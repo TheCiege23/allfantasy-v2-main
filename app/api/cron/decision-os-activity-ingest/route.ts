@@ -168,6 +168,16 @@ const LEAGUE_CAP = 40
  * no Yahoo ones today, so this cap is headroom, not a limit anyone has hit.
  */
 const PLATFORM_LEAGUE_CAP = 10
+/**
+ * ⚠ THE ESPN/YAHOO LOOP RUNS FIRST, UNDER ITS OWN BUDGET. Measured in sync_job_runs on 2026-09-05
+ * and 2026-09-06: the Sleeper phase spends the whole `INGEST_BUDGET_MS` on every daily fire (34 and
+ * 32 of its 40 leagues "deferred by the 180s ingest budget"). A loop placed after it under the same
+ * budget check therefore never ran — the platform leagues were "skipped for time" on every fire,
+ * and nothing said so. Ten leagues at one team read plus one feed read each is seconds; they go
+ * first, bounded here, and the Sleeper phase keeps its ABSOLUTE deadline (`startedAt +
+ * INGEST_BUDGET_MS`), so the handler's total does not move by a millisecond.
+ */
+const PLATFORM_BUDGET_MS = 40_000
 const WEEKS = 18
 
 /** Map with a bounded number of in-flight promises, preserving input order. */
@@ -404,6 +414,28 @@ export async function GET(request: Request) {
       let updated = 0
       const errors: string[] = []
       const ingestDeadline = startedAt + INGEST_BUDGET_MS
+
+      // ESPN/Yahoo first, under their own budget — see PLATFORM_BUDGET_MS for why the order matters.
+      const platform = { discovered: platformLeagues.length, processed: 0, failed: 0, skippedForTime: 0, created: 0, updated: 0, unfetched: 0, errors: [] as string[] }
+      const platformDeadline = Math.min(startedAt + PLATFORM_BUDGET_MS, ingestDeadline)
+      for (const league of platformLeagues) {
+        if (Date.now() > platformDeadline) {
+          platform.skippedForTime += 1
+          continue
+        }
+        const leagueDeadline = Math.min(Date.now() + LEAGUE_DEADLINE_MS, platformDeadline)
+        try {
+          const r = await withDeadline(ingestOnePlatformLeague(league, store), leagueDeadline, "platform_league_ingest")
+          platform.processed += 1
+          platform.created += r.created
+          platform.updated += r.updated
+          if (!r.fetched) platform.unfetched += 1
+        } catch (error) {
+          platform.failed += 1
+          if (platform.errors.length < 5) platform.errors.push(`${league.platform}:${league.id}: ${error instanceof Error ? error.message : "unknown_error"}`)
+        }
+      }
+
       for (const league of leagues) {
         if (Date.now() - startedAt > INGEST_BUDGET_MS) {
           skippedForTime += 1
@@ -420,25 +452,6 @@ export async function GET(request: Request) {
         } catch (error) {
           failed += 1
           if (errors.length < 5) errors.push(`${league.id}: ${error instanceof Error ? error.message : "unknown_error"}`)
-        }
-      }
-
-      const platform = { discovered: platformLeagues.length, processed: 0, failed: 0, skippedForTime: 0, created: 0, updated: 0, unfetched: 0, errors: [] as string[] }
-      for (const league of platformLeagues) {
-        if (Date.now() - startedAt > INGEST_BUDGET_MS) {
-          platform.skippedForTime += 1
-          continue
-        }
-        const leagueDeadline = Math.min(Date.now() + LEAGUE_DEADLINE_MS, ingestDeadline)
-        try {
-          const r = await withDeadline(ingestOnePlatformLeague(league, store), leagueDeadline, "platform_league_ingest")
-          platform.processed += 1
-          platform.created += r.created
-          platform.updated += r.updated
-          if (!r.fetched) platform.unfetched += 1
-        } catch (error) {
-          platform.failed += 1
-          if (platform.errors.length < 5) platform.errors.push(`${league.platform}:${league.id}: ${error instanceof Error ? error.message : "unknown_error"}`)
         }
       }
 
@@ -547,6 +560,8 @@ export async function GET(request: Request) {
       ],
       warnings: [
         ...(s.skippedForTime > 0 ? [`${s.skippedForTime} leagues deferred by the ${INGEST_BUDGET_MS / 1000}s ingest budget`] : []),
+        // A platform league deferred by its own budget wrote nothing — say so, or it reads as quiet.
+        ...((s.platform?.skippedForTime ?? 0) > 0 ? [`${s.platform!.skippedForTime} ESPN/Yahoo leagues deferred by the ${PLATFORM_BUDGET_MS / 1000}s platform budget`] : []),
         // A relay whose window closed before its first batch reports 0/0 with no error, which reads
         // as "nothing to do". Name it -- this is the failure that hid 7,645 rows for three days.
         ...(s.relay.starved ? ["outbox relay skipped: its window closed before the first batch"] : []),
@@ -565,6 +580,8 @@ export async function GET(request: Request) {
     processed: summary.processed,
     failed: summary.failed,
     skippedForTime: summary.skippedForTime,
+    // The ESPN/Yahoo counters, so a fire's body says whether the platform loop ran (it silently did not until this fix).
+    platform: summary.platform ?? null,
     relay: summary.relay,
     managerProjection: summary.managerProjection,
     leagueProjection: summary.leagueProjection,

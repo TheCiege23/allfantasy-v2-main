@@ -34,9 +34,12 @@ type SyncCtx = { jobName: string; trigger?: string }
 
 const {
   withSyncJobRunMock, syncRuns, prismaMock, relayRunMock, relayCtorMock,
-  projectImportedManagerSnapshotsMock,
+  projectImportedManagerSnapshotsMock, ingestSleeperMock, ingestPlatformMock, fetchEspnMock,
 } = vi.hoisted(() => {
   const syncRuns: Array<{ ctx: SyncCtx; outcome: unknown }> = []
+  const ingestSleeperMock = vi.fn(async () => ({ created: 0, updated: 0 }))
+  const ingestPlatformMock = vi.fn(async () => ({ writer: { created: 0, updated: 0, skipped: 0 }, normalizerSkipped: [], emitterSkipped: [] }))
+  const fetchEspnMock = vi.fn(async () => ({ teams: [{ teamId: '1', managerId: '{SWID-A}' }], transactions: [], transactionsFetched: true }))
   const relayRunMock = vi.fn(async () => ({
     fetched: 0, dispatched: 0, retried: 0, deadLettered: 0, failed: 0, dryRun: false, failures: [],
   }))
@@ -52,7 +55,9 @@ const {
     prismaMock: {
       decisionOsImportedActivity: { findMany: vi.fn(), upsert: vi.fn() },
       league: { findMany: vi.fn(async () => []) },
+      leagueTeam: { findMany: vi.fn(async () => []) },
     },
+    ingestSleeperMock, ingestPlatformMock, fetchEspnMock,
     relayRunMock,
     relayCtorMock: vi.fn(),
     projectImportedManagerSnapshotsMock: vi.fn(async () => ({
@@ -82,8 +87,14 @@ vi.mock('@/lib/decision-os/ingestion/prismaImportedActivityStore', () => ({
   PrismaImportedActivityStore: class {},
 }))
 vi.mock('@/lib/decision-os/ingestion/sleeperActivityEmitter', () => ({
-  ingestSleeperImportedActivity: vi.fn(async () => ({ created: 0, updated: 0 })),
+  ingestSleeperImportedActivity: ingestSleeperMock,
 }))
+vi.mock('@/lib/decision-os/ingestion/platformActivityEmitter', () => ({
+  ingestPlatformImportedActivity: ingestPlatformMock,
+  buildPlatformManagerMapping: vi.fn(() => ({})),
+}))
+vi.mock('@/lib/league-import/espn/EspnLeagueFetchService', () => ({ fetchEspnActivityForSync: fetchEspnMock }))
+vi.mock('@/lib/league-import/yahoo/YahooLeagueFetchService', () => ({ fetchYahooActivityForSync: vi.fn() }))
 vi.mock('@/lib/decision-os/ingestion/importedActivityNormalizer', () => ({
   buildManagerIdentityIndex: vi.fn(() => ({})),
 }))
@@ -104,6 +115,7 @@ vi.mock('@/scripts/decision-os-ingest-sleeper-activity-helpers', () => ({
 }))
 
 import { GET } from '@/app/api/cron/decision-os-activity-ingest/route'
+import { getLeagueRosters, getLeagueTransactions } from '@/lib/sleeper-client'
 
 const SECRET = 'test-cron-secret'
 const ORIGINAL_ENV = { ...process.env }
@@ -142,6 +154,35 @@ describe('decision-os-activity-ingest ?relayOnly=1', () => {
   it('skips the manager projection, which would push the handler back to the ceiling', async () => {
     await GET(req('/api/cron/decision-os-activity-ingest?relayOnly=1'))
     expect(projectImportedManagerSnapshotsMock).not.toHaveBeenCalled()
+  })
+
+  it('⚠ runs the ESPN/Yahoo leagues FIRST, under their own budget — the Sleeper phase spends the whole ingest budget every day', async () => {
+    // Measured in sync_job_runs on 2026-09-05 and 2026-09-06: the Sleeper phase deferred 34 and 32 of
+    // its 40 leagues "by the 180s ingest budget" on every fire. A platform loop placed AFTER it under
+    // the same budget check never ran — five ESPN leagues skipped for time, silently, every day.
+    prismaMock.league.findMany
+      .mockResolvedValueOnce([{ id: 'L-sleeper', platformLeagueId: '1', season: 2026 }])
+      .mockResolvedValueOnce([{ id: 'L-espn', platform: 'espn', platformLeagueId: '919', season: 2026, userId: 'u1' }])
+    const realNow = Date.now
+    let clockSkew = 0
+    const nowSpy = vi.spyOn(Date, 'now').mockImplementation(() => realNow() + clockSkew)
+    const order: string[] = []
+    // The Sleeper phase "eats" the budget: its first provider read moves the handler's clock 181 s
+    // past startedAt. Hooked on the Sleeper client, which the loop must call for any league; the
+    // emitter itself is not reached when a league has no transactions.
+    const sleeperRead = async () => { if (!order.includes('sleeper')) { order.push('sleeper'); clockSkew = 181_000 } ; return [] }
+    vi.mocked(getLeagueRosters).mockImplementationOnce(sleeperRead)
+    vi.mocked(getLeagueTransactions).mockImplementationOnce(sleeperRead)
+    ingestPlatformMock.mockImplementationOnce(async () => { order.push('platform'); return { writer: { created: 2, updated: 0, skipped: 0 }, normalizerSkipped: [], emitterSkipped: [] } })
+    try {
+      const res = await GET(req('/api/cron/decision-os-activity-ingest?discover=1'))
+      const body = await res.json()
+      expect(order).toEqual(['platform', 'sleeper'])
+      expect(body.platform).toMatchObject({ discovered: 1, processed: 1, skippedForTime: 0, created: 2 })
+      expect(fetchEspnMock).toHaveBeenCalledWith('u1', '919', 2026)
+    } finally {
+      nowSpy.mockRestore()
+    }
   })
 
   it('still discovers and projects on a NORMAL fire', async () => {
