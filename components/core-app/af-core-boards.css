@@ -133,12 +133,27 @@
 
 /*
  * A row that ties with the one above it carries a bullet instead of a numeral.
- * It keeps the column's width so the league names stay aligned, but drops the
- * weight — a bullet as bold as a rank would read as a rank. See `rankTiers`.
+ * It keeps the column's width so the league names stay aligned, and drops the
+ * weight — a bullet as bold as a rank would read as a rank.
+ *
+ * 🛑 NO OPACITY. This shipped at `opacity: 0.45` and had to be corrected on the
+ * production screen: `--faint` #7d84a8 at 45% over the board's #0b0d17 resolves
+ * to #3e4358, which is **1.98:1** — under the 3:1 floor for a non-text UI mark,
+ * and far enough under to read as an EMPTY COLUMN. That is precisely the failure
+ * the bullet exists to prevent, so the treatment was defeating its own purpose
+ * while looking tasteful in the diff.
+ *
+ *     0.45 -> #3e4358  1.98:1   unreadable
+ *     0.75 -> #616684  3.45:1   clears the floor
+ *     1.00 -> #7d84a8  5.29:1   what ships
+ *
+ * The WEIGHT is what separates a bullet from a rank (400 against the numerals'
+ * 800), and a `·` is not a numeral in the first place. Dimming was never doing
+ * that work. Note an opacity here would hit light mode too, where `--faint` is
+ * #5c6587 on a pale ground.
  */
 .af-core .af-bd-rank[data-untiered] {
   font-weight: 400;
-  opacity: 0.45;
 }
 
 /* league identity block — name over platform · detail */
