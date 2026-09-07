@@ -248,6 +248,29 @@ const DATA_API_HOST_PATTERNS = [
    * These stay in DATA_API_UNMONITORED with the same reasons. Adding them today would
    * import exactly the noise that got media.api-sports.io excluded above.
    */
+
+  /*
+   * ⚠ IP GEOLOCATION WAS INVISIBLE TO THIS GUARD, and it decides who is allowed to
+   * use the product. Added 2026-09-07, and the lesson is the one this file already
+   * records for Fantrax, api-sports.io and CollegeFootballData, met a fourth time:
+   * the list is not a census of our providers.
+   *
+   * Both hosts are called from lib/geo/detectUserState.ts, which is reached from TWO
+   * REQUEST PATHS — app/api/auth/register/route.ts (signup) and app/api/geo/check.
+   * Both keys are set in production, so both calls are live, and neither host being
+   * on this list meant neither call was ever checked.
+   *
+   * ⚠ THESE ARE NOT ORDINARY DATA FEEDS AND MUST NOT BE MIGRATED TO A DB READ.
+   * "Which state is this request from" is a property of the REQUEST, not of stored
+   * data — Postgres cannot answer it, the same way it cannot answer an auth
+   * exchange. They are reported here so the calls are VISIBLE, and the resolution
+   * for a new one is a cache with a marker, never a table lookup.
+   *
+   * The right primary fix is not code at all: a proxied hostname sets
+   * `cf-ipcountry` and the fallback never runs. See lib/geo/geoHeaders.ts.
+   */
+  /(^|\.)ipapi\.co$/i,
+  /(^|\.)proxycheck\.io$/i,
 ];
 
 /**
@@ -498,6 +521,35 @@ const ALLOWED_PATH_PATTERNS = [
    * `await import(...)`, which a plain `from '...'` grep does not see.
    */
   /^lib\/weather\/openWeatherFetch\.(ts|tsx|js|jsx|mjs|cjs)$/i,
+  /*
+   * The IP-geolocation vendor calls, split out of lib/geo/detectUserState.ts on
+   * 2026-09-07 — the same inverted split as openWeatherFetch directly above.
+   *
+   * detectUserState is reached from TWO REQUEST PATHS (app/api/auth/register and
+   * app/api/geo/check) and so can never itself be exempt; moving the fetch out left
+   * it with no provider URL at all, which is what makes this a split rather than a
+   * silencing. A live vendor call is this file's only job.
+   *
+   * ⚠ ALLOWLISTING THE FILE IS NOT UNWATCHING THE HOSTS. ipapi.co and proxycheck.io
+   * are in DATA_API_HOST_PATTERNS as of the same commit, so a call to either from
+   * anywhere else in the tree is still reported. Conditional on the importer set
+   * staying small, exactly as lib/cfb-player-data.ts's exemption is:
+   *     grep -rnE "from '(@/lib/geo|\.)/geoIpFetch'|import\(.*geoIpFetch" \
+   *       --include=*.ts --include=*.tsx .
+   * must show lib/geo/detectUserState.ts and tests, and nothing else.
+   *
+   * ⚠ The ALIASED form alone is not the census — detectUserState imports this
+   * RELATIVELY, so `@/lib/geo/geoIpFetch` on its own finds only the test file and
+   * reports a module with a caller as having none. Census run 2026-09-07 across
+   * aliased, relative, dynamic, require and vi.mock: detectUserState plus the one
+   * test, and nothing else.
+   *
+   * ⚠ AND THIS IS NOT A MIGRATION TARGET. "Which state is this request from" is a
+   * property of the REQUEST, not of stored data — Postgres cannot answer it, the way
+   * it cannot answer an auth exchange. The real fix is not a DB read but a proxied
+   * hostname setting `cf-ipcountry`, after which this path never runs at all.
+   */
+  /^lib\/geo\/geoIpFetch\.(ts|tsx|js|jsx|mjs|cjs)$/i,
   /*
    * The api-sports.io adapter. Allowlisted on a FULL caller census — every
    * import form, aliased, relative and dynamic:

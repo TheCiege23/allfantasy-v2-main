@@ -8,6 +8,7 @@ import { resolveAuthSecret } from "@/lib/auth/resolve-auth-secret"
 import { requiresSessionAuth } from "@/lib/auth/session-auth-paths"
 import { isFullyBlocked, isPaidBlocked } from "@/lib/geo/restrictedStates"
 import { resolveEdgeGeo } from "@/lib/geo/geoHeaders"
+import { resolveGeoByIp } from "@/lib/geo/geoIpCache"
 import { getPublicSiteHostname } from "@/lib/site-public-origin"
 import { GUEST_SESSION_COOKIE_NAME } from "@/lib/guest-mode/guestSessionToken"
 import { applyAttributionCapture } from "@/lib/analytics/attributionCookies"
@@ -93,7 +94,33 @@ function canonicalProductionHostRedirect(request: NextRequest): NextResponse | n
  * The rule lives in lib/auth/session-auth-paths so it can be tested directly.
  */
 
-/** Paths that skip geo logic. Includes `/api/auth` so NextAuth + OAuth callbacks are never geo-blocked. */
+/**
+ * Paths that skip geo logic. Includes `/api/auth` so NextAuth + OAuth callbacks are never geo-blocked.
+ *
+ * 🛑 MACHINE CALLERS BELONG HERE, AND LEAVING THEM OUT IS A LATENT OUTAGE THAT
+ * ONLY FIRES ONCE GEO STARTS WORKING. A geo restriction exists to stop a PERSON
+ * in a prohibited state from using the product. A cron runner and a payment
+ * webhook have no person behind them, so blocking one enforces nothing and
+ * silently stops ingestion or billing instead.
+ *
+ * Measured 2026-09-07, and it was very nearly shipped: `WA` is the one
+ * full_block state, this repo fires its crons over HTTP from GitHub Actions
+ * (`.github/workflows/cron-slow-tier.yml`, `wc-cron.yml` → `${APP_URL}/api/cron/…`),
+ * and GitHub Actions runs on Azure — whose West US 2 region is in Quincy,
+ * WASHINGTON. A runner allocated a WA address hits the gate with no session, so
+ * `isMiddlewareAdmin` is false, and the job takes a 403 GEO_BLOCKED and fails
+ * silently. 38 cron routes and 4 webhooks were exposed this way.
+ *
+ * ⚠ IT WAS INVISIBLE UNTIL NOW ONLY BECAUSE THE GATE WAS BROKEN. With no edge
+ * header, `country` was null and every request skipped the block — so this bug
+ * and the bug that hid it are the same bug. Fixing geo detection is exactly what
+ * arms it, whether the fix is the IP fallback in this PR or proxying the
+ * hostname through Cloudflare. Both trip it.
+ *
+ * Exempting these opens nothing: geo and auth are independent, and each of these
+ * carries its own (cron secret, Stripe/Resend signature). No path that serves a
+ * human belongs in this list.
+ */
 const GEO_EXEMPT_PREFIXES = [
   "/geo-blocked",
   "/paid-restricted",
@@ -110,6 +137,13 @@ const GEO_EXEMPT_PREFIXES = [
   "/api/auth",
   "/api/geo",
   "/api/af-debug",
+  // Machine callers — see the block comment above. Not user traffic; each is
+  // authenticated by its own secret or provider signature.
+  "/api/cron",
+  "/api/webhooks",
+  "/api/stripe/webhook",
+  "/api/bracket/stripe/webhook",
+  "/api/community/discord/webhook",
   "/_next",
   "/favicon.ico",
 ]
@@ -557,9 +591,21 @@ async function routeMiddleware(request: NextRequest) {
   // they were two separate copies of this until 2026-09-02, and both went blind
   // together when production left Vercel.
   const edgeGeo = resolveEdgeGeo(request.headers)
-  const country = edgeGeo.country
-  const region = edgeGeo.regionCode
   const ip = request.headers.get("x-real-ip") ?? request.headers.get("x-forwarded-for")?.split(",")[0]?.trim()
+
+  // ⚠ THE FALLBACK RUNS ONLY WHEN NO EDGE PLACED THE REQUEST, and it is cached
+  // for exactly that reason: this matcher covers all but static assets, so an
+  // uncached lookup here would be one vendor call per chunk and per API hit.
+  // resolveGeoByIp collapses that to one call per IP per TTL and dedups the
+  // parallel requests of a single page load. With the hostname proxied through
+  // Cloudflare, edgeGeo answers and this line never makes a call at all.
+  //
+  // It fails open (null on timeout, outage or an unplaceable IP), which raises
+  // this gate from NOT ENFORCED AT ALL — measured 2026-09-07, no edge header on
+  // any request — to best-effort. It is not a substitute for proxying.
+  const viaIp = edgeGeo.source === "unknown" && ip ? await resolveGeoByIp(ip) : null
+  const country = viaIp ? viaIp.country : edgeGeo.country
+  const region = viaIp ? viaIp.regionCode : edgeGeo.regionCode
 
   if (country === "US" && region && !isMiddlewareAdmin(tokenUserId)) {
     const stateCode = region
