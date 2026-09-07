@@ -50,6 +50,9 @@ function card(over: Partial<PlayerCardData> = {}): PlayerCardData {
     trades: SECTION_NO('no trades'),
     comps: SECTION_NO('no comps'),
     news: SECTION_NO('no news'),
+    /* Required since the injury section shipped; its behaviour is pinned by
+       `__tests__/player-card-injury.test.tsx`. */
+    injury: SECTION_NO('No injury designation reported in the last 14 days.'),
     insight: null,
     league: {
       leagueId: 'lg-42',

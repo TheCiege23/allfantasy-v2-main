@@ -128,6 +128,46 @@
 }
 
 /*
+ * The availability designation.
+ *
+ * ⚠ WRAPS RATHER THAN TRUNCATES. The provider's sentence runs long — "Hamstring
+ * - Questionable for Week 1 vs. Denver" — and an ellipsis on an availability
+ * note hides the half that says WHICH WEEK. A card that clips this is worse
+ * than one that is a line taller.
+ */
+.af-pc-injury {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  font: 500 12px/1.45 'Archivo', system-ui, sans-serif;
+}
+.af-pc-injury-s {
+  font: 800 11px/1 'Archivo', system-ui, sans-serif;
+  letter-spacing: 0.04em;
+  padding: 4px 7px;
+  border-radius: 5px;
+  flex: none;
+  background: color-mix(in srgb, var(--warn, #d98324) 16%, transparent);
+  color: var(--warn, #d98324);
+}
+/* OUT and IR are not the same news as QUESTIONABLE — do not flatten them. */
+.af-pc-injury-s[data-status='OUT'],
+.af-pc-injury-s[data-status='IR'],
+.af-pc-injury-s[data-status='SUSPENSION'],
+.af-pc-injury-s[data-status='PUP'] {
+  background: color-mix(in srgb, var(--bad, #c8484b) 16%, transparent);
+  color: var(--bad, #c8484b);
+}
+.af-pc-injury-n {
+  color: var(--text);
+  min-width: 0;
+}
+
+/*
  * The ☆ watchlist toggle, in the top bar beside the close control.
  *
  * ⚠ THE SIZE IS SET ON THE BUTTON, NOT ONLY ON THE GLYPH, because this is a tap

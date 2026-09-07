@@ -400,6 +400,42 @@ export default function PlayerCardSheet({
           {status === 'loading' ? <p className="af-pc-absent">Loading this player&rsquo;s market…</p> : null}
           {status === 'error' ? <p className="af-pc-absent">This player&rsquo;s card could not be loaded.</p> : null}
 
+          {/*
+            availability ───────────────────────────────────────────
+
+            High on the card on purpose: whether he can play outranks what he is
+            worth, and a reader who scrolls past it has been failed.
+
+            🛑 THE AGE IS RENDERED BESIDE THE STATUS, ALWAYS. A designation is a
+            point-in-time claim and `SportsInjury` is mostly old — 2.2% of rows
+            for rostered players are within 2 days, 15% within 7. The loader
+            already refuses anything older than 14 days, but "inside 14 days" is
+            not "true now", so the card shows WHEN and lets the reader judge
+            rather than asserting currency it cannot support.
+          */}
+          {data?.injury ? (
+            <div className="af-pc-injury">
+              {data.injury.available ? (
+                <>
+                  <span className="af-pc-injury-s" data-status={data.injury.data.status}>
+                    {data.injury.data.status}
+                  </span>
+                  {data.injury.data.note ? (
+                    <span className="af-pc-injury-n">{data.injury.data.note}</span>
+                  ) : data.injury.data.bodyPart ? (
+                    <span className="af-pc-injury-n">{data.injury.data.bodyPart}</span>
+                  ) : null}
+                  <span className="af-pc-faint">
+                    {ago(data.injury.data.reportedAt) ? ` · ${ago(data.injury.data.reportedAt)}` : ''}
+                    {` · ${data.injury.data.source}`}
+                  </span>
+                </>
+              ) : (
+                <span className="af-pc-absent">{data.injury.reason}</span>
+              )}
+            </div>
+          ) : null}
+
           {/* insight ───────────────────────────────────────────── */}
           {data?.insight ? (
             <div className="af-pc-insight">

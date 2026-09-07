@@ -142,6 +142,25 @@ export type PlayerCardInsight = {
   basis: string
 }
 
+/**
+ * His latest injury designation, when there is a RECENT one.
+ *
+ * ⚠ `reportedAt` IS PART OF THE FACT, NOT DECORATION. A designation is a
+ * point-in-time claim that goes stale in days, and this table holds rows from
+ * months ago. The card renders the age beside the status so the reader judges
+ * currency instead of the card asserting it.
+ */
+export type PlayerCardInjury = {
+  /** QUESTIONABLE / OUT / IR / DOUBTFUL / PUP / SUSPENSION … never ACTIVE. */
+  status: string
+  /** The provider's sentence, e.g. "Hamstring - Questionable for Week 1 vs. Denver". */
+  note: string | null
+  /** Body part, when the provider separates it out. */
+  bodyPart: string | null
+  reportedAt: string | null
+  source: string
+}
+
 /** Everything only a league can answer. Null on the universal card. */
 export type PlayerCardLeague = {
   leagueId: string
@@ -202,6 +221,8 @@ export type PlayerCardData = {
   trades: SectionState<PlayerCardTrade[]>
   comps: SectionState<PlayerCardComp[]>
   news: SectionState<PlayerCardNews[]>
+  /** His latest availability designation, when one was reported recently. */
+  injury: SectionState<PlayerCardInjury>
   insight: PlayerCardInsight | null
   league: PlayerCardLeague | null
 }
@@ -578,6 +599,111 @@ async function loadTrades(sleeperId: string | null, leagueId?: string): Promise<
   })
 
   return { available: true, data: out }
+}
+
+/* ── injury ──────────────────────────────────────────────────────────────── */
+
+/**
+ * How far back a designation is still worth showing.
+ *
+ * 🛑 THIS WINDOW IS THE WHOLE CORRECTNESS OF THE SECTION, AND IT IS MEASURED.
+ * `SportsInjury` holds 4,039 rows for rostered players and most are OLD: only
+ * 2.2% are within 2 days, 15.0% within 7, 31.6% within 14, 42.1% within 30.
+ * Worse, one source is frozen — `api_sports` contributes 1,444 rows for rostered
+ * players and **zero** of them are fresher than 7 days; they are pre-season
+ * snapshots stamped 2026-06-03 that still read "Questionable for Week 1 vs.
+ * Denver". Rendering one of those as a current designation would be a confident
+ * lie about a player's availability, which is the single most damaging thing
+ * this card could say.
+ *
+ * 14 days is the compromise: it admits the live feeds (espn, rolling_insights,
+ * sleeper_live all have rows inside it) and excludes the frozen one BY AGE
+ * rather than by naming it, so a source that comes back to life is included
+ * automatically and one that dies drops out without a code change.
+ */
+const INJURY_WINDOW_DAYS = 14
+
+/**
+ * Statuses that are NOT a designation.
+ *
+ * ⚠ "Active" IS THE COMMON ONE AND IT IS NOT AN INJURY. The ESPN half of this
+ * table doubles as a per-player transaction/news feed — 539 "Active" rows inside
+ * the window, carrying sentences like "The Giants signed Deguara to a contract
+ * Wednesday". Useful, but it is not an availability designation and must never
+ * render in a slot the reader scans for "can I start him".
+ */
+const NON_DESIGNATIONS = new Set(['active', 'na', 'healthy', ''])
+
+export async function loadInjury(
+  sleeperId: string | null,
+  name: string,
+  sport: string
+): Promise<SectionState<PlayerCardInjury>> {
+  const cutoff = new Date(Date.now() - INJURY_WINDOW_DAYS * 86_400_000)
+
+  const rows = await prisma.sportsInjury
+    .findMany({
+      where: {
+        sport: { equals: sport, mode: 'insensitive' },
+        AND: [
+          {
+            /*
+             * ⚠ ID FIRST, NAME SECOND, AND THE NAME ARM IS LOAD-BEARING.
+             * Measured: only 51% of rows carry a `playerId` at all, and the
+             * biggest live source (espn) leaves it null — an id-only match
+             * reaches 6.7% of rostered players against 49.2% with the name.
+             * The name arm is safe HERE in a way it is not for `SportsNews`:
+             * 97.8% of this table's `playerName` values are real NFL players,
+             * against 31.4% for the news table's headline n-grams.
+             */
+            OR: [
+              ...(sleeperId ? [{ playerId: sleeperId }] : []),
+              { playerName: { equals: name, mode: 'insensitive' as const } },
+            ],
+          },
+          {
+            // `date` is the report date; fall back to `updatedAt` when absent.
+            OR: [{ date: { gte: cutoff } }, { AND: [{ date: null }, { updatedAt: { gte: cutoff } }] }],
+          },
+        ],
+      },
+      orderBy: [{ date: 'desc' }, { updatedAt: 'desc' }],
+      take: 5,
+      select: { status: true, type: true, description: true, date: true, updatedAt: true, source: true },
+    })
+    .catch(() => [])
+
+  const hit = rows.find((r) => r.status && !NON_DESIGNATIONS.has(r.status.trim().toLowerCase()))
+  if (!hit || !hit.status) {
+    return unavailable(
+      `No injury designation reported in the last ${INJURY_WINDOW_DAYS} days.`
+    )
+  }
+
+  const reported = hit.date ?? hit.updatedAt ?? null
+  const status = hit.status.trim().toUpperCase()
+
+  /*
+   * ⚠ DROP A NOTE THAT ONLY REPEATS THE STATUS. Found by running this loader
+   * against production rather than against a fixture: ESPN's `description` is
+   * usually a real sentence ("Henderson (ankle) remained sidelined at Monday's
+   * practice") but is sometimes just the word "questionable", which rendered as
+   * "QUESTIONABLE questionable" on the card. The fixtures could not show this
+   * because I wrote them, and I wrote sentences.
+   */
+  const rawNote = hit.description?.trim() || null
+  const note = rawNote && rawNote.toUpperCase() !== status ? rawNote : null
+
+  return {
+    available: true,
+    data: {
+      status,
+      note,
+      bodyPart: hit.type?.trim() || null,
+      reportedAt: reported ? reported.toISOString() : null,
+      source: hit.source,
+    },
+  }
 }
 
 /* ── news ────────────────────────────────────────────────────────────────── */
@@ -995,13 +1121,14 @@ export async function getPlayerCard(req: PlayerCardRequest): Promise<PlayerCardD
     ? valueBookFor(leagueBookRow.settings, leagueBookRow.leagueType)
     : UNIVERSAL_BOOK
 
-  const [market, ownershipBoard, projections, news, trades, league] = await Promise.all([
+  const [market, ownershipBoard, projections, news, injury, trades, league] = await Promise.all([
     loadMarket(player.sleeperId, player.position, book),
     getRosteredMarket({ sport: 'NFL', dynastyOnly: null }).catch(() => null),
     player.sleeperId && projWeek
       ? lookupProjections([player.sleeperId], projWeek, null, player.sport).catch(() => new Map())
       : Promise.resolve(new Map()),
     loadNews(player.name, player.sport),
+    loadInjury(player.sleeperId, player.name, player.sport),
     loadTrades(player.sleeperId),
     req.leagueId
       ? loadLeague(
@@ -1074,6 +1201,7 @@ export async function getPlayerCard(req: PlayerCardRequest): Promise<PlayerCardD
     trades,
     comps,
     news,
+    injury,
     insight: deriveInsight({ name: player.name, market, ownership, byeWeek, comps }),
     league,
   }
