@@ -128,6 +128,32 @@ describe('getLeagueActivity', () => {
     ])
   })
 
+  it('⚠ never resolves an ESPN or Yahoo id as a Sleeper id — the numbers collide', async () => {
+    // ESPN player ids are bare integers too, so "4046" on an ESPN row is an ESPN player, not
+    // whoever holds Sleeper id 4046. The id stays the provider's, named as such; the Sleeper
+    // row in the same read still resolves, and so does a legacy row with no stamp at all.
+    activityFindMany.mockResolvedValue([
+      { id: 'e1', activityType: 'waiver', occurredAt: T('2026-09-06T10:00:00Z'), rosterId: null,
+        payload: { source: 'espn_transaction', idSpace: 'espn', adds: { '4046': '1' }, drops: null } },
+      { id: 'y1', activityType: 'trade', occurredAt: T('2026-09-05T12:00:00Z'), rosterId: null,
+        payload: { source: 'yahoo_transaction', idSpace: 'yahoo', adds: { '461.p.100': '461.l.1.t.3' }, drops: {} } },
+      { id: 's1', activityType: 'waiver', occurredAt: T('2026-09-04T10:00:00Z'), rosterId: null,
+        payload: { source: 'sleeper_transaction', adds: { p2: 1 } } },
+      { id: 'legacy', activityType: 'waiver', occurredAt: T('2026-09-03T10:00:00Z'), rosterId: null,
+        payload: { adds: ['p1'] } },
+    ])
+    const out = await getLeagueActivity(ARGS)
+    const by = (id: string) => out!.items.find((i) => i.id === id)!
+    expect(by('e1').adds).toEqual([{ id: '4046', label: 'ESPN player 4046', name: null, position: null, team: null, imageUrl: null }])
+    expect(by('y1').adds[0].label).toBe('Yahoo player 461.p.100')
+    expect(by('s1').adds[0].label).toContain('Tyjae Spears')
+    expect(by('legacy').adds[0].label).toContain('Darren Waller')
+    // The Sleeper-id lookup never even asked about the ESPN or Yahoo ids.
+    // The LAST call: this file's beforeEach never clears the player mock's call log.
+    const asked = playerFindMany.mock.calls.at(-1)![0].where.sleeperId.in as string[]
+    expect(asked.sort()).toEqual(['p1', 'p2'])
+  })
+
   it('reads adds/drops sent as an object, which is how Sleeper sends them', async () => {
     activityFindMany.mockResolvedValue([
       {

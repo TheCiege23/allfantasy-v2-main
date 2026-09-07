@@ -206,8 +206,17 @@ export async function getManagerPresence(
       : []
   const coverage = rosterIdCoverage(sample, new Set(knownRows.map((r) => r.sleeperId).filter((x): x is string => Boolean(x))))
 
+  /*
+   * ⚠ VOCABULARY FIRST, THEN THE HIT. A hit on rosters that do not speak Sleeper
+   * ids is a collision, not a holder: ESPN player ids are bare integers too
+   * (2330, 8439 …) and `externalId` is only unique within a sport, so a Sleeper
+   * id can equal an ESPN id sitting on an ESPN roster. Until 2026-09-06 that
+   * showed a wrong holder with no moves; with ESPN moves now ingested it would
+   * show a wrong holder WITH a window. So an unusable vocabulary refuses even
+   * when the scan "found" him.
+   */
+  if (!coverage.usable) return { available: false, reason: coverageReason(platform) }
   const holder = rosters.find((r) => contains((r.playerData ?? {}) as Record<string, unknown>, sleeperId)) ?? null
-  if (!holder && !coverage.usable) return { available: false, reason: coverageReason(platform) }
   if (!holder) return { available: false, reason: 'nobody has him here — he is a free agent, so there is nobody to pitch; claim him' }
 
   const yours = teams.find((t) => t.claimedByUserId === userId) ?? null

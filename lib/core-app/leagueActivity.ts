@@ -97,6 +97,29 @@ type Payload = {
   transactionType?: unknown
   settings?: unknown
   waiverBid?: unknown
+  /** The emitter that wrote the row: `sleeper_transaction`, `espn_transaction`, `yahoo_transaction` … */
+  source?: unknown
+  /** Which provider's player ids `adds`/`drops` carry; stamped by the ESPN/Yahoo emitter since 2026-09-06. */
+  idSpace?: unknown
+}
+
+type IdSpace = 'sleeper' | 'espn' | 'yahoo'
+const PROVIDER_LABEL: Record<IdSpace, string> = { sleeper: 'Sleeper', espn: 'ESPN', yahoo: 'Yahoo' }
+
+/**
+ * Which provider's player ids a row's `adds`/`drops` speak. Only Sleeper's
+ * resolve through `SportsPlayer.sleeperId`; ESPN ids are bare integers too, so
+ * resolving them the same way names the WRONG player whenever the numbers
+ * collide (`externalId` is only unique within a sport). A row with neither
+ * stamp is one written before 2026-09-06, and every one of those is Sleeper's.
+ */
+function idSpaceOf(p: Payload): IdSpace {
+  const explicit = typeof p.idSpace === 'string' ? p.idSpace.toLowerCase() : ''
+  if (explicit === 'espn' || explicit === 'yahoo' || explicit === 'sleeper') return explicit
+  const source = typeof p.source === 'string' ? p.source.toLowerCase() : ''
+  if (source.startsWith('espn')) return 'espn'
+  if (source.startsWith('yahoo')) return 'yahoo'
+  return 'sleeper'
 }
 
 /**
@@ -236,6 +259,7 @@ export async function getLeagueActivity(args: {
   const everyPlayerId = new Set<string>()
   for (const r of rows) {
     const p = (r.payload ?? {}) as Payload
+    if (idSpaceOf(p) !== 'sleeper') continue
     for (const id of [...ids(p.adds), ...ids(p.drops)]) everyPlayerId.add(id)
   }
   const players = everyPlayerId.size
@@ -256,8 +280,15 @@ export async function getLeagueActivity(args: {
     players.filter((p) => p.sleeperId).map((p) => [p.sleeperId as string, p]),
   )
 
-  /** A player id we cannot name stays an id — never silently dropped. */
-  const resolve = (id: string): ActivityPlayer => {
+  /**
+   * A player id we cannot name stays an id — never silently dropped. An ESPN or
+   * Yahoo id is never looked up as a Sleeper id: it stays the provider's id,
+   * named as such, until an identity link for that provider exists.
+   */
+  const resolve = (id: string, space: IdSpace): ActivityPlayer => {
+    if (space !== 'sleeper') {
+      return { id, label: `${PROVIDER_LABEL[space]} player ${id}`, name: null, position: null, team: null, imageUrl: null }
+    }
     const p = nameBy.get(id)
     if (!p) {
       return { id, label: `player ${id}`, name: null, position: null, team: null, imageUrl: null }
@@ -277,6 +308,7 @@ export async function getLeagueActivity(args: {
 
   const items: LeagueActivityItem[] = rows.map((r) => {
     const p = (r.payload ?? {}) as Payload
+    const space = idSpaceOf(p)
     const kind = r.activityType as ActivityKind
     if (kind === 'trade') counts.trade += 1
     else if (kind === 'waiver') counts.waiver += 1
@@ -296,8 +328,8 @@ export async function getLeagueActivity(args: {
       managerName: team?.ownerName ?? null,
       teamName: team?.teamName ?? null,
       avatarUrl: team?.avatarUrl ?? null,
-      adds: ids(p.adds).map(resolve),
-      drops: ids(p.drops).map(resolve),
+      adds: ids(p.adds).map((id) => resolve(id, space)),
+      drops: ids(p.drops).map((id) => resolve(id, space)),
       bid: readBid(p),
       picks: pickLabels(p.draftPicks),
     }

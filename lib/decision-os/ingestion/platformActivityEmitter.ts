@@ -104,6 +104,8 @@ export function emitEspnTransactionActivity(
       managerSourceIds: ownersOf(tx.teamIds ?? [], ctx.teamOwnerMap),
       payload: {
         source: 'espn_transaction',
+        // `adds`/`drops` carry ESPN player ids; the feed must never resolve them as Sleeper ids.
+        idSpace: 'espn',
         transactionType: tx.type,
         messageTypeId: tx.messageTypeId ?? null,
         adds: Object.keys(tx.adds ?? {}).length ? tx.adds : null,
@@ -149,6 +151,7 @@ export function emitYahooTransactionActivity(
       managerSourceIds: ownersOf(tx.teamKeys ?? [], ctx.teamOwnerMap),
       payload: {
         source: 'yahoo_transaction',
+        idSpace: 'yahoo',
         transactionType: tx.type,
         adds: Object.keys(tx.adds ?? {}).length ? tx.adds : null,
         drops: Object.keys(tx.drops ?? {}).length ? tx.drops : null,

@@ -54,7 +54,7 @@ describe('emitEspnTransactionActivity', () => {
       ['t4', 'trade', [SWID_A, SWID_B]],
     ])
     expect(raws[0]).toMatchObject({ provider: 'espn', leagueId: '919055222', afLeagueId: 'L-elites', occurredAt: '2026-10-25T15:40:00.000Z' })
-    expect(raws[2]!.payload).toMatchObject({ source: 'espn_transaction', bidAmount: 12, adds: { '7777': '1' } })
+    expect(raws[2]!.payload).toMatchObject({ source: 'espn_transaction', idSpace: 'espn', bidAmount: 12, adds: { '7777': '1' } })
   })
 
   it('skips what did not happen or cannot be named — a pending trade, an unknown kind — and attributes an ownerless team to nobody', () => {
@@ -108,6 +108,8 @@ describe('emitYahooTransactionActivity', () => {
       ['trade', [GUID_A, 'YAHOOGUIDBBBBBBB']],
     ])
     expect(raws[0]).toMatchObject({ provider: 'yahoo', leagueId: '461.l.1361311', afLeagueId: 'L-warriors' })
+    // The feed keys its Sleeper-id lookup off this stamp; a Yahoo player key must never reach it.
+    expect(raws[0]!.payload).toMatchObject({ source: 'yahoo_transaction', idSpace: 'yahoo' })
   })
 
   it('skips a commissioner action and a transaction Yahoo did not complete', () => {
