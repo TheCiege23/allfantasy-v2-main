@@ -8,6 +8,7 @@ import { resolveAuthSecret } from "@/lib/auth/resolve-auth-secret"
 import { requiresSessionAuth } from "@/lib/auth/session-auth-paths"
 import { isFullyBlocked, isPaidBlocked } from "@/lib/geo/restrictedStates"
 import { resolveEdgeGeo } from "@/lib/geo/geoHeaders"
+import { resolveGeoByIp } from "@/lib/geo/geoIpCache"
 import { getPublicSiteHostname } from "@/lib/site-public-origin"
 import { GUEST_SESSION_COOKIE_NAME } from "@/lib/guest-mode/guestSessionToken"
 import { applyAttributionCapture } from "@/lib/analytics/attributionCookies"
@@ -557,9 +558,21 @@ async function routeMiddleware(request: NextRequest) {
   // they were two separate copies of this until 2026-09-02, and both went blind
   // together when production left Vercel.
   const edgeGeo = resolveEdgeGeo(request.headers)
-  const country = edgeGeo.country
-  const region = edgeGeo.regionCode
   const ip = request.headers.get("x-real-ip") ?? request.headers.get("x-forwarded-for")?.split(",")[0]?.trim()
+
+  // ⚠ THE FALLBACK RUNS ONLY WHEN NO EDGE PLACED THE REQUEST, and it is cached
+  // for exactly that reason: this matcher covers all but static assets, so an
+  // uncached lookup here would be one vendor call per chunk and per API hit.
+  // resolveGeoByIp collapses that to one call per IP per TTL and dedups the
+  // parallel requests of a single page load. With the hostname proxied through
+  // Cloudflare, edgeGeo answers and this line never makes a call at all.
+  //
+  // It fails open (null on timeout, outage or an unplaceable IP), which raises
+  // this gate from NOT ENFORCED AT ALL — measured 2026-09-07, no edge header on
+  // any request — to best-effort. It is not a substitute for proxying.
+  const viaIp = edgeGeo.source === "unknown" && ip ? await resolveGeoByIp(ip) : null
+  const country = viaIp ? viaIp.country : edgeGeo.country
+  const region = viaIp ? viaIp.regionCode : edgeGeo.regionCode
 
   if (country === "US" && region && !isMiddlewareAdmin(tokenUserId)) {
     const stateCode = region

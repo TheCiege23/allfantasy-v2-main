@@ -66,10 +66,11 @@ export async function fetchProxycheck(
 export async function fetchIpApi(
   ip: string,
   key: string,
+  signal?: AbortSignal,
 ): Promise<Record<string, unknown> | null> {
   try {
     const url = `https://ipapi.co/${encodeURIComponent(ip)}/json/?key=${encodeURIComponent(key)}`
-    const res = await fetch(url, { cache: "no-store", next: { revalidate: 0 } })
+    const res = await fetch(url, { cache: "no-store", next: { revalidate: 0 }, signal })
     if (!res.ok) return null
     return (await res.json()) as Record<string, unknown>
   } catch {
