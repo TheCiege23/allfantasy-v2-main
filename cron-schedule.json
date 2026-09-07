@@ -113,6 +113,10 @@
       "schedule": "0 10 * * *"
     },
     {
+      "path": "/api/cron/fantasycalc-warm",
+      "schedule": "0 * * * *"
+    },
+    {
       "path": "/api/cron/import-news",
       "schedule": "*/15 * * * *"
     },
