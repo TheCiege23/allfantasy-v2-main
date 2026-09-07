@@ -1,6 +1,6 @@
 {
   "_comment": "Pre-existing tsc --noEmit error counts, per file. Ratchet fails if any file gains errors or a new file appears. Run `npm run ts:ratchet:update` after legitimately changing the count. DO NOT hand-edit up.",
-  "total": 154,
+  "total": 143,
   "byFile": {
     "app/ai-chat/page.tsx": 1,
     "app/api/admin/world-cup/actions/route.ts": 3,
@@ -25,11 +25,9 @@
     "lib/ai/engine/plugins/aew.plugin.ts": 1,
     "lib/ai/engine/plugins/worldCup.plugin.ts": 3,
     "lib/ai/insights/rootingGuide.ts": 1,
-    "lib/ai/waivers/waiverRecommendationService.ts": 8,
     "lib/ai/working-memory.ts": 2,
     "lib/automation/errors.ts": 2,
     "lib/automation/jobs/waivers/processLeagueWaiversJob.ts": 3,
-    "lib/chimmy-context/prompt/PromptComposer.ts": 1,
     "lib/chimmy-context/structuredPromptPayload.ts": 2,
     "lib/chimmy-context/telemetry/recordFeedback.ts": 1,
     "lib/decision-os/world/adpEnrichedWorld.ts": 1,
@@ -38,7 +36,6 @@
     "lib/decision-os/world/projectionEnrichedWorld.ts": 3,
     "lib/decision-os/world/weatherEnrichedWorld.ts": 3,
     "lib/fantasy-media/VideoGenerationJobTracker.ts": 1,
-    "lib/guillotine/GuillotineEliminationEngine.ts": 1,
     "lib/guillotine/GuillotineEventLog.ts": 1,
     "lib/identity/DuplicateManagerRiskService.ts": 1,
     "lib/league/league-dashboard-view.ts": 1,
@@ -69,7 +66,6 @@
     "lib/world-cup/worldCupGroupStageScoringService.ts": 1,
     "lib/world-cup/worldCupGroupStageService.ts": 2,
     "lib/world-cup/worldCupJoinGate.ts": 1,
-    "lib/world-cup/worldCupSimulationService.ts": 1,
-    "server/api-route-modules/league-survivor/foundation/route.ts": 1
+    "lib/world-cup/worldCupSimulationService.ts": 1
   }
 }
