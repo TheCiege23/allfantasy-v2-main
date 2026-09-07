@@ -63,9 +63,10 @@ let countsCache: { at: number; counts: Map<string, number> } | null = null
 let countsRefresh: Promise<Map<string, number>> | null = null
 
 async function buildGlobalRosterCounts(): Promise<Map<string, number>> {
-  const rosters = await prisma.roster
-    .findMany({ select: { playerData: true } })
-    .catch(() => [] as Array<{ playerData: unknown }>)
+  // ⚠ A failed read REJECTS. It used to resolve to `[]`, which made a refresh that failed
+  // replace a good ten-minute count with an empty map — the suggestion ranking then lost its
+  // "rostered globally" signal until the next refresh. The caller decides what a failure means.
+  const rosters: Array<{ playerData: unknown }> = await prisma.roster.findMany({ select: { playerData: true } })
   const counts = new Map<string, number>()
   for (const r of rosters) {
     for (const id of allIds((r.playerData ?? {}) as Record<string, unknown>)) counts.set(id, (counts.get(id) ?? 0) + 1)
@@ -92,7 +93,16 @@ export async function getGlobalRosterCounts(now = Date.now()): Promise<Map<strin
         countsRefresh = null
       })
   }
-  return countsCache ? countsCache.counts : countsRefresh
+  if (countsCache) {
+    // The stale path awaits nothing: a refresh that fails must not become an unhandled
+    // rejection (a process crash on Node 15+). The stale map stands until the next read,
+    // which starts another refresh, because a failed one dated nothing.
+    countsRefresh.catch(() => {})
+    return countsCache.counts
+  }
+  // A cold first load that fails degrades to "no global counts" for THIS read only — nothing
+  // is cached, so the next read tries again rather than serving an empty map for ten minutes.
+  return countsRefresh.catch(() => new Map<string, number>())
 }
 
 type IndexedRoster = { platformUserId: string; ids: Set<string> }
