@@ -140,7 +140,9 @@ describe("League Analytics live.ts — getSnapshot builds real kpis/trends, hone
     expect(result.error).toBeNull()
     expect(result.data?.kpis).toEqual([
       { id: "kpi-engagement", label: "League Engagement Score", value: "74", trend: { direction: "up", label: "+4 vs previous capture" } },
-      { id: "kpi-active-managers", label: "Active Managers", value: "9 of 12" },
+      // "(last 90d)" is load-bearing, not decoration: the denominator counts managers
+      // with an event inside INTELLIGENCE_LOOKBACK_DAYS, not the league's team count.
+      { id: "kpi-active-managers", label: "Active Managers (last 90d)", value: "9 of 12" },
       { id: "kpi-trade-activity", label: "Trade Activity", value: "Moderate" },
       { id: "kpi-waiver-activity", label: "Waiver Activity", value: "High" },
     ])
