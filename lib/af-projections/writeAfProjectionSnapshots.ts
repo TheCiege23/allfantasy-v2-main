@@ -74,6 +74,11 @@ export interface WriteSnapshotsResult {
   olderSeasonAvailable: boolean
   /** Set when the source season was rolled back after a total `no_games_played` refusal. */
   sourceSeasonFallback: { from: number; to: number; reason: string } | null
+  /**
+   * Set when `targetSeason` was pulled back because the sport has no game scheduled in the season
+   * the fallback picked. Null on the normal path, including when a caller passed `targetSeason`.
+   */
+  targetSeasonClamp: { from: number; to: number; reason: string } | null
   errors: string[]
 }
 
@@ -169,7 +174,66 @@ export async function writeAfProjectionSnapshotsForSeason(
   // In-season the projection applies to the season BEING PLAYED (Sleeper's own season id):
   // once current-season stat lines start landing, `sourceSeason + 1` would mislabel every
   // weekly row as next year's.
-  const targetSeason = opts.targetSeason ?? inRegularSeason?.season ?? sourceSeason + 1
+  const requestedTargetSeason = opts.targetSeason ?? inRegularSeason?.season ?? sourceSeason + 1
+
+  /*
+   * 🛑 NEVER STAMP A SEASON THE SPORT HAS NO GAME SCHEDULED FOR.
+   *
+   * The `sourceSeason + 1` fallback above is right in a true preseason and wrong the moment the
+   * source season is the one being PLAYED — and the guard that catches that (`inRegularSeason`) is
+   * scoped `sport === 'NFL'` thirty lines up, so it can NEVER fire for the other five sports.
+   * Measured on prod 2026-09-07: 1,712 MLB rows stamped season 2027 while MLB's 2026 season was
+   * still running, and NCAAF had just produced its first 2027 row the same way. `snapshotLookupKey`
+   * contains the season, so such rows are not merely mislabelled — a reader asking for 2026 finds
+   * none of them, and a corrected run writes NEW rows rather than updating them.
+   *
+   * ⚠ THIS IS A BOUND, NOT A SEASON AUTHORITY, and that distinction is what makes it safe. Both
+   * obvious authorities were measured and both are wrong:
+   *   - `SportsGame.season` labels a winter season by its END year (2026-27 -> 2027) where stat
+   *     lines and snapshots use the START year, so reading it directly would relabel every
+   *     NBA/NHL/NCAAB row from 2026 to 2027.
+   *   - stat-line `updated_at` recency is a sync artifact — finished 2025 seasons re-sync every 30
+   *     minutes, so it reports "in progress" for all six sports and would target 2025 for three.
+   * A bound needs neither convention to agree; it only has to be an over-estimate. The end-year
+   * convention makes the winter sports' bound HIGHER, so the clamp cannot fire on them at all.
+   *
+   * ⚠ THE BOUND IS "HAS AN UNPLAYED GAME", NOT `max(season)`. A plain max would drag the target
+   * BACKWARDS onto a finished season in an offseason whose next schedule has not loaded yet — MLB
+   * in January, where `max(season)` is last year. Requiring a future game means an unloaded
+   * schedule yields no bound and the fallback stands untouched.
+   *
+   * Verified against all six sports before shipping: MLB 2027->2026 and NCAAF 2027->2026 clamp;
+   * NFL, NBA, NCAAB and NHL are untouched; and no sport's bound sits below its own sourceSeason.
+   */
+  let targetSeason = requestedTargetSeason
+  let targetSeasonClamp: WriteSnapshotsResult['targetSeasonClamp'] = null
+  if (opts.targetSeason == null) {
+    try {
+      const scheduled = await prisma.sportsGame.aggregate({
+        where: { sport, startTime: { gte: new Date() } },
+        _max: { season: true },
+      })
+      const bound = scheduled._max.season
+      if (typeof bound === 'number' && Number.isFinite(bound) && requestedTargetSeason > bound) {
+        targetSeason = bound
+        targetSeasonClamp = {
+          from: requestedTargetSeason,
+          to: bound,
+          reason:
+            `no ${sport} game is scheduled in season ${requestedTargetSeason}; ` +
+            `the newest season with an unplayed game is ${bound}`,
+        }
+      }
+    } catch (err) {
+      /*
+       * Best effort, deliberately. An unreadable schedule must not stop projections being written —
+       * the pre-existing fallback is what ships, and the error is reported rather than swallowed.
+       */
+      errors.push(
+        `target-season bound lookup failed: ${err instanceof Error ? err.message : String(err)}`,
+      )
+    }
+  }
 
   const statLines = await prisma.fantasyStatLine.findMany({
     where: { sport, season: String(sourceSeason) },
@@ -338,6 +402,7 @@ export async function writeAfProjectionSnapshotsForSeason(
     mirrorSkippedNoSleeperId: 0,
     olderSeasonAvailable,
     sourceSeasonFallback: null,
+    targetSeasonClamp,
     errors,
   }
 

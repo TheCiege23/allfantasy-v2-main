@@ -211,6 +211,11 @@ async function runOneSport(
               // season is a different claim and the telemetry must say so.
               sourceSeasonFallback: result.sourceSeasonFallback,
               targetSeason: result.targetSeason,
+              // Non-null when `sourceSeason + 1` picked a season the sport has no game scheduled
+              // in, and the writer pulled it back. Reported for the same reason as the fallback
+              // above: it changes which season the rows are keyed to, and the 1,712 MLB rows
+              // stamped 2027 on 2026-09-07 were invisible precisely because nothing said so.
+              targetSeasonClamp: result.targetSeasonClamp,
               refusalRate: Number(v.refusalRate.toFixed(4)),
               refusalsByReason: result.refusalsByReason,
               noSourceSeasonYet: v.noSourceSeasonYet,
@@ -242,6 +247,8 @@ async function runOneSport(
         sourceSeason: r.sourceSeason,
         sourceSeasonFallback: r.sourceSeasonFallback,
         targetSeason: r.targetSeason,
+        /** Non-null when the season was pulled back to one the sport actually has games in. */
+        targetSeasonClamp: r.targetSeasonClamp,
         scoringFormat: r.scoringFormat,
         idpPreset: r.idpPreset,
         statLinesRead: r.statLinesRead,
