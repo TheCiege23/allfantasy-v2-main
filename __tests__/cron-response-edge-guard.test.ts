@@ -91,3 +91,68 @@ describe('respondBeforeEdge', () => {
     expect(CRON_HARD_RESPONSE_MS).toBeLessThan(300_000)
   })
 })
+
+/**
+ * The instrument, asserted.
+ *
+ * 🛑 WHY THESE EXIST. After the guard shipped, `import-players` still returned FAIL 502 (300073ms)
+ * and the container logged NOTHING for the six minutes it ran. Three different causes predict that
+ * same silence — the guard never ran, the timer never fired, or the work finished and the response
+ * was lost — and no artifact could separate them. These lines are the discriminator, so they are
+ * held to the same standard as any other guard: a log line nobody asserts is a log line that can
+ * quietly stop being emitted, and then the next investigation reads its absence as a finding.
+ */
+describe('respondBeforeEdge — observability', () => {
+  it('logs ARMED before the work starts, naming the caller', async () => {
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {})
+
+    await respondBeforeEdge(async () => 'done', () => 'partial', 5_000, 'import-players')
+
+    const armed = log.mock.calls.map(String).find((l) => l.includes('armed'))
+    expect(armed).toContain('[edge-guard] import-players')
+    expect(armed).toContain('5000')
+  })
+
+  it('logs COMPLETED with the elapsed time on the happy path', async () => {
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {})
+
+    await respondBeforeEdge(async () => 'done', () => 'partial', 5_000, 'import-schedules')
+
+    // The DURATION is the diagnostic: a completion past the deadline means the timer failed,
+    // which is a different bug from a slow job and needs to be readable as such.
+    expect(log.mock.calls.map(String).some((l) => /import-schedules completed in \d+ms/.test(l))).toBe(true)
+  })
+
+  it('logs FIRED when the deadline wins', async () => {
+    vi.useFakeTimers()
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {})
+
+    const p = respondBeforeEdge<string>(() => new Promise<string>(() => {}), () => 'partial', 1_000, 'import-stat-lines')
+    await vi.advanceTimersByTimeAsync(1_000)
+    await p
+
+    expect(log.mock.calls.map(String).some((l) => /import-stat-lines FIRED at \d+ms/.test(l))).toBe(true)
+  })
+
+  it('logs a throw AND still propagates it — observing must never swallow', async () => {
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {})
+
+    await expect(
+      respondBeforeEdge(async () => {
+        throw new Error('provider exploded')
+      }, () => 'partial', 5_000, 'import-players'),
+    ).rejects.toThrow('provider exploded')
+
+    // Both halves matter. A guard that logged the throw and swallowed it would turn a broken job
+    // into a silent one — the exact failure this whole area exists to remove.
+    expect(log.mock.calls.map(String).some((l) => /import-players threw after \d+ms/.test(l))).toBe(true)
+  })
+
+  it('defaults the label rather than throwing when a caller omits it', async () => {
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {})
+
+    await respondBeforeEdge(async () => 'done', () => 'partial', 5_000)
+
+    expect(log.mock.calls.map(String).some((l) => l.includes('[edge-guard] cron armed'))).toBe(true)
+  })
+})

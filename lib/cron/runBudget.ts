@@ -209,11 +209,14 @@ export interface EdgeGuardResult<T> {
  *
  * @param work the handler's real work. Invoked immediately.
  * @param onOverrun builds the partial response. Must not throw and must not await.
+ * @param hardMs the response deadline.
+ * @param label names the caller in the log lines below. Job name only — never a URL or a secret.
  */
 export async function respondBeforeEdge<T>(
   work: () => Promise<T>,
   onOverrun: () => T,
   hardMs: number = CRON_HARD_RESPONSE_MS,
+  label = 'cron',
 ): Promise<EdgeGuardResult<T>> {
   /*
    * 🛑 A SYMBOL, NOT null/undefined/a string. The sentinel is compared by identity against the
@@ -223,6 +226,25 @@ export async function respondBeforeEdge<T>(
    */
   const TIMED_OUT = Symbol('cron.respondBeforeEdge.deadline')
   let timer: ReturnType<typeof setTimeout> | undefined
+  const startedAt = Date.now()
+
+  /*
+   * 🛑 A LINE ON EVERY PATH, BECAUSE SILENCE HERE IS UNREADABLE. Measured 2026-09-07: after this
+   * guard shipped, `import-players` STILL returned FAIL 502 (300073ms), and the container logged
+   * nothing at all for the six minutes it ran. Three separate causes predict that same silence —
+   * the guard never ran, the timer never fired, or the work finished and the response was lost —
+   * and nothing on disk could tell them apart. That is the false-clean shape this repo keeps
+   * paying for: an absent guard and a working one produced byte-identical evidence.
+   *
+   * Ruled out before adding this, so the next reader does not re-run them: the deployed blob has
+   * the wrapper wired (0 direct `handle(req)` calls); no deployment rolled over during the window;
+   * and the event loop was healthy — the uptime probe was answered in 24-72ms every minute of it,
+   * on a service configured `numReplicas: 1`, so that traffic and the cron shared one container.
+   *
+   * ARMED is what makes the others readable. Without it, "no FIRED line" cannot distinguish a
+   * timer that failed from a guard that was never reached.
+   */
+  console.log(`[edge-guard] ${label} armed: deadline ${hardMs}ms`)
 
   try {
     const raced = await Promise.race<T | typeof TIMED_OUT>([
@@ -233,11 +255,35 @@ export async function respondBeforeEdge<T>(
          * ⚠ `unref` so a pending deadline cannot by itself hold the process open. Optional-called
          * because the edge/browser timer type has no `unref`, and calling it blindly throws in the
          * runtimes where this matters least.
+         *
+         * ⚠ AND THIS IS A LIVE SUSPECT FOR THE 2026-09-07 MISS, NOT A SETTLED DETAIL. It is left
+         * in place deliberately: changing it in the same commit as the logging would leave two
+         * candidate explanations for whatever the next run shows. Instrument first, then change
+         * one thing.
          */
         ;(timer as unknown as { unref?: () => void }).unref?.()
       }),
     ])
-    return raced === TIMED_OUT ? { result: onOverrun(), overran: true } : { result: raced as T, overran: false }
+
+    const elapsed = Date.now() - startedAt
+    if (raced === TIMED_OUT) {
+      console.log(`[edge-guard] ${label} FIRED at ${elapsed}ms — returning the partial response`)
+      return { result: onOverrun(), overran: true }
+    }
+    /*
+     * Logged on the happy path too, and the DURATION is the diagnostic. A completion at >hardMs
+     * means the work finished but the deadline never fired — which is a timer problem, not a slow
+     * job, and is the single most useful thing this instrument can report.
+     */
+    console.log(`[edge-guard] ${label} completed in ${elapsed}ms (deadline ${hardMs}ms)`)
+    return { result: raced as T, overran: false }
+  } catch (error) {
+    /*
+     * ⚠ Rethrown unchanged — this only observes. A guard that swallowed a failure would turn a
+     * broken job into a silent one, which is the bug this file exists to remove.
+     */
+    console.log(`[edge-guard] ${label} threw after ${Date.now() - startedAt}ms`)
+    throw error
   } finally {
     /*
      * ⚠ Always clear. On the fast path the timer is still pending, and leaving one behind per

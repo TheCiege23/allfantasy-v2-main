@@ -17,7 +17,7 @@ import { refreshStaleLeagueProfiles } from '@/lib/psychological-profiles/Profile
 import { prisma } from "@/lib/prisma"
 import { toPrismaJsonInput } from "@/lib/prisma-json"
 import { runSportsDataImporter } from "@/lib/workers/sports-data-importer"
-import { createRunBudget, respondBeforeEdge } from "@/lib/cron/runBudget"
+import { createRunBudget, respondBeforeEdge, CRON_HARD_RESPONSE_MS } from "@/lib/cron/runBudget"
 
 /**
  * NOTE: `requireCronAuth` resolves `preferredSecretEnv ?? LEAGUE_CRON_SECRET ?? CRON_SECRET`.
@@ -670,7 +670,12 @@ async function handle(req: NextRequest) {
  */
 async function handleBoundedByEdge(req: NextRequest) {
   const startedAt = Date.now()
-  const { result, overran } = await respondBeforeEdge<NextResponse | null>(() => handle(req), () => null)
+  const { result, overran } = await respondBeforeEdge<NextResponse | null>(
+    () => handle(req),
+    () => null,
+    CRON_HARD_RESPONSE_MS,
+    'import-players',
+  )
   if (!overran && result) return result
 
   return NextResponse.json(

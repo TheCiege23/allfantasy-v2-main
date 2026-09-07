@@ -21,7 +21,7 @@
 import type { NextRequest } from "next/server"
 import { NextResponse } from "next/server"
 import { requireCronAuth } from "@/app/api/cron/_auth"
-import { createRunBudget, rotateForFairness, respondBeforeEdge } from "@/lib/cron/runBudget"
+import { createRunBudget, rotateForFairness, respondBeforeEdge, CRON_HARD_RESPONSE_MS } from "@/lib/cron/runBudget"
 import { withSyncJobRun } from "@/lib/production-health/syncJobRunTelemetry"
 import { syncNFLScheduleToDb } from "@/lib/rolling-insights"
 import {
@@ -554,7 +554,12 @@ async function handle(req: NextRequest) {
  */
 async function handleBoundedByEdge(req: NextRequest) {
   const startedAt = Date.now()
-  const { result, overran } = await respondBeforeEdge<NextResponse | null>(() => handle(req), () => null)
+  const { result, overran } = await respondBeforeEdge<NextResponse | null>(
+    () => handle(req),
+    () => null,
+    CRON_HARD_RESPONSE_MS,
+    'import-schedules',
+  )
   if (!overran && result) return result
 
   return NextResponse.json(
