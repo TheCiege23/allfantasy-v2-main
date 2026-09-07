@@ -147,14 +147,21 @@ export type PlayerBidInstead = {
   /** His share of the upgrade value that would hit waivers with him, 0–1. */
   shareOfSupply: number
   /**
-   * The bid at a FULL season budget, or null when the league has no budget on file.
+   * The bid against the FAAB this manager actually has left, or null when we do not hold it.
    *
-   * 🛑 IT IS NOT "WHAT YOU HAVE LEFT", AND SAYING SO IS NOT PEDANTRY. Measured 2026-09-06:
-   * `waiver_budget_used` is populated for ZERO rosters in the entire database, so a per-team
-   * remaining budget does not exist here. Presenting this as a live recommendation would put a
-   * number in front of a manager that assumes they have spent nothing all season.
+   * ⚠ THIS FIELD WAS `ceilingAtFullBudget` FOR ONE COMMIT, ON A MEASUREMENT THAT WAS WRONG. The
+   * probe behind it read `rosters.settings` and `waiver_budget_used` — both empty — and concluded
+   * no per-team budget existed. It was in `rosters.faabRemaining` the whole time, a dedicated
+   * column the probe never looked at: 3,266 of 3,418 rosters (96%) carry it, written by
+   * `lib/sleeper-sync.ts` as `leagueBudget − waiver_budget_used` on every sync.
+   *
+   * 🛑 THE LESSON IS THE PROBE'S SHAPE, NOT THE COLUMN. An absence is only as trustworthy as the
+   * places you looked, and "I checked two spellings in one JSON blob" is not "the database does
+   * not have this".
    */
-  ceilingAtFullBudget: number | null
+  ceilingAtRemaining: number | null
+  /** What that manager has left, in dollars. Null when the roster row does not carry it. */
+  budgetRemaining: number | null
   reason: string
 }
 
@@ -252,7 +259,10 @@ function bidFor(args: {
   byId: Map<string, { sleeperId: string | null; name: string; position: string | null }>
   values: MarketValuesPayload
   leagueScoring: Record<string, number>
+  /** The league's configured season budget. Context only — never the thing bid against. */
   faabBudget: number | null
+  /** What THIS manager has left, from `rosters.faabRemaining`. This is what is bid against. */
+  faabRemaining: number | null
   myPlayers: DiscoveryPlayer[]
 }): PlayerBidInstead | null {
   /* Your weakest starter at each slot — what a new man would actually displace. */
@@ -286,9 +296,15 @@ function bidFor(args: {
    * aggressive read — the whole budget against this one pool — and the module says so in its own
    * reason string rather than letting a caller mistake it for a paced number.
    */
+  /*
+   * ⚠ `faabRemaining` IS WHAT THIS MANAGER ACTUALLY HAS, not the league's season budget.
+   * `lib/sleeper-sync.ts` writes it as `leagueBudget − waiver_budget_used` on every sync, and it
+   * is present on 96% of rosters. Falling back to the league total would quietly tell somebody
+   * down to their last $40 to bid like they were untouched.
+   */
   const alloc = allocateFaabAcrossPool({
     pool,
-    budgetRemaining: args.faabBudget ?? 0,
+    budgetRemaining: args.faabRemaining ?? 0,
     horizon: null,
   })
   const mine = alloc?.bids.find((b) => b.id === args.targetSleeperId)
@@ -297,17 +313,18 @@ function bidFor(args: {
   return {
     concept: args.concept,
     budgetTotal: args.faabBudget,
+    budgetRemaining: args.faabRemaining,
     marginalValue: mine.marginalValue,
     shareOfSupply: mine.shareOfSupply,
-    ceilingAtFullBudget: args.faabBudget == null ? null : mine.ceiling,
+    ceilingAtRemaining: args.faabRemaining == null ? null : mine.ceiling,
     reason:
       mine.marginalValue <= 0
         ? `No trades in this league, and he would not improve your lineup anyway — ${mine.reason}`
         : `No trades in this league. He reaches waivers only if his owner is chopped, and his whole ` +
           `roster arrives with him: ${mine.reason}` +
-          (args.faabBudget == null
-            ? ' This league has no FAAB budget on file, so that share cannot be turned into dollars.'
-            : ' That is against a FULL season budget — we do not hold what anyone has actually spent.'),
+          (args.faabRemaining == null
+            ? ' We do not hold your remaining FAAB for this league, so that share cannot be turned into dollars.'
+            : ''),
   }
 }
 
@@ -352,7 +369,7 @@ export async function getPlayerTradeVisual(
       })
       .catch(() => []),
     prisma.roster
-      .findMany({ where: { leagueId }, select: { platformUserId: true, playerData: true } })
+      .findMany({ where: { leagueId }, select: { platformUserId: true, playerData: true, faabRemaining: true } })
       .catch(() => []),
   ])
 
@@ -543,6 +560,7 @@ export async function getPlayerTradeVisual(
           values,
           leagueScoring,
           faabBudget: Number.isFinite(faabRaw) && faabRaw > 0 ? faabRaw : null,
+          faabRemaining: typeof myRoster.faabRemaining === 'number' ? myRoster.faabRemaining : null,
           myPlayers: me.players,
         })
       : null

@@ -81,7 +81,7 @@ export function TradeVisual({ state, playerName }: { state: SectionState<PlayerT
         {b.marginalValue > 0 ? (
           <p className="af-pf-tv-bidline">
             <strong>
-              {b.ceilingAtFullBudget != null ? `Up to $${b.ceilingAtFullBudget}` : `${Math.round(b.shareOfSupply * 100)}% of your budget`}
+              {b.ceilingAtRemaining != null ? `Up to $${b.ceilingAtRemaining}` : `${Math.round(b.shareOfSupply * 100)}% of your budget`}
             </strong>{' '}
             — {Math.round(b.shareOfSupply * 100)}% of the upgrade value on his roster.
           </p>

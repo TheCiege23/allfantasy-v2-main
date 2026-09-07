@@ -125,9 +125,10 @@ describe('TradeVisual', () => {
             bidInstead: {
               concept: 'guillotine',
               budgetTotal: 1000,
+              budgetRemaining: 400,
               marginalValue: 2100,
               shareOfSupply: 2100 / 3300,
-              ceilingAtFullBudget: 636,
+              ceilingAtRemaining: 636,
               reason: 'No trades in this league. He reaches waivers only if his owner is chopped. That is against a FULL season budget — we do not hold what anyone has actually spent.',
             },
           },
@@ -158,9 +159,10 @@ describe('TradeVisual', () => {
             bidInstead: {
               concept: 'guillotine',
               budgetTotal: 1000,
+              budgetRemaining: 400,
               marginalValue: -2205,
               shareOfSupply: 0,
-              ceilingAtFullBudget: 0,
+              ceilingAtRemaining: 0,
               reason: 'No trades in this league, and he would not improve your lineup anyway — he does not improve your starting lineup.',
             },
           },
