@@ -39,6 +39,18 @@ export type LivePick = {
   imageUrl: string | null
   /** The player's real club, for the crest beside the face. */
   team: string | null
+  /**
+   * The Sleeper id this pick RESOLVED to, for the player card.
+   *
+   * 🛑 NOT `DraftPick.playerId`, WHICH IS THE TRAP THIS FIELD EXISTS TO CLOSE.
+   * That column carries whichever id the drafting room happened to have — ours,
+   * the provider's, or Sleeper's — so handing it to a Sleeper-keyed lookup
+   * matches sometimes and silently opens the wrong player or nothing the rest of
+   * the time. This is the id the three-key join below actually landed on, and it
+   * is null when the join found nobody, so the name renders as plain text rather
+   * than as a control that leads somewhere wrong.
+   */
+  sleeperId: string | null
 }
 
 export type LiveDraftPicks = {
@@ -159,13 +171,16 @@ export async function getLiveDraftPicks(
    * Sleeper's — the same three-key match `myTeam.ts` and the waiver recommender
    * already do. A single-column join silently drops most of them.
    */
+  /*
+   * ⚠ WIDENED FROM "picks with no stored headshot" TO EVERY PICK, because the
+   * player card needs a resolved Sleeper id for all of them and a stored image
+   * says nothing about whether we can identify the man. The cost is one slightly
+   * longer `IN` list on a query that already runs: `picks` is capped at
+   * `TAIL * sessions * 3` (TAIL = 4) and only exists while a draft is LIVE, so
+   * this is a dozen ids per draft, not a table scan.
+   */
   const playerIds = [
-    ...new Set(
-      picks
-        .filter((p) => !p.playerImageUrl)
-        .map((p) => p.playerId)
-        .filter((x): x is string => !!x),
-    ),
+    ...new Set(picks.map((p) => p.playerId).filter((x): x is string => !!x)),
   ]
   const players =
     playerIds.length > 0
@@ -192,10 +207,17 @@ export async function getLiveDraftPicks(
 
   const byPlayerKey = new Map<
     string,
-    { imageUrl: string | null; team: string | null; position: string | null }
+    { imageUrl: string | null; team: string | null; position: string | null; sleeperId: string | null }
   >()
   for (const p of players) {
-    const v = { imageUrl: p.imageUrl ?? null, team: p.team ?? null, position: p.position ?? null }
+    const v = {
+      imageUrl: p.imageUrl ?? null,
+      team: p.team ?? null,
+      position: p.position ?? null,
+      sleeperId: p.sleeperId ?? null,
+    }
+    // Keyed under all three vocabularies, so a lookup succeeds whichever one the
+    // drafting room stored — and yields the SLEEPER id regardless.
     for (const k of [p.id, p.externalId, p.sleeperId]) {
       if (k) byPlayerKey.set(k, v)
     }
@@ -240,6 +262,14 @@ export async function getLiveDraftPicks(
           position: p.position?.trim() || meta?.position || null,
           imageUrl: p.playerImageUrl?.trim() || meta?.imageUrl || null,
           team: p.team?.trim() || meta?.team || null,
+          /*
+           * ⚠ ONLY FROM THE RESOLVED ROW, NEVER FROM `p.playerId`. Falling back
+           * to the raw column here would reintroduce the exact bug this field
+           * exists to close: on a Sleeper draft it happens to be right, and on
+           * an ESPN or native one it is an id from another vocabulary that would
+           * open somebody else's card.
+           */
+          sleeperId: meta?.sleeperId ?? null,
         }
       })
 

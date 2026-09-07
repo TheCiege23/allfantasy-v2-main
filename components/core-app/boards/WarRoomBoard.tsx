@@ -4,6 +4,7 @@ import type { DraftHqAllData, DraftHqAllRow } from '@/lib/core-app/draftHqAll'
 import type { LiveDraftPicks } from '@/lib/core-app/warRoomBoard'
 import { platformLabel } from '@/lib/core-app/platformLinks'
 import { teamLogoUrl } from '@/lib/core-app/teamLogo'
+import PlayerName from '@/components/core-app/player-card/PlayerName'
 import {
   BoardHead,
   FooterSummary,
@@ -101,7 +102,26 @@ function LiveCard({ row, picks }: { row: DraftHqAllRow; picks: LiveDraftPicks })
                       numbers skip — a gap in our resolution reading as a gap in
                       the draft.
                     */}
-                    {p.playerName ?? 'Player not identified'}
+                    {/*
+                      Opens the player card in this league's context — but only
+                      when the three-key join actually landed a Sleeper id.
+                      `PlayerName` degrades to plain text without one, which is
+                      the right outcome for a pick we could not identify: an
+                      inert control would promise a lookup that cannot happen.
+                    */}
+                    {p.playerName ? (
+                      <PlayerName
+                        sport="NFL"
+                        sleeperId={p.sleeperId}
+                        name={p.playerName}
+                        position={p.position}
+                        team={p.team}
+                        imageUrl={p.imageUrl}
+                        leagueId={row.leagueId}
+                      />
+                    ) : (
+                      'Player not identified'
+                    )}
                     {p.position ? (
                       <span className="af-bd-pos" data-pos={p.position.toUpperCase()}>
                         {' '}

@@ -4,8 +4,11 @@ import { render } from '@testing-library/react'
 
 import TradesBoard from '@/components/core-app/boards/TradesBoard'
 import WaiversBoard from '@/components/core-app/boards/WaiversBoard'
+import WarRoomBoard from '@/components/core-app/boards/WarRoomBoard'
 import type { TradesBoardData } from '@/lib/core-app/tradesBoard'
 import type { WaiversBoardData } from '@/lib/core-app/waiversBoard'
+import type { LiveDraftPicks } from '@/lib/core-app/warRoomBoard'
+import type { DraftHqAllRow, DraftHqAllData } from '@/lib/core-app/draftHqAll'
 
 /*
  * Player names on the cross-league boards open the player card.
@@ -157,5 +160,89 @@ describe('cross-league boards — player names open the card', () => {
     )
     expect(btn).toBeTruthy()
     expect(btn?.tagName).toBe('BUTTON')
+  })
+})
+
+/*
+ * ⚠ THE WAR ROOM IS THE ONE BOARD WHERE A NAME IS NOT ALWAYS OPENABLE, and that
+ * is the whole reason it was wired last. `DraftPick.playerId` carries whichever
+ * id the drafting room had — ours, the provider's, or Sleeper's — so the loader
+ * runs a three-key join and puts the RESOLVED Sleeper id on the row. When that
+ * join finds nobody, `sleeperId` is null and the name must stay plain text: an
+ * inert control would promise a lookup that cannot happen, and a raw
+ * `DraftPick.playerId` handed to a Sleeper-keyed API would open somebody else.
+ */
+function warRoomPicks(): LiveDraftPicks {
+  return {
+    byLeague: {
+      wr1: [
+        {
+          overall: 1, round: 1, pickInRound: 1, rosterId: '1',
+          managerName: 'Riley', isYours: false,
+          playerName: 'Josh Allen', position: 'QB', imageUrl: null, team: 'BUF',
+          sleeperId: '4984',
+        },
+        {
+          overall: 2, round: 1, pickInRound: 2, rosterId: '2',
+          managerName: null, isYours: true,
+          /* Named, but the three-key join landed nothing — must NOT be a control. */
+          playerName: 'Some Rookie', position: 'RB', imageUrl: null, team: null,
+          sleeperId: null,
+        },
+      ],
+    },
+    queueByLeague: {},
+  }
+}
+
+function draftRow(over: Partial<DraftHqAllRow> = {}): DraftHqAllRow {
+  return {
+    leagueId: 'l1',
+    leagueName: 'Four Horsemen Vol. 5',
+    platform: 'sleeper',
+    imageUrl: null,
+    phase: 'live',
+    rawStatus: 'in_progress',
+    draftType: 'snake',
+    rounds: 4,
+    teamCount: 28,
+    yourSlot: 5,
+    picksMade: 47,
+    pickExpiresAt: null,
+    onClockName: 'Riley',
+    yoursOnClock: false,
+    currentRound: 2,
+    nextOverallPick: 48,
+    queuedCount: 0,
+    modeLabel: 'rookie',
+    startedAt: null,
+    ...over,
+  }
+}
+
+function draftData(rows: DraftHqAllRow[], over: Partial<DraftHqAllData> = {}): DraftHqAllData {
+  return {
+    rows,
+    counts: { live: 1, upcoming: 0, done: 0, unknown: 0 },
+    withoutDraft: 55,
+    ...over,
+  }
+}
+
+describe('war room — a pick opens the card only when its id resolved', () => {
+  it('makes a RESOLVED pick openable', () => {
+    const { container } = render(
+      <WarRoomBoard drafts={draftData([draftRow({ leagueId: 'wr1', phase: 'live' })])} picks={warRoomPicks()} allHref="/core/war-room?all=1" draftHqHref="/core/draft-hq" />
+    )
+    expect(triggers(container)).toContain('Josh Allen')
+  })
+
+  /* The case the whole three-key join exists for. */
+  it('renders an UNRESOLVED pick as plain text, never a control', () => {
+    const { container } = render(
+      <WarRoomBoard drafts={draftData([draftRow({ leagueId: 'wr1', phase: 'live' })])} picks={warRoomPicks()} allHref="/core/war-room?all=1" draftHqHref="/core/draft-hq" />
+    )
+    expect(container.textContent).toContain('Some Rookie')
+    expect(triggers(container)).not.toContain('Some Rookie')
   })
 })
