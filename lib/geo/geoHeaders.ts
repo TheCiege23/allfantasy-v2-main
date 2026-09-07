@@ -50,7 +50,13 @@ function read(headers: Headers, name: string): string | null {
   return trimmed === "" ? null : trimmed;
 }
 
-function normaliseCountry(value: string | null): string | null {
+/**
+ * Exported so the IP-lookup fallback in `detectUserState` normalises a vendor's
+ * country the same way an edge header is normalised. Two implementations of one
+ * rule is the bug this module was created to remove; a second copy living in the
+ * fallback would reintroduce it one layer down.
+ */
+export function normaliseCountry(value: string | null): string | null {
   if (!value) return null;
   const upper = value.toUpperCase();
   return NON_COUNTRIES.has(upper) ? null : upper;
@@ -59,8 +65,14 @@ function normaliseCountry(value: string | null): string | null {
 /**
  * Some edges send the full subdivision path ("US-WA") rather than the bare
  * code. Keep the last segment so both spellings land on "WA".
+ *
+ * ⚠ This normalises SPELLING, it does not validate that the result is a code.
+ * "Washington" survives it unchanged, and `isFullyBlocked("WASHINGTON")` is
+ * false — so a caller taking a region from a source that may send a full name
+ * (an IP-geolocation vendor does) must check the shape itself. Exported for the
+ * same single-implementation reason as `normaliseCountry`.
  */
-function normaliseRegion(value: string | null): string | null {
+export function normaliseRegion(value: string | null): string | null {
   if (!value) return null;
   const upper = value.toUpperCase();
   const tail = upper.includes("-") ? upper.slice(upper.lastIndexOf("-") + 1) : upper;
