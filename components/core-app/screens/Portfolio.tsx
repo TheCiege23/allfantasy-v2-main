@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { LeagueInvitePanel } from '@/components/core-app/LeagueInvitePanel'
 import type { PortfolioData } from '@/lib/core-app/portfolio'
 import '@/components/core-app/af-portfolio.css'
+import '@/components/core-app/af-core-boards.css'
 
 /**
  * Portfolio — every league you are in.
@@ -69,6 +70,14 @@ export function Portfolio({ data, importHref = '/import?returnTo=%2Fcore%2Fportf
    * asked to see. The panel fetches on mount, so not mounting it IS the guard.
    */
   const [openInvite, setOpenInvite] = useState<string | null>(null)
+  /*
+   * ⚠ CLIENT STATE, NOT A SEARCH PARAM, AND ONLY BECAUSE THIS SCREEN IS ALREADY
+   * A CLIENT ISLAND. Every other filter in /core is a link so it survives a
+   * refresh and can be shared; here the invite panel already forces `use client`
+   * and the whole list is in memory, so a round-trip to re-render the same rows
+   * would be a page load to change a heading. `null` is "every platform".
+   */
+  const [platformTab, setPlatformTab] = useState<string | null>(null)
   if (!data.leagues.available) {
     return (
       <div className="af-pf">
@@ -118,13 +127,25 @@ export function Portfolio({ data, importHref = '/import?returnTo=%2Fcore%2Fportf
     )
   })()
 
+  const shown =
+    platformTab == null ? groups : groups.filter(([platform]) => platform === platformTab)
+
   return (
     <div className="af-pf">
       <header className="af-pf-head">
         <div>
           <h1 className="af-pf-title">Portfolio</h1>
+          {/*
+            ⚠ "CLAIMED TEAMS", NOT "LEAGUES", AND THE DIFFERENCE IS REAL. This
+            screen is one row per team you have CLAIMED — `getPortfolio` reads
+            `LeagueTeam WHERE claimedByUserId`. A league with no claimed team is
+            absent however healthy its import, and two claimed teams in one
+            league render as two rows BY DESIGN (a 32-team league is often two
+            conferences). Calling the count "leagues" is what makes both of those
+            look like bugs.
+          */}
           <p className="af-pf-sub">
-            {leagues.length} {leagues.length === 1 ? 'league' : 'leagues'}
+            {leagues.length} claimed {leagues.length === 1 ? 'team' : 'teams'}
             {data.commissionedCount > 0 ? ` · you commission ${data.commissionedCount}` : ''}
           </p>
         </div>
@@ -133,7 +154,45 @@ export function Portfolio({ data, importHref = '/import?returnTo=%2Fcore%2Fportf
         </Link>
       </header>
 
-      {groups.map(([platform, rows]) => (
+      {/*
+        Platform tabs with counts — 2026-09-07 handoff.
+
+        ⚠ THE GROUPED LAYOUT UNDERNEATH IS KEPT, NOT REPLACED. The grouping
+        exists for a measured reason: a single alphabetical list put the first
+        Fantrax league ever imported between two Sleeper leagues, where it was
+        reported as missing while it was on screen. The tabs narrow to one
+        platform; "All" still shows every group, so nothing that worked stops.
+      */}
+      {groups.length > 1 ? (
+        <div className="af-bd-tabs" role="tablist" aria-label="Filter by platform">
+          <button
+            type="button"
+            role="tab"
+            className="af-bd-tab"
+            aria-current={platformTab == null ? 'page' : undefined}
+            aria-selected={platformTab == null}
+            onClick={() => setPlatformTab(null)}
+          >
+            All <span className="af-bd-tab-n">{leagues.length}</span>
+          </button>
+          {groups.map(([platform, rows]) => (
+            <button
+              key={platform}
+              type="button"
+              role="tab"
+              className="af-bd-tab"
+              aria-current={platformTab === platform ? 'page' : undefined}
+              aria-selected={platformTab === platform}
+              onClick={() => setPlatformTab(platform)}
+            >
+              {PLATFORM_LABEL[platform] ?? platform}{' '}
+              <span className="af-bd-tab-n">{rows.length}</span>
+            </button>
+          ))}
+        </div>
+      ) : null}
+
+      {shown.map(([platform, rows]) => (
         <section key={platform} className="af-pf-group">
           <header className="af-pf-group-head">
             <span className="af-pf-group-name" data-platform={platform}>
@@ -275,6 +334,28 @@ export function Portfolio({ data, importHref = '/import?returnTo=%2Fcore%2Fportf
           </ul>
         </section>
       ))}
+
+      {/*
+        The footer summary every board in this batch carries. On this screen it
+        is the way back to a full list after a tab has narrowed it, and the way
+        to add what is not here at all.
+      */}
+      <div className="af-bd-foot">
+        <p className="af-bd-foot-text">
+          {platformTab
+            ? `Showing ${shown[0]?.[1].length ?? 0} of ${leagues.length} claimed teams.`
+            : `A league with no team claimed to you does not appear here — connect or re-import it and it will.`}
+        </p>
+        {platformTab ? (
+          <button type="button" className="af-bd-foot-cta" onClick={() => setPlatformTab(null)}>
+            View all {leagues.length} &rarr;
+          </button>
+        ) : (
+          <Link className="af-bd-foot-cta" href={importHref}>
+            Import a league &rarr;
+          </Link>
+        )}
+      </div>
     </div>
   )
 }

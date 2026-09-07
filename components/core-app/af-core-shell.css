@@ -1197,3 +1197,351 @@
 }
 
 .af-gdb-dismiss:hover { color: var(--text2); background: var(--surface2); }
+
+/* ── The expandable league rail ──────────────────────────────────────────
+ *
+ * 2026-09-07 handoff (`AF League List.dc.html`). One flag — `data-rail-open`
+ * on `.af-shell` — drives two presentations:
+ *
+ *   desktop  the 68px crest column widens to 300px and each tile becomes a
+ *            matchup row (your team and score against the opponent's).
+ *   mobile   the rail leaves the flow entirely and becomes a full-screen tray
+ *            behind an AF-blue handle pinned to the left edge.
+ *
+ * ⚠ COLLAPSED IS THE DEFAULT AND EVERY RULE BELOW IS ADDITIVE. Nothing in this
+ * block applies until the flag is set, so a shell that never opens the rail
+ * renders exactly as it did before — which is what makes this safe to add to a
+ * component every /core screen mounts.
+ */
+
+/*
+ * The art now sits in its own span so the row can put text beside it. Sized
+ * here rather than on the tile, because the tile stops being 42px square the
+ * moment the rail expands.
+ */
+.af-core .af-rail-tile-art {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  flex: none;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+/* Hidden until the rail opens; always in the DOM so toggling costs no re-render. */
+.af-core .af-rail-row {
+  display: none;
+  min-width: 0;
+  flex-direction: column;
+  gap: 3px;
+  text-align: left;
+}
+
+.af-core .af-rail-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 8px;
+  background: none;
+  border: 0;
+  border-radius: 9px;
+  color: var(--faint);
+  cursor: pointer;
+  font: 700 10px/1 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.af-core .af-rail-toggle:hover {
+  background: var(--chip);
+  color: var(--text2);
+}
+
+.af-core .af-rail-toggle-icon {
+  flex: none;
+  font-size: 13px;
+  line-height: 1;
+}
+
+/* The word count only fits once the rail is wide. */
+.af-core .af-rail-toggle-text {
+  display: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ── expanded, desktop ─────────────────────────────────────────────────── */
+
+/*
+ * 🛑 THE COLUMN WIDTHS ARE DESKTOP-ONLY, AND LEAVING THEM UNSCOPED BROKE THE
+ * MOBILE TRAY OUTRIGHT. Below 720px the shell is a single column and the rail is
+ * a fixed overlay; an unscoped `300px 232px 1fr` made the grid 566px wide on a
+ * 375px viewport, the page scrolled sideways, and the fixed rail then sized
+ * itself against that 566px box instead of the viewport — so `translateX(-100%)`
+ * moved it 566px and the "open" state slid it to −191px, still off-screen.
+ * Visibility flipped, the tray did not appear, and nothing threw. Found by
+ * measuring `getComputedStyle(rail).transform` in the browser, not by reading
+ * the CSS — the rule looks correct in isolation.
+ */
+@media (min-width: 721px) {
+  .af-core.af-shell[data-rail-open='true'] {
+    grid-template-columns: 300px 232px minmax(0, 1fr);
+  }
+}
+
+.af-shell[data-rail-open='true'] .af-rail {
+  align-items: stretch;
+  padding: 14px 10px;
+}
+
+.af-shell[data-rail-open='true'] .af-rail-scroll {
+  align-items: stretch;
+}
+
+.af-shell[data-rail-open='true'] .af-rail-tile {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 10px;
+  width: 100%;
+  height: auto;
+  padding: 7px 8px;
+  border-radius: 10px;
+  /*
+   * ⚠ THE PLATFORM TINT COMES OFF THE ROW, NOT OFF THE ART. `.af-platform`
+   * paints the tile; at 42px square that is a crest, at full width it is a
+   * coloured band across the rail. The tint moves to the art span so the row
+   * itself stays quiet and the crest keeps its identity.
+   */
+  background: transparent;
+}
+
+.af-shell[data-rail-open='true'] .af-rail-tile:hover {
+  background: var(--chip);
+}
+
+.af-shell[data-rail-open='true'] .af-rail-row {
+  display: flex;
+  flex: 1;
+}
+
+.af-shell[data-rail-open='true'] .af-rail-toggle-text {
+  display: block;
+}
+
+.af-shell[data-rail-open='true'] .af-rail-foot {
+  flex-direction: row;
+  gap: 8px;
+}
+
+.af-core .af-rail-row-name {
+  font: 800 12px/1.2 var(--font-archivo, 'Archivo', system-ui, sans-serif);
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.af-core .af-rail-row-line {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+
+.af-core .af-rail-row-side {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+  min-width: 0;
+  flex: 1;
+}
+
+.af-core .af-rail-row-team {
+  font: 500 10px/1.3 var(--font-archivo, 'Archivo', system-ui, sans-serif);
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.af-core .af-rail-row-side[data-side='them'] .af-rail-row-team {
+  color: var(--faint);
+}
+
+.af-core .af-rail-row-score {
+  flex: none;
+  font: 800 11px/1 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font-variant-numeric: tabular-nums;
+  color: var(--text2);
+}
+
+.af-core .af-rail-row-vs {
+  flex: none;
+  font: 700 9px/1 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  color: var(--faint);
+}
+
+/* ── the mobile handle and tray ────────────────────────────────────────── */
+
+/*
+ * Desktop never shows the handle: the rail is always visible there and its own
+ * header carries the toggle.
+ */
+.af-core .af-rail-handle {
+  display: none;
+}
+
+@media (max-width: 720px) {
+  /*
+   * ⚠ A SECOND BLOCK WITH THE SAME CONDITION, NOT AN EDIT INSIDE THE EXISTING
+   * ONE. Inserting a new @media inside another closes the outer query early and
+   * silently moves every rule below the insertion point into the narrower one —
+   * brace balance stays 0, nothing throws, and a CSS lint cannot see it. This
+   * repo has already shipped that bug once, in af-matchup.css. Later-wins makes
+   * a sibling block equivalent and impossible to get wrong. See CLAUDE.md.
+   */
+
+  /*
+   * ⚠ THE CONTENT MUST MAKE ROOM FOR THE HANDLE, OR THE HANDLE SITS ON THE
+   * WORDS. It is fixed, so it takes no space in the flow — and at 38vh it
+   * landed squarely over the first paragraph of every board. Reserving its
+   * width here is the fix; making it transparent or moving it down the page
+   * only changes which sentence it covers.
+   */
+  .af-core .af-content {
+    padding-left: 30px;
+  }
+
+  .af-core .af-rail-handle {
+    position: fixed;
+    left: 0;
+    top: 38vh;
+    z-index: 60;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    padding: 12px 4px;
+    border: 0;
+    border-radius: 0 12px 12px 0;
+    background: var(--accent);
+    color: var(--accent-ink);
+    cursor: pointer;
+    /* ≥44px in both directions — this is the only way into the league list on a phone. */
+    min-width: 26px;
+    min-height: 108px;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
+  }
+
+  .af-core .af-rail-handle-text {
+    font: 800 10px/1 var(--font-archivo, 'Archivo', system-ui, sans-serif);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    writing-mode: vertical-rl;
+  }
+
+  /*
+   * The rail leaves the flow. Its grid track then has no in-flow content and
+   * collapses to zero on its own, so the content row keeps the space.
+   */
+  .af-core .af-rail {
+    position: fixed;
+    inset: 0;
+    z-index: 59;
+    flex-direction: column;
+    align-items: stretch;
+    padding: 16px 14px calc(16px + env(safe-area-inset-bottom));
+    background: var(--rail);
+    border-right: 0;
+    overflow-y: auto;
+    transform: translateX(-100%);
+    /* `visibility` as well as the transform: an off-screen rail must not be
+       reachable by the tab key, and a transform alone leaves it focusable. */
+    visibility: hidden;
+    transition: transform 180ms ease;
+  }
+
+  .af-shell[data-rail-open='true'] .af-rail {
+    transform: none;
+    visibility: visible;
+  }
+
+  /* Inside the tray it is a vertical list again, not the horizontal strip. */
+  .af-core .af-rail-scroll {
+    flex-direction: column;
+    align-items: stretch;
+    overflow-x: visible;
+    overflow-y: auto;
+  }
+
+  .af-core .af-rail-tile {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 10px;
+    width: 100%;
+    height: auto;
+    padding: 9px 8px;
+    border-radius: 10px;
+    background: transparent;
+  }
+
+  /* In the tray every row is expanded — that is the point of a full screen. */
+  .af-core .af-rail-row {
+    display: flex;
+    flex: 1;
+  }
+
+  .af-core .af-rail-toggle-text {
+    display: block;
+  }
+
+  .af-core .af-rail-foot {
+    flex-direction: row;
+    gap: 10px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .af-core .af-rail {
+    transition: none;
+  }
+}
+
+/*
+ * The platform tint, moved from the row onto the crest.
+ *
+ * ⚠ WITHOUT THIS THE EXPANDED ROW HAS NO ART AT ALL. `.af-platform` paints the
+ * TILE, and the expanded rule above sets that tile transparent so a full-width
+ * coloured band does not run across the rail. The tint has to land somewhere,
+ * and the crest is where it means something. `color` is not repeated: it is
+ * still set on the tile and the art span inherits it, so the letter fallback
+ * keeps its platform colour.
+ */
+.af-shell[data-rail-open='true'] .af-rail-tile[data-platform='sleeper'] .af-rail-tile-art,
+.af-shell[data-rail-open='true'] .af-rail-tile[data-platform='espn'] .af-rail-tile-art,
+.af-shell[data-rail-open='true'] .af-rail-tile[data-platform='yahoo'] .af-rail-tile-art,
+.af-shell[data-rail-open='true'] .af-rail-tile[data-platform='fantrax'] .af-rail-tile-art,
+.af-shell[data-rail-open='true'] .af-rail-tile[data-platform='mfl'] .af-rail-tile-art,
+.af-shell[data-rail-open='true'] .af-rail-tile[data-platform='fleaflicker'] .af-rail-tile-art,
+.af-shell[data-rail-open='true'] .af-rail-tile[data-platform='manual'] .af-rail-tile-art {
+  background: var(--chip);
+}
+
+.af-shell[data-rail-open='true'] .af-rail-tile[data-platform='sleeper'] .af-rail-tile-art {
+  background: var(--p-sleeper-bg);
+}
+.af-shell[data-rail-open='true'] .af-rail-tile[data-platform='espn'] .af-rail-tile-art {
+  background: var(--p-espn-bg);
+}
+.af-shell[data-rail-open='true'] .af-rail-tile[data-platform='yahoo'] .af-rail-tile-art {
+  background: var(--p-yahoo-bg);
+}
+.af-shell[data-rail-open='true'] .af-rail-tile[data-platform='fantrax'] .af-rail-tile-art {
+  background: var(--p-fantrax-bg);
+}

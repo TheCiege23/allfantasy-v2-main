@@ -56,9 +56,17 @@ import { getMatchupPulse } from '@/lib/core-app/matchupPulse'
 import Trades from '@/components/core-app/screens/Trades'
 import { TradeCenter } from '@/components/core-app/screens/TradeCenter'
 import { getTradesData } from '@/lib/core-app/trades'
+import { getTradesBoard } from '@/lib/core-app/tradesBoard'
+import TradesBoard from '@/components/core-app/boards/TradesBoard'
+import { resolveCurrentWeek } from '@/lib/core-app/currentWeek'
 import Waivers from '@/components/core-app/screens/Waivers'
 import { getWaiversData } from '@/lib/core-app/waivers'
+import { getWaiversBoard } from '@/lib/core-app/waiversBoard'
+import WaiversBoard from '@/components/core-app/boards/WaiversBoard'
 import DraftHq from '@/components/core-app/screens/DraftHq'
+import DraftHqBoard from '@/components/core-app/boards/DraftHqBoard'
+import WarRoomBoard from '@/components/core-app/boards/WarRoomBoard'
+import { getLiveDraftPicks } from '@/lib/core-app/warRoomBoard'
 import { getDraftHqData } from '@/lib/core-app/draftHq'
 import WarRoom from '@/components/core-app/screens/WarRoom'
 import { getWarRoomData } from '@/lib/core-app/warRoom'
@@ -77,6 +85,9 @@ import { Portfolio } from '@/components/core-app/screens/Portfolio'
 import { Tools } from '@/components/core-app/screens/Tools'
 import { Career } from '@/components/core-app/screens/Career'
 import { getCareerData } from '@/lib/core-app/career'
+import { leagueArtUrl } from '@/lib/core-app/leagueArt'
+import { getRailMatchups } from '@/lib/core-app/railMatchups'
+import { getCareerRecords } from '@/lib/core-app/careerRecords'
 import LeagueCareer from '@/components/core-app/screens/LeagueCareer'
 import { getLeagueCareer } from '@/lib/core-app/leagueCareer'
 import { toShareCard } from '@/lib/core-app/shareCard'
@@ -95,6 +106,7 @@ import { readPlayByPlayFeed } from '@/lib/live/playByPlayFeed'
 import { getDraftHqAll } from '@/lib/core-app/draftHqAll'
 import { getWeekAll, scoredMatchupLeagueIds } from '@/lib/core-app/weekAll'
 import YourWeek from '@/components/core-app/screens/YourWeek'
+import WeekBoard from '@/components/core-app/boards/WeekBoard'
 import RivalryRadar from '@/components/core-app/screens/RivalryRadar'
 import { getWeekBoard, getRivalryRadar } from '@/lib/core-app/weekBoard'
 import YourWeekLeague from '@/components/core-app/screens/YourWeekLeague'
@@ -114,6 +126,7 @@ import { getLivePageData } from '@/lib/live/liveScoresPage'
 import CommissionerHub from '@/components/core-app/screens/CommissionerHub'
 import { getCommissionerHub } from '@/lib/core-app/commissionerHub'
 import Standings from '@/components/core-app/screens/Standings'
+import StandingsBoard from '@/components/core-app/boards/StandingsBoard'
 import PickALeague from '@/components/core-app/PickALeague'
 import LeagueTabs from '@/components/core-app/LeagueTabs'
 import { getLeagueStandings } from '@/lib/core-app/leagueStandings'
@@ -673,6 +686,15 @@ export default async function AfCorePage({
       : null
 
   /*
+   * Career records — only for `?view=records`, because it reads every played
+   * week this account has and no other tab needs it.
+   */
+  const careerRecords =
+    activeKey === 'career' && sp.view === 'records' && !selectedLeagueId
+      ? await getCareerRecords(userId).catch(() => null)
+      : null
+
+  /*
    * Rankings, its FAQ and the compare view share one screen key and one data
    * read. `?view=` picks the panel — three sibling routes for one product
    * surface is exactly the spend that pushed this repo against the route
@@ -901,9 +923,39 @@ export default async function AfCorePage({
       ? await getMatchupPulse(userId).catch(() => null)
       : null
 
+  /*
+   * The cross-league trade board. `weekBoard` is not loaded on this screen, so
+   * the current week comes from the same resolver the rest of the app uses —
+   * and null is fine: the board then prints the deadline WEEK without a
+   * countdown rather than inventing one.
+   */
+  const tradesBoard =
+    activeKey === 'trades' && !selectedLeagueId
+      ? await getTradesBoard(
+          userId,
+          await resolveCurrentWeek(
+            playedLeagues
+              .map((l) => (l as { platformLeagueId?: string | null }).platformLeagueId ?? '')
+              .filter((v) => v.length > 0),
+          )
+            .then((w) => w?.week ?? null)
+            .catch(() => null),
+        ).catch(() => null)
+      : null
+
   const trades =
     activeKey === 'trades' && selectedLeagueId
       ? await getTradesData(selectedLeagueId, userId).catch(() => null)
+      : null
+
+  /*
+   * The cross-league waiver board. Bounded to one candidate-pool read for the
+   * whole portfolio — see `waiversBoard.ts` for why a per-league free-agent
+   * query is the fan-out that must not be reintroduced here.
+   */
+  const waiversBoard =
+    activeKey === 'waivers' && !selectedLeagueId
+      ? await getWaiversBoard(userId).catch(() => null)
       : null
 
   const waivers =
@@ -1095,6 +1147,19 @@ export default async function AfCorePage({
     leagueType: (l as { leagueType?: string | null }).leagueType ?? null,
   }))
 
+  /*
+   * `?all=1` — the escape hatch out of every ranked board back to the full
+   * league picker.
+   *
+   * ⚠ THIS IS THE ONLY REMAINING ROUTE TO `PickALeague` ON A BOARD SCREEN, and
+   * the 2026-09-07 handoff is why: each board replaced the picker's grid with a
+   * footer line that accounts for the leagues it did not show. Every board's
+   * footer CTA points here unconditionally, so a manager whose leagues are all
+   * quiet still has a way in — which was the stated reason (2026-08-30) the old
+   * boards were composed ABOVE the picker rather than replacing it.
+   */
+  const showAllLeagues = sp.all === '1' || sp.all === 'true'
+
   const rivalriesView = activeKey === 'week' && sp.view === 'rivalries'
 
   const weekBoard =
@@ -1109,8 +1174,19 @@ export default async function AfCorePage({
     ? await getRivalryRadar(userId, weekLeagues).catch(() => null)
     : null
 
+  /*
+   * ⚠ SHARED WITH `/core/standings`, WHICH IS NOT A SECOND SIMULATION. The
+   * cross-league standings board ranks on `you.seed` and prints `you.playoffPct`
+   * beside it — both come out of this one run. Computing seeds separately for
+   * that screen would give two surfaces two different answers to "where do I
+   * sit", which is the failure `seasonOutlook.ts` documents at its own head.
+   *
+   * The cost only lands on a standings request that has NO league held; with a
+   * league selected the per-league screen loads instead and this stays null.
+   */
   const outlook =
-    activeKey === 'season-outlook'
+    activeKey === 'season-outlook' ||
+    ((activeKey === 'standings' || activeKey === 'week') && !selectedLeagueId && !rivalriesView)
       ? await getSeasonOutlook(
           userId,
           playedLeagues.map((l) => ({
@@ -1424,7 +1500,17 @@ export default async function AfCorePage({
    * site — the unfiltered list carries hundreds of past-season board rows. A
    * loader failure is null, and null renders NOTHING — see DashDraftsBand.
    */
-  const homeDrafts = isHome3a
+  /*
+   * ⚠ SHARED BY THREE SURFACES, ONE READ. The 3a home rail, the cross-league
+   * Draft HQ board and the cross-league War Room all want the same three
+   * set-based queries. `isHome3a` is false when segment === 'dashboard-v2', so
+   * the v2 dispatch further down still never pays for this twice.
+   */
+  const wantsAllDrafts =
+    isHome3a ||
+    ((activeKey === 'draft-hq' || activeKey === 'war-room') && !selectedLeagueId)
+
+  const homeDrafts = wantsAllDrafts
     ? await getDraftHqAll(
         userId,
         playedLeagues.map((l) => ({
@@ -1435,6 +1521,39 @@ export default async function AfCorePage({
         })),
       ).catch(() => null)
     : null
+
+  /*
+   * This week's head-to-head per league, for the expanded league rail.
+   *
+   * ⚠ THE SHELL IS ON EVERY /core PAGE, SO THIS IS BUDGETED, NOT FREE. Three
+   * set-based reads regardless of league count — the same shape and cost as
+   * `getWeekAll`, which already runs on the home. It is loaded unconditionally
+   * because the rail is chrome: the user can expand it on any screen, and a
+   * rail that only carries scores on some pages is worse than one that never
+   * does. A failure is null and the rail simply renders names and crests.
+   */
+  const railMatchups = await getRailMatchups(
+    userId,
+    playedLeagues.map((l) => ({
+      id: l.id,
+      platformLeagueId: (l as { platformLeagueId?: string | null }).platformLeagueId ?? null,
+    })),
+  ).catch(() => null)
+
+  /*
+   * The tail of each LIVE draft's board, for the cross-league War Room.
+   *
+   * ⚠ SCOPED TO THE LIVE LEAGUES ONLY, AND ONLY ON THAT SCREEN. Reading the pick
+   * tail for sixty finished drafts to render two running ones is the fan-out
+   * `draftHqAll.ts` exists to avoid; with nothing live this does not query at all.
+   */
+  const warRoomPicks =
+    activeKey === 'war-room' && !selectedLeagueId && homeDrafts
+      ? await getLiveDraftPicks(
+          userId,
+          homeDrafts.rows.filter((r) => r.phase === 'live').map((r) => r.leagueId),
+        ).catch(() => ({ byLeague: {}, queueByLeague: {} }))
+      : { byLeague: {}, queueByLeague: {} }
 
   /*
    * The activation funnel signal, carried over from /dashboard when that route
@@ -1660,6 +1779,8 @@ export default async function AfCorePage({
       isAdmin={isAdmin}
       importCapabilities={importCoverageSummary.capabilities}
       weekLabel={dash34?.weekLabel ?? null}
+      railMatchups={railMatchups?.byLeague}
+      railWeekLabel={railMatchups?.week != null ? `Week ${railMatchups.week}` : null}
       plan={plan}
       commissionerCount={commissionerCount}
       notificationCount={unreadNotifications}
@@ -1830,39 +1951,44 @@ export default async function AfCorePage({
       ) : activeKey === 'my-team' ? (
         myTeam ? (
           <MyTeam data={myTeam} />
-        ) : (
+        ) : /*
+           * 2026-09-07 handoff. The ranked board IS the screen now; the picker
+           * lives behind `?all=1`, which the board's own footer links to.
+           *
+           * ⚠ A FAILED PULSE READ FALLS BACK TO THE PICKER, NOT TO AN EMPTY
+           * BOARD. `getMyTeamPulse` is `.catch(() => null)` at its call site, so
+           * null here means we could not read — which is not the same fact as
+           * "nothing needs you", and the board must never be asked to draw it.
+           */
+        showAllLeagues || !myTeamPulse ? (
           <PickALeague
             tabKey="my-team"
             title="My team"
             blurb="Which lineups still need setting, and how long you have left. Pick one below for the full roster."
             issues={issues}
             leagues={rail}
-            /*
-              Composed above the queue and picker rather than replacing them —
-              the same shape as the matchup pulse below. A failed read renders
-              nothing here instead of an empty board, so this screen still does
-              everything it did before.
-            */
-            above={myTeamPulse ? <MyTeamBoard pulse={myTeamPulse} /> : null}
           />
+        ) : (
+          <MyTeamBoard pulse={myTeamPulse} allHref="/core/my-team?all=1" />
         )
       ) : activeKey === 'matchup' ? (
         matchup ? (
           <Matchup data={matchup} />
-        ) : (
+        ) : showAllLeagues || !matchupPulse ? (
+          /* A failed pulse read is not "no games" — fall back to the picker. */
           <PickALeague
             tabKey="matchup"
             title="Matchup"
             blurb="Every league with a head-to-head this week, ranked by margin. Pick one below for the full box score."
             issues={issues}
             leagues={rail}
-            /*
-              The pulse is composed above the queue and picker rather than
-              replacing them — the handoff leaves both unchanged. A failed read
-              renders nothing here instead of an empty board, so this screen
-              still does everything it did before.
-            */
-            above={matchupPulse ? <MatchupPulseBoard pulse={matchupPulse} /> : null}
+          />
+        ) : (
+          <MatchupPulseBoard
+            pulse={matchupPulse}
+            issues={issues}
+            allHref="/core/matchup?all=1"
+            totalLeagues={playedLeagues.length}
           />
         )
       ) : activeKey === 'trades' ? (
@@ -1896,6 +2022,8 @@ export default async function AfCorePage({
             />
             <Trades data={trades} />
           </>
+        ) : !showAllLeagues && tradesBoard ? (
+          <TradesBoard data={tradesBoard} allHref="/core/trades?all=1" />
         ) : (
           <PickALeague
             tabKey="trades"
@@ -1908,6 +2036,12 @@ export default async function AfCorePage({
       ) : activeKey === 'waivers' ? (
         waivers ? (
           <Waivers data={waivers} />
+        ) : !showAllLeagues && waiversBoard ? (
+          <WaiversBoard
+            data={waiversBoard}
+            allHref="/core/waivers?all=1"
+            totalLeagues={playedLeagues.length}
+          />
         ) : (
           <PickALeague
             tabKey="waivers"
@@ -1988,7 +2122,7 @@ export default async function AfCorePage({
       ) : activeKey === 'draft-hq' ? (
         draftHq ? (
           <DraftHq data={draftHq} />
-        ) : (
+        ) : showAllLeagues || !homeDrafts ? (
           <PickALeague
             tabKey="draft-hq"
             title="Draft HQ"
@@ -1996,17 +2130,30 @@ export default async function AfCorePage({
             issues={issues}
             leagues={rail}
           />
+        ) : (
+          <DraftHqBoard
+            data={homeDrafts}
+            allHref="/core/draft-hq?all=1"
+            totalLeagues={playedLeagues.length}
+          />
         )
       ) : activeKey === 'war-room' ? (
         warRoom ? (
           <WarRoom data={warRoom} />
-        ) : (
+        ) : showAllLeagues || !homeDrafts ? (
           <PickALeague
             tabKey="war-room"
             title="War Room"
             blurb="The board, the clock and the queue all belong to one league's draft."
             issues={issues}
             leagues={rail}
+          />
+        ) : (
+          <WarRoomBoard
+            drafts={homeDrafts}
+            picks={warRoomPicks}
+            allHref="/core/war-room?all=1"
+            draftHqHref="/core/draft-hq"
           />
         )
       ) : activeKey === 'players' ? (
@@ -2056,8 +2203,21 @@ export default async function AfCorePage({
            */
           weekBoard.leagueBoard ? (
             <YourWeekLeague board={weekBoard.leagueBoard} allWeeksHref="/core/week" />
-          ) : (
+          ) : showAllLeagues ? (
+            /*
+             * The full cross-league table, kept whole behind `?all=1`. The two
+             * ranked columns above it are a summary, not a replacement — a
+             * manager who wants every game still has one page that lists them.
+             */
             <YourWeek data={weekBoard} rivalriesHref="/core/week?view=rivalries" />
+          ) : (
+            <WeekBoard
+              board={weekBoard}
+              outlook={outlook}
+              rivalriesHref="/core/week?view=rivalries"
+              allHref="/core/week?all=1"
+              totalLeagues={playedLeagues.length}
+            />
           )
         ) : (
           <div className="af-frame" style={{ padding: 24, maxWidth: 720 }}>
@@ -2135,13 +2295,23 @@ export default async function AfCorePage({
                 on our side, not a season with no games in it.
               </p>
             </div>
-          ) : (
+          ) : showAllLeagues || !outlook ? (
+            /*
+             * A failed simulation is not "no standings" — fall back to the
+             * picker rather than drawing an empty board.
+             */
             <PickALeague
               tabKey="standings"
               title="Standings"
               blurb="Points-for only means something inside one league — two leagues with different scoring settings produce numbers that cannot be compared."
               issues={issues}
               leagues={rail}
+            />
+          ) : (
+            <StandingsBoard
+              outlook={outlook}
+              allHref="/core/standings?all=1"
+              totalLeagues={playedLeagues.length}
             />
           )
         )
@@ -2210,6 +2380,16 @@ export default async function AfCorePage({
               id: l.id,
               name: l.name,
               platform: String(l.platform ?? 'manual').toLowerCase(),
+              /*
+               * Resolved here rather than in the component: `avatarUrl` on a
+               * Sleeper league is an avatar ID, not a link, so the raw column
+               * would render a broken image on most rows.
+               */
+              imageUrl: leagueArtUrl({
+                logoUrl: (l as { logoUrl?: string | null }).logoUrl ?? null,
+                avatarUrl: (l as { avatarUrl?: string | null }).avatarUrl ?? null,
+                platform: l.platform,
+              }),
             }))}
             selectedLeagueId={selectedLeagueId}
             /*
@@ -2300,6 +2480,7 @@ export default async function AfCorePage({
             data={career}
             view={typeof sp.view === 'string' ? sp.view : null}
             share={shareCard}
+            records={careerRecords}
           />
         ) : (
           <div className="af-frame" style={{ padding: 24, maxWidth: 720 }}>

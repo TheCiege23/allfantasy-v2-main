@@ -770,14 +770,24 @@
    * is the same shape at every league-name length, which is the property the
    * flex row could not have.
    */
+  /*
+   * ⚠ THE FACE NEEDS ITS OWN AREA OR IT AUTO-PLACES AND SHUNTS EVERY OTHER CELL.
+   * `grid-template-areas` names three cells; a fourth child with no `grid-area`
+   * lands in the next implicit row, which pushes the points line onto a row of
+   * its own. Adding the headshot without this rule looks fine on desktop (a flex
+   * row) and only breaks below 640px, which is exactly the width nobody checks.
+   */
   .af-live-tiein {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-columns: auto minmax(0, 1fr) auto;
     grid-template-areas:
-      'tag tag'
-      'name pts';
+      'tag tag tag'
+      'face name pts';
     align-items: center;
     gap: 5px 10px;
+  }
+  .af-live-tiein-face {
+    grid-area: face;
   }
   .af-live-tiein-tag {
     grid-area: tag;

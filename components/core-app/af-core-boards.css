@@ -1,0 +1,708 @@
+/*
+ * AF Core — cross-league ranked boards.
+ *
+ * One stylesheet for every `/core/*` no-league surface in the 2026-09-07
+ * handoff (`design_handoff_core_pages`). Those fifteen designs are the same
+ * three primitives repeated: a titled section whose label STATES its ranking
+ * rule, a list of hairline rows, and a footer line accounting for the leagues
+ * the list did not show.
+ *
+ * ⚠ SCOPED UNDER `.af-core`, like every other file in this folder. The handoff
+ * reuses variable names the app defines globally with different values — see
+ * the long note at the top of af-core.css. Nothing here defines a token; it
+ * only consumes the ones af-core.css already sets, so the three themes keep
+ * working with no per-theme block in this file.
+ *
+ * ⚠ ROWS ARE HAIRLINE-DIVIDED, NOT BOXED, AND BADGES ARE UNFILLED TEXT. That is
+ * the handoff's stated reason for both: at ten to eighty rows a boxed card and
+ * a filled chip each add a border and a fill per row, and the page turns into
+ * texture. Do not "tidy" a board by giving its rows a background.
+ */
+
+/* ── page frame ─────────────────────────────────────────────────────────── */
+
+.af-core .af-bd {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  max-width: 1180px;
+}
+
+.af-core .af-bd-head {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.af-core .af-bd-eyebrow {
+  font: 700 9px/1 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  letter-spacing: 0.14em;
+  color: var(--faint);
+  margin: 0;
+  text-transform: uppercase;
+}
+
+.af-core .af-bd-title {
+  font: 900 26px/1.1 var(--font-archivo, 'Archivo', system-ui, sans-serif);
+  letter-spacing: -0.03em;
+  margin: 0;
+}
+
+.af-core .af-bd-blurb {
+  font: 400 12px/1.5 var(--font-archivo, 'Archivo', system-ui, sans-serif);
+  color: var(--muted);
+  margin: 0;
+  max-width: 70ch;
+}
+
+/* ── section header: label, rule, hairline, right-hand count ────────────── */
+
+.af-core .af-bd-sec {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.af-core .af-bd-sec-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding-bottom: 8px;
+}
+
+.af-core .af-bd-sec-label {
+  font: 700 9px/1 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  letter-spacing: 0.12em;
+  color: var(--faint);
+  margin: 0;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.af-core .af-bd-sec-rule {
+  flex: 1;
+  height: 1px;
+  background: var(--line);
+  /* Decorative; the label already carries the meaning. */
+}
+
+.af-core .af-bd-sec-count {
+  font: 400 10px/1 var(--font-archivo, 'Archivo', system-ui, sans-serif);
+  color: var(--faint);
+  white-space: nowrap;
+}
+
+/* ── rows ───────────────────────────────────────────────────────────────── */
+
+.af-core .af-bd-rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.af-core .af-bd-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 13px 4px;
+  border-bottom: 1px solid var(--line);
+  color: inherit;
+  text-decoration: none;
+  border-radius: 8px;
+}
+
+.af-core a.af-bd-row:hover,
+.af-core a.af-bd-row:focus-visible {
+  background: var(--chip);
+  outline: none;
+}
+
+.af-core a.af-bd-row:focus-visible {
+  box-shadow: 0 0 0 2px var(--accent-line);
+}
+
+.af-core .af-bd-rank {
+  width: 20px;
+  flex: none;
+  font: 800 12px/1 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  color: var(--faint);
+  font-variant-numeric: tabular-nums;
+}
+
+/* league identity block — name over platform · detail */
+.af-core .af-bd-league {
+  width: 230px;
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.af-core .af-bd-league--wide {
+  width: 280px;
+}
+
+.af-core .af-bd-name {
+  font: 800 13px/1.2 var(--font-archivo, 'Archivo', system-ui, sans-serif);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.af-core .af-bd-sub {
+  font: 500 11px/1.3 var(--font-archivo, 'Archivo', system-ui, sans-serif);
+  color: var(--faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/*
+ * The platform word, tinted by platform and UNFILLED — see the file header.
+ * `.af-platform` in af-core.css is the filled chip; this is its flat sibling
+ * and deliberately does not reuse it.
+ */
+.af-core .af-bd-plat {
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.af-core .af-bd-plat[data-platform='sleeper'] { color: var(--p-sleeper-fg); }
+.af-core .af-bd-plat[data-platform='espn'] { color: var(--p-espn-fg); }
+.af-core .af-bd-plat[data-platform='yahoo'] { color: var(--p-yahoo-fg); }
+.af-core .af-bd-plat[data-platform='fantrax'] { color: var(--p-fantrax-fg); }
+.af-core .af-bd-plat[data-platform='mfl'],
+.af-core .af-bd-plat[data-platform='fleaflicker'],
+.af-core .af-bd-plat[data-platform='manual'],
+.af-core .af-bd-plat[data-platform='native'] { color: var(--muted); }
+
+/* the flexible middle — issue tags, matchup summary, whatever the screen needs */
+.af-core .af-bd-mid {
+  flex: 1;
+  display: flex;
+  gap: 16px;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.af-core .af-bd-tag {
+  font: 700 11px/1.3 var(--font-archivo, 'Archivo', system-ui, sans-serif);
+}
+
+.af-core .af-bd-tag[data-sev='bad'] { color: var(--bad); }
+.af-core .af-bd-tag[data-sev='warn'] { color: var(--warn); }
+.af-core .af-bd-tag[data-sev='good'] { color: var(--good); }
+.af-core .af-bd-tag[data-sev='info'] { color: var(--accent); }
+
+.af-core .af-bd-tag-detail {
+  color: var(--muted);
+  font-weight: 500;
+}
+
+/* right-hand numeric column */
+.af-core .af-bd-stat {
+  width: 140px;
+  flex: none;
+  text-align: right;
+  font: 800 11px/1 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+
+.af-core .af-bd-stat--narrow { width: 92px; }
+.af-core .af-bd-stat[data-sev='bad'] { color: var(--bad); }
+.af-core .af-bd-stat[data-sev='warn'] { color: var(--warn); }
+.af-core .af-bd-stat[data-sev='good'] { color: var(--good); }
+
+.af-core .af-bd-cta {
+  width: 130px;
+  flex: none;
+  text-align: right;
+  font: 800 11px/1 var(--font-archivo, 'Archivo', system-ui, sans-serif);
+  color: var(--accent);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.af-core .af-bd-cta:hover { text-decoration: underline; }
+
+/* ── crest ──────────────────────────────────────────────────────────────── */
+
+.af-core .af-bd-crest {
+  width: 36px;
+  height: 36px;
+  flex: none;
+  border-radius: 10px;
+  object-fit: cover;
+  background: var(--chip);
+}
+
+.af-core .af-bd-crest--sm { width: 28px; height: 28px; border-radius: 8px; }
+.af-core .af-bd-crest--xs { width: 22px; height: 22px; border-radius: 7px; }
+
+.af-core .af-bd-crest--none {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font: 800 12px/1 var(--font-archivo, 'Archivo', system-ui, sans-serif);
+  letter-spacing: -0.02em;
+  color: var(--muted);
+  background: var(--chip);
+  border: 1px solid var(--chip-line);
+}
+
+.af-core .af-bd-crest--sm.af-bd-crest--none { font-size: 11px; }
+.af-core .af-bd-crest--xs.af-bd-crest--none { font-size: 9px; }
+
+.af-core .af-bd-crest--none[data-platform='sleeper'] {
+  background: var(--p-sleeper-bg);
+  color: var(--p-sleeper-fg);
+  border-color: transparent;
+}
+.af-core .af-bd-crest--none[data-platform='espn'] {
+  background: var(--p-espn-bg);
+  color: var(--p-espn-fg);
+  border-color: transparent;
+}
+.af-core .af-bd-crest--none[data-platform='yahoo'] {
+  background: var(--p-yahoo-bg);
+  color: var(--p-yahoo-fg);
+  border-color: transparent;
+}
+.af-core .af-bd-crest--none[data-platform='fantrax'] {
+  background: var(--p-fantrax-bg);
+  color: var(--p-fantrax-fg);
+  border-color: transparent;
+}
+
+/* ── player headshot ────────────────────────────────────────────────────── */
+
+.af-core .af-bd-face {
+  width: 34px;
+  height: 34px;
+  flex: none;
+  border-radius: 50%;
+  object-fit: cover;
+  object-position: top center;
+  background: var(--chip);
+  border: 1px solid var(--chip-line);
+}
+
+.af-core .af-bd-face--sm { width: 26px; height: 26px; }
+
+.af-core .af-bd-face--none {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font: 800 10px/1 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  color: var(--faint);
+}
+
+/* the club crest that sits on the headshot's shoulder */
+.af-core .af-bd-facewrap {
+  position: relative;
+  flex: none;
+  display: inline-flex;
+}
+
+.af-core .af-bd-club {
+  position: absolute;
+  right: -3px;
+  bottom: -3px;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  background: var(--surface);
+  padding: 1px;
+  object-fit: contain;
+}
+
+/* ── position tint, used wherever a player row shows one ────────────────── */
+
+.af-core .af-bd-pos {
+  font: 800 9px/1 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
+
+.af-core .af-bd-pos[data-pos='QB'] { color: #fb923c; }
+.af-core .af-bd-pos[data-pos='RB'] { color: var(--good); }
+.af-core .af-bd-pos[data-pos='WR'] { color: var(--accent); }
+.af-core .af-bd-pos[data-pos='TE'] { color: #a78bfa; }
+.af-core .af-bd-pos[data-pos='K'] { color: var(--faint); }
+.af-core .af-bd-pos[data-pos='DL'],
+.af-core .af-bd-pos[data-pos='LB'],
+.af-core .af-bd-pos[data-pos='DB'],
+.af-core .af-bd-pos[data-pos='DEF'] { color: var(--bad); }
+
+/* ── footer summary ─────────────────────────────────────────────────────── */
+
+.af-core .af-bd-foot {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 13px 15px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  flex-wrap: wrap;
+}
+
+.af-core .af-bd-foot-text {
+  flex: 1;
+  min-width: 220px;
+  font: 500 12px/1.4 var(--font-archivo, 'Archivo', system-ui, sans-serif);
+  color: var(--muted);
+  margin: 0;
+}
+
+.af-core .af-bd-foot-cta {
+  font: 700 11px/1 var(--font-archivo, 'Archivo', system-ui, sans-serif);
+  color: var(--accent);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.af-core .af-bd-foot-cta:hover { text-decoration: underline; }
+
+/* ── an honest "we have nothing here" note ──────────────────────────────── */
+
+.af-core .af-bd-note {
+  font: 400 12px/1.5 var(--font-archivo, 'Archivo', system-ui, sans-serif);
+  color: var(--muted);
+  margin: 0;
+  padding: 14px 15px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+
+.af-core .af-bd-note strong {
+  color: var(--text2);
+  font-weight: 700;
+}
+
+/* ── two-column split (Week, Standings) ─────────────────────────────────── */
+
+.af-core .af-bd-split {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 28px;
+  align-items: start;
+}
+
+/* ── card list (Trades, Draft HQ, War Room, Waivers, Live) ──────────────── */
+
+.af-core .af-bd-cards {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.af-core .af-bd-card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 11px;
+}
+
+.af-core .af-bd-card[data-live='true'] {
+  border-color: var(--accent-line);
+  background: linear-gradient(180deg, var(--accent-soft), transparent 42%), var(--surface);
+}
+
+.af-core .af-bd-card[data-sev='bad'] { border-color: rgba(251, 91, 120, 0.35); }
+
+.af-core .af-bd-card-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.af-core .af-bd-card-head .af-bd-league {
+  width: auto;
+  flex: 1;
+}
+
+.af-core .af-bd-card-body {
+  display: flex;
+  gap: 18px;
+  flex-wrap: wrap;
+}
+
+.af-core .af-bd-reason {
+  font: 500 11.5px/1.5 var(--font-archivo, 'Archivo', system-ui, sans-serif);
+  color: var(--muted);
+  margin: 0;
+  padding-top: 2px;
+  border-top: 1px solid var(--line);
+}
+
+/* hairline asset rows inside a trade card */
+.af-core .af-bd-side {
+  flex: 1;
+  min-width: 210px;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.af-core .af-bd-side-label {
+  font: 700 9px/1 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  letter-spacing: 0.12em;
+  color: var(--faint);
+  padding-bottom: 6px;
+  text-transform: uppercase;
+}
+
+.af-core .af-bd-asset {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--line);
+  font: 600 12px/1.3 var(--font-archivo, 'Archivo', system-ui, sans-serif);
+}
+
+.af-core .af-bd-asset:last-child { border-bottom: 0; }
+
+.af-core .af-bd-asset-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.af-core .af-bd-asset-val {
+  font: 700 11px/1 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+
+/* small stat pair, e.g. AF PROJ 15.8 */
+.af-core .af-bd-kv {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.af-core .af-bd-k {
+  font: 700 8.5px/1 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  letter-spacing: 0.1em;
+  color: var(--faint);
+  text-transform: uppercase;
+}
+
+.af-core .af-bd-v {
+  font: 800 13px/1 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font-variant-numeric: tabular-nums;
+}
+
+.af-core .af-bd-v[data-sev='good'] { color: var(--good); }
+.af-core .af-bd-v[data-sev='warn'] { color: var(--warn); }
+.af-core .af-bd-v[data-sev='bad'] { color: var(--bad); }
+.af-core .af-bd-v[data-sev='accent'] { color: var(--accent); }
+
+.af-core .af-bd-kvrow {
+  display: flex;
+  gap: 18px;
+  flex-wrap: wrap;
+}
+
+/* a filter row of pills (Live sports, Portfolio platforms) */
+.af-core .af-bd-pills {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.af-core .af-bd-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 12px;
+  border-radius: 9px;
+  background: var(--chip);
+  border: 1px solid var(--chip-line);
+  color: var(--text2);
+  text-decoration: none;
+  font: 700 11px/1 var(--font-archivo, 'Archivo', system-ui, sans-serif);
+}
+
+.af-core .af-bd-pill[aria-current='true'] {
+  background: var(--accent-soft);
+  border-color: var(--accent-line);
+  color: var(--accent);
+}
+
+.af-core .af-bd-pill-n {
+  font: 700 10px/1 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font-variant-numeric: tabular-nums;
+  color: var(--faint);
+}
+
+.af-core .af-bd-pill[aria-current='true'] .af-bd-pill-n { color: var(--accent); }
+
+/* tabs with counts (Portfolio) */
+.af-core .af-bd-tabs {
+  display: flex;
+  gap: 20px;
+  border-bottom: 1px solid var(--line);
+  flex-wrap: wrap;
+}
+
+.af-core .af-bd-tab {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 0 0 9px;
+  margin-bottom: -1px;
+  border-bottom: 2px solid transparent;
+  color: var(--faint);
+  text-decoration: none;
+  font: 700 12px/1 var(--font-archivo, 'Archivo', system-ui, sans-serif);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.af-core .af-bd-tab[aria-current='page'] {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+
+.af-core .af-bd-tab-n {
+  font: 700 10px/1 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── stat-card grid (Career records) ────────────────────────────────────── */
+
+.af-core .af-bd-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(232px, 1fr));
+  gap: 10px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.af-core .af-bd-statcard {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 14px 15px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.af-core .af-bd-statcard-k {
+  font: 700 8.5px/1.2 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  letter-spacing: 0.12em;
+  color: var(--faint);
+  text-transform: uppercase;
+}
+
+.af-core .af-bd-statcard-v {
+  font: 900 26px/1 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
+
+.af-core .af-bd-statcard-v[data-sev='good'] { color: var(--good); }
+.af-core .af-bd-statcard-v[data-sev='warn'] { color: var(--warn); }
+.af-core .af-bd-statcard-v[data-sev='bad'] { color: var(--bad); }
+.af-core .af-bd-statcard-v[data-sev='accent'] { color: var(--accent); }
+
+.af-core .af-bd-statcard-c {
+  font: 500 11px/1.4 var(--font-archivo, 'Archivo', system-ui, sans-serif);
+  color: var(--muted);
+}
+
+/* ── narrow viewports ───────────────────────────────────────────────────── */
+
+@media (max-width: 900px) {
+  .af-core .af-bd-split {
+    grid-template-columns: 1fr;
+    gap: 20px;
+  }
+}
+
+@media (max-width: 760px) {
+  .af-core .af-bd-title { font-size: 22px; }
+
+  /*
+   * The desktop row is one line of fixed columns; below this it becomes two
+   * lines — identity and headline stat on the first, tags and the CTA on the
+   * second, indented under the crest. That is the handoff's own mobile frame.
+   */
+  .af-core .af-bd-row {
+    flex-wrap: wrap;
+    gap: 9px 10px;
+    padding: 12px 4px;
+  }
+
+  .af-core .af-bd-league,
+  .af-core .af-bd-league--wide {
+    width: auto;
+    flex: 1;
+    min-width: 0;
+  }
+
+  .af-core .af-bd-mid {
+    order: 3;
+    flex-basis: 100%;
+    padding-left: 45px;
+    gap: 12px;
+  }
+
+  .af-core .af-bd-stat,
+  .af-core .af-bd-stat--narrow {
+    width: auto;
+    flex: none;
+  }
+
+  .af-core .af-bd-cta {
+    width: auto;
+    order: 4;
+    margin-left: auto;
+  }
+
+  .af-core .af-bd-crest { width: 30px; height: 30px; border-radius: 9px; }
+  .af-core .af-bd-card-body { gap: 12px; }
+  .af-core .af-bd-side { min-width: 0; flex-basis: 100%; }
+}
+
+/*
+ * A footer CTA that is a <button> rather than a link.
+ *
+ * Portfolio's "view all" clears a client-side tab filter, so it is genuinely an
+ * action and not a destination — but it must look identical to the link form
+ * beside it, and a bare <button> inherits none of that.
+ */
+.af-core button.af-bd-foot-cta {
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 700;
+  font-size: 11px;
+  line-height: 1;
+  color: var(--accent);
+}
+
+.af-core button.af-bd-foot-cta:hover { text-decoration: underline; }

@@ -2,7 +2,7 @@ import React from 'react'
 import { describe, expect, it } from 'vitest'
 import { render, within } from '@testing-library/react'
 
-import { MyTeamBoard, columnsTooUneven } from '@/components/core-app/MyTeamBoard'
+import { MyTeamBoard } from '@/components/core-app/MyTeamBoard'
 import { isAtRisk, isHealthyDesignation, isRuledOut } from '@/lib/core-app/injuryStatus'
 import { formatLockLabel } from '@/lib/core-app/lockLabel'
 import type { MyTeamPulse, MyTeamRow } from '@/lib/core-app/myTeamPulse'
@@ -14,6 +14,8 @@ import type { MyTeamPulse, MyTeamRow } from '@/lib/core-app/myTeamPulse'
  * out on a specific date and the assertion went red with no code change.
  */
 const NOW = Date.parse('2026-09-10T12:00:00Z')
+
+const ALL_HREF = '/core/my-team?all=1'
 
 function row(over: Partial<MyTeamRow> = {}): MyTeamRow {
   return {
@@ -35,6 +37,9 @@ function row(over: Partial<MyTeamRow> = {}): MyTeamRow {
     week: 2,
     severity: 0,
     href: '/core/my-team?league=l1',
+    platformLeagueId: '9990001',
+    leagueSeason: 2026,
+    teamId: '4',
     ...over,
   }
 }
@@ -125,6 +130,7 @@ describe('MyTeamBoard', () => {
   it('names every certain hole in the lineup', () => {
     const { container } = render(
       <MyTeamBoard
+        allHref={ALL_HREF}
         now={NOW}
         pulse={pulse({
           needs: [row({ empty: 2, out: 1, bye: 1, questionable: 3, severity: 4 })],
@@ -133,10 +139,10 @@ describe('MyTeamBoard', () => {
       />,
     )
     const text = container.textContent ?? ''
-    expect(text).toContain('2 empty')
-    expect(text).toContain('1 out')
-    expect(text).toContain('1 bye')
-    expect(text).toContain('3 Q')
+    expect(text).toContain('slots empty')
+    expect(text).toContain('ruled out')
+    expect(text).toContain('on bye')
+    expect(text).toContain('questionable')
   })
 
   /*
@@ -147,6 +153,7 @@ describe('MyTeamBoard', () => {
   it('never renders an unchecked bye count as zero', () => {
     const { container } = render(
       <MyTeamBoard
+        allHref={ALL_HREF}
         now={NOW}
         pulse={pulse({
           needs: [row({ bye: null, empty: 1, severity: 1 })],
@@ -156,76 +163,119 @@ describe('MyTeamBoard', () => {
       />,
     )
     const text = container.textContent ?? ''
-    expect(text).not.toContain('0 bye')
-    expect(text).toMatch(/not checked for byes|no lineup below was checked for byes/i)
+    expect(text).not.toContain('0 on bye')
+    expect(text).toMatch(/bye check did not run/i)
   })
 
   it('says a bye check ran clean rather than going silent', () => {
     const { container } = render(
-      <MyTeamBoard now={NOW} pulse={pulse({ set: [row()], setTotal: 1 })} />,
+      <MyTeamBoard allHref={ALL_HREF} now={NOW} pulse={pulse({ needs: [row()], needsTotal: 1 })} />,
     )
-    expect(container.textContent ?? '').not.toMatch(/checked for byes/i)
+    expect(container.textContent ?? '').not.toMatch(/bye check did not run/i)
   })
 
-  it('shows a clean lineup as set instead of leaving the row blank', () => {
+  it('shows a clean lineup as SET instead of leaving the row blank', () => {
     const { container } = render(
-      <MyTeamBoard now={NOW} pulse={pulse({ set: [row()], setTotal: 1 })} />,
+      <MyTeamBoard allHref={ALL_HREF} now={NOW} pulse={pulse({ needs: [row()], needsTotal: 1 })} />,
     )
-    expect(within(container).getByText('set')).toBeTruthy()
+    expect(within(container).getByText('SET')).toBeTruthy()
   })
 
   it('states an unresolved starter without colouring it as a lineup problem', () => {
     const { container } = render(
       <MyTeamBoard
+        allHref={ALL_HREF}
         now={NOW}
-        pulse={pulse({ set: [row({ unresolved: 2 })], setTotal: 1 })}
+        pulse={pulse({ needs: [row({ unresolved: 2 })], needsTotal: 1 })}
       />,
     )
-    const chip = within(container).getByText('2 unknown')
-    expect(chip.getAttribute('data-tone')).toBe('quiet')
+    const tag = container.querySelector('.af-bd-tag[data-sev="info"]')
+    expect(tag?.textContent).toContain('unidentified')
   })
 
-  it('says how many rows a capped column is hiding', () => {
+  /*
+   * ⚠ THE FOOTER'S CTA IS THE ONLY ROUTE LEFT TO THE LEAGUE PICKER, so it must
+   * render whether or not anything is hidden. Before this board the picker was
+   * on the page; if this link ever became conditional, a manager whose lineups
+   * are all set would have no way into a league at all.
+   */
+  it('always offers the route to every league, even with nothing hidden', () => {
     const { container } = render(
       <MyTeamBoard
+        allHref={ALL_HREF}
+        now={NOW}
+        pulse={pulse({ needs: [row()], needsTotal: 1, considered: 1 })}
+      />,
+    )
+    const cta = container.querySelector('.af-bd-foot-cta')
+    expect(cta?.getAttribute('href')).toBe(ALL_HREF)
+    expect(container.textContent ?? '').toContain('Every league you hold is on this board.')
+  })
+
+  it('accounts for the leagues the board did not show', () => {
+    const { container } = render(
+      <MyTeamBoard
+        allHref={ALL_HREF}
         now={NOW}
         pulse={pulse({
-          needs: Array.from({ length: 5 }, (_, i) =>
+          needs: Array.from({ length: 10 }, (_, i) =>
             row({ leagueId: `l${i}`, empty: 1, severity: 1 }),
           ),
-          needsTotal: 9,
+          needsTotal: 10,
+          considered: 65,
+          checked: 65,
         })}
       />,
     )
-    expect(container.textContent ?? '').toContain('4 more need a change')
+    const text = container.textContent ?? ''
+    expect(text).toContain('55 more leagues are set')
+    expect(text).toContain('View all 65')
   })
 
   it('tells no-claimed-team apart from nothing-we-could-read', () => {
-    const none = render(<MyTeamBoard now={NOW} pulse={pulse({ considered: 0, checked: 0 })} />)
-    expect(none.container.textContent ?? '').toContain('No claimed team yet')
+    const none = render(
+      <MyTeamBoard allHref={ALL_HREF} now={NOW} pulse={pulse({ considered: 0, checked: 0 })} />,
+    )
+    expect(none.container.textContent ?? '').toContain('No team in any league is claimed')
 
     const unreadable = render(
       <MyTeamBoard
+        allHref={ALL_HREF}
         now={NOW}
         pulse={pulse({ considered: 12, checked: 0, notChecked: { noRoster: 12, noLineup: 0 } })}
       />,
     )
     const text = unreadable.container.textContent ?? ''
-    expect(text).toContain('None of your 12 claimed teams')
+    expect(text).toContain('12 of your 12 claimed teams could not be checked')
     expect(text).toContain('12 have no roster imported')
   })
 
-  it('links each row into that league own my-team screen', () => {
+  it('links the league name into that league own my-team screen', () => {
     const { container } = render(
-      <MyTeamBoard now={NOW} pulse={pulse({ set: [row()], setTotal: 1 })} />,
+      <MyTeamBoard allHref={ALL_HREF} now={NOW} pulse={pulse({ needs: [row()], needsTotal: 1 })} />,
     )
-    const link = container.querySelector('a.af-mtb-row')
+    const link = container.querySelector('a.af-bd-league')
     expect(link?.getAttribute('href')).toBe('/core/my-team?league=l1')
   })
 
-  it('marks a locked row so it can be dimmed rather than dropped', () => {
+  /*
+   * AllFantasy is read-only. The row's action must leave for the platform where
+   * the lineup is actually changed, not loop back into a screen that cannot
+   * change it.
+   */
+  it('sends the row action to the platform, not back into AllFantasy', () => {
+    const { container } = render(
+      <MyTeamBoard allHref={ALL_HREF} now={NOW} pulse={pulse({ needs: [row()], needsTotal: 1 })} />,
+    )
+    const cta = container.querySelector('a.af-bd-cta')
+    expect(cta?.getAttribute('href')).toMatch(/^https?:\/\//)
+    expect(cta?.getAttribute('rel')).toBe('noopener noreferrer')
+  })
+
+  it('says Locked once the first kickoff has passed', () => {
     const { container } = render(
       <MyTeamBoard
+        allHref={ALL_HREF}
         now={NOW}
         pulse={pulse({
           needs: [row({ locked: true, lockAt: '2026-09-07T17:00:00Z', empty: 1, severity: 1 })],
@@ -233,95 +283,19 @@ describe('MyTeamBoard', () => {
         })}
       />,
     )
-    const link = container.querySelector('a.af-mtb-row')
-    expect(link?.getAttribute('data-locked')).toBe('true')
     expect(container.textContent ?? '').toContain('Locked')
   })
 
   it('renders an em dash, not a zero, when no kickoff could be read', () => {
     const { container } = render(
-      <MyTeamBoard now={NOW} pulse={pulse({ set: [row({ lockAt: null })], setTotal: 1 })} />,
+      <MyTeamBoard
+        allHref={ALL_HREF}
+        now={NOW}
+        pulse={pulse({ needs: [row({ lockAt: null })], needsTotal: 1 })}
+      />,
     )
-    const lock = container.querySelector('.af-mtb-lock')
-    expect(lock?.getAttribute('data-state')).toBe('unknown')
+    const lock = container.querySelector('.af-bd-stat')
     expect(lock?.textContent).toBe('—')
-  })
-})
-
-/*
- * When the two columns stop sitting side by side.
- *
- * ⚠ THE ORIGINAL RULE ASKED "IS ONE SIDE EMPTY", AND EMPTY IS THE RARE CASE.
- * Observed on a real 66-league portfolio: 1 needing a change against 5 set,
- * which left roughly 160px of blank column — four rows of nothing beside five
- * rows of content, on the state this board exists to reach. One-or-two-against-
- * dozens is the STEADY state, so the balanced layout the grid assumes is the one
- * that almost never happens.
- */
-describe('columnsTooUneven', () => {
-  it('stacks when one side is empty', () => {
-    expect(columnsTooUneven(0, 5)).toBe(true)
-    expect(columnsTooUneven(5, 0)).toBe(true)
-  })
-
-  /* The case that prompted this: one row beside five. */
-  it('stacks at one against five', () => {
-    expect(columnsTooUneven(1, 5)).toBe(true)
-  })
-
-  it('stays side by side when the columns are close', () => {
-    expect(columnsTooUneven(5, 5)).toBe(false)
-    expect(columnsTooUneven(4, 5)).toBe(false)
-    expect(columnsTooUneven(3, 5)).toBe(false)
-  })
-
-  /* Three rows of difference is the boundary; check both sides of it. */
-  it('turns over at a difference of exactly three', () => {
-    expect(columnsTooUneven(2, 5)).toBe(true)
-    expect(columnsTooUneven(3, 6)).toBe(true)
-    expect(columnsTooUneven(3, 5)).toBe(false)
-  })
-
-  /* Symmetric — it must not matter which side is the short one. */
-  it('does not care which column is the short one', () => {
-    expect(columnsTooUneven(1, 5)).toBe(columnsTooUneven(5, 1))
-    expect(columnsTooUneven(4, 5)).toBe(columnsTooUneven(5, 4))
-  })
-
-  it('does not stack two short columns', () => {
-    expect(columnsTooUneven(0, 0)).toBe(false)
-    expect(columnsTooUneven(1, 1)).toBe(false)
-  })
-})
-
-describe('MyTeamBoard — column stacking', () => {
-  it('marks the board for stacking when one row faces five', () => {
-    const { container } = render(
-      <MyTeamBoard
-        pulse={pulse({
-          needs: [row({ leagueId: 'n1', empty: 1 })],
-          needsTotal: 1,
-          set: [1, 2, 3, 4, 5].map((n) => row({ leagueId: `s${n}` })),
-          setTotal: 5,
-        })}
-        now={NOW}
-      />,
-    )
-    expect(container.querySelector('.af-mtb-cols')?.getAttribute('data-stack')).toBe('true')
-  })
-
-  it('leaves a balanced board in two columns', () => {
-    const { container } = render(
-      <MyTeamBoard
-        pulse={pulse({
-          needs: [1, 2, 3].map((n) => row({ leagueId: `n${n}`, empty: 1 })),
-          needsTotal: 3,
-          set: [1, 2, 3, 4].map((n) => row({ leagueId: `s${n}` })),
-          setTotal: 4,
-        })}
-        now={NOW}
-      />,
-    )
-    expect(container.querySelector('.af-mtb-cols')?.getAttribute('data-stack')).toBeNull()
+    expect(lock?.getAttribute('aria-label')).toMatch(/Lock time unknown/)
   })
 })

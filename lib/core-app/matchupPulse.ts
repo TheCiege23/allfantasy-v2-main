@@ -137,6 +137,20 @@ export type MatchupPulse = {
      * such totals is an artefact of coverage, not a lead.
      */
     uncomparable: number
+    /**
+     * A claimed team whose roster id this loader cannot use.
+     *
+     * 🛑 THIS COUNT EXISTS BECAUSE ITS ABSENCE PRODUCED A FALSE STATEMENT ON A
+     * REAL ACCOUNT. `mine` requires `Number.isFinite(Number(externalId))` — the
+     * WeeklyMatchup join needs Sleeper's numeric roster_id — so an ESPN SWID or
+     * a Fantrax slug drops the team silently. With every claimed team dropped,
+     * `considered` was 0 and the cross-league board rendered "No claimed team
+     * yet" to a manager holding four. Found by rendering it, 2026-09-07.
+     *
+     * "We cannot place your roster against a schedule" and "you have not
+     * claimed a team" are different sentences and the screen now says which.
+     */
+    unidentifiedRoster: number
   }
 }
 
@@ -212,7 +226,7 @@ const EMPTY_PULSE: MatchupPulse = {
   considered: 0,
   ranked: 0,
   basis: null,
-  notRanked: { noSchedule: 0, noOpponent: 0, unpriceable: 0, uncomparable: 0 },
+  notRanked: { noSchedule: 0, noOpponent: 0, unpriceable: 0, uncomparable: 0, unidentifiedRoster: 0 },
 }
 
 export async function getMatchupPulse(
@@ -246,7 +260,18 @@ export async function getMatchupPulse(
   const mine = claimed.filter(
     (c) => c.league?.platformLeagueId && Number.isFinite(Number(c.externalId)),
   )
-  if (mine.length === 0) return EMPTY_PULSE
+  /*
+   * See `notRanked.unidentifiedRoster`. Reporting `considered: 0` here told a
+   * manager with four claimed teams that they had none.
+   */
+  const unidentifiedRoster = claimed.length - mine.length
+  if (mine.length === 0) {
+    return {
+      ...EMPTY_PULSE,
+      considered: claimed.length,
+      notRanked: { ...EMPTY_PULSE.notRanked, unidentifiedRoster },
+    }
+  }
 
   const plids = [...new Set(mine.map((c) => c.league!.platformLeagueId as string))]
   const leagueIds = [...new Set(mine.map((c) => c.league!.id))]
@@ -447,7 +472,11 @@ export async function getMatchupPulse(
   }
 
   if (pending.length === 0) {
-    return { ...EMPTY_PULSE, considered: mine.length, notRanked }
+    return {
+      ...EMPTY_PULSE,
+      considered: claimed.length,
+      notRanked: { ...notRanked, unidentifiedRoster },
+    }
   }
 
   /* ── 4. Lineups for both sides of every unscored pairing. ──────────────── */
@@ -658,9 +687,9 @@ export async function getMatchupPulse(
   return {
     leading,
     trailing,
-    considered: mine.length,
+    considered: claimed.length,
     ranked: ranked.length,
     basis: bases.size === 0 ? null : bases.size > 1 ? 'mixed' : [...bases][0],
-    notRanked,
+    notRanked: { ...notRanked, unidentifiedRoster },
   }
 }

@@ -1,98 +1,104 @@
 import Link from 'next/link'
 
 import { formatLockLabel } from '@/lib/core-app/lockLabel'
+import { lineupLink } from '@/lib/core-app/platformLinks'
 import type { MyTeamPulse, MyTeamRow } from '@/lib/core-app/myTeamPulse'
 import { MyTeamLockClock } from '@/components/core-app/MyTeamLockClock'
-import '@/components/core-app/af-my-team-board.css'
+import {
+  BoardHead,
+  FooterSummary,
+  LeagueCrest,
+  RowTag,
+  SectionHead,
+  rankLabel,
+  type Sev,
+} from '@/components/core-app/boards/BoardKit'
+import '@/components/core-app/af-core-boards.css'
 
 /**
- * "Lineups that need you" — the cross-league my-team board.
+ * `/core/my-team` with no league held — the cross-league lineup board.
  *
- * Sits above the existing "Needs you first" queue and league picker on
- * `/core/my-team`, the same way the matchup pulse does on `/core/matchup`, and
- * leaves both of them alone.
+ * "Your ten most urgent lineups across every league, ranked by time left before
+ * lock." One ranked list, then a footer line accounting for every league it did
+ * not show. (2026-09-07 handoff, `AF Core My Team.dc.html`.)
  *
- * ⚠ THAT DIVERGES FROM THE HANDOFF ON PURPOSE, BY DECISION, NOT OVERSIGHT.
- * The handoff says this board "replaces the old 'Needs you first' + 'Or pick a
- * league' placeholder entirely". User's call, 2026-08-30: it sits above and both
- * stay. Do not "reconcile" the code to the handoff later — the handoff is the
- * older opinion, and this note exists because that doc is not in the repo, so a
- * future reader meets the instruction with nothing recording that it was
- * answered.
+ * ── What this replaced, and why each drop was a decision ────────────────────
  *
- * The reason it cannot replace them: this component is passed as `above=` and
- * renders NOTHING when there is no pulse to show — see the `return null` below,
- * and the call site in `app/core/[[...screen]]/page.tsx`, which passes `null`
- * outright when `myTeamPulse` is absent. Replacing the placeholders would leave
- * a manager with no urgent lineup looking at an empty screen, and strand the one
- * who has not imported a league yet: the picker is their only route in.
+ * The previous version of this file was a two-column "needs you / quiet" board
+ * that sat ABOVE the `PickALeague` queue and its grid of all 65+ leagues. All
+ * three are gone from the default view and none is deleted:
+ *
+ *   the split columns  — collapsed into one ranked list. The quiet column was
+ *                        five rows saying nothing needs you, which is what the
+ *                        footer now says in one line.
+ *   "Needs you first"  — the same severity signal this board ranks on. It was
+ *                        being rendered twice on one screen.
+ *   the league grid    — moved behind the footer's "View all N", which renders
+ *                        unconditionally.
+ *
+ * ⚠ THAT LAST ONE IS LOAD-BEARING AND REVERSES A 2026-08-30 DECISION ON PURPOSE.
+ * The board was made additive back then for one stated reason: a manager whose
+ * lineups are all set would otherwise face an empty screen with no route into a
+ * league. The footer link is that route, and it is why `FooterSummary` renders
+ * even when the hidden count is zero. Do not make the CTA conditional.
  *
  * ⚠ EVERY COUNT ON A ROW IS A LOSS THAT HAS ALREADY HAPPENED OR IS CERTAIN TO.
  * An empty slot, a starter ruled out and a starter on bye all score zero, which
- * is why they share a colour and add up into one urgency. A QUESTIONABLE
- * designation does not — he probably plays — so it is rendered in the warning
- * tone, kept out of the total, and never used to sort a league to the top.
+ * is why they share a tone and add into one urgency. A QUESTIONABLE designation
+ * does not — he probably plays — so it is warning-toned, kept out of the total,
+ * and never used to sort a league to the top.
  *
  * ⚠ AND A MISSING BYE CHECK IS SAID OUT LOUD. `bye: null` means this week's
  * schedule was too thin to tell a bye from a hole in our ingestion. A board that
- * silently renders that as "nothing on bye" is the exact failure the underlying
- * gate exists to prevent, so the note under the header states it instead.
+ * renders that as "nothing on bye" is the exact failure the underlying gate
+ * exists to prevent.
  */
 
 export type MyTeamBoardProps = {
   pulse: MyTeamPulse
   /** Injected in tests so the rendered countdown is deterministic. */
   now?: number
+  /** Where the footer's "View all" goes — the full picker. */
+  allHref: string
 }
 
-/** The crest, or the initials that are the genuine fallback for a missing one. */
-function Crest({ row }: { row: MyTeamRow }) {
-  return row.logoUrl ? (
-    // eslint-disable-next-line @next/next/no-img-element
-    <img className="af-mtb-crest" src={row.logoUrl} alt="" width={30} height={30} loading="lazy" />
-  ) : (
-    <span className="af-mtb-crest af-mtb-crest--none" data-platform={row.platform} aria-hidden>
-      {row.leagueBadge}
-    </span>
-  )
-}
-
-/**
- * "Ghosts of Gridiron · 9 starters".
- *
- * Each clause is dropped rather than faked when its source is absent: a league
- * that never published a team name stays unnamed rather than borrowing the
- * league's own.
- */
-function metaOf(row: MyTeamRow): string {
+/** "Ghosts of Gridiron · 9 starters" — each clause dropped rather than faked. */
+function detailOf(row: MyTeamRow): string {
   const parts: string[] = []
   if (row.teamName) parts.push(row.teamName)
   parts.push(`${row.starters} ${row.starters === 1 ? 'starter' : 'starters'}`)
-  if (row.week != null) parts.push(`wk ${row.week}`)
   return parts.join(' · ')
 }
 
 /**
- * The problem chips, in the order a manager would fix them.
+ * The problems, in the order a manager would fix them.
  *
- * Empty first because it is the only one with no excuse — nobody is in the
- * slot — then the two that need a replacement found, then the risk.
+ * Empty first because it is the only one with no excuse — nobody is in the slot
+ * — then the two that need a replacement found, then the risk, then our own gap.
  */
-function chipsOf(row: MyTeamRow): Array<{ key: string; text: string; tone: 'bad' | 'warn' | 'quiet' }> {
-  const out: Array<{ key: string; text: string; tone: 'bad' | 'warn' | 'quiet' }> = []
-  if (row.empty > 0) out.push({ key: 'empty', text: `${row.empty} empty`, tone: 'bad' })
-  if (row.out > 0) out.push({ key: 'out', text: `${row.out} out`, tone: 'bad' })
-  if (row.bye != null && row.bye > 0) out.push({ key: 'bye', text: `${row.bye} bye`, tone: 'bad' })
+function tagsOf(row: MyTeamRow): Array<{ key: string; tag: string; detail: string; sev: Sev }> {
+  const out: Array<{ key: string; tag: string; detail: string; sev: Sev }> = []
+  if (row.empty > 0) {
+    out.push({
+      key: 'empty',
+      tag: String(row.empty),
+      detail: row.empty === 1 ? 'slot empty' : 'slots empty',
+      sev: 'bad',
+    })
+  }
+  if (row.out > 0) out.push({ key: 'out', tag: String(row.out), detail: 'ruled out', sev: 'bad' })
+  if (row.bye != null && row.bye > 0) {
+    out.push({ key: 'bye', tag: String(row.bye), detail: 'on bye', sev: 'bad' })
+  }
   if (row.questionable > 0) {
-    out.push({ key: 'q', text: `${row.questionable} Q`, tone: 'warn' })
+    out.push({ key: 'q', tag: String(row.questionable), detail: 'questionable', sev: 'warn' })
   }
   /*
-   * Not a lineup problem and never coloured as one — a starter we could not
-   * look up is OUR gap. It is shown so a short count is explained rather than
-   * quietly wrong.
+   * Not a lineup problem and never toned as one — a starter we could not look
+   * up is OUR gap. Shown so a short count is explained rather than quietly wrong.
    */
   if (row.unresolved > 0) {
-    out.push({ key: 'unresolved', text: `${row.unresolved} unknown`, tone: 'quiet' })
+    out.push({ key: 'unresolved', tag: String(row.unresolved), detail: 'unidentified', sev: 'info' })
   }
   return out
 }
@@ -100,15 +106,13 @@ function chipsOf(row: MyTeamRow): Array<{ key: string; text: string; tone: 'bad'
 function Lock({ row, now }: { row: MyTeamRow; now: number }) {
   /*
    * ⚠ THE EM DASH NEEDS AN ACCESSIBLE NAME OR IT IS SILENCE. `title` alone is
-   * not reliably announced, and "—" read aloud is nothing at all — so the
-   * reason travels as the label, matching what `af-mt-status` already does on
-   * the per-league screen.
+   * not reliably announced and "—" read aloud is nothing at all, so the reason
+   * travels as the label.
    */
   if (row.lockAt == null) {
-    const why =
-      'Lock time unknown — no kickoff on file for any of these starters.'
+    const why = 'Lock time unknown — no kickoff on file for any of these starters.'
     return (
-      <span className="af-mtb-lock af-num" data-state="unknown" title={why} aria-label={why}>
+      <span className="af-bd-stat" title={why} aria-label={why}>
         &mdash;
       </span>
     )
@@ -119,21 +123,19 @@ function Lock({ row, now }: { row: MyTeamRow; now: number }) {
   const kickoff = `${new Date(atMs).toUTCString().slice(0, 22)} UTC`
 
   /*
-   * ⚠ A DATE, NOT A COUNTDOWN, AND NOT A LIVE ONE. Past DISTANT_LOCK_DAYS the
-   * next kickoff we hold is almost certainly not this week's — the per-league
-   * screen says so in as many words — so counting down to it states a deadline
-   * that does not exist. Every league on a 55-league portfolio read "10d 8h"
-   * before this, which is a board that has told you nothing.
-   *
-   * The ticking clock is dropped with the countdown: it re-renders every thirty
-   * seconds to redraw a date that changes once a day.
+   * ⚠ A DATE, NOT A COUNTDOWN, PAST `DISTANT_LOCK_DAYS`. The next kickoff we
+   * hold that far out is almost certainly not this week's, so counting down to
+   * it states a deadline that does not exist — every league on a 55-league
+   * portfolio read "10d 8h" before this, which is a board that told you nothing.
+   * The ticking clock goes with it: it re-rendered every thirty seconds to
+   * redraw a date that changes once a day.
    */
   if (label.distant) {
     const why =
       `The next kickoff we hold for these starters is ${kickoff}, further out than a lineup ` +
       'lock should be — this week’s schedule has probably not been ingested yet.'
     return (
-      <span className="af-mtb-lock af-num" data-state="distant" title={why} aria-label={why}>
+      <span className="af-bd-stat" title={why} aria-label={why}>
         {label.text}
       </span>
     )
@@ -141,192 +143,205 @@ function Lock({ row, now }: { row: MyTeamRow; now: number }) {
 
   return (
     <span
-      className="af-mtb-lock af-num"
-      data-state={label.locked ? 'locked' : label.urgent ? 'urgent' : 'open'}
+      className="af-bd-stat"
+      data-sev={label.locked ? 'bad' : label.urgent ? 'bad' : 'warn'}
       title={`First kickoff ${kickoff}`}
     >
-      {label.locked ? (
-        label.text
-      ) : (
-        <MyTeamLockClock atMs={atMs} initial={label.text} />
-      )}
+      {label.locked ? label.text : <MyTeamLockClock atMs={atMs} initial={label.text} />}
     </span>
   )
 }
 
-function Row({ row, tone, now }: { row: MyTeamRow; tone: 'bad' | 'good'; now: number }) {
-  const chips = chipsOf(row)
+function Row({ row, i, now }: { row: MyTeamRow; i: number; now: number }) {
+  const tags = tagsOf(row)
+  /*
+   * ⚠ THE CTA GOES TO THE PLATFORM, NOT INTO AllFantasy. AllFantasy is
+   * read-only; the lineup is changed on Sleeper. `lineupLink` falls back to the
+   * in-app screen for a native league and for any provider whose deep-link
+   * format is not yet verified, so this is never a dead destination.
+   */
+  const fix = lineupLink({
+    id: row.leagueId,
+    platform: row.platform,
+    platformLeagueId: row.platformLeagueId,
+    season: row.leagueSeason,
+    name: row.leagueName,
+    teamId: row.teamId,
+  })
+
   return (
     <li>
-      <Link className="af-mtb-row" href={row.href} data-tone={tone} data-locked={row.locked}>
-        <Crest row={row} />
-        <span className="af-mtb-text">
-          <span className="af-mtb-league">{row.leagueName}</span>
-          <span className="af-mtb-meta">{metaOf(row)}</span>
+      <div className="af-bd-row">
+        <span className="af-bd-rank" aria-hidden>
+          {rankLabel(i)}
         </span>
-        {chips.length > 0 ? (
-          <span className="af-mtb-chips">
-            {chips.map((c) => (
-              <span key={c.key} className="af-mtb-chip" data-tone={c.tone}>
-                {c.text}
-              </span>
-            ))}
-          </span>
-        ) : (
-          /*
-           * A clean lineup still says so. An empty gap here reads as "we did not
-           * check", which is a different and much weaker claim than "we checked
-           * and there is nothing wrong".
-           */
-          <span className="af-mtb-chips">
-            <span className="af-mtb-chip" data-tone="good">
-              set
+        <LeagueCrest
+          imageUrl={row.logoUrl}
+          mark={row.leagueBadge}
+          name={row.leagueName}
+          platform={row.platform}
+        />
+        <Link className="af-bd-league" href={row.href}>
+          <span className="af-bd-name">{row.leagueName}</span>
+          <span className="af-bd-sub">
+            <span className="af-bd-plat" data-platform={row.platform}>
+              {row.platform.toUpperCase()}
             </span>
+            {' · '}
+            {detailOf(row)}
           </span>
-        )}
+        </Link>
+        <span className="af-bd-mid">
+          {tags.length > 0 ? (
+            tags.map((t) => (
+              <RowTag key={t.key} tag={t.tag} detail={t.detail} sev={t.sev} />
+            ))
+          ) : (
+            /*
+             * A clean lineup still says so. An empty gap here reads as "we did
+             * not check", which is a much weaker claim than "we checked and
+             * there is nothing wrong".
+             */
+            <RowTag tag="SET" detail="nothing missing" sev="good" />
+          )}
+        </span>
         <Lock row={row} now={now} />
-      </Link>
+        {fix ? (
+          <a
+            className="af-bd-cta"
+            href={fix.href}
+            {...(fix.external ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
+          >
+            {fix.label.replace(/^Open in /, 'Open in ')} {fix.external ? '↗' : '→'}
+          </a>
+        ) : (
+          <span className="af-bd-cta" />
+        )}
+      </div>
     </li>
   )
 }
 
-/** "we could not check for byes" — never a silent pass. */
-function byeNote(pulse: MyTeamPulse): string | null {
-  if (pulse.checked === 0 || pulse.byeChecked) return null
-  return 'This week’s schedule is not complete enough for us to tell a bye from a gap in our own data, so no lineup below was checked for byes.'
-}
+export function MyTeamBoard({ pulse, now, allHref }: MyTeamBoardProps) {
+  const nowMs = now ?? Date.now()
+  const rows = pulse.needs
+  const total = pulse.considered
 
-/** "we could not check six of them, and here is why" — never a silent short list. */
-function gapNote(pulse: MyTeamPulse): string | null {
-  const { noRoster, noLineup } = pulse.notChecked
-  const parts: string[] = []
-  if (noRoster > 0) parts.push(`${noRoster} have no roster imported`)
-  if (noLineup > 0) parts.push(`${noLineup} carry no starting lineup`)
-  if (parts.length === 0) return null
-  return `Not checked: ${parts.join(', ')}.`
-}
-
-/** "+3 more" when a column is capped. The header count is the whole truth. */
-function More({ shown, total, noun }: { shown: number; total: number; noun: string }) {
-  if (total <= shown) return null
-  return (
-    <p className="af-mtb-more">
-      {total - shown} more {noun}. Pick a league below to see it.
-    </p>
-  )
-}
-
-/**
- * Are the two columns too unequal to sit side by side?
- *
- * ⚠ THIS USED TO ASK "IS ONE SIDE EMPTY", AND EMPTY IS THE RARE CASE. Observed
- * on a real 66-league portfolio: 1 needing a change against 5 set, which left
- * roughly 160px of blank column under the single row — four rows of nothing
- * beside five rows of content. That is the STEADY state, not an edge case: most
- * weeks a manager has one or two lineups to fix and dozens already set, so the
- * balanced layout the two-column grid assumes is the one that almost never
- * happens.
- *
- * Three rows of difference is where the shorter column stops reading as a list
- * and starts reading as a panel that failed to load. Below that the gap is small
- * enough that side-by-side still compares better than stacking.
- */
-export function columnsTooUneven(a: number, b: number): boolean {
-  return Math.abs(a - b) >= 3
-}
-
-export function MyTeamBoard({ pulse, now = Date.now() }: MyTeamBoardProps) {
-  const bye = byeNote(pulse)
-  const gap = gapNote(pulse)
-
-  return (
-    <section className="af-mtb" aria-labelledby="af-mtb-head">
-      <header className="af-mtb-head">
-        <h2 className="af-label" id="af-mtb-head">
-          Lineups that need you
-        </h2>
-        <span className="af-mtb-rule" aria-hidden />
-        <span className="af-mtb-count">
-          {pulse.needsTotal} need a change · {pulse.setTotal} set
-        </span>
-      </header>
-
-      {bye ? <p className="af-mtb-basis">{bye}</p> : null}
-
-      {pulse.checked > 0 ? (
-        /*
-          ⚠ THE TWO COLUMNS ARE ROUTINELY UNEQUAL, AND THAT LEAVES A HOLE.
-          "Nothing needs a change" is the state this board exists to reach, and
-          one-against-five is what it actually looks like most weeks — measured
-          on a real portfolio as ~160px of blank column beside five rows of
-          content, which reads as a panel that failed to load rather than as
-          good news. See `columnsTooUneven` for where the threshold sits and why.
-
-          Collapsing to one column and running each list two-up keeps the rows at
-          the width the handoff draws them (~460px) instead of stretching one row
-          across the whole board.
-        */
-        <div
-          className="af-mtb-cols"
-          data-stack={columnsTooUneven(pulse.needs.length, pulse.set.length) || undefined}
-        >
-          <div className="af-mtb-col">
-            <h3 className="af-label af-mtb-col-head" data-tone="bad">
-              Needs a change · soonest lock
-            </h3>
-            {pulse.needs.length > 0 ? (
-              <>
-                <ul className="af-mtb-rows">
-                  {pulse.needs.map((r) => (
-                    <Row key={r.leagueId} row={r} tone="bad" now={now} />
-                  ))}
-                </ul>
-                <More shown={pulse.needs.length} total={pulse.needsTotal} noun="need a change" />
-              </>
-            ) : (
-              <p className="af-mtb-quiet">
-                Nothing empty, out or on bye in any lineup we could read. Every starting slot is
-                filled with somebody who is playing.
-              </p>
-            )}
-          </div>
-
-          <div className="af-mtb-col">
-            <h3 className="af-label af-mtb-col-head" data-tone="good">
-              Set · next to lock
-            </h3>
-            {pulse.set.length > 0 ? (
-              <>
-                <ul className="af-mtb-rows">
-                  {pulse.set.map((r) => (
-                    <Row key={r.leagueId} row={r} tone="good" now={now} />
-                  ))}
-                </ul>
-                <More shown={pulse.set.length} total={pulse.setTotal} noun="set" />
-              </>
-            ) : (
-              <p className="af-mtb-quiet">
-                Every lineup we could read has something wrong with it right now.
-              </p>
-            )}
-          </div>
-        </div>
-      ) : (
-        /*
-         * ⚠ "NOTHING TO CHECK" AND "NOTHING IS WRONG" ARE DIFFERENT FACTS. A
-         * user with sixty leagues whose rosters never imported and a user with
-         * no claimed team at all must not read the same sentence, so the count
-         * is stated either way.
-         */
-        <p className="af-mtb-quiet">
-          {pulse.considered > 0
-            ? `None of your ${pulse.considered} claimed teams has a starting lineup we can read yet.`
-            : 'No claimed team yet, so there is no lineup to check. Claim your team in a league and it appears here.'}
+  /*
+   * ⚠ THREE DIFFERENT SILENCES, THREE DIFFERENT SENTENCES. "Nothing needs you",
+   * "we could not read some of these" and "you hold no claimed teams" are
+   * distinct facts, and collapsing them is how a board tells a manager their
+   * lineups are fine when in truth it never read them.
+   */
+  if (total === 0) {
+    return (
+      <div className="af-bd">
+        <BoardHead
+          eyebrow="Core · My team"
+          title="My team"
+          blurb="Your most urgent lineups across every league, ranked by time left before lock."
+        />
+        <p className="af-bd-note">
+          No team in any league is claimed to this account yet, so there is no lineup to
+          check. <Link href="/import">Connect a platform</Link> and this board fills in.
         </p>
-      )}
+      </div>
+    )
+  }
 
-      {gap ? <p className="af-mtb-gap">{gap}</p> : null}
-    </section>
+  const unreadable = pulse.notChecked.noRoster + pulse.notChecked.noLineup
+  const hidden = Math.max(0, total - rows.length)
+
+  return (
+    <div className="af-bd">
+      <BoardHead
+        eyebrow="Core · My team"
+        title="My team"
+        blurb="Your most urgent lineups across every league, ranked by time left before lock."
+      />
+
+      <section className="af-bd-sec" aria-labelledby="af-mt-board">
+        <SectionHead
+          id="af-mt-board"
+          /*
+            ⚠ "TOP 0" IS NOT A HEADING. An empty board headed "Top 0 · ranked by
+            urgency" reads as a list that failed to load; the ranking rule only
+            belongs on a list that has something in it.
+          */
+          label={rows.length > 0 ? `Top ${rows.length} · ranked by urgency` : 'Needs you first'}
+          count={`${pulse.checked.toLocaleString()} of ${total.toLocaleString()} teams read`}
+        />
+        {rows.length > 0 ? (
+          <ul className="af-bd-rows">
+            {rows.map((r, i) => (
+              <Row key={r.leagueId} row={r} i={i} now={nowMs} />
+            ))}
+          </ul>
+        ) : pulse.checked === 0 ? (
+          /*
+            🛑 THE MOST IMPORTANT BRANCH ON THIS SCREEN, AND THE FIRST VERSION GOT
+            IT WRONG — caught by rendering it, not by a test. With `checked` at 0
+            nothing was read at all, and "every lineup we could read is set" is
+            then vacuously true and reads as "your lineups are fine". That is the
+            single most damaging sentence this board could print: it tells a
+            manager with four unfilled lineups that there is nothing to do.
+          */
+          <p className="af-bd-note">
+            <strong>We could not read a single lineup.</strong> Nothing below is a verdict on your
+            teams — it is a gap in what we hold. The line under this says which.
+          </p>
+        ) : (
+          <p className="af-bd-note">
+            Every one of the {pulse.checked.toLocaleString()} lineups we could read is set — no
+            empty slots, nobody ruled out
+            {pulse.byeChecked ? ', nobody on a bye' : ''}.
+          </p>
+        )}
+      </section>
+
+      {/*
+        ⚠ THE UNREADABLE COUNT IS ITS OWN LINE, NOT FOLDED INTO THE FOOTER. A
+        team whose roster was never imported has not been checked and found
+        clean; putting it in the same sentence as "nothing needs you there" is
+        the claim this whole loader refuses to make.
+      */}
+      {unreadable > 0 ? (
+        <p className="af-bd-note">
+          <strong>
+            {unreadable} of your {total.toLocaleString()} claimed{' '}
+            {total === 1 ? 'team' : 'teams'} could not be checked.
+          </strong>{' '}
+          {/* Singular counts read as broken copy on a screen full of real numbers. */}
+          {pulse.notChecked.noRoster > 0
+            ? `${pulse.notChecked.noRoster} ${pulse.notChecked.noRoster === 1 ? 'has' : 'have'} no roster imported`
+            : ''}
+          {pulse.notChecked.noRoster > 0 && pulse.notChecked.noLineup > 0 ? ' and ' : ''}
+          {pulse.notChecked.noLineup > 0
+            ? `${pulse.notChecked.noLineup} ${pulse.notChecked.noLineup === 1 ? 'has' : 'have'} a roster but no starting lineup on file`
+            : ''}
+          . That is a gap in what we hold, not a verdict on those lineups —{' '}
+          <Link href="/core/sync">re-sync</Link> to close it.
+        </p>
+      ) : null}
+
+      {!pulse.byeChecked ? (
+        <p className="af-bd-note">
+          The bye check did not run this week — the ingested schedule was too incomplete to
+          tell a bye from a gap in our own data, so no row claims to be bye-clear.
+        </p>
+      ) : null}
+
+      <FooterSummary
+        hidden={hidden}
+        total={total}
+        href={allHref}
+        quiet={
+          unreadable > 0
+            ? 'are either set or could not be read — the line above says which.'
+            : 'are set — nothing needs you there.'
+        }
+      />
+    </div>
   )
 }
 

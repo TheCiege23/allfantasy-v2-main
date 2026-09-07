@@ -48,6 +48,25 @@ export type RailLeague = {
   alertTone?: 'bad' | 'warn'
 }
 
+/**
+ * This week's head-to-head for one league, for the expanded rail.
+ *
+ * ⚠ SCORES, NOT PROJECTIONS — see the header of `lib/core-app/railMatchups.ts`.
+ * A projected number in a 300px rail has nowhere to state its basis, and a
+ * projection rendered like a score is the one mistake the matchup surfaces
+ * exist to avoid.
+ */
+export type RailMatchupSummary = {
+  yourTeam: string | null
+  yourAvatarUrl: string | null
+  yourScore: number
+  opponentTeam: string | null
+  opponentAvatarUrl: string | null
+  opponentScore: number
+  /** False when the fixture exists but has not been played. Drawn as a dash. */
+  scored: boolean
+}
+
 export type CoreNavKey =
   | 'home'
   | 'my-team'
@@ -149,6 +168,15 @@ type NavSection = { id: string; heading: string | null; items: NavItem[] }
 export type AfCoreShellProps = {
   active: CoreNavKey
   leagues: RailLeague[]
+  /**
+   * This week's matchup per league id, for the expanded rail.
+   *
+   * Optional: the rail expands with or without it, and without it a row shows
+   * the league and its crest alone rather than an empty scoreline.
+   */
+  railMatchups?: Record<string, RailMatchupSummary>
+  /** "Week 3" — printed once at the head of the expanded rail, not per row. */
+  railWeekLabel?: string | null
   /** Rendered from sportsReadPort freshness — label plus whether to warn. */
   syncAge: { label: string; stale: boolean }
   /**
@@ -889,12 +917,53 @@ export function AfCoreShell(props: AfCoreShellProps) {
     })
   }, [props])
   const { leagues, syncAge, syncEligibleCount, plan, weekLabel, active, children, comms } = props
+
+  /*
+   * The expanded league rail — 2026-09-07 handoff (`AF League List.dc.html`).
+   *
+   * ⚠ COLLAPSED IS THE DEFAULT AND THAT IS DELIBERATE. Expanding widens the
+   * shell's first grid column from 68px to 300px on every screen at once, so it
+   * must be the user's choice, remembered. On a phone the same flag opens the
+   * rail as a full-screen tray instead — one piece of state, two presentations,
+   * so the tray can never disagree with the rail about what is open.
+   */
+  const [railOpen, setRailOpen] = useState(false)
+
+  /*
+   * ⚠ READ IN AN EFFECT, NOT DURING RENDER. `localStorage` does not exist on the
+   * server, so reading it in the initial state would render a different tree on
+   * the client and take hydration down. First paint is always collapsed; the
+   * remembered value arrives a tick later.
+   *
+   * ⚠ AND EVERY ACCESS IS WRAPPED. A private window, cleared site data, or a
+   * browser set to block storage makes the accessor itself THROW rather than
+   * return null — an unguarded read there takes the whole shell down.
+   */
+  useEffect(() => {
+    try {
+      if (window.localStorage.getItem('af-rail-open') === '1') setRailOpen(true)
+    } catch {
+      /* storage unavailable — collapsed is a perfectly good default */
+    }
+  }, [])
+
+  const toggleRail = () => {
+    setRailOpen((v) => {
+      const next = !v
+      try {
+        window.localStorage.setItem('af-rail-open', next ? '1' : '0')
+      } catch {
+        /* the toggle still works for this session */
+      }
+      return next
+    })
+  }
   // "More" is current whenever the screen you are on is not one of the five
   // pinned ones — otherwise the bar shows nothing as active and reads broken.
   const activeInBar = mobileItems.some((i) => i.key === active)
 
   return (
-    <div className="af-core af-shell">
+    <div className="af-core af-shell" data-rail-open={railOpen ? 'true' : undefined}>
       {/*
         Keyboard users land on the rail, then the nav, then the search box —
         three groups and roughly thirty tabbable controls — before reaching the
@@ -905,8 +974,27 @@ export function AfCoreShell(props: AfCoreShellProps) {
         Skip to content
       </a>
 
+      {/*
+        ⚠ THE MOBILE HANDLE IS OUTSIDE THE RAIL, NOT INSIDE IT. Below 720px the
+        rail becomes a full-screen tray; a handle rendered inside it would be
+        inside the thing it opens. Hidden above 720px, where the rail's own
+        header carries the toggle.
+      */}
+      <button
+        type="button"
+        className="af-rail-handle"
+        aria-expanded={railOpen}
+        aria-controls="af-rail"
+        onClick={toggleRail}
+      >
+        <span className="af-rail-handle-mark">
+          <AfCrest size={20} tone="inherit" />
+        </span>
+        <span className="af-rail-handle-text">{railOpen ? 'Close' : 'Leagues'}</span>
+      </button>
+
       {/* ── League rail ─────────────────────────────────────────────── */}
-      <nav className="af-rail" aria-label="Leagues">
+      <nav className="af-rail" id="af-rail" aria-label="Leagues">
         {/*
           The crest, above the leagues, drawn rather than loaded — see
           AfCrest's header for why /af-crest.png cannot sit on a dark rail.
@@ -916,6 +1004,28 @@ export function AfCoreShell(props: AfCoreShellProps) {
         </Link>
 
         <div className="af-rail-divider" />
+
+        {/*
+          Expand / collapse. A button rather than a link because it changes how
+          this page looks, not which page you are on — and it is labelled by
+          state so a screen reader announces what pressing it will do.
+        */}
+        <button
+          type="button"
+          className="af-rail-toggle"
+          aria-expanded={railOpen}
+          aria-controls="af-rail-scroll"
+          onClick={toggleRail}
+          title={railOpen ? 'Collapse the league rail' : 'Expand the league rail'}
+        >
+          <span className="af-rail-toggle-icon" aria-hidden>
+            {railOpen ? '«' : '»'}
+          </span>
+          <span className="af-rail-toggle-text">
+            {leagues.length} {leagues.length === 1 ? 'league' : 'leagues'}
+            {props.railWeekLabel ? ` · ${props.railWeekLabel}` : ''}
+          </span>
+        </button>
 
         {/*
           ⚠ EVERY LEAGUE, NOT THE FIRST EIGHT.
@@ -932,20 +1042,83 @@ export function AfCoreShell(props: AfCoreShellProps) {
           scroll, but nothing is out of reach and no count is hidden behind a
           second screen.
         */}
-        <div className="af-rail-scroll">
-          {leagues.map((l) => (
-            <Link
-              key={l.id}
-              href={`/core?league=${encodeURIComponent(l.id)}`}
-              className="af-rail-tile af-platform"
-              data-platform={l.platform}
-              title={`${l.name} · ${l.platform}`}
-              aria-label={`${l.name} on ${l.platform}`}
-            >
-              <RailMark src={l.imageUrl} letter={l.mark} />
-              {l.hasAlert ? <span className="af-rail-dot" data-tone={l.alertTone ?? 'warn'} /> : null}
-            </Link>
-          ))}
+        <div className="af-rail-scroll" id="af-rail-scroll">
+          {leagues.map((l) => {
+            const m = props.railMatchups?.[l.id]
+            return (
+              <Link
+                key={l.id}
+                href={`/core?league=${encodeURIComponent(l.id)}`}
+                className="af-rail-tile af-platform"
+                data-platform={l.platform}
+                title={`${l.name} · ${l.platform}`}
+                aria-label={`${l.name} on ${l.platform}`}
+                /*
+                  ⚠ CLOSES THE TRAY ON SELECTION, ON MOBILE ONLY. The handoff asks
+                  for it, and it matters: the tray is full-screen, so navigating
+                  without closing leaves the user on the new page looking at the
+                  list they just used. On desktop the rail is chrome and must not
+                  collapse under the click — `railOpen` there is a layout
+                  preference the user set, not a transient overlay.
+                */
+                onClick={() => {
+                  if (railOpen && typeof window !== 'undefined' && window.innerWidth <= 720) {
+                    setRailOpen(false)
+                  }
+                }}
+              >
+                <span className="af-rail-tile-art">
+                  <RailMark src={l.imageUrl} letter={l.mark} />
+                  {l.hasAlert ? (
+                    <span className="af-rail-dot" data-tone={l.alertTone ?? 'warn'} />
+                  ) : null}
+                </span>
+
+                {/*
+                  The expanded half. Rendered always and hidden by CSS in the
+                  collapsed state rather than conditionally mounted: toggling the
+                  rail then costs no re-render of sixty rows, and the row keeps
+                  one accessible name either way.
+                */}
+                <span className="af-rail-row">
+                  <span className="af-rail-row-name">{l.name}</span>
+                  {m ? (
+                    <span className="af-rail-row-line">
+                      <span className="af-rail-row-side">
+                        <span className="af-rail-row-team">{m.yourTeam ?? 'Your team'}</span>
+                        <span className="af-rail-row-score">
+                          {/*
+                            ⚠ A DASH, NOT 0.00, ON AN UNPLAYED FIXTURE. A
+                            scheduled row carries zeroes as soon as the schedule
+                            exists; printing them says the game was played and
+                            finished nil-all.
+                          */}
+                          {m.scored ? m.yourScore.toFixed(1) : '—'}
+                        </span>
+                      </span>
+                      <span className="af-rail-row-vs" aria-hidden>
+                        v
+                      </span>
+                      <span className="af-rail-row-side" data-side="them">
+                        <span className="af-rail-row-team">
+                          {m.opponentTeam ?? 'opponent not named'}
+                        </span>
+                        <span className="af-rail-row-score">
+                          {m.scored ? m.opponentScore.toFixed(1) : '—'}
+                        </span>
+                      </span>
+                    </span>
+                  ) : (
+                    <span className="af-rail-row-line">
+                      <span className="af-rail-row-team">
+                        no head-to-head on file this week
+                      </span>
+                    </span>
+                  )}
+                </span>
+              </Link>
+            )
+          })}
         </div>
 
         {/*

@@ -415,3 +415,20 @@
 .af-core .af-cs-act {
   min-height: 44px;
 }
+
+/*
+ * The league's own crest beside its name on the preview card.
+ *
+ * ⚠ Sized to match `.af-cs-card-mark` so the two marks sit on one baseline. It
+ * renders only when the league HAS artwork — a league without one shows its
+ * name alone rather than a placeholder tile, because no artwork is the common
+ * case, not a failure.
+ */
+.af-cs-card-crest {
+  width: 22px;
+  height: 22px;
+  flex: none;
+  border-radius: 6px;
+  object-fit: cover;
+  background: rgba(255, 255, 255, 0.08);
+}
