@@ -45,9 +45,18 @@ export const IMPORT_PROVIDER_UI_OPTIONS: {
    * Left `true` while the landing page stopped advertising Yahoo would have been the worst
    * of both: no longer promised, still offered.
    *
-   * ⚠ FLIPPING BACK NEEDS A ROW, NOT A REPAIRED CODE PATH — reconcile the two stores, then
-   * require `select count(*) from import_runs where provider='yahoo'` to be non-zero. The
-   * Yahoo app itself must NOT be deleted or recreated while doing so; its fantasy-read
+   * ⚠ THE TWO STORES ARE NOW RECONCILED IN CODE, AND THIS FLAG STILL DOES NOT MOVE.
+   * `lib/yahoo/yahooCredentialStore.ts` made `league_auths` the single credential and
+   * demoted `YahooConnection` to the identity record the 2026-09-04 migration had already
+   * declared it to be; both callbacks write through it and `/api/yahoo/leagues` reads it
+   * instead of a cookie. That was the first half of the sentence below, and it is done.
+   *
+   * ⚠ FLIPPING BACK NEEDS A ROW, NOT A REPAIRED CODE PATH — which is the half that is NOT
+   * done, and deliberately so. Require `select count(*) from import_runs where
+   * provider='yahoo'` to be non-zero before this becomes `true`; the repair was written
+   * and tested without Yahoo credentials in hand, so no real league has been through it.
+   * A code path that should work is exactly the evidence this file already refuses once.
+   * The Yahoo app itself must NOT be deleted or recreated while doing so; its fantasy-read
    * permission is captured at consent time and cannot be re-granted to a new app.
    */
   { provider: 'yahoo', label: 'Yahoo', available: false, supportsDiscovery: true, supportedSports: ['NFL'] },

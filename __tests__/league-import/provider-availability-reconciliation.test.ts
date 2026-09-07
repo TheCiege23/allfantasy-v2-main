@@ -31,10 +31,13 @@ const EXPECTED_AVAILABILITY: Record<string, boolean> = {
    * Yahoo. `hasFullAdapter()` passes throughout, which is the blind spot this file exists
    * to cover.
    *
-   * ⚠ TO FLIP IT BACK, RECONCILE THE TWO STORES FIRST, then require
-   * `select count(*) from import_runs where provider='yahoo'` to be non-zero. A repaired
-   * code path is not evidence; a row is. And do NOT delete or recreate the Yahoo app while
-   * doing it — its fantasy-read permission is captured at consent time.
+   * ⚠ THE STORES ARE RECONCILED NOW (`lib/yahoo/yahooCredentialStore.ts`) AND THIS STAYS
+   * `false`. That was the prerequisite, not the standard. The standard is the next
+   * sentence, and it is unchanged: require `select count(*) from import_runs where
+   * provider='yahoo'` to be non-zero. A repaired code path is not evidence; a row is —
+   * and the repair was built without Yahoo credentials to test against, so it has never
+   * carried a real league. And do NOT delete or recreate the Yahoo app while doing it —
+   * its fantasy-read permission is captured at consent time.
    */
   yahoo: false,
   /*

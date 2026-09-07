@@ -1,11 +1,8 @@
-import { decrypt, encrypt } from '@/lib/league-auth-crypto'
 import {
-  clearDeadYahooCredentials,
-  isTerminalGrantFailure,
-  parseOAuthErrorCode,
-  YAHOO_RECONNECT_MESSAGE,
-} from '@/lib/league-import/yahoo/yahooOAuthRecovery'
-import { prisma } from '@/lib/prisma'
+  loadYahooCredential,
+  refreshYahooCredential,
+  YahooImportConnectionError,
+} from '@/lib/yahoo/yahooCredentialStore'
 import type {
   YahooImportDraftPick,
   YahooImportLeague,
@@ -96,7 +93,14 @@ export class YahooApiResponseError extends Error {
   }
 }
 
-export class YahooImportConnectionError extends Error {}
+/*
+ * Re-exported, not re-declared. It now lives in `lib/yahoo/yahooCredentialStore.ts`
+ * beside the credential it describes, and `app/api/leagues/import/discover/route.ts`
+ * and `lib/import-os/collector/externalMatchupParity.ts` both branch on
+ * `instanceof` — which a second class of the same name fails silently, message
+ * intact and connect button never rendered. One class, imported everywhere.
+ */
+export { YahooImportConnectionError }
 
 export class YahooImportLeagueNotFoundError extends Error {}
 
@@ -310,7 +314,7 @@ export async function fetchYahooPendingTrades(
 
   let context: YahooApiFetchContext
   try {
-    context = await getYahooAuthForUser(userId)
+    context = await loadYahooCredential(userId)
   } catch {
     return { ok: false, reason: 'connect your Yahoo account in League Sync to read offers waiting there' }
   }
@@ -345,102 +349,6 @@ export async function fetchYahooPendingTrades(
   }
 }
 
-async function getYahooAuthForUser(userId: string): Promise<YahooApiFetchContext> {
-  const auth = await (prisma as any).leagueAuth.findUnique({
-    where: { userId_platform: { userId, platform: 'yahoo' } },
-  })
-  if (!auth?.oauthToken) {
-    throw new YahooImportConnectionError('Connect Yahoo in League Sync before importing from Yahoo.')
-  }
-
-  return {
-    userId,
-    accessToken: decrypt(auth.oauthToken),
-    refreshToken: auth.oauthSecret ? decrypt(auth.oauthSecret) : null,
-  }
-}
-
-async function refreshYahooAccessToken(context: YahooApiFetchContext): Promise<string> {
-  const clientId = process.env.YAHOO_CLIENT_ID
-  const clientSecret = process.env.YAHOO_CLIENT_SECRET
-  if (!clientId || !clientSecret || !context.refreshToken) {
-    throw new YahooImportConnectionError('Reconnect Yahoo in League Sync before importing from Yahoo.')
-  }
-
-  const response = await fetch('https://api.login.yahoo.com/oauth2/get_token', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/x-www-form-urlencoded',
-      'Authorization': `Basic ${Buffer.from(`${clientId}:${clientSecret}`).toString('base64')}`,
-    },
-    body: new URLSearchParams({
-      grant_type: 'refresh_token',
-      refresh_token: context.refreshToken,
-    }),
-  })
-
-  if (!response.ok) {
-    const body = await response.text()
-    const vendorError = parseOAuthErrorCode(body)
-
-    /*
-     * ⚠ `invalid_grant` IS TERMINAL, AND WAS BEING RETRIED FOREVER.
-     *
-     * Per OAuth2 it means the refresh token is expired, revoked, or already
-     * used — no amount of retrying recovers it, only re-consent does. This
-     * branch used to throw the vendor's raw JSON, so the user saw
-     *
-     *     Yahoo token refresh failed: {"error":"invalid_grant",
-     *     "error_description":"Invalid refresh token"}
-     *
-     * verbatim in the UI (the discover route returns `error.message` straight
-     * to the browser), while the dead credential stayed in the database. So
-     * `getYahooAuthForUser` kept finding an `oauthToken`, kept believing Yahoo
-     * was connected, and kept failing the same way — with no path back.
-     *
-     * Clearing the tokens is what turns this into a recoverable state: the
-     * stored value is already worthless, and its absence is exactly what makes
-     * the surface say "Connect Yahoo" and show the button again.
-     *
-     * 🛑 ONLY on `invalid_grant`. A 500 or a timeout from Yahoo is transient and
-     * must NOT cost the user their connection.
-     */
-    if (isTerminalGrantFailure(body)) {
-      await clearDeadYahooCredentials(context.userId)
-      throw new YahooImportConnectionError(YAHOO_RECONNECT_MESSAGE)
-    }
-
-    // Status and vendor code only. The body can carry token material, and this
-    // message is rendered to the user by the discover route.
-    console.warn(
-      '[Yahoo] token refresh failed status=%d error=%s',
-      response.status,
-      vendorError ?? 'unrecognised',
-    )
-    throw new YahooImportConnectionError(
-      `Yahoo could not refresh the connection (HTTP ${response.status}). ` +
-        'Try again in a moment; reconnect Yahoo in League Sync if it keeps happening.',
-    )
-  }
-
-  const tokens = await response.json()
-  const accessToken = String(tokens.access_token ?? '')
-  const refreshToken = typeof tokens.refresh_token === 'string' ? tokens.refresh_token : context.refreshToken
-
-  await (prisma as any).leagueAuth.update({
-    where: { userId_platform: { userId: context.userId, platform: 'yahoo' } },
-    data: {
-      oauthToken: encrypt(accessToken),
-      oauthSecret: refreshToken ? encrypt(refreshToken) : undefined,
-      updatedAt: new Date(),
-    },
-  })
-
-  context.accessToken = accessToken
-  context.refreshToken = refreshToken
-  return accessToken
-}
-
 async function fetchYahooLoggedInUserGuid(context: YahooApiFetchContext): Promise<string | null> {
   const data = await yahooApiFetchJson(`${YAHOO_API_BASE}/users;use_login=1?format=json`, context)
   const usersWrapper = data?.fantasy_content?.users
@@ -471,7 +379,7 @@ const yahooFetchDelay = (ms: number) => new Promise<void>((resolve) => setTimeou
  * not-found semantics stay exact. Exhausted retries surface as a
  * YahooApiResponseError with status 0 and an honest attempt count — never a
  * silent null. The token-refresh POST is intentionally NOT retried here; it has
- * its own single-shot path in refreshYahooAccessToken.
+ * its own single-shot path in refreshYahooCredential.
  */
 async function yahooRequestWithResilience(url: string, accessToken: string): Promise<Response> {
   let lastError: unknown = null
@@ -511,7 +419,7 @@ async function yahooRequestWithResilience(url: string, accessToken: string): Pro
 async function yahooApiFetchJson(url: string, context: YahooApiFetchContext): Promise<any> {
   let response = await yahooRequestWithResilience(url, context.accessToken)
   if (response.status === 401 && context.refreshToken) {
-    const refreshedToken = await refreshYahooAccessToken(context)
+    const refreshedToken = await refreshYahooCredential(context)
     response = await yahooRequestWithResilience(url, refreshedToken)
   }
 
@@ -563,7 +471,7 @@ async function listYahooLeaguesForUser(context: YahooApiFetchContext): Promise<Y
  * Sync, and `YahooApiResponseError` when the Yahoo API rejects the call.
  */
 export async function listYahooLeaguesForAccount(userId: string): Promise<YahooLeagueLookup[]> {
-  const context = await getYahooAuthForUser(userId)
+  const context = await loadYahooCredential(userId)
   return listYahooLeaguesForUser(context)
 }
 
@@ -1011,7 +919,7 @@ export async function fetchYahooLeagueForImport(
   userId: string,
   sourceInput: string
 ): Promise<YahooImportPayload> {
-  const context = await getYahooAuthForUser(userId)
+  const context = await loadYahooCredential(userId)
   const loggedInGuid = await fetchYahooLoggedInUserGuid(context).catch(() => null)
   const resolvedLeague = await resolveYahooLeagueLookup(sourceInput, context)
   const leagueKey = resolvedLeague.leagueKey
@@ -1226,7 +1134,7 @@ export async function fetchYahooWeeklyMatchupsForSync(
   userId: string,
   leagueKey: string
 ): Promise<{ season: number | null; schedule: YahooImportScheduleWeek[] }> {
-  const context = await getYahooAuthForUser(userId)
+  const context = await loadYahooCredential(userId)
 
   let metadataData: any
   try {

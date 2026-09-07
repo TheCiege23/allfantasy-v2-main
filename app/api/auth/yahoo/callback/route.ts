@@ -1,9 +1,8 @@
 import { withApiUsage } from "@/lib/telemetry/usage"
 import { NextRequest, NextResponse } from 'next/server'
-import { prisma } from '@/lib/prisma'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
-import { encrypt } from '@/lib/league-auth-crypto'
+import { linkYahooIdentity, persistYahooCredential } from '@/lib/yahoo/yahooCredentialStore'
 import {
   buildYahooReturnUrl,
   getYahooRedirectUri,
@@ -100,7 +99,7 @@ export const GET = withApiUsage({ endpoint: "/api/auth/yahoo/callback", tool: "A
     }
     
     const tokens = await tokenResponse.json()
-    const { access_token, refresh_token, expires_in } = tokens
+    const { access_token, refresh_token } = tokens
     
     const userResponse = await fetch('https://fantasysports.yahooapis.com/fantasy/v2/users;use_login=1?format=json', { // db-first-exception: user-delegated OAuth import, requires live accessToken
       headers: {
@@ -137,48 +136,54 @@ export const GET = withApiUsage({ endpoint: "/api/auth/yahoo/callback", tool: "A
     const yahooUserId = user?.guid || 'unknown'
     const displayName = user?.profile?.display_name || user?.name || null
     
-    const tokenExpiresAt = new Date(Date.now() + (expires_in || 3600) * 1000)
-    const encryptedAccessToken = encrypt(access_token)
-    const encryptedRefreshToken = refresh_token ? encrypt(refresh_token) : ''
-    
-    await prisma.yahooConnection.upsert({
-      where: { yahooUserId },
-      update: {
-        accessToken: encryptedAccessToken,
-        refreshToken: encryptedRefreshToken,
-        tokenExpiresAt,
-        displayName,
-        updatedAt: new Date(),
-      },
-      create: {
-        yahooUserId,
-        displayName,
-        accessToken: encryptedAccessToken,
-        refreshToken: encryptedRefreshToken,
-        tokenExpiresAt,
-      },
+    /*
+     * 🛑 THE CREDENTIAL GOES TO `league_auths`. THIS IS THE WHOLE BUG.
+     *
+     * This block used to upsert the access and refresh tokens onto
+     * `YahooConnection` and stop there. Nothing on the import path has ever read
+     * that table for a token: `YahooLeagueFetchService`, `league-sync-core`,
+     * `yahooOAuthRecovery` and the `/import` page's own connected-check all read
+     * `league_auths`. So this callback would complete perfectly — real token,
+     * real guid, real redirect — and hand the user back to a screen that still
+     * said "Connect Yahoo", because the token it had just saved was invisible to
+     * every reader. `import_runs` for provider='yahoo' stood at 0 for the life of
+     * the feature.
+     *
+     * ⚠ AND THE SCHEMA HAD ALREADY SAID SO. The 2026-09-04 migration made
+     * `YahooConnection`'s token columns nullable and added `userId`, demoting the
+     * table to an identity record; this line was still writing tokens into
+     * columns that migration had just declared vestigial.
+     *
+     * `expires_in` is deliberately dropped rather than stored. `league_auths` has
+     * no expiry column and does not need one — every Yahoo caller here refreshes
+     * on a 401 rather than on a clock, which is the one form that cannot be
+     * wrong about a token the vendor revoked early.
+     */
+    await persistYahooCredential({
+      userId: session.user.id,
+      accessToken: access_token,
+      refreshToken: refresh_token ?? null,
     })
+
+    /* Identity only, and best-effort: see `linkYahooIdentity`. A failure here
+       must not cost the user a connect that otherwise succeeded. */
+    await linkYahooIdentity({ userId: session.user.id, yahooUserId, displayName })
     
     const response = NextResponse.redirect(returnToWith(returnTo, {
       yahoo_connected: '1',
       yahoo_user: yahooUserId,
     }))
     
-    response.cookies.set('yahoo_user_id', yahooUserId, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      maxAge: 60 * 60 * 24 * 30,
-    })
+    /*
+     * ⚠ `yahoo_user_id` AND `yahoo_owner_user_id` ARE GONE, AND THEIR ONLY READER
+     * WENT WITH THEM. `/api/yahoo/leagues` resolved the connection from those two
+     * cookies, which made a stored, valid, correctly-owned connection unreachable
+     * from a second browser, from a private window, and on day 31 of a 30-day
+     * maxAge. The session already says who is asking and `YahooConnection.userId`
+     * already says which Yahoo account is theirs; a cookie was a third answer to a
+     * question that now has one.
+     */
 
-    response.cookies.set('yahoo_owner_user_id', session.user.id, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      maxAge: 60 * 60 * 24 * 30,
-      path: '/',
-    })
-    
     // Clear both names -- either could have carried this round-trip.
     for (const name of YAHOO_STATE_COOKIE_NAMES) response.cookies.delete(name)
     response.cookies.delete(YAHOO_RETURN_TO_COOKIE)
