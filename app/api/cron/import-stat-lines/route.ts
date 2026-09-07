@@ -38,7 +38,7 @@
 import type { NextRequest } from "next/server"
 import { NextResponse } from "next/server"
 import { requireCronAuth } from "@/app/api/cron/_auth"
-import { createRunBudget, rotateForFairness, respondBeforeEdge } from "@/lib/cron/runBudget"
+import { createRunBudget, rotateForFairness, respondBeforeEdge, CRON_HARD_RESPONSE_MS } from "@/lib/cron/runBudget"
 import { syncRollingInsightsPlayerStatsToDb } from "@/lib/stats/rollingInsightsPlayerStats"
 import { syncCfbdPlayerStatsToDb } from "@/lib/stats/cfbdPlayerStats"
 import { backfillCfbdIdsForNcaaf } from "@/lib/sports-data/cfbdIdentityBridge"
@@ -290,6 +290,8 @@ async function handle(req: NextRequest) {
       }
     },
     () => undefined,
+    CRON_HARD_RESPONSE_MS,
+    'import-stat-lines',
   )
 
   if (overran) {
