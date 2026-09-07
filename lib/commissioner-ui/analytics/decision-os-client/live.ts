@@ -1,7 +1,14 @@
 import { callDecisionOS } from '../../adapter/transport'
 import { isLiveReady } from '../../liveReadiness'
 import { resolveActiveLeagueId } from '../../resolveActiveLeagueId'
-import type { AnalyticsClient, AnalyticsKpi, AnalyticsTrendSeries, LeagueAnalyticsSnapshot } from './types'
+import { readAnalyticsDataWindow } from '../dataWindow'
+import type {
+  AnalyticsClient,
+  AnalyticsDataWindow,
+  AnalyticsKpi,
+  AnalyticsTrendSeries,
+  LeagueAnalyticsSnapshot,
+} from './types'
 
 /**
  * Phase 3.10 — League Analytics is the first module in this program with a
@@ -76,8 +83,38 @@ function capitalize(tier: string): string {
   return tier.charAt(0).toUpperCase() + tier.slice(1)
 }
 
+/**
+ * The window every KPI below is measured over, written the way a commissioner reads it.
+ *
+ * Taken from `dataWindow` rather than restated, so the label can never drift from the window
+ * the numbers were actually computed over.
+ */
+function windowSuffix(dataWindow: AnalyticsDataWindow | null): string {
+  return dataWindow ? ` (last ${dataWindow.lookbackDays}d)` : ''
+}
+
+/**
+ * Says what a zero actually is.
+ *
+ * 🛑 "None" WAS READ AS "THIS LEAGUE HAS NEVER TRADED". On the league that prompted this, the
+ * tier was `none` because all 7 of its real trades fell outside the 90-day window — so the one
+ * word on the card was true about the window and false about the league. Where all-time is
+ * greater than the window's zero, the card now carries both numbers; where all-time is also
+ * zero, nothing is appended, because "None" is then the whole truth.
+ */
+function activityValue(tier: string, allTimeCount: number): string {
+  const label = capitalize(tier)
+  if (tier !== 'none' || allTimeCount <= 0) return label
+  return `${label} · ${allTimeCount} all-time`
+}
+
 /** Real KPIs only — every value traces directly to a `LeagueIntelligenceV1` field, no derived scoring. */
-function buildKpis(intel: LeagueIntelligenceAnalyticsShape['data'], trend: LeagueTrendShape['data']): AnalyticsKpi[] {
+function buildKpis(
+  intel: LeagueIntelligenceAnalyticsShape['data'],
+  trend: LeagueTrendShape['data'],
+  dataWindow: AnalyticsDataWindow | null,
+): AnalyticsKpi[] {
+  const win = windowSuffix(dataWindow)
   const kpis: AnalyticsKpi[] = [
     {
       id: 'kpi-engagement',
@@ -111,11 +148,24 @@ function buildKpis(intel: LeagueIntelligenceAnalyticsShape['data'], trend: Leagu
        * league-intelligence.ts — so it is deliberately NOT done here.
        */
       id: 'kpi-active-managers',
-      label: 'Active Managers (last 90d)',
+      /*
+       * The window is no longer hard-coded here. It read `(last 90d)` while the window itself
+       * comes from `INTELLIGENCE_LOOKBACK_DAYS` — true today, and silently a lie the first time
+       * anyone tunes that env var. `windowSuffix` takes it from the same place the numbers do.
+       */
+      label: `Active Managers${win}`,
       value: `${intel.participationDistribution.activeManagers} of ${intel.participationDistribution.totalManagers}`,
     },
-    { id: 'kpi-trade-activity', label: 'Trade Activity', value: capitalize(intel.tradeActivity.tier) },
-    { id: 'kpi-waiver-activity', label: 'Waiver Activity', value: capitalize(intel.waiverActivity.tier) },
+    {
+      id: 'kpi-trade-activity',
+      label: `Trade Activity${win}`,
+      value: activityValue(intel.tradeActivity.tier, dataWindow?.allTime.tradeCount ?? 0),
+    },
+    {
+      id: 'kpi-waiver-activity',
+      label: `Waiver Activity${win}`,
+      value: activityValue(intel.waiverActivity.tier, dataWindow?.allTime.waiverCount ?? 0),
+    },
   ]
   return kpis
 }
@@ -146,9 +196,12 @@ export const liveAnalyticsClient: AnalyticsClient = {
       return { data: null, error: notYetIntegrated(), source: 'live', timestamp }
     }
 
-    const [leagueResult, trendResult] = await Promise.all([
+    const [leagueResult, trendResult, dataWindow] = await Promise.all([
       callDecisionOS<LeagueIntelligenceAnalyticsShape>('analytics', `/api/v1/intelligence/league?leagueId=${encodeURIComponent(leagueId)}`),
       callDecisionOS<LeagueTrendShape>('analytics', `/api/v1/intelligence/league/trend?leagueId=${encodeURIComponent(leagueId)}`),
+      // Runs alongside the two intelligence calls rather than after them: it is provenance for
+      // their output, not a dependency of it, and it must not add latency to the page.
+      readAnalyticsDataWindow(leagueId),
     ])
 
     if (leagueResult.error || !leagueResult.data) {
@@ -159,7 +212,7 @@ export const liveAnalyticsClient: AnalyticsClient = {
     const trend: LeagueTrendShape['data'] = trendResult.data?.data ?? { available: false, reason: 'insufficient_historical_data', snapshotCount: 0 }
 
     const snapshot: LeagueAnalyticsSnapshot = {
-      kpis: buildKpis(intel, trend),
+      kpis: buildKpis(intel, trend, dataWindow),
       trends: buildTrends(trend),
       // No Decision OS (or honestly-wireable application-layer) analog exists for these — see this
       // file's top comment and LEAGUE_ANALYTICS_LIVE_INTEGRATION_REPORT.md. Left honestly empty
@@ -182,6 +235,7 @@ export const liveAnalyticsClient: AnalyticsClient = {
       healthTarget: null,
       managerActivity: [],
       pointsForAgainst: [],
+      dataWindow,
       generatedAt: timestamp,
     }
 
@@ -208,7 +262,18 @@ export const liveAnalyticsClient: AnalyticsClient = {
 
     const intel = data.data
     const kpiCount = 4
-    const headline = `League engagement score ${intel.leagueEngagementScore} — ${intel.participationDistribution.activeManagers} of ${intel.participationDistribution.totalManagers} managers active`
+
+    /*
+     * Mission Control renders this sentence with no room for a banner, so the caveat has to be
+     * inside the sentence or it does not exist. "0 of 7 managers active" on 18-day-old data is
+     * the exact claim this whole change exists to stop making unqualified.
+     */
+    const dataWindow = await readAnalyticsDataWindow(leagueId)
+    const stale =
+      dataWindow?.daysSinceLastActivity != null &&
+      dataWindow.daysSinceLastActivity > dataWindow.inactiveAfterDays
+    const caveat = stale ? ` (no league activity recorded in ${dataWindow.daysSinceLastActivity} days)` : ''
+    const headline = `League engagement score ${intel.leagueEngagementScore} — ${intel.participationDistribution.activeManagers} of ${intel.participationDistribution.totalManagers} managers active${caveat}`
 
     return { data: { headline, kpiCount }, error: null, source: 'live', timestamp }
   },

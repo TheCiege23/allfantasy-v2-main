@@ -16,6 +16,20 @@
 import type { BehavioralEvent } from './events/types'
 import type { ManagerBehavioralFacts } from './facts'
 
+/**
+ * A manager counts as inactive after this many days with no event of any kind.
+ *
+ * Was a bare `14` repeated at four comparison sites in this file. Named and exported because a
+ * SECOND reader now needs it: Commissioner OS labels its participation KPI with the rule that
+ * produced the number, and a hard-coded 14 in the UI would be a second definition of one rule —
+ * it would keep saying "14" on the day someone tunes this.
+ *
+ * ⚠ The `inactive_14d` nudge id and signal name are deliberately NOT templated off this
+ * constant. They are stable identifiers that downstream consumers match on; renaming them
+ * because a threshold moved would break those consumers silently.
+ */
+export const MANAGER_INACTIVE_AFTER_DAYS = 14
+
 // ── Participation tier ────────────────────────────────────────────────────────
 
 /**
@@ -119,7 +133,7 @@ export interface ManagerBehavioralIntelligence {
 
   /** Days since the most recent event. Null when no events have ever been recorded. */
   daysSinceLastActivity: number | null
-  /** True when inactive for > 14 days OR when no events have been recorded. */
+  /** True when inactive for more than `MANAGER_INACTIVE_AFTER_DAYS`, or when no events have been recorded. */
   isInactive: boolean
   /** Customer-facing inactivity warning for the commissioner. Null when not inactive. */
   inactivityWarning: string | null
@@ -248,7 +262,7 @@ function computeRetentionRisk(
     }
   }
   const reasons: string[] = []
-  if (daysSinceLastActivity !== null && daysSinceLastActivity > 14) {
+  if (daysSinceLastActivity !== null && daysSinceLastActivity > MANAGER_INACTIVE_AFTER_DAYS) {
     reasons.push(`Manager has been inactive for ${daysSinceLastActivity} days`)
   }
   if (facts.lineupSaveCount === 0 && facts.eventCount > 0) {
@@ -291,7 +305,7 @@ function computeNudges(
         'Manager has been inactive for over 4 weeks. They are at high risk of abandoning the league.',
       supportingEventIds: facts.lastActivity ? [facts.lastActivity.eventId] : [],
     })
-  } else if (daysSinceLastActivity !== null && daysSinceLastActivity > 14) {
+  } else if (daysSinceLastActivity !== null && daysSinceLastActivity > MANAGER_INACTIVE_AFTER_DAYS) {
     nudges.push({
       nudgeId: 'nudge_inactive_14d',
       priority: 'high',
@@ -433,7 +447,7 @@ export function deriveManagerBehavioralIntelligence(
   const isInactive =
     facts.eventCount === 0 ||
     daysSinceLastActivity === null ||
-    daysSinceLastActivity > 14
+    daysSinceLastActivity > MANAGER_INACTIVE_AFTER_DAYS
 
   const inactivityWarning: string | null = (() => {
     if (daysSinceLastActivity === null) {
@@ -442,7 +456,7 @@ export function deriveManagerBehavioralIntelligence(
     if (daysSinceLastActivity > 28) {
       return 'Manager has been inactive for over 4 weeks — high risk of abandoning the league'
     }
-    if (daysSinceLastActivity > 14) {
+    if (daysSinceLastActivity > MANAGER_INACTIVE_AFTER_DAYS) {
       return 'Manager has been inactive for over 2 weeks — consider reaching out'
     }
     return null

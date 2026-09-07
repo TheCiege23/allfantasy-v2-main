@@ -15,6 +15,7 @@ import {
 } from '@/lib/commissioner-ui/analytics/timeRange'
 import type { CommissionerDataMode } from '@/lib/commissioner-ui/demo-mode/constants'
 import type {
+  AnalyticsDataWindow,
   LeagueAnalyticsSnapshot,
   LeagueHealthWeek,
   ManagerActivityEntry,
@@ -100,6 +101,71 @@ function NotWired({ what }: { what: string }) {
       No {what} for this league yet. This section reads from the live platform and is left blank
       rather than filled with an example — an empty chart here would read as “no activity”, which is
       a different thing.
+    </p>
+  )
+}
+
+/* ── Data freshness ──────────────────────────────────────────────────────── */
+
+function daysLabel(days: number): string {
+  if (days === 0) return 'today'
+  if (days === 1) return 'yesterday'
+  return `${days} days ago`
+}
+
+/**
+ * Says how old the numbers above it are, and only when that changes how they should be read.
+ *
+ * 🛑 THE STAT ROW IS ENTIRELY WINDOW-DERIVED AND USED TO PRESENT ITSELF AS FACT. On the league
+ * this was built for, it read "Active Managers 0 of 7" and "Trade Activity: None" — both
+ * arithmetically correct, both taken as statements about the league. What they meant was that
+ * the newest event we hold is 18 days old, past the 14-day inactivity threshold, so every
+ * manager flipped inactive at once. The league has 12 rostered teams and six seasons of history.
+ *
+ * Three states, because they need three different sentences:
+ *   - stale     — data older than the inactivity threshold, so the KPIs above are describing our
+ *                 feed rather than the league. This is the one that was missing.
+ *   - no data   — we have never recorded an event, which is not the same as a quiet league.
+ *   - current   — a quiet, factual line. Deliberately not a green success badge: freshness is
+ *                 the expected state, and celebrating it trains people to ignore the banner.
+ */
+function FreshnessNote({ window: w }: { window: AnalyticsDataWindow | null }) {
+  if (!w) return null
+
+  if (w.lastActivityAt === null) {
+    return (
+      <p className="cos-sheet-freshness" data-state="none">
+        <strong>No activity recorded for this league.</strong> Every number below is measured over
+        the last {w.lookbackDays} days of league activity, and we hold none — so they describe our
+        data, not your league.
+      </p>
+    )
+  }
+
+  const stale = w.daysSinceLastActivity !== null && w.daysSinceLastActivity > w.inactiveAfterDays
+  const asOf = new Date(w.lastActivityAt).toLocaleDateString(undefined, {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+  })
+
+  if (stale) {
+    return (
+      <p className="cos-sheet-freshness" data-state="stale">
+        <strong>
+          Newest league activity is from {asOf} ({daysLabel(w.daysSinceLastActivity as number)}).
+        </strong>{' '}
+        Managers count as inactive after {w.inactiveAfterDays} days without an action, so the
+        participation and activity numbers below reflect how old this data is, not how quiet the
+        league is. We hold {w.allTime.eventCount.toLocaleString()} events for it all-time.
+      </p>
+    )
+  }
+
+  return (
+    <p className="cos-sheet-freshness" data-state="current">
+      Measured over the last {w.lookbackDays} days. Newest activity {asOf} (
+      {daysLabel(w.daysSinceLastActivity as number)}).
     </p>
   )
 }
@@ -416,6 +482,9 @@ export function LeagueAnalyticsView({ snapshot, dataMode, errorMessage }: League
           </Button>
         </div>
       </div>
+
+      {/* Sits above the stat row, not below it: it changes how those numbers should be read. */}
+      <FreshnessNote window={view.dataWindow} />
 
       {/* Stat row */}
       <section aria-label="Headline numbers" className="cos-sheet-stats">
