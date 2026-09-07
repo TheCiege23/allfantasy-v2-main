@@ -11,12 +11,37 @@
  * must never be run: a wrong pairing is invisible once written and `sleeperId @unique` cannot
  * catch it, because the wrong id is still a free id.
  *
- * ⚠ `normalizedName` IS PLAIN LOWERCASE HERE, NOT `normalizePlayerName`. Measured on the 1,933
- * existing NFL rows: `normalizedName === canonicalName.trim().toLowerCase()` holds for 100% of
- * them, while `normalizePlayerName` from `lib/team-abbrev` agrees on only 93.2% — it strips
- * suffixes and punctuation the stored rows keep ("david sills v", "a.j. terrell", "james pearce
- * jr."). Writing that normalizer's output into an indexed column shared with 1,933 rows that use
- * the other convention would put half the table out of reach of the other half's lookups.
+ * ⚠ `normalizedName` IS PLAIN LOWERCASE HERE, NOT `normalizePlayerName`. The reasoning is
+ * unchanged and still correct in shape: writing a different convention into an indexed column
+ * shared with rows that use another one puts each half out of reach of the other's lookups.
+ *
+ * 🛑 BUT THE MEASUREMENT THAT PICKED THIS CONVENTION HAS SINCE INVERTED, AND THE ORIGINAL WROTE
+ * ITS NUMBERS AS PRESENT-TENSE FACT WITH NO POPULATION AND NO DATE. It read: "Measured on the
+ * 1,933 existing NFL rows: [plain lowercase] holds for 100% of them, while `normalizePlayerName`
+ * from `lib/team-abbrev` agrees on only 93.2%." Both figures were true. Re-measured 2026-09-07,
+ * when the table holds 9,563 NFL rows:
+ *
+ *     population                          plain lowercase   team-abbrev   canonicalName
+ *     the oldest 1,933 rows (its own)          100.0%           93.2%         90.4%
+ *     the 7,630 rows written since              96.2%           98.6%         93.8%
+ *     the whole table today                     97.0%           97.5%         93.1%
+ *
+ * The first row reproduces the original exactly, which is what makes the rest of the table
+ * credible. Plain lowercase is no longer the majority convention; it is now a ~1.5% minority
+ * (139 rows are reproduced by NO other rule) inside a column three writers disagree about:
+ * `unified-player-service` / `api-sports` / `multiSportIdentityMap` / `espnIdentityPopulation`
+ * write `lib/team-abbrev`'s output, `nflFoundationSync` / `linkEspnIdentities` write
+ * `canonicalName`'s, and this script writes neither.
+ *
+ * ⚠ DO NOT "FIX" THIS BY FLIPPING THE LINE. 97.5 against 97.0 is not a mandate, and switching
+ * strands a different minority instead of the current one. The column needs ONE rule plus a
+ * rewrite of the rows that disagree, which is a data decision, not a line edit. Until that is
+ * taken, the cost is live and measured: a reader keyed with `canonicalName` finds no row for 657
+ * of 9,563 players it HAS a row for, `normalizeMatchName` for 566, `lib/team-abbrev` for 205 —
+ * "James Cook Iii" is stored under that key, so a lookup for "james cook" returns nothing at all.
+ *
+ * The durable half, which is not about this column: a measurement quoted without its population
+ * and its date reads as a standing fact, and stays persuasive long after it stops being true.
  *
  * ⚠ ROLLING INSIGHTS HOLDS DUPLICATE ROWS FOR ONE PLAYER. "Harold Landry" and "Harold Landry Iii"
  * are separate RI ids that both resolve to Sleeper 5030. The `sleeperId @unique` constraint stops
