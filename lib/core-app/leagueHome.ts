@@ -393,6 +393,8 @@ export async function getLeagueHomeData(
   const activity = await getLeagueActivity({
     leagueId: league.id,
     platformLeagueId: league.platformLeagueId,
+    platform: league.platform,
+    sport: league.sport,
     limit: 8,
   }).catch(() => null)
 

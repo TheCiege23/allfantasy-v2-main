@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma'
 import { suggestCatalog, type PlayerMatch } from './playerFinder'
 import { normalizePosition } from './positionNormalization'
 import { rosterIdCoverage, sampleRosterIds } from './rosterIdCoverage'
+import { translateRostersByLeague } from './rosterIdSpace'
 
 /**
  * Suggestions as you type, ranked by what you meant and annotated with where
@@ -129,10 +130,10 @@ function allIds(pd: Record<string, unknown>): Set<string> {
 
 export async function buildRosterIndex(userId: string, leagueIds: string[]): Promise<RosterIndex> {
   if (leagueIds.length === 0) return { leagues: [] }
-  const [leagues, teams, rosters] = await Promise.all([
+  const [leagues, teams, rawRosters] = await Promise.all([
     prisma.league
-      .findMany({ where: { id: { in: leagueIds } }, select: { id: true, name: true } })
-      .catch(() => [] as Array<{ id: string; name: string | null }>),
+      .findMany({ where: { id: { in: leagueIds } }, select: { id: true, name: true, platform: true } })
+      .catch(() => [] as Array<{ id: string; name: string | null; platform: string | null }>),
     prisma.leagueTeam
       .findMany({
         where: { leagueId: { in: leagueIds } },
@@ -146,6 +147,9 @@ export async function buildRosterIndex(userId: string, leagueIds: string[]): Pro
       .findMany({ where: { leagueId: { in: leagueIds } }, select: { leagueId: true, platformUserId: true, playerData: true } })
       .catch(() => [] as Array<{ leagueId: string; platformUserId: string; playerData: unknown }>),
   ])
+
+  // ESPN rosters -> Sleeper ids through the identity chain, one read for every ESPN id (rosterIdSpace.ts).
+  const rosters = await translateRostersByLeague(rawRosters, new Map(leagues.map((l) => [l.id, l.platform])))
 
   // One vocabulary sample per league, resolved in a single read.
   const rostersByLeague = new Map<string, typeof rosters>()

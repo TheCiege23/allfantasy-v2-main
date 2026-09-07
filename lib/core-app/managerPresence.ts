@@ -5,6 +5,7 @@ import type { SectionState } from './leagueHome'
 import { leagueDisplayName } from './leagueHome'
 import { normalizePosition } from './positionNormalization'
 import { coverageReason, rosterIdCoverage, sampleRosterIds } from './rosterIdCoverage'
+import { translateRostersToSleeperIds } from './rosterIdSpace'
 import { activityWindow, DEFAULT_TIME_ZONE, zoneLabel, type ActivityWindow } from './managerActivityWindow'
 
 /**
@@ -153,7 +154,7 @@ export async function getManagerPresence(
 
   const platform = String(league.platform ?? 'manual').toLowerCase()
 
-  const [teams, rosters, rows] = await Promise.all([
+  const [teams, rawRosters, rows] = await Promise.all([
     prisma.leagueTeam
       .findMany({
         where: { leagueId },
@@ -188,9 +189,17 @@ export async function getManagerPresence(
       .catch(() => [] as Array<{ occurredAt: Date; activityType: string; normalized: unknown }>),
   ])
 
-  if (rosters.length === 0) {
+  if (rawRosters.length === 0) {
     return { available: false, reason: 'no rosters have been imported for this league, so we cannot tell who has him' }
   }
+
+  /*
+   * ESPN rosters speak ESPN ids. Translate them through the identity chain the
+   * import pipeline already maintains (PlayerIdentityMap.espnId -> sleeperId)
+   * BEFORE the vocabulary guard and every Sleeper-id read below; an id with no
+   * link stays as it is and counts against the guard. See rosterIdSpace.ts.
+   */
+  const { rosters } = await translateRostersToSleeperIds(platform, rawRosters)
 
   /*
    * The same id-vocabulary guard the ownership card uses: an ESPN roster full of

@@ -1,6 +1,7 @@
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
+import { lookupProviderIdentityNames } from './providerIdentityNames'
 
 /**
  * What has actually happened in this league — processed waivers, free-agent
@@ -175,6 +176,13 @@ export async function getLeagueActivity(args: {
   platformLeagueId: string | null
   /** How many items to surface. */
   limit?: number
+  /**
+   * `League.platform` and `League.sport`, so an ESPN or Yahoo id can be named from
+   * the provider's own athlete record (providerIdentityNames.ts). Without them a
+   * provider id stays the provider's id.
+   */
+  platform?: string | null
+  sport?: string | null
 }): Promise<LeagueActivity | null> {
   const limit = args.limit ?? 12
 
@@ -257,11 +265,17 @@ export async function getLeagueActivity(args: {
 
   // Resolve player ids to names in one read rather than per row.
   const everyPlayerId = new Set<string>()
+  const providerPlayerIds = new Set<string>()
   for (const r of rows) {
     const p = (r.payload ?? {}) as Payload
-    if (idSpaceOf(p) !== 'sleeper') continue
-    for (const id of [...ids(p.adds), ...ids(p.drops)]) everyPlayerId.add(id)
+    const target = idSpaceOf(p) === 'sleeper' ? everyPlayerId : providerPlayerIds
+    for (const id of [...ids(p.adds), ...ids(p.drops)]) target.add(id)
   }
+  // ESPN/Yahoo ids are named from the provider's own athlete record, never looked up as Sleeper ids.
+  const providerNames =
+    providerPlayerIds.size > 0 && args.platform && args.sport
+      ? await lookupProviderIdentityNames(args.platform, args.sport, [...providerPlayerIds]).catch(() => new Map())
+      : new Map<string, { name: string }>()
   const players = everyPlayerId.size
     ? await prisma.sportsPlayer
         .findMany({
@@ -287,7 +301,8 @@ export async function getLeagueActivity(args: {
    */
   const resolve = (id: string, space: IdSpace): ActivityPlayer => {
     if (space !== 'sleeper') {
-      return { id, label: `${PROVIDER_LABEL[space]} player ${id}`, name: null, position: null, team: null, imageUrl: null }
+      const named = providerNames.get(id)?.name ?? null
+      return { id, label: named ?? `${PROVIDER_LABEL[space]} player ${id}`, name: named, position: null, team: null, imageUrl: null }
     }
     const p = nameBy.get(id)
     if (!p) {

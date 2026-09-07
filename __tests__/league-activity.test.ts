@@ -13,6 +13,8 @@ vi.mock('@/lib/prisma', () => ({
     sportsPlayer: { findMany: playerFindMany },
   },
 }))
+const providerNamesMock = vi.hoisted(() => vi.fn(async () => new Map<string, { name: string }>()))
+vi.mock('@/lib/core-app/providerIdentityNames', () => ({ lookupProviderIdentityNames: providerNamesMock }))
 
 import { getLeagueActivity } from '@/lib/core-app/leagueActivity'
 
@@ -152,6 +154,22 @@ describe('getLeagueActivity', () => {
     // The LAST call: this file's beforeEach never clears the player mock's call log.
     const asked = playerFindMany.mock.calls.at(-1)![0].where.sleeperId.in as string[]
     expect(asked.sort()).toEqual(['p1', 'p2'])
+  })
+
+  it('names an ESPN id from the provider identity table when told which league, and never through Sleeper ids', async () => {
+    providerNamesMock.mockResolvedValueOnce(new Map([['4430737', { name: 'Kyren Williams' }]]))
+    activityFindMany.mockResolvedValue([
+      { id: 'e1', activityType: 'waiver', occurredAt: T('2026-09-06T10:00:00Z'), rosterId: null,
+        payload: { source: 'espn_transaction', idSpace: 'espn', adds: { '4430737': '1' }, drops: { '99999': '1' } } },
+    ])
+    const out = await getLeagueActivity({ ...ARGS, platform: 'espn', sport: 'NFL' })
+    expect(out!.items[0].adds[0]).toMatchObject({ id: '4430737', label: 'Kyren Williams', name: 'Kyren Williams' })
+    // An ESPN id the table cannot name stays the provider's id, never dropped.
+    expect(out!.items[0].drops[0]).toMatchObject({ id: '99999', label: 'ESPN player 99999', name: null })
+    expect(providerNamesMock).toHaveBeenCalledWith('espn', 'NFL', expect.arrayContaining(['4430737', '99999']))
+    // The Sleeper-id lookup was never asked about either.
+    const asked = (playerFindMany.mock.calls.at(-1)?.[0]?.where?.sleeperId?.in ?? []) as string[]
+    expect(asked).not.toContain('4430737')
   })
 
   it('reads adds/drops sent as an object, which is how Sleeper sends them', async () => {

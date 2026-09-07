@@ -17,6 +17,7 @@ const mockActivityFindMany = vi.hoisted(() => vi.fn())
 const mockSportsPlayerFindMany = vi.hoisted(() => vi.fn())
 const mockSportsPlayerFindFirst = vi.hoisted(() => vi.fn())
 const mockProfileFindMany = vi.hoisted(() => vi.fn())
+const mockIdentityFindMany = vi.hoisted(() => vi.fn())
 
 vi.mock('@/lib/prisma', () => ({
   prisma: {
@@ -26,6 +27,7 @@ vi.mock('@/lib/prisma', () => ({
     decisionOsImportedActivity: { findMany: mockActivityFindMany },
     sportsPlayer: { findMany: mockSportsPlayerFindMany, findFirst: mockSportsPlayerFindFirst },
     userProfile: { findMany: mockProfileFindMany },
+    playerIdentityMap: { findMany: mockIdentityFindMany },
   },
 }))
 
@@ -102,6 +104,7 @@ beforeEach(() => {
   )
   mockSportsPlayerFindFirst.mockResolvedValue({ position: 'TE' })
   mockProfileFindMany.mockResolvedValue([{ userId: 'af-mike', sleeperUserId: 'sl-mike' }])
+  mockIdentityFindMany.mockResolvedValue([])
 })
 
 describe('getManagerPresence — someone else has him', () => {
@@ -181,6 +184,37 @@ describe('getManagerPresence — nothing to pitch', () => {
     if (res.available) return
     expect(res.reason).toMatch(/ESPN/i)
     expect(res.reason).not.toMatch(/free agent/)
+  })
+
+  /*
+   * ⚠ AND THE LINK EXISTS: 185 of 263 ESPN roster ids in production carry a
+   * sleeperId on PlayerIdentityMap.espnId. Translated through it, an ESPN roster
+   * is read like any other — the holder is named and his window computed.
+   */
+  it('reads an ESPN roster through the identity chain, names the holder and keeps the ESPN platform', async () => {
+    mockLeagueFindUnique.mockResolvedValue({ ...LEAGUE, platform: 'espn' })
+    mockRosterFindMany.mockResolvedValue([
+      { platformUserId: 'sl-tasha', playerData: { players: ['4430737', '2577417', '3139477'], starters: ['4430737', '2577417'] } },
+      { platformUserId: 'sl-me', playerData: { players: ['3116406'], starters: ['3116406'] } },
+      { platformUserId: 'sl-mike', playerData: { players: ['4241457', '4362628'], starters: ['4241457'] } },
+      { platformUserId: 'sl-drew', playerData: { players: ['4047365', '4569618', '4426515'], starters: ['4047365'] } },
+    ])
+    // ESPN id -> Sleeper id, for every id on these rosters, so the vocabulary guard passes.
+    const espnToSleeper: Record<string, string> = {
+      '4430737': KINCAID, '2577417': '50', '3139477': '51', '3116406': '60', '4241457': '70', '4362628': '71',
+      '4047365': '80', '4569618': '81', '4426515': '82',
+    }
+    mockIdentityFindMany.mockImplementation(async (args: { where: { espnId: { in: string[] } } }) =>
+      args.where.espnId.in.filter((id) => espnToSleeper[id]).map((id) => ({ espnId: id, sleeperId: espnToSleeper[id] })),
+    )
+    const res = await getManagerPresence('L-gang', KINCAID, 'me', { position: 'TE' })
+    expect(res.available).toBe(true)
+    if (!res.available) return
+    expect(res.data.platform).toBe('espn')
+    expect(res.data.holder).toBe('other')
+    expect(res.data.managers[0]).toMatchObject({ role: 'owner', ownerName: 'tashaR', startsHim: true })
+    // The translation asked about ESPN ids, never handed them to a Sleeper-id read.
+    expect(mockIdentityFindMany).toHaveBeenCalledTimes(1)
   })
 
   /* ⚠ A "HIT" ON AN ESPN ROSTER IS A COLLISION, NOT A HOLDER. */

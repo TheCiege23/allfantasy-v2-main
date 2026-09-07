@@ -15,6 +15,7 @@ import { playerGame, unresolvedClubNames, weekKickoffs, type PlayerGame } from '
 import { designationOnset } from './designationOnset'
 import { createSwrCache } from './staleWhileRevalidate'
 import { rosterIdCoverage, sampleRosterIds } from './rosterIdCoverage'
+import { translateRostersByLeague } from './rosterIdSpace'
 import { getPlayerImpact, type LeagueImpact } from './playerImpact'
 export type { LeagueImpact, ReplacementOption } from './playerImpact'
 // Re-exported so server callers keep one import site; the definitions live in a
@@ -525,14 +526,18 @@ async function resolveLeagueSlots(
     select: { id: true, name: true, platform: true, leagueType: true, platformLeagueId: true, season: true },
   })
   const byId = new Map(leagues.map((l) => [l.id, l]))
+  // ESPN rosters -> Sleeper ids through the identity chain before any scan below (rosterIdSpace.ts).
+  const platformByLeague = new Map(leagues.map((l) => [l.id, l.platform]))
 
-  const rosters =
+  const rosters = await translateRostersByLeague(
     claimedLeagueIds.length > 0 && allCandidates.length > 0
       ? await prisma.roster.findMany({
           where: { leagueId: { in: claimedLeagueIds }, platformUserId: { in: allCandidates } },
           select: { leagueId: true, platformUserId: true, playerData: true },
         })
-      : []
+      : [],
+    platformByLeague,
+  )
 
   const out: LeagueSlot[] = []
   const unmatched: UnmatchedLeague[] = []
@@ -592,12 +597,15 @@ async function resolveLeagueSlots(
    */
   const unclaimed = leagueIds.filter((id) => !claimed.has(id))
   if (unclaimed.length > 0) {
-    const everyRoster = await prisma.roster
-      .findMany({
-        where: { leagueId: { in: unclaimed } },
-        select: { leagueId: true, platformUserId: true, playerData: true },
-      })
-      .catch(() => [] as Array<{ leagueId: string; platformUserId: string; playerData: unknown }>)
+    const everyRoster = await translateRostersByLeague(
+      await prisma.roster
+        .findMany({
+          where: { leagueId: { in: unclaimed } },
+          select: { leagueId: true, platformUserId: true, playerData: true },
+        })
+        .catch(() => [] as Array<{ leagueId: string; platformUserId: string; playerData: unknown }>),
+      platformByLeague,
+    )
 
     const held = new Map<string, { platformUserId: string; slot: string }>()
     for (const r of everyRoster) {

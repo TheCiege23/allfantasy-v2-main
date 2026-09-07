@@ -16,6 +16,7 @@ const mockRosterFindMany = vi.hoisted(() => vi.fn())
 const mockProjFindFirst = vi.hoisted(() => vi.fn())
 const mockProjFindMany = vi.hoisted(() => vi.fn())
 const mockSportsPlayerFindMany = vi.hoisted(() => vi.fn())
+const mockIdentityFindMany = vi.hoisted(() => vi.fn())
 
 vi.mock('@/lib/prisma', () => ({
   prisma: {
@@ -24,6 +25,7 @@ vi.mock('@/lib/prisma', () => ({
     roster: { findMany: mockRosterFindMany },
     fantasyProjection: { findFirst: mockProjFindFirst, findMany: mockProjFindMany },
     sportsPlayer: { findMany: mockSportsPlayerFindMany },
+    playerIdentityMap: { findMany: mockIdentityFindMany },
   },
 }))
 
@@ -95,6 +97,8 @@ beforeEach(() => {
   mockProjFindFirst.mockReset().mockResolvedValue(PROJECTION)
   mockProjFindMany.mockReset().mockResolvedValue(FEED)
   mockSportsPlayerFindMany.mockReset().mockImplementation(KNOWS_EVERY_ID)
+  // The identity chain knows nothing unless a case says so; an ESPN roster then stays refused.
+  mockIdentityFindMany.mockReset().mockResolvedValue([])
 })
 
 describe('getPlayerLeagueView', () => {
@@ -200,6 +204,20 @@ describe('getPlayerLeagueView', () => {
    * ⚠ THE ESPN CASE. Rosters keyed on ESPN ids resolve to nothing in our
    * player table; a Sleeper-id miss on them is not a free agent.
    */
+  it('names the holder on an ESPN roster once its ids are translated through the identity chain', async () => {
+    mockRosterFindMany.mockResolvedValue([
+      { platformUserId: 'espn-1', playerData: { players: ['4430737', '2577417'], starters: ['4430737'] } },
+      { platformUserId: 'espn-2', playerData: { players: ['3139477'], starters: ['3139477'] } },
+    ])
+    const espnToSleeper: Record<string, string> = { '4430737': KINCAID, '2577417': '50', '3139477': '51' }
+    mockIdentityFindMany.mockImplementation(async (args: { where: { espnId: { in: string[] } } }) =>
+      args.where.espnId.in.filter((id) => espnToSleeper[id]).map((id) => ({ espnId: id, sleeperId: espnToSleeper[id] })),
+    )
+    const view = await getPlayerLeagueView('L-1', KINCAID, 'me')
+    expect(view?.ownership.kind).toBe('other')
+    if (view?.ownership.kind === 'other') expect(view.ownership.slot).toBe('STARTER')
+  })
+
   it('refuses to call him unrostered when the rosters do not speak Sleeper ids', async () => {
     mockRosterFindMany.mockResolvedValue([
       { platformUserId: 'u-tasha', playerData: { players: ['3139477', '4241457'], starters: ['3139477'] } },

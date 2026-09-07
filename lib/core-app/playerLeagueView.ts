@@ -7,6 +7,7 @@ import type { SectionState } from './leagueHome'
 import { leagueDisplayName } from './leagueHome'
 import { latestProjectionWeek } from './playerProjections'
 import { normalizePosition } from './positionNormalization'
+import { translateRostersToSleeperIds } from './rosterIdSpace'
 import { coverageReason, rosterIdCoverage, sampleRosterIds, type RosterIdCoverage } from './rosterIdCoverage'
 import { hasIdpScoring, isIdpPosition } from './scoringNotes'
 import { slotForStarterIndex, startingSlots } from './slotEligibility'
@@ -128,7 +129,7 @@ export async function getPlayerLeagueView(
     .catch(() => null)
   if (!league) return null
 
-  const [teams, rosters] = await Promise.all([
+  const [teams, rawRosters] = await Promise.all([
     prisma.leagueTeam
       .findMany({
         where: { leagueId },
@@ -159,6 +160,8 @@ export async function getPlayerLeagueView(
    * Can these rosters be searched by Sleeper id at all? One query: a sample of
    * the ids they hold, against our player table. See rosterIdCoverage.ts.
    */
+  // ESPN ids -> Sleeper ids through the identity chain, before any Sleeper-id read (rosterIdSpace.ts).
+  const { rosters } = await translateRostersToSleeperIds(league.platform, rawRosters)
   const sample = sampleRosterIds(rosters.map((r) => r.playerData))
   const knownRows =
     sample.length > 0
