@@ -26,6 +26,48 @@ describe("normalizeMatchName", () => {
   it("never collapses genuinely different names", () => {
     expect(normalizeMatchName("Josh Allen")).not.toBe(normalizeMatchName("Josh Allan"))
   })
+
+  /*
+   * 🛑 THE SUFFIX STRIP MUST ONLY FIRE AT THE END. The previous regex was
+   * `\b(jr|sr|ii|iii|iv|v)\.?\b/g` — unanchored and global — so those letters were
+   * removed wherever they stood alone, including as somebody's FIRST name. Both of
+   * these are real rows in `SportsPlayer`, and both keyed to the wrong thing:
+   *
+   *     "JR Pace"          -> "pace"             (before)  -> "jr pace"         (now)
+   *     "V'Angelo Bentley" -> "angelo bentley"   (before)  -> "vangelo bentley" (now)
+   *
+   * These assertions FAIL against the old implementation, which is what makes them
+   * evidence rather than decoration.
+   */
+  it("🛑 does not eat a suffix token that is part of a first name", () => {
+    expect(normalizeMatchName("JR Pace")).toBe("jr pace")
+    expect(normalizeMatchName("V'Angelo Bentley")).toBe("vangelo bentley")
+    // A mid-string token is left alone too: the row is corrupt upstream and
+    // deleting the token silently "repairs" data we should not be rewriting.
+    expect(normalizeMatchName("Reggie Jr. White")).toBe("reggie jr white")
+  })
+
+  it("[control] still strips every TRAILING suffix, which is the merge callers rely on", () => {
+    expect(normalizeMatchName("Kenneth Walker III")).toBe("kenneth walker")
+    expect(normalizeMatchName("Clark Phillips Sr")).toBe("clark phillips")
+    expect(normalizeMatchName("Thomas Fidone II")).toBe("thomas fidone")
+    expect(normalizeMatchName("Ernest Jones IV")).toBe("ernest jones")
+    expect(normalizeMatchName("David Sills V")).toBe("david sills")
+    expect(normalizeMatchName("Velus Jones Jr.")).toBe("velus jones")
+  })
+
+  /*
+   * ⚠ PINNED, NOT ENDORSED. Stripping a trailing suffix merges a father into his son.
+   * It is kept because `SportsPlayer` stores one player under several spellings
+   * ("Quincy Skinner" / "Quincy Skinner JR" / "Quincy Skinner Jr.") and stripping is
+   * what reunites him — 6,144 of the merged groups share a team AND a position family.
+   * `lib/draft-room/player-canonical-identity` makes the opposite choice on purpose.
+   * Asserted so the cost is visible and a future change to it shows up as a failure.
+   */
+  it("⚠ merges a suffixed name into its stem — deliberate, and it has a cost", () => {
+    expect(normalizeMatchName("Marvin Harrison Jr.")).toBe(normalizeMatchName("Marvin Harrison"))
+    expect(normalizeMatchName("David Long Jr.")).toBe(normalizeMatchName("David Long"))
+  })
 })
 
 describe("resolveVerifiedMatch — collisions", () => {

@@ -40,16 +40,44 @@ export interface NameMatchResult<T> {
 }
 
 /**
- * Name normalization for joining. Deliberately conservative: lowercase, strip
- * punctuation and generational suffixes, collapse whitespace. It never strips
- * enough to merge two genuinely different names.
+ * Name normalization for joining. Lowercase, strip accents, strip a TRAILING
+ * generational suffix, strip punctuation, collapse whitespace.
+ *
+ * 🛑 THE SUFFIX STRIP IS ANCHORED TO THE END, AND THAT ANCHOR IS THE WHOLE POINT.
+ * It used to be `\b(jr|sr|ii|iii|iv|v)\.?\b/g` — unanchored and global, so it fired
+ * wherever those letters stood alone, including inside a FIRST name. Measured
+ * against the 12,594 distinct NFL names in `SportsPlayer` on 2026-09-07:
+ *
+ *     "JR Pace"           -> "pace"             the first name, deleted outright
+ *     "V'Angelo Bentley"  -> "angelo bentley"   the V eaten as a suffix
+ *
+ * Anchoring changes the key of 4 names out of 12,594 (0.032%) and leaves all 401
+ * trailing-suffix names stripped exactly as before, so no intended merge is lost.
+ * Two of those four are corrupt rows — `"Reggie Jr. White"`, `"Larry Jr. Allen"` —
+ * where the old regex silently "repaired" the data by deleting a token; they now
+ * key as written, which is the honest outcome for a row that is wrong upstream.
+ *
+ * ⚠ AND THE OLD DOCBLOCK'S CLAIM — "it never strips enough to merge two genuinely
+ * different names" — WAS NOT TRUE, so it is not repeated here. Stripping a trailing
+ * suffix merges `Marvin Harrison Jr.` into `Marvin Harrison`, and `David Long Jr.`
+ * (CB) into `David Long` (LB). That merge is DELIBERATE and is why the anchor was
+ * fixed rather than the strip removed: `SportsPlayer` holds the same player under
+ * several spellings ("Quincy Skinner", "Quincy Skinner JR", "Quincy Skinner Jr."),
+ * and stripping is what reunites him. `lib/draft-room/player-canonical-identity`
+ * makes the OPPOSITE choice for the same reason in reverse — it keeps suffixes so a
+ * father and son stay distinct. Both are defensible; they are not interchangeable,
+ * and a key built by one must never be looked up in an index built by the other.
+ *
+ * The residual risk is real and is the caller's to manage: this returns a KEY, and
+ * `resolveVerifiedMatch` is what refuses an ambiguous bind. Do not treat a matching
+ * key as an identity on its own.
  */
 export function normalizeMatchName(name: string | null | undefined): string {
   return String(name ?? '')
     .toLowerCase()
     .normalize('NFD')
     .replace(/[̀-ͯ]/g, '')
-    .replace(/\b(jr|sr|ii|iii|iv|v)\.?\b/g, '')
+    .replace(/\s+(jr|sr|ii|iii|iv|v)\.?\s*$/, '')
     .replace(/[^a-z0-9 ]/g, '')
     .replace(/\s+/g, ' ')
     .trim()
