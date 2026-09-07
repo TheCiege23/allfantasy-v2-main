@@ -17,7 +17,7 @@ import { refreshStaleLeagueProfiles } from '@/lib/psychological-profiles/Profile
 import { prisma } from "@/lib/prisma"
 import { toPrismaJsonInput } from "@/lib/prisma-json"
 import { runSportsDataImporter } from "@/lib/workers/sports-data-importer"
-import { createRunBudget } from "@/lib/cron/runBudget"
+import { createRunBudget, respondBeforeEdge } from "@/lib/cron/runBudget"
 
 /**
  * NOTE: `requireCronAuth` resolves `preferredSecretEnv ?? LEAGUE_CRON_SECRET ?? CRON_SECRET`.
@@ -648,12 +648,49 @@ async function handle(req: NextRequest) {
   }
 }
 
+/**
+ * 🛑 THE 240s BUDGET GATES ENTRY TO A PHASE AND NEVER BOUNDS THE PHASE ITSELF.
+ * Measured 2026-09-07 from the slow-tier dispatcher, with that budget already in place:
+ * `/api/cron/import-players ... FAIL HTTP 502 (300033ms)`. `budget.exhausted()` is checked BETWEEN
+ * phases, so the last one admitted runs for as long as its provider calls take and carries the
+ * request past the 300s platform edge on its own.
+ *
+ * Bounding the RESPONSE here rather than inside `handle` on purpose: this handler is ~600 lines of
+ * phases, and threading a deadline through every one of them (and the modules they call, which
+ * accept no signal) is a far larger change with far more ways to be subtly wrong.
+ *
+ * ⚠ WHY THIS DOES NOT LOSE TELEMETRY. Every phase records itself as it completes — `withSyncJobRun`
+ * for the devy phases, an explicit `syncJobRun.create` for the importer — so phases finished before
+ * the deadline have ALREADY written their rows. Only the in-flight phase is unrecorded, which is
+ * correct: it did not finish. Its `running` row is what `/api/cron/reap-sync-runs` sweeps.
+ *
+ * ⚠ 200, NOT 5xx. A deferral is designed behaviour for a budgeted job, not a failure — the same
+ * convention `import-stat-lines` already uses with `deferredForBudget`. Returning 5xx here would
+ * make a job that is merely late read as broken.
+ */
+async function handleBoundedByEdge(req: NextRequest) {
+  const startedAt = Date.now()
+  const { result, overran } = await respondBeforeEdge<NextResponse | null>(() => handle(req), () => null)
+  if (!overran && result) return result
+
+  return NextResponse.json(
+    {
+      ok: true,
+      deferredForBudget: true,
+      note: 'stopped at the response deadline; completed phases recorded their own runs and the next fire continues',
+      elapsedMs: Date.now() - startedAt,
+      timestamp: new Date().toISOString(),
+    },
+    { status: 200 },
+  )
+}
+
 export async function GET(req: NextRequest) {
   if (!requireCronAuth(req, 'CRON_SECRET')) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-  return handle(req)
+  return handleBoundedByEdge(req)
 }
 
 export async function POST(req: NextRequest) {
   if (!requireCronAuth(req, 'CRON_SECRET')) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-  return handle(req)
+  return handleBoundedByEdge(req)
 }
