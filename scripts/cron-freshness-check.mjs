@@ -616,6 +616,7 @@ export const NO_PROBE = {
    * today, so pointing a heartbeat probe at it now would report CONFIG forever rather than
    * measure anything. Checked before writing this rather than assumed.
    */
+
 }
 
 /**

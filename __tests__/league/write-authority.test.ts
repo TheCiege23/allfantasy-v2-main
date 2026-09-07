@@ -159,7 +159,13 @@ describe('buildWriteAuthorityEnvelope', () => {
 describe('mutation routes disclose write authority', () => {
   const MUTATION_ROUTES = [
     'app/api/leagues/roster/save/route.ts',
-    'app/api/leagues/[leagueId]/trades/route.ts',
+    // ⚠ handler.ts, NOT route.ts. The trades mutation surface was consolidated into the
+    // `[section]` catch-all, which reaches it by dynamic import
+    // (`app/api/leagues/[leagueId]/[section]/route.ts`: `'trades': () => import('../trades/handler')`).
+    // The route.ts this list named has never existed since; `read()` threw ENOENT at that path and
+    // killed the whole file, so none of these five routes was being checked at all. Same shape as
+    // the ESPN placeholder rot: a hardcoded path outliving the reorganisation it described.
+    'app/api/leagues/[leagueId]/trades/handler.ts',
     'app/api/waiver-wire/leagues/[leagueId]/claims/route.ts',
     'app/api/waiver-wire/leagues/[leagueId]/add-drop/route.ts',
     'lib/league/execute-league-settings-patch.ts',

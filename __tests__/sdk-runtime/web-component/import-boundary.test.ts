@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, it, expect } from 'vitest'
 import { hasInternalLeakage } from '../../../lib/decision-os/sdk/privacy'
@@ -30,7 +30,25 @@ const stripComments = (src: string) =>
 
 const read = (rel: string) => stripComments(readFileSync(resolve(process.cwd(), rel), 'utf8'))
 
-const WEB_COMPONENT_FILES = [
+const exists = (rel: string) => existsSync(resolve(process.cwd(), rel))
+
+// ⚠ ONE DECLARED FILE HAS NO COMMITTED SOURCE, AND THAT MUST NOT SILENTLY DISABLE
+// THIS SUITE. Reading it threw ENOENT at module scope, which fails the whole file
+// before a single assertion runs — so the boundary rules below were enforcing
+// nothing, and had been since the suite landed.
+//
+// This is the FOURTH suite in this family with the same defect: sdk-contracts,
+// js-embed, iframe/browser and this one all declare a barrel `src/index.ts` that
+// was never committed. Only sdk-contracts is skipped wholesale, because its entire
+// `src` tree is absent; here — as in js-embed and iframe/browser — every other file
+// is committed and real, so skipping would drop genuine sources out of enforcement
+// to work around one that is missing.
+//
+// EXPECTED_ABSENT is asserted below, so this cannot rot in either direction: a NEW
+// file going missing fails, and committing the barrel also fails until it is removed
+// from this list — which is what puts it back under enforcement rather than leaving
+// it quietly excluded forever.
+const DECLARED_WEB_COMPONENT_FILES = [
   'sdk-runtime/web-component/src/attributes.ts',
   'sdk-runtime/web-component/src/credentials.ts',
   'sdk-runtime/web-component/src/config.ts',
@@ -39,7 +57,13 @@ const WEB_COMPONENT_FILES = [
   'sdk-runtime/web-component/src/AllFantasyWidgetElement.tsx',
   'sdk-runtime/web-component/src/register.ts',
   'sdk-runtime/web-component/src/index.ts',
-].map((p) => [p, read(p)] as const)
+] as const
+
+const EXPECTED_ABSENT: readonly string[] = ['sdk-runtime/web-component/src/index.ts']
+
+const WEB_COMPONENT_FILES = DECLARED_WEB_COMPONENT_FILES.filter(exists).map(
+  (p) => [p, read(p)] as const,
+)
 
 const IMPORT_SPECIFIER_RE = /import\s+(?:type\s+)?(?:[\s\S]*?)from\s+['"]([^'"]+)['"]/g
 
@@ -65,6 +89,13 @@ function isAllowedSpecifier(specifier: string): boolean {
 }
 
 describe('architecture: sdk-runtime/web-component import boundary', () => {
+  it('every declared source file is present except the known-absent barrel', () => {
+    expect(DECLARED_WEB_COMPONENT_FILES.filter((f) => !exists(f))).toEqual(EXPECTED_ABSENT)
+    expect(WEB_COMPONENT_FILES).toHaveLength(
+      DECLARED_WEB_COMPONENT_FILES.length - EXPECTED_ABSENT.length,
+    )
+  })
+
   it('every import specifier is local, the sanctioned react exception, core, or the frozen sdk/presentation contract layers', () => {
     for (const [path, src] of WEB_COMPONENT_FILES) {
       const specifiers = extractImportSpecifiers(src)
@@ -157,8 +188,18 @@ describe('architecture: sdk-runtime/web-component import boundary', () => {
   it('the credential WeakMap is genuinely module-private — never exported from credentials.ts or the barrel', () => {
     const credentialsSrc = WEB_COMPONENT_FILES.find(([p]) => p.endsWith('credentials.ts'))![1]
     expect(/export\s+(const|let|var)\s+CREDENTIALS\b/.test(credentialsSrc)).toBe(false)
-    const indexSrc = WEB_COMPONENT_FILES.find(([p]) => p.endsWith('src/index.ts'))![1]
-    expect(indexSrc.includes('CREDENTIALS')).toBe(false)
+
+    /*
+     * The barrel half is checked only when the barrel is committed. It is the one file in
+     * EXPECTED_ABSENT, and a bare `.find(...)![1]` on a filtered list is a non-null assertion
+     * that lies: it returned undefined and threw
+     * "Cannot read properties of undefined (reading '1')" — a crash that reads like a broken
+     * test rather than a missing file. The credentials.ts half above still runs unconditionally,
+     * so the module-private property is never left entirely unchecked, and this half re-arms
+     * itself the moment the barrel lands.
+     */
+    const indexEntry = WEB_COMPONENT_FILES.find(([p]) => p.endsWith('src/index.ts'))
+    if (indexEntry) expect(indexEntry[1].includes('CREDENTIALS')).toBe(false)
   })
 })
 
