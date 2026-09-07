@@ -7,6 +7,7 @@ import {
   type RedraftScheduleClient,
 } from '@/lib/redraft/client'
 import { ScheduleView } from './ScheduleView'
+import { WeekControlPanel } from './WeekControlPanel'
 import { LeagueSurfaceState } from '@/components/league/LeagueSurfaceState'
 
 /**
@@ -16,11 +17,19 @@ import { LeagueSurfaceState } from '@/components/league/LeagueSurfaceState'
  * ScheduleView. It keeps the full-season schedule implementation shared with
  * the legacy Season Hub while making it reachable through the core league tab.
  */
-export function CanonicalRedraftScheduleTab({ leagueId }: { leagueId: string }) {
+export function CanonicalRedraftScheduleTab({
+  leagueId,
+  isCommissioner = false,
+}: {
+  leagueId: string
+  isCommissioner?: boolean
+}) {
   const [schedule, setSchedule] = useState<RedraftScheduleClient | null>(null)
+  const [seasonId, setSeasonId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [noSeason, setNoSeason] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [reloadToken, setReloadToken] = useState(0)
 
   useEffect(() => {
     let cancelled = false
@@ -33,9 +42,11 @@ export function CanonicalRedraftScheduleTab({ leagueId }: { leagueId: string }) 
         if (cancelled) return
         if (!season?.id) {
           setSchedule(null)
+          setSeasonId(null)
           setNoSeason(true)
           return
         }
+        setSeasonId(season.id)
         const nextSchedule = await fetchRedraftSchedule(leagueId, season.id)
         if (!cancelled) setSchedule(nextSchedule)
       } catch (cause) {
@@ -50,7 +61,7 @@ export function CanonicalRedraftScheduleTab({ leagueId }: { leagueId: string }) 
     return () => {
       cancelled = true
     }
-  }, [leagueId])
+  }, [leagueId, reloadToken])
 
   if (loading) {
     return (
@@ -95,6 +106,13 @@ export function CanonicalRedraftScheduleTab({ leagueId }: { leagueId: string }) 
 
   return (
     <div className="min-w-0 p-4" data-testid="canonical-redraft-schedule-tab">
+      {isCommissioner && seasonId && schedule ? (
+        <WeekControlPanel
+          seasonId={seasonId}
+          schedule={schedule}
+          onChanged={() => setReloadToken((n) => n + 1)}
+        />
+      ) : null}
       <ScheduleView schedule={schedule} />
     </div>
   )

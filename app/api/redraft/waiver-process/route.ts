@@ -3,6 +3,7 @@ import { processWaiverWindow } from '@/lib/redraft/waiverEngine'
 import { prisma } from '@/lib/prisma'
 import { requireAdminOrBearer } from '@/lib/adminAuth'
 import { requireCronAuth } from '@/app/api/cron/_auth'
+import { engineSeasonScope } from '@/lib/redraft/seasonStatus'
 import { withSyncJobRun } from '@/lib/production-health/syncJobRunTelemetry'
 
 export const dynamic = 'force-dynamic'
@@ -34,8 +35,13 @@ export async function POST(request: Request) {
  * one function now so the cron path can be wrapped in telemetry without the two drifting.
  */
 async function processDueWaiverWindows() {
+  // ⚠ THIS FILTERED OUT 242 OF 246 SEASONS AND NOTHING SAID SO. `'in_season'` —
+  // what the import materializer writes — matched neither arm, so waiver
+  // processing has only ever run for natively drafted leagues. That is a
+  // defensible rule; it just was not one anybody had written. `engineSeasonScope`
+  // states it: both spellings, native leagues only, shadow behind an argument.
   const seasons = await prisma.redraftSeason.findMany({
-    where: { status: { in: ['active', 'drafting'] } },
+    where: engineSeasonScope(),
     take: 20,
   })
   const results: { seasonId: string; processed: unknown[] }[] = []

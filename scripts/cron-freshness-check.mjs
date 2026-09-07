@@ -322,6 +322,14 @@ export const PROBES = {
   '/api/redraft/score-sync': { heartbeat: 'cron-redraft-score-sync' },
   '/api/redraft/waiver-process': { heartbeat: 'cron-redraft-waiver-process' },
   /*
+   * A week boundary is a WEEKLY event, so "advanced 0" is the healthy result of
+   * roughly 167 of every 168 hourly runs. That is why this is a heartbeat and
+   * not an output probe: a freshness check on redraft_seasons.updatedAt would
+   * read STALE precisely when the job is working, and go green only in the hour
+   * a week happened to roll.
+   */
+  '/api/cron/season-week-roll': { heartbeat: 'cron-season-week-roll' },
+  /*
    * ⚠ '/api/guillotine/eliminate' REMOVED — THE ROUTE IS DELIBERATELY GONE.
    * 47151092e ("refactor(guillotine): delete the second elimination engine and its route")
    * deleted app/api/guillotine/eliminate/route.ts along with lib/guillotine/

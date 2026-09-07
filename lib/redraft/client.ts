@@ -415,6 +415,47 @@ export async function fetchRedraftSchedule(leagueId: string, seasonId?: string |
   return body.schedule ?? null
 }
 
+/**
+ * Commissioner week controls.
+ *
+ * 🛑 THE ONLY CLIENT REFERENCE TO `/api/redraft/schedule` WAS A GET. The route has
+ * supported `open_week` / `complete_week` / `advance_week` / `lock_schedule`
+ * behind a commissioner gate since it shipped, and no surface in the product
+ * called any of them — so a commissioner could not move their own league's week
+ * without hand-crafting an API request, and no league ever left week 1.
+ *
+ * `commissionerOverride` forces past the runtime's own refusal (an unfinalized
+ * matchup). It is exposed because a real league needs it — a postponed game, a
+ * provider that never reports — but it is never the default, and the scheduled
+ * roller never sets it.
+ */
+export type RedraftScheduleActionResult = {
+  ok: boolean
+  seasonId?: string
+  status?: string
+  currentWeek?: number
+  code?: string
+  message?: string
+  error?: string
+}
+
+export async function runRedraftScheduleAction(payload: {
+  seasonId: string
+  action: 'open_week' | 'complete_week' | 'advance_week' | 'lock_schedule'
+  week?: number
+  commissionerOverride?: boolean
+}): Promise<RedraftScheduleActionResult> {
+  const res = await fetch('/api/redraft/schedule', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify(payload),
+  })
+  // A refused transition is a 409 carrying a `code` the UI must show verbatim —
+  // "all matchups must be finalized" is the answer, not a generic failure.
+  return (await res.json()) as RedraftScheduleActionResult
+}
+
 export async function fetchRedraftLiveScoring(params: {
   leagueId: string
   seasonId?: string | null

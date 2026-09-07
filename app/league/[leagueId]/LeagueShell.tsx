@@ -1971,7 +1971,7 @@ function LeagueTabRouter({
       return <MatchupTabContainer league={selectedLeague} />
     case 'schedule':
       if (isNflRedraftCoreDashboardFromUserLeague(selectedLeague)) {
-        return <CanonicalRedraftScheduleTab leagueId={leagueId} />
+        return <CanonicalRedraftScheduleTab leagueId={leagueId} isCommissioner={isCommissioner} />
       }
       return <ScheduleTab league={selectedLeague} tabLabel={tabLabel} />
     case 'draft':

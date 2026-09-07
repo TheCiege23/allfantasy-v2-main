@@ -182,7 +182,16 @@ function normalizedStatus(value: unknown): string {
   return raw || 'scheduled'
 }
 
-function matchupCompleted(matchup: Pick<CanonicalScheduleRuntimeMatchup, 'status' | 'bye'>): boolean {
+/**
+ * Whether a matchup counts as played.
+ *
+ * ⚠ EXPORTED SO THE UI CANNOT INVENT A SECOND ANSWER. The commissioner week
+ * panel needs "how many matchups are still open", and the obvious inline version
+ * (`status !== 'final' && status !== 'completed'`) drifts the moment this set
+ * changes — the panel would then offer an Advance button the runtime refuses, or
+ * hide one it would allow. Same rule, one implementation.
+ */
+export function matchupCompleted(matchup: Pick<CanonicalScheduleRuntimeMatchup, 'status' | 'bye'>): boolean {
   return !matchup.bye && COMPLETED_STATUSES.has(normalizedStatus(matchup.status))
 }
 
