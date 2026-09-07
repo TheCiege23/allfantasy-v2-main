@@ -5,6 +5,7 @@ import NextLink from 'next/link'
 import { Download, Link as LinkIcon } from 'lucide-react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
+import { FormattedTimestamp } from '@/components/commissioner-os/FormattedTimestamp'
 import { downloadReportCsv, downloadReportPdf } from '@/lib/commissioner-ui/reports/exportUtils'
 import { REPORT_STATUS_LABELS, REPORT_FORMAT_LABELS } from './reportsLabels'
 import type { GeneratedReport } from '@/lib/commissioner-ui/reports/decision-os-client'
@@ -61,7 +62,7 @@ export function ReportDetailDialog({ report, onOpenChange, onToggleShare }: Repo
             )}
 
             <p className="text-xs" style={{ color: 'var(--muted2)' }}>
-              Generated {new Date(report.generatedAt).toLocaleString()} by {report.generatedByLabel}
+              Generated <FormattedTimestamp iso={report.generatedAt} /> by {report.generatedByLabel}
             </p>
 
             {report.relatedLinks.length > 0 && (
