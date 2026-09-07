@@ -50,6 +50,46 @@ export async function runPostDraftFinalizationArtifacts(leagueId: string): Promi
         redraftPlayersAlreadyPresent: summary.redraftPlayersAlreadyPresent,
         skippedPicks: summary.skippedPicks,
       })
+
+      /*
+       * A guillotine league's season shell, which nothing has ever created.
+       *
+       * 🛑 `guillotine_seasons` HOLDS ZERO ROWS IN PRODUCTION against 12
+       * guillotine leagues. The config is written in the create transaction, but
+       * the SEASON — which the elimination engine, chop audit, survival log and
+       * waiver-release engine all hang off — only existed if a commissioner
+       * POSTed to `/api/guillotine/season` by hand.
+       *
+       * ⚠ IT BELONGS HERE, NOT AT LEAGUE CREATE, and that is the whole reason it
+       * was missed. `GuillotineSeason.redraftSeasonId` is a required unique FK
+       * and its team counts are `RedraftRoster` counts — none of which exist
+       * until the line directly above this one runs. Guillotine reaches that
+       * sync through its `isDynasty === false` arm.
+       *
+       * Non-fatal: the draft is already finalized and the rosters already
+       * materialized by this point. A commissioner can still create the season
+       * by hand, exactly as before.
+       */
+      if (summary.seasonId) {
+        try {
+          const { ensureGuillotineSeason } = await import('@/lib/guillotine/ensureGuillotineSeason')
+          const guillotine = await ensureGuillotineSeason({
+            leagueId,
+            redraftSeasonId: summary.seasonId,
+          })
+          if (guillotine.ok && guillotine.created) {
+            console.info('[postDraftFinalizeArtifacts] guillotine season created', {
+              leagueId,
+              guillotineSeasonId: guillotine.seasonId,
+            })
+          }
+        } catch (guillotineErr) {
+          console.error('[postDraftFinalizeArtifacts] guillotine season ensure failed', {
+            leagueId,
+            error: guillotineErr instanceof Error ? guillotineErr.message : String(guillotineErr),
+          })
+        }
+      }
     }
   } catch (err) {
     console.error('[postDraftFinalizeArtifacts] redraft season sync failed', {
