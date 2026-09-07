@@ -202,14 +202,20 @@ const EMPTY_PULSE: MyTeamPulse = {
 /**
  * How many rows each column renders. The header states the totals either way.
  *
- * ⚠ THE TWO CAPS DIFFER, AND THE ASYMMETRY IS THE 2026-09-07 HANDOFF'S. The
- * board leads with "your ten most urgent lineups"; the quiet column is context
- * and five is enough of it, because the footer already accounts for the rest by
- * count. Raising `SET_CAP` to match would put fifteen rows on a screen whose
- * whole point is that only the first ten need you.
+ * 🛑 BOTH ARE 10, AND THE EARLIER ASYMMETRY WAS A BUG. This said five was
+ * enough for the quiet column "because the footer accounts for the rest" — which
+ * assumed the board would always have broken lineups to lead with. On a
+ * 94-league account in the preseason NOTHING was broken, `needs` was empty, and
+ * the board rendered zero rows under a heading promising ten. The quiet column
+ * is not context; it is the fallback, and a fallback capped below the board's
+ * own row count cannot fill it.
+ *
+ * ⚠ THE CONSUMER SLICES TO 10 ACROSS BOTH COLUMNS, so ten here is a ceiling
+ * rather than a quota — six broken and four quiet is a full board, and so is
+ * zero and ten.
  */
 const NEEDS_CAP = 10
-const SET_CAP = 5
+const SET_CAP = 10
 
 /**
  * Kickoff per club for one sport's current week.
