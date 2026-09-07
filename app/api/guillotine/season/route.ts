@@ -4,6 +4,7 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { assertLeagueMember } from '@/lib/league/league-access'
 import { requireCommissionerRole } from '@/lib/league/permissions'
+import { ensureGuillotineSeason } from '@/lib/guillotine/ensureGuillotineSeason'
 
 export const dynamic = 'force-dynamic'
 
@@ -35,7 +36,7 @@ export async function POST(req: NextRequest) {
   const userId = session?.user?.id
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  let body: { leagueId?: string; redraftSeasonId?: string; sport?: string; season?: number }
+  let body: { leagueId?: string; redraftSeasonId?: string }
   try {
     body = (await req.json()) as typeof body
   } catch {
@@ -55,26 +56,36 @@ export async function POST(req: NextRequest) {
     throw err
   }
 
-  const rs = await prisma.redraftSeason.findFirst({ where: { id: redraftSeasonId, leagueId } })
-  if (!rs) return NextResponse.json({ error: 'RedraftSeason not found' }, { status: 404 })
+  /*
+   * Delegates to `ensureGuillotineSeason`, which the post-draft finalization now
+   * also calls. This route was the ONLY thing that ever created a
+   * `GuillotineSeason` — production holds zero of them against 12 guillotine
+   * leagues — so the season shell existed only if a commissioner knew to ask for
+   * it by hand. Now that a second caller exists, the creation rule lives in one
+   * place rather than being copied into it.
+   *
+   * ⚠ `body.sport` / `body.season` OVERRIDES ARE DROPPED, AND THAT IS A FIX.
+   * They defaulted to the RedraftSeason's own values and nothing in the app
+   * sends them; accepting them let a caller build a guillotine season whose
+   * sport or year disagreed with the RedraftSeason it is keyed to, which every
+   * downstream engine then reads as authoritative.
+   */
+  const result = await ensureGuillotineSeason({ leagueId, redraftSeasonId })
 
-  const existing = await prisma.guillotineSeason.findFirst({ where: { redraftSeasonId: rs.id } })
-  if (existing) return NextResponse.json({ season: existing })
+  if (!result.ok) {
+    if (result.reason === 'REDRAFT_SEASON_NOT_FOUND') {
+      return NextResponse.json({ error: 'RedraftSeason not found' }, { status: 404 })
+    }
+    if (result.reason === 'NOT_GUILLOTINE') {
+      return NextResponse.json({ error: 'Not a guillotine league' }, { status: 400 })
+    }
+    return NextResponse.json(
+      { error: 'League has no drafted rosters yet — finish the draft first' },
+      { status: 409 },
+    )
+  }
 
-  const rosters = await prisma.redraftRoster.count({ where: { seasonId: rs.id } })
-  const g = await prisma.guillotineSeason.create({
-    data: {
-      leagueId,
-      redraftSeasonId: rs.id,
-      sport: body.sport ?? rs.sport,
-      season: body.season ?? rs.season,
-      status: 'setup',
-      totalTeamsStarted: rosters,
-      currentTeamsActive: rosters,
-      currentScoringPeriod: 0,
-    },
-  })
-
-  return NextResponse.json({ season: g })
+  const season = await prisma.guillotineSeason.findUnique({ where: { id: result.seasonId } })
+  return NextResponse.json({ season })
 }
 
