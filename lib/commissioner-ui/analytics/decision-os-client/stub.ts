@@ -22,6 +22,7 @@ export const stubAnalyticsClient: AnalyticsClient = {
         managerFingerprints: [
           { managerName: 'Test Manager', aggression: 40, activity: 30, tradeFrequency: 50, riskTolerance: 20, labels: [] },
         ],
+        fingerprintAxisMax: { aggression: 45, activity: 38, tradeFrequency: 100, riskTolerance: 63 },
         allTimeRecords: [{ teamName: 'Test Team', wins: 9, losses: 5, seasons: 1, titles: 1 }],
         // A fixture has no real window. Null renders the page exactly as it did before the
         // window existed, rather than asserting a freshness this data does not have.

@@ -108,6 +108,14 @@ export function buildAnalyticsCsv(snapshot: LeagueAnalyticsSnapshot): string {
     lines.push(csvRow(['All-time record', `${record.teamName} — Seasons`, record.seasons]))
     lines.push(csvRow(['All-time record', `${record.teamName} — Titles`, record.titles]))
   }
+  const axisMax = snapshot.fingerprintAxisMax
+  if (axisMax) {
+    // The radar plots each axis against these; without them the exported scores have no scale.
+    lines.push(csvRow(['Manager fingerprint', 'Scale — Aggression max', axisMax.aggression]))
+    lines.push(csvRow(['Manager fingerprint', 'Scale — Activity max', axisMax.activity]))
+    lines.push(csvRow(['Manager fingerprint', 'Scale — Trading max', axisMax.tradeFrequency]))
+    lines.push(csvRow(['Manager fingerprint', 'Scale — Risk max', axisMax.riskTolerance]))
+  }
   for (const m of snapshot.managerFingerprints ?? []) {
     lines.push(csvRow(['Manager fingerprint', `${m.managerName} — Aggression`, m.aggression]))
     lines.push(csvRow(['Manager fingerprint', `${m.managerName} — Activity`, m.activity]))

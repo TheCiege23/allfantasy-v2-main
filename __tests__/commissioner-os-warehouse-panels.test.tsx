@@ -30,6 +30,7 @@ const BASE: LeagueAnalyticsSnapshot = {
   pointsForAgainst: [],
   activityMix: [],
   managerFingerprints: [],
+  fingerprintAxisMax: null,
   allTimeRecords: [],
   dataWindow: null,
   seasonLabel: null,

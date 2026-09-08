@@ -11,8 +11,17 @@ export interface ManagerFingerprint {
   labels: string[]
 }
 
+/** The highest each measure reaches platform-wide — the ring, per axis. See the read layer. */
+export interface FingerprintAxisMax {
+  aggression: number
+  activity: number
+  tradeFrequency: number
+  riskTolerance: number
+}
+
 export interface ManagerFingerprintRadarProps {
   managers: ManagerFingerprint[]
+  axisMax: FingerprintAxisMax
   ariaLabel: string
 }
 
@@ -25,11 +34,18 @@ export interface ManagerFingerprintRadarProps {
  * SINGLE series, so no hue carries identity and no legend is needed — the heading is the label.
  * Comparing shapes across a grid is also the thing a fingerprint is for.
  *
- * ⚠ THE DOMAIN IS A HARD 0–100 AND IS NOT RESCALED TO THE LEAGUE'S MAXIMUM. These are 0–100
- * scores, and stretching each axis to whatever the top manager happened to score would turn "the
- * most aggressive manager here" into a spoke at the rim that reads as "maximally aggressive". The
- * cost is honest and visible: in most leagues the polygons sit well inside the ring, because real
- * scores cluster low. The panel note says so rather than the chart quietly flattering everyone.
+ * 🛑 EACH AXIS IS PLOTTED AGAINST ITS OWN PLATFORM-WIDE MAXIMUM, AND THE FIRST VERSION'S SHARED
+ * 0–100 RING WAS UNREADABLE. Measured across 2,679 rows the four measures top out at 45, 38, 100
+ * and 63 — they are not commensurate. On one ring three of them never left the inner fifth: every
+ * manager drew the same thin vertical sliver and two of eleven were invisible dots. That was
+ * caught by rendering the real league in a browser; the numbers alone looked fine.
+ *
+ * ⚠ THE DENOMINATOR MUST BE THE PLATFORM MAX, NEVER THIS LEAGUE'S. Scaling to the top score among
+ * the managers on screen is the dishonest version — the rim would mean "highest here", it would
+ * move whenever someone joined or left, and no two leagues could be compared. A fixed reference
+ * means a full spoke reads as "as high as this measure has ever been recorded", which is a real
+ * claim. The tooltip carries the RAW score against that maximum so nothing is hidden behind the
+ * normalisation, and the panel note states the rule.
  *
  * ⚠ FOUR AXES, NOT FIVE. `waiverFocusScore` exists on the source table and is constant zero across
  * all 2,611 rows platform-wide; it is dropped in the read layer so no chart can pick it up by
@@ -42,8 +58,18 @@ const AXES: { key: keyof Omit<ManagerFingerprint, 'managerName' | 'labels'>; lab
   { key: 'riskTolerance', label: 'Risk' },
 ]
 
-function Fingerprint({ manager }: { manager: ManagerFingerprint }) {
-  const data = AXES.map((axis) => ({ axis: axis.label, value: manager[axis.key] }))
+function Fingerprint({ manager, axisMax }: { manager: ManagerFingerprint; axisMax: FingerprintAxisMax }) {
+  const data = AXES.map((axis) => {
+    const raw = manager[axis.key]
+    const max = axisMax[axis.key]
+    return {
+      axis: axis.label,
+      // Plotted normalised; `raw` and `max` ride along so the tooltip can show the real score.
+      value: Math.round((raw / max) * 100),
+      raw,
+      max,
+    }
+  })
   return (
     <figure className="m-0">
       <figcaption
@@ -67,7 +93,10 @@ function Fingerprint({ manager }: { manager: ManagerFingerprint }) {
             <PolarRadiusAxis domain={[0, 100]} tick={false} axisLine={false} />
             <Tooltip
               contentStyle={{ background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 8, color: 'var(--text)' }}
-              formatter={(value, _name, item) => [`${value} / 100`, String(item?.payload?.axis ?? '')]}
+              formatter={(_value, _name, item) => [
+                `${item?.payload?.raw ?? 0} of ${item?.payload?.max ?? 0}`,
+                String(item?.payload?.axis ?? ''),
+              ]}
             />
             <Radar
               dataKey="value"
@@ -84,7 +113,7 @@ function Fingerprint({ manager }: { manager: ManagerFingerprint }) {
   )
 }
 
-export function ManagerFingerprintRadar({ managers, ariaLabel }: ManagerFingerprintRadarProps) {
+export function ManagerFingerprintRadar({ managers, axisMax, ariaLabel }: ManagerFingerprintRadarProps) {
   if (managers.length === 0) return null
   return (
     <div
@@ -94,7 +123,7 @@ export function ManagerFingerprintRadar({ managers, ariaLabel }: ManagerFingerpr
       style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))' }}
     >
       {managers.map((m) => (
-        <Fingerprint key={m.managerName} manager={m} />
+        <Fingerprint key={m.managerName} manager={m} axisMax={axisMax} />
       ))}
     </div>
   )

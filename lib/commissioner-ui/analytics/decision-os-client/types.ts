@@ -110,6 +110,21 @@ export interface ManagerFingerprintEntry {
   labels: string[]
 }
 
+/**
+ * The highest each fingerprint measure reaches platform-wide — the radar's ring, per axis.
+ *
+ * Needed because the four measures are NOT commensurate (they top out at 45 / 38 / 100 / 63), so a
+ * shared 0–100 ring squeezed three of them into the inner fifth and every manager drew the same
+ * sliver. Platform-wide, never this league's: a fixed denominator means a full spoke reads as "as
+ * high as this has ever been recorded", and two leagues stay comparable.
+ */
+export interface FingerprintAxisMaxEntry {
+  aggression: number
+  activity: number
+  tradeFrequency: number
+  riskTolerance: number
+}
+
 /** All-time record per franchise across every season the import captured. */
 export interface AllTimeRecordEntry {
   teamName: string
@@ -185,6 +200,8 @@ export interface LeagueAnalyticsSnapshot {
    */
   activityMix: ActivityMixEntry[]
   managerFingerprints: ManagerFingerprintEntry[]
+  /** Null when no fingerprints are shown; the radar needs it to scale each axis. */
+  fingerprintAxisMax: FingerprintAxisMaxEntry | null
   allTimeRecords: AllTimeRecordEntry[]
   /** Provenance for every window-derived KPI above. Null when the window cannot be established. */
   dataWindow: AnalyticsDataWindow | null
