@@ -221,6 +221,14 @@ function WindowCard({ row, i }: { row: TradeWindowRow; i: number }) {
 export function TradesBoard({ data, allHref }: TradesBoardProps) {
   const live = data.windows.filter((w) => w.weeksLeft != null && w.weeksLeft >= 0).length
   const anyDeadline = data.windows.some((w) => w.deadlineWeek != null || w.noDeadline)
+  /*
+    ⚠ THE LABEL MUST NAME THE RULE IN FORCE. The loader now sorts leagues that
+    HAVE trades above ones that do not, so "ranked by deadline" would state a
+    rule the list is not following -- and when nothing has trades at all, the
+    reader deserves to be told that rather than shown ten empty cards under a
+    heading promising trades.
+  */
+  const anyTrades = data.windows.some((w) => w.tradesOnFile > 0)
 
   return (
     <div className="af-bd">
@@ -310,7 +318,9 @@ export function TradesBoard({ data, allHref }: TradesBoardProps) {
             */
             label={
               anyDeadline
-                ? `Top ${data.windows.length} · ranked by deadline`
+                ? anyTrades
+                  ? `Top ${data.windows.length} · leagues with trades first, then deadline`
+                  : `Top ${data.windows.length} · ranked by deadline · no trades on file in any of them`
                 : `Your ${data.windows.length} ${data.windows.length === 1 ? 'league' : 'leagues'} · no deadline ingested for any of them`
             }
             count={

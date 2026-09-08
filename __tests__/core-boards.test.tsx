@@ -18,7 +18,7 @@ import WarRoomBoard from '@/components/core-app/boards/WarRoomBoard'
 import type { SeasonOutlook, OutlookLeague } from '@/lib/core-app/seasonOutlook'
 import type { WeekBoard as WeekBoardData, WeekMatchup } from '@/lib/core-app/weekBoard'
 import type { WaiversBoardData } from '@/lib/core-app/waiversBoard'
-import { isViewersOwnHistory, type TradesBoardData } from '@/lib/core-app/tradesBoard'
+import { byTradeUrgency, managerLabel, type TradesBoardData } from '@/lib/core-app/tradesBoard'
 import { collapseMirroredTrades } from '@/lib/core-app/tradesBoard'
 import type { DraftHqAllData, DraftHqAllRow } from '@/lib/core-app/draftHqAll'
 import type { LiveDraftPicks } from '@/lib/core-app/warRoomBoard'
@@ -667,11 +667,35 @@ describe('TradesBoard — the label must describe what the list did', () => {
     expect(text).toMatch(/no deadline ingested for any of them/i)
   })
 
-  it('states the deadline ranking as soon as one league has one', () => {
+  /*
+   * ⚠ THE RULE CHANGED, SO THE ASSERTION CHANGED WITH IT -- the subject is
+   * unaltered. Deadline alone put nine leagues with NO trades above the one with
+   * 26, on a board whose blurb promises the most recent real trade in each
+   * league. Leagues with trades now sort first, so a label saying "ranked by
+   * deadline" would state a rule the list is no longer following.
+   */
+  it('names the trades-first rule when some league has trades', () => {
     const { container } = render(
       <TradesBoard data={tradesData()} allHref="/core/trades?all=1" />,
     )
-    expect(container.textContent ?? '').toMatch(/ranked by deadline/i)
+    const text = container.textContent ?? ''
+    expect(text).toMatch(/leagues with trades first, then deadline/i)
+    expect(text).not.toMatch(/^.*Top \d+ · ranked by deadline/i)
+  })
+
+  /* And when NOTHING has a trade, say that rather than promise trades. */
+  it('says no trades are on file rather than heading an empty list', () => {
+    const empty = tradesData()
+    const { container } = render(
+      <TradesBoard
+        data={{
+          ...empty,
+          windows: empty.windows.map((w) => ({ ...w, tradesOnFile: 0, latest: null })),
+        }}
+        allHref="/core/trades?all=1"
+      />,
+    )
+    expect(container.textContent ?? '').toMatch(/no trades on file in any of them/i)
   })
 })
 
@@ -1028,33 +1052,35 @@ describe('WarRoomBoard', () => {
  * `LegacyUser.sleeperUsername` (@unique). It resolves to one username or to
  * none, so the only two outcomes are "correct" and "unchanged".
  */
-describe('isViewersOwnHistory', () => {
-  it('claims the trade only when both names are known and equal', () => {
-    expect(isViewersOwnHistory('TheCiege24', 'TheCiege24')).toBe(true)
-    expect(isViewersOwnHistory('TheCiege24', 'someone-else')).toBe(false)
-  })
-
-  /* Sleeper is case-preserving but not case-significant. */
-  it('ignores case and surrounding space', () => {
-    expect(isViewersOwnHistory('  TheCiege24 ', 'theciege24')).toBe(true)
-  })
-
+describe('managerLabel', () => {
   /*
-   * 🛑 THE ENTIRE SAFETY PROPERTY. An account with no legacy link resolves to
-   * null, and a null must never become "You" — that would tell a manager they
-   * made a trade they did not make.
+   * 🛑 THE BOARD PRINTED `596439279961588352` WHERE A MANAGER'S NAME BELONGS.
+   * `LeagueTradeHistory.sleeperUsername` holds a Sleeper user ID -- the column
+   * name lies, because `persistTradesForSeason` writes `rosterIdToOwner`'s value
+   * ("roster_id -> Sleeper user_id") straight into it. Reported from the live
+   * screen, not by any test here.
    */
-  it('never claims the trade when either side is unknown', () => {
-    for (const [a, b] of [
-      ['TheCiege24', null],
-      [null, 'TheCiege24'],
-      [null, null],
-      ['TheCiege24', ''],
-      ['', 'TheCiege24'],
-      ['TheCiege24', '   '],
-    ] as Array<[string | null, string | null]>) {
-      expect(isViewersOwnHistory(a, b), `${a} / ${b}`).toBe(false)
+  it('never prints a bare platform id as a name', () => {
+    expect(managerLabel('596439279961588352')).toBe('a manager')
+    expect(managerLabel('123456')).toBe('a manager')
+  })
+
+  it('prefers a resolved name over anything else', () => {
+    expect(managerLabel('596439279961588352', 'TheCiege24')).toBe('TheCiege24')
+    expect(managerLabel(null, 'Jordan')).toBe('Jordan')
+  })
+
+  /* A real username is not an id and must survive untouched. */
+  it('keeps a genuine name, including one with digits in it', () => {
+    expect(managerLabel('TheCiege24')).toBe('TheCiege24')
+    expect(managerLabel('KBFL2026')).toBe('KBFL2026')
+  })
+
+  it('says so when it has nothing at all', () => {
+    for (const v of [null, undefined, '', '   ']) {
+      expect(managerLabel(v as string | null | undefined)).toBe('a manager')
     }
+    expect(managerLabel('596439279961588352', '   ')).toBe('a manager')
   })
 })
 
@@ -1085,5 +1111,55 @@ describe('TradesBoard — whose side is whose', () => {
     )
     expect(sideLabels(container)).toContain('TheCiege24 sent')
     expect(sideLabels(container)).not.toContain('You sent')
+  })
+})
+
+/*
+ * 🛑 REPORTED FROM THE LIVE SCREEN: "the whole page is basically blank with no
+ * trade info". Nine leagues with ZERO trades at 8 weeks sorted above the one
+ * league holding 26 trades at 9 weeks, because the live tier ordered on
+ * weeks-left ALONE and never consulted `tradesOnFile`. With 94 leagues against a
+ * 10-row cap, the entire board filled with "no trade has been made here" under a
+ * heading promising the most recent real trade in each league.
+ */
+describe('byTradeUrgency', () => {
+  const w = (over: Partial<Parameters<typeof byTradeUrgency>[0]> = {}) => ({
+    weeksLeft: 8,
+    deadlineWeek: 9,
+    noDeadline: false,
+    tradesOnFile: 0,
+    ...over,
+  })
+
+  it('puts a league that HAS trades above an emptier one closing sooner', () => {
+    const empty = w({ weeksLeft: 8, tradesOnFile: 0 })
+    const busy = w({ weeksLeft: 9, tradesOnFile: 26 })
+    expect(byTradeUrgency(busy, empty)).toBeLessThan(0)
+    expect([empty, busy].sort(byTradeUrgency)[0]).toBe(busy)
+  })
+
+  /* Urgency is subordinated, not discarded: it still orders within a group. */
+  it('still ranks by deadline once both sides have trades', () => {
+    const soon = w({ weeksLeft: 2, tradesOnFile: 3 })
+    const later = w({ weeksLeft: 9, tradesOnFile: 26 })
+    expect([later, soon].sort(byTradeUrgency)[0]).toBe(soon)
+  })
+
+  it('and among two empty leagues, by deadline', () => {
+    const soon = w({ weeksLeft: 2 })
+    const later = w({ weeksLeft: 9 })
+    expect([later, soon].sort(byTradeUrgency)[0]).toBe(soon)
+  })
+
+  /*
+   * A closed or unknown window must never outrank a live one, however many trades
+   * it holds — that tier order predates this fix and must survive it.
+   */
+  it('never lifts a dead window above a live one on trade count', () => {
+    const live = w({ weeksLeft: 9, tradesOnFile: 0 })
+    const passed = w({ weeksLeft: null, deadlineWeek: 4, tradesOnFile: 99 })
+    const never = w({ weeksLeft: null, deadlineWeek: null, noDeadline: true, tradesOnFile: 99 })
+    const unknown = w({ weeksLeft: null, deadlineWeek: null, noDeadline: false, tradesOnFile: 99 })
+    expect([passed, never, unknown, live].sort(byTradeUrgency)[0]).toBe(live)
   })
 })

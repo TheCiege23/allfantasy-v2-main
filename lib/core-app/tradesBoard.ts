@@ -220,55 +220,56 @@ export function collapseMirroredTrades<T extends { leagueId: string; transaction
 }
 
 /**
- * The reader's own Sleeper username, or null when we cannot say who they are.
+ * A manager label we are willing to put on screen.
  *
- * ⚠ THIS IS AN EXACT TWO-HOP LOOKUP, NOT A NAME MATCH, and the distinction is
- * the whole reason this is safe to render. `AppUser.legacyUserId` is `@unique`
- * and points at `LegacyUser.id`; `LegacyUser.sleeperUsername` is `@unique` too.
- * So the chain either resolves to exactly one username or to nothing — there is
- * no scoring, no threshold, and no second-best candidate.
- *
- * ⚠ NULL IS THE COMMON CASE AND MUST STAY CHEAP. An account that never came
- * through the legacy Sleeper import has no `legacyUserId`, and that is not an
- * error — the board simply keeps printing the platform username, which is what
- * it does today. Every failure here (no row, no link, a throw) returns null, so
- * the feature can only ever ADD a correct "You" and never replace a correct
- * username with a wrong one.
- *
- * `lib/core-app/career.ts` already walks the first hop of this same chain.
+ * 🛑 AN UNRESOLVED SLEEPER ID IS WORSE THAN ADMITTING WE DO NOT KNOW. This board
+ * shipped printing `596439279961588352` where a manager's name belongs, because
+ * `LeagueTradeHistory.sleeperUsername` holds a Sleeper user **id** and the column
+ * name lies about it. A bare id tells the reader nothing and reads as broken; "a
+ * manager" says we could not resolve it, which is true and legible.
  */
-async function viewerSleeperUsername(userId: string): Promise<string | null> {
-  try {
-    const appUser = await prisma.appUser.findUnique({
-      where: { id: userId },
-      select: { legacyUserId: true },
-    })
-    if (!appUser?.legacyUserId) return null
-    const legacy = await prisma.legacyUser.findUnique({
-      where: { id: appUser.legacyUserId },
-      select: { sleeperUsername: true },
-    })
-    return legacy?.sleeperUsername?.trim() || null
-  } catch {
-    return null
-  }
+export function managerLabel(raw: string | null | undefined, resolved?: string | null): string {
+  const r = resolved?.trim()
+  if (r) return r
+  const v = String(raw ?? '').trim()
+  if (!v) return 'a manager'
+  return /^\d{6,}$/.test(v) ? 'a manager' : v
 }
 
 /**
- * Is this trade history the READER's own?
+ * The order the Trades board shows leagues in.
  *
- * ⚠ BOTH SIDES MUST BE PRESENT. A null on either side is "we do not know", and
- * an unknown must never render as "You" — that would tell a manager they made a
- * trade they did not make, which is worse than the raw username this replaces.
+ * Exported so it can be TESTED. The rule IS the product here, and it lived inside
+ * the loader where nothing could reach it while it was getting this wrong.
+ *
+ * ⚠ SOONEST DEADLINE FIRST, WITH THREE KINDS OF "NO DEADLINE" BELOW IT, NOT AMONG
+ * IT. A window shutting this week is the most urgent thing on the screen; a league
+ * that never closes, one whose deadline has passed, and one that never told us are
+ * all "not urgent" for different reasons, and none may sort above a live window.
+ *
+ * 🛑 AND WITHIN THE LIVE TIER, HAVING SOMETHING TO SHOW COMES FIRST. Deadline alone
+ * put nine leagues with ZERO trades above the one holding 26, on a board whose own
+ * blurb promises "the most recent real trade in each league" — with 94 leagues
+ * against a 10-row cap the entire screen read "no trade has been made here".
+ * Reported from the live screen, not caught by any test. The deadline still orders
+ * within each group, so urgency is subordinated to having content, not discarded.
  */
-export function isViewersOwnHistory(
-  historyUsername: string | null | undefined,
-  viewerUsername: string | null | undefined,
-): boolean {
-  const a = historyUsername?.trim().toLowerCase()
-  const b = viewerUsername?.trim().toLowerCase()
-  if (!a || !b) return false
-  return a === b
+export function byTradeUrgency(
+  a: { weeksLeft: number | null; deadlineWeek: number | null; noDeadline: boolean; tradesOnFile: number },
+  b: { weeksLeft: number | null; deadlineWeek: number | null; noDeadline: boolean; tradesOnFile: number },
+): number {
+  const rank = (w: typeof a) =>
+    w.weeksLeft != null && w.weeksLeft >= 0 ? 0 : w.deadlineWeek != null ? 1 : w.noDeadline ? 2 : 3
+  const ra = rank(a)
+  const rb = rank(b)
+  if (ra !== rb) return ra - rb
+  if (ra === 0) {
+    const ha = a.tradesOnFile > 0 ? 0 : 1
+    const hb = b.tradesOnFile > 0 ? 0 : 1
+    if (ha !== hb) return ha - hb
+    return (a.weeksLeft as number) - (b.weeksLeft as number)
+  }
+  return b.tradesOnFile - a.tradesOnFile
 }
 
 export async function getTradesBoard(
@@ -283,7 +284,7 @@ export async function getTradesBoard(
    * sides needs re-orienting; the only thing the board could not say was
    * whether that manager is the person reading the screen.
    */
-  const viewerSleeper = await viewerSleeperUsername(userId)
+  /* Identity is resolved per league from `LeagueTeam.claimedByUserId`, below. */
   const claimed = await prisma.leagueTeam
     .findMany({
       where: { claimedByUserId: userId },
@@ -353,6 +354,52 @@ export async function getTradesBoard(
       : Promise.resolve([] as Array<{ id: string; sleeperLeagueId: string; sleeperUsername: string }>),
   ])
 
+  /*
+   * ⚠ `LeagueTradeHistory.sleeperUsername` HOLDS A SLEEPER USER **ID**, AND THE
+   * COLUMN NAME LIES. `persistTradesForSeason` writes `rosterIdToOwner`'s value
+   * straight in -- its own docblock says "roster_id -> Sleeper user_id". So this
+   * board printed an 18-digit id where a name belongs, and any comparison against
+   * a real username could never match.
+   *
+   * `LeagueTeam` answers both sides per league: `platformUserId` is that same
+   * Sleeper id, `externalId` is the roster id `partnerRosterId` refers to, and
+   * `claimedByUserId` says which team is the READER'S -- an exact identity rather
+   * than a name match.
+   */
+  const teamRows =
+    leagueIds.length > 0
+      ? await prisma.leagueTeam
+          .findMany({
+            where: { leagueId: { in: leagueIds } },
+            select: {
+              leagueId: true,
+              externalId: true,
+              ownerName: true,
+              teamName: true,
+              platformUserId: true,
+              claimedByUserId: true,
+            },
+          })
+          .catch(() => [])
+      : []
+
+  const managersByLeague = new Map<
+    string,
+    { byUserId: Map<string, { name: string; mine: boolean }>; byRoster: Map<string, string> }
+  >()
+  for (const row of teamRows) {
+    let e = managersByLeague.get(row.leagueId)
+    if (!e) {
+      e = { byUserId: new Map(), byRoster: new Map() }
+      managersByLeague.set(row.leagueId, e)
+    }
+    const name = row.ownerName?.trim() || row.teamName?.trim() || ''
+    if (row.platformUserId) {
+      e.byUserId.set(String(row.platformUserId), { name, mine: row.claimedByUserId === userId })
+    }
+    if (row.externalId) e.byRoster.set(String(row.externalId), name)
+  }
+
   const historyIds = histories.map((h) => h.id)
   const trades =
     historyIds.length > 0
@@ -382,6 +429,8 @@ export async function getTradesBoard(
               playersGiven: true,
               playersReceived: true,
               partnerName: true,
+              /* Resolves the OTHER side's manager via LeagueTeam.externalId. */
+              partnerRosterId: true,
             },
           })
           .catch(() => [])
@@ -552,19 +601,22 @@ export async function getTradesBoard(
       },
     )
 
+    const mgr = managersByLeague.get(league.id)
+    const fromEntry = mgr?.byUserId.get(String(h.sleeperUsername))
+    const toResolved =
+      t.partnerRosterId != null ? mgr?.byRoster.get(String(t.partnerRosterId)) : null
+
     latestByLeague.set(league.id, {
       transactionId: t.transactionId,
       season: t.season ?? null,
       week: t.week ?? null,
       at: t.tradeDate ? t.tradeDate.toISOString() : null,
       /*
-       * "You sent" only when the identity is certain — see `isViewersOwnHistory`.
-       * An unresolved reader keeps the platform username, which is exactly what
-       * this board printed before, so the fallback is the previous behaviour
-       * rather than a degraded one.
+       * "You" only when this league's claimed team IS the reader's -- exact, not a
+       * name match. Otherwise the resolved manager, and only then a fallback.
        */
-      fromName: isViewersOwnHistory(h.sleeperUsername, viewerSleeper) ? 'You' : h.sleeperUsername,
-      toName: t.partnerName?.trim() || 'the other manager',
+      fromName: fromEntry?.mine ? 'You' : managerLabel(h.sleeperUsername, fromEntry?.name),
+      toName: managerLabel(t.partnerName, toResolved),
       /*
        * ⚠ NOT `.map(toAsset)`. With a second parameter that form passes the
        * array INDEX as the book — the classic `map` arity trap, and here it
@@ -644,15 +696,7 @@ export async function getTradesBoard(
    * deadline has passed, and a league that never told us are all "not urgent"
    * for three different reasons, and none of them may sort above a live window.
    */
-  windows.sort((a, b) => {
-    const rank = (w: TradeWindowRow) =>
-      w.weeksLeft != null && w.weeksLeft >= 0 ? 0 : w.deadlineWeek != null ? 1 : w.noDeadline ? 2 : 3
-    const ra = rank(a)
-    const rb = rank(b)
-    if (ra !== rb) return ra - rb
-    if (ra === 0) return (a.weeksLeft as number) - (b.weeksLeft as number)
-    return b.tradesOnFile - a.tradesOnFile
-  })
+  windows.sort(byTradeUrgency)
 
   const pending: PendingTrade[] = pendingRows.map((p) => {
     const l = mine.find((c) => c.leagueId === p.leagueId)?.league
