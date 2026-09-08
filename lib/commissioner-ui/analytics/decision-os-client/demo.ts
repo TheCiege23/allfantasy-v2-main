@@ -166,6 +166,8 @@ export const demoAnalyticsClient: AnalyticsClient = {
           { managerName: 'Marcus Webb', aggression: 22, activity: 26, tradeFrequency: 34, riskTolerance: 41, labels: ['position-focused'] },
           { managerName: 'The Gridiron Giants', aggression: 12, activity: 9, tradeFrequency: 15, riskTolerance: 11, labels: ['early-round focused'] },
         ],
+        // The real platform maxima, so the demo radar fills the ring the way a live one does.
+        fingerprintAxisMax: { aggression: 45, activity: 38, tradeFrequency: 100, riskTolerance: 63 },
         allTimeRecords: [
           { teamName: 'Priya Natarajan', wins: 63, losses: 20, seasons: 6, titles: 2 },
           { teamName: 'Playoff Bound', wins: 51, losses: 32, seasons: 6, titles: 1 },

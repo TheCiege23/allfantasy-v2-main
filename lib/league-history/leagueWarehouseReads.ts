@@ -383,6 +383,50 @@ export interface LeagueWarehouseManagerFingerprint {
 }
 
 /**
+ * The highest value each measure reaches ANYWHERE on the platform — the denominator the radar
+ * plots against.
+ *
+ * 🛑 THE FOUR AXES ARE NOT ON A COMMON SCALE, AND PLOTTING THEM AS IF THEY WERE MADE THE CHART
+ * UNREADABLE. Measured across all 2,679 rows: aggression tops out at 45, activity at 38, risk at
+ * 63, and trade frequency at 100. Rendered against a shared 0–100 ring, three of the four axes
+ * never leave the inner fifth, so every manager drew the same thin vertical sliver and two of the
+ * eleven were invisible dots. Verified by rendering the real league in a browser, not by reading
+ * the numbers — the shapes were legible as data and useless as a comparison.
+ *
+ * ⚠ SCALING PER AXIS IS ONLY HONEST BECAUSE THE DENOMINATOR IS STABLE. Scaling to the top score
+ * in the CURRENT LEAGUE would be the misleading version: the rim would mean "highest here", it
+ * would move whenever a manager joined or left, and two leagues could not be compared. The
+ * platform-wide maximum is a fixed reference — a full spoke means "as high as this measure has
+ * ever been recorded" — and the chart says so rather than leaving the reader to assume 100.
+ */
+export interface LeagueWarehouseFingerprintAxisMax {
+  aggression: number
+  activity: number
+  tradeFrequency: number
+  riskTolerance: number
+}
+
+export async function readFingerprintAxisMax(): Promise<LeagueWarehouseFingerprintAxisMax> {
+  const agg = await prisma.managerPsychProfile.aggregate({
+    _max: {
+      aggressionScore: true,
+      activityScore: true,
+      tradeFrequencyScore: true,
+      riskToleranceScore: true,
+    },
+  })
+  // A zero or missing maximum would divide the whole axis by nothing; 1 keeps the chart drawable
+  // and the spoke at full length, which is the truthful reading when one value is all there is.
+  const safe = (v: unknown) => Math.max(1, num(v))
+  return {
+    aggression: safe(agg._max.aggressionScore),
+    activity: safe(agg._max.activityScore),
+    tradeFrequency: safe(agg._max.tradeFrequencyScore),
+    riskTolerance: safe(agg._max.riskToleranceScore),
+  }
+}
+
+/**
  * Behavioural fingerprints from `manager_psych_profiles`.
  *
  * 🛑 FOUR AXES, NOT FIVE — `waiverFocusScore` IS DEAD AND MUST NOT BE PLOTTED. Measured across all

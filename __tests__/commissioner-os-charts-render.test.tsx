@@ -49,6 +49,12 @@ beforeAll(() => {
   }
 })
 
+/**
+ * The real platform maxima (measured across 2,679 rows). The radar plots each axis against these
+ * because the four measures are not commensurate — see the component's own comment.
+ */
+const AXIS_MAX = { aggression: 45, activity: 38, tradeFrequency: 100, riskTolerance: 63 }
+
 describe('commissioner-os charts — the marks are actually drawn', () => {
   it('draws one donut sector per activity type', () => {
     // Real proportions from the test league: 51 / 48 / 31 / 7.
@@ -83,7 +89,7 @@ describe('commissioner-os charts — the marks are actually drawn', () => {
       riskTolerance: i,
       labels: [],
     }))
-    const { container } = render(<ManagerFingerprintRadar managers={managers} ariaLabel="probe" />)
+    const { container } = render(<ManagerFingerprintRadar managers={managers} axisMax={AXIS_MAX} ariaLabel="probe" />)
     expect(container.querySelectorAll('.recharts-radar-polygon')).toHaveLength(11)
   })
 
@@ -103,7 +109,7 @@ describe('commissioner-os charts — the marks are actually drawn', () => {
   it('renders nothing rather than an empty frame when there is no data', () => {
     // An empty chart frame reads as "this league has no activity", which is a different claim.
     expect(render(<ActivityMixDonut slices={[]} ariaLabel="p" />).container.innerHTML).toBe('')
-    expect(render(<ManagerFingerprintRadar managers={[]} ariaLabel="p" />).container.innerHTML).toBe('')
+    expect(render(<ManagerFingerprintRadar managers={[]} axisMax={AXIS_MAX} ariaLabel="p" />).container.innerHTML).toBe('')
     expect(render(<AllTimeRecordChart records={[]} ariaLabel="p" />).container.innerHTML).toBe('')
   })
 

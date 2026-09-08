@@ -36,11 +36,28 @@ export function AllTimeRecordChart({ records, height, ariaLabel }: AllTimeRecord
   // twelve teams in a fixed frame gives slivers, four gives slabs.
   const resolvedHeight = height ?? Math.max(200, records.length * 26 + 48)
 
-  const data = records.map((r) => ({
-    ...r,
-    // Pre-computed so the tick formatter stays a pure lookup rather than re-deriving per render.
-    label: r.titles > 0 ? `${r.teamName} ${'★'.repeat(Math.min(r.titles, 3))}` : r.teamName,
-  }))
+  /*
+   * ⚠ THE LABEL IS TRUNCATED BECAUSE RECHARTS WRAPS RATHER THAN CLIPS. Rendered against the real
+   * league, "Team Too Many Falcons ★★" broke onto a second line and collided with the rows above
+   * and below it. A category axis cannot ellipsise on its own, so the budget is enforced here and
+   * the full name stays in the tooltip.
+   */
+  const NAME_BUDGET = 22
+  const data = records.map((r) => {
+    // NON-BREAKING space: with a normal one Recharts treats it as a wrap opportunity and drops the
+    // stars onto their own line under the name, colliding with the row beneath.
+    const stars = r.titles > 0 ? ` ${'★'.repeat(Math.min(r.titles, 3))}` : ''
+    const room = NAME_BUDGET - stars.length
+    const name = r.teamName.length > room ? `${r.teamName.slice(0, room - 1)}…` : r.teamName
+    return { ...r, label: `${name}${stars}` }
+  })
+
+  /*
+   * The axis stops at the longest bar, not at a round 100. Every team has played the same number
+   * of seasons, so the totals cluster tightly — leaving 16 points of empty track past the longest
+   * bar just shrinks the part that carries the signal.
+   */
+  const maxGames = Math.max(...records.map((r) => r.wins + r.losses), 1)
 
   return (
     <div role="img" aria-label={ariaLabel} style={{ height: resolvedHeight }}>
@@ -49,6 +66,7 @@ export function AllTimeRecordChart({ records, height, ariaLabel }: AllTimeRecord
           <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" horizontal={false} />
           <XAxis
             type="number"
+            domain={[0, maxGames]}
             tick={{ fill: 'var(--muted2)', fontSize: 11 }}
             axisLine={{ stroke: 'var(--border)' }}
             tickLine={false}
@@ -56,7 +74,7 @@ export function AllTimeRecordChart({ records, height, ariaLabel }: AllTimeRecord
           <YAxis
             type="category"
             dataKey="label"
-            width={150}
+            width={158}
             tick={{ fill: 'var(--muted2)', fontSize: 11 }}
             axisLine={{ stroke: 'var(--border)' }}
             tickLine={false}

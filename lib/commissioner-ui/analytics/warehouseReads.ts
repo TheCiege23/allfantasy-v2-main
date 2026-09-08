@@ -4,6 +4,7 @@ import {
   readActivityMix,
   readAllTimeRecords,
   readManagerActivity,
+  readFingerprintAxisMax,
   readManagerFingerprints,
   readMargins,
   readSeasonPoints,
@@ -18,6 +19,7 @@ import type {
   AllTimeRecordEntry,
   CompetitiveBalanceMetric,
   ManagerActivityEntry,
+  FingerprintAxisMaxEntry,
   ManagerFingerprintEntry,
   ScoringDistributionBucket,
   SeasonComparisonPoint,
@@ -66,6 +68,7 @@ export interface WarehouseAnalytics {
   managerActivity: ManagerActivityEntry[]
   activityMix: ActivityMixEntry[]
   managerFingerprints: ManagerFingerprintEntry[]
+  fingerprintAxisMax: FingerprintAxisMaxEntry | null
   allTimeRecords: AllTimeRecordEntry[]
 }
 
@@ -79,6 +82,7 @@ const EMPTY: WarehouseAnalytics = {
   managerActivity: [],
   activityMix: [],
   managerFingerprints: [],
+  fingerprintAxisMax: null,
   allTimeRecords: [],
 }
 
@@ -229,6 +233,7 @@ export async function readWarehouseAnalytics(leagueId: string): Promise<Warehous
       activityMix,
       fingerprints,
       allTimeRecords,
+      fingerprintAxisMax,
     ] = await Promise.all([
       season == null ? [] : panel('pointsForAgainst', () => readSeasonPoints(leagueId, season), []),
       season == null ? [] : panel('scoringDistribution', () => readSeasonPointsForDistribution(leagueId, season), []),
@@ -239,6 +244,7 @@ export async function readWarehouseAnalytics(leagueId: string): Promise<Warehous
       panel('activityMix', () => readActivityMix(leagueId), []),
       panel('managerFingerprints', () => readManagerFingerprints(leagueId), []),
       panel('allTimeRecords', () => readAllTimeRecords(leagueId), []),
+      panel('fingerprintAxisMax', () => readFingerprintAxisMax(), null),
     ])
 
     return {
@@ -255,6 +261,8 @@ export async function readWarehouseAnalytics(leagueId: string): Promise<Warehous
       })),
       activityMix: activityMix.map((a) => ({ label: humaniseActivityType(a.activityType), count: a.count })),
       managerFingerprints: fingerprints,
+      // Null unless there is something to scale — the radar is not rendered without fingerprints.
+      fingerprintAxisMax: fingerprints.length ? fingerprintAxisMax : null,
       allTimeRecords,
     }
   } catch {

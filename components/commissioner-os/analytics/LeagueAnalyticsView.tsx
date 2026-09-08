@@ -656,13 +656,14 @@ export function LeagueAnalyticsView({ snapshot, dataMode, errorMessage }: League
         </Panel>
       ) : null}
 
-      {view.managerFingerprints.length ? (
+      {view.managerFingerprints.length && view.fingerprintAxisMax ? (
         <Panel
           title="Manager fingerprints"
-          note="Four behavioural scores per manager, each 0–100 against the outer ring. Real scores cluster low, so most shapes sit well inside it — compare them to each other, not to the edge."
+          note="Four behavioural measures per manager. Each spoke is scaled to the highest score that measure has ever reached across every league, so a full spoke means “as high as this gets”. Hover for the raw score."
         >
           <ManagerFingerprintRadar
             managers={view.managerFingerprints}
+            axisMax={view.fingerprintAxisMax}
             ariaLabel={`Behavioural fingerprints for ${view.managerFingerprints.length} managers across aggression, activity, trading and risk.`}
           />
         </Panel>

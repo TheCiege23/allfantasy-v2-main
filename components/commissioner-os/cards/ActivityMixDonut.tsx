@@ -58,8 +58,10 @@ export function ActivityMixDonut({ slices, height = 260, ariaLabel }: ActivityMi
             nameKey="label"
             // A donut, not a pie: the hole is where the total goes, and an arc is easier to compare
             // by length than a wedge is by area.
-            innerRadius="52%"
-            outerRadius="80%"
+            innerRadius="48%"
+            // 72%, not 80%: the outer labels sit beyond the ring, and at ~600px the widest of them
+            // ("Roster move 51 · 37%") ran to the panel edge. The ring gives up the space instead.
+            outerRadius="72%"
             paddingAngle={2}
             // Off deliberately: a dashboard people READ VALUES OFF should be complete on first
             // paint, not sweep in. It also respects reduced-motion by construction rather than by
