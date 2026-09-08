@@ -109,6 +109,10 @@
       "schedule": "10 9 * * *"
     },
     {
+      "path": "/api/cron/import-schedules?odds=1",
+      "schedule": "25 */6 * * *"
+    },
+    {
       "path": "/api/cron/adp-refresh",
       "schedule": "0 10 * * *"
     },

@@ -16,6 +16,12 @@
  *             sports. This is the pass that fills soccer badges and expands soccer to EPL /
  *             LALIGA / SERIEA, and the one that keeps PlayerIdentityMap's join key fed. Also its
  *             own mode, for the same budget reason as `rosters`.
+ *   odds    — "1" runs ONLY the API-Sports betting-market sync into `game_odds`. Exclusive for
+ *             the same reason as the two above, and for one more: it is the only block here on a
+ *             6-HOURLY schedule, while the schedule blocks are weekly. Sharing a fire would
+ *             either drag a weekly sweep along four times a day or hold odds back to weekly, and
+ *             a weekly spread is worse than no spread. See `syncAPISportsGameOddsToDb` for why
+ *             the run is bounded to a handful of calls.
  */
 
 import type { NextRequest } from "next/server"
@@ -26,6 +32,7 @@ import { withSyncJobRun } from "@/lib/production-health/syncJobRunTelemetry"
 import { syncNFLScheduleToDb } from "@/lib/rolling-insights"
 import {
   syncAPISportsGamesToDb,
+  syncAPISportsGameOddsToDb,
   clearAPISportsDiagnostics,
   getAPISportsDiagnostics,
 } from "@/lib/api-sports"
@@ -66,6 +73,13 @@ const JOB_TSDB = "cron-import-schedules-tsdb"
  * freshness monitor report CONFIG ("no rows for job_name") forever.
  */
 const JOB_RI_PROFILES = "cron-import-schedules-ri-profiles"
+
+/**
+ * Heartbeat identity for the `?odds=1` schedule, read by PROBES in
+ * scripts/cron-freshness-check.mjs. Renaming it here without renaming it there makes the
+ * freshness monitor report CONFIG ("no rows for job_name") forever.
+ */
+const JOB_ODDS = "cron-import-schedules-odds"
 
 /** Every league the TheSportsDB ingest covers. */
 const TSDB_SPORTS: IngestSport[] = ['NFL', 'NCAAF', 'MLB', 'NBA', 'NHL', 'NCAAB', 'SOCCER']
@@ -125,12 +139,20 @@ async function handle(req: NextRequest) {
   const rostersOnly = url.searchParams.get("rosters") === "1"
   /** Exclusive mode, like `?rosters=1` — see the block that reads it for why it gets its own fire. */
   const riProfilesOnly = url.searchParams.get("riProfiles") === "1"
+  /** Exclusive mode — see the header. Runs 6-hourly while the schedule blocks run weekly. */
+  const oddsOnly = url.searchParams.get("odds") === "1"
   /**
-   * The schedule/teams blocks run only in the DEFAULT mode. Both `?rosters=1` and `?riProfiles=1`
-   * are exclusive because each is a per-team or per-league sweep that needs the whole budget —
-   * this route has already returned a 300s edge 502 once by doing too much in one fire.
+   * The schedule/teams blocks run only in the DEFAULT mode. `?rosters=1`, `?riProfiles=1` and
+   * `?odds=1` are exclusive because each is a per-team, per-league or per-game sweep that needs
+   * the whole budget — this route has already returned a 300s edge 502 once by doing too much in
+   * one fire.
+   *
+   * ⚠ `odds` MUST be in this list, not expressed as a `source=` value. `source=tsdb-only` works
+   * because the TheSportsDB block gates on `tsdb !== '0'` rather than on `source`, so an
+   * unrecognised source still runs it. A hypothetical `source=odds` would therefore have dragged
+   * the whole TheSportsDB sweep along on every 6-hourly odds fire.
    */
-  const runScheduleBlocks = !rostersOnly && !riProfilesOnly
+  const runScheduleBlocks = !rostersOnly && !riProfilesOnly && !oddsOnly
 
   const startedAt = Date.now()
   const budget = createRunBudget()
@@ -160,6 +182,54 @@ async function handle(req: NextRequest) {
         }
         diagnostics[`api_sports_${s}`] = getAPISportsDiagnostics()
       }
+    }
+
+    /*
+     * API-SPORTS BETTING MARKETS — `?odds=1`, every 6h.
+     *
+     * Writes `game_odds`, which nothing else in the repo fills; there is no other odds provider
+     * and no other writer. The read side is lib/odds/gameOddsReads.ts, which never calls a
+     * provider, so this cron is the ONLY thing keeping that table alive. Root CLAUDE.md's
+     * `ingestCFBDStats` case is the reason it shipped in the same change as the read.
+     *
+     * Cheap by construction: `syncAPISportsGameOddsToDb` drives off SportsGame rows we already
+     * store and fetches one game at a time within a bounded window, so an NFL week is ~16 calls
+     * against a 300/hr budget. Per-sport isolation matches the games block above.
+     */
+    if (oddsOnly) {
+      await withSyncJobRun(
+        { jobName: JOB_ODDS, jobScope: sports.join(","), trigger: "cron" },
+        async () => {
+          const odds: Record<string, unknown> = {}
+          for (const s of sports) {
+            if (budget.exhausted()) {
+              odds[s] = { deferred: true }
+              continue
+            }
+            try {
+              const summary = await syncAPISportsGameOddsToDb({ season, sport: s })
+              odds[s] = summary
+              /*
+               * Surfaced deliberately rather than logged and forgotten. The vendor's market names
+               * are unverified (their docs sit behind a bot check and there is no committed
+               * contract), so an empty `unrecognizedBets` is the signal the guesses still hold —
+               * and a non-empty one is the only warning that a rename has started quietly
+               * emptying the market columns. See lib/odds/normalizeApiSportsOdds.ts.
+               */
+              if (summary.unrecognizedBets.length > 0) {
+                console.warn(
+                  `[import-schedules] ${s} odds returned unrecognized bet names: ` +
+                    summary.unrecognizedBets.join(", "),
+                )
+              }
+            } catch (err) {
+              odds[s] = { error: String(err).slice(0, 120), sport: s }
+            }
+          }
+          results.api_sports_odds = odds
+          return odds
+        },
+      )
     }
 
     /*
