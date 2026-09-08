@@ -4,6 +4,7 @@ import { writeAutomationAuditLog } from '@/lib/automation/audit'
 import { toErrorMessage } from '@/lib/automation/errors'
 import { discoverWorkspaceRefreshLeagues } from '@/lib/automation/jobs/workspace/discoverWorkspaceRefreshLeagues'
 import { refreshWorkspaceTasksBatch } from '@/lib/automation/jobs/workspace/refreshWorkspaceTasksJob'
+import { generateScheduledReportsBatch } from '@/lib/automation/jobs/reports/generateScheduledReportsJob'
 import { withSyncJobRun } from '@/lib/production-health/syncJobRunTelemetry'
 
 export const runtime = 'nodejs'
@@ -88,13 +89,33 @@ export async function GET(request: Request) {
     }
   }
 
+  /*
+   * ⚠ TWO JOBS, ONE CRON ENTRY, AND THAT IS A BUDGET DECISION NOT A DESIGN ONE.
+   * `scripts/cron-budget-check.mjs` caps the registry at 60 schedules and it is AT 60 — measured
+   * 2026-09-08. A 61st entry fails the budget check and blocks every PR that touches the registry.
+   * The two still write separate `automation_runs` rows under separate job types, so the ledger
+   * and Automation Center distinguish them exactly as if they had their own schedules; only this
+   * entry point and the heartbeat are shared.
+   *
+   * The scan runs FIRST on purpose: reports package what the scan has just refreshed, so running
+   * them in the other order would generate this week's digest from last night's picture.
+   */
   const outcome = await withSyncJobRun(
     { jobName: JOB, trigger: 'cron' },
-    () => refreshWorkspaceTasksBatch({ limit, leagueId }),
+    async () => {
+      const workspace = await refreshWorkspaceTasksBatch({ limit, leagueId })
+      const reports = await generateScheduledReportsBatch({ limit, leagueId }).catch((e) => {
+        // Report generation must never take the task scan's heartbeat down with it — the scan is
+        // the thing whose absence makes every other commissioner surface lie.
+        console.error('[cron-commissioner] report generation failed:', toErrorMessage(e))
+        return { enabled: true, discovered: 0, completed: 0, skipped: 0, failed: 1, generated: 0 }
+      })
+      return { ...workspace, reports }
+    },
     (r) => ({
       rowsRead: r.discovered,
       rowsWritten: r.completed,
-      status: r.failed > 0 ? 'partial' : 'success',
+      status: r.failed > 0 || r.reports.failed > 0 ? 'partial' : 'success',
       /*
        * ⚠ `enabled` IS IN THE TELEMETRY BECAUSE A GATED RUN AND A RUN THAT FOUND NO WORK ARE
        * OTHERWISE THE SAME ROW — zero read, zero written, status success. Those are opposite
@@ -108,18 +129,22 @@ export async function GET(request: Request) {
         completed: r.completed,
         skipped: r.skipped,
         failed: r.failed,
+        reportsEnabled: r.reports.enabled,
+        reportsGenerated: r.reports.generated,
+        reportsFailed: r.reports.failed,
       },
     }),
   )
 
   return NextResponse.json({
-    ok: outcome.failed === 0,
+    ok: outcome.failed === 0 && outcome.reports.failed === 0,
     enabled: outcome.enabled,
     dryRun: false,
     discovered: outcome.discovered,
     completed: outcome.completed,
     skipped: outcome.skipped,
     failed: outcome.failed,
+    reports: outcome.reports,
     results: outcome.leagues,
   })
 }

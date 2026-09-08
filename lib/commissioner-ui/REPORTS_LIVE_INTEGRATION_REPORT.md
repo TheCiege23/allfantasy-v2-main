@@ -232,3 +232,55 @@ change behavior.
    help articles) rather than calling Decision OS directly itself —
    worth checking whether that means no new `callDecisionOS` calls at
    all, only composition of what other modules already fetch.
+
+
+---
+
+## Superseded 2026-09-08 — the artifacts this report said had no store now exist
+
+The audit above is still correct about Decision OS, and correct about the shape of the gap: Reports
+is "a persisted-artifact system, the same structural class of gap as Automation Center's execution
+log, not a porting gap."
+
+It also rejected generating a report on the fly, and gave the sharpest reason in this whole
+programme: doing so "would still require fabricating `status`, `generatedAt` (of a generation event
+that never happened), `format`, `sizeLabel`, and `shareLink` — every one of Reports' own defining
+fields."
+
+That distinction — between DESCRIBING a generation and PERFORMING one — is exactly right, and it is
+what changed. `lib/commissioner-reports/` performs generations and keeps the output, so each field
+it named is now a measurement:
+
+| field | where it now comes from |
+|---|---|
+| `generatedAt` | when the generator actually ran |
+| `status` | the real outcome of that run |
+| `format` | what was actually produced (`csv`) |
+| `sizeLabel` | `Buffer.byteLength` of the stored artifact |
+| `shareLink` | **still absent** — sharing has no implementation, so `shareStatus` is always `private` and no link is emitted |
+
+**What was built**
+
+- `prisma/migrations/20260908220000_commissioner_report_runs` — the artifact store. The CSV is kept,
+  not rebuilt on download: a file regenerated in December from a league that has moved on is not the
+  file the row says was made in September.
+- `lib/commissioner-reports/reportCatalog.ts` — four templates, each shipping with the `build`
+  function that produces it. Templates are CODE, not rows, so the catalog cannot advertise a report
+  nothing can make.
+- `lib/automation/jobs/reports/generateScheduledReportsJob.ts` — scheduled generation through the
+  same automation engine the waiver and workspace jobs use, so Automation Center reads one ledger.
+- `app/api/commissioner-os/reports/generate` and `.../[id]/download` — on-demand generation and the
+  artifact itself, both scoped to the session's own commissioned league.
+
+⚠ **The report's "is `[]` an honest value" ruling still stands and is still enforced.** An empty
+`getTemplates()`/`getHistory()` would report "we have no way to check" as "you have zero templates" /
+"zero reports". Templates therefore always have content — they are a code catalog — and an empty
+history is only ever returned alongside a real catalog, where it genuinely means "nothing generated
+yet".
+
+🛑 **And one thing this change had to fix rather than inherit.** `ReportsView`'s Generate button
+added a row to LOCAL STATE and flipped it to `ready` after a two-second timer, with a hard-coded
+`sizeLabel: '128 KB'`. That was defensible while every row on the page was a fixture — the view's own
+comment justifies it — and stopped being defensible the moment the history beside it became real,
+because the invented row is indistinguishable from a genuine artifact. The simulation now runs only
+in stub/demo; live mode calls the real generator.

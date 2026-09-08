@@ -1,5 +1,20 @@
-import { fireEvent, render, screen, within } from "@testing-library/react"
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+
+/*
+ * `ReportsView` calls `useRouter` so a live generation can re-read the server's history rather than
+ * guessing what it now contains. The App Router page supplies that context; a bare render does not.
+ */
+const routerRefresh = vi.hoisted(() => vi.fn())
+vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: routerRefresh }) }))
+
+/*
+ * The live client is now really wired, so it reads `platform_config` for its readiness flag. The
+ * vitest db-guard pins the database to 127.0.0.1:1, so that read is stubbed here — the flag's own
+ * behaviour is not what this suite is about.
+ */
+const isLiveReady = vi.hoisted(() => vi.fn(async () => false))
+vi.mock('@/lib/commissioner-ui/liveReadiness', () => ({ isLiveReady, setLiveReady: vi.fn() }))
 import { ReportsView } from "@/components/commissioner-os/reports/ReportsView"
 import { stubReportsClient } from "@/lib/commissioner-ui/reports/decision-os-client/stub"
 import { demoReportsClient } from "@/lib/commissioner-ui/reports/decision-os-client/demo"
@@ -33,7 +48,7 @@ describe("commissioner-os reports — client parity", () => {
     }
   })
 
-  it("stub and demo are source-tagged and error-free; live is an honest, typed placeholder error for every method", async () => {
+  it("stub and demo are source-tagged and error-free; live returns an honest, typed error while the module is not enabled", async () => {
     const stubTemplates = await stubReportsClient.getTemplates()
     const demoTemplates = await demoReportsClient.getTemplates()
     expect(stubTemplates.source).toBe('stub')
@@ -41,6 +56,11 @@ describe("commissioner-os reports — client parity", () => {
     expect(demoTemplates.source).toBe('demo')
     expect(demoTemplates.error).toBeNull()
 
+    // 🛑 THIS USED TO ASSERT A PERMANENT PLACEHOLDER, and that claim is no longer true — Reports is
+    // wired to a real catalog and artifact store. What is still true, and worth guarding, is that a
+    // module which is not switched on says so rather than returning an empty list that would read
+    // as "you have generated zero reports".
+    isLiveReady.mockResolvedValue(false)
     const liveTemplates = await liveReportsClient.getTemplates()
     const liveHistory = await liveReportsClient.getHistory()
     const liveSummary = await liveReportsClient.getSummary()
@@ -200,5 +220,72 @@ describe("commissioner-os reports — view", () => {
   it("hides the preview data banner in live mode", () => {
     render(<ReportsView templates={[]} history={[]} dataMode="live" />)
     expect(screen.queryByRole('status')).not.toBeInTheDocument()
+  })
+})
+
+describe('commissioner-os reports — Generate in LIVE mode', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    routerRefresh.mockClear()
+  })
+
+  const template = { id: 'weekly-commissioner-digest', name: 'Weekly Digest', description: 'd', category: 'commissioner_digest' as const, sourceModuleIds: [], schedule: { frequency: 'weekly' as const } }
+
+  it('🛑 CALLS THE REAL GENERATOR AND DOES NOT FABRICATE A ROW', async () => {
+    /*
+     * The whole point of the live branch. The stub/demo path invents a `generating` row that flips
+     * to ready with a hard-coded "128 KB"; beside a real history that row is indistinguishable from
+     * a genuine artifact. In live mode nothing may be invented — the server is asked, and the
+     * server's history is re-read.
+     */
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ id: 'r1', templateId: template.id, status: 'ready', sizeBytes: 2048 }), { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(<ReportsView templates={[template]} history={[]} dataMode="live" />)
+    fireEvent.click(screen.getByRole('button', { name: /generate/i }))
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1))
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit]
+    expect(url).toBe('/api/commissioner-os/reports/generate')
+    expect(init.method).toBe('POST')
+    expect(JSON.parse(String(init.body))).toEqual({ templateId: template.id })
+
+    // No invented row, and the server's history is what gets re-read.
+    expect(screen.queryByText('128 KB')).toBeNull()
+    await waitFor(() => expect(routerRefresh).toHaveBeenCalled())
+  })
+
+  it('surfaces a recorded failure instead of reporting success over a report that does not exist', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ id: 'r2', templateId: template.id, status: 'failed', failureReason: 'warehouse unreachable' }), { status: 200 })))
+
+    render(<ReportsView templates={[template]} history={[]} dataMode="live" />)
+    fireEvent.click(screen.getByRole('button', { name: /generate/i }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('warehouse unreachable')
+  })
+
+  it('surfaces a refusal from the server rather than failing silently', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ error: 'No commissioned league for this session.' }), { status: 403 })))
+
+    render(<ReportsView templates={[template]} history={[]} dataMode="live" />)
+    fireEvent.click(screen.getByRole('button', { name: /generate/i }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('No commissioned league')
+  })
+
+  it('⚠ keeps the SIMULATION in demo mode, where every row on the page is a fixture anyway', async () => {
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(<ReportsView templates={[template]} history={[]} dataMode="demo" />)
+    fireEvent.click(screen.getByRole('button', { name: /generate/i }))
+
+    expect(fetchMock).not.toHaveBeenCalled()
+    /*
+     * The status label is the assertion, not the template name — the name also appears on the
+     * template card above the table, so matching it would pass without any row being added at all.
+     */
+    expect(await screen.findByText('Generating')).toBeTruthy()
+    expect(routerRefresh).not.toHaveBeenCalled()
   })
 })
