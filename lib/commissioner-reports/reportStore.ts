@@ -45,12 +45,46 @@ export interface StoredReportRun {
 }
 
 export interface GenerateReportResult {
+  /** Empty for a skipped generation — nothing was written, so there is nothing to identify. */
   id: string
   templateId: string
-  status: 'ready' | 'failed'
+  status: 'ready' | 'failed' | 'empty'
   sizeBytes: number
   rows: number
+  /** Rows carrying actual findings — the header and the provenance block do not count. */
+  substantiveRows: number
   failureReason?: string
+}
+
+/**
+ * Rows that say something about the league, as opposed to rows that say where the numbers came from.
+ *
+ * 🛑 BYTE SIZE IS THE WRONG MEASURE, AND MISREADING IT IS WHAT PROMPTED THIS FUNCTION. The first
+ * look at production on 2026-09-08 found 39 of 119 transaction summaries under 400 bytes and called
+ * them empty. They are not: counted properly, **0 of 119** transaction summaries carry no findings,
+ * and the smallest — a header, four provenance rows and one `Activity mix, Draft pick, 48` line —
+ * is a true and complete statement about a league that drafted and then went quiet. Small because
+ * there is little to say, which is the report working.
+ *
+ * What the same count DID find is 3 of 119 weekly digests with nothing at all behind the
+ * provenance. Those are the real case: a file labelled `ready`, which promises something to open,
+ * containing no statement about the league whatsoever.
+ *
+ * ⚠ SO THE LINE IS ZERO FINDINGS, NOT "FEW" FINDINGS. A threshold like "fewer than three rows"
+ * would suppress true statements about quiet leagues — exactly the 39 above — and there is no
+ * principled place to put it. Zero is the only non-arbitrary boundary.
+ *
+ * ⚠ AND FILTERING THE LEAGUES INSTEAD — by "has transaction history" — answers a DIFFERENT
+ * QUESTION. Whether a report has anything in it is a property of the built artifact, not of a
+ * separate query that has to be kept in step with whatever each template happens to include. Ask
+ * the artifact.
+ */
+export function countSubstantiveRows(content: string): number {
+  return content
+    .split('\n')
+    .filter((line) => line.trim() !== '')
+    .filter((line, i) => !(i === 0 && line.startsWith('Section,')))
+    .filter((line) => !line.startsWith('Data window,')).length
 }
 
 /**
@@ -67,6 +101,16 @@ export async function generateReport(
   templateId: string,
   generatedByLabel = 'Scheduled',
   now = new Date(),
+  /**
+   * Scheduled runs pass true; a person asking for a report passes false.
+   *
+   * ⚠ THE ASYMMETRY IS THE POINT. Storing an empty artifact every week, unasked, fills a history
+   * with files that say nothing — but when someone clicks Generate they have asked a direct
+   * question, and "there is nothing to report" is an honest answer to it that they should be able
+   * to open and see. Suppressing it there would leave the button doing nothing at all, which is a
+   * worse failure than a thin file.
+   */
+  skipWhenEmpty = false,
 ): Promise<GenerateReportResult> {
   const template = findTemplate(templateId)
   if (!template) {
@@ -85,6 +129,16 @@ export async function generateReport(
 
     const content = template.build(data, window)
     const rows = content.split('\n').length
+    const substantiveRows = countSubstantiveRows(content)
+
+    if (skipWhenEmpty && substantiveRows === 0) {
+      /*
+       * Nothing is written. The automation run row is what records that we looked, so "no report
+       * for this league" never has to be read as "nothing ever ran" — the same ambiguity the
+       * workspace read had to solve with `hasEverBeenScanned`.
+       */
+      return { id: '', templateId, status: 'empty', sizeBytes: 0, rows, substantiveRows: 0 }
+    }
     /*
      * Byte length, not string length. A CSV of team names carries multi-byte characters routinely,
      * and `content.length` would under-report the size of exactly the files most likely to be
@@ -108,7 +162,7 @@ export async function generateReport(
       select: { id: true },
     })
 
-    return { id: created.id, templateId, status: 'ready', sizeBytes, rows }
+    return { id: created.id, templateId, status: 'ready', sizeBytes, rows, substantiveRows }
   } catch (error) {
     const reason = error instanceof Error ? error.message : String(error)
     const created = await prisma.commissionerReportRun.create({
@@ -127,7 +181,7 @@ export async function generateReport(
       },
       select: { id: true },
     })
-    return { id: created.id, templateId, status: 'failed', sizeBytes: 0, rows: 0, failureReason: reason }
+    return { id: created.id, templateId, status: 'failed', sizeBytes: 0, rows: 0, substantiveRows: 0, failureReason: reason }
   }
 }
 
