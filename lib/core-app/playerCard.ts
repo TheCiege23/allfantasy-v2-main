@@ -254,6 +254,22 @@ const PLAYOFF_WEEKS = 3
 const DELTA_DAYS = 7
 const COMP_COUNT = 3
 const NEWS_COUNT = 3
+
+/**
+ * How many items the merged list shows.
+ *
+ * Larger than `NEWS_COUNT` because the list now draws on two feeds; three rows
+ * split across them would routinely hide one source entirely.
+ */
+const MERGED_NEWS_COUNT = 5
+
+/**
+ * Shortest `SportsInjury.description` that can be a news sentence.
+ *
+ * Real values below this are stubs — "IR.", "Questionable" — that repeat the
+ * designation already rendered above the list.
+ */
+const MIN_BLURB_CHARS = 25
 const TRADE_COUNT = 3
 
 /**
@@ -716,7 +732,8 @@ async function loadNews(name: string, sport: string): Promise<SectionState<Playe
         OR: [{ playerName: { equals: name, mode: 'insensitive' } }, { playerNames: { has: name } }],
       },
       orderBy: { publishedAt: 'desc' },
-      take: NEWS_COUNT,
+      // Enough candidates for the merge below to have something to choose from.
+      take: MERGED_NEWS_COUNT,
       select: { title: true, source: true, sourceUrl: true, publishedAt: true },
     })
     .catch(() => [])
@@ -732,6 +749,112 @@ async function loadNews(name: string, sport: string): Promise<SectionState<Playe
       publishedAt: r.publishedAt ? r.publishedAt.toISOString() : null,
     })),
   }
+}
+
+/**
+ * Per-player news, from the feed whose attribution can be trusted.
+ *
+ * `SportsNews` is a general NFL feed and its per-player names are n-grams lifted
+ * out of headlines — 31.4% of them are real players. `SportsInjury` carries a
+ * real sentence about a named man and 97.8% of its names are real players.
+ * Measured over the 1,663 rostered players, blurbs reach 31.5% of them where
+ * news reaches 26.2%, and the UNION reaches 42.4% — +270 players who see nothing
+ * today, from a table already ingested every 30 minutes.
+ *
+ * ⚠ A BLURB HAS NO LINK. `SportsInjury` has no `sourceUrl`, which is exactly why
+ * this supplements `loadNews` rather than replacing it.
+ */
+export async function loadPlayerBlurbs(
+  sleeperId: string | null,
+  name: string,
+  sport: string
+): Promise<PlayerCardNews[]> {
+  const cutoff = new Date(Date.now() - INJURY_WINDOW_DAYS * 86_400_000)
+
+  const rows = await prisma.sportsInjury
+    .findMany({
+      where: {
+        sport: { equals: sport, mode: 'insensitive' },
+        AND: [
+          {
+            OR: [
+              ...(sleeperId ? [{ playerId: sleeperId }] : []),
+              { playerName: { equals: name, mode: 'insensitive' as const } },
+            ],
+          },
+          {
+            OR: [{ date: { gte: cutoff } }, { AND: [{ date: null }, { updatedAt: { gte: cutoff } }] }],
+          },
+        ],
+      },
+      orderBy: [{ date: 'desc' }, { updatedAt: 'desc' }],
+      take: NEWS_COUNT * 4,
+      select: { description: true, status: true, date: true, updatedAt: true, source: true },
+    })
+    .catch(() => [])
+
+  const seen = new Set<string>()
+  const out: PlayerCardNews[] = []
+  for (const r of rows) {
+    const text = r.description?.trim()
+    /*
+     * ⚠ TWO THINGS THAT LOOK LIKE NEWS AND ARE NOT: a description that only
+     * echoes the status ("questionable"), and a stub too short to be a sentence
+     * ("IR."). Both are real values in this column, and both would occupy a row
+     * on the card saying nothing the status line has not already said.
+     */
+    if (!text || text.length <= MIN_BLURB_CHARS) continue
+    if (text.toLowerCase() === (r.status ?? '').trim().toLowerCase()) continue
+    const key = text.toLowerCase()
+    if (seen.has(key)) continue
+    seen.add(key)
+    const when = r.date ?? r.updatedAt ?? null
+    out.push({
+      title: text,
+      source: r.source,
+      url: null,
+      publishedAt: when ? when.toISOString() : null,
+    })
+  }
+  return out
+}
+
+/**
+ * One news list out of two feeds.
+ *
+ * ⚠ A LINKED ITEM WINS A TIE. The same sentence can arrive as a `SportsNews`
+ * headline (with a URL) and as a blurb (without one). Keeping the blurb would
+ * silently cost the reader the link, so the linked copy is preferred whenever
+ * the text matches.
+ *
+ * ⚠ AND THE DESIGNATION NOTE IS EXCLUDED, because it is already rendered one
+ * block above. Repeating it as the top news item spends the most valuable row
+ * on the card on something the reader has just read.
+ */
+export function mergeNewsItems(
+  news: PlayerCardNews[],
+  blurbs: PlayerCardNews[],
+  injuryNote: string | null
+): PlayerCardNews[] {
+  const note = injuryNote?.trim().toLowerCase() ?? null
+  const byText = new Map<string, PlayerCardNews>()
+
+  // News first so a linked item claims the key; a blurb cannot displace it.
+  for (const item of [...news, ...blurbs]) {
+    const key = item.title.trim().toLowerCase()
+    if (!key || key === note) continue
+    const existing = byText.get(key)
+    if (!existing) byText.set(key, item)
+    else if (!existing.url && item.url) byText.set(key, item)
+  }
+
+  return [...byText.values()]
+    .sort((a, b) => {
+      const ta = a.publishedAt ? Date.parse(a.publishedAt) : 0
+      const tb = b.publishedAt ? Date.parse(b.publishedAt) : 0
+      return tb - ta
+    })
+    .slice(0, MERGED_NEWS_COUNT)
 }
 
 /* ── the insight line ────────────────────────────────────────────────────── */
@@ -1121,13 +1244,14 @@ export async function getPlayerCard(req: PlayerCardRequest): Promise<PlayerCardD
     ? valueBookFor(leagueBookRow.settings, leagueBookRow.leagueType)
     : UNIVERSAL_BOOK
 
-  const [market, ownershipBoard, projections, news, injury, trades, league] = await Promise.all([
+  const [market, ownershipBoard, projections, news, blurbs, injury, trades, league] = await Promise.all([
     loadMarket(player.sleeperId, player.position, book),
     getRosteredMarket({ sport: 'NFL', dynastyOnly: null }).catch(() => null),
     player.sleeperId && projWeek
       ? lookupProjections([player.sleeperId], projWeek, null, player.sport).catch(() => new Map())
       : Promise.resolve(new Map()),
     loadNews(player.name, player.sport),
+    loadPlayerBlurbs(player.sleeperId, player.name, player.sport),
     loadInjury(player.sleeperId, player.name, player.sport),
     loadTrades(player.sleeperId),
     req.leagueId
@@ -1162,6 +1286,20 @@ export async function getPlayerCard(req: PlayerCardRequest): Promise<PlayerCardD
               leaguesCounted: ownershipBoard.leaguesCounted,
             },
           }
+
+  /*
+   * One news list out of two feeds — see `loadPlayerBlurbs`. The designation's
+   * own sentence is excluded because it is already rendered above the list.
+   */
+  const mergedItems = mergeNewsItems(
+    news.available ? news.data : [],
+    blurbs,
+    injury.available ? injury.data.note : null
+  )
+  const mergedNews: SectionState<PlayerCardNews[]> =
+    mergedItems.length > 0
+      ? { available: true, data: mergedItems }
+      : unavailable('No recent item mentions this player.')
 
   const projected = player.sleeperId ? (projections.get(player.sleeperId)?.projectedPoints ?? null) : null
 
@@ -1200,7 +1338,7 @@ export async function getPlayerCard(req: PlayerCardRequest): Promise<PlayerCardD
     byeWeek,
     trades,
     comps,
-    news,
+    news: mergedNews,
     injury,
     insight: deriveInsight({ name: player.name, market, ownership, byeWeek, comps }),
     league,
