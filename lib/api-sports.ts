@@ -95,6 +95,58 @@ export function teamNameToAbbrev(name: string | null): string | null {
 let ipBlockedUntil = 0;
 const IP_BLOCK_COOLDOWN_MS = 60 * 60 * 1000;
 
+/**
+ * A (sport, season) pair the current plan is not entitled to, and when to retry it.
+ *
+ * ⚠ THIS IS NOT AN OUTAGE AND RETRYING IT CANNOT HELP. The season-wide games query for
+ * the CURRENT season is refused by the plan ("Free plans do not have access to this
+ * season, try from 2022 to 2024"), and `getCurrentNFLSeasonForAPISports()` returns the
+ * current year from August onward — so from every August the request is dead for a year.
+ * `/api/cron/import-scores` runs on the fast tier, so before this it emitted an
+ * error-level line roughly every two minutes, indefinitely, competing with real errors.
+ *
+ * ⚠ DELIBERATELY NOT A HARDCODED YEAR RANGE. "2022 to 2024" is the plan's wording today
+ * and moves when the plan changes; pinning it here would rot silently and keep refusing
+ * a season that had become available. Remembering the refusal and expiring it means an
+ * upgraded plan heals on its own within one cooldown.
+ *
+ * ⚠ AND IT IS SCOPED PER (sport, season), NOT GLOBAL. Only the season-wide query is
+ * blocked — date- and week-scoped calls still succeed and still write rows, which is why
+ * `api_sports` remains a live source. A global pause would take those down too.
+ */
+const PLAN_BLOCK_COOLDOWN_MS = 6 * 60 * 60 * 1000;
+const planBlockedUntil = new Map<string, number>();
+
+const planBlockKey = (sport: string, season: string) => `${sport}:${season}`;
+
+/** True while this sport/season is known to be outside the plan. */
+export function isApiSportsPlanBlocked(sport: string, season: string): boolean {
+  const until = planBlockedUntil.get(planBlockKey(sport, season));
+  return until != null && Date.now() < until;
+}
+
+/** Records a plan refusal. Exported so a caller can report it without re-deriving it. */
+export function markApiSportsPlanBlocked(sport: string, season: string): void {
+  planBlockedUntil.set(planBlockKey(sport, season), Date.now() + PLAN_BLOCK_COOLDOWN_MS);
+}
+
+/** Test seam: the cooldown is module state and would otherwise leak between cases. */
+export function resetApiSportsPlanBlocks(): void {
+  planBlockedUntil.clear();
+}
+
+/**
+ * Whether a thrown error is the plan refusing the request.
+ *
+ * ⚠ MATCHES THE SHAPE, NOT THE SENTENCE. API-Sports reports this as an `errors.plan`
+ * KEY; the human text after it is vendor copy that can be reworded without notice. The
+ * neighbouring IP-block check tests for the words "IP is not allowed" and would miss a
+ * reworded message — do not copy that pattern here.
+ */
+export function isApiSportsPlanError(error: unknown): boolean {
+  return (error as { apiSportsPlanBlocked?: unknown } | null)?.apiSportsPlanBlocked === true;
+}
+
 let minuteRateLimitResetAt = 0;
 
 let requestQueue: Promise<unknown> = Promise.resolve();
@@ -210,7 +262,17 @@ async function apiSportsFetchInternal<T>(endpoint: string, params?: Record<strin
         console.warn('[API-Sports] IP blocked by API-Sports. Pausing requests for 1 hour.');
         ipBlockedUntil = Date.now() + IP_BLOCK_COOLDOWN_MS;
       }
-      throw new Error(`API-Sports error: ${errStr}`);
+      const apiError = new Error(`API-Sports error: ${errStr}`);
+      /*
+       * Tag a plan refusal on the ERROR OBJECT so callers classify it without re-parsing
+       * vendor prose. Keyed on the `plan` KEY in the vendor's own `errors` object — the
+       * message beside it is copy that can change; the key is the contract. Note the
+       * IP-block branch above matches on words, which is the pattern this avoids.
+       */
+      if (result.errors && typeof result.errors === 'object' && 'plan' in result.errors) {
+        Object.assign(apiError, { apiSportsPlanBlocked: true });
+      }
+      throw apiError;
     }
 
     pushApiSportsDiagnostic({
@@ -961,9 +1023,27 @@ export async function syncAPISportsGamesToDb(opts?: { season?: string; sport?: '
   const dbSport = resolveDbSport(opts?.sport)
   let games: APISportsGame[];
 
+  if (isApiSportsPlanBlocked(dbSport, currentSeason)) {
+    /*
+     * Silent on purpose. Once the plan has refused this season it refuses it every time,
+     * and this runs on the fast tier — so a line here would reproduce the every-two-minutes
+     * noise the cooldown exists to remove. The refusal is announced once, below.
+     */
+    return 0;
+  }
+
   try {
     games = await fetchAPISportsGames(currentSeason, { sport: dbSport });
   } catch (error) {
+    if (isApiSportsPlanError(error)) {
+      markApiSportsPlanBlocked(dbSport, currentSeason);
+      console.warn(
+        `[API-Sports] ${dbSport} ${currentSeason} season-wide query is not on the current plan — ` +
+          `pausing it for ${PLAN_BLOCK_COOLDOWN_MS / 3_600_000}h. ` +
+          `Date- and week-scoped calls are unaffected and still write rows.`,
+      );
+      return 0;
+    }
     console.error('[API-Sports] Failed to fetch games:', error);
     return 0;
   }
