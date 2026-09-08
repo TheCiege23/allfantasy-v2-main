@@ -1,7 +1,10 @@
 import { lookbackDays } from '@/lib/decision-os/behavioral/api/real-data-provider'
 import {
   latestScoredSeason,
+  readActivityMix,
+  readAllTimeRecords,
   readManagerActivity,
+  readManagerFingerprints,
   readMargins,
   readSeasonPoints,
   readSeasonPointTotals,
@@ -11,8 +14,11 @@ import {
   readTransactionsByWeek,
 } from '@/lib/league-history/leagueWarehouseReads'
 import type {
+  ActivityMixEntry,
+  AllTimeRecordEntry,
   CompetitiveBalanceMetric,
   ManagerActivityEntry,
+  ManagerFingerprintEntry,
   ScoringDistributionBucket,
   SeasonComparisonPoint,
   TeamPointsEntry,
@@ -58,6 +64,9 @@ export interface WarehouseAnalytics {
   seasonComparison: SeasonComparisonPoint[]
   transactionsByWeek: TransactionWeek[]
   managerActivity: ManagerActivityEntry[]
+  activityMix: ActivityMixEntry[]
+  managerFingerprints: ManagerFingerprintEntry[]
+  allTimeRecords: AllTimeRecordEntry[]
 }
 
 const EMPTY: WarehouseAnalytics = {
@@ -68,6 +77,18 @@ const EMPTY: WarehouseAnalytics = {
   seasonComparison: [],
   transactionsByWeek: [],
   managerActivity: [],
+  activityMix: [],
+  managerFingerprints: [],
+  allTimeRecords: [],
+}
+
+/**
+ * `draft_pick` → "Draft pick". Humanised here rather than in the view so the chart component takes
+ * a label it can render verbatim and never has to know the provider's vocabulary.
+ */
+function humaniseActivityType(activityType: string): string {
+  const words = activityType.replace(/_/g, ' ').trim()
+  return words ? words.charAt(0).toUpperCase() + words.slice(1) : activityType
 }
 
 /**
@@ -198,15 +219,27 @@ export async function readWarehouseAnalytics(leagueId: string): Promise<Warehous
     const weeks = days / 7
     const season = await panel('latestScoredSeason', () => latestScoredSeason(leagueId), null)
 
-    const [pointsForAgainst, distributionPoints, competitiveBalance, seasonTotals, transactionWeeks, managerCounts] =
-      await Promise.all([
-        season == null ? [] : panel('pointsForAgainst', () => readSeasonPoints(leagueId, season), []),
-        season == null ? [] : panel('scoringDistribution', () => readSeasonPointsForDistribution(leagueId, season), []),
-        season == null ? [] : panel('competitiveBalance', () => buildCompetitiveBalance(leagueId, season), []),
-        panel('seasonComparison', () => readSeasonPointTotals(leagueId), []),
-        panel('transactionsByWeek', () => readTransactionsByWeek(leagueId), []),
-        panel('managerActivity', () => readManagerActivity(leagueId, days), []),
-      ])
+    const [
+      pointsForAgainst,
+      distributionPoints,
+      competitiveBalance,
+      seasonTotals,
+      transactionWeeks,
+      managerCounts,
+      activityMix,
+      fingerprints,
+      allTimeRecords,
+    ] = await Promise.all([
+      season == null ? [] : panel('pointsForAgainst', () => readSeasonPoints(leagueId, season), []),
+      season == null ? [] : panel('scoringDistribution', () => readSeasonPointsForDistribution(leagueId, season), []),
+      season == null ? [] : panel('competitiveBalance', () => buildCompetitiveBalance(leagueId, season), []),
+      panel('seasonComparison', () => readSeasonPointTotals(leagueId), []),
+      panel('transactionsByWeek', () => readTransactionsByWeek(leagueId), []),
+      panel('managerActivity', () => readManagerActivity(leagueId, days), []),
+      panel('activityMix', () => readActivityMix(leagueId), []),
+      panel('managerFingerprints', () => readManagerFingerprints(leagueId), []),
+      panel('allTimeRecords', () => readAllTimeRecords(leagueId), []),
+    ])
 
     return {
       seasonLabel: season == null ? null : String(season),
@@ -220,6 +253,9 @@ export async function readWarehouseAnalytics(leagueId: string): Promise<Warehous
         actionsPerWeek: round(m.currentCount / weeks, 2),
         priorActionsPerWeek: round(m.priorCount / weeks, 2),
       })),
+      activityMix: activityMix.map((a) => ({ label: humaniseActivityType(a.activityType), count: a.count })),
+      managerFingerprints: fingerprints,
+      allTimeRecords,
     }
   } catch {
     // Never let the history half break the KPI half — the page degrades to what it showed before.

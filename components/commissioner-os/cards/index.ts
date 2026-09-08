@@ -7,4 +7,7 @@ export { TimelineCard, type TimelineEntry, type TimelineCardProps } from './Time
 export { InfoCard, type InfoCardProps } from './InfoCard'
 export { TrendLineChart, type TrendChartSeries, type TrendLineChartProps } from './TrendLineChart'
 export { DistributionBarChart, type DistributionBarPoint, type DistributionBarChartProps } from './DistributionBarChart'
+export { ActivityMixDonut, type ActivityMixSlice, type ActivityMixDonutProps } from './ActivityMixDonut'
+export { ManagerFingerprintRadar, type ManagerFingerprint, type ManagerFingerprintRadarProps } from './ManagerFingerprintRadar'
+export { AllTimeRecordChart, type AllTimeRecord, type AllTimeRecordChartProps } from './AllTimeRecordChart'
 export { getSeverityStyle, SEVERITY_LABELS, getEventSeverityStyle, EVENT_SEVERITY_LABELS } from './severityStyles'
