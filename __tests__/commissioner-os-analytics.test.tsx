@@ -134,17 +134,27 @@ describe("commissioner-os analytics — view", () => {
     const response = await demoAnalyticsClient.getSnapshot()
     render(<LeagueAnalyticsView snapshot={response.data} dataMode="demo" />)
 
-    const images = screen.getAllByRole('img')
+    const labels = screen.getAllByRole('img').map((img) => img.getAttribute('aria-label') ?? '')
+
     /*
-     * 30a replaced the four generic charts with three the handoff names:
-     * league health by week, transactions by week, and points for/against.
-     * Manager activity is a ranked bar LIST, not an SVG, so it is asserted
-     * separately below rather than counted here.
+     * ⚠ NAMED ENTRIES, NOT A COUNT. This asserted `images.length === 3` and went red the moment
+     * three more charts were added — a true failure that says nothing about whether the charts it
+     * cares about are still labelled. A count also passes if one chart is swapped for another.
+     * Manager activity is a ranked bar LIST, not an SVG, so it is asserted separately below.
      */
-    expect(images.length).toBe(3)
-    expect(images.some((img) => img.getAttribute('aria-label')?.includes('League health by week'))).toBe(true)
-    expect(images.some((img) => img.getAttribute('aria-label')?.includes('Weekly transactions'))).toBe(true)
-    expect(images.some((img) => img.getAttribute('aria-label')?.includes('Points for and against'))).toBe(true)
+    for (const expected of [
+      'League health by week',
+      'Weekly transactions',
+      'Points for and against',
+      'Share of league actions by type',
+      'All-time records',
+      'Behavioural fingerprints',
+    ]) {
+      expect(labels.some((l) => l.includes(expected)), `no chart labelled "${expected}"`).toBe(true)
+    }
+
+    // Every chart carries a real description, not an empty one that satisfies the role alone.
+    expect(labels.every((l) => l.trim().length > 10)).toBe(true)
   })
 
   it("renders the transaction analytics table and competitive balance metrics", async () => {

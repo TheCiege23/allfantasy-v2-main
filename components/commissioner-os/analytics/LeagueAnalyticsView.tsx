@@ -3,7 +3,12 @@
 import { Download } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { Button } from '@/components/ui/button'
-import { InfoCard } from '@/components/commissioner-os/cards'
+import {
+  ActivityMixDonut,
+  AllTimeRecordChart,
+  InfoCard,
+  ManagerFingerprintRadar,
+} from '@/components/commissioner-os/cards'
 import { PreviewDataBanner } from '@/components/commissioner-os/PreviewDataBanner'
 import { ErrorState } from '@/components/commissioner-os/states'
 import { downloadAnalyticsCsv } from '@/lib/commissioner-ui/analytics/exportCsv'
@@ -614,6 +619,52 @@ export function LeagueAnalyticsView({ snapshot, dataMode, errorMessage }: League
               </InfoCard>
             ))}
           </div>
+        </Panel>
+      ) : null}
+
+      {/*
+        The three panels below are ALL-TIME, not windowed, and sit after the season-scoped ones on
+        purpose. They answer "what kind of league is this" and "who has been good" — standing
+        characteristics. Windowing them would collapse each to near-nothing every offseason, which
+        is the failure the freshness banner at the top exists to stop.
+      */}
+      {view.activityMix.length ? (
+        <Panel
+          title="What this league does"
+          note="Every recorded action since the import began, by kind."
+        >
+          <ActivityMixDonut
+            slices={view.activityMix.map((a) => ({ label: a.label, value: a.count }))}
+            ariaLabel={`Share of league actions by type: ${view.activityMix
+              .map((a) => `${a.label}, ${a.count}`)
+              .join('; ')}.`}
+          />
+        </Panel>
+      ) : null}
+
+      {view.allTimeRecords.length ? (
+        <Panel
+          title="All-time records"
+          note="Wins and losses across every season on record. ★ marks a championship."
+        >
+          <AllTimeRecordChart
+            records={view.allTimeRecords}
+            ariaLabel={`All-time records: ${view.allTimeRecords
+              .map((r) => `${r.teamName}, ${r.wins} wins and ${r.losses} losses over ${r.seasons} seasons, ${r.titles} titles`)
+              .join('; ')}.`}
+          />
+        </Panel>
+      ) : null}
+
+      {view.managerFingerprints.length ? (
+        <Panel
+          title="Manager fingerprints"
+          note="Four behavioural scores per manager, each 0–100 against the outer ring. Real scores cluster low, so most shapes sit well inside it — compare them to each other, not to the edge."
+        >
+          <ManagerFingerprintRadar
+            managers={view.managerFingerprints}
+            ariaLabel={`Behavioural fingerprints for ${view.managerFingerprints.length} managers across aggression, activity, trading and risk.`}
+          />
         </Panel>
       ) : null}
 

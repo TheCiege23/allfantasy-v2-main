@@ -88,6 +88,35 @@ export function buildAnalyticsCsv(snapshot: LeagueAnalyticsSnapshot): string {
     lines.push(csvRow(['Points', `${team.teamName} — For`, team.pointsFor]))
     lines.push(csvRow(['Points', `${team.teamName} — Against`, team.pointsAgainst]))
   }
+  /*
+   * The all-time sections. A donut and a radar are the two forms hardest to read a number off, so
+   * the export matters more for these than for the bar charts above — this is where someone goes
+   * to get the actual figure behind a wedge or a spoke.
+   *
+   * ⚠ `?? []` ON A REQUIRED FIELD IS DELIBERATE HERE. `tsconfig.json` excludes every test pattern
+   * repo-wide, so NO test file is typechecked — a fixture missing a required field compiles fine
+   * and only explodes at runtime, which is exactly how this crashed. An export is the wrong place
+   * to be strict: losing someone's whole CSV to one absent section is worse than emitting it
+   * without that section.
+   */
+  for (const entry of snapshot.activityMix ?? []) {
+    lines.push(csvRow(['Activity mix', entry.label, entry.count]))
+  }
+  for (const record of snapshot.allTimeRecords ?? []) {
+    lines.push(csvRow(['All-time record', `${record.teamName} — Wins`, record.wins]))
+    lines.push(csvRow(['All-time record', `${record.teamName} — Losses`, record.losses]))
+    lines.push(csvRow(['All-time record', `${record.teamName} — Seasons`, record.seasons]))
+    lines.push(csvRow(['All-time record', `${record.teamName} — Titles`, record.titles]))
+  }
+  for (const m of snapshot.managerFingerprints ?? []) {
+    lines.push(csvRow(['Manager fingerprint', `${m.managerName} — Aggression`, m.aggression]))
+    lines.push(csvRow(['Manager fingerprint', `${m.managerName} — Activity`, m.activity]))
+    lines.push(csvRow(['Manager fingerprint', `${m.managerName} — Trading`, m.tradeFrequency]))
+    lines.push(csvRow(['Manager fingerprint', `${m.managerName} — Risk`, m.riskTolerance]))
+    if (m.labels.length) {
+      lines.push(csvRow(['Manager fingerprint', `${m.managerName} — Labels`, m.labels.join(' | ')]))
+    }
+  }
 
   return lines.join('\n')
 }

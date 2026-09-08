@@ -87,6 +87,38 @@ export interface TeamPointsEntry {
   pointsAgainst: number
 }
 
+/** All-time share of each kind of league action — the part-to-whole the donut draws. */
+export interface ActivityMixEntry {
+  /** Already humanised ("Draft pick", not "draft_pick") — the view formats nothing. */
+  label: string
+  count: number
+}
+
+/**
+ * A manager's behavioural fingerprint: four 0–100 axes from `manager_psych_profiles`.
+ *
+ * ⚠ FOUR, NOT FIVE. The source table also carries `waiverFocusScore`, which is constant zero
+ * across all 2,611 rows platform-wide. It is dropped in the read layer so no chart can plot a
+ * permanently-collapsed spoke that reads as "nobody here uses the waiver wire".
+ */
+export interface ManagerFingerprintEntry {
+  managerName: string
+  aggression: number
+  activity: number
+  tradeFrequency: number
+  riskTolerance: number
+  labels: string[]
+}
+
+/** All-time record per franchise across every season the import captured. */
+export interface AllTimeRecordEntry {
+  teamName: string
+  wins: number
+  losses: number
+  seasons: number
+  titles: number
+}
+
 /**
  * How old the data behind the window-derived KPIs actually is.
  *
@@ -146,6 +178,14 @@ export interface LeagueAnalyticsSnapshot {
   healthTarget: number | null
   managerActivity: ManagerActivityEntry[]
   pointsForAgainst: TeamPointsEntry[]
+  /**
+   * Three history views the KPI row cannot express. All-time on purpose: they answer "what kind of
+   * league is this" and "who has been good", which are standing characteristics, not 90-day
+   * readings that collapse every offseason.
+   */
+  activityMix: ActivityMixEntry[]
+  managerFingerprints: ManagerFingerprintEntry[]
+  allTimeRecords: AllTimeRecordEntry[]
   /** Provenance for every window-derived KPI above. Null when the window cannot be established. */
   dataWindow: AnalyticsDataWindow | null
   /**

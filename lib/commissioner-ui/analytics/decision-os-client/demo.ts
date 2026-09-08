@@ -149,6 +149,31 @@ export const demoAnalyticsClient: AnalyticsClient = {
           { teamName: 'The Injury Reserve', pointsFor: 1164.7, pointsAgainst: 1394.1 },
         ],
         /*
+         * Demo is the sales and QA surface, so these carry the SHAPE a healthy league produces —
+         * a mix dominated by roster moves, fingerprints that actually differ between managers, and
+         * a records table with more than one champion. A fixture where every manager scores the
+         * same would make the radar look broken rather than showing off what it does.
+         */
+        activityMix: [
+          { label: 'Roster move', count: 184 },
+          { label: 'Waiver', count: 218 },
+          { label: 'Draft pick', count: 192 },
+          { label: 'Trade', count: 34 },
+        ],
+        managerFingerprints: [
+          { managerName: 'Priya Natarajan', aggression: 41, activity: 36, tradeFrequency: 88, riskTolerance: 54, labels: ['trade-heavy'] },
+          { managerName: 'Playoff Bound', aggression: 33, activity: 30, tradeFrequency: 61, riskTolerance: 28, labels: [] },
+          { managerName: 'Marcus Webb', aggression: 22, activity: 26, tradeFrequency: 34, riskTolerance: 41, labels: ['position-focused'] },
+          { managerName: 'The Gridiron Giants', aggression: 12, activity: 9, tradeFrequency: 15, riskTolerance: 11, labels: ['early-round focused'] },
+        ],
+        allTimeRecords: [
+          { teamName: 'Priya Natarajan', wins: 63, losses: 20, seasons: 6, titles: 2 },
+          { teamName: 'Playoff Bound', wins: 51, losses: 32, seasons: 6, titles: 1 },
+          { teamName: 'Marcus Webb', wins: 49, losses: 35, seasons: 6, titles: 1 },
+          { teamName: 'The Gridiron Giants', wins: 38, losses: 45, seasons: 6, titles: 0 },
+          { teamName: 'Hail Mary Heroes', wins: 29, losses: 54, seasons: 6, titles: 0 },
+        ],
+        /*
          * Demo mode is the sales and QA surface, so this is a HEALTHY window rather than null:
          * the curated league is meant to look like one whose data is arriving normally, and a
          * missing window would hide the very affordance a demo should show off. Deliberately

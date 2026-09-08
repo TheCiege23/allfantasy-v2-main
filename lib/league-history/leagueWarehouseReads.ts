@@ -348,6 +348,118 @@ export async function readManagerActivity(
   return out.sort((a, b) => b.currentCount - a.currentCount || a.managerName.localeCompare(b.managerName))
 }
 
+export interface LeagueWarehouseActivityMixSlice {
+  activityType: string
+  count: number
+}
+
+/**
+ * All-time mix of activity types — the part-to-whole a donut is actually for.
+ *
+ * All-time rather than windowed on purpose: this answers "what kind of league is this", which is a
+ * standing characteristic, not a 90-day reading. A windowed version would collapse to one or two
+ * slices every offseason and imply the league stopped drafting.
+ */
+export async function readActivityMix(leagueId: string): Promise<LeagueWarehouseActivityMixSlice[]> {
+  const identity = await providerIdentity(leagueId)
+  const rows = await prisma.decisionOsImportedActivity.groupBy({
+    by: ['activityType'],
+    where: activityWhere(leagueId, identity),
+    _count: { _all: true },
+  })
+  return rows
+    .map((r) => ({ activityType: r.activityType, count: r._count._all }))
+    .filter((r) => r.count > 0)
+    .sort((a, b) => b.count - a.count)
+}
+
+export interface LeagueWarehouseManagerFingerprint {
+  managerName: string
+  aggression: number
+  activity: number
+  tradeFrequency: number
+  riskTolerance: number
+  labels: string[]
+}
+
+/**
+ * Behavioural fingerprints from `manager_psych_profiles`.
+ *
+ * 🛑 FOUR AXES, NOT FIVE — `waiverFocusScore` IS DEAD AND MUST NOT BE PLOTTED. Measured across all
+ * 2,611 rows platform-wide: exactly ONE distinct value, min 0, max 0. Plotting it would draw a
+ * permanently-collapsed spoke on every manager in every league and read as "nobody here touches
+ * the waiver wire" — false on its face for a league with 31 waiver claims. It is excluded here
+ * rather than in the view, so no future chart can pick it up by accident.
+ *
+ * The other four carry real within-league signal: measured mean spans across 190 leagues are
+ * aggression 18.4, activity 13.7, trade frequency 39.8, risk tolerance 20.9. That was worth
+ * checking — a fingerprint whose axes are the same for everyone in a league is a decoration.
+ */
+export async function readManagerFingerprints(leagueId: string): Promise<LeagueWarehouseManagerFingerprint[]> {
+  const [profiles, names] = await Promise.all([
+    prisma.managerPsychProfile.findMany({
+      where: { leagueId },
+      select: {
+        managerId: true,
+        aggressionScore: true,
+        activityScore: true,
+        tradeFrequencyScore: true,
+        riskToleranceScore: true,
+        profileLabels: true,
+      },
+    }),
+    teamNames(leagueId),
+  ])
+  return profiles
+    .map((p) => ({
+      managerName: names.get(p.managerId) ?? `Manager ${p.managerId}`,
+      aggression: num(p.aggressionScore),
+      activity: num(p.activityScore),
+      tradeFrequency: num(p.tradeFrequencyScore),
+      riskTolerance: num(p.riskToleranceScore),
+      labels: Array.isArray(p.profileLabels) ? p.profileLabels.filter((l): l is string => typeof l === 'string') : [],
+    }))
+    // A profile with every axis at zero was never scored; drawing it puts a dot at the origin.
+    .filter((p) => p.aggression + p.activity + p.tradeFrequency + p.riskTolerance > 0)
+    .sort((a, b) => a.managerName.localeCompare(b.managerName))
+}
+
+export interface LeagueWarehouseRecord {
+  teamName: string
+  wins: number
+  losses: number
+  seasons: number
+  titles: number
+}
+
+/** All-time record per team across every season the import captured. */
+export async function readAllTimeRecords(leagueId: string): Promise<LeagueWarehouseRecord[]> {
+  const [rows, names] = await Promise.all([
+    prisma.seasonResult.findMany({
+      where: { leagueId },
+      select: { rosterId: true, wins: true, losses: true, champion: true },
+    }),
+    teamNames(leagueId),
+  ])
+  const byTeam = new Map<string, LeagueWarehouseRecord>()
+  for (const r of rows) {
+    // A season row with no wins AND no losses is a scheduled-but-unplayed season (preseason
+    // carries a full fixture list); counting it would inflate `seasons` with a 0-0 record.
+    if (r.wins == null && r.losses == null) continue
+    const wins = r.wins ?? 0
+    const losses = r.losses ?? 0
+    if (wins === 0 && losses === 0) continue
+    const teamName = names.get(r.rosterId) ?? `Team ${r.rosterId}`
+    const acc = byTeam.get(teamName) ?? { teamName, wins: 0, losses: 0, seasons: 0, titles: 0 }
+    acc.wins += wins
+    acc.losses += losses
+    acc.seasons += 1
+    if (r.champion) acc.titles += 1
+    byTeam.set(teamName, acc)
+  }
+  return [...byTeam.values()].sort((a, b) => b.wins - a.wins || a.teamName.localeCompare(b.teamName))
+}
+
 /** Freshness and all-time totals for a league's imported activity. */
 export async function readActivityWindow(leagueId: string): Promise<LeagueWarehouseActivityWindow> {
   const identity = await providerIdentity(leagueId)

@@ -246,6 +246,9 @@ export const liveAnalyticsClient: AnalyticsClient = {
       seasonComparison: warehouse.seasonComparison,
       managerActivity: warehouse.managerActivity,
       pointsForAgainst: warehouse.pointsForAgainst,
+      activityMix: warehouse.activityMix,
+      managerFingerprints: warehouse.managerFingerprints,
+      allTimeRecords: warehouse.allTimeRecords,
       /*
        * These three stay empty, and the reasons are specific rather than "no analog":
        *
