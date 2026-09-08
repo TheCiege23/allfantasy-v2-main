@@ -45,6 +45,40 @@ export type SupportedSport = LeagueSport
 /** IDP leagues are explicitly supported only for pro + college football. */
 export const IDP_SUPPORTED_SPORTS: readonly LeagueSport[] = ['NFL', 'NCAAF']
 
+/**
+ * Sports whose season can actually RUN, end to end, today.
+ *
+ * 🛑 THIS IS A CAPABILITY, NOT A PREFERENCE, AND THE GAP IS SILENT. A league in
+ * any other sport can be created, drafted and scheduled — and then nothing ever
+ * happens to it. `syncPlayerWeeklyScoresForRedraftSeason` THROWS for a non-NFL
+ * sport ("Weekly stat sync is currently wired for NFL only"), so its matchups
+ * never finalize, so `advance_week` refuses forever, so it never reaches
+ * playoffs, a champion or an offseason. Nothing goes red; the league simply sits
+ * at week 1, which is exactly the dead end the whole season-lifecycle effort
+ * exists to remove.
+ *
+ * ⚠ THE PER-SPORT `lib/{nba,mlb,nhl,ncaab,ncaaf}-scoring` MODULES DO NOT CHANGE
+ * THIS, AND THEY LOOK LIKE THEY DO. They are CONFIG services — their own headers
+ * say "Read/write NBA scoring configuration from League.settings JSON". They
+ * define what a stat is worth; they do not fetch stat lines or compute a weekly
+ * score. Everything that writes `PlayerWeeklyScore` is NFL-specific.
+ *
+ * ⚠ AND THE WEEK RESOLVER IS BROADER THAN THIS LIST, WHICH IS NOT A CONTRADICTION.
+ * `lib/season-week` can place a week for NFL, NCAAF and SOCCER from the schedule
+ * feed. Knowing WHICH week it is does not help when nothing can score that week,
+ * so the narrower capability is the one that governs here.
+ *
+ * Widening this list means wiring a stat provider for that sport — not editing
+ * this line.
+ */
+export const SEASON_CAPABLE_SPORTS: readonly LeagueSport[] = ['NFL']
+
+/** Whether a league in this sport can run a season to completion today. */
+export function canRunSeasonForSport(sport: string | null | undefined): boolean {
+  if (sport == null) return false
+  return (SEASON_CAPABLE_SPORTS as readonly string[]).includes(String(sport).toUpperCase())
+}
+
 /** IDP create-flow draft types (pick-order + execution modes). */
 export const IDP_ALLOWED_DRAFT_TYPES = ['snake', 'linear', 'auction', 'offline', 'auto'] as const
 export type IdpAllowedDraftType = (typeof IDP_ALLOWED_DRAFT_TYPES)[number]
