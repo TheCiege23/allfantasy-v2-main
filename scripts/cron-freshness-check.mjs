@@ -126,6 +126,16 @@ export const PROBES = {
    */
   '/api/cron/import-schedules?riProfiles=1': { heartbeat: 'cron-import-schedules-ri-profiles' },
   /*
+   * A TABLE probe, not a heartbeat, and the contrast with the two modes above is the
+   * point: `game_odds` has exactly ONE writer in the repo, so nothing else can move
+   * its clock. That makes the table the stronger signal — it measures whether the
+   * ODDS ARE FRESH rather than whether the job woke up, and those come apart exactly
+   * when it matters (a fire that runs but writes nothing because every fetch 4xx'd).
+   * The route still emits a `cron-import-schedules-odds` heartbeat for per-mode
+   * evidence when the table probe reports stale and the question is which half broke.
+   */
+  '/api/cron/import-schedules?odds=1': { table: 'game_odds', column: 'fetched_at' },
+  /*
    * The four CFBD intel feeds, split onto their own tick 2026-08-28.
    *
    * ⚠ HEARTBEAT, NOT A TABLE PROBE, for the same reason as ?rosters=1 above:

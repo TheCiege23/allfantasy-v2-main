@@ -461,6 +461,63 @@ model SportsGame {
   @@index([sport, season, seasonType, week])
 }
 
+/// Betting markets for one game, one row per (game, source, bookmaker).
+///
+/// Joins to `SportsGame` on `gameExternalId` = `SportsGame.externalId` for rows
+/// sharing the same `source`. Deliberately NOT a foreign key: `SportsGame`'s key
+/// is the composite `[sport, externalId, source]`, and this schema carries more
+/// than one id space, so a constraint here would fail a page render over a
+/// provider mismatch rather than simply returning no odds.
+///
+/// Every market column is nullable on purpose. A missing spread and a pick-em
+/// are different facts, so the normalizer writes null rather than 0 — see
+/// `lib/odds/normalizeApiSportsOdds.ts`.
+model GameOdds {
+  id             String @id @default(uuid())
+  sport          String @db.VarChar(16)
+  gameExternalId String @map("game_external_id") @db.VarChar(64)
+  source         String @db.VarChar(32)
+  bookmakerId    Int    @map("bookmaker_id")
+  bookmakerName  String @map("bookmaker_name") @db.VarChar(96)
+
+  season       Int?
+  week         Int?
+  seasonType   String?   @map("season_type") @db.VarChar(24)
+  commenceTime DateTime? @map("commence_time")
+
+  /// Spread from the HOME perspective; negative = home favoured.
+  spreadHome         Float? @map("spread_home")
+  spreadHomeOdd      Float? @map("spread_home_odd")
+  spreadAwayOdd      Float? @map("spread_away_odd")
+  /// Moneylines stored as DECIMAL odds (2.50 = +150), converted on ingest.
+  moneylineHome      Float? @map("moneyline_home")
+  moneylineAway      Float? @map("moneyline_away")
+  totalPoints        Float? @map("total_points")
+  overOdd            Float? @map("over_odd")
+  underOdd           Float? @map("under_odd")
+  /// Derived: total/2 -/+ spread/2. Null unless BOTH inputs parsed.
+  impliedHomeTotal   Float? @map("implied_home_total")
+  impliedAwayTotal   Float? @map("implied_away_total")
+  /// Vig-free, from both moneylines. Null unless both sides parsed.
+  homeWinProbability Float? @map("home_win_probability")
+
+  /// Bet names the normalizer did not recognise. A vendor rename shows up here
+  /// as data instead of as quietly-empty market columns.
+  unrecognizedBets Json? @map("unrecognized_bets")
+  raw              Json?
+
+  fetchedAt DateTime @default(now()) @map("fetched_at")
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([sport, gameExternalId, source, bookmakerId], name: "uniq_game_odds_book")
+  @@index([sport, gameExternalId])
+  @@index([sport, season, week])
+  @@index([expiresAt])
+  @@map("game_odds")
+}
+
 model SportsInjury {
   id          String    @id @default(uuid())
   sport       String

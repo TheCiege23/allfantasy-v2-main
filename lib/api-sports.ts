@@ -6,6 +6,7 @@ import {
   type InjurySyncFanoutRow,
 } from '@/lib/realtime-events/injuryFanoutPolicy'
 import { normalizeGameStatus, normalizeSeasonType } from '@/lib/scores/gameScoreProviders'
+import { normalizeBookmakerOdds } from '@/lib/odds/normalizeApiSportsOdds'
 
 const BASE_URL = 'https://v1.american-football.api-sports.io';
 
@@ -1599,4 +1600,194 @@ export async function getAPISportsGameDetail(gameId: string): Promise<{
   ]);
 
   return { events, teamStats, playerStats };
+}
+
+export interface APISportsOddsSyncSummary {
+  sport: 'NFL' | 'NCAAF';
+  gamesConsidered: number;
+  gamesFetched: number;
+  rowsUpserted: number;
+  endpointFailures: number;
+  /** Union of every bet name no alias matched, deduped. Empty is the healthy state. */
+  unrecognizedBets: string[];
+}
+
+/**
+ * Sync betting markets for UPCOMING games into `game_odds`.
+ *
+ * 🛑 DRIVEN BY THE DATABASE, NOT BY A PROVIDER LISTING, AND THE VENDOR DOCS MAKE
+ * THAT THE ONLY VALID SHAPE. `/odds` documents `game` as a REQUIRED parameter —
+ * "This endpoint requires at least one of theses parameters : game". So a
+ * season-wide odds pull is not merely expensive, it is not a supported request.
+ *
+ * ⚠ `fetchAPISportsOddsBySeasonWeek` (above) sends `league` + `season` and NO
+ * `game`, so by that contract it cannot succeed. It has zero callers and is left
+ * alone here rather than deleted in a change about something else — but do not
+ * reach for it, and do not "fix" this function to use it.
+ *
+ * Bounded three ways, because this shares a 300/hr, 7500/day budget with the
+ * schedule, score and standings crons that the product depends on far more:
+ *   - only games starting inside `withinDays` — default 7, which is the vendor's
+ *     own limit, not a guess: "We provide pre-match odds between 1 and 7 days
+ *     before the game." A wider window spends calls on games that have no odds.
+ *   - only games not already finished
+ *   - a hard `maxGames` ceiling per run
+ * A typical NFL week is ~16 games, so a run costs ~16 calls. That is the reason
+ * odds got wired and `syncAPISportsPlayerSeasonStatsToDb` deliberately did not:
+ * the latter is one call PER PLAYER (~1,700), which would starve this budget.
+ *
+ * Failures are per game and never abort the run — the same lesson
+ * `syncAPISportsStandingsToDb` records after one malformed row lost an entire sync.
+ */
+export async function syncAPISportsGameOddsToDb(opts?: {
+  season?: string;
+  sport?: 'NFL' | 'NCAAF';
+  withinDays?: number;
+  maxGames?: number;
+}): Promise<APISportsOddsSyncSummary> {
+  const dbSport = resolveDbSport(opts?.sport);
+  const season = opts?.season || getCurrentNFLSeasonForAPISports();
+  // 7 = the vendor's documented pre-match odds window, not a round number.
+  const withinDays = opts?.withinDays && opts.withinDays > 0 ? opts.withinDays : 7;
+  const maxGames = opts?.maxGames && opts.maxGames > 0 ? opts.maxGames : 24;
+
+  const summary: APISportsOddsSyncSummary = {
+    sport: dbSport,
+    gamesConsidered: 0,
+    gamesFetched: 0,
+    rowsUpserted: 0,
+    endpointFailures: 0,
+    unrecognizedBets: [],
+  };
+
+  const now = new Date();
+  const horizon = new Date(now.getTime() + withinDays * 24 * 60 * 60 * 1000);
+
+  /*
+   * A small backward window as well as a forward one, and the vendor supports it:
+   * "We keep a 7-day history", so a game that has already kicked off still returns
+   * its last pre-match prices. That last quote IS the closing line — the number
+   * every post-hoc accuracy check wants — and a cron that only looked forward
+   * would drop each game the moment it started, permanently.
+   */
+  const lookback = new Date(now.getTime() - 12 * 60 * 60 * 1000);
+
+  const games = await prisma.sportsGame.findMany({
+    where: {
+      sport: dbSport,
+      source: 'api_sports',
+      startTime: { gte: lookback, lte: horizon },
+    },
+    select: {
+      externalId: true,
+      homeTeam: true,
+      awayTeam: true,
+      season: true,
+      week: true,
+      seasonType: true,
+      startTime: true,
+      status: true,
+    },
+    orderBy: { startTime: 'asc' },
+    take: maxGames,
+  });
+
+  summary.gamesConsidered = games.length;
+  if (games.length === 0) return summary;
+
+  // 6h TTL matches the cron cadence, so a row is never presented as fresh once a
+  // fire has been missed.
+  const expiresAt = new Date(now.getTime() + 6 * 60 * 60 * 1000);
+  const unrecognized = new Set<string>();
+
+  for (const game of games) {
+    let payloads: APISportsOdds[];
+    try {
+      payloads = await fetchAPISportsOdds(String(game.externalId));
+      summary.gamesFetched += 1;
+    } catch (error) {
+      summary.endpointFailures += 1;
+      console.error(`[API-Sports] odds fetch failed for game ${game.externalId}:`, error);
+      continue;
+    }
+
+    for (const payload of payloads || []) {
+      for (const bookmaker of payload?.bookmakers || []) {
+        let normalized;
+        try {
+          normalized = normalizeBookmakerOdds(bookmaker, {
+            homeTeamName: game.homeTeam,
+            awayTeamName: game.awayTeam,
+          });
+        } catch (error) {
+          console.error(`[API-Sports] odds normalize failed for game ${game.externalId}:`, error);
+          continue;
+        }
+
+        for (const name of normalized.unrecognizedBets) unrecognized.add(name);
+
+        const data = {
+          bookmakerName: normalized.bookmakerName,
+          // Parenthesised deliberately: the game's own season wins, and the cron's
+          // season string is the fallback only when it parses to a real year.
+          season: game.season ?? (Number(season) || null),
+          week: game.week ?? null,
+          seasonType: game.seasonType ?? null,
+          commenceTime: game.startTime ?? null,
+          spreadHome: normalized.spreadHome,
+          spreadHomeOdd: normalized.spreadHomeOdd,
+          spreadAwayOdd: normalized.spreadAwayOdd,
+          moneylineHome: normalized.moneylineHome,
+          moneylineAway: normalized.moneylineAway,
+          totalPoints: normalized.totalPoints,
+          overOdd: normalized.overOdd,
+          underOdd: normalized.underOdd,
+          impliedHomeTotal: normalized.impliedHomeTotal,
+          impliedAwayTotal: normalized.impliedAwayTotal,
+          homeWinProbability: normalized.homeWinProbability,
+          unrecognizedBets: normalized.unrecognizedBets as unknown as object,
+          raw: bookmaker as unknown as object,
+          fetchedAt: now,
+          expiresAt,
+        };
+
+        try {
+          await prisma.gameOdds.upsert({
+            where: {
+              uniq_game_odds_book: {
+                sport: dbSport,
+                gameExternalId: String(game.externalId),
+                source: 'api_sports',
+                bookmakerId: normalized.bookmakerId,
+              },
+            },
+            update: data,
+            create: {
+              sport: dbSport,
+              gameExternalId: String(game.externalId),
+              source: 'api_sports',
+              bookmakerId: normalized.bookmakerId,
+              ...data,
+            },
+          });
+          summary.rowsUpserted += 1;
+        } catch (error) {
+          console.error(`[API-Sports] odds upsert failed for game ${game.externalId}:`, error);
+        }
+      }
+    }
+  }
+
+  summary.unrecognizedBets = [...unrecognized];
+
+  console.log(
+    `[API-Sports] Synced ${summary.rowsUpserted} ${dbSport} odds rows across ` +
+      `${summary.gamesFetched}/${summary.gamesConsidered} games` +
+      (summary.endpointFailures > 0 ? ` (${summary.endpointFailures} fetch failures)` : '') +
+      (summary.unrecognizedBets.length > 0
+        ? ` — UNRECOGNIZED BET NAMES: ${summary.unrecognizedBets.join(', ')}`
+        : ''),
+  );
+
+  return summary;
 }
