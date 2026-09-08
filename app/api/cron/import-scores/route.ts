@@ -321,9 +321,21 @@ async function runOneSport(url: URL, sport: Sport, budget: ReturnType<typeof cre
       }
     }
 
-    // API-Sports first, for continuity — but it is plan-blocked for the current
-    // season ("Free plans do not have access to this season"), so it reliably
-    // returns 0 and the real work happens below.
+    /*
+     * API-Sports first, for continuity. The SEASON-WIDE query below is plan-blocked for
+     * the current season ("Free plans do not have access to this season"), so this call
+     * returns 0 and the real work happens further down.
+     *
+     * 🛑 THAT DOES NOT MAKE `api_sports` AN INERT SOURCE, AND THIS COMMENT USED TO IMPLY
+     * IT DID. Only the season-wide games query is refused. Date- and week-scoped calls
+     * are entitled and still write: measured 2026-09-08, `SportsGame` held 321 NFL and
+     * 1,596 NCAAF rows for season 2026 with `source='api_sports'`, the newest CREATED
+     * that same day. Reading "reliably returns 0" as "nothing here writes" and deleting
+     * the source would drop a live writer.
+     *
+     * The refusal is now remembered per (sport, season) with a cooldown in
+     * `lib/api-sports.ts`, so it is announced once rather than at every fast-tier tick.
+     */
     clearAPISportsDiagnostics()
     let count = 0
     try {
