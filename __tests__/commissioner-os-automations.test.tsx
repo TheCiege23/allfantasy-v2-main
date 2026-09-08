@@ -92,6 +92,23 @@ describe("commissioner-os automations — client parity", () => {
   })
 })
 
+/*
+ * Cards are addressed by their accessible name, never by a class.
+ *
+ * The selector here used to be `closest('[class*="rounded-2xl"]')`, which the shared `Card`
+ * stopped emitting at the Phase 23 component refresh (`d23d8b42e`) — it renders `card-premium`
+ * now. `closest()` returned null, the `as HTMLElement` cast hid that, and all three assertions
+ * below had been red since. The identical rot is recorded in
+ * `__tests__/commissioner-os-recommendations.test.tsx`.
+ *
+ * ⚠ A CLASS-NAME SELECTOR IS A TEST COUPLED TO STYLING. It goes red on a purely visual change
+ * and says nothing about the behaviour it guards. `getByRole` also cannot hand back a null
+ * container: it throws where it fails, naming what it looked for.
+ */
+function getAutomationCard(name: string): HTMLElement {
+  return screen.getByRole('group', { name })
+}
+
 describe("commissioner-os automations — view", () => {
   it("renders the preview data banner and every catalog entry, sorted by health severity", async () => {
     const { catalog, historyByAutomationId } = await loadDemoCatalogAndHistory()
@@ -110,7 +127,7 @@ describe("commissioner-os automations — view", () => {
     const { catalog, historyByAutomationId } = await loadDemoCatalogAndHistory()
     render(<AutomationCenterView catalog={catalog} historyByAutomationId={historyByAutomationId} dataMode="demo" />)
 
-    const card = screen.getByText('Lineup lock reminder').closest('[class*="rounded-2xl"]') as HTMLElement
+    const card = getAutomationCard('Lineup lock reminder')
     expect(within(card).getByText('Enabled')).toBeInTheDocument()
     expect(within(card).getByText('Elevated')).toBeInTheDocument()
   })
@@ -119,7 +136,7 @@ describe("commissioner-os automations — view", () => {
     const { catalog, historyByAutomationId } = await loadDemoCatalogAndHistory()
     render(<AutomationCenterView catalog={catalog} historyByAutomationId={historyByAutomationId} dataMode="demo" />)
 
-    const card = screen.getByText('Trade-deadline reminder broadcast').closest('[class*="rounded-2xl"]') as HTMLElement
+    const card = getAutomationCard('Trade-deadline reminder broadcast')
     const toggle = within(card).getByRole('switch')
     expect(toggle).toHaveAttribute('aria-checked', 'true')
 
@@ -127,7 +144,7 @@ describe("commissioner-os automations — view", () => {
     expect(toggle).toHaveAttribute('aria-checked', 'false')
     expect(within(card).getByText('Disabled')).toBeInTheDocument()
 
-    const otherCard = screen.getByText('Lineup lock reminder').closest('[class*="rounded-2xl"]') as HTMLElement
+    const otherCard = getAutomationCard('Lineup lock reminder')
     expect(within(otherCard).getByRole('switch')).toHaveAttribute('aria-checked', 'true')
   })
 
@@ -135,7 +152,7 @@ describe("commissioner-os automations — view", () => {
     const { catalog, historyByAutomationId } = await loadDemoCatalogAndHistory()
     render(<AutomationCenterView catalog={catalog} historyByAutomationId={historyByAutomationId} dataMode="demo" />)
 
-    const card = screen.getByText('Lineup lock reminder').closest('[class*="rounded-2xl"]') as HTMLElement
+    const card = getAutomationCard('Lineup lock reminder')
     fireEvent.click(within(card).getByRole('button', { name: 'View History' }))
 
     const dialog = await screen.findByRole('dialog')

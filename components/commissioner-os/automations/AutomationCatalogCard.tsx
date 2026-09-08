@@ -1,3 +1,4 @@
+import { useId } from 'react'
 import Link from 'next/link'
 import { Card, CardHeader, CardTitle, CardContent, CardFooter } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -19,16 +20,25 @@ export interface AutomationCatalogCardProps {
  * live `enabled` toggle state rather than the original fetched value) are
  * kept visually distinct — a running automation can still be unhealthy,
  * and a disabled one can still have a clean history.
+ *
+ * The card is a `role="group"` named by its own title. Every card renders the
+ * same controls (a Switch, a View History button), so "this automation's
+ * toggle" is only expressible as a named region — for a screen reader and for
+ * a test alike. It replaces a `closest('[class*=…]')` selector that went red on
+ * a purely visual change; see `__tests__/commissioner-os-automations.test.tsx`.
+ * `useId` rather than `automation.id` because an `aria-labelledby` value is a
+ * space-separated id list, and ids from the live ledger are not ours to trust.
  */
 export function AutomationCatalogCard({ automation, enabled, onToggle, onViewHistory }: AutomationCatalogCardProps) {
   const style = getSeverityStyle(automation.health)
+  const titleId = useId()
 
   return (
-    <Card style={{ borderColor: style.border }}>
+    <Card role="group" aria-labelledby={titleId} style={{ borderColor: style.border }}>
       <CardHeader>
         <div className="flex items-start justify-between gap-2">
           <div>
-            <CardTitle>{automation.name}</CardTitle>
+            <CardTitle id={titleId}>{automation.name}</CardTitle>
             <p className="mt-1 text-xs" style={{ color: 'var(--muted2)' }}>
               {AUTOMATION_CATEGORY_LABELS[automation.category]}
             </p>
