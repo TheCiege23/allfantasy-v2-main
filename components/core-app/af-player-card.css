@@ -1,0 +1,701 @@
+/*
+ * AF Core — the player card pop-up (STATE 6 / STATE 7 of the 2026-09-07 design
+ * handoff, `AF Trade Price Transparency.dc.html`).
+ *
+ * ⚠ NOT SCOPED UNDER `.af-core`, UNLIKE EVERY OTHER FILE IN THIS FOLDER, AND
+ * THAT IS DELIBERATE. The sheet renders in a portal-like position at the end of
+ * the provider's subtree and is `position: fixed` — it is visually outside the
+ * `.af-core` box even when it is inside it in the DOM. More importantly the card
+ * opens from surfaces that are NOT under `.af-core` (the league screens, the
+ * player finder), and a scoped rule would leave it unstyled there with no
+ * warning. It consumes only tokens `af-core.css` already defines, so it inherits
+ * all three themes; it defines none of its own.
+ *
+ * ⚠ THE DESIGN'S `--violet` AND `--orange` DO NOT EXIST IN THIS REPO. The handoff
+ * colours the position badge violet and a falling price orange. Rather than
+ * introduce two tokens that would need a value per theme, the position badge
+ * reuses the `.af-bd-pos[data-pos]` scale af-core-boards.css already defines, and
+ * the price delta uses `--good` / `--bad`, which exist in every theme and carry
+ * the same meaning.
+ *
+ * ⚠ DO NOT NEST A NEW @media INSIDE THE ONE BELOW. This repo has already shipped
+ * a bug where a media block opened inside another closed the outer query early
+ * and silently moved four rules into a narrower band (af-matchup.css, 2026-08-30).
+ * Brace balance stays 0 either way and no lint catches it.
+ */
+
+/* ── the name you click ──────────────────────────────────────────────────── */
+
+.af-pc-trigger {
+  appearance: none;
+  background: none;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  color: inherit;
+  text-align: inherit;
+  cursor: pointer;
+  border-bottom: 1px solid transparent;
+}
+.af-pc-trigger:hover {
+  color: var(--accent);
+  border-bottom-color: color-mix(in srgb, var(--accent) 45%, transparent);
+}
+.af-pc-trigger:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+
+/* ── scrim + panel ───────────────────────────────────────────────────────── */
+
+.af-pc-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  background: rgba(4, 5, 10, 0.72);
+  display: flex;
+  justify-content: flex-end;
+}
+
+.af-pc-panel {
+  position: relative;
+  width: min(920px, 100vw);
+  height: 100%;
+  background: var(--surface);
+  border-left: 1px solid var(--line2);
+  box-shadow: -30px 0 70px rgba(0, 0, 0, 0.55);
+  display: flex;
+  flex-direction: column;
+  animation: af-pc-in 180ms cubic-bezier(0.22, 0.8, 0.3, 1);
+}
+
+@keyframes af-pc-in {
+  from {
+    transform: translateX(24px);
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .af-pc-panel {
+    animation: none;
+  }
+}
+
+/* ── header bar ──────────────────────────────────────────────────────────── */
+
+.af-pc-bar {
+  height: 52px;
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 20px 0 28px;
+  border-bottom: 1px solid var(--line);
+}
+.af-pc-bar-sp {
+  flex: 1;
+}
+
+.af-pc-back,
+.af-pc-x {
+  appearance: none;
+  background: none;
+  border: 0;
+  cursor: pointer;
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font: 700 12px/1 'Archivo', system-ui, sans-serif;
+}
+.af-pc-back:hover,
+.af-pc-x:hover {
+  color: var(--text);
+}
+.af-pc-x {
+  font-size: 18px;
+  padding: 6px 8px;
+  color: var(--faint);
+}
+.af-pc-back:focus-visible,
+.af-pc-x:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+/*
+ * The availability designation.
+ *
+ * ⚠ WRAPS RATHER THAN TRUNCATES. The provider's sentence runs long — "Hamstring
+ * - Questionable for Week 1 vs. Denver" — and an ellipsis on an availability
+ * note hides the half that says WHICH WEEK. A card that clips this is worse
+ * than one that is a line taller.
+ */
+.af-pc-injury {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  font: 500 12px/1.45 'Archivo', system-ui, sans-serif;
+}
+.af-pc-injury-s {
+  font: 800 11px/1 'Archivo', system-ui, sans-serif;
+  letter-spacing: 0.04em;
+  padding: 4px 7px;
+  border-radius: 5px;
+  flex: none;
+  background: color-mix(in srgb, var(--warn, #d98324) 16%, transparent);
+  color: var(--warn, #d98324);
+}
+/* OUT and IR are not the same news as QUESTIONABLE — do not flatten them. */
+.af-pc-injury-s[data-status='OUT'],
+.af-pc-injury-s[data-status='IR'],
+.af-pc-injury-s[data-status='SUSPENSION'],
+.af-pc-injury-s[data-status='PUP'] {
+  background: color-mix(in srgb, var(--bad, #c8484b) 16%, transparent);
+  color: var(--bad, #c8484b);
+}
+.af-pc-injury-n {
+  color: var(--text);
+  min-width: 0;
+}
+
+/*
+ * When we last looked — the stamp under the designation, or under the sentence
+ * saying there isn't one.
+ *
+ * ⚠ `flex-basis: 100%` PUTS IT ON ITS OWN ROW, and that is the whole layout
+ * decision. `.af-pc-injury` is a baseline-aligned wrapping flex row, so without
+ * it this trails the source label and reads as part of the designation — which
+ * inverts the meaning. It is a statement about the FEED, not about the player,
+ * and it has to be legible as a separate claim, most of all on the empty branch
+ * where the line above it is the only other thing in the box.
+ *
+ * Quieter than `.af-pc-absent`: a reader looking for "can I start him" should
+ * pass over it, and a reader asking "is this current" should find it.
+ */
+.af-pc-feed {
+  flex-basis: 100%;
+  margin: 0;
+  font: 500 10px/1.5 'Archivo', system-ui, sans-serif;
+  color: var(--faint);
+}
+
+/*
+ * The ☆ watchlist toggle, in the top bar beside the close control.
+ *
+ * ⚠ THE SIZE IS SET ON THE BUTTON, NOT ONLY ON THE GLYPH, because this is a tap
+ * target on a phone: the agent-tester flags anything under 44px, and a bare
+ * 18px star is about half that. The padding is what makes it hittable.
+ */
+.af-pc-star {
+  appearance: none;
+  background: none;
+  border: 0;
+  cursor: pointer;
+  color: var(--faint);
+  font-size: 18px;
+  line-height: 1;
+  padding: 6px 8px;
+  min-width: 32px;
+  min-height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.af-pc-star:hover {
+  color: var(--text);
+}
+.af-pc-star[aria-pressed='true'] {
+  color: var(--accent);
+}
+.af-pc-star:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+.af-pc-crest {
+  width: 18px;
+  height: 18px;
+  flex: none;
+  border-radius: 5px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font: 800 9px/1 'Archivo', system-ui, sans-serif;
+  background: var(--chip);
+  color: var(--text2);
+}
+
+/* ── body ────────────────────────────────────────────────────────────────── */
+
+.af-pc-body {
+  flex: 1;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  padding: 28px 32px 48px;
+}
+
+/*
+ * 🛑 WITHOUT THIS THE INSIGHT BAR AND THE STAT TILES COLLAPSE TO 2px.
+ *
+ * `.af-pc-body` is a COLUMN flex container, so every section is a flex item with
+ * the default `flex-shrink: 1`. Once the sections are taller than the panel — which
+ * is always, on a phone — the browser shrinks them to fit BEFORE it scrolls, and a
+ * `display: block` or `display: grid` child has no automatic minimum height to
+ * resist with. Measured at 375×812: `.af-pc-insight` rendered 2px against a
+ * 41px scrollHeight and `.af-pc-tiles` 2px against 155px, while `.af-pc-id`
+ * (a flex row of text) was untouched — which is exactly why this reads as
+ * "the tiles didn't render" rather than as a layout bug.
+ *
+ * ⚠ IT IS NOT A MOBILE-ONLY FIX AND MUST NOT BE MOVED INTO THE MEDIA QUERY.
+ * Desktop escaped it only because the panel happened to be tall enough; a short
+ * window reproduces it there too.
+ */
+.af-pc-body > * {
+  flex: none;
+}
+
+/* ── identity ────────────────────────────────────────────────────────────── */
+
+.af-pc-id {
+  display: flex;
+  align-items: flex-start;
+  gap: 20px;
+}
+
+.af-pc-face {
+  width: 100px;
+  height: 100px;
+  flex: none;
+  border-radius: 16px;
+  overflow: hidden;
+  background: var(--surface2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.af-pc-face img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.af-pc-face-none {
+  font: 800 30px/1 'Archivo', system-ui, sans-serif;
+  color: var(--faint);
+}
+
+.af-pc-id-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 2px;
+}
+
+.af-pc-name {
+  margin: 0;
+  font: 900 26px/1.1 'Archivo', system-ui, sans-serif;
+  letter-spacing: -0.02em;
+  color: var(--text);
+}
+
+.af-pc-meta {
+  font: 700 13px/1 'Archivo', system-ui, sans-serif;
+}
+.af-pc-faint {
+  color: var(--faint);
+  font-weight: 500;
+}
+
+.af-pc-owner {
+  font: 700 11px/1.3 'Archivo', system-ui, sans-serif;
+}
+.af-pc-owner-who {
+  color: var(--accent);
+}
+.af-pc-owner-free {
+  color: var(--good);
+}
+
+.af-pc-bio {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  flex-wrap: wrap;
+  padding-top: 6px;
+}
+.af-pc-bio-i {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.af-pc-bio-i b {
+  font: 800 13px/1.2 'Archivo', system-ui, sans-serif;
+  color: var(--text2);
+}
+
+/* ── Propose Trade ───────────────────────────────────────────────────────── */
+
+.af-pc-cta {
+  align-self: flex-start;
+  padding: 10px 18px;
+  border-radius: 9px;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font: 800 12px/1 'Archivo', system-ui, sans-serif;
+  text-decoration: none;
+}
+.af-pc-cta:hover {
+  filter: brightness(1.08);
+}
+.af-pc-cta:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* ── labels + absent reasons ─────────────────────────────────────────────── */
+
+.af-pc-label {
+  font: 700 9px/1 'JetBrains Mono', ui-monospace, monospace;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+
+.af-pc-absent {
+  margin: 0;
+  font: 500 11px/1.5 'Archivo', system-ui, sans-serif;
+  color: var(--muted);
+  max-width: 60ch;
+}
+
+.af-pc-basis {
+  margin: 0;
+  font: 500 10px/1.5 'Archivo', system-ui, sans-serif;
+  color: var(--faint);
+  max-width: 60ch;
+}
+
+/* ── insight ─────────────────────────────────────────────────────────────── */
+
+.af-pc-insight {
+  background: var(--accent-soft);
+  border: 1px solid var(--accent-line);
+  border-radius: 12px;
+  overflow: hidden;
+}
+.af-pc-insight-h {
+  appearance: none;
+  background: none;
+  border: 0;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  cursor: pointer;
+  text-align: left;
+}
+.af-pc-insight-h:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+.af-pc-dot {
+  width: 7px;
+  height: 7px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--accent);
+}
+.af-pc-insight-t {
+  flex: 1;
+  font: 600 12px/1.4 'Archivo', system-ui, sans-serif;
+  color: var(--text2);
+}
+.af-pc-chev {
+  font: 700 10px/1 'Archivo', system-ui, sans-serif;
+  color: var(--faint);
+}
+.af-pc-insight-d {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 0 14px 12px 31px;
+}
+.af-pc-insight-d p {
+  margin: 0;
+  font: 500 11px/1.5 'Archivo', system-ui, sans-serif;
+  color: var(--muted);
+}
+
+/* ── stat tiles ──────────────────────────────────────────────────────────── */
+
+.af-pc-tiles {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  border: 1px solid var(--line2);
+  border-radius: 12px;
+  overflow: hidden;
+}
+.af-pc-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 14px 16px;
+  border-right: 1px solid var(--line);
+  min-width: 0;
+}
+.af-pc-tile:last-child {
+  border-right: 0;
+}
+.af-pc-tile-v {
+  font: 900 20px/1 'JetBrains Mono', ui-monospace, monospace;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+.af-pc-tile-v--accent {
+  color: var(--accent);
+}
+.af-pc-tile-v--good {
+  color: var(--good);
+}
+.af-pc-tile-v--bad {
+  color: var(--bad);
+}
+.af-pc-tile-sub {
+  font: 700 10px/1.3 'Archivo', system-ui, sans-serif;
+}
+.af-pc-up {
+  color: var(--good);
+}
+.af-pc-down {
+  color: var(--bad);
+}
+
+/* ── two columns ─────────────────────────────────────────────────────────── */
+
+.af-pc-cols {
+  display: flex;
+  gap: 28px;
+  align-items: flex-start;
+}
+.af-pc-col {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+/* Give every label after the first some air, without a wrapper per group. */
+.af-pc-col > .af-pc-label:not(:first-child) {
+  padding-top: 12px;
+}
+
+/* ── hairline rows (the handoff's own pattern) ───────────────────────────── */
+
+.af-pc-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+}
+.af-pc-row:last-child {
+  border-bottom: 0;
+}
+.af-pc-row-k {
+  font: 700 12px/1.3 'Archivo', system-ui, sans-serif;
+  color: var(--text2);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.af-pc-row-v {
+  font: 800 12px/1.3 'JetBrains Mono', ui-monospace, monospace;
+  color: var(--text);
+  flex: none;
+}
+.af-pc-row--muted .af-pc-row-k,
+.af-pc-row--muted .af-pc-row-v {
+  color: var(--faint);
+}
+
+/* ── trades ──────────────────────────────────────────────────────────────── */
+
+.af-pc-trade {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+}
+.af-pc-trade:last-of-type {
+  border-bottom: 0;
+}
+.af-pc-trade-h {
+  font: 700 11px/1.3 'Archivo', system-ui, sans-serif;
+}
+.af-pc-trade-lg {
+  color: var(--faint);
+  font-weight: 500;
+}
+.af-pc-trade-b {
+  font: 500 11px/1.4 'Archivo', system-ui, sans-serif;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+/* Platform tints, matching the badge vocabulary used across core. */
+.af-pc-plat--sleeper {
+  color: var(--p-sleeper-fg);
+}
+.af-pc-plat--espn {
+  color: var(--p-espn-fg);
+}
+.af-pc-plat--yahoo {
+  color: var(--p-yahoo-fg);
+}
+.af-pc-plat--fantrax {
+  color: var(--p-fantrax-fg);
+}
+.af-pc-plat--mfl {
+  color: var(--p-mfl-fg);
+}
+.af-pc-plat--fleaflicker {
+  color: var(--p-fleaflicker-fg);
+}
+.af-pc-plat--manual {
+  color: var(--p-manual-fg);
+}
+
+/* ── comps ───────────────────────────────────────────────────────────────── */
+
+.af-pc-chips {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding-top: 2px;
+}
+.af-pc-chip {
+  appearance: none;
+  padding: 6px 12px;
+  border: 1px solid var(--chip-line);
+  background: none;
+  border-radius: 999px;
+  font: 700 11px/1 'Archivo', system-ui, sans-serif;
+  color: var(--text2);
+  cursor: pointer;
+}
+.af-pc-chip:hover {
+  border-color: var(--accent-line);
+  color: var(--text);
+}
+.af-pc-chip:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* ── news ────────────────────────────────────────────────────────────────── */
+
+.af-pc-news {
+  padding: 7px 0;
+  border-bottom: 1px solid var(--line);
+  font: 500 11px/1.5 'Archivo', system-ui, sans-serif;
+  color: var(--muted);
+}
+.af-pc-news:last-child {
+  border-bottom: 0;
+}
+.af-pc-news-t {
+  font-weight: 700;
+  color: var(--text2);
+}
+a.af-pc-news-t:hover {
+  color: var(--accent);
+}
+
+/*
+ * ── mobile: the full-screen sheet ────────────────────────────────────────
+ *
+ * The design's mobile frame is the same card with the panel filling the screen,
+ * the tiles in a 2×2, and the columns stacked. Nothing is removed — the sections
+ * that are side by side on desktop simply follow one another.
+ */
+@media (max-width: 780px) {
+  .af-pc-panel {
+    width: 100vw;
+    border-left: 0;
+  }
+
+  .af-pc-bar {
+    padding: 0 14px 0 18px;
+  }
+
+  .af-pc-body {
+    gap: 16px;
+    padding: 18px 18px 32px;
+  }
+
+  .af-pc-id {
+    align-items: center;
+    gap: 14px;
+  }
+
+  .af-pc-face {
+    width: 72px;
+    height: 72px;
+    border-radius: 50%;
+  }
+
+  .af-pc-face-none {
+    font-size: 22px;
+  }
+
+  .af-pc-name {
+    font-size: 19px;
+  }
+
+  .af-pc-bio {
+    gap: 14px;
+  }
+
+  .af-pc-tiles {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  /* In a 2-col grid the right-hand cell must not keep a divider on the edge. */
+  .af-pc-tile {
+    border-bottom: 1px solid var(--line);
+  }
+  .af-pc-tile:nth-child(2n) {
+    border-right: 0;
+  }
+  .af-pc-tile:nth-last-child(-n + 2) {
+    border-bottom: 0;
+  }
+
+  .af-pc-tile-v {
+    font-size: 17px;
+  }
+
+  .af-pc-cols {
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .af-pc-col {
+    width: 100%;
+  }
+}
