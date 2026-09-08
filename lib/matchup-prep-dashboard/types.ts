@@ -85,6 +85,8 @@ export type MatchupPrepSourceFlags = {
   injuryNewsLayerReady: boolean
   /** Weather influence captured for at least one game in the matchup. */
   weatherLayerReady: boolean
+  /** True when the market fed at least one starter's game environment. */
+  marketLayerReady: boolean
   /** League scoring rules applied via normalized league context. */
   leagueScoringApplied: boolean
   /** AI time/league envelope attached to chimmyPayload. */
@@ -169,6 +171,29 @@ export type MatchupPrepDashboardResult = {
   injuryPivots: MatchupInjuryPivot[]
   scheduleNotes: string[]
   weatherInfluence: Array<{ name: string; team: string; summary: string; risk: string | null }>
+  /**
+   * Game environment for your starters, from the betting market read as a FORECAST.
+   *
+   * `impliedTeamTotal` is how many points that player's offence is expected to
+   * score — a projection input, and the reason this feed exists. It is NOT a
+   * betting card: no prices, no sportsbook names, and nothing here should be
+   * rendered as odds. See `lib/odds/gameOddsReads.ts` for the enforced boundary.
+   *
+   * ⚠ Do NOT confuse this with `winProbability` on the matchup itself. That one is
+   * your fantasy head-to-head, derived from starter projection bands; this one is
+   * whether an NFL team wins its game. They answer different questions and the
+   * market has no opinion on the first.
+   */
+  marketContext: Array<{
+    name: string
+    team: string
+    impliedTeamTotal: number | null
+    spread: number | null
+    gameTotal: number | null
+    opponent: string | null
+    isHome: boolean
+    isStale: boolean
+  }>
   dataGaps: string[]
   degraded: boolean
   modules: {

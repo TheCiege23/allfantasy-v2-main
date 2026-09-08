@@ -12,6 +12,7 @@ import { attachIntelligenceToChimmyPayload, buildAiToolPayload } from '@/lib/int
 import { leagueWantsLongHorizon, resolveNormalizedLeagueContext } from '@/lib/league-context-engine'
 import { normalizeToSupportedSport, SUPPORTED_SPORTS } from '@/lib/sport-scope'
 import { resolveMatchupOpponentExternal } from '@/lib/matchup-prep-dashboard/resolveMatchupOpponent'
+import { readWeekMarketContextByTeam } from '@/lib/odds/gameOddsReads'
 import {
   aggregateStarterBands,
   buildPositionEdges,
@@ -614,6 +615,60 @@ export async function runMatchupPrepDashboard(input: MatchupPrepDashboardInput):
         .slice(0, 10)
     : []
 
+  /*
+   * GAME ENVIRONMENT FROM THE BETTING MARKET, READ AS A FORECAST.
+   *
+   * `impliedTeamTotal` is how many points a player's offence is expected to score.
+   * That is a projection input and the reason the odds feed exists — a starter in a
+   * 27-point offence is a different case from the same starter in a 16-point one.
+   *
+   * 🛑 NOT A BETTING SURFACE. `readWeekMarketContextByTeam` returns forecast fields
+   * only — no prices, no sportsbook names — and that boundary is enforced by a test
+   * in __tests__/odds, not by this call site remembering it.
+   *
+   * ⚠ DO NOT let this near `winProbability` above. That number is the FANTASY
+   * head-to-head, from starter projection bands; this one is whether an NFL team
+   * wins its game. The market has no opinion on your league's matchup, which is
+   * exactly what the "Not Vegas — fantasy points only" note means and why it stays.
+   *
+   * NFL only: `game_odds` is fed by the API-Sports American Football endpoints, so
+   * any other sport would join zero rows and quietly render an empty layer.
+   */
+  const marketWeek = Number(mySs.week)
+  const marketByTeam =
+    sport === 'NFL' && Number.isFinite(marketWeek) && Number.isFinite(Number(seasonYear))
+      ? await readWeekMarketContextByTeam('NFL', Number(seasonYear), marketWeek).catch(() => new Map())
+      : new Map()
+
+  const marketRoster = myStarters.size > 0
+    ? mySs.players.filter((p) => myStarters.has((p as StartSitPlayerRow).playerId))
+    : mySs.players
+  const marketContext = marketRoster
+    .map((p) => {
+      const m = p.team ? marketByTeam.get(p.team) : null
+      if (!m) return null
+      return {
+        name: p.name,
+        team: p.team,
+        impliedTeamTotal: m.impliedTeamTotal,
+        spread: m.spread,
+        gameTotal: m.gameTotal,
+        opponent: m.opponent,
+        isHome: m.isHome,
+        isStale: m.isStale,
+      }
+    })
+    .filter((x): x is NonNullable<typeof x> => x != null && x.impliedTeamTotal != null)
+    // Highest-scoring environments first — that is the ordering a lineup decision reads.
+    .sort((a, b) => (b.impliedTeamTotal ?? 0) - (a.impliedTeamTotal ?? 0))
+    .slice(0, 10)
+
+  if (marketContext.length > 0 && marketContext.every((m) => m.isStale)) {
+    // Surfacing rather than hiding: a spread from before a QB was ruled out looks
+    // perfectly reasonable and is wrong. The reader decides what to do with it.
+    dataGaps.push('Market game environment is past its refresh window — treat implied totals as stale.')
+  }
+
   let aiSummary: string | null = null
   if (!input.skipAi) {
     const payload = {
@@ -634,6 +689,7 @@ export async function runMatchupPrepDashboard(input: MatchupPrepDashboardInput):
       positionEdges: positionEdges.slice(0, 8),
       slotEdges: slotEdges.slice(0, 8),
       weatherInfluence,
+      marketContext,
       dataGaps,
       startSitSummary: mySs.summary,
     }
@@ -642,7 +698,7 @@ export async function runMatchupPrepDashboard(input: MatchupPrepDashboardInput):
         {
           role: 'system',
           content:
-            'You are Chimmy. Write 4–7 sentences for fantasy matchup prep. Use ONLY numbers and names from the JSON. Never invent players, injuries, or scores. Explain that win chance is derived from projections (not betting odds). If opponent data is missing, say so. If weatherInfluence is present, tie it to those players only.',
+            'You are Chimmy. Write 4–7 sentences for fantasy matchup prep. Use ONLY numbers and names from the JSON. Never invent players, injuries, or scores. Explain that win chance is derived from projections (not betting odds). If opponent data is missing, say so. If weatherInfluence is present, tie it to those players only. If marketContext is present, use impliedTeamTotal as a scoring-environment expectation for those players only — describe it as the expected points their offense scores, never as a bet, a line to take, or a price, and never name a sportsbook. Do not present impliedTeamTotal as the chance of winning your fantasy matchup; those are different numbers.',
         },
         { role: 'user', content: JSON.stringify(payload).slice(0, 12000) },
       ],
@@ -718,6 +774,7 @@ export async function runMatchupPrepDashboard(input: MatchupPrepDashboardInput):
       injuryHighlights: injuryHighlights.slice(0, 14),
       injuryPivots,
       weatherInfluence,
+      marketContext,
       floorVsUpside,
       gamePlan: gamePlan.slice(0, 12),
       dataGaps: dataGaps.slice(0, 14),
@@ -749,6 +806,7 @@ export async function runMatchupPrepDashboard(input: MatchupPrepDashboardInput):
       opponentStrengths: oppStrengths.map((e) => e.position),
       streamingOpportunities,
       weatherInfluence,
+      marketContext,
       scheduleNotes: scheduleNotes.slice(0, 10),
       dataGaps,
       degraded,
@@ -791,6 +849,7 @@ export async function runMatchupPrepDashboard(input: MatchupPrepDashboardInput):
     injuryPivots,
     scheduleNotes: scheduleNotes.slice(0, 10),
     weatherInfluence,
+    marketContext,
     dataGaps,
     degraded,
     modules: {
@@ -813,6 +872,7 @@ export async function runMatchupPrepDashboard(input: MatchupPrepDashboardInput):
         (mySs.sourceFlags?.injuryNewsLayerReady ?? false) ||
         (oppSs?.sourceFlags?.injuryNewsLayerReady ?? false),
       weatherLayerReady: weatherInfluence.length > 0,
+      marketLayerReady: marketContext.length > 0,
       leagueScoringApplied: Boolean(scoringSummary) && (mySs.sourceFlags?.leagueScoringApplied ?? false),
       aiEnvelopeReady: Boolean(aiSummary) || chimmyPayload != null,
     },
