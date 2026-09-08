@@ -1,6 +1,7 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useTransition } from 'react'
+import { useRouter } from 'next/navigation'
 import { FileText } from 'lucide-react'
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table'
 import { Button } from '@/components/ui/button'
@@ -27,17 +28,57 @@ export interface ReportsViewProps {
  * `summary` and `relatedLinks` back to its real owner, never the raw
  * data itself.
  *
- * "Generate Report" is a real, local-state interaction (not a
- * represented-but-unwired button) — it adds a `generating` entry to
- * history that transitions to `ready` after a short simulated delay,
- * the same "Demo Mode should look and behave convincingly" reasoning
- * Automation Center's enable/disable toggle already established.
+ * "Generate Report" behaves DIFFERENTLY BY DATA MODE, and that split is the point.
+ *
+ * In stub/demo it stays the local simulation it always was — a `generating` entry that flips to
+ * `ready` after a short delay — which is the "Demo Mode should look and behave convincingly"
+ * reasoning Automation Center's toggle already established, and which is honest there because
+ * every row on the page is a fixture.
+ *
+ * 🛑 IN LIVE MODE IT CALLS THE REAL GENERATOR, because the simulation stopped being honest the
+ * moment the history became real. Its fabricated row carried a hard-coded `sizeLabel: '128 KB'`
+ * and sat in the same table as genuine artifacts, indistinguishable from them. A real list beside
+ * a button that invents entries is worse than the honest error this module used to return.
  */
 export function ReportsView({ templates, history: initialHistory, dataMode, errorMessage }: ReportsViewProps) {
   const [history, setHistory] = useState(initialHistory)
   const [selectedReportId, setSelectedReportId] = useState<string | null>(null)
 
+  const router = useRouter()
+  const [isGenerating, startGenerating] = useTransition()
+  const [generateError, setGenerateError] = useState<string | null>(null)
+
+  async function handleGenerateLive(template: ReportTemplate) {
+    setGenerateError(null)
+    try {
+      const res = await fetch('/api/commissioner-os/reports/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ templateId: template.id }),
+      })
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}))
+        setGenerateError(body?.error ?? `Generation failed (${res.status}).`)
+        return
+      }
+      const body = await res.json()
+      if (body?.status === 'failed') {
+        // The run happened and was recorded; the history row carries the reason. Say so rather
+        // than reporting success over a report that does not exist.
+        setGenerateError(body?.failureReason ?? 'The report could not be generated.')
+      }
+      // The server owns the history, so re-read it rather than guessing what it now contains.
+      startGenerating(() => router.refresh())
+    } catch {
+      setGenerateError('Generation failed — the request did not complete.')
+    }
+  }
+
   function handleGenerate(template: ReportTemplate) {
+    if (dataMode === 'live') {
+      void handleGenerateLive(template)
+      return
+    }
     const id = `local-${Date.now()}`
     const newReport: GeneratedReport = {
       id,
@@ -92,13 +133,21 @@ export function ReportsView({ templates, history: initialHistory, dataMode, erro
             <h2 id="reports-templates-heading" className="mb-2 text-sm font-semibold" style={{ color: 'var(--text)' }}>
               Report Templates
             </h2>
+            {generateError ? (
+              <p className="mb-2 text-sm" role="alert" style={{ color: 'var(--accent-red-strong)' }}>
+                {generateError}
+              </p>
+            ) : null}
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               {templates.map((template) => (
                 <ReportTemplateCard
                   key={template.id}
                   template={template}
                   onGenerate={() => handleGenerate(template)}
-                  disabled={history.some((report) => report.templateId === template.id && report.status === 'generating')}
+                  disabled={
+                    isGenerating ||
+                    history.some((report) => report.templateId === template.id && report.status === 'generating')
+                  }
                 />
               ))}
             </div>

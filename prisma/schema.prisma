@@ -18150,3 +18150,36 @@ model CommissionerWorkspaceTask {
   @@index([status, dueAt])
   @@map("commissioner_workspace_tasks")
 }
+
+/// Commissioner Reports' generated-artifact store — see
+/// prisma/migrations/20260908220000_commissioner_report_runs for why it exists. The short version:
+/// Reports shipped unwired because `generatedAt`/`status`/`format`/`sizeLabel` had no generation
+/// event behind them, and this table is the record of runs that really happened.
+///
+/// Read and written ONLY through lib/commissioner-reports/. Nothing under lib/commissioner-ui/ may
+/// touch prisma — an ESLint rule with a bounded exemption list enforces that.
+model CommissionerReportRun {
+  id               String   @id @default(uuid())
+  leagueId         String   @map("league_id")
+  /// A CODE catalog id, not a row: a template describes a generator that exists in the repo.
+  templateId       String   @map("template_id")
+  status           String   @default("ready")
+  /// Only ever "csv" today — nothing here generates a PDF, so nothing here writes one.
+  format           String   @default("csv")
+  /// Prose about the artifact. Never a copy of the data it summarises.
+  summary          String
+  /// The artifact itself, kept rather than regenerated: a file rebuilt later is not the file this
+  /// row says was made. Null only when the run failed.
+  content          String?
+  sizeBytes        Int      @default(0) @map("size_bytes")
+  generatedByLabel String   @default("Scheduled") @map("generated_by_label")
+  /// Only ever "private" — sharing has no implementation, so no row can honestly claim otherwise.
+  shareStatus      String   @default("private") @map("share_status")
+  failureReason    String?  @map("failure_reason")
+  generatedAt      DateTime @default(now()) @map("generated_at")
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  @@index([leagueId, generatedAt])
+  @@index([leagueId, templateId, generatedAt])
+  @@map("commissioner_report_runs")
+}
