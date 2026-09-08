@@ -18054,3 +18054,42 @@ model RecentPlayerSearch {
   @@index([userId, searchedAt])
   @@map("recent_player_searches")
 }
+
+/// Commissioner Workspace's persisted task store — see
+/// prisma/migrations/20260908120000_commissioner_workspace_tasks for why it exists
+/// and what each column means. The short version: Workspace deliberately shipped
+/// unwired because `status`/`createdAt`/`updatedAt` had nothing behind them, and
+/// this table is what puts something behind them.
+///
+/// Read and written ONLY through lib/commissioner-workspace/. Nothing under
+/// lib/commissioner-ui/ may touch prisma — that boundary is an ESLint rule with a
+/// bounded exemption list, guarded by __tests__/commissioner-os/eslintBoundary.test.ts.
+model CommissionerWorkspaceTask {
+  id                  String    @id @default(uuid())
+  leagueId            String    @map("league_id")
+  /// Stable identity for a DETECTED condition ("data-stale:v1"), versioned so that
+  /// redefining a detector opens a new task instead of rewriting an old one's history.
+  sourceKey           String    @map("source_key")
+  title               String
+  description         String
+  status              String    @default("open")
+  priority            String    @default("standard")
+  dueAt               DateTime? @map("due_at")
+  automationCandidate Boolean   @default(false) @map("automation_candidate")
+  relatedLinks        Json?     @map("related_links")
+  /// Set when the COMMISSIONER resolved it; autoResolvedAt is set when the condition
+  /// stopped being true on its own. Two different facts, never collapsed into one.
+  resolvedAt          DateTime? @map("resolved_at")
+  autoResolvedAt      DateTime? @map("auto_resolved_at")
+  /// Bumped every time the detector still sees the condition. Deliberately NOT
+  /// updatedAt: re-observation is not a change, and a column that moves on every
+  /// scheduled run cannot also mean "this task changed".
+  lastSeenAt          DateTime  @default(now()) @map("last_seen_at")
+  createdAt           DateTime  @default(now()) @map("created_at")
+  updatedAt           DateTime  @default(now()) @updatedAt @map("updated_at")
+
+  @@unique([leagueId, sourceKey])
+  @@index([leagueId, status])
+  @@index([status, dueAt])
+  @@map("commissioner_workspace_tasks")
+}

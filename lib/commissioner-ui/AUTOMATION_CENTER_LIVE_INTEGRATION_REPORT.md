@@ -239,3 +239,46 @@ and audit logs, the exact shape this contract needs — rather than at
 any extension of Decision OS's intelligence pipeline. That would be new
 application-layer work layered on existing application-layer
 infrastructure, not a Decision OS port of any kind.
+
+
+---
+
+## Superseded 2026-09-08 — wired to `lib/automation/`, which is where this report pointed
+
+The paragraph immediately above predicted this: *"the evidence points at the main application's own
+`lib/automation/` job-orchestration foundation as the far more natural home — it already has jobs,
+runs, statuses, retries, and audit logs, the exact shape this contract needs."* That is what was
+built, and this section records what changed since the two objections in the audit above.
+
+The first objection — Decision OS has no automation catalog anywhere — is still true and is not
+being worked around. The second was that `lib/automation/`'s job types were unusable here because
+"none of its job types correspond to anything in this contract". That has been removed rather than
+waived: `workspace.refreshTasks` is a job type that fits the canon's own definition of what may be
+automated — repetitive, low-stakes league housekeeping, never a trade approval, member removal or
+rule ratification.
+
+**What the ledger actually said, measured on production 2026-09-08:**
+
+```
+waivers.processLeague  skipped    249   newest 2026-06-21T03:55:02Z
+waivers.processLeague  completed    2   newest 2026-06-21T04:00:02Z
+```
+
+251 runs, one job type, one seed league, nothing since June. The engine, the audit trail and the
+idempotency guard were all working correctly — `discoverDueWaiverLeagues` finds work by grouping
+`WaiverClaim` rows with `status = 'pending'`, and that table is empty platform-wide because every
+league here is an import and an imported league never writes AF-native waiver claims. The one wired
+job was pointed at a queue that is empty by construction.
+
+🛑 **The catalog reports that honestly rather than hiding it.** A commissioner whose waiver
+automation has not fired since June is entitled to see it, and `lastRunAt` is how they find out.
+Two consequences for how health is computed, both recorded at their definition sites in `live.ts`:
+
+- A `skipped` run is NOT a failure — it is the idempotency guard working — so it is out of the
+  success-rate denominator. Counting the 249 skips would report a job that has never failed at
+  0.8%.
+- Success rate alone would therefore score the waiver automation perfectly while it was silent for
+  eleven weeks. Staleness is a separate health axis for exactly that reason.
+
+⚠ **Live wiring is gated on `commissioner_os_live_ready_automations`,** which is off. Nothing
+changes for any user until it is switched on.
