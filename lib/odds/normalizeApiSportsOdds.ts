@@ -145,6 +145,27 @@ export function classifyBet(bet: { id?: number; name?: string }): Market | null 
 }
 
 /**
+ * Strip a bookmaker payload down to the three markets we actually model.
+ *
+ * 🛑 THIS IS A PRODUCT BOUNDARY, NOT AN OPTIMISATION. A live payload carries
+ * whatever that book quotes out of 361 markets — `Anytime Touchdown Scorer`,
+ * `Player Interceptions`, `Multi Touchdown Scorer (3 or More)`, and the rest of
+ * the prop board. AllFantasy consumes the betting market as a FORECAST (what will
+ * the offence score, who is likely to win) and is deliberately not a gambling
+ * product, so warehousing a book's prop prices is both data we never read and the
+ * wrong thing to be holding.
+ *
+ * Used for the `raw` column, which exists to diagnose a parse — and a parse can
+ * only ever concern the markets the parser looks at.
+ */
+export function retainPrimaryMarkets(bookmaker: RawBookmaker): RawBookmaker {
+  return {
+    ...bookmaker,
+    bets: (bookmaker.bets ?? []).filter((bet) => classifyBet(bet) !== null),
+  }
+}
+
+/**
  * Parse a price into DECIMAL odds.
  *
  * The vendor's `odd` field is a string and the interface does not say which

@@ -6,7 +6,7 @@ import {
   type InjurySyncFanoutRow,
 } from '@/lib/realtime-events/injuryFanoutPolicy'
 import { normalizeGameStatus, normalizeSeasonType } from '@/lib/scores/gameScoreProviders'
-import { normalizeBookmakerOdds } from '@/lib/odds/normalizeApiSportsOdds'
+import { normalizeBookmakerOdds, retainPrimaryMarkets } from '@/lib/odds/normalizeApiSportsOdds'
 
 const BASE_URL = 'https://v1.american-football.api-sports.io';
 
@@ -1950,7 +1950,14 @@ export async function syncAPISportsGameOddsToDb(opts?: {
           impliedAwayTotal: normalized.impliedAwayTotal,
           homeWinProbability: normalized.homeWinProbability,
           unrecognizedBets: normalized.unrecognizedBets as unknown as object,
-          raw: bookmaker as unknown as object,
+          /*
+           * Only the three markets we model. A book's payload also carries its prop
+           * board — touchdown scorers, player interception lines, and the rest of the
+           * 361 market types — and AllFantasy reads the betting market as a FORECAST
+           * rather than as a betting product, so none of that is ever read and none of
+           * it should be warehoused. See `retainPrimaryMarkets`.
+           */
+          raw: retainPrimaryMarkets(bookmaker) as unknown as object,
           fetchedAt: now,
           expiresAt,
         };
