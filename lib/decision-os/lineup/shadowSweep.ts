@@ -4,6 +4,8 @@ import { prisma as defaultPrisma } from '@/lib/prisma'
 import { computeLineupActionsForUser } from '@/lib/lineup-actions/computeLineupActionsForUser'
 import { runLineupShadowForSummary, type LineupShadowResult } from './shadow'
 import { createLineupOsLoaders } from '@/lib/decision-os/lineup-os'
+import { PrismaCanonicalDecisionStore } from '@/lib/decision-os/canonical/prismaDecisionStore'
+import { persistLineupCanonicalDecisions } from './canonicalPersist'
 import type { LineupActionSummaryPayload } from '@/lib/lineup-actions/types'
 
 /**
@@ -78,6 +80,15 @@ export interface ShadowSweepDeps {
     opts: { maxLeagues?: number; leagueOffset?: number },
   ) => Promise<LineupShadowResult[]>
   now: () => number
+  /**
+   * Write the tick's decisions to the canonical store (P5 step 1).
+   *
+   * ⚠ OPTIONAL SO EVERY EXISTING CALLER AND TEST IS BYTE-IDENTICAL. Omit it and the sweep behaves
+   * exactly as it did before this existed — which is also what keeps the two features independently
+   * gated: the sweep has its own flag, and the persist refuses unless `DECISION_OS_CANONICAL_SHADOW_
+   * ENABLED` is true. Neither implies the other.
+   */
+  persistCanonical?: (userId: string, results: LineupShadowResult[]) => Promise<unknown>
 }
 
 /**
@@ -130,6 +141,20 @@ export function productionSweepDeps(db: typeof defaultPrisma = defaultPrisma): S
     computeSummary: (userId) => computeLineupActionsForUser(userId),
     runShadow: (userId, summary, opts) => runLineupShadowForSummary(userId, summary, opts, lineupOsLoaders),
     now: () => Date.now(),
+    /*
+     * ⚠ ONE `runId` FOR THE WHOLE TICK, minted here rather than per user. Revision identity is
+     * (decisionId, runId), so a per-user id would make each user its own "run" and defeat the
+     * same-run conflict detection the revisions table exists for. The sweep is one run.
+     *
+     * ⚠ THE PRISMA STORE IS CONSTRUCTED ONCE PER TICK, not per user — it is a thin wrapper over the
+     * shared client, and building one per call would be a new object on every league.
+     */
+    persistCanonical: (() => {
+      const runId = `lineup-sweep:${new Date().toISOString()}`
+      const store = new PrismaCanonicalDecisionStore(db)
+      return (userId: string, results: LineupShadowResult[]) =>
+        persistLineupCanonicalDecisions({ userId, results, runId, store })
+    })(),
   }
 }
 
@@ -209,6 +234,27 @@ export async function runLineupShadowSweep(
         // no extra cost per tick.
         const results = await deps.runShadow(userId, summary, { maxLeagues: 1, leagueOffset: bucket })
         usersSwept += 1
+        /*
+         * P5 step 1 — write down the decision this sweep already computed.
+         *
+         * 🛑 THE CANONICAL LAYER HAD NO WRITER. `canonical_decisions` has a 46-column schema, a
+         * migration, a validated boundary and five adapters, and measured 2026-09-08 it had ZERO
+         * production callers and ZERO rows. So `DECISION_OS_CANONICAL_SHADOW_ENABLED` gated
+         * nothing; this is the first thing that reaches the boundary at all.
+         *
+         * ⚠ HERE RATHER THAN IN `runLineupShadow`, WHICH THE REQUEST PATH ALSO CALLS. Persisting
+         * from `/api/today/lineup-actions` would add a write to a page load for a table nothing
+         * reads yet. This sweep is a cron with no latency budget and it already runs the engine —
+         * writing down what it has computed is the cheapest possible writer, and it is the
+         * SCHEDULED one the standing rule requires to exist before any reader does.
+         *
+         * ⚠ AWAITED, NOT FIRE-AND-FORGET. The tick's budget check is the next statement, and a
+         * detached write could outlive the invocation. It cannot throw (the persist swallows its
+         * own failures) and it is inert unless a second flag is on, so the cost is a no-op call.
+         */
+        if (deps.persistCanonical) {
+          await deps.persistCanonical(userId, results)
+        }
         for (const r of results) {
           if (r?.ran) {
             comparisons += 1
