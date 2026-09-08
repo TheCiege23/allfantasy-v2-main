@@ -4,7 +4,18 @@
  */
 import { getWaiverProcessingConfigForLeague } from './WaiverProcessingConfigResolver'
 import { getFAABConfigForLeague } from './FAABConfigResolver'
-import { getEffectiveLeagueWaiverSettings } from '@/lib/waiver-wire'
+/*
+ * ⚠ THE LEAF, NOT THE `@/lib/waiver-wire` BARREL, AND THIS IMPORT IS LOAD-BEARING
+ * FOR THE WHOLE `league-runtime` GRAPH. The barrel re-exports `claim-service`,
+ * which reaches `ai-learning-system/recordEvent.ts` and its `import 'server-only'`.
+ * Because this resolver sits under `league-runtime/canonicalLeagueRules`, importing
+ * the barrel here for ONE function dragged that server tail into every consumer of
+ * league-runtime -- including, on 2026-09-07, a `'use client'` component, which
+ * failed `next build` and held main red for ~80 minutes across six deploys.
+ *
+ * A barrel is a server module if ANY of its re-exports is. Import the leaf.
+ */
+import { getEffectiveLeagueWaiverSettings } from '@/lib/waiver-wire/settings-service'
 
 export interface WaiverConfigForLeague {
   waiver_type: string
