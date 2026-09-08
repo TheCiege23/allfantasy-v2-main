@@ -40,7 +40,7 @@ vi.mock('@/lib/commissioner-ui/analytics/dataWindow', () => ({
 }))
 
 import { REPORT_TEMPLATES, findTemplate } from '@/lib/commissioner-reports/reportCatalog'
-import { generateReport, readReportContent, templatesDue } from '@/lib/commissioner-reports/reportStore'
+import { countSubstantiveRows, generateReport, readReportContent, templatesDue } from '@/lib/commissioner-reports/reportStore'
 
 const NOW = new Date('2026-09-08T12:00:00.000Z')
 const daysAgo = (n: number) => new Date(NOW.getTime() - n * 86_400_000)
@@ -192,5 +192,57 @@ describe('templatesDue', () => {
     const monthly = REPORT_TEMPLATES.find((t) => t.frequency === 'monthly')!
     expect(templatesDue(new Map([[monthly.id, daysAgo(10)]]), NOW).map((t) => t.id)).not.toContain(monthly.id)
     expect(templatesDue(new Map([[monthly.id, daysAgo(31)]]), NOW).map((t) => t.id)).toContain(monthly.id)
+  })
+})
+
+describe('the empty-report gate', () => {
+  /*
+   * The league that produced the smallest artifact on production: activity exists (so this is not
+   * the "never imported" case), but there are no transaction weeks and only one activity type, so
+   * the transaction summary carries a header, provenance, and one line.
+   */
+  const QUIET = { ...SNAPSHOT, transactionsByWeek: [], activityMix: [] }
+
+  it('counts only rows that say something about the league', () => {
+    const t = findTemplate('transaction-summary')!
+    const empty = t.build(QUIET as never, WINDOW as never)
+    expect(countSubstantiveRows(empty)).toBe(0)
+    // The file is not blank — it still carries its header and provenance, which is why byte size
+    // cannot be the measure.
+    expect(empty.length).toBeGreaterThan(100)
+
+    const full = t.build(SNAPSHOT as never, WINDOW as never)
+    expect(countSubstantiveRows(full)).toBeGreaterThan(0)
+  })
+
+  it('🛑 A SCHEDULED RUN STORES NOTHING when the report would have no findings', async () => {
+    mocks.readWarehouseAnalytics.mockResolvedValue(QUIET)
+
+    const result = await generateReport('lg-1', 'transaction-summary', 'Scheduled', NOW, true)
+
+    expect(result.status).toBe('empty')
+    expect(result.id).toBe('')
+    expect(mocks.create).not.toHaveBeenCalled()
+  })
+
+  it('⚠ BUT AN ON-DEMAND RUN STILL PRODUCES IT — the person asked a direct question', async () => {
+    mocks.readWarehouseAnalytics.mockResolvedValue(QUIET)
+
+    // skipWhenEmpty defaults to false, which is the on-demand path.
+    const result = await generateReport('lg-1', 'transaction-summary', 'You', NOW)
+
+    expect(result.status).toBe('ready')
+    expect(mocks.create).toHaveBeenCalledTimes(1)
+    expect(mocks.create.mock.calls[0][0].data.status).toBe('ready')
+  })
+
+  it('never suppresses a report that HAS findings, even on the scheduled path', async () => {
+    mocks.readWarehouseAnalytics.mockResolvedValue(SNAPSHOT)
+
+    const result = await generateReport('lg-1', 'transaction-summary', 'Scheduled', NOW, true)
+
+    expect(result.status).toBe('ready')
+    expect(result.substantiveRows).toBeGreaterThan(0)
+    expect(mocks.create).toHaveBeenCalledTimes(1)
   })
 })

@@ -69,13 +69,27 @@ export async function generateScheduledReportsForLeague(input: {
             const due = templatesDue(lastRuns, scheduledFor)
 
             const produced: string[] = []
+            const empty: string[] = []
             const failed: string[] = []
             for (const template of due) {
-              const r = await generateReport(input.leagueId, template.id, 'Scheduled', scheduledFor)
+              /*
+               * ⚠ `skipWhenEmpty` IS TRUE ONLY HERE, on the scheduled path. Measured on production
+               * 2026-09-08: 3 of 119 weekly digests carried nothing behind their provenance block.
+               * Storing those every week fills a commissioner's history with files marked `ready`
+               * that say nothing — and `ready` is a promise that there is something to open.
+               *
+               * ⚠ It is NOT aimed at small reports. 0 of 119 transaction summaries were empty; the
+               * small ones are true statements about quiet leagues. See `countSubstantiveRows`.
+               *
+               * A person clicking Generate still gets the thin file: they asked a direct question,
+               * and "there is nothing to report" is an honest answer they should be able to see.
+               */
+              const r = await generateReport(input.leagueId, template.id, 'Scheduled', scheduledFor, true)
               if (r.status === 'ready') produced.push(`${template.id} (${r.sizeBytes}B)`)
+              else if (r.status === 'empty') empty.push(template.id)
               else failed.push(`${template.id}: ${r.failureReason ?? 'unknown'}`)
             }
-            return { due: due.length, produced, failed }
+            return { due: due.length, produced, empty, failed }
           },
         )
 
@@ -87,7 +101,7 @@ export async function generateScheduledReportsForLeague(input: {
           }
         }
 
-        const { due, produced, failed } = locked.value
+        const { due, produced, empty, failed } = locked.value
 
         /*
          * Nothing due is the COMMON outcome and a completely healthy one — a weekly digest is due
@@ -103,11 +117,17 @@ export async function generateScheduledReportsForLeague(input: {
          */
         return {
           status: 'completed',
+          /*
+           * `empty` is reported separately from `produced` and from `due`, because the three are
+           * different facts: what was owed, what was written, and what was checked and found to
+           * have nothing to say. Collapsing the last into either of the others is what would make
+           * "this league generates no reports" indistinguishable from "this league is not covered".
+           */
           message:
             due === 0
               ? 'Nothing due'
-              : `${produced.length} generated${failed.length ? `, ${failed.length} failed` : ''}`,
-          metadata: { due, produced, failed },
+              : `${produced.length} generated${empty.length ? `, ${empty.length} empty (not stored)` : ''}${failed.length ? `, ${failed.length} failed` : ''}`,
+          metadata: { due, produced, empty, failed },
         }
       } catch (error) {
         throw new RetryableAutomationError(
