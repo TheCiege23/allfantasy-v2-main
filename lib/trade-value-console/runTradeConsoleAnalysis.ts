@@ -3,6 +3,7 @@
 import type { SportsPlayerRecord } from '@prisma/client'
 import { openaiChatJson, parseJsonContentFromChatCompletion } from '@/lib/openai-client'
 import { getPlayer, searchPlayers } from '@/lib/data/players'
+import { resolvePlayer } from '@/lib/shared-services/player-identity/PlayerIdentityResolver'
 import { findPlayerByName, type FantasyCalcPlayer } from '@/lib/fantasycalc'
 import { getFantasyCalcValuesDbFirst } from '@/lib/fantasycalc-db'
 import {
@@ -115,10 +116,55 @@ function priceFaabAsset(amount: number, budget: number): PricedAsset {
   }
 }
 
+/**
+ * The SLEEPER provider id for a player, or null — the key the trade enrichment tables use.
+ *
+ * 🛑 WHY THIS EXISTS AT ALL. `analyze/route.ts` builds `enrichIds` from the console's player id and
+ * hands them to `resolveTradeEnrichment`; with no usable key the canonical engine is fed the
+ * console's own numbers and `independentInputs` is false. Measured on production 2026-09-08: all
+ * nine trade parity rows ever recorded sit in the `console` bucket and ZERO in
+ * `console_independent` — the two-engine comparison the shadow exists to run has never happened.
+ *
+ * The cause was NOT a missing lookup, which is what it looked like. `SportsPlayerRecord.id` (what
+ * the console carries), `SportsPlayer.id` and `canonicalPlayerId` were each tested against
+ * `resolveTradeEnrichment` and none of them resolve anything; `providerIds.sleeper` returns
+ * `adp 2.8` for the same player, and `PlayerValueSnapshot.sleeperId` matches it. The console simply
+ * carries a different id space from the one the enrichment port reads.
+ *
+ * ⚠ AMBIGUOUS IS REFUSED, NOT GUESSED. This repo carries 178 NFL duplicate-name groups it must not
+ * merge, and `consoleShadowCompare` already declines `name_match_ambiguous` for exactly this reason
+ * — a wrong id here would price one player's trade with another's market value and never surface as
+ * an error. `searchPlayers(name)[0]`, which the non-NFL branch uses for its own purposes, is
+ * first-hit-wins and is deliberately NOT reused here.
+ *
+ * ⚠ NEVER THROWS. A resolver failure returns null and the caller behaves exactly as it did before
+ * this function existed.
+ */
+async function resolveEnrichmentPlayerId(
+  nameHint: string,
+  sport: string,
+  positionHint?: string | null,
+): Promise<string | null> {
+  if (!nameHint.trim()) return null
+  try {
+    const res = await resolvePlayer({
+      provider: 'sleeper',
+      nameHint,
+      positionHint: positionHint ?? null,
+      sport,
+    })
+    if (res.confidence !== 'direct' && res.confidence !== 'name_match_confident') return null
+    return res.player?.providerIds?.sleeper ?? null
+  } catch {
+    return null
+  }
+}
+
 function lineFromPriced(pa: PricedAsset, meta: Partial<TradeConsolePlayerLine>): TradeConsolePlayerLine {
   return {
     name: pa.name,
     playerId: meta.playerId ?? null,
+    enrichmentPlayerId: meta.enrichmentPlayerId ?? null,
     sport: meta.sport ?? 'NFL',
     position: pa.position ?? meta.position ?? '—',
     team: meta.team ?? '—',
@@ -212,6 +258,11 @@ async function resolveAssets(
       lines.push(
         lineFromPriced(pa, {
           playerId: row?.id ?? raw.playerId ?? null,
+          enrichmentPlayerId: await resolveEnrichmentPlayerId(
+            displayName,
+            'NFL',
+            pa.position ?? row?.position ?? null,
+          ),
           sport: 'NFL',
           team: row?.team ?? matched?.player.maybeTeam ?? '—',
           headshotUrl: headshot,
@@ -250,6 +301,10 @@ async function resolveAssets(
     lines.push(
       lineFromPriced(pa, {
         playerId: row.id,
+        // Same seam for every other sport: `row.id` is the slug id, which the enrichment port
+        // cannot read either. Resolving from the resolved row's own name keeps the two branches
+        // honest about the same distinction.
+        enrichmentPlayerId: await resolveEnrichmentPlayerId(row.name, row.sport, row.position),
         sport: row.sport,
         team: row.team,
         headshotUrl: row.headshotUrl ?? row.headshotUrlLg ?? row.headshotUrlSm,
