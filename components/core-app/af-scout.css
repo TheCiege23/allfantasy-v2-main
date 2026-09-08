@@ -1,0 +1,307 @@
+/*
+ * Scout — the first room of the War Room.
+ *
+ * ⚠ EVERY RULE IS SCOPED UNDER `.af-core`, like the rest of this suite. The
+ * shell supplies the token set (--surface, --line, --faint, --accent…) and an
+ * unscoped rule here would leak into /admin and the marketing pages, which do
+ * not carry those variables and would render this with browser defaults.
+ *
+ * ⚠ AND THERE IS EXACTLY ONE `@media` BLOCK, AT THE BOTTOM, ON PURPOSE. CLAUDE.md
+ * records a live bug where a narrow query was inserted mid-file inside a wider
+ * one: brace balance stayed 0, nothing threw, no lint could see it, and four
+ * rules silently moved into the narrower band. Keeping the file's only query
+ * last means an appended rule cannot land inside one by accident.
+ */
+
+.af-core .af-sc {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+/* ── Header ──────────────────────────────────────────────────────────── */
+
+.af-core .af-sc-head {
+  padding: 18px 20px;
+}
+
+.af-core .af-sc-title {
+  font-size: 22px;
+  margin: 0 0 6px;
+}
+
+.af-core .af-sc-blurb {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--muted);
+  max-width: 62ch;
+}
+
+/* ── Coverage line ───────────────────────────────────────────────────── */
+
+/*
+ * Deliberately loud when partial and quiet when complete. It sits above the
+ * cards because it changes how they should be read.
+ */
+.af-core .af-sc-coverage {
+  margin: 0;
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: 1px solid var(--warn, var(--line));
+  background: color-mix(in srgb, var(--warn, var(--line)) 10%, transparent);
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text2);
+}
+
+.af-core .af-sc-coverage[data-complete] {
+  border-color: var(--line);
+  background: var(--chip, transparent);
+  color: var(--muted);
+}
+
+/* ── Manager list ────────────────────────────────────────────────────── */
+
+.af-core .af-sc-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 12px;
+}
+
+.af-core .af-sc-card {
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  height: 100%;
+}
+
+/* The manager you play this week is the reason to be on this screen. */
+.af-core .af-sc-card[data-opponent] {
+  border-color: var(--bad);
+  box-shadow: 0 0 0 1px var(--bad) inset;
+}
+
+.af-core .af-sc-card[data-you] {
+  opacity: 0.82;
+}
+
+.af-core .af-sc-card-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.af-core .af-sc-face {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex: 0 0 auto;
+  border: 1px solid var(--line);
+}
+
+.af-core .af-sc-face--none {
+  display: grid;
+  place-items: center;
+  background: var(--chip);
+  color: var(--faint);
+  font-weight: 800;
+  font-size: 14px;
+}
+
+.af-core .af-sc-who {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.af-core .af-sc-team {
+  font-weight: 700;
+  font-size: 14px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.af-core .af-sc-owner {
+  font-size: 11.5px;
+  color: var(--faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.af-core .af-sc-tag {
+  flex: 0 0 auto;
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  padding: 4px 7px;
+  border-radius: 6px;
+  border: 1px solid var(--line);
+  color: var(--faint);
+}
+
+.af-core .af-sc-tag[data-sev='bad'] {
+  border-color: var(--bad);
+  color: var(--bad);
+}
+
+/* ── Labels ──────────────────────────────────────────────────────────── */
+
+.af-core .af-sc-labels {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.af-core .af-sc-label {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 8px;
+}
+
+/* ── Meters ──────────────────────────────────────────────────────────── */
+
+.af-core .af-sc-meters {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.af-core .af-sc-meter {
+  display: grid;
+  grid-template-columns: 76px 1fr 30px;
+  grid-template-areas: 'label track value' 'hint hint hint';
+  align-items: center;
+  gap: 2px 8px;
+}
+
+.af-core .af-sc-meter-label {
+  grid-area: label;
+}
+
+.af-core .af-sc-meter-track {
+  grid-area: track;
+  height: 5px;
+  border-radius: 3px;
+  background: var(--chip);
+  overflow: hidden;
+}
+
+.af-core .af-sc-meter-fill {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+  background: var(--accent);
+}
+
+.af-core .af-sc-meter-value {
+  grid-area: value;
+  font-size: 11px;
+  text-align: right;
+  color: var(--text2);
+}
+
+/*
+ * The hint only earns a line when the reading is unmeasured — otherwise it is
+ * noise on every row of every card.
+ */
+.af-core .af-sc-meter-hint {
+  grid-area: hint;
+  font-size: 10.5px;
+  color: var(--faint);
+  display: none;
+}
+
+.af-core .af-sc-meter[data-unmeasured='true'] .af-sc-meter-hint {
+  display: block;
+}
+
+.af-core .af-sc-meter[data-unmeasured='true'] .af-sc-meter-value {
+  color: var(--faint);
+}
+
+/* ── Trajectory, evidence, refusals ──────────────────────────────────── */
+
+.af-core .af-sc-traj {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--muted);
+  padding-left: 9px;
+  border-left: 2px solid var(--line);
+}
+
+.af-core .af-sc-traj[data-has='true'] {
+  border-left-color: var(--accent);
+  color: var(--text2);
+}
+
+.af-core .af-sc-evidence {
+  margin: 0;
+  font-size: 10.5px;
+  color: var(--faint);
+}
+
+.af-core .af-sc-none,
+.af-core .af-sc-unavailable {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--faint);
+}
+
+.af-core .af-sc-section {
+  padding: 16px 18px;
+}
+
+/* ── Locked ──────────────────────────────────────────────────────────── */
+
+/*
+ * A locked card reads as withheld, not as empty. The dashed edge is the tell —
+ * a card with no border at all looks like a card whose data failed to load.
+ */
+.af-core .af-sc-locked {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 1px dashed var(--line);
+  border-radius: 10px;
+  background: var(--chip, transparent);
+}
+
+.af-core .af-sc-locked-reason {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text2);
+}
+
+/* ── Narrow ──────────────────────────────────────────────────────────── */
+/* The file's ONLY media query, kept last — see the header note. */
+
+@media (max-width: 560px) {
+  .af-core .af-sc-list {
+    grid-template-columns: 1fr;
+  }
+
+  .af-core .af-sc-title {
+    font-size: 18px;
+  }
+
+  .af-core .af-sc-meter {
+    grid-template-columns: 64px 1fr 26px;
+  }
+}

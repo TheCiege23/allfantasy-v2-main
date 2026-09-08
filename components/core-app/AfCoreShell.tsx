@@ -196,7 +196,13 @@ export type AfCoreShellProps = {
   weekLabel?: string | null
   commissionerCount?: number
   rankingsLevel?: number | null
-  warRoomLive?: boolean
+  /**
+   * Is any of your drafts running right now? Drives Draft HQ's LIVE badge.
+   *
+   * ⚠ NOT CURRENTLY PASSED BY ANY CALLER — see the badge's own note. It was
+   * `warRoomLive` until 2026-09-08 and was never wired then either.
+   */
+  draftLive?: boolean
   /** Keeps league-scoped nav links pointed at the league in context. */
   selectedLeagueId?: string | null
   /**
@@ -308,7 +314,7 @@ const NAV_GROUPS: Array<{ label: string | null; keys: CoreNavKey[] }> = [
   { label: null, keys: ['home'] },
   {
     label: 'This league',
-    keys: ['my-team', 'matchup', 'trades', 'waivers', 'devy-league', 'draft-hq', 'war-room'],
+    keys: ['my-team', 'matchup', 'war-room', 'trades', 'waivers', 'devy-league', 'draft-hq'],
   },
   {
     label: 'Across leagues',
@@ -466,7 +472,6 @@ function navItems(props: AfCoreShellProps): NavItem[] {
       href: props.selectedLeagueId
         ? `/core/war-room?league=${encodeURIComponent(props.selectedLeagueId)}`
         : '/core/war-room',
-      badge: props.warRoomLive ? { text: 'LIVE', tone: 'live' } : undefined,
     },
     {
       key: 'draft-hq',
@@ -475,7 +480,20 @@ function navItems(props: AfCoreShellProps): NavItem[] {
       href: props.selectedLeagueId
         ? `/core/draft-hq?league=${encodeURIComponent(props.selectedLeagueId)}`
         : '/core/draft-hq',
+      /*
+       * The LIVE badge moved here with the draft board on 2026-09-08 — a running
+       * draft is a Draft HQ fact now, and the War Room is the season-long
+       * scouting hub with nothing live about it.
+       *
+       * ⚠ AND IT IS STILL NOT PASSED BY ANY CALLER, AS IT WAS NOT ON THE WAR
+       * ROOM. Stated rather than left to be discovered: this badge has never
+       * rendered. Wiring it needs a cross-league "is any draft live" signal on
+       * the shell, which is chrome on every /core page and therefore a budgeted
+       * read — see the note on `getRailMatchups`.
+       */
+      badge: props.draftLive ? { text: 'LIVE', tone: 'live' } : undefined,
     },
+
     {
       key: 'devy',
       label: 'Devy',
@@ -653,7 +671,7 @@ const NAV_SECTIONS: Array<{ id: string; heading: string | null; keys: CoreNavKey
   {
     id: 'league',
     heading: 'This league',
-    keys: ['my-team', 'defense-hub', 'matchup', 'waivers', 'trades', 'players', 'draft-hq', 'war-room'],
+    keys: ['my-team', 'defense-hub', 'matchup', 'war-room', 'waivers', 'trades', 'players', 'draft-hq'],
   },
   { id: 'now', heading: 'This week', keys: ['week', 'live', 'standings', 'season-outlook'] },
   { id: 'history', heading: 'Your record', keys: ['career', 'rankings', 'portfolio'] },

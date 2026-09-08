@@ -3,12 +3,22 @@
 import { useEffect, useState } from 'react'
 import '@/components/core-app/af-war-room.css'
 import DraftMusicWidget from '@/components/core-app/draft-music/DraftMusicWidget'
-import type { BoardCell, BoardColumn, WarRoomData } from '@/lib/core-app/warRoom'
+import type { BoardCell, BoardColumn, DraftBoardData } from '@/lib/core-app/draftBoard'
 
 /**
- * Screen 9 — War Room · live draft.
+ * The per-league draft board, clock and queue.
  *
  * "On the clock: board, queue, recommendations and the pick-trade panel."
+ *
+ * ── 2026-09-08: THIS WAS SCREEN 9, THE WAR ROOM ─────────────────────────────
+ *
+ * It now renders INSIDE Draft HQ, above the board settings, because the War Room
+ * has become the season-long Decision OS hub and a draft belongs to Draft HQ in
+ * every phase. Nothing about the board changed in the move.
+ *
+ * ⚠ SO IT NO LONGER OWNS AN `h1`. Draft HQ's own title is the page heading;
+ * a second one here gave the screen two competing headings and read to a screen
+ * reader as two documents. The status bar is a labelled section instead.
  *
  * The board is real, drawn from stored picks. The clock only appears when the
  * session actually stores one — a completed draft is not "on the clock", and a
@@ -16,8 +26,8 @@ import type { BoardCell, BoardColumn, WarRoomData } from '@/lib/core-app/warRoom
  * fiction on the screen.
  */
 
-export type WarRoomProps = {
-  data: WarRoomData
+export type DraftBoardProps = {
+  data: DraftBoardData
 }
 
 function Unavailable({ reason }: { reason: string }) {
@@ -109,13 +119,13 @@ function Board({ columns, cells }: { columns: BoardColumn[]; cells: BoardCell[] 
   )
 }
 
-export function WarRoom({ data }: WarRoomProps) {
+export function DraftBoard({ data }: DraftBoardProps) {
   return (
     <div className="af-wr">
       {/* ── Status bar ──────────────────────────────────────────────── */}
       <header className="af-frame af-wr-status">
         <div className="af-wr-status-text">
-          <h1 className="af-display af-wr-title">War Room · {data.league.name}</h1>
+          <h2 className="af-display af-wr-title">Draft board · {data.league.name}</h2>
           {data.session.available ? (
             <p className="af-wr-progress">
               {data.session.data.draftType} · {data.session.data.rounds} rounds ·{' '}
@@ -160,7 +170,7 @@ export function WarRoom({ data }: WarRoomProps) {
       {/* ── Board ───────────────────────────────────────────────────── */}
       <section className="af-frame af-wr-section">
         <header className="af-wr-section-head">
-          <h2 className="af-label">Draft board</h2>
+          <h3 className="af-label">The board</h3>
           <span className="af-wr-legend">
             <span className="af-wr-legend-swatch" data-kind="yours" /> your picks
           </span>
@@ -176,7 +186,7 @@ export function WarRoom({ data }: WarRoomProps) {
       {/* ── Recommendations / queue / advice ────────────────────────── */}
       <div className="af-wr-pair">
         <section className="af-card af-wr-section">
-          <h2 className="af-label">Best available for you</h2>
+          <h3 className="af-label">Best available for you</h3>
           {/*
             The handoff ranks undrafted players with a fit score. Nothing stores a
             recommendation output, and a confidence number attached to a name is
@@ -187,7 +197,7 @@ export function WarRoom({ data }: WarRoomProps) {
         </section>
 
         <section className="af-card af-wr-section">
-          <h2 className="af-label">Your queue</h2>
+          <h3 className="af-label">Your queue</h3>
           <Unavailable reason={data.queue.reason} />
           <p className="af-wr-note">
             The queue that drives autopick lives on{' '}
@@ -200,4 +210,4 @@ export function WarRoom({ data }: WarRoomProps) {
   )
 }
 
-export default WarRoom
+export default DraftBoard

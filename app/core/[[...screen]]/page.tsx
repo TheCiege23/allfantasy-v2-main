@@ -65,11 +65,12 @@ import { getWaiversBoard } from '@/lib/core-app/waiversBoard'
 import WaiversBoard from '@/components/core-app/boards/WaiversBoard'
 import DraftHq from '@/components/core-app/screens/DraftHq'
 import DraftHqBoard from '@/components/core-app/boards/DraftHqBoard'
-import WarRoomBoard from '@/components/core-app/boards/WarRoomBoard'
 import { getLiveDraftPicks } from '@/lib/core-app/warRoomBoard'
 import { getDraftHqData } from '@/lib/core-app/draftHq'
-import WarRoom from '@/components/core-app/screens/WarRoom'
-import { getWarRoomData } from '@/lib/core-app/warRoom'
+import DraftBoard from '@/components/core-app/screens/DraftBoard'
+import { getDraftBoardData } from '@/lib/core-app/draftBoard'
+import Scout from '@/components/core-app/screens/Scout'
+import { getScoutData } from '@/lib/core-app/scout'
 import LandingV4 from '@/components/core-app/screens/LandingV4'
 import DashboardV2 from '@/components/core-app/screens/DashboardV2'
 import Partners from '@/components/core-app/screens/Partners'
@@ -250,7 +251,10 @@ const TAB_META: Record<string, { title: string; description: string }> = {
   matchup: { title: 'Matchup', description: 'This week head to head, scored against your league rules.' },
   trades: { title: 'Trades', description: 'Trade offers and grades, priced against one league.' },
   waivers: { title: 'Waivers', description: 'Targets, bids and claim order for this league.' },
-  'war-room': { title: 'War Room', description: 'The live draft board, clock and queue.' },
+  'war-room': {
+    title: 'War Room',
+    description: 'Scout the room — how every manager in this league actually plays.',
+  },
   'draft-hq': { title: 'Draft HQ', description: 'Draft order, pick slots and board settings.' },
   'defense-hub': {
     title: 'Defense Hub',
@@ -968,9 +972,19 @@ export default async function AfCorePage({
       ? await getDraftHqData(selectedLeagueId, userId).catch(() => null)
       : null
 
-  const warRoom =
+  /*
+   * The per-league draft grid and clock, which Draft HQ now renders above its own
+   * board settings — see `draftBoard.ts` for why it moved off the War Room.
+   */
+  const draftBoard =
+    activeKey === 'draft-hq' && selectedLeagueId
+      ? await getDraftBoardData(selectedLeagueId, userId).catch(() => null)
+      : null
+
+  /* The War Room's first room: every manager in the league, profiled. */
+  const scout =
     activeKey === 'war-room' && selectedLeagueId
-      ? await getWarRoomData(selectedLeagueId, userId).catch(() => null)
+      ? await getScoutData(selectedLeagueId, userId).catch(() => null)
       : null
 
   /*
@@ -1501,14 +1515,15 @@ export default async function AfCorePage({
    * loader failure is null, and null renders NOTHING — see DashDraftsBand.
    */
   /*
-   * ⚠ SHARED BY THREE SURFACES, ONE READ. The 3a home rail, the cross-league
-   * Draft HQ board and the cross-league War Room all want the same three
-   * set-based queries. `isHome3a` is false when segment === 'dashboard-v2', so
-   * the v2 dispatch further down still never pays for this twice.
+   * ⚠ SHARED BY TWO SURFACES, ONE READ. The 3a home rail and the cross-league
+   * Draft HQ board want the same three set-based queries. `isHome3a` is false
+   * when segment === 'dashboard-v2', so the v2 dispatch further down still never
+   * pays for this twice.
+   *
+   * The cross-league War Room used to be a third consumer. It is now the Scout
+   * hub and reads no drafts at all.
    */
-  const wantsAllDrafts =
-    isHome3a ||
-    ((activeKey === 'draft-hq' || activeKey === 'war-room') && !selectedLeagueId)
+  const wantsAllDrafts = isHome3a || (activeKey === 'draft-hq' && !selectedLeagueId)
 
   const homeDrafts = wantsAllDrafts
     ? await getDraftHqAll(
@@ -1541,19 +1556,24 @@ export default async function AfCorePage({
   ).catch(() => null)
 
   /*
-   * The tail of each LIVE draft's board, for the cross-league War Room.
+   * The tail of each LIVE draft's board, for the cross-league Draft HQ.
    *
    * ⚠ SCOPED TO THE LIVE LEAGUES ONLY, AND ONLY ON THAT SCREEN. Reading the pick
    * tail for sixty finished drafts to render two running ones is the fan-out
    * `draftHqAll.ts` exists to avoid; with nothing live this does not query at all.
+   *
+   * ⚠ AND `undefined` WHEN IT DID NOT RUN, NOT AN EMPTY OBJECT. `DraftHqBoard`
+   * treats an absent `picks` as "not loaded" and skips the live block entirely;
+   * an empty object would be indistinguishable from a live draft whose board we
+   * read and found empty, which is a different and wrong claim.
    */
-  const warRoomPicks =
-    activeKey === 'war-room' && !selectedLeagueId && homeDrafts
+  const liveDraftPicks =
+    activeKey === 'draft-hq' && !selectedLeagueId && homeDrafts
       ? await getLiveDraftPicks(
           userId,
           homeDrafts.rows.filter((r) => r.phase === 'live').map((r) => r.leagueId),
-        ).catch(() => ({ byLeague: {}, queueByLeague: {} }))
-      : { byLeague: {}, queueByLeague: {} }
+        ).catch(() => undefined)
+      : undefined
 
   /*
    * The activation funnel signal, carried over from /dashboard when that route
@@ -1639,7 +1659,7 @@ export default async function AfCorePage({
   if (segment === 'dashboard-v2') {
     /*
      * Both of these are CROSS-LEAGUE, which is why they can feed this screen.
-     * getDraftHqData and getWarRoomData take a leagueId — they are per-league
+     * getDraftHqData and getScoutData take a leagueId — they are per-league
      * and cannot back a cross-league module. Wiring one of them to a single
      * arbitrary league would put one league's draft under a header that says
      * "all leagues", so those sections stay placeholders until an aggregator
@@ -2122,7 +2142,15 @@ export default async function AfCorePage({
         )
       ) : activeKey === 'draft-hq' ? (
         draftHq ? (
-          <DraftHq data={draftHq} />
+          <>
+            {/*
+              The live board and clock first — it is the only thing on this
+              screen with a deadline measured in seconds. Settings, pick
+              inventory and grades read after it.
+            */}
+            {draftBoard ? <DraftBoard data={draftBoard} /> : null}
+            <DraftHq data={draftHq} />
+          </>
         ) : showAllLeagues || !homeDrafts ? (
           <PickALeague
             tabKey="draft-hq"
@@ -2136,25 +2164,19 @@ export default async function AfCorePage({
             data={homeDrafts}
             allHref="/core/draft-hq?all=1"
             totalLeagues={playedLeagues.length}
+            picks={liveDraftPicks}
           />
         )
       ) : activeKey === 'war-room' ? (
-        warRoom ? (
-          <WarRoom data={warRoom} />
-        ) : showAllLeagues || !homeDrafts ? (
+        scout ? (
+          <Scout data={scout} />
+        ) : (
           <PickALeague
             tabKey="war-room"
             title="War Room"
-            blurb="The board, the clock and the queue all belong to one league's draft."
+            blurb="Scouting a room means scouting one room — pick the league whose managers you want read."
             issues={issues}
             leagues={rail}
-          />
-        ) : (
-          <WarRoomBoard
-            drafts={homeDrafts}
-            picks={warRoomPicks}
-            allHref="/core/war-room?all=1"
-            draftHqHref="/core/draft-hq"
           />
         )
       ) : activeKey === 'players' ? (

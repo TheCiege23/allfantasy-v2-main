@@ -4,8 +4,17 @@ import { prisma } from '@/lib/prisma'
 import { leagueDisplayName, type SectionState, type UnavailableSection } from './leagueHome'
 
 /**
- * War Room — "on the clock: board, queue, recommendations and the pick-trade
- * panel".
+ * The per-league draft board — "on the clock: board, queue, recommendations and
+ * the pick-trade panel".
+ *
+ * ── 2026-09-08: THIS WAS `warRoom.ts`, AND THE RENAME IS THE POINT ───────────
+ *
+ * The War Room is now the season-long Decision OS hub, so a draft grid is a
+ * Draft HQ concern in every phase a draft can be in. Nothing about the
+ * derivation below changed in the move — only the name and the screen that
+ * renders it. The `af-wr-` CSS prefix in `af-war-room.css` is left alone
+ * deliberately: renaming forty class names carries real risk and buys a reader
+ * nothing the file header does not already say.
  *
  * The board is the real thing here. DraftPick holds every pick made, with its
  * overall number, round, roster and player, so the grid the handoff draws —
@@ -41,7 +50,7 @@ export type BoardColumn = {
   isYours: boolean
 }
 
-export type WarRoomData = {
+export type DraftBoardData = {
   league: { id: string; name: string; platform: string }
   session: SectionState<{
     status: string
@@ -60,7 +69,7 @@ export type WarRoomData = {
   advice: UnavailableSection
 }
 
-export async function getWarRoomData(leagueId: string, userId: string): Promise<WarRoomData | null> {
+export async function getDraftBoardData(leagueId: string, userId: string): Promise<DraftBoardData | null> {
   const league = await prisma.league.findUnique({
     where: { id: leagueId },
     select: { id: true, name: true, platform: true },
@@ -129,7 +138,7 @@ export async function getWarRoomData(leagueId: string, userId: string): Promise<
   const currentRound =
     nextOverall != null ? Math.ceil(nextOverall / session.teamCount) : null
 
-  const sessionState: WarRoomData['session'] = {
+  const sessionState: DraftBoardData['session'] = {
     available: true,
     data: {
       status: session.status,
@@ -155,7 +164,7 @@ export async function getWarRoomData(leagueId: string, userId: string): Promise<
     return order.find((o) => o.slot === slot)?.rosterId ?? null
   })()
 
-  const clock: WarRoomData['clock'] = !isRunning
+  const clock: DraftBoardData['clock'] = !isRunning
     ? {
         available: false,
         reason:
@@ -197,7 +206,7 @@ export async function getWarRoomData(leagueId: string, userId: string): Promise<
     }
   })
 
-  const board: WarRoomData['board'] =
+  const board: DraftBoardData['board'] =
     columns.length === 0
       ? { available: false, reason: 'this draft has no order set, so the board cannot be laid out' }
       : picks.length === 0
