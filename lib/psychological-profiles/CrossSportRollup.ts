@@ -74,12 +74,34 @@ export async function rollUpManagerAcrossSports(input: { userId: string }): Prom
   const sportsSeen = new Set<string>()
   let withoutProfile = 0
 
+  /*
+   * Batched for the same reason, and by the same shape, as `CrossLeagueRollup` — see its header
+   * for the measurement. These two roll-ups run CONCURRENTLY with each other inside
+   * `loadPsychologyConsistencySlice`, so leaving one serial would have capped the win at whatever
+   * the slower chain cost: fixing either alone is close to fixing neither.
+   *
+   * ⚠ ONLY LEAGUES THAT PASS THE `managerId` GUARD ARE FETCHED. Pre-fetching every league in
+   * `leagues` would issue reads the serial version never made — a "faster" version that does more
+   * work than the one it replaces. `sportsSeen` is still populated in the original loop below, so
+   * the guard's two effects stay where they were.
+   */
+  const PROFILE_FETCH_CONCURRENCY = 12
+  const fetchTargets = leagues.filter((l) => managerIdByLeague.get(l.id))
+  const profilesByLeague = new Map<string, Awaited<ReturnType<typeof listProfilesByLeague>>>()
+  for (let i = 0; i < fetchTargets.length; i += PROFILE_FETCH_CONCURRENCY) {
+    const batch = fetchTargets.slice(i, i + PROFILE_FETCH_CONCURRENCY)
+    const fetched = await Promise.all(
+      batch.map((l) => listProfilesByLeague(l.id, { limit: 64 }).catch(() => [])),
+    )
+    batch.forEach((l, j) => profilesByLeague.set(l.id, fetched[j]))
+  }
+
   for (const league of leagues) {
     const managerId = managerIdByLeague.get(league.id)
     if (!managerId) continue
     sportsSeen.add(league.sport)
 
-    const profiles = await listProfilesByLeague(league.id, { limit: 64 }).catch(() => [])
+    const profiles = profilesByLeague.get(league.id) ?? []
     const profile = profiles.find((p) => p.managerId === managerId)
     if (!profile || !profile.evidenceSummary?.anySufficient) {
       withoutProfile += 1
