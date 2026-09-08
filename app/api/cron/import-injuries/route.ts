@@ -25,6 +25,7 @@ import { createRunBudget, rotateForFairness } from "@/lib/cron/runBudget"
 import { syncRollingInsightsInjuriesToDb } from "@/lib/injuries/rollingInsightsInjuries"
 import { espnHasInjuryFeed, syncEspnInjuriesToDb } from "@/lib/injuries/espnInjuries"
 import { riSupports } from "@/lib/sports-data/rollingInsightsSupport"
+import { recordInjurySyncDeferred, recordInjurySyncRun } from "@/lib/injuries/injurySyncState"
 import { SUPPORTED_SPORTS } from "@/lib/sport-scope"
 
 /**
@@ -197,6 +198,20 @@ async function runOneSport(url: URL, sport: Sport) {
           .filter(Boolean)
           .join("+")
 
+    /*
+     * ⚠ RECORDED BEFORE RETURNING, AND AWAITED. The HTTP response already
+     * carried all of this and nothing kept it, which is why "did NFL refresh?"
+     * was unanswerable. `recordInjurySyncRun` fails soft, so awaiting it cannot
+     * turn a good import into a 500.
+     */
+    await recordInjurySyncRun({
+      sport,
+      written: result.written + espn.written,
+      fetched: result.fetched + espn.fetched,
+      failed,
+      error: [...result.errors, ...espn.errors][0] ?? null,
+    })
+
     return {
       body: {
         ok: !failed,
@@ -232,6 +247,7 @@ async function runOneSport(url: URL, sport: Sport) {
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
     console.error(`[cron/import-injuries] ${sport} failed:`, message)
+    await recordInjurySyncRun({ sport, written: 0, fetched: 0, failed: true, error: message })
     return {
       body: { ok: false, sport, error: message.slice(0, 240), durationMs: Date.now() - startedAt },
       failed: true,
@@ -265,6 +281,14 @@ async function handle(req: NextRequest) {
   for (const sport of resolveSports(explicit)) {
     if (!explicit && budget.exhausted()) {
       deferred.push(sport)
+      /*
+       * 🛑 THE DEFERRAL IS THE DATAPOINT THAT WAS MISSING. A sport starved by
+       * the budget looks identical, from the database, to one that ran and
+       * found nothing — and with a 24h rotation period a sport can be starved
+       * for a long time. Recording it is what makes "NFL has not refreshed in
+       * six hours" distinguishable from "no injuries changed in six hours".
+       */
+      await recordInjurySyncDeferred(sport)
       continue
     }
     results.push(await runOneSport(url, sport))
