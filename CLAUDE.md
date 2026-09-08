@@ -667,6 +667,39 @@ LAST command's**, so the thing being tested never decides the result. Use
      file, never in yours — so say which one you ran and hand the cross-file question
      to whoever runs the batch smoke.
 
+🛑 **AND THE LANDING LANE HAS ITS OWN, CREATED BY THIS REPO'S OWN CHERRY-PICK
+CONVENTION.** A lane that guards on
+`git merge-base --is-ancestor origin/main "$TIP"` — meaning "my tip sits on
+current main" — is satisfied when `TIP == MAIN`. That is precisely the state a
+**failed cherry-pick** leaves, because the abort drops the worktree back to the
+`origin/main` it was detached at. The guard then reads as current, skips the
+re-pick, pushes `main:main` ("already origin/main. Nothing to push."), compares
+`remote == tip` and prints **`RESULT=LANDED`** — the same line it prints on a real
+landing. Measured 2026-09-08; the conclusion happened to be true because an earlier
+lane had already pushed the commits, so nothing contradicted the wrong signal.
+
+⚠ **AND THE ASSERTION WRITTEN TO CATCH IT LIVED INSIDE THE BRANCH THAT GOT
+SKIPPED.** The lane already had `rev-list --count MAIN..TIP != N → refuse`, which is
+the right check — sitting inside the re-pick block, which is the thing the bad guard
+skipped. A guard and its assertion on the same code path protect nothing.
+
+**Assert CONTAINMENT, never descent, and assert it on every path:**
+
+```bash
+for c in $COMMITS; do
+  pid=$(git show "$c" --format='' --patch | git patch-id --stable | cut -d' ' -f1)
+  git log "$MAIN".."$TIP" --format=%H | while read m; do
+    git show "$m" --format='' --patch | git patch-id --stable | cut -d' ' -f1
+  done | grep -qx "$pid" || { echo "REFUSING: $c not in tip"; exit 1; }
+done
+```
+
+Patch-id, not sha — a pick renames every commit, which is why ancestry answers "no"
+about work sitting right there in the range. ⚠ And a pick that fails because the
+commit is **already upstream** exits non-zero with `The previous cherry-pick is now
+empty`, which a bare `||` cannot tell from a real conflict: treat "pick failed" as
+"re-verify what is on main", never as "retry".
+
 🛑 **THE RULE THAT CATCHES ALL THREE: MAKE EVERY CHECK REPRODUCE A KNOWN
 POSITIVE BEFORE YOU TRUST ITS NEGATIVE.** Inject the failure you are looking for
 and confirm the check reports it. A green check that has never once gone red is
