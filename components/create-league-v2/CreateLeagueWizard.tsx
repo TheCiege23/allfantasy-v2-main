@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { CreateLeagueVideoTile } from '@/components/create-league-v2/CreateLeagueVideoTile'
 import { useEntitlements } from '@/hooks/useEntitlements'
 import { useLanguage } from '@/components/i18n/LanguageProviderClient'
+import { canRunSeasonForSport } from '@/lib/sport-scope'
 import {
   SUPPORTED_SPORTS,
   getDefaultBestBallSetup,
@@ -293,11 +294,29 @@ export function SportStep({ state, onChange }: Pick<WizardProps, 'state' | 'onCh
         {SUPPORTED_SPORTS.map((sport) => {
           const selected = state.sport === sport
           const media = SPORT_MEDIA[sport]
+          /*
+           * ⚠ SAY WHAT WILL NOT WORK, AT THE MOMENT OF CHOOSING. Only NFL can
+           * run a season end to end — every other sport throws on weekly stat
+           * sync, so its matchups never finalize and the league sits at week 1
+           * forever with nothing red anywhere. Choosing the sport is the last
+           * point where that is cheap to know.
+           *
+           * ⚠ LABELLED, NOT BLOCKED, AND THAT IS A DELIBERATE CHOICE. The tile
+           * supports `disabled`, and using it would also remove draft-only and
+           * Decision-OS use of those sports, which work fine. The harm here is
+           * being MISLED, not being able to choose — so the fix is to stop
+           * misleading. Swap to `disabled` if the product decision changes.
+           */
+          const seasonCapable = canRunSeasonForSport(sport)
           return (
             <CreateLeagueVideoTile
               key={sport}
               title={t(`createLeague.sport.${sport.toLowerCase()}`)}
-              hint={t('createLeague.g30.sport.cardHint')}
+              hint={
+                seasonCapable
+                  ? t('createLeague.g30.sport.cardHint')
+                  : 'Draft and league tools only — weekly scoring is not wired for this sport yet'
+              }
               selected={selected}
               media={media}
               onSelect={() => onChange(nextStateForSport(state, sport))}
