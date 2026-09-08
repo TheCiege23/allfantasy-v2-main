@@ -1,0 +1,296 @@
+/*
+ * Game Plan — the War Room's second room.
+ *
+ * ⚠ SCOPED UNDER `.af-core` like the rest of the suite; the shell supplies the
+ * token set and an unscoped rule leaks into pages that do not carry it.
+ *
+ * ⚠ ONE `@media` BLOCK, LAST IN THE FILE, ON PURPOSE. CLAUDE.md records a live
+ * bug where a narrow query inserted mid-file closed the outer one early and
+ * silently moved four rules into a narrower band — brace balance stayed 0 and no
+ * lint could see it. Keeping the only query last means an appended rule cannot
+ * land inside one by accident.
+ */
+
+.af-core .af-gp {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+/* ── Header ──────────────────────────────────────────────────────────── */
+
+.af-core .af-gp-head {
+  padding: 18px 20px;
+}
+
+.af-core .af-gp-title {
+  font-size: 22px;
+  margin: 0 0 6px;
+}
+
+.af-core .af-gp-blurb {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--muted);
+  max-width: 64ch;
+}
+
+.af-core .af-gp-coverage {
+  margin: 0;
+  padding: 9px 13px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--chip, transparent);
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+/* ── Rows ────────────────────────────────────────────────────────────── */
+
+.af-core .af-gp-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.af-core .af-gp-row {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1.4fr) minmax(0, 1.1fr) auto;
+  grid-template-areas:
+    'face who state when'
+    '.    leagues leagues leagues'
+    '.    note note note';
+  align-items: center;
+  gap: 4px 12px;
+  padding: 11px 14px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+}
+
+/* Severity on the left edge, so a column of rows reads as a priority list. */
+.af-core .af-gp-row[data-tone='bad'] {
+  border-left-color: var(--bad);
+}
+
+.af-core .af-gp-row[data-tone='warn'] {
+  border-left-color: var(--warn);
+}
+
+/*
+ * A locked row is history, not a decision. Dimmed rather than removed: knowing
+ * you missed one is worth more than a tidy list.
+ */
+.af-core .af-gp-row[data-locked] {
+  opacity: 0.55;
+}
+
+.af-core .af-gp-face {
+  grid-area: face;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 1px solid var(--line);
+}
+
+.af-core .af-gp-face--none {
+  display: grid;
+  place-items: center;
+  background: var(--chip);
+  color: var(--faint);
+  font-weight: 800;
+  font-size: 13px;
+}
+
+.af-core .af-gp-who {
+  grid-area: who;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.af-core .af-gp-name {
+  font-weight: 700;
+  font-size: 14px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.af-core .af-gp-meta {
+  font-size: 11px;
+  color: var(--faint);
+}
+
+.af-core .af-gp-state {
+  grid-area: state;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.af-core .af-gp-chip {
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  padding: 3px 7px;
+  border-radius: 6px;
+  border: 1px solid var(--line);
+  color: var(--faint);
+  white-space: nowrap;
+}
+
+.af-core .af-gp-chip[data-tone='bad'] {
+  border-color: var(--bad);
+  color: var(--bad);
+}
+
+.af-core .af-gp-chip[data-tone='warn'] {
+  border-color: var(--warn);
+  color: var(--warn);
+}
+
+.af-core .af-gp-when {
+  grid-area: when;
+  text-align: right;
+}
+
+.af-core .af-gp-lock {
+  font-size: 11px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+/* The only thing on this screen with a deadline measured in minutes. */
+.af-core .af-gp-lock[data-state='soon'] {
+  color: var(--bad);
+  font-weight: 700;
+}
+
+.af-core .af-gp-lock[data-state='locked'],
+.af-core .af-gp-lock[data-state='none'] {
+  color: var(--faint);
+}
+
+/* ── Leagues and notes ───────────────────────────────────────────────── */
+
+.af-core .af-gp-leagues {
+  grid-area: leagues;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.af-core .af-gp-league {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  font-size: 11px;
+  color: var(--text2);
+  text-decoration: none;
+  max-width: 100%;
+}
+
+.af-core .af-gp-league:hover {
+  border-color: var(--accent-line, var(--accent));
+}
+
+.af-core .af-gp-league-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 22ch;
+}
+
+.af-core .af-gp-plat {
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: var(--faint);
+}
+
+.af-core .af-gp-note {
+  grid-area: note;
+  margin: 3px 0 0;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--faint);
+}
+
+/* ── Empty and footer ────────────────────────────────────────────────── */
+
+.af-core .af-gp-empty {
+  padding: 18px 20px;
+}
+
+.af-core .af-gp-clear {
+  margin: 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.af-core .af-gp-foot {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-top: 2px;
+}
+
+.af-core .af-gp-limits {
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--faint);
+  max-width: 70ch;
+}
+
+.af-core .af-gp-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.af-core .af-gp-cta {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.af-core .af-gp-cta:hover {
+  text-decoration: underline;
+}
+
+/* ── Narrow ──────────────────────────────────────────────────────────── */
+/* The file's ONLY media query, kept last — see the header note. */
+
+@media (max-width: 620px) {
+  .af-core .af-gp-row {
+    grid-template-columns: 34px minmax(0, 1fr);
+    grid-template-areas:
+      'face who'
+      '.    state'
+      '.    when'
+      '.    leagues'
+      '.    note';
+  }
+
+  .af-core .af-gp-when {
+    text-align: left;
+  }
+
+  .af-core .af-gp-title {
+    font-size: 18px;
+  }
+}

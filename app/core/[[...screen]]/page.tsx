@@ -71,6 +71,7 @@ import DraftBoard from '@/components/core-app/screens/DraftBoard'
 import { getDraftBoardData } from '@/lib/core-app/draftBoard'
 import Scout from '@/components/core-app/screens/Scout'
 import { getScoutData } from '@/lib/core-app/scout'
+import GamePlan from '@/components/core-app/screens/GamePlan'
 import LandingV4 from '@/components/core-app/screens/LandingV4'
 import DashboardV2 from '@/components/core-app/screens/DashboardV2'
 import Partners from '@/components/core-app/screens/Partners'
@@ -253,7 +254,8 @@ const TAB_META: Record<string, { title: string; description: string }> = {
   waivers: { title: 'Waivers', description: 'Targets, bids and claim order for this league.' },
   'war-room': {
     title: 'War Room',
-    description: 'Scout the room — how every manager in this league actually plays.',
+    description:
+      'Scout the managers you play, and the moves you owe before kickoff. ?view=plan for the game plan.',
   },
   'draft-hq': { title: 'Draft HQ', description: 'Draft order, pick slots and board settings.' },
   'defense-hub': {
@@ -981,10 +983,33 @@ export default async function AfCorePage({
       ? await getDraftBoardData(selectedLeagueId, userId).catch(() => null)
       : null
 
+  /*
+   * The War Room carries two rooms on one screen key, the same way `week` carries
+   * Rivalry Radar behind `?view=rivalries` — same shell, same header, and no new
+   * route at a repo already against the platform's route ceiling.
+   *
+   * Scout is per-league; Game Plan is CROSS-league and needs no selection, which
+   * is also what gives the War Room something to show before a league is picked.
+   */
+  const gamePlanView = activeKey === 'war-room' && sp.view === 'plan'
+
   /* The War Room's first room: every manager in the league, profiled. */
   const scout =
-    activeKey === 'war-room' && selectedLeagueId
+    activeKey === 'war-room' && !gamePlanView && selectedLeagueId
       ? await getScoutData(selectedLeagueId, userId).catch(() => null)
+      : null
+
+  /*
+   * The War Room's second room: every flagged starter across every league,
+   * soonest lock first.
+   *
+   * ⚠ THE SAME LOADER THE PLAYER FINDER USES, UNCHANGED — bounded joins over
+   * starters, the injury feed and the week's kickoffs. 🛑 NEVER
+   * `computeLineupActionsForUser`, which is far too expensive for a page render.
+   */
+  const gamePlan =
+    gamePlanView && userId
+      ? await loadGameDayTriage(userId, playedLeagues.map((l) => l.id)).catch(() => null)
       : null
 
   /*
@@ -2168,8 +2193,44 @@ export default async function AfCorePage({
           />
         )
       ) : activeKey === 'war-room' ? (
-        scout ? (
-          <Scout data={scout} />
+        /*
+         * Two rooms, one screen key. `?view=plan` picks Game Plan — cross-league,
+         * so unlike Scout it renders without a league in context.
+         */
+        gamePlanView ? (
+          gamePlan?.available ? (
+            <GamePlan
+              data={gamePlan.data}
+              nowIso={new Date().toISOString()}
+              weekHref="/core/week"
+              waiversHref={
+                selectedLeagueId
+                  ? `/core/waivers?league=${encodeURIComponent(selectedLeagueId)}`
+                  : '/core/waivers'
+              }
+            />
+          ) : (
+            <PickALeague
+              tabKey="war-room"
+              title="Game plan"
+              blurb={
+                gamePlan?.available === false
+                  ? gamePlan.reason
+                  : 'No starting lineups could be read, so there is nothing to plan against yet.'
+              }
+              issues={issues}
+              leagues={rail}
+            />
+          )
+        ) : scout ? (
+          <Scout
+            data={scout}
+            gamePlanHref={
+              selectedLeagueId
+                ? `/core/war-room?view=plan&league=${encodeURIComponent(selectedLeagueId)}`
+                : '/core/war-room?view=plan'
+            }
+          />
         ) : (
           <PickALeague
             tabKey="war-room"
