@@ -24,6 +24,7 @@ import {
   pickPrimaryBookmaker,
   parseOddToDecimal,
   parsePoints,
+  retainPrimaryMarkets,
   type RawBookmaker,
 } from '@/lib/odds/normalizeApiSportsOdds'
 
@@ -319,6 +320,61 @@ describe('pickPrimaryBookmaker', () => {
 
   it('returns null on an empty list rather than throwing', () => {
     expect(pickPrimaryBookmaker([])).toBeNull()
+  })
+})
+
+describe('retainPrimaryMarkets — the prop board is never warehoused', () => {
+  /*
+   * A product boundary, not an optimisation. AllFantasy reads the betting market as
+   * a FORECAST (implied team totals, win probability) and is deliberately not a
+   * gambling product, so a book's prop prices are data we never read and should not
+   * be holding. `raw` exists to diagnose a PARSE, and a parse can only concern the
+   * markets the parser looks at.
+   */
+  const withProps: RawBookmaker = {
+    id: 8,
+    name: 'Bet365',
+    bets: [
+      { id: 1, name: 'Home/Away', values: [{ value: 'Home', odd: '1.65' }] },
+      { id: 2, name: 'Asian Handicap', values: [{ value: 'Home -3.5', odd: '1.91' }] },
+      { id: 3, name: 'Over/Under', values: [{ value: 'Over 45.5', odd: '1.90' }] },
+      { id: 47, name: 'Anytime Goal Scorer', values: [{ value: 'Someone', odd: '2.50' }] },
+      { id: 95, name: 'Player Interceptions', values: [{ value: 'Over 0.5', odd: '3.00' }] },
+      { id: 51, name: 'Multi Touchdown Scorer (3 or More)', values: [{ value: 'Yes', odd: '9.0' }] },
+      { id: 4, name: 'Over/Under 1st Half', values: [{ value: 'Over 23.5', odd: '1.9' }] },
+    ],
+  }
+
+  it('keeps exactly the three modelled markets', () => {
+    const kept = retainPrimaryMarkets(withProps)
+    expect(kept.bets.map((b) => b.id).sort((a, b) => a - b)).toEqual([1, 2, 3])
+  })
+
+  it('drops every player prop', () => {
+    const names = retainPrimaryMarkets(withProps).bets.map((b) => b.name)
+    for (const prop of ['Anytime Goal Scorer', 'Player Interceptions', 'Multi Touchdown Scorer (3 or More)']) {
+      expect(names).not.toContain(prop)
+    }
+  })
+
+  it('drops period-scoped markets too', () => {
+    expect(retainPrimaryMarkets(withProps).bets.map((b) => b.name)).not.toContain('Over/Under 1st Half')
+  })
+
+  it('preserves the bookmaker identity and does not mutate the input', () => {
+    const before = withProps.bets.length
+    const kept = retainPrimaryMarkets(withProps)
+    expect(kept.id).toBe(8)
+    expect(kept.name).toBe('Bet365')
+    // the caller's object is left alone — the writer still normalizes off the full payload
+    expect(withProps.bets.length).toBe(before)
+  })
+
+  it('CONTROL: the fixture really did contain props, so the filter had work to do', () => {
+    // Without this, all four assertions above would pass on an input that never
+    // held a prop — a guard that has never actually removed anything.
+    expect(withProps.bets.length).toBe(7)
+    expect(retainPrimaryMarkets(withProps).bets.length).toBe(3)
   })
 })
 

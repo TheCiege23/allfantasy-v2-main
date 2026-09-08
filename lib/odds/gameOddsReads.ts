@@ -25,23 +25,63 @@
 import { prisma } from '@/lib/prisma'
 import { pickPrimaryBookmaker, type NormalizedGameOdds } from './normalizeApiSportsOdds'
 
+/**
+ * What a consumer of this module is allowed to see.
+ *
+ * 🛑 FORECAST FIELDS ONLY — NO PRICES, AND NO BOOKMAKER NAME. This is a product
+ * boundary and it is enforced by the type rather than by a convention someone has
+ * to remember.
+ *
+ * AllFantasy uses the betting market as the best available FORECAST of how a game
+ * will go: how many points an offence is expected to score (`impliedHomeTotal`),
+ * and how likely a team is to win (`homeWinProbability`, with the vig already
+ * removed at ingest). Those are projection inputs. It is deliberately NOT a
+ * gambling product, so the things that only mean something to a bettor never leave
+ * this module:
+ *
+ *   - `moneylineHome` / `moneylineAway`, `spreadHomeOdd`/`spreadAwayOdd`,
+ *     `overOdd`/`underOdd` — these are PRICES. Their only legitimate use is
+ *     computing the vig-free probability, which already happened at ingest, so no
+ *     reader needs them.
+ *   - `bookmakerName` — naming a sportsbook in a UI is the clearest marker of a
+ *     betting product and is where affiliate relationships usually enter.
+ *     `bookmakerId` stays, so two books can still be told apart without branding
+ *     either of them.
+ *
+ * `spreadHome` and `totalPoints` DO stay: they are the game-script inputs (is this
+ * team likely to be trailing and throwing?) and they are what the implied totals
+ * are derived from, so hiding them would make the derived numbers unexplainable.
+ *
+ * ⚠ Present them as market-implied projections, never as a betting card. See the
+ * repo notes on the odds feed for the wider framing.
+ */
 export interface GameOddsRow {
   gameExternalId: string
   sport: string
   source: string
   bookmakerId: number
-  bookmakerName: string
   season: number | null
   week: number | null
   spreadHome: number | null
   totalPoints: number | null
-  moneylineHome: number | null
-  moneylineAway: number | null
   impliedHomeTotal: number | null
   impliedAwayTotal: number | null
   homeWinProbability: number | null
   fetchedAt: Date
   expiresAt: Date
+}
+
+/**
+ * The row as stored, prices included. Internal to this module.
+ *
+ * The prices are read for ONE reason: `pickPrimaryBookmaker` scores a quote on how
+ * complete it is, and "did this book price both sides of the moneyline" is part of
+ * that. They are dropped in `assemble` before anything is returned.
+ */
+interface PricedRow extends GameOddsRow {
+  bookmakerName: string
+  moneylineHome: number | null
+  moneylineAway: number | null
 }
 
 export interface GameOddsResult {
@@ -84,7 +124,7 @@ const SELECT = {
  * quote is best" would drift, and the SQL-vs-JS normalizer incident in root
  * CLAUDE.md is exactly what that costs.
  */
-function toScorable(row: GameOddsRow): NormalizedGameOdds {
+function toScorable(row: PricedRow): NormalizedGameOdds {
   return {
     bookmakerId: row.bookmakerId,
     bookmakerName: row.bookmakerName,
@@ -103,13 +143,23 @@ function toScorable(row: GameOddsRow): NormalizedGameOdds {
   }
 }
 
-function assemble(rows: GameOddsRow[], now: Date): GameOddsResult {
+/**
+ * Drop every field a bettor would want and a fantasy surface would not.
+ * This is the single place prices are removed, so there is one gate rather than a
+ * rule each caller has to remember.
+ */
+function toPublic(row: PricedRow): GameOddsRow {
+  const { bookmakerName: _name, moneylineHome: _mh, moneylineAway: _ma, ...forecast } = row
+  return forecast
+}
+
+function assemble(rows: PricedRow[], now: Date): GameOddsResult {
   if (!rows.length) return EMPTY
   const ranked = pickPrimaryBookmaker(rows.map(toScorable))
   const primary = ranked ? rows.find((r) => r.bookmakerId === ranked.bookmakerId) ?? rows[0] : rows[0]
   return {
-    primary,
-    books: rows,
+    primary: toPublic(primary),
+    books: rows.map(toPublic),
     isStale: primary.expiresAt.getTime() < now.getTime(),
     ageMs: now.getTime() - primary.fetchedAt.getTime(),
   }
@@ -130,7 +180,7 @@ export async function readGameOdds(
       ...(opts.source ? { source: opts.source } : {}),
     },
     select: SELECT,
-  })) as GameOddsRow[]
+  })) as PricedRow[]
 
   return assemble(rows, new Date())
 }
@@ -159,9 +209,9 @@ export async function readWeekOdds(
       ...(opts.source ? { source: opts.source } : {}),
     },
     select: SELECT,
-  })) as GameOddsRow[]
+  })) as PricedRow[]
 
-  const byGame = new Map<string, GameOddsRow[]>()
+  const byGame = new Map<string, PricedRow[]>()
   for (const row of rows) {
     const list = byGame.get(row.gameExternalId) ?? []
     list.push(row)
