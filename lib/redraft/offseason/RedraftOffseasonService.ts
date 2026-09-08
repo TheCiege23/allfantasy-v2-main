@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { EVENT, getPlatformEvents } from '@/lib/events'
 import { publishLeagueFanoutEvent } from '@/lib/league-events/publisher'
 import { transitionLeagueStateInTransaction } from '@/server/services/leagueLifecycleService'
+import { auditUserId } from '@/lib/league/systemActor'
 
 export type EnterRedraftOffseasonResult = {
   ok: true
@@ -189,7 +190,10 @@ export async function enterRedraftOffseason(
       await tx.leagueAuditLog.create({
         data: {
           leagueId: season.leagueId,
-          userId: actorUserId,
+          // FK-constrained to AppUser; a `system:` actor is not one. See
+          // lib/league/systemActor — this is what killed the first end-to-end
+          // season run, mid-transaction, after the champion was already crowned.
+          userId: auditUserId(actorUserId),
           actionType: 'season_snapshot_created',
           entityType: 'league_season',
           entityId: snapshot.id,

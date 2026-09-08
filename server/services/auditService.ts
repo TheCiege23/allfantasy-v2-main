@@ -4,6 +4,7 @@
 
 import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
+import { auditUserId } from '@/lib/league/systemActor'
 
 export type AuditLogInput = {
   leagueId: string
@@ -45,7 +46,10 @@ export async function logAction(input: AuditLogInput): Promise<{ id: string }> {
   const row = await prisma.leagueAuditLog.create({
     data: {
       leagueId: input.leagueId,
-      userId: input.userId ?? null,
+      // `userId` is FK-constrained to AppUser. A scheduled actor
+      // (`system:…`) is not a user, and writing its label violates the key and
+      // rolls back whatever transaction this sits in — see lib/league/systemActor.
+      userId: auditUserId(input.userId),
       actionType: input.actionType,
       entityType: input.entityType,
       entityId: input.entityId ?? null,
