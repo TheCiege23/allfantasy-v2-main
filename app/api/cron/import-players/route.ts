@@ -602,7 +602,23 @@ async function handle(req: NextRequest) {
       deferredPhases.push('psychProfiles')
     } else if (!dryRun) {
       try {
-        psychProfiles = await refreshStaleLeagueProfiles({ maxLeagues: 3 })
+        /*
+         * ⚠ 24, NOT 3 — AND THE BUDGET IS WHAT MAKES THAT SAFE.
+         *
+         * Measured in production 2026-09-08: at a fixed 3 this drained 3-13 leagues/day against
+         * 287, a ~36-day cycle, with 66 team-carrying leagues (769 managers) never profiled at
+         * all. The rotation already orders never-profiled first and then stalest, so the cap was
+         * the only thing holding it back — it spent a 240s budget doing three leagues.
+         *
+         * The budget is now checked BETWEEN leagues, so this does as many as actually fit and
+         * stops cleanly instead of running to the 300s edge ceiling and 502ing. It can therefore
+         * only do MORE work per run than before, never overrun further.
+         *
+         * 24 rather than unbounded because `ingestSleeperTradeFacts` defaults to a 25-league
+         * take; staying under it keeps the enrichment set aligned with the profiling set even
+         * if the explicit `maxLeagues` pass-through there is ever lost.
+         */
+        psychProfiles = await refreshStaleLeagueProfiles({ maxLeagues: 24, budget })
       } catch (psychErr) {
         psychProfiles = {
           error: psychErr instanceof Error ? psychErr.message.slice(0, 160) : 'profile refresh failed',

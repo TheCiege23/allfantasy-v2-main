@@ -170,10 +170,45 @@ export async function refreshProfilesForExternalLeagues(input: {
  * having draft history, which is the evidence stream that is actually populated;
  * never-profiled leagues go first, then the stalest.
  */
+/**
+ * ⚠ 2026-09-08 — A FIXED `maxLeagues: 3` WAS THE BINDING CONSTRAINT, MEASURED IN PRODUCTION.
+ *
+ * Steady-state throughput was 3-13 leagues/day against 287 leagues: a full cycle every ~36
+ * days, and 66 leagues with real teams (769 managers) had never been profiled at all. It was
+ * briefly invisible because a one-off bulk run wrote 93 leagues on the day it was measured,
+ * which dragged average profile age down to 3.3 days and made the fleet look healthy. Read the
+ * daily series, not the snapshot.
+ *
+ * `lib/cron/runBudget.ts` already prescribes the fix in its own header — *"PAIR IT WITH
+ * STALENESS ORDERING… order the work list by how stale each unit is, oldest first, and
+ * successive runs cover everything without needing a stored cursor."* The ordering below was
+ * always there; the budget was the missing half, so the rotation spent a 240s budget doing
+ * three leagues and returned.
+ *
+ * ⚠ `budget` IS CHECKED BETWEEN LEAGUES, NEVER DURING ONE — the same contract `RunBudget`
+ * states. A league already started runs to completion.
+ *
+ * ⚠ AND THE DEFAULT STAYS 3, so every existing caller behaves exactly as before. Only a caller
+ * that passes a budget opts into draining, which keeps this change to the one call site that
+ * was measured.
+ */
 export async function refreshStaleLeagueProfiles(input?: {
   maxLeagues?: number
   managersPerLeague?: number
-}): Promise<{ leaguesProfiled: number; managersProfiled: number; leagueIds: string[] }> {
+  /**
+   * Wall-clock budget from the calling cron. Checked BETWEEN leagues; when it is spent the
+   * rotation stops and the next scheduled fire resumes at the next-stalest league.
+   */
+  budget?: { exhausted(): boolean }
+}): Promise<{
+  leaguesProfiled: number
+  managersProfiled: number
+  leagueIds: string[]
+  /** True when the budget stopped the run before `picked` was drained — reported, not silent. */
+  stoppedEarly: boolean
+  /** How many of `picked` were never reached. */
+  deferred: number
+}> {
   const maxLeagues = input?.maxLeagues ?? 3
 
   // Leagues with draft history — something to observe.
@@ -183,7 +218,7 @@ export async function refreshStaleLeagueProfiles(input?: {
   })
   const candidateIds = withDrafts.map((r) => r.leagueId)
   if (candidateIds.length === 0) {
-    return { leaguesProfiled: 0, managersProfiled: 0, leagueIds: [] }
+    return { leaguesProfiled: 0, managersProfiled: 0, leagueIds: [], stoppedEarly: false, deferred: 0 }
   }
 
   // Staleness by the most recent profile write per league.
@@ -212,8 +247,18 @@ export async function refreshStaleLeagueProfiles(input?: {
   // the work stays proportional to the rotation rather than sweeping everything
   // every six hours. Swallowed: a warehouse hiccup must not stop profiling, which
   // still works from the fallback.
+  /*
+   * 🛑 `maxLeagues` IS PASSED EXPLICITLY, AND OMITTING IT WAS A SILENT TRUNCATION WAITING FOR
+   * THIS CHANGE. Both enrichment helpers apply their OWN default cap — `ingestSleeperTradeFacts`
+   * takes 25 — so the moment `picked` grew past that, the tail of the rotation would have been
+   * profiled from un-enriched data with nothing reporting a shortfall. It was harmless only
+   * while `picked` was fixed at 3.
+   */
   try {
-    await backfillTransactionFactsFromTradeHistory({ leagueIds: picked })
+    await backfillTransactionFactsFromTradeHistory({
+      leagueIds: picked,
+      maxLeagues: picked.length,
+    })
   } catch {
     // fallback path still covers it
   }
@@ -224,27 +269,55 @@ export async function refreshStaleLeagueProfiles(input?: {
   // importer run against them, so no amount of re-normalising reaches them.
   // Trade psychology was thin because the data was never asked for, not because
   // managers had not traded.
+  /*
+   * ⚠ STILL ONE BATCHED CALL, NOT ONE PER LEAGUE INSIDE THE LOOP. This function resets a
+   * MODULE-LEVEL `rateLimitHits = 0` on entry, so invoking it per league would reset its
+   * Sleeper backoff state on every iteration and turn a rotation into a hammer.
+   */
   try {
-    await ingestSleeperTradeFacts({ leagueIds: picked })
+    await ingestSleeperTradeFacts({ leagueIds: picked, maxLeagues: picked.length })
   } catch {
     // Enrichment: a provider hiccup must not stop the profile run, which still
     // has draft evidence and whatever trades already landed.
   }
 
   const results: LeagueProfileRefreshResult[] = []
+  const done: string[] = []
+  let stoppedEarly = false
+
   for (const leagueId of picked) {
+    /*
+     * BETWEEN leagues, before starting the next one — never during. A league already begun runs
+     * to completion, which is why `CRON_RUN_BUDGET_MS` leaves 60s of headroom under the 300s
+     * edge ceiling rather than treating 240s as padding.
+     */
+    if (input?.budget?.exhausted()) {
+      stoppedEarly = true
+      break
+    }
     try {
-      results.push(
-        await refreshLeagueProfiles({ leagueId, limit: input?.managersPerLeague })
-      )
+      results.push(await refreshLeagueProfiles({ leagueId, limit: input?.managersPerLeague }))
+      done.push(leagueId)
     } catch {
-      // One bad league must not stop the rotation.
+      /*
+       * One bad league must not stop the rotation — but it IS counted as reached, or a league
+       * that throws every time would be re-picked forever (it sorts first, having never been
+       * profiled) and would consume the head of the rotation on every run.
+       */
+      done.push(leagueId)
     }
   }
 
   return {
     leaguesProfiled: results.length,
     managersProfiled: results.reduce((a, r) => a + r.profiled, 0),
-    leagueIds: picked,
+    /*
+     * ⚠ THE LEAGUES ACTUALLY REACHED, NOT `picked`. Returning the full pick list would report
+     * work the budget stopped us from doing — the cron's own log would then claim coverage the
+     * database does not have, which is the failure mode this whole rotation exists to surface.
+     */
+    leagueIds: done,
+    stoppedEarly,
+    deferred: picked.length - done.length,
   }
 }
