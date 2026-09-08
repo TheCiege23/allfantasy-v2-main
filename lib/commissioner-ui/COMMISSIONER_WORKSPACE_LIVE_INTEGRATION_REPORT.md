@@ -174,3 +174,42 @@ No new tests were written this phase, matching the "no functional
 change" scope: the doc-comment addition to `live.ts` doesn't change
 `getTasks()`'s observable behavior in any way already-existing tests
 don't already cover.
+
+
+---
+
+## Superseded 2026-09-08 — the store this report said was missing has been built
+
+Everything above is still accurate about DECISION OS. It has no task or workflow concept, and the
+audit that established that by repository-wide search rather than assumption stands.
+
+What has changed is the conclusion, and it turned on re-reading this report's own reason for
+declining. It said `status`, `createdAt` and `updatedAt` "would have to be invented (nothing tracks
+whether a commissioner already started or finished a given item), which is exactly the fabrication
+this whole program has never done."
+
+That is an argument for building the missing thing, not for leaving the module unwired. The answer
+to "nothing tracks it" is to track it:
+
+- **`prisma/migrations/20260908120000_commissioner_workspace_tasks`** — a persisted task store.
+  `createdAt` is when a condition was first detected, `status` is whatever the commissioner last
+  set. Nothing is invented.
+- **`lib/commissioner-workspace/taskSources.ts`** — two detectors, over the same warehouse reads
+  League Analytics already uses, so a task can never disagree with the panel a commissioner would
+  open to check it.
+- **`lib/commissioner-workspace/taskStore.ts`** — the reconciler. Idempotent by `(leagueId,
+  sourceKey)`, closes a task on its own when the condition clears, and never reopens one a person
+  settled.
+- **`lib/automation/jobs/workspace/`** — the scheduled writer, running through the real automation
+  engine. It shipped in the same commit as the read, per the root CLAUDE.md's `ingestCFBDStats`
+  rule: a surface pointed at a table nothing refreshes is worse than the honest error it replaced.
+
+Measured on production 2026-09-08 before wiring: 119 leagues have imported activity, none had ever
+been scanned, and 8 of 8 sampled produced a real finding. 44 of the 119 are past
+`MANAGER_INACTIVE_AFTER_DAYS`, which is the condition that made League Analytics report
+"Active Managers: 0 of 7" over a twelve-team league.
+
+⚠ **The migration is NOT applied.** Applying it to production is the user's decision, not the
+author's — root CLAUDE.md, "A MIGRATION IS NOT PUSHABLE WORK". Until it is applied and
+`commissioner_os_live_ready_workspace` is switched on, this module serves stub/demo exactly as it
+does today.
