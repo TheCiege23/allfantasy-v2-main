@@ -1070,6 +1070,19 @@ export function AfCoreShell(props: AfCoreShellProps) {
                 href={`/core?league=${encodeURIComponent(l.id)}`}
                 className="af-rail-tile af-platform"
                 data-platform={l.platform}
+                /*
+                 * ⚠ THE RAIL NEVER SAID WHICH LEAGUE YOU ARE IN. The 2026-09-07
+                 * handoff accent-fills the current row, and on a sixty-row rail of
+                 * near-identical crests it is the only thing answering "where am
+                 * I". `selectedLeagueId` was already threaded through for the
+                 * `?league=` links below, so nothing new is fetched.
+                 *
+                 * `aria-current="true"`, not `"page"`: this row is not the page,
+                 * it is the league the page is SCOPED to, and the nav below
+                 * already uses `aria-current="page"` for the page itself.
+                 */
+                data-active={l.id === props.selectedLeagueId}
+                aria-current={l.id === props.selectedLeagueId ? 'true' : undefined}
                 title={`${l.name} · ${l.platform}`}
                 aria-label={`${l.name} on ${l.platform}`}
                 /*

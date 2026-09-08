@@ -1320,6 +1320,23 @@
   background: transparent;
 }
 
+/*
+ * The league the current page is scoped to.
+ *
+ * ⚠ REUSES `--accent-soft`/`--accent-line`, THE TOKENS THE ACTIVE NAV ITEM
+ * ALREADY USES, rather than a new colour. Two different "you are here" tints on
+ * one screen read as two different meanings.
+ *
+ * ⚠ AND IT IS NOT SCOPED TO `[data-rail-open='true']`. The collapsed rail is a
+ * column of identical crests, which is exactly where "which one am I in" is
+ * hardest to answer -- scoping this to the expanded state would drop it where it
+ * is needed most.
+ */
+.af-shell .af-rail-tile[data-active='true'] {
+  background: var(--accent-soft);
+  border-color: var(--accent-line);
+}
+
 .af-shell[data-rail-open='true'] .af-rail-tile:hover {
   background: var(--chip);
 }
