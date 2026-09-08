@@ -940,13 +940,31 @@ export function AfCoreShell(props: AfCoreShellProps) {
   /*
    * The expanded league rail — 2026-09-07 handoff (`AF League List.dc.html`).
    *
-   * ⚠ COLLAPSED IS THE DEFAULT AND THAT IS DELIBERATE. Expanding widens the
-   * shell's first grid column from 68px to 300px on every screen at once, so it
-   * must be the user's choice, remembered. On a phone the same flag opens the
-   * rail as a full-screen tray instead — one piece of state, two presentations,
-   * so the tray can never disagree with the rail about what is open.
+   * ⚠ THREE STATES, NOT TWO, AND THE THIRD IS THE WHOLE POINT. `null` means the
+   * reader has expressed no preference — which is NOT the same as having chosen
+   * collapsed, because the two want opposite defaults on desktop. The handoff
+   * asks for the rail to be open on desktop out of the box; a boolean cannot
+   * say "open by default but collapsed because you asked", so it forced the
+   * default to be whatever `useState` was seeded with.
+   *
+   * One flag still drives two presentations — desktop column and mobile tray —
+   * so they can never disagree about what is open. What differs is only what
+   * ABSENT means: expanded on desktop, closed on mobile.
+   *
+   *   null      no preference   desktop expanded (CSS), mobile tray closed
+   *   'closed'  chose collapsed desktop 68px crests, mobile tray closed
+   *   'open'    chose expanded  desktop 300px,        mobile tray OPEN
    */
-  const [railOpen, setRailOpen] = useState(false)
+  const [railChoice, setRailChoice] = useState<'open' | 'closed' | null>(null)
+
+  /*
+   * ⚠ FALSE WHILE THE PREFERENCE IS UNREAD, INCLUDING ON A DESKTOP THAT IS
+   * ABOUT TO RENDER EXPANDED. That is deliberate: this drives `aria-expanded`,
+   * the toggle glyph and the tray, and on the server we do not know the
+   * viewport. The CSS default below carries first paint on its own; the effect
+   * then reconciles this flag to it, so the two never disagree once mounted.
+   */
+  const railOpen = railChoice === 'open'
 
   /*
    * ⚠ READ IN AN EFFECT, NOT DURING RENDER. `localStorage` does not exist on the
@@ -959,18 +977,49 @@ export function AfCoreShell(props: AfCoreShellProps) {
    * return null — an unguarded read there takes the whole shell down.
    */
   useEffect(() => {
+    let stored: string | null = null
     try {
-      if (window.localStorage.getItem('af-rail-open') === '1') setRailOpen(true)
+      stored = window.localStorage.getItem('af-rail-open')
     } catch {
-      /* storage unavailable — collapsed is a perfectly good default */
+      /* storage unavailable — fall through to the per-breakpoint default */
+    }
+    if (stored === '1') {
+      setRailChoice('open')
+      return
+    }
+    if (stored === '0') {
+      setRailChoice('closed')
+      return
+    }
+    /*
+     * No preference. Adopt the desktop default so this flag AGREES with what
+     * the CSS has already painted — `aria-expanded`, the toggle glyph and its
+     * title all read off it, and leaving it null would announce a collapsed
+     * rail to a screen reader while a 300px expanded one is on screen.
+     *
+     * ⚠ NOTHING MOVES WHEN THIS RUNS. The CSS default already expanded the rail
+     * at first paint, so adopting 'open' changes the attribute from absent to
+     * 'true' and both select the same declarations. This is reconciliation, not
+     * a second layout pass.
+     *
+     * ⚠ 721px IS THE CSS BREAKPOINT, DUPLICATED HERE ON PURPOSE AND THE ONLY
+     * PLACE IT IS. It must equal the `min-width: 721px` guard in
+     * af-core-shell.css; if they ever disagree, a viewport in the gap paints
+     * expanded and reports collapsed. matchMedia rather than innerWidth so it
+     * is the same question the stylesheet asks.
+     */
+    try {
+      if (window.matchMedia('(min-width: 721px)').matches) setRailChoice('open')
+    } catch {
+      /* no matchMedia — leave it null; CSS still paints the right thing */
     }
   }, [])
 
   const toggleRail = () => {
-    setRailOpen((v) => {
-      const next = !v
+    setRailChoice((v) => {
+      const next = v === 'open' ? 'closed' : 'open'
       try {
-        window.localStorage.setItem('af-rail-open', next ? '1' : '0')
+        window.localStorage.setItem('af-rail-open', next === 'open' ? '1' : '0')
       } catch {
         /* the toggle still works for this session */
       }
@@ -982,7 +1031,20 @@ export function AfCoreShell(props: AfCoreShellProps) {
   const activeInBar = mobileItems.some((i) => i.key === active)
 
   return (
-    <div className="af-core af-shell" data-rail-open={railOpen ? 'true' : undefined}>
+    <div
+      className="af-core af-shell"
+      /*
+       * ⚠ THE ABSENT ATTRIBUTE IS A MEANINGFUL THIRD VALUE, NOT A FALSY 'false'.
+       * Desktop CSS expands on `:not([data-rail-open='false'])`, so absent reads
+       * as "expanded" there and as "tray closed" on mobile — exactly the pair of
+       * defaults the handoff asks for. Collapsing must therefore emit a LITERAL
+       * 'false'; emitting `undefined` for it would re-expand the rail the reader
+       * just closed, on every page they open.
+       */
+      data-rail-open={
+        railChoice === 'open' ? 'true' : railChoice === 'closed' ? 'false' : undefined
+      }
+    >
       {/*
         Keyboard users land on the rail, then the nav, then the search box —
         three groups and roughly thirty tabbable controls — before reaching the
@@ -1095,7 +1157,7 @@ export function AfCoreShell(props: AfCoreShellProps) {
                 */
                 onClick={() => {
                   if (railOpen && typeof window !== 'undefined' && window.innerWidth <= 720) {
-                    setRailOpen(false)
+                    setRailChoice('closed')
                   }
                 }}
               >

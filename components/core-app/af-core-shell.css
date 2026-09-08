@@ -1598,3 +1598,124 @@
     grid-template-columns: 300px minmax(0, 1fr);
   }
 }
+
+/* ── The rail is EXPANDED BY DEFAULT on desktop ─────────────────────────
+ *
+ * 2026-09-07 handoff: you should land on /core already seeing which leagues you
+ * are in, named, with this week's matchup — not a column of sixty anonymous
+ * crests you have to expand first.
+ *
+ * 🛑 KEYED ON `:not([data-rail-open='false'])`, NOT ON FLIPPING THE DEFAULT TO
+ * `true`. Flipping the flag was the obvious move and it is wrong, because the
+ * SAME flag opens the mobile tray. Measured in a 375px frame before writing
+ * this: with the flag set, `.af-rail` is `position: fixed`, `x: 0`, full
+ * viewport — a full-screen league list over every page on every phone load.
+ * Three states are needed because absent and 'false' want OPPOSITE desktop
+ * behaviour:
+ *
+ *   absent    no preference    expanded here, tray CLOSED on mobile
+ *   'false'   chose collapsed  68px crests
+ *   'true'    chose expanded   expanded (identical to absent, on desktop)
+ *
+ * ⚠ THE DECLARATIONS ARE DUPLICATED FROM THE `[data-rail-open='true']` RULES
+ * ABOVE RATHER THAN THOSE SELECTORS BEING WIDENED. Widening them would apply
+ * them at ALL widths, and below 720px those same class names are the tray,
+ * whose geometry is set by the mobile block. The mobile block already restates
+ * this exact set for the same reason — this file's established shape.
+ *
+ * ⚠ AND THIS IS WHY FIRST PAINT NEEDS NO SCRIPT. The expansion is a stylesheet
+ * fact, so it is painted before any JS runs. The reader who explicitly
+ * COLLAPSED still sees one reconciliation, because the server cannot know a
+ * localStorage value — that population is strictly smaller than the one the old
+ * default made flash, and moving the flash is the honest description of it.
+ */
+@media (min-width: 721px) {
+  .af-core.af-shell:not([data-rail-open='false']) {
+    grid-template-columns: 300px 232px minmax(0, 1fr);
+  }
+
+  .af-shell:not([data-rail-open='false']) .af-rail {
+    align-items: stretch;
+    padding: 14px 10px;
+  }
+
+  .af-shell:not([data-rail-open='false']) .af-rail-scroll {
+    align-items: stretch;
+  }
+
+  .af-shell:not([data-rail-open='false']) .af-rail-tile {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 10px;
+    width: 100%;
+    height: auto;
+    padding: 7px 8px;
+    border-radius: 10px;
+    /* Tint moves to the crest; see the platform block below. */
+    background: transparent;
+  }
+
+  .af-shell:not([data-rail-open='false']) .af-rail-tile:hover {
+    background: var(--chip);
+  }
+
+  .af-shell:not([data-rail-open='false']) .af-rail-row {
+    display: flex;
+    flex: 1;
+  }
+
+  .af-shell:not([data-rail-open='false']) .af-rail-toggle-text {
+    display: block;
+  }
+
+  .af-shell:not([data-rail-open='false']) .af-rail-foot {
+    flex-direction: row;
+    gap: 8px;
+  }
+
+  /*
+   * ⚠ WITHOUT THIS THE EXPANDED ROW HAS NO ART AT ALL — the rule above sets the
+   * tile transparent so a coloured band does not run the width of the rail, so
+   * the platform tint has to land on the crest instead.
+   */
+  .af-shell:not([data-rail-open='false']) .af-rail-tile[data-platform='sleeper'] .af-rail-tile-art,
+  .af-shell:not([data-rail-open='false']) .af-rail-tile[data-platform='espn'] .af-rail-tile-art,
+  .af-shell:not([data-rail-open='false']) .af-rail-tile[data-platform='yahoo'] .af-rail-tile-art,
+  .af-shell:not([data-rail-open='false']) .af-rail-tile[data-platform='fantrax'] .af-rail-tile-art,
+  .af-shell:not([data-rail-open='false']) .af-rail-tile[data-platform='mfl'] .af-rail-tile-art,
+  .af-shell:not([data-rail-open='false']) .af-rail-tile[data-platform='fleaflicker'] .af-rail-tile-art,
+  .af-shell:not([data-rail-open='false']) .af-rail-tile[data-platform='manual'] .af-rail-tile-art {
+    background: var(--chip);
+  }
+
+  .af-shell:not([data-rail-open='false']) .af-rail-tile[data-platform='sleeper'] .af-rail-tile-art {
+    background: var(--p-sleeper-bg);
+  }
+  .af-shell:not([data-rail-open='false']) .af-rail-tile[data-platform='espn'] .af-rail-tile-art {
+    background: var(--p-espn-bg);
+  }
+  .af-shell:not([data-rail-open='false']) .af-rail-tile[data-platform='yahoo'] .af-rail-tile-art {
+    background: var(--p-yahoo-bg);
+  }
+  .af-shell:not([data-rail-open='false']) .af-rail-tile[data-platform='fantrax'] .af-rail-tile-art {
+    background: var(--p-fantrax-bg);
+  }
+}
+
+/*
+ * ⚠ AND THE SAME NARROW-DESKTOP CORRECTION THE OPENED RAIL NEEDED. Between
+ * 721px and 1080px the nav is `display: none`, so a three-track grid puts the
+ * page in the nav's 232px column — measured, and fixed for the explicit 'true'
+ * case earlier in this file. Making expansion the DEFAULT would have made that
+ * bug the default too, for every reader in that band, which is why this lands
+ * in the same change rather than after it.
+ *
+ * Appended as its own top-level block: equal specificity to the rule above, so
+ * source order decides, and nesting it would silently narrow everything below.
+ */
+@media (min-width: 721px) and (max-width: 1080px) {
+  .af-core.af-shell:not([data-rail-open='false']) {
+    grid-template-columns: 300px minmax(0, 1fr);
+  }
+}
