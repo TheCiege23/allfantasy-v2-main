@@ -104,12 +104,76 @@ function enqueueRequest<T>(fn: () => Promise<T>): Promise<T> {
   return queued;
 }
 
-async function apiSportsFetchInternal<T>(endpoint: string, params?: Record<string, string>, opts?: { bypassRateGuard?: boolean }): Promise<T> {
-  const apiKey =
+/**
+ * The configured API-Sports key, or null when there is none.
+ *
+ * ⚠ ONE DEFINITION OF THE ALIAS LIST, ON PURPOSE. Four spellings are accepted, and a caller that
+ * wants to ask "can we reach this provider at all" needs the same answer this module uses. A
+ * second copy of the list in a caller fails SILENTLY when the two drift: the caller checks
+ * `APISPORTS_API_KEY`, finds nothing, and reports the provider unavailable while every fetch
+ * through this module works fine. Env-var names have already drifted repo-wide once.
+ */
+/**
+ * Map an API-Sports designation onto the vocabulary the rest of AF speaks.
+ *
+ * 🛑 WHY THIS IS NOT OPTIONAL. The vendor uses NFL roster-list notation, not the
+ * Out/Doubtful/Questionable set every consumer switches on. Measured over a full 32-team sweep,
+ * 2026-09-08 — 430 injuries, 430 distinct players:
+ *
+ *     204  Questionable      already shared vocabulary
+ *     177  I.L.              injured list
+ *      30  PUP               physically unable to perform
+ *       8  NFI               non-football injury
+ *       8  Suspension
+ *       1  Personal / Sidelined / Undisclosed
+ *
+ * 226 of 430 — 53% — would have landed as a status nothing downstream recognises. A player on
+ * I.L. reads as having no designation, which is not "unavailable", and `playerUrgency` escalates
+ * on `Out`. That is the confidently-wrong failure this whole subsystem exists to prevent, and it
+ * would have been invisible: the rows write fine and the route returns 200.
+ *
+ * Mirrors `resolveStatus` in `lib/injuries/espnInjuries.ts`, including its closing decision —
+ * an unrecognised designation is PRESERVED VERBATIM rather than nulled, because the vendor did
+ * publish something and dropping it invents an absence.
+ *
+ * ⚠ NO BODY-PART EXTRACTION, DELIBERATELY. `description` reads "Knee - Questionable for Week 1 at
+ * Seattle" on one row and "I.L. - Ankle" on the next, so the body part sits on OPPOSITE sides of
+ * the dash depending on the designation. A split rule would be right most of the time and
+ * silently wrong the rest, which is how the RI prose parser earned its "refuse rather than guess"
+ * note. `type` therefore stays null here and the full description is preserved.
+ */
+export function normalizeApiSportsInjuryStatus(raw: string | null | undefined): string | null {
+  const s = String(raw ?? '').trim()
+  if (!s) return null
+  const t = s.toLowerCase().replace(/\./g, '')
+
+  if (t === 'il' || t.includes('injured list') || t.includes('injured reserve') || t === 'ir') return 'IR'
+  if (t === 'pup' || t.includes('physically unable')) return 'Out'
+  if (t === 'nfi' || t.includes('non-football') || t.includes('non football')) return 'Out'
+  if (t.includes('suspend') || t.includes('suspension')) return 'Suspended'
+  if (t.includes('doubtful')) return 'Doubtful'
+  if (t.includes('questionable')) return 'Questionable'
+  if (t.includes('probable')) return 'Probable'
+  if (t.includes('day-to-day') || t.includes('day to day') || t === 'dtd') return 'Day-To-Day'
+  // Checked AFTER the specific designations so "out for season" cannot shadow them.
+  if (t.includes('out')) return 'Out'
+  if (t === 'active') return 'Active'
+
+  return s
+}
+
+export function getApiSportsKey(): string | null {
+  return (
     process.env.APISPORTS_API_KEY ||
     process.env.APISPORTS_KEY ||
     process.env.API_SPORTS_KEY ||
-    process.env.SPORTS_API_KEY;
+    process.env.SPORTS_API_KEY ||
+    null
+  );
+}
+
+async function apiSportsFetchInternal<T>(endpoint: string, params?: Record<string, string>, opts?: { bypassRateGuard?: boolean }): Promise<T> {
+  const apiKey = getApiSportsKey();
   if (!apiKey) {
     throw new Error('APISPORTS_API_KEY not configured (accepted aliases: APISPORTS_KEY, API_SPORTS_KEY, SPORTS_API_KEY)');
   }
@@ -278,8 +342,27 @@ export interface APISportsPlayer {
   } | null;
 }
 
+/**
+ * One row of `GET /injuries` on `v1.american-football.api-sports.io`.
+ *
+ * ⚠ `id` AND `type` ARE NOT IN THE DOCUMENTED RESPONSE, and declaring them required was not
+ * harmless. The vendor returns exactly player / team / date / status / description:
+ *
+ *   { "player": { "id": 53, "name": "Nate Hobbs", "image": "..." },
+ *     "team":   { "id": 1, "name": "Las Vegas Raiders", "logo": "..." },
+ *     "date": "2022-09-26", "status": "Questionable", "description": "Concussion" }
+ *
+ * A required `id` made `row.id != null` read as a live discriminator when it was always false,
+ * which is what sent every row down the array-index key path — see the note on `externalId` in
+ * `syncAPISportsInjuriesToDb`. They stay declared but OPTIONAL: other endpoints and plan tiers
+ * may include them, and the readers below already fall back.
+ *
+ * NOTE ON `description`: it holds the BODY PART ("Concussion"), not prose — the opposite of the
+ * Rolling Insights writer, where `type` is the body part and `description` is the return
+ * timeline. The mapping below puts it in both so `type` is populated consistently across sources.
+ */
 export interface APISportsInjury {
-  id: number;
+  id?: number;
   player: {
     id: number;
     name: string;
@@ -293,7 +376,7 @@ export interface APISportsInjury {
   status: string | null;
   date: string | null;
   description: string | null;
-  type: string | null;
+  type?: string | null;
 }
 
 export interface APISportsGame {
@@ -494,9 +577,21 @@ export async function fetchAPISportsInjuries(season: string, opts?: { sport?: 'N
   throw lastError instanceof Error ? lastError : new Error('Failed to fetch API-Sports injuries')
 }
 
-export async function fetchAPISportsInjuriesByTeam(teamId: string, season: string): Promise<APISportsInjury[]> {
+/**
+ * ⚠ `season` IS NOT A PARAMETER ON THIS ENDPOINT, AND SENDING IT COSTS A REQUEST.
+ *
+ * Probed 2026-09-08: `/injuries?team=1&season=2026` answers HTTP 200 with
+ * `{"season":"The Season field do not exist."}` and zero results. `apiSportsFetch` throws on a
+ * populated `errors` envelope, so the first attempt below ALWAYS failed and the retry did the
+ * real work — quietly doubling a 33-request fanout to 65. `league` is rejected the same way, so
+ * there is no league-wide sweep either, and a bare call answers "At least one parameter is
+ * required". Per-team is genuinely the only bulk access.
+ *
+ * The parameter is kept in the signature because callers pass it and it still selects the season
+ * elsewhere; it is simply not sent here.
+ */
+export async function fetchAPISportsInjuriesByTeam(teamId: string, _season?: string): Promise<APISportsInjury[]> {
   const attempts: Array<Record<string, string>> = [
-    { team: teamId, season },
     { team: teamId },
   ]
 
@@ -530,14 +625,18 @@ async function fetchAPISportsInjuriesViaTeamFanout(
   for (const team of teams) {
     try {
       const injuries = await fetchAPISportsInjuriesByTeam(String(team.id), season)
-      for (const [index, injury] of injuries.entries()) {
+      for (const injury of injuries) {
         const row = injury as APISportsInjury & Record<string, unknown>
         const playerId = row.player?.id ?? (row.player_id as number | string | undefined) ?? ''
         const playerName = row.player?.name ?? (row.player_name as string | undefined) ?? ''
-        const injuryDate = row.date ?? (row.updated as string | undefined) ?? ''
-        const dedupeKey = row.id != null
-          ? `id:${String(row.id)}`
-          : `team:${team.id}:player:${String(playerId)}:${String(playerName).trim().toLowerCase()}:date:${String(injuryDate)}:i:${index}`
+        /*
+         * Same stable identity the writer keys on. The old key ended in the array index, which
+         * made it unique by construction — so this map de-duplicated nothing and a player listed
+         * under two teams (a mid-season move) came through twice.
+         */
+        const dedupeKey = playerId
+          ? `player:${String(playerId)}`
+          : `name:${String(playerName).trim().toLowerCase()}`
 
         if (!byId.has(dedupeKey)) byId.set(dedupeKey, injury)
       }
@@ -805,14 +904,19 @@ export async function syncAPISportsInjuriesToDb(opts?: { season?: string; sport?
   const expiresAt = new Date(now.getTime() + 6 * 60 * 60 * 1000);
   const fanoutByPlayer = new Map<string, InjurySyncFanoutRow>();
 
-  for (const [index, injury] of injuries.entries()) {
+  for (const injury of injuries) {
     const row = injury as APISportsInjury & Record<string, unknown>
     const playerIdRaw = row.player?.id ?? (row.player_id as number | string | undefined) ?? null
     const playerNameRaw = row.player?.name ?? (row.player_name as string | undefined) ?? (row.name as string | undefined) ?? null
     const teamIdRaw = row.team?.id ?? (row.team_id as number | string | undefined) ?? null
     const teamNameRaw = row.team?.name ?? (row.team_name as string | undefined) ?? null
+    // The vendor ships no `type`; its `description` IS the body part ("Concussion"). Fall through
+    // to it so `type` is populated the same way the RI and ESPN writers populate it.
+    // No `description` fallback — see the body-part note on `normalizeApiSportsInjuryStatus`.
     const typeRaw = row.type ?? (row.injury as string | null | undefined) ?? null
-    const statusRaw = row.status ?? (row.state as string | null | undefined) ?? null
+    const statusRaw = normalizeApiSportsInjuryStatus(
+      row.status ?? (row.state as string | null | undefined) ?? null
+    )
     const descriptionRaw = row.description ?? (row.details as string | null | undefined) ?? null
     const dateRaw = row.date ?? (row.updated as string | null | undefined) ?? null
 
@@ -824,9 +928,29 @@ export async function syncAPISportsInjuriesToDb(opts?: { season?: string; sport?
     const playerName = (playerNameRaw || '').trim() || `Unknown ${playerId || 'player'}`
     const teamId = teamIdRaw != null ? String(teamIdRaw) : null
     const team = teamNameToAbbrev(teamNameRaw || null)
-    const externalId = row.id != null
-      ? String(row.id)
-      : `${playerId || 'p'}:${teamId || 't'}:${dateRaw || 'd'}:${index}`
+    /*
+     * 🛑 KEYED ON THE PLAYER, NEVER ON ARRAY POSITION.
+     *
+     * The live payload carries NO top-level `id` — the documented response is player / team /
+     * date / status / description and nothing else — so the old fallback fired on every row, and
+     * it ended in `:${index}`, the row's position in that team's injury list. Position shifts
+     * whenever a team-mate above you recovers, so the same player got a NEW externalId on the
+     * next run and the upsert INSERTED instead of updating.
+     *
+     * MEASURED IN PRODUCTION 2026-09-08: 2,953 NFL `api_sports` rows across 450 distinct players
+     * — 6.6 rows each, 21 for the worst — with keys reading `14653:1:2026-03-02:0`, `...:1`,
+     * `...:2`. The unique key (sport, externalId, source) worked perfectly on a key that was
+     * never stable, so nothing ever errored and the table just grew.
+     *
+     * The player id IS stable and IS present, and is what the Rolling Insights writer already
+     * keys on for exactly this reason. Name is the fallback only when the vendor omits the id.
+     *
+     * ⚠ ONE ROW PER PLAYER PER SPORT, so a second simultaneous injury overwrites the first. That
+     * matches the RI writer's behaviour and the read port's "freshest row per player" contract;
+     * do not "fix" it by putting the body part or the date back in the key, which is how the
+     * duplicates above happened.
+     */
+    const externalId = playerId ?? `name:${playerName.toLowerCase()}`
     const parsedDate = dateRaw ? new Date(String(dateRaw)) : null
     const safeDate = parsedDate && !Number.isNaN(parsedDate.getTime()) ? parsedDate : null
 

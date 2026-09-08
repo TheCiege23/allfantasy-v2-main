@@ -25,6 +25,7 @@ import { createRunBudget, rotateForFairness } from "@/lib/cron/runBudget"
 import { syncRollingInsightsInjuriesToDb } from "@/lib/injuries/rollingInsightsInjuries"
 import { espnHasInjuryFeed, syncEspnInjuriesToDb } from "@/lib/injuries/espnInjuries"
 import { riSupports } from "@/lib/sports-data/rollingInsightsSupport"
+import { getApiSportsKey, syncAPISportsInjuriesToDb } from "@/lib/api-sports"
 import { recordInjurySyncDeferred, recordInjurySyncRun } from "@/lib/injuries/injurySyncState"
 import { SUPPORTED_SPORTS } from "@/lib/sport-scope"
 
@@ -95,37 +96,118 @@ function resolveSports(param: string | null): Sport[] {
 }
 
 /**
- * Which providers can answer for this sport at all.
+ * 🛑 NFL ONLY. THE SUBSCRIPTION DOES NOT COVER COLLEGE — confirmed by the account holder,
+ * 2026-09-08.
  *
- * A sport with NO source is not a failing sport. SOCCER has neither — Rolling Insights documents
- * no injuries endpoint for it and ESPN scopes soccer per competition with no all-competition
- * injuries path — so it reports `providerCoverage: "none"` and stays green. Reporting it red
- * every fifteen minutes forever is how an operator learns to ignore the whole job.
+ * The client can address NCAAF (league id 2) and an earlier version of this listed it here, which
+ * would have been the worst possible way to find out: a plan gap is SILENT in the fanout. Every
+ * team call throws, each is swallowed by a bare `catch { continue }`, the sync returns 0, and the
+ * route reports a clean run. NCAAF would have looked like a sport where nobody is hurt, forever,
+ * while quietly spending ~33 requests a run to learn nothing.
+ *
+ * Listing only what is entitled turns that into ordinary "no coverage": the source is absent,
+ * `providerCoverage` says so, and nothing pretends to have looked.
+ *
+ * ⚠ SO NCAAF INJURIES REMAIN ESPN-ONLY, AND ESPN IS THIN — 3 rows for the whole of FBS when
+ * measured. CFBD supplies this repo's college player and stat data but has no injury ingestion,
+ * so it does not fill the gap. That is a real hole, not something this change closed.
+ *
+ * Returns the vendor sport code rather than a boolean so the entitlement list and the call site
+ * cannot drift: widening this union is the ONLY way to add a sport, and TypeScript then forces
+ * `syncAPISportsInjuriesToDb` to accept it. A boolean plus a cast at the call site would let a
+ * future addition silently sync NFL under another sport's name.
  */
-function sourcesFor(sport: Sport): { rollingInsights: boolean; espn: boolean } {
-  return { rollingInsights: riSupports("injuries", sport), espn: espnHasInjuryFeed(sport) }
+function apiSportsInjurySport(sport: Sport): "NFL" | null {
+  return sport === "NFL" ? "NFL" : null
 }
 
-async function runOneSport(url: URL, sport: Sport) {
+/**
+ * A configured key is part of coverage, not a failure.
+ *
+ * With no key the source is simply ABSENT — the same treatment as a sport the vendor does not
+ * document. Calling it an error would light this route red on every run for an account that was
+ * never meant to have one.
+ */
+function apiSportsHasInjuryFeed(sport: Sport): boolean {
+  return apiSportsInjurySport(sport) !== null && getApiSportsKey() !== null
+}
+
+/**
+ * Off by default, enabled with a flag — but the COST CASE FOR THAT IS GONE, AND THIS NOTE RECORDS
+ * WHY IT IS STILL A FLAG.
+ *
+ * The endpoint is reliable only per-team (`league` and `season` are rejected outright, and a bare
+ * call answers "At least one parameter is required"), so one pass is a team-list call plus one per
+ * team. Measured on a full NFL sweep, 2026-09-08:
+ *
+ *     33 requests, 5 seconds, 430 injuries across 430 distinct players, 30 of 32 teams
+ *     quota headers: 74,893 of 75,000 remaining that day
+ *
+ * At every run on a 30-minute schedule that is ~1,580 requests/day — 2% of the allowance, and 5s
+ * against this route's 200s budget. The 100/day ceiling that made this expensive belonged to the
+ * dead Free plan; on the current subscription there is no reason to throttle, so the earlier
+ * top-of-hour gate is gone.
+ *
+ * ⚠ THE FLAG STAYS, FOR A DIFFERENT REASON. Turning a paid provider on is a spend decision and an
+ * entitlement question, and a plan gap here is SILENT: every team call throws, each is swallowed
+ * by a bare `catch { continue }` in the fanout, and the sync returns 0 with no error. Defaulting
+ * it on would make that indistinguishable from a quiet week.
+ *
+ *   APISPORTS_INJURIES=1   enable on the schedule
+ *   ?apiSports=1           one-off for a manual or admin call; wins over the env either way
+ */
+function apiSportsEnabled(url: URL): boolean {
+  const param = url.searchParams.get("apiSports")
+  if (param !== null) return ["1", "true", "yes"].includes(param.trim().toLowerCase())
+  return process.env.APISPORTS_INJURIES === "1"
+}
+
+/**
+ * Which providers can answer for this sport at all.
+ *
+ * A sport with NO source is not a failing sport. SOCCER has none — Rolling Insights documents
+ * no injuries endpoint for it, ESPN scopes soccer per competition with no all-competition
+ * injuries path, and API-Sports is football-only here — so it reports `providerCoverage: "none"`
+ * and stays green. Reporting it red every half hour forever is how an operator learns to ignore
+ * the whole job.
+ */
+function sourcesFor(
+  sport: Sport,
+  apiSportsOn: boolean,
+): { rollingInsights: boolean; espn: boolean; apiSports: boolean } {
+  return {
+    rollingInsights: riSupports("injuries", sport),
+    espn: espnHasInjuryFeed(sport),
+    apiSports: apiSportsOn && apiSportsHasInjuryFeed(sport),
+  }
+}
+
+async function runOneSport(url: URL, sport: Sport, apiSportsOn: boolean) {
   const season = url.searchParams.get("season") ?? undefined
 
   const startedAt = Date.now()
 
-  const sources = sourcesFor(sport)
+  const sources = sourcesFor(sport, apiSportsOn)
+  const apiSportsVendorSport = apiSportsInjurySport(sport)
 
   try {
     /*
-     * Two feeds, each run only where the provider actually documents the sport.
+     * Up to three feeds, each run only where the provider actually documents the sport.
      *
      * Rolling Insights covers NFL, NBA, MLB and NHL (support_matrix.injuries) and nothing else —
      * `injuries/NCAAF` answers 304-empty, which is why college once sat at ONE injury row. ESPN
      * publishes both football codes plus NBA, NCAAB, MLB and NHL, needs no key, and so acts as
      * corroboration where RI also answers and as the only source where it does not.
      *
-     * The upsert key includes the source, so the two feeds coexist and injuryReadPort picks the
+     * API-Sports is NFL-only here (the subscription excludes college) and opt-in, see
+     * `apiSportsEnabled`. It earns its place on corroboration and precision rather than coverage:
+     * it ships a first-class `status` field where RI designations have to be regex-parsed out of
+     * prose, and a measured sweep returned 430 players against RI's own NFL feed.
+     *
+     * The upsert key includes the source, so the feeds coexist and injuryReadPort picks the
      * freshest row per player rather than one overwriting the other.
      */
-    const [result, espn] = await Promise.all([
+    const [result, espn, apiSports] = await Promise.all([
       sources.rollingInsights
         ? syncRollingInsightsInjuriesToDb({ sport })
         : Promise.resolve({
@@ -146,6 +228,18 @@ async function runOneSport(url: URL, sport: Sport) {
             errors: [e instanceof Error ? e.message : String(e)],
           }))
         : Promise.resolve({ sport, fetched: 0, written: 0, skippedNoPlayer: 0, errors: [] as string[] }),
+      /*
+       * ⚠ A ZERO FROM THIS SOURCE IS AMBIGUOUS, AND THAT IS WHY IT IS ADDITIVE ONLY.
+       * `syncAPISportsInjuriesToDb` catches its own fetch failure and returns 0, so "no injuries"
+       * and "the fanout died" are indistinguishable from here. It therefore contributes rows and
+       * nothing else: `failed` below is still decided by RI and ESPN, which report honestly. The
+       * catch is for a throw the function does not already swallow.
+       */
+      apiSportsVendorSport && sources.apiSports
+        ? syncAPISportsInjuriesToDb({ sport: apiSportsVendorSport, season })
+            .then((written) => ({ written, errors: [] as string[] }))
+            .catch((e) => ({ written: 0, errors: [e instanceof Error ? e.message : String(e)] }))
+        : Promise.resolve({ written: 0, errors: [] as string[] }),
     ])
 
     /**
@@ -167,8 +261,8 @@ async function runOneSport(url: URL, sport: Sport) {
      *     refuses to say which, so the existing rows stand. Calling that a failure would be
      *     asserting the reading the contract declines to make.
      */
-    const noCoverage = !sources.rollingInsights && !sources.espn
-    const unchangedOnly = result.notModified && !sources.espn
+    const noCoverage = !sources.rollingInsights && !sources.espn && !sources.apiSports
+    const unchangedOnly = result.notModified && !sources.espn && !sources.apiSports
 
     /*
      * A PROVIDER THAT ANSWERS 200 WITH ZERO ROWS IS NOT A FAILING PROVIDER.
@@ -185,16 +279,27 @@ async function runOneSport(url: URL, sport: Sport) {
      * from every configured provider is allowed through, and it is reported explicitly rather than
      * blending into a green.
      */
-    const providerErrored = result.errors.length > 0 || espn.errors.length > 0
+    const providerErrored =
+      result.errors.length > 0 || espn.errors.length > 0 || apiSports.errors.length > 0
     const cleanEmpty =
       !providerErrored && result.fetched === 0 && espn.fetched === 0 && !result.notModified
 
+    /*
+     * ⚠ API-SPORTS IS DELIBERATELY ABSENT FROM THIS EXPRESSION. Its zero is ambiguous (see the
+     * note on the call above), so letting it satisfy `failed` would let a source that CANNOT
+     * report a failure suppress the signal from two that can — the precise way the 17-day outage
+     * stayed invisible. It adds rows and diagnostics; it never turns a run green.
+     */
     const failed =
       !noCoverage && !unchangedOnly && !cleanEmpty && result.written === 0 && espn.written === 0
 
     const providerLabel = noCoverage
       ? "none"
-      : [sources.rollingInsights ? "rolling_insights" : null, sources.espn ? "espn" : null]
+      : [
+          sources.rollingInsights ? "rolling_insights" : null,
+          sources.espn ? "espn" : null,
+          sources.apiSports ? "api_sports" : null,
+        ]
           .filter(Boolean)
           .join("+")
 
@@ -206,10 +311,10 @@ async function runOneSport(url: URL, sport: Sport) {
      */
     await recordInjurySyncRun({
       sport,
-      written: result.written + espn.written,
+      written: result.written + espn.written + apiSports.written,
       fetched: result.fetched + espn.fetched,
       failed,
-      error: [...result.errors, ...espn.errors][0] ?? null,
+      error: [...result.errors, ...espn.errors, ...apiSports.errors][0] ?? null,
     })
 
     return {
@@ -224,9 +329,14 @@ async function runOneSport(url: URL, sport: Sport) {
         providerReturnedEmpty: cleanEmpty || undefined,
         /** RI answered 304 through the retry: unchanged-or-empty, existing rows untouched. */
         rollingInsightsNotModified: result.notModified || undefined,
-        synced: result.written + espn.written,
+        synced: result.written + espn.written + apiSports.written,
         fetched: result.fetched + espn.fetched,
         espn: { fetched: espn.fetched, written: espn.written, errors: espn.errors.slice(0, 3) },
+        /** Present only when the source actually ran, so an absent key or an off-hour tick reads
+         *  as "did not run" rather than as a zero that looks like a failing provider. */
+        apiSports: sources.apiSports
+          ? { written: apiSports.written, errors: apiSports.errors.slice(0, 3) }
+          : undefined,
         /**
          * RI ships no status field — designations are parsed from prose. This
          * counter is the parser-coverage signal: a rising number means the feed
@@ -236,8 +346,8 @@ async function runOneSport(url: URL, sport: Sport) {
          */
         unparseableStatus: result.unparseableStatus,
         legacyApiSportsRowsExpired: result.legacyExpired,
-        errors: [...result.errors, ...espn.errors].length
-          ? [...result.errors, ...espn.errors].slice(0, 10)
+        errors: [...result.errors, ...espn.errors, ...apiSports.errors].length
+          ? [...result.errors, ...espn.errors, ...apiSports.errors].slice(0, 10)
           : undefined,
         durationMs: Date.now() - startedAt,
         timestamp: new Date().toISOString(),
@@ -274,8 +384,15 @@ async function handle(req: NextRequest) {
    * ceiling. `createRunBudget` stops BETWEEN sports and names what it did not reach, so a slow
    * provider costs the tail this run and the rotation gives it the lead next run — instead of a
    * 502 at 300s that writes nothing and records no telemetry at all.
+   *
+   * ⚠ AND THE BUDGET IS WHY THE API-SPORTS FANOUT WAS MEASURED BEFORE BEING ADDED. On 2026-09-08
+   * every sport was writing inside the 30-minute window with budget to spare, so the rotation was
+   * starving nothing — and a per-run cost increase is exactly what would end that. Measured, a
+   * full 32-team NFL sweep is 33 requests in 5 seconds, which is noise against 200s. It is safe
+   * to run on every tick; the flag exists for entitlement and spend, not for wall-clock.
    */
   const budget = createRunBudget(200_000)
+  const apiSportsOn = apiSportsEnabled(url)
   const results = []
   const deferred: string[] = []
   for (const sport of resolveSports(explicit)) {
@@ -291,7 +408,7 @@ async function handle(req: NextRequest) {
       await recordInjurySyncDeferred(sport)
       continue
     }
-    results.push(await runOneSport(url, sport))
+    results.push(await runOneSport(url, sport, apiSportsOn))
   }
 
   // Explicit single-sport callers keep the exact response they had before.

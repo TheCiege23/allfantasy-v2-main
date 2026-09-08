@@ -35,6 +35,20 @@ import { prisma } from '@/lib/prisma'
 import { riFetch } from '@/lib/workers/providers/rollingInsightsRest'
 import { riSupports } from '@/lib/sports-data/rollingInsightsSupport'
 
+/**
+ * Rows fetched BEFORE this instant belong to the dead Free-plan API-Sports feed and get retired
+ * below; rows fetched after it belong to a live subscription and must be left alone.
+ *
+ * 2026-08-10 is the day injuries moved to Rolling Insights, so nothing legitimate was writing
+ * `api_sports` injury rows after it. Production's frozen rows all sit at 2026-07-24, comfortably
+ * on the legacy side.
+ *
+ * ⚠ A CUTOVER, NOT A ROLLING WINDOW. A relative bound (`now - N days`) would start expiring live
+ * rows again the moment the new feed paused for longer than N — silently, which is the whole
+ * failure being fixed. This date is fixed and only moves by hand.
+ */
+const API_SPORTS_LEGACY_CUTOVER = new Date('2026-08-10T00:00:00.000Z')
+
 /** One row exactly as Rolling Insights returns it. */
 export interface RiInjuryRow {
   player?: string
@@ -332,7 +346,27 @@ export async function syncRollingInsightsInjuriesToDb(opts?: {
   if (result.written > 0) {
     try {
       const expired = await prisma.sportsInjury.updateMany({
-        where: { sport, source: 'api_sports', expiresAt: { gt: now } },
+        /*
+         * 🛑 DATE-SCOPED, AND THE SCOPE IS LOAD-BEARING. This clause exists to retire what the
+         * FROZEN Free-plan feed left behind — production still holds 2,953 NFL rows stuck at
+         * 2026-07-24, because that account could not serve a current season at all.
+         *
+         * Without the `fetchedAt` bound it retires every `api_sports` row unconditionally,
+         * including rows a LIVE subscription wrote minutes earlier. RI writes NFL on every
+         * 30-minute run, so a re-enabled API-Sports feed would be expired within half an hour of
+         * each write — and SILENTLY: the rows are still present, the write still reports success,
+         * and the read port simply drops them for being expired. Nothing errors, nothing 500s,
+         * and no monitor goes red. Exactly the shape of failure this file exists to avoid.
+         *
+         * Anything fetched after the cutover came from a paid, current-season account and is not
+         * this clause's business.
+         */
+        where: {
+          sport,
+          source: 'api_sports',
+          expiresAt: { gt: now },
+          fetchedAt: { lt: API_SPORTS_LEGACY_CUTOVER },
+        },
         data: { expiresAt: now },
       })
       result.legacyExpired = expired.count
