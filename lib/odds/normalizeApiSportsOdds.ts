@@ -86,43 +86,62 @@ export interface NormalizedGameOdds {
  * every set and the first match wins, so the more specific sets are listed first.
  */
 /*
- * 🛑 `'line'` IS NOT AN ALIAS FOR SPREAD, AND IT USED TO BE. Substring matching
- * meant `'Moneyline'` contained `'line'`, so a moneyline market was classified as a
- * spread, its team-named values parsed for a points number, found none, and the
- * whole market vanished — moneylineHome/Away null, no error, no unrecognised name.
- * Caught by the team-named-sides test in __tests__/odds. Some books do label the
- * spread "Line"; such a book now lands in `unrecognizedBets` instead, which is the
- * failure this file is built to prefer — visible rather than silent.
+ * 🛑 CLASSIFY ON THE BET **ID**, NEVER ON A SUBSTRING OF THE NAME.
  *
- * MONEYLINE IS ALSO TESTED FIRST for the same reason: it is the set whose names most
- * readily contain another set's words, so it gets first refusal.
+ * This file first shipped with substring alias matching, and `/odds/bets` was then
+ * captured live (the fixture is committed at
+ * `contracts/api-sports/fixtures/odds-bets.json`). It returns **361** markets, not
+ * the 78 the docs' collapsed sample implies, and measuring the old aliases against
+ * that real list is what condemned them:
+ *
+ *   `'total'`    matched **59** markets. Exactly ONE is the game total.
+ *                The rest include `Total Passing Yards` (~520), `Total Touchdowns`
+ *                (~5.5), `Total Field Goals` (~3.5), `Total Punts`, `Total Sacks`,
+ *                `Total - Home` and `Total - Away` (TEAM totals, not the game's).
+ *   `'handicap'` matched `Handicap Result`, a THREE-way handicap — a different
+ *                market from the two-way spread.
+ *   `'2-way'`    matched `Team To Make First Score 2-Way`.
+ *
+ * Any of those would have landed in `total_points` or `spread_home` as a number
+ * that is the right type, the right shape, and completely wrong — and, worse, they
+ * would NOT have appeared in `unrecognizedBets`, because they were wrongly
+ * RECOGNISED. The diagnostic could not have saved us; only the ids can.
+ *
+ * The docs state ids are stable and usable as filters ("All bets id can be used in
+ * endpoint odds as filters"), so they are the identifier and the name is cosmetic.
  */
-const MONEYLINE_ALIASES = ['home/away', 'moneyline', 'money line', 'match winner', 'winner', 'to win', '2way', '2-way']
-const SPREAD_ALIASES = ['handicap', 'point spread', 'spread']
-const TOTAL_ALIASES = ['over/under', 'over under', 'total points', 'totals', 'total']
+const BET_ID_MONEYLINE = 1 // "Home/Away"
+const BET_ID_SPREAD = 2 // "Asian Handicap"
+const BET_ID_TOTAL = 3 // "Over/Under"
 
 /*
- * ⚠ PERIOD-SCOPED MARKETS MUST BE REJECTED, NOT PARSED.
- * A book quotes the same three markets for halves and quarters, and those names
- * contain the full-game aliases as substrings ("Over/Under 1st Half"). Matching
- * on substring alone would let a 1st-quarter total overwrite the game total with
- * a number roughly a quarter the size — a value that is entirely plausible, lands
- * in the right column, and is wrong. Checked BEFORE the alias sets.
+ * EXACT-name fallback, for the single case the ids cannot cover: a provider that
+ * renumbers. Compared on the whole normalized string — never a substring — so
+ * `Total Touchdowns` can no longer reach `Over/Under`'s branch by containing a word.
  */
-const PERIOD_SCOPED_MARKERS = [
-  '1st half', '2nd half', 'first half', 'second half', 'halftime', 'half time',
-  '1st quarter', '2nd quarter', '3rd quarter', '4th quarter',
-  'quarter', 'period', 'inning', 'drive',
-]
-
-function isPeriodScoped(betName: string): boolean {
-  const lower = betName.toLowerCase()
-  return PERIOD_SCOPED_MARKERS.some((marker) => lower.includes(marker))
+const EXACT_NAME_TO_MARKET: Record<string, Market> = {
+  'home/away': 'moneyline',
+  'asian handicap': 'spread',
+  'over/under': 'total',
 }
 
-function matchesAny(betName: string, aliases: string[]): boolean {
-  const lower = betName.toLowerCase()
-  return aliases.some((alias) => lower.includes(alias))
+type Market = 'moneyline' | 'spread' | 'total'
+
+function normalizeName(name: string): string {
+  return name.trim().toLowerCase().replace(/\s+/g, ' ')
+}
+
+/**
+ * Which of the three full-game markets this bet is, or null for the other ~358.
+ *
+ * Note there is a bet in the live list whose `name` is literally `null` (id 86).
+ * It is handled by the caller's empty-name guard rather than here.
+ */
+export function classifyBet(bet: { id?: number; name?: string }): Market | null {
+  if (bet.id === BET_ID_MONEYLINE) return 'moneyline'
+  if (bet.id === BET_ID_SPREAD) return 'spread'
+  if (bet.id === BET_ID_TOTAL) return 'total'
+  return EXACT_NAME_TO_MARKET[normalizeName(String(bet.name ?? ''))] ?? null
 }
 
 /**
@@ -225,20 +244,28 @@ export function normalizeBookmakerOdds(
     unrecognizedBets: [],
   }
 
+  const seenNames: string[] = []
+
   for (const bet of bookmaker.bets ?? []) {
     const name = String(bet?.name ?? '')
+    // id 86 in the live list has a null name; `values` can also be absent.
     if (!name) continue
+    if (seenNames.length < 10) seenNames.push(name)
 
-    if (isPeriodScoped(name)) {
-      // Not "unrecognized" — recognised and deliberately skipped. Recording it as
-      // unknown would bury the genuine vendor-rename signal under routine noise.
+    const market = classifyBet(bet)
+    if (market === null) {
+      /*
+       * ~358 of the 361 markets land here — player props, period splits, team
+       * totals, touchdown scorers. Pushing them all into `unrecognizedBets` would
+       * write a few hundred names on every row and drown the one signal that
+       * matters. What gets recorded instead is handled after the loop.
+       */
       continue
     }
 
     const values = Array.isArray(bet.values) ? bet.values : []
 
-    // Moneyline first — see the alias-set comment for the collision this ordering fixes.
-    if (matchesAny(name, MONEYLINE_ALIASES)) {
+    if (market === 'moneyline') {
       for (const entry of values) {
         const side = sideOf(entry.value, opts.homeTeamName, opts.awayTeamName)
         const odd = parseOddToDecimal(entry.odd)
@@ -249,7 +276,7 @@ export function normalizeBookmakerOdds(
       continue
     }
 
-    if (matchesAny(name, SPREAD_ALIASES)) {
+    if (market === 'spread') {
       for (const entry of values) {
         const side = sideOf(entry.value, opts.homeTeamName, opts.awayTeamName)
         const points = parsePoints(entry.value)
@@ -267,7 +294,7 @@ export function normalizeBookmakerOdds(
       continue
     }
 
-    if (matchesAny(name, TOTAL_ALIASES)) {
+    if (market === 'total') {
       for (const entry of values) {
         const lower = String(entry.value ?? '').trim().toLowerCase()
         const points = parsePoints(entry.value)
@@ -283,8 +310,24 @@ export function normalizeBookmakerOdds(
       continue
     }
 
-    out.unrecognizedBets.push(name)
   }
+
+  /*
+   * The diagnostic, re-aimed now that classification is id-based.
+   *
+   * A vendor RENAME no longer breaks anything (ids carry the meaning), so listing
+   * unmatched names on every row would be pure noise. The failure that CAN still
+   * happen is that ids 1/2/3 are absent or renumbered — and its signature is a
+   * bookmaker that quoted markets from which we extracted nothing at all. Only then
+   * is it worth recording what was on offer, so a human can see whether the primary
+   * ids moved. Capped at 10; a book quotes hundreds.
+   */
+  const gotNothing =
+    out.spreadHome === null &&
+    out.totalPoints === null &&
+    out.moneylineHome === null &&
+    out.moneylineAway === null
+  if (gotNothing && seenNames.length > 0) out.unrecognizedBets = seenNames
 
   // Derived fields. Both require a complete pair by design — see the field docs.
   if (out.totalPoints !== null && out.spreadHome !== null) {

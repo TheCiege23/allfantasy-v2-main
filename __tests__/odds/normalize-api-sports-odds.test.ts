@@ -209,8 +209,95 @@ describe('period-scoped markets are rejected, not parsed', () => {
     )
     expect(out.totalPoints).toBeNull()
     expect(out.spreadHome).toBeNull()
-    // Skipped deliberately ≠ unrecognised. Recording these as unknown would bury the
-    // genuine vendor-rename signal under routine noise.
+    // Nothing was extracted, so the diagnostic reports what WAS on offer — that is
+    // the one case where listing names is signal rather than noise.
+    expect(out.unrecognizedBets).toEqual(['Over/Under 1st Half', 'Asian Handicap 2nd Quarter'])
+  })
+})
+
+describe('real market names from the live /odds/bets list', () => {
+  /*
+   * 🛑 THE MOST IMPORTANT BLOCK IN THIS FILE. Every name below is copied verbatim
+   * from `contracts/api-sports/fixtures/odds-bets.json`, captured live on
+   * 2026-09-08. Each one was matched by the ORIGINAL substring aliases and would
+   * have been written into `total_points` or `spread_home` as a plausible,
+   * correctly-typed, completely wrong number — and would NOT have shown up in
+   * `unrecognizedBets`, because it was wrongly RECOGNISED.
+   *
+   * The substring alias `'total'` matched 59 of the 361 live markets. One is the
+   * game total. These tests are what stop the other 58.
+   */
+  const NOT_THE_GAME_TOTAL: Array<[number, string, string]> = [
+    [54, 'Total Touchdowns', 'Over 5.5'],
+    [75, 'Total Field Goals', 'Over 3.5'],
+    [8, 'Total - Home', 'Over 24.5'],
+    [9, 'Total - Away', 'Over 21.5'],
+    [129, 'Total (3W)', 'Over 45.5'],
+    [136, 'Total Touchdowns (3W)', 'Over 5.5'],
+    [70, 'Home Total Touchdowns', 'Over 2.5'],
+    [155, 'Shortest Total Touchdowns', 'Over 3.5'],
+  ]
+
+  it.each(NOT_THE_GAME_TOTAL)('bet %i "%s" must not become the game total', (id, name, value) => {
+    const out = normalizeBookmakerOdds(
+      book({ bets: [{ id, name, values: [{ value, odd: '1.90' }] }] }),
+    )
+    expect(out.totalPoints).toBeNull()
+    expect(out.impliedHomeTotal).toBeNull()
+  })
+
+  it('a yardage prop does not become a 500-point game total', () => {
+    // The worst case: `Total Passing Yards` at 520.5 would have produced implied
+    // team totals of ~260 each — absurd, but nothing in the pipeline checks ranges.
+    const out = normalizeBookmakerOdds(
+      book({ bets: [{ id: 200, name: 'Total Passing Yards', values: [{ value: 'Over 520.5', odd: '1.9' }] }] }),
+    )
+    expect(out.totalPoints).toBeNull()
+  })
+
+  it('"Handicap Result" (3-way) must not become the 2-way spread', () => {
+    const out = normalizeBookmakerOdds(
+      book({ bets: [{ id: 6, name: 'Handicap Result', values: [{ value: 'Home -3.5', odd: '1.9' }] }] }),
+    )
+    expect(out.spreadHome).toBeNull()
+  })
+
+  it('"Team To Make First Score 2-Way" must not become the moneyline', () => {
+    const out = normalizeBookmakerOdds(
+      book({ bets: [{ id: 83, name: 'Team To Make First Score 2-Way', values: [
+        { value: 'Home', odd: '1.90' },
+        { value: 'Away', odd: '1.90' },
+      ] }] }),
+    )
+    expect(out.moneylineHome).toBeNull()
+    expect(out.moneylineAway).toBeNull()
+  })
+
+  it('the three real primaries DO parse, by id', () => {
+    // The positive half: ids 1/2/3 with their live names, which is what a real
+    // payload carries. Without this the block above would pass with everything
+    // rejected — the classic guard that only ever says no.
+    const out = normalizeBookmakerOdds({
+      id: 8,
+      name: 'Bet365',
+      bets: [
+        { id: 1, name: 'Home/Away', values: [{ value: 'Home', odd: '1.65' }, { value: 'Away', odd: '2.35' }] },
+        { id: 2, name: 'Asian Handicap', values: [{ value: 'Home -3.5', odd: '1.91' }] },
+        { id: 3, name: 'Over/Under', values: [{ value: 'Over 45.5', odd: '1.90' }] },
+      ],
+    })
+    expect(out.moneylineHome).toBeCloseTo(1.65, 5)
+    expect(out.spreadHome).toBe(-3.5)
+    expect(out.totalPoints).toBe(45.5)
+    expect(out.impliedHomeTotal).toBeCloseTo(24.5, 5)
+    expect(out.unrecognizedBets).toEqual([])
+  })
+
+  it('tolerates the live list entry whose name is literally null (id 86)', () => {
+    const out = normalizeBookmakerOdds(
+      book({ bets: [{ id: 86, name: null as unknown as string, values: [] }] }),
+    )
+    expect(out.totalPoints).toBeNull()
     expect(out.unrecognizedBets).toEqual([])
   })
 })
@@ -253,14 +340,21 @@ describe('positive control — these guards can actually fail', () => {
     expect(out.homeWinProbability).toBeNull()
   })
 
-  it('CONTROL: the period-scope guard is what rejects the half-line, not luck', () => {
-    // Strip the guard's reason for firing (rename the market so it is NOT period-scoped)
-    // and the same 23.5 DOES land as the game total. That proves the earlier assertions
-    // are testing the guard rather than something incidental about the fixture.
-    const unguarded = normalizeBookmakerOdds(
+  it('CONTROL: it is the ID/exact-name check doing the rejecting, not the number', () => {
+    // The rejections above are not because 23.5 or 5.5 "looks wrong" — nothing here
+    // range-checks. Give the SAME value a primary identity and it lands. Here via the
+    // exact-name fallback (id 4 is not a primary, but the name matches exactly), which
+    // also proves that fallback is wired rather than dead code.
+    const accepted = normalizeBookmakerOdds(
       book({ bets: [{ id: 4, name: 'Over/Under', values: [{ value: 'Over 23.5', odd: '1.90' }] }] }),
     )
-    expect(unguarded.totalPoints).toBe(23.5)
+    expect(accepted.totalPoints).toBe(23.5)
+
+    // Same number, same shape, non-primary identity → rejected.
+    const rejected = normalizeBookmakerOdds(
+      book({ bets: [{ id: 54, name: 'Total Touchdowns', values: [{ value: 'Over 23.5', odd: '1.90' }] }] }),
+    )
+    expect(rejected.totalPoints).toBeNull()
   })
 
   it('CONTROL: an unrecognised name is genuinely unmatched by every alias set', () => {
