@@ -78,6 +78,29 @@ export type TradeConsoleRosterSummary = {
 export type TradeConsolePlayerLine = {
   name: string
   playerId: string | null
+  /**
+   * The SLEEPER provider id, when this player could be resolved to one — the key the trade
+   * ENRICHMENT tables are written under.
+   *
+   * 🛑 A SECOND FIELD RATHER THAN A BETTER `playerId`, BECAUSE THEY ARE DIFFERENT ID SPACES AND
+   * MIXING THEM IS THE BUG THIS EXISTS TO FIX. Measured on production 2026-09-08, resolving one
+   * player four ways and asking `resolveTradeEnrichment` which key it can read:
+   *
+   *     SportsPlayerRecord.id   NFL:NFL:puka-nacua:WR:LAR   <- what `playerId` carries   nothing
+   *     SportsPlayer.id         bde7f6cf-...                                             nothing
+   *     canonicalPlayerId       bf213084-...                                             nothing
+   *     providerIds.sleeper     9493                                                     adp 2.8
+   *
+   * `PlayerValueSnapshot.sleeperId` is 9493 for the same player, so the market table keys the same
+   * way. `playerId` stays the slug id every existing consumer already reads (`sportsDataReady`, the
+   * client); this carries the one the enrichment port can actually use.
+   *
+   * ⚠ NULL IS A REAL ANSWER AND MUST STAY VISIBLE. A hand-typed name that does not resolve, or one
+   * that resolves ambiguously across the 178 NFL duplicate-name groups, gets null here — priced by
+   * name exactly as before, and counted in `playerAssets` but not `playerAssetsWithId`, so the
+   * resolution rate stays measured rather than assumed.
+   */
+  enrichmentPlayerId?: string | null
   sport: string
   position: string
   team: string

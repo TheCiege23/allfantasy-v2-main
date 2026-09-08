@@ -130,11 +130,26 @@ export const POST = withApiUsage({ endpoint: '/api/trade-value/analyze', tool: '
             ...lines.map((line) => ({
               kind: 'player' as const,
               /*
-               * The id the console already resolved (`row?.id ?? raw.playerId`). It was being
-               * dropped here, which is the entire reason the canonical engine could only ever be
-               * handed the console's own numbers.
+               * 🛑 THE ENRICHMENT KEY, NOT THE CONSOLE'S DISPLAY ID — CORRECTED 2026-09-08.
+               *
+               * This passed `line.playerId`, and that is a `SportsPlayerRecord` slug id
+               * (`NFL:NFL:puka-nacua:WR:LAR`). The enrichment tables are keyed on the SLEEPER id
+               * (`9493`). Measured against `resolveTradeEnrichment` directly: the slug resolves
+               * nothing, the Sleeper id returns `adp 2.8`, and `PlayerValueSnapshot.sleeperId`
+               * agrees. So `enrichIds` below was always a list of keys nothing could match.
+               *
+               * ⚠ THAT IS WHY FIXING THE MISSING NFL NAME LOOKUP ALONE WOULD HAVE BEEN COSMETIC:
+               * it raises `playerAssetsWithId` — the telemetry reads as fixed — while
+               * `independentInputs` stays false and the row still buckets to `console`. Production
+               * has ZERO `console_independent` rows across all nine observations, including trades
+               * where the client did supply an id.
+               *
+               * `ConsoleComparableAsset.playerId` is used for exactly two things in
+               * `consoleShadowCompare` — keying the enrichment lookup and counting the resolution
+               * rate — so the enrichment id is the correct value for this field specifically.
+               * `line.playerId` keeps its own meaning for every other consumer.
                */
-              playerId: line.playerId ?? null,
+              playerId: line.enrichmentPlayerId ?? null,
               name: line.name,
               position: line.position,
               team: line.team,
