@@ -94,6 +94,48 @@ const PUSH_GRACE_MS =
   Number(process.env.AF_PUSH_QUEUE_GRACE_MS) || SMOKE_TIMEOUT_MS + PUSH_GRACE_MARGIN_MS
 
 /**
+ * 🛑 THE GRACE ABOVE IS THE RIGHT PRICE FOR A SMOKE RUN AND THE WRONG PRICE FOR
+ * A CORPSE, AND UNTIL NOW EVERY WAVED-THROUGH TICKET PAID IT.
+ *
+ * `pre-push-smoke.mjs` skips itself when 2+ other `tsc.js` processes are already
+ * running, which on a box carrying ~9 sessions is the common case, not the edge
+ * one. So the 25 min above was being charged to pushes that were never going to
+ * spend it — including pushes whose session had already died.
+ *
+ * That is what turns a slow queue into a stalled one, and it is a positive
+ * feedback loop rather than a constant cost. Measured 2026-09-08:
+ *
+ *   - a background wait lane is killed at ~25 min (CLAUDE.md records this)
+ *   - the queue was 6 deep with the oldest ticket 37 min in line — every one of
+ *     them already past that kill line
+ *   - so their lanes die while waiting, and each corpse then holds the HEAD for
+ *     the full 25 min before this file gives up on it
+ *   - 3 of the day's 15 releases expired without landing; `#269` burned three
+ *     ticket numbers and never landed at all
+ *   - nothing reached `origin/main` between 08:04 and 12:45, on a lane that had
+ *     landed 27 commits the day before
+ *
+ * Each corpse lengthens the queue, which lengthens the wait, which kills the
+ * next lane. The queue is stable while it is short and cannot recover on its own
+ * once it is not.
+ *
+ * ⚠ SO THE EXPENSIVE GRACE IS NOW SOMETHING THE SMOKE ANNOUNCES, NEVER SOMETHING
+ * THIS FILE ASSUMES. A ticket gets the full grace only while a marker written by
+ * `pre-push-smoke.mjs` says a run is genuinely in progress for that exact sha.
+ * Without one, a push has the cheaper guards and the push itself to do, and this
+ * shorter clock applies.
+ *
+ * 🛑 DO NOT TIGHTEN THIS TOWARDS THE OBSERVED PUSH TIME. A no-smoke push was
+ * measured at ~7 min from wave-through to landing, and the failure mode of being
+ * WRONG here is not a slow queue — it is the six-lost-landings starvation the
+ * long grace was written to fix, reappearing for every push that skips the smoke.
+ * 10 min is a deliberately generous floor over that 7, in the same spirit as the
+ * smoke's own 20-minute timeout, and it should be moved only from a measured
+ * distribution of wave-through-to-landing times rather than from a tidier number.
+ */
+const SHORT_PUSH_GRACE_MS = Number(process.env.AF_PUSH_QUEUE_SHORT_GRACE_MS) || 10 * 60_000
+
+/**
  * How long a pusher lock survives without a heartbeat.
  *
  * Deliberately much longer than a ticket's 15 min: a ticket covers one push,
@@ -382,9 +424,98 @@ function remoteMain() {
     remoteMainSha = null
     return remoteMainSha
   }
+  /**
+   * Test affordance, and a sibling of `AF_PUSH_QUEUE_NO_REMOTE` above rather
+   * than a new kind of thing: the ancestry release cannot be exercised without
+   * naming what `origin/main` is, and reaching the network to find out would put
+   * a flaky `ls-remote` in charge of whether the queue blocks.
+   *
+   * Safe to have in production for the same reason the rest of this file fails
+   * open: the worst a bogus value can do is release a ticket early, letting one
+   * session take a turn out of order. It cannot block a push.
+   */
+  if (process.env.AF_PUSH_QUEUE_REMOTE_SHA) {
+    remoteMainSha = process.env.AF_PUSH_QUEUE_REMOTE_SHA
+    return remoteMainSha
+  }
   const out = git(['ls-remote', 'origin', 'refs/heads/main'], { timeout: 15_000 })
   remoteMainSha = out ? out.split(/\s+/)[0] || null : null
   return remoteMainSha
+}
+
+/**
+ * Is `pre-push-smoke.mjs` genuinely mid-run for this exact sha?
+ *
+ * Read as a POSITIVE signal only. Every failure to answer — no marker, an
+ * unreadable one, a truncated one, a clock that makes no sense — returns false
+ * and buys the ticket the shorter grace, which is safe in that direction
+ * precisely because the smoke refuses to run at all when it cannot write its
+ * marker. Absence therefore means "no smoke is running" rather than "could not
+ * tell", which is the property this whole mechanism rests on.
+ *
+ * ⚠ KEYED ON THE SHA, never on the worktree or the ticket. Two sessions can be
+ * inside the guards at once, and a marker for someone else's commit says nothing
+ * about this one.
+ *
+ * ⚠ AND A MARKER OLDER THAN THE SMOKE'S OWN CEILING IS A CORPSE, NOT A RUN. A
+ * smoke killed hard enough to skip its own cleanup would otherwise grant the
+ * long grace forever. Bounding it here degrades to the old behaviour — 25 min
+ * and no worse — rather than to something new.
+ */
+/**
+ * 🛑 THE MARKER ONLY EXISTS IF THE SMOKE THAT RAN KNOWS TO WRITE ONE, AND FOR A
+ * WHILE AFTER THIS LANDS, MOST OF THEM WILL NOT.
+ *
+ * The pre-push hook resolves its scripts from `$root/scripts` and only falls
+ * back to the primary checkout when the file is ABSENT. A linked worktree
+ * sitting on an older commit therefore has the file, and runs its OWN older
+ * `pre-push-smoke.mjs` — which writes no marker. Judging that run by the short
+ * grace kills a genuine 20-minute compile at 10 minutes, which is exactly the
+ * six-lost-landings starvation the long grace exists to prevent.
+ *
+ * Caught in production rather than in review: on 2026-09-08 `#272` was released
+ * as "never landed (no smoke running, short grace)" 12 minutes into a push whose
+ * commit is now `origin/main`. Its push was still in flight, and nothing in the
+ * marker scheme could see it.
+ *
+ * So a compile that is running is treated as a smoke that could not announce
+ * itself. Three-valued on purpose, and only `false` — a positive, parsed "no
+ * compiler is running" — is allowed to shorten anything. An error, a timeout, a
+ * platform this cannot inspect: all return null and keep the long grace, which
+ * is the safe direction.
+ *
+ * ⚠ Called ONLY at the moment a ticket would be released on the short grace, so
+ * the subprocess cost is paid once per expiry rather than once per reconcile.
+ */
+function typecheckIsRunning() {
+  const forced = process.env.AF_PUSH_QUEUE_ASSUME_TSC
+  if (forced === '1') return true
+  if (forced === '0') return false
+  if (process.platform !== 'win32') return null
+  const res = spawnSync(
+    'powershell.exe',
+    [
+      '-NoProfile',
+      '-Command',
+      "@(Get-CimInstance Win32_Process -Filter \"Name='node.exe'\" | " +
+        "Where-Object { $_.CommandLine -like '*tsc.js*' } | Measure-Object).Count",
+    ],
+    { encoding: 'utf8', timeout: 15_000, windowsHide: true },
+  )
+  if (res.error || res.status !== 0) return null
+  const n = Number.parseInt(String(res.stdout).trim(), 10)
+  return Number.isFinite(n) ? n > 0 : null
+}
+
+function smokeIsRunningFor(dir, sha) {
+  try {
+    const m = JSON.parse(readFileSync(join(dir, 'smoke-active', `${sha}.json`), 'utf8'))
+    const startedAt = Number(m.startedAt) || 0
+    if (!startedAt) return false
+    return now() - startedAt < SMOKE_TIMEOUT_MS + PUSH_GRACE_MARGIN_MS
+  } catch {
+    return false
+  }
 }
 
 /**
@@ -418,13 +549,68 @@ function reconcile(dir, tickets) {
      * being trusted forever.
      */
     if (t.state === 'pushing' && allowedAt) {
+      /**
+       * 🛑 "IS MY SHA THE TIP" IS THE WRONG QUESTION, AND ASKING IT COSTS THE
+       * HEAD OF THE LINE ITS WHOLE GRACE.
+       *
+       * A push that lands is only the tip until the next one lands on top of it.
+       * Between this ticket's push finishing and this reconcile running, any peer
+       * can push — and then `landed === t.sha` is false forever, for a commit
+       * that is sitting on `origin/main`. The ticket is not waiting for anything
+       * at that point; it just cannot say so, and it holds the head until its
+       * grace expires. On a queue that was 7 deep on 2026-09-08 this compounds
+       * with every landing.
+       *
+       * Ancestry is the honest question — "is my work ON main" — and it subsumes
+       * the tip case, which is kept only as a free fast path ahead of the git
+       * call. `isAncestor` is deliberately three-valued: 0 is yes, 1 is no, and
+       * anything else (a timeout, a killed process, a contended tree) is NOT a
+       * verdict. This repo has already read a `timeout`'s 124 and a missing
+       * `pgrep`'s 127 as answers; here a null must mean "do not act", never "no",
+       * so the ticket simply keeps its grace and the next poll asks again.
+       *
+       * ⚠ THIS DOES NOT COVER A CHERRY-PICKED BATCH. A pick renames every commit,
+       * so a batched landing leaves the picked-from tickets failing this test and
+       * waiting out their (now 10 min) grace. That is bounded and survivable
+       * rather than free: a session that batches peers' commits should `drop`
+       * their tickets explicitly instead of leaving them to expire.
+       */
       const landed = remoteMain()
-      if (landed && landed === t.sha) {
+      if (landed && (landed === t.sha || isAncestor(t.sha, landed) === true)) {
         release(dir, t, 'landed on origin/main')
         continue
       }
-      if (t0 - allowedAt > PUSH_GRACE_MS) {
-        release(dir, t, `waved through ${mins(t0 - allowedAt)} ago and never landed`)
+      /**
+       * Which clock applies is decided by the smoke marker, and the journal
+       * records which one fired. That naming is not decoration: this whole fix
+       * was diagnosed by reading release reasons out of `journal.jsonl`, and a
+       * reason that does not say which grace expired would have made the next
+       * such diagnosis guesswork.
+       */
+      const smoking = smokeIsRunningFor(dir, t.sha)
+      if (t0 - allowedAt > (smoking ? PUSH_GRACE_MS : SHORT_PUSH_GRACE_MS)) {
+        /**
+         * The short grace has run out, but an UNANNOUNCED smoke — one run by an
+         * older worktree's copy of the guard — looks identical to no smoke at
+         * all. A running compiler is the evidence that separates them, and only
+         * a parsed `false` is allowed to shorten anything: null keeps the long
+         * grace. Still capped by PUSH_GRACE_MS, so this can defer a release but
+         * never prevent one.
+         */
+        if (!smoking && t0 - allowedAt <= PUSH_GRACE_MS && typecheckIsRunning() !== false) {
+          live.push(t)
+          continue
+        }
+        release(
+          dir,
+          t,
+          `waved through ${mins(t0 - allowedAt)} ago and never landed ` +
+            (smoking
+              ? '(smoke run in progress, full grace)'
+              : t0 - allowedAt > PUSH_GRACE_MS
+                ? '(full grace, no smoke ever announced)'
+                : '(no smoke running and no compile in flight, short grace)'),
+        )
         continue
       }
       live.push(t)

@@ -13,7 +13,15 @@
  * arithmetic.
  */
 import { execFileSync, spawnSync } from 'node:child_process'
-import { existsSync, mkdtempSync, readdirSync, rmSync, writeFileSync, readFileSync } from 'node:fs'
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  rmSync,
+  writeFileSync,
+  readFileSync,
+} from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
@@ -53,6 +61,13 @@ function run(args: string[], payload: string, env: Record<string, string> = {}):
       // No network in a unit test: the `landed on origin/main` reconciliation is
       // left off here so a flaky ls-remote cannot decide whether the queue blocks.
       AF_PUSH_QUEUE_NO_REMOTE: '1',
+      // 🛑 AND NO PROCESS TABLE EITHER. The short grace defers to a running
+      // compile, and this box genuinely runs peers' `tsc` most of the time — so
+      // without pinning this, every short-grace assertion below would pass or
+      // fail according to what a DIFFERENT session happened to be doing. '0'
+      // means "no compile in flight"; the cases that exercise the deferral set
+      // it to '1' explicitly.
+      AF_PUSH_QUEUE_ASSUME_TSC: '0',
       ...env,
     },
   })
@@ -84,6 +99,24 @@ function seed(seq: number, sha: string, extra: Record<string, unknown> = {}) {
       heartbeatAt: Date.now(),
       ...extra,
     }),
+  )
+}
+
+/**
+ * Stand in for `pre-push-smoke.mjs` announcing a run in progress.
+ *
+ * Written as a plain file rather than by invoking the smoke, deliberately: what
+ * is under test here is the queue's reading of the marker, and driving the real
+ * smoke would need a git worktree, a node_modules link and a cold compile to
+ * assert an arithmetic branch. The cost of that choice is that the two scripts
+ * could drift apart on the PATH, so the marker's location is asserted from the
+ * smoke's own source in the contract test at the bottom of this file.
+ */
+function seedSmokeMarker(sha: string, startedAt = Date.now()) {
+  mkdirSync(join(queueDir, 'smoke-active'), { recursive: true })
+  writeFileSync(
+    join(queueDir, 'smoke-active', `${sha}.json`),
+    JSON.stringify({ sha, pid: 1234, startedAt }),
   )
 }
 
@@ -221,15 +254,68 @@ describe('push-queue — the line always moves', () => {
    * bouncing the leader as non-fast-forward. Measured 2026-09-07: the same patch
    * lost six consecutive attempts in ~90 min and its patch-id never changed.
    *
-   * 12 min is chosen to sit BETWEEN the old grace and the new one, so this test
-   * is red on the old constant and green on the new. A value inside both, or
-   * outside both, would pass either way and prove nothing.
+   * 12 min is chosen to sit BETWEEN the short grace and the long one, so this
+   * test is red if the long grace stops applying to a real run. A value inside
+   * both, or outside both, would pass either way and prove nothing.
+   *
+   * ⚠ THE MARKER IS NOW WHAT EARNS THE LONG GRACE, so this test seeds one. Its
+   * intent is unchanged and its companion below is the half that was missing:
+   * the identical ticket WITHOUT a marker must be released, or the long grace is
+   * still being charged to corpses and nothing has been fixed.
    */
-  it('holds a ticket 12 minutes into a push, because the smoke check runs for 20', () => {
+  it('holds a ticket 12 minutes into a push while its smoke run is announced', () => {
     seed(1, SHA_A, { state: 'pushing', allowedAt: Date.now() - 12 * 60_000 })
+    seedSmokeMarker(SHA_A)
 
     expect(check(SHA_B).status).toBe(1)
     expect(tickets().some((t) => t.sha === SHA_A)).toBe(true)
+  })
+
+  /**
+   * 🛑 THE KNOWN POSITIVE FOR THE WHOLE FIX. Measured 2026-09-08: the queue was
+   * 6 deep with the oldest ticket 37 min in line, past the ~25 min at which a
+   * background wait lane is killed — so lanes died waiting, and each corpse then
+   * held the head for the full 25 min grace. Nothing reached `origin/main`
+   * between 08:04 and 12:45 on a lane that had landed 27 commits the day before.
+   *
+   * Same 12 minutes as the test above and the opposite verdict, with the marker
+   * as the only difference between them. Both are needed: the pair is what
+   * distinguishes "the short grace works" from "the long grace was deleted".
+   */
+  it('releases a ticket 12 minutes into a push with no smoke run announced', () => {
+    seed(1, SHA_A, { state: 'pushing', allowedAt: Date.now() - 12 * 60_000 })
+
+    expect(check(SHA_B).status).toBe(0)
+    expect(tickets().some((t) => t.sha === SHA_A)).toBe(false)
+    expect(readFileSync(join(queueDir, 'journal.jsonl'), 'utf8')).toContain('no smoke running')
+  })
+
+  /**
+   * A marker keyed on someone else's commit must not rescue this ticket. Two
+   * sessions are regularly inside the guards at once, and a marker that granted
+   * the long grace to whoever happened to be at the head would restore the old
+   * behaviour on any busy day — which is exactly when it matters.
+   */
+  it('ignores a smoke marker written for a different sha', () => {
+    seed(1, SHA_A, { state: 'pushing', allowedAt: Date.now() - 12 * 60_000 })
+    seedSmokeMarker(SHA_C)
+
+    expect(check(SHA_B).status).toBe(0)
+    expect(tickets().some((t) => t.sha === SHA_A)).toBe(false)
+  })
+
+  /**
+   * A smoke killed hard enough to skip its own cleanup leaves its marker behind.
+   * Without an age bound that corpse would grant the long grace indefinitely —
+   * strictly worse than the behaviour being replaced, since it would never
+   * expire rather than expiring at 25 min.
+   */
+  it('ignores a smoke marker older than the smoke could possibly run', () => {
+    seed(1, SHA_A, { state: 'pushing', allowedAt: Date.now() - 12 * 60_000 })
+    seedSmokeMarker(SHA_A, Date.now() - 90 * 60_000)
+
+    expect(check(SHA_B).status).toBe(0)
+    expect(tickets().some((t) => t.sha === SHA_A)).toBe(false)
   })
 
   /**
@@ -869,5 +955,176 @@ describe('push-queue — rebind cannot touch a ticket that is not yours', () => 
 
     expect(res.status ?? 0).toBe(0)
     expect(ticketOf(1).sha).toBe(SHA_B)
+  })
+})
+
+/**
+ * 🛑 THE TWO SCRIPTS MUST AGREE ON WHERE THE MARKER LIVES, AND DISAGREEING IS
+ * SILENT IN THE DANGEROUS DIRECTION.
+ *
+ * `pre-push-smoke.mjs` writes the marker; `push-queue.mjs` reads it. If they
+ * ever compute different paths, the write still succeeds, the smoke still runs,
+ * and the queue simply never sees a marker — so every real smoke run falls back
+ * to the SHORT grace and expires mid-compile. That is the six-lost-landings
+ * starvation restored, with no error anywhere and every test above still green,
+ * because each one seeds the marker itself rather than making the smoke write it.
+ *
+ * ⚠ THIS IS A COARSE DRIFT GUARD, NOT PROOF. It compares the path ingredients as
+ * they appear in each source — it would catch a rename of the directory or a
+ * dropped env override in one file only, which is the realistic way these two
+ * drift. It cannot catch a difference the strings do not show. Driving the real
+ * smoke end-to-end would need a git worktree, a node_modules link and a cold
+ * compile to assert one arithmetic branch; the honest trade is a cheap guard
+ * that names its own limit.
+ */
+describe('push-queue — the smoke marker contract', () => {
+  const smokeSrc = readFileSync(join(process.cwd(), 'scripts', 'pre-push-smoke.mjs'), 'utf8')
+  const queueSrc = readFileSync(join(process.cwd(), 'scripts', 'push-queue.mjs'), 'utf8')
+
+  it('both scripts name the same marker directory', () => {
+    expect(smokeSrc).toContain("'smoke-active'")
+    expect(queueSrc).toContain("'smoke-active'")
+  })
+
+  it('both scripts key the marker file on the sha', () => {
+    expect(smokeSrc).toContain('`${sha}.json`')
+    expect(queueSrc).toContain('`${sha}.json`')
+  })
+
+  /**
+   * The override exists so this suite can point both at a temp dir. A smoke that
+   * ignored it would write into the real queue during a test run — and, worse,
+   * would prove nothing about the path used in production.
+   */
+  it('both scripts honour the AF_PUSH_QUEUE_DIR override', () => {
+    expect(smokeSrc).toContain('AF_PUSH_QUEUE_DIR')
+    expect(queueSrc).toContain('AF_PUSH_QUEUE_DIR')
+  })
+
+  /**
+   * The marker is only worth writing if the smoke refuses to run without it.
+   * Were it to fail open here, an unannounced run would get the short grace —
+   * the exact regression this whole mechanism exists to prevent.
+   */
+  it('the smoke skips rather than running unannounced', () => {
+    expect(smokeSrc).toContain('skipping rather than running unannounced')
+  })
+})
+
+/**
+ * 🛑 A TICKET IS WAITING FOR ITS WORK TO BE ON MAIN, NOT FOR ITS SHA TO BE THE TIP.
+ *
+ * The tip is only the tip until the next push lands on it. Between a push
+ * finishing and the next reconcile, any peer can land — and the exact-sha test
+ * then answers "no" forever about a commit sitting on `origin/main`, so the
+ * ticket holds the HEAD OF THE LINE until its grace expires. On the 7-deep queue
+ * of 2026-09-08 that compounds with every single landing.
+ *
+ * These name the remote tip through `AF_PUSH_QUEUE_REMOTE_SHA` rather than
+ * reaching the network, so a flaky `ls-remote` is never what decides whether the
+ * queue blocks — the same reason `AF_PUSH_QUEUE_NO_REMOTE` exists for the rest
+ * of the file.
+ */
+describe('push-queue — a ticket whose work is already on main', () => {
+  const rev = (ref: string) => execFileSync('git', ['rev-parse', ref], { encoding: 'utf8' }).trim()
+
+  /**
+   * `allowedAt` is NOW, so the grace cannot be what releases this — only the
+   * landed check can. Dating it in the past would conflate the two and this test
+   * would go green for the other one's reason.
+   */
+  it('releases a pushing ticket whose commit is an ancestor of the tip, not the tip itself', () => {
+    const tip = rev('origin/main')
+    const mine = rev('origin/main~3')
+    expect(mine).not.toBe(tip) // the whole point: mine is ON main but is not the tip
+
+    seed(1, mine, { state: 'pushing', allowedAt: Date.now() })
+
+    const res = check(SHA_B, { AF_PUSH_QUEUE_NO_REMOTE: '0', AF_PUSH_QUEUE_REMOTE_SHA: tip })
+
+    expect(res.status).toBe(0)
+    expect(tickets().some((t) => t.sha === mine)).toBe(false)
+    expect(readFileSync(join(queueDir, 'journal.jsonl'), 'utf8')).toContain('landed on origin/main')
+  })
+
+  /**
+   * The control, so the release above cannot become "any pushing ticket is
+   * released once a remote sha is known". A sha that is not on main at all must
+   * still be held — and note it is held for the RIGHT reason: `merge-base
+   * --is-ancestor` on a nonexistent object exits neither 0 nor 1, which this file
+   * treats as "not a verdict" rather than as "no".
+   */
+  it('holds a pushing ticket whose commit is not on origin/main', () => {
+    const tip = rev('origin/main')
+
+    seed(1, SHA_A, { state: 'pushing', allowedAt: Date.now() })
+
+    const res = check(SHA_B, { AF_PUSH_QUEUE_NO_REMOTE: '0', AF_PUSH_QUEUE_REMOTE_SHA: tip })
+
+    expect(res.status).toBe(1)
+    expect(tickets().some((t) => t.sha === SHA_A)).toBe(true)
+  })
+})
+
+/**
+ * 🛑 AN UNANNOUNCED SMOKE LOOKS EXACTLY LIKE NO SMOKE, AND KILLING ONE AT 10
+ * MINUTES IS THE REGRESSION THE LONG GRACE EXISTS TO PREVENT.
+ *
+ * The pre-push hook resolves scripts from `$root/scripts` and only falls back to
+ * the primary checkout when the file is ABSENT — so a linked worktree on an older
+ * commit runs its OWN older `pre-push-smoke.mjs`, which writes no marker. For as
+ * long as any such worktree exists, real 20-minute compiles will be unannounced.
+ *
+ * Caught in production, not in review: on 2026-09-08 `#272` was released as
+ * "never landed (no smoke running, short grace)" 12 minutes into a push whose
+ * commit is now `origin/main` — its push was still in flight and the marker
+ * scheme could not see it.
+ *
+ * A running compiler is the evidence that separates the two cases. These pin
+ * BOTH halves, because the deferral is only safe if it is bounded.
+ */
+describe('push-queue — an unannounced smoke still gets the long grace', () => {
+  it('holds a 12-minute unmarked push while a compile is in flight', () => {
+    seed(1, SHA_A, { state: 'pushing', allowedAt: Date.now() - 12 * 60_000 })
+
+    const res = check(SHA_B, { AF_PUSH_QUEUE_ASSUME_TSC: '1' })
+
+    expect(res.status).toBe(1)
+    expect(tickets().some((t) => t.sha === SHA_A)).toBe(true)
+  })
+
+  /**
+   * The bound, and the reason the deferral cannot become "a pushing ticket lives
+   * as long as anyone on the box is compiling". Past PUSH_GRACE_MS the ticket
+   * goes regardless of what the process table says — this repo runs ~9 sessions
+   * and something is almost always compiling.
+   */
+  it('still releases past the FULL grace even with a compile in flight', () => {
+    seed(1, SHA_A, { state: 'pushing', allowedAt: Date.now() - 26 * 60_000 })
+
+    const res = check(SHA_B, { AF_PUSH_QUEUE_ASSUME_TSC: '1' })
+
+    expect(res.status).toBe(0)
+    expect(tickets().some((t) => t.sha === SHA_A)).toBe(false)
+    expect(readFileSync(join(queueDir, 'journal.jsonl'), 'utf8')).toContain(
+      'no smoke ever announced',
+    )
+  })
+
+  /**
+   * "Cannot tell" must behave like "a compile is running", never like "none is".
+   * An unreadable process table is not evidence that it is safe to shorten a
+   * grace — the same three-valued discipline this file applies to
+   * `merge-base --is-ancestor` and that CLAUDE.md applies to a `timeout`'s 124.
+   */
+  it('keeps the long grace when the process table cannot be read', () => {
+    seed(1, SHA_A, { state: 'pushing', allowedAt: Date.now() - 12 * 60_000 })
+
+    // An unset override on a non-win32 CI box returns null from the probe; on
+    // win32 an unparseable count does the same. Either way: not a verdict.
+    const res = check(SHA_B, { AF_PUSH_QUEUE_ASSUME_TSC: 'unreadable' })
+
+    expect(res.status).toBe(1)
+    expect(tickets().some((t) => t.sha === SHA_A)).toBe(true)
   })
 })

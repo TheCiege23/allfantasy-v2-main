@@ -1161,6 +1161,12 @@ one.
 
 ### 🛑 ONE SESSION BATCHES AND PUSHES TO `main`
 
+> ⚠ **SUPERSEDED AS THE DEFAULT 2026-09-08 — read "Queue-order self-push" below
+> before acting on this section.** Everything measured here is still true, and is
+> still why the queue, the base-staleness check and the build guard exist. What
+> changed is the CONCLUSION drawn from it. Keep reading for the mechanism; the
+> standing instruction is the later section.
+
 User's decision, 2026-08-29, and the larger half of the build bill. The
 cherry-pick rule above settles HOW work lands; this settles WHEN.
 
@@ -1477,6 +1483,55 @@ because the wrong version was the confident one:
 
 Neither belongs in a signing runbook as folklore; both are in
 `docs/play-store/RUNBOOK.md` with the measurement attached.
+
+#### 2026-09-08: queue-order self-push is the default; batch YOUR OWN work
+
+Guap's call, delegated to a session and decided from measurement rather than from
+the earlier cost argument. It replaces the 2026-08-29 default above.
+
+🛑 **THIS FILE SAID BOTH THINGS AT ONCE FOR TWO DAYS, AND THAT IS WHAT BROKE THE
+LANE.** A section retiring the batching default was committed 2026-09-06 in
+`cabc72677` and **never reached `origin/main`** — while a comment that DID land,
+in `scripts/pre-push-smoke.mjs`, asserted the opposite: that the role and the
+batching rule stand. So a session reading this checkout self-pushed, and a
+session reading `origin/main` was told one session batches. Six to nine sessions
+queued independently under a default that had never actually landed. Whatever
+else changes here, do not leave those two disagreeing again — and note the tell
+was cheap: `git grep <ref>` on the section title, not a read of the working tree.
+
+**The rule:**
+
+1. **Push your own commits, in queue order.** `npm run push:main` — take a
+   ticket, wait your turn, push. No role, no permission, nobody to hand over to.
+2. **Batch your OWN work.** Several commits ready? Land them as ONE tip rather
+   than one push at a time. This needs no coordination from anybody else, and it
+   is where the remaining build spend actually is.
+3. **The pusher role stays, as an opt-in tool.** Claim it deliberately for a
+   large or risky multi-commit landing, a migration, or a rescue — announcing and
+   releasing it exactly as described above. It is no longer a queue everyone is
+   expected to wait behind.
+
+**Why not the batching default.** Its failure mode is a LANDING failure, which is
+the thing being optimised for: the lock reads vacant on every session rename
+(four times in one day, recorded above), and a pusher who vanishes blocks
+everyone. Measured 2026-09-08 against the live Railway project — commits reach
+Railway fine (`a60907432` deployed SUCCESS at 13:02), the duplicate-deploy rate
+is **3 of 46 sha/service pairs (6.5%)**, and all six FAILED deploys in a
+50-deployment sample fall in one contiguous 70-minute band on 09-07: the
+client/server barrel break, since fixed. None of that is a batching problem.
+
+⚠ **BUT THE CADENCE IS HIGHER THAN THE RETIRED SECTION ASSUMED — 55 deploys/day
+across services over a 21.9h window, against the ~27/day it quoted.** That is why
+rule 2 is a rule and not a suggestion.
+
+🛑 **AND DO NOT QUOTE A BUILD-MINUTES NUMBER FROM `list-deployments`. IT CANNOT
+MEASURE ONE.** 42 of that sample's 50 rows carry status `REMOVED`, whose
+`updatedAt` is when the deployment was REPLACED, not when its build ended.
+Differencing those two fields measures a deployment's LIFETIME and yields a
+tidy-looking median and a "builds run 100% of the window" figure, both meaningless
+— caught here only because the status column was read after the arithmetic. The
+`REMOVED` share is the tell, and any cost argument resting on those numbers is
+resting on nothing.
 
 ## Deploys cost money, and pushes are the meter
 

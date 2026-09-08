@@ -98,6 +98,7 @@ import {
   rmSync,
   symlinkSync,
   unlinkSync,
+  writeFileSync,
 } from 'node:fs'
 import { execFileSync, spawnSync } from 'node:child_process'
 import { join, resolve, dirname } from 'node:path'
@@ -184,6 +185,59 @@ function commonDir() {
 function primaryRoot() {
   const common = commonDir()
   return common ? dirname(common) : null
+}
+
+/**
+ * Where `push-queue.mjs` keeps the line. Mirrors its own `queueDir()`, env
+ * override included — if the two ever disagree the marker below is written
+ * somewhere nothing reads, which is silent and looks exactly like success.
+ */
+function queueDir(common) {
+  return process.env.AF_PUSH_QUEUE_DIR
+    ? resolve(process.env.AF_PUSH_QUEUE_DIR)
+    : join(common, 'af-push-queue')
+}
+
+/**
+ * Tell the queue that a real run is starting, so the ticket authorising this
+ * push gets the long grace instead of the short one.
+ *
+ * The queue derives its grace from this script's timeout, which is correct
+ * while a smoke is running and far too generous when one is not — and this
+ * script skips under load, so "not running" is the common case. Before this
+ * marker existed, a lane that died while waiting still held the head of the
+ * line for the full 25 min; see the long note on `SHORT_PUSH_GRACE_MS` in
+ * `push-queue.mjs` for the day that cost.
+ *
+ * 🛑 IF THE MARKER CANNOT BE WRITTEN, SKIP THE RUN — DO NOT RUN UNANNOUNCED.
+ * This is the one place where this file's usual fail-open instinct is the
+ * dangerous one. Absence of a marker has to MEAN "no smoke is running" for the
+ * queue to be entitled to act on it. A smoke that ran without one would be
+ * judged by the short grace and expire mid-compile, which is precisely the
+ * six-lost-landings starvation the long grace was written to fix. Skipping
+ * costs one unchecked push; running unannounced costs the guard's own ticket.
+ *
+ * Cleanup is on `exit` rather than at the end of `main`, because every verdict
+ * here leaves through `allow()` or `block()` and both call `process.exit`.
+ * A marker that outlives its process is still bounded — the queue ignores one
+ * older than the smoke's own ceiling — so the worst case is the old behaviour.
+ */
+function announceSmokeStart(common, sha) {
+  const path = join(queueDir(common), 'smoke-active', `${sha}.json`)
+  try {
+    mkdirSync(dirname(path), { recursive: true })
+    writeFileSync(path, JSON.stringify({ sha, pid: process.pid, startedAt: Date.now() }))
+  } catch (err) {
+    return `could not write the smoke marker (${err?.code || err?.message || 'unknown'})`
+  }
+  process.on('exit', () => {
+    try {
+      unlinkSync(path)
+    } catch {
+      /* already gone, or the dir went with it — the queue's age bound covers this */
+    }
+  })
+  return null
 }
 
 /** Find an existing node_modules to link against: this worktree's own, else
@@ -377,6 +431,13 @@ function main() {
 
   const common = commonDir()
   if (!common) allow('no git common dir resolvable')
+
+  // Announced BEFORE the first expensive step, not before the compile: the
+  // worktree checkout and the node_modules link carry 3- and 5-minute timeouts
+  // of their own, and a run judged by the short grace while it sets itself up
+  // would be reaped for work it was legitimately doing.
+  const markerErr = announceSmokeStart(common, sha)
+  if (markerErr) allow(`${markerErr} — skipping rather than running unannounced`)
 
   const worktreeDir = join(common, 'af-smoke-worktree')
   const wtErr = ensureWorktree(worktreeDir, sha)
