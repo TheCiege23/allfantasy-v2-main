@@ -40,6 +40,25 @@ export async function addToWatchlist(leagueId: string, userId: string, playerId:
     where: { leagueId_userId_playerId: { leagueId, userId, playerId: pid } },
     create: { leagueId, userId, playerId: pid, sport: sport ?? null },
     update: {},
+    /*
+     * 🛑 `select` IS LOAD-BEARING HERE, NOT TIDINESS. Prisma returns every
+     * scalar field unless told otherwise, and `schema.prisma` declares three
+     * columns production does not have — `playerName`, `position`, `team`, each
+     * carrying a literal `// <- ADD THIS` comment from whoever added them
+     * without migrating. Reading them raises P2022.
+     *
+     * This was the only call in this file without a select, which is why
+     * `waiver_watchlists` held ZERO rows: every add — from the waiver page and
+     * from the player card alike — had been 500ing in production. Observed
+     * 2026-09-08 as `POST /api/core/player-card/watch -> 500`, P2022 on
+     * `waiver_watchlists.playerName`.
+     *
+     * Nothing in this service writes those three columns, so narrowing the
+     * select is the correct shape rather than a workaround. If they are ever
+     * genuinely wanted, they need a migration first — code ahead of its
+     * migration does not no-op.
+     */
+    select: { id: true },
   })
 }
 

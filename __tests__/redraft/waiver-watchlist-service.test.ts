@@ -30,6 +30,36 @@ describe('waiver watchlist service (Step 3C)', () => {
     )
   })
 
+  /*
+   * 🛑 THE WRITE MUST NOT ASK FOR COLUMNS PRODUCTION DOES NOT HAVE.
+   *
+   * `schema.prisma` declares `playerName`, `position` and `team` on this model —
+   * each with a literal `// <- ADD THIS` comment — and production has NONE of
+   * them: `waiver_watchlists` there is id, leagueId, userId, playerId, sport,
+   * createdAt. Code shipped ahead of its migration, which does NOT no-op: a
+   * generated client that knows about absent columns raises P2022.
+   *
+   * Prisma returns every scalar field unless told otherwise, so an unselected
+   * upsert reads the three missing ones and throws. This was the ONLY call in
+   * the service without a `select`, and it is why `waiver_watchlists` held zero
+   * rows: every add, from the waiver page and from the player card alike, had
+   * been 500ing in production. Observed live 2026-09-08 as two
+   * `POST /api/core/player-card/watch -> 500`, P2022, column
+   * `waiver_watchlists.playerName`.
+   *
+   * The service never writes those three columns, so narrowing the select is
+   * the correct fix rather than a workaround — and it needs no migration.
+   */
+  it('asks only for `id` back, so a column production lacks cannot break the write', async () => {
+    await addToWatchlist('L', 'U', 'p1', 'NFL')
+    const arg = prisma.waiverWatchlist.upsert.mock.calls[0][0]
+    expect(arg.select).toEqual({ id: true })
+    // and it must never try to WRITE the drifted columns either
+    expect(Object.keys(arg.create)).not.toContain('playerName')
+    expect(Object.keys(arg.create)).not.toContain('position')
+    expect(Object.keys(arg.create)).not.toContain('team')
+  })
+
   it('addToWatchlist upserts by the composite key and ignores blanks', async () => {
     await addToWatchlist('L', 'U', 'p1', 'NFL')
     expect(prisma.waiverWatchlist.upsert).toHaveBeenCalledWith(
