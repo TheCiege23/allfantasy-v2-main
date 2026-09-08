@@ -1562,3 +1562,39 @@
 .af-shell[data-rail-open='true'] .af-rail-tile[data-platform='fantrax'] .af-rail-tile-art {
   background: var(--p-fantrax-bg);
 }
+
+/*
+ * 🛑 THE EXPANDED RAIL PUT THE PAGE IN THE NAV'S COLUMN BETWEEN 721px AND 1080px.
+ *
+ * Three rules collide in that band and each is individually correct:
+ *
+ *   .af-shell                                  68px 232px 1fr   (rail, nav, content)
+ *   @media (max-width: 1080px) .af-shell       68px 1fr         + .af-nav { display: none }
+ *   @media (min-width: 721px)  [rail-open]     300px 232px 1fr
+ *
+ * The third has an attribute selector, so it is (0,3,0) and outranks the 1080px
+ * rule no matter what order they appear in. Opening the rail therefore restored
+ * a THREE-track grid while the nav was still `display: none` — and a
+ * `display: none` element is not a grid item, so the content box auto-placed
+ * into the SECOND track. Measured at 900px and again at 1000px:
+ *
+ *   collapsed   68px 832px                      content 832px
+ *   open        300px 232px 368px               content 232px   <- the nav's track
+ *
+ * The page rendered at 232px wide with a 368px empty column beside it. Nothing
+ * threw, no test failed, and the layout is valid CSS either way — it just means
+ * something else, which is why this is read off `getBoundingClientRect` rather
+ * than off the stylesheet.
+ *
+ * ⚠ APPENDED AS ITS OWN TOP-LEVEL @media, NOT EDITED INTO THE min-width: 721px
+ * BLOCK ABOVE. Dropping a query inside another closes the outer one early and
+ * silently migrates every rule below the insertion point into the narrower
+ * band, with brace balance still 0. This repo has shipped that exact bug once
+ * already, in af-matchup.css. Later-wins makes a sibling block equivalent and
+ * impossible to get wrong.
+ */
+@media (min-width: 721px) and (max-width: 1080px) {
+  .af-core.af-shell[data-rail-open='true'] {
+    grid-template-columns: 300px minmax(0, 1fr);
+  }
+}
