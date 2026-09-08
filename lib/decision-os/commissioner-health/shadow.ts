@@ -7,7 +7,7 @@
  * ONLY — the Decision OS never executes a commissioner action, changes settings, sends announcements,
  * locks teams, reverses trades, processes waivers, adjusts scores, or mutates any league state.
  */
-import { emitShadowParity } from '@/lib/decision-os/core/parity'
+import { WRAP_FIDELITY_SURFACE, emitShadowParity } from '@/lib/decision-os/core/parity'
 import { shouldRunShadow, type DecisionShadowScope } from '@/lib/decision-os/core/shadow'
 import type { CommissionerLeagueHealthSnapshot } from '@/lib/commissioner-hub/commissionerHubHealth'
 import { runCommissionerHealthDecision, type RunCommissionerHealthResult } from './index'
@@ -62,7 +62,7 @@ export async function runCommissionerHealthShadow(
   try {
     // Skip the non-authoritative fallback path (no live roster reads).
     if (!args.snapshot || args.snapshot.source === 'dashboard-fallback') {
-      emitShadowParity('commissioner.league.health', { shadow: true, ran: false, reason: 'fallback_or_missing_snapshot', userId: args.userId, leagueId })
+      emitShadowParity('commissioner.league.health', { shadow: true, surface: WRAP_FIDELITY_SURFACE, ran: false, reason: 'fallback_or_missing_snapshot', userId: args.userId, leagueId })
       return { ran: false, leagueId, error: 'fallback_or_missing_snapshot' }
     }
     const result = await runCommissionerHealthDecision(
@@ -77,6 +77,7 @@ export async function runCommissionerHealthShadow(
       'commissioner.league.health',
       {
         shadow: true,
+        surface: WRAP_FIDELITY_SURFACE,
         ran: true,
         legacy_shadow_compared: true,
         wrap_fidelity: true,
@@ -91,7 +92,7 @@ export async function runCommissionerHealthShadow(
     )
     return { ran: true, leagueId, result }
   } catch (e) {
-    emitShadowParity('commissioner.league.health', { shadow: true, ran: false, reason: 'shadow_error', userId: args.userId, leagueId })
+    emitShadowParity('commissioner.league.health', { shadow: true, surface: WRAP_FIDELITY_SURFACE, ran: false, reason: 'shadow_error', userId: args.userId, leagueId })
     return { ran: false, leagueId, error: e instanceof Error ? e.message : 'shadow_error' }
   }
 }

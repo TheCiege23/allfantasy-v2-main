@@ -22,6 +22,35 @@ import { persistParityEvent } from './durableParityStore'
 import { recordDecisionOsFeed } from '@/lib/telemetry/decision-os-feed'
 
 /**
+ * The parity surface for a comparison whose two sides come from the SAME engine — the wrapper is
+ * fed the legacy answer and then compared against it.
+ *
+ * 🛑 WHAT SUCH A SURFACE PROVES, AND WHAT IT DOES NOT. It proves the Decision OS wrapper introduces
+ * no drift, which is exactly what you want before replacing a call site. It is NOT evidence that
+ * the answer is good, because the same engine produced both sides. `ADR_DECISION_OS_PHASE3_
+ * WHAT_COUNTS_AS_FLIP_EVIDENCE` decides this in full; §5.2 is the operative sentence — "a
+ * wrap-fidelity surface reaching 50/95% licenses replacing the call site, it does not license
+ * trusting the recommendation".
+ *
+ * ⚠ THE LABEL IS THE MECHANISM, AND THAT WAS A DELIBERATE CHOICE OVER THE ALTERNATIVE. The same
+ * ADR considered teaching `flipReadiness` to refuse these surfaces and REJECTED it: that hardcodes
+ * "which surfaces are tautological" — a fact about wiring — into a summariser that only reports and
+ * would not be updated when the wiring changes. `flipReadiness` groups on `flags.surface` with a
+ * literal `'default'` fallback, so naming the surface is what keeps weak evidence out of a strong
+ * bucket. Do not add that policy to the summariser; label the emitter.
+ *
+ * ⚠ AND THE LABEL MUST GO ON BEFORE A SECOND SURFACE EXISTS, NOT AFTER. `manager.lineup.set` and
+ * `commissioner.league.health` each had exactly one surface and emitted none, bucketing as
+ * `'default'` — harmless only while the count is one. The ADR's own §7 says to label them first,
+ * because a mislabelled sample cannot be re-attributed once it is fifty rows deep.
+ *
+ * ⚠ HISTORICAL ROWS KEEP `'default'` AND ARE NOT REWRITTEN. The ~11,000 lineup rows already
+ * recorded stay where they are; new rows land here. That split is the honest outcome rather than a
+ * defect — those rows were gathered under the old label and cannot be reinterpreted under this one.
+ */
+export const WRAP_FIDELITY_SURFACE = 'wrap_fidelity' as const
+
+/**
  * Emit, then durably record. Never throws: `persistParityEvent` swallows its own failures and does
  * not await the write, so a parity emitter costs the same as before plus one synchronous call.
  */

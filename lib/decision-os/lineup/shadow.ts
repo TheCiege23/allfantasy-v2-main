@@ -8,7 +8,7 @@
 import type { LineupActionSummaryPayload } from '@/lib/lineup-actions/types'
 import type { LineupValidationContext } from '@/lib/roster-lineup-engine/types'
 import type { RuleVerdict } from '@/lib/decision-os/core/decision'
-import { emitShadowParity, emitValidatorParity } from '@/lib/decision-os/core/parity'
+import { WRAP_FIDELITY_SURFACE, emitShadowParity, emitValidatorParity } from '@/lib/decision-os/core/parity'
 import { shouldRunShadow, type DecisionShadowScope } from '@/lib/decision-os/core/shadow'
 import { runLineupSetDecision, type LineupParityResult, type LineupWorld, type RunLineupSetInput, type RunLineupSetResult } from './index'
 import { defaultLineupRuleDeps, evaluateLineupRulesWithParity, type LineupRuleContext, type LineupRuleDeps } from './rules'
@@ -127,7 +127,7 @@ export async function runLineupShadow(
       warnings = resolved.warnings
     }
     if (!input) {
-      emitShadowParity('manager.lineup.set', { shadow: true, ran: false, reason: 'inputs_unavailable', source, warnings, leagueId: args.leagueId })
+      emitShadowParity('manager.lineup.set', { shadow: true, surface: WRAP_FIDELITY_SURFACE, ran: false, reason: 'inputs_unavailable', source, warnings, leagueId: args.leagueId })
       return { ran: false, leagueId: args.leagueId, source, warnings, error: 'inputs_unavailable' }
     }
     // F2.9/F2.10 warehouse grounding (SHADOW memo enrichment only — deterministic rules never
@@ -162,7 +162,7 @@ export async function runLineupShadow(
     })
     emitShadowParity(
       'manager.lineup.set',
-      { shadow: true, ran: true, leagueId: args.leagueId, source, warnings, parity_passed: result.parity?.passed, parity_failed: result.parity ? !result.parity.passed : undefined, diffs: result.parity?.diffs?.length ?? 0 },
+      { shadow: true, surface: WRAP_FIDELITY_SURFACE, ran: true, leagueId: args.leagueId, source, warnings, parity_passed: result.parity?.passed, parity_failed: result.parity ? !result.parity.passed : undefined, diffs: result.parity?.diffs?.length ?? 0 },
       result.decision.decision_id,
     )
 
@@ -172,7 +172,7 @@ export async function runLineupShadow(
 
     return { ran: true, leagueId: args.leagueId, source, warnings, parity: result.parity, validatorParity, result }
   } catch (e) {
-    emitShadowParity('manager.lineup.set', { shadow: true, ran: false, reason: 'shadow_error', leagueId: args.leagueId })
+    emitShadowParity('manager.lineup.set', { shadow: true, surface: WRAP_FIDELITY_SURFACE, ran: false, reason: 'shadow_error', leagueId: args.leagueId })
     return { ran: false, leagueId: args.leagueId, error: e instanceof Error ? e.message : 'shadow_error' }
   }
 }
