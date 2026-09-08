@@ -7,6 +7,7 @@ import { latestProjectionWeek } from './playerProjections'
 import { leagueArtUrl } from './leagueArt'
 import { leagueDisplayName } from './leagueHome'
 import { myRosterCandidates } from './myRoster'
+import { countRealLeagues, keepBestPerRealLeague } from './realLeague'
 
 /**
  * Waivers, across every league — "the single best add on each wire, ranked by
@@ -70,6 +71,15 @@ export type WaiverBoardRow = {
   leagueId: string
   leagueName: string
   platform: string
+  /**
+   * The provider's own league id, carried so two AF rows for ONE real league can
+   * be told apart from two genuinely different leagues.
+   *
+   * ⚠ NOT AN IDENTITY ON ITS OWN — provider ids are unique only within a
+   * provider, and a manual league has none at all. `realLeagueKey` pairs it with
+   * `platform` and falls back to `leagueId`; do not compare it bare.
+   */
+  platformLeagueId: string | null
   logoUrl: string | null
   /** "Dynasty · Superflex", from the league's own ingested settings. Null when absent. */
   format: string | null
@@ -174,6 +184,8 @@ export async function getWaiversBoard(userId: string): Promise<WaiversBoardData>
             platform: true,
             sport: true,
             settings: true,
+            /* Needed to tell one REAL league from one AF row of it — see realLeague.ts. */
+            platformLeagueId: true,
             leagueType: true,
             /* ⚠ `scoring`, NOT `scoringType` — the column is named `scoring` on League. */
             scoring: true,
@@ -471,6 +483,7 @@ export async function getWaiversBoard(userId: string): Promise<WaiversBoardData>
       leagueId: c.leagueId,
       leagueName: leagueDisplayName(l.name),
       platform: String(l.platform ?? 'manual').toLowerCase(),
+      platformLeagueId: l.platformLeagueId ?? null,
       logoUrl: leagueArtUrl({
         logoUrl: l.logoUrl,
         avatarUrl: l.avatarUrl,
@@ -490,11 +503,38 @@ export async function getWaiversBoard(userId: string): Promise<WaiversBoardData>
     })
   }
 
-  rows.sort((a, b) => b.netGain - a.netGain)
+  /*
+   * 🛑 ONE ROW PER REAL LEAGUE. A Sleeper league imported by two of its members
+   * has TWO AF `leagues` rows, and this board is keyed on claimed teams — so it
+   * rendered "Parbur" twice and "Its gonna be Maye 26" three times, with
+   * identical add/drop/net-gain. Measured for the reporting account: 94 claimed
+   * teams across 65 real leagues, 29 duplicate rows.
+   *
+   * ⚠ COLLAPSED HERE, ON THE OUTPUT, RATHER THAN BY PICKING ONE AF ROW EARLIER.
+   * Imported data attaches to whichever AF row the ingest cron reached first, so
+   * a twin can be real but empty; a twin that produced no recommendation is
+   * simply not in this list to win.
+   */
+  const deduped = keepBestPerRealLeague(
+    rows,
+    (r) => ({ platform: r.platform, platformLeagueId: r.platformLeagueId, leagueId: r.leagueId }),
+    /* Total on purpose: the stronger recommendation wins, and a tie resolves on
+       leagueId so the board cannot show a different copy between two loads. */
+    (a, b) => a.netGain > b.netGain || (a.netGain === b.netGain && a.leagueId < b.leagueId),
+  )
+
+  deduped.sort((a, b) => b.netGain - a.netGain)
 
   return {
-    rows: rows.slice(0, ROW_CAP),
-    considered: mine.length,
+    rows: deduped.slice(0, ROW_CAP),
+    /* Real leagues, not AF rows — otherwise this count inflates the same way. */
+    considered: countRealLeagues(
+      mine.map((c) => ({
+        platform: c.league?.platform ?? null,
+        platformLeagueId: c.league?.platformLeagueId ?? null,
+        leagueId: c.leagueId,
+      })),
+    ),
     withheld,
     marketLeagues: market.leaguesCounted,
     at,

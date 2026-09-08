@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma'
 import { leagueArtUrl } from './leagueArt'
 import { findRosterForTeam, rosterPlayerIds } from '@/lib/leagues/rosterForTeam'
 import { leagueDisplayName, type SectionState } from './leagueHome'
+import { keepBestPerRealLeague } from './realLeague'
 
 /**
  * Every league you are in — the inventory the new dashboard does not have.
@@ -88,42 +89,35 @@ function collapseSameRealLeague(
   rows: PortfolioLeague[],
   keys: CollapseKey[],
 ): PortfolioLeague[] {
-  const byPlatform = new Map<string, number>()
-  const kept: PortfolioLeague[] = []
-  const keptKeys: CollapseKey[] = []
+  /*
+   * ⚠ THE KEY AND THE COLLAPSE NOW LIVE IN `./realLeague`, WHICH IS THE ONLY
+   * COPY. This function used to carry its own, and the two had already diverged:
+   * this one omitted `platform` from the key, so two different providers sharing
+   * a league id would have merged. (Measured zero such collisions in production,
+   * so adopting the stricter key changes no row today — it just removes a trap.)
+   * What stays here is the only part that is genuinely the portfolio's: WHICH
+   * copy to keep.
+   */
+  const paired = rows.map((row, i) => ({ row, key: keys[i] }))
 
-  rows.forEach((row, i) => {
-    const key = keys[i]
-    /* No provider id means no evidence two rows are the same thing. */
-    if (!key?.platformLeagueId) {
-      kept.push(row)
-      keptKeys.push(key)
-      return
-    }
-    const id = `${key.platformLeagueId}::${key.season ?? ''}`
-    const at = byPlatform.get(id)
-    if (at === undefined) {
-      byPlatform.set(id, kept.length)
-      kept.push(row)
-      keptKeys.push(key)
-      return
-    }
-
-    const heldKey = keptKeys[at]
-    const held = kept[at]
-    const preferIncoming =
-      (key.importedByMe && !heldKey.importedByMe) ||
-      (key.importedByMe === heldKey.importedByMe &&
-        held.rosterCount == null &&
-        row.rosterCount != null)
-
-    if (preferIncoming) {
-      kept[at] = row
-      keptKeys[at] = key
-    }
-  })
-
-  return kept
+  return keepBestPerRealLeague(
+    paired,
+    (x) => ({
+      platform: x.row.platform,
+      platformLeagueId: x.key?.platformLeagueId ?? null,
+      season: x.key?.season ?? null,
+      leagueId: x.row.leagueId,
+    }),
+    /*
+     * Prefer the copy the reader imported themselves; failing that, whichever has
+     * a roster behind it, since the other is a view they cannot act on.
+     */
+    (a, b) =>
+      (a.key.importedByMe && !b.key.importedByMe) ||
+      (a.key.importedByMe === b.key.importedByMe &&
+        b.row.rosterCount == null &&
+        a.row.rosterCount != null),
+  ).map((x) => x.row)
 }
 
 function recordOf(t: { wins: number; losses: number; ties: number } | null): string | null {
