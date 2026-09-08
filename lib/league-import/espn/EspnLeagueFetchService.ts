@@ -1019,12 +1019,34 @@ function parseEspnDraftPicks(
     .filter(Boolean) as EspnImportDraftPick[]
 }
 
-function parseEspnTransactions(
+/**
+ * ESPN's activity feed -> our transaction shape.
+ *
+ * Exported so the unmapped-code tally below can be TESTED. That behaviour is the
+ * only thing standing between "ESPN sent no trades" and "ESPN sent trades we do
+ * not recognise", and it lived where nothing could reach it.
+ */
+export function parseEspnTransactions(
   raw: any,
   playerDirectory: Map<string, EspnPlayerSummary>
 ): EspnImportTransaction[] {
   const topics = Array.isArray(raw?.topics) ? raw.topics : Array.isArray(raw?.content?.topics) ? raw.content.topics : []
   const transactions: EspnImportTransaction[] = []
+  /*
+   * 🛑 AN UNMAPPED `messageTypeId` USED TO VANISH IN SILENCE, AND THAT IS WHY WE
+   * COULD NOT SAY WHY ESPN YIELDS NO TRADES. Measured on production 2026-09-08:
+   * ESPN leagues hold 39 transaction rows -- waiver/add/drop only -- and ZERO of
+   * type `trade`, while Sleeper holds 18,657. `ESPN_ACTIVITY_TYPE_MAP` carries
+   * exactly ONE trade code (244), and every code absent from it was dropped by a
+   * bare `continue` with no counter, no log and no error.
+   *
+   * That makes two very different states indistinguishable: "these leagues had no
+   * trades" and "ESPN sent trades under a code we do not know". This tally
+   * separates them. It deliberately does NOT guess additional codes -- there is no
+   * ESPN contract in `contracts/`, so any code added from memory would silently
+   * MISLABEL real transactions, which is worse than dropping them.
+   */
+  const unmappedTypeCounts = new Map<number, number>()
 
   for (const [topicIndex, topic] of topics.entries()) {
     if (!isRecord(topic)) continue
@@ -1037,7 +1059,11 @@ function parseEspnTransactions(
     for (const [messageIndex, message] of messages.entries()) {
       if (!isRecord(message)) continue
       const messageTypeId = parseNumber(message.messageTypeId, null)
-      if (messageTypeId == null || !(messageTypeId in ESPN_ACTIVITY_TYPE_MAP)) continue
+      if (messageTypeId == null) continue
+      if (!(messageTypeId in ESPN_ACTIVITY_TYPE_MAP)) {
+        unmappedTypeCounts.set(messageTypeId, (unmappedTypeCounts.get(messageTypeId) ?? 0) + 1)
+        continue
+      }
 
       const activity = ESPN_ACTIVITY_TYPE_MAP[messageTypeId]
       const playerId = String(message.targetId ?? message.playerId ?? '').trim()
@@ -1107,6 +1133,22 @@ function parseEspnTransactions(
         messageTypeId,
       })
     }
+  }
+
+  /*
+   * One line per parse, only when something was actually dropped. Codes and counts
+   * only -- no player, team or league identifiers, because this runs on a public
+   * repo's production logs.
+   */
+  if (unmappedTypeCounts.size > 0) {
+    const dropped = [...unmappedTypeCounts.values()].reduce((a, b) => a + b, 0)
+    const detail = [...unmappedTypeCounts.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .map(([id, n]) => `${id}x${n}`)
+      .join(' ')
+    console.warn(
+      `[espn-activity] dropped ${dropped} message(s) with unmapped messageTypeId: ${detail}`,
+    )
   }
 
   return transactions
