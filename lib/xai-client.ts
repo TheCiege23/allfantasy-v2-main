@@ -255,6 +255,13 @@ async function xaiResponsesJsonInternal(opts: {
   stop?: string | string[]
   responseFormat?: { type: "text" | "json_object" }
   seed?: number
+  /**
+   * ⚠ THIS WAS DECLARED ON `xaiChatJson` AND SILENTLY DROPPED HERE. A caller passing a signal
+   * got cancellation on the plain chat path and none at all the moment it added a tool — the
+   * type said otherwise, so nothing failed and nothing warned. Same defect the Responses path
+   * above carried, reached from the other direction.
+   */
+  signal?: AbortSignal
 }, apiKey: string, baseUrl: string, defaultModel: string): Promise<XaiChatJsonResult> {
   const input = opts.messages.map(m => ({
     role: m.role,
@@ -285,6 +292,7 @@ async function xaiResponsesJsonInternal(opts: {
       Authorization: `Bearer ${apiKey}`,
     },
     body: JSON.stringify(body),
+    signal: opts.signal,
   })
 
   const text = await res.text().catch(() => "")
@@ -353,6 +361,15 @@ export async function xaiResponsesJson(opts: {
   store?: boolean
   reasoning?: { effort?: "low" | "medium" | "high"; summary?: "auto" | "concise" | "detailed" }
   skipCache?: boolean
+  /**
+   * Cancels the underlying fetch. A signalled call bypasses the cache, matching `xaiChatJson`.
+   *
+   * ⚠ THE SEARCH TOOLS MADE THIS UNBOUNDED. This is the only path carrying `web_search` /
+   * `x_search`, the slowest shape we make, and it had no signal at all — so one slow retrieval
+   * ran until the platform edge severed the connection at 300s and answered 502 itself. A
+   * `RunBudget` cannot help there: it is checked BETWEEN units and this was one unit.
+   */
+  signal?: AbortSignal
 }): Promise<XaiResponsesJsonResult> {
   /*
    * ⚠ THIS BOUNDARY WAS UNGUARDED. `xaiChatJson` has asserted the kill switch
@@ -367,7 +384,7 @@ export async function xaiResponsesJson(opts: {
    * is meant to be authoritative the moment it is flipped, not after a TTL.
    */
   assertAiSpendAllowed('xai-client.xaiResponsesJson')
-  if (opts.skipCache) return _xaiResponsesJsonUncached(opts)
+  if (opts.skipCache || opts.signal) return _xaiResponsesJsonUncached(opts)
   const key = cacheKey('xai-responses', opts.messages, opts.model, opts.temperature)
   return cachedFetch(key, 1800, () => _xaiResponsesJsonUncached(opts))
 }
@@ -384,6 +401,7 @@ async function _xaiResponsesJsonUncached(opts: {
   seed?: number
   store?: boolean
   reasoning?: { effort?: "low" | "medium" | "high"; summary?: "auto" | "concise" | "detailed" }
+  signal?: AbortSignal
 }): Promise<XaiResponsesJsonResult> {
   const runtime = getXaiRuntimeConfig()
   if (!runtime.ok) {
@@ -416,6 +434,7 @@ async function _xaiResponsesJsonUncached(opts: {
       Authorization: `Bearer ${runtime.apiKey}`,
     },
     body: JSON.stringify(body),
+    signal: opts.signal,
   })
 
   const text = await res.text().catch(() => "")

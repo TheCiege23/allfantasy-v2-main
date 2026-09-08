@@ -14,6 +14,7 @@
 import type { NextRequest } from "next/server"
 import { NextResponse } from "next/server"
 import { requireCronAuth } from "@/app/api/cron/_auth"
+import { createRunBudget, respondBeforeEdge, CRON_HARD_RESPONSE_MS } from "@/lib/cron/runBudget"
 import { runNewsImporter } from "@/lib/workers/news-importer"
 import { recordSyncJobRun, extractCommonCounts } from "@/lib/production-health/syncJobRunTelemetry"
 
@@ -39,9 +40,24 @@ const JOB_XNEWS = "cron-import-news-xnews"
  * `weather/refresh-cron` already do, and those are the crons that were returning 200.
  */
 export const dynamic = "force-dynamic"
-export const maxDuration = 120
+/**
+ * 300 to match the platform's real ceiling, not to buy time.
+ *
+ * ⚠ THIS WAS 120 AND IT NEVER MEANT ANYTHING. Nothing enforced it — the runs that failed did so
+ * at ~300,040ms, which is the edge severing the connection and answering 502 itself, and no value
+ * here changes that. `createRunBudget()` and `respondBeforeEdge` below are what actually bound the
+ * handler. 300 only stops the declaration contradicting them, and matches `import-players`,
+ * `import-schedules` and `import-stat-lines`, which are the same shape of job.
+ */
+export const maxDuration = 300
 
 async function handle(req: NextRequest) {
+  /*
+   * ⚠ ONE BUDGET FOR THE WHOLE HANDLER, not one per phase. `lib/cron/runBudget.ts` records why:
+   * a budget bolted onto an inner loop leaves the phases free to overrun each other, and the
+   * ceiling applies to the request, not to any one phase of it.
+   */
+  const budget = createRunBudget()
   const url = new URL(req.url)
   const sportParam = url.searchParams.get("sport")
 
@@ -78,10 +94,24 @@ async function handle(req: NextRequest) {
    * ⚠ BOTH HALVES RUN IN ONE INVOCATION ON PURPOSE. Ingesting without dispatching just
    * refreshes rows nobody sees; dispatching without ingesting notifies on stale rows.
    *
+   * 🛑 BUT THE DISPATCH HALF IS NOW DEFERRABLE, AND THAT IS NOT A WEAKENING OF THE LINE ABOVE.
+   * When that was written this pass was the only dispatcher. The base pass below has since
+   * gained the same call on an every-15-minutes schedule, so "rows nobody sees" is no longer
+   * what skipping it produces — it produces rows seen up to fifteen minutes later. See the
+   * priority note at the call site.
+   *
+   * 🛑 AND "BOUNDED IN WALL-CLOCK" WAS NEVER TRUE — that claim is why this went unnoticed.
+   * Nothing bounded it. A search is not "seconds, not milliseconds" when the model chooses its
+   * own retrieval budget, the provider call carried no timeout at all, and the cost of writing
+   * results scales with how much news there is. Measured over 40 scheduled runs: a stable
+   * ~50s all through the offseason, then 130-280s within a day of the season starting on
+   * 2026-09-04, then 502s at the 300s edge ceiling. `createRunBudget()`, the `remainingFor` clamp
+   * on each search, and `respondBeforeEdge` at the bottom of this file are what bound it now.
+   * `maxDuration` never did.
+   *
    * ⚠ SPEND. Each sport costs one xAI x_search call per configured query — roughly 20
    * calls for all seven sports. It defaults to NFL alone so a scheduled run is bounded in
-   * both cost and wall-clock (maxDuration is 120s and a search is seconds, not
-   * milliseconds); widen deliberately via `?sport=`.
+   * cost; widen deliberately via `?sport=`.
    */
   const xnewsParam = url.searchParams.get('xnews')
   if (xnewsParam !== null && ['1', 'true', 'yes'].includes(xnewsParam.toLowerCase())) {
@@ -97,8 +127,26 @@ async function handle(req: NextRequest) {
        * perfectly clean zero.
        */
       const xSports = (sports ?? ['NFL']).map((s) => s.toLowerCase())
-      const ingest = await runXNewsIngestion(xSports)
-      const dispatchResult = await dispatchPendingPlayerNewsNotifications()
+      const ingest = await runXNewsIngestion(xSports, budget)
+
+      /*
+       * ⚠ INGEST FIRST AND DISPATCH ON THE REMAINDER — the priority is deliberate, and it is a
+       * change from what the note above this block used to claim.
+       *
+       * "Both halves run in one invocation" was written when this pass was the ONLY thing
+       * dispatching. It no longer is: the base every-15-minutes pass below calls the same
+       * dispatcher with a six-hour lookback and no source filter, so rows written here and left
+       * unstamped are picked up within fifteen minutes. Deferring the dispatch costs a short
+       * delay; deferring the ingest costs the rows outright, because nothing else writes
+       * `x_grok_search`.
+       *
+       * So when the budget is gone the dispatch is skipped rather than half-run, and the
+       * response says so.
+       */
+      const dispatchResult = budget.exhausted()
+        ? { scanned: 0, notified: 0, recipients: 0, noRoster: 0, deferred: null as number | null,
+            skipped: 'run budget exhausted before phase start' }
+        : await dispatchPendingPlayerNewsNotifications({ budget })
 
       await recordSyncJobRun(
         { jobName: JOB_XNEWS, jobScope: xSports.join(','), trigger: 'cron' },
@@ -113,6 +161,17 @@ async function handle(req: NextRequest) {
           sports: xSports,
           ingest,
           dispatch: dispatchResult,
+          /*
+           * ⚠ DEFERRAL IS NOT AN ERROR AND MUST NOT READ AS ONE. A truncated run did real work
+           * and the next fire continues it; reporting 500 here would make a working job look
+           * broken on a schedule, which is how a team learns to ignore the alarm. Surfaced as
+           * its own field so a red run and a short run stay distinguishable.
+           */
+          budget: {
+            exhausted: budget.exhausted(),
+            elapsedMs: budget.elapsedMs(),
+            remainingMs: budget.remainingMs(),
+          },
           durationMs: Date.now() - startedAt,
           timestamp: new Date().toISOString(),
         },
@@ -173,7 +232,8 @@ async function handle(req: NextRequest) {
       const { dispatchPendingPlayerNewsNotifications } = await import(
         '@/lib/notifications/PlayerNewsNotificationService'
       )
-      dispatch = await dispatchPendingPlayerNewsNotifications({ lookbackHours: 6 })
+      // Same budget object as the ingest above, so the two phases cannot overrun each other.
+      dispatch = await dispatchPendingPlayerNewsNotifications({ lookbackHours: 6, budget })
     } catch (err) {
       dispatchError = err instanceof Error ? err.message : String(err)
       console.error('[cron/import-news] notification dispatch failed:', dispatchError)
@@ -213,12 +273,61 @@ async function handle(req: NextRequest) {
   }
 }
 
+/**
+ * 🛑 THE 240s BUDGET GATES ENTRY TO A UNIT AND CANNOT BOUND THE UNIT ITSELF, so it is not enough
+ * on its own — the same conclusion `import-players`, `import-schedules` and `import-stat-lines`
+ * reached on 2026-09-07 after all three 502'd at the edge WITH a budget already in place.
+ *
+ * This route's units are smaller than theirs and every provider call it makes is now clamped by
+ * `remainingFor`, so the budget should hold here where it did not there. This wrapper is the
+ * backstop for the case that reasoning is wrong: the notification fanout calls
+ * `dispatchNotification`, which reaches email and SMS providers that take no signal, and a fanout
+ * entered at 239s is bounded by nothing this file controls.
+ *
+ * ⚠ WHY THIS LOSES NO TELEMETRY THAT THE 502 DID NOT ALREADY LOSE. Today a run that overruns is
+ * severed by the edge with no heartbeat written at all — `recordSyncJobRun` is the last thing
+ * `handle` does — so the freshness probe reports this job stale even on runs that wrote rows.
+ * Answering at 270s does not make that worse; it is the only way the run gets recorded at all.
+ *
+ * ⚠ 200, NOT 5xx — the `deferredForBudget` convention `import-stat-lines` established. A deferral
+ * is designed behaviour for a budgeted job; 5xx would make a job that is merely late read broken.
+ *
+ * 🛑 AND `ok: true` HERE DOES NOT MEAN WHAT `ok` MEANS INSIDE `handle`. Down there it is the
+ * freshness signal — `articlesFetched > 0` — and reporting 200 over a feed that had stopped
+ * advancing is precisely what hid this job for 107 days. Here it means only "the request was
+ * handled as designed", which is why `deferredForBudget` is on the same object: the two must
+ * never be read as the same claim. A stalled feed is still caught, because the base schedule's
+ * probe in `scripts/cron-freshness-check.mjs` is a TABLE probe on `player_news.created_at` and
+ * does not read this response at all. Do not "simplify" that probe to a heartbeat.
+ */
+async function handleBoundedByEdge(req: NextRequest) {
+  const startedAt = Date.now()
+  const { result, overran } = await respondBeforeEdge<NextResponse | null>(
+    () => handle(req),
+    () => null,
+    CRON_HARD_RESPONSE_MS,
+    'import-news',
+  )
+  if (!overran && result) return result
+
+  return NextResponse.json(
+    {
+      ok: true,
+      deferredForBudget: true,
+      note: 'stopped at the response deadline; rows already written are committed and the next fire continues from the rotation',
+      elapsedMs: Date.now() - startedAt,
+      timestamp: new Date().toISOString(),
+    },
+    { status: 200 },
+  )
+}
+
 export async function GET(req: NextRequest) {
   if (!requireCronAuth(req, 'CRON_SECRET')) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-  return handle(req)
+  return handleBoundedByEdge(req)
 }
 
 export async function POST(req: NextRequest) {
   if (!requireCronAuth(req, 'CRON_SECRET')) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-  return handle(req)
+  return handleBoundedByEdge(req)
 }

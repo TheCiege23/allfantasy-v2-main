@@ -14,6 +14,7 @@
  */
 
 import { prisma } from '@/lib/prisma'
+import type { RunBudget } from '@/lib/cron/runBudget'
 import type { NotificationCategoryId } from '@/lib/notification-settings/types'
 import type { NewsCategory } from '@/lib/workers/x-news-ingestion'
 import { dispatchNotification } from '@/lib/notifications/NotificationDispatcher'
@@ -303,7 +304,24 @@ export async function dispatchPendingPlayerNewsNotifications(input?: {
   limit?: number
   lookbackHours?: number
   sources?: string[]
-}): Promise<{ scanned: number; notified: number; recipients: number; noRoster: number }> {
+  /**
+   * Stop before the platform's 300s edge ceiling and leave the rest for the next fire.
+   *
+   * ⚠ THE COST PER ROW IS NOT A CONSTANT AND IT GREW UNDER US. A notified row costs one roster
+   * scan plus one `dispatchNotification` PER LEAGUE that rosters the player, and league count
+   * only goes up. Measured across scheduled runs: a quiet run reported 330 recipients and
+   * finished in ~50s; once the season started the same limit of 40 rows produced 1,265 and the
+   * handler ran to the ceiling. Nothing about the code changed.
+   */
+  budget?: RunBudget
+}): Promise<{
+  scanned: number
+  notified: number
+  recipients: number
+  noRoster: number
+  /** Rows fetched but never considered because the budget ran out. Zero means the run completed. */
+  deferred: number
+}> {
   const limit = input?.limit ?? 40
   const lookbackHours = input?.lookbackHours ?? 24
   const since = new Date(Date.now() - lookbackHours * 60 * 60 * 1000)
@@ -329,9 +347,22 @@ export async function dispatchPendingPlayerNewsNotifications(input?: {
   let notified = 0
   let recipients = 0
   let noRoster = 0
+  let deferred = 0
   const stamped: string[] = []
 
-  for (const row of rows) {
+  for (let i = 0; i < rows.length; i += 1) {
+    const row = rows[i]
+    /*
+     * ⚠ CHECKED BEFORE THE STAMP, NOT AFTER. `stamped` means "considered", and the updateMany at
+     * the end writes `notificationDispatchedAt` for everything in it — so a check placed even one
+     * line lower would mark a row considered that this run never looked at, and no later run
+     * would ever pick it up. The deferred rows stay unstamped and the next fire finds them.
+     */
+    if (input?.budget?.exhausted()) {
+      deferred = rows.length - i
+      break
+    }
+
     /*
      * ⚠ STAMPED WHETHER OR NOT ANYONE IS NOTIFIED, and that is deliberate. `player_news`
      * holds 11,765 rows and gains ~3,400 a week; if unmatched rows stayed unstamped the
@@ -393,5 +424,7 @@ export async function dispatchPendingPlayerNewsNotifications(input?: {
       .catch(() => {})
   }
 
-  return { scanned: rows.length, notified, recipients, noRoster }
+  // `scanned` counts rows actually considered, not rows fetched — otherwise a truncated run
+  // reports the same number as a complete one and the deferral is invisible in the response.
+  return { scanned: stamped.length, notified, recipients, noRoster, deferred }
 }

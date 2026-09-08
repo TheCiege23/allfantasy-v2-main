@@ -16,6 +16,7 @@
  */
 
 import { prisma } from '@/lib/prisma'
+import { rotateForFairness, remainingFor, type RunBudget } from '@/lib/cron/runBudget'
 import { buildNewsPlayerIndex, type NewsPlayerIndex } from '@/lib/player-identity/resolveNewsPlayer'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
 import {
@@ -117,35 +118,119 @@ const HIGH_IMPACT_ACRONYMS = /\b(acl|mcl|pcl|tjs|ir)\b/
 const MEDIUM_IMPACT_ACRONYMS = /\b(gtd|dnp)\b/
 
 /**
- * Run the X API news ingestion for all sports.
- * Called by cron every 5-15 minutes.
+ * How long the cron holding this leads each query, for `rotateForFairness`.
+ *
+ * ⚠ MUST MATCH THE CRON'S OWN INTERVAL — six hours, per this route's entry in
+ * cron-schedule.json — or the same query leads every fire and rotation buys nothing, which is the
+ * exact starvation the helper's own header describes. Rotation only bites when a run is
+ * truncated, which is the case this all exists for.
  */
-export async function runXNewsIngestion(sports?: string[]): Promise<{
+const XNEWS_ROTATION_PERIOD_MS = 6 * 60 * 60 * 1000
+
+/**
+ * Cap on ONE provider search, before the remaining budget is taken into account.
+ *
+ * The budget is checked BETWEEN queries, so without a per-call clamp a single hung retrieval
+ * spends the whole run inside one unit, where the budget cannot see it. `remainingFor` in
+ * `lib/cron/runBudget.ts` is exactly that clamp, and it is used below rather than a local
+ * `Math.min`, on that helper's own instruction: a second copy of the rule is the
+ * duplicate-implementation failure CLAUDE.md records for `normalizePlayerName`, and copies drift.
+ *
+ * ⚠ AN UNBUDGETED CALLER GETS THIS CAP, NOT "NO TIMEOUT" — `remainingFor(undefined, cap)` returns
+ * the cap. That is a deliberate behaviour change: the call had no timeout at all before, which is
+ * how one search could consume a whole run. There is no caller for whom an unbounded search is
+ * the right answer.
+ */
+const XNEWS_SEARCH_TIMEOUT_MS = 60_000
+
+/**
+ * Run the X API news ingestion for all sports.
+ *
+ * 🛑 BOUNDED PER RUN, AND IT HAS TO BE. Every unit here is unbounded on its own: a provider
+ * search, then one dedupe read plus an insert per returned item, plus an injury upsert. The job
+ * sat at a stable ~50s for the whole offseason ONLY because nothing was new — measured across 40
+ * scheduled runs, every sub-70s run reported `newRecords: 0` and every 200s+ run reported 32-38.
+ * When the NFL season started on 2026-09-04 the same code went from ~50s to 130-280s in a day and
+ * began hitting the platform's 300s edge ceiling, which answers 502 itself.
+ *
+ * So the shape is the one `lib/cron/runBudget.ts` was written for: stop before the ceiling, say
+ * what was not reached, let the next fire continue. Queries are rotated so a truncated run does
+ * not drop the same query forever.
+ */
+export async function runXNewsIngestion(sports?: string[], budget?: RunBudget): Promise<{
   fetched: number
   newRecords: number
   duplicatesSkipped: number
   injuryRecords: number
+  /** Queries not attempted because the budget ran out. Zero means the run was complete. */
+  deferredQueries: number
   errors: string[]
 }> {
   const targetSports = sports ?? Object.keys(SPORT_SEARCH_QUERIES)
+  /*
+   * An absolute instant, captured once — that is the shape `remainingFor` takes, and the shape
+   * `rollingInsightsTeamsPlayers` and `sleeperIdentitySync` already pass it. Deriving it from the
+   * budget keeps ONE source of truth for when this run must stop; a separately-configured deadline
+   * could disagree with `exhausted()` and each would be right about a different thing.
+   */
+  const deadlineAt = budget ? Date.now() + budget.remainingMs() : undefined
   let fetched = 0
   let newRecords = 0
   let duplicatesSkipped = 0
   let injuryRecords = 0
+  let deferredQueries = 0
   const errors: string[] = []
 
   for (const sport of targetSports) {
     const queries = SPORT_SEARCH_QUERIES[sport]
     if (!queries) continue
 
+    /*
+     * Rotated BEFORE the budget check, so the count of deferred queries is correct even when the
+     * budget is already spent and this sport contributes nothing but a deferral.
+     */
+    const ordered = rotateForFairness(queries, XNEWS_ROTATION_PERIOD_MS)
+
+    if (budget?.exhausted()) {
+      deferredQueries += ordered.length
+      continue
+    }
+
     const playerIndex = await buildNewsPlayerIndex(sport)
 
-    for (const query of queries) {
+    for (let i = 0; i < ordered.length; i += 1) {
+      const query = ordered[i]
+      // Checked BETWEEN units, never during one — the contract runBudget documents.
+      if (budget?.exhausted()) {
+        deferredQueries += ordered.length - i
+        break
+      }
+
+      /*
+       * ⚠ `null` MEANS DO NOT START THE CALL, not "no timeout". `remainingFor` returns null
+       * inside its 1s floor precisely so a request that cannot finish is never issued — a
+       * zero-timeout call would surface as a provider error, which is a different and more
+       * misleading claim than "we ran out of time".
+       */
+      const searchMs = remainingFor(deadlineAt, XNEWS_SEARCH_TIMEOUT_MS)
+      if (searchMs == null) {
+        deferredQueries += ordered.length - i
+        break
+      }
+
       try {
-        const items = await searchXForNews(query, sport)
+        const items = await searchXForNews(query, sport, searchMs)
         fetched += items.length
 
         for (const item of items) {
+          /*
+           * A second, finer boundary. One query can return 20 items and each costs a dedupe read
+           * plus an insert plus a possible upsert, which on a contended single-core worker is the
+           * phase that actually grew when the season started. Dropping the tail of a query is
+           * safe: nothing is half-written, and the next fire searches afresh.
+           */
+          if (budget?.exhausted()) break
+
           const persisted = await persistNewsItem(item, playerIndex)
           if (persisted === 'new') {
             newRecords++
@@ -164,13 +249,19 @@ export async function runXNewsIngestion(sports?: string[]): Promise<{
     }
   }
 
-  return { fetched, newRecords, duplicatesSkipped, injuryRecords, errors }
+  return { fetched, newRecords, duplicatesSkipped, injuryRecords, deferredQueries, errors }
 }
 
 /**
  * Search X/Twitter for news using Grok's search capabilities.
+ *
+ * ⚠ `timeoutMs` IS REQUIRED. It was optional for one revision, which left an
+ * "unbounded search" branch that the sole caller could no longer reach — an untestable path that
+ * reads as a supported mode. There is one call site and `remainingFor` always hands it a number.
  */
-async function searchXForNews(query: string, sport: string): Promise<XNewsItem[]> {
+async function searchXForNews(query: string, sport: string, timeoutMs: number): Promise<XNewsItem[]> {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), timeoutMs)
   try {
     const { xaiResponsesJson, parseTextFromXaiResponse } = await import('@/lib/xai-client')
 
@@ -183,6 +274,7 @@ async function searchXForNews(query: string, sport: string): Promise<XNewsItem[]
         },
       ],
       tools: [{ type: 'web_search' as const }],
+      signal: controller.signal,
     })
 
     if (!result.ok) return []
@@ -196,6 +288,10 @@ async function searchXForNews(query: string, sport: string): Promise<XNewsItem[]
   } catch (e) {
     console.warn(`[x-news] Search failed for ${sport}:`, e instanceof Error ? e.message : String(e))
     return []
+  } finally {
+    // The abort must not outlive the call: a live timer holds the event loop open, and on this
+    // worker that is a leak per query per run.
+    clearTimeout(timer)
   }
 }
 
