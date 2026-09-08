@@ -28,6 +28,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 const findMany = vi.fn()
 const findFirst = vi.fn()
 const count = vi.fn()
+const gamesFindMany = vi.fn()
 
 vi.mock('@/lib/prisma', () => ({
   prisma: {
@@ -36,10 +37,15 @@ vi.mock('@/lib/prisma', () => ({
       findFirst: (...args: unknown[]) => findFirst(...args),
       count: (...args: unknown[]) => count(...args),
     },
+    sportsGame: {
+      findMany: (...args: unknown[]) => gamesFindMany(...args),
+    },
   },
 }))
 
-const { readGameOdds, readWeekOdds } = await import('@/lib/odds/gameOddsReads')
+const { readGameOdds, readWeekOdds, readWeekMarketContextByTeam } = await import(
+  '@/lib/odds/gameOddsReads'
+)
 
 /** A stored row exactly as the DB holds it — prices included. */
 function storedRow(over: Record<string, unknown> = {}) {
@@ -70,6 +76,95 @@ beforeEach(() => {
   findMany.mockReset()
   findFirst.mockReset()
   count.mockReset()
+  gamesFindMany.mockReset()
+})
+
+describe('readWeekMarketContextByTeam — each side stated from its own perspective', () => {
+  /*
+   * 🛑 THE FIXTURE IS DELIBERATELY ASYMMETRIC. Home is favoured by 3.5 on a 45.5
+   * total, so the two sides differ in every field: -3.5 vs +3.5, 24.5 vs 21.0,
+   * 0.5876 vs 0.4124. With a pick-em and an even total, a bug that COPIED the home
+   * values onto the away team instead of mirroring them would pass every assertion
+   * below. That is the whole reason these numbers are lopsided.
+   */
+  beforeEach(() => {
+    findMany.mockResolvedValue([storedRow({ gameExternalId: '7532' })])
+    gamesFindMany.mockResolvedValue([
+      { externalId: '7532', homeTeam: 'KC', awayTeam: 'DEN' },
+    ])
+  })
+
+  it('states the home side directly', async () => {
+    const m = await readWeekMarketContextByTeam('NFL', 2026, 1)
+    const kc = m.get('KC')!
+    expect(kc.isHome).toBe(true)
+    expect(kc.opponent).toBe('DEN')
+    expect(kc.spread).toBe(-3.5)
+    expect(kc.impliedTeamTotal).toBe(24.5)
+    expect(kc.winProbability).toBeCloseTo(0.5876, 4)
+  })
+
+  it('MIRRORS the spread for the away side rather than copying it', async () => {
+    const m = await readWeekMarketContextByTeam('NFL', 2026, 1)
+    const den = m.get('DEN')!
+    expect(den.isHome).toBe(false)
+    expect(den.opponent).toBe('KC')
+    expect(den.spread).toBe(3.5) // NOT -3.5
+    expect(den.impliedTeamTotal).toBe(21)
+  })
+
+  it('takes the complement of the win probability for the away side', async () => {
+    const m = await readWeekMarketContextByTeam('NFL', 2026, 1)
+    expect(m.get('DEN')!.winProbability).toBeCloseTo(0.4124, 4)
+  })
+
+  it('the two sides are internally consistent', async () => {
+    const m = await readWeekMarketContextByTeam('NFL', 2026, 1)
+    const kc = m.get('KC')!
+    const den = m.get('DEN')!
+    // spreads cancel, probabilities sum to 1, implied totals sum to the game total
+    expect(kc.spread! + den.spread!).toBeCloseTo(0, 10)
+    expect(kc.winProbability! + den.winProbability!).toBeCloseTo(1, 4)
+    expect(kc.impliedTeamTotal! + den.impliedTeamTotal!).toBeCloseTo(kc.gameTotal!, 5)
+  })
+
+  it('carries no prices or bookmaker names into the team view either', async () => {
+    const m = await readWeekMarketContextByTeam('NFL', 2026, 1)
+    for (const key of FORBIDDEN) {
+      expect(Object.keys(m.get('KC')!)).not.toContain(key)
+      expect(Object.keys(m.get('DEN')!)).not.toContain(key)
+    }
+  })
+
+  it('stays null rather than inventing a mirror of a missing value', async () => {
+    findMany.mockResolvedValue([
+      storedRow({ gameExternalId: '7532', spreadHome: null, homeWinProbability: null }),
+    ])
+    const m = await readWeekMarketContextByTeam('NFL', 2026, 1)
+    // -null would be -0, and 1-null would be 1 — both plausible, both wrong.
+    expect(m.get('DEN')!.spread).toBeNull()
+    expect(m.get('DEN')!.winProbability).toBeNull()
+  })
+
+  it('skips a game that has no odds rather than emitting an empty entry', async () => {
+    gamesFindMany.mockResolvedValue([
+      { externalId: '7532', homeTeam: 'KC', awayTeam: 'DEN' },
+      { externalId: '9999', homeTeam: 'BUF', awayTeam: 'MIA' },
+    ])
+    const m = await readWeekMarketContextByTeam('NFL', 2026, 1)
+    expect(m.has('KC')).toBe(true)
+    expect(m.has('BUF')).toBe(false)
+    expect(m.has('MIA')).toBe(false)
+  })
+
+  it('CONTROL: a copy-instead-of-mirror bug would be caught by this fixture', async () => {
+    // Proves the asymmetry is real: if the two sides shared a value, the mirror
+    // assertions above could pass while doing nothing.
+    const m = await readWeekMarketContextByTeam('NFL', 2026, 1)
+    expect(m.get('KC')!.spread).not.toBe(m.get('DEN')!.spread)
+    expect(m.get('KC')!.impliedTeamTotal).not.toBe(m.get('DEN')!.impliedTeamTotal)
+    expect(m.get('KC')!.winProbability).not.toBe(m.get('DEN')!.winProbability)
+  })
 })
 
 describe('readGameOdds returns forecast fields only', () => {

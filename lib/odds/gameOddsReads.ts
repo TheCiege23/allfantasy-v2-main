@@ -224,6 +224,98 @@ export async function readWeekOdds(
 }
 
 /**
+ * One team's game environment for a week — the shape fantasy actually consumes.
+ *
+ * Everything here is stated from THIS TEAM's point of view, because that is the
+ * question a lineup surface asks ("is my guy's offence expected to score?") and
+ * because a home-perspective spread silently inverted for half the league is
+ * exactly the kind of plausible-but-wrong number this feed is built to avoid.
+ */
+export interface TeamMarketContext {
+  team: string
+  opponent: string | null
+  isHome: boolean
+  /** Points THIS team is implied to score. The headline number for fantasy. */
+  impliedTeamTotal: number | null
+  /** Spread from THIS team's perspective; negative = favoured. */
+  spread: number | null
+  /** The game's total, shared by both teams. */
+  gameTotal: number | null
+  /** Vig-free probability THIS team wins. */
+  winProbability: number | null
+  /** True when the underlying quote is past its TTL — see the file header. */
+  isStale: boolean
+}
+
+/**
+ * A week's market context keyed by TEAM abbreviation.
+ *
+ * Joins `game_odds` to `SportsGame` on the provider's game id, then states each
+ * game twice — once per side, each from that side's perspective. A caller holding
+ * a roster has team codes, not game ids, so doing the flip here means it happens
+ * once, in a tested place, rather than in every surface.
+ *
+ * DB-only, like everything else in this module: two queries, no provider call.
+ */
+export async function readWeekMarketContextByTeam(
+  sport: string,
+  season: number,
+  week: number,
+  opts: { source?: string } = {},
+): Promise<Map<string, TeamMarketContext>> {
+  const out = new Map<string, TeamMarketContext>()
+  if (!sport || !Number.isFinite(season) || !Number.isFinite(week)) return out
+
+  const source = opts.source ?? 'api_sports'
+  const [oddsByGame, games] = await Promise.all([
+    readWeekOdds(sport, season, week, { source }),
+    prisma.sportsGame.findMany({
+      where: { sport, season, week, source },
+      select: { externalId: true, homeTeam: true, awayTeam: true },
+    }),
+  ])
+
+  for (const game of games) {
+    const entry = oddsByGame.get(String(game.externalId))
+    const q = entry?.primary
+    if (!q) continue
+
+    const stale = entry!.isStale
+    const homeProb = q.homeWinProbability
+
+    if (game.homeTeam) {
+      out.set(game.homeTeam, {
+        team: game.homeTeam,
+        opponent: game.awayTeam ?? null,
+        isHome: true,
+        impliedTeamTotal: q.impliedHomeTotal,
+        spread: q.spreadHome,
+        gameTotal: q.totalPoints,
+        winProbability: homeProb,
+        isStale: stale,
+      })
+    }
+
+    if (game.awayTeam) {
+      out.set(game.awayTeam, {
+        team: game.awayTeam,
+        opponent: game.homeTeam ?? null,
+        isHome: false,
+        impliedTeamTotal: q.impliedAwayTotal,
+        // Mirrored, not copied. A -3.5 home line is +3.5 for the away side.
+        spread: q.spreadHome == null ? null : -q.spreadHome,
+        gameTotal: q.totalPoints,
+        // Two-way market, vig already removed, so the complement is the away price.
+        winProbability: homeProb == null ? null : Math.round((1 - homeProb) * 10000) / 10000,
+        isStale: stale,
+      })
+    }
+  }
+
+  return out
+}
+
+/**
  * Freshness of the odds table itself, for health surfaces.
  *
  * ⚠ Read THIS, not any accessor on the adapter. Root CLAUDE.md records
