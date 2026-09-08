@@ -25,6 +25,9 @@ async function main() {
   console.log(`sessions missing an id:  ${result.sessionsMissingId}`)
   console.log(`  resolved:              ${result.resolved}`)
   console.log(`  no draft upstream yet: ${result.noDraftUpstream}`)
+  // Not a failure and not a success: the draft belongs to a sibling League row for the
+  // same Sleeper league. Printed on its own line so it cannot be read as either.
+  console.log(`  id held by a sibling:  ${result.claimedByAnotherSession}`)
   console.log(`  failed:                ${result.failed}`)
   console.log(`\nsleeper leagues with NO draft session at all: ${result.leaguesWithoutSession}`)
   console.log('  (this script cannot help those — they need a session first)')

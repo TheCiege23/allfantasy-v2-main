@@ -32,6 +32,15 @@ export type BackfillDraftIdsResult = {
   resolved: number
   /** The league genuinely has no draft on Sleeper yet — not an error. */
   noDraftUpstream: number
+  /**
+   * Another DraftSession already holds this Sleeper draft id.
+   *
+   * `sleeperDraftId` is GLOBALLY unique and one Sleeper league is N rows here — every
+   * importer of the same league gets its own League row — so only the first session can
+   * ever hold the id. Counted apart from `failed` because nothing is broken and no retry
+   * will help: it is a coverage gap awaiting a schema decision, not an outage.
+   */
+  claimedByAnotherSession: number
   failed: number
   /** Sleeper leagues with no DraftSession at all. Nothing here can fix those. */
   leaguesWithoutSession: number
@@ -89,6 +98,7 @@ export async function backfillSleeperDraftIds(
     sessionsMissingId: sessions.length,
     resolved: 0,
     noDraftUpstream: 0,
+    claimedByAnotherSession: 0,
     failed: 0,
     leaguesWithoutSession: Math.max(0, sleeperLeagues - sessionsForSleeper),
     failures: [],
@@ -108,12 +118,50 @@ export async function backfillSleeperDraftIds(
         result.noDraftUpstream += 1
         continue
       }
+      /*
+       * ⚠ ONE SLEEPER LEAGUE IS N ROWS HERE, AND `sleeperDraftId` IS GLOBALLY UNIQUE.
+       * Every importer of the same Sleeper league gets its own League row, so several
+       * DraftSessions legitimately point at ONE upstream draft — and only the first can
+       * hold the id. Assigning it blind throws P2002 for every other row, on every pass,
+       * forever; observed in production as a repeating
+       * `Unique constraint failed on the fields: (sleeperDraftId)`.
+       *
+       * ⚠ SKIPPING IS NOT A FIX FOR THE UNDERLYING GAP — the losing league still has no
+       * mirrored draft. It is reported under its own counter so the gap stays legible
+       * instead of arriving as noise inside `failed`, where a real outage lives.
+       */
+      const holder = await prisma.draftSession.findUnique({
+        where: { sleeperDraftId: draftId },
+        select: { id: true, leagueId: true },
+      })
+      if (holder && holder.id !== s.id) {
+        result.claimedByAnotherSession += 1
+        result.failures.push({
+          leagueId: s.leagueId,
+          reason: `draft ${draftId} already held by league ${holder.leagueId}`,
+        })
+        continue
+      }
+
       await prisma.draftSession.update({
         where: { id: s.id },
         data: { sleeperDraftId: draftId },
       })
       result.resolved += 1
     } catch (e) {
+      /*
+       * The read above is not a lock: two passes can interleave between it and the write,
+       * so the constraint stays the authority. Classify a lost race the same way rather
+       * than reporting it as an outage — otherwise the guard just moves the noise.
+       */
+      if ((e as { code?: unknown } | null)?.code === 'P2002') {
+        result.claimedByAnotherSession += 1
+        result.failures.push({
+          leagueId: s.leagueId,
+          reason: 'sleeperDraftId claimed concurrently',
+        })
+        continue
+      }
       // One league's outage must not stop the rest.
       result.failed += 1
       result.failures.push({
