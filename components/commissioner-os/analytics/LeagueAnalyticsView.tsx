@@ -419,7 +419,11 @@ function ManagerActivity({ rows }: { rows: ManagerActivityEntry[] }) {
                 />
               </span>
               <span className="cos-lb-val">{r.actionsPerWeek}</span>
-              <span className="cos-lb-delta" data-dir={down ? 'down' : delta > 0 ? 'up' : 'flat'}>
+              <span
+                className="cos-lb-delta"
+                data-testid="lb-delta"
+                data-dir={down ? 'down' : delta > 0 ? 'up' : 'flat'}
+              >
                 {/*
                   Rounded at the point of display: `0.31 - 1.4` is `1.0899999999999999` in binary
                   floating point, and the leaderboard rendered exactly that. It was intermittent —

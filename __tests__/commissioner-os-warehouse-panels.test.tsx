@@ -94,10 +94,22 @@ describe('commissioner-os analytics — warehouse-backed panels', () => {
      * and invisible in any fixture using round numbers. These operands reproduce it.
      */
     const rows = [mgr('Ada', 0.31, 1.4), mgr('Bo', 0.5, 0.5)]
-    const { container } = render(
-      <LeagueAnalyticsView snapshot={{ ...BASE, managerActivity: rows }} dataMode="live" />,
-    )
-    const deltas = [...container.querySelectorAll('.cos-lb-delta')].map((e) => e.textContent ?? '')
+    render(<LeagueAnalyticsView snapshot={{ ...BASE, managerActivity: rows }} dataMode="live" />)
+    /*
+     * Addressed by test id, not by `.cos-lb-delta` — that is a styling class in
+     * `analytics-sheet.css` and a purely visual rename would have taken this assertion with it.
+     * There is no accessible name to anchor on here (these are anonymous spans in a leaderboard
+     * row), so a test id is the right handle rather than a role.
+     *
+     * ⚠ It also closes a hole, stated narrowly because the overstated version is tempting:
+     * `querySelectorAll` returns an EMPTY list when the selector stops matching, and `[].join(' ')`
+     * then satisfies the `not.toMatch` below VACUOUSLY — the assertion that actually guards the
+     * float artifact stops doing any work. The suite would still go red here, because the
+     * `toContain('1.09')` beneath it fails on the same empty string; but that is a companion
+     * assertion covering for a dead one, and a variant asserting only the negative would be
+     * silently blind. `getAllByTestId` throws instead, naming what it looked for.
+     */
+    const deltas = screen.getAllByTestId('lb-delta').map((e) => e.textContent ?? '')
     expect(deltas.join(' ')).not.toMatch(/\d\.\d{3,}/)
     expect(deltas.join(' ')).toContain('1.09')
   })
