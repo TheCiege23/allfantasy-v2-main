@@ -1324,6 +1324,46 @@
   background: var(--chip);
 }
 
+/*
+ * 🛑 WITHOUT THIS THE ROWS SILENTLY OVERLAP EACH OTHER. `.af-rail-scroll` is a
+ * flex COLUMN, so every tile inherits `flex-shrink: 1`, and the `height: auto`
+ * above only removes the fixed 42px — it does not stop the flex algorithm
+ * squashing an overflowing list. Measured in the browser once the projection and
+ * rank lines landed: tiles rendered 44px against a 63–66px `scrollHeight`, so
+ * each row's last line was drawn over the next row's league name. Nothing
+ * overflowed visibly, nothing threw, and the CSS reads correctly in isolation —
+ * the tell was `getBoundingClientRect().height` against `scrollHeight`.
+ *
+ * ⚠ SCOPED TO THE SCROLLER, AND THE FIRST VERSION WAS NOT — IT BROKE THE FOOT.
+ * `.af-rail-foot`'s add and profile buttons are `.af-rail-tile` too, and the
+ * expanded rule takes their fixed 42px away. Their flex-shrink was the only
+ * thing holding the profile down; removing it let the avatar render at its
+ * intrinsic height, which measured 353px on a 812px viewport and left the mobile
+ * tray 301px in which to list 65 leagues. Same measurement caught it: the foot's
+ * own children, not the rail's.
+ */
+.af-shell[data-rail-open='true'] .af-rail-scroll .af-rail-tile {
+  flex: none;
+}
+
+/*
+ * ⚠ AND THE FOOT'S TILES GET THEIR SQUARE BACK, WHICH IS A PRE-EXISTING BUG THIS
+ * WORK ONLY MADE VISIBLE. The expanded rule above takes the fixed 42px off every
+ * `.af-rail-tile`, foot included, so the profile avatar sized to its intrinsic
+ * image height and was held down only by flex-shrink — measured at 172px against
+ * a 44px add button beside it, on a foot the stylesheet lays out as a ROW of two
+ * buttons. On a 812px phone that is 130px of league list spent on one avatar.
+ *
+ * ⚠ HEIGHT ONLY — NOT `flex: none`. The foot is a ROW of two buttons that both
+ * carry `width: 100%` from the expanded rule, so their shrink is what makes them
+ * share the width. Pinning it pushed the profile button clean off the right edge
+ * of the 375px tray, which the screenshot showed and no measurement of the rail
+ * itself would have.
+ */
+.af-shell[data-rail-open='true'] .af-rail-foot .af-rail-tile {
+  height: 42px;
+}
+
 .af-shell[data-rail-open='true'] .af-rail-row {
   display: flex;
   flex: 1;
@@ -1346,22 +1386,57 @@
   white-space: nowrap;
 }
 
+/*
+ * ⚠ THIS LINE WAS HORIZONTAL — `you v them` — AND HAD TO STOP BEING. Each side
+ * now carries three lines (name + score, then PROJ, then AF), and three lines
+ * beside three more inside 300px leaves each team about 90px of name, which is
+ * not a name. Stacking the sides trades vertical space, which the rail scrolls,
+ * for horizontal space, which it does not have.
+ */
 .af-core .af-rail-row-line {
   display: flex;
-  align-items: center;
-  gap: 7px;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 3px;
   min-width: 0;
 }
 
 .af-core .af-rail-row-side {
   display: flex;
-  align-items: baseline;
-  gap: 5px;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 2px;
   min-width: 0;
-  flex: 1;
+}
+
+/* The name-and-score line, which is the only part that stays horizontal. */
+.af-core .af-rail-row-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+/*
+ * The manager's avatar. Deliberately much smaller than the 42px league crest at
+ * the head of the row — it identifies a person inside a league, not the league,
+ * and at equal size the two would compete.
+ */
+.af-core .af-rail-row-av {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  overflow: hidden;
+  background: var(--chip);
+  color: var(--faint);
+  font: 800 8px/1 var(--font-archivo, 'Archivo', system-ui, sans-serif);
 }
 
 .af-core .af-rail-row-team {
+  flex: 1 1 auto;
   font: 500 10px/1.3 var(--font-archivo, 'Archivo', system-ui, sans-serif);
   color: var(--muted);
   overflow: hidden;
@@ -1380,9 +1455,137 @@
   color: var(--text2);
 }
 
+/*
+ * The two projected totals, indented under the name so they read as belonging
+ * to that side rather than to the row.
+ *
+ * ⚠ STACKED, NOT SIDE BY SIDE, AND THE KEY IS A FIXED COLUMN. Both fit on one
+ * line at this size, but two numbers sharing a line invite being read as a range
+ * or a pair, and the AF figure is a DIFFERENT measurement of the same lineup —
+ * a claim that deserves its own row. The 30px key column keeps `PROJ` and `AF`
+ * left-aligned so the two values line up under each other and the difference
+ * between them is readable at a glance.
+ */
+.af-core .af-rail-row-projs {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 1px;
+  min-width: 0;
+  padding-left: 22px;
+}
+
+.af-core .af-rail-row-proj {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+}
+
+
+/*
+ * ⚠ THE LABEL IS NOT DECORATION. An unlabelled number beside a score reads as a
+ * score, which is the one mistake every matchup surface here is built to avoid.
+ * PROJ is the vendor feed under generic PPR; AF is the same starters under this
+ * league's own rules.
+ */
+.af-core .af-rail-row-proj-k {
+  flex: none;
+  /* A fixed column, so the two values line up under one another. */
+  width: 30px;
+  font: 700 8px/1 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  letter-spacing: 0.08em;
+  color: var(--faint);
+}
+
+.af-core .af-rail-row-proj[data-kind='af'] .af-rail-row-proj-k {
+  color: var(--accent);
+}
+
+.af-core .af-rail-row-proj-v {
+  font: 600 10px/1 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+
+/*
+ * A total built from only some of the lineup. Marked rather than hidden, and
+ * marked cheaply — the count itself is in the `title`, because "projected from 7
+ * of 9 starters" does not fit here and a partial total passing for a complete
+ * one is the thing worth guarding against.
+ */
+.af-core .af-rail-row-projs[data-partial='true'] .af-rail-row-proj-v {
+  opacity: 0.7;
+  text-decoration: underline dotted;
+  text-underline-offset: 2px;
+}
+
 .af-core .af-rail-row-vs {
   flex: none;
+  align-self: flex-start;
+  padding-left: 5px;
   font: 700 9px/1 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  color: var(--faint);
+}
+
+/*
+ * The rank block that stands in for an opponent in an elimination league.
+ *
+ * Tone is a border, not a fill: at this size a filled red block beside a league
+ * crest reads as an error state, and being 14th of 18 in week one is not one.
+ */
+.af-core .af-rail-row-rank {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 3px 7px;
+  min-width: 0;
+  margin-top: 1px;
+  padding: 3px 7px;
+  border: 1px solid var(--line2);
+  border-left-width: 2px;
+  border-radius: 7px;
+}
+
+.af-core .af-rail-row-rank[data-tone='warn'] {
+  border-left-color: var(--warn);
+}
+
+.af-core .af-rail-row-rank[data-tone='bad'] {
+  border-left-color: var(--bad);
+}
+
+.af-core .af-rail-row-rank-pos {
+  flex: none;
+  font: 800 11px/1.2 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font-variant-numeric: tabular-nums;
+  color: var(--text2);
+}
+
+.af-core .af-rail-row-rank-of {
+  font-weight: 500;
+  color: var(--faint);
+}
+
+.af-core .af-rail-row-rank-cut {
+  font: 600 10px/1.2 var(--font-archivo, 'Archivo', system-ui, sans-serif);
+  color: var(--muted);
+}
+
+.af-core .af-rail-row-rank[data-tone='bad'] .af-rail-row-rank-cut {
+  color: var(--bad);
+}
+
+/*
+ * ⚠ WHAT THE RANK WAS MEASURED FROM, AND IT IS NOT OPTIONAL. Before kickoff
+ * every score in the league is 0, so the order comes entirely from the
+ * projections; "14th of 18" with no basis presents a projected ordering as a
+ * played one.
+ */
+.af-core .af-rail-row-rank-basis {
+  flex-basis: 100%;
+  font: 500 9px/1.2 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  letter-spacing: 0.04em;
   color: var(--faint);
 }
 

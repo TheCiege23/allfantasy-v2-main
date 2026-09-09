@@ -8,6 +8,7 @@ import CommsDock from '@/components/core-app/comms/CommsDock'
 import type { CommsLeague } from '@/components/core-app/comms/CommsDrawer'
 import { AfCrest } from '@/components/core-app/AfCrest'
 import SyncNowButton from '@/components/core-app/SyncNowButton'
+import PlayerCardProvider from '@/components/core-app/player-card/PlayerCardProvider'
 import { SUPPORT_OPEN_EVENT } from '@/components/core-app/comms/commsEvents'
 import MiniPlayerImg from '@/components/MiniPlayerImg'
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
@@ -49,20 +50,51 @@ export type RailLeague = {
 }
 
 /**
- * This week's head-to-head for one league, for the expanded rail.
+ * One side's two projected totals, as `lib/core-app/railMatchups.ts` computes them.
  *
- * ⚠ SCORES, NOT PROJECTIONS — see the header of `lib/core-app/railMatchups.ts`.
- * A projected number in a 300px rail has nowhere to state its basis, and a
- * projection rendered like a score is the one mistake the matchup surfaces
- * exist to avoid.
+ * ⚠ THE PAIR IS THE POINT AND BOTH LINES MUST BE LABELLED. `projected` is the
+ * vendor feed's number under generic PPR — a league nobody is in. `af` is the
+ * same starters re-scored under THIS league's rules. Drawn unlabelled, either
+ * one reads as a score, which is the mistake every matchup surface here is built
+ * to avoid; drawn as `PROJ` and `AF` they read as what they are.
+ */
+export type RailSideProjectionSummary = {
+  projected: number | null
+  afProjected: number | null
+  /** Starters priced, of starters in the lineup. Reported in the row's title. */
+  pricedFrom: number
+  starterCount: number
+}
+
+/** Where you sit in a league that has no opponent to show. */
+export type RailStandingSummary = {
+  rank: number
+  outOf: number
+  /** Points over the lowest team in the league. Null when you ARE the lowest. */
+  overCut: number | null
+  basis: 'points' | 'projected'
+  /** The bottom of this table goes home, so the copy says "cut" rather than "last". */
+  elimination: boolean
+}
+
+/**
+ * This week's head-to-head for one league, for the expanded rail.
  */
 export type RailMatchupSummary = {
   yourTeam: string | null
   yourAvatarUrl: string | null
   yourScore: number
+  yourProjection?: RailSideProjectionSummary | null
   opponentTeam: string | null
   opponentAvatarUrl: string | null
   opponentScore: number
+  opponentProjection?: RailSideProjectionSummary | null
+  /**
+   * No other roster shares this week's matchupId — an elimination league, or a
+   * schedule the sync has not paired. The row draws `standing` instead of a `v`.
+   */
+  unpaired?: boolean
+  standing?: RailStandingSummary | null
   /** False when the fixture exists but has not been played. Drawn as a dash. */
   scored: boolean
 }
@@ -195,7 +227,13 @@ export type AfCoreShellProps = {
   weekLabel?: string | null
   commissionerCount?: number
   rankingsLevel?: number | null
-  warRoomLive?: boolean
+  /**
+   * Is any of your drafts running right now? Drives Draft HQ's LIVE badge.
+   *
+   * ⚠ NOT CURRENTLY PASSED BY ANY CALLER — see the badge's own note. It was
+   * `warRoomLive` until 2026-09-08 and was never wired then either.
+   */
+  draftLive?: boolean
   /** Keeps league-scoped nav links pointed at the league in context. */
   selectedLeagueId?: string | null
   /**
@@ -307,7 +345,7 @@ const NAV_GROUPS: Array<{ label: string | null; keys: CoreNavKey[] }> = [
   { label: null, keys: ['home'] },
   {
     label: 'This league',
-    keys: ['my-team', 'matchup', 'trades', 'waivers', 'devy-league', 'draft-hq', 'war-room'],
+    keys: ['my-team', 'matchup', 'war-room', 'trades', 'waivers', 'devy-league', 'draft-hq'],
   },
   {
     label: 'Across leagues',
@@ -465,7 +503,6 @@ function navItems(props: AfCoreShellProps): NavItem[] {
       href: props.selectedLeagueId
         ? `/core/war-room?league=${encodeURIComponent(props.selectedLeagueId)}`
         : '/core/war-room',
-      badge: props.warRoomLive ? { text: 'LIVE', tone: 'live' } : undefined,
     },
     {
       key: 'draft-hq',
@@ -474,6 +511,18 @@ function navItems(props: AfCoreShellProps): NavItem[] {
       href: props.selectedLeagueId
         ? `/core/draft-hq?league=${encodeURIComponent(props.selectedLeagueId)}`
         : '/core/draft-hq',
+      /*
+       * The LIVE badge moved here with the draft board on 2026-09-08 — a running
+       * draft is a Draft HQ fact now, and the War Room is the season-long
+       * scouting hub with nothing live about it.
+       *
+       * ⚠ AND IT IS STILL NOT PASSED BY ANY CALLER, AS IT WAS NOT ON THE WAR
+       * ROOM. Stated rather than left to be discovered: this badge has never
+       * rendered. Wiring it needs a cross-league "is any draft live" signal on
+       * the shell, which is chrome on every /core page and therefore a budgeted
+       * read — see the note on `getRailMatchups`.
+       */
+      badge: props.draftLive ? { text: 'LIVE', tone: 'live' } : undefined,
     },
     {
       key: 'devy',
@@ -652,7 +701,7 @@ const NAV_SECTIONS: Array<{ id: string; heading: string | null; keys: CoreNavKey
   {
     id: 'league',
     heading: 'This league',
-    keys: ['my-team', 'defense-hub', 'matchup', 'waivers', 'trades', 'players', 'draft-hq', 'war-room'],
+    keys: ['my-team', 'defense-hub', 'matchup', 'war-room', 'waivers', 'trades', 'players', 'draft-hq'],
   },
   { id: 'now', heading: 'This week', keys: ['week', 'live', 'standings', 'season-outlook'] },
   { id: 'history', heading: 'Your record', keys: ['career', 'rankings', 'portfolio'] },
@@ -883,6 +932,143 @@ function RailMark({ src, letter }: { src: string | null | undefined; letter: str
   return <img src={src} alt="" className="af-rail-tile-img" onError={() => setFailed(true)} loading="lazy" />
 }
 
+/**
+ * One team in a rail row: their platform avatar, their name, their score, and
+ * the two projected totals under it.
+ *
+ * ⚠ THE AVATAR IS THE MANAGER'S, NOT THE LEAGUE'S. The league crest is already
+ * the 42px mark at the head of the row; repeating it here would say nothing. The
+ * loader resolves both sides' `avatarUrl` through `managerArtUrl` — Sleeper
+ * stores an avatar *id* where other platforms store a link, and 85 of this
+ * account's 94 claimed teams have one.
+ *
+ * ⚠ AND THE INITIAL IS `Array.from`, NOT `slice`. A team name starting with an
+ * emoji sliced mid-surrogate serialises differently on server and client and
+ * takes hydration down — the same trap the profile mark in the rail foot
+ * carries a note about, and half this account's league names begin with 🪓.
+ */
+function RailSide({
+  name,
+  avatarUrl,
+  score,
+  projection,
+  them,
+}: {
+  name: string
+  avatarUrl: string | null
+  /** Null while the fixture is unplayed, which draws a dash rather than 0.0. */
+  score: number | null
+  projection: RailSideProjectionSummary | null
+  them?: boolean
+}) {
+  const initial = (Array.from(name.trim() || '•')[0] ?? '•').toUpperCase()
+  /*
+   * ⚠ `pricedFrom > 0` MATTERS: a side where NOTHING priced already draws a dash,
+   * and marking that dash as partial rendered it as a dotted "⋯" that read like a
+   * third state. Partial means "some of the lineup", which is the only case the
+   * mark has anything to add.
+   */
+  const partial =
+    projection != null &&
+    projection.pricedFrom > 0 &&
+    projection.pricedFrom < projection.starterCount
+
+  return (
+    <span className="af-rail-row-side" data-side={them ? 'them' : undefined}>
+      <span className="af-rail-row-head">
+        <span className="af-rail-row-av" aria-hidden>
+          <RailMark src={avatarUrl} letter={initial} />
+        </span>
+        <span className="af-rail-row-team">{name}</span>
+        <span className="af-rail-row-score">{score == null ? '—' : score.toFixed(1)}</span>
+      </span>
+
+      {projection ? (
+        <span
+          className="af-rail-row-projs"
+          /*
+            The coverage lives in the title rather than on screen: a 300px rail
+            has no room for "projected from 7 of 9", and a partial total that
+            passes for a complete one is the thing worth guarding against. The
+            `data-partial` hook lets the CSS mark it without spending width.
+          */
+          title={
+            `Projected from ${projection.pricedFrom} of ${projection.starterCount} starters` +
+            (projection.afProjected == null
+              ? ' · no AF total: this league’s scoring did not match the projected stat line'
+              : '')
+          }
+          data-partial={partial ? 'true' : undefined}
+        >
+          <span className="af-rail-row-proj">
+            <span className="af-rail-row-proj-k">PROJ</span>
+            <span className="af-rail-row-proj-v">
+              {projection.projected == null ? '—' : projection.projected.toFixed(1)}
+            </span>
+          </span>
+          <span className="af-rail-row-proj" data-kind="af">
+            <span className="af-rail-row-proj-k">AF</span>
+            <span className="af-rail-row-proj-v">
+              {projection.afProjected == null ? '—' : projection.afProjected.toFixed(1)}
+            </span>
+          </span>
+        </span>
+      ) : null}
+    </span>
+  )
+}
+
+/** 1st, 2nd, 3rd, 4th … and 11th/12th/13th, which are the ones a naive rule gets wrong. */
+function ordinal(n: number): string {
+  const teens = n % 100
+  if (teens >= 11 && teens <= 13) return `${n}th`
+  const unit = n % 10
+  if (unit === 1) return `${n}st`
+  if (unit === 2) return `${n}nd`
+  if (unit === 3) return `${n}rd`
+  return `${n}th`
+}
+
+/**
+ * The rank block that replaces the opponent in a league with no head-to-head.
+ *
+ * ⚠ IT SAYS WHAT THE NUMBER IS MEASURED FROM, because before kickoff it is not
+ * measured from points — every score in the league is 0 in that window and the
+ * order comes entirely from the projections. Printing "14th of 18" without
+ * saying so would present a projected ordering as a played one.
+ */
+function RailStanding({ standing }: { standing: RailStandingSummary | null }) {
+  if (!standing) {
+    return (
+      <span className="af-rail-row-side" data-side="them">
+        <span className="af-rail-row-team">no head-to-head — rank not yet measurable</span>
+      </span>
+    )
+  }
+
+  const last = standing.rank === standing.outOf
+  const tone = last ? 'bad' : standing.rank > standing.outOf * 0.75 ? 'warn' : undefined
+
+  return (
+    <span className="af-rail-row-rank" data-tone={tone}>
+      <span className="af-rail-row-rank-pos">
+        {ordinal(standing.rank)}
+        <span className="af-rail-row-rank-of"> of {standing.outOf}</span>
+      </span>
+      <span className="af-rail-row-rank-cut">
+        {standing.overCut == null
+          ? standing.elimination
+            ? 'on the block'
+            : 'bottom of the league'
+          : `+${standing.overCut.toFixed(1)} ${standing.elimination ? 'over the cut' : 'over last'}`}
+      </span>
+      <span className="af-rail-row-rank-basis">
+        {standing.basis === 'points' ? 'on points' : 'on projection'}
+      </span>
+    </span>
+  )
+}
+
 function HelpDot({ title, body }: { title: string; body: string }) {
   const [open, setOpen] = useState(false)
   return (
@@ -1084,29 +1270,42 @@ export function AfCoreShell(props: AfCoreShellProps) {
                   <span className="af-rail-row-name">{l.name}</span>
                   {m ? (
                     <span className="af-rail-row-line">
-                      <span className="af-rail-row-side">
-                        <span className="af-rail-row-team">{m.yourTeam ?? 'Your team'}</span>
-                        <span className="af-rail-row-score">
-                          {/*
-                            ⚠ A DASH, NOT 0.00, ON AN UNPLAYED FIXTURE. A
-                            scheduled row carries zeroes as soon as the schedule
-                            exists; printing them says the game was played and
-                            finished nil-all.
-                          */}
-                          {m.scored ? m.yourScore.toFixed(1) : '—'}
-                        </span>
-                      </span>
-                      <span className="af-rail-row-vs" aria-hidden>
-                        v
-                      </span>
-                      <span className="af-rail-row-side" data-side="them">
-                        <span className="af-rail-row-team">
-                          {m.opponentTeam ?? 'opponent not named'}
-                        </span>
-                        <span className="af-rail-row-score">
-                          {m.scored ? m.opponentScore.toFixed(1) : '—'}
-                        </span>
-                      </span>
+                      <RailSide
+                        name={m.yourTeam ?? 'Your team'}
+                        avatarUrl={m.yourAvatarUrl}
+                        /*
+                          ⚠ A DASH, NOT 0.00, ON AN UNPLAYED FIXTURE. A scheduled
+                          row carries zeroes as soon as the schedule exists;
+                          printing them says the game was played and finished
+                          nil-all.
+                        */
+                        score={m.scored ? m.yourScore : null}
+                        projection={m.yourProjection ?? null}
+                      />
+
+                      {/*
+                        An elimination league has no opponent BY DESIGN — every
+                        roster writes its own matchupId — so "v opponent not
+                        named" was an honest answer to a question the league does
+                        not ask. What its manager wants is the distance between
+                        them and the cut.
+                      */}
+                      {m.unpaired ? (
+                        <RailStanding standing={m.standing ?? null} />
+                      ) : (
+                        <>
+                          <span className="af-rail-row-vs" aria-hidden>
+                            v
+                          </span>
+                          <RailSide
+                            them
+                            name={m.opponentTeam ?? 'opponent not named'}
+                            avatarUrl={m.opponentAvatarUrl}
+                            score={m.scored ? m.opponentScore : null}
+                            projection={m.opponentProjection ?? null}
+                          />
+                        </>
+                      )}
                     </span>
                   ) : (
                     <span className="af-rail-row-line">
@@ -1306,7 +1505,21 @@ export function AfCoreShell(props: AfCoreShellProps) {
           {active === 'home' ? (
             <SyncNowButton variant="panel" eligibleCount={syncEligibleCount} />
           ) : null}
-          {children}
+          {/*
+            The player card pop-up (design handoff 2026-09-07, STATE 6/7), mounted
+            once for the whole shell like the overlays below.
+
+            ⚠ IT WRAPS `children` RATHER THAN LIVING IN A SCREEN, because the same
+            card opens from a dozen surfaces — my team, matchup, waivers, trades,
+            draft, live. A per-screen mount would mean a dozen copies of the
+            fetch/escape/scroll-lock behaviour drifting apart.
+
+            It renders nothing at all until a name is clicked, so a screen that
+            shows no players pays only the context. A per-league screen supplies
+            its own league through `PlayerCardLeagueScope`, which is why this
+            mount takes no `leagueId` — the shell does not know one.
+          */}
+          <PlayerCardProvider>{children}</PlayerCardProvider>
         </main>
       </div>
 
