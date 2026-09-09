@@ -1,8 +1,6 @@
 'use client'
 
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table'
-import { Dialog, DialogTrigger, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { Button } from '@/components/ui/button'
 import { KpiCard, RecommendationCard, InfoCard } from '@/components/commissioner-os/cards'
 import { getSeverityStyle, SEVERITY_LABELS } from '@/components/commissioner-os/cards/severityStyles'
 import { EmptyState } from '@/components/commissioner-os/states'
@@ -27,6 +25,8 @@ export interface LeagueHealthViewProps {
  */
 export function LeagueHealthView({ detail, risks, evidence, recommendations, dataMode }: LeagueHealthViewProps) {
   const scoreStyle = getSeverityStyle(detail.tier)
+  // Only worth a column if at least one risk carries it — see the header comment below.
+  const showRiskAge = risks.some((risk) => risk.ageInDays != null)
 
   return (
     <div>
@@ -49,32 +49,48 @@ export function LeagueHealthView({ detail, risks, evidence, recommendations, dat
           </span>
         </div>
 
-        <InfoCard title="Deduction Breakdown">
-          <ul className="space-y-1">
-            <li className="flex justify-between">
-              <span>Baseline</span>
-              <span style={{ color: 'var(--text)' }}>{detail.baseline}</span>
-            </li>
-            {detail.deductions.map((line) => (
-              <li key={line.label} className="flex justify-between">
-                <span>{line.label}</span>
-                <span style={{ color: 'var(--severity-elevated-text)' }}>{line.points}</span>
-              </li>
-            ))}
-            <li className="flex justify-between border-t pt-1 font-semibold" style={{ borderColor: 'var(--border)', color: 'var(--text)' }}>
-              <span>Final Score</span>
-              <span>{detail.score}</span>
-            </li>
-          </ul>
+        {/*
+          * Was a "Deduction Breakdown" — Baseline 100 minus a list of penalties down to the final
+          * score. No such model exists: the pipeline computes one number and no decomposition, so
+          * every line in that card was invented to make the arithmetic land on the real total. What
+          * replaces it is the league's own narrative evidence, which is real and is the closest
+          * honest answer to "why is the score what it is".
+          */}
+        <InfoCard title="What drives this score">
+          {evidence.length === 0 ? (
+            <p className="text-xs" style={{ color: 'var(--muted)' }}>
+              No narrative signals were available for this league.
+            </p>
+          ) : (
+            <ul className="space-y-2">
+              {evidence.map((point) => (
+                <li key={point.label}>
+                  <span className="block text-xs font-semibold" style={{ color: 'var(--text)' }}>
+                    {point.label}
+                  </span>
+                  <span className="text-xs">{point.detail}</span>
+                </li>
+              ))}
+            </ul>
+          )}
         </InfoCard>
       </div>
 
-      {/* Sub-scores */}
+      {/*
+        * Four real readings, replacing four sub-scores of which exactly one was real. Retention and
+        * commissioner load are BANDS, not numbers — the pipeline bands them — so they render as
+        * labels; showing "89" for a category would invent precision. "Managers active" names its own
+        * denominator because `totalManagers` counts managers seen in the lookback window, not the
+        * league's team count.
+        */}
       <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <KpiCard label="Engagement" value={String(detail.subScores.engagement)} />
-        <KpiCard label="Retention" value={String(detail.subScores.retention)} />
-        <KpiCard label="Competitive Balance" value={String(detail.subScores.competitiveBalance)} />
-        <KpiCard label="Risk" value={String(detail.subScores.risk)} />
+        <KpiCard label="Engagement score" value={String(detail.score)} />
+        <KpiCard label="Retention risk" value={SEVERITY_LABELS[detail.retentionRisk]} severity={detail.retentionRisk} />
+        <KpiCard label="Commissioner load" value={SEVERITY_LABELS[detail.commissionerWorkload]} severity={detail.commissionerWorkload} />
+        <KpiCard
+          label="Managers active in window"
+          value={`${detail.participation.activeManagers} of ${detail.participation.totalManagers}`}
+        />
       </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[2fr_1fr]">
@@ -93,7 +109,12 @@ export function LeagueHealthView({ detail, risks, evidence, recommendations, dat
                     <TableHead>Risk</TableHead>
                     <TableHead>Category</TableHead>
                     <TableHead>Severity</TableHead>
-                    <TableHead>Age</TableHead>
+                    {/*
+                      * Rendered only when something actually tracks it. Risks are recomputed from the
+                      * current window on every request, so there is no first-seen timestamp to age
+                      * from — a permanent "0d" column would read as "found today, every day".
+                      */}
+                    {showRiskAge ? <TableHead>Age</TableHead> : null}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -106,7 +127,7 @@ export function LeagueHealthView({ detail, risks, evidence, recommendations, dat
                         <TableCell>
                           <span style={{ color: style.text }}>{SEVERITY_LABELS[risk.severity]}</span>
                         </TableCell>
-                        <TableCell>{risk.ageInDays}d</TableCell>
+                        {showRiskAge ? <TableCell>{risk.ageInDays == null ? '—' : `${risk.ageInDays}d`}</TableCell> : null}
                       </TableRow>
                     )
                   })}
@@ -140,29 +161,30 @@ export function LeagueHealthView({ detail, risks, evidence, recommendations, dat
           </div>
         </div>
 
+        {/*
+          * The "View Evidence" dialog that stood here is gone, not moved: it hid the league's
+          * narrative behind a click, and that narrative is now the primary content of the "What
+          * drives this score" card above — which is where a commissioner looks when the number
+          * surprises them. Two copies of the same three sentences is worse than one visible copy.
+          *
+          * `completeness` takes its place because it was the one real field this page fetched and
+          * never rendered, and it is the caveat every number here should be read with.
+          */}
         <div>
-          <Dialog>
-            <DialogTrigger asChild>
-              <Button variant="outline" size="sm">
-                View Evidence
-              </Button>
-            </DialogTrigger>
-            <DialogContent style={{ background: 'var(--panel)', borderColor: 'var(--border)', color: 'var(--text)' }}>
-              <DialogHeader>
-                <DialogTitle>Evidence</DialogTitle>
-              </DialogHeader>
-              <ul className="space-y-2 text-sm">
-                {evidence.map((point) => (
-                  <li key={point.label}>
-                    <span className="font-medium" style={{ color: 'var(--text)' }}>
-                      {point.label}:
-                    </span>{' '}
-                    <span style={{ color: 'var(--muted)' }}>{point.detail}</span>
-                  </li>
-                ))}
-              </ul>
-            </DialogContent>
-          </Dialog>
+          <InfoCard title="Data quality">
+            <div className="space-y-2">
+              <div className="flex items-baseline justify-between">
+                <span>Inputs available</span>
+                <span className="text-metric font-semibold" style={{ color: 'var(--text)' }}>
+                  {detail.completeness}%
+                </span>
+              </div>
+              <p className="text-xs" style={{ color: 'var(--muted)' }}>
+                How much of what the intelligence pipeline wanted for this league it actually had. A
+                property of the inputs, not a confidence rating for any single finding above.
+              </p>
+            </div>
+          </InfoCard>
         </div>
       </div>
     </div>

@@ -11,6 +11,7 @@ import type { SearchClient } from '../search/decision-os-client/types'
 import type { NotificationsClient, NotificationsSummary } from '../notifications/decision-os-client/types'
 import type { ActivityClient } from '../activity/decision-os-client/types'
 import type { HelpClient } from '../help/decision-os-client/types'
+import type { SettingsClient } from '../settings/decision-os-client/types'
 
 export type {
   DecisionOSClient,
@@ -61,4 +62,9 @@ export interface CommissionerDecisionOSAdapter {
   readonly notifications: NotificationsClient
   readonly activity: ActivityClient
   readonly help: HelpClient
+  /**
+   * Settings joined the adapter last, which matches its place in the Decision Hierarchy: it is the
+   * only namespace that reports stored fact rather than derived intelligence.
+   */
+  readonly settings: SettingsClient
 }

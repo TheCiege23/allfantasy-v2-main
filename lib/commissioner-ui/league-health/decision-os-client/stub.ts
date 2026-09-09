@@ -10,13 +10,10 @@ export const stubLeagueHealthClient: LeagueHealthClient = {
       data: {
         score: 84,
         tier: 'advisory',
-        baseline: 100,
-        deductions: [
-          { label: 'Engagement', points: -8 },
-          { label: 'Competitive Balance', points: -5 },
-          { label: 'Retention', points: -3 },
-        ],
-        subScores: { engagement: 76, retention: 88, competitiveBalance: 81, risk: 90 },
+        retentionRisk: 'elevated',
+        commissionerWorkload: 'standard',
+        participation: { activeManagers: 9, totalManagers: 12 },
+        completeness: 70,
       },
       error: null,
       source: 'stub',

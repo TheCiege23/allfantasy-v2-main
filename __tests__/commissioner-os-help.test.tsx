@@ -4,6 +4,7 @@ import { HelpCenterView } from "@/components/commissioner-os/help/HelpCenterView
 import { stubHelpClient } from "@/lib/commissioner-ui/help/decision-os-client/stub"
 import { demoHelpClient } from "@/lib/commissioner-ui/help/decision-os-client/demo"
 import { liveHelpClient } from "@/lib/commissioner-ui/help/decision-os-client/live"
+import { CATALOG_REVISED_AT } from "@/lib/commissioner-ui/help/helpCatalog"
 import { stubDecisionOSClient } from "@/lib/commissioner-ui/decision-os-client/stub"
 import { demoActivityClient } from "@/lib/commissioner-ui/activity/decision-os-client/demo"
 import { demoNotificationsClient } from "@/lib/commissioner-ui/notifications/decision-os-client/demo"
@@ -30,7 +31,18 @@ describe("commissioner-os help — client parity", () => {
     }
   })
 
-  it("stub and demo are source-tagged and error-free; live is an honest, typed placeholder error", async () => {
+  /*
+   * 🛑 THIS ASSERTED THAT LIVE MODE RETURNS AN ERROR, AND CALLED IT "an honest, typed
+   * placeholder". It was honest, and it was also why a paying commissioner opened Help & Knowledge
+   * Center and found nothing, while the twelve articles explaining the product sat in a file only Demo
+   * Mode could read.
+   *
+   * The original argument was that `source: 'live'` should mean one consistent thing across all twelve
+   * namespaces. Help is genuinely the exception: every other namespace answers a question about YOUR
+   * league and needs a backend to do it, while Help answers questions about the PRODUCT and that
+   * content ships inside the deployment. There is no upstream that could be unavailable.
+   */
+  it("serves the same catalog in every mode, tagged with the mode that served it", async () => {
     for (const method of ['getArticles', 'getGlossary'] as const) {
       const stubResponse = await stubHelpClient[method]()
       const demoResponse = await demoHelpClient[method]()
@@ -40,11 +52,24 @@ describe("commissioner-os help — client parity", () => {
       expect(demoResponse.error).toBeNull()
 
       const liveResponse = await liveHelpClient[method]()
-      expect(liveResponse.data).toBeNull()
-      expect(liveResponse.error?.category).toBe('upstream_unavailable')
-      expect(liveResponse.error?.retryable).toBe(false)
       expect(liveResponse.source).toBe('live')
+      expect(liveResponse.error).toBeNull()
+      expect(liveResponse.data?.length ?? 0).toBeGreaterThan(0)
+      // One catalog, not a live-only copy that could drift from what Demo Mode shows in a sales call.
+      expect(liveResponse.data).toEqual(demoResponse.data)
     }
+  })
+
+  it("stamps articles with the date the prose was authored, not the moment they were read", async () => {
+    const { data } = await liveHelpClient.getArticles()
+    const stamps = new Set((data ?? []).map((article) => article.updatedAt))
+    /*
+     * `updatedAt` used to be `new Date().toISOString()` evaluated per read, so every article claimed to
+     * have been updated that instant — the one field a reader uses to judge whether documentation can
+     * be trusted. One shared constant is the fix, and a set of size 1 is how it is asserted.
+     */
+    expect(stamps.size).toBe(1)
+    expect([...stamps][0]).toBe(CATALOG_REVISED_AT)
   })
 
   it("demo articles span multiple categories — a believable knowledge base, not a single-topic list", async () => {

@@ -61,6 +61,10 @@ import { stubHelpClient } from '../help/decision-os-client/stub'
 import { demoHelpClient } from '../help/decision-os-client/demo'
 import { liveHelpClient } from '../help/decision-os-client/live'
 import type { HelpClient } from '../help/decision-os-client/types'
+import { stubSettingsClient } from '../settings/decision-os-client/stub'
+import { demoSettingsClient } from '../settings/decision-os-client/demo'
+import { liveSettingsClient } from '../settings/decision-os-client/live'
+import type { SettingsClient } from '../settings/decision-os-client/types'
 
 import { normalizeErrorContract, normalizeEventSeverity, normalizeEvidencePoints, normalizeRecommendationList, normalizeSeverity, normalizeTimestamp, errorFromException } from './normalize'
 import { isWellFormedResponse } from './validate'
@@ -284,6 +288,22 @@ function buildHelpAdapter(mode: CommissionerDataMode): HelpClient {
 }
 
 /**
+ * Settings is a real `CommissionerModuleId` with its own sidebar entry, so no
+ * `CommissionerErrorAttributableId` widening is needed.
+ *
+ * No per-field normalizer, and for a stronger reason than Help's: nothing in a settings snapshot is a
+ * severity, a confidence or a score, so there is no field the adapter could coerce. Every value is a
+ * string the read layer already formatted, or `null` meaning "not captured" — and a normalizer that
+ * touched those nulls is precisely how a default would get introduced behind the read layer's back.
+ */
+function buildSettingsAdapter(mode: CommissionerDataMode): SettingsClient {
+  const client = selectByMode(mode, stubSettingsClient, demoSettingsClient, liveSettingsClient)
+  return {
+    getSnapshot: wrapMethod('settings', 'getSnapshot', mode, () => client.getSnapshot()),
+  }
+}
+
+/**
  * The pure half of the factory — composes all four modules' normalized
  * clients for a given, already-resolved mode. No `cookies()` call, so
  * it's directly unit-testable outside a Next.js request scope (unlike
@@ -306,6 +326,7 @@ export function buildDecisionOSAdapter(mode: CommissionerDataMode): Commissioner
     notifications: buildNotificationsAdapter(mode),
     activity: buildActivityAdapter(mode),
     help: buildHelpAdapter(mode),
+    settings: buildSettingsAdapter(mode),
   }
 }
 

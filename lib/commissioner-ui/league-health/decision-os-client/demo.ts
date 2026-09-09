@@ -11,13 +11,10 @@ export const demoLeagueHealthClient: LeagueHealthClient = {
       data: {
         score: 88,
         tier: 'positive',
-        baseline: 100,
-        deductions: [
-          { label: 'Engagement', points: -6 },
-          { label: 'Retention', points: -4 },
-          { label: 'Competitive Balance', points: -2 },
-        ],
-        subScores: { engagement: 91, retention: 89, competitiveBalance: 93, risk: 95 },
+        retentionRisk: 'positive',
+        commissionerWorkload: 'standard',
+        participation: { activeManagers: 11, totalManagers: 12 },
+        completeness: 94,
       },
       error: null,
       source: 'demo',

@@ -11,6 +11,7 @@ export const AUTOMATION_CATEGORY_LABELS: Record<AutomationCategory, string> = {
   communications: 'Communications',
   compliance_reminders: 'Compliance Reminders',
   scheduling: 'Scheduling',
+  reporting: 'Reporting',
 }
 
 export const AUTOMATION_RESULT_LABELS: Record<AutomationExecutionResult, string> = {

@@ -1,5 +1,6 @@
 import { MANAGER_INACTIVE_AFTER_DAYS } from '@/lib/decision-os/behavioral/manager-intelligence'
 import { readActivityWindow, readManagerActivity } from '@/lib/league-history/leagueWarehouseReads'
+import { readOrphanTeamCounts } from './rosterReads'
 
 /**
  * What Commissioner Workspace's tasks are DERIVED from.
@@ -15,7 +16,7 @@ import { readActivityWindow, readManagerActivity } from '@/lib/league-history/le
  *   3. It CLEARS on its own when the situation resolves, so the store can close the task and the
  *      list shrinks without anybody tidying it.
  *
- * Two detectors clear that bar today. Adding a third is a deliberate edit here, not a config flag.
+ * Four detectors clear that bar today. Adding a fifth is a deliberate edit here, not a config flag.
  *
  * 🛑 THESE ARE PURE FUNCTIONS OF READS. They decide nothing about persistence — `taskStore.ts`
  * owns that — which is what lets the whole detection layer be tested without a database.
@@ -166,6 +167,96 @@ export function detectInactiveManagers(
   }
 }
 
+
+/**
+ * A league that was connected to a provider and has never produced a single event.
+ *
+ * 🛑 141 OF THE 288 COMMISSIONED LEAGUES ON PRODUCTION ARE IN THIS STATE, AND NOT ONE OF THEM GOT A
+ * TASK. `detectStaleImport` declines them on purpose — "never imported at all is a different
+ * situation with a different fix, and reporting it as 'your feed stopped' would be a claim about a
+ * feed that never started" — and `detectInactiveManagers` declines them too, because it needs a
+ * `lastActivityAt` to gate on. Both refusals are right, and the gap between them was the single
+ * largest reason Workspace looked empty: nearly half the platform's leagues fell into it.
+ *
+ * ⚠ THIS IS MEASURED, NOT INFERRED FROM ABSENCE, AND THE DISTINCTION IS THE WHOLE DETECTOR. What is
+ * measured is the CONNECTION: every one of those 141 leagues carries a `platform` and a
+ * `platformLeagueId`, so somebody deliberately connected it. A connected league holding zero events
+ * is an inconsistency between two things we hold, which is a fact. "This league has no data" on its
+ * own would not be.
+ *
+ * 🛑 AND `eventCount` MUST COME FROM `readActivityWindow`, WHICH IS PROVIDER-SCOPED. One Sleeper
+ * league produces one AF `leagues` row PER IMPORTING USER, and only one of them ever holds the
+ * activity — so counting by `afLeagueId` alone reports every sibling row as empty. Measured
+ * 2026-09-09: 169 leagues look empty that way against 141 that genuinely are. Those 28 false
+ * positives are leagues whose real history is sitting under a sibling row. `readActivityWindow`
+ * already unions on `provider` + `providerLeagueId`, which is why this detector takes its count from
+ * there rather than running a query of its own.
+ */
+export function detectNeverImported(
+  lastActivityAt: Date | null,
+  eventCount: number,
+): WorkspaceTaskCandidate | null {
+  // Any event at all means the connection works, and a different detector owns whatever is wrong.
+  if (eventCount > 0 || lastActivityAt) return null
+
+  return {
+    sourceKey: 'never-imported:v1',
+    title: 'This league is connected but has never sent any data',
+    description:
+      'The league is linked to its platform, but no trade, waiver claim, roster move or draft pick ' +
+      'has ever arrived for it. Until some does, every intelligence surface here has nothing to ' +
+      'read — League Health, Manager Intelligence and the analytics panels stay empty no matter how ' +
+      'active the league actually is. Re-running the import is the fix, and it is the whole fix.',
+    /*
+     * `elevated`, not `critical`. Nothing is broken or at risk — the product simply cannot say
+     * anything about this league yet. Critical is reserved for a condition with a consequence, and
+     * spending it here would flatten the distinction on the leagues that have one.
+     */
+    priority: 'elevated',
+    // A re-import is repetitive and low-stakes, the same reasoning `detectStaleImport` applies.
+    automationCandidate: true,
+    relatedLinks: [{ label: 'League settings', moduleId: 'settings', href: '/commissioner-os/settings' }],
+  }
+}
+
+/**
+ * Seats nobody is sitting in.
+ *
+ * Measured from `league_teams.isOrphan` — rows we hold, flagged by the import itself — so it needs
+ * no inference. 25 commissioned leagues carry 147 orphan rows between them on production.
+ *
+ * ⚠ ONE TASK FOR THE LEAGUE, NOT ONE PER SEAT, for the same reason `detectInactiveManagers` groups
+ * its managers: filling vacancies is a single recruiting decision a commissioner makes once, and a
+ * league with eleven orphans would otherwise bury every other task in the queue.
+ */
+export function detectOrphanTeams(orphanCount: number, totalTeams: number): WorkspaceTaskCandidate | null {
+  if (orphanCount <= 0) return null
+
+  /*
+   * A league that is MOSTLY unclaimed is a different situation from one with a seat to fill — it has
+   * probably not finished being set up, or has wound down. Severity says which without claiming to
+   * know which it is.
+   */
+  const majority = totalTeams > 0 && orphanCount * 2 >= totalTeams
+
+  return {
+    sourceKey: 'orphan-teams:v1',
+    title: orphanCount === 1 ? 'One team has no manager' : `${orphanCount} teams have no manager`,
+    description: majority
+      ? `${orphanCount} of the ${totalTeams} teams in this league are unclaimed. Standings, scoring ` +
+        'and every per-manager reading here describe only the seats that are filled, so treat them ' +
+        'as partial until the roster is settled.'
+      : `${orphanCount} team${orphanCount === 1 ? '' : 's'} in this league ` +
+        `${orphanCount === 1 ? 'has' : 'have'} no manager attached. An unclaimed team does not set a ` +
+        'lineup or make a move, so it drags every league-wide participation figure down without ' +
+        'anybody having gone quiet.',
+    priority: majority ? 'elevated' : 'standard',
+    // Deciding who fills a seat is a judgement call about people, never automated.
+    automationCandidate: false,
+    relatedLinks: [{ label: 'Manager Intelligence', moduleId: 'managers', href: '/commissioner-os/managers' }],
+  }
+}
+
 /**
  * Every candidate for one league. The reads are the same ones League Analytics already runs, so a
  * task can never disagree with the panel a commissioner would check to verify it.
@@ -173,15 +264,29 @@ export function detectInactiveManagers(
 export async function detectLeagueTasks(leagueId: string, now = new Date()): Promise<WorkspaceTaskCandidate[]> {
   const window = await readActivityWindow(leagueId)
 
-  const stale = detectStaleImport(window.lastActivityAt, window.eventCount, now)
+  /*
+   * Three states of the feed, mutually exclusive by construction: never sent anything, sent
+   * something and stopped, or current. Only one of the first two can fire, which is what keeps the
+   * queue from reporting one problem twice under two names.
+   */
+  const neverImported = detectNeverImported(window.lastActivityAt, window.eventCount)
+  const stale = neverImported ? null : detectStaleImport(window.lastActivityAt, window.eventCount, now)
 
   /*
-   * The manager read is skipped entirely when the feed is stale — not merely filtered afterwards.
-   * It is the more expensive of the two, and on a stale league its answer is known in advance and
-   * useless, so running it would spend the query to throw the result away.
+   * The manager read is skipped entirely when the feed is stale or absent — not merely filtered
+   * afterwards. It is the most expensive read here, and in both those states its answer is known in
+   * advance and useless, so running it would spend the query to throw the result away.
    */
-  const managers = stale ? [] : await readManagerActivity(leagueId, MANAGER_INACTIVE_AFTER_DAYS)
+  const managers = stale || neverImported ? [] : await readManagerActivity(leagueId, MANAGER_INACTIVE_AFTER_DAYS)
   const inactive = detectInactiveManagers(managers, window.lastActivityAt, now)
 
-  return [stale, inactive].filter((c): c is WorkspaceTaskCandidate => c !== null)
+  /*
+   * Orphan seats are independent of the feed: a league can have current data and an empty seat, or
+   * no data and an empty seat, and the vacancy is equally real either way. So this one is
+   * deliberately not gated on the feed state above.
+   */
+  const roster = await readOrphanTeamCounts(leagueId)
+  const orphans = detectOrphanTeams(roster.orphanCount, roster.totalTeams)
+
+  return [neverImported, stale, inactive, orphans].filter((c): c is WorkspaceTaskCandidate => c !== null)
 }
