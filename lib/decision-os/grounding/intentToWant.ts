@@ -11,16 +11,23 @@ import type { GroundingPacketArgs } from '@/lib/decision-os/grounding/packet'
  * below). This file does not know what a `DecisionOsGroundingPacket` is, only which of its
  * opt-in slices each Chimmy intent should turn on.
  *
- * ⚠ FIVE FLAGS, NOT SEVEN — and `waiverDecision` is mapped for a reason that is NOT "it works".
- * It still has no producer. Asking for it returns an honest `no_producer` gap naming the missing
- * input and pointing at the waiver surface that CAN answer. That is strictly better than the
- * silence it replaced: unmapped, a waiver question got no waiver fact AND no explanation, so the
- * model had nothing to be honest about. Mapped, the refusal is grounded.
+ * ⚠ FIVE FLAGS, NOT SEVEN. `waiverDecision` was originally mapped for a reason that was NOT "it
+ * works" — it had no producer, and a mapped intent at least turned silence into a grounded refusal.
+ * 🛑 THAT IS NO LONGER WHY IT IS HERE: it has a producer as of `waiver/packetInput.ts`, and this
+ * mapping is now what makes a waiver question actually get a claim recommendation.
  *
- * ⚠ AND IT MUST STAY OPT-IN FOR EXACTLY THAT REASON. The gap is only surfaced when the intent
- * asked for it; on every other turn the slice is `not_requested` and never renders. An
- * always-on "no waiver decision" line would teach a reader to skim the gap block — the failure
- * R1.6 spent a commit removing.
+ * 🛑 AND ITS COST HAS THEREFORE CHANGED, UNMEASURED. The 2026-09-07 profile below recorded the
+ * waiver intent at 1,004 ms — with this slice resolving instantly to a `no_producer` gap that read
+ * nothing. The producer reads the league's rosters, the sport's player pool and the asker's roster
+ * before an engine runs, so that figure no longer describes this intent and MUST be re-measured
+ * against a real league before this mapping is trusted in production. Both `false` entries below
+ * exist because a slice that pushes the build past the route's 3s ceiling discards the WHOLE
+ * packet — if waiver lands in that territory, this line belongs with them, and
+ * `DECISION_OS_FEED_waiverDecision=off` is the switch that settles it without a deploy.
+ *
+ * ⚠ AND IT MUST STAY OPT-IN. The slice is only built when the intent asked for it; on every other
+ * turn it is `not_requested` and never renders — which now saves an engine run rather than saving
+ * a line of prose.
  *
  * `idpKicker` remains excluded: its own doc comment names it "the one slice that cannot join the
  * concurrent wave" — a serialized second hop with its own cost profile — and turning it on for

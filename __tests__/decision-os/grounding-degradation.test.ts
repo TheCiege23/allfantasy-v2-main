@@ -633,23 +633,39 @@ describe('a portfolio that timed out is not a portfolio that is empty', () => {
 })
 
 /**
- * R2.6 — `waiverDecision` is the one slice with NO producer, and it must say so ONLY when asked.
+ * R2.6 — `waiverDecision` degrades honestly, and is only asked for when the question wants it.
  *
- * 🛑 IT USED TO BE INVISIBLE. The field was declared on the packet type and rendered by the
- * serializer, and assigned nowhere — `undefined` on every packet, which `sliceLine` tolerates by
- * emitting nothing. It was also absent from the array feeding `collectGaps`. So a declared fact
- * was neither reported available nor reported missing, in a packet whose whole contract is that
- * those are the only two options. The structural suite above could not see it precisely because
- * an undefined slice does not appear in `everySlice`.
+ * 🛑 THIS SLICE HAS HAD THREE STATES AND THE TEST HAS TRACKED EACH. First it was INVISIBLE: the
+ * field was declared on the packet type and rendered by the serializer, and assigned nowhere —
+ * `undefined` on every packet, which `sliceLine` tolerates by emitting nothing, and absent from the
+ * array feeding `collectGaps`. So a declared fact was neither reported available nor reported
+ * missing, in a packet whose whole contract is that those are the only two options. The structural
+ * suite above could not see it precisely because an undefined slice does not appear in
+ * `everySlice`. Then it reported `no_producer` out loud. Now it has a producer
+ * (`waiver/packetInput.ts`), and this suite asserts what survives that change.
+ *
+ * ⚠ THE ASSERTION BELOW IS DELIBERATELY ABOUT THE DEGRADATION PATH, NOT ABOUT A DECISION. There is
+ * no database in this suite, so `loadWaiverWorldFacts` resolves nothing and the slice reports
+ * `not_synced` — which is exactly the behaviour worth pinning here: a slice that now runs an engine
+ * and reads three tables must still degrade to a STATED gap rather than throwing into the packet.
+ * The producer's own contract is tested against its inputs in
+ * `__tests__/decision-os/waiver-decision-producer.test.ts`.
  */
-describe('R2.6 · waiverDecision reports an honest gap, and only when requested', () => {
-  it('🛑 when REQUESTED it surfaces a no_producer gap naming the missing input', async () => {
+describe('R2.6 · waiverDecision degrades to a stated gap, and only when requested', () => {
+  it('🛑 when REQUESTED it degrades to a stated gap rather than throwing', async () => {
     const p = await buildDecisionOsGroundingPacket({ ...ARGS, want: { ...ARGS.want, waiverDecision: true } })
 
     expect(p.waiverDecision?.present).toBe(false)
-    expect(p.waiverDecision?.gap?.reason).toBe('no_producer')
-    // The remedy must point somewhere that actually works, not at a TODO.
-    expect(p.waiverDecision?.gap?.remedy).toMatch(/waiver assistant/i)
+    /*
+     * 🛑 `no_producer` IS RETIRED AND MUST NOT COME BACK SILENTLY. It was true for months and is
+     * now false — the engine has its input. Pinning its ABSENCE is what catches a regression that
+     * reinstates the stub, which would otherwise read as a working slice reporting a gap.
+     */
+    expect(p.waiverDecision?.gap?.reason).not.toBe('no_producer')
+    // With no roster resolvable, the honest reason is the league's sync state.
+    expect(p.waiverDecision?.gap?.reason).toBe('not_synced')
+    // The remedy must name something the reader can do, not a TODO.
+    expect(p.waiverDecision?.gap?.remedy).toMatch(/re-?sync|import/i)
 
     const surfaced = p.gaps.filter((g) => g.slice === 'waiverDecision')
     expect(surfaced).toHaveLength(1)

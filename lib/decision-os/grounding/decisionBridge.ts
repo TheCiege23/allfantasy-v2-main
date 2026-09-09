@@ -10,6 +10,11 @@ import { productionLineupWorldDeps, productionLineupDecisionDeps } from '../line
 import { runCommissionerHealthDecision } from '../commissioner-health'
 import { buildProductionCommissionerHealthDecisionDeps } from '../commissioner-health/deps'
 import type { CommissionerActionSuggestion, CommissionerHealthAssessment } from '../commissioner-health/decision'
+import { loadWaiverWorldFacts, worldInputFromFacts } from '../waiver/loader'
+import { buildWaiverPacketInput } from '../waiver/packetInput'
+import { runWaiverClaimDecision } from '../waiver'
+import { buildProductionWaiverRuleDeps, productionWaiverRecommend } from '../waiver/deps'
+import type { WaiverClaimRecommendation } from '../waiver/decision'
 import { decisionToSlice, type DecisionFact } from './decisionToSlice'
 import type { GroundedSlice, GroundingGap } from './packet'
 
@@ -301,5 +306,140 @@ export async function loadCommissionerHealthDecisionSlice(
     }, { describeAction: describeCommissionerAssessment })
   } catch (err) {
     return failed('commissioner health', err instanceof Error ? err.message.slice(0, 120) : 'unknown error')
+  }
+}
+
+/**
+ * One recommended claim, in one line.
+ *
+ * ⚠ THE BID BELONGS IN THE LINE AND THE DROP DOES TOO. A waiver recommendation without its cost is
+ * not actionable — "claim him" and "claim him for 34% of your remaining budget, dropping your WR5"
+ * are different recommendations, and a chat answer that renders only the first invites the user to
+ * agree to the second without seeing it.
+ */
+function describeWaiverAction(a: WaiverClaimRecommendation): string | null {
+  const who = a.addPlayerName ?? a.addPlayerId
+  if (!who) return null
+  const pos = a.position ? ` (${a.position})` : ''
+  const bid = typeof a.faabBid === 'number' ? `, bid ${a.faabBid}` : ''
+  const drop = a.dropPlayerName ? `, drop ${a.dropPlayerName}` : ''
+  const call = a.recommendation ? `${a.recommendation}: ` : ''
+  return `${call}${who}${pos}${bid}${drop}`
+}
+
+/**
+ * R2.6 — the waiver claim decision for this user in this league.
+ *
+ * 🛑 THIS SLICE REPORTED `no_producer` FOR MONTHS AND THE ENGINE WAS NEVER THE REASON.
+ * `productionWaiverRecommend()` is deterministic and has always been callable; what was missing was
+ * `availablePlayers` — the wire, which only a browser had ever assembled. `buildWaiverPacketInput`
+ * is that assembly, and this is its one caller.
+ *
+ * ── ⚠ NO `shadow` DEPS, MATCHING THE LINEUP BRIDGE ABOVE ────────────────────────────────────
+ * `runWaiverClaimDecision` accepts a `shadow` that compares against the legacy engine's
+ * suggestions. That comparison belongs to `/api/waiver-ai/engine`, which owns the parity gate and
+ * has the legacy output in hand. A chat turn wants the decision; running the legacy recommender
+ * again here would double the work for a comparison nobody reads.
+ *
+ * ── ⚠ AND THE RECOMMENDER IS THE REAL ONE, NOT A WRAP ───────────────────────────────────────
+ * The route's shadow path passes `buildProductionWaiverDecisionDeps`, which REUSES an
+ * already-computed legacy output to prove wrapper fidelity. There is no legacy output here — no
+ * browser posted one — so this runs the recommender itself. That is the difference between proving
+ * the wrapper does not drift and actually deciding, and it is why the two call sites differ.
+ */
+export async function loadWaiverDecisionSlice(args: DecisionBridgeArgs): Promise<GroundedSlice<DecisionFact>> {
+  const userId = args.userId ?? null
+  const leagueId = args.leagueId ?? null
+  if (!userId || !leagueId) {
+    return {
+      present: false,
+      value: null,
+      asOf: null,
+      servedFrom: null,
+      confidence: null,
+      conclusive: { ok: true },
+      gap: {
+        reason: 'not_requested',
+        detail: 'A waiver claim decision needs both a signed-in user and a league.',
+        remedy: 'Ask about a specific league while signed in.',
+      },
+    }
+  }
+
+  try {
+    const facts = await loadWaiverWorldFacts(userId, leagueId)
+    if (!facts) {
+      /*
+       * ⚠ NOT AN ERROR. `loadWaiverWorldFacts` returns null when this user has no roster in the
+       * league or its settings will not resolve — ordinary states for an unimported league, and
+       * `not_synced` names the fix rather than blaming the engine.
+       */
+      return {
+        present: false,
+        value: null,
+        asOf: null,
+        servedFrom: null,
+        confidence: null,
+        conclusive: { ok: true },
+        gap: {
+          reason: 'not_synced',
+          detail: 'No roster or waiver settings are resolved for this user in this league yet.',
+          remedy: 'Import or re-sync the league so the roster and waiver rules are known.',
+        },
+      }
+    }
+
+    const built = await buildWaiverPacketInput({ userId, leagueId, facts })
+    if (!built) {
+      /*
+       * ⚠ AN EMPTY WIRE IS A TRUE ANSWER ABOUT THE LEAGUE, NOT A MISSING PRODUCER. Every player in
+       * the sport pool being rostered is a real state of a deep league, and saying so is more useful
+       * than reporting the decision as uncomputable.
+       */
+      return {
+        present: false,
+        value: null,
+        asOf: null,
+        servedFrom: null,
+        confidence: null,
+        conclusive: { ok: true },
+        gap: {
+          reason: 'not_computed',
+          detail: 'No available players were found on the waiver wire for this league.',
+          remedy: 'Nothing to claim right now — the wire refills as other teams drop players.',
+        },
+      }
+    }
+
+    const result = await runWaiverClaimDecision(
+      {
+        worldInput: worldInputFromFacts(facts),
+        userId,
+        leagueId,
+        sport: facts.sport,
+        rosterId: facts.rosterId,
+        engineInput: built.engineInput,
+        poolIncomplete: built.poolIncomplete,
+      },
+      {
+        decision: {
+          recommend: productionWaiverRecommend(),
+          ruleDeps: buildProductionWaiverRuleDeps(facts),
+        },
+        // No `shadow` — see the header.
+      },
+    )
+
+    return decisionToSlice(
+      result.decision,
+      {
+        reason: 'not_computed',
+        detail: 'The waiver engine returned no claim recommendation.',
+        remedy: 'It runs again on the next request.',
+      },
+      { describeAction: describeWaiverAction },
+    )
+  } catch (err) {
+    return failed('waiver', err instanceof Error ? err.message.slice(0, 120) : 'unknown error')
   }
 }

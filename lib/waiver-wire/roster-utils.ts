@@ -66,3 +66,50 @@ export function removePlayerFromRosterData(playerData: unknown, playerId: string
 export function getRosterSize(playerData: unknown): number {
   return getRosterPlayerIds(playerData).length
 }
+
+/**
+ * Which section of the roster each player sits in, keyed by player id.
+ *
+ * 🛑 THE SLOT IS A FACT ABOUT THE ROSTER AND MUST NOT BE GUESSED. The waiver scorer reads
+ * `slot === 'starter'` to find the worst starter a candidate would replace, and reads
+ * `slot === 'bench'` to pick a drop. Defaulting everyone to bench would make every candidate look
+ * like a free upgrade and would nominate a starter as the drop.
+ *
+ * ⚠ `players` IS THE SUPERSET AND CARRIES NO SLOT. Sleeper (and the importers that follow it)
+ * writes a flat `players` array plus `starters` / `taxi` / `reserve` arrays naming the subsets, so
+ * a player's slot is the array they ALSO appear in, and bench is the remainder. Anyone not named by
+ * a subset array is on the bench — which is a derivation, not an assumption, because the subsets
+ * are exhaustive by construction.
+ *
+ * ⚠ `"0"` IS A HOLE, NOT A PLAYER. Sleeper writes an unfilled starting slot as the string "0";
+ * counting it would inflate the starter count and put a phantom in the depth maths.
+ */
+export function getRosterSlotsByPlayerId(
+  playerData: unknown,
+): Map<string, 'starter' | 'bench' | 'ir' | 'taxi'> {
+  const slots = new Map<string, 'starter' | 'bench' | 'ir' | 'taxi'>()
+  for (const id of getRosterPlayerIds(playerData)) {
+    const v = String(id ?? '').trim()
+    if (!v || v === '0') continue
+    slots.set(v, 'bench')
+  }
+  if (!playerData || typeof playerData !== 'object' || Array.isArray(playerData)) return slots
+
+  const d = playerData as Record<string, unknown>
+  const sections: Array<[string, 'starter' | 'ir' | 'taxi']> = [
+    ['starters', 'starter'],
+    ['reserve', 'ir'],
+    ['ir', 'ir'],
+    ['taxi', 'taxi'],
+  ]
+  for (const [key, slot] of sections) {
+    const raw = d[key]
+    if (!Array.isArray(raw)) continue
+    for (const x of raw) {
+      const v = x == null ? '' : String(typeof x === 'object' ? ((x as any)?.id ?? (x as any)?.player_id ?? '') : x).trim()
+      if (!v || v === '0') continue
+      slots.set(v, slot)
+    }
+  }
+  return slots
+}

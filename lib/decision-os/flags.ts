@@ -95,6 +95,19 @@ export type DecisionOsFeed =
    * `managerPsychology`'s feed the way trajectory did.
    */
   | 'psychologyConsistency'
+  /**
+   * The waiver claim decision bridged from Pipeline A (R2.6).
+   *
+   * 🛑 THE MOST EXPENSIVE FEED IN THIS UNION, AND THE ONE MOST LIKELY TO NEED KILLING. It reads
+   * every roster in the league, the sport's player pool and the asker's own roster, then runs the
+   * waiver engine — all inside the chat route's 3s packet ceiling. The two other decision bridges
+   * got their own switches because they cost different things; this one gets its own because it may
+   * turn out to cost more than the budget, and `DECISION_OS_FEED_waiverDecision=off` is then the
+   * difference between shedding one slice and losing the packet.
+   *
+   * ⚠ ITS COST IS UNMEASURED AGAINST A REAL LEAGUE. Until it is, this switch is the mitigation.
+   */
+  | 'waiverDecision'
 
 export const DECISION_OS_FEEDS: readonly DecisionOsFeed[] = [
   'importAssertions',
@@ -113,6 +126,7 @@ export const DECISION_OS_FEEDS: readonly DecisionOsFeed[] = [
   'idpKickerValues',
   'rosterValueGrade',
   'psychologyConsistency',
+  'waiverDecision',
 ] as const
 
 const KEY_PREFIX = 'decision_os_feed_'

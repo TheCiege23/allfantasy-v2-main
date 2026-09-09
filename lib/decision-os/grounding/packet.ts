@@ -21,7 +21,7 @@ import {
  * cycle exists only in the type graph, where it is legal and inert.
  */
 import type { DecisionFact } from './decisionToSlice'
-import { loadLineupDecisionSlice, loadCommissionerHealthDecisionSlice } from './decisionBridge'
+import { loadLineupDecisionSlice, loadCommissionerHealthDecisionSlice, loadWaiverDecisionSlice } from './decisionBridge'
 import { loadIdpKickerValueSlice, rosterSleeperIdsFrom, rosterPositionsFrom } from './idpKickerSlice'
 import { loadRosterValueGradeSlice, type RosterValueGradeFact } from './rosterValueGradeSlice'
 import { loadPsychologyConsistencySlice, type PsychologyConsistencyFact } from './psychologyConsistencySlice'
@@ -733,6 +733,7 @@ export async function buildDecisionOsGroundingPacket(
   const psychologyKill = killed('managerPsychology')
   const lineupDecisionKill = killed('lineupDecision')
   const commishHealthKill = killed('commissionerHealthDecision')
+  const waiverDecisionKill = killed('waiverDecision')
   const idpKickerKill = killed('idpKickerValues')
   const rosterValueGradeKill = killed('rosterValueGrade')
   const psychologyConsistencyKill = killed('psychologyConsistency')
@@ -812,6 +813,20 @@ export async function buildDecisionOsGroundingPacket(
   const pCommishHealth =
     want.commissionerHealthDecision && !commishHealthKill
       ? kick('commissionerHealthDecision', loadCommissionerHealthDecisionSlice({ userId: args.userId, leagueId }))
+      : Promise.resolve(null)
+
+  /*
+   * R2.6 — the waiver claim decision. Same wave and same rules as the two bridges above.
+   *
+   * 🛑 IT IS THE MOST EXPENSIVE OF THE THREE AND THAT IS WHY IT IS OPT-IN. The lineup bridge is one
+   * loader call; this one reads the league's whole roster set, the sport's player pool and the
+   * asker's roster before an engine runs. It is requested only when the question is about waivers,
+   * and it is independently killable for the same reason `commissionerHealthDecision` is — an
+   * operator shedding load must be able to drop the expensive slice without losing the cheap ones.
+   */
+  const pWaiverDecision =
+    want.waiverDecision && !waiverDecisionKill
+      ? kick('waiverDecision', loadWaiverDecisionSlice({ userId: args.userId, leagueId }))
       : Promise.resolve(null)
 
   /*
@@ -1304,40 +1319,36 @@ export async function buildDecisionOsGroundingPacket(
       })
 
   /*
-   * R2.6 — waiverDecision. THE ONE SLICE WITH NO PRODUCER, AND IT SAYS SO.
+   * R2.6 — waiverDecision. IT HAS A PRODUCER NOW, AND THE HISTORY IS WORTH KEEPING.
    *
-   * 🛑 IT WAS INVISIBLE BEFORE THIS. The field was declared on the packet type, rendered by the
-   * serializer, and assigned NOWHERE — so it was `undefined` on every packet, and `sliceLine`
-   * tolerates undefined by emitting nothing. It also was not in the array above that feeds
-   * `collectGaps`. The result: a declared fact that was neither reported as available nor
-   * reported as missing, in a packet whose entire contract is that those are the only two
-   * options.
+   * 🛑 IT WAS INVISIBLE, THEN IT WAS AN HONEST GAP, AND NOW IT DECIDES. First the field was
+   * declared on the packet type, rendered by the serializer, and assigned NOWHERE — neither
+   * reported as available nor reported as missing, in a packet whose whole contract is that those
+   * are the only two options. Then it was made to say `no_producer` out loud. This is the third
+   * state.
    *
-   * ⚠ WHY THERE IS NO PRODUCER, recorded so the next reader does not re-derive it. The engine
-   * at `lib/decision-os/waiver/` is complete, but it is a WRAP-FIDELITY wrapper: it takes the
-   * legacy `/api/waiver-ai/engine` OUTPUT and proves the wrapper adds no drift.
-   * `productionWaiverRecommend()` exists for a future live run and is deterministic — no LLM
-   * unless `includeAIExplanation` is set — so cost is not the blocker. The blocker is INPUT:
-   * `WaiverAIEngineInput` needs `availablePlayers`, the waiver wire pool, which the legacy
-   * route already holds and `loadWaiverWorldFacts` does not load. Building it means a pool
-   * loader inside the packet's latency ceiling, which is a scoped decision, not a bridge.
+   * ⚠ AND THE BLOCKER WAS NEVER THE ENGINE, WHICH IS THE PART THAT MISLED TWO READINGS OF THIS
+   * COMMENT. `lib/decision-os/waiver/` was complete and `productionWaiverRecommend()` has always
+   * been deterministic — no LLM unless `includeAIExplanation` is set, so cost was never the reason
+   * either. The blocker was an INPUT: `availablePlayers`, the waiver wire, which
+   * `/api/waiver-ai/engine` receives in its request body from the browser and which
+   * `loadWaiverWorldFacts` does not load. A packet has no browser. `waiver/packetInput.ts` is that
+   * assembly, built on the same pool loader the waiver page's own route calls.
    *
-   * Until then the honest answer is a gap with a remedy that actually works: the waiver
-   * product surface is live, so a user is pointed at the thing that CAN answer them.
+   * ⚠ THE KILL SWITCH MATTERS MORE HERE THAN ANYWHERE ELSE IN THIS FILE. This slice reads the
+   * league's rosters, the sport's player pool and the asker's roster before running an engine,
+   * inside a 3s ceiling. `waiverDecision` is its own killable feed precisely so an operator can
+   * drop it without dropping the packet.
    */
-  const waiverDecision: GroundedSlice<DecisionFact> = want.waiverDecision
-    ? absent<DecisionFact>({
-        reason: 'no_producer',
-        detail:
-          'A waiver claim decision cannot be computed here yet — the waiver engine needs the ' +
-          'available-player pool for this league, which this packet does not load.',
-        remedy: 'The waiver assistant in the app has the pool and can recommend claims there.',
-      })
-    : absent<DecisionFact>({
+  const waiverDecisionSlice = await pWaiverDecision
+  const waiverDecision: GroundedSlice<DecisionFact> = waiverDecisionKill
+    ? absent<DecisionFact>(waiverDecisionKill)
+    : (waiverDecisionSlice ??
+      absent<DecisionFact>({
         reason: 'not_requested',
         detail: 'This question did not call for a waiver claim decision.',
         remedy: 'Ask who to claim off waivers and it is requested.',
-      })
+      }))
 
   const psychologyRows = await pPsychology
   const managerPsychology: GroundedSlice<PsychologyProfileFact[]> = psychologyKill

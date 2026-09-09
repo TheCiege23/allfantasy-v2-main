@@ -26,6 +26,7 @@ import {
 } from "@/lib/waiver-wire/WaiverUIStateService"
 import { invalidateIntelligence } from "@/lib/dashboard/intelligence-events"
 import { getRosterPlayerIds } from "@/lib/waiver-wire/roster-utils"
+import { estimateWaiverCandidateValue, rosterPlayerValue } from "@/lib/waiver-wire/waiver-value-scale"
 import { DEFAULT_SPORT } from "@/lib/sport-scope"
 import { useUserTimezone } from "@/hooks/useUserTimezone"
 import { useAIAssistantAvailability } from "@/hooks/useAIAssistantAvailability"
@@ -138,33 +139,6 @@ type RosterSnapshotPlayer = {
   value: number
 }
 
-const POSITION_BASE_VALUE: Record<string, number> = {
-  QB: 2400,
-  RB: 3000,
-  WR: 2900,
-  TE: 2200,
-  K: 900,
-  DEF: 1000,
-  DST: 1000,
-  PG: 2600,
-  SG: 2500,
-  SF: 2500,
-  PF: 2500,
-  C: 2650,
-  SP: 2800,
-  RP: 1800,
-  P: 2600,
-  G: 2400,
-  F: 2400,
-  UTIL: 2200,
-  GKP: 1800,
-  GK: 1800,
-  MID: 2600,
-  FWD: 2700,
-  DM: 2200,
-  DEFENDER: 2100,
-}
-
 const WAIVER_PLAYER_FETCH_LIMIT = 200
 const WAIVER_PLAYER_RENDER_LIMIT = 120
 
@@ -193,14 +167,6 @@ function compareNumberWithNulls(a: number | null, b: number | null, direction: "
   if (a == null) return 1
   if (b == null) return -1
   return direction === "asc" ? a - b : b - a
-}
-
-function estimateWaiverCandidateValue(position: string | null, trendScore: number, watchlisted: boolean): number {
-  const normalizedPosition = String(position ?? "").toUpperCase()
-  const base = POSITION_BASE_VALUE[normalizedPosition] ?? 2200
-  const trendBoost = Math.max(0, trendScore) * 240
-  const watchlistBoost = watchlisted ? 260 : 0
-  return Math.round(base + trendBoost + watchlistBoost)
 }
 
 function getFallbackNeedPositionsForSport(sport: string | null | undefined): string[] {
@@ -300,9 +266,6 @@ export default function WaiverWirePage({
       const slot: RosterSnapshotPlayer["slot"] =
         rawSlot.includes("ir") ? "ir" : rawSlot.includes("taxi") ? "taxi" : rawSlot.includes("starter") ? "starter" : "bench"
       const position = String(source.position ?? source.pos ?? source.primaryPosition ?? "").toUpperCase() || "UTIL"
-      const inferredValue =
-        Number(source.value ?? (source as any)?.assetValue?.marketValue ?? (source as any)?.assetValue?.impactValue ?? 0) ||
-        estimateWaiverCandidateValue(position, 0, false)
       return {
         id: player.id,
         name: player.name ?? player.id,
@@ -310,7 +273,7 @@ export default function WaiverWirePage({
         team: source.team != null ? String(source.team) : source.teamAbbr != null ? String(source.teamAbbr) : null,
         slot,
         age: typeof source.age === "number" ? source.age : null,
-        value: Math.max(200, Number.isFinite(inferredValue) ? Number(inferredValue) : 1200),
+        value: rosterPlayerValue(position, source as { value?: unknown; assetValue?: { marketValue?: unknown; impactValue?: unknown } }),
       }
     })
     setRosterSnapshotPlayers(normalizedSnapshot)
