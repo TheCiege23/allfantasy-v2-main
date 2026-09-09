@@ -20,6 +20,15 @@ export type ChimmyLeagueSnapshot = {
   lastSyncedAt: Date | null
   importBatchId: string | null
   importedAt: Date | null
+  /**
+   * Rule-resolution fields. Consumed by `resolveLeagueRules`; see
+   * `SNAPSHOT_SELECT` for why they ride on this query rather than a second one.
+   */
+  leagueType: string | null
+  settings: unknown
+  keeperCount: number | null
+  keeperCostSystem: string | null
+  keeperRoundPenalty: number | null
 }
 
 /**
@@ -61,6 +70,24 @@ const SNAPSHOT_SELECT = {
   lastSyncedAt: true,
   importBatchId: true,
   importedAt: true,
+  /*
+   * ⚠ THE FIVE BELOW ARE FOR RULE RESOLUTION, AND THEY RIDE ON THIS QUERY
+   * DELIBERATELY. `resolveLeagueRules` needs them, and this findUnique has
+   * ALREADY PROVEN MEMBERSHIP — fetching them separately would mean a second
+   * read whose authorization a future edit could quietly drop. Adding columns
+   * to a proven-authorized select cannot.
+   *
+   * ⚠ `settings` IS THE WHOLE JSON BLOB and is the only way to reach
+   * `conceptRules.extensions.aliasTags`, which is what stops a King of the Hill
+   * league reading as a plain redraft. Do not narrow it to a sub-path: the
+   * reader that knows that path is `readConceptAliasTags`, and it takes the
+   * blob.
+   */
+  leagueType: true,
+  settings: true,
+  keeperCount: true,
+  keeperCostSystem: true,
+  keeperRoundPenalty: true,
 } as const
 
 /**
