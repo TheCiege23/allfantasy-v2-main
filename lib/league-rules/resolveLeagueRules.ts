@@ -16,13 +16,21 @@
  */
 
 import {
+  FORMAT_ALIASES,
   LEAGUE_COLUMN_DEFAULTS,
+  MODIFIER_ALIASES,
   readFormatRules,
   type FormatRules,
   type KeeperEvidence,
 } from '@/lib/trade-intel/leagueFormatRules'
 import { readConceptAliasTags } from '@/lib/league-contract/conceptAliasTags'
-import { CATALOG_VERSION, getConceptForFormat, getConceptsForAliasTags } from './conceptCatalog'
+import { keeperSettingsConfirmedFrom } from '@/lib/league-contract/keeperProvenance'
+import {
+  CATALOG_VERSION,
+  getConceptById,
+  getConceptForFormat,
+  getConceptsForAliasTags,
+} from './conceptCatalog'
 import type { ConceptCatalogEntry, ResolvedRule } from './types'
 
 /** The league fields this resolver reads. A subset of the Prisma row on purpose. */
@@ -51,10 +59,22 @@ export type ResolvedLeagueRules = {
    */
   formatRules: FormatRules
   /**
-   * The catalog entry for the resolved format, or null when the format is one
-   * the catalog does not document (including `other`).
+   * What the league IS — the primary product concept.
+   *
+   * ⚠ NOT THE SAME AS `pricingBaseFormat`, and deliberately so. A Royal league's
+   * concept is Royal; its pricing base is dynasty. Null only when nothing —
+   * alias, leagueType or classifier — matches a catalog entry.
    */
   concept: ConceptCatalogEntry | null
+  /**
+   * What VALUES the league — the classifier's concept, which pricing selects on.
+   *
+   * ⚠ THIS IS THE FIELD THE TRADE ENGINES USE, and it is reported separately so
+   * an explanation can say "Royal, priced as dynasty" instead of having to pick
+   * one and erase the other. Equal to `concept.formatRulesConcept` for the
+   * common case; different exactly when a format was flattened onto a shell.
+   */
+  pricingBaseFormat: string
   /**
    * Scoring/roster modifiers that ACCOMPANY the format rather than replace it.
    *
@@ -152,18 +172,83 @@ export function resolveLeagueRules(league: LeagueRuleInput): ResolvedLeagueRules
     keeperCostSystem: league.keeperCostSystem,
     keeperRoundPenalty: league.keeperRoundPenalty,
     aliasTags,
-    keeperSettingsConfirmed: league.keeperSettingsConfirmed,
+    /*
+     * ⚠ AN EXPLICIT ARGUMENT WINS, AND ABSENT FALLS THROUGH TO THE SETTINGS
+     * BLOCK — it is NOT coerced to false. `keeperSettingsConfirmedFrom` returns
+     * `undefined` when no provenance was ever written, which is what lets the
+     * differs-from-default heuristic still speak for older rows. Using `??`
+     * rather than `||` matters: `false` is a real answer here ("the provider
+     * says this is not a keeper league") and `||` would discard it.
+     */
+    keeperSettingsConfirmed:
+      league.keeperSettingsConfirmed ?? keeperSettingsConfirmedFrom(league.settings),
   })
 
-  const concept = getConceptForFormat(formatRules.concept)
+  /*
+   * 🛑 THE PRIMARY CONCEPT AND THE PRICING BASE ARE DIFFERENT QUESTIONS, AND
+   * COLLAPSING THEM ERASES THE PRODUCT.
+   *
+   * `readFormatRules` maps Royal onto `dynasty` — correctly, because dynasty is
+   * how a Royal league must be PRICED (rosters carry over, future picks are
+   * real). But a manager in a Royal league is not in a dynasty league, and
+   * grounding that says "Dynasty, plus a modifier called Royal" has described
+   * the shell and thrown away the format.
+   *
+   * So both are kept: `concept` is what the league IS, `pricingBaseFormat` is
+   * what values it. Neither is derived from the other and neither is dropped.
+   *
+   * Resolution order, most specific first:
+   *   1. a FORMAT alias tag that names a catalog entry — Royal, KOTH, Pirate
+   *   2. `leagueType` matching a catalog entry id directly — this is what makes
+   *      the catalog-only concepts reachable (Survivor All-Stars Guillotine,
+   *      Big Brother, Salary Cap, Best Ball), none of which any classifier
+   *      emits, without inventing a classifier branch for them
+   *   3. the classifier's concept
+   *
+   * ⚠ STEP 1 USES `FORMAT_ALIASES`, THE EXISTING AUTHORITY, RATHER THAN ASKING
+   * "is this tag also a catalog id". `idp` is a catalog entry AND an alias tag,
+   * and without that allowlist it would win step 1 and become the primary
+   * concept of every IDP league — the 97-dynasty-league bug, rebuilt here.
+   */
+  const aliasMatches = getConceptsForAliasTags(aliasTags)
+  const primaryFromAlias =
+    aliasMatches.find((e) => e.aliasTags.some((a) => FORMAT_ALIASES.has(a))) ?? null
+  /*
+   * 🛑 STEP 2 IS RESTRICTED TO CONCEPTS THE CLASSIFIER CANNOT EXPRESS, AND THE
+   * UNRESTRICTED VERSION WAS WRONG IN A WAY A TEST CAUGHT IMMEDIATELY.
+   *
+   * `leagueType` is `redraft` on a keeper league imported from Sleeper — the
+   * classifier is what upgrades it to `keeper` on the evidence. An unguarded
+   * "does leagueType name a catalog entry" match found the REDRAFT entry and
+   * beat that upgrade, silently undoing the keeper work in the same commit that
+   * added it.
+   *
+   * So this step exists only for entries with no `formatRulesConcept`: the
+   * catalog-only concepts (Survivor All-Stars Guillotine, Big Brother, Salary
+   * Cap, Best Ball, Royal) that no classifier branch emits. Where the classifier
+   * HAS an opinion, it wins.
+   *
+   * ⚠ MODIFIERS ARE EXCLUDED EVEN THOUGH THEY ALSO HAVE A NULL CONCEPT. `idp`
+   * qualifies on that test alone, and letting it through would make IDP the
+   * primary concept of any league whose `leagueType` read `idp` — the
+   * modifier-as-format error, one more time.
+   */
+  const byLeagueType = getConceptById(String(league.leagueType ?? '').trim().toLowerCase())
+  const primaryFromLeagueType =
+    byLeagueType &&
+    byLeagueType.formatRulesConcept === null &&
+    !byLeagueType.aliasTags.some((a) => MODIFIER_ALIASES.has(a))
+      ? byLeagueType
+      : null
+
+  const concept = primaryFromAlias ?? primaryFromLeagueType ?? getConceptForFormat(formatRules.concept)
 
   /*
-   * Modifiers are the alias-tag matches that are NOT the resolved format.
+   * Modifiers are the alias-tag matches that are NOT the primary concept.
    * Comparing by catalog id rather than by tag keeps this correct when a
    * concept carries several aliases (koth answers to both `king_of_the_hill`
    * and `koth`).
    */
-  const aliasMatches = getConceptsForAliasTags(aliasTags)
   const modifiers = aliasMatches.filter((m) => m.id !== concept?.id)
 
   const sport = league.sport ? String(league.sport).trim().toUpperCase() : null
@@ -181,6 +266,7 @@ export function resolveLeagueRules(league: LeagueRuleInput): ResolvedLeagueRules
     catalogVersion: CATALOG_VERSION,
     formatRules,
     concept,
+    pricingBaseFormat: formatRules.concept,
     modifiers,
     aliasTags,
     flattenedOnto: concept?.flattenedOnto ?? null,

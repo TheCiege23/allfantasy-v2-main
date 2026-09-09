@@ -34,17 +34,27 @@ describe('authorization: the grounding cannot be driven by a client-supplied lea
   })
 
   it('is gated on the authorized snapshot, not on the plan input', () => {
-    const call = routeSrc.slice(
-      routeSrc.indexOf('const rulesCtx = buildLeagueRulesGrounding'),
-      routeSrc.indexOf('const rulesCtx = buildLeagueRulesGrounding') + 600
-    )
+    const at = routeSrc.indexOf('rulesCtx = buildLeagueRulesGrounding')
+    expect(at, 'call site not found — the slice below would be vacuous').toBeGreaterThan(0)
+    const call = routeSrc.slice(at, at + 600)
     expect(call).toContain('leagueSnapshot.')
     expect(call).not.toContain('planInput.leagueId')
   })
 
   it('the guard is the snapshot itself, so a failed grounding produces no rules', () => {
-    const before = routeSrc.slice(0, routeSrc.indexOf('const rulesCtx = buildLeagueRulesGrounding'))
-    expect(before.slice(-400)).toContain('if (leagueSnapshot) {')
+    const at = routeSrc.indexOf('rulesCtx = buildLeagueRulesGrounding')
+    expect(at).toBeGreaterThan(0)
+    expect(routeSrc.slice(0, at).slice(-1200)).toContain('if (leagueSnapshot) {')
+  })
+
+  it('does not swallow a grounding failure', () => {
+    /*
+     * The block used to end in `catch { /* non-fatal *\/ }`, which left the model
+     * with a league and no rules — indistinguishable from a league that has none.
+     */
+    const at = routeSrc.indexOf('rulesCtx = buildLeagueRulesGrounding')
+    const block = routeSrc.slice(at, at + 1200)
+    expect(block).toContain('buildRuleGroundingGap')
   })
 })
 
