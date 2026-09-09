@@ -28,7 +28,9 @@ import {
   buildTier0LeagueColumnPatch,
   buildImportedLeagueSettings,
   persistTradedPicks,
+  republishCanonicalSettingsForRefresh,
 } from '@/lib/league-import/ImportedLeagueCommitService'
+import { buildCanonicalImportBundle } from '@/lib/league-import/canonicalImportNormalizer'
 import type { ApplyScopeResult, SleeperSyncScope } from './types'
 import { persistLiveTrades } from './persistLiveTrades'
 import { emptyApplyResult } from './types'
@@ -149,10 +151,37 @@ async function applyLeagueState(
 
   const freshSettings = buildImportedLeagueSettings(normalized)
   const existingSettings = asRecord(existing.settings)
-  const mergedSettings: Record<string, unknown> = { ...existingSettings, ...freshSettings }
+
+  /*
+   * 🛑 IMP-02 — REBUILD THE CANONICAL SLICES, DO NOT INHERIT THEM.
+   *
+   * This used to be a plain `{ ...existing, ...fresh }`, and `importCanonical` sat in
+   * AF_MANAGED_SETTINGS_KEYS below — so the canonical `scoringSettings` / `rosterSettings` /
+   * `playoffSettings` written at IMPORT time were re-asserted on every refresh and could
+   * never change. Raw imported values moved; the canonical snapshot every rules consumer
+   * reads did not. A league that switched to full PPR in September was still graded on its
+   * import-day scoring, silently and indefinitely.
+   *
+   * ⚠ A THROW HERE MUST NOT COST THE WHOLE REFRESH. The rest of this writer (name, roster
+   * size, dynasty flag, lastSyncedAt) is still correct and worth persisting, so a failure to
+   * rebuild the bundle degrades to the previous merge rather than dropping the sync.
+   */
+  let mergedSettings: Record<string, unknown>
+  try {
+    const bundle = buildCanonicalImportBundle(normalized)
+    mergedSettings = republishCanonicalSettingsForRefresh(existingSettings, freshSettings, bundle)
+  } catch (e) {
+    mergedSettings = { ...existingSettings, ...freshSettings }
+    out.notes.push(
+      `league_state: canonical settings rebuild failed (${
+        e instanceof Error ? e.message : String(e)
+      }) — kept previous canonical slices`,
+    )
+  }
+
   // Re-assert AF-managed keys the fresh settings don't carry (belt-and-suspenders over the merge order).
   for (const k of AF_MANAGED_SETTINGS_KEYS) {
-    if (k in existingSettings && !(k in freshSettings)) mergedSettings[k] = existingSettings[k]
+    if (k in existingSettings && !(k in mergedSettings)) mergedSettings[k] = existingSettings[k]
   }
 
   const rosterPositions = (normalized.league as Record<string, unknown>).roster_positions

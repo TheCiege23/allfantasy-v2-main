@@ -209,12 +209,35 @@ describe('a scheduled refresh asks for CURRENT STATE ONLY', () => {
     })
     expect(runPipeline).toHaveBeenCalledWith({
       provider: 'espn',
-      sourceId: '123',
+      /*
+       * ⚠ `123:2026`, NOT `123` — IMP-01 re-encodes the connection's own season onto a
+       * BARE provider id before the fetch. This fixture's season IS the current year, so
+       * the resolved scope is identical either way; `parseEspnSourceInput` maps both to
+       * league 123 / season 2026. The encoding only changes behaviour for a connection
+       * whose season is NOT the current year, which is asserted separately below.
+       */
+      sourceId: '123:2026',
       userId: 'u1',
       currentStateOnly: true,
       transactionWeeks: WEEK_WINDOW,
       maxMatchupWeeks: MATCHUP_CAP,
     })
+  })
+
+  /*
+   * 🛑 IMP-01 — THE CASE THE ENCODING ACTUALLY EXISTS FOR.
+   *
+   * `parseEspnSourceInput` fills a missing season with `new Date().getFullYear()`. So a
+   * connection recorded against an OLDER season used to be refreshed against the CURRENT
+   * one, and the writer applied whatever came back to the historical league record.
+   */
+  it('sends a historical ESPN season rather than defaulting to the current year', async () => {
+    const runPipeline = vi.fn(async () => ok())
+    await fetchNormalizedForConnection(
+      connection({ provider: 'espn', externalLeagueId: '123', season: 2023, runKey: 'espn:123:2023' }),
+      { runPipeline: runPipeline as never, resolveCandidates: async () => ['u1'], now: NOW },
+    )
+    expect(runPipeline.mock.calls[0]?.[0]).toMatchObject({ sourceId: '123:2023' })
   })
 
   it('sets currentStateOnly on the unowned path too', async () => {

@@ -142,6 +142,20 @@ export interface NormalizedRoster {
   taxi_ids?: string[]
   faab_remaining?: number | null
   waiver_priority?: number | null
+  /**
+   * Whether this team's player lists are an OBSERVATION or a PLACEHOLDER — IMP-04.
+   *
+   * 🛑 AN EMPTY ARRAY ANSWERS TWO COMPLETELY DIFFERENT QUESTIONS AND THE WRITER CANNOT
+   * TELL THEM APART WITHOUT THIS. `fetched` means the provider was asked and answered:
+   * an empty `player_ids` is then a real, empty roster and may replace stored rows.
+   * `failed` means the request rejected and these arrays are filler — the team's
+   * last-good roster must be preserved and the league must not be called fully current.
+   *
+   * ⚠ OPTIONAL, AND ABSENT MEANS `fetched`. Adapters that have no partial-failure mode
+   * do not set it, and defaulting the other way would make every one of them look
+   * unreliable — which would train readers to ignore the field.
+   */
+  fetch_status?: 'fetched' | 'failed'
 }
 
 /** Normalized scoring (maps to AF scoring template or settings). */

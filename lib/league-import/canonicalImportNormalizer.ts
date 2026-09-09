@@ -26,12 +26,49 @@ const NORMALIZATION_VERSION = '2'
 function inferScoringPresetId(normalized: NormalizedImportResult): string {
   const fmt = String(normalized.scoring?.scoring_format ?? normalized.league.scoring ?? '').toLowerCase()
   if (fmt.includes('idp')) return 'fb_idp'
-  if (fmt.includes('full') && fmt.includes('ppr')) return 'fb_ppr'
-  if (fmt.includes('half') || fmt.includes('0.5')) return 'fb_half_ppr'
-  if (fmt.includes('std') || fmt.includes('non')) return 'fb_std'
   if (fmt.includes('te') && fmt.includes('prem')) return 'fb_te_premium'
   if (fmt.includes('super')) return 'fb_superflex'
+  /*
+   * ⚠ ORDER MATTERS, AND SO DOES TESTING "half" BEFORE "ppr". The previous full-PPR test
+   * required BOTH "full" and "ppr", so the single commonest format string in fantasy —
+   * a plain `ppr` — fell past every branch and landed on the `fb_half_ppr` default.
+   * A full-PPR league was labelled half-PPR in its canonical metadata.
+   *
+   * A "standard"/"non-ppr" check must also come after the half test, because a league
+   * described as "half ppr (non-standard)" is half, not standard.
+   */
+  if (fmt.includes('half') || fmt.includes('0.5')) return 'fb_half_ppr'
+  if (fmt.includes('std') || fmt.includes('non')) return 'fb_std'
+  if (fmt.includes('ppr') || fmt.includes('reception')) return 'fb_ppr'
+  /*
+   * 🛑 THE FALLBACK IS A GUESS, AND IT USED TO BE AN UNQUALIFIED ONE. Half-PPR is the
+   * most common league shape, so it remains the least-wrong default — but the caller
+   * needs to know this was inferred rather than read, which `inferScoringPresetId`'s
+   * one return value cannot say. `buildCanonicalImportBundle` records the ambiguity as
+   * an import warning instead; see `presetWasInferred` below.
+   */
   return 'fb_half_ppr'
+}
+
+/**
+ * True when `inferScoringPresetId` fell through to its default rather than recognising
+ * the source's own format string. An unresolved rule must reduce confidence rather than
+ * become an unqualified exact valuation (audit IMP-03).
+ */
+function scoringPresetWasInferred(normalized: NormalizedImportResult): boolean {
+  const fmt = String(normalized.scoring?.scoring_format ?? normalized.league.scoring ?? '').toLowerCase()
+  if (!fmt.trim()) return true
+  return !(
+    fmt.includes('idp') ||
+    (fmt.includes('te') && fmt.includes('prem')) ||
+    fmt.includes('super') ||
+    fmt.includes('half') ||
+    fmt.includes('0.5') ||
+    fmt.includes('std') ||
+    fmt.includes('non') ||
+    fmt.includes('ppr') ||
+    fmt.includes('reception')
+  )
 }
 
 function inferDraftType(normalized: NormalizedImportResult): string {
@@ -316,7 +353,17 @@ export function buildCanonicalImportBundle(normalized: NormalizedImportResult): 
   // each provider actually emits: Sleeper (BN/IR/TAXI), ESPN (BE/IR), Yahoo
   // (BN/BE/IR/IL/NA/DL, per YahooLeagueFetchService.ts's own YAHOO_RESERVE_POSITIONS), MFL
   // (TAXI, appended by MflLeagueFetchService.ts).
-  const RESERVE_SLOT_LABELS = new Set(['BN', 'BE', 'IR', 'IL', 'NA', 'DL', 'TAXI'])
+  //
+  // 🛑 `DL` MEANS TWO DIFFERENT THINGS AND THE SPORT IS WHAT SEPARATES THEM. In Yahoo
+  // baseball/hockey it is the DISABLED LIST — a reserve slot, which is why it was added
+  // here. In NFL it is the DEFENSIVE LINE, an IDP STARTER position, and this same file
+  // already lists 'DL' among its `idpPositions`. Counting an NFL starter as reserve
+  // inflated the bench by one slot for every IDP league: a five-slot roster of
+  // QB/DL/BN/BN/BN computed four bench slots instead of three, which then feeds roster
+  // capacity and every downstream lineup/valuation consumer.
+  const RESERVE_SLOT_LABELS = new Set(['BN', 'BE', 'IR', 'IL', 'NA', 'TAXI'])
+  const sportForSlots = normalizeToSupportedSport(normalized.league.sport)
+  if (sportForSlots !== 'NFL') RESERVE_SLOT_LABELS.add('DL')
   const rosterPositionsRaw = Array.isArray((normalized.league as Record<string, unknown>).roster_positions)
     ? ((normalized.league as Record<string, unknown>).roster_positions as unknown[]).map((p) => String(p).toUpperCase())
     : []
@@ -358,10 +405,51 @@ export function buildCanonicalImportBundle(normalized: NormalizedImportResult): 
       ? { ...(baseCommissionerSettings ?? {}), tradeDeadlineWeek: importedTradeDeadlineWeek }
       : baseCommissionerSettings
 
+  /*
+   * 🛑 A FLAT `stat_key -> points` MAP CANNOT HOLD A POSITION-DEPENDENT RULE, AND THE
+   * COLLAPSE WAS SILENT. MFL prices a reception differently by position; three rules for
+   * `rec` (RB 0.5, WR 1.0, TE 1.5) all wrote the same key, so the LAST one won and every
+   * RB and WR reception was silently repriced at the TE value. Nothing failed — the
+   * league simply meant something else afterwards.
+   *
+   * Rules that name positions are now qualified as `stat_key@POS`, one entry per
+   * position, so no rule can overwrite another. An UNQUALIFIED rule keeps its bare
+   * `stat_key`, which preserves the existing shape for every league that has no
+   * position-dependent scoring — the overwhelming majority, and every existing reader.
+   *
+   * ⚠ `scoringRulesDetail` carries the same rules as a typed LIST alongside the map.
+   * The map is lossy by construction (it cannot express a range, threshold or unit) and
+   * consumers that need exact rule semantics must read the list; the map remains only
+   * so existing readers are not broken by this repair.
+   */
   const scoringRules: Record<string, unknown> = {}
+  const scoringRulesDetail: Array<Record<string, unknown>> = []
+  const collidedStatKeys = new Set<string>()
+
   if (normalized.scoring?.rules?.length) {
     for (const r of normalized.scoring.rules) {
-      scoringRules[r.stat_key] = r.points_value
+      const rule = r as Record<string, unknown>
+      const positions = Array.isArray(rule.positions)
+        ? (rule.positions as unknown[]).map((p) => String(p).trim().toUpperCase()).filter(Boolean)
+        : []
+
+      scoringRulesDetail.push({
+        statKey: r.stat_key,
+        pointsValue: r.points_value,
+        ...(positions.length > 0 ? { positions } : {}),
+      })
+
+      if (positions.length === 0) {
+        if (Object.prototype.hasOwnProperty.call(scoringRules, r.stat_key)) {
+          collidedStatKeys.add(String(r.stat_key))
+        }
+        scoringRules[r.stat_key] = r.points_value
+        continue
+      }
+
+      for (const pos of positions) {
+        scoringRules[`${r.stat_key}@${pos}`] = r.points_value
+      }
     }
   }
 
@@ -372,8 +460,16 @@ export function buildCanonicalImportBundle(normalized: NormalizedImportResult): 
       format: normalized.scoring?.scoring_format ?? String(normalized.league.scoring ?? 'standard'),
       scoringTemplateId: scoringPresetId,
       rules: scoringRules,
+      /*
+       * The typed rule list — sport, native stat key, points, and position eligibility
+       * where the source supplied it. `rules` above cannot express eligibility without
+       * collapsing, so a consumer needing exact semantics reads this instead.
+       */
+      rulesDetail: scoringRulesDetail,
+      /* False means the preset was READ from the source; true means it was guessed. */
+      templateInferred: scoringPresetWasInferred(normalized),
       source: normalized.source.source_provider,
-    },
+    } as SettingsSnapshot['scoringSettings'],
     draftSettings: {
       draftType,
       rounds:
@@ -447,7 +543,42 @@ export function buildCanonicalImportBundle(normalized: NormalizedImportResult): 
     message,
     severity: 'warn',
   }))
-  const warnings = [...inferred.warnings, ...coverageWarnings, ...fetchWarnings]
+  /*
+   * IMP-03 — an unresolved rule must reduce confidence rather than silently become an
+   * exact valuation. Both cases below are recorded rather than repaired, because only
+   * the league's owner can say what the source actually meant.
+   */
+  const scoringAmbiguityWarnings: ImportWarningRecord[] = []
+  if (scoringPresetWasInferred(normalized)) {
+    scoringAmbiguityWarnings.push({
+      code: 'scoring_preset_inferred',
+      message: `Source reported scoring format "${
+        normalized.scoring?.scoring_format ?? normalized.league.scoring ?? '(none)'
+      }", which did not match a known preset — defaulted to half-PPR. Confirm in League Settings before trusting valuations.`,
+      severity: 'warn',
+      metadata: {
+        rawFormat: String(normalized.scoring?.scoring_format ?? normalized.league.scoring ?? ''),
+        assumedTemplateId: scoringPresetId,
+      },
+    })
+  }
+  if (collidedStatKeys.size > 0) {
+    scoringAmbiguityWarnings.push({
+      code: 'scoring_rule_collision',
+      message: `The source sent more than one unqualified rule for: ${[...collidedStatKeys].join(
+        ', ',
+      )}. Only the last value could be kept; confirm these in League Settings.`,
+      severity: 'warn',
+      metadata: { statKeys: [...collidedStatKeys] },
+    })
+  }
+
+  const warnings = [
+    ...inferred.warnings,
+    ...coverageWarnings,
+    ...fetchWarnings,
+    ...scoringAmbiguityWarnings,
+  ]
 
   const conceptResolved = normalizeConceptToFormat(inferred.concept)
 

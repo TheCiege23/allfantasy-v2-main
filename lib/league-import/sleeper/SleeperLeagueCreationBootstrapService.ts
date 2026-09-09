@@ -9,6 +9,12 @@ import type { NormalizedImportResult } from '../types'
 export interface SleeperLeagueBootstrapResult {
   leagueTeamsCreated: number
   rostersCreated: number
+  /**
+   * Teams skipped because their provider roster fetch FAILED, so the stored roster was
+   * kept rather than overwritten with an empty placeholder (IMP-04). Non-zero means this
+   * league is NOT fully current and must not be reported as such.
+   */
+  rostersPreserved?: number
   teamPerformancesCreated: number
 }
 
@@ -113,6 +119,8 @@ export async function bootstrapLeagueFromNormalizedImport(
 
   let leagueTeamsCreated = 0
   let rostersCreated = 0
+  /** Teams whose roster fetch failed and whose stored roster was therefore left alone (IMP-04). */
+  let rostersPreserved = 0
 
   for (const r of normalized.rosters) {
     const standing = standingsByTeam.get(r.source_team_id)
@@ -249,6 +257,24 @@ export async function bootstrapLeagueFromNormalizedImport(
       },
     })
 
+    /*
+     * 🛑 IMP-04 — A FAILED FETCH MUST NOT CLEAR A GOOD ROSTER.
+     *
+     * `fetch_status === 'failed'` means the provider request for THIS team rejected and
+     * `player_ids` is an empty placeholder rather than an observation. Writing it would
+     * empty a real roster on a transient timeout, with nothing anywhere going red — the
+     * league would simply show a manager with no players and report itself current.
+     *
+     * ⚠ SKIPPING ONLY APPLIES WHERE THERE IS SOMETHING TO PRESERVE. With no existing
+     * row there is no last-good data to protect, and skipping would leave the team with
+     * no roster at all; the placeholder is then strictly better, and the league's
+     * `currentRosters` coverage is already `partial` so nothing claims it is complete.
+     */
+    if (r.fetch_status === 'failed' && existingRoster) {
+      rostersPreserved++
+      continue
+    }
+
     if (existingRoster) {
       await prisma.roster.update({
         where: { id: existingRoster.id },
@@ -346,7 +372,7 @@ export async function bootstrapLeagueFromNormalizedImport(
     }
   }
 
-  return { leagueTeamsCreated, rostersCreated, teamPerformancesCreated }
+  return { leagueTeamsCreated, rostersCreated, teamPerformancesCreated, rostersPreserved }
 }
 
 /**
