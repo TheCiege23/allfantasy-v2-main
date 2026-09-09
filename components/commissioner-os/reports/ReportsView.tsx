@@ -1,11 +1,13 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { useMemo, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { FileText } from 'lucide-react'
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table'
 import { Button } from '@/components/ui/button'
 import { EmptyState, ErrorState } from '@/components/commissioner-os/states'
+import { StackedBarChart, InfoCard } from '@/components/commissioner-os/cards'
+import { reportOutcomesByTemplate, REPORT_OUTCOME_SERIES } from '@/lib/commissioner-ui/charts/deriveChartSeries'
 import { PreviewDataBanner } from '@/components/commissioner-os/PreviewDataBanner'
 import { ReportTemplateCard } from './ReportTemplateCard'
 import { ReportDetailDialog } from './ReportDetailDialog'
@@ -47,6 +49,11 @@ export function ReportsView({ templates, history: initialHistory, dataMode, erro
   const router = useRouter()
   const [isGenerating, startGenerating] = useTransition()
   const [generateError, setGenerateError] = useState<string | null>(null)
+  /*
+   * From the `history` STATE rather than the `initialHistory` prop, so generating a report updates the
+   * chart along with the table. Reading the prop would leave the two disagreeing until a reload.
+   */
+  const outcomeRows = useMemo(() => reportOutcomesByTemplate(history), [history])
 
   async function handleGenerateLive(template: ReportTemplate) {
     setGenerateError(null)
@@ -124,6 +131,29 @@ export function ReportsView({ templates, history: initialHistory, dataMode, erro
   return (
     <div>
       <PreviewDataBanner mode={dataMode} />
+
+      {/*
+        * Runs per template, split by outcome. Horizontal because template names are sentences and
+        * would collide on an x-axis; stacked because "which template is failing" is a comparison
+        * inside each template's own total.
+        */}
+      {outcomeRows.length > 0 ? (
+        <div className="mb-6">
+          <InfoCard title="Report runs by template">
+            <StackedBarChart
+              rows={outcomeRows}
+              layout="horizontal"
+              height={Math.max(160, outcomeRows.length * 44 + 60)}
+              ariaLabel="Report generation runs per template, split into ready, generating and failed"
+              series={[
+                { id: 'ready', label: 'Ready', color: 'var(--accent-emerald-strong)' },
+                { id: 'generating', label: 'Generating', color: 'var(--accent-cyan-strong)' },
+                { id: 'failed', label: 'Failed', color: 'var(--accent-red-strong)' },
+              ]}
+            />
+          </InfoCard>
+        </div>
+      ) : null}
 
       {errorMessage ? (
         <ErrorState message={errorMessage} />

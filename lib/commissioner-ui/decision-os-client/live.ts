@@ -3,6 +3,7 @@ import { isLiveReady } from '../liveReadiness'
 import { resolveActiveLeagueId } from '../resolveActiveLeagueId'
 import { resolveManagerDisplayNames, UNKNOWN_MANAGER_NAME } from '../managers/managerNames'
 import { readAnalyticsDataWindow } from '../analytics/dataWindow'
+import { readLeagueActivityTrend } from '../missionControl/activityTrendReads'
 import type { CommissionerErrorContract, CommissionerModuleId } from '../contracts'
 import type { SeverityTier } from '../tokens/colors'
 import type { DecisionOSClient, LeagueHealthSummary, ManagerHighlight, MissionControlKpis } from './types'
@@ -140,6 +141,25 @@ function withDataAgeCaveat(claim: string, window: Awaited<ReturnType<typeof read
 }
 
 export const liveDecisionOSClient: DecisionOSClient = {
+  /*
+   * No `callDecisionOS` and no `isLiveReady` gate — this is a direct read of a table in the same
+   * database the request already has open, the same reasoning Settings' client records at length.
+   * There is no upstream integration here to stage behind a flag.
+   */
+  async getActivityTrend() {
+    const timestamp = new Date().toISOString()
+    const leagueId = await resolveActiveLeagueId()
+    if (!leagueId) {
+      return { data: null, error: notYetIntegrated('mission-control'), source: 'live', timestamp }
+    }
+    /*
+     * An empty series comes back as DATA, not as an error. "This league has no captured history yet"
+     * is a true and specific thing for the view to say; an error would replace it with a generic
+     * failure and imply something is broken.
+     */
+    return { data: await readLeagueActivityTrend(leagueId), error: null, source: 'live', timestamp }
+  },
+
   async getLeagueHealthSummary() {
     if (!(await isLiveReady('mission-control'))) {
       return { data: null, error: notYetIntegrated('mission-control'), source: 'live', timestamp: new Date().toISOString() }

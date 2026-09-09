@@ -38,7 +38,8 @@ const RECENT_ACTIVITY_PREVIEW_COUNT = 5
 export default async function MissionControlPage() {
   const adapter = await getDecisionOSAdapter()
 
-  const [leagueHealthResponse, recommendationsResponse, managerHighlightsResponse, kpisResponse, activityResponse, automationSummaryResponse, analyticsSummaryResponse, reportsSummaryResponse, notificationsSummaryResponse] = await Promise.all([
+  const [activityTrendResponse, leagueHealthResponse, recommendationsResponse, managerHighlightsResponse, kpisResponse, activityResponse, automationSummaryResponse, analyticsSummaryResponse, reportsSummaryResponse, notificationsSummaryResponse] = await Promise.all([
+    adapter.missionControl.getActivityTrend(),
     adapter.missionControl.getLeagueHealthSummary(),
     adapter.recommendations.getQueue(),
     adapter.missionControl.getManagerHighlights(),
@@ -84,6 +85,7 @@ export default async function MissionControlPage() {
         analyticsSummary={analyticsSummaryResponse.data ?? { headline: 'Unavailable', kpiCount: 0 }}
         reportsSummary={reportsSummaryResponse.data ?? { headline: 'Unavailable', scheduledCount: 0, readyCount: 0 }}
         notificationsSummary={notificationsSummaryResponse.data ?? { headline: 'Unavailable', unreadCount: 0, criticalCount: 0 }}
+        activityTrend={activityTrendResponse.data}
       />
     </CommissionerPageContainer>
   )

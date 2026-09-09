@@ -123,6 +123,7 @@ export const demoAutomationClient: AutomationClient = {
           lastRunResult: 'success',
           totalRunsCount: 42,
           successRatePercent: 100,
+          runOutcomes: { succeeded: 40, failed: 0, skipped: 2 },
           relatedLinks: [{ moduleId: 'recommendations', label: 'Trade deadline approaching', href: '/commissioner-os/recommendations' }],
         },
         {
@@ -137,6 +138,7 @@ export const demoAutomationClient: AutomationClient = {
           lastRunResult: 'failure',
           totalRunsCount: 168,
           successRatePercent: 93,
+          runOutcomes: { succeeded: 150, failed: 11, skipped: 7 },
           relatedLinks: [{ moduleId: 'league-health', label: 'League Health — Risk Analysis', href: '/commissioner-os/league-health' }],
         },
         {
@@ -151,6 +153,7 @@ export const demoAutomationClient: AutomationClient = {
           lastRunResult: 'success',
           totalRunsCount: 3,
           successRatePercent: 100,
+          runOutcomes: { succeeded: 3, failed: 0, skipped: 0 },
           relatedLinks: [{ moduleId: 'managers', label: 'Devon Okafor — Manager Intelligence', href: '/commissioner-os/managers' }],
         },
         {
@@ -165,6 +168,7 @@ export const demoAutomationClient: AutomationClient = {
           lastRunResult: 'success',
           totalRunsCount: 8,
           successRatePercent: 100,
+          runOutcomes: { succeeded: 7, failed: 0, skipped: 1 },
           relatedLinks: [],
         },
         {
@@ -179,6 +183,7 @@ export const demoAutomationClient: AutomationClient = {
           lastRunResult: 'success',
           totalRunsCount: 6,
           successRatePercent: 100,
+          runOutcomes: { succeeded: 6, failed: 0, skipped: 0 },
           relatedLinks: [{ moduleId: 'workspace', label: 'Resolve a duplicate waiver claim from Week 6', href: '/commissioner-os/workspace' }],
         },
       ],

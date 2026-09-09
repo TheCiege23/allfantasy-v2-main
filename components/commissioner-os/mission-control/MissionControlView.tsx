@@ -2,7 +2,8 @@
 
 import { HeartPulse, Lightbulb, Users, Briefcase, Zap, Send, UserPlus, ListChecks, BarChart3, FileText, Bell } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { KpiCard, RecommendationCard, SummaryCard, TimelineCard, StatusCard, type TimelineEntry } from '@/components/commissioner-os/cards'
+import { KpiCard, RecommendationCard, SummaryCard, TimelineCard, StatusCard, InfoCard, TrendLineChart, type TimelineEntry } from '@/components/commissioner-os/cards'
+import type { LeagueActivityTrend } from '@/lib/commissioner-ui/missionControl/activityTrendReads'
 import { EmptyState } from '@/components/commissioner-os/states'
 import { PreviewDataBanner } from '@/components/commissioner-os/PreviewDataBanner'
 import type { CommissionerDataMode } from '@/lib/commissioner-ui/demo-mode/constants'
@@ -33,6 +34,8 @@ export interface MissionControlViewProps {
   reportsSummary: ReportsSummary
   /** Notification Center's own computed aggregate — Mission Control renders it, never recomputes it. */
   notificationsSummary: NotificationsSummary
+  /** The behavioural snapshot series — Mission Control's one chart. Null when it could not be read. */
+  activityTrend: LeagueActivityTrend | null
   dataMode: CommissionerDataMode
 }
 
@@ -45,7 +48,8 @@ export interface MissionControlViewProps {
  * job is arranging it per the Mission Control Blueprint's layout and
  * Decision Hierarchy.
  */
-export function MissionControlView({ leagueHealth, recommendations, managerHighlights, kpis, recentActivity, automationSummary, analyticsSummary, reportsSummary, notificationsSummary, dataMode }: MissionControlViewProps) {
+export function MissionControlView({ leagueHealth, recommendations, managerHighlights, kpis, recentActivity, automationSummary, analyticsSummary, reportsSummary, notificationsSummary, activityTrend, dataMode }: MissionControlViewProps) {
+  const trendPoints = activityTrend?.points ?? []
   return (
     <div>
       <PreviewDataBanner mode={dataMode} />
@@ -76,6 +80,60 @@ export function MissionControlView({ leagueHealth, recommendations, managerHighl
         <Button size="sm" variant="outline">
           <UserPlus size={14} aria-hidden /> Invite Co-Commissioner
         </Button>
+      </div>
+
+      {/*
+        * The activity chart. Sits above the two columns because it is context for everything in them:
+        * a falling line explains a falling engagement score, and it is the difference between "this
+        * league is quiet" and "we stopped receiving its data".
+        */}
+      <div className="mb-6">
+        <InfoCard
+          title={
+            activityTrend?.lookbackDays
+              ? `Activity over time — events in the trailing ${activityTrend.lookbackDays} days`
+              : 'Activity over time'
+          }
+        >
+          {trendPoints.length < 2 ? (
+            /*
+             * One point is not a trend and zero points is not a chart. Both say so rather than
+             * rendering an empty frame, which reads as a broken component.
+             */
+            <p className="text-xs" style={{ color: 'var(--muted)' }}>
+              {trendPoints.length === 0
+                ? 'No activity history has been captured for this league yet. A capture runs daily; the first two give this chart a line.'
+                : 'Only one capture so far — one more gives this chart a line.'}
+            </p>
+          ) : (
+            <>
+              <TrendLineChart
+                height={220}
+                ariaLabel={`Events recorded in the trailing ${activityTrend?.lookbackDays ?? 90} days, across ${trendPoints.length} daily captures`}
+                series={[
+                  {
+                    id: 'windowed-activity',
+                    name: `Events in the trailing ${activityTrend?.lookbackDays ?? 90} days`,
+                    points: trendPoints.map((point) => ({ label: point.date, value: point.windowedEventCount })),
+                  },
+                ]}
+              />
+              {/*
+                * 🛑 THIS SENTENCE IS LOAD-BEARING, NOT A CAPTION. Each point counts everything inside
+                * the trailing window as of that capture, so the line falls whenever old events age out
+                * faster than new ones arrive — a league can post activity every week and still trend
+                * down. Without saying so, a declining line reads as "your league is dying", which is
+                * the same unqualified-window error as "0 of 9 managers active".
+                */}
+              <p className="mt-2 text-xs" style={{ color: 'var(--muted)' }}>
+                Each point counts every event inside the trailing{' '}
+                {activityTrend?.lookbackDays ?? 90} days as of that day — not that day&apos;s activity.
+                A steady decline through the offseason is normal: older events leave the window faster
+                than new ones arrive.
+              </p>
+            </>
+          )}
+        </InfoCard>
       </div>
 
       {/* Zone 2 — Primary / Secondary columns */}

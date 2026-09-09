@@ -14,6 +14,7 @@ export const stubAutomationClient: AutomationClient = {
           schedule: { triggerType: 'manual', description: 'Manual only.' },
           totalRunsCount: 1,
           successRatePercent: 100,
+          runOutcomes: { succeeded: 1, failed: 0, skipped: 0 },
           relatedLinks: [],
         },
       ],

@@ -1,7 +1,8 @@
 'use client'
 
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table'
-import { KpiCard, RecommendationCard, InfoCard } from '@/components/commissioner-os/cards'
+import { KpiCard, RecommendationCard, InfoCard, ActivityMixDonut } from '@/components/commissioner-os/cards'
+import { participationSlices } from '@/lib/commissioner-ui/charts/deriveChartSeries'
 import { getSeverityStyle, SEVERITY_LABELS } from '@/components/commissioner-os/cards/severityStyles'
 import { EmptyState } from '@/components/commissioner-os/states'
 import { PreviewDataBanner } from '@/components/commissioner-os/PreviewDataBanner'
@@ -27,6 +28,7 @@ export function LeagueHealthView({ detail, risks, evidence, recommendations, dat
   const scoreStyle = getSeverityStyle(detail.tier)
   // Only worth a column if at least one risk carries it — see the header comment below.
   const showRiskAge = risks.some((risk) => risk.ageInDays != null)
+  const participation = participationSlices(detail.participation)
 
   return (
     <div>
@@ -170,7 +172,22 @@ export function LeagueHealthView({ detail, risks, evidence, recommendations, dat
           * `completeness` takes its place because it was the one real field this page fetched and
           * never rendered, and it is the caveat every number here should be read with.
           */}
-        <div>
+        <div className="space-y-4">
+          {/*
+            * Active against quiet, inside the intelligence window. The labels name the window because
+            * `totalManagers` counts managers with an event in it rather than the league's roster — the
+            * same reason the KPI labels above say "in window".
+            */}
+          {participation.length > 0 ? (
+            <InfoCard title="Manager participation">
+              <ActivityMixDonut
+                slices={participation}
+                height={200}
+                ariaLabel={`${detail.participation.activeManagers} of ${detail.participation.totalManagers} managers seen active in the intelligence window`}
+              />
+            </InfoCard>
+          ) : null}
+
           <InfoCard title="Data quality">
             <div className="space-y-2">
               <div className="flex items-baseline justify-between">

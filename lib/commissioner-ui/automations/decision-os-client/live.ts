@@ -173,6 +173,15 @@ function toCatalogEntry(aggregate: AutomationLedgerAggregate, now: Date): Automa
     ...(lastRunResult ? { lastRunResult } : {}),
     totalRunsCount: aggregate.totalRuns,
     successRatePercent: successRatePercent(aggregate),
+    /*
+     * Straight from the ledger aggregate, which has carried these three counts all along — they were
+     * being collapsed into one percentage before reaching the view. No new query.
+     */
+    runOutcomes: {
+      succeeded: aggregate.successCount,
+      failed: aggregate.failureCount,
+      skipped: aggregate.skippedCount,
+    },
     relatedLinks: meta.relatedLinks ?? [],
   }
 }
