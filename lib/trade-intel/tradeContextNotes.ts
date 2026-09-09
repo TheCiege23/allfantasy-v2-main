@@ -276,9 +276,40 @@ export async function buildTradeContextNotes(args: {
     }
   }
 
+  /*
+   * 🛑 TWO ID SPACES, AND THE VIEWER'S OWN ROSTER IS THE ONE ROW THAT LANDS IN
+   * THE OTHER ONE — so keying this the obvious way misses exactly the manager
+   * this whole ledger exists for, and nobody else.
+   *
+   * `SleeperLeagueCreationBootstrapService` writes `Roster.platformUserId` as
+   * `managerUserIds.get(source_manager_id) ?? source_manager_id` — the
+   * AllFantasy user id whenever the manager resolves to a linked account, the
+   * raw Sleeper id when they do not. `LeagueTeam.platformUserId` on the same
+   * pass is written as `r.source_manager_id || null`: always the Sleeper id.
+   * The viewer is by definition resolved (they are looking at the screen), so
+   * their Roster row carries the AF id while their LeagueTeam row carries the
+   * Sleeper id, and a lookup by the team's id finds all eleven strangers and
+   * misses them. `Roster.redraftRosterId`'s own schema note records the same
+   * split from the data side: "23 carry an app uuid in platformUserId rather
+   * than a platform id".
+   *
+   * `buildNativeActiveTrades` in /api/league/trades-panel already does this
+   * dual lookup, and says why. This did not, so a fully imported league
+   * reported itself unsynced under "what we couldn't see" and every note group
+   * — byes, roster need, league scale, format rules — came back empty.
+   *
+   * ⚠ ORDERED, NOT `findFirst` OVER AN UNORDERED `in`. Both rows can exist at
+   * once: the bootstrap writes the AF-id row and a later `/api/league/sync`
+   * (`lib/league-sync-core.ts`, which keys on Sleeper `owner_id`) creates a
+   * SECOND row for the same manager. Picking arbitrarily between them means a
+   * manager's roster silently alternates between two vintages across reloads.
+   * Newest write wins.
+   */
+  const rosterOwnerIds = [...new Set([team.platformUserId, userId].filter(Boolean))]
   const roster = await prisma.roster
     .findFirst({
-      where: { leagueId, platformUserId: team.platformUserId },
+      where: { leagueId, platformUserId: { in: rosterOwnerIds } },
+      orderBy: { updatedAt: 'desc' },
       select: { id: true, playerData: true },
     })
     .catch(() => null)
