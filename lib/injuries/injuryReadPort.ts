@@ -33,30 +33,25 @@ import 'server-only'
 import { prisma } from '@/lib/prisma'
 import { buildNameIndex, normalizeMatchName, resolveVerifiedMatch } from '@/lib/player-match/verifiedNameMatch'
 import type { InjuryDesignation } from '@/lib/injuries/rollingInsightsInjuries'
+import {
+  INJURY_PRIOR_SEASON_AFTER_HOURS,
+  INJURY_STALE_AFTER_HOURS,
+} from '@/lib/injuries/injuryRecency'
 
 /**
- * Beyond this, a status is treated as a claim we can no longer stand behind.
- * NFL injury reports move daily and hard on game day; 36h spans a normal
- * report cycle without blessing week-old data.
- */
-export const INJURY_STALE_AFTER_HOURS = 36
-
-/**
- * Beyond this, a report cannot be describing the CURRENT season and is dropped
- * outright rather than returned with a caveat.
+ * Re-exported, not redeclared. Both constants moved to `injuryRecency.ts` so the
+ * OTHER injury table — `injury_reports`, which has no scheduled writer outside
+ * NFL — can bound its reads by the same rule without importing prisma through
+ * this module. Two copies of "how old is too old" is the bug those bounds exist
+ * to fix; see the header there for the production measurement.
  *
- * 120 days clears an offseason without touching in-season data. Measured against
- * production when this was added: it keeps 1,224 of 1,230 live NFL rows, and drops
- * exactly the archival items — the three NCAAF rows ESPN's college feed replays,
- * whose reports are dated 2020-11-21, 2022-11-03 and 2022-11-26 yet were being
- * served as today's college injury report on the eve of the season.
+ * Every existing `from '@/lib/injuries/injuryReadPort'` import keeps working.
  *
- * ⚠ This is deliberately NOT `season`, which would be the obvious column: the
- * ingest stamps the CURRENT season onto whatever it pulls, so all three of those
- * 2020/2022 rows carry `season = 2026`. The report date is the only field on the
- * row that has not been overwritten with something convenient.
+ * Beyond INJURY_STALE_AFTER_HOURS, a status is treated as a claim we can no
+ * longer stand behind. NFL injury reports move daily and hard on game day; 36h
+ * spans a normal report cycle without blessing week-old data.
  */
-export const INJURY_PRIOR_SEASON_AFTER_HOURS = 120 * 24
+export { INJURY_STALE_AFTER_HOURS, INJURY_PRIOR_SEASON_AFTER_HOURS }
 
 /**
  * Sports for which NO feed can currently produce a live injury designation.

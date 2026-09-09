@@ -1,6 +1,7 @@
 import "server-only"
 
 import { prisma } from "@/lib/prisma"
+import { currentSeasonReportWhere } from "@/lib/injuries/injuryRecency"
 
 export type FantasyValueSnapshot = {
   sport: string
@@ -284,6 +285,42 @@ function rowDate(row: Record<string, unknown> | null, key: string): Date | strin
   return value instanceof Date || typeof value === "string" ? value : null
 }
 
+/** Epoch ms for a rowDate value, or null when it is absent/unparseable. */
+function rowTime(row: Record<string, unknown> | null, key: string): number | null {
+  const value = rowDate(row, key)
+  if (value == null) return null
+  const ms = value instanceof Date ? value.getTime() : new Date(value).getTime()
+  return Number.isFinite(ms) ? ms : null
+}
+
+type InjuryClaim = { status: string | null; notes: string | null; reportedAt: number | null }
+
+/**
+ * The fresher of the two injury tables, as ONE claim.
+ *
+ * 🛑 THIS USED TO PREFER `injury_reports` UNCONDITIONALLY, AND THAT IS BACKWARDS.
+ * `SportsInjury` is refreshed every 30 minutes by /api/cron/import-injuries for
+ * every sport that has a source; `injury_reports` has no scheduled writer outside
+ * the NFL-only Grok pass. Preferring the latter meant a four-month-old NBA
+ * designation beat a thirty-minute-old one — measured 2026-09-09, see
+ * lib/injuries/injuryRecency.ts.
+ *
+ * ⚠ AND STATUS AND NOTES NOW COME FROM THE SAME ROW. They were resolved
+ * independently, so a player could be described with one source's designation and
+ * the other's prose — a sentence neither provider ever said.
+ *
+ * A row with no report date loses to one that has a date, and two undated rows
+ * fall back to the previous order. Undated is not evidence of being current.
+ */
+function freshestInjuryClaim(a: InjuryClaim, b: InjuryClaim): InjuryClaim {
+  if (a.status == null && a.notes == null) return b
+  if (b.status == null && b.notes == null) return a
+  if (a.reportedAt == null && b.reportedAt == null) return a
+  if (a.reportedAt == null) return b
+  if (b.reportedAt == null) return a
+  return b.reportedAt > a.reportedAt ? b : a
+}
+
 export async function getFantasyValueSnapshot(
   request: FantasyValueSnapshotRequest
 ): Promise<FantasyValueSnapshot> {
@@ -335,9 +372,14 @@ export async function getFantasyValueSnapshot(
       },
       orderBy: { updatedAt: "desc" },
     }),
+    /*
+     * Bounded to the current season — `injury_reports` has no scheduled writer
+     * outside NFL. See lib/injuries/injuryRecency.ts.
+     */
     safeFindFirst("injuryReportRecord", {
       where: {
         sport,
+        ...currentSeasonReportWhere(),
         OR: playerOrNameWhere,
       },
       orderBy: { reportDate: "desc" },
@@ -365,6 +407,20 @@ export async function getFantasyValueSnapshot(
     }),
   ])
 
+  const liveInjury = freshestInjuryClaim(
+    {
+      status: rowString(injuryReport, "status"),
+      notes: rowString(injuryReport, "notes"),
+      reportedAt: rowTime(injuryReport, "reportDate"),
+    },
+    {
+      status: rowString(sportsInjury, "status"),
+      notes: rowString(sportsInjury, "description"),
+      // The provider's REPORT date, falling back to when we pulled it.
+      reportedAt: rowTime(sportsInjury, "date") ?? rowTime(sportsInjury, "fetchedAt"),
+    }
+  )
+
   return buildFantasyValueSnapshot({
     sport,
     playerId: resolvedPlayerId,
@@ -375,8 +431,14 @@ export async function getFantasyValueSnapshot(
     scoringFormat: request.scoringFormat,
     adp: rowNumber(record, "adp"),
     dynastyValue: rowNumber(record, "dynastyValue"),
-    injuryStatus: rowString(record, "injuryStatus") ?? rowString(injuryReport, "status") ?? rowString(sportsInjury, "status"),
-    injuryNotes: rowString(record, "injuryNotes") ?? rowString(injuryReport, "notes") ?? rowString(sportsInjury, "description"),
+    /*
+     * `record` (SportsPlayerRecord) still leads: it is the denormalized row the
+     * rest of this snapshot is built from. It is no longer a laundering route for
+     * last season — sports-data-importer, the only thing that writes those two
+     * columns, is now bounded to the current season and writes null instead.
+     */
+    injuryStatus: rowString(record, "injuryStatus") ?? liveInjury.status,
+    injuryNotes: rowString(record, "injuryNotes") ?? liveInjury.notes,
     projections: record?.projections ?? null,
     stats: record?.stats ?? seasonStats?.stats ?? null,
     seasonStats: seasonStats
