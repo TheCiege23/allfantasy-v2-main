@@ -15,6 +15,8 @@
  */
 
 import { loadLeagueEvents, lookbackDays, sinceDate } from '../dashboard-intelligence'
+import { buildLeaguePipeline } from '../behavioral/api/real-data-provider'
+import { captureLeagueSnapshotHistory } from '../behavioral/history/snapshots'
 import { captureAndWriteBehavioralSnapshots } from './behavioralSnapshotWriter'
 import type { WriteBehavioralSnapshotsSummary } from './behavioralSnapshotWriter'
 import type { BehavioralSnapshotStore } from './behavioralSnapshotStore'
@@ -23,10 +25,23 @@ export interface CaptureLeagueSnapshotJobDeps {
   store: BehavioralSnapshotStore
   now?: Date
   lookbackDays?: number
+  /**
+   * Writes the trend-history row. Injectable for the same reason `store` is: without it a test
+   * exercises a real Prisma write, which the vitest DB guard pins to an unreachable host — so the
+   * write would fail, the catch below would swallow it, and the suite would stay green while
+   * proving nothing about the behaviour this dependency exists for.
+   */
+  writeHistory?: typeof captureLeagueSnapshotHistory
 }
 
 export type CaptureLeagueSnapshotJobResult =
-  | { leagueId: string; ok: true; summary: WriteBehavioralSnapshotsSummary }
+  | {
+      leagueId: string
+      ok: true
+      summary: WriteBehavioralSnapshotsSummary
+      /** Set when the behavioral snapshot was written but the trend-history row was not. */
+      historyError?: string
+    }
   | { leagueId: string; ok: false; error: string }
 
 /** Capture + persist one league's behavioral snapshot for "now". Never throws. */
@@ -43,7 +58,41 @@ export async function captureLeagueSnapshotJob(
       { leagueId, events, capturedAt: now, lookbackDays: lookback },
       deps.store,
     )
-    return { leagueId, ok: true, summary }
+
+    /*
+     * 🛑 THE HEADER ABOVE HAS CLAIMED "NOW ALSO FEEDING TREND HISTORY" SINCE THIS FILE WAS
+     * WRITTEN, AND UNTIL THIS LINE IT DID NOT. There are two snapshot stores, and this job wrote
+     * only one of them:
+     *
+     *   - `decision_os_behavioral_snapshot` — written by `captureAndWriteBehavioralSnapshots`
+     *     above. 19,166 rows on prod, 26 daily periods, fresh.
+     *   - `intelligence_league_snapshot_history` — the ONLY store
+     *     `/api/v1/intelligence/league/trend` reads. **0 rows.** Its only writer was a hand-run
+     *     script with no scheduled caller.
+     *
+     * So every trend in the product — the direction arrow on Mission Control, League Analytics'
+     * `trends` series, every "vs last period" comparison — returned
+     * `insufficient_historical_data` in every environment, permanently, while a month of the
+     * same measurements sat in the table next to it. `computeLeagueTrend` needs two points.
+     *
+     * Derived through the exported `buildLeaguePipeline` so the score written here is the same
+     * number the intelligence API serves, computed from the same events by the same code. A
+     * second derivation would drift, and a trend built from a different scale than the current
+     * value is worse than no trend.
+     *
+     * Deliberately NOT fatal: history is additive, and a league whose behavioral snapshot was
+     * captured should not be reported as a failed capture because the extra write failed. The
+     * failure is returned in the result rather than swallowed, so a caller can see it.
+     */
+    let historyError: string | undefined
+    try {
+      const { leagueIntelligence } = buildLeaguePipeline(leagueId, events, lookback)
+      await (deps.writeHistory ?? captureLeagueSnapshotHistory)(leagueIntelligence)
+    } catch (error) {
+      historyError = error instanceof Error ? error.message : 'unknown_error'
+    }
+
+    return historyError ? { leagueId, ok: true, summary, historyError } : { leagueId, ok: true, summary }
   } catch (error) {
     return { leagueId, ok: false, error: error instanceof Error ? error.message : 'unknown_error' }
   }

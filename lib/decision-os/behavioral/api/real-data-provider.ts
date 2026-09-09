@@ -214,7 +214,13 @@ async function loadAllLeagueEvents(
   ]
 }
 
-function buildLeaguePipeline(
+/**
+ * Exported so the scheduled snapshot job can derive league intelligence from the SAME event
+ * stream and the SAME rules this API serves, rather than growing a second implementation of
+ * "what is this league's engagement score". Two implementations of one rule is the bug; the
+ * fix is one of them, not a better copy.
+ */
+export function buildLeaguePipeline(
   leagueId:    string,
   events:      BehavioralEvent[],
   lookback:    number,

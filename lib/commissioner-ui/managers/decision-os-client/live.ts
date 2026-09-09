@@ -1,7 +1,7 @@
-import { prisma } from '@/lib/prisma'
 import { callDecisionOS } from '../../adapter/transport'
 import { isLiveReady } from '../../liveReadiness'
 import { resolveActiveLeagueId } from '../../resolveActiveLeagueId'
+import { resolveManagerDisplayNames, UNKNOWN_MANAGER_NAME } from '../managerNames'
 import type { CommissionerErrorContract } from '../../contracts'
 import type { ManagerDnaProfile, ManagerIntelligenceClient } from './types'
 
@@ -89,17 +89,6 @@ interface ManagerDnaDirectoryShape {
 }
 
 /** Batch-resolves manager display names — one query for all managers, not N+1. Same pattern as Mission Control's live.ts. */
-async function resolveManagerDisplayNames(managerIds: string[]): Promise<Map<string, string>> {
-  if (managerIds.length === 0) return new Map()
-  const users = await prisma.appUser.findMany({
-    where: { id: { in: managerIds } },
-    select: { id: true, displayName: true, username: true },
-  })
-  const map = new Map<string, string>()
-  for (const u of users) map.set(u.id, u.displayName ?? u.username)
-  return map
-}
-
 /**
  * League-continuity risk framing only, never a characterological judgment — the contract's own
  * wording. Fires on a real continuity signal (unreliable engagement, or a declining trend), and
@@ -138,14 +127,16 @@ export const liveManagerIntelligenceClient: ManagerIntelligenceClient = {
     }
 
     const rows = data.data.rows
-    const names = await resolveManagerDisplayNames(rows.map((r) => r.managerId))
+    const names = await resolveManagerDisplayNames(leagueId, rows.map((r) => r.managerId))
 
     const profiles: ManagerDnaProfile[] = rows.map((row) => {
       const profile: ManagerDnaProfile = {
         id: row.managerId,
-        // A manager with no AppUser row still belongs in their league's directory; omitting the row
-        // would under-report the league rather than under-report one name.
-        managerName: names.get(row.managerId) ?? 'Unknown manager',
+        // A manager resolvable by neither an AF account nor a league_teams row still belongs in
+        // their league's directory; omitting the row would under-report the league rather than
+        // under-report one name. After the two-source lookup above this is ~5 managers platform-wide,
+        // not the 1,137 it was.
+        managerName: names.get(row.managerId) ?? UNKNOWN_MANAGER_NAME,
         archetype: ARCHETYPE_LABEL[row.primaryIdentity] ?? 'Building Profile',
         engagementReliability: row.engagementReliability,
       }

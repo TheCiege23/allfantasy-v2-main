@@ -68,6 +68,22 @@
   color: var(--faint, #7d84a8);
 }
 
+/*
+ * Partial-failure notice. Deliberately a caption, not an error card: the page below it is real
+ * data that loaded fine, and error styling over working charts tells the commissioner to
+ * distrust numbers that are correct. It says which half is missing and gets out of the way.
+ */
+.cos-sheet-degraded {
+  margin: 0 0 10px;
+  padding: 8px 12px;
+  border-left: 2px solid var(--warning, #f59e0b);
+  border-radius: 0 4px 4px 0;
+  background: var(--panel2, rgba(148, 163, 184, 0.08));
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--muted, #94a3b8);
+}
+
 /* ── Stat row ─────────────────────────────────────────────────────────────── */
 
 .cos-sheet-stats {

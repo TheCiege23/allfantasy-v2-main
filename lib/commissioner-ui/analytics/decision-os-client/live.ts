@@ -2,7 +2,7 @@ import { callDecisionOS } from '../../adapter/transport'
 import { isLiveReady } from '../../liveReadiness'
 import { resolveActiveLeagueId } from '../../resolveActiveLeagueId'
 import { readAnalyticsDataWindow } from '../dataWindow'
-import { readWarehouseAnalytics } from '../warehouseReads'
+import { readWarehouseAnalytics, type WarehouseAnalytics } from '../warehouseReads'
 import type {
   AnalyticsClient,
   AnalyticsDataWindow,
@@ -200,6 +200,28 @@ function buildTrends(trend: LeagueTrendShape['data']): AnalyticsTrendSeries[] {
   ]
 }
 
+/**
+ * Whether the Postgres half of the snapshot produced anything worth rendering.
+ *
+ * Only consulted when the intelligence call already failed, to decide between "show the season
+ * history and say the live numbers are missing" and "there is genuinely nothing here". Reads the
+ * arrays rather than adding a flag to `WarehouseAnalytics`, so `warehouseReads.ts` keeps a single
+ * job and a new panel added there is covered here automatically.
+ */
+function hasWarehouseData(warehouse: WarehouseAnalytics): boolean {
+  return (
+    warehouse.pointsForAgainst.length > 0 ||
+    warehouse.scoringDistribution.length > 0 ||
+    warehouse.competitiveBalance.length > 0 ||
+    warehouse.seasonComparison.length > 0 ||
+    warehouse.transactionsByWeek.length > 0 ||
+    warehouse.managerActivity.length > 0 ||
+    warehouse.activityMix.length > 0 ||
+    warehouse.managerFingerprints.length > 0 ||
+    warehouse.allTimeRecords.length > 0
+  )
+}
+
 export const liveAnalyticsClient: AnalyticsClient = {
   async getSnapshot() {
     if (!(await isLiveReady('analytics'))) {
@@ -222,16 +244,35 @@ export const liveAnalyticsClient: AnalyticsClient = {
       readWarehouseAnalytics(leagueId),
     ])
 
-    if (leagueResult.error || !leagueResult.data) {
-      return { data: null, error: leagueResult.error ?? notYetIntegrated(), source: 'live', timestamp }
-    }
-
-    const intel = leagueResult.data.data
+    /*
+     * 🛑 THIS USED TO `return { data: null }` AND THROW AWAY ELEVEN WORKING CHART SERIES.
+     *
+     * The four reads above run in parallel and fail independently: the two `callDecisionOS`
+     * calls are an HTTP hop to the intelligence API, while `readWarehouseAnalytics` is straight
+     * Postgres — six seasons of drafts, trades, waivers, scoring and records that have nothing
+     * to do with whether that hop succeeded. Discarding all of it because the KPI row could not
+     * be built meant one upstream blip emptied the only tab in the product that draws charts,
+     * and the commissioner saw a bare error where their league history should be.
+     *
+     * Now the intelligence half degrades on its own: the KPI and trend rows come back empty, the
+     * warehouse half renders exactly as it would have, and `degradedReason` tells the view to say
+     * which part is missing instead of implying the whole page failed. The snapshot is only
+     * abandoned when there is genuinely nothing to show.
+     */
+    const intel = leagueResult.data?.data ?? null
+    const intelligenceError = leagueResult.error ?? (intel ? null : notYetIntegrated())
     const trend: LeagueTrendShape['data'] = trendResult.data?.data ?? { available: false, reason: 'insufficient_historical_data', snapshotCount: 0 }
 
+    if (intelligenceError && !hasWarehouseData(warehouse)) {
+      return { data: null, error: intelligenceError, source: 'live', timestamp }
+    }
+
     const snapshot: LeagueAnalyticsSnapshot = {
-      kpis: buildKpis(intel, trend, dataWindow),
+      kpis: intel ? buildKpis(intel, trend, dataWindow) : [],
       trends: buildTrends(trend),
+      degradedReason: intelligenceError
+        ? 'Live league intelligence is unavailable right now, so the headline numbers and trend lines are hidden. Season history below is unaffected.'
+        : null,
       /*
        * These six were hard-coded `[]` with a comment explaining that Decision OS's behavioural
        * pipeline has no analog for scoring or standings. That was true of Decision OS and beside

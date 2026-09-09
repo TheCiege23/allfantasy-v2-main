@@ -102,6 +102,61 @@ describe('captureLeagueSnapshotJob', () => {
     expect(managerRow).toBeDefined()
   })
 
+  /*
+   * The trend-history write. Every trend in Commissioner OS reads
+   * `intelligence_league_snapshot_history`, and until this job wrote it that table held zero rows
+   * platform-wide while `decision_os_behavioral_snapshot` accumulated a month of the same
+   * measurements — so the direction arrow on Mission Control and every "vs last period" comparison
+   * returned `insufficient_historical_data` permanently.
+   *
+   * ⚠ ASSERTED THROUGH AN INJECTED WRITER, NOT A SPY ON THE REAL ONE. The real writer calls Prisma,
+   * which the vitest DB guard pins to an unreachable host; the job catches that failure by design,
+   * so a test using the real writer would pass whether or not the call was ever made. That is the
+   * shape of green test this repo has been bitten by before.
+   */
+  it('writes a trend-history row from the same events as the behavioral snapshot', async () => {
+    mockWaiverActivity()
+    const store = new InMemoryBehavioralSnapshotStore()
+    const writeHistory = vi.fn().mockResolvedValue(undefined)
+
+    const result = await captureLeagueSnapshotJob(LG, {
+      store,
+      now: new Date('2026-07-08T10:00:00Z'),
+      writeHistory,
+    })
+
+    expect(result.ok).toBe(true)
+    if (!result.ok) throw new Error('unreachable')
+    expect(result.historyError).toBeUndefined()
+
+    expect(writeHistory).toHaveBeenCalledTimes(1)
+    const intel = writeHistory.mock.calls[0][0]
+    // The same league, and a real derived score — not a placeholder the job invented.
+    expect(intel.leagueId).toBe(LG)
+    expect(typeof intel.leagueEngagementScore).toBe('number')
+    expect(Number.isFinite(intel.leagueEngagementScore)).toBe(true)
+    expect(typeof intel.leagueEngagementTier).toBe('string')
+  })
+
+  it('reports a failed history write without failing the behavioral capture', async () => {
+    mockWaiverActivity()
+    const store = new InMemoryBehavioralSnapshotStore()
+    const writeHistory = vi.fn().mockRejectedValue(new Error('history store unavailable'))
+
+    const result = await captureLeagueSnapshotJob(LG, {
+      store,
+      now: new Date('2026-07-08T10:00:00Z'),
+      writeHistory,
+    })
+
+    // History is additive: losing it must not report the behavioral snapshot as a failed capture.
+    expect(result.ok).toBe(true)
+    if (!result.ok) throw new Error('unreachable')
+    expect(result.summary.league.status).toBe('created')
+    // But it must not be silent either — the caller can see exactly what failed.
+    expect(result.historyError).toBe('history store unavailable')
+  })
+
   it('repeated same-day capture updates the existing rows, never duplicates', async () => {
     mockWaiverActivity()
     const store = new InMemoryBehavioralSnapshotStore()

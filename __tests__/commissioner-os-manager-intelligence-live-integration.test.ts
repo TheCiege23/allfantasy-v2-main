@@ -19,7 +19,23 @@ const getServerSessionMock = vi.hoisted(() => vi.fn())
 vi.mock("next-auth", () => ({ getServerSession: getServerSessionMock }))
 vi.mock("@/lib/auth", () => ({ authOptions: {} }))
 
+/*
+ * `league` and `leagueTeam`, not `roster`.
+ *
+ * 🛑 THE MOCK AND THE MODULE HAD DISAGREED SINCE `resolveActiveLeagueId` STOPPED RESOLVING BY
+ * ROSTER. It now asks `prisma.league.findMany({ where: { userId } })` — commissioner-of, not
+ * plays-in — while this mock still supplied only `roster`, so every test that reached it died on
+ * `Cannot read properties of undefined (reading 'findMany')` before its own assertion ran. Five
+ * suites, red on main.
+ *
+ * `leagueTeam` is the second half: `resolveManagerDisplayNames` reads it to turn a
+ * `sleeper:<id>` manager key into that manager's name. It is only queried when a provider-prefixed
+ * id is present, so it stays unused by the AF-uuid fixtures below and is mocked so a test that
+ * adds one does not silently reach Prisma.
+ */
 const prismaMock = vi.hoisted(() => ({
+  league: { findMany: vi.fn() },
+  leagueTeam: { findMany: vi.fn() },
   roster: { findMany: vi.fn() },
   appUser: { findMany: vi.fn() },
 }))
@@ -56,7 +72,7 @@ afterEach(() => {
 
 function withActiveLeague(leagueId = "lg-1") {
   getServerSessionMock.mockResolvedValue({ user: { id: "user-1" } })
-  prismaMock.roster.findMany.mockResolvedValue([{ league: { id: leagueId, status: "active" } }])
+  prismaMock.league.findMany.mockResolvedValue([{ id: leagueId, status: "active" }])
 }
 
 /** A directory row as the route returns it. `engagementTrend` is a union, never a bare direction. */
@@ -100,7 +116,7 @@ describe("Manager Intelligence live.ts — active-league resolution", () => {
 
   it("resolves no active league (session present, zero non-archived rosters) → honest placeholder", async () => {
     getServerSessionMock.mockResolvedValue({ user: { id: "user-1" } })
-    prismaMock.roster.findMany.mockResolvedValue([{ league: { id: "lg-archived", status: "ARCHIVED" } }])
+    prismaMock.league.findMany.mockResolvedValue([{ id: "lg-archived", status: "ARCHIVED" }])
     const result = await liveManagerIntelligenceClient.getManagerDirectory()
     expect(result.error).toMatchObject({ category: "upstream_unavailable", moduleId: "managers" })
     expect(callDecisionOSMock).not.toHaveBeenCalled()
@@ -110,7 +126,7 @@ describe("Manager Intelligence live.ts — active-league resolution", () => {
     withActiveLeague("lg live/one")
     callDecisionOSMock.mockResolvedValue(directoryResponse([]))
     await liveManagerIntelligenceClient.getManagerDirectory()
-    expect(prismaMock.roster.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { platformUserId: "user-1" } }))
+    expect(prismaMock.league.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { userId: "user-1" } }))
     expect(callDecisionOSMock).toHaveBeenCalledWith(
       "managers",
       `/api/v1/intelligence/league/manager-dna?leagueId=${encodeURIComponent("lg live/one")}`,

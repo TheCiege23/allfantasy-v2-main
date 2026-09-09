@@ -1,7 +1,8 @@
-import { prisma } from '@/lib/prisma'
 import { callDecisionOS } from '../adapter/transport'
 import { isLiveReady } from '../liveReadiness'
 import { resolveActiveLeagueId } from '../resolveActiveLeagueId'
+import { resolveManagerDisplayNames, UNKNOWN_MANAGER_NAME } from '../managers/managerNames'
+import { readAnalyticsDataWindow } from '../analytics/dataWindow'
 import type { CommissionerErrorContract, CommissionerModuleId } from '../contracts'
 import type { SeverityTier } from '../tokens/colors'
 import type { DecisionOSClient, LeagueHealthSummary, ManagerHighlight, MissionControlKpis } from './types'
@@ -30,16 +31,6 @@ function notYetIntegrated(moduleId: CommissionerModuleId): CommissionerErrorCont
   }
 }
 
-/** A specific, honest degradation — not a permanent gap anymore, but real for this request. */
-function trendDataUnavailable(moduleId: CommissionerModuleId): CommissionerErrorContract {
-  return {
-    category: 'upstream_unavailable',
-    message: 'The Decision OS backend does not yet have enough historical data to compute a trend for this league.',
-    moduleId,
-    retryable: false,
-    timestamp: new Date().toISOString(),
-  }
-}
 
 // ── Local wire-shape types ──────────────────────────────────────────────────
 // Minimal projections of the real Phase 3.3 API response shapes
@@ -119,16 +110,33 @@ function calloutFromManager(m: ManagerSummaryShape): string {
   return m.retentionRiskReasons[0] ?? m.inactivityWarning ?? 'Active and engaged'
 }
 
-/** Batch-resolves manager display names — one query for all managers, not N+1. */
-async function resolveManagerDisplayNames(managerIds: string[]): Promise<Map<string, string>> {
-  if (managerIds.length === 0) return new Map()
-  const users = await prisma.appUser.findMany({
-    where: { id: { in: managerIds } },
-    select: { id: true, displayName: true, username: true },
-  })
-  const map = new Map<string, string>()
-  for (const u of users) map.set(u.id, u.displayName ?? u.username)
-  return map
+/**
+ * Attach the age of the data to a claim made about the league.
+ *
+ * 🛑 THE SENTENCE THIS QUALIFIES IS THE MOST DAMAGING STRING IN THE PRODUCT. On the reference
+ * league the intelligence API returns `topConcern: "No managers have recorded any activity"` —
+ * arithmetically true over the rolling window, and read by a commissioner as "your league is
+ * dead". The same response simultaneously reports waiver activity as HIGH at 6.56 claims per
+ * manager, because that figure is all-time. Both come from the same rows; only the window
+ * differs. What actually happened is that the league's newest imported event is weeks old.
+ *
+ * A commissioner cannot tell "your league is dying" from "we stopped receiving your data", and
+ * the difference between those two is the entire product. Analytics already says this — its
+ * summary headline and its freshness note both carry the caveat — and Mission Control, which is
+ * the first thing anyone sees, did not.
+ *
+ * Appended to the claim rather than rendered beside it: the health card has room for exactly one
+ * sentence, so a caveat that is not inside the sentence does not exist.
+ */
+function withDataAgeCaveat(claim: string, window: Awaited<ReturnType<typeof readAnalyticsDataWindow>>): string {
+  if (!window) return claim
+  const { daysSinceLastActivity, inactiveAfterDays } = window
+  if (daysSinceLastActivity == null) {
+    // Never any activity at all is a real state, and a different one from stale data.
+    return `${claim} (no league activity has ever been recorded)`
+  }
+  if (daysSinceLastActivity <= inactiveAfterDays) return claim
+  return `${claim} (no league activity recorded in ${daysSinceLastActivity} days)`
 }
 
 export const liveDecisionOSClient: DecisionOSClient = {
@@ -150,22 +158,39 @@ export const liveDecisionOSClient: DecisionOSClient = {
     if (leagueResult.error || !leagueResult.data) {
       return { data: null, error: leagueResult.error ?? notYetIntegrated('mission-control'), source: 'live', timestamp }
     }
-    if (trendResult.error) {
-      return { data: null, error: trendResult.error, source: 'live', timestamp }
-    }
-    if (!trendResult.data || !trendResult.data.data.available) {
-      return { data: null, error: trendDataUnavailable('mission-control'), source: 'live', timestamp }
-    }
-
+    /*
+     * 🛑 A MISSING TREND USED TO DESTROY THE WHOLE HEALTH CARD, OVER A FIELD THE VIEW DOES
+     * NOT RENDER. `MissionControlView` shows `score`, `tier` and `driver`; `trendLabel` appears
+     * nowhere in it. Yet both branches above returned `data: null`, so the commissioner's health
+     * score — a real, computed number that had already arrived — was replaced by an error state
+     * because a SECOND call had nothing to compare against.
+     *
+     * That is not an edge case. `intelligence_league_snapshot_history` needs two rows before a
+     * trend exists at all, so this fired for every league on the platform (the table held zero
+     * rows until the snapshot job started writing it), and it still fires for the first two days
+     * of any newly imported league, permanently and by design.
+     *
+     * A league with one day of history has a health score and no trend. Saying so is honest;
+     * withholding the score is not.
+     */
     const league = leagueResult.data.data
-    const trend = trendResult.data.data
+    // A failed trend call leaves `data` null, so `trend` is already undefined on that path and
+    // `trendResult.error` needs no separate test. The discriminant is checked inline below rather
+    // than hoisted into a boolean, because only the inline form narrows the union for the compiler.
+    const trend = trendResult.data?.data
     const score = Math.round(league.leagueEngagementScore)
+    const dataWindow = await readAnalyticsDataWindow(leagueId)
     const summary: LeagueHealthSummary = {
       score,
       tier: scoreToSeverityTier(score),
-      trendLabel: formatTrendLabel(trend.direction, trend.scoreDelta),
-      trendDirection: trend.direction,
-      driver: league.healthNarrative.topConcern ?? league.healthNarrative.standoutSignal ?? league.healthNarrative.engagementSummary,
+      trendLabel: trend?.available
+        ? formatTrendLabel(trend.direction, trend.scoreDelta)
+        : 'Not enough history yet to show a trend',
+      trendDirection: trend?.available ? trend.direction : 'flat',
+      driver: withDataAgeCaveat(
+        league.healthNarrative.topConcern ?? league.healthNarrative.standoutSignal ?? league.healthNarrative.engagementSummary,
+        dataWindow,
+      ),
     }
     return { data: summary, error: null, source: 'live', timestamp }
   },
@@ -189,10 +214,15 @@ export const liveDecisionOSClient: DecisionOSClient = {
     }
 
     const managers = data.data
-    const names = await resolveManagerDisplayNames(managers.map((m) => m.managerId))
+    const names = await resolveManagerDisplayNames(leagueId, managers.map((m) => m.managerId))
     const highlights: ManagerHighlight[] = managers.map((m) => ({
       id: m.managerId,
-      managerName: names.get(m.managerId) ?? m.managerId,
+      /*
+       * ⚠ THE FALLBACK USED TO BE `m.managerId`, WHICH PRINTED `sleeper:1267977501351628801`
+       * INTO THE MANAGER HIGHLIGHT CARD. A raw provider id is not a degraded name, it is a leak
+       * of an internal identifier onto a surface a commissioner shows their league.
+       */
+      managerName: names.get(m.managerId) ?? UNKNOWN_MANAGER_NAME,
       callout: calloutFromManager(m),
       tone: toneFromRisk(m.retentionRisk, m.isInactive),
     }))

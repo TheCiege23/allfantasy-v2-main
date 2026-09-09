@@ -14,7 +14,34 @@ const getServerSessionMock = vi.hoisted(() => vi.fn())
 vi.mock("next-auth", () => ({ getServerSession: getServerSessionMock }))
 vi.mock("@/lib/auth", () => ({ authOptions: {} }))
 
+/*
+ * `league` and `leagueTeam`, not `roster`.
+ *
+ * 🛑 THE MOCK AND THE MODULE HAD DISAGREED SINCE `resolveActiveLeagueId` STOPPED RESOLVING BY
+ * ROSTER. It now asks `prisma.league.findMany({ where: { userId } })` — commissioner-of, not
+ * plays-in — while this mock still supplied only `roster`, so every test that reached it died on
+ * `Cannot read properties of undefined (reading 'findMany')` before its own assertion ran. Five
+ * suites, red on main.
+ *
+ * `leagueTeam` is the second half: `resolveManagerDisplayNames` reads it to turn a
+ * `sleeper:<id>` manager key into that manager's name. It is only queried when a provider-prefixed
+ * id is present, so it stays unused by the AF-uuid fixtures below and is mocked so a test that
+ * adds one does not silently reach Prisma.
+ */
 const prismaMock = vi.hoisted(() => ({
+  league: { findMany: vi.fn(), findFirst: vi.fn() },
+  leagueTeam: { findMany: vi.fn() },
+  /*
+   * The data window. `buildKpis` labels its rolling-window KPIs "(last 90d)", and that suffix
+   * only appears when `readAnalyticsDataWindow` resolves — which needs `league.findFirst` (the
+   * league's provider identity) and these two reads. Without them the window came back null, the
+   * suffix vanished, and this suite asserted a label the source could not produce.
+   *
+   * ⚠ THE SUFFIX IS THE ASSERTION, NOT DECORATION. "0 of 7 managers active" without it reads as a
+   * statement about the league; with it, as a statement about a 90-day window. A mock that
+   * silently drops it would let that distinction be deleted from the product under a green suite.
+   */
+  decisionOsImportedActivity: { findFirst: vi.fn(), groupBy: vi.fn() },
   roster: { findMany: vi.fn() },
 }))
 vi.mock("@/lib/prisma", () => ({ prisma: prismaMock }))
@@ -50,7 +77,14 @@ afterEach(() => {
 
 function withActiveLeague(leagueId = "lg-1") {
   getServerSessionMock.mockResolvedValue({ user: { id: "user-1" } })
-  prismaMock.roster.findMany.mockResolvedValue([{ league: { id: leagueId, status: "active" } }])
+  prismaMock.league.findMany.mockResolvedValue([{ id: leagueId, status: "active" }])
+  prismaMock.league.findFirst.mockResolvedValue({ platform: "sleeper", platformLeagueId: "111" })
+  // Recent activity, so the window resolves and the KPI labels carry their "(last 90d)" scope.
+  prismaMock.decisionOsImportedActivity.findFirst.mockResolvedValue({ occurredAt: new Date() })
+  prismaMock.decisionOsImportedActivity.groupBy.mockResolvedValue([
+    { activityType: "trade", _count: { _all: 3 } },
+    { activityType: "waiver", _count: { _all: 12 } },
+  ])
 }
 
 const LEAGUE_INTEL = {
@@ -143,8 +177,11 @@ describe("League Analytics live.ts — getSnapshot builds real kpis/trends, hone
       // "(last 90d)" is load-bearing, not decoration: the denominator counts managers
       // with an event inside INTELLIGENCE_LOOKBACK_DAYS, not the league's team count.
       { id: "kpi-active-managers", label: "Active Managers (last 90d)", value: "9 of 12" },
-      { id: "kpi-trade-activity", label: "Trade Activity", value: "Moderate" },
-      { id: "kpi-waiver-activity", label: "Waiver Activity", value: "High" },
+      // The suffix is on all three window-derived KPIs, not just the manager count: `windowSuffix`
+      // was generalised when the window stopped being hard-coded, and trade/waiver activity are
+      // rolling-window readings too. Asserting it on only one of them let the other two drift.
+      { id: "kpi-trade-activity", label: "Trade Activity (last 90d)", value: "Moderate" },
+      { id: "kpi-waiver-activity", label: "Waiver Activity (last 90d)", value: "High" },
     ])
   })
 
@@ -180,15 +217,45 @@ describe("League Analytics live.ts — getSnapshot builds real kpis/trends, hone
     expect(result.data?.seasonComparison).toEqual([])
   })
 
-  it("a real /league transport failure is passed straight through, even if /league/trend would have succeeded", async () => {
+  /*
+   * 🛑 THIS ASSERTED `result.data` WAS NULL, WHICH SPECIFIED THROWING AWAY ELEVEN WORKING
+   * CHART SERIES TO REPORT A PROBLEM WITH FOUR NUMBERS.
+   *
+   * The intelligence API and the Postgres warehouse are read in parallel and fail independently.
+   * Six seasons of drafts, trades, waivers and scoring do not stop being true because an HTTP hop
+   * timed out — but the whole snapshot was discarded, so one upstream blip emptied the only tab in
+   * Commissioner OS that draws charts.
+   *
+   * The intelligence half now degrades on its own and names itself in `degradedReason`.
+   */
+  it("keeps the warehouse series when the /league call fails, and says which half is missing", async () => {
     const transportError = { category: "unauthorized" as const, message: "Unknown API key.", moduleId: "analytics" as const, retryable: false, timestamp: new Date().toISOString() }
     callDecisionOSMock.mockImplementation((_moduleId: string, path: string) => {
       if (path.includes("/league/trend")) return Promise.resolve(TREND_AVAILABLE.data ? { data: TREND_AVAILABLE, error: null } : { data: null, error: null })
       return Promise.resolve({ data: null, error: transportError })
     })
     const result = await liveAnalyticsClient.getSnapshot()
-    expect(result.error).toEqual(transportError)
+
+    expect(result.data).not.toBeNull()
+    // The half that failed is empty and SAID to be empty — never filled in with a guess.
+    expect(result.data?.kpis).toEqual([])
+    expect(result.data?.degradedReason).toMatch(/intelligence is unavailable/i)
+    // The half that succeeded survived.
+    expect(result.data?.activityMix.length).toBeGreaterThan(0)
+  })
+
+  it("abandons the snapshot when the /league call fails AND the warehouse has nothing to show", async () => {
+    const transportError = { category: "unauthorized" as const, message: "Unknown API key.", moduleId: "analytics" as const, retryable: false, timestamp: new Date().toISOString() }
+    callDecisionOSMock.mockImplementation(() => Promise.resolve({ data: null, error: transportError }))
+    // No imported activity at all, so every warehouse panel is genuinely empty.
+    prismaMock.decisionOsImportedActivity.groupBy.mockResolvedValue([])
+    prismaMock.decisionOsImportedActivity.findFirst.mockResolvedValue(null)
+
+    const result = await liveAnalyticsClient.getSnapshot()
+    // Degrading is for partial data. With nothing on either side there is no snapshot to render,
+    // and inventing an empty one would read as "your league has no history".
     expect(result.data).toBeNull()
+    expect(result.error).toEqual(transportError)
   })
 
   it("a /league/trend failure degrades to available:false rather than failing the whole snapshot", async () => {

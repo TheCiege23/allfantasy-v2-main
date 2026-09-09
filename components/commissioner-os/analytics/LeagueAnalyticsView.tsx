@@ -520,7 +520,13 @@ export function LeagueAnalyticsView({ snapshot, dataMode, errorMessage }: League
    */
   const view = useMemo(() => (snapshot ? applyTimeRange(snapshot, range) : null), [snapshot, range])
 
-  if (errorMessage || !snapshot || !view) {
+  /*
+   * A snapshot that exists wins over an error, because the two are no longer the same claim.
+   * The client can now return real season history alongside `degradedReason` when only the
+   * live-intelligence half failed; showing a full-page `ErrorState` over that would hide eleven
+   * working charts to report a problem with the four numbers above them.
+   */
+  if (!snapshot || !view) {
     return (
       <div>
         <PreviewDataBanner mode={dataMode} />
@@ -532,6 +538,12 @@ export function LeagueAnalyticsView({ snapshot, dataMode, errorMessage }: League
   return (
     <div className="cos-sheet">
       <PreviewDataBanner mode={dataMode} />
+
+      {view.degradedReason ? (
+        <p className="cos-sheet-degraded" role="status">
+          {view.degradedReason}
+        </p>
+      ) : null}
 
       <div className="cos-sheet-bar">
         <div className="cos-sheet-ranges" role="group" aria-label="Time range">
