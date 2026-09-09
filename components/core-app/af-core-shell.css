@@ -1545,3 +1545,234 @@
 .af-shell[data-rail-open='true'] .af-rail-tile[data-platform='fantrax'] .af-rail-tile-art {
   background: var(--p-fantrax-bg);
 }
+
+/*
+ * ── Phone hit targets ───────────────────────────────────────────────────────
+ *
+ * ⚠ APPENDED AS ITS OWN TOP-LEVEL @media AT END OF FILE, per the convention this
+ * file already records twice above: dropping a new block inside an existing
+ * @media closes the outer query early and silently reparents every rule below
+ * the insertion point.
+ *
+ * Measured at 375x812 across every /core screen — these two are on all of them,
+ * so the defect is one rule each rather than one per screen:
+ *
+ *   button.af-help-dot   15 x 15
+ *   button.af-syncnow   101 x 26
+ *
+ * Both are well under the 44px thumb floor the tabbar in this file already
+ * treats as the minimum.
+ */
+@media (max-width: 720px) {
+  /*
+   * The dot stays 15px. Growing it to 44 would put a control the size of the
+   * section heading next to every section heading — so the HIT AREA grows and
+   * the paint does not, via a transparent centred ::after.
+   *
+   * ⚠ `position: relative` on the BUTTON does not move the popover.
+   * `.af-help-body` is a SIBLING inside `.af-help-wrap` (see HelpDot in
+   * AfCoreShell.tsx), so it still anchors to the wrapper, not to the dot.
+   */
+  .af-core .af-help-dot {
+    position: relative;
+  }
+  .af-core .af-help-dot::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 44px;
+    height: 44px;
+    transform: translate(-50%, -50%);
+    /* Hit area only — never paints, and must not become a scroll/overflow box. */
+    background: transparent;
+  }
+
+  .af-core .af-syncnow {
+    min-height: 44px;
+    padding-inline: 14px;
+  }
+}
+
+/* ── Route-loading skeleton (app/core/[[...screen]]/loading.tsx) ──────── */
+
+/*
+ * ⚠ APPENDED AS ITS OWN TOP-LEVEL BLOCK AT END OF FILE, per the convention this
+ * file already states twice above: dropping a new @media inside an existing one
+ * closes the outer query early and silently reparents every rule below it into
+ * a narrower breakpoint. Nothing throws and brace balance stays correct, so the
+ * only way to catch it is to read the effect.
+ *
+ * These rules style ONLY the fallback's own placeholder blocks. The grid, the
+ * rail, the nav and the topbar come from the real shell's classes further up —
+ * see the note in loading.tsx for why the fallback borrows them rather than
+ * restating a skeleton layout of its own.
+ */
+
+/*
+ * 🛑 A SKELETON TONE OF ITS OWN — DO NOT REPOINT THESE AT `--chip`.
+ * That was the first attempt and it is invisible. `--chip` is
+ * `rgba(255,255,255,0.05)`, designed as a tint for a chip sitting ON a card;
+ * composited onto `--bg` (#06070f) it computes to #12131B, which is
+ * **1.09:1** against that ground. Measured, not eyeballed. A skeleton whose
+ * whole job is to say "this screen is coming" cannot be a shade nobody can
+ * see — it renders as a blank dark page, which is the exact failure this
+ * boundary was added to fix.
+ *
+ * These sit at ~1.40:1 (dark) and ~1.35:1 (light) against `--bg`. Low on
+ * purpose: a placeholder should read as absence, not as content.
+ *
+ * ⚠ AND LOW CONTRAST IS ONLY DEFENSIBLE BECAUSE THE STATE IS ANNOUNCED
+ * SEPARATELY. WCAG 1.4.11's 3:1 floor is for UI that carries information; the
+ * information here is carried by the `.af-sk-sr` live region, and the blocks
+ * are decorative. Delete that paragraph and these values become a real
+ * accessibility problem rather than a stylistic choice.
+ *
+ * ⚠ THE SHEEN INVERTS BETWEEN THEMES AND THE FILL DOES NOT. On dark the block
+ * is lighter than its ground and the highlight is lighter still; on light the
+ * block is DARKER than its ground, so a white sheen is what reads as a sweep.
+ * Reusing the dark sheen on light produces a highlight that is invisible
+ * against the ground it is sweeping over.
+ */
+.af-core {
+  --af-sk-fill: rgba(255, 255, 255, 0.14);
+  --af-sk-sheen: rgba(255, 255, 255, 0.1);
+}
+
+/* `af` is the third dark theme; it takes the dark values. Light inverts. */
+html[data-mode='af'] .af-core {
+  --af-sk-fill: rgba(255, 255, 255, 0.14);
+  --af-sk-sheen: rgba(255, 255, 255, 0.1);
+}
+
+html[data-mode='light'] .af-core {
+  --af-sk-fill: rgba(11, 16, 32, 0.14);
+  --af-sk-sheen: rgba(255, 255, 255, 0.45);
+}
+
+.af-core .af-sk-block {
+  background: var(--af-sk-fill);
+  border-radius: 8px;
+  /*
+   * The sweep is painted with a gradient that is wider than the block and slid
+   * across it. `background-size` on the gradient layer only — the flat fill
+   * above stays as the resting colour, so a block still reads as a block when
+   * the animation is suppressed below.
+   */
+  background-image: linear-gradient(
+    90deg,
+    transparent 0%,
+    var(--af-sk-sheen) 50%,
+    transparent 100%
+  );
+  background-size: 200% 100%;
+  background-repeat: no-repeat;
+  animation: af-sk-sweep 1.4s ease-in-out infinite;
+  flex: 0 0 auto;
+}
+
+@keyframes af-sk-sweep {
+  from {
+    background-position: 150% 0;
+  }
+  to {
+    background-position: -50% 0;
+  }
+}
+
+/* Rail — 42px tiles and a 12px radius, matching .af-rail-tile exactly so the
+   real tiles land on the same centres when the page swaps in. */
+.af-core .af-sk-rail-logo {
+  width: 38px;
+  height: 38px;
+  border-radius: 11px;
+}
+.af-core .af-sk-rail-tile {
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+}
+
+/* Nav — .af-nav-item is min-height 40px / radius 10px. */
+.af-core .af-sk-nav-heading {
+  width: 84px;
+  height: 9px;
+  margin: 0 0 8px 10px;
+  border-radius: 5px;
+}
+.af-core .af-sk-nav-item {
+  height: 40px;
+  border-radius: 10px;
+}
+
+/* Topbar — the search field is the flexible child, the avatar is fixed. */
+.af-core .af-sk-search {
+  flex: 1 1 auto;
+  max-width: 420px;
+  height: 36px;
+  border-radius: 10px;
+}
+.af-core .af-sk-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  margin-left: auto;
+}
+
+/* Content — a heading pair over a responsive card grid. Deliberately generic:
+   nine screens share this boundary and no single one of their layouts should be
+   promised before we know which one is arriving. */
+.af-core .af-sk-head {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 22px;
+}
+.af-core .af-sk-title {
+  width: min(260px, 60%);
+  height: 26px;
+  border-radius: 9px;
+}
+.af-core .af-sk-sub {
+  width: min(380px, 85%);
+  height: 13px;
+  border-radius: 6px;
+}
+.af-core .af-sk-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 14px;
+}
+.af-core .af-sk-card {
+  height: 148px;
+  border-radius: 14px;
+}
+
+/*
+ * The one thing a screen reader should get. Visually hidden rather than
+ * `display: none`, which would take it out of the accessibility tree along with
+ * the pixels and announce nothing at all.
+ */
+.af-core .af-sk-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/*
+ * ⚠ ITS OWN TOP-LEVEL @media, NOT NESTED — same reason as the header note.
+ * A sweeping gradient across two dozen blocks is exactly the large-area motion
+ * this query exists to suppress; the blocks keep their resting colour.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .af-core .af-sk-block {
+    animation: none;
+    background-image: none;
+  }
+}
