@@ -336,6 +336,61 @@ export function mergeCanonicalBundleIntoLeagueSettingsJson(
   }
 }
 
+/**
+ * Republish the canonical settings slices on a SCHEDULED REFRESH — IMP-02.
+ *
+ * 🛑 THE DEFECT: initial import merged a full `CanonicalImportBundle` into `League.settings`,
+ * but the scheduled `league_state` writer merged only `buildImportedLeagueSettings(normalized)`
+ * and then RE-ASSERTED `importCanonical` and `snapshotVersion` from the existing row. So the
+ * raw imported values tracked the source while the canonical slices — `scoringSettings`,
+ * `rosterSettings`, `waiverSettings`, `playoffSettings`, `conceptRules` — stayed frozen at
+ * import time, forever. Commissioner rule intelligence reads exactly those slices.
+ *
+ * The visible result is the one the audit names: a league whose roster is current and whose
+ * SCORING is whatever it was on import day. Nothing errors; the numbers are simply wrong, and
+ * they get more wrong the longer the league is connected.
+ *
+ * ⚠ SOURCE-DERIVED SLICES ARE REPUBLISHED; ALLFANTASY'S OWN ARE NOT. `scoringSettings` and
+ * friends are FACTS ABOUT THE HOST LEAGUE and must track it. `visualTheme` and `mediaSettings`
+ * are AllFantasy-side presentation that a user may have set in-app, and the source has no
+ * opinion about them — republishing those would silently revert a user's own customisation on
+ * the next 30-minute tick. That asymmetry is the whole reason this is a separate function from
+ * `mergeCanonicalBundleIntoLeagueSettingsJson` rather than a reuse of it.
+ */
+export function republishCanonicalSettingsForRefresh(
+  existingSettings: Record<string, unknown>,
+  freshSettings: Record<string, unknown>,
+  bundle: CanonicalImportBundle,
+): Record<string, unknown> {
+  const snap = bundle.settingsSnapshot
+  const merged: Record<string, unknown> = { ...existingSettings, ...freshSettings }
+
+  /* Source-derived: the host league owns these, so a refresh must reflect what it now says. */
+  merged.snapshotVersion = SETTINGS_SNAPSHOT_VERSION
+  if (snap.rosterSettings !== undefined) merged.rosterSettings = snap.rosterSettings
+  if (snap.scoringSettings !== undefined) merged.scoringSettings = snap.scoringSettings
+  if (snap.draftSettings !== undefined) merged.draftSettings = snap.draftSettings
+  if (snap.waiverSettings !== undefined) merged.waiverSettings = snap.waiverSettings
+  if (snap.playoffSettings !== undefined) merged.playoffSettings = snap.playoffSettings
+  if (snap.conceptRules !== undefined) merged.conceptRules = snap.conceptRules
+
+  merged.importCanonical = {
+    presetKey: bundle.presetKey,
+    scoringPresetId: bundle.scoringPresetId,
+    draftType: bundle.draftType,
+    inferredConcept: bundle.inferredConcept,
+    /*
+     * When the effective rules were last republished from the source. A consumer that
+     * caches anything derived from these slices can invalidate on this changing, which is
+     * the "recompute affected values when the effective rules version changes" half of the
+     * repair — without it the slices are correct and every cache of them still is not.
+     */
+    republishedAt: new Date().toISOString(),
+  }
+
+  return merged
+}
+
 function mergeCanonicalBundleIntoSettings(
   normalized: NormalizedImportResult,
   bundle: CanonicalImportBundle,

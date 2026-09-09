@@ -32,7 +32,16 @@ export const FleaflickerAdapter: ILeagueImportAdapter<FleaflickerImportPayload> 
       imported_at: new Date().toISOString(),
     }
 
-    const teamsFlat = standings.divisions.flatMap((d) => d.teams.map((t) => ({ division: d.name, team: t })))
+    /*
+     * ⚠ A DIVISION CAN ARRIVE WITH NO `teams` ARRAY AT ALL, AND THE COMMITTED FIXTURE
+     * PROVES IT: `contracts/fleaflicker/fixtures/standings.NFL.json` carries three
+     * divisions and only the first has `teams`. `d.teams.map` threw on the second, so
+     * a real Fleaflicker league with an empty division could not be imported at all.
+     * An empty division is a legitimate league shape, not a malformed response.
+     */
+    const teamsFlat = (standings.divisions ?? []).flatMap((d) =>
+      (d.teams ?? []).map((t) => ({ division: d.name, team: t })),
+    )
     const rosterByTeamId = new Map<number, FleaflickerImportPayload['rosters']['rosters'][number]>()
     for (const r of rosters.rosters ?? []) {
       rosterByTeamId.set(r.team.id, r)

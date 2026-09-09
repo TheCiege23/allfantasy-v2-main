@@ -68,6 +68,8 @@ export const YahooAdapter: ILeagueImportAdapter<YahooImportPayload> = {
       taxi_ids: [],
       faab_remaining: team.faabBalance,
       waiver_priority: team.waiverPriority,
+      /* IMP-04 — a rejected roster request must not read as an empty roster. */
+      fetch_status: team.rosterFetchStatus,
     }))
 
     const statCategoryById = new Map(
@@ -193,10 +195,27 @@ export const YahooAdapter: ILeagueImportAdapter<YahooImportPayload> = {
           state: 'full',
           count: 1,
         },
-        currentRosters: {
-          state: rosters.length > 0 ? 'full' : 'missing',
-          count: rosters.length,
-        },
+        /*
+         * 🛑 IMP-04 — COVERAGE MUST MEASURE SUCCESSFUL FETCHES, NOT TEAM RECORDS.
+         *
+         * `rosters.length` counts the teams we know about, every one of which gets a
+         * roster entry even when its fetch rejected. So eleven of twelve teams loading
+         * still reported `full`, and removal reconciliation trusts that claim — meaning
+         * a transient failure on one team could be read as "these players are gone".
+         * Completeness has to be established before reconciliation, not assumed.
+         */
+        currentRosters: (() => {
+          const failed = raw.failedRosterTeamKeys ?? []
+          if (rosters.length === 0) return { state: 'missing' as const, count: 0 }
+          if (failed.length > 0) {
+            return {
+              state: 'partial' as const,
+              count: rosters.length - failed.length,
+              note: `${failed.length} of ${rosters.length} team roster requests failed; those teams' stored rosters were left unchanged.`,
+            }
+          }
+          return { state: 'full' as const, count: rosters.length }
+        })(),
         historicalRosterSnapshots: {
           state: raw.previousSeasons.length > 0 ? 'partial' : 'missing',
           count: raw.previousSeasons.length,

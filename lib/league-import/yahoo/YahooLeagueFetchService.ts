@@ -249,7 +249,8 @@ function createImportTeam(
   teamKey: string,
   standing: YahooStandingDetails | undefined,
   metadata: YahooTeamMetadata | undefined,
-  roster: ReturnType<typeof parseYahooRoster>
+  roster: ReturnType<typeof parseYahooRoster>,
+  rosterFetchStatus: YahooImportTeam['rosterFetchStatus'] = 'fetched'
 ): YahooImportTeam {
   const manager = metadata ?? standing
   return {
@@ -273,6 +274,7 @@ function createImportTeam(
     starterPlayerIds: roster.starterIds,
     reservePlayerIds: roster.reserveIds,
     playerMap: roster.playerMap,
+    rosterFetchStatus,
   }
 }
 
@@ -1042,14 +1044,31 @@ export async function fetchYahooLeagueForImport(
     }
   }
 
-  const teams: YahooImportTeam[] = teamKeys.map((teamKey) =>
-    createImportTeam(
+  /*
+   * 🛑 IMP-04 — A REJECTED ROSTER FETCH IS NOT AN EMPTY ROSTER.
+   *
+   * `Promise.allSettled` above deliberately keeps one team's failure from sinking the
+   * whole import, which is right. What was wrong is what happened next: the missing entry
+   * fell through to an empty-arrays placeholder, and every consumer downstream — including
+   * the writer that replaces `Roster` rows — read that as "this team has nobody". One
+   * timed-out request out of twelve could therefore clear a real roster, and the league
+   * still reported itself fully current.
+   *
+   * The placeholder is still supplied so the shape is uniform, but the team now carries
+   * the reason, and league-level roster coverage below degrades to `partial`.
+   */
+  const failedRosterTeamKeys = teamKeys.filter((teamKey) => !rostersByTeamKey.has(teamKey))
+
+  const teams: YahooImportTeam[] = teamKeys.map((teamKey) => {
+    const roster = rostersByTeamKey.get(teamKey)
+    return createImportTeam(
       teamKey,
       standingsByTeamKey.get(teamKey),
       metadataByTeamKey.get(teamKey),
-      rostersByTeamKey.get(teamKey) ?? { playerIds: [], starterIds: [], reserveIds: [], playerMap: {} }
+      roster ?? { playerIds: [], starterIds: [], reserveIds: [], playerMap: {} },
+      roster ? 'fetched' : 'failed'
     )
-  )
+  })
 
   const scheduleByWeek = new Map<number, YahooImportScheduleWeek['matchups']>()
   if (expectedScheduleWeeks.length > 0) {
@@ -1149,6 +1168,7 @@ export async function fetchYahooLeagueForImport(
     previousSeasons,
     viewerTeamKey,
     commissionerTeamKeys,
+    failedRosterTeamKeys,
   }
 }
 
