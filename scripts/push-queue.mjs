@@ -811,6 +811,32 @@ function ticketFor(dir, sha, ctx, { create = true } = {}) {
     let signal = null
     const inherited = live.find((t) => {
       if (t.sha === sha) return false
+      /*
+       * 🛑 NEVER REBIND BACKWARDS. Patch-id equality is DIRECTION-BLIND: a
+       * rebase leaves the old and new commits with the same patch-id, so the
+       * test that recognises "my work under a new name" recognises the reverse
+       * just as happily and walks the ticket back to the name it already left.
+       *
+       * That is not hypothetical. A `wait` loop holds the sha it was LAUNCHED
+       * with and re-enters `ticketFor` every few seconds. Rebase, `rebind`, and
+       * the still-running wait silently undoes it on its next tick — measured
+       * 2026-09-09 on #000313, where `rebind` printed "now covers 482669cfb;
+       * place kept" and the ticket file read `66621d0fb` moments later. The
+       * status view showed the stale sha, which reads as a display quirk rather
+       * than a lost rebind.
+       *
+       * ⚠ AND THE REVERT COSTS MORE THAN THE SHA. The branch below also sets
+       * `state = 'waiting'` and deletes `allowedAt`, so a stale process can
+       * DEMOTE a ticket that had already been waved through — losing a turn the
+       * holder waited half an hour for.
+       *
+       * Ancestry cannot settle the direction either: a rebase produces a
+       * SIBLING, so `--is-ancestor` answers "no" both ways (this file's own
+       * rebind note records the measurement). The ticket's own history can,
+       * because it is the one party that knows which names it has already
+       * carried.
+       */
+      if (Array.isArray(t.shaHistory) && t.shaHistory.includes(sha)) return false
       // 🛑 PATCH-ID MATCHES ACROSS WORKTREES; ANCESTRY DOES NOT.
       // The prescribed recovery from a stale base is `git worktree add --detach
       // <tmp> origin/main && git cherry-pick <sha>` — which rebuilds the commit
@@ -835,6 +861,12 @@ function ticketFor(dir, sha, ctx, { create = true } = {}) {
     })
     if (inherited) {
       const was = inherited.sha
+      /* The names this ticket has already carried, so the guard above can
+         refuse to walk it back to one of them. Append-only and bounded — a
+         ticket that rebinds more than a handful of times has a bigger problem
+         than its history array. */
+      const priorShas = Array.isArray(inherited.shaHistory) ? inherited.shaHistory : []
+      inherited.shaHistory = [...priorShas, was].slice(-20)
       inherited.sha = sha
       inherited.state = 'waiting'
       delete inherited.allowedAt
@@ -970,8 +1002,27 @@ function cmdCheck() {
 function cmdTake(argv) {
   const dir = resolveDir()
   if (!dir) allow('no queue directory')
-  const ctx = describeContext()
-  const sha = argFor(argv, '--sha') || ctx.sha
+  /*
+   * ⚠ RESOLVE `--sha` BEFORE BUILDING THE CONTEXT, OR THE LABEL DESCRIBES THE
+   * CALLER'S HEAD. `describeContext` derives `subject` from the sha it is
+   * given and falls back to HEAD when given nothing, and `ticketFor` writes
+   * that subject as the ticket's label — so calling it bare labelled every
+   * `take --sha` ticket with whatever this checkout happened to be sitting on.
+   *
+   * Measured 2026-09-09: tickets #313, #314 and #317 — three sessions, not
+   * consecutive — all displayed "feat(core): the league rail said …", which was
+   * the commit of none of them. #313 is the one traced end to end: its label
+   * was the subject of HEAD in the checkout that ran `take`, not of the sha it
+   * was queued for. The queue is how ~9 sessions see what is landing, so a
+   * wrong label is not cosmetic — it is the queue confidently describing
+   * someone else's work.
+   *
+   * This is the invariant `describeContext`'s own header already states; only
+   * `cmdPush` was honouring it.
+   */
+  const argSha = argFor(argv, '--sha')
+  const ctx = describeContext(argSha)
+  const sha = argSha || ctx.sha
   if (!sha) allow('cannot resolve a sha to queue')
   const { degraded, reason, live, mine, created } = ticketFor(dir, sha, ctx)
   if (degraded) allow(reason)
@@ -1097,6 +1148,16 @@ function cmdRebind(argv) {
   }
 
   const was = t.sha
+  /*
+   * ⚠ RECORD THE NAME WE ARE LEAVING, OR THIS REBIND CAN BE UNDONE SECONDS
+   * LATER. `ticketFor` rebinds on patch-id equality, which is direction-blind,
+   * so any still-running `wait` or `check` holding the OLD sha will walk the
+   * ticket straight back. The guard there reads this list; an explicit rebind
+   * that does not append to it is the one path that stays vulnerable — and it
+   * is the path a human takes precisely when they know the sha changed.
+   */
+  const priorShas = Array.isArray(t.shaHistory) ? t.shaHistory : []
+  t.shaHistory = [...priorShas, was].slice(-20)
   t.sha = to
   t.state = 'waiting'
   delete t.allowedAt
@@ -1284,8 +1345,11 @@ function cmdReap() {
 async function cmdWait(argv) {
   const dir = resolveDir()
   if (!dir) allow('no queue directory')
-  const ctx = describeContext()
-  const sha = argFor(argv, '--sha') || ctx.sha
+  /* Same reason as `cmdTake` — `wait` also reaches `ticketFor`, which writes
+     `ctx.subject` as the label whenever it creates or rebinds a ticket. */
+  const argSha = argFor(argv, '--sha')
+  const ctx = describeContext(argSha)
+  const sha = argSha || ctx.sha
   const timeoutMs = Number(argFor(argv, '--timeout-min') || 0) * 60_000 || WAIT_TIMEOUT_MS
   const started = now()
   let lastPosition = -1
