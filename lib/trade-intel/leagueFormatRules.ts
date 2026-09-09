@@ -67,6 +67,14 @@ export type FormatRules = {
   keeperRoundPenalty: number | null
   keeperCostSystem: string | null
   maxKeepers: number | null
+  /**
+   * Why this league was or was not classified as keeper.
+   *
+   * Non-null does NOT mean `concept === 'keeper'` — a league that deliberately
+   * set `keeperCount: 0` has `configured_value` evidence and is a redraft
+   * league. It records that somebody decided, not what they decided.
+   */
+  keeperEvidence: KeeperEvidence
   notes: string[]
 }
 
@@ -126,6 +134,104 @@ export const FORMAT_ALIASES: ReadonlySet<string> = new Set([
 export const MODIFIER_ALIASES: ReadonlySet<string> = new Set(['idp'])
 
 /**
+ * The Prisma column defaults on `League`, verbatim from `prisma/schema.prisma`.
+ *
+ * 🛑 EVERY LEAGUE ROW CARRIES A KEEPER POLICY WHETHER OR NOT ANYONE CHOSE ONE.
+ * `keeperCount @default(3)`, `keeperCostSystem @default("round_based")`,
+ * `keeperRoundPenalty @default(1)`. So `keeperCount > 0` is TRUE on essentially
+ * every row in the database, including redraft leagues with no keepers at all —
+ * which is why the concept chain below cannot use it as evidence on its own.
+ *
+ * ⚠ ONE DEFINITION SITE. `lib/league-rules/resolveLeagueRules.ts` imports these
+ * rather than keeping its own copy: two implementations of one rule is the bug,
+ * and a second copy would drift the moment the schema moves.
+ *
+ * ⚠ MIRRORS THE SCHEMA AND WILL DRIFT IF THE SCHEMA CHANGES.
+ * `__tests__/league-rules/conceptCatalog.test.ts` parses `schema.prisma` and
+ * fails when they disagree, so the drift is loud rather than silent.
+ */
+export const LEAGUE_COLUMN_DEFAULTS = {
+  keeperCount: 3,
+  keeperCostSystem: 'round_based',
+  keeperRoundPenalty: 1,
+} as const
+
+/**
+ * Why a league was — or was not — classified as a keeper league.
+ *
+ * Returned on `FormatRules` so a consumer can say *why*, and so a test can pin
+ * WHICH signal fired rather than only that the answer came out right. A test
+ * asserting the concept alone passes with either branch deleted.
+ */
+export type KeeperEvidence =
+  /** `leagueType` (or a format alias) is literally `keeper`. */
+  | 'explicit_concept'
+  /**
+   * A durable keeper column is distinguishable from its schema default, so
+   * somebody wrote it: an importer that received the value from the provider, a
+   * commissioner, or the create wizard.
+   */
+  | 'configured_value'
+  /**
+   * The caller asserted it — a confirmed canonical settings snapshot, or a
+   * provider payload that carried the setting explicitly.
+   */
+  | 'caller_confirmed'
+  /** No evidence. NOT a keeper league, whatever `keeperCount` reads. */
+  | null
+
+/**
+ * Whether this row proves somebody intentionally configured keepers.
+ *
+ * 🛑 PRODUCT DECISION, 2026-09-09: AN UNTOUCHED `keeperCount = 3` MEANS
+ * "UNCONFIRMED", NOT "THREE KEEPERS." Before this, the concept chain read
+ * `redraft && keeperCount > 0` as a keeper league — and because the column
+ * defaults to 3, every league whose platform reported no `max_keepers` was
+ * silently priced as a keeper league. `ImportedLeagueCommitService.setIfNum`
+ * only writes the column when the provider sends a number, so "the platform
+ * told us nothing" and "the platform told us three" were indistinguishable.
+ *
+ * ⚠ A LEAGUE SITTING ON ALL THREE DEFAULTS READS AS UNCONFIRMED EVEN IF IT
+ * GENUINELY HAS THREE KEEPERS, and that is the accepted cost. From the row
+ * alone the two are identical, so the choice is which way to be wrong: pricing
+ * a redraft league as keeper corrupts the valuation of every deal in it, while
+ * declining to price an unconfirmed keeper league costs a keeper adjustment
+ * that the commissioner can restore by setting any keeper field. Callers with
+ * better information pass `keeperSettingsConfirmed`.
+ */
+export function keeperEvidenceFor(league: {
+  leagueType?: string | null
+  keeperCount?: number | null
+  keeperCostSystem?: string | null
+  keeperRoundPenalty?: number | null
+  keeperSettingsConfirmed?: boolean | null
+}): KeeperEvidence {
+  if (String(league.leagueType ?? '').trim().toLowerCase() === 'keeper') return 'explicit_concept'
+  if (league.keeperSettingsConfirmed === true) return 'caller_confirmed'
+
+  /*
+   * ⚠ ANY of the three differing is enough, not all three. A commissioner who
+   * sets `maxKeepers: 5` and leaves the cost system alone has configured
+   * keepers just as deliberately as one who changes all three.
+   *
+   * ⚠ AND `keeperCount: 0` COUNTS AS EVIDENCE — of the opposite. It differs
+   * from the default, so it was chosen; the `keeperCount > 0` test at the call
+   * site is what then keeps the league out of the keeper branch. Evidence means
+   * "somebody decided", not "somebody decided yes".
+   */
+  const c = league.keeperCount
+  if (typeof c === 'number' && c !== LEAGUE_COLUMN_DEFAULTS.keeperCount) return 'configured_value'
+  const cs = league.keeperCostSystem
+  if (typeof cs === 'string' && cs.length > 0 && cs !== LEAGUE_COLUMN_DEFAULTS.keeperCostSystem) {
+    return 'configured_value'
+  }
+  const rp = league.keeperRoundPenalty
+  if (typeof rp === 'number' && rp !== LEAGUE_COLUMN_DEFAULTS.keeperRoundPenalty) return 'configured_value'
+
+  return null
+}
+
+/**
  * Read the format from the league row.
  *
  * Prefers the explicit `leagueType` because it is the canonical concept id.
@@ -151,6 +257,16 @@ export function readFormatRules(league: {
    * redraft league and silently drops everything that makes the format itself.
    */
   aliasTags?: string[] | null
+  /**
+   * The caller has independent proof the keeper settings were intentionally
+   * chosen — a confirmed canonical settings snapshot, or a provider payload
+   * that carried `max_keepers` explicitly.
+   *
+   * ⚠ ABSENT MEANS UNCONFIRMED, NOT "ASSUME YES". That default is the whole
+   * fix: every existing caller passes nothing, and every existing caller
+   * therefore stops pricing an untouched redraft league as a keeper league.
+   */
+  keeperSettingsConfirmed?: boolean | null
 }): FormatRules {
   const alias = (league.aliasTags ?? []).map((t) => String(t).trim().toLowerCase())
   /*
@@ -165,6 +281,12 @@ export function readFormatRules(league: {
   const formatAlias = alias.find((t) => FORMAT_ALIASES.has(t)) ?? null
   const raw = (formatAlias ?? league.leagueType ?? '').trim().toLowerCase()
   const keeperCount = league.keeperCount ?? 0
+  /*
+   * Computed off `raw` rather than `league.leagueType` so a format ALIAS of
+   * `keeper` would count as an explicit concept too, the same way the chain
+   * below reads the alias first and the column second.
+   */
+  const keeperEvidence = keeperEvidenceFor({ ...league, leagueType: raw })
 
   const baseConcept: LeagueConcept =
     raw === 'king_of_the_hill' || raw === 'koth'
@@ -181,7 +303,22 @@ export function readFormatRules(league: {
                 ? 'guillotine'
                 : raw === 'dynasty' || raw === 'royal' || (raw === '' && league.isDynasty)
                   ? 'dynasty'
-                  : raw === 'keeper' || (raw === 'redraft' && keeperCount > 0)
+                  : /*
+                     * 🛑 `keeperCount > 0` IS NOT EVIDENCE ON ITS OWN — the column
+                     * defaults to 3, so it is true of essentially every row in the
+                     * database. Requiring `keeperEvidence` is the 2026-09-09 product
+                     * decision: an untouched default means UNCONFIRMED, not "three
+                     * keepers", and an unconfirmed league must not reach the keeper
+                     * branch, because that branch is what activates `keeperSurplus`
+                     * (via lib/trade-value/formats/registry.ts, which selects on this
+                     * very field) and `keeperDriftNote` (via tradeContextNotes'
+                     * `rules.concept !== 'keeper'` gate). Both are pricing, not wording.
+                     *
+                     * ⚠ `raw === 'keeper'` STILL WINS UNCONDITIONALLY. An explicit
+                     * concept is its own evidence, so an AllFantasy-created keeper
+                     * league is unaffected however its columns read.
+                     */
+                    raw === 'keeper' || (raw === 'redraft' && keeperCount > 0 && keeperEvidence !== null)
                     ? 'keeper'
                     : raw === 'redraft' || raw === 'idp' || raw === ''
                       ? 'redraft'
@@ -346,6 +483,7 @@ export function readFormatRules(league: {
     keeperRoundPenalty: penalty,
     keeperCostSystem: league.keeperCostSystem ?? null,
     maxKeepers: keeperCount > 0 ? keeperCount : null,
+    keeperEvidence,
     notes,
   }
 }

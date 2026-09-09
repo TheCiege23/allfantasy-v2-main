@@ -28,13 +28,26 @@ describe('keeper — a contract, not a player', () => {
   const adjust = (costRound: number, over: Record<string, unknown> = {}) =>
     keeperModel.adjust({ ...base, ...over, assetState: { costRound } })
 
-  it('resolves by leagueType and by keeperCount on a redraft league', () => {
+  it('resolves by leagueType and by a CONFIGURED keeperCount on a redraft league', () => {
     expect(formatModelFor('keeper')).toBe(keeperModel)
     /*
-     * `readFormatRules` folds `redraft + keeperCount > 0` into the keeper concept — real format
-     * knowledge the registry defers to rather than re-deriving.
+     * `readFormatRules` folds `redraft + a configured keeper count` into the keeper concept — real
+     * format knowledge the registry defers to rather than re-deriving.
+     *
+     * ⚠ WAS 3, WHICH IS THE COLUMN DEFAULT. That made this assertion true of every league in the
+     * database, so the keeper VALUATION MODEL was being selected for redraft leagues nobody had
+     * configured. 4 is a value somebody must have written.
      */
-    expect(formatModelForLeague({ leagueType: 'redraft', keeperCount: 3 })).toBe(keeperModel)
+    expect(formatModelForLeague({ leagueType: 'redraft', keeperCount: 4 })).toBe(keeperModel)
+  })
+
+  it('🛑 does NOT select the keeper model from the bare column default', () => {
+    /*
+     * This is the pricing half of the 2026-09-09 decision. `keeperModel` applies a
+     * market-minus-contract discount; applying it to a league with no keepers reprices every
+     * asset in it. The classifier is the single gate — this asserts the gate holds here.
+     */
+    expect(formatModelForLeague({ leagueType: 'redraft', keeperCount: 3 })).not.toBe(keeperModel)
   })
 
   it('🛑 a CHEAPER keeper is worth more than the same player at a dearer price', () => {
