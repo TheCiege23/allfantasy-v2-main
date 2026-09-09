@@ -1575,8 +1575,24 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       ? parseScreenshotWithVision(imageFile, message)
       : Promise.resolve(undefined)
   const insightTask: Promise<{ summary?: string; sources: string[] } | undefined> =
-    leagueId && insightType
-      ? getInsightBundle(leagueId, insightType, {
+    /*
+     * 🛑 THE AUTHORIZED SNAPSHOT, NOT THE REQUEST FIELD. This read `leagueId &&
+     * insightType`, and `leagueId` is `formData.get('leagueId')` — a client
+     * claim. `getInsightBundle` declares no `userId` at all
+     * (lib/ai-simulation-integration/AIInsightRouter.ts contains zero
+     * occurrences of one), so it read matchup predictions, playoff odds,
+     * warehouse summaries and a league settings summary for whatever id it was
+     * handed, and the result went into the prompt.
+     *
+     * ⚠ THE EARLIER REFUSAL DID NOT COVER IT. `requiresLeagueGrounding` forces
+     * grounding for `insightType` of trade / waiver / dynasty — three of the six
+     * values `InsightType` has. For `matchup`, `playoff` and `draft` with no
+     * `teamId` and a message tripping none of the phrase patterns, nothing
+     * refused and the raw id flowed through. Reading `leagueSnapshot.id` closes
+     * it by construction: that id exists only because membership proved it.
+     */
+    leagueSnapshot && insightType
+      ? getInsightBundle(leagueSnapshot.id, insightType, {
           teamId,
           season,
           week,
