@@ -1335,10 +1335,12 @@ export async function buildDecisionOsGroundingPacket(
    * `loadWaiverWorldFacts` does not load. A packet has no browser. `waiver/packetInput.ts` is that
    * assembly, built on the same pool loader the waiver page's own route calls.
    *
-   * ⚠ THE KILL SWITCH MATTERS MORE HERE THAN ANYWHERE ELSE IN THIS FILE. This slice reads the
-   * league's rosters, the sport's player pool and the asker's roster before running an engine,
-   * inside a 3s ceiling. `waiverDecision` is its own killable feed precisely so an operator can
-   * drop it without dropping the packet.
+   * 🛑 AND IT IS NOT REQUESTED BY THE CHAT ROUTE, MEASURED RATHER THAN ASSUMED. At ~6.6 s median
+   * against a real 12-team league it is the critical path and roughly twice the route's 3 s ceiling,
+   * so `intentToWant.ts` maps the waiver intent to `false` and carries the numbers. The producer is
+   * correct and reachable — the admin proof surface asks for it explicitly — it simply cannot ride
+   * a chat turn until it is faster. Fixing that is what earns the mapping back; requesting it first
+   * only re-buys the latency.
    */
   const waiverDecisionSlice = await pWaiverDecision
   const waiverDecision: GroundedSlice<DecisionFact> = waiverDecisionKill

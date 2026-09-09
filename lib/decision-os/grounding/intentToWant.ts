@@ -16,18 +16,13 @@ import type { GroundingPacketArgs } from '@/lib/decision-os/grounding/packet'
  * 🛑 THAT IS NO LONGER WHY IT IS HERE: it has a producer as of `waiver/packetInput.ts`, and this
  * mapping is now what makes a waiver question actually get a claim recommendation.
  *
- * 🛑 AND ITS COST HAS THEREFORE CHANGED, UNMEASURED. The 2026-09-07 profile below recorded the
- * waiver intent at 1,004 ms — with this slice resolving instantly to a `no_producer` gap that read
- * nothing. The producer reads the league's rosters, the sport's player pool and the asker's roster
- * before an engine runs, so that figure no longer describes this intent and MUST be re-measured
- * against a real league before this mapping is trusted in production. Both `false` entries below
- * exist because a slice that pushes the build past the route's 3s ceiling discards the WHOLE
- * packet — if waiver lands in that territory, this line belongs with them, and
- * `DECISION_OS_FEED_waiverDecision=off` is the switch that settles it without a deploy.
+ * 🛑 AND IT WAS MEASURED, AND IT IS NOW THE THIRD `false`. See its own note below. The producer is
+ * correct and stays; what is switched off is asking for it on every waiver turn.
  *
- * ⚠ AND IT MUST STAY OPT-IN. The slice is only built when the intent asked for it; on every other
- * turn it is `not_requested` and never renders — which now saves an engine run rather than saving
- * a line of prose.
+ * ⚠ THE SLICE IS STILL OPT-IN AND THAT STILL MATTERS. With all three mappings false the only way
+ * to request one is an explicit `want`, which is exactly what the admin proof surface does — so the
+ * slices remain reachable, measurable and reviewable without being on the critical path of a chat
+ * turn.
  *
  * `idpKicker` remains excluded: its own doc comment names it "the one slice that cannot join the
  * concurrent wave" — a serialized second hop with its own cost profile — and turning it on for
@@ -135,6 +130,41 @@ export function deriveWantFromIntent(intent: ChimmyOrchestrationIntent): IntentD
      * re-buys the drop.
      */
     rosterValueGrade: false,
-    waiverDecision: intent === 'waiver',
+    /*
+     * 🛑 FALSE, AND UNLIKE THE TWO ABOVE THIS ONE WAS MEASURED THE DAY ITS PRODUCER LANDED —
+     * 2026-09-08. The slice had no producer until then; the 1,004 ms recorded for the waiver intent
+     * above was this slice resolving instantly to a `no_producer` gap that read nothing, so it never
+     * described a real waiver build.
+     *
+     * Profiled through `/api/admin/decision-os/grounding-proof` (which mirrors this router) against
+     * a real 12-team SF dynasty league, warm, median of 3:
+     *
+     *     general  2,979 ms      waiver  7,251 ms   (waiverDecision slice 7,242 ms)
+     *     best warm run:                  6,155 ms  (slice 6,147 ms)
+     *
+     * ⚠ THE SLICE IS THE CRITICAL PATH, NOT A CONTRIBUTOR. `kick()` measures elapsed from the start
+     * of the concurrent wave, so a slice whose ms is within 10 of the packet total is the last thing
+     * finishing and everything else is already done waiting on it. It adds ~4 s over the base packet.
+     *
+     * ⚠ AND THE OBVIOUS OPTIMISATION WAS TRIED AND IS NOT THE FIX — recorded so nobody re-derives it.
+     * `loadLeaguePlayerPool` was serializing every available player through
+     * `serializeUnifiedPlayerForApi` (canonical player + metadata + intelligence + game context +
+     * live scoring, per row) when the engine uses sixty. Capping the serialize at the candidate limit
+     * moved the median 7,251 -> 6,663 ms: real, worth keeping, and about 8%. The cost is elsewhere —
+     * the pool resolver's full-table fetch-and-dedupe, the all-rosters read, or the engine itself —
+     * and finding it is the work that earns this mapping back.
+     *
+     * So it fails the same test `lineupDecision` (37 s) and `rosterValueGrade` (4.6 s) failed: the
+     * route's 3 s ceiling is a `Promise.race` that abandons the result without cancelling the work,
+     * so requesting a slice that routinely lands over it costs the user 3 s of latency, costs the
+     * database the full 6 s of reads, and delivers the same empty prompt section as not asking.
+     *
+     * ⚠ MEASURED ON A LOCAL DEV SERVER AGAINST THE PRODUCTION DATABASE, so compute is slower than
+     * production while the data volume — which dominates a read-bound slice — is identical. Treat
+     * ~6.1 s as a FLOOR rather than the exact production figure. The conclusion survives that
+     * caveat: the floor is already twice the ceiling, so production would need a >2x speedup to
+     * change the answer, which is a fix rather than a measurement error.
+     */
+    waiverDecision: false,
   }
 }

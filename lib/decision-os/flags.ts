@@ -105,7 +105,9 @@ export type DecisionOsFeed =
    * turn out to cost more than the budget, and `DECISION_OS_FEED_waiverDecision=off` is then the
    * difference between shedding one slice and losing the packet.
    *
-   * ⚠ ITS COST IS UNMEASURED AGAINST A REAL LEAGUE. Until it is, this switch is the mitigation.
+   * ⚠ MEASURED 2026-09-08: ~6.6 s median against a real 12-team league, against a 3 s ceiling — so
+   * the intent router no longer requests it on a waiver turn (`intentToWant.ts` carries the numbers).
+   * This switch is what an operator uses if a future caller asks for it and regrets it.
    */
   | 'waiverDecision'
 

@@ -56,6 +56,23 @@ export interface LeaguePlayerPoolOptions {
   poolLimit?: number
   position?: string
   teamId?: string
+  /**
+   * Cap the number of AVAILABLE players serialized, applied after the rostered filter.
+   *
+   * 🛑 THE SERIALIZATION IS THE COST, NOT THE QUERY — measured 2026-09-08. `serializeUnifiedPlayerForApi`
+   * builds the full unified snapshot per row: canonical NFL redraft player, display metadata, player
+   * intelligence, game context, live scoring context. A caller that needs sixty names, positions and
+   * injury statuses was paying for several hundred of those.
+   *
+   * ⚠ IT MUST BE APPLIED AFTER THE ROSTERED FILTER AND NEVER BY LOWERING `poolLimit`. The pool is
+   * ADP-ordered, so its head is mostly rostered players; capping the INPUT returns a wire of scraps,
+   * while capping the OUTPUT returns the true top of the wire. They are not interchangeable and the
+   * cheap-looking one is wrong.
+   *
+   * Omitted by the route on purpose — the waiver page renders and filters the whole wire client-side,
+   * so truncating it there would silently shorten a list a user scrolls.
+   */
+  maxPlayers?: number
 }
 
 export interface LeaguePlayerPoolResult {
@@ -100,7 +117,16 @@ export async function loadLeaguePlayerPool(
     )
   })
 
-  const availablePlayerIds = available
+  /*
+   * ⚠ CAP BEFORE THE AUGMENT LOOKUP AND THE SERIALIZE, not after. Both scale with row count, and a
+   * caller that wanted sixty was paying for every available player in the sport.
+   */
+  const capped =
+    options.maxPlayers != null && options.maxPlayers >= 0
+      ? available.slice(0, options.maxPlayers)
+      : available
+
+  const availablePlayerIds = capped
     .map((p: any) => (p.player_id == null ? null : String(p.player_id)))
     .filter((id: string | null): id is string => Boolean(id))
 
@@ -128,7 +154,7 @@ export async function loadLeaguePlayerPool(
     sportsPlayerRows.map((row: any) => [String(row.id), row]),
   )
 
-  const players = available.map((p: any) =>
+  const players = capped.map((p: any) =>
     serializeUnifiedPlayerForApi(
       normalizePoolRowToUnified(p, sport, {
         augment: {

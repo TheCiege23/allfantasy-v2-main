@@ -106,20 +106,42 @@ describe('R2/R3.1/R3.3/R4b.5 intent router — deriveWantFromIntent', () => {
   })
 
   /**
-   * ⚠ THIS ASSERTION WAS INVERTED DELIBERATELY, AND THE REASON IS NOT "waiver works now".
+   * 🛑 INVERTED TWICE, AND THE SECOND INVERSION IS NOT THE FIRST ONE UNDONE.
    *
-   * It still has no producer. But the slice now returns an honest `no_producer` gap that names
-   * the missing input (the available-player pool) and points at the waiver surface that can
-   * answer — so requesting it gives the model something to be honest ABOUT. Unmapped, a waiver
-   * question got no waiver fact and no explanation, which is the silence D8 exists to prevent.
+   * It was turned ON when the slice had no producer, because an honest `no_producer` gap naming
+   * the missing input gave the model something to be honest ABOUT — better than silence.
+   *
+   * It is now OFF because the producer LANDED and was measured: ~6.6 s median against a real
+   * 12-team league, against the chat route's 3 s ceiling, with the slice as the critical path.
+   * The ceiling is a `Promise.race` that abandons the result without cancelling the work, so
+   * requesting it costs the user 3 s, costs the database the full 6 s, and delivers the same empty
+   * section as not asking. `intentToWant.ts` carries the numbers.
+   *
+   * ⚠ SO THIS TEST NOW PINS "ALL FIVE OFF FOR A WAIVER TURN", which reads like a test asserting
+   * nothing. It is not: it is the assertion that the most expensive slice in the packet is not
+   * being requested by the highest-traffic path to it, and it goes red the moment somebody
+   * restores the mapping without doing the performance work first.
    */
-  it('waiver turns on waiverDecision — which answers with an honest gap, not a decision', () => {
+  it('waiver turns on NOTHING — the producer exists but is ~2x over the route ceiling', () => {
     const w = deriveWantFromIntent('waiver')
-    expect(w.waiverDecision).toBe(true)
+    expect(w.waiverDecision).toBe(false)
     expect(w.lineupDecision).toBe(false)
     expect(w.commissionerHealthDecision).toBe(false)
     expect(w.psychologyConsistency).toBe(false)
     expect(w.rosterValueGrade).toBe(false)
+  })
+
+  /**
+   * The same structural guard `lineupDecision` and `rosterValueGrade` already carry, and it earns
+   * its place here for a reason those two do not have: this slice WORKS. A restore of
+   * `intent === 'waiver'` produces correct waiver advice in every test and every manual check —
+   * the only thing wrong with it is that it takes ~6.6 s, which no assertion about CONTENT can
+   * see. Without this, reddening one test reads like a stale expectation to update.
+   */
+  it('NO intent asks for waiverDecision, on any path', () => {
+    for (const intent of ALL_INTENTS) {
+      expect(deriveWantFromIntent(intent).waiverDecision).toBe(false)
+    }
   })
 
   it('every other intent (trade, draft, matchup, league_strength, bracket, injury, weather, story_recap, general) turns on nothing', () => {

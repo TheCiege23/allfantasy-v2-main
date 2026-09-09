@@ -80,13 +80,18 @@ export async function buildWaiverPacketInput(args: {
   const { facts, leagueId } = args
 
   const [pool, rosterRow] = await Promise.all([
-    loadLeaguePlayerPool(leagueId, facts.sport, { poolLimit: POOL_LIMIT }),
+    loadLeaguePlayerPool(leagueId, facts.sport, { poolLimit: POOL_LIMIT, maxPlayers: CANDIDATE_LIMIT }),
     (prisma as any).roster.findUnique({
       where: { id: facts.rosterId },
       select: { playerData: true },
     }),
   ])
 
+  /*
+   * The loader already capped at `CANDIDATE_LIMIT`, so this slice is a belt-and-braces no-op that
+   * keeps the cap true if the loader's option is ever dropped. `availableCount` below therefore
+   * reports the capped count, not the whole wire — named accordingly.
+   */
   const candidates = pool.players.slice(0, CANDIDATE_LIMIT)
   if (candidates.length === 0) return null
 
