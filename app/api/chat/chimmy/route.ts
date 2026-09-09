@@ -73,6 +73,7 @@ import { buildTradeContextForChimmy } from '@/lib/chimmy-trade/tradeChimmyGround
 import { buildPendingTradeDecisionContext } from '@/lib/chimmy-trade/pendingTradeDecisionGrounding'
 import { buildLeagueTradeHistoryContext } from '@/lib/chimmy-trade/leagueTradeHistoryGrounding'
 import { buildLeagueStandingsContext } from '@/lib/chimmy/leagueStandingsGrounding'
+import { buildLeagueRulesGrounding } from '@/lib/chimmy/leagueRulesGrounding'
 import { buildHeadToHeadGrounding } from '@/lib/chimmy/headToHeadGrounding'
 import { buildDescribedTradeContext } from '@/lib/chimmy-trade/describedTradeEvaluator'
 import { buildDraftContext } from '@/lib/chimmy/draftGrounding'
@@ -2302,6 +2303,39 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
           }
 
           // Inject specialty league context for tournament and Big Brother leagues
+          /*
+           * ⚠ RULE GROUNDING RUNS FIRST, AND OFF `leagueSnapshot` RATHER THAN
+           * `planInput.leagueId`. The snapshot is the row `loadLeagueGroundingForUser`
+           * already proved this user is a member of; `planInput.leagueId` is a
+           * client-supplied claim. Same id in the ordinary case, different trust.
+           *
+           * ⚠ FIRST BECAUSE IT IS THE FRAME THE REST SITS IN. It is what says a
+           * King of the Hill league is not a redraft league, that IDP has not
+           * replaced dynasty, and that a keeper cost system nobody set is not a
+           * rule. A specialty block read before that frame is read against the
+           * wrong format.
+           *
+           * Synchronous and allocation-only: `resolveLeagueRules` reads the row
+           * we already hold and opens nothing.
+           */
+          if (leagueSnapshot) {
+            try {
+              const rulesCtx = buildLeagueRulesGrounding({
+                leagueType: leagueSnapshot.leagueType,
+                isDynasty: leagueSnapshot.isDynasty,
+                keeperCount: leagueSnapshot.keeperCount,
+                keeperCostSystem: leagueSnapshot.keeperCostSystem,
+                keeperRoundPenalty: leagueSnapshot.keeperRoundPenalty,
+                settings: leagueSnapshot.settings,
+                sport: leagueSnapshot.sport,
+              })
+              if (rulesCtx) {
+                legacyEnrichmentContext = legacyEnrichmentContext
+                  ? `${rulesCtx}\n\n${legacyEnrichmentContext}`
+                  : rulesCtx
+              }
+            } catch { /* non-fatal */ }
+          }
           if (planInput.leagueId && planInput.userId) {
             try {
               const tournamentCtx = await buildTournamentContextForChimmy(planInput.leagueId, planInput.userId)
