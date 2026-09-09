@@ -10,6 +10,7 @@ import {
   type SettingsSnapshot,
 } from '@/lib/league-contract/types'
 import { resolveLeagueFormat } from '@/lib/league/format-engine'
+import { buildKeeperProvenance } from '@/lib/league-contract/keeperProvenance'
 import { normalizeConceptToFormat } from '@/lib/league-creation/canonical/normalizeConcept'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
 import type {
@@ -263,6 +264,34 @@ function buildConceptRulesBlock(
 ): NonNullable<SettingsSnapshot['conceptRules']> {
   const nc = normalizeConceptToFormat(inferredConcept)
   const meta = buildImportMetadata(normalized)
+
+  /*
+   * 🛑 KEEPER PROVENANCE IS WRITTEN FROM `is_keeper`, NEVER FROM `max_keepers`.
+   * The measurement is in `lib/league-import/types.ts`: Sleeper's `max_keepers`
+   * is >= 1 on 225/225 imported leagues, dynasty and guillotine included, so
+   * "the payload contained a keeper count" marks every league confirmed and is
+   * worthless. `settings.type` (0 redraft / 1 keeper / 2 dynasty) is the only
+   * provider signal that discriminates, and it arrives here as `is_keeper`.
+   *
+   * ⚠ ONLY WRITTEN WHEN THE PROVIDER ACTUALLY REPORTED ITS TYPE. An adapter
+   * that does not populate `is_keeper` leaves the block absent, which reads as
+   * "nobody established anything" rather than as a confirmed redraft league —
+   * a distinction `keeperSettingsConfirmedFrom` preserves deliberately.
+   *
+   * ⚠ THIS RUNS ON REFRESH TOO. `applySleeperLeagueSync` rebuilds the bundle
+   * through this same function, so a re-sync re-derives provenance from the
+   * provider's current type rather than leaving a stale one in place.
+   */
+  const providerIsKeeper = normalized.league.is_keeper
+  const keeperProvenance =
+    typeof providerIsKeeper === 'boolean'
+      ? buildKeeperProvenance({
+          source: 'provider',
+          isKeeper: providerIsKeeper,
+          providerSuppliedMaxKeepers: typeof normalized.league.max_keepers === 'number',
+        })
+      : undefined
+
   return {
     concept: inferredConcept,
     version: 1,
@@ -270,6 +299,7 @@ function buildConceptRulesBlock(
       importSource: normalized.source.source_provider,
       sourceLeagueId: normalized.source.source_league_id,
       aliasTags: [...(nc?.aliasTags ?? []), ...aliasTags],
+      ...(keeperProvenance ? { keeperProvenance } : {}),
       importMetadata: {
         externalLeagueId: meta.externalLeagueId,
         externalSeasonId: meta.externalSeasonId,
