@@ -137,21 +137,41 @@ async function ensureDevAuthUser() {
         emailVerified: new Date(),
       },
     });
-  } else {
+  } else if (!user.emailVerified) {
+    /*
+     * ⚠ THIS BRANCH USED TO REWRITE `email`, `username` AND `displayName` ON A
+     * ROW IT DID NOT CREATE, AND THAT IS A DATA-LOSS BUG, NOT A CONVENIENCE.
+     *
+     * The lookup above matches on id OR email OR username, so it routinely
+     * resolves to a REAL account — pointing `DEV_AUTH_BYPASS_EMAIL` at one is
+     * the documented way to get a dev session with real leagues. Signing in
+     * then renamed that account to the env profile's identity. Measured on
+     * 2026-09-08: an existing account came back as `local_dev_user` /
+     * "Local Dev User", and because the write is an overwrite rather than a
+     * merge, the previous values are simply gone — nothing logs them first.
+     *
+     * Rewriting `email` was the worst of the three: a row matched by USERNAME
+     * would have had its address replaced with the configured one.
+     *
+     * An existing row is now left alone apart from backfilling `emailVerified`,
+     * which is what the bypass actually needs to produce a usable session. The
+     * env profile still fully describes a user this function CREATES.
+     */
     user = await prisma.appUser.update({
       where: { id: user.id },
-      data: {
-        email: profile.email,
-        username: profile.username,
-        displayName: profile.displayName,
-        emailVerified: user.emailVerified ?? new Date(),
-      },
+      data: { emailVerified: new Date() },
     });
   }
 
   await ensureSharedAccountProfile({
     userId: user.id,
-    displayName: profile.displayName,
+    /*
+     * The second clobber site: this upserts `UserProfile.displayName` from
+     * whatever is passed. Passing the row's OWN name keeps a real account's
+     * profile intact, and still seeds a freshly created dev user — `create`
+     * above already set `displayName` from the same env profile.
+     */
+    displayName: user.displayName,
   });
 
   await prisma.managerXPProfile.upsert({
