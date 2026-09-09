@@ -259,12 +259,21 @@ describe('Survivor All-Stars Guillotine is traced to mechanics, not to its name'
 
 describe('a format that forbids an action says so loudly', () => {
   it('tells the model never to suggest a trade in a no-trade format', () => {
+    /*
+     * ⚠ THIS ASSERTED `concept` WAS NULL UNTIL 2026-09-09, AND THE INVERSION IS
+     * THE RECORD. Best Ball has no classifier concept, so the resolver could not
+     * reach it and this test drove the catalog directly — proving the entry
+     * existed, not that Chimmy would ever see it. `resolveLeagueRules` now
+     * reaches catalog-only concepts by `leagueType`, so the resolver is what is
+     * asserted, and the grounding text with it.
+     */
     const bestBall = resolveLeagueRules({ leagueType: 'best_ball' })
-    // best_ball has no classifier concept, so drive the renderer from the entry directly.
-    expect(bestBall.concept).toBeNull()
+    expect(bestBall.concept?.id).toBe('best_ball')
+    expect(bestBall.concept?.actions.find((a) => a.id === 'set_lineup')?.legalInFormat).toBe(false)
 
-    const entry = getConceptById('best_ball')
-    expect(entry?.actions.find((a) => a.id === 'set_lineup')?.legalInFormat).toBe(false)
+    const text = buildLeagueRulesGrounding({ leagueType: 'best_ball' }) ?? ''
+    expect(text).toContain('NOT POSSIBLE IN THIS FORMAT')
+    expect(text).toContain('Lineups are scored optimally and automatically')
   })
 
   it('emits the NOT POSSIBLE block for a tournament league', () => {
