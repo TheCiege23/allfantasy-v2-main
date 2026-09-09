@@ -110,7 +110,7 @@ describe("commissioner-os automations — view", () => {
     const { catalog, historyByAutomationId } = await loadDemoCatalogAndHistory()
     render(<AutomationCenterView catalog={catalog} historyByAutomationId={historyByAutomationId} dataMode="demo" />)
 
-    const card = screen.getByText('Lineup lock reminder').closest('[class*="rounded-2xl"]') as HTMLElement
+    const card = screen.getByText('Lineup lock reminder').closest('[data-automation-id]') as HTMLElement
     expect(within(card).getByText('Enabled')).toBeInTheDocument()
     expect(within(card).getByText('Elevated')).toBeInTheDocument()
   })
@@ -119,7 +119,7 @@ describe("commissioner-os automations — view", () => {
     const { catalog, historyByAutomationId } = await loadDemoCatalogAndHistory()
     render(<AutomationCenterView catalog={catalog} historyByAutomationId={historyByAutomationId} dataMode="demo" />)
 
-    const card = screen.getByText('Trade-deadline reminder broadcast').closest('[class*="rounded-2xl"]') as HTMLElement
+    const card = screen.getByText('Trade-deadline reminder broadcast').closest('[data-automation-id]') as HTMLElement
     const toggle = within(card).getByRole('switch')
     expect(toggle).toHaveAttribute('aria-checked', 'true')
 
@@ -127,7 +127,7 @@ describe("commissioner-os automations — view", () => {
     expect(toggle).toHaveAttribute('aria-checked', 'false')
     expect(within(card).getByText('Disabled')).toBeInTheDocument()
 
-    const otherCard = screen.getByText('Lineup lock reminder').closest('[class*="rounded-2xl"]') as HTMLElement
+    const otherCard = screen.getByText('Lineup lock reminder').closest('[data-automation-id]') as HTMLElement
     expect(within(otherCard).getByRole('switch')).toHaveAttribute('aria-checked', 'true')
   })
 
@@ -135,7 +135,7 @@ describe("commissioner-os automations — view", () => {
     const { catalog, historyByAutomationId } = await loadDemoCatalogAndHistory()
     render(<AutomationCenterView catalog={catalog} historyByAutomationId={historyByAutomationId} dataMode="demo" />)
 
-    const card = screen.getByText('Lineup lock reminder').closest('[class*="rounded-2xl"]') as HTMLElement
+    const card = screen.getByText('Lineup lock reminder').closest('[data-automation-id]') as HTMLElement
     fireEvent.click(within(card).getByRole('button', { name: 'View History' }))
 
     const dialog = await screen.findByRole('dialog')

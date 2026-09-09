@@ -71,19 +71,117 @@ function withActiveLeague(leagueId = "lg-1") {
   prismaMock.league.findMany.mockResolvedValue([{ id: leagueId, status: "active" }])
 }
 
-describe("League Health live.ts — the 3 methods that stay on the honest placeholder", () => {
-  it.each(["getHealthDetail", "getRisks", "getRecommendations"] as const)(
-    "%s: always the honest placeholder — isLiveReady is never even consulted, since no backend capability exists to wire it to",
-    async (method) => {
-      isLiveReadyMock.mockResolvedValue(true)
+/*
+ * 🛑 THIS BLOCK USED TO ASSERT THAT THREE OF THE FOUR METHODS ARE PERMANENT PLACEHOLDERS, "since no
+ * backend capability exists to wire it to". The premise was half right: no backend computes a
+ * baseline-minus-deductions decomposition, a persisted risk lifecycle, or per-recommendation
+ * confidence — and the CONTRACT demanded all three, so the client could not satisfy it without
+ * inventing them.
+ *
+ * The contract was the thing that was wrong, and the consequence of leaving it wrong was that the
+ * League Health tab showed a paying commissioner an error instead of their league's condition.
+ * `types.ts` is now narrowed to what the pipeline genuinely computes — one score, two banded
+ * categories, a participation ratio and a data-completeness figure — and these three methods return
+ * it. Nothing was fabricated to get here; a decomposition that does not exist was removed from the
+ * contract rather than faked in the client.
+ */
+describe("League Health live.ts — the 3 methods that were placeholders now return real intelligence", () => {
+  const INTEL = {
+    data: {
+      data: {
+        leagueEngagementScore: 62.4,
+        retentionRisk: "high",
+        commissionerWorkload: "critical",
+        participationDistribution: { activeManagers: 4, totalManagers: 9 },
+        completeness: 70,
+        healthNarrative: { engagementSummary: "4 of 9 managers are active", topConcern: "Two managers have gone quiet", standoutSignal: null },
+      },
+    },
+    error: null,
+  }
+
+  beforeEach(() => {
+    isLiveReadyMock.mockResolvedValue(true)
+    withActiveLeague()
+    callDecisionOSMock.mockResolvedValue(INTEL)
+  })
+
+  it("getHealthDetail: every field traces to a value the API returned", async () => {
+    const result = await liveLeagueHealthClient.getHealthDetail()
+    expect(result.error).toBeNull()
+    // Rounded, never truncated — 62.4 is a score of 62, not 62.4 and not 62.0.
+    expect(result.data?.score).toBe(62)
+    expect(result.data?.participation).toEqual({ activeManagers: 4, totalManagers: 9 })
+    expect(result.data?.completeness).toBe(70)
+    /*
+     * The bands are mapped to severity tiers, not to numbers. `high` retention risk becoming
+     * `elevated` is the mapping; becoming `71` would be invented precision.
+     */
+    expect(result.data?.retentionRisk).toBe("elevated")
+    expect(result.data?.commissionerWorkload).toBe("critical")
+  })
+
+  it("getRisks: reports the conditions that ARE something, and nothing else", async () => {
+    const result = await liveLeagueHealthClient.getRisks()
+    expect(result.error).toBeNull()
+    const ids = (result.data ?? []).map((r) => r.id)
+    expect(ids).toContain("risk-retention")
+    expect(ids).toContain("risk-workload")
+    expect(ids).toContain("risk-participation")
+
+    /*
+     * ⚠ NO INVENTED AGE OR LIFECYCLE. Risks are recomputed from the current window on every request,
+     * so there is no first-seen timestamp to age from. Both fields are optional on the contract and
+     * must be absent rather than defaulted — a permanent "0d" would read as "found today, every day".
+     */
+    for (const risk of result.data ?? []) {
+      expect(risk.ageInDays).toBeUndefined()
+      expect(risk.status).toBeUndefined()
+    }
+  })
+
+  it("getRisks: a healthy league produces an empty list, not padding", async () => {
+    callDecisionOSMock.mockResolvedValue({
+      data: {
+        data: {
+          ...INTEL.data.data,
+          retentionRisk: "low",
+          commissionerWorkload: "low",
+          participationDistribution: { activeManagers: 9, totalManagers: 9 },
+        },
+      },
+      error: null,
+    })
+    const result = await liveLeagueHealthClient.getRisks()
+    expect(result.error).toBeNull()
+    expect(result.data).toEqual([])
+  })
+
+  it("getRecommendations: delegates rather than re-mapping the same payload", async () => {
+    callDecisionOSMock.mockResolvedValue({
+      data: { data: { recommendations: [{ recommendationId: "rec-1", priority: "critical", category: "retention", message: "Reach out" }] } },
+      error: null,
+    })
+    const result = await liveLeagueHealthClient.getRecommendations()
+    expect(result.error).toBeNull()
+    expect(result.data?.[0]?.id).toBe("rec-1")
+    /*
+     * Two modules reading one payload must not carry two mappings of it. Recommendations Center owns
+     * this one — including the decision to OMIT the four fields nothing computes — so the assertion
+     * that matters here is that those omissions survive delegation.
+     */
+    expect(result.data?.[0]).not.toHaveProperty("confidence")
+    expect(result.data?.[0]).not.toHaveProperty("status")
+  })
+
+  it("all three still refuse when the namespace is not live-ready", async () => {
+    isLiveReadyMock.mockResolvedValue(false)
+    for (const method of ["getHealthDetail", "getRisks", "getRecommendations"] as const) {
       const result = await liveLeagueHealthClient[method]()
       expect(result.data).toBeNull()
       expect(result.error).toMatchObject({ category: "upstream_unavailable", moduleId: "league-health" })
-      expect(result.source).toBe("live")
-      expect(isLiveReadyMock).not.toHaveBeenCalled()
-      expect(callDecisionOSMock).not.toHaveBeenCalled()
-    },
-  )
+    }
+  })
 })
 
 describe("League Health live.ts — getEvidence gating and resolution", () => {

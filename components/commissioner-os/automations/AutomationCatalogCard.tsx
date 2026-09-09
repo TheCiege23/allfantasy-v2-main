@@ -24,7 +24,13 @@ export function AutomationCatalogCard({ automation, enabled, onToggle, onViewHis
   const style = getSeverityStyle(automation.health)
 
   return (
-    <Card style={{ borderColor: style.border }}>
+    /*
+     * `data-automation-id` is a stable hook for finding one card among many — in a test, and in a
+     * browser inspector. It replaces tests reaching for `closest('[class*="rounded-2xl"]')`, which
+     * bound them to a Tailwind radius on a shared `<Card>` primitive: the class changed, the selector
+     * returned null, and three assertions started failing on a component that still worked perfectly.
+     */
+    <Card data-automation-id={automation.id} style={{ borderColor: style.border }}>
       <CardHeader>
         <div className="flex items-start justify-between gap-2">
           <div>

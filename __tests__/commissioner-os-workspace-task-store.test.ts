@@ -43,7 +43,12 @@ vi.mock('@/lib/league-history/leagueWarehouseReads', () => ({
   readManagerActivity: mocks.readManagerActivity,
 }))
 
-import { detectInactiveManagers, detectStaleImport } from '@/lib/commissioner-workspace/taskSources'
+import {
+  detectInactiveManagers,
+  detectNeverImported,
+  detectOrphanTeams,
+  detectStaleImport,
+} from '@/lib/commissioner-workspace/taskSources'
 import { hasEverBeenScanned, reconcileLeagueTasks, readLeagueTasks } from '@/lib/commissioner-workspace/taskStore'
 
 const NOW = new Date('2026-09-08T12:00:00.000Z')
@@ -101,6 +106,74 @@ describe('detectStaleImport', () => {
      */
     expect(detectStaleImport(null, 0, NOW)).toBeNull()
     expect(detectStaleImport(daysAgo(90), 0, NOW)).toBeNull()
+  })
+})
+
+describe('detectNeverImported', () => {
+  /*
+   * The gap this detector was added to close. `detectStaleImport` declines a league with no events
+   * ("your feed stopped" is a claim about a feed that started) and `detectInactiveManagers` needs a
+   * `lastActivityAt` to gate on, so between them a connected league that has never sent anything got
+   * no task at all. Measured on production 2026-09-09: 141 of 288 commissioned leagues.
+   */
+  it('opens a finding for a league that has never sent a single event', () => {
+    const found = detectNeverImported(null, 0)
+    expect(found?.sourceKey).toBe('never-imported:v1')
+    expect(found?.priority).toBe('elevated')
+    expect(found?.automationCandidate).toBe(true)
+  })
+
+  it('stays silent the moment any event has arrived', () => {
+    expect(detectNeverImported(null, 1)).toBeNull()
+    expect(detectNeverImported(daysAgo(400), 1)).toBeNull()
+  })
+
+  /*
+   * 🛑 THE MUTUAL EXCLUSION WITH `detectStaleImport` IS THE POINT, NOT A DETAIL. A league with old
+   * events is stale, not un-imported: it needs "your feed stopped", and a second task saying "you
+   * have never imported" would be the same problem under a name that sends the commissioner somewhere
+   * else. A timestamp with no events is a contradictory read and is treated as "something arrived".
+   */
+  it('never fires on a league that is merely stale', () => {
+    expect(detectNeverImported(daysAgo(90), 500)).toBeNull()
+    expect(detectStaleImport(daysAgo(90), 500, NOW)).not.toBeNull()
+
+    expect(detectNeverImported(daysAgo(90), 0)).toBeNull()
+  })
+})
+
+describe('detectOrphanTeams', () => {
+  it('says nothing when every seat is filled', () => {
+    expect(detectOrphanTeams(0, 12)).toBeNull()
+  })
+
+  it('reports a single vacancy in the singular, and does not claim the league is partial', () => {
+    const found = detectOrphanTeams(1, 12)
+    expect(found?.sourceKey).toBe('orphan-teams:v1')
+    expect(found?.title).toBe('One team has no manager')
+    expect(found?.priority).toBe('standard')
+    // Never automated: who fills a seat is a judgement call about people.
+    expect(found?.automationCandidate).toBe(false)
+  })
+
+  /*
+   * A mostly-unclaimed league is a different situation from one seat to fill — it has probably not
+   * finished being set up. The severity says so without claiming to know which it is, and the copy
+   * warns that every per-manager figure elsewhere is partial.
+   */
+  it('escalates and reframes once half the league or more is unclaimed', () => {
+    const half = detectOrphanTeams(6, 12)
+    expect(half?.priority).toBe('elevated')
+    expect(half?.description).toContain('6 of the 12')
+
+    expect(detectOrphanTeams(5, 12)?.priority).toBe('standard')
+  })
+
+  it('does not divide by a total it does not have', () => {
+    // totalTeams 0 means the roster read degraded; the vacancy is still real, the ratio is not.
+    const found = detectOrphanTeams(3, 0)
+    expect(found).not.toBeNull()
+    expect(found?.priority).toBe('standard')
   })
 })
 

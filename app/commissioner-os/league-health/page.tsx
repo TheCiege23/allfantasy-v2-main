@@ -18,11 +18,17 @@ export default async function LeagueHealthPage() {
         dataMode={adapter.mode}
         detail={
           detailResponse.data ?? {
+            /*
+             * The nothing-loaded fallback. Zeroes and `standard` throughout, so an unavailable
+             * league reads as "no reading" rather than as a league scoring zero — the previous
+             * fallback's `baseline: 100` minus nothing implied a perfect league whose score was 0.
+             */
             score: 0,
             tier: 'standard',
-            baseline: 100,
-            deductions: [],
-            subScores: { engagement: 0, retention: 0, competitiveBalance: 0, risk: 0 },
+            retentionRisk: 'standard',
+            commissionerWorkload: 'standard',
+            participation: { activeManagers: 0, totalManagers: 0 },
+            completeness: 0,
           }
         }
         risks={risksResponse.data ?? []}

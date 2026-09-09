@@ -55,21 +55,40 @@ import type { SeverityTier } from '../../tokens/colors'
  */
 const CATALOG_METADATA: Record<
   string,
-  Pick<AutomationCatalogEntry, 'name' | 'description' | 'category'> & { scheduleDescription: string }
+  Pick<AutomationCatalogEntry, 'name' | 'description' | 'category'> & {
+    scheduleDescription: string
+    relatedLinks?: AutomationCatalogEntry['relatedLinks']
+  }
 > = {
   'workspace.refreshTasks': {
     name: 'League task scan',
     description:
       'Checks each league for conditions a commissioner should know about — a feed that has stopped arriving, managers who have gone quiet — and keeps the Workspace task list current. Closes tasks on its own when the condition clears.',
     category: 'compliance_reminders',
-    scheduleDescription: 'Daily, one scan per league',
+    scheduleDescription: 'Daily at 08:40 UTC, one scan per league',
+    relatedLinks: [{ moduleId: 'workspace', label: 'Workspace', href: '/commissioner-os/workspace' }],
   },
   'waivers.processLeague': {
     name: 'Waiver batch processing',
     description:
       'Settles pending waiver claims for leagues that run batched waivers, in FAAB or rolling-priority order. Only applies to leagues whose waivers are run by AllFantasy — an imported league settles its waivers on its own platform, so this never has work to do for one.',
     category: 'waiver_management',
-    scheduleDescription: 'Daily, for leagues with pending claims',
+    scheduleDescription: 'Every 5 minutes, for leagues with pending claims',
+  },
+  /*
+   * 🛑 THIS JOB RAN 121 TIMES AND WAS DESCRIBED TO COMMISSIONERS AS "not described in the
+   * Automation Center catalog yet". It has a handler, a ledger entry and a scheduled caller —
+   * everything the two above have — and it generates the reports the Reports module lists. The
+   * `describe()` fallback existed so a running job is never hidden, which is right; it was never
+   * meant to be the permanent description of a first-class automation.
+   */
+  'reports.generateScheduled': {
+    name: 'Scheduled report generation',
+    description:
+      'Generates the reports each league has on a schedule — the weekly commissioner digest and the rest of the catalog — and files them in Reports ready to read or share. One report per league per ISO week, so a daily run never produces the same digest twice.',
+    category: 'reporting',
+    scheduleDescription: 'Daily, generating any report whose schedule is due',
+    relatedLinks: [{ moduleId: 'reports', label: 'Reports', href: '/commissioner-os/reports' }],
   },
 }
 
@@ -154,10 +173,7 @@ function toCatalogEntry(aggregate: AutomationLedgerAggregate, now: Date): Automa
     ...(lastRunResult ? { lastRunResult } : {}),
     totalRunsCount: aggregate.totalRuns,
     successRatePercent: successRatePercent(aggregate),
-    relatedLinks:
-      aggregate.jobType === 'workspace.refreshTasks'
-        ? [{ moduleId: 'workspace' as const, label: 'Workspace', href: '/commissioner-os/workspace' }]
-        : [],
+    relatedLinks: meta.relatedLinks ?? [],
   }
 }
 
@@ -171,9 +187,39 @@ function notYetIntegrated(message: string) {
   }
 }
 
+/**
+ * The catalog is the UNION of what the code declares and what the ledger has observed.
+ *
+ * 🛑 IT USED TO BE THE LEDGER ALONE, WHICH MEANS AN AUTOMATION THAT HAS NEVER RUN DID NOT EXIST.
+ * That is the wrong answer to the only question this page is asked — "what does this product do
+ * for me automatically" — because the handler and its schedule are in the code either way. A fresh
+ * deployment showed a commissioner an empty Automation Center and told them so in an error.
+ *
+ * The ledger side is what stops this becoming a brochure: a declared automation with zero runs
+ * reports `totalRunsCount: 0` and `healthOf`'s `advisory` tier, so "scheduled but never fired" is
+ * visible rather than dressed up as healthy. And a job type observed in the ledger with no catalog
+ * entry is still listed via `describe()`, so the union hides nothing from either direction.
+ */
 async function catalogEntries(now: Date): Promise<AutomationCatalogEntry[]> {
   const aggregates = await readAutomationAggregates()
-  return aggregates
+  const observed = new Map(aggregates.map((a) => [a.jobType, a]))
+
+  // A declared job type with no ledger row has genuinely never run here. Zeroes are the honest
+  // reading of that, and `healthOf` already treats `totalRuns === 0` as advisory rather than good.
+  for (const jobType of Object.keys(CATALOG_METADATA)) {
+    if (observed.has(jobType)) continue
+    observed.set(jobType, {
+      jobType,
+      totalRuns: 0,
+      successCount: 0,
+      failureCount: 0,
+      skippedCount: 0,
+      lastRunAt: null,
+      lastRunStatus: null,
+    })
+  }
+
+  return [...observed.values()]
     .map((aggregate) => toCatalogEntry(aggregate, now))
     .sort((a, b) => a.name.localeCompare(b.name))
 }
@@ -190,26 +236,14 @@ export const liveAutomationClient: AutomationClient = {
       }
     }
 
-    const data = await catalogEntries(new Date())
-
     /*
-     * An empty ledger means no automation has ever run on this deployment. That is a real and
-     * reportable state, but it is NOT "you have no automations" — the handlers and their schedules
-     * exist in the code either way. Returning `[]` would render as an empty catalog and read as
-     * the first claim, so the honest error is returned instead.
+     * No empty-catalog error branch any more, and its removal is the point rather than a tidy-up.
+     * It existed because an ledger-only catalog could come back empty on a deployment where nothing
+     * had run yet, and `[]` would have read as "you have no automations" when the handlers and
+     * schedules were sitting right there in the code. `catalogEntries` now unions the two, so the
+     * claim that error was avoiding is one this module can no longer make.
      */
-    if (data.length === 0) {
-      return {
-        data: null,
-        error: notYetIntegrated(
-          'No automation has run on this deployment yet, so there is no execution history to describe.',
-        ),
-        source: 'live',
-        timestamp,
-      }
-    }
-
-    return { data, error: null, source: 'live', timestamp }
+    return { data: await catalogEntries(new Date()), error: null, source: 'live', timestamp }
   },
 
   async getExecutionHistory(automationId: string) {
@@ -267,17 +301,6 @@ export const liveAutomationClient: AutomationClient = {
     }
 
     const entries = await catalogEntries(new Date())
-    if (entries.length === 0) {
-      return {
-        data: null,
-        error: notYetIntegrated(
-          'No automation has run on this deployment yet, so there is no execution history to describe.',
-        ),
-        source: 'live',
-        timestamp,
-      }
-    }
-
     const needsAttention = entries.filter((e) => e.health === 'critical' || e.health === 'elevated')
 
     const data: AutomationSummary = {

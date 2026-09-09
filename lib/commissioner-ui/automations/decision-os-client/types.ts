@@ -16,7 +16,20 @@ export type AutomationStatus = 'enabled' | 'disabled'
 /** Health is a severity signal ("how well is this currently running"), always visually distinct from status ("is this turned on"). */
 export type AutomationTriggerType = 'schedule' | 'event' | 'manual'
 
-export type AutomationCategory = 'waiver_management' | 'communications' | 'compliance_reminders' | 'scheduling'
+/*
+ * `reporting` was added when `reports.generateScheduled` — a real job with a handler, a schedule
+ * and 121 ledger runs — turned out to have no category that described it. The alternatives were
+ * both wrong in a way a commissioner would notice: `communications` implies the report was sent to
+ * someone, and it is filed rather than sent; `scheduling` describes when a thing runs, not what it
+ * does. The union is the honest place to fix that, and `AUTOMATION_CATEGORY_LABELS` is a `Record`,
+ * so the compiler requires a label for every member and this cannot drift into an unlabelled state.
+ */
+export type AutomationCategory =
+  | 'waiver_management'
+  | 'communications'
+  | 'compliance_reminders'
+  | 'scheduling'
+  | 'reporting'
 
 export type AutomationExecutionResult = 'success' | 'failure' | 'skipped'
 
