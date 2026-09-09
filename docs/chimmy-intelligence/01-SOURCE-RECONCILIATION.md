@@ -77,3 +77,59 @@ not a style preference — a second classifier is precisely the 110-league bug.
 The catalog therefore **delegates** classification to `readFormatRules` and
 `readConceptAliasTags` and adds only what does not exist: rule version,
 lifecycle phases, legal actions, elimination/tiebreak text, and provenance.
+
+## Found while building — two things the census did not predict
+
+### 1. Every league row carries a keeper policy nobody chose
+
+`prisma/schema.prisma`, `model League`:
+
+```
+keeperCount        Int?    @default(3)
+keeperCostSystem   String? @default("round_based")
+keeperRoundPenalty Int?    @default(1)
+```
+
+So a league whose commissioner never configured keepers still arrives with
+`keeperCount=3, keeperCostSystem="round_based"`. Reading the column and calling
+it the league's setting states an invented rule about essentially every league in
+the database, in the same voice as a real one.
+
+**Handled** by a fourth provenance value, `schema_default` — the value is
+printed, and so is the fact that nobody is known to have chosen it. The
+alternative, folding it into `unknown`, would have been wrong the other way: a
+commissioner who genuinely chose `round_based` is indistinguishable from the
+default, and hiding the value would leave Chimmy unable to answer at all.
+
+### 2. 🛑 UNRESOLVED, AND IT MOVES TRADE PRICING — not just wording
+
+`readFormatRules` (`lib/trade-intel/leagueFormatRules.ts:185`):
+
+```
+: raw === 'keeper' || (raw === 'redraft' && keeperCount > 0)
+    ? 'keeper'
+```
+
+Combined with `keeperCount @default(3)`, **an untouched `redraft` row classifies
+as a `keeper` league.** Measured directly against the resolver: a row of
+`{leagueType:'redraft', keeperCount:3}` returns `concept: 'keeper'` and emits the
+full keeper trade note.
+
+The import path does not close this. `ImportedLeagueCommitService` writes the
+column through `setIfNum('keeperCount', l.max_keepers)`, which only fires when
+the platform reported `max_keepers` **as a number**. Any league whose platform
+reported nothing keeps the default and reads as a keeper league.
+
+**Not fixed here, deliberately.** Changing that branch alters `FormatRules` for
+every consumer, including trade pricing — `keeperSurplus` and `keeperDriftNote`
+both key off it. That is a product decision about live leagues, not a refactor.
+
+Pinned instead by
+`__tests__/league-rules/conceptCatalog.test.ts` → *"PINS AN UPSTREAM EXPOSURE"*,
+which asserts the current behaviour and states that it **should go red** when the
+decision is made.
+
+**The open question for the user:** should an untouched `keeperCount=3` be read
+as "3 keepers" or as "we were never told"? A `@default(0)` on the column, or a
+`keeperCount != null && keeperCount > 0 && explicitlySet` predicate, are the two
+obvious shapes — but both change what existing leagues price as.
