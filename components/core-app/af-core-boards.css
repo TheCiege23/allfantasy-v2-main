@@ -742,3 +742,76 @@
 }
 
 .af-core button.af-bd-foot-cta:hover { text-decoration: underline; }
+
+/*
+ * ⚠ Own top-level @media at end of file — see the same note in af-core-shell.css.
+ *
+ * `.af-bd-foot-cta` is an 11px/1 text link ("View all 0 →", "Rivalry radar →")
+ * sitting in a board footer, so its box is the line box: measured 11px tall on
+ * every board screen at 375px. It is the primary way out of a board card, and
+ * an 11px target is not reachably tappable.
+ *
+ * Specificity has to MATCH the base rule, which is `.af-core .af-bd-foot-cta`
+ * (0,2,0) — a bare `.af-bd-foot-cta` here would lose on weight, not on order.
+ */
+@media (max-width: 720px) {
+  .af-core .af-bd-foot-cta {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+  }
+
+  /*
+   * ⚠ ONLY VISIBLE WITH REAL DATA. `.af-bd-sec-head` is a nowrap flex row of
+   * label + rule + count, and the count only says anything once there is
+   * something to count — on an empty account it is absent and this row fits.
+   *
+   * With real leagues, /core/trades rendered "10 still open · currently week 1"
+   * (131px, `white-space: nowrap`) into a head measuring 333px wide against a
+   * scrollWidth of 465. The count spilled to x=495 and took the whole document
+   * to 496px against a 375px viewport — so the page scrolled sideways, and the
+   * fixed tabbar and theme pill stretched with it.
+   *
+   * Wrapping puts the count on its own line under the rule. The count keeps its
+   * own `nowrap`: at 131px it fits a 333px line comfortably, and letting it
+   * break mid-phrase would split "10 still open · currently week 1" awkwardly.
+   */
+  .af-core .af-bd-sec-head {
+    flex-wrap: wrap;
+    row-gap: 4px;
+  }
+
+  /*
+   * Same shape one level down, and it only appears once a card has a grade to
+   * report. `.af-bd-card-head` is a nowrap row of league + `.af-bd-kv`; on
+   * /core/trades the "Latest grade / ungraded: Not graded — one side has no…"
+   * pair measured 220px inside a 299px head whose content totalled 346px,
+   * leaving the document 18px wider than the viewport after the section-head
+   * fix above removed the larger spill.
+   */
+  .af-core .af-bd-card-head {
+    flex-wrap: wrap;
+    row-gap: 6px;
+  }
+
+  /* Same 11px line-box problem as `.af-bd-foot-cta` above — this is the "View
+     all" style link inside a board card rather than its footer. */
+  .af-core .af-bd-cta {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+  }
+}
+
+/*
+ * `.af-bd-tab` is the board's own tab row (Portfolio renders five of them),
+ * measured 23px tall at 375px. A tab strip is the primary navigation of the
+ * panel it heads, so it gets the same floor as the rest of this file.
+ */
+@media (max-width: 720px) {
+  .af-core .af-bd-tab {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+  }
+}

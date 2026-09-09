@@ -1368,3 +1368,33 @@
   line-height: 1.5;
   color: var(--text2);
 }
+
+/*
+ * ⚠ Own top-level @media at end of file, per the convention in af-core-shell.css.
+ *
+ * `.af-sb-proj-flag` is a full sentence — "Nothing scored yet — these are
+ * projections, under your league's scoring" — carrying `white-space: nowrap`.
+ * At 375px it measured 379px wide inside a 303px column and took the league
+ * home to a 424px document, so the page scrolled sideways and the fixed tabbar
+ * stretched with it.
+ *
+ * `.af-sb-head` above it already wraps; the flag simply could not break. Nowrap
+ * is right for a short status chip and wrong for prose, and this is prose — it
+ * only appears before a league has scored, which is why it is invisible on an
+ * account with no leagues and on any league mid-season.
+ */
+@media (max-width: 720px) {
+  .af-sb-proj-flag {
+    white-space: normal;
+  }
+}
+
+/*
+ * A native `<select>` at 27px. Unlike the text links elsewhere in this pass this
+ * one opens the OS picker, so an accidental miss costs a whole interaction.
+ */
+@media (max-width: 720px) {
+  .af-weekpick-select {
+    min-height: 44px;
+  }
+}

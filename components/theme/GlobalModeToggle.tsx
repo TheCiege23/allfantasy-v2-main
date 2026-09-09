@@ -29,12 +29,30 @@ export function GlobalModeToggle() {
   const createLeagueRoute =
     pathname.startsWith('/create-league') || pathname === '/leagues/create'
 
+  /*
+   * `bottom-20` (80px) is clearance for a phone bottom bar, and on the marketing
+   * landing page there is no bottom bar to clear — so it parked this pill in the
+   * middle of the content instead. Measured at 375x812 on `/`: it covered the
+   * word "projections" in the pricing paragraph, and at the foot of the page it
+   * sat on top of the state-restriction legal line.
+   *
+   * ⚠ SCOPED TO `/` ON PURPOSE, NOT "everything that isn't /core". Several other
+   * routes DO have their own fixed mobile bottom bar that this clearance is
+   * carrying — `/survivor/[leagueId]`, `/tournament/[tournamentId]`,
+   * `/world-cup`, `/brackets/*` and the IDP draft filters — so inverting the
+   * default would tuck the toggle underneath each of them. `/core` keeps it too:
+   * that is `.af-core .af-tabbar`, the one this value was chosen for.
+   */
+  const marketingLanding = pathname === '/'
+
   return (
     <div
       className={
         createLeagueRoute
           ? 'fixed right-4 top-4 z-40 sm:top-5'
-          : 'fixed right-4 z-40 bottom-20 lg:bottom-4'
+          : marketingLanding
+            ? 'fixed right-4 bottom-4 z-40'
+            : 'fixed right-4 z-40 bottom-20 lg:bottom-4'
       }
     >
       <ModeToggle className="rounded-xl border px-3 py-2 text-xs font-semibold shadow-lg backdrop-blur"

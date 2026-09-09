@@ -897,6 +897,16 @@
     padding-left: 16px;
     padding-right: 16px;
   }
+  /*
+   * Clearance for the fixed theme pill, which sits bottom-right at `bottom-4`
+   * on this route (see GlobalModeToggle). Without it the last thing the page
+   * says — the state-restriction compliance line — is what the pill lands on
+   * once you reach the end of the scroll. 16px offset + 34px control + 16px
+   * breathing room, plus the home-indicator inset on a notched phone.
+   */
+  .af-lp-footer {
+    padding-bottom: calc(66px + env(safe-area-inset-bottom, 0px));
+  }
   .af-lp-sports,
   .af-lp-footer-links {
     margin-left: 0;

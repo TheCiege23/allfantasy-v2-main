@@ -457,7 +457,6 @@
 .af-crm { display: none; }
 
 @media (max-width: 767px) {
-  .af-cr-desktop { display: none; }
   .af-crm {
     display: flex;
     flex-direction: column;
@@ -880,4 +879,31 @@
   display: inline-flex;
   align-items: center;
   min-height: 44px;
+}
+
+/*
+ * ⚠ APPENDED AS ITS OWN TOP-LEVEL @media AT END OF FILE, DELIBERATELY.
+ *
+ * The mobile block at the top of this file used to hide `.af-cr-desktop` — a
+ * class that no longer exists anywhere in the markup. `CareerDesktop` renders
+ * `<div className="af-c13">`, so the rename left that rule aiming at nothing and
+ * a phone rendered BOTH the desktop layout and the `.af-crm` card beneath it.
+ *
+ * A dead selector fails silently in one direction only — it stops hiding — so
+ * the tell was geometry, not CSS. `.af-cr-tabs` is a `nowrap` flex row carrying
+ * four tabs, the tab-stats group and three action buttons: scrollWidth 732
+ * inside a 333px column, which pushed the document to 762px against a 375px
+ * viewport. The other "overflows" reported on this screen — the fixed tabbar,
+ * the theme pill — were that widened document, not faults of their own.
+ *
+ * ⚠ AND IT HAS TO LIVE DOWN HERE. The base `.af-c13 { display: flex }` is at
+ * line ~683, AFTER the mobile block near the top. A media query adds no
+ * specificity, so the same-weight base rule simply wins on order — the first
+ * attempt at this fix sat in that block and measured `display: flex` on a
+ * 375px frame with the page still 762px wide. Appending puts it last.
+ */
+@media (max-width: 767px) {
+  .af-c13 {
+    display: none;
+  }
 }

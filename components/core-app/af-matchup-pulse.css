@@ -344,3 +344,25 @@
     display: none;
   }
 }
+
+/*
+ * `.af-mp-live-btn` measured 20x20 at 375px — an icon button with no text to
+ * grow it. Padding it out would move the row it sits in, so the hit area grows
+ * and the paint does not, the same technique as `.af-help-dot` in
+ * af-core-shell.css. No neighbouring control is within 44px of it.
+ */
+@media (max-width: 720px) {
+  .af-mp-live-btn {
+    position: relative;
+  }
+  .af-mp-live-btn::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 44px;
+    height: 44px;
+    transform: translate(-50%, -50%);
+    background: transparent;
+  }
+}

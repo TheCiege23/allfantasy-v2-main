@@ -435,3 +435,15 @@
 .af-core .af-so-pri-league {
   min-height: 44px;
 }
+
+/*
+ * `.af-so-panel-cta` is the link out of each outlook panel, measured 19px tall
+ * at 375px — its box is the line box, the same shape as the board CTAs.
+ */
+@media (max-width: 720px) {
+  .af-so-panel-cta {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+  }
+}

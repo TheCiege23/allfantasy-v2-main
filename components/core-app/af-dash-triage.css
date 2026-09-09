@@ -268,3 +268,46 @@
 .af-core .af-triage-overflow {
   min-height: 44px;
 }
+
+/* ── The league chip must not eat its own recommendation on a phone ──────
+ *
+ * ⚠ MEASURED, NOT ASSUMED, AND ONLY VISIBLE WITH REAL LEAGUES. On an account
+ * with no leagues this list renders "Nothing is waiting on you" and the bug is
+ * invisible. With 65 leagues at 375x812, `.af-triage-league` measured 220px wide
+ * against a scrollWidth of 501, and `.af-triage-bench` — the half of the row
+ * that says what to actually DO ("swap in Braelon Allen or Emmett Johnson") —
+ * sat at x=392, entirely outside the chip and clipped away.
+ *
+ * ⚠ `text-overflow: ellipsis` IS ALREADY DECLARED ON THAT CHIP AND CANNOT WORK.
+ * The chip is `display: inline-flex`, so its children are flex items rather than
+ * inline content and `text-overflow` does not apply to them. The result is a
+ * hard cut with no ellipsis — nothing on screen suggests text was removed, which
+ * is why this reads as "the panel is fine" rather than "the panel is truncated".
+ *
+ * So the chip wraps on a phone instead of clipping. The advice is the payload of
+ * this panel; a one-line pill that hides it is worse than a taller one.
+ *
+ * ⚠ Radius drops from 999px when wrapping. A stadium radius on a two- or
+ * three-line box curves in past the 9px inline padding and clips the first and
+ * last characters of the wrapped lines.
+ */
+@media (max-width: 640px) {
+  .af-triage-league {
+    max-width: 100%;
+    flex-wrap: wrap;
+    white-space: normal;
+    overflow: visible;
+    row-gap: 2px;
+    border-radius: 12px;
+    padding: 5px 9px;
+    /*
+     * The touch floor from the block above, which these chips never carried.
+     * A chip that wraps is already ~65px; this is for the SHORT ones — a league
+     * with no bench suggestion measured 30px. `.af-triage-name` is deliberately
+     * NOT given a floor: it shares `.af-triage-line1` with `.af-triage-meta`, so
+     * it is an inline link in a text row, which is the case that block exempts.
+     */
+    min-height: 44px;
+    box-sizing: border-box;
+  }
+}

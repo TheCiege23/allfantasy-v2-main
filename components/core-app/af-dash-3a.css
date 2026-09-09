@@ -586,3 +586,19 @@
   color: var(--text);
   font: 800 12px/1.4 'Archivo', system-ui, sans-serif;
 }
+
+/*
+ * ⚠ Own top-level @media at end of file — see the same note in af-core-shell.css.
+ *
+ * `.af3a-cardlink` is a 12px/1 text link ("Rankings →", "Open Portfolio →"), so
+ * its box is the line box: measured 12-14px tall at 375px. These are the links
+ * out of every card on the home dashboard — the first screen after sign-in, and
+ * the one most likely to be used one-handed.
+ */
+@media (max-width: 720px) {
+  .af3a-cardlink {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+  }
+}

@@ -678,3 +678,51 @@ a.af-pc-news-t:hover {
     width: 100%;
   }
 }
+
+/*
+ * ⚠ Own top-level @media at end of file, per the convention in af-core-shell.css.
+ *
+ * `.af-pc-trigger` is the player-name button that opens the player card — the
+ * primary interaction on the waivers, trades and roster boards. It is styled as
+ * inline text with `padding: 0`, so its box is the line box: measured 17px tall
+ * at 375px, on 19 separate controls on /core/waivers alone.
+ *
+ * The name must keep its inline text metrics — padding it out would break the
+ * rows it sits in — so the HIT AREA grows and the paint does not.
+ *
+ * ⚠ THE EXPANSION IS SAFE BECAUSE IT WAS MEASURED, NOT GUESSED. Stretching a
+ * hit area vertically is only safe if neighbours are further apart than the
+ * expansion; otherwise two triggers overlap and the wrong one takes the tap.
+ * Smallest gap between adjacent triggers on /core/waivers is 106px against the
+ * 44px claimed here, so no two can overlap. Re-measure before widening this.
+ *
+ * ⚠ AND IT DOES NOT REACH THE FULL 44px EVERYWHERE — SAID PLAINLY RATHER THAN
+ * ASSUMED. Inside a trade card the trigger sits in `.af-bd-asset-name`, which
+ * carries `overflow: hidden` for its ellipsis. Clipping applies to hit testing
+ * as well as painting, so there the area is cut back to roughly 33px: measured
+ * by hit-testing down the centre line, ±8px returns the trigger and ±14px
+ * returns the row behind it.
+ *
+ * Left as is on purpose. `overflow-x: hidden` + `overflow-y: visible` is not an
+ * escape — a `visible` axis computes to `auto` when the other is `hidden`, so it
+ * still clips — and the alternative, padding `.af-bd-asset-name` out to 44px,
+ * adds ~28px to EVERY asset row (a four-player trade card grows by ~112px). At
+ * 61x33 the control clears the 24x24 WCAG 2.5.8 AA floor; buying the last 11px
+ * with that much density is not obviously the right trade, so it is recorded
+ * here rather than silently taken.
+ */
+@media (max-width: 720px) {
+  .af-pc-trigger {
+    position: relative;
+  }
+  .af-pc-trigger::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 50%;
+    height: 44px;
+    transform: translateY(-50%);
+    background: transparent;
+  }
+}

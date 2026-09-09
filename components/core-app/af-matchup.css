@@ -712,3 +712,72 @@
   line-height: 1.5;
   color: var(--text2);
 }
+
+/*
+ * ⚠ APPENDED AS ITS OWN TOP-LEVEL @media AT END OF FILE. This file is the one
+ * CLAUDE.md names for the nested-@media incident — a `max-width: 560px` block
+ * inserted inside the `780px` block closed the outer query early and carried
+ * four rules into the narrower band with brace balance still at 0. A sibling
+ * block at the end cannot do that.
+ *
+ * ── The lineup name is a 15px tap target, and padding it out is not free ──
+ *
+ * `.af-pc-trigger` (the player name that opens the player card) measured 79x15
+ * on the matchup board at 375px. The generic hit-area expansion in
+ * af-player-card.css cannot reach it: `.af-mu-half-name` carries
+ * `overflow: hidden` for its `-webkit-line-clamp: 2`, and clipping applies to
+ * hit testing as well as painting, so the pseudo-element is cut back to the
+ * name's own 15px box. Measured: only -8..0px from centre returned the trigger,
+ * and +8px already returned `.af-mu-half-pts` — the score beside it was taking
+ * taps meant for the name.
+ *
+ * ⚠ GROWING THE BOX COSTS ROW HEIGHT, WHICH IS WHY THIS IS NOT JUST A
+ * `min-height`. There is no slack in the row to absorb it — measured at 375px:
+ *
+ *     baseline            name 15   row 64   board 673
+ *     padding-block 5px   name 25   row 74   board 763   (+13%)
+ *     min-height 44px     name 44   row 79   board 830   (+23%)
+ *
+ * A 23% taller board on the one screen whose job is showing both lineups at
+ * once is a bad trade for a hit area.
+ *
+ * So the CLIP BOX grows and the LAYOUT does not: `padding-block` enlarges the
+ * padding box the `overflow: hidden` clips to, and an equal negative
+ * `margin-block` cancels its effect on the flow. Verified rather than assumed —
+ * the bounding rects of all 40 triggers, points and club marks in the board are
+ * byte-identical before and after, row stays 64px and the board stays 673px,
+ * while hit testing returns the trigger across the full ±20px.
+ *
+ * ⚠ SAFE ONLY BECAUSE THE NEIGHBOURS WERE MEASURED — AND 15px WAS NOT SAFE.
+ * Among triggers that overlap HORIZONTALLY the closest vertical centre-to-centre
+ * distance is 62px at 375px but only 46px at 700px, where the rows are shorter.
+ * (The 0px and 7px gaps in the raw numbers are the two halves of ONE row, which
+ * sit side by side and never overlap in x.)
+ *
+ * ⚠ AND THE FIRST CHECK OF THIS ASSERTED A SIZE INSTEAD OF MEASURING ONE. It
+ * asked whether 44px boxes would collide and got "no" — but the hit region is
+ * the PADDING BOX, `content + 2 x padding`, and content is 19px at 700px, so the
+ * real box was 49px against a 46px pitch. Measuring the actual rects found 16
+ * overlapping pairs, each by 3px: a band where the neighbouring name silently
+ * takes the tap. Assuming the number you are trying to verify is how a check
+ * goes green on a value it never looked at.
+ *
+ * 11px is the value that holds at both ends — box 37px at 375px (25px of
+ * clearance) and 41px at 700px (5px). That is short of the 44px platform
+ * guidance and comfortably over the 24px WCAG 2.5.8 AA floor; buying the last
+ * few pixels would cost either row height or the collision margin. Re-measure
+ * the real boxes, not an assumed size, before changing it.
+ *
+ * The row contains no other link or button, so the area this reclaims from
+ * `.af-mu-half-pts` was not carrying a control.
+ *
+ * Applies to 720px rather than the 560px band the clamp lives in: at 700px the
+ * board row still renders and the trigger still measured 19px, clipped the same
+ * way.
+ */
+@media (max-width: 720px) {
+  .af-mu-board-row .af-mu-half-name {
+    padding-block: 11px;
+    margin-block: -11px;
+  }
+}

@@ -1465,3 +1465,65 @@
   font: 500 11px/1.5 'Archivo', system-ui, sans-serif;
   color: var(--muted);
 }
+
+/*
+ * ⚠ A `truncate` THAT NEVER TRUNCATES. `.af-tc-handoff-link` carries an inner
+ * `span.truncate` (nowrap + overflow hidden + ellipsis), which only does
+ * anything once something upstream constrains the width — and nothing did.
+ *
+ * As a flex item of `.af-tc-handoff` the link takes `min-width: auto`, whose
+ * automatic minimum size is its CONTENT size, so it refused to shrink below the
+ * full string. Measured at 375px on /core/trades?league=…: "Review Trade in
+ * Jacksonville Pro H2H Points PPR League" rendered 459px wide inside a 333px
+ * row and pushed the document to 489px, so the page scrolled sideways and the
+ * fixed tabbar stretched with it. The longer the league's name, the worse it
+ * gets — which is why this needs a real league to see at all.
+ *
+ * `min-width: 0` lets the item shrink to its container; the existing `truncate`
+ * then does the job it was already written to do. Not scoped to a breakpoint:
+ * the automatic-minimum-size behaviour is not a mobile quirk, and a long enough
+ * league name overflows the same way on a narrow desktop column.
+ */
+.af-tc-handoff-link {
+  min-width: 0;
+}
+
+/*
+ * ⚠ AND `min-width: 0` ALONE WAS NOT ENOUGH — MEASURED, NOT ASSUMED. With the
+ * link correctly shrunk to 333px the span inside was still 459px, because
+ * Tailwind's `truncate` sets `overflow`, `text-overflow` and `white-space` but
+ * NOT `display`, and the span computes to `display: inline`. Neither `overflow`
+ * nor `text-overflow` applies to an inline box, so the utility was inert.
+ *
+ * This is the same failure as `.af-cr-tabs` in af-career.css and
+ * `.af-bd-asset-name`'s working counterpart: an ellipsis declaration is only
+ * live on a block box with a constrained width. Both halves are required.
+ */
+.af-tc-handoff-link > span {
+  display: block;
+  min-width: 0;
+}
+
+/*
+ * ⚠ A FULL-BLEED FOOTER WITH NOTHING TO BLEED INTO. `.af-tc-actions` carries
+ * `margin: 0 -16px -16px`, which is the standard trick for letting a footer
+ * reach the edges of a card that pads its children by 16px. `.af-tc` computes
+ * to `padding: 0px`, so there is no padding to cancel and the negative margin
+ * simply pushes the footer 16px OUTSIDE the card on each side.
+ *
+ * On desktop the page gutter absorbs it. On a phone it does not: the card sits
+ * at x=30..363 inside an `.af-content` whose right gutter is 12px, so the
+ * footer ran to 379px against a 375px viewport and the whole page scrolled
+ * sideways for 4px.
+ *
+ * ⚠ THE GUTTER ASYMMETRY IS DELIBERATE AND IS NOT THE THING TO "FIX" —
+ * `.af-core .af-content` sets `padding-left: 30px` at this breakpoint to
+ * reserve room for the fixed rail handle, which otherwise sits on top of the
+ * first paragraph of every board. Widening the right gutter to match would cost
+ * 18px of line length on every screen to accommodate one card's margin.
+ */
+@media (max-width: 720px) {
+  .af-tc-actions {
+    margin-inline: 0;
+  }
+}

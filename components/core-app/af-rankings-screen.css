@@ -617,3 +617,18 @@
 .af-core .af-rk-btn {
   min-height: 44px;
 }
+
+/*
+ * ⚠ Own top-level @media at end of file — see the same note in af-core-shell.css.
+ *
+ * The rankings tab strip is five pills ("Top users", "Best drafters", "Titles",
+ * "Win %", "Most active"), each measured 29px tall at 375px. They are the only
+ * navigation on this screen, so they are the one row that has to be thumb-sized.
+ */
+@media (max-width: 720px) {
+  .af-rk-tab {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+  }
+}

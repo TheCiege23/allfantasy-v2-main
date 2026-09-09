@@ -283,3 +283,12 @@
   height: 100%;
   object-fit: cover;
 }
+
+/*
+ * `.af-pf-invite-toggle` measured 26px tall at 375px.
+ */
+@media (max-width: 720px) {
+  .af-pf-invite-toggle {
+    min-height: 44px;
+  }
+}
