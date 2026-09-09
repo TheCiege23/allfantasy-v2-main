@@ -212,7 +212,7 @@ export function LandingV4({
           <LangSwitch lang={lang} label={c.nav.langLabel} />
           {/* "Sign in" is noise to someone already signed in. */}
           {signedIn ? null : (
-            <Link href="/login" data-testid="landing-nav-sign-in">
+            <Link href="/login" className="af-lp-signin" data-testid="landing-nav-sign-in">
               {c.nav.signIn}
             </Link>
           )}
