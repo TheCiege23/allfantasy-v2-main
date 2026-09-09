@@ -161,25 +161,19 @@ describe('a schema default is never reported as a commissioner setting', () => {
     expect(text).not.toContain('Keeper / pick rules')
   })
 
-  it('PINS AN UPSTREAM EXPOSURE: keeperCount defaults to 3, so an untouched redraft row classifies as KEEPER', () => {
+  it('an untouched redraft row is NOT reclassified as keeper by the column default', () => {
     /*
-     * 🛑 THIS ASSERTS BEHAVIOUR THAT IS PROBABLY WRONG, ON PURPOSE, BECAUSE THE
-     * FIX IS NOT THIS MODULE'S TO MAKE.
-     *
-     * `readFormatRules` classifies `redraft && keeperCount > 0` as `keeper`, and
-     * `League.keeperCount` carries `@default(3)`. The Sleeper import only writes
-     * the column when the platform reports `max_keepers` as a number
-     * (`ImportedLeagueCommitService.setIfNum`), so every league whose platform
-     * reported nothing keeps the default and reads as a keeper league — which
-     * changes trade pricing, not just wording.
-     *
-     * Changing the classifier would move pricing for an unknown number of live
-     * leagues, so it is a product decision, not a refactor. Recorded in
-     * docs/chimmy-intelligence/01-SOURCE-RECONCILIATION.md. When it is fixed,
-     * this test SHOULD go red — that is the signal, and the expectation below
-     * becomes 'redraft'.
+     * ⚠ THIS ASSERTION WAS INVERTED ON 2026-09-09, AND THE INVERSION IS THE
+     * RECORD. It previously pinned the exposure — asserting `keeper`, with a
+     * comment saying it SHOULD go red once the decision was made. The user
+     * ruled: an untouched `keeperCount = 3` means unconfirmed, not three
+     * keepers. The fix went into `readFormatRules` (the classifier both pricing
+     * paths already select on), this test went red on the same run, and it now
+     * asserts the decided behaviour. Full coverage of the rule lives in
+     * `__tests__/league-rules/keeperClassification.test.ts`.
      */
-    expect(resolveLeagueRules(untouchedRow).formatRules.concept).toBe('keeper')
+    expect(resolveLeagueRules(untouchedRow).formatRules.concept).toBe('redraft')
+    expect(resolveLeagueRules(untouchedRow).keeperEvidence).toBeNull()
   })
 
   it('still recognises a value the commissioner actually changed', () => {
