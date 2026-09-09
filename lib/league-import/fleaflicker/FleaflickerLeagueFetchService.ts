@@ -14,6 +14,27 @@ export class FleaflickerImportLeagueNotFoundError extends Error {
   }
 }
 
+/**
+ * The provider was reachable-in-principle but did not answer — a rate limit, a 5xx, or a
+ * network failure.
+ *
+ * 🛑 DISTINCT FROM "NOT FOUND", AND THE COLLECTOR ACTS ON THE DIFFERENCE. Every non-404
+ * HTTP status used to be raised as `FleaflickerImportLeagueNotFoundError`, which the
+ * pipeline maps to `LEAGUE_NOT_FOUND` — and the collector treats that as "the league is
+ * gone: stop, skip, note it" rather than "retry later". So a Fleaflicker throttle or a
+ * five-minute outage read as a deleted league. This mirrors `SleeperImportUnavailableError`,
+ * which exists in this repo for exactly the same misdiagnosis.
+ */
+export class FleaflickerImportUnavailableError extends Error {
+  readonly status: number | null
+
+  constructor(message: string, status: number | null = null) {
+    super(message)
+    this.name = 'FleaflickerImportUnavailableError'
+    this.status = status
+  }
+}
+
 const SPORT_SET = new Set<string>(['NFL', 'MLB', 'NBA', 'NHL'])
 
 /**
@@ -57,7 +78,14 @@ async function fetchJson<T>(url: string): Promise<T> {
     throw new FleaflickerImportLeagueNotFoundError('Fleaflicker league not found (404).')
   }
   if (!res.ok) {
-    throw new FleaflickerImportLeagueNotFoundError(`Fleaflicker API error (${res.status}).`)
+    /*
+     * ⚠ ONLY 404 MEANS THE LEAGUE IS NOT THERE. A 429 or 5xx is a transient provider
+     * condition and must stay retryable; reporting it as "not found" retires a live league.
+     */
+    throw new FleaflickerImportUnavailableError(
+      `Fleaflicker API error (${res.status}).`,
+      res.status,
+    )
   }
   return res.json() as Promise<T>
 }
