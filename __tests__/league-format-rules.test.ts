@@ -32,10 +32,34 @@ describe('readFormatRules', () => {
      * Keeper leagues frequently arrive with isDynasty false and leagueType
      * "redraft" with a keeper count above zero. Treating that as redraft would
      * switch off the surplus maths that matters most there.
+     *
+     * ⚠ THE COUNT WAS 3 UNTIL 2026-09-09, AND 3 IS THE COLUMN DEFAULT — so this
+     * test could not tell a real keeper league from a league nobody configured,
+     * and it passed for the wrong reason on every untouched row in the database.
+     * Now 4: a value somebody must have written. See `keeperEvidenceFor`.
+     */
+    const r = readFormatRules({ leagueType: 'redraft', keeperCount: 4 })
+    expect(r.concept).toBe('keeper')
+    expect(r.maxKeepers).toBe(4)
+    expect(r.keeperEvidence).toBe('configured_value')
+  })
+
+  it('🛑 but the bare column DEFAULT is not a keeper league', () => {
+    /*
+     * `League.keeperCount @default(3)`, so this row is what every league carries
+     * when nobody configured keepers. Product decision 2026-09-09: that means
+     * unconfirmed, not three keepers.
      */
     const r = readFormatRules({ leagueType: 'redraft', keeperCount: 3 })
+    expect(r.concept).toBe('redraft')
+    expect(r.keeperEvidence).toBeNull()
+  })
+
+  it('and a caller that can prove the value was reported still gets keeper', () => {
+    // The escape hatch for an importer that received max_keepers explicitly.
+    const r = readFormatRules({ leagueType: 'redraft', keeperCount: 3, keeperSettingsConfirmed: true })
     expect(r.concept).toBe('keeper')
-    expect(r.maxKeepers).toBe(3)
+    expect(r.keeperEvidence).toBe('caller_confirmed')
   })
 
   it('⚠ leaves keeper pick-trading UNKNOWN rather than assuming yes', () => {

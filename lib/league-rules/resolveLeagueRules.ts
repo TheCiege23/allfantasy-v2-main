@@ -15,7 +15,12 @@
  * imported fields remain unknown."
  */
 
-import { readFormatRules, type FormatRules } from '@/lib/trade-intel/leagueFormatRules'
+import {
+  LEAGUE_COLUMN_DEFAULTS,
+  readFormatRules,
+  type FormatRules,
+  type KeeperEvidence,
+} from '@/lib/trade-intel/leagueFormatRules'
 import { readConceptAliasTags } from '@/lib/league-contract/conceptAliasTags'
 import { CATALOG_VERSION, getConceptForFormat, getConceptsForAliasTags } from './conceptCatalog'
 import type { ConceptCatalogEntry, ResolvedRule } from './types'
@@ -31,6 +36,11 @@ export type LeagueRuleInput = {
   settings?: unknown
   /** Sport, when the caller has it. Used only to report coverage, never to classify. */
   sport?: string | null
+  /**
+   * Independent proof the keeper settings were intentionally chosen. Forwarded
+   * verbatim to `readFormatRules`; this module forms no opinion about it.
+   */
+  keeperSettingsConfirmed?: boolean | null
 }
 
 export type ResolvedLeagueRules = {
@@ -64,6 +74,15 @@ export type ResolvedLeagueRules = {
   /** Sport, when supplied, and whether the concept claims to support it. */
   sport: string | null
   sportSupported: boolean | null
+  /**
+   * Why the classifier did or did not treat this as a keeper league.
+   *
+   * ⚠ `null` WITH A NON-ZERO `keeper.maxKeepers` IS THE INTERESTING CASE, not a
+   * contradiction: the row carries the schema default of 3 and nobody is known
+   * to have chosen it. The value is reportable as an unconfirmed default; it
+   * has simply not earned keeper classification or keeper pricing.
+   */
+  keeperEvidence: KeeperEvidence
   /** Keeper rules, resolved with provenance. */
   keeper: {
     maxKeepers: ResolvedRule<number>
@@ -81,25 +100,13 @@ function fromLeague<T>(value: T, basis: string): ResolvedRule<T> {
   return { value, provenance: 'league_setting', basis }
 }
 
-/**
- * The Prisma column defaults on `League`, verbatim from `prisma/schema.prisma`.
- *
- * 🛑 EVERY LEAGUE ROW CARRIES THESE WHETHER OR NOT ANYONE CHOSE THEM.
- * `keeperCount @default(3)`, `keeperCostSystem @default("round_based")`,
- * `keeperRoundPenalty @default(1)` — so reading the column and reporting it as
- * the commissioner's setting invents a keeper policy for every league in the
- * database, redraft leagues included. Matching against these is what lets the
- * resolver say "default, unconfirmed" instead.
- *
- * ⚠ THIS IS A MIRROR OF THE SCHEMA AND WILL DRIFT IF THE SCHEMA CHANGES.
- * `__tests__/league-rules/conceptCatalog.test.ts` parses `schema.prisma` and
- * fails when these disagree, so the drift is loud rather than silent.
+/*
+ * ⚠ `LEAGUE_COLUMN_DEFAULTS` IS RE-EXPORTED, NOT REDEFINED. It briefly lived
+ * here as its own copy, which is two implementations of one rule — the bug this
+ * repo has paid for before. It now lives with the classifier that reads it,
+ * because the classifier is the thing whose correctness depends on it.
  */
-export const LEAGUE_COLUMN_DEFAULTS = {
-  keeperCount: 3,
-  keeperCostSystem: 'round_based',
-  keeperRoundPenalty: 1,
-} as const
+export { LEAGUE_COLUMN_DEFAULTS }
 
 /**
  * A value read off the row, classified by whether it is distinguishable from the
@@ -145,6 +152,7 @@ export function resolveLeagueRules(league: LeagueRuleInput): ResolvedLeagueRules
     keeperCostSystem: league.keeperCostSystem,
     keeperRoundPenalty: league.keeperRoundPenalty,
     aliasTags,
+    keeperSettingsConfirmed: league.keeperSettingsConfirmed,
   })
 
   const concept = getConceptForFormat(formatRules.concept)
@@ -178,6 +186,7 @@ export function resolveLeagueRules(league: LeagueRuleInput): ResolvedLeagueRules
     flattenedOnto: concept?.flattenedOnto ?? null,
     sport,
     sportSupported,
+    keeperEvidence: formatRules.keeperEvidence,
     keeper: {
       maxKeepers: fromColumn(formatRules.maxKeepers, LEAGUE_COLUMN_DEFAULTS.keeperCount, 'keeperCount'),
       costSystem: fromColumn(
