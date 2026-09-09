@@ -20,6 +20,8 @@ import { join, relative, extname } from 'path'
 import { fileURLToPath } from 'url'
 import { execFileSync } from 'child_process'
 
+import { classifyBundling } from './secret-scan-client-bundling.mjs'
+
 const ROOT = join(fileURLToPath(import.meta.url), '..', '..')
 const WARN_ONLY = process.argv.includes('--warn-only')
 
@@ -189,13 +191,11 @@ for (const dir of CLIENT_SOURCE_DIRS) {
       continue
     }
 
-    // Only flag files that are actually client components or might be client-bundled
-    const isClientFile = content.includes("'use client'") || content.includes('"use client"')
-    // For pages dir and components without 'use server', assume client-bundled if imported
-    // We check both 'use client' files AND files without explicit server marker for safety
-    const isNotExplicitlyServer = !content.includes("'use server'") && !content.includes('"use server"')
-
-    if (!isClientFile && !isNotExplicitlyServer) continue
+    // 'client' ships to the browser (ERROR), 'server' cannot (skip), and
+    // 'unknown' might be imported BY a client module, which is still a WARN.
+    const bundling = classifyBundling({ rel, content })
+    if (bundling === 'server') continue
+    const isClientFile = bundling === 'client'
 
     const lines = content.split('\n')
     for (let i = 0; i < lines.length; i++) {
