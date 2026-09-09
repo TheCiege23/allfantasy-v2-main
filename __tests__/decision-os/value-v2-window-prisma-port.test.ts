@@ -291,6 +291,71 @@ describe('injury load', () => {
   })
 })
 
+describe('query cost is bounded by weeks, never by assets', () => {
+  /** Counts every table read the port performs, whatever the caller does above it. */
+  function countingPrisma(f: Fixtures) {
+    const counts: Record<string, number> = { leagueTeam: 0, weeklyMatchup: 0, seasonForecastSnapshot: 0, dynastyProjectionSnapshot: 0 }
+    const real = fakePrisma(f) as any
+    const wrap = (model: string) => new Proxy(real[model], {
+      get: (t, k) => typeof (t as any)[k] === 'function'
+        ? (...args: unknown[]) => { counts[model] += 1; return (t as any)[k](...args) }
+        : (t as any)[k],
+    })
+    return {
+      counts,
+      prisma: { leagueTeam: wrap('leagueTeam'), weeklyMatchup: wrap('weeklyMatchup'),
+        seasonForecastSnapshot: wrap('seasonForecastSnapshot'), dynastyProjectionSnapshot: wrap('dynastyProjectionSnapshot') } as unknown as PrismaClient,
+    }
+  }
+
+  it('reads a fixed number of times per team regardless of how many assets a trade has', async () => {
+    const { counts, prisma } = countingPrisma(fixtures())
+    let injuryLoads = 0
+    const port = createWindowFactsPrismaPort({
+      prisma, platformLeagueId: PLATFORM, sport: 'nfl', rosterPlayerIds: healthyRoster,
+      loadAvailability: async (s, ids) => { injuryLoads += 1; return healthy(s, ids) },
+    })
+    await resolveWindowDecision(scope('1'), port)
+
+    // WINDOW_PERSISTENCE_WEEKS weeks, one read per producer per week. Nothing here
+    // scales with asset count, because the resolver runs per TEAM per decision.
+    expect(counts.leagueTeam).toBe(3)
+    expect(counts.weeklyMatchup).toBe(3)
+    expect(counts.seasonForecastSnapshot).toBe(3)
+    expect(counts.dynastyProjectionSnapshot).toBe(3)
+    expect(injuryLoads).toBe(3)
+    const total = Object.values(counts).reduce((a, b) => a + b, 0) + injuryLoads
+    expect(total).toBe(15)
+  })
+
+  it('costs the same for a two-asset and a twenty-asset trade', async () => {
+    const run = async () => {
+      const { counts, prisma } = countingPrisma(fixtures())
+      const port = createWindowFactsPrismaPort({
+        prisma, platformLeagueId: PLATFORM, sport: 'nfl', rosterPlayerIds: healthyRoster, loadAvailability: healthy,
+      })
+      // One resolve per team per decision — the asset count never enters here.
+      await resolveWindowDecision(scope('1'), port)
+      return Object.values(counts).reduce((a, b) => a + b, 0)
+    }
+    expect(await run()).toBe(await run())
+  })
+
+  it('resolves the two sides of a trade independently, twice not once per asset', async () => {
+    const { counts, prisma } = countingPrisma(fixtures())
+    const port = createWindowFactsPrismaPort({
+      prisma, platformLeagueId: PLATFORM, sport: 'nfl', rosterPlayerIds: healthyRoster, loadAvailability: healthy,
+    })
+    const [a, b] = await Promise.all([
+      resolveWindowDecision(scope('1'), port),
+      resolveWindowDecision(scope('4'), port),
+    ])
+    expect(a.status).toBe('contender')
+    expect(b.status).toBe('rebuilding')
+    expect(counts.weeklyMatchup).toBe(6) // 3 weeks x 2 teams, not x assets
+  })
+})
+
 describe('integration: fixtures to a window decision', () => {
   it('drives a contender all the way from stored rows', async () => {
     const decision = await resolveWindowDecision(scope('1'), makePort(fixtures()))

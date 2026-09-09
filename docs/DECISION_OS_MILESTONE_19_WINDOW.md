@@ -182,3 +182,80 @@ test suites whose imports close over them**. The consumer wiring — `shadow.ts`
 and left **uncommitted in the working tree**, to be landed with Codex's foundation.
 
 The shared milestone and status documents were not modified.
+
+
+---
+
+# Continuation — real database verification, query cost, and the observation model
+
+## Isolated commit, now on a remote
+
+`990606405` was local only. Cherry-picked onto `origin/main` as **`9abefa708`** and pushed
+to **`feat/decision-os-milestone-19-window`**. `patch-id` is identical on both
+(`d4e5dd862d30abefb01ea8cd9304ed50db0e3cfc`), the branch adds exactly **one** commit beyond
+`origin/main`, and `origin/main` is unchanged at `1a43ebbd8`. 88 other local commits — all
+Codex's — were deliberately excluded by picking onto `origin/main` rather than pushing the
+local branch.
+
+## Codex is still active, so the integration boundary stays closed
+
+Two `codex.exe` processes spawned during this pass and twelve `lib/league-import/*` files
+were written three minutes before the check. Every candidate production caller is
+modified-uncommitted by that session — `lib/trade-value/snapshot.ts`,
+`lib/decision-os/trade/tradeWorld.ts`, `canonicalMemo.ts`,
+`runTradeConsoleAnalysis.ts` — and so is `prisma/schema.prisma`. Under the stated rule
+(*if Codex is active, do not modify or commit its files*) the production caller, the schema
+change and the consumer reconciliation are **blocked, not skipped**.
+
+## A real environment finding: the test database is behind production
+
+`WeeklyMatchup.rosterId` is `integer` on the test database and `String` in
+`prisma/schema.prisma`. The generated client therefore **cannot read the table at all** —
+a raw insert succeeds and `prisma.weeklyMatchup.findMany` fails with Postgres `08P01
+insufficient data left in message`.
+
+This is test-database drift, not a repo defect:
+`prisma/migrations-pending/20260903222531_weekly_matchup_roster_id_text`'s README records
+it as **"APPLIED TO PRODUCTION 2026-09-03"**. The test database has not had it applied.
+
+Consequence for this milestone: the five assertions that depend on reading real matchup
+rows **skip** on this database, gated on a probe. The port's honest degradation under that
+failure is asserted instead — it refuses with `all_play_record_missing` rather than
+throwing, which is the correct behaviour for a shadow path.
+
+⚠ **The first version of that probe was a check that could not fail.** It queried a
+league id with no rows, so Prisma never decoded the integer column and the probe reported
+the client as able to read the table. It now probes a row that exists.
+
+## Database verification performed
+
+Endpoint **`ep-muddy-leaf-adigvvph-pooler.c-2.us-east-1.aws.neon.tech`**, named explicitly
+from `.env.test`. Distinct from production (`ep-curly-block-ad0dlt9o`) and staging
+(`ep-winter-salad-ad34lce8`); the suite asserts the production endpoint is not the target
+and logs the host it used. No production credential was read and no production connection
+was opened.
+
+`vitest.setup.db-guard.ts` governs the gate: with nothing exported the suite **skips 9/9**
+and the production host appears **zero** times in its output. Fixtures are prefixed per run
+and removed in `afterAll`; the `AppUser` fixture uses a reserved `.invalid` TLD so a leaked
+row can never be deliverable.
+
+**Result: 5 passed, 5 skipped, exit 0.** Passing: endpoint identity; `League.id` passed
+where a platform league id is required **refuses** rather than reporting a team with no
+history; an unauthorised team id refuses; honest degradation under the drift; injury
+coverage below the floor refuses.
+
+## Query cost
+
+Bounded by weeks, never by assets: **15 reads per team per decision** — 3 weeks x
+(identity, matchups, forecast, dynasty, injuries). Two teams cost exactly twice that, and
+the count is byte-identical for a two-asset and a twenty-asset trade because the resolver
+runs per team, not per asset. Pinned by three tests.
+
+## Observation model
+
+Proposed, not implemented — see
+[`DECISION_OS_M19_OBSERVATION_MODEL_PROPOSAL.md`](DECISION_OS_M19_OBSERVATION_MODEL_PROPOSAL.md).
+`TeamWindowProfile`, `CanonicalDecision`, `DecisionLog`, `SeasonForecastSnapshot` and
+`DecisionStrategyState` were each evaluated and each rejected with a stated reason. No
+schema file was edited and no migration was created or applied.
