@@ -4,6 +4,8 @@ import { requireAdminOrBearer } from '@/lib/adminAuth'
 import { prisma } from '@/lib/prisma'
 import { buildDecisionOsGroundingPacket } from '@/lib/decision-os/grounding/packet'
 import { serializeDecisionOsGroundingForPrompt } from '@/lib/decision-os/grounding/serialize'
+import { classifyChimmyIntent } from '@/lib/chimmy-orchestration/intent-classifier'
+import { deriveWantFromIntent } from '@/lib/decision-os/grounding/intentToWant'
 
 /**
  * GET /api/admin/decision-os/grounding-proof?leagueId=…&userId=…
@@ -64,6 +66,33 @@ export async function GET(request: NextRequest) {
   const question = url.searchParams.get('q')?.trim() || null
 
   /*
+   * 🛑 `?want=` FORCES OPT-IN SLICES ON, AND THIS SURFACE WOULD BE USELESS WITHOUT IT. The intent
+   * router below maps `lineupDecision` (37s) and `rosterValueGrade` (4.6s) to a hard `false`
+   * because they are over the chat route's latency ceiling — so mirroring the router alone would
+   * make those slices unreachable from the one tool built to look at them. That is the wrong kind
+   * of faithful: the point of a proof surface is to see what a slice DOES, including a slice a
+   * chat turn cannot afford.
+   *
+   * ⚠ AND THE FIRST JOB FOR IT IS `waiverDecision`, WHICH THE ROUTER STILL ASKS FOR. Its producer
+   * landed in 1b51ee3f0 and its latency has never been measured against a real league, so nobody
+   * knows whether a waiver turn still lands inside the 3s ceiling. Because the router requests it,
+   * `?q=who should I add off the waiver wire` measures it without `?want=` at all; `?want=` is what
+   * lets the same question be asked of a slice the router has already given up on.
+   *
+   * ⚠ IT ONLY EVER TURNS FLAGS ON. A slice killed by `DECISION_OS_FEED_*` stays killed, and this
+   * cannot silence a slice the router asked for — an admin diagnosing a bad answer must not be
+   * able to produce a packet that is quieter than the real one.
+   *
+   * ⚠ AND IT IS EXPLICIT PER CALL, never a default. A packet built with a forced slice is NOT what
+   * the live route builds, which is the whole reason the parameter is named rather than implied.
+   */
+  const forcedSlices = (url.searchParams.get('want') ?? '')
+    .split(',')
+    .map((v) => v.trim())
+    .filter(Boolean)
+  const forced = Object.fromEntries(forcedSlices.map((k) => [k, true]))
+
+  /*
    * 🛑 NO leagueId → HAND BACK THE ANSWER, NOT AN ERROR. "leagueId is required" is true and
    * useless: the id is a uuid nobody has memorised, and hunting for one is exactly the friction
    * that kept this surface unused. So the no-argument call lists the caller's own leagues with
@@ -94,7 +123,7 @@ export async function GET(request: NextRequest) {
           season: l.season,
           try: `/api/admin/decision-os/grounding-proof?leagueId=${l.id}`,
         })),
-        usage: '/api/admin/decision-os/grounding-proof?leagueId=<id>[&userId=<id>&sport=NFL&season=2026&week=3&q=...]',
+        usage: '/api/admin/decision-os/grounding-proof?leagueId=<id>[&userId=<id>&sport=NFL&season=2026&week=3&q=...&want=waiverDecision,lineupDecision]',
       },
       { status: 400 },
     )
@@ -122,12 +151,26 @@ export async function GET(request: NextRequest) {
      * ⚠ MIRRORS `/api/chat/chimmy` EXACTLY (R1.2), because a proof surface that assembles a
      * DIFFERENT packet from the live route proves nothing about the live route. `valueFormat` and
      * `leagueIdpRules` are derived inside the packet from the rules it already loads.
+     *
+     * 🛑 AND IT HAD STOPPED MIRRORING IT. The chat route gained an intent router — it spreads
+     * `deriveWantFromIntent(classifyChimmyIntent(message).intent)` over this same base, so which
+     * opt-in slices a turn requests depends on what was ASKED. Without that spread this surface
+     * built the base packet for every question and could not show any opt-in slice at all, which
+     * is precisely the "proves nothing about the live route" failure the paragraph above warns
+     * against — including for the slice whose latency decides whether it belongs in the router.
+     *
+     * ⚠ `q` IS NOW LOAD-BEARING, NOT DECORATIVE. It was passed to the packet as the question and
+     * otherwise ignored; it now also selects the intent. A call with no `q` classifies as a
+     * general turn and requests nothing extra — the previous behaviour exactly, so an existing
+     * link still shows what it always showed.
      */
     want: {
       values: true,
       devy: sport.toUpperCase() === 'NCAAF',
       projections: true,
       leagueRules: true,
+      ...deriveWantFromIntent(classifyChimmyIntent(question ?? '').intent),
+      ...forced,
     },
   }).catch((e: unknown) => {
     // Surface the failure rather than returning an empty packet that reads as "nothing to see".
