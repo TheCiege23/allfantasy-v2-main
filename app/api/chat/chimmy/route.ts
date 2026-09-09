@@ -73,7 +73,7 @@ import { buildTradeContextForChimmy } from '@/lib/chimmy-trade/tradeChimmyGround
 import { buildPendingTradeDecisionContext } from '@/lib/chimmy-trade/pendingTradeDecisionGrounding'
 import { buildLeagueTradeHistoryContext } from '@/lib/chimmy-trade/leagueTradeHistoryGrounding'
 import { buildLeagueStandingsContext } from '@/lib/chimmy/leagueStandingsGrounding'
-import { buildLeagueRulesGrounding } from '@/lib/chimmy/leagueRulesGrounding'
+import { buildLeagueRulesGrounding, buildRuleGroundingGap } from '@/lib/chimmy/leagueRulesGrounding'
 import { buildHeadToHeadGrounding } from '@/lib/chimmy/headToHeadGrounding'
 import { buildDescribedTradeContext } from '@/lib/chimmy-trade/describedTradeEvaluator'
 import { buildDraftContext } from '@/lib/chimmy/draftGrounding'
@@ -2319,8 +2319,22 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
            * we already hold and opens nothing.
            */
           if (leagueSnapshot) {
+            /*
+             * 🛑 NO EMPTY CATCH. This block used to swallow a failure, which left
+             * the model holding a league id, a roster and a name but no rules —
+             * indistinguishable from a league that HAS no special rules. It then
+             * answered from general fantasy knowledge in the same confident voice
+             * it uses for a grounded league. An explicit evidence gap is a few
+             * tokens and makes the absence visible.
+             *
+             * ⚠ THE DIAGNOSTIC CARRIES NO IDS, SETTINGS OR ERROR TEXT. Only the
+             * error's constructor name and a fixed reason. Interpolating a caught
+             * message would put arbitrary upstream text into a log — and this repo
+             * has already had a credential escape through a URL in exactly that way.
+             */
+            let rulesCtx: string | null = null
             try {
-              const rulesCtx = buildLeagueRulesGrounding({
+              rulesCtx = buildLeagueRulesGrounding({
                 leagueType: leagueSnapshot.leagueType,
                 isDynasty: leagueSnapshot.isDynasty,
                 keeperCount: leagueSnapshot.keeperCount,
@@ -2329,12 +2343,21 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
                 settings: leagueSnapshot.settings,
                 sport: leagueSnapshot.sport,
               })
-              if (rulesCtx) {
-                legacyEnrichmentContext = legacyEnrichmentContext
-                  ? `${rulesCtx}\n\n${legacyEnrichmentContext}`
-                  : rulesCtx
-              }
-            } catch { /* non-fatal */ }
+            } catch (err) {
+              console.warn('[chimmy] league rule grounding failed', {
+                kind: err instanceof Error ? err.constructor.name : 'unknown',
+              })
+              rulesCtx = buildRuleGroundingGap('resolve_threw')
+            }
+            /*
+             * A null return is not an error — it is "this row carried no
+             * identifying signal", which is still an absence the model must not
+             * paper over. Same gap, different reason.
+             */
+            if (!rulesCtx) rulesCtx = buildRuleGroundingGap('not_grounded')
+            legacyEnrichmentContext = legacyEnrichmentContext
+              ? `${rulesCtx}\n\n${legacyEnrichmentContext}`
+              : rulesCtx
           }
           if (planInput.leagueId && planInput.userId) {
             try {
