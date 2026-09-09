@@ -1,20 +1,34 @@
 #!/usr/bin/env node
 /**
- * Automated replacement for the batch-pusher's manual cross-session smoke check.
+ * Per-push automation of the cross-session smoke check a batch pusher used to
+ * run by hand — now that pushes are self-served in queue order, nobody does.
  *
  * WHY THIS EXISTS
  *
- * 🛑 THE BATCHING CONVENTION AND THE PUSHER ROLE STAND. An earlier draft of
- * this header said they had been "retired as a default now that production
- * bills like Railway usage" and pointed at a dated CLAUDE.md section for the
- * numbers. That was wrong on both counts: the section was an UNCOMMITTED
- * working-tree edit that never reached `main`, and Guap reaffirmed the role
- * and the batching rule on 2026-09-06 when asked directly. Corrected before
- * landing, because a comment asserting a policy outlives the conversation
- * that produced it and the next reader has no way to tell a real decision
- * from a confident paraphrase.
+ * 🛑 QUEUE-ORDER SELF-PUSH IS THE DEFAULT. Push your own commits with
+ * `npm run push:main`; batch your OWN work into one tip; claim the pusher
+ * role only deliberately, for a large or risky landing, a migration, or a
+ * rescue. That is Guap's call of 2026-09-08, and it lives in CLAUDE.md under
+ * "queue-order self-push is the default; batch YOUR OWN work".
  *
- * So this is a FLOOR UNDER the pusher, not a replacement for one. What it
+ * ⚠ THIS PARAGRAPH IS THE OTHER HALF OF A DISAGREEMENT CLAUDE.md NAMES BY
+ * NAME, so it is corrected here rather than left to rot. It previously read
+ * "THE BATCHING CONVENTION AND THE PUSHER ROLE STAND", and that was accurate
+ * WHEN WRITTEN on 2026-09-06 — the section retiring the batching default was
+ * committed in `cabc72677` and never reached `origin/main`, so a session
+ * reading this comment and a session reading the working tree were told
+ * opposite things for two days, and six to nine sessions queued behind a
+ * default that had never landed. The 2026-09-08 decision settled it in the
+ * other direction and DID land. Neither version was careless; the failure was
+ * that a policy assertion in a code comment outlives the conversation that
+ * produced it, and nothing makes the two files verify each other.
+ *
+ * So: if you change the push convention, `git grep` this file for it in the
+ * same commit. CLAUDE.md records that the tell here was cheap — `git grep
+ * <ref>` on the section title, never a read of the working tree, which is
+ * exactly how a never-landed edit passed for policy.
+ *
+ * So this is a FLOOR UNDER the queue, not a replacement for review. What it
  * automates is the one check an author structurally cannot run for
  * themselves: a typecheck of the exact SHA being pushed, against that
  * commit's own baseline. That is what caught the `LivePageData.fetchedAt`
@@ -92,6 +106,7 @@
 
 import {
   existsSync,
+  lstatSync,
   mkdirSync,
   readdirSync,
   readFileSync,
@@ -101,6 +116,7 @@ import {
   writeFileSync,
 } from 'node:fs'
 import { execFileSync, spawnSync } from 'node:child_process'
+import { tmpdir } from 'node:os'
 import { join, resolve, dirname } from 'node:path'
 
 const ZEROS = /^0+$/
@@ -291,6 +307,16 @@ function nukeWorktree(dir) {
   } catch {}
 }
 
+/**
+ * First-time checkout budget for the isolated worktree.
+ *
+ * ⚠ ONE DEFINITION, because the failure message quotes it. Written as a literal
+ * in both places, the two drift and the message then reports a timeout that did
+ * not happen at a duration nobody used — the same duplication bug CLAUDE.md
+ * records for the fast-tier window length.
+ */
+const ADD_TIMEOUT_MS = 5 * 60_000
+
 function ensureWorktree(dir, sha) {
   mkdirSync(dirname(dir), { recursive: true })
   const entry = worktreeEntry(dir)
@@ -324,13 +350,101 @@ function ensureWorktree(dir, sha) {
     // run well past a naive 30s budget on Windows. This is a one-time cost —
     // every later push reuses the worktree and only pays the checkout-swap
     // cost above.
-    timeout: 5 * 60_000,
+    timeout: ADD_TIMEOUT_MS,
     windowsHide: true,
   })
   if (add.error || add.status !== 0) {
-    return `git worktree add failed: ${(add.stderr || add.error?.message || '').trim().slice(0, 300)}`
+    /*
+     * ⚠ A TIMEOUT AND A GIT ERROR MUST NOT READ THE SAME, because they have
+     * opposite fixes. On 2026-09-08 this reported `git worktree add failed:
+     * Preparing worktree… Updating files: 0% (44/15141)` — which is CHECKOUT
+     * PROGRESS, not an error. It had timed out on a slow volume, and the
+     * message sent the reader looking for a git fault that did not exist.
+     */
+    const timedOut = Boolean(add.error) && (add.error.code === 'ETIMEDOUT' || Boolean(add.signal))
+    const detail = (add.stderr || add.error?.message || '').trim().slice(0, 300)
+    if (timedOut) {
+      return (
+        `git worktree add TIMED OUT after ${Math.round(ADD_TIMEOUT_MS / 60_000)}min checking out into ${dir} ` +
+        `— a slow volume or a contended box, NOT a git fault. Last output: ${detail}`
+      )
+    }
+    return `git worktree add failed: ${detail}`
   }
   return null
+}
+
+/**
+ * Can a directory on THIS volume host the node_modules link the run needs?
+ *
+ * 🛑 THIS GUARD WAS DECORATIVE ON AN exFAT CHECKOUT AND NOBODY COULD TELL.
+ * Measured 2026-09-08 on `F:\allfantasy-v2-main`, which lives on **exFAT**:
+ * `mklink /J` refuses with "Local NTFS volumes are required" and
+ * `New-Item -ItemType SymbolicLink` refuses with "Administrator privilege
+ * required", so `ensureNodeModulesLink` below CANNOT succeed there. Worse, the
+ * failure never even reached the link — `git worktree add` timed out first,
+ * part-way through 15,141 files on a slow volume, and the run failed open. A
+ * real push landed with this guard contributing nothing, and because it fails
+ * open by design, the push output read as normal.
+ *
+ * ⚠ PROBED, NOT SNIFFED. The obvious implementation is to read the filesystem
+ * type and compare it against "NTFS". That is a proxy for the thing we care
+ * about, and it goes wrong on the next exotic volume — a network share, a
+ * container mount, ReFS. This performs the ACTUAL operation and checks the
+ * ACTUAL result, which is the same "read the effect, not the syntax" rule
+ * CLAUDE.md applies to CSS and to typechecks.
+ *
+ * ⚠ AND IT IS THE LINK'S OWN VOLUME THAT MATTERS, NOT THE TARGET'S — measured,
+ * because assuming otherwise would have sent this looking for a second
+ * `node_modules` it does not need. A junction created on NTFS pointing AT the
+ * exFAT `node_modules` works fine and `tsc` resolves through it. So the fix is
+ * only ever about where the worktree goes.
+ */
+function canHostLink(parentDir) {
+  let probe = null
+  try {
+    mkdirSync(parentDir, { recursive: true })
+    probe = join(parentDir, `.af-smoke-linkprobe-${process.pid}-${Date.now()}`)
+    // Target is an unrelated directory that certainly exists; per the note
+    // above the target's volume is irrelevant to whether this succeeds.
+    symlinkSync(tmpdir(), probe, process.platform === 'win32' ? 'junction' : 'dir')
+    return lstatSync(probe).isSymbolicLink()
+  } catch {
+    return false
+  } finally {
+    // `unlinkSync` removes the LINK, never its target — the same call
+    // `nukeWorktree` already relies on for exactly this reason.
+    try {
+      if (probe) unlinkSync(probe)
+    } catch {}
+  }
+}
+
+/**
+ * Where to build the isolated worktree.
+ *
+ * Order: an explicit override, then the git common dir (which is what every
+ * NTFS checkout has always used — this is a NO-OP for them), then the system
+ * temp dir. The first candidate that can actually host a link wins.
+ *
+ * ⚠ AN EXPLICIT OVERRIDE IS HONOURED WITHOUT PROBING. Naming the directory you
+ * want IS the escape hatch, and silently overruling it would leave someone
+ * debugging a path they had deliberately chosen. If it cannot host a link the
+ * run fails open and says so, which is the loud outcome.
+ */
+function chooseWorktreeDir(common) {
+  const override = (process.env.AF_SMOKE_WORKTREE_DIR || '').trim()
+  if (override) return { dir: join(override, 'af-smoke-worktree'), why: 'AF_SMOKE_WORKTREE_DIR' }
+
+  for (const [parent, why] of [
+    [common, 'git common dir'],
+    [tmpdir(), 'system temp — the git common dir cannot host a link (exFAT?)'],
+  ]) {
+    if (parent && canHostLink(parent)) return { dir: join(parent, 'af-smoke-worktree'), why }
+  }
+  // Nothing can host a link. Return the historical location and let
+  // ensureNodeModulesLink report the real reason rather than inventing one.
+  return { dir: join(common, 'af-smoke-worktree'), why: 'no candidate can host a link' }
 }
 
 function ensureNodeModulesLink(worktreeDir, source) {
@@ -439,7 +553,13 @@ function main() {
   const markerErr = announceSmokeStart(common, sha)
   if (markerErr) allow(`${markerErr} — skipping rather than running unannounced`)
 
-  const worktreeDir = join(common, 'af-smoke-worktree')
+  const { dir: worktreeDir, why: worktreeWhy } = chooseWorktreeDir(common)
+  if (worktreeWhy !== 'git common dir') {
+    // Said out loud: a run building somewhere other than the historical
+    // location is a fact the next person debugging this needs, and silence
+    // here is how the exFAT failure stayed invisible for as long as it did.
+    process.stderr.write(`  … pre-push-smoke: worktree at ${worktreeDir} (${worktreeWhy})\n`)
+  }
   const wtErr = ensureWorktree(worktreeDir, sha)
   if (wtErr) allow(wtErr)
 
