@@ -3,6 +3,8 @@
 import { useMemo, useState } from 'react'
 import { Briefcase } from 'lucide-react'
 import { EmptyState, ErrorState } from '@/components/commissioner-os/states'
+import { DistributionBarChart, InfoCard } from '@/components/commissioner-os/cards'
+import { taskAgeBands } from '@/lib/commissioner-ui/charts/deriveChartSeries'
 import { PreviewDataBanner } from '@/components/commissioner-os/PreviewDataBanner'
 import { WorkQueueStrip } from './WorkQueueStrip'
 import { TaskListItem } from './TaskListItem'
@@ -32,10 +34,34 @@ export function WorkspaceView({ tasks, dataMode, errorMessage }: WorkspaceViewPr
   const activeQueue = getWorkspaceQueue(activeQueueId)
   const visibleTasks = useMemo(() => activeQueue.filter(tasks), [activeQueue, tasks])
   const selectedTask = tasks.find((task) => task.id === selectedTaskId) ?? null
+  /*
+   * Derived from every task, deliberately NOT from `visibleTasks`. A queue filter answers "what am I
+   * working on"; this chart answers "is anything rotting in here", and scoping it to the active queue
+   * would let a stale task hide by sitting outside the current filter.
+   */
+  const ageBands = useMemo(() => taskAgeBands(tasks), [tasks])
 
   return (
     <div>
       <PreviewDataBanner mode={dataMode} />
+
+      {/*
+        * How long the open queue has been open. Bands rather than a daily histogram: the question is
+        * whether anything is rotting, and that is a shape across a few buckets. An empty array means
+        * there is nothing open — the chart is absent rather than drawn with every bar at zero.
+        */}
+      {ageBands.length > 0 ? (
+        <div className="mb-6">
+          <InfoCard title="Open tasks by age">
+            <DistributionBarChart
+              data={ageBands}
+              height={200}
+              valueLabel="Open tasks"
+              ariaLabel={`${ageBands.reduce((sum, band) => sum + band.value, 0)} open tasks grouped by how long they have been open`}
+            />
+          </InfoCard>
+        </div>
+      ) : null}
 
       {errorMessage ? (
         <ErrorState message={errorMessage} />

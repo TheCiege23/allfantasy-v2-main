@@ -1,5 +1,6 @@
 import type { CommissionerPlatformResponse } from '../contracts'
 import type { SeverityTier } from '../tokens/colors'
+import type { LeagueActivityTrend } from '../missionControl/activityTrendReads'
 
 /**
  * The interface Mission Control consumes instead of reaching into League
@@ -51,6 +52,15 @@ export interface MissionControlKpis {
 }
 
 export interface DecisionOSClient {
+  /**
+   * The league's activity over the last 30 captures — Mission Control's one chart.
+   *
+   * Separate from `getLeagueHealthSummary`'s trend direction on purpose: that arrow compares two
+   * engagement SCORES from the history store, this is the underlying activity VOLUME from the
+   * behavioural snapshot store. Different stores, different units, and only one of them has data
+   * today — see `missionControl/activityTrendReads.ts`.
+   */
+  getActivityTrend(): Promise<CommissionerPlatformResponse<LeagueActivityTrend>>
   getLeagueHealthSummary(): Promise<CommissionerPlatformResponse<LeagueHealthSummary>>
   getManagerHighlights(): Promise<CommissionerPlatformResponse<ManagerHighlight[]>>
   getMissionControlKpis(): Promise<CommissionerPlatformResponse<MissionControlKpis>>

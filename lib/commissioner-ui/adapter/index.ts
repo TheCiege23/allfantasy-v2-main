@@ -141,6 +141,12 @@ function wrapMethod<T>(
 function buildMissionControlAdapter(mode: CommissionerDataMode): DecisionOSClient {
   const client = selectByMode(mode, stubDecisionOSClient, demoDecisionOSClient, liveDecisionOSClient)
   return {
+    /*
+     * No normalizer: a trend point is a date and a count. There is no severity, confidence or score
+     * for the adapter to coerce, and touching the count would put a second opinion about the number
+     * between the read layer and the chart.
+     */
+    getActivityTrend: wrapMethod('mission-control', 'getActivityTrend', mode, () => client.getActivityTrend()),
     getLeagueHealthSummary: wrapMethod('mission-control', 'getLeagueHealthSummary', mode, () => client.getLeagueHealthSummary(), (data) => ({
       ...data,
       tier: normalizeSeverity(data.tier),

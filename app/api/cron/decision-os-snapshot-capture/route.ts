@@ -87,12 +87,13 @@ export async function GET(request: Request) {
 
         const store = createDefaultBehavioralSnapshotStore()
         if (!store) {
-          return { storeUnavailable: true, discovered: 0, processed: 0, failed: 0, skippedForTime: 0, errors: [] as string[] }
+          return { storeUnavailable: true, discovered: 0, processed: 0, failed: 0, skippedForTime: 0, historyFailures: 0, errors: [] as string[] }
         }
 
         let processed = 0
         let failed = 0
         let skippedForTime = 0
+        let historyFailures = 0
         const errors: string[] = []
         for (const league of leagues) {
           if (Date.now() - startedAt > DISCOVERY_TIME_BUDGET_MS) {
@@ -100,20 +101,45 @@ export async function GET(request: Request) {
             continue
           }
           const result = await captureLeagueSnapshotJob(league.id, { store })
-          if (result.ok) processed += 1
-          else {
+          if (result.ok) {
+            processed += 1
+            /*
+             * 🛑 THIS BRANCH WAS MISSING, AND IT MADE THE TREND-HISTORY WRITE UNFALSIFIABLE.
+             * `captureLeagueSnapshotJob` reports a failed history write in `historyError` and still
+             * returns `ok: true`, deliberately: history is additive, and losing it must not report a
+             * successful behavioural capture as a failure. But the only caller checked `result.ok`
+             * and discarded the rest, so a history write that failed for every league on every run
+             * would have produced a completely green `SyncJobRun` — and the table would stay empty
+             * with nothing anywhere saying why.
+             *
+             * That is the same shape as the bug this job exists to fix: a surface pointed at a table
+             * nothing refreshes, failing silently and looking correct.
+             */
+            if (result.historyError) {
+              historyFailures += 1
+              if (errors.length < 5) errors.push(`${league.id}: trend history not written — ${result.historyError}`)
+            }
+          } else {
             failed += 1
             if (errors.length < 5) errors.push(`${league.id}: ${result.error}`)
           }
         }
-        return { storeUnavailable: false, discovered: leagues.length, processed, failed, skippedForTime, errors }
+        return { storeUnavailable: false, discovered: leagues.length, processed, failed, skippedForTime, historyFailures, errors }
       },
       (s) => ({
         rowsRead: s.discovered,
         rowsWritten: s.processed,
         rowsSkipped: s.skippedForTime,
         errors: s.storeUnavailable ? ["snapshot_store_unavailable"] : s.errors,
-        warnings: s.skippedForTime > 0 ? [`${s.skippedForTime} leagues deferred by the ${DISCOVERY_TIME_BUDGET_MS / 1000}s time budget`] : [],
+        warnings: [
+          ...(s.skippedForTime > 0 ? [`${s.skippedForTime} leagues deferred by the ${DISCOVERY_TIME_BUDGET_MS / 1000}s time budget`] : []),
+          /*
+           * A warning rather than an error: the behavioural snapshots were captured, so the run did
+           * its main job. But it is the count that tells a reader whether the trend store is filling,
+           * and that question had no observable answer at all before this.
+           */
+          ...(s.historyFailures > 0 ? [`${s.historyFailures} leagues captured but wrote no trend-history row`] : []),
+        ],
       }),
     )
 

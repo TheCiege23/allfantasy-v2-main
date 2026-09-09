@@ -5,6 +5,12 @@ import { Zap } from 'lucide-react'
 import { EmptyState, ErrorState } from '@/components/commissioner-os/states'
 import { PreviewDataBanner } from '@/components/commissioner-os/PreviewDataBanner'
 import { AutomationCatalogCard } from './AutomationCatalogCard'
+import { StackedBarChart, DistributionBarChart, InfoCard } from '@/components/commissioner-os/cards'
+import {
+  automationRunOutcomes,
+  automationStaleness,
+  AUTOMATION_OUTCOME_SERIES,
+} from '@/lib/commissioner-ui/charts/deriveChartSeries'
 import { AutomationHistoryDialog } from './AutomationHistoryDialog'
 import type { CommissionerDataMode } from '@/lib/commissioner-ui/demo-mode/constants'
 import type { AutomationCatalogEntry, AutomationExecutionEntry } from '@/lib/commissioner-ui/automations/decision-os-client'
@@ -36,6 +42,9 @@ export function AutomationCenterView({ catalog, historyByAutomationId, dataMode,
   )
   const [historyAutomationId, setHistoryAutomationId] = useState<string | null>(null)
 
+  const outcomeRows = useMemo(() => automationRunOutcomes(catalog), [catalog])
+  const staleness = useMemo(() => automationStaleness(catalog), [catalog])
+
   const sortedCatalog = useMemo(
     () => catalog.slice().sort((a, b) => HEALTH_RANK[a.health] - HEALTH_RANK[b.health]),
     [catalog]
@@ -46,6 +55,54 @@ export function AutomationCenterView({ catalog, historyByAutomationId, dataMode,
   return (
     <div>
       <PreviewDataBanner mode={dataMode} />
+
+      {/*
+        * Two charts, two different questions, and the second is the one this platform actually failed.
+        * Outcomes answer "is it succeeding when it runs"; staleness answers "is it running at all".
+        * `waivers.processLeague` scores perfectly on the first and had been silent for eleven weeks.
+        */}
+      {(outcomeRows.length > 0 || staleness.length > 0) ? (
+        <div className="mb-6 grid grid-cols-1 gap-4 lg:grid-cols-2">
+          {outcomeRows.length > 0 ? (
+            <InfoCard title="Run outcomes">
+              <StackedBarChart
+                rows={outcomeRows}
+                layout="horizontal"
+                height={Math.max(160, outcomeRows.length * 44 + 60)}
+                ariaLabel="Automation runs per job, split into succeeded, skipped and failed"
+                series={[
+                  { id: 'succeeded', label: 'Succeeded', color: 'var(--accent-emerald-strong)' },
+                  { id: 'skipped', label: 'Skipped', color: 'var(--accent-amber-strong)' },
+                  { id: 'failed', label: 'Failed', color: 'var(--accent-red-strong)' },
+                ]}
+              />
+              {/*
+                * The legend cannot carry this and the distinction decides how the whole chart reads.
+                */}
+              <p className="mt-2 text-xs" style={{ color: 'var(--muted)' }}>
+                A skip is the idempotency guard finding the window&apos;s work already done — not a
+                failure. It is shown separately because a job that skips constantly is telling you
+                something different from one that fails.
+              </p>
+            </InfoCard>
+          ) : null}
+
+          {staleness.length > 0 ? (
+            <InfoCard title="Days since last run">
+              <DistributionBarChart
+                data={staleness}
+                height={Math.max(160, staleness.length * 44 + 60)}
+                valueLabel="Days"
+                ariaLabel="Days since each automation last ran, most stale first"
+              />
+              <p className="mt-2 text-xs" style={{ color: 'var(--muted)' }}>
+                Judged on success rate alone a job that never runs looks perfect. This is the axis that
+                shows it.
+              </p>
+            </InfoCard>
+          ) : null}
+        </div>
+      ) : null}
 
       {errorMessage ? (
         <ErrorState message={errorMessage} />

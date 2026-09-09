@@ -1,7 +1,8 @@
 'use client'
 
 import { useMemo, useState } from 'react'
-import { RecommendationCard } from '@/components/commissioner-os/cards'
+import { RecommendationCard, ActivityMixDonut, InfoCard } from '@/components/commissioner-os/cards'
+import { recommendationsBySeverity } from '@/lib/commissioner-ui/charts/deriveChartSeries'
 import { EmptyState } from '@/components/commissioner-os/states'
 import { PreviewDataBanner } from '@/components/commissioner-os/PreviewDataBanner'
 import type { CommissionerDataMode } from '@/lib/commissioner-ui/demo-mode/constants'
@@ -48,9 +49,28 @@ export function RecommendationsView({ recommendations, dataMode }: Recommendatio
       .sort((a, b) => severityRank[a.severity] - severityRank[b.severity])
   }, [recommendations, showArchive])
 
+  const severityMix = useMemo(() => recommendationsBySeverity(visible), [visible])
+
   return (
     <div>
       <PreviewDataBanner mode={dataMode} />
+
+      {/*
+        * Severity mix of whatever the current filter is showing — derived from `visible`, not from the
+        * whole queue, so the chart always describes the list underneath it. A donut that ignored the
+        * archive toggle would contradict the rows beside it.
+        */}
+      {severityMix.length > 0 ? (
+        <div className="mb-6">
+          <InfoCard title="Open queue by severity">
+            <ActivityMixDonut
+              slices={severityMix}
+              height={220}
+              ariaLabel={`${visible.length} recommendation${visible.length === 1 ? '' : 's'} by severity`}
+            />
+          </InfoCard>
+        </div>
+      ) : null}
 
       <div className="mb-4 flex gap-2" role="tablist" aria-label="Recommendation view">
         <button

@@ -4,9 +4,22 @@ const DUE_SOON_WINDOW_MS = 7 * 24 * 60 * 60 * 1000
 const ATTENTION_PRIORITIES = new Set(['critical', 'elevated'])
 const UNRESOLVED_STATUSES = new Set(['open', 'waiting_on_manager', 'waiting_on_league_vote'])
 
+/**
+ * Whether a task is still open.
+ *
+ * ⚠ EXPORTED BECAUSE THIS TEST WAS ALREADY WRITTEN OUT TWICE IN THIS FILE — once inside
+ * `isDueSoon` and once in the automation-candidate queue's filter — and a third copy was about to be
+ * added in the chart derivations. `completed` and `archived` are Workspace's terminal statuses; the
+ * chart that plots "open tasks by age" and the queue that lists them have to agree on which those
+ * are, or the chart's total contradicts the list beside it.
+ */
+export function isTaskOpen(task: CommissionerTask): boolean {
+  return task.status !== 'completed' && task.status !== 'archived'
+}
+
 function isDueSoon(task: CommissionerTask): boolean {
   if (!task.dueAt) return false
-  if (task.status === 'completed' || task.status === 'archived') return false
+  if (!isTaskOpen(task)) return false
   const dueInMs = new Date(task.dueAt).getTime() - Date.now()
   return dueInMs >= 0 && dueInMs <= DUE_SOON_WINDOW_MS
 }
@@ -81,7 +94,7 @@ export const WORKSPACE_QUEUES: WorkspaceQueueDefinition[] = [
     label: 'Automation Candidates',
     emptyTitle: 'No automation candidates.',
     emptyDescription: 'Recurring, low-stakes tasks worth automating will appear here.',
-    filter: (tasks) => tasks.filter((task) => task.automationCandidate && task.status !== 'completed' && task.status !== 'archived'),
+    filter: (tasks) => tasks.filter((task) => task.automationCandidate && isTaskOpen(task)),
   },
   {
     id: 'recently-completed',

@@ -53,6 +53,17 @@ export interface AutomationCatalogEntry {
   lastRunResult?: AutomationExecutionResult
   totalRunsCount: number
   successRatePercent: number
+  /**
+   * The outcome breakdown behind `successRatePercent`, so a chart can show the shape of a job's
+   * history rather than one derived percentage.
+   *
+   * ⚠ `skipped` IS NOT A FAILURE AND IS NOT IN `successRatePercent`'S DENOMINATOR. A skip is the
+   * idempotency guard doing its job — the same window's work already done. `waivers.processLeague`
+   * on production is 2 completed, 0 failed, 249 skipped: a chart that stacked skips as failures
+   * would paint a job that has never failed once as catastrophic, and a chart that hid them would
+   * lose the fact that it has barely attempted anything. Both belong, distinguished.
+   */
+  runOutcomes: { succeeded: number; failed: number; skipped: number }
   relatedLinks: CommissionerRelatedLink[]
 }
 

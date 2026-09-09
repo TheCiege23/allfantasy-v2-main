@@ -16,6 +16,26 @@ function timestamp() {
 }
 
 export const stubDecisionOSClient: DecisionOSClient = {
+  async getActivityTrend() {
+    return {
+      data: {
+        // Six captures is enough to draw a line and short enough to read in a fixture.
+        points: [
+          { date: '2026-09-04', windowedEventCount: 61 },
+          { date: '2026-09-05', windowedEventCount: 60 },
+          { date: '2026-09-06', windowedEventCount: 58 },
+          { date: '2026-09-07', windowedEventCount: 58 },
+          { date: '2026-09-08', windowedEventCount: 55 },
+          { date: '2026-09-09', windowedEventCount: 54 },
+        ],
+        lookbackDays: 90,
+      },
+      error: null,
+      source: 'stub',
+      timestamp: timestamp(),
+    }
+  },
+
   async getLeagueHealthSummary() {
     return {
       data: {

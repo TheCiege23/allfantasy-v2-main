@@ -16,6 +16,30 @@ function timestamp() {
 }
 
 export const demoDecisionOSClient: DecisionOSClient = {
+  /*
+   * A realistic 30-capture series that DECLINES, which is the shape a real dynasty league shows
+   * outside its season: the rolling window is shedding draft-week activity faster than the offseason
+   * replaces it. A flat or rising demo line would teach a viewer that a falling line means trouble,
+   * when for most of the year it means the calendar.
+   */
+  async getActivityTrend() {
+    const start = 118
+    /*
+     * Dates are walked through a real Date so the series crosses a month boundary correctly. Building
+     * them by padding an incrementing day number collapsed everything past the 31st onto one date, and
+     * a chart with duplicate x-values silently stacks points on top of each other.
+     */
+    const first = Date.UTC(2026, 7, 11) // 2026-08-11
+    const points = Array.from({ length: 30 }, (_, i) => {
+      const date = new Date(first + i * 86_400_000).toISOString().slice(0, 10)
+      // A gentle decline with a small mid-series bump, so it reads as measured rather than generated.
+      const drift = Math.round(i * 1.4)
+      const bump = i === 12 || i === 13 ? 6 : 0
+      return { date, windowedEventCount: start - drift + bump }
+    })
+    return { data: { points, lookbackDays: 90 }, error: null, source: 'demo', timestamp: timestamp() }
+  },
+
   async getLeagueHealthSummary() {
     return {
       data: {
