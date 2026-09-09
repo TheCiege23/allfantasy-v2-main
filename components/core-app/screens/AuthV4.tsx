@@ -285,8 +285,54 @@ function SignIn({ callbackUrl }: { callbackUrl: string }) {
         </button>
       </form>
 
+      <DevBypassSignIn callbackUrl={callbackUrl} />
+
       <OAuthGrid callbackUrl={callbackUrl} />
     </div>
+  )
+}
+
+/*
+ * Local-dev sign-in, restored here because the AuthV4 cutover orphaned it.
+ *
+ * `app/login/page.tsx` used to render `LoginContent`, which carried this button;
+ * the cutover swapped in AuthV4 and did not bring it across, so on a dev box the
+ * `dev-bypass` credentials provider registered in `lib/auth.ts` had no way to be
+ * reached from the UI at all.
+ *
+ * ⚠ DOUBLE-GATED, AND THE `NODE_ENV` HALF IS THE ONE THAT MATTERS. Next inlines
+ * `process.env.NODE_ENV` at build time, so in a production bundle this whole
+ * subtree is dead code the minifier removes — the button cannot be rendered by
+ * setting an env var on the host. The public flag is the second gate so a dev
+ * box that has not opted in does not show it either.
+ *
+ * Even if both gates were somehow satisfied in production the call would fail
+ * closed: `lib/auth.ts` only registers the `dev-bypass` provider when
+ * `NODE_ENV !== "production"`, so there would be no provider to sign in with.
+ */
+function DevBypassSignIn({ callbackUrl }: { callbackUrl: string }) {
+  const [busy, setBusy] = useState(false)
+
+  if (process.env.NODE_ENV === 'production') return null
+  if (process.env.NEXT_PUBLIC_DEV_AUTH_BYPASS_ENABLED !== 'true') return null
+
+  return (
+    <button
+      type="button"
+      className="af-btn af-au-submit"
+      style={{ marginTop: 12, opacity: 0.85 }}
+      disabled={busy}
+      onClick={async () => {
+        setBusy(true)
+        try {
+          await signIn('dev-bypass', { callbackUrl })
+        } finally {
+          setBusy(false)
+        }
+      }}
+    >
+      {busy ? 'Signing in…' : 'Continue as Local Dev User'}
+    </button>
   )
 }
 
