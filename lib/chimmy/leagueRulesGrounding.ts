@@ -41,6 +41,29 @@ function renderRule(label: string, rule: ResolvedRule<unknown>): string {
  * a heading with nothing under it invites the model to fill it in.
  */
 export function buildLeagueRulesGrounding(league: LeagueRuleInput): string | null {
+  /*
+   * 🛑 NOTHING IN, NOTHING OUT. `readFormatRules` maps an empty `leagueType` to
+   * `redraft` — a documented, deliberate fallback that is right for pricing,
+   * where "we could not tell" still has to price something. It is wrong here:
+   * this function's output is asserted to a model as THIS LEAGUE'S RULES, so
+   * the same fallback states redraft rules about a league we know nothing
+   * about, which is precisely the invention the provenance model exists to
+   * prevent.
+   *
+   * ⚠ THE ROUTE ALREADY GUARANTEES A LEAGUE — the call is inside
+   * `if (leagueSnapshot)`. This is a second lock on the same door, because the
+   * cost of being wrong here is a confidently stated false rule, and the cost
+   * of the guard is one object check.
+   */
+  const hasAnySignal =
+    (typeof league.leagueType === 'string' && league.leagueType.trim().length > 0) ||
+    league.isDynasty === true ||
+    typeof league.keeperCount === 'number' ||
+    (typeof league.keeperCostSystem === 'string' && league.keeperCostSystem.length > 0) ||
+    typeof league.keeperRoundPenalty === 'number' ||
+    (league.settings !== null && league.settings !== undefined)
+  if (!hasAnySignal) return null
+
   const resolved = resolveLeagueRules(league)
   return renderLeagueRulesGrounding(resolved)
 }
