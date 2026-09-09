@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/prisma'
+import { currentSeasonReportWhere } from '@/lib/injuries/injuryRecency'
 import { buildPlayerKey } from '@/lib/adp/computeAllFantasyAdp'
 import {
   canonicalName,
@@ -600,10 +601,23 @@ async function loadInjuryStatus(
     .catch(() => null)) as { status: string | null; fetchedAt: Date | null } | null
   if (sportsInjury) return sportsInjury
 
+  /*
+   * Bounded to the current season, like every other serving-path read of this
+   * table — see lib/injuries/injuryRecency.ts.
+   *
+   * ⚠ NFL LOOKS SAFE HERE AND IS NOT QUITE. Unlike the other sports this table is
+   * genuinely fresh for NFL (the Grok pass writes it four times a day), which is
+   * why this read was left unbounded. But 573 of its 1,109 NFL rows were still
+   * older than 120 days when measured on 2026-09-09 — last season's reports — and
+   * this is a FALLBACK reached exactly when `sportsInjury` has nothing for the
+   * player. That is precisely the population for which the only surviving row is
+   * an old one.
+   */
   const injuryReport = (await (db as any).injuryReportRecord
     .findFirst({
       where: {
         sport: 'NFL',
+        ...currentSeasonReportWhere(),
         AND: [
           { OR: [{ playerId: { in: candidates } }, { playerName: player.name }] },
           { OR: [{ week }, { week: null }] },

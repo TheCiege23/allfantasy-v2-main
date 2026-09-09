@@ -3,6 +3,7 @@ import 'server-only'
 import { prisma } from '@/lib/prisma'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
 import { DATA_TTLS, isFreshDate, triggerBackgroundRefresh } from '@/lib/data/shared'
+import { currentSeasonReportWhere } from '@/lib/injuries/injuryRecency'
 import { runInjuryImporter } from '@/lib/workers/injury-importer'
 import { runNewsImporter } from '@/lib/workers/news-importer'
 import { runSportsDataImporter } from '@/lib/workers/sports-data-importer'
@@ -98,28 +99,54 @@ export async function getPlayersByTeam(team: string, sport: string) {
   return rows
 }
 
+/**
+ * ⚠ NOT THE CANONICAL INJURY READ. `lib/injuries/injuryReadPort` is — it reads
+ * `SportsInjury` (refreshed every 30 minutes), returns one row per player with the
+ * freshest source winning, and REPORTS staleness rather than hiding it. Most
+ * callers have already moved; `app/api/start-sit/injuries` keeps this only as a
+ * fallback when the port returns nothing.
+ *
+ * 🛑 BOUNDED TO THE CURRENT SEASON AT THE SOURCE, ON PURPOSE. This had no recency
+ * filter of its own, and `injury_reports` has no scheduled writer outside NFL —
+ * NBA, NHL, MLB and NCAAB were all last written 2026-04-26, measured 135 days
+ * stale on 2026-09-09 (see lib/injuries/injuryRecency.ts). Every caller was
+ * therefore expected to remember to filter, and the one that did wrote its own
+ * horizon inline. Bounding it here means a new caller cannot be handed last
+ * season by accident — the failure mode was silent, since an April "Out" is a
+ * perfectly well-formed row.
+ */
 export async function getInjuryReport(sport: string, week?: number) {
   const normalizedSport = normalizeToSupportedSport(sport)
-  let rows = await prisma.injuryReportRecord.findMany({
-    where: {
-      sport: normalizedSport,
-      ...(typeof week === 'number' ? { week } : {}),
-    },
+  const where = {
+    sport: normalizedSport,
+    ...currentSeasonReportWhere(),
+    ...(typeof week === 'number' ? { week } : {}),
+  }
+  const rows = await prisma.injuryReportRecord.findMany({
+    where,
     orderBy: { reportDate: 'desc' },
     take: 250,
   })
 
-  if (rows.length === 0) {
-    await runInjuryImporter({ sports: [normalizedSport], week })
-    rows = await prisma.injuryReportRecord.findMany({
-      where: {
-        sport: normalizedSport,
-        ...(typeof week === 'number' ? { week } : {}),
-      },
-      orderBy: { reportDate: 'desc' },
-      take: 250,
-    })
-  } else if (!isFreshDate(rows[0]?.reportDate, DATA_TTLS.injuries)) {
+  /*
+   * ⚠ NON-BLOCKING ON A MISS, AND THE BOUND ABOVE IS WHY THAT HAD TO CHANGE.
+   *
+   * A miss used to `await runInjuryImporter(...)` and re-read. That was safe only
+   * because the unbounded read almost never missed — for NBA, NHL and MLB it
+   * returned last April's rows and the importer was never reached. Bounding the
+   * read makes those sports MISS on every call, which would have turned a silent
+   * staleness bug into a synchronous provider fanout on a request path, once per
+   * request, for exactly the sports nothing writes.
+   *
+   * `triggerBackgroundRefresh` dedupes by key, so a burst collapses to one import,
+   * and this matches how every sibling in this file already handles a miss. The
+   * caller gets an honest empty list meanwhile — and its own primary source is the
+   * canonical port, which is current to the half-hour.
+   *
+   * Cold and stale are therefore the same instruction now: go and refresh, answer
+   * with what is genuinely on hand.
+   */
+  if (rows.length === 0 || !isFreshDate(rows[0]?.reportDate, DATA_TTLS.injuries)) {
     triggerBackgroundRefresh(`injuries:${normalizedSport}:${week ?? 'all'}`, () =>
       runInjuryImporter({ sports: [normalizedSport], week })
     )

@@ -2,6 +2,7 @@ import 'server-only'
 
 import { prisma } from '@/lib/prisma'
 import { toPrismaJsonInput } from '@/lib/prisma-json'
+import { currentSeasonReportWhere } from '@/lib/injuries/injuryRecency'
 import { SUPPORTED_SPORTS, normalizeToSupportedSport, type SupportedSport } from '@/lib/sport-scope'
 import {
   assertTeamCodeFits,
@@ -404,8 +405,29 @@ export async function runSportsDataImporter(options?: {
           take: 4000,
           select: { playerId: true, playerName: true, stats: true },
         }),
+        /*
+         * 🛑 BOUNDED TO THE CURRENT SEASON, AND THIS READ IS WHY THE BOUND EXISTS.
+         *
+         * `injury_reports` has no scheduled writer outside NFL (see
+         * lib/injuries/injuryRecency.ts for the production measurement — NBA, NHL,
+         * MLB and NCAAB were all last written 2026-04-26, 135 days before this was
+         * added). Unbounded, this read did two damaging things per non-NFL sport:
+         *
+         *   - `injuryStatus`/`injuryNotes` below are written from these rows onto
+         *     SportsPlayerRecord, a column carrying NO DATE. A four-month-old
+         *     designation became indistinguishable from one taken this morning, and
+         *     FantasyValueSnapshotService reads that column FIRST.
+         *   - the seed loop further down INVENTS a player from any injury row it
+         *     cannot otherwise match, so last season's report also kept resurrecting
+         *     roster entries.
+         *
+         * Dropping the stale rows leaves `injuryStatus` null, which is the honest
+         * answer: SportsInjury is refreshed every 30 minutes for every sport that has
+         * a source, and the port reads it. An absent status degrades to "unknown"; a
+         * wrong one is asserted with full confidence.
+         */
         prisma.injuryReportRecord.findMany({
-          where: { sport },
+          where: { sport, ...currentSeasonReportWhere() },
           orderBy: { reportDate: 'desc' },
           take: 2500,
         }),
