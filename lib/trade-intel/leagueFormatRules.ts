@@ -14,6 +14,8 @@
  * the whole game in a keeper league and nothing prices it.
  */
 
+import { keeperSettingsConfirmedFrom } from '@/lib/league-contract/keeperProvenance'
+
 export type LeagueConcept =
   | 'redraft'
   | 'keeper'
@@ -210,6 +212,21 @@ export function keeperEvidenceFor(league: {
   if (league.keeperSettingsConfirmed === true) return 'caller_confirmed'
 
   /*
+   * 🛑 AN EXPLICIT `false` OUTRANKS THE HEURISTIC BELOW, AND THAT IS THE WHOLE
+   * REASON THIS IS THREE-VALUED. "The provider told us this is a redraft
+   * league" is stronger information than "this column differs from its
+   * default" — Sleeper's `settings.type` is the only signal that separates
+   * keeper from redraft, and a league it calls redraft must not be reclassified
+   * because someone's `keeperCount` happens to read 5.
+   *
+   * ⚠ `undefined`/`null` MUST NOT REACH HERE AS `false`. Absent means nobody
+   * ever established anything, and the heuristic is the only signal an older
+   * row has. `keeperSettingsConfirmedFrom` returns `undefined` for that case
+   * precisely so the two stay distinguishable.
+   */
+  if (league.keeperSettingsConfirmed === false) return null
+
+  /*
    * ⚠ ANY of the three differing is enough, not all three. A commissioner who
    * sets `maxKeepers: 5` and leaves the cost system alone has configured
    * keepers just as deliberately as one who changes all three.
@@ -267,6 +284,20 @@ export function readFormatRules(league: {
    * therefore stops pricing an untouched redraft league as a keeper league.
    */
   keeperSettingsConfirmed?: boolean | null
+  /**
+   * The league's raw `settings` JSON, when the caller has it.
+   *
+   * 🛑 ACCEPTED HERE SO NO CALLER HAS TO REMEMBER. Keeper provenance lives in
+   * `settings.conceptRules.extensions.keeperProvenance`, and threading a derived
+   * flag through every call site is a rule that gets forgotten on the next one
+   * added — which is how the original defect priced every untouched league as
+   * keeper. Handing the blob to the classifier means a caller that already
+   * selects `settings` (tradeContextNotes does) is correct without changing.
+   *
+   * ⚠ AN EXPLICIT `keeperSettingsConfirmed` STILL WINS. This is the fallback,
+   * not an override.
+   */
+  settings?: unknown
 }): FormatRules {
   const alias = (league.aliasTags ?? []).map((t) => String(t).trim().toLowerCase())
   /*
@@ -286,7 +317,13 @@ export function readFormatRules(league: {
    * `keeper` would count as an explicit concept too, the same way the chain
    * below reads the alias first and the column second.
    */
-  const keeperEvidence = keeperEvidenceFor({ ...league, leagueType: raw })
+  const keeperEvidence = keeperEvidenceFor({
+    ...league,
+    leagueType: raw,
+    // `??` not `||`: `false` is a real answer ("the provider says not keeper").
+    keeperSettingsConfirmed:
+      league.keeperSettingsConfirmed ?? keeperSettingsConfirmedFrom(league.settings),
+  })
 
   const baseConcept: LeagueConcept =
     raw === 'king_of_the_hill' || raw === 'koth'

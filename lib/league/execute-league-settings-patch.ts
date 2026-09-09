@@ -10,6 +10,7 @@ import { prisma } from '@/lib/prisma'
 import {
   buildLeagueUpdateFromBody,
 } from '@/lib/league/commissioner-league-patch'
+import { keeperProvenanceFromCommissionerSave } from '@/lib/league-contract/keeperProvenance'
 import { requireCommissionerRole } from '@/lib/league/permissions'
 import { buildWriteAuthorityEnvelope } from '@/lib/league/write-authority'
 import { isValidIanaTimeZone } from '@/lib/timezone'
@@ -276,6 +277,45 @@ export async function executeLeagueSettingsPatch(
       data: leaguePatch,
     })
     updatedFieldNames.push(...leagueKeys)
+  }
+
+  /*
+   * 🛑 A COMMISSIONER SAVE IS THE ONLY THING THAT CAN CONFIRM A DEFAULT VALUE.
+   * `League.keeperCount @default(3)` means the column cannot distinguish "the
+   * commissioner chose three" from "nobody chose anything", so a save that
+   * SUBMITS a keeper field is recorded as provenance even when the value is
+   * unchanged. Submitting the field is the evidence — comparing values would
+   * miss exactly the case this exists for.
+   *
+   * ⚠ WRITTEN AS A READ-MODIFY-WRITE ON `settings`, matching the sportConfig and
+   * devyLeagueConfig blocks below. `league.settings` was loaded before the
+   * column update above and the column update does not touch `settings`, so it
+   * is still current.
+   */
+  const keeperProv = keeperProvenanceFromCommissionerSave({ submittedKeys: leagueKeys, body })
+  if (keeperProv) {
+    const prevSettings = (league.settings as Record<string, unknown> | null) ?? {}
+    const prevConcept =
+      prevSettings.conceptRules && typeof prevSettings.conceptRules === 'object' && !Array.isArray(prevSettings.conceptRules)
+        ? (prevSettings.conceptRules as Record<string, unknown>)
+        : {}
+    const prevExt =
+      prevConcept.extensions && typeof prevConcept.extensions === 'object' && !Array.isArray(prevConcept.extensions)
+        ? (prevConcept.extensions as Record<string, unknown>)
+        : {}
+    await prisma.league.update({
+      where: { id: leagueId },
+      data: {
+        settings: {
+          ...prevSettings,
+          conceptRules: {
+            ...prevConcept,
+            extensions: { ...prevExt, keeperProvenance: keeperProv },
+          },
+        } as Prisma.InputJsonValue,
+      },
+    })
+    updatedFieldNames.push('keeperProvenance')
   }
 
   if (body.sportConfig !== undefined) {
