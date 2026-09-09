@@ -13,6 +13,8 @@ import {
   canonicalSettingsHash,
   effectiveRulesVersion,
   OVERRIDES_KEY,
+  PROVENANCE_KEY,
+  PROVIDER_PROVENANCE,
   readOverrides,
   resolveLayered,
   SOURCE_KEY,
@@ -146,20 +148,44 @@ describe('the invalidation signal', () => {
 
 describe('first adoption of an unlayered league', () => {
   /*
-   * Every league that exists today is unlayered. These two cases are the whole deploy risk.
+   * Every league that exists today is unlayered. This is the whole deploy risk, and Batch A.1
+   * item 5 changed the rule: equality with the provider is NOT proof of provider ownership,
+   * because a user may have deliberately chosen the value the provider happens to serve.
    */
-  it('files a value that MATCHES the provider into the source layer', () => {
-    const provider = { visualTheme: { accent: 'from-provider' } }
+  it('preserves an ambiguous value as a USER OVERRIDE even when it matches the provider', () => {
+    /*
+     * 🛑 THE CASE THE EQUALITY RULE GOT WRONG. A manager who picked the same accent the
+     * provider serves is indistinguishable, by comparison, from the importer having written
+     * it. Filing it as provider-owned means the next provider change silently overwrites a
+     * deliberate choice. Freezing is recoverable; destroying is not.
+     */
     const merged = applyUserOwnedLayering(
       {},
+      { visualTheme: { accent: 'same-as-provider' } },
+      { visualTheme: { accent: 'same-as-provider' } },
+    )
+    expect(readOverrides(merged).visualTheme).toEqual({ accent: 'same-as-provider' })
+
+    /* And it survives a later provider change, which is the property that was at risk. */
+    const next = applyUserOwnedLayering({}, merged, { visualTheme: { accent: 'provider-v2' } })
+    expect(next.visualTheme).toEqual({ accent: 'same-as-provider' })
+  })
+
+  it('files a value into the SOURCE layer only with explicit provenance', () => {
+    const merged = applyUserOwnedLayering(
+      {},
+      {
+        visualTheme: { accent: 'from-provider' },
+        [PROVENANCE_KEY]: { visualTheme: PROVIDER_PROVENANCE },
+      },
       { visualTheme: { accent: 'from-provider' } },
-      provider,
     )
     expect((merged[SOURCE_KEY] as Record<string, unknown>).visualTheme).toEqual({
       accent: 'from-provider',
     })
     expect(readOverrides(merged).visualTheme).toBeUndefined()
-    /* Provider branding keeps updating for this league, which is the point. */
+
+    /* Provider branding keeps updating for this league, which is the point of the evidence. */
     const next = applyUserOwnedLayering({}, merged, { visualTheme: { accent: 'provider-v2' } })
     expect(next.visualTheme).toEqual({ accent: 'provider-v2' })
   })
@@ -172,14 +198,42 @@ describe('first adoption of an unlayered league', () => {
     )
     expect(readOverrides(merged).visualTheme).toEqual({ accent: 'user-picked' })
     expect(merged.visualTheme).toEqual({ accent: 'user-picked' })
-    /* And it survives every later provider change. */
     const next = applyUserOwnedLayering({}, merged, { visualTheme: { accent: 'provider-v3' } })
     expect(next.visualTheme).toEqual({ accent: 'user-picked' })
+  })
+
+  it('lets the user clear an adopted override and reveal the CURRENT provider value', () => {
+    /* This is what makes the freeze recoverable, and therefore what justifies the rule. */
+    const adopted = applyUserOwnedLayering(
+      {},
+      { visualTheme: { accent: 'ambiguous' } },
+      { visualTheme: { accent: 'provider-v1' } },
+    )
+    const overrides = readOverrides(adopted)
+    delete overrides.visualTheme
+    const cleared = applyUserOwnedLayering(
+      {},
+      { ...adopted, [OVERRIDES_KEY]: overrides },
+      { visualTheme: { accent: 'provider-v2' } },
+    )
+    expect(cleared.visualTheme).toEqual({ accent: 'provider-v2' })
   })
 
   it('adopts nothing when the league has no existing value', () => {
     const merged = applyUserOwnedLayering({}, {}, { visualTheme: { accent: 'p' } })
     expect(readOverrides(merged).visualTheme).toBeUndefined()
     expect(merged.visualTheme).toEqual({ accent: 'p' })
+  })
+
+  it('drops a stale provider provenance claim once the user takes the key', () => {
+    const merged = applyUserOwnedLayering(
+      {},
+      {
+        [OVERRIDES_KEY]: { visualTheme: { accent: 'mine' } },
+        [PROVENANCE_KEY]: { visualTheme: PROVIDER_PROVENANCE },
+      },
+      { visualTheme: { accent: 'provider' } },
+    )
+    expect((merged[PROVENANCE_KEY] as Record<string, unknown>).visualTheme).toBeUndefined()
   })
 })

@@ -216,7 +216,16 @@ export interface ApplyScopeResult {
   unchanged: number
   /** Records the provider returned but that could not be persisted (malformed). */
   rejected: number
-  /** Canonical rows reconciled away because a *complete authoritative* response no longer contained them. */
+  /**
+   * Canonical rows reconciled away because a *complete authoritative* response no longer
+   * contained them.
+   *
+   * ⚠ "RECONCILED AWAY" MEANS ARCHIVED, NOT DELETED (Batch A.1). A LeagueTeam absent from a
+   * complete response is flagged `isOrphan` and keeps its ownership, transactions, matchups,
+   * drafts and external identifiers; its `Roster` is untouched. The counter still reports how
+   * many teams left the active set, which is what the telemetry asks — but nothing was
+   * destroyed, and a team that reappears is restored by the bootstrap upsert.
+   */
   removed: number
   /** Non-fatal notes (e.g. empty response protection engaged). */
   notes: string[]

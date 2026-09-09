@@ -106,15 +106,29 @@ describe('the contracts themselves', () => {
     }
   })
 
-  it('skips a dimension the CONNECTION itself does not record', () => {
+  it('REJECTS a required dimension the intended scope could not supply', () => {
     /*
-     * Nothing to verify against is not a provider fault. The guard catches the provider
-     * answering about a different league; it must not refuse every refresh for a connection
-     * whose own row is thin.
+     * 🛑 REVERSED IN BATCH A.1. This previously skipped, reasoning "nothing to verify against
+     * is not a provider fault". For a provider whose parser DEFAULTS the dimension that is the
+     * failure mode in disguise: the request goes out with a substituted season, the answer comes
+     * back internally consistent, and nothing can tell whether it is the league we wanted.
+     * `missing_target` names the real repair — supply the scope — rather than blaming the
+     * provider for an answer we had no way to check.
      */
     expect(
       findScopeMismatches({
         provider: 'espn',
+        requested: { sport: 'NFL', season: null },
+        returned: { sport: 'NFL', season: 2026 },
+      }),
+    ).toEqual([{ field: 'season', kind: 'missing_target', requested: null, returned: '2026' }])
+  })
+
+  it('still skips an unknown target for an OPPORTUNISTIC dimension', () => {
+    /* Sleeper's id pins the season, so an unknown target there is not a verification hole. */
+    expect(
+      findScopeMismatches({
+        provider: 'sleeper',
         requested: { sport: 'NFL', season: null },
         returned: { sport: 'NFL', season: 2026 },
       }),

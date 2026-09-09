@@ -11,6 +11,7 @@ import type { Prisma } from '@prisma/client'
 import { executeCanonicalLeagueCreation } from '@/lib/league-creation/canonical/executeCanonicalLeagueCreation'
 import type { MergedC2CRoster } from './c2cMultiSourceMerge'
 import type { C2CImportSource } from './types'
+import { withRosterObservation } from '@/lib/league-import/rosterPayload'
 
 function platformIdFor(provider: string, teamId: string): string {
   return `import:${provider}:${teamId}`
@@ -72,25 +73,45 @@ export async function persistC2CMultiSource(input: C2CCommitInput): Promise<C2CC
   const collegeSport = collegeSportFor(sport)
 
   for (const manager of merged) {
+    /*
+     * 🛑 A FIRST IMPORT WITH AN UNOBSERVED SOURCE MUST NOT PUBLISH A FALSELY EMPTY ROSTER
+     * — Batch A.1 item 2.
+     *
+     * This path CREATES the league, so there is no last-good data to preserve; the only
+     * decision available is what the new row asserts. Writing the merged list unqualified
+     * would state "this manager rosters exactly these players" when one of the two source
+     * reads failed — the same false claim the taxonomy exists to prevent, and worse here
+     * because a C2C manager legitimately has an empty college side, so nothing about the
+     * shape looks wrong.
+     *
+     * The row is still created (the manager exists, and refusing to create it would lose the
+     * league), but it carries the rolled-up observation, so every reader that asks
+     * `isRosterContentKnown` sees "unknown" rather than "empty".
+     */
+    const c2cPlayerData = withRosterObservation(
+      {
+        players: [
+          ...manager.proPlayers.map((p) => p.playerId),
+          ...manager.collegePlayers.map((p) => p.playerId),
+        ],
+        import: {
+          displayName: manager.displayName,
+          proProvider: proSource.provider,
+          proTeamId: manager.proSource.teamId,
+          proTeamName: manager.proTeamName,
+          collegeProvider: collegeSource.provider,
+          collegeTeamId: manager.collegeSource.teamId,
+          collegeTeamName: manager.collegeTeamName,
+        },
+      },
+      manager.rosterStatus,
+    )
+
     const roster = await prisma.roster.create({
       data: {
         leagueId,
         platformUserId: platformIdFor(proSource.provider, manager.proSource.teamId),
-        playerData: {
-          players: [
-            ...manager.proPlayers.map((p) => p.playerId),
-            ...manager.collegePlayers.map((p) => p.playerId),
-          ],
-          import: {
-            displayName: manager.displayName,
-            proProvider: proSource.provider,
-            proTeamId: manager.proSource.teamId,
-            proTeamName: manager.proTeamName,
-            collegeProvider: collegeSource.provider,
-            collegeTeamId: manager.collegeSource.teamId,
-            collegeTeamName: manager.collegeTeamName,
-          },
-        } as Prisma.JsonObject,
+        playerData: c2cPlayerData as Prisma.JsonObject,
       },
     })
     rostersCreated++

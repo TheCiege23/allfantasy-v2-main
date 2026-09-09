@@ -401,8 +401,9 @@ async function applyTeamsRosters(
   }
 
   // Removal reconciliation — ONLY when the provider returned an authoritative *complete* current-roster
-  // collection. Preserve claimed teams (never delete a user's claimed roster on a mirror refresh); mark
-  // a vanished claimed team as orphaned instead so the claim + data survive.
+  // collection, and then it ARCHIVES rather than deletes. A team absent from one complete response is
+  // flagged `isOrphan`; nothing about it is destroyed, and a team that reappears is un-flagged by the
+  // bootstrap upsert above. Claimed and unclaimed follow the same rule (Batch A.1 item 1).
   const authoritative =
     reconcileRemovals &&
     normalized.coverage?.currentRosters?.state === 'full' &&
@@ -412,10 +413,11 @@ async function applyTeamsRosters(
      *
      * The coverage check above is an adapter's CLAIM about completeness, and this batch
      * exists because that claim was wrong: Yahoo and ESPN both reported `full` while
-     * counting team records rather than successful reads. Both are fixed, but a removal is
-     * irreversible — it deletes a team and its roster — so the gate does not rest on one
-     * adapter remembering to be honest. This second test reads the per-team status
-     * directly, and a future adapter that forgets its coverage block fails closed here.
+     * counting team records rather than successful reads. Both are fixed, and archival made
+     * the consequence recoverable, but an orphan flag still hides a team from every active
+     * selector — so the gate does not rest on one adapter remembering to be honest. This
+     * second test reads the per-team status directly, and a future adapter that forgets its
+     * coverage block fails closed here.
      */
     normalized.rosters.every((r) => isAuthoritativeStatus(r.fetch_status))
   if (authoritative) {
@@ -424,37 +426,32 @@ async function applyTeamsRosters(
       where: { leagueId, externalId: { notIn: Array.from(liveTeamIds) } },
       select: { id: true, externalId: true, platformUserId: true, claimedByUserId: true, isOrphan: true },
     })
-    // Index the league's rosters by their canonical source team id (stable across the raw→resolved
-    // platformUserId change) so a removed team's roster is found even when Roster.platformUserId holds
-    // a RESOLVED AllFantasy id rather than the raw Sleeper manager id.
-    const leagueRosters = await prisma.roster.findMany({
-      where: { leagueId },
-      select: { id: true, platformUserId: true, playerData: true },
-    })
-    const rosterIdBySourceTeam = new Map<string, string>()
-    for (const r of leagueRosters) {
-      const st = String(asRecord(r.playerData).source_team_id ?? '')
-      if (st) rosterIdBySourceTeam.set(st, r.id)
-    }
     for (const t of staleTeams) {
-      if (t.claimedByUserId) {
-        // A claimed team (and its roster) is NEVER deleted by reconciliation — the user's claim + data
-        // survive. If it truly vanished upstream, mark it orphaned so the surface can disclose that.
-        if (!t.isOrphan) {
-          await prisma.leagueTeam.update({ where: { id: t.id }, data: { isOrphan: true } })
-          out.notes.push(`teams_rosters: claimed team ${t.externalId} vanished upstream — marked orphan (preserved, not deleted)`)
-        }
-        continue
-      }
-      // Unclaimed + absent from a complete authoritative response → reconcile away (team + its roster).
-      const rosterId = rosterIdBySourceTeam.get(t.externalId)
-      if (rosterId) {
-        await prisma.roster.delete({ where: { id: rosterId } }).catch(() => undefined)
-      } else if (t.platformUserId) {
-        await prisma.roster.deleteMany({ where: { leagueId, platformUserId: t.platformUserId } }).catch(() => undefined)
-      }
-      await prisma.leagueTeam.delete({ where: { id: t.id } }).catch(() => undefined)
+      /*
+       * 🛑 ARCHIVE, NEVER DELETE — AND THE CLAIMED/UNCLAIMED SPLIT WAS THE BUG.
+       *
+       * This block used to preserve a CLAIMED team (orphan-flag it) and hard-delete an
+       * unclaimed one along with its `Roster`. The asymmetry has no defensible basis: a
+       * team's absence from one response is evidence about the ROSTER FEED, not about the
+       * value of the team's history. An unclaimed team still carries ownership history,
+       * transactions, matchups, draft picks and the external identifiers every later join
+       * depends on — and a delete takes all of it, irreversibly, on the strength of one
+       * provider response being complete.
+       *
+       * It is also the single reason a LeagueTeam row could vanish under a foreign key,
+       * which is what blocked the Milestone 19 deletion work. Archiving clears that
+       * prerequisite without implementing that migration.
+       *
+       * ⚠ IDEMPOTENT BY CONSTRUCTION: an already-orphaned team is skipped, so repeated
+       * reconciliation over an unchanged league writes nothing and reports nothing.
+       */
+      if (t.isOrphan) continue
+
+      await prisma.leagueTeam.update({ where: { id: t.id }, data: { isOrphan: true } })
       out.removed += 1
+      out.notes.push(
+        `teams_rosters: team ${t.externalId} absent from a complete authoritative response — archived as orphan (preserved, not deleted)`,
+      )
     }
   }
 

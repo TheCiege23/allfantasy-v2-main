@@ -189,14 +189,96 @@ export function buildProviderSourceRef(input: ProviderSourceRefInput): string {
   return raw
 }
 
-export type ScopeProblemKind = 'mismatch' | 'missing_required'
+export type ScopeProblemKind =
+  /** Provider answered a different scope than was requested. */
+  | 'mismatch'
+  /** Provider did not report a dimension its contract requires. */
+  | 'missing_required'
+  /**
+   * WE could not say which scope we wanted for a dimension the provider's contract requires.
+   *
+   * Distinct from `missing_required` because the repair is different: this one is fixed by
+   * supplying the scope (a job argument, a connection backfill), not by chasing the provider.
+   */
+  | 'missing_target'
 
 export interface ScopeProblem {
   field: ScopeDimension
   kind: ScopeProblemKind
-  requested: string
+  /** `null` for `missing_target` — we could not determine the intended scope. */
+  requested: string | null
   /** `null` for `missing_required` — the provider did not report the dimension at all. */
   returned: string | null
+}
+
+/**
+ * Where an intended-scope dimension came from. Carried so a rejection can say what to fix.
+ */
+export type ScopeOrigin = 'request' | 'connection' | 'verified_identity' | 'unknown'
+
+export interface IntendedScopeSources {
+  /** An explicit import/job argument — the caller said exactly what it wanted. */
+  request?: { sport?: string | null; season?: number | string | null } | null
+  /** The stored `LeagueSyncConnection` row. */
+  connection?: { sport?: string | null; season?: number | string | null } | null
+  /** A previously VERIFIED league identity — a scope we already validated and persisted. */
+  verifiedIdentity?: { sport?: string | null; season?: number | string | null } | null
+}
+
+export interface IntendedScope {
+  sport: string | null
+  season: number | null
+  origin: { sport: ScopeOrigin; season: ScopeOrigin }
+}
+
+/**
+ * Resolve the scope a refresh INTENDS to read, in priority order — Batch A.1 item 3.
+ *
+ *     explicit request  >  stored connection  >  previously verified league identity
+ *
+ * 🛑 THIS EXISTS BECAUSE "THE CONNECTION DID NOT SAY" IS NOT A REASON TO STOP CHECKING.
+ * The earlier validator skipped any dimension the connection lacked, on the reasoning that
+ * there was no claim to verify. For a provider whose parser DEFAULTS the dimension, that is
+ * the failure mode wearing a disguise: the request goes out with a substituted season, the
+ * answer comes back internally consistent, and nothing can tell whether it is the league we
+ * wanted. Resolving through three sources means the dimension is usually known; when it is
+ * genuinely unknown, `findScopeMismatches` now reports `missing_target` and refuses, instead
+ * of waving the payload through.
+ *
+ * ⚠ EACH DIMENSION RESOLVES INDEPENDENTLY. A job that pins the season but not the sport
+ * should still inherit the sport from the connection, rather than falling wholesale to a
+ * lower tier and discarding the caller's explicit season.
+ */
+export function resolveIntendedScope(sources: IntendedScopeSources): IntendedScope {
+  const tiers: Array<{ origin: ScopeOrigin; value: IntendedScopeSources['request'] }> = [
+    { origin: 'request', value: sources.request ?? null },
+    { origin: 'connection', value: sources.connection ?? null },
+    { origin: 'verified_identity', value: sources.verifiedIdentity ?? null },
+  ]
+
+  let sport: string | null = null
+  let sportOrigin: ScopeOrigin = 'unknown'
+  let season: number | null = null
+  let seasonOrigin: ScopeOrigin = 'unknown'
+
+  for (const tier of tiers) {
+    if (sport == null) {
+      const v = normalizeSport(tier.value?.sport)
+      if (v != null) {
+        sport = v
+        sportOrigin = tier.origin
+      }
+    }
+    if (season == null) {
+      const v = normalizeSeason(tier.value?.season)
+      if (v != null) {
+        season = v
+        seasonOrigin = tier.origin
+      }
+    }
+  }
+
+  return { sport, season, origin: { sport: sportOrigin, season: seasonOrigin } }
 }
 
 export interface ScopeAssertionInput {
@@ -243,9 +325,34 @@ export function findScopeMismatches(input: ScopeAssertionInput): ScopeProblem[] 
 
   const check = (field: ScopeDimension, required: boolean) => {
     const want = requested[field]
-    /* Nothing recorded on our side — there is no claim to verify. */
-    if (want == null) return
     const got = returned[field]
+
+    if (want == null) {
+      /*
+       * 🛑 AN UNKNOWN *TARGET* DIMENSION IS A REJECTION FOR A REQUIRED FIELD, NOT A SKIP.
+       *
+       * The previous version returned here — "nothing recorded on our side, so there is no
+       * claim to verify" — and that reasoning is exactly backwards for a provider whose bare
+       * id DEFAULTS the dimension. If we do not know which season we wanted, and the parser
+       * silently supplies the current one, then whatever comes back is unverifiable by
+       * construction: it may be the right league or a different season of it, and nothing in
+       * the response can tell us. Persisting it is a coin-flip on the caller's data.
+       *
+       * The honest failure is `missing_target`. It says the CONNECTION is under-specified,
+       * which is a repair a human can make, rather than blaming the provider for an answer we
+       * had no way to check.
+       */
+      if (required) {
+        out.push({
+          field,
+          kind: 'missing_target',
+          requested: null,
+          returned: got,
+        })
+      }
+      return
+    }
+
     if (got == null) {
       if (required) {
         out.push({ field, kind: 'missing_required', requested: want, returned: null })
@@ -287,11 +394,15 @@ export class SyncScopeMismatchError extends Error {
 
   constructor(provider: string, problems: ScopeProblem[]) {
     const detail = problems
-      .map((p) =>
-        p.kind === 'missing_required'
-          ? `${p.field}: requested ${p.requested}, provider reported none`
-          : `${p.field}: requested ${p.requested}, provider returned ${p.returned}`,
-      )
+      .map((p) => {
+        if (p.kind === 'missing_target') {
+          return `${p.field}: no intended ${p.field} could be determined for this connection, so the provider's answer cannot be verified`
+        }
+        if (p.kind === 'missing_required') {
+          return `${p.field}: requested ${p.requested}, provider reported none`
+        }
+        return `${p.field}: requested ${p.requested}, provider returned ${p.returned}`
+      })
       .join('; ')
     super(
       `${provider}: refusing to apply refresh — the provider did not confirm the requested league scope (${detail}). Last-good data is unchanged.`,

@@ -5,7 +5,8 @@
 
 import { prisma } from '@/lib/prisma'
 import type { NormalizedImportResult } from '../types'
-import { buildObservation, isAuthoritativeStatus } from '@/lib/league-import/resourceStatus'
+import { isAuthoritativeStatus } from '@/lib/league-import/resourceStatus'
+import { withRosterObservation } from '@/lib/league-import/rosterPayload'
 
 export interface SleeperLeagueBootstrapResult {
   leagueTeamsCreated: number
@@ -207,20 +208,6 @@ export async function bootstrapLeagueFromNormalizedImport(
     )
 
     const playerData = {
-      /*
-       * 🛑 THE OBSERVATION RECORD IS HOW A READER TELLS "NOBODY" FROM "WE DO NOT KNOW".
-       *
-       * Every consumer that renders or reasons about a roster — Decision OS's canonical
-       * world, Chimmy's grounding, trade evaluation, waiver recommendations — has until now
-       * had only `players: []` to go on, which is the same value for a pre-draft league and
-       * for a league whose provider read failed. `roster_status` makes them distinguishable
-       * without a schema change: `Roster.playerData` is already a Json column.
-       *
-       * ⚠ `lastGoodAt` DELIBERATELY DOES NOT ADVANCE ON A PRESERVED WRITE. It answers "when
-       * was this true", not "when did we last try" — a badge showing "updated just now" over
-       * week-old data is the false-green in miniature.
-       */
-      roster_status: buildObservation(r.fetch_status ?? 'fetched', new Date(), r.observed_at ?? null),
       players: r.player_ids,
       starters: r.starter_ids,
       reserve: r.reserve_ids ?? [],
@@ -255,6 +242,29 @@ export async function bootstrapLeagueFromNormalizedImport(
         sourceIsOrphan: isOrphan,
       },
     }
+
+    /*
+     * 🛑 THE OBSERVATION RECORD IS HOW A READER TELLS "NOBODY" FROM "WE DO NOT KNOW".
+     *
+     * Every consumer that renders or reasons about a roster — Decision OS's canonical world,
+     * Chimmy's grounding, trade evaluation, waiver recommendations — has until now had only
+     * `players: []` to go on, which is the same value for a pre-draft league and for a league
+     * whose provider read failed.
+     *
+     * ⚠ IT GOES UNDER THE RESERVED NAMESPACE, NOT AT THE TOP LEVEL. An earlier version wrote a
+     * bare `roster_status` sibling; `withRosterObservation` puts it under `af_import_meta`, which
+     * cannot be mistaken for a player id by any of the ~66 `playerData` readers.
+     *
+     * ⚠ `lastGoodAt` DELIBERATELY DOES NOT ADVANCE ON A PRESERVED WRITE. It answers "when was
+     * this true", not "when did we last try" — a badge reading "updated just now" over week-old
+     * data is the false-green in miniature.
+     */
+    const playerDataWithMeta = withRosterObservation(
+      playerData,
+      r.fetch_status ?? 'fetched',
+      new Date(),
+      r.observed_at ?? null,
+    )
 
     const resolvedPlatformUserId =
       managerUserIds.get(r.source_manager_id) ?? r.source_manager_id
@@ -298,7 +308,7 @@ export async function bootstrapLeagueFromNormalizedImport(
         where: { id: existingRoster.id },
         data: {
           platformUserId: resolvedPlatformUserId,
-          playerData: playerData as any,
+          playerData: playerDataWithMeta as any,
           faabRemaining: r.faab_remaining ?? null,
           waiverPriority: r.waiver_priority ?? null,
         },
@@ -308,7 +318,7 @@ export async function bootstrapLeagueFromNormalizedImport(
         data: {
           leagueId,
           platformUserId: resolvedPlatformUserId,
-          playerData: playerData as any,
+          playerData: playerDataWithMeta as any,
           faabRemaining: r.faab_remaining ?? null,
           waiverPriority: r.waiver_priority ?? null,
         },

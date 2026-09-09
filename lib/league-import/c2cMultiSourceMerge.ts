@@ -12,6 +12,7 @@
  */
 
 import type { NormalizedRoster, NormalizedImportResult, C2CImportSource } from './types'
+import { rollUpStatus, type ResourceFetchStatus } from '@/lib/league-import/resourceStatus'
 
 export interface MergedPlayerInfo {
   playerId: string
@@ -29,6 +30,16 @@ export interface MergedC2CRoster {
   collegePlayers: MergedPlayerInfo[]
   proSource: { provider: string; teamId: string }
   collegeSource: { provider: string; teamId: string }
+  /**
+   * Whether this merged roster's player lists were OBSERVED — Batch A.1 item 2.
+   *
+   * 🛑 A C2C ROSTER IS A UNION OF TWO PROVIDER READS, SO IT IS ONLY AS OBSERVED AS ITS WORSE
+   * SOURCE. If the college read failed and the pro read succeeded, the merged list is a real
+   * pro roster plus a silent absence — and written naively that is a manager who appears to
+   * have drafted no college players at all. `rollUpStatus` collapses the pair honestly:
+   * both observed is observed, neither is the failure itself, one of each is `partial`.
+   */
+  rosterStatus: ResourceFetchStatus
 }
 
 export interface MergeResult {
@@ -113,6 +124,10 @@ export function mergeC2CSources(args: {
       collegePlayers: hydratePlayers(collegeIds, college.player_map),
       proSource: { provider: proSource.provider, teamId: proRoster.source_team_id },
       collegeSource: { provider: collegeSource.provider, teamId: match.source_team_id },
+      rosterStatus: rollUpStatus([
+        proRoster.fetch_status ?? 'fetched',
+        match.fetch_status ?? 'fetched',
+      ]),
     })
   }
 

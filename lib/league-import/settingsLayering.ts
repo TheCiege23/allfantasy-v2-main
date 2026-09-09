@@ -23,6 +23,8 @@
  */
 
 /** Where a resolved value came from. Carried so a UI can say "from your league" honestly. */
+import { createHash } from 'node:crypto'
+
 export type SettingsLayer = 'override' | 'source' | 'default'
 
 export interface LayeredValue<T> {
@@ -46,6 +48,31 @@ export const OVERRIDES_KEY = 'userOverrides' as const
 
 /** Where the provider's own current values live inside `League.settings`. */
 export const SOURCE_KEY = 'sourceValues' as const
+
+/**
+ * Where explicit provenance for user-owned keys is recorded.
+ *
+ * A writer that KNOWS it produced a value (the importer writing provider branding) records the
+ * key here, and first-adoption can then file it into the source layer with evidence rather than
+ * by inference. Absent means unknown, and unknown is treated as the user's.
+ */
+export const PROVENANCE_KEY = 'settingsProvenance' as const
+
+/** Provenance value meaning "this key's current value came from the provider import". */
+export const PROVIDER_PROVENANCE = 'source' as const
+
+/**
+ * Does the league record explicitly say the provider owns this key's current value?
+ *
+ * ⚠ ONLY AN EXPLICIT RECORD COUNTS. Inferring ownership from equality with the provider's
+ * current value is the unsound step this exists to replace — a user may have chosen exactly
+ * that value, and no comparison can tell the two apart.
+ */
+export function hasProviderProvenance(settings: Record<string, unknown>, key: string): boolean {
+  const raw = settings[PROVENANCE_KEY]
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return false
+  return (raw as Record<string, unknown>)[key] === PROVIDER_PROVENANCE
+}
 
 export function readOverrides(settings: Record<string, unknown>): Record<string, unknown> {
   const raw = settings[OVERRIDES_KEY]
@@ -98,20 +125,28 @@ export function applyUserOwnedLayering(
   for (const key of USER_OWNED_SETTINGS_KEYS) {
     /*
      * 🛑 FIRST-ADOPTION: EVERY LEAGUE THAT ALREADY EXISTS IS UNLAYERED, AND GETTING THIS
-     * WRONG WIPES REAL USER CUSTOMISATION ON THE FIRST REFRESH AFTER DEPLOY.
+     * WRONG DESTROYS REAL USER CUSTOMISATION ON THE FIRST REFRESH AFTER DEPLOY.
      *
-     * Today `visualTheme` sits as a bare top-level key with no record of who put it there —
-     * the importer, or a manager who changed it. With no layers, resolution would fall
-     * straight through to the provider value and overwrite the manager's choice, once,
-     * irreversibly. So the value is adopted into a layer BEFORE anything resolves:
+     * `visualTheme` sits today as a bare top-level key with no record of who put it there —
+     * the importer, or a manager who changed it. With no layers, resolution falls straight
+     * through to the provider value and overwrites the manager's choice, once, irreversibly.
      *
-     *   equals what the provider now reports  → it was provider-derived  → source layer
-     *   differs from the provider             → somebody changed it      → override layer
+     * 🛑 AND EQUALITY WITH THE PROVIDER IS NOT PROOF OF PROVIDER OWNERSHIP. An earlier version
+     * filed a value into the source layer when it matched what the provider currently reports.
+     * That inference is unsound in the one direction that costs data: a manager may have
+     * deliberately CHOSEN the value the provider happens to serve — picked the same accent,
+     * kept the league logo on purpose — and equality cannot distinguish that from a value the
+     * importer wrote. Treating it as provider-owned silently converts a deliberate choice into
+     * something the next provider change overwrites.
      *
-     * ⚠ THE TIE-BREAK LEANS TOWARDS THE OVERRIDE ON PURPOSE. Misfiling a provider value as
-     * an override freezes branding until the user clears it — visible, reversible, annoying.
-     * Misfiling a user's choice as a provider value destroys it. Those are not symmetric,
-     * and the asymmetry decides the default.
+     * So the rule is loss-minimizing rather than clever:
+     *
+     *   explicit provenance proving provider ownership  → source layer
+     *   no provenance                                    → preserve as a user override
+     *
+     * Freezing a provider value is recoverable — the user clears the override and the current
+     * provider value is revealed, which is tested. Destroying a user choice is not recoverable
+     * at all. Those costs are not symmetric, so the ambiguous case takes the recoverable side.
      */
     const alreadyLayered =
       Object.prototype.hasOwnProperty.call(overrides, key) ||
@@ -119,12 +154,7 @@ export function applyUserOwnedLayering(
 
     if (!alreadyLayered && Object.prototype.hasOwnProperty.call(existingSettings, key)) {
       const existingValue = existingSettings[key] ?? null
-      const providerValue = Object.prototype.hasOwnProperty.call(freshSourceValues, key)
-        ? (freshSourceValues[key] ?? null)
-        : undefined
-      const matchesProvider =
-        providerValue !== undefined && JSON.stringify(existingValue) === JSON.stringify(providerValue)
-      if (matchesProvider) {
+      if (hasProviderProvenance(existingSettings, key)) {
         sourceValues[key] = existingValue
       } else if (existingValue !== null) {
         overrides[key] = existingValue
@@ -145,6 +175,29 @@ export function applyUserOwnedLayering(
 
   merged[OVERRIDES_KEY] = overrides
   merged[SOURCE_KEY] = sourceValues
+
+  /*
+   * Record provenance for every key the PROVIDER currently owns, so a future adoption has
+   * evidence instead of an inference. Once a key is layered this is belt-and-braces, but it
+   * also means a league whose layers are ever rebuilt from scratch does not fall back to
+   * guessing — the same reason the layers exist at all.
+   */
+  const provenance: Record<string, unknown> = {
+    ...(typeof merged[PROVENANCE_KEY] === 'object' && merged[PROVENANCE_KEY] !== null && !Array.isArray(merged[PROVENANCE_KEY])
+      ? (merged[PROVENANCE_KEY] as Record<string, unknown>)
+      : {}),
+  }
+  for (const key of USER_OWNED_SETTINGS_KEYS) {
+    const isOverridden = Object.prototype.hasOwnProperty.call(overrides, key)
+    if (!isOverridden && Object.prototype.hasOwnProperty.call(sourceValues, key)) {
+      provenance[key] = PROVIDER_PROVENANCE
+    } else if (isOverridden) {
+      /* The user owns it now; a stale provider claim must not outlive that. */
+      delete provenance[key]
+    }
+  }
+  merged[PROVENANCE_KEY] = provenance
+
   return merged
 }
 
@@ -156,14 +209,31 @@ export function applyUserOwnedLayering(
  * across every league) or ignores it — and every consumer ignored it. A CONTENT hash changes
  * only when the rules actually change, which is the property a cache key needs.
  *
+ * 🛑 AND IT IS SHA-256, NOT FNV-1a. The first implementation used 32-bit FNV-1a, which is a
+ * fine bucket function and an unfit cache key. At 32 bits a collision is findable by brute
+ * force in seconds — and a collision here does not present as a bug. It presents as "the
+ * rules did not change", so stale projections keep serving with nothing red anywhere. This
+ * key decides whether derived artifacts are recomputed; being wrong is silent, and SHA-256
+ * costs microseconds on a path that already touches Postgres.
+ *
  * ⚠ KEY ORDER MUST NOT MOVE THE HASH. `JSON.stringify` preserves insertion order, and these
  * objects are rebuilt from provider payloads whose key order is not guaranteed — so an
  * unsorted hash would report a rules change on a refresh that changed nothing, which is
  * exactly the constant-recompute failure it exists to prevent.
  */
 export function canonicalSettingsHash(input: unknown): string {
-  const json = stableStringify(input)
-  /* FNV-1a, 32-bit. Not cryptographic — this detects change, it does not resist an adversary. */
+  return createHash('sha256').update(stableStringify(input), 'utf8').digest('hex')
+}
+
+/**
+ * The removed 32-bit FNV-1a, retained ONLY so the regression suite can demonstrate a real
+ * collision against it.
+ *
+ * ⚠ NOT FOR PRODUCTION USE — nothing outside that test may call it. It exists so the claim
+ * "32 bits is unfit for this key" is a measured fact in this repository rather than an
+ * appeal to general knowledge about hash functions.
+ */
+export function __fnv1aForCollisionTestOnly(json: string): string {
   let h = 0x811c9dc5
   for (let i = 0; i < json.length; i++) {
     h ^= json.charCodeAt(i)
@@ -196,13 +266,27 @@ export interface EffectiveRulesInput {
  * invalidate every cached projection in the league — the artifacts depend on the rules, not
  * on the theme, and including them would make the hash a change-detector for the wrong thing.
  */
-export function effectiveRulesVersion(input: EffectiveRulesInput): string {
-  return canonicalSettingsHash({
+function effectiveRulesPayload(input: EffectiveRulesInput): Record<string, unknown> {
+  return {
     scoringSettings: input.scoringSettings ?? null,
     rosterSettings: input.rosterSettings ?? null,
     waiverSettings: input.waiverSettings ?? null,
     playoffSettings: input.playoffSettings ?? null,
     draftSettings: input.draftSettings ?? null,
     conceptRules: input.conceptRules ?? null,
-  })
+  }
+}
+
+export function effectiveRulesVersion(input: EffectiveRulesInput): string {
+  return canonicalSettingsHash(effectiveRulesPayload(input))
+}
+
+/**
+ * The exact serialization the hash is taken over.
+ *
+ * Exposed so a test can prove that import publication and Decision OS canonicalise the SAME
+ * contract — comparing hashes alone would pass even if both sides were consistently wrong.
+ */
+export function canonicalRulesSerialization(input: EffectiveRulesInput): string {
+  return stableStringify(effectiveRulesPayload(input))
 }
