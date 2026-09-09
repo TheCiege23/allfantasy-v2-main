@@ -3,7 +3,7 @@
 import '@/components/core-app/af-trades.css'
 import PlayerName from '@/components/core-app/player-card/PlayerName'
 import { PlayerCardLeagueScope } from '@/components/core-app/player-card/PlayerCardProvider'
-import type { TradesData, TradeRecord } from '@/lib/core-app/trades'
+import type { TradesData, TradeRecord, PendingOffer } from '@/lib/core-app/trades'
 
 /**
  * Screen 6 — Trades.
@@ -27,6 +27,85 @@ export type TradesProps = {
 
 function Unavailable({ reason }: { reason: string }) {
   return <p className="af-tr-unavailable">{reason}</p>
+}
+
+/**
+ * One offer waiting on the platform.
+ *
+ * ⚠ NO ACCEPT / REJECT / COUNTER, DELIBERATELY. Sleeper's public API has no
+ * write endpoint, so a button here could not do what it says. The league's
+ * `sourceLink` in the header is the way to go and answer it.
+ */
+function OfferCard({ offer }: { offer: PendingOffer }) {
+  const side = (label: string, lines: PendingOffer['give']) => (
+    <div className="af-tr-offer-side">
+      <span className="af-label">{label}</span>
+      {lines.length > 0 ? (
+        <ul className="af-tr-offer-assets">
+          {lines.map((l, i) => (
+            <li key={`${l.label}:${i}`}>
+              <span className="af-tr-offer-name">{l.label}</span>
+              {l.sublabel ? <span className="af-tr-offer-sub">{l.sublabel}</span> : null}
+            </li>
+          ))}
+        </ul>
+      ) : (
+        /* A real shape, not a rendering gap: a pick-only or FAAB-only side of a
+           deal genuinely has nothing on it. An empty list would read as broken. */
+        <p className="af-tr-offer-none">nothing</p>
+      )}
+    </div>
+  )
+
+  return (
+    <li className="af-tr-offer">
+      <header className="af-tr-offer-head">
+        <span className="af-tr-offer-partner">{offer.partnerName}</span>
+        {offer.proposedAt ? (
+          <time className="af-tr-offer-when" dateTime={offer.proposedAt}>
+            {new Date(offer.proposedAt).toLocaleDateString()}
+          </time>
+        ) : null}
+      </header>
+      <div className="af-tr-offer-sides">
+        {side('You send', offer.give)}
+        {side('You get', offer.get)}
+      </div>
+    </li>
+  )
+}
+
+/**
+ * ⚠ "WE LOOKED AND FOUND NOTHING" AND "WE DID NOT LOOK" GET DIFFERENT SENTENCES.
+ * They used to share one, and it claimed the second while meaning neither.
+ */
+function OfferColumn({
+  title,
+  state,
+  empty,
+}: {
+  title: string
+  state: TradesData['inbox']
+  empty: string
+}) {
+  return (
+    <section className="af-card af-tr-pending-col">
+      <h2 className="af-label">{title}</h2>
+      {state.available ? (
+        state.data.length > 0 ? (
+          <ul className="af-tr-offers">
+            {state.data.map((o) => (
+              <OfferCard key={o.id} offer={o} />
+            ))}
+          </ul>
+        ) : (
+          <Unavailable reason={empty} />
+        )
+      ) : (
+        <Unavailable reason={state.reason} />
+      )}
+    </section>
+  )
 }
 
 function TradeCard({ trade }: { trade: TradeRecord }) {
@@ -177,14 +256,8 @@ export function Trades({ data }: TradesProps) {
 
       {/* ── Inbox / sent ────────────────────────────────────────────── */}
       <div className="af-tr-pending">
-        <section className="af-card af-tr-pending-col">
-          <h2 className="af-label">Inbox</h2>
-          <Unavailable reason={data.inbox.reason} />
-        </section>
-        <section className="af-card af-tr-pending-col">
-          <h2 className="af-label">Sent</h2>
-          <Unavailable reason={data.sent.reason} />
-        </section>
+        <OfferColumn title="Inbox" state={data.inbox} empty="No offers waiting on you." />
+        <OfferColumn title="Sent" state={data.sent} empty="You have no offers out." />
       </div>
 
       {/* ── Completed trades ────────────────────────────────────────── */}

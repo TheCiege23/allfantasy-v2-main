@@ -325,3 +325,94 @@
   line-height: 1.45;
   color: var(--muted);
 }
+
+/* ── Pending offers ──────────────────────────────────────────────────── */
+/*
+ * ⚠ APPENDED AT TOP LEVEL ON PURPOSE. This file carries a @media block above;
+ * inserting rules INSIDE one silently narrows every rule below the insertion
+ * point and keeps brace balance at zero, so nothing catches it. Verified before
+ * writing: depth 0 at EOF.
+ */
+
+.af-tr-offers {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.af-tr-offer {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.af-tr-offer-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.af-tr-offer-partner {
+  font-size: 13px;
+  font-weight: 700;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.af-tr-offer-when {
+  font-size: 11px;
+  color: var(--faint);
+  white-space: nowrap;
+}
+
+.af-tr-offer-sides {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 10px;
+}
+
+.af-tr-offer-side {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.af-tr-offer-assets {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.af-tr-offer-assets li {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.af-tr-offer-name {
+  font-size: 12.5px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.af-tr-offer-sub {
+  font-size: 10.5px;
+  color: var(--faint);
+}
+
+.af-tr-offer-none {
+  margin: 0;
+  font-size: 12px;
+  color: var(--faint);
+}

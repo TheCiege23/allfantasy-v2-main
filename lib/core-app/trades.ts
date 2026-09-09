@@ -3,8 +3,12 @@ import { valueBookFor, type ValueBook } from './valueBook'
 import { resolveSourceScreenLink, type SourceScreenLink } from '@/lib/league-links/sourceLinkResolver'
 
 import { prisma } from '@/lib/prisma'
-import { leagueDisplayName, type SectionState, type UnavailableSection } from './leagueHome'
+import { leagueDisplayName, type SectionState } from './leagueHome'
 import { describeNoSignal, gradeTrade } from '@/lib/projections/tradeGrading'
+import {
+  scanPendingSleeperTrades,
+  type PendingTradeAsset,
+} from '@/lib/provider-trades/scanPendingSleeperTrades'
 
 /**
  * Trades — "offer, grade, counter, all scored against this league's own rules".
@@ -254,10 +258,54 @@ export type TradesData = {
   /** Grading context the handoff prints above every grade. */
   gradingContext: SectionState<{ leagueName: string; format: string | null; teamCount: number }>
   history: SectionState<TradeRecord[]>
-  inbox: UnavailableSection
-  sent: UnavailableSection
+  /**
+   * Offers waiting on the source platform, read LIVE.
+   *
+   * 🛑 THESE WERE `UnavailableSection` — "no data path at all, always" — and the
+   * reason they printed said `pending offers are not ingested`. That was FALSE,
+   * and had been since `scanPendingSleeperTrades` shipped: the Trade Center reads
+   * exactly these offers on every load, off `platformLeagueId`, on a 5-minute
+   * cache. The capability existed; this screen simply never called it, and told
+   * the manager the product could not do a thing it was already doing one screen
+   * over.
+   *
+   * ⚠ `SectionState`, NOT `UnavailableSection`, AND THE DISTINCTION IS THE POINT.
+   * The latter is a permanent claim about the product. The former can say "we
+   * looked and there is nothing", which is a fact about the league — and those two
+   * must never render as the same sentence.
+   */
+  inbox: SectionState<PendingOffer[]>
+  sent: SectionState<PendingOffer[]>
   grades: SectionState<GradedTrade[]>
   deadline: SectionState<TradeDeadline>
+}
+
+/** One asset on one side of a pending offer, already in display form. */
+export type PendingOfferLine = {
+  label: string
+  /** Position · team, or "Draft pick". Null when the provider named neither. */
+  sublabel: string | null
+}
+
+/**
+ * An offer sitting unanswered on the source platform.
+ *
+ * ⚠ READ-ONLY BY CONSTRUCTION, AND THE SCREEN MUST NOT OFFER ACTIONS. Sleeper's
+ * public API has no write endpoint, so AllFantasy can show and grade these and
+ * can never accept, reject or counter one. `sourceLink` on `TradesData.league`
+ * is how a manager gets to the place they can answer it.
+ */
+export type PendingOffer = {
+  /** Sleeper's transaction id — stable, and the natural React key. */
+  id: string
+  /** Who sent it. "You" on an outgoing offer. */
+  partnerName: string
+  proposedAt: string | null
+  /** Leaving the viewer's roster — on BOTH directions, so an outgoing offer
+      is not rendered back to front. */
+  give: PendingOfferLine[]
+  /** Arriving on the viewer's roster. */
+  get: PendingOfferLine[]
 }
 
 export type TradeDeadline = {
@@ -303,10 +351,99 @@ function resolveDeadline(settings: unknown): SectionState<TradeDeadline> {
   return { available: true, data: { week: none ? null : week, regularSeasonLength, none } }
 }
 
+/** A provider asset in display form. Mirrors the Trade Center's own mapping. */
+function offerLine(a: PendingTradeAsset): PendingOfferLine {
+  const sub = a.isPick
+    ? 'Draft pick'
+    : [a.position, a.team].filter((v) => v && v !== '—').join(' · ') || null
+  return { label: a.playerName, sublabel: sub }
+}
+
+/**
+ * Offers waiting on the platform, split into what the viewer received and what
+ * they sent.
+ *
+ * ⚠ FOUR OUTCOMES, AND COLLAPSING ANY TWO OF THEM IS THE BUG THIS REPLACES.
+ * "we never looked", "we could not tell whose offers to read", "the provider
+ * refused" and "we looked and nothing is waiting" are different facts, and only
+ * the middle two are things a manager can act on. An empty inbox that means
+ * "not scanned" is a claim about their league we never checked.
+ */
+async function resolvePendingOffers(
+  league: { id: string; platform: string | null; platformLeagueId: string | null; sport: string | null },
+  userId: string,
+): Promise<{ inbox: SectionState<PendingOffer[]>; sent: SectionState<PendingOffer[]> }> {
+  const platform = String(league.platform ?? 'manual').toLowerCase()
+
+  /*
+   * Sleeper only, and said plainly. The Trade Center also reads Yahoo, through
+   * that platform's OAuth refresh path; wiring it here means carrying the same
+   * auth failure modes onto a server-rendered screen, which is a bigger change
+   * than this one and does not belong in it. Naming Sleeper specifically is
+   * honest about what this screen does rather than about what the product can.
+   */
+  if (platform !== 'sleeper' || !league.platformLeagueId) {
+    const reason = `pending offers are only readable on Sleeper — open ${platform} to see anything waiting`
+    return { inbox: { available: false, reason }, sent: { available: false, reason } }
+  }
+
+  /*
+   * The viewer's Sleeper id, resolved the way every other league surface
+   * resolves it: the claim FIRST because it is an explicit statement about this
+   * league, the linked profile second because it is an inference from an id
+   * space shared across all of them.
+   */
+  const viewerSleeperId = await (async () => {
+    const claimed = await prisma.leagueTeam
+      .findFirst({ where: { leagueId: league.id, claimedByUserId: userId }, select: { platformUserId: true } })
+      .catch(() => null)
+    const fromClaim = claimed?.platformUserId?.trim()
+    if (fromClaim) return fromClaim
+    const profile = await prisma.userProfile
+      .findUnique({ where: { userId }, select: { sleeperUserId: true } })
+      .catch(() => null)
+    return profile?.sleeperUserId?.trim() || null
+  })()
+
+  if (!viewerSleeperId) {
+    const reason = 'claim your team, or link the account you play on, so we know whose offers to read'
+    return { inbox: { available: false, reason }, sent: { available: false, reason } }
+  }
+
+  const scan = await scanPendingSleeperTrades({
+    platformLeagueId: league.platformLeagueId,
+    ownerSleeperId: viewerSleeperId,
+    sport: league.sport,
+  }).catch(() => null)
+
+  /* A throw and a refusal are the same fact to a reader: we did not look. */
+  if (!scan || !scan.scanned) {
+    const reason = scan?.reason ?? 'Sleeper could not be reached'
+    return { inbox: { available: false, reason }, sent: { available: false, reason } }
+  }
+
+  const map = (t: (typeof scan.trades)[number]): PendingOffer => ({
+    id: t.transactionId,
+    partnerName: t.proposedByViewer ? 'You' : t.proposedBy,
+    proposedAt: t.proposedAt,
+    /* `assetsGiven` is already viewer-relative in BOTH directions, so an offer
+       the manager sent is not rendered back to front. */
+    give: t.assetsGiven.map(offerLine),
+    get: t.assetsReceived.map(offerLine),
+  })
+
+  return {
+    inbox: { available: true, data: scan.trades.filter((t) => !t.proposedByViewer).map(map) },
+    sent: { available: true, data: scan.trades.filter((t) => t.proposedByViewer).map(map) },
+  }
+}
+
 export async function getTradesData(leagueId: string, userId: string): Promise<TradesData | null> {
   const league = await prisma.league.findUnique({
     where: { id: leagueId },
-    select: { id: true, name: true, platform: true, leagueType: true, settings: true, platformLeagueId: true, season: true },
+    /* `sport` is selected for the pending-offer scan: Sleeper's player
+       dictionary is NFL-only, so a non-NFL league must not be handed one. */
+    select: { id: true, name: true, platform: true, leagueType: true, settings: true, platformLeagueId: true, season: true, sport: true },
   })
   if (!league) return null
 
@@ -331,13 +468,21 @@ export async function getTradesData(leagueId: string, userId: string): Promise<T
       available: true as const,
       data: { leagueName: leagueDisplayName(league.name), format: league.leagueType ?? null, teamCount },
     },
-    // Pending offers are a live platform concept. Nothing ingests them, and a
-    // trade screen that shows an empty inbox implies none are waiting.
-    inbox: {
-      available: false as const,
-      reason: 'pending offers are not ingested — open your platform to see anything waiting',
-    },
-    sent: { available: false as const, reason: 'outgoing offers are not ingested' },
+    /*
+     * Read LIVE off the platform, not from a table.
+     *
+     * 🛑 THE COMMENT THAT STOOD HERE SAID "Nothing ingests them", AND IT WAS
+     * WRONG THE DAY IT WAS WRITTEN — or became wrong and nobody came back. The
+     * reasoning was sound and the premise was false, which is the worst
+     * combination: it reads as a considered decision rather than a stale fact,
+     * so nobody re-checks it. `scanPendingSleeperTrades` has been serving the
+     * Trade Center's inbox this whole time.
+     *
+     * Nothing INGESTS them, which is true and irrelevant — they are never
+     * written to a table, and should not be. A pending offer is answered on the
+     * platform, and a cached copy would go stale the moment it was accepted.
+     */
+    ...(await resolvePendingOffers(league, userId)),
     grades,
     deadline: resolveDeadline(league.settings),
   }
