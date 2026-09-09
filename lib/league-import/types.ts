@@ -171,7 +171,19 @@ export interface NormalizedScoring {
    * from a measured one.
    */
   scoring_format: string | null
-  rules: Array<{ stat_key: string; points_value: number; multiplier?: number }>
+  /**
+   * ⚠ `positions` IS WHAT KEEPS A POSITION-DEPENDENT RULE FROM COLLAPSING. MFL prices the
+   * same stat differently by position (a reception is 0.5 for RB, 1.0 for WR, 1.5 for TE),
+   * and a rule list keyed only on `stat_key` cannot express that — the canonical normalizer
+   * had no choice but to let the last rule win, silently repricing every RB and WR.
+   * Absent or empty means the rule applies to every position, which is the common case.
+   */
+  rules: Array<{
+    stat_key: string
+    points_value: number
+    multiplier?: number
+    positions?: string[]
+  }>
   raw?: Record<string, unknown>
 }
 
