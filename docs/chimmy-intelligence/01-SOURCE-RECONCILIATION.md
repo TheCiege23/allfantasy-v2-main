@@ -101,35 +101,58 @@ alternative, folding it into `unknown`, would have been wrong the other way: a
 commissioner who genuinely chose `round_based` is indistinguishable from the
 default, and hiding the value would leave Chimmy unable to answer at all.
 
-### 2. 🛑 UNRESOLVED, AND IT MOVES TRADE PRICING — not just wording
+### 2. ✅ RESOLVED 2026-09-09 — an untouched redraft league no longer classifies as KEEPER
 
-`readFormatRules` (`lib/trade-intel/leagueFormatRules.ts:185`):
+**Was:** `readFormatRules` treated `redraft && keeperCount > 0` as `keeper`, and
+`League.keeperCount` defaults to `3`. `ImportedLeagueCommitService.setIfNum`
+only writes the column when the provider sends a number, so "the platform told
+us nothing" and "the platform told us three" were the same row. Every such
+league was priced as a keeper league.
 
-```
-: raw === 'keeper' || (raw === 'redraft' && keeperCount > 0)
-    ? 'keeper'
-```
+**Product decision (user, 2026-09-09):** an untouched `keeperCount = 3` means
+*unknown/unconfirmed*, not "this league has three keepers." A bare schema
+default must not classify redraft as keeper and must not activate
+`keeperSurplus`, `keeperDriftNote`, or other keeper-based valuation
+adjustments.
 
-Combined with `keeperCount @default(3)`, **an untouched `redraft` row classifies
-as a `keeper` league.** Measured directly against the resolver: a row of
-`{leagueType:'redraft', keeperCount:3}` returns `concept: 'keeper'` and emits the
-full keeper trade note.
+**The rule, in `keeperEvidenceFor`** (`lib/trade-intel/leagueFormatRules.ts`).
+Keeper classification requires one of:
 
-The import path does not close this. `ImportedLeagueCommitService` writes the
-column through `setIfNum('keeperCount', l.max_keepers)`, which only fires when
-the platform reported `max_keepers` **as a number**. Any league whose platform
-reported nothing keeps the default and reads as a keeper league.
+| Evidence | Source |
+| --- | --- |
+| `explicit_concept` | `leagueType` (or a format alias) is literally `keeper` |
+| `caller_confirmed` | caller passes `keeperSettingsConfirmed` — a provider payload or a confirmed canonical settings snapshot |
+| `configured_value` | a durable keeper column differs from its schema default |
+| `null` | no evidence — **not** a keeper league, whatever `keeperCount` reads |
 
-**Not fixed here, deliberately.** Changing that branch alters `FormatRules` for
-every consumer, including trade pricing — `keeperSurplus` and `keeperDriftNote`
-both key off it. That is a product decision about live leagues, not a refactor.
+Absent means unconfirmed. Every existing caller passes nothing, so every
+existing caller stops pricing untouched leagues as keeper.
 
-Pinned instead by
-`__tests__/league-rules/conceptCatalog.test.ts` → *"PINS AN UPSTREAM EXPOSURE"*,
-which asserts the current behaviour and states that it **should go red** when the
-decision is made.
+**Why the fix is in the classifier and nowhere else.** Both keeper pricing
+paths select on `readFormatRules(...).concept`:
+`lib/trade-value/formats/registry.ts` picks `keeperModel` off it, and
+`lib/trade-intel/tradeContextNotes.ts` returns early on
+`rules.concept !== 'keeper'` before it can reach `keeperDriftNote`. One gate
+closes both — and a second gate in Chimmy would have been a competing
+classifier.
 
-**The open question for the user:** should an untouched `keeperCount=3` be read
-as "3 keepers" or as "we were never told"? A `@default(0)` on the column, or a
-`keeperCount != null && keeperCount > 0 && explicitlySet` predicate, are the two
-obvious shapes — but both change what existing leagues price as.
+**Accepted cost.** A league sitting on all three defaults reads as unconfirmed
+even if it genuinely has three keepers. From the row alone the two are
+identical, so the choice is which way to be wrong: pricing a redraft league as
+keeper corrupts every deal in it, while declining to price an unconfirmed keeper
+league costs an adjustment the commissioner restores by setting any keeper
+field. Chimmy says so explicitly — "Keeper status: UNCONFIRMED" — rather than
+staying silent.
+
+Note `keeperCount: 0` **is** evidence, of the opposite. It differs from the
+default, so it was chosen; `keeperCount > 0` at the call site keeps it out of
+the keeper branch. Evidence means somebody decided, not that they decided yes.
+
+**Migration / backfill: not recommended, and not needed.** No Prisma default was
+changed and no production row was touched. The classifier now requires evidence
+at read time, so the correction applies to every league immediately, including
+historical rows. Changing `keeperCount @default(3)` to `@default(0)` would alter
+what future AllFantasy-created leagues carry and would not improve any existing
+row, since an existing 3 would still be indistinguishable. If a backfill is ever
+wanted, the honest one is per-provider: re-read `max_keepers` from the platform
+and set `keeperSettingsConfirmed` where it was actually reported.
