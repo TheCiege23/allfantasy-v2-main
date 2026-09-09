@@ -1,3 +1,4 @@
+import type { ResourceFetchStatus } from '@/lib/league-import/resourceStatus'
 export interface YahooImportLeague {
   leagueKey: string
   leagueId: string
@@ -68,7 +69,7 @@ export interface YahooImportTeam {
    * `fetched` means the arrays are authoritative and may replace stored data.
    * `failed` means they are a PLACEHOLDER — the team's last-good roster must be kept.
    */
-  rosterFetchStatus: 'fetched' | 'failed'
+  rosterFetchStatus: ResourceFetchStatus
 }
 
 export interface YahooImportScheduleWeek {

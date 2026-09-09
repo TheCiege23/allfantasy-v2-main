@@ -158,6 +158,8 @@ export const MflAdapter: ILeagueImportAdapter<MflImportPayload> = {
       return {
         stat_key: `mfl_stat_${rule.code}`,
         points_value: rule.points,
+        /* Carried because the alias resolver maps MFL by NAME, never by code. */
+        stat_name: rule.name ?? null,
         ...(positions.length > 0 ? { positions } : {}),
       }
     })

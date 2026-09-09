@@ -31,6 +31,7 @@ import {
   republishCanonicalSettingsForRefresh,
 } from '@/lib/league-import/ImportedLeagueCommitService'
 import { buildCanonicalImportBundle } from '@/lib/league-import/canonicalImportNormalizer'
+import { isAuthoritativeStatus } from '@/lib/league-import/resourceStatus'
 import type { ApplyScopeResult, SleeperSyncScope } from './types'
 import { persistLiveTrades } from './persistLiveTrades'
 import { emptyApplyResult } from './types'
@@ -171,12 +172,25 @@ async function applyLeagueState(
     const bundle = buildCanonicalImportBundle(normalized)
     mergedSettings = republishCanonicalSettingsForRefresh(existingSettings, freshSettings, bundle)
   } catch (e) {
+    /*
+     * 🛑 PRESERVE, RECORD, AND REFUSE TO CALL IT COMPLETE — IMP-02 false-green.
+     *
+     * Keeping the previous canonical slices is right: the raw league columns below are
+     * still correct and worth persisting, and last-good rules beat no rules. What was
+     * WRONG was doing that silently — the scope completed, `lastSuccessfulSyncAt`
+     * advanced, and Decision OS was told this league's effective rules were current when
+     * they were the rules from whenever the last successful rebuild happened.
+     *
+     * `incompleteReasons` makes the store throw after these writes land, so the good
+     * columns persist, unrelated scopes still run, and the run cannot report success.
+     */
     mergedSettings = { ...existingSettings, ...freshSettings }
-    out.notes.push(
-      `league_state: canonical settings rebuild failed (${
-        e instanceof Error ? e.message : String(e)
-      }) — kept previous canonical slices`,
-    )
+    const detail = e instanceof Error ? e.message : String(e)
+    out.notes.push(`league_state: canonical settings rebuild failed (${detail}) — kept previous canonical slices`)
+    out.incompleteReasons = [
+      ...(out.incompleteReasons ?? []),
+      `canonical settings rebuild failed: ${detail}`,
+    ]
   }
 
   // Re-assert AF-managed keys the fresh settings don't carry (belt-and-suspenders over the merge order).
@@ -304,6 +318,13 @@ async function applyTeamsRosters(
     return out
   }
 
+  /*
+   * IMP-04 — teams whose roster could not be read. `bootstrapLeagueFromNormalizedImport`
+   * preserves their stored rosters; this scope must then refuse to call itself complete, or
+   * `lastSuccessfulSyncAt` advances over a league we did not fully read.
+   */
+  const unobserved = normalized.rosters.filter((r) => !isAuthoritativeStatus(r.fetch_status))
+
   const before = await snapshotTeamsRosters(leagueId)
 
   // REUSE the canonical, claim-preserving upsert (LeagueTeam by [leagueId,externalId] never nulls a
@@ -325,6 +346,16 @@ async function applyTeamsRosters(
    * provider hiccup that returns no standings must not zero a populated league.
    * Absent standings means "we did not learn anything", not "everyone is 0-0".
    */
+  if (unobserved.length > 0) {
+    out.notes.push(
+      `teams_rosters: ${unobserved.length} of ${normalized.rosters.length} rosters were not observed — stored rosters preserved, no reconciliation`,
+    )
+    out.incompleteReasons = [
+      ...(out.incompleteReasons ?? []),
+      `${unobserved.length} of ${normalized.rosters.length} team rosters were not observed`,
+    ]
+  }
+
   const standings = Array.isArray(normalized.standings) ? normalized.standings : []
   if (standings.length === 0) {
     out.notes.push('teams_rosters: no standings in response — left existing records untouched')
@@ -375,7 +406,18 @@ async function applyTeamsRosters(
   const authoritative =
     reconcileRemovals &&
     normalized.coverage?.currentRosters?.state === 'full' &&
-    normalized.rosters.length > 0
+    normalized.rosters.length > 0 &&
+    /*
+     * 🛑 AND EVERY ROSTER MUST ITSELF BE AN OBSERVATION — IMP-04.
+     *
+     * The coverage check above is an adapter's CLAIM about completeness, and this batch
+     * exists because that claim was wrong: Yahoo and ESPN both reported `full` while
+     * counting team records rather than successful reads. Both are fixed, but a removal is
+     * irreversible — it deletes a team and its roster — so the gate does not rest on one
+     * adapter remembering to be honest. This second test reads the per-team status
+     * directly, and a future adapter that forgets its coverage block fails closed here.
+     */
+    normalized.rosters.every((r) => isAuthoritativeStatus(r.fetch_status))
   if (authoritative) {
     const liveTeamIds = new Set(normalized.rosters.map((r) => r.source_team_id))
     const staleTeams = await prisma.leagueTeam.findMany({

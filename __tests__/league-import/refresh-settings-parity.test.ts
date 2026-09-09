@@ -84,10 +84,15 @@ describe('IMP-02 — refresh republishes canonical settings', () => {
     expect(Number.isNaN(Date.parse(String(stamp)))).toBe(false)
   })
 
-  it('leaves AllFantasy-side presentation slices alone', () => {
+  it('adopts an UNLAYERED existing presentation value as an override rather than losing it', () => {
     /*
-     * `visualTheme` and `mediaSettings` are AllFantasy's own, not the host league's.
-     * Republishing them would revert a user's in-app customisation on the next tick.
+     * 🛑 THE DEPLOY CASE, AND THE ONE THAT COSTS REAL USER DATA IF IT IS WRONG. Every league
+     * that exists today carries `visualTheme` as a bare top-level key with no record of who
+     * set it. Without first-adoption, resolution falls through to the provider value and a
+     * manager's customisation is overwritten once, irreversibly, on the first refresh after
+     * this ships. A value that differs from what the provider reports is adopted as an
+     * override, because misfiling a provider value merely freezes branding (visible and
+     * reversible) while misfiling a user's choice destroys it.
      */
     const bundle = buildCanonicalImportBundle(normalized('ppr'))
     const merged = republishCanonicalSettingsForRefresh(
@@ -97,6 +102,10 @@ describe('IMP-02 — refresh republishes canonical settings', () => {
     )
     expect(merged.visualTheme).toEqual({ accent: 'user-picked' })
     expect(merged.mediaSettings).toEqual({ banner: 'user-upload' })
+    /* And it is now recorded as an override, so the next refresh needs no re-adoption. */
+    expect((merged.userOverrides as Record<string, unknown>).visualTheme).toEqual({
+      accent: 'user-picked',
+    })
   })
 
   it('produces the same canonical slices a fresh import would', () => {

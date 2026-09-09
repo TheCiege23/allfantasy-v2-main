@@ -5,6 +5,7 @@
 
 import { prisma } from '@/lib/prisma'
 import type { NormalizedImportResult } from '../types'
+import { buildObservation, isAuthoritativeStatus } from '@/lib/league-import/resourceStatus'
 
 export interface SleeperLeagueBootstrapResult {
   leagueTeamsCreated: number
@@ -206,6 +207,20 @@ export async function bootstrapLeagueFromNormalizedImport(
     )
 
     const playerData = {
+      /*
+       * 🛑 THE OBSERVATION RECORD IS HOW A READER TELLS "NOBODY" FROM "WE DO NOT KNOW".
+       *
+       * Every consumer that renders or reasons about a roster — Decision OS's canonical
+       * world, Chimmy's grounding, trade evaluation, waiver recommendations — has until now
+       * had only `players: []` to go on, which is the same value for a pre-draft league and
+       * for a league whose provider read failed. `roster_status` makes them distinguishable
+       * without a schema change: `Roster.playerData` is already a Json column.
+       *
+       * ⚠ `lastGoodAt` DELIBERATELY DOES NOT ADVANCE ON A PRESERVED WRITE. It answers "when
+       * was this true", not "when did we last try" — a badge showing "updated just now" over
+       * week-old data is the false-green in miniature.
+       */
+      roster_status: buildObservation(r.fetch_status ?? 'fetched', new Date(), r.observed_at ?? null),
       players: r.player_ids,
       starters: r.starter_ids,
       reserve: r.reserve_ids ?? [],
@@ -258,19 +273,22 @@ export async function bootstrapLeagueFromNormalizedImport(
     })
 
     /*
-     * 🛑 IMP-04 — A FAILED FETCH MUST NOT CLEAR A GOOD ROSTER.
+     * 🛑 IMP-04 — ONLY AN OBSERVATION MAY REPLACE A ROSTER.
      *
-     * `fetch_status === 'failed'` means the provider request for THIS team rejected and
-     * `player_ids` is an empty placeholder rather than an observation. Writing it would
-     * empty a real roster on a transient timeout, with nothing anywhere going red — the
-     * league would simply show a manager with no players and report itself current.
+     * A non-authoritative status (`failed`, `unauthorized`, `not_fetched`, `partial`) means
+     * `player_ids` is a placeholder, not a reading. Writing it empties a real roster on a
+     * transient timeout with nothing going red — the league simply shows a manager with no
+     * players and reports itself current.
      *
-     * ⚠ SKIPPING ONLY APPLIES WHERE THERE IS SOMETHING TO PRESERVE. With no existing
-     * row there is no last-good data to protect, and skipping would leave the team with
-     * no roster at all; the placeholder is then strictly better, and the league's
-     * `currentRosters` coverage is already `partial` so nothing claims it is complete.
+     * ⚠ AND A FIRST IMPORT MUST NOT PUBLISH THE PLACEHOLDER EITHER. The earlier version
+     * skipped only when there was an existing row to protect, reasoning that "some row beats
+     * none". That is wrong in the way that matters: it writes an EMPTY roster that every
+     * downstream reader is entitled to treat as "this manager has nobody", which is the exact
+     * false statement this whole repair exists to stop. The team is still created below, and
+     * the roster is recorded as UNKNOWN rather than empty.
      */
-    if (r.fetch_status === 'failed' && existingRoster) {
+    const rosterIsAuthoritative = isAuthoritativeStatus(r.fetch_status)
+    if (!rosterIsAuthoritative && existingRoster) {
       rostersPreserved++
       continue
     }

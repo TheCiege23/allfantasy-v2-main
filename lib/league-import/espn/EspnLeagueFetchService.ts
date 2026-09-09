@@ -709,6 +709,13 @@ function parseEspnTeams(raw: any, settings: EspnImportSettings | null): EspnImpo
       if (!teamId) return null
 
       const { managerId, managerName } = resolveEspnOwners(team, members)
+      /*
+       * ⚠ THE PRESENCE OF `team.roster` IS THE ONLY EVIDENCE THE mRoster VIEW CAME BACK.
+       * `parseEspnRosterEntries(undefined)` returns empty lists, which is indistinguishable
+       * from a genuinely empty roster — so the check has to happen HERE, before parsing
+       * flattens the difference away.
+       */
+      const rosterViewPresent = team.roster != null
       const roster = parseEspnRosterEntries(team.roster?.entries)
       const record = isRecord(team.record?.overall) ? team.record.overall : {}
       const acquisitionBudgetSpent = parseNumber(team.transactionCounter?.acquisitionBudgetSpent, null)
@@ -736,6 +743,11 @@ function parseEspnTeams(raw: any, settings: EspnImportSettings | null): EspnImpo
         starterPlayerIds: roster.starterIds,
         reservePlayerIds: roster.reserveIds,
         playerMap: roster.playerMap,
+        rosterFetchStatus: !rosterViewPresent
+          ? ('not_fetched' as const)
+          : roster.playerIds.length > 0
+            ? ('fetched' as const)
+            : ('fetched_empty' as const),
       }
     })
     .filter(Boolean) as EspnImportTeam[]

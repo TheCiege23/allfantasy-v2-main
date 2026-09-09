@@ -12,6 +12,14 @@ import {
 import { resolveLeagueFormat } from '@/lib/league/format-engine'
 import { normalizeConceptToFormat } from '@/lib/league-creation/canonical/normalizeConcept'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
+import { resolveProviderScoringStatKey } from '@/lib/scoring-defaults/ScoringKeyAliasResolver'
+import {
+  SCORING_RULE_CONTRACT_VERSION,
+  projectLegacyMap,
+  describeProjectionLoss,
+  type ImportedScoringContract,
+  type ScoringMode,
+} from '@/lib/league-import/scoringRuleContract'
 import type {
   CanonicalImportBundle,
   DerivedImportFlags,
@@ -68,6 +76,66 @@ function scoringPresetWasInferred(normalized: NormalizedImportResult): boolean {
     fmt.includes('ppr') ||
     fmt.includes('reception')
   )
+}
+
+/**
+ * Turn the source's roster-position list into explicit starter slots with multiplicity.
+ *
+ * Handles BOTH provider shapes this repo has to live with, which is why it exists rather than
+ * being inlined: Sleeper emits a FLAT array with one entry per slot (`['QB','RB','RB','BN']`),
+ * while ESPN/Yahoo/MFL emit AGGREGATED `"SLOT:count"` strings (`['QB:1','RB:2','BE:6']`).
+ * Counting one shape with the other's logic is a defect this file has already shipped once.
+ *
+ * ⚠ RESERVE LABELS ARE EXCLUDED USING THE CALLER'S SET, not a second copy of the list. The
+ * NFL-vs-baseball meaning of `DL` is decided there, and duplicating that decision here is how
+ * the two would drift apart.
+ */
+function buildStarterSlots(
+  rosterPositionsRaw: string[],
+  reserveLabels: ReadonlySet<string>,
+): Record<string, number> | undefined {
+  if (rosterPositionsRaw.length === 0) return undefined
+
+  const slots: Record<string, number> = {}
+  for (const entry of rosterPositionsRaw) {
+    const [labelRaw, countRaw] = entry.split(':')
+    const label = (labelRaw ?? '').trim().toUpperCase()
+    if (!label || reserveLabels.has(label)) continue
+    const parsed = countRaw != null ? Number(countRaw) : 1
+    const count = Number.isFinite(parsed) && parsed > 0 ? parsed : 1
+    slots[label] = (slots[label] ?? 0) + count
+  }
+
+  /* Every slot was a reserve slot — a real answer, but not a starter lineup. */
+  return Object.keys(slots).length > 0 ? slots : undefined
+}
+
+/**
+ * Which scoring MODE the source describes.
+ *
+ * ⚠ THE MODE HAS TO SURVIVE BATCH A EVEN THOUGH CATEGORY/ROTO EXECUTION DOES NOT LAND HERE.
+ * Full support belongs to the provider/sport batch — but a category league that is imported
+ * as ordinary points scoring is not "unsupported", it is MISLABELLED, and the batch that
+ * implements it would be building on data that already asserts the wrong thing.
+ *
+ * Conservative on purpose: only an explicit signal moves it off `points`, because guessing
+ * `category` for a points league is just as wrong in the other direction.
+ */
+function resolveScoringMode(normalized: NormalizedImportResult): ScoringMode {
+  const raw = normalized.league as Record<string, unknown>
+  const signals = [
+    String(normalized.scoring?.scoring_format ?? ''),
+    String(normalized.league.scoring ?? ''),
+    String(raw.scoring_type ?? raw.scoringType ?? ''),
+  ]
+    .join(' ')
+    .toLowerCase()
+
+  if (/\broto\b|rotisserie/.test(signals)) return 'roto'
+  if (/\bcategor(y|ies|ical)\b|\bh2h[\s_-]*categor/.test(signals)) return 'category'
+  if (/\bpoints?\b|\bppr\b|\bstandard\b/.test(signals)) return 'points'
+  /* Nothing said — `unknown` is honest; `points` would be a claim. */
+  return normalized.scoring?.rules?.length ? 'points' : 'unknown'
 }
 
 function inferDraftType(normalized: NormalizedImportResult): string {
@@ -356,8 +424,23 @@ export function buildCanonicalImportBundle(normalized: NormalizedImportResult): 
   const importedIrSlots =
     typeof normalized.league.reserve_slots === 'number' ? normalized.league.reserve_slots : undefined
 
+  /*
+   * 🛑 `starterSlots: undefined` MADE EXACT SLOT ELIGIBILITY UNRECOVERABLE — IMP-03.
+   *
+   * The source tells us the roster shape (`roster_positions`), and the bench maths above
+   * already parses it. Throwing the parsed result away and storing `undefined` forced every
+   * consumer that needs slot eligibility — lineup validity, SF/2QB detection, IDP handling,
+   * flex arithmetic — to re-derive it from a different representation or fall back to a
+   * template. That is how a superflex league gets graded as single-QB.
+   *
+   * ⚠ ABSENT SOURCE POSITIONS STILL YIELD `undefined`, NOT AN EMPTY OBJECT. `{}` would read
+   * as "this league has no starters", which is a claim; `undefined` is the honest "the
+   * source did not say", which is what a fallback is allowed to act on.
+   */
+  const starterSlots = buildStarterSlots(rosterPositionsRaw, RESERVE_SLOT_LABELS)
+
   const rosterSettings: SettingsSnapshot['rosterSettings'] = {
-    starterSlots: undefined,
+    starterSlots,
     benchSlots: computedBenchSlots,
     irSlots: importedIrSlots,
     taxiSlots: importedTaxiSlots ?? (derivedFlags.devy ? 4 : undefined),
@@ -376,52 +459,56 @@ export function buildCanonicalImportBundle(normalized: NormalizedImportResult): 
       : baseCommissionerSettings
 
   /*
-   * 🛑 A FLAT `stat_key -> points` MAP CANNOT HOLD A POSITION-DEPENDENT RULE, AND THE
-   * COLLAPSE WAS SILENT. MFL prices a reception differently by position; three rules for
-   * `rec` (RB 0.5, WR 1.0, TE 1.5) all wrote the same key, so the LAST one won and every
-   * RB and WR reception was silently repriced at the TE value. Nothing failed — the
-   * league simply meant something else afterwards.
+   * 🛑 ONE AUTHORITATIVE SCORING REPRESENTATION — IMP-03/IMP-05.
    *
-   * Rules that name positions are now qualified as `stat_key@POS`, one entry per
-   * position, so no rule can overwrite another. An UNQUALIFIED rule keeps its bare
-   * `stat_key`, which preserves the existing shape for every league that has no
-   * position-dependent scoring — the overwhelming majority, and every existing reader.
-   *
-   * ⚠ `scoringRulesDetail` carries the same rules as a typed LIST alongside the map.
-   * The map is lossy by construction (it cannot express a range, threshold or unit) and
-   * consumers that need exact rule semantics must read the list; the map remains only
-   * so existing readers are not broken by this repair.
+   * The interim version of this batch built the typed list AND the flat map side by side,
+   * each from the raw rules. Two implementations of one rule set is the bug this repo has
+   * already paid for once; the map is now PROJECTED from the contract by `projectLegacyMap`
+   * and is built nowhere else, so the two cannot drift.
    */
-  const scoringRules: Record<string, unknown> = {}
-  const scoringRulesDetail: Array<Record<string, unknown>> = []
-  const collidedStatKeys = new Set<string>()
-
-  if (normalized.scoring?.rules?.length) {
-    for (const r of normalized.scoring.rules) {
+  const scoringMode: ScoringMode = resolveScoringMode(normalized)
+  const importedScoringContract: ImportedScoringContract = {
+    version: SCORING_RULE_CONTRACT_VERSION,
+    sport,
+    mode: scoringMode,
+    sourceFormat: normalized.scoring?.scoring_format ?? null,
+    presetId: scoringPresetId,
+    presetInferred: scoringPresetWasInferred(normalized),
+    rules: (normalized.scoring?.rules ?? []).map((r) => {
       const rule = r as Record<string, unknown>
       const positions = Array.isArray(rule.positions)
-        ? (rule.positions as unknown[]).map((p) => String(p).trim().toUpperCase()).filter(Boolean)
+        ? (rule.positions as unknown[]).map((x) => String(x).trim().toUpperCase()).filter(Boolean)
         : []
-
-      scoringRulesDetail.push({
-        statKey: r.stat_key,
-        pointsValue: r.points_value,
-        ...(positions.length > 0 ? { positions } : {}),
+      /*
+       * ⚠ `canonicalStat` STAYS NULL UNLESS THE ALIAS RESOLVER VERIFIED IT. Guessing here
+       * turns an unmapped provider code into an exact-looking valuation, which is strictly
+       * worse than a visible gap because nothing downstream can tell it was invented.
+       */
+      const canonical = resolveProviderScoringStatKey(String(r.stat_key), {
+        mflStatName: (rule.stat_name as string | null | undefined) ?? null,
       })
-
-      if (positions.length === 0) {
-        if (Object.prototype.hasOwnProperty.call(scoringRules, r.stat_key)) {
-          collidedStatKeys.add(String(r.stat_key))
-        }
-        scoringRules[r.stat_key] = r.points_value
-        continue
+      return {
+        nativeStatId: String(r.stat_key),
+        canonicalStat: canonical,
+        pointsValue: Number(r.points_value),
+        positions,
+        sport,
+        mode: scoringMode,
+        provenance: 'source' as const,
+        resolution: canonical ? ('resolved' as const) : ('unresolved' as const),
+        unresolvedReason: canonical ? null : 'No verified canonical mapping for this provider stat id.',
+        /* Declared, not yet read from any provider — null is honest, a zero would score. */
+        range: null,
+        threshold: null,
+        unit: null,
+        rounding: null,
+        multiplier: typeof rule.multiplier === 'number' ? (rule.multiplier as number) : null,
       }
-
-      for (const pos of positions) {
-        scoringRules[`${r.stat_key}@${pos}`] = r.points_value
-      }
-    }
+    }),
   }
+
+  const { map: scoringRules, collisions: scoringCollisions } = projectLegacyMap(importedScoringContract)
+  const projectionLoss = describeProjectionLoss(importedScoringContract)
 
   const settingsSnapshot: SettingsSnapshot = {
     snapshotVersion: SETTINGS_SNAPSHOT_VERSION,
@@ -431,13 +518,16 @@ export function buildCanonicalImportBundle(normalized: NormalizedImportResult): 
       scoringTemplateId: scoringPresetId,
       rules: scoringRules,
       /*
-       * The typed rule list — sport, native stat key, points, and position eligibility
-       * where the source supplied it. `rules` above cannot express eligibility without
-       * collapsing, so a consumer needing exact semantics reads this instead.
+       * 🛑 THE AUTHORITATIVE CONTRACT. `rules` above is a lossy PROJECTION of this, generated
+       * by `projectLegacyMap` and built nowhere else. A consumer needing exact semantics —
+       * position eligibility, category/roto mode, provenance, unresolved rules — reads this;
+       * `rules` exists only until the last legacy reader is migrated.
        */
-      rulesDetail: scoringRulesDetail,
+      rulesDetail: importedScoringContract,
       /* False means the preset was READ from the source; true means it was guessed. */
-      templateInferred: scoringPresetWasInferred(normalized),
+      templateInferred: importedScoringContract.presetInferred,
+      /* What `rules` cannot express for this league, so a caller can decide rather than discover. */
+      projectionLoss,
       source: normalized.source.source_provider,
     } as SettingsSnapshot['scoringSettings'],
     draftSettings: {
@@ -532,14 +622,26 @@ export function buildCanonicalImportBundle(normalized: NormalizedImportResult): 
       },
     })
   }
-  if (collidedStatKeys.size > 0) {
+  if (scoringCollisions.length > 0) {
     scoringAmbiguityWarnings.push({
       code: 'scoring_rule_collision',
-      message: `The source sent more than one unqualified rule for: ${[...collidedStatKeys].join(
-        ', ',
-      )}. Only the last value could be kept; confirm these in League Settings.`,
+      message: `The source sent conflicting values for the same rule key: ${[
+        ...new Set(scoringCollisions),
+      ].join(', ')}. Only one value could be kept in the compatibility map; confirm these in League Settings.`,
       severity: 'warn',
-      metadata: { statKeys: [...collidedStatKeys] },
+      metadata: { statKeys: [...new Set(scoringCollisions)] },
+    })
+  }
+  /*
+   * The flat map cannot carry ranges, thresholds, units, rounding or a category/roto mode.
+   * That loss is a property of THIS league's rules, so it is surfaced rather than absorbed —
+   * a consumer still reading the map is entitled to know what it is missing.
+   */
+  for (const loss of projectionLoss) {
+    scoringAmbiguityWarnings.push({
+      code: 'scoring_projection_lossy',
+      message: loss,
+      severity: 'info',
     })
   }
 

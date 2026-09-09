@@ -267,7 +267,7 @@ describe('IMP-01 — fetchNormalizedForConnection preserves scope end to end', (
           normalized: normalizedFor('NFL', 2026),
         })) as never,
       }),
-    ).rejects.toThrow(/different league scope/i)
+    ).rejects.toThrow(/did not confirm the requested league scope/i)
   })
 
   it('accepts a matching scope', async () => {

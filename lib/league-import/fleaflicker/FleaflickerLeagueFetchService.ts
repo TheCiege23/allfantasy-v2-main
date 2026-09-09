@@ -1,3 +1,4 @@
+import type { ResourceFetchStatus } from '@/lib/league-import/resourceStatus'
 import type {
   FleaflickerImportPayload,
   FleaflickerSport,
@@ -99,10 +100,23 @@ export async function fetchFleaflickerLeagueForImport(sourceId: string): Promise
   const standingsUrl = `${API_BASE}/FetchLeagueStandings?sport=${encodeURIComponent(sport)}&league_id=${leagueId}&season=${season}`
   const rostersUrl = `${API_BASE}/FetchLeagueRosters?sport=${encodeURIComponent(sport)}&league_id=${leagueId}&season=${season}`
 
+  /*
+   * ⚠ THE ROSTER READ IS STILL ALLOWED TO FAIL WITHOUT SINKING THE IMPORT — a league with
+   * readable standings and an unreadable roster endpoint is worth importing. What changed is
+   * that the failure is now RECORDED rather than disguised as an empty league.
+   */
+  let rostersStatus: ResourceFetchStatus = 'fetched'
   const [standings, rosters] = await Promise.all([
     fetchJson<FleaflickerStandingsResponse>(standingsUrl),
-    fetchJson<FleaflickerRostersResponse>(rostersUrl).catch(() => ({ rosters: [] })),
+    fetchJson<FleaflickerRostersResponse>(rostersUrl).catch((e: unknown) => {
+      const status = (e as { status?: number } | undefined)?.status
+      rostersStatus = status === 401 || status === 403 ? 'unauthorized' : 'failed'
+      return { rosters: [] }
+    }),
   ])
+  if (rostersStatus === 'fetched' && (rosters.rosters ?? []).length === 0) {
+    rostersStatus = 'fetched_empty'
+  }
 
   if (!standings?.league?.id) {
     throw new FleaflickerImportLeagueNotFoundError('Fleaflicker response missing league object.')
@@ -113,5 +127,6 @@ export async function fetchFleaflickerLeagueForImport(sourceId: string): Promise
     season: standings.season ?? season,
     standings,
     rosters,
+    rostersStatus,
   }
 }

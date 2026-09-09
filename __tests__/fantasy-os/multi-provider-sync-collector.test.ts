@@ -69,10 +69,28 @@ function connection(overrides: Partial<LeagueSyncConnection> = {}): LeagueSyncCo
   }
 }
 
-/** Only the fields the loader touches — it returns the payload untouched. */
-const NORMALIZED = { source: { source_league_id: '123' } } as unknown as NormalizedImportResult
+/**
+ * Only the fields the loader touches.
+ *
+ * ⚠ `league.sport`/`league.season` ARE NOT DECORATION — the loader validates returned scope
+ * fail-closed (IMP-01), so a payload that reports no scope is REFUSED. Every one of the six
+ * adapters populates both, so a stub without them was never a realistic payload; it just
+ * happened to pass while the guard was permissive. `scopedNormalized` below builds one that
+ * agrees with the connection under test.
+ */
+const NORMALIZED = {
+  source: { source_league_id: '123' },
+  league: { sport: 'NFL', season: 2026 },
+} as unknown as NormalizedImportResult
 
 const ok = () => ({ success: true as const, normalized: NORMALIZED })
+
+/** A payload that answers about a specific scope, for the scope-validation cases. */
+const scopedNormalized = (sport: string | null, season: number | null) =>
+  ({
+    source: { source_league_id: '123' },
+    league: { sport, season },
+  }) as unknown as NormalizedImportResult
 
 /**
  * Pinned clock, because the loader now derives a transaction-week window from the CALENDAR.
@@ -232,7 +250,11 @@ describe('a scheduled refresh asks for CURRENT STATE ONLY', () => {
    * one, and the writer applied whatever came back to the historical league record.
    */
   it('sends a historical ESPN season rather than defaulting to the current year', async () => {
-    const runPipeline = vi.fn(async () => ok())
+    /* The payload must ANSWER about 2023, or the fail-closed scope guard refuses it. */
+    const runPipeline = vi.fn(async () => ({
+      success: true as const,
+      normalized: scopedNormalized('NFL', 2023),
+    }))
     await fetchNormalizedForConnection(
       connection({ provider: 'espn', externalLeagueId: '123', season: 2023, runKey: 'espn:123:2023' }),
       { runPipeline: runPipeline as never, resolveCandidates: async () => ['u1'], now: NOW },

@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma'
 import { calculateAndSaveRank } from '@/lib/rank/calculateRank'
 import { deriveImportStatsFromNormalized } from '@/lib/rank/deriveImportStatsFromNormalized'
 import { SETTINGS_SNAPSHOT_VERSION } from '@/lib/league-contract/types'
+import { applyUserOwnedLayering, effectiveRulesVersion } from '@/lib/league-import/settingsLayering'
 import { readBackfillOutcome, backfillSettingsPatch } from '@/lib/league-import/backfillOutcome'
 import { resolveSeasonPlacement } from '@/lib/league-import/seasonPlacement'
 import { IMPORT_COVERAGE_SETTINGS_KEY } from '@/lib/league-import/importCoverageSummary'
@@ -350,12 +351,16 @@ export function mergeCanonicalBundleIntoLeagueSettingsJson(
  * SCORING is whatever it was on import day. Nothing errors; the numbers are simply wrong, and
  * they get more wrong the longer the league is connected.
  *
- * ⚠ SOURCE-DERIVED SLICES ARE REPUBLISHED; ALLFANTASY'S OWN ARE NOT. `scoringSettings` and
- * friends are FACTS ABOUT THE HOST LEAGUE and must track it. `visualTheme` and `mediaSettings`
- * are AllFantasy-side presentation that a user may have set in-app, and the source has no
- * opinion about them — republishing those would silently revert a user's own customisation on
- * the next 30-minute tick. That asymmetry is the whole reason this is a separate function from
- * `mergeCanonicalBundleIntoLeagueSettingsJson` rather than a reuse of it.
+ * ⚠ USER-OWNED KEYS GO THROUGH LAYERING, NOT THROUGH AN EXCLUSION LIST. An earlier version
+ * simply skipped `visualTheme`/`mediaSettings` so a refresh could not stomp a user's choice.
+ * That protected the override and broke everything else about the field: provider branding
+ * could never update, and clearing an override revealed nothing because the provider value
+ * had never been stored. `applyUserOwnedLayering` keeps both facts and resolves them.
+ *
+ * ⚠ AND THE RESULT CARRIES A CONTENT HASH, NOT A TIMESTAMP. `republishedAt` alone was
+ * unusable — it changes on every tick, so a consumer keying off it recomputes constantly or
+ * ignores it, and every consumer ignored it. `effectiveRulesVersion` changes only when the
+ * rules actually change.
  */
 export function republishCanonicalSettingsForRefresh(
   existingSettings: Record<string, unknown>,
@@ -374,17 +379,49 @@ export function republishCanonicalSettingsForRefresh(
   if (snap.playoffSettings !== undefined) merged.playoffSettings = snap.playoffSettings
   if (snap.conceptRules !== undefined) merged.conceptRules = snap.conceptRules
 
+  /*
+   * User-owned: resolved through override > source > default, with BOTH layers retained so
+   * the provider's current value is there to be revealed if the override is ever cleared.
+   */
+  applyUserOwnedLayering(merged, existingSettings, {
+    visualTheme: snap.visualTheme ?? null,
+    mediaSettings: snap.mediaSettings ?? null,
+  })
+
+  const rulesVersion = effectiveRulesVersion({
+    scoringSettings: merged.scoringSettings,
+    rosterSettings: merged.rosterSettings,
+    waiverSettings: merged.waiverSettings,
+    playoffSettings: merged.playoffSettings,
+    draftSettings: merged.draftSettings,
+    conceptRules: merged.conceptRules,
+  })
+
+  const priorCanonical =
+    existingSettings.importCanonical && typeof existingSettings.importCanonical === 'object'
+      ? (existingSettings.importCanonical as Record<string, unknown>)
+      : {}
+  const priorVersion = typeof priorCanonical.rulesVersion === 'string' ? priorCanonical.rulesVersion : null
+
   merged.importCanonical = {
     presetKey: bundle.presetKey,
     scoringPresetId: bundle.scoringPresetId,
     draftType: bundle.draftType,
     inferredConcept: bundle.inferredConcept,
     /*
-     * When the effective rules were last republished from the source. A consumer that
-     * caches anything derived from these slices can invalidate on this changing, which is
-     * the "recompute affected values when the effective rules version changes" half of the
-     * repair — without it the slices are correct and every cache of them still is not.
+     * The invalidation signal. A consumer caches against THIS; when it differs from what the
+     * consumer last saw, its derived artifacts are stale. Unchanged rules produce an
+     * unchanged hash, so a quiet refresh triggers no recomputation anywhere.
      */
+    rulesVersion,
+    /*
+     * When the rules last actually CHANGED — not when they were last republished. A
+     * "rules updated" surface wants this; a freshness badge wants `lastSuccessfulSyncAt`.
+     */
+    rulesChangedAt:
+      priorVersion && priorVersion === rulesVersion
+        ? (priorCanonical.rulesChangedAt ?? null)
+        : new Date().toISOString(),
     republishedAt: new Date().toISOString(),
   }
 

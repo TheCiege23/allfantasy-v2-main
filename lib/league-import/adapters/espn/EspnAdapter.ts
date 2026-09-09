@@ -1,6 +1,7 @@
 import type { ILeagueImportAdapter } from '../ILeagueImportAdapter'
 import type { NormalizedImportResult, SourceTracking } from '../../types'
 import type { EspnImportPayload } from './types'
+import { isAuthoritativeStatus } from '@/lib/league-import/resourceStatus'
 
 function detectEspnScoringFormat(raw: EspnImportPayload): string | null {
   const receptionRule = raw.settings?.scoringItems.find((rule) => rule.statId === 53)
@@ -50,6 +51,7 @@ export const EspnAdapter: ILeagueImportAdapter<EspnImportPayload> = {
         : null
     const receptionRule = raw.settings?.scoringItems.find((rule) => rule.statId === 53)
 
+    const espnRosterObservedAt = new Date().toISOString()
     const rosters = raw.teams.map((team) => ({
       source_team_id: team.teamId,
       source_manager_id: team.managerId,
@@ -63,6 +65,9 @@ export const EspnAdapter: ILeagueImportAdapter<EspnImportPayload> = {
       points_against: team.pointsAgainst ?? undefined,
       player_ids: team.rosterPlayerIds,
       starter_ids: team.starterPlayerIds,
+      /* IMP-04 — an absent mRoster view is not a league of empty rosters. */
+      fetch_status: team.rosterFetchStatus,
+      observed_at: isAuthoritativeStatus(team.rosterFetchStatus) ? espnRosterObservedAt : null,
       reserve_ids: team.reservePlayerIds,
       taxi_ids: [],
       faab_remaining: team.faabRemaining,
@@ -190,10 +195,31 @@ export const EspnAdapter: ILeagueImportAdapter<EspnImportPayload> = {
           state: 'full',
           count: 1,
         },
-        currentRosters: {
-          state: rosters.length > 0 ? 'full' : 'missing',
-          count: rosters.length,
-        },
+        /*
+         * 🛑 SAME FALSE-`full` AS YAHOO'S, FROM THE SAME CAUSE: `rosters.length` counts TEAMS,
+         * and every team gets a roster entry whether or not the mRoster view arrived. A
+         * league whose roster view was missing reported `full` with twelve empty rosters,
+         * and removal reconciliation trusts that claim.
+         */
+        currentRosters: (() => {
+          if (rosters.length === 0) return { state: 'missing' as const, count: 0 }
+          const observed = rosters.filter((r) => isAuthoritativeStatus(r.fetch_status))
+          if (observed.length === rosters.length) {
+            return { state: 'full' as const, count: rosters.length }
+          }
+          if (observed.length === 0) {
+            return {
+              state: 'missing' as const,
+              count: 0,
+              note: 'The roster view did not arrive; stored rosters were left unchanged.',
+            }
+          }
+          return {
+            state: 'partial' as const,
+            count: observed.length,
+            note: `${rosters.length - observed.length} of ${rosters.length} rosters were not read; those teams' stored rosters were left unchanged.`,
+          }
+        })(),
         historicalRosterSnapshots: {
           state: raw.previousSeasons.length > 0 ? 'partial' : 'missing',
           count: raw.previousSeasons.length,

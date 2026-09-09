@@ -12,6 +12,7 @@ import type {
   YahooImportTeam,
   YahooImportTransaction,
 } from '@/lib/league-import/adapters/yahoo/types'
+import type { ResourceFetchStatus } from '@/lib/league-import/resourceStatus'
 
 const YAHOO_API_BASE = 'https://fantasysports.yahooapis.com/fantasy/v2' // db-first-exception: ingestion service endpoint
 const YAHOO_LEAGUE_LIST_URL =
@@ -1038,10 +1039,24 @@ export async function fetchYahooLeagueForImport(
     })
   )
   const rostersByTeamKey = new Map<string, ReturnType<typeof parseYahooRoster>>()
-  for (const result of rosterResults) {
+  /*
+   * ⚠ THE REJECTION REASON IS THE ONLY PLACE 401 IS DISTINGUISHABLE FROM 503, AND IT WAS
+   * BEING DISCARDED. `unauthorized` needs a human to reconnect; `failed` recovers on its
+   * own. Collapsing both to "empty roster" lost the difference AND the data.
+   */
+  const rosterStatusByIndex: ResourceFetchStatus[] = []
+  for (let i = 0; i < rosterResults.length; i++) {
+    const result = rosterResults[i]!
     if (result.status === 'fulfilled') {
       rostersByTeamKey.set(result.value[0], result.value[1])
+      rosterStatusByIndex.push(
+        result.value[1].playerIds.length > 0 ? 'fetched' : 'fetched_empty',
+      )
+      continue
     }
+    const reason = result.reason as { status?: number } | undefined
+    const httpStatus = typeof reason?.status === 'number' ? reason.status : null
+    rosterStatusByIndex.push(httpStatus === 401 || httpStatus === 403 ? 'unauthorized' : 'failed')
   }
 
   /*
@@ -1059,14 +1074,14 @@ export async function fetchYahooLeagueForImport(
    */
   const failedRosterTeamKeys = teamKeys.filter((teamKey) => !rostersByTeamKey.has(teamKey))
 
-  const teams: YahooImportTeam[] = teamKeys.map((teamKey) => {
+  const teams: YahooImportTeam[] = teamKeys.map((teamKey, i) => {
     const roster = rostersByTeamKey.get(teamKey)
     return createImportTeam(
       teamKey,
       standingsByTeamKey.get(teamKey),
       metadataByTeamKey.get(teamKey),
       roster ?? { playerIds: [], starterIds: [], reserveIds: [], playerMap: {} },
-      roster ? 'fetched' : 'failed'
+      rosterStatusByIndex[i] ?? (roster ? 'fetched' : 'failed')
     )
   })
 
