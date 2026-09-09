@@ -16,7 +16,23 @@ const getServerSessionMock = vi.hoisted(() => vi.fn())
 vi.mock("next-auth", () => ({ getServerSession: getServerSessionMock }))
 vi.mock("@/lib/auth", () => ({ authOptions: {} }))
 
+/*
+ * `league` and `leagueTeam`, not `roster`.
+ *
+ * 🛑 THE MOCK AND THE MODULE HAD DISAGREED SINCE `resolveActiveLeagueId` STOPPED RESOLVING BY
+ * ROSTER. It now asks `prisma.league.findMany({ where: { userId } })` — commissioner-of, not
+ * plays-in — while this mock still supplied only `roster`, so every test that reached it died on
+ * `Cannot read properties of undefined (reading 'findMany')` before its own assertion ran. Five
+ * suites, red on main.
+ *
+ * `leagueTeam` is the second half: `resolveManagerDisplayNames` reads it to turn a
+ * `sleeper:<id>` manager key into that manager's name. It is only queried when a provider-prefixed
+ * id is present, so it stays unused by the AF-uuid fixtures below and is mocked so a test that
+ * adds one does not silently reach Prisma.
+ */
 const prismaMock = vi.hoisted(() => ({
+  league: { findMany: vi.fn() },
+  leagueTeam: { findMany: vi.fn() },
   roster: { findMany: vi.fn() },
 }))
 vi.mock("@/lib/prisma", () => ({ prisma: prismaMock }))
@@ -26,6 +42,19 @@ vi.mock("@/lib/commissioner-ui/adapter/transport", () => ({ callDecisionOS: call
 
 const isLiveReadyMock = vi.hoisted(() => vi.fn())
 vi.mock("@/lib/commissioner-ui/liveReadiness", () => ({ isLiveReady: isLiveReadyMock }))
+/*
+ * ⚠ MOCKED BECAUSE THE MODULE UNDER TEST CHANGED DEPENDENCY, NOT BECAUSE THESE TESTS CARE ABOUT
+ * COOKIES. `resolveActiveLeagueId` gained a `cookies()` read in 440e6d39 (the Commissioner OS
+ * league selector), and every suite here reaches it through its live client. Without this the
+ * whole file dies on `\`cookies\` was called outside a request scope` before a single assertion
+ * runs.
+ *
+ * `get` returns undefined, which is the no-cookie path — the "most recent roster" default these
+ * assertions were written against and still describe. Returning a value here would silently
+ * repoint every test at a different league.
+ */
+const cookieStoreMock = vi.hoisted(() => ({ get: vi.fn(() => undefined) }))
+vi.mock("next/headers", () => ({ cookies: () => Promise.resolve(cookieStoreMock) }))
 
 import { liveLeagueHealthClient } from "@/lib/commissioner-ui/league-health/decision-os-client/live"
 
@@ -39,7 +68,7 @@ afterEach(() => {
 
 function withActiveLeague(leagueId = "lg-1") {
   getServerSessionMock.mockResolvedValue({ user: { id: "user-1" } })
-  prismaMock.roster.findMany.mockResolvedValue([{ league: { id: leagueId, status: "active" } }])
+  prismaMock.league.findMany.mockResolvedValue([{ id: leagueId, status: "active" }])
 }
 
 describe("League Health live.ts — the 3 methods that stay on the honest placeholder", () => {
@@ -83,7 +112,7 @@ describe("League Health live.ts — getEvidence gating and resolution", () => {
       error: null,
     })
     await liveLeagueHealthClient.getEvidence()
-    expect(prismaMock.roster.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { platformUserId: "user-1" } }))
+    expect(prismaMock.league.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { userId: "user-1" } }))
     expect(callDecisionOSMock).toHaveBeenCalledWith("league-health", `/api/v1/intelligence/league?leagueId=${encodeURIComponent("lg live/one")}`)
   })
 })

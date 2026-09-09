@@ -14,7 +14,23 @@ const getServerSessionMock = vi.hoisted(() => vi.fn())
 vi.mock("next-auth", () => ({ getServerSession: getServerSessionMock }))
 vi.mock("@/lib/auth", () => ({ authOptions: {} }))
 
+/*
+ * `league` and `leagueTeam`, not `roster`.
+ *
+ * 🛑 THE MOCK AND THE MODULE HAD DISAGREED SINCE `resolveActiveLeagueId` STOPPED RESOLVING BY
+ * ROSTER. It now asks `prisma.league.findMany({ where: { userId } })` — commissioner-of, not
+ * plays-in — while this mock still supplied only `roster`, so every test that reached it died on
+ * `Cannot read properties of undefined (reading 'findMany')` before its own assertion ran. Five
+ * suites, red on main.
+ *
+ * `leagueTeam` is the second half: `resolveManagerDisplayNames` reads it to turn a
+ * `sleeper:<id>` manager key into that manager's name. It is only queried when a provider-prefixed
+ * id is present, so it stays unused by the AF-uuid fixtures below and is mocked so a test that
+ * adds one does not silently reach Prisma.
+ */
 const prismaMock = vi.hoisted(() => ({
+  league: { findMany: vi.fn() },
+  leagueTeam: { findMany: vi.fn() },
   roster: { findMany: vi.fn() },
   appUser: { findMany: vi.fn() },
 }))
@@ -25,6 +41,19 @@ vi.mock("@/lib/commissioner-ui/adapter/transport", () => ({ callDecisionOS: call
 
 const isLiveReadyMock = vi.hoisted(() => vi.fn())
 vi.mock("@/lib/commissioner-ui/liveReadiness", () => ({ isLiveReady: isLiveReadyMock }))
+/*
+ * ⚠ MOCKED BECAUSE THE MODULE UNDER TEST CHANGED DEPENDENCY, NOT BECAUSE THESE TESTS CARE ABOUT
+ * COOKIES. `resolveActiveLeagueId` gained a `cookies()` read in 440e6d39 (the Commissioner OS
+ * league selector), and every suite here reaches it through its live client. Without this the
+ * whole file dies on `\`cookies\` was called outside a request scope` before a single assertion
+ * runs.
+ *
+ * `get` returns undefined, which is the no-cookie path — the "most recent roster" default these
+ * assertions were written against and still describe. Returning a value here would silently
+ * repoint every test at a different league.
+ */
+const cookieStoreMock = vi.hoisted(() => ({ get: vi.fn(() => undefined) }))
+vi.mock("next/headers", () => ({ cookies: () => Promise.resolve(cookieStoreMock) }))
 
 import { liveDecisionOSClient } from "@/lib/commissioner-ui/decision-os-client/live"
 
@@ -50,7 +79,7 @@ function mockByPath(responses: Record<string, unknown>) {
 
 function withActiveLeague(leagueId = "lg-1") {
   getServerSessionMock.mockResolvedValue({ user: { id: "user-1" } })
-  prismaMock.roster.findMany.mockResolvedValue([{ league: { id: leagueId, status: "active" } }])
+  prismaMock.league.findMany.mockResolvedValue([{ id: leagueId, status: "active" }])
 }
 
 describe("Mission Control live.ts — isLiveReady gating (today's real, default behavior)", () => {
@@ -61,7 +90,7 @@ describe("Mission Control live.ts — isLiveReady gating (today's real, default 
     expect(result.error).toMatchObject({ category: "upstream_unavailable", moduleId: "mission-control", retryable: false })
     expect(result.source).toBe("live")
     expect(getServerSessionMock).not.toHaveBeenCalled()
-    expect(prismaMock.roster.findMany).not.toHaveBeenCalled()
+    expect(prismaMock.league.findMany).not.toHaveBeenCalled()
     expect(callDecisionOSMock).not.toHaveBeenCalled()
   })
 
@@ -96,7 +125,7 @@ describe("Mission Control live.ts — active-league resolution (shared by all 3 
 
   it("resolves no active league (session present, zero non-archived rosters) → honest placeholder", async () => {
     getServerSessionMock.mockResolvedValue({ user: { id: "user-1" } })
-    prismaMock.roster.findMany.mockResolvedValue([{ league: { id: "lg-archived", status: "ARCHIVED" } }])
+    prismaMock.league.findMany.mockResolvedValue([{ id: "lg-archived", status: "ARCHIVED" }])
     const result = await liveDecisionOSClient.getMissionControlKpis()
     expect(result.error).toMatchObject({ category: "upstream_unavailable", moduleId: "mission-control" })
     expect(callDecisionOSMock).not.toHaveBeenCalled()
@@ -109,7 +138,7 @@ describe("Mission Control live.ts — active-league resolution (shared by all 3 
       [`/api/v1/intelligence/league/trend?leagueId=${encodeURIComponent("lg live/one")}`]: { data: null, error: null },
     })
     await liveDecisionOSClient.getLeagueHealthSummary()
-    expect(prismaMock.roster.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { platformUserId: "user-1" } }))
+    expect(prismaMock.league.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { userId: "user-1" } }))
     expect(callDecisionOSMock).toHaveBeenCalledWith("mission-control", `/api/v1/intelligence/league?leagueId=${encodeURIComponent("lg live/one")}`)
     expect(callDecisionOSMock).toHaveBeenCalledWith("mission-control", `/api/v1/intelligence/league/trend?leagueId=${encodeURIComponent("lg live/one")}`)
   })
@@ -154,15 +183,31 @@ describe("getLeagueHealthSummary — full real success path", () => {
     expect(result.data?.tier).toBe("elevated")
   })
 
-  it("degrades honestly (never fabricates) when trend reports insufficient historical data for this league", async () => {
+/*
+ * 🛑 THIS TEST USED TO ASSERT `result.data` WAS NULL, AND IT WAS PINNING A BUG.
+ *
+ * "Degrades honestly" was the intent; discarding the health score was the implementation. A
+ * missing trend meant the whole summary came back as an error — including `score`, `tier` and
+ * `driver`, which had already arrived from a successful call and are the only three fields
+ * `MissionControlView` actually renders. `trendLabel` appears nowhere in that view.
+ *
+ * And it was not rare: `intelligence_league_snapshot_history` needs two rows before any trend
+ * exists, and held zero platform-wide, so this fired for every league. It still fires for the
+ * first two days of every newly imported league.
+ *
+ * The honest degradation is to show the score and say there is no trend yet.
+ */
+  it("keeps the real health score and reports no trend when there is not enough history yet", async () => {
     mockByPath({
       [LEAGUE_URL]: { data: { data: { leagueEngagementScore: 80, healthNarrative: { engagementSummary: "ok", topConcern: null, standoutSignal: null } } }, error: null },
       [TREND_URL]: { data: { data: { available: false } }, error: null },
     })
     const result = await liveDecisionOSClient.getLeagueHealthSummary()
-    expect(result.data).toBeNull()
-    expect(result.error?.category).toBe("upstream_unavailable")
-    expect(result.error?.message).toMatch(/historical data/i)
+    expect(result.error).toBeNull()
+    expect(result.data?.score).toBe(80)
+    // Nothing invented in the trend's place: a flat direction and a label that says why.
+    expect(result.data?.trendDirection).toBe("flat")
+    expect(result.data?.trendLabel).toMatch(/not enough history/i)
   })
 
   it("a real transport failure on the league call is passed straight through, not masked", async () => {
@@ -175,14 +220,23 @@ describe("getLeagueHealthSummary — full real success path", () => {
     expect(result.error).toEqual(transportError)
   })
 
-  it("a real transport failure on the trend call is passed straight through, not masked", async () => {
+/*
+ * The league call and the trend call fail independently, and only one of them carries the health
+ * score. A trend timeout is not a reason to withhold a number that arrived successfully — the
+ * league call above is still the one whose failure is passed straight through (asserted in the
+ * test before this one).
+ */
+  it("survives a trend-call transport failure, keeping the score the league call returned", async () => {
     const transportError = { category: "upstream_unavailable" as const, message: "Timed out.", moduleId: "mission-control" as const, retryable: true, timestamp: new Date().toISOString() }
     mockByPath({
       [LEAGUE_URL]: { data: { data: { leagueEngagementScore: 80, healthNarrative: { engagementSummary: "ok", topConcern: null, standoutSignal: null } } }, error: null },
       [TREND_URL]: { data: null, error: transportError },
     })
     const result = await liveDecisionOSClient.getLeagueHealthSummary()
-    expect(result.error).toEqual(transportError)
+    expect(result.error).toBeNull()
+    expect(result.data?.score).toBe(80)
+    expect(result.data?.trendDirection).toBe("flat")
+    expect(result.data?.trendLabel).toMatch(/not enough history/i)
   })
 })
 
@@ -263,14 +317,49 @@ describe("getManagerHighlights — full real success path", () => {
     ])
   })
 
-  it("falls back to the raw managerId as the name when no AppUser row exists — a real, honest label, not fabrication", async () => {
+/*
+ * 🛑 THIS ASSERTED THAT AN UNRESOLVED MANAGER RENDERS AS ITS OWN ID, AND CALLED THAT
+ * "a real, honest label". In production those ids are shaped `sleeper:1267977501351628801`, so
+ * what it actually specified was printing an internal provider identifier into a card the
+ * commissioner shows their league. Honest and unreadable are not the same thing.
+ *
+ * Both id spaces are covered here, because the resolver now reads two tables and a test that
+ * exercised only one would go green with the other half deleted.
+ */
+  it("names managers from both id spaces, and labels only the genuinely unresolvable ones", async () => {
     mockByPath({
-      [MANAGERS_URL]: { data: { data: [{ managerId: "ghost-user", retentionRisk: "low", retentionRiskReasons: [], isInactive: false, inactivityWarning: null }] }, error: null },
+      [MANAGERS_URL]: {
+        data: {
+          data: [
+            { managerId: "u-af", retentionRisk: "low", retentionRiskReasons: [], isInactive: false, inactivityWarning: null },
+            { managerId: "sleeper:12345", retentionRisk: "low", retentionRiskReasons: [], isInactive: false, inactivityWarning: null },
+            { managerId: "sleeper:99999", retentionRisk: "low", retentionRiskReasons: [], isInactive: false, inactivityWarning: null },
+          ],
+        },
+        error: null,
+      },
     })
-    prismaMock.appUser.findMany.mockResolvedValue([])
+    // An AllFantasy account resolves by uuid...
+    prismaMock.appUser.findMany.mockResolvedValue([{ id: "u-af", displayName: "Claimed Manager", username: "claimed" }])
+    // ...and an imported Sleeper manager resolves through their league_teams row.
+    prismaMock.leagueTeam.findMany.mockResolvedValue([
+      { platformUserId: "12345", ownerName: "Hoovi", teamName: "Team Hoovi" },
+    ])
 
     const result = await liveDecisionOSClient.getManagerHighlights()
-    expect(result.data?.[0]).toEqual({ id: "ghost-user", managerName: "ghost-user", callout: "Active and engaged", tone: "positive" })
+    const names = Object.fromEntries((result.data ?? []).map((m) => [m.id, m.managerName]))
+
+    expect(names["u-af"]).toBe("Claimed Manager")
+    expect(names["sleeper:12345"]).toBe("Hoovi")
+    // Only the manager with no row in either table falls back — and never to the raw id.
+    expect(names["sleeper:99999"]).toBe("Unknown manager")
+    expect(names["sleeper:99999"]).not.toContain("sleeper:")
+
+    // The provider lookup is scoped to one league; an unscoped query would name a manager from
+    // whichever other league happened to sort first.
+    expect(prismaMock.leagueTeam.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: expect.objectContaining({ leagueId: expect.any(String) }) }),
+    )
   })
 
   it("returns an empty list, not an error, when the league has zero surfaced managers", async () => {

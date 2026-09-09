@@ -5,6 +5,7 @@ import { Menu, PanelLeftClose, PanelLeft, Search, Bell, HelpCircle, UserCircle }
 import { useCommissionerLayout } from '@/components/commissioner-os/providers/CommissionerLayoutProvider'
 import { useCommissionerPlatform } from '@/components/commissioner-os/providers/CommissionerPlatformProvider'
 import { DataModeIndicator } from '@/components/commissioner-os/demo-mode/DataModeIndicator'
+import type { CommissionerDataMode } from '@/lib/commissioner-ui/demo-mode/constants'
 import { LeagueSelector, type LeagueSelectorOption } from '@/components/commissioner-os/shell/LeagueSelector'
 
 export interface CommissionerHeaderProps {
@@ -14,6 +15,11 @@ export interface CommissionerHeaderProps {
   leagues?: LeagueSelectorOption[]
   /** Fetched once by the layout via `resolveActiveLeagueId()`. */
   activeLeagueId?: string | null
+  /**
+   * Which data modes this viewer may switch between — decided by the layout, never here.
+   * Empty for an ordinary commissioner, who simply sees their live league.
+   */
+  availableDataModes?: CommissionerDataMode[]
 }
 
 /**
@@ -25,6 +31,7 @@ export function CommissionerHeader({
   unreadNotificationCount = 0,
   leagues = [],
   activeLeagueId = null,
+  availableDataModes = [],
 }: CommissionerHeaderProps) {
   const { toggleSidebar, sidebarCollapsed, toggleMobileSidebar } = useCommissionerLayout()
   const { openService } = useCommissionerPlatform()
@@ -57,7 +64,7 @@ export function CommissionerHeader({
 
       <div className="flex-1" />
 
-      <DataModeIndicator />
+      <DataModeIndicator available={availableDataModes} />
 
       <button
         type="button"

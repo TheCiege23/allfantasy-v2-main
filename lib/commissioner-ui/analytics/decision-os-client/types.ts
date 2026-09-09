@@ -203,6 +203,15 @@ export interface LeagueAnalyticsSnapshot {
   /** Null when no fingerprints are shown; the radar needs it to scale each axis. */
   fingerprintAxisMax: FingerprintAxisMaxEntry | null
   allTimeRecords: AllTimeRecordEntry[]
+  /**
+   * Set when part of this snapshot could not be built, and the rest is real.
+   *
+   * The season-history series come from Postgres and the KPI/trend row comes from the
+   * intelligence API; they fail independently. Before this field the whole snapshot was thrown
+   * away if the API call failed, taking eleven working charts with it — so one upstream blip
+   * emptied the only tab in the product that has charts. Null means everything resolved.
+   */
+  degradedReason?: string | null
   /** Provenance for every window-derived KPI above. Null when the window cannot be established. */
   dataWindow: AnalyticsDataWindow | null
   /**

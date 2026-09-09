@@ -9,6 +9,8 @@ import { CommissionerHeader } from '@/components/commissioner-os/shell/Commissio
 import { CommissionerBreadcrumbs } from '@/components/commissioner-os/shell/CommissionerBreadcrumbs'
 import { CommissionerSearchPalette } from '@/components/commissioner-os/search/CommissionerSearchPalette'
 import { NotificationPanel } from '@/components/commissioner-os/notifications/NotificationPanel'
+import { isAdminEmailAllowed } from '@/lib/adminAuth'
+import { isSelectableDataMode, type CommissionerDataMode } from '@/lib/commissioner-ui/demo-mode/constants'
 import { getDecisionOSAdapter } from '@/lib/commissioner-ui/adapter'
 import { listActiveLeaguesForUser, resolveActiveLeagueId } from '@/lib/commissioner-ui/resolveActiveLeagueId'
 
@@ -56,10 +58,30 @@ export default async function CommissionerOSLayout({ children }: { children: Rea
    * can never disagree. A separate boolean gate beside a separate resolver is exactly how those
    * four definitions accumulated.
    */
-  const session = (await getServerSession(authOptions as never)) as { user?: { id?: string } } | null
+  const session = (await getServerSession(authOptions as never)) as
+    | { user?: { id?: string; email?: string | null } }
+    | null
   if (!session?.user?.id) {
     redirect('/login')
   }
+
+  /*
+   * Who may change the data source, decided here rather than inside the picker.
+   *
+   * An ordinary commissioner gets no picker at all — they open this product to see their own
+   * league, which is now the default, and a control offering them "curated demo data" would be
+   * an invitation to distrust every number on the page. Demo Mode exists for the people
+   * showing the product rather than using it, so it is offered to the same admin allowlist
+   * that already governs every other operator surface (`ADMIN_EMAILS`, via `isAdminEmailAllowed`
+   * — reusing the existing authority rather than inventing a Commissioner-OS-specific one).
+   *
+   * `stub` is filtered by `isSelectableDataMode`, not by this list, because the cookie is
+   * viewer-editable and the UI is therefore not the enforcement point.
+   */
+  const canSelectDataMode = isAdminEmailAllowed(session.user.email)
+  const availableDataModes: CommissionerDataMode[] = (
+    canSelectDataMode ? (['stub', 'demo', 'live'] as CommissionerDataMode[]) : []
+  ).filter((mode) => isSelectableDataMode(mode))
 
   /*
    * Resolved BEFORE the adapter is built, so a non-commissioner triggers no intelligence fetch at
@@ -97,6 +119,7 @@ export default async function CommissionerOSLayout({ children }: { children: Rea
             unreadNotificationCount={notificationsSummaryResponse.data?.unreadCount ?? 0}
             leagues={leagues}
             activeLeagueId={activeLeagueId}
+            availableDataModes={availableDataModes}
           />
           <main className="flex-1">
             <div className="px-4 pt-2 sm:px-6 lg:px-8">

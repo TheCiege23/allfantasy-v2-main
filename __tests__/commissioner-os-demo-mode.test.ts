@@ -3,6 +3,7 @@ import {
   DEFAULT_DATA_MODE,
   DATA_MODE_LABELS,
   isValidDataMode,
+  isSelectableDataMode,
   normalizeDataMode,
 } from "@/lib/commissioner-ui/demo-mode/constants"
 import { stubDecisionOSClient } from "@/lib/commissioner-ui/decision-os-client/stub"
@@ -10,8 +11,17 @@ import { demoDecisionOSClient } from "@/lib/commissioner-ui/decision-os-client/d
 import { liveDecisionOSClient } from "@/lib/commissioner-ui/decision-os-client/live"
 
 describe("commissioner-os demo mode — constants", () => {
-  it("defaults to demo mode", () => {
-    expect(DEFAULT_DATA_MODE).toBe("demo")
+  /*
+   * 🛑 THIS ASSERTED `"demo"` UNTIL 2026-09-09, AND IT WAS PINNING THE BUG IN PLACE.
+   *
+   * The mode comes from a cookie that only `DataModeIndicator` writes, and that component
+   * returned null in production — so this constant was not a fallback, it was the ONLY value
+   * production ever resolved. Every commissioner saw curated fixtures while a fully configured
+   * live pipeline sat behind them. A test asserting the default is `demo` reads as a
+   * specification and made the wrong value look deliberate.
+   */
+  it("defaults to live — a commissioner opening the product sees their own league", () => {
+    expect(DEFAULT_DATA_MODE).toBe("live")
   })
 
   it("validates exactly the three defined modes", () => {
@@ -31,6 +41,25 @@ describe("commissioner-os demo mode — constants", () => {
 
   it("has a label for every mode", () => {
     expect(Object.keys(DATA_MODE_LABELS).sort()).toEqual(["demo", "live", "stub"])
+  })
+
+  /*
+   * The cookie is viewer-editable, so this — not the picker UI — is where `stub` is refused.
+   * Both directions are asserted: without the negative case a rule that never fires would pass,
+   * and without the positive case the rule could be deleted entirely and this would stay green.
+   */
+  describe("stub is refused in production", () => {
+    it("is selectable outside production and refused inside it", () => {
+      expect(isSelectableDataMode("stub", false)).toBe(true)
+      expect(isSelectableDataMode("stub", true)).toBe(false)
+    })
+
+    it("never refuses demo or live in either environment", () => {
+      for (const isProduction of [true, false]) {
+        expect(isSelectableDataMode("demo", isProduction)).toBe(true)
+        expect(isSelectableDataMode("live", isProduction)).toBe(true)
+      }
+    })
   })
 })
 
