@@ -5,7 +5,7 @@ vi.mock('next-auth', () => ({ getServerSession: getServerSessionMock }))
 vi.mock('@/lib/auth', () => ({ authOptions: {} }))
 
 const prismaMock = vi.hoisted(() => ({
-  league: { findMany: vi.fn(), findUnique: vi.fn() },
+  league: { findMany: vi.fn(), findFirst: vi.fn() },
 }))
 vi.mock('@/lib/prisma', () => ({ prisma: prismaMock }))
 
@@ -54,7 +54,7 @@ const IMPORTED_SETTINGS = {
 function withLeague(settings: unknown, overrides: Record<string, unknown> = {}) {
   getServerSessionMock.mockResolvedValue({ user: { id: 'user-1' } })
   prismaMock.league.findMany.mockResolvedValue([{ id: 'lg-1', status: 'active' }])
-  prismaMock.league.findUnique.mockResolvedValue({
+  prismaMock.league.findFirst.mockResolvedValue({
     name: 'The Last IDP Dynasty!!',
     settings,
     platform: 'sleeper',
@@ -190,7 +190,7 @@ describe('Settings live client — reads captured rules, never defaults', () => 
     const { data, error } = await liveSettingsClient.getSnapshot()
     expect(data).toBeNull()
     expect(error?.category).toBe('upstream_unavailable')
-    expect(prismaMock.league.findUnique).not.toHaveBeenCalled()
+    expect(prismaMock.league.findFirst).not.toHaveBeenCalled()
   })
 })
 
