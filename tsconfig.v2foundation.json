@@ -1,0 +1,20 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": { "noEmit": true, "incremental": false },
+  "_why_exclude_is_empty": [
+    "`extends` INHERITS `exclude`, and the base config excludes __tests__ repo-wide plus",
+    "**/*.test.ts. Without this reset the test entries below are silently dropped from",
+    "`include` and tsc still exits clean over the source files alone — a check that cannot",
+    "fail. Every target is verified present with --listFiles rather than assumed."
+  ],
+  "exclude": [],
+  "include": [
+    "lib/decision-os/value-v2/types.ts",
+    "lib/decision-os/value-v2/cohort.ts",
+    "lib/decision-os/value-v2/market.ts",
+    "lib/decision-os/value-v2/league.ts",
+    "lib/decision-os/value-v2/shadow.ts",
+    "lib/decision-os/value-v2/consoleShadow.ts",
+    "__tests__/decision-os/value-v2-window-consumer.test.ts"
+  ]
+}

@@ -11,6 +11,7 @@ export type TradeAssetKind = 'player' | 'draft_pick' | 'faab' | 'future_consider
 
 /** Raw value sources captured for a single asset. `null` = source not available at capture time. */
 export interface AssetValueSources {
+  marketObservation?: import('@/lib/decision-os/value-v2/market').MarketObservationV2 | null
   projectionValue: number | null
   rankingValue: number | null
   adpValue: number | null
@@ -83,6 +84,13 @@ export interface AssetValueSnapshot {
 }
 
 export interface TradeValueContext {
+  leagueRuntimeV2?: import('@/lib/decision-os/value-v2/league').LeagueRuntimeV2
+  /**
+   * The requesting team's competitive window, resolved by the caller that holds
+   * database access. Absent means no window was resolved — never 'competitive'.
+   */
+  teamWindowV2?: import('@/lib/decision-os/value-v2/windowDecision').WindowDecision
+  marketCohort?: import('@/lib/decision-os/value-v2/cohort').MarketCohortV2
   sport: string
   leagueType: string
   scoring: string
@@ -143,6 +151,7 @@ export interface CommissionerReview {
 }
 
 export interface TradeValueSnapshot {
+  valueV2Shadow?: import('@/lib/decision-os/value-v2/shadow').ValueV2Shadow
   version: typeof TRADE_VALUE_SNAPSHOT_VERSION
   context: TradeValueContext
   /** Exactly two sides for a two-party trade: [proposer, receiver]. */
