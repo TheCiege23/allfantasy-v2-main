@@ -227,8 +227,13 @@ describe('the three MIXED reads resolved by the 2026-09-10 corrective pass', () 
     expect(src).toMatch(/activeTeams\.length < 2/)
     expect(src).toMatch(/\[\.\.\.activeTeams\]\.sort/)
     expect(src).toMatch(/const n = activeTeams\.length/)
-    /* The opponent is still resolved against every team, archived included. */
-    expect(src).toMatch(/const oppTeam = teams\.find\(/)
+    /*
+     * The opponent is still resolved against every team, archived included — and by the
+     * PRODUCER'S CONTRACT (a LeagueTeam.id), not by a name substring. See
+     * `__tests__/league-import/team-performance-opponent.test.ts`.
+     */
+    expect(src).toMatch(/resolveTeamPerformanceOpponent\(perf\.opponent, teams\)/)
+    expect(src).not.toMatch(/includes\(\(t\.teamName \?\? ''\)/)
   })
 
   it('roster-context-loader filters the selectable partners but not the id resolver', () => {

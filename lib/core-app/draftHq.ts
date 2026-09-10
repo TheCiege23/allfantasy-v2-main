@@ -1,6 +1,7 @@
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
+import { ACTIVE_TEAM_WHERE, selectActiveTeams } from '@/lib/league-import/activeTeams'
 import { getDraftReport, type DraftGradeLetter } from '@/lib/draft-intel/draftReportService'
 import { buildImportedDraftReport } from '@/lib/draft-intel/importedDraftReport'
 import { leagueDisplayName, type SectionState, type UnavailableSection } from './leagueHome'
@@ -429,7 +430,11 @@ async function loadCompletedDraftBoard(
 
   const [teams, mine, names] = await Promise.all([
     prisma.leagueTeam
-      .findMany({ where: { leagueId }, select: { externalId: true, teamName: true, ownerName: true } })
+      .findMany({
+        where: { leagueId },
+        /* `isOrphan` is required or `selectActiveTeams` below keeps every row silently. */
+        select: { externalId: true, teamName: true, ownerName: true, isOrphan: true },
+      })
       .catch(() => []),
     prisma.leagueTeam
       .findMany({ where: { leagueId, claimedByUserId: userId }, select: { externalId: true } })
@@ -437,7 +442,12 @@ async function loadCompletedDraftBoard(
     resolvePlayerNames([...new Set(rows.map((r) => r.playerId))], boardLeague?.platform ?? ''),
   ])
 
-  const teamCount = teams.length
+  /*
+   * ⚠ TWO CONSUMERS, OPPOSITE NEEDS. `teamCount` is the league size that pick-in-round maths
+   * divides by, so an archived seat shifts every printed pick number; `nameByKey` below must
+   * keep archived seats or a pick made by a departed manager loses its label.
+   */
+  const teamCount = selectActiveTeams(teams).length
   const nameByKey = new Map<string, string>()
   for (const t of teams) {
     const label = t.teamName?.trim() || t.ownerName?.trim()
@@ -520,7 +530,8 @@ async function loadImportedDraftPicks(
   /* Pick-in-round is derived from the overall pick and the league size, the same
      correction the live path documents: DraftPick.slot is a roster's draft slot, not a
      pick-in-round, and labelling from it prints every round identically. */
-  const teamCount = await prisma.leagueTeam.count({ where: { leagueId } })
+  /* League size for pick-in-round maths — an archived seat shifts every printed pick number. */
+  const teamCount = await prisma.leagueTeam.count({ where: { ...ACTIVE_TEAM_WHERE, leagueId } })
 
   /*
    * ⚠ THE PLAYER ID IS THE PROVIDER'S, AND ONLY SLEEPER'S RESOLVES VIA SportsPlayer.

@@ -9,6 +9,7 @@ import { renderDigestEmail } from '@/lib/notifications/designedEmail'
 import { escapeHtml } from '@/lib/trade-intel/tradeGradeEmail'
 import { getBaseUrl } from '@/lib/get-base-url'
 import { withSyncJobRun } from '@/lib/production-health/syncJobRunTelemetry'
+import { ACTIVE_TEAM_WHERE } from '@/lib/league-import/activeTeams'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 300
@@ -75,7 +76,8 @@ async function markPosted(key: string): Promise<void> {
 async function memberEmails(afLeagueId: string, ownerUserId: string): Promise<string[]> {
   const teams = await prisma.leagueTeam
     .findMany({
-      where: { leagueId: afLeagueId, claimedByUserId: { not: null } },
+      /* Who gets the weekly award email — a departed manager must stop receiving it. */
+      where: { ...ACTIVE_TEAM_WHERE, leagueId: afLeagueId, claimedByUserId: { not: null } },
       select: { claimedByUserId: true },
     })
     .catch(() => [] as { claimedByUserId: string | null }[])

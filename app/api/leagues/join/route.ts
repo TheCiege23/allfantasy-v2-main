@@ -391,9 +391,17 @@ export async function GET(req: NextRequest) {
 
   // Claim progress — how many of the league's teams have a real AF member
   // behind them. Powers the "N of M teams claimed" bar next to the invite link.
+  /*
+   * Both halves of the bar count CURRENT seats. An archived seat inflated the denominator, so a
+   * fully-claimed league whose twelfth manager left reported "11 of 12 claimed" for ever — the
+   * bar could never reach the end. `claimedByUserId: { not: null }` does not narrow to one row,
+   * so the numerator needed the same filter.
+   */
   const [teamCount, claimedCount] = await Promise.all([
-    prisma.leagueTeam.count({ where: { leagueId } }).catch(() => 0),
-    prisma.leagueTeam.count({ where: { leagueId, claimedByUserId: { not: null } } }).catch(() => 0),
+    prisma.leagueTeam.count({ where: { ...ACTIVE_TEAM_WHERE, leagueId } }).catch(() => 0),
+    prisma.leagueTeam
+      .count({ where: { ...ACTIVE_TEAM_WHERE, leagueId, claimedByUserId: { not: null } } })
+      .catch(() => 0),
   ])
 
   return NextResponse.json({

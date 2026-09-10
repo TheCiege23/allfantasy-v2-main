@@ -27,146 +27,150 @@ const ROOT = process.cwd()
  * Adding a line here is a visible decision in a diff, which is the whole point.
  */
 const ENUMERATION_EXCEPTIONS: Record<string, string> = {
-  // ── category 3: identity / reference maps ───────────────────────────────────────────────
-  'lib/core-app/matchup.ts':
-    'Identity map keyed by unique externalId. An archived team has no current matchup, so it is unreachable; filtering would break resolution of a historical one.',
-  'lib/decision-os/world/port.ts':
-    'Facts substrate. Carries isOrphan to consumers (league-pulse, leagueIntelEnrichedWorld already branch on it) rather than deciding for them; the id/externalId map resolves historical matchups.',
-  'lib/scoring-engine/resolveTeamLabels.ts':
-    'Label lookup keyed by team id — a historical scoreboard row still needs its team name.',
-  'lib/zombie/rosterTeamMap.ts': 'Roster→team identity map; archived teams must still resolve.',
-  'lib/import-os/collector/fantraxMatchupParity.ts':
-    'Name-keyed map. Names collide, so it PREFERS the active team rather than excluding the archived one, which would break historical matchup resolution.',
-
-  // ── category 6: import / reconciliation lifecycle ───────────────────────────────────────
-  'lib/import-os/collector/applySleeperLeagueSync.ts':
-    'The reconciliation writer itself. It must read ALL teams or it cannot find the absent one to archive.',
-  'lib/league-import/sleeper/SleeperLeagueCreationBootstrapService.ts':
-    'Bootstrap upsert; re-activates a returning team, so it must see archived rows.',
-  'lib/league-import/placeholderClaim.ts': 'Claim path already branches on isOrphan explicitly.',
-  'lib/league-import/canonicalSeasonMaterialization.ts':
-    'Materialises a SEASON snapshot — the teams that played that season, including ones later archived.',
-  'lib/league-import/avatarMirror.ts':
-    'Mirrors avatars by team id; harmless for an archived team and needed if it returns.',
-  'lib/league/sleeper-import-process.ts': 'Import lifecycle; branches on isOrphan explicitly.',
-  'lib/tournament/importTournamentFromLeagues.ts': 'Import lifecycle; branches on isOrphan explicitly.',
-
-  // ── category 4: historical / statistical ────────────────────────────────────────────────
-  'lib/tournament/importedStandingsSource.ts':
-    'Historical standings source — a departed team still played those games.',
-  'lib/tournament/ingestWeeklyPlayerScores.ts': 'Historical score ingestion, attributed per team.',
-  'lib/survivor/SurvivorTimelineResolver.ts':
-    'Timeline is a historical record; an eliminated or departed team must remain in it.',
-  'lib/schedule-runtime/resolveNflRedraftScheduleRuntime.ts':
-    'Resolves a schedule that may include already-played weeks against a since-archived team.',
-  'lib/data-warehouse/HistoricalFactGenerator.ts':
-    'Ingests SEASON STANDING FACTS. A team that played the season must be attributed in it, whatever happened to the seat afterwards.',
-  'lib/sports-media-engine/RecapGenerator.ts':
-    'Season recap, read alongside SeasonResult. Recapping a season without the team that played it would be wrong.',
-  'app/api/devy/import/match/route.ts':
-    'Import identity matching against existing league managers — it must see every seat to match one.',
-
-  // ── category 5: admin / commissioner monitoring ─────────────────────────────────────────
-  'app/api/commissioner/leagues/[leagueId]/managers/route.ts':
-    'ADMIN: archived teams are shown deliberately — a commissioner needs to see that a seat left.',
-  'app/api/commissioner/leagues/[leagueId]/league-settings/route.ts':
+  'app/api/commissioner/leagues/[leagueId]/league-settings/route.ts#1':
     'ADMIN: settings view over the full roster of seats, archived included.',
-  'app/api/commissioner/leagues/[leagueId]/renew/route.ts':
-    'ADMIN: renewal decides which seats carry forward, so it must see archived ones.',
-  'app/api/leagues/[leagueId]/downsize/handler.ts':
-    'ADMIN: downsizing operates on the full seat list and branches on isOrphan explicitly.',
-  'lib/commissioner-workspace/rosterReads.ts':
-    'ADMIN: counts orphans on purpose — that is the metric.',
-  'lib/chimmy-alerts/ChimmyAlertSignalHydrator.ts':
-    'Queries isOrphan: true deliberately to raise an orphan-seat alert.',
-  'lib/commissioner-ui/managers/managerNames.ts':
-    'ADMIN: name resolution across all seats, archived included.',
-  'lib/invite-engine/InviteEngine.ts':
-    'ADMIN: counts seats to decide invite capacity; branches are commissioner-facing.',
-  'lib/admin-dashboard/DuplicateManagerVerificationService.ts':
-    'ADMIN verification tool operating on its own fixture manifest.',
-
-  // ── surfaces reviewed and judged non-current ────────────────────────────────────────────
-  'app/api/leagues/[leagueId]/draft/import/validate/route.ts':
-    'Draft import validation compares against the stored seat set, archived included.',
-  'app/api/leagues/[leagueId]/draft/settings/route.ts':
-    'Draft settings operate on stored seats; a draft may predate an archival.',
-  'app/api/leagues/[leagueId]/fill-empty-slots/handler.ts':
-    'Explicitly works on empty/orphaned seats — filtering them is the opposite of its job.',
-  'app/api/leagues/[leagueId]/zombie/summary/route.ts':
-    'Zombie format tracks eliminated seats; they must remain visible.',
-  'lib/zombie/ai/ZombieAIContext.ts': 'Same: eliminated seats are the format.',
-  'app/api/dynasty-outlook/route.ts':
-    'Multi-season outlook reads historical performance per seat.',
-  'lib/ai/leagueSportsGroundingPacket.ts':
-    'Grounding packet includes historical context; carries the flag rather than filtering.',
-  'lib/core-app/draftHq.ts': 'Draft HQ counts stored seats, which may predate an archival.',
-  'lib/core-app/trades.ts': 'Counts seats for trade history context, not a current partner list.',
-  'lib/trending-players/trendCardEnrichment.ts':
-    'Enriches trend cards by team id; an archived team still owned a trending player historically.',
-  'app/api/league/trend-board/route.ts': 'Already branches on isOrphan explicitly.',
-
-  // ── surfaced by the CORRECTED scanner, classified in the census pass ────────────────────
-  // Identity maps: consumed only as keyed .get()/find lookups that resolve a reference.
-  'lib/agents/anthropic-pipeline.ts':
-    'Identity map — an externalId-keyed Map resolving the caller own team plus a find-by-id resolving an opponent reference; no current-state consumer.',
-  'lib/ai/sim/groundedTradeDelta.ts':
-    'Identity map — builds teamByExternal solely to resolve a scheduled opponent rosterId into a platformUserId for roster lookup.',
-  'lib/league-history/leagueWarehouseReads.ts':
-    'Historical, and MIXED on closer reading — three callers are pure label resolution with a `?? fallback` (filtering would degrade a label and remove no row), but readManagerActivity uses the map as a MEMBERSHIP GATE (`const team = names.get(...)`, then `if (!team) continue`, no fallback), so the query must stay unfiltered or historical activity rows silently vanish.',
-  'lib/psychological-profiles/TransactionFactBackfill.ts':
-    'Historical backfill — the identity map resolves a LeagueTradeHistory row Sleeper user id to the roster id stamped onto dw_transaction facts.',
-  'lib/tournament/rosterCompliance.ts':
-    'Identity map — handleFor resolves a display handle for rows enumerated from the Roster table; it never gates compliance.',
-  'lib/tournament/topPerformers.ts':
-    'Identity map — a two-key index resolving a roster to its manager label; it never gates or ranks.',
-  'app/api/cron/decision-os-activity-ingest/route.ts':
+  'app/api/commissioner/leagues/[leagueId]/league-settings/route.ts#2':
+    'ADMIN: settings view over the full roster of seats, archived included.',
+  'app/api/commissioner/leagues/[leagueId]/managers/route.ts#1':
+    'ADMIN: archived teams are shown deliberately — a commissioner needs to see that a seat left.',
+  'app/api/cron/decision-os-activity-ingest/route.ts#1':
     'Identity map — a platformUserId-keyed Map consumed only by .get() to attribute imported activity to an AllFantasy user.',
-  'app/api/leagues/[leagueId]/rivalries/[rivalryId]/head-to-head/route.ts':
+  'app/api/devy/import/match/route.ts#1':
+    'Import identity matching against existing league managers — it must see every seat to match one.',
+  'app/api/dynasty-outlook/route.ts#1':
+    'Multi-season outlook reads historical performance per seat.',
+  'app/api/league/trend-board/route.ts#1':
+    'Already branches on isOrphan explicitly.',
+  'app/api/leagues/[leagueId]/downsize/handler.ts#1':
+    'ADMIN: downsizing operates on the full seat list and branches on isOrphan explicitly.',
+  'app/api/leagues/[leagueId]/draft/import/validate/route.ts#1':
+    'Draft import validation compares against the stored seat set, archived included.',
+  'app/api/leagues/[leagueId]/draft/settings/route.ts#1':
+    'Draft settings operate on stored seats; a draft may predate an archival.',
+  'app/api/leagues/[leagueId]/draft/settings/route.ts#2':
+    'Draft settings operate on stored seats; a draft may predate an archival.',
+  'app/api/leagues/[leagueId]/fill-empty-slots/handler.ts#1':
+    'Explicitly works on empty/orphaned seats — filtering them is the opposite of its job.',
+  'app/api/leagues/[leagueId]/fill-empty-slots/handler.ts#2':
+    'Explicitly works on empty/orphaned seats — filtering them is the opposite of its job.',
+  'app/api/leagues/[leagueId]/rivalries/[rivalryId]/head-to-head/route.ts#1':
     'Historical — an externalId-keyed lookup resolving display names for historical MatchupFact rows; no current-state consumer.',
-  'lib/sleeper-sync.ts':
+  'app/api/leagues/[leagueId]/trades/rosters/route.ts#1':
+    'Identity maps only — namedTeams feeds teamNameByPlatformId / externalIdByPlatformId / teamMetaByPlatformId, all keyed .get() lookups resolving a trade counterparty.',
+  'app/api/leagues/[leagueId]/zombie/summary/route.ts#1':
+    'Zombie format tracks eliminated seats; they must remain visible.',
+  'lib/admin-dashboard/DuplicateManagerVerificationService.ts#1':
+    'ADMIN verification tool operating on its own fixture manifest.',
+  'lib/agents/anthropic-pipeline.ts#1':
+    'Identity map — an externalId-keyed Map resolving the caller own team plus a find-by-id resolving an opponent reference; no current-state consumer.',
+  'lib/ai/leagueSportsGroundingPacket.ts#1':
+    'Grounding packet includes historical context; carries the flag rather than filtering.',
+  'lib/ai/sim/groundedTradeDelta.ts#1':
+    'Identity map — builds teamByExternal solely to resolve a scheduled opponent rosterId into a platformUserId for roster lookup.',
+  'lib/chimmy-alerts/ChimmyAlertSignalHydrator.ts#1':
+    'Queries isOrphan: true deliberately to raise an orphan-seat alert.',
+  'lib/commissioner-hub/managerHealth.ts#1':
+    'Identity maps — teamByPlatformId and teamByLegacyRosterId resolve a health row back to a seat; no count or list is derived from the array.',
+  'lib/commissioner-ui/managers/managerNames.ts#1':
+    'ADMIN: name resolution across all seats, archived included.',
+  'lib/commissioner-workspace/rosterReads.ts#1':
+    'ADMIN: counts orphans on purpose — that is the metric.',
+  'lib/core-app/allPlay.ts#1':
+    'Identity map via buildRosterIdMap; the all-play rows come from WeeklyMatchup, and a departed team that played must keep its name.',
+  'lib/core-app/dash3aPanels.ts#2':
+    'Identity map plus viewer resolution — leagueTeams.find(claimedByUserId) and buildRosterIdMap; the rival rows come from WeeklyMatchup, not from this array.',
+  'lib/core-app/leagueActivity.ts#1':
+    'Identity map — byKey indexes platformUserId / sleeper:manager: / claimedByUserId / externalId so an activity row resolves to whichever spelling it was ingested with.',
+  'lib/core-app/leagueCareer.ts#1':
+    'Career is a HISTORICAL surface read alongside season facts; a departed manager must keep his career rows and his name.',
+  'lib/core-app/leagueScoreboard.ts#1':
+    'Identity map via buildRosterIdMap; scoreboard rows come from WeeklyMatchup and a played week against a since-archived team still needs its label.',
+  'lib/core-app/leagueStandings.ts#1':
+    'loadSeasonHistory — nameByKey resolves SeasonStandingFact rows for PAST seasons. A team that played the season must keep its name.',
+  'lib/core-app/leagueStandings.ts#3':
+    'getLeagueStandings — nameByRoster only; the standings population comes from WeeklyMatchup, so filtering here would leave a played row unlabelled and remove nobody.',
+  'lib/core-app/managerPresence.ts#1':
+    'Identity map — byKey resolves a manager key to a seat for attribution; presence rows come from activity, not from this array.',
+  'lib/core-app/matchup.ts#1':
+    'Identity map keyed by unique externalId. An archived team has no current matchup, so it is unreachable; filtering would break resolution of a historical one.',
+  'lib/core-app/matchupPulse.ts#1':
+    'Identity map keyed leagueId:externalId across leagues, resolving a matchup to a name.',
+  'lib/core-app/playerCard.ts#1':
+    'Two keyed .find() lookups only — the viewer own seat and the holder of the player being carded.',
+  'lib/core-app/playerFinder.ts#2':
+    'Keyed .find() lookups resolving a holder platformUserId or externalId to an owner across leagues.',
+  'lib/core-app/playerLeagueView.ts#1':
+    'Keyed .find() lookups — the viewer own seat and the holder of the player.',
+  'lib/core-app/playerSuggest.ts#1':
+    'Identity map — ownerByRoster resolves a roster id to an owner name; suggestions come from roster rows.',
+  'lib/core-app/playerTradeVisual.ts#1':
+    'Keyed .find() lookups resolving the viewer seat and the holder of the player.',
+  'lib/core-app/publicStandings.ts#1':
+    'nameByRoster only; the published rows come from WeeklyMatchup, so a departed team that played keeps its name and no live team is affected.',
+  'lib/core-app/trades.ts#2':
+    'Counts seats for trade history context, not a current partner list.',
+  'lib/core-app/tradesBoard.ts#1':
+    'Identity maps — managersByLeague byUserId / byRoster resolve a trade row to a manager name across leagues.',
+  'lib/data-warehouse/HistoricalFactGenerator.ts#1':
+    'Ingests SEASON STANDING FACTS. A team that played the season must be attributed in it, whatever happened to the seat afterwards.',
+  'lib/decision-os/world/port.ts#1':
+    'Facts substrate. Carries isOrphan to consumers (league-pulse, leagueIntelEnrichedWorld already branch on it) rather than deciding for them; the id/externalId map resolves historical matchups.',
+  'lib/decision-os/world/port.ts#2':
+    'Facts substrate. Carries isOrphan to consumers (league-pulse, leagueIntelEnrichedWorld already branch on it) rather than deciding for them; the id/externalId map resolves historical matchups.',
+  'lib/draft-intel/importedDraftReport.ts#1':
+    'Identity map teamByKey; a draft predates any archival and a pick by a departed manager must keep its label.',
+  'lib/dynasty-war-room/dynastyWarRoomContext.ts#1':
+    'Identity map teamByUser, plus standingsAvailable which is a DATA-PRESENCE probe (does any row carry a result), not a ranking.',
+  'lib/import-os/collector/applySleeperLeagueSync.ts#1':
+    'The reconciliation writer itself. It must read ALL teams or it cannot find the absent one to archive.',
+  'lib/league-history/leagueWarehouseReads.ts#1':
+    'Historical, and MIXED on closer reading — three callers are pure label resolution with a `?? fallback` (filtering would degrade a label and remove no row), but readManagerActivity uses the map as a MEMBERSHIP GATE (`const team = names.get(...)`, then `if (!team) continue`, no fallback), so the query must stay unfiltered or historical activity rows silently vanish.',
+  'lib/league-import/ImportedLeagueCommitService.ts#2':
+    'Inside the import writer: it reads the stored seat set to detect shape and whether a seat is held by someone else, so it must see archived rows.',
+  'lib/league-import/avatarMirror.ts#1':
+    'Mirrors avatars by team id; harmless for an archived team and needed if it returns.',
+  'lib/league-import/canonicalSeasonMaterialization.ts#1':
+    'Materialises a SEASON snapshot — the teams that played that season, including ones later archived.',
+  'lib/league-import/sleeper/SleeperLeagueCreationBootstrapService.ts#1':
+    'Bootstrap upsert; re-activates a returning team, so it must see archived rows.',
+  'lib/league/sleeper-import-process.ts#1':
+    'Import lifecycle; branches on isOrphan explicitly.',
+  'lib/psychological-profiles/TransactionFactBackfill.ts#1':
+    'Historical backfill — the identity map resolves a LeagueTradeHistory row Sleeper user id to the roster id stamped onto dw_transaction facts.',
+  'lib/rivalry-engine/rivalryBoard.ts#1':
+    'Identity map nameById; a rivalry names managers from past seasons and must resolve a departed one.',
+  'lib/schedule-runtime/resolveNflRedraftScheduleRuntime.ts#1':
+    'Resolves a schedule that may include already-played weeks against a since-archived team.',
+  'lib/scoring-engine/resolveTeamLabels.ts#1':
+    'Label lookup keyed by team id — a historical scoreboard row still needs its team name.',
+  'lib/sleeper-sync.ts#1':
     'Import lifecycle — the Sleeper writer reading its own prior rows by externalId to carry pointsAgainst/currentRank forward into its own upsert.',
-
-  /*
-   * 🛑 MIXED READS — DOCUMENTED DEBT, DELIBERATELY NOT FIXED IN THIS BRANCH.
-   *
-   * Each of these feeds BOTH a current-state consumer AND an identity map or historical consumer
-   * from one read. The correct repair is consumer-level filtering inside each subsystem, not a
-   * `where` clause — a query filter here would starve the historical half, which is exactly the
-   * regression this branch already made once in BroadcastModeEngine and had to undo.
-   *
-   * They are LEFT UNFILTERED on purpose, because unfiltered is the SAFE side of that asymmetry:
-   * an extra row on a screen versus silently losing attribution. They also predate this branch —
-   * `origin/main` already archives vanishing claimed teams, so they leak there today and this
-   * branch does not make them worse in kind.
-   *
-   * Listed here so they are visible and enforced-as-known rather than silently passing. Each
-   * needs its own change in its own subsystem; that is the proposed follow-up, not this batch.
-   */
-  /*
-   * ⚠ THREE OF THE ORIGINAL FOUR ARE GONE FROM THIS LIST BECAUSE THEY WERE FIXED, NOT BECAUSE
-   * THEY WERE RECLASSIFIED. Each turned out to have a clean consumer split once its data flow
-   * was read rather than summarised — see the corrective commit for the per-file evidence:
-   *
-   *   - `lib/shared-services/league-hub/userOsContext.ts` — never mixed at all. Its one consumer
-   *     is `standings`, and `viewerTeam` is derived FROM `standings`, so the counterexample that
-   *     justified deferring it ("absent from standings while viewerTeam is still non-null")
-   *     cannot occur. Now filtered at the query.
-   *   - `lib/ai-tools-start-sit/opponentMatchup.ts` — filtered at the two current-state consumers
-   *     (`paSorted`, `n`); `oppTeam` resolution stays on the unfiltered array.
-   *   - `lib/trade-value-console/roster-context-loader.ts` — `opponentTeams` filtered; the
-   *     `externalId` resolver stays on the unfiltered array.
-   */
-  'app/api/leagues/[leagueId]/dynasty-projections/handler.ts':
-    'MIXED (deferred) — `targetTeams` (which receives a PERSISTED projection, `persist: true`) and the `teamCount` fallback are current-state, while `buildFuturePicksByTeam` resolves future-pick ownership through the same array. The consumer split is clean in shape but the write is persistent, so it is deliberately left to its own change rather than folded into a corrective pass.',
+  'lib/sports-media-engine/RecapGenerator.ts#1':
+    'Season recap, read alongside SeasonResult. Recapping a season without the team that played it would be wrong.',
+  'lib/survivor/SurvivorTimelineResolver.ts#1':
+    'Timeline is a historical record; an eliminated or departed team must remain in it.',
+  'lib/tournament/importTournamentFromLeagues.ts#1':
+    'Import lifecycle; branches on isOrphan explicitly.',
+  'lib/tournament/importedStandingsSource.ts#1':
+    'Historical standings source — a departed team still played those games.',
+  'lib/tournament/ingestWeeklyPlayerScores.ts#1':
+    'Historical score ingestion, attributed per team.',
+  'lib/tournament/rosterCompliance.ts#1':
+    'Identity map — handleFor resolves a display handle for rows enumerated from the Roster table; it never gates compliance.',
+  'lib/tournament/topPerformers.ts#1':
+    'Identity map — a two-key index resolving a roster to its manager label; it never gates or ranks.',
+  'lib/trending-players/trendCardEnrichment.ts#1':
+    'Enriches trend cards by team id; an archived team still owned a trending player historically.',
+  'lib/values/leagueDefenderBoard.ts#1':
+    'Identity map teamByPlatformUser resolving a roster owner to a display name.',
+  'lib/waiver-wire/process-engine.ts#1':
+    'Identity map — rankByPlatformUserId is read as .get(claimant) ?? 999 to break ties BETWEEN CLAIMANTS. An archived seat adds an unreachable entry, shifts no live rank, and awards nothing; filtering would drop the rank of a seat archived between a claim and its processing.',
+  'lib/zombie/ai/ZombieAIContext.ts#1':
+    'Same: eliminated seats are the format.',
+  'lib/zombie/rosterTeamMap.ts#1':
+    'Roster→team identity map; archived teams must still resolve.',
 }
 
-const FILTERED_MARKERS = [
-  'selectActiveTeams',
-  'isActiveTeam',
-  'ACTIVE_TEAM_WHERE',
-  'ORPHAN_TEAM_WHERE',
-]
 
 /**
  * Call sites the CORRECTED scanner revealed and that have NOT been individually classified yet.
@@ -175,93 +179,18 @@ const FILTERED_MARKERS = [
  * retain archived teams". This means "the scanner can now see it, and nobody has read it". The
  * two are deliberately separate lists so a backlog can never be mistaken for a review.
  */
-const PENDING_CLASSIFICATION: Record<string, string> = {
-  /* :57 */
-  'lib/chimmy-context/providers/StandingsContextProvider.ts':
-    'Chimmy standings context — league-wide read feeding a model-facing standings block; consumer trace not yet done.',
-  /* :170 */
-  'lib/commissioner-hub/managerHealth.ts':
-    'getLeagueManagerHealth — a manager-health enumeration; may be admin-monitoring (retain) like its siblings, unread.',
-  /* :155 */
-  'lib/core-app/allPlay.ts':
-    'getAllPlayBoard — all-play records over the league; denominator-sensitive, consumer trace not yet done.',
-  /* :237 */
-  'lib/core-app/commissionerHub.ts':
-    'getCommissionerHub — likely admin-monitoring (retain), but not yet read against the category-5 rule.',
-  /* :257 */
-  'lib/core-app/dash3aPanels.ts':
-    'getRivalRecords — rival records panel; historical-vs-current split unexamined.',
-  /* :219 */
-  'lib/core-app/leagueActivity.ts':
-    'getLeagueActivity — activity feed; may need archived seats to attribute past rows, unread.',
-  /* :139 */
-  'lib/core-app/leagueCareer.ts':
-    'getLeagueCareer — career records are historical by name; retain is plausible but unverified.',
-  /* :166 */
-  'lib/core-app/leagueScoreboard.ts':
-    'getLeagueScoreboard — current scoreboard; strong active-enumeration candidate, consumer trace not yet done.',
-  /* :205,299 */
-  'lib/core-app/leagueStandings.ts':
-    'getLeagueStandings and loadSeasonHistory in one file — one is current standings and one is season history, so they almost certainly need OPPOSITE treatment. Must be read as two.',
-  /* :158 */
-  'lib/core-app/managerPresence.ts':
-    'getManagerPresence — presence is current by definition; strong active-enumeration candidate, unread.',
-  /* :357 */
-  'lib/core-app/matchupPulse.ts':
-    'getMatchupPulse — matchup pulse mixes a current week with past weeks; split unexamined.',
-  /* :978 */
-  'lib/core-app/playerCard.ts':
-    'loadLeague inside the player card — league seat list for the league context of a player, unread.',
-  /* :667 */
-  'lib/core-app/playerFinder.ts':
-    'resolveLeagueSlots — resolves seats to slots; an archived seat may or may not hold a slot, unread.',
-  /* :133 */
-  'lib/core-app/playerLeagueView.ts':
-    'getPlayerLeagueView — per-league view of a player; ownership resolution vs current roster unexamined.',
-  /* :137 */
-  'lib/core-app/playerSuggest.ts':
-    'buildRosterIndex — index over league rosters; keyed-lookup vs enumeration not yet distinguished.',
-  /* :368 */
-  'lib/core-app/playerTradeVisual.ts':
-    'getPlayerTradeVisual — trade visual may name a departed counterparty; retain is plausible, unverified.',
-  /* :101 */
-  'lib/core-app/publicStandings.ts':
-    'getPublicLeagueStandings — a PUBLIC standings surface; strong active-enumeration candidate, unread.',
-  /* :197 */
-  'lib/core-app/scout.ts':
-    'getScoutData — scouting over league seats; current-vs-historical split unexamined.',
-  /* :371 */
-  'lib/core-app/tradesBoard.ts':
-    'getTradesBoard — a trades board names historical counterparties; retain is plausible, unverified.',
-  /* :207 */
-  'lib/draft-intel/importedDraftReport.ts':
-    'buildImportedDraftReport — a draft predates an archival, so retain is plausible; not yet read.',
-  /* :216 */
-  'lib/dynasty-war-room/dynastyWarRoomContext.ts':
-    'buildDynastyWarRoomContext — league context for the war room; consumer trace not yet done.',
-  /* :973 */
-  'lib/league-import/ImportedLeagueCommitService.ts':
-    'persistImportedLeagueFromNormalization — inside the import writer, which category 6 says must see archived rows; almost certainly a legitimate exception but it is newly visible and unread.',
-  /* :135 */
-  'lib/rivalry-engine/rivalryBoard.ts':
-    'getRivalryBoard — rivalries name departed managers, so retain is plausible; not yet read.',
-  /* :1035,1124,1266 */
-  'lib/trade-intel/tradeContextNotes.ts':
-    'buildFormatNotes, buildScaleNotes and buildPostureAndPickNotes — THREE separate league-wide reads in one file that may not agree with each other; must be read individually.',
-  /* :194 */
-  'lib/values/leagueDefenderBoard.ts':
-    'loadLeagueDefenderBoard — a defender board over league seats; denominator-sensitive, unread.',
-  /* :109 */
-  'lib/waiver-wire/process-engine.ts':
-    'processWaiverClaimsForLeague — a WRITE path processing claims per seat; an archived seat receiving a waiver award would be a real defect, so this one is high priority.',
-  /* :189 */
-  'app/api/leagues/[leagueId]/trades/rosters/route.ts':
-    'GET trades/rosters — roster list for the trade UI; selectable-partner exposure like roster-context-loader, unread.',
-}
+const PENDING_CLASSIFICATION: Record<string, string> = {}
 
 /** The backlog may shrink. It may not grow — a new unfiltered enumeration must be dealt with. */
-const PENDING_BUDGET = 27
+const PENDING_BUDGET = 0
 
+/**
+ * Every `.ts`/`.tsx` under a root, excluding tests and build output.
+ *
+ * Kept separate from the scanner so the scanner can be handed SYNTHETIC sources by its own
+ * positive control. A control that re-implements the scan instead of running it proves nothing
+ * about the scan — which is exactly the bug this file shipped for two commits.
+ */
 /**
  * Every `.ts`/`.tsx` under a root, excluding tests and build output.
  *
@@ -287,26 +216,81 @@ function walk(dir: string, out: string[] = []): string[] {
 
 type Source = { rel: string; src: string }
 
+/**
+ * Memoised: walking `lib/` + `app/` and reading every file takes ~35s on this box, and more than
+ * one test needs it. Two walks put the suite over vitest's 30s per-test timeout.
+ */
+let SOURCE_CACHE: Source[] | null = null
+
 function collectSources(): Source[] {
-  return [...walk(join(ROOT, 'lib')), ...walk(join(ROOT, 'app'))].map((abs) => ({
+  if (SOURCE_CACHE) return SOURCE_CACHE
+  SOURCE_CACHE = [...walk(join(ROOT, 'lib')), ...walk(join(ROOT, 'app'))].map((abs) => ({
     rel: relative(ROOT, abs).split(sep).join('/'),
     src: readFileSync(abs, 'utf8'),
   }))
+  return SOURCE_CACHE
+}
+
+/**
+ * Comments replaced by spaces, newlines kept, so every offset and line number is unchanged.
+ *
+ * 🛑 A COMMENT MUST NEVER EXEMPT A CALL. The previous marker test was `src.includes(...)` over
+ * the raw file, so writing "we deliberately do NOT use ACTIVE_TEAM_WHERE here" in prose marked
+ * the file protected. It also worked in reverse: an absence assertion elsewhere in this suite
+ * went red because a comment NAMED the constant. Both directions are the same defect — text is
+ * not code.
+ *
+ * String and template bodies are skipped too, so a URL's `//` cannot start a comment and a
+ * `/*` inside a string cannot swallow real code.
+ */
+function blankComments(src: string): string {
+  const out = src.split('')
+  let i = 0
+  const n = src.length
+  while (i < n) {
+    const c = src[i]
+    const d = src[i + 1]
+    if (c === '/' && d === '/') {
+      while (i < n && src[i] !== '\n') {
+        out[i] = ' '
+        i++
+      }
+    } else if (c === '/' && d === '*') {
+      while (i < n && !(src[i] === '*' && src[i + 1] === '/')) {
+        if (src[i] !== '\n') out[i] = ' '
+        i++
+      }
+      if (i < n) {
+        out[i] = ' '
+        out[i + 1] = ' '
+        i += 2
+      }
+    } else if (c === "'" || c === '"' || c === '`') {
+      const quote = c
+      i++
+      while (i < n && src[i] !== quote) {
+        if (src[i] === '\\') i++
+        i++
+      }
+      i++
+    } else {
+      i++
+    }
+  }
+  return out.join('')
 }
 
 /**
  * 🛑 MATCH THE CALL ACROSS A LINE BREAK. A PER-LINE REGEX IS BLIND TO A WRAPPED CALL, AND THAT
- * BLINDNESS HID 55 OF 175 CALL SITES — INCLUDING ONE THIS VERY BRANCH CREATED.
+ * BLINDNESS HID 55 OF 175 CALL SITES — INCLUDING ONE THIS BRANCH CREATED.
  *
  * Prettier wraps `prisma.leagueTeam.count({ ... })` onto two lines as soon as the line gets long:
  *
  *     prisma.leagueTeam
  *       .count({ where: { leagueId } })
  *
- * The original scanner tested `lines[i]` against a per-line pattern, so the verb and the receiver
- * being on different lines made the call invisible. Adding `ACTIVE_TEAM_WHERE` to
- * `lib/chimmy/tools/leagueByName.ts` pushed that exact call over the width limit, so the fix took
- * its own call site out of the guard's sight — remove the filter again and nothing goes red.
+ * Adding `ACTIVE_TEAM_WHERE` to `lib/chimmy/tools/leagueByName.ts` pushed that exact call over
+ * the width limit, so the fix took its own call site out of the guard's sight.
  */
 const ENUMERATION_CALL = /leagueTeam\s*\.\s*(?:findMany|count)\s*\(/g
 
@@ -326,12 +310,7 @@ function callText(src: string, from: number): string {
   return src.slice(from, from + 4000)
 }
 
-/**
- * Just the `where: { ... }` object of a call, brace-balanced.
- *
- * Returns '' when there is no `where` — a caller must treat that as "no narrowing keys", which is
- * the conservative direction: an unparseable call gets INSPECTED rather than skipped.
- */
+/** Just the `where: { ... }` object of a call, brace-balanced. */
 function extractWhereClause(window: string): string {
   const at = window.indexOf('where:')
   if (at === -1) return ''
@@ -351,48 +330,180 @@ function extractWhereClause(window: string): string {
 
 /**
  * 🛑 SCOPE THE NARROWING TEST TO THE `where` CLAUSE. Only keys inside `where` say anything about
- * which ROWS come back; a `select: { id: true }` or an `orderBy` naming an id says nothing, and
- * reading them as "this is a narrowed lookup, skip it" silently passed over real enumerations.
+ * which ROWS come back; a `select: { id: true }` or an `orderBy` naming an id says nothing.
+ *
+ * ⚠ AND A KEY IS ONLY NARROWING WHEN IT TESTS A VALUE. `claimedByUserId: userId` selects one
+ * seat; `claimedByUserId: { not: null }` selects MANY and is a league-wide enumeration wearing
+ * a key's clothes. Treating the two alike hid `app/api/leagues/join/route.ts`'s claimed-seat
+ * count — the denominator of the "N of M teams claimed" bar — from the guard entirely. The
+ * `[^{]` lookahead is what separates them, and `platformUserId` already had it.
+ *
+ * 🛑 AND `[^{]` ALONE IS NOT ENOUGH — IT WAS WRITTEN THAT WAY FIRST AND STILL DID NOT FIRE.
+ * `\s*` backtracks to zero width, so `[^{]` happily matches the SPACE before the brace and the
+ * key reads as narrowing again. The class has to exclude whitespace too: `[^{\s]`. Measured —
+ * with `[^{]` the claimed-seat count stayed invisible; with `[^{\s]` it is reported.
  */
-const NARROWING_KEY = /externalId:|\bid:\s|claimedByUserId:|platformUserId:\s*[^{]/
+const NARROWING_KEY = /externalId:|\bid:\s|claimedByUserId:\s*[^{\s]|platformUserId:\s*[^{\s]/
+
+const QUERY_FILTER = /ACTIVE_TEAM_WHERE|ORPHAN_TEAM_WHERE|isOrphan\s*:/
+const CONSUMER_FILTER = ['selectActiveTeams', 'selectOrphanTeams', 'isActiveTeam']
+
+/** Sentinel binding: the call is wrapped directly in a filter, so there is no name to trace. */
+const INLINE_PROTECTED = '<inline>'
 
 /**
- * The scanner. A league-wide enumeration is `leagueTeam.findMany`/`count` whose `where` narrows
- * only by `leagueId`, in a file that names no filtering helper and is not registered.
+ * The name(s) this call's result is bound to, or [] when it cannot be determined.
  *
- * Takes its sources as an argument so the positive control below can run THIS function against
- * planted code. `findUnguardedEnumerations()` is the production entry point.
+ * 🛑 UNDETERMINED MEANS UNPROTECTED, NEVER PROTECTED. A binding we cannot read is a consumer we
+ * cannot check, so the call is reported and a human looks at it. The opposite default is how a
+ * scanner goes quiet.
+ *
+ * Two shapes cover almost everything here:
+ *   const teams = await prisma.leagueTeam.findMany(...)
+ *   const [teams, facts] = await Promise.all([ prisma.leagueTeam.findMany(...), ... ])
+ *
+ * The second matters — `BroadcastModeEngine` and `dynasty-projections` both use it, and a naive
+ * "nearest const" would bind them to the wrong name.
  */
-function scanSources(sources: Source[]): Array<{ file: string; line: number }> {
-  const hits: Array<{ file: string; line: number }> = []
-  for (const { rel, src } of sources) {
-    if (!src.includes('leagueTeam')) continue
+function bindingsFor(src: string, callStart: number): string[] {
+  /*
+   * 🛑 NO FIXED LOOKBACK WINDOW. A 1200-character window was tried and it under-detected
+   * immediately: `BroadcastModeEngine` carries an 1800-character comment between its
+   * `Promise.all([` and the call, so the window started INSIDE the comment, the destructure was
+   * out of range, and a correctly consumer-filtered call was reported as unguarded. This file
+   * has now been bitten by a fixed window three times — an 8-line one, a 40-line one, and this.
+   * The whole prefix is cheap; use it, and let the structural checks below do the narrowing.
+   */
+  const before = src.slice(0, callStart)
+
+  /* Promise.all([...]) — bind by POSITION among the array's top-level elements. */
+  const allAt = before.lastIndexOf('Promise.all([')
+  if (allAt !== -1) {
+    const destructure = before
+      .slice(0, allAt)
+      .match(/const\s*\[([^\]]*)\]\s*=\s*await\s*$/)
+    if (destructure) {
+      const names = destructure[1]!.split(',').map((s) => s.trim()).filter(Boolean)
+      /* Which element are we in? Count top-level commas between the `[` and the call. */
+      const between = before.slice(allAt + 'Promise.all(['.length)
+      let depth = 0
+      let index = 0
+      let escaped = false
+      for (const ch of between) {
+        if (ch === '(' || ch === '[' || ch === '{') depth++
+        else if (ch === ')' || ch === ']' || ch === '}') {
+          depth--
+          /* Depth below zero means that array closed before us — a DIFFERENT Promise.all. */
+          if (depth < 0) {
+            escaped = true
+            break
+          }
+        } else if (ch === ',' && depth === 0) index++
+      }
+      if (!escaped) {
+        const name = names[index]
+        return name ? [name.replace(/[:.].*$/, '').trim()] : []
+      }
+    }
+  }
+
+  /*
+   * const teams = await prisma.leagueTeam.findMany(...)
+   *
+   * ⚠ THE MATCH STARTS AT `leagueTeam`, NOT AT `prisma`. So the receiver chain (`prisma.`, `tx.`,
+   * `this.db.`) still sits between the `=` and the anchor, and a regex ending at `await\s*$`
+   * matches nothing. That bug reported SIX correctly-filtered readers as unguarded — including
+   * three this batch had just fixed — which is a false POSITIVE, but the same carelessness in
+   * the other direction is a false negative.
+   */
+  /**
+   * `prisma.`, `tx.`, `this.db.`, `(prisma as any).` — the receiver chain before `leagueTeam`.
+   *
+   * ⚠ A SEGMENT CAN BE PARENTHESISED. `app/api/rankings/route.ts` writes
+   * `selectActiveTeams(await (prisma as any).leagueTeam.findMany(...))`, and an identifier-only
+   * chain does not match `(prisma as any)` — so a correctly filtered read was reported.
+   */
+  const SEG = String.raw`(?:\([^()]*\)|[A-Za-z_$][\w$]*)`
+  const RECEIVER = String.raw`${SEG}(?:\s*\.\s*${SEG})*\s*\.\s*`
+
+  const direct = before.match(
+    new RegExp(
+      String.raw`(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*(?::[^=]+)?=\s*(?:await\s+)?(?:${RECEIVER})?$`,
+    ),
+  )
+  if (direct) return [direct[1]!]
+
+  /* return selectActiveTeams(await prisma.leagueTeam.findMany(...)) — protection is inline. */
+  if (new RegExp(String.raw`selectActiveTeams\s*\(\s*(?:await\s+)?(?:${RECEIVER})?$`).test(before)) {
+    return [INLINE_PROTECTED]
+  }
+
+  return []
+}
+
+/**
+ * Is THIS call protected? Per call and per consumer — never per file.
+ *
+ * 🛑 THE OLD TEST WAS `FILTERED_MARKERS.some((k) => src.includes(k))` OVER THE WHOLE FILE, so a
+ * single protected query anywhere exempted every other enumeration in the same file, an
+ * unrelated consumer's `selectActiveTeams(other)` exempted this one, and a comment naming the
+ * constant exempted all of them. Three ways to be silently wrong, in one line.
+ */
+function isProtected(src: string, callStart: number, call: string): boolean {
+  /* Query-level: the filter is in THIS call's own `where`. */
+  if (QUERY_FILTER.test(extractWhereClause(call))) return true
+
+  /* Consumer-level: THIS call's binding is what gets filtered. */
+  const names = bindingsFor(src, callStart)
+  if (names.includes(INLINE_PROTECTED)) return true
+  return names.some((name) =>
+    CONSUMER_FILTER.some((fn) =>
+      new RegExp(`${fn}\\s*\\(\\s*${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*[,)]`).test(src),
+    ),
+  )
+}
+
+/**
+ * A stable identity for a call site: the file plus its ordinal among that file's LeagueTeam
+ * enumerations. Line numbers move with every edit above them; the ordinal does not, so a
+ * pending entry keeps pointing at the same call while the file is worked on.
+ */
+function siteId(rel: string, ordinal: number): string {
+  return `${rel}#${ordinal}`
+}
+
+function scanSources(
+  sources: Source[],
+  options?: { ignoreRegistry?: boolean },
+): Array<{ id: string; file: string; line: number }> {
+  const hits: Array<{ id: string; file: string; line: number }> = []
+  for (const { rel, src: raw } of sources) {
+    if (!raw.includes('leagueTeam')) continue
+    const src = blankComments(raw)
     ENUMERATION_CALL.lastIndex = 0
     let m: RegExpExecArray | null
+    let ordinal = 0
     while ((m = ENUMERATION_CALL.exec(src)) !== null) {
       const call = callText(src, m.index)
       /* Only a league-wide read; a narrowing key means it is a lookup, not an enumeration. */
       if (!/where:\s*\{[^}]*leagueId/.test(call)) continue
+      ordinal++
       if (NARROWING_KEY.test(extractWhereClause(call))) continue
-      if (FILTERED_MARKERS.some((k) => src.includes(k))) continue
-      if (ENUMERATION_EXCEPTIONS[rel] || PENDING_CLASSIFICATION[rel]) continue
-      hits.push({ file: rel, line: src.slice(0, m.index).split('\n').length })
+      if (isProtected(src, m.index, call)) continue
+      const id = siteId(rel, ordinal)
+      if (!options?.ignoreRegistry && (ENUMERATION_EXCEPTIONS[id] || PENDING_CLASSIFICATION[id])) {
+        continue
+      }
+      hits.push({ id, file: rel, line: src.slice(0, m.index).split('\n').length })
     }
   }
   return hits
 }
 
-function findUnguardedEnumerations(): Array<{ file: string; line: number }> {
+function findUnguardedEnumerations(): Array<{ id: string; file: string; line: number }> {
   return scanSources(collectSources())
 }
 
-/**
- * Sources the scanner MUST report, and sources it MUST NOT.
- *
- * These are the real shapes that defeated earlier revisions, kept as executable fixtures rather
- * than prose. Blinding the scanner in any of the ways it has actually been blinded — returning
- * early, matching per line, widening the narrowing test back to the whole call — turns these red.
- */
 const MUST_REPORT: Source[] = [
   {
     rel: '__control__/bare.ts',
@@ -441,7 +552,7 @@ describe('active-team policy guard', () => {
     expect(
       unguarded,
       `Unregistered league-wide LeagueTeam enumeration(s):\n${unguarded
-        .map((h) => `  ${h.file}:${h.line}`)
+        .map((h) => `  ${h.id}   (line ${h.line})`)
         .join('\n')}\n\nEither filter with selectActiveTeams/ACTIVE_TEAM_WHERE, or add the file to ` +
         `ENUMERATION_EXCEPTIONS with the reason it must retain archived teams.`,
     ).toEqual([])
@@ -463,6 +574,75 @@ describe('active-team policy guard', () => {
     expect(scanSources([fixture])).toEqual([])
   })
 
+  /*
+   * 🛑 PROTECTION IS PER CALL, AND THIS IS THE CASE THAT PROVES IT.
+   *
+   * The old test was `FILTERED_MARKERS.some((k) => src.includes(k))` over the WHOLE FILE, so one
+   * protected query anywhere exempted every other enumeration beside it. `app/api/leagues/join`
+   * is that shape in production: line 302 filters, line 395 did not, and the guard saw a clean
+   * file. Eight files in the current tree hold more than one reported call.
+   */
+  it('one protected and one unprotected enumeration in the SAME file: only the second is reported', () => {
+    const mixed: Source = {
+      rel: '__control__/mixed.ts',
+      src: [
+        'const guarded = await prisma.leagueTeam.count({',
+        '  where: { ...ACTIVE_TEAM_WHERE, leagueId },',
+        '})',
+        '',
+        'const leaky = await prisma.leagueTeam.count({ where: { leagueId } })',
+        '',
+      ].join('\n'),
+    }
+    const hits = scanSources([mixed])
+    expect(hits.map((h) => h.id)).toEqual(['__control__/mixed.ts#2'])
+    expect(hits[0]!.line).toBe(5)
+  })
+
+  it('a filter named only in a COMMENT does not exempt the call', () => {
+    const commented: Source = {
+      rel: '__control__/commented.ts',
+      src: [
+        /*
+         * The comment names the exact call the checker looks for — `selectActiveTeams(teams)`
+         * — so without comment-blanking this file reads as protected and the leak below is
+         * invisible. Explaining why you are NOT filtering must not count as filtering.
+         */
+        '/* Do NOT write selectActiveTeams(teams) here: the maps below need archived rows. */',
+        'const teams = await prisma.leagueTeam.findMany({ where: { leagueId } })',
+        '',
+      ].join('\n'),
+    }
+    expect(scanSources([commented]).map((h) => h.id)).toEqual(['__control__/commented.ts#1'])
+  })
+
+  it('an UNRELATED consumer being filtered does not exempt the call', () => {
+    const unrelated: Source = {
+      rel: '__control__/unrelated.ts',
+      src: [
+        'const other = await prisma.roster.findMany({ where: { leagueId } })',
+        'const safeOther = selectActiveTeams(other)',
+        'const teams = await prisma.leagueTeam.findMany({ where: { leagueId } })',
+        '',
+      ].join('\n'),
+    }
+    expect(scanSources([unrelated]).map((h) => h.id)).toEqual(['__control__/unrelated.ts#1'])
+  })
+
+  it('the call whose OWN binding is filtered is the one exempted', () => {
+    const both: Source = {
+      rel: '__control__/both.ts',
+      src: [
+        'const a = await prisma.leagueTeam.findMany({ where: { leagueId } })',
+        'const b = await prisma.leagueTeam.findMany({ where: { leagueId } })',
+        'const activeA = selectActiveTeams(a)',
+        '',
+      ].join('\n'),
+    }
+    /* `a` is consumed by the filter, `b` is not — and only `b` is reported. */
+    expect(scanSources([both]).map((h) => h.id)).toEqual(['__control__/both.ts#2'])
+  })
+
   it('the scanner reaches the real tree — it is not scanning an empty source set', () => {
     /* Separate from the fixtures above: those prove it can SEE, this proves it is LOOKING here. */
     const sources = collectSources()
@@ -473,6 +653,22 @@ describe('active-team policy guard', () => {
         return ENUMERATION_CALL.test(s.src)
       }).length,
     ).toBeGreaterThan(20)
+  })
+
+  /*
+   * 🛑 A DEAD EXEMPTION IS A SILENT WIDENING. Once a call is fixed or deleted, its entry stops
+   * describing anything — but it keeps matching, so if that id is ever reused by a NEW call the
+   * guard waves it straight through on a reason written about different code. This caught the
+   * `dynasty-projections` entry the moment A.2 filtered it.
+   */
+  it('every registered exception still corresponds to a real unprotected call', () => {
+    const live = new Set(scanSources(collectSources(), { ignoreRegistry: true }).map((h) => h.id))
+    const dead = Object.keys(ENUMERATION_EXCEPTIONS).filter((id) => !live.has(id))
+    expect(
+      dead,
+      `These exceptions no longer match an unprotected call — the code was fixed or moved. ` +
+        `Delete them:\n${dead.map((d) => `  ${d}`).join('\n')}`,
+    ).toEqual([])
   })
 
   it('every exception states a reason', () => {

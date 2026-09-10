@@ -1,6 +1,7 @@
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
+import { selectActiveTeams } from '@/lib/league-import/activeTeams'
 import { createPsychologyOsLoaders } from '@/lib/decision-os/psychology-os'
 import type { PsychologyProfileFact } from '@/lib/decision-os/psychology-os'
 import { resolveProfileAccessForUser } from '@/lib/psychological-profiles/ProfileAccess'
@@ -207,9 +208,18 @@ export async function getScoutData(leagueId: string, userId: string): Promise<Sc
         losses: true,
         ties: true,
         claimedByUserId: true,
+        /* Required, or `selectActiveTeams` below silently keeps every row. */
+        isOrphan: true,
       },
     })
     .catch(() => [])
+
+  /*
+   * Scouting is a CURRENT-opponent surface: the manager list, and the coverage denominator, are
+   * about who you can play now. `teams` stays unfiltered so `mine` and `oppTeam` can still
+   * resolve a seat by id — including one archived between a matchup being scheduled and read.
+   */
+  const activeTeams = selectActiveTeams(teams)
 
   if (teams.length === 0) {
     return {
@@ -289,7 +299,7 @@ export async function getScoutData(leagueId: string, userId: string): Promise<Sc
   const facts = await loadProfiles({ leagueId, sport }).catch(() => null)
   const byManager = new Map((facts ?? []).map((f) => [f.managerId, f]))
 
-  const managers: ScoutedManager[] = teams.map((t) => {
+  const managers: ScoutedManager[] = activeTeams.map((t) => {
     const managerId = managerIdOf(t)
     const fact = byManager.get(managerId)
 
@@ -380,6 +390,6 @@ export async function getScoutData(leagueId: string, userId: string): Promise<Sc
     you: mine && myManagerId ? { managerId: myManagerId, teamName: mine.teamName } : null,
     week: week ? { seasonYear: week.seasonYear, week: week.week } : null,
     managers: { available: true, data: managers },
-    coverage: { teamCount: teams.length, profiledCount, lastRefreshedAt, lockedCount },
+    coverage: { teamCount: activeTeams.length, profiledCount, lastRefreshedAt, lockedCount },
   }
 }

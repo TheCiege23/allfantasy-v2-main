@@ -1,6 +1,7 @@
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
+import { selectActiveTeams } from '@/lib/league-import/activeTeams'
 import { getLeagueRole, type LeagueRole } from '@/lib/league/permissions'
 import { leagueDisplayName, type SectionState, type UnavailableSection } from './leagueHome'
 import type { CoreIssue } from './outstandingIssues'
@@ -237,12 +238,14 @@ export async function getCommissionerHub(input: {
     prisma.leagueTeam
       .findMany({
         where: { leagueId },
+        /* `isOrphan` or `selectActiveTeams` below is a silent no-op — see activeTeams.ts. */
         select: {
           teamName: true,
           ownerName: true,
           claimedByUserId: true,
           isCommissioner: true,
           isCoCommissioner: true,
+          isOrphan: true,
         },
       })
       .catch(() => []),
@@ -255,7 +258,14 @@ export async function getCommissionerHub(input: {
     prisma.roster.count({ where: { leagueId } }).catch(() => 0),
   ])
 
-  const teamCount = teams.length || rosterCount
+  /*
+   * Both tiles below are CURRENT-state metrics, so they count live seats. An archived seat
+   * inflated `teamCount` and so pushed the "Claimed teams" tile permanently below 100% — a
+   * commissioner of a full league saw 11/12 for ever. Seeing THAT a seat left is useful and is
+   * what `rosterReads.readOrphanTeamCounts` is for; it is not what these two tiles say.
+   */
+  const activeTeams = selectActiveTeams(teams)
+  const teamCount = activeTeams.length || rosterCount
 
   /*
    * "Nobody has read this league" and "this league is healthy" produce the same
@@ -272,7 +282,7 @@ export async function getCommissionerHub(input: {
    * team nobody has connected to an AllFantasy account, which says nothing
    * about whether its manager is engaged on the platform itself.
    */
-  const claimed = teams.filter((t) => t.claimedByUserId).length
+  const claimed = activeTeams.filter((t) => t.claimedByUserId).length
 
   const tiles: CommissionerTile[] = [
     {

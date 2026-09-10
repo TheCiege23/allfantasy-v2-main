@@ -4,6 +4,7 @@
 
 import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
+import { ACTIVE_TEAM_WHERE } from '@/lib/league-import/activeTeams'
 import { assertPaidJoinAllowed, linkDuesToRoster } from '@/lib/league-finance/joinGate'
 import { validateInviteCode, validateFantasyInviteCode } from '@/lib/league-invite'
 import { attributeSignupToReferrer, grantRewardForSignup } from '@/lib/referral'
@@ -287,8 +288,16 @@ export async function createFantasyLeagueRoster(
     await linkDuesToRoster({ leagueId, userId, rosterId: roster.id, tx: tx as Prisma.TransactionClient })
 
     if (league.platform === 'manual') {
+      /*
+       * 🛑 THIS COUNT DECIDES WHETHER A JOINING MANAGER GETS A TEAM ROW AT ALL.
+       *
+       * An archived seat inflated it, so a manual league that had lost a seat could report
+       * itself full and silently skip the `leagueTeam.create` below — the manager joins, gets a
+       * roster, and has no team. Registered as an admin/monitoring exception before this pass;
+       * that was wrong. Counting seats to REPORT is monitoring, counting them to DECIDE is not.
+       */
       const manualTeamCount = await tx.leagueTeam.count({
-        where: { leagueId },
+        where: { ...ACTIVE_TEAM_WHERE, leagueId },
       })
       if (league.leagueSize == null || manualTeamCount < league.leagueSize) {
         const displayName = profile?.displayName?.trim() || profile?.sleeperUsername?.trim() || 'Manager'
