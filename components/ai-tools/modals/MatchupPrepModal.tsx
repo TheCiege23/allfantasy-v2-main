@@ -638,6 +638,7 @@ function MatchupTabBody({
         {data.timeContext?.timeAuthorityNote ? (
           <p className="text-[9px] text-white/45">{data.timeContext.timeAuthorityNote}</p>
         ) : null}
+        <MarketEnvironment rows={data.marketContext ?? []} />
         {data.weatherInfluence.length > 0 ? (
           <div className="rounded-xl border border-sky-500/15 bg-sky-500/[0.04] px-2 py-2">
             <p className="text-[9px] font-bold uppercase text-sky-300/80">Weather (your starters)</p>
@@ -706,6 +707,104 @@ function MatchupTabBody({
   }
 
   return null
+}
+
+type MarketRow = NonNullable<MatchupPrepDashboardResult['marketContext']>[number]
+
+/**
+ * Scoring environment for your starters, from the betting market read as a FORECAST.
+ *
+ * 🛑 THIS IS NOT A BETTING CARD, AND THE WORDING IS THE BOUNDARY.
+ * AllFantasy consumes the market as a projection input and is deliberately not a
+ * gambling product. The read layer already refuses to hand over prices or
+ * sportsbook names (see lib/odds/gameOddsReads.ts, enforced by a runtime test), so
+ * this component *cannot* render odds even by mistake. What it must still get
+ * right is the language:
+ *
+ *   - the headline is EXPECTED POINTS for that player's offense, not a line
+ *   - the spread is stated as game script in words — "favored by 3.5" — never as
+ *     "-3.5", which is betting notation
+ *   - the total is "combined", not "O/U"
+ *
+ * ⚠ AN EMPTY PANEL IS A NORMAL STATE, NOT A FAULT. Measured against the live
+ * vendor: a game 3 days out returns ZERO odds, and only fixtures inside roughly
+ * two days of kickoff are populated. So early in a week this is legitimately empty
+ * for most of the slate. Saying that plainly is the difference between "not yet"
+ * and "this feature is broken".
+ */
+export function MarketEnvironment({ rows }: { rows: MarketRow[] }) {
+  const usable = rows.filter((r) => r.impliedTeamTotal != null)
+
+  if (usable.length === 0) {
+    return (
+      <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] px-2 py-2">
+        <p className="text-[9px] font-bold uppercase text-white/45">Scoring environment</p>
+        <p className="mt-1 text-[10px] text-white/45">
+          No market read yet — expected team scoring posts closer to kickoff.
+        </p>
+      </div>
+    )
+  }
+
+  const anyStale = usable.some((r) => r.isStale)
+
+  return (
+    <div className="rounded-xl border border-violet-500/15 bg-violet-500/[0.04] px-2 py-2">
+      <div className="flex items-baseline justify-between">
+        <p className="text-[9px] font-bold uppercase text-violet-300/80">
+          Scoring environment (your starters)
+        </p>
+        <span className="text-[8px] uppercase text-white/30">expected pts</span>
+      </div>
+
+      <div className="mt-1.5 space-y-1.5">
+        {usable.map((r, i) => {
+          const pts = r.impliedTeamTotal as number
+          // Light emphasis only. NFL team totals sit roughly 17-30, so these bands
+          // read as "strong / thin" rather than as a recommendation to act on.
+          const tone =
+            pts >= 26 ? 'text-emerald-300' : pts <= 19 ? 'text-amber-300' : 'text-white/80'
+
+          const script =
+            r.spread == null
+              ? null
+              : r.spread < 0
+                ? `favored by ${Math.abs(r.spread)}`
+                : r.spread > 0
+                  ? `underdog by ${r.spread}`
+                  : 'even game'
+
+          return (
+            <div
+              key={`${r.name}-${i}`}
+              className="rounded-lg border border-white/[0.06] bg-[#0d111a] px-2 py-1.5"
+            >
+              <div className="flex items-center justify-between text-[10px]">
+                <span className="font-bold text-white/80">
+                  {r.name} <span className="text-white/40">({r.team})</span>
+                </span>
+                <span className={`font-black tabular-nums ${tone}`}>{pts.toFixed(1)}</span>
+              </div>
+              <p className="text-[9px] text-white/40">
+                {r.isHome ? 'vs' : 'at'} {r.opponent ?? '—'}
+                {script ? ` · ${script}` : ''}
+                {r.gameTotal != null ? ` · ${r.gameTotal.toFixed(1)} combined` : ''}
+              </p>
+            </div>
+          )
+        })}
+      </div>
+
+      {anyStale ? (
+        <p className="mt-1.5 text-[9px] text-amber-300/70">
+          Past its refresh window — re-check before locking.
+        </p>
+      ) : null}
+      <p className="mt-1 text-[8px] text-white/30">
+        Market-implied team scoring. Not a wager, and not your matchup win chance.
+      </p>
+    </div>
+  )
 }
 
 function EdgeBar({ label, mine, theirs }: { label: string; mine: number; theirs: number }) {
