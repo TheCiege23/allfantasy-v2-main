@@ -441,8 +441,19 @@ describe("POST /api/chat/chimmy contract", () => {
 
     expect(res.status).toBe(412)
     const body = await res.json()
-    expect(body.details?.groundingReason).toBe("not_member")
-    expect(body.details?.message).toMatch(/not a member/i)
+    /*
+     * ⚠ THIS ASSERTED `groundingReason === "not_member"` AND A "not a member"
+     * MESSAGE UNTIL THE 2026-09-09 DISCLOSURE FIX, AND THE INVERSION IS THE
+     * RECORD. Together those two told a caller that the id addresses a REAL
+     * league and that they simply are not in it — an enumeration oracle.
+     * `not_member` and `not_found` now read identically to the caller. The
+     * distinction is still known internally and still logged; it is no longer
+     * published.
+     */
+    expect(body.details?.groundingReason).toBeUndefined()
+    expect(body.details?.leagueId).toBeUndefined()
+    expect(body.details?.message).toMatch(/could not open that league/i)
+    expect(body.details?.message).not.toMatch(/i can see that league exists/i)
     // A refusal must not bill.
     expect(spendTokensForRuleMock).not.toHaveBeenCalled()
   })
@@ -461,7 +472,12 @@ describe("POST /api/chat/chimmy contract", () => {
     // not in it", and only one of them is worth retrying.
     expect(res.status).toBe(503)
     const body = await res.json()
-    expect(body.details?.groundingReason).toBe("error")
+    /*
+     * Same disclosure fix: the reason code is no longer published. The caller
+     * still gets the 503 and a retry message, which is the actionable part.
+     */
+    expect(body.details?.groundingReason).toBeUndefined()
+    expect(body.details?.leagueId).toBeUndefined()
     expect(spendTokensForRuleMock).not.toHaveBeenCalled()
   })
 
