@@ -2,6 +2,7 @@ import 'server-only'
 
 import { prisma } from '@/lib/prisma'
 import { selectActiveTeams } from '@/lib/league-import/activeTeams'
+import { resolveTeamPerformanceOpponent } from '@/lib/league-import/teamPerformanceOpponent'
 
 const SLEEPER = 'https://api.sleeper.app/v1'
 
@@ -138,12 +139,23 @@ export async function fetchNativeOpponentMatchup(args: {
     }
 
     const paSorted = [...activeTeams].sort((a, b) => a.pointsAgainst - b.pointsAgainst)
-    const oppTeam = teams.find(
-      (t) =>
-        perf.opponent &&
-        (t.teamName?.toLowerCase().includes(perf.opponent.toLowerCase()) ||
-          perf.opponent.toLowerCase().includes((t.teamName ?? '').toLowerCase())),
-    )
+
+    /*
+     * 🛑 RESOLVE BY THE PRODUCER'S CONTRACT — `TeamPerformance.opponent` IS A `LeagueTeam.id`.
+     *
+     * This was a bidirectional substring match on `teamName`, which could never match the UUID
+     * the importer actually stores, and whose `(t.teamName ?? '')` arm matched EVERY opponent
+     * for any seat with an empty name. See `teamPerformanceOpponent.ts` for the measurement.
+     * Resolved against the unfiltered array on purpose: a past week can name a departed team.
+     */
+    const { team: oppTeam, via } = resolveTeamPerformanceOpponent(perf.opponent, teams)
+    if (!oppTeam) {
+      notes.push(
+        `Opponent "${perf.opponent}" in team_performances did not match any team in this league, so no matchup-difficulty note is offered.`,
+      )
+    } else if (via === 'legacy_name') {
+      notes.push('Opponent resolved by name — this row predates the team-id opponent contract.')
+    }
 
     let matchupDifficultyNote: string | null = null
     if (oppTeam) {

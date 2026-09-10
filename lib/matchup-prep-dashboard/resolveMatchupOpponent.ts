@@ -3,6 +3,7 @@ import 'server-only'
 import { prisma } from '@/lib/prisma'
 import type { SupportedSport } from '@/lib/sport-scope'
 import { ACTIVE_TEAM_WHERE } from '@/lib/league-import/activeTeams'
+import { resolveTeamPerformanceOpponent } from '@/lib/league-import/teamPerformanceOpponent'
 
 const SLEEPER = 'https://api.sleeper.app/v1'
 
@@ -17,21 +18,6 @@ export type ResolveMatchupOpponentResult = {
 
 type SleeperMatchup = { roster_id?: number; matchup_id?: number; points?: number }
 
-function normName(s: string | null | undefined): string {
-  return (s ?? '')
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '')
-    .trim()
-}
-
-function fuzzyTeamMatch(opponentLabel: string, teamName: string | null | undefined): boolean {
-  const a = normName(opponentLabel)
-  const b = normName(teamName)
-  if (!a || !b) return false
-  if (a === b) return true
-  if (a.length >= 4 && (b.includes(a) || a.includes(b))) return true
-  return false
-}
 
 async function resolveSleeperOpponent(args: {
   leagueId: string
@@ -159,9 +145,16 @@ async function resolveNativeOpponent(args: {
       select: { id: true, externalId: true, teamName: true },
     })
     const label = perf.opponent.trim()
-    const hit = teams.find(
-      (t) => t.id !== myTeam!.id && t.teamName && fuzzyTeamMatch(label, t.teamName),
-    )
+    /*
+     * 🛑 `TeamPerformance.opponent` IS A `LeagueTeam.id`, NOT A NAME — this matched it by name.
+     * The `fuzzyTeamMatch` helper this replaced (now deleted) normalised both sides and compared
+     * names, which can never hit a UUID — so this path silently fell through to the "pick the
+     * matching team" note on every real imported league. Shared resolver so the two readers of
+     * this column cannot drift; see `teamPerformanceOpponent.ts`.
+     */
+    const { team: hit } = resolveTeamPerformanceOpponent(label, teams, {
+      excludeTeamId: myTeam.id,
+    })
     if (!hit) {
       notes.push(`Native matchup lists opponent as "${label}" — pick the matching team from the league list if needed.`)
       return { opponentExternalId: null, opponentName: label, source: 'none', notes }
