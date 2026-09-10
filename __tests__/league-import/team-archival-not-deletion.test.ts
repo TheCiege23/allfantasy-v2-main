@@ -26,14 +26,31 @@ describe('the reconciliation path contains no destructive call', () => {
    * actually caused data loss was a single `prisma.*.delete` in this file — so the guard that
    * matters most is one that fails the moment a delete comes back, however it is reached.
    */
-  it('never deletes a LeagueTeam or a Roster', () => {
-    expect(APPLY_SRC).not.toMatch(/prisma\.leagueTeam\.delete/)
-    expect(APPLY_SRC).not.toMatch(/prisma\.roster\.delete/)
+  it('never deletes a LeagueTeam or a Roster, through ANY client alias', () => {
+    /*
+     * ⚠ THE OLD VERSION WAS BOUND TO ONE ALIAS. It matched `prisma.leagueTeam.delete` and a bare
+     * `deleteMany`, but a delete reached through an interactive-transaction client (`tx.`), a
+     * destructured delegate, or `$executeRaw` carrying a DELETE would have sailed past — and this
+     * file DOES use a transaction client elsewhere. Match the delegate regardless of receiver.
+     */
+    expect(APPLY_SRC).not.toMatch(/\.\s*leagueTeam\s*\.\s*delete(Many)?\s*\(/)
+    expect(APPLY_SRC).not.toMatch(/\.\s*roster\s*\.\s*delete(Many)?\s*\(/)
     expect(APPLY_SRC).not.toMatch(/deleteMany/)
+    expect(APPLY_SRC).not.toMatch(/\$executeRaw[\s\S]{0,200}DELETE/i)
   })
 
-  it('archives an absent team by setting isOrphan', () => {
-    expect(APPLY_SRC).toMatch(/data:\s*\{\s*isOrphan:\s*true\s*\}/)
+  it('archives an absent team by setting isOrphan, in code rather than in a comment', () => {
+    /*
+     * ⚠ A WHOLE-FILE PRESENCE CHECK IS SATISFIED BY A COMMENT. This file carries an 18-line block
+     * comment immediately above the write, so matching the pattern anywhere proved nothing about
+     * where — or whether — the update actually happens. Strip comments, then require the write to
+     * sit inside the reconciliation loop.
+     */
+    const codeOnly = APPLY_SRC.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
+    const loopStart = codeOnly.indexOf('for (const t of staleTeams)')
+    expect(loopStart, 'reconciliation loop not found in stripped source').toBeGreaterThan(-1)
+    const loopBody = codeOnly.slice(loopStart)
+    expect(loopBody).toMatch(/leagueTeam\.update\(\{[\s\S]{0,200}data:\s*\{\s*isOrphan:\s*true\s*\}/)
   })
 
   it('skips a team that is already archived, so reconciliation is idempotent', () => {
@@ -46,7 +63,15 @@ describe('the reconciliation path contains no destructive call', () => {
      * The old branch read `if (t.claimedByUserId) { ...orphan... continue }` and fell through
      * to the delete. No claim-conditional may remain inside the reconciliation loop.
      */
-    const loop = APPLY_SRC.slice(APPLY_SRC.indexOf('for (const t of staleTeams)'))
+    /*
+     * ⚠ ASSERT THE ANCHOR WAS FOUND BEFORE SLICING. `indexOf` returns -1 when the loop is renamed
+     * or removed, and `slice(-1)` yields the file's FINAL CHARACTER — so the negative assertion
+     * below passed trivially and the "claimed and unclaimed alike" contract went unchecked.
+     */
+    const loopStart = APPLY_SRC.indexOf('for (const t of staleTeams)')
+    expect(loopStart, 'reconciliation loop anchor not found — the assertion would be vacuous').toBeGreaterThan(-1)
+    const loop = APPLY_SRC.slice(loopStart)
+    expect(loop.length).toBeGreaterThan(200)
     expect(loop).not.toMatch(/claimedByUserId/)
   })
 
@@ -55,11 +80,37 @@ describe('the reconciliation path contains no destructive call', () => {
     expect(APPLY_SRC).toMatch(/const authoritative =/)
     expect(APPLY_SRC).toMatch(/currentRosters\?\.state === 'full'/)
     expect(APPLY_SRC).toMatch(/rosters\.every\(\(r\) => isAuthoritativeStatus\(r\.fetch_status\)\)/)
-    /* And the loop is inside that gate. */
+    /*
+     * 🛑 CONTAINMENT, NOT TEXTUAL ORDER. The previous version asserted `loopIdx > gateIdx`, which
+     * only says the loop appears LATER IN THE FILE than the gate — moving the archival loop OUT
+     * of the `if (authoritative)` block, so it archives on every response including a partial one,
+     * still satisfies that. It is the difference between "after" and "inside", and only the
+     * second is the safety property.
+     *
+     * Brace-walk the gate block and assert the loop is genuinely within its extent.
+     */
     const gateIdx = APPLY_SRC.indexOf('if (authoritative) {')
     const loopIdx = APPLY_SRC.indexOf('for (const t of staleTeams)')
-    expect(gateIdx).toBeGreaterThan(-1)
-    expect(loopIdx).toBeGreaterThan(gateIdx)
+    expect(gateIdx, 'authoritative gate not found — the assertion would be vacuous').toBeGreaterThan(-1)
+    expect(loopIdx, 'reconciliation loop not found — the assertion would be vacuous').toBeGreaterThan(-1)
+
+    const openBrace = APPLY_SRC.indexOf('{', gateIdx)
+    let depth = 0
+    let gateEnd = -1
+    for (let i = openBrace; i < APPLY_SRC.length; i++) {
+      const ch = APPLY_SRC[i]
+      if (ch === '{') depth++
+      else if (ch === '}') {
+        depth--
+        if (depth === 0) {
+          gateEnd = i
+          break
+        }
+      }
+    }
+    expect(gateEnd, 'could not brace-match the authoritative gate').toBeGreaterThan(openBrace)
+    expect(loopIdx).toBeGreaterThan(openBrace)
+    expect(loopIdx, 'the archival loop is NOT inside the authoritative gate').toBeLessThan(gateEnd)
   })
 })
 
@@ -81,7 +132,24 @@ describe('a reappearing team is restored', () => {
       ),
       'utf8',
     )
-    const updateBlock = bootstrap.slice(bootstrap.indexOf('update: {'), bootstrap.indexOf('isCoCommissioner: Boolean(r.is_co_commissioner),\n      },\n    })'))
+    /*
+     * 🛑 THIS ASSERTION COULD NOT FAIL, AND THE CAUSE WAS CRLF. Measured on this checkout: the
+     * file has 414 CR and 414 LF, and the end anchor was spelled with bare `\n`, so `indexOf`
+     * returned -1 — `slice(start, -1)` then yielded 9185 of the file's 15609 characters, which
+     * of course contain `isOrphan,`. The test passed regardless of what the update clause said.
+     *
+     * Both anchors are now newline-agnostic AND asserted to have been FOUND before the slice is
+     * trusted. An anchor that stops matching must turn the test red, never make it vacuous.
+     */
+    const src = bootstrap.replace(/\r\n/g, '\n')
+    const startIdx = src.indexOf('update: {')
+    const endIdx = src.indexOf('isCoCommissioner: Boolean(r.is_co_commissioner),\n      },\n    })')
+    expect(startIdx, 'update-clause start anchor not found — the assertion would be vacuous').toBeGreaterThan(-1)
+    expect(endIdx, 'update-clause end anchor not found — the assertion would be vacuous').toBeGreaterThan(startIdx)
+
+    const updateBlock = src.slice(startIdx, endIdx)
+    /* A real bound, not most of the file. */
+    expect(updateBlock.length).toBeLessThan(3000)
     expect(updateBlock).toMatch(/isOrphan,/)
   })
 })

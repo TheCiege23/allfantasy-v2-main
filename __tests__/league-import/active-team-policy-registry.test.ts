@@ -105,6 +105,52 @@ const ENUMERATION_EXCEPTIONS: Record<string, string> = {
   'lib/trending-players/trendCardEnrichment.ts':
     'Enriches trend cards by team id; an archived team still owned a trending player historically.',
   'app/api/league/trend-board/route.ts': 'Already branches on isOrphan explicitly.',
+
+  // ── surfaced by the CORRECTED scanner, classified in the census pass ────────────────────
+  // Identity maps: consumed only as keyed .get()/find lookups that resolve a reference.
+  'lib/agents/anthropic-pipeline.ts':
+    'Identity map — an externalId-keyed Map resolving the caller own team plus a find-by-id resolving an opponent reference; no current-state consumer.',
+  'lib/ai/sim/groundedTradeDelta.ts':
+    'Identity map — builds teamByExternal solely to resolve a scheduled opponent rosterId into a platformUserId for roster lookup.',
+  'lib/league-history/leagueWarehouseReads.ts':
+    'Historical — every consumer is an externalId-keyed .get() resolving names for season_results and dw_matchup_facts rows; filtering would erase attribution.',
+  'lib/psychological-profiles/TransactionFactBackfill.ts':
+    'Historical backfill — the identity map resolves a LeagueTradeHistory row Sleeper user id to the roster id stamped onto dw_transaction facts.',
+  'lib/tournament/rosterCompliance.ts':
+    'Identity map — handleFor resolves a display handle for rows enumerated from the Roster table; it never gates compliance.',
+  'lib/tournament/topPerformers.ts':
+    'Identity map — a two-key index resolving a roster to its manager label; it never gates or ranks.',
+  'app/api/cron/decision-os-activity-ingest/route.ts':
+    'Identity map — a platformUserId-keyed Map consumed only by .get() to attribute imported activity to an AllFantasy user.',
+  'app/api/leagues/[leagueId]/rivalries/[rivalryId]/head-to-head/route.ts':
+    'Historical — an externalId-keyed lookup resolving display names for historical MatchupFact rows; no current-state consumer.',
+  'lib/sleeper-sync.ts':
+    'Import lifecycle — the Sleeper writer reading its own prior rows by externalId to carry pointsAgainst/currentRank forward into its own upsert.',
+
+  /*
+   * 🛑 MIXED READS — DOCUMENTED DEBT, DELIBERATELY NOT FIXED IN THIS BRANCH.
+   *
+   * Each of these feeds BOTH a current-state consumer AND an identity map or historical consumer
+   * from one read. The correct repair is consumer-level filtering inside each subsystem, not a
+   * `where` clause — a query filter here would starve the historical half, which is exactly the
+   * regression this branch already made once in BroadcastModeEngine and had to undo.
+   *
+   * They are LEFT UNFILTERED on purpose, because unfiltered is the SAFE side of that asymmetry:
+   * an extra row on a screen versus silently losing attribution. They also predate this branch —
+   * `origin/main` already archives vanishing claimed teams, so they leak there today and this
+   * branch does not make them worse in kind.
+   *
+   * Listed here so they are visible and enforced-as-known rather than silently passing. Each
+   * needs its own change in its own subsystem; that is the proposed follow-up, not this batch.
+   */
+  'app/api/leagues/[leagueId]/dynasty-projections/handler.ts':
+    'MIXED (deferred) — one read feeds four consumers that disagree; needs consumer-level filtering in the projections builder.',
+  'lib/ai-tools-start-sit/opponentMatchup.ts':
+    'MIXED (deferred) — one read feeds four consumers in fetchNativeOpponentMatchup, current and resolution mixed.',
+  'lib/shared-services/league-hub/userOsContext.ts':
+    'MIXED (deferred) — the standings array splits into a current-state consumer and a resolution consumer.',
+  'lib/trade-value-console/roster-context-loader.ts':
+    'MIXED (deferred) — opponentTeams is current-state while the sibling consumer resolves references.',
 }
 
 const FILTERED_MARKERS = [
@@ -157,6 +203,29 @@ function callWindow(lines: string[], start: number): string {
   return out.join('\n')
 }
 
+/**
+ * Just the `where: { ... }` object of a call, brace-balanced.
+ *
+ * Returns '' when there is no `where` — a caller must treat that as "no narrowing keys", which is
+ * the conservative direction: an unparseable call gets INSPECTED rather than skipped.
+ */
+function extractWhereClause(window: string): string {
+  const at = window.indexOf('where:')
+  if (at === -1) return ''
+  const open = window.indexOf('{', at)
+  if (open === -1) return ''
+  let depth = 0
+  for (let i = open; i < window.length; i++) {
+    const ch = window[i]
+    if (ch === '{') depth++
+    else if (ch === '}') {
+      depth--
+      if (depth === 0) return window.slice(open, i + 1)
+    }
+  }
+  return window.slice(open)
+}
+
 /** A league-wide enumeration: `leagueTeam.findMany/count` whose `where` narrows only by leagueId. */
 function findUnguardedEnumerations(): Array<{ file: string; line: number }> {
   const hits: Array<{ file: string; line: number }> = []
@@ -171,7 +240,18 @@ function findUnguardedEnumerations(): Array<{ file: string; line: number }> {
       const window = callWindow(lines, i)
       /* Only a league-wide read; a narrowing key means it is a lookup, not an enumeration. */
       if (!/where:\s*\{[^}]*leagueId/.test(window)) continue
-      if (/externalId:|\bid:\s|claimedByUserId:|platformUserId:\s*[^{]/.test(window)) continue
+
+      /*
+       * 🛑 SCOPE THE NARROWING TEST TO THE `where` CLAUSE — THIS GUARD UNDER-DETECTED TWICE.
+       *
+       * First it used a fixed 8-line window that bled into the adjacent query. That was fixed.
+       * It then still ran the narrowing-key test against the WHOLE call, so an innocuous
+       * `select: { id: true }` or an `orderBy` mentioning an id read as "this is a narrowed
+       * lookup, skip it" — and a genuinely unguarded league-wide enumeration was passed over.
+       * Only keys inside `where` say anything about which ROWS are returned.
+       */
+      const whereClause = extractWhereClause(window)
+      if (/externalId:|\bid:\s|claimedByUserId:|platformUserId:\s*[^{]/.test(whereClause)) continue
       if (FILTERED_MARKERS.some((m) => src.includes(m))) continue
       if (ENUMERATION_EXCEPTIONS[rel]) continue
       hits.push({ file: rel, line: i + 1 })

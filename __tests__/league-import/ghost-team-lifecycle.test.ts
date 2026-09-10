@@ -112,8 +112,16 @@ describe('D vanishes from a COMPLETE authoritative refresh', () => {
 
   it('archives D and deletes nothing', () => {
     expect(after.archived).toEqual(['D'])
-    expect(after.deleted).toEqual([])
-    expect(after.teams).toHaveLength(4)
+    /*
+     * ⚠ `after.deleted` IS NOT THE PROOF — IT CANNOT FAIL. This fixture's own `reconcile` helper
+     * returns the literal `deleted: []` on both exits, so asserting it is empty tests the fixture,
+     * not the rule. The real proof that nothing was destroyed is that the ARRAY LENGTH is
+     * invariant and D is still present with its identity intact, which is what the next two
+     * assertions check. The production "never deletes" contract is enforced separately, against
+     * the real source, in team-archival-not-deletion.test.ts.
+     */
+    expect(after.teams).toHaveLength(seed.teams.length)
+    expect(after.teams.map((t) => t.externalId).sort()).toEqual(['A', 'B', 'C', 'D'])
     expect(after.teams.find((t) => t.externalId === 'D')?.isOrphan).toBe(true)
   })
 

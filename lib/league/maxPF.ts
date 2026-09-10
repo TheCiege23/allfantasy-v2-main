@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/prisma'
+import { ACTIVE_TEAM_WHERE } from '@/lib/league-import/activeTeams'
 
 export type ReverseMaxPfRow = {
   slot: number
@@ -26,8 +27,9 @@ export async function computeReverseMaxPfOrder(leagueId: string): Promise<{
   }
 
   const prevSeason = String((league.season ?? new Date().getFullYear()) - 1)
+  /* Max points-for is a CURRENT standings statistic; a departed team must not win it. */
   const teams = await prisma.leagueTeam.findMany({
-    where: { leagueId },
+    where: { ...ACTIVE_TEAM_WHERE, leagueId },
     orderBy: { externalId: 'asc' },
   })
 

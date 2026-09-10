@@ -10,6 +10,7 @@ import type { NormalizedPlayerSportsProfile } from '@/lib/sports-data-normalizat
 import type { SupportedSport } from '@/lib/sport-scope'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
 import { parseDraftPicksFromPlayerData, sumPickCapitalScore } from '@/lib/long-term-coaching/parseRosterPicks'
+import { ACTIVE_TEAM_WHERE } from '@/lib/league-import/activeTeams'
 import type {
   LongTermCoachingAnalysis,
   LongTermCoachingHorizonYears,
@@ -223,8 +224,12 @@ export async function buildLongTermCoachingAnalysis(args: {
   const picksRaw = parseDraftPicksFromPlayerData(rosterRow?.playerData ?? {}, lc.matchupPeriod.season)
   const pickCapitalScore = sumPickCapitalScore(picksRaw)
 
+  /*
+   * The points-for distribution the user's percentile is measured against must be the CURRENT
+   * league — a departed team's season total would skew every percentile in it.
+   */
   const leagueTeams = await prisma.leagueTeam.findMany({
-    where: { leagueId: args.leagueId },
+    where: { ...ACTIVE_TEAM_WHERE, leagueId: args.leagueId },
     select: { pointsFor: true, claimedByUserId: true },
   })
   const pfVals = leagueTeams.map((t) => t.pointsFor).filter((n): n is number => n != null && Number.isFinite(n))

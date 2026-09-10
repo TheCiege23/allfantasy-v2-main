@@ -33,9 +33,16 @@ describe('corrected ENUMERATION surfaces filter archived teams', () => {
     const src = read('lib', 'data', 'league-home.ts')
     expect(src).toMatch(/const leagueTeams = selectActiveTeams\(leagueTeamRows\)/)
     expect(src).toMatch(/from '@\/lib\/league-import\/activeTeams'/)
-    /* It must select the column, or the filter judges an undefined field. */
+    /*
+     * ⚠ `isOrphan: true` IS AMBIGUOUS — it is both the SELECT spelling and the inner half of
+     * `ACTIVE_TEAM_WHERE`'s `NOT: { isOrphan: true }`. Matching it loosely would accept a surface
+     * that filters in the query while never selecting the column. Pin the `select` block itself.
+     */
     const query = src.slice(src.indexOf('prisma.leagueTeam.findMany'))
-    expect(query.slice(0, 900)).toMatch(/isOrphan: true/)
+    const selectBlock = query.slice(query.indexOf('select:'), query.indexOf('}),'))
+    expect(selectBlock.length, 'could not locate the select block').toBeGreaterThan(0)
+    expect(selectBlock).toMatch(/isOrphan: true/)
+    expect(selectBlock).not.toMatch(/NOT:/)
   })
 
   it('core-app league home team list and standings use it', () => {
@@ -53,7 +60,10 @@ describe('corrected ENUMERATION surfaces filter archived teams', () => {
     /* The CALL in its return position — not merely the imported name. */
     expect(src).toMatch(/return selectActiveTeams\(teams\)/)
     const query = src.slice(src.indexOf('prisma.leagueTeam.findMany'))
-    expect(query.slice(0, 400)).toMatch(/isOrphan: true/)
+    const selectBlock = query.slice(query.indexOf('select:'), query.indexOf('})'))
+    expect(selectBlock.length, 'could not locate the select block').toBeGreaterThan(0)
+    expect(selectBlock).toMatch(/isOrphan: true/)
+    expect(selectBlock).not.toMatch(/NOT:/)
   })
 })
 
@@ -132,15 +142,19 @@ describe('HISTORICAL surfaces never filter', () => {
 
   for (const parts of historical) {
     it(`${parts[parts.length - 1]} does not filter archived teams`, () => {
-      let src: string
-      try {
-        src = read(...parts)
-      } catch {
-        /* Absent in this tree — nothing to assert, and inventing a path would be worse. */
-        return
-      }
+      /*
+       * ⚠ NO try/catch SWALLOW. The previous version returned early when the file could not be
+       * read, so a renamed or moved path turned this contract into a silent pass — the historical
+       * surface stopped being checked at the exact moment it moved. If a path in this list stops
+       * existing, that is a finding: fix the list deliberately, do not let it self-disable.
+       */
+      const src = read(...parts)
+      expect(src.length).toBeGreaterThan(0)
       expect(src).not.toMatch(/selectActiveTeams/)
       expect(src).not.toMatch(/isActiveTeam/)
+      expect(src).not.toMatch(/ACTIVE_TEAM_WHERE/)
+      /* A hand-rolled equivalent does the same damage. */
+      expect(src).not.toMatch(/\.filter\([^)]*!\s*\w+\.isOrphan/)
     })
   }
 
