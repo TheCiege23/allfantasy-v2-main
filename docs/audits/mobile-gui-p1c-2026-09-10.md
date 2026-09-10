@@ -175,10 +175,37 @@ and confirmed byte-identical with `diff -q`.
 count as the previous batch. jsdom does not implement `inert`, so the hook's
 `el.inert = true` is an inert JS property there and the suites are unaffected.
 
-**Scoped typecheck**: 0 errors in the changed files; 3 pre-existing errors in
-`lib/auth.ts`, which this batch does not touch. Verified with `--listFiles` that
-the files under test were actually in the compile set, and with an injected
-`TS2322` that the check reports errors in them.
+**Scoped typecheck**: 0 errors in the changed files. 4 pre-existing errors, all
+in files this batch does not touch — `lib/auth.ts` (3 × TS2339) and
+`lib/push-notifications/push-service.ts` (1 × TS7016).
+
+🛑 **THE FIRST VERSION OF THIS ATTESTATION WAS WRONG, AND THE WAY IT WAS WRONG IS
+THE POINT.** The scoped config used `extends`, which **inherits `exclude`**, and
+the base `tsconfig.json` excludes `"**/e2e/**"`. That silently dropped
+**`lib/e2e/seedG8League.ts` and `app/api/e2e/decision-os-proof-league/route.ts`**
+— two of the files this batch changes — out of the config's own `include`. tsc
+compiled the remaining seven, exited, and read exactly like a pass. "Zero errors
+in the changed files" was therefore an untested claim about two of them.
+
+The `--listFiles` control DID catch the absence and it was reported at the time;
+what did not happen was fixing it and re-running, so the claim shipped anyway.
+Caught in review by a concurrent session, and re-measured with an explicit
+`"exclude": ["node_modules", ".next-*"]` override:
+
+```
+compile set        1171 -> 2895 files
+seedG8League.ts                    ABSENT -> IN-SET
+decision-os-proof-league/route.ts  ABSENT -> IN-SET
+errors             4, all pre-existing, ZERO in any file this batch changes
+```
+
+**Positive control re-derived for the new config rather than inherited**, because
+the failure mode changed: planting `const E2E_PLAYER_SOURCE: number = '…'` in
+`seedG8League.ts` — the file that used to be invisible — makes the run report 3
+errors there. Restored byte-identical afterwards (`diff -q`, 0 NULs).
+
+The lesson is the one this repo already records twice: a check that cannot fail
+reads as a pass, and noticing a hole is not the same as closing it.
 
 **ESLint** on the changed files: 0 errors, 2 pre-existing warnings
 (`no-img-element` in `AfCoreShell`, an unrelated `exhaustive-deps` at
@@ -273,6 +300,17 @@ green baseline, so it cannot yet certify anything about navigation.
   repo.** `tsconfig.json`'s `exclude` carries `"**/e2e/**"`, so the fixture
   changes in this batch are outside every `tsc` invocation here — confirmed with
   `--listFiles`. Same family as the standing "tests are never typechecked" note.
+  **This batch's fixture code has now been checked under an explicit `exclude`
+  override and is clean**, but nothing in the repo will keep it that way: the
+  next change to either file is unchecked again unless someone repeats the
+  override by hand.
+
+- ⚠ **The overlay proof pins ONE viewport** (`390×844`), plus a 900px pass for
+  the backdrop scenario. The stack behaviour it measures is not width-dependent —
+  the lock, the stack, inertness and focus are the same at every size — but the
+  tray only exists below 721px and the Comms drawer only overlays below 1200px,
+  so a 320/360/390/430 sweep would need the runner parameterised over widths the
+  way `mobile-my-team-browser-proof.cjs` already is. Not done here.
 - **WebKit rejects Next's RSC prefetch** (`?_rsc=…`) on this dev origin as a
   cross-origin fetch. It happens on navigation whether or not an overlay was ever
   opened. The proof exempts exactly that string pair and reports the count as a
