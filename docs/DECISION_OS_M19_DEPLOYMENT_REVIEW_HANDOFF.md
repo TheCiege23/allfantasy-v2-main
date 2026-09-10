@@ -14,8 +14,8 @@ correction. It ships no schema, no migration, no worker, no route, and flips no 
 | Repository | `TheCiege23/allfantasy-v2-main` |
 | Branch | `feat/decision-os-milestone-19-window` |
 | Base | `origin/main` @ `1a43ebbd8d338a59d297a0ec46fc3f8a0ec2a3a8` |
-| Commit | *(filled in below at push time)* |
-| PR | *(filled in below at push time)* |
+| Commit | `7cf881cd0abad6619cd8dc3b00556001d5196135` |
+| PR | https://github.com/TheCiege23/allfantasy-v2-main/pull/694 |
 
 The two divergent M19 branches were unified here: `decision-os-m19-pure-foundations`
 (Batch 19A) was cherry-picked onto this branch so a reviewer reads **one** branch, not two.
