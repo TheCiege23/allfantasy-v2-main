@@ -93,6 +93,26 @@ export function resolveTeamState(facts: TeamStateFacts): TeamStateVerdict {
   // lifecycle === 'CURRENT' from here.
 
   /*
+   * 🛑 ELIMINATION IS JUDGED BEFORE THE MANAGER AXIS, AND THE ORDER IS LOAD-BEARING.
+   *
+   * The guillotine writer sets THREE fields in one statement — `lifecycleState: 'CURRENT'`,
+   * `eliminatedAt: <now>`, `managerKind: 'VACANT'` — because elimination legitimately vacates the
+   * seat. Judged manager-first, the VACANT rule below fired and refused the very team the
+   * elimination rule exists to resolve.
+   *
+   * ⚠ AND EVERY TEST MISSED IT, BECAUSE EACH ONE VARIED ONE FIELD. The original elimination cases
+   * all used `managerKind: 'HUMAN'`, so a vacant seat and an eliminated team never met. A state
+   * written as a combination has to be TESTED as one; varying a single axis at a time cannot see a
+   * defect that needs two. Caught in review against the real writer, not by this suite.
+   *
+   * ⚠ ELIMINATION IS NOT ARCHIVAL. A knocked-out guillotine or survivor team is still one of the
+   * league's current franchises, with a real record and roster — which is exactly the evidence a
+   * 'rebuilding' verdict is made of. Archival still outranks it: an ARCHIVED row has already
+   * refused above, so a team that is both is refused on the axis that means "gone".
+   */
+  if (facts.eliminatedAt != null) return { resolvable: true, eliminated: true }
+
+  /*
    * Same reasoning one axis over: an unclassified manager must never silently read as HUMAN.
    */
   if (manager === 'UNKNOWN') return { resolvable: false, gap: TEAM_GAP_MANAGER_UNKNOWN }
@@ -116,11 +136,5 @@ export function resolveTeamState(facts: TeamStateFacts): TeamStateVerdict {
    * one line and cannot happen by accident.
    */
 
-  /*
-   * ⚠ ELIMINATION IS NOT ARCHIVAL, AND IT DOES NOT BLOCK RESOLUTION. A guillotine or survivor team
-   * that is out of the competition is still one of the league's current franchises, with a real
-   * record and a real roster — which is exactly the evidence a 'rebuilding' verdict is made of.
-   * It is reported so a consumer can label it, never used to refuse.
-   */
-  return { resolvable: true, eliminated: facts.eliminatedAt != null }
+  return { resolvable: true, eliminated: false }
 }

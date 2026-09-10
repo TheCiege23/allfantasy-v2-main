@@ -165,3 +165,84 @@ describe('the enum mirror, and the signal that it is time to wire the seam', () 
     expect(membersOf('LeagueTeamManagerKind').sort()).toEqual([...KNOWN_MANAGER_KINDS].sort())
   })
 })
+
+/**
+ * The eliminated-team shape AS THE GUILLOTINE ACTUALLY WRITES IT, confirmed against the committed
+ * Batch A tree by the session that owns that writer.
+ *
+ * 🛑 THE FIRST VERSION OF THIS FILE COULD NOT HAVE CAUGHT THIS. Every elimination case it tested
+ * used `managerKind: 'HUMAN'`, so the VACANT rule never met an eliminated team and the rule-order
+ * bug was invisible. The writer sets THREE fields together — `lifecycleState: 'CURRENT'`,
+ * `eliminatedAt: <now>`, `managerKind: 'VACANT'` — because elimination legitimately vacates the
+ * seat. Testing a state one field at a time cannot see a defect that needs two of them.
+ */
+describe('an eliminated team, in the exact shape the guillotine writes', () => {
+  const guillotined = {
+    lifecycleState: 'CURRENT' as const,
+    managerKind: 'VACANT' as const,
+    eliminatedAt: new Date('2026-11-15T00:00:00Z'),
+  }
+
+  /*
+   * ⚠ ELIMINATION IS CHECKED BEFORE THE MANAGER AXIS, AND THE ORDER IS THE WHOLE FIX. A vacant
+   * seat is normally a contradiction against a claim — but for an eliminated team it is the
+   * EXPECTED consequence, written by the same statement that set `eliminatedAt`. Judging the
+   * manager axis first turned a coherent state into a refusal.
+   */
+  it('resolves, rather than refusing on the vacated seat', () => {
+    expect(resolveTeamState(guillotined)).toEqual({ resolvable: true, eliminated: true })
+  })
+
+  it('a vacant seat WITHOUT elimination still refuses — the contradiction rule is intact', () => {
+    expect(resolveTeamState({ ...guillotined, eliminatedAt: null }))
+      .toEqual({ resolvable: false, gap: TEAM_GAP_SEAT_VACANT })
+  })
+
+  it('an UNKNOWN manager on an eliminated team also resolves', () => {
+    expect(resolveTeamState({ ...guillotined, managerKind: 'UNKNOWN' }))
+      .toEqual({ resolvable: true, eliminated: true })
+  })
+
+  it('but an ARCHIVED eliminated team still refuses — lifecycle outranks elimination', () => {
+    expect(resolveTeamState({ ...guillotined, lifecycleState: 'ARCHIVED' }))
+      .toEqual({ resolvable: false, gap: TEAM_GAP_ARCHIVED })
+  })
+
+  it('and an unrecognised lifecycle still fails closed, elimination notwithstanding', () => {
+    expect(resolveTeamState({ ...guillotined, lifecycleState: 'SUSPENDED' }))
+      .toEqual({ resolvable: false, gap: TEAM_GAP_STATE_UNRECOGNISED })
+  })
+})
+
+/**
+ * 🛑 A LIMITATION THIS RESOLVER CANNOT FIX, PINNED SO IT IS NOT MISTAKEN FOR WORKING.
+ *
+ * The adapter reaches a team by `claimedByUserId = <caller>`. The guillotine writer sets
+ * `claimedByUserId: null` and `platformUserId: null` when it eliminates. So once elimination
+ * actually fires, THERE IS NO CLAIM LEFT and the adapter can never reach that row — the
+ * "eliminated resolves" path above is correct and, through the current lookup, unreachable.
+ *
+ * ⚠ IT IS MASKED TODAY, WHICH IS WHY IT NEEDS PINNING RATHER THAN FIXING BY GUESS. That writer's
+ * `where` keys on `externalId`, which matches ZERO rows in production — measured across 3,419
+ * `league_teams` rows by the session that owns it, and reported as a separate id-space blocker
+ * (`externalId` holds a `Roster.id` uuid for canonically-created leagues and a slot number for
+ * provider-imported ones). When that key is fixed, elimination begins firing and this seam loses
+ * those users SILENTLY: no error, no gap, just a team the adapter stops finding.
+ *
+ * Two ways out, and the choice is not this module's to make: give the adapter a fallback identity
+ * path that does not depend on a live claim, or have the elimination writer stop nulling it.
+ * Recorded here so whoever wires the seam meets the decision rather than the symptom.
+ */
+describe('what the resolver decides is not the same as what the adapter can reach', () => {
+  it('resolves an eliminated team that the current lookup could never hand it', () => {
+    // The resolver is correct in isolation...
+    expect(resolveTeamState({
+      lifecycleState: 'CURRENT', managerKind: 'VACANT', eliminatedAt: new Date(),
+    })).toEqual({ resolvable: true, eliminated: true })
+
+    // ...and the row it describes has no claim, which is the only key the adapter looks up by.
+    // Pinned as a documented gap, not asserted as working behaviour.
+    const rowAsWritten = { claimedByUserId: null, platformUserId: null }
+    expect(rowAsWritten.claimedByUserId).toBeNull()
+  })
+})
