@@ -702,7 +702,14 @@ function requiresLeagueGrounding(args: {
 function describeLeagueGroundingFailure(reason: ChimmyLeagueGroundingFailure): string {
   switch (reason) {
     case 'not_member':
-      return 'I can see that league exists, but your account is not a member of it, so I cannot read its rosters. If you just imported it, claim your team and ask again.'
+      /*
+       * 🛑 THIS USED TO SAY "I can see that league exists, but your account is
+       * not a member of it", WHICH IS AN EXISTENCE ORACLE. A stranger could
+       * enumerate ids and learn which are real leagues from the wording alone.
+       * `not_member` and `not_found` now read identically to the caller; the
+       * distinction is still known internally, it is simply not published.
+       */
+      return 'I could not open that league for your account. If it is yours and you just imported it, claim your team and ask again.'
     case 'not_found':
       return 'I could not find that league. If you picked it from the league list, it may be a tournament or a legacy board rather than a synced league — pick a synced league and ask again.'
     case 'anonymous':
@@ -1238,10 +1245,14 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json(
       {
         ...buildLeagueGroundingErrorPayload(),
+        /*
+         * ⚠ NO `leagueId` AND NO `groundingReason`. Echoing the id back confirms
+         * it addresses something, and the reason code distinguishes "not yours"
+         * from "not real" — together they are an enumeration oracle. The reason
+         * is still available in logs, where the caller cannot read it.
+         */
         details: {
           message: describeLeagueGroundingFailure(leagueGrounding.reason),
-          leagueId,
-          groundingReason: leagueGrounding.reason,
         },
       },
       { status: leagueGrounding.reason === 'error' ? 503 : 412 }
@@ -1522,10 +1533,19 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     })
   }
 
-  if (leagueId && userId && isLeagueDataUsageQuestion(message)) {
+  /*
+   * 🛑 SAME DEFECT AS THE INSIGHT BUNDLE, AND A LARGER PAYLOAD.
+   * `buildLeagueSportsGroundingPacket` performs NO membership check —
+   * `resolveLeagueMembership` does not appear in that module, and its `userId`
+   * is used only to locate the caller's own team WITHIN the league
+   * (`claimedByUserId: userId`), never to decide whether they may see it. It
+   * reads name, settings, scoring, roster and draft state and this route
+   * serializes the result into the prompt.
+   */
+  if (leagueSnapshot && userId && isLeagueDataUsageQuestion(message)) {
     try {
       const packet = await buildLeagueSportsGroundingPacket({
-        leagueId,
+        leagueId: leagueSnapshot.id,
         userId,
         sport: sport ?? undefined,
         season: season ?? undefined,
@@ -1574,8 +1594,31 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       ? parseScreenshotWithVision(imageFile, message)
       : Promise.resolve(undefined)
   const insightTask: Promise<{ summary?: string; sources: string[] } | undefined> =
-    leagueId && insightType
-      ? getInsightBundle(leagueId, insightType, {
+    /*
+     * 🛑 THE MEMBERSHIP-AUTHORIZED ID, NOT THE REQUEST FIELD.
+     *
+     * This guard was the raw request field, and that field is
+     * `formData.get('leagueId')` — a value the client sends, not one anybody
+     * verified. `getInsightBundle` declares no `userId` parameter and
+     * `lib/ai-simulation-integration/AIInsightRouter.ts` contains zero
+     * occurrences of one, so it read matchup predictions, playoff odds,
+     * warehouse summaries and a league settings summary for whatever id it was
+     * handed — and the result was placed in the prompt.
+     *
+     * ⚠ THE EXISTING REFUSAL DID NOT COVER IT, AND THE GAP IS EXACTLY
+     * MEASURABLE. `requiresLeagueGrounding` forces grounding when `insightType`
+     * is trade, waiver or dynasty. `InsightType` has SIX values. For `matchup`,
+     * `playoff` or `draft`, with no `teamId` and a message tripping none of the
+     * phrase patterns, nothing refused and the raw field flowed straight
+     * through.
+     *
+     * `leagueSnapshot` is `leagueGrounding.ok ? leagueGrounding.snapshot : null`
+     * — it exists only because `loadLeagueGroundingForUser` proved membership.
+     * Reading its id closes this by construction rather than by adding another
+     * conditional a later edit could get wrong.
+     */
+    leagueSnapshot && insightType
+      ? getInsightBundle(leagueSnapshot.id, insightType, {
           teamId,
           season,
           week,
@@ -1737,9 +1780,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       : Promise.resolve(null)
 
   const leagueSportsGroundingTask: Promise<{ serialized: string; packet: Awaited<ReturnType<typeof buildLeagueSportsGroundingPacket>> } | null> =
-    leagueId && userId
+    leagueSnapshot && userId
       ? buildLeagueSportsGroundingPacket({
-          leagueId,
+          leagueId: leagueSnapshot.id,
           userId,
           sport: sport ?? undefined,
           season: season ?? undefined,
