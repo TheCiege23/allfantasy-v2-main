@@ -18233,3 +18233,64 @@ model CommissionerReportRun {
   @@index([leagueId, templateId, generatedAt])
   @@map("commissioner_report_runs")
 }
+
+/// The immutable regular-season Max PF snapshot a rookie draft order is built on.
+///
+/// 🛑 TWO TABLES, NOT THREE, AND THE REASON IS IMMUTABILITY RATHER THAN BREVITY. Normalised
+/// per-team value rows were considered and rejected: a correction would then either MUTATE the
+/// row — destroying the original computed value the brief requires to stay recoverable — or need a
+/// second "original" column, which is a JSON blob with extra steps. Here `values` is written once
+/// and never updated, and `LeagueMaxPfFreezeCorrection` is an append-only log beside it, so the
+/// effective number is (computed + corrections) and BOTH halves survive.
+///
+/// Per-team SQL querying was the other argument for normalising, and it does not apply: a freeze is
+/// always read as a whole, because ranking 32 teams needs all 32 values.
+model LeagueMaxPfFreeze {
+  id                     String                        @id @default(cuid())
+  leagueId               String                        @db.VarChar(64)
+  season                 Int
+  /// REGULAR_SEASON_COMPLETE for this league, as a week number. Never assumed to be 14.
+  regularSeasonFinalWeek Int
+  /// 'optimal_lineup_max_pf' | 'actual_points_for' — see lib/commissioner-os/efl/maxPfFreeze.ts.
+  metric                 String                        @db.VarChar(48)
+  /// Which engine produced it, e.g. 'maxpf-optimal-v1+exact-transversal-matroid-v1'.
+  computationVersion     String                        @db.VarChar(96)
+  /// MaxPfFreezeRow[] — [{ teamId, value, weeksCounted, source }]. WRITTEN ONCE, NEVER UPDATED.
+  values                 Json
+  /// FNV-1a over (league, season, finalWeek, metric, computationVersion, sorted rows).
+  fingerprint            String                        @db.VarChar(32)
+  /// Where the numbers came from, for audit: scoring source, eligibility source, unmatched ids.
+  provenance             Json?
+  createdByUserId        String?                       @db.VarChar(64)
+  createdAt              DateTime                      @default(now())
+  corrections            LeagueMaxPfFreezeCorrection[]
+
+  /// 🛑 THE FREEZE IS UNIQUE PER (league, season, metric, computationVersion). A metric or engine
+  /// change produces a NEW row rather than overwriting the old one, so two numbers that both call
+  /// themselves Max PF can never occupy the same slot and be silently compared.
+  @@unique([leagueId, season, metric, computationVersion], name: "uniq_max_pf_freeze")
+  @@index([leagueId, season])
+  @@map("league_max_pf_freezes")
+}
+
+/// An explicit, audited commissioner override of one team's frozen value.
+///
+/// ⚠ APPEND-ONLY. Nothing here updates `LeagueMaxPfFreeze.values`; the effective value is derived by
+/// applying the latest correction per team on read. That is what keeps the originally computed
+/// number recoverable, and what lets Commissioner OS explain why a draft slot moved.
+model LeagueMaxPfFreezeCorrection {
+  id                String            @id @default(cuid())
+  freezeId          String            @db.VarChar(64)
+  /// `LeagueTeam.id` — the AllFantasy cuid, not a provider roster id.
+  teamId            String            @db.VarChar(64)
+  previousValue     Float
+  value             Float
+  reason            String
+  correctedByUserId String            @db.VarChar(64)
+  correctedAt       DateTime          @default(now())
+  freeze            LeagueMaxPfFreeze @relation(fields: [freezeId], references: [id], onDelete: Cascade)
+
+  @@index([freezeId])
+  @@index([freezeId, teamId])
+  @@map("league_max_pf_freeze_corrections")
+}
