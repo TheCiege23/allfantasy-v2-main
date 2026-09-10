@@ -57,7 +57,7 @@ function fakePrisma(over: {
        * ⚠ THE PORT'S OWN IDENTITY READ, AND OMITTING IT COST A DIAGNOSIS. `createWindowFactsPrismaPort`
        * calls `leagueTeam.findFirst` for team/manager identity. A double that defines only
        * `findMany` throws `findFirst is not a function` inside the port — which the adapter's
-       * catch correctly reported as `window_adapter_read_failed`, i.e. the test double's hole
+       * catch correctly reported as a named read failure, i.e. the test double's hole
        * arrived looking exactly like a database outage. Doubles have to cover every method the
        * subject reaches, or they test the double.
        */

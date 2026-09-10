@@ -5,7 +5,7 @@ import { deriveAvailabilityCategory } from '@/lib/decision-os/world/injuryEnrich
 import { REDRAFT_WINDOW_COEFFICIENTS } from './window'
 import { resolveWindowDecision, unresolvableWindowDecision, type WindowDecision } from './windowDecision'
 import type { RestOfSeasonStrength, WindowFactsScope } from './windowFacts'
-import { createWindowFactsPrismaPort } from './windowFactsPrismaPort'
+import { createWindowFactsPrismaPort, WindowPortReadError } from './windowFactsPrismaPort'
 
 /**
  * Resolve the REQUESTING team's competitive window for a redraft trade preview.
@@ -70,7 +70,31 @@ export const WINDOW_GAP_ARCHIVAL_UNPROVABLE = 'window_team_archival_state_unprov
 export const WINDOW_GAP_SCHEDULE_READ_FAILED = 'window_schedule_read_failed'
 export const WINDOW_GAP_ROSTER_READ_FAILED = 'window_roster_read_failed'
 export const WINDOW_GAP_PERIOD_UNRESOLVED = 'window_scheduled_period_unresolved'
+export const WINDOW_GAP_PROJECTION_READ_FAILED = 'window_projection_read_failed'
+export const WINDOW_GAP_MATCHUP_READ_FAILED = 'window_matchup_read_failed'
+export const WINDOW_GAP_FORECAST_READ_FAILED = 'window_forecast_read_failed'
+export const WINDOW_GAP_INJURY_READ_FAILED = 'window_injury_read_failed'
+/** Only for a throw the port could not attribute to a stage of its own. */
 export const WINDOW_GAP_EVIDENCE_READ_FAILED = 'window_evidence_read_failed'
+
+/**
+ * The port names the stage it failed at; this turns that into the caller-facing gap.
+ *
+ * ⚠ THE FALLBACK IS DELIBERATELY LAST AND DELIBERATELY BROAD. An unrecognised throw is reported
+ * as a generic evidence failure rather than being mapped to whichever stage seems likeliest —
+ * naming the wrong read is worse than admitting the read is unknown.
+ */
+function gapForPortError(e: unknown): string {
+  if (!(e instanceof WindowPortReadError)) return WINDOW_GAP_EVIDENCE_READ_FAILED
+  switch (e.stage) {
+    case 'identity': return WINDOW_GAP_TEAM_READ_FAILED
+    case 'matchup': return WINDOW_GAP_MATCHUP_READ_FAILED
+    case 'forecast': return WINDOW_GAP_FORECAST_READ_FAILED
+    case 'dynasty': return WINDOW_GAP_PROJECTION_READ_FAILED
+    case 'injury': return WINDOW_GAP_INJURY_READ_FAILED
+    default: return WINDOW_GAP_EVIDENCE_READ_FAILED
+  }
+}
 
 export interface RedraftWindowRequest {
   prisma: PrismaClient
@@ -157,8 +181,17 @@ function restOfSeasonLoader(
   season: number,
 ) {
   return async (_scope: WindowFactsScope): Promise<RestOfSeasonStrength | null> => {
+    /*
+     * ⚠ `droppedAt: null` — CURRENT ROSTERS, NOT EVERY PLAYER EVER ROSTERED. `RedraftRosterPlayer`
+     * RETAINS dropped rows, so without this the share sums a season-to-date union: a team that
+     * dropped a strong early-season player keeps his projected points, and every team's total is
+     * inflated by its own waiver churn. The distortion lands on both the numerator and the
+     * denominator, so it does not cancel — and it moves `futureBase` across the 0.62/0.38
+     * thresholds, which is a contender relabelled as rebuilding. 63 other reads in this repo
+     * filter it; these two were the exception.
+     */
     const rosterRows = await prisma.redraftRosterPlayer.findMany({
-      where: { roster: { seasonId } },
+      where: { roster: { seasonId }, droppedAt: null },
       select: { rosterId: true, playerId: true },
     })
     if (rosterRows.length === 0) return null
@@ -166,10 +199,21 @@ function restOfSeasonLoader(
     const playerIds = [...new Set(rosterRows.map(r => r.playerId).filter((p): p is string => !!p))]
     if (playerIds.length === 0) return null
 
+    /*
+     * ⚠ UNBOUNDED WITHOUT `distinct`. This model accumulates a row per player per recompute, so by
+     * late season an unfiltered fetch of every rostered player's history is tens of thousands of
+     * rows on a route that re-prices as a manager clicks. `distinct` + a playerId-major `orderBy`
+     * is DISTINCT ON semantics: newest row per player.
+     *
+     * The JS dedupe below STAYS, and not as belt-and-braces theatre — Prisma's `distinct` is not
+     * guaranteed to push down to SQL on every connector/version, and if it resolves in memory the
+     * loop is what still guarantees newest-per-player. Correctness does not depend on which.
+     */
     const projections = await prisma.aFProjectionSnapshot.findMany({
       where: { playerId: { in: playerIds }, season },
       select: { playerId: true, rosProjection: true, rosWeeksRemaining: true, computedAt: true },
-      orderBy: { computedAt: 'desc' },
+      orderBy: [{ playerId: 'asc' }, { computedAt: 'desc' }],
+      distinct: ['playerId'],
     })
 
     /* Newest computed row per player wins; the `desc` order makes the first seen the newest. */
@@ -264,7 +308,18 @@ export async function resolveRedraftTeamWindow(req: RedraftWindowRequest): Promi
    * the exact conflation this adapter exists to prevent.
    */
   const partialScope = { leagueId, season, week }
-  const refuse = (gap: string) => unresolvableWindowDecision(partialScope, [gap], { now })
+  /*
+   * 🛑 THE COEFFICIENT SET IS PASSED, AND OMITTING IT SILENTLY UNDID THIS BATCH'S OWN FIX.
+   * `unresolvableWindowDecision` defaults to `DEFAULT_WINDOW_COEFFICIENTS`, whose horizon is
+   * 'dynasty', and `refusedDecision` writes `evidence.format` FROM the coefficients it was given.
+   * So every adapter-level refusal in the redraft flow — period, league, identity, schedule,
+   * roster — reported `format: 'dynasty'`: the exact field added in this commit to tell a reader
+   * which horizon a league was judged over, answering wrong for every redraft refusal. Verified
+   * before the fix: a missing-league refusal came back `evidence.format=dynasty
+   * coefficients.version=window-structural-dynasty-1`.
+   */
+  const refuse = (gap: string) =>
+    unresolvableWindowDecision(partialScope, [gap], { now, coefficients: REDRAFT_WINDOW_COEFFICIENTS })
 
   if (!Number.isSafeInteger(week) || week < 1) return refuse(WINDOW_GAP_PERIOD_UNRESOLVED)
 
@@ -294,12 +349,35 @@ export async function resolveRedraftTeamWindow(req: RedraftWindowRequest): Promi
     .filter(w => Number.isSafeInteger(w) && w >= 1)
 
   const rosterRead = await stage(WINDOW_GAP_ROSTER_READ_FAILED, () =>
-    prisma.redraftRosterPlayer.findMany({ where: { rosterId: proposerRosterId }, select: { playerId: true } }),
+    // Same reason as the league-wide read: a dropped player is not on this roster, and counting
+    // him drags injury COVERAGE and the unavailable SHARE toward whoever churned most.
+    prisma.redraftRosterPlayer.findMany({
+      where: { rosterId: proposerRosterId, droppedAt: null }, select: { playerId: true },
+    }),
   )
   if (!rosterRead.ok) return refuse(rosterRead.gap)
   const rosterPlayerIds = [...new Set(
     rosterRead.value.map(r => (typeof r.playerId === 'string' ? r.playerId.trim() : '')).filter(Boolean),
   )]
+
+  /*
+   * 🛑 COMPUTED ONCE PER REQUEST, NOT ONCE PER LOOKBACK WEEK. `resolveWindowDecision` assembles
+   * facts for each of WINDOW_PERSISTENCE_WEEKS weeks, and every redraft assembly calls
+   * `port.restOfSeason`. Because the loader ignores the week entirely — the rest of the season is
+   * the same quantity whichever prior week is being reconstructed — that fired the league-wide
+   * roster read and the whole-league projection scan THREE TIMES for byte-identical data.
+   * Measured before this change: `rosterPlayer:LEAGUE-WIDE` 3, `aFProjectionSnapshot` 3.
+   *
+   * ⚠ AND HOISTING IT BUYS SOMETHING BESIDES COST: the projection read now has its OWN failure
+   * stage. Inside the assembler it ran within a `Promise.all` alongside matchups, forecast and
+   * injuries, so a throw could only be reported as the broad `window_evidence_read_failed`. Out
+   * here it is attributable, which is what a stage-specific projection failure was asked for.
+   */
+  const rosRead = await stage(WINDOW_GAP_PROJECTION_READ_FAILED, () =>
+    restOfSeasonLoader(prisma, seasonId, proposerRosterId, season)({ leagueId, teamId: team.externalId, season, week }),
+  )
+  if (!rosRead.ok) return refuse(rosRead.gap)
+  const restOfSeason = rosRead.value
 
   const port = createWindowFactsPrismaPort({
     prisma,
@@ -307,19 +385,19 @@ export async function resolveRedraftTeamWindow(req: RedraftWindowRequest): Promi
     sport,
     rosterPlayerIds,
     loadAvailability: availabilityLoader(prisma),
-    loadRestOfSeason: restOfSeasonLoader(prisma, seasonId, proposerRosterId, season),
+    // Already resolved above; the port hands back the one value rather than re-reading per week.
+    loadRestOfSeason: async () => restOfSeason,
   })
 
   /*
-   * ⚠ THE EVIDENCE READS ARE WRAPPED ONE STAGE COARSER, AND THAT IS STATED RATHER THAN HIDDEN.
-   * Matchup, forecast, projection and injury reads run inside the assembler's `Promise.all`, so a
-   * throw there cannot be attributed to a single one from out here without unwinding that
-   * concurrency. It is reported as an evidence-stage failure rather than guessed at — naming the
-   * wrong stage would be worse than naming a broad one, and every stage this adapter DOES own is
-   * named exactly.
+   * ⚠ AN EARLIER REVISION REPORTED ALL OF THESE AS ONE BROAD EVIDENCE FAILURE, ON THE REASONING
+   * THAT CONCURRENCY MADE THEM UNATTRIBUTABLE. That was a rationalisation: the port knows which
+   * read it was in, and it now says so on the error. Every one of the seven named stages is
+   * reported specifically.
    */
-  const resolved = await stage(WINDOW_GAP_EVIDENCE_READ_FAILED, () =>
-    resolveWindowDecision(
+  let resolved: Awaited<ReturnType<typeof resolveWindowDecision>>
+  try {
+    resolved = await resolveWindowDecision(
       { leagueId, teamId: team.externalId, season, week },
       port,
       {
@@ -328,8 +406,14 @@ export async function resolveRedraftTeamWindow(req: RedraftWindowRequest): Promi
         coefficients: REDRAFT_WINDOW_COEFFICIENTS,
         ...(scheduledPeriods.length ? { scheduledPeriods } : {}),
       },
-    ),
-  )
-  if (!resolved.ok) return refuse(resolved.gap)
-  return resolved.value
+    )
+  } catch (e) {
+    /*
+     * ⚠ ATTRIBUTED, NOT GUESSED. The matchup, forecast, dynasty and injury reads run concurrently
+     * inside the assembler, so a plain try/catch out here could only say "something failed". The
+     * port carries its own stage on the error, which is what makes a specific gap honest.
+     */
+    return refuse(gapForPortError(e))
+  }
+  return resolved
 }

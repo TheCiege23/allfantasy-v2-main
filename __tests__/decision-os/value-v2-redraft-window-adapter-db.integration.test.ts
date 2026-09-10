@@ -196,8 +196,22 @@ describe.skipIf(NO_DB)('the redraft adapter against real rows', () => {
     requireMatchups(ctx)
     const d = await resolveRedraftTeamWindow(req())
 
-    // Guard the guard: a refusal here would make every assertion below vacuous.
-    expect(d.gaps).not.toContain('window_adapter_read_failed')
+    /*
+     * Guard the guard: a refusal here would make every assertion below vacuous.
+     *
+     * ⚠ THIS ASSERTION USED TO NAME `window_adapter_read_failed`, A STRING THIS BATCH RETIRED.
+     * Nothing emitted it any more, so `not.toContain` was true by construction and would have
+     * stayed green through any real refusal — a check that cannot fail, in a line whose comment
+     * claimed it was guarding. Renaming a constant silently disarms every test that hard-codes
+     * its old value, because a string literal has no compiler to answer to.
+     */
+    for (const gap of [
+      'window_league_read_failed', 'window_team_identity_read_failed',
+      'window_schedule_read_failed', 'window_roster_read_failed',
+      'window_projection_read_failed', 'window_evidence_read_failed',
+    ]) {
+      expect(d.gaps).not.toContain(gap)
+    }
     expect(d.state).not.toBe('refused')
     expect(d.status).not.toBeNull()
 
