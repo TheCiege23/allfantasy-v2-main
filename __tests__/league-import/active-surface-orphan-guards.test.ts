@@ -88,6 +88,37 @@ describe('LOOKUP maps deliberately keep archived teams', () => {
   })
 })
 
+describe('a read serving BOTH a current and a historical consumer filters at the CONSUMER', () => {
+  it('BroadcastModeEngine reads all teams and filters only the standings', () => {
+    /*
+     * 🛑 THE REGRESSION THIS PASS INTRODUCED AND THEN CAUGHT. One `teams` array feeds two jobs
+     * here: the CURRENT standings, and the identity maps that resolve `dramaEvents` and
+     * `rivalries` — which are historical and can name a team that has since left. Filtering the
+     * QUERY starved the maps, so a drama beat about a departed team rendered against an
+     * unresolvable id.
+     *
+     * The rule this pins: when one read serves both a current and a historical consumer, the
+     * query must stay unfiltered and the filter must sit on the current consumer.
+     */
+    const src = read('lib', 'broadcast-engine', 'BroadcastModeEngine.ts')
+    /* The query is unfiltered... */
+    expect(src).toMatch(/prisma\.leagueTeam\.findMany\(\{\s*\n\s*where: \{ leagueId \},/)
+    expect(src).not.toMatch(/ACTIVE_TEAM_WHERE/)
+    /* ...the identity maps see every team... */
+    expect(src).toMatch(/const teamById = new Map\(teams\.map/)
+    expect(src).toMatch(/const teamByExternalId = new Map\(teams\.map/)
+    /* ...and only the standings are narrowed. */
+    expect(src).toMatch(/standings: BroadcastStandingRow\[\] = selectActiveTeams\(teams\)\.map/)
+  })
+
+  it('leagueHome keeps the unfiltered array available for anything else that needs it', () => {
+    const src = read('lib', 'core-app', 'leagueHome.ts')
+    /* The filter is a separate binding, not a rewrite of the query. */
+    expect(src).toMatch(/const teams = await prisma\.leagueTeam\.findMany/)
+    expect(src).toMatch(/const teamsActive = selectActiveTeams\(teams\)/)
+  })
+})
+
 describe('HISTORICAL surfaces never filter', () => {
   /*
    * Asserted as an ABSENCE, which is unusual and deliberate: the risk here is someone "fixing"

@@ -6,7 +6,7 @@ import { prisma } from '@/lib/prisma'
 import { listDramaEvents } from '@/lib/drama-engine/DramaQueryService'
 import { listRivalries } from '@/lib/rivalry-engine/RivalryQueryService'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
-import { ACTIVE_TEAM_WHERE } from '@/lib/league-import/activeTeams'
+import { selectActiveTeams } from '@/lib/league-import/activeTeams'
 import type {
   BroadcastPayload,
   BroadcastStandingRow,
@@ -35,9 +35,19 @@ export async function getBroadcastPayload(
   const sport = normalizeToSupportedSport(sportInput ?? league?.sport)
 
   const [teams, matchupFacts, dramaEvents, rivalries] = await Promise.all([
-    /* Broadcast mode presents the league as it stands now. */
+    /*
+     * 🛑 READ EVERY TEAM HERE, INCLUDING ARCHIVED — THE FILTER BELONGS ON THE STANDINGS ONLY.
+     *
+     * This one array feeds two different jobs: the CURRENT standings, and the identity maps
+     * that resolve `dramaEvents` and `rivalries` back to a name. Those are HISTORICAL — a
+     * rivalry or a drama beat can name a team that has since left the league — so filtering
+     * the query starved them and the event rendered against an unresolvable id.
+     *
+     * An earlier revision of this pass did exactly that. Filtering the QUERY is the wrong
+     * lever whenever one read serves both a current and a historical consumer.
+     */
     prisma.leagueTeam.findMany({
-      where: { ...ACTIVE_TEAM_WHERE, leagueId },
+      where: { leagueId },
       orderBy: [{ currentRank: 'asc' }, { pointsFor: 'desc' }, { wins: 'desc' }],
     }),
     getMatchupsForBroadcast(leagueId, requestedWeek ?? null),
@@ -53,7 +63,8 @@ export async function getBroadcastPayload(
     if (team.externalId) ownerNameByManagerId.set(team.externalId, team.ownerName)
   })
 
-  const standings: BroadcastStandingRow[] = teams.map((t, i) => ({
+  /* Standings are the CURRENT competition; the maps above deliberately keep archived teams. */
+  const standings: BroadcastStandingRow[] = selectActiveTeams(teams).map((t, i) => ({
     teamId: t.id,
     teamName: t.teamName,
     ownerName: t.ownerName,
