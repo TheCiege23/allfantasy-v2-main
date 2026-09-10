@@ -6,7 +6,6 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { listProfilesByLeague } from '@/lib/psychological-profiles/ManagerBehaviorQueryService'
 import { resolveProfileAccessForUser } from '@/lib/psychological-profiles/ProfileAccess'
-import { filterLabelsByDimension } from '@/lib/psychological-profiles/ProfileLabelResolver'
 import type { ProfileLabel } from '@/lib/psychological-profiles/types'
 import {
   getAllPlayers,
@@ -486,9 +485,7 @@ async function loadLegacyManagerPsychology(
       if (!isSelf && !access.canSeeOpponents) continue
 
       const trade = profile.evidenceSummary?.dimensions.trade
-      const labels = Array.isArray(profile.profileLabels)
-        ? filterLabelsByDimension(profile.profileLabels as ProfileLabel[], 'trade')
-        : []
+      const labels: ProfileLabel[] = []
       out.set(profile.managerId, {
         labels,
         tradesObserved: trade?.evidenceCount ?? 0,

@@ -1,4 +1,5 @@
 import React from 'react'
+import '@testing-library/jest-dom/vitest'
 import { render, screen, within } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import ManagerDnaCard from '@/components/decision-os/ManagerDnaCard'
@@ -25,44 +26,18 @@ const profile: ManagerDnaProfile = {
   completeness: 91,
 }
 
-describe('Manager DNA premium card', () => {
-  it('adapts completed manager DNA output without exposing internal ids or backend wording', () => {
+describe('Manager DNA compatibility card privacy', () => {
+  it.each(['dashboard', 'league', 'commissioner', 'team'] as const)('withholds supplied profiles on %s surfaces', variant => {
     const model = buildManagerDnaViewModel({ source: profile, now })
-
-    expect(model.primaryIdentity).toBe('Waiver Hawk')
-    expect(model.decisionStyle).toBe('Methodical')
-    expect(model.transactionStyle).toBe('Waiver Dominant')
-    expect(model.confidenceLabel).toBe('High')
-
-    render(<ManagerDnaCard profile={model} variant="dashboard" />)
-
-    const card = screen.getByTestId('manager-dna-card-dashboard')
-    expect(within(card).getByText('Waiver Hawk')).toBeInTheDocument()
-    expect(within(card).getByText('High confidence')).toBeInTheDocument()
-    expect(within(card).getByText('Supporting evidence')).toBeInTheDocument()
-    expect(within(card).getByText('Coaching focus')).toBeInTheDocument()
-    expect(card.textContent).not.toContain('manager-internal-123')
-    expect(card.textContent).not.toContain('league-internal-456')
-    expect(card.textContent).not.toMatch(/Decision OS|derivation|classifier|backend/i)
+    expect(model.primaryIdentity).toBe('Waiver Hawk') // Internal classifier/view adapter still works.
+    render(<ManagerDnaCard profile={model} variant={variant} />)
+    const card = screen.getByLabelText('Competitive Edge')
+    expect(within(card).getByText(/Decision-specific negotiation evidence is still being connected/)).toBeInTheDocument()
+    expect(card.textContent).not.toMatch(/Waiver Hawk|Methodical|Risk Taking|manager-internal|High confidence|waiver_wire_aggressor/)
   })
-
-  it('renders graceful insufficient data fallback', () => {
-    const model = buildManagerDnaViewModel({ source: null, now })
-
-    render(<ManagerDnaCard profile={model} variant="league" />)
-
-    const card = screen.getByTestId('manager-dna-card-league')
-    expect(within(card).getByText('Needs more history')).toBeInTheDocument()
-    expect(within(card).getByText('Low confidence')).toBeInTheDocument()
-    expect(within(card).getByText('Not enough manager history yet')).toBeInTheDocument()
-    expect(within(card).getByText(/Play a few more weeks/i)).toBeInTheDocument()
-  })
-
-  it('has an accessible card label and stable snapshot', () => {
-    const model = buildManagerDnaViewModel({ source: profile, now })
-    const { container } = render(<ManagerDnaCard profile={model} variant="team" compact />)
-
-    expect(screen.getByLabelText(/Manager DNA: Waiver Hawk/i)).toBeInTheDocument()
-    expect(container.firstChild).toMatchSnapshot()
+  it('shows the same honest feature status without a profile', () => {
+    render(<ManagerDnaCard profile={buildManagerDnaViewModel({ source: null, now })} />)
+    expect(screen.getByText(/No acceptance prediction is available here yet/)).toBeInTheDocument()
+    expect(screen.queryByText('Needs more history')).not.toBeInTheDocument()
   })
 })

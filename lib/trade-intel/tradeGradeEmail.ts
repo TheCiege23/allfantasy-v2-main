@@ -427,45 +427,9 @@ function gradeBands(provisional: boolean): string {
 
 export type TradeGradeEmail = { subject: string; html: string }
 
-/**
- * How these managers have traded before.
- *
- * Deliberately its own card, placed AFTER the grade reasoning. The grade is
- * arithmetic on player values; a trading pattern is a different kind of claim,
- * and blending the two would let a reputation quietly colour a number the reader
- * takes as objective. Anyone who has not traded enough to have a pattern is said
- * to have no pattern, not described as unremarkable.
- */
-function psychologyCard(psychology: TradePsychologyContext | null): string {
-  if (!psychology) return ''
-
-  const rows = psychology.sides
-    .map((side) => {
-      const body =
-        side.labels.length > 0
-          ? `<span style="color:${TEXT};font-weight:600">${escapeHtml(side.labels.join(' · '))}</span>` +
-            `<span style="color:${FAINT}"> — from ${side.tradeEvidenceCount} recorded trade action${
-              side.tradeEvidenceCount === 1 ? '' : 's'
-            }${side.confidence ? `, ${escapeHtml(side.confidence)} confidence` : ''}</span>`
-          : `<span style="color:${FAINT}">${escapeHtml(side.shortfall ?? 'Not enough trading history yet.')}</span>`
-      return `<div style="font-size:13px;line-height:1.6;color:${MUTED};margin-bottom:4px">${escapeHtml(
-        side.managerName
-      )}: ${body}</div>`
-    })
-    .join('')
-
-  return `
-    <tr>
-      <td style="padding:14px 16px;background:${CARD};border:1px solid ${BORDER};border-radius:14px;margin-top:12px">
-        <div style="font-size:10px;letter-spacing:0.09em;text-transform:uppercase;color:${FAINT};font-weight:700;margin-bottom:6px">
-          How these managers trade
-        </div>
-        ${rows}
-        <div style="font-size:11px;color:${FAINT};line-height:1.5;margin-top:8px">
-          Based on past trades in this league. This did not affect the grade above.
-        </div>
-      </td>
-    </tr>`
+/** Stored contexts may predate profile privacy; the render boundary also withholds them. */
+function psychologyCard(_psychology: TradePsychologyContext | null): string {
+  return ''
 }
 
 /**

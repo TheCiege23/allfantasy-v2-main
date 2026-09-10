@@ -581,54 +581,6 @@ export async function getCachedOpponentProfile(
   };
 }
 
-export function formatOpponentForPrompt(profile: OpponentProfile): string {
-  if (profile.confidence < 0.15) return '';
-
-  const t = profile.tendencies;
-  const lines: string[] = [
-    '',
-    '## OPPONENT TENDENCIES PROFILE',
-    `Manager: ${profile.displayName || profile.username || `Roster #${profile.rosterId}`}`,
-    `Confidence: ${Math.round(profile.confidence * 100)}% (based on ${profile.tradeCount} trades, ${profile.seasonsCovered} seasons)`,
-    '',
-    '### Behavioral Tendencies:',
-    `- Rookie Bias: ${Math.round(t.rookieBias * 100)}%`,
-    `- Risk Aversion: ${Math.round(t.riskAversion * 100)}%`,
-    `- Pick Preference: ${Math.round(t.pickPreference * 100)}%`,
-    `- Star Chasing: ${Math.round(t.starChasing * 100)}%`,
-    `- Trade Willingness: ${Math.round(t.tradeWillingness * 100)}%`,
-    `- Buy-Low Hunter: ${Math.round(t.buyLowHunter * 100)}%`,
-    `- Loyalty Factor: ${Math.round(t.loyaltyFactor * 100)}%`,
-    `- Consolidation Preference: ${Math.round(t.consolidationPreference * 100)}%`,
-    `- Veteran Lean: ${Math.round(t.veteranLean * 100)}%`,
-  ];
-
-  const posEntries = Object.entries(t.positionNeeds).sort((a, b) => b[1] - a[1]);
-  const needsList = posEntries.filter(([, v]) => v > 0.1).map(([p, v]) => `${p} (need: ${Math.round(v * 100)}%)`);
-  const surplusList = posEntries.filter(([, v]) => v <= 0).map(([p, v]) => `${p} (surplus: ${Math.round(Math.abs(v) * 100)}%)`);
-  if (needsList.length > 0) {
-    lines.push(`- Position Needs: ${needsList.join(', ')}`);
-  }
-  if (surplusList.length > 0) {
-    lines.push(`- Position Surplus: ${surplusList.join(', ')}`);
-  }
-
-  lines.push('');
-  lines.push(`### Trade Likelihood: ${profile.tradeLikelihood.overall}/100`);
-  if (profile.tradeLikelihood.reasons.length > 0) {
-    lines.push('Reasons: ' + profile.tradeLikelihood.reasons.join(' | '));
-  }
-
-  if (profile.pitchAngles.length > 0) {
-    lines.push('');
-    lines.push('### Recommended Pitch Angles:');
-    for (const angle of profile.pitchAngles.slice(0, 3)) {
-      lines.push(`- ${angle.angle} (${angle.effectiveness}%): ${angle.description}`);
-    }
-  }
-
-  lines.push('');
-  lines.push('IMPORTANT: Use these opponent tendencies to tailor your trade pitch. Frame the proposal in terms that appeal to THEIR psychology and preferences.');
-
-  return lines.join('\n');
+export function formatOpponentForPrompt(_profile: OpponentProfile): string {
+  return ''
 }

@@ -111,17 +111,14 @@ async function getLegacyContext(sleeperUsername: string) {
   const totalLosses = allRosters.reduce((sum, r) => sum + r.losses, 0);
   const championships = allRosters.filter(r => r.isChampion).length;
   const aiReport = user.aiReports[0];
-  const insights = aiReport?.insights as Record<string, unknown> | null;
+
 
   return {
     display_name: user.displayName,
     total_leagues: user.leagues.length,
     record: `${totalWins}-${totalLosses}`,
     championships,
-    archetype: insights?.archetype || 'Unknown',
     rating: aiReport?.rating || null,
-    trading_style: insights?.archetype === 'Trader' ? 'aggressive' : 
-                   insights?.archetype === 'Hoarder' ? 'conservative' : 'balanced',
   };
 }
 
@@ -172,9 +169,7 @@ Legacy Context (from DB - do not call external APIs):
 - Manager: ${legacyContext.display_name}
 - Career Record: ${legacyContext.record}
 - Championships: ${legacyContext.championships}
-- Archetype: ${legacyContext.archetype}
 - Legacy Rating: ${legacyContext.rating || 'Not rated'}
-- Trading Style: ${legacyContext.trading_style}
 `;
     }
 
@@ -335,7 +330,7 @@ Trade proposal:
             topTrends: aiMetaContext.topTrends?.slice(0, 3) ?? [],
           }
         : undefined,
-      legacy_context: legacyContext ? { included: true, archetype: legacyContext.archetype } : { included: false },
+      legacy_context: legacyContext ? { included: true } : { included: false },
     });
   } catch (error) {
     console.error('Trade evaluator error:', error);

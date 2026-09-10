@@ -297,35 +297,8 @@ function renderItem(item: unknown): string | null {
     return o.position ? `${who} (${String(o.position)})` : who
   }
 
-  // PsychologyProfileFact — labels plus only the scores that cleared their evidence floor.
-  if (typeof o.managerId === 'string' && Array.isArray(o.labels) && o.scores && typeof o.scores === 'object') {
-    const labels = (o.labels as unknown[]).filter((l): l is string => typeof l === 'string')
-    const sc = o.scores as Record<string, unknown>
-    // ⚠ ONLY NON-NULL SCORES ARE RENDERED. A null is "not enough evidence to say", and printing
-    // it as 0 would hand the model a measured-looking number for an absence — the exact failure
-    // `gateScores` nulls it to prevent.
-    const measured = Object.entries(sc)
-      .filter(([, v]) => typeof v === 'number')
-      .map(([k, v]) => `${k.replace(/Score$/, '')} ${fmt(v as number)}`)
-    const bits: string[] = []
-    if (labels.length) bits.push(labels.join(', '))
-    if (measured.length) bits.push(measured.join(' · '))
-    const unmeasured = Array.isArray(o.unmeasuredDimensions) ? (o.unmeasuredDimensions as string[]) : []
-    // Naming what is unmeasured lets an answer decline one read without hedging the whole profile.
-    if (unmeasured.length) bits.push(`no ${unmeasured.join('/')} read yet`)
-    /*
-     * R4b.5 — trajectory. Same rule as everything else in this branch: only render it when it says
-     * something. `hasTrajectory: false` is `summariseTrajectory`'s own honest refusal (one season,
-     * or nothing clears the evidence floor), and repeating that refusal here would just be noise —
-     * the label/score bits above already carry the CURRENT read.
-     */
-    const trajectory = o.trajectory as Record<string, unknown> | undefined
-    if (trajectory?.hasTrajectory === true && typeof trajectory.summary === 'string') {
-      bits.push(`trajectory: ${trajectory.summary}`)
-    }
-    const n = typeof o.evidenceCount === 'number' ? ` [${o.evidenceCount} obs]` : ''
-    return bits.length ? `manager ${o.managerId}${n}: ${bits.join(' — ')}` : null
-  }
+  // Internal profiles cannot be rendered, even if a future caller puts one in a different slice.
+  if (typeof o.managerId === 'string' && Array.isArray(o.labels) && o.scores) return null
 
   // ProjectionFact
   if (typeof o.playerName === 'string' && typeof o.points === 'number') {
@@ -542,10 +515,10 @@ export function serializeDecisionOsGroundingForPrompt(
      */
     ['IDP/kicker values', packet.idpKickerValues as GroundedSlice<unknown>],
     ['Roster value grade', packet.rosterValueGrade as GroundedSlice<unknown>],
-    ['Psychology consistency (cross-league/cross-sport)', packet.psychologyConsistency as GroundedSlice<unknown>],
+
     // R4b — manager behavioural profiles. Rendered like any other collection: bounded,
     // with the hidden count stated.
-    ['Manager psychology', packet.managerPsychology as GroundedSlice<unknown>],
+
     // The eight graded context slices (4.3). Rendered alongside the rest because a reader should
     // not have to know which subsystem produced a fact to know whether it is safe to use.
     ...(packet.contextFacts
@@ -629,19 +602,6 @@ export function serializeDecisionOsGroundingForPrompt(
    * decision and every psychology fact are already combined into one prompt, covers all three
    * today and whatever is bridged next without touching any of them.
    */
-  const hasDecision = [packet.lineupDecision, packet.waiverDecision, packet.commissionerHealthDecision].some(
-    (d) => d?.present,
-  )
-  if (hasDecision && packet.managerPsychology.present) {
-    lines.push('')
-    lines.push(
-      'Manager psychology may inform how you EXPLAIN a decision above — framing, not authority. ' +
-        'A decision\'s four answers, grade, and legality are already final; a behavioural label or ' +
-        'trajectory may motivate why a manager might make a move, never justify a different verdict ' +
-        'than the decision itself gives.',
-    )
-  }
-
   if (available.length === 0 && packet.gaps.length === 0) {
     // Neither available nor missing: nothing was requested. Say so rather than emitting a header
     // with no body, which reads to a model as an empty-but-authoritative source.

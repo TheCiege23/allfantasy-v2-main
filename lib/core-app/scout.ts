@@ -11,8 +11,13 @@ import { leagueDisplayName, type SectionState } from './leagueHome'
  * Scout — the first room of the War Room.
  *
  * "A place users could go to scout out the competition." Every manager in the
- * league, with what their behaviour over past seasons says about how they trade,
- * bid and take risk — and your next opponent pinned to the top of it.
+ * league, with league competition and coverage — and your next opponent pinned to
+ * the top of it.
+ *
+ * 🛑 IT NO LONGER RENDERS WHAT THEIR BEHAVIOUR SAYS ABOUT THEM, and that sentence
+ * used to be this file's opening promise. See the entitlement section below: raw
+ * characterisation is now withheld from every viewer, so the header states what
+ * the screen shows rather than what it once did.
  *
  * ── 🛑 THIS READS THE DECISION OS SEAM, IT DOES NOT REIMPLEMENT IT ──────────
  *
@@ -41,31 +46,38 @@ import { leagueDisplayName, type SectionState } from './leagueHome'
  * the roster of rivals look shorter than the league is, which is the same class
  * of lie as dropping an unnamed draft pick from the board.
  *
- * ── 🛑 THE ENTITLEMENT GATE IS NOT OPTIONAL, AND THIS FILE SHIPPED WITHOUT IT ──
+ * ── 🛑 THE MEMBERSHIP GATE IS NOT OPTIONAL, AND THIS FILE SHIPPED WITHOUT IT ──
  *
- * Manager psychology is asymmetric by design: YOUR OWN profile is a mirror and is
- * free; anyone else's is competitive intelligence about a real person and is sold
- * on Pro, War Room and Supreme. `ProfileAccess.ts` is the one place that decides,
- * and it exists because all five psych API routes were once completely
- * unauthenticated — any caller could read a character read on any named manager
- * in any league just by knowing a league id.
+ * `ProfileAccess.ts` is the one place that decides, and it exists because all five
+ * psych API routes were once completely unauthenticated — any caller could read a
+ * character read on any named manager in any league just by knowing a league id.
  *
  * The first version of this loader read `psychology-os` directly and handed back
  * every manager's labels, scores and trajectory to every caller. That is the same
  * hole, reopened from a new direction, and neither a typecheck nor a test would
- * have shown it. So:
+ * have shown it. So `resolveProfileAccessForUser` still decides MEMBERSHIP — a
+ * non-member gets nothing, because this loader takes a league id from the URL and
+ * must not assume the page gated it.
  *
- *   1. `resolveProfileAccessForUser` decides MEMBERSHIP and ENTITLEMENT. A
- *      non-member gets nothing — this loader takes a league id from the URL and
- *      must not assume the page gated it.
- *   2. A locked profile mirrors `redactForLock`: it still says the profile EXISTS
- *      and how much was observed, and reveals no labels, no scores and no
- *      trajectory. Coverage is not the premium part; characterisation is.
+ * ── 🛑 AND ENTITLEMENT NO LONGER OPENS THE CHARACTERISATION AT ALL ────────────
  *
- * ⚠ THE DECISION IS IMPORTED, NOT REIMPLEMENTED. What is written here is only the
- * PRESENTATION of that decision — which of three states a card is in. Re-deriving
- * "may this viewer see opponents" from plan names would be a second gate that
- * drifts from the first, which is how five routes came to be ungated.
+ * This section used to read "manager psychology is asymmetric by design: YOUR OWN
+ * profile is a mirror and is free; anyone else's is competitive intelligence about
+ * a real person and is sold on Pro, War Room and Supreme." That was the rule, and
+ * Milestone 32 replaces it: raw behavioural profiles are unavailable through every
+ * public API path, and a paid plan is not an exception to that. An entitlement
+ * decides who PAYS; it does not decide what counts as a raw dossier.
+ *
+ * ⚠ SO THE LOCKED STATE IS NOW UNCONDITIONAL, not a plan boundary. Every card with
+ * a profile behind it reports the same thing: the profile EXISTS, how much was
+ * observed, and nothing else. That is still `redactForLock`'s split — coverage
+ * crosses, characterisation does not — applied to everyone rather than to
+ * non-payers. Your own profile is withheld too, which is the part that changed.
+ *
+ * ⚠ THE DECISION IS STILL IMPORTED, NOT REIMPLEMENTED. Re-deriving "may this viewer
+ * see opponents" from plan names would be a second gate that drifts from the first,
+ * which is how five routes came to be ungated — so the entitlement fields are left
+ * unread here rather than reinterpreted.
  */
 
 /** One manager's psychological read, in the shape the screen renders. */
@@ -294,15 +306,22 @@ export async function getScoutData(leagueId: string, userId: string): Promise<Sc
     const fact = byManager.get(managerId)
 
     /*
-     * ⚠ `ownManagerIds` HOLDS BOTH `externalId` AND `id` FOR THE CALLER'S TEAMS,
-     * which is why this asks the set rather than comparing against
-     * `myManagerId`. A viewer with two claimed teams in one league — rare, but
-     * the schema allows it — would otherwise have one of them priced as an
-     * opponent's.
+     * 🛑 THE ENTITLEMENT BRANCH IS GONE, AND ITS ABSENCE IS THE POINT. Scout used to
+     * ask `isSelf || access.canSeeOpponents` and serve the full characterisation —
+     * labels, the five scores, trajectory — to whoever cleared it. Milestone 32 says
+     * raw behavioural profiles are unavailable through every public API path, and an
+     * entitlement is not an exception to that; it decides who PAYS, not what a raw
+     * dossier is. So no caller reaches the characterisation here, the manager
+     * themselves included.
+     *
+     * ⚠ THE MEMBERSHIP GATE ABOVE IS UNTOUCHED. Closing a data leak must not quietly
+     * relax a check that was already correct — `access.ok` still refuses a non-member
+     * outright, which is the hole all five psych routes once had.
+     *
+     * ⚠ AND COVERAGE SURVIVES WHERE CHARACTERISATION DOES NOT — the same split
+     * `redactForLock` makes. "44 observations" says nothing about the person; a label
+     * says everything. So `evidenceCount` still crosses and nothing else does.
      */
-    const isSelf = access.ownManagerIds.has(managerId)
-    const mayRead = isSelf || access.canSeeOpponents
-
     const profile: ScoutProfileState = !fact
       ? {
           available: false,
@@ -312,30 +331,12 @@ export async function getScoutData(leagueId: string, userId: string): Promise<Sc
               ? 'no manager has been profiled in this league yet — the profiler runs on a schedule and has not covered it'
               : 'this manager has no profile yet, though others in the league do',
         }
-      : !mayRead
-        ? {
-            available: false,
-            locked: true,
-            /*
-             * Coverage survives the lock and characterisation does not — the same
-             * split `redactForLock` makes. "44 observations" says nothing about
-             * the person; a label says everything.
-             */
-            evidenceCount: fact.evidenceCount,
-            reason: 'Manager psychology for other managers is a premium capability.',
-          }
-        : {
-            available: true,
-            data: {
-              labels: fact.labels,
-              scores: fact.scores,
-              evidenceCount: fact.evidenceCount,
-              unmeasuredDimensions: fact.unmeasuredDimensions.map(String),
-              anySufficient: fact.anySufficient,
-              trajectory: fact.trajectory,
-              updatedAt: fact.updatedAt,
-            },
-          }
+      : {
+          available: false,
+          locked: true,
+          evidenceCount: fact.evidenceCount,
+          reason: 'Open a trade, draft or waiver decision for Competitive Edge guidance.',
+        }
 
     return {
       managerId,

@@ -107,7 +107,6 @@ async function getLegacyContext(sleeperUsername: string) {
   const championships = allRosters.filter((r: { isChampion?: boolean | null }) => r.isChampion).length
 
   const aiReport = user.aiReports[0]
-  const insights = (aiReport?.insights as Record<string, unknown> | null) ?? null
 
   const recentLeagues = user.leagues
     .slice()
@@ -131,11 +130,7 @@ async function getLegacyContext(sleeperUsername: string) {
     win_percentage:
       totalWins + totalLosses > 0 ? Math.round((totalWins / (totalWins + totalLosses)) * 100) : 0,
     championships,
-    archetype: (insights?.archetype as string) || 'Unknown',
     rating: aiReport?.rating || null,
-    title: aiReport?.title || null,
-    strengths: (insights?.strengths as string[]) || [],
-    weaknesses: (insights?.weaknesses as string[]) || [],
     recent_leagues: recentLeagues,
   }
 }
@@ -247,13 +242,9 @@ You can classify any team using this logic:
 - Career Record: ${legacyContext.career_record} (${winPct}% win rate)
 - Championships: ${legacyContext.championships}
 - Total Leagues: ${legacyContext.total_leagues} across ${legacyContext.total_seasons} seasons
-- Archetype: ${legacyContext.archetype}
 - Legacy Rating: ${legacyContext.rating || 'Not yet rated'}/100
-- Title: ${legacyContext.title || 'Not assigned'}
 - Estimated Status: ${statusGuess}
 
-Strengths: ${legacyContext.strengths.join(', ') || 'Not identified'}
-Areas to improve: ${legacyContext.weaknesses.join(', ') || 'Not identified'}
 
 Recent League History:
 ${legacyContext.recent_leagues
@@ -623,7 +614,7 @@ export const POST = withApiUsage({ endpoint: "/api/ai/chat", tool: "AiChat" })(a
               legacy_context: {
                 included: true,
                 display_name: legacyContext.display_name,
-                archetype: legacyContext.archetype,
+
               },
               chimmy_context: chimmyContextMeta,
               rate_limit: { remaining: rl.remaining, retryAfterSec: rl.retryAfterSec },
@@ -703,7 +694,7 @@ export const POST = withApiUsage({ endpoint: "/api/ai/chat", tool: "AiChat" })(a
       legacy_context: {
         included: true,
         display_name: legacyContext.display_name,
-        archetype: legacyContext.archetype,
+
       },
       chimmy_context: chimmyContextMeta,
       rate_limit: { remaining: rl.remaining, retryAfterSec: rl.retryAfterSec },

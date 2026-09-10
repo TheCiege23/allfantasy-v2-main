@@ -13,9 +13,9 @@ export default function PsychologicalProfilesPage() {
       <section className="rounded-xl border border-white/10 bg-black/20 p-4">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
-            <h1 className="text-lg font-semibold text-white">Psychological Profiles</h1>
+            <h1 className="text-lg font-semibold text-white">Competitive Edge</h1>
             <p className="text-xs text-white/55">
-              Behavioral profiles for managers across draft, trade, waiver, and lineup actions.
+              Evaluate specific league decisions using supported evidence.
             </p>
           </div>
           <Link

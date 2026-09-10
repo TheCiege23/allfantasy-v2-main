@@ -3,7 +3,6 @@ import { getRivalryById } from '@/lib/rivalry-engine/RivalryQueryService'
 import { buildTimelineForRivalry } from '@/lib/rivalry-engine/RivalryTimelineBuilder'
 import { getRivalryTierLabel } from '@/lib/rivalry-engine/RivalryTierResolver'
 import { getRivalrySportLabel } from '@/lib/rivalry-engine/SportRivalryResolver'
-import { listProfilesByLeague } from '@/lib/psychological-profiles/ManagerBehaviorQueryService'
 import { listDramaEvents } from '@/lib/drama-engine/DramaQueryService'
 import { runUnifiedOrchestration } from '@/lib/ai-orchestration'
 import { buildEnvelopeForTool, formatToolResult, validateToolOutput } from '@/lib/ai-tool-layer'
@@ -58,14 +57,8 @@ export async function POST(
       return NextResponse.json({ error: 'Rivalry not found' }, { status: 404 })
     }
 
-    const [timeline, profileRows, linkedDrama] = await Promise.all([
+    const [timeline, linkedDrama] = await Promise.all([
       buildTimelineForRivalry(rivalryId),
-      listProfilesByLeague(leagueId, {
-        sport: rivalry.sport,
-        managerAId: rivalry.managerAId,
-        managerBId: rivalry.managerBId,
-        limit: 4,
-      }).catch(() => []),
       listDramaEvents(leagueId, {
         sport: rivalry.sport,
         limit: 50,
@@ -92,9 +85,6 @@ export async function POST(
       rivalry.eventCount && rivalry.eventCount > 0
         ? `The timeline includes ${rivalry.eventCount} recorded events (head-to-head matchups, close games, upsets, trades).`
         : 'History is still being collected for this pair.',
-      profileRows.length > 0
-        ? `Behavior profile context is available for ${profileRows.length} manager(s) in this rivalry.`
-        : 'Behavior profile context is limited for this pair.',
       linkedDrama.length > 0
         ? `${linkedDrama.length} linked drama storyline(s) reinforce this rivalry thread.`
         : 'No linked drama storyline has been recorded yet.',
@@ -117,12 +107,6 @@ export async function POST(
         intensityScore: rivalry.rivalryScore,
         rivalryTier: rivalry.rivalryTier,
         eventCount: rivalry.eventCount ?? 0,
-        profileContext: profileRows.map((p) => ({
-          managerId: p.managerId,
-          profileLabels: p.profileLabels,
-          activityScore: p.activityScore,
-          riskToleranceScore: p.riskToleranceScore,
-        })),
         linkedDrama: linkedDrama.slice(0, 5).map((d) => ({
           id: d.id,
           dramaType: d.dramaType,
