@@ -323,6 +323,105 @@ describe('pickPrimaryBookmaker', () => {
   })
 })
 
+describe('side assignment — identifiers are matched by CODE, never by substring', () => {
+  /*
+   * 🛑 REGRESSION. `sideOf` used to do `value.includes(teamName)`, and the writer
+   * passes ABBREVIATIONS ("KC", "NE") into those parameters. Measured before the
+   * fix: with home="NE" and away="NO", the value "New Orleans Saints" matched
+   * "ne" via the word "new", so BOTH values classified as home, `moneylineAway`
+   * came back null, and the away team's price occupied the home field. A wrong
+   * side inverts homeWinProbability and both implied team totals.
+   */
+  function ml(homeValue: string, awayValue: string): RawBookmaker {
+    return {
+      id: 8,
+      name: 'B',
+      bets: [{ id: 1, name: 'Home/Away', values: [
+        { value: homeValue, odd: '1.65' },
+        { value: awayValue, odd: '2.35' },
+      ] }],
+    }
+  }
+
+  it('NE must not swallow "New Orleans Saints" as the home side', () => {
+    const out = normalizeBookmakerOdds(ml('New England Patriots', 'New Orleans Saints'), {
+      homeTeam: 'NE',
+      awayTeam: 'NO',
+    })
+    // Neither resolves without a resolver — but crucially the AWAY value is not
+    // mis-assigned to home, which is what the substring match used to do.
+    expect(out.moneylineHome).toBeNull()
+    expect(out.moneylineAway).toBeNull()
+  })
+
+  it('the literal Home/Away vocabulary still works, and is token-anchored', () => {
+    const out = normalizeBookmakerOdds(ml('Home', 'Away'), { homeTeam: 'NE', awayTeam: 'NO' })
+    expect(out.moneylineHome).toBeCloseTo(1.65, 5)
+    expect(out.moneylineAway).toBeCloseTo(2.35, 5)
+  })
+
+  it('a spread value keeps its side once the line is stripped', () => {
+    const out = normalizeBookmakerOdds(
+      { id: 8, name: 'B', bets: [{ id: 2, name: 'Asian Handicap', values: [
+        { value: 'Home -3.5', odd: '1.91' },
+        { value: 'Away +3.5', odd: '1.91' },
+      ] }] },
+      { homeTeam: 'KC', awayTeam: 'DEN' },
+    )
+    expect(out.spreadHome).toBe(-3.5)
+  })
+
+  it('an exact identifier echo resolves', () => {
+    const out = normalizeBookmakerOdds(ml('KC', 'DEN'), { homeTeam: 'KC', awayTeam: 'DEN' })
+    expect(out.moneylineHome).toBeCloseTo(1.65, 5)
+    expect(out.moneylineAway).toBeCloseTo(2.35, 5)
+  })
+
+  it('resolveTeamCode makes team-labelled values work, safely', () => {
+    // This is how a caller wires the full-name table without this module
+    // importing it (which would be a cycle).
+    const table: Record<string, string> = {
+      'kansas city chiefs': 'KC',
+      'denver broncos': 'DEN',
+      'new england patriots': 'NE',
+      'new orleans saints': 'NO',
+    }
+    const resolveTeamCode = (label: string) => table[label] ?? null
+
+    const ok = normalizeBookmakerOdds(ml('Kansas City Chiefs', 'Denver Broncos'), {
+      homeTeam: 'KC', awayTeam: 'DEN', resolveTeamCode,
+    })
+    expect(ok.moneylineHome).toBeCloseTo(1.65, 5)
+    expect(ok.moneylineAway).toBeCloseTo(2.35, 5)
+
+    // And the case that used to invert now lands on the correct sides.
+    const ne = normalizeBookmakerOdds(ml('New England Patriots', 'New Orleans Saints'), {
+      homeTeam: 'NE', awayTeam: 'NO', resolveTeamCode,
+    })
+    expect(ne.moneylineHome).toBeCloseTo(1.65, 5)
+    expect(ne.moneylineAway).toBeCloseTo(2.35, 5)
+  })
+
+  it('the deprecated homeTeamName/awayTeamName spelling still routes correctly', () => {
+    // The writer in lib/api-sports.ts still passes these; it must not silently
+    // stop resolving while that file is held by another session.
+    const out = normalizeBookmakerOdds(ml('Home', 'Away'), {
+      homeTeamName: 'KC',
+      awayTeamName: 'DEN',
+    })
+    expect(out.moneylineHome).toBeCloseTo(1.65, 5)
+    expect(out.moneylineAway).toBeCloseTo(2.35, 5)
+  })
+
+  it('CONTROL: the old substring rule really would have matched here', () => {
+    // Proves the regression tests above are aimed at a real collision rather than
+    // an imagined one — if "ne" were not inside "new orleans saints", the NE case
+    // would have been safe all along and its assertion would prove nothing.
+    expect('new orleans saints'.includes('ne')).toBe(true)
+    expect('new york giants'.includes('ne')).toBe(true)
+  })
+})
+
 describe('retainPrimaryMarkets — the prop board is never warehoused', () => {
   /*
    * A product boundary, not an optimisation. AllFantasy reads the betting market as
