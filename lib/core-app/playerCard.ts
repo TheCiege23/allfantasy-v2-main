@@ -1,6 +1,7 @@
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
+import { loadLeagueFor, memberLeaguePlatformIdsFor } from './loadLeagueFor'
 import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
 import { isWatched } from '@/lib/waiver-wire/watchlist-service'
 import { buildNextGameMap, type FixtureRow } from './nextGameMap'
@@ -506,8 +507,47 @@ async function loadSchedule(
  * production: the newest pair is literally `["12484"]→["2133"]` and
  * `["2133"]→["12484"]`.
  */
-async function loadTrades(sleeperId: string | null, leagueId?: string): Promise<SectionState<PlayerCardTrade[]>> {
+/**
+ * Trades involving this player, in leagues the viewer is entitled to see.
+ *
+ * 🛑 THE SCOPE USED TO BE OPTIONAL, AND THE UNIVERSAL CARD CALLS THIS WITHOUT
+ * ONE. So the signed-out path queried EVERY trade involving the player across
+ * every league in the database, and then resolved those leagues' names.
+ *
+ * Measured before the fix, no cookies at all:
+ *   GET /api/core/player-card?sport=NFL&sleeperId=6813   ->  200
+ *   3 trades naming three private leagues (redacted — this repo is public),
+ *   plus who moved for whom and the platform transaction id.
+ *
+ * The route's own docblock already called this league-member data: "WITH one it
+ * carries … that league's trade history, which is league member data and is
+ * gated as such." The contract was right; the implementation did not honour it
+ * on the path that has no league.
+ *
+ * ⚠ AN EMPTY VIEWER SET RETURNS EARLY RATHER THAN QUERYING. Prisma's `{ in: [] }`
+ * matches nothing, which is the right answer for a signed-out reader — but it is
+ * right by a coincidence of semantics, and a guard that depends on one is the
+ * kind that stops holding when the semantics change.
+ */
+async function loadTrades(
+  sleeperId: string | null,
+  leagueId?: string,
+  viewerLeagueIds?: string[],
+): Promise<SectionState<PlayerCardTrade[]>> {
   if (!sleeperId) return unavailable('No Sleeper id on file, so trades cannot be matched to this player.')
+
+  if (!leagueId && !(viewerLeagueIds ?? []).length) {
+    return unavailable('Sign in to see trades from your own leagues involving this player.')
+  }
+
+  /*
+   * Exactly one of these scopes the query. `leagueId` is the league-flavour
+   * call, already membership-checked by the route; `viewerLeagueIds` is the
+   * universal one. There is no unscoped branch any more.
+   */
+  const scope = leagueId
+    ? { history: { sleeperLeagueId: leagueId } }
+    : { history: { sleeperLeagueId: { in: viewerLeagueIds ?? [] } } }
 
   const rows = await prisma.leagueTrade
     .findMany({
@@ -516,7 +556,7 @@ async function loadTrades(sleeperId: string | null, leagueId?: string): Promise<
           { playersGiven: { array_contains: sleeperId } },
           { playersReceived: { array_contains: sleeperId } },
         ],
-        ...(leagueId ? { history: { sleeperLeagueId: leagueId } } : {}),
+        ...scope,
       },
       orderBy: { tradeDate: 'desc' },
       take: TRADE_COUNT * 4, // headroom for the two-rows-per-trade fold
@@ -963,12 +1003,24 @@ async function loadLeague(
   club: string | null,
   season: number
 ): Promise<PlayerCardLeague | null> {
-  const league = await prisma.league
-    .findUnique({
-      where: { id: leagueId },
-      select: { id: true, name: true, platform: true, settings: true, leagueType: true, platformLeagueId: true },
-    })
-    .catch(() => null)
+  /*
+   * Gated read — see lib/core-app/loadLeagueFor.ts.
+   *
+   * ⚠ DEFENCE IN DEPTH, NOT THE ONLY GATE. `app/api/core/player-card/route.ts`
+   * already runs `resolveLeagueMembership` and passes `leagueId: null` for a
+   * non-member, so this should never see an id the viewer cannot read. This
+   * loader does not assume that: it is the section carrying who holds the player
+   * and that league's roster, and a second caller added later would inherit the
+   * assumption rather than the check.
+   */
+  const league = await loadLeagueFor(userId ?? '', leagueId, {
+    id: true,
+    name: true,
+    platform: true,
+    settings: true,
+    leagueType: true,
+    platformLeagueId: true,
+  }).catch(() => null)
   if (!league) return null
 
   const [rosters, teams] = await Promise.all([
@@ -1235,14 +1287,35 @@ export async function getPlayerCard(req: PlayerCardRequest): Promise<PlayerCardD
    *
    * One extra small query when a league is in context; nothing when it is not.
    */
+  /*
+   * Gated read — see lib/core-app/loadLeagueFor.ts. The route already refuses a
+   * non-member's `leagueId` before it reaches here, so this is defence in depth:
+   * the loader does not assume the caller gated it. Returns only scoring shape,
+   * never anything identifying, so a refusal simply falls back to the universal
+   * value book.
+   */
   const leagueBookRow = req.leagueId
-    ? await prisma.league
-        .findUnique({ where: { id: req.leagueId }, select: { settings: true, leagueType: true } })
-        .catch(() => null)
+    ? await loadLeagueFor(req.userId ?? '', req.leagueId, {
+        settings: true,
+        leagueType: true,
+      }).catch(() => null)
     : null
   const book = leagueBookRow
     ? valueBookFor(leagueBookRow.settings, leagueBookRow.leagueType)
     : UNIVERSAL_BOOK
+
+  /*
+   * The viewer's own leagues, for the card's cross-league trade section.
+   *
+   * ⚠ COMPUTED WHETHER OR NOT A LEAGUE IS IN CONTEXT. The first version skipped
+   * this when `req.leagueId` was set, on the reasoning that the league flavour
+   * has its own scoped trade list — but the top-level `trades` section renders
+   * on BOTH cards, so skipping it made that section read "sign in to see trades"
+   * for a signed-in member who was looking at their own league. One indexed
+   * query, and the alternative is a correct-looking card that tells a member
+   * they are not signed in.
+   */
+  const viewerLeagueIds = await memberLeaguePlatformIdsFor(req.userId)
 
   const [market, ownershipBoard, projections, news, blurbs, injury, trades, league] = await Promise.all([
     loadMarket(player.sleeperId, player.position, book),
@@ -1253,7 +1326,7 @@ export async function getPlayerCard(req: PlayerCardRequest): Promise<PlayerCardD
     loadNews(player.name, player.sport),
     loadPlayerBlurbs(player.sleeperId, player.name, player.sport),
     loadInjury(player.sleeperId, player.name, player.sport),
-    loadTrades(player.sleeperId),
+    loadTrades(player.sleeperId, undefined, viewerLeagueIds),
     req.leagueId
       ? loadLeague(
           req.leagueId,

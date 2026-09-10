@@ -59,3 +59,50 @@ export async function loadLeagueFor<S extends Prisma.LeagueSelect>(
     select,
   }) as Promise<Prisma.LeagueGetPayload<{ select: S }> | null>
 }
+
+/**
+ * The provider-side ids of every league this viewer belongs to.
+ *
+ * 🛑 FOR THE READS THAT ARE NOT A LOOKUP BY `League.id`. `loadLeagueFor` gates a
+ * single league the caller already names. Some reads instead SPAN leagues —
+ * `loadTrades` on the player card resolves names for every league that traded a
+ * player — so there is no id to gate, and without the viewer's own set they
+ * return everybody's.
+ *
+ * Measured 2026-09-10 on a 290-league database, signed out, no cookies at all:
+ * `GET /api/core/player-card?sport=NFL&sleeperId=6813` returned three trades
+ * carrying the real names of three private leagues (redacted — this repo is
+ * public) — plus who moved for whom and the
+ * platform's transaction id. The route's own docblock already called that
+ * league-member data; only the implementation disagreed.
+ *
+ * ⚠ THE FOUR PATHS MIRROR `resolveLeagueMembership` EXACTLY AND MUST KEEP DOING
+ * SO. Two narrower copies of this rule already exist here — `leagueNameForTitle`
+ * and `listAccessibleLeagues`, both owner-and-claimed-team only — so both
+ * silently exclude the roster-backed population that `lib/league-access.ts`
+ * calls the largest one. A third divergent copy is how this goes wrong in a new
+ * direction; if the canonical predicate gains a path, it is added here too.
+ *
+ * ⚠ RETURNS `platformLeagueId`, NOT `League.id`. `LeagueTradeHistory` keys the
+ * provider's id under the name `sleeperLeagueId`; joining on our uuid matches
+ * nothing and reads as a league with no trades.
+ */
+export async function memberLeaguePlatformIdsFor(
+  userId: string | null | undefined,
+): Promise<string[]> {
+  if (!userId) return []
+
+  const rows = await prisma.league.findMany({
+    where: {
+      OR: [
+        { userId },
+        { redraftMembers: { some: { userId } } },
+        { rosters: { some: { platformUserId: userId } } },
+        { teams: { some: { claimedByUserId: userId } } },
+      ],
+    },
+    select: { platformLeagueId: true },
+  })
+
+  return [...new Set(rows.map((r) => r.platformLeagueId).filter((id): id is string => !!id))]
+}

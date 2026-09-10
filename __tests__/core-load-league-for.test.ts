@@ -24,6 +24,7 @@ vi.mock('server-only', () => ({}))
 
 const mocks = vi.hoisted(() => ({
   leagueFindUnique: vi.fn(),
+  leagueFindMany: vi.fn(),
   redraftFindUnique: vi.fn(),
   rosterCount: vi.fn(),
   leagueTeamFindFirst: vi.fn(),
@@ -31,14 +32,14 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('@/lib/prisma', () => ({
   prisma: {
-    league: { findUnique: mocks.leagueFindUnique },
+    league: { findUnique: mocks.leagueFindUnique, findMany: mocks.leagueFindMany },
     redraftLeagueMember: { findUnique: mocks.redraftFindUnique },
     roster: { count: mocks.rosterCount },
     leagueTeam: { findFirst: mocks.leagueTeamFindFirst },
   },
 }))
 
-import { loadLeagueFor } from '@/lib/core-app/loadLeagueFor'
+import { loadLeagueFor, memberLeaguePlatformIdsFor } from '@/lib/core-app/loadLeagueFor'
 
 const LEAGUE_ID = 'league-under-test'
 const VIEWER = 'app-user-uuid-viewer'
@@ -162,5 +163,71 @@ describe('refuses everyone else, and does not read the row', () => {
 
     expect(missing).toBe(nonMember)
     expect(missing).toBeNull()
+  })
+})
+
+/**
+ * `memberLeaguePlatformIdsFor` — the scope for reads that span leagues rather
+ * than naming one.
+ *
+ * 🛑 WHAT THIS REPLACES, measured 2026-09-10 with no cookies at all:
+ * `GET /api/core/player-card?sport=NFL&sleeperId=6813` returned three trades
+ * carrying the real names of three private leagues, plus who moved for whom and
+ * the platform's transaction id. `loadTrades` had no viewer in its query, so it
+ * answered from every league in the database.
+ */
+describe('memberLeaguePlatformIdsFor', () => {
+  it('returns nothing for an anonymous viewer, and asks the database nothing', async () => {
+    /*
+     * 🛑 THE `not.toHaveBeenCalled()` IS THE POINT, not the empty array. An
+     * implementation that fell through to an unscoped `findMany` and filtered
+     * afterwards would also return [] here while having read every league.
+     */
+    await expect(memberLeaguePlatformIdsFor(null)).resolves.toEqual([])
+    await expect(memberLeaguePlatformIdsFor(undefined)).resolves.toEqual([])
+    await expect(memberLeaguePlatformIdsFor('')).resolves.toEqual([])
+    expect(mocks.leagueFindMany).not.toHaveBeenCalled()
+  })
+
+  it('scopes on all four canonical membership paths', async () => {
+    /*
+     * ⚠ PINNED AGAINST DIVERGENCE. Two narrower copies of this rule already
+     * exist in this codebase — `leagueNameForTitle` and `listAccessibleLeagues`,
+     * both owner-and-claimed-team only — so both silently exclude the
+     * roster-backed population `lib/league-access.ts` calls the largest one.
+     * Dropping a path here would not fail any other assertion in this file.
+     */
+    mocks.leagueFindMany.mockResolvedValue([])
+    await memberLeaguePlatformIdsFor(VIEWER)
+
+    const where = mocks.leagueFindMany.mock.calls[0][0].where
+    expect(where.OR).toEqual([
+      { userId: VIEWER },
+      { redraftMembers: { some: { userId: VIEWER } } },
+      { rosters: { some: { platformUserId: VIEWER } } },
+      { teams: { some: { claimedByUserId: VIEWER } } },
+    ])
+  })
+
+  it('selects platformLeagueId, not League.id', async () => {
+    /*
+     * ⚠ THE FAILURE IS SILENT AND READS AS "THIS LEAGUE HAS NO TRADES".
+     * `LeagueTradeHistory` keys the provider's id under the name
+     * `sleeperLeagueId`; joining our uuid against it matches nothing.
+     */
+    mocks.leagueFindMany.mockResolvedValue([])
+    await memberLeaguePlatformIdsFor(VIEWER)
+    expect(mocks.leagueFindMany.mock.calls[0][0].select).toEqual({ platformLeagueId: true })
+  })
+
+  it('drops leagues with no provider id and de-duplicates the rest', async () => {
+    mocks.leagueFindMany.mockResolvedValue([
+      { platformLeagueId: '111' },
+      { platformLeagueId: null },
+      { platformLeagueId: '111' },
+      { platformLeagueId: '' },
+      { platformLeagueId: '222' },
+    ])
+    await expect(memberLeaguePlatformIdsFor(VIEWER)).resolves.toEqual(['111', '222'])
   })
 })
