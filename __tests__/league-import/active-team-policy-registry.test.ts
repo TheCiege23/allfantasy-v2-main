@@ -113,7 +113,7 @@ const ENUMERATION_EXCEPTIONS: Record<string, string> = {
   'lib/ai/sim/groundedTradeDelta.ts':
     'Identity map — builds teamByExternal solely to resolve a scheduled opponent rosterId into a platformUserId for roster lookup.',
   'lib/league-history/leagueWarehouseReads.ts':
-    'Historical — every consumer is an externalId-keyed .get() resolving names for season_results and dw_matchup_facts rows; filtering would erase attribution.',
+    'Historical, and MIXED on closer reading — three callers are pure label resolution with a `?? fallback` (filtering would degrade a label and remove no row), but readManagerActivity uses the map as a MEMBERSHIP GATE (`const team = names.get(...)`, then `if (!team) continue`, no fallback), so the query must stay unfiltered or historical activity rows silently vanish.',
   'lib/psychological-profiles/TransactionFactBackfill.ts':
     'Historical backfill — the identity map resolves a LeagueTradeHistory row Sleeper user id to the roster id stamped onto dw_transaction facts.',
   'lib/tournament/rosterCompliance.ts':
@@ -148,7 +148,7 @@ const ENUMERATION_EXCEPTIONS: Record<string, string> = {
   'lib/ai-tools-start-sit/opponentMatchup.ts':
     'MIXED (deferred) — one read feeds four consumers in fetchNativeOpponentMatchup, current and resolution mixed.',
   'lib/shared-services/league-hub/userOsContext.ts':
-    'MIXED (deferred) — the standings array splits into a current-state consumer and a resolution consumer.',
+    'MIXED (deferred) — and the naive consumer-side filter is DEMONSTRABLY UNSAFE, which is why it is deferred rather than patched: activeLeagueContext resolves viewerTeam from the UNFILTERED set, so an archived-but-claimed viewer would be absent from a filtered standings array; strategyRecommendations/playoffRecommendations guard only on viewerTeam truthiness, giving rankIndex -1 and percentile 1 + 1/(n-1) > 1 — rendering "#0 of 11 (109th percentile)" and classifying the seat strong_contender. Needs viewer-presence handling in those generators first.',
   'lib/trade-value-console/roster-context-loader.ts':
     'MIXED (deferred) — opponentTeams is current-state while the sibling consumer resolves references.',
 }
