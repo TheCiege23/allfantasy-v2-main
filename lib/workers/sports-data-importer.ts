@@ -17,8 +17,24 @@ const SPORTS_PLAYER_TTL_MS = 6 * 60 * 60 * 1000
 const UPSERT_BATCH_SIZE = 100
 
 /**
- * Wall-clock budget for the whole import, kept under the route's `maxDuration = 300`.
+ * DEFAULT wall-clock budget for the whole import, kept under the route's `maxDuration = 300`.
  * The margin leaves room for the per-sport stale-fallback write to land after we stop.
+ *
+ * 🛑 A CALLER THAT HAS PHASES OF ITS OWN MUST PASS `budgetMs` INSTEAD OF ACCEPTING THIS.
+ *
+ * This default is the SAME NUMBER as `CRON_RUN_BUDGET_MS` (240s), and for `import-players` the
+ * two clocks were stacked in sequence: the route opened a 240s budget, then called this, which
+ * was entitled to spend all 240s of it. Measured in production 2026-09-10 — three consecutive
+ * runs at 240,580 / 240,884 / 240,413 ms — after which `budget.exhausted()` was true the instant
+ * this returned, so ALL TEN follow-on phases deferred every time:
+ *
+ *     identity · devyPool · devyStats · devyDraftStatus · devyIntelSources
+ *     devyIntel · sleeperRows · canonicalBirthdays · espnIdentities · psychProfiles
+ *
+ * ⚠ IT LOOKED LIKE A PHASE-ORDERING BUG AND IS NOT. `psychProfiles` sits last and is the first
+ * dropped, so it appeared to be uniquely starved; in fact the whole tail was, and reordering
+ * would only have moved the starvation to whichever phase inherited last place. Two independent
+ * clocks holding the same value is the defect.
  */
 const IMPORT_BUDGET_MS = 240_000
 
@@ -323,6 +339,19 @@ export async function runSportsDataImporter(options?: {
   sports?: string[]
   /** College source-page size per sport per run; clamped to MAX_SEED_PAGE_SIZE. */
   seedPageSize?: number
+  /**
+   * Wall-clock ms this import may use, carved out of the CALLER's budget.
+   *
+   * Pass this from any handler that has work of its own after the import — see the note on
+   * `IMPORT_BUDGET_MS`. Omitting it keeps the historical behaviour of assuming the whole
+   * window, which is correct only for a caller that does nothing afterwards.
+   *
+   * ⚠ FLOORED AT `PER_SPORT_RESERVE_MS`, so a caller that arrives with almost no time left
+   * still gets a coherent budget rather than a negative one. A negative budget would make the
+   * between-sports check true immediately and skip EVERY sport while reporting success — the
+   * silent no-op this reserve exists to prevent.
+   */
+  budgetMs?: number
 }): Promise<{
   imported: number
   sports: string[]
@@ -342,6 +371,14 @@ export async function runSportsDataImporter(options?: {
   let staleFallbackApplied = false
 
   const startedAt = Date.now()
+  /*
+   * The caller's slice when given, this module's default otherwise — resolved ONCE so the
+   * between-sports check and the log line it prints can never disagree about which budget was
+   * in force. Reading two separately-derived numbers is how a log comes to describe a run that
+   * did not happen.
+   */
+  const effectiveBudgetMs = Math.max(PER_SPORT_RESERVE_MS, options?.budgetMs ?? IMPORT_BUDGET_MS)
+  const usableBudgetMs = effectiveBudgetMs - PER_SPORT_RESERVE_MS
   const skippedSports: string[] = []
   const teamCodeCounts: Record<string, TeamCodeCounts> = {}
   let rowsSkippedByGuard = 0
@@ -365,10 +402,10 @@ export async function runSportsDataImporter(options?: {
      * partial updates from other paths. Stopping early leaves those sports untouched rather
      * than starved, and the next scheduled run reaches them.
      */
-    if (Date.now() - startedAt > IMPORT_BUDGET_MS - PER_SPORT_RESERVE_MS) {
+    if (Date.now() - startedAt > usableBudgetMs) {
       skippedSports.push(sport)
       console.warn(
-        `[sports-data-importer] budget exhausted (${IMPORT_BUDGET_MS - PER_SPORT_RESERVE_MS}ms usable of ${IMPORT_BUDGET_MS}ms) — skipping ${sport}`,
+        `[sports-data-importer] budget exhausted (${usableBudgetMs}ms usable of ${effectiveBudgetMs}ms) — skipping ${sport}`,
       )
       continue
     }
