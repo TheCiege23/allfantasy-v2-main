@@ -372,11 +372,36 @@ export async function getFullAIContext(options: {
     teamSnapshots = await getTeamSnapshots(leagueId, teamId, 6)
   }
 
-  const recentEvents = await getRecentMemoryEvents({
-    userId: userProfile?.userId,
-    leagueId,
-    limit: 10,
-  })
+  /*
+   * 🛑 PRIVATE-DATA EXPOSURE: THE USER FILTER SILENTLY DISAPPEARED WHEN IT COULD NOT BE RESOLVED.
+   *
+   * `getRecentMemoryEvents` applies `where.userId` only `if (options.userId)`. This call passed
+   * `userProfile?.userId`, and `userProfile` is null whenever the caller has no `AIUserProfile`
+   * row — a brand-new account, or any user reached by `userId` with no profile written yet. In
+   * that case the filter vanished and the query degraded to `where: { leagueId }`, returning the
+   * ten most recent `AIMemoryEvent` rows for EVERY member of the league. `content` is free-form
+   * JSON per-user memory, and the result goes into the prompt via `buildMemoryPromptSection`.
+   *
+   * ⚠ THIS IS THE CATEGORY DISTINCTION THAT MATTERS HERE, AND IT CUTS THE OTHER WAY FROM
+   * `getTeamSnapshots`. A team snapshot is DERIVED ROSTER ANALYTICS — win-now, future value, QB
+   * stability, RB dependency, pick inventory — computed from facts every league member can
+   * already see, which is exactly what opponent analysis is for. A memory event is that user's
+   * own recorded content. The first is league-visible; the second is not, and only the second is
+   * narrowed here. Opponent analysis is deliberately left working.
+   *
+   * `userId` (the caller's own, passed by the route) is preferred over the profile's, so a user
+   * with no profile row now gets THEIR OWN events rather than the league's. With no resolvable
+   * identity at all we return nothing rather than everyone's — an empty section is a degraded
+   * answer; the alternative is a disclosure.
+   */
+  const memoryScopeUserId = userId ?? userProfile?.userId ?? null
+  const recentEvents = memoryScopeUserId
+    ? await getRecentMemoryEvents({
+        userId: memoryScopeUserId,
+        leagueId,
+        limit: 10,
+      })
+    : []
 
   let patterns: string[] = []
   if (userProfile?.userId) {

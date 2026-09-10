@@ -1,0 +1,20 @@
+{
+  "//": "Release-evidence config for PR #695. NOT committed — created to run the check, then deleted.",
+  "//1": "`exclude: []` is the whole point. The base tsconfig excludes __tests__, **/*.test.ts and more,",
+  "//2": "and `extends` INHERITS exclude — which silently drops matching entries from `include`, so a",
+  "//3": "config that merely lists the test files would compile ZERO of them and report clean. Setting",
+  "//4": "exclude to the empty array overrides that inheritance. Verified with --listFiles, not assumed.",
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "incremental": false
+  },
+  "exclude": [],
+  "include": [
+    "__tests__/chimmy-reader-authorization.test.ts",
+    "__tests__/ai-memory-league-scope.test.ts",
+    "app/api/chat/chimmy/route.ts",
+    "lib/ai-memory.ts",
+    "lib/ai/deterministic.ts"
+  ]
+}
