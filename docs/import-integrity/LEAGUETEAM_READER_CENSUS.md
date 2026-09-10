@@ -2,7 +2,47 @@
 
 Generated for the integration compatibility pass. Every `prisma.leagueTeam.find*` /
 `count` / `aggregate` / `groupBy` call site in `lib/`, `app/` and `scripts/`, excluding
-`__tests__`. **No reader is left unclassified.**
+`__tests__` — **as seen by a same-line regex.**
+
+## 🛑 THIS CENSUS IS INCOMPLETE, AND SAID OTHERWISE UNTIL 2026-09-10
+
+It claimed "**No reader is left unclassified**". That was wrong, and wrong by the same
+mechanism that had already defeated the guard twice: **the generator matched
+`leagueTeam.<verb>(` on a single line**, so a call Prettier had wrapped onto two —
+
+```ts
+prisma.leagueTeam
+  .count({ where: { leagueId: l.id } })
+```
+
+— was never seen at all. Measured at `c318ae8f3`:
+
+| scan | call sites | files |
+|---|---|---|
+| same-line (what produced this table) | 193 | 145 |
+| multiline-aware | **263** | 145 |
+
+**70 call sites, 27% of the population, were never censused.** They are not classified
+below and this document does not describe them.
+
+### Reconciling the three numbers that were in circulation
+
+| figure | what it actually counted |
+|---|---|
+| **146 files / 194 sites** | this table — `lib` + `app` + `scripts`, same-line |
+| **139 files / 186 sites** | the orphan-blind exposure scan — `lib` + `app` only, no `scripts/` |
+| **145 files / 193 sites** | a fresh same-line rescan of this table's own scope at `c318ae8f3` |
+
+139 → 145 is exactly the six `scripts/` files (category 7). 145 → 146 is one row:
+`lib/chimmy/tools/leagueByName.ts`, which **this branch itself made invisible** —
+adding `ACTIVE_TEAM_WHERE` to its `count` pushed the line over the width limit, Prettier
+wrapped it, and the call left the scanner's sight. The fix removed its own call site from
+the guard that polices it. That is the whole finding in one line.
+
+`__tests__/league-import/active-team-policy-registry.test.ts` now matches across the line
+break and carries fixtures for the wrapped form. The 27 files its corrected scan revealed
+are listed there under `PENDING_CLASSIFICATION` — **suppressed and counted, not
+classified.** They are the outstanding work this document does not cover.
 
 ## Why most readers correctly need no filter
 
@@ -30,7 +70,10 @@ The decisive distinction is the SHAPE of the read, not the file it lives in:
 | 5 admin-monitoring | 10 | 8 |
 | 6 import-lifecycle | 10 | 8 |
 | 7 purge/script | 7 | 6 |
-| **Total** | **194** | **146** |
+| **Total (same-line scan)** | **194** | **146** |
+
+⚠ Against a multiline-aware scan of the same scope the true population is **263 call
+sites**. The 70-site gap is unclassified — see the correction at the top of this file.
 
 Files changed in this pass: **12**
 

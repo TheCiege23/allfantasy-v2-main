@@ -1,6 +1,7 @@
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
+import { selectActiveTeams } from '@/lib/league-import/activeTeams'
 
 const SLEEPER = 'https://api.sleeper.app/v1'
 
@@ -107,15 +108,36 @@ export async function fetchNativeOpponentMatchup(args: {
       return { opponentLabel: null, matchupDifficultyNote: null, notes }
     }
 
+    /*
+     * 🛑 UNFILTERED QUERY, FILTERED CONSUMER — the two halves of this read disagree.
+     *
+     * `oppTeam` resolves `perf.opponent`, a string on a `TeamPerformance` row for a PAST week,
+     * so it must be able to name a team that has since left the league. The PA ranking is the
+     * opposite: it is a statement about the league AS IT STANDS, and an archived seat carrying a
+     * frozen `pointsAgainst` both occupies a slot in the ordering and inflates the denominator.
+     *
+     * ⚠ `isOrphan` MUST BE IN THE SELECT. `isActiveTeam` reads `team.isOrphan !== true`, so a
+     * `select` that omits the column makes every row read ACTIVE and `selectActiveTeams` a
+     * silent no-op — a filter that cannot fail, which is the failure mode this batch exists for.
+     */
     const teams = await prisma.leagueTeam.findMany({
       where: { leagueId: args.leagueId },
-      select: { id: true, teamName: true, pointsAgainst: true, pointsFor: true, wins: true, losses: true },
+      select: {
+        id: true,
+        teamName: true,
+        pointsAgainst: true,
+        pointsFor: true,
+        wins: true,
+        losses: true,
+        isOrphan: true,
+      },
     })
-    if (teams.length < 2) {
+    const activeTeams = selectActiveTeams(teams)
+    if (activeTeams.length < 2) {
       return { opponentLabel: perf.opponent, matchupDifficultyNote: null, notes }
     }
 
-    const paSorted = [...teams].sort((a, b) => a.pointsAgainst - b.pointsAgainst)
+    const paSorted = [...activeTeams].sort((a, b) => a.pointsAgainst - b.pointsAgainst)
     const oppTeam = teams.find(
       (t) =>
         perf.opponent &&
@@ -125,8 +147,9 @@ export async function fetchNativeOpponentMatchup(args: {
 
     let matchupDifficultyNote: string | null = null
     if (oppTeam) {
+      /* -1 + 1 = 0 when the opponent is itself archived, and `rank > 0` below drops the note. */
       const rank = paSorted.findIndex((t) => t.id === oppTeam.id) + 1
-      const n = teams.length
+      const n = activeTeams.length
       if (rank > 0 && n > 1) {
         const pct = rank / n
         if (pct <= 0.33) {

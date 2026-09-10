@@ -1,6 +1,7 @@
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
+import { selectActiveTeams } from '@/lib/league-import/activeTeams'
 import { assertLeagueMember } from '@/lib/league/league-access'
 import { getRosterPlayerIds } from '@/lib/waiver-wire/roster-utils'
 import { getPlayer } from '@/lib/data/players'
@@ -228,13 +229,29 @@ export async function loadTradeEngineRosterContext(args: {
     }
   }
 
+  /*
+   * 🛑 UNFILTERED QUERY, FILTERED CONSUMER. `opponentTeams` is a list of seats the user can PICK
+   * as a trade partner, so an archived one must not appear. The sibling consumer below
+   * (`teams.find(t => t.externalId === args.opponentTeamExternalId)`) resolves a caller-supplied
+   * id to a `platformUserId`, and filtering the query would break that resolution.
+   *
+   * ⚠ `isOrphan` MUST BE IN THE SELECT or `selectActiveTeams` is a silent no-op — `isActiveTeam`
+   * tests `isOrphan !== true`, and an omitted column is `undefined`, which reads as ACTIVE.
+   */
   const teams = await prisma.leagueTeam.findMany({
     where: { leagueId: args.leagueId },
-    select: { externalId: true, teamName: true, ownerName: true, platformUserId: true, claimedByUserId: true },
+    select: {
+      externalId: true,
+      teamName: true,
+      ownerName: true,
+      platformUserId: true,
+      claimedByUserId: true,
+      isOrphan: true,
+    },
     orderBy: { pointsFor: 'desc' },
   })
 
-  const opponentTeams: OpponentTeamOption[] = teams.map((t) => ({
+  const opponentTeams: OpponentTeamOption[] = selectActiveTeams(teams).map((t) => ({
     externalId: t.externalId,
     teamName: t.teamName,
     ownerName: t.ownerName,

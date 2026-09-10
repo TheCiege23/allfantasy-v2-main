@@ -20,6 +20,17 @@ import { join } from 'node:path'
 
 const read = (...p: string[]) => readFileSync(join(process.cwd(), ...p), 'utf8')
 
+/**
+ * Source with block and line comments removed.
+ *
+ * 🛑 FOR ABSENCE ASSERTIONS ONLY, AND THEY NEED IT. A `not.toMatch` over raw file text cannot
+ * tell code from prose, so documenting WHY an identifier must not appear makes it appear. That
+ * is a guard failing on a correct change — the mirror of a guard passing on a wrong one, and
+ * just as much a reason not to trust it.
+ */
+const stripComments = (src: string) =>
+  src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1')
+
 describe('corrected ENUMERATION surfaces filter archived teams', () => {
   it('league-home standings uses the shared authority', () => {
     /*
@@ -102,10 +113,13 @@ describe('a read serving BOTH a current and a historical consumer filters at the
   it('BroadcastModeEngine reads all teams and filters only the standings', () => {
     /*
      * 🛑 THE REGRESSION THIS PASS INTRODUCED AND THEN CAUGHT. One `teams` array feeds two jobs
-     * here: the CURRENT standings, and the identity maps that resolve `dramaEvents` and
-     * `rivalries` — which are historical and can name a team that has since left. Filtering the
-     * QUERY starved the maps, so a drama beat about a departed team rendered against an
-     * unresolvable id.
+     * here: the CURRENT standings, and the identity maps that resolve a HISTORICAL reference to
+     * a name — `teamById`/`teamByExternalId` for `matchups`, and `ownerNameByManagerId` for
+     * `rivalriesWithNames`. Both can name a team that has since left. Filtering the QUERY
+     * starved them, so a past matchup or rivalry rendered a raw id where a name belongs.
+     *
+     * ⚠ NOT `dramaEvents`. `storylines` maps those straight through and touches no team map;
+     * an earlier version of this comment and of the source said otherwise.
      *
      * The rule this pins: when one read serves both a current and a historical consumer, the
      * query must stay unfiltered and the filter must sit on the current consumer.
@@ -113,7 +127,14 @@ describe('a read serving BOTH a current and a historical consumer filters at the
     const src = read('lib', 'broadcast-engine', 'BroadcastModeEngine.ts')
     /* The query is unfiltered... */
     expect(src).toMatch(/prisma\.leagueTeam\.findMany\(\{\s*\n\s*where: \{ leagueId \},/)
-    expect(src).not.toMatch(/ACTIVE_TEAM_WHERE/)
+    /*
+     * ⚠ ASSERT ON CODE, NOT ON THE FILE. This was `expect(src).not.toMatch(/ACTIVE_TEAM_WHERE/)`
+     * over the whole file, so merely NAMING the constant in a comment that explains why it must
+     * not be used here turned the guard red. A whole-file text match is the same defect this
+     * suite was repaired for once already (an archival-write check satisfiable by the comment
+     * above the write). Strip comments first, then assert.
+     */
+    expect(stripComments(src)).not.toMatch(/ACTIVE_TEAM_WHERE/)
     /* ...the identity maps see every team... */
     expect(src).toMatch(/const teamById = new Map\(teams\.map/)
     expect(src).toMatch(/const teamByExternalId = new Map\(teams\.map/)
@@ -179,5 +200,70 @@ describe('one authority, not many', () => {
       expect(src, parts.join('/')).not.toMatch(/isOrphan !== true/)
       expect(src, parts.join('/')).not.toMatch(/isOrphan === false/)
     }
+  })
+})
+
+describe('the three MIXED reads resolved by the 2026-09-10 corrective pass', () => {
+  /*
+   * 🛑 `selectActiveTeams` IS A NO-OP WHEN `isOrphan` IS NOT SELECTED, AND NOTHING TYPE-CHECKS IT.
+   *
+   * `isActiveTeam` tests `team.isOrphan !== true`. A Prisma `select` that omits the column yields
+   * `undefined`, which is `!== true`, so EVERY row reads as active and the filter silently keeps
+   * the archived seats it was added to remove. `TeamOrphanState` marks the field optional on
+   * purpose — raw rows and partial mappers need that — so the compiler cannot catch it either.
+   *
+   * These pin the call AND the select together, because either alone is satisfiable while the
+   * behaviour is wrong.
+   */
+  it('opponentMatchup filters the PA ranking but not the opponent resolution', () => {
+    const src = stripComments(read('lib', 'ai-tools-start-sit', 'opponentMatchup.ts'))
+    /* The query stays unfiltered so a past week can still name a departed opponent... */
+    expect(src).toMatch(/where: \{ leagueId: args\.leagueId \}/)
+    expect(src).not.toMatch(/ACTIVE_TEAM_WHERE/)
+    /* ...the select carries the flag, or the consumer filter below is a no-op... */
+    expect(src).toMatch(/isOrphan: true/)
+    /* ...and the current-state consumers use the narrowed array. */
+    expect(src).toMatch(/const activeTeams = selectActiveTeams\(teams\)/)
+    expect(src).toMatch(/activeTeams\.length < 2/)
+    expect(src).toMatch(/\[\.\.\.activeTeams\]\.sort/)
+    expect(src).toMatch(/const n = activeTeams\.length/)
+    /* The opponent is still resolved against every team, archived included. */
+    expect(src).toMatch(/const oppTeam = teams\.find\(/)
+  })
+
+  it('roster-context-loader filters the selectable partners but not the id resolver', () => {
+    const src = stripComments(read('lib', 'trade-value-console', 'roster-context-loader.ts'))
+    expect(src).not.toMatch(/ACTIVE_TEAM_WHERE/)
+    expect(src).toMatch(/isOrphan: true/)
+    expect(src).toMatch(/opponentTeams: OpponentTeamOption\[\] = selectActiveTeams\(teams\)\.map/)
+    /* The externalId resolver must keep seeing archived rows. */
+    expect(src).toMatch(/teams\.find\(\(t\) => t\.externalId === args\.opponentTeamExternalId\)/)
+  })
+
+  it('userOsContext filters at the QUERY, because it has no historical consumer', () => {
+    /*
+     * The one of the four that was never mixed. `standings` is the sole consumer of this read and
+     * `viewerTeam` is derived from `standings`, so a query filter cannot desynchronise them —
+     * which is what the deferral rationale claimed it would.
+     */
+    const src = stripComments(read('lib', 'shared-services', 'league-hub', 'userOsContext.ts'))
+    expect(src).toMatch(/where: \{ \.\.\.ACTIVE_TEAM_WHERE, leagueId: args\.canonicalLeagueId \}/)
+    expect(src).toMatch(/const viewerTeam = standings\.find\(\(s\) => s\.isViewerTeam\) \?\? null/)
+  })
+
+  it('both recommendation generators still return early on an absent viewer', () => {
+    /*
+     * The safety property the query filter now depends on. If either generator stops guarding,
+     * filtering the standings starts producing the −1 rank index the deferral warned about — so
+     * the guard belongs here, next to the filter, not in the generators' own suites.
+     */
+    const strategy = stripComments(
+      read('lib', 'shared-services', 'league-hub', 'generators', 'strategyRecommendations.ts'),
+    )
+    const playoff = stripComments(
+      read('lib', 'shared-services', 'league-hub', 'generators', 'playoffRecommendations.ts'),
+    )
+    expect(strategy).toMatch(/if \(!context\.viewerTeam \|\| context\.standings\.length < 2\) return null/)
+    expect(playoff).toMatch(/!context\.viewerTeam\) return \[\]/)
   })
 })
