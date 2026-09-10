@@ -1,4 +1,4 @@
-import { render } from '@testing-library/react'
+import { fireEvent, render } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 /**
@@ -108,6 +108,15 @@ describe('the desktop rail opens without being asked', () => {
     setViewport(false)
     const { container } = render(shell())
     expect(railFlag(container)).toBeNull()
+  })
+
+  it('gives the mobile league control a stateful accessible name', () => {
+    setViewport(false)
+    const { container } = render(shell())
+    const handle = container.querySelector<HTMLButtonElement>('.af-rail-handle')
+    expect(handle?.getAttribute('aria-label')).toBe('Open leagues')
+    fireEvent.click(handle as HTMLButtonElement)
+    expect(handle?.getAttribute('aria-label')).toBe('Close leagues')
   })
 
   /*

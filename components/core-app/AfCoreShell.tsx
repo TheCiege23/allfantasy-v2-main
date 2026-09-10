@@ -1232,6 +1232,7 @@ export function AfCoreShell(props: AfCoreShellProps) {
       <button
         type="button"
         className="af-rail-handle"
+        aria-label={railOpen ? 'Close leagues' : 'Open leagues'}
         aria-expanded={railOpen}
         aria-controls="af-rail"
         onClick={toggleRail}
