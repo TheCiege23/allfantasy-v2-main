@@ -13,6 +13,7 @@ import { resolveSportForDynasty } from '@/lib/dynasty-engine/SportDynastyResolve
 import type { DynastyProjectionOutput } from '@/lib/dynasty-engine/types'
 import type { FuturePickAsset, PlayerDynastyAsset, TeamDynastyInputs } from '@/lib/dynasty-projection/types'
 import { requireLeagueApiAccess } from '@/lib/api/require-league-access'
+import { selectActiveTeams } from '@/lib/league-import/activeTeams'
 
 type LeagueLite = {
   id: string
@@ -34,6 +35,8 @@ type TeamLite = {
   losses: number
   pointsFor: number
   aiPowerScore: number | null
+  /** Carried so `selectActiveTeams` can judge the row — an absent field reads as ACTIVE. */
+  isOrphan: boolean
 }
 
 type RosterLite = {
@@ -318,7 +321,14 @@ async function resolveLeagueByAnyId(leagueId: string): Promise<LeagueLite | null
   })
 }
 
-async function buildTeamInputsFromLeague(params: {
+/**
+ * Exported for `__tests__/league-import/dynasty-projections-archived-seats.test.ts`.
+ *
+ * It is the last step before `generateDynastyProjection(..., { persist: true })`, so asserting
+ * that an archived seat is absent from what it returns proves no row can be written for one —
+ * without the test having to persist anything to prove it.
+ */
+export async function buildTeamInputsFromLeague(params: {
   leagueId: string
   sportOverride?: string
   seasonOverride?: number
@@ -345,6 +355,8 @@ async function buildTeamInputsFromLeague(params: {
         losses: true,
         pointsFor: true,
         aiPowerScore: true,
+        /* Required, or selectActiveTeams below silently keeps every row. */
+        isOrphan: true,
       },
     }),
     prisma.roster.findMany({
@@ -362,9 +374,24 @@ async function buildTeamInputsFromLeague(params: {
     throw new Error('No league teams found for dynasty projection generation')
   }
 
+  /*
+   * 🛑 PROJECTION TARGETS ARE CURRENT SEATS, AND THIS PATH PERSISTS.
+   *
+   * `generateDynastyProjection(input, { persist: true })` writes a row per target, so an
+   * archived seat did not merely appear in a power ranking — it acquired a stored dynasty
+   * projection that later reads treat as real. The explicit `teamIdFilter` branch is filtered
+   * too: asking for a departed seat by id should find nothing rather than mint a projection
+   * for it.
+   *
+   * ⚠ `teams` STAYS UNFILTERED BELOW. `buildFuturePicksByTeam` seeds its ledger from every
+   * ORIGINAL team and resolves traded picks through an alias map keyed on ids that a departed
+   * seat still owns — so filtering there would silently drop a pick that a LIVE team acquired
+   * from a manager who has since left. Targets and counts are current; pick provenance is not.
+   */
+  const activeTeams = selectActiveTeams(teams)
   const targetTeams = params.teamIdFilter
-    ? teams.filter((t) => t.externalId === params.teamIdFilter || t.id === params.teamIdFilter)
-    : teams
+    ? activeTeams.filter((t) => t.externalId === params.teamIdFilter || t.id === params.teamIdFilter)
+    : activeTeams
   if (!targetTeams.length) {
     throw new Error('Requested teamId was not found in this league')
   }
@@ -481,7 +508,8 @@ async function buildTeamInputsFromLeague(params: {
         isDynasty: league.isDynasty ?? true,
         isSuperFlex: formatFlags.isSuperFlex,
         isTightEndPremium: formatFlags.isTightEndPremium,
-        teamCount: league.leagueSize ?? teams.length,
+        /* League size for valuation — the live seat count, not the stored-row count. */
+        teamCount: league.leagueSize ?? activeTeams.length,
       },
       players: fallbackPlayers,
       futurePicks: futurePicksByTeam.get(team.externalId) ?? [],
