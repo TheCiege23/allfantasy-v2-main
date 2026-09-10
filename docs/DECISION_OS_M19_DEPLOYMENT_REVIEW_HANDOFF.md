@@ -5,6 +5,10 @@ correction. It ships no schema, no migration, no worker, no route, and flips no 
 
 🛑 **Recommendation: DO NOT SHIP YET.** See §8. The blocking reason is not in this code.
 
+**Revision 2 (review-fix batch).** Adds the two defects found in review of `a7b6b891` — see
+§4a. External dependencies are documented separately in
+`DECISION_OS_M19_EXTERNAL_DEPENDENCIES.md`; neither was implemented.
+
 ---
 
 ## 1. Repository, branch, commit, PR
@@ -40,6 +44,7 @@ Sources: `DECISION_OS_M19_CHECKPOINT_CONTRACT_FINAL_V2.md` and
 | Seed barrier (V2.1 §4) | **Complete (planning only)** | `blocksLiveSettlement`; the worker that would honour it does not exist |
 | **Resolver walks the schedule, not `week−1, week−2`** | **Complete — new here** | `windowDecision.ts` + `scheduledLookback`; 15 tests |
 | Refusal, never a silent "competitive" | **Complete** | Asserted across window, facts and integration suites |
+| **Scope validated before any evidence read** | **Complete — new here** | `invalidScopeReason`; 22 tests, port throws if touched |
 | Prisma-backed window facts | **Complete** | `windowFactsPrismaPort.ts`; 30 unit + 5 real-DB tests |
 | Consumer seam reaches the window | **Partial — implemented, uncommittable** | §5 |
 | Durable weekly observations | **Blocked** | No `TeamWindowObservation` model exists anywhere |
@@ -63,6 +68,10 @@ number.
 | `__tests__/decision-os/value-v2-window-schedule-integration.test.ts` | New, 15 tests | Pins the above, including the case arithmetic gets wrong |
 | `docs/DECISION_OS_M19_BATCH_19A_CLOSEOUT.md` | Test-count correction | 55, not 41 — see §4 |
 | *(cherry-picked)* `periodCalendar.ts`, `leaseToken.ts`, `lanePlanner.ts` + 3 suites | Batch 19A | Pure foundations |
+| **`lib/decision-os/value-v2/windowDecision.ts`** | *(rev 2)* `invalidScopeReason`, `INVALID_SCOPE_GAP`, `MAX_PERIOD_ORDINAL` | Scope is validated **before** any lookback is built and before the port is touched |
+| **`__tests__/decision-os/value-v2-window-scope-validation.test.ts`** | *(rev 2)* New, 22 tests | Pins the refusal for 9 invalid weeks plus malformed identity, with a port that throws if read |
+| **`__tests__/decision-os/value-v2-window-db.integration.test.ts`** | *(rev 2)* `requireAllPlay` runtime skip, `M19_DB_STRICT`, `seedTenant` | Success-path tests actually run; strict mode fails loudly instead of skipping |
+| **`docs/DECISION_OS_M19_EXTERNAL_DEPENDENCIES.md`** | *(rev 2)* New | The `value-v2` foundation and Platform Import Batch A, documented not implemented |
 
 ### The defect this fixes
 
@@ -87,9 +96,31 @@ over 15, 16 and a period that does not exist. Now:
 
 ## 4. Tests — exact commands and results for this commit
 
-Run from the branch worktree. **Run suites individually or in small batches**: eight files at
-once fails with `Failed to start forks worker / Timeout waiting for worker to respond` on a
-contended box — a false red, not a code failure. Every suite below passes alone.
+### The reproducible CI command
+
+The per-file list below was a workaround for a contention failure, not a real constraint. The
+cause was file-level parallelism, and naming the workers settles it:
+
+```bash
+npx vitest run __tests__/decision-os/value-v2- --maxWorkers=1 --no-file-parallelism
+```
+
+```
+CI_EXIT=0
+Test Files  8 passed | 1 skipped (9)
+     Tests  210 passed | 10 skipped (220)
+  Duration  241.80s
+```
+
+The 1 skipped file and 10 skipped tests are `value-v2-window-db.integration` with no database
+named — the guard working as designed. Production host `ep-curly-block` appears **0 times** in
+the output.
+
+⚠ Without those two flags the same command fails with `Failed to start forks worker / Timeout
+waiting for worker to respond` on a contended box. That is a **false red**: every suite passes
+alone. Do not read it as a code failure.
+
+Individual suites, if a reviewer wants them separately:
 
 ```bash
 npx vitest run __tests__/decision-os/value-v2-period-calendar.test.ts
@@ -99,6 +130,7 @@ npx vitest run __tests__/decision-os/value-v2-window.test.ts
 npx vitest run __tests__/decision-os/value-v2-window-facts.test.ts
 npx vitest run __tests__/decision-os/value-v2-window-prisma-port.test.ts
 npx vitest run __tests__/decision-os/value-v2-window-schedule-integration.test.ts
+npx vitest run __tests__/decision-os/value-v2-window-scope-validation.test.ts
 npx vitest run __tests__/decision-os/value-v2-window-db.integration.test.ts   # needs DATABASE_URL
 ```
 
@@ -111,26 +143,173 @@ npx vitest run __tests__/decision-os/value-v2-window-db.integration.test.ts   # 
 | `value-v2-window-facts` | 0 | **16 passed** |
 | `value-v2-window-prisma-port` | 0 | **30 passed** |
 | `value-v2-window-schedule-integration` | 0 | **15 passed** |
+| `value-v2-window-scope-validation` *(rev 2)* | 0 | **22 passed** |
 | `value-v2-window-db.integration` (no DB named) | 0 | **10 skipped** — the guard working |
-| `value-v2-window-db.integration` (test DB named) | 0 | **5 passed, 5 skipped** |
-| **Total** | | **193 passed**, 5 skipped |
+| `value-v2-window-db.integration` (compatible DB, `M19_DB_STRICT=1`) | 0 | **10 passed** |
+| **Total** | | **210 passed**, 10 skipped (220) |
 
 **Scoped typecheck** — `tsconfig.json` excludes `__tests__` repo-wide, so the suites are never
-typechecked by default; the checker adds them explicitly and **throws if a target is absent
-from the compile set**, because a run that compiled nothing would otherwise read clean.
+typechecked by default. `tsconfig.m19scope.json` sets `"exclude": []` to defeat the inherited
+exclusion, and the run is verified against `--listFiles` because a config that compiles nothing
+exits 0 and reads clean.
 
 ```
-node ./__tc19b.mjs   →  exit 0
-M19 scoped typecheck passed for 15 files (all present in the compile set).
+node ./node_modules/typescript/lib/tsc.js -p tsconfig.m19scope.json --noEmit --listFiles
+  →  297 files in the compile set; windowDecision.ts, the scope-validation suite and the
+     DB integration suite each confirmed present
+
+node ./node_modules/typescript/lib/tsc.js -p tsconfig.m19scope.json --noEmit
+  →  TYPECHECK_EXIT=0, 0 `error TS` lines, 0 bytes of output
 ```
 
-**Lint** — `npx eslint <changed files>` → exit 0. No NUL bytes, no trailing whitespace.
+**Positive control**, because a green check that has never gone red is not evidence: planting
+`const __planted: number = "not a number"` in the new suite produced
+`value-v2-window-scope-validation.test.ts(98,7): error TS2322` at exit 2. File restored
+byte-identical (`diff -q`).
 
-**Database** — `ep-muddy-leaf-adigvvph-pooler…neon.tech`, the endpoint named in `.env.test`.
-Verified **not** production (`ep-curly-block`) and the production host appears **0 times** in
-output. No production migration was applied.
+**Lint** — `npx eslint` on the three changed files → exit 0, **0 bytes of output**.
 
-### Mutation controls
+⚠ **Read that result narrowly.** This repo's config resolves 47 enabled rules for a `.ts` file
+and every one of them is React, Next, `jsx-a11y` or `import/*`; `@typescript-eslint` is loaded
+as a plugin with **no rules enabled**. A clean lint on a plain non-JSX module is therefore weak
+evidence — it is close to a no-op. Confirmed rather than assumed: `debugger` and an unused
+`const` produced nothing, and only a genuinely-enabled rule fired —
+`export default {}` → `98:1 warning import/no-anonymous-default-export`. Note also that eslint
+exits **0 on warnings**, so the byte count is the signal here, not the exit code. Restored
+byte-identical.
+
+## 4a. The review-fix batch (revision 2)
+
+Two defects were reported against `a7b6b891`. **Both were real**, and both were confirmed by
+mutation before being fixed.
+
+### Defect 1 — `resolveWindowDecision` accepted a scope it could not describe
+
+`week` reached the lookback loop unvalidated. Two distinct failures, not one:
+
+| Input | Before | Why |
+| --- | --- | --- |
+| `0`, `-1`, `NaN` | `TypeError: Cannot read properties of undefined (reading 'facts')` | The loop pushes nothing, so `assembled[assembled.length - 1]` is `undefined` |
+| `Infinity` | **hangs forever** | `Infinity - 2 <= Infinity` is true and `w += 1` never advances |
+
+Fixed by `invalidScopeReason(scope)`, called at the top of `resolveWindowDecision` **before any
+lookback is constructed and before the port is touched** — it returns a `refusedDecision`
+carrying `window_scope_invalid` plus a specific reason (`week_below_first_period`,
+`week_not_an_integer`, `week_above_period_bound`, `season_not_an_integer`, …).
+
+`Number.isSafeInteger` does the finiteness work: it is false for `NaN`, both infinities,
+fractions, and anything past 2^53−1, so the arithmetic loop cannot be reached with a value that
+would not terminate. The upper bound is `MAX_PERIOD_ORDINAL = 25`, matching `twobs_ordinal_chk`
+in the observation schema.
+
+**22 tests** cover 9 invalid weeks × 2 (schedule supplied and absent), plus malformed identity,
+plus a legitimate week to prove the guard is not simply refusing everything. Every test runs
+against a `forbiddenPort()` whose every method throws — so "zero evidence reads" is asserted,
+not asserted-about.
+
+**Mutation control — both failure modes reproduced:**
+
+| Mutation | Result |
+| --- | --- |
+| Remove the validation call entirely | suite **hung**, killed at 180s, `exit=124` |
+| Keep validation, delete the `Infinity`/`-Infinity` cases | `TypeError: … reading 'facts'`, **14 failed / 3 passed** |
+
+`windowDecision.ts` restored **byte-identical** after each.
+
+⚠ Worth recording: the `Promise.race` timeout inside the Infinity test **cannot interrupt a
+synchronous infinite loop**. It is useful documentation of intent, not a working guard — which
+is exactly why the mutation run had to be killed by `timeout` rather than failing cleanly. A
+timer cannot preempt a loop that never yields to the event loop.
+
+### Defect 2 — the DB suite's five success-path tests could never run
+
+```ts
+let allPlayReadable = false                       // module scope
+beforeAll(async () => { allPlayReadable = await probe() })
+it.skipIf(!allPlayReadable)('…', …)               // evaluated at REGISTRATION
+```
+
+`it.skipIf` is evaluated when the test is **registered**, which happens before `beforeAll` runs.
+`allPlayReadable` is therefore always `false` at that moment. **All five success-path tests were
+skipped unconditionally — on every database, compatible or not.** The suite reported
+`5 passed, 5 skipped` and looked healthy; the five skips were guaranteed by the lifecycle bug,
+and had nothing to do with schema drift.
+
+Fixed by moving the decision to **run** time:
+
+```ts
+function requireAllPlay(ctx: { skip: () => void }): void {
+  if (allPlayReadable) return
+  if (STRICT_DB) throw new Error('M19_DB_STRICT=1 but … ')   // actionable, names the migration
+  ctx.skip()
+}
+```
+
+Six call sites; **zero** remaining `it.skipIf(!allPlayReadable)`.
+
+🛑 **This had been masking a second, real defect.** With the success path finally executing, it
+failed immediately on `PrismaClientKnownRequestError: Foreign key constraint violated:
+leagues_tenantId_fkey` — the fixtures never seeded a `Tenant`. That defect had existed the whole
+time and was invisible because the test that would have caught it never ran. Fixed with
+`seedTenant()`, called first in `beforeAll`.
+
+**The lesson is the transferable part: a skipped test is not a passing test, and a suite
+reporting "5 passed, 5 skipped" was reporting a lifecycle bug as coverage.**
+
+### Database validation
+
+Run against an explicitly identified, **schema-compatible, disposable, non-production**
+PostgreSQL instance built for this batch:
+
+| | |
+| --- | --- |
+| Host | `127.0.0.1:55434`, database `m19compat`, role `m19` |
+| Server | PostgreSQL **17.9**, `trust` auth, `listen_addresses=127.0.0.1` |
+| Provenance | `initdb` into the session scratchpad — created for this run, destroyed after |
+| Schema | `prisma migrate diff --from-empty --to-schema-datamodel` off committed `origin/main` → **717 tables**, then the pending `20260903222531_weekly_matchup_roster_id_text` migration |
+| Credentials | none — `trust` auth on a loopback port. Nothing secret to redact |
+
+```bash
+DATABASE_URL="postgresql://m19@127.0.0.1:55434/m19compat" DIRECT_URL="postgresql://m19@127.0.0.1:55434/m19compat" M19_DB_STRICT=1 npx vitest run __tests__/decision-os/value-v2-window-db.integration.test.ts   --maxWorkers=1 --no-file-parallelism
+```
+
+```
+DB_STRICT_EXIT=0
+Test Files  1 passed (1)
+     Tests  10 passed (10)
+```
+
+**10 passed, 0 skipped** — against **5 passed / 5 skipped** before the fix. Production host
+`ep-curly-block` appears **0 times** in the output.
+
+**Fixture isolation and cleanup verified** after the run — every table the suite writes reads
+zero rows:
+
+```
+leagues 0 · league_teams 0 · "WeeklyMatchup" 0 · season_forecast_snapshots 0
+dynasty_projection_snapshots 0 · app_users 0
+```
+
+**Strict mode proven to fail actionably on an incompatible database.** The same command against
+the shared Neon test endpoint (`ep-muddy-leaf…`, named in `.env.test`, non-production) exits
+**1** with 5 success-path failures, each naming the unapplied migration and what to do:
+
+> `M19_DB_STRICT=1 but the Prisma client cannot read WeeklyMatchup on this database. … Most
+> likely cause: the pending migration 20260903222531_weekly_matchup_roster_id_text is unapplied
+> here, so "rosterId" is still integer while the generated client expects text.`
+
+That is the behaviour the review asked for: incompatible schema under explicit verification
+produces an actionable failure, not a silent skip.
+
+⚠ **No production migration was applied**, and `prisma/schema.prisma` was not edited — it
+remains held by another session with uncommitted changes.
+
+---
+
+### Mutation controls carried over from revision 1 (the schedule fix)
+
+Listed here for completeness; these are the controls for the *previous* commit's change, not
+this batch's. Revision 2's own controls are in §4a above.
 
 | Mutation | Exit | Caught by |
 | --- | --- | --- |
@@ -138,6 +317,14 @@ output. No production migration was applied.
 | Stop refusing an out-of-schedule period; clamp instead | 1 | 2 failures |
 
 `windowDecision.ts` restored byte-identical afterwards; suite returns to 15 passed, exit 0.
+
+⚠ **One of Batch 19A's three mutations was a silent no-op**, and it is recorded because the
+lesson generalises. A `sed` pattern matched only the completed-season branch, where the mutated
+expression evaluates identically, so the mutation applied to the file and changed no behaviour;
+an unrelated `exit=1` elsewhere in the batch made it look caught. Re-running that mutation
+against its own suite alone returned exit 0, 19 passed. Retargeted by line number, it failed
+correctly with `AssertionError: expected 3 to be 1`. **Proving a mutation applied is necessary
+and not sufficient — prove it changed behaviour.**
 
 ### A correction to an earlier committed document
 
@@ -213,11 +400,15 @@ needed by both services has to reach both. No credentials appear in this documen
    projection landing today can still influence what W-1 and W-2 are computed to have been —
    the defect the contract exists to close. This branch narrows *which periods* are consulted;
    it does not make them durable.
-3. **Readiness row 17 is open.** `import-integrity-batch-a` (`55d388017`) has not landed on
-   `main`, so reconciliation still hard-deletes unclaimed `LeagueTeam` rows.
-4. **The full-suite command is not CI-safe as written.** Eight files at once fails on worker
-   startup under load. CI must run these individually or in small batches, or it will produce
-   a red that means nothing.
+3. **Readiness row 17 is open.** `import-integrity-batch-a` (`55d388017`, 5 commits) has not
+   landed on `main`, so reconciliation still hard-deletes unclaimed `LeagueTeam` rows. Both
+   this and item 1 are documented in full in `DECISION_OS_M19_EXTERNAL_DEPENDENCIES.md`,
+   including the exact six-file `value-v2` import closure the consumer seam needs. **Neither
+   was implemented — both belong to other sessions.**
+4. ~~**The full-suite command is not CI-safe as written.**~~ **Resolved in revision 2.**
+   `npx vitest run __tests__/decision-os/value-v2- --maxWorkers=1 --no-file-parallelism` runs
+   all nine files in one command at exit 0. The failure was file-level parallelism on a
+   contended box, not the suites.
 5. **Production PostgreSQL major is still unconfirmed** — validated on 18.3 and 17.9; the test
    endpoint reports 17.11. Immaterial for this commit (no migration), material before any
    schema batch.

@@ -126,6 +126,33 @@ export const HISTORICAL_RECONSTRUCTION_GAP = 'hysteresis_history_reconstructed_n
  */
 export const SCHEDULE_UNAVAILABLE_GAP = 'schedule_unavailable_lookback_assumed_contiguous'
 
+/** The caller supplied a scope that cannot describe a real scoring period. */
+export const INVALID_SCOPE_GAP = 'window_scope_invalid'
+
+/** Matches `twobs_ordinal_chk` in the observation schema. */
+export const MAX_PERIOD_ORDINAL = 25
+
+/**
+ * Rejects a scope before ANY lookback is built.
+ *
+ * ⚠ THE ARITHMETIC PATH HAD NO UPPER OR FINITENESS GUARD, AND TWO DISTINCT FAILURES CAME
+ * OUT OF IT. A week of 0, -1 or NaN pushed nothing, leaving `assembled[assembled.length - 1]`
+ * undefined and throwing a TypeError on `.facts`. A week of Infinity was worse: `w += 1`
+ * never advances past Infinity, so the loop never terminated at all — a hang rather than an
+ * error. Validating here, before either branch, closes both.
+ */
+function invalidScopeReason(scope: WindowFactsScope): string | null {
+  if (!scope || typeof scope !== 'object') return 'scope_missing'
+  if (typeof scope.leagueId !== 'string' || !scope.leagueId) return 'league_id_missing'
+  if (typeof scope.teamId !== 'string' || !scope.teamId) return 'team_id_missing'
+  if (!Number.isSafeInteger(scope.season)) return 'season_not_an_integer'
+  // Number.isSafeInteger is false for NaN, Infinity, fractions and anything past 2^53-1.
+  if (!Number.isSafeInteger(scope.week)) return 'week_not_an_integer'
+  if (scope.week < 1) return 'week_below_first_period'
+  if (scope.week > MAX_PERIOD_ORDINAL) return 'week_above_period_bound'
+  return null
+}
+
 /** The requested period is not in the league's schedule at all. */
 export const PERIOD_NOT_SCHEDULED_GAP = 'period_not_in_schedule'
 
@@ -161,6 +188,10 @@ export async function resolveWindowDecision(
 ): Promise<WindowDecision> {
   const coefficients = options.coefficients ?? DEFAULT_WINDOW_COEFFICIENTS
   const now = options.now ?? new Date()
+
+  // Validate BEFORE any lookback is constructed and before the port is touched.
+  const scopeProblem = invalidScopeReason(scope)
+  if (scopeProblem) return refusedDecision(scope, coefficients, now, [INVALID_SCOPE_GAP, scopeProblem])
 
   const scheduleGaps: string[] = []
   let weeks: number[]
