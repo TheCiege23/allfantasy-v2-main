@@ -231,6 +231,14 @@ endpoints:
       - This is the PRIMARY game-day endpoint. Player-level box stats live here.
       - Returns started AND finished events for the given date.
       - 304 => retry once with fresh buster.
+      - >
+        🛑 THE `season` IN THIS RESPONSE IS A HYPHENATED SPAN, NOT THE `YYYY` THE SEASON
+        PATH PARAM TAKES. Measured 2026-03-15 for both NBA and NHL: `season: "2025-2026"`,
+        `season_type: "Regular Season"`. So the value you READ here is not the value you
+        SEND to /player-stats/{season} or store in an integer season column — normalise on
+        the way in (lib/sports-data/seasonLabel.ts) and build each request in the spelling
+        that endpoint documents. RI's GraphQL nflRoster wants the span and rejects a plain
+        year, so all three spellings are live at once.
 
   play_by_play:
     method: GET
@@ -394,9 +402,33 @@ fields:
         Wed/Thu/Fri practice grid, parse NFL.com injury reports separately.
 
   NBA:
-    confidence: low   # partial hints only
-    live: [game_ID, status, game_status, home_team_name, away_team_name,
-           "full_box.home_team.score", "full_box.away_team.score", game_time, clock]
+    source: probe.sh live NBA 2026-03-15 (RSC_TOKEN2)
+    confidence: high        # was `low — partial hints only`; fixture committed
+    fixture: fixtures/live.NBA.json   # 7 games, full player box
+    live_envelope: [game_ID, sport, season, season_type, round, status, game_status,
+                    game_time, game_location, event_name, broadcast,
+                    home_team_name, away_team_name]
+    # ⚠ PLAYER BOX IS KEYED BY PLAYER ID DIRECTLY: player_box.<side>.<player_id>.<stat>
+    #   NHL below nests one level deeper (goalies/skaters). Do not share a parser blindly.
+    live_player:
+      identity: [player, position, status]
+      box:      [minutes, points, assists, total_rebounds, offensive_rebounds,
+                 defensive_rebounds, steals, blocks, turnovers, fouls,
+                 field_goals_made, field_goals_attempted,
+                 three_points_made, three_points_attempted,
+                 two_points_made, two_points_attempted, two_point_percentage,
+                 free_throws_made, free_throws_attempted]
+    live_team:
+      identity: [abbrv, mascot, record, division_name, team_id]
+      scoring:  [score, "quarter_scores.1", "quarter_scores.2", "quarter_scores.3", "quarter_scores.4"]
+      stats:    [assists, blocks, steals, turnovers, fouls, total_rebounds,
+                 offensive_rebounds, defensive_rebounds,
+                 field_goals_made, field_goals_attempted,
+                 three_points_made, three_points_attempted,
+                 two_points_made, two_points_attempted, two_point_percentage,
+                 free_throws_made, free_throws_attempted]
+    game_state:
+      current: ["full_box.current.Quarter", "full_box.current.TimeRemaining"]
 
   MLB:
     confidence: high   # for `live`; schedule/play_by_play below remain doc-derived
@@ -442,7 +474,34 @@ fields:
     team_stats: [team_ID, name, played, wins, draws, losses, points]
     live: unknown   # see GAPS.md
 
-  NHL:    { confidence: none, live: unknown }   # see GAPS.md
+  NHL:
+    source: probe.sh live NHL 2026-03-15 (RSC_TOKEN2)
+    confidence: high        # was `none / live: unknown`; fixture committed, G-01 RESOLVED
+    fixture: fixtures/live.NHL.json   # 6 games, full player box
+    live_envelope: [game_ID, sport, season, season_type, round, status, game_status,
+                    game_time, game_location, event_name,
+                    home_team_name, away_team_name]
+    # 🛑 NHL NESTS ONE LEVEL DEEPER THAN NBA AND MLB:
+    #      NBA  player_box.<side>.<player_id>.<stat>
+    #      NHL  player_box.<side>.{goalies|skaters}.<player_id>.<stat>
+    #   A parser written against NBA reads `goalies`/`skaters` as player ids and finds
+    #   no stats on them. Branch on the sport, or detect the grouping level.
+    live_player_groups: [goalies, skaters]
+    live_player:
+      identity: [player, position, position_category, status]
+      skaters:  [goals, assists, plus_minus, shots_on_goal, hits, blocks,
+                 giveaways, takeaways, faceoffs_won, faceoffs_lost,
+                 penalty_minutes, time_on_ice,
+                 power_play_goals, power_play_assists,
+                 short_handed_goals, short_handed_assists, shootout_goals]
+      goalies:  [win, loss, overtime_loss, saves, shots_against, goals_allowed,
+                 shutouts, time_on_ice]
+    live_team:
+      identity: [abbrv, mascot, record, division_name, team_id]
+      scoring:  [score, "quarter_scores.1", "quarter_scores.2", "quarter_scores.3"]  # periods
+      stats:    [assists, blocks, hits, saves, shots_on_goal, penalty_minutes,
+                 faceoffs_won, faceoffs_lost, power_plays, power_plays_converted,
+                 short_handed_goals_scored, short_handed_goals_allowed]
   NCAAFB: { confidence: none, live: unknown }   # see GAPS.md
   NCAABB: { confidence: none, live: unknown }   # see GAPS.md
 

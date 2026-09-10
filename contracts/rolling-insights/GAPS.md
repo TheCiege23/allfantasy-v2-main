@@ -51,7 +51,8 @@
 
 | ID | Gap | Status | Blocks | How to resolve |
 |---|---|---|---|---|
-| `G-01` | Field names in `/live` for **NHL** | UNVERIFIED | NHL scoring | One probe during an NHL game → commit fixture |
+| `G-01` | Field names in `/live` for **NHL** | **RESOLVED** | — | `fixtures/live.NHL.json` — probed 2026-03-15 on `RSC_TOKEN2`, 6 games, full player box. Fields in `ENDPOINTS.yaml → fields.NHL`. ⚠ NHL nests `player_box.<side>.{goalies\|skaters}.<player_id>`, one level deeper than NBA/MLB. |
+| `G-01b` | Are **NBA / NHL** actually entitled on `RSC_TOKEN2`? | **RESOLVED — yes** | NBA + NHL scoring | Probed 2026-03-15 with `RSC_TOKEN2`: NBA HTTP 200 / 7 games, NHL HTTP 200 / 6 games, both with full player box. Recorded because this question has been answered WRONGLY twice by probing with the first token only — see `N-02` and the CLAUDE.md credential table. A single-credential probe cannot answer "do we have this sport". |
 | `G-02` | Field names in `/live` for **NCAAFB** | UNVERIFIED | CFB scoring | Probe on a Saturday → commit fixture |
 | `G-03` | Field names in `/live` for **NCAABB** | UNVERIFIED | CBB scoring | Probe during a game → commit fixture |
 | `G-04` | Field names in `/live` for **SOCCER** (all 3 leagues) | UNVERIFIED | Soccer scoring | Probe with `?league=EPL` during a match |
