@@ -447,9 +447,54 @@ function chooseWorktreeDir(common) {
   return { dir: join(common, 'af-smoke-worktree'), why: 'no candidate can host a link' }
 }
 
+/**
+ * Link the smoke worktree's `node_modules` at the primary checkout's copy.
+ *
+ * 🛑 `existsSync` FOLLOWS THE LINK; `symlinkSync` REFUSES THE PATH. That mismatch disabled this
+ * entire guard, silently, for every session sharing this checkout.
+ *
+ * `.git/af-smoke-worktree` is SHARED. A session junctioned `node_modules` there at its own
+ * scratchpad — `…/<session-id>/scratchpad/wt9/node_modules` — and then ended; its temp directory
+ * was cleaned up and the junction was left dangling. From then on, on every push, for everyone:
+ *
+ *     existsSync(dest)   -> false    it resolves the TARGET, which was gone
+ *     symlinkSync(dest)  -> EEXIST   it refuses the PATH, which was still there
+ *
+ * The early return never fired, the link was never made, and this printed "failing open, the
+ * push is allowed". Measured 2026-09-10: pushes landed on main with NO typecheck, and the only
+ * symptom was one warning line in output most callers filter away.
+ *
+ * ⚠ SO THE PROBE IS `lstatSync`, WHICH DOES NOT FOLLOW. It is the only call that answers the
+ * question `symlinkSync` actually asks — is there an entry at this path — and a dangling link is
+ * precisely the state where the two disagree.
+ *
+ * 🛑 AND THE REMOVAL IS NON-RECURSIVE, DELIBERATELY. `rmSync(dest, { recursive: true })` on a
+ * LIVE junction deletes THROUGH it and takes the primary checkout's real `node_modules` — 696
+ * entries — with it. This unlinks the entry alone, and only reaches that branch after
+ * `existsSync` has already proven the target is gone.
+ */
 function ensureNodeModulesLink(worktreeDir, source) {
   const dest = join(worktreeDir, 'node_modules')
-  if (existsSync(dest)) return null // already linked from a previous run, or a real install
+
+  let entry = null
+  try {
+    entry = lstatSync(dest)
+  } catch {
+    entry = null // nothing at the path — fall through and create it
+  }
+
+  if (entry) {
+    // A live link, or a real install someone did by hand: reuse it, as before.
+    if (existsSync(dest)) return null
+
+    // Present but unresolvable — the dangling case. Unlink the entry, never its target.
+    try {
+      rmSync(dest, { recursive: false, force: true })
+    } catch (err) {
+      return `node_modules at ${dest} is a stale link and could not be removed: ${err.message}`
+    }
+  }
+
   try {
     symlinkSync(source, dest, process.platform === 'win32' ? 'junction' : 'dir')
     return null

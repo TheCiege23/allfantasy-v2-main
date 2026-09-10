@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma'
 import { getTheSportsDbApiKeyOrFallback } from '@/lib/env/sports-media-keys'
 import { coercePlayerAge } from '@/lib/sports-data/playerAge'
 import { providerPositionCode } from '@/lib/sports-data/providerPositionCode'
+import { canonicalSeasonLabel, seasonStartYear } from '@/lib/sports-data/seasonLabel'
 
 /**
  * TheSportsDB ingestion — everything the provider actually serves.
@@ -515,7 +516,9 @@ export async function ingestSchedule(
       startTime: parseKickoff(e),
       venue: str(e.strVenue),
       week: intOf(e.intRound),
-      season: intOf(season.slice(0, 4)),
+      // Was an inline `intOf(season.slice(0, 4))`. Same rule, now named and shared with the
+      // season-stats path below, so the two cannot drift into disagreeing about one season.
+      season: seasonStartYear(season),
       fetchedAt: now,
       expiresAt: ttl(now),
       raw: e as never,
@@ -556,8 +559,14 @@ export async function ingestSchedule(
 export async function ingestPlayerStats(
   sport: IngestSport,
   opts?: { maxPlayers?: number }
-): Promise<{ playersQueried: number; playersWithStats: number; seasonRowsWritten: number }> {
-  const result = { playersQueried: 0, playersWithStats: 0, seasonRowsWritten: 0 }
+): Promise<{
+  playersQueried: number
+  playersWithStats: number
+  seasonRowsWritten: number
+  /** Labels `canonicalSeasonLabel` could not read — a new provider spelling, reported not guessed. */
+  unreadableSeasonLabels: number
+}> {
+  const result = { playersQueried: 0, playersWithStats: 0, seasonRowsWritten: 0, unreadableSeasonLabels: 0 }
 
   /*
    * ⚠ ORDERING IS LOAD-BEARING FOR SCHEDULED RUNS.
@@ -618,10 +627,26 @@ export async function ingestPlayerStats(
 
     const bySeason = new Map<string, Record<string, string>>()
     for (const r of rows) {
-      const season = str(r.strSeason)
+      /*
+       * ⚠ NORMALISED HERE BECAUSE THE COLUMN TYPE WILL NOT DO IT FOR US.
+       *
+       * `SportsGame.season` is an `Int`, so the games path above was always forced to reduce
+       * this label to a start year. `player_season_stats.season` is a `String`, so the raw
+       * span passed straight through — and production accumulated NBA rows under
+       * "2024-2025" and NHL under "2020-2021" while every Rolling Insights row used a plain
+       * year. Same file, same feed, two answers, decided by a column type.
+       *
+       * A mismatch cannot throw: an integer-year comparison against "2024-2025" matches
+       * nothing and returns zero rows quietly. Hence one shared rule, not a second inline one.
+       */
+      const season = canonicalSeasonLabel(r.strSeason)
       const stat = str(r.strStatistic)
       const value = str(r.strValue)
-      if (!season || !stat) continue
+      if (!season || !stat) {
+        // An unreadable season label is counted, not guessed into a row that joins to nothing.
+        if (!season && str(r.strSeason)) result.unreadableSeasonLabels += 1
+        continue
+      }
       const bucket = bySeason.get(season) ?? {}
       bucket[stat] = value ?? ''
       bySeason.set(season, bucket)

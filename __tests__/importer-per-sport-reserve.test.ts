@@ -42,11 +42,56 @@ function constant(name: string): number {
 
 describe('importer per-sport reserve', () => {
   it('refuses to start a sport inside the reserved tail', () => {
-    // The literal guard, read from source: asserting the expression rather than a behaviour keeps
-    // this honest without booting the whole importer and its provider chain.
-    expect(SRC).toContain('IMPORT_BUDGET_MS - PER_SPORT_RESERVE_MS')
-    // The bare form is what shipped the 502. If it comes back, the reserve is decorative.
+    /*
+     * ⚠ THIS ASSERTION WAS REWRITTEN 2026-09-10 AND THE REASON MATTERS. It pinned the literal
+     * `'IMPORT_BUDGET_MS - PER_SPORT_RESERVE_MS'`, which stopped existing the moment the budget
+     * became caller-supplied and the subtraction moved into a named `usableBudgetMs`. The
+     * property it was defending — the reserve is actually subtracted — was never broken.
+     *
+     * That is the source-string guard failure mode in both directions: it went red on a
+     * refactor that preserved the behaviour, and it would have gone GREEN on a rename that
+     * destroyed it. So this now pins the SHAPE (a subtraction of the reserve, in whatever
+     * expression) plus the bare form that shipped the 502.
+     */
+    expect(SRC).toMatch(/usableBudgetMs\s*=\s*effectiveBudgetMs\s*-\s*PER_SPORT_RESERVE_MS/)
+    expect(SRC).toMatch(/startedAt\s*>\s*usableBudgetMs/)
+    // The bare forms are what shipped the 502. If either comes back, the reserve is decorative.
     expect(SRC).not.toMatch(/startedAt > IMPORT_BUDGET_MS\)/)
+    expect(SRC).not.toMatch(/startedAt > effectiveBudgetMs\)/)
+  })
+
+  it('floors a caller-supplied budget so it can never go negative', () => {
+    /*
+     * 🛑 A NEGATIVE BUDGET SKIPS EVERY SPORT AND REPORTS SUCCESS. The between-sports check is
+     * `elapsed > usable`, so a usable value below zero is true on the first iteration: every
+     * sport lands in `skippedSports`, the function returns normally, and `syncJobRun` records a
+     * run that imported nothing. That is the silent no-op this whole reserve exists to prevent,
+     * and making the budget caller-supplied is exactly what introduces the possibility.
+     */
+    expect(SRC).toMatch(
+      /effectiveBudgetMs\s*=\s*Math\.max\(\s*PER_SPORT_RESERVE_MS,\s*options\?\.budgetMs\s*\?\?\s*IMPORT_BUDGET_MS/,
+    )
+  })
+
+  it('is given a slice of the cron budget, not the whole window', () => {
+    /*
+     * The defect this pins, measured in production 2026-09-10: `IMPORT_BUDGET_MS` and
+     * `CRON_RUN_BUDGET_MS` were both 240_000 and stacked in sequence, so the import could spend
+     * the entire run and did — 240,580 / 240,884 / 240,413ms on three consecutive runs — after
+     * which all ten follow-on phases deferred every time.
+     *
+     * ⚠ ASSERTED AGAINST `budget.remainingMs()`, NOT A CONSTANT. Deriving the slice from the
+     * live budget is what stops the two clocks drifting apart again; a second hardcoded number
+     * would recreate the same trap one subtraction later.
+     */
+    const ROUTE = readFileSync(
+      join(process.cwd(), 'app/api/cron/import-players/route.ts'),
+      'utf8',
+    )
+    expect(ROUTE).toMatch(/budget\.remainingMs\(\)\s*-\s*TAIL_PHASE_RESERVE_MS/)
+    expect(ROUTE).toMatch(/budgetMs:\s*importBudgetMs/)
+    // The unsliced call is what starved the tail. It must not return.
+    expect(ROUTE).not.toMatch(/runSportsDataImporter\(\{\s*\n\s*sports,\s*\n\s*\.\.\./)
   })
 
   it('leaves real headroom between the usable budget and the 300s edge', () => {
