@@ -347,7 +347,26 @@ export async function runElimination(input: RunEliminationInput): Promise<Guillo
      * is provable from this engine, so the key is reported as a separate blocker rather than
      * guessed. Consequence to keep in mind: on the leagues where it matches nothing, these new
      * fields are written to zero rows exactly as `isOrphan` already was. The count below is what
-     * makes that visible.
+     * makes that visible. Measured 2026-09-10 against production: this writer's signature matches
+     * ZERO of 3,419 rows, so it has never successfully fired.
+     *
+     * 🛑 THIS BLOCKER HAS A DOWNSTREAM CONSUMER, AND FIXING THE KEY FIRST BREAKS IT SILENTLY.
+     *
+     * `lib/decision-os/value-v2/redraftWindowServerAdapter.ts` reaches a LeagueTeam only by
+     * `claimedByUserId` — and the update below NULLS that column. Its contract says an eliminated
+     * team still resolves (a knocked-out franchise has a real record and a real roster, and
+     * "rebuilding" is the right verdict), but once elimination actually fires there is no claim
+     * left to join on, so the adapter simply stops finding those users. No error, no gap, no
+     * failing test: the team is just absent.
+     *
+     * That is invisible today ONLY because the key matches nothing. Repairing the key without
+     * first deciding between:
+     *
+     *   (a) the adapter gains a fallback identity path, or
+     *   (b) this writer stops nulling `claimedByUserId` on elimination
+     *
+     * turns a dormant defect into a live one. Decide (a) or (b) BEFORE the id-space fix lands —
+     * the ordering is the whole risk, not either change on its own.
      */
     const unclaimed = await prisma.leagueTeam
       .updateMany({

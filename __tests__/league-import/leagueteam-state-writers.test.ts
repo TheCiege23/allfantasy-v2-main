@@ -370,6 +370,32 @@ describeDb('UNKNOWN stays distinguishable, and the selectors honour it', () => {
         eliminatedAt: new Date(),
       },
     })
+
+    /*
+     * 🛑 A GENUINELY ARCHIVED ROW, AND ITS ABSENCE WAS A HOLE IN THIS FIXTURE.
+     *
+     * Without it `expect(count(ARCHIVED_FRANCHISES)).toBe(0)` was measuring an empty set: the
+     * assertion could not fail, and nothing here proved archived rows are EXCLUDED from the
+     * current or claimable sets rather than merely absent from the table.
+     *
+     * ⚠ IT IS DELIBERATELY `ARCHIVED` + `VACANT` — the PAIR, not one axis. A defect that needs
+     * two fields to appear is invisible to a fixture that varies one at a time: `CLAIMABLE` keys
+     * on lifecycle AND manager, so a row that is vacant but departed is exactly the case where
+     * checking only `managerKind` would wrongly offer someone a franchise that has left.
+     */
+    await prisma.leagueTeam.create({
+      data: {
+        leagueId: L,
+        externalId: 'sel-archived',
+        teamName: 'Archived',
+        ownerName: 'Archived',
+        isOrphan: true,
+        lifecycleState: 'ARCHIVED',
+        managerKind: 'VACANT',
+        archivedAt: new Date(),
+        archiveReason: 'absent_from_authoritative_roster_response',
+      },
+    })
   })
 
   afterAll(async () => {
@@ -406,11 +432,24 @@ describeDb('UNKNOWN stays distinguishable, and the selectors honour it', () => {
     const { CURRENT_FRANCHISES_INCLUDING_UNKNOWN, ARCHIVED_FRANCHISES, UNCLASSIFIED_FRANCHISES } =
       await import('@/lib/league-import/teamLifecycle')
 
+    /*
+     * Four rows exist; three are current. This now proves the archived row is EXCLUDED, which is
+     * a different claim from the one this made before `sel-archived` existed — then it counted 3
+     * of 3 and would have passed with no exclusion happening at all.
+     */
+    expect(await prisma.leagueTeam.count({ where: { leagueId: L } }), 'fixture size').toBe(4)
     expect(
       await prisma.leagueTeam.count({ where: { leagueId: L, ...CURRENT_FRANCHISES_INCLUDING_UNKNOWN } }),
-      'league size must count the vacant seat, the eliminated team and the unclassified row',
+      'league size counts the vacant seat, the eliminated team and the unclassified row — but NOT the archived one',
     ).toBe(3)
-    expect(await prisma.leagueTeam.count({ where: { leagueId: L, ...ARCHIVED_FRANCHISES } })).toBe(0)
+
+    /* Named, not counted: a count of 1 would pass if the selector found the wrong row. */
+    const archived = await prisma.leagueTeam.findMany({
+      where: { leagueId: L, ...ARCHIVED_FRANCHISES },
+      select: { externalId: true },
+    })
+    expect(archived.map((a) => a.externalId)).toEqual(['sel-archived'])
+
     expect(await prisma.leagueTeam.count({ where: { leagueId: L, ...UNCLASSIFIED_FRANCHISES } })).toBe(1)
   })
 
@@ -434,7 +473,39 @@ describeDb('UNKNOWN stays distinguishable, and the selectors honour it', () => {
       select: { externalId: true },
       orderBy: { externalId: 'asc' },
     })
+    /*
+     * 🛑 `sel-archived` IS ALSO `managerKind: 'VACANT'` AND MUST NOT APPEAR. That is the pair this
+     * assertion exists for: a selector checking only the manager axis would offer a departed
+     * franchise to a new manager, and every other row here would still make it look correct.
+     */
     expect(claimable.map((c) => c.externalId)).toEqual(['sel-eliminated', 'sel-vacant'])
+  })
+
+  it('🛑 an ARCHIVED row is excluded from every live set, on lifecycle alone', async () => {
+    const { prisma } = await import('@/lib/prisma')
+    const {
+      CURRENT_FRANCHISES_INCLUDING_UNKNOWN,
+      CLAIMABLE_FRANCHISES,
+      ELIGIBLE_FRANCHISES_INCLUDING_UNKNOWN,
+      HUMAN_RECIPIENTS_INCLUDING_UNKNOWN,
+    } = await import('@/lib/league-import/teamLifecycle')
+
+    /*
+     * The archived row carries `managerKind: 'VACANT'` and `eliminatedAt: null`, so on the manager
+     * and competition axes it looks exactly like a live claimable seat. Only the lifecycle axis
+     * separates them — which is the entire reason the axes are orthogonal instead of one boolean.
+     */
+    for (const [name, where] of [
+      ['CURRENT_FRANCHISES_INCLUDING_UNKNOWN', CURRENT_FRANCHISES_INCLUDING_UNKNOWN],
+      ['CLAIMABLE_FRANCHISES', CLAIMABLE_FRANCHISES],
+      ['ELIGIBLE_FRANCHISES_INCLUDING_UNKNOWN', ELIGIBLE_FRANCHISES_INCLUDING_UNKNOWN],
+      ['HUMAN_RECIPIENTS_INCLUDING_UNKNOWN', HUMAN_RECIPIENTS_INCLUDING_UNKNOWN],
+    ] as const) {
+      const hit = await prisma.leagueTeam.count({
+        where: { leagueId: L, externalId: 'sel-archived', ...where },
+      })
+      expect(hit, `${name} must not return a departed franchise`).toBe(0)
+    }
   })
 
   it('elimination is a THIRD axis: eliminated teams stay current but leave the eligible set', async () => {
