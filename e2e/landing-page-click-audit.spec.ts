@@ -85,20 +85,40 @@ test.describe("@growth landing page click audit", () => {
     expect(desktopHasOverflow).toBeFalsy()
   })
 
-  test("mobile layout click audit: responsive rendering and hero CTA", async ({ page }) => {
-    await page.setViewportSize({ width: 390, height: 844 })
-    await page.goto("/", { waitUntil: "domcontentloaded" })
+  test("mobile layout click audit: 320–430px rendering, menu, and hero CTA", async ({ page }) => {
+    for (const width of [320, 360, 390, 430]) {
+      await page.setViewportSize({ width, height: 844 })
+      await page.goto("/", { waitUntil: "domcontentloaded" })
 
-    await expect(page.locator("h1").first()).toBeVisible()
-    await expect(page.getByTestId("landing-hero-primary")).toBeVisible()
+      await expect(page.locator("h1").first()).toBeVisible()
+      await expect(page.getByTestId("landing-hero-primary")).toBeVisible()
+      await expect(page.getByTestId("landing-mobile-primary")).toBeVisible()
 
-    // A landing page that scrolls sideways on a phone is the single most common
-    // way this surface breaks, and the reason this check outlived the redesign.
-    const mobileHasOverflow = await page.evaluate(() => {
-      return document.documentElement.scrollWidth > window.innerWidth + 2
-    })
-    expect(mobileHasOverflow).toBeFalsy()
+      const measurements = await page.evaluate(() => {
+        const nav = document.querySelector<HTMLElement>(".af-lp-nav")
+        const mobileCta = document.querySelector<HTMLElement>("[data-testid='landing-mobile-primary']")
+        const menu = document.querySelector<HTMLElement>(".af-lp-mobile-menu summary")
+        return {
+          overflow: document.documentElement.scrollWidth > window.innerWidth + 2,
+          navHeight: nav?.getBoundingClientRect().height ?? 0,
+          ctaHeight: mobileCta?.getBoundingClientRect().height ?? 0,
+          menuWidth: menu?.getBoundingClientRect().width ?? 0,
+          menuHeight: menu?.getBoundingClientRect().height ?? 0,
+        }
+      })
+      expect(measurements.overflow, `${width}px landing page scrolls sideways`).toBeFalsy()
+      expect(measurements.navHeight, `${width}px mobile header should remain one row`).toBeLessThanOrEqual(66)
+      expect(measurements.ctaHeight, `${width}px mobile CTA target`).toBeGreaterThanOrEqual(44)
+      expect(measurements.menuWidth, `${width}px menu target width`).toBeGreaterThanOrEqual(44)
+      expect(measurements.menuHeight, `${width}px menu target height`).toBeGreaterThanOrEqual(44)
 
+      await page.locator(".af-lp-mobile-menu summary").click()
+      await expect(page.getByTestId("landing-mobile-sign-in")).toBeVisible()
+      await expect(page.locator(".af-lp-mobile-panel")).toBeVisible()
+    }
+
+    // Keep the original conversion contract after the full width matrix.
+    await page.locator(".af-lp-mobile-menu summary").click()
     await page.getByTestId("landing-hero-primary").click()
     await expect(page).not.toHaveURL(/\/$/, { timeout: 20_000 })
   })

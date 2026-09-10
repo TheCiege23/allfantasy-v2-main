@@ -59,7 +59,7 @@ function NavGroupBar({ groups, currentPath }: { groups: NavGroup[]; currentPath:
     href === "/admin" ? currentPath.startsWith("/admin") : isNavItemActive(currentPath, href)
 
   return (
-    <div ref={barRef} className="flex gap-1 overflow-x-auto pb-1">
+    <div ref={barRef} className="hidden gap-1 overflow-x-auto pb-1 lg:flex">
       {groups.map((group) => {
         const groupActive = group.items.some((item) => isItemActive(item.href))
         const pillStyle = groupActive
@@ -242,7 +242,7 @@ export default function GlobalTopNav({
             <button
               type="button"
               onClick={onOpenMobileMenu}
-              className="flex lg:hidden h-9 w-9 items-center justify-center rounded-lg border"
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border lg:hidden"
               style={{ borderColor: "var(--border)", color: "var(--muted)" }}
               aria-label="Open menu"
               aria-expanded={mobileMenuOpen}
@@ -264,7 +264,10 @@ export default function GlobalTopNav({
 
           <ProductContextSwitcher />
 
-          <div className="ml-auto flex w-full flex-wrap items-center justify-end gap-1.5 sm:w-auto sm:gap-2">
+          <div className={cn(
+            "ml-auto w-full flex-wrap items-center justify-end gap-1.5 sm:w-auto sm:gap-2",
+            isAuthenticated ? "hidden lg:flex" : "flex",
+          )}>
             {isAuthenticated ? (
               <>
                 <Link

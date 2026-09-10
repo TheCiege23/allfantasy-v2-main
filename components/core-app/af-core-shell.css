@@ -1626,35 +1626,26 @@
    * a sibling block equivalent and impossible to get wrong. See CLAUDE.md.
    */
 
-  /*
-   * ⚠ THE CONTENT MUST MAKE ROOM FOR THE HANDLE, OR THE HANDLE SITS ON THE
-   * WORDS. It is fixed, so it takes no space in the flow — and at 38vh it
-   * landed squarely over the first paragraph of every board. Reserving its
-   * width here is the fix; making it transparent or moving it down the page
-   * only changes which sentence it covers.
-   */
-  .af-core .af-content {
-    padding-left: 30px;
-  }
-
   .af-core .af-rail-handle {
     position: fixed;
-    left: 0;
-    top: 38vh;
+    left: 12px;
+    top: auto;
+    bottom: calc(72px + env(safe-area-inset-bottom, 0px));
     z-index: 60;
     display: flex;
-    flex-direction: column;
+    flex-direction: row;
     align-items: center;
-    gap: 6px;
-    padding: 12px 4px;
-    border: 0;
-    border-radius: 0 12px 12px 0;
+    justify-content: center;
+    gap: 8px;
+    padding: 0 12px;
+    border: 1px solid var(--accent-line);
+    border-radius: 999px;
     background: var(--accent);
     color: var(--accent-ink);
     cursor: pointer;
-    /* ≥44px in both directions — this is the only way into the league list on a phone. */
-    min-width: 26px;
-    min-height: 108px;
+    /* This is the only way into the league list on a phone. */
+    min-width: 44px;
+    min-height: 44px;
     box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
   }
 
@@ -1662,7 +1653,7 @@
     font: 800 10px/1 var(--font-archivo, 'Archivo', system-ui, sans-serif);
     letter-spacing: 0.08em;
     text-transform: uppercase;
-    writing-mode: vertical-rl;
+    writing-mode: horizontal-tb;
   }
 
   /*
@@ -1675,7 +1666,7 @@
     z-index: 59;
     flex-direction: column;
     align-items: stretch;
-    padding: 16px 14px calc(16px + env(safe-area-inset-bottom));
+    padding: max(16px, env(safe-area-inset-top)) 14px calc(76px + env(safe-area-inset-bottom));
     background: var(--rail);
     border-right: 0;
     overflow-y: auto;

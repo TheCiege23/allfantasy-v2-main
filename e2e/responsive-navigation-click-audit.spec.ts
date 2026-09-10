@@ -219,16 +219,31 @@ test.describe("@db @nav responsive navigation click audit", () => {
     await expect(header.locator('a[href="/admin"]')).toHaveCount(0)
 
     // Mobile drawer interactions
-    await page.setViewportSize({ width: 390, height: 844 })
+    await page.setViewportSize({ width: 320, height: 844 })
     await page.goto("/settings?tab=profile")
     const mobileHeader = page.locator("header").first()
     const openMenuButton = mobileHeader.getByRole("button", { name: "Open menu" })
     await expect(openMenuButton).toBeVisible()
     await expect(openMenuButton).toHaveAttribute("aria-expanded", "false")
 
+    const mobileHeaderMeasurements = await mobileHeader.evaluate((node) => {
+      const button = node.querySelector<HTMLElement>('button[aria-label="Open menu"]')
+      return {
+        height: node.getBoundingClientRect().height,
+        buttonWidth: button?.getBoundingClientRect().width ?? 0,
+        buttonHeight: button?.getBoundingClientRect().height ?? 0,
+        overflow: document.documentElement.scrollWidth > window.innerWidth + 2,
+      }
+    })
+    expect(mobileHeaderMeasurements.height).toBeLessThanOrEqual(80)
+    expect(mobileHeaderMeasurements.buttonWidth).toBeGreaterThanOrEqual(44)
+    expect(mobileHeaderMeasurements.buttonHeight).toBeGreaterThanOrEqual(44)
+    expect(mobileHeaderMeasurements.overflow).toBeFalsy()
+
     await openMenuButton.click()
     const drawer = page.getByTestId("mobile-nav-drawer")
     await expect(drawer).toBeVisible()
+    await expect(page.getByRole("button", { name: "Close menu" })).toBeFocused()
     await expect(openMenuButton).toHaveAttribute("aria-expanded", "true")
     await expect(drawer.getByText("Products")).toBeVisible()
     await expect(drawer.getByText("Workspace")).toBeVisible()
@@ -236,8 +251,16 @@ test.describe("@db @nav responsive navigation click audit", () => {
     await expect(drawer.getByRole("link", { name: "Notifications" })).toBeVisible()
     await expect(drawer.locator('a[href*="tab=chat"]').first()).toBeVisible()
 
-    await page.getByRole("button", { name: "Close menu" }).click()
+    const closeButton = page.getByRole("button", { name: "Close menu" })
+    const closeTarget = await closeButton.evaluate((node) => {
+      const rect = node.getBoundingClientRect()
+      return { width: rect.width, height: rect.height }
+    })
+    expect(closeTarget.width).toBeGreaterThanOrEqual(44)
+    expect(closeTarget.height).toBeGreaterThanOrEqual(44)
+    await closeButton.click()
     await expect(page.getByTestId("mobile-nav-drawer")).toHaveCount(0)
+    await expect(openMenuButton).toBeFocused()
 
     await openMenuButton.click()
     await page.getByTestId("mobile-nav-overlay").click({ position: { x: 8, y: 8 } })

@@ -229,6 +229,44 @@ export function LandingV4({
             {primaryCta.label}
           </Link>
         </div>
+
+        {/*
+          Phones get one compact header row instead of promoting every desktop
+          control into three stacked rows. `details` keeps this usable in the
+          server-rendered document and without JavaScript; the primary CTA stays
+          outside the menu because it is the page's main conversion action.
+        */}
+        <div className="af-lp-mobile-actions">
+          <Link
+            href={primaryCta.href}
+            className="af-btn af-lp-mobile-primary"
+            data-testid="landing-mobile-primary"
+          >
+            {primaryCta.label}
+          </Link>
+          <details className="af-lp-mobile-menu">
+            <summary aria-label="Open navigation menu">
+              <svg width="20" height="20" viewBox="0 0 20 20" aria-hidden focusable="false">
+                <path d="M3 5h14M3 10h14M3 15h14" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+              </svg>
+            </summary>
+            <div className="af-lp-mobile-panel">
+              <a href="#how">{c.nav.how}</a>
+              <a href="#pricing">{c.nav.pricing}</a>
+              <Link href="/pricing">{c.nav.forCommissioners}</Link>
+              <Link href="/core/partners" className="af-lp-partners">
+                {c.nav.partners}
+                <span className="af-lp-api-chip af-num">API</span>
+              </Link>
+              {signedIn ? null : (
+                <Link href="/login" data-testid="landing-mobile-sign-in">
+                  {c.nav.signIn}
+                </Link>
+              )}
+              <LangSwitch lang={lang} label={c.nav.langLabel} />
+            </div>
+          </details>
+        </div>
       </nav>
 
       {/* ── Hero ────────────────────────────────────────────────────── */}
