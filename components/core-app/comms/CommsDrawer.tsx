@@ -1561,6 +1561,8 @@ export function CommsDrawer({
   const [tab, setTab] = useState<CommsTab>(initialTab)
   const [scopeId, setScopeId] = useState<string | null>(pageLeagueId)
   const panelRef = useRef<HTMLElement | null>(null)
+  /** The backdrop. A SIBLING of the panel, so it needs an inert exemption — see below. */
+  const scrimRef = useRef<HTMLButtonElement | null>(null)
 
   /*
    * ⚠ 23b's CORE VALUE PROP, AND IT IS REAL. A docked drawer follows the page:
@@ -1594,10 +1596,26 @@ export function CommsDrawer({
    *   - focus landed on the panel and was never restored, dropping keyboard
    *     users on <body> at the top of the roster they came from.
    */
+  /*
+   * 🛑 THE SCRIM MUST BE NAMED, OR THE HOOK INERTS IT AND BACKDROP-CLOSE DIES.
+   *
+   * `applyInertForTopmost` walks the container's ancestor chain and marks every
+   * sibling inert. This drawer renders its scrim as a SIBLING of the panel, so
+   * the scrim was in that sweep — measured in Chromium at 1100×900:
+   * `scrimHasInertAttr: true`, and a click at (8,8) left the drawer open. Inert
+   * removes hit testing, so the scrim's `onClick` never fired.
+   *
+   * `PlayerCardSheet` escaped this only by accident of markup: its scrim WRAPS
+   * the panel, so it is an ancestor, and ancestors are never inerted. The two
+   * shapes are not interchangeable, and this one needs the exemption.
+   */
+  const keepClickable = useMemo(() => [scrimRef], [])
+
   useOverlayContainment({
     active: open && mode === 'overlay',
     containerRef: panelRef,
     onClose,
+    keepClickableRefs: keepClickable,
   })
 
   if (!open) return null
@@ -1609,6 +1627,7 @@ export function CommsDrawer({
       {mode === 'overlay' ? (
         <button
           type="button"
+          ref={scrimRef}
           className="af-cm-scrim"
           aria-label="Close communications"
           onClick={onClose}

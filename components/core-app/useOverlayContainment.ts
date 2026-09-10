@@ -59,8 +59,10 @@ import { useEffect, useRef, type RefObject } from 'react'
 type OverlayEntry = {
   containerRef: RefObject<HTMLElement | null>
   initialFocusRef?: RefObject<HTMLElement | null>
-  /** Controls outside the container that stay live and stay in the Tab cycle. */
+  /** Controls outside the container that stay live AND stay in the Tab cycle. */
   keepRefs: ReadonlyArray<RefObject<HTMLElement | null>>
+  /** Outside the container, exempt from inert, but NOT in the Tab cycle. */
+  clickableRefs: ReadonlyArray<RefObject<HTMLElement | null>>
   onClose: () => void
   /** Where focus sat when this overlay activated. May be unmounted by close. */
   restoreTo: HTMLElement | null
@@ -113,10 +115,21 @@ function clearAllInert(): void {
   inertOriginals.clear()
 }
 
+/**
+ * Everything the inert sweep must leave alone.
+ *
+ * ⚠ BOTH REF LISTS COUNT HERE, AND ONLY ONE OF THEM COUNTS FOR FOCUS. A backdrop
+ * has to survive the sweep or its click handler dies, but putting it in the Tab
+ * cycle means tabbing off the last control lands on an invisible full-viewport
+ * button with no focus ring — focus looks like it vanished. Inertness and
+ * tabbability are separate questions and this is the one that asks about inert.
+ */
 function liveNodes(entry: OverlayEntry): HTMLElement[] {
   const container = entry.containerRef.current
-  const keep = entry.keepRefs.map((r) => r.current).filter((n): n is HTMLElement => n != null)
-  return container ? [container, ...keep] : keep
+  const outside = [...entry.keepRefs, ...entry.clickableRefs]
+    .map((r) => r.current)
+    .filter((n): n is HTMLElement => n != null)
+  return container ? [container, ...outside] : outside
 }
 
 /**
@@ -201,11 +214,40 @@ export type OverlayContainmentOptions = {
   /** Where focus goes on open. Falls back to the container itself. */
   initialFocusRef?: RefObject<HTMLElement | null>
   /**
-   * Controls that live OUTSIDE the container but belong to it — the league
-   * tray's handle is rendered as a sibling of the tray and is its close button.
-   * They stay out of the inert sweep and sit at the end of the Tab cycle.
+   * Controls that live OUTSIDE the container but belong to it, and that a
+   * keyboard user should reach. They are exempt from the inert sweep AND sit at
+   * the end of the Tab cycle.
+   *
+   * The league tray's handle is the case: it is rendered beside the tray and is
+   * its close control, so it must be both clickable and tabbable.
    */
   keepInteractiveRefs?: ReadonlyArray<RefObject<HTMLElement | null>>
+  /**
+   * Exempt from the inert sweep, but deliberately NOT in the Tab cycle.
+   *
+   * 🛑 YOUR SCRIM BELONGS HERE IF IT IS A SIBLING OF THE PANEL, AND OMITTING IT
+   * SILENTLY KILLS BACKDROP-CLOSE. `applyInertForTopmost` inerts every sibling
+   * along the container's ancestor chain, and inert removes hit testing — so a
+   * sibling scrim keeps rendering, keeps looking clickable, and its `onClick`
+   * never fires again. Nothing throws. Measured on `CommsDrawer` in Chromium at
+   * 1100×900: `inert` present on `.af-cm-scrim`, and a click at (8,8) left the
+   * drawer open.
+   *
+   * Two markup shapes exist and only one is safe by default:
+   *   - scrim WRAPS the panel (`PlayerCardSheet`) — an ancestor, and ancestors
+   *     are never inerted. Nothing to declare.
+   *   - scrim is a SIBLING of the panel (`CommsDrawer`, `SupportModal`) — in the
+   *     sweep, and it must be listed here.
+   *
+   * ⚠ AND IT IS A SEPARATE LIST FROM `keepInteractiveRefs` FOR A MEASURED
+   * REASON. Declaring the scrims as "interactive" fixed the click and broke the
+   * trap: the browser proof reported `escaped: outside after 16 Tab presses`,
+   * because tabbing off the last panel control landed on a transparent
+   * full-viewport button with no focus ring — focus appearing to vanish. A
+   * backdrop should be clickable and not tabbable; the panel already carries an
+   * explicit close button for keyboard users.
+   */
+  keepClickableRefs?: ReadonlyArray<RefObject<HTMLElement | null>>
 }
 
 export function useOverlayContainment({
@@ -214,6 +256,7 @@ export function useOverlayContainment({
   onClose,
   initialFocusRef,
   keepInteractiveRefs,
+  keepClickableRefs,
 }: OverlayContainmentOptions): void {
   /*
    * ⚠ THE CALLBACK GOES THROUGH A REF AND IS NOT AN EFFECT DEPENDENCY, AND THAT
@@ -229,6 +272,8 @@ export function useOverlayContainment({
   onCloseRef.current = onClose
   const keepRef = useRef(keepInteractiveRefs)
   keepRef.current = keepInteractiveRefs
+  const clickableRef = useRef(keepClickableRefs)
+  clickableRef.current = keepClickableRefs
 
   useEffect(() => {
     if (!active) return
@@ -239,6 +284,7 @@ export function useOverlayContainment({
       containerRef,
       initialFocusRef,
       keepRefs: keepRef.current ?? [],
+      clickableRefs: clickableRef.current ?? [],
       onClose: () => onCloseRef.current(),
       /*
        * Captured BEFORE focus moves into the overlay, and re-checked on cleanup
