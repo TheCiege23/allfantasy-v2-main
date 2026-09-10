@@ -4,6 +4,7 @@ import { authOptions } from '@/lib/auth'
 import { assertLeagueMember } from '@/lib/league/league-access'
 import { prisma } from '@/lib/prisma'
 import { rateLimit, getClientIp } from '@/lib/rate-limit'
+import { selectActiveTeams } from '@/lib/league-import/activeTeams'
 
 /**
  * Lists league teams for trade opponent selection (requires membership).
@@ -31,7 +32,12 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Forbidden' }, { status: access.status })
   }
 
-  const teams = await prisma.leagueTeam.findMany({
+  /*
+   * Trade partners are a CURRENT-competition list — an archived team cannot be traded with.
+   * `selectActiveTeams` is applied to the rows below rather than the `where`, per the note on
+   * that helper.
+   */
+  const teamRows = await prisma.leagueTeam.findMany({
     where: { leagueId },
     select: {
       externalId: true,
@@ -40,9 +46,11 @@ export async function GET(req: NextRequest) {
       platformUserId: true,
       claimedByUserId: true,
       pointsFor: true,
+      isOrphan: true,
     },
     orderBy: { pointsFor: 'desc' },
   })
+  const teams = selectActiveTeams(teamRows)
 
   return NextResponse.json({
     teams: teams.map((t) => ({

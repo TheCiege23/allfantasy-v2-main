@@ -41,6 +41,23 @@
 /** Prisma filter selecting ONLY archived teams. Safe in a query: NULL never matches `= true`. */
 export const ORPHAN_TEAM_WHERE = { isOrphan: true } as const
 
+/**
+ * Prisma filter selecting ACTIVE teams, for the cases a predicate cannot serve.
+ *
+ * ⚠ USE `selectActiveTeams` WHENEVER YOU ALREADY HAVE THE ROWS. This exists for `count`,
+ * `aggregate` and `groupBy`, where filtering in application code would mean fetching every row
+ * just to discard some — and for a `findMany` whose result feeds straight into a count.
+ *
+ * 🛑 IT IS ONLY CORRECT BECAUSE THE COLUMN IS `NOT NULL`. `NOT: { isOrphan: true }` compiles to
+ * SQL `NOT (isOrphan = true)`, and `NOT (NULL = true)` is NULL — which excludes the row. The
+ * committed DDL (`prisma/migrations/20260407024117_init/migration.sql`) declares
+ * `"isOrphan" BOOLEAN NOT NULL DEFAULT false` and no migration alters it, so no NULL exists in
+ * the table and the two forms agree. The PREDICATE is still the default because it additionally
+ * survives a partial `select`, a hand-typed `$queryRaw` row, and a mapper-built object — none of
+ * which a `where` clause ever sees.
+ */
+export const ACTIVE_TEAM_WHERE = { NOT: { isOrphan: true } } as const
+
 /** The minimum a row needs for `isActiveTeam` to judge it. */
 export interface TeamOrphanState {
   isOrphan?: boolean | null

@@ -15,6 +15,7 @@ import { prisma } from '@/lib/prisma'
 import { assertPaidJoinAllowed, linkDuesToRoster } from '@/lib/league-finance/joinGate'
 import { claimPlaceholderRoster } from '@/lib/league-import/placeholderClaim'
 import { findExistingLeagueClaim } from '@/lib/identity/linkedAccounts'
+import { ACTIVE_TEAM_WHERE } from '@/lib/league-import/activeTeams'
 
 export const dynamic = 'force-dynamic'
 
@@ -294,8 +295,12 @@ export async function POST(req: NextRequest) {
       .catch(() => null)
 
     if (league.platform === 'manual') {
+      /*
+       * 🛑 CAPACITY MUST COUNT CURRENT SEATS ONLY. An archived team counting toward `leagueSize`
+       * would block a legitimate join against a seat nobody occupies.
+       */
       const manualTeamCount = await tx.leagueTeam.count({
-        where: { leagueId: result.leagueId },
+        where: { ...ACTIVE_TEAM_WHERE, leagueId: result.leagueId },
       })
       if (league.leagueSize == null || manualTeamCount < league.leagueSize) {
         const displayName = profile?.displayName?.trim() || profile?.sleeperUsername?.trim() || 'Manager'

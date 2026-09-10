@@ -6,6 +6,7 @@ import { prisma } from '@/lib/prisma'
 import { listDramaEvents } from '@/lib/drama-engine/DramaQueryService'
 import { listRivalries } from '@/lib/rivalry-engine/RivalryQueryService'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
+import { ACTIVE_TEAM_WHERE } from '@/lib/league-import/activeTeams'
 import type {
   BroadcastPayload,
   BroadcastStandingRow,
@@ -34,8 +35,9 @@ export async function getBroadcastPayload(
   const sport = normalizeToSupportedSport(sportInput ?? league?.sport)
 
   const [teams, matchupFacts, dramaEvents, rivalries] = await Promise.all([
+    /* Broadcast mode presents the league as it stands now. */
     prisma.leagueTeam.findMany({
-      where: { leagueId },
+      where: { ...ACTIVE_TEAM_WHERE, leagueId },
       orderBy: [{ currentRank: 'asc' }, { pointsFor: 'desc' }, { wins: 'desc' }],
     }),
     getMatchupsForBroadcast(leagueId, requestedWeek ?? null),

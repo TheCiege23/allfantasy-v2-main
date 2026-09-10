@@ -5,6 +5,7 @@
 import { prisma } from '@/lib/prisma'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
 import type { GenerationContext, TeamStandingRow } from './types'
+import { ACTIVE_TEAM_WHERE } from '@/lib/league-import/activeTeams'
 
 export interface PowerRankingOptions {
   leagueId: string
@@ -23,8 +24,9 @@ export async function buildPowerRankingContext(
   const leagueId = options.leagueId
 
   const [teams, league] = await Promise.all([
+    /* Power rankings rank the CURRENT league; an archived team must not appear in them. */
     prisma.leagueTeam.findMany({
-      where: { leagueId },
+      where: { ...ACTIVE_TEAM_WHERE, leagueId },
       orderBy: [{ currentRank: 'asc' }, { pointsFor: 'desc' }, { wins: 'desc' }],
     }),
     prisma.league.findUnique({ where: { id: leagueId }, select: { name: true } }),

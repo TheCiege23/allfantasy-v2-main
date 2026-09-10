@@ -19,6 +19,7 @@ import {
   writeAiResultCache,
 } from '@/lib/ai-result-cache'
 import { getUserAfProStatus, AfProRequiredError } from '@/lib/entitlements/afAccess'
+import { selectActiveTeams } from '@/lib/league-import/activeTeams'
 
 export const dynamic = 'force-dynamic'
 
@@ -67,12 +68,17 @@ export async function POST(req: Request) {
 
     const bundle = await fetchSleeperLeagueBundle(sleeperId)
     const playersMap = await fetchPlayersMap(bundle.sport)
+    /*
+     * Resolving the REQUESTING manager's own team. If their team was archived they are no longer
+     * in this league, and generating waiver advice for a seat they do not hold is worse than the
+     * explicit 400 below.
+     */
     const teams = await prisma.leagueTeam.findMany({
       where: { leagueId },
-      select: { platformUserId: true, claimedByUserId: true },
+      select: { platformUserId: true, claimedByUserId: true, isOrphan: true },
     })
     const sleeperUserId =
-      teams.find((t) => t.claimedByUserId === targetUserId)?.platformUserId ?? null
+      selectActiveTeams(teams).find((t) => t.claimedByUserId === targetUserId)?.platformUserId ?? null
     if (!sleeperUserId) {
       return NextResponse.json({ error: 'No Sleeper user linked to this manager in the league' }, { status: 400 })
     }

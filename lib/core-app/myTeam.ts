@@ -25,6 +25,7 @@ import { displayPosition, inferSlotLabel } from './positionLabels'
 import { lookupProviderIdentityNames } from './providerIdentityNames'
 import { resolveSourceLink, type SourceLink } from '@/lib/league-links/sourceLinkResolver'
 import { identityGapNote } from './identityGap'
+import { ACTIVE_TEAM_WHERE } from '@/lib/league-import/activeTeams'
 import {
   BENCH_SWAP_POINTS,
   isEligibleForSlot,
@@ -883,7 +884,8 @@ export async function getMyTeamData(leagueId: string, userId: string): Promise<M
     },
   })
 
-  const teamCount = await prisma.leagueTeam.count({ where: { leagueId } })
+  /* The my-team view reports the CURRENT league size. */
+  const teamCount = await prisma.leagueTeam.count({ where: { ...ACTIVE_TEAM_WHERE, leagueId } })
 
   if (!myTeamRow) {
     const unknown = {

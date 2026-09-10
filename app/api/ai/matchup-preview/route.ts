@@ -11,6 +11,7 @@ import {
   nameForPlayer,
   readSleeperStateWeek,
 } from '@/lib/ai/league-settings-ai/sleeper'
+import { selectActiveTeams } from '@/lib/league-import/activeTeams'
 import {
   buildAiCacheKey,
   createSmokeAiResult,
@@ -67,11 +68,12 @@ export async function POST(req: Request) {
           ? stateWeek
           : 1
 
+    /* Same own-team resolution as the waiver route: an archived team has no current matchup. */
     const teams = await prisma.leagueTeam.findMany({
       where: { leagueId },
-      select: { id: true, platformUserId: true, claimedByUserId: true },
+      select: { id: true, platformUserId: true, claimedByUserId: true, isOrphan: true },
     })
-    const myLeagueTeam = teams.find((t) => t.claimedByUserId === targetUserId) ?? null
+    const myLeagueTeam = selectActiveTeams(teams).find((t) => t.claimedByUserId === targetUserId) ?? null
     const sleeperUserId = myLeagueTeam?.platformUserId ?? null
     if (!sleeperUserId) {
       return NextResponse.json({ error: 'No Sleeper user linked to this manager' }, { status: 400 })

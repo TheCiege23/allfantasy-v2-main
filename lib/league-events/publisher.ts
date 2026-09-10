@@ -11,6 +11,7 @@ import {
   parseLeagueNotificationPrefs,
 } from '@/lib/league/league-notification-prefs'
 import type { LeagueEventVisibility, LeagueFanoutEventType } from '@/lib/league-events/types'
+import { ACTIVE_TEAM_WHERE } from '@/lib/league-import/activeTeams'
 
 async function getAllLeagueMemberUserIds(leagueId: string): Promise<string[]> {
   const [rosterIds, league] = await Promise.all([
@@ -29,8 +30,9 @@ async function getElevatedCommissionerUserIds(leagueId: string): Promise<string[
   })
   const ids = new Set<string>()
   if (league?.userId) ids.add(league.userId)
+  /* A co-commissioner whose team was archived is no longer in the league to be notified. */
   const co = await prisma.leagueTeam.findMany({
-    where: { leagueId, isCoCommissioner: true, platformUserId: { not: null } },
+    where: { ...ACTIVE_TEAM_WHERE, leagueId, isCoCommissioner: true, platformUserId: { not: null } },
     select: { platformUserId: true },
   })
   for (const row of co) {
