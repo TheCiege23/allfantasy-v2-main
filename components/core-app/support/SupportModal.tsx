@@ -99,6 +99,8 @@ export function SupportModal({
   const [error, setError] = useState<string | null>(null)
   const [excluded, setExcluded] = useState<Set<string>>(new Set())
   const panelRef = useRef<HTMLDivElement | null>(null)
+  /** The backdrop. A SIBLING of the panel, so it needs an inert exemption — see below. */
+  const scrimRef = useRef<HTMLButtonElement | null>(null)
 
   useEffect(() => {
     if (open) setLeagueId(pageLeagueId)
@@ -111,11 +113,21 @@ export function SupportModal({
    * together routinely — and before this it had a bare `window` Escape listener
    * and nothing else, so one Escape closed the modal AND the drawer underneath
    * it, and Tab walked straight out of a dialog marked `aria-modal="true"`.
+   *
+   * 🛑 AND THE SCRIM IS A SIBLING OF THE PANEL, SO IT MUST BE EXEMPTED FROM THE
+   * INERT SWEEP OR CLICKING THE BACKDROP STOPS CLOSING THIS MODAL. Same defect
+   * and same fix as `CommsDrawer` — see the note there. `keepClickableRefs`
+   * rather than `keepInteractiveRefs`: the backdrop should be clickable but not
+   * tabbable, or Tab off the last control lands on a transparent full-viewport
+   * button and focus appears to vanish.
    */
+  const keepClickable = useMemo(() => [scrimRef], [])
+
   useOverlayContainment({
     active: open,
     containerRef: panelRef,
     onClose,
+    keepClickableRefs: keepClickable,
   })
 
   /*
@@ -211,7 +223,13 @@ export function SupportModal({
 
   return (
     <>
-      <button type="button" className="af-sp-scrim" aria-label="Close support" onClick={onClose} />
+      <button
+        type="button"
+        ref={scrimRef}
+        className="af-sp-scrim"
+        aria-label="Close support"
+        onClick={onClose}
+      />
       <div
         className="af-sp"
         ref={panelRef}

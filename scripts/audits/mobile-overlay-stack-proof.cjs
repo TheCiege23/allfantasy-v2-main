@@ -131,6 +131,19 @@ async function snapshot(page) {
     const inside = (el) => (el ? !!el.closest('[inert]') : null)
     const holds = (el) => !!(el && active && el.contains(active))
 
+    /*
+     * 🛑 THE SCRIMS ARE READ SEPARATELY FROM THE PANELS, AND THAT SPLIT IS THE
+     * WHOLE POINT. A scrim rendered as a SIBLING of its panel lands in the inert
+     * sweep, which removes hit testing — the backdrop keeps painting, keeps
+     * looking clickable, and its onClick never fires. `panelInsideInert` stays
+     * false throughout, so every assertion about the PANEL passes while
+     * click-outside-to-close is dead.
+     */
+    const scrimInert = (sel) => {
+      const el = document.querySelector(sel)
+      return el ? !!el.closest('[inert]') : null
+    }
+
     return {
       overflow: document.body.style.overflow,
       cardOpen: !!card,
@@ -146,6 +159,9 @@ async function snapshot(page) {
       supportInsideInert: inside(support),
       mainInert: main ? main.hasAttribute('inert') : null,
       handleInert: handle ? handle.hasAttribute('inert') : null,
+      cardScrimInert: scrimInert(sel.cardScrim),
+      commsScrimInert: scrimInert(sel.commsScrim),
+      supportScrimInert: scrimInert(sel.supportScrim),
       activeDesc: describe(active),
       activeInCard: holds(card),
       activeInComms: holds(comms),
@@ -427,6 +443,13 @@ async function scenarioTraySupport(page, engine, closeFirst) {
   check(trayUp.mainInert === true, `${label}: .af-main IS inert while the tray is topmost`)
 
   await openSupport(page)
+  /*
+   * ⚠ THE SUPPORT MODAL HAD NO BACKDROP COVERAGE ANYWHERE. `scenarioBackdrop`
+   * never opens it — it is only reachable from inside the tray — so its scrim
+   * went un-asserted entirely and was inert in exactly the same way the drawer's
+   * was. Checked here, where it is already open.
+   */
+  await checkScrimLive(page, engine, 'support')
   const both = await snapshot(page)
   check(both.supportOpen, `${label}: support modal opened from inside the tray`)
   check(
@@ -653,10 +676,31 @@ async function backdropPoint(page, scrimSel, panelSel) {
   )
 }
 
+/**
+ * 🛑 THE SCRIM MUST BE LIVE, ASSERTED INDEPENDENTLY OF GEOMETRY.
+ *
+ * This exists because the geometry check below CANNOT FAIL when the overlay is
+ * full-bleed: `backdropPoint` returns null, the run emits a note, and the
+ * assertion is simply skipped. That is exactly how a regression shipped — the
+ * hook's inert sweep marked `.af-cm-scrim` and `.af-sp-scrim` (both SIBLINGS of
+ * their panels), backdrop-close died on both, and the proof reported "the comms
+ * drawer covers its scrim — no backdrop to click at this width", which reads
+ * like a layout fact rather than a dead control.
+ *
+ * `inert` is a property of the element, not of the viewport, so this holds at
+ * every width and there is no shape of the page that turns it into a note.
+ */
+async function checkScrimLive(page, engine, which) {
+  const key = { card: 'cardScrimInert', comms: 'commsScrimInert', support: 'supportScrimInert' }[which]
+  const seen = await snapshot(page)
+  check(seen[key] === false, `${engine} scrim: the ${which} backdrop is NOT inert (saw ${seen[key]})`)
+}
+
 async function scenarioBackdrop(page, engine) {
   const label = `${engine} backdrop`
 
   await openers.card(page)
+  await checkScrimLive(page, engine, 'card')
   const cardPt = await backdropPoint(page, SEL.cardScrim, SEL.cardPanel)
   if (!cardPt) {
     notes.push(`  note ${label}: the card sheet covers the full viewport — no backdrop to click at this width`)
@@ -671,6 +715,7 @@ async function scenarioBackdrop(page, engine) {
   }
 
   await openers.comms(page)
+  await checkScrimLive(page, engine, 'comms')
   const commsPt = await backdropPoint(page, SEL.commsScrim, SEL.commsPanel)
   if (!commsPt) {
     notes.push(`  note ${label}: the comms drawer covers its scrim — no backdrop to click at this width`)
