@@ -2683,14 +2683,24 @@ export default async function AfCorePage({
              returned 200 rendering "Your leagues / We could not read your leagues
              just now".
 
-             ⚠ AND THIS BRANCH DELIBERATELY MAKES NO CLAIM ABOUT MEMBERSHIP.
-             `getLeagueHomeData` is `findUnique({ where: { id } })` with no
-             `userId` clause, so this code cannot distinguish "the read failed"
-             from "you are not in this league" — a reassurance like "not a sign
-             you are no longer in it" would be asserting something the data does
-             not support. It says only what is true either way: this league could
-             not be read, and the others are unaffected. Nothing here changes what
-             is loaded, who may load it, or any guard.
+             🛑 AND IT ASSERTS NOTHING BEYOND THE ONE READ THAT FAILED. Two
+             reassurances were tried here and BOTH were retracted for the same
+             reason — they describe state this code has not observed:
+
+               - "not a sign that you are no longer in it" claims MEMBERSHIP.
+                 `getLeagueHomeData` is `findUnique({ where: { id } })` with no
+                 `userId` clause, so this branch cannot tell "the read failed"
+                 from "you are not in this league".
+               - "Your other leagues are unaffected" claims the SCOPE of the
+                 failure. Nothing here has read the other leagues. The reads that
+                 would have — `dash34` — are null by design on this path, so under
+                 a systemic database or provider outage every league is failing
+                 and that sentence is confidently false at the worst moment.
+
+             What is left is the one thing observed: this league did not load. The
+             second sentence is a way OUT rather than a claim — the reader can go
+             back to the list or retry, and neither depends on why it failed.
+             Nothing here changes what is loaded, who may load it, or any guard.
            */
         selectedLeagueId ? (
           <div className="af-frame" style={{ padding: 24, maxWidth: 720 }}>
@@ -2698,7 +2708,7 @@ export default async function AfCorePage({
               This league
             </h1>
             <p style={{ marginTop: 8, fontSize: 13, lineHeight: 1.5, color: 'var(--muted)' }}>
-              We could not read this league just now. Your other leagues are unaffected.
+              We could not load this league just now. Return to your leagues or try again.
             </p>
           </div>
         ) : (

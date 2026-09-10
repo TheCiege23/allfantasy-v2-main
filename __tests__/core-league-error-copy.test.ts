@@ -40,7 +40,8 @@ function flat(source: string): string {
   return source.replace(/\s+/g, ' ')
 }
 
-const LEAGUE_SPECIFIC = 'We could not read this league just now. Your other leagues are unaffected.'
+const LEAGUE_SPECIFIC =
+  'We could not load this league just now. Return to your leagues or try again.'
 const ACCOUNT_WIDE = 'We could not read your leagues just now.'
 
 /**
@@ -89,16 +90,24 @@ describe('/core error copy names the read that actually failed', () => {
 
   it('never implies the whole account is unreadable in the league-specific branch', () => {
     /*
-     * 🛑 THE ASSERTION THIS FILE EXISTS FOR. Between the `selectedLeagueId ?`
-     * branch opening and the `) : (` that ends it, the account-wide sentence must
-     * not appear. A future edit that collapses the two branches back together, or
-     * pastes the old wording into the new one, fails here.
+     * 🛑 THE ASSERTION THIS FILE EXISTS FOR. Inside the `selectedLeagueId ?`
+     * branch the account-wide sentence must not appear. A future edit that
+     * collapses the two branches back together, or pastes the old wording into
+     * the new one, fails here.
+     *
+     * ⚠ THE CLAIM IS FORBIDDEN, NOT THE PHRASE. An earlier version asserted
+     * `not.toMatch(/your leagues/i)` and had to be relaxed when the copy became
+     * "Return to your leagues or try again" — which mentions them in order to
+     * offer a way out, and asserts nothing about their state. Matching the words
+     * rather than the claim would have blocked a correct sentence, so the pattern
+     * targets the shape "could not read/load YOUR leagues" instead.
      */
     const branch = leagueBranch(flat(code(PAGE)))
 
     expect(branch).toContain(LEAGUE_SPECIFIC)
     expect(branch).not.toContain(ACCOUNT_WIDE)
-    expect(branch).not.toMatch(/your leagues/i)
+    expect(branch).not.toMatch(/could not (read|load|reach) your leagues/i)
+    expect(branch).not.toMatch(/you have none/i)
   })
 
   it('claims nothing about membership, which this code cannot know', () => {
@@ -112,6 +121,25 @@ describe('/core error copy names the read that actually failed', () => {
 
     expect(branch).not.toMatch(/no longer in it/i)
     expect(branch).not.toMatch(/still (a member|in this league)/i)
+  })
+
+  it('claims nothing about the OTHER leagues, whose state it has not read', () => {
+    /*
+     * 🛑 THE SECOND RETRACTED REASSURANCE. "Your other leagues are unaffected"
+     * shipped briefly and was withdrawn: nothing on this path has read the other
+     * leagues. `dash34` — the read that would have — is null BY DESIGN whenever a
+     * league is selected, so under a systemic database or provider outage every
+     * league is failing and that sentence is confidently false at exactly the
+     * moment it matters most.
+     *
+     * The branch may offer a way OUT ("return to your leagues") but may not
+     * describe their STATE.
+     */
+    const branch = leagueBranch(flat(code(PAGE)))
+
+    expect(branch).not.toMatch(/unaffected/i)
+    expect(branch).not.toMatch(/other leagues are/i)
+    expect(branch).not.toMatch(/only this league/i)
   })
 })
 
