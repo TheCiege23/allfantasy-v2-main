@@ -91,6 +91,17 @@ async function runOneSport(
   sport: string,
   season: number | undefined,
   skipIdentityBackfill: boolean,
+  /**
+   * The caller's budget, threaded IN rather than consulted around the call.
+   *
+   * 🛑 A BUDGET CHECKED ONLY BETWEEN SPORTS BOUNDS THE COUNT, NOT THE DURATION, AND ONE SPORT
+   * WAS ENOUGH TO SPEND THE WHOLE WINDOW. Measured 2026-09-08 on the worker:
+   *   {"ok":true,"sports":[],"deferredForBudget":["NCAAB","SOCCER","NFL","NBA","NHL","MLB","NCAAF"]}
+   *   import-stat-lines ... OK 200 (270212ms)
+   * Zero sports imported, all seven deferred, HTTP 200 — every six hours, for months, with
+   * `player_game_log_cache` frozen at 7 NFL rows since 2026-06-24.
+   */
+  shouldStop?: () => boolean,
 ): Promise<SportOutcome> {
   const startedAt = Date.now()
   const source = statSourceFor(sport)
@@ -109,7 +120,7 @@ async function runOneSport(
    */
   const identity = skipIdentityBackfill
     ? null
-    : await backfillIdentityMapForSport(sport, { limit: IDENTITY_SCAN_PER_RUN }).catch((e) => {
+    : await backfillIdentityMapForSport(sport, { limit: IDENTITY_SCAN_PER_RUN, shouldStop }).catch((e) => {
         console.error(`[cron/import-stat-lines] ${sport} identity backfill failed:`, e)
         return null
       })
@@ -133,6 +144,26 @@ async function runOneSport(
         providerCoverage: "none",
         note: "no player season-stats feed exists for this sport at any configured provider",
         /** Still reported: the map is what game logs and injury resolution join through. */
+        identityBackfill: identityReport,
+        written: 0,
+        durationMs: Date.now() - startedAt,
+      },
+      failed: false,
+    }
+  }
+
+  /*
+   * The backfill above may have consumed what was left. Starting a provider sync now is what
+   * carries a request past the platform edge — so stop between the two units rather than
+   * discovering it at 300s. Reported as its own state: neither a success nor a failure.
+   */
+  if (shouldStop?.()) {
+    return {
+      body: {
+        ok: true,
+        sport,
+        deferredAfterIdentityBackfill: true,
+        note: "budget spent on the identity backfill; stat sync not started",
         identityBackfill: identityReport,
         written: 0,
         durationMs: Date.now() - startedAt,
@@ -286,7 +317,16 @@ async function handle(req: NextRequest) {
           deferred.push(sport)
           continue
         }
-        results.push(await runOneSport(sport, season, skipIdentityBackfill))
+        results.push(
+          // An explicit single-sport request is deliberate and unbounded; a scheduled sweep is
+          // bounded from the inside, not merely gated at the door.
+          await runOneSport(
+            sport,
+            season,
+            skipIdentityBackfill,
+            explicit ? undefined : () => budget.exhausted(),
+          ),
+        )
       }
     },
     () => undefined,
@@ -324,14 +364,40 @@ async function handle(req: NextRequest) {
   }
 
   const anyFailed = results.some((r) => r.failed)
+
+  /*
+   * 🛑 A RUN THAT SETTLED NOTHING IS NOT A SUCCESS, AND CALLING IT ONE IS HOW THIS HID.
+   *
+   * `ok: true` with `sports: []` is exactly what the worker returned every six hours for months:
+   *   {"ok":true,"sports":[],"deferredForBudget":["NCAAB","SOCCER","NFL","NBA","NHL","MLB","NCAAF"]}
+   * 200, green in every dashboard, zero work done — while `player_game_log_cache` sat at 7 rows
+   * from 2026-06-24. Nothing was watching for the one shape that mattered, because the shape
+   * looked like health.
+   *
+   * ⚠ THE TEST IS "SETTLED NOTHING WHILE THERE WAS SOMETHING TO DO", NOT "WROTE NO ROWS." A sweep
+   * where every sport legitimately had nothing new is a real success and must stay green, or the
+   * alarm becomes noise and gets ignored — which is the failure this replaces, wearing a
+   * different hat.
+   */
+  const settledNothing = results.length === 0 && sports.length > 0
+  if (settledNothing) {
+    console.error(
+      `[cron/import-stat-lines] settled 0 of ${sports.length} sports in ${budget.elapsedMs()}ms — ` +
+        `deferred: ${deferred.join(',') || 'none'}. The budget was spent before any sport completed.`,
+    )
+  }
+
   return NextResponse.json(
     {
-      ok: !anyFailed,
+      ok: !anyFailed && !settledNothing,
+      settledNothing: settledNothing || undefined,
+      sportsAttempted: sports.length,
       sports: results.map((r) => r.body),
       deferredForBudget: deferred.length ? deferred : undefined,
+      elapsedMs: budget.elapsedMs(),
       timestamp: new Date().toISOString(),
     },
-    { status: anyFailed ? 500 : 200 },
+    { status: anyFailed || settledNothing ? 500 : 200 },
   )
 }
 

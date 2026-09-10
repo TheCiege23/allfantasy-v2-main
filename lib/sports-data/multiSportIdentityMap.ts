@@ -55,6 +55,12 @@ export interface IdentityBackfillResult {
   skippedNoName: number
   dryRun: boolean
   errors: string[]
+  /**
+   * True when `shouldStop` cut the scan short, so `scanned` is a partial pass rather than the
+   * whole eligible set. Reported rather than inferred: a caller cannot otherwise tell a converged
+   * sport (nothing left to do) from one that ran out of time, and those need opposite responses.
+   */
+  stoppedEarly?: boolean
 }
 
 interface IdentityRow {
@@ -73,7 +79,7 @@ interface IdentityRow {
  */
 export async function backfillIdentityMapForSport(
   sportInput: string,
-  opts: { dryRun?: boolean; limit?: number } = {},
+  opts: { dryRun?: boolean; limit?: number; shouldStop?: () => boolean } = {},
 ): Promise<IdentityBackfillResult> {
   const sport = sportInput.trim().toUpperCase()
   const dryRun = opts.dryRun === true
@@ -126,6 +132,26 @@ export async function backfillIdentityMapForSport(
   const now = new Date()
 
   for (;;) {
+    /*
+     * 🛑 CHECKED INSIDE THE PAGE LOOP, NOT AROUND THE CALL — THAT DISTINCTION IS THE WHOLE FIX.
+     *
+     * `backfillIdentityMaps` below already gates ENTRY to a sport on `shouldStop`, which bounds
+     * how MANY sports run and not how long one takes. With READ_PAGE at 5,000 and a 20,000-row
+     * limit, one sport is four pages of per-row updates: NCAAB (18,209 rows) leads the rotation
+     * and, unbounded, consumed the caller's entire window on its own.
+     *
+     * Measured 2026-09-08 on the worker, with the route's 240s budget already in place:
+     *   {"ok":true,"sports":[],"deferredForBudget":["NCAAB","SOCCER","NFL","NBA","NHL","MLB","NCAAF"]}
+     *   import-stat-lines ... OK 200 (270212ms)
+     * Zero sports imported, every sport deferred, reported as success — for months.
+     *
+     * ⚠ BETWEEN PAGES, NOT PER ROW. A page is already committed work; abandoning mid-page would
+     * discard scanning that has been paid for. The granularity is what makes this cheap.
+     */
+    if (opts.shouldStop?.()) {
+      result.stoppedEarly = true
+      break
+    }
     if (opts.limit != null && result.scanned >= opts.limit) break
 
     const take = opts.limit != null ? Math.min(READ_PAGE, opts.limit - result.scanned) : READ_PAGE
@@ -306,7 +332,13 @@ export async function backfillIdentityMaps(
       continue
     }
     results.push(
-      await backfillIdentityMapForSport(sport, { dryRun: opts.dryRun, limit: opts.limitPerSport }),
+      // Pass the signal DOWN as well as checking it here: gating entry bounds how many sports
+      // run, not how long one takes, and one sport was enough to spend a whole window.
+      await backfillIdentityMapForSport(sport, {
+        dryRun: opts.dryRun,
+        limit: opts.limitPerSport,
+        shouldStop: opts.shouldStop,
+      }),
     )
   }
 
