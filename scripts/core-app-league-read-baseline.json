@@ -1,5 +1,6 @@
 {
   "lib/core-app/dash3aPanels.ts": 1,
+  "lib/core-app/discordBridge.ts": 0,
   "lib/core-app/draftHq.ts": 2,
   "lib/core-app/gameDayTriageLoader.ts": 1,
   "lib/core-app/leagueHome.ts": 1,

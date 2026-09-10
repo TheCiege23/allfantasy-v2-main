@@ -12,29 +12,73 @@
  * — because `components/core-app/screens/DiscordBridge.tsx` is a `'use client'`
  * component importing the same module the loader lived in. The combined module
  * therefore could not carry a `server-only` marker, which in turn meant nothing
- * stopped a server import from being added to a client-reachable file. Caught by
- * a 500 on a live server, not by typecheck: `next.config.js` sets
- * `typescript.ignoreBuildErrors`, and a client/server boundary violation is a
- * BUNDLING error, so no amount of typechecking would have found it.
+ * stopped a database read from being added to a client-reachable file.
  *
- * The split is the shape CLAUDE.md records for `lib/fantasycalc.ts`: move the
- * half that cannot be shared, leave the half that everything imports.
+ * 🛑 AN EARLIER VERSION OF THIS PARAGRAPH SAID NOTHING IN THE REPO COULD SEE
+ * THAT ERROR, AND THAT WAS FLATLY WRONG. `next build` catches it, and catches it
+ * TRANSITIVELY. The claim rested on `typescript.ignoreBuildErrors`, which is
+ * consumed in exactly one place in all of `next/dist/build` — `type-check.js`,
+ * where it gates the `tsc` step. It cannot suppress a webpack error, and this is
+ * a webpack error: `webpack-config.js` registers `next-invalid-import-error-loader`
+ * against `/^server-only$/` unconditionally, and webpack propagates the issuer's
+ * layer to every module it imports, so the violation is caught at any depth.
+ * `performance-budget.yml` runs `npm run build` on every pull request and every
+ * push to `main`, and `build:railway` runs it on every deploy.
+ *
+ * ⚠ SO THE THING WORTH GUARDING IS THE HALF THE BUNDLER CANNOT SEE: a module
+ * that reads the database but carries NO `server-only` marker. There is nothing
+ * for the loader to trip on, so it bundles clean and fails later and quieter.
+ * `scripts/check-core-app-server-only.mjs` is that guard, and it is why the
+ * client-side import scanner that first shipped here was withdrawn — it
+ * duplicated the bundler badly (blind to side-effect imports, to `await
+ * import()`, to re-exports, and to any file whose `'use client'` sat below a
+ * comment) while missing the case the bundler genuinely cannot reach.
+ *
+ * The split is the shape CLAUDE.md records for `lib/fantasycalc.ts`, though
+ * mirrored: there the FETCH moved out because 45 importers wanted the pure
+ * helpers; here the pure half moved out because the loader had one importer and
+ * the shared vocabulary had two. Same principle — the smaller move — opposite
+ * direction. Read the fantasycalc note for the reasoning, not the mechanics.
  *
  * ⚠ DIRECTION IS THREE STATES, AND "OFF" IS NOT "POST-ONLY WITH THE SWITCH
  * DOWN". The schema stores three booleans (`syncEnabled`, `syncOutbound`,
- * `syncInbound`); this module is the ONLY place that translates them to and from
- * the three directions a commissioner actually chooses. Two translations would
+ * `syncInbound`); this module translates them to and from the three directions a
+ * commissioner actually chooses on `/core/discord`. Two translations would
  * eventually disagree, and the failure mode of disagreeing about direction is a
- * private message in a public channel. Both directions of that translation live
- * here PRECISELY so the client and the server cannot drift: the PATCH route at
- * /api/discord/league takes `flagsFromDirection`'s output, and the client builds
- * it.
+ * private message in a public channel.
  *
- * ⚠ COMMISSIONER-ONLY SURFACES DEFAULT TO OFF, AND THAT DEFAULT IS LOAD-BEARING.
- * A private note that appears in a public Discord channel is the kind of mistake
- * you only make once. `defaultDirection` is 'off' for those surfaces here, the
- * column default in the migration says the same, and the UI refuses to present
- * them as on-by-default. Three places, deliberately.
+ * 🛑 AND THEY ALREADY DISAGREE. This module is NOT the only writer, and an
+ * earlier version of this comment claimed it was — that the client and server
+ * "cannot drift". `app/league/[leagueId]/components/DiscordLeagueSyncPanel.tsx`
+ * is a second client UI over the same three booleans, with three INDEPENDENT
+ * checkboxes, each PATCHing one flag on its own and never calling
+ * `flagsFromDirection`. It can therefore produce `{ syncEnabled: true,
+ * syncOutbound: false, syncInbound: true }` — inbound-only — which
+ * `directionFromFlags` reports as 'off' while `/api/discord/poll-messages`
+ * (`where: { syncEnabled: true, syncInbound: true }`) keeps pulling Discord
+ * messages into league chat. The screen says "Nothing relays" and it is relaying.
+ *
+ * That is a live product bug, not a refactor artifact, and it is NOT fixed here:
+ * the honest options are a fourth direction or removing the panel's independent
+ * toggles, and that is a product decision. Recorded so the next reader does not
+ * inherit the false version.
+ *
+ * ⚠ COMMISSIONER-ONLY SURFACES DEFAULT TO OFF IN THIS FILE — AND ONLY IN THIS
+ * FILE. A private note that appears in a public Discord channel is the kind of
+ * mistake you only make once. `defaultDirection` is 'off' for those surfaces
+ * here, and the UI refuses to present them as on-by-default.
+ *
+ * 🛑 THE DATABASE DOES NOT AGREE, THOUGH THIS COMMENT USED TO SAY IT DID ("the
+ * column default in the migration says the same. Three places, deliberately.").
+ * Migration `20260823120000_discord_bridge_surfaces` adds only
+ * `commissionerOnly BOOLEAN NOT NULL DEFAULT false` — it never touches the
+ * direction columns, which remain `syncEnabled @default(true)`,
+ * `syncOutbound @default(true)`, `syncInbound @default(false)`: post-only. So a
+ * row inserted for `commissioner_notes` by anything that does not go through
+ * this file lands post-only AND flagged not-commissioner-only, the inverse of
+ * both labels. The migration's own comment anticipates exactly that script.
+ * Until the column defaults are fixed, this constant is the ONLY place the
+ * safety default actually lives — treat it accordingly.
  */
 
 export type BridgeDirection = 'both' | 'post-only' | 'off'

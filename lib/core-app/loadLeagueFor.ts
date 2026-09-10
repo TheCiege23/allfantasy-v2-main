@@ -106,3 +106,46 @@ export async function memberLeaguePlatformIdsFor(
 
   return [...new Set(rows.map((r) => r.platformLeagueId).filter((id): id is string => !!id))]
 }
+
+/**
+ * The OWNER-only sibling of `loadLeagueFor`.
+ *
+ * 🛑 A SECOND CHOKEPOINT, NOT A NARROWER FLAG ON THE FIRST. `loadLeagueFor`
+ * admits all four canonical membership paths, which is right for a screen a
+ * manager reads and wrong for one a manager configures. The Discord bridge
+ * decides what relays into a public channel; routing it through the member-wide
+ * helper would hand those controls to everyone in the league. Two predicates,
+ * two functions, both in this file so neither drifts unwatched.
+ *
+ * 🛑 THE NULLISH GUARD IS THE HALF PRISMA WOULD THROW AWAY. Prisma DROPS a
+ * `where` field whose value is `undefined`, so `where: { id, userId: undefined }`
+ * degrades to `where: { id }` and returns the row to ANY caller —
+ * `strictUndefinedChecks` is not enabled (the generator block in schema.prisma
+ * declares no `previewFeatures`), so nothing reports it. Scoping into the query
+ * is therefore strictly WEAKER than a read-then-compare on exactly that input,
+ * which is how `getDiscordBridge` briefly regressed on 2026-09-10: the
+ * equivalence probe that cleared it tested the empty string, the case that
+ * agrees, and not `undefined`, the case that diverges.
+ *
+ * ⚠ 195 HAND-ROLLED OWNER-ONLY READS ACROSS 165 FILES still exist outside this
+ * helper, in two mutually inconsistent shapes (106 scope `userId` into the
+ * `where`, 89 read then compare). This function is the place to converge them,
+ * and the co-commissioner question — `League.userId` is owner-only, so a
+ * co-commissioner is refused — is a product decision that then has ONE
+ * implementation to change rather than 165.
+ *
+ * ⚠ NULL MERGES "NO SUCH LEAGUE" WITH "NOT YOUR LEAGUE", as above: a caller that
+ * could tell them apart could enumerate which league ids exist.
+ */
+export async function loadLeagueForOwner<S extends Prisma.LeagueSelect>(
+  userId: string | null | undefined,
+  leagueId: string,
+  select: S,
+): Promise<Prisma.LeagueGetPayload<{ select: S }> | null> {
+  if (!userId) return null
+
+  return prisma.league.findFirst({
+    where: { id: leagueId, userId },
+    select,
+  }) as Promise<Prisma.LeagueGetPayload<{ select: S }> | null>
+}

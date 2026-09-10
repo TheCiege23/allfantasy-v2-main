@@ -1,6 +1,7 @@
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
+import { loadLeagueForOwner } from '@/lib/core-app/loadLeagueFor'
 import { isBotConfigured } from '@/lib/discord/bot'
 import { channelLink } from '@/lib/discord/deepLinks'
 import { DISCORD_BOT_PERMISSIONS, DISCORD_CLIENT_ID } from '@/lib/discord/constants'
@@ -24,9 +25,9 @@ import {
  * PURPOSE. It configures the whole league's bridge, so it deliberately does NOT
  * go through `loadLeagueFor` — that admits any of the four canonical membership
  * paths, which would hand every manager in the league the controls for what
- * relays into a public Discord channel. The read is scoped inline to
- * `{ id: leagueId, userId }` instead, which is the same predicate the old
- * read-then-compare applied and refuses one query earlier.
+ * relays into a public Discord channel. It goes through `loadLeagueForOwner`
+ * instead — the owner-only sibling in the same chokepoint file, so the two
+ * predicates sit side by side and neither drifts unwatched.
  *
  * ⚠ SO A CO-COMMISSIONER IS REFUSED HERE. That matches the behaviour this file
  * has always had and is unchanged by the split; it is recorded because it is a
@@ -54,17 +55,20 @@ export async function getDiscordBridge(
   leagueId: string,
 ): Promise<DiscordBridgeData | null> {
   /*
-   * Owner-only, scoped IN the query rather than compared after it. Identical
-   * outcomes to the read-then-compare this replaces for every input, including
-   * an empty `userId`; it simply refuses before reading the row instead of
-   * after. That also makes it legible to
-   * `scripts/check-core-app-league-reads.mjs`, which recognises a `where` that
-   * names the viewer and needs no gate.
+   * 🛑 OWNER-ONLY, AND THROUGH THE CHOKEPOINT RATHER THAN HAND-ROLLED.
+   * `loadLeagueForOwner` carries the nullish guard that stops Prisma dropping an
+   * `undefined` `userId` out of the `where` — which would return the row to any
+   * caller. An earlier version of this function scoped the query inline and a
+   * comment here claimed it was equivalent to the read-then-compare it replaced
+   * "for every input"; that was false for exactly `undefined`.
+   *
+   * ⚠ DELIBERATELY NOT `loadLeagueFor`. That helper admits all four canonical
+   * membership paths, and this screen configures what relays into a public
+   * Discord channel for the whole league — member-wide access would be a
+   * privilege widening dressed as consistency. A co-commissioner is refused
+   * here; that is a product question with one implementation to change.
    */
-  const league = await prisma.league.findFirst({
-    where: { id: leagueId, userId },
-    select: { id: true, name: true },
-  })
+  const league = await loadLeagueForOwner(userId, leagueId, { id: true, name: true })
   if (!league) return null
 
   const [profile, link, teams] = await Promise.all([
@@ -72,8 +76,15 @@ export async function getDiscordBridge(
       where: { userId },
       select: { discordUserId: true, discordGuildId: true },
     }),
+    /*
+     * ⚠ SCOPED TO `league_chat`. `@@unique([leagueId, surface])` permits four
+     * rows per league, and whatever row came back was rendered under the League
+     * chat heading unconditionally — so once a `commissioner_notes` row exists,
+     * an unfiltered `findFirst` could print the commissioner channel's name, URL
+     * and direction as if it were league chat.
+     */
     prisma.discordLeagueChannel.findFirst({
-      where: { leagueId },
+      where: { leagueId, surface: 'league_chat' },
       include: { guild: { select: { guildName: true } } },
     }),
     prisma.leagueTeam.findMany({

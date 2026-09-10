@@ -1,3 +1,13 @@
+import 'server-only'
+
+/*
+ * ⚠ MARKER ADDED 2026-09-10, NOT DECORATION. This module reads the database
+ * and had no marker, so the bundler had nothing to refuse and it could be pulled
+ * into a client bundle silently. Its client-side importers are `import type`
+ * only, which is erased before bundling, so the marker costs them nothing.
+ * See scripts/check-core-app-server-only.mjs.
+ */
+
 import { prisma } from '@/lib/prisma'
 import {
   SPORT_ORDER,

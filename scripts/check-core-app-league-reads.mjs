@@ -55,6 +55,20 @@ const GATE_FILE = join('lib', 'core-app', 'loadLeagueFor.ts')
  * every edit, so the key is the file and the value is how many it is allowed to
  * have. Adding one to a listed file fails. Adding a new file fails. The number
  * can only go down, and `--update-baseline` refuses to raise it.
+ *
+ * 🛑 THAT LAST SENTENCE WAS FALSE FOR DELISTED FILES UNTIL 2026-09-10, AND A
+ * FILE CLEANED TO ZERO WAS EXACTLY THE KIND THAT GOT DELISTED. See the comment
+ * on the raise-check below for the measurement. A file at zero is now written as
+ * `0` rather than dropped.
+ *
+ * ⚠ WHAT THIS GUARD DOES NOT SEE, stated so the count is not read as a census:
+ * `READ_PATTERN` matches `prisma.league.find*` only. A raw `$queryRaw` /
+ * `$queryRawUnsafe` against the `leagues` table is invisible to it — there is a
+ * live unscoped one at `lib/core-app/railMatchups.ts` — as are the sibling
+ * league models (`prisma.fantraxLeague.findUnique` at `leaguePairing.ts`).
+ * Widening the pattern is worth doing and is deliberately NOT bundled into the
+ * commit that wrote this note, because it surfaces an unknown number of new
+ * violations that each need tracing rather than baselining.
  */
 const BASELINE_FILE = join(ROOT, 'scripts', 'core-app-league-read-baseline.json')
 
@@ -224,10 +238,37 @@ ${scoped.length} League read(s) already scoped inline by userId (no gate needed)
   if (process.argv.includes('--update-baseline')) {
     const next = {}
     let raised = null
-    for (const [f, n] of Object.entries(counts)) {
-      const was = baseline[f]
-      if (was != null && n > was) raised = `${f}: ${was} -> ${n}`
-      next[f] = was != null ? Math.min(was, n) : n
+
+    /*
+     * 🛑 A FILE MISSING FROM THE BASELINE MEANS ZERO, NOT "UNLIMITED", AND THIS
+     * LOOP USED TO DISAGREE WITH THE ENFORCEMENT BELOW ABOUT THAT.
+     *
+     * Enforcement reads `baseline[f] ?? 0`, holding a delisted file at zero. The
+     * raise-check here read `if (was != null && n > was)` — and for a delisted
+     * file `was` is `undefined`, so it was SKIPPED ENTIRELY and the new count
+     * written straight back. The effect: driving a file to zero cost that file
+     * its protection. Measured 2026-09-10 in an isolated copy, after
+     * `discordBridge.ts` was cleaned to 0 and dropped from this file — plant an
+     * ungated read, run the guard (exit 1, "0 allowed, 1 found"), run
+     * `--update-baseline` (exit 0, "Baseline written"), run the guard again:
+     * green, with the read still there. The docblock at the top of this file
+     * promised the opposite, which is why it went unnoticed.
+     *
+     * ⚠ THE KEY SET IS NOW THE UNION, so a file that reaches zero is written as
+     * `0` and stays visible instead of vanishing. Enforcement treats absent and
+     * `0` identically; a human reading the file does not, and a file that
+     * disappeared read as "cleaned up" rather than "unprotected".
+     *
+     * ⚠ A FIRST RUN STILL SEEDS. With no baseline file there is nothing to
+     * ratchet against, so current counts are accepted — otherwise the very first
+     * `--update-baseline` would refuse to raise every file from an imagined 0.
+     */
+    const firstRun = !existsSync(BASELINE_FILE)
+    for (const f of new Set([...Object.keys(baseline), ...Object.keys(counts)])) {
+      const n = counts[f] ?? 0
+      const was = firstRun ? n : baseline[f] ?? 0
+      if (n > was) raised = `${f}: ${was} -> ${n}`
+      next[f] = Math.min(was, n)
     }
     if (raised) {
       console.error(`\nREFUSING to raise the baseline (${raised}).`)
