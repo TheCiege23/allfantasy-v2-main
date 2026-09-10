@@ -11,6 +11,7 @@ import SyncNowButton from '@/components/core-app/SyncNowButton'
 import PlayerCardProvider from '@/components/core-app/player-card/PlayerCardProvider'
 import { SUPPORT_OPEN_EVENT } from '@/components/core-app/comms/commsEvents'
 import MiniPlayerImg from '@/components/MiniPlayerImg'
+import { useOverlayContainment } from '@/components/core-app/useOverlayContainment'
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import '@/components/core-app/af-core.css'
 import '@/components/core-app/af-core-shell.css'
@@ -1137,55 +1138,37 @@ export function AfCoreShell(props: AfCoreShellProps) {
   const railHandleRef = useRef<HTMLButtonElement>(null)
   const [phoneLayout, setPhoneLayout] = useState(false)
   const mobileRailOpen = phoneLayout && railOpen
+  /** The tray's close control lives outside the tray — see the hook call below. */
+  const railKeepRefs = useMemo(() => [railHandleRef], [])
 
-  // The phone tray covers the screen. Keep focus and scrolling inside it;
-  // its external handle remains available as the close control.
-  useEffect(() => {
-    if (!mobileRailOpen) return
-    const rail = railRef.current
-    const handle = railHandleRef.current
-    if (!rail || !handle) return
-    const previousOverflow = document.body.style.overflow
-    const siblings = Array.from(rail.parentElement?.children ?? [])
-      .filter((node): node is HTMLElement => node instanceof HTMLElement && node !== rail && node !== handle)
-    const previousInert = siblings.map((node) => node.inert)
-    siblings.forEach((node) => { node.inert = true })
-    document.body.style.overflow = 'hidden'
-
-    const controls = () => [
-      ...Array.from(rail.querySelectorAll<HTMLElement>('a[href], button:not([disabled]), [tabindex="0"]'))
-        .filter((node) => node.getClientRects().length > 0),
-      handle,
-    ]
-    handle.focus()
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        event.preventDefault()
-        setRailChoice('closed')
-      } else if (event.key === 'Tab') {
-        const items = controls()
-        const first = items[0]
-        const last = items[items.length - 1]
-        if (event.shiftKey && (document.activeElement === first || !items.includes(document.activeElement as HTMLElement))) {
-          event.preventDefault()
-          last.focus()
-        } else if (!event.shiftKey && (document.activeElement === last || !items.includes(document.activeElement as HTMLElement))) {
-          event.preventDefault()
-          first.focus()
-        }
-      }
-    }
-    document.addEventListener('keydown', onKeyDown)
-    return () => {
-      document.removeEventListener('keydown', onKeyDown)
-      siblings.forEach((node, index) => { node.inert = previousInert[index] })
-      document.body.style.overflow = previousOverflow
-      if (handle.getClientRects().length > 0) handle.focus()
-      else if (document.activeElement === handle && rail.isConnected) {
-        rail.querySelector<HTMLButtonElement>('.af-rail-toggle')?.focus()
-      }
-    }
-  }, [mobileRailOpen])
+  /*
+   * The phone tray covers the screen, so it is modal: focus and scrolling stay
+   * inside it and the rest of the shell goes inert.
+   *
+   * 🛑 THIS USED TO BE ITS OWN IMPLEMENTATION, AND IT WAS THE ONE THAT BROKE THE
+   * OTHERS. It inerted every sibling of `.af-rail` — which is `.af-main` (the
+   * player card's mount point) and `CommsDock` (the Comms drawer's). Opening the
+   * tray over an already-open card or drawer left that dialog painted, modal and
+   * completely dead: inert removes hit testing and focusability from the whole
+   * subtree. It also held its own `document.body.style.overflow` value and its
+   * own `document` Escape listener, so it fought the other two overlays for both.
+   *
+   * The shared hook decides inertness from whichever overlay is TOPMOST, by
+   * walking that overlay's ancestor chain — so the tray still inerts the shell
+   * when the tray is on top, and stops doing so the moment a card opens above it.
+   *
+   * `keepInteractiveRefs` is what preserves this tray's one unusual property:
+   * its close control is the handle, which is rendered as a SIBLING of the tray
+   * rather than inside it. It stays out of the inert sweep and stays at the end
+   * of the Tab cycle, exactly as the hand-rolled version had it.
+   */
+  useOverlayContainment({
+    active: mobileRailOpen,
+    containerRef: railRef,
+    onClose: () => setRailChoice('closed'),
+    initialFocusRef: railHandleRef,
+    keepInteractiveRefs: railKeepRefs,
+  })
 
   // Only the desktop column is a saved preference. A phone overlay must
   // start closed on navigation and when resizing down from desktop.

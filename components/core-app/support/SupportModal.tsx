@@ -1,6 +1,7 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useOverlayContainment } from '@/components/core-app/useOverlayContainment'
 import { SUPPORT_WIDGET_TOOL } from '@/lib/support/support-widget'
 import '@/components/core-app/af-support.css'
 
@@ -97,19 +98,25 @@ export function SupportModal({
   const [status, setStatus] = useState<'form' | 'sending' | 'sent' | 'error'>('form')
   const [error, setError] = useState<string | null>(null)
   const [excluded, setExcluded] = useState<Set<string>>(new Set())
+  const panelRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
     if (open) setLeagueId(pageLeagueId)
   }, [open, pageLeagueId])
 
-  useEffect(() => {
-    if (!open) return
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose()
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [open, onClose])
+  /*
+   * The same containment every other /core overlay now takes.
+   *
+   * This modal is opened FROM the Comms drawer's footer, so the two are open
+   * together routinely — and before this it had a bare `window` Escape listener
+   * and nothing else, so one Escape closed the modal AND the drawer underneath
+   * it, and Tab walked straight out of a dialog marked `aria-modal="true"`.
+   */
+  useOverlayContainment({
+    active: open,
+    containerRef: panelRef,
+    onClose,
+  })
 
   /*
    * Everything we would attach, itemised. Read at render rather than at submit
@@ -205,7 +212,14 @@ export function SupportModal({
   return (
     <>
       <button type="button" className="af-sp-scrim" aria-label="Close support" onClick={onClose} />
-      <div className="af-sp" role="dialog" aria-modal="true" aria-label="Contact support">
+      <div
+        className="af-sp"
+        ref={panelRef}
+        tabIndex={-1}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Contact support"
+      >
         <header className="af-sp-head">
           <h2 className="af-sp-title">
             {status === 'sent' ? 'Sent' : status === 'error' ? "That didn't send" : 'Tell us what happened'}

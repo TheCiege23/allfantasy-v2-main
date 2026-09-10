@@ -35,7 +35,21 @@ export type SeededG8League = {
   defTeam: string
   /** PlayerWeeklyScore rows (no FK cascade) — deleted explicitly on cleanup. */
   seededScoreIds: string[]
+  /**
+   * SportsPlayer rows backing `Roster.playerData` (no FK to the league, so no
+   * cascade) — deleted explicitly on cleanup. See `seedMyTeamRoster` below.
+   */
+  seededPlayerIds: string[]
 }
+
+/**
+ * `SportsPlayer.source` for the rows this fixture owns.
+ *
+ * ⚠ IT IS PART OF `@@unique([sport, externalId, source])`, and that is what makes
+ * cleanup safe: a delete filtered on this source cannot reach a real ingested
+ * player row even if some other importer ever used the same external id.
+ */
+const E2E_PLAYER_SOURCE = 'e2e-g8-fixture'
 
 export type SeedG8Options = {
   team?: string
@@ -183,6 +197,8 @@ export async function seedG8CommissionerLeague(
   await saveLeagueNflScoringConfig(league.id, { presetKey: 'custom', rules: { dst_sack: 5, dst_pa_7_13: 4 }, userId })
   await updateMatchupScores(matchup.id)
 
+  const seededPlayerIds = await seedMyTeamRoster(prisma, league.id, userId, mark, team)
+
   return {
     mark,
     leagueId: league.id,
@@ -195,18 +211,133 @@ export async function seedG8CommissionerLeague(
     defPlayerId,
     defTeam: team,
     seededScoreIds: [defPlayerId, homeQbId, awayQbId],
+    seededPlayerIds,
   }
 }
 
-/** Deterministic cleanup: cascade-delete the league + the non-FK weekly scores. */
+/**
+ * Give /core/my-team a roster it can actually render.
+ *
+ * 🛑 THE REDRAFT PATH ABOVE DOES NOT FEED THIS SCREEN. The draft finalizer writes
+ * `RedraftRosterPlayer`, which is what the matchup centre reads. `/core/my-team`
+ * reads a different pair entirely (`lib/core-app/myTeam.ts`):
+ *
+ *   1. `LeagueTeam` where `claimedByUserId = userId`  — the canonical create
+ *      already writes this one, claimed, for the commissioner.
+ *   2. `Roster.playerData` — `{ starters, players, reserve, taxi }`, arrays of
+ *      ids — which the canonical create leaves EMPTY.
+ *
+ * So before this function existed the fixture produced a league whose My Team
+ * screen rendered zero roster rows and not one primary control, while every
+ * other seeded surface looked correct. That cost a whole verification batch:
+ * the mobile touch-target work had to be proved at component level because the
+ * live screen had nothing on it to measure.
+ *
+ * The ids are then resolved to names through `SportsPlayer.sleeperId`
+ * (`resolvePlayers` in myTeam.ts), so each one needs a row there or the screen
+ * renders an "unresolved id" slot instead of a player. Those rows carry no FK to
+ * the league, so they do NOT cascade — `cleanupG8League` deletes them by id.
+ */
+async function seedMyTeamRoster(
+  prisma: PrismaClient,
+  leagueId: string,
+  userId: string,
+  mark: string,
+  team: string,
+): Promise<string[]> {
+  const id = (suffix: string) => `${mark}-${suffix}`
+
+  /*
+   * One deliberately long name. The phone layout ellipsises the name cell, and a
+   * roster of short names cannot show whether that still holds — the mobile audit
+   * measured a two-line name as nearly twice the height of a one-line one.
+   */
+  const squad = [
+    { key: 'qb', name: 'Christian Kirkpatrick-Wetherington III', position: 'QB', role: 'starter' },
+    { key: 'rb1', name: 'Javonte Fixture', position: 'RB', role: 'starter' },
+    { key: 'rb2', name: 'Rhamondre Sample', position: 'RB', role: 'starter' },
+    { key: 'wr1', name: 'Amon-Ra Fixture', position: 'WR', role: 'starter' },
+    { key: 'wr2', name: 'Puka Sample', position: 'WR', role: 'starter' },
+    { key: 'te', name: 'Trey Fixture', position: 'TE', role: 'starter' },
+    { key: 'k', name: 'Harrison Sample', position: 'K', role: 'starter' },
+    { key: 'bench1', name: 'Tyjae Fixture', position: 'RB', role: 'bench' },
+    { key: 'bench2', name: 'Jaxon Sample', position: 'WR', role: 'bench' },
+    { key: 'ir1', name: 'Injured Fixture', position: 'WR', role: 'reserve' },
+    { key: 'taxi1', name: 'Taxi Sample', position: 'RB', role: 'taxi' },
+  ] as const
+
+  const expiresAt = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000)
+  await prisma.sportsPlayer.createMany({
+    data: squad.map((p) => ({
+      sport: 'NFL',
+      externalId: id(p.key),
+      // The lookup is on sleeperId, not externalId — see resolvePlayers().
+      sleeperId: id(p.key),
+      name: p.name,
+      position: p.position,
+      team,
+      source: E2E_PLAYER_SOURCE,
+      expiresAt,
+    })),
+    skipDuplicates: true,
+  })
+
+  const of = (role: string) => squad.filter((p) => p.role === role).map((p) => id(p.key))
+  const playerData = {
+    starters: of('starter'),
+    players: squad.map((p) => id(p.key)),
+    reserve: of('reserve'),
+    taxi: of('taxi'),
+  }
+
+  /*
+   * The same candidate rule the screen uses (`myRosterCandidates`): the claimed
+   * LeagueTeam's `platformUserId` is the app user id for a canonically-created
+   * league, and that is what the commissioner's Roster row carries.
+   */
+  const roster = await prisma.roster.findFirst({
+    where: { leagueId, platformUserId: userId },
+    select: { id: true },
+  })
+  if (!roster) throw new Error('G8 seed: no commissioner Roster row to attach playerData to')
+  await prisma.roster.update({ where: { id: roster.id }, data: { playerData } })
+
+  return squad.map((p) => id(p.key))
+}
+
+/**
+ * Deterministic cleanup: cascade-delete the league + every row this fixture wrote
+ * that has no FK to it.
+ *
+ * ⚠ TWO TABLES DO NOT CASCADE, NOT ONE. `PlayerWeeklyScore` never did, and
+ * `SportsPlayer` (added with the My Team roster) does not either — both are
+ * global, league-agnostic tables. A cleanup that only deletes the league leaves
+ * eleven player rows per run behind in a shared test database.
+ *
+ * `seededPlayerIds` is optional so a DELETE issued by an older caller — or one
+ * replaying a seed response captured before this field existed — still cleans the
+ * league and the scores instead of failing outright. The source filter makes the
+ * delete safe regardless of what ids are passed.
+ */
 export async function cleanupG8League(
   prisma: PrismaClient,
-  args: { leagueId: string; season: number; seededScoreIds: string[] },
+  args: { leagueId: string; season: number; seededScoreIds: string[]; seededPlayerIds?: string[] },
 ): Promise<void> {
   await prisma.league.delete({ where: { id: args.leagueId } }).catch(() => undefined)
   if (args.seededScoreIds.length) {
     await prisma.playerWeeklyScore
       .deleteMany({ where: { playerId: { in: args.seededScoreIds }, season: args.season, sport: 'NFL' } })
+      .catch(() => undefined)
+  }
+  if (args.seededPlayerIds?.length) {
+    await prisma.sportsPlayer
+      .deleteMany({
+        where: {
+          externalId: { in: args.seededPlayerIds },
+          // Belt and braces: never reach a real ingested row. See E2E_PLAYER_SOURCE.
+          source: E2E_PLAYER_SOURCE,
+        },
+      })
       .catch(() => undefined)
   }
 }

@@ -16,6 +16,7 @@ import { useChatPolling } from '@/lib/chat-core/useChatPolling'
 import { ChatComposer, type LeagueComposerPayload } from '@/app/dashboard/components/chat/ChatComposer'
 import Link from 'next/link'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useOverlayContainment } from '../useOverlayContainment'
 import '@/components/core-app/af-comms.css'
 
 /**
@@ -1573,30 +1574,31 @@ export function CommsDrawer({
     if (open) setScopeId(pageLeagueId)
   }, [open, pageLeagueId])
 
-  // Escape closes the overlay. A docked panel is part of the page and does not.
-  useEffect(() => {
-    if (!open || mode !== 'overlay') return
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose()
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [open, mode, onClose])
-
   /*
-   * Full-screen overlay hygiene: the page behind must not scroll, and focus
-   * must land inside the dialog so keyboard and screen-reader users arrive
-   * where the action is. Docked (23b) is part of the page and gets neither.
+   * Full-screen overlay hygiene, from the one place that owns it: Escape, the
+   * background scroll lock, background inertness, focus in on open and focus
+   * back out on close.
+   *
+   * ⚠ `active` CARRIES THE MODE TEST, NOT JUST `open`. Docked (23b) sits BESIDE
+   * page content rather than over it, so it is not modal and must take none of
+   * this — trapping focus in a panel the user can see the page around, and
+   * locking a page nothing is covering, are both worse than doing nothing.
+   *
+   * Three behaviours moved out of this file, none of which could stay local:
+   *   - Escape was bound on `window` here and on `document` in the player card,
+   *     so ONE keypress closed both. The hook's stack answers with the topmost.
+   *   - the scroll lock captured `document.body.style.overflow` as though this
+   *     drawer were its only owner. Open the player card first and this captured
+   *     `'hidden'`, then wrote it back on close — leaving a page locked with no
+   *     overlay on it. The hook reference-counts one lock instead.
+   *   - focus landed on the panel and was never restored, dropping keyboard
+   *     users on <body> at the top of the roster they came from.
    */
-  useEffect(() => {
-    if (!open || mode !== 'overlay') return
-    const prevOverflow = document.body.style.overflow
-    document.body.style.overflow = 'hidden'
-    panelRef.current?.focus()
-    return () => {
-      document.body.style.overflow = prevOverflow
-    }
-  }, [open, mode])
+  useOverlayContainment({
+    active: open && mode === 'overlay',
+    containerRef: panelRef,
+    onClose,
+  })
 
   if (!open) return null
 
