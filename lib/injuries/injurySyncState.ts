@@ -19,13 +19,23 @@ import { prisma } from '@/lib/prisma'
  *   - The route computes `deferredForBudget` and returns it in the HTTP
  *     response, where nothing reads it and nothing keeps it.
  *
- * 🛑 AND THE CADENCE IS NOT WHAT THE `*​/30` SCHEDULE SUGGESTS. `resolveSports`
- * returns `rotateForFairness(ALL_SPORTS)`, whose period defaults to TWENTY-FOUR
- * HOURS. Seven sports run sequentially against a 200s budget, so a sport leads
- * roughly one day in seven and otherwise refreshes only if the budget reaches
- * it. `lastSuccessAt` here is the honest answer to "when was NFL last actually
- * refreshed", and a climbing `recordsSkipped` is the honest answer to "is it
- * being starved by the budget".
+ * ⚠ THE CADENCE WORRY THAT MOTIVATED THIS WAS WRONG, AND THE FIRST TICKS SAID SO.
+ * `resolveSports` returns `rotateForFairness(ALL_SPORTS)`, whose period defaults
+ * to TWENTY-FOUR HOURS, and I predicted from that a sport would lead one day in
+ * seven and starve in between. Measured on the first runs after this shipped
+ * (2026-09-08, 18:47Z):
+ *
+ *   NFL 1277 written · MLB 532 · NBA 199 · NHL 183 · NCAAF 3 · NCAAB 0 · SOCCER 0
+ *   recordsSkipped: 0 for every one of the seven
+ *
+ * All seven completed inside a single run. `rotateForFairness` sets the ORDER;
+ * the 200s budget is what would starve a sport, and it is not being reached.
+ * That is the whole reason to keep measuring rather than reasoning: the module
+ * was written to confirm a starvation problem and its first output disproved it.
+ *
+ * So `lastSuccessAt` answers "when was NFL last actually refreshed", and
+ * `recordsSkipped` — a STREAK, see its docs — answers "is the budget starting to
+ * starve it". Today both say the feed is healthy.
  *
  * ⚠ EVERY FUNCTION HERE FAILS SOFT. This measures a cron that already reports
  * honestly about zero-row runs; a telemetry write that threw would turn a
@@ -82,7 +92,15 @@ export type InjuryFeedFreshness = {
   lastSuccessAt: Date | null
   /** Last run that failed. Never stamped in the same run as a success. */
   lastErrorAt: Date | null
-  /** Runs that never reached this sport at all, because the budget ran out. */
+  /**
+   * CONSECUTIVE runs that never reached this sport, since the last one that
+   * did. Zero whenever the most recent run reached it, success or failure.
+   *
+   * ⚠ IT IS A STREAK, NOT A TOTAL, and the distinction is the whole point — see
+   * the reset in `recordInjurySyncRun`. A lifetime total answers "has this ever
+   * been starved", which is not a question any surface needs; a streak answers
+   * "is it starving now", which is the one the player card asks.
+   */
   skipped: number
 }
 
@@ -105,6 +123,22 @@ export async function readInjurySyncFreshness(sport: string): Promise<InjuryFeed
         provider: PROVIDER,
         entityType: ENTITY,
         sport: { equals: wanted, mode: 'insensitive' },
+        /*
+         * ⚠ THE FOURTH COLUMN OF THE UNIQUE, AND LEAVING IT OUT MADE THIS READ
+         * DEPEND ON A PROMISE NOTHING ENFORCES. The unique is
+         * [provider, entityType, sport, key]; every writer above stamps
+         * `key: KEY`. Filtering on only three of the four was correct ONLY while
+         * `'rotation'` remains the sole key under this provider — so the moment
+         * someone splits telemetry per source (rolling_insights vs espn vs
+         * api_sports, an obvious next step), `findFirst` with no `orderBy`
+         * returns an implementation-defined row and the card silently reports
+         * another source's timestamps. No test would fail.
+         *
+         * `key` is our own constant, so pinning it costs nothing — unlike
+         * `sport`, which comes from two different callers and must stay
+         * case-insensitive.
+         */
+        key: KEY,
       },
       select: { lastSuccessAt: true, lastErrorAt: true, recordsSkipped: true },
     })
@@ -136,9 +170,37 @@ export async function recordInjurySyncRun(args: {
    * errored 2m ago" is a far more useful pair than either alone, and stamping
    * both on every run would destroy that.
    */
+  /*
+   * 🛑 `recordsSkipped` RESETS HERE, AND WITHOUT THIS IT IS NOT A SIGNAL.
+   *
+   * It is only ever `increment: 1`'d by `recordInjurySyncDeferred`. With no
+   * reset it is a LIFETIME ACCUMULATOR: one bad afternoon in July, and every
+   * player card in that sport reads "487 runs skipped for budget" forever, long
+   * after the feed stabilised. A number that only climbs cannot distinguish
+   * "starving right now" from "starved once, months ago" — which is the only
+   * question the card asks it.
+   *
+   * ⚠ A FAILED RUN RESETS IT TOO, and that is deliberate. The counter means
+   * "consecutive runs that never REACHED this sport". A run that reached the
+   * sport and got a provider error did reach it — that is an outage, not
+   * starvation, and `lastErrorAt` is what says so. Conflating the two would
+   * make a broken provider look like a budget problem.
+   */
   const update = args.failed
-    ? { lastStartedAt: now, lastErrorAt: now, lastError: error, recordsUpdated: args.written }
-    : { lastStartedAt: now, lastSuccessAt: now, lastCompletedAt: now, recordsUpdated: args.written }
+    ? {
+        lastStartedAt: now,
+        lastErrorAt: now,
+        lastError: error,
+        recordsUpdated: args.written,
+        recordsSkipped: 0,
+      }
+    : {
+        lastStartedAt: now,
+        lastSuccessAt: now,
+        lastCompletedAt: now,
+        recordsUpdated: args.written,
+        recordsSkipped: 0,
+      }
 
   try {
     await prisma.providerSyncState.upsert({

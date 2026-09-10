@@ -109,6 +109,35 @@ describe('injury sync telemetry', () => {
     await expect(recordInjurySyncDeferred('NFL')).resolves.toBeUndefined()
   })
 
+  /*
+   * 🛑 THE SKIP COUNTER IS A STREAK, AND IT SHIPPED AS A LIFETIME TOTAL.
+   * Found by review, not by these tests, which is the point of writing it down:
+   * `recordsSkipped` was only ever `increment: 1`'d and never reset, so one
+   * starved afternoon would have put "487 runs skipped for budget" on every
+   * player card in that sport permanently. A number that only climbs cannot
+   * answer "is it starving NOW" — the single question the card asks it.
+   */
+  it('zeroes the skip streak on a successful run', async () => {
+    const { recordInjurySyncRun } = await subject()
+    await recordInjurySyncRun({ sport: 'NFL', written: 1225, fetched: 1300, failed: false })
+    expect(upsert.mock.calls[0][0].update.recordsSkipped).toBe(0)
+  })
+
+  /*
+   * ⚠ A FAILED RUN RESETS IT TOO. The counter means "consecutive runs that never
+   * REACHED this sport". A run that reached the sport and got a provider error
+   * did reach it — that is an outage, and `lastErrorAt` is what reports it.
+   * Leaving the streak climbing through an outage would make a broken provider
+   * read as a budget problem.
+   */
+  it('zeroes the skip streak on a FAILED run too, because the run reached the sport', async () => {
+    const { recordInjurySyncRun } = await subject()
+    await recordInjurySyncRun({ sport: 'NFL', written: 0, fetched: 0, failed: true, error: 'RI 500' })
+    const u = upsert.mock.calls[0][0].update
+    expect(u.recordsSkipped).toBe(0)
+    expect(u.lastErrorAt).toBeInstanceOf(Date)
+  })
+
   it('truncates a long provider error rather than storing an essay', async () => {
     const { recordInjurySyncRun } = await subject()
     await recordInjurySyncRun({ sport: 'NFL', written: 0, fetched: 0, failed: true, error: 'x'.repeat(2000) })

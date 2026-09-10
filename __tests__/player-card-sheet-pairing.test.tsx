@@ -73,6 +73,9 @@ function card(over: Partial<PlayerCardData> = {}): PlayerCardData {
     /* Required since the injury section shipped; its behaviour is pinned by
        `__tests__/player-card-injury.test.tsx`. */
     injury: SECTION_NO('No injury designation reported in the last 14 days.'),
+    /* Required since PlayerCardData gained injuryFeed. tsconfig excludes __tests__
+       repo-wide, so nothing typechecks this fixture — the drift is only visible here. */
+    injuryFeed: SECTION_NO('No record of when this sport was last checked.'),
     insight: null,
     league: {
       leagueId: 'l1',

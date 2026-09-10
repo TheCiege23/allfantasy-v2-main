@@ -77,6 +77,22 @@ describe('readInjurySyncFreshness', () => {
     expect(where.entityType).toBe('injuries')
   })
 
+  /*
+   * 🛑 THE READ MUST PIN `key`, THE FOURTH COLUMN OF THE UNIQUE.
+   * The unique is [provider, entityType, sport, key] and every writer stamps
+   * `key: 'rotation'`. Filtering on three of four with no `orderBy` was correct
+   * only while one key exists under this provider — split telemetry per source
+   * (rolling_insights vs espn vs api_sports) and `findFirst` returns an
+   * implementation-defined row, so the card reports another source's timestamps
+   * with nothing failing. `key` is our own constant, so pinning it is free;
+   * `sport` is not, which is why that one stays case-insensitive.
+   */
+  it('pins the key, so a second telemetry key cannot silently swap the row', async () => {
+    const { readInjurySyncFreshness } = await subject()
+    await readInjurySyncFreshness('NFL')
+    expect(findFirst.mock.calls[0][0].where.key).toBe('rotation')
+  })
+
   it('carries the skip count, which is the starvation signal', async () => {
     findFirst.mockResolvedValue({ lastSuccessAt: null, lastErrorAt: null, recordsSkipped: 11 })
     const { readInjurySyncFreshness } = await subject()

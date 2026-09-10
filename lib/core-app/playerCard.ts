@@ -188,12 +188,19 @@ export type PlayerCardInjuryFeed = {
   /** Last run that failed. Never set in the same run as a success. */
   erroredAt: string | null
   /**
-   * Runs the budget never reached this sport at all.
+   * CONSECUTIVE runs the budget never reached this sport, since the last one
+   * that did.
    *
-   * ⚠ A CLIMBING NUMBER IS THE STARVATION SIGNAL, and it is the one this card
-   * most needs. `resolveSports` rotates seven sports on a 24-hour period against
-   * a 200s budget, so a sport can go a full day between leads and refresh in
-   * between only if the budget reaches it.
+   * 🛑 A STREAK, NOT A LIFETIME TOTAL, AND IT SHIPPED AS A TOTAL FIRST. The
+   * counter was only ever incremented, never reset, so one starved afternoon
+   * would have put "487 runs skipped for budget" on every card in that sport
+   * permanently — a number that climbs and never falls cannot answer "is it
+   * starving now", which is the only thing this card asks it. `recordInjurySyncRun`
+   * now zeroes it on any run that reaches the sport.
+   *
+   * `resolveSports` rotates seven sports on a 24-hour period against a 200s
+   * budget, so a sport can go a full day between leads and refresh in between
+   * only if the budget reaches it. A non-zero streak here is that happening.
    */
   skipped: number
 }
