@@ -39,18 +39,43 @@ describe('the reconciliation path contains no destructive call', () => {
     expect(APPLY_SRC).not.toMatch(/\$executeRaw[\s\S]{0,200}DELETE/i)
   })
 
-  it('archives an absent team by setting isOrphan, in code rather than in a comment', () => {
+  it('archives an absent team in code rather than in a comment, on BOTH axes', () => {
     /*
      * ⚠ A WHOLE-FILE PRESENCE CHECK IS SATISFIED BY A COMMENT. This file carries an 18-line block
      * comment immediately above the write, so matching the pattern anywhere proved nothing about
      * where — or whether — the update actually happens. Strip comments, then require the write to
      * sit inside the reconciliation loop.
+     *
+     * 🛑 AND THE FIXED 200-CHARACTER WINDOW THAT USED TO SPAN `update({` → `data: { isOrphan: true }`
+     * IS GONE, BECAUSE IT BROKE THE MOMENT THE WRITE GREW. That single regex also required
+     * `isOrphan: true` to be the object's ONLY key — `\s*\}` immediately after it — so adding the
+     * lifecycle fields turned a correct, strictly more informative write into a red test. A
+     * fixed-width lookahead is the same defect this batch has now hit in three separate scanners:
+     * it measures formatting, not behaviour. Anchor on the write, then assert each required key
+     * BY NAME, so the failure message says which one is missing instead of "did not match".
      */
     const codeOnly = APPLY_SRC.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
     const loopStart = codeOnly.indexOf('for (const t of staleTeams)')
     expect(loopStart, 'reconciliation loop not found in stripped source').toBeGreaterThan(-1)
+
     const loopBody = codeOnly.slice(loopStart)
-    expect(loopBody).toMatch(/leagueTeam\.update\(\{[\s\S]{0,200}data:\s*\{\s*isOrphan:\s*true\s*\}/)
+    const writeAt = loopBody.search(/leagueTeam\s*\.\s*update\s*\(\s*\{/)
+    expect(writeAt, 'no leagueTeam.update inside the reconciliation loop').toBeGreaterThan(-1)
+    const write = loopBody.slice(writeAt)
+
+    /* The legacy flag is still written — readers that have not migrated must not change meaning. */
+    expect(write, 'the legacy isOrphan flag must still be set').toMatch(/isOrphan:\s*true/)
+
+    /*
+     * And the lifecycle axis must say ARCHIVED explicitly. This is the assertion that separates a
+     * genuine departure from the six other things `isOrphan` means — a vacant seat, an eliminated
+     * team and an admin removal all set the same flag, and only this path may claim the team left.
+     */
+    expect(write, 'the departure must be recorded on the lifecycle axis').toMatch(
+      /lifecycleState:\s*'ARCHIVED'/,
+    )
+    expect(write, 'an archive must be stamped, not merely flagged').toMatch(/archivedAt:/)
+    expect(write, 'the reason must name the evidence for the archive').toMatch(/archiveReason:/)
   })
 
   it('skips a team that is already archived, so reconciliation is idempotent', () => {

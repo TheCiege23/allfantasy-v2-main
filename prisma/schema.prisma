@@ -8140,11 +8140,18 @@ model LeagueTeam {
   divisionId           String?                   @db.VarChar(64)
   role                 String                    @default("member")
 
-  /// 🛑 `isOrphan` IS OVERLOADED AND IS NOT AN ARCHIVAL FLAG. Five writers set it true and they
-  /// mean different things: canonical league creation marks every OPEN, CLAIMABLE slot;
+  /// 🛑 `isOrphan` IS OVERLOADED AND IS NOT AN ARCHIVAL FLAG. THIRTEEN write sites set it and they
+  /// mean SEVEN different things: canonical league creation marks every OPEN, CLAIMABLE slot;
   /// GuillotineEliminationEngine marks an ELIMINATED team; commissioner renewal marks an
   /// ADMINISTRATIVELY REMOVED one and separately sweeps `orphan-*` placeholders; and Sleeper
   /// reconciliation marks a team ABSENT FROM THE PROVIDER'S ROSTER SET.
+  ///
+  /// ⚠ THIS COMMENT SAID "FIVE WRITERS" AND WAS WRONG, because every count before it came from
+  /// grep — which cannot distinguish `data: { isOrphan: true }` from `select: { isOrphan: true }`.
+  /// Classifying each occurrence by its enclosing Prisma key found 13 mutations across 10 files.
+  /// The seventh meaning is the sharpest: BOTH Sleeper importers set `isOrphan = !ownerId` for a
+  /// seat the provider LISTS WITH NO MANAGER — a live franchise, the opposite lifecycle from the
+  /// reconciliation case above, in the same pipeline.
   ///
   /// It is RETAINED UNCHANGED for compatibility. Do not redefine it, do not delete it, and do not
   /// derive lifecycle from it. The three axes below replace it, one meaning at a time.
