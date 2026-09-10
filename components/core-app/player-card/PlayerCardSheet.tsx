@@ -433,6 +433,46 @@ export default function PlayerCardSheet({
               ) : (
                 <span className="af-pc-absent">{data.injury.reason}</span>
               )}
+
+              {/*
+                🛑 THE STAMP THAT MAKES THE LINE ABOVE CHECKABLE, AND IT MATTERS
+                MOST ON THE EMPTY BRANCH. "No injury designation in the last 14
+                days" is exactly what a DEAD FEED says too — measured, api_sports
+                held 1,444 rows for rostered players with not one fresher than a
+                week — and until now nothing on this card could tell a healthy
+                player from a source that stopped.
+
+                ⚠ RENDERED ONLY WHEN THERE IS SOMETHING TO SAY. No telemetry row
+                means we have no record, which is not the same as "never checked";
+                claiming the latter from the absence of the former is the kind of
+                confident falsehood this section is built to avoid. So the
+                unavailable arm renders nothing at all.
+              */}
+              {data.injuryFeed?.available ? (
+                <span className="af-pc-feed">
+                  {data.injuryFeed.data.checkedAt
+                    ? `feed checked ${ago(data.injuryFeed.data.checkedAt) ?? 'just now'}`
+                    : 'feed has not completed a run for this sport yet'}
+                  {/*
+                    An error stamp and a success stamp are never written by the
+                    same run, on purpose — "last succeeded 6h ago, last errored
+                    2m ago" is a far more useful pair than either alone, and it is
+                    the shape that shows a feed which is running and failing.
+                  */}
+                  {data.injuryFeed.data.erroredAt
+                    ? ` · last error ${ago(data.injuryFeed.data.erroredAt)}`
+                    : ''}
+                  {/*
+                    ⚠ THE STARVATION SIGNAL. Seven sports rotate on a 24-hour
+                    period against a 200s budget, so a climbing skip count is how
+                    "checked 9h ago" stops being a blip and becomes the norm.
+                    Silent below 1 so an ordinary run adds no noise.
+                  */}
+                  {data.injuryFeed.data.skipped > 0
+                    ? ` · ${data.injuryFeed.data.skipped} run${data.injuryFeed.data.skipped === 1 ? '' : 's'} skipped for budget`
+                    : ''}
+                </span>
+              ) : null}
             </div>
           ) : null}
 
