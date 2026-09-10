@@ -8,6 +8,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
  */
 const findManySessions = vi.fn()
 const updateSession = vi.fn()
+const findUniqueSession = vi.fn()
 const countSessions = vi.fn()
 const countLeagues = vi.fn()
 
@@ -16,6 +17,23 @@ vi.mock('@/lib/prisma', () => ({
     draftSession: {
       findMany: (...a: unknown[]) => findManySessions(...a),
       update: (...a: unknown[]) => updateSession(...a),
+      /*
+       * ⚠ ADDED BY `dbd233fec`, AND ITS ABSENCE READ AS A BEHAVIOUR CHANGE.
+       * The backfill now asks whether another league's session already holds this
+       * globally-unique `sleeperDraftId` before claiming it — one Sleeper league is
+       * N League rows, so several DraftSessions legitimately point at one upstream
+       * draft and only the first can hold the id.
+       *
+       * Without this delegate the lookup threw on every row, each landed in the
+       * catch, and `resolved` came back 0 — which surfaces as "expected 0 to be 1"
+       * and looks exactly like the function having stopped working.
+       *
+       * ⚠ NO DEFAULT NEEDED: an un-stubbed vi.fn() resolves undefined, and the
+       * function guards with `if (holder && holder.id !== s.id)`. Undefined is
+       * falsy, so the ordinary path — nobody else holds it — is what every existing
+       * test already gets, without touching their setup.
+       */
+      findUnique: (...a: unknown[]) => findUniqueSession(...a),
       count: (...a: unknown[]) => countSessions(...a),
     },
     league: { count: (...a: unknown[]) => countLeagues(...a) },
@@ -36,6 +54,30 @@ beforeEach(() => {
 })
 
 describe('draft id backfill', () => {
+  /*
+   * 🛑 THE BRANCH `dbd233fec` ADDED HAD NO TEST, which is why its arrival read as a
+   * regression rather than as new behaviour. `sleeperDraftId` is globally unique and
+   * one Sleeper league is N League rows, so the second row through must SKIP and be
+   * counted apart — not throw P2002 forever, and not land in `failed`, where a real
+   * outage lives.
+   *
+   * ⚠ `mockResolvedValueOnce`, NOT `mockResolvedValue`: this file has two describe
+   * blocks and the stub must not survive into a sibling test that expects the
+   * ordinary "nobody holds it" path.
+   */
+  it('skips a draft another league already holds, and counts it apart from failures', async () => {
+    findManySessions.mockResolvedValue([session('s1', '123456')])
+    findUniqueSession.mockResolvedValueOnce({ id: 's-other', leagueId: 'lg-other' })
+    globalThis.fetch = vi.fn(async () => ({ ok: true, json: async () => ({ draft_id: 'd1' }) })) as never
+
+    const r = await backfillSleeperDraftIds()
+
+    expect(r.claimedByAnotherSession).toBe(1)
+    expect(r.resolved).toBe(0)
+    expect(updateSession).not.toHaveBeenCalled()
+    expect(r.failures[0]?.reason).toContain('already held by league lg-other')
+  })
+
   it('writes the id when Sleeper returns one', async () => {
     findManySessions.mockResolvedValue([session('s1', '123456')])
     globalThis.fetch = vi.fn(async () => ({ ok: true, json: async () => ({ draft_id: '998877' }) })) as never
