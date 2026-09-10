@@ -654,7 +654,18 @@ export async function claimExistingLeagueForMember(args: {
     await prisma.$transaction([
       (prisma as any).leagueTeam.update({
         where: { id: team.id },
-        data: { claimedByUserId: userId, isOrphan: false },
+        /*
+         * A confirmed manager claim on an imported league — human, and current by the act of
+         * claiming. ⚠ The `as any` above means TypeScript checks NOTHING in this object, these
+         * two fields included; they are correct against the schema by inspection, not by the
+         * compiler. That cast predates this change and is left alone deliberately.
+         */
+        data: {
+          claimedByUserId: userId,
+          isOrphan: false,
+          lifecycleState: 'CURRENT',
+          managerKind: 'HUMAN',
+        },
       }),
       (prisma as any).leagueManagerClaim.create({
         data: {

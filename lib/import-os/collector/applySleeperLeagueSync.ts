@@ -447,7 +447,31 @@ async function applyTeamsRosters(
        */
       if (t.isOrphan) continue
 
-      await prisma.leagueTeam.update({ where: { id: t.id }, data: { isOrphan: true } })
+      /*
+       * 🛑 THE OTHER SLEEPER WRITER IN THIS SAME IMPORT PATH SETS `isOrphan` TO MEAN THE
+       * OPPOSITE OF THIS. `SleeperLeagueCreationBootstrapService` and
+       * `lib/league/sleeper-import-process` both compute `isOrphan = !ownerId` — a seat the
+       * provider reports with NO MANAGER, which is a live franchise with an empty chair. Here
+       * the flag means the team is ABSENT FROM THE ROSTER FEED ENTIRELY, which is departure.
+       * One boolean, one provider, two opposite lifecycles — and no reader could tell them
+       * apart, which is why this batch was stopped.
+       *
+       * This site is genuinely archival, so it is the one that gets to say ARCHIVED. The reason
+       * string names the evidence, not the conclusion: a complete authoritative response did not
+       * contain this team.
+       *
+       * ⚠ `managerKind` is untouched. Whoever ran this franchise is unchanged by the provider
+       * dropping it; conflating "the team is gone" with "the seat is empty" is the original bug.
+       */
+      await prisma.leagueTeam.update({
+        where: { id: t.id },
+        data: {
+          isOrphan: true,
+          lifecycleState: 'ARCHIVED',
+          archivedAt: new Date(),
+          archiveReason: 'absent_from_authoritative_roster_response',
+        },
+      })
       out.removed += 1
       out.notes.push(
         `teams_rosters: team ${t.externalId} absent from a complete authoritative response — archived as orphan (preserved, not deleted)`,

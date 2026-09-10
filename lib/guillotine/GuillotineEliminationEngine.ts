@@ -327,10 +327,39 @@ export async function runElimination(input: RunEliminationInput): Promise<Guillo
      * be a guess. The count is captured instead, so a no-match is visible in the result and in the
      * log rather than being indistinguishable from success.
      */
+    /*
+     * 🛑 ELIMINATION IS NOT ARCHIVAL, AND THIS WRITER IS WHY THE TWO GOT CONFUSED.
+     *
+     * A guillotined team is still one of the league's franchises: it keeps its history, its
+     * standings row, its transactions and every identifier a later join needs. It is out of the
+     * COMPETITION, which is a third axis — so `eliminatedAt` carries it and `lifecycleState`
+     * stays CURRENT. Writing ARCHIVED here would delete a live team from its own league's
+     * counts, which is the precise failure this batch exists to undo.
+     *
+     * `managerKind: 'VACANT'` follows the claim being cleared on the two lines above: the seat
+     * genuinely has nobody in it after an elimination.
+     *
+     * ⚠ THE `where` KEY IS STILL WRONG AND IS STILL NOT CHANGED HERE. `externalId` holds a slot
+     * number for provider-imported leagues and a `Roster.id` uuid for canonically created ones
+     * (`createCanonicalLeagueInTransaction` writes `roster.id`;
+     * `SleeperLeagueCreationBootstrapService` writes `r.source_team_id`), so `rosterId` — a uuid
+     * — matches in one id space and not the other. Two readings imply opposite fixes and neither
+     * is provable from this engine, so the key is reported as a separate blocker rather than
+     * guessed. Consequence to keep in mind: on the leagues where it matches nothing, these new
+     * fields are written to zero rows exactly as `isOrphan` already was. The count below is what
+     * makes that visible.
+     */
     const unclaimed = await prisma.leagueTeam
       .updateMany({
         where: { leagueId: input.leagueId, externalId: rosterId },
-        data: { claimedByUserId: null, platformUserId: null, isOrphan: true },
+        data: {
+          claimedByUserId: null,
+          platformUserId: null,
+          isOrphan: true,
+          lifecycleState: 'CURRENT',
+          managerKind: 'VACANT',
+          eliminatedAt: new Date(),
+        },
       })
       .catch(() => ({ count: 0 }))
     if (unclaimed.count === 0) {

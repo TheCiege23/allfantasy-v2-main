@@ -129,6 +129,21 @@ export async function bootstrapLeagueFromNormalizedImport(
     const rank = standing?.rank ?? null
     const pointsAgainst = r.points_against ?? (standing?.points_against ?? 0)
     const isOrphan = Boolean(r.is_orphan) || !r.source_manager_id
+
+    /*
+     * 🛑 THIS `isOrphan` MEANS "THE PROVIDER SHOWS NO MANAGER ON A LIVE SEAT" — the opposite
+     * lifecycle from `applySleeperLeagueSync`, which sets the same flag to mean the team is gone
+     * from the feed. Both are Sleeper, both write `LeagueTeam.isOrphan`, and no reader could
+     * separate them. On the manager axis this is VACANT; on the lifecycle axis it is CURRENT,
+     * because the provider just listed it.
+     *
+     * HUMAN when a `source_manager_id` is present: that is a real Sleeper account, and it stays
+     * HUMAN whether or not it resolves to an AllFantasy user. `resolvedClaim` below answers a
+     * DIFFERENT question — has this person linked an AF account — and an imported league is full
+     * of genuinely human-run seats nobody has claimed here.
+     */
+    const importedManagerKind = isOrphan ? 'VACANT' : 'HUMAN'
+
     const importedRole = isOrphan
       ? 'orphan'
       : r.is_commissioner
@@ -162,6 +177,8 @@ export async function bootstrapLeagueFromNormalizedImport(
         currentRank: rank,
         role: importedRole,
         isOrphan,
+        lifecycleState: 'CURRENT',
+        managerKind: importedManagerKind,
         platformUserId: r.source_manager_id || null,
         claimedByUserId: resolvedClaim,
         isCommissioner: Boolean(r.is_commissioner),
@@ -179,6 +196,18 @@ export async function bootstrapLeagueFromNormalizedImport(
         currentRank: rank,
         role: importedRole,
         isOrphan,
+        /*
+         * ⚠ THIS BRANCH IS ALSO THE PROVIDER-REAPPEARANCE PATH, AND IT MUST UNDO AN ARCHIVE.
+         * A team `applySleeperLeagueSync` archived as absent, that later returns to a complete
+         * response, arrives here. Setting CURRENT without clearing the archive stamp would leave
+         * a row that reads current and carries an `archivedAt` — a contradiction a later audit
+         * cannot resolve. The provider listing the team IS the authoritative evidence, so the
+         * archival facts are retracted rather than left standing beside their own refutation.
+         */
+        lifecycleState: 'CURRENT',
+        managerKind: importedManagerKind,
+        archivedAt: null,
+        archiveReason: null,
         platformUserId: r.source_manager_id || null,
         // Idempotent reimport: only (re)set the claim when the manager resolves;
         // never overwrite an existing claim with null.

@@ -733,6 +733,13 @@ export async function createCanonicalLeagueInTransaction(
       platformUserId: appUserId,
       isCommissioner: true,
       role: 'commissioner',
+      /*
+       * The commissioner's own franchise: current, and run by the person creating the league.
+       * Stated rather than defaulted — a row that leaves this writer unclassified is
+       * indistinguishable from the historical population, which is the thing being ended.
+       */
+      lifecycleState: 'CURRENT',
+      managerKind: 'HUMAN',
     },
   })
 
@@ -792,7 +799,21 @@ export async function createCanonicalLeagueInTransaction(
         teamName: openTeamName,
         claimedByUserId: null,
         platformUserId: openRoster.platformUserId,
+        /*
+         * 🛑 THIS `isOrphan: true` IS THE SINGLE ROW THAT DISPROVED "isOrphan MEANS ARCHIVED".
+         *
+         * An open slot in a brand-new league is the most CURRENT franchise there is — it has
+         * existed for milliseconds and is waiting to be claimed. Eleven of them ship with every
+         * 12-team league, and reading the flag as archival deleted them from their own league's
+         * counts. `__tests__/league-import/vacant-franchise-counts.test.ts` holds that behaviour.
+         *
+         * The flag is KEPT so the column stays populated for the backfill and so no reader
+         * changes meaning underneath this commit. The two fields beside it are what the flag
+         * should have been all along: the lifecycle axis and the manager axis, stated separately.
+         */
         isOrphan: true,
+        lifecycleState: 'CURRENT',
+        managerKind: 'VACANT',
         isCommissioner: false,
         role: 'member',
       },
