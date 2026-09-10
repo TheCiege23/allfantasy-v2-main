@@ -25,7 +25,7 @@ carrying only that session's 42 uncommitted insertions.
 | `lib/decision-os/value-v2/periodCalendar.ts` | Scheduled period resolution and advancement |
 | `lib/decision-os/value-v2/leaseToken.ts` | Per-claim lease tokens |
 | `lib/decision-os/value-v2/lanePlanner.ts` | Live / historical lane specifications |
-| `__tests__/decision-os/value-v2-period-calendar.test.ts` | 41 tests |
+| `__tests__/decision-os/value-v2-period-calendar.test.ts` | 55 tests |
 | `__tests__/decision-os/value-v2-lease-token.test.ts` | 21 tests |
 | `__tests__/decision-os/value-v2-lane-planner.test.ts` | 19 tests |
 | `docs/DECISION_OS_M19_BATCH_19A_CLOSEOUT.md` | This document |
@@ -162,5 +162,12 @@ IMP-05, deployment, and `main`. No merge was performed.
 | Production PostgreSQL major confirmed | Open — validated on 18.3 and 17.9; test Neon reports 17.11 |
 | IMP-05 period finality implemented | Open |
 | Real concurrency and non-UTC tests | Open — require the schema and worker batches |
+
+⚠ **Correction to this document.** The per-file table first read "41 tests" for the period
+calendar. The real count is **55** — the file's `it.each` tables expand to more cases than a
+`grep -c "it("` reports, and 95 - 21 - 19 = 55 does not reconcile with 41. Verified by running
+each suite alone: 55 / 21 / 19, each exit 0. The 95 total was always right; the split was not.
+The lesson is small and worth keeping: a total that is correct does not validate the parts it
+was assembled from.
 
 **Milestone 19 progress: 34%.**
