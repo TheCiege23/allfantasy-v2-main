@@ -40,8 +40,30 @@ import { prisma } from '@/lib/prisma'
 import { assertLeagueMember } from '@/lib/league/league-access'
 import { rateLimit, getClientIp } from '@/lib/rate-limit'
 import { computeRedraftTradeValueSnapshot } from '@/lib/trade-value/captureSnapshot'
+import { valueV2ShadowEnabled } from '@/lib/decision-os/value-v2/shadow'
+import { resolveRedraftTeamWindow } from '@/lib/decision-os/value-v2/redraftWindowServerAdapter'
+import type { WindowDecision } from '@/lib/decision-os/value-v2/windowDecision'
 
 export const dynamic = 'force-dynamic'
+
+/**
+ * The league's real scheduled periods, ascending and de-duplicated.
+ *
+ * ⚠ THE SCHEDULE, NOT `1..currentWeek`. `scheduledLookback` walks real predecessors, and the
+ * whole reason it exists is that arithmetic invents periods a league never played — a schedule
+ * that ends at 16 asked about 17, or a week with no matchups sitting in the middle of a season.
+ * Deriving this from the matchup rows means a gap in the schedule stays a gap.
+ *
+ * Returns empty when the season has no schedule rows, and empty is passed as "no schedule": the
+ * resolver then takes its arithmetic fallback and says so via
+ * `schedule_unavailable_lookback_assumed_contiguous`, rather than silently claiming a schedule.
+ */
+async function scheduledPeriodsFor(seasonId: string): Promise<number[]> {
+  const rows = await prisma.redraftMatchup
+    .findMany({ where: { seasonId }, select: { week: true }, distinct: ['week'], orderBy: { week: 'asc' } })
+    .catch(() => [] as Array<{ week: number }>)
+  return rows.map((r) => r.week).filter((w) => Number.isSafeInteger(w) && w >= 1)
+}
 
 /**
  * The asset shape the client already sends to `POST /api/redraft/trade-proposals`, so the console
@@ -133,9 +155,50 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Only the proposer roster owner can price this trade' }, { status: 403 })
   }
 
+  /*
+   * ── THE COMPETITIVE WINDOW ────────────────────────────────────────────────────────────────
+   *
+   * 🛑 EVERY LINE ABOVE THIS ONE IS A GATE, AND THAT ORDER IS THE POINT. Session, membership,
+   * league/season roster scoping and proposer ownership have all passed before a single window
+   * read happens. Resolving it earlier would read a team's evidence for a caller who is about to
+   * be refused — a smaller leak than the per-asset breakdown this route already guards, but the
+   * same kind, and invisible, because the response is a 403 either way.
+   *
+   * ⚠ THE FLAG IS READ HERE, AT THE BOUNDARY, SO FLAG-OFF COSTS NOTHING. With the shadow
+   * disabled this branch does not run and the route issues exactly the queries it always did —
+   * no League read, no LeagueTeam read, no matchup, forecast, dynasty or injury read. A flag
+   * that still paid for the work it disables would not be a flag.
+   *
+   * ⚠ THE REQUESTING TEAM IS THE PROPOSER, NEVER THE RECEIVER AND NEVER "THE FIRST TEAM". The
+   * proposer roster is the only identity in this request the server has authenticated.
+   * `resolveRedraftTeamWindow` maps it onto the canonical `LeagueTeam` explicitly rather than
+   * assuming the two id spaces agree, and anything it cannot resolve comes back as a REFUSED
+   * window naming the step that failed — so the shadow records why there is no window instead of
+   * implying a neutral one.
+   */
+  let teamWindowV2: WindowDecision | null = null
+  if (valueV2ShadowEnabled()) {
+    teamWindowV2 = await resolveRedraftTeamWindow({
+      prisma,
+      leagueId,
+      userId,
+      proposerRosterId,
+      sport: season.sport,
+      season: season.season,
+      /*
+       * The league's own scoring period, not today's date and not a guess. `currentWeek` is 0
+       * before a season starts, which is not a period at all — the adapter refuses on it rather
+       * than clamping to 1 and inventing a window over games nobody has played.
+       */
+      week: season.currentWeek,
+      scheduledPeriods: await scheduledPeriodsFor(seasonId),
+    })
+  }
+
   try {
     const snapshot = await computeRedraftTradeValueSnapshot({
       seasonId,
+      teamWindowV2,
       /*
        * ⚠ WITHOUT THIS EVERY VALUE IS PRICED AS A STANDARD 12-TEAM 1-QB LEAGUE — the exact defect
        * this route exists to remove. The `scoring` string below is a LABEL for the context record;

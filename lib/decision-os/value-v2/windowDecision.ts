@@ -220,6 +220,31 @@ function scopeEcho(scope: unknown): WindowDecision['identity'] {
   }
 }
 
+/**
+ * A refusal a CALLER can construct, for the case where the window was never resolvable.
+ *
+ * ⚠ THIS EXISTS SO "WE COULD NOT IDENTIFY THE TEAM" IS NOT REPORTED AS "THERE IS NO WINDOW".
+ * A server adapter that fails to map its caller onto a canonical team has evidence worth
+ * carrying — which identity step failed — and returning `null` throws that away: `buildValueV2Shadow`
+ * would emit the generic `team_competitive_window_missing`, which is also what a caller that never
+ * asked produces. Those are different facts and an operator needs to tell them apart.
+ *
+ * The result is a genuine refusal: `status` null, NEUTRAL_TEAM_FIT, no evidence read, and
+ * `INVALID_SCOPE_GAP` is deliberately NOT added, because the scope is not what was wrong.
+ */
+export function unresolvableWindowDecision(
+  scope: unknown,
+  gaps: readonly string[],
+  options: { coefficients?: WindowCoefficients; now?: Date } = {},
+): WindowDecision {
+  return refusedDecision(
+    scope,
+    options.coefficients ?? DEFAULT_WINDOW_COEFFICIENTS,
+    options.now ?? new Date(),
+    gaps,
+  )
+}
+
 /** A refusal that carries no evidence — used when the period is not in the schedule at all. */
 function refusedDecision(
   scope: unknown,

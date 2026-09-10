@@ -20,6 +20,7 @@ import {
 } from './valueEngine'
 import { gradeTrade } from './grader'
 import { applyFormatFit } from './formats/applyFormat'
+import { buildValueV2Shadow, valueV2ShadowEnabled } from '@/lib/decision-os/value-v2/shadow'
 
 export interface EnrichedTradeAsset {
   kind: AssetValueSnapshot['kind']
@@ -184,11 +185,31 @@ export function buildTradeValueSnapshot(input: {
   const sideB = sideFor(input.receiverRosterId)
   const { grade, commissionerReview } = gradeTrade(sideA, sideB, input.profiles)
 
+  /*
+   * The V2 shadow, carried BESIDE the legacy verdict and never inside it.
+   *
+   * 🛑 EVERY FIELD ABOVE IS COMPUTED BEFORE THIS LINE AND NONE OF THEM READS IT. `sideA`, `sideB`,
+   * `grade` and `commissionerReview` are already final, so the shadow cannot move a market price,
+   * a total, a grade, a fairness verdict or a legality result even if it is wrong. That ordering
+   * is the guarantee — not a convention — and `authority: 'legacy'` inside the payload says the
+   * same thing to a reader.
+   *
+   * ⚠ STILL PURE. `buildValueV2Shadow` is a pure function of the assets and the context it is
+   * handed; the window inside `input.context.teamWindowV2` was resolved by the route, which is
+   * where the session and the membership gate live. Nothing here queries anything.
+   *
+   * The flag is read here as well as at the route boundary, and deliberately: the boundary check
+   * is what stops the WINDOW READS, and this one is what stops the OUTPUT changing shape. A
+   * caller that never resolved a window still gets no `valueV2Shadow` key while the flag is off.
+   */
+  const shadow = valueV2ShadowEnabled() ? buildValueV2Shadow(snapAssets, input.context) : null
+
   return {
     version: TRADE_VALUE_SNAPSHOT_VERSION,
     context: input.context,
     sides: [sideA, sideB],
     grade,
     commissionerReview,
+    ...(shadow ? { valueV2Shadow: shadow } : {}),
   }
 }

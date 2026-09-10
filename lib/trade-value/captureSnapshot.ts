@@ -69,6 +69,20 @@ export interface RedraftTradeValueInput {
   rosterFormat: string
   currentSeason: number | null
   assets: RawAsset[]
+  /**
+   * The REQUESTING team's competitive window, already resolved by the caller.
+   *
+   * ⚠ RESOLVED BY THE CALLER, NEVER HERE, AND THAT SPLIT IS DELIBERATE. Working out which team is
+   * asking is an AUTHORIZATION question — it depends on the session, the membership gate and the
+   * proposer-ownership check, none of which this function has or should have. Resolving it here
+   * would bury an identity decision inside a valuation function, where the route that enforces
+   * those gates could not audit it.
+   *
+   * Absent means no window was resolved — the flag is off, or identity refused. Absent is never
+   * 'competitive': `teamFitFor(null)` is neutral, so a missing window cannot move a price, a
+   * grade or a fairness verdict.
+   */
+  teamWindowV2?: import('@/lib/decision-os/value-v2/windowDecision').WindowDecision | null
 }
 
 /**
@@ -295,6 +309,13 @@ export async function computeRedraftTradeValueSnapshot(
     scoring: input.scoring,
     rosterFormat: input.rosterFormat,
     capturedAt: new Date().toISOString(),
+    /*
+     * ⚠ SPREAD ONLY WHEN PRESENT, so a caller that resolved no window produces a context that is
+     * byte-identical to before this field existed. `teamWindowV2: undefined` and "no such key"
+     * are the same to a consumer but not to `JSON.stringify`, and persisted proposal snapshots
+     * are compared as JSON.
+     */
+    ...(input.teamWindowV2 ? { teamWindowV2: input.teamWindowV2 } : {}),
   }
 
   const snapshot = buildTradeValueSnapshot({
