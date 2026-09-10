@@ -1,6 +1,6 @@
 'use client'
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
+import { createContext, useCallback, useContext, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 
 import type { PlayerCardData } from '@/lib/core-app/playerCard'
@@ -106,7 +106,6 @@ export default function PlayerCardProvider({
    * the wrong player under the right header.
    */
   const seq = useRef(0)
-  const restoreFocus = useRef<HTMLElement | null>(null)
 
   const close = useCallback(() => {
     seq.current += 1
@@ -117,9 +116,6 @@ export default function PlayerCardProvider({
 
   const open = useCallback(
     (next: PlayerCardRef) => {
-      if (typeof document !== 'undefined' && document.activeElement instanceof HTMLElement) {
-        restoreFocus.current = document.activeElement
-      }
       const mine = ++seq.current
       setRef(next)
       setData(null)
@@ -146,31 +142,21 @@ export default function PlayerCardProvider({
     [leagueId]
   )
 
-  // Escape closes, and the page behind does not scroll while it is open.
-  useEffect(() => {
-    if (!ref) return
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') close()
-    }
-    document.addEventListener('keydown', onKey)
-
-    const previous = document.body.style.overflow
-    document.body.style.overflow = 'hidden'
-
-    return () => {
-      document.removeEventListener('keydown', onKey)
-      document.body.style.overflow = previous
-    }
-  }, [ref, close])
-
-  // Send focus back where it came from, so keyboard users are not dumped at the
-  // top of the page every time they inspect a player.
-  useEffect(() => {
-    if (ref) return
-    const el = restoreFocus.current
-    restoreFocus.current = null
-    if (el && document.contains(el)) el.focus()
-  }, [ref])
+  /*
+   * Escape, the background scroll lock and focus restoration all moved into
+   * `useOverlayContainment`, which PlayerCardSheet calls.
+   *
+   * ⚠ THEY HAD TO MOVE TOGETHER, NOT ONE AT A TIME. Two owners of
+   * `document.body.style.overflow` cannot compose: whichever cleanup runs last
+   * writes the value IT captured, so a provider-level lock plus the hook's
+   * reference-counted one would restore `hidden` over an already-unlocked page,
+   * or unlock underneath a second open overlay. The hook owns the whole set
+   * precisely so there is one owner.
+   *
+   * `restoreFocus` is likewise the hook's job now: it captures the opener at the
+   * moment the overlay activates, which is strictly later — and therefore more
+   * accurate — than capturing it here inside `open()`.
+   */
 
   const value = useMemo<PlayerCardState>(() => ({ open, close, isOpen: ref != null }), [open, close, ref])
 

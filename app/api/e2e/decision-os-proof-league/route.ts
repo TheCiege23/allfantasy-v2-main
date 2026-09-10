@@ -64,7 +64,12 @@ export async function POST(request: Request) {
 export async function DELETE(request: Request) {
   if (!e2eAllowed(request)) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
-  let body: { leagueId?: string; season?: number; seededScoreIds?: string[] }
+  let body: {
+    leagueId?: string
+    season?: number
+    seededScoreIds?: string[]
+    seededPlayerIds?: string[]
+  }
   try {
     body = (await request.json()) as typeof body
   } catch {
@@ -75,10 +80,17 @@ export async function DELETE(request: Request) {
     return NextResponse.json({ error: 'leagueId and season required' }, { status: 400 })
   }
 
+  /*
+   * The POST response is designed to be handed back verbatim as this body, so
+   * `seededPlayerIds` arrives without any caller having to know about it. It stays
+   * optional: a DELETE replaying a seed response captured before that field
+   * existed must still clean the league rather than 400.
+   */
   await cleanupG8League(prisma, {
     leagueId: body.leagueId,
     season: body.season,
     seededScoreIds: body.seededScoreIds ?? [],
+    seededPlayerIds: body.seededPlayerIds ?? [],
   })
   return NextResponse.json({ ok: true })
 }
