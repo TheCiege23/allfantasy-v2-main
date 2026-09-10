@@ -4,6 +4,7 @@ import {
   type WindowCoefficients, type WindowResolution, type WindowState, type WindowStatus,
 } from './window'
 import { assembleWindowFacts, type WindowEvidence, type WindowFactsPort, type WindowFactsScope } from './windowFacts'
+import { scheduledLookback } from './periodCalendar'
 
 /**
  * The competitive window as a Decision OS consumer sees it.
@@ -84,6 +85,14 @@ export interface WindowDecision {
 }
 
 export interface WindowDecisionOptions {
+  /**
+   * The league's scheduled periods, ascending, from `resolveScheduledPeriods`.
+   *
+   * Supplied: the lookback walks real scheduled predecessors, and a `scope.week` outside the
+   * schedule REFUSES rather than inventing a window.
+   * Absent: the arithmetic fallback runs and `SCHEDULE_UNAVAILABLE_GAP` is reported.
+   */
+  scheduledPeriods?: readonly number[]
   coefficients?: WindowCoefficients
   /** Seeded window for a team with no settled history. */
   seed?: WindowState
@@ -108,6 +117,43 @@ export interface WindowDecisionOptions {
  */
 export const HISTORICAL_RECONSTRUCTION_GAP = 'hysteresis_history_reconstructed_not_stored'
 
+/**
+ * Emitted when no schedule was supplied and the lookback fell back to arithmetic.
+ *
+ * ⚠ THE FALLBACK ASSUMES EVERY INTEGER BELOW THE CURRENT WEEK IS A PERIOD OF THIS SEASON.
+ * That is usually true mid-season and wrong at a season boundary or for a league whose
+ * schedule ends early. Naming it keeps the assumption visible instead of silent.
+ */
+export const SCHEDULE_UNAVAILABLE_GAP = 'schedule_unavailable_lookback_assumed_contiguous'
+
+/** The requested period is not in the league's schedule at all. */
+export const PERIOD_NOT_SCHEDULED_GAP = 'period_not_in_schedule'
+
+/** A refusal that carries no evidence — used when the period is not in the schedule at all. */
+function refusedDecision(
+  scope: WindowFactsScope,
+  coefficients: WindowCoefficients,
+  now: Date,
+  gaps: readonly string[],
+): WindowDecision {
+  return {
+    version: '2.0', state: 'refused', status: null, observed: null, teamFit: NEUTRAL_TEAM_FIT,
+    nowScore: null, futureScore: null, luckAdjustedWinRate: null, sourceConfidence: null,
+    hysteresis: { persistenceWeeks: WINDOW_PERSISTENCE_WEEKS, pendingStatus: null, pendingObservations: 0, weeksObserved: [] },
+    timestamps: { assembledAt: now.toISOString(), forecastGeneratedAt: null, dynastyGeneratedAt: null, forecastWeek: null },
+    identity: {
+      leagueId: scope.leagueId, season: scope.season, week: scope.week, teamId: scope.teamId,
+      teamName: null, managerName: null,
+    },
+    coefficients,
+    gaps: [...new Set(gaps)],
+    evidence: {
+      identity: null, allPlay: null, forecast: null, dynasty: null, injuries: null,
+      assembledAt: now.toISOString(),
+    },
+  }
+}
+
 export async function resolveWindowDecision(
   scope: WindowFactsScope,
   port: WindowFactsPort,
@@ -116,8 +162,20 @@ export async function resolveWindowDecision(
   const coefficients = options.coefficients ?? DEFAULT_WINDOW_COEFFICIENTS
   const now = options.now ?? new Date()
 
-  const weeks: number[] = []
-  for (let w = scope.week - (WINDOW_PERSISTENCE_WEEKS - 1); w <= scope.week; w += 1) if (w >= 1) weeks.push(w)
+  const scheduleGaps: string[] = []
+  let weeks: number[]
+  if (options.scheduledPeriods?.length) {
+    const lookback = scheduledLookback(options.scheduledPeriods, scope.week, WINDOW_PERSISTENCE_WEEKS)
+    if (lookback.kind === 'refused') {
+      // A period outside the schedule has no window. Refuse rather than invent one.
+      return refusedDecision(scope, coefficients, now, [PERIOD_NOT_SCHEDULED_GAP, lookback.reason])
+    }
+    weeks = [...lookback.periods]
+  } else {
+    weeks = []
+    for (let w = scope.week - (WINDOW_PERSISTENCE_WEEKS - 1); w <= scope.week; w += 1) if (w >= 1) weeks.push(w)
+    scheduleGaps.push(SCHEDULE_UNAVAILABLE_GAP)
+  }
 
   const assembled = await Promise.all(
     weeks.map(week => assembleWindowFacts({ ...scope, week }, port, now)),
@@ -149,7 +207,7 @@ export async function resolveWindowDecision(
       sourceConfidence,
       hysteresis: { persistenceWeeks: WINDOW_PERSISTENCE_WEEKS, pendingStatus: null, pendingObservations: 0, weeksObserved: [] },
       timestamps, identity, coefficients,
-      gaps: [...new Set([...current.gaps, ...currentResolution.gaps])],
+      gaps: [...new Set([...current.gaps, ...currentResolution.gaps, ...scheduleGaps])],
       evidence: current.evidence,
     }
   }
@@ -191,7 +249,7 @@ export async function resolveWindowDecision(
       weeksObserved,
     },
     timestamps, identity, coefficients,
-    gaps: [...new Set([...currentResolution.gaps, HISTORICAL_RECONSTRUCTION_GAP])],
+    gaps: [...new Set([...currentResolution.gaps, ...scheduleGaps, HISTORICAL_RECONSTRUCTION_GAP])],
     evidence: current.evidence,
   }
 }

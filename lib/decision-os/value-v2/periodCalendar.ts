@@ -174,3 +174,31 @@ export function isConsecutiveSchedule(periods: readonly number[]): boolean {
   }
   return true
 }
+
+export type LookbackResolution =
+  | { kind: 'lookback'; periods: readonly number[] }
+  | { kind: 'refused'; reason: 'period_not_in_schedule' | 'lookback_invalid' | 'schedule_empty' }
+
+/**
+ * `current` plus its immediate scheduled PREDECESSORS, oldest first.
+ *
+ * ⚠ THIS REPLACES `week - 1, week - 2` ARITHMETIC. Counting backwards by one assumes every
+ * integer below the current week is a period of this league's season. It is not: a schedule
+ * ending at 16 makes "week 17 minus two" reach 15 and 16 and then claim 17 as a period that
+ * does not exist, and a schedule whose first period is not 1 loses its floor entirely.
+ *
+ * Returns FEWER than `count` periods near the start of a season — that is the honest answer,
+ * and the caller reports the shortfall rather than padding it.
+ */
+export function scheduledLookback(
+  scheduled: readonly number[],
+  current: number,
+  count: number,
+): LookbackResolution {
+  if (!scheduled.length) return { kind: 'refused', reason: 'schedule_empty' }
+  if (!Number.isInteger(count) || count < 1) return { kind: 'refused', reason: 'lookback_invalid' }
+  const index = scheduled.indexOf(current)
+  if (index < 0) return { kind: 'refused', reason: 'period_not_in_schedule' }
+  const start = Math.max(0, index - (count - 1))
+  return { kind: 'lookback', periods: scheduled.slice(start, index + 1) }
+}
