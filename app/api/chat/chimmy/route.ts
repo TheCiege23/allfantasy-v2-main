@@ -73,7 +73,8 @@ import { buildTradeContextForChimmy } from '@/lib/chimmy-trade/tradeChimmyGround
 import { buildPendingTradeDecisionContext } from '@/lib/chimmy-trade/pendingTradeDecisionGrounding'
 import { buildLeagueTradeHistoryContext } from '@/lib/chimmy-trade/leagueTradeHistoryGrounding'
 import { buildLeagueStandingsContext } from '@/lib/chimmy/leagueStandingsGrounding'
-import { buildLeagueRulesGrounding, buildRuleGroundingGap } from '@/lib/chimmy/leagueRulesGrounding'
+import { buildRuleGroundingGap } from '@/lib/chimmy/leagueRulesGrounding'
+import { buildDecisionEnvelopeGrounding } from '@/lib/chimmy/decisionEnvelopeGrounding'
 import { buildHeadToHeadGrounding } from '@/lib/chimmy/headToHeadGrounding'
 import { buildDescribedTradeContext } from '@/lib/chimmy-trade/describedTradeEvaluator'
 import { buildDraftContext } from '@/lib/chimmy/draftGrounding'
@@ -2346,62 +2347,54 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
           }
 
           // Inject specialty league context for tournament and Big Brother leagues
-          /*
-           * ⚠ RULE GROUNDING RUNS FIRST, AND OFF `leagueSnapshot` RATHER THAN
-           * `planInput.leagueId`. The snapshot is the row `loadLeagueGroundingForUser`
-           * already proved this user is a member of; `planInput.leagueId` is a
-           * client-supplied claim. Same id in the ordinary case, different trust.
-           *
-           * ⚠ FIRST BECAUSE IT IS THE FRAME THE REST SITS IN. It is what says a
-           * King of the Hill league is not a redraft league, that IDP has not
-           * replaced dynasty, and that a keeper cost system nobody set is not a
-           * rule. A specialty block read before that frame is read against the
-           * wrong format.
-           *
-           * Synchronous and allocation-only: `resolveLeagueRules` reads the row
-           * we already hold and opens nothing.
-           */
-          if (leagueSnapshot) {
             /*
-             * 🛑 NO EMPTY CATCH. This block used to swallow a failure, which left
-             * the model holding a league id, a roster and a name but no rules —
-             * indistinguishable from a league that HAS no special rules. It then
-             * answered from general fantasy knowledge in the same confident voice
-             * it uses for a grounded league. An explicit evidence gap is a few
-             * tokens and makes the absence visible.
+             * 🛑 ONE CALL. The rule grounding, the context resolver, evidence
+             * validation, scoped refusals and the envelope all live in
+             * lib/decision-os/envelope — this route orchestrates them rather than
+             * containing another implementation. The block this replaces was ~40
+             * lines and was the eighth inline section in this file.
              *
-             * ⚠ THE DIAGNOSTIC CARRIES NO IDS, SETTINGS OR ERROR TEXT. Only the
-             * error's constructor name and a fixed reason. Interpolating a caught
-             * message would put arbitrary upstream text into a log — and this repo
-             * has already had a credential escape through a URL in exactly that way.
+             * ⚠ IT RESOLVES OFF `leagueSnapshot`, WHICH MEMBERSHIP ALREADY PROVED.
+             * The resolver authorizes the id again — it cannot know one was
+             * checked, and should not be told. The worst case is a redundant
+             * membership read; the alternative is a trusted claim.
+             *
+             * ⚠ THE SPECIALTY BLOCKS BELOW STILL RUN. This is the frame they are
+             * read against, exactly as the rule grounding was. Dropping them to
+             * look tidy would lose contexts that work today.
              */
-            let rulesCtx: string | null = null
             try {
-              rulesCtx = buildLeagueRulesGrounding({
-                leagueType: leagueSnapshot.leagueType,
-                isDynasty: leagueSnapshot.isDynasty,
-                keeperCount: leagueSnapshot.keeperCount,
-                keeperCostSystem: leagueSnapshot.keeperCostSystem,
-                keeperRoundPenalty: leagueSnapshot.keeperRoundPenalty,
-                settings: leagueSnapshot.settings,
-                sport: leagueSnapshot.sport,
+              const envelopeGrounding = await buildDecisionEnvelopeGrounding({
+                message: planInput.message,
+                userId,
+                snapshot: leagueSnapshot,
+                orchestrationIntent: pecrIntent,
+                sportHint: sport ?? null,
               })
+              if (envelopeGrounding) {
+                legacyEnrichmentContext = legacyEnrichmentContext
+                  ? `${envelopeGrounding.promptBlock}
+
+${legacyEnrichmentContext}`
+                  : envelopeGrounding.promptBlock
+              }
             } catch (err) {
-              console.warn('[chimmy] league rule grounding failed', {
+              /*
+               * ⚠ NO EMPTY CATCH, AND NO ERROR TEXT IN THE DIAGNOSTIC. Only the
+               * constructor name: an upstream message can carry a URL, and this
+               * repo has had a credential escape that way. The envelope emits its
+               * own evidence gap, so a failure here is visible to the model rather
+               * than indistinguishable from a league with no rules.
+               */
+              console.warn('[chimmy] decision envelope grounding failed', {
                 kind: err instanceof Error ? err.constructor.name : 'unknown',
               })
-              rulesCtx = buildRuleGroundingGap('resolve_threw')
+              legacyEnrichmentContext = legacyEnrichmentContext
+                ? `${buildRuleGroundingGap('resolve_threw')}
+
+${legacyEnrichmentContext}`
+                : buildRuleGroundingGap('resolve_threw')
             }
-            /*
-             * A null return is not an error — it is "this row carried no
-             * identifying signal", which is still an absence the model must not
-             * paper over. Same gap, different reason.
-             */
-            if (!rulesCtx) rulesCtx = buildRuleGroundingGap('not_grounded')
-            legacyEnrichmentContext = legacyEnrichmentContext
-              ? `${rulesCtx}\n\n${legacyEnrichmentContext}`
-              : rulesCtx
-          }
           if (planInput.leagueId && planInput.userId) {
             try {
               const tournamentCtx = await buildTournamentContextForChimmy(planInput.leagueId, planInput.userId)
