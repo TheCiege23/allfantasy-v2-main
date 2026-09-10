@@ -36,6 +36,8 @@
     "__tests__/decision-os/value-v2-window-consumer.test.ts",
     "__tests__/decision-os/value-v2-window-facts.test.ts",
     "__tests__/decision-os/value-v2-window-prisma-port.test.ts",
-    "__tests__/decision-os/value-v2-redraft-window-adapter.test.ts"
+    "__tests__/decision-os/value-v2-redraft-window-adapter.test.ts",
+    "lib/decision-os/value-v2/teamLifecycle.ts",
+    "__tests__/decision-os/value-v2-team-lifecycle.test.ts"
   ]
 }
