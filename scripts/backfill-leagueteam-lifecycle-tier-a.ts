@@ -118,10 +118,32 @@ async function columnsExist(): Promise<boolean> {
   return Number(rows[0]?.n ?? 0) === 5
 }
 
+/** Rows this run would classify: the bucket, restricted to what is still unclassified. */
 async function countMatching(p: Prisma.Sql): Promise<number> {
   const rows = await prisma.$queryRaw<Array<{ n: bigint }>>(
     Prisma.sql`SELECT count(*)::bigint AS n FROM league_teams WHERE "lifecycleState" = 'UNKNOWN' AND (${p})`,
   )
+  return Number(rows[0]?.n ?? 0)
+}
+
+/**
+ * The bucket's WHOLE population, classified or not — the only number comparable to the audit.
+ *
+ * ⚠ DRIFT MUST NOT BE MEASURED AGAINST THE UNCLASSIFIED SUBSET. It was, and after the backfill
+ * ran successfully every bucket reported "0 vs 354" — flagging drift precisely because the
+ * script had done its job. A drift check that fires on success trains the reader to ignore it.
+ */
+async function countPopulation(p: Prisma.Sql): Promise<number> {
+  const rows = await prisma.$queryRaw<Array<{ n: bigint }>>(
+    Prisma.sql`SELECT count(*)::bigint AS n FROM league_teams WHERE (${p})`,
+  )
+  return Number(rows[0]?.n ?? 0)
+}
+
+/** Rows genuinely still UNKNOWN. Asked directly, never inferred by subtraction. */
+async function countUnknown(): Promise<number> {
+  const rows = await prisma.$queryRaw<Array<{ n: bigint }>>`
+    SELECT count(*)::bigint AS n FROM league_teams WHERE "lifecycleState" = 'UNKNOWN'`
   return Number(rows[0]?.n ?? 0)
 }
 
@@ -167,30 +189,38 @@ async function main() {
   const drift: string[] = []
   for (const b of BUCKETS) {
     const n = await countMatching(b.predicate)
+    const population = await countPopulation(b.predicate)
     planned += n
-    const flag = n === b.auditCount ? '' : `   <-- DRIFT (audit measured ${b.auditCount})`
-    console.log(`  ${b.key.padEnd(16)} ${String(n).padStart(5)} -> ${b.lifecycle}/${b.manager}${flag}`)
+    const flag = population === b.auditCount ? '' : `   <-- DRIFT (audit measured ${b.auditCount})`
+    console.log(
+      `  ${b.key.padEnd(16)} ${String(n).padStart(5)} to classify of ${String(population).padStart(5)}` +
+        ` -> ${b.lifecycle}/${b.manager}${flag}`,
+    )
     console.log(`    ${b.what}`)
-    if (n !== b.auditCount) drift.push(`${b.key}: ${n} vs ${b.auditCount}`)
+    if (population !== b.auditCount) drift.push(`${b.key}: ${population} vs ${b.auditCount}`)
   }
 
   /*
-   * 🛑 THE REMAINDER IS ARITHMETIC, NOT A FIFTH SQL PREDICATE, AND THAT IS LOAD-BEARING.
+   * 🛑 NEVER DERIVE "STILL UNKNOWN" BY SUBTRACTING WHAT THIS RUN WOULD DO.
    *
-   * The obvious "improvement" is one statement counting `NOT (b1 OR b2 OR b3 OR b4)`. It is
-   * wrong, and wrong quietly. `"platformUserId" LIKE 'open-slot-%'` yields NULL — not false —
-   * when the column is NULL, which is true of 67 production rows. `NOT (false OR NULL)` is NULL,
-   * and `FILTER (WHERE NULL)` drops the row from the count, so the consolidated form reported
-   * 2,659 where the four buckets plus the remainder say 2,660. It was caught only because those
-   * two numbers disagreed by one.
+   * `total - planned` is right exactly once — on a virgin database — and wrong every time after.
+   * Re-run against production immediately after a successful backfill it reported
+   * "left UNKNOWN: 3419" when 759 rows were already classified and only 2,660 were UNKNOWN. The
+   * two quantities are "rows this run will not touch" and "rows that are unclassified", and they
+   * coincide only while nothing has been classified yet. Ask the database.
    *
-   * Counting each bucket separately is immune: a predicate that evaluates to NULL simply fails
-   * to match, which is the correct outcome — an unclassifiable row is exactly what should not be
-   * classified. Keep the subtraction.
+   * ⚠ AND DO NOT REPLACE THIS WITH ONE `NOT (b1 OR b2 OR b3 OR b4)` STATEMENT, which is the
+   * other tempting shortcut and is wrong for a different reason:
+   * `"platformUserId" LIKE 'open-slot-%'` yields NULL — not false — when the column is NULL,
+   * true of 67 production rows. `NOT (false OR NULL)` is NULL, `FILTER (WHERE NULL)` drops the
+   * row, and the consolidated form under-reported by exactly the one unclassifiable row. Each
+   * bucket counted separately is immune, because a NULL predicate simply fails to match, which
+   * is the correct outcome for a row that must not be classified.
    */
-  const untouched = total - planned
-  console.log(`\n  TOTAL to classify: ${planned}`)
-  console.log(`  left UNKNOWN:      ${untouched}   (Tier B + unclassifiable — deliberate)`)
+  const unknownNow = await countUnknown()
+  console.log(`\n  TOTAL to classify:  ${planned}`)
+  console.log(`  already classified: ${total - unknownNow}`)
+  console.log(`  will remain UNKNOWN: ${unknownNow - planned}   (Tier B + unclassifiable — deliberate)`)
 
   /*
    * ⚠ DRIFT IS REPORTED, NOT ENFORCED. The population moves — leagues are created and claimed
