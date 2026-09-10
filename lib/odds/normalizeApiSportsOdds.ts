@@ -211,13 +211,75 @@ export function parsePoints(value: string | null | undefined): number | null {
   return Number.isFinite(parsed) ? parsed : null
 }
 
-/** Which side of a two-way market a value string refers to. */
-function sideOf(value: string, homeTeamName?: string | null, awayTeamName?: string | null): 'home' | 'away' | null {
-  const lower = value.trim().toLowerCase()
-  if (lower.startsWith('home') || lower === '1') return 'home'
-  if (lower.startsWith('away') || lower === '2') return 'away'
-  if (homeTeamName && lower.includes(homeTeamName.trim().toLowerCase())) return 'home'
-  if (awayTeamName && lower.includes(awayTeamName.trim().toLowerCase())) return 'away'
+/** Options for resolving which side of a two-way market a value refers to. */
+export interface SideOpts {
+  /** Home team IDENTIFIER as stored — an abbreviation like "KC" in practice. */
+  homeTeam?: string | null
+  awayTeam?: string | null
+  /**
+   * Optional: map a bookmaker's team label ("Kansas City Chiefs") to the same
+   * code space as `homeTeam`/`awayTeam` ("KC").
+   *
+   * Injected rather than imported so this module stays pure and free of a cycle —
+   * the full-name table lives in `lib/api-sports.ts`, which imports THIS file.
+   * Without it, team-labelled values simply do not resolve, which is the correct
+   * outcome: no side is better than the wrong side.
+   */
+  resolveTeamCode?: (label: string) => string | null | undefined
+}
+
+/** Strip a trailing handicap/line off a value: "Chiefs -3.5" -> "chiefs". */
+function labelPart(lower: string): string {
+  return lower.replace(/\s*[+-]?\d+(?:\.\d+)?\s*$/, '').trim()
+}
+
+function sameCode(a: string, b: string): boolean {
+  return a.trim().toUpperCase() === b.trim().toUpperCase()
+}
+
+/**
+ * Which side of a two-way market a value string refers to.
+ *
+ * 🛑 NEVER SUBSTRING-MATCH A TEAM IDENTIFIER. This used to do
+ * `value.includes(teamName)`, and with the ABBREVIATIONS the writer actually
+ * passes that is actively dangerous: `"new orleans saints".includes("ne")` is
+ * true via the word "new", so with home="NE" the AWAY value was classified home
+ * and the away team's price landed in the home field. Measured, not theorised —
+ * both values resolved to 'home' and `moneylineAway` came back null. A wrong side
+ * inverts `homeWinProbability` and both implied team totals, which is precisely
+ * the plausible-but-wrong number this file exists to prevent.
+ *
+ * So identifiers are compared by EQUALITY on a code, never by containment:
+ *   1. the literal Home/Away/1/2 vocabulary the live feed actually uses, matched
+ *      on the leading TOKEN so "Home -3.5" works and no team name can collide;
+ *   2. an exact match against the identifier itself;
+ *   3. an exact match after `resolveTeamCode` maps a label into the code space.
+ * Anything else returns null.
+ */
+function sideOf(value: string, opts: SideOpts = {}): 'home' | 'away' | null {
+  const lower = String(value ?? '').trim().toLowerCase()
+  if (!lower) return null
+
+  // 1. The vocabulary the real payload uses. Token-anchored, so a team whose name
+  //    merely begins with these letters cannot be swallowed.
+  const firstToken = lower.split(/\s+/)[0]
+  if (firstToken === 'home' || lower === '1') return 'home'
+  if (firstToken === 'away' || lower === '2') return 'away'
+
+  const label = labelPart(lower)
+  if (!label) return null
+
+  // 2. The value IS the identifier (e.g. the feed echoes "KC").
+  if (opts.homeTeam && sameCode(label, opts.homeTeam)) return 'home'
+  if (opts.awayTeam && sameCode(label, opts.awayTeam)) return 'away'
+
+  // 3. A label the caller can translate into the same code space.
+  const code = opts.resolveTeamCode?.(label)
+  if (code) {
+    if (opts.homeTeam && sameCode(code, opts.homeTeam)) return 'home'
+    if (opts.awayTeam && sameCode(code, opts.awayTeam)) return 'away'
+  }
+
   return null
 }
 
@@ -246,8 +308,24 @@ export interface RawBookmaker {
  */
 export function normalizeBookmakerOdds(
   bookmaker: RawBookmaker,
-  opts: { homeTeamName?: string | null; awayTeamName?: string | null } = {},
+  opts: SideOpts & {
+    /**
+     * @deprecated Use `homeTeam`. Kept because the writer in `lib/api-sports.ts`
+     * still passes these names, and that file currently carries another session's
+     * uncommitted work — renaming there would mean committing their changes.
+     * The values were always abbreviations despite the "Name" suffix, which is
+     * half of why the old substring matching was wrong.
+     */
+    homeTeamName?: string | null
+    awayTeamName?: string | null
+  } = {},
 ): NormalizedGameOdds {
+  const side: SideOpts = {
+    homeTeam: opts.homeTeam ?? opts.homeTeamName,
+    awayTeam: opts.awayTeam ?? opts.awayTeamName,
+    resolveTeamCode: opts.resolveTeamCode,
+  }
+
   const out: NormalizedGameOdds = {
     bookmakerId: bookmaker.id,
     bookmakerName: bookmaker.name,
@@ -288,24 +366,24 @@ export function normalizeBookmakerOdds(
 
     if (market === 'moneyline') {
       for (const entry of values) {
-        const side = sideOf(entry.value, opts.homeTeamName, opts.awayTeamName)
+        const entrySide = sideOf(entry.value, side)
         const odd = parseOddToDecimal(entry.odd)
         if (odd === null) continue
-        if (side === 'home') out.moneylineHome = odd
-        else if (side === 'away') out.moneylineAway = odd
+        if (entrySide === 'home') out.moneylineHome = odd
+        else if (entrySide === 'away') out.moneylineAway = odd
       }
       continue
     }
 
     if (market === 'spread') {
       for (const entry of values) {
-        const side = sideOf(entry.value, opts.homeTeamName, opts.awayTeamName)
+        const entrySide = sideOf(entry.value, side)
         const points = parsePoints(entry.value)
         const odd = parseOddToDecimal(entry.odd)
-        if (side === 'home') {
+        if (entrySide === 'home') {
           if (points !== null) out.spreadHome = points
           if (odd !== null) out.spreadHomeOdd = odd
-        } else if (side === 'away') {
+        } else if (entrySide === 'away') {
           if (odd !== null) out.spreadAwayOdd = odd
           // Away line only fills the home number when home never supplied one;
           // the two are mirror images, so this keeps a one-sided quote usable.
