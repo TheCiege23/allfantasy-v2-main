@@ -66,11 +66,35 @@ async function seedMatchups(platformLeagueId: string, season: number) {
 
 /**
  * Whether the generated client can read `WeeklyMatchup` on THIS database.
- * False here is an environment fact about schema drift, never a fact about the
- * port — which is why the all-play assertions skip rather than fail, and why one
- * test below asserts the port DEGRADES honestly when the read throws.
+ *
+ * ⚠ THIS IS SET IN `beforeAll`, WHICH RUNS AFTER TEST REGISTRATION. `it.skipIf(!flag)`
+ * evaluates its condition when the `describe` callback runs, so it read `false` every time
+ * and skipped all five success-path tests even on a database that could read the table. The
+ * skip is therefore decided at RUN time inside each test, via `requireAllPlay(ctx)`.
  */
 let allPlayReadable = false
+
+/**
+ * Opt-in strictness. When DB verification is explicitly demanded, an incompatible schema is a
+ * FAILURE, not a skip — silently skipping the required success-path coverage is how a suite
+ * reports green while proving nothing.
+ */
+const STRICT_DB = process.env.M19_DB_STRICT === '1'
+
+/** Skip at RUN time, or fail loudly under strict mode. */
+function requireAllPlay(ctx: { skip: () => void }): void {
+  if (allPlayReadable) return
+  if (STRICT_DB) {
+    throw new Error(
+      'M19_DB_STRICT=1 but the Prisma client cannot read WeeklyMatchup on this database. ' +
+      'The success-path coverage this suite exists for did not run. Most likely cause: the ' +
+      'pending migration 20260903222531_weekly_matchup_roster_id_text is unapplied here, so ' +
+      '"rosterId" is still integer while the generated client expects text. Apply it to this ' +
+      'non-production database, or unset M19_DB_STRICT to allow the skip.',
+    )
+  }
+  ctx.skip()
+}
 
 const USER_ID = `${RUN}-user`
 
@@ -82,6 +106,18 @@ const USER_ID = `${RUN}-user`
 async function seedUser() {
   await prisma.appUser.create({
     data: { id: USER_ID, email: `${RUN}@allfantasy-fixture.invalid`, username: `${RUN}-user` },
+  })
+}
+
+/**
+ * `League.tenantId` is a required FK to `Tenant`. The success path never ran while the
+ * registration-time `skipIf` was forcing a skip, so this constraint had never been exercised.
+ */
+async function seedTenant() {
+  await prisma.tenant.upsert({
+    where: { id: 'allfantasy' },
+    create: { id: 'allfantasy', slug: 'allfantasy', name: 'AllFantasy' },
+    update: {},
   })
 }
 
@@ -128,6 +164,7 @@ const scope = (leagueId: string, teamId: string, week = 6, season = SEASON) =>
 
 describe.skipIf(NO_DB)('competitive window against a real database', () => {
   beforeAll(async () => {
+    await seedTenant()
     await seedUser()
     await seedLeague(LEAGUE_A, PLATFORM_A)
     await seedLeague(LEAGUE_B, PLATFORM_B)
@@ -167,7 +204,8 @@ describe.skipIf(NO_DB)('competitive window against a real database', () => {
     console.log(`[m19] verified against endpoint: ${host}`)
   })
 
-  it.skipIf(!allPlayReadable)('reads real rows end to end and classifies a contender', async () => {
+  it('reads real rows end to end and classifies a contender', async ctx => {
+    requireAllPlay(ctx)
     const decision = await resolveWindowDecision(scope(LEAGUE_A, '1'), portFor(LEAGUE_A, PLATFORM_A))
     expect(decision.state).toBe('evidenced')
     expect(decision.status).toBe('contender')
@@ -175,13 +213,15 @@ describe.skipIf(NO_DB)('competitive window against a real database', () => {
     expect(decision.teamFit.winNowWeight).toBeGreaterThan(1)
   })
 
-  it.skipIf(!allPlayReadable)('classifies the opposite team as rebuilding from the same rows', async () => {
+  it('classifies the opposite team as rebuilding from the same rows', async ctx => {
+    requireAllPlay(ctx)
     const decision = await resolveWindowDecision(scope(LEAGUE_A, '4'), portFor(LEAGUE_A, PLATFORM_A))
     expect(decision.status).toBe('rebuilding')
     expect(decision.teamFit.longTermWeight).toBeGreaterThan(1)
   })
 
-  it.skipIf(!allPlayReadable)('reconstructs a prior week from real weekly rows', async () => {
+  it('reconstructs a prior week from real weekly rows', async ctx => {
+    requireAllPlay(ctx)
     const w4 = await assembleWindowFacts(scope(LEAGUE_A, '1', 4), portFor(LEAGUE_A, PLATFORM_A))
     const w6 = await assembleWindowFacts(scope(LEAGUE_A, '1', 6), portFor(LEAGUE_A, PLATFORM_A))
     expect(w4.facts!.wins).toBe(4)
@@ -203,7 +243,8 @@ describe.skipIf(NO_DB)('competitive window against a real database', () => {
     expect(decision.teamFit).toMatchObject({ winNowWeight: 1, longTermWeight: 1, basis: 'unresolved' })
   })
 
-  it.skipIf(!allPlayReadable)('isolates two leagues that share the same platform roster number', async () => {
+  it('isolates two leagues that share the same platform roster number', async ctx => {
+    requireAllPlay(ctx)
     const a = await assembleWindowFacts(scope(LEAGUE_A, '1'), portFor(LEAGUE_A, PLATFORM_A))
     const b = await assembleWindowFacts(scope(LEAGUE_B, '1'), portFor(LEAGUE_B, PLATFORM_B))
     expect(a.facts).not.toBeNull()
@@ -219,7 +260,8 @@ describe.skipIf(NO_DB)('competitive window against a real database', () => {
     expect(mismatch.gaps).toContain('team_identity_missing')
   })
 
-  it.skipIf(!allPlayReadable)('isolates seasons: a prior seasons matchups do not answer for this one', async () => {
+  it('isolates seasons: a prior seasons matchups do not answer for this one', async ctx => {
+    requireAllPlay(ctx)
     const prior = await assembleWindowFacts(scope(LEAGUE_A, '1', 6, PRIOR_SEASON), portFor(LEAGUE_A, PLATFORM_A))
     // Matchups exist for the prior season, but no forecast or projection does.
     expect(prior.evidence.allPlay).not.toBeNull()

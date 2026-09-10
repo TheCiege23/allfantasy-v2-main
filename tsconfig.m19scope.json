@@ -1,0 +1,23 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": { "noEmit": true, "incremental": false },
+  "exclude": [],
+  "include": [
+    "lib/decision-os/value-v2/window.ts",
+    "lib/decision-os/value-v2/windowDecision.ts",
+    "lib/decision-os/value-v2/windowFacts.ts",
+    "lib/decision-os/value-v2/windowFactsPrismaPort.ts",
+    "lib/decision-os/value-v2/periodCalendar.ts",
+    "lib/decision-os/value-v2/leaseToken.ts",
+    "lib/decision-os/value-v2/lanePlanner.ts",
+    "__tests__/decision-os/value-v2-lane-planner.test.ts",
+    "__tests__/decision-os/value-v2-lease-token.test.ts",
+    "__tests__/decision-os/value-v2-period-calendar.test.ts",
+    "__tests__/decision-os/value-v2-window-db.integration.test.ts",
+    "__tests__/decision-os/value-v2-window-facts.test.ts",
+    "__tests__/decision-os/value-v2-window-prisma-port.test.ts",
+    "__tests__/decision-os/value-v2-window-schedule-integration.test.ts",
+    "__tests__/decision-os/value-v2-window-scope-validation.test.ts",
+    "__tests__/decision-os/value-v2-window.test.ts"
+  ]
+}
