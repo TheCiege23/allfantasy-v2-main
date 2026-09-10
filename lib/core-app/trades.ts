@@ -3,7 +3,6 @@ import { valueBookFor, type ValueBook } from './valueBook'
 import { resolveSourceScreenLink, type SourceScreenLink } from '@/lib/league-links/sourceLinkResolver'
 
 import { prisma } from '@/lib/prisma'
-import { ACTIVE_TEAM_WHERE } from '@/lib/league-import/activeTeams'
 import { leagueDisplayName, type SectionState } from './leagueHome'
 import { describeNoSignal, gradeTrade } from '@/lib/projections/tradeGrading'
 import {
@@ -448,8 +447,8 @@ export async function getTradesData(leagueId: string, userId: string): Promise<T
   })
   if (!league) return null
 
-  /* League size feeds trade GRADING context, so an archived seat skews every grade. */
-  const teamCount = await prisma.leagueTeam.count({ where: { ...ACTIVE_TEAM_WHERE, leagueId } })
+  /* League size feeds trade GRADING context: every CURRENT franchise, vacant seats included. */
+  const teamCount = await prisma.leagueTeam.count({ where: { leagueId } })
   const grades = await resolveGrades(league.platformLeagueId ?? null, valueBookFor(league.settings, league.leagueType))
 
   const base = {

@@ -1,7 +1,6 @@
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
-import { selectActiveTeams } from '@/lib/league-import/activeTeams'
 import { resolveTeamPerformanceOpponent } from '@/lib/league-import/teamPerformanceOpponent'
 
 const SLEEPER = 'https://api.sleeper.app/v1'
@@ -110,16 +109,16 @@ export async function fetchNativeOpponentMatchup(args: {
     }
 
     /*
-     * 🛑 UNFILTERED QUERY, FILTERED CONSUMER — the two halves of this read disagree.
+     * The PA ranking covers every CURRENT franchise. A vacant seat plays real matchups and
+     * carries real points-against, so removing it would both shrink the denominator and drop a
+     * legitimate opponent from the ordering.
      *
-     * `oppTeam` resolves `perf.opponent`, a string on a `TeamPerformance` row for a PAST week,
-     * so it must be able to name a team that has since left the league. The PA ranking is the
-     * opposite: it is a statement about the league AS IT STANDS, and an archived seat carrying a
-     * frozen `pointsAgainst` both occupies a slot in the ordering and inflates the denominator.
+     * ⚠ AN EARLIER REVISION FILTERED `isOrphan` HERE. That flag marks canonical open slots, so
+     * in a league with open seats it silently removed live opponents from the ranking. Excluding
+     * a DEPARTED team is a different question and needs the lifecycle axis.
      *
-     * ⚠ `isOrphan` MUST BE IN THE SELECT. `isActiveTeam` reads `team.isOrphan !== true`, so a
-     * `select` that omits the column makes every row read ACTIVE and `selectActiveTeams` a
-     * silent no-op — a filter that cannot fail, which is the failure mode this batch exists for.
+     * `isOrphan` remains in the select only so the column is available to a future lifecycle
+     * migration; nothing reads it here today.
      */
     const teams = await prisma.leagueTeam.findMany({
       where: { leagueId: args.leagueId },
@@ -133,12 +132,11 @@ export async function fetchNativeOpponentMatchup(args: {
         isOrphan: true,
       },
     })
-    const activeTeams = selectActiveTeams(teams)
-    if (activeTeams.length < 2) {
+    if (teams.length < 2) {
       return { opponentLabel: perf.opponent, matchupDifficultyNote: null, notes }
     }
 
-    const paSorted = [...activeTeams].sort((a, b) => a.pointsAgainst - b.pointsAgainst)
+    const paSorted = [...teams].sort((a, b) => a.pointsAgainst - b.pointsAgainst)
 
     /*
      * 🛑 RESOLVE BY THE PRODUCER'S CONTRACT — `TeamPerformance.opponent` IS A `LeagueTeam.id`.
@@ -161,7 +159,7 @@ export async function fetchNativeOpponentMatchup(args: {
     if (oppTeam) {
       /* -1 + 1 = 0 when the opponent is itself archived, and `rank > 0` below drops the note. */
       const rank = paSorted.findIndex((t) => t.id === oppTeam.id) + 1
-      const n = activeTeams.length
+      const n = teams.length
       if (rank > 0 && n > 1) {
         const pct = rank / n
         if (pct <= 0.33) {

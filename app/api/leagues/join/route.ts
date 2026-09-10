@@ -15,7 +15,6 @@ import { prisma } from '@/lib/prisma'
 import { assertPaidJoinAllowed, linkDuesToRoster } from '@/lib/league-finance/joinGate'
 import { claimPlaceholderRoster } from '@/lib/league-import/placeholderClaim'
 import { findExistingLeagueClaim } from '@/lib/identity/linkedAccounts'
-import { ACTIVE_TEAM_WHERE } from '@/lib/league-import/activeTeams'
 
 export const dynamic = 'force-dynamic'
 
@@ -300,7 +299,7 @@ export async function POST(req: NextRequest) {
        * would block a legitimate join against a seat nobody occupies.
        */
       const manualTeamCount = await tx.leagueTeam.count({
-        where: { ...ACTIVE_TEAM_WHERE, leagueId: result.leagueId },
+        where: { leagueId: result.leagueId },
       })
       if (league.leagueSize == null || manualTeamCount < league.leagueSize) {
         const displayName = profile?.displayName?.trim() || profile?.sleeperUsername?.trim() || 'Manager'
@@ -392,15 +391,15 @@ export async function GET(req: NextRequest) {
   // Claim progress — how many of the league's teams have a real AF member
   // behind them. Powers the "N of M teams claimed" bar next to the invite link.
   /*
-   * Both halves of the bar count CURRENT seats. An archived seat inflated the denominator, so a
-   * fully-claimed league whose twelfth manager left reported "11 of 12 claimed" for ever — the
-   * bar could never reach the end. `claimedByUserId: { not: null }` does not narrow to one row,
-   * so the numerator needed the same filter.
+   * ⚠ THE DENOMINATOR IS EVERY CURRENT FRANCHISE, VACANT SEATS INCLUDED — that is the whole
+   * point of the bar. An earlier revision filtered `isOrphan` here, which in a freshly created
+   * 12-team league (where canonical creation marks all eleven open slots `isOrphan: true`)
+   * reported "1 of 1 claimed" for a league that was 1/12 claimed.
    */
   const [teamCount, claimedCount] = await Promise.all([
-    prisma.leagueTeam.count({ where: { ...ACTIVE_TEAM_WHERE, leagueId } }).catch(() => 0),
+    prisma.leagueTeam.count({ where: { leagueId } }).catch(() => 0),
     prisma.leagueTeam
-      .count({ where: { ...ACTIVE_TEAM_WHERE, leagueId, claimedByUserId: { not: null } } })
+      .count({ where: { leagueId, claimedByUserId: { not: null } } })
       .catch(() => 0),
   ])
 

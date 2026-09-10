@@ -41,16 +41,24 @@ const src = readFileSync(join(process.cwd(), HANDLER), 'utf8')
 const code = src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1')
 
 describe('dynasty projections: current targets, historical pick provenance', () => {
-  it('the projection targets come from the FILTERED set', () => {
-    expect(code).toMatch(/const activeTeams = selectActiveTeams\(teams\)/)
-    /* Both branches — the explicit teamIdFilter must not mint a projection for a departed seat. */
-    expect(code).toMatch(/const targetTeams = params\.teamIdFilter\s*\?\s*activeTeams\.filter/)
-    expect(code).toMatch(/:\s*activeTeams\b/)
+  it('🛑 the targets are EVERY current franchise — vacant seats included', () => {
+    /*
+     * INVERTED ON PURPOSE, 2026-09-10. This asserted the opposite until the premise was shown
+     * false: `isOrphan` is not an archival flag. Canonical league creation sets it on every OPEN,
+     * CLAIMABLE slot, so filtering it gave a brand-new 12-team league ONE projection target and
+     * priced `teamCount` at 1.
+     *
+     * Excluding a genuinely DEPARTED seat from a PERSISTED projection is still wanted — it needs
+     * the lifecycle axis, which is a different transition from vacancy.
+     */
+    expect(code).not.toMatch(/selectActiveTeams\(teams\)/)
+    expect(code).toMatch(/const targetTeams = params\.teamIdFilter/)
   })
 
-  it('the league-size fallback counts live seats, not stored rows', () => {
-    expect(code).toMatch(/teamCount: league\.leagueSize \?\? activeTeams\.length/)
-    expect(code).not.toMatch(/teamCount: league\.leagueSize \?\? teams\.length/)
+  it('the league-size fallback counts every current franchise', () => {
+    /* Also inverted — a vacant seat is part of the league being valued. */
+    expect(code).toMatch(/teamCount: league\.leagueSize \?\? teams\.length/)
+    expect(code).not.toMatch(/activeTeams\.length/)
   })
 
   it('🛑 the future-pick ledger still sees EVERY team, including archived', () => {

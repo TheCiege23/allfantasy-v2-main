@@ -13,7 +13,6 @@ import { resolveSportForDynasty } from '@/lib/dynasty-engine/SportDynastyResolve
 import type { DynastyProjectionOutput } from '@/lib/dynasty-engine/types'
 import type { FuturePickAsset, PlayerDynastyAsset, TeamDynastyInputs } from '@/lib/dynasty-projection/types'
 import { requireLeagueApiAccess } from '@/lib/api/require-league-access'
-import { selectActiveTeams } from '@/lib/league-import/activeTeams'
 
 type LeagueLite = {
   id: string
@@ -35,7 +34,7 @@ type TeamLite = {
   losses: number
   pointsFor: number
   aiPowerScore: number | null
-  /** Carried so `selectActiveTeams` can judge the row — an absent field reads as ACTIVE. */
+  /** Carried for the coming lifecycle migration. Not a filter: the flag is overloaded. */
   isOrphan: boolean
 }
 
@@ -322,11 +321,12 @@ async function resolveLeagueByAnyId(leagueId: string): Promise<LeagueLite | null
 }
 
 /**
- * Exported for `__tests__/league-import/dynasty-projections-archived-seats.test.ts`.
+ * Exported so the persistence-boundary test can assert on what reaches the persisting generator.
  *
- * It is the last step before `generateDynastyProjection(..., { persist: true })`, so asserting
- * that an archived seat is absent from what it returns proves no row can be written for one —
- * without the test having to persist anything to prove it.
+ * ⚠ IT NO LONGER FILTERS. An earlier revision excluded `isOrphan` rows from the targets, on the
+ * belief that the flag meant "archived". It does not: canonical league creation sets it on every
+ * OPEN, CLAIMABLE slot, so that filter gave a brand-new 12-team league one projection target
+ * instead of twelve. Restoring a target filter needs the lifecycle axis, not this flag.
  */
 export async function buildTeamInputsFromLeague(params: {
   leagueId: string
@@ -355,7 +355,7 @@ export async function buildTeamInputsFromLeague(params: {
         losses: true,
         pointsFor: true,
         aiPowerScore: true,
-        /* Required, or selectActiveTeams below silently keeps every row. */
+        /* Selected for the coming lifecycle migration; NOT read as a filter here — the flag also marks vacant, eliminated and admin-removed seats. */
         isOrphan: true,
       },
     }),
@@ -375,23 +375,21 @@ export async function buildTeamInputsFromLeague(params: {
   }
 
   /*
-   * 🛑 PROJECTION TARGETS ARE CURRENT SEATS, AND THIS PATH PERSISTS.
+   * 🛑 EVERY CURRENT FRANCHISE IS A PROJECTION TARGET, VACANT SEATS INCLUDED.
    *
-   * `generateDynastyProjection(input, { persist: true })` writes a row per target, so an
-   * archived seat did not merely appear in a power ranking — it acquired a stored dynasty
-   * projection that later reads treat as real. The explicit `teamIdFilter` branch is filtered
-   * too: asking for a departed seat by id should find nothing rather than mint a projection
-   * for it.
+   * A vacant seat still holds a roster and a valuation, and it is still part of the league's
+   * size. An earlier revision filtered `isOrphan` here on the belief it meant "archived"; in a
+   * canonically created league that flag marks every OPEN slot, so the filter reduced a 12-team
+   * league to one target and priced `teamCount` at 1.
    *
-   * ⚠ `teams` STAYS UNFILTERED BELOW. `buildFuturePicksByTeam` seeds its ledger from every
-   * ORIGINAL team and resolves traded picks through an alias map keyed on ids that a departed
-   * seat still owns — so filtering there would silently drop a pick that a LIVE team acquired
-   * from a manager who has since left. Targets and counts are current; pick provenance is not.
+   * Excluding a genuinely DEPARTED seat is still the right goal — it just needs the lifecycle
+   * axis, which is a separate transition from vacancy. `buildFuturePicksByTeam` below must in
+   * any case see every original team, or a pick a LIVE team acquired from a departed manager
+   * silently disappears from the ledger.
    */
-  const activeTeams = selectActiveTeams(teams)
   const targetTeams = params.teamIdFilter
-    ? activeTeams.filter((t) => t.externalId === params.teamIdFilter || t.id === params.teamIdFilter)
-    : activeTeams
+    ? teams.filter((t) => t.externalId === params.teamIdFilter || t.id === params.teamIdFilter)
+    : teams
   if (!targetTeams.length) {
     throw new Error('Requested teamId was not found in this league')
   }
@@ -509,7 +507,7 @@ export async function buildTeamInputsFromLeague(params: {
         isSuperFlex: formatFlags.isSuperFlex,
         isTightEndPremium: formatFlags.isTightEndPremium,
         /* League size for valuation — the live seat count, not the stored-row count. */
-        teamCount: league.leagueSize ?? activeTeams.length,
+        teamCount: league.leagueSize ?? teams.length,
       },
       players: fallbackPlayers,
       futurePicks: futurePicksByTeam.get(team.externalId) ?? [],

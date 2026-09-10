@@ -15,7 +15,6 @@
  */
 
 import { prisma } from "@/lib/prisma"
-import { ACTIVE_TEAM_WHERE } from "@/lib/league-import/activeTeams"
 import { resolveLeagueIdentity } from "@/lib/chimmy-context/providers/_helpers/leagueIdentity"
 import type {
   ChimmyContextProvider,
@@ -57,8 +56,8 @@ export class StandingsContextProvider
 
       const teams = await prisma.leagueTeam
         .findMany({
-          /* Standings rows are built straight from this list, so archived seats would be ranked. */
-          where: { ...ACTIVE_TEAM_WHERE, leagueId: identity.leagueId },
+          /* Standings rows are built straight from this list — a vacant seat is in the standings. */
+          where: { leagueId: identity.leagueId },
           select: {
             id: true,
             teamName: true,

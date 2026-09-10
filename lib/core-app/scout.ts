@@ -1,7 +1,6 @@
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
-import { selectActiveTeams } from '@/lib/league-import/activeTeams'
 import { createPsychologyOsLoaders } from '@/lib/decision-os/psychology-os'
 import type { PsychologyProfileFact } from '@/lib/decision-os/psychology-os'
 import { resolveProfileAccessForUser } from '@/lib/psychological-profiles/ProfileAccess'
@@ -208,18 +207,25 @@ export async function getScoutData(leagueId: string, userId: string): Promise<Sc
         losses: true,
         ties: true,
         claimedByUserId: true,
-        /* Required, or `selectActiveTeams` below silently keeps every row. */
+        /* Selected for the coming lifecycle migration; NOT read as a filter here — the flag also marks vacant, eliminated and admin-removed seats. */
         isOrphan: true,
       },
     })
     .catch(() => [])
 
   /*
-   * Scouting is a CURRENT-opponent surface: the manager list, and the coverage denominator, are
-   * about who you can play now. `teams` stays unfiltered so `mine` and `oppTeam` can still
-   * resolve a seat by id — including one archived between a matchup being scheduled and read.
+   * ⚠ THE HUMAN/VACANT SPLIT THIS SURFACE WANTS DOES NOT EXIST YET, AND IS NOT GUESSED HERE.
+   *
+   * The coverage denominator is every CURRENT franchise, vacant seats included — that part is
+   * settled. The manager LIST should arguably show only real people, but the only signal
+   * available today is `claimedByUserId`, and that is NOT the same question: an imported league
+   * has real, human-managed seats that nobody has claimed on AllFantasy yet, and filtering them
+   * out would empty Scout for exactly the leagues it is most useful in.
+   *
+   * `isOrphan` cannot answer it either — it is written for vacancy, elimination, admin removal
+   * AND provider departure. So the list stays on every current franchise until `managerKind`
+   * carries a real answer, at which point this becomes `managerKind === 'HUMAN'`.
    */
-  const activeTeams = selectActiveTeams(teams)
 
   if (teams.length === 0) {
     return {
@@ -299,7 +305,7 @@ export async function getScoutData(leagueId: string, userId: string): Promise<Sc
   const facts = await loadProfiles({ leagueId, sport }).catch(() => null)
   const byManager = new Map((facts ?? []).map((f) => [f.managerId, f]))
 
-  const managers: ScoutedManager[] = activeTeams.map((t) => {
+  const managers: ScoutedManager[] = teams.map((t) => {
     const managerId = managerIdOf(t)
     const fact = byManager.get(managerId)
 
@@ -390,6 +396,6 @@ export async function getScoutData(leagueId: string, userId: string): Promise<Sc
     you: mine && myManagerId ? { managerId: myManagerId, teamName: mine.teamName } : null,
     week: week ? { seasonYear: week.seasonYear, week: week.week } : null,
     managers: { available: true, data: managers },
-    coverage: { teamCount: activeTeams.length, profiledCount, lastRefreshedAt, lockedCount },
+    coverage: { teamCount: teams.length, profiledCount, lastRefreshedAt, lockedCount },
   }
 }

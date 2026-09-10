@@ -1,5 +1,4 @@
 import { prisma } from '@/lib/prisma'
-import { ACTIVE_TEAM_WHERE } from '@/lib/league-import/activeTeams'
 
 export type EnqueueNotificationInput = {
   recipientUserId?: string
@@ -44,8 +43,8 @@ async function resolveRecipientUserIds(
   if (recipientUserId) return [recipientUserId]
   if (!recipientRole || recipientRole === 'all') {
     const teams = await prisma.leagueTeam.findMany({
-      /* Notification recipients are current members; a departed seat stops being notified. */
-      where: { ...ACTIVE_TEAM_WHERE, leagueId, claimedByUserId: { not: null } },
+      /* Keyed on the claim — see leagueMemberIds: `isOrphan` cannot express "departed". */
+      where: { leagueId, claimedByUserId: { not: null } },
       select: { claimedByUserId: true },
     })
     return [...new Set(teams.map((t) => t.claimedByUserId).filter(Boolean))] as string[]

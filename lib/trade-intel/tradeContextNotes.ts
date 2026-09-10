@@ -1,7 +1,6 @@
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
-import { ACTIVE_TEAM_WHERE } from '@/lib/league-import/activeTeams'
 import { getByeWeeks } from '@/lib/core-app/byeWeeks'
 import { isRuledOut } from '@/lib/core-app/injuryStatus'
 import { latestProjectionWeek } from '@/lib/core-app/playerProjections'
@@ -1033,9 +1032,9 @@ async function buildFormatNotes(args: {
    * size is exactly the round his talent is worth, and that is enough to say
    * whether his keeper price has drifted away from what he is.
    */
-  /* League size prices keeper and pick maths — an archived seat skews every note below. */
+  /* League size prices keeper and pick maths: every CURRENT franchise, vacant seats included. */
   const teamCount = await prisma.leagueTeam
-    .count({ where: { ...ACTIVE_TEAM_WHERE, leagueId: args.leagueId } })
+    .count({ where: { leagueId: args.leagueId } })
     .catch(() => 0)
   if (teamCount < 2) return notes
 
@@ -1123,9 +1122,9 @@ async function buildScaleNotes(args: {
 }): Promise<string[]> {
   const notes: string[] = []
 
-  /* Same league-size input, same reason. */
+  /* Same league-size input, same reason: current franchises, not `isOrphan`-filtered. */
   const teamCount = await prisma.leagueTeam
-    .count({ where: { ...ACTIVE_TEAM_WHERE, leagueId: args.leagueId } })
+    .count({ where: { leagueId: args.leagueId } })
     .catch(() => 0)
 
   if (teamCount >= 2) {
@@ -1266,10 +1265,10 @@ async function buildPostureAndPickNotes(args: {
 }): Promise<{ postureNotes: string[]; pickNotes: string[] }> {
   const none = { postureNotes: [] as string[], pickNotes: [] as string[] }
 
-  /* Builds a CURRENT standings list (`teams.map` below, plus a `< 4` sufficiency guard). */
+  /* Current standings — a vacant seat is in them, so this is not `isOrphan`-filtered. */
   const teams = await prisma.leagueTeam
     .findMany({
-      where: { ...ACTIVE_TEAM_WHERE, leagueId: args.leagueId },
+      where: { leagueId: args.leagueId },
       select: {
         id: true,
         externalId: true,

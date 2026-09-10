@@ -3,7 +3,6 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { canAccessLeagueDraft } from '@/lib/live-draft-engine/auth'
-import { ACTIVE_TEAM_WHERE } from '@/lib/league-import/activeTeams'
 
 export const dynamic = 'force-dynamic'
 
@@ -25,8 +24,8 @@ export async function GET(
   if (q.length < 1) return NextResponse.json([])
 
   const teams = await prisma.leagueTeam.findMany({
-    /* @-mention autocomplete offers CURRENT members; a departed manager is not one. */
-    where: { ...ACTIVE_TEAM_WHERE, leagueId, claimedByUserId: { not: null } },
+    /* Keyed on the claim — `isOrphan` conflates vacancy, elimination, removal and departure. */
+    where: { leagueId, claimedByUserId: { not: null } },
     select: {
       claimedByUserId: true,
       ownerName: true,

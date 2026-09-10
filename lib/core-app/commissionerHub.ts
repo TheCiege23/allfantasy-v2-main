@@ -1,7 +1,6 @@
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
-import { selectActiveTeams } from '@/lib/league-import/activeTeams'
 import { getLeagueRole, type LeagueRole } from '@/lib/league/permissions'
 import { leagueDisplayName, type SectionState, type UnavailableSection } from './leagueHome'
 import type { CoreIssue } from './outstandingIssues'
@@ -238,7 +237,7 @@ export async function getCommissionerHub(input: {
     prisma.leagueTeam
       .findMany({
         where: { leagueId },
-        /* `isOrphan` or `selectActiveTeams` below is a silent no-op — see activeTeams.ts. */
+        /* Selected for the coming lifecycle migration; NOT read as a filter here — the flag also marks vacant, eliminated and admin-removed seats. */
         select: {
           teamName: true,
           ownerName: true,
@@ -259,13 +258,14 @@ export async function getCommissionerHub(input: {
   ])
 
   /*
-   * Both tiles below are CURRENT-state metrics, so they count live seats. An archived seat
-   * inflated `teamCount` and so pushed the "Claimed teams" tile permanently below 100% — a
-   * commissioner of a full league saw 11/12 for ever. Seeing THAT a seat left is useful and is
-   * what `rosterReads.readOrphanTeamCounts` is for; it is not what these two tiles say.
+   * `teamCount` is every CURRENT franchise — a vacant seat is one of the league's teams, and in a
+   * canonically created league every unclaimed slot carries `isOrphan: true`. Filtering that
+   * flag reported a brand-new 12-team league as having one team.
+   *
+   * `claimed` is a different question and is answered by the claim itself, which is why the two
+   * lines read the same array through different predicates.
    */
-  const activeTeams = selectActiveTeams(teams)
-  const teamCount = activeTeams.length || rosterCount
+  const teamCount = teams.length || rosterCount
 
   /*
    * "Nobody has read this league" and "this league is healthy" produce the same
@@ -282,7 +282,7 @@ export async function getCommissionerHub(input: {
    * team nobody has connected to an AllFantasy account, which says nothing
    * about whether its manager is engaged on the platform itself.
    */
-  const claimed = activeTeams.filter((t) => t.claimedByUserId).length
+  const claimed = teams.filter((t) => t.claimedByUserId).length
 
   const tiles: CommissionerTile[] = [
     {

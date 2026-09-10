@@ -220,13 +220,15 @@ describe('the three MIXED reads resolved by the 2026-09-10 corrective pass', () 
     /* The query stays unfiltered so a past week can still name a departed opponent... */
     expect(src).toMatch(/where: \{ leagueId: args\.leagueId \}/)
     expect(src).not.toMatch(/ACTIVE_TEAM_WHERE/)
-    /* ...the select carries the flag, or the consumer filter below is a no-op... */
-    expect(src).toMatch(/isOrphan: true/)
-    /* ...and the current-state consumers use the narrowed array. */
-    expect(src).toMatch(/const activeTeams = selectActiveTeams\(teams\)/)
-    expect(src).toMatch(/activeTeams\.length < 2/)
-    expect(src).toMatch(/\[\.\.\.activeTeams\]\.sort/)
-    expect(src).toMatch(/const n = activeTeams\.length/)
+    /*
+     * 🛑 THE PA RANKING IS NO LONGER FILTERED, AND THAT IS THE FIX.
+     * `isOrphan` marks canonical OPEN SLOTS, which play real matchups and carry real
+     * points-against, so filtering it removed live opponents from the ranking and shrank the
+     * denominator. Excluding a genuinely DEPARTED team needs the lifecycle axis.
+     */
+    expect(src).not.toMatch(/selectActiveTeams\(teams\)/)
+    expect(src).toMatch(/const paSorted = \[\.\.\.teams\]\.sort/)
+    expect(src).toMatch(/const n = teams\.length/)
     /*
      * The opponent is still resolved against every team, archived included — and by the
      * PRODUCER'S CONTRACT (a LeagueTeam.id), not by a name substring. See

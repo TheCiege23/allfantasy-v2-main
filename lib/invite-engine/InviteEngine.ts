@@ -4,7 +4,6 @@
 
 import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
-import { ACTIVE_TEAM_WHERE } from '@/lib/league-import/activeTeams'
 import { assertPaidJoinAllowed, linkDuesToRoster } from '@/lib/league-finance/joinGate'
 import { validateInviteCode, validateFantasyInviteCode } from '@/lib/league-invite'
 import { attributeSignupToReferrer, grantRewardForSignup } from '@/lib/referral'
@@ -289,15 +288,16 @@ export async function createFantasyLeagueRoster(
 
     if (league.platform === 'manual') {
       /*
-       * 🛑 THIS COUNT DECIDES WHETHER A JOINING MANAGER GETS A TEAM ROW AT ALL.
+       * 🛑 CAPACITY IS SEATS, AND A VACANT SEAT IS A SEAT.
        *
-       * An archived seat inflated it, so a manual league that had lost a seat could report
-       * itself full and silently skip the `leagueTeam.create` below — the manager joins, gets a
-       * roster, and has no team. Registered as an admin/monitoring exception before this pass;
-       * that was wrong. Counting seats to REPORT is monitoring, counting them to DECIDE is not.
+       * This count decides whether a joining manager gets a team row at all. An earlier revision
+       * excluded `isOrphan`, which counts zero in a league whose seats are all still open — so it
+       * would have created team rows past `leagueSize`. Whether a DEPARTED seat should still hold
+       * capacity is a real question, and it needs the lifecycle axis to answer; it cannot be
+       * answered by a flag that also means "vacant".
        */
       const manualTeamCount = await tx.leagueTeam.count({
-        where: { ...ACTIVE_TEAM_WHERE, leagueId },
+        where: { leagueId },
       })
       if (league.leagueSize == null || manualTeamCount < league.leagueSize) {
         const displayName = profile?.displayName?.trim() || profile?.sleeperUsername?.trim() || 'Manager'

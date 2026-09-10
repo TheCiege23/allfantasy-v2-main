@@ -73,6 +73,50 @@ const ENUMERATION_EXCEPTIONS: Record<string, string> = {
     'Identity maps — teamByPlatformId and teamByLegacyRosterId resolve a health row back to a seat; no count or list is derived from the array.',
   'lib/commissioner-ui/managers/managerNames.ts#1':
     'ADMIN: name resolution across all seats, archived included.',
+  // ── REQUIRES ALL CURRENT FRANCHISES (vacant and AI seats included) ──────────────────────
+  // 🛑 These were filtered by an earlier revision of this branch and are reverted. The flag
+  // they were filtered on marks canonical OPEN SLOTS, so the filter removed live franchises
+  // from their own league. Each entry now records the SET THE CALL REQUIRES, which is the
+  // contract this registry is being rebuilt around.
+  'app/api/leagues/join/route.ts#1':
+    'ALL CURRENT FRANCHISES — capacity check inside the join transaction. A vacant seat is a seat, so filtering `isOrphan` would count zero in a league whose slots are all still open and create team rows past leagueSize.',
+  'app/api/leagues/join/route.ts#2':
+    'ALL CURRENT FRANCHISES — the "N of M teams claimed" denominator. Canonical creation marks every open slot `isOrphan: true`, so filtering it reported a brand-new 12-team league as "1 of 1 claimed".',
+  'app/api/leagues/join/route.ts#3':
+    'HUMAN-MANAGED — the same bar numerator, keyed on the claim itself. Correct as a claim count; suppressing a DEPARTED claimer needs the lifecycle axis, not `isOrphan`.',
+  'lib/invite-engine/InviteEngine.ts#1':
+    'ALL CURRENT FRANCHISES — this count gates `leagueTeam.create`, and capacity is seats. Whether a departed seat still holds capacity is a real question that needs the lifecycle axis.',
+  'lib/core-app/commissionerHub.ts#1':
+    'ALL CURRENT FRANCHISES for `teamCount`; the "Claimed teams" tile beside it is HUMAN-MANAGED and is keyed on `claimedByUserId`, which is why one array is read through two predicates.',
+  'lib/core-app/draftHq.ts#1':
+    'ALL CURRENT FRANCHISES — an open slot still occupies a draft position, so league size for pick-in-round maths counts it. The same array additionally feeds a name map that needs archived seats.',
+  'lib/core-app/draftHq.ts#3':
+    'ALL CURRENT FRANCHISES — league size for the imported-draft pick numbering, same reason as #1.',
+  'lib/core-app/trades.ts#1':
+    'ALL CURRENT FRANCHISES — league size prices trade grading. A vacant seat is part of the league being priced.',
+  'lib/trade-intel/tradeContextNotes.ts#1':
+    'ALL CURRENT FRANCHISES — league size prices keeper maths.',
+  'lib/trade-intel/tradeContextNotes.ts#2':
+    'ALL CURRENT FRANCHISES — league size prices pick maths.',
+  'lib/trade-intel/tradeContextNotes.ts#3':
+    'ALL CURRENT FRANCHISES — a current standings list, and a vacant seat appears in standings carrying real points.',
+  'lib/chimmy-context/providers/StandingsContextProvider.ts#1':
+    'ALL CURRENT FRANCHISES — standings rows are built straight from this array and a vacant seat is one of them; `league-pulse` counts open slots from exactly this shape.',
+  'app/api/leagues/[leagueId]/dynasty-projections/handler.ts#1':
+    'ALL CURRENT FRANCHISES — a vacant seat holds a roster and a valuation. Excluding a genuinely DEPARTED seat from a persisted projection is still wanted and needs the lifecycle axis; `isOrphan` cannot express it.',
+  'lib/ai-tools-start-sit/opponentMatchup.ts#1':
+    'ALL CURRENT FRANCHISES for the points-against ranking (a vacant seat plays real matchups), and ALL IDENTITIES for the opponent resolution beside it, which must still name a departed team.',
+  'lib/core-app/scout.ts#1':
+    'ALL CURRENT FRANCHISES for the coverage denominator. The manager LIST wants HUMAN-MANAGED, but no trustworthy human signal exists yet: `claimedByUserId` would drop real, unclaimed managers in imported leagues. Deferred to `managerKind`.',
+  'app/api/cron/weekly-awards/route.ts#1':
+    'HUMAN-MANAGED — keyed on the claim. `isOrphan` cannot suppress a departed recipient because it also marks vacant, eliminated and admin-removed seats.',
+  'lib/league-chat/leagueMemberIds.ts#1':
+    'HUMAN-MANAGED — chat membership, keyed on the claim. Same limitation as weekly-awards.',
+  'lib/survivor/notificationEngine.ts#1':
+    'HUMAN-MANAGED — notification recipients, keyed on the claim. Same limitation.',
+  'app/api/leagues/[leagueId]/members/autocomplete/route.ts#1':
+    'HUMAN-MANAGED — @-mention candidates, keyed on the claim. Same limitation.',
+
   // ── ARCHIVED-ONLY BY DESIGN ─────────────────────────────────────────────────────────────
   // These select archived teams on purpose. They were exempt for the WRONG REASON until the
   // 2026-09-10 polarity fix: the old predicate test granted protection to any clause merely
@@ -616,17 +660,34 @@ const MUST_NOT_REPORT: Source[] = [
   },
 ]
 
+/**
+ * This scan reads every `.ts`/`.tsx` under `lib/` and `app/` — about 12,700 files. On an idle box
+ * that is a couple of seconds; on a contended one it has been measured at 47s, which blows
+ * vitest's 30s default and fails as a TIMEOUT rather than as a verdict.
+ *
+ * ⚠ A TIMEOUT IS NOT A RESULT, AND IT LOOKS LIKE A FAILING GUARD. Raising this is not papering
+ * over a slow test: the work is a genuine filesystem walk, `collectSources()` is already memoised
+ * across the file, and the alternative — a red guard whose message points at call sites that are
+ * in fact registered — is actively misleading.
+ */
+const SCAN_TIMEOUT_MS = 180_000
+
 describe('active-team policy guard', () => {
-  it('every league-wide enumeration filters archived teams or is a registered exception', () => {
-    const unguarded = findUnguardedEnumerations()
-    expect(
-      unguarded,
-      `Unregistered league-wide LeagueTeam enumeration(s):\n${unguarded
-        .map((h) => `  ${h.id}   (line ${h.line})`)
-        .join('\n')}\n\nEither filter with selectActiveTeams/ACTIVE_TEAM_WHERE, or add the file to ` +
-        `ENUMERATION_EXCEPTIONS with the reason it must retain archived teams.`,
-    ).toEqual([])
-  })
+  it(
+    'every league-wide enumeration filters archived teams or is a registered exception',
+    () => {
+      const unguarded = findUnguardedEnumerations()
+      expect(
+        unguarded,
+        `Unregistered league-wide LeagueTeam enumeration(s):\n${unguarded
+          .map((h) => `  ${h.id}   (line ${h.line})`)
+          .join('\n')}\n\nDeclare the SET this call requires in ENUMERATION_EXCEPTIONS with the ` +
+          `reason — e.g. ALL CURRENT FRANCHISES (vacant seats included), HUMAN-MANAGED, ` +
+          `CLAIMABLE, ELIGIBLE, ARCHIVED-ONLY, or ALL IDENTITIES.`,
+      ).toEqual([])
+    },
+    SCAN_TIMEOUT_MS,
+  )
 
   /*
    * 🛑 THE POSITIVE CONTROL, AND IT RUNS THE PRODUCTION SCANNER.
@@ -772,7 +833,9 @@ describe('active-team policy guard', () => {
     expect(grantsProtection('{ leagueId, isOrphan: maybe }')).toBe(false)
   })
 
-  it('the scanner reaches the real tree — it is not scanning an empty source set', () => {
+  it(
+    'the scanner reaches the real tree — it is not scanning an empty source set',
+    () => {
     /* Separate from the fixtures above: those prove it can SEE, this proves it is LOOKING here. */
     const sources = collectSources()
     expect(sources.length).toBeGreaterThan(500)
@@ -782,7 +845,9 @@ describe('active-team policy guard', () => {
         return ENUMERATION_CALL.test(s.src)
       }).length,
     ).toBeGreaterThan(20)
-  })
+    },
+    SCAN_TIMEOUT_MS,
+  )
 
   /*
    * 🛑 A DEAD EXEMPTION IS A SILENT WIDENING. Once a call is fixed or deleted, its entry stops
@@ -790,15 +855,19 @@ describe('active-team policy guard', () => {
    * guard waves it straight through on a reason written about different code. This caught the
    * `dynasty-projections` entry the moment A.2 filtered it.
    */
-  it('every registered exception still corresponds to a real unprotected call', () => {
-    const live = new Set(scanSources(collectSources(), { ignoreRegistry: true }).map((h) => h.id))
-    const dead = Object.keys(ENUMERATION_EXCEPTIONS).filter((id) => !live.has(id))
-    expect(
-      dead,
-      `These exceptions no longer match an unprotected call — the code was fixed or moved. ` +
-        `Delete them:\n${dead.map((d) => `  ${d}`).join('\n')}`,
-    ).toEqual([])
-  })
+  it(
+    'every registered exception still corresponds to a real unprotected call',
+    () => {
+      const live = new Set(scanSources(collectSources(), { ignoreRegistry: true }).map((h) => h.id))
+      const dead = Object.keys(ENUMERATION_EXCEPTIONS).filter((id) => !live.has(id))
+      expect(
+        dead,
+        `These exceptions no longer match an unprotected call — the code was fixed or moved. ` +
+          `Delete them:\n${dead.map((d) => `  ${d}`).join('\n')}`,
+      ).toEqual([])
+    },
+    SCAN_TIMEOUT_MS,
+  )
 
   it('every exception states a reason', () => {
     for (const [file, reason] of Object.entries(ENUMERATION_EXCEPTIONS)) {
