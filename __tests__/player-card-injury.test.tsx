@@ -63,6 +63,12 @@ function card(over: Partial<PlayerCardData> = {}): PlayerCardData {
     comps: SECTION_NO('no comps'),
     news: SECTION_NO('no news'),
     injury: SECTION_NO('No injury designation reported in the last 14 days.'),
+    /*
+     * Default to NO RECORD, so every test above this one keeps asserting exactly
+     * what it asserted before — and so the stamp has to be opted into by the
+     * tests that are about it.
+     */
+    injuryFeed: SECTION_NO('No record of when this sport was last checked.'),
     insight: null,
     league: null,
     ...over,
@@ -176,5 +182,127 @@ describe('player card — injury designation', () => {
       })
     )
     expect(block(container)?.textContent).toContain('DOUBTFUL')
+  })
+})
+
+/*
+ * The stamp that makes the section above CHECKABLE.
+ *
+ * 🛑 "NO INJURY DESIGNATION IN THE LAST 14 DAYS" IS WHAT A DEAD FEED SAYS TOO.
+ * That is not hypothetical here: `api_sports` contributes 1,444 rows for
+ * rostered players and ZERO fresher than seven days, so for that source the
+ * dead-feed reading was the correct one — while the card said "no injury" for
+ * every player it covered. Silence from a healthy player and silence from a
+ * stopped pipeline were rendered identically, and nothing on the card could
+ * separate them.
+ *
+ * ⚠ AND THESE ARE RENDER TESTS. They pin that the stamp REACHES THE SCREEN,
+ * which is the failure this feature is most exposed to: the payload already
+ * existed on the rail's `RailMatchupSummary` as `yourAvatarUrl` for a full day,
+ * typed and threaded and rendered nowhere. A field that arrives and is never
+ * drawn passes every loader test there is.
+ */
+describe('player card — injury feed freshness', () => {
+  const at = (minsAgo: number) => new Date(Date.now() - minsAgo * 60_000).toISOString()
+
+  it('stamps the EMPTY branch, which is the case it exists for', () => {
+    const { container } = mount(
+      card({
+        injury: SECTION_NO('No injury designation reported in the last 14 days.'),
+        injuryFeed: OK({ checkedAt: at(12), erroredAt: null, skipped: 0 }),
+      })
+    )
+    const el = block(container)
+    expect(el?.textContent).toContain('No injury designation reported in the last 14 days.')
+    expect(el?.textContent).toMatch(/feed checked 12m/)
+  })
+
+  /*
+   * A stated designation is also a point-in-time claim, so it gets the stamp
+   * too — "QUESTIONABLE, reported 2d ago, feed checked 12m ago" says the status
+   * is current rather than merely stored.
+   */
+  it('stamps the AVAILABLE branch as well, without displacing the designation', () => {
+    const { container } = mount(
+      card({
+        injury: OK({
+          status: 'QUESTIONABLE',
+          note: 'Hamstring',
+          bodyPart: 'Hamstring',
+          reportedAt: at(60 * 24 * 2),
+          source: 'espn',
+        }),
+        injuryFeed: OK({ checkedAt: at(9), erroredAt: null, skipped: 0 }),
+      })
+    )
+    const el = block(container)
+    expect(el?.textContent).toContain('QUESTIONABLE')
+    expect(el?.textContent).toMatch(/feed checked 9m/)
+  })
+
+  /*
+   * 🛑 NO RECORD MEANS SAY NOTHING. The telemetry began 2026-09-08 and the
+   * worker took it at 18:25Z, so every sport read "no row" before its first
+   * tick. Rendering "never checked" off that would be a claim about the FEED
+   * derived from a gap in our own BOOKKEEPING — a confident falsehood on every
+   * card in the app on the day it shipped.
+   */
+  it('renders NOTHING when there is no record, rather than claiming "never checked"', () => {
+    const { container } = mount(
+      card({ injuryFeed: SECTION_NO('No record of when this sport was last checked.') })
+    )
+    const el = block(container)
+    expect(el?.textContent).not.toMatch(/feed/i)
+    expect(el?.textContent).not.toMatch(/never/i)
+    expect(container.querySelector('.af-pc-feed')).toBeNull()
+  })
+
+  /*
+   * A feed that is RUNNING AND FAILING is the case a single timestamp hides.
+   * The writer never stamps success and error in the same run precisely so this
+   * pair survives; the card has to show both or that design bought nothing.
+   */
+  it('shows the last error alongside the last success', () => {
+    const { container } = mount(
+      card({ injuryFeed: OK({ checkedAt: at(60 * 6), erroredAt: at(2), skipped: 0 }) })
+    )
+    const t = block(container)?.textContent ?? ''
+    expect(t).toMatch(/feed checked 6h/)
+    expect(t).toMatch(/last error 2m/)
+  })
+
+  /*
+   * ⚠ THE STARVATION SIGNAL. Seven sports rotate on a 24-hour period against a
+   * 200s budget, so a climbing skip count is what turns "checked 9h ago" from a
+   * blip into the expected state. Without it the reader sees an old timestamp
+   * and no reason for it.
+   */
+  it('reports runs skipped for budget, and pluralises honestly', () => {
+    const one = mount(card({ injuryFeed: OK({ checkedAt: at(30), erroredAt: null, skipped: 1 }) }))
+    expect(block(one.container)?.textContent).toMatch(/1 run skipped for budget/)
+
+    const many = mount(card({ injuryFeed: OK({ checkedAt: at(30), erroredAt: null, skipped: 4 }) }))
+    expect(block(many.container)?.textContent).toMatch(/4 runs skipped for budget/)
+  })
+
+  it('stays silent about skips when there are none, so an ordinary run adds no noise', () => {
+    const { container } = mount(
+      card({ injuryFeed: OK({ checkedAt: at(5), erroredAt: null, skipped: 0 }) })
+    )
+    expect(block(container)?.textContent).not.toMatch(/skipped/)
+  })
+
+  /*
+   * The reader has a row but the sport has never completed a run — a real state
+   * once a sport has only ever been DEFERRED for budget, which writes the row
+   * without any success stamp. It must not render "checked null".
+   */
+  it('says the sport has not completed a run when only skips have been recorded', () => {
+    const { container } = mount(
+      card({ injuryFeed: OK({ checkedAt: null, erroredAt: null, skipped: 3 }) })
+    )
+    const t = block(container)?.textContent ?? ''
+    expect(t).toMatch(/has not completed a run/)
+    expect(t).not.toMatch(/null/)
   })
 })

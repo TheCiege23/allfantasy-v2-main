@@ -57,6 +57,69 @@ function base(sport: string) {
   return { provider: PROVIDER, entityType: ENTITY, sport, key: KEY }
 }
 
+/**
+ * When the injuries feed last actually ran for a sport.
+ *
+ * ── Why a READER exists at all ──────────────────────────────────────────────
+ *
+ * The player card's injury slot says "no injury designation reported in the last
+ * 14 days". That sentence is true and a reader cannot distinguish it from a feed
+ * that quietly died — which is the same silence, and the more likely one, since
+ * `api_sports` rows for rostered players sat frozen with ZERO fresher than seven
+ * days when measured on 2026-09-08.
+ *
+ * Stamping the silence with when we last looked turns an assertion into
+ * evidence. It is the only claim on that section a reader can check.
+ *
+ * ⚠ NULL MEANS "NO RECORD", WHICH IS NOT "NEVER RAN". This telemetry started on
+ * 2026-09-08 and the worker picked it up at 18:25Z; before its first tick every
+ * sport reads null. A card that rendered "last checked: never" off that would be
+ * making a stronger claim than the data supports — so the caller renders NOTHING
+ * when this is null, and only speaks when it has something to say.
+ */
+export type InjuryFeedFreshness = {
+  /** Last run that completed without the providers erroring. */
+  lastSuccessAt: Date | null
+  /** Last run that failed. Never stamped in the same run as a success. */
+  lastErrorAt: Date | null
+  /** Runs that never reached this sport at all, because the budget ran out. */
+  skipped: number
+}
+
+export async function readInjurySyncFreshness(sport: string): Promise<InjuryFeedFreshness | null> {
+  const wanted = String(sport ?? '').trim()
+  if (!wanted) return null
+
+  try {
+    /*
+     * ⚠ `findFirst` + INSENSITIVE, NOT `findUnique` ON THE COMPOSITE KEY. The
+     * writer takes its sport from the cron's `Sport` union ('NFL'); the card
+     * takes its from `SportsPlayer.sport`, and `loadInjury` already reads that
+     * column case-insensitively because the two have not always agreed. A
+     * `findUnique` here would return null on a casing difference and be
+     * indistinguishable from "the feed never ran" — the exact ambiguity this
+     * module exists to remove.
+     */
+    const row = await prisma.providerSyncState.findFirst({
+      where: {
+        provider: PROVIDER,
+        entityType: ENTITY,
+        sport: { equals: wanted, mode: 'insensitive' },
+      },
+      select: { lastSuccessAt: true, lastErrorAt: true, recordsSkipped: true },
+    })
+    if (!row) return null
+    return {
+      lastSuccessAt: row.lastSuccessAt ?? null,
+      lastErrorAt: row.lastErrorAt ?? null,
+      skipped: row.recordsSkipped ?? 0,
+    }
+  } catch {
+    // See the header: this never breaks the surface it annotates.
+    return null
+  }
+}
+
 export async function recordInjurySyncRun(args: {
   sport: string
   written: number
