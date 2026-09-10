@@ -36,7 +36,6 @@ import type { LeagueActivityTrendSummary } from './dashboard-intelligence'
 import { assembleManagerBehavioralFacts } from './behavioral/assemble'
 import { deriveManagerBehavioralIntelligence } from './behavioral/manager-intelligence'
 import type { ParticipationTier, ManagerRetentionRisk } from './behavioral/manager-intelligence'
-import type { ManagerDnaProfile } from './phase6/dna/types'
 import type { RecommendationSet } from './phase6/recommendations/types'
 
 export interface UserOsTeamHealth {
@@ -65,7 +64,37 @@ export type UserOsSnapshot =
       activitySummary: UserOsActivitySummary
       /** Same league-wide trend contract Commissioner OS already shows — reused, not re-derived. */
       leagueTrend: LeagueActivityTrendSummary
-      managerDna: ManagerDnaProfile | null
+      /**
+       * 🛑 ALWAYS NULL, AND TYPED `null` SO IT CANNOT BE REPOPULATED BY ACCIDENT.
+       *
+       * This carried a real `ManagerDnaProfile` — `primaryIdentity`, `decisionStyle`,
+       * `transactionStyle`, `riskTendency`, `engagementReliability`, `traits`, and `derivation`
+       * ("classifiers evaluated, scores, threshold comparisons"). `resolveManagerIntelligencePayload`
+       * returns a live profile from `computeLeagueDna`, not a stub, so this route served a raw
+       * behavioural dossier through a session-gated public path — the exact condition milestone 32
+       * exists to remove, and the named remainder "User OS reads (including server-rendered props)".
+       *
+       * ⚠ THE SIBLING ROUTE CLOSED THIS FIRST AND THIS ONE DID NOT FOLLOW.
+       * THIS route's own header claims it "Mirrors /api/decision-os/manager-intelligence's contract
+       * exactly". That claim was false while the sibling withheld the dossier and this one served it,
+       * and nothing checked it — a doc comment is not an invariant.
+       *
+       * 🛑 THE MIRROR CANNOT BE ASSERTED AGAINST THAT SIBLING ANY MORE, WHICH IS WHY THE TEST DOES NOT.
+       * The previous commit retired `/api/decision-os/manager-intelligence` outright: it is now a
+       * constant 410 and hard-codes nothing. Pinning "both routes say `managerDna: null`" against a
+       * retired stub would be an assertion about a file that no longer contains the field — green
+       * forever, and blind. The invariant kept here is the one that still means something: THIS
+       * payload types the field as `null`, so the compiler refuses a repopulation.
+       *
+       * ⚠ SELF-SCOPED, WHICH IS WHY THIS IS A PRIVACY TIGHTENING AND NOT AN INCIDENT. `targetProfile`
+       * is matched on `managerId === session user` and the route never accepts a managerId param, so
+       * no third party's dossier was ever reachable here. Milestone 32's criterion has no self
+       * carve-out, which is the reason it still closes.
+       *
+       * The profile is still COMPUTED internally — "Internal profiles remain available for future
+       * decision support" — it is simply no longer projected to a client.
+       */
+      managerDna: null
       recommendations: RecommendationSet | null
     }
   | {
@@ -134,7 +163,7 @@ export async function resolveUserOsSnapshot(
         draftEventCount: intelligence.draftEngagement.eventCount,
       },
       leagueTrend: payload.leagueTrend,
-      managerDna: payload.managerDna,
+      managerDna: null,
       recommendations: payload.recommendations,
     }
   } catch {
