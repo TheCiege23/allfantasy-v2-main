@@ -3,7 +3,10 @@ import {
   WINDOW_PERSISTENCE_WEEKS,
   type WindowCoefficients, type WindowResolution, type WindowState, type WindowStatus,
 } from './window'
-import { assembleWindowFacts, type WindowEvidence, type WindowFactsPort, type WindowFactsScope } from './windowFacts'
+import {
+  assembleWindowFacts,
+  type WindowEvidence, type WindowFactsPort, type WindowFactsScope, type WindowFormat,
+} from './windowFacts'
 import { scheduledLookback } from './periodCalendar'
 
 /**
@@ -115,6 +118,15 @@ export interface WindowDecisionOptions {
    * Absent: the arithmetic fallback runs and `SCHEDULE_UNAVAILABLE_GAP` is reported.
    */
   scheduledPeriods?: readonly number[]
+  /**
+   * Which horizon this league is judged over. Defaults to 'dynasty' — the pre-existing behaviour
+   * for callers that predate the split, not a guess about a league nobody described.
+   *
+   * ⚠ IT MUST AGREE WITH `coefficients.horizon`. The resolver refuses on a mismatch rather than
+   * rescaling: a rest-of-season share and a three-year strength are both 0..1 and are not the
+   * same quantity.
+   */
+  format?: WindowFormat
   coefficients?: WindowCoefficients
   /** Seeded window for a team with no settled history. */
   seed?: WindowState
@@ -261,7 +273,14 @@ function refusedDecision(
     coefficients,
     gaps: [...new Set(gaps)],
     evidence: {
-      identity: null, allPlay: null, forecast: null, dynasty: null, injuries: null,
+      identity: null, allPlay: null, forecast: null, dynasty: null,
+      restOfSeason: null, remainingScheduleStrength: null, injuries: null,
+      /*
+       * The horizon a refusal was gathered FOR, taken from the coefficient set that was in play.
+       * A refusal with no format would leave a reader unable to tell whether a redraft league was
+       * even being judged as one — which is the question this whole correction is about.
+       */
+      format: coefficients.horizon,
       assembledAt: now.toISOString(),
     },
   }
@@ -274,6 +293,13 @@ export async function resolveWindowDecision(
 ): Promise<WindowDecision> {
   const coefficients = options.coefficients ?? DEFAULT_WINDOW_COEFFICIENTS
   const now = options.now ?? new Date()
+  /*
+   * The horizon defaults to the coefficient set's own, so a caller that passes
+   * `REDRAFT_WINDOW_COEFFICIENTS` cannot accidentally assemble dynasty facts for them. Passing
+   * `format` explicitly and disagreeing with the coefficients is refused downstream by
+   * `resolveCompetitiveWindow` rather than silently reconciled here.
+   */
+  const format: WindowFormat = options.format ?? coefficients.horizon
 
   // Validate BEFORE any lookback is constructed and before the port is touched.
   const scopeProblem = invalidScopeReason(scope)
@@ -295,7 +321,7 @@ export async function resolveWindowDecision(
   }
 
   const assembled = await Promise.all(
-    weeks.map(week => assembleWindowFacts({ ...scope, week }, port, now)),
+    weeks.map(week => assembleWindowFacts({ ...scope, week }, port, { format, now })),
   )
   const current = assembled[assembled.length - 1]
   const currentResolution: WindowResolution = current.facts

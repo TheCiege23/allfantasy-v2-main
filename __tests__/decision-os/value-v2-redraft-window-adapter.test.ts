@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
   resolveRedraftTeamWindow, resolveRequestingTeam,
-  WINDOW_GAP_ADAPTER_FAILED, WINDOW_GAP_LEAGUE_MISSING, WINDOW_GAP_PERIOD_UNRESOLVED,
-  WINDOW_GAP_TEAM_AMBIGUOUS, WINDOW_GAP_TEAM_ARCHIVED, WINDOW_GAP_TEAM_ID_MISSING,
+  WINDOW_GAP_TEAM_READ_FAILED, WINDOW_GAP_LEAGUE_MISSING, WINDOW_GAP_PERIOD_UNRESOLVED,
+  WINDOW_GAP_TEAM_AMBIGUOUS, WINDOW_GAP_ARCHIVAL_UNPROVABLE, WINDOW_GAP_TEAM_ID_MISSING,
   WINDOW_GAP_TEAM_NOT_CLAIMED,
 } from '@/lib/decision-os/value-v2/redraftWindowServerAdapter'
 import { NEUTRAL_TEAM_FIT } from '@/lib/decision-os/value-v2/windowDecision'
@@ -28,7 +28,14 @@ function fakePrisma(over: {
   league?: unknown
   leagueTeams?: Array<{ externalId: string; isOrphan: boolean }>
   leagueTeamThrows?: boolean
-  rosterPlayers?: Array<{ playerId: string | null }>
+  rosterPlayers?: Array<{ rosterId?: string; playerId: string | null }>
+  leagueRosterPlayers?: Array<{ rosterId: string; playerId: string | null }>
+  rosterPlayerThrows?: boolean
+  schedule?: Array<{ week: number }>
+  scheduleThrows?: boolean
+  projections?: Array<{ playerId: string; rosProjection: number | null; rosWeeksRemaining: number | null; computedAt: Date }>
+  projectionThrows?: boolean
+  leagueThrows?: boolean
 } = {}) {
   const reads: Read[] = []
   const log = (model: string) => (args: unknown) => { reads.push({ model, args }); return args }
@@ -36,6 +43,7 @@ function fakePrisma(over: {
     league: {
       findUnique: async (args: unknown) => {
         log('league.findUnique')(args)
+        if (over.leagueThrows) throw new Error('league read down')
         return over.league === undefined ? { platformLeagueId: 'sleeper-1' } : over.league
       },
     },
@@ -61,8 +69,27 @@ function fakePrisma(over: {
     },
     redraftRosterPlayer: {
       findMany: async (args: unknown) => {
-        log('redraftRosterPlayer.findMany')(args)
-        return over.rosterPlayers ?? []
+        const a = args as { where?: { rosterId?: string; roster?: { seasonId?: string } } }
+        // The adapter makes TWO different reads here: the proposer's roster, and every roster in
+        // the season for the league-relative rest-of-season denominator.
+        const which = a?.where?.roster ? 'redraftRosterPlayer.findMany:league' : 'redraftRosterPlayer.findMany'
+        log(which)(args)
+        if (over.rosterPlayerThrows) throw new Error('roster read down')
+        return a?.where?.roster ? (over.leagueRosterPlayers ?? []) : (over.rosterPlayers ?? [])
+      },
+    },
+    redraftMatchup: {
+      findMany: async (args: unknown) => {
+        log('redraftMatchup.findMany')(args)
+        if (over.scheduleThrows) throw new Error('schedule read down')
+        return over.schedule ?? []
+      },
+    },
+    aFProjectionSnapshot: {
+      findMany: async (args: unknown) => {
+        log('aFProjectionSnapshot.findMany')(args)
+        if (over.projectionThrows) throw new Error('projection read down')
+        return over.projections ?? []
       },
     },
     weeklyMatchup: { findMany: async (args: unknown) => { log('weeklyMatchup.findMany')(args); return [] } },
@@ -75,7 +102,7 @@ function fakePrisma(over: {
 
 const base = {
   leagueId: 'af-league-uuid', userId: 'user-1', proposerRosterId: 'redraft-roster-cuid',
-  sport: 'NFL', season: 2026, week: 6,
+  seasonId: 'redraft-season-cuid', sport: 'NFL', season: 2026, week: 6,
 }
 
 describe('resolveRequestingTeam maps the caller onto exactly one canonical team', () => {
@@ -104,9 +131,9 @@ describe('resolveRequestingTeam maps the caller onto exactly one canonical team'
     expect(JSON.stringify(r)).not.toContain('"7"')
   })
 
-  it('refuses an archived (orphaned) team even though its matchups would resolve', async () => {
+  it('refuses a CLAIMED row that is also flagged vacant, because that is data contradicting itself', async () => {
     const { prisma } = fakePrisma({ leagueTeams: [{ externalId: '7', isOrphan: true }] })
-    expect(await resolveRequestingTeam(prisma, 'l1', 'user-1')).toEqual({ ok: false, gap: WINDOW_GAP_TEAM_ARCHIVED })
+    expect(await resolveRequestingTeam(prisma, 'l1', 'user-1')).toEqual({ ok: false, gap: WINDOW_GAP_ARCHIVAL_UNPROVABLE })
   })
 
   it.each([[''], ['   ']])('refuses a blank externalId (%j)', async (externalId) => {
@@ -127,7 +154,7 @@ describe('resolveRequestingTeam maps the caller onto exactly one canonical team'
 
   it('reports a database failure as a failure, not as "no team claimed"', async () => {
     const { prisma } = fakePrisma({ leagueTeamThrows: true })
-    expect(await resolveRequestingTeam(prisma, 'l1', 'user-1')).toEqual({ ok: false, gap: WINDOW_GAP_ADAPTER_FAILED })
+    expect(await resolveRequestingTeam(prisma, 'l1', 'user-1')).toEqual({ ok: false, gap: WINDOW_GAP_TEAM_READ_FAILED })
   })
 })
 
@@ -197,6 +224,17 @@ describe('a resolved identity reaches the port in the right namespaces', () => {
       league: { platformLeagueId: 'sleeper-999' },
       leagueTeams: [{ externalId: '7', isOrphan: false }],
       rosterPlayers: [{ playerId: 'p1' }, { playerId: 'p2' }],
+      schedule: [{ week: 4 }, { week: 5 }, { week: 6 }],
+      leagueRosterPlayers: [
+        { rosterId: 'redraft-roster-cuid', playerId: 'p1' },
+        { rosterId: 'redraft-roster-cuid', playerId: 'p2' },
+        { rosterId: 'other-roster', playerId: 'p3' },
+      ],
+      projections: [
+        { playerId: 'p1', rosProjection: 200, rosWeeksRemaining: 11, computedAt: new Date('2026-10-01T00:00:00Z') },
+        { playerId: 'p2', rosProjection: 150, rosWeeksRemaining: 11, computedAt: new Date('2026-10-01T00:00:00Z') },
+        { playerId: 'p3', rosProjection: 300, rosWeeksRemaining: 11, computedAt: new Date('2026-10-01T00:00:00Z') },
+      ],
     })
     await resolveRedraftTeamWindow({ ...base, prisma })
 
@@ -222,6 +260,7 @@ describe('a resolved identity reaches the port in the right namespaces', () => {
     const { prisma, reads } = fakePrisma({
       leagueTeams: [{ externalId: '7', isOrphan: false }],
       rosterPlayers: [{ playerId: 'p1' }],
+      schedule: [{ week: 6 }],
     })
     await resolveRedraftTeamWindow({ ...base, prisma })
     const call = reads.find(r => r.model === 'redraftRosterPlayer.findMany')!.args as { where: { rosterId: string } }

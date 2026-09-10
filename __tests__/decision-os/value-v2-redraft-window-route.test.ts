@@ -129,8 +129,7 @@ describe('the shadow flag decides whether any window work happens', () => {
     const res = await POST(request())
     expect(res.status).toBe(200)
     expect(adapter.resolveRedraftTeamWindow).not.toHaveBeenCalled()
-    // The schedule query is part of the window work and must not run either.
-    expect(db.redraftMatchup.findMany).not.toHaveBeenCalled()
+    // The schedule read moved into the adapter, so not calling the adapter is what proves it.
     expect(compute.computeRedraftTradeValueSnapshot.mock.calls[0][0].teamWindowV2).toBeNull()
   })
 
@@ -169,11 +168,20 @@ describe('the identity handed to the adapter is the authenticated proposer', () 
     expect(JSON.stringify(arg)).not.toContain('receiver-cuid')
   })
 
-  it('passes the real scheduled periods, not 1..currentWeek', async () => {
-    db.redraftMatchup.findMany.mockResolvedValue([{ week: 1 }, { week: 2 }, { week: 5 }, { week: 6 }])
+  /*
+   * 🛑 THE ROUTE NO LONGER READS THE SCHEDULE, AND THAT MOVE IS THE FIX. It used to call
+   * `prisma.redraftMatchup.findMany(...).catch(() => [])`, and that `catch` turned a FAILED query
+   * into an empty array — which the resolver reads as "this league has no schedule" and answers
+   * with its arithmetic fallback plus `schedule_unavailable_lookback_assumed_contiguous`. A
+   * database outage came out of the far end as a confident claim about a league's calendar.
+   * The adapter owns the read now and distinguishes a throw from an empty result.
+   */
+  it('hands the season id over and does NOT read the schedule itself', async () => {
     await POST(request())
-    // The gap at 3-4 survives: a schedule with a hole is not the same as a contiguous one.
-    expect(adapter.resolveRedraftTeamWindow.mock.calls[0][0].scheduledPeriods).toEqual([1, 2, 5, 6])
+    const arg = adapter.resolveRedraftTeamWindow.mock.calls[0][0]
+    expect(arg.seasonId).toBe('season-cuid')
+    expect(arg.scheduledPeriods).toBeUndefined()
+    expect(db.redraftMatchup.findMany).not.toHaveBeenCalled()
   })
 })
 

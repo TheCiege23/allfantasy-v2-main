@@ -7,10 +7,12 @@ import {
   settleWindow,
   WINDOW_PERSISTENCE_WEEKS,
   type TeamWindowFacts,
+  type DynastyWindowFacts,
   type WindowState,
 } from '@/lib/decision-os/value-v2/window'
 
-const base: TeamWindowFacts = {
+const base: DynastyWindowFacts = {
+  format: 'dynasty' as const,
   teamId: 't1',
   leagueId: 'l1',
   season: 2026,
@@ -27,7 +29,12 @@ const base: TeamWindowFacts = {
   injuryTreatment: 'excluded',
 }
 
-const facts = (over: Partial<TeamWindowFacts> = {}): TeamWindowFacts => ({ ...base, ...over })
+/*
+ * ⚠ TYPED AS THE DYNASTY MEMBER, NOT THE UNION. `Partial<TeamWindowFacts>` over a discriminated
+ * union accepts fields from EITHER arm, which would let a redraft key be spread into a dynasty
+ * fixture and typecheck — the exact mixing the split exists to prevent.
+ */
+const facts = (over: Partial<DynastyWindowFacts> = {}): DynastyWindowFacts => ({ ...base, ...over })
 
 describe('resolveCompetitiveWindow refuses rather than defaulting', () => {
   it('returns null instead of the legacy fall-through to Competitive', () => {

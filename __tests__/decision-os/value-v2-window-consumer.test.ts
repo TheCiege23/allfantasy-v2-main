@@ -26,6 +26,8 @@ function weeklyPort(byWeek: Record<number, { wins: number; losses: number; luckW
       const w = byWeek[s.week]
       return w ? { season: s.season, projectedStrength3YearsPct: w.strengthPct, projectedStrengthNextYearPct: w.strengthPct, windowStartYear: null, windowEndYear: null, confidencePct: 70, generatedAt: CAPTURED } : null
     },
+    // Dynasty fixtures never read this; the port contract still requires the method.
+    restOfSeason: async () => null,
     injuries: async () => ({ unavailableShare: 0, basis: 'test', coverage: 1, treatment: 'excluded' }),
   }
 }

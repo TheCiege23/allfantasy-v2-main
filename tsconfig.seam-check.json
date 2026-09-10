@@ -1,6 +1,9 @@
 {
   "extends": "./tsconfig.json",
-  "compilerOptions": { "noEmit": true, "incremental": false },
+  "compilerOptions": {
+    "noEmit": true,
+    "incremental": false
+  },
   "_why_exclude_is_empty": [
     "`extends` INHERITS `exclude`. The base config excludes __tests__ repo-wide, so without this",
     "reset the test entries are silently dropped from `include` and tsc exits clean over the",
@@ -13,7 +16,7 @@
     "reports 3 phantom TS2339s ('id'/'username'/'spotifyAccount' do not exist on Session.user)",
     "that the repo-wide run does not have and the ratchet baseline does not list. Those are an",
     "artifact of the scoping, not defects. Verified by removing them: 14 errors -> 11.",
-    "⚠ CLAUDE.md warns that adding .d.ts entries can suppress TS18003 and hide an empty compile",
+    "\u26a0 CLAUDE.md warns that adding .d.ts entries can suppress TS18003 and hide an empty compile",
     "set. That risk is handled the other way here: every target is confirmed present via",
     "--listFiles, so an empty or partial set is caught by name rather than by exit code."
   ],
@@ -22,9 +25,17 @@
     "types/**/*.d.ts",
     "lib/decision-os/value-v2/redraftWindowServerAdapter.ts",
     "lib/decision-os/value-v2/windowDecision.ts",
+    "lib/decision-os/value-v2/windowFacts.ts",
+    "lib/decision-os/value-v2/windowFactsPrismaPort.ts",
+    "lib/decision-os/value-v2/window.ts",
     "lib/decision-os/value-v2/shadow.ts",
     "lib/trade-value/snapshot.ts",
     "lib/trade-value/captureSnapshot.ts",
-    "app/api/redraft/trade-value-preview/route.ts"
+    "app/api/redraft/trade-value-preview/route.ts",
+    "__tests__/decision-os/value-v2-window.test.ts",
+    "__tests__/decision-os/value-v2-window-consumer.test.ts",
+    "__tests__/decision-os/value-v2-window-facts.test.ts",
+    "__tests__/decision-os/value-v2-window-prisma-port.test.ts",
+    "__tests__/decision-os/value-v2-redraft-window-adapter.test.ts"
   ]
 }

@@ -1,7 +1,7 @@
 import { PrismaClient } from '@prisma/client'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import {
-  resolveRedraftTeamWindow, WINDOW_GAP_TEAM_AMBIGUOUS, WINDOW_GAP_TEAM_ARCHIVED,
+  resolveRedraftTeamWindow, WINDOW_GAP_TEAM_AMBIGUOUS, WINDOW_GAP_ARCHIVAL_UNPROVABLE,
   WINDOW_GAP_TEAM_NOT_CLAIMED,
 } from '@/lib/decision-os/value-v2/redraftWindowServerAdapter'
 
@@ -33,6 +33,8 @@ const OTHER_USER = `${RUN}-other`
 const REDRAFT_ROSTER = `${RUN}-redraft-roster`
 const REDRAFT_SEASON = `${RUN}-redraft-season`
 const PLAYERS = ['p1', 'p2', 'p3', 'p4'].map(p => `${RUN}-${p}`)
+const OTHER_ROSTER = `${RUN}-other-roster`
+const OTHER_PLAYERS = ['q1', 'q2', 'q3', 'q4'].map(p => `${RUN}-${p}`)
 const SEASON = 2999
 const WEEK = 6
 
@@ -124,6 +126,34 @@ describe.skipIf(NO_DB)('the redraft adapter against real rows', () => {
         position: 'WR', sport: 'NFL', slotType: 'bench',
       })),
     })
+    /*
+     * ⚠ A SECOND ROSTER, BECAUSE THE SHARE IS LEAGUE-RELATIVE. With one roster the denominator is
+     * this roster and every team holds 100% of the league's remaining scoring — which is not a
+     * measurement, and `teamsCovered < 2` refuses precisely so that never reads as dominance.
+     */
+    await prisma.redraftRoster.create({
+      data: { id: OTHER_ROSTER, seasonId: REDRAFT_SEASON, leagueId: LEAGUE, ownerId: OTHER_USER, ownerName: 'Sam' },
+    })
+    await prisma.redraftRosterPlayer.createMany({
+      data: OTHER_PLAYERS.map((playerId, i) => ({
+        rosterId: OTHER_ROSTER, playerId, playerName: `Other ${i}`,
+        position: 'WR', sport: 'NFL', slotType: 'bench',
+      })),
+    })
+    /*
+     * The canonical rest-of-season source. `rosProjection` NULL means NOT COMPUTED, so one player
+     * is deliberately left without a row: coverage stays above the floor and the roster is still
+     * counted honestly rather than scored as zero for the missing man.
+     */
+    await prisma.aFProjectionSnapshot.createMany({
+      data: [...PLAYERS.slice(0, 3), ...OTHER_PLAYERS].map((playerId, i) => ({
+        playerId, playerName: `Fixture ${i}`, sport: 'NFL', position: 'WR', season: SEASON,
+        baselineProjection: 10, afProjection: 12,
+        rosProjection: PLAYERS.includes(playerId) ? 200 - i * 10 : 60,
+        rosWeeksRemaining: 11,
+        snapshotLookupKey: `${playerId}|${SEASON}|w|none`,
+      })),
+    })
     await prisma.sportsPlayer.createMany({
       data: PLAYERS.map((externalId, i) => ({
         sport: 'NFL', externalId, name: `Fixture ${i}`, source: RUN,
@@ -143,8 +173,9 @@ describe.skipIf(NO_DB)('the redraft adapter against real rows', () => {
 
   afterAll(async () => {
     await prisma.$executeRawUnsafe(`DELETE FROM "WeeklyMatchup" WHERE "leagueId" = $1`, PLATFORM).catch(() => 0)
-    await prisma.redraftRosterPlayer.deleteMany({ where: { rosterId: REDRAFT_ROSTER } }).catch(() => null)
-    await prisma.redraftRoster.deleteMany({ where: { id: REDRAFT_ROSTER } }).catch(() => null)
+    await prisma.aFProjectionSnapshot.deleteMany({ where: { playerId: { in: [...PLAYERS, ...OTHER_PLAYERS] } } }).catch(() => null)
+    await prisma.redraftRosterPlayer.deleteMany({ where: { rosterId: { in: [REDRAFT_ROSTER, OTHER_ROSTER] } } }).catch(() => null)
+    await prisma.redraftRoster.deleteMany({ where: { id: { in: [REDRAFT_ROSTER, OTHER_ROSTER] } } }).catch(() => null)
     await prisma.redraftSeason.deleteMany({ where: { id: REDRAFT_SEASON } }).catch(() => null)
     await prisma.sportsPlayer.deleteMany({ where: { source: RUN } }).catch(() => null)
     await prisma.dynastyProjectionSnapshot.deleteMany({ where: { leagueId: LEAGUE } }).catch(() => null)
@@ -157,8 +188,7 @@ describe.skipIf(NO_DB)('the redraft adapter against real rows', () => {
 
   const req = (over: Record<string, unknown> = {}) => ({
     prisma, leagueId: LEAGUE, userId: USER_ID, proposerRosterId: REDRAFT_ROSTER,
-    sport: 'NFL', season: SEASON, week: WEEK,
-    scheduledPeriods: [1, 2, 3, 4, 5, 6],
+    seasonId: REDRAFT_SEASON, sport: 'NFL', season: SEASON, week: WEEK,
     ...over,
   }) as Parameters<typeof resolveRedraftTeamWindow>[0]
 
@@ -211,11 +241,11 @@ describe.skipIf(NO_DB)('the redraft adapter against real rows', () => {
     await prisma.leagueTeam.updateMany({ where: { leagueId: LEAGUE, externalId: '4' }, data: { claimedByUserId: null } })
   }, 120_000)
 
-  it('refuses an archived team whose matchups would otherwise resolve', async () => {
+  it('refuses a claimed row also flagged vacant — contradictory, not archived', async () => {
     await prisma.leagueTeam.updateMany({ where: { leagueId: LEAGUE, externalId: '1' }, data: { isOrphan: true } })
     const d = await resolveRedraftTeamWindow(req())
     expect(d.state).toBe('refused')
-    expect(d.gaps).toContain(WINDOW_GAP_TEAM_ARCHIVED)
+    expect(d.gaps).toContain(WINDOW_GAP_ARCHIVAL_UNPROVABLE)
     await prisma.leagueTeam.updateMany({ where: { leagueId: LEAGUE, externalId: '1' }, data: { isOrphan: false } })
   }, 120_000)
 
