@@ -7,9 +7,15 @@ no production writes.**
 |---|---|
 | Branch | `integration/import-batch-a` |
 | Batch A.1 tip | `337bf69e2` |
-| **Batch A.2 final SHA** | **`799cf13ac`** |
+| **Final CODE SHA — every gate in §6 was measured here** | **`cfdc1b700`** |
 | Baseline | `origin/main` `1a43ebbd8` |
-| A.2 commits | `f214174cd`, `cd4c96b3d`, `0a8a16edf`, `799cf13ac` |
+| A.2 commits | `f214174cd`, `cd4c96b3d`, `0a8a16edf`, `799cf13ac`, `cfdc1b700` |
+
+⚠ **Read the code SHA, not the branch tip.** Documentation-only commits sit on top of
+`cfdc1b700`; `git diff --name-only cfdc1b700..HEAD` touches nothing outside `docs/`, so every
+gate result below still describes the code at the branch tip. Where a result was measured at an
+*earlier* SHA it says so beside the number, and results from runs that did not complete are not
+reported at all (§6.2).
 
 A.2 closes the remaining archival-reader risk inside Platform Import scope. Its headline is not
 a new class of bug — it is that **the guard built in A.1 to police the class was still deciding
@@ -66,18 +72,70 @@ call stops describing anything but keeps matching, so a future call reusing that
 through on a reason written about different code. It caught `dynasty-projections` the moment A.2
 filtered it.
 
+### 🛑 The predicate gap: a bare `isOrphan` mention is not protection
+
+The per-call rule was right and its *predicate* was still wrong. It read:
+
+```ts
+/ACTIVE_TEAM_WHERE|ORPHAN_TEAM_WHERE|isOrphan\s*:/
+```
+
+So `isOrphan: true` — a query returning **only** archived teams — counted as "protected from
+archived teams". So did `ORPHAN_TEAM_WHERE`, whose entire purpose is to select them. **A
+wrong-polarity predicate silenced the guard exactly as effectively as a correct one**, and did it
+on the two reads most likely to be about archived seats.
+
+`orphanPolarity()` now returns one of four answers, and only one is protection:
+
+| verdict | shapes | outcome |
+|---|---|---|
+| `active` | `ACTIVE_TEAM_WHERE`, `NOT: { isOrphan: true }`, `isOrphan: false` | protected |
+| `archived-only` | `ORPHAN_TEAM_WHERE`, `isOrphan: true` | **reported** — classify it with a reason |
+| `unknown` | an `OR:` anywhere, both polarities present, `isOrphan: <variable>` | **reported** — review decides |
+| `none` | the field is absent | ordinary enumeration path |
+
+⚠ **An `OR:` anywhere downgrades to `unknown`** rather than being reasoned about:
+`where: { OR: [{ isOrphan: false }, { … }] }` matches rows through the other branch, so the
+predicate constrains nothing. An unrecognised shape requires review, which is the safe direction.
+
+⚠ **And the canonical active filter nearly classified itself as `unknown`.** `NOT: { isOrphan: true }`
+*contains* the substring `isOrphan: true`, so testing both patterns against the raw clause found
+"both polarities present". The negated form is consumed before the bare one is looked for —
+caught by the control for that exact shape, which is why the controls run through the real scanner.
+
+**What it revealed, and what it did not.** Two reads that were exempt for the wrong reason are now
+classified explicitly, both genuinely archived-only and both correct as they stand:
+`lib/commissioner-workspace/rosterReads.ts#2` (the orphan metric itself) and
+`app/api/commissioner/leagues/[leagueId]/renew/route.ts#1` (counts orphans to set
+`dispersalDraftEligible`). **No historical identity map was blanket-filtered** — the change adds
+scrutiny, not filters.
+
+**Mutation-controlled:** restoring the bare-mention predicate turns **seven** tests red — all five
+polarity controls, the "bare mention never grants protection" assertion, and the dead-exemption
+check (because both new entries stop matching).
+
 ---
 
 ## 2. The population, and its classification
 
-| | |
-|---|---|
-| Unprotected league-wide calls at the A.1 tip, per-call | **88** |
-| Fixed in A.2 | **16** |
-| Remaining, **all classified** | **72** → 71 after the dynasty fix |
-| `PENDING_CLASSIFICATION` | **empty**, budget **0** |
+The count moved four times, and every step is a real event rather than a restatement. Stated in
+full because "88 → 16 fixed → 72 remaining" and the PR's "71" are both true of different moments:
 
-Every one of the 72 carries a reason established by tracing its binding, not by inferring from
+| step | count | why it moved |
+|---|---|---|
+| Unprotected calls at the A.1 tip, per-call, **old predicate** | **88** | the population the per-call scanner first revealed |
+| − 16 leaks fixed | **72** | §2 below |
+| − 1 dynasty-projections | **71** | the separate dynasty commit filtered it, so it stopped being reported |
+| + 2 revealed by the **polarity fix** | **73** | two archived-only reads had been exempt for the wrong reason (§4) |
+
+**Final: 73 classified exceptions, `PENDING_CLASSIFICATION` empty, budget 0, zero dead entries.**
+
+⚠ **The 88 is measured under the OLD predicate.** Re-measured with the corrected polarity rule,
+the A.1 tip would have shown **90** — the same two archived-only reads were being silently
+exempted there too. 88 is kept as the figure actually observed at the time rather than
+retrofitted, and this note is the reconciliation.
+
+Every one of the 73 carries a reason established by tracing its binding, not by inferring from
 the file's name or directory.
 
 ### The 16 fixed — every one a count, a list, an eligibility decision, or a write
@@ -163,20 +221,48 @@ self-exclusion.
   on ids a departed seat still owns — narrowing it would **silently delete a future pick a live
   team acquired from a manager who has since left.**
 
-### The honest boundary on its testing
+### Its testing — corrected, and now behavioural
 
-`buildTeamInputsFromLeague` is exported so the assertion can be made on what reaches the
-persisting generator **without persisting anything to prove it**. Four structural assertions run
-everywhere and are what CI has today.
+⚠ **AN EARLIER VERSION OF THIS SECTION OVERCLAIMED, AND THE CORRECTION IS THE POINT.** It said
+asserting on what `buildTeamInputsFromLeague` returns "proves no row can be written" for an
+archived seat. It does not. That function returns *targets*; it never reaches
+`prisma.dynastyProjection.upsert`, so it cannot show that an existing archived row is left
+un-updated, and it cannot show that a live target produces a stored row at all. Proving a
+persistence boundary requires executing the persistence.
 
-The database assertion is `describe.skipIf`-gated and **skipped in this run** — visibly, in the
-summary. 🛑 `DATABASE_URL` unset in this repo means **production**, not "no database": importing
-`@prisma/client` populates `process.env` from `.env`, which is why `vitest.setup.db-guard.ts` pins
-the unset case to `127.0.0.1:1`. The fixture-creating test therefore runs only against a database
-a human names, and carries its own second refusal against a `neon.tech` host.
+It now does. `generateForInputs` — the function both `GET` and `POST` call, which invokes
+`generateDynastyProjection(input, { persist: true })` — is exported and driven directly, and the
+assertions are made on **stored rows**:
 
-**So: the persisted behaviour is asserted, and that assertion has not executed here.** It is
-listed as an open item in §7 rather than counted as covered.
+| | asserted against the database |
+|---|---|
+| a LIVE target really is persisted | a `dynasty_projections` row exists for it, and its score is not the sentinel |
+| an ARCHIVED target gets no NEW row | exactly one row for it — the pre-seeded one |
+| an ARCHIVED target gets no UPDATE | that row's values are still `-999`, which no generator produces |
+| an explicit archived request cannot bypass | `teamIdFilter: '<archived>'` **rejects**, and the stored row is still `-999` |
+| a LIVE team keeps a pick from an archived seat | its `futurePicks` length is **10**, not the base 9 — the traded 2027 first-rounder survives |
+
+The pre-seeded sentinel row is what makes "no update" checkable: the upsert would have *updated*
+that row rather than created one, so "no new row" alone would have missed a regression.
+
+**Ran against an explicitly identified disposable database** — a local PostgreSQL 17.9 at
+`127.0.0.1:5433`, database `af_a2_dynasty_test`, created for this and holding nothing else. Not
+Neon, so neither production nor any shared branch. **7/7 pass.**
+
+**Mutation-controlled.** Restoring archived targeting (`activeTeams` -> `teams`) turns **four**
+tests red, including all three behavioural ones. Applied to the file and restored, with the
+restore verified by `diff`.
+
+**Cleanup is asserted, not swallowed.** `afterAll` deletes every fixture it created and then
+*counts* what remains, failing the run if anything is left. Verified independently by querying the
+database after both a passing run and a failing one: **0 rows** either way. The `allfantasy`
+tenant row is upserted and deliberately **not** deleted — this suite may not have created it.
+
+🛑 **The safeguards are intact and were not weakened to make this run.** `vitest.setup.db-guard.ts`
+still pins an inherited `DATABASE_URL` to `127.0.0.1:1`; the block is still `describe.skipIf`-gated
+so it **skips** when no database is named (verified: 4 passed, 3 skipped); and it carries its own
+second refusal against a `neon.tech` host *and* against the guard's own sentinel, rather than
+trusting a setup file it does not own.
 
 ---
 
@@ -202,49 +288,91 @@ Recorded in `BATCH_A_CORRECTIONS.md`; history was not rewritten.
 
 ---
 
-## 6. Gates at `799cf13ac`
+## 6. Gates — each result tied to the SHA it was measured at
 
 Run **one at a time**. The box carries other sessions' `tsc` and `vitest` processes, and this repo
 has a recorded incident of concurrent runs killing each other into output that reads exactly like
-a clean pass. The ratchet was started only once the box showed 1 `tsc` and 0 `vitest`; the suite
-only once it showed 0 and 0.
+a clean pass. Each gate was started only after checking the box was clear.
 
-| gate | result |
-|---|---|
-| **TypeScript ratchet** at `799cf13ac` | ✅ **`DONE=0` — 143 errors against a 143 baseline, no regressions** |
-| `__tests__/league-import` (33 files) | ✅ 360 tests pass |
-| Registry guard incl. per-call controls | ✅ 18/18 |
-| Cross-cutting run over the touched areas | ✅ 68 files / 701 tests pass |
-| New opponent + dynasty suites | ✅ 16 pass, **1 skipped** (the gated database assertion) |
-| Secret scan over the tree | ✅ exit 0 |
-| **Full-suite baseline comparison** | ⏳ **running at the time of writing** |
+| gate | measured at | result |
+|---|---|---|
+| **TypeScript ratchet** | `cfdc1b700` | ✅ `DONE=0` — **no file gained errors**; total 143 vs baseline 143 |
+| Registry guard, incl. polarity + per-call controls | `cfdc1b700` | ✅ **27/27** |
+| Dynasty persistence, against a disposable database | `cfdc1b700` | ✅ **7/7**, incl. 3 behavioural |
+| `league-import` + `user-os` + `core-app` | `cfdc1b700` | ✅ **46 files / 460 tests**, 3 skipped (the gated DB block, run separately) |
+| Secret scan | `cfdc1b700` | ✅ exit 0 |
+| **Full-suite baseline comparison** | `cfdc1b700` | ⏳ **sharded run in progress — see §6.2** |
 
-⚠ **The ratchet number is read against a baseline, not in isolation.** 143 is exactly this repo's
-standing count — neither higher (a regression) nor *lower*, which on a repo with a known baseline
-is the tell for a run that measured nothing. `DONE=0` and a printed count together make it a
-verdict; either alone would not.
+Documentation-only commits sit on top of `cfdc1b700`; `git diff --name-only cfdc1b700..HEAD`
+touches nothing but `docs/`, so the gates above describe the code as it stands at the branch tip.
 
-⚠ **The full-suite comparison is stated as pending rather than summarised.** The baseline to beat
-is `broad-base.txt` at `origin/main` `1a43ebbd8`: **81 failed files / 145 failed tests**. It will
-be reported by **failure identity** — which files gained or lost failures — not as a net count,
-and only once the run writes a summary block **and** a `DONE=` of 0 or 1. Any other exit value is
-not a verdict; see `BATCH_A_CORRECTIONS.md` §8 for why that rule exists.
+### 6.1 What the ratchet does and does not establish
 
-**Known-good reference points:** `__tests__/user-os` was **7 of 7 failing at `origin/main`**
-(a stale prisma mock, repaired in A.1) and now passes 58, so this branch runs **−7** against the
-baseline before A.2's changes are counted.
+⚠ **AN EARLIER VERSION OF THIS SECTION GOT THIS WRONG IN BOTH DIRECTIONS.** It said 143 == 143
+proves no regressions, and that a *lower* total would be the tell for a starved run. Neither is
+right.
+
+- **Equal totals prove nothing on their own.** One file could gain two errors while another loses
+  two. What actually carries the verdict is that `ts-error-ratchet.mjs` compares **per file, by
+  identity** against `scripts/ts-error-baseline.json` and fails if *any* file gained errors or a
+  new file appeared with them. `✓ no regressions` is that per-file result. The total is context.
+- **A lower total is not automatically a starved run.** It is the ordinary shape of a genuine
+  fix. The tool has a narrower sanity check for the case that matters — a baseline with known
+  errors and a run finding *none* — and that is the reading to keep: **zero** against a non-zero
+  baseline is the tell, not merely *fewer*.
+
+**Compile coverage was verified rather than assumed.** `tsc --listFilesOnly` puts **12,727** files
+in the compile set, and every changed **source** file is in it (sampled:
+`teamPerformanceOpponent.ts`, `scout.ts`, `InviteEngine.ts`, the dynasty handler,
+`tradeContextNotes.ts` — 1 each). 🛑 The changed **test** files are **not** (0 each): this repo
+excludes `__tests__` repo-wide, so **the ratchet says nothing about the new tests' types.** That is
+pre-existing and is stated rather than implied.
+
+### 6.2 Why the suite is sharded, and what "usable" means
+
+Two single-process full runs were attempted and **both died with no summary block and an exit of
+4** — the second at `799cf13ac`, preserved as `suite-799cf13ac.PARTIAL.txt` (202 KB, 17 failing
+files reported, no sentinel). Neither is a result, and neither is reported as one.
+
+The suite now runs in **six sequential shards**. Each shard produces its own summary block and
+exit status, so a shard that dies invalidates *that shard* and can be re-run, rather than
+discarding the whole gate. A shard counts as **usable** only when it printed a summary block
+**and** exited 0 or 1; anything else is recorded as UNRESOLVED and re-run.
+
+The comparison is against the **complete** `origin/main` `1a43ebbd8` baseline — summary present,
+`DONE=1`, **81 failed files / 145 failed tests** — and is reported by **failure identity**, which
+files gained or lost failures, never as a net count.
+
+**Known reference point:** `__tests__/user-os` was 7 of 7 failing at `origin/main` (a stale prisma
+mock, repaired in A.1) and now passes 58, so the branch is already **−7** before A.2 is counted.
 
 ---
 
 ## 7. Open items
 
-1. **The dynasty persisted-write assertion has not executed.** It is written and gated; it needs
-   an isolated database to run against.
-2. **`FILTERED_MARKERS` semantics are now per call, but `QUERY_FILTER` still accepts a bare
-   `isOrphan:` anywhere in the `where`.** That is deliberate (it covers `ORPHAN_TEAM_WHERE` and
-   hand-written positive tests) but it would also accept a `where` that filters the wrong way.
-   Not observed in the tree; recorded rather than fixed.
+**Closed since the previous revision of this file:**
+
+- ~~The dynasty persisted-write assertion has not executed.~~ **Now executed** against a disposable
+  local database, behaviourally, with a mutation control and asserted cleanup (§4).
+- ~~`QUERY_FILTER` accepts a bare `isOrphan:` anywhere in the `where`.~~ **Fixed** — `orphanPolarity`
+  grants protection only to an `active` predicate, and the two archived-only reads it revealed are
+  classified with reasons (§1).
+
+**Still open:**
+
+1. **The full-suite baseline comparison is not finished.** Six sequential shards are running at
+   `cfdc1b700`; the result will be reported by failure identity against the complete `1a43ebbd8`
+   baseline (81 failed files / 145 failed tests). Two earlier single-process attempts died with no
+   summary and an exit of 4 and are **not** reported as results (§6.2). **This is the one gate
+   still outstanding and it is a blocker for calling the branch validated.**
+2. **The ratchet does not cover the new tests' types.** `tsc --listFilesOnly` confirms the changed
+   source files are in the 12,727-file compile set and the changed test files are not — this repo
+   excludes `__tests__` repo-wide. Pre-existing, stated rather than implied.
 3. **A shorthand narrowing key is not recognised.** `where: { leagueId, externalId }` carries no
    colon, so it reports as an enumeration. A false positive in the safe direction — it gets
    inspected — and left as-is.
-4. **Batch B (Sleeper certification) is not started.**
+4. **16 behaviour changes to live surfaces.** Counts drop by the number of departed seats and
+   departed managers stop receiving notifications. That is the intent; it is still visible to users.
+5. **`InviteEngine` reverses a previously-reviewed decision** (from admin/monitoring exception to
+   filtered). Counting seats to *report* is monitoring; counting them to *decide* is not.
+6. **Batch B (Sleeper certification) is not started.**
