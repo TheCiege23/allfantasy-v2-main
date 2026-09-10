@@ -6,6 +6,11 @@ import { toPrismaJsonInput } from "@/lib/prisma-json"
 import { recordProviderSync } from "@/lib/provider-sync-logger"
 import { normalizePlayerName, normalizeTeamAbbrev } from "@/lib/team-abbrev"
 import { rateLimitManager } from "@/lib/workers/rate-limit-manager"
+import {
+  RI_LIVE_GAME_LOG_SPORTS,
+  RI_LIVE_LOOKBACK_DAYS,
+  fetchRiLiveGameLogRows,
+} from "@/lib/sports-reporting/riLiveGameLogAdapter"
 
 const GAME_LOG_CACHE_TTL_MS = 6 * 60 * 60 * 1000
 const DEFAULT_IMPORT_LIMIT = 50
@@ -210,6 +215,12 @@ function normalizeProvider(value: string | null | undefined, sport: PlayerGameLo
   if (raw === "sleeper") return "sleeper"
   if (sport === "NFL") return "sleeper"
   if (sport === "NCAAF") return "cache"
+  /*
+   * A sport with a REAL adapter must not default to `cache`, or the caller silently gets the
+   * cached-only path and the live one is unreachable without an explicit `?provider=`. These
+   * four now have a Rolling Insights `/live` adapter; everything else still falls back to cache.
+   */
+  if (RI_LIVE_GAME_LOG_SPORTS.has(sport)) return "rolling_insights"
   return "cache"
 }
 
@@ -725,6 +736,26 @@ async function fetchCachedRowsForSport(input: {
 
 function getImportAdapter(sport: PlayerGameLogImportSport, provider: PlayerGameLogProvider, limit: number): ImportProviderAdapter {
   if (sport === "NFL" && provider === "sleeper") return buildSleeperNflAdapter()
+
+  /*
+   * Rolling Insights `/live` for the sports that had only the scaffold below — which returned
+   * zero rows and a "not implemented yet" warning, forever, with nothing scheduled to notice.
+   *
+   * ⚠ THE PROVIDER DATA WAS ALREADY ARRIVING. `lib/sports-data/rollingInsightsGameLogs` has swept
+   * these same sports daily since 2026-08-27 — into `player_game_stats`. Nothing joins that table
+   * to `player_game_log_cache`, which is what `playerWeeklyScoreService` reads, so the scorer
+   * could not see any of it. This adapter fills the table the scorer actually reads, reusing that
+   * module's measured parser rather than adding a second one.
+   */
+  if (provider === "rolling_insights" && RI_LIVE_GAME_LOG_SPORTS.has(sport)) {
+    return {
+      provider,
+      sport,
+      status: "real",
+      fetchRows: (input) =>
+        fetchRiLiveGameLogRows({ sport, seasonType: input.seasonType, days: RI_LIVE_LOOKBACK_DAYS }),
+    }
+  }
   if (provider === "cache" || sport === "NCAAF") {
     return {
       provider,

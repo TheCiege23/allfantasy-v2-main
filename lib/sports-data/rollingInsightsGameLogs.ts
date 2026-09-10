@@ -68,6 +68,14 @@ const num = (v: unknown): number | null => {
   return null
 }
 
+
+/** Leading 4-digit year of a season label: "2025-2026" -> 2025, "2025" -> 2025. */
+function seasonStartYearLocal(v: unknown): number | null {
+  if (typeof v === 'number') return Number.isFinite(v) ? v : null
+  const m = /^(\d{4})/.exec(String(v ?? '').trim())
+  return m ? Number(m[1]) : null
+}
+
 function asRecord(v: unknown): Record<string, unknown> | null {
   return v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : null
 }
@@ -118,10 +126,15 @@ export interface RiGameBox {
  * Team identity still comes from `full_box.<side>_team` (`abbrv`, `team_id`), which is where the
  * fixture confirms it lives.
  *
- * ⚠ ONLY MLB IS MEASURED. NBA / NHL / NCAAB / NFL live shapes remain UNVERIFIED (GAPS.md
- * G-01..G-04 — their seasons were out when this was captured). Both the array form and the
- * id-keyed object form are therefore accepted, and an array entry may still carry its own
- * `player_id`. Do not narrow this to the MLB shape until each has its own committed fixture.
+ * ⚠ NBA AND NHL ARE NOW MEASURED TOO, AND NBA DID NOT MATCH. Probed 2026-03-15 on RSC_TOKEN2
+ * (fixtures/live.NBA.json, fixtures/live.NHL.json). NHL nests like MLB — `skaters`/`goalies`
+ * where MLB has `batting`/`pitching`. NBA has NO GROUP LEVEL AT ALL: player ids hang straight
+ * off the side. Against the real fixtures this parser extracted 38 NHL lines and **0 NBA**,
+ * silently, because it read stat NAMES as player ids. Now detected by shape, not by sport.
+ *
+ * ⚠ NCAAB and NCAAFB live shapes remain UNVERIFIED (GAPS.md G-02/G-03 — seasons out of window).
+ * Both the array form and the id-keyed object form are still accepted, and an array entry may
+ * carry its own `player_id`. Do not narrow this until each has its own committed fixture.
  */
 export function normalizeRiGameBox(game: unknown): RiGameBox | null {
   const g = asRecord(game)
@@ -174,9 +187,42 @@ export function normalizeRiGameBox(game: unknown): RiGameBox | null {
         continue
       }
 
-      // Measured form: the KEY is the player id and the entry carries no id of its own.
       const byId = asRecord(bucket)
       if (!byId) continue
+
+      /*
+       * 🛑 NOT EVERY SPORT HAS A GROUP LEVEL, AND ASSUMING ONE SILENTLY DROPPED ALL OF NBA.
+       *
+       * MLB nests `batting`/`pitching` and NHL nests `skaters`/`goalies`, so for those the loop
+       * above is a GROUP and the level below is the player map. NBA hangs player ids straight
+       * off the side, so for NBA this level IS the player and the level below is stat NAMES —
+       * `asRecord('A Player')` is null, every entry is skipped, and the game yields no lines.
+       *
+       * Measured against the committed fixtures (probe 2026-03-15):
+       *     fixtures/live.NBA.json  ->  0 lines extracted   (silently)
+       *     fixtures/live.NHL.json  -> 38 lines extracted
+       * Nothing failed; NBA simply never produced a row. The `group` field's own doc comment
+       * already allowed `'all'` for this case — the shape was anticipated and never handled.
+       *
+       * Detect by SHAPE rather than by sport: a group's values are records, a player line's
+       * values are scalars. A sport switch here would need editing for the next feed.
+       */
+      const looksGrouped = Object.values(byId).some((v) => asRecord(v) !== null)
+      if (!looksGrouped) {
+        const providerPlayerId = str(byId.player_id ?? byId.playerId ?? byId.player_ID) ?? str(group)
+        if (!providerPlayerId) continue
+        lines.push({
+          providerPlayerId,
+          playerName: str(byId.player ?? byId.name),
+          group: 'all',
+          team,
+          opponent,
+          raw: { player_id: providerPlayerId, ...byId },
+        })
+        continue
+      }
+
+      // Grouped form: the KEY is the player id and the entry carries no id of its own.
       for (const [playerId, entry] of Object.entries(byId)) {
         const p = asRecord(entry)
         if (!p) continue
@@ -201,7 +247,14 @@ export function normalizeRiGameBox(game: unknown): RiGameBox | null {
 
   return {
     providerGameId,
-    season: num(g.season),
+    // `/live` returns a hyphenated SPAN for sports whose season crosses a calendar year
+    // ("2025-2026" for NBA and NHL, measured 2026-03-15). `num()` gives NaN -> null on
+    // those, so this field was silently null for exactly the sports being added and the
+    // caller fell back to a guessed season. The vendor contract settles the rule:
+    // `season: { format: "YYYY", note: "Year season started." }`.
+    // ⚠ DUPLICATES `lib/sports-data/seasonLabel.ts`, which is not on main yet (p1b, queued).
+    //   Collapse into that helper once it lands — two implementations of one rule is the bug.
+    season: seasonStartYearLocal(g.season),
     // Football carries a real week; the daily sports do not, and 0 is this column's documented
     // "no week" value rather than a made-up round number.
     weekOrRound: num(g.week) ?? 0,

@@ -39,6 +39,8 @@ import {
   ingestRollingInsightsGameLogs,
   recentDates,
 } from "@/lib/sports-data/rollingInsightsGameLogs"
+import { importPlayerGameLogs } from "@/lib/sports-reporting/PlayerGameLogImportService"
+import { RI_LIVE_GAME_LOG_SPORTS } from "@/lib/sports-reporting/riLiveGameLogAdapter"
 import { scoreProjectionAccuracyForCompletedWeeks } from "@/lib/projections/projectionAccuracy"
 import {
   SleeperWeeklyStatsFetcher,
@@ -149,6 +151,50 @@ async function handle(req: NextRequest) {
         })
       } catch (err) {
         perSport[s] = { error: String(err).slice(0, 200) }
+      }
+
+      /*
+       * 🛑 SECOND WRITE, TO THE TABLE THE SCORER ACTUALLY READS.
+       *
+       * Measured 2026-09-10: this repo has TWO game-log tables and nothing joined them. The
+       * sweep above fills `player_game_stats` — 62,069 MLB rows, daily since 2026-08-27. But
+       * `playerWeeklyScoreService` reads `player_game_log_cache`, whose only writer
+       * (`PlayerGameLogImportService`) had NO SCHEDULED CALLER and held 7 NFL rows last written
+       * 2026-06-24. So provider data arrived every day and the scorer could see none of it —
+       * the writer-with-no-scheduled-caller failure CLAUDE.md records for `ingestCFBDStats`,
+       * reached a third time. The adapter and its schedule therefore land together.
+       *
+       * ⚠ IT FETCHES `/live` A SECOND TIME, AND THAT IS A DELIBERATE TRADE, NOT AN OVERSIGHT.
+       * Sharing one fetch would mean restructuring `ingestRollingInsightsGameLogs` — a proven
+       * 420-line module — to hand its normalised boxes back out. The measured cost of not doing
+       * that is roughly a dozen extra requests every six hours (4 sports x ~3 dates), against a
+       * vendor with no documented rate limit (GAPS `N-03`). It is bounded by the same budget as
+       * everything else in this loop. Revisit if the request count starts to matter; do not
+       * "optimise" it by giving the cache a second writer.
+       *
+       * ⚠ A NEW CRON ROUTE WAS THE OBVIOUS SHAPE AND IS BARRED. `cron-budget-check.mjs` caps the
+       * job list at 60 and says so: "Fold the new job into an existing route or an existing
+       * cadence rather than adding a slot." This is that fold.
+       */
+      if (!budget.exhausted() && RI_LIVE_GAME_LOG_SPORTS.has(s as never)) {
+        try {
+          const cache = await importPlayerGameLogs({
+            sport: s,
+            provider: "rolling_insights",
+            seasonType: "regular",
+            trigger: "cron",
+          })
+          ;(perSport[s] as Record<string, unknown>).cache = {
+            ok: cache.ok,
+            rawRowsRead: cache.rawRowsRead,
+            imported: cache.importedCount,
+            updated: cache.updatedCount,
+            unmappedPlayers: cache.unmappedPlayers.length,
+            warnings: cache.warnings.slice(0, 2),
+          }
+        } catch (err) {
+          ;(perSport[s] as Record<string, unknown>).cache = { error: String(err).slice(0, 200) }
+        }
       }
     }
 
