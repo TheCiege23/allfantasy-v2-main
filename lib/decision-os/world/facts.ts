@@ -12,6 +12,7 @@
 
 /** Raw inputs the read-only port returns (one row group per league). Decoupled from Prisma types. */
 export interface RawLeagueRow {
+  leagueSize?: number | null
   id: string
   sport: string
   season: number
@@ -383,6 +384,8 @@ export interface LeagueTradeSettingsFacts {
 }
 
 export interface LeagueFacts {
+  /** Recorded capacity; team rows may be incomplete during import. */
+  teamCount?: number | null
   leagueId: string
   sport: string
   season: number
@@ -533,6 +536,10 @@ export type RawIdpValueRow = {
 }
 
 export type RawPlayerValueRow = {
+  marketNumTeams?: number | null
+  marketPpr?: number | null
+  observedAt?: Date | null
+  marketStdDev?: number | null
   sleeperId: string
   /** The vendor. Filtered to FANTASYCALC at the port — a licence boundary. */
   source: string
