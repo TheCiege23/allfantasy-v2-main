@@ -2669,6 +2669,38 @@ export default async function AfCorePage({
             */}
             <Dash34Coverage data={dash34} />
           </>
+        ) : /*
+             🛑 TWO DIFFERENT READS REACH THIS FALLBACK AND THEY ARE NOT THE SAME
+             SENTENCE.
+
+             `dash34` is loaded ONLY when no league is selected, and `leagueHome`
+             ONLY when one IS — so with `?league=` present `dash34` is null BY
+             DESIGN, not by failure. Landing here with a league selected therefore
+             means `getLeagueHomeData` failed for THAT ONE league, and the
+             account-wide copy below is then factually wrong: it tells someone
+             their whole account is unreadable when a single league did not load.
+             Measured before the fix — `GET /core?league=<unreadable uuid>`
+             returned 200 rendering "Your leagues / We could not read your leagues
+             just now".
+
+             ⚠ AND THIS BRANCH DELIBERATELY MAKES NO CLAIM ABOUT MEMBERSHIP.
+             `getLeagueHomeData` is `findUnique({ where: { id } })` with no
+             `userId` clause, so this code cannot distinguish "the read failed"
+             from "you are not in this league" — a reassurance like "not a sign
+             you are no longer in it" would be asserting something the data does
+             not support. It says only what is true either way: this league could
+             not be read, and the others are unaffected. Nothing here changes what
+             is loaded, who may load it, or any guard.
+           */
+        selectedLeagueId ? (
+          <div className="af-frame" style={{ padding: 24, maxWidth: 720 }}>
+            <h1 className="af-display" style={{ margin: 0, fontSize: 22, letterSpacing: '-0.03em' }}>
+              This league
+            </h1>
+            <p style={{ marginTop: 8, fontSize: 13, lineHeight: 1.5, color: 'var(--muted)' }}>
+              We could not read this league just now. Your other leagues are unaffected.
+            </p>
+          </div>
         ) : (
           <div className="af-frame" style={{ padding: 24, maxWidth: 720 }}>
             <h1 className="af-display" style={{ margin: 0, fontSize: 22, letterSpacing: '-0.03em' }}>
