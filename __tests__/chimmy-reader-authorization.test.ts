@@ -5,17 +5,33 @@ import { createMockNextRequest } from '@/__tests__/helpers/createMockNextRequest
 /**
  * ── READER AUTHORIZATION: the league readers that sit OUTSIDE the refusal path ───────────────
  *
- * The two commits already on this branch closed three disclosures, and every one of them lived
- * on the same stretch of code: the block that decides whether to return a 412. The suites that
- * cover them (`chimmy-insight-authorization`, `chimmy-league-indistinguishability`) drive a
- * question that REQUIRES league grounding, because that is the only kind that reaches a refusal.
+ * ⚠ THE FIRST VERSION OF THIS HEADER SAID THE EXISTING SUITES "DRIVE A QUESTION THAT REQUIRES
+ * LEAGUE GROUNDING, BECAUSE THAT IS THE ONLY KIND THAT REACHES A REFUSAL", AND THAT WAS FALSE.
+ * It is corrected here rather than quietly deleted, because the wrong version was the flattering
+ * one — it made this file look like it covered a blind spot nobody could have seen.
  *
- * 🛑 THAT IS ALSO WHY THEY COULD NOT HAVE FOUND WHAT IS IN THIS FILE. `requiresLeagueGrounding`
- * is a pattern match over the message — `lib/agents/leagueGroundingGate.ts`. "What is X worth?"
- * carries none of its markers: not trade, not waiver, not "my team", not "should i". So
- * `leagueGroundingRequired` is FALSE, the 412 never fires, and the request runs on through
- * readers that were keyed on `formData.get('leagueId')`. A suite that only ever asks a
- * league-required question cannot observe a single line of that.
+ * What `chimmy-league-indistinguishability` actually does: `GLOBAL_200` ("Who leads the NFL in
+ * rushing?", `confirmTokenSpend: 'true'`) is NOT league-required, it reaches a real HTTP 200
+ * with an unauthorized `leagueId`, and that block asserts on READERS, not just on the payload —
+ * that no descriptive league read follows the failed check, and that `getInsightBundle` is
+ * never called. Prior coverage was better than I credited it.
+ *
+ * 🛑 SO THE GAP IS THE SHAPE OF THOSE ASSERTIONS, NOT THE STATUS CODE THEY STOPPED AT.
+ * They observe exactly two surfaces: the `select` shapes handed to `prisma.league.findUnique`,
+ * and one named function, `getInsightBundle`. A reader that reaches league data through any
+ * OTHER module is invisible to both — and all three below do:
+ * `createLeagueOsLoaders().loadRules`, `buildDecisionOsGroundingPacket`, and `getFullAIContext`.
+ * Two further conditions kept them dark: `GLOBAL_200`'s wording triggers no deterministic value
+ * builder, and `DECISION_OS_GROUNDING_ENABLED` is unset in that file, so the flagged reader was
+ * unreachable there by construction.
+ *
+ * The durable form: "we asserted no unauthorized read happened" is only ever true of the
+ * surfaces the assertion can see. Name them, or the claim is wider than the evidence.
+ *
+ * Question selection still matters here, and for the reason the blocks below document:
+ * `requiresLeagueGrounding` is a pattern match over the message
+ * (`lib/agents/leagueGroundingGate.ts`), so which question you ask decides which readers you
+ * reach at all.
  *
  * Three readers are covered here, and they fail in three different ways:
  *
