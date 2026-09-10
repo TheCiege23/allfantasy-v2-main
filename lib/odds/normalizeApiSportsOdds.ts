@@ -283,6 +283,59 @@ function sideOf(value: string, opts: SideOpts = {}): 'home' | 'away' | null {
   return null
 }
 
+/**
+ * Pick the MAIN line out of a book's alternate ladder.
+ *
+ * 🛑 A BOOK DOES NOT QUOTE ONE LINE, IT QUOTES A LADDER, AND POSITION IS MEANINGLESS.
+ * Measured against production payloads 2026-09-10: `Over/Under` carried 2-81 values
+ * and `Asian Handicap` 14-71. Taking the last array element — which this parser did
+ * — stored a 57.5 total and an 8.5 spread on a game whose real line was ~44.5/-3.5,
+ * and those fed straight into `impliedTeamTotal`. Wrong by ~13 points, in the right
+ * column, with no error anywhere.
+ *
+ * THE SIGNAL IS ODDS BALANCE, NOT ORDER. A book prices the main line near even and
+ * skews every alternate away from it. From one real payload:
+ *
+ *     Over 44.5 @1.87 / Under 44.5 @1.87   diff 0.00   <- main
+ *     Over 45.5 @1.95 / Under 45.5 @1.80   diff 0.15
+ *     Over 48.5 @2.30 / Under 48.5 @1.57   diff 0.73
+ *
+ * In that payload the main line was FIRST; in another it was LAST. Only the balance
+ * identifies it.
+ *
+ * Ties break toward the smaller magnitude, which is the more conservative read when
+ * a book genuinely prices two rungs identically.
+ */
+function pickMainLine(quotes: Map<number, { a: number | null; b: number | null }>): number | null {
+  let best: { points: number; score: number } | null = null
+  for (const [points, q] of quotes) {
+    if (q.a === null || q.b === null) continue
+    const score = Math.abs(q.a - q.b)
+    if (
+      best === null ||
+      score < best.score ||
+      (score === best.score && Math.abs(points) < Math.abs(best.points))
+    ) {
+      best = { points, score }
+    }
+  }
+  if (best !== null) return best.points
+
+  /*
+   * No rung has both sides priced, so balance cannot be measured. Fall back to the
+   * quote closest to even money — the same principle applied with half the
+   * evidence — rather than to array order, which is what caused this.
+   */
+  let solo: { points: number; distance: number } | null = null
+  for (const [points, q] of quotes) {
+    const odd = q.a ?? q.b
+    if (odd === null) continue
+    const distance = Math.abs(odd - 2)
+    if (solo === null || distance < solo.distance) solo = { points, distance }
+  }
+  return solo ? solo.points : null
+}
+
 function roundTo(value: number, places: number): number {
   const factor = 10 ** places
   return Math.round(value * factor) / factor
@@ -376,35 +429,56 @@ export function normalizeBookmakerOdds(
     }
 
     if (market === 'spread') {
+      /*
+       * ⚠ THE NUMBER IS ALWAYS THE HOME HANDICAP, ON BOTH SIDES — DO NOT NEGATE IT.
+       * A real rung reads `Home -3.5 @1.84` / `Away -3.5 @1.94`: one line, two sides
+       * you can back, and the away entry repeats the HOME-perspective number rather
+       * than mirroring it. The previous code did `spreadHome = -points` for an away
+       * entry, which inverts a favourite into an underdog whenever the away value is
+       * seen first. Verified against production payloads.
+       */
+      const quotes = new Map<number, { a: number | null; b: number | null }>()
       for (const entry of values) {
         const entrySide = sideOf(entry.value, side)
         const points = parsePoints(entry.value)
+        if (points === null || entrySide === null) continue
+        const q = quotes.get(points) ?? { a: null, b: null }
         const odd = parseOddToDecimal(entry.odd)
-        if (entrySide === 'home') {
-          if (points !== null) out.spreadHome = points
-          if (odd !== null) out.spreadHomeOdd = odd
-        } else if (entrySide === 'away') {
-          if (odd !== null) out.spreadAwayOdd = odd
-          // Away line only fills the home number when home never supplied one;
-          // the two are mirror images, so this keeps a one-sided quote usable.
-          if (points !== null && out.spreadHome === null) out.spreadHome = -points
-        }
+        if (entrySide === 'home') q.a = odd
+        else q.b = odd
+        quotes.set(points, q)
+      }
+      const main = pickMainLine(quotes)
+      if (main !== null) {
+        out.spreadHome = main
+        const q = quotes.get(main)
+        out.spreadHomeOdd = q?.a ?? null
+        out.spreadAwayOdd = q?.b ?? null
       }
       continue
     }
 
     if (market === 'total') {
+      const quotes = new Map<number, { a: number | null; b: number | null }>()
       for (const entry of values) {
         const lower = String(entry.value ?? '').trim().toLowerCase()
         const points = parsePoints(entry.value)
+        if (points === null) continue
+        const isOver = lower.startsWith('over')
+        const isUnder = lower.startsWith('under')
+        if (!isOver && !isUnder) continue
+        const q = quotes.get(points) ?? { a: null, b: null }
         const odd = parseOddToDecimal(entry.odd)
-        if (lower.startsWith('over')) {
-          if (points !== null) out.totalPoints = points
-          if (odd !== null) out.overOdd = odd
-        } else if (lower.startsWith('under')) {
-          if (points !== null && out.totalPoints === null) out.totalPoints = points
-          if (odd !== null) out.underOdd = odd
-        }
+        if (isOver) q.a = odd
+        else q.b = odd
+        quotes.set(points, q)
+      }
+      const main = pickMainLine(quotes)
+      if (main !== null) {
+        out.totalPoints = main
+        const q = quotes.get(main)
+        out.overOdd = q?.a ?? null
+        out.underOdd = q?.b ?? null
       }
       continue
     }
