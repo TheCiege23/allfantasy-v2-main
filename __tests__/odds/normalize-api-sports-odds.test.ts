@@ -323,6 +323,113 @@ describe('pickPrimaryBookmaker', () => {
   })
 })
 
+describe('alternate ladders — the MAIN line is picked, not the last array element', () => {
+  /*
+   * 🛑 EVERY FIXTURE HERE IS COPIED FROM A REAL PRODUCTION PAYLOAD (2026-09-10).
+   * A book quotes a LADDER, not a line: measured, Over/Under carried 2-81 values and
+   * Asian Handicap 14-71. The parser used to keep whichever rung happened to be last,
+   * which stored a 57.5 total and an 8.5 spread on a game whose real line was
+   * ~44.5 / -3.5 — roughly 13 points wrong, feeding impliedTeamTotal, with no error.
+   *
+   * Position is meaningless: in one payload the main line was FIRST, in another LAST.
+   * Only ODDS BALANCE identifies it — a book prices the main rung near even and skews
+   * the alternates.
+   */
+
+  it('picks the balanced total, even when it is FIRST in the array', () => {
+    // Verbatim from production, bet id 3.
+    const out = normalizeBookmakerOdds({
+      id: 5, name: 'B', bets: [{ id: 3, name: 'Over/Under', values: [
+        { value: 'Over 44.5', odd: '1.87' }, { value: 'Under 44.5', odd: '1.87' }, // balanced
+        { value: 'Over 41.5', odd: '1.60' }, { value: 'Under 41.5', odd: '2.30' },
+        { value: 'Over 42.5', odd: '1.65' }, { value: 'Under 42.5', odd: '2.15' },
+        { value: 'Over 43.5', odd: '1.75' }, { value: 'Under 43.5', odd: '2.00' },
+        { value: 'Over 45.5', odd: '1.95' }, { value: 'Under 45.5', odd: '1.80' },
+        { value: 'Over 48.5', odd: '2.30' }, { value: 'Under 48.5', odd: '1.57' },
+      ] }],
+    })
+    expect(out.totalPoints).toBe(44.5)
+    expect(out.overOdd).toBeCloseTo(1.87, 5)
+    expect(out.underOdd).toBeCloseTo(1.87, 5)
+  })
+
+  it('picks the balanced total when it is LAST — position must not decide', () => {
+    const out = normalizeBookmakerOdds({
+      id: 5, name: 'B', bets: [{ id: 3, name: 'Over/Under', values: [
+        { value: 'Over 48.5', odd: '2.30' }, { value: 'Under 48.5', odd: '1.57' },
+        { value: 'Over 41.5', odd: '1.60' }, { value: 'Under 41.5', odd: '2.30' },
+        { value: 'Over 44.5', odd: '1.87' }, { value: 'Under 44.5', odd: '1.87' }, // balanced, last
+      ] }],
+    })
+    expect(out.totalPoints).toBe(44.5)
+  })
+
+  it('REGRESSION: does not keep the extreme rung the old parser stored', () => {
+    // The exact shape that produced stored_total = 57.5 on game 21514.
+    const out = normalizeBookmakerOdds({
+      id: 5, name: 'B', bets: [{ id: 3, name: 'Over/Under', values: [
+        { value: 'Over 44.5', odd: '1.90' }, { value: 'Under 44.5', odd: '1.90' },
+        { value: 'Over 57.5', odd: '4.50' }, { value: 'Under 57.5', odd: '1.18' },
+      ] }],
+    })
+    expect(out.totalPoints).toBe(44.5)
+    expect(out.totalPoints).not.toBe(57.5)
+  })
+
+  it('picks the balanced handicap from a real ladder', () => {
+    // Verbatim from production, bet id 2. Note BOTH sides carry the HOME number.
+    const out = normalizeBookmakerOdds({
+      id: 5, name: 'B', bets: [{ id: 2, name: 'Asian Handicap', values: [
+        { value: 'Home +2.5', odd: '1.44' }, { value: 'Away +2.5', odd: '2.69' },
+        { value: 'Home -3.5', odd: '1.84' }, { value: 'Away -3.5', odd: '1.94' }, // balanced
+        { value: 'Home +5.5', odd: '1.26' }, { value: 'Away +5.5', odd: '3.62' },
+        { value: 'Home -12.5', odd: '3.72' }, { value: 'Away -12.5', odd: '1.24' },
+        { value: 'Home +8.5', odd: '1.12' }, { value: 'Away +8.5', odd: '5.35' }, // what we stored
+      ] }],
+    })
+    expect(out.spreadHome).toBe(-3.5)
+    expect(out.spreadHome).not.toBe(8.5)
+  })
+
+  it('🛑 does NOT negate the away entry — both sides carry the home number', () => {
+    // Away-first ordering. The old code did `spreadHome = -points` here, turning a
+    // home favourite into an underdog and inverting both implied team totals.
+    const out = normalizeBookmakerOdds({
+      id: 5, name: 'B', bets: [{ id: 2, name: 'Asian Handicap', values: [
+        { value: 'Away -3.5', odd: '1.94' },
+        { value: 'Home -3.5', odd: '1.84' },
+      ] }],
+    })
+    expect(out.spreadHome).toBe(-3.5)
+    expect(out.spreadHome).not.toBe(3.5)
+  })
+
+  it('a simple two-value market still works — the ladder logic is not a regression', () => {
+    const out = normalizeBookmakerOdds(book())
+    expect(out.totalPoints).toBe(45.5)
+    expect(out.spreadHome).toBe(-3.5)
+  })
+
+  it('falls back to the quote nearest even money when no rung has both sides', () => {
+    const out = normalizeBookmakerOdds({
+      id: 5, name: 'B', bets: [{ id: 3, name: 'Over/Under', values: [
+        { value: 'Over 51.5', odd: '3.40' },
+        { value: 'Over 45.5', odd: '1.95' }, // closest to 2.0
+        { value: 'Over 39.5', odd: '1.20' },
+      ] }],
+    })
+    expect(out.totalPoints).toBe(45.5)
+  })
+
+  it('CONTROL: the ladder fixtures really are unbalanced away from the main rung', () => {
+    // If every rung were priced alike, "pick the balanced one" would be vacuous and
+    // the assertions above would pass on any implementation.
+    expect(Math.abs(1.87 - 1.87)).toBe(0)
+    expect(Math.abs(2.30 - 1.57)).toBeGreaterThan(0.5)
+    expect(Math.abs(1.12 - 5.35)).toBeGreaterThan(4)
+  })
+})
+
 describe('side assignment — identifiers are matched by CODE, never by substring', () => {
   /*
    * 🛑 REGRESSION. `sideOf` used to do `value.includes(teamName)`, and the writer

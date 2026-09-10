@@ -51,10 +51,19 @@ type RunResult = { status: number; stdout: string; stderr: string }
  * why it allowed a push it might have blocked — goes to stderr on a SUCCESSFUL
  * exit, and `execFileSync` only surfaces stderr when it throws.
  */
-function run(args: string[], payload: string, env: Record<string, string> = {}): RunResult {
+function run(
+  args: string[],
+  payload: string,
+  env: Record<string, string> = {},
+  cwd?: string,
+): RunResult {
   const res = spawnSync('node', [SCRIPT, ...args], {
     input: payload,
     encoding: 'utf8',
+    // Defaults to the repo, which is what every case but the ancestry ones wants.
+    // Those build their own repo so they do not depend on this checkout's refs —
+    // see the `already on main` block below.
+    cwd,
     env: {
       ...process.env,
       AF_PUSH_QUEUE_DIR: queueDir,
@@ -76,7 +85,8 @@ function run(args: string[], payload: string, env: Record<string, string> = {}):
 
 const mainPayload = (sha: string) => `refs/heads/main ${sha} refs/heads/main ${'0'.repeat(40)}\n`
 
-const check = (sha: string, env?: Record<string, string>) => run(['check'], mainPayload(sha), env)
+const check = (sha: string, env?: Record<string, string>, cwd?: string) =>
+  run(['check'], mainPayload(sha), env, cwd)
 
 const tickets = () =>
   readdirSync(queueDir)
@@ -1026,7 +1036,54 @@ describe('push-queue — the smoke marker contract', () => {
  * of the file.
  */
 describe('push-queue — a ticket whose work is already on main', () => {
-  const rev = (ref: string) => execFileSync('git', ['rev-parse', ref], { encoding: 'utf8' }).trim()
+  /**
+   * 🛑 THESE TWO USED TO READ `origin/main` AND `origin/main~3` OUT OF THIS
+   * CHECKOUT, AND THAT IS WHY THEY PASSED HERE AND FAILED IN CI FOR WEEKS.
+   *
+   * `actions/checkout` fetches one ref at depth 1 and leaves the workspace on a
+   * detached merge commit: there is no `origin/main` remote-tracking ref to
+   * resolve, and no depth for `~3` even if there were. The failure was
+   * `fatal: ambiguous argument 'origin/main'` — an environment assumption, not a
+   * defect in the queue, which is the most expensive kind of red because it
+   * looks like a real regression on every unrelated PR.
+   *
+   * ⚠ AND A `skipIf` WOULD HAVE BEEN THE WRONG FIX. It would have made the suite
+   * green by never running the ancestry logic in the one place that gates
+   * merges. The script does not actually need `origin/main` to exist — it is
+   * handed the tip through `AF_PUSH_QUEUE_REMOTE_SHA` and only needs the two
+   * OBJECTS present locally for `merge-base --is-ancestor` — so a four-commit
+   * throwaway repo reproduces the real thing and depends on nothing ambient.
+   */
+  let repo: string
+  let tip: string
+  let mine: string
+
+  const g = (args: string[], cwd: string) =>
+    execFileSync('git', args, { encoding: 'utf8', cwd }).trim()
+
+  beforeEach(() => {
+    repo = mkdtempSync(join(tmpdir(), 'af-push-queue-repo-'))
+    // `-c` rather than `git config`, so a CI runner with no identity — and one
+    // with commit.gpgsign on — both work without touching global state.
+    const id = [
+      '-c',
+      'user.email=test@example.com',
+      '-c',
+      'user.name=test',
+      '-c',
+      'commit.gpgsign=false',
+    ]
+    g(['init', '-q', '-b', 'main'], repo)
+    for (let i = 0; i < 4; i++) {
+      g([...id, 'commit', '-q', '--allow-empty', '-m', `c${i}`], repo)
+    }
+    tip = g(['rev-parse', 'HEAD'], repo)
+    mine = g(['rev-parse', 'HEAD~3'], repo)
+  })
+
+  afterEach(() => {
+    rmSync(repo, { recursive: true, force: true })
+  })
 
   /**
    * `allowedAt` is NOW, so the grace cannot be what releases this — only the
@@ -1034,13 +1091,11 @@ describe('push-queue — a ticket whose work is already on main', () => {
    * would go green for the other one's reason.
    */
   it('releases a pushing ticket whose commit is an ancestor of the tip, not the tip itself', () => {
-    const tip = rev('origin/main')
-    const mine = rev('origin/main~3')
     expect(mine).not.toBe(tip) // the whole point: mine is ON main but is not the tip
 
     seed(1, mine, { state: 'pushing', allowedAt: Date.now() })
 
-    const res = check(SHA_B, { AF_PUSH_QUEUE_NO_REMOTE: '0', AF_PUSH_QUEUE_REMOTE_SHA: tip })
+    const res = check(SHA_B, { AF_PUSH_QUEUE_NO_REMOTE: '0', AF_PUSH_QUEUE_REMOTE_SHA: tip }, repo)
 
     expect(res.status).toBe(0)
     expect(tickets().some((t) => t.sha === mine)).toBe(false)
@@ -1055,11 +1110,9 @@ describe('push-queue — a ticket whose work is already on main', () => {
    * treats as "not a verdict" rather than as "no".
    */
   it('holds a pushing ticket whose commit is not on origin/main', () => {
-    const tip = rev('origin/main')
-
     seed(1, SHA_A, { state: 'pushing', allowedAt: Date.now() })
 
-    const res = check(SHA_B, { AF_PUSH_QUEUE_NO_REMOTE: '0', AF_PUSH_QUEUE_REMOTE_SHA: tip })
+    const res = check(SHA_B, { AF_PUSH_QUEUE_NO_REMOTE: '0', AF_PUSH_QUEUE_REMOTE_SHA: tip }, repo)
 
     expect(res.status).toBe(1)
     expect(tickets().some((t) => t.sha === SHA_A)).toBe(true)

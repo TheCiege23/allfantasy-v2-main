@@ -32,6 +32,7 @@ import { describe, it, expect, beforeAll, vi } from 'vitest'
 vi.setConfig({ testTimeout: 180_000, hookTimeout: 180_000 })
 import { ESLint } from 'eslint'
 import path from 'node:path'
+import { readFileSync } from 'node:fs'
 
 const FIXTURES = path.resolve(process.cwd(), '__tests__/commissioner-os/eslint-fixtures')
 
@@ -156,20 +157,60 @@ describe('T-005 · the boundary is inert outside its scope', () => {
 })
 
 describe('T-005 · the migration debt is bounded and countable', () => {
-  it('the three pre-existing importers are exempt, and only those three', async () => {
-    // They cannot move until a tenant id can be resolved (T-101 + T-102). They
-    // are listed individually in .eslintrc.json rather than by directory, so a
-    // FOURTH cannot appear without editing that file and explaining itself.
-    const exempt = [
-      'lib/commissioner-ui/decision-os-client/live.ts',
-      'lib/commissioner-ui/managers/decision-os-client/live.ts',
-      'lib/commissioner-ui/resolveActiveLeagueId.ts',
-    ]
-    const results = await eslint.lintFiles(exempt.map((f) => path.resolve(process.cwd(), f)))
+  /**
+   * The exempted set, NAMED. Kept here as the single expected value so the two
+   * assertions below cannot drift apart.
+   *
+   * ⚠ THE FIRST THREE PREDATE THE BOUNDARY; THE LAST THREE DO NOT. The latter
+   * were added by feature work on 2026-09-08/09 and caught by the ratchet — see
+   * the block comment on this override in .eslintrc.json for why each is
+   * exempted rather than migrated, and what would let it move.
+   */
+  const EXEMPT = [
+    'lib/commissioner-ui/decision-os-client/live.ts',
+    'lib/commissioner-ui/managers/decision-os-client/live.ts',
+    'lib/commissioner-ui/resolveActiveLeagueId.ts',
+    'lib/commissioner-ui/managers/managerNames.ts',
+    'lib/commissioner-ui/missionControl/activityTrendReads.ts',
+    'lib/commissioner-ui/settings/leagueSettingsReads.ts',
+  ]
+
+  it('the exempt importers are exempt', async () => {
+    const results = await eslint.lintFiles(EXEMPT.map((f) => path.resolve(process.cwd(), f)))
     const flagged = results
       .flatMap((r) => r.messages)
       .filter((m) => m.ruleId === '@typescript-eslint/no-restricted-imports')
     expect(flagged).toEqual([])
+  })
+
+  it('and ONLY those — the exemption list itself is pinned', () => {
+    /*
+     * 🛑 THIS ASSERTION IS NEW, AND ITS ABSENCE IS WHY THE LIST COULD GROW FROM
+     * THREE TO SIX WITH NOTHING GOING RED.
+     *
+     * "and only those three" was the old test's NAME and its comment, never its
+     * behaviour: linting three files and finding them clean says nothing about
+     * whether a fourth was also exempted. The surface-is-clean test below cannot
+     * catch it either — exempting a violator is precisely what makes that test
+     * go green again. So a countable debt list was being counted by nobody.
+     *
+     * Reading .eslintrc.json is the only way to assert the set rather than a
+     * sample of it. Parsed with a comment-stripper because the file is JSONC and
+     * is heavily commented on purpose.
+     */
+    const raw = readFileSync(path.resolve(process.cwd(), '.eslintrc.json'), 'utf8')
+    const config = JSON.parse(raw.replace(/^\s*\/\/.*$/gm, ''))
+
+    const override = config.overrides.find(
+      (o: { rules?: Record<string, unknown> }) =>
+        o.rules?.['@typescript-eslint/no-restricted-imports'] === 'off',
+    )
+
+    // A positive control on the parse itself: if the comment-stripper or the
+    // predicate broke, `override` is undefined and toEqual([]) below would pass
+    // against nothing.
+    expect(override, 'no import-exemption override found in .eslintrc.json').toBeDefined()
+    expect([...override.files].sort()).toEqual([...EXEMPT].sort())
   })
 
   it('the rest of the surface is already clean', async () => {

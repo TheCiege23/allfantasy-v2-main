@@ -516,6 +516,32 @@ export const PROBES = {
    * keeps the strong claim in season and self-suppresses out of it.
    */
   '/api/cron/compute-projections': { heartbeat: 'cron-compute-projections' },
+
+  /*
+   * ⚠ THE ROUTE'S OWN HEADER ARGUES FOR AN OUTPUT PROBE ON `automation_runs`, AND THAT WOULD BE A
+   * FALSE GREEN. Its reasoning is half right: the job is genuinely unconditional, so unlike
+   * cron-waivers it does have work every day and an output probe is not defeated by seasonality.
+   * But `automation_runs` has ONE writer -- `writeAutomationRunStarted` in lib/automation/audit.ts,
+   * reached through lib/automation/engine.ts -- shared by every automation job in the repo
+   * (`refresh-rankings`, `waivers.processLeague`, `decision_os.intelligence_refresh`, and both
+   * halves of this cron). Any of those advances the table's clock, so a table probe here reports
+   * this job healthy on another job's run. That is precisely the failure the ?rosters=1 and
+   * ?intel=1 entries above are heartbeats to avoid.
+   *
+   * The heartbeat is unique to this job and `withSyncJobRun` writes one row per SCHEDULED fire --
+   * the no-work ones included, and deliberately none on the `dryRun=true` path, which is the same
+   * discipline cron-waivers records: a hand-issued smoke test must not be able to hide a dead
+   * scheduler.
+   *
+   * ⚠ ONE HEARTBEAT COVERS TWO JOBS. The entry runs the workspace scan and the scheduled-report
+   * batch under one schedule because the registry is capped at 60 and is AT 60. The wrap is around
+   * BOTH, and report failures are swallowed so they cannot take the scan's heartbeat down -- so a
+   * green here means "the scan fired", never "reports were generated". Read `reportsFailed` in the
+   * run metadata for that half.
+   */
+  '/api/cron/commissioner-workspace-refresh?limit=60': {
+    heartbeat: 'cron-commissioner-workspace-refresh',
+  },
 }
 
 /** Where heartbeats are read from. One row per run, whether or not the run found work to do. */

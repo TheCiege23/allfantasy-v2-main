@@ -89,10 +89,44 @@
       // one cannot be added without editing this file and explaining itself.
       // Delete each entry as it migrates; when the list is empty, delete the
       // override.
+      //
+      // ─── 🛑 THE LIST IS NO LONGER THREE, AND THE THREE NEW ONES ARE A WORSE
+      //     CATEGORY THAN THE ORIGINAL THREE. Stated plainly because the
+      //     paragraph above is now half wrong and quietly editing it would hide
+      //     the distinction that matters.
+      //
+      //     The original three PREDATE the boundary (2026-09-04). These three
+      //     were added AFTER it, by Commissioner OS feature work on 2026-09-08
+      //     and 2026-09-09 (a03eca554, 6158b1fed, 1f6201d68), and the ratchet
+      //     caught them exactly as designed — this entry is the "explaining
+      //     itself" the rule demands, not an absolution.
+      //
+      //     Why they are exempted rather than migrated, per file:
+      //
+      //     · managers/managerNames.ts — reads `app_users` and `league_teams`.
+      //       NEITHER is in lib/domain/tenantScopedTables.ts, so `withTenant`
+      //       has nothing to scope: it would open a commish_app connection and
+      //       set a GUC that no policy on those tables reads. That is ceremony
+      //       that LOOKS like tenancy, which is worse than an honest exemption.
+      //     · missionControl/activityTrendReads.ts — same, for
+      //       `decision_os_behavioral_snapshot`.
+      //     · settings/leagueSettingsReads.ts — the real debt. It reads
+      //       `leagues`, which IS tenant-scoped, so this one genuinely belongs
+      //       behind lib/domain/ and should be the FIRST to migrate. Its T-006
+      //       half was fixed rather than exempted (findUnique -> findFirst); only
+      //       the import remains.
+      //
+      //     ⚠ WHAT WOULD LET THEM MOVE: withTenant has exactly ONE caller today
+      //     (app/api/commissioner-os/sync-health/route.ts), so it is not yet an
+      //     established read path. Migrate leagueSettingsReads first and the
+      //     other two become a tenantScopedTables question, not a plumbing one.
       "files": [
         "lib/commissioner-ui/decision-os-client/live.ts",
         "lib/commissioner-ui/managers/decision-os-client/live.ts",
-        "lib/commissioner-ui/resolveActiveLeagueId.ts"
+        "lib/commissioner-ui/resolveActiveLeagueId.ts",
+        "lib/commissioner-ui/managers/managerNames.ts",
+        "lib/commissioner-ui/missionControl/activityTrendReads.ts",
+        "lib/commissioner-ui/settings/leagueSettingsReads.ts"
       ],
       "rules": {
         "@typescript-eslint/no-restricted-imports": "off"
