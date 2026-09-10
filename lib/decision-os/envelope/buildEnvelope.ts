@@ -43,6 +43,21 @@ export type EnvelopeInput = {
   competitiveWindow?: CompetitiveWindow | null
   confirmedStrategy?: ConfirmedStrategy | null
   actions?: PermittedAction[]
+  /**
+   * Whether the recommendation and alternatives were ALREADY decided by a scoped
+   * refusal upstream.
+   *
+   * 🛑 WITHOUT THIS, THE BLANKET RULE BELOW DEFEATS REFUSAL SCOPE. This function
+   * suppresses on `refusals.length > 0`, which is right for a caller that does
+   * not scope — and wrong for the orchestrator, where an ACTION refusal must
+   * leave the informational answer standing. A test caught it: the action-scoped
+   * case came back with a null recommendation.
+   *
+   * ⚠ OPTIONAL, SO THE OLD BEHAVIOUR IS THE DEFAULT. A caller that passes nothing
+   * keeps the blanket rule, which is the safe direction for anything that has not
+   * thought about scope.
+   */
+  recommendationAlreadyScoped?: boolean
   now?: Date
 }
 
@@ -126,7 +141,7 @@ export function buildDecisionEnvelope(input: EnvelopeInput): DecisionResponseEnv
    * that protects the user. If an engine declined, there is nothing to
    * recommend, and the envelope says so structurally rather than by convention.
    */
-  const hasBlockingRefusal = refusals.length > 0
+  const hasBlockingRefusal = input.recommendationAlreadyScoped ? false : refusals.length > 0
   const recommendation = hasBlockingRefusal ? null : (input.recommendation ?? null)
   const alternatives = hasBlockingRefusal ? [] : (input.alternatives ?? [])
 

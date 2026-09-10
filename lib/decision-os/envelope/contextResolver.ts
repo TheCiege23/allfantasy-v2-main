@@ -92,6 +92,16 @@ export type ResolvedContext = {
 /** Precedence order. Index = priority; lower wins. */
 const SOURCE_PRIORITY: LeagueIdSource[] = ['explicit_request', 'active_selection', 'conversation']
 
+/**
+ * How many conversation-derived candidates may be authorized in one request.
+ *
+ * ⚠ A CAP, BECAUSE THE CONVERSATION TIER IS UNBOUNDED AND THE OTHERS ARE NOT.
+ * Ids scraped from prior turns cost one membership query each, so an unbounded
+ * list is a cheap way to probe many leagues in a single request. Explicit and
+ * active candidates are bounded by the UI; this tier is bounded here.
+ */
+const MAX_CONVERSATION_CANDIDATES = 3
+
 function dedupeByPriority(candidates: LeagueCandidate[]): LeagueCandidate[] {
   const seen = new Map<string, LeagueCandidate>()
   for (const c of candidates) {
@@ -102,7 +112,11 @@ function dedupeByPriority(candidates: LeagueCandidate[]): LeagueCandidate[] {
       seen.set(id, { id, source: c.source })
     }
   }
-  return [...seen.values()]
+  const out = [...seen.values()]
+  const conversation = out.filter((c) => c.source === 'conversation')
+  if (conversation.length <= MAX_CONVERSATION_CANDIDATES) return out
+  const dropped = new Set(conversation.slice(MAX_CONVERSATION_CANDIDATES))
+  return out.filter((c) => !dropped.has(c))
 }
 
 function identityFrom(snapshot: ChimmyLeagueSnapshot): AuthorizedLeagueIdentity {
@@ -256,9 +270,49 @@ export async function resolveDecisionContext(
    * conversation. Within one tier, more than one AUTHORIZED league is genuine
    * ambiguity and the user is asked.
    */
+  /*
+   * 🛑 A PRESENT-BUT-INVALID TIER REFUSES. IT DOES NOT FALL THROUGH.
+   *
+   * The first version walked the tiers and took the first that had an
+   * AUTHORIZED survivor. So a user who explicitly named a league they cannot
+   * open got a confident answer about whichever league happened to be selected
+   * in the UI instead — silently, under the name of the one they asked about.
+   * That is worse than a refusal and worse than a guess: it is an answer about
+   * a different league wearing the right label.
+   *
+   * The rule is: only evaluate a lower tier when the higher one was ABSENT.
+   * Present-and-unauthorized, present-and-nonexistent and present-and-ambiguous
+   * are all terminal.
+   */
   for (const source of SOURCE_PRIORITY) {
+    const requested = candidates.filter((c) => c.source === source)
+    if (requested.length === 0) continue // absent: the next tier may speak
+
     const tier = authorized.filter((a) => a.candidate.source === source)
-    if (tier.length === 0) continue
+
+    if (tier.length === 0) {
+      /*
+       * The tier was PRESENT and nothing in it survived authorization. Stop.
+       * ⚠ The message names no id and no reason — "not yours" and "not real"
+       * read identically, so the refusal cannot be used to enumerate.
+       */
+      refusals.push({
+        code: 'not_authorized',
+        message: 'I could not open the league you asked about, so I will not answer using a different one.',
+        remedy: 'Pick a league you are a member of and ask again.',
+      })
+      return {
+        intent,
+        sport,
+        temporalScope,
+        contextScope: resolveContextScope(intent, false),
+        league: null,
+        snapshot: null,
+        refusals,
+        resolvedFrom: null,
+      }
+    }
+
     if (tier.length > 1) {
       refusals.push({
         code: 'ambiguous_league',
@@ -276,6 +330,7 @@ export async function resolveDecisionContext(
         resolvedFrom: null,
       }
     }
+
     const chosen = tier[0]
     return {
       intent,
@@ -288,7 +343,6 @@ export async function resolveDecisionContext(
       resolvedFrom: source,
     }
   }
-
   /* Unreachable: `authorized` is non-empty and every entry carries a source. */
   return {
     intent,

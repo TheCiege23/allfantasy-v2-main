@@ -254,7 +254,17 @@ describe('unauthorized league fails closed', () => {
     expect(r.league).toBeNull()
   })
 
-  it('an unauthorized id is not used even when ONE other league IS authorized', async () => {
+  it('🛑 an explicit request that fails REFUSES rather than falling through', async () => {
+    /*
+     * ⚠ THIS ASSERTED THE OPPOSITE UNTIL 2026-09-09, AND THE INVERSION IS THE
+     * RECORD. The resolver used to walk the tiers and take the first with an
+     * authorized survivor, so a user who explicitly named a league they cannot
+     * open got a confident answer about whichever league the UI had selected —
+     * silently, under the name of the one they asked about. An answer about a
+     * different league wearing the right label is worse than a refusal.
+     *
+     * A lower tier now speaks only when the higher one was ABSENT.
+     */
     h.loadLeagueGroundingForUser.mockImplementation(async (_u: string, id: string) =>
       id === 'lg-mine' ? { ok: true, snapshot: snapshot({ id }) } : { ok: false, reason: 'not_member' }
     )
@@ -266,8 +276,38 @@ describe('unauthorized league fails closed', () => {
         { id: 'lg-mine', source: 'active_selection' },
       ],
     })
-    // The explicit tier had no survivor, so the active tier wins — not the unauthorized id.
+    expect(r.league).toBeNull()
+    expect(r.refusals.map((x) => x.code)).toContain('not_authorized')
+  })
+
+  it('and the refusal says it will not substitute another league', async () => {
+    h.loadLeagueGroundingForUser.mockImplementation(async (_u: string, id: string) =>
+      id === 'lg-mine' ? { ok: true, snapshot: snapshot({ id }) } : { ok: false, reason: 'not_member' }
+    )
+    const r = await resolveDecisionContext({
+      message: 'what are my league rules',
+      userId: 'u1',
+      candidates: [
+        { id: 'lg-theirs', source: 'explicit_request' },
+        { id: 'lg-mine', source: 'active_selection' },
+      ],
+    })
+    expect(r.refusals[0].message).toMatch(/will not answer using a different one/i)
+  })
+
+  it('a lower tier DOES speak when the higher one was absent — the control', async () => {
+    // Without this, the refusal above would pass with precedence deleted entirely.
+    h.loadLeagueGroundingForUser.mockImplementation(async (_u: string, id: string) => ({
+      ok: true,
+      snapshot: snapshot({ id }),
+    }))
+    const r = await resolveDecisionContext({
+      message: 'what are my league rules',
+      userId: 'u1',
+      candidates: [{ id: 'lg-mine', source: 'active_selection' }],
+    })
     expect(r.league?.id).toBe('lg-mine')
+    expect(r.resolvedFrom).toBe('active_selection')
   })
 })
 
