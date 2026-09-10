@@ -471,7 +471,25 @@ function extractLikelyPlayerName(message: string): string | null {
  */
 export async function buildFantasyCalcValueAnswer(
   message: string,
+  /**
+   * 🛑 THIS MUST BE AN **AUTHORIZED** LEAGUE ID, NEVER THE RAW REQUEST FIELD.
+   * `loadRules` performs no membership check of its own — it is a cache loader, not a guard — so
+   * whatever id arrives here is read. The route's obligation is to pass
+   * `leagueSnapshot?.id ?? null`, which exists only because membership was proved.
+   */
   leagueId?: string | null,
+  /**
+   * Whether the CALLER named a league at all, independent of whether they may see it.
+   *
+   * ⚠ WITHOUT THIS THE FALLBACK SENTENCE BECOMES A LIE THE MOMENT THE ID IS WITHHELD. Passing
+   * `null` for an unauthorized league would make the answer say "You did not name a league",
+   * which is false — they did, they just may not read it. It is deliberately a BOOLEAN and not
+   * the id: it says a league was requested without saying which, so `not_member` and `not_found`
+   * stay indistinguishable here exactly as they are in the refusal path.
+   *
+   * Defaults to `leagueId != null` so every existing caller and test keeps its current wording.
+   */
+  leagueRequested: boolean = leagueId != null,
 ): Promise<string | null> {
   if (!/\b(trade value|fantasycalc|value|worth)\b/i.test(message)) return null
   const playerName = extractLikelyPlayerName(message)
@@ -521,7 +539,7 @@ export async function buildFantasyCalcValueAnswer(
      * basis was used and why, which is the honest version of the same information.
      */
     if (!fmt) {
-      const why = leagueId
+      const why = leagueRequested
         ? `I could not read that league's settings, so this is the standard 1QB redraft market`
         : `You did not name a league, so this is the standard 1QB redraft market`
       return `${head} ${why}, not your league's. Source: FantasyCalc current values.`
@@ -769,8 +787,12 @@ export async function tryDeterministicAnswerDetailed(
    * BUG-1. The route has this resolved at line 1159, two hundred lines before it calls us, and it
    * simply was not passed — which is how the value path ended up guessing league settings from the
    * question text. Optional so every existing caller and test compiles unchanged.
+   *
+   * 🛑 AUTHORIZED ID ONLY — see `buildFantasyCalcValueAnswer`, which reads the league off it.
    */
   leagueId?: string | null,
+  /** Whether the caller named a league, regardless of whether they may read it. */
+  leagueRequested: boolean = leagueId != null,
 ): Promise<DeterministicResult | null> {
   const answer = (text: string): DeterministicResult => ({ kind: 'answer', text })
   const refusal = (text: string): DeterministicResult => ({ kind: 'refusal', text })
@@ -787,7 +809,7 @@ export async function tryDeterministicAnswerDetailed(
   }
   const teamResult = await buildTeamResultAnswer(message)
   if (teamResult) return answer(teamResult)
-  const fantasyCalcValue = await buildFantasyCalcValueAnswer(message, leagueId ?? null)
+  const fantasyCalcValue = await buildFantasyCalcValueAnswer(message, leagueId ?? null, leagueRequested)
   if (fantasyCalcValue) return answer(fantasyCalcValue)
   const weather = await buildCachedWeatherAnswer(message, safeLocale)
   if (weather) return answer(weather)
@@ -838,9 +860,11 @@ export async function tryDeterministicAnswerDetailed(
 export async function tryDeterministicAnswer(
   message: string,
   locale?: string,
+  /** 🛑 AUTHORIZED ID ONLY — see `buildFantasyCalcValueAnswer`. */
   leagueId?: string | null,
+  leagueRequested: boolean = leagueId != null,
 ): Promise<string | null> {
-  return (await tryDeterministicAnswerDetailed(message, locale, leagueId))?.text ?? null
+  return (await tryDeterministicAnswerDetailed(message, locale, leagueId, leagueRequested))?.text ?? null
 }
 
 /** Metadata marker for deterministic responses. */

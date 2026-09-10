@@ -1418,8 +1418,31 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
    * SENTENCE and hardcoded "12-team PPR" — a dynasty league was answered with a redraft price,
    * measured 3779 against a correct 6644. This short-circuit returns before the grounding packet
    * is built at ~1667, so nothing downstream could have corrected it.
+   *
+   * 🛑 BUT IT PASSED THE RAW `leagueId`, WHICH IS `formData.get('leagueId')` — THE SAME ROOT CAUSE
+   * AS THE THREE DISCLOSURES ALREADY CLOSED IN THIS FILE, REACHED THROUGH A FOURTH DOOR.
+   * `buildFantasyCalcValueAnswer` calls `createLeagueOsLoaders().loadRules(leagueId)`, and that
+   * loader performs no membership check — `resolveLeagueMembership` does not appear in it. So a
+   * stranger's league format came back priced INTO the answer text: a dynasty league answers
+   * "dynasty value 6644 … Settings read from your league: superflex, 10-team" and a redraft league
+   * answers differently. The price itself was the oracle; the settings sentence merely narrated it.
+   *
+   * ⚠ AND IT SITS ABOVE EVERY GUARD IN THIS ROUTE. This short-circuit returns before the 412
+   * refusal path, before the token spend, and before the grounding packet — so the two commits
+   * that closed the refusal-side oracles could not have covered it, and the indistinguishability
+   * suite could not have seen it: it never reaches the code those tests drive.
+   *
+   * `leagueSnapshot` exists only because `loadLeagueGroundingForUser` proved membership, so passing
+   * `leagueSnapshot?.id ?? null` closes this by construction. The second argument keeps the
+   * fallback sentence TRUE for a caller who named a league they may not read — it says a league was
+   * requested without saying which, so `not_member` and `not_found` stay indistinguishable here too.
    */
-  const deterministic = await tryDeterministicAnswerDetailed(message, requestLocale, leagueId)
+  const deterministic = await tryDeterministicAnswerDetailed(
+    message,
+    requestLocale,
+    leagueSnapshot?.id ?? null,
+    leagueId != null,
+  )
   if (deterministic !== null) {
     /*
      * ⚠ A REFUSAL IS NOT A FINAL ANSWER — it is a statement that OUR DATABASE
@@ -1743,10 +1766,33 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
    * why only four of the seven opt-in slices are mapped.
    */
   const earlyWant = deriveWantFromIntent(classifyChimmyIntent(message).intent)
+  /*
+   * 🛑 THE THIRD BYPASS FAMILY, AND THE ONLY ONE GATED BEHIND A FLAG.
+   *
+   * This was `DECISION_OS_GROUNDING_ENABLED === 'true' && leagueId` passing the RAW request field,
+   * exactly like `getInsightBundle`, `buildLeagueSportsGroundingPacket` and the sixteen specialty
+   * builders before them. `buildDecisionOsGroundingPacket` performs no membership check of its own:
+   * `resolveLeagueMembership` appears nowhere in `lib/decision-os/grounding/`, and its `userId` is
+   * used only to scope slices WITHIN the league (`loadLineupDecisionSlice({ userId, leagueId })`),
+   * never to decide whether the caller may see it. It is also the WIDEST of the four — it fans out
+   * to league rules, values, projections, lineup, waiver, roster-value, commissioner-health,
+   * psychology-consistency, saved analysis, league intelligence and league context.
+   *
+   * ⚠ THE FLAG IS WHY THIS ONE IS SCOPED CONDITIONALLY, NOT WHY IT IS SAFE. A flag being off in
+   * tests says nothing about production. The deployed value of `DECISION_OS_GROUNDING_ENABLED` on
+   * the Railway `allfantasy-v2-main` service was NOT verified when this was written, so the live
+   * exposure is UNKNOWN: if the flag is off in production this was latent, and if it is on it was
+   * live. Either way the code defect is identical and is closed here.
+   *
+   * Gating on `leagueSnapshot` is strictly stronger than the old gate AND than adding a `userId`
+   * check: the snapshot is `leagueGrounding.ok ? … : null`, and `leagueGrounding` is only ever
+   * computed when `leagueId && userId`, so a non-null snapshot already implies an authenticated
+   * caller whose membership was proved. The flag check stays exactly where it was.
+   */
   const decisionOsGroundingTask: Promise<string | null> =
-    process.env.DECISION_OS_GROUNDING_ENABLED === 'true' && leagueId
+    process.env.DECISION_OS_GROUNDING_ENABLED === 'true' && leagueSnapshot && userId
       ? withPacketCeiling(buildDecisionOsGroundingPacket({
-          leagueId,
+          leagueId: leagueSnapshot.id,
           userId,
           sport: normalizeToSupportedSport(sport),
           season: season ?? new Date().getFullYear(),
@@ -2327,15 +2373,37 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
           const intent = classifyPecrIntent(planInput.message)
           pecrIntent = intent
 
+          /*
+           * 🛑 A FOURTH BYPASS FAMILY, FOUND WHILE PROVING THE THIRD, AND NOT PREVIOUSLY REPORTED.
+           *
+           * `getFullAIContext` makes THREE league-scoped reads with no membership check of its
+           * own — `prisma.aILeagueContext.findUnique({ where: { leagueId } })`,
+           * `getTeamSnapshots(leagueId, teamId, 6)` and `getRecentMemoryEvents({ leagueId })`.
+           * `resolveLeagueMembership` appears nowhere in `lib/ai-memory.ts`. Its result is not
+           * discarded either: `buildMemoryPromptSection(legacyMemory.value)` becomes
+           * `legacyMemorySection`, which is passed straight into the prompt at ~2843. So a
+           * stranger's league phase, team snapshots and memory events were model-visible.
+           *
+           * ⚠ `enrichChatWithData` IS NOT A BYPASS AND IS ONLY CHANGED FOR SYMMETRY. `leagueId`
+           * occurs exactly once in `lib/chat-data-enrichment.ts` — in its own options type — and
+           * is never read, so it discloses nothing today. It is switched to the authorized id so
+           * that whoever eventually implements it inherits the guard instead of the hole.
+           *
+           * ⚠ `teamId` REMAINS THE RAW CLIENT FIELD AND IS DELIBERATELY LEFT. Once `leagueId` is
+           * authorized, `getTeamSnapshots` can still read ANOTHER MEMBER'S team within a league
+           * the caller legitimately belongs to. That is a real but materially different problem —
+           * intra-league, not cross-league — and fixing it needs a team-ownership predicate this
+           * route does not have. Reported, not silently widened into this change.
+           */
           const [legacyEnrichment, legacyMemory] = await Promise.allSettled([
             enrichChatWithData(planInput.message, {
-              leagueId: planInput.leagueId,
+              leagueId: leagueSnapshot?.id,
               sleeperUsername: planInput.sleeperUsername,
             }),
             getFullAIContext({
               userId: planInput.userId,
               sleeperUsername: planInput.sleeperUsername,
-              leagueId: planInput.leagueId,
+              leagueId: leagueSnapshot?.id,
               teamId: planInput.teamId,
             }),
           ])
