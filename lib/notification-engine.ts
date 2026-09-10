@@ -14,6 +14,7 @@ import 'server-only'
 import { dispatchNotification } from '@/lib/notifications/NotificationDispatcher'
 import { prisma } from '@/lib/prisma'
 import type { NotificationCategoryId } from '@/lib/notification-settings/types'
+import { selectActiveTeams } from '@/lib/league-import/activeTeams'
 
 // ── Event Types ──
 
@@ -173,9 +174,17 @@ async function resolveLeagueUserIds(leagueId: string): Promise<string[]> {
   try {
     const teams = await prisma.leagueTeam.findMany({
       where: { leagueId },
-      select: { claimedByUserId: true },
+      select: { claimedByUserId: true, isOrphan: true },
     })
-    return teams
+    /*
+     * 🛑 A DEPARTED TEAM'S CLAIMER IS NOT A LEAGUE RECIPIENT.
+     *
+     * Reconciliation ARCHIVES a team that vanishes from a complete authoritative response rather
+     * than deleting it (Batch A.1), so the row — and its `claimedByUserId` — now persists where it
+     * previously disappeared. Unfiltered, this keeps mailing someone about a league they are no
+     * longer in, which is the most visible possible form of the leak.
+     */
+    return selectActiveTeams(teams)
       .map((t) => t.claimedByUserId)
       .filter((id): id is string => !!id)
   } catch {

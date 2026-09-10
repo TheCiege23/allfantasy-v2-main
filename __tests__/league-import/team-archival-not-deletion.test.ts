@@ -94,15 +94,31 @@ describe('active-team selection excludes current orphans', () => {
     expect(isActiveTeam(team('b', true))).toBe(false)
   })
 
-  it('treats NULL as ACTIVE, because the column is effectively three-state', () => {
+  it('treats NULL and UNDEFINED as ACTIVE — absent evidence never hides a live team', () => {
     /*
-     * 🛑 `isOrphan` is declared `Boolean @default(false)` but production carries NULLs for rows
-     * predating the column. `rosterReads.ts` records that treating those as orphaned "would
-     * report every league that predates the flag as entirely unclaimed... the loudest possible
-     * way to be wrong about 288 leagues".
+     * ⚠ NOT because the column is nullable. It is not: the init migration creates
+     * `"isOrphan" BOOLEAN NOT NULL DEFAULT false` and no migration ever alters it. An earlier
+     * version of this test cited "288 leagues carry NULLs", which was an attribution error —
+     * 288 is this repo's count of COMMISSIONED LEAGUES, not of NULL rows.
+     *
+     * The case is real for a different reason: `TeamOrphanState` accepts
+     * `boolean | null | undefined` because callers produce those — a Prisma `select` omitting
+     * the column yields `undefined`, a `$queryRaw` row is hand-typed, a mapper may build a
+     * partial object. Absent evidence of archival must mean ACTIVE, so a missing field shows a
+     * live team rather than hiding one.
      */
     expect(isActiveTeam(team('c', null))).toBe(true)
     expect(isActiveTeam(team('d', undefined))).toBe(true)
+    /* And a row that simply never selected the column. */
+    expect(isActiveTeam({} as { isOrphan?: boolean | null })).toBe(true)
+  })
+
+  it('pins the committed DDL, so a future nullability change cannot pass unnoticed', () => {
+    const initMigration = readFileSync(
+      join(process.cwd(), 'prisma', 'migrations', '20260407024117_init', 'migration.sql'),
+      'utf8',
+    )
+    expect(initMigration).toMatch(/"isOrphan" BOOLEAN NOT NULL DEFAULT false/)
   })
 
   it('partitions a mixed league correctly', () => {

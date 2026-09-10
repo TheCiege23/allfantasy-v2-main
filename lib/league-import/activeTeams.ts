@@ -8,18 +8,31 @@
  * persists, so a selector that means "the teams in this league" and does not exclude orphans
  * silently starts counting archived teams as live ones.
  *
- * 🛑 `isOrphan` IS EFFECTIVELY THREE-STATE, AND THE SCHEMA DOES NOT SAY SO. It is declared
- * `Boolean @default(false)`, but rows predating the column carry NULL — see the measurement in
- * `lib/commissioner-workspace/rosterReads.ts`, which records that treating `!== false` as orphan
- * "would report every league that predates the flag as entirely unclaimed... the loudest possible
- * way to be wrong about 288 leagues". So NULL means "never decided", which is ACTIVE, not orphan.
+ * ⚠ THE COLUMN IS `NOT NULL`, AND A PREVIOUS VERSION OF THIS COMMENT SAID OTHERWISE.
  *
- * ⚠ AND THAT IS WHY THIS FILTERS IN APPLICATION CODE RATHER THAN IN THE QUERY. The obvious
- * Prisma spelling, `NOT: { isOrphan: true }`, compiles to SQL `NOT (isOrphan = true)`, and
- * `NOT (NULL = true)` is NULL, not true — so the row is EXCLUDED. A where-clause that looks like
- * it means "not orphaned" would quietly drop exactly the legacy rows the note above is about, and
- * Prisma's types will not let you write `isOrphan: null` for a field declared non-nullable. A
- * predicate over already-fetched rows has none of that ambiguity.
+ * It claimed `isOrphan` was "effectively three-state" because "production carries NULLs — 288
+ * leagues". That was WRONG on both halves, and is corrected here rather than quietly deleted:
+ *
+ *   - `prisma/migrations/20260407024117_init/migration.sql` creates it as
+ *     `"isOrphan" BOOLEAN NOT NULL DEFAULT false`, and it appears in NO other migration — never
+ *     altered, never made nullable. The committed schema and the Prisma declaration agree.
+ *   - The figure came from `lib/commissioner-workspace/rosterReads.ts`, whose comment asserts the
+ *     three-state reading and says a wrong count would be "the loudest possible way to be wrong
+ *     about 288 leagues". 288 is this repo's widely-cited count of COMMISSIONED LEAGUES ON
+ *     PRODUCTION — the size of the blast radius, not a count of NULL rows. Reading it as a NULL
+ *     measurement was an attribution error, and no production data was accessed at any point.
+ *
+ * 🛑 THE `!== true` PREDICATE STAYS ANYWAY, FOR REASONS THAT DO NOT DEPEND ON THAT CLAIM.
+ * `TeamOrphanState` accepts `boolean | null | undefined` because callers legitimately produce
+ * those: a Prisma `select` that omits the column yields `undefined`, a `$queryRaw` row is typed by
+ * hand, a mapper may build a partial object carrying neither. `!== true` answers all of them the
+ * same safe way — absent evidence of archival means ACTIVE, which is the direction that shows a
+ * live team rather than hiding one.
+ *
+ * ⚠ AND IT STILL MUST NOT BECOME A PRISMA `where`. `NOT: { isOrphan: true }` compiles to
+ * `NOT (isOrphan = true)`; on a NOT NULL column that is fine today, but the predicate form is what
+ * keeps the helper correct for hand-typed raw rows and partial selects too, where the value
+ * genuinely can be absent. Filtering fetched rows has no such ambiguity.
  *
  * The one direction that IS safe in a query is the positive test, `{ isOrphan: true }`, because
  * NULL simply does not match it. `ORPHAN_TEAM_WHERE` exists so that spelling is shared too.
