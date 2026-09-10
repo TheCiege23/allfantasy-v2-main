@@ -45,9 +45,22 @@ export type DiscordBridgeProps = {
   data: DiscordBridgeData
 }
 
-const DIRECTIONS: Array<{ id: BridgeDirection; label: string; hint: string }> = [
+/*
+ * ⚠ ONE ENTRY PER `BridgeDirection`, AND NOTHING TYPECHECKS THAT. A direction
+ * missing here is not a compile error — it is a state the server can report and
+ * this picker cannot show. That is exactly how inbound-only came to render as
+ * "Off · Nothing relays" while the inbound relay was running.
+ * `__tests__/core-discord-bridge-directions.test.ts` asserts the two stay in
+ * step, because the compiler will not.
+ *
+ * ⚠ "Pull only" is the inbound leg: Discord relays INTO league chat and nothing
+ * goes out. It is reachable from the legacy sync panel at /league/[id], so it
+ * has to be nameable here even though this picker is not what produces it.
+ */
+export const DIRECTIONS: Array<{ id: BridgeDirection; label: string; hint: string }> = [
   { id: 'both', label: 'Both ways', hint: 'Relayed in and out' },
   { id: 'post-only', label: 'Post only', hint: 'AllFantasy → Discord' },
+  { id: 'pull-only', label: 'Pull only', hint: 'Discord → AllFantasy' },
   { id: 'off', label: 'Off', hint: 'Nothing relays' },
 ]
 

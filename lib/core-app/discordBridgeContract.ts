@@ -40,28 +40,35 @@
  * the shared vocabulary had two. Same principle — the smaller move — opposite
  * direction. Read the fantasycalc note for the reasoning, not the mechanics.
  *
- * ⚠ DIRECTION IS THREE STATES, AND "OFF" IS NOT "POST-ONLY WITH THE SWITCH
+ * ⚠ DIRECTION IS FOUR STATES, AND "OFF" IS NOT "POST-ONLY WITH THE SWITCH
  * DOWN". The schema stores three booleans (`syncEnabled`, `syncOutbound`,
- * `syncInbound`); this module translates them to and from the three directions a
+ * `syncInbound`); this module translates them to and from the directions a
  * commissioner actually chooses on `/core/discord`. Two translations would
  * eventually disagree, and the failure mode of disagreeing about direction is a
  * private message in a public channel.
  *
- * 🛑 AND THEY ALREADY DISAGREE. This module is NOT the only writer, and an
- * earlier version of this comment claimed it was — that the client and server
- * "cannot drift". `app/league/[leagueId]/components/DiscordLeagueSyncPanel.tsx`
- * is a second client UI over the same three booleans, with three INDEPENDENT
- * checkboxes, each PATCHing one flag on its own and never calling
- * `flagsFromDirection`. It can therefore produce `{ syncEnabled: true,
- * syncOutbound: false, syncInbound: true }` — inbound-only — which
- * `directionFromFlags` reports as 'off' while `/api/discord/poll-messages`
- * (`where: { syncEnabled: true, syncInbound: true }`) keeps pulling Discord
- * messages into league chat. The screen says "Nothing relays" and it is relaying.
+ * 🛑 THERE IS A SECOND WRITER, AND THIS FILE IS NOT IT. An earlier version of
+ * this comment claimed the client and server "cannot drift".
+ * `app/league/[leagueId]/components/DiscordLeagueSyncPanel.tsx` is a second
+ * client UI over the same three booleans, with three INDEPENDENT checkboxes,
+ * each PATCHing one flag on its own and never calling `flagsFromDirection`. So
+ * the set of flag combinations a WRITER can produce has always been larger than
+ * the set this vocabulary could NAME.
  *
- * That is a live product bug, not a refactor artifact, and it is NOT fixed here:
- * the honest options are a fourth direction or removing the panel's independent
- * toggles, and that is a product decision. Recorded so the next reader does not
- * inherit the false version.
+ * 🛑 THAT GAP WAS A LIE, NOT AN OMISSION, AND `pull-only` CLOSES IT.
+ * `{ syncEnabled: true, syncOutbound: false, syncInbound: true }` — inbound-only
+ * — used to fall through to 'off'. `/core/discord` printed "Off · Nothing
+ * relays" while `/api/discord/poll-messages` (`where: { syncEnabled: true,
+ * syncInbound: true }`, which never reads `syncOutbound`) kept pulling Discord
+ * messages into league chat. Worse, the picker short-circuits on
+ * `next === direction`, so a commissioner who distrusted it and clicked "Off"
+ * got a no-op. Every reachable combination now has a name the UI can show.
+ *
+ * ⚠ THE DURABLE RULE, WHICH IS NOT ABOUT DISCORD: when a reader maps a WIDER
+ * state space onto a NARROWER vocabulary, the extra states do not disappear —
+ * they get reported as whichever name is nearest, and "nearest" here meant the
+ * safest-sounding one. Prefer a name per reachable state over a fallback,
+ * because a fallback is indistinguishable from a correct answer.
  *
  * ⚠ COMMISSIONER-ONLY SURFACES DEFAULT TO OFF IN THIS FILE — AND ONLY IN THIS
  * FILE. A private note that appears in a public Discord channel is the kind of
@@ -81,7 +88,15 @@
  * safety default actually lives — treat it accordingly.
  */
 
-export type BridgeDirection = 'both' | 'post-only' | 'off'
+/**
+ * ⚠ FOUR STATES, ONE PER REACHABLE FLAG COMBINATION. `pull-only` is the
+ * inbound-only case — Discord relays INTO league chat and nothing goes out. It
+ * was added because the state was already reachable from the legacy sync panel
+ * and this vocabulary reported it as 'off' while it was relaying. Adding a fifth
+ * means updating `flagsFromDirection`'s switch (the compiler will say so) and
+ * `DIRECTIONS` in `components/core-app/screens/DiscordBridge.tsx` (it will not).
+ */
+export type BridgeDirection = 'both' | 'post-only' | 'pull-only' | 'off'
 
 export type BridgeSurfaceId = 'league_chat' | 'trades_waivers' | 'draft_room' | 'commissioner_notes'
 
@@ -129,7 +144,24 @@ export const BRIDGE_SURFACES: BridgeSurface[] = [
   },
 ]
 
-/** The three booleans the schema stores → the one direction a human picks. */
+/**
+ * The three booleans the schema stores → the one direction a human picks.
+ *
+ * 🛑 EVERY REACHABLE FLAG COMBINATION NOW MAPS TO A DIRECTION THE UI CAN SHOW.
+ * `pull-only` exists because the state was already reachable and was being
+ * reported as its opposite: inbound-only rendered as 'off' — "Nothing relays" —
+ * while `/api/discord/poll-messages` (`where: { syncEnabled: true, syncInbound:
+ * true }`, which never looks at `syncOutbound`) kept pulling Discord messages
+ * into league chat. A commissioner could switch the bridge off, be told it was
+ * off, and still be relaying.
+ *
+ * ⚠ THE COLLAPSE WAS NOT A BUG IN THIS FUNCTION, WHICH IS WHY IT SURVIVED.
+ * It was correct about `/core/discord`, which offered three buttons. It was
+ * wrong about the DATABASE, which the three independent checkboxes in
+ * `app/league/[leagueId]/components/DiscordLeagueSyncPanel.tsx` can drive into
+ * any of eight combinations. A reader that cannot express what a writer can
+ * produce does not report an omission — it reports a falsehood.
+ */
 export function directionFromFlags(flags: {
   syncEnabled: boolean
   syncOutbound: boolean
@@ -138,20 +170,43 @@ export function directionFromFlags(flags: {
   if (!flags.syncEnabled) return 'off'
   if (flags.syncOutbound && flags.syncInbound) return 'both'
   if (flags.syncOutbound) return 'post-only'
-  // Inbound-only is not an offered direction; treat it as off rather than
-  // inventing a fourth state the UI cannot express.
+  if (flags.syncInbound) return 'pull-only'
+  // Enabled with neither leg on. Nothing moves, so 'off' is the honest answer —
+  // and unlike inbound-only, it is also what the picker writes back for 'off'.
   return 'off'
 }
 
-/** The inverse. The PATCH route at /api/discord/league takes exactly these. */
+/**
+ * The inverse. The PATCH route at /api/discord/league takes exactly these.
+ *
+ * ⚠ EXHAUSTIVE, AND IT FAILS CLOSED. The previous form was a chain of `if`s
+ * ending in a bare `return { …all true }`, so ANY direction it did not
+ * recognise — a fifth one added later, a stale value off the wire — became the
+ * MOST permissive setting the bridge has. The `never` binding makes a missing
+ * case a type error, and the default returns all-false so a value that does
+ * reach it at runtime stops the relay rather than opening it. Types alone are
+ * not the backstop here: `next.config.js` sets `typescript.ignoreBuildErrors`.
+ */
 export function flagsFromDirection(direction: BridgeDirection): {
   syncEnabled: boolean
   syncOutbound: boolean
   syncInbound: boolean
 } {
-  if (direction === 'off') return { syncEnabled: false, syncOutbound: false, syncInbound: false }
-  if (direction === 'post-only') return { syncEnabled: true, syncOutbound: true, syncInbound: false }
-  return { syncEnabled: true, syncOutbound: true, syncInbound: true }
+  switch (direction) {
+    case 'both':
+      return { syncEnabled: true, syncOutbound: true, syncInbound: true }
+    case 'post-only':
+      return { syncEnabled: true, syncOutbound: true, syncInbound: false }
+    case 'pull-only':
+      return { syncEnabled: true, syncOutbound: false, syncInbound: true }
+    case 'off':
+      return { syncEnabled: false, syncOutbound: false, syncInbound: false }
+    default: {
+      const unreachable: never = direction
+      void unreachable
+      return { syncEnabled: false, syncOutbound: false, syncInbound: false }
+    }
+  }
 }
 
 export type BridgeMapping = {
