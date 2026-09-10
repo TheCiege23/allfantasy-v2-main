@@ -9,7 +9,8 @@ import {
   resolveRedraftTeamWindow, resolveRequestingTeam,
   WINDOW_GAP_ARCHIVAL_UNPROVABLE, WINDOW_GAP_LEAGUE_READ_FAILED, WINDOW_GAP_ROSTER_READ_FAILED,
   WINDOW_GAP_SCHEDULE_READ_FAILED, WINDOW_GAP_TEAM_NOT_CLAIMED, WINDOW_GAP_TEAM_READ_FAILED,
-  WINDOW_GAP_EVIDENCE_READ_FAILED,
+  WINDOW_GAP_EVIDENCE_READ_FAILED, WINDOW_GAP_PROJECTION_READ_FAILED,
+  WINDOW_GAP_MATCHUP_READ_FAILED, WINDOW_GAP_FORECAST_READ_FAILED, WINDOW_GAP_INJURY_READ_FAILED,
 } from '@/lib/decision-os/value-v2/redraftWindowServerAdapter'
 import { SCHEDULE_UNAVAILABLE_GAP } from '@/lib/decision-os/value-v2/windowDecision'
 
@@ -189,7 +190,7 @@ describe('team state, and what this schema can and cannot prove about it', () =>
 
 // ── 3. FAILURE PROVENANCE, ONE STAGE AT A TIME ───────────────────────────────────────────────
 
-type Stage = 'league' | 'team' | 'schedule' | 'roster' | 'evidence'
+type Stage = 'league' | 'team' | 'schedule' | 'roster' | 'projection' | 'matchup' | 'forecast' | 'injury'
 
 /** A prisma double where exactly ONE stage is made to throw. Everything else succeeds. */
 function stagedPrisma(broken: Stage | null) {
@@ -198,21 +199,22 @@ function stagedPrisma(broken: Stage | null) {
     league: { findUnique: async () => { boom('league'); return { platformLeagueId: 'p1' } } },
     leagueTeam: {
       findMany: async () => { boom('team'); return [{ externalId: '7', isOrphan: false }] },
-      findFirst: async () => { boom('evidence'); return { externalId: '7', teamName: 'A', ownerName: 'R' } },
+      findFirst: async () => { boom('team'); return { externalId: '7', teamName: 'A', ownerName: 'R' } },
     },
     redraftMatchup: { findMany: async () => { boom('schedule'); return [{ week: 5 }, { week: 6 }] } },
     redraftRosterPlayer: {
       findMany: async (args: { where?: { roster?: unknown } }) => {
-        if (args?.where?.roster) { boom('evidence'); return [{ rosterId: 'r1', playerId: 'p1' }] }
+        // The league-wide read is part of the PROJECTION stage now that it is hoisted.
+        if (args?.where?.roster) { boom('projection'); return [{ rosterId: 'r1', playerId: 'p1' }] }
         boom('roster')
         return [{ playerId: 'p1' }]
       },
     },
-    aFProjectionSnapshot: { findMany: async () => { boom('evidence'); return [] } },
-    weeklyMatchup: { findMany: async () => { boom('evidence'); return [] } },
-    seasonForecastSnapshot: { findFirst: async () => { boom('evidence'); return null } },
+    aFProjectionSnapshot: { findMany: async () => { boom('projection'); return [] } },
+    weeklyMatchup: { findMany: async () => { boom('matchup'); return [] } },
+    seasonForecastSnapshot: { findFirst: async () => { boom('forecast'); return null } },
     dynastyProjectionSnapshot: { findFirst: async () => null },
-    sportsPlayer: { findMany: async () => { boom('evidence'); return [] } },
+    sportsPlayer: { findMany: async () => { boom('injury'); return [] } },
   } as never
 }
 
@@ -221,13 +223,16 @@ const req = (prisma: unknown) => ({
   sport: 'NFL', season: 2026, week: 6,
 }) as Parameters<typeof resolveRedraftTeamWindow>[0]
 
-describe('a failed query is never reported as a successful absence', () => {
+describe('a failed query is never reported as a successful absence — all SEVEN stages', () => {
   const cases: Array<[Stage, string]> = [
     ['league', WINDOW_GAP_LEAGUE_READ_FAILED],
     ['team', WINDOW_GAP_TEAM_READ_FAILED],
     ['schedule', WINDOW_GAP_SCHEDULE_READ_FAILED],
     ['roster', WINDOW_GAP_ROSTER_READ_FAILED],
-    ['evidence', WINDOW_GAP_EVIDENCE_READ_FAILED],
+    ['projection', WINDOW_GAP_PROJECTION_READ_FAILED],
+    ['matchup', WINDOW_GAP_MATCHUP_READ_FAILED],
+    ['forecast', WINDOW_GAP_FORECAST_READ_FAILED],
+    ['injury', WINDOW_GAP_INJURY_READ_FAILED],
   ]
 
   /*
@@ -335,5 +340,153 @@ describe('only completed, graded matchups count', () => {
     ], '1', 1)
     // Against two graded opponents team 1 beats one and loses to one; against none it beats none.
     expect(graded!.luckWins).not.toBe(halfPlayed!.luckWins)
+  })
+})
+
+// ── 5. CLOUD-REVIEW CORRECTIONS ──────────────────────────────────────────────────────────────
+
+/**
+ * Findings from an automated adversarial review of the corrective batch. All five were real; the
+ * three with behaviour worth pinning are below, each written so that reverting its fix turns this
+ * suite red.
+ */
+
+/** A prisma double that RECORDS every call and HONOURS the droppedAt filter. */
+function countingPrisma(over: { rosterRows?: Array<{ rosterId: string; playerId: string; dropped?: boolean }> } = {}) {
+  const calls: string[] = []
+  const rows = over.rosterRows ?? [
+    { rosterId: 'r1', playerId: 'keep1' },
+    { rosterId: 'r2', playerId: 'keep2' },
+  ]
+  const prisma = {
+    league: { findUnique: async () => { calls.push('league'); return { platformLeagueId: 'p1' } } },
+    leagueTeam: {
+      findMany: async () => { calls.push('team'); return [{ externalId: '1', isOrphan: false }] },
+      findFirst: async () => ({ externalId: '1', teamName: 'A', ownerName: 'R' }),
+    },
+    redraftMatchup: { findMany: async () => { calls.push('schedule'); return [{ week: 4 }, { week: 5 }, { week: 6 }] } },
+    redraftRosterPlayer: {
+      findMany: async (a: { where?: { roster?: unknown; droppedAt?: unknown } }) => {
+        const leagueWide = !!a?.where?.roster
+        calls.push(leagueWide ? 'ros:leagueWide' : 'ros:proposer')
+        // The double HONOURS the filter, so a query that forgets it receives the dropped rows.
+        const filtered = a?.where?.droppedAt === null ? rows.filter(r => !r.dropped) : rows
+        return leagueWide ? filtered : filtered.map(r => ({ playerId: r.playerId }))
+      },
+    },
+    aFProjectionSnapshot: {
+      findMany: async () => {
+        calls.push('projections')
+        return rows.map(r => ({
+          playerId: r.playerId,
+          rosProjection: r.dropped ? 10000 : 100,
+          rosWeeksRemaining: 11,
+          computedAt: new Date('2026-10-01T00:00:00Z'),
+        }))
+      },
+    },
+    weeklyMatchup: { findMany: async () => [] },
+    seasonForecastSnapshot: { findFirst: async () => null },
+    dynastyProjectionSnapshot: { findFirst: async () => { calls.push('DYNASTY'); return null } },
+    sportsPlayer: { findMany: async () => [] },
+  }
+  return { prisma: prisma as never, calls }
+}
+
+const creq = (prisma: unknown) => ({
+  prisma, leagueId: 'l1', userId: 'u1', proposerRosterId: 'r1', seasonId: 's1',
+  sport: 'NFL', season: 2026, week: 6,
+}) as Parameters<typeof resolveRedraftTeamWindow>[0]
+
+describe('a redraft refusal reports the redraft horizon', () => {
+  /*
+   * 🛑 THE FIELD THIS BATCH ADDED WAS ANSWERING WRONG FOR EVERY ADAPTER REFUSAL. `refuse` omitted
+   * the coefficient set, `unresolvableWindowDecision` defaulted to the DYNASTY one, and
+   * `refusedDecision` derives `evidence.format` from whatever coefficients it was handed. So the
+   * one field added to say which horizon a league was judged over said "dynasty" for every
+   * redraft refusal.
+   */
+  it('carries redraft coefficients and format, not the dynasty default', async () => {
+    const prisma = { league: { findUnique: async () => null } } as never
+    const d = await resolveRedraftTeamWindow(creq(prisma))
+    expect(d.state).toBe('refused')
+    expect(d.evidence.format).toBe('redraft')
+    expect(d.coefficients.horizon).toBe('redraft')
+    expect(d.coefficients.version).toBe(REDRAFT_WINDOW_COEFFICIENTS.version)
+    expect(d.coefficients.version).not.toBe(DEFAULT_WINDOW_COEFFICIENTS.version)
+  })
+})
+
+describe('only the CURRENT roster counts', () => {
+  /*
+   * `RedraftRosterPlayer` RETAINS dropped rows. Without `droppedAt: null` the share sums every
+   * player ever rostered this season. The dropped player here carries a deliberately absurd
+   * projection, so a query that forgets the filter cannot produce the same answer as one that
+   * never had him.
+   */
+  it('excludes dropped players from the rest-of-season share', async () => {
+    const withDrop = countingPrisma({
+      rosterRows: [
+        { rosterId: 'r1', playerId: 'keep1' },
+        { rosterId: 'r1', playerId: 'gone1', dropped: true },
+        { rosterId: 'r2', playerId: 'keep2' },
+      ],
+    })
+    const clean = countingPrisma({
+      rosterRows: [
+        { rosterId: 'r1', playerId: 'keep1' },
+        { rosterId: 'r2', playerId: 'keep2' },
+      ],
+    })
+    const a = await resolveRedraftTeamWindow(creq(withDrop.prisma))
+    const b = await resolveRedraftTeamWindow(creq(clean.prisma))
+    expect(a.evidence.restOfSeason).not.toBeNull()
+    expect(a.evidence.restOfSeason!.share).toBeCloseTo(b.evidence.restOfSeason!.share, 10)
+    expect(a.evidence.restOfSeason!.rosterSize).toBe(b.evidence.restOfSeason!.rosterSize)
+  })
+
+  it('asks the database for current rows rather than filtering after the fact', async () => {
+    const seen: Array<Record<string, unknown>> = []
+    const base = countingPrisma().prisma as unknown as Record<string, unknown>
+    const prisma = {
+      ...base,
+      redraftRosterPlayer: {
+        findMany: async (a: { where?: Record<string, unknown> }) => {
+          seen.push(a?.where ?? {})
+          return []
+        },
+      },
+    } as never
+    await resolveRedraftTeamWindow(creq(prisma))
+    expect(seen.length).toBeGreaterThan(0)
+    for (const where of seen) expect(where).toHaveProperty('droppedAt', null)
+  })
+})
+
+describe('the league-wide reads happen once per request', () => {
+  /*
+   * The loader ignores the week — the rest of the season is the same quantity whichever prior week
+   * is reconstructed — so running it per lookback week repeated a full-league roster read and a
+   * whole-league projection scan for byte-identical data, on a route rate-limited at 60/min.
+   */
+  it('reads the league roster and projections exactly once, not once per lookback week', async () => {
+    const { prisma, calls } = countingPrisma()
+    await resolveRedraftTeamWindow(creq(prisma))
+    expect(calls.filter(c => c === 'ros:leagueWide')).toHaveLength(1)
+    expect(calls.filter(c => c === 'projections')).toHaveLength(1)
+    // Still redraft: the dynasty store is never touched at any point.
+    expect(calls).not.toContain('DYNASTY')
+  })
+
+  it('a failed projection read has its OWN stage, not the broad evidence one', async () => {
+    const base = countingPrisma().prisma as unknown as Record<string, unknown>
+    const broken = {
+      ...base,
+      aFProjectionSnapshot: { findMany: async () => { throw new Error('projection read down') } },
+    } as never
+    const d = await resolveRedraftTeamWindow(creq(broken))
+    expect(d.state).toBe('refused')
+    expect(d.gaps).toContain(WINDOW_GAP_PROJECTION_READ_FAILED)
+    expect(d.gaps).not.toContain(WINDOW_GAP_EVIDENCE_READ_FAILED)
   })
 })

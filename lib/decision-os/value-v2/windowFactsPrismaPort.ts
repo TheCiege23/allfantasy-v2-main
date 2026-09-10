@@ -51,6 +51,26 @@ export interface WindowFactsPrismaDeps {
   loadRestOfSeason?: (scope: WindowFactsScope) => Promise<RestOfSeasonStrength | null>
 }
 
+/**
+ * A read that FAILED, as distinct from one that found nothing.
+ *
+ * 🛑 EVERY READ IN THIS PORT USED TO SWALLOW ITS OWN ERROR AND RETURN AN EMPTY RESULT, WHICH
+ * TURNED FIVE DATABASE FAILURES INTO FIVE CONFIDENT ABSENCES. A forecast query that threw came
+ * back as `season_forecast_missing`; a matchup query that threw came back as a team that has
+ * never played. Both are statements about the league made from no evidence at all, and neither is
+ * distinguishable downstream from the real thing.
+ *
+ * The port no longer swallows. It names the stage and rethrows, so a caller can report WHICH read
+ * failed instead of guessing, or reporting one broad gap for four different causes.
+ */
+export class WindowPortReadError extends Error {
+  constructor(readonly stage: 'identity' | 'matchup' | 'forecast' | 'dynasty' | 'injury', cause: unknown) {
+    super(`window port read failed at stage: ${stage}`)
+    this.name = 'WindowPortReadError'
+    this.cause = cause
+  }
+}
+
 export const INJURY_BASIS = 'sportsplayer-availability-category:unavailable-share-of-covered-roster'
 
 /** Categories `deriveAvailabilityCategory` can return. Only 'unavailable' counts against a team. */
@@ -156,7 +176,7 @@ export function createWindowFactsPrismaPort(deps: WindowFactsPrismaDeps): Window
       const team = await prisma.leagueTeam.findFirst({
         where: { leagueId: scope.leagueId, externalId: String(scope.teamId) },
         select: { externalId: true, teamName: true, ownerName: true },
-      }).catch(() => null)
+      }).catch(e => { throw new WindowPortReadError('identity', e) })
       if (!team) return null
       return {
         teamId: String(team.externalId),
@@ -172,7 +192,7 @@ export function createWindowFactsPrismaPort(deps: WindowFactsPrismaDeps): Window
         where: { leagueId: platformLeagueId, seasonYear: scope.season, week: { lte: scope.week } },
         select: { rosterId: true, week: true, pointsFor: true, pointsAgainst: true, win: true },
         orderBy: { week: 'asc' },
-      }).catch(() => [])
+      }).catch(e => { throw new WindowPortReadError('matchup', e) })
       if (!rows.length) return null
       return allPlayAsOfWeek(
         rows.map(r => ({ ...r, rosterId: String(r.rosterId) })),
@@ -188,7 +208,7 @@ export function createWindowFactsPrismaPort(deps: WindowFactsPrismaDeps): Window
         where: { leagueId: scope.leagueId, season: scope.season, week: { lte: scope.week } },
         orderBy: { week: 'desc' },
         select: { season: true, week: true, teamForecasts: true, generatedAt: true },
-      }).catch(() => null)
+      }).catch(e => { throw new WindowPortReadError('forecast', e) })
       if (!row) return null
       const pct = forecastForTeam(row.teamForecasts, scope.teamId)
       if (pct === null) return null
@@ -206,7 +226,7 @@ export function createWindowFactsPrismaPort(deps: WindowFactsPrismaDeps): Window
           season: true, projectedStrength3Years: true, projectedStrengthNextYear: true,
           windowStartYear: true, windowEndYear: true, confidenceScore: true, generatedAt: true,
         },
-      }).catch(() => null)
+      }).catch(e => { throw new WindowPortReadError('dynasty', e) })
       if (!row) return null
       return {
         season: row.season,
@@ -222,7 +242,7 @@ export function createWindowFactsPrismaPort(deps: WindowFactsPrismaDeps): Window
     async injuries(): Promise<InjuryLoad | null> {
       const ids = rosterPlayerIds.filter(id => typeof id === 'string' && id.length > 0)
       if (!ids.length) return null
-      const byId = await loadAvailability(sport, [...ids]).catch(() => null)
+      const byId = await loadAvailability(sport, [...ids]).catch(e => { throw new WindowPortReadError('injury', e) })
       if (!byId) return null
 
       let covered = 0, unavailable = 0
