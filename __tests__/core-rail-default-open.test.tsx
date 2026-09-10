@@ -119,6 +119,42 @@ describe('the desktop rail opens without being asked', () => {
     expect(handle?.getAttribute('aria-label')).toBe('Close leagues')
   })
 
+  it('contains phone tray focus, closes with Escape, and restores the page', () => {
+    setViewport(false)
+    // jsdom has no layout; treat these rendered controls as visible here.
+    vi.spyOn(HTMLElement.prototype, 'getClientRects').mockReturnValue([{}] as unknown as DOMRectList)
+    const { container } = render(shell())
+    const handle = container.querySelector<HTMLButtonElement>('.af-rail-handle')!
+    const home = container.querySelector<HTMLAnchorElement>('.af-rail-logo')!
+    const content = container.querySelector<HTMLElement>('#af-content')!
+    const previousOverflow = document.body.style.overflow
+    fireEvent.click(handle)
+    expect(document.activeElement).toBe(handle)
+    expect(document.body.style.overflow).toBe('hidden')
+    expect(content.closest('.af-main')?.inert ?? content.inert).toBe(true)
+    fireEvent.keyDown(document, { key: 'Tab' })
+    expect(document.activeElement).toBe(home)
+    fireEvent.keyDown(document, { key: 'Tab', shiftKey: true })
+    expect(document.activeElement).toBe(handle)
+    fireEvent.keyDown(document, { key: 'Escape' })
+    expect(handle).toHaveAttribute('aria-expanded', 'false')
+    expect(document.activeElement).toBe(handle)
+    expect(document.body.style.overflow).toBe(previousOverflow)
+    expect(content.closest('.af-main')?.inert ?? content.inert).not.toBe(true)
+  })
+
+  it('closes the phone tray for its home and utility links too', () => {
+    setViewport(false)
+    const { container } = render(shell())
+    const handle = container.querySelector<HTMLButtonElement>('.af-rail-handle')!
+    for (const selector of ['.af-rail-logo', '.af-rail-add', '.af-rail-profile']) {
+      fireEvent.click(handle)
+      fireEvent.click(container.querySelector(selector)!)
+      expect(handle).toHaveAttribute('aria-expanded', 'false')
+      expect(document.body.style.overflow).not.toBe('hidden')
+    }
+  })
+
   /*
    * ⚠ 'false' AND absent MUST NOT COLLAPSE INTO ONE VALUE. Emitting `undefined`
    * for a reader who collapsed the rail would re-expand it on their next page
@@ -138,15 +174,20 @@ describe('the desktop rail opens without being asked', () => {
     expect(railFlag(container)).toBe('true')
   })
 
-  /*
-   * A stored preference outranks the breakpoint default in BOTH directions —
-   * including on a phone, where '1' is what opens the tray on load.
-   */
-  it('lets a stored preference beat the breakpoint default on mobile', () => {
+  it('keeps the phone tray shut even with an expanded desktop preference', () => {
     setViewport(false)
     window.localStorage.setItem('af-rail-open', '1')
     const { container } = render(shell())
+    expect(railFlag(container)).toBeNull()
+  })
+
+  it('does not save a temporary phone tray as the desktop preference', () => {
+    setViewport(false)
+    window.localStorage.setItem('af-rail-open', '0')
+    const { container } = render(shell())
+    fireEvent.click(container.querySelector('.af-rail-handle')!)
     expect(railFlag(container)).toBe('true')
+    expect(window.localStorage.getItem('af-rail-open')).toBe('0')
   })
 
   /*
