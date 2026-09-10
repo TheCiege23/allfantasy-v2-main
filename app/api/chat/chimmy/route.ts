@@ -1669,11 +1669,28 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
           }))
           .catch(() => undefined)
       : Promise.resolve(undefined)
+  /*
+   * 🛑 `getFullAIContext` HAS TWO CALL SITES IN THIS REQUEST AND THE PREVIOUS COMMIT CLOSED ONE.
+   *
+   * That commit's message says the reader is closed. It was closed at ~2401 (inside the PECR
+   * plan) and NOT here, where `getChimmyMemoryContext` reaches the identical function through
+   * `lib/ai-memory/chimmy-memory-context.ts` — so `aILeagueContext.findUnique({ where:
+   * { leagueId } })` and `getRecentMemoryEvents({ leagueId })` still ran on the raw request field.
+   *
+   * ⚠ AND THE READER-AUTHORIZATION SUITE COULD NOT HAVE CAUGHT IT, because it MOCKS
+   * `@/lib/ai-memory/chimmy-memory-context` wholesale — so the real module, and the second route
+   * into the real `getFullAIContext`, never executed under test. Mocking a module hides every
+   * path through it, including the unguarded one. The regression test added for this asserts on
+   * the `leagueId` handed to that mock instead.
+   *
+   * The lesson worth keeping: "I fixed function F" is not the same claim as "every call site of
+   * F is fixed", and a census of CALL SITES is what closes the second one.
+   */
   const memoryTask: Promise<string | undefined> =
     userId
       ? getChimmyMemoryContext({
           userId,
-          leagueId: leagueId ?? null,
+          leagueId: leagueSnapshot?.id ?? null,
           conversationId,
           sleeperUsername: sleeperUsername ?? null,
         })

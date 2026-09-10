@@ -565,11 +565,163 @@ describe('the AI memory context reader', () => {
     }
   })
 
+  it('🛑 a NONEXISTENT league id never reaches getFullAIContext either', async () => {
+    /*
+     * ⚠ THIS CASE WAS MISSING, AND IT IS NOT REDUNDANT WITH THE ONE ABOVE. `not_member` and
+     * `not_found` arrive here by DIFFERENT routes through `loadLeagueGroundingForUser`: the
+     * inaccessible league returns a row and then fails four membership probes, the nonexistent
+     * one short-circuits on the first read. They converge on `leagueGrounding.ok === false` —
+     * but "they converge" is the property under test, not an assumption the test may make. The
+     * two sibling blocks each cover both cases; this block covered only one.
+     */
+    asNonexistent()
+    await post(NON_GROUNDED_Q)
+    expect(getFullAIContextMock).toHaveBeenCalled()
+    for (const call of getFullAIContextMock.mock.calls) {
+      expect(call[0]?.leagueId).toBeUndefined()
+    }
+  })
+
+  it('🛑 inaccessible and nonexistent are INDISTINGUISHABLE at this reader', async () => {
+    /*
+     * The two cases compared to EACH OTHER rather than each checked alone — the correction this
+     * whole branch exists to make, applied at this reader. Compared on the argument actually
+     * passed, because that is the channel: a reader called with an id in one case and without it
+     * in the other leaks existence into the prompt even when both HTTP responses read alike.
+     */
+    asInaccessible()
+    await post(NON_GROUNDED_Q)
+    const inaccessible = getFullAIContextMock.mock.calls.map((c) => c[0]?.leagueId ?? null)
+    getFullAIContextMock.mockClear()
+    asNonexistent()
+    await post(NON_GROUNDED_Q)
+    const nonexistent = getFullAIContextMock.mock.calls.map((c) => c[0]?.leagueId ?? null)
+    // Non-vacuous: the reader must actually have run in both cases.
+    expect(inaccessible.length).toBeGreaterThan(0)
+    expect(inaccessible).toEqual(nonexistent)
+  })
+
   it('✅ CONTROL: an AUTHORIZED league id DOES reach getFullAIContext', async () => {
     asAuthorized()
     await post(NON_GROUNDED_Q)
     expect(getFullAIContextMock).toHaveBeenCalledWith(
       expect.objectContaining({ leagueId: 'league-real' }),
     )
+  })
+})
+
+// ─────────────────────────────────────────────────────────────────────────────────────────────
+describe('the SECOND route into getFullAIContext — getChimmyMemoryContext', () => {
+  /*
+   * 🛑 THE PREVIOUS COMMIT CLOSED ONE OF TWO CALL SITES AND ITS MESSAGE SAID "THE READER IS
+   * CLOSED". `getChimmyMemoryContext` reaches the same `getFullAIContext` through
+   * `lib/ai-memory/chimmy-memory-context.ts`, and it was still handed the raw request field.
+   *
+   * ⚠ THE SUITE COULD NOT HAVE SEEN IT: this file MOCKS that module, so the real path never
+   * executed. Mocking a module hides every path through it, the unguarded one included. The
+   * assertion therefore moves to the boundary that IS observable — the `leagueId` handed to the
+   * mock — which is the same value the real module would have forwarded.
+   */
+  it('🛑 PRECONDITION: this question reaches getChimmyMemoryContext at all', async () => {
+    asAuthorized()
+    await post(NON_GROUNDED_Q)
+    expect(getChimmyMemoryContextMock).toHaveBeenCalled()
+  })
+
+  it('🛑 an inaccessible league id never reaches it', async () => {
+    asInaccessible()
+    await post(NON_GROUNDED_Q)
+    for (const call of getChimmyMemoryContextMock.mock.calls) {
+      expect(call[0]?.leagueId ?? null).toBeNull()
+    }
+  })
+
+  it('🛑 a nonexistent league id never reaches it', async () => {
+    asNonexistent()
+    await post(NON_GROUNDED_Q)
+    for (const call of getChimmyMemoryContextMock.mock.calls) {
+      expect(call[0]?.leagueId ?? null).toBeNull()
+    }
+  })
+
+  it('✅ CONTROL: an AUTHORIZED league id DOES reach it', async () => {
+    asAuthorized()
+    await post(NON_GROUNDED_Q)
+    expect(getChimmyMemoryContextMock).toHaveBeenCalledWith(
+      expect.objectContaining({ leagueId: 'league-real' }),
+    )
+  })
+})
+
+// ─────────────────────────────────────────────────────────────────────────────────────────────
+describe('teamId — league-scoped opponent analysis, not a cross-league key', () => {
+  /*
+   * THE POLICY THIS BLOCK ENCODES, because the two halves of `getFullAIContext`'s team-scoped
+   * read are in DIFFERENT categories and must not be treated alike:
+   *
+   *   LEAGUE-VISIBLE. `getTeamSnapshots(leagueId, teamId)` returns derived roster analytics —
+   *   windowStatus, winNowScore, futureValueScore, qbStabilityScore, rbDependencyScore,
+   *   pickInventory — computed from rosters and picks every league member can already see.
+   *   Reading an OPPONENT'S snapshot inside your own league IS the product. Not restricted.
+   *
+   *   PRIVATE. `AIMemoryEvent.content` is that user's own recorded content. Narrowed in
+   *   `lib/ai-memory.ts` and covered by `__tests__/ai-memory-league-scope.test.ts`.
+   *
+   * What must hold for the league-visible half is SCOPING: `teamId` is only ever paired with a
+   * league the caller was authorized for. The prisma query is `where: { leagueId, teamId }` — a
+   * compound filter — so an authorized league plus a foreign team simply matches no rows. The
+   * cross-league case cannot arise at all, and the test below says why.
+   */
+  const TEAM_Q = { ...NON_GROUNDED_Q, teamId: 'team-belonging-to-another-league' }
+
+  it('🛑 CROSS-LEAGUE DENIAL: sending a teamId FORCES grounding, so an inaccessible league is refused', async () => {
+    /*
+     * `requiresLeagueGrounding` returns true on `args.teamId` alone (route.ts ~654). So a teamId
+     * paired with a league the caller cannot access is refused at 412 before any reader — the
+     * cross-league pairing is unreachable rather than merely unrewarding. Asserted, not assumed,
+     * because it is the load-bearing half of the policy.
+     */
+    asInaccessible()
+    const res = await post(TEAM_Q)
+    expect(res.status).toBe(412)
+    expect(getFullAIContextMock).not.toHaveBeenCalled()
+  })
+
+  it('🛑 CROSS-LEAGUE DENIAL: the same holds for a nonexistent league', async () => {
+    asNonexistent()
+    const res = await post(TEAM_Q)
+    expect(res.status).toBe(412)
+    expect(getFullAIContextMock).not.toHaveBeenCalled()
+  })
+
+  it('✅ CONTROL: inside an AUTHORIZED league the teamId still flows — opponent analysis works', async () => {
+    /*
+     * Without this the two above are satisfied by breaking the feature. This is the assertion
+     * that says the fix did not disable legitimate opponent analysis.
+     */
+    asAuthorized()
+    const res = await post(TEAM_Q)
+    expect(res.status).toBeLessThan(400)
+    expect(getFullAIContextMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        leagueId: 'league-real',
+        teamId: 'team-belonging-to-another-league',
+      }),
+    )
+  })
+
+  it('🛑 a teamId is NEVER paired with a league the caller was not authorized for', async () => {
+    /*
+     * The policy stated as one invariant over every call actually made, rather than as three
+     * separate scenarios. Any call carrying a teamId must carry the authorized league id.
+     */
+    for (const fixture of [asInaccessible, asNonexistent, asAuthorized]) {
+      getFullAIContextMock.mockClear()
+      fixture()
+      await post(TEAM_Q)
+      for (const call of getFullAIContextMock.mock.calls) {
+        if (call[0]?.teamId) expect(call[0]?.leagueId).toBe('league-real')
+      }
+    }
   })
 })
