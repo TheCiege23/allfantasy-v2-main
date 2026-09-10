@@ -78,7 +78,29 @@ export interface WindowDecision {
     /** Week the forecast actually came from, which may lag the requested week. */
     forecastWeek: number | null
   }
-  identity: { leagueId: string; season: number; week: number; teamId: string; teamName: string | null; managerName: string | null }
+  /**
+   * The scope the caller asked about, echoed back so an operator can find the
+   * caller from a refusal.
+   *
+   * ⚠ THE FOUR SCOPE FIELDS ARE NULLABLE, AND ONLY A REFUSAL EVER SETS THEM NULL.
+   * `invalidScopeReason` accepts `null`, `undefined` and non-objects and names
+   * them `scope_missing` — so a refusal genuinely can have no league, team,
+   * season or week to report. Typing them as `string`/`number` made this a lie
+   * the compiler could not see: every malformed-identity refusal already wrote
+   * `undefined` into a field declared `string`. Null is the honest value, and it
+   * is the only one that does not invent a league id.
+   *
+   * On any non-refused decision all four are populated — validation has already
+   * proved the scope well-formed before evidence is read.
+   */
+  identity: {
+    leagueId: string | null
+    season: number | null
+    week: number | null
+    teamId: string | null
+    teamName: string | null
+    managerName: string | null
+  }
   coefficients: WindowCoefficients
   gaps: string[]
   evidence: WindowEvidence
@@ -140,25 +162,67 @@ export const MAX_PERIOD_ORDINAL = 25
  * undefined and throwing a TypeError on `.facts`. A week of Infinity was worse: `w += 1`
  * never advances past Infinity, so the loop never terminated at all — a hang rather than an
  * error. Validating here, before either branch, closes both.
+ *
+ * ⚠ THE PARAMETER IS `unknown`, NOT `WindowFactsScope`, AND THAT IS THE POINT. It was
+ * declared as the latter while the body's first line tested `!scope` — a check TypeScript
+ * believes can never fire, so the compiler offered no help when `refusedDecision` then
+ * dereferenced the very value this had just called missing. Starting from `unknown` is what
+ * makes the null branch a case the compiler can see rather than dead code it assumes away.
  */
-function invalidScopeReason(scope: WindowFactsScope): string | null {
+function invalidScopeReason(scope: unknown): string | null {
   if (!scope || typeof scope !== 'object') return 'scope_missing'
-  if (typeof scope.leagueId !== 'string' || !scope.leagueId) return 'league_id_missing'
-  if (typeof scope.teamId !== 'string' || !scope.teamId) return 'team_id_missing'
-  if (!Number.isSafeInteger(scope.season)) return 'season_not_an_integer'
+  const s = scope as Partial<WindowFactsScope>
+  if (typeof s.leagueId !== 'string' || !s.leagueId) return 'league_id_missing'
+  if (typeof s.teamId !== 'string' || !s.teamId) return 'team_id_missing'
+  if (!Number.isSafeInteger(s.season)) return 'season_not_an_integer'
   // Number.isSafeInteger is false for NaN, Infinity, fractions and anything past 2^53-1.
-  if (!Number.isSafeInteger(scope.week)) return 'week_not_an_integer'
-  if (scope.week < 1) return 'week_below_first_period'
-  if (scope.week > MAX_PERIOD_ORDINAL) return 'week_above_period_bound'
+  if (!Number.isSafeInteger(s.week)) return 'week_not_an_integer'
+  if ((s.week as number) < 1) return 'week_below_first_period'
+  if ((s.week as number) > MAX_PERIOD_ORDINAL) return 'week_above_period_bound'
   return null
 }
 
 /** The requested period is not in the league's schedule at all. */
 export const PERIOD_NOT_SCHEDULED_GAP = 'period_not_in_schedule'
 
+/**
+ * Echoes back whatever of the scope is actually usable, and nulls the rest.
+ *
+ * 🛑 THE GUARD NAMED AN INPUT THE REFUSAL THEN CRASHED ON. `invalidScopeReason`
+ * returns `scope_missing` for `null`, `undefined` and non-objects — and
+ * `refusedDecision` read `scope.leagueId` straight afterwards, so the one input
+ * the contract explicitly claimed to support threw a TypeError instead of
+ * refusing. The refusal for `scope_missing` was unreachable BY CONSTRUCTION: it
+ * could only be produced by a value that made producing it throw.
+ *
+ * ⚠ A TYPE ANNOTATION IS NOT A RUNTIME GUARANTEE AT A TRUST BOUNDARY. The
+ * declared parameter was `WindowFactsScope`, which is exactly why the
+ * dereference looked safe on review. This resolver is reached from request
+ * handlers with parsed JSON, so `unknown` is the truthful parameter type and the
+ * narrowing is done here, once.
+ *
+ * Fields are echoed only when they carry the RIGHT PRIMITIVE TYPE, never
+ * coerced. `week: 0` and `season: NaN` are wrong values but real ones, and an
+ * operator diagnosing a bad caller needs to see what was actually sent —
+ * replacing them with null would hide the evidence the echo exists to carry.
+ * Anything absent or of the wrong type becomes null rather than `undefined`
+ * masquerading as a `string`, which is what this previously produced.
+ */
+function scopeEcho(scope: unknown): WindowDecision['identity'] {
+  const s = (scope && typeof scope === 'object' ? scope : {}) as Partial<WindowFactsScope>
+  return {
+    leagueId: typeof s.leagueId === 'string' ? s.leagueId : null,
+    season: typeof s.season === 'number' ? s.season : null,
+    week: typeof s.week === 'number' ? s.week : null,
+    teamId: typeof s.teamId === 'string' ? s.teamId : null,
+    teamName: null,
+    managerName: null,
+  }
+}
+
 /** A refusal that carries no evidence — used when the period is not in the schedule at all. */
 function refusedDecision(
-  scope: WindowFactsScope,
+  scope: unknown,
   coefficients: WindowCoefficients,
   now: Date,
   gaps: readonly string[],
@@ -168,10 +232,7 @@ function refusedDecision(
     nowScore: null, futureScore: null, luckAdjustedWinRate: null, sourceConfidence: null,
     hysteresis: { persistenceWeeks: WINDOW_PERSISTENCE_WEEKS, pendingStatus: null, pendingObservations: 0, weeksObserved: [] },
     timestamps: { assembledAt: now.toISOString(), forecastGeneratedAt: null, dynastyGeneratedAt: null, forecastWeek: null },
-    identity: {
-      leagueId: scope.leagueId, season: scope.season, week: scope.week, teamId: scope.teamId,
-      teamName: null, managerName: null,
-    },
+    identity: scopeEcho(scope),
     coefficients,
     gaps: [...new Set(gaps)],
     evidence: {

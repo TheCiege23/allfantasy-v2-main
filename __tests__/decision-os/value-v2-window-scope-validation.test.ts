@@ -94,3 +94,100 @@ describe('an invalid scope refuses without touching the port', () => {
     expect(decision.gaps).not.toContain(INVALID_SCOPE_GAP)
   })
 })
+
+/**
+ * The `scope_missing` branch, which could not previously be reached alive.
+ *
+ * 🛑 `invalidScopeReason` returned 'scope_missing' for null, undefined and non-objects, and
+ * `refusedDecision` then read `scope.leagueId` — so the ONE input the contract named as
+ * supported threw a TypeError instead of refusing. The refusal was unreachable by
+ * construction: producing it required a value that made producing it throw.
+ *
+ * These assert the contract end to end rather than the guard in isolation. A test that only
+ * called `invalidScopeReason` would have passed against the broken version, because the
+ * guard was never the broken half.
+ */
+describe('a missing or non-object scope refuses instead of throwing', () => {
+  const MISSING: Array<[string, unknown]> = [
+    ['null', null],
+    ['undefined', undefined],
+    ['a string', 'l1'],
+    ['a number', 7],
+    ['a boolean', true],
+  ]
+
+  it.each(MISSING)('scope %s refuses and reads no evidence', async (_label, bad) => {
+    const decision = await resolveWindowDecision(
+      bad as never,
+      forbiddenPort(),
+    )
+    expect(decision.state).toBe('refused')
+    expect(decision.status).toBeNull()
+    expect(decision.gaps).toContain(INVALID_SCOPE_GAP)
+    expect(decision.gaps).toContain('scope_missing')
+    expect(decision.teamFit).toMatchObject({ winNowWeight: 1, longTermWeight: 1, basis: 'unresolved' })
+  })
+
+  it.each(MISSING)('scope %s reports a null identity rather than inventing one', async (_label, bad) => {
+    const decision = await resolveWindowDecision(bad as never, forbiddenPort())
+    // Null, not undefined: the field is declared nullable and must actually hold null.
+    expect(decision.identity).toEqual({
+      leagueId: null, season: null, week: null, teamId: null, teamName: null, managerName: null,
+    })
+  })
+
+  it('an array is not a usable scope even though typeof is "object"', async () => {
+    const decision = await resolveWindowDecision([] as never, forbiddenPort())
+    expect(decision.state).toBe('refused')
+    // An array has no leagueId, so it is caught one step later than scope_missing.
+    expect(decision.gaps).toContain('league_id_missing')
+    expect(decision.identity.leagueId).toBeNull()
+  })
+
+  /*
+   * A partial scope must still echo the fields that ARE usable. This is what the refusal is
+   * for: an operator reading it has to be able to find the caller that sent it.
+   */
+  it('echoes usable fields and nulls only the unusable ones', async () => {
+    const decision = await resolveWindowDecision(
+      { leagueId: 'l1', teamId: 't1', season: 2026 } as never,
+      forbiddenPort(),
+    )
+    expect(decision.state).toBe('refused')
+    expect(decision.gaps).toContain('week_not_an_integer')
+    expect(decision.identity).toEqual({
+      leagueId: 'l1', season: 2026, week: null, teamId: 't1', teamName: null, managerName: null,
+    })
+  })
+
+  /*
+   * ⚠ A WRONG VALUE IS NOT AN ABSENT ONE. `week: 0` and `season: NaN` are real values that a
+   * real caller sent, and they are the evidence needed to find that caller. Nulling them
+   * would hide exactly what the echo exists to carry.
+   */
+  it('echoes a wrong-but-real week and season rather than nulling them', async () => {
+    const zero = await resolveWindowDecision(
+      { leagueId: 'l1', teamId: 't1', season: 2026, week: 0 } as never,
+      forbiddenPort(),
+    )
+    expect(zero.identity.week).toBe(0)
+
+    const nan = await resolveWindowDecision(
+      { leagueId: 'l1', teamId: 't1', season: Number.NaN, week: 6 } as never,
+      forbiddenPort(),
+    )
+    expect(nan.identity.season).toBeNaN()
+    expect(nan.identity.week).toBe(6)
+  })
+
+  it('a wrong-typed field is nulled rather than passed through as-is', async () => {
+    const decision = await resolveWindowDecision(
+      { leagueId: 42, teamId: 't1', season: '2026', week: 6 } as never,
+      forbiddenPort(),
+    )
+    expect(decision.state).toBe('refused')
+    expect(decision.identity.leagueId).toBeNull()
+    expect(decision.identity.season).toBeNull()
+    expect(decision.identity.teamId).toBe('t1')
+  })
+})
