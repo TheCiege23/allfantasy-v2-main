@@ -73,6 +73,17 @@ const ENUMERATION_EXCEPTIONS: Record<string, string> = {
     'Identity maps — teamByPlatformId and teamByLegacyRosterId resolve a health row back to a seat; no count or list is derived from the array.',
   'lib/commissioner-ui/managers/managerNames.ts#1':
     'ADMIN: name resolution across all seats, archived included.',
+  // ── ARCHIVED-ONLY BY DESIGN ─────────────────────────────────────────────────────────────
+  // These select archived teams on purpose. They were exempt for the WRONG REASON until the
+  // 2026-09-10 polarity fix: the old predicate test granted protection to any clause merely
+  // MENTIONING isOrphan, so a query returning ONLY archived teams read as one that excludes
+  // them. Classified explicitly now, which is the point — the guard should make a deliberate
+  // archived read state its case, not wave it through on a substring.
+  'lib/commissioner-workspace/rosterReads.ts#2':
+    'ARCHIVED-ONLY on purpose — this is the orphan metric itself (`isOrphan: true`), read beside the unfiltered total so a commissioner can see how many seats left. Filtering it would zero the number it exists to report.',
+  'app/api/commissioner/leagues/[leagueId]/renew/route.ts#1':
+    'ARCHIVED-ONLY on purpose — counts orphaned seats after removal to set `dispersalDraftEligible` (>= 2). The decision is ABOUT departed seats, so excluding them would make the flag permanently false.',
+
   'lib/commissioner-workspace/rosterReads.ts#1':
     'ADMIN: counts orphans on purpose — that is the metric.',
   'lib/core-app/allPlay.ts#1':
@@ -345,8 +356,63 @@ function extractWhereClause(window: string): string {
  */
 const NARROWING_KEY = /externalId:|\bid:\s|claimedByUserId:\s*[^{\s]|platformUserId:\s*[^{\s]/
 
-const QUERY_FILTER = /ACTIVE_TEAM_WHERE|ORPHAN_TEAM_WHERE|isOrphan\s*:/
-const CONSUMER_FILTER = ['selectActiveTeams', 'selectOrphanTeams', 'isActiveTeam']
+/**
+ * What a `where` clause says about archived teams — which is NOT the same question as whether it
+ * mentions them.
+ *
+ * 🛑 A BARE `isOrphan` MENTION USED TO GRANT PROTECTION, AND THAT IS BACKWARDS FOR HALF OF THEM.
+ * The old test was `/ACTIVE_TEAM_WHERE|ORPHAN_TEAM_WHERE|isOrphan\s*:/`. So `isOrphan: true` —
+ * a query that returns ONLY archived teams — counted as "this call is protected from archived
+ * teams". So did `ORPHAN_TEAM_WHERE`, whose entire purpose is to select them. A wrong-polarity
+ * predicate silenced the guard exactly as effectively as a correct one.
+ *
+ * Four answers, and only ONE of them is protection:
+ *
+ *   active         `ACTIVE_TEAM_WHERE`, `NOT: { isOrphan: true }`, `isOrphan: false`
+ *   archived-only  `ORPHAN_TEAM_WHERE`, `isOrphan: true`   → a deliberate archived read; REPORT it
+ *                                                              so it is classified with a reason
+ *   unknown        mentions the field in a shape not listed → REPORT it; review decides
+ *   none           does not mention it at all              → the ordinary enumeration path
+ *
+ * ⚠ AND A SURROUNDING `OR:` DEFEATS ANY OF THEM. `where: { OR: [{ isOrphan: false }, { … }] }`
+ * matches rows through the other branch, so the predicate constrains nothing. Rather than try to
+ * reason about which branch dominates, an `OR` anywhere in the clause downgrades the verdict to
+ * `unknown` — an unrecognised shape requires review, which is the safe direction.
+ */
+type OrphanPolarity = 'active' | 'archived-only' | 'unknown' | 'none'
+
+function orphanPolarity(whereClause: string): OrphanPolarity {
+  const w = whereClause
+  const namesActiveHelper = /ACTIVE_TEAM_WHERE/.test(w)
+  const namesOrphanHelper = /ORPHAN_TEAM_WHERE/.test(w)
+  const namesField = /isOrphan/.test(w)
+  if (!namesActiveHelper && !namesOrphanHelper && !namesField) return 'none'
+
+  /* A disjunction can satisfy the query without the predicate ever applying. */
+  if (/\bOR\s*:/.test(w)) return 'unknown'
+
+  /* Checked before the active helper: a clause naming both is not a clean active filter. */
+  if (namesOrphanHelper) return namesActiveHelper ? 'unknown' : 'archived-only'
+  if (namesActiveHelper) return 'active'
+
+  /*
+   * ⚠ CONSUME THE NEGATED FORM BEFORE LOOKING FOR A BARE ONE. `NOT: { isOrphan: true }` — which
+   * IS the active filter, and is literally what `ACTIVE_TEAM_WHERE` expands to — contains the
+   * substring `isOrphan: true`. Testing both patterns against the raw clause classified the
+   * canonical active predicate as "both polarities present", i.e. unknown. Caught by the control
+   * for that exact shape, which is why the control is written against the real scanner.
+   */
+  const negatedConsumed = w.replace(/NOT\s*:\s*\{\s*isOrphan\s*:\s*true\s*\}/g, ' <negated> ')
+  const active = negatedConsumed.includes('<negated>') || /isOrphan\s*:\s*false\b/.test(negatedConsumed)
+  const archived = /isOrphan\s*:\s*true\b/.test(negatedConsumed)
+  if (active && archived) return 'unknown'
+  if (active) return 'active'
+  if (archived) return 'archived-only'
+  /* e.g. `isOrphan: someVariable` — the value is not readable here. */
+  return 'unknown'
+}
+
+const CONSUMER_FILTER = ['selectActiveTeams', 'isActiveTeam']
 
 /** Sentinel binding: the call is wrapped directly in a filter, so there is no name to trace. */
 const INLINE_PROTECTED = '<inline>'
@@ -450,8 +516,12 @@ function bindingsFor(src: string, callStart: number): string[] {
  * constant exempted all of them. Three ways to be silently wrong, in one line.
  */
 function isProtected(src: string, callStart: number, call: string): boolean {
-  /* Query-level: the filter is in THIS call's own `where`. */
-  if (QUERY_FILTER.test(extractWhereClause(call))) return true
+  /*
+   * Query-level, and ONLY when the predicate actually selects ACTIVE teams. `archived-only` and
+   * `unknown` fall through to be reported, so a deliberate archived read is classified with a
+   * reason rather than silently exempted by the mere presence of the field.
+   */
+  if (orphanPolarity(extractWhereClause(call)) === 'active') return true
 
   /* Consumer-level: THIS call's binding is what gets filtered. */
   const names = bindingsFor(src, callStart)
@@ -641,6 +711,65 @@ describe('active-team policy guard', () => {
     }
     /* `a` is consumed by the filter, `b` is not — and only `b` is reported. */
     expect(scanSources([both]).map((h) => h.id)).toEqual(['__control__/both.ts#2'])
+  })
+
+  /*
+   * 🛑 PREDICATE POLARITY. A `where` that MENTIONS `isOrphan` is not thereby a `where` that
+   * EXCLUDES archived teams. These run through the production scanner, so the classifier cannot
+   * drift from what the guard actually does.
+   */
+  const POLARITY_CASES: Array<{ label: string; where: string; reported: boolean }> = [
+    { label: 'ACTIVE_TEAM_WHERE spread', where: '{ ...ACTIVE_TEAM_WHERE, leagueId }', reported: false },
+    { label: 'NOT isOrphan true', where: '{ leagueId, NOT: { isOrphan: true } }', reported: false },
+    { label: 'isOrphan false', where: '{ leagueId, isOrphan: false }', reported: false },
+
+    /* Wrong polarity — these SELECT archived teams. They must be reported and classified. */
+    { label: 'isOrphan true (archived-only)', where: '{ leagueId, isOrphan: true }', reported: true },
+    { label: 'ORPHAN_TEAM_WHERE (archived-only)', where: '{ ...ORPHAN_TEAM_WHERE, leagueId }', reported: true },
+
+    /* Weakened or overridden by surrounding query logic. */
+    {
+      label: 'OR branch bypasses the predicate',
+      where: '{ leagueId, OR: [{ isOrphan: false }, { claimedByUserId: { not: null } }] }',
+      reported: true,
+    },
+    {
+      label: 'both polarities in one clause',
+      where: '{ leagueId, isOrphan: false, NOT: { isOrphan: true }, ...ORPHAN_TEAM_WHERE }',
+      reported: true,
+    },
+
+    /* Unrecognised shape — the value is not readable here, so review decides. */
+    { label: 'isOrphan bound to a variable', where: '{ leagueId, isOrphan: wantArchived }', reported: true },
+  ]
+
+  it.each(POLARITY_CASES)('polarity: $label', ({ where, reported }) => {
+    const fixture: Source = {
+      rel: '__control__/polarity.ts',
+      src: `const t = await prisma.leagueTeam.findMany({ where: ${where} })\n`,
+    }
+    const hits = scanSources([fixture]).map((h) => h.id)
+    expect(hits).toEqual(reported ? ['__control__/polarity.ts#1'] : [])
+  })
+
+  it('a bare isOrphan mention alone never grants protection', () => {
+    /*
+     * The single assertion that would have caught the old rule. Under
+     * `/ACTIVE_TEAM_WHERE|ORPHAN_TEAM_WHERE|isOrphan\s*:/` every one of these was silently
+     * exempt; only the first is a filter for ACTIVE teams.
+     */
+    const grantsProtection = (where: string) =>
+      scanSources([
+        {
+          rel: '__control__/bare.ts',
+          src: `const t = await prisma.leagueTeam.findMany({ where: ${where} })\n`,
+        },
+      ]).length === 0
+
+    expect(grantsProtection('{ leagueId, isOrphan: false }')).toBe(true)
+    expect(grantsProtection('{ leagueId, isOrphan: true }')).toBe(false)
+    expect(grantsProtection('{ ...ORPHAN_TEAM_WHERE, leagueId }')).toBe(false)
+    expect(grantsProtection('{ leagueId, isOrphan: maybe }')).toBe(false)
   })
 
   it('the scanner reaches the real tree — it is not scanning an empty source set', () => {

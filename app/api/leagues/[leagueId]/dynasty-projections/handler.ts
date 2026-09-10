@@ -519,7 +519,13 @@ export async function buildTeamInputsFromLeague(params: {
   return { league, teamInputs }
 }
 
-async function generateForInputs(
+/**
+ * Exported so the archived-seat test can drive the REAL persistence path — this is what both
+ * `GET` and `POST` call, and `persist: true` reaches
+ * `prisma.dynastyProjection.upsert`. Asserting on the stored rows is the only way to prove an
+ * archived seat gets neither a new row nor an update to an existing one.
+ */
+export async function generateForInputs(
   teamInputs: TeamDynastyInputs[],
   persist: boolean
 ): Promise<DynastyProjectionOutput[]> {
