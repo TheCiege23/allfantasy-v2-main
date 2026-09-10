@@ -1173,12 +1173,37 @@ export async function syncAPISportsGamesToDb(opts?: { season?: string; sport?: '
   }
 
   let synced = 0;
+  /*
+   * ⚠ A PER-ROW FAILURE MUST NOT BE ABLE TO FLOOD THE LOG, WHATEVER CAUSES IT.
+   *
+   * Measured 2026-09-10: API-Sports returned NCAAF fixtures whose away team had an id
+   * but no NAME, every one failed the non-null `awayTeam` column, and the handler below
+   * passed the whole Prisma error to `console.error` — which embeds the ENTIRE upsert
+   * invocation, `where` + `update` + `create`, per game. That saturated Railway's
+   * 500 logs/sec replica limit and dropped 6,008 messages in a burst.
+   *
+   * 🛑 THE DROPPED MESSAGES ARE THE REAL DAMAGE, NOT THE FAILED ROWS. Everything else on
+   * the replica went with them, so an absence in these logs stopped being evidence of
+   * anything — three unrelated checks could not be cleared while this was running.
+   *
+   * So the cap is on the MECHANISM, not on this one cause: whatever fails next gets the
+   * same first-N-then-count treatment, and only the error's first line is printed.
+   */
+  const MAX_LOGGED_FAILURES = 5;
+  let failed = 0;
+  let unwritable = 0;
   const now = new Date();
   const expiresAt = new Date(now.getTime() + 60 * 1000);
 
   for (const g of games) {
     const homeTeam = teamNameToAbbrev(g.teams.home.name) || g.teams.home.name;
     const awayTeam = teamNameToAbbrev(g.teams.away.name) || g.teams.away.name;
+
+    // Guaranteed-to-fail rows are skipped, not attempted. See `isSyncableGameRow`.
+    if (!isSyncableGameRow(g)) {
+      unwritable++;
+      continue;
+    }
     const weekNum = g.game.week ? parseInt(g.game.week.replace(/\D/g, '')) || null : null;
     /*
      * ⚠ API-Sports' `status.long` IS A DIALECT NOTHING DOWNSTREAM SPEAKS. It emits
@@ -1255,11 +1280,22 @@ export async function syncAPISportsGamesToDb(opts?: { season?: string; sport?: '
       });
       synced++;
     } catch (err) {
-      console.error(`[API-Sports] Failed to sync game ${g.game.id}:`, err);
+      failed++;
+      // First line only. Passing the error object prints the whole Prisma invocation.
+      if (failed <= MAX_LOGGED_FAILURES) {
+        const reason = (err instanceof Error ? err.message : String(err)).split('\n')[0].slice(0, 200);
+        console.error(`[API-Sports] Failed to sync game ${g.game.id}: ${reason}`);
+      } else if (failed === MAX_LOGGED_FAILURES + 1) {
+        console.error(`[API-Sports] Further game sync failures suppressed; total reported at the end.`);
+      }
     }
   }
 
-  console.log(`[API-Sports] Synced ${synced}/${games.length} ${dbSport} games`);
+  console.log(
+    `[API-Sports] Synced ${synced}/${games.length} ${dbSport} games` +
+      (unwritable ? ` (${unwritable} skipped: missing team name)` : '') +
+      (failed ? ` (${failed} failed)` : ''),
+  );
   return synced;
 }
 
@@ -1695,6 +1731,27 @@ export async function syncAPISportsPlayerSeasonStatsToDb(
   }
 
   return summary;
+}
+
+/**
+ * A game row is syncable only if BOTH team names survive normalization, because `homeTeam` and
+ * `awayTeam` are non-null columns — a fixture missing either can never be written, and attempting
+ * it buys one guaranteed exception per game.
+ *
+ * ⚠ TEST THE NORMALIZED VALUE, NOT THE RAW FIELD. `teamNameToAbbrev(name) || name` is what the
+ * upsert stores, so a row whose raw name is present but normalizes to empty is still unwritable.
+ * Checking `g.teams.away.name` alone would pass a row the database then rejects.
+ *
+ * Observed 2026-09-10: API-Sports returned NCAAF fixtures whose away team carried an `id` (`902`)
+ * and no `name`. Every one failed the column, and the old handler logged the entire Prisma
+ * invocation per game — 6,008 log messages dropped to Railway's replica rate limit in one burst.
+ * Same shape as `isSyncableStandingRow` below, and the same reason.
+ */
+export function isSyncableGameRow(g: APISportsGame | null | undefined): boolean {
+  const home = g?.teams?.home?.name;
+  const away = g?.teams?.away?.name;
+  if (!home || !away) return false;
+  return Boolean((teamNameToAbbrev(home) || home) && (teamNameToAbbrev(away) || away));
 }
 
 /**
