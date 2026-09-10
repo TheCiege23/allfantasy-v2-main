@@ -474,7 +474,28 @@ export default async function AfCorePage({
   const session = (await getServerSession(authOptions as never)) as { user?: { id?: string } } | null
   const userId = session?.user?.id
   if (!userId) {
-    redirect(`/login?callbackUrl=${encodeURIComponent(`/core${segment ? `/${segment}` : ''}`)}`)
+    /*
+     * ⚠ CARRY THE QUERY, NOT JUST THE PATH. `?league=` is the ONLY thing that
+     * decides whether /core renders the cross-league dashboard or one league's
+     * home — see `selectedLeagueId` above: there is no cookie, no stored
+     * default and no first-league fallback. Redirecting to a bare
+     * `/core/<segment>` therefore silently downgrades every signed-out deep
+     * link INTO a league: the user follows a link to their league, signs in,
+     * and lands on the cross-league dashboard with nothing saying a selection
+     * was dropped.
+     *
+     * Rebuilt from `sp` rather than from a request URL because a server
+     * component has none. Array-valued params are skipped for the same reason
+     * `selectedLeagueId` ignores them: `?league=a&league=b` already resolves to
+     * null, so carrying it forward would preserve nothing.
+     */
+    const carried = new URLSearchParams()
+    for (const [key, value] of Object.entries(sp)) {
+      if (typeof value === 'string') carried.set(key, value)
+    }
+    const carriedQuery = carried.toString()
+    const callbackTarget = `/core${segment ? `/${segment}` : ''}${carriedQuery ? `?${carriedQuery}` : ''}`
+    redirect(`/login?callbackUrl=${encodeURIComponent(callbackTarget)}`)
   }
 
   /*
