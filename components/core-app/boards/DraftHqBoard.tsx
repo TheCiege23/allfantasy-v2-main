@@ -237,6 +237,24 @@ function LiveDetail({ row, picks }: { row: DraftHqAllRow; picks: LiveDraftPicks 
             <span className="af-bd-asset-name">No queue built in AllFantasy for this draft.</span>
           </span>
         )}
+
+        {/*
+          🛑 THE CAVEAT TRAVELS WITH THE QUEUE, AND IT DID NOT ON THE FIRST MOVE.
+          The retired War Room carried this sentence in its reasoning line; when
+          the queue block moved here the sentence stayed behind, so for one
+          commit this screen listed queued targets with no indication that
+          nothing had checked whether they were still on the board. A queue
+          rendered beside a live draft implies availability unless it says
+          otherwise — at a draft, that is the difference between a target and a
+          player taken four picks ago.
+        */}
+        {queue.length > 0 ? (
+          <span className="af-bd-asset">
+            <span className="af-bd-asset-name">
+              This does not check whether they are still available — read the picks beside them.
+            </span>
+          </span>
+        ) : null}
       </div>
     </div>
   )

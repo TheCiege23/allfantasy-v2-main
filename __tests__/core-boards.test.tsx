@@ -14,7 +14,6 @@ import WeekBoard from '@/components/core-app/boards/WeekBoard'
 import WaiversBoard from '@/components/core-app/boards/WaiversBoard'
 import TradesBoard from '@/components/core-app/boards/TradesBoard'
 import DraftHqBoard from '@/components/core-app/boards/DraftHqBoard'
-import WarRoomBoard from '@/components/core-app/boards/WarRoomBoard'
 import type { SeasonOutlook, OutlookLeague } from '@/lib/core-app/seasonOutlook'
 import type { WeekBoard as WeekBoardData, WeekMatchup } from '@/lib/core-app/weekBoard'
 import type { WaiversBoardData } from '@/lib/core-app/waiversBoard'
@@ -849,13 +848,18 @@ describe('collapseMirroredTrades', () => {
 /* ── War Room ────────────────────────────────────────────────────────────── */
 
 /*
- * 🛑 THIS BOARD HAD NO TEST AT ALL UNTIL A PEER SESSION NAMED THE SHAPE. Their
- * case was a suite that set `lineups: { available: false }` and so never reached
- * the component it was believed to cover — green with the wiring deleted.
- * WarRoomBoard renders more player data than any other board here (pick rows
- * with headshots and club crests, the queue) and none of it was asserted.
+ * The live board tail, which moved here from the retired cross-league War Room.
  *
- * Every test below was verified red-before-green against a deliberate mutation.
+ * 🛑 THESE ARE NOT NEW TESTS — they are that screen's, repointed. The component
+ * was deleted because no route rendered it, but the behaviour it drew still
+ * ships from `DraftHqBoard.LiveDetail`, so deleting its suite would have dropped
+ * live coverage on the pretext of removing dead code. Four of its seven cases
+ * WERE dropped, deliberately: the live-only filter and the three-silences copy
+ * describe behaviour that is genuinely retired, and "your own clock first" is
+ * already asserted against this board above.
+ *
+ * Every case below was verified red-before-green against a deliberate mutation,
+ * as the originals were.
  */
 function livePicks(over: Partial<LiveDraftPicks> = {}): LiveDraftPicks {
   return {
@@ -872,6 +876,7 @@ function livePicks(over: Partial<LiveDraftPicks> = {}): LiveDraftPicks {
           position: 'QB',
           imageUrl: null,
           team: 'BUF',
+          sleeperId: null,
         },
         {
           overall: 2,
@@ -885,6 +890,7 @@ function livePicks(over: Partial<LiveDraftPicks> = {}): LiveDraftPicks {
           position: null,
           imageUrl: null,
           team: null,
+          sleeperId: null,
         },
       ],
     },
@@ -893,44 +899,16 @@ function livePicks(over: Partial<LiveDraftPicks> = {}): LiveDraftPicks {
   }
 }
 
-const NO_PICKS: LiveDraftPicks = { byLeague: {}, queueByLeague: {} }
-
-describe('WarRoomBoard', () => {
-  /*
-   * The filter that is this screen's entire reason to exist beside Draft HQ. If
-   * it stops filtering, the two screens show one list and one of them is dead
-   * weight.
-   */
-  it('shows only running drafts, and does not hide the rest', () => {
-    const { container } = render(
-      <WarRoomBoard
-        drafts={draftData(
-          [
-            draftRow({ leagueId: 'l1', leagueName: 'Running Now', phase: 'live' }),
-            draftRow({ leagueId: 'l2', leagueName: 'Not Yet', phase: 'upcoming' }),
-          ],
-          { counts: { live: 1, upcoming: 1, done: 0, unknown: 0 } },
-        )}
-        picks={livePicks()}
-        allHref="/core/war-room?all=1"
-        draftHqHref="/core/draft-hq"
-      />,
-    )
-    const live = container.querySelector('.af-bd-cards')
-    expect(live?.textContent).toContain('Running Now')
-    expect(live?.textContent).not.toContain('Not Yet')
-    /* Not hidden — it moves to Starting soon, pointing at Draft HQ. */
-    expect(container.textContent ?? '').toContain('Not Yet')
-    expect(container.textContent ?? '').toContain('Starting soon')
-  })
+describe('DraftHqBoard · the live board tail', () => {
+  const liveRow = () => draftRow({ leagueId: 'l1', phase: 'live' })
 
   it('renders the last picks with their round and pick number', () => {
     const { container } = render(
-      <WarRoomBoard
-        drafts={draftData([draftRow({ leagueId: 'l1' })])}
+      <DraftHqBoard
+        data={draftData([liveRow()], { counts: { live: 1, upcoming: 0, done: 0, unknown: 0 } })}
+        allHref="/core/draft-hq?all=1"
+        totalLeagues={1}
         picks={livePicks()}
-        allHref="/core/war-room?all=1"
-        draftHqHref="/core/draft-hq"
       />,
     )
     const text = container.textContent ?? ''
@@ -946,11 +924,11 @@ describe('WarRoomBoard', () => {
    */
   it('renders a pick we could not identify rather than skipping its number', () => {
     const { container } = render(
-      <WarRoomBoard
-        drafts={draftData([draftRow({ leagueId: 'l1' })])}
+      <DraftHqBoard
+        data={draftData([liveRow()], { counts: { live: 1, upcoming: 0, done: 0, unknown: 0 } })}
+        allHref="/core/draft-hq?all=1"
+        totalLeagues={1}
         picks={livePicks()}
-        allHref="/core/war-room?all=1"
-        draftHqHref="/core/draft-hq"
       />,
     )
     const text = container.textContent ?? ''
@@ -965,80 +943,55 @@ describe('WarRoomBoard', () => {
    */
   it('blames AllFantasy, not the manager, for an empty queue', () => {
     const { container } = render(
-      <WarRoomBoard
-        drafts={draftData([draftRow({ leagueId: 'l1' })])}
+      <DraftHqBoard
+        data={draftData([liveRow()], { counts: { live: 1, upcoming: 0, done: 0, unknown: 0 } })}
+        allHref="/core/draft-hq?all=1"
+        totalLeagues={1}
         picks={livePicks({ queueByLeague: {} })}
-        allHref="/core/war-room?all=1"
-        draftHqHref="/core/draft-hq"
       />,
     )
     expect(container.textContent ?? '').toMatch(/No queue built in AllFantasy/i)
   })
 
+  /*
+   * 🛑 THE REGRESSION GUARD. This caveat lived in the War Room's reasoning line
+   * and did NOT travel with the queue block on the first move, so for one commit
+   * the board listed queued targets with nothing saying their availability was
+   * unchecked. Beside a running draft that is the difference between a target
+   * and a player taken four picks ago.
+   */
   it('says the queue is not checked for availability rather than implying it is', () => {
     const { container } = render(
-      <WarRoomBoard
-        drafts={draftData([draftRow({ leagueId: 'l1' })])}
+      <DraftHqBoard
+        data={draftData([liveRow()], { counts: { live: 1, upcoming: 0, done: 0, unknown: 0 } })}
+        allHref="/core/draft-hq?all=1"
+        totalLeagues={1}
         picks={livePicks()}
-        allHref="/core/war-room?all=1"
-        draftHqHref="/core/draft-hq"
       />,
     )
     expect(container.textContent ?? '').toMatch(/does not check whether they are still available/i)
   })
 
   /*
-   * Three different silences. A War Room that says one sentence for all three
-   * tells a manager with a draft in an hour that they have nothing on.
+   * ⚠ ABSENT IS NOT EMPTY. `picks` is undefined when the loader did not run,
+   * which happens whenever nothing is live — a different fact from a live draft
+   * whose board we read and found empty. Rendering "No picks recorded yet"
+   * against a draft nobody read would be a claim we cannot support.
    */
-  it('tells nothing-running apart from nothing-at-all', () => {
-    const coming = render(
-      <WarRoomBoard
-        drafts={draftData([draftRow({ phase: 'upcoming' })], {
-          counts: { live: 0, upcoming: 1, done: 0, unknown: 0 },
-        })}
-        picks={NO_PICKS}
-        allHref="/core/war-room?all=1"
-        draftHqHref="/core/draft-hq"
-      />,
-    )
-    expect(coming.container.textContent ?? '').toMatch(/1 is still to come/i)
-
-    const none = render(
-      <WarRoomBoard
-        drafts={draftData([], {
-          counts: { live: 0, upcoming: 0, done: 0, unknown: 0 },
-          withoutDraft: 12,
-        })}
-        picks={NO_PICKS}
-        allHref="/core/war-room?all=1"
-        draftHqHref="/core/draft-hq"
-      />,
-    )
-    expect(none.container.textContent ?? '').toMatch(/No draft is set up in any of your leagues/i)
-  })
-
-  it('puts your own clock above the other running drafts', () => {
+  it('omits the live block entirely when picks were never loaded', () => {
     const { container } = render(
-      <WarRoomBoard
-        drafts={draftData(
-          [
-            draftRow({ leagueId: 'a', leagueName: 'Someone else', phase: 'live' }),
-            draftRow({ leagueId: 'b', leagueName: 'Your pick', phase: 'live', yoursOnClock: true }),
-          ],
-          { counts: { live: 2, upcoming: 0, done: 0, unknown: 0 } },
-        )}
-        picks={NO_PICKS}
-        allHref="/core/war-room?all=1"
-        draftHqHref="/core/draft-hq"
+      <DraftHqBoard
+        data={draftData([liveRow()], { counts: { live: 1, upcoming: 0, done: 0, unknown: 0 } })}
+        allHref="/core/draft-hq?all=1"
+        totalLeagues={1}
       />,
     )
-    const names = [...container.querySelectorAll('.af-bd-cards .af-bd-name')].map(
-      (n) => n.textContent,
-    )
-    expect(names[0]).toBe('Your pick')
+    const text = container.textContent ?? ''
+    expect(text).not.toMatch(/No picks recorded yet/i)
+    expect(text).not.toMatch(/Last picks/i)
   })
 })
+
 
 /*
  * ⚠ THE BOARD LABELLED BOTH SIDES WITH A RAW SLEEPER USERNAME, so a trade the

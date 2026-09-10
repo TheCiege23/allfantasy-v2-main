@@ -510,8 +510,36 @@ export default function WorldCupDailyEdgeReportCard({
       .then(async (res) => {
         if (cancelled) return
         if (!res.ok) throw new Error(`HTTP ${res.status}`)
-        const data = (await res.json()) as ReportResponse
+        const data = (await res.json()) as ReportResponse | null
         if (cancelled) return
+
+        /*
+         * 🛑 A 200 IS NOT A CONTRACT, AND THE CAST ABOVE IS NOT A CHECK.
+         *
+         * `as ReportResponse` is a compile-time assertion about a value that
+         * arrived over the wire at runtime. Without this guard the next lines
+         * set `loadState = "loaded"` and then read `data.report.noEntry`, so a
+         * response that is JSON, is 200, and simply lacks `report` throws AFTER
+         * the component has committed to rendering the loaded branch — and that
+         * branch dereferences `reportData.report` in five more places.
+         *
+         * ⚠ THE BLAST RADIUS IS THE WHOLE TREE, NOT THIS CARD. The throw happens
+         * during render, so React unmounts everything above it. That is why one
+         * malformed edge-report response failed 18 tests in
+         * `world-cup-components.test.tsx` that have nothing to do with the edge
+         * report — chat, the entry video, participant lists, Chimmy prompt chips
+         * — and why the log carries React's "add an error boundary" notice
+         * rather than an assertion failure. A reader of that output would
+         * reasonably go looking in the chat code.
+         *
+         * The `.catch` below already owns this case: it sets the error state and
+         * reports `phase: "load"` telemetry. Failing into it is strictly better
+         * than a white screen, and it is what the card does for a 500 today.
+         */
+        if (!data || !data.report) {
+          throw new Error("edge-report response carried no report")
+        }
+
         setReportData(data)
         setLoadState("loaded")
 

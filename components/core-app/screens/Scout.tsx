@@ -1,3 +1,5 @@
+import Link from 'next/link'
+
 import '@/components/core-app/af-scout.css'
 import type { ScoutData, ScoutProfile, ScoutedManager } from '@/lib/core-app/scout'
 
@@ -28,6 +30,14 @@ import type { ScoutData, ScoutProfile, ScoutedManager } from '@/lib/core-app/sco
 
 export type ScoutProps = {
   data: ScoutData
+  /**
+   * The War Room's other room, on the same screen key behind `?view=plan`.
+   *
+   * Passed in rather than built here: the league query param belongs to the
+   * router, and a screen that assembles its own sibling's href is a screen that
+   * can silently disagree with it.
+   */
+  gamePlanHref: string
 }
 
 function Unavailable({ reason }: { reason: string }) {
@@ -204,7 +214,7 @@ function ManagerCard({ m }: { m: ScoutedManager }) {
   )
 }
 
-export function Scout({ data }: ScoutProps) {
+export function Scout({ data, gamePlanHref }: ScoutProps) {
   const { coverage } = data
   const complete = coverage.profiledCount === coverage.teamCount && coverage.teamCount > 0
 
@@ -219,6 +229,14 @@ export function Scout({ data }: ScoutProps) {
             {data.week ? ` Week ${data.week.week} of ${data.week.seasonYear}.` : ''}
           </p>
         </div>
+        {/*
+          The War Room's other room. Scout is about WHO you are playing; Game
+          Plan is about what you must do before kickoff — different questions,
+          so they are two rooms rather than one crowded screen.
+        */}
+        <Link className="af-sc-switch" href={gamePlanHref}>
+          Game plan &rarr;
+        </Link>
       </header>
 
       {/*

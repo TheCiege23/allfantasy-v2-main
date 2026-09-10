@@ -4,7 +4,7 @@ import { render } from '@testing-library/react'
 
 import TradesBoard from '@/components/core-app/boards/TradesBoard'
 import WaiversBoard from '@/components/core-app/boards/WaiversBoard'
-import WarRoomBoard from '@/components/core-app/boards/WarRoomBoard'
+import DraftHqBoard from '@/components/core-app/boards/DraftHqBoard'
 import type { TradesBoardData } from '@/lib/core-app/tradesBoard'
 import type { WaiversBoardData } from '@/lib/core-app/waiversBoard'
 import type { LiveDraftPicks } from '@/lib/core-app/warRoomBoard'
@@ -229,10 +229,15 @@ function draftData(rows: DraftHqAllRow[], over: Partial<DraftHqAllData> = {}): D
   }
 }
 
-describe('war room — a pick opens the card only when its id resolved', () => {
+/*
+ * The live board tail moved from the retired cross-league War Room into
+ * DraftHqBoard; these two cases moved with it rather than being deleted with
+ * the component, because the join they guard still runs.
+ */
+describe('draft hq — a pick opens the card only when its id resolved', () => {
   it('makes a RESOLVED pick openable', () => {
     const { container } = render(
-      <WarRoomBoard drafts={draftData([draftRow({ leagueId: 'wr1', phase: 'live' })])} picks={warRoomPicks()} allHref="/core/war-room?all=1" draftHqHref="/core/draft-hq" />
+      <DraftHqBoard data={draftData([draftRow({ leagueId: 'wr1', phase: 'live' })])} picks={warRoomPicks()} allHref="/core/draft-hq?all=1" totalLeagues={1} />
     )
     expect(triggers(container)).toContain('Josh Allen')
   })
@@ -240,7 +245,7 @@ describe('war room — a pick opens the card only when its id resolved', () => {
   /* The case the whole three-key join exists for. */
   it('renders an UNRESOLVED pick as plain text, never a control', () => {
     const { container } = render(
-      <WarRoomBoard drafts={draftData([draftRow({ leagueId: 'wr1', phase: 'live' })])} picks={warRoomPicks()} allHref="/core/war-room?all=1" draftHqHref="/core/draft-hq" />
+      <DraftHqBoard data={draftData([draftRow({ leagueId: 'wr1', phase: 'live' })])} picks={warRoomPicks()} allHref="/core/draft-hq?all=1" totalLeagues={1} />
     )
     expect(container.textContent).toContain('Some Rookie')
     expect(triggers(container)).not.toContain('Some Rookie')
