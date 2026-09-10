@@ -174,6 +174,20 @@ async function main() {
     if (n !== b.auditCount) drift.push(`${b.key}: ${n} vs ${b.auditCount}`)
   }
 
+  /*
+   * 🛑 THE REMAINDER IS ARITHMETIC, NOT A FIFTH SQL PREDICATE, AND THAT IS LOAD-BEARING.
+   *
+   * The obvious "improvement" is one statement counting `NOT (b1 OR b2 OR b3 OR b4)`. It is
+   * wrong, and wrong quietly. `"platformUserId" LIKE 'open-slot-%'` yields NULL — not false —
+   * when the column is NULL, which is true of 67 production rows. `NOT (false OR NULL)` is NULL,
+   * and `FILTER (WHERE NULL)` drops the row from the count, so the consolidated form reported
+   * 2,659 where the four buckets plus the remainder say 2,660. It was caught only because those
+   * two numbers disagreed by one.
+   *
+   * Counting each bucket separately is immune: a predicate that evaluates to NULL simply fails
+   * to match, which is the correct outcome — an unclassifiable row is exactly what should not be
+   * classified. Keep the subtraction.
+   */
   const untouched = total - planned
   console.log(`\n  TOTAL to classify: ${planned}`)
   console.log(`  left UNKNOWN:      ${untouched}   (Tier B + unclassifiable — deliberate)`)
