@@ -1,4 +1,4 @@
-import { BRIDGE_SURFACES, type DiscordBridgeData } from '@/lib/core-app/discordBridge'
+import { BRIDGE_SURFACES, type DiscordBridgeData } from '@/lib/core-app/discordBridgeContract'
 import type { QueueTrack } from '@/components/core-app/draft-music/DraftMusicWidget'
 import type { GradedTrade } from '@/lib/trade-intel/sleeperTradeGradeService'
 import type { TradeExpectation } from '@/lib/trade-intel/tradeExpectation'

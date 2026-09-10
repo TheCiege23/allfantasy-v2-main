@@ -10,7 +10,7 @@ import {
   type BridgeDirection,
   type BridgeMapping,
   type DiscordBridgeData,
-} from '@/lib/core-app/discordBridge'
+} from '@/lib/core-app/discordBridgeContract'
 
 /**
  * 32a — the Discord bridge.
