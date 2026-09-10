@@ -408,6 +408,62 @@ describe('authorization passes and the row then disappears (the race)', () => {
   })
 })
 
+describe('🛑 the FULL 200 response — reached, not assumed', () => {
+  /*
+   * ⚠ THE EARLIER LEAKAGE ASSERTIONS IN THIS FILE NEVER GOT THIS FAR, AND THAT
+   * IS WORTH STATING. Without `confirmTokenSpend` the route returns 409
+   * token_confirmation_required before it ever builds `meta`, so "the body
+   * contains no league name" was true of a 409 payload that could not have
+   * contained one either way. It proved the refusal payloads clean and nothing
+   * about the answer payload.
+   *
+   * A probe caught it: the unauthorized playoff request came back
+   * `STATUS=409 {"error":"Token spend confirmation required..."}`. These
+   * confirm the spend so the handler runs to completion and `meta.leagueGrounding`
+   * is actually constructed.
+   */
+  const confirmed = { confirmTokenSpend: 'true' }
+
+  it('reaches a real answer for an authorized member — the control', async () => {
+    prismaLeagueFindUniqueMock.mockResolvedValue({ ...PRIVATE_LEAGUE, userId: 'stranger-1' })
+    const { res } = await post({ message: 'How does my team look?', leagueId: 'league-private', ...confirmed })
+    expect(res.status).toBe(200)
+  })
+
+  it('an unauthorized league yields a 200 that names no league', async () => {
+    const { res, body } = await post({
+      message: 'Who leads the NFL in rushing?',
+      leagueId: 'league-private',
+      ...confirmed,
+    })
+    expect(res.status).toBe(200)
+    for (const secret of LEAKABLE) {
+      expect(body, `leaked "${secret}"`).not.toContain(secret)
+    }
+  })
+
+  it('and publishes no grounding reason code in meta', async () => {
+    /*
+     * `grounded: false` stays — the drawer renders it and the user should see
+     * that Chimmy answered without their league. The identifiers beside it are
+     * what were never theirs to read.
+     */
+    const { body } = await post({
+      message: 'Who leads the NFL in rushing?',
+      leagueId: 'league-private',
+      ...confirmed,
+    })
+    expect(body).not.toContain('not_member')
+    expect(body).not.toContain('not_found')
+    expect(body).toContain('"grounded":false')
+  })
+
+  it.each(ALL_INSIGHT_TYPES)('insightType=%s still never reaches getInsightBundle', async (insightType) => {
+    await post({ message: 'How does that team look?', leagueId: 'league-private', insightType, ...confirmed })
+    expect(getInsightBundleMock).not.toHaveBeenCalled()
+  })
+})
+
 describe('ordinary global sports questions still work', () => {
   it('answers without a league and without any insight call', async () => {
     const { res } = await post({ message: 'Who won the 1992 World Series?' })

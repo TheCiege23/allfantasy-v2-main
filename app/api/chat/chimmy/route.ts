@@ -701,17 +701,31 @@ function requiresLeagueGrounding(args: {
  */
 function describeLeagueGroundingFailure(reason: ChimmyLeagueGroundingFailure): string {
   switch (reason) {
+    /*
+     * 🛑 `not_member` AND `not_found` SHARE ONE BRANCH AND ONE STRING. THEY MUST
+     * NOT MERELY BE 'SIMILAR'.
+     *
+     * A previous pass removed the words "I can see that league exists" from the
+     * not_member copy and claimed the two were now identical. They were not:
+     * not_member said "could not open that league" and not_found said "could not
+     * find that league". That is still an enumeration oracle — walk ids, read the
+     * verb, learn which leagues are real. The claim was wrong and the test that
+     * was supposed to cover it asserted /could not open that league/, pinning the
+     * distinguishable string instead of comparing the two cases.
+     *
+     * ⚠ SHARED FALLTHROUGH RATHER THAN TWO IDENTICAL RETURNS. Two branches that
+     * happen to hold the same literal drift the moment someone improves one of
+     * them, and the drift is invisible in review. One branch cannot drift.
+     *
+     * ⚠ `anonymous` AND `error` STAY DISTINCT, DELIBERATELY. Anonymous is an
+     * authentication problem the user can fix and telling them costs nothing —
+     * it reveals nothing about which leagues exist. `error` is transient
+     * infrastructure, and collapsing it into this message would tell a member of
+     * their own league that they are not in it.
+     */
     case 'not_member':
-      /*
-       * 🛑 THIS USED TO SAY "I can see that league exists, but your account is
-       * not a member of it", WHICH IS AN EXISTENCE ORACLE. A stranger could
-       * enumerate ids and learn which are real leagues from the wording alone.
-       * `not_member` and `not_found` now read identically to the caller; the
-       * distinction is still known internally, it is simply not published.
-       */
-      return 'I could not open that league for your account. If it is yours and you just imported it, claim your team and ask again.'
     case 'not_found':
-      return 'I could not find that league. If you picked it from the league list, it may be a tournament or a legacy board rather than a synced league — pick a synced league and ask again.'
+      return 'I could not open that league for your account. If it is yours and you just imported it, claim your team and ask again.'
     case 'anonymous':
       return 'I could not confirm who you are signed in as, so I cannot read that league.'
     case 'error':
@@ -2345,9 +2359,31 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
           }
 
           // Inject specialty league context for tournament and Big Brother leagues
-          if (planInput.leagueId && planInput.userId) {
+          /*
+           * 🛑 THE AUTHORIZED SNAPSHOT, NOT THE PLAN INPUT — AND THIS GUARDS SIXTEEN
+           * BUILDERS, NOT ONE.
+           *
+           * `planInput.leagueId` traces back to `formData.get('leagueId')`. Every
+           * `build*ContextForChimmy` below reads league configuration directly —
+           * guillotine mode, dynasty config, best-ball mode, leagueVariant, settings,
+           * leagueSize — and NONE of them performs a membership check:
+           * `resolveLeagueMembership` appears in none of those modules. So an
+           * unauthorized id reached sixteen readers, and their output goes into the
+           * prompt.
+           *
+           * ⚠ FOUND BY A TEST, NOT BY READING. The assertion "no downstream league
+           * read happens after authorization fails" came back with six selects that
+           * were not the membership shape — `guillotineMode,sport`,
+           * `dynastyConfig,id,leagueSize,settings,sport`, and four more. Reading the
+           * route had already missed them twice.
+           *
+           * `leagueSnapshot` exists only because `loadLeagueGroundingForUser` proved
+           * membership, so gating here closes all sixteen at once rather than
+           * per-builder.
+           */
+          if (leagueSnapshot && planInput.userId) {
             try {
-              const tournamentCtx = await buildTournamentContextForChimmy(planInput.leagueId, planInput.userId)
+              const tournamentCtx = await buildTournamentContextForChimmy(leagueSnapshot.id, planInput.userId)
               if (tournamentCtx) {
                 legacyEnrichmentContext = legacyEnrichmentContext
                   ? `${legacyEnrichmentContext}\n\n${tournamentCtx}`
@@ -2355,7 +2391,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
               }
             } catch { /* non-fatal */ }
             try {
-              const bbCtx = await buildBigBrotherContextForChimmy(planInput.leagueId, planInput.userId)
+              const bbCtx = await buildBigBrotherContextForChimmy(leagueSnapshot.id, planInput.userId)
               if (bbCtx) {
                 legacyEnrichmentContext = legacyEnrichmentContext
                   ? `${legacyEnrichmentContext}\n\n${bbCtx}`
@@ -2376,7 +2412,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
                * paid for the league read twice. Removed; its comment is the one you are
                * reading.
                */
-              const idpCtx = await buildIdpContextForChimmy(planInput.leagueId, planInput.userId)
+              const idpCtx = await buildIdpContextForChimmy(leagueSnapshot.id, planInput.userId)
               if (idpCtx) {
                 legacyEnrichmentContext = legacyEnrichmentContext
                   ? `${legacyEnrichmentContext}\n\n${idpCtx}`
@@ -2384,7 +2420,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
               }
             } catch { /* non-fatal */ }
             try {
-              const survivorCtx = await buildSurvivorContextForChimmy(planInput.leagueId, planInput.userId)
+              const survivorCtx = await buildSurvivorContextForChimmy(leagueSnapshot.id, planInput.userId)
               if (survivorCtx) {
                 legacyEnrichmentContext = legacyEnrichmentContext
                   ? `${legacyEnrichmentContext}\n\n${survivorCtx}`
@@ -2392,7 +2428,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
               }
             } catch { /* non-fatal */ }
             try {
-              const zombieCtx = await buildZombieContextForChimmy(planInput.leagueId, planInput.userId)
+              const zombieCtx = await buildZombieContextForChimmy(leagueSnapshot.id, planInput.userId)
               if (zombieCtx) {
                 legacyEnrichmentContext = legacyEnrichmentContext
                   ? `${legacyEnrichmentContext}\n\n${zombieCtx}`
@@ -2400,7 +2436,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
               }
             } catch { /* non-fatal */ }
             try {
-              const devyCtx = await buildDevyContextForChimmy(planInput.leagueId, planInput.userId)
+              const devyCtx = await buildDevyContextForChimmy(leagueSnapshot.id, planInput.userId)
               if (devyCtx) {
                 legacyEnrichmentContext = legacyEnrichmentContext
                   ? `${legacyEnrichmentContext}\n\n${devyCtx}`
@@ -2408,7 +2444,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
               }
             } catch { /* non-fatal */ }
             try {
-              const guillotineCtx = await buildGuillotineContextForChimmy(planInput.leagueId, planInput.userId)
+              const guillotineCtx = await buildGuillotineContextForChimmy(leagueSnapshot.id, planInput.userId)
               if (guillotineCtx) {
                 legacyEnrichmentContext = legacyEnrichmentContext
                   ? `${legacyEnrichmentContext}\n\n${guillotineCtx}`
@@ -2416,7 +2452,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
               }
             } catch { /* non-fatal */ }
             try {
-              const c2cCtx = await buildC2CContextForChimmy(planInput.leagueId, planInput.userId)
+              const c2cCtx = await buildC2CContextForChimmy(leagueSnapshot.id, planInput.userId)
               if (c2cCtx) {
                 legacyEnrichmentContext = legacyEnrichmentContext
                   ? `${legacyEnrichmentContext}\n\n${c2cCtx}`
@@ -2424,7 +2460,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
               }
             } catch { /* non-fatal */ }
             try {
-              const salaryCapCtx = await buildSalaryCapContextForChimmy(planInput.leagueId, planInput.userId)
+              const salaryCapCtx = await buildSalaryCapContextForChimmy(leagueSnapshot.id, planInput.userId)
               if (salaryCapCtx) {
                 legacyEnrichmentContext = legacyEnrichmentContext
                   ? `${legacyEnrichmentContext}\n\n${salaryCapCtx}`
@@ -2432,7 +2468,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
               }
             } catch { /* non-fatal */ }
             try {
-              const dynastyCtx = await buildDynastyContextForChimmy(planInput.leagueId, planInput.userId)
+              const dynastyCtx = await buildDynastyContextForChimmy(leagueSnapshot.id, planInput.userId)
               if (dynastyCtx) {
                 legacyEnrichmentContext = legacyEnrichmentContext
                   ? `${legacyEnrichmentContext}\n\n${dynastyCtx}`
@@ -2440,7 +2476,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
               }
             } catch { /* non-fatal */ }
             try {
-              const dynastyWarRoomCtx = await buildDynastyWarRoomContextForChimmy(planInput.leagueId, planInput.userId)
+              const dynastyWarRoomCtx = await buildDynastyWarRoomContextForChimmy(leagueSnapshot.id, planInput.userId)
               if (dynastyWarRoomCtx) {
                 legacyEnrichmentContext = legacyEnrichmentContext
                   ? `${legacyEnrichmentContext}\n\n${dynastyWarRoomCtx}`
@@ -2448,7 +2484,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
               }
             } catch { /* non-fatal */ }
             try {
-              const redraftCtx = await buildRedraftContextForChimmy(planInput.leagueId, planInput.userId)
+              const redraftCtx = await buildRedraftContextForChimmy(leagueSnapshot.id, planInput.userId)
               if (redraftCtx) {
                 legacyEnrichmentContext = legacyEnrichmentContext
                   ? `${legacyEnrichmentContext}\n\n${redraftCtx}`
@@ -2456,7 +2492,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
               }
             } catch { /* non-fatal */ }
             try {
-              const keeperCtx = await buildKeeperContextForChimmy(planInput.leagueId, planInput.userId)
+              const keeperCtx = await buildKeeperContextForChimmy(leagueSnapshot.id, planInput.userId)
               if (keeperCtx) {
                 legacyEnrichmentContext = legacyEnrichmentContext
                   ? `${legacyEnrichmentContext}\n\n${keeperCtx}`
@@ -2464,7 +2500,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
               }
             } catch { /* non-fatal */ }
             try {
-              const bestBallCtx = await buildBestBallContextForChimmy(planInput.leagueId, planInput.userId)
+              const bestBallCtx = await buildBestBallContextForChimmy(leagueSnapshot.id, planInput.userId)
               if (bestBallCtx) {
                 legacyEnrichmentContext = legacyEnrichmentContext
                   ? `${legacyEnrichmentContext}\n\n${bestBallCtx}`
@@ -2472,7 +2508,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
               }
             } catch { /* non-fatal */ }
             try {
-              const guillotineWarRoomCtx = await buildGuillotineWarRoomContextForChimmy(planInput.leagueId, planInput.userId)
+              const guillotineWarRoomCtx = await buildGuillotineWarRoomContextForChimmy(leagueSnapshot.id, planInput.userId)
               if (guillotineWarRoomCtx) {
                 legacyEnrichmentContext = legacyEnrichmentContext
                   ? `${legacyEnrichmentContext}\n\n${guillotineWarRoomCtx}`
@@ -2481,7 +2517,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
             } catch { /* non-fatal */ }
             try {
               // T10 — grounded trade intelligence (deterministic T2–T9; reuses this route, no new route).
-              const tradeCtx = await buildTradeContextForChimmy(planInput.leagueId, planInput.userId)
+              const tradeCtx = await buildTradeContextForChimmy(leagueSnapshot.id, planInput.userId)
               if (tradeCtx) {
                 legacyEnrichmentContext = legacyEnrichmentContext
                   ? `${legacyEnrichmentContext}\n\n${tradeCtx}`
@@ -2497,7 +2533,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
                * without the trade.
                */
               const pendingTradeCtx = await buildPendingTradeDecisionContext(
-                planInput.leagueId,
+                leagueSnapshot.id,
                 planInput.userId,
               )
               if (pendingTradeCtx) {
@@ -2516,7 +2552,7 @@ ${pendingTradeCtx}`
                * back from there.
                */
               const tradeHistoryCtx = await buildLeagueTradeHistoryContext(
-                planInput.leagueId,
+                leagueSnapshot.id,
                 planInput.userId,
               )
               if (tradeHistoryCtx) {
@@ -2535,7 +2571,7 @@ ${tradeHistoryCtx}`
                * answer.
                */
               const standingsCtx = await buildLeagueStandingsContext(
-                planInput.leagueId,
+                leagueSnapshot.id,
                 planInput.userId,
               )
               if (standingsCtx) {
@@ -2553,7 +2589,7 @@ ${standingsCtx}`
                * could not answer: the aggregation behind this has three live
                * callers and the chat route referenced none of them.
                */
-              const h2h = await buildHeadToHeadGrounding(planInput.leagueId)
+              const h2h = await buildHeadToHeadGrounding(leagueSnapshot.id)
               if (h2h) {
                 legacyEnrichmentContext = legacyEnrichmentContext
                   ? `${legacyEnrichmentContext}
@@ -2567,7 +2603,7 @@ ${h2h.text}`
                * The draft. Live for 7 leagues and paused for 2 as of writing —
                * the one surface with rich data while the season has not started.
                */
-              const draftCtx = await buildDraftContext(planInput.leagueId, planInput.userId)
+              const draftCtx = await buildDraftContext(leagueSnapshot.id, planInput.userId)
               if (draftCtx) {
                 legacyEnrichmentContext = legacyEnrichmentContext
                   ? `${legacyEnrichmentContext}
@@ -2581,7 +2617,7 @@ ${draftCtx}`
                * Waiver RULES, which exist for 92 leagues — carrying with them the
                * explicit statement that waiver ACTIVITY does not exist at all.
                */
-              const waiverCtx = await buildWaiverContext(planInput.leagueId, planInput.userId)
+              const waiverCtx = await buildWaiverContext(leagueSnapshot.id, planInput.userId)
               if (waiverCtx) {
                 legacyEnrichmentContext = legacyEnrichmentContext
                   ? `${legacyEnrichmentContext}
@@ -2597,7 +2633,7 @@ ${waiverCtx}`
                * everyone else, because everything in it is other managers' data.
                */
               const commishCtx = await buildCommissionerContext(
-                planInput.leagueId,
+                leagueSnapshot.id,
                 planInput.userId,
               )
               if (commishCtx) {
@@ -3031,8 +3067,20 @@ ${describedTradeCtx}`
             }
           : {
               grounded: false as const,
-              leagueId,
-              reason: leagueGrounding.reason,
+              /*
+               * 🛑 THE SAME ENUMERATION ORACLE AS THE REFUSAL PAYLOAD, IN THE 200
+               * RESPONSE. `leagueId` here is the raw request field and `reason`
+               * distinguishes "not yours" from "not real", so a caller could walk
+               * ids and read which exist off a SUCCESSFUL answer, not only off a
+               * refusal.
+               *
+               * ⚠ THE `grounded: false` FLAG STAYS. The drawer renders it, and
+               * "Chimmy is answering without your league" is exactly the state a
+               * user should see — it is the IDENTIFIERS beside it that were never
+               * theirs to read. The message stays too: it is the same copy the
+               * refusal shows, and that copy no longer distinguishes the two cases.
+               */
+              leagueId: null,
               message: describeLeagueGroundingFailure(leagueGrounding.reason),
             }
         : { grounded: false as const, leagueId: null, reason: 'no_league_selected' as const },
