@@ -24,6 +24,46 @@ vi.mock('@/lib/commissioner-ui/resolveActiveLeagueId', () => ({
 const callDecisionOS = vi.fn()
 vi.mock('@/lib/commissioner-ui/adapter/transport', () => ({ callDecisionOS: (...a: unknown[]) => callDecisionOS(...a) }))
 
+/**
+ * 🛑 ACTIVITY AND NOTIFICATIONS FAN OUT OVER FIVE LIVE CLIENTS, THREE OF WHICH READ THE DATABASE —
+ * AND `prisma` IS `null` BY DESIGN IN THIS FILE.
+ *
+ * `lib/prisma.ts` returns null when `typeof window !== "undefined"`, and this is a `.tsx` suite, so
+ * it runs under jsdom. Both `liveActivityClient.getEvents()` and `composeNotifications()` await:
+ *
+ *     league-health · recommendations · automations · reports · workspace (activity only)
+ *
+ * league-health and recommendations go through `callDecisionOS`, already mocked above. The other
+ * three each read a store module, so the two tests below died on
+ * `Cannot read properties of null (reading 'automationRun')`.
+ *
+ * ⚠ THAT IS NOT A MISSING DELEGATE ON AN EXISTING MOCK — THIS SUITE NEVER MOCKED PRISMA AT ALL. It
+ * did not need to until the composition path grew database reads underneath it.
+ *
+ * ⚠ AND THE STORES ARE STUBBED RATHER THAN `@/lib/prisma`, DELIBERATELY. A blanket prisma stub would
+ * make every future database read anywhere under this composition silently return a fake instead of
+ * failing loudly — which is how a suite stops testing what its name says. These tests assert what
+ * RECOMMENDATIONS contribute (they filter on `sourceModuleId === 'recommendations'`), so the
+ * neighbours are emptied at their own seams and stay visible.
+ *
+ * ⚠ EVERY EXPORT THE CALLERS IMPORT IS STUBBED, not just the one that threw first — fixing them one
+ * at a time is how this failed twice. A partial mock is the failure mode where a suite keeps passing
+ * against a stand-in that no longer matches its module.
+ */
+vi.mock('@/lib/commissioner-automations/automationLedgerReads', () => ({
+  readAutomationAggregates: vi.fn(async () => []),
+  readAutomationRuns: vi.fn(async () => []),
+}))
+vi.mock('@/lib/commissioner-reports/reportStore', () => ({
+  readReportHistory: vi.fn(async () => []),
+  /* A Map, not an array — `catalogEntries` calls `.get()` on it. */
+  readLastRunByTemplate: vi.fn(async () => new Map<string, Date>()),
+}))
+vi.mock('@/lib/commissioner-workspace/taskStore', () => ({
+  readLeagueTasks: vi.fn(async () => []),
+  hasEverBeenScanned: vi.fn(async () => true),
+}))
+
 const WIRE = {
   data: {
     recommendations: [
@@ -118,7 +158,34 @@ describe('recommendations — live mapping', () => {
 describe('recommendations — the modules that compose over it', () => {
   beforeEach(() => {
     callDecisionOS.mockReset()
-    callDecisionOS.mockResolvedValue({ data: WIRE, error: null })
+    /*
+     * 🛑 THIS BLOCK NEEDS A TRANSPORT THAT ANSWERS PER MODULE, NOT ONE PAYLOAD FOR EVERYONE.
+     *
+     * The other describes here exercise the recommendations client alone, so a blanket
+     * `mockResolvedValue(WIRE)` is right for them. These two go through Activity and Notification
+     * composition, which also awaits `liveLeagueHealthClient.getRisks()` over the SAME transport —
+     * and handing league-health a recommendations payload made it destructure
+     * `intel.participationDistribution` off a shape that has no such field.
+     *
+     * ⚠ `callDecisionOS(moduleId, path, ...)` takes the caller's id first, so the double can be
+     * honest about who is asking instead of pretending every module returns the same thing.
+     * Neighbours get the transport's real "not configured" answer, which each live client already
+     * handles by contributing nothing — leaving these assertions measuring recommendations only,
+     * which is what they filter on.
+     */
+    callDecisionOS.mockImplementation(async (moduleId: unknown) => {
+      if (moduleId === 'recommendations') return { data: WIRE, error: null }
+      return {
+        data: null,
+        error: {
+          category: 'upstream_unavailable' as const,
+          message: 'Not configured in this test.',
+          moduleId,
+          retryable: false,
+          timestamp: '2026-09-07T22:57:10.013Z',
+        },
+      }
+    })
   })
 
   /*

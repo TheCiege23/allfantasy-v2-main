@@ -88,7 +88,35 @@ describe("commissioner-os live integration foundation — Stub == Demo == Live",
     }
   })
 
-  it("the adapter composes all twelve namespaces identically regardless of which mode it was built for", () => {
+  /**
+   * ⚠ ASSERTS THE NAMED SET, NOT A COUNT. This was `toHaveLength(12)` and it went red the moment a
+   * thirteenth namespace was composed — reporting "expected 12, got 13" without naming which one,
+   * on a change that was entirely legitimate. A count assertion cannot distinguish "somebody added
+   * a namespace and forgot to wire it into every mode" (the thing worth catching) from "somebody
+   * added a namespace" (the thing that will keep happening).
+   *
+   * ⚠ `missionControl` IS THE ONE THAT LOOKS MISSING AND IS NOT. Twelve namespaces have a
+   * `<name>/decision-os-client/` directory; this one is composed differently, so counting
+   * directories says twelve and counting the adapter says thirteen. That mismatch is exactly what
+   * made the old failure read like a bug in the adapter.
+   */
+  const EXPECTED_NAMESPACES = [
+    "activity",
+    "analytics",
+    "automations",
+    "help",
+    "leagueHealth",
+    "managers",
+    "missionControl",
+    "notifications",
+    "recommendations",
+    "reports",
+    "search",
+    "settings",
+    "workspace",
+  ].sort()
+
+  it("the adapter composes the same named namespaces regardless of which mode it was built for", () => {
     const stubAdapter = buildDecisionOSAdapter("stub")
     const demoAdapter = buildDecisionOSAdapter("demo")
     const liveAdapter = buildDecisionOSAdapter("live")
@@ -96,7 +124,7 @@ describe("commissioner-os live integration foundation — Stub == Demo == Live",
     const namespaceKeys = Object.keys(stubAdapter).filter((k) => k !== "mode").sort()
     expect(Object.keys(demoAdapter).filter((k) => k !== "mode").sort()).toEqual(namespaceKeys)
     expect(Object.keys(liveAdapter).filter((k) => k !== "mode").sort()).toEqual(namespaceKeys)
-    expect(namespaceKeys).toHaveLength(12)
+    expect(namespaceKeys).toEqual(EXPECTED_NAMESPACES)
   })
 
   it("swapping the adapter's mode alone — with no page or component change — is sufficient to move from demo data to an honest live placeholder", async () => {
