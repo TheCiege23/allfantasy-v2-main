@@ -85,41 +85,25 @@ describe('both routes refuse to serve a profile', () => {
 })
 
 /**
- * 🛑 A LEAK NEITHER THIS COMMIT NOR THE ADOPTED PRIVACY PASS CLOSES, PINNED SO IT STAYS VISIBLE.
+ * ✅ THE GAP THIS FILE USED TO PIN IS CLOSED, AND THE PIN IS REPLACED BY A POINTER.
  *
- * `recommendations[].evidence` carries the SAME classification as prose — "Manager classified as
- * ghost_manager by DNA assembler" — and one line that interpolates `primaryIdentity` straight into
- * a sentence. `derivation` carries it as machine strings (`primaryIdentity=ghost_manager`).
+ * `recommendations[].evidence` carried the same classification as prose — "Manager classified as
+ * ghost_manager by DNA assembler", `primaryIdentity` interpolated into a sentence,
+ * `derivation.push('primaryIdentity=ghost_manager')`. Three assertions here pinned that state
+ * deliberately, so they would go red the moment it was fixed rather than rotting into a false
+ * description of the code. They went red; this is that re-scope.
  *
- * ⚠ A FIELD-NAME DENYLIST WOULD MISS ALL OF IT. The values sit inside `evidence`/`derivation`,
- * which are legitimate field names holding free text — which is exactly why the checklist's
- * remainder says "and any nested behavioral maps" rather than naming fields.
+ * ⚠ THE REPLACEMENT LIVES IN ITS OWN FILE AND IS BEHAVIOURAL, NOT A SOURCE GREP.
+ * `manager-recommendations-withhold-identity.test.ts` runs the producer and asserts the text a
+ * client receives does not vary with the classification — a property that holds for labels nobody
+ * has invented yet, which a grep for today's vocabulary cannot promise. Source-text assertions
+ * like the ones removed here were the right tool for PINNING an unfixed leak and the wrong tool
+ * for guarding a fixed one.
  *
- * ⚠ AND IT PROPAGATES. `recommendations` is NOT dead payload: `attentionSignals.ts` and
- * `managerCommandCenter.ts` both reuse it verbatim, so the prose reaches the manager command
- * centre — the checklist's very next named surface.
- *
- * It is not closed here because the honest fix is at the PRODUCER (state the observable fact, not
- * the inferred label), and that changes user-visible copy on surfaces this commit was not scoped
- * to touch. These assertions pin the CURRENT state, so they go red the moment it is fixed — which
- * is the signal to re-scope, not a regression.
+ * The vocabulary list below stays: it is what the User OS assertions above are measured against.
  */
-describe('KNOWN REMAINING GAP: classification prose inside recommendation evidence', () => {
-  const producer = read('lib/decision-os/phase6/recommendations/recommendations.ts')
-
-  it('the producer still writes the classification as prose', () => {
-    expect(producer).toContain('Manager classified as ghost_manager by DNA assembler')
-  })
-
-  it('and still interpolates the raw identity label into a sentence', () => {
-    expect(producer).toMatch(/Manager classified as \$\{input\.identity\?\.primaryIdentity\}/)
-  })
-
-  it('and still pushes the label into the derivation chain', () => {
-    expect(producer).toContain("derivation.push('primaryIdentity=ghost_manager')")
-  })
-
-  it('the vocabulary this gap is measured against is recorded, not implied', () => {
+describe('the dossier vocabulary is recorded, not implied', () => {
+  it('names the fields this file is measured against', () => {
     // If a term is added to the dossier, add it here — the list is the detector.
     expect(DOSSIER_FIELDS).toContain('primaryIdentity')
     expect(DOSSIER_FIELDS).toContain('engagementReliability')
