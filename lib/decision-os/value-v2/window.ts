@@ -49,6 +49,10 @@ export interface WindowCoefficients {
   futureRosterStrength: number
   futurePickCapital: number
   /** Band edges on the 0..1 score scale. */
+  /** Which facts shape this set may score. Mismatched horizons refuse rather than rescale. */
+  horizon: 'redraft' | 'dynasty'
+  /** How far strength of remaining schedule may move the forward half. 0 disables it. */
+  scheduleStrengthWeight: number
   contenderThreshold: number
   rebuildThreshold: number
   risingDelta: number
@@ -57,13 +61,49 @@ export interface WindowCoefficients {
   materialScoreDelta: number
 }
 
+/**
+ * 🛑 TWO SETS, VERSIONED SEPARATELY, AND THE VERSION STRINGS MUST NOT CONVERGE. A coefficient
+ * version is what a stored observation's persistence count is keyed on, so reusing one string
+ * across two horizons would let a redraft observation and a dynasty observation count toward the
+ * same streak while measuring different quantities.
+ */
 export const DEFAULT_WINDOW_COEFFICIENTS: WindowCoefficients = {
-  version: 'window-structural-1',
+  version: 'window-structural-dynasty-1',
+  horizon: 'dynasty',
   calibration: 'uncalibrated-structural',
   nowRecord: 0.5,
   nowPlayoffProbability: 0.5,
   futureRosterStrength: 0.75,
   futurePickCapital: 0.25,
+  scheduleStrengthWeight: 0,
+  contenderThreshold: 0.62,
+  rebuildThreshold: 0.38,
+  risingDelta: 0.15,
+  decliningDelta: 0.15,
+  materialScoreDelta: 0.05,
+}
+
+/**
+ * Redraft. One season, so the forward half is the rest of THIS season.
+ *
+ * ⚠ `futurePickCapital` IS ZERO AND `futureRosterStrength` IS ONE because a redraft league has no
+ * future picks to hold — not because picks are being ignored. The blend validity check requires
+ * the pair to sum to 1, and stating it explicitly is what keeps that check meaningful here.
+ *
+ * ⚠ `scheduleStrengthWeight` IS DELIBERATELY SMALL. Strength of remaining schedule is real
+ * evidence but the weakest of the four, and it is the only one that is optional — a coefficient
+ * large enough to flip a verdict on evidence that may be absent would make two teams with
+ * identical rosters resolve differently based on whether anyone computed their slate.
+ */
+export const REDRAFT_WINDOW_COEFFICIENTS: WindowCoefficients = {
+  version: 'window-structural-redraft-1',
+  horizon: 'redraft',
+  calibration: 'uncalibrated-structural',
+  nowRecord: 0.5,
+  nowPlayoffProbability: 0.5,
+  futureRosterStrength: 1,
+  futurePickCapital: 0,
+  scheduleStrengthWeight: 0.1,
   contenderThreshold: 0.62,
   rebuildThreshold: 0.38,
   risingDelta: 0.15,
@@ -77,7 +117,15 @@ export const DEFAULT_WINDOW_COEFFICIENTS: WindowCoefficients = {
  * conversion between an engine's arbitrary strength scale and this one would be
  * exactly the unbacked coefficient the value contract forbids.
  */
-export interface TeamWindowFacts {
+/**
+ * 🛑 THE FACTS ARE DISCRIMINATED BY FORMAT, AND THAT IS A CORRECTNESS BOUNDARY, NOT TIDINESS.
+ * One shared shape carrying both horizons meant a redraft league REQUIRED a three-year dynasty
+ * projection to resolve at all, and — worse — that a five-year number could move a verdict about
+ * a season that ends in December. A redraft team has no 2029. Splitting the type is what makes
+ * "redraft cannot see dynasty inputs" a thing the compiler enforces rather than a rule to
+ * remember: `rosterStrength3Year` does not EXIST on `RedraftWindowFacts`.
+ */
+interface SharedWindowFacts {
   teamId: string
   leagueId: string
   season: number
@@ -93,11 +141,6 @@ export interface TeamWindowFacts {
   luckWins: number | null
   /** 0..1, forward-looking. */
   playoffProbability: number | null
-  /** 0..1, three seasons out. */
-  rosterStrength3Year: number | null
-  /** 0..1 accumulated future draft capital. Must be null unless `pickTreatment` is 'separate'. */
-  futurePickCapital: number | null
-  pickTreatment: PickTreatment
   /**
    * 0..1 share of the roster that is currently unavailable.
    *
@@ -111,6 +154,35 @@ export interface TeamWindowFacts {
   unavailableShare: number | null
   injuryTreatment: InjuryTreatment
 }
+
+/**
+ * A single-season league. Every input describes THIS season and nothing beyond it.
+ *
+ * ⚠ THERE IS DELIBERATELY NO `rosterStrength3Year`, NO FIVE-YEAR FIGURE AND NO PICK CAPITAL. A
+ * redraft league does not have those seasons, and the absent fields are what stop one being
+ * reintroduced by a well-meaning spread.
+ */
+export interface RedraftWindowFacts extends SharedWindowFacts {
+  format: 'redraft'
+  /** 0..1 share of the league's REMAINING projected scoring held by this roster. */
+  restOfSeasonStrength: number | null
+  /** `1 / teamsCovered` — the share an exactly average roster would hold. */
+  leagueAverageShare: number
+  /** 0..1, 0.5 = average remaining slate. Null when not derivable; optional evidence. */
+  remainingScheduleStrength: number | null
+}
+
+/** A multi-season league, where a three-year horizon is a fact about the team rather than noise. */
+export interface DynastyWindowFacts extends SharedWindowFacts {
+  format: 'dynasty'
+  /** 0..1, three seasons out. */
+  rosterStrength3Year: number | null
+  /** 0..1 accumulated future draft capital. Must be null unless `pickTreatment` is 'separate'. */
+  futurePickCapital: number | null
+  pickTreatment: PickTreatment
+}
+
+export type TeamWindowFacts = RedraftWindowFacts | DynastyWindowFacts
 
 export interface WindowResolution {
   status: WindowStatus | null
@@ -157,21 +229,57 @@ export function resolveCompetitiveWindow(
     return { status: null, nowScore: null, futureScore: null, luckAdjustedWinRate: null, coefficients: c, gaps: ['window_coefficients_invalid'] }
   }
 
+  /*
+   * ⚠ THE COEFFICIENT SET MUST MATCH THE HORIZON IT IS SCORING. A dynasty set applied to redraft
+   * facts would weight a rest-of-season share as if it were three-year strength, which is not the
+   * same quantity even though both are 0..1. Refusing is the only honest option: rescaling between
+   * two arbitrary scales is the unbacked coefficient this module already forbids.
+   */
+  if (c.horizon !== facts.format) {
+    return {
+      status: null, nowScore: null, futureScore: null, luckAdjustedWinRate: null,
+      coefficients: c, gaps: ['window_coefficients_wrong_horizon'],
+    }
+  }
+
   const record = luckAdjustedWinRate(facts)
   if (record === null) gaps.push('record_or_schedule_luck_missing')
 
   const playoff = unitOrNull(facts.playoffProbability)
   if (playoff === null) gaps.push('playoff_probability_missing')
 
-  const strength = unitOrNull(facts.rosterStrength3Year)
-  if (strength === null) gaps.push('roster_strength_3y_missing')
+  /*
+   * The forward half, per horizon.
+   *
+   * DYNASTY: three-year strength, optionally with pick capital carried separately.
+   * REDRAFT: this roster's share of the league's REMAINING projected scoring, rebased so that an
+   * exactly average roster scores 0.5. A raw share is ~1/12 in a 12-team league and would put
+   * every team below every rebuild threshold — the rebase is a change of origin, not a
+   * recalibration, and `leagueAverageShare` comes from the assembler rather than an assumed size.
+   */
+  let futureBase: number | null = null
+  let separatePicks = false
+  let picks: number | null = null
 
-  const separatePicks = facts.pickTreatment === 'separate'
-  const picks = separatePicks ? unitOrNull(facts.futurePickCapital) : null
-  if (separatePicks && picks === null) gaps.push('future_pick_capital_missing')
-  // Supplying picks alongside a strength figure that already contains them is a
-  // caller error, not a value to quietly ignore.
-  if (!separatePicks && facts.futurePickCapital !== null) gaps.push('future_pick_capital_double_counted')
+  if (facts.format === 'dynasty') {
+    futureBase = unitOrNull(facts.rosterStrength3Year)
+    if (futureBase === null) gaps.push('roster_strength_3y_missing')
+
+    separatePicks = facts.pickTreatment === 'separate'
+    picks = separatePicks ? unitOrNull(facts.futurePickCapital) : null
+    if (separatePicks && picks === null) gaps.push('future_pick_capital_missing')
+    // Supplying picks alongside a strength figure that already contains them is a
+    // caller error, not a value to quietly ignore.
+    if (!separatePicks && facts.futurePickCapital !== null) gaps.push('future_pick_capital_double_counted')
+  } else {
+    const share = unitOrNull(facts.restOfSeasonStrength)
+    if (share === null) gaps.push('rest_of_season_strength_missing')
+    else if (!Number.isFinite(facts.leagueAverageShare) || facts.leagueAverageShare <= 0) {
+      gaps.push('league_average_share_invalid')
+    } else {
+      futureBase = Math.min(1, Math.max(0, 0.5 * (share / facts.leagueAverageShare)))
+    }
+  }
 
   const injured = unitOrNull(facts.unavailableShare)
   if (injured === null) gaps.push('injury_share_missing')
@@ -185,9 +293,20 @@ export function resolveCompetitiveWindow(
   // not already priced them.
   const forwardHealth = facts.injuryTreatment === 'excluded' ? 1 - injured! : 1
   const nowScore = c.nowRecord * record! + c.nowPlayoffProbability * playoff! * forwardHealth
+
+  /*
+   * Strength of remaining schedule, when the league can supply it. 0.5 is neutral by definition,
+   * so an absent value leaves `futureScore` exactly as it was — optional evidence must be
+   * omittable without moving the answer.
+   */
+  const sos = facts.format === 'redraft' ? unitOrNull(facts.remainingScheduleStrength) : null
+  const sosAdjusted = sos === null
+    ? futureBase!
+    : Math.min(1, Math.max(0, futureBase! * (1 + c.scheduleStrengthWeight * (sos - 0.5) * 2)))
+
   const futureScore = separatePicks
-    ? c.futureRosterStrength * strength! + c.futurePickCapital * picks!
-    : strength!
+    ? c.futureRosterStrength * futureBase! + c.futurePickCapital * picks!
+    : sosAdjusted
 
   const status: WindowStatus =
     nowScore >= c.contenderThreshold && futureScore >= c.contenderThreshold ? 'contender'

@@ -1,6 +1,6 @@
 import type { PrismaClient } from '@prisma/client'
 import type {
-  AllPlayRecord, InjuryLoad, StoredDynastyProjection, StoredForecast,
+  AllPlayRecord, InjuryLoad, RestOfSeasonStrength, StoredDynastyProjection, StoredForecast,
   TeamIdentity, WindowFactsPort, WindowFactsScope,
 } from './windowFacts'
 
@@ -38,6 +38,17 @@ export interface WindowFactsPrismaDeps {
    * pure Prisma seam and the injury feed choice stays in one place.
    */
   loadAvailability: (sport: string, ids: string[]) => Promise<Map<string, string>>
+  /**
+   * REDRAFT rest-of-season strength, injected for the same reason `loadAvailability` is.
+   *
+   * ⚠ IT LIVES OUTSIDE THIS PORT BECAUSE THE SEASON CONTEXT DOES. A rest-of-season share is
+   * league-relative, so computing it needs every team's roster for a specific `RedraftSeason` —
+   * an id this port has never been given and should not start guessing at from `scope`. The
+   * caller that already resolved the season supplies the loader; absent one, the port answers
+   * null and the assembler refuses with `rest_of_season_projection_missing` rather than
+   * pretending the format is unsupported.
+   */
+  loadRestOfSeason?: (scope: WindowFactsScope) => Promise<RestOfSeasonStrength | null>
 }
 
 export const INJURY_BASIS = 'sportsplayer-availability-category:unavailable-share-of-covered-roster'
@@ -77,20 +88,41 @@ export function allPlayAsOfWeek(
 
   for (const week of [...byWeek.keys()].sort((a, b) => a - b)) {
     const weekRows = byWeek.get(week)!
-    if (!weekRows.some(r => r.pointsFor > 0)) continue
     const mine = weekRows.find(r => String(r.rosterId) === String(teamId))
+
+    /*
+     * 🛑 A ROW WITH `win === null` IS NOT A TIE, IT IS AN UNGRADED GAME. The previous shape was
+     * `win === 1 → win`, `win === 0 && pointsFor !== pointsAgainst → loss`, `else → TIE`, so every
+     * in-progress week, every bye and every row the ingester had not graded fell into the final
+     * `else` and was recorded as a drawn game. That is not a cosmetic miscount: ties enter
+     * `played`, `played` is the denominator of the luck adjustment, and half a phantom win per
+     * ungraded week drags a genuine contender toward the middle every Sunday until the grade lands.
+     *
+     * ⚠ AND `weeksCounted` INCREMENTED BEFORE THE ROW WAS EVEN FOUND. A week in which this team
+     * had no row at all — a bye, or a roster that joined late — still counted as a week it played,
+     * on the strength of somebody else having scored. Both gates now hang off ONE condition: a
+     * week counts for this team when THIS team has a completed, graded row in it.
+     */
+    const completed = mine != null && (mine.win === 1 || mine.win === 0)
+    if (!completed) continue
+
     weeksCounted += 1
-    if (!mine) continue
+    pf += mine!.pointsFor
 
-    pf += mine.pointsFor
-    if (mine.win === 1) wins += 1
-    else if (mine.win === 0 && mine.pointsAgainst !== mine.pointsFor) losses += 1
-    else ties += 1
+    if (mine!.win === 1) wins += 1
+    else if (mine!.pointsFor === mine!.pointsAgainst) ties += 1
+    else losses += 1
 
+    /*
+     * All-play compares only against teams that also COMPLETED this week. An opponent still on 0
+     * points mid-Sunday is not a team this roster beat, and counting it inflates the all-play win
+     * rate — which is the expected-wins term, so it would report a lucky team as unlucky.
+     */
     for (const other of weekRows) {
-      if (String(other.rosterId) === String(mine.rosterId)) continue
-      if (mine.pointsFor > other.pointsFor) apw += 1
-      else if (mine.pointsFor < other.pointsFor) apl += 1
+      if (String(other.rosterId) === String(mine!.rosterId)) continue
+      if (other.win !== 1 && other.win !== 0) continue
+      if (mine!.pointsFor > other.pointsFor) apw += 1
+      else if (mine!.pointsFor < other.pointsFor) apl += 1
       else apt += 1
     }
   }
@@ -210,6 +242,17 @@ export function createWindowFactsPrismaPort(deps: WindowFactsPrismaDeps): Window
         // probability has not already priced this. See the audit's §5.2.
         treatment: 'excluded',
       }
+    },
+
+    /**
+     * REDRAFT only, and delegated.
+     *
+     * Returning null when no loader was supplied is not a silent degrade: the assembler treats a
+     * null rest-of-season as `rest_of_season_projection_missing` and refuses, so a redraft caller
+     * that forgot to wire the loader gets a named refusal rather than a window built without it.
+     */
+    async restOfSeason(scope: WindowFactsScope): Promise<RestOfSeasonStrength | null> {
+      return deps.loadRestOfSeason ? deps.loadRestOfSeason(scope) : null
     },
   }
 }

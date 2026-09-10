@@ -47,33 +47,14 @@ import type { WindowDecision } from '@/lib/decision-os/value-v2/windowDecision'
 export const dynamic = 'force-dynamic'
 
 /**
- * The league's real scheduled periods, ascending and de-duplicated.
- *
- * ⚠ THE SCHEDULE, NOT `1..currentWeek`. `scheduledLookback` walks real predecessors, and the
- * whole reason it exists is that arithmetic invents periods a league never played — a schedule
- * that ends at 16 asked about 17, or a week with no matchups sitting in the middle of a season.
- * Deriving this from the matchup rows means a gap in the schedule stays a gap.
- *
- * Returns empty when the season has no schedule rows, and empty is passed as "no schedule": the
- * resolver then takes its arithmetic fallback and says so via
- * `schedule_unavailable_lookback_assumed_contiguous`, rather than silently claiming a schedule.
- */
-async function scheduledPeriodsFor(seasonId: string): Promise<number[]> {
-  const rows = await prisma.redraftMatchup
-    .findMany({ where: { seasonId }, select: { week: true }, distinct: ['week'], orderBy: { week: 'asc' } })
-    .catch(() => [] as Array<{ week: number }>)
-  return rows.map((r) => r.week).filter((w) => Number.isSafeInteger(w) && w >= 1)
-}
-
-/**
  * The asset shape the client already sends to `POST /api/redraft/trade-proposals`, so the console
  * can reuse the exact array it has built rather than assembling a second one.
  *
  * 🛑 `metadata` IS LOAD-BEARING AND WAS NEARLY DROPPED. The compute function reads `position` and
  * `team` from it (position drives the whole scarcity multiplier), `label` for a pick, `amount` for
  * FAAB, and `restOfSeasonProjection` as the fallback when the resolver has nothing. Forwarding
- * only the top-level fields would have priced every player at a 1.0 scarcity and valued every
- * FAAB asset at zero — quietly, with no error anywhere.
+ * only the top-level fields would price every player at 1.0 scarcity and every FAAB asset at
+ * zero — quietly, with no error anywhere.
  */
 type RawAssetBody = {
   fromRosterId?: string
@@ -191,7 +172,7 @@ export async function POST(req: NextRequest) {
        * than clamping to 1 and inventing a window over games nobody has played.
        */
       week: season.currentWeek,
-      scheduledPeriods: await scheduledPeriodsFor(seasonId),
+      seasonId,
     })
   }
 

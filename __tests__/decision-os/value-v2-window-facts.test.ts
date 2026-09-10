@@ -1,3 +1,4 @@
+import type { TeamWindowFacts } from '@/lib/decision-os/value-v2/window'
 import { describe, expect, it } from 'vitest'
 import {
   assembleWindowFacts,
@@ -7,6 +8,17 @@ import {
 } from '@/lib/decision-os/value-v2/windowFacts'
 import { resolveCompetitiveWindow } from '@/lib/decision-os/value-v2/window'
 
+/**
+ * ⚠ NARROWED, NOT CAST BLIND. `TeamWindowFacts` is a discriminated union now, so reading a
+ * dynasty-only field means proving the arm first — which is also an assertion worth having: if
+ * an assembly silently produced redraft facts here, this throws instead of reading `undefined`.
+ */
+function asDynasty(facts: TeamWindowFacts | null | undefined) {
+  if (!facts || facts.format !== 'dynasty') throw new Error(`expected dynasty facts, got ${facts?.format ?? 'none'}`)
+  return facts
+}
+
+
 const scope: WindowFactsScope = { leagueId: 'l1', teamId: 't1', season: 2026, week: 11 }
 
 const port = (over: Partial<WindowFactsPort> = {}): WindowFactsPort => ({
@@ -14,6 +26,11 @@ const port = (over: Partial<WindowFactsPort> = {}): WindowFactsPort => ({
   allPlay: async () => ({ wins: 7, losses: 4, ties: 0, luckWins: 1.5, weeksCounted: 11, pointsFor: 1200 }),
   forecast: async () => ({ season: 2026, week: 11, playoffProbabilityPct: 82.5, generatedAt: '2026-10-06T12:00:00.000Z' }),
   dynasty: async () => ({ season: 2026, projectedStrength3YearsPct: 71, projectedStrengthNextYearPct: 68, windowStartYear: 2026, windowEndYear: 2029, confidencePct: 74, generatedAt: '2026-10-06T12:00:00.000Z' }),
+  /*
+   * These fixtures are DYNASTY, so this is never consulted. It is present because the port
+   * contract requires it, and null is the honest answer for an assembly that never calls it.
+   */
+  restOfSeason: async () => null,
   injuries: async () => ({ unavailableShare: 0.1, basis: 'test-basis', coverage: 1, treatment: 'excluded' }),
   ...over,
 })
@@ -23,7 +40,7 @@ describe('assembleWindowFacts converts stored units without inventing them', () 
     const { facts, gaps } = await assembleWindowFacts(scope, port())
     expect(gaps).toEqual([])
     expect(facts!.playoffProbability).toBeCloseTo(0.825, 10)
-    expect(facts!.rosterStrength3Year).toBeCloseTo(0.71, 10)
+    expect(asDynasty(facts).rosterStrength3Year).toBeCloseTo(0.71, 10)
   })
 
   it('carries the all-play record through unchanged, luck included', async () => {
@@ -33,8 +50,8 @@ describe('assembleWindowFacts converts stored units without inventing them', () 
 
   it('declares picks already inside the stored dynasty strength', async () => {
     const { facts } = await assembleWindowFacts(scope, port())
-    expect(facts!.pickTreatment).toBe('included-in-roster-strength')
-    expect(facts!.futurePickCapital).toBeNull()
+    expect(asDynasty(facts).pickTreatment).toBe('included-in-roster-strength')
+    expect(asDynasty(facts).futurePickCapital).toBeNull()
   })
 
   it('produces facts the resolver accepts end to end', async () => {

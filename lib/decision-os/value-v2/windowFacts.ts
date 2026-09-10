@@ -77,11 +77,62 @@ export interface InjuryLoad {
   treatment: InjuryTreatment
 }
 
+/**
+ * Rest-of-season roster strength for a REDRAFT team.
+ *
+ * 🛑 THE CANONICAL SOURCE IS `AFProjectionSnapshot`, AUDITED RATHER THAN INVENTED. That model
+ * stores `afProjection` (PER GAME, the league-agnostic truth) and `rosProjection` (rest-of-season
+ * total at a stated horizon) with `rosWeeksRemaining`, so a league-aware consumer can re-project
+ * onto its own horizon. `lib/af-projections/restOfSeason.ts` is the ONE place the per-game →
+ * rest-of-season multiplication may happen; its header records that feeding a per-game figure
+ * where a season total belongs understates a player ~17× with no zero, no NaN and no error.
+ *
+ * ⚠ `rosProjection` NULL MEANS "NOT COMPUTED", NEVER ZERO — the column's own schema comment says
+ * readers must fall back and never treat it as zero. A zeroed roster is indistinguishable from a
+ * genuinely weak one, and it is exactly the shape that would classify a healthy contender as
+ * rebuilding. Thin coverage refuses here rather than summing whatever happens to be present.
+ *
+ * `share` is LEAGUE-RELATIVE on purpose: projected points have no absolute scale, so the only
+ * honest 0..1 figure is this roster's share of the league's remaining projected scoring, where
+ * `1 / teamsCovered` is average.
+ */
+export interface RestOfSeasonStrength {
+  /** 0..1 share of the league's remaining projected scoring held by this roster. */
+  share: number
+  /** How many of this roster's players had a computed projection. */
+  playersCovered: number
+  rosterSize: number
+  /** Teams the share was computed across. A share means nothing without it. */
+  teamsCovered: number
+  /** Horizon the projections cover, as recorded by the producer. */
+  weeksRemaining: number | null
+  /** Names the producing store, carried into provenance. */
+  source: string
+  generatedAt: string | null
+}
+
+/** Which season horizon a league's window is judged over. Redraft never reaches past this season. */
+export type WindowFormat = 'redraft' | 'dynasty'
+
 export interface WindowFactsPort {
   identity(scope: WindowFactsScope): Promise<TeamIdentity | null>
   allPlay(scope: WindowFactsScope): Promise<AllPlayRecord | null>
   forecast(scope: WindowFactsScope): Promise<StoredForecast | null>
+  /**
+   * ⚠ DYNASTY ONLY, AND NOT CALLED AT ALL FOR A REDRAFT LEAGUE. Three- and five-year strength and
+   * future pick capital describe seasons a redraft league does not have. Requiring them made every
+   * redraft team unresolvable unless somebody had generated a dynasty projection for it and — far
+   * worse — let a long-horizon number move a single-season verdict.
+   */
   dynasty(scope: WindowFactsScope): Promise<StoredDynastyProjection | null>
+  /** REDRAFT ONLY. Null when no trustworthy rest-of-season projection exists. */
+  restOfSeason(scope: WindowFactsScope): Promise<RestOfSeasonStrength | null>
+  /**
+   * REDRAFT, OPTIONAL. 0..1 where 0.5 is an average remaining slate. Genuinely optional: null
+   * omits it rather than refusing, because a league with no derivable strength-of-schedule is
+   * still judgeable on record, playoff probability and roster strength.
+   */
+  remainingScheduleStrength?(scope: WindowFactsScope): Promise<number | null>
   /** Null when no trustworthy per-team injury load exists. It is not assumed healthy. */
   injuries(scope: WindowFactsScope): Promise<InjuryLoad | null>
 }
@@ -106,11 +157,20 @@ export interface WindowEvidence {
   identity: TeamIdentity | null
   allPlay: AllPlayRecord | null
   forecast: StoredForecast | null
+  /** Always null for a redraft league, because it is never read there. */
   dynasty: StoredDynastyProjection | null
+  /** Always null for a dynasty league, because it is never read there. */
+  restOfSeason: RestOfSeasonStrength | null
+  remainingScheduleStrength: number | null
   injuries: InjuryLoad | null
+  /** Which horizon this evidence was gathered for. */
+  format: WindowFormat
   /** When the assembly ran. Distinct from when any producer generated its row. */
   assembledAt: string
 }
+
+/** Below this share of the roster, a rest-of-season total is not a roster's total. */
+export const MIN_ROS_COVERAGE = 0.5
 
 export interface WindowFactsResult {
   facts: TeamWindowFacts | null
@@ -125,20 +185,48 @@ function pctToUnit(pct: number | null | undefined): number | null {
 export async function assembleWindowFacts(
   scope: WindowFactsScope,
   port: WindowFactsPort,
-  now: Date = new Date(),
+  options: { format: WindowFormat; now?: Date } | Date = { format: 'dynasty' },
 ): Promise<WindowFactsResult> {
+  /*
+   * ⚠ THE DATE OVERLOAD IS FOR EXISTING DYNASTY CALLERS AND IS NOT A DEFAULT TO COPY. New callers
+   * pass a format explicitly; a caller that does not say which horizon it means gets the dynasty
+   * one, which is the pre-existing behaviour rather than a guess about their league.
+   */
+  const opts = options instanceof Date ? { format: 'dynasty' as WindowFormat, now: options } : options
+  const format = opts.format
+  const now = opts.now ?? new Date()
   const assembledAt = now.toISOString()
-  const empty: WindowEvidence = { identity: null, allPlay: null, forecast: null, dynasty: null, injuries: null, assembledAt }
+  const empty: WindowEvidence = {
+    identity: null, allPlay: null, forecast: null, dynasty: null,
+    restOfSeason: null, remainingScheduleStrength: null, injuries: null, format, assembledAt,
+  }
 
   if (!scope.leagueId || !scope.teamId || !Number.isInteger(scope.season) ||
       !Number.isInteger(scope.week) || scope.week < 1) {
     return { facts: null, evidence: empty, gaps: ['window_scope_invalid'] }
   }
 
-  const [identity, record, forecast, dynasty, injuries] = await Promise.all([
-    port.identity(scope), port.allPlay(scope), port.forecast(scope), port.dynasty(scope), port.injuries(scope),
+  const isRedraft = format === 'redraft'
+
+  /*
+   * 🛑 THE BRANCH IS ON WHAT IS *CALLED*, NOT ONLY ON WHAT IS REQUIRED. A redraft assembly that
+   * still awaited `port.dynasty` would keep the query, keep its cost, and keep the possibility of
+   * a long-horizon row reaching a single-season verdict through some later edit. Not calling it is
+   * the property the tests assert, because it is the one that cannot rot into a soft dependency.
+   */
+  const [identity, record, forecast, dynasty, restOfSeason, scheduleStrength, injuries] = await Promise.all([
+    port.identity(scope),
+    port.allPlay(scope),
+    port.forecast(scope),
+    isRedraft ? Promise.resolve(null) : port.dynasty(scope),
+    isRedraft ? port.restOfSeason(scope) : Promise.resolve(null),
+    isRedraft && port.remainingScheduleStrength ? port.remainingScheduleStrength(scope) : Promise.resolve(null),
+    port.injuries(scope),
   ])
-  const evidence: WindowEvidence = { identity, allPlay: record, forecast, dynasty, injuries, assembledAt }
+  const evidence: WindowEvidence = {
+    identity, allPlay: record, forecast, dynasty, restOfSeason,
+    remainingScheduleStrength: scheduleStrength, injuries, format, assembledAt,
+  }
 
   const gaps: string[] = []
 
@@ -157,12 +245,34 @@ export async function assembleWindowFacts(
     if (playoffProbability === null) gaps.push('season_forecast_probability_out_of_range')
   }
 
+  /*
+   * The long-horizon half, for DYNASTY only. `rosterStrength3Year` is three seasons out and
+   * already blends future pick capital in — neither is a fact about a redraft league, which is why
+   * this whole branch is unreachable there rather than merely unused.
+   */
   let rosterStrength3Year: number | null = null
-  if (!dynasty) gaps.push('dynasty_projection_missing')
-  else if (dynasty.season !== scope.season) gaps.push('dynasty_projection_wrong_season')
-  else {
-    rosterStrength3Year = pctToUnit(dynasty.projectedStrength3YearsPct)
-    if (rosterStrength3Year === null) gaps.push('dynasty_projection_strength_out_of_range')
+  if (!isRedraft) {
+    if (!dynasty) gaps.push('dynasty_projection_missing')
+    else if (dynasty.season !== scope.season) gaps.push('dynasty_projection_wrong_season')
+    else {
+      rosterStrength3Year = pctToUnit(dynasty.projectedStrength3YearsPct)
+      if (rosterStrength3Year === null) gaps.push('dynasty_projection_strength_out_of_range')
+    }
+  }
+
+  /* The current-season half, for REDRAFT only. */
+  let rosStrength: number | null = null
+  if (isRedraft) {
+    if (!restOfSeason) gaps.push('rest_of_season_projection_missing')
+    else if (restOfSeason.rosterSize <= 0) gaps.push('rest_of_season_roster_empty')
+    else if (restOfSeason.teamsCovered < 2) gaps.push('rest_of_season_league_not_comparable')
+    else if (restOfSeason.playersCovered / restOfSeason.rosterSize < MIN_ROS_COVERAGE) {
+      gaps.push('rest_of_season_coverage_below_floor')
+    } else if (!Number.isFinite(restOfSeason.share) || restOfSeason.share < 0 || restOfSeason.share > 1) {
+      gaps.push('rest_of_season_share_out_of_range')
+    } else {
+      rosStrength = restOfSeason.share
+    }
   }
 
   if (!injuries) gaps.push('injury_load_missing')
@@ -170,25 +280,42 @@ export async function assembleWindowFacts(
 
   if (gaps.length) return { facts: null, evidence, gaps }
 
+  const shared = {
+    teamId: scope.teamId,
+    leagueId: scope.leagueId,
+    season: scope.season,
+    week: scope.week,
+    wins: record!.wins,
+    losses: record!.losses,
+    ties: record!.ties,
+    luckWins: record!.luckWins,
+    playoffProbability,
+    unavailableShare: injuries!.unavailableShare,
+    injuryTreatment: injuries!.treatment,
+  }
+
   return {
     gaps: [],
     evidence,
-    facts: {
-      teamId: scope.teamId,
-      leagueId: scope.leagueId,
-      season: scope.season,
-      week: scope.week,
-      wins: record!.wins,
-      losses: record!.losses,
-      ties: record!.ties,
-      luckWins: record!.luckWins,
-      playoffProbability,
-      rosterStrength3Year,
-      // The persisted dynasty strength already blends pick capital in.
-      futurePickCapital: null,
-      pickTreatment: 'included-in-roster-strength',
-      unavailableShare: injuries!.unavailableShare,
-      injuryTreatment: injuries!.treatment,
-    },
+    facts: isRedraft
+      ? {
+          ...shared,
+          format: 'redraft',
+          restOfSeasonStrength: rosStrength,
+          /*
+           * A share above `1 / teamsCovered` is an above-average remaining slate of scoring. Kept
+           * so a consumer can reason about it without re-deriving the league size.
+           */
+          leagueAverageShare: 1 / restOfSeason!.teamsCovered,
+          remainingScheduleStrength: scheduleStrength,
+        }
+      : {
+          ...shared,
+          format: 'dynasty',
+          rosterStrength3Year,
+          // The persisted dynasty strength already blends pick capital in.
+          futurePickCapital: null,
+          pickTreatment: 'included-in-roster-strength',
+        },
   }
 }

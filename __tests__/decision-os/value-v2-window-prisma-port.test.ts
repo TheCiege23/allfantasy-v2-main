@@ -1,3 +1,4 @@
+import type { TeamWindowFacts } from '@/lib/decision-os/value-v2/window'
 import { describe, expect, it } from 'vitest'
 import type { PrismaClient } from '@prisma/client'
 import {
@@ -5,6 +6,17 @@ import {
 } from '@/lib/decision-os/value-v2/windowFactsPrismaPort'
 import { assembleWindowFacts, MIN_INJURY_COVERAGE } from '@/lib/decision-os/value-v2/windowFacts'
 import { resolveWindowDecision } from '@/lib/decision-os/value-v2/windowDecision'
+
+/**
+ * ⚠ NARROWED, NOT CAST BLIND. `TeamWindowFacts` is a discriminated union now, so reading a
+ * dynasty-only field means proving the arm first — which is also an assertion worth having: if
+ * an assembly silently produced redraft facts here, this throws instead of reading `undefined`.
+ */
+function asDynasty(facts: TeamWindowFacts | null | undefined) {
+  if (!facts || facts.format !== 'dynasty') throw new Error(`expected dynasty facts, got ${facts?.format ?? 'none'}`)
+  return facts
+}
+
 
 /**
  * Repository-shaped fixtures. The fake applies the same filters the real client
@@ -162,7 +174,7 @@ describe('prisma port mapping', () => {
       pickTreatment: 'included-in-roster-strength', futurePickCapital: null,
     })
     expect(result.facts!.playoffProbability).toBeCloseTo(0.945, 10)
-    expect(result.facts!.rosterStrength3Year).toBeCloseTo(0.88, 10)
+    expect(asDynasty(result.facts).rosterStrength3Year).toBeCloseTo(0.88, 10)
   })
 
   it('resolves team and manager identity', async () => {
