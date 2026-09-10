@@ -1,6 +1,7 @@
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
+import { loadLeagueFor } from './loadLeagueFor'
 import { myRosterCandidates } from './myRoster'
 import { leagueDisplayName, type SectionState } from './leagueHome'
 
@@ -229,9 +230,12 @@ function readEngineNumber(config: unknown, key: string): number | null {
 }
 
 export async function getWaiversData(leagueId: string, userId: string): Promise<WaiversData | null> {
-  const league = await prisma.league.findUnique({
-    where: { id: leagueId },
-    select: { id: true, name: true, platform: true, leagueType: true },
+  /* Gated read — see lib/core-app/loadLeagueFor.ts. A non-member gets null here. */
+  const league = await loadLeagueFor(userId, leagueId, {
+    id: true,
+    name: true,
+    platform: true,
+    leagueType: true,
   })
   if (!league) return null
 

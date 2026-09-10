@@ -1,6 +1,7 @@
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
+import { loadLeagueFor } from './loadLeagueFor'
 import { getDraftReport, type DraftGradeLetter } from '@/lib/draft-intel/draftReportService'
 import { buildImportedDraftReport } from '@/lib/draft-intel/importedDraftReport'
 import { leagueDisplayName, type SectionState, type UnavailableSection } from './leagueHome'
@@ -614,10 +615,8 @@ async function loadImportedDraftPicks(
 }
 
 export async function getDraftHqData(leagueId: string, userId: string): Promise<DraftHqData | null> {
-  const league = await prisma.league.findUnique({
-    where: { id: leagueId },
-    select: { id: true, name: true, platform: true, leagueType: true, platformLeagueId: true },
-  })
+  /* Gated read — see lib/core-app/loadLeagueFor.ts. A non-member gets null here. */
+  const league = await loadLeagueFor(userId, leagueId, { id: true, name: true, platform: true, leagueType: true, platformLeagueId: true })
   if (!league) return null
 
   const base = {

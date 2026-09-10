@@ -1,6 +1,7 @@
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
+import { loadLeagueFor } from './loadLeagueFor'
 import { leagueDisplayName, type SectionState, type UnavailableSection } from './leagueHome'
 import { isRuledOut } from './injuryStatus'
 import { latestProjectionWeek, lookupProjections, summariseLineup } from './playerProjections'
@@ -812,9 +813,8 @@ async function resolvePlayers(
 }
 
 export async function getMyTeamData(leagueId: string, userId: string): Promise<MyTeamData | null> {
-  const league = await prisma.league.findUnique({
-    where: { id: leagueId },
-    select: {
+  /* Gated read — see lib/core-app/loadLeagueFor.ts. A non-member gets null here. */
+  const league = await loadLeagueFor(userId, leagueId, {
       id: true, name: true, platform: true, leagueType: true, sport: true,
       // `scoring_settings` lives in here — the basis for the league-specific number.
       settings: true,
@@ -829,8 +829,7 @@ export async function getMyTeamData(leagueId: string, userId: string): Promise<M
       // Superflex and dynasty both change which value market applies.
       isDynasty: true,
       starters: true,
-    },
-  })
+    })
   if (!league) return null
 
   const sport = String(league.sport ?? 'NFL')

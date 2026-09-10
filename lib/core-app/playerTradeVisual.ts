@@ -1,6 +1,7 @@
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
+import { loadLeagueFor } from './loadLeagueFor'
 import {
   getMarketValues,
   playerValue,
@@ -348,20 +349,23 @@ export async function getPlayerTradeVisual(
 ): Promise<SectionState<PlayerTradeVisual>> {
   if (!userId) return { available: false, reason: 'sign in to build a trade for him' }
 
-  const league = await prisma.league
-    .findUnique({
-      where: { id: leagueId },
-      select: {
-        id: true,
-        name: true,
-        platform: true,
-        platformLeagueId: true,
-        season: true,
-        settings: true,
-        leagueType: true,
-      },
-    })
-    .catch(() => null)
+  /*
+   * Gated read — see lib/core-app/loadLeagueFor.ts. A non-member gets null here.
+   *
+   * ⚠ THE `reason` STAYS "league not found" FOR A REFUSAL TOO, AND THAT IS THE
+   * POINT. A viewer who could tell "not yours" from "no such league" could
+   * enumerate which league ids exist by reading the copy. `loadLeagueFor` merges
+   * the two upstream, so this branch cannot separate them even by accident.
+   */
+  const league = await loadLeagueFor(userId, leagueId, {
+    id: true,
+    name: true,
+    platform: true,
+    platformLeagueId: true,
+    season: true,
+    settings: true,
+    leagueType: true,
+  }).catch(() => null)
   if (!league) return { available: false, reason: 'league not found' }
 
   const [teams, rosters] = await Promise.all([

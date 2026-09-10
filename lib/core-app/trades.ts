@@ -3,6 +3,7 @@ import { valueBookFor, type ValueBook } from './valueBook'
 import { resolveSourceScreenLink, type SourceScreenLink } from '@/lib/league-links/sourceLinkResolver'
 
 import { prisma } from '@/lib/prisma'
+import { loadLeagueFor } from './loadLeagueFor'
 import { leagueDisplayName, type SectionState } from './leagueHome'
 import { describeNoSignal, gradeTrade } from '@/lib/projections/tradeGrading'
 import {
@@ -439,12 +440,10 @@ async function resolvePendingOffers(
 }
 
 export async function getTradesData(leagueId: string, userId: string): Promise<TradesData | null> {
-  const league = await prisma.league.findUnique({
-    where: { id: leagueId },
+  /* Gated read — see lib/core-app/loadLeagueFor.ts. A non-member gets null here. */
     /* `sport` is selected for the pending-offer scan: Sleeper's player
        dictionary is NFL-only, so a non-NFL league must not be handed one. */
-    select: { id: true, name: true, platform: true, leagueType: true, settings: true, platformLeagueId: true, season: true, sport: true },
-  })
+  const league = await loadLeagueFor(userId, leagueId, { id: true, name: true, platform: true, leagueType: true, settings: true, platformLeagueId: true, season: true, sport: true })
   if (!league) return null
 
   const teamCount = await prisma.leagueTeam.count({ where: { leagueId } })

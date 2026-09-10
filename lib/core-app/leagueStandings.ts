@@ -1,6 +1,7 @@
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
+import { loadLeagueFor } from './loadLeagueFor'
 import { leagueDisplayName, type SectionState } from './leagueHome'
 import { isScored, resolveCurrentWeekFrom, type WeekScoreRow } from './currentWeek'
 
@@ -256,10 +257,8 @@ export async function getLeagueStandings(
   leagueId: string,
   userId: string,
 ): Promise<LeagueStandingsResult> {
-  const league = await prisma.league.findUnique({
-    where: { id: leagueId },
-    select: { id: true, name: true, platform: true, platformLeagueId: true },
-  })
+  /* Gated read — see lib/core-app/loadLeagueFor.ts. A non-member gets null here. */
+  const league = await loadLeagueFor(userId, leagueId, { id: true, name: true, platform: true, platformLeagueId: true })
 
   const leagueName = leagueDisplayName(league?.name)
 

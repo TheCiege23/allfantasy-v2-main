@@ -1,6 +1,7 @@
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
+import { loadLeagueFor } from './loadLeagueFor'
 import { getLeagueRole, type LeagueRole } from '@/lib/league/permissions'
 import { leagueDisplayName, type SectionState, type UnavailableSection } from './leagueHome'
 import type { CoreIssue } from './outstandingIssues'
@@ -190,9 +191,8 @@ export async function getCommissionerHub(input: {
   const { leagueId, userId, issues } = input
   const now = input.now ?? new Date()
 
-  const league = await prisma.league.findUnique({
-    where: { id: leagueId },
-    select: {
+  /* Gated read — see lib/core-app/loadLeagueFor.ts. A non-member gets null here. */
+  const league = await loadLeagueFor(userId, leagueId, {
       id: true,
       name: true,
       platform: true,
@@ -203,8 +203,7 @@ export async function getCommissionerHub(input: {
       tradeDeadlineWeek: true,
       playoffStartWeek: true,
       playoffTeams: true,
-    },
-  })
+    })
 
   const leagueName = leagueDisplayName(league?.name)
 

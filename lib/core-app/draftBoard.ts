@@ -1,6 +1,7 @@
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
+import { loadLeagueFor } from './loadLeagueFor'
 import { leagueDisplayName, type SectionState, type UnavailableSection } from './leagueHome'
 
 /**
@@ -70,10 +71,8 @@ export type DraftBoardData = {
 }
 
 export async function getDraftBoardData(leagueId: string, userId: string): Promise<DraftBoardData | null> {
-  const league = await prisma.league.findUnique({
-    where: { id: leagueId },
-    select: { id: true, name: true, platform: true },
-  })
+  /* Gated read — see lib/core-app/loadLeagueFor.ts. A non-member gets null here. */
+  const league = await loadLeagueFor(userId, leagueId, { id: true, name: true, platform: true })
   if (!league) return null
 
   const base = {
