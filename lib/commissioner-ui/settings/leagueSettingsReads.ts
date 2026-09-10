@@ -116,7 +116,13 @@ function group(id: string, label: string, description: string, entries: LeagueSe
 }
 
 export async function readLeagueSettingsSnapshot(leagueId: string): Promise<LeagueSettingsSnapshot | null> {
-  const league = await prisma.league.findUnique({
+  /*
+   * ⚠ `findFirst`, NOT `findUnique`, AND THE DIFFERENCE IS NOT STYLISTIC (T-006). `findUnique`'s
+   * `where` accepts only unique fields, so `deletedAt` is not a legal filter on it — the
+   * soft-delete extension is STRUCTURALLY unable to cover it, and a purged league would still
+   * render its settings here. `findFirst` takes the same arguments and IS filtered.
+   */
+  const league = await prisma.league.findFirst({
     where: { id: leagueId },
     select: { name: true, settings: true, platform: true, platformLeagueId: true, sport: true },
   })
