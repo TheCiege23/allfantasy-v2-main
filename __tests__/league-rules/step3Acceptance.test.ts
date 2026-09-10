@@ -22,39 +22,44 @@ describe('authorization: the grounding cannot be driven by a client-supplied lea
   )
 
   /*
-   * ⚠ STRUCTURAL, NOT A LIVE REQUEST, AND SAID SO RATHER THAN IMPLIED. These
-   * assert how the call site is wired. They do NOT prove a running request
-   * refuses a stranger's league — `loadLeagueGroundingForUser` owns that, and
-   * its own membership tests own proving it. What is checked here is the thing
-   * this batch could get wrong: reading the id from the wrong place.
+   * ⚠ THESE ASSERTED THE INLINE `buildLeagueRulesGrounding` BLOCK UNTIL THE
+   * STEP 2B WIRING, AND THE UPDATE IS THE RECORD. That block moved into
+   * `lib/chimmy/decisionEnvelopeGrounding.ts` so the route orchestrates rather
+   * than contains — and these went red on the same run, which is what a
+   * structural test is for. Their positive control fired FIRST, reporting the
+   * read found nothing rather than passing vacuously.
+   *
+   * ⚠ STILL STRUCTURAL, AND STILL WEAKER THAN THE EXECUTABLE COVERAGE. The
+   * proof that an unauthorized id yields no league lives in
+   * `ruleGroundingAuthorization.test.ts` and `chimmy-insight-authorization.test.ts`,
+   * which drive the real boundary. What is checked here is the one thing those
+   * cannot see: which variable this call site reads.
    */
   it('the wiring exists at all (positive control — a bad read must not read as agreement)', () => {
-    // Without this, a failed read or a renamed symbol makes every check below vacuous.
-    expect(routeSrc).toContain('buildLeagueRulesGrounding')
+    expect(routeSrc).toContain('buildDecisionEnvelopeGrounding')
   })
 
-  it('is gated on the authorized snapshot, not on the plan input', () => {
-    const at = routeSrc.indexOf('rulesCtx = buildLeagueRulesGrounding')
-    expect(at, 'call site not found — the slice below would be vacuous').toBeGreaterThan(0)
-    const call = routeSrc.slice(at, at + 600)
-    expect(call).toContain('leagueSnapshot.')
+  it('is driven by the authorized snapshot, not by a request field', () => {
+    const at = routeSrc.indexOf('buildDecisionEnvelopeGrounding({')
+    expect(at).toBeGreaterThan(0)
+    const call = routeSrc.slice(at, at + 400)
+    expect(call).toContain('snapshot: leagueSnapshot')
     expect(call).not.toContain('planInput.leagueId')
   })
 
-  it('the guard is the snapshot itself, so a failed grounding produces no rules', () => {
-    const at = routeSrc.indexOf('rulesCtx = buildLeagueRulesGrounding')
-    expect(at).toBeGreaterThan(0)
-    expect(routeSrc.slice(0, at).slice(-1200)).toContain('if (leagueSnapshot) {')
+  it('does not swallow a grounding failure', () => {
+    const at = routeSrc.indexOf('buildDecisionEnvelopeGrounding({')
+    const block = routeSrc.slice(at, at + 1600)
+    expect(block).toContain('buildRuleGroundingGap')
+    expect(block).not.toMatch(/catch\s*\{\s*\/\* non-fatal \*\/\s*\}/)
   })
 
-  it('does not swallow a grounding failure', () => {
+  it('the route no longer contains the inline rule-grounding implementation', () => {
     /*
-     * The block used to end in `catch { /* non-fatal *\/ }`, which left the model
-     * with a league and no rules — indistinguishable from a league that has none.
+     * The point of the move: orchestration lives in modules with one authority
+     * each, and the route calls them.
      */
-    const at = routeSrc.indexOf('rulesCtx = buildLeagueRulesGrounding')
-    const block = routeSrc.slice(at, at + 1200)
-    expect(block).toContain('buildRuleGroundingGap')
+    expect(routeSrc).not.toContain('buildLeagueRulesGrounding({')
   })
 })
 
