@@ -1,4 +1,30 @@
 /**
+ * 🛑 SUPERSEDED — `isOrphan` IS NOT AN ARCHIVAL FLAG, SO THERE IS NO "ACTIVE TEAM" HERE.
+ *
+ * Everything below rests on one premise that is FALSE: that `isOrphan = true` means a team has
+ * left the league. Five writers set it, and they disagree —
+ *
+ *   `createCanonicalLeagueInTransaction` → an OPEN, CLAIMABLE slot at league creation (CURRENT)
+ *   `GuillotineEliminationEngine`        → an ELIMINATED team                          (CURRENT)
+ *   commissioner renewal                 → an ADMINISTRATIVELY REMOVED team
+ *   commissioner renewal (sweep)         → collapses vacant + removed + `orphan-*` together
+ *   `applySleeperLeagueSync`             → absent from the provider's roster set
+ *
+ * — so `ACTIVE_TEAM_WHERE` removes live franchises from their own league. A brand-new 12-team
+ * league carries eleven `isOrphan: true` rows, and filtering them reported it as having one team.
+ * Proven by `__tests__/league/nfl-ncaaf-league-ui.test.ts` and `league-pulse-decision-os.test.tsx`,
+ * whose fixture counts an `isOrphan: true` "Open Team" toward `teamCount: 4` and gives it points.
+ *
+ * ⚠ THIS FILE IS DELIBERATELY LEFT WORKING AND UNCHANGED. Redefining these exports would silently
+ * change the meaning under every remaining call site — the exact failure mode being repaired.
+ * They are being retired one call site at a time.
+ *
+ * **Use `lib/league-import/teamLifecycle.ts` instead**, and name the set you need:
+ * current franchises (vacant included), claimable, competitively eligible, human recipients, or
+ * archived. Do not add new callers here.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────────────────────
+ *
  * One definition of "an ACTIVE team" — Batch A.1 item 1.
  *
  * Reconciliation no longer deletes a `LeagueTeam` that vanishes from a complete authoritative
