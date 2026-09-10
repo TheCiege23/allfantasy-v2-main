@@ -47,6 +47,9 @@ vi.mock('@/lib/league-import/ImportedLeagueCommitService', () => ({
 
 vi.mock('@/lib/league-import/importPersistenceService', () => ({
   persistImportWithCanonicalAudit: persistImportWithCanonicalAuditMock,
+  // A real class, not vi.fn(): the commit route narrows with
+  // `error instanceof ImportRunInFlightError` (app/api/leagues/import/commit/route.ts).
+  ImportRunInFlightError: class ImportRunInFlightError extends Error {},
 }))
 
 describe('Fantrax import API routes', () => {
