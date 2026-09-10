@@ -22,8 +22,14 @@ prisma.leagueTeam
 | same-line (what produced this table) | 193 | 145 |
 | multiline-aware | **263** | 145 |
 
-**70 call sites, 27% of the population, were never censused.** They are not classified
-below and this document does not describe them.
+**Roughly a quarter of the population was never censused.** Two figures, and they are not
+interchangeable:
+
+- **70** = 263 − 193, the call sites a same-line scan of the tree **today** cannot see.
+- **69** = 263 − 194, the rows this table is **short**, because it still lists
+  `lib/chimmy/tools/leagueByName.ts` — the call whose wrapping made it invisible.
+
+The uncensused sites are not classified below and this document does not describe them.
 
 ### Reconciling the three numbers that were in circulation
 

@@ -116,6 +116,26 @@ to *set* the `isViewerTeam` flag; it never re-introduces the row.
 active enumeration and is now filtered at the query, with the generators' early return pinned by
 a guard so the property the filter depends on cannot silently disappear.
 
+🛑 **AND THE GENERALISATION DRAWN FROM IT WAS WRONG. `eb7914760`'s message and the A.1 closeout
+both say "three of the four MIXED reads were not mixed". Only ONE was.**
+
+`userOsContext` is the single case where the *classification* was mistaken: one consumer, no
+historical half, so "MIXED" never described it. The other two are **genuinely mixed and remain
+so** — the fix was to filter the CURRENT consumer while leaving the historical one on the
+unfiltered array, which is the correct treatment *of a mixed read*, not evidence it was never
+mixed:
+
+| file | current consumer (now filtered) | historical consumer (deliberately unfiltered) |
+|---|---|---|
+| `lib/ai-tools-start-sit/opponentMatchup.ts` | `paSorted`, `n`, the `< 2` guard | `oppTeam` — a past week can name a departed opponent |
+| `lib/trade-value-console/roster-context-loader.ts` | `opponentTeams`, the selectable partner list | the `externalId → platformUserId` resolver |
+
+Both still hold two consumers that disagree, and both would break if the query were filtered.
+Calling them "not mixed" reads as though the deferral had been a bookkeeping error in all three
+cases; in two of the three the deferral was a correct reading of the code and only the *remedy*
+was available sooner than claimed. Batch A.2 filters the fourth, `dynasty-projections`, the same
+consumer-level way.
+
 ---
 
 ## 6. `f418ed68b` and the `BroadcastModeEngine` source comment — right fix, wrong reason
@@ -143,20 +163,51 @@ comment, in the commit message, and in closeout §5. The source comment is corre
 
 ## 7. Closeout §2 / the census — "No reader is left unclassified"
 
-False, by the mechanism in §2. The census generator used the same same-line regex, so **70 call
-sites (263 real vs 194 censused, 27%) were never examined**. `LEAGUETEAM_READER_CENSUS.md` now
-carries the retraction and the reconciliation of the three figures in circulation
-(146/194, 139/186, 145/193).
+False, by the mechanism in §2. The census generator used the same same-line regex, so a large
+share of the population was never examined.
+
+⚠ **The size of that share was stated with two different denominators bolted together, and this
+is the corrected arithmetic.** Both comparisons are over `lib/` + `app/` + `scripts/`:
+
+| comparison | difference | what it means |
+|---|---|---|
+| 263 multiline-aware vs **193** same-line rescan | **70** | call sites a same-line scan of the tree **today** cannot see |
+| 263 multiline-aware vs **194** census table | **69** | call sites missing from the census **as written** |
+
+The two differ by one because the census table still lists
+`lib/chimmy/tools/leagueByName.ts`, which a same-line rescan no longer sees — the wrapped call
+of §2. Writing "70 … vs 194" pairs a difference with the wrong operand; **69** is the number of
+rows the census is short.
+
+`LEAGUETEAM_READER_CENSUS.md` carries the retraction and the reconciliation of the three figures
+in circulation (146/194, 139/186, 145/193).
 
 ---
 
 ## 8. The integration gates the closeout reported on had not completed
 
 `broad-int.txt`, the branch-tip vitest run, ends with **`DONE=4` and no summary block** — 235 KB
-against the baseline run's 1.1 MB. Exit 4 is neither 0 nor 1 and is not a verdict; the run was
-terminated before Vitest reported. `ratchet-f665.txt`, the TypeScript ratchet at the final two
+against the baseline run's 1.1 MB. `ratchet-f665.txt`, the TypeScript ratchet at the final two
 commits, is **0 bytes**. Neither measured the tested SHA, so no baseline-versus-tip comparison
-existed for `f665943c7` or `c318ae8f3`. See the closeout's §7 for the re-run.
+existed for `f665943c7` or `c318ae8f3`.
+
+⚠ **WHAT THAT EVIDENCE DOES AND DOES NOT ESTABLISH — AND THIS FILE OVERREACHED ONCE ALREADY.**
+An earlier version of this section said the run "was terminated before Vitest reported", and the
+A.1 closeout went further and named Vitest as the failing component. The artifacts support
+neither claim.
+
+What they establish: the run **did not complete normally**. Vitest exits 0 on pass and 1 on test
+failures; `DONE=4` is neither, and the summary block Vitest always prints is absent. So the
+output is incomplete and the exit status is abnormal, and **no result may be read from it** —
+which is the only thing the gate decision needed.
+
+What they do NOT establish: *why*. Exit 4 could be an internal Vitest error, a killed child, a
+crashed worker pool, or the wrapper losing the process; the artifacts cannot separate those, and
+nothing was captured at the time that would. Attributing it to a specific component was an
+inference presented as a measurement — the same move this document exists to correct elsewhere.
+
+**The rule: an abnormal status plus truncated output is sufficient to reject a result and
+insufficient to diagnose a cause.** Rejecting it needed no cause.
 
 ---
 
