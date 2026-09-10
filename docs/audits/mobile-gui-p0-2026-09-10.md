@@ -1,5 +1,9 @@
 # Mobile GUI P0 audit — 2026-09-10
 
+Continuation: [league tray and Standings repairs, browser evidence, and remaining
+journey ledger](mobile-gui-p1-2026-09-10.md). The validation below records the
+original P0 batch; the continuation does not certify its authenticated E2E gate.
+
 ## Scope
 
 This pass covers the public landing page and the two shared navigation systems

@@ -1133,61 +1133,89 @@ export function AfCoreShell(props: AfCoreShellProps) {
    * then reconciles this flag to it, so the two never disagree once mounted.
    */
   const railOpen = railChoice === 'open'
+  const railRef = useRef<HTMLElement>(null)
+  const railHandleRef = useRef<HTMLButtonElement>(null)
+  const [phoneLayout, setPhoneLayout] = useState(false)
+  const mobileRailOpen = phoneLayout && railOpen
 
-  /*
-   * ⚠ READ IN AN EFFECT, NOT DURING RENDER. `localStorage` does not exist on the
-   * server, so reading it in the initial state would render a different tree on
-   * the client and take hydration down. First paint is always collapsed; the
-   * remembered value arrives a tick later.
-   *
-   * ⚠ AND EVERY ACCESS IS WRAPPED. A private window, cleared site data, or a
-   * browser set to block storage makes the accessor itself THROW rather than
-   * return null — an unguarded read there takes the whole shell down.
-   */
+  // The phone tray covers the screen. Keep focus and scrolling inside it;
+  // its external handle remains available as the close control.
   useEffect(() => {
-    let stored: string | null = null
-    try {
-      stored = window.localStorage.getItem('af-rail-open')
-    } catch {
-      /* storage unavailable — fall through to the per-breakpoint default */
+    if (!mobileRailOpen) return
+    const rail = railRef.current
+    const handle = railHandleRef.current
+    if (!rail || !handle) return
+    const previousOverflow = document.body.style.overflow
+    const siblings = Array.from(rail.parentElement?.children ?? [])
+      .filter((node): node is HTMLElement => node instanceof HTMLElement && node !== rail && node !== handle)
+    const previousInert = siblings.map((node) => node.inert)
+    siblings.forEach((node) => { node.inert = true })
+    document.body.style.overflow = 'hidden'
+
+    const controls = () => [
+      ...Array.from(rail.querySelectorAll<HTMLElement>('a[href], button:not([disabled]), [tabindex="0"]'))
+        .filter((node) => node.getClientRects().length > 0),
+      handle,
+    ]
+    handle.focus()
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault()
+        setRailChoice('closed')
+      } else if (event.key === 'Tab') {
+        const items = controls()
+        const first = items[0]
+        const last = items[items.length - 1]
+        if (event.shiftKey && (document.activeElement === first || !items.includes(document.activeElement as HTMLElement))) {
+          event.preventDefault()
+          last.focus()
+        } else if (!event.shiftKey && (document.activeElement === last || !items.includes(document.activeElement as HTMLElement))) {
+          event.preventDefault()
+          first.focus()
+        }
+      }
     }
-    if (stored === '1') {
-      setRailChoice('open')
-      return
+    document.addEventListener('keydown', onKeyDown)
+    return () => {
+      document.removeEventListener('keydown', onKeyDown)
+      siblings.forEach((node, index) => { node.inert = previousInert[index] })
+      document.body.style.overflow = previousOverflow
+      if (handle.getClientRects().length > 0) handle.focus()
+      else if (document.activeElement === handle && rail.isConnected) {
+        rail.querySelector<HTMLButtonElement>('.af-rail-toggle')?.focus()
+      }
     }
-    if (stored === '0') {
-      setRailChoice('closed')
-      return
+  }, [mobileRailOpen])
+
+  // Only the desktop column is a saved preference. A phone overlay must
+  // start closed on navigation and when resizing down from desktop.
+  useEffect(() => {
+    if (typeof window.matchMedia !== 'function') return
+    const desktop = window.matchMedia('(min-width: 721px)')
+    const update = () => {
+      setPhoneLayout(!desktop.matches)
+      if (!desktop.matches) {
+        setRailChoice(null)
+        return
+      }
+      let stored: string | null = null
+      try {
+        stored = window.localStorage.getItem('af-rail-open')
+      } catch {
+        // Storage may be unavailable; retain the desktop expanded default.
+      }
+      setRailChoice(stored === '0' ? 'closed' : 'open')
     }
-    /*
-     * No preference. Adopt the desktop default so this flag AGREES with what
-     * the CSS has already painted — `aria-expanded`, the toggle glyph and its
-     * title all read off it, and leaving it null would announce a collapsed
-     * rail to a screen reader while a 300px expanded one is on screen.
-     *
-     * ⚠ NOTHING MOVES WHEN THIS RUNS. The CSS default already expanded the rail
-     * at first paint, so adopting 'open' changes the attribute from absent to
-     * 'true' and both select the same declarations. This is reconciliation, not
-     * a second layout pass.
-     *
-     * ⚠ 721px IS THE CSS BREAKPOINT, DUPLICATED HERE ON PURPOSE AND THE ONLY
-     * PLACE IT IS. It must equal the `min-width: 721px` guard in
-     * af-core-shell.css; if they ever disagree, a viewport in the gap paints
-     * expanded and reports collapsed. matchMedia rather than innerWidth so it
-     * is the same question the stylesheet asks.
-     */
-    try {
-      if (window.matchMedia('(min-width: 721px)').matches) setRailChoice('open')
-    } catch {
-      /* no matchMedia — leave it null; CSS still paints the right thing */
-    }
+    update()
+    desktop.addEventListener('change', update)
+    return () => desktop.removeEventListener('change', update)
   }, [])
 
   const toggleRail = () => {
     setRailChoice((v) => {
       const next = v === 'open' ? 'closed' : 'open'
       try {
-        window.localStorage.setItem('af-rail-open', next === 'open' ? '1' : '0')
+        if (!phoneLayout) window.localStorage.setItem('af-rail-open', next === 'open' ? '1' : '0')
       } catch {
         /* the toggle still works for this session */
       }
@@ -1232,6 +1260,7 @@ export function AfCoreShell(props: AfCoreShellProps) {
       <button
         type="button"
         className="af-rail-handle"
+        ref={railHandleRef}
         aria-label={railOpen ? 'Close leagues' : 'Open leagues'}
         aria-expanded={railOpen}
         aria-controls="af-rail"
@@ -1244,7 +1273,17 @@ export function AfCoreShell(props: AfCoreShellProps) {
       </button>
 
       {/* ── League rail ─────────────────────────────────────────────── */}
-      <nav className="af-rail" id="af-rail" aria-label="Leagues">
+      <nav
+        ref={railRef}
+        className="af-rail"
+        id="af-rail"
+        aria-label="Leagues"
+        onClick={(event) => {
+          if (mobileRailOpen && (event.target as HTMLElement).closest('a[href]')) {
+            setRailChoice('closed')
+          }
+        }}
+      >
         {/*
           The crest, above the leagues, drawn rather than loaded — see
           AfCrest's header for why /af-crest.png cannot sit on a dark rail.

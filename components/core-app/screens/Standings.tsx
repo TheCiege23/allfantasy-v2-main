@@ -63,7 +63,8 @@ function SeasonHistory({ rows }: { rows: SeasonHistoryRow[] }) {
       {seasons.map(([season, teams]) => (
         <div key={season} className="af-st-history-season">
           <h3 className="af-st-history-season-title af-num">{season}</h3>
-          <div className="af-st-history-scroll">
+          <p className="af-st-scroll-cue">Scroll sideways to compare every column.</p>
+          <div className="af-st-history-scroll" role="region" aria-label={`${season} final standings`} tabIndex={0}>
             <table className="af-st-history-table">
               <thead>
                 <tr>
@@ -80,7 +81,7 @@ function SeasonHistory({ rows }: { rows: SeasonHistoryRow[] }) {
                     {/* A provider that did not report a finish gets an em dash, not a
                         fabricated position. */}
                     <td className="af-num">{t.rank ?? '—'}</td>
-                    <td>{t.name ?? t.teamKey}</td>
+                    <th scope="row">{t.name ?? t.teamKey}</th>
                     <td className="af-num">
                       {t.wins}-{t.losses}
                       {t.ties > 0 ? `-${t.ties}` : ''}
@@ -248,7 +249,8 @@ export function Standings({ data }: StandingsProps) {
       </div>
 
       {/* ── Board ───────────────────────────────────────────────────── */}
-      <section className="af-st-tablewrap">
+      <p className="af-st-scroll-cue">Scroll sideways to compare every column.</p>
+      <section className="af-st-tablewrap" aria-label="Current league standings" tabIndex={0}>
         <table className="af-st-table">
           <caption className="af-st-caption">
             Every team in {league.name}, by points scored. Record is shown alongside so a team

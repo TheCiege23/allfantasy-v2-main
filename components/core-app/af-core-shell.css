@@ -977,16 +977,14 @@
   }
 
   .af-core .af-tabbar-label {
-    font-size: 9.5px;
+    font-size: 11px;
     font-weight: 700;
     letter-spacing: -0.01em;
     line-height: 1.1;
     text-align: center;
-    /* Five labels across a 390px frame: "Notifications" has to wrap or clip,
-       and clipping mid-word is the worse of the two. */
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    /* Keep all six destinations readable even on a 320px phone. */
+    overflow-wrap: anywhere;
+    white-space: normal;
     max-width: 100%;
   }
 
@@ -1650,7 +1648,7 @@
   }
 
   .af-core .af-rail-handle-text {
-    font: 800 10px/1 var(--font-archivo, 'Archivo', system-ui, sans-serif);
+    font: 800 11px/1 var(--font-archivo, 'Archivo', system-ui, sans-serif);
     letter-spacing: 0.08em;
     text-transform: uppercase;
     writing-mode: horizontal-tb;
@@ -1660,13 +1658,14 @@
    * The rail leaves the flow. Its grid track then has no in-flow content and
    * collapses to zero on its own, so the content row keeps the space.
    */
-  .af-core .af-rail {
+  .af-core.af-shell .af-rail {
     position: fixed;
     inset: 0;
     z-index: 59;
     flex-direction: column;
     align-items: stretch;
-    padding: max(16px, env(safe-area-inset-top)) 14px calc(76px + env(safe-area-inset-bottom));
+    padding: max(16px, env(safe-area-inset-top)) 14px calc(132px + env(safe-area-inset-bottom));
+    overscroll-behavior: contain;
     background: var(--rail);
     border-right: 0;
     overflow-y: auto;
@@ -1715,6 +1714,14 @@
   .af-core .af-rail-foot {
     flex-direction: row;
     gap: 10px;
+  }
+  .af-core .af-rail-toggle,
+  .af-core .af-rail-tile {
+    min-height: 44px;
+  }
+  .af-core .af-rail-logo {
+    width: 44px;
+    height: 44px;
   }
 }
 
