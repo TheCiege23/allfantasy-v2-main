@@ -30,6 +30,14 @@ function recordingPort(seen: number[], over: Partial<WindowFactsPort> = {}): Win
       season: s.season, projectedStrength3YearsPct: 82, projectedStrengthNextYearPct: 80,
       windowStartYear: null, windowEndYear: null, confidencePct: 70, generatedAt: CAPTURED,
     }),
+    /*
+     * REDRAFT-ONLY read, and these cases are all dynasty, so the resolver never calls it. It is
+     * present because the port REQUIRES it: a stub that omits it types as an incomplete port, and
+     * a `Partial<WindowFactsPort>` override could not restore it. Null is the honest default —
+     * "no trustworthy rest-of-season projection" — so a case that does go redraft gets the
+     * `rest_of_season_projection_missing` gap rather than a TypeError from a missing method.
+     */
+    restOfSeason: async () => null,
     injuries: async () => ({ unavailableShare: 0, basis: 'test', coverage: 1, treatment: 'excluded' }),
     ...over,
   }

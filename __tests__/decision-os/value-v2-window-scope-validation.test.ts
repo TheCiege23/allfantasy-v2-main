@@ -23,6 +23,15 @@ function forbiddenPort(): WindowFactsPort {
     allPlay: boom('allPlay') as WindowFactsPort['allPlay'],
     forecast: boom('forecast') as WindowFactsPort['forecast'],
     dynasty: boom('dynasty') as WindowFactsPort['dynasty'],
+    /*
+     * ⚠ THE REDRAFT READS BELONG IN THE TRAP TOO, OR THE TRAP ONLY COVERS HALF THE PORT.
+     * `restOfSeason` and `remainingScheduleStrength` are the reads the resolver makes for a
+     * REDRAFT league; `dynasty` is the one it makes otherwise. A forbidden port that omits them
+     * proves the resolver touches no evidence only on the dynasty branch, and an invalid scope
+     * must be refused before the format is even consulted.
+     */
+    restOfSeason: boom('restOfSeason') as WindowFactsPort['restOfSeason'],
+    remainingScheduleStrength: boom('remainingScheduleStrength') as NonNullable<WindowFactsPort['remainingScheduleStrength']>,
     injuries: boom('injuries') as WindowFactsPort['injuries'],
   }
 }
@@ -87,6 +96,8 @@ describe('an invalid scope refuses without touching the port', () => {
       allPlay: async () => null,
       forecast: async () => null,
       dynasty: async () => null,
+      /** Null is the honest answer here: this stub models no rest-of-season projection. */
+      restOfSeason: async () => null,
       injuries: async () => null,
     }
     const decision = await resolveWindowDecision(scope(6), port)
