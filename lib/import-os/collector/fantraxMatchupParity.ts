@@ -32,6 +32,7 @@ import {
   getFantraxLeagueInfo,
 } from '@/lib/league-import/fantrax/fantraxApi'
 import { normalizeFantraxTeamName } from '@/lib/league-import/fantrax/fantraxTeamIds'
+import { isCurrentOrUnknown } from '@/lib/league-import/teamLifecycle'
 
 const CACHE_KEY_PREFIX = 'fantrax_matchup_sync'
 /** Fantrax costs one request per played period, so refresh less often than Sleeper. */
@@ -120,9 +121,23 @@ async function readRosterIdsByTeamName(
 ): Promise<Map<string, string> | null> {
   const teams = await prisma.leagueTeam.findMany({
     where: { league: { platformLeagueId: leaguePlatformId } },
-    select: { externalId: true, teamName: true, ownerName: true },
+    select: { externalId: true, teamName: true, ownerName: true, lifecycleState: true },
   })
+  /*
+   * ⚠ AN ACTIVE TEAM MUST WIN A NAME COLLISION AGAINST AN ARCHIVED ONE (Batch A.1 item 1).
+   *
+   * This map is keyed on a NORMALIZED team name, and `map.set` is last-writer-wins. Before
+   * archival a vanished team was deleted, so it could never collide; now it persists, and a
+   * stale row sharing a live team's name could capture the label purely by query order and
+   * point this week's matchups at the wrong roster id.
+   *
+   * ⚠ ARCHIVED TEAMS ARE STILL MAPPED, DELIBERATELY. Their historical matchups still need
+   * resolving. This is a PREFERENCE, not an exclusion: an orphan claims a label only when no
+   * active team wants it, which is exactly the pre-archival behaviour for a name nothing live
+   * uses.
+   */
   const map = new Map<string, string>()
+  const labelIsFromActiveTeam = new Set<string>()
   for (const t of teams) {
     // WeeklyMatchup.rosterId is String now, but the validation stays: still reject
     // anything that is not the plain-integer fantraxTeamHash form this map has
@@ -131,7 +146,13 @@ async function readRosterIdsByTeamName(
     if (!Number.isInteger(roster) || roster < 0) continue
     const label = normalizeFantraxTeamName(t.teamName?.trim() || t.ownerName?.trim() || '')
     if (!label) continue
+
+    const active = isCurrentOrUnknown(t)
+    /* An archived row never displaces a label an active team already claimed. */
+    if (!active && labelIsFromActiveTeam.has(label)) continue
+
     map.set(label, String(roster))
+    if (active) labelIsFromActiveTeam.add(label)
   }
   return map.size > 0 ? map : null
 }

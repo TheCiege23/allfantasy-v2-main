@@ -18,6 +18,7 @@ import {
   projectRosterSlots,
   readWaiverBudgetUsed,
 } from './derive'
+import { effectiveRulesVersion } from '@/lib/league-import/settingsLayering'
 import type {
   CanonicalWorld,
   CanonicalWorldRawInput,
@@ -181,6 +182,26 @@ function assembleLeagueFacts(input: CanonicalWorldRawInput): LeagueFacts {
     },
     currentWeek: week.currentWeek,
     currentWeekBasis: week.basis,
+    /*
+     * IMP-02 — the invalidation signal, computed from the slices this world actually uses so
+     * it cannot disagree with them and cannot carry a provider string.
+     */
+    effectiveRulesVersion: effectiveRulesVersion({
+      scoringSettings: narrowScoringSettings(league.settings),
+      rosterSettings: {
+        rosterSize: league.rosterSize,
+        starterSlots,
+        irSlots: league.irSlots,
+        taxiSlots: league.taxiSlots,
+      },
+      waiverSettings: {
+        type: league.waiverType,
+        budget: league.waiverBudget,
+        minBid: league.waiverMinBid,
+        hours: league.waiverHours,
+      },
+      draftSettings: { pickTrading: league.draftPickTrading },
+    }),
   }
 }
 

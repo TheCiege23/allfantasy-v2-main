@@ -1032,6 +1032,7 @@ async function buildFormatNotes(args: {
    * size is exactly the round his talent is worth, and that is enough to say
    * whether his keeper price has drifted away from what he is.
    */
+  /* League size prices keeper and pick maths: every CURRENT franchise, vacant seats included. */
   const teamCount = await prisma.leagueTeam
     .count({ where: { leagueId: args.leagueId } })
     .catch(() => 0)
@@ -1121,6 +1122,7 @@ async function buildScaleNotes(args: {
 }): Promise<string[]> {
   const notes: string[] = []
 
+  /* Same league-size input, same reason: current franchises, not `isOrphan`-filtered. */
   const teamCount = await prisma.leagueTeam
     .count({ where: { leagueId: args.leagueId } })
     .catch(() => 0)
@@ -1263,6 +1265,7 @@ async function buildPostureAndPickNotes(args: {
 }): Promise<{ postureNotes: string[]; pickNotes: string[] }> {
   const none = { postureNotes: [] as string[], pickNotes: [] as string[] }
 
+  /* Current standings — a vacant seat is in them, so this is not `isOrphan`-filtered. */
   const teams = await prisma.leagueTeam
     .findMany({
       where: { leagueId: args.leagueId },

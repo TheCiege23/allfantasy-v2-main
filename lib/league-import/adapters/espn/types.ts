@@ -1,3 +1,4 @@
+import type { ResourceFetchStatus } from '@/lib/league-import/resourceStatus'
 export interface EspnImportLeague {
   leagueId: string
   name: string
@@ -42,6 +43,15 @@ export interface EspnImportTeam {
   starterPlayerIds: string[]
   reservePlayerIds: string[]
   playerMap: Record<string, { name: string; position: string; team: string }>
+  /**
+   * Whether this team's roster lists were OBSERVED — IMP-04.
+   *
+   * 🛑 ESPN SERVES EVERY ROSTER FROM ONE `mRoster` VIEW, AND `team.roster?.entries` QUIETLY
+   * YIELDS EMPTY LISTS WHEN THAT VIEW IS ABSENT FROM AN OTHERWISE-SUCCESSFUL RESPONSE. So the
+   * failure is not per-team like Yahoo's — it is the whole league at once, presenting as a
+   * pre-draft league with twelve empty rosters. `not_fetched` says the view never arrived.
+   */
+  rosterFetchStatus: ResourceFetchStatus
 }
 
 export interface EspnImportScheduleWeek {

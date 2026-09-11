@@ -75,6 +75,12 @@ async function markPosted(key: string): Promise<void> {
 async function memberEmails(afLeagueId: string, ownerUserId: string): Promise<string[]> {
   const teams = await prisma.leagueTeam
     .findMany({
+      /*
+       * ⚠ RECIPIENTS ARE KEYED ON THE CLAIM, NOT ON ARCHIVAL STATE. An earlier revision also
+       * excluded `isOrphan`, which is wrong: that flag means vacancy, elimination, admin
+       * removal AND provider departure. Suppressing a departed manager needs the lifecycle
+       * axis, which is why this reads only the claim until `lifecycleState` is populated.
+       */
       where: { leagueId: afLeagueId, claimedByUserId: { not: null } },
       select: { claimedByUserId: true },
     })

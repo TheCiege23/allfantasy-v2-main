@@ -500,6 +500,14 @@ export async function processLeague(
       const isOrphan = !ownerId || ownerId === "";
       const role = isTeamCommissioner ? "commissioner" : isOrphan ? "orphan" : "member";
 
+      /*
+       * 🛑 "NO OWNER ON THE SEAT" — NOT "THE TEAM IS GONE". Sleeper lists this roster, so the
+       * franchise is CURRENT; what is missing is the manager, which is the other axis.
+       * `applySleeperLeagueSync` writes the identical flag to mean departure, and separating the
+       * two is the whole point of these fields. See the note in that file.
+       */
+      const managerKind = isOrphan ? "VACANT" : "HUMAN";
+
       return prisma.leagueTeam.upsert({
         where: {
           leagueId_externalId: {
@@ -520,6 +528,11 @@ export async function processLeague(
           pointsAgainst,
           role,
           isOrphan,
+          /* Reappearance: the provider listing this roster retracts any earlier archive. */
+          lifecycleState: "CURRENT",
+          managerKind,
+          archivedAt: null,
+          archiveReason: null,
           platformUserId: ownerId,
           isCommissioner: isTeamCommissioner,
         },
@@ -538,6 +551,8 @@ export async function processLeague(
           pointsAgainst,
           role,
           isOrphan,
+          lifecycleState: "CURRENT",
+          managerKind,
           platformUserId: ownerId,
           isCommissioner: isTeamCommissioner,
           isCoCommissioner: false,

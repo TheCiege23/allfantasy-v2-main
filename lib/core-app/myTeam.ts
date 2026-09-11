@@ -25,6 +25,7 @@ import { displayPosition, inferSlotLabel } from './positionLabels'
 import { lookupProviderIdentityNames } from './providerIdentityNames'
 import { resolveSourceLink, type SourceLink } from '@/lib/league-links/sourceLinkResolver'
 import { identityGapNote } from './identityGap'
+import { CURRENT_FRANCHISES_INCLUDING_UNKNOWN } from '@/lib/league-import/teamLifecycle'
 import {
   BENCH_SWAP_POINTS,
   isEligibleForSlot,
@@ -883,7 +884,17 @@ export async function getMyTeamData(leagueId: string, userId: string): Promise<M
     },
   })
 
-  const teamCount = await prisma.leagueTeam.count({ where: { leagueId } })
+  /*
+   * The my-team view reports the CURRENT league size — every franchise, vacant seats included.
+   *
+   * ⚠ THE INTENT HERE WAS ALWAYS RIGHT AND THE PREDICATE WAS ALWAYS WRONG. `ACTIVE_TEAM_WHERE`
+   * is `NOT { isOrphan: true }`, and `isOrphan` carries seven meanings — a brand-new 12-team
+   * league sets it on all eleven open slots, so this reported a league size of 1. League size
+   * does not shrink because a seat is empty.
+   */
+  const teamCount = await prisma.leagueTeam.count({
+    where: { ...CURRENT_FRANCHISES_INCLUDING_UNKNOWN, leagueId },
+  })
 
   if (!myTeamRow) {
     const unknown = {

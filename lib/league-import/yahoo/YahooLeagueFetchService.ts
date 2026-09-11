@@ -12,6 +12,7 @@ import type {
   YahooImportTeam,
   YahooImportTransaction,
 } from '@/lib/league-import/adapters/yahoo/types'
+import type { ResourceFetchStatus } from '@/lib/league-import/resourceStatus'
 
 const YAHOO_API_BASE = 'https://fantasysports.yahooapis.com/fantasy/v2' // db-first-exception: ingestion service endpoint
 const YAHOO_LEAGUE_LIST_URL =
@@ -249,7 +250,8 @@ function createImportTeam(
   teamKey: string,
   standing: YahooStandingDetails | undefined,
   metadata: YahooTeamMetadata | undefined,
-  roster: ReturnType<typeof parseYahooRoster>
+  roster: ReturnType<typeof parseYahooRoster>,
+  rosterFetchStatus: YahooImportTeam['rosterFetchStatus'] = 'fetched'
 ): YahooImportTeam {
   const manager = metadata ?? standing
   return {
@@ -273,6 +275,7 @@ function createImportTeam(
     starterPlayerIds: roster.starterIds,
     reservePlayerIds: roster.reserveIds,
     playerMap: roster.playerMap,
+    rosterFetchStatus,
   }
 }
 
@@ -1036,20 +1039,51 @@ export async function fetchYahooLeagueForImport(
     })
   )
   const rostersByTeamKey = new Map<string, ReturnType<typeof parseYahooRoster>>()
-  for (const result of rosterResults) {
+  /*
+   * ⚠ THE REJECTION REASON IS THE ONLY PLACE 401 IS DISTINGUISHABLE FROM 503, AND IT WAS
+   * BEING DISCARDED. `unauthorized` needs a human to reconnect; `failed` recovers on its
+   * own. Collapsing both to "empty roster" lost the difference AND the data.
+   */
+  const rosterStatusByIndex: ResourceFetchStatus[] = []
+  for (let i = 0; i < rosterResults.length; i++) {
+    const result = rosterResults[i]!
     if (result.status === 'fulfilled') {
       rostersByTeamKey.set(result.value[0], result.value[1])
+      rosterStatusByIndex.push(
+        result.value[1].playerIds.length > 0 ? 'fetched' : 'fetched_empty',
+      )
+      continue
     }
+    const reason = result.reason as { status?: number } | undefined
+    const httpStatus = typeof reason?.status === 'number' ? reason.status : null
+    rosterStatusByIndex.push(httpStatus === 401 || httpStatus === 403 ? 'unauthorized' : 'failed')
   }
 
-  const teams: YahooImportTeam[] = teamKeys.map((teamKey) =>
-    createImportTeam(
+  /*
+   * 🛑 IMP-04 — A REJECTED ROSTER FETCH IS NOT AN EMPTY ROSTER.
+   *
+   * `Promise.allSettled` above deliberately keeps one team's failure from sinking the
+   * whole import, which is right. What was wrong is what happened next: the missing entry
+   * fell through to an empty-arrays placeholder, and every consumer downstream — including
+   * the writer that replaces `Roster` rows — read that as "this team has nobody". One
+   * timed-out request out of twelve could therefore clear a real roster, and the league
+   * still reported itself fully current.
+   *
+   * The placeholder is still supplied so the shape is uniform, but the team now carries
+   * the reason, and league-level roster coverage below degrades to `partial`.
+   */
+  const failedRosterTeamKeys = teamKeys.filter((teamKey) => !rostersByTeamKey.has(teamKey))
+
+  const teams: YahooImportTeam[] = teamKeys.map((teamKey, i) => {
+    const roster = rostersByTeamKey.get(teamKey)
+    return createImportTeam(
       teamKey,
       standingsByTeamKey.get(teamKey),
       metadataByTeamKey.get(teamKey),
-      rostersByTeamKey.get(teamKey) ?? { playerIds: [], starterIds: [], reserveIds: [], playerMap: {} }
+      roster ?? { playerIds: [], starterIds: [], reserveIds: [], playerMap: {} },
+      rosterStatusByIndex[i] ?? (roster ? 'fetched' : 'failed')
     )
-  )
+  })
 
   const scheduleByWeek = new Map<number, YahooImportScheduleWeek['matchups']>()
   if (expectedScheduleWeeks.length > 0) {
@@ -1149,6 +1183,7 @@ export async function fetchYahooLeagueForImport(
     previousSeasons,
     viewerTeamKey,
     commissionerTeamKeys,
+    failedRosterTeamKeys,
   }
 }
 

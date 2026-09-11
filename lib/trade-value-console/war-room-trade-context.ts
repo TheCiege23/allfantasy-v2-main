@@ -7,6 +7,7 @@ import type { LeagueToolAccessErrorCode } from '@/lib/ai-tools/league-tool-conte
 import { resolveNormalizedLeagueContext } from '@/lib/league-context-engine'
 import { loadLeagueForTrade } from './league-loader'
 import { snapshotFromLoaded } from './quick-badges'
+import { CURRENT_FRANCHISES_INCLUDING_UNKNOWN } from '@/lib/league-import/teamLifecycle'
 
 export type TradeValueWarRoomContext =
   | {
@@ -113,8 +114,9 @@ export async function loadTradeValueWarRoomContext(args: {
     scoringLine = snap.scoring ? `League label: ${snap.scoring}` : null
   }
 
+  /* "Is your team claimed" is a current-membership question. */
   const teams = await prisma.leagueTeam.findMany({
-    where: { leagueId: args.leagueId.trim() },
+    where: { ...CURRENT_FRANCHISES_INCLUDING_UNKNOWN, leagueId: args.leagueId.trim() },
     select: { claimedByUserId: true },
   })
   const yourTeamClaimed = teams.some((t) => t.claimedByUserId === args.userId)

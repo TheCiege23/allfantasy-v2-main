@@ -397,6 +397,22 @@ export interface LeagueFacts {
   /** Latest week with canonical data; null when not derivable. See `currentWeekBasis`. */
   currentWeek: number | null
   currentWeekBasis: 'team_performance' | 'unavailable'
+  /**
+   * Content hash of the EFFECTIVE rules this world was assembled from — IMP-02 invalidation.
+   *
+   * 🛑 CACHE AND DERIVED ARTIFACTS KEY ON THIS, NEVER ON A TIMESTAMP. A refresh timestamp
+   * changes on every 30-minute tick, so a consumer keying off one either recomputes
+   * constantly across every league or ignores it — and every consumer ignored it. This
+   * changes only when the rules themselves change, so an unchanged league triggers no
+   * recomputation and a rules change invalidates exactly the artifacts that depended on them.
+   *
+   * ⚠ DERIVED FROM THE NARROWED SLICES, NOT FROM `importCanonical`. This substrate is
+   * deliberately origin-blind — `importCanonical` is one of the provenance keys stripped out
+   * because it carries provider-branded strings. A hash of the already-narrowed facts cannot
+   * leak one, and it has the stronger property of describing what this world ACTUALLY used
+   * rather than what the writer claimed to publish.
+   */
+  effectiveRulesVersion: string
 }
 
 export interface FaabFacts {

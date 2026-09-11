@@ -429,7 +429,11 @@ async function loadCompletedDraftBoard(
 
   const [teams, mine, names] = await Promise.all([
     prisma.leagueTeam
-      .findMany({ where: { leagueId }, select: { externalId: true, teamName: true, ownerName: true } })
+      .findMany({
+        where: { leagueId },
+        /* Selected for the coming lifecycle migration; NOT read as a filter here — the flag also marks vacant, eliminated and admin-removed seats. */
+        select: { externalId: true, teamName: true, ownerName: true, isOrphan: true },
+      })
       .catch(() => []),
     prisma.leagueTeam
       .findMany({ where: { leagueId, claimedByUserId: userId }, select: { externalId: true } })
@@ -437,6 +441,11 @@ async function loadCompletedDraftBoard(
     resolvePlayerNames([...new Set(rows.map((r) => r.playerId))], boardLeague?.platform ?? ''),
   ])
 
+  /*
+   * League size for pick-in-round maths. An open slot still occupies a draft position, so this
+   * counts every current franchise; `nameByKey` below additionally needs archived seats, so the
+   * array stays unfiltered for both.
+   */
   const teamCount = teams.length
   const nameByKey = new Map<string, string>()
   for (const t of teams) {
@@ -520,6 +529,7 @@ async function loadImportedDraftPicks(
   /* Pick-in-round is derived from the overall pick and the league size, the same
      correction the live path documents: DraftPick.slot is a roster's draft slot, not a
      pick-in-round, and labelling from it prints every round identically. */
+  /* League size for pick-in-round maths — every CURRENT franchise, including open slots. */
   const teamCount = await prisma.leagueTeam.count({ where: { leagueId } })
 
   /*

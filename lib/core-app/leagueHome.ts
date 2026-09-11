@@ -27,6 +27,7 @@ import { getDraftHqAll } from './draftHqAll'
 import { describeAge } from '@/lib/sports-data/freshnessPolicy'
 import { resolveLeagueStage, isPreDraftOrDrafting } from '@/lib/league-stage/leagueStage'
 import { rosterIdsMatch } from './rosterIdMatch'
+import { selectCurrentOrUnknown } from '@/lib/league-import/teamLifecycle'
 
 /**
  * Everything the league-selected dashboard (screen 2) renders, read from the
@@ -493,11 +494,28 @@ export async function getLeagueHomeData(
       isCoCommissioner: true,
       // The owner id, which is how Roster rows (and their FAAB) are found.
       platformUserId: true,
+      /* Selected so `selectCurrentOrUnknown` below can judge the row — omit it and the filter is a no-op. */
+      lifecycleState: true,
     },
     orderBy: [{ currentRank: 'asc' }, { wins: 'desc' }, { pointsFor: 'desc' }],
   })
 
-  const yours = teams.find((t) => t.claimedByUserId === userId) ?? null
+  /*
+   * 🛑 A LEAGUE-HOME TEAM LIST IS A CURRENT-COMPETITION SURFACE.
+   *
+   * Reconciliation ARCHIVES a team that vanishes from a complete authoritative response rather
+   * than deleting it (Batch A.1). The history is worth keeping, but the row now persists where
+   * it previously disappeared — so an unfiltered enumeration ranks a departed team among the
+   * league's current members.
+   *
+   * ⚠ `yours` IS RESOLVED FROM THE ACTIVE SET TOO, DELIBERATELY. If the viewer's own team was
+   * archived they are no longer in this league, and surfacing it here would present a live seat
+   * they do not hold. Their history remains readable on the historical surfaces, which do not
+   * filter.
+   */
+  const teamsActive = selectCurrentOrUnknown(teams)
+
+  const yours = teamsActive.find((t) => t.claimedByUserId === userId) ?? null
 
   /*
    * Commissioner status decides whether the hub preview exists at all.
@@ -523,7 +541,7 @@ export async function getLeagueHomeData(
   // A league whose teams all sit at 0-0 has been imported but never had results
   // read. Showing that as a standings table would present "everyone is 0-0" as a
   // finding rather than as an absence.
-  const anyResults = teams.some((t) => t.wins > 0 || t.losses > 0 || t.ties > 0 || t.pointsFor > 0)
+  const anyResults = teamsActive.some((t) => t.wins > 0 || t.losses > 0 || t.ties > 0 || t.pointsFor > 0)
 
   /*
    * ⚠ STANDINGS AND THE POWER BOARD READ DIFFERENT TABLES, and only one of them
@@ -564,7 +582,7 @@ export async function getLeagueHomeData(
       : null
 
   const standings: SectionState<LeagueStanding[]> =
-    teams.length === 0
+    teamsActive.length === 0
       ? { available: false, reason: 'no teams imported for this league' }
       : !anyResults && standingsFromPowerBoard && standingsFromPowerBoard.length > 0
         ? { available: true, data: standingsFromPowerBoard }
@@ -574,7 +592,7 @@ export async function getLeagueHomeData(
           : { available: false, reason: 'teams imported but no results read yet — every record is 0-0' }
         : {
             available: true,
-            data: teams.map((t) => ({
+            data: teamsActive.map((t) => ({
               teamId: t.id,
               teamName: t.teamName,
               ownerName: t.ownerName,

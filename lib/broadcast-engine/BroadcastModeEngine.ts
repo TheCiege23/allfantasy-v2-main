@@ -6,6 +6,7 @@ import { prisma } from '@/lib/prisma'
 import { listDramaEvents } from '@/lib/drama-engine/DramaQueryService'
 import { listRivalries } from '@/lib/rivalry-engine/RivalryQueryService'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
+import { selectCurrentOrUnknown } from '@/lib/league-import/teamLifecycle'
 import type {
   BroadcastPayload,
   BroadcastStandingRow,
@@ -34,6 +35,28 @@ export async function getBroadcastPayload(
   const sport = normalizeToSupportedSport(sportInput ?? league?.sport)
 
   const [teams, matchupFacts, dramaEvents, rivalries] = await Promise.all([
+    /*
+     * 🛑 READ EVERY TEAM HERE, INCLUDING ARCHIVED — THE FILTER BELONGS ON THE STANDINGS ONLY.
+     *
+     * This one array feeds two different jobs. The CURRENT standings, which must exclude an
+     * archived seat; and two identity maps that resolve HISTORICAL references to a name:
+     *
+     *   - `teamById` / `teamByExternalId` → `matchups` (below). A matchup row for a past week
+     *     can name a team that has since left, and a miss falls back to `?? m.teamA`, so the
+     *     UI renders a raw team id where a team name belongs.
+     *   - `ownerNameByManagerId` → `rivalriesWithNames`. Same shape, falling back to
+     *     `?? r.managerAId`, so a rivalry renders a raw manager id as a manager's name.
+     *
+     * ⚠ `dramaEvents` is NOT one of them, and an earlier version of this comment said it was.
+     * `storylines` maps `dramaEvents` straight through and touches no team map at all, so it is
+     * unaffected either way. Nothing here throws or drops a row when a map is starved — the
+     * cost is a name degrading to an id — but that is precisely the attribution archival exists
+     * to preserve.
+     *
+     * An earlier revision of this pass put `ACTIVE_TEAM_WHERE` on the query and starved both
+     * maps. Filtering the QUERY is the wrong lever whenever one read serves both a current and
+     * a historical consumer.
+     */
     prisma.leagueTeam.findMany({
       where: { leagueId },
       orderBy: [{ currentRank: 'asc' }, { pointsFor: 'desc' }, { wins: 'desc' }],
@@ -51,7 +74,8 @@ export async function getBroadcastPayload(
     if (team.externalId) ownerNameByManagerId.set(team.externalId, team.ownerName)
   })
 
-  const standings: BroadcastStandingRow[] = teams.map((t, i) => ({
+  /* Standings are the CURRENT competition; the maps above deliberately keep archived teams. */
+  const standings: BroadcastStandingRow[] = selectCurrentOrUnknown(teams).map((t, i) => ({
     teamId: t.id,
     teamName: t.teamName,
     ownerName: t.ownerName,

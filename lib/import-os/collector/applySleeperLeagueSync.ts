@@ -28,7 +28,10 @@ import {
   buildTier0LeagueColumnPatch,
   buildImportedLeagueSettings,
   persistTradedPicks,
+  republishCanonicalSettingsForRefresh,
 } from '@/lib/league-import/ImportedLeagueCommitService'
+import { buildCanonicalImportBundle } from '@/lib/league-import/canonicalImportNormalizer'
+import { isAuthoritativeStatus } from '@/lib/league-import/resourceStatus'
 import type { ApplyScopeResult, SleeperSyncScope } from './types'
 import { persistLiveTrades } from './persistLiveTrades'
 import { emptyApplyResult } from './types'
@@ -149,10 +152,50 @@ async function applyLeagueState(
 
   const freshSettings = buildImportedLeagueSettings(normalized)
   const existingSettings = asRecord(existing.settings)
-  const mergedSettings: Record<string, unknown> = { ...existingSettings, ...freshSettings }
+
+  /*
+   * 🛑 IMP-02 — REBUILD THE CANONICAL SLICES, DO NOT INHERIT THEM.
+   *
+   * This used to be a plain `{ ...existing, ...fresh }`, and `importCanonical` sat in
+   * AF_MANAGED_SETTINGS_KEYS below — so the canonical `scoringSettings` / `rosterSettings` /
+   * `playoffSettings` written at IMPORT time were re-asserted on every refresh and could
+   * never change. Raw imported values moved; the canonical snapshot every rules consumer
+   * reads did not. A league that switched to full PPR in September was still graded on its
+   * import-day scoring, silently and indefinitely.
+   *
+   * ⚠ A THROW HERE MUST NOT COST THE WHOLE REFRESH. The rest of this writer (name, roster
+   * size, dynasty flag, lastSyncedAt) is still correct and worth persisting, so a failure to
+   * rebuild the bundle degrades to the previous merge rather than dropping the sync.
+   */
+  let mergedSettings: Record<string, unknown>
+  try {
+    const bundle = buildCanonicalImportBundle(normalized)
+    mergedSettings = republishCanonicalSettingsForRefresh(existingSettings, freshSettings, bundle)
+  } catch (e) {
+    /*
+     * 🛑 PRESERVE, RECORD, AND REFUSE TO CALL IT COMPLETE — IMP-02 false-green.
+     *
+     * Keeping the previous canonical slices is right: the raw league columns below are
+     * still correct and worth persisting, and last-good rules beat no rules. What was
+     * WRONG was doing that silently — the scope completed, `lastSuccessfulSyncAt`
+     * advanced, and Decision OS was told this league's effective rules were current when
+     * they were the rules from whenever the last successful rebuild happened.
+     *
+     * `incompleteReasons` makes the store throw after these writes land, so the good
+     * columns persist, unrelated scopes still run, and the run cannot report success.
+     */
+    mergedSettings = { ...existingSettings, ...freshSettings }
+    const detail = e instanceof Error ? e.message : String(e)
+    out.notes.push(`league_state: canonical settings rebuild failed (${detail}) — kept previous canonical slices`)
+    out.incompleteReasons = [
+      ...(out.incompleteReasons ?? []),
+      `canonical settings rebuild failed: ${detail}`,
+    ]
+  }
+
   // Re-assert AF-managed keys the fresh settings don't carry (belt-and-suspenders over the merge order).
   for (const k of AF_MANAGED_SETTINGS_KEYS) {
-    if (k in existingSettings && !(k in freshSettings)) mergedSettings[k] = existingSettings[k]
+    if (k in existingSettings && !(k in mergedSettings)) mergedSettings[k] = existingSettings[k]
   }
 
   const rosterPositions = (normalized.league as Record<string, unknown>).roster_positions
@@ -275,6 +318,13 @@ async function applyTeamsRosters(
     return out
   }
 
+  /*
+   * IMP-04 — teams whose roster could not be read. `bootstrapLeagueFromNormalizedImport`
+   * preserves their stored rosters; this scope must then refuse to call itself complete, or
+   * `lastSuccessfulSyncAt` advances over a league we did not fully read.
+   */
+  const unobserved = normalized.rosters.filter((r) => !isAuthoritativeStatus(r.fetch_status))
+
   const before = await snapshotTeamsRosters(leagueId)
 
   // REUSE the canonical, claim-preserving upsert (LeagueTeam by [leagueId,externalId] never nulls a
@@ -296,6 +346,16 @@ async function applyTeamsRosters(
    * provider hiccup that returns no standings must not zero a populated league.
    * Absent standings means "we did not learn anything", not "everyone is 0-0".
    */
+  if (unobserved.length > 0) {
+    out.notes.push(
+      `teams_rosters: ${unobserved.length} of ${normalized.rosters.length} rosters were not observed — stored rosters preserved, no reconciliation`,
+    )
+    out.incompleteReasons = [
+      ...(out.incompleteReasons ?? []),
+      `${unobserved.length} of ${normalized.rosters.length} team rosters were not observed`,
+    ]
+  }
+
   const standings = Array.isArray(normalized.standings) ? normalized.standings : []
   if (standings.length === 0) {
     out.notes.push('teams_rosters: no standings in response — left existing records untouched')
@@ -341,49 +401,81 @@ async function applyTeamsRosters(
   }
 
   // Removal reconciliation — ONLY when the provider returned an authoritative *complete* current-roster
-  // collection. Preserve claimed teams (never delete a user's claimed roster on a mirror refresh); mark
-  // a vanished claimed team as orphaned instead so the claim + data survive.
+  // collection, and then it ARCHIVES rather than deletes. A team absent from one complete response is
+  // flagged `isOrphan`; nothing about it is destroyed, and a team that reappears is un-flagged by the
+  // bootstrap upsert above. Claimed and unclaimed follow the same rule (Batch A.1 item 1).
   const authoritative =
     reconcileRemovals &&
     normalized.coverage?.currentRosters?.state === 'full' &&
-    normalized.rosters.length > 0
+    normalized.rosters.length > 0 &&
+    /*
+     * 🛑 AND EVERY ROSTER MUST ITSELF BE AN OBSERVATION — IMP-04.
+     *
+     * The coverage check above is an adapter's CLAIM about completeness, and this batch
+     * exists because that claim was wrong: Yahoo and ESPN both reported `full` while
+     * counting team records rather than successful reads. Both are fixed, and archival made
+     * the consequence recoverable, but an orphan flag still hides a team from every active
+     * selector — so the gate does not rest on one adapter remembering to be honest. This
+     * second test reads the per-team status directly, and a future adapter that forgets its
+     * coverage block fails closed here.
+     */
+    normalized.rosters.every((r) => isAuthoritativeStatus(r.fetch_status))
   if (authoritative) {
     const liveTeamIds = new Set(normalized.rosters.map((r) => r.source_team_id))
     const staleTeams = await prisma.leagueTeam.findMany({
       where: { leagueId, externalId: { notIn: Array.from(liveTeamIds) } },
       select: { id: true, externalId: true, platformUserId: true, claimedByUserId: true, isOrphan: true },
     })
-    // Index the league's rosters by their canonical source team id (stable across the raw→resolved
-    // platformUserId change) so a removed team's roster is found even when Roster.platformUserId holds
-    // a RESOLVED AllFantasy id rather than the raw Sleeper manager id.
-    const leagueRosters = await prisma.roster.findMany({
-      where: { leagueId },
-      select: { id: true, platformUserId: true, playerData: true },
-    })
-    const rosterIdBySourceTeam = new Map<string, string>()
-    for (const r of leagueRosters) {
-      const st = String(asRecord(r.playerData).source_team_id ?? '')
-      if (st) rosterIdBySourceTeam.set(st, r.id)
-    }
     for (const t of staleTeams) {
-      if (t.claimedByUserId) {
-        // A claimed team (and its roster) is NEVER deleted by reconciliation — the user's claim + data
-        // survive. If it truly vanished upstream, mark it orphaned so the surface can disclose that.
-        if (!t.isOrphan) {
-          await prisma.leagueTeam.update({ where: { id: t.id }, data: { isOrphan: true } })
-          out.notes.push(`teams_rosters: claimed team ${t.externalId} vanished upstream — marked orphan (preserved, not deleted)`)
-        }
-        continue
-      }
-      // Unclaimed + absent from a complete authoritative response → reconcile away (team + its roster).
-      const rosterId = rosterIdBySourceTeam.get(t.externalId)
-      if (rosterId) {
-        await prisma.roster.delete({ where: { id: rosterId } }).catch(() => undefined)
-      } else if (t.platformUserId) {
-        await prisma.roster.deleteMany({ where: { leagueId, platformUserId: t.platformUserId } }).catch(() => undefined)
-      }
-      await prisma.leagueTeam.delete({ where: { id: t.id } }).catch(() => undefined)
+      /*
+       * 🛑 ARCHIVE, NEVER DELETE — AND THE CLAIMED/UNCLAIMED SPLIT WAS THE BUG.
+       *
+       * This block used to preserve a CLAIMED team (orphan-flag it) and hard-delete an
+       * unclaimed one along with its `Roster`. The asymmetry has no defensible basis: a
+       * team's absence from one response is evidence about the ROSTER FEED, not about the
+       * value of the team's history. An unclaimed team still carries ownership history,
+       * transactions, matchups, draft picks and the external identifiers every later join
+       * depends on — and a delete takes all of it, irreversibly, on the strength of one
+       * provider response being complete.
+       *
+       * It is also the single reason a LeagueTeam row could vanish under a foreign key,
+       * which is what blocked the Milestone 19 deletion work. Archiving clears that
+       * prerequisite without implementing that migration.
+       *
+       * ⚠ IDEMPOTENT BY CONSTRUCTION: an already-orphaned team is skipped, so repeated
+       * reconciliation over an unchanged league writes nothing and reports nothing.
+       */
+      if (t.isOrphan) continue
+
+      /*
+       * 🛑 THE OTHER SLEEPER WRITER IN THIS SAME IMPORT PATH SETS `isOrphan` TO MEAN THE
+       * OPPOSITE OF THIS. `SleeperLeagueCreationBootstrapService` and
+       * `lib/league/sleeper-import-process` both compute `isOrphan = !ownerId` — a seat the
+       * provider reports with NO MANAGER, which is a live franchise with an empty chair. Here
+       * the flag means the team is ABSENT FROM THE ROSTER FEED ENTIRELY, which is departure.
+       * One boolean, one provider, two opposite lifecycles — and no reader could tell them
+       * apart, which is why this batch was stopped.
+       *
+       * This site is genuinely archival, so it is the one that gets to say ARCHIVED. The reason
+       * string names the evidence, not the conclusion: a complete authoritative response did not
+       * contain this team.
+       *
+       * ⚠ `managerKind` is untouched. Whoever ran this franchise is unchanged by the provider
+       * dropping it; conflating "the team is gone" with "the seat is empty" is the original bug.
+       */
+      await prisma.leagueTeam.update({
+        where: { id: t.id },
+        data: {
+          isOrphan: true,
+          lifecycleState: 'ARCHIVED',
+          archivedAt: new Date(),
+          archiveReason: 'absent_from_authoritative_roster_response',
+        },
+      })
       out.removed += 1
+      out.notes.push(
+        `teams_rosters: team ${t.externalId} absent from a complete authoritative response — archived as orphan (preserved, not deleted)`,
+      )
     }
   }
 

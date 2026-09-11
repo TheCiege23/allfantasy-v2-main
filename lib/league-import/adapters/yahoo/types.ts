@@ -1,3 +1,4 @@
+import type { ResourceFetchStatus } from '@/lib/league-import/resourceStatus'
 export interface YahooImportLeague {
   leagueKey: string
   leagueId: string
@@ -56,6 +57,19 @@ export interface YahooImportTeam {
   starterPlayerIds: string[]
   reservePlayerIds: string[]
   playerMap: Record<string, { name: string; position: string; team: string }>
+  /*
+   * 🛑 IMP-04 — WHY THIS TEAM'S ROSTER ARRAYS LOOK THE WAY THEY DO.
+   *
+   * Yahoo fetches every team's roster with `Promise.allSettled`, and a REJECTED fetch
+   * used to be substituted with empty player/starter/reserve arrays. Downstream that is
+   * indistinguishable from a genuinely empty roster, so the shared bootstrap wrote the
+   * empty arrays to `Roster` and a transient timeout on one of twelve teams silently
+   * cleared a good roster.
+   *
+   * `fetched` means the arrays are authoritative and may replace stored data.
+   * `failed` means they are a PLACEHOLDER — the team's last-good roster must be kept.
+   */
+  rosterFetchStatus: ResourceFetchStatus
 }
 
 export interface YahooImportScheduleWeek {
@@ -108,4 +122,10 @@ export interface YahooImportPayload {
   viewerTeamKey?: string | null
   /** Team keys flagged as commissioner/co-commissioner in Yahoo manager metadata. */
   commissionerTeamKeys?: string[]
+  /**
+   * Teams whose roster request REJECTED — IMP-04. Their `rosterPlayerIds` etc. are an
+   * empty placeholder, not an observation, and must never replace stored roster rows.
+   * Empty array means every team's roster was fetched successfully.
+   */
+  failedRosterTeamKeys?: string[]
 }

@@ -20,6 +20,7 @@ import type { SportPlugin, AIEngineInput } from "../types"
 import { getAiLanguageInstruction } from "@/lib/world-cup/worldCupI18n"
 import { prisma } from "@/lib/prisma"
 import { listInjuryFacts } from "@/lib/injuries/injuryReadPort"
+import { CURRENT_FRANCHISES_INCLUDING_UNKNOWN } from '@/lib/league-import/teamLifecycle'
 
 // ─── Context type ─────────────────────────────────────────────────────────────
 
@@ -192,8 +193,9 @@ export const nflPlugin: SportPlugin<NflContext, NflProviderData, NflInsights> = 
         },
       }).catch(() => null)
 
+      /* AI standings context is a CURRENT-standings surface. */
       const standings = await (prisma as any).leagueTeam.findMany({
-        where: { leagueId: input.contextId },
+        where: { ...CURRENT_FRANCHISES_INCLUDING_UNKNOWN, leagueId: input.contextId },
         select: { teamName: true, pointsFor: true, pointsAgainst: true, wins: true, losses: true, currentRank: true },
         orderBy: [{ wins: "desc" }, { pointsFor: "desc" }],
         take: 20,

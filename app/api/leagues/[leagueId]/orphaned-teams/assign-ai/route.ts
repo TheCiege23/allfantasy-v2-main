@@ -75,7 +75,16 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ leagueId: 
     data: {
       externalId: rosterId,
       ownerName: 'AI Manager',
+      /*
+       * 🛑 AN AI-MANAGED SEAT IS NOT AN EMPTY ONE, AND `isOrphan: false` WAS THE ONLY WAY THIS
+       * WRITER COULD SAY SO. Clearing the flag made an AI seat indistinguishable from a
+       * human-claimed one — `claimedByUserId` stays null here, so every recipient set built on
+       * the claim already excluded it, but nothing could tell "run by a bot" from "run by a
+       * person who has not linked an account". `managerKind` is that distinction.
+       */
       isOrphan: false,
+      lifecycleState: 'CURRENT',
+      managerKind: 'AI',
     },
   })
 

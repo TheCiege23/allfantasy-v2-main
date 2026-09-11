@@ -116,6 +116,15 @@ export async function POST(req: NextRequest) {
       data: {
         claimedByUserId: userId,
         isOrphan: false,
+        /*
+         * A person accepting an invite is the strongest evidence this seat is live that the
+         * system ever gets, so it settles BOTH axes at once — and it is new evidence from a
+         * user action, not an inference over an unclassified row. `UNKNOWN` is being resolved
+         * by something that just happened, which is the only way UNKNOWN is ever allowed to
+         * become CURRENT.
+         */
+        lifecycleState: 'CURRENT',
+        managerKind: 'HUMAN',
       },
     }),
     ...(rosterToClaim

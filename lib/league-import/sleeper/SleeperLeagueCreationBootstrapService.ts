@@ -5,10 +5,18 @@
 
 import { prisma } from '@/lib/prisma'
 import type { NormalizedImportResult } from '../types'
+import { isAuthoritativeStatus } from '@/lib/league-import/resourceStatus'
+import { withRosterObservation } from '@/lib/league-import/rosterPayload'
 
 export interface SleeperLeagueBootstrapResult {
   leagueTeamsCreated: number
   rostersCreated: number
+  /**
+   * Teams skipped because their provider roster fetch FAILED, so the stored roster was
+   * kept rather than overwritten with an empty placeholder (IMP-04). Non-zero means this
+   * league is NOT fully current and must not be reported as such.
+   */
+  rostersPreserved?: number
   teamPerformancesCreated: number
 }
 
@@ -113,12 +121,29 @@ export async function bootstrapLeagueFromNormalizedImport(
 
   let leagueTeamsCreated = 0
   let rostersCreated = 0
+  /** Teams whose roster fetch failed and whose stored roster was therefore left alone (IMP-04). */
+  let rostersPreserved = 0
 
   for (const r of normalized.rosters) {
     const standing = standingsByTeam.get(r.source_team_id)
     const rank = standing?.rank ?? null
     const pointsAgainst = r.points_against ?? (standing?.points_against ?? 0)
     const isOrphan = Boolean(r.is_orphan) || !r.source_manager_id
+
+    /*
+     * 🛑 THIS `isOrphan` MEANS "THE PROVIDER SHOWS NO MANAGER ON A LIVE SEAT" — the opposite
+     * lifecycle from `applySleeperLeagueSync`, which sets the same flag to mean the team is gone
+     * from the feed. Both are Sleeper, both write `LeagueTeam.isOrphan`, and no reader could
+     * separate them. On the manager axis this is VACANT; on the lifecycle axis it is CURRENT,
+     * because the provider just listed it.
+     *
+     * HUMAN when a `source_manager_id` is present: that is a real Sleeper account, and it stays
+     * HUMAN whether or not it resolves to an AllFantasy user. `resolvedClaim` below answers a
+     * DIFFERENT question — has this person linked an AF account — and an imported league is full
+     * of genuinely human-run seats nobody has claimed here.
+     */
+    const importedManagerKind = isOrphan ? 'VACANT' : 'HUMAN'
+
     const importedRole = isOrphan
       ? 'orphan'
       : r.is_commissioner
@@ -152,6 +177,8 @@ export async function bootstrapLeagueFromNormalizedImport(
         currentRank: rank,
         role: importedRole,
         isOrphan,
+        lifecycleState: 'CURRENT',
+        managerKind: importedManagerKind,
         platformUserId: r.source_manager_id || null,
         claimedByUserId: resolvedClaim,
         isCommissioner: Boolean(r.is_commissioner),
@@ -169,6 +196,18 @@ export async function bootstrapLeagueFromNormalizedImport(
         currentRank: rank,
         role: importedRole,
         isOrphan,
+        /*
+         * ⚠ THIS BRANCH IS ALSO THE PROVIDER-REAPPEARANCE PATH, AND IT MUST UNDO AN ARCHIVE.
+         * A team `applySleeperLeagueSync` archived as absent, that later returns to a complete
+         * response, arrives here. Setting CURRENT without clearing the archive stamp would leave
+         * a row that reads current and carries an `archivedAt` — a contradiction a later audit
+         * cannot resolve. The provider listing the team IS the authoritative evidence, so the
+         * archival facts are retracted rather than left standing beside their own refutation.
+         */
+        lifecycleState: 'CURRENT',
+        managerKind: importedManagerKind,
+        archivedAt: null,
+        archiveReason: null,
         platformUserId: r.source_manager_id || null,
         // Idempotent reimport: only (re)set the claim when the manager resolves;
         // never overwrite an existing claim with null.
@@ -233,6 +272,29 @@ export async function bootstrapLeagueFromNormalizedImport(
       },
     }
 
+    /*
+     * 🛑 THE OBSERVATION RECORD IS HOW A READER TELLS "NOBODY" FROM "WE DO NOT KNOW".
+     *
+     * Every consumer that renders or reasons about a roster — Decision OS's canonical world,
+     * Chimmy's grounding, trade evaluation, waiver recommendations — has until now had only
+     * `players: []` to go on, which is the same value for a pre-draft league and for a league
+     * whose provider read failed.
+     *
+     * ⚠ IT GOES UNDER THE RESERVED NAMESPACE, NOT AT THE TOP LEVEL. An earlier version wrote a
+     * bare `roster_status` sibling; `withRosterObservation` puts it under `af_import_meta`, which
+     * cannot be mistaken for a player id by any of the ~66 `playerData` readers.
+     *
+     * ⚠ `lastGoodAt` DELIBERATELY DOES NOT ADVANCE ON A PRESERVED WRITE. It answers "when was
+     * this true", not "when did we last try" — a badge reading "updated just now" over week-old
+     * data is the false-green in miniature.
+     */
+    const playerDataWithMeta = withRosterObservation(
+      playerData,
+      r.fetch_status ?? 'fetched',
+      new Date(),
+      r.observed_at ?? null,
+    )
+
     const resolvedPlatformUserId =
       managerUserIds.get(r.source_manager_id) ?? r.source_manager_id
 
@@ -249,12 +311,33 @@ export async function bootstrapLeagueFromNormalizedImport(
       },
     })
 
+    /*
+     * 🛑 IMP-04 — ONLY AN OBSERVATION MAY REPLACE A ROSTER.
+     *
+     * A non-authoritative status (`failed`, `unauthorized`, `not_fetched`, `partial`) means
+     * `player_ids` is a placeholder, not a reading. Writing it empties a real roster on a
+     * transient timeout with nothing going red — the league simply shows a manager with no
+     * players and reports itself current.
+     *
+     * ⚠ AND A FIRST IMPORT MUST NOT PUBLISH THE PLACEHOLDER EITHER. The earlier version
+     * skipped only when there was an existing row to protect, reasoning that "some row beats
+     * none". That is wrong in the way that matters: it writes an EMPTY roster that every
+     * downstream reader is entitled to treat as "this manager has nobody", which is the exact
+     * false statement this whole repair exists to stop. The team is still created below, and
+     * the roster is recorded as UNKNOWN rather than empty.
+     */
+    const rosterIsAuthoritative = isAuthoritativeStatus(r.fetch_status)
+    if (!rosterIsAuthoritative && existingRoster) {
+      rostersPreserved++
+      continue
+    }
+
     if (existingRoster) {
       await prisma.roster.update({
         where: { id: existingRoster.id },
         data: {
           platformUserId: resolvedPlatformUserId,
-          playerData: playerData as any,
+          playerData: playerDataWithMeta as any,
           faabRemaining: r.faab_remaining ?? null,
           waiverPriority: r.waiver_priority ?? null,
         },
@@ -264,7 +347,7 @@ export async function bootstrapLeagueFromNormalizedImport(
         data: {
           leagueId,
           platformUserId: resolvedPlatformUserId,
-          playerData: playerData as any,
+          playerData: playerDataWithMeta as any,
           faabRemaining: r.faab_remaining ?? null,
           waiverPriority: r.waiver_priority ?? null,
         },
@@ -346,7 +429,7 @@ export async function bootstrapLeagueFromNormalizedImport(
     }
   }
 
-  return { leagueTeamsCreated, rostersCreated, teamPerformancesCreated }
+  return { leagueTeamsCreated, rostersCreated, teamPerformancesCreated, rostersPreserved }
 }
 
 /**

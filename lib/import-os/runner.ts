@@ -12,6 +12,7 @@
  *   - full request accounting where attempts != logical requests (both fully classified).
  */
 import type { SeasonState } from './season'
+import { isDurableSyncError } from '@/lib/league-import/sourceRef'
 
 export type SyncScope = string
 
@@ -175,6 +176,30 @@ export async function runSync(opts: RunSyncOptions): Promise<RunResult> {
           // A scope-level attempt that threw. Not final → a retry attempt (attempt, no terminal outcome).
           // Final → a terminal permanent failure (one attempt, one logical request classified as failed).
           acc.requestAttempts += 1
+
+          /*
+           * 🛑 A DURABLE ERROR MUST NOT BE RETRIED — IT WILL FAIL IDENTICALLY.
+           *
+           * The retry loop exists for transient conditions: a throttle, a 5xx, a timeout.
+           * A configuration or data-integrity condition — a connection whose recorded scope
+           * disagrees with what the provider serves (SyncScopeMismatchError) — is just as
+           * true on the third attempt as the first, so every retry is a wasted provider
+           * request against a problem only a human or a data repair can resolve.
+           *
+           * ⚠ IT STILL COUNTS AS A PERMANENT FAILURE AND THE SCOPE STILL GOES INCOMPLETE.
+           * Breaking early changes only how much we PAY to learn the answer, never what the
+           * answer is: freshness does not advance, last-good data stands, and the reason is
+           * carried into `warnings` for `lastError` and operator diagnostics.
+           */
+          if (isDurableSyncError(err)) {
+            acc.permanentFailures += 1
+            acc.logicalRequests += 1
+            warnings.push(
+              `scope "${scope}" refused (durable, not retried): ${err instanceof Error ? err.message : 'error'}`,
+            )
+            break
+          }
+
           if (attempt < maxRetries) {
             acc.retries += 1
             await opts.sleep(backoffMs(baseBackoff, attempt, opts.rng))

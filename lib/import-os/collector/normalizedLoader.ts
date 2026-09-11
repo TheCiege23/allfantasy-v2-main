@@ -47,6 +47,12 @@
 
 import { runImportedLeagueNormalizationPipeline } from '@/lib/league-import/ImportedLeagueNormalizationPipeline'
 import type { NormalizedImportResult } from '@/lib/league-import/types'
+import {
+  buildProviderSourceRef,
+  findScopeMismatches,
+  resolveIntendedScope,
+  SyncScopeMismatchError,
+} from '@/lib/league-import/sourceRef'
 import { prisma } from '@/lib/prisma'
 import { resolveTransactionWeekWindow, resolveMatchupWeekCap } from '@/lib/import-os/season'
 /*
@@ -83,6 +89,49 @@ export class SyncCredentialsUnavailableError extends Error {
     this.provider = options.provider
     this.candidatesTried = options.candidatesTried
   }
+}
+
+/**
+ * Reject a payload whose scope is not the scope that was requested — IMP-01.
+ *
+ * ⚠ THROWS RATHER THAN RETURNING A FLAG ON PURPOSE. Every caller of
+ * `fetchNormalizedForConnection` treats a throw as "do not advance freshness, do not
+ * write", which is exactly the handling a scope mismatch needs. Returning a payload with
+ * a warning attached would leave the writer free to apply it, and the whole point is that
+ * last-good data must survive a provider answering about a different league.
+ */
+function assertScopeOrThrow(
+  connection: LeagueSyncConnection,
+  normalized: NormalizedImportResult,
+  requestedScope?: { sport?: string | null; season?: number | string | null } | null,
+  verifiedIdentity?: { sport?: string | null; season?: number | string | null } | null,
+): NormalizedImportResult {
+  /*
+   * Batch A.1 item 3 — the intended scope is RESOLVED, not read off one row.
+   *
+   * `explicit request > stored connection > previously verified identity`. A connection with
+   * a thin row no longer causes the check to be skipped: if every tier is silent for a
+   * dimension the provider's contract requires, `findScopeMismatches` reports `missing_target`
+   * and this throws, because an answer we cannot verify must not overwrite one we could.
+   */
+  const intended = resolveIntendedScope({
+    request: requestedScope ?? null,
+    connection: { sport: connection.sport, season: connection.season },
+    verifiedIdentity: verifiedIdentity ?? null,
+  })
+
+  const mismatches = findScopeMismatches({
+    provider: connection.provider,
+    requested: { sport: intended.sport, season: intended.season },
+    returned: {
+      sport: normalized.league?.sport,
+      season: normalized.league?.season,
+    },
+  })
+  if (mismatches.length > 0) {
+    throw new SyncScopeMismatchError(connection.provider, mismatches)
+  }
+  return normalized
 }
 
 /** The league is no longer readable at the provider — not a credential problem, not transient. */
@@ -196,6 +245,17 @@ export async function fetchNormalizedForConnection(
     maxCandidates?: number
     /** Injectable clock; the window below is calendar-derived, so tests must be able to pin it. */
     now?: Date
+    /**
+     * An EXPLICIT scope for this run — a job argument or an import request. Highest priority
+     * in `resolveIntendedScope`, above the stored connection (Batch A.1 item 3).
+     */
+    requestedScope?: { sport?: string | null; season?: number | string | null } | null
+    /**
+     * A previously VERIFIED league identity, used only when neither the request nor the
+     * connection supplies a dimension. Lowest priority because it is the weakest evidence:
+     * it says what we last confirmed, not what this run intends.
+     */
+    verifiedIdentity?: { sport?: string | null; season?: number | string | null } | null
   } = {},
 ): Promise<NormalizedImportResult> {
   const runPipeline = deps.runPipeline ?? runImportedLeagueNormalizationPipeline
@@ -242,6 +302,27 @@ export async function fetchNormalizedForConnection(
   const matchupCap = resolveMatchupWeekCap(seasonInput) ?? undefined
 
   /*
+   * 🛑 IMP-01 — RESTORE THE SCOPE THIS CONNECTION ALREADY KNOWS BEFORE ASKING THE PROVIDER.
+   *
+   * `connection.sport` and `connection.season` are both in hand here, but only the bare
+   * `externalLeagueId` used to be passed on — and three providers' parsers fill a missing
+   * season with `new Date().getFullYear()`, with Fleaflicker additionally defaulting the
+   * sport to NFL. An imported Fleaflicker NBA/2024 league was therefore refreshed as an
+   * NFL/current-year request, and ESPN/MFL historical connections asked for the wrong
+   * season. The writer then applied whatever came back to the existing league.
+   *
+   * ⚠ THE FAILURE MODE THAT MATTERS IS THE ONE THAT SUCCEEDS. A wrong scope that is
+   * unavailable merely errors; a wrong scope that EXISTS overwrites a good league record
+   * with another league's data, and reports itself as a successful refresh.
+   */
+  const scopedSourceId = buildProviderSourceRef({
+    provider: connection.provider,
+    externalLeagueId: connection.externalLeagueId,
+    sport: connection.sport,
+    season: connection.season,
+  })
+
+  /*
    * An UNOWNED provider takes the no-user path directly. Resolving candidates for it would be a
    * wasted query, and — worse — such a league whose only importing user was deleted would then
    * skip for want of a credential it never needed.
@@ -249,12 +330,13 @@ export async function fetchNormalizedForConnection(
   if (!providerNeedsUser(connection.provider)) {
     const result = await runPipeline({
       provider: connection.provider,
-      sourceId: connection.externalLeagueId,
+      sourceId: scopedSourceId,
       currentStateOnly: true,
       transactionWeeks: weekWindow,
       maxMatchupWeeks: matchupCap,
     })
-    if (result.success) return result.normalized
+    if (result.success)
+      return assertScopeOrThrow(connection, result.normalized, deps.requestedScope, deps.verifiedIdentity)
     if (result.code === 'LEAGUE_NOT_FOUND') {
       throw new SyncLeagueGoneError(`${connection.provider}: ${result.error}`)
     }
@@ -277,13 +359,14 @@ export async function fetchNormalizedForConnection(
   for (const userId of candidates) {
     const result = await runPipeline({
       provider: connection.provider,
-      sourceId: connection.externalLeagueId,
+      sourceId: scopedSourceId,
       userId,
       currentStateOnly: true,
       transactionWeeks: weekWindow,
       maxMatchupWeeks: matchupCap,
     })
-    if (result.success) return result.normalized
+    if (result.success)
+      return assertScopeOrThrow(connection, result.normalized, deps.requestedScope, deps.verifiedIdentity)
 
     if (result.code === 'CONNECTION_REQUIRED' || result.code === 'UNAUTHORIZED') {
       /* This user's stored credential does not unlock the league — ask the next mirror. */

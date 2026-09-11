@@ -11,6 +11,7 @@
  * looks identical to "nothing to recommend right now."
  */
 import { prisma } from '@/lib/prisma'
+import { CURRENT_FRANCHISES_INCLUDING_UNKNOWN } from '@/lib/league-import/teamLifecycle'
 import { resolveInjuryFacts } from '@/lib/injuries/injuryReadPort'
 import { normalizeMatchName } from '@/lib/player-match/verifiedNameMatch'
 import { resolveActiveLeagueContext } from './activeLeagueContext'
@@ -131,8 +132,19 @@ export async function assembleUserOsContext(args: {
       where: { id: args.canonicalLeagueId },
       select: { isDynasty: true, playoffTeams: true, playoffStartWeek: true },
     }),
+    /*
+     * Current standings only. This read has ONE consumer — the `standings` array below — and
+     * `viewerTeam` is derived from that same array, so there is no historical half to starve.
+     *
+     * ⚠ This was registered as a MIXED read on the argument that filtering would leave an
+     * archived-but-claimed viewer "absent from standings while `viewerTeam` is still non-null",
+     * producing a −1 rank index and a >100th percentile. That cannot happen:
+     * `viewerTeam = standings.find(s => s.isViewerTeam) ?? null` reads the SAME filtered array,
+     * so it is null exactly when the row is gone, and both generators return early on a null
+     * `viewerTeam` (`playoffRecommendations.ts:20`, `strategyRecommendations.ts:41`).
+     */
     prisma.leagueTeam.findMany({
-      where: { leagueId: args.canonicalLeagueId },
+      where: { ...CURRENT_FRANCHISES_INCLUDING_UNKNOWN, leagueId: args.canonicalLeagueId },
       select: {
         id: true,
         teamName: true,

@@ -13,6 +13,14 @@ import { resolveLeagueFormat } from '@/lib/league/format-engine'
 import { buildKeeperProvenance } from '@/lib/league-contract/keeperProvenance'
 import { normalizeConceptToFormat } from '@/lib/league-creation/canonical/normalizeConcept'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
+import { resolveProviderScoringStatKey } from '@/lib/scoring-defaults/ScoringKeyAliasResolver'
+import {
+  SCORING_RULE_CONTRACT_VERSION,
+  projectLegacyMap,
+  describeProjectionLoss,
+  type ImportedScoringContract,
+  type ScoringMode,
+} from '@/lib/league-import/scoringRuleContract'
 import type {
   CanonicalImportBundle,
   DerivedImportFlags,
@@ -26,12 +34,109 @@ const NORMALIZATION_VERSION = '2'
 function inferScoringPresetId(normalized: NormalizedImportResult): string {
   const fmt = String(normalized.scoring?.scoring_format ?? normalized.league.scoring ?? '').toLowerCase()
   if (fmt.includes('idp')) return 'fb_idp'
-  if (fmt.includes('full') && fmt.includes('ppr')) return 'fb_ppr'
-  if (fmt.includes('half') || fmt.includes('0.5')) return 'fb_half_ppr'
-  if (fmt.includes('std') || fmt.includes('non')) return 'fb_std'
   if (fmt.includes('te') && fmt.includes('prem')) return 'fb_te_premium'
   if (fmt.includes('super')) return 'fb_superflex'
+  /*
+   * ⚠ ORDER MATTERS, AND SO DOES TESTING "half" BEFORE "ppr". The previous full-PPR test
+   * required BOTH "full" and "ppr", so the single commonest format string in fantasy —
+   * a plain `ppr` — fell past every branch and landed on the `fb_half_ppr` default.
+   * A full-PPR league was labelled half-PPR in its canonical metadata.
+   *
+   * A "standard"/"non-ppr" check must also come after the half test, because a league
+   * described as "half ppr (non-standard)" is half, not standard.
+   */
+  if (fmt.includes('half') || fmt.includes('0.5')) return 'fb_half_ppr'
+  if (fmt.includes('std') || fmt.includes('non')) return 'fb_std'
+  if (fmt.includes('ppr') || fmt.includes('reception')) return 'fb_ppr'
+  /*
+   * 🛑 THE FALLBACK IS A GUESS, AND IT USED TO BE AN UNQUALIFIED ONE. Half-PPR is the
+   * most common league shape, so it remains the least-wrong default — but the caller
+   * needs to know this was inferred rather than read, which `inferScoringPresetId`'s
+   * one return value cannot say. `buildCanonicalImportBundle` records the ambiguity as
+   * an import warning instead; see `presetWasInferred` below.
+   */
   return 'fb_half_ppr'
+}
+
+/**
+ * True when `inferScoringPresetId` fell through to its default rather than recognising
+ * the source's own format string. An unresolved rule must reduce confidence rather than
+ * become an unqualified exact valuation (audit IMP-03).
+ */
+function scoringPresetWasInferred(normalized: NormalizedImportResult): boolean {
+  const fmt = String(normalized.scoring?.scoring_format ?? normalized.league.scoring ?? '').toLowerCase()
+  if (!fmt.trim()) return true
+  return !(
+    fmt.includes('idp') ||
+    (fmt.includes('te') && fmt.includes('prem')) ||
+    fmt.includes('super') ||
+    fmt.includes('half') ||
+    fmt.includes('0.5') ||
+    fmt.includes('std') ||
+    fmt.includes('non') ||
+    fmt.includes('ppr') ||
+    fmt.includes('reception')
+  )
+}
+
+/**
+ * Turn the source's roster-position list into explicit starter slots with multiplicity.
+ *
+ * Handles BOTH provider shapes this repo has to live with, which is why it exists rather than
+ * being inlined: Sleeper emits a FLAT array with one entry per slot (`['QB','RB','RB','BN']`),
+ * while ESPN/Yahoo/MFL emit AGGREGATED `"SLOT:count"` strings (`['QB:1','RB:2','BE:6']`).
+ * Counting one shape with the other's logic is a defect this file has already shipped once.
+ *
+ * ⚠ RESERVE LABELS ARE EXCLUDED USING THE CALLER'S SET, not a second copy of the list. The
+ * NFL-vs-baseball meaning of `DL` is decided there, and duplicating that decision here is how
+ * the two would drift apart.
+ */
+function buildStarterSlots(
+  rosterPositionsRaw: string[],
+  reserveLabels: ReadonlySet<string>,
+): Record<string, number> | undefined {
+  if (rosterPositionsRaw.length === 0) return undefined
+
+  const slots: Record<string, number> = {}
+  for (const entry of rosterPositionsRaw) {
+    const [labelRaw, countRaw] = entry.split(':')
+    const label = (labelRaw ?? '').trim().toUpperCase()
+    if (!label || reserveLabels.has(label)) continue
+    const parsed = countRaw != null ? Number(countRaw) : 1
+    const count = Number.isFinite(parsed) && parsed > 0 ? parsed : 1
+    slots[label] = (slots[label] ?? 0) + count
+  }
+
+  /* Every slot was a reserve slot — a real answer, but not a starter lineup. */
+  return Object.keys(slots).length > 0 ? slots : undefined
+}
+
+/**
+ * Which scoring MODE the source describes.
+ *
+ * ⚠ THE MODE HAS TO SURVIVE BATCH A EVEN THOUGH CATEGORY/ROTO EXECUTION DOES NOT LAND HERE.
+ * Full support belongs to the provider/sport batch — but a category league that is imported
+ * as ordinary points scoring is not "unsupported", it is MISLABELLED, and the batch that
+ * implements it would be building on data that already asserts the wrong thing.
+ *
+ * Conservative on purpose: only an explicit signal moves it off `points`, because guessing
+ * `category` for a points league is just as wrong in the other direction.
+ */
+function resolveScoringMode(normalized: NormalizedImportResult): ScoringMode {
+  const raw = normalized.league as Record<string, unknown>
+  const signals = [
+    String(normalized.scoring?.scoring_format ?? ''),
+    String(normalized.league.scoring ?? ''),
+    String(raw.scoring_type ?? raw.scoringType ?? ''),
+  ]
+    .join(' ')
+    .toLowerCase()
+
+  if (/\broto\b|rotisserie/.test(signals)) return 'roto'
+  if (/\bcategor(y|ies|ical)\b|\bh2h[\s_-]*categor/.test(signals)) return 'category'
+  if (/\bpoints?\b|\bppr\b|\bstandard\b/.test(signals)) return 'points'
+  /* Nothing said — `unknown` is honest; `points` would be a claim. */
+  return normalized.scoring?.rules?.length ? 'points' : 'unknown'
 }
 
 function inferDraftType(normalized: NormalizedImportResult): string {
@@ -316,7 +421,17 @@ export function buildCanonicalImportBundle(normalized: NormalizedImportResult): 
   // each provider actually emits: Sleeper (BN/IR/TAXI), ESPN (BE/IR), Yahoo
   // (BN/BE/IR/IL/NA/DL, per YahooLeagueFetchService.ts's own YAHOO_RESERVE_POSITIONS), MFL
   // (TAXI, appended by MflLeagueFetchService.ts).
-  const RESERVE_SLOT_LABELS = new Set(['BN', 'BE', 'IR', 'IL', 'NA', 'DL', 'TAXI'])
+  //
+  // 🛑 `DL` MEANS TWO DIFFERENT THINGS AND THE SPORT IS WHAT SEPARATES THEM. In Yahoo
+  // baseball/hockey it is the DISABLED LIST — a reserve slot, which is why it was added
+  // here. In NFL it is the DEFENSIVE LINE, an IDP STARTER position, and this same file
+  // already lists 'DL' among its `idpPositions`. Counting an NFL starter as reserve
+  // inflated the bench by one slot for every IDP league: a five-slot roster of
+  // QB/DL/BN/BN/BN computed four bench slots instead of three, which then feeds roster
+  // capacity and every downstream lineup/valuation consumer.
+  const RESERVE_SLOT_LABELS = new Set(['BN', 'BE', 'IR', 'IL', 'NA', 'TAXI'])
+  const sportForSlots = normalizeToSupportedSport(normalized.league.sport)
+  if (sportForSlots !== 'NFL') RESERVE_SLOT_LABELS.add('DL')
   const rosterPositionsRaw = Array.isArray((normalized.league as Record<string, unknown>).roster_positions)
     ? ((normalized.league as Record<string, unknown>).roster_positions as unknown[]).map((p) => String(p).toUpperCase())
     : []
@@ -339,8 +454,23 @@ export function buildCanonicalImportBundle(normalized: NormalizedImportResult): 
   const importedIrSlots =
     typeof normalized.league.reserve_slots === 'number' ? normalized.league.reserve_slots : undefined
 
+  /*
+   * 🛑 `starterSlots: undefined` MADE EXACT SLOT ELIGIBILITY UNRECOVERABLE — IMP-03.
+   *
+   * The source tells us the roster shape (`roster_positions`), and the bench maths above
+   * already parses it. Throwing the parsed result away and storing `undefined` forced every
+   * consumer that needs slot eligibility — lineup validity, SF/2QB detection, IDP handling,
+   * flex arithmetic — to re-derive it from a different representation or fall back to a
+   * template. That is how a superflex league gets graded as single-QB.
+   *
+   * ⚠ ABSENT SOURCE POSITIONS STILL YIELD `undefined`, NOT AN EMPTY OBJECT. `{}` would read
+   * as "this league has no starters", which is a claim; `undefined` is the honest "the
+   * source did not say", which is what a fallback is allowed to act on.
+   */
+  const starterSlots = buildStarterSlots(rosterPositionsRaw, RESERVE_SLOT_LABELS)
+
   const rosterSettings: SettingsSnapshot['rosterSettings'] = {
-    starterSlots: undefined,
+    starterSlots,
     benchSlots: computedBenchSlots,
     irSlots: importedIrSlots,
     taxiSlots: importedTaxiSlots ?? (derivedFlags.devy ? 4 : undefined),
@@ -358,12 +488,57 @@ export function buildCanonicalImportBundle(normalized: NormalizedImportResult): 
       ? { ...(baseCommissionerSettings ?? {}), tradeDeadlineWeek: importedTradeDeadlineWeek }
       : baseCommissionerSettings
 
-  const scoringRules: Record<string, unknown> = {}
-  if (normalized.scoring?.rules?.length) {
-    for (const r of normalized.scoring.rules) {
-      scoringRules[r.stat_key] = r.points_value
-    }
+  /*
+   * 🛑 ONE AUTHORITATIVE SCORING REPRESENTATION — IMP-03/IMP-05.
+   *
+   * The interim version of this batch built the typed list AND the flat map side by side,
+   * each from the raw rules. Two implementations of one rule set is the bug this repo has
+   * already paid for once; the map is now PROJECTED from the contract by `projectLegacyMap`
+   * and is built nowhere else, so the two cannot drift.
+   */
+  const scoringMode: ScoringMode = resolveScoringMode(normalized)
+  const importedScoringContract: ImportedScoringContract = {
+    version: SCORING_RULE_CONTRACT_VERSION,
+    sport,
+    mode: scoringMode,
+    sourceFormat: normalized.scoring?.scoring_format ?? null,
+    presetId: scoringPresetId,
+    presetInferred: scoringPresetWasInferred(normalized),
+    rules: (normalized.scoring?.rules ?? []).map((r) => {
+      const rule = r as Record<string, unknown>
+      const positions = Array.isArray(rule.positions)
+        ? (rule.positions as unknown[]).map((x) => String(x).trim().toUpperCase()).filter(Boolean)
+        : []
+      /*
+       * ⚠ `canonicalStat` STAYS NULL UNLESS THE ALIAS RESOLVER VERIFIED IT. Guessing here
+       * turns an unmapped provider code into an exact-looking valuation, which is strictly
+       * worse than a visible gap because nothing downstream can tell it was invented.
+       */
+      const canonical = resolveProviderScoringStatKey(String(r.stat_key), {
+        mflStatName: (rule.stat_name as string | null | undefined) ?? null,
+      })
+      return {
+        nativeStatId: String(r.stat_key),
+        canonicalStat: canonical,
+        pointsValue: Number(r.points_value),
+        positions,
+        sport,
+        mode: scoringMode,
+        provenance: 'source' as const,
+        resolution: canonical ? ('resolved' as const) : ('unresolved' as const),
+        unresolvedReason: canonical ? null : 'No verified canonical mapping for this provider stat id.',
+        /* Declared, not yet read from any provider — null is honest, a zero would score. */
+        range: null,
+        threshold: null,
+        unit: null,
+        rounding: null,
+        multiplier: typeof rule.multiplier === 'number' ? (rule.multiplier as number) : null,
+      }
+    }),
   }
+
+  const { map: scoringRules, collisions: scoringCollisions } = projectLegacyMap(importedScoringContract)
+  const projectionLoss = describeProjectionLoss(importedScoringContract)
 
   const settingsSnapshot: SettingsSnapshot = {
     snapshotVersion: SETTINGS_SNAPSHOT_VERSION,
@@ -372,8 +547,19 @@ export function buildCanonicalImportBundle(normalized: NormalizedImportResult): 
       format: normalized.scoring?.scoring_format ?? String(normalized.league.scoring ?? 'standard'),
       scoringTemplateId: scoringPresetId,
       rules: scoringRules,
+      /*
+       * 🛑 THE AUTHORITATIVE CONTRACT. `rules` above is a lossy PROJECTION of this, generated
+       * by `projectLegacyMap` and built nowhere else. A consumer needing exact semantics —
+       * position eligibility, category/roto mode, provenance, unresolved rules — reads this;
+       * `rules` exists only until the last legacy reader is migrated.
+       */
+      rulesDetail: importedScoringContract,
+      /* False means the preset was READ from the source; true means it was guessed. */
+      templateInferred: importedScoringContract.presetInferred,
+      /* What `rules` cannot express for this league, so a caller can decide rather than discover. */
+      projectionLoss,
       source: normalized.source.source_provider,
-    },
+    } as SettingsSnapshot['scoringSettings'],
     draftSettings: {
       draftType,
       rounds:
@@ -447,7 +633,54 @@ export function buildCanonicalImportBundle(normalized: NormalizedImportResult): 
     message,
     severity: 'warn',
   }))
-  const warnings = [...inferred.warnings, ...coverageWarnings, ...fetchWarnings]
+  /*
+   * IMP-03 — an unresolved rule must reduce confidence rather than silently become an
+   * exact valuation. Both cases below are recorded rather than repaired, because only
+   * the league's owner can say what the source actually meant.
+   */
+  const scoringAmbiguityWarnings: ImportWarningRecord[] = []
+  if (scoringPresetWasInferred(normalized)) {
+    scoringAmbiguityWarnings.push({
+      code: 'scoring_preset_inferred',
+      message: `Source reported scoring format "${
+        normalized.scoring?.scoring_format ?? normalized.league.scoring ?? '(none)'
+      }", which did not match a known preset — defaulted to half-PPR. Confirm in League Settings before trusting valuations.`,
+      severity: 'warn',
+      metadata: {
+        rawFormat: String(normalized.scoring?.scoring_format ?? normalized.league.scoring ?? ''),
+        assumedTemplateId: scoringPresetId,
+      },
+    })
+  }
+  if (scoringCollisions.length > 0) {
+    scoringAmbiguityWarnings.push({
+      code: 'scoring_rule_collision',
+      message: `The source sent conflicting values for the same rule key: ${[
+        ...new Set(scoringCollisions),
+      ].join(', ')}. Only one value could be kept in the compatibility map; confirm these in League Settings.`,
+      severity: 'warn',
+      metadata: { statKeys: [...new Set(scoringCollisions)] },
+    })
+  }
+  /*
+   * The flat map cannot carry ranges, thresholds, units, rounding or a category/roto mode.
+   * That loss is a property of THIS league's rules, so it is surfaced rather than absorbed —
+   * a consumer still reading the map is entitled to know what it is missing.
+   */
+  for (const loss of projectionLoss) {
+    scoringAmbiguityWarnings.push({
+      code: 'scoring_projection_lossy',
+      message: loss,
+      severity: 'info',
+    })
+  }
+
+  const warnings = [
+    ...inferred.warnings,
+    ...coverageWarnings,
+    ...fetchWarnings,
+    ...scoringAmbiguityWarnings,
+  ]
 
   const conceptResolved = normalizeConceptToFormat(inferred.concept)
 

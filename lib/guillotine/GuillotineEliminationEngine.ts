@@ -327,10 +327,58 @@ export async function runElimination(input: RunEliminationInput): Promise<Guillo
      * be a guess. The count is captured instead, so a no-match is visible in the result and in the
      * log rather than being indistinguishable from success.
      */
+    /*
+     * 🛑 ELIMINATION IS NOT ARCHIVAL, AND THIS WRITER IS WHY THE TWO GOT CONFUSED.
+     *
+     * A guillotined team is still one of the league's franchises: it keeps its history, its
+     * standings row, its transactions and every identifier a later join needs. It is out of the
+     * COMPETITION, which is a third axis — so `eliminatedAt` carries it and `lifecycleState`
+     * stays CURRENT. Writing ARCHIVED here would delete a live team from its own league's
+     * counts, which is the precise failure this batch exists to undo.
+     *
+     * `managerKind: 'VACANT'` follows the claim being cleared on the two lines above: the seat
+     * genuinely has nobody in it after an elimination.
+     *
+     * ⚠ THE `where` KEY IS STILL WRONG AND IS STILL NOT CHANGED HERE. `externalId` holds a slot
+     * number for provider-imported leagues and a `Roster.id` uuid for canonically created ones
+     * (`createCanonicalLeagueInTransaction` writes `roster.id`;
+     * `SleeperLeagueCreationBootstrapService` writes `r.source_team_id`), so `rosterId` — a uuid
+     * — matches in one id space and not the other. Two readings imply opposite fixes and neither
+     * is provable from this engine, so the key is reported as a separate blocker rather than
+     * guessed. Consequence to keep in mind: on the leagues where it matches nothing, these new
+     * fields are written to zero rows exactly as `isOrphan` already was. The count below is what
+     * makes that visible. Measured 2026-09-10 against production: this writer's signature matches
+     * ZERO of 3,419 rows, so it has never successfully fired.
+     *
+     * 🛑 THIS BLOCKER HAS A DOWNSTREAM CONSUMER, AND FIXING THE KEY FIRST BREAKS IT SILENTLY.
+     *
+     * `lib/decision-os/value-v2/redraftWindowServerAdapter.ts` reaches a LeagueTeam only by
+     * `claimedByUserId` — and the update below NULLS that column. Its contract says an eliminated
+     * team still resolves (a knocked-out franchise has a real record and a real roster, and
+     * "rebuilding" is the right verdict), but once elimination actually fires there is no claim
+     * left to join on, so the adapter simply stops finding those users. No error, no gap, no
+     * failing test: the team is just absent.
+     *
+     * That is invisible today ONLY because the key matches nothing. Repairing the key without
+     * first deciding between:
+     *
+     *   (a) the adapter gains a fallback identity path, or
+     *   (b) this writer stops nulling `claimedByUserId` on elimination
+     *
+     * turns a dormant defect into a live one. Decide (a) or (b) BEFORE the id-space fix lands —
+     * the ordering is the whole risk, not either change on its own.
+     */
     const unclaimed = await prisma.leagueTeam
       .updateMany({
         where: { leagueId: input.leagueId, externalId: rosterId },
-        data: { claimedByUserId: null, platformUserId: null, isOrphan: true },
+        data: {
+          claimedByUserId: null,
+          platformUserId: null,
+          isOrphan: true,
+          lifecycleState: 'CURRENT',
+          managerKind: 'VACANT',
+          eliminatedAt: new Date(),
+        },
       })
       .catch(() => ({ count: 0 }))
     if (unclaimed.count === 0) {

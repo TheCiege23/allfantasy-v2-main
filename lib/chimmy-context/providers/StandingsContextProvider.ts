@@ -56,6 +56,7 @@ export class StandingsContextProvider
 
       const teams = await prisma.leagueTeam
         .findMany({
+          /* Standings rows are built straight from this list — a vacant seat is in the standings. */
           where: { leagueId: identity.leagueId },
           select: {
             id: true,

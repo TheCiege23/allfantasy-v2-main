@@ -8092,6 +8092,32 @@ model SpecialtyPhaseState {
   @@map("specialty_phase_state")
 }
 
+/// Current/history axis for a LeagueTeam.
+///
+/// 🛑 UNKNOWN IS A REAL STATE, NOT A PLACEHOLDER. Every row that predates this enum is UNKNOWN
+/// because nothing has classified it, and the two ways to "clean that up" are both wrong:
+/// defaulting to CURRENT hides a departed team on live surfaces, and defaulting to ARCHIVED hides
+/// a live franchise from its own league. A reader that must include UNKNOWN to avoid hiding a
+/// possibly-live franchise may do so under an explicitly named transitional selector — but it
+/// must not call UNKNOWN "current".
+enum LeagueTeamLifecycleState {
+  UNKNOWN
+  CURRENT
+  ARCHIVED
+}
+
+/// Who runs the franchise. Orthogonal to lifecycle: a VACANT seat is still CURRENT, and an
+/// ARCHIVED team can still record who used to run it.
+///
+/// 🛑 UNKNOWN, NOT HUMAN, IS THE DEFAULT. An unclassified row that reads HUMAN would be treated
+/// as a notification recipient — i.e. a guess that emails a real person.
+enum LeagueTeamManagerKind {
+  UNKNOWN
+  HUMAN
+  VACANT
+  AI
+}
+
 model LeagueTeam {
   id                   String                    @id @default(uuid())
   leagueId             String
@@ -8113,7 +8139,46 @@ model LeagueTeam {
   legacyRosterId       String?                   @unique
   divisionId           String?                   @db.VarChar(64)
   role                 String                    @default("member")
+
+  /// 🛑 `isOrphan` IS OVERLOADED AND IS NOT AN ARCHIVAL FLAG. THIRTEEN write sites set it and they
+  /// mean SEVEN different things: canonical league creation marks every OPEN, CLAIMABLE slot;
+  /// GuillotineEliminationEngine marks an ELIMINATED team; commissioner renewal marks an
+  /// ADMINISTRATIVELY REMOVED one and separately sweeps `orphan-*` placeholders; and Sleeper
+  /// reconciliation marks a team ABSENT FROM THE PROVIDER'S ROSTER SET.
+  ///
+  /// ⚠ THIS COMMENT SAID "FIVE WRITERS" AND WAS WRONG, because every count before it came from
+  /// grep — which cannot distinguish `data: { isOrphan: true }` from `select: { isOrphan: true }`.
+  /// Classifying each occurrence by its enclosing Prisma key found 13 mutations across 10 files.
+  /// The seventh meaning is the sharpest: BOTH Sleeper importers set `isOrphan = !ownerId` for a
+  /// seat the provider LISTS WITH NO MANAGER — a live franchise, the opposite lifecycle from the
+  /// reconciliation case above, in the same pipeline.
+  ///
+  /// It is RETAINED UNCHANGED for compatibility. Do not redefine it, do not delete it, and do not
+  /// derive lifecycle from it. The three axes below replace it, one meaning at a time.
   isOrphan             Boolean                   @default(false)
+
+  /// Current/history axis. UNKNOWN is the default ON PURPOSE: an existing row has not been
+  /// classified, and calling it CURRENT would be a guess that hides a departed team, while
+  /// calling it ARCHIVED would hide a live one. UNKNOWN must stay distinguishable from both.
+  lifecycleState       LeagueTeamLifecycleState  @default(UNKNOWN)
+
+  /// Manager axis. UNKNOWN is the default ON PURPOSE — an unclassified row must never silently
+  /// become HUMAN, which is what would put a departed manager back on a notification list.
+  managerKind          LeagueTeamManagerKind     @default(UNKNOWN)
+
+  /// Metadata FOR an ARCHIVED transition, never the discriminator itself: `archivedAt IS NULL`
+  /// does not mean current, because UNKNOWN rows also have no timestamp. Null for a row that was
+  /// archived before this column existed — do not invent a historical timestamp.
+  archivedAt           DateTime?
+  /// Why the archive transition happened, e.g. 'provider_absent' | 'admin_removed'. Free text so
+  /// a new reason does not need a migration; the writer is the authority on the vocabulary.
+  archiveReason        String?                   @db.VarChar(64)
+
+  /// Competition axis. Elimination is NOT archival: a guillotine or survivor team that is out of
+  /// the competition is still one of the league's current franchises, still in its history, and
+  /// still resolvable. Set by the elimination engine only.
+  eliminatedAt         DateTime?
+
   claimedByUserId      String?
   platformUserId       String?
   /// Sleeper is_owner for this teamâ€™s user; co-commissioners are AF-only via isCoCommissioner.

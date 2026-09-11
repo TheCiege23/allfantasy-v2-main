@@ -24,6 +24,7 @@ export async function GET(
   if (q.length < 1) return NextResponse.json([])
 
   const teams = await prisma.leagueTeam.findMany({
+    /* Keyed on the claim — `isOrphan` conflates vacancy, elimination, removal and departure. */
     where: { leagueId, claimedByUserId: { not: null } },
     select: {
       claimedByUserId: true,

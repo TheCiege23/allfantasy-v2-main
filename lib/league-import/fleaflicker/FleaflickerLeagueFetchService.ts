@@ -1,3 +1,4 @@
+import type { ResourceFetchStatus } from '@/lib/league-import/resourceStatus'
 import type {
   FleaflickerImportPayload,
   FleaflickerSport,
@@ -11,6 +12,27 @@ export class FleaflickerImportLeagueNotFoundError extends Error {
   constructor(message: string) {
     super(message)
     this.name = 'FleaflickerImportLeagueNotFoundError'
+  }
+}
+
+/**
+ * The provider was reachable-in-principle but did not answer — a rate limit, a 5xx, or a
+ * network failure.
+ *
+ * 🛑 DISTINCT FROM "NOT FOUND", AND THE COLLECTOR ACTS ON THE DIFFERENCE. Every non-404
+ * HTTP status used to be raised as `FleaflickerImportLeagueNotFoundError`, which the
+ * pipeline maps to `LEAGUE_NOT_FOUND` — and the collector treats that as "the league is
+ * gone: stop, skip, note it" rather than "retry later". So a Fleaflicker throttle or a
+ * five-minute outage read as a deleted league. This mirrors `SleeperImportUnavailableError`,
+ * which exists in this repo for exactly the same misdiagnosis.
+ */
+export class FleaflickerImportUnavailableError extends Error {
+  readonly status: number | null
+
+  constructor(message: string, status: number | null = null) {
+    super(message)
+    this.name = 'FleaflickerImportUnavailableError'
+    this.status = status
   }
 }
 
@@ -57,7 +79,14 @@ async function fetchJson<T>(url: string): Promise<T> {
     throw new FleaflickerImportLeagueNotFoundError('Fleaflicker league not found (404).')
   }
   if (!res.ok) {
-    throw new FleaflickerImportLeagueNotFoundError(`Fleaflicker API error (${res.status}).`)
+    /*
+     * ⚠ ONLY 404 MEANS THE LEAGUE IS NOT THERE. A 429 or 5xx is a transient provider
+     * condition and must stay retryable; reporting it as "not found" retires a live league.
+     */
+    throw new FleaflickerImportUnavailableError(
+      `Fleaflicker API error (${res.status}).`,
+      res.status,
+    )
   }
   return res.json() as Promise<T>
 }
@@ -71,10 +100,23 @@ export async function fetchFleaflickerLeagueForImport(sourceId: string): Promise
   const standingsUrl = `${API_BASE}/FetchLeagueStandings?sport=${encodeURIComponent(sport)}&league_id=${leagueId}&season=${season}`
   const rostersUrl = `${API_BASE}/FetchLeagueRosters?sport=${encodeURIComponent(sport)}&league_id=${leagueId}&season=${season}`
 
+  /*
+   * ⚠ THE ROSTER READ IS STILL ALLOWED TO FAIL WITHOUT SINKING THE IMPORT — a league with
+   * readable standings and an unreadable roster endpoint is worth importing. What changed is
+   * that the failure is now RECORDED rather than disguised as an empty league.
+   */
+  let rostersStatus: ResourceFetchStatus = 'fetched'
   const [standings, rosters] = await Promise.all([
     fetchJson<FleaflickerStandingsResponse>(standingsUrl),
-    fetchJson<FleaflickerRostersResponse>(rostersUrl).catch(() => ({ rosters: [] })),
+    fetchJson<FleaflickerRostersResponse>(rostersUrl).catch((e: unknown) => {
+      const status = (e as { status?: number } | undefined)?.status
+      rostersStatus = status === 401 || status === 403 ? 'unauthorized' : 'failed'
+      return { rosters: [] }
+    }),
   ])
+  if (rostersStatus === 'fetched' && (rosters.rosters ?? []).length === 0) {
+    rostersStatus = 'fetched_empty'
+  }
 
   if (!standings?.league?.id) {
     throw new FleaflickerImportLeagueNotFoundError('Fleaflicker response missing league object.')
@@ -85,5 +127,6 @@ export async function fetchFleaflickerLeagueForImport(sourceId: string): Promise
     season: standings.season ?? season,
     standings,
     rosters,
+    rostersStatus,
   }
 }

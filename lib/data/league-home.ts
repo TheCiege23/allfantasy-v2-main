@@ -16,6 +16,7 @@ import { attachPlayerMediaBatch } from '@/lib/player-media'
 import { getLeagueChatMessages } from '@/lib/league-chat/LeagueChatMessageService'
 import { getFormatIntroMetadata } from '@/lib/league/format-engine'
 import { resolveLeagueIntroFormatKey } from '@/lib/league/resolveLeagueIntroFormatKey'
+import { selectCurrentOrUnknown } from '@/lib/league-import/teamLifecycle'
 import type {
   LeagueActivityItem,
   LeagueBracketMatchup,
@@ -324,7 +325,7 @@ async function loadLeagueContext(leagueId: string, userId: string): Promise<Leag
   const access = await resolveLeagueAccess(leagueId, userId)
   if (!access?.isMember) return null
 
-  const [league, currentRoster, allRosters, leagueTeams] = await Promise.all([
+  const [league, currentRoster, allRosters, leagueTeamRows] = await Promise.all([
     prisma.league.findUnique({
       where: { id: leagueId },
       select: {
@@ -380,11 +381,31 @@ async function loadLeagueContext(leagueId: string, userId: string): Promise<Leag
         pointsFor: true,
         pointsAgainst: true,
         currentRank: true,
+        /* Selected so `selectCurrentOrUnknown` below can judge the row — see the note there. */
+        lifecycleState: true,
       },
     }),
   ])
 
   if (!league) return null
+
+  /*
+   * 🛑 THIS IS A STANDINGS TABLE, SO IT MUST SHOW THE LEAGUE AS IT IS NOW.
+   *
+   * Reconciliation ARCHIVES a team that vanishes from a complete authoritative response rather
+   * than deleting it (Batch A.1) — the history is worth keeping, but the row now persists where
+   * it previously disappeared. An unfiltered enumeration therefore ranks a team that is no
+   * longer in the league among the ones that are.
+   *
+   * ⚠ FILTERED HERE RATHER THAN IN THE `where`, because a sibling consumer needs the unfiltered
+   * array. `selectCurrentOrUnknown` is the single authority: it excludes only an explicit
+   * `ARCHIVED`, so a row not yet classified is kept rather than silently dropped.
+   *
+   * 🛑 `lifecycleState` MUST STAY IN THE SELECT ABOVE. An omitted column is `undefined`, which is
+   * not `'ARCHIVED'`, so every row would read as current and the filter would keep the departed
+   * seats it exists to remove — the same no-op `isOrphan` had here before it.
+   */
+  const leagueTeams = selectCurrentOrUnknown(leagueTeamRows)
 
   return {
     userId,

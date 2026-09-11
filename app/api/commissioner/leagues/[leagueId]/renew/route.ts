@@ -251,13 +251,54 @@ export async function POST(
   if (removeMemberIds.length > 0) {
     await prisma.leagueTeam.updateMany({
       where: { leagueId, id: { in: removeMemberIds }, isCommissioner: false },
-      data: { isOrphan: true, ownerName: 'Removed' },
+      /*
+       * A commissioner deliberately removing a member IS an archival event — one of only two
+       * writers in the whole codebase that genuinely meant what `isOrphan` was read to mean.
+       * `archiveReason` records WHICH of the five meanings put the row here, so the next
+       * reader never has to guess again.
+       *
+       * ⚠ `managerKind` IS DELIBERATELY NOT SET. Removal says the franchise left; it says
+       * nothing about who was running it, and a removed human is not thereby VACANT. Leaving
+       * the axis untouched keeps UNKNOWN honest instead of inventing a manager state.
+       */
+      data: {
+        isOrphan: true,
+        ownerName: 'Removed',
+        lifecycleState: 'ARCHIVED',
+        archivedAt: new Date(),
+        archiveReason: 'commissioner_removed_at_renewal',
+      },
     })
     changes.push({ field: 'Members Removed', oldValue: '', newValue: `${removeMemberIds.length} member(s)` })
   }
 
-  // ─── 3. LABEL existing orphans properly ───
-  // Any team without a real owner gets labeled as orphan
+  /*
+   * ─── 3. LABEL existing orphans properly ───
+   *
+   * 🛑 THIS SWEEP IS THE WRITER THAT CREATED THE AMBIGUITY, AND IT IS LEFT UNCLASSIFIED ON
+   * PURPOSE. Its `OR` collects four populations that land on OPPOSITE sides of the lifecycle
+   * axis and then stamps one flag across all of them:
+   *
+   *   { isOrphan: true }                            already-flagged rows — ANY of the seven
+   *                                                 meanings, including a live open slot
+   *   { ownerName: 'Removed' }                      administratively removed  → ARCHIVED
+   *   { ownerName:      startsWith 'orphan-' }      an AI/orphan-managed seat → CURRENT
+   *   { platformUserId: startsWith 'orphan-' }      likewise CURRENT — `isOrphanPlatformUserId`
+   *                                                 in `lib/orphan-ai-manager/orphanRosterResolver`
+   *                                                 is what reads this prefix back
+   *
+   * A single `lifecycleState` here would have to be wrong for at least two of those four. There
+   * is no per-row evidence available at this point in the request to split them — the sweep does
+   * not know which branch matched — so NOTHING is written to the new axes and the rows stay
+   * UNKNOWN, which is exactly what UNKNOWN is for.
+   *
+   * ⚠ DO NOT "FINISH" THIS SITE BY PICKING A STATE. Splitting it needs the four predicates run
+   * as separate statements with a reason each, and that is a behaviour change to a commissioner
+   * endpoint — out of scope for a corrective commit and listed as a follow-up instead.
+   *
+   * The write itself is a near no-op today (`isOrphan: true` onto rows mostly already true) and
+   * is kept only so the flag's meaning does not shift under the readers still consuming it.
+   */
   await prisma.leagueTeam.updateMany({
     where: {
       leagueId,

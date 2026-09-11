@@ -287,6 +287,15 @@ export async function createFantasyLeagueRoster(
     await linkDuesToRoster({ leagueId, userId, rosterId: roster.id, tx: tx as Prisma.TransactionClient })
 
     if (league.platform === 'manual') {
+      /*
+       * 🛑 CAPACITY IS SEATS, AND A VACANT SEAT IS A SEAT.
+       *
+       * This count decides whether a joining manager gets a team row at all. An earlier revision
+       * excluded `isOrphan`, which counts zero in a league whose seats are all still open — so it
+       * would have created team rows past `leagueSize`. Whether a DEPARTED seat should still hold
+       * capacity is a real question, and it needs the lifecycle axis to answer; it cannot be
+       * answered by a flag that also means "vacant".
+       */
       const manualTeamCount = await tx.leagueTeam.count({
         where: { leagueId },
       })

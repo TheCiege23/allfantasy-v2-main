@@ -14,6 +14,7 @@ import { prisma } from '@/lib/prisma'
 import type { NormalizedImportResult } from '@/lib/league-import/types'
 import type { RunResult, SyncStore, SyncScope } from '@/lib/import-os/runner'
 import { applySleeperScopeToLeague } from './applySleeperLeagueSync'
+import { ScopeIncompleteError } from './scopeIncomplete'
 import { resolveLeagueIdsForConnection } from './enumerate'
 import type { ApplyScopeResult, SleeperSyncConnection, SleeperSyncScope } from './types'
 
@@ -81,7 +82,14 @@ export function createPrismaSleeperSyncStore(deps: {
     ): Promise<{ imported: number; unchanged: number; rejected: number }> {
       const normalized = await deps.loadNormalized()
       const leagues = await resolveLeagueIdsForConnection(connection)
-      let agg: ApplyScopeResult = { imported: 0, unchanged: 0, rejected: 0, removed: 0, notes: [] }
+      let agg: ApplyScopeResult = {
+        imported: 0,
+        unchanged: 0,
+        rejected: 0,
+        removed: 0,
+        notes: [],
+        incompleteReasons: [],
+      }
       for (const l of leagues) {
         const r = await applySleeperScopeToLeague({
           leagueId: l.id,
@@ -95,10 +103,31 @@ export function createPrismaSleeperSyncStore(deps: {
           rejected: agg.rejected + r.rejected,
           removed: agg.removed + r.removed,
           notes: [...agg.notes, ...r.notes],
+          incompleteReasons: [...(agg.incompleteReasons ?? []), ...(r.incompleteReasons ?? [])],
         }
       }
       removed += agg.removed
       for (const n of agg.notes) notes.push(`[${scope}] ${n}`)
+
+      /*
+       * 🛑 THROW AFTER THE WRITES, NEVER BEFORE — IMP-02/04.
+       *
+       * The rows above are good and are already persisted: raw league columns, standings,
+       * every team whose fetch succeeded, and last-good data for every team whose fetch did
+       * not. Throwing here does not roll any of that back. What it does is stop the runner
+       * marking this scope complete, which is the only thing that keeps
+       * `lastSuccessfulSyncAt` from advancing over a league whose rules or rosters are
+       * demonstrably not current.
+       *
+       * ⚠ IT IS DURABLE, SO THE RUNNER WILL NOT RETRY IT. Re-running the same apply against
+       * the same payload produces the same incompleteness; the condition is in the data, not
+       * in the network. Unrelated scopes are unaffected — the runner continues to the next one.
+       */
+      const reasons = agg.incompleteReasons ?? []
+      if (reasons.length > 0) {
+        throw new ScopeIncompleteError(scope, reasons)
+      }
+
       return { imported: agg.imported, unchanged: agg.unchanged, rejected: agg.rejected }
     },
 

@@ -4,6 +4,7 @@ import type {
   SleeperUserRaw,
 } from '@/lib/league-import/adapters/sleeper/types';
 import { normalizeToSupportedSport } from '@/lib/sport-scope';
+import { withRosterObservation } from '@/lib/league-import/rosterPayload';
 import {
   isLeagueTombstoned,
   LeagueDeletedByUserError,
@@ -521,12 +522,32 @@ export async function syncSleeperLeague(
       ...(platformUserId !== ownerId ? { app_user_id: platformUserId } : {}),
     };
 
+    /*
+     * Batch A.1 item 2 — stamp the observation on the LEGACY path too.
+     *
+     * ⚠ THIS PATH IS ALREADY FAIL-CLOSED AT THE FETCH, AND THAT IS WHY THE STATUS IS ALWAYS
+     * AUTHORITATIVE HERE. `if (!rostersRes.ok) throw` above aborts the whole sync before any
+     * write, so there is no way to reach this line with an unobserved roster — unlike Yahoo's
+     * per-team `allSettled` or Fleaflicker's `.catch(() => ({ rosters: [] }))`, which is where
+     * the false-empty writes actually came from. Sleeper serves every roster in one response.
+     *
+     * It is stamped anyway rather than left blank, because "no observation" and "observed and
+     * genuinely empty" are exactly the two things this batch exists to separate, and a legacy
+     * writer that omits the record makes its rows indistinguishable from pre-batch rows for
+     * every reader that asks. `fetched_empty` for a real pre-draft roster is a fact worth
+     * recording.
+     */
+    const playerDataWithMeta = withRosterObservation(
+      playerData,
+      players.length > 0 ? 'fetched' : 'fetched_empty',
+    );
+
     if (existingUnifiedRoster) {
       await prisma.roster.update({
         where: { id: existingUnifiedRoster.id },
         data: {
           platformUserId,
-          playerData: playerData as any,
+          playerData: playerDataWithMeta as any,
           faabRemaining: roster.settings?.waiver_budget_used != null
             ? waiverBudget - roster.settings.waiver_budget_used
             : null,
@@ -538,7 +559,7 @@ export async function syncSleeperLeague(
         data: {
           leagueId: unifiedLeague.id,
           platformUserId,
-          playerData: playerData as any,
+          playerData: playerDataWithMeta as any,
           faabRemaining: roster.settings?.waiver_budget_used != null
             ? waiverBudget - roster.settings.waiver_budget_used
             : null,

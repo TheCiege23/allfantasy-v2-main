@@ -6,6 +6,8 @@ import { prisma } from '@/lib/prisma'
 export async function getLeagueMemberUserIds(leagueId: string): Promise<string[]> {
   const [teams, league] = await Promise.all([
     prisma.leagueTeam.findMany({
+      /* Keyed on the claim. Suppressing a DEPARTED claimer needs the lifecycle axis; the
+       * `isOrphan` flag cannot say it, because it also means vacant, eliminated and removed. */
       where: { leagueId, claimedByUserId: { not: null } },
       select: { claimedByUserId: true },
     }),

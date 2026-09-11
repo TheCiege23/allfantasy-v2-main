@@ -1,6 +1,7 @@
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
+import { resolveTeamPerformanceOpponent } from '@/lib/league-import/teamPerformanceOpponent'
 
 const SLEEPER = 'https://api.sleeper.app/v1'
 
@@ -107,24 +108,56 @@ export async function fetchNativeOpponentMatchup(args: {
       return { opponentLabel: null, matchupDifficultyNote: null, notes }
     }
 
+    /*
+     * The PA ranking covers every CURRENT franchise. A vacant seat plays real matchups and
+     * carries real points-against, so removing it would both shrink the denominator and drop a
+     * legitimate opponent from the ordering.
+     *
+     * ⚠ AN EARLIER REVISION FILTERED `isOrphan` HERE. That flag marks canonical open slots, so
+     * in a league with open seats it silently removed live opponents from the ranking. Excluding
+     * a DEPARTED team is a different question and needs the lifecycle axis.
+     *
+     * `isOrphan` remains in the select only so the column is available to a future lifecycle
+     * migration; nothing reads it here today.
+     */
     const teams = await prisma.leagueTeam.findMany({
       where: { leagueId: args.leagueId },
-      select: { id: true, teamName: true, pointsAgainst: true, pointsFor: true, wins: true, losses: true },
+      select: {
+        id: true,
+        teamName: true,
+        pointsAgainst: true,
+        pointsFor: true,
+        wins: true,
+        losses: true,
+        isOrphan: true,
+      },
     })
     if (teams.length < 2) {
       return { opponentLabel: perf.opponent, matchupDifficultyNote: null, notes }
     }
 
     const paSorted = [...teams].sort((a, b) => a.pointsAgainst - b.pointsAgainst)
-    const oppTeam = teams.find(
-      (t) =>
-        perf.opponent &&
-        (t.teamName?.toLowerCase().includes(perf.opponent.toLowerCase()) ||
-          perf.opponent.toLowerCase().includes((t.teamName ?? '').toLowerCase())),
-    )
+
+    /*
+     * 🛑 RESOLVE BY THE PRODUCER'S CONTRACT — `TeamPerformance.opponent` IS A `LeagueTeam.id`.
+     *
+     * This was a bidirectional substring match on `teamName`, which could never match the UUID
+     * the importer actually stores, and whose `(t.teamName ?? '')` arm matched EVERY opponent
+     * for any seat with an empty name. See `teamPerformanceOpponent.ts` for the measurement.
+     * Resolved against the unfiltered array on purpose: a past week can name a departed team.
+     */
+    const { team: oppTeam, via } = resolveTeamPerformanceOpponent(perf.opponent, teams)
+    if (!oppTeam) {
+      notes.push(
+        `Opponent "${perf.opponent}" in team_performances did not match any team in this league, so no matchup-difficulty note is offered.`,
+      )
+    } else if (via === 'legacy_name') {
+      notes.push('Opponent resolved by name — this row predates the team-id opponent contract.')
+    }
 
     let matchupDifficultyNote: string | null = null
     if (oppTeam) {
+      /* -1 + 1 = 0 when the opponent is itself archived, and `rank > 0` below drops the note. */
       const rank = paSorted.findIndex((t) => t.id === oppTeam.id) + 1
       const n = teams.length
       if (rank > 0 && n > 1) {

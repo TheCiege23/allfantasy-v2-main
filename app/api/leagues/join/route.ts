@@ -294,6 +294,10 @@ export async function POST(req: NextRequest) {
       .catch(() => null)
 
     if (league.platform === 'manual') {
+      /*
+       * 🛑 CAPACITY MUST COUNT CURRENT SEATS ONLY. An archived team counting toward `leagueSize`
+       * would block a legitimate join against a seat nobody occupies.
+       */
       const manualTeamCount = await tx.leagueTeam.count({
         where: { leagueId: result.leagueId },
       })
@@ -386,9 +390,17 @@ export async function GET(req: NextRequest) {
 
   // Claim progress — how many of the league's teams have a real AF member
   // behind them. Powers the "N of M teams claimed" bar next to the invite link.
+  /*
+   * ⚠ THE DENOMINATOR IS EVERY CURRENT FRANCHISE, VACANT SEATS INCLUDED — that is the whole
+   * point of the bar. An earlier revision filtered `isOrphan` here, which in a freshly created
+   * 12-team league (where canonical creation marks all eleven open slots `isOrphan: true`)
+   * reported "1 of 1 claimed" for a league that was 1/12 claimed.
+   */
   const [teamCount, claimedCount] = await Promise.all([
     prisma.leagueTeam.count({ where: { leagueId } }).catch(() => 0),
-    prisma.leagueTeam.count({ where: { leagueId, claimedByUserId: { not: null } } }).catch(() => 0),
+    prisma.leagueTeam
+      .count({ where: { leagueId, claimedByUserId: { not: null } } })
+      .catch(() => 0),
   ])
 
   return NextResponse.json({

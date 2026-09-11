@@ -237,12 +237,14 @@ export async function getCommissionerHub(input: {
     prisma.leagueTeam
       .findMany({
         where: { leagueId },
+        /* Selected for the coming lifecycle migration; NOT read as a filter here — the flag also marks vacant, eliminated and admin-removed seats. */
         select: {
           teamName: true,
           ownerName: true,
           claimedByUserId: true,
           isCommissioner: true,
           isCoCommissioner: true,
+          isOrphan: true,
         },
       })
       .catch(() => []),
@@ -255,6 +257,14 @@ export async function getCommissionerHub(input: {
     prisma.roster.count({ where: { leagueId } }).catch(() => 0),
   ])
 
+  /*
+   * `teamCount` is every CURRENT franchise — a vacant seat is one of the league's teams, and in a
+   * canonically created league every unclaimed slot carries `isOrphan: true`. Filtering that
+   * flag reported a brand-new 12-team league as having one team.
+   *
+   * `claimed` is a different question and is answered by the claim itself, which is why the two
+   * lines read the same array through different predicates.
+   */
   const teamCount = teams.length || rosterCount
 
   /*

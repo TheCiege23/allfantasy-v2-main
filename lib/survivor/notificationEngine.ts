@@ -43,6 +43,7 @@ async function resolveRecipientUserIds(
   if (recipientUserId) return [recipientUserId]
   if (!recipientRole || recipientRole === 'all') {
     const teams = await prisma.leagueTeam.findMany({
+      /* Keyed on the claim — see leagueMemberIds: `isOrphan` cannot express "departed". */
       where: { leagueId, claimedByUserId: { not: null } },
       select: { claimedByUserId: true },
     })

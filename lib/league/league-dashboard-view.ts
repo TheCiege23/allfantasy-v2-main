@@ -12,6 +12,7 @@ import type {
 } from '@/app/league/[leagueId]/league-dashboard-types'
 import { getLeagueScoringConfig } from '@/lib/scoring-defaults/LeagueScoringConfigResolver'
 import { buildLeagueScoringDashboardSummary } from '@/lib/league/league-scoring-dashboard'
+import { CURRENT_FRANCHISES_INCLUDING_UNKNOWN } from '@/lib/league-import/teamLifecycle'
 
 function weekFromSettings(settings: unknown): number | null {
   if (!settings || typeof settings !== 'object' || Array.isArray(settings)) return null
@@ -212,8 +213,9 @@ async function loadStandingsPresentation(league: League): Promise<StandingsPrese
   }
 
   const divisions = await listDivisionsByLeague(leagueId, { sport: String(league.sport) }).catch(() => [])
+  /* A count decides the dashboard's display mode; an archived team must not tip it. */
   const teamsWithDivision = await prisma.leagueTeam.count({
-    where: { leagueId, divisionId: { not: null } },
+    where: { ...CURRENT_FRANCHISES_INCLUDING_UNKNOWN, leagueId, divisionId: { not: null } },
   }).catch(() => 0)
   if (divisions.length > 0 && teamsWithDivision > 0) {
     return {

@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma'
 import { calculateAndSaveRank } from '@/lib/rank/calculateRank'
 import { deriveImportStatsFromNormalized } from '@/lib/rank/deriveImportStatsFromNormalized'
 import { SETTINGS_SNAPSHOT_VERSION } from '@/lib/league-contract/types'
+import { applyUserOwnedLayering, effectiveRulesVersion } from '@/lib/league-import/settingsLayering'
 import { readBackfillOutcome, backfillSettingsPatch } from '@/lib/league-import/backfillOutcome'
 import { resolveSeasonPlacement } from '@/lib/league-import/seasonPlacement'
 import { IMPORT_COVERAGE_SETTINGS_KEY } from '@/lib/league-import/importCoverageSummary'
@@ -336,6 +337,97 @@ export function mergeCanonicalBundleIntoLeagueSettingsJson(
   }
 }
 
+/**
+ * Republish the canonical settings slices on a SCHEDULED REFRESH — IMP-02.
+ *
+ * 🛑 THE DEFECT: initial import merged a full `CanonicalImportBundle` into `League.settings`,
+ * but the scheduled `league_state` writer merged only `buildImportedLeagueSettings(normalized)`
+ * and then RE-ASSERTED `importCanonical` and `snapshotVersion` from the existing row. So the
+ * raw imported values tracked the source while the canonical slices — `scoringSettings`,
+ * `rosterSettings`, `waiverSettings`, `playoffSettings`, `conceptRules` — stayed frozen at
+ * import time, forever. Commissioner rule intelligence reads exactly those slices.
+ *
+ * The visible result is the one the audit names: a league whose roster is current and whose
+ * SCORING is whatever it was on import day. Nothing errors; the numbers are simply wrong, and
+ * they get more wrong the longer the league is connected.
+ *
+ * ⚠ USER-OWNED KEYS GO THROUGH LAYERING, NOT THROUGH AN EXCLUSION LIST. An earlier version
+ * simply skipped `visualTheme`/`mediaSettings` so a refresh could not stomp a user's choice.
+ * That protected the override and broke everything else about the field: provider branding
+ * could never update, and clearing an override revealed nothing because the provider value
+ * had never been stored. `applyUserOwnedLayering` keeps both facts and resolves them.
+ *
+ * ⚠ AND THE RESULT CARRIES A CONTENT HASH, NOT A TIMESTAMP. `republishedAt` alone was
+ * unusable — it changes on every tick, so a consumer keying off it recomputes constantly or
+ * ignores it, and every consumer ignored it. `effectiveRulesVersion` changes only when the
+ * rules actually change.
+ */
+export function republishCanonicalSettingsForRefresh(
+  existingSettings: Record<string, unknown>,
+  freshSettings: Record<string, unknown>,
+  bundle: CanonicalImportBundle,
+): Record<string, unknown> {
+  const snap = bundle.settingsSnapshot
+  const merged: Record<string, unknown> = { ...existingSettings, ...freshSettings }
+
+  /* Source-derived: the host league owns these, so a refresh must reflect what it now says. */
+  merged.snapshotVersion = SETTINGS_SNAPSHOT_VERSION
+  if (snap.rosterSettings !== undefined) merged.rosterSettings = snap.rosterSettings
+  if (snap.scoringSettings !== undefined) merged.scoringSettings = snap.scoringSettings
+  if (snap.draftSettings !== undefined) merged.draftSettings = snap.draftSettings
+  if (snap.waiverSettings !== undefined) merged.waiverSettings = snap.waiverSettings
+  if (snap.playoffSettings !== undefined) merged.playoffSettings = snap.playoffSettings
+  if (snap.conceptRules !== undefined) merged.conceptRules = snap.conceptRules
+
+  /*
+   * User-owned: resolved through override > source > default, with BOTH layers retained so
+   * the provider's current value is there to be revealed if the override is ever cleared.
+   */
+  applyUserOwnedLayering(merged, existingSettings, {
+    visualTheme: snap.visualTheme ?? null,
+    mediaSettings: snap.mediaSettings ?? null,
+  })
+
+  const rulesVersion = effectiveRulesVersion({
+    scoringSettings: merged.scoringSettings,
+    rosterSettings: merged.rosterSettings,
+    waiverSettings: merged.waiverSettings,
+    playoffSettings: merged.playoffSettings,
+    draftSettings: merged.draftSettings,
+    conceptRules: merged.conceptRules,
+  })
+
+  const priorCanonical =
+    existingSettings.importCanonical && typeof existingSettings.importCanonical === 'object'
+      ? (existingSettings.importCanonical as Record<string, unknown>)
+      : {}
+  const priorVersion = typeof priorCanonical.rulesVersion === 'string' ? priorCanonical.rulesVersion : null
+
+  merged.importCanonical = {
+    presetKey: bundle.presetKey,
+    scoringPresetId: bundle.scoringPresetId,
+    draftType: bundle.draftType,
+    inferredConcept: bundle.inferredConcept,
+    /*
+     * The invalidation signal. A consumer caches against THIS; when it differs from what the
+     * consumer last saw, its derived artifacts are stale. Unchanged rules produce an
+     * unchanged hash, so a quiet refresh triggers no recomputation anywhere.
+     */
+    rulesVersion,
+    /*
+     * When the rules last actually CHANGED — not when they were last republished. A
+     * "rules updated" surface wants this; a freshness badge wants `lastSuccessfulSyncAt`.
+     */
+    rulesChangedAt:
+      priorVersion && priorVersion === rulesVersion
+        ? (priorCanonical.rulesChangedAt ?? null)
+        : new Date().toISOString(),
+    republishedAt: new Date().toISOString(),
+  }
+
+  return merged
+}
+
 function mergeCanonicalBundleIntoSettings(
   normalized: NormalizedImportResult,
   bundle: CanonicalImportBundle,
@@ -562,7 +654,18 @@ export async function claimExistingLeagueForMember(args: {
     await prisma.$transaction([
       (prisma as any).leagueTeam.update({
         where: { id: team.id },
-        data: { claimedByUserId: userId, isOrphan: false },
+        /*
+         * A confirmed manager claim on an imported league — human, and current by the act of
+         * claiming. ⚠ The `as any` above means TypeScript checks NOTHING in this object, these
+         * two fields included; they are correct against the schema by inspection, not by the
+         * compiler. That cast predates this change and is left alone deliberately.
+         */
+        data: {
+          claimedByUserId: userId,
+          isOrphan: false,
+          lifecycleState: 'CURRENT',
+          managerKind: 'HUMAN',
+        },
       }),
       (prisma as any).leagueManagerClaim.create({
         data: {

@@ -4,6 +4,7 @@
  */
 
 import type { SettingsSnapshot } from '@/lib/league-contract/types'
+import type { ResourceFetchStatus } from '@/lib/league-import/resourceStatus'
 
 export const IMPORT_PROVIDERS = ['sleeper', 'espn', 'yahoo', 'fantrax', 'mfl', 'fleaflicker'] as const
 export type ImportProvider = (typeof IMPORT_PROVIDERS)[number]
@@ -142,7 +143,36 @@ export interface NormalizedRoster {
   taxi_ids?: string[]
   faab_remaining?: number | null
   waiver_priority?: number | null
+  /**
+   * Whether this team's player lists are an OBSERVATION or a PLACEHOLDER — IMP-04.
+   *
+   * 🛑 AN EMPTY ARRAY ANSWERS TWO COMPLETELY DIFFERENT QUESTIONS AND THE WRITER CANNOT
+   * TELL THEM APART WITHOUT THIS. `fetched`/`fetched_empty` mean the provider was asked
+   * and answered, so the lists may replace stored rows. Every other state means these
+   * arrays are filler — the team's last-good roster must be preserved, and the league must
+   * not be reported as fully current.
+   *
+   * ⚠ ASK `isAuthoritativeStatus`, NEVER COMPARE THE STRING. The rule about which states
+   * may overwrite lives in exactly one place on purpose; several writers each deciding what
+   * an empty array means is the bug this field exists to end.
+   *
+   * ⚠ OPTIONAL, AND ABSENT MEANS AUTHORITATIVE. Adapters with no partial-failure mode do
+   * not set it, and defaulting the other way would make every one of them look unreliable —
+   * which trains readers to ignore the field.
+   */
+  fetch_status?: ResourceFetchStatus
+  /**
+   * When this team's roster was last actually OBSERVED — ISO 8601, absent when unknown.
+   *
+   * On a preserved write this deliberately stays at the older successful read rather than
+   * advancing to now, so a "last updated" badge shows when the data was true rather than
+   * when we last tried to refresh it.
+   */
+  observed_at?: string | null
 }
+
+/* Re-exported so a consumer of a NormalizedRoster does not need a second import to read it. */
+export type { ResourceFetchStatus } from '@/lib/league-import/resourceStatus'
 
 /** Normalized scoring (maps to AF scoring template or settings). */
 export interface NormalizedScoring {
@@ -157,7 +187,27 @@ export interface NormalizedScoring {
    * from a measured one.
    */
   scoring_format: string | null
-  rules: Array<{ stat_key: string; points_value: number; multiplier?: number }>
+  /**
+   * ⚠ `positions` IS WHAT KEEPS A POSITION-DEPENDENT RULE FROM COLLAPSING. MFL prices the
+   * same stat differently by position (a reception is 0.5 for RB, 1.0 for WR, 1.5 for TE),
+   * and a rule list keyed only on `stat_key` cannot express that — the canonical normalizer
+   * had no choice but to let the last rule win, silently repricing every RB and WR.
+   * Absent or empty means the rule applies to every position, which is the common case.
+   */
+  rules: Array<{
+    stat_key: string
+    points_value: number
+    multiplier?: number
+    positions?: string[]
+    /**
+     * The provider's own human-readable name for the rule, when it shipped one.
+     *
+     * ⚠ MFL CANNOT BE RESOLVED WITHOUT THIS. `resolveProviderScoringStatKey` maps an MFL rule
+     * by NAME, never by code — the alias table records that there is no evidence base for a
+     * code mapping — so dropping the name guarantees every MFL rule stays unresolved.
+     */
+    stat_name?: string | null
+  }>
   raw?: Record<string, unknown>
 }
 

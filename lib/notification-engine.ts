@@ -14,6 +14,7 @@ import 'server-only'
 import { dispatchNotification } from '@/lib/notifications/NotificationDispatcher'
 import { prisma } from '@/lib/prisma'
 import type { NotificationCategoryId } from '@/lib/notification-settings/types'
+import { HUMAN_RECIPIENTS_INCLUDING_UNKNOWN } from '@/lib/league-import/teamLifecycle'
 
 // ── Event Types ──
 
@@ -171,13 +172,29 @@ async function filterUsersInCooldown(
 
 async function resolveLeagueUserIds(leagueId: string): Promise<string[]> {
   try {
+    /*
+     * 🛑 A DEPARTED TEAM'S CLAIMER IS NOT A LEAGUE RECIPIENT.
+     *
+     * Reconciliation ARCHIVES a team that vanishes from a complete authoritative response rather
+     * than deleting it (Batch A.1), so the row — and its `claimedByUserId` — now persists where it
+     * previously disappeared. Unfiltered, this keeps mailing someone about a league they are no
+     * longer in, which is the most visible possible form of the leak.
+     *
+     * ⚠ THE OLD PREDICATE SUPPRESSED LIVE MANAGERS AS WELL AS DEPARTED ONES. It filtered on
+     * `isOrphan`, which is true for seven unrelated reasons — a vacant seat at creation, an
+     * eliminated team, an admin removal, a provider seat with no manager. A CLAIMED row carrying
+     * that flag is a real person who gets mail about their own league, and this dropped them. The
+     * lifecycle axis suppresses departure and nothing else; `claimedByUserId` remains the identity.
+     *
+     * This is the one selector built for exactly this shape — a recipient set keyed on the AF
+     * claim. `lib/league-events/publisher.ts` keys on `platformUserId` instead and deliberately
+     * does NOT use it; see the note there.
+     */
     const teams = await prisma.leagueTeam.findMany({
-      where: { leagueId },
+      where: { ...HUMAN_RECIPIENTS_INCLUDING_UNKNOWN, leagueId },
       select: { claimedByUserId: true },
     })
-    return teams
-      .map((t) => t.claimedByUserId)
-      .filter((id): id is string => !!id)
+    return teams.map((t) => t.claimedByUserId).filter((id): id is string => !!id)
   } catch {
     return []
   }

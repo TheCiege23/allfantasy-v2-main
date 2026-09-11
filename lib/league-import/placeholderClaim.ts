@@ -211,6 +211,9 @@ export async function claimPlaceholderRoster(args: {
         platformUserId: candidate.appUserId,
         claimedByUserId: candidate.appUserId,
         isOrphan: false,
+        /* A placeholder seat adopted by a real person: still current, now human-run. */
+        lifecycleState: 'CURRENT',
+        managerKind: 'HUMAN',
       },
     })
     await tx.leagueEntrySlot.updateMany({

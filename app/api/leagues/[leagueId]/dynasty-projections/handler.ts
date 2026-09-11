@@ -34,6 +34,8 @@ type TeamLite = {
   losses: number
   pointsFor: number
   aiPowerScore: number | null
+  /** Carried for the coming lifecycle migration. Not a filter: the flag is overloaded. */
+  isOrphan: boolean
 }
 
 type RosterLite = {
@@ -318,7 +320,15 @@ async function resolveLeagueByAnyId(leagueId: string): Promise<LeagueLite | null
   })
 }
 
-async function buildTeamInputsFromLeague(params: {
+/**
+ * Exported so the persistence-boundary test can assert on what reaches the persisting generator.
+ *
+ * ⚠ IT NO LONGER FILTERS. An earlier revision excluded `isOrphan` rows from the targets, on the
+ * belief that the flag meant "archived". It does not: canonical league creation sets it on every
+ * OPEN, CLAIMABLE slot, so that filter gave a brand-new 12-team league one projection target
+ * instead of twelve. Restoring a target filter needs the lifecycle axis, not this flag.
+ */
+export async function buildTeamInputsFromLeague(params: {
   leagueId: string
   sportOverride?: string
   seasonOverride?: number
@@ -345,6 +355,8 @@ async function buildTeamInputsFromLeague(params: {
         losses: true,
         pointsFor: true,
         aiPowerScore: true,
+        /* Selected for the coming lifecycle migration; NOT read as a filter here — the flag also marks vacant, eliminated and admin-removed seats. */
+        isOrphan: true,
       },
     }),
     prisma.roster.findMany({
@@ -362,6 +374,19 @@ async function buildTeamInputsFromLeague(params: {
     throw new Error('No league teams found for dynasty projection generation')
   }
 
+  /*
+   * 🛑 EVERY CURRENT FRANCHISE IS A PROJECTION TARGET, VACANT SEATS INCLUDED.
+   *
+   * A vacant seat still holds a roster and a valuation, and it is still part of the league's
+   * size. An earlier revision filtered `isOrphan` here on the belief it meant "archived"; in a
+   * canonically created league that flag marks every OPEN slot, so the filter reduced a 12-team
+   * league to one target and priced `teamCount` at 1.
+   *
+   * Excluding a genuinely DEPARTED seat is still the right goal — it just needs the lifecycle
+   * axis, which is a separate transition from vacancy. `buildFuturePicksByTeam` below must in
+   * any case see every original team, or a pick a LIVE team acquired from a departed manager
+   * silently disappears from the ledger.
+   */
   const targetTeams = params.teamIdFilter
     ? teams.filter((t) => t.externalId === params.teamIdFilter || t.id === params.teamIdFilter)
     : teams
@@ -481,6 +506,7 @@ async function buildTeamInputsFromLeague(params: {
         isDynasty: league.isDynasty ?? true,
         isSuperFlex: formatFlags.isSuperFlex,
         isTightEndPremium: formatFlags.isTightEndPremium,
+        /* League size for valuation — the live seat count, not the stored-row count. */
         teamCount: league.leagueSize ?? teams.length,
       },
       players: fallbackPlayers,
@@ -491,7 +517,13 @@ async function buildTeamInputsFromLeague(params: {
   return { league, teamInputs }
 }
 
-async function generateForInputs(
+/**
+ * Exported so the archived-seat test can drive the REAL persistence path — this is what both
+ * `GET` and `POST` call, and `persist: true` reaches
+ * `prisma.dynastyProjection.upsert`. Asserting on the stored rows is the only way to prove an
+ * archived seat gets neither a new row nor an update to an existing one.
+ */
+export async function generateForInputs(
   teamInputs: TeamDynastyInputs[],
   persist: boolean
 ): Promise<DynastyProjectionOutput[]> {

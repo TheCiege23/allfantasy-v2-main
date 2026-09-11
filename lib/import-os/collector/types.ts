@@ -216,14 +216,38 @@ export interface ApplyScopeResult {
   unchanged: number
   /** Records the provider returned but that could not be persisted (malformed). */
   rejected: number
-  /** Canonical rows reconciled away because a *complete authoritative* response no longer contained them. */
+  /**
+   * Canonical rows reconciled away because a *complete authoritative* response no longer
+   * contained them.
+   *
+   * ⚠ "RECONCILED AWAY" MEANS ARCHIVED, NOT DELETED (Batch A.1). A LeagueTeam absent from a
+   * complete response is flagged `isOrphan` and keeps its ownership, transactions, matchups,
+   * drafts and external identifiers; its `Roster` is untouched. The counter still reports how
+   * many teams left the active set, which is what the telemetry asks — but nothing was
+   * destroyed, and a team that reappears is restored by the bootstrap upsert.
+   */
   removed: number
   /** Non-fatal notes (e.g. empty response protection engaged). */
   notes: string[]
+  /**
+   * Reasons this scope did NOT fully succeed, even though rows were written — IMP-02/04.
+   *
+   * 🛑 WRITING SOMETHING IS NOT THE SAME AS SUCCEEDING, AND CONFLATING THEM IS THE
+   * FALSE-GREEN BUG. A canonical-settings rebuild can fail while the raw league columns
+   * still persist correctly; a team's roster fetch can fail while its standings row still
+   * updates. In both cases the right outcome is: keep what is good, keep last-good for what
+   * is not, and REFUSE to call the scope complete — because `lastSuccessfulSyncAt` only
+   * advances on a fully completed run, and anything downstream reading that timestamp is
+   * being told the league's rules and rosters are current.
+   *
+   * Empty means genuinely complete. Non-empty makes the store throw AFTER its writes, so
+   * the runner records the scope incomplete without discarding the good rows.
+   */
+  incompleteReasons?: string[]
 }
 
 export function emptyApplyResult(): ApplyScopeResult {
-  return { imported: 0, unchanged: 0, rejected: 0, removed: 0, notes: [] }
+  return { imported: 0, unchanged: 0, rejected: 0, removed: 0, notes: [], incompleteReasons: [] }
 }
 
 export function mergeApplyResults(a: ApplyScopeResult, b: ApplyScopeResult): ApplyScopeResult {
@@ -233,5 +257,6 @@ export function mergeApplyResults(a: ApplyScopeResult, b: ApplyScopeResult): App
     rejected: a.rejected + b.rejected,
     removed: a.removed + b.removed,
     notes: [...a.notes, ...b.notes],
+    incompleteReasons: [...(a.incompleteReasons ?? []), ...(b.incompleteReasons ?? [])],
   }
 }

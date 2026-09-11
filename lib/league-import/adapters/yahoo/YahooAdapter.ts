@@ -1,6 +1,7 @@
 import type { ILeagueImportAdapter } from '../ILeagueImportAdapter'
 import type { NormalizedImportResult, SourceTracking } from '../../types'
 import type { YahooImportPayload } from './types'
+import { isAuthoritativeStatus } from '@/lib/league-import/resourceStatus'
 
 function detectYahooScoringFormat(raw: YahooImportPayload): string | null {
   const receptionCategory = raw.settings?.statCategories.find((category) => {
@@ -51,6 +52,7 @@ export const YahooAdapter: ILeagueImportAdapter<YahooImportPayload> = {
         ? Math.max(0, raw.settings.playoffStartWeek - raw.league.startWeek)
         : raw.league.endWeek ?? undefined
 
+    const rosterObservedAt = new Date().toISOString()
     const rosters = raw.teams.map((team) => ({
       source_team_id: team.teamKey,
       source_manager_id: team.managerGuid || team.managerId || team.teamKey,
@@ -68,6 +70,9 @@ export const YahooAdapter: ILeagueImportAdapter<YahooImportPayload> = {
       taxi_ids: [],
       faab_remaining: team.faabBalance,
       waiver_priority: team.waiverPriority,
+      /* IMP-04 — a rejected roster request must not read as an empty roster. */
+      fetch_status: team.rosterFetchStatus,
+      observed_at: isAuthoritativeStatus(team.rosterFetchStatus) ? rosterObservedAt : null,
     }))
 
     const statCategoryById = new Map(
@@ -193,10 +198,41 @@ export const YahooAdapter: ILeagueImportAdapter<YahooImportPayload> = {
           state: 'full',
           count: 1,
         },
-        currentRosters: {
-          state: rosters.length > 0 ? 'full' : 'missing',
-          count: rosters.length,
-        },
+        /*
+         * 🛑 IMP-04 — COVERAGE MUST MEASURE SUCCESSFUL FETCHES, NOT TEAM RECORDS.
+         *
+         * `rosters.length` counts the teams we know about, every one of which gets a
+         * roster entry even when its fetch rejected. So eleven of twelve teams loading
+         * still reported `full`, and removal reconciliation trusts that claim — meaning
+         * a transient failure on one team could be read as "these players are gone".
+         * Completeness has to be established before reconciliation, not assumed.
+         */
+        currentRosters: (() => {
+          if (rosters.length === 0) return { state: 'missing' as const, count: 0 }
+          /*
+           * ⚠ COUNT THE STATUSES, NOT `failedRosterTeamKeys`. The key list cannot express
+           * `unauthorized` versus `failed`, and the distinction is what tells an operator
+           * whether a human must reconnect or the next tick will heal it.
+           */
+          const observed = rosters.filter((r) => isAuthoritativeStatus(r.fetch_status))
+          const unobserved = rosters.length - observed.length
+          if (unobserved === 0) return { state: 'full' as const, count: rosters.length }
+          if (observed.length === 0) {
+            return {
+              state: 'missing' as const,
+              count: 0,
+              note: `No team roster could be read; stored rosters were left unchanged.`,
+            }
+          }
+          const anyUnauthorized = rosters.some((r) => r.fetch_status === 'unauthorized')
+          return {
+            state: 'partial' as const,
+            count: observed.length,
+            note: `${unobserved} of ${rosters.length} team roster requests did not succeed${
+              anyUnauthorized ? ' (at least one was rejected by the provider — reconnect required)' : ''
+            }; those teams' stored rosters were left unchanged.`,
+          }
+        })(),
         historicalRosterSnapshots: {
           state: raw.previousSeasons.length > 0 ? 'partial' : 'missing',
           count: raw.previousSeasons.length,

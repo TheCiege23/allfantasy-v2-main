@@ -219,9 +219,25 @@ export async function getScoutData(leagueId: string, userId: string): Promise<Sc
         losses: true,
         ties: true,
         claimedByUserId: true,
+        /* Selected for the coming lifecycle migration; NOT read as a filter here — the flag also marks vacant, eliminated and admin-removed seats. */
+        isOrphan: true,
       },
     })
     .catch(() => [])
+
+  /*
+   * ⚠ THE HUMAN/VACANT SPLIT THIS SURFACE WANTS DOES NOT EXIST YET, AND IS NOT GUESSED HERE.
+   *
+   * The coverage denominator is every CURRENT franchise, vacant seats included — that part is
+   * settled. The manager LIST should arguably show only real people, but the only signal
+   * available today is `claimedByUserId`, and that is NOT the same question: an imported league
+   * has real, human-managed seats that nobody has claimed on AllFantasy yet, and filtering them
+   * out would empty Scout for exactly the leagues it is most useful in.
+   *
+   * `isOrphan` cannot answer it either — it is written for vacancy, elimination, admin removal
+   * AND provider departure. So the list stays on every current franchise until `managerKind`
+   * carries a real answer, at which point this becomes `managerKind === 'HUMAN'`.
+   */
 
   if (teams.length === 0) {
     return {

@@ -1,5 +1,6 @@
 import 'server-only'
 import { prisma } from '@/lib/prisma'
+import { CURRENT_FRANCHISES_INCLUDING_UNKNOWN } from '@/lib/league-import/teamLifecycle'
 
 /**
  * RESOLVE A LEAGUE THE USER NAMED, WITHOUT EVER TRUSTING THE MODEL WITH AN ID.
@@ -322,7 +323,10 @@ async function settleDuplicates(candidates: NamedLeague[]): Promise<LeagueNameLo
   const counted = await Promise.all(
     candidates.slice(0, MAX_SUGGESTIONS).map(async (l) => ({
       ...l,
-      teamCount: await prisma.leagueTeam.count({ where: { leagueId: l.id } }).catch(() => 0),
+      /* Populated means CURRENT seats — an archived team must not make an empty league look real. */
+      teamCount: await prisma.leagueTeam
+        .count({ where: { ...CURRENT_FRANCHISES_INCLUDING_UNKNOWN, leagueId: l.id } })
+        .catch(() => 0),
     })),
   )
 

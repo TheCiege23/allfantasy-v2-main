@@ -447,6 +447,7 @@ export async function getTradesData(leagueId: string, userId: string): Promise<T
   })
   if (!league) return null
 
+  /* League size feeds trade GRADING context: every CURRENT franchise, vacant seats included. */
   const teamCount = await prisma.leagueTeam.count({ where: { leagueId } })
   const grades = await resolveGrades(league.platformLeagueId ?? null, valueBookFor(league.settings, league.leagueType))
 

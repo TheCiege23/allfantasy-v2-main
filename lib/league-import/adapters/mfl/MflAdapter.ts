@@ -140,10 +140,29 @@ export const MflAdapter: ILeagueImportAdapter<MflImportPayload> = {
      * place a fabricated answer could re-enter after `detectMflScoringFormat` honestly
      * returned null.
      */
-    const mflScoringRules = (raw.scoringRules ?? []).map((rule) => ({
-      stat_key: `mfl_stat_${rule.code}`,
-      points_value: rule.points,
-    }))
+    /*
+     * 🛑 `positions` WAS BEING DROPPED HERE, AND THAT IS WHERE MFL LEAGUES LOST THEIR
+     * SCORING. `MflScoringRuleRaw` carries the position restriction MFL sends, but this
+     * map kept only the stat code and the points — so three separate reception rules
+     * (RB 0.5, WR 1.0, TE 1.5) reached the canonical normalizer as three rules with one
+     * key, the last overwrote the rest, and every RB and WR in the league was scored at
+     * the TE rate. Nothing failed; the league just meant something else.
+     *
+     * ⚠ AN EMPTY LIST IS OMITTED RATHER THAN PASSED AS `[]`. Downstream treats absent as
+     * "applies to all positions"; an empty array would read as "applies to none".
+     */
+    const mflScoringRules = (raw.scoringRules ?? []).map((rule) => {
+      const positions = (rule.positions ?? [])
+        .map((p) => String(p).trim().toUpperCase())
+        .filter(Boolean)
+      return {
+        stat_key: `mfl_stat_${rule.code}`,
+        points_value: rule.points,
+        /* Carried because the alias resolver maps MFL by NAME, never by code. */
+        stat_name: rule.name ?? null,
+        ...(positions.length > 0 ? { positions } : {}),
+      }
+    })
     const scoring =
       raw.settings != null || mflScoringRules.length > 0
         ? {
