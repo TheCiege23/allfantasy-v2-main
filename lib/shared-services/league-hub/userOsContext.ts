@@ -11,7 +11,7 @@
  * looks identical to "nothing to recommend right now."
  */
 import { prisma } from '@/lib/prisma'
-import { ACTIVE_TEAM_WHERE } from '@/lib/league-import/activeTeams'
+import { CURRENT_FRANCHISES_INCLUDING_UNKNOWN } from '@/lib/league-import/teamLifecycle'
 import { resolveInjuryFacts } from '@/lib/injuries/injuryReadPort'
 import { normalizeMatchName } from '@/lib/player-match/verifiedNameMatch'
 import { resolveActiveLeagueContext } from './activeLeagueContext'
@@ -144,7 +144,7 @@ export async function assembleUserOsContext(args: {
      * `viewerTeam` (`playoffRecommendations.ts:20`, `strategyRecommendations.ts:41`).
      */
     prisma.leagueTeam.findMany({
-      where: { ...ACTIVE_TEAM_WHERE, leagueId: args.canonicalLeagueId },
+      where: { ...CURRENT_FRANCHISES_INCLUDING_UNKNOWN, leagueId: args.canonicalLeagueId },
       select: {
         id: true,
         teamName: true,

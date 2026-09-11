@@ -7,7 +7,7 @@ import { assertLeagueMember, type LeagueAccessResult } from '@/lib/league-access
 import { z } from 'zod';
 import { isToolRankingsEnabled } from '@/lib/feature-toggle';
 import { getOrCreateAiResult } from '@/lib/ai/ai-result-cache'
-import { selectActiveTeams } from '@/lib/league-import/activeTeams'
+import { selectCurrentOrUnknown } from '@/lib/league-import/teamLifecycle'
 
 const openai = getOpenAIRouteClient()
 
@@ -54,7 +54,7 @@ export async function POST(req: Request) {
     const playerSport = String(leagueSport).toLowerCase()
 
     /* Rankings are a current-standings surface — an archived team must not be ranked. */
-    const teams = selectActiveTeams(await (prisma as any).leagueTeam.findMany({
+    const teams = selectCurrentOrUnknown(await (prisma as any).leagueTeam.findMany({
       where: { leagueId },
       include: { performances: { orderBy: { week: 'asc' } } },
       orderBy: { pointsFor: 'desc' },

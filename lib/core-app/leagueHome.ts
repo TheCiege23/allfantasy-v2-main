@@ -27,7 +27,7 @@ import { getDraftHqAll } from './draftHqAll'
 import { describeAge } from '@/lib/sports-data/freshnessPolicy'
 import { resolveLeagueStage, isPreDraftOrDrafting } from '@/lib/league-stage/leagueStage'
 import { rosterIdsMatch } from './rosterIdMatch'
-import { selectActiveTeams } from '@/lib/league-import/activeTeams'
+import { selectCurrentOrUnknown } from '@/lib/league-import/teamLifecycle'
 
 /**
  * Everything the league-selected dashboard (screen 2) renders, read from the
@@ -494,8 +494,8 @@ export async function getLeagueHomeData(
       isCoCommissioner: true,
       // The owner id, which is how Roster rows (and their FAAB) are found.
       platformUserId: true,
-      /* Selected so `selectActiveTeams` below can judge the row. */
-      isOrphan: true,
+      /* Selected so `selectCurrentOrUnknown` below can judge the row — omit it and the filter is a no-op. */
+      lifecycleState: true,
     },
     orderBy: [{ currentRank: 'asc' }, { wins: 'desc' }, { pointsFor: 'desc' }],
   })
@@ -513,7 +513,7 @@ export async function getLeagueHomeData(
    * they do not hold. Their history remains readable on the historical surfaces, which do not
    * filter.
    */
-  const teamsActive = selectActiveTeams(teams)
+  const teamsActive = selectCurrentOrUnknown(teams)
 
   const yours = teamsActive.find((t) => t.claimedByUserId === userId) ?? null
 

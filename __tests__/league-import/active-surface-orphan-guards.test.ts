@@ -42,23 +42,27 @@ describe('corrected ENUMERATION surfaces filter archived teams', () => {
      * exactly the form this batch keeps finding. The assignment is what has to be pinned.
      */
     const src = read('lib', 'data', 'league-home.ts')
-    expect(src).toMatch(/const leagueTeams = selectActiveTeams\(leagueTeamRows\)/)
-    expect(src).toMatch(/from '@\/lib\/league-import\/activeTeams'/)
+    expect(src).toMatch(/const leagueTeams = selectCurrentOrUnknown\(leagueTeamRows\)/)
+    expect(src).toMatch(/from '@\/lib\/league-import\/teamLifecycle'/)
     /*
-     * ⚠ `isOrphan: true` IS AMBIGUOUS — it is both the SELECT spelling and the inner half of
-     * `ACTIVE_TEAM_WHERE`'s `NOT: { isOrphan: true }`. Matching it loosely would accept a surface
-     * that filters in the query while never selecting the column. Pin the `select` block itself.
+     * ⚠ THE SELECT ASSERTION IS THE LOAD-BEARING HALF, AND THE COLUMN IT PINS HAS CHANGED.
+     * `selectCurrentOrUnknown` reads `lifecycleState`; an omitted column is `undefined`, which is
+     * not `'ARCHIVED'`, so a partial select makes the filter keep every departed seat it exists to
+     * remove. Same no-op `isOrphan` had here, on a new column — pin the `select` block itself
+     * rather than the file, because the field name alone appears in a `where` too.
      */
     const query = src.slice(src.indexOf('prisma.leagueTeam.findMany'))
     const selectBlock = query.slice(query.indexOf('select:'), query.indexOf('}),'))
     expect(selectBlock.length, 'could not locate the select block').toBeGreaterThan(0)
-    expect(selectBlock).toMatch(/isOrphan: true/)
+    expect(selectBlock, 'lifecycleState must be selected or the filter is a no-op').toMatch(
+      /lifecycleState: true/,
+    )
     expect(selectBlock).not.toMatch(/NOT:/)
   })
 
   it('core-app league home team list and standings use it', () => {
     const src = read('lib', 'core-app', 'leagueHome.ts')
-    expect(src).toMatch(/const teamsActive = selectActiveTeams\(teams\)/)
+    expect(src).toMatch(/const teamsActive = selectCurrentOrUnknown\(teams\)/)
     /* Every downstream consumer repointed — an unfiltered `teams.` use is the regression. */
     expect(src).not.toMatch(/\bteams\.map\(\(t\) => \(\{\s*\n\s*teamId/)
     expect(src).toMatch(/teamsActive\.map/)
@@ -159,14 +163,14 @@ describe('a read serving BOTH a current and a historical consumer filters at the
     expect(src).toMatch(/const teamById = new Map\(teams\.map/)
     expect(src).toMatch(/const teamByExternalId = new Map\(teams\.map/)
     /* ...and only the standings are narrowed. */
-    expect(src).toMatch(/standings: BroadcastStandingRow\[\] = selectActiveTeams\(teams\)\.map/)
+    expect(src).toMatch(/standings: BroadcastStandingRow\[\] = selectCurrentOrUnknown\(teams\)\.map/)
   })
 
   it('leagueHome keeps the unfiltered array available for anything else that needs it', () => {
     const src = read('lib', 'core-app', 'leagueHome.ts')
     /* The filter is a separate binding, not a rewrite of the query. */
     expect(src).toMatch(/const teams = await prisma\.leagueTeam\.findMany/)
-    expect(src).toMatch(/const teamsActive = selectActiveTeams\(teams\)/)
+    expect(src).toMatch(/const teamsActive = selectCurrentOrUnknown\(teams\)/)
   })
 })
 
@@ -305,7 +309,7 @@ describe('the three MIXED reads resolved by the 2026-09-10 corrective pass', () 
      * which is what the deferral rationale claimed it would.
      */
     const src = stripComments(read('lib', 'shared-services', 'league-hub', 'userOsContext.ts'))
-    expect(src).toMatch(/where: \{ \.\.\.ACTIVE_TEAM_WHERE, leagueId: args\.canonicalLeagueId \}/)
+    expect(src).toMatch(/where: \{ \.\.\.CURRENT_FRANCHISES_INCLUDING_UNKNOWN, leagueId: args\.canonicalLeagueId \}/)
     expect(src).toMatch(/const viewerTeam = standings\.find\(\(s\) => s\.isViewerTeam\) \?\? null/)
   })
 

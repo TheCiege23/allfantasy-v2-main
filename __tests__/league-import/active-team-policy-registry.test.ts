@@ -603,8 +603,19 @@ function bindingsFor(src: string, callStart: number): string[] {
   )
   if (direct) return [direct[1]!]
 
-  /* return selectActiveTeams(await prisma.leagueTeam.findMany(...)) — protection is inline. */
-  if (new RegExp(String.raw`selectActiveTeams\s*\(\s*(?:await\s+)?(?:${RECEIVER})?$`).test(before)) {
+  /*
+   * `selectCurrentOrUnknown(await prisma.leagueTeam.findMany(...))` — protection is inline.
+   *
+   * 🛑 THIS NAMED ONE FUNCTION LITERALLY WHILE `CONSUMER_FILTER` LISTED SIX, AND THAT IS TWO
+   * IMPLEMENTATIONS OF ONE RULE — the exact bug this whole batch keeps paying for, sitting inside
+   * the guard that exists to catch it. Extending `CONSUMER_FILTER` for the lifecycle helpers fixed
+   * the BOUND case on line 633 and left this INLINE case still matching only `selectActiveTeams`,
+   * so `app/api/rankings/route.ts` reported as an unfiltered league-wide enumeration the moment it
+   * migrated — a correct migration turning the guard red for a reason that had nothing to do with
+   * the call. Derive the alternation from the one list.
+   */
+  const inlineFilters = CONSUMER_FILTER.map((fn) => fn.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')
+  if (new RegExp(String.raw`(?:${inlineFilters})\s*\(\s*(?:await\s+)?(?:${RECEIVER})?$`).test(before)) {
     return [INLINE_PROTECTED]
   }
 

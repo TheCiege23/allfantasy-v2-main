@@ -10,7 +10,7 @@ import type { NormalizedPlayerSportsProfile } from '@/lib/sports-data-normalizat
 import type { SupportedSport } from '@/lib/sport-scope'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
 import { parseDraftPicksFromPlayerData, sumPickCapitalScore } from '@/lib/long-term-coaching/parseRosterPicks'
-import { ACTIVE_TEAM_WHERE } from '@/lib/league-import/activeTeams'
+import { CURRENT_FRANCHISES_INCLUDING_UNKNOWN } from '@/lib/league-import/teamLifecycle'
 import type {
   LongTermCoachingAnalysis,
   LongTermCoachingHorizonYears,
@@ -229,7 +229,7 @@ export async function buildLongTermCoachingAnalysis(args: {
    * league — a departed team's season total would skew every percentile in it.
    */
   const leagueTeams = await prisma.leagueTeam.findMany({
-    where: { ...ACTIVE_TEAM_WHERE, leagueId: args.leagueId },
+    where: { ...CURRENT_FRANCHISES_INCLUDING_UNKNOWN, leagueId: args.leagueId },
     select: { pointsFor: true, claimedByUserId: true },
   })
   const pfVals = leagueTeams.map((t) => t.pointsFor).filter((n): n is number => n != null && Number.isFinite(n))

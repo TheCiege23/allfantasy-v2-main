@@ -32,7 +32,7 @@ import {
   getFantraxLeagueInfo,
 } from '@/lib/league-import/fantrax/fantraxApi'
 import { normalizeFantraxTeamName } from '@/lib/league-import/fantrax/fantraxTeamIds'
-import { isActiveTeam } from '@/lib/league-import/activeTeams'
+import { isCurrentOrUnknown } from '@/lib/league-import/teamLifecycle'
 
 const CACHE_KEY_PREFIX = 'fantrax_matchup_sync'
 /** Fantrax costs one request per played period, so refresh less often than Sleeper. */
@@ -121,7 +121,7 @@ async function readRosterIdsByTeamName(
 ): Promise<Map<string, string> | null> {
   const teams = await prisma.leagueTeam.findMany({
     where: { league: { platformLeagueId: leaguePlatformId } },
-    select: { externalId: true, teamName: true, ownerName: true, isOrphan: true },
+    select: { externalId: true, teamName: true, ownerName: true, lifecycleState: true },
   })
   /*
    * ⚠ AN ACTIVE TEAM MUST WIN A NAME COLLISION AGAINST AN ARCHIVED ONE (Batch A.1 item 1).
@@ -147,7 +147,7 @@ async function readRosterIdsByTeamName(
     const label = normalizeFantraxTeamName(t.teamName?.trim() || t.ownerName?.trim() || '')
     if (!label) continue
 
-    const active = isActiveTeam(t)
+    const active = isCurrentOrUnknown(t)
     /* An archived row never displaces a label an active team already claimed. */
     if (!active && labelIsFromActiveTeam.has(label)) continue
 

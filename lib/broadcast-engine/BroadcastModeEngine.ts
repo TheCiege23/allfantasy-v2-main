@@ -6,7 +6,7 @@ import { prisma } from '@/lib/prisma'
 import { listDramaEvents } from '@/lib/drama-engine/DramaQueryService'
 import { listRivalries } from '@/lib/rivalry-engine/RivalryQueryService'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
-import { selectActiveTeams } from '@/lib/league-import/activeTeams'
+import { selectCurrentOrUnknown } from '@/lib/league-import/teamLifecycle'
 import type {
   BroadcastPayload,
   BroadcastStandingRow,
@@ -75,7 +75,7 @@ export async function getBroadcastPayload(
   })
 
   /* Standings are the CURRENT competition; the maps above deliberately keep archived teams. */
-  const standings: BroadcastStandingRow[] = selectActiveTeams(teams).map((t, i) => ({
+  const standings: BroadcastStandingRow[] = selectCurrentOrUnknown(teams).map((t, i) => ({
     teamId: t.id,
     teamName: t.teamName,
     ownerName: t.ownerName,

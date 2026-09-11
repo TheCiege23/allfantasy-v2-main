@@ -2,7 +2,7 @@ import { prisma } from '@/lib/prisma'
 import { isBotConfigured } from '@/lib/discord/bot'
 import { channelLink } from '@/lib/discord/deepLinks'
 import { DISCORD_BOT_PERMISSIONS, DISCORD_CLIENT_ID } from '@/lib/discord/constants'
-import { ACTIVE_TEAM_WHERE } from '@/lib/league-import/activeTeams'
+import { CURRENT_FRANCHISES_INCLUDING_UNKNOWN } from '@/lib/league-import/teamLifecycle'
 
 /**
  * 32a — the Discord bridge, read from real state.
@@ -188,7 +188,7 @@ export async function getDiscordBridge(
     }),
     /* The Discord roster/member display is current-state — a departed seat must not be posted. */
     prisma.leagueTeam.findMany({
-      where: { ...ACTIVE_TEAM_WHERE, leagueId },
+      where: { ...CURRENT_FRANCHISES_INCLUDING_UNKNOWN, leagueId },
       select: { teamName: true, ownerName: true, claimedByUserId: true },
       orderBy: { teamName: 'asc' },
     }),

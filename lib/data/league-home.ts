@@ -16,7 +16,7 @@ import { attachPlayerMediaBatch } from '@/lib/player-media'
 import { getLeagueChatMessages } from '@/lib/league-chat/LeagueChatMessageService'
 import { getFormatIntroMetadata } from '@/lib/league/format-engine'
 import { resolveLeagueIntroFormatKey } from '@/lib/league/resolveLeagueIntroFormatKey'
-import { selectActiveTeams } from '@/lib/league-import/activeTeams'
+import { selectCurrentOrUnknown } from '@/lib/league-import/teamLifecycle'
 import type {
   LeagueActivityItem,
   LeagueBracketMatchup,
@@ -381,8 +381,8 @@ async function loadLeagueContext(leagueId: string, userId: string): Promise<Leag
         pointsFor: true,
         pointsAgainst: true,
         currentRank: true,
-        /* Selected so `selectActiveTeams` below can judge the row — see the note there. */
-        isOrphan: true,
+        /* Selected so `selectCurrentOrUnknown` below can judge the row — see the note there. */
+        lifecycleState: true,
       },
     }),
   ])
@@ -397,11 +397,15 @@ async function loadLeagueContext(leagueId: string, userId: string): Promise<Leag
    * it previously disappeared. An unfiltered enumeration therefore ranks a team that is no
    * longer in the league among the ones that are.
    *
-   * ⚠ FILTERED HERE RATHER THAN IN THE `where`. `NOT: { isOrphan: true }` is a SQL predicate and
-   * answers differently for an absent value; `selectActiveTeams` is the single authority and
-   * treats anything that is not an explicit `true` as active.
+   * ⚠ FILTERED HERE RATHER THAN IN THE `where`, because a sibling consumer needs the unfiltered
+   * array. `selectCurrentOrUnknown` is the single authority: it excludes only an explicit
+   * `ARCHIVED`, so a row not yet classified is kept rather than silently dropped.
+   *
+   * 🛑 `lifecycleState` MUST STAY IN THE SELECT ABOVE. An omitted column is `undefined`, which is
+   * not `'ARCHIVED'`, so every row would read as current and the filter would keep the departed
+   * seats it exists to remove — the same no-op `isOrphan` had here before it.
    */
-  const leagueTeams = selectActiveTeams(leagueTeamRows)
+  const leagueTeams = selectCurrentOrUnknown(leagueTeamRows)
 
   return {
     userId,
