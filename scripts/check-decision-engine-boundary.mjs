@@ -99,10 +99,40 @@ const EXEMPT_PATH_PATTERNS = [
 
 const SOURCE_EXTENSIONS = new Set([".ts", ".tsx", ".mts", ".cts"]);
 
+/*
+ * ⚠ `.tmp-pr671` USED TO BE LISTED HERE BY NAME, and removing it is the point of this change
+ * rather than an oversight. It is one session's 2.4G scratch COPY of this repo, already covered by
+ * `.gitignore:123:.tmp-*`, and hand-patching the name was load-bearing: measured 2026-09-11 in the
+ * primary checkout, the walk saw 12,912 source files with that entry and 25,297 without it —
+ * nearly double, because the copy contains the whole tree again.
+ *
+ * Naming one scratch directory does not survive the next one being called anything else, and it
+ * teaches the next reader to add `.tmp-pr672` rather than to ask git. Ignored paths are now
+ * dropped by `listGitVisibleFiles` below, which covers every ignore rule and needs no maintenance.
+ *
+ * What stays here is the set git CANNOT answer: `.claude/` is not gitignored in this repo (only
+ * `.claude/settings.local.json*` and `.claude/scheduled_tasks.lock` are), so it holds a full
+ * checkout per concurrent session and must be excluded explicitly.
+ */
 const EXCLUDED_DIRS = new Set([
-  ".git", ".next", "node_modules", "dist", "build", "coverage",
-  ".vercel", ".turbo", "public", ".claude", ".tmp-pr671",
+  ".git", "node_modules", "dist", "build", "coverage",
+  ".vercel", ".turbo", "public", ".claude",
 ]);
+
+/*
+ * Any Next build output, matched by PREFIX rather than by exact name — the same test
+ * `check-db-first-api-boundary.mjs` carries, and for the same reason it learned it.
+ *
+ * `.next` alone missed every per-session dist dir. Measured 2026-09-11: the walk was picking up
+ * 301 files from `.next-playwright-3207/types`, `.next-dev-e2efix/types`, `.next-dev-mobile-smoke/types`
+ * and eleven more — route-type stubs that this guard then scanned for verdict-shaped exports. They
+ * happen to contain none today, so the count stayed right while the work was wasted; a generated
+ * stub whose name matched would have been reported as a violation nobody can fix.
+ *
+ * Every session here runs its own dist dir (AF_NEXT_DIST_DIR, see .claude/launch.json), so the
+ * next variant is named something this file has never heard of.
+ */
+const isBuildOutputDir = (name) => name.startsWith(".next");
 
 /** `export function x`, `export async function x`, `export const x =`, `export class X`. */
 const EXPORT_DECL =
@@ -140,7 +170,62 @@ function matchVerdict(name, kind) {
   return null;
 }
 
+/**
+ * Candidate files as GIT sees them: tracked files, plus untracked files no ignore rule covers.
+ * Returns null — never an empty array — when git cannot answer, so the caller falls back to the
+ * walk rather than concluding the tree has no source in it.
+ *
+ * ⚠ TRACKED FILES ARE LISTED UNCONDITIONALLY via `--cached`, and git does not report a tracked
+ * path as ignored. Committing a file into a `tmp-*` directory therefore does not exempt it — this
+ * drops ignored SCRATCH, never source.
+ *
+ * ⚠ AND IT MUST NOT NARROW TO TRACKED-ONLY. `--others --exclude-standard` keeps brand-new files
+ * visible before they are staged, which is exactly when a developer wants this guard to speak.
+ *
+ * Verified against the walk on the primary checkout, 2026-09-11: git's set is missing ZERO files
+ * the walk finds outside the excluded dirs. The 302-file difference runs entirely the other way.
+ */
+function listGitVisibleFiles(rootDir) {
+  let output;
+  try {
+    output = execSync("git ls-files -z --cached --others --exclude-standard", {
+      cwd: rootDir,
+      encoding: "utf8",
+      maxBuffer: 256 * 1024 * 1024,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+  } catch (err) {
+    console.warn(
+      `Decision-engine boundary: git could not enumerate files (${err?.message}). Falling back to ` +
+        "a filesystem walk, which may descend into ignored directories.",
+    );
+    return null;
+  }
+
+  const paths = output
+    .split("\0")
+    .map((s) => s.trim())
+    .filter(Boolean);
+
+  // An empty answer is not "there is no source here". Fall back and be noisy instead.
+  if (paths.length === 0) {
+    console.warn("Decision-engine boundary: git listed no files. Falling back to a filesystem walk.");
+    return null;
+  }
+
+  return [...new Set(paths)].filter((f) => SOURCE_EXTENSIONS.has(path.extname(f).toLowerCase()));
+}
+
 function getAllSourceFiles(rootDir) {
+  // Segment-wise: git returns whole relative paths, not a directory to prune.
+  const isExcludedPath = (rel) =>
+    toPosix(rel)
+      .split("/")
+      .some((seg) => EXCLUDED_DIRS.has(seg) || isBuildOutputDir(seg));
+
+  const gitVisible = listGitVisibleFiles(rootDir);
+  if (gitVisible) return gitVisible.filter((f) => !isExcludedPath(f));
+
   const out = [];
   const stack = [rootDir];
   while (stack.length) {
@@ -154,7 +239,7 @@ function getAllSourceFiles(rootDir) {
     for (const entry of entries) {
       const full = path.join(dir, entry.name);
       if (entry.isDirectory()) {
-        if (!EXCLUDED_DIRS.has(entry.name)) stack.push(full);
+        if (!EXCLUDED_DIRS.has(entry.name) && !isBuildOutputDir(entry.name)) stack.push(full);
       } else if (SOURCE_EXTENSIONS.has(path.extname(entry.name).toLowerCase())) {
         out.push(full);
       }
