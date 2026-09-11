@@ -561,6 +561,36 @@ they had verified something. The common cause: **a pipeline's exit status is the
 LAST command's**, so the thing being tested never decides the result. Use
 `${PIPESTATUS[0]}`, or do not pipe the command whose status you are reading.
 
+🛑 **AND THAT REMEDY BECOMES PART OF THE BUG INSIDE A COMMAND SUBSTITUTION.**
+`PIPESTATUS` describes the last pipeline run by the CURRENT shell. A command
+substitution runs its pipeline in a SUBSHELL, so after `out=$(cmd | wc -c)` the
+current shell's last command is the assignment — and an assignment succeeds.
+Measured 2026-09-11:
+
+```
+out=$(false | wc -c); echo ${PIPESTATUS[0]}   ->  0     # wrong
+false | wc -c >/dev/null; echo ${PIPESTATUS[0]}  ->  1  # right
+out=$(false | wc -c); echo $?                 ->  0
+```
+
+⚠ **SO SOMEONE FOLLOWING THE LINE ABOVE TO THE LETTER WRITES THE BROKEN FORM.**
+That is how a probe written to investigate *this very family* reported `exit=0`
+for five paths, on a run where git had actually exited 128 — five rows of
+manufactured verdicts, in a check whose whole purpose was catching manufactured
+verdicts. Capturing output and capturing status are different jobs and `$( )`
+only does the first.
+
+**When you need both, redirect to files and read `$?` unpiped:**
+
+```
+cmd >/tmp/out 2>/tmp/err; rc=$?        # rc is the command's, bytes are wc -c </tmp/out
+```
+
+⚠ And a byte count is not a verdict either: `0` is indistinguishable between an
+empty file and a read that failed. `git ls-tree -l <ref> -- <path>` gives the
+true size, which is the only thing that separates them — the same reason the
+four-case control further down needs its PRESENT cases to be non-empty.
+
 - `git push … | tail` printed a success line over a rejection. **Verify a push
   by comparing SHAs, never by reading its output or its exit status through a
   pipe** — a rejected push prints `-> main` too, so grepping the text for
