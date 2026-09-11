@@ -83,6 +83,24 @@ if [[ "$CODE" != "200" ]]; then
   exit 1
 fi
 
+# 🛑 A MISSING `jq` USED TO BE REPORTED AS "the response is not valid JSON", WHICH BLAMES
+# FLEAFLICKER FOR A TOOL THIS BOX DOES NOT HAVE. `jq` is absent from this repo's Git Bash;
+# `jq -e .` then exits 127 (command not found), the `||` below caught it exactly as it catches
+# a parse failure, and the probe told you the provider had returned garbage. That is the same
+# shape CLAUDE.md records for a missing `pgrep` — a status that is neither 0 nor 1 is not a
+# verdict — and here it would have sent someone to file a provider gap that does not exist.
+#
+# Checked separately, and named, BEFORE the status of the parse can be confused with it.
+if ! command -v jq >/dev/null 2>&1; then
+  echo "ERROR: jq is not installed, so this script cannot parse or write the fixture." >&2
+  echo "       This is a TOOLING problem on this machine, NOT a provider response problem —" >&2
+  echo "       the HTTP request above already returned ${CODE}. Install jq, or capture the" >&2
+  echo "       fixture with node:" >&2
+  echo "         curl -sS -H 'Accept: application/json' \"\$URL\" -o raw.json" >&2
+  echo "         node -e \"const f=require('fs');f.writeFileSync('out.json',JSON.stringify(JSON.parse(f.readFileSync('raw.json','utf8')),null,2)+'\\n')\"" >&2
+  exit 3
+fi
+
 jq -e . "$TMP" >/dev/null 2>&1 || { echo "ERROR: response is not valid JSON" >&2; exit 1; }
 
 # --- report what we learned ----------------------------------------------------
