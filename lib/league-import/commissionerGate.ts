@@ -226,7 +226,29 @@ async function checkEspn(appUserId: string, sourceLeagueId: string): Promise<Com
     if (!viewerTeamId) {
       return {
         ok: false,
-        reason: 'Link the ESPN account that manages this league before importing it.',
+        /*
+         * 🛑 THE ONE MESSAGE MOST LIKELY TO REACH SOMEONE ON A PHONE, AND IT USED TO NAME NO
+         * DEVICE. This branch is where a PUBLIC ESPN league lands when no cookies are stored:
+         * `loadEspnLeagueRaw` reads it fine uncredentialed, and then `viewerTeamId` — resolved
+         * from the SWID cookie — is null, so membership cannot be proven and the import stops
+         * here. The league being readable is exactly why the old wording confused: nothing had
+         * visibly failed, and "link the account that manages this league" reads as an accusation
+         * about the wrong account rather than a missing credential.
+         *
+         * ⚠ NAMING THE DEVICE IS THE WHOLE FIX. Connecting ESPN needs the browser extension or a
+         * cookie paste out of devtools, and neither works on a mobile browser — so a phone user
+         * given only "link your account" retries on the phone, fails identically, and has no way
+         * to learn why. One clause turns an unbounded loop into a known errand.
+         *
+         * It does NOT promise the desktop trip is avoidable. It is not: ownership verification
+         * needs that cookie, and saying otherwise would send people to find a league id for an
+         * import that cannot complete.
+         */
+        reason:
+          'We could read this league, but not prove you have a team in it — that needs your ESPN ' +
+          'account connected. Connect ESPN in Settings → Connected Accounts. That step needs a ' +
+          'desktop browser once (it reads a cookie, and mobile browsers cannot); after that this ' +
+          'league imports from any device.',
       }
     }
     const commissionerTeamIds = (payload.commissionerTeamIds ?? []).filter(Boolean)

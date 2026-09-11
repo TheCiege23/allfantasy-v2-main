@@ -136,6 +136,47 @@ describe('assertImportCommissioner', () => {
     })
   })
 
+  /**
+   * 🛑 THE MESSAGE A PUBLIC ESPN LEAGUE PRODUCES, AND THE ONE MOST LIKELY TO REACH A PHONE.
+   *
+   * `loadEspnLeagueRaw` reads a public league fine with no cookies stored, so nothing visibly
+   * fails — and then `viewerTeamId`, resolved from the SWID cookie, is null and the import stops
+   * here. Connecting ESPN needs the extension or a cookie pasted out of devtools, and neither
+   * runs on a mobile browser, so a message that does not name the device leaves a phone user
+   * retrying the same failure with no way to learn why.
+   *
+   * ⚠ ASSERTED ON THE RETURNED REASON, NOT ON SOURCE TEXT. The module's own comments say
+   * "desktop" too, so a grep over the file would pass on the explanation while the user-facing
+   * string had lost it. A check that cannot tell those apart is not a check.
+   */
+  it('tells a member-unproven ESPN import that connecting needs a desktop, not just "link your account"', async () => {
+    espnFetchMock.mockResolvedValue({
+      // Read fine — this is the public-league shape. Membership is what is missing, not access.
+      viewerTeamId: null,
+      commissionerTeamIds: [],
+      teams: [{ teamId: '3', managerId: 'espn-member-3' }],
+    })
+
+    const { assertImportCommissioner } = await import('@/lib/league-import/commissionerGate')
+    const result = await assertImportCommissioner({
+      appUserId: 'u1',
+      provider: 'espn',
+      sourceLeagueId: '12345',
+    })
+
+    expect(result.ok).toBe(false)
+    const reason = result.reason ?? ''
+    expect(reason).toMatch(/desktop/i)
+    // It must still say WHERE to go, not only what device.
+    expect(reason).toMatch(/Settings/i)
+    /*
+     * And it must not imply the desktop trip is skippable. Ownership verification needs that
+     * cookie; saying otherwise sends someone to find a league id for an import that cannot
+     * complete — the same failure one step later.
+     */
+    expect(reason).not.toMatch(/no connection needed|without connecting|from any device first/i)
+  })
+
   it('requires explicit attestation for a full-league ESPN commit — real membership alone is not enough (Import Security Closure phase)', async () => {
     espnFetchMock.mockResolvedValue({
       viewerTeamId: '3',

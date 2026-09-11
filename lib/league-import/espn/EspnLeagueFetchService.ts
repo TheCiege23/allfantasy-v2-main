@@ -413,14 +413,29 @@ async function loadEspnLeagueRaw(args: {
     }
   }
 
+  /*
+   * ⚠ BOTH OF THESE NAME THE DEVICE, AND NEITHER USED TO. Connecting or reconnecting ESPN needs
+   * the browser extension or a cookie pasted out of devtools, and neither works on a mobile
+   * browser — so "Connect ESPN in Settings" sent a phone user to a settings page where the only
+   * two paths available to them are the two that cannot run. They retry, fail identically, and
+   * nothing on the way tells them why. See the matching note in `checkEspn`, which is the message
+   * a PUBLIC league produces; these two are the private and expired cases.
+   *
+   * Kept to one added clause each: these are already long, and a wall of text at the moment
+   * something failed is read by nobody.
+   */
   if (lastError instanceof EspnApiResponseError && (lastError.status === 401 || lastError.status === 403)) {
     if (cookieHeader) {
       throw new EspnImportConnectionError(
-        'Your saved ESPN cookies no longer unlock this league. Reconnect ESPN in Settings → Connected Accounts and try again.'
+        'Your saved ESPN cookies no longer unlock this league. Reconnect ESPN in Settings → ' +
+          'Connected Accounts and try again — that step needs a desktop browser, as mobile ' +
+          'browsers cannot read the cookie.'
       )
     }
     throw new EspnImportConnectionError(
-      'This ESPN league is private. Connect ESPN in Settings → Connected Accounts before importing it.'
+      'This ESPN league is private, so importing it needs your ESPN account connected. Connect ' +
+        'ESPN in Settings → Connected Accounts. That step needs a desktop browser once (it reads ' +
+        'a cookie, and mobile browsers cannot); after that this league imports from any device.'
     )
   }
 
