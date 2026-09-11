@@ -45,9 +45,13 @@ export type V2RankingsResult = {
 export class RankingsUnavailableError extends Error {
   constructor(
     readonly leagueId: string,
-    readonly week: number,
+    /** `null` when the caller did not pin a week and the engine never got far enough to derive one. */
+    readonly week: number | null,
   ) {
-    super(`No V2 rankings for league ${leagueId} week ${week}: computeLeagueRankingsV2 returned null (league settings could not be loaded).`)
+    super(
+      `No V2 rankings for league ${leagueId} week ${week ?? '<derived>'}: ` +
+        `computeLeagueRankingsV2 returned null (league settings could not be loaded).`,
+    )
     this.name = "RankingsUnavailableError"
   }
 }
@@ -71,9 +75,23 @@ export class RankingsUnavailableError extends Error {
  * engine's output type and this module's local shape. It is not the null cast and is deliberately
  * left alone — widening it is its own change with its own blast radius.
  */
-export async function getV2Rankings(params: { leagueId: string; week: number }) {
+/**
+ * ⚠ `week` IS OPTIONAL, AND OMITTING IT IS NOT THE SAME AS PASSING `0`.
+ *
+ * `computeLeagueRankingsV2` resolves the week as `currentWeek ?? settings.week`, and `??` is
+ * NULLISH — so `0` is a value, not an absence. A caller that does not know the week and passes `0`
+ * to satisfy a required field silently pins every snapshot to week 0 instead of the league's
+ * actual week, and nothing downstream objects: `0` is a valid Int, the row writes, and the
+ * rankings are simply for a week nobody played.
+ *
+ * A scheduled sweep cannot know the week — it is read from the league's own settings by the very
+ * call being made. So `week` is optional here and threaded through as `undefined`, which is the
+ * only spelling that reaches the `?? settings.week` fallback. Existing callers that pass a real
+ * week are unaffected.
+ */
+export async function getV2Rankings(params: { leagueId: string; week?: number }) {
   const result = await computeLeagueRankingsV2(params.leagueId, params.week)
-  if (!result) throw new RankingsUnavailableError(params.leagueId, params.week)
+  if (!result) throw new RankingsUnavailableError(params.leagueId, params.week ?? null)
   return result as V2RankingsResult
 }
 
