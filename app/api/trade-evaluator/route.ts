@@ -81,9 +81,19 @@ const PlayerInputSchema = z.object({
   provider_player_id: z.string().optional(),
 })
 
+/*
+ * 🛑 `year` AND `round` WERE BARE `z.number()`, WHICH ACCEPTS ANYTHING NUMERIC.
+ * `{ year: 1776, round: 0 }` and `{ round: -3 }` and `{ round: 2.7 }` all validated and went
+ * straight to `pricePick`. Round 0 and every negative round are the dangerous ones: they do
+ * not error downstream, they become a FIRST-ROUND PICK, because `pickRoundShare` in
+ * lib/pick-curve.ts clamps with `Math.max(1, Math.round(round))`.
+ *
+ * Bounds match `lib/parsePickLabel.ts` so the string and object forms of the same asset
+ * cannot disagree about what is acceptable. The year window is the parser's own `20\d{2}`.
+ */
 const PickInputSchema = z.object({
-  year: z.number(),
-  round: z.number(),
+  year: z.number().int().min(2000).max(2099),
+  round: z.number().int().min(1).max(25),
   projected_range: z.enum(['early', 'mid', 'late', 'unknown']).optional(),
 })
 
@@ -356,13 +366,40 @@ function resolvePlayerName(p: string | { name: string }): string {
   return typeof p === 'string' ? p : p.name
 }
 
+/**
+ * Every pick label in the trade that `parsePickLabel` cannot read.
+ *
+ * Runs BEFORE the entitlement gate so an unreadable pick costs the user nothing. The existing
+ * refusals further down (UNPRICED_ASSETS, AMBIGUOUS_PLAYER, DEVY_SCALE) all return after the
+ * gate has already spent tokens and only the catch block refunds — a separate defect, not one
+ * to inherit.
+ */
+function unreadablePickLabels(picks: readonly unknown[]): string[] {
+  return picks.filter((p): p is string => typeof p === 'string' && parsePickLabel(p) === null)
+}
+
 function resolvePickData(p: string | { year: number; round: number; projected_range?: string }) {
   if (typeof p === 'string') {
     const parsed = parsePickLabel(p)
+    /*
+     * 🛑 THIS WAS `year: parsed?.year ?? 2025, round: parsed?.round ?? 1`.
+     *
+     * So every string the parser rejected — a typo, an empty field, a format it did not know —
+     * was silently priced as a 2025 FIRST-ROUND PICK, the most valuable asset on the curve.
+     * Nothing logged it and nothing in the response said the label had not been understood;
+     * the grade just came back confident and wrong, in the side's favour.
+     *
+     * `unreadablePickLabels` refuses the request before this point, so reaching here with an
+     * unreadable label means that guard was bypassed. Throwing fails closed into the catch
+     * (500 + token refund) rather than resurrecting the default.
+     */
+    if (!parsed) {
+      throw new Error(`unparseable pick label reached pricing: ${JSON.stringify(p)}`)
+    }
     return {
-      year: parsed?.year ?? 2025,
-      round: parsed?.round ?? 1,
-      tier: parsed?.bucket as 'early' | 'mid' | 'late' | undefined,
+      year: parsed.year,
+      round: parsed.round,
+      tier: parsed.bucket,
       label: p,
     }
   }
@@ -402,6 +439,41 @@ export const POST = withApiUsage({ endpoint: "/api/trade-evaluator", tool: "Trad
       } catch {
         return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
       }
+    }
+
+    /*
+     * 🛑 REFUSE AN UNREADABLE PICK BEFORE ANYTHING IS SPENT OR GRADED.
+     *
+     * A draft pick is the most valuable asset class this route prices, and until now an
+     * unreadable label became a 2025 first-round pick (see `resolvePickData`). The grade came
+     * back confident, lopsided in favour of whoever sent the garbage, and nothing in the
+     * response admitted the label had not been understood.
+     *
+     * Deliberately placed here — after auth and the league-membership check, BEFORE the rate
+     * limiter and the entitlement gate — so a typo costs the user neither a token nor a slice
+     * of their rate-limit window. The object form is already bounded by `PickInputSchema`, so
+     * only strings need reading.
+     *
+     * Naming the offending label is the point: "2026 3th" is a fixable typo and "Kittens" is
+     * not, and the manager can only tell which he sent if we say what we could not read.
+     */
+    const unreadablePicks = [
+      ...unreadablePickLabels(data.sender.gives_picks ?? []),
+      ...unreadablePickLabels(data.receiver.gives_picks ?? []),
+    ]
+    if (unreadablePicks.length > 0) {
+      const shown = Array.from(new Set(unreadablePicks.map((l) => l.trim() || '(empty)')))
+      return NextResponse.json(
+        {
+          error: 'UNREADABLE_PICK',
+          message:
+            shown.length === 1
+              ? `"${shown[0]}" is not a pick label we can read, so this trade cannot be graded. Use a form like "2027 1st", "2027 Early 2nd" or "2027 Round 3".`
+              : `These are not pick labels we can read, so this trade cannot be graded: ${shown.map((s) => `"${s}"`).join(', ')}. Use a form like "2027 1st", "2027 Early 2nd" or "2027 Round 3".`,
+          unreadablePicks: shown,
+        },
+        { status: 422 },
+      )
     }
 
     const sId = (data.sender.team_id || data.sender.manager_name || '').trim().toLowerCase()

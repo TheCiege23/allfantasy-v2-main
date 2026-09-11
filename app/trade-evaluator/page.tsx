@@ -987,9 +987,19 @@ function TradeHubInner() {
         }),
       })
 
-      const data = (await response.json().catch(() => ({}))) as ApiTradeResponse & { error?: string }
+      const data = (await response.json().catch(() => ({}))) as ApiTradeResponse & {
+        error?: string
+        message?: string
+      }
       if (!response.ok) {
-        throw new Error(data.error ?? `Trade evaluator returned ${response.status}`)
+        /*
+         * ⚠ `error` IS A CODE, `message` IS THE SENTENCE. Reading `error` first rendered
+         * refusals to the user as bare machine strings — "UNPRICED_ASSETS", "DEVY_SCALE",
+         * "AMBIGUOUS_PLAYER" — while the route was sending a written explanation right beside
+         * it saying which player, and what to do about it. Prefer the sentence; keep the code
+         * as the fallback for responses that carry no message.
+         */
+        throw new Error(data.message ?? data.error ?? `Trade evaluator returned ${response.status}`)
       }
 
       setResult(mapApiResponse(data, response.headers, asOfDate))
