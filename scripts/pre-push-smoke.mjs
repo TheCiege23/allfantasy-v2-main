@@ -72,12 +72,19 @@
  * `vitest-ratchet.mjs`'s "were passing and now FAIL" vs its own
  * "infrastructure failure" message.
  *
- * ⚠ A REUSED DETACHED WORKTREE LIES IF TSC'S INCREMENTAL CACHE SURVIVES A
- * CHECKOUT SWAP. This repo's tsconfig sets `incremental: true`, and reusing
- * one worktree path across many different SHAs is exactly the shape that
- * bites: a stale `.tsbuildinfo` from a PREVIOUS sha can make tsc trust cached
- * state instead of re-analysing the new one. Every run deletes any
- * `*.tsbuildinfo` in the worktree root before invoking the ratchet.
+ * 🛑 THIS FILE USED TO SAY A REUSED WORKTREE LIES IF TSC'S INCREMENTAL CACHE
+ * SURVIVES A CHECKOUT SWAP, AND DELETED EVERY `*.tsbuildinfo` BEFORE EACH RUN.
+ * That claim was never measured. It was tested on 2026-09-11 and did not hold:
+ * warm and cold runs on the same SHA returned the identical verdict, 31s against
+ * 329s, and a warm run still went red on an injected error AND on a dependency
+ * type break whose consumers were left untouched. The clear is now opt-in via
+ * AF_SMOKE_COLD=1. Full measurement and both controls live on
+ * `clearIncrementalCache` below — read it before restoring the old behaviour.
+ *
+ * ⚠ The retracted claim was plausible, specific and written with conviction, and
+ * it cost every push in this repo ~5 extra minutes for weeks. It is left quoted
+ * here rather than deleted because the failure worth remembering is not "caches
+ * are fine" — it is that a confident comment became the reason nobody checked.
  *
  * WHAT THIS DOES NOT DO
  * - It does not run the full vitest suite by default (AF_SMOKE_RUN_TESTS=1
@@ -503,8 +510,37 @@ function ensureNodeModulesLink(worktreeDir, source) {
   }
 }
 
-/** Kill any `.tsbuildinfo` left from a previous SHA at this same worktree
- *  path — see the header comment on why a reused worktree lies otherwise. */
+/**
+ * Delete every `.tsbuildinfo` in the worktree root, forcing a cold compile.
+ *
+ * 🛑 NO LONGER RUN BY DEFAULT, AND THE CLAIM THAT REQUIRED IT WAS MEASURED AND DID NOT HOLD.
+ * The header used to assert that a reused worktree "lies if tsc's incremental cache survives a
+ * checkout swap" — that a stale `.tsbuildinfo` from a previous SHA makes tsc trust cached state
+ * instead of re-analysing the new one. Tested 2026-09-11, same SHA and same machine:
+ *
+ *     cold (cache deleted)                       143 vs baseline 143, no regressions    329s
+ *     warm (cache carried from a DIFFERENT sha)  143 vs baseline 143, no regressions     31s
+ *
+ * Same verdict, 10.6x faster. A fast agreeing run is exactly what a check that measures nothing
+ * looks like, so it was made to go red twice before being believed:
+ *
+ *   - an injected error in a CHANGED file    -> RED, 144, named that file,  35s
+ *   - a dependency's exported type broken,
+ *     every CONSUMER left untouched          -> RED, 151, FOUR files,       27s
+ *
+ * ⚠ THE SECOND CONTROL IS THE ONE THAT SETTLES IT. `leagueId: string` was changed to `number` in
+ * lib/decision-os/lineup/shadow.ts and nothing else was edited; the warm run reported breaks in
+ * three files that had not changed at all — canonicalPersist.ts, app/api/today/lineup-actions/
+ * route.ts and runTodayActions.ts. That is precisely the cross-file type widening CLAUDE.md says a
+ * scoped check cannot see, and the warm cache saw it. tsc invalidates on the dependency graph, not
+ * on file identity. Both mutations were proven applied by diff before their run and each restore
+ * verified by content.
+ *
+ * ⚠ WHAT THIS IS NOT EVIDENCE OF. Two break shapes were tested, not all of them. The escape hatch
+ * below exists because that is a real limit, not a formality: if a smoke result ever looks wrong,
+ * re-run with AF_SMOKE_COLD=1 before believing it, and if a cold run then disagrees with a warm one
+ * that is a finding worth writing down here rather than a flake.
+ */
 function clearIncrementalCache(worktreeDir) {
   let names
   try {
@@ -613,7 +649,12 @@ function main() {
   const nmErr = ensureNodeModulesLink(worktreeDir, nmSource)
   if (nmErr) allow(nmErr)
 
-  clearIncrementalCache(worktreeDir)
+  // Cold only on request. See clearIncrementalCache's header for the measurement that retired
+  // the unconditional clear, and for what to do when a warm result looks wrong.
+  if (process.env.AF_SMOKE_COLD === '1') {
+    clearIncrementalCache(worktreeDir)
+    process.stderr.write('  … pre-push-smoke: AF_SMOKE_COLD=1 — incremental cache cleared\n')
+  }
 
   const started = Date.now()
   process.stderr.write(`  … pre-push-smoke: typechecking ${sha.slice(0, 9)} in isolation…\n`)
