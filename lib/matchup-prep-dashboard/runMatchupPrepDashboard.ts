@@ -13,6 +13,7 @@ import { leagueWantsLongHorizon, resolveNormalizedLeagueContext } from '@/lib/le
 import { normalizeToSupportedSport, SUPPORTED_SPORTS } from '@/lib/sport-scope'
 import { resolveMatchupOpponentExternal } from '@/lib/matchup-prep-dashboard/resolveMatchupOpponent'
 import { readWeekMarketContextByTeam } from '@/lib/odds/gameOddsReads'
+import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
 import {
   aggregateStarterBands,
   buildPositionEdges,
@@ -645,7 +646,14 @@ export async function runMatchupPrepDashboard(input: MatchupPrepDashboardInput):
     : mySs.players
   const marketContext = marketRoster
     .map((p) => {
-      const m = p.team ? marketByTeam.get(p.team) : null
+      /*
+       * Both sides of this join go through `normalizeTeamAbbrev`. The map is keyed
+       * on the canonical code in `readWeekMarketContextByTeam`, so looking up a raw
+       * roster code would re-open exactly the mismatch that keying fixed — and the
+       * failure is silent, dropping the player from the layer with no error.
+       */
+      const teamKey = p.team ? (normalizeTeamAbbrev(p.team) ?? p.team) : null
+      const m = teamKey ? marketByTeam.get(teamKey) : null
       if (!m) return null
       return {
         name: p.name,

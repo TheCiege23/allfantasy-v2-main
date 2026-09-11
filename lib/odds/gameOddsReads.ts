@@ -23,6 +23,7 @@
  */
 
 import { prisma } from '@/lib/prisma'
+import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
 import { pickPrimaryBookmaker, type NormalizedGameOdds } from './normalizeApiSportsOdds'
 
 /**
@@ -283,10 +284,32 @@ export async function readWeekMarketContextByTeam(
     const stale = entry!.isStale
     const homeProb = q.homeWinProbability
 
+    /*
+     * 🛑 KEY ON THE CANONICAL CODE, BECAUSE THIS COLUMN IS NOT ALWAYS A CODE.
+     * `syncAPISportsGamesToDb` writes
+     *     teamNameToAbbrev(g.teams.home.name) || g.teams.home.name
+     * so when the abbreviation table misses, the FULL TEAM NAME is stored instead.
+     * A caller holding roster team codes would then never match that row, and the
+     * miss is silent — the player is simply dropped from the result with no error
+     * and no data gap.
+     *
+     * Measured 2026-09-11: zero NFL rows currently carry a long value, and the two
+     * vocabularies agree on all 32 codes, so this is dormant rather than broken
+     * today. It fires on a relocation, a rename, or NCAAF, whose hundreds of
+     * colleges the abbreviation table does not begin to cover.
+     *
+     * `normalizeTeamAbbrev` also folds the known aliases (JAC->JAX, WSH->WAS,
+     * LA->LAR, OAK->LV), and returns the upper-cased input for anything it does not
+     * recognise — so junk codes stay junk and still compare equal on both sides,
+     * provided the caller normalizes too.
+     */
+    const homeKey = normalizeTeamAbbrev(game.homeTeam) ?? game.homeTeam
+    const awayKey = normalizeTeamAbbrev(game.awayTeam) ?? game.awayTeam
+
     if (game.homeTeam) {
-      out.set(game.homeTeam, {
-        team: game.homeTeam,
-        opponent: game.awayTeam ?? null,
+      out.set(homeKey, {
+        team: homeKey,
+        opponent: awayKey ?? null,
         isHome: true,
         impliedTeamTotal: q.impliedHomeTotal,
         spread: q.spreadHome,
@@ -297,9 +320,9 @@ export async function readWeekMarketContextByTeam(
     }
 
     if (game.awayTeam) {
-      out.set(game.awayTeam, {
-        team: game.awayTeam,
-        opponent: game.homeTeam ?? null,
+      out.set(awayKey, {
+        team: awayKey,
+        opponent: homeKey ?? null,
         isHome: false,
         impliedTeamTotal: q.impliedAwayTotal,
         // Mirrored, not copied. A -3.5 home line is +3.5 for the away side.

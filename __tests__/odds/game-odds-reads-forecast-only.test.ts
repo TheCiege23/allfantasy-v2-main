@@ -157,6 +157,49 @@ describe('readWeekMarketContextByTeam — each side stated from its own perspect
     expect(m.has('MIA')).toBe(false)
   })
 
+  it('keys on the CANONICAL code when the column holds a full team name', async () => {
+    /*
+     * The real failure path, not a hypothetical: `syncAPISportsGamesToDb` writes
+     *     teamNameToAbbrev(name) || g.teams.home.name
+     * so an abbreviation-table miss stores the FULL NAME. A caller holding roster
+     * codes would never match it, and the miss is silent.
+     */
+    gamesFindMany.mockResolvedValue([
+      { externalId: '7532', homeTeam: 'Kansas City Chiefs', awayTeam: 'Denver Broncos' },
+    ])
+    const m = await readWeekMarketContextByTeam('NFL', 2026, 1)
+
+    expect(m.has('KC')).toBe(true)
+    expect(m.has('DEN')).toBe(true)
+    // and the entry reports the canonical code, not the stored prose
+    expect(m.get('KC')!.team).toBe('KC')
+    expect(m.get('KC')!.opponent).toBe('DEN')
+  })
+
+  it('folds known aliases so JAC and JAX are the same team', async () => {
+    gamesFindMany.mockResolvedValue([
+      { externalId: '7532', homeTeam: 'JAC', awayTeam: 'WSH' },
+    ])
+    const m = await readWeekMarketContextByTeam('NFL', 2026, 1)
+
+    expect(m.has('JAX')).toBe(true) // JAC -> JAX
+    expect(m.has('WAS')).toBe(true) // WSH -> WAS
+    expect(m.get('JAX')!.opponent).toBe('WAS')
+  })
+
+  it('CONTROL: an unknown code is not silently mapped onto a real team', async () => {
+    // normalizeTeamAbbrev upper-cases what it does not recognise rather than
+    // guessing, so junk stays junk — and a caller that normalizes too still matches.
+    gamesFindMany.mockResolvedValue([
+      { externalId: '7532', homeTeam: 'zzz', awayTeam: 'KC' },
+    ])
+    const m = await readWeekMarketContextByTeam('NFL', 2026, 1)
+
+    expect(m.has('ZZZ')).toBe(true)
+    expect(m.has('KC')).toBe(true)
+    expect(m.size).toBe(2)
+  })
+
   it('CONTROL: a copy-instead-of-mirror bug would be caught by this fixture', async () => {
     // Proves the asymmetry is real: if the two sides shared a value, the mirror
     // assertions above could pass while doing nothing.
