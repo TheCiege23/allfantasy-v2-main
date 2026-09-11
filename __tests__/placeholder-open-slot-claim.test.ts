@@ -66,7 +66,15 @@ describe('claimPlaceholderRoster native open slots', () => {
         data: expect.objectContaining({
           ownerName: 'Second Manager',
           claimedByUserId: 'app-user-2',
+          /*
+           * The legacy flag is still written so no unmigrated reader changes meaning, but it is
+           * no longer the thing that MEANS anything — `isOrphan: false` was the only way this
+           * writer could say "somebody is in this seat now", and it could not also say the
+           * franchise is current. The two axes below are what it says instead.
+           */
           isOrphan: false,
+          lifecycleState: 'CURRENT',
+          managerKind: 'HUMAN',
         }),
       }),
     )

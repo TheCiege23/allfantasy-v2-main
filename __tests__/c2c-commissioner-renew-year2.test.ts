@@ -124,6 +124,56 @@ describe('C2C commissioner renew / continue-to-next-year', () => {
     expect(lastUpdateCall.data.settings.renewal_completed_for_season).toBe(2027)
   })
 
+  it('🛑 removing a member ARCHIVES it with a reason, and touches no other axis', async () => {
+    /*
+     * This is ONE OF ONLY TWO WRITERS IN THE CODEBASE THAT GENUINELY MEANT WHAT `isOrphan` WAS
+     * READ TO MEAN. A commissioner deliberately removing a member is a departure; the other five
+     * meanings of that flag — a vacant seat at creation, a provider seat with no manager, an
+     * elimination — are not. So this is the writer that must archive, and the assertions below
+     * are as much about what it does NOT do.
+     *
+     * ⚠ THE EXISTING TESTS IN THIS FILE NEVER REACHED THIS BRANCH. Neither posts
+     * `removeMemberIds`, so `if (removeMemberIds.length > 0)` was dead in every run and
+     * `leagueTeamUpdateManyMock` — wired up in the setup above — was only ever exercised by the
+     * sweep and the stats reset. The archival write could have been deleted outright and this
+     * suite would have stayed green.
+     */
+    const { POST } = await import('@/app/api/commissioner/leagues/[leagueId]/renew/route')
+
+    const req = new Request('http://localhost/api/commissioner/leagues/league-1/renew', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ removeMemberIds: ['t9'] }),
+    })
+
+    const res = await POST(req as any, { params: Promise.resolve({ leagueId: 'league-1' }) })
+    expect(res.status).toBe(200)
+
+    const removal = leagueTeamUpdateManyMock.mock.calls
+      .map((c) => c[0])
+      .find((a) => a?.where?.id?.in?.includes('t9'))
+    expect(removal, 'the removal branch never ran — removeMemberIds was not honoured').toBeTruthy()
+
+    /* Scoped to the named members, and never to a commissioner. */
+    expect(removal.where).toMatchObject({ leagueId: 'league-1', isCommissioner: false })
+
+    expect(removal.data.lifecycleState, 'an admin removal IS a departure').toBe('ARCHIVED')
+    expect(removal.data.archivedAt, 'an archive must be stamped, not merely flagged').toBeTruthy()
+    expect(removal.data.archiveReason, 'the reason records WHICH of the meanings put it here').toBe(
+      'commissioner_removed_at_renewal',
+    )
+    /* The legacy flag keeps being written so no unmigrated reader changes meaning. */
+    expect(removal.data.isOrphan).toBe(true)
+
+    /*
+     * 🛑 `managerKind` IS DELIBERATELY UNTOUCHED, AND THIS PINS THAT. Removal says the franchise
+     * left; it says nothing about who was running it, and a removed human is not thereby VACANT.
+     * Writing a manager state here would invent one — the exact habit this batch exists to end.
+     */
+    expect(removal.data.managerKind, 'removal must not invent a manager state').toBeUndefined()
+    expect(removal.data.eliminatedAt, 'removal is not an elimination').toBeUndefined()
+  })
+
   it('allows commissioner league-type update to c2c and forces dynasty=true', async () => {
     leagueFindUniqueMock.mockResolvedValueOnce({
       userId: 'commissioner-1',

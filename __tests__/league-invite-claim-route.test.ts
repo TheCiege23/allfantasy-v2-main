@@ -128,6 +128,32 @@ describe('POST /api/league/invite/claim', () => {
     const res = await POST(req as any)
     expect(res.status).toBe(200)
     await expect(res.json()).resolves.toEqual({ ok: true, leagueId: 'league-1' })
+    /*
+     * 🛑 THE CLAIM WRITER SETTLES BOTH AXES, AND NOTHING ASSERTED IT UNTIL NOW.
+     * `leagueTeamUpdateMock` was wired up in this file's setup and never checked, so the route
+     * could have stopped writing the lifecycle fields entirely and every test here stayed green.
+     *
+     * A person accepting an invite is the strongest evidence a seat is live that the system ever
+     * gets — it is a user action, not an inference over an unclassified row — which is the only
+     * way UNKNOWN is allowed to become CURRENT.
+     */
+    expect(leagueTeamUpdateMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'team-row-1' },
+        data: expect.objectContaining({
+          claimedByUserId: 'af-user-1',
+          isOrphan: false,
+          lifecycleState: 'CURRENT',
+          managerKind: 'HUMAN',
+        }),
+      }),
+    )
+    /* A claim is not an archival event and must never stamp one. */
+    const claimData = leagueTeamUpdateMock.mock.calls[0]?.[0]?.data ?? {}
+    expect(claimData.lifecycleState).not.toBe('ARCHIVED')
+    expect(claimData.archivedAt ?? null).toBeNull()
+    expect(claimData.archiveReason ?? null).toBeNull()
+
     expect(rosterUpdateMock).toHaveBeenCalledWith(
       expect.objectContaining({
         where: { id: 'roster-1' },
