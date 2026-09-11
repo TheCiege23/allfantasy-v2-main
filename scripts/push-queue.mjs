@@ -54,6 +54,7 @@ import {
   mkdirSync,
   readdirSync,
   readFileSync,
+  renameSync,
   rmSync,
   writeFileSync,
   appendFileSync,
@@ -234,9 +235,29 @@ function readTickets(dir) {
   return { tickets, degraded, reason }
 }
 
+/**
+ * 🛑 WRITE THE WHOLE FILE SOMEWHERE ELSE, THEN MOVE IT INTO PLACE.
+ *
+ * This rewrote the ticket IN PLACE, and every heartbeat rewrites one — so with
+ * a dozen live tickets there is a steady stream of partial files for a
+ * concurrent `readTickets` to catch mid-write. It did, on 2026-09-11: a peer's
+ * `000410.json` read as unparseable, the queue correctly declared itself
+ * degraded and failed open, and the push then silently did not happen (see the
+ * note in `cmdWait`). The same file parsed perfectly seconds later.
+ *
+ * A rename within one directory is atomic, so a reader sees either the old
+ * ticket or the new one and never half of either. `readTickets` matches
+ * `/^\d{6}\.json$/`, which the temp name deliberately does not.
+ *
+ * ⚠ The temp name carries the pid because two processes can heartbeat the same
+ * ticket — a session and an orphan from its own earlier run — and a shared temp
+ * name would put them back in the race this exists to remove.
+ */
 function writeTicket(t) {
   const { _file, ...body } = t
-  writeFileSync(_file, `${JSON.stringify(body, null, 2)}\n`)
+  const tmp = `${_file}.${process.pid}.tmp`
+  writeFileSync(tmp, `${JSON.stringify(body, null, 2)}\n`)
+  renameSync(tmp, _file)
 }
 
 function release(dir, t, reason) {
@@ -1356,7 +1377,31 @@ async function cmdWait(argv) {
 
   for (;;) {
     const { degraded, reason, live, mine } = ticketFor(dir, sha, ctx)
-    if (degraded) allow(reason)
+    /*
+     * 🛑 RETURN, DO NOT `allow()` — `allow()` IS `process.exit(0)`, AND THAT IS
+     * THE RIGHT ANSWER ONLY FOR THE GATE.
+     *
+     * In the hook, exiting 0 means "do not block git" and the push proceeds.
+     * Reached from `cmdPush`, which calls this IN-PROCESS and then runs
+     * `git push` itself, the same exit killed the program BEFORE the push — so
+     * "failing open, the push is allowed" was printed by a program that then
+     * did not push. Exit 0, ticket still `waiting`, origin/main unmoved, no
+     * error anywhere. Observed 2026-09-11 and caught only because the result
+     * was verified by `ls-remote` rather than by exit status.
+     *
+     * Returning 0 means the same thing to both callers and is true for both:
+     * the CLI `wait` still exits 0, and `cmdPush` falls through and actually
+     * pushes. A fail-open that skips the operation is not failing open.
+     *
+     * ⚠ The two other `if (degraded) allow(reason)` sites are gate paths where
+     * terminating IS correct. This is the only one whose caller has work left.
+     */
+    if (degraded) {
+      process.stderr.write(
+        `  ⚠ push-queue: ${reason} — failing open; proceeding without a turn check.\n`,
+      )
+      return 0
+    }
     heartbeat(mine)
     const ahead = live.filter((t) => t.seq < mine.seq)
     if (ahead.length === 0) {
