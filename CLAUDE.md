@@ -366,6 +366,71 @@ staged set before committing.
 
 **This repo is public.** Secret-scan before every push.
 
+### ⚠ 2026-09-11: `enforce_admins` WENT ON FOR ABOUT TWO HOURS AND CAME BACK OFF
+
+🛑 **DIRECT PUSHES TO `main` WORK. This section is a RECORD, not a rule.** The flag was
+enabled at the user's instruction at ~17:23 and reverted at their instruction ~2h later.
+Both endpoints now read `enforce_admins: false`. Nothing here changes how you land work —
+everything else in this chapter still applies verbatim.
+
+It is kept because that window measured things that are true whether or not the flag is
+on, and because the episode itself is the most compact example of this file's own thesis.
+
+**What the flip revealed, and these outlive it:**
+
+- **The 14 required contexts have always been bypassed.** Every push prints
+  `Bypassed rule violations for refs/heads/main: 14 of 14 required status checks are
+  expected`, and that line is LITERAL — the contract exists and enforces nothing, because
+  `enforce_admins: false` exempts the owner account and every push is that account. It is
+  one boolean, not a consequence of the cherry-pick convention.
+- **Removing the bypass surfaced a genuinely red required check that had been invisible.**
+  `Unit tests (3/4)` was failing on `main` and nothing said so, because nothing was
+  evaluating it against a landing. The gate did not create the failure; it revealed one.
+- **`enforce_admins` blocks BYPASS, not merge.** A peer read
+  `required_approving_review_count: 1` off
+  `/branches/main/protection/required_pull_request_reviews` and concluded no path to `main`
+  existed. That sub-endpoint returns what the setting WOULD be rather than 404ing when it
+  is unset — the canonical object does not have the key, `rulesets` is 0, and live PRs
+  report `reviewDecision` EMPTY. No review is required.
+- **`required ∩ failing` is the only view that answers "can this land".** A raw
+  `/commits/<sha>/check-runs` list showed six failures; two were `Playwright (mobile-smoke)`
+  and `Playwright (core 2/3)`, which are NOT required and block nobody. Keep the LATEST run
+  per name and intersect with the 14. ⚠ Count with `jq length`, not `grep -c` — grep
+  returning 0 exits 1 and reads exactly like a failed command.
+- ⚠ **Under `strict: true`, PENDING blocks exactly as FAILING does.** "0 required in a
+  failed state" is not "can land".
+
+🛑 **AND THE EXPENSIVE PART, WHICH IS NOT ABOUT BRANCH PROTECTION.** The flip reverses the
+2026-08-27 decision *"commit straight to prod everytime, do not do preview"* — the reason
+this entire chapter exists. A peer raised that contradiction before the session doing it
+did; it had stated the consequence ("ends direct pushes") without connecting it to the
+recorded decision it overturned. The user was then shown it explicitly and confirmed. **A
+decision reversed knowingly is a different act from the same reversal made silently**, and
+the only thing separating them was one peer reading the memory file.
+
+⚠ **THE SEQUENCING FAILED AND THE REASON GENERALISES.** The plan was "flip once the queue
+drains". That state never arrived: 14 → 10 tickets in 35 minutes while `origin/main` did not
+move once, because the line refilled as fast as it emptied. ~10 tickets were live at the
+flip and `main` froze for ~100 minutes with nine sessions queued behind a push that could
+not succeed. **Do not gate an irreversible-feeling change on a quiet moment in a system
+that has no quiet moments** — pick a condition you can observe reaching, or accept the cost
+deliberately.
+
+⚠ **AND THE ANNOUNCEMENT WAS BLOCKED, WHICH IS WHY IT COST SO MUCH.** The session flipping
+it tried to warn the room first and the send was refused by a permission classifier. It
+proceeded and reported the gap rather than skipping it quietly — but eight sessions learned
+about the change one refused push at a time until a peer broadcast it. A blocked
+announcement that gets reported is a delay; one that gets dropped is the mystery everyone
+else pays for.
+
+🛑 **IF IT IS EVER TURNED ON AGAIN, THIS IS WHAT BREAKS FIRST.** `push-queue.mjs` engages
+only for a remote ref of `refs/heads/main` (cmdCheck ~line 1022) and its default refspec is
+`<sha>:refs/heads/main` (cmdPush ~line 1539). So a direct push still takes a ticket, waits
+its turn, pays the ~25s secret scan and a cold typecheck — **and is only then refused by
+GitHub.** Every message it prints on the way says *rebuild onto current main*; none says
+*open a PR*. A session can burn 40+ minutes being told by our own tooling that it is nearly
+there. Fix that text BEFORE the flag, not after.
+
 ### 🛑 CHERRY-PICK ONTO `main`. DO NOT MERGE IN THE SHARED TREE.
 
 User's decision, 2026-08-29, after six sessions spent a day working two
