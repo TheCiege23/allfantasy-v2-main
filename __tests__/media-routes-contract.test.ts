@@ -38,7 +38,7 @@ describe('Media route contracts', () => {
 
   it('forwards list filters and normalizes sport', async () => {
     listArticlesMock.mockResolvedValueOnce({ articles: [], nextCursor: undefined })
-    const { GET } = await import('@/app/api/leagues/[leagueId]/media/route')
+    const { GET } = await import('@/app/api/leagues/[leagueId]/media/handler')
     const req = new Request(
       'http://localhost/api/leagues/lg-1/media?sport=nba&tags=weekly_recap,power_rankings&limit=10&cursor=c-1'
     )
@@ -55,7 +55,7 @@ describe('Media route contracts', () => {
   })
 
   it('rejects invalid sport and invalid tags for list', async () => {
-    const { GET } = await import('@/app/api/leagues/[leagueId]/media/route')
+    const { GET } = await import('@/app/api/leagues/[leagueId]/media/handler')
 
     const badSportReq = new Request('http://localhost/api/leagues/lg-1/media?sport=bad')
     const badSportRes = await GET(badSportReq, { params: Promise.resolve({ leagueId: 'lg-1' }) })
@@ -74,7 +74,7 @@ describe('Media route contracts', () => {
   })
 
   it('requires auth, membership, and commissioner role for media generation', async () => {
-    const { POST } = await import('@/app/api/leagues/[leagueId]/media/route')
+    const { POST } = await import('@/app/api/leagues/[leagueId]/media/handler')
 
     getServerSessionMock.mockResolvedValueOnce(null)
     const unauthReq = new Request('http://localhost/api/leagues/lg-1/media', {
@@ -108,7 +108,7 @@ describe('Media route contracts', () => {
   })
 
   it('validates generate payload and forwards normalized values', async () => {
-    const { POST } = await import('@/app/api/leagues/[leagueId]/media/route')
+    const { POST } = await import('@/app/api/leagues/[leagueId]/media/handler')
 
     getServerSessionMock.mockResolvedValue({ user: { id: 'u-1' } })
     assertLeagueMemberMock.mockResolvedValueOnce({

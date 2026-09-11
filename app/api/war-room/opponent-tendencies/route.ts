@@ -4,8 +4,6 @@ import { requireUserId, requireLeagueWarRoom } from '@/lib/war-room/war-room-api
 import { logAiRecommendation, upsertManagerTendency } from '@/lib/war-room/war-room-persist'
 import { listProfilesByLeague } from '@/lib/psychological-profiles/ManagerBehaviorQueryService'
 import { resolveProfileAccess, presentProfile } from '@/lib/psychological-profiles/ProfileAccess'
-import { filterLabelsByDimension } from '@/lib/psychological-profiles/ProfileLabelResolver'
-import type { ProfileLabel } from '@/lib/psychological-profiles/types'
 
 export const dynamic = 'force-dynamic'
 
@@ -93,15 +91,15 @@ export async function GET(req: NextRequest) {
     const presented = presentProfile(profile, access)
     const locked = 'locked' in presented
     const draft = profile.evidenceSummary?.dimensions.draft
-    const labels = locked
-      ? []
-      : filterLabelsByDimension(profile.profileLabels as ProfileLabel[], 'draft')
+    const labels: string[] = []
 
     return {
       managerId: profile.managerId,
       isYou: access.ownManagerIds.has(profile.managerId),
       locked,
       labels,
+      evidence: [],
+      message: 'Competitive Edge guidance is available for a specific draft decision.',
       // Coverage is shown even when locked: "44 picks observed" says how much we
       // watched without saying what it revealed.
       picksObserved: draft?.evidenceCount ?? 0,

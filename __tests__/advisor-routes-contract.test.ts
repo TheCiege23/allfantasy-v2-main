@@ -22,7 +22,7 @@ describe('Advisor route contracts', () => {
   })
 
   it('enforces auth and validates required leagueId', async () => {
-    const { GET } = await import('@/app/api/leagues/[leagueId]/advisor/route')
+    const { GET } = await import('@/app/api/leagues/[leagueId]/advisor/handler')
 
     getServerSessionMock.mockResolvedValueOnce(null)
     const unauthRes = await GET(new Request('http://localhost/api/leagues/lg-1/advisor'), {
@@ -39,7 +39,7 @@ describe('Advisor route contracts', () => {
   })
 
   it('returns 404 when advisor has no accessible league/roster', async () => {
-    const { GET } = await import('@/app/api/leagues/[leagueId]/advisor/route')
+    const { GET } = await import('@/app/api/leagues/[leagueId]/advisor/handler')
     getLeagueAdvisorAdviceMock.mockResolvedValueOnce(null)
 
     const res = await GET(new Request('http://localhost/api/leagues/lg-1/advisor'), {
@@ -52,7 +52,7 @@ describe('Advisor route contracts', () => {
   })
 
   it('forwards user-scoped params and returns structured advice', async () => {
-    const { GET } = await import('@/app/api/leagues/[leagueId]/advisor/route')
+    const { GET } = await import('@/app/api/leagues/[leagueId]/advisor/handler')
     getLeagueAdvisorAdviceMock.mockResolvedValueOnce({
       lineup: [{ summary: 'Start A', priority: 'high' }],
       trade: [],

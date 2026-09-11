@@ -94,6 +94,74 @@ function makeSet(
 
 // ── Manager recommendation generators ────────────────────────────────────────
 
+/**
+ * 🛑 WHAT A RECOMMENDATION MAY SAY ABOUT AN INFERRED CLASSIFICATION: NOTHING.
+ *
+ * Milestone 32 requires raw behavioural profiles to be unavailable through every public API path,
+ * and these recommendations ARE a public path — `managerCommandCenter.ts` passes the whole
+ * `Recommendation` through untouched and `/api/decision-os/manager-command-center` answers with
+ * `NextResponse.json({ ...snapshot })`. So every string below travels to a client verbatim.
+ *
+ * The classification still DRIVES the decision — that is internal and stays. What changed is that
+ * it is no longer RESTATED. Fourteen strings used to carry it: "Manager classified as
+ * ghost_manager by DNA assembler", `primaryIdentity=${...}` interpolated into a sentence,
+ * `identity=trade_seeker`, "Dismiss when transactionStyle improves to waiver_dominant or
+ * balanced", and rationale/uncertainty copy naming the label in prose.
+ *
+ * ⚠ AND THE OBVIOUS FIX — "state the observable fact instead of the label" — IS NOT AVAILABLE
+ * HERE, WHICH IS WHY THIS IS A WITHHOLDING RATHER THAN A REPHRASING. `ManagerIdentitySlice`
+ * carries labels and a completeness number and nothing else: no `lineupEditsPerWeek`, no
+ * `waiverClaimsPerWeek`, no counts. Those rates exist upstream in `ManagerSignalInput` and are not
+ * passed to this layer. Writing "0 lineup edits in three weeks" here would be a fact this module
+ * has never seen. Where a real PATTERN exists it is already cited with its own occurrence count —
+ * that is the observable half, and it is untouched. Where identity is the only driver, the honest
+ * statement is that an assessment contributed and is not disclosed.
+ *
+ * 🛑 A RESIDUAL CHANNEL REMAINS, IT IS BIGGER THAN "priority IS JUST AN ORDINAL", AND MEASURING IT
+ * IS THE ONLY REASON THAT IS KNOWN.
+ *
+ * An earlier version of this note claimed `priority`/`severity` were a coarse ordinal and therefore
+ * not a dossier. A peer review proposed the test that settles it — hold everything fixed, vary only
+ * the label, and see whether the emitted pairs collide. They do not. Measured across the eight
+ * identity labels, every one produces a UNIQUE (priority, severity), and the label is recoverable.
+ *
+ * ⚠ AND THE ORDINAL IS NOT EVEN THE BINDING CHANNEL, WHICH IS WHY "FIX priority" IS THE WRONG
+ * CONCLUSION. The SET OF CATEGORIES THAT FIRE is already injective on the label: `lineup_discipline`
+ * fires only for `indecisive_tinkerer`, `trade_coaching` only for `trade_seeker`, `ghost_manager`
+ * uniquely produces engagement_boost + league_participation together, `set_and_forget` uniquely
+ * produces league_participation + draft_preparation. Flattening the urgency would therefore cost
+ * real product behaviour and close NOTHING — the label is recoverable from which advice appears,
+ * before any field on it is read.
+ *
+ * That channel is inseparable from the feature. A recommender that gives different advice to
+ * different manager types reveals the type by giving the advice; the only way to close it is to
+ * stop tailoring, which is the product. So it is recorded rather than "fixed", and the test file
+ * pins the exact shape so a later change is visible instead of silent.
+ *
+ * ✅ RULED 2026-09-11 BY GUAP, PRESENTED WITH THE MEASUREMENT ABOVE: "keep the recommendations,
+ * it's self-scoped." The tailored advice stays and the residual channel is accepted. Milestone 32
+ * has no self carve-out on paper, so this is a deliberate product judgement about THIS surface, not
+ * a claim that the criterion is met — recorded here so a later reader meets the decision rather
+ * than re-deriving it or quietly reversing it.
+ *
+ * 🛑 AND THE RULING IS CONDITIONAL ON THE SELF-SCOPING, WHICH IS NOW ENFORCED RATHER THAN OBSERVED.
+ * These are self-scoped because `dashboard-intelligence.ts` — the ONLY production caller — matches
+ * `p.managerId === managerId`, and `/api/decision-os/manager-command-center` resolves the session
+ * user's own leagues and never reads a managerId off the request. A viewer can infer their OWN
+ * classification and nobody else's.
+ *
+ * ⚠ THE PATH THAT WOULD BREAK IT IS ALREADY IN THIS FILE. `assembleRecommendations` does
+ * `input.managerInputs.map(assembleManagerRecommendations)` — many managers at once. It is exported
+ * from the phase6 barrel and has NO production caller today. Wire it to a route and third parties'
+ * classifications become recoverable, while every privacy test above still passes: the text carries
+ * no label, the equivalence property still holds, and nothing else goes red. So
+ * `manager-recommendations-withhold-identity.test.ts` asserts that caller set directly and fails if
+ * it changes — the ruling was given on a premise, and the premise is now a test.
+ */
+const IDENTITY_WITHHELD_EVIDENCE =
+  'Supported by an internal engagement assessment, which is not disclosed here'
+const IDENTITY_WITHHELD_DERIVATION = 'identity_signal=contributed (classification withheld)'
+
 function buildEngagementBoost(input: ManagerRecommendationInput): Recommendation | null {
   const inactivity = findPattern(input.patterns, 'manager_inactivity_window')
   const isGhost = input.identity?.primaryIdentity === 'ghost_manager'
@@ -111,15 +179,26 @@ function buildEngagementBoost(input: ManagerRecommendationInput): Recommendation
 
   const derivation: string[] = []
   if (inactivity) derivation.push(`manager_inactivity_window (${inactivity.confidence}): ${inactivity.occurrenceCount} instance(s)`)
-  if (isGhost) derivation.push('primaryIdentity=ghost_manager')
-  if (isUnreliable) derivation.push('engagementReliability=unreliable')
-  if (isInconsistent) derivation.push('engagementReliability=inconsistent')
+  // One marker for all three, so the string does not vary with WHICH classification fired.
+  if (isGhost || isUnreliable || isInconsistent) derivation.push(IDENTITY_WITHHELD_DERIVATION)
   derivation.push(`priority=${priority}, severity=${severity}`)
 
   const evidence: string[] = []
   if (inactivity) evidence.push(`Inactivity gap detected (${inactivity.confidence} confidence, ${inactivity.occurrenceCount}x)`)
-  if (isGhost) evidence.push('Manager classified as ghost_manager by DNA assembler')
-  if (isUnreliable && !inactivity) evidence.push('Engagement reliability = unreliable (no explicit gap pattern)')
+  /*
+   * ⚠ PUSHED ONCE, ON THE SAME CONDITION AS THE DERIVATION, AND BOTH HALVES MATTER.
+   *
+   * Once, because emitting a marker for `isGhost` and a second for `isUnreliable` would put the
+   * COUNT of matched conditions on the wire, and a count is a read of the profile — the leak
+   * reappearing as arithmetic rather than as prose.
+   *
+   * 🛑 And on the SAME condition, because the first version of this line read
+   * `isGhost || (isUnreliable && !inactivity)` and so said nothing at all for an `inconsistent`
+   * manager. That produced an EMPTY evidence array for one classification and a populated one for
+   * another — which hands a reader the label back through the SHAPE of the response after every
+   * word naming it had been removed. Caught by the equivalence test, not by reading this code.
+   */
+  if (isGhost || isUnreliable || isInconsistent) evidence.push(IDENTITY_WITHHELD_EVIDENCE)
 
   return {
     id: makeId('manager', 'engagement_boost', input.managerId),
@@ -142,7 +221,7 @@ function buildEngagementBoost(input: ManagerRecommendationInput): Recommendation
       { action: 'Check lineup 48 hours before game day', rationale: 'Allows time for injury adjustment before lock' },
       { action: 'Review waiver wire every Tuesday morning', rationale: 'Waiver claims typically process overnight' },
     ],
-    rollbackCriteria: ['Dismiss when engagement_reliability returns to reliable for 3+ consecutive weeks'],
+    rollbackCriteria: ['Dismiss when weekly participation holds a consistent cadence for 3+ consecutive weeks'],
     completeness: input.identity?.completeness ?? 50,
     uncertainty: [
       'Pattern detection depends on event stream completeness',
@@ -168,7 +247,7 @@ function buildLineupDiscipline(input: ManagerRecommendationInput): Recommendatio
   const derivation: string[] = []
   if (indecision) derivation.push(`repeated_lineup_indecision (${indecision.confidence}): ${indecision.occurrenceCount}x`)
   if (benchRegret) derivation.push(`bench_regret_repetition (${benchRegret.confidence}): ${benchRegret.occurrenceCount}x`)
-  if (identitySupports) derivation.push(`identity/decisionStyle supports indecisive pattern`)
+  if (identitySupports) derivation.push(IDENTITY_WITHHELD_DERIVATION)
 
   return {
     id: makeId('manager', 'lineup_discipline', input.managerId),
@@ -181,9 +260,17 @@ function buildLineupDiscipline(input: ManagerRecommendationInput): Recommendatio
     affectedDimensions: ['roster_management', 'lineup_discipline'],
     expectedImpact: 'Fewer last-minute changes, reduced bench regret, more consistent start/sit decisions',
     derivation,
+    /*
+     * ⚠ THE IDENTITY-ONLY FIRING USED TO PRODUCE AN EMPTY `evidence` ARRAY, BEFORE ANY OF THIS.
+     * `identitySupports` alone can fire this recommendation, and neither entry below applied — so a
+     * user could be shown advice with nothing behind it. The suite did not catch that: it asserts
+     * `evidence.length > 0` for fired recommendations, and passed only because every fixture also
+     * carried a pattern. Withholding the label is not a licence to say nothing at all.
+     */
     evidence: [
       ...(indecision ? [`${indecision.occurrenceCount} week(s) with 3+ lineup saves (indecision pattern)`] : []),
       ...(benchRegret ? [`${benchRegret.occurrenceCount} player(s) flip-flopped between bench and starter`] : []),
+      ...(!indecision && !benchRegret && identitySupports ? [IDENTITY_WITHHELD_EVIDENCE] : []),
     ],
     benchmarkComparison: null,
     prerequisites: ['Manager must have at least one flex position in their lineup'],
@@ -221,11 +308,11 @@ function buildTradeCoaching(input: ManagerRecommendationInput): Recommendation |
     expectedImpact: 'Higher trade acceptance rate, more balanced proposals, improved roster construction via trades',
     derivation: [
       ...(rejectionPattern ? [`trade_rejection_pattern (${rejectionPattern.confidence}): ${rejectionPattern.occurrenceCount} window(s)`] : []),
-      ...(identitySupports ? ['identity=trade_seeker'] : []),
+      ...(identitySupports ? [IDENTITY_WITHHELD_DERIVATION] : []),
     ],
     evidence: [
       ...(rejectionPattern ? [`${rejectionPattern.occurrenceCount} window(s) with repeated trade rejections`] : []),
-      ...(identitySupports ? ['Manager classified as trade_seeker — moderate trade rate with rejections'] : []),
+      ...(identitySupports ? [IDENTITY_WITHHELD_EVIDENCE] : []),
     ],
     benchmarkComparison: input.leagueBenchmark
       ? `League at ${input.leagueBenchmark.tradeActivity.percentile}th percentile trade activity`
@@ -260,10 +347,10 @@ function buildWaiverOpportunity(input: ManagerRecommendationInput): Recommendati
     affectedDimensions: ['waiver_activity', 'roster_management'],
     expectedImpact: 'Improved roster depth and flexibility through targeted waiver wire use',
     derivation: [
-      'transactionStyle=passive: both trade and waiver rates below active threshold',
+      IDENTITY_WITHHELD_DERIVATION,
       'No waiver_aggression_streak detected',
     ],
-    evidence: ['Manager transaction style classified as passive — below-threshold activity on both waivers and trades'],
+    evidence: [IDENTITY_WITHHELD_EVIDENCE],
     benchmarkComparison: input.leagueBenchmark
       ? `League at ${input.leagueBenchmark.waiverActivity.percentile}th percentile waiver activity`
       : null,
@@ -273,9 +360,9 @@ function buildWaiverOpportunity(input: ManagerRecommendationInput): Recommendati
       { action: 'Set waiver priority targets before the weekly deadline', rationale: 'Avoids reactive claims based only on the latest game results' },
       { action: 'Monitor injury reports for pickup opportunities', rationale: 'Streamlining transactions improves roster ceiling' },
     ],
-    rollbackCriteria: ['Dismiss when transactionStyle improves to waiver_dominant or balanced'],
+    rollbackCriteria: ['Dismiss when waiver or trade activity rises above the minimal threshold'],
     completeness: input.identity?.completeness ?? 50,
-    uncertainty: ['Passive transaction style may reflect intentional roster management strategy for deep-bench teams'],
+    uncertainty: ['Low transaction activity may reflect an intentional strategy for deep-bench teams'],
   }
 }
 
@@ -299,18 +386,27 @@ function buildLeagueParticipation(input: ManagerRecommendationInput): Recommenda
     affectedDimensions: ['engagement', 'participation'],
     expectedImpact: 'Improved league culture, higher commish satisfaction, better seasonal experience',
     derivation: [
-      `primaryIdentity=${input.identity?.primaryIdentity}`,
+      IDENTITY_WITHHELD_DERIVATION,
       `priority=${priority}, severity=${severity}`,
     ],
-    evidence: [`Manager classified as ${input.identity?.primaryIdentity} — low active participation signals`],
+    evidence: [IDENTITY_WITHHELD_EVIDENCE],
     benchmarkComparison: null,
     prerequisites: ['Manager must be in a league with active messaging/polling features'],
     recommendedActions: [
       { action: 'Respond to commissioner polls and surveys', rationale: 'Signals active membership, improves commissioner experience' },
       { action: 'Comment on matchup results or trade blocks', rationale: 'Increases league engagement culture' },
-      ...(isGhost ? [{ action: 'Set up push notifications for lineup lock reminders', rationale: 'Prevents forfeits from missed lineups' }] : []),
+      /*
+       * 🛑 UNCONDITIONAL NOW, AND REMOVING THE CONDITION IS THE FIX RATHER THAN A COMPROMISE.
+       * This action used to be gated on `isGhost`, so the ACTION LIST length recovered the exact
+       * classification the strings had stopped naming — two actions meant one label, three meant
+       * the other. A leak does not have to be a word. It is offered to everyone because it is good
+       * advice for anyone who gets this recommendation at all, so closing the channel costs no
+       * product behaviour; the alternative was widening the `priority`/`severity` exemption to
+       * cover a whole content field, which is how a narrow carve-out becomes a general one.
+       */
+      { action: 'Set up push notifications for lineup lock reminders', rationale: 'Prevents forfeits from missed lineups' },
     ],
-    rollbackCriteria: ['Dismiss when primaryIdentity transitions to committed_grinder or active classification'],
+    rollbackCriteria: ['Dismiss when weekly participation rises and holds across a full month'],
     completeness: input.identity?.completeness ?? 50,
     uncertainty: ['League participation signals depend on platform social feature availability'],
   }
@@ -334,13 +430,24 @@ function buildDraftPreparation(input: ManagerRecommendationInput): Recommendatio
     expectedImpact: 'Better draft positioning, stronger initial roster quality, reduced in-season adjustment burden',
     derivation: [
       ...(conservativePattern ? [`conservative_roster_pattern (${conservativePattern.confidence}): ${conservativePattern.occurrenceCount} streak(s) of zero-change weeks`] : []),
-      ...(isSetAndForget ? ['primaryIdentity=set_and_forget'] : []),
+      ...(isSetAndForget ? [IDENTITY_WITHHELD_DERIVATION] : []),
     ],
-    evidence: [`Manager shows minimal in-season roster activity — draft quality has outsized impact on outcomes`],
+    /*
+     * 🛑 THIS SENTENCE WAS UNCONDITIONAL, AND THAT IS WHAT MADE IT A LEAK ON ONE OF ITS TWO PATHS.
+     * "Manager shows minimal in-season roster activity" is a fair reading of
+     * `conservative_roster_pattern`, which counts streaks of zero-change weeks — an observable
+     * thing. Driven by `set_and_forget` alone it is not an observation at all; it is the label's
+     * definition written out in plain words, which is the same disclosure wearing a friendlier
+     * sentence. A privacy pass that only removes the machine vocabulary and leaves the paraphrase
+     * has moved the leak, not closed it.
+     */
+    evidence: conservativePattern
+      ? [`${conservativePattern.occurrenceCount} streak(s) of zero-change weeks — draft quality has outsized impact on outcomes`]
+      : [IDENTITY_WITHHELD_EVIDENCE],
     benchmarkComparison: null,
     prerequisites: ['Offseason or pre-draft window must be within 60 days'],
     recommendedActions: [
-      { action: 'Study ADP and positional value tiers before the draft', rationale: 'Set-and-forget managers benefit most from a strong draft foundation' },
+      { action: 'Study ADP and positional value tiers before the draft', rationale: 'A strong draft foundation matters most when in-season roster changes are few' },
       { action: 'Prepare a ranked position board for each round', rationale: 'Reduces decision fatigue during live draft' },
       { action: 'Identify 3-4 handcuff running backs to target in late rounds', rationale: 'Provides injury insurance without waiver wire dependency' },
     ],

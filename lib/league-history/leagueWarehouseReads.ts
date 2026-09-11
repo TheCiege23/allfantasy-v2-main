@@ -439,33 +439,9 @@ export async function readFingerprintAxisMax(): Promise<LeagueWarehouseFingerpri
  * aggression 18.4, activity 13.7, trade frequency 39.8, risk tolerance 20.9. That was worth
  * checking — a fingerprint whose axes are the same for everyone in a league is a decoration.
  */
-export async function readManagerFingerprints(leagueId: string): Promise<LeagueWarehouseManagerFingerprint[]> {
-  const [profiles, names] = await Promise.all([
-    prisma.managerPsychProfile.findMany({
-      where: { leagueId },
-      select: {
-        managerId: true,
-        aggressionScore: true,
-        activityScore: true,
-        tradeFrequencyScore: true,
-        riskToleranceScore: true,
-        profileLabels: true,
-      },
-    }),
-    teamNames(leagueId),
-  ])
-  return profiles
-    .map((p) => ({
-      managerName: names.get(p.managerId) ?? `Manager ${p.managerId}`,
-      aggression: num(p.aggressionScore),
-      activity: num(p.activityScore),
-      tradeFrequency: num(p.tradeFrequencyScore),
-      riskTolerance: num(p.riskToleranceScore),
-      labels: Array.isArray(p.profileLabels) ? p.profileLabels.filter((l): l is string => typeof l === 'string') : [],
-    }))
-    // A profile with every axis at zero was never scored; drawing it puts a dot at the origin.
-    .filter((p) => p.aggression + p.activity + p.tradeFrequency + p.riskTolerance > 0)
-    .sort((a, b) => a.managerName.localeCompare(b.managerName))
+export async function readManagerFingerprints(_leagueId: string): Promise<LeagueWarehouseManagerFingerprint[]> {
+  // Full behavioral fingerprints are internal; no plan exposes them in league history.
+  return []
 }
 
 export interface LeagueWarehouseRecord {

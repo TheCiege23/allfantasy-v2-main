@@ -16,9 +16,19 @@
  *     production routes" — that describes the module's original build-time scope; Commissioner OS
  *     Surface Alignment Increments 1-3 already cut a subset of this exact function's output into
  *     live production (retentionRisk/retentionRiskReasons/isInactive, via Mission Control's
- *     managersAtRetentionRisk). This module extends that already-proven-safe exposure to more of
+ *     managersAtRetentionRisk). This module extends that already-SHIPPED exposure to more of
  *     the same function's fields, for a different audience — it does not open a new gate the way
  *     Phase 5.3/5.4 remain closed; those have zero live usage anywhere, unlike Phase 5.2.)
+ *
+ *     🛑 THIS LINE READ "already-proven-safe" AND NOTHING HAD PROVEN IT. A reviewer went looking
+ *     for where that proof lived and could not find it; neither could I. What was true is that
+ *     Increments 1-3 had SHIPPED it. Shipped is not proven, and the conflation was load-bearing —
+ *     this module cited it as the warrant for widening the same exposure, so one unexamined
+ *     decision was licensing the next. The exposure itself is examined in
+ *     `docs/DECISION_OS_COMPETITIVE_EDGE_PRIVACY_STATUS.md` under "Deliberately EXCLUDED" and is
+ *     judged out of milestone 32's scope on measured grounds — a different engine, emitting zero
+ *     dossier vocabulary, whose reasons are observable facts. That is a conclusion someone can now
+ *     check and disagree with, which is what the original phrasing denied a reader.
  *   - `resolveManagerIntelligencePayload` (Increments 1/2) for Manager DNA, manager-tier
  *     Recommendations, and League Trend — already provider-agnostic, already role-agnostic, already
  *     reachable without a commissioner gate on `LeagueTab.tsx` (see
@@ -36,7 +46,6 @@ import type { LeagueActivityTrendSummary } from './dashboard-intelligence'
 import { assembleManagerBehavioralFacts } from './behavioral/assemble'
 import { deriveManagerBehavioralIntelligence } from './behavioral/manager-intelligence'
 import type { ParticipationTier, ManagerRetentionRisk } from './behavioral/manager-intelligence'
-import type { ManagerDnaProfile } from './phase6/dna/types'
 import type { RecommendationSet } from './phase6/recommendations/types'
 
 export interface UserOsTeamHealth {
@@ -65,7 +74,37 @@ export type UserOsSnapshot =
       activitySummary: UserOsActivitySummary
       /** Same league-wide trend contract Commissioner OS already shows — reused, not re-derived. */
       leagueTrend: LeagueActivityTrendSummary
-      managerDna: ManagerDnaProfile | null
+      /**
+       * 🛑 ALWAYS NULL, AND TYPED `null` SO IT CANNOT BE REPOPULATED BY ACCIDENT.
+       *
+       * This carried a real `ManagerDnaProfile` — `primaryIdentity`, `decisionStyle`,
+       * `transactionStyle`, `riskTendency`, `engagementReliability`, `traits`, and `derivation`
+       * ("classifiers evaluated, scores, threshold comparisons"). `resolveManagerIntelligencePayload`
+       * returns a live profile from `computeLeagueDna`, not a stub, so this route served a raw
+       * behavioural dossier through a session-gated public path — the exact condition milestone 32
+       * exists to remove, and the named remainder "User OS reads (including server-rendered props)".
+       *
+       * ⚠ THE SIBLING ROUTE CLOSED THIS FIRST AND THIS ONE DID NOT FOLLOW.
+       * THIS route's own header claims it "Mirrors /api/decision-os/manager-intelligence's contract
+       * exactly". That claim was false while the sibling withheld the dossier and this one served it,
+       * and nothing checked it — a doc comment is not an invariant.
+       *
+       * 🛑 THE MIRROR CANNOT BE ASSERTED AGAINST THAT SIBLING ANY MORE, WHICH IS WHY THE TEST DOES NOT.
+       * The previous commit retired `/api/decision-os/manager-intelligence` outright: it is now a
+       * constant 410 and hard-codes nothing. Pinning "both routes say `managerDna: null`" against a
+       * retired stub would be an assertion about a file that no longer contains the field — green
+       * forever, and blind. The invariant kept here is the one that still means something: THIS
+       * payload types the field as `null`, so the compiler refuses a repopulation.
+       *
+       * ⚠ SELF-SCOPED, WHICH IS WHY THIS IS A PRIVACY TIGHTENING AND NOT AN INCIDENT. `targetProfile`
+       * is matched on `managerId === session user` and the route never accepts a managerId param, so
+       * no third party's dossier was ever reachable here. Milestone 32's criterion has no self
+       * carve-out, which is the reason it still closes.
+       *
+       * The profile is still COMPUTED internally — "Internal profiles remain available for future
+       * decision support" — it is simply no longer projected to a client.
+       */
+      managerDna: null
       recommendations: RecommendationSet | null
     }
   | {
@@ -134,7 +173,7 @@ export async function resolveUserOsSnapshot(
         draftEventCount: intelligence.draftEngagement.eventCount,
       },
       leagueTrend: payload.leagueTrend,
-      managerDna: payload.managerDna,
+      managerDna: null,
       recommendations: payload.recommendations,
     }
   } catch {

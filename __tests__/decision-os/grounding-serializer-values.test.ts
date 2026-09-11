@@ -161,7 +161,7 @@ describe('the serializer says WHAT it knows, not merely THAT it knows', () => {
    * handles this shape had to be extended by hand to read it. Adding a field to the data does
    * nothing on its own — G11 in miniature, caught here rather than discovered live.
    */
-  it('🛑 a manager fact WITH a trajectory renders its summary text', () => {
+  it('🛑 a private manager trajectory never enters model context', () => {
     const text = serializeDecisionOsGroundingForPrompt(
       packet({
         managerPsychology: present([
@@ -175,10 +175,10 @@ describe('the serializer says WHAT it knows, not merely THAT it knows', () => {
       }),
       NOW,
     )
-    expect(text).toContain('trajectory: 2024: rebuilder → 2026: win-now')
+    expect(text).not.toContain('trajectory: 2024: rebuilder → 2026: win-now')
   })
 
-  it('a manager fact WITHOUT a trajectory renders normally and adds no trajectory noise', () => {
+  it('a private manager fact without trajectory is also excluded', () => {
     const text = serializeDecisionOsGroundingForPrompt(
       packet({
         managerPsychology: present([
@@ -192,7 +192,7 @@ describe('the serializer says WHAT it knows, not merely THAT it knows', () => {
       }),
       NOW,
     )
-    expect(text).toContain('aggressive')
+    expect(text).not.toContain('aggressive')
     expect(text).not.toContain('trajectory:')
   })
 
@@ -209,7 +209,7 @@ describe('the serializer says WHAT it knows, not merely THAT it knows', () => {
    * and the reason it survived every mutation-verified producer test this session wrote: each one
    * tested its OWN producer in isolation, never a full packet through this exact function.
    */
-  it('🛑 idpKickerValues, rosterValueGrade and psychologyConsistency all reach "WHAT IS AVAILABLE"', () => {
+  it('🛑 player values reach the prompt while private consistency is excluded from "WHAT IS AVAILABLE"', () => {
     const text = serializeDecisionOsGroundingForPrompt(
       packet({
         idpKickerValues: present([
@@ -232,7 +232,7 @@ describe('the serializer says WHAT it knows, not merely THAT it knows', () => {
     )
     expect(text).toContain('Micah Parsons')
     expect(text).toContain('weakestPosition: RB')
-    expect(text).toContain('crossLeagueConsistentLabels: aggressive')
+    expect(text).not.toContain('crossLeagueConsistentLabels: aggressive')
   })
 
   /**
@@ -241,7 +241,7 @@ describe('the serializer says WHAT it knows, not merely THAT it knows', () => {
    * combined into one prompt, rather than wiring framing into each engine (which R2's own
    * decisionBridge.ts explicitly forbids touching) or hand-writing a rule per decision type.
    */
-  it('🛑 the framing instruction appears when a decision AND psychology are BOTH present', () => {
+  it('🛑 raw behavior framing is excluded even alongside a decision', () => {
     const text = serializeDecisionOsGroundingForPrompt(
       packet({
         lineupDecision: present({
@@ -255,7 +255,7 @@ describe('the serializer says WHAT it knows, not merely THAT it knows', () => {
       }),
       NOW,
     )
-    expect(text).toContain('framing, not authority')
+    expect(text).not.toContain('framing, not authority')
   })
 
   it('does NOT pad the prompt with the framing instruction when there is no decision to frame', () => {

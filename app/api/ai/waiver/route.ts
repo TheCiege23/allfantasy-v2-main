@@ -47,16 +47,11 @@ async function getLegacyContext(sleeperUsername: string) {
   if (!user) return null;
 
   const aiReport = user.aiReports[0];
-  const insights = aiReport?.insights as Record<string, unknown> | null;
+
 
   return {
     display_name: user.displayName,
-    archetype: insights?.archetype || 'Unknown',
     rating: aiReport?.rating || null,
-    waiver_style: insights?.archetype === 'Sniper' ? 'selective' : 
-                  insights?.archetype === 'Hoarder' ? 'aggressive' : 'balanced',
-    strengths: (insights?.strengths as string[]) || [],
-    weaknesses: (insights?.weaknesses as string[]) || [],
   };
 }
 
@@ -114,11 +109,7 @@ export const POST = withApiUsage({ endpoint: "/api/ai/waiver", tool: "AiWaiver" 
       const legacySection = `
 LEGACY CONTEXT (from DB - do not call external APIs):
 - Manager: ${legacyContext.display_name}
-- Archetype: ${legacyContext.archetype}
 - Legacy Rating: ${legacyContext.rating || 'Not rated'}
-- Waiver Style Preference: ${legacyContext.waiver_style}
-- Known Strengths: ${legacyContext.strengths.slice(0, 2).join(', ') || 'None identified'}
-- Areas to Improve: ${legacyContext.weaknesses.slice(0, 2).join(', ') || 'None identified'}
 
 Consider this manager's style when making recommendations.
 `;
@@ -223,7 +214,7 @@ Consider this manager's style when making recommendations.
             topTrends: aiMetaContext.topTrends?.slice(0, 3) ?? [],
           }
         : undefined,
-      legacy_context: legacyContext ? { included: true, archetype: legacyContext.archetype } : { included: false },
+      legacy_context: legacyContext ? { included: true } : { included: false },
     });
   } catch (error) {
     console.error('Waiver AI error:', error);

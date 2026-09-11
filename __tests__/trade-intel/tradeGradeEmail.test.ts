@@ -282,7 +282,7 @@ describe('projected grades are labelled as projections everywhere', () => {
   })
 })
 
-describe('manager psychology is context, not a thumb on the scale', () => {
+describe('stored manager psychology stays private at the email boundary', () => {
   const psychology = {
     available: true,
     sides: [
@@ -305,49 +305,12 @@ describe('manager psychology is context, not a thumb on the scale', () => {
     ],
   }
 
-  it('changes nothing about the grade when added', () => {
-    // The whole point of the design decision: describe first, influence
-    // explicitly. If psychology ever moves the letter, it does so where the
-    // reader cannot see it, in a number they take as arithmetic.
-    const withPsych = buildTradeGradeEmail({
-      leagueName: 'L',
-      trade: MIDSEASON,
-      ledgerUrl: URL,
-      psychology,
-    })
+  it('a stored profile cannot change the email or expose its labels', () => {
+    const withPsych = buildTradeGradeEmail({ leagueName: 'L', trade: MIDSEASON, ledgerUrl: URL, psychology })
     const without = buildTradeGradeEmail({ leagueName: 'L', trade: MIDSEASON, ledgerUrl: URL })
-
-    expect(withPsych.subject).toBe(without.subject)
-
-    // The card must be a pure INSERTION: everything the email said about the
-    // grade is byte-identical, with the psychology block added between. Computed
-    // as a common prefix/suffix rather than matched by regex, so the assertion
-    // cannot be satisfied by a lucky pattern.
-    const a = withPsych.html
-    const b = without.html
-    let head = 0
-    while (head < b.length && a[head] === b[head]) head += 1
-    let tail = 0
-    while (tail < b.length - head && a[a.length - 1 - tail] === b[b.length - 1 - tail]) tail += 1
-    expect(b.slice(0, head) + b.slice(b.length - tail)).toBe(b)
-    expect(a.length).toBeGreaterThan(b.length)
-    // And the inserted region is the psychology card, nothing else.
-    expect(a.slice(head, a.length - tail)).toContain('How these managers trade')
-  })
-
-  it('says what it observed, and says when it observed too little', () => {
-    const { html } = buildTradeGradeEmail({
-      leagueName: 'L',
-      trade: MIDSEASON,
-      ledgerUrl: URL,
-      psychology,
-    })
-    expect(html).toContain('trade-heavy')
-    expect(html).toContain('29 recorded trade actions')
-    // The unobserved manager is reported as unobserved rather than described as
-    // an ordinary trader, which is the same fabrication the profile engine had.
-    expect(html).toContain('not enough to call a pattern')
-    expect(html).toContain('did not affect the grade')
+    expect(withPsych).toEqual(without)
+    expect(withPsych.html).not.toMatch(/trade-heavy|How these managers trade|29 recorded trade actions|not enough to call a pattern/)
+    expect(withPsych.html).toContain(MIDSEASON.sides[0]!.managerName)
   })
 
   it('renders nothing at all when no manager has an observed pattern', () => {

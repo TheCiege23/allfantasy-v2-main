@@ -343,46 +343,6 @@ function getManagerTintStyle(managerName: string, alpha = 0.12): { backgroundCol
   }
 }
 
-function DnaStat({ label, value, suffix, color, sub, hideBar }: { label: string; value: number; suffix: string; color: string; sub: string; hideBar?: boolean }) {
-  const colorMap: Record<string, string> = {
-    red: 'bg-red-500', amber: 'bg-amber-500', green: 'bg-green-500', purple: 'bg-purple-500',
-    blue: 'bg-blue-500', cyan: 'bg-cyan-500', pink: 'bg-pink-500', slate: 'bg-slate-500', orange: 'bg-orange-500',
-  }
-  const textMap: Record<string, string> = {
-    red: 'text-red-400', amber: 'text-amber-400', green: 'text-green-400', purple: 'text-purple-400',
-    blue: 'text-blue-400', cyan: 'text-cyan-400', pink: 'text-pink-400', slate: 'text-slate-400', orange: 'text-orange-400',
-  }
-  return (
-    <div className="rounded-lg border border-white/5 bg-white/[0.02] p-2 space-y-1">
-      <div className="text-[10px] text-gray-500 uppercase tracking-wider">{label}</div>
-      {!hideBar && (
-        <>
-          <div className={`text-lg font-bold tabular-nums ${textMap[color] || 'text-gray-300'}`}>{value}{suffix}</div>
-          <div className="h-1.5 bg-white/5 rounded-full overflow-hidden">
-            <div className={`h-full rounded-full ${colorMap[color] || 'bg-gray-500'}`} style={{ width: `${Math.min(100, value)}%` }} />
-          </div>
-        </>
-      )}
-      <div className="text-[10px] text-gray-400">{sub}</div>
-    </div>
-  )
-}
-
-function AggBar({ label, value, color }: { label: string; value: number; color: string }) {
-  const bgMap: Record<string, string> = {
-    red: 'bg-red-500/60', cyan: 'bg-cyan-500/60', green: 'bg-green-500/60', purple: 'bg-purple-500/60',
-  }
-  return (
-    <div className="flex items-center gap-1.5">
-      <span className="text-[9px] text-gray-500 w-7">{label}</span>
-      <div className="flex-1 h-1.5 bg-white/5 rounded-full overflow-hidden">
-        <div className={`h-full rounded-full ${bgMap[color] || 'bg-gray-500/60'}`} style={{ width: `${Math.min(100, value)}%` }} />
-      </div>
-      <span className="text-[9px] text-gray-400 w-6 text-right tabular-nums">{value}</span>
-    </div>
-  )
-}
-
 function VolatilityBadge({ v }: { v: VolatilityMeter }) {
   const chaosColors: Record<string, { bg: string; text: string; ring: string; glow: string }> = {
     low: { bg: 'bg-emerald-500/15', text: 'text-emerald-400', ring: 'ring-emerald-500/30', glow: 'shadow-emerald-500/10' },
@@ -483,10 +443,6 @@ export default function MockDraftSimulatorClient({
   const [pickPathLoading, setPickPathLoading] = useState(false)
   const [pickPathData, setPickPathData] = useState<any[]>([])
   const [pickPathTarget, setPickPathTarget] = useState('')
-  const [dnaOpen, setDnaOpen] = useState(false)
-  const [dnaLoading, setDnaLoading] = useState(false)
-  const [dnaCards, setDnaCards] = useState<any[]>([])
-  const [dnaExpandedIdx, setDnaExpandedIdx] = useState<number | null>(null)
   const [snipeRadarOpen, setSnipeRadarOpen] = useState(false)
   const [snipeRadarLoading, setSnipeRadarLoading] = useState(false)
   const [snipeRadarData, setSnipeRadarData] = useState<SnipeRadarEntry[]>([])
@@ -1218,29 +1174,6 @@ export default function MockDraftSimulatorClient({
     }
   }
 
-  const loadManagerDNA = async () => {
-    if (!selectedLeagueId) return toast.error('Select a league first')
-    if (!requireNflAdvancedTool()) return
-    setDnaLoading(true)
-    try {
-      const res = await fetch('/api/mock-draft/manager-dna', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ leagueId: selectedLeagueId }),
-      })
-      const data = await res.json().catch(() => ({}))
-      if (!res.ok) throw new Error(data.error || 'Failed to load Manager DNA')
-      setDnaCards(data.dnaCards || [])
-      setDnaExpandedIdx(null)
-      setDnaOpen(true)
-      toast.success(`Scouting report ready - ${(data.dnaCards || []).length} managers profiled.`)
-    } catch (err: any) {
-      toast.error(err?.message || 'Failed to load Manager DNA')
-    } finally {
-      setDnaLoading(false)
-    }
-  }
-
   const loadSnipeRadar = async () => {
     if (!selectedLeagueId) return toast.error('Select a league first')
     if (!requireNflAdvancedTool()) return
@@ -1735,9 +1668,6 @@ export default function MockDraftSimulatorClient({
             </Button>
             <Button onClick={generatePickPath} disabled={pickPathLoading || !selectedLeagueId} variant="outline" className="h-10 border-purple-700/40 text-purple-300 hover:text-purple-200">
               {pickPathLoading ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Mapping</> : 'Pick Path'}
-            </Button>
-            <Button onClick={loadManagerDNA} disabled={dnaLoading || !selectedLeagueId} variant="outline" className="h-10 border-amber-700/40 text-amber-300 hover:text-amber-200">
-              {dnaLoading ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Scouting</> : <><Users className="mr-2 h-4 w-4" /> Manager DNA</>}
             </Button>
             <Button onClick={loadSnipeRadar} disabled={snipeRadarLoading || !selectedLeagueId} variant="outline" className="h-10 border-red-700/40 text-red-300 hover:text-red-200">
               {snipeRadarLoading ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Scanning</> : <><TrendingDown className="mr-2 h-4 w-4" /> Snipe Radar</>}
@@ -2607,104 +2537,6 @@ export default function MockDraftSimulatorClient({
                 </div>
               </div>
             ))}
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={dnaOpen} onOpenChange={setDnaOpen}>
-        <DialogContent className="max-w-5xl bg-black/95 border-amber-900/40">
-          <DialogHeader>
-            <DialogTitle className="text-amber-300">Manager DNA - League Scouting Report</DialogTitle>
-          </DialogHeader>
-          <div className="max-h-[72vh] overflow-y-auto space-y-3 pr-1">
-            {dnaCards.length === 0 && <p className="text-sm text-gray-500 text-center py-4">No DNA profiles available</p>}
-            {dnaCards.map((dna: any, idx: number) => {
-              const expanded = dnaExpandedIdx === idx
-              const archetypeColors: Record<string, string> = {
-                'The Gambler': 'text-red-400 bg-red-500/10',
-                'The Calculator': 'text-cyan-400 bg-cyan-500/10',
-                'Dynasty Architect': 'text-purple-400 bg-purple-500/10',
-                'Win-Now Commander': 'text-green-400 bg-green-500/10',
-                'Stack Strategist': 'text-amber-400 bg-amber-500/10',
-                'Boom-or-Bust': 'text-orange-400 bg-orange-500/10',
-                'Steady Operator': 'text-blue-400 bg-blue-500/10',
-                'Youth Raider': 'text-pink-400 bg-pink-500/10',
-                'Rebuilder': 'text-gray-400 bg-gray-500/10',
-                'Balanced Drafter': 'text-slate-300 bg-slate-500/10',
-              }
-              const arcColor = archetypeColors[dna.overallArchetype] || 'text-gray-300 bg-gray-500/10'
-              return (
-                <div key={idx} className="rounded-xl border border-amber-900/25 bg-amber-500/[0.03] overflow-hidden">
-                  <button
-                    onClick={() => setDnaExpandedIdx(expanded ? null : idx)}
-                    className="w-full flex items-center justify-between p-4 hover:bg-amber-500/5 transition-colors text-left"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-full bg-amber-500/15 flex items-center justify-center text-amber-400 font-bold text-sm">
-                        {idx + 1}
-                      </div>
-                      <div>
-                        <div className="font-semibold text-white text-sm">{dna.manager}</div>
-                        <span className={`text-xs px-2 py-0.5 rounded-full ${arcColor}`}>{dna.overallArchetype}</span>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-4 text-xs text-gray-400">
-                      <span>Reach: <span className={dna.reachFrequency > 0.5 ? 'text-red-400' : 'text-green-400'}>{dna.reachLabel}</span></span>
-                      <span>Panic: <span className={dna.panicScore > 0.5 ? 'text-red-400' : 'text-green-400'}>{dna.panicResponse}</span></span>
-                      <svg className={`w-4 h-4 transition-transform ${expanded ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
-                    </div>
-                  </button>
-
-                  {expanded && (
-                    <div className="px-4 pb-4 space-y-4 border-t border-amber-900/20">
-                      <div className="grid grid-cols-2 md:grid-cols-5 gap-3 pt-3">
-                        <DnaStat label="Reach Frequency" value={Math.round(dna.reachFrequency * 100)} suffix="%" color={dna.reachFrequency > 0.6 ? 'red' : dna.reachFrequency > 0.35 ? 'amber' : 'green'} sub={dna.reachLabel} />
-                        <DnaStat label="Rookie Appetite" value={Math.round(dna.rookieAppetite * 100)} suffix="%" color={dna.rookieAppetite > 0.6 ? 'purple' : dna.rookieAppetite > 0.35 ? 'blue' : 'slate'} sub={dna.rookieLabel} />
-                        <DnaStat label="Stack Tendency" value={Math.round(dna.stackTendency * 100)} suffix="%" color={dna.stackTendency > 0.5 ? 'amber' : 'cyan'} sub={dna.stackLabel} />
-                        <DnaStat label="Panic Response" value={Math.round(dna.panicScore * 100)} suffix="%" color={dna.panicScore > 0.6 ? 'red' : dna.panicScore > 0.35 ? 'amber' : 'green'} sub={dna.panicResponse} />
-                        <DnaStat label="Archetype" value={0} suffix="" color="amber" sub={dna.overallArchetype} hideBar />
-                      </div>
-
-                      <div>
-                        <div className="text-xs font-semibold text-amber-300 mb-2">Positional Aggression by Round Phase</div>
-                        <div className="grid grid-cols-4 gap-2">
-                          {['QB', 'RB', 'WR', 'TE'].map(pos => {
-                            const agg = dna.positionalAggression?.[pos]
-                            if (!agg) return null
-                            const posTextColors: Record<string, string> = { QB: 'text-red-400', RB: 'text-cyan-400', WR: 'text-green-400', TE: 'text-purple-400' }
-                            const posBarColors: Record<string, string> = { QB: 'red', RB: 'cyan', WR: 'green', TE: 'purple' }
-                            return (
-                              <div key={pos} className="rounded-lg border border-white/5 bg-white/[0.02] p-2">
-                                <div className={`text-xs font-bold ${posTextColors[pos] || 'text-gray-400'} mb-1`}>{pos}</div>
-                                <div className="space-y-1">
-                                  <AggBar label="Early" value={agg.early} color={posBarColors[pos] || 'gray'} />
-                                  <AggBar label="Mid" value={agg.mid} color={posBarColors[pos] || 'gray'} />
-                                  <AggBar label="Late" value={agg.late} color={posBarColors[pos] || 'gray'} />
-                                </div>
-                              </div>
-                            )
-                          })}
-                        </div>
-                      </div>
-
-                      <div>
-                        <div className="text-xs font-semibold text-amber-300 mb-1">Draft Tendency Weights</div>
-                        <div className="flex gap-3">
-                          {Object.entries(dna.tendency || {}).map(([pos, val]: [string, any]) => (
-                            <div key={pos} className="text-xs">
-                              <span className="text-gray-400">{pos}:</span>{' '}
-                              <span className={val > 1.1 ? 'text-green-400 font-semibold' : val < 0.85 ? 'text-red-400' : 'text-gray-300'}>
-                                {(val as number).toFixed(2)}
-                              </span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )
-            })}
           </div>
         </DialogContent>
       </Dialog>

@@ -55,7 +55,7 @@ const SUBTABS_BASE = [
   'Division Settings',
   'Member Settings',
   'Commissioner Controls',
-  'Behavior Profiles',
+  'Competitive Edge',
   'League Drama',
   'Reputation',
   'GM Economy',
@@ -87,7 +87,7 @@ const SUBTAB_I18N: Record<SettingsSubtab, string> = {
   'Division Settings': 'league.appSettings.subtab.divisionSettings',
   'Member Settings': 'league.appSettings.subtab.memberSettings',
   'Commissioner Controls': 'league.appSettings.subtab.commissionerControls',
-  'Behavior Profiles': 'league.appSettings.subtab.behaviorProfiles',
+  'Competitive Edge': 'league.appSettings.subtab.behaviorProfiles',
   'League Drama': 'league.appSettings.subtab.leagueDrama',
   Reputation: 'league.appSettings.subtab.reputation',
   'GM Economy': 'league.appSettings.subtab.gmEconomy',
@@ -154,7 +154,7 @@ export default function LeagueSettingsTab({
       }
       return
     }
-    const requestedLower = requested.toLowerCase()
+    const requestedLower = requested.toLowerCase() === 'behavior profiles' ? 'competitive edge' : requested.toLowerCase()
     const resolved = visibleSubtabs.find((tab) => tab.toLowerCase() === requestedLower)
     if (!resolved) {
       const fallback = visibleSubtabs[0]
@@ -180,7 +180,7 @@ export default function LeagueSettingsTab({
             }}
             className={`whitespace-nowrap rounded-lg px-3 py-1.5 text-xs transition ${active === tab ? 'bg-white text-black' : 'border border-white/10 bg-black/20 text-white/75 hover:bg-white/10'}`}
           >
-            {t(SUBTAB_I18N[tab])}
+            {tab === 'Competitive Edge' ? 'Competitive Edge' : t(SUBTAB_I18N[tab])}
           </button>
         ))}
       </div>
@@ -205,7 +205,7 @@ export default function LeagueSettingsTab({
       {active === 'Division Settings' && <DivisionSettingsPanel />}
       {active === 'Member Settings' && <MemberSettingsPanel leagueId={leagueId} />}
       {active === 'Commissioner Controls' && <CommissionerControlsPanel leagueId={leagueId} />}
-      {active === 'Behavior Profiles' && <BehaviorProfilesPanel leagueId={leagueId} />}
+      {active === 'Competitive Edge' && <BehaviorProfilesPanel leagueId={leagueId} />}
       {active === 'League Drama' && <LeagueDramaPanel leagueId={leagueId} />}
       {active === 'Reputation' && <ReputationPanel leagueId={leagueId} />}
       {active === 'GM Economy' && <GMEconomyPanel leagueId={leagueId} />}

@@ -597,41 +597,9 @@ export async function getOrComputeManagerDNA(
   return profile;
 }
 
-export function formatDNAForPrompt(dna: ManagerDNAProfile): string {
-  if (dna.confidence < 0.15) return '';
-
-  const lines: string[] = [
-    '',
-    '## MANAGER DNA PROFILE',
-    `Archetype: ${dna.archetype}${dna.secondaryArchetype ? ` / ${dna.secondaryArchetype}` : ''}`,
-    `Confidence: ${Math.round(dna.confidence * 100)}% (based on ${dna.tradeCount} trades, ${dna.waiverCount} waiver moves, ${dna.seasonsCovered} seasons)`,
-    '',
-    '### Behavioral Metrics:',
-    `- Risk Tolerance: ${Math.round(dna.metrics.riskTolerance * 100)}%`,
-    `- Patience: ${Math.round(dna.metrics.patience * 100)}%`,
-    `- Pick Hoarding: ${Math.round(dna.metrics.pickHoarding * 100)}%`,
-    `- Trade Frequency: ${Math.round(dna.metrics.tradeFrequency * 100)}%`,
-    `- Waiver Aggressiveness: ${Math.round(dna.metrics.waiverAggressiveness * 100)}%`,
-    `- Consolidation Tendency: ${Math.round(dna.metrics.consolidationTendency * 100)}%`,
-    `- Buy-Low Tendency: ${Math.round(dna.metrics.buyLowTendency * 100)}%`,
-    `- Sell-High Tendency: ${Math.round(dna.metrics.sellHighTendency * 100)}%`,
-    `- Age Preference: ${dna.metrics.agePreference > 0.6 ? 'Prefers veterans' : dna.metrics.agePreference < 0.4 ? 'Prefers youth' : 'Balanced'}`,
-  ];
-
-  const topPositions = Object.entries(dna.metrics.positionBias)
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 3);
-  if (topPositions.length > 0) {
-    lines.push(`- Top Position Focus: ${topPositions.map(([p, v]) => `${p} (${Math.round(v * 100)}%)`).join(', ')}`);
-  }
-
-  lines.push('');
-  lines.push('### Strengths: ' + dna.strengths.join(' | '));
-  lines.push('### Blind Spots: ' + dna.blindSpots.join(' | '));
-  lines.push('');
-  lines.push('IMPORTANT: Tailor your analysis tone and advice to this manager\'s profile. Reference their tendencies when relevant.');
-
-  return lines.join('\n');
+export function formatDNAForPrompt(_dna: ManagerDNAProfile): string {
+  // Raw inferred traits are internal. Supply selected-decision evidence through its own contract.
+  return ''
 }
 
 export async function getCachedDNA(sleeperUsername: string): Promise<ManagerDNAProfile | null> {

@@ -48,6 +48,9 @@ vi.mock('@/lib/subscription/feature-access', () => ({
 }))
 vi.mock('@/lib/dashboard/get-dashboard-league-list', () => ({
   getDashboardLeagueListForUser: vi.fn().mockResolvedValue({ leagues: [] }),
+  // `/api/shared/activity` reads this one; the module gained it and the mock did not,
+  // so the suite died on a missing export rather than on anything it means to assert.
+  getActivityLeaguesForUser: vi.fn().mockResolvedValue([]),
 }))
 vi.mock('@/lib/white-label', () => ({
   resolveTenantBrand: () => ({ copy: { productName: 'AllFantasy' } }),

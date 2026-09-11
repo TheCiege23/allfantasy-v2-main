@@ -30,6 +30,21 @@ import { createRunBudget, respondBeforeEdge, CRON_HARD_RESPONSE_MS } from "@/lib
 export const dynamic = "force-dynamic"
 export const maxDuration = 300
 
+/**
+ * Time held back from the import for the ten maintenance phases that follow it.
+ *
+ * 60s, and the number is a floor rather than an estimate: every one of those phases is bounded
+ * by COUNT and resumes where it stopped, so a short slice does less work rather than incorrect
+ * work. What it must not be is zero, which is what they were getting on every run where the
+ * import used its full 240s.
+ *
+ * ⚠ IT DOES NOT GUARANTEE EVERY PHASE RUNS, AND IS NOT MEANT TO. `devyIntelSources` alone
+ * refuses to start without ~150s of runway, which is why `?intel=1` exists as its own tick with
+ * the whole window. This reserve is what lets the CHEAP phases — identity, sleeperRows,
+ * canonicalBirthdays, espnIdentities, psychProfiles — stop being collateral damage.
+ */
+const TAIL_PHASE_RESERVE_MS = 60_000
+
 async function handle(req: NextRequest) {
   const url = new URL(req.url)
   const sportParam = url.searchParams.get("sport")
@@ -181,8 +196,31 @@ async function handle(req: NextRequest) {
       })
     }
 
+    /*
+     * 🛑 THE IMPORT GETS A SLICE OF THIS RUN'S BUDGET, NOT ALL OF IT.
+     *
+     * `IMPORT_BUDGET_MS` defaults to 240s and `CRON_RUN_BUDGET_MS` is also 240s, so before this
+     * the importer was entitled to spend the entire window and routinely did — measured in
+     * production 2026-09-10 at 240,580 / 240,884 / 240,413 ms on three consecutive runs. Every
+     * one of the ten phases below then saw `budget.exhausted()` and deferred, on roughly half
+     * of all runs. The other half completed in 12-22s, which is why the tail ran at all.
+     *
+     * ⚠ THIS PRESENTED AS A PHASE-ORDERING BUG AND IS NOT ONE. `psychProfiles` is last and so
+     * was the visible casualty, but identity, devy, sleeperRows, canonicalBirthdays and
+     * espnIdentities were dropped on exactly the same ticks. Moving any one of them earlier
+     * would have starved whichever took its place — the fix has to be upstream, in who owns
+     * the clock.
+     *
+     * ⚠ DERIVED FROM `budget.remainingMs()` AT THE CALL, NOT FROM THE CONSTANT. Anything that
+     * runs before this point is then already accounted for, and the two clocks cannot drift
+     * apart the way two independent 240s constants did. `runSportsDataImporter` floors the
+     * value, so a late arrival still gets a coherent budget rather than a negative one.
+     */
+    const importBudgetMs = budget.remainingMs() - TAIL_PHASE_RESERVE_MS
+
     const result = await runSportsDataImporter({
       sports,
+      budgetMs: importBudgetMs,
       ...(Number.isFinite(seedPageSizeParam) && seedPageSizeParam > 0 ? { seedPageSize: seedPageSizeParam } : {}),
     })
 

@@ -46,7 +46,7 @@ describe('Record book route contracts', () => {
 
   it('forwards leaderboard filters with normalized sport', async () => {
     getRecordLeaderboardMock.mockResolvedValue([])
-    const { GET } = await import('@/app/api/leagues/[leagueId]/record-book/route')
+    const { GET } = await import('@/app/api/leagues/[leagueId]/record-book/handler')
     const req = new Request(
       'http://localhost/api/leagues/lg-1/record-book?recordType=highest_score&season=2025&sport=nba&limit=15'
     )
@@ -63,7 +63,7 @@ describe('Record book route contracts', () => {
   })
 
   it('rejects invalid leaderboard filters', async () => {
-    const { GET } = await import('@/app/api/leagues/[leagueId]/record-book/route')
+    const { GET } = await import('@/app/api/leagues/[leagueId]/record-book/handler')
 
     const invalidTypeReq = new Request(
       'http://localhost/api/leagues/lg-1/record-book?recordType=not_real'

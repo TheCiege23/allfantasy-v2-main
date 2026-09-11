@@ -5,7 +5,6 @@ import { consumeRateLimit, getClientIp } from '@/lib/rate-limit'
 import { pricePlayer, pricePick, PricedAsset, ValuationContext, PickInput } from '@/lib/hybrid-valuation'
 import { openaiChatJson, parseJsonContentFromChatCompletion } from '@/lib/openai-client'
 import { getFantasyCalcValuesDbFirst } from '@/lib/fantasycalc-db'
-import { getCachedDNA } from '@/lib/manager-dna'
 import { getCachedOpponentProfile, formatOpponentForPrompt } from '@/lib/opponent-tendencies'
 import { z } from 'zod'
 import { autoLogDecision } from '@/lib/decision-log'
@@ -368,14 +367,6 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/trade/proposal-generat
 
     let aiExplanations: any = {}
 
-    let dnaSystemAddendum = '';
-    try {
-      const dna = await getCachedDNA(username);
-      if (dna) {
-        dnaSystemAddendum = `\n\nMANAGER DNA: This user is "${dna.archetype}"${dna.secondaryArchetype ? ` / "${dna.secondaryArchetype}"` : ''}. Tailor your pitch suggestions to their style — e.g. a Gambler likes bold moves, an Architect prefers patient value plays, a Win-Now General wants proven talent.`;
-      }
-    } catch {}
-
     let opponentAddendum = '';
     let opponentTendencyData: any = null;
     try {
@@ -453,7 +444,7 @@ For each proposal, explain:
 3. A pitch the user could use when proposing this trade
 4. If the trade is lopsided (fairness below 85%), be transparent about that
 
-Keep explanations concise but insightful (2-3 sentences each). Consider team needs, roster construction, and competitive windows. If a trade heavily favors one side, say so — don't dress it up.${dnaSystemAddendum}${opponentAddendum}`
+Keep explanations concise but insightful (2-3 sentences each). Consider team needs, roster construction, and competitive windows. If a trade heavily favors one side, say so — don't dress it up.${opponentAddendum}`
         }, {
           role: 'user',
           content: `Analyze these trade proposals between ${username} (${myTeam.displayName}) and ${targetTeam.displayName}.
@@ -618,7 +609,7 @@ Respond in JSON format:
       proposals: finalProposals,
       desiredTotal,
       bestAcceptanceIndex: bestAcceptanceIdx >= 0 ? bestAcceptanceIdx : null,
-      opponentTendencies: opponentTendencyData,
+      opponentTendencies: null, // Private inputs may inform internal calculations, never the public dossier.
       confidenceRisk: {
         confidence: crResult.numericConfidence,
         level: crResult.confidenceLevel,
