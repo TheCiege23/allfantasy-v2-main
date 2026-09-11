@@ -1064,6 +1064,69 @@ export function parseMflFutureDraftPicks(raw: unknown): MflFutureDraftPickRaw[] 
   return out
 }
 
+/**
+ * The franchise → manager binding and the transaction feed for one MFL league, for the
+ * Decision OS activity ingest. `fetchEspnActivityForSync` and `fetchYahooActivityForSync` are
+ * the ESPN and Yahoo counterparts; this is the third.
+ *
+ * Deliberately NOT `fetchMflLeagueForImport`. That fetches eleven endpoints to build a whole
+ * league; the ingest needs two, runs on a rotation under a shared budget, and asking for
+ * rosters, rules, standings, schedule and draft results in order to read a transaction list
+ * would spend a league's entire slice of that budget on data nothing here reads.
+ *
+ * ⚠ `transactionsFetched` EXISTS SO AN EMPTY LIST CANNOT BE READ AS "NOBODY MOVED".
+ * A league with no activity and a league whose transaction export failed both parse to `[]`.
+ * ESPN's fetcher carries the same flag for the same reason — the difference matters to a
+ * caller deciding whether a quiet league is quiet or merely unread.
+ *
+ * 🛑 NEVER LOG THE URL THIS BUILDS. `buildMflEndpointUrl` puts `APIKEY` in the query string, so
+ * a logged MFL request URL publishes a long-lived credential — the same defect CLAUDE.md
+ * records for Rolling Insights' `RSC_token`. Log the league id and counts, never the request.
+ */
+export async function fetchMflActivityForSync(
+  userId: string,
+  leagueId: string,
+  season: number,
+): Promise<{
+  teams: Array<{ franchiseId: string; managerKey: string }>
+  transactions: MflImportTransaction[]
+  transactionsFetched: boolean
+}> {
+  const auth = await getMflAuthForUser(userId)
+  const source = { season, leagueId }
+
+  /*
+   * The league export carries the franchises; the transaction export carries the moves. Only
+   * the second is allowed to fail softly: without franchises there is no manager to attribute
+   * anything to, and activity bound to nobody is worse than no activity.
+   */
+  const [leagueRaw, transactionsResult] = await Promise.all([
+    fetchMflEndpoint({ ...source, type: 'league', apiKey: auth.apiKey }),
+    fetchMflEndpoint({ ...source, type: 'transactions', apiKey: auth.apiKey }).then(
+      (value) => ({ ok: true as const, value }),
+      () => ({ ok: false as const, value: null }),
+    ),
+  ])
+
+  const profiles = buildMflFranchiseProfiles(leagueRaw, null)
+  const teams = [...profiles.values()].map((profile) => ({
+    franchiseId: profile.franchiseId,
+    /*
+     * `managerId` is MFL's `owner_id` when it supplies one and the FRANCHISE ID otherwise —
+     * see `buildMflFranchiseProfiles`. Either way it is the value the importer writes to
+     * `LeagueTeam.platformUserId`, which is the column the ingest resolves a claimed team
+     * through, so this must stay that same expression rather than a second guess at identity.
+     */
+    managerKey: profile.managerId,
+  }))
+
+  return {
+    teams,
+    transactions: transactionsResult.ok ? parseMflTransactions(transactionsResult.value) : [],
+    transactionsFetched: transactionsResult.ok,
+  }
+}
+
 export async function fetchMflLeagueForImport(
   userId: string,
   sourceInput: string,

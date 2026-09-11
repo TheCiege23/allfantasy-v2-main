@@ -1,12 +1,14 @@
 import { describe, expect, it } from 'vitest'
 
 import type { EspnImportTransaction } from '@/lib/league-import/adapters/espn/types'
+import type { MflImportTransaction } from '@/lib/league-import/adapters/mfl/types'
 import type { YahooImportTransaction } from '@/lib/league-import/adapters/yahoo/types'
 import { buildManagerIdentityIndex, deriveActivityNaturalKey } from '@/lib/decision-os/ingestion/importedActivityNormalizer'
 import { InMemoryImportedActivityStore } from '@/lib/decision-os/ingestion/importedActivityStore'
 import {
   buildPlatformManagerMapping,
   emitEspnTransactionActivity,
+  emitMflTransactionActivity,
   emitYahooTransactionActivity,
   ingestPlatformImportedActivity,
 } from '@/lib/decision-os/ingestion/platformActivityEmitter'
@@ -122,7 +124,138 @@ describe('emitYahooTransactionActivity', () => {
   })
 })
 
+/*
+ * MFL, added 2026-09-11. Franchise ids are MFL's own zero-padded form — '0001', not '1' — in
+ * every fixture below, deliberately: MFL is the platform whose ids look like numbers and are
+ * not, so a fixture using '1' would agree with a coercion bug rather than catch one.
+ */
+const MFL_OWNER_A = 'mflowner77'
+const mflOwners = new Map<string, string | null>([
+  ['0001', MFL_OWNER_A],
+  ['0002', 'mflowner88'],
+  ['0003', null], // a franchise with no known owner: attributes to nobody
+])
+const mflTx = (over: Partial<MflImportTransaction> & Pick<MflImportTransaction, 'transactionId' | 'type'>): MflImportTransaction => ({
+  status: 'completed',
+  createdAt: '2026-10-25T15:40:00.000Z',
+  franchiseIds: ['0001'],
+  adds: {},
+  drops: {},
+  ...over,
+})
+
+describe('emitMflTransactionActivity', () => {
+  it('reads free agent as a roster move, both waiver spellings as waivers, and a trade as a trade', () => {
+    const { raws, skipped } = emitMflTransactionActivity(
+      [
+        mflTx({ transactionId: 'm1', type: 'free_agent', adds: { '13145': '0001' } }),
+        mflTx({ transactionId: 'm2', type: 'waiver', adds: { '13146': '0001' } }),
+        // MFL's blind-bid waiver: a second spelling for the same thing; both must land as `waiver`.
+        mflTx({ transactionId: 'm3', type: 'bbid_waiver', adds: { '13147': '0001' } }),
+        mflTx({ transactionId: 'm4', type: 'trade', franchiseIds: ['0001', '0002'] }),
+      ],
+      { leagueId: '65432', afLeagueId: 'L-mfl', teamOwnerMap: mflOwners },
+    )
+    expect(skipped).toEqual([])
+    expect(raws.map((r) => [r.providerEventId, r.activityType, r.managerSourceIds])).toEqual([
+      ['m1', 'roster_move', [MFL_OWNER_A]],
+      ['m2', 'waiver', [MFL_OWNER_A]],
+      ['m3', 'waiver', [MFL_OWNER_A]],
+      ['m4', 'trade', [MFL_OWNER_A, 'mflowner88']],
+    ])
+    expect(raws[0]).toMatchObject({ provider: 'mfl', leagueId: '65432', afLeagueId: 'L-mfl', occurredAt: '2026-10-25T15:40:00.000Z' })
+    // MFL player ids are MFL's own; a consumer must not resolve them against the Sleeper map.
+    expect(raws[0]!.payload).toMatchObject({ source: 'mfl_transaction', idSpace: 'mfl', adds: { '13145': '0001' } })
+  })
+
+  it('REGRESSION: a zero-padded franchise id binds to its owner instead of being coerced to a number', () => {
+    /*
+     * `Number('0001')` is 1 — a perfectly valid franchise id, just not this one. That exact
+     * coercion silently emptied MFL trades on the import path (see `lib/dynasty-import/types.ts`),
+     * so the binding is asserted here rather than assumed correct because a map lookup happens
+     * to be keyed on a string today.
+     */
+    const { raws } = emitMflTransactionActivity(
+      [mflTx({ transactionId: 'm5', type: 'trade', franchiseIds: ['0001', '0002'] })],
+      { leagueId: '65432', teamOwnerMap: mflOwners },
+    )
+    expect(raws[0]!.managerSourceIds).toEqual([MFL_OWNER_A, 'mflowner88'])
+    expect(raws[0]!.payload).toMatchObject({ franchiseIds: ['0001', '0002'] })
+  })
+
+  it('leaves IR and taxi out, skips what MFL did not complete, and attributes an ownerless franchise to nobody', () => {
+    /*
+     * IR and taxi are roster DESIGNATIONS, not changes in who holds a player. Counting them
+     * would inflate MFL managers' activity against every other platform, so they are skipped as
+     * unsupported rather than mapped to `roster_move`.
+     */
+    const { raws, skipped } = emitMflTransactionActivity(
+      [
+        mflTx({ transactionId: 'i1', type: 'ir' }),
+        mflTx({ transactionId: 'i2', type: 'taxi' }),
+        mflTx({ transactionId: 'x1', type: 'trade', status: 'pending' }),
+        mflTx({ transactionId: 'o1', type: 'free_agent', franchiseIds: ['0003'] }),
+      ],
+      { leagueId: '65432', teamOwnerMap: mflOwners },
+    )
+    expect(skipped.map((s) => s.reason)).toEqual([
+      'UNSUPPORTED_TRANSACTION_TYPE',
+      'UNSUPPORTED_TRANSACTION_TYPE',
+      'TRANSACTION_NOT_COMPLETE',
+    ])
+    // The ownerless franchise still emits an event — it simply names no manager.
+    expect(raws.map((r) => [r.providerEventId, r.managerSourceIds])).toEqual([['o1', []]])
+  })
+})
+
 describe('ingestPlatformImportedActivity', () => {
+  it('routes an MFL league to the MFL emitter, not to the provider that used to be the fall-through', async () => {
+    /*
+     * 🛑 THE ROUTING IS THE ASSERTION, AND IT IS WHY THIS CASE EXISTS SEPARATELY FROM THE
+     * EMITTER TESTS ABOVE. `ingestPlatformImportedActivity` dispatched with a nested ternary
+     * whose last branch was reached by elimination, so a third provider added without its own
+     * branch would have been handed to the Yahoo emitter — which reads `teamKeys` where MFL has
+     * `franchiseIds`. Every MFL event would have been written attributed to NOBODY, with no
+     * throw, no skip and a healthy-looking `created` count.
+     *
+     * So this asserts the manager actually resolved. An assertion that only counted rows would
+     * have passed against that bug.
+     */
+    const store = new InMemoryImportedActivityStore()
+    const index = buildManagerIdentityIndex([
+      buildPlatformManagerMapping('mfl', MFL_OWNER_A, 'af-guap'),
+      buildPlatformManagerMapping('mfl', 'mflowner88', null),
+    ])
+    const input = {
+      provider: 'mfl' as const,
+      providerLeagueId: '65432',
+      afLeagueId: 'L-mfl',
+      teamOwnerMap: mflOwners,
+      transactions: [
+        mflTx({ transactionId: 'm4', type: 'trade', franchiseIds: ['0001', '0002'] }),
+        mflTx({ transactionId: 'm9', type: 'waiver', createdAt: null }), // MFL gave no date: never invented
+      ],
+    }
+
+    const first = await ingestPlatformImportedActivity(input, index, store)
+    expect(first.writer).toMatchObject({ total: 1, created: 1, updated: 0 })
+    expect(first.normalizerSkipped.map((s) => s.reason)).toEqual(['MISSING_OCCURRED_AT'])
+
+    const row = await store.getByNaturalKey(deriveActivityNaturalKey('mfl', '65432', 'trade', 'm4'))
+    expect(row).not.toBeNull()
+    expect(row!.managerKeys).toEqual(['af-guap', 'mfl:mflowner88'])
+
+    // An MFL league and a Sleeper league sharing a numeric id cannot collide: the provider is in the key.
+    expect(deriveActivityNaturalKey('mfl', '65432', 'trade', 'm4')).not.toBe(
+      deriveActivityNaturalKey('sleeper', '65432', 'trade', 'm4'),
+    )
+
+    // Re-ingesting the same feed converges.
+    const second = await ingestPlatformImportedActivity(input, index, store)
+    expect(second.writer).toMatchObject({ created: 0 })
+    expect(await store.count()).toBe(1)
+  })
+
   it('writes idempotent rows keyed on the provider and its league id, attributes a claimed team to its AllFantasy user and an unclaimed one to its provider key, and skips a dateless transaction honestly', async () => {
     const store = new InMemoryImportedActivityStore()
     const index = buildManagerIdentityIndex([

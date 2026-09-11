@@ -5,6 +5,7 @@ import { ingestSleeperImportedActivity } from "@/lib/decision-os/ingestion/sleep
 import { buildPlatformManagerMapping, ingestPlatformImportedActivity } from "@/lib/decision-os/ingestion/platformActivityEmitter"
 import { fetchEspnActivityForSync } from "@/lib/league-import/espn/EspnLeagueFetchService"
 import { fetchYahooActivityForSync } from "@/lib/league-import/yahoo/YahooLeagueFetchService"
+import { fetchMflActivityForSync } from "@/lib/league-import/mfl/MflLeagueFetchService"
 import { buildManagerIdentityIndex } from "@/lib/decision-os/ingestion/importedActivityNormalizer"
 import { PrismaImportedActivityStore } from "@/lib/decision-os/ingestion/prismaImportedActivityStore"
 import {
@@ -386,7 +387,14 @@ async function ingestOnePlatformLeague(
   league: PlatformLeagueRow,
   store: PrismaImportedActivityStore,
 ): Promise<{ created: number; updated: number; skipped: number; fetched: boolean }> {
-  const provider = league.platform === "espn" ? "espn" : league.platform === "yahoo" ? "yahoo" : null
+  const provider =
+    league.platform === "espn"
+      ? "espn"
+      : league.platform === "yahoo"
+        ? "yahoo"
+        : league.platform === "mfl"
+          ? "mfl"
+          : null
   if (!provider) throw new Error(`unsupported_platform:${league.platform}`)
   if (!league.userId) throw new Error("no_importing_user")
   const sourceLeagueId = league.platformLeagueId as string
@@ -411,16 +419,57 @@ async function ingestOnePlatformLeague(
     return { created: r.writer.created, updated: r.writer.updated, skipped: r.writer.skipped, fetched: activity.transactionsFetched }
   }
 
-  const activity = await fetchYahooActivityForSync(league.userId, sourceLeagueId)
-  const teamOwnerMap = new Map<string, string | null>(activity.teams.map((t) => [t.teamKey, t.managerKey || null]))
-  const managerIds = [...new Set(activity.teams.map((t) => t.managerKey).filter(Boolean))]
-  const identityIndex = buildManagerIdentityIndex(managerIds.map((id) => buildPlatformManagerMapping("yahoo", id, afUserByManager.get(id) ?? null)))
-  const r = await ingestPlatformImportedActivity(
-    { provider: "yahoo", providerLeagueId: activity.leagueKey, afLeagueId: league.id, transactions: activity.transactions, teamOwnerMap },
-    identityIndex,
-    store,
-  )
-  return { created: r.writer.created, updated: r.writer.updated, skipped: r.writer.skipped, fetched: true }
+  if (provider === "mfl") {
+    /*
+     * MFL needs the season: its export URL is `/<season>/export`, so the year is part of the
+     * address rather than a filter. `League.season` when we have it, this year otherwise —
+     * the same fallback the ESPN branch above uses.
+     */
+    const activity = await fetchMflActivityForSync(
+      league.userId,
+      sourceLeagueId,
+      league.season ?? new Date().getUTCFullYear(),
+    )
+    const teamOwnerMap = new Map<string, string | null>(
+      activity.teams.map((t) => [t.franchiseId, t.managerKey || null]),
+    )
+    const managerIds = [...new Set(activity.teams.map((t) => t.managerKey).filter(Boolean))]
+    const identityIndex = buildManagerIdentityIndex(
+      managerIds.map((id) => buildPlatformManagerMapping("mfl", id, afUserByManager.get(id) ?? null)),
+    )
+    const r = await ingestPlatformImportedActivity(
+      { provider: "mfl", providerLeagueId: sourceLeagueId, afLeagueId: league.id, transactions: activity.transactions, teamOwnerMap },
+      identityIndex,
+      store,
+    )
+    return { created: r.writer.created, updated: r.writer.updated, skipped: r.writer.skipped, fetched: activity.transactionsFetched }
+  }
+
+  if (provider === "yahoo") {
+    const activity = await fetchYahooActivityForSync(league.userId, sourceLeagueId)
+    const teamOwnerMap = new Map<string, string | null>(activity.teams.map((t) => [t.teamKey, t.managerKey || null]))
+    const managerIds = [...new Set(activity.teams.map((t) => t.managerKey).filter(Boolean))]
+    const identityIndex = buildManagerIdentityIndex(managerIds.map((id) => buildPlatformManagerMapping("yahoo", id, afUserByManager.get(id) ?? null)))
+    const r = await ingestPlatformImportedActivity(
+      { provider: "yahoo", providerLeagueId: activity.leagueKey, afLeagueId: league.id, transactions: activity.transactions, teamOwnerMap },
+      identityIndex,
+      store,
+    )
+    return { created: r.writer.created, updated: r.writer.updated, skipped: r.writer.skipped, fetched: true }
+  }
+
+  /*
+   * 🛑 YAHOO WAS THE FALL-THROUGH UNTIL MFL WAS ADDED, AND THAT IS WHY THIS LINE EXISTS.
+   * With two providers, "not espn" meant Yahoo by elimination. A third one added to the
+   * resolution above without its own branch would have been handed to the Yahoo fetcher —
+   * wrong credential, wrong id space, wrong parser — and nothing would have thrown.
+   *
+   * `never` makes that a COMPILE error instead: the next provider added to `provider` fails to
+   * build until it has a branch here. Cheaper than the test that would otherwise have to
+   * notice, and it cannot be forgotten.
+   */
+  const exhaustive: never = provider
+  throw new Error(`unsupported_platform:${String(exhaustive)}`)
 }
 
 export async function GET(request: Request) {
@@ -498,11 +547,20 @@ export async function GET(request: Request) {
         .map((id) => byId.get(id))
         .filter((l): l is EligibleLeagueRow => l !== undefined)
 
-      // ESPN and Yahoo leagues, read through their importers (2026-09-06). Ordered the same way, capped smaller.
+      /*
+       * ESPN and Yahoo leagues, read through their importers (2026-09-06); MFL added 2026-09-11.
+       * Ordered the same way, capped smaller.
+       *
+       * ⚠ THIS LIST AND THE `provider` RESOLUTION IN `ingestOnePlatformLeague` MUST AGREE, AND
+       * ONLY ONE OF THEM FAILS LOUDLY. A platform selected here but unhandled there throws
+       * `unsupported_platform` once per league per fire — visible, but only in the error
+       * counters. A platform handled there and missing HERE is silent: the branch simply never
+       * runs, and the provider looks quietly inactive rather than unwired.
+       */
       const platformLeagues = relayOnly ? ([] as PlatformLeagueRow[]) : (await prisma.league
         .findMany({
           where: {
-            platform: { in: ["espn", "yahoo"] },
+            platform: { in: ["espn", "yahoo", "mfl"] },
             platformLeagueId: { not: "" },
             status: { notIn: ["complete", "completed", "archived"] },
           },
