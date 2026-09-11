@@ -11,14 +11,18 @@
  * ⚠ WHY THIS IS A FIXTURE-LEVEL TEST AND NOT A DATABASE ONE. The repo's vitest setup pins
  * `DATABASE_URL` to `127.0.0.1:1` unless a human names a target, precisely so a suite like this
  * cannot silently reach production. So the league lives in an in-memory fixture and the test
- * exercises the REAL decision functions over it — `isActiveTeam` / `selectActiveTeams`, the same
+ * exercises the REAL decision functions over it — `isCurrentOrUnknown` / `selectCurrentOrUnknown`,
  * authority the production readers now call. That proves the rule the readers depend on; it does
  * not prove any individual reader calls it, which is what the static reader guards cover.
  */
 
 import { describe, expect, it } from 'vitest'
 
-import { isActiveTeam, selectActiveTeams, selectOrphanTeams } from '@/lib/league-import/activeTeams'
+import {
+  isCurrentOrUnknown,
+  selectArchived,
+  selectCurrentOrUnknown,
+} from '@/lib/league-import/teamLifecycle'
 import { isAuthoritativeStatus, rollUpStatus } from '@/lib/league-import/resourceStatus'
 import type { ResourceFetchStatus } from '@/lib/league-import/resourceStatus'
 
@@ -26,7 +30,9 @@ interface Team {
   externalId: string
   teamName: string
   claimedByUserId: string | null
-  isOrphan: boolean | null
+  lifecycleState: 'UNKNOWN' | 'CURRENT' | 'ARCHIVED' | null
+  /** Set on archival, RETRACTED on reappearance - the writer clears it, so the fixture does too. */
+  archivedAt: string | null
   /** Stable across archival — the whole point of not deleting. */
   createdAt: string
 }
@@ -48,10 +54,10 @@ function seedLeague(): {
 } {
   return {
     teams: [
-      { externalId: 'A', teamName: 'Alpha', claimedByUserId: 'u1', isOrphan: false, createdAt: '2026-08-01T00:00:00.000Z' },
-      { externalId: 'B', teamName: 'Bravo', claimedByUserId: null, isOrphan: false, createdAt: '2026-08-01T00:00:00.000Z' },
-      { externalId: 'C', teamName: 'Charlie', claimedByUserId: null, isOrphan: null, createdAt: '2026-08-01T00:00:00.000Z' },
-      { externalId: 'D', teamName: 'Delta', claimedByUserId: 'u4', isOrphan: false, createdAt: '2026-08-01T00:00:00.000Z' },
+      { externalId: 'A', teamName: 'Alpha', claimedByUserId: 'u1', lifecycleState: 'CURRENT', archivedAt: null, createdAt: '2026-08-01T00:00:00.000Z' },
+      { externalId: 'B', teamName: 'Bravo', claimedByUserId: null, lifecycleState: 'CURRENT', archivedAt: null, createdAt: '2026-08-01T00:00:00.000Z' },
+      { externalId: 'C', teamName: 'Charlie', claimedByUserId: null, lifecycleState: null, archivedAt: null, createdAt: '2026-08-01T00:00:00.000Z' },
+      { externalId: 'D', teamName: 'Delta', claimedByUserId: 'u4', lifecycleState: 'CURRENT', archivedAt: null, createdAt: '2026-08-01T00:00:00.000Z' },
     ],
     matchups: [
       { week: 1, homeExternalId: 'A', awayExternalId: 'D', homePoints: 101.2, awayPoints: 98.4 },
@@ -90,9 +96,9 @@ function reconcile(
   const archived: string[] = []
   const next = teams.map((t) => {
     if (live.has(t.externalId)) return t
-    if (t.isOrphan === true) return t // idempotent
+    if (t.lifecycleState === 'ARCHIVED') return t // idempotent
     archived.push(t.externalId)
-    return { ...t, isOrphan: true }
+    return { ...t, lifecycleState: 'ARCHIVED' as const, archivedAt: '2026-09-11T00:00:00.000Z' }
   })
   /* Nothing is ever removed — the array length is invariant. */
   return { teams: next, archived, deleted: [] }
@@ -101,7 +107,9 @@ function reconcile(
 /** A team present in a payload is un-archived by the bootstrap upsert. */
 function applyPresentTeams(teams: Team[], payloadExternalIds: string[]): Team[] {
   const live = new Set(payloadExternalIds)
-  return teams.map((t) => (live.has(t.externalId) ? { ...t, isOrphan: false } : t))
+  return teams.map((t) =>
+    live.has(t.externalId) ? { ...t, lifecycleState: 'CURRENT' as const, archivedAt: null } : t,
+  )
 }
 
 const ALL_OBSERVED: ResourceFetchStatus[] = ['fetched', 'fetched', 'fetched']
@@ -122,7 +130,7 @@ describe('D vanishes from a COMPLETE authoritative refresh', () => {
      */
     expect(after.teams).toHaveLength(seed.teams.length)
     expect(after.teams.map((t) => t.externalId).sort()).toEqual(['A', 'B', 'C', 'D'])
-    expect(after.teams.find((t) => t.externalId === 'D')?.isOrphan).toBe(true)
+    expect(after.teams.find((t) => t.externalId === 'D')?.lifecycleState).toBe('ARCHIVED')
   })
 
   it('preserves D\'s identity and history fields through archival', () => {
@@ -135,7 +143,7 @@ describe('D vanishes from a COMPLETE authoritative refresh', () => {
   it('archives a CLAIMED team on the same rule as an unclaimed one', () => {
     /* D is claimed; the old code preserved claimed teams and hard-deleted unclaimed ones. */
     expect(after.teams.find((t) => t.externalId === 'D')?.claimedByUserId).toBe('u4')
-    expect(after.teams.find((t) => t.externalId === 'D')?.isOrphan).toBe(true)
+    expect(after.teams.find((t) => t.externalId === 'D')?.lifecycleState).toBe('ARCHIVED')
   })
 
   it('is idempotent — a second identical refresh archives nothing further', () => {
@@ -148,7 +156,7 @@ describe('D vanishes from a COMPLETE authoritative refresh', () => {
 describe('CURRENT surfaces show only A–C', () => {
   const seed = seedLeague()
   const after = reconcile(seed.teams, ['A', 'B', 'C'], ALL_OBSERVED, 'full')
-  const active = selectActiveTeams(after.teams)
+  const active = selectCurrentOrUnknown(after.teams)
   const ids = active.map((t) => t.externalId)
 
   it('standings / dashboard team list', () => {
@@ -156,7 +164,7 @@ describe('CURRENT surfaces show only A–C', () => {
     expect(ids).not.toContain('D')
   })
 
-  it('keeps C, whose isOrphan is NULL — absent evidence is not archival', () => {
+  it('keeps C, whose lifecycleState is NULL — absent evidence is not archival', () => {
     expect(ids).toContain('C')
   })
 
@@ -166,7 +174,7 @@ describe('CURRENT surfaces show only A–C', () => {
   })
 
   it('waiver / team-fit inputs exclude D', () => {
-    expect(active.every((t) => isActiveTeam(t))).toBe(true)
+    expect(active.every((t) => isCurrentOrUnknown(t))).toBe(true)
     expect(active.find((t) => t.externalId === 'D')).toBeUndefined()
   })
 
@@ -181,7 +189,7 @@ describe('CURRENT surfaces show only A–C', () => {
   })
 
   it('notification recipients drop the archived team\'s claimer', () => {
-    const recipients = selectActiveTeams(after.teams)
+    const recipients = selectCurrentOrUnknown(after.teams)
       .map((t) => t.claimedByUserId)
       .filter((x): x is string => !!x)
     expect(recipients).toEqual(['u1'])
@@ -192,7 +200,7 @@ describe('CURRENT surfaces show only A–C', () => {
 describe('HISTORICAL surfaces still resolve D', () => {
   const seed = seedLeague()
   const after = reconcile(seed.teams, ['A', 'B', 'C'], ALL_OBSERVED, 'full')
-  /* History reads the FULL team set — it must never call selectActiveTeams. */
+  /* History reads the FULL team set — it must never call selectCurrentOrUnknown. */
   const byId = new Map(after.teams.map((t) => [t.externalId, t]))
 
   it('historical matchups still name D', () => {
@@ -229,7 +237,7 @@ describe('HISTORICAL surfaces still resolve D', () => {
   })
 
   it('the archived team is enumerable as archived, for a disclosure surface', () => {
-    expect(selectOrphanTeams(after.teams).map((t) => t.externalId)).toEqual(['D'])
+    expect(selectArchived(after.teams).map((t) => t.externalId)).toEqual(['D'])
   })
 })
 
@@ -238,7 +246,7 @@ describe('a PARTIAL refresh missing D does not archive it', () => {
     const seed = seedLeague()
     const after = reconcile(seed.teams, ['A', 'B', 'C'], ALL_OBSERVED, 'partial')
     expect(after.archived).toEqual([])
-    expect(after.teams.find((t) => t.externalId === 'D')?.isOrphan).toBe(false)
+    expect(after.teams.find((t) => t.externalId === 'D')?.lifecycleState).toBe('CURRENT')
   })
 
   it('does nothing when coverage claims full but a roster was NOT observed', () => {
@@ -249,7 +257,7 @@ describe('a PARTIAL refresh missing D does not archive it', () => {
     const seed = seedLeague()
     const after = reconcile(seed.teams, ['A', 'B', 'C'], ['fetched', 'failed', 'fetched'], 'full')
     expect(after.archived).toEqual([])
-    expect(after.teams.find((t) => t.externalId === 'D')?.isOrphan).toBe(false)
+    expect(after.teams.find((t) => t.externalId === 'D')?.lifecycleState).toBe('CURRENT')
   })
 
   it('does nothing when an unauthorized read makes the set unobserved', () => {
@@ -266,8 +274,8 @@ describe('D reappears in a later authoritative refresh', () => {
   const restored = applyPresentTeams(archivedState.teams, ['A', 'B', 'C', 'D'])
 
   it('becomes active again', () => {
-    expect(restored.find((t) => t.externalId === 'D')?.isOrphan).toBe(false)
-    expect(selectActiveTeams(restored).map((t) => t.externalId)).toEqual(['A', 'B', 'C', 'D'])
+    expect(restored.find((t) => t.externalId === 'D')?.lifecycleState).toBe('CURRENT')
+    expect(selectCurrentOrUnknown(restored).map((t) => t.externalId)).toEqual(['A', 'B', 'C', 'D'])
   })
 
   it('exists exactly ONCE — no duplicate identity was created', () => {

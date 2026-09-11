@@ -13,7 +13,12 @@ import { describe, expect, it } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
-import { isActiveTeam, selectActiveTeams, selectOrphanTeams } from '@/lib/league-import/activeTeams'
+import {
+  isArchived,
+  isCurrentOrUnknown,
+  selectArchived,
+  selectCurrentOrUnknown,
+} from '@/lib/league-import/teamLifecycle'
 
 const APPLY_SRC = readFileSync(
   join(process.cwd(), 'lib', 'import-os', 'collector', 'applySleeperLeagueSync.ts'),
@@ -179,55 +184,87 @@ describe('a reappearing team is restored', () => {
   })
 })
 
-describe('active-team selection excludes current orphans', () => {
-  const team = (id: string, isOrphan: boolean | null | undefined) => ({ id, isOrphan })
+describe('lifecycle selection excludes only the positively departed', () => {
+  type Lc = 'UNKNOWN' | 'CURRENT' | 'ARCHIVED' | null | undefined
+  const team = (id: string, lifecycleState: Lc) => ({ id, lifecycleState })
 
-  it('treats only an explicit true as archived', () => {
-    expect(isActiveTeam(team('a', false))).toBe(true)
-    expect(isActiveTeam(team('b', true))).toBe(false)
+  it('treats only an explicit ARCHIVED as departed', () => {
+    expect(isCurrentOrUnknown(team('a', 'CURRENT'))).toBe(true)
+    expect(isCurrentOrUnknown(team('b', 'ARCHIVED'))).toBe(false)
+    /* UNKNOWN is kept and is NOT called current — see the note on the selector. */
+    expect(isCurrentOrUnknown(team('u', 'UNKNOWN'))).toBe(true)
   })
 
-  it('treats NULL and UNDEFINED as ACTIVE — absent evidence never hides a live team', () => {
+  it('treats NULL and UNDEFINED as NOT ARCHIVED — absent evidence never hides a live team', () => {
     /*
-     * ⚠ NOT because the column is nullable. It is not: the init migration creates
-     * `"isOrphan" BOOLEAN NOT NULL DEFAULT false` and no migration ever alters it. An earlier
-     * version of this test cited "288 leagues carry NULLs", which was an attribution error —
-     * 288 is this repo's count of COMMISSIONED LEAGUES, not of NULL rows.
+     * ⚠ NOT because the column is nullable. It is not: the migration creates both enum columns
+     * `NOT NULL DEFAULT 'UNKNOWN'`, pinned below.
      *
-     * The case is real for a different reason: `TeamOrphanState` accepts
-     * `boolean | null | undefined` because callers produce those — a Prisma `select` omitting
-     * the column yields `undefined`, a `$queryRaw` row is hand-typed, a mapper may build a
-     * partial object. Absent evidence of archival must mean ACTIVE, so a missing field shows a
-     * live team rather than hiding one.
+     * The case is real for a different reason, unchanged from the flag this replaced: a Prisma
+     * `select` omitting the column yields `undefined`, a `$queryRaw` row is hand-typed, a mapper
+     * may build a partial object. Absent evidence of departure must show a live team rather than
+     * hide one.
      */
-    expect(isActiveTeam(team('c', null))).toBe(true)
-    expect(isActiveTeam(team('d', undefined))).toBe(true)
+    expect(isCurrentOrUnknown(team('c', null))).toBe(true)
+    expect(isCurrentOrUnknown(team('d', undefined))).toBe(true)
     /* And a row that simply never selected the column. */
-    expect(isActiveTeam({} as { isOrphan?: boolean | null })).toBe(true)
+    expect(isCurrentOrUnknown({} as { lifecycleState?: Lc })).toBe(true)
   })
 
-  it('pins the committed DDL, so a future nullability change cannot pass unnoticed', () => {
+  it('pins the committed DDL for BOTH axes, so a default change cannot pass unnoticed', () => {
     const initMigration = readFileSync(
       join(process.cwd(), 'prisma', 'migrations', '20260407024117_init', 'migration.sql'),
       'utf8',
     )
+    /* The legacy flag is RETAINED and still NOT NULL — readers migrated, the column did not. */
     expect(initMigration).toMatch(/"isOrphan" BOOLEAN NOT NULL DEFAULT false/)
+
+    const axes = readFileSync(
+      join(
+        process.cwd(),
+        'prisma',
+        'migrations',
+        '20260910140000_leagueteam_lifecycle_manager_axes',
+        'migration.sql',
+      ),
+      'utf8',
+    )
+    /*
+     * 🛑 THE DEFAULT IS THE WHOLE SAFETY PROPERTY. `UNKNOWN` is what keeps an unclassified row
+     * from being read as CURRENT or HUMAN; a migration that changed either default to a concrete
+     * state would silently convert an unmeasured population into a claim about it.
+     */
+    expect(axes).toMatch(/"lifecycleState" "LeagueTeamLifecycleState" NOT NULL DEFAULT 'UNKNOWN'/)
+    expect(axes).toMatch(/"managerKind" "LeagueTeamManagerKind" NOT NULL DEFAULT 'UNKNOWN'/)
   })
 
-  it('partitions a mixed league correctly', () => {
-    const teams = [team('a', false), team('b', true), team('c', null), team('d', true)]
-    expect(selectActiveTeams(teams).map((t) => t.id)).toEqual(['a', 'c'])
-    expect(selectOrphanTeams(teams).map((t) => t.id)).toEqual(['b', 'd'])
+  it('🛑 current and archived are NOT complements — an unclassified row is in NEITHER', () => {
+    /*
+     * The boolean this replaced could not express this: every row was active or orphaned. With a
+     * three-state axis a row with no evidence belongs to neither set, and the two helpers err in
+     * OPPOSITE directions on purpose — `isCurrentOrUnknown` toward showing a live team,
+     * `isArchived` toward not accusing one of having left. A partition assertion would force them
+     * back into complements and quietly reintroduce the guess.
+     */
+    const teams = [team('a', 'CURRENT'), team('b', 'ARCHIVED'), team('c', null), team('u', 'UNKNOWN')]
+    expect(selectCurrentOrUnknown(teams).map((t) => t.id)).toEqual(['a', 'c', 'u'])
+    expect(selectArchived(teams).map((t) => t.id)).toEqual(['b'])
+    /* `c` appears in one and not the other — and that is the point. */
+    expect(selectArchived(teams).some((t) => t.id === 'c')).toBe(false)
   })
 
   it('is stable when applied repeatedly', () => {
-    const teams = [team('a', false), team('b', true)]
-    expect(selectActiveTeams(selectActiveTeams(teams))).toEqual(selectActiveTeams(teams))
+    const teams = [team('a', 'CURRENT'), team('b', 'ARCHIVED')]
+    expect(selectCurrentOrUnknown(selectCurrentOrUnknown(teams))).toEqual(
+      selectCurrentOrUnknown(teams),
+    )
   })
 
-  it('rejects a null team rather than counting it active', () => {
-    expect(isActiveTeam(null)).toBe(false)
-    expect(isActiveTeam(undefined)).toBe(false)
+  it('rejects a null team rather than counting it either way', () => {
+    expect(isCurrentOrUnknown(null)).toBe(false)
+    expect(isCurrentOrUnknown(undefined)).toBe(false)
+    expect(isArchived(null)).toBe(false)
+    expect(isArchived(undefined)).toBe(false)
   })
 })
 

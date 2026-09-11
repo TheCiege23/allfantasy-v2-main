@@ -16,10 +16,16 @@
  * So a brand-new 12-team league has eleven rows with `isOrphan = true` that are current,
  * claimable franchises, and filtering them reported that league as having one team.
  *
- * ⚠ THE OLD CONSTANT IS NOT REDEFINED HERE, DELIBERATELY. Redefining a name leaves every existing
+ * ⚠ THE OLD CONSTANT WAS NEVER REDEFINED, DELIBERATELY. Redefining a name leaves every existing
  * call site pointing at a meaning that changed underneath it — which is the failure this file
- * exists to end. `activeTeams.ts` keeps its current behaviour and is being retired call site by
- * call site; each one moves to whichever selector below states what it actually needs.
+ * exists to end. `activeTeams.ts` kept its behaviour untouched and was retired one call site at a
+ * time; each moved to whichever selector below states what it actually needs.
+ *
+ * ✅ THAT MIGRATION IS COMPLETE. All 22 call sites moved, and `lib/league-import/activeTeams.ts`
+ * was deleted once a six-form importer census (alias, relative, dynamic, `require`, `vi.mock`,
+ * bare path) returned zero. If you are here looking for `ACTIVE_TEAM_WHERE`, `selectActiveTeams`
+ * or `isActiveTeam`: they are gone, and the selector you want is named below by the question it
+ * answers rather than by a flag.
  *
  * ── THE TRANSITIONAL PROBLEM, NAMED RATHER THAN HIDDEN ──────────────────────────────────────
  *
@@ -167,4 +173,24 @@ export function isTradeable(team: TeamLifecycleState | null | undefined): boolea
 /** Keep only franchises a manager could actually propose a trade to. */
 export function selectTradeable<T extends TeamLifecycleState>(teams: readonly T[]): T[] {
   return teams.filter(isTradeable)
+}
+
+/**
+ * Positively departed. The consumer-side complement of `ARCHIVED_FRANCHISES`, for a disclosure
+ * surface that reports what LEFT.
+ *
+ * 🛑 THIS IS NOT `!isCurrentOrUnknown`, AND THE DIFFERENCE IS THE WHOLE POINT. The two are not
+ * complements: a row with no `lifecycleState` at all — a partial `select`, a hand-typed raw row —
+ * is neither current nor archived, and it must not be REPORTED AS DEPARTED on the strength of a
+ * column nobody fetched. `isCurrentOrUnknown` errs toward showing a live team; this errs toward
+ * not accusing one of leaving. Both defaults are chosen, and they are deliberately asymmetric.
+ */
+export function isArchived(team: TeamLifecycleState | null | undefined): boolean {
+  if (!team) return false
+  return team.lifecycleState === 'ARCHIVED'
+}
+
+/** Keep only franchises positively known to have left — for a disclosure surface. */
+export function selectArchived<T extends TeamLifecycleState>(teams: readonly T[]): T[] {
+  return teams.filter(isArchived)
 }
