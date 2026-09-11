@@ -23,6 +23,7 @@ import { rememberChimmyAssistantMemory, rememberChimmyUserMessageMemory } from '
 import { recordUnifiedMemoryFromChatTurn } from '@/lib/ai-memory/unified-memory-system'
 import { recordChimmyQualityEvent } from '@/lib/chimmy-quality/ChimmyQualityAnalytics'
 import { prisma } from '@/lib/prisma'
+import { resolveLeagueMembership } from '@/lib/league-access'
 import { requireFeatureEntitlement } from '@/lib/subscription/entitlement-middleware'
 import { parseZombieChimmyIntentFromMessage, persistZombieChimmyAction } from '@/lib/zombie/chimmy-zombie-persist'
 
@@ -129,6 +130,39 @@ export async function POST(req: Request) {
     typeof (body as { leagueId?: unknown }).leagueId === 'string'
       ? ((body as { leagueId: string }).leagueId || null)
       : null
+  /*
+   * 🛑 THE `leagueId` ABOVE CAME STRAIGHT OFF THE REQUEST BODY AND NOTHING
+   * CHECKED IT. It flowed into `prisma.league.findUnique`, the zombie-action
+   * branch, the conversation id, and every memory and history write — so any
+   * signed-in caller could ground a Chimmy turn on any league by naming it.
+   *
+   * ⚠ `requireFeatureEntitlement` BELOW IS NOT THIS CHECK. It answers whether
+   * this USER may use the feature and whether they have tokens; it never asks
+   * whether they may see this LEAGUE. The two were easy to mistake for one,
+   * because that entitlement gate was the only thing standing between the body
+   * and the league read.
+   *
+   * ⚠ NOTHING TO AUTHORIZE MEANS NOTHING TO REFUSE. Chimmy answers questions
+   * with no league attached, so a gate that demanded one would turn this route
+   * league-only. Only a supplied id is checked.
+   */
+  if (leagueId) {
+    const membership = await resolveLeagueMembership(leagueId, userId)
+    if (!membership.ok) {
+      return NextResponse.json(
+        {
+          code: membership.status === 404 ? 'league_not_found' : 'league_forbidden',
+          message: membership.status === 404 ? 'League not found' : 'Forbidden',
+          userMessage:
+            membership.status === 404
+              ? 'We could not find that league.'
+              : 'You do not have access to that league.',
+        },
+        { status: membership.status }
+      )
+    }
+  }
+
   const conversationId = buildChimmyConversationId({
     userId,
     leagueId,
