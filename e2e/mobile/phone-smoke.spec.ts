@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test"
 import rawBaseline from "./undersized-target-baseline.json"
+import { compareTargets, type BaselineTarget } from "./targetRatchet"
 
 /**
  * The per-PR phone gate: invariants that must hold on every public route, on a
@@ -30,9 +31,8 @@ const PUBLIC_ROUTES = ["/", "/login", "/pricing"] as const
 const MIN_TARGET = 44
 const MIN_FIELD_FONT = 16
 
-type BaselineEntry = { cls: string; label: string; seen?: string }
 const BASELINE = rawBaseline as unknown as {
-  routes: Record<string, BaselineEntry[]>
+  routes: Record<string, BaselineTarget[]>
 }
 
 test.describe("@mobile phone smoke", () => {
@@ -155,11 +155,21 @@ test.describe("@mobile phone smoke", () => {
        * So: a NEW undersized control fails; a known one does not. The baseline
        * can only shrink.
        */
-      const known = new Set(
-        (BASELINE.routes[route] ?? []).map((e) => `${e.cls}|${e.label}`),
-      )
-      const regressions = report.smallTargets.filter(
-        (t) => !known.has(`${t.cls}|${t.label}`),
+      /*
+       * ⚠ THE COMPARISON LIVES IN `targetRatchet.ts`, AND THAT IS THE POINT.
+       * Inline here, its regression branch could only be forced red by arranging
+       * a browser, a dev server, a database and an unbaselined control all at
+       * once — which failed three times for environmental reasons and never once
+       * told us whether the branch worked. As a pure function it is proven both
+       * ways in milliseconds by `__tests__/mobile/target-ratchet.test.ts`.
+       *
+       * 🛑 DO NOT REINLINE IT. The unit test would keep passing while guarding
+       * nothing — this import is the only thing tying the proven code to the
+       * gate that runs.
+       */
+      const { regressions, stale } = compareTargets(
+        report.smallTargets,
+        BASELINE.routes[route] ?? [],
       )
 
       expect(
@@ -175,10 +185,8 @@ test.describe("@mobile phone smoke", () => {
        * defect later — a ratchet that only ever loosens. Same failure the TS
        * ratchet avoids by regenerating its baseline.
        */
-      const stillSmall = new Set(report.smallTargets.map((t) => `${t.cls}|${t.label}`))
-      const staleBaseline = [...known].filter((k) => !stillSmall.has(k))
       expect(
-        staleBaseline,
+        stale,
         `${route} has baseline entries that are no longer undersized — delete them ` +
           `from e2e/mobile/undersized-target-baseline.json`,
       ).toEqual([])
