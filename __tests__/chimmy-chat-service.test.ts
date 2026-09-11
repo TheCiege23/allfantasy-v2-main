@@ -134,6 +134,60 @@ describe("sendChimmyMessage", () => {
     })
   })
 
+  /*
+   * ⚠ ONE BOOLEAN WAS DOING TWO JOBS, AND THE SERVER BELIEVED THE WRONG ONE.
+   *
+   * `confirmTokenSpend` meant both "should I prompt?" and "what do I tell the
+   * server?", so a caller that had ALREADY asked the user could only suppress the
+   * second dialog by also telling the server it had no consent. app/components/
+   * ChimmyChat.tsx did exactly that: it ran its own window.confirm, the user
+   * clicked OK, and it then sent confirmTokenSpend:false. requireFeatureEntitlement
+   * answers that with 409 token_confirmation_required for any user without AF Pro,
+   * and lib/chimmy-chat/response-copy.ts files that code under PREMIUM_GATE_CODES —
+   * so a user holding tokens, who had just agreed to spend them, was shown
+   * "Upgrade to AF Pro". ai_chat is accessType "subscription_or_tokens"; the token
+   * half was unreachable on that surface.
+   */
+  it("sends confirmTokenSpend: true for a caller that already has consent, without prompting again", async () => {
+    ;(global.fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
+      new Response(JSON.stringify({ result: "Agent response." }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      })
+    )
+
+    const { sendChimmyMessage } = await import("@/lib/chimmy-chat/ChimmyChatService")
+    await sendChimmyMessage({
+      message: "What should I do?",
+      promptForTokenSpend: false,
+      tokenSpendConfirmed: true,
+    })
+
+    expect(confirmTokenSpendMock).not.toHaveBeenCalled()
+    const [, init] = (global.fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[0]!
+    expect(JSON.parse(String(init?.body)).confirmTokenSpend).toBe(true)
+  })
+
+  /* The same suppression must NOT manufacture consent nobody gave. */
+  it("sends confirmTokenSpend: false when prompting is suppressed and no consent was obtained", async () => {
+    ;(global.fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
+      new Response(JSON.stringify({ result: "Agent response." }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      })
+    )
+
+    const { sendChimmyMessage } = await import("@/lib/chimmy-chat/ChimmyChatService")
+    await sendChimmyMessage({
+      message: "What should I do?",
+      promptForTokenSpend: false,
+    })
+
+    expect(confirmTokenSpendMock).not.toHaveBeenCalled()
+    const [, init] = (global.fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[0]!
+    expect(JSON.parse(String(init?.body)).confirmTokenSpend).toBe(false)
+  })
+
   afterEach(() => {
     global.fetch = originalFetch
   })

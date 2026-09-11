@@ -425,6 +425,13 @@ export default function ChimmyChat({
     setIsTyping(true);
 
     const skipClientTokenPreflight = outgoingText ? isNoChargeChimmyIntent(outgoingText) : false;
+    /*
+     * 🛑 THIS IS A CLAIM THAT REACHES BILLING, SO IT IS ONLY EVER SET BY AN ACTUAL
+     * "yes" BELOW. A skipped preflight is not consent, and neither is a preflight
+     * that threw — both leave this false and let the server ask for confirmation
+     * rather than charging somebody who was never asked.
+     */
+    let tokenSpendConfirmed = false;
     if (!skipClientTokenPreflight) {
       try {
         const { confirmed, preview } = await confirmTokenSpend('ai_chimmy_chat_message');
@@ -452,6 +459,7 @@ export default function ChimmyChat({
           setIsTyping(false);
           return;
         }
+        tokenSpendConfirmed = true;
       } catch (error) {
         console.error(
           '[ChimmyChat] Token preview failed, continuing without preflight:',
@@ -484,7 +492,9 @@ export default function ChimmyChat({
               }
             : {}),
         },
-        confirmTokenSpend: false,
+        /* We already asked, just above — so do not ask again, and pass on the answer. */
+        promptForTokenSpend: false,
+        tokenSpendConfirmed,
         onChunk: (text) => {
           streamedAssistantHandled = true;
           setMessages((prev) => {
