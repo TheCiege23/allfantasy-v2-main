@@ -242,4 +242,119 @@ describe("POST /api/trade-evaluator contract", () => {
       })
     )
   })
+
+  /**
+   * 🛑 An unreadable pick label used to be priced as a 2025 FIRST-ROUND PICK.
+   *
+   * `resolvePickData` answered `parsePickLabel`'s null with `year: 2025, round: 1`, so a typo
+   * or an empty field produced a confident grade, lopsided in favour of whoever sent it, with
+   * nothing in the response admitting the label had not been understood.
+   */
+  describe("unreadable draft picks", () => {
+    it.each([
+      ["Kittens", "not a pick at all"],
+      ["", "empty string"],
+      ["first rounder", "no year"],
+      ["2026 0th", "round zero, which pickRoundShare clamps up to a FIRST"],
+    ])("refuses %s (%s) instead of grading it as a first-round pick", async (label) => {
+      const { POST } = await import("@/app/api/trade-evaluator/route")
+      const req = createMockNextRequest("http://localhost/api/trade-evaluator", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(
+          buildValidTradeEvaluatorBody({
+            sender: {
+              manager_name: "Team A",
+              gives_players: ["Player A"],
+              gives_picks: [label],
+              gives_faab: 0,
+            },
+          })
+        ),
+      })
+
+      const res = await POST(req as any)
+      expect(res.status).toBe(422)
+      const body = await res.json()
+      expect(body.error).toBe("UNREADABLE_PICK")
+      // Naming it is the point — the manager cannot fix a typo we will not show him.
+      expect(body.unreadablePicks).toEqual([label.trim() || "(empty)"])
+    })
+
+    it("costs the user nothing — it refuses ahead of the rate limiter and the token gate", async () => {
+      const { POST } = await import("@/app/api/trade-evaluator/route")
+      const req = createMockNextRequest("http://localhost/api/trade-evaluator", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(
+          buildValidTradeEvaluatorBody({
+            receiver: {
+              manager_name: "Team B",
+              gives_players: ["Player B"],
+              gives_picks: ["not a pick"],
+              gives_faab: 0,
+            },
+          })
+        ),
+      })
+
+      const res = await POST(req as any)
+      expect(res.status).toBe(422)
+      /*
+       * The existing refusals below this one (UNPRICED_ASSETS, AMBIGUOUS_PLAYER, DEVY_SCALE)
+       * all return AFTER the gate has spent tokens, and only the catch block refunds. This
+       * assertion is what keeps the pick refusal from inheriting that.
+       */
+      expect(requireFeatureEntitlementMock).not.toHaveBeenCalled()
+      expect(checkAiRateLimitMock).not.toHaveBeenCalled()
+    })
+
+    it("rejects an out-of-range structured pick at the schema, before any pricing", async () => {
+      const { POST } = await import("@/app/api/trade-evaluator/route")
+      const req = createMockNextRequest("http://localhost/api/trade-evaluator", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(
+          buildValidTradeEvaluatorBody({
+            sender: {
+              manager_name: "Team A",
+              gives_players: ["Player A"],
+              // round 0 validated as a bare z.number() and priced as a first.
+              gives_picks: [{ year: 2026, round: 0 }],
+              gives_faab: 0,
+            },
+          })
+        ),
+      })
+
+      const res = await POST(req as any)
+      expect(res.status).toBe(400)
+      const body = await res.json()
+      expect(body.error).toBe("Invalid request format")
+      expect(requireFeatureEntitlementMock).not.toHaveBeenCalled()
+    })
+
+    it("still grades a trade whose picks ARE readable", async () => {
+      const { POST } = await import("@/app/api/trade-evaluator/route")
+      const req = createMockNextRequest("http://localhost/api/trade-evaluator", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(
+          buildValidTradeEvaluatorBody({
+            sender: {
+              manager_name: "Team A",
+              gives_players: ["Player A"],
+              // Includes the two forms that used to be refused and priced as firsts.
+              gives_picks: ["2027 Early 1st", "2027 6th", "2026 Round 3"],
+              gives_faab: 0,
+            },
+          })
+        ),
+      })
+
+      const res = await POST(req as any)
+      expect(res.status).not.toBe(422)
+      expect(requireFeatureEntitlementMock).toHaveBeenCalled()
+    })
+  })
 })
