@@ -1335,15 +1335,45 @@ thirty seconds ago, and it can lose repeatedly. The build guard was never wrong
 about *whether* anyone may push; it simply had no opinion about *whose turn* it
 is, and with ~9 concurrent sessions that is a starvation problem.
 
-So there are now two guards on a push to `main`, in this order:
+🛑 **THIS TABLE SAID "TWO GUARDS" UNTIL 2026-09-11 AND THERE ARE FOUR.** The two
+missing ones both RAN on every push that read this — they were simply undocumented
+here, because the section describing the fourth was committed and never landed (see
+the pre-push-smoke section below). Read off an actual push, not inferred:
 
-| | question | script |
-|---|---|---|
-| 1 | is it your **turn**? | `scripts/push-queue.mjs check` |
-| 2 | may **anyone** push right now? | `scripts/check-inflight-prod-build.mjs` |
+| | question | script | measured cost |
+|---|---|---|---|
+| 1 | does this push carry a **secret**? | `scripts/secret-scan.mjs` | **23–30s** |
+| 2 | is it your **turn**? | `scripts/push-queue.mjs check` | local, instant |
+| 3 | may **anyone** push right now? | `scripts/check-inflight-prod-build.mjs` | one API call |
+| 4 | does the pushed SHA **typecheck**? | `scripts/pre-push-smoke.mjs` | 31s warm / 329s cold |
 
-The queue runs first because it is local and cheap — only the head of the line
-ever spends a Vercel API call.
+Order read off `.githooks/pre-push` itself (the secret scan at its line 103, then
+the three `run_guard` calls), not inferred from output.
+
+⚠ **IT IS NOT CHEAPEST-FIRST, AND THE FIRST GUARD IS NOT FREE.** The secret scan
+was assumed to cost about a second; timed three times on 2026-09-11 it is 29.9s,
+23.7s and 22.9s. It runs BEFORE the instant local turn check, so **every refused
+push pays ~25 seconds before being told it is not its turn or that its base is
+stale** — three times in a row, in the landing this was measured during. That is
+not an argument for reordering it (a secret must never leave the machine, and the
+scan is the one guard whose failure is unrecoverable), but budget for it: a
+retry loop polling the queue through `git push` is not the cheap operation it
+looks like.
+
+⚠ **THREE OF THE FOUR REFUSE WITHOUT FAILING, AND THAT IS NOT THE SAME AS PASSING.**
+Guard 2 refuses a STALE BASE ("3 commit(s) landed since") and keeps your ticket;
+guard 3 refuses while a production build is in flight and keeps your ticket. Both
+are the guard working. Neither is a reason to reach for an override — and the
+difference matters, because a stale base means **rebuild**, while an in-flight
+build means **wait and retry**. Retrying a stale base forever is a loop that
+cannot succeed.
+
+⚠ **AND THE STALE-BASE MESSAGE HANDS YOU A RECIPE THAT IS WRONG FOR A MULTI-COMMIT
+TIP.** It prints `git cherry-pick <tip>`, which picks ONE commit. If your tip is
+two or three commits, that lands only the LAST one — no conflict, no failing test,
+and the rest silently absent. Use the range, `git cherry-pick <base>..<tip>`, then
+assert EVERY patch-id is in `origin/main..<newTip>`. Measured 2026-09-11 on a
+two-commit tip; a peer confirmed independently they would have dropped two of three.
 
 **Use the wrapper; it is one command and it does the whole convention:**
 
@@ -1634,6 +1664,17 @@ queued independently under a default that had never actually landed. Whatever
 else changes here, do not leave those two disagreeing again — and note the tell
 was cheap: `git grep <ref>` on the section title, not a read of the working tree.
 
+🛑 **AND THIS NOTE WAS ITSELF INCOMPLETE FOR FIVE DAYS, WHICH IS THE DURABLE
+LESSON: NAME THE COMMIT'S WHOLE FILE SET, NOT THE SECTION YOU NOTICED.**
+`cabc72677` touched THREE files. Its `scripts/pre-push-smoke.mjs` and
+`.githooks/pre-push` landed; its CLAUDE.md third did not — and that third
+contained the batching section this note is about **and** the only documentation
+of the smoke guard. Because the note named one section, the rest stayed lost, and
+the guard table ABOVE went on saying "two guards" while four ran until
+2026-09-11, and the smoke guard itself was documented for the first time below.
+A partially-landed commit does not announce which parts are missing;
+`git show <sha> --stat` does.
+
 **The rule:**
 
 1. **Push your own commits, in queue order.** `npm run push:main` — take a
@@ -1667,6 +1708,85 @@ tidy-looking median and a "builds run 100% of the window" figure, both meaningle
 — caught here only because the status column was read after the arithmetic. The
 `REMOVED` share is the tell, and any cost argument resting on those numbers is
 resting on nothing.
+
+#### `scripts/pre-push-smoke.mjs` — the fourth guard, documented here for the first time
+
+🛑 **THIS SECTION WAS WRITTEN ON 2026-09-06 IN `cabc72677` AND NEVER REACHED
+`origin/main`.** The commit's other two files did — `scripts/pre-push-smoke.mjs`
+(715 lines) and the `.githooks/pre-push` wiring are both live and have been
+running on every push since. Only the CLAUDE.md third of it was lost. So for five
+days the guard table above said "two guards" while four ran, and the one doing the
+most work was the one nobody had documented. Verified 2026-09-11:
+`git merge-base --is-ancestor cabc72677 origin/main` → rc=1, and
+`git show origin/main:scripts/pre-push-smoke.mjs` → 715 lines.
+
+⚠ **THAT IS THE SAME FAILURE THE SELF-PUSH SECTION ABOVE ALREADY RECORDS, FROM THE
+SAME COMMIT** — a section committed, never landed, and a shipped comment asserting
+the opposite. It is written twice because it was found twice, independently, five
+days apart, and the second finder had read the first note without connecting it.
+**The tell is cheap and nobody ran it:** `git grep <pattern> origin/main` on a
+section you believe you landed. Reading your own working tree proves nothing about
+what shipped.
+
+**What it does.** For a push whose remote ref is `refs/heads/main`, it builds the
+exact SHA being pushed in an isolated detached worktree — never the pushing
+session's own checkout, which can hold a peer's uncommitted edits — and runs
+`scripts/ts-error-ratchet.mjs` against it. A regression (any file gaining errors,
+or a new file appearing with errors, against that SHA's own committed
+`ts-error-baseline.json`) blocks the push. Everything else — worktree creation
+failed, tsc did not run, the ratchet itself threw — fails **OPEN** with a loud
+warning. A correctness gate that can strand a deploy is worse than the bug it
+might have caught.
+
+🛑 **IT IS WARM BY DEFAULT SINCE `c878407f0`, AND ANY "~17 MINUTES, EVERY RUN IS A
+COLD COMPILE" FIGURE YOU HAVE IN MIND IS RETIRED.** The original cleared every
+`*.tsbuildinfo` before each run, on the unmeasured claim that a reused worktree
+lies when tsc's incremental cache survives a checkout swap. Measured, same SHA,
+same machine:
+
+```
+cold (cache deleted)                       143 vs baseline 143, clean    329s
+warm (cache carried from a DIFFERENT sha)  143 vs baseline 143, clean     31s
+```
+
+Identical verdict, 10.6x faster — and the warm run was made to go RED twice before
+being believed: an injected error in a changed file (144, named it, 35s), and a
+`leagueId: string → number` break whose consumers were **left completely
+untouched** (151, four files). That second one is the cross-file type widening this
+document says a scoped check cannot see, and the warm cache saw it, because tsc
+invalidates on the dependency graph rather than on file identity. The clear is now
+opt-in via `AF_SMOKE_COLD=1`, kept because two break shapes are not all of them: if
+a smoke result ever looks wrong, re-run cold before believing it, and a cold/warm
+disagreement is a finding to write down rather than a flake.
+
+Observed in the wild 2026-09-11: **`no TypeScript regressions (83s)`** on a
+two-commit push, against a cache eight minutes old. Budget seconds, not minutes.
+
+⚠ **THE WARM CACHE LIVES IN SYSTEM TEMP, NOT BESIDE THE REPO, AND THAT IS NOT A
+CHOICE.** The smoke cannot put its worktree in the git common dir because that dir
+is on `F:`, which is exFAT and cannot host the link, so it falls back to
+`C:\Users\Guap_\AppData\Local\Temp\af-smoke-worktree` — saying so in one line it
+scrolls past. Every session shares that one ~15 MB `tsconfig.tsbuildinfo`. So
+anything that cleans system temp resets EVERY session's smoke to a 329s cold run at
+once, and the first person to notice will see one slow push rather than a shared
+cause.
+
+⚠ **IT SKIPS ITSELF WHEN 2+ OTHER `tsc` PROCESSES ARE RUNNING**, which on this box
+is common — deliberately, per this document's own "concurrent tsc kill each other"
+entry. So it is a floor, not a wall, and a push that sailed through may simply not
+have been checked. ⚠ **And do not attribute a `tsc` process to your own run by
+counting them.** Every session's `node scripts/push-queue.mjs push` has an
+identical command line and a bare `tsc` carries no owner; a count is not an
+attribution. That error was made and corrected on 2026-09-11 — "the one tsc on the
+box is mine, so it did NOT skip" was asserted as measurement while the run
+finished in 83s, which a cold compile cannot do.
+
+⚠ Exit code 1 from `ts-error-ratchet.mjs` is ambiguous — it fires both for a real
+regression and for an uncaught throw from a failed tsc launch — so the wrapper
+classifies by the ratchet's own wording ("gained TypeScript errors") rather than by
+the exit code. It does NOT run vitest by default (`AF_SMOKE_RUN_TESTS=1` turns it
+on). Emergency escape hatch, for a genuine emergency only:
+`AF_SKIP_SMOKE_CHECK=1 git push …`
 
 ## Deploys cost money, and pushes are the meter
 
