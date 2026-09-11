@@ -238,8 +238,12 @@ async function collectPlayedWeeks(
    * shape this collector deliberately does not write (see the header note on
    * G-05(b)).
    */
-  const eligible = head.periods.length > 0 ? head.periods : []
-  const periods = (eligible.length > 0 ? eligible : Array.from({ length: current }, (_, i) => i + 1))
+  const periods = (
+    head.periods.length > 0
+      ? head.periods
+      : /* No eligible-period list came back; fall back to counting up to the current one. */
+        Array.from({ length: current }, (_, i) => i + 1)
+  )
     .filter((p) => p <= current)
     .slice(0, MAX_PERIODS_PER_LEAGUE)
     .sort((a, b) => a - b)
