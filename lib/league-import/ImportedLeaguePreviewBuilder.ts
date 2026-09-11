@@ -8,6 +8,10 @@ import type {
   ImportCoverageState,
   NormalizedImportResult,
 } from './types'
+import {
+  summarizeImportCoverage,
+  type ImportCoverageSummary,
+} from './importCoverageSummary'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
 import { getPrimaryLogoUrlForTeam, getTeamByAbbreviation } from '@/lib/sport-teams/SportTeamMetadataRegistry'
 import {
@@ -116,6 +120,21 @@ export interface ImportPreviewDataQuality {
     count?: number | null
     note?: string | null
   }>
+  /**
+   * The same summary the post-import banner shows, computed BEFORE the commit.
+   *
+   * 🛑 THIS EXISTS SO A PERSON CAN SEE WHAT THEY ARE ABOUT TO GET. Every field it needs was
+   * already computed on every preview and then discarded: the import screen rendered the league
+   * NAME and nothing else, so a ten-year Sleeper dynasty and a Fleaflicker league with no scoring,
+   * no schedule, no draft and no history presented identically right up to the moment of import.
+   *
+   * ⚠ DERIVED BY `summarizeImportCoverage`, NOT BY REDUCING `coverageSummary` ABOVE — and that is
+   * the whole point. The banner a user sees after importing comes from that same function, so
+   * computing a second answer here is how "you'll get trade history" before the commit becomes
+   * "trade history is missing" after it. See the note on `COVERAGE_LABELS`: the two vocabularies
+   * in this file have already diverged once.
+   */
+  coverageNarrative: ImportCoverageSummary
 }
 
 export interface ImportPreviewResponse {
@@ -139,6 +158,30 @@ export interface ImportPreviewResponse {
   source: NormalizedImportResult['source']
 }
 
+/**
+ * ⚠ A SECOND COPY OF `IMPORT_COVERAGE_LABELS`, AND IT HAS ALREADY DRIFTED.
+ *
+ * `lib/league-import/importCoverageSummary.ts` holds the other one, deliberately as plain
+ * lower-case nouns ("a person manages 'past seasons', not `previousSeasons`"). These are
+ * title-case and in places internal — six of the eleven differ in substance:
+ *
+ *   currentRosters             "Current rosters"    vs  "rosters"
+ *   historicalRosterSnapshots  "Historical rosters" vs  "past rosters"
+ *   scoringSettings            "Scoring settings"   vs  "scoring rules"
+ *   draftHistory               "Draft history"      vs  "draft results"
+ *   previousSeasons            "Previous seasons"   vs  "past seasons"
+ *   playerIdentityMap          "Player identity map" vs "player matching"
+ *
+ * 🛑 NOT UNIFIED HERE, AND THE REASON IS THAT IT IS CURRENTLY HARMLESS. These labels reach a
+ * user through nothing: `coverageSummary[].label` and the `signals` built from it have no
+ * renderer (checked across `components/`, `app/` and `lib/` — `DataFreshnessBanner` is fed from
+ * `/api/legacy/transfer`, a different shape). The user-facing sentence comes from
+ * `coverageNarrative` below, which is the SHARED derivation.
+ *
+ * So this is a trap rather than a bug: the moment someone renders `coverageSummary`, the import
+ * preview and the post-import banner start describing the same league in two vocabularies. Delete
+ * this map and use the shared one — a separate change, because it alters the API response body.
+ */
 const COVERAGE_LABELS: Record<ImportCoverageKey, string> = {
   leagueSettings: 'League settings',
   currentRosters: 'Current rosters',
@@ -232,6 +275,16 @@ function buildDataQuality(normalized: NormalizedImportResult): ImportPreviewData
     tier,
     signals,
     coverageSummary,
+    /*
+     * The provider comes off the payload rather than a parameter so this cannot be told a
+     * different provider than the one that produced the coverage — the sentence names the
+     * platform ("Fleaflicker doesn't publish trade history"), and naming the wrong one would turn
+     * an honest limitation into a false accusation about someone else's product.
+     */
+    coverageNarrative: summarizeImportCoverage(
+      normalized.coverage,
+      normalized.source.source_provider,
+    ),
   }
 }
 

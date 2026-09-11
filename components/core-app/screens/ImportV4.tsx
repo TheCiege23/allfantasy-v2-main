@@ -40,6 +40,11 @@ import {
   submitImportCreation,
 } from '@/lib/league-import/LeagueCreationImportSubmissionService'
 import type { ImportProvider } from '@/lib/league-import/types'
+import {
+  labelCoverageKeys,
+  readPreviewCoverage,
+  type PreviewCoverage,
+} from '@/lib/league-import/previewCoverageView'
 import { toYahooLeagueKey } from '@/lib/league-import/yahooLeagueKey'
 
 /**
@@ -177,7 +182,19 @@ type Phase =
   | { k: 'discovering' }
   | { k: 'previewing'; sourceId: string }
   | { k: 'attest'; sourceId: string; message: string }
-  | { k: 'preview'; sourceId: string; leagueName: string; attested: boolean }
+  /*
+   * `coverage` is nullable, and the distinction is load-bearing. `null` means the preview did not
+   * carry a summary — an older deployment, or a shape we could not read — and the screen must then
+   * say NOTHING about coverage rather than render an empty gap list, which would read as "we
+   * checked and everything is fine". Absent is not the same as complete.
+   */
+  | {
+      k: 'preview'
+      sourceId: string
+      leagueName: string
+      attested: boolean
+      coverage: PreviewCoverage | null
+    }
   | { k: 'committing'; sourceId: string }
   | {
       k: 'done'
@@ -940,12 +957,24 @@ export function ImportV4({
         setPhase({ k: 'idle' })
         return
       }
-      const payload = res.data as { league?: { name?: string } }
+      const payload = res.data as {
+        league?: { name?: string }
+        // `unknown`, not `PreviewCoverage`: asserting the shape here would defeat the validation
+        // in `readPreviewCoverage`, which exists precisely because this crossed a network.
+        dataQuality?: { coverageNarrative?: unknown }
+      }
       setPhase({
         k: 'preview',
         sourceId,
         leagueName: payload?.league?.name?.trim() || 'Your league',
         attested: attest,
+        /*
+         * Read defensively and default to null rather than to an empty summary. The field was
+         * added 2026-09-11; a preview served by an older build has no `dataQuality.coverageNarrative`,
+         * and inventing `{ missing: [], partial: [] }` for it would claim a complete import on the
+         * strength of a missing field.
+         */
+        coverage: readPreviewCoverage(payload?.dataQuality?.coverageNarrative),
       })
     },
     [provider]
@@ -2514,6 +2543,38 @@ export function ImportV4({
             We read this league from {provider}. Importing builds a read-only copy — nothing changes
             on {provider}.
           </p>
+          {/*
+            ── What you are about to get ──────────────────────────────────────────
+            Rendered ONLY when the preview actually said something. `phase.coverage` is null both
+            for a preview that carried no summary and for one reporting no gaps at all, and in
+            both cases silence is correct: the first because we do not know, the second because a
+            complete import has nothing to warn about and a green "everything arrived" panel on
+            every import is noise that trains people to skip it.
+
+            The sentence names the PLATFORM, not us — "Fleaflicker doesn't publish trade history"
+            rather than "we couldn't get your trade history". That wording comes from
+            `summarizeImportCoverage`, the same function that writes the post-import banner, so
+            what someone reads here cannot disagree with what they read afterwards.
+          */}
+          {phase.coverage ? (
+            <div className="af-im-coverage" data-testid="import-preview-coverage">
+              {phase.coverage.sentence ? (
+                <p className="af-im-field-help af-im-coverage-sentence">{phase.coverage.sentence}</p>
+              ) : null}
+              {phase.coverage.missing.length > 0 ? (
+                <p className="af-im-field-help">
+                  <strong>Not available:</strong>{' '}
+                  {labelCoverageKeys(phase.coverage.missing)}
+                </p>
+              ) : null}
+              {phase.coverage.partial.length > 0 ? (
+                <p className="af-im-field-help">
+                  <strong>Partial:</strong>{' '}
+                  {labelCoverageKeys(phase.coverage.partial)}
+                </p>
+              ) : null}
+            </div>
+          ) : null}
           <div className="af-im-actions">
             <button
               type="button"
