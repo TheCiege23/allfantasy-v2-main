@@ -586,8 +586,9 @@ LAST command's**, so the thing being tested never decides the result. Use
 🛑 **AND `${PIPESTATUS[0]}` SILENTLY BECOMES PART OF THE BUG INSIDE `$( )`.** The
 remedy above is correct for a bare pipeline and WRONG the moment you capture the
 output, which is the form anyone writing a probe reaches for. A command
-substitution is its own command: the array you read afterwards belongs to the
-ASSIGNMENT, which succeeded, so the failure you were guarding against is erased.
+substitution runs its pipeline in a SUBSHELL, so `PIPESTATUS` describes the
+CURRENT shell's last pipeline — which is the ASSIGNMENT, and an assignment
+succeeds. The failure you were guarding against is erased.
 Measured 2026-09-11 against a `git show` that exits 128:
 
 ```bash
@@ -604,12 +605,14 @@ FIRST.** A probe written to diagnose a PIPESTATUS bug used this form and
 manufactured `exit=0` on every row; the finding it produced was withdrawn. The
 rule had been read, quoted between sessions, and applied wrongly inside the hour.
 
-Either of these works, and both were controlled in both directions — non-zero on
-the failing command, zero on a succeeding one:
+Any of these works, and each was controlled in both directions — non-zero on the
+failing command, zero on a succeeding one. The first keeps the substitution; the
+other two give it up, and the third stops trying to do two jobs with one syntax:
 
 ```bash
 out=$(set -o pipefail; git show "$REF:$P" 2>/dev/null | wc -c); rc=$?   # rc=128 / rc=0
 raw=$(git show "$REF:$P" 2>/dev/null); rc=$?                            # do not pipe at all
+git show "$REF:$P" >/tmp/out 2>/tmp/err; rc=$?                          # output and status apart
 ```
 
 ⚠ The second form loses a trailing newline to the substitution (28943 vs 28944
@@ -617,9 +620,16 @@ bytes on the same file), so do not byte-compare across the two.
 
 **And do not trust a zero on either side of it.** `bytes=0` is not evidence of
 failure unless you know the true size — an empty file and a broken read are
-indistinguishable by count. `git ls-tree -l` says what the size should be. A
-peer nearly filed a spurious "second silent failure mode" that was a genuinely
-0-byte `.gitkeep`.
+indistinguishable by count. `git ls-tree -l <ref> -- <path>` says what the size
+should be. A peer nearly filed a spurious "second silent failure mode" that was a
+genuinely 0-byte `.gitkeep`.
+
+🛑 **AND THAT LANDS ON THE FOUR-CASE CONTROL BELOW: ITS *PRESENT* CASES MUST BE
+NON-EMPTY, VERIFIED BY `git ls-tree -l`.** A control whose present rows are
+`.gitkeep` blobs reports `__ABSENT__`-vs-empty as a clean pass and goes green
+against a completely broken helper — a control that cannot fail, inside the
+control written to stop checks that cannot fail. Pick present rows with real
+bytes in them and say what the byte count should be.
 
 - `git push … | tail` printed a success line over a rejection. **Verify a push
   by comparing SHAs, never by reading its output or its exit status through a
