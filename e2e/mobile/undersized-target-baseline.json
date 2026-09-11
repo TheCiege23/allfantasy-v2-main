@@ -1,0 +1,40 @@
+{
+  "_comment": [
+    "Known sub-44px controls in the first phone screen of each public route, as",
+    "measured on 2026-09-11 in Mobile Chrome (Pixel 5) and Mobile Safari",
+    "(iPhone 12). The smoke spec fails on anything NOT listed here, so this file",
+    "can only shrink.",
+    "",
+    "It exists because the gate was red the moment it was switched on, and a",
+    "gate that blocks every PR on pre-existing debt gets disabled within a day.",
+    "Same reasoning, and the same shape, as scripts/ts-error-baseline.json and",
+    "the vitest ratchet: require NO REGRESSION rather than require green.",
+    "",
+    "To retire an entry: make the control >= 44x44, then delete its line. Do not",
+    "add entries to make a failing run pass unless the new control is genuinely",
+    "pre-existing debt you are deliberately deferring - that is what turns a",
+    "ratchet back into decoration.",
+    "",
+    "Keyed on route + class + label, NOT on size, so that a control shrinking",
+    "further still passes while one that appears anew does not. Size is recorded",
+    "alongside for the reader only."
+  ],
+  "routes": {
+    "/": [
+      { "cls": "af-lp-lang-opt af-num", "label": "EN", "seen": "36x44" },
+      { "cls": "af-lp-lang-opt af-num", "label": "ES", "seen": "36x44" },
+      { "cls": "af-btn af-lp-cta", "label": "Get started free", "seen": "132x36" },
+      { "cls": "af-btn af-lp-cta-lg", "label": "Get started free", "seen": "132x36" },
+      { "cls": "af-btn af-btn--ghost af-lp-cta-lg", "label": "See how it works", "seen": "139x36" },
+      { "cls": "rounded-xl border px-3 py-2 text-xs font", "label": "Current theme: Dark", "seen": "52x34" }
+    ],
+    "/login": [],
+    "/pricing": [
+      { "cls": "af-pr-nav-link", "label": "Sign in", "seen": "42x44" },
+      { "cls": "af-pr-toggle-btn", "label": "Monthly", "seen": "86x27" },
+      { "cls": "af-pr-toggle-btn", "label": "Yearly", "seen": "71x27" },
+      { "cls": "af-pr-cta af-pr-cta--ghost", "label": "Create an account", "seen": "315x35" },
+      { "cls": "rounded-xl border px-3 py-2 text-xs font", "label": "Current theme: Dark", "seen": "52x34" }
+    ]
+  }
+}

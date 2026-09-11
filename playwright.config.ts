@@ -17,6 +17,17 @@ const PLAYWRIGHT_BASE_URL =
 const PLAYWRIGHT_DIST_DIR =
   process.env.AF_NEXT_DIST_DIR ?? process.env.PLAYWRIGHT_DIST_DIR ?? `.next-playwright-${PLAYWRIGHT_PORT}`;
 
+/*
+ * Specs that belong to the phone devices and to nothing else. See the projects
+ * block below for why the split has to be explicit in BOTH directions.
+ *
+ * A RegExp rather than a glob because Playwright matches it against the full
+ * file path, which is backslash-separated on Windows — `e2e/mobile/**` silently
+ * matches nothing here, and a testMatch that matches nothing is a project that
+ * runs zero tests and reports success.
+ */
+const MOBILE_SPECS = /[\\/]e2e[\\/]mobile[\\/].*\.spec\.ts$/;
+
 export default defineConfig({
   testDir: './e2e',
   /* Run tests in files in parallel */
@@ -86,32 +97,65 @@ export default defineConfig({
     trace: 'on-first-retry',
   },
 
-  /* Configure projects for major browsers */
+  /*
+   * Configure projects for major browsers.
+   *
+   * 🛑 A PROJECT MULTIPLIES THE WHOLE `testDir`, SO THE MOBILE ONES ARE SCOPED.
+   *
+   * Playwright runs every spec under `testDir` in every project. There are 154
+   * specs in `e2e/`, the core lane already takes 17-60 minutes per shard, and
+   * parts of it are red — so uncommenting the two mobile projects as they
+   * shipped (no `testMatch`) would have added 308 spec-runs to every command
+   * that does not pin `--project`, on devices nothing was written for.
+   *
+   * ⚠ AND THE CI LANES WOULD NOT HAVE SHOWN IT. Every lane in
+   * `.github/workflows/playwright.yml` pins `--project=chromium`, including the
+   * one REQUIRED check (`Draft Room Regression` runs
+   * `test:e2e:draft-room:chromium`). The cost would have landed on the UNPINNED
+   * scripts — `test:e2e`, `test:e2e:db`, `test:e2e:draft-room`,
+   * `test:e2e:click-audits` — which are what a human runs locally. Green CI, a
+   * suite nobody can run.
+   *
+   * So the phone devices own `e2e/mobile/` and nothing else, and the desktop
+   * projects ignore that directory: a spec asserting phone invariants has no
+   * meaning at 1280px and would simply fail there.
+   */
   projects: [
     {
       name: 'chromium',
       use: { ...devices['Desktop Chrome'] },
+      testIgnore: MOBILE_SPECS,
     },
 
     {
       name: 'firefox',
       use: { ...devices['Desktop Firefox'] },
+      testIgnore: MOBILE_SPECS,
     },
 
     {
       name: 'webkit',
       use: { ...devices['Desktop Safari'] },
+      testIgnore: MOBILE_SPECS,
     },
 
-    /* Test against mobile viewports. */
-    // {
-    //   name: 'Mobile Chrome',
-    //   use: { ...devices['Pixel 5'] },
-    // },
-    // {
-    //   name: 'Mobile Safari',
-    //   use: { ...devices['iPhone 12'] },
-    // },
+    /*
+     * Test against mobile viewports.
+     *
+     * Pixel 5 and iPhone 12 are the audit's two target engines: Chromium and
+     * WebKit at phone width. iPhone 12 is 390x844, which is the width the
+     * landed `/core` repairs were measured at.
+     */
+    {
+      name: 'Mobile Chrome',
+      use: { ...devices['Pixel 5'] },
+      testMatch: MOBILE_SPECS,
+    },
+    {
+      name: 'Mobile Safari',
+      use: { ...devices['iPhone 12'] },
+      testMatch: MOBILE_SPECS,
+    },
 
     /* Test against branded browsers. */
     // {
