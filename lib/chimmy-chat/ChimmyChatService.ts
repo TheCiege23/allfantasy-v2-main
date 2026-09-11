@@ -25,7 +25,32 @@ type SendChimmyMessageInput = {
   imageFile?: File | null
   conversation?: ChimmyThreadMessage[]
   context?: AIChatContext
-  confirmTokenSpend?: boolean
+  /**
+   * Whether THIS service should ask the user. Defaults to true.
+   *
+   * Set false only when the caller has already asked — and then say what the
+   * answer was in `tokenSpendConfirmed`. Suppressing the prompt does not imply
+   * consent.
+   */
+  promptForTokenSpend?: boolean
+  /**
+   * Whether the CALLER already has the user's consent. Defaults to false.
+   *
+   * 🛑 THIS REPLACES A SINGLE `confirmTokenSpend` FLAG THAT MEANT BOTH "prompt?"
+   * AND "tell the server yes?", WHICH MADE THE HONEST CALLER THE BROKEN ONE.
+   * app/components/ChimmyChat.tsx ran its own window.confirm, so it passed
+   * `confirmTokenSpend: false` to avoid a second dialog — and thereby told the
+   * server the user had refused. requireFeatureEntitlement answers an unconfirmed
+   * spend with 409 token_confirmation_required, and
+   * lib/chimmy-chat/response-copy.ts files that code under PREMIUM_GATE_CODES, so
+   * a user holding tokens who had just clicked OK was shown "Upgrade to AF Pro".
+   * `ai_chat` is sold as accessType "subscription_or_tokens"; the token half was
+   * unreachable on /dashboard and /legacy.
+   *
+   * The two fields are deliberately independent: one describes the UI, the other
+   * is a claim about consent that reaches billing.
+   */
+  tokenSpendConfirmed?: boolean
   onChunk?: (text: string) => void
 }
 
@@ -210,8 +235,15 @@ function toMeta(rawMeta: unknown): ChimmyMessageMeta | undefined {
 }
 
 export async function sendChimmyMessage(input: SendChimmyMessageInput): Promise<SendChimmyMessageResult> {
-  let shouldConfirmTokenSpend = input.confirmTokenSpend ?? true
-  if (shouldConfirmTokenSpend) {
+  const promptForTokenSpend = input.promptForTokenSpend ?? true
+  /*
+   * Starts at what the caller claims and is only ever raised by an actual "yes"
+   * from the user. A failed preflight leaves it alone, so the request still goes
+   * out — and goes out UNCONFIRMED, which is the honest state: a Pro account is
+   * served, and a token account gets the 409 rather than a silent charge.
+   */
+  let tokenSpendConfirmed = input.tokenSpendConfirmed ?? false
+  if (promptForTokenSpend) {
     try {
       const { confirmed, preview } = await confirmTokenSpend("ai_chimmy_chat_message")
       if (!preview.canSpend) {
@@ -234,12 +266,13 @@ export async function sendChimmyMessage(input: SendChimmyMessageInput): Promise<
           error: "Token spend cancelled by user.",
         }
       }
+      tokenSpendConfirmed = true
     } catch (error) {
       console.error(
         "[sendChimmyMessage] Token preview failed, continuing without preflight:",
         error instanceof Error ? error.message : error
       )
-      shouldConfirmTokenSpend = false
+      tokenSpendConfirmed = false
     }
   }
 
@@ -260,7 +293,8 @@ export async function sendChimmyMessage(input: SendChimmyMessageInput): Promise<
   const payload = {
     message: input.message,
     stream: typeof input.onChunk === "function",
-    confirmTokenSpend: shouldConfirmTokenSpend,
+    /* The SERVER's field keeps its name and meaning: "the user consented." */
+    confirmTokenSpend: tokenSpendConfirmed,
     conversation: conversation.length > 0 ? conversation : undefined,
     image: imageDataUrl
       ? {
