@@ -366,7 +366,57 @@ staged set before committing.
 
 **This repo is public.** Secret-scan before every push.
 
+### 🛑 2026-09-11: DIRECT PUSHES TO `main` NO LONGER WORK. EVERYTHING IS A PR.
+
+**Read this before any section below that tells you to push.** `enforce_admins` was
+enabled on branch protection at the user's instruction. Verified by reading the API
+back rather than from the call's own success:
+
+```
+before   enforce_admins: false   strict: true   contexts: 14
+after    enforce_admins: true    strict: true   contexts: 14
+```
+
+The 14 required contexts were ALREADY configured and ALREADY green — what changed is
+that the owner account is no longer exempt from them. Until now every push printed
+`Bypassed rule violations for refs/heads/main: 14 of 14 required status checks are
+expected`, and that line was literal: the contract existed and enforced nothing.
+
+🛑 **THIS REVERSES A STANDING DECISION OF THE USER'S, DELIBERATELY.** The 2026-08-27
+instruction was *"commit straight to prod everytime, do not do preview"*, and the whole
+apparatus below — the cherry-pick convention, the push queue, the build-inflight guard,
+the pusher role — exists because of it. The user was shown that contradiction explicitly
+and confirmed the change anyway. It is a reversal, not an oversight, and the sections
+below are kept because their MEASUREMENTS are still the record of why each guard exists.
+
+**What this means in practice:**
+
+- `npm run push:main` cannot succeed against `main`. Open a PR instead.
+- Required status checks are a PR-MERGE gate. They cannot have run on a commit that has
+  not landed, so a direct push is refused *by construction* — not by a failing check.
+- Nothing below about cherry-picking, patch-id containment, stale bases or rebuilding is
+  wrong; it just now applies to preparing a PR branch rather than to pushing a tip.
+
+⚠ **THE QUEUE WILL STRAND YOU AND ITS ADVICE IS NOW WRONG.** `push-queue.mjs` engages
+only for a remote ref of `refs/heads/main` (cmdCheck ~line 1022) and its default refspec
+is `<sha>:refs/heads/main` (cmdPush ~line 1539). So a direct push still takes a ticket,
+waits its turn, pays the ~25s secret scan and a cold typecheck — **and is then refused by
+GitHub.** Every message it prints on the way says *rebuild onto current main*; none says
+*open a PR*. Until that text is fixed, a session can burn 40+ minutes being told by our
+own tooling that it is nearly there.
+
+⚠ **AND ~10 TICKETS WERE LIVE WHEN THE FLAG FLIPPED.** The intended sequencing was "wait
+for the queue to drain", and that turned out not to be a reachable state: it went 14 → 10
+in 35 minutes while `main` did not move once, because the line refilled as fast as it
+emptied. Those commits are not lost — they are clean fast-forwards and need reopening as
+PRs.
+
 ### 🛑 CHERRY-PICK ONTO `main`. DO NOT MERGE IN THE SHARED TREE.
+
+> ⚠ **SUPERSEDED AS A LANDING ROUTE 2026-09-11 — see the section directly above.** The
+> mechanics here still govern how you PREPARE a change (detached worktree at
+> `origin/main`, cherry-pick, never merge in the shared tree, patch-id over ancestry).
+> The push at the end of it is now a PR.
 
 User's decision, 2026-08-29, after six sessions spent a day working two
 incompatible ways. Landing work goes:
