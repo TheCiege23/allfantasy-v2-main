@@ -92,7 +92,18 @@ function DirectionPicker({
       const res = await fetch('/api/discord/league', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ leagueId, ...flagsFromDirection(next) }),
+        /*
+         * ⚠ THE SURFACE IS SENT EXPLICITLY. Without it the route falls back to
+         * `league_chat`, which is right for the legacy panel (it predates
+         * surfaces and edits the only row that exists) and wrong for this
+         * picker, which renders one control PER SURFACE. Omitting it here would
+         * mean every picker on the page wrote to league chat.
+         */
+        body: JSON.stringify({
+          leagueId,
+          surface: mapping.surface.id,
+          ...flagsFromDirection(next),
+        }),
       })
       if (!res.ok) throw new Error(String(res.status))
     } catch {
