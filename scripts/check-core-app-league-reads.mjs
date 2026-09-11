@@ -61,20 +61,75 @@ const GATE_FILE = join('lib', 'core-app', 'loadLeagueFor.ts')
  * on the raise-check below for the measurement. A file at zero is now written as
  * `0` rather than dropped.
  *
- * ⚠ WHAT THIS GUARD DOES NOT SEE, stated so the count is not read as a census:
- * `READ_PATTERN` matches `prisma.league.find*` only. A raw `$queryRaw` /
- * `$queryRawUnsafe` against the `leagues` table is invisible to it — there is a
- * live unscoped one at `lib/core-app/railMatchups.ts` — as are the sibling
- * league models (`prisma.fantraxLeague.findUnique` at `leaguePairing.ts`).
- * Widening the pattern is worth doing and is deliberately NOT bundled into the
- * commit that wrote this note, because it surfaces an unknown number of new
- * violations that each need tracing rather than baselining.
+ * ⚠ IT NOW SEES TWO SYNTAXES, NOT ONE. `READ_PATTERN` covers
+ * `prisma.league.find*`; `RAW_ANCHOR` covers `$queryRaw` / `$queryRawUnsafe` /
+ * `$executeRaw*` against the `leagues` table. The second was added 2026-09-10
+ * after the first reported `railMatchups.ts` as a file with ZERO reads while it
+ * was reading `leagues` through `$queryRawUnsafe`. Measured at that point: three
+ * raw statements touch the table under `lib/core-app/` — `career.ts` (scoped,
+ * `WHERE "userId" = ...`), `railMatchups.ts` (unscoped, now marked with a traced
+ * reason), and a third that reads `rosters` rather than `leagues` and is
+ * correctly ignored.
+ *
+ * 🛑 WHAT IT STILL DOES NOT SEE, stated so the count is not read as a census:
+ * reads of league CHILD tables. Measured 2026-09-10: 30 of them under
+ * `lib/core-app/` — 22 `leagueTeam`, plus `leagueTrade`, `leagueTradeHistory`,
+ * `leagueWaiverSettings`, `leagueSyncState`, `discordLeagueChannel`,
+ * `fantraxLeague`, `legacyLeague` and `franchiseLeagueMember`. Those are a
+ * DIFFERENT question — they filter by `leagueId`, so they are safe exactly when
+ * the leagueId was authorised upstream, which is a per-caller trace rather than
+ * a per-query pattern. Bundling them here would have meant baselining 30
+ * untraced reads, which is the opposite of what a ratchet is for. They need
+ * their own pass; the number is recorded so that pass starts from a measurement.
  */
 const BASELINE_FILE = join(ROOT, 'scripts', 'core-app-league-read-baseline.json')
 
 const READ_PATTERN = /prisma\s*\.\s*league\s*\n?\s*\.\s*(findUnique|findFirst|findMany)/
 const MARKER = /core-app-league-read:\s*(.+)$/
 const MARKER_LOOKBACK = 3
+
+/**
+ * The raw-SQL half. `prisma.league.find*` is not the only way to read a League
+ * row, and the other way was invisible here until 2026-09-10.
+ *
+ * 🛑 `lib/core-app/railMatchups.ts` READS THE `leagues` TABLE THROUGH
+ * `$queryRawUnsafe` AND THE GUARD REPORTED IT AS A FILE WITH ZERO READS — it was
+ * not in the baseline at all, so the headline count read as a census when it was
+ * a count of one syntax. `career.ts` does the same thing two lines differently
+ * and adds `WHERE "userId" = ...`, so the two differ in exactly the way this
+ * guard exists to detect and it saw neither.
+ *
+ * ⚠ ANCHORED ON THE STRIPPED SOURCE, READ FROM THE RAW SOURCE. The anchor must
+ * be stripped or a docblock mentioning `$queryRaw ... FROM leagues` (this one)
+ * is itself a violation. But `stripCommentsAndStrings` blanks template literals,
+ * which is where the SQL lives — so the statement is re-read from the raw lines.
+ */
+const RAW_ANCHOR = /\$(queryRaw|queryRawUnsafe|executeRaw|executeRawUnsafe)\b/
+const RAW_TOUCHES_LEAGUES = /\b(from|join|update|into)\s+"?leagues"?\b/i
+/** Columns that identify the viewer. Only counted AFTER a `WHERE`. */
+const VIEWER_COLUMN = /\b("?userId"?|claimedByUserId|platformUserId|creatorId)\b/
+
+/**
+ * The raw statement beginning at `start`, bounded by its own backticks.
+ *
+ * ⚠ A FIXED FORWARD WINDOW IS NOT GOOD ENOUGH, AND THE THROWAWAY PROBE THAT
+ * MEASURED THIS PROVED IT. `railMatchups.ts` runs two raw queries eleven lines
+ * apart; a window from the SECOND one reached back into nothing, but a window
+ * from a query against any other table would have reached FORWARD into the
+ * `leagues` one and reported it as a League read. Closing on backtick parity
+ * bounds the statement at the thing that actually ends it.
+ */
+function rawStatement(rawLines, start) {
+  let text = ''
+  let ticks = 0
+  for (let i = start; i < Math.min(start + 60, rawLines.length); i += 1) {
+    text += rawLines[i] + '\n'
+    ticks += (rawLines[i].match(/`/g) || []).length
+    if (ticks >= 2 && ticks % 2 === 0) return text
+  }
+  // No closing backtick found: the SQL is not inline (a variable, a builder).
+  return ticks === 0 ? null : text
+}
 
 function sourceFiles(dir) {
   const out = []
@@ -164,6 +219,39 @@ function main() {
     const lines = stripped.split(/\r?\n/)
 
     for (let i = 0; i < lines.length; i += 1) {
+      /*
+       * ── raw SQL against the `leagues` table ──────────────────────────────
+       *
+       * Same defect, different syntax: a direct read of the League row that
+       * does not go through the gate. Judged on its own `WHERE`, because a
+       * viewer column in the SELECT list scopes nothing — the throwaway probe
+       * that first measured this cleared `railMatchups.ts` on a `platformUserId`
+       * it was SELECTING, which is how that read would have been waved through.
+       */
+      if (RAW_ANCHOR.test(lines[i])) {
+        const sql = rawStatement(rawLines, i)
+        if (sql && RAW_TOUCHES_LEAGUES.test(sql)) {
+          const at = sql.search(/\bwhere\b/i)
+          const predicate = at === -1 ? '' : sql.slice(at)
+          if (predicate && VIEWER_COLUMN.test(predicate)) {
+            scoped.push({ where: `${rel}:${i + 1}` })
+          } else {
+            let reason = null
+            for (let back = 0; back <= MARKER_LOOKBACK && i - back >= 0; back += 1) {
+              const m = MARKER.exec(rawLines[i - back])
+              if (m) {
+                reason = m[1].replace(/\*\/\s*$/, '').trim()
+                break
+              }
+            }
+            const where = `${rel}:${i + 1}`
+            if (reason) exemptions.push({ where, reason })
+            else violations.push({ where, line: rawLines[i].trim() })
+          }
+        }
+        continue
+      }
+
       /*
        * ⚠ THE READ IS ANCHORED ON THE LINE THAT NAMES `prisma.league`, NOT ON
        * ANY LINE THE PATTERN HAPPENS TO SPAN. Joining line i with i+1 to catch a
