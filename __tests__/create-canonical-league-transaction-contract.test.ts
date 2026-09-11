@@ -131,6 +131,82 @@ function buildEngine(overrides: Record<string, unknown> = {}) {
   } as any
 }
 
+describe('createCanonicalLeagueInTransaction writes the lifecycle axes', () => {
+  /*
+   * 🛑 THIS IS THE WRITER THAT DISPROVED "isOrphan MEANS ARCHIVED", AND IT HAD NO TEST OF THE
+   * REPLACEMENT. Canonical creation stamps `isOrphan: true` on every OPEN SLOT — eleven rows in a
+   * fresh twelve-team league — so reading that flag as departure reported the league as having one
+   * team. The fix is `lifecycleState` / `managerKind`, and until now nothing asserted this writer
+   * populates them; only the Sleeper import path was covered end to end.
+   *
+   * ⚠ NO DATABASE, DELIBERATELY. The recorded `tx` already proves what the writer SENDS, which is
+   * the whole contract here — the DB-backed coverage lives in
+   * `__tests__/league-import/leagueteam-state-writers.test.ts` and exercises a different writer.
+   */
+  it('marks the commissioner CURRENT/HUMAN and every open slot CURRENT/VACANT', async () => {
+    const tx = buildTx()
+    await createCanonicalLeagueInTransaction(tx as any, 'app-user-1', buildBody(), buildEngine())
+
+    expect(tx.leagueTeam.create).toHaveBeenCalledTimes(12)
+
+    /* Seat 1 is the creator's own franchise: current, and run by a person. */
+    expect(tx.leagueTeam.create).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        data: expect.objectContaining({
+          claimedByUserId: 'app-user-1',
+          isCommissioner: true,
+          lifecycleState: 'CURRENT',
+          managerKind: 'HUMAN',
+        }),
+      }),
+    )
+
+    /*
+     * Seats 2-12 are the open slots. CURRENT on the lifecycle axis and VACANT on the manager axis
+     * — the two facts the single boolean could not hold at once, which is the entire correction.
+     */
+    for (let n = 2; n <= 12; n += 1) {
+      expect(tx.leagueTeam.create, `open slot ${n}`).toHaveBeenNthCalledWith(
+        n,
+        expect.objectContaining({
+          data: expect.objectContaining({
+            claimedByUserId: null,
+            lifecycleState: 'CURRENT',
+            managerKind: 'VACANT',
+            /* The legacy flag is still written, so no unmigrated reader changes meaning. */
+            isOrphan: true,
+          }),
+        }),
+      )
+    }
+  })
+
+  it('🛑 creation can never emit an ARCHIVED, eliminated or stamped row', async () => {
+    /*
+     * The negative half, and it is the one that would catch a careless edit. Every field below
+     * means something that CANNOT be true of a franchise created milliseconds ago; a writer that
+     * starts emitting one would make brand-new seats invisible to the current-franchise selectors
+     * and no positive assertion above would notice.
+     */
+    const tx = buildTx()
+    await createCanonicalLeagueInTransaction(tx as any, 'app-user-1', buildBody(), buildEngine())
+
+    const calls = (tx.leagueTeam.create as unknown as { mock: { calls: Array<[{ data: Record<string, unknown> }]> } })
+      .mock.calls
+    expect(calls).toHaveLength(12)
+    for (const [arg] of calls) {
+      expect(arg.data.lifecycleState, 'a newly created seat is never archived').not.toBe('ARCHIVED')
+      expect(arg.data.archivedAt ?? null, 'nothing is archived at creation').toBeNull()
+      expect(arg.data.archiveReason ?? null, 'nothing is archived at creation').toBeNull()
+      expect(arg.data.eliminatedAt ?? null, 'nobody is eliminated at creation').toBeNull()
+      /* And neither axis may be left unstated — UNKNOWN here would be a row nobody classified. */
+      expect(arg.data.lifecycleState, 'the writer must state the lifecycle').not.toBe('UNKNOWN')
+      expect(arg.data.managerKind, 'the writer must state the manager kind').not.toBe('UNKNOWN')
+    }
+  })
+})
+
 describe('createCanonicalLeagueInTransaction contract', () => {
   it('writes canonical records and defaults for create->finder/join/draft-intro flow', async () => {
     const tx = buildTx()

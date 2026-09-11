@@ -134,4 +134,36 @@ describe('🛑 the cast that hid the bug must not come back', () => {
     const code = SRC.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '')
     expect(code).not.toMatch(/prisma\.\w+\.\w+\s+as\s+\(/)
   })
+
+  /*
+   * 🛑 ELIMINATION IS NOT ARCHIVAL, AND THAT IS THE EASIEST RULE IN THE MODEL TO GET WRONG.
+   *
+   * A chopped team is OUT OF THE COMPETITION and still one of the league's franchises: it keeps
+   * its record, its roster, its standings row and every identifier a later join needs. Writing
+   * `ARCHIVED` here would delete a live franchise from its own league's counts — precisely the
+   * bug Batch A.1 spent itself undoing, reintroduced from the other direction.
+   *
+   * ⚠ ASSERTED ON THE SOURCE, FOR THE REASON THIS FILE ALREADY GIVES ABOVE. The
+   * `leagueTeam.updateMany` here keys on `externalId`, which holds a slot number for
+   * provider-imported leagues and a `Roster.id` uuid for canonically created ones — so it matches
+   * ZERO rows in production (measured: 0 of 3,419). A behavioural test would assert against an
+   * update that never fires and would pass with the data block deleted entirely. The source is
+   * where the contract is legible until that id-space blocker is resolved.
+   */
+  it('🛑 the elimination write sets eliminatedAt and never ARCHIVED', () => {
+    const code = SRC.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '')
+
+    const at = code.search(/leagueTeam\s*\.\s*updateMany/)
+    expect(at, 'the elimination write is gone — find out where it went').toBeGreaterThan(-1)
+    /* Bound the slice to the call, not to most of the file. */
+    const write = code.slice(at, at + 600)
+
+    expect(write, 'elimination is a competition fact — the franchise stays CURRENT').toMatch(
+      /lifecycleState:\s*'CURRENT'/,
+    )
+    expect(write, 'the competition axis is what elimination moves').toMatch(/eliminatedAt:/)
+    expect(write, 'a chopped team has NOT left the league').not.toMatch(/'ARCHIVED'/)
+    expect(write, 'elimination must not stamp an archival').not.toMatch(/archivedAt:/)
+    expect(write, 'elimination must not stamp an archival').not.toMatch(/archiveReason:/)
+  })
 })
