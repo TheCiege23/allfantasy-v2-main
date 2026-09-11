@@ -43,6 +43,16 @@ export type ProviderCapabilityBadge =
   | 'live_sync'
   | 'read_only'
   | 'csv_snapshot'
+  /**
+   * The scheduled collector re-reads this league (`/api/cron/fantasy-os-exec-sync`, every ten
+   * minutes over `SYNCABLE_PROVIDERS`). Added 2026-09-11, when `manual_refresh` below stopped
+   * being true for most leagues.
+   */
+  | 'auto_refresh'
+  /**
+   * Nothing refreshes this league on a schedule — a frozen CSV-era snapshot, or a legacy platform
+   * the collector does not sync. Re-reading it takes a user action.
+   */
   | 'manual_refresh'
   | 'commissioner_verified'
   | 'membership_verified'

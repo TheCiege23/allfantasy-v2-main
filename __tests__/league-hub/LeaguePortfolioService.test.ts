@@ -10,10 +10,26 @@
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const { getDashboardLeagueListForUserMock, leagueTeamFindMany, forecastFindMany } = vi.hoisted(() => ({
+const {
+  getDashboardLeagueListForUserMock,
+  leagueTeamFindMany,
+  forecastFindMany,
+  leagueFindMany,
+  fantraxLeagueFindMany,
+} = vi.hoisted(() => ({
   getDashboardLeagueListForUserMock: vi.fn(),
   leagueTeamFindMany: vi.fn(),
   forecastFindMany: vi.fn(),
+  /*
+   * ⚠ ADDED 2026-09-11 WITH `resolveFantraxRefreshability`, AND THE MOCK FAILING LOUDLY IS THE
+   * GOOD OUTCOME. The service gained two reads (`League` filtered to fantrax, then the matching
+   * `FantraxLeague` rows) to answer whether a league can actually be re-read. This mock listed
+   * only the two delegates the service used before, so the new call hit `undefined.findMany`.
+   * That is the stale-mock hazard CLAUDE.md records, caught in its noisy form rather than its
+   * silent one — a mock that had merely returned `[]` would have passed while testing nothing.
+   */
+  leagueFindMany: vi.fn(),
+  fantraxLeagueFindMany: vi.fn(),
 }))
 
 vi.mock('@/lib/dashboard/get-dashboard-league-list', () => ({
@@ -24,6 +40,8 @@ vi.mock('@/lib/prisma', () => ({
   prisma: {
     leagueTeam: { findMany: leagueTeamFindMany },
     seasonForecastSnapshot: { findMany: forecastFindMany },
+    league: { findMany: leagueFindMany },
+    fantraxLeague: { findMany: fantraxLeagueFindMany },
   },
 }))
 
@@ -32,6 +50,11 @@ describe('getLeaguePortfolioForUser', () => {
     vi.clearAllMocks()
     leagueTeamFindMany.mockResolvedValue([])
     forecastFindMany.mockResolvedValue([])
+    // No Fantrax leagues by default: the resolver returns an empty map and every other
+    // provider's label comes from the provider alone, which is the pre-existing behaviour
+    // these tests already assert.
+    leagueFindMany.mockResolvedValue([])
+    fantraxLeagueFindMany.mockResolvedValue([])
   })
 
   it('normalizes a native AllFantasy league with zero LeagueTeam/forecast lookups skipped when no canonical rows exist', async () => {

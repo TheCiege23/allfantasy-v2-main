@@ -26,6 +26,7 @@
 import { prisma } from '@/lib/prisma'
 import { getDashboardLeagueListForUser } from '@/lib/dashboard/get-dashboard-league-list'
 import { deriveProviderCapabilities, deriveImportType } from './providerCapabilities'
+import { resolveFantraxRefreshability } from './leagueRefreshability'
 import { deriveSyncFreshness } from './syncFreshness'
 import { getEmptyRecommendationBundle } from './recommendationContract'
 import type { LeagueHubEntry, LeagueHubProvider, LeaguePortfolio } from './types'
@@ -83,7 +84,12 @@ export async function getLeaguePortfolioForUser(userId: string): Promise<LeagueP
     )
   )
 
-  const [viewerTeams, forecastSnapshots] = canonicalIds.length
+  /*
+   * Batched with the rest rather than resolved per row: a portfolio is many leagues, and a
+   * per-league lookup here would be an N+1 on a page that already loads the whole list. It costs
+   * one indexed query returning nothing when the viewer has no Fantrax leagues.
+   */
+  const [viewerTeams, forecastSnapshots, refreshableByLeague] = canonicalIds.length
     ? await Promise.all([
         prisma.leagueTeam.findMany({
           where: { leagueId: { in: canonicalIds }, claimedByUserId: userId },
@@ -104,8 +110,9 @@ export async function getLeaguePortfolioForUser(userId: string): Promise<LeagueP
             select: { leagueId: true, week: true, teamForecasts: true },
           })
           .catch(() => []),
+        resolveFantraxRefreshability(canonicalIds),
       ])
-    : [[], []]
+    : [[], [], new Map<string, boolean>()]
 
   const teamByLeagueId = new Map<string, (typeof viewerTeams)[number]>()
   for (const team of viewerTeams) {
@@ -168,8 +175,18 @@ export async function getLeaguePortfolioForUser(userId: string): Promise<LeagueP
         syncStatus: row.syncStatus,
         lastSyncedAt: row.lastSyncedAt,
       }),
-      importType: deriveImportType(provider),
-      capabilities: deriveProviderCapabilities({ provider, isCommissioner, settings }),
+      /*
+       * `isRefreshable` is null for every provider but Fantrax, and that is the resolver's answer
+       * rather than a default — an absent entry means "the provider decides", not "not
+       * refreshable". See `leagueRefreshability.ts`.
+       */
+      importType: deriveImportType({ provider, isRefreshable: refreshableByLeague.get(canonicalLeagueId) ?? null }),
+      capabilities: deriveProviderCapabilities({
+        provider,
+        isCommissioner,
+        settings,
+        isRefreshable: refreshableByLeague.get(canonicalLeagueId) ?? null,
+      }),
       playoffProbability: hasCanonicalRecord
         ? resolvePlayoffProbability(canonicalLeagueId, team?.id ?? null)
         : null,

@@ -33,6 +33,9 @@ const CAPABILITY_LABEL: Record<ProviderCapabilityBadge, string> = {
   live_sync: 'Live Sync',
   read_only: 'Read-Only Synchronization',
   csv_snapshot: 'CSV Snapshot',
+  // "Auto" describes the schedule, not a promise about this second. What the league actually did
+  // and when is the separate, real `lastSyncedAt` line below — see SYNC_LABEL.
+  auto_refresh: 'Auto Refresh',
   manual_refresh: 'Manual Refresh',
   commissioner_verified: 'Provider-Verified Commissioner',
   membership_verified: 'Membership Verified',

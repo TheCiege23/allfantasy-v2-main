@@ -13,26 +13,55 @@ import { deriveImportType, deriveProviderCapabilities } from '@/lib/shared-servi
 
 describe('deriveImportType', () => {
   it('labels native leagues native', () => {
-    expect(deriveImportType('allfantasy')).toBe('native')
-  })
-
-  it('labels fantrax as csv_snapshot, never live_sync', () => {
-    expect(deriveImportType('fantrax')).toBe('csv_snapshot')
-  })
-
-  it('labels fleaflicker as read_only (open-read, no membership verification)', () => {
-    expect(deriveImportType('fleaflicker')).toBe('read_only')
+    expect(deriveImportType({ provider: 'allfantasy' })).toBe('native')
   })
 
   it('labels sleeper/espn/yahoo/mfl as live_sync', () => {
-    expect(deriveImportType('sleeper')).toBe('live_sync')
-    expect(deriveImportType('espn')).toBe('live_sync')
-    expect(deriveImportType('yahoo')).toBe('live_sync')
-    expect(deriveImportType('mfl')).toBe('live_sync')
+    for (const provider of ['sleeper', 'espn', 'yahoo', 'mfl'] as const) {
+      expect(deriveImportType({ provider })).toBe('live_sync')
+    }
+  })
+
+  /*
+   * 🛑 THIS REPLACES "labels fleaflicker as read_only (open-read, no membership verification)".
+   * That test's own parenthetical is the bug it was pinning: open-read is an AUTHORIZATION fact,
+   * and it was being used to answer a SYNC question. Fleaflicker is in `SYNCABLE_PROVIDERS` and is
+   * refreshed on the same ten-minute heartbeat as everyone else, so `read_only` understated it on
+   * the card.
+   */
+  it('REGRESSION: fleaflicker is live_sync — the collector refreshes it, whatever we can prove about the importer', () => {
+    expect(deriveImportType({ provider: 'fleaflicker' })).toBe('live_sync')
+  })
+
+  /*
+   * 🛑 AND THIS REPLACES "labels fantrax as csv_snapshot, never live_sync", which hardcoded a
+   * provider-wide answer to a per-league question. Both Fantrax cases are asserted, because
+   * getting either direction wrong has a real cost: `isSnapshotOnly` suppresses abandonment
+   * recommendations, so a wrong `csv_snapshot` hides a real inactive manager from a commissioner,
+   * and a wrong `live_sync` accuses someone on the strength of one months-old upload.
+   */
+  it('REGRESSION: a refreshable Fantrax league is live_sync, a CSV-era one is still csv_snapshot', () => {
+    expect(deriveImportType({ provider: 'fantrax', isRefreshable: true })).toBe('live_sync')
+    expect(deriveImportType({ provider: 'fantrax', isRefreshable: false })).toBe('csv_snapshot')
+  })
+
+  it('downgrades ANY provider whose league cannot be re-read, not just fantrax', () => {
+    // The parameter is general because the question is. A league with no live source is a
+    // snapshot regardless of which logo is on it.
+    expect(deriveImportType({ provider: 'sleeper', isRefreshable: false })).toBe('csv_snapshot')
+  })
+
+  it('treats unknown refreshability as "ask the provider", never as "not refreshable"', () => {
+    // Five of the six have nothing league-specific to know, so an absent answer must not downgrade
+    // them — that would relabel every non-Fantrax league the moment a caller forgot to pass it.
+    expect(deriveImportType({ provider: 'espn' })).toBe('live_sync')
+    expect(deriveImportType({ provider: 'espn', isRefreshable: null })).toBe('live_sync')
   })
 
   it('never claims live_sync for an unrecognized/legacy platform string', () => {
-    expect(deriveImportType('cbs')).toBe('read_only')
+    expect(deriveImportType({ provider: 'cbs' })).toBe('read_only')
+    // Not even if a caller insists it is refreshable — the collector does not sync it.
+    expect(deriveImportType({ provider: 'cbs', isRefreshable: true })).toBe('read_only')
   })
 })
 
@@ -46,7 +75,9 @@ describe('deriveProviderCapabilities', () => {
   it('sleeper commissioner gets commissioner_verified (real API true/false signal)', () => {
     const badges = deriveProviderCapabilities({ provider: 'sleeper', isCommissioner: true, settings: null })
     expect(badges).toContain('live_sync')
-    expect(badges).toContain('manual_refresh')
+    // auto_refresh, not manual_refresh: the collector re-reads this league every ten minutes.
+    expect(badges).toContain('auto_refresh')
+    expect(badges).not.toContain('manual_refresh')
     expect(badges).toContain('commissioner_verified')
     expect(badges).not.toContain('membership_verified')
   })
@@ -59,7 +90,7 @@ describe('deriveProviderCapabilities', () => {
 
   it('mfl with no recorded verification gets membership_verified only — never commissioner_verified', () => {
     const badges = deriveProviderCapabilities({ provider: 'mfl', isCommissioner: false, settings: null })
-    expect(badges).toEqual(expect.arrayContaining(['live_sync', 'manual_refresh', 'membership_verified']))
+    expect(badges).toEqual(expect.arrayContaining(['live_sync', 'auto_refresh', 'membership_verified']))
     expect(badges).not.toContain('commissioner_verified')
     expect(badges).not.toContain('user_attested')
   })
@@ -74,9 +105,19 @@ describe('deriveProviderCapabilities', () => {
     }
   })
 
-  it('fantrax gets csv_snapshot + manual_refresh, never membership_verified', () => {
-    const badges = deriveProviderCapabilities({ provider: 'fantrax', isCommissioner: false, settings: null })
+  it('REGRESSION: a CSV-era fantrax league keeps csv_snapshot + manual_refresh, never membership_verified', () => {
+    const badges = deriveProviderCapabilities({ provider: 'fantrax', isCommissioner: false, settings: null, isRefreshable: false })
     expect(badges).toEqual(['csv_snapshot', 'manual_refresh'])
+  })
+
+  it('REGRESSION: a refreshable fantrax league gets live_sync + auto_refresh, and still never membership_verified', () => {
+    /*
+     * The second half matters as much as the first. Becoming refreshable says something about the
+     * DATA, not about what we can prove about the importer — Fantrax is still open-read, so a
+     * membership claim here would be fabricated.
+     */
+    const badges = deriveProviderCapabilities({ provider: 'fantrax', isCommissioner: false, settings: null, isRefreshable: true })
+    expect(badges).toEqual(['live_sync', 'auto_refresh'])
   })
 
   it('fantrax with a real recorded attestation gets user_attested', () => {
