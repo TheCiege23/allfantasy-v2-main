@@ -92,13 +92,31 @@ function toAdapterInput(r: LineupShadowResult) {
 }
 
 /**
+ * What this returns INSTEAD of a persist result when it declines or catches.
+ *
+ * ⚠ `attempted` IS `number`, NOT THE LITERAL `0`, AND THAT DISTINCTION WAS A REAL TYPE ERROR.
+ * The catch below reports `args.results.length`, so a literal-`0` field makes this branch
+ * unmatchable; the union then falls back to `ShadowPersistResult`, which has no `error` at all,
+ * and the failure surfaces as TS2353 on the object literal rather than on the annotation that
+ * caused it. Nothing typechecks this file in CI — `next.config.js` sets `ignoreBuildErrors` and
+ * the ratchet is per-file — so it rode along until a landing measured it.
+ */
+export type LineupCanonicalPersistFailure = {
+  mode: 'shadow'
+  enabled: false
+  attempted: number
+  persisted: 0
+  error: string
+}
+
+/**
  * Adapt and persist. NEVER THROWS — a telemetry-adjacent writer must not be able to fail a cron
  * that also does real work, and the boundary itself already swallows nothing, so the guard lives
  * here.
  */
 export async function persistLineupCanonicalDecisions(
   args: LineupCanonicalPersistArgs,
-): Promise<ShadowPersistResult | { mode: 'shadow'; enabled: false; attempted: 0; persisted: 0; error: string }> {
+): Promise<ShadowPersistResult | LineupCanonicalPersistFailure> {
   try {
     const ran = args.results.filter((r) => r?.ran && r.result?.decision)
     if (ran.length === 0) {
