@@ -25,6 +25,7 @@ import { parseSleeperRosterPositions } from '@/lib/trade-engine/sleeper-converte
 import { computeTradeDrivers } from '@/lib/trade-engine/trade-engine'
 import { getTotalIdpStarterSlots, canFieldLegalIdpLineup } from '@/lib/trade-engine/idp-lineup-check'
 import { loadLeagueTradeValues } from '@/lib/league-values/leagueTradeValues'
+import { normalizedFaabValue } from '@/lib/trade-value/faabValue'
 import { identifyDevyAssets } from '@/lib/devy/devyTradeVerdict'
 import { buildNegotiationToolkit, negotiationToolkitToLegacy } from '@/lib/trade-engine/negotiation-builder'
 import { buildNegotiationGptContract, buildNegotiationGptUserPrompt, validateNegotiationGptOutput, shouldSkipNegotiationGpt, NEGOTIATION_GPT_SYSTEM_PROMPT } from '@/lib/trade-engine/negotiation-gpt-contract'
@@ -106,7 +107,23 @@ const LeagueContextSchema = z.object({
   qb_format: z.enum(['1qb', 'sf']).optional().default('sf'),
   idp_enabled: z.boolean().optional().default(false),
   roster_requirements: z.string().optional(),
+  /**
+   * Team count, for a caller that is NOT handing us a `league_id` we can look up.
+   *
+   * 🛑 ADDED BECAUSE THE PRICING CONTEXT BELOW HARDCODED 12. That constant is what goes to
+   * FantasyCalc as `numTeams`, so every 10-, 14- or 32-team league was being graded against
+   * twelve-team market prices. A Sleeper league's `total_rosters` answers this on its own; an
+   * imported Yahoo/ESPN/MFL/Fantrax caller has nothing else to say it with, which is exactly the
+   * Sleeper-centricity that made the hardcode invisible.
+   */
+  team_count: z.number().int().positive().optional(),
   waiver_type: z.string().optional(),
+  /**
+   * The league's FULL season FAAB budget — not a manager's remaining balance, which is
+   * `faab_remaining` on each team. Used to price `gives_faab` against the budget it comes out of.
+   * Absent ⇒ `FAAB_DEFAULT_BUDGET`.
+   */
+  waiver_budget: z.number().positive().optional(),
   trade_deadline: z.string().optional(),
   playoff_weeks: z.string().optional(),
   standings_summary: z.string().optional(),
@@ -569,10 +586,45 @@ export const POST = withApiUsage({ endpoint: "/api/trade-evaluator", tool: "Trad
         }).catch(() => null)
       : null
 
+    /*
+     * 🛑 THIS WAS THE LITERAL `12`, AND IT IS NOT A LABEL — IT IS THE MARKET REQUEST.
+     * `labelCtx.numTeams` reaches `getFantasyCalcPlayers` in lib/hybrid-valuation.ts, which sends
+     * it to FantasyCalc as the league size and CACHES the result under it. So a 32-team league's
+     * every player price came back from a 12-team market, and `buildRosterConfig` derived its
+     * replacement level from twelve teams too. The real count was already sitting in
+     * `rosterConfigForVorp` twenty lines above, resolved from `total_rosters`.
+     *
+     * Order: the caller's explicit `team_count` (the only thing a non-Sleeper import can supply),
+     * then the Sleeper league's own `total_rosters`, then 12 — which stays as the last resort
+     * because `ValuationContext.numTeams` feeds a market profile that must be SOME size, and 12
+     * is what every downstream `?? 12` already assumes. It is now reached only when nobody knows.
+     */
+    const resolvedNumTeams = data.league?.team_count ?? sleeperLeagueForConfig?.total_rosters ?? 12
+
+    /*
+     * The budget a traded FAAB amount is a fraction OF. Caller first, then the Sleeper league's
+     * own `settings.waiver_budget` (the key `lib/sleeper-sync.ts` already reads), then undefined —
+     * which lets `normalizedFaabValue` apply `FAAB_DEFAULT_BUDGET` rather than this route
+     * inventing a second fallback.
+     */
+    const sleeperWaiverBudget = Number((sleeperLeagueForConfig?.settings as Record<string, unknown> | undefined)?.waiver_budget)
+    const faabBudget = data.league?.waiver_budget
+      ?? (Number.isFinite(sleeperWaiverBudget) && sleeperWaiverBudget > 0 ? sleeperWaiverBudget : undefined)
+
+    /**
+     * A side's FAAB, on the same 0–10000 scale as the players it is being weighed against.
+     *
+     * 🛑 THIS USED TO BE THE RAW DOLLAR FIGURE ADDED STRAIGHT TO A COMPOSITE TOTAL. A composite
+     * player price here runs into the thousands, so `+ 25` for $25 of FAAB was arithmetically
+     * present and practically zero — this route graded FAAB as worthless while the console priced
+     * the same $25 at 700 and the canonical engine at 450. One converter now serves all three.
+     */
+    const faabValue = (amount: number | null | undefined) => normalizedFaabValue(amount, faabBudget)
+
     const labelCtx: ValuationContext = {
       asOfDate: data.asOfDate || new Date().toISOString().split('T')[0],
       isSuperFlex: isSF,
-      numTeams: 12,
+      numTeams: resolvedNumTeams,
       rosterConfig: rosterConfigForVorp,
       ...(leagueValues && leagueValues.byNameLower.size > 0 && { leagueValueByNameLower: leagueValues.byNameLower }),
     }
@@ -715,13 +767,13 @@ export const POST = withApiUsage({ endpoint: "/api/trade-evaluator", tool: "Trad
     const senderGivenAssetsList = [...senderPlayerPrices, ...senderPickPrices]
     const senderReceivedAssetsList = [...receiverPlayerPrices, ...receiverPickPrices]
 
-    const senderGivenComposite = compositeTotal(senderGivenAssetsList) + (data.sender.gives_faab ?? 0)
-    const senderReceivedComposite = compositeTotal(senderReceivedAssetsList) + (data.receiver.gives_faab ?? 0)
+    const senderGivenComposite = compositeTotal(senderGivenAssetsList) + faabValue(data.sender.gives_faab)
+    const senderReceivedComposite = compositeTotal(senderReceivedAssetsList) + faabValue(data.receiver.gives_faab)
 
     const senderGivenMarket = senderGivenAssetsList.reduce((s, p) => s + p.assetValue.marketValue, 0)
-      + (data.sender.gives_faab ?? 0)
+      + faabValue(data.sender.gives_faab)
     const senderReceivedMarket = senderReceivedAssetsList.reduce((s, p) => s + p.assetValue.marketValue, 0)
-      + (data.receiver.gives_faab ?? 0)
+      + faabValue(data.receiver.gives_faab)
 
     const senderGivenTotal = senderGivenComposite
     const senderReceivedTotal = senderReceivedComposite
@@ -993,7 +1045,8 @@ export const POST = withApiUsage({ endpoint: "/api/trade-evaluator", tool: "Trad
     const idpCeilingBand = idpCeilingCompositeBand(
       senderReceivedAssetsList,
       senderGivenAssetsList,
-      { received: data.receiver.gives_faab ?? 0, gave: data.sender.gives_faab ?? 0 },
+      // Composite-scale offsets, per `idpCeilingCompositeBand`'s `extra` — so they convert too.
+      { received: faabValue(data.receiver.gives_faab), gave: faabValue(data.sender.gives_faab) },
     )
     let idpCeilingCaveat: {
       lowFairness: number
