@@ -2826,10 +2826,26 @@ ${newsCtx}`
              * fair?" is answerable with no league selected at all — it needs
              * player values, not a roster — and gating it behind a league would
              * withhold the one trade question that never required one.
+             *
+             * 🛑 BUT THE ID IT TAKES IS STILL THE AUTHORIZED ONE. This read
+             * `planInput.leagueId ?? null`, which traces to `formData.get('leagueId')`.
+             * `describedTradeEvaluator.ts` then runs `prisma.league.findUnique` on it
+             * and selects `scoring`, `leagueVariant`, `starters`, `settings`,
+             * `rosterSize`, `irSlots`, `taxiSlots` and a team count — so an unproven
+             * id still returned that league's CONFIGURATION. Smaller than the roster
+             * and member reads closed alongside it, and not nothing.
+             *
+             * ⚠ THE "WORKS WITH NO LEAGUE" PROPERTY ABOVE IS PRESERVED, NOT TRADED
+             * AWAY. `leagueSnapshot?.id` is null for an unauthorized league exactly as
+             * it is for a caller who named none, and the evaluator's own `if (leagueId)`
+             * already treats null as "value the trade on market prices". An
+             * unauthorized caller therefore gets the same generic answer a
+             * league-less one gets — which is also what keeps `not_member` and
+             * `not_found` indistinguishable here.
              */
             const describedTradeCtx = await buildDescribedTradeContext({
               message: planInput.message,
-              leagueId: planInput.leagueId ?? null,
+              leagueId: leagueSnapshot?.id ?? null,
               sport,
             })
             if (describedTradeCtx) {
