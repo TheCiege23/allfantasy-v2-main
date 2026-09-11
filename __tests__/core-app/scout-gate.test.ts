@@ -153,16 +153,32 @@ describe('Scout refuses a non-member outright', () => {
   })
 })
 
-describe('Scout locks opponents for a member without the entitlement', () => {
-  it('gives you your own profile free', async () => {
+describe('Scout locks every characterisation, entitlement or not', () => {
+  /**
+   * 🛑 THIS BLOCK USED TO ASSERT "gives you your own profile free". Milestone 32 removed the
+   * `isSelf || access.canSeeOpponents` branch from `lib/core-app/scout.ts` entirely — its own
+   * comment says "no caller reaches the characterisation here, the manager themselves included",
+   * because an entitlement "decides who PAYS, not what a raw dossier is".
+   *
+   * ⚠ SO A SELF-READ IS NOW LOCKED TOO, AND THAT IS THE CHANGE RATHER THAN A REGRESSION. Restoring
+   * `available: true` for `isYou` would re-open the exact exposure the milestone closes, on the one
+   * path people most readily assume is safe.
+   */
+  it('locks your OWN profile too — self is not a carve-out', async () => {
     const data = await scoutFor(granted())
     const mine = (data.managers.available ? data.managers.data : []).find((m) => m.isYou)
 
-    expect(mine?.profile.available).toBe(true)
-    if (mine?.profile.available) {
-      expect(mine.profile.data.labels).toContain('Win-now')
-      expect(mine.profile.data.scores.aggressionScore).toBe(81)
-    }
+    expect(mine?.profile.available).toBe(false)
+    if (mine && !mine.profile.available) expect(mine.profile.locked).toBe(true)
+
+    /*
+     * ⚠ ON THE SERIALIZED PAYLOAD, for the same reason the opponent case does it: a refactor that
+     * reintroduced the characterisation under another key would pass a property check and still
+     * ship the leak. Your own labels and scores must not cross either.
+     */
+    const serialized = JSON.stringify(mine)
+    expect(serialized).not.toContain('Win-now')
+    expect(serialized).not.toContain('81')
   })
 
   it('locks the opponent without revealing anything that characterises them', async () => {
@@ -195,24 +211,39 @@ describe('Scout locks opponents for a member without the entitlement', () => {
   it('counts a locked profile as PROFILED, not as a coverage gap', async () => {
     const data = await scoutFor(granted())
 
-    // Both managers are profiled; one is merely unreadable on this plan.
+    /*
+     * Coverage is unchanged in meaning and changed in number: both managers are still PROFILED —
+     * a lock is not a gap, or a paywall would make a working profiler look broken — but both are
+     * now locked rather than one, because self is no longer a carve-out.
+     */
     expect(data.coverage.profiledCount).toBe(2)
     expect(data.coverage.teamCount).toBe(2)
-    expect(data.coverage.lockedCount).toBe(1)
+    expect(data.coverage.lockedCount).toBe(2)
   })
 })
 
-describe('Scout opens up for an entitled member', () => {
-  it('returns the opponent in full', async () => {
+describe('Scout does NOT open up for an entitled member', () => {
+  /**
+   * 🛑 THE INVERSION THAT MATTERS MOST IN THIS FILE. This test was called "returns the opponent in
+   * full" and asserted that `canSeeOpponents` unlocked the characterisation. Under Milestone 32 an
+   * entitlement no longer buys a raw dossier — `scout.ts` dropped the branch entirely.
+   *
+   * ⚠ AN ENTITLED CALLER IS THE STRONGEST CASE TO PIN, because it is the one a well-meaning change
+   * would "restore" first: the paying user appears to be owed the data. Asserting the lock HOLDS
+   * under entitlement is what stops the exposure being reopened as a bug fix.
+   */
+  it('keeps the opponent locked even WITH canSeeOpponents — an entitlement is not an exception', async () => {
     const data = await scoutFor(granted({ canSeeOpponents: true }))
     const rival = (data.managers.available ? data.managers.data : []).find((m) => !m.isYou)
 
-    expect(rival?.profile.available).toBe(true)
-    if (rival?.profile.available) {
-      expect(rival.profile.data.labels).toContain('Aggressive trader')
-      expect(rival.profile.data.trajectory.summary).toContain('Rebuilder in 2023')
-    }
-    expect(data.coverage.lockedCount).toBe(0)
+    expect(rival?.profile.available).toBe(false)
+    if (rival && !rival.profile.available) expect(rival.profile.locked).toBe(true)
+
+    const serialized = JSON.stringify(rival)
+    expect(serialized).not.toContain('Aggressive trader')
+    expect(serialized).not.toContain('Rebuilder in 2023')
+
+    expect(data.coverage.lockedCount).toBe(2)
   })
 })
 
@@ -233,8 +264,14 @@ describe('Scout separates "not profiled" from "locked"', () => {
       expect(rival.profile.locked).toBe(false)
       expect(rival.profile.reason).toMatch(/no profile yet/i)
     }
+    /*
+     * ⚠ `lockedCount` is 1, not 0 — YOUR OWN profile is the locked one now. The distinction this
+     * test exists to protect is untouched: the rival is an honest coverage GAP (unlocked, "no
+     * profile yet"), while a lock is a refusal. Both still count as profiled/unprofiled correctly;
+     * only self's lock is new.
+     */
     expect(data.coverage.profiledCount).toBe(1)
-    expect(data.coverage.lockedCount).toBe(0)
+    expect(data.coverage.lockedCount).toBe(1)
   })
 
   it('says the league is uncovered when the feed holds nothing', async () => {
