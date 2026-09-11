@@ -10,6 +10,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const {
   leagueFindUnique,
+  leagueFindMany,
+  fantraxLeagueFindMany,
   rosterFindFirst,
   leagueSeasonFindMany,
   rivalryRecordFindMany,
@@ -38,11 +40,38 @@ const {
     redraftLeagueMemberFindUnique: vi.fn(),
     rosterCount: vi.fn(),
     leagueTeamFindFirst: vi.fn(),
+    /*
+     * ── 🛑 AND A FOURTH, FOR THE SAME REASON, ON 2026-09-11 ──────────────────────────────────
+     *
+     * `deriveImportType` now asks `resolveFantraxRefreshability`
+     * (lib/shared-services/league-hub/leagueRefreshability.ts), which reads
+     * `prisma.league.findMany` to find the Fantrax leagues in a portfolio. This suite stubbed
+     * `league.findUnique` and nothing else, so all seven authorization tests died on
+     * `TypeError: prisma.league.findMany is not a function` the moment that call landed
+     * (547ce23b3).
+     *
+     * ⚠ THE RESOLVER'S OWN `.catch(() => [])` CANNOT ABSORB THIS, which is worth knowing before
+     * anyone "fixes" it there instead: a missing method throws SYNCHRONOUSLY, at the call, before
+     * a promise exists for `.catch` to attach to. The mock is the right place.
+     *
+     * Defaults to `[]`, which makes the resolver return early for the eleven tests that have no
+     * Fantrax league. The snapshot-only test overrides BOTH delegates, because it is the one case
+     * that must reach the real path.
+     */
+    leagueFindMany: vi.fn(),
+    /*
+     * The resolver's second read. Needed because a CSV-uploaded Fantrax league is not modelled by
+     * a missing `platformLeagueId` — it has a real `FantraxLeague` row whose `sourceLeagueId` is
+     * blank, and that blank is precisely what makes it un-refreshable. Stubbing the row away
+     * would test a shape the product never produces.
+     */
+    fantraxLeagueFindMany: vi.fn(),
   }))
 
 vi.mock('@/lib/prisma', () => ({
   prisma: {
-    league: { findUnique: leagueFindUnique },
+    league: { findUnique: leagueFindUnique, findMany: leagueFindMany },
+    fantraxLeague: { findMany: fantraxLeagueFindMany },
     roster: { findFirst: rosterFindFirst, count: rosterCount },
     leagueSeason: { findMany: leagueSeasonFindMany },
     rivalryRecord: { findMany: rivalryRecordFindMany },
@@ -100,6 +129,11 @@ describe('assembleCommissionerOsContext — authorization boundary', () => {
     // short-circuits before consuming every queued value (e.g. a rejection test that never reaches
     // the second `league.findUnique` call).
     leagueFindUnique.mockReset()
+    leagueFindMany.mockReset()
+    fantraxLeagueFindMany.mockReset()
+    // No Fantrax league in these fixtures, so the refreshability resolver returns early.
+    leagueFindMany.mockResolvedValue([])
+    fantraxLeagueFindMany.mockResolvedValue([])
     rosterFindFirst.mockReset()
     redraftLeagueMemberFindUnique.mockReset()
     rosterCount.mockReset()
@@ -287,6 +321,15 @@ describe('assembleCommissionerOsContext — authorization boundary', () => {
         })
       )
       .mockResolvedValueOnce({ platform: 'fantrax', sport: 'NFL', season: 2026, isDynasty: false })
+    /*
+     * ⚠ THIS IS THE ONE TEST THAT MUST REACH `resolveFantraxRefreshability`'s REAL PATH, so it
+     * overrides the suite's empty defaults. `isSnapshotOnly` is no longer "the platform is
+     * fantrax" — it is `FantraxLeague.sourceLeagueId` being blank, which is what a CSV upload
+     * actually leaves behind. `platformLeagueId` is the FantraxLeague row's uuid, not Fantrax's
+     * own league id.
+     */
+    leagueFindMany.mockResolvedValue([{ id: 'league-1', platformLeagueId: 'snapshot-1' }])
+    fantraxLeagueFindMany.mockResolvedValue([{ id: 'snapshot-1', sourceLeagueId: null }])
     const { assembleCommissionerOsContext } = await import('@/lib/shared-services/league-hub/commissionerOsContext')
     const result = await assembleCommissionerOsContext({ appUserId: 'commissioner-1', canonicalLeagueId: 'league-1' })
     expect(result?.isSnapshotOnly).toBe(true)
