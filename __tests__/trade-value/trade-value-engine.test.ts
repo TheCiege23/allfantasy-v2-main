@@ -5,6 +5,7 @@ import {
   normalizedFaabValue,
   scarcityFor,
   FAAB_VALUE_PER_DOLLAR,
+  FAAB_FULL_BUDGET_VALUE,
 } from '@/lib/trade-value/valueEngine'
 import { buildTeamProfile } from '@/lib/trade-value/teamProfile'
 import { gradeTrade } from '@/lib/trade-value/grader'
@@ -57,9 +58,37 @@ describe('valueEngine', () => {
     expect(future).toBeLessThan(now)
   })
 
-  it('values FAAB linearly', () => {
-    expect(normalizedFaabValue(10)).toBe(10 * FAAB_VALUE_PER_DOLLAR)
-    expect(normalizedFaabValue(0)).toBe(0)
+  /*
+   * ⚠ THE ASSERTION HERE USED TO BE `normalizedFaabValue(10) === 10 * FAAB_VALUE_PER_DOLLAR`,
+   * and once both sides came from the same module it could not fail — it would have stayed green
+   * with the constant set to anything at all. These pin NUMBERS, so changing the conversion has
+   * to be a deliberate edit to this file.
+   */
+  it('prices FAAB against the budget it comes out of', () => {
+    // The $100 budget is the pre-2026-09-11 canonical calibration, preserved byte-for-byte.
+    expect(normalizedFaabValue(10, 100)).toBe(180)
+    expect(normalizedFaabValue(25, 100)).toBe(450)
+    expect(normalizedFaabValue(10)).toBe(180) // unknown budget ⇒ FAAB_DEFAULT_BUDGET
+    expect(FAAB_VALUE_PER_DOLLAR).toBe(18) // the per-dollar rate AT that default budget
+
+    // The whole point: the same $10 is a smaller slice of a bigger budget.
+    expect(normalizedFaabValue(10, 1000)).toBe(18)
+    expect(normalizedFaabValue(10, 50)).toBe(360)
+
+    // A full budget is a full budget whatever its face value, and caps there.
+    expect(normalizedFaabValue(100, 100)).toBe(FAAB_FULL_BUDGET_VALUE)
+    expect(normalizedFaabValue(1000, 1000)).toBe(FAAB_FULL_BUDGET_VALUE)
+    expect(normalizedFaabValue(600, 100)).toBe(FAAB_FULL_BUDGET_VALUE)
+  })
+
+  it('refuses to invent value from a missing or nonsense input', () => {
+    expect(normalizedFaabValue(0, 100)).toBe(0)
+    expect(normalizedFaabValue(null, 100)).toBe(0)
+    expect(normalizedFaabValue(undefined, 100)).toBe(0)
+    expect(normalizedFaabValue(-5, 100)).toBe(0)
+    // A non-positive or non-finite budget falls back rather than dividing by it.
+    expect(normalizedFaabValue(10, 0)).toBe(180)
+    expect(normalizedFaabValue(10, Number.NaN)).toBe(180)
   })
 })
 

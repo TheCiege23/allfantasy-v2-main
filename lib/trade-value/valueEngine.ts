@@ -16,7 +16,10 @@
  *   roundBase discounted 15%/yr for future seasons (reference-only — redraft has no pick inventory).
  *
  * ── FAAB formula ──────────────────────────────────────────────────────────────
- *   value = amount × FAAB_VALUE_PER_DOLLAR
+ *   Budget-relative, and it lives in `./faabValue` — the ONE definition site, shared
+ *   with the trade console and `/api/trade-evaluator`, which each used to carry their
+ *   own incompatible conversion. Re-exported below so this module stays the engine's
+ *   single import surface.
  */
 
 import { pickRoundTable, pickValueByOverall } from '@/lib/pick-curve'
@@ -27,8 +30,14 @@ export const ADP_PIVOT = 120
 export const ADP_SLOPE = 6
 export const ADP_PREMIUM_MIN = -600
 export const ADP_PREMIUM_MAX = 1600
-export const FAAB_VALUE_PER_DOLLAR = 18
 export const PICK_FUTURE_DISCOUNT = 0.15
+
+export {
+  FAAB_DEFAULT_BUDGET,
+  FAAB_FULL_BUDGET_VALUE,
+  FAAB_VALUE_PER_DOLLAR,
+  normalizedFaabValue,
+} from './faabValue'
 
 /**
  * Slice 16 — SCORING-AWARE VALUATION.
@@ -464,7 +473,3 @@ export function normalizedPickValue(input: {
   return clamp(value, 0, 10000)
 }
 
-export function normalizedFaabValue(amount: number | null | undefined): number {
-  const amt = Number.isFinite(amount as number) ? Math.max(0, amount as number) : 0
-  return clamp(Math.round(amt * FAAB_VALUE_PER_DOLLAR), 0, 10000)
-}
