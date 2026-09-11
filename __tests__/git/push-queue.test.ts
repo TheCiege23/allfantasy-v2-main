@@ -1318,3 +1318,169 @@ describe('push-queue — a ticket is REFUSED when the push would add nothing', (
     expect(tickets()).toHaveLength(1)
   })
 })
+
+describe('push-queue — main that refuses DIRECT pushes sends you to a PR, not round a rebuild loop', () => {
+  /**
+   * 🛑 THE WHOLE QUEUE ASSUMES A DIRECT PUSH TO refs/heads/main. When branch protection starts
+   * enforcing required checks on everyone, that assumption is false — and the queue does not
+   * merely stop helping, it actively misleads: a session waits its full turn, pays the ~25s
+   * secret scan and the typecheck smoke, reaches the head of the line, and is refused by GitHub
+   * having read nothing but advice about stale bases. "Rebuild and re-run" is a loop that cannot
+   * terminate.
+   *
+   * These push to a REAL local bare remote whose `pre-receive` hook rejects the way GitHub does,
+   * so the capture → classify → record → refuse-next-ticket path is exercised end to end rather
+   * than by feeding a string to a matcher.
+   */
+  let remote: string
+  let work: string
+  let sha: string
+
+  const g = (args: string[], cwd: string) =>
+    execFileSync(
+      'git',
+      ['-c', 'user.email=t@e.com', '-c', 'user.name=t', '-c', 'commit.gpgsign=false', ...args],
+      { encoding: 'utf8', cwd },
+    ).trim()
+
+  /** A bare remote whose pre-receive hook refuses, printing `text` on stderr. */
+  const makeRemote = (text: string | null) => {
+    const bare = mkdtempSync(join(tmpdir(), 'af-pq-remote-'))
+    execFileSync('git', ['init', '-q', '--bare', '-b', 'main', bare])
+    if (text !== null) {
+      const hook = join(bare, 'hooks', 'pre-receive')
+      writeFileSync(hook, `#!/bin/sh\necho "${text}" >&2\nexit 1\n`)
+      try {
+        execFileSync('chmod', ['+x', hook])
+      } catch {
+        /* windows: git for windows runs the hook via sh regardless of the mode bit */
+      }
+    }
+    return bare
+  }
+
+  const pushOnce = (env: Record<string, string> = {}) =>
+    run(['push', '--', 'origin', `${sha}:refs/heads/main`], '', env, work)
+
+  const markerPath = () => join(queueDir, 'direct-push-blocked.json')
+
+  beforeEach(() => {
+    work = mkdtempSync(join(tmpdir(), 'af-pq-work-'))
+    g(['init', '-q', '-b', 'main'], work)
+    writeFileSync(join(work, 'a.txt'), 'a\n')
+    g(['add', 'a.txt'], work)
+    g(['commit', '-q', '-m', 'c0'], work)
+    sha = g(['rev-parse', 'HEAD'], work)
+  })
+
+  afterEach(() => {
+    rmSync(work, { recursive: true, force: true })
+    if (remote) rmSync(remote, { recursive: true, force: true })
+    rmSync(markerPath(), { force: true })
+  })
+
+  it('records a marker when the remote rejects with a branch-protection message', () => {
+    remote = makeRemote('GH006: Protected branch update failed for refs/heads/main.')
+    g(['remote', 'add', 'origin', remote], work)
+
+    const res = pushOnce()
+
+    expect(res.status).not.toBe(0)
+    expect(res.stderr).toContain('REFUSES direct pushes')
+    expect(existsSync(markerPath())).toBe(true)
+  })
+
+  it('the NEXT ticket is then refused up front, before any wait — and takes no ticket', () => {
+    // The saving is the whole point: refusing at the head of the line is a correct answer
+    // delivered after the cost has already been paid.
+    writeFileSync(markerPath(), JSON.stringify({ observedAt: Date.now(), evidence: 'GH006' }))
+
+    const res = check(SHA_B)
+
+    expect(res.status).toBe(1)
+    expect(res.stderr).toContain('needs a pull request')
+    expect(res.stderr).toContain('gh pr create')
+    expect(tickets()).toHaveLength(0)
+  })
+
+  it('🛑 does NOT classify an ordinary non-fast-forward as protection — the negative control', () => {
+    // A false positive here is worse than no feature: it would tell a session to open a PR when
+    // the real problem was a stale base, and record that for everyone else too.
+    remote = makeRemote('! [rejected] main -> main (non-fast-forward)')
+    g(['remote', 'add', 'origin', remote], work)
+
+    const res = pushOnce()
+
+    expect(res.status).not.toBe(0)
+    expect(res.stderr).not.toContain('REFUSES direct pushes')
+    expect(existsSync(markerPath())).toBe(false)
+  })
+
+  it('an EXPIRED marker is ignored, so a one-off rejection cannot wedge the queue forever', () => {
+    writeFileSync(
+      markerPath(),
+      JSON.stringify({ observedAt: Date.now() - 60_000, evidence: 'GH006' }),
+    )
+    const res = check(SHA_B, { AF_PUSH_QUEUE_PROTECTION_TTL_MS: '1000' })
+
+    expect(res.status).toBe(0)
+    expect(res.stderr).not.toContain('needs a pull request')
+  })
+
+  it('AF_PUSH_QUEUE_IGNORE_PROTECTION=1 bypasses a live marker', () => {
+    writeFileSync(markerPath(), JSON.stringify({ observedAt: Date.now(), evidence: 'GH006' }))
+    const res = check(SHA_B, { AF_PUSH_QUEUE_IGNORE_PROTECTION: '1' })
+
+    expect(res.status).toBe(0)
+    expect(res.stderr).not.toContain('needs a pull request')
+  })
+
+  it('a corrupt marker is ignored rather than blocking every push', () => {
+    writeFileSync(markerPath(), 'not json at all')
+    const res = check(SHA_B)
+
+    expect(res.status).toBe(0)
+    expect(res.stderr).not.toContain('needs a pull request')
+  })
+})
+
+describe('push-queue — a protection marker must not deadlock the room', () => {
+  /**
+   * 🛑 THE FIRST VERSION OF THIS FEATURE DEADLOCKED, AND IT HAPPENED FOR REAL. The marker was
+   * cleared only by a SUCCESSFUL direct push — but the marker is what prevents the push. When
+   * protection was reverted ~25 min after being enabled, every session in the room was refused
+   * for a false reason until the file was deleted by hand. "Clears on success" is not
+   * self-healing when the block is what stops success.
+   *
+   * So a marker older than the re-probe interval lets ONE push through to re-test. These assert
+   * both halves: it still refuses inside the interval, and it stops refusing after it.
+   */
+  const markerPath = () => join(queueDir, 'direct-push-blocked.json')
+  afterEach(() => rmSync(markerPath(), { force: true }))
+
+  it('still refuses INSIDE the re-probe interval — the saving is not given away', () => {
+    writeFileSync(markerPath(), JSON.stringify({ observedAt: Date.now(), evidence: 'GH006' }))
+    const res = check(SHA_B, { AF_PUSH_QUEUE_PROTECTION_REPROBE_MS: '600000' })
+    expect(res.status).toBe(1)
+    expect(res.stderr).toContain('needs a pull request')
+  })
+
+  it('lets ONE push through once the interval has passed, and says it is re-testing', () => {
+    writeFileSync(markerPath(), JSON.stringify({ observedAt: Date.now() - 60_000, evidence: 'GH006' }))
+    const res = check(SHA_B, { AF_PUSH_QUEUE_PROTECTION_REPROBE_MS: '1000' })
+    expect(res.status).toBe(0)
+    expect(res.stderr).toContain('re-testing with this push')
+  })
+
+  it('stamps lastProbeAt so nine concurrent sessions do not all probe at once', () => {
+    writeFileSync(markerPath(), JSON.stringify({ observedAt: Date.now() - 60_000, evidence: 'GH006' }))
+    check(SHA_B, { AF_PUSH_QUEUE_PROTECTION_REPROBE_MS: '1000' })
+    const after = JSON.parse(readFileSync(markerPath(), 'utf8'))
+    expect(Number(after.lastProbeAt)).toBeGreaterThan(0)
+
+    // The SECOND session in the same interval is refused again rather than probing too.
+    const second = check(SHA_C, { AF_PUSH_QUEUE_PROTECTION_REPROBE_MS: '600000' })
+    expect(second.status).toBe(1)
+    expect(second.stderr).toContain('needs a pull request')
+  })
+})

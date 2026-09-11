@@ -907,6 +907,133 @@ function upstreamRefusal(sha, found) {
 }
 
 /**
+ * Does git's rejection say this branch refuses DIRECT pushes as a matter of policy?
+ *
+ * ⚠ THE WHOLE QUEUE ASSUMES A DIRECT PUSH TO `refs/heads/main` — `cmdCheck` engages only for
+ * that remote ref, and `cmdPush`'s default refspec names it. The moment branch protection
+ * enforces required checks on everyone (GitHub's `enforce_admins`), that assumption is false and
+ * the queue becomes actively misleading rather than merely idle: a session waits its full turn,
+ * pays the ~25s secret scan and the smoke, reaches the head of the line, and is THEN refused —
+ * having read nothing but advice about stale bases and rebuilding. Not one message says "open a
+ * pull request".
+ *
+ * Matching on git's own text rather than asking an API keeps this dependency-free and
+ * fail-closed-to-nothing: an unrecognised failure is simply not classified, and the existing
+ * "did NOT land" path runs unchanged.
+ */
+/*
+ * ⚠ EVERY MARKER HERE IS SPECIFIC TO BRANCH PROTECTION. `pre-receive hook declined` was in this
+ * list and is NOT: git prints it for ANY rejecting server-side hook — a secret scan, a custom
+ * policy hook, anything — so it misreported unrelated rejections as "open a PR" AND recorded that
+ * for every other session. The negative control below caught it; the list shipped correct only
+ * because that control was written to fail.
+ */
+const PROTECTION_MARKERS = [
+  /GH006/i,
+  /protected branch/i,
+  /changes must be made through a pull request/i,
+  /required status check/i,
+]
+
+function looksLikeBranchProtection(text) {
+  if (!text) return false
+  return PROTECTION_MARKERS.some((re) => re.test(String(text)))
+}
+
+/*
+ * The first session to be refused TEACHES THE QUEUE, so the next one is told at ticket time
+ * instead of after a forty-minute wait. No API call, no token, no new failure mode — the
+ * evidence is a rejection we already had in hand.
+ *
+ * ⚠ IT IS SELF-CORRECTING IN BOTH DIRECTIONS, which is what makes it safe to act on:
+ *   - a successful direct push CLEARS it (proof that direct pushes work again)
+ *   - it expires on a TTL, so a marker written by a one-off server-side hiccup cannot wedge
+ *     the queue for everyone indefinitely
+ * and `AF_PUSH_QUEUE_IGNORE_PROTECTION=1` bypasses it outright.
+ */
+const ttlRaw = Number.parseInt(process.env.AF_PUSH_QUEUE_PROTECTION_TTL_MS ?? '', 10)
+const PROTECTION_TTL_MS = Number.isFinite(ttlRaw) && ttlRaw >= 0 ? ttlRaw : 12 * 60 * 60_000
+
+/*
+ * 🛑 A MARKER THAT ONLY A SUCCESSFUL PUSH CAN CLEAR IS A DEADLOCK, BECAUSE THE MARKER PREVENTS
+ * THE PUSH. Found the hard way: protection was enabled at 17:23, this recorded it correctly at
+ * 17:30, protection was REVERTED at ~17:55 — and the marker then refused every session in the
+ * room for a false reason, with only a 12h expiry and an env var nobody knew about to escape it.
+ * It had to be deleted by hand. A guard whose stale state blocks work is worse than the waste it
+ * prevents, and "clears on success" is not self-healing when the block is what stops success.
+ *
+ * So the marker now lets ONE push through every re-probe interval: the reading is refreshed by
+ * the only thing that can actually answer the question — an attempted push. Cost is bounded to at
+ * most one wasted attempt per interval; recovery is automatic and needs nobody to know anything.
+ * `lastProbeAt` is stamped BEFORE the probe so nine concurrent sessions do not all probe at once.
+ */
+const probeRaw = Number.parseInt(process.env.AF_PUSH_QUEUE_PROTECTION_REPROBE_MS ?? '', 10)
+const PROTECTION_REPROBE_MS = Number.isFinite(probeRaw) && probeRaw >= 0 ? probeRaw : 10 * 60_000
+
+const protectionPath = (dir) => join(dir, 'direct-push-blocked.json')
+
+function readProtection(dir) {
+  if (process.env.AF_PUSH_QUEUE_IGNORE_PROTECTION === '1') return null
+  try {
+    const m = JSON.parse(readFileSync(protectionPath(dir), 'utf8'))
+    const at = Number(m?.observedAt) || 0
+    if (!at || now() - at > PROTECTION_TTL_MS) return null
+
+    // Time to re-test? Stamp FIRST, then let this one push through to find out.
+    const lastLook = Number(m?.lastProbeAt) || at
+    if (now() - lastLook >= PROTECTION_REPROBE_MS) {
+      try {
+        writeFileSync(protectionPath(dir), JSON.stringify({ ...m, lastProbeAt: now() }, null, 2))
+      } catch {
+        return null // cannot stamp => cannot rate-limit the probe => do not block
+      }
+      process.stderr.write(
+        `  ⚠ push-queue: main last refused direct pushes ${Math.round((now() - at) / 60_000)} min ago;\n` +
+          `    re-testing with this push rather than refusing on a stale reading.\n`,
+      )
+      return null
+    }
+    return m
+  } catch {
+    return null // unreadable or absent: behave exactly as before
+  }
+}
+
+function writeProtection(dir, evidence) {
+  try {
+    writeFileSync(
+      protectionPath(dir),
+      JSON.stringify({ observedAt: now(), evidence: String(evidence).slice(0, 800) }, null, 2),
+    )
+  } catch {}
+}
+
+function clearProtection(dir) {
+  try {
+    rmSync(protectionPath(dir), { force: true })
+  } catch {}
+}
+
+function protectionRefusal(m) {
+  const mins = Math.round((now() - (Number(m?.observedAt) || now())) / 60_000)
+  return (
+    `\n  ✋ push-queue: main refuses DIRECT pushes — this needs a pull request, not a place in line.\n\n` +
+    `     observed  ${mins} min ago, from git's own rejection of a real push\n\n` +
+    `  No ticket was taken. Queueing would cost you the wait, the secret scan and the\n` +
+    `  typecheck smoke before GitHub refused you at the head of the line — which is exactly\n` +
+    `  what happened to the session that recorded this.\n\n` +
+    `  Open a PR instead:\n\n` +
+    `     git push -u origin HEAD:refs/heads/<your-branch>\n` +
+    `     gh pr create --base main --fill\n\n` +
+    `  ⚠ Required status checks gate the MERGE, so they cannot have run on a commit that has\n` +
+    `  not landed anywhere — a direct push is refused by construction, not by a red suite.\n\n` +
+    `  This clears itself: a successful direct push removes it, and it expires after\n` +
+    `  ${Math.round(PROTECTION_TTL_MS / 60_000)} min. Believe protection is off again?\n` +
+    `     AF_PUSH_QUEUE_IGNORE_PROTECTION=1 git push …\n\n`
+  )
+}
+
+/**
  * Find this sha's live ticket, creating one at the back if it has none.
  *
  * ⚠ A SHA-KEYED TICKET CAN BE ORPHANED BY WORK YOU DID NOT DO. Amending is the
@@ -1079,6 +1206,14 @@ function cmdCheck() {
         `  The pusher role is handed over explicitly:  npm run push:pusher -- --release\n` +
         `  Genuinely urgent?  AF_SKIP_PUSH_QUEUE=1 git push <args>\n\n`,
     )
+    process.exit(1)
+  }
+
+  /* Also before ticketFor: if main is known to refuse direct pushes, a ticket is worthless and
+     the wait is pure loss. Absent or expired marker => behaves exactly as it always did. */
+  const blocked = readProtection(dir)
+  if (blocked) {
+    process.stderr.write(protectionRefusal(blocked))
     process.exit(1)
   }
 
@@ -1665,14 +1800,31 @@ async function cmdPush(argv) {
     }
   }
 
+  // ⚠ Resolved HERE rather than reused from elsewhere: `cmdPush` had no `dir` in scope, and the
+  // protection marker is the first thing in this function to need one. `node --check` cannot see
+  // an undefined identifier, so this was caught by reading scope, not by the syntax check.
+  const dir = resolveDir()
+
   // What is actually being sent — see pushedSha. On the default path this IS ctx.sha.
   const target = pushedSha(passthrough, ctx.sha)
   process.stdout.write(`push-queue: pushing ${target.slice(0, 9)} → git push ${passthrough.join(' ')}\n`)
   let pushStatus = 0
-  try {
-    execFileSync('git', ['push', ...passthrough], { stdio: 'inherit', windowsHide: true })
-  } catch (err) {
-    pushStatus = typeof err?.status === 'number' ? err.status : 1
+  let pushErrText = ''
+  /*
+   * ⚠ stderr is PIPED rather than inherited, purely so the rejection can be CLASSIFIED — and it
+   * is written straight back out, so the user sees byte-for-byte what git said. stdout stays
+   * inherited. Losing git's live output to gain a better error message would be a bad trade.
+   */
+  {
+    const res = spawnSync('git', ['push', ...passthrough], {
+      stdio: ['inherit', 'inherit', 'pipe'],
+      encoding: 'utf8',
+      windowsHide: true,
+    })
+    pushErrText = res.stderr || ''
+    if (pushErrText) process.stderr.write(pushErrText)
+    if (res.error) pushStatus = 1
+    else pushStatus = typeof res.status === 'number' ? res.status : 1
   }
 
   // ⚠ VERIFY BY SHA. A rejected push prints `-> main` too, and its status read
@@ -1685,9 +1837,35 @@ async function cmdPush(argv) {
     // it. Only the landed/not-landed VERDICT is about the pushed sha. Conflating the two would
     // strand the ticket on every passthrough push.
     cmdDone([`--sha=${ctx.sha}`])
+    // A direct push just succeeded, which is the strongest possible evidence that direct pushes
+    // are permitted. Clearing here is what stops a stale marker outliving the protection.
+    clearProtection(dir)
     process.stdout.write(`push-queue: ✅ origin/main is now ${landed.slice(0, 9)}.\n`)
     return 0
   }
+
+  /*
+   * 🛑 "REBUILD AND RE-RUN" IS THE WRONG ADVICE WHEN THE BRANCH REFUSES DIRECT PUSHES AT ALL.
+   * It sends a session round a loop that cannot terminate. Classify first, and record it so the
+   * NEXT session is stopped at ticket time rather than after its own full wait.
+   */
+  if (looksLikeBranchProtection(pushErrText)) {
+    writeProtection(dir, pushErrText)
+    process.stderr.write(
+      `\n  ✋ push-queue: that was not a stale base — main REFUSES direct pushes.\n\n` +
+        `     git's own words are above; the marker matched is branch protection, not a\n` +
+        `     non-fast-forward, so rebuilding onto a newer main will not help.\n\n` +
+        `  Your ticket is KEPT — dropping it for you on a classification would be worse than a\n` +
+        `  wasted place, and you may disagree with this reading. Release it yourself with\n` +
+        `  \`npm run push:done\` once you have opened a PR:\n\n` +
+        `     git push -u origin HEAD:refs/heads/<your-branch>\n` +
+        `     gh pr create --base main --fill\n\n` +
+        `  Recorded so the next session is told BEFORE it waits its turn. It clears on the next\n` +
+        `  successful direct push and expires after ${Math.round(PROTECTION_TTL_MS / 60_000)} min.\n\n`,
+    )
+    return pushStatus || 1
+  }
+
   process.stderr.write(
     `push-queue: ⚠ push did NOT land — origin/main is ${landed ? landed.slice(0, 9) : '(unreadable)'}, not ${target.slice(0, 9)}.\n` +
       `  Your ticket is kept so you do not lose your place. Fix and re-run, or release it with:\n` +
