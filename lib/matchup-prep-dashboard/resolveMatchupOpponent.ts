@@ -2,7 +2,7 @@ import 'server-only'
 
 import { prisma } from '@/lib/prisma'
 import type { SupportedSport } from '@/lib/sport-scope'
-import { ACTIVE_TEAM_WHERE } from '@/lib/league-import/activeTeams'
+import { CURRENT_FRANCHISES_INCLUDING_UNKNOWN } from '@/lib/league-import/teamLifecycle'
 import { resolveTeamPerformanceOpponent } from '@/lib/league-import/teamPerformanceOpponent'
 
 const SLEEPER = 'https://api.sleeper.app/v1'
@@ -141,7 +141,7 @@ async function resolveNativeOpponent(args: {
 
     /* Resolving THIS WEEK's opponent — an archived team has no current matchup. */
     const teams = await prisma.leagueTeam.findMany({
-      where: { ...ACTIVE_TEAM_WHERE, leagueId: args.leagueId },
+      where: { ...CURRENT_FRANCHISES_INCLUDING_UNKNOWN, leagueId: args.leagueId },
       select: { id: true, externalId: true, teamName: true },
     })
     const label = perf.opponent.trim()

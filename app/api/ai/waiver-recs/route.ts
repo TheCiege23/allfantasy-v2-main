@@ -19,7 +19,7 @@ import {
   writeAiResultCache,
 } from '@/lib/ai-result-cache'
 import { getUserAfProStatus, AfProRequiredError } from '@/lib/entitlements/afAccess'
-import { selectActiveTeams } from '@/lib/league-import/activeTeams'
+import { selectCurrentOrUnknown } from '@/lib/league-import/teamLifecycle'
 
 export const dynamic = 'force-dynamic'
 
@@ -75,10 +75,10 @@ export async function POST(req: Request) {
      */
     const teams = await prisma.leagueTeam.findMany({
       where: { leagueId },
-      select: { platformUserId: true, claimedByUserId: true, isOrphan: true },
+      select: { platformUserId: true, claimedByUserId: true, lifecycleState: true },
     })
     const sleeperUserId =
-      selectActiveTeams(teams).find((t) => t.claimedByUserId === targetUserId)?.platformUserId ?? null
+      selectCurrentOrUnknown(teams).find((t) => t.claimedByUserId === targetUserId)?.platformUserId ?? null
     if (!sleeperUserId) {
       return NextResponse.json({ error: 'No Sleeper user linked to this manager in the league' }, { status: 400 })
     }

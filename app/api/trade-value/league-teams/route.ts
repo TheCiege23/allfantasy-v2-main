@@ -4,7 +4,7 @@ import { authOptions } from '@/lib/auth'
 import { assertLeagueMember } from '@/lib/league/league-access'
 import { prisma } from '@/lib/prisma'
 import { rateLimit, getClientIp } from '@/lib/rate-limit'
-import { selectActiveTeams } from '@/lib/league-import/activeTeams'
+import { selectTradeable } from '@/lib/league-import/teamLifecycle'
 
 /**
  * Lists league teams for trade opponent selection (requires membership).
@@ -33,9 +33,14 @@ export async function GET(req: NextRequest) {
   }
 
   /*
-   * Trade partners are a CURRENT-competition list — an archived team cannot be traded with.
-   * `selectActiveTeams` is applied to the rows below rather than the `where`, per the note on
-   * that helper.
+   * Trade partners are a CURRENT-competition list — an archived team cannot be traded with, and
+   * 🛑 NEITHER CAN A VACANT ONE (user's ruling). A vacant seat has a real roster and real points,
+   * so it belongs in standings and league-size reads; it does not belong here, because nobody is
+   * on the other side to accept. `selectTradeable` is the only selector that draws that line.
+   *
+   * ⚠ It is applied to the ROWS rather than the `where` so the fetched list stays complete for any
+   * sibling consumer, and `lifecycleState` + `managerKind` are both selected — without them the
+   * filter is a silent no-op.
    */
   const teamRows = await prisma.leagueTeam.findMany({
     where: { leagueId },
@@ -46,11 +51,12 @@ export async function GET(req: NextRequest) {
       platformUserId: true,
       claimedByUserId: true,
       pointsFor: true,
-      isOrphan: true,
+      lifecycleState: true,
+      managerKind: true,
     },
     orderBy: { pointsFor: 'desc' },
   })
-  const teams = selectActiveTeams(teamRows)
+  const teams = selectTradeable(teamRows)
 
   return NextResponse.json({
     teams: teams.map((t) => ({

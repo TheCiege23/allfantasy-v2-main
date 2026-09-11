@@ -449,7 +449,7 @@ function orphanPolarity(whereClause: string): OrphanPolarity {
    *   UNCLASSIFIED_FRANCHISES                UNKNOWN only               -> neither; see below
    */
   const namesLifecycleActive =
-    /CURRENT_FRANCHISES_INCLUDING_UNKNOWN|ELIGIBLE_FRANCHISES_INCLUDING_UNKNOWN|HUMAN_RECIPIENTS_INCLUDING_UNKNOWN|CLAIMABLE_FRANCHISES/.test(
+    /CURRENT_FRANCHISES_INCLUDING_UNKNOWN|ELIGIBLE_FRANCHISES_INCLUDING_UNKNOWN|HUMAN_RECIPIENTS_INCLUDING_UNKNOWN|CLAIMABLE_FRANCHISES|TRADEABLE_FRANCHISES_INCLUDING_UNKNOWN/.test(
       w,
     )
   const namesLifecycleArchived = /ARCHIVED_FRANCHISES/.test(w)
@@ -514,6 +514,8 @@ const CONSUMER_FILTER = [
   'isActiveTeam',
   'selectCurrentOrUnknown',
   'isCurrentOrUnknown',
+  'selectTradeable',
+  'isTradeable',
 ]
 
 /** Sentinel binding: the call is wrapped directly in a filter, so there is no name to trace. */

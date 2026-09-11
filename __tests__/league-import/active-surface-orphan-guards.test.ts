@@ -271,10 +271,29 @@ describe('the three MIXED reads resolved by the 2026-09-10 corrective pass', () 
   })
 
   it('roster-context-loader filters the selectable partners but not the id resolver', () => {
+    /*
+     * ⚠ PORTED TO THE LIFECYCLE AXIS, AND THE BAR IS NOW HIGHER THAN IT WAS.
+     *
+     * The shape this pins is unchanged — filter the SELECTABLE list, leave the id resolver seeing
+     * every row — but the rule changed: a partner list must exclude the ARCHIVED *and* the VACANT
+     * (user's ruling, 2026-09-10). A vacant seat has a roster and points but nobody to accept an
+     * offer, so `selectTradeable` is the only selector that draws that line.
+     *
+     * 🛑 THE SELECT ASSERTION IS THE LOAD-BEARING HALF AND IT NOW TAKES TWO FIELDS. `isTradeable`
+     * reads `lifecycleState` and `managerKind`; an omitted column is `undefined`, which is neither
+     * 'ARCHIVED' nor 'VACANT', so a partial select makes the filter a silent no-op that keeps
+     * exactly the seats it exists to remove — the identical trap `isOrphan` had, on new fields.
+     */
     const src = stripComments(read('lib', 'trade-value-console', 'roster-context-loader.ts'))
     expect(src).not.toMatch(/ACTIVE_TEAM_WHERE/)
-    expect(src).toMatch(/isOrphan: true/)
-    expect(src).toMatch(/opponentTeams: OpponentTeamOption\[\] = selectActiveTeams\(teams\)\.map/)
+    expect(src).not.toMatch(/isOrphan/)
+    expect(src, 'lifecycleState must be selected or the filter is a no-op').toMatch(
+      /lifecycleState: true/,
+    )
+    expect(src, 'managerKind must be selected or vacant seats survive the filter').toMatch(
+      /managerKind: true/,
+    )
+    expect(src).toMatch(/opponentTeams: OpponentTeamOption\[\] = selectTradeable\(teams\)\.map/)
     /* The externalId resolver must keep seeing archived rows. */
     expect(src).toMatch(/teams\.find\(\(t\) => t\.externalId === args\.opponentTeamExternalId\)/)
   })

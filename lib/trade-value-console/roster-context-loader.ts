@@ -1,7 +1,7 @@
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
-import { selectActiveTeams } from '@/lib/league-import/activeTeams'
+import { selectTradeable } from '@/lib/league-import/teamLifecycle'
 import { assertLeagueMember } from '@/lib/league/league-access'
 import { getRosterPlayerIds } from '@/lib/waiver-wire/roster-utils'
 import { getPlayer } from '@/lib/data/players'
@@ -235,8 +235,15 @@ export async function loadTradeEngineRosterContext(args: {
    * (`teams.find(t => t.externalId === args.opponentTeamExternalId)`) resolves a caller-supplied
    * id to a `platformUserId`, and filtering the query would break that resolution.
    *
-   * ⚠ `isOrphan` MUST BE IN THE SELECT or `selectActiveTeams` is a silent no-op — `isActiveTeam`
-   * tests `isOrphan !== true`, and an omitted column is `undefined`, which reads as ACTIVE.
+   * 🛑 A VACANT SEAT IS NOT A TRADE PARTNER (user's ruling). It keeps its roster, its points and
+   * its place in every standings read — but there is nobody on the other side to accept an offer,
+   * so it must not appear in a list of seats you can PICK. `selectTradeable` excludes rows
+   * positively known vacant and keeps AI and not-yet-classified ones; see the note on that helper.
+   *
+   * ⚠ BOTH `lifecycleState` AND `managerKind` MUST BE IN THE SELECT or `selectTradeable` is a
+   * silent no-op — an omitted column is `undefined`, which is neither `'ARCHIVED'` nor `'VACANT'`,
+   * so every row reads as tradeable. This is the identical trap the old `isOrphan` filter had,
+   * reproduced on two new fields, and nothing type-checks it.
    */
   const teams = await prisma.leagueTeam.findMany({
     where: { leagueId: args.leagueId },
@@ -246,12 +253,13 @@ export async function loadTradeEngineRosterContext(args: {
       ownerName: true,
       platformUserId: true,
       claimedByUserId: true,
-      isOrphan: true,
+      lifecycleState: true,
+      managerKind: true,
     },
     orderBy: { pointsFor: 'desc' },
   })
 
-  const opponentTeams: OpponentTeamOption[] = selectActiveTeams(teams).map((t) => ({
+  const opponentTeams: OpponentTeamOption[] = selectTradeable(teams).map((t) => ({
     externalId: t.externalId,
     teamName: t.teamName,
     ownerName: t.ownerName,

@@ -98,6 +98,26 @@ export const HUMAN_RECIPIENTS_INCLUDING_UNKNOWN = {
 } as const satisfies Prisma.LeagueTeamWhereInput
 
 /**
+ * Franchises a manager can actually propose a trade TO.
+ *
+ * 🛑 A VACANT SEAT IS NOT A TRADE PARTNER — user's ruling, 2026-09-10. It has a real roster and
+ * real points, so it belongs in every standings and league-size read, but there is nobody on the
+ * other side to accept an offer. This is the one question where a vacant seat and a current
+ * franchise genuinely diverge.
+ *
+ * ⚠ `managerKind: { not: 'VACANT' }` KEEPS `AI` AND `UNKNOWN`, AND BOTH ARE DELIBERATE.
+ * An AI-managed seat CAN accept — that is what AI managers are for. UNKNOWN is kept because the
+ * backfill classified only what a writer signature proves: 2,660 production rows are UNKNOWN on
+ * the manager axis, and requiring `HUMAN` would empty this list for most leagues. Excluding rows
+ * POSITIVELY known vacant is the whole change; the asymmetry is that a list one seat too long is
+ * a trade nobody accepts, while one seat too short is a partner the manager cannot reach.
+ */
+export const TRADEABLE_FRANCHISES_INCLUDING_UNKNOWN = {
+  lifecycleState: { in: ['CURRENT', 'UNKNOWN'] },
+  managerKind: { not: 'VACANT' },
+} as const satisfies Prisma.LeagueTeamWhereInput
+
+/**
  * Rows that have never been classified. Exposed so a backfill or an audit can COUNT them —
  * an unclassified population that nobody can measure is how this state got here.
  */
@@ -126,4 +146,25 @@ export function isCurrentOrUnknown(team: TeamLifecycleState | null | undefined):
 /** Keep only franchises that are current or not yet classified. */
 export function selectCurrentOrUnknown<T extends TeamLifecycleState>(teams: readonly T[]): T[] {
   return teams.filter(isCurrentOrUnknown)
+}
+
+/**
+ * In-memory counterpart of `TRADEABLE_FRANCHISES_INCLUDING_UNKNOWN`, for the readers that must
+ * filter the CONSUMER rather than the query — several fetch one unfiltered list and serve two
+ * consumers from it, and narrowing the query breaks the other one.
+ *
+ * 🛑 `managerKind` MUST BE IN THE `select`, AND NOTHING TYPE-CHECKS THAT. An omitted column is
+ * `undefined`, which is `!== 'VACANT'`, so every row reads as tradeable and the filter silently
+ * keeps the vacant seats it exists to remove. This is the identical trap `isActiveTeam` had with
+ * `isOrphan`, reproduced on a new field — the registry guard pins the call and the select together
+ * for exactly this reason.
+ */
+export function isTradeable(team: TeamLifecycleState | null | undefined): boolean {
+  if (!team) return false
+  return team.lifecycleState !== 'ARCHIVED' && team.managerKind !== 'VACANT'
+}
+
+/** Keep only franchises a manager could actually propose a trade to. */
+export function selectTradeable<T extends TeamLifecycleState>(teams: readonly T[]): T[] {
+  return teams.filter(isTradeable)
 }
