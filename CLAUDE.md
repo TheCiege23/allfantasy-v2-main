@@ -561,6 +561,44 @@ they had verified something. The common cause: **a pipeline's exit status is the
 LAST command's**, so the thing being tested never decides the result. Use
 `${PIPESTATUS[0]}`, or do not pipe the command whose status you are reading.
 
+🛑 **AND `${PIPESTATUS[0]}` SILENTLY BECOMES PART OF THE BUG INSIDE `$( )`.** The
+remedy above is correct for a bare pipeline and WRONG the moment you capture the
+output, which is the form anyone writing a probe reaches for. A command
+substitution is its own command: the array you read afterwards belongs to the
+ASSIGNMENT, which succeeded, so the failure you were guarding against is erased.
+Measured 2026-09-11 against a `git show` that exits 128:
+
+```bash
+git show "$REF:$P" 2>/dev/null | wc -c >/dev/null; echo "${PIPESTATUS[0]}"   # 128  correct
+out=$(git show "$REF:$P" 2>/dev/null | wc -c); rc=${PIPESTATUS[0]}           # rc=0  ERASED
+```
+
+Both lines follow the rule above to the letter. One of them reports a clean pass
+over a fatal error — and it is the one that keeps the output, so it is the one
+that gets written.
+
+⚠ **IT COST TWO SESSIONS IN ONE EVENING AND THE SECOND WAS INVESTIGATING THE
+FIRST.** A probe written to diagnose a PIPESTATUS bug used this form and
+manufactured `exit=0` on every row; the finding it produced was withdrawn. The
+rule had been read, quoted between sessions, and applied wrongly inside the hour.
+
+Either of these works, and both were controlled in both directions — non-zero on
+the failing command, zero on a succeeding one:
+
+```bash
+out=$(set -o pipefail; git show "$REF:$P" 2>/dev/null | wc -c); rc=$?   # rc=128 / rc=0
+raw=$(git show "$REF:$P" 2>/dev/null); rc=$?                            # do not pipe at all
+```
+
+⚠ The second form loses a trailing newline to the substitution (28943 vs 28944
+bytes on the same file), so do not byte-compare across the two.
+
+**And do not trust a zero on either side of it.** `bytes=0` is not evidence of
+failure unless you know the true size — an empty file and a broken read are
+indistinguishable by count. `git ls-tree -l` says what the size should be. A
+peer nearly filed a spurious "second silent failure mode" that was a genuinely
+0-byte `.gitkeep`.
+
 - `git push … | tail` printed a success line over a rejection. **Verify a push
   by comparing SHAs, never by reading its output or its exit status through a
   pipe** — a rejected push prints `-> main` too, so grepping the text for
