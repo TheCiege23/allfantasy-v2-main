@@ -155,10 +155,24 @@ export const MflAdapter: ILeagueImportAdapter<MflImportPayload> = {
       const positions = (rule.positions ?? [])
         .map((p) => String(p).trim().toUpperCase())
         .filter(Boolean)
+      /*
+       * 🛑 `name` WAS THE SECOND FIELD THIS MAP DROPPED, AND IT COST THE WHOLE TRANSLATION.
+       * The note above records `positions` being lost here and what that did. `name` was lost in
+       * exactly the same place, and it is worse: `ScoringKeyAliasResolver` resolves MFL by NAME
+       * ONLY — there is no MFL code table, on purpose, because no evidence base exists for one.
+       * Without the name every `mfl_stat_<code>` reached the resolver unresolvable, so the MFL
+       * map it was given could never fire and no MFL league has ever had its scoring translated.
+       *
+       * ⚠ OMITTED WHEN MFL SHIPPED NONE, rather than passed as ''. An empty string normalizes to
+       * no name anyway, but omitting keeps "MFL sent nothing" distinguishable from "MFL sent
+       * blank" in the stored snapshot, and the resolver's null path stays the honest one.
+       */
+      const name = typeof rule.name === 'string' ? rule.name.trim() : ''
       return {
         stat_key: `mfl_stat_${rule.code}`,
         points_value: rule.points,
         ...(positions.length > 0 ? { positions } : {}),
+        ...(name ? { stat_name: name } : {}),
       }
     })
     const scoring =
