@@ -316,27 +316,46 @@ describe('POST /api/rankings/league-v2 (coach LLM)', () => {
 })
 
 describe('POST /api/rankings/manager-psychology', () => {
-  it('rejects an anonymous caller with 401 and never reads trade history or calls the LLM', async () => {
+  /**
+   * 🛑 THIS SURFACE IS RETIRED, AND THESE ASSERT THAT RATHER THAN THE AUTHORIZATION LADDER
+   * THEY USED TO. `dcaaa6946` (the ownerless Competitive Edge privacy pass) replaced the
+   * handler with `retiredProfileRoute`, which answers 410 `PROFILE_SURFACE_RETIRED` to
+   * EVERYONE — including a member, and including the subject of the profile.
+   *
+   * ⚠ DO NOT "FIX" THESE BY RESTORING 401/403/200. A 410 where a member used to get 200 is
+   * not a regression against the old behaviour, it IS the privacy decision; re-greening the
+   * old expectation would mean un-retiring a surface that was deliberately withdrawn.
+   *
+   * What still has to hold is the half these tests existed to protect, and it is now asserted
+   * on MORE callers than before: no trade history is read and no LLM is billed, for ANY
+   * caller. The old `allows a member` case could not check either, because on its 200 path
+   * both were expected to happen.
+   */
+  const RETIRED = 410
+
+  it('answers 410 to an anonymous caller, and never reads trade history or calls the LLM', async () => {
     asAnonymous()
     const res = await psychologyPost(postRequest(PSYCH_URL, PSYCHOLOGY_BODY))
-    expect(res.status).toBe(401)
+    expect(res.status).toBe(RETIRED)
+    expect(await res.json()).toMatchObject({ code: 'PROFILE_SURFACE_RETIRED' })
     expect(prismaMock.leagueTradeHistory.findFirst).not.toHaveBeenCalled()
     expect(openaiChatJsonMock).not.toHaveBeenCalled()
   })
 
-  it("rejects a non-member with 403 and never reads another league's trade history", async () => {
+  it("answers 410 to a non-member, and never reads another league's trade history", async () => {
     asOutsider()
     const res = await psychologyPost(postRequest(PSYCH_URL, PSYCHOLOGY_BODY))
-    expect(res.status).toBe(403)
+    expect(res.status).toBe(RETIRED)
     expect(prismaMock.leagueTradeHistory.findFirst).not.toHaveBeenCalled()
     expect(openaiChatJsonMock).not.toHaveBeenCalled()
   })
 
-  it('allows a member of that Sleeper league', async () => {
+  it('answers 410 to a MEMBER of that Sleeper league too — retirement is not an authorization tier', async () => {
     asUser(freshUser())
     const res = await psychologyPost(postRequest(PSYCH_URL, PSYCHOLOGY_BODY))
-    expect(res.status).toBe(200)
-    expect(prismaMock.leagueTradeHistory.findFirst).toHaveBeenCalled()
+    expect(res.status).toBe(RETIRED)
+    expect(prismaMock.leagueTradeHistory.findFirst).not.toHaveBeenCalled()
+    expect(openaiChatJsonMock).not.toHaveBeenCalled()
   })
 })
 
