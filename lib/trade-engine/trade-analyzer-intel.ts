@@ -85,7 +85,26 @@ export interface TradeIntelSignal {
 }
 
 export interface LeagueStrategySnapshot {
-  competitiveWindow: 'contender' | 'fringe' | 'retooling' | 'rebuilding'
+  /**
+   * The three states `computeLeagueStrategySnapshot` can actually produce.
+   *
+   * ⚠ `'retooling'` WAS DECLARED HERE AND WAS UNPRODUCIBLE. `competitiveWindow` is assigned in
+   * exactly one place — `tierToWindow[ctx.sideA.contenderTier] ?? 'fringe'` — and that map's four
+   * entries yield only `contender`, `fringe` and `rebuilding`. No input produced `'retooling'`, and
+   * the fallback is `'fringe'`, so nothing downstream could ever observe it. It appeared exactly
+   * once in the whole `lib/trade-engine/` tree: in this union.
+   *
+   * A union member no producer emits is a promise the code does not keep — it invites a consumer
+   * to write a branch that can never run and reads as covered. Removing it makes the type describe
+   * what the function does. If a retooling state is wanted later, it arrives with a producer.
+   *
+   * ⚠ AND `'rebuilding'` IS NOT THE SAME CASE, though a literal grep makes it look like one:
+   * no `contenderTier: 'rebuild'` string literal exists either, but the tier is declared
+   * `'champion' | 'contender' | 'middle' | 'rebuild'` in `lib/league-intelligence/league-intel-engine.ts`
+   * and `portfolio-manager-engine` filters live rows on `'rebuild'`. It is computed, not written
+   * literally. Reachability was checked at the declaration, not by grepping for assignments.
+   */
+  competitiveWindow: 'contender' | 'fringe' | 'rebuilding'
   positionalStrengths: string[]
   positionalWeaknesses: string[]
   draftCapitalGrade: string
