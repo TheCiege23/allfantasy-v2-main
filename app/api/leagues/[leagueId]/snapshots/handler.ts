@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { saveRankingsSnapshot } from "@/lib/rankings-engine/snapshots"
-import { getV2Rankings } from "@/lib/rankings-engine/v2-adapter"
+import { getV2Rankings, RankingsUnavailableError } from "@/lib/rankings-engine/v2-adapter"
 import { withApiUsage } from "@/lib/telemetry/usage"
 import { requireLeagueApiAccess } from '@/lib/api/require-league-access'
 
@@ -37,8 +37,28 @@ export const POST = withApiUsage({
       }))
     })
 
-    return NextResponse.json({ ok: true, season: v2.season, week: v2.week })
+    /*
+     * `teams` is reported because `saveRankingsSnapshot` runs
+     * `prisma.$transaction(args.teams.map(...))` — an empty array is a no-op transaction that
+     * resolves successfully having written nothing. Without this count, "ok: true" is returned
+     * just as cheerfully for zero rows as for twelve.
+     */
+    return NextResponse.json({ ok: true, season: v2.season, week: v2.week, teams: v2.teams.length })
   } catch (err: any) {
+    /*
+     * A league whose settings will not load is a NORMAL single-league outcome — a deleted league,
+     * a renumbered id, a provider timeout — not a server fault. It was previously indistinguishable
+     * from a real failure: the null flowed through the cast, `v2.season` threw a TypeError, and
+     * this branch reported "Failed to save snapshot" with a 500. A batch caller could not tell
+     * "skip this league" from "something is broken, stop".
+     */
+    if (err instanceof RankingsUnavailableError) {
+      console.warn("[Snapshots API] rankings unavailable", { leagueId: err.leagueId, week: err.week })
+      return NextResponse.json(
+        { error: "Rankings unavailable for this league and week", leagueId: err.leagueId, week: err.week },
+        { status: 422 },
+      )
+    }
     console.error("[Snapshots API]", err?.message)
     return NextResponse.json({ error: "Failed to save snapshot" }, { status: 500 })
   }
