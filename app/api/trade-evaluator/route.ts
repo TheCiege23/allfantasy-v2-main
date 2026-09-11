@@ -26,6 +26,7 @@ import { computeTradeDrivers } from '@/lib/trade-engine/trade-engine'
 import { getTotalIdpStarterSlots, canFieldLegalIdpLineup } from '@/lib/trade-engine/idp-lineup-check'
 import { loadLeagueTradeValues } from '@/lib/league-values/leagueTradeValues'
 import { normalizedFaabValue } from '@/lib/trade-value/faabValue'
+import { resolveSuperflex } from '@/lib/trade-value/superflexResolution'
 import { identifyDevyAssets } from '@/lib/devy/devyTradeVerdict'
 import { buildNegotiationToolkit, negotiationToolkitToLegacy } from '@/lib/trade-engine/negotiation-builder'
 import { buildNegotiationGptContract, buildNegotiationGptUserPrompt, validateNegotiationGptOutput, shouldSkipNegotiationGpt, NEGOTIATION_GPT_SYSTEM_PROMPT } from '@/lib/trade-engine/negotiation-gpt-contract'
@@ -114,7 +115,20 @@ const LeagueContextSchema = z.object({
   format: z.enum(['redraft', 'dynasty', 'keeper', 'best_ball']).optional(),
   sport: z.string().optional(),
   scoring_summary: z.string().optional(),
-  qb_format: z.enum(['1qb', 'sf']).optional().default('sf'),
+  /*
+   * 🛑 THE `.default('sf')` HERE WAS A SILENT, GRADE-CHANGING ASSUMPTION.
+   *
+   * Superflex is the aggressive read: it is what tells FantasyCalc to quote `numQbs: 2`, and a
+   * superflex board prices quarterbacks far above a 1QB one. A caller that simply omitted the
+   * field — a script, an integration, anything that is not the trade page — had every QB in the
+   * trade priced on a superflex board, and nothing in the response said so.
+   *
+   * Worse, zod's default is applied BEFORE the route sees the value, so `data.league.qb_format`
+   * was never `undefined` and "the caller told us superflex" could not be distinguished from
+   * "the caller told us nothing". Dropping the default is what makes the difference visible;
+   * `resolveSuperflex` below decides what to do about it.
+   */
+  qb_format: z.enum(['1qb', 'sf']).optional(),
   idp_enabled: z.boolean().optional().default(false),
   roster_requirements: z.string().optional(),
   /**
@@ -521,7 +535,11 @@ export const POST = withApiUsage({ endpoint: "/api/trade-evaluator", tool: "Trad
     if (!gate.ok) return gate.response
     if (gate.tokenSpend) tokenFallbackLedgerId = gate.tokenSpend.id
 
-    const isSF = data.league?.qb_format === 'sf'
+    /*
+     * What the CALLER said, which is not yet an answer. `isSF` is resolved after the league is
+     * fetched, because the league's own roster positions outrank anything a client asserts.
+     */
+    const declaredQbFormat = data.league?.qb_format ?? null
     const leagueSport = normalizeToSupportedSport(String(data.league?.sport || 'nfl'))
     const leagueSportSlug = String(leagueSport).toLowerCase()
     const biasMode = data.sender.is_af_pro && data.receiver.is_af_pro ? 'neutral' : 'protect_receiver'
@@ -586,6 +604,23 @@ export const POST = withApiUsage({ endpoint: "/api/trade-evaluator", tool: "Trad
           receiver: data.receiver.gives_players.map(resolvePlayerName).sort(),
           receiverPicks: (data.receiver.gives_picks ?? []).map((p: any) => ({ year: p.year, round: p.round })).sort((a: any, b: any) => a.round - b.round || a.year - b.year),
           normalizedPlayerIds: identityResult.resolved.map((r) => r.playerId).sort(),
+          /*
+           * 🛑 THE FORMAT BELONGS IN THE KEY, AND WAS NOT IN IT.
+           *
+           * `leagueId` separates league-linked trades, but a league-LESS trade keyed on player
+           * names alone: the same two players in a 1QB league and a superflex one produced the
+           * same key, so whichever was graded first was served to the other. A superflex grade
+           * handed to a 1QB manager is exactly the QB inflation this commit removes, arriving
+           * by a different route.
+           *
+           * Keyed on what the CALLER supplied rather than the resolved `isSF`, because this
+           * runs before the league fetch — and that is sufficient: anything the league itself
+           * decides is already separated by `leagueId`.
+           */
+          qbFormat: data.league?.qb_format ?? '',
+          leagueFormat: data.league?.format ?? '',
+          sport: leagueSportSlug,
+          idp: data.league?.idp_enabled ?? false,
         })
       : null
     const cached = cacheKey ? getCachedResponse<Record<string, unknown>>(cacheKey) : null
@@ -622,6 +657,18 @@ export const POST = withApiUsage({ endpoint: "/api/trade-evaluator", tool: "Trad
         }
       } catch { /* use defaults */ }
     }
+
+    /*
+     * The league's own roster slots outrank the client flag. See `resolveSuperflex` for why —
+     * it carries the full account, and it is a pure function so the rule is testable without a
+     * database, which this route's grading path is not.
+     */
+    const { isSuperflex: isSF, basis: qbFormatBasis } = resolveSuperflex({
+      leagueRoster: rosterConfigForVorp
+        ? { superflex: rosterConfigForVorp.superflex, startingQB: rosterConfigForVorp.startingQB }
+        : null,
+      declared: declaredQbFormat,
+    })
 
     /*
      * This league's own defenders, priced by its own scoring.
@@ -1332,7 +1379,10 @@ export const POST = withApiUsage({ endpoint: "/api/trade-evaluator", tool: "Trad
         format: data.league?.format ?? 'redraft',
         leagueType: data.league?.format === 'best_ball' ? 'bestball' : 'standard',
         sport: leagueSportSlug,
-        qbFormat: data.league?.qb_format || 'sf',
+        // The RESOLVED format, not the raw flag — and how it was decided, so a caller can tell
+        // a measured answer from an assumption.
+        qbFormat: isSF ? 'sf' : '1qb',
+        qbFormatBasis,
         idpEnabled: data.league?.idp_enabled || false,
         biasMode,
         ...(data.league?.scoring_summary && { scoringSummary: data.league.scoring_summary }),
@@ -1704,7 +1754,7 @@ TRADE DETAILS:
 Team A (${data.sender.manager_name}) gives: ${senderPlayerNames.join(', ')}${senderPicksData.length ? ', ' + senderPicksData.map(p => p.label).join(', ') : ''}
 Team B (${data.receiver.manager_name}) gives: ${receiverPlayerNames.join(', ')}${receiverPicksData.length ? ', ' + receiverPicksData.map(p => p.label).join(', ') : ''}
 
-LEAGUE: ${data.league?.format || 'dynasty'} | ${data.league?.qb_format || 'sf'} | ${isSF ? 'Superflex' : '1QB'}
+LEAGUE: ${data.league?.format || 'dynasty'} | ${isSF ? 'Superflex' : '1QB'} (${qbFormatBasis})
 Team A total value: ${senderGivenComposite}
 Team B total value: ${senderReceivedComposite}
 Net delta: ${teamANetValue}
@@ -2200,6 +2250,15 @@ ${normalizedEvidencePrompt ? `\nNORMALIZED PROVIDER EVIDENCE (supplemental — i
       success: true,
       evaluation: evalData,
       schemaValid: true,
+      /*
+       * The RESOLVED superflex answer and how it was reached.
+       *
+       * Surfaced to the client because "the league's roster positions say 1QB" and "nobody told
+       * us, so we assumed 1QB" are different claims and only one of them is evidence. Until now
+       * the response carried neither — `leagueSettings` lives on `structuredPayload`, which is
+       * the AI prompt contract and is never returned.
+       */
+      leagueSettings: { qbFormat: isSF ? 'sf' : '1qb', qbFormatBasis },
       rate_limit: { remaining: rl.remaining, retryAfterSec: rl.retryAfterSec },
       tokenSpend: gate.tokenSpend
         ? {
