@@ -193,6 +193,64 @@ export function EspnConnectPanel({ onConnectedChange }: EspnConnectPanelProps) {
     void refresh()
   }, [refresh])
 
+  /**
+   * Desktop pairing — and it needs no pairing token, because there is nothing to pair.
+   *
+   * 🛑 THE CREDENTIAL IS ALREADY SHARED ACROSS THIS USER'S DEVICES. `league_auths` is unique on
+   * `(userId, platform)` and `GET /api/league/auth` resolves the user from the SESSION, so a
+   * desktop that connects ESPN writes a row the phone can already read. A code-exchange protocol
+   * — the obvious reading of "pair my phone to my desktop" — would invent a transfer for
+   * something that is not separate, and the code itself would be a NEW bearer credential granting
+   * access to an account's ESPN connection. Strictly worse: more attack surface, a new route (and
+   * this repo is at Vercel's 2048-route ceiling), for no capability that does not already exist.
+   *
+   * ⚠ WHAT WAS ACTUALLY MISSING IS THIS: the panel asked once, on mount, and never again. So
+   * someone who went to a laptop, connected there, and came back to their phone found the same
+   * "Connect ESPN" card, with no way to learn it had worked short of reloading a page they had no
+   * reason to think was stale. The capability was shared the whole time; only the NOTICING was
+   * absent.
+   *
+   * ⚠ VISIBILITY IS THE REAL TRIGGER, NOT THE TIMER, and the ordering matters. The phone tab is
+   * backgrounded or the screen is locked for the entire time the user is on the desktop, so the
+   * moment worth checking is when they come BACK. A bare interval would fire dozens of times into
+   * a hidden tab and then miss the return by up to its own period. The interval is a fallback for
+   * a tab that stays foreground (two windows on one machine), and it is deliberately slow.
+   */
+  useEffect(() => {
+    if (status !== 'disconnected') return
+    if (typeof document === 'undefined') return
+
+    let cancelled = false
+    const check = () => {
+      if (cancelled || document.visibilityState !== 'visible') return
+      void refresh()
+    }
+
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') check()
+    }
+    document.addEventListener('visibilitychange', onVisible)
+
+    /*
+     * ⚠ BOUNDED ON PURPOSE. An abandoned tab must not poll this endpoint forever — it is a
+     * session-authenticated database read. Ten minutes is longer than the errand (open a laptop,
+     * sign in, paste two cookies) and short enough that a forgotten tab stops. Coming back to the
+     * tab still re-checks after the cap, because `visibilitychange` is registered independently
+     * of the timer.
+     */
+    const POLL_MS = 10_000
+    const STOP_AFTER_MS = 10 * 60_000
+    const timer = setInterval(check, POLL_MS)
+    const stop = setTimeout(() => clearInterval(timer), STOP_AFTER_MS)
+
+    return () => {
+      cancelled = true
+      document.removeEventListener('visibilitychange', onVisible)
+      clearInterval(timer)
+      clearTimeout(stop)
+    }
+  }, [status, refresh])
+
   useEffect(() => {
     if (!EXTENSION_ID) return
     void sendExtensionMessage({ type: 'ping' }).then((res) => {
@@ -580,8 +638,19 @@ export function EspnConnectPanel({ onConnectedChange }: EspnConnectPanelProps) {
       */}
       {showForm ? (
         <p className="af-espn-note af-espn-note--mobile">
-          <LockGlyph /> On a phone? Extensions don&rsquo;t work on most mobile browsers
-          &mdash; connect ESPN once on desktop and it stays connected.
+          <LockGlyph /> On a phone? Extensions don&rsquo;t work on most mobile browsers, and the
+          cookie below has to be copied out of a desktop browser&rsquo;s developer tools. Open{' '}
+          <strong>allfantasy.ai</strong> on your computer, sign in as the same account, and connect
+          ESPN there.{' '}
+          {/*
+            ⚠ THE SECOND SENTENCE IS THE ONE THAT CHANGES THE ERRAND, and it is only true because
+            `league_auths` is keyed on the USER. The connection is not tied to the device that made
+            it, so the phone needs nothing handed to it — it just has to look again, which the
+            visibility effect above now does. Telling someone to "come back and press Retry" when
+            the screen updates itself is a worse instruction than telling them it will.
+          */}
+          This page will notice by itself when you come back &mdash; you won&rsquo;t need to start
+          over, and you only have to do it once.
         </p>
       ) : null}
     </div>

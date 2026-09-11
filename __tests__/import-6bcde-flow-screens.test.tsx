@@ -406,3 +406,125 @@ describe('6e — the completion bar counts live platforms', () => {
     expect(screen.getByText(new RegExp(`of ${LIVE.length} live platforms`, 'i'))).toBeTruthy()
   })
 })
+
+/**
+ * Desktop pairing, 2026-09-11 — and the reason there is no pairing CODE in these tests.
+ *
+ * 🛑 `league_auths` IS UNIQUE ON `(userId, platform)` AND `GET /api/league/auth` RESOLVES THE USER
+ * FROM THE SESSION. A desktop that connects ESPN writes a row the phone can already read, so the
+ * two devices are not holding separate things and there is nothing to hand across. A code
+ * exchange would have invented a transfer for something already shared, and the code would itself
+ * be a new bearer credential granting access to an account's ESPN connection.
+ *
+ * ⚠ WHAT WAS MISSING WAS NOTICING, NOT SHARING. The panel asked once on mount and never again, so
+ * a phone left on the import screen kept showing "Connect ESPN" after the desktop had finished.
+ * These tests pin the noticing, because it is the entire feature.
+ */
+describe('6b — the phone notices a connection made on another device', () => {
+  /** `auths` for one fetch call; `hasEspnCookies` is what the panel reads. */
+  function authsResponse(connected: boolean) {
+    return {
+      ok: true,
+      json: async () => ({
+        auths: connected
+          ? [{ platform: 'espn', hasEspnCookies: true, updatedAt: '2026-09-11T12:00:00.000Z' }]
+          : [],
+      }),
+    }
+  }
+
+  function setVisibility(state: 'visible' | 'hidden') {
+    Object.defineProperty(document, 'visibilityState', { value: state, configurable: true })
+    document.dispatchEvent(new Event('visibilitychange'))
+  }
+
+  beforeEach(() => {
+    setVisibility('visible')
+  })
+
+  it('re-checks when the tab is returned to, and advances without a reload', async () => {
+    /*
+     * The real sequence: mount on the phone (not connected), user leaves for a laptop and connects
+     * there, user returns to the phone. Only the RETURN should move the screen.
+     */
+    let connected = false
+    const fetchMock = vi.fn(async () => authsResponse(connected))
+    vi.stubGlobal('fetch', fetchMock as unknown as typeof fetch)
+
+    const onConnectedChange = vi.fn()
+    render(<EspnConnectPanel onConnectedChange={onConnectedChange} />)
+    await waitFor(() => expect(document.querySelector('.af-espn-card')).toBeTruthy())
+    expect(onConnectedChange).toHaveBeenLastCalledWith(false)
+
+    // The desktop connects while the phone sits there.
+    connected = true
+
+    // Coming back to the tab is the trigger.
+    setVisibility('hidden')
+    setVisibility('visible')
+
+    await waitFor(() => expect(onConnectedChange).toHaveBeenLastCalledWith(true))
+  })
+
+  it('🛑 does NOT poll while the tab is hidden', async () => {
+    /*
+     * The phone is backgrounded or locked for the whole time the user is on the desktop. Polling
+     * a session-authenticated database read into a hidden tab is the wasteful half of this
+     * feature, and a bare interval would do exactly that.
+     */
+    const fetchMock = vi.fn(async () => authsResponse(false))
+    vi.stubGlobal('fetch', fetchMock as unknown as typeof fetch)
+
+    render(<EspnConnectPanel />)
+    await waitFor(() => expect(document.querySelector('.af-espn-card')).toBeTruthy())
+
+    const afterMount = fetchMock.mock.calls.length
+    setVisibility('hidden')
+    // Fire the listener repeatedly while hidden — none of these may reach the network.
+    for (let i = 0; i < 5; i++) document.dispatchEvent(new Event('visibilitychange'))
+
+    expect(fetchMock.mock.calls.length).toBe(afterMount)
+  })
+
+  it('stops re-checking once connected — the effect is scoped to the disconnected state', async () => {
+    const fetchMock = vi.fn(async () => authsResponse(true))
+    vi.stubGlobal('fetch', fetchMock as unknown as typeof fetch)
+
+    render(<EspnConnectPanel />)
+    /*
+     * ⚠ WAIT ON THE CONNECTED STATE, NOT ON `.af-espn-card`. That card is the CONNECT form, so it
+     * is absent once connected — waiting for it here timed out and reported "expected null to be
+     * truthy", which reads as the panel failing to render rather than as the test asking for the
+     * wrong element. The root carries `data-connected`, which is true in both states.
+     */
+    await waitFor(() =>
+      expect(document.querySelector('.af-espn[data-connected="true"]')).toBeTruthy(),
+    )
+    const afterConnected = fetchMock.mock.calls.length
+
+    setVisibility('hidden')
+    setVisibility('visible')
+
+    // Nothing further: a connected panel has no question left to ask.
+    expect(fetchMock.mock.calls.length).toBe(afterConnected)
+  })
+
+  it('tells a phone user where to go and that the screen will update itself', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => authsResponse(false)) as unknown as typeof fetch,
+    )
+    render(<EspnConnectPanel />)
+    await waitFor(() => expect(document.querySelector('.af-espn-card')).toBeTruthy())
+
+    const note = document.querySelector('.af-espn-note--mobile')
+    const text = (note?.textContent ?? '').replace(/\s+/g, ' ')
+    expect(text).toMatch(/on your computer/i)
+    expect(text).toMatch(/same account/i)
+    /*
+     * "It will notice by itself" is the claim the effect above has to keep. If the polling is ever
+     * removed, this sentence becomes a lie and this assertion is what says so.
+     */
+    expect(text).toMatch(/notice by itself/i)
+  })
+})
