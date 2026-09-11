@@ -21,6 +21,7 @@ import { persistLeagueEntryFeeFromStripeSession } from "@/lib/league-finance/lea
 import { buildSubscriptionPurchaseMetaEvent } from "@/lib/monetization/meta"
 import { trackMetaServerEvent } from "@/lib/meta-capi"
 import { redeemCouponFromWebhook } from "@/lib/promotions/sponsorCoupon"
+import { assertLeagueEntryFeeProcessingEnabled } from "@/lib/monetization/leagueEntryFeeKillSwitch"
 
 export const runtime = "nodejs"
 
@@ -344,6 +345,27 @@ async function routeCheckoutSessionCompleted(session: Stripe.Checkout.Session): 
 
   if (FINANCE_PURCHASE_TYPES.has(purchaseType)) {
     if (purchaseType === "league_entry_fee") {
+      /*
+       * 🛑 GATING THE ROUTE ALONE WOULD NOT HAVE STOPPED THIS.
+       *
+       * A Checkout session created before the kill switch closed can still be
+       * paid afterwards, and Stripe would deliver the event here — writing
+       * `LeagueDues` and incrementing a league treasury balance for a feature
+       * the published terms say does not exist. Creation and fulfillment are
+       * separate doors and both have to be shut.
+       *
+       * ⚠ THIS THROWS RATHER THAN RETURNING QUIETLY, ON PURPOSE. The catch
+       * around this call marks the ledger row `error` with this message and
+       * still answers Stripe 200, so there is no three-day retry storm and the
+       * refusal is visible to the admin health endpoint. A silent no-op would
+       * leave a real charge with no record anywhere.
+       *
+       * ⚠ MONEY MAY HAVE MOVED. Stripe has taken the customer's funds by the
+       * time this event fires. Refusing to write our side means the charge needs
+       * a human decision — refund, or fulfil manually after a legal sign-off.
+       * The session id is in the message so it can be found.
+       */
+      assertLeagueEntryFeeProcessingEnabled(`stripe session ${session.id}`)
       await persistLeagueEntryFeeFromStripeSession(session)
     }
     return purchaseType
