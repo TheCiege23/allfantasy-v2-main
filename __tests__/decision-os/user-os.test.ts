@@ -110,8 +110,18 @@ describe('resolveUserOsSnapshot', () => {
     expect(snapshot.teamHealth.overallEngagementScore).toBeGreaterThan(0)
     expect(snapshot.activitySummary.tradeEventCount).toBeGreaterThan(0)
     expect(snapshot.activitySummary.waiverEventCount).toBeGreaterThan(0)
-    expect(snapshot.managerDna).not.toBeNull()
-    expect(snapshot.managerDna?.managerId).toBe(MGR)
+    /**
+     * 🛑 `managerDna` IS WITHHELD ON PURPOSE — THIS USED TO ASSERT THE OPPOSITE.
+     * Milestone 32 stopped projecting the behavioural dossier to any client, and `userOs.ts` types
+     * the field as the literal `null` precisely so the compiler refuses a repopulation. The profile
+     * is still COMPUTED internally; it is simply never handed out.
+     *
+     * ⚠ The old `not.toBeNull()` here was asserting the pre-M32 contract, so "fix" it back and you
+     * have re-opened the exposure the milestone exists to close. Note this holds even though the
+     * snapshot is SELF-scoped — M32's criterion has no self carve-out, which is why it still bites
+     * on a manager reading their own team.
+     */
+    expect(snapshot.managerDna).toBeNull()
   })
 
   it('a manager who is NOT the commissioner (just another active league member) still gets their own real profile', async () => {
@@ -147,7 +157,19 @@ describe('resolveUserOsSnapshot', () => {
       lineupEventCount: 0,
       draftEventCount: 0,
     })
-    expect(snapshot.managerDna?.primaryIdentity).toBe('unknown')
+    /**
+     * ⚠ WITHHELD, NOT "UNKNOWN" — AND THE DIFFERENCE IS THE WHOLE POINT OF M32.
+     * This previously asserted `primaryIdentity === 'unknown'`, i.e. that a zero-activity manager
+     * got an honest empty classification rather than a fabricated one. That property still matters,
+     * but it is no longer OBSERVABLE from a snapshot, because the dossier is not projected at all.
+     *
+     * 🛑 `?.` IS WHAT MADE THE OLD ASSERTION ROT SILENTLY. Once `managerDna` became null,
+     * `snapshot.managerDna?.primaryIdentity` evaluated to `undefined` rather than throwing — so the
+     * test failed with "expected undefined to be 'unknown'", which reads like a classifier bug and
+     * is actually a field that is gone. An optional chain in an assertion turns "the thing I am
+     * testing does not exist" into "the thing I am testing has the wrong value".
+     */
+    expect(snapshot.managerDna).toBeNull()
   })
 
   it('reports no_snapshots league trend honestly when no history has been captured', async () => {

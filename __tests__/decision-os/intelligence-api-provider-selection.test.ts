@@ -358,10 +358,16 @@ describe('auth / scope enforcement (independent of provider)', () => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe('route file thin-wrapper structure', () => {
+  /**
+   * 🛑 `manager/route.ts` IS NO LONGER IN THIS LIST, AND ITS ABSENCE IS AN ASSERTION IN ITSELF.
+   * Milestone 32's privacy pass replaced that handler with `retiredProfileRoute` — a constant 410 —
+   * so it neither has nor should have any provider wiring. Leaving it here made this suite demand
+   * `resolveDataProvider()` from a file that deliberately no longer selects a provider, which is a
+   * test asserting the contract the milestone removed. It is covered by its own case below instead.
+   */
   const routeFiles = [
     'app/api/v1/intelligence/platform/route.ts',
     'app/api/v1/intelligence/league/route.ts',
-    'app/api/v1/intelligence/manager/route.ts',
   ]
 
   it.each(routeFiles)('%s calls resolveDataProvider() and contains no inline selection logic', async (relPath) => {
@@ -373,6 +379,28 @@ describe('route file thin-wrapper structure', () => {
     expect(content).toContain('resolveDataProvider()')
 
     // Must NOT import providers directly or read env inline — selection belongs in the selector
+    expect(content).not.toMatch(/import.*stubDataProvider/)
+    expect(content).not.toMatch(/import.*realDataProvider/)
+    expect(content).not.toContain("process.env['DECISION_OS_INTELLIGENCE_API_PROVIDER']")
+    expect(content).not.toContain('process.env.DECISION_OS_INTELLIGENCE_API_PROVIDER')
+  })
+
+  /**
+   * The retired sibling. This is the inverse assertion: the file must reach NO provider at all.
+   *
+   * ⚠ IT PINS ABSENCE AS WELL AS PRESENCE, BECAUSE `retiredProfileRoute` ALONE WOULD NOT. A file
+   * could import the retirement helper AND still carry live provider wiring underneath it; only the
+   * negative clauses catch that. This is the same reasoning as the positive case above, pointed the
+   * other way — and it is why the route was moved to its own test rather than deleted from the list.
+   */
+  it('app/api/v1/intelligence/manager/route.ts is RETIRED and reaches no provider at all', async () => {
+    const { readFileSync } = await import('node:fs')
+    const { resolve }      = await import('node:path')
+    const content = readFileSync(resolve(process.cwd(), 'app/api/v1/intelligence/manager/route.ts'), 'utf8')
+
+    expect(content).toContain('retiredProfileRoute')
+
+    expect(content).not.toContain('resolveDataProvider()')
     expect(content).not.toMatch(/import.*stubDataProvider/)
     expect(content).not.toMatch(/import.*realDataProvider/)
     expect(content).not.toContain("process.env['DECISION_OS_INTELLIGENCE_API_PROVIDER']")
