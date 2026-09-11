@@ -16,9 +16,19 @@
  *     production routes" — that describes the module's original build-time scope; Commissioner OS
  *     Surface Alignment Increments 1-3 already cut a subset of this exact function's output into
  *     live production (retentionRisk/retentionRiskReasons/isInactive, via Mission Control's
- *     managersAtRetentionRisk). This module extends that already-proven-safe exposure to more of
+ *     managersAtRetentionRisk). This module extends that already-SHIPPED exposure to more of
  *     the same function's fields, for a different audience — it does not open a new gate the way
  *     Phase 5.3/5.4 remain closed; those have zero live usage anywhere, unlike Phase 5.2.)
+ *
+ *     🛑 THIS LINE READ "already-proven-safe" AND NOTHING HAD PROVEN IT. A reviewer went looking
+ *     for where that proof lived and could not find it; neither could I. What was true is that
+ *     Increments 1-3 had SHIPPED it. Shipped is not proven, and the conflation was load-bearing —
+ *     this module cited it as the warrant for widening the same exposure, so one unexamined
+ *     decision was licensing the next. The exposure itself is examined in
+ *     `docs/DECISION_OS_COMPETITIVE_EDGE_PRIVACY_STATUS.md` under "Deliberately EXCLUDED" and is
+ *     judged out of milestone 32's scope on measured grounds — a different engine, emitting zero
+ *     dossier vocabulary, whose reasons are observable facts. That is a conclusion someone can now
+ *     check and disagree with, which is what the original phrasing denied a reader.
  *   - `resolveManagerIntelligencePayload` (Increments 1/2) for Manager DNA, manager-tier
  *     Recommendations, and League Trend — already provider-agnostic, already role-agnostic, already
  *     reachable without a commissioner gate on `LeagueTab.tsx` (see

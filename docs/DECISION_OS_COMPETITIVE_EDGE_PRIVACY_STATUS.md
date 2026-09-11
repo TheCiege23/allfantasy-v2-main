@@ -43,6 +43,20 @@ Overall Decision OS progress remains **34%**. This pass completes the changes be
 3. Verify old cached analysis, replay, exported/report and stored narrative payloads cannot bypass the current read projections. Rebuilt drama summaries, the manager-intelligence dashboard cache path and trade-email psychology cards are covered; that does not certify every historical payload.
 4. Characterize dynamic route dispatch and every relevant alias against the final public contract. The profile routes' current methods and canonical opponent-tendencies alias are covered in this pass.
 
+## Deliberately EXCLUDED, with the reasoning (added 2026-09-11, after review)
+
+🛑 **`managersAtRetentionRisk` exposes a NAMED THIRD PARTY to a commissioner, and it is excluded on purpose.** A reviewer surfaced it as matching neither the completed list nor the remainder, which was fair: it was in neither. `Mission Control` → `CommissionerContextAssembler` / `MissionControlCard` take the array WHOLE, not its `.length`, and each element is `{ managerId, retentionRisk, retentionRiskReasons, isInactive }` — a named person, a classification, and prose.
+
+It is excluded because it is **not the subsystem this milestone is about**, and that was measured rather than assumed:
+
+- It comes from `lib/decision-os/behavioral/manager-intelligence.ts`, which emits **zero** occurrences of the dossier vocabulary — no `primaryIdentity`, `decisionStyle`, `transactionStyle`, `riskTendency`, `engagementReliability` or `archetype`. It is a different engine from the phase-6 DNA / psychological profiles this pass closes.
+- `retentionRiskReasons` are **observable facts, not inferred labels**. The complete emitted set is two strings: `Manager has been inactive for N days` and `Manager has not set their lineup this season`. That is the same standard applied to the recommendation producer in this pass — state the observable fact, never the classification — and this surface already met it.
+- The risk tier ships **alongside** its reasons, so a commissioner sees the basis rather than a verdict.
+
+⚠ **This is an exclusion, not a clearance, and the distinction matters.** It IS a third-party disclosure: a commissioner learns that a named manager has not set a lineup. The judgement here is that operational league health with a disclosed observable basis is not a "raw behavioral profile", not that the disclosure is nothing. If that judgement is wrong, the fix is at `leagueHealthAlignment.ts:124` and the two consumers, and it is a product decision about what a commissioner may see — not a privacy defect to be quietly patched.
+
+⚠ **AND "ALREADY IN PRODUCTION" WAS BEING READ AS "PROVEN SAFE".** `lib/decision-os/userOs.ts` described this exposure as "already-proven-safe" and extended it on that basis. It was already SHIPPED; nobody had shown it was safe. The wording is corrected there. Shipped is not proven, and a comment that conflates them turns one unexamined decision into the licence for the next.
+
 ## Next functional work
 
 Build the authenticated decision-specific Competitive Edge evidence contract from actual trade, draft and waiver facts. It must bind evidence to the selected move and manager, enforce coverage and freshness, and return bounded factual explanations. Acceptance probabilities and counters require calibration; the new entry does not invent them.
