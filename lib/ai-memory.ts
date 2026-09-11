@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/prisma'
+import { resolveLeagueMembership } from '@/lib/league-access'
 import { UserToneSettings, DEFAULT_TONE_SETTINGS } from '@/lib/ai-personality'
 
 type AIUserProfile = {
@@ -360,23 +361,61 @@ export async function getFullAIContext(options: {
     })
   }
 
+  /*
+   * 🛑 THE `leagueId` ARRIVES FROM A REQUEST BODY AND WAS TRUSTED. Traced
+   * 2026-09-11 from `app/api/chat/chimmy/route.ts`: `leagueId` comes off the
+   * form, and the route refuses an unauthorized one ONLY when the question is
+   * classified as needing league grounding. For every other question the id is
+   * never nulled, flows into `planInput`, and lands here — where the three reads
+   * below were keyed on it with no viewer column at all.
+   *
+   * ⚠ THE SIXTEEN BUILDERS IN THAT ROUTE ARE ALREADY CLOSED, which is what made
+   * this one easy to miss: they were gated on the authorized `leagueSnapshot`,
+   * and `leagueSnapshot` is null when grounding fails. This function does not
+   * take the snapshot — it takes the raw id — so that fix did not reach it.
+   *
+   * ⚠ GATED HERE RATHER THAN AT THE CALLER because there are two callers
+   * (`chimmy-memory-context.ts` and the chat route) and the next one will not
+   * know to pass an authorized id. Membership is proved once, and an id that
+   * cannot be proved is simply not used.
+   */
+  let authorizedLeagueId: string | undefined
+  if (leagueId && userId) {
+    const membership = await resolveLeagueMembership(leagueId, userId)
+    if (membership.ok) authorizedLeagueId = leagueId
+  }
+
   let leagueContext: AILeagueContext | null = null
-  if (leagueId) {
+  if (authorizedLeagueId) {
     leagueContext = await prisma.aILeagueContext.findUnique({
-      where: { leagueId },
+      where: { leagueId: authorizedLeagueId },
     })
   }
 
   let teamSnapshots: AITeamStateSnapshot[] = []
-  if (leagueId && teamId) {
-    teamSnapshots = await getTeamSnapshots(leagueId, teamId, 6)
+  if (authorizedLeagueId && teamId) {
+    teamSnapshots = await getTeamSnapshots(authorizedLeagueId, teamId, 6)
   }
 
-  const recentEvents = await getRecentMemoryEvents({
-    userId: userProfile?.userId,
-    leagueId,
-    limit: 10,
-  })
+  /*
+   * 🛑 AND THIS ONE FAILED OPEN IN A SECOND, QUIETER WAY. `getRecentMemoryEvents`
+   * applies its viewer filter only `if (options.userId)` (see :253), so a null
+   * `userProfile` made `where.userId` vanish and the query became league-wide
+   * over every user's memory events. With no league either, `where` was `{}` —
+   * the ten most recent memory events in the system, for anyone.
+   *
+   * ⚠ A SILENTLY-OPTIONAL FILTER IS ITS OWN BUG CLASS: nothing throws and the
+   * rows look normal. So the viewer is resolved explicitly, and when there is no
+   * viewer to scope by there is no query.
+   */
+  const eventViewerId = userId ?? userProfile?.userId
+  const recentEvents = eventViewerId
+    ? await getRecentMemoryEvents({
+        userId: eventViewerId,
+        leagueId: authorizedLeagueId,
+        limit: 10,
+      })
+    : []
 
   let patterns: string[] = []
   if (userProfile?.userId) {
