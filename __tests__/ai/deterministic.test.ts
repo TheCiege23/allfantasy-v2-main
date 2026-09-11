@@ -315,6 +315,47 @@ describe('tryDeterministicAnswer', () => {
     expect(result).toContain('SportsInjury cache')
   })
 
+  /*
+   * ⚠ BOTH HALVES ARE LOAD-BEARING AND THEY PULL IN OPPOSITE DIRECTIONS.
+   *
+   * The MISS half is the bug that was shipped: "live World Cup odds and
+   * injuries" was answered "I do not have cached SOCCER injury data" — typed
+   * `answer` — because the injury builder matched the word "injuries", missed,
+   * and ended the dispatch before the unsupported-live-data refusal. Typed
+   * `answer`, it also suppressed the live-search escalation at
+   * app/api/chat/chimmy/route.ts:1413, which only ever fires on a `refusal`.
+   *
+   * The HIT half is the guard against the obvious-looking fix. Hoisting the
+   * route's category check above these builders passes the MISS half and breaks
+   * this one — and in production it would refuse "Any injuries on the Chiefs
+   * playoff bracket?" with a World Cup line, because the router's `isWorldCup`
+   * is `WORLD_CUP_RE || BRACKET_RE` and "bracket" alone satisfies it. Data from
+   * our own rows wins on every route; only a miss yields.
+   */
+  it('yields a cached MISS to the unsupported-live-data refusal but never a cached HIT', async () => {
+    mockSportsInjuryFindMany.mockResolvedValueOnce([
+      {
+        playerName: 'Kylian Mbappe',
+        team: 'France',
+        status: 'Questionable',
+        description: 'Ankle knock',
+      },
+    ])
+
+    const hit = await tryDeterministicAnswerDetailed('What are the live World Cup injuries right now?')
+
+    expect(hit?.kind).toBe('answer')
+    expect(hit?.text).toContain('Kylian Mbappe')
+    expect(hit?.text).toContain('SportsInjury cache')
+
+    mockSportsInjuryFindMany.mockResolvedValueOnce([])
+
+    const miss = await tryDeterministicAnswerDetailed('What are the live World Cup injuries right now?')
+
+    expect(miss?.kind).toBe('refusal')
+    expect(miss?.text).toContain("I don't have fresh live provider data")
+  })
+
   it('refuses exact stat-event questions when event data is unavailable', async () => {
     const result = await tryDeterministicAnswer('Who hit home runs across MLB yesterday?')
 
