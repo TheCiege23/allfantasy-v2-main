@@ -1,6 +1,7 @@
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
+import { resolveLeagueMembership } from '@/lib/league-access'
 import {
   resolveImportCoverageSummary,
   type ImportCoverageSummary,
@@ -318,7 +319,84 @@ function settingWeek(settings: unknown, ...keys: string[]): number | null {
  * league's own settings and omits any phase whose setting is absent.
  */
 
+/**
+ * What a league-home read can come back as.
+ *
+ * 🛑 `unauthorized` DELIBERATELY MERGES "NO SUCH LEAGUE" WITH "NOT YOUR LEAGUE",
+ * AND THAT MERGE IS THE SECURITY PROPERTY. Two variants would let a caller — or
+ * a future refactor of one — render them differently, and the difference is
+ * itself the disclosure: a viewer who can tell 403 from 404 can enumerate which
+ * league ids exist by watching which error comes back. Collapsing them here makes
+ * the two indistinguishable BY CONSTRUCTION, rather than by every caller
+ * remembering to treat them alike.
+ *
+ * `unavailable` is the only variant meaning "you may read this league and we
+ * could not", and so the only one allowed to render the "try again" copy.
+ */
+export type LeagueHomeResult =
+  | { status: 'ok'; data: LeagueHomeData }
+  | { status: 'unauthorized' }
+  | { status: 'unavailable' }
+
+/**
+ * The league home, for a viewer entitled to it.
+ *
+ * 🛑 THE ACCESS CHECK IS THE FIRST STATEMENT AND NOTHING READS BEFORE IT.
+ *
+ * Until 2026-09-10 this was `findUnique({ where: { id: leagueId } })` with no
+ * `userId` clause. `userId` was used only AFTER the league had loaded, to find
+ * the viewer's own team — so a non-member received the entire league home with
+ * `yourTeam` degraded to "we cannot tell which team is yours". Measured: an
+ * account registered seconds earlier, with no `League.userId`, no
+ * `RedraftLeagueMember`, no `Roster` and no claimed `LeagueTeam`, fetched
+ * `/core?league=<someone else's id>` and got HTTP 200, the league home root, and
+ * the league's real name in the `<h1>` — while `leagueNameForTitle` in the same
+ * route scoped correctly and withheld that name from the `<title>`. One request,
+ * two answers, and the safe one lost.
+ *
+ * ⚠ THE GATE AND THE LOADER ARE SEPARATE FUNCTIONS ON PURPOSE. The loader fans
+ * out to standings, scoreboard, activity, trades, draft HQ, the commissioner hub
+ * and import coverage — a dozen reads across as many modules. Guarding that body
+ * by putting a check "at the top" of it invites the next edit to add a query
+ * above the check, and nothing would catch it. Here the body is unreachable
+ * without passing the gate, because it is a different function and this is its
+ * only caller.
+ *
+ * ⚠ NO ADMIN BYPASS. `resolveLeagueMembership` has none and this does not add
+ * one: a platform admin who is not in the league is refused like anyone else. If
+ * operators need cross-league support views, that is a separate, deliberate,
+ * auditable surface — not an implicit widening of a page read.
+ */
 export async function getLeagueHomeData(
+  leagueId: string,
+  userId: string,
+  requestedWeek?: number | null,
+): Promise<LeagueHomeResult> {
+  const membership = await resolveLeagueMembership(leagueId, userId)
+  if (!membership.ok) return { status: 'unauthorized' }
+
+  try {
+    const data = await loadAuthorizedLeagueHome(leagueId, userId, requestedWeek)
+    /*
+     * `null` means the league vanished between the membership check and the read
+     * — a race, not a permission decision. The viewer WAS entitled, so it is
+     * reported as a read failure, which is what actually happened.
+     */
+    return data ? { status: 'ok', data } : { status: 'unavailable' }
+  } catch {
+    /*
+     * ⚠ CAUGHT HERE RATHER THAN AT THE CALL SITE, WHICH USED TO DO
+     * `.catch(() => null)`. That collapsed everything into one "no data" value,
+     * so an authorization refusal and a database timeout were the same thing to
+     * the page — which is exactly how a refusal came to be rendered as a
+     * temporary read failure. Catching inside the `try`, after the gate has
+     * already returned, means only an AUTHORIZED read can reach this branch.
+     */
+    return { status: 'unavailable' }
+  }
+}
+
+async function loadAuthorizedLeagueHome(
   leagueId: string,
   userId: string,
   /**

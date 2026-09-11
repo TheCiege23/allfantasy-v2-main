@@ -167,6 +167,14 @@ export async function getPortfolio(userId: string): Promise<PortfolioData> {
   }
 
   const leagueIds = [...new Set(teams.map((t) => t.leagueId))]
+  /*
+   * ⚠ VIEWER-DERIVED, AND THE DERIVATION IS FOUR LINES UP RATHER THAN FOUR FILES
+   * AWAY — which is why this is a marker and not a gate. `teams` is
+   * `where: { claimedByUserId: userId }`, so `leagueIds` can only hold leagues
+   * the viewer has a claimed team in, and what comes back is a per-league COUNT
+   * with no league content in it. Widen `teams` and this widens with it.
+   */
+  // core-app-league-read: ids derive from the claimedByUserId read directly above
   const counts = await prisma.leagueTeam.groupBy({
     by: ['leagueId'],
     where: { leagueId: { in: leagueIds } },

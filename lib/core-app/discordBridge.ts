@@ -1,23 +1,37 @@
+import 'server-only'
+
 import { prisma } from '@/lib/prisma'
+import { loadLeagueForOwner } from '@/lib/core-app/loadLeagueFor'
 import { isBotConfigured } from '@/lib/discord/bot'
 import { channelLink } from '@/lib/discord/deepLinks'
 import { DISCORD_BOT_PERMISSIONS, DISCORD_CLIENT_ID } from '@/lib/discord/constants'
+import {
+  BRIDGE_SURFACES,
+  directionFromFlags,
+  type BridgeMapping,
+  type BridgeMember,
+  type DiscordBridgeData,
+} from '@/lib/core-app/discordBridgeContract'
 
 /**
  * 32a — the Discord bridge, read from real state.
  *
- * ⚠ DIRECTION IS THREE STATES, AND "OFF" IS NOT "POST-ONLY WITH THE SWITCH
- * DOWN". The schema stores three booleans (`syncEnabled`, `syncOutbound`,
- * `syncInbound`); this module is the ONLY place that translates them to and from
- * the three directions a commissioner actually chooses. Two translations would
- * eventually disagree, and the failure mode of disagreeing about direction is a
- * private message in a public channel.
+ * The shared vocabulary this returns lives in `discordBridgeContract.ts`, which
+ * the client screen imports. Everything that touches the database lives HERE,
+ * behind `server-only`, so the boundary is enforced by the bundler rather than
+ * by remembering. See that file for why the two were separated.
  *
- * ⚠ COMMISSIONER-ONLY SURFACES DEFAULT TO OFF, AND THAT DEFAULT IS LOAD-BEARING.
- * A private note that appears in a public Discord channel is the kind of mistake
- * you only make once. `defaultDirection` is 'off' for those surfaces here, the
- * column default in the migration says the same, and the UI refuses to present
- * them as on-by-default. Three places, deliberately.
+ * 🛑 THIS SCREEN IS OWNER-ONLY, AND THAT IS NARROWER THAN LEAGUE MEMBERSHIP ON
+ * PURPOSE. It configures the whole league's bridge, so it deliberately does NOT
+ * go through `loadLeagueFor` — that admits any of the four canonical membership
+ * paths, which would hand every manager in the league the controls for what
+ * relays into a public Discord channel. It goes through `loadLeagueForOwner`
+ * instead — the owner-only sibling in the same chokepoint file, so the two
+ * predicates sit side by side and neither drifts unwatched.
+ *
+ * ⚠ SO A CO-COMMISSIONER IS REFUSED HERE. That matches the behaviour this file
+ * has always had and is unchanged by the split; it is recorded because it is a
+ * real product question, not because it was decided here.
  *
  * ⚠ ONLY `league_chat` IS WIRED TODAY, AND THE REASON CHANGED ON 2026-08-30.
  * It used to be the schema: `surface` did not exist. It does now —
@@ -36,153 +50,41 @@ import { DISCORD_BOT_PERMISSIONS, DISCORD_CLIENT_ID } from '@/lib/discord/consta
  * and the screen says why.
  */
 
-export type BridgeDirection = 'both' | 'post-only' | 'off'
-
-export type BridgeSurfaceId = 'league_chat' | 'trades_waivers' | 'draft_room' | 'commissioner_notes'
-
-export type BridgeSurface = {
-  id: BridgeSurfaceId
-  label: string
-  description: string
-  /** Commissioner-only surfaces default OFF and are labelled as such. */
-  commissionerOnly: boolean
-  defaultDirection: BridgeDirection
-}
-
-export const BRIDGE_SURFACES: BridgeSurface[] = [
-  {
-    id: 'league_chat',
-    label: 'League chat',
-    description: 'Everyday league talk. The surface the bridge relays today.',
-    commissionerOnly: false,
-    defaultDirection: 'both',
-  },
-  {
-    id: 'trades_waivers',
-    label: 'Trades & waivers',
-    description: 'Offers, accepts, vetoes and claim results.',
-    commissionerOnly: false,
-    defaultDirection: 'post-only',
-  },
-  {
-    id: 'draft_room',
-    label: 'Draft room',
-    description: 'Picks as they land. Bursty on draft night — see rate limiting below.',
-    commissionerOnly: false,
-    defaultDirection: 'post-only',
-  },
-  {
-    id: 'commissioner_notes',
-    label: 'Commissioner notes',
-    description: 'Private commissioner working notes.',
-    commissionerOnly: true,
-    /*
-     * ⚠ OFF. Not a preference — a safety default. Do not "improve" this to
-     * post-only because the other three are on.
-     */
-    defaultDirection: 'off',
-  },
-]
-
-/** The three booleans the schema stores → the one direction a human picks. */
-export function directionFromFlags(flags: {
-  syncEnabled: boolean
-  syncOutbound: boolean
-  syncInbound: boolean
-}): BridgeDirection {
-  if (!flags.syncEnabled) return 'off'
-  if (flags.syncOutbound && flags.syncInbound) return 'both'
-  if (flags.syncOutbound) return 'post-only'
-  // Inbound-only is not an offered direction; treat it as off rather than
-  // inventing a fourth state the UI cannot express.
-  return 'off'
-}
-
-/** The inverse. The PATCH route at /api/discord/league takes exactly these. */
-export function flagsFromDirection(direction: BridgeDirection): {
-  syncEnabled: boolean
-  syncOutbound: boolean
-  syncInbound: boolean
-} {
-  if (direction === 'off') return { syncEnabled: false, syncOutbound: false, syncInbound: false }
-  if (direction === 'post-only') return { syncEnabled: true, syncOutbound: true, syncInbound: false }
-  return { syncEnabled: true, syncOutbound: true, syncInbound: true }
-}
-
-export type BridgeMapping = {
-  surface: BridgeSurface
-  /** False when no Discord channel is mapped to this surface. */
-  mapped: boolean
-  /**
-   * False when the schema cannot yet express this mapping at all — the
-   * `surface` column is unapplied. Distinct from `mapped: false`, which means
-   * "expressible, just not set up".
-   */
-  available: boolean
-  direction: BridgeDirection
-  channelName: string | null
-  channelUrl: string | null
-}
-
-export type BridgeMember = {
-  teamName: string
-  ownerName: string
-  linked: boolean
-  discordUsername: string | null
-  discordAvatar: string | null
-}
-
-export type DiscordBridgeData = {
-  leagueId: string
-  leagueName: string
-  /** False when DISCORD_BOT_TOKEN is unset — nothing can relay at all. */
-  botConfigured: boolean
-  /** Has this commissioner connected their own Discord account? */
-  connected: boolean
-  guildName: string | null
-  guildId: string | null
-  mappings: BridgeMapping[]
-  members: BridgeMember[]
-  /** The bot-install URL, with exactly the permissions the bridge needs. */
-  installUrl: string | null
-  /**
-   * True while the outbound relay is not surface-aware. The screen prints this as a
-   * plain sentence rather than hiding three dead controls.
-   */
-  surfacesPending: boolean
-}
-
-/** The three scopes the connect flow asks for, and the ones it never does. */
-export const BRIDGE_SCOPES_REQUESTED = [
-  'Create channels and webhooks in the server you choose',
-  'Read messages in the channels you map — and only those',
-  'Send messages in the channels you map — and only those',
-]
-
-export const BRIDGE_SCOPES_REFUSED = [
-  'Your DMs. Never requested, never bridged.',
-  'Server member management. We do not kick, ban or assign roles.',
-  'Any channel you did not map. The bot cannot see the rest of the server.',
-]
-
 export async function getDiscordBridge(
   userId: string,
   leagueId: string,
 ): Promise<DiscordBridgeData | null> {
-  const league = await prisma.league.findFirst({
-    where: { id: leagueId },
-    select: { id: true, name: true, userId: true },
-  })
-  // Commissioner-only surface: this screen configures the whole league's bridge.
-  if (!league || league.userId !== userId) return null
+  /*
+   * 🛑 OWNER-ONLY, AND THROUGH THE CHOKEPOINT RATHER THAN HAND-ROLLED.
+   * `loadLeagueForOwner` carries the nullish guard that stops Prisma dropping an
+   * `undefined` `userId` out of the `where` — which would return the row to any
+   * caller. An earlier version of this function scoped the query inline and a
+   * comment here claimed it was equivalent to the read-then-compare it replaced
+   * "for every input"; that was false for exactly `undefined`.
+   *
+   * ⚠ DELIBERATELY NOT `loadLeagueFor`. That helper admits all four canonical
+   * membership paths, and this screen configures what relays into a public
+   * Discord channel for the whole league — member-wide access would be a
+   * privilege widening dressed as consistency. A co-commissioner is refused
+   * here; that is a product question with one implementation to change.
+   */
+  const league = await loadLeagueForOwner(userId, leagueId, { id: true, name: true })
+  if (!league) return null
 
   const [profile, link, teams] = await Promise.all([
     prisma.userProfile.findUnique({
       where: { userId },
       select: { discordUserId: true, discordGuildId: true },
     }),
+    /*
+     * ⚠ SCOPED TO `league_chat`. `@@unique([leagueId, surface])` permits four
+     * rows per league, and whatever row came back was rendered under the League
+     * chat heading unconditionally — so once a `commissioner_notes` row exists,
+     * an unfiltered `findFirst` could print the commissioner channel's name, URL
+     * and direction as if it were league chat.
+     */
     prisma.discordLeagueChannel.findFirst({
-      where: { leagueId },
+      where: { leagueId, surface: 'league_chat' },
       include: { guild: { select: { guildName: true } } },
     }),
     prisma.leagueTeam.findMany({

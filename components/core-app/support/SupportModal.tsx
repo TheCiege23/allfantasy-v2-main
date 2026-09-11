@@ -1,6 +1,7 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useOverlayContainment } from '@/components/core-app/useOverlayContainment'
 import { SUPPORT_WIDGET_TOOL } from '@/lib/support/support-widget'
 import '@/components/core-app/af-support.css'
 
@@ -97,19 +98,37 @@ export function SupportModal({
   const [status, setStatus] = useState<'form' | 'sending' | 'sent' | 'error'>('form')
   const [error, setError] = useState<string | null>(null)
   const [excluded, setExcluded] = useState<Set<string>>(new Set())
+  const panelRef = useRef<HTMLDivElement | null>(null)
+  /** The backdrop. A SIBLING of the panel, so it needs an inert exemption — see below. */
+  const scrimRef = useRef<HTMLButtonElement | null>(null)
 
   useEffect(() => {
     if (open) setLeagueId(pageLeagueId)
   }, [open, pageLeagueId])
 
-  useEffect(() => {
-    if (!open) return
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose()
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [open, onClose])
+  /*
+   * The same containment every other /core overlay now takes.
+   *
+   * This modal is opened FROM the Comms drawer's footer, so the two are open
+   * together routinely — and before this it had a bare `window` Escape listener
+   * and nothing else, so one Escape closed the modal AND the drawer underneath
+   * it, and Tab walked straight out of a dialog marked `aria-modal="true"`.
+   *
+   * 🛑 AND THE SCRIM IS A SIBLING OF THE PANEL, SO IT MUST BE EXEMPTED FROM THE
+   * INERT SWEEP OR CLICKING THE BACKDROP STOPS CLOSING THIS MODAL. Same defect
+   * and same fix as `CommsDrawer` — see the note there. `keepClickableRefs`
+   * rather than `keepInteractiveRefs`: the backdrop should be clickable but not
+   * tabbable, or Tab off the last control lands on a transparent full-viewport
+   * button and focus appears to vanish.
+   */
+  const keepClickable = useMemo(() => [scrimRef], [])
+
+  useOverlayContainment({
+    active: open,
+    containerRef: panelRef,
+    onClose,
+    keepClickableRefs: keepClickable,
+  })
 
   /*
    * Everything we would attach, itemised. Read at render rather than at submit
@@ -204,8 +223,21 @@ export function SupportModal({
 
   return (
     <>
-      <button type="button" className="af-sp-scrim" aria-label="Close support" onClick={onClose} />
-      <div className="af-sp" role="dialog" aria-modal="true" aria-label="Contact support">
+      <button
+        type="button"
+        ref={scrimRef}
+        className="af-sp-scrim"
+        aria-label="Close support"
+        onClick={onClose}
+      />
+      <div
+        className="af-sp"
+        ref={panelRef}
+        tabIndex={-1}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Contact support"
+      >
         <header className="af-sp-head">
           <h2 className="af-sp-title">
             {status === 'sent' ? 'Sent' : status === 'error' ? "That didn't send" : 'Tell us what happened'}

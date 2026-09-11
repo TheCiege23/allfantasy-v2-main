@@ -1,6 +1,7 @@
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
+import { loadLeagueFor } from './loadLeagueFor'
 import { crosswalkToSleeperIds } from './rosterIdCrosswalk'
 import {
   composePlayerIdentities,
@@ -233,9 +234,8 @@ export async function getMatchupData(
   userId: string,
   weekParam?: number | null
 ): Promise<MatchupData | null> {
-  const league = await prisma.league.findUnique({
-    where: { id: leagueId },
-    select: {
+  /* Gated read — see lib/core-app/loadLeagueFor.ts. A non-member gets null here. */
+  const league = await loadLeagueFor(userId, leagueId, {
       id: true,
       name: true,
       platform: true,
@@ -245,8 +245,7 @@ export async function getMatchupData(
       logoUrl: true,
       avatarUrl: true,
       settings: true,
-    },
-  })
+    })
   if (!league) return null
 
   const platform = String(league.platform ?? 'manual').toLowerCase()

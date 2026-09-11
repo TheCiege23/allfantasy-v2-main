@@ -155,6 +155,8 @@
     "sync:player-images": "tsx scripts/sync-player-images.ts",
     "capture:pwa-screenshots": "node scripts/capture-pwa-screenshots.mjs",
     "sync:sports-foundation": "node --env-file=.env --require ./scripts/_audit-preload.cjs --import tsx scripts/sync-sports-foundation.ts",
+    "guard:core-app-league-reads": "node scripts/check-core-app-league-reads.mjs",
+    "guard:core-app-server-only": "node scripts/check-core-app-server-only.mjs",
     "guard:db-first-api": "node scripts/check-db-first-api-boundary.mjs",
     "guard:decision-engine": "node scripts/check-decision-engine-boundary.mjs",
     "guard:trade-shadow": "node scripts/check-trade-shadow-readiness.mjs",

@@ -517,6 +517,26 @@ async function loadRailProjections(args: {
    * league on this surface to the generic number.
    */
   const [leagueMeta, starterRows]: [LeagueMetaRow[], StarterRow[]] = await Promise.all([
+    /*
+     * 🛑 THE `WHERE` NAMES NO VIEWER, AND THAT IS SAFE ONLY BECAUSE OF WHERE THE
+     * IDS COME FROM. Traced 2026-09-10 rather than assumed: `dbLeagueIds` comes
+     * from `args.fixtures`, and a fixture is only pushed when
+     * `yourRosterByLeague.get(m.leagueId)` matches the row's roster. That map is
+     * filled under `if (meta.isYours)`, and `isYours` is
+     * `t.claimedByUserId === userId`. So every id in this array is a league the
+     * viewer holds a CLAIMED TEAM in, and passing one they do not own is not
+     * reachable through this function's only caller.
+     *
+     * ⚠ WHICH MAKES THE CALLER LOAD-BEARING. Do not repoint this at a wider
+     * fixture source without putting a viewer clause in the SQL. The safety
+     * lives 200 lines away in another function — precisely the shape
+     * `loadLeagueFor`'s docblock warns about, "userId used only to locate the
+     * viewer's own team". It is marked rather than gated because `loadLeagueFor`
+     * reads ONE league by id and this prices a whole rail in one round trip; the
+     * honest fix is a viewer clause here, which is a behaviour change to a hot
+     * path and not a guard fix.
+     */
+    // core-app-league-read: ids are the viewer's own claimed-team leagues (traced above)
     prisma
       .$queryRawUnsafe<LeagueMetaRow[]>(
         `SELECT id,

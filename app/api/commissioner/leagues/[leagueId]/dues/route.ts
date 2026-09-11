@@ -6,6 +6,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { resolveLeagueMembership } from '@/lib/league-access'
 import { toPrismaJsonInput } from '@/lib/prisma-json'
 import { notifyCommissionerChange } from '@/lib/commissioner/CommissionerChangeNotifier'
 
@@ -49,6 +50,32 @@ export async function GET(
   const session = (await getServerSession(authOptions as never)) as { user?: { id?: string } } | null
   if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const { leagueId } = await params
+  /*
+   * 🛑 MEMBER GATE. This GET returned the league to ANY signed-in user. It
+   * computed the commissioner flag and handed it back as a FIELD for the UI to
+   * branch on, and never refused on it — so naming any leagueId returned that
+   * league's settings and team list, owner names included.
+   *
+   * ⚠ MEMBER-LEVEL, NOT COMMISSIONER-LEVEL, AND THAT IS LOAD-BEARING.
+   * `LeagueDuesTrackerPanel` and `RosterSettingsEditor` fetch this, read
+   * `isCommissioner` off the response, and render READ-ONLY for ordinary
+   * members. Gating at commissioner level would close the hole and break every
+   * non-commissioner in the league. The write handlers keep their own stricter
+   * check; this one only has to exclude non-members.
+   *
+   * ⚠ BEFORE THE READ, not after. `resolveLeagueMembership` is the four-path
+   * canonical predicate (owner, RedraftLeagueMember, roster-backed, claimed
+   * team) and returns 401/404/403 itself, so a missing league and a league that
+   * is not yours stay indistinguishable to the caller.
+   */
+  const membership = await resolveLeagueMembership(leagueId, session.user.id)
+  if (!membership.ok) {
+    return NextResponse.json(
+      { error: membership.status === 404 ? 'Not found' : 'Forbidden' },
+      { status: membership.status },
+    )
+  }
+
   const league = await prisma.league.findUnique({
     where: { id: leagueId },
     select: {

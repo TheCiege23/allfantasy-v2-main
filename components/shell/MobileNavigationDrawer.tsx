@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect } from "react"
+import { useEffect, useRef } from "react"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import { X, Shield, Bell, Sparkles, Search } from "lucide-react"
@@ -25,17 +25,54 @@ export function MobileNavigationDrawer({
   const pathname = usePathname() ?? ""
   const router = useRouter()
   const chimmyEntry = getPrimaryChimmyEntry({ source: "top_bar" })
+  const drawerRef = useRef<HTMLElement | null>(null)
+  const closeButtonRef = useRef<HTMLButtonElement | null>(null)
+  const restoreFocusRef = useRef<HTMLElement | null>(null)
 
   useEffect(() => {
     if (!open) return
+    restoreFocusRef.current = document.activeElement instanceof HTMLElement
+      ? document.activeElement
+      : null
+    const focusFrame = window.requestAnimationFrame(() => closeButtonRef.current?.focus())
+
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         event.preventDefault()
         onClose()
+        return
+      }
+      if (event.key !== "Tab") return
+
+      const focusable = Array.from(
+        drawerRef.current?.querySelectorAll<HTMLElement>(
+          'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+        ) ?? []
+      ).filter((node) => node.getClientRects().length > 0)
+      if (focusable.length === 0) {
+        event.preventDefault()
+        return
+      }
+
+      const first = focusable[0]
+      const last = focusable[focusable.length - 1]
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault()
+        last.focus()
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault()
+        first.focus()
       }
     }
     window.addEventListener("keydown", onKeyDown)
-    return () => window.removeEventListener("keydown", onKeyDown)
+    return () => {
+      window.cancelAnimationFrame(focusFrame)
+      window.removeEventListener("keydown", onKeyDown)
+      const restoreTarget = restoreFocusRef.current
+      if (restoreTarget?.isConnected) {
+        window.requestAnimationFrame(() => restoreTarget.focus())
+      }
+    }
   }, [open, onClose])
 
   if (!open) return null
@@ -62,7 +99,8 @@ export function MobileNavigationDrawer({
         onClick={onClose}
       />
       <aside
-        className="fixed top-0 right-0 z-50 h-full w-[min(100vw-2rem,280px)] border-l shadow-xl transition-transform lg:hidden"
+        ref={drawerRef}
+        className="fixed right-0 top-0 z-[51] h-[100dvh] w-[min(100vw,22rem)] border-l shadow-xl transition-transform lg:hidden"
         style={{
           background: "var(--panel)",
           borderColor: "var(--border)",
@@ -75,19 +113,20 @@ export function MobileNavigationDrawer({
         aria-label="Navigation menu"
       >
         <div className="flex flex-col h-full">
-          <div className="flex items-center justify-between px-4 py-3 border-b" style={{ borderColor: "var(--border)" }}>
+          <div className="flex items-center justify-between border-b px-4 pb-3 pt-[max(0.75rem,env(safe-area-inset-top))]" style={{ borderColor: "var(--border)" }}>
             <span className="text-sm font-semibold" style={{ color: "var(--text)" }}>Menu</span>
             <button
               type="button"
+              ref={closeButtonRef}
               onClick={onClose}
-              className="flex h-9 w-9 items-center justify-center rounded-lg border"
+              className="flex h-11 w-11 items-center justify-center rounded-lg border"
               style={{ borderColor: "var(--border)", color: "var(--muted)" }}
               aria-label="Close menu"
             >
               <X className="h-5 w-5" />
             </button>
           </div>
-          <nav className="flex-1 overflow-y-auto p-3 space-y-4">
+          <nav className="flex-1 space-y-4 overscroll-contain overflow-y-auto p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
             <div className="rounded-xl border p-2" style={{ borderColor: "var(--border)" }}>
               <p className="px-1 pb-1 text-[10px] font-semibold uppercase tracking-wide" style={{ color: "var(--muted)" }}>
                 Quick actions
@@ -96,7 +135,7 @@ export function MobileNavigationDrawer({
                 <Link
                   href="/messages"
                   onClick={onClose}
-                  className="flex items-center gap-2 rounded-lg px-3 py-2.5 text-sm font-medium transition"
+                  className="flex min-h-11 items-center gap-2 rounded-lg px-3 py-2.5 text-sm font-medium transition"
                   aria-current={isNavItemActive(pathname, "/messages") ? "page" : undefined}
                   style={{
                     background: isNavItemActive(pathname, "/messages")
@@ -113,7 +152,7 @@ export function MobileNavigationDrawer({
                 <Link
                   href={chimmyEntry.href}
                   onClick={onClose}
-                  className="flex items-center gap-2 rounded-lg px-3 py-2.5 text-sm font-medium transition"
+                  className="flex min-h-11 items-center gap-2 rounded-lg px-3 py-2.5 text-sm font-medium transition"
                   style={{ color: "var(--text)" }}
                 >
                   <Sparkles className="h-4 w-4" />
@@ -130,7 +169,7 @@ export function MobileNavigationDrawer({
                     onClose()
                     router.push("/dashboard")
                   }}
-                  className="flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-sm font-medium transition"
+                  className="flex min-h-11 w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-sm font-medium transition"
                   style={{ color: "var(--text)" }}
                 >
                   <Search className="h-4 w-4" />
@@ -152,7 +191,7 @@ export function MobileNavigationDrawer({
                       href={item.href}
                       onClick={onClose}
                       aria-current={active ? "page" : undefined}
-                      className="block rounded-lg px-3 py-2.5 text-sm font-medium transition"
+                      className="flex min-h-11 items-center rounded-lg px-3 py-2.5 text-sm font-medium transition"
                       style={{
                         background: active ? "color-mix(in srgb, var(--accent-cyan) 18%, transparent)" : "transparent",
                         color: active ? "var(--accent-cyan-strong)" : "var(--text)",
@@ -178,7 +217,7 @@ export function MobileNavigationDrawer({
                       href={item.href}
                       onClick={onClose}
                       aria-current={active ? "page" : undefined}
-                      className="block rounded-lg px-3 py-2.5 text-sm font-medium transition"
+                      className="flex min-h-11 items-center rounded-lg px-3 py-2.5 text-sm font-medium transition"
                       style={{
                         background: active ? "color-mix(in srgb, var(--accent-cyan) 18%, transparent)" : "transparent",
                         color: active ? "var(--accent-cyan-strong)" : "var(--text)",
@@ -204,7 +243,7 @@ export function MobileNavigationDrawer({
                       href={item.href}
                       onClick={onClose}
                       aria-current={active ? "page" : undefined}
-                      className="block rounded-lg px-3 py-2.5 text-sm font-medium transition"
+                      className="flex min-h-11 items-center rounded-lg px-3 py-2.5 text-sm font-medium transition"
                       style={{
                         background: active ? "color-mix(in srgb, var(--accent-cyan) 18%, transparent)" : "transparent",
                         color: active ? "var(--accent-cyan-strong)" : "var(--text)",
@@ -230,7 +269,7 @@ export function MobileNavigationDrawer({
               <Link
                 href="/admin"
                 onClick={onClose}
-                className="block rounded-lg px-3 py-2.5 text-sm font-medium transition"
+                className="flex min-h-11 items-center rounded-lg px-3 py-2.5 text-sm font-medium transition"
                 aria-current={pathname?.startsWith("/admin") ? "page" : undefined}
                 style={{
                   background: pathname?.startsWith("/admin") ? "color-mix(in srgb, var(--accent-amber) 18%, transparent)" : "transparent",

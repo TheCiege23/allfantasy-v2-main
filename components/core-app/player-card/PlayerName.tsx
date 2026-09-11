@@ -44,6 +44,22 @@ export default function PlayerName({
       className={`af-pc-trigger${className ? ` ${className}` : ''}`}
       onClick={(e) => {
         e.stopPropagation()
+        /*
+         * ⚠ FOCUS THE TRIGGER BEFORE OPENING, AND IT IS WEBKIT THAT NEEDS IT.
+         * The sheet restores focus to whatever `document.activeElement` was when
+         * it opened. Blink focuses a <button> on click, so that is this trigger.
+         * WebKit does NOT — a clicked button there never takes focus — so the
+         * sheet captured the containing <main> instead, and closing the card
+         * dropped a Safari user at the top of the roster rather than on the row
+         * they came from. Measured at 390×844 on the same journey:
+         * `active=main.af-content` in WebKit against
+         * `active=button.af-pc-trigger` in Chromium.
+         *
+         * One line here covers every surface that renders a player name, which
+         * is why it belongs on the shared trigger rather than in the sheet: the
+         * sheet cannot know which control asked for it.
+         */
+        e.currentTarget.focus()
         open({ sport, externalId, sleeperId, name, position, team, imageUrl, leagueId: inLeague })
       }}
     >

@@ -594,6 +594,18 @@ export async function getSeasonOutlook(
         win: true,
       },
     }),
+    /*
+     * ⚠ EVERY TEAM IN THESE LEAGUES, NOT JUST THE VIEWER'S — deliberately, since
+     * an outlook ranks you against the field and a field needs opponents.
+     *
+     * 🛑 SAFE ONLY BECAUSE `platformIds` IS VIEWER-DERIVED, AND THAT IS HELD BY A
+     * CALLER TWO HOPS AWAY. Traced 2026-09-10: `platformIds` comes from the
+     * `leagues` parameter, which `app/core/[[...screen]]/page.tsx` builds from
+     * `playedLeagues` -> `getDashboardLeagueListForUser(userId)`. Nothing in this
+     * file enforces that. Hand this function a wider league list and it returns
+     * strangers' rosters with no gate to stop it.
+     */
+    // core-app-league-read: platformIds are the caller's own leagues (traced above)
     prisma.leagueTeam.findMany({
       where: { league: { platformLeagueId: { in: platformIds } } },
       select: {

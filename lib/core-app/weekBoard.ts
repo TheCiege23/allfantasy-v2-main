@@ -327,7 +327,15 @@ async function readHistory(userId: string, leagues: LeagueInput[]): Promise<Hist
      * Every team in these leagues, not just the user's — this is what names an
      * OPPONENT. Without it a rivalry card can only say "roster 7", and a rivalry
      * against a number is not a rivalry.
+     *
+     * 🛑 SAFE ONLY BECAUSE `platformIds` IS VIEWER-DERIVED, AND THAT IS HELD BY A
+     * CALLER THREE HOPS AWAY. Traced 2026-09-10: `platformIds` comes from the
+     * `leagues` parameter, which `app/core/[[...screen]]/page.tsx` builds as
+     * `weekLeagues` <- `playedLeagues` <- `getDashboardLeagueListForUser(userId)`.
+     * Nothing in this file enforces it. Hand `getWeekBoard` a wider league list
+     * and this returns strangers' rosters with no gate to stop it.
      */
+    // core-app-league-read: platformIds are the caller's own leagues (traced above)
     prisma.leagueTeam.findMany({
       where: { league: { platformLeagueId: { in: platformIds } } },
       select: {

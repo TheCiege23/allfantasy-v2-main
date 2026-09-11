@@ -1,0 +1,46 @@
+name: Core App Boundaries
+
+# Two guards over `lib/core-app/`, both cheap and both previously uncalled.
+#
+# 🛑 `scripts/check-core-app-league-reads.mjs` HAD NO CALLER AT ALL until this
+# workflow — not a package.json script, not a hook, not a workflow — while
+# commit messages attested to its output as if something recomputed it. Measured
+# 2026-09-10. `.githooks/pre-push` carries a comment recording the same thing
+# happening to `secret-scan.mjs`, so this is a repeat, not a surprise.
+#
+# ⚠ BOTH RUN A FULL SCAN, NOT `--changed`. The sibling boundary workflows pass
+# `--changed --base --head`, but `check-core-app-league-reads.mjs`'s `--changed`
+# mode diffs the WORKING TREE against HEAD, so on a CI checkout it reports zero
+# files and exits 0 — a check that cannot fail. Both scans are per-file ratchets
+# over ~120 files and finish in well under a second, so scanning everything
+# costs nothing and cannot silently measure nothing.
+
+on:
+  pull_request:
+    # No `branches:` filter, matching db-first-api-boundary.yml — filtering PR
+    # runs to base main/master silently skipped every stacked PR.
+  push:
+    branches: [main, master]
+
+jobs:
+  core-app-boundaries:
+    name: Core App Boundaries
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+
+      # Neither guard imports anything outside node:* builtins, so there is no
+      # `npm ci` step. That is deliberate: an install would dominate the runtime
+      # of two sub-second scans, and a failing install would turn a correctness
+      # gate into a flaky one.
+
+      - name: League reads go through the chokepoint
+        run: node scripts/check-core-app-league-reads.mjs
+
+      - name: DB-reaching modules carry a server-only marker
+        run: node scripts/check-core-app-server-only.mjs

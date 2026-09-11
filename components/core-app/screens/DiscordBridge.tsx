@@ -10,7 +10,7 @@ import {
   type BridgeDirection,
   type BridgeMapping,
   type DiscordBridgeData,
-} from '@/lib/core-app/discordBridge'
+} from '@/lib/core-app/discordBridgeContract'
 
 /**
  * 32a — the Discord bridge.
@@ -45,9 +45,22 @@ export type DiscordBridgeProps = {
   data: DiscordBridgeData
 }
 
-const DIRECTIONS: Array<{ id: BridgeDirection; label: string; hint: string }> = [
+/*
+ * ⚠ ONE ENTRY PER `BridgeDirection`, AND NOTHING TYPECHECKS THAT. A direction
+ * missing here is not a compile error — it is a state the server can report and
+ * this picker cannot show. That is exactly how inbound-only came to render as
+ * "Off · Nothing relays" while the inbound relay was running.
+ * `__tests__/core-discord-bridge-directions.test.ts` asserts the two stay in
+ * step, because the compiler will not.
+ *
+ * ⚠ "Pull only" is the inbound leg: Discord relays INTO league chat and nothing
+ * goes out. It is reachable from the legacy sync panel at /league/[id], so it
+ * has to be nameable here even though this picker is not what produces it.
+ */
+export const DIRECTIONS: Array<{ id: BridgeDirection; label: string; hint: string }> = [
   { id: 'both', label: 'Both ways', hint: 'Relayed in and out' },
   { id: 'post-only', label: 'Post only', hint: 'AllFantasy → Discord' },
+  { id: 'pull-only', label: 'Pull only', hint: 'Discord → AllFantasy' },
   { id: 'off', label: 'Off', hint: 'Nothing relays' },
 ]
 
@@ -79,7 +92,18 @@ function DirectionPicker({
       const res = await fetch('/api/discord/league', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ leagueId, ...flagsFromDirection(next) }),
+        /*
+         * ⚠ THE SURFACE IS SENT EXPLICITLY. Without it the route falls back to
+         * `league_chat`, which is right for the legacy panel (it predates
+         * surfaces and edits the only row that exists) and wrong for this
+         * picker, which renders one control PER SURFACE. Omitting it here would
+         * mean every picker on the page wrote to league chat.
+         */
+        body: JSON.stringify({
+          leagueId,
+          surface: mapping.surface.id,
+          ...flagsFromDirection(next),
+        }),
       })
       if (!res.ok) throw new Error(String(res.status))
     } catch {

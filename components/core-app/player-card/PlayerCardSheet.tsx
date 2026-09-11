@@ -10,6 +10,7 @@ import type {
   PlayerCardWeek,
 } from '@/lib/core-app/playerCard'
 import type { PlayerCardRef } from './PlayerCardProvider'
+import { useOverlayContainment } from '../useOverlayContainment'
 
 /**
  * STATE 6 / STATE 7 of the design handoff, in one component.
@@ -170,10 +171,22 @@ export default function PlayerCardSheet({
   const panelRef = useRef<HTMLDivElement | null>(null)
   const closeRef = useRef<HTMLButtonElement | null>(null)
 
-  // Focus lands inside the sheet, so Escape and Tab belong to it immediately.
-  useEffect(() => {
-    closeRef.current?.focus()
-  }, [])
+  /*
+   * Focus lands inside the sheet AND stays there, the page behind stops
+   * scrolling, Escape closes, and focus returns to the row that opened it.
+   *
+   * Containment did not exist before: Tab walked straight out of the sheet into
+   * the roster behind the scrim. The scroll lock and Escape used to live in
+   * PlayerCardProvider; both now come from the shared hook, which reference-counts
+   * the lock — so opening Comms on top of this sheet and closing THIS one first
+   * no longer unlocks the page underneath a still-open drawer.
+   */
+  useOverlayContainment({
+    active: true,
+    containerRef: panelRef,
+    onClose,
+    initialFocusRef: closeRef,
+  })
 
   // Collapse the expander whenever the subject changes — a comp opened from
   // inside the card must not inherit the previous player's expanded state.

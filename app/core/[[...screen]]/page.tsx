@@ -1,4 +1,4 @@
-import { redirect } from 'next/navigation'
+import { notFound, redirect } from 'next/navigation'
 import { cookies } from 'next/headers'
 import { getServerSession } from 'next-auth'
 
@@ -476,7 +476,28 @@ export default async function AfCorePage({
   const session = (await getServerSession(authOptions as never)) as { user?: { id?: string } } | null
   const userId = session?.user?.id
   if (!userId) {
-    redirect(`/login?callbackUrl=${encodeURIComponent(`/core${segment ? `/${segment}` : ''}`)}`)
+    /*
+     * ⚠ CARRY THE QUERY, NOT JUST THE PATH. `?league=` is the ONLY thing that
+     * decides whether /core renders the cross-league dashboard or one league's
+     * home — see `selectedLeagueId` above: there is no cookie, no stored
+     * default and no first-league fallback. Redirecting to a bare
+     * `/core/<segment>` therefore silently downgrades every signed-out deep
+     * link INTO a league: the user follows a link to their league, signs in,
+     * and lands on the cross-league dashboard with nothing saying a selection
+     * was dropped.
+     *
+     * Rebuilt from `sp` rather than from a request URL because a server
+     * component has none. Array-valued params are skipped for the same reason
+     * `selectedLeagueId` ignores them: `?league=a&league=b` already resolves to
+     * null, so carrying it forward would preserve nothing.
+     */
+    const carried = new URLSearchParams()
+    for (const [key, value] of Object.entries(sp)) {
+      if (typeof value === 'string') carried.set(key, value)
+    }
+    const carriedQuery = carried.toString()
+    const callbackTarget = `/core${segment ? `/${segment}` : ''}${carriedQuery ? `?${carriedQuery}` : ''}`
+    redirect(`/login?callbackUrl=${encodeURIComponent(callbackTarget)}`)
   }
 
   /*
@@ -665,14 +686,37 @@ export default async function AfCorePage({
   const requestedWeekRaw = Array.isArray(sp.week) ? sp.week[0] : sp.week
   const requestedWeek = requestedWeekRaw != null ? Number.parseInt(requestedWeekRaw, 10) : NaN
 
-  const leagueHome =
+  /*
+   * 🛑 NO `.catch(() => null)` HERE, AND ITS REMOVAL IS THE POINT.
+   *
+   * That catch turned every outcome into one "no data" value, so a viewer who was
+   * REFUSED a league and a database that timed out were the same thing to this
+   * page — which is how a refusal came to be rendered as "we could not load this
+   * league just now, try again". `getLeagueHomeData` now returns a discriminated
+   * result and catches its OWN read failures, after the gate. A throw reaching
+   * here would be a genuine bug and must not be swallowed.
+   */
+  const leagueHomeResult =
     activeKey === 'home' && selectedLeagueId
       ? await getLeagueHomeData(
           selectedLeagueId,
           userId,
           Number.isFinite(requestedWeek) ? requestedWeek : null,
-        ).catch(() => null)
+        )
       : null
+
+  /*
+   * ⚠ ONE `notFound()` FOR BOTH "NO SUCH LEAGUE" AND "NOT YOUR LEAGUE", because
+   * telling them apart IS the disclosure: a viewer who can distinguish them can
+   * enumerate which league ids exist by watching which screen comes back. The
+   * result type merges the two upstream, so this boundary cannot separate them
+   * even by accident.
+   */
+  if (leagueHomeResult?.status === 'unauthorized') notFound()
+
+  const leagueHome = leagueHomeResult?.status === 'ok' ? leagueHomeResult.data : null
+  /** Authorized, and the read failed — the ONLY state allowed to say "try again". */
+  const leagueHomeUnavailable = leagueHomeResult?.status === 'unavailable'
 
   // Player Finder searches and selects entirely through query params — no client
   // fetch and no new API route, which matters because the repo is at the route
@@ -2709,6 +2753,55 @@ export default async function AfCorePage({
             */}
             <Dash34Coverage data={dash34} />
           </>
+        ) : /*
+             🛑 TWO DIFFERENT READS REACH THIS FALLBACK AND THEY ARE NOT THE SAME
+             SENTENCE.
+
+             `dash34` is loaded ONLY when no league is selected, and `leagueHome`
+             ONLY when one IS — so with `?league=` present `dash34` is null BY
+             DESIGN, not by failure. Landing here with a league selected therefore
+             means the league-home read failed, and the account-wide copy below is
+             then factually wrong: it tells someone their whole account is
+             unreadable when a single league did not load. Measured before the fix
+             — `GET /core?league=<unreadable uuid>` returned 200 rendering
+             "Your leagues / We could not read your leagues just now".
+
+             ⚠ GATED ON `leagueHomeUnavailable`, NOT ON `selectedLeagueId`. Those
+             were the same condition only while every outcome collapsed into
+             `null`. Now a refusal returns `unauthorized` and has already left
+             through `notFound()` further up, so the only way to reach this branch
+             is an AUTHORIZED read that failed — which is the single state
+             entitled to say "try again". Gating on `selectedLeagueId` would put
+             this copy back in front of people who were refused.
+
+             🛑 AND IT ASSERTS NOTHING BEYOND THE ONE READ THAT FAILED. Two
+             reassurances were tried here and BOTH were retracted for the same
+             reason — they describe state this code has not observed:
+
+               - "not a sign that you are no longer in it" claims MEMBERSHIP.
+                 At the time this branch could not tell "the read failed" from
+                 "you are not in this league"; now it never sees the latter at
+                 all, and the sentence is still not this screen's to say.
+               - "Your other leagues are unaffected" claims the SCOPE of the
+                 failure. Nothing here has read the other leagues. The reads that
+                 would have — `dash34` — are null by design on this path, so under
+                 a systemic database or provider outage every league is failing
+                 and that sentence is confidently false at the worst moment.
+
+             What is left is the one thing observed: this league did not load. The
+             second sentence is a way OUT rather than a claim — the reader can go
+             back to the list or retry, and neither depends on why it failed.
+             Nothing here changes what is loaded, who may load it, or any guard.
+           */
+        leagueHomeUnavailable ? (
+          <div className="af-frame" style={{ padding: 24, maxWidth: 720 }}>
+            <h1 className="af-display" style={{ margin: 0, fontSize: 22, letterSpacing: '-0.03em' }}>
+              This league
+            </h1>
+            <p style={{ marginTop: 8, fontSize: 13, lineHeight: 1.5, color: 'var(--muted)' }}>
+              We could not load this league just now. Return to your leagues or try again.
+            </p>
+          </div>
         ) : (
           <div className="af-frame" style={{ padding: 24, maxWidth: 720 }}>
             <h1 className="af-display" style={{ margin: 0, fontSize: 22, letterSpacing: '-0.03em' }}>

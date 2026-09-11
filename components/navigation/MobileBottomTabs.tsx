@@ -64,7 +64,7 @@ export default function MobileBottomTabs() {
             <Link
               key={item.href}
               href={item.href}
-              className="group relative flex flex-col items-center justify-center rounded-xl px-1 py-2 text-[10px] font-semibold transition duration-150 active:scale-95"
+              className="group relative flex min-h-12 flex-col items-center justify-center rounded-xl px-1 py-2 text-[10px] font-semibold transition duration-150 active:scale-95"
               aria-current={active ? "page" : undefined}
               style={{
                 background: active

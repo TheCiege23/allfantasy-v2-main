@@ -1,6 +1,7 @@
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
+import { loadLeagueFor } from './loadLeagueFor'
 import { leagueDisplayName, type SectionState } from './leagueHome'
 import { letterFor, type GradeLetter } from '@/lib/trade-intel/gradeScale'
 
@@ -107,10 +108,8 @@ export async function getLeagueCareer(
   leagueId: string,
   userId: string,
 ): Promise<LeagueCareerResult> {
-  const league = await prisma.league.findUnique({
-    where: { id: leagueId },
-    select: { id: true, name: true, platform: true, platformLeagueId: true },
-  })
+  /* Gated read — see lib/core-app/loadLeagueFor.ts. A non-member gets null here. */
+  const league = await loadLeagueFor(userId, leagueId, { id: true, name: true, platform: true, platformLeagueId: true })
   const leagueName = leagueDisplayName(league?.name)
   if (!league) {
     return { available: false, leagueName, reason: 'this league could not be read' }

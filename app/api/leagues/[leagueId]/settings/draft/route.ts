@@ -16,6 +16,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { resolveLeagueMembership } from '@/lib/league-access'
 import {
   getSettingsTabDraftTypesForFormat,
   getSettingsTabExecutionModes,
@@ -41,6 +42,26 @@ export async function GET(
   const userId = session?.user?.id
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const { leagueId } = await params
+
+  /*
+   * 🛑 THIS GET RETURNED THE LEAGUE TO ANY SIGNED-IN USER. It computed
+   * `isCommissioner: league.userId === userId` and returned it as a FIELD for
+   * the UI to branch on; the refusal on that comparison lives in the PATCH
+   * below, not here. Naming any leagueId returned its draft settings.
+   *
+   * ⚠ MEMBER-LEVEL, NOT COMMISSIONER-LEVEL. The response carries
+   * `isCommissioner` precisely so ordinary members can load this read-only,
+   * so gating at commissioner level would close the hole and break them. The
+   * PATCH keeps its own stricter check.
+   */
+  const membership = await resolveLeagueMembership(leagueId, userId)
+  if (!membership.ok) {
+    return NextResponse.json(
+      { error: membership.status === 404 ? 'Not found' : 'Forbidden' },
+      { status: membership.status },
+    )
+  }
+
 
   const league = await prisma.league.findUnique({
     where: { id: leagueId },

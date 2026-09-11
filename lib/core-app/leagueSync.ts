@@ -1,6 +1,7 @@
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
+import { loadLeagueFor } from './loadLeagueFor'
 import { leagueDisplayName, type SectionState } from './leagueHome'
 
 /**
@@ -105,9 +106,8 @@ export async function getLeagueSync(
   userId: string,
   now: Date = new Date(),
 ): Promise<LeagueSyncResult> {
-  const league = await prisma.league.findUnique({
-    where: { id: leagueId },
-    select: {
+  /* Gated read — see lib/core-app/loadLeagueFor.ts. A non-member gets null here. */
+  const league = await loadLeagueFor(userId, leagueId, {
       id: true,
       name: true,
       platform: true,
@@ -116,8 +116,7 @@ export async function getLeagueSync(
       createdAt: true,
       lastSyncedAt: true,
       syncStatus: true,
-    },
-  })
+    })
 
   const leagueName = leagueDisplayName(league?.name)
   if (!league) {

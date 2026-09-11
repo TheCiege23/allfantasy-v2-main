@@ -99,6 +99,11 @@
   text-decoration: none;
 }
 
+/* The compact disclosure replaces the desktop link groups below 720px. */
+.af-lp-mobile-actions {
+  display: none;
+}
+
 /* ── Hero ────────────────────────────────────────────────────────────── */
 
 .af-lp-hero {
@@ -838,110 +843,90 @@
 
 @media (max-width: 720px) {
   .af-lp-nav {
-    height: auto;
+    position: relative;
+    height: 64px;
     padding: 10px 16px;
-    gap: 10px;
-  }
-  /*
-   * ⚠ MUST NOT NOWRAP, OR THE PRIMARY CTA IS CUT IN HALF. This nav holds the
-   * language switch, Partners and the dashboard CTA, and at nowrap on a 375px
-   * frame it measured 393px wide inside an .af-lp that clips at 375 — so the
-   * right-hand ~18px of the one button the page exists to get pressed was
-   * simply not on screen, with no scrollbar to reveal it because the parent is
-   * overflow:hidden.
-   *
-   * Wrapping fixed that and then cost 231px of nav on an 812px screen: four
-   * stacked rows (brand / lang+Partners / CTA / links) before any content, with
-   * the CTA marooned on the third row. `display: contents` promotes the
-   * right-hand group's children to direct flex items of the nav so `order` can
-   * lay them out across three DELIBERATE rows instead of four accidental ones —
-   * brand+CTA, links, lang+Partners. Measured 231px -> ~168px, and the CTA is
-   * back beside the brand where a mobile header puts it.
-   *
-   * Content box is 343px at 375: brand 147 + CTA 137 + 10 gap = 294, fits.
-   */
-  .af-lp-nav-right {
-    display: contents;
-  }
-  .af-lp-brand {
-    order: 1;
-  }
-  .af-lp-nav .af-lp-cta {
-    order: 2;
-    margin-left: auto;
-  }
-  .af-lp-nav-links {
-    order: 3;
-    width: 100%;
-    overflow-x: auto;
-    /* The row measures 283px against a 343px content box, so nothing is hidden
-       today; nowrap + scroll keeps it one row if a fourth link is ever added. */
+    gap: 8px;
     flex-wrap: nowrap;
-    gap: 16px;
-    scrollbar-width: none;
   }
-  .af-lp-nav-links::-webkit-scrollbar {
+  .af-lp-nav-links,
+  .af-lp-nav-right {
     display: none;
   }
-  .af-lp-nav-links a {
+  .af-lp-mobile-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-left: auto;
+  }
+  .af-core .af-lp-mobile-primary {
+    min-height: 44px;
+    padding-inline: 14px;
+    font-size: 12px;
+    text-decoration: none;
     white-space: nowrap;
   }
-  .af-lp-nav .af-lp-lang {
-    order: 4;
+  .af-lp-mobile-menu summary {
+    display: grid;
+    place-items: center;
+    width: 44px;
+    height: 44px;
+    border: 1px solid var(--line2);
+    border-radius: 10px;
+    color: var(--text);
+    background: var(--surface);
+    cursor: pointer;
+    list-style: none;
   }
-  .af-lp-nav .af-lp-nav-divider {
-    order: 5;
+  .af-lp-mobile-menu summary::-webkit-details-marker {
+    display: none;
   }
-  .af-lp-nav .af-lp-partners {
-    order: 6;
-    margin-right: auto;
+  .af-lp-mobile-menu summary:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
   }
-  /*
-   * ⚠ WITHOUT AN ORDER THIS LINK SORTS AHEAD OF THE BRAND, AND ONLY WHEN
-   * SIGNED OUT — which is every first-time visitor.
-   *
-   * `.af-lp-nav-right` is `display: contents` above, so its children become
-   * direct flex items of `.af-lp-nav` and the `order` values on this block are
-   * what build the three deliberate rows. "Sign in" is the one child that never
-   * got one, so it kept the initial `order: 0` and sorted BEFORE `.af-lp-brand`
-   * (order 1) — measured at x=16 with the logo pushed to x=70, i.e. the page
-   * opened with "Sign in" where the wordmark belongs.
-   *
-   * It survived because `LandingV4` renders it only when `signedIn` is false,
-   * so it is absent from exactly the state the rows were tuned in.
-   *
-   * Row 1 cannot take it: brand 147 + CTA 132 + two 10px gaps already measures
-   * 343 against a 343px content box, so adding 44px there wraps the CTA. It
-   * joins row 3 instead, where `.af-lp-partners`'s `margin-right: auto` parks
-   * it against the right edge.
-   *
-   * 🛑 THIS RULE AND THE `display: contents` BLOCK ABOVE MUST LAND TOGETHER, AND
-   * BOTH NEED `className="af-lp-signin"` IN LandingV4.tsx. All three are
-   * uncommitted as of 2026-09-09 and none is any use alone:
-   *
-   *   - refactor without this rule  -> Sign in keeps `order: 0` and sorts ahead
-   *     of `.af-lp-brand`, so the page opens with "Sign in" where the wordmark
-   *     belongs. Measured: Sign in at x=16, logo pushed to x=70.
-   *   - this rule without the refactor -> `.af-lp-nav-right` is a plain wrapper,
-   *     Sign in is one of ITS flex items, and `order: 7` moves it AFTER "Get
-   *     started free" instead. Worse than doing nothing.
-   *   - either without the TSX class -> the selector matches nothing, silently.
-   *
-   * ⚠ AND IT IS INVISIBLE TO WHOEVER TESTS IT. `LandingV4` renders Sign in only
-   * when `signedIn` is false, so a signed-in check shows a correct header in
-   * every one of these states. Check `/` SIGNED OUT at 375px, and commit
-   * af-landing.css and LandingV4.tsx in the same commit.
-   */
-  .af-lp-nav .af-lp-signin {
-    order: 7;
+  .af-lp-mobile-panel {
+    position: absolute;
+    top: calc(100% + 1px);
+    left: 12px;
+    right: 12px;
+    z-index: 50;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px;
+    padding: 10px;
+    border: 1px solid var(--line);
+    border-radius: 0 0 14px 14px;
+    background: var(--surface);
+    box-shadow: var(--shadow);
+  }
+  .af-lp-mobile-panel > a {
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+    padding: 8px 10px;
+    border-radius: 9px;
+    color: var(--text2);
+    font-size: 13px;
+    font-weight: 700;
+    text-decoration: none;
+  }
+  .af-lp-mobile-panel > a:focus-visible,
+  .af-lp-mobile-panel > a:hover {
+    background: var(--chip);
+  }
+  .af-lp-mobile-panel .af-lp-lang {
+    min-height: 44px;
+    align-self: center;
+    justify-self: start;
   }
   .af-lp-hero {
-    padding: 40px 16px 36px;
+    padding: 34px 16px 32px;
     gap: 28px;
   }
   /* 66px would wrap to five lines on a 390px frame. */
   .af-lp-h1 {
-    font-size: 40px;
+    font-size: clamp(36px, 10.25vw, 40px);
   }
   .af-lp-sub {
     font-size: 16px;
@@ -995,6 +980,28 @@
     min-height: 44px;
     display: inline-flex;
     align-items: center;
+  }
+}
+
+@media (max-width: 360px) {
+  .af-lp-wordmark {
+    /* Keep the crest and accessible link name while making room for the CTA. */
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+  .af-lp-card-row {
+    padding-inline: 12px;
+  }
+  .af-lp-card-tag {
+    padding-inline: 6px;
+    letter-spacing: 0.06em;
   }
 }
 

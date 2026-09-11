@@ -1,0 +1,18 @@
+{
+  "lib/core-app/dash3aPanels.ts": 1,
+  "lib/core-app/discordBridge.ts": 0,
+  "lib/core-app/draftHq.ts": 2,
+  "lib/core-app/gameDayTriageLoader.ts": 1,
+  "lib/core-app/leagueHome.ts": 1,
+  "lib/core-app/leaguePairing.ts": 2,
+  "lib/core-app/managerPresence.ts": 1,
+  "lib/core-app/matchupProjections.ts": 1,
+  "lib/core-app/playerCard.ts": 1,
+  "lib/core-app/playerFinder.ts": 1,
+  "lib/core-app/playerLeagueView.ts": 1,
+  "lib/core-app/playerSuggest.ts": 1,
+  "lib/core-app/publicStandings.ts": 1,
+  "lib/core-app/rosteredMarket.ts": 1,
+  "lib/core-app/scout.ts": 1,
+  "lib/core-app/taxiTenure.ts": 1
+}
