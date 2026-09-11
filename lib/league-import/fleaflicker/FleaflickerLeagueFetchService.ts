@@ -3,6 +3,8 @@ import type {
   FleaflickerSport,
   FleaflickerStandingsResponse,
   FleaflickerRostersResponse,
+  FleaflickerScoreboardResponse,
+  FleaflickerScoreboardGame,
 } from '@/lib/league-import/fleaflicker/types'
 
 const API_BASE = 'https://www.fleaflicker.com/api'
@@ -114,4 +116,105 @@ export async function fetchFleaflickerLeagueForImport(sourceId: string): Promise
     standings,
     rosters,
   }
+}
+
+/**
+ * Raised when the provider answered 200 with a body describing a DIFFERENT
+ * SEASON from the one requested.
+ *
+ * 🛑 THIS IS NOT A HYPOTHETICAL, AND IT IS WHY THIS ERROR EXISTS AT ALL.
+ * Fleaflicker silently CLAMPS a `season` past the league's last to the last
+ * season it has, and returns that season's complete, played data under HTTP
+ * 200 — no 404, no empty envelope, no warning. Measured 2026-09-11 against
+ * league 206154, whose final season is 2021: `season=` 2021, 2024, 2025, 2026
+ * and even 2099 returned byte-identical games, the same eight ids and the same
+ * final scores. Within range the parameter IS honoured (2019, 2020 and 2021
+ * each differ), so this only fires past the end of a league's life.
+ *
+ * ⚠ AND YOU CANNOT DETECT IT FROM THE FIELD THAT LOOKS LIKE IT SHOULD.
+ * `FetchLeagueStandings` returns a top-level `season` that reads back whatever
+ * you asked for. `schedulePeriod.low.season` on the SCOREBOARD is the only
+ * authority, which is why this check lives here and not in the standings path.
+ *
+ * Without this refusal a weekly sync of any dormant Fleaflicker league would
+ * persist five-year-old finals as the current season's results, and every
+ * downstream surface would render them as this week's scores. Nothing else in
+ * the stack could tell.
+ */
+export class FleaflickerSeasonMismatchError extends Error {
+  readonly requestedSeason: number
+  readonly returnedSeason: number | null
+
+  constructor(requestedSeason: number, returnedSeason: number | null) {
+    super(
+      `Fleaflicker returned season ${returnedSeason ?? 'unknown'} for a request for ${requestedSeason} ` +
+        `(a season past the league's last is silently clamped) — refusing the payload.`,
+    )
+    this.name = 'FleaflickerSeasonMismatchError'
+    this.requestedSeason = requestedSeason
+    this.returnedSeason = returnedSeason
+  }
+}
+
+export interface FleaflickerScoreboardWeek {
+  /** The scoring period, 1-indexed. */
+  week: number
+  /** Taken from `schedulePeriod.low.season`, never from the request. */
+  season: number
+  games: FleaflickerScoreboardGame[]
+}
+
+/**
+ * One scoring period of a league's scoreboard.
+ *
+ * `scoringPeriod` omitted means "the league's current period" — confirmed
+ * behaviour, not an assumption: omitting it and passing the current period's
+ * own value returned byte-identical responses.
+ *
+ * ⚠ ASSERTS THE SEASON AND THROWS RATHER THAN RETURNING A BEST EFFORT. See
+ * `FleaflickerSeasonMismatchError`. A caller that would rather skip than fail
+ * should catch it — but it must not be silently swallowed, because the payload
+ * underneath looks completely healthy.
+ */
+export async function fetchFleaflickerScoreboard(
+  sport: FleaflickerSport,
+  leagueId: number,
+  season: number,
+  scoringPeriod?: number,
+): Promise<{ week: FleaflickerScoreboardWeek | null; periods: number[]; currentPeriod: number | null }> {
+  let url =
+    `${API_BASE}/FetchLeagueScoreboard?sport=${encodeURIComponent(sport)}` +
+    `&league_id=${leagueId}&season=${season}`
+  if (scoringPeriod != null) url += `&scoring_period=${scoringPeriod}`
+
+  const body = await fetchJson<FleaflickerScoreboardResponse>(url)
+
+  const returnedSeason = body.schedulePeriod?.low?.season ?? null
+  if (returnedSeason !== season) {
+    throw new FleaflickerSeasonMismatchError(season, returnedSeason)
+  }
+
+  const periods = (body.eligibleSchedulePeriods ?? [])
+    .map((p) => p.value ?? p.ordinal)
+    .filter((n): n is number => Number.isInteger(n) && (n as number) > 0)
+  const currentPeriod = body.schedulePeriod?.value ?? body.schedulePeriod?.ordinal ?? null
+
+  /*
+   * ⚠ NO `games` KEY IS A REAL, NON-ERROR STATE — a league that has not drafted
+   * has no generated schedule and the key is ABSENT, not empty. Returning null
+   * for the week (rather than an empty games array) keeps that distinguishable
+   * from "this week exists and has no games", which is what a bye week might
+   * look like if G-06 ever gets observed.
+   */
+  const games = body.games
+  const week =
+    games == null
+      ? null
+      : {
+          week: scoringPeriod ?? currentPeriod ?? 0,
+          season: returnedSeason,
+          games,
+        }
+
+  return { week, periods, currentPeriod }
 }

@@ -52,9 +52,25 @@ transport:
       type: integer
       format: four-digit year
       note: >
-        A season with no data still returns a normal envelope rather than an
-        error — confirmed by the existing null-safe handling of
-        `standings.season` in fetchFleaflickerLeagueForImport.
+        🛑 A SEASON AFTER THE LEAGUE'S LAST IS SILENTLY CLAMPED TO THE LAST ONE, AND
+        RETURNS THAT SEASON'S COMPLETE, PLAYED DATA UNDER HTTP 200. It does not error,
+        404, or return an empty envelope. Measured 2026-09-11 against league 206154,
+        whose final season is 2021: season=2021, 2024, 2025, 2026 and 2099 all returned
+        BYTE-IDENTICAL games — the same eight game ids and the same final scores.
+        The parameter IS honoured within range (2019, 2020 and 2021 each return distinct
+        game ids); the clamp only applies past the end.
+
+        ⚠ AND THE ECHOED SEASON IS THE REQUEST, NOT THE PAYLOAD. FetchLeagueStandings
+        returns a top-level `season` field that reads back whatever you asked for —
+        `season: 2026` on a body containing 2021's standings. Reading it to find out what
+        you got is circular. This retracts the previous note here, which said a season with
+        no data "returns a normal envelope"; the envelope is normal but the DATA IS ANOTHER
+        SEASON'S, which is far more dangerous — a writer asking for the current season on a
+        dead league will happily persist five-year-old finals as this week's results.
+
+        THE ONLY AUTHORITY FOR WHICH SEASON A SCOREBOARD BODY ACTUALLY DESCRIBES IS
+        `schedulePeriod.low.season`. Assert it against the season you requested and refuse
+        the payload when they differ.
 
   status_codes:
     200: Valid JSON response.
@@ -112,11 +128,17 @@ endpoints:
 
   FetchLeagueScoreboard:
     status: GAME_SHAPE_CONFIRMED_NOT_INTEGRATED   # <-- see GAPS.md G-01/G-04. Promoted
-      # 2026-09-11 by a probe of a league with a REAL PLAYED SCHEDULE (206154, season 2025,
-      # scoring_period 1 — fixtures/scoreboard.NFL.week1.json, 8 final games). The game row and
-      # its team identity are now observed, not guessed. Still NOT integrated: no caller fetches
-      # this endpoint yet, and G-05(b)/G-06 (a future week inside an active season; a bye) remain
-      # unobserved — a 16-team league plays 8 games and has no byes.
+      # 2026-09-11 by a probe of a league with a REAL PLAYED SCHEDULE (206154, season 2021,
+      # scoring_period 1 — fixtures/scoreboard.NFL.2021.week1.json, 8 final games). The game row
+      # and its team identity are now observed, not guessed. Still NOT integrated: no caller
+      # fetches this endpoint yet, and G-05(b)/G-06 (a future week inside an active season; a
+      # bye) remain unobserved — a 16-team league plays 8 games and has no byes.
+      #
+      # ⚠ THE SEASON ON THIS LINE READ "2025" UNTIL 2026-09-11 AND WAS WRONG. The probe passed
+      # season=2025; league 206154's last season is 2021, so the request was clamped and the
+      # fixture is 2021 data (startEpochMilli 1631008800000 = 2021-09-07). See the `season`
+      # note in common_query_params — nothing about the response said 2025 was not honoured
+      # except `schedulePeriod.low.season`, which was sitting in the fixture the whole time.
     method: GET
     path: /FetchLeagueScoreboard
     path_confirmed_via: "https://www.fleaflicker.com/api-docs/index.html — vendor's own published
@@ -141,7 +163,8 @@ endpoints:
       SchedulePeriod = { ordinal: number, value: number, low: { ordinal: number, startEpochMilli: string (epoch ms, as a string) } }
 
       CONFIRMED 2026-09-11 for a league WITH a generated, played schedule
-      (fixtures/scoreboard.NFL.week1.json — league 206154, season 2025, period 1):
+      (fixtures/scoreboard.NFL.2021.week1.json — league 206154, season 2021, period 1;
+       and fixtures/scoreboard.NFL.2021.week16.json — same league, the championship week):
       {
         schedulePeriod: SchedulePeriod,
         eligibleSchedulePeriods: SchedulePeriod[],
@@ -154,9 +177,33 @@ endpoints:
         awayScore: { same },
         homeResult: "WIN" | "LOSE",                # observed values only; a tie was not observed
         awayResult: "WIN" | "LOSE",
-        isFinalScore: boolean,
-        isDivisional: boolean
+        // EVERY FIELD BELOW IS OPTIONAL AND PRESENT ONLY WHEN TRUE — see the omission rule.
+        isFinalScore?: true,
+        isDivisional?: true,                       # regular-season weeks only
+        isPlayoffs?: true,                         # playoff weeks only
+        isConsolation?: true,                      # playoff weeks only
+        isChampionshipGame?: true,                 # final week only
+        isThirdPlaceGame?: true                    # final week only
       }
+
+      🛑 A FALSE BOOLEAN IS OMITTED, NOT SENT AS `false`. This is the single most important
+      fact about the row and it is proven per-row, inside ONE payload, not inferred from
+      comparing weeks: in season 2021 period 14, rows 0-1 carry `isPlayoffs: true` and have
+      NO `isConsolation` key, while rows 2-5 carry `isConsolation: true` and have NO
+      `isPlayoffs` key. Period 16 likewise gives `isChampionshipGame` to exactly one row.
+      (The same rule reaches nested objects: a team's `newItemCounts` is absent on some
+      rows and present on others.)
+
+      ⚠ THE CONSEQUENCE THAT WILL BITE A WRITER: `game.isFinalScore === false` IS NEVER
+      TRUE. An unplayed or in-progress game does not say `isFinalScore: false` — it omits
+      the key. Test `game.isFinalScore === true` for "final", and treat absence as
+      not-final. Any code branching on `=== false`, or on `'isFinalScore' in game`, is
+      dead or inverted.
+
+      ⚠ AND THE FLAG SET VARIES BY WEEK TYPE, so the union above is not a fixed schema.
+      Observed key sets: periods 1 and 13 → isDivisional; periods 14-15 → isPlayoffs |
+      isConsolation; period 16 → isPlayoffs | isConsolation | isChampionshipGame |
+      isThirdPlaceGame. Do not require any of them.
 
       ⚠ `games` IS ABSENT, NOT EMPTY, BEFORE A DRAFT. The pre-schedule fixture
       (scoreboard.NFL.json, league 356670) has no `games` key at all for any scoring_period.
@@ -167,24 +214,45 @@ endpoints:
     fields:
       - "games[].home.id / games[].away.id: integer — THE SAME ID SPACE as
          FetchLeagueStandings and FetchLeagueRosters. PROVEN 2026-09-11, not inferred from the
-         shape looking similar: all 16 scoreboard team sides in league 206154 season 2025 week 1
+         shape looking similar: all 16 scoreboard team sides in league 206154 season 2021 week 1
          joined to that league's own standings on id AND name, 16/16, zero mismatches. This is
          GAPS.md G-04, the field flagged as mattering most for correctness — a writer may join a
-         matchup row to LeagueTeam on this id."
+         matchup row to LeagueTeam on this id. The season-label correction above does not
+         weaken it, and the reason is worth stating exactly: TEAM IDS ARE STABLE ACROSS
+         SEASONS. Measured 2026-09-11 — league 206154's 2019 and 2021 standings share all 16
+         team ids, and the 2021 week-1 scoreboard sides join 16/16 on id AND name to BOTH
+         seasons' standings. So the join proves a shared id space, but it canNOT date a
+         payload; only `schedulePeriod.low.season` can. A WeeklyMatchup writer keyed on this
+         id is safe across seasons; a writer using it to infer WHICH season it holds is not."
       - "games[].id: integer — the fantasy_game_id FetchLeagueBoxscore takes."
       - "games[].homeScore.score.value: number (points); .formatted: string, pre-rounded by
          Fleaflicker. Prefer .value for arithmetic."
-      - "games[].isFinalScore: boolean — true for every game in the played-week fixture."
+      - "games[].isFinalScore: OPTIONAL, present only as `true`. True for every game in both
+         played-week fixtures. Absent means not final — the key is omitted, never sent as
+         `false`. Read it as `=== true`; see the omission rule in the envelope."
+      - "games[].isDivisional / isPlayoffs / isConsolation / isChampionshipGame /
+         isThirdPlaceGame: OPTIONAL, present only as `true`, and which ones exist depends on
+         the week type. Never require them and never read them as `false`."
       - "schedulePeriod.ordinal: integer, 1-indexed, matches value in every fixture seen so far"
       - "schedulePeriod.value: integer — the actual week/period number to pass as `scoring_period`"
       - "schedulePeriod.low.startEpochMilli: string — epoch milliseconds (as a JSON string, not a number) when this period starts"
       - "eligibleSchedulePeriods: array of the same SchedulePeriod shape, one per week in the season (17 for the 2026 NFL fixture)"
-      - "games (or equivalent): UNKNOWN — see envelope note, do not guess the key name"
-    source_of_truth: "real fixture at fixtures/scoreboard.NFL.json (league 356670, sport=NFL,
-      season=2026, probed both without `scoring_period` and with `scoring_period=1` — identical
-      byte-for-byte, one fixture committed for both)"
+      - "schedulePeriod.low.season: integer — THE ONLY AUTHORITY for which season the body
+         describes. Not the `season` you requested, which is clamped past the league's last,
+         and not standings' top-level `season`, which echoes the request back."
+    source_of_truth: "three real fixtures — fixtures/scoreboard.NFL.json (league 356670,
+      season=2026, PRE-SCHEDULE: no games key; probed both without `scoring_period` and with
+      `scoring_period=1`, identical byte-for-byte), fixtures/scoreboard.NFL.2021.week1.json
+      (league 206154, season 2021 period 1, a played REGULAR-season week) and
+      fixtures/scoreboard.NFL.2021.week16.json (same league, period 16, the CHAMPIONSHIP week —
+      committed because its row carries a different flag set, which is the evidence for the
+      false-omission rule)"
     note: >
-      🛑 THE ENVELOPE FOR A LEAGUE WITH NO SCHEDULE IS NOW CONFIRMED. THE GAME ROW SHAPE IS NOT.
+      🛑 THE PRE-SCHEDULE ENVELOPE AND THE GAME ROW ARE BOTH CONFIRMED NOW; WHAT REMAINS
+      UNOBSERVED IS AN UNPLAYED WEEK AND A BYE (GAPS.md G-05(b), G-06). The paragraph below
+      records the pre-schedule half and is kept because it is still the evidence for "no games
+      key before a draft"; its closing instruction — do not write a mapper against the game-row
+      shape — was DISCHARGED on 2026-09-11 by the two played-week fixtures above.
       League 356670 ("Public League 96FCE6") was probed at membershipType CREATING_COMMISH, size
       1 of capacity 12, with a draftLiveTimeEpochMilli essentially AT the moment of the probe
       (2026-09-03T17:45Z, probed 2026-09-03T17:46Z) — i.e. a league that has not drafted and has
