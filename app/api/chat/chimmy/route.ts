@@ -701,10 +701,31 @@ function requiresLeagueGrounding(args: {
  */
 function describeLeagueGroundingFailure(reason: ChimmyLeagueGroundingFailure): string {
   switch (reason) {
+    /*
+     * 🛑 `not_member` AND `not_found` SHARE ONE BRANCH AND ONE STRING. THEY MUST
+     * NOT MERELY BE 'SIMILAR'.
+     *
+     * A previous pass removed the words "I can see that league exists" from the
+     * not_member copy and claimed the two were now identical. They were not:
+     * not_member said "could not open that league" and not_found said "could not
+     * find that league". That is still an enumeration oracle — walk ids, read the
+     * verb, learn which leagues are real. The claim was wrong and the test that
+     * was supposed to cover it asserted /could not open that league/, pinning the
+     * distinguishable string instead of comparing the two cases.
+     *
+     * ⚠ SHARED FALLTHROUGH RATHER THAN TWO IDENTICAL RETURNS. Two branches that
+     * happen to hold the same literal drift the moment someone improves one of
+     * them, and the drift is invisible in review. One branch cannot drift.
+     *
+     * ⚠ `anonymous` AND `error` STAY DISTINCT, DELIBERATELY. Anonymous is an
+     * authentication problem the user can fix and telling them costs nothing —
+     * it reveals nothing about which leagues exist. `error` is transient
+     * infrastructure, and collapsing it into this message would tell a member of
+     * their own league that they are not in it.
+     */
     case 'not_member':
-      return 'I can see that league exists, but your account is not a member of it, so I cannot read its rosters. If you just imported it, claim your team and ask again.'
     case 'not_found':
-      return 'I could not find that league. If you picked it from the league list, it may be a tournament or a legacy board rather than a synced league — pick a synced league and ask again.'
+      return 'I could not open that league for your account. If it is yours and you just imported it, claim your team and ask again.'
     case 'anonymous':
       return 'I could not confirm who you are signed in as, so I cannot read that league.'
     case 'error':
@@ -1238,10 +1259,14 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json(
       {
         ...buildLeagueGroundingErrorPayload(),
+        /*
+         * ⚠ NO `leagueId` AND NO `groundingReason`. Echoing the id back confirms
+         * it addresses something, and the reason code distinguishes "not yours"
+         * from "not real" — together they are an enumeration oracle. The reason
+         * is still available in logs, where the caller cannot read it.
+         */
         details: {
           message: describeLeagueGroundingFailure(leagueGrounding.reason),
-          leagueId,
-          groundingReason: leagueGrounding.reason,
         },
       },
       { status: leagueGrounding.reason === 'error' ? 503 : 412 }
@@ -1391,8 +1416,31 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
    * SENTENCE and hardcoded "12-team PPR" — a dynasty league was answered with a redraft price,
    * measured 3779 against a correct 6644. This short-circuit returns before the grounding packet
    * is built at ~1667, so nothing downstream could have corrected it.
+   *
+   * 🛑 BUT IT PASSED THE RAW `leagueId`, WHICH IS `formData.get('leagueId')` — THE SAME ROOT CAUSE
+   * AS THE THREE DISCLOSURES ALREADY CLOSED IN THIS FILE, REACHED THROUGH A FOURTH DOOR.
+   * `buildFantasyCalcValueAnswer` calls `createLeagueOsLoaders().loadRules(leagueId)`, and that
+   * loader performs no membership check — `resolveLeagueMembership` does not appear in it. So a
+   * stranger's league format came back priced INTO the answer text: a dynasty league answers
+   * "dynasty value 6644 … Settings read from your league: superflex, 10-team" and a redraft league
+   * answers differently. The price itself was the oracle; the settings sentence merely narrated it.
+   *
+   * ⚠ AND IT SITS ABOVE EVERY GUARD IN THIS ROUTE. This short-circuit returns before the 412
+   * refusal path, before the token spend, and before the grounding packet — so the two commits
+   * that closed the refusal-side oracles could not have covered it, and the indistinguishability
+   * suite could not have seen it: it never reaches the code those tests drive.
+   *
+   * `leagueSnapshot` exists only because `loadLeagueGroundingForUser` proved membership, so passing
+   * `leagueSnapshot?.id ?? null` closes this by construction. The second argument keeps the
+   * fallback sentence TRUE for a caller who named a league they may not read — it says a league was
+   * requested without saying which, so `not_member` and `not_found` stay indistinguishable here too.
    */
-  const deterministic = await tryDeterministicAnswerDetailed(message, requestLocale, leagueId)
+  const deterministic = await tryDeterministicAnswerDetailed(
+    message,
+    requestLocale,
+    leagueSnapshot?.id ?? null,
+    leagueId != null,
+  )
   if (deterministic !== null) {
     /*
      * ⚠ A REFUSAL IS NOT A FINAL ANSWER — it is a statement that OUR DATABASE
@@ -1522,10 +1570,19 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     })
   }
 
-  if (leagueId && userId && isLeagueDataUsageQuestion(message)) {
+  /*
+   * 🛑 SAME DEFECT AS THE INSIGHT BUNDLE, AND A LARGER PAYLOAD.
+   * `buildLeagueSportsGroundingPacket` performs NO membership check —
+   * `resolveLeagueMembership` does not appear in that module, and its `userId`
+   * is used only to locate the caller's own team WITHIN the league
+   * (`claimedByUserId: userId`), never to decide whether they may see it. It
+   * reads name, settings, scoring, roster and draft state and this route
+   * serializes the result into the prompt.
+   */
+  if (leagueSnapshot && userId && isLeagueDataUsageQuestion(message)) {
     try {
       const packet = await buildLeagueSportsGroundingPacket({
-        leagueId,
+        leagueId: leagueSnapshot.id,
         userId,
         sport: sport ?? undefined,
         season: season ?? undefined,
@@ -1574,8 +1631,31 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       ? parseScreenshotWithVision(imageFile, message)
       : Promise.resolve(undefined)
   const insightTask: Promise<{ summary?: string; sources: string[] } | undefined> =
-    leagueId && insightType
-      ? getInsightBundle(leagueId, insightType, {
+    /*
+     * 🛑 THE MEMBERSHIP-AUTHORIZED ID, NOT THE REQUEST FIELD.
+     *
+     * This guard was the raw request field, and that field is
+     * `formData.get('leagueId')` — a value the client sends, not one anybody
+     * verified. `getInsightBundle` declares no `userId` parameter and
+     * `lib/ai-simulation-integration/AIInsightRouter.ts` contains zero
+     * occurrences of one, so it read matchup predictions, playoff odds,
+     * warehouse summaries and a league settings summary for whatever id it was
+     * handed — and the result was placed in the prompt.
+     *
+     * ⚠ THE EXISTING REFUSAL DID NOT COVER IT, AND THE GAP IS EXACTLY
+     * MEASURABLE. `requiresLeagueGrounding` forces grounding when `insightType`
+     * is trade, waiver or dynasty. `InsightType` has SIX values. For `matchup`,
+     * `playoff` or `draft`, with no `teamId` and a message tripping none of the
+     * phrase patterns, nothing refused and the raw field flowed straight
+     * through.
+     *
+     * `leagueSnapshot` is `leagueGrounding.ok ? leagueGrounding.snapshot : null`
+     * — it exists only because `loadLeagueGroundingForUser` proved membership.
+     * Reading its id closes this by construction rather than by adding another
+     * conditional a later edit could get wrong.
+     */
+    leagueSnapshot && insightType
+      ? getInsightBundle(leagueSnapshot.id, insightType, {
           teamId,
           season,
           week,
@@ -1587,11 +1667,28 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
           }))
           .catch(() => undefined)
       : Promise.resolve(undefined)
+  /*
+   * 🛑 `getFullAIContext` HAS TWO CALL SITES IN THIS REQUEST AND THE PREVIOUS COMMIT CLOSED ONE.
+   *
+   * That commit's message says the reader is closed. It was closed at ~2401 (inside the PECR
+   * plan) and NOT here, where `getChimmyMemoryContext` reaches the identical function through
+   * `lib/ai-memory/chimmy-memory-context.ts` — so `aILeagueContext.findUnique({ where:
+   * { leagueId } })` and `getRecentMemoryEvents({ leagueId })` still ran on the raw request field.
+   *
+   * ⚠ AND THE READER-AUTHORIZATION SUITE COULD NOT HAVE CAUGHT IT, because it MOCKS
+   * `@/lib/ai-memory/chimmy-memory-context` wholesale — so the real module, and the second route
+   * into the real `getFullAIContext`, never executed under test. Mocking a module hides every
+   * path through it, including the unguarded one. The regression test added for this asserts on
+   * the `leagueId` handed to that mock instead.
+   *
+   * The lesson worth keeping: "I fixed function F" is not the same claim as "every call site of
+   * F is fixed", and a census of CALL SITES is what closes the second one.
+   */
   const memoryTask: Promise<string | undefined> =
     userId
       ? getChimmyMemoryContext({
           userId,
-          leagueId: leagueId ?? null,
+          leagueId: leagueSnapshot?.id ?? null,
           conversationId,
           sleeperUsername: sleeperUsername ?? null,
         })
@@ -1684,10 +1781,33 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
    * why only four of the seven opt-in slices are mapped.
    */
   const earlyWant = deriveWantFromIntent(classifyChimmyIntent(message).intent)
+  /*
+   * 🛑 THE THIRD BYPASS FAMILY, AND THE ONLY ONE GATED BEHIND A FLAG.
+   *
+   * This was `DECISION_OS_GROUNDING_ENABLED === 'true' && leagueId` passing the RAW request field,
+   * exactly like `getInsightBundle`, `buildLeagueSportsGroundingPacket` and the sixteen specialty
+   * builders before them. `buildDecisionOsGroundingPacket` performs no membership check of its own:
+   * `resolveLeagueMembership` appears nowhere in `lib/decision-os/grounding/`, and its `userId` is
+   * used only to scope slices WITHIN the league (`loadLineupDecisionSlice({ userId, leagueId })`),
+   * never to decide whether the caller may see it. It is also the WIDEST of the four — it fans out
+   * to league rules, values, projections, lineup, waiver, roster-value, commissioner-health,
+   * psychology-consistency, saved analysis, league intelligence and league context.
+   *
+   * ⚠ THE FLAG IS WHY THIS ONE IS SCOPED CONDITIONALLY, NOT WHY IT IS SAFE. A flag being off in
+   * tests says nothing about production. The deployed value of `DECISION_OS_GROUNDING_ENABLED` on
+   * the Railway `allfantasy-v2-main` service was NOT verified when this was written, so the live
+   * exposure is UNKNOWN: if the flag is off in production this was latent, and if it is on it was
+   * live. Either way the code defect is identical and is closed here.
+   *
+   * Gating on `leagueSnapshot` is strictly stronger than the old gate AND than adding a `userId`
+   * check: the snapshot is `leagueGrounding.ok ? … : null`, and `leagueGrounding` is only ever
+   * computed when `leagueId && userId`, so a non-null snapshot already implies an authenticated
+   * caller whose membership was proved. The flag check stays exactly where it was.
+   */
   const decisionOsGroundingTask: Promise<string | null> =
-    process.env.DECISION_OS_GROUNDING_ENABLED === 'true' && leagueId
+    process.env.DECISION_OS_GROUNDING_ENABLED === 'true' && leagueSnapshot && userId
       ? withPacketCeiling(buildDecisionOsGroundingPacket({
-          leagueId,
+          leagueId: leagueSnapshot.id,
           userId,
           sport: normalizeToSupportedSport(sport),
           season: season ?? new Date().getFullYear(),
@@ -1737,9 +1857,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       : Promise.resolve(null)
 
   const leagueSportsGroundingTask: Promise<{ serialized: string; packet: Awaited<ReturnType<typeof buildLeagueSportsGroundingPacket>> } | null> =
-    leagueId && userId
+    leagueSnapshot && userId
       ? buildLeagueSportsGroundingPacket({
-          leagueId,
+          leagueId: leagueSnapshot.id,
           userId,
           sport: sport ?? undefined,
           season: season ?? undefined,
@@ -2268,15 +2388,37 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
           const intent = classifyPecrIntent(planInput.message)
           pecrIntent = intent
 
+          /*
+           * 🛑 A FOURTH BYPASS FAMILY, FOUND WHILE PROVING THE THIRD, AND NOT PREVIOUSLY REPORTED.
+           *
+           * `getFullAIContext` makes THREE league-scoped reads with no membership check of its
+           * own — `prisma.aILeagueContext.findUnique({ where: { leagueId } })`,
+           * `getTeamSnapshots(leagueId, teamId, 6)` and `getRecentMemoryEvents({ leagueId })`.
+           * `resolveLeagueMembership` appears nowhere in `lib/ai-memory.ts`. Its result is not
+           * discarded either: `buildMemoryPromptSection(legacyMemory.value)` becomes
+           * `legacyMemorySection`, which is passed straight into the prompt at ~2843. So a
+           * stranger's league phase, team snapshots and memory events were model-visible.
+           *
+           * ⚠ `enrichChatWithData` IS NOT A BYPASS AND IS ONLY CHANGED FOR SYMMETRY. `leagueId`
+           * occurs exactly once in `lib/chat-data-enrichment.ts` — in its own options type — and
+           * is never read, so it discloses nothing today. It is switched to the authorized id so
+           * that whoever eventually implements it inherits the guard instead of the hole.
+           *
+           * ⚠ `teamId` REMAINS THE RAW CLIENT FIELD AND IS DELIBERATELY LEFT. Once `leagueId` is
+           * authorized, `getTeamSnapshots` can still read ANOTHER MEMBER'S team within a league
+           * the caller legitimately belongs to. That is a real but materially different problem —
+           * intra-league, not cross-league — and fixing it needs a team-ownership predicate this
+           * route does not have. Reported, not silently widened into this change.
+           */
           const [legacyEnrichment, legacyMemory] = await Promise.allSettled([
             enrichChatWithData(planInput.message, {
-              leagueId: planInput.leagueId,
+              leagueId: leagueSnapshot?.id,
               sleeperUsername: planInput.sleeperUsername,
             }),
             getFullAIContext({
               userId: planInput.userId,
               sleeperUsername: planInput.sleeperUsername,
-              leagueId: planInput.leagueId,
+              leagueId: leagueSnapshot?.id,
               teamId: planInput.teamId,
             }),
           ])
@@ -2302,9 +2444,31 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
           }
 
           // Inject specialty league context for tournament and Big Brother leagues
-          if (planInput.leagueId && planInput.userId) {
+          /*
+           * 🛑 THE AUTHORIZED SNAPSHOT, NOT THE PLAN INPUT — AND THIS GUARDS SIXTEEN
+           * BUILDERS, NOT ONE.
+           *
+           * `planInput.leagueId` traces back to `formData.get('leagueId')`. Every
+           * `build*ContextForChimmy` below reads league configuration directly —
+           * guillotine mode, dynasty config, best-ball mode, leagueVariant, settings,
+           * leagueSize — and NONE of them performs a membership check:
+           * `resolveLeagueMembership` appears in none of those modules. So an
+           * unauthorized id reached sixteen readers, and their output goes into the
+           * prompt.
+           *
+           * ⚠ FOUND BY A TEST, NOT BY READING. The assertion "no downstream league
+           * read happens after authorization fails" came back with six selects that
+           * were not the membership shape — `guillotineMode,sport`,
+           * `dynastyConfig,id,leagueSize,settings,sport`, and four more. Reading the
+           * route had already missed them twice.
+           *
+           * `leagueSnapshot` exists only because `loadLeagueGroundingForUser` proved
+           * membership, so gating here closes all sixteen at once rather than
+           * per-builder.
+           */
+          if (leagueSnapshot && planInput.userId) {
             try {
-              const tournamentCtx = await buildTournamentContextForChimmy(planInput.leagueId, planInput.userId)
+              const tournamentCtx = await buildTournamentContextForChimmy(leagueSnapshot.id, planInput.userId)
               if (tournamentCtx) {
                 legacyEnrichmentContext = legacyEnrichmentContext
                   ? `${legacyEnrichmentContext}\n\n${tournamentCtx}`
@@ -2312,7 +2476,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
               }
             } catch { /* non-fatal */ }
             try {
-              const bbCtx = await buildBigBrotherContextForChimmy(planInput.leagueId, planInput.userId)
+              const bbCtx = await buildBigBrotherContextForChimmy(leagueSnapshot.id, planInput.userId)
               if (bbCtx) {
                 legacyEnrichmentContext = legacyEnrichmentContext
                   ? `${legacyEnrichmentContext}\n\n${bbCtx}`
@@ -2333,7 +2497,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
                * paid for the league read twice. Removed; its comment is the one you are
                * reading.
                */
-              const idpCtx = await buildIdpContextForChimmy(planInput.leagueId, planInput.userId)
+              const idpCtx = await buildIdpContextForChimmy(leagueSnapshot.id, planInput.userId)
               if (idpCtx) {
                 legacyEnrichmentContext = legacyEnrichmentContext
                   ? `${legacyEnrichmentContext}\n\n${idpCtx}`
@@ -2341,7 +2505,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
               }
             } catch { /* non-fatal */ }
             try {
-              const survivorCtx = await buildSurvivorContextForChimmy(planInput.leagueId, planInput.userId)
+              const survivorCtx = await buildSurvivorContextForChimmy(leagueSnapshot.id, planInput.userId)
               if (survivorCtx) {
                 legacyEnrichmentContext = legacyEnrichmentContext
                   ? `${legacyEnrichmentContext}\n\n${survivorCtx}`
@@ -2349,7 +2513,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
               }
             } catch { /* non-fatal */ }
             try {
-              const zombieCtx = await buildZombieContextForChimmy(planInput.leagueId, planInput.userId)
+              const zombieCtx = await buildZombieContextForChimmy(leagueSnapshot.id, planInput.userId)
               if (zombieCtx) {
                 legacyEnrichmentContext = legacyEnrichmentContext
                   ? `${legacyEnrichmentContext}\n\n${zombieCtx}`
@@ -2357,7 +2521,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
               }
             } catch { /* non-fatal */ }
             try {
-              const devyCtx = await buildDevyContextForChimmy(planInput.leagueId, planInput.userId)
+              const devyCtx = await buildDevyContextForChimmy(leagueSnapshot.id, planInput.userId)
               if (devyCtx) {
                 legacyEnrichmentContext = legacyEnrichmentContext
                   ? `${legacyEnrichmentContext}\n\n${devyCtx}`
@@ -2365,7 +2529,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
               }
             } catch { /* non-fatal */ }
             try {
-              const guillotineCtx = await buildGuillotineContextForChimmy(planInput.leagueId, planInput.userId)
+              const guillotineCtx = await buildGuillotineContextForChimmy(leagueSnapshot.id, planInput.userId)
               if (guillotineCtx) {
                 legacyEnrichmentContext = legacyEnrichmentContext
                   ? `${legacyEnrichmentContext}\n\n${guillotineCtx}`
@@ -2373,7 +2537,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
               }
             } catch { /* non-fatal */ }
             try {
-              const c2cCtx = await buildC2CContextForChimmy(planInput.leagueId, planInput.userId)
+              const c2cCtx = await buildC2CContextForChimmy(leagueSnapshot.id, planInput.userId)
               if (c2cCtx) {
                 legacyEnrichmentContext = legacyEnrichmentContext
                   ? `${legacyEnrichmentContext}\n\n${c2cCtx}`
@@ -2381,7 +2545,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
               }
             } catch { /* non-fatal */ }
             try {
-              const salaryCapCtx = await buildSalaryCapContextForChimmy(planInput.leagueId, planInput.userId)
+              const salaryCapCtx = await buildSalaryCapContextForChimmy(leagueSnapshot.id, planInput.userId)
               if (salaryCapCtx) {
                 legacyEnrichmentContext = legacyEnrichmentContext
                   ? `${legacyEnrichmentContext}\n\n${salaryCapCtx}`
@@ -2389,7 +2553,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
               }
             } catch { /* non-fatal */ }
             try {
-              const dynastyCtx = await buildDynastyContextForChimmy(planInput.leagueId, planInput.userId)
+              const dynastyCtx = await buildDynastyContextForChimmy(leagueSnapshot.id, planInput.userId)
               if (dynastyCtx) {
                 legacyEnrichmentContext = legacyEnrichmentContext
                   ? `${legacyEnrichmentContext}\n\n${dynastyCtx}`
@@ -2397,7 +2561,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
               }
             } catch { /* non-fatal */ }
             try {
-              const dynastyWarRoomCtx = await buildDynastyWarRoomContextForChimmy(planInput.leagueId, planInput.userId)
+              const dynastyWarRoomCtx = await buildDynastyWarRoomContextForChimmy(leagueSnapshot.id, planInput.userId)
               if (dynastyWarRoomCtx) {
                 legacyEnrichmentContext = legacyEnrichmentContext
                   ? `${legacyEnrichmentContext}\n\n${dynastyWarRoomCtx}`
@@ -2405,7 +2569,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
               }
             } catch { /* non-fatal */ }
             try {
-              const redraftCtx = await buildRedraftContextForChimmy(planInput.leagueId, planInput.userId)
+              const redraftCtx = await buildRedraftContextForChimmy(leagueSnapshot.id, planInput.userId)
               if (redraftCtx) {
                 legacyEnrichmentContext = legacyEnrichmentContext
                   ? `${legacyEnrichmentContext}\n\n${redraftCtx}`
@@ -2413,7 +2577,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
               }
             } catch { /* non-fatal */ }
             try {
-              const keeperCtx = await buildKeeperContextForChimmy(planInput.leagueId, planInput.userId)
+              const keeperCtx = await buildKeeperContextForChimmy(leagueSnapshot.id, planInput.userId)
               if (keeperCtx) {
                 legacyEnrichmentContext = legacyEnrichmentContext
                   ? `${legacyEnrichmentContext}\n\n${keeperCtx}`
@@ -2421,7 +2585,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
               }
             } catch { /* non-fatal */ }
             try {
-              const bestBallCtx = await buildBestBallContextForChimmy(planInput.leagueId, planInput.userId)
+              const bestBallCtx = await buildBestBallContextForChimmy(leagueSnapshot.id, planInput.userId)
               if (bestBallCtx) {
                 legacyEnrichmentContext = legacyEnrichmentContext
                   ? `${legacyEnrichmentContext}\n\n${bestBallCtx}`
@@ -2429,7 +2593,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
               }
             } catch { /* non-fatal */ }
             try {
-              const guillotineWarRoomCtx = await buildGuillotineWarRoomContextForChimmy(planInput.leagueId, planInput.userId)
+              const guillotineWarRoomCtx = await buildGuillotineWarRoomContextForChimmy(leagueSnapshot.id, planInput.userId)
               if (guillotineWarRoomCtx) {
                 legacyEnrichmentContext = legacyEnrichmentContext
                   ? `${legacyEnrichmentContext}\n\n${guillotineWarRoomCtx}`
@@ -2438,7 +2602,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
             } catch { /* non-fatal */ }
             try {
               // T10 — grounded trade intelligence (deterministic T2–T9; reuses this route, no new route).
-              const tradeCtx = await buildTradeContextForChimmy(planInput.leagueId, planInput.userId)
+              const tradeCtx = await buildTradeContextForChimmy(leagueSnapshot.id, planInput.userId)
               if (tradeCtx) {
                 legacyEnrichmentContext = legacyEnrichmentContext
                   ? `${legacyEnrichmentContext}\n\n${tradeCtx}`
@@ -2454,7 +2618,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
                * without the trade.
                */
               const pendingTradeCtx = await buildPendingTradeDecisionContext(
-                planInput.leagueId,
+                leagueSnapshot.id,
                 planInput.userId,
               )
               if (pendingTradeCtx) {
@@ -2473,7 +2637,7 @@ ${pendingTradeCtx}`
                * back from there.
                */
               const tradeHistoryCtx = await buildLeagueTradeHistoryContext(
-                planInput.leagueId,
+                leagueSnapshot.id,
                 planInput.userId,
               )
               if (tradeHistoryCtx) {
@@ -2492,7 +2656,7 @@ ${tradeHistoryCtx}`
                * answer.
                */
               const standingsCtx = await buildLeagueStandingsContext(
-                planInput.leagueId,
+                leagueSnapshot.id,
                 planInput.userId,
               )
               if (standingsCtx) {
@@ -2510,7 +2674,7 @@ ${standingsCtx}`
                * could not answer: the aggregation behind this has three live
                * callers and the chat route referenced none of them.
                */
-              const h2h = await buildHeadToHeadGrounding(planInput.leagueId)
+              const h2h = await buildHeadToHeadGrounding(leagueSnapshot.id)
               if (h2h) {
                 legacyEnrichmentContext = legacyEnrichmentContext
                   ? `${legacyEnrichmentContext}
@@ -2524,7 +2688,7 @@ ${h2h.text}`
                * The draft. Live for 7 leagues and paused for 2 as of writing —
                * the one surface with rich data while the season has not started.
                */
-              const draftCtx = await buildDraftContext(planInput.leagueId, planInput.userId)
+              const draftCtx = await buildDraftContext(leagueSnapshot.id, planInput.userId)
               if (draftCtx) {
                 legacyEnrichmentContext = legacyEnrichmentContext
                   ? `${legacyEnrichmentContext}
@@ -2538,7 +2702,7 @@ ${draftCtx}`
                * Waiver RULES, which exist for 92 leagues — carrying with them the
                * explicit statement that waiver ACTIVITY does not exist at all.
                */
-              const waiverCtx = await buildWaiverContext(planInput.leagueId, planInput.userId)
+              const waiverCtx = await buildWaiverContext(leagueSnapshot.id, planInput.userId)
               if (waiverCtx) {
                 legacyEnrichmentContext = legacyEnrichmentContext
                   ? `${legacyEnrichmentContext}
@@ -2554,7 +2718,7 @@ ${waiverCtx}`
                * everyone else, because everything in it is other managers' data.
                */
               const commishCtx = await buildCommissionerContext(
-                planInput.leagueId,
+                leagueSnapshot.id,
                 planInput.userId,
               )
               if (commishCtx) {
@@ -2988,8 +3152,20 @@ ${describedTradeCtx}`
             }
           : {
               grounded: false as const,
-              leagueId,
-              reason: leagueGrounding.reason,
+              /*
+               * 🛑 THE SAME ENUMERATION ORACLE AS THE REFUSAL PAYLOAD, IN THE 200
+               * RESPONSE. `leagueId` here is the raw request field and `reason`
+               * distinguishes "not yours" from "not real", so a caller could walk
+               * ids and read which exist off a SUCCESSFUL answer, not only off a
+               * refusal.
+               *
+               * ⚠ THE `grounded: false` FLAG STAYS. The drawer renders it, and
+               * "Chimmy is answering without your league" is exactly the state a
+               * user should see — it is the IDENTIFIERS beside it that were never
+               * theirs to read. The message stays too: it is the same copy the
+               * refusal shows, and that copy no longer distinguishes the two cases.
+               */
+              leagueId: null,
               message: describeLeagueGroundingFailure(leagueGrounding.reason),
             }
         : { grounded: false as const, leagueId: null, reason: 'no_league_selected' as const },
