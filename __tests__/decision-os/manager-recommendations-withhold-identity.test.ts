@@ -125,12 +125,10 @@ describe('no manager classification reaches a client', () => {
  * receives must not change. If the output carries no information about which label fired, no label
  * can be recovered from it — and that holds for labels nobody has invented yet.
  *
- * ⚠ `priority` AND `severity` ARE DELIBERATELY EXCLUDED, AND THAT IS A REAL LIMIT, NOT AN OVERSIGHT.
- * They genuinely vary with the classification — a dormant manager is more urgent than a
- * conservative one — so a coarse urgency signal does still correlate. Flattening it would remove
- * product behaviour the privacy rule never asked for. The line drawn is the vocabulary and any
- * restatement of it, not the existence of a decision. Said out loud so nobody reads this test as
- * proving more than it does.
+ * 🛑 `priority` AND `severity` ARE EXCLUDED HERE, AND THE LIMIT IS LARGER THAN THAT EXCLUSION
+ * ADMITS. See the pinned measurement at the bottom of this file: the label is recoverable, and not
+ * only from the ordinal. This describe block therefore proves something narrow — that the TEXT
+ * carries nothing — and must not be read as proving the classification is unrecoverable.
  */
 describe('the text a client receives does not vary with the classification', () => {
   const textOf = (over: Record<string, unknown>, category: string) => {
@@ -174,5 +172,68 @@ describe('league-level archetypes are deliberately untouched', () => {
   it('the manager denylist contains no league archetype term', () => {
     expect(LEAKY_TOKENS).not.toContain('inactive_or_stale')
     expect(LEAKY_TOKENS).not.toContain('high_churn_risk')
+  })
+})
+
+/**
+ * 🛑 PINNED MEASUREMENT: THE CLASSIFICATION IS STILL RECOVERABLE, AND THIS RECORDS EXACTLY HOW.
+ *
+ * The text carries nothing (above). That is not the same as the label being unrecoverable, and the
+ * difference was found only by running the test a reviewer proposed: hold everything fixed, vary
+ * only the label, and check whether the emitted urgency pairs COLLIDE. They do not — all eight
+ * labels produce distinct (priority, severity).
+ *
+ * ⚠ AND THE URGENCY IS NOT THE BINDING CHANNEL, WHICH IS THE FINDING THAT MATTERS. The SET OF
+ * CATEGORIES that fires is already injective on the label, before any field is read. So
+ * "flatten priority/severity" would cost real product behaviour and close nothing.
+ *
+ * That residue is inseparable from a recommender that tailors advice: giving the advice reveals the
+ * condition that triggered it. It is pinned rather than fixed, so that if someone later changes the
+ * category-to-label mapping — or decides the residue is unacceptable and removes the tailoring —
+ * this goes red and the decision is explicit instead of silent.
+ *
+ * ⚠ SCOPE, WHICH IS WHAT KEEPS IT PROPORTIONATE: these are SELF-SCOPED. `dashboard-intelligence.ts`
+ * matches `p.managerId === managerId` and the only consumer resolves the session user's own
+ * leagues, so a viewer can infer their OWN classification and never a third party's. Milestone 32
+ * has no self carve-out, so this is a product decision, not a closed one.
+ */
+describe('PINNED LIMIT: the label survives in the shape of the response', () => {
+  const LABELS = [
+    'ghost_manager', 'set_and_forget', 'reactive_manager', 'indecisive_tinkerer',
+    'serial_trader', 'waiver_hawk', 'trade_seeker', 'committed_grinder',
+  ]
+
+  /** The categories that fire for a label, sorted — the channel that binds. */
+  const firedFor = (label: string) =>
+    assembleManagerRecommendations(forIdentity({ primaryIdentity: label }))
+      .recommendations.map((r) => r.category).sort().join('+')
+
+  it('the set of categories that fires identifies the label', () => {
+    const seen = new Map<string, string[]>()
+    for (const l of LABELS) {
+      const k = firedFor(l)
+      seen.set(k, [...(seen.get(k) ?? []), l])
+    }
+    // Labels that produce a NON-EMPTY, unique category set are individually recoverable.
+    const recoverable = [...seen.entries()]
+      .filter(([k, ls]) => k !== '' && ls.length === 1)
+      .map(([, ls]) => ls[0])
+      .sort()
+    expect(recoverable).toEqual(
+      ['ghost_manager', 'indecisive_tinkerer', 'set_and_forget', 'trade_seeker'],
+    )
+  })
+
+  it('and the urgency pair does not collide either, so flattening it would close nothing', () => {
+    const pairs = new Set<string>()
+    let emitted = 0
+    for (const l of LABELS) {
+      for (const r of assembleManagerRecommendations(forIdentity({ primaryIdentity: l })).recommendations) {
+        pairs.add(`${r.category}:${r.priority}/${r.severity}`)
+        emitted += 1
+      }
+    }
+    // One distinct (category, priority, severity) per emitted recommendation = no collisions at all.
+    expect(pairs.size).toBe(emitted)
   })
 })

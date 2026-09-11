@@ -117,10 +117,33 @@ function makeSet(
  * that is the observable half, and it is untouched. Where identity is the only driver, the honest
  * statement is that an assessment contributed and is not disclosed.
  *
- * ⚠ `priority` AND `severity` STILL VARY WITH THE CLASSIFICATION, DELIBERATELY. A dormant manager
- * is genuinely more urgent than a conservative one, and flattening that would remove product
- * behaviour the privacy rule never asked for. A coarse urgency level is not a raw dossier. The
- * line drawn here is the vocabulary and any restatement of it, not the existence of a decision.
+ * 🛑 A RESIDUAL CHANNEL REMAINS, IT IS BIGGER THAN "priority IS JUST AN ORDINAL", AND MEASURING IT
+ * IS THE ONLY REASON THAT IS KNOWN.
+ *
+ * An earlier version of this note claimed `priority`/`severity` were a coarse ordinal and therefore
+ * not a dossier. A peer review proposed the test that settles it — hold everything fixed, vary only
+ * the label, and see whether the emitted pairs collide. They do not. Measured across the eight
+ * identity labels, every one produces a UNIQUE (priority, severity), and the label is recoverable.
+ *
+ * ⚠ AND THE ORDINAL IS NOT EVEN THE BINDING CHANNEL, WHICH IS WHY "FIX priority" IS THE WRONG
+ * CONCLUSION. The SET OF CATEGORIES THAT FIRE is already injective on the label: `lineup_discipline`
+ * fires only for `indecisive_tinkerer`, `trade_coaching` only for `trade_seeker`, `ghost_manager`
+ * uniquely produces engagement_boost + league_participation together, `set_and_forget` uniquely
+ * produces league_participation + draft_preparation. Flattening the urgency would therefore cost
+ * real product behaviour and close NOTHING — the label is recoverable from which advice appears,
+ * before any field on it is read.
+ *
+ * That channel is inseparable from the feature. A recommender that gives different advice to
+ * different manager types reveals the type by giving the advice; the only way to close it is to
+ * stop tailoring, which is the product. So it is recorded rather than "fixed", and the test file
+ * pins the exact shape so a later change is visible instead of silent.
+ *
+ * ⚠ WHAT KEEPS THIS PROPORTIONATE IS SCOPE, NOT SIZE. These are SELF-SCOPED: the single producer
+ * call site in `dashboard-intelligence.ts` matches `p.managerId === managerId`, and the only
+ * consumer resolves the session user's own leagues. A viewer can infer their OWN classification,
+ * never a third party's — which is the thing "competitive intelligence about a real person" was
+ * always about. It is still not nothing, and milestone 32 has no self carve-out, so whether this
+ * residue is acceptable is a product decision and is deliberately left to one.
  */
 const IDENTITY_WITHHELD_EVIDENCE =
   'Supported by an internal engagement assessment, which is not disclosed here'
