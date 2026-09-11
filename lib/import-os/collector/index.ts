@@ -71,6 +71,21 @@ export {
   type FantraxMatchupParityResult,
   type FantraxMatchupLeagueResult,
 } from './fantraxMatchupParity'
+// Fleaflicker weekly-matchup parity. Separate for the same reason Fantrax is —
+// the API is public and keyless, so the credential-candidate machinery is dead
+// code — and sharing `applySchedule` for the same reason too.
+//
+// 🛑 IT REFUSES A PAYLOAD WHOSE SEASON IS NOT THE ONE REQUESTED, and that is not
+// defensive padding: Fleaflicker silently CLAMPS a season past the league's last
+// and returns that season's completed games under HTTP 200. Without the refusal
+// a weekly sync of any dormant league persists years-old finals as this week's
+// results. See fleaflickerMatchupParity.ts's header and contracts/fleaflicker.
+export {
+  runFleaflickerMatchupParity,
+  enumerateFleaflickerMatchupConnections,
+  type FleaflickerMatchupParityResult,
+  type FleaflickerMatchupLeagueResult,
+} from './fleaflickerMatchupParity'
 
 /*
  * 🛑 MFL STILL HAS NO WEEKLY-MATCHUP WRITER, AND IT IS STILL NOT "NOBODY GOT ROUND TO IT" —
