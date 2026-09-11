@@ -338,6 +338,36 @@ function extractYahooStatCategories(yahooSettings: unknown): Map<string, YahooCa
  * Returns null when nothing translated (no invented rulebook; Sleeper-keyed
  * and native snapshots fall through to the legacy path unchanged).
  */
+/**
+ * `statKey -> statName` from the canonical normalizer's `rulesDetail` list.
+ *
+ * ⚠ A POSITION-QUALIFIED KEY (`rec@TE`) IS ALSO INDEXED UNDER ITS BARE STAT KEY, because the flat
+ * `rules` map this feeds is keyed on whichever form the normalizer wrote. Losing the name for a
+ * position-dependent rule would leave exactly the MFL leagues that motivated `positions` — the
+ * ones pricing a reception differently per position — as the ones still untranslated.
+ */
+function extractProviderStatNames(scoringSettings: unknown): Map<string, string> {
+  const out = new Map<string, string>()
+  if (!scoringSettings || typeof scoringSettings !== 'object' || Array.isArray(scoringSettings)) return out
+  const detail = (scoringSettings as Record<string, unknown>).rulesDetail
+  if (!Array.isArray(detail)) return out
+
+  for (const entry of detail) {
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) continue
+    const row = entry as Record<string, unknown>
+    const key = typeof row.statKey === 'string' ? row.statKey.trim() : ''
+    const name = typeof row.statName === 'string' ? row.statName.trim() : ''
+    if (!key || !name) continue
+    if (!out.has(key)) out.set(key, name)
+    const positions = Array.isArray(row.positions) ? row.positions : []
+    for (const p of positions) {
+      const qualified = `${key}@${String(p).trim().toUpperCase()}`
+      if (!out.has(qualified)) out.set(qualified, name)
+    }
+  }
+  return out
+}
+
 function bridgeProviderScoringRules(s: Record<string, unknown>): Record<string, unknown> | null {
   const snapshot = s.scoringSettings
   const rules =
@@ -347,12 +377,32 @@ function bridgeProviderScoringRules(s: Record<string, unknown>): Record<string, 
   if (!rules || typeof rules !== 'object' || Array.isArray(rules)) return null
 
   const yahooStatCategoriesById = extractYahooStatCategories(s.yahoo_settings)
+  /*
+   * 🛑 MFL RULES ARE RESOLVABLE ONLY BY NAME, AND THE NAME IS NOT IN `rules`.
+   * `resolveProviderScoringStatKey` refuses to translate an `mfl_stat_<code>` from the code —
+   * deliberately, because no evidence base for an MFL code table exists and a guessed key
+   * "silently mis-scores every player in the league". It takes the name instead, and this
+   * function never passed one, so every MFL league fell through untranslated while the map
+   * written for it sat unreachable.
+   *
+   * The flat `rules` map cannot carry the name (it is `stat_key -> points` by construction), so
+   * it comes off `rulesDetail`, the typed list the canonical normalizer keeps alongside it for
+   * exactly this reason.
+   *
+   * ⚠ ABSENT STAYS UNRESOLVED. A rule with no name passes `null` and keeps its provider key, so
+   * it surfaces in `coverage.unmatched` rather than being guessed at — same bar as before, now
+   * reachable.
+   */
+  const mflStatNamesByKey = extractProviderStatNames(s.scoringSettings)
   const bridged: Record<string, unknown> = {}
   let translated = 0
   for (const [key, value] of Object.entries(rules as Record<string, unknown>)) {
     const weight = readNumber(value)
     if (weight == null) continue
-    const canonical = resolveProviderScoringStatKey(key, { yahooStatCategoriesById })
+    const canonical = resolveProviderScoringStatKey(key, {
+      yahooStatCategoriesById,
+      mflStatName: mflStatNamesByKey.get(key) ?? null,
+    })
     if (canonical) {
       translated++
       bridged[canonical] = weight

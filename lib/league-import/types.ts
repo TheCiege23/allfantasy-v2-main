@@ -183,6 +183,21 @@ export interface NormalizedScoring {
     points_value: number
     multiplier?: number
     positions?: string[]
+    /**
+     * The provider's own human-readable name for this rule, when it ships one.
+     *
+     * 🛑 THIS IS THE ONLY THING THAT CAN RESOLVE AN MFL RULE, AND IT WAS BEING DROPPED.
+     * `ScoringKeyAliasResolver` maps MFL deliberately by NAME rather than by code — there is no
+     * evidence base for an MFL code table and guessing one "silently mis-scores every player in
+     * the league" (see `MFL_STAT_NAME_TO_SLEEPER_KEY`). `MflScoringRuleRaw` parses the name; the
+     * adapter then discarded it, so `resolveProviderScoringStatKey` was never given the one input
+     * it needs and every `mfl_stat_<code>` fell through unresolved. The careful map could not fire.
+     *
+     * ⚠ OPTIONAL, AND ABSENT MUST STAY UNRESOLVED. A rule with no name resolves to null and keeps
+     * its provider key — visibly unmatched rather than guessed. That is the same bar the resolver
+     * sets and this field must not be used to relax it.
+     */
+    stat_name?: string | null
   }>
   raw?: Record<string, unknown>
 }

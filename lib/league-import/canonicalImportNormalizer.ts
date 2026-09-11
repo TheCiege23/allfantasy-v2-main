@@ -433,10 +433,19 @@ export function buildCanonicalImportBundle(normalized: NormalizedImportResult): 
         ? (rule.positions as unknown[]).map((p) => String(p).trim().toUpperCase()).filter(Boolean)
         : []
 
+      /*
+       * ⚠ `statName` RIDES ON THE DETAIL LIST, NOT THE MAP, AND IT HAS TO. The flat
+       * `scoringRules` map is `stat_key -> points` by construction and cannot carry a third
+       * value — which is precisely why the detail list exists ("the map is lossy by
+       * construction", above). MFL rules are resolvable ONLY by name, so a consumer that needs
+       * to translate them must read this list; `bridgeProviderScoringRules` now does.
+       */
+      const statName = typeof rule.stat_name === 'string' ? rule.stat_name.trim() : ''
       scoringRulesDetail.push({
         statKey: r.stat_key,
         pointsValue: r.points_value,
         ...(positions.length > 0 ? { positions } : {}),
+        ...(statName ? { statName } : {}),
       })
 
       if (positions.length === 0) {

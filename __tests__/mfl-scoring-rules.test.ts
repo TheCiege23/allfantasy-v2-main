@@ -130,3 +130,88 @@ describe('MFL scoring key resolution', () => {
     expect(resolveProviderScoringStatKey('rec')).toBeNull()
   })
 })
+
+/**
+ * 🛑 THE RESOLVER ABOVE COULD NEVER FIRE FOR A REAL LEAGUE, AND NOTHING SAID SO.
+ *
+ * Every test in `MFL scoring key resolution` calls `resolveProviderScoringStatKey` with a name
+ * passed in by hand. In production nothing passed one: `MflAdapter` parsed `rule.name` and then
+ * dropped it building the normalized rule, so the name never reached the stored snapshot and
+ * `bridgeProviderScoringRules` had nothing to give the resolver. Every `mfl_stat_<code>` fell
+ * through unresolved, in a league whose scoring the product then reported as untranslatable.
+ *
+ * A unit test of the resolver cannot catch that — it supplies the very input the pipeline was
+ * failing to supply. These cases follow the name through the three layers that dropped it.
+ */
+describe('MFL scoring names survive the import chain', () => {
+  it('the adapter keeps the name MFL shipped, and omits it when MFL shipped none', async () => {
+    const { MflAdapter } = await import('@/lib/league-import/adapters/mfl/MflAdapter')
+    // `MflAdapter` is an object literal implementing ILeagueImportAdapter, not a class.
+    const adapter = MflAdapter
+    const payload = {
+      league: { id: '65432', name: 'Test', season: '2025' },
+      teams: [],
+      settings: { scoringType: null, rosterPositions: [], raw: {} },
+      scoringRules: [
+        { code: '21', name: 'Receptions', positions: [], points: 1 },
+        { code: '99', name: null, positions: [], points: 3 },
+      ],
+      schedule: [], standings: [], transactions: [], draftPicks: [],
+      playerMap: {}, lineupBreakdownAvailable: false, previousSeasons: [],
+    }
+    const out = await adapter.normalize(payload as never)
+    const rules = out.scoring?.rules ?? []
+
+    expect(rules.find((r) => r.stat_key === 'mfl_stat_21')).toMatchObject({ stat_name: 'Receptions' })
+    // No name shipped ⇒ the field is ABSENT, not ''. "MFL sent nothing" must stay distinguishable.
+    expect(rules.find((r) => r.stat_key === 'mfl_stat_99')).not.toHaveProperty('stat_name')
+  })
+
+  it('🛑 the bridge resolves an MFL rule from the stored name — the end-to-end claim', async () => {
+    const { extractScoringSettings } = await import('@/lib/projections/leagueScoring')
+    const settings = {
+      scoringSettings: {
+        rules: { mfl_stat_21: 1 },
+        rulesDetail: [{ statKey: 'mfl_stat_21', pointsValue: 1, statName: 'Receptions' }],
+      },
+    }
+    const bridged = extractScoringSettings(settings)
+    // Translated to the canonical Sleeper key rather than left as the provider code.
+    expect(bridged).toMatchObject({ rec: 1 })
+    expect(bridged).not.toHaveProperty('mfl_stat_21')
+  })
+
+  it('a rule with no stored name stays UNRESOLVED under its provider key', async () => {
+    /*
+     * The honesty bar the resolver sets, preserved now that it is reachable: unmatched is
+     * reported, never guessed. `coverage.unmatched` is what surfaces it to a user.
+     */
+    const { extractScoringSettings } = await import('@/lib/projections/leagueScoring')
+    const bridged = extractScoringSettings({
+      scoringSettings: {
+        rules: { mfl_stat_21: 1, mfl_stat_99: 3 },
+        rulesDetail: [{ statKey: 'mfl_stat_21', pointsValue: 1, statName: 'Receptions' }],
+      },
+    })
+    expect(bridged).toMatchObject({ rec: 1, mfl_stat_99: 3 })
+  })
+
+  it('a POSITION-QUALIFIED MFL rule resolves too', async () => {
+    /*
+     * ⚠ The position-dependent leagues are exactly the ones that motivated `positions` in the
+     * first place — MFL pricing a reception per position. The flat map keys those as
+     * `mfl_stat_21@TE`, so a name lookup that only indexed the bare key would leave precisely
+     * those leagues untranslated while appearing to work everywhere else.
+     */
+    const { extractScoringSettings } = await import('@/lib/projections/leagueScoring')
+    const bridged = extractScoringSettings({
+      scoringSettings: {
+        rules: { 'mfl_stat_21@TE': 1.5 },
+        rulesDetail: [
+          { statKey: 'mfl_stat_21', pointsValue: 1.5, positions: ['TE'], statName: 'Receptions' },
+        ],
+      },
+    })
+    expect(bridged).toMatchObject({ rec: 1.5 })
+  })
+})
