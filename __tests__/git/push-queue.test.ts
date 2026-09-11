@@ -1181,3 +1181,140 @@ describe('push-queue — an unannounced smoke still gets the long grace', () => 
     expect(tickets().some((t) => t.sha === SHA_A)).toBe(true)
   })
 })
+
+describe('push-queue — a ticket is REFUSED when the push would add nothing', () => {
+  /**
+   * 🛑 THE QUEUE'S DEPTH WAS MOSTLY NOT REAL WORK. Audited 2026-09-11: 6 of 11
+   * live tickets were already upstream — three copies of one docs commit under
+   * renamed shas, plus two whose patch-id was on `main` hours earlier. The
+   * refusal has to land at TICKET time; refusing at the head of the line is a
+   * correct answer delivered forty minutes late, and does not stop the ticket
+   * occupying a place meanwhile. So every case here asserts BOTH the exit status
+   * AND that no ticket file was written.
+   *
+   * ⚠ THE `stranding` CASE IS THE REASON THIS IS NOT A ONE-LINER, and it must
+   * never be "simplified" away. A ticket is keyed on the TIP, and a tip's
+   * patch-id is only its top commit's — so testing "the tip is already upstream"
+   * refuses a tip of [new commit, duplicate on top] and the new commit never
+   * lands. No conflict, no error, just a push nobody let through.
+   */
+  let repo: string
+  let main: string
+  let dupOfLanded: string
+  let brandNew: string
+  let strandingTip: string
+  let containedSha: string
+
+  const g = (args: string[], cwd: string) =>
+    execFileSync('git', args, { encoding: 'utf8', cwd }).trim()
+  const patchId = (sha: string, cwd: string) => {
+    const show = execFileSync('git', ['show', sha, '--format=', '--patch'], { encoding: 'utf8', cwd })
+    return execFileSync('git', ['patch-id', '--stable'], { input: show, encoding: 'utf8', cwd })
+      .trim()
+      .split(/\s+/)[0]
+  }
+
+  beforeEach(() => {
+    repo = mkdtempSync(join(tmpdir(), 'af-push-queue-dup-'))
+    const id = ['-c', 'user.email=test@example.com', '-c', 'user.name=test', '-c', 'commit.gpgsign=false']
+    const commit = (file: string, msg: string) => {
+      writeFileSync(join(repo, file), `${file}\n`)
+      g([...id, 'add', file], repo)
+      g([...id, 'commit', '-q', '-m', msg], repo)
+      return g(['rev-parse', 'HEAD'], repo)
+    }
+
+    g(['init', '-q', '-b', 'main'], repo)
+    const c0 = commit('base.txt', 'c0')
+    // The ORIGINAL feature commit, authored off c0 and never pushed from here.
+    const original = commit('f.txt', 'feat: the feature')
+
+    // main carries a CHERRY-PICKED COPY of it — same patch, different sha.
+    g(['checkout', '-q', '-B', 'mainline', c0], repo)
+    commit('one.txt', 'c1')
+    g([...id, 'cherry-pick', original], repo)
+    main = g(['rev-parse', 'HEAD'], repo)
+    containedSha = c0
+    dupOfLanded = original
+
+    g(['checkout', '-q', '-B', 'newonly', c0], repo)
+    brandNew = commit('n.txt', 'feat: genuinely new')
+
+    g(['checkout', '-q', '-B', 'stranding', c0], repo)
+    commit('n2.txt', 'feat: new, and would be stranded')
+    g([...id, 'cherry-pick', original], repo)
+    strandingTip = g(['rev-parse', 'HEAD'], repo)
+  })
+
+  afterEach(() => {
+    rmSync(repo, { recursive: true, force: true })
+  })
+
+  const remote = (extra: Record<string, string> = {}) => ({
+    AF_PUSH_QUEUE_NO_REMOTE: '0',
+    AF_PUSH_QUEUE_REMOTE_SHA: main,
+    ...extra,
+  })
+
+  it('the fixture is real: the copy on main is a RENAME, not the same commit', () => {
+    // Without this the duplicate case could pass for the trivial reason that the
+    // two shas are equal, which is not the case the guard exists for.
+    expect(dupOfLanded).not.toBe(main)
+    expect(patchId(dupOfLanded, repo)).toBe(patchId(main, repo))
+    expect(spawnSync('git', ['merge-base', '--is-ancestor', dupOfLanded, main], { cwd: repo }).status).toBe(1)
+  })
+
+  it('REFUSES a sha already contained in main, and takes no ticket', () => {
+    const res = check(containedSha, remote(), repo)
+    expect(res.status).toBe(1)
+    expect(res.stderr).toContain('would add nothing')
+    expect(tickets()).toHaveLength(0)
+  })
+
+  it('REFUSES a cherry-picked duplicate matched by patch-id, and takes no ticket', () => {
+    const res = check(dupOfLanded, remote(), repo)
+    expect(res.status).toBe(1)
+    expect(res.stderr).toContain('would add nothing')
+    expect(res.stderr).toContain('already on main as')
+    expect(tickets()).toHaveLength(0)
+  })
+
+  it('ALLOWS genuinely new work, and takes a ticket', () => {
+    const res = check(brandNew, remote(), repo)
+    expect(res.status).toBe(0)
+    expect(res.stderr).not.toContain('would add nothing')
+    expect(tickets()).toHaveLength(1)
+  })
+
+  it('ALLOWS a tip whose TOP commit is a duplicate but which carries new work below it', () => {
+    // 🛑 The stranding case. `strandingTip`'s own patch-id IS already upstream,
+    // so a tip-only test refuses this and loses the commit underneath.
+    expect(patchId(strandingTip, repo)).toBe(patchId(main, repo))
+
+    const res = check(strandingTip, remote(), repo)
+    expect(res.status).toBe(0)
+    expect(res.stderr).not.toContain('would add nothing')
+    expect(tickets()).toHaveLength(1)
+  })
+
+  it('fails OPEN when the remote is unreadable — it can never block on a doubt', () => {
+    const res = check(dupOfLanded, { AF_PUSH_QUEUE_NO_REMOTE: '1' }, repo)
+    expect(res.status).toBe(0)
+    expect(res.stderr).not.toContain('would add nothing')
+  })
+
+  it('fails OPEN when the range is larger than the scan cap', () => {
+    // ⚠ The cap is parsed with Number.parseInt, NOT `Number(x) || 200` — 0 is
+    // falsy, so the `||` form swallowed an explicit 0 and this control passed
+    // against the default while appearing to test the cap.
+    const res = check(dupOfLanded, remote({ AF_PUSH_QUEUE_UPSTREAM_CAP: '0' }), repo)
+    expect(res.status).toBe(0)
+    expect(res.stderr).not.toContain('would add nothing')
+  })
+
+  it('honours the deliberate re-land escape hatch', () => {
+    const res = check(dupOfLanded, remote({ AF_PUSH_QUEUE_ALLOW_DUPLICATE: '1' }), repo)
+    expect(res.status).toBe(0)
+    expect(tickets()).toHaveLength(1)
+  })
+})

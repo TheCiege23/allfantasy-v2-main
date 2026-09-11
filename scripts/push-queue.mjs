@@ -786,6 +786,106 @@ function isAncestor(older, newer) {
 }
 
 /**
+ * Would this push add NOTHING that is not already on `origin/main`?
+ *
+ * ⚠ THE QUEUE'S DEPTH WAS MOSTLY NOT REAL WORK. Audited 2026-09-11: of ELEVEN
+ * live tickets, SIX were already upstream — three copies of one docs commit under
+ * renamed shas, plus two whose patch-id was on `main` hours earlier. Everyone in
+ * that line, including the sessions that put them there, waited behind their own
+ * orphaned churn. The refusal has to happen at TICKET time, not at push time:
+ * refusing at the head of the line is a correct answer delivered forty minutes
+ * late, and it does not stop the ticket occupying a place meanwhile.
+ *
+ * 🛑 AND THE OBVIOUS IMPLEMENTATION STRANDS WORK. Testing "the tip's patch-id is
+ * already upstream" is WRONG, because a ticket is keyed on the TIP and a tip's
+ * patch-id is only its top commit's. A tip of [new commit, duplicate on top]
+ * would be refused and the new commit never landed — no conflict, no error, just
+ * a push nobody let through. So the question is not about the tip at all: EVERY
+ * commit in `origin/main..tip` must already be upstream before this refuses.
+ * There is a control for exactly this case; do not "simplify" it back.
+ *
+ * Returns null — meaning ALLOW — for every uncertainty: no remote, git failed, a
+ * patch-id that would not compute, or a range too large to scan. Same fail-open
+ * contract as the rest of this file. A queue that blocks a real push to save a
+ * wasted one is a worse trade than the noise it removes.
+ */
+/* ⚠ NOT `Number(env) || 200`. That swallows an explicit 0, because 0 is falsy —
+   so the cap could never be lowered, and the control written to exercise the
+   fail-open path silently tested the default instead and reported a refusal.
+   Found by that control going the wrong way, which is the only reason it is
+   parsed properly here. */
+const capRaw = Number.parseInt(process.env.AF_PUSH_QUEUE_UPSTREAM_CAP ?? '', 10)
+const UPSTREAM_SCAN_CAP = Number.isFinite(capRaw) && capRaw >= 0 ? capRaw : 200
+
+function alreadyUpstream(sha) {
+  if (process.env.AF_PUSH_QUEUE_ALLOW_DUPLICATE === '1') return null
+
+  const main = remoteMain()
+  if (!main) return null
+  if (!/^[0-9a-f]{7,40}$/i.test(String(sha))) return null
+
+  // Literally contained: the orphan case. A re-taking orphan holds a landed sha
+  // by definition, which is where most of the six came from.
+  if (isAncestor(sha, main) === true) return { kind: 'contained', pairs: [] }
+
+  const rangeOut = git(['rev-list', `${main}..${sha}`], { timeout: 20_000 })
+  if (rangeOut === null) return null
+  const commits = rangeOut.split('\n').map((s) => s.trim()).filter(Boolean)
+  if (commits.length === 0) return { kind: 'contained', pairs: [] }
+  if (commits.length > UPSTREAM_SCAN_CAP) return null
+
+  const base = git(['merge-base', sha, main])
+  if (!base) return null
+  const upOut = git(['rev-list', `${base}..${main}`], { timeout: 20_000 })
+  if (upOut === null) return null
+  const upstream = upOut.split('\n').map((s) => s.trim()).filter(Boolean)
+  if (upstream.length === 0 || upstream.length > UPSTREAM_SCAN_CAP) return null
+
+  /* ⚠ null NEVER MATCHES null, the same rule `sameWork` carries. A commit whose
+     patch-id would not compute is not thereby a duplicate of another one that
+     also would not compute — and here that mistake refuses a real push. */
+  const upstreamPids = new Map()
+  for (const c of upstream) {
+    const p = patchIdOf(c)
+    if (p && !upstreamPids.has(p)) upstreamPids.set(p, c)
+  }
+  if (upstreamPids.size === 0) return null
+
+  const pairs = []
+  for (const c of commits) {
+    const p = patchIdOf(c)
+    if (!p) return null
+    const landed = upstreamPids.get(p)
+    if (!landed) return null // something here is genuinely new — allow the push
+    pairs.push([c, landed])
+  }
+  return { kind: 'duplicate', pairs }
+}
+
+function upstreamRefusal(sha, found) {
+  const lines =
+    found.kind === 'contained'
+      ? `     ${sha.slice(0, 9)} is already contained in origin/main\n`
+      : found.pairs
+          .map(([local, landed]) => `     ${local.slice(0, 9)}  already on main as  ${landed.slice(0, 9)}\n`)
+          .join('')
+  return (
+    `\n  ✋ push-queue: this push would add nothing — refusing the TICKET, not just the push.\n\n` +
+    lines +
+    `\n  Matched by patch-id, not by sha, because a cherry-pick renames every commit\n` +
+    `  it touches — which is why ancestry says "no" about work that is sitting\n` +
+    `  right there on main. Nothing is wrong with your commit; it has landed.\n\n` +
+    `  Audited 2026-09-11: 6 of 11 tickets in this queue were already upstream, so\n` +
+    `  everyone waiting was mostly waiting behind duplicates. No ticket was taken.\n\n` +
+    `  Confirm for yourself before doing anything else:\n` +
+    `     git show <sha> --format='' --patch | git patch-id --stable\n\n` +
+    `  ⚠ If a ticket for this sha was DROPPED rather than landed, the sha may be\n` +
+    `  abandoned rather than shipped — ask its author before re-landing it.\n\n` +
+    `  Genuinely re-landing it on purpose?  AF_PUSH_QUEUE_ALLOW_DUPLICATE=1\n\n`
+  )
+}
+
+/**
  * Find this sha's live ticket, creating one at the back if it has none.
  *
  * ⚠ A SHA-KEYED TICKET CAN BE ORPHANED BY WORK YOU DID NOT DO. Amending is the
@@ -958,6 +1058,14 @@ function cmdCheck() {
         `  The pusher role is handed over explicitly:  npm run push:pusher -- --release\n` +
         `  Genuinely urgent?  AF_SKIP_PUSH_QUEUE=1 git push <args>\n\n`,
     )
+    process.exit(1)
+  }
+
+  /* BEFORE ticketFor, deliberately: the whole point is that no place in the line
+     is occupied by a push that would add nothing. Fails open on every doubt. */
+  const upstream = alreadyUpstream(sha)
+  if (upstream) {
+    process.stderr.write(upstreamRefusal(sha, upstream))
     process.exit(1)
   }
 
@@ -1429,6 +1537,19 @@ async function cmdPush(argv) {
   // attested. One session pushed three other sessions' commits that way today.
   // A ticket is a promise about ONE commit, so the refspec names that commit.
   const passthrough = argv.length ? argv : ['origin', `${ctx.sha}:refs/heads/main`]
+
+  /* ⚠ BEFORE cmdWait, which is what takes the ticket. There is already an
+     "is already origin/main. Nothing to push." check further down, but it runs
+     AFTER the wait and tests only exact equality with the tip — so a duplicate
+     under a renamed sha still sat in the line for its full turn first. This
+     catches both, at the door. */
+  if (!argv.length) {
+    const dup = alreadyUpstream(ctx.sha)
+    if (dup) {
+      process.stderr.write(upstreamRefusal(ctx.sha, dup))
+      return 1
+    }
+  }
 
   const waited = await cmdWait([])
   if (waited !== 0) return waited
