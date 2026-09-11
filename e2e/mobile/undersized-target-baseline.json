@@ -17,19 +17,30 @@
     "",
     "Keyed on route + class + label, NOT on size, so that a control shrinking",
     "further still passes while one that appears anew does not. Size is recorded",
-    "alongside for the reader only."
+    "alongside for the reader only.",
+    "",
+    "THE EN/ES ENTRIES WERE PHANTOM AND HAVE BEEN REMOVED. They were recorded",
+    "by a lane run pointed at the SHARED F: CHECKOUT, whose af-landing.css was",
+    "dirty with a peer's unlanded rework converting .af-lp-nav-right from",
+    "display:none to display:contents on phones. Under that tree the language",
+    "pills render 36x44 and got baselined. Under origin/main they are",
+    "clientRects=0 at 390px, so the spec's visibility check skips them and they",
+    "are never reported -- which would have made these two entries STALE and",
+    "turned the lane red on a clean CI checkout.",
+    "",
+    "The lesson is not about this control: A LANE IS ONLY AS TRUSTWORTHY AS THE",
+    "TREE ITS SERVER IS SERVING. A dev server started in the shared checkout",
+    "serves whatever every other session has uncommitted. Baseline against a",
+    "clean checkout of the commit, or read the blob you are actually measuring.",
+    "",
+    "WHEN THAT PEER REWORK LANDS the pills become visible at 36x44 and the lane",
+    "will report them as a REGRESSION, because nothing baselines them. That is",
+    "correct: a control that becomes reachable on a phone at 36px wide is a new",
+    "phone defect, and it should be sized when it is surfaced, not pre-excused."
   ],
   "routes": {
-    "/": [
-      { "cls": "af-lp-lang-opt af-num", "label": "EN", "seen": "36x44" },
-      { "cls": "af-lp-lang-opt af-num", "label": "ES", "seen": "36x44" },
-      { "cls": "rounded-xl border px-3 py-2 text-xs font", "label": "Current theme: Dark", "seen": "52x34" }
-    ],
+    "/": [],
     "/login": [],
-    "/pricing": [
-      { "cls": "af-pr-nav-link", "label": "Sign in", "seen": "42x44" },
-      { "cls": "af-pr-cta af-pr-cta--ghost", "label": "Create an account", "seen": "315x35" },
-      { "cls": "rounded-xl border px-3 py-2 text-xs font", "label": "Current theme: Dark", "seen": "52x34" }
-    ]
+    "/pricing": []
   }
 }

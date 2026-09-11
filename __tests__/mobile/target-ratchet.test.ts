@@ -132,12 +132,19 @@ describe("committed baseline file", () => {
    * like.
    */
   /*
-   * Ratcheted 11 -> 6 on 2026-09-11 when the landing hero/header CTAs and the
-   * pricing billing toggle were fixed. Lowering this number is what fixing a
-   * control looks like; raising it needs a deliberate edit and a reason.
+   * Ratcheted 11 -> 6 -> 0 on 2026-09-11: the landing hero/header CTAs and the
+   * pricing billing toggle, then the global theme toggle (two entries, it is on
+   * both routes), "Create an account" and "Sign in" — and finally the two EN/ES
+   * entries, which were never real (see the baseline file's own note: they were
+   * measured against a dirty shared checkout).
+   *
+   * 🛑 IT IS ZERO NOW, WHICH MAKES THIS ASSERTION STRICTER THAN IT LOOKS. Any
+   * new entry fails it. That is the intent — the public routes currently have no
+   * known sub-44px debt, so the next one to appear should be argued for, not
+   * absorbed.
    */
   it("holds no more known debt than the last time this was ratcheted down", () => {
     const total = Object.values(baseline.routes).reduce((n, e) => n + e.length, 0)
-    expect(total).toBeLessThanOrEqual(6)
+    expect(total).toBeLessThanOrEqual(0)
   })
 })

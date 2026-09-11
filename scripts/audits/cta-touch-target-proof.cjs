@@ -38,6 +38,31 @@ const LANDING = fs.readFileSync(root + "/components/core-app/af-landing.css", "u
 const PRICING = fs.readFileSync(root + "/components/core-app/af-pricing.css", "utf8");
 
 /*
+ * The global theme toggle is styled by TAILWIND UTILITIES, not by a stylesheet
+ * in this repo, so it cannot be read off disk like the three above. It is
+ * compiled here from the component that owns it.
+ *
+ * 🛑 THIS IS THE PART THAT COULD SILENTLY DO NOTHING. `max-[720px]:min-h-[44px]`
+ * is an ARBITRARY VARIANT and the first one in this codebase — nothing else uses
+ * `max-[...]`. A variant Tailwind declines to emit produces no rule, no error,
+ * and a control that is still 34px. Compiling it here and asserting on the
+ * measured height is what turns "should work" into "does".
+ */
+function tailwindFor(file) {
+  const { execFileSync } = require("child_process");
+  const inCss = path.join(outDir, "tw-in.css");
+  const outCss = path.join(outDir, "tw-out.css");
+  fs.writeFileSync(inCss, "@tailwind utilities;");
+  execFileSync(
+    process.execPath,
+    [root + "/node_modules/tailwindcss/lib/cli.js", "-i", inCss, "-o", outCss, "--content", file],
+    { cwd: root, stdio: "pipe" },
+  );
+  return fs.readFileSync(outCss, "utf8");
+}
+const TOGGLE = tailwindFor("components/theme/GlobalModeToggle.tsx");
+
+/*
  * The real markup, copied from the two screens. `af-core` on the root is what
  * brings `.af-core .af-btn` into play at all — without it the primitive never
  * applies and the whole question disappears, which would make this proof pass
@@ -50,16 +75,19 @@ const BODY = `
   <a class="af-btn af-btn--ghost af-lp-cta-lg" href="#">See how it works</a>
 </div>
 <div class="af-core af-pr">
+  <nav><a class="af-pr-nav-link" href="#">Sign in</a></nav>
   <div class="af-pr-toggle">
     <button class="af-pr-toggle-btn" data-on="true">Monthly</button>
     <button class="af-pr-toggle-btn">Yearly</button>
   </div>
-</div>`;
+  <a class="af-pr-cta af-pr-cta--ghost" href="#">Create an account</a>
+</div>
+<button data-proof="theme-toggle" class="rounded-xl border px-3 py-2 text-xs font-semibold shadow-lg backdrop-blur max-[720px]:inline-flex max-[720px]:min-h-[44px] max-[720px]:min-w-[44px] max-[720px]:items-center max-[720px]:justify-center">Dark</button>`;
 
 /** Both orders. If the fix depends on either, these disagree and the run fails. */
 const ORDERS = {
-  "core-first": [CORE, LANDING, PRICING],
-  "core-last": [LANDING, PRICING, CORE],
+  "core-first": [CORE, LANDING, PRICING, TOGGLE],
+  "core-last": [TOGGLE, LANDING, PRICING, CORE],
 };
 
 const TARGETS = [
@@ -68,6 +96,9 @@ const TARGETS = [
   { sel: ".af-btn--ghost.af-lp-cta-lg", label: "See how it works", min: 44, phoneOnly: false },
   { sel: ".af-pr-toggle-btn[data-on='true']", label: "Monthly", min: 44, phoneOnly: true },
   { sel: ".af-pr-toggle-btn:not([data-on])", label: "Yearly", min: 44, phoneOnly: true },
+  { sel: ".af-pr-cta--ghost", label: "Create an account", min: 44, phoneOnly: true },
+  { sel: ".af-pr-nav-link", label: "Sign in", min: 44, phoneOnly: true, axis: "w" },
+  { sel: "[data-proof='theme-toggle']", label: "Theme toggle", min: 44, phoneOnly: true },
 ];
 
 function serve() {
@@ -110,9 +141,16 @@ async function main() {
         const m = await page.evaluate(MEASURE(t.sel));
         assert(m, `${t.label}: selector ${t.sel} matched nothing — the proof would pass vacuously`);
         const applies = width <= 720 || !t.phoneOnly;
-        const ok = !applies || m.h >= t.min;
+        /*
+         * Some of these failed on WIDTH, not height — `.af-pr-nav-link` was
+         * 42x44 and the EN/ES pills 36x44. A height-only assertion calls all
+         * three of those a pass, which is exactly the gap in the my-team proof
+         * that the census exists to cover.
+         */
+        const measured = t.axis === "w" ? m.w : m.h;
+        const ok = !applies || measured >= t.min;
         if (!ok) failures++;
-        rows.push({ width, order, label: t.label, ...m, applies, ok });
+        rows.push({ width, order, label: t.label, ...m, axis: t.axis, applies, ok });
       }
       await page.close();
     }
@@ -126,7 +164,7 @@ async function main() {
   for (const r of rows) {
     console.log(
       `  ${String(r.width).padStart(4)}px ${r.order.padEnd(10)} ` +
-        `${r.ok ? "PASS" : "FAIL"}  ${String(r.h).padStart(3)}px tall ` +
+        `${r.ok ? "PASS" : "FAIL"}  ${String(r.axis === "w" ? r.w : r.h).padStart(3)}px ${r.axis === "w" ? "wide" : "tall"} ` +
         `(min-height ${r.minHeight.padEnd(6)}) ${r.applies ? "" : "[not expected at this width] "}` +
         r.label,
     );
@@ -142,9 +180,11 @@ async function main() {
     for (const t of TARGETS) {
       const a = rows.find((r) => r.width === width && r.order === "core-first" && r.label === t.label);
       const b = rows.find((r) => r.width === width && r.order === "core-last" && r.label === t.label);
-      if (a.h !== b.h) {
+      const av = t.axis === "w" ? a.w : a.h;
+      const bv = t.axis === "w" ? b.w : b.h;
+      if (av !== bv) {
         drift++;
-        console.log(`  *** ORDER-DEPENDENT at ${width}px: ${t.label} is ${a.h}px vs ${b.h}px ***`);
+        console.log(`  *** ORDER-DEPENDENT at ${width}px: ${t.label} is ${av}px vs ${bv}px ***`);
       }
     }
   }

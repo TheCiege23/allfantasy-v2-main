@@ -55,7 +55,22 @@ export function GlobalModeToggle() {
             : 'fixed right-4 z-40 bottom-20 lg:bottom-4'
       }
     >
-      <ModeToggle className="rounded-xl border px-3 py-2 text-xs font-semibold shadow-lg backdrop-blur"
+      {/*
+        The 44px thumb floor, phone only.
+
+        `px-3 py-2 text-xs` computes to 52x34 — measured on `/` and `/pricing` in
+        Mobile Chrome and Mobile Safari. It is a FIXED control sitting over page
+        content, so a missed tap lands on whatever is underneath it.
+
+        Phone-scoped because 34px already clears the WCAG 2.5.8 AA floor of 24px
+        on a precise pointer, and this pill is on every route — widening it
+        everywhere is a visual change well outside what the phone gate asks for.
+        720px matches the band the rest of this repair used, not Tailwind's `sm`.
+
+        The flex utilities come with the min-height: without them the label sits
+        against the top of a box that is now taller than its text.
+      */}
+      <ModeToggle className="rounded-xl border px-3 py-2 text-xs font-semibold shadow-lg backdrop-blur max-[720px]:inline-flex max-[720px]:min-h-[44px] max-[720px]:min-w-[44px] max-[720px]:items-center max-[720px]:justify-center"
       />
     </div>
   )

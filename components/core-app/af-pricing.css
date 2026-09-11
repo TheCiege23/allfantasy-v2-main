@@ -594,3 +594,31 @@
     min-height: 44px;
   }
 }
+
+/* ── The last two pricing targets, phone only ─────────────────────────
+ *
+ * `.af-pr-cta` is `padding: 10px 14px` over a `12.5px/1` font = 34.5px, measured
+ * at 315x35 on "Create an account". `.af-pr-nav-link` already carries a 44px
+ * min-height from the block above — it failed on the OTHER AXIS, 42px wide, and
+ * that is the axis the my-team proof does not check. Two pixels, and invisible
+ * to a height-only assertion.
+ *
+ * ⚠ `min-width` NEEDS `justify-content` HERE. The link is already `inline-flex`;
+ * widening it without centring pushes "Sign in" to the left edge of a box that
+ * is now wider than its text, which looks like a layout bug rather than a fix.
+ *
+ * Both phone-only, and 780px matches this file's existing band.
+ */
+@media (max-width: 780px) {
+  .af-core .af-pr-cta {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 44px;
+  }
+
+  .af-core .af-pr-nav-link {
+    min-width: 44px;
+    justify-content: center;
+  }
+}
