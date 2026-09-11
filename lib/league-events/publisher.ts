@@ -11,7 +11,7 @@ import {
   parseLeagueNotificationPrefs,
 } from '@/lib/league/league-notification-prefs'
 import type { LeagueEventVisibility, LeagueFanoutEventType } from '@/lib/league-events/types'
-import { ACTIVE_TEAM_WHERE } from '@/lib/league-import/activeTeams'
+import { CURRENT_FRANCHISES_INCLUDING_UNKNOWN } from '@/lib/league-import/teamLifecycle'
 
 async function getAllLeagueMemberUserIds(leagueId: string): Promise<string[]> {
   const [rosterIds, league] = await Promise.all([
@@ -30,9 +30,28 @@ async function getElevatedCommissionerUserIds(leagueId: string): Promise<string[
   })
   const ids = new Set<string>()
   if (league?.userId) ids.add(league.userId)
-  /* A co-commissioner whose team was archived is no longer in the league to be notified. */
+  /*
+   * A co-commissioner whose team was ARCHIVED is no longer in the league to be notified. That is
+   * the only thing the lifecycle axis is doing here.
+   *
+   * 🛑 DO NOT "TIDY" THIS TO `HUMAN_RECIPIENTS_INCLUDING_UNKNOWN`. That selector looks like the
+   * obvious fit for a recipient set and is wrong HERE, because it adds
+   * `claimedByUserId: { not: null }` — and this function keys on `platformUserId`, a PROVIDER
+   * identity. An imported league is full of real co-commissioners who have never claimed an
+   * AllFantasy account; requiring a claim would silently shrink the notification set to the few
+   * who have, with nothing failing to say so. `lib/notification-engine.ts` DOES key on the claim
+   * and correctly uses that selector — two recipient sets, two identities, two predicates.
+   *
+   * The `orphan-` prefix check below stays: it is the placeholder-manager convention
+   * (`isOrphanPlatformUserId`), a different axis again from lifecycle.
+   */
   const co = await prisma.leagueTeam.findMany({
-    where: { ...ACTIVE_TEAM_WHERE, leagueId, isCoCommissioner: true, platformUserId: { not: null } },
+    where: {
+      ...CURRENT_FRANCHISES_INCLUDING_UNKNOWN,
+      leagueId,
+      isCoCommissioner: true,
+      platformUserId: { not: null },
+    },
     select: { platformUserId: true },
   })
   for (const row of co) {

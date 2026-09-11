@@ -67,14 +67,34 @@ describe('corrected ENUMERATION surfaces filter archived teams', () => {
   })
 
   it('notification recipients exclude an archived team\'s claimer', () => {
-    const src = read('lib', 'notification-engine.ts')
-    /* The CALL in its return position — not merely the imported name. */
-    expect(src).toMatch(/return selectActiveTeams\(teams\)/)
+    /*
+     * ⚠ REWRITTEN FOR THE LIFECYCLE AXIS — THE INTENT IS UNCHANGED AND THE MECHANISM MOVED.
+     *
+     * This used to pin `return selectActiveTeams(teams)` plus `isOrphan: true` in the SELECT,
+     * because the filter ran in application code and was a silent no-op without that column.
+     * The reader now filters in the QUERY on `HUMAN_RECIPIENTS_INCLUDING_UNKNOWN`, so the select
+     * no longer needs `isOrphan` and pinning it would force a column back that nothing reads.
+     *
+     * 🛑 THE OLD PREDICATE WAS ALSO WRONG IN THE OTHER DIRECTION, which is why this is not a
+     * like-for-like port. `isOrphan` is true for seven unrelated reasons, so a CLAIMED row
+     * carrying it — a real person — was dropped from their own league's mail. Excluding departure
+     * is the requirement; excluding live managers never was.
+     */
+    const src = stripComments(read('lib', 'notification-engine.ts'))
     const query = src.slice(src.indexOf('prisma.leagueTeam.findMany'))
-    const selectBlock = query.slice(query.indexOf('select:'), query.indexOf('})'))
-    expect(selectBlock.length, 'could not locate the select block').toBeGreaterThan(0)
-    expect(selectBlock).toMatch(/isOrphan: true/)
-    expect(selectBlock).not.toMatch(/NOT:/)
+    expect(query.length, 'could not locate the recipient query').toBeGreaterThan(0)
+
+    const whereBlock = query.slice(query.indexOf('where:'), query.indexOf('select:'))
+    expect(whereBlock, 'the departure filter must be in the query').toMatch(
+      /HUMAN_RECIPIENTS_INCLUDING_UNKNOWN/,
+    )
+
+    /* The identity key is the AF claim, and it must still be what is returned. */
+    expect(query).toMatch(/claimedByUserId: true/)
+    expect(src).toMatch(/\.map\(\(t\) => t\.claimedByUserId\)/)
+
+    /* And the retired flag must not come back as a second, drifting authority. */
+    expect(src, 'isOrphan must not be re-derived here').not.toMatch(/isOrphan/)
   })
 })
 
@@ -195,10 +215,22 @@ describe('one authority, not many', () => {
       ['lib', 'notification-engine.ts'],
     ] as const) {
       const src = read(...parts)
-      expect(src, parts.join('/')).toMatch(/from '@\/lib\/league-import\/activeTeams'/)
+      /*
+       * ⚠ EITHER SHARED AUTHORITY SATISFIES THIS, AND THAT IS THE POINT OF THE TEST.
+       *
+       * `activeTeams.ts` is superseded and `teamLifecycle.ts` replaces it one call site at a
+       * time, so during the migration both are legitimate. What this guard actually forbids is a
+       * HAND-ROLLED predicate — two implementations of one rule is the bug this whole batch keeps
+       * paying for, and pinning one specific module would have turned every correct migration red
+       * while catching no re-derivation at all.
+       */
+      expect(src, parts.join('/')).toMatch(
+        /from '@\/lib\/league-import\/(activeTeams|teamLifecycle)'/,
+      )
       /* A hand-rolled predicate is how the two implementations drift apart. */
       expect(src, parts.join('/')).not.toMatch(/isOrphan !== true/)
       expect(src, parts.join('/')).not.toMatch(/isOrphan === false/)
+      expect(src, parts.join('/')).not.toMatch(/lifecycleState !== 'ARCHIVED'/)
     }
   })
 })
