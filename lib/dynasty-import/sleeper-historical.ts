@@ -95,6 +95,28 @@ export async function fetchSleeperStandings(
 }
 
 /**
+ * Sleeper serves roster ids as JSON numbers; `NormalizedTradeFact` carries provider-native
+ * strings, because Yahoo's and MFL's are not numbers at all (see that type's docblock). For
+ * Sleeper the conversion is lossless in both directions — these are 1..12.
+ *
+ * An absent id becomes `""`, which matches no roster. That is the same outcome the previous `?? 0`
+ * gave, since Sleeper roster ids start at 1 — but `""` cannot be confused with a real id on a
+ * provider whose team ids DO start at zero.
+ */
+function rosterKey(raw: unknown): string {
+  return raw === null || raw === undefined ? "" : String(raw);
+}
+
+function stringifyRosterMap(
+  raw: Record<string, unknown> | null | undefined
+): Record<string, string> | null {
+  if (!raw) return null;
+  const out: Record<string, string> = {};
+  for (const [playerId, rosterId] of Object.entries(raw)) out[playerId] = rosterKey(rosterId);
+  return out;
+}
+
+/**
  * Fetch all trades for one Sleeper league (one season), normalized (with week).
  */
 export async function fetchSleeperTradesForSeason(
@@ -111,15 +133,15 @@ export async function fetchSleeperTradesForSeason(
         transactionId: t.transaction_id,
         season,
         week,
-        rosterIds: t.roster_ids ?? [],
-        adds: t.adds ?? null,
-        drops: t.drops ?? null,
+        rosterIds: (t.roster_ids ?? []).map(rosterKey),
+        adds: stringifyRosterMap(t.adds),
+        drops: stringifyRosterMap(t.drops),
         draftPicks: (t.draft_picks ?? []).map((p: any) => ({
           season: String(p.season),
           round: p.round ?? 0,
-          rosterId: p.roster_id ?? 0,
-          previousOwnerId: p.previous_owner_id ?? 0,
-          ownerId: p.owner_id ?? 0,
+          rosterId: rosterKey(p.roster_id),
+          previousOwnerId: rosterKey(p.previous_owner_id),
+          ownerId: rosterKey(p.owner_id),
         })),
         created: t.created ?? 0,
         creator: t.creator ?? "",

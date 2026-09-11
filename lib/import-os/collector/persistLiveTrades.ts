@@ -33,23 +33,37 @@ import { persistTradesForSeason } from '@/lib/dynasty-import/normalize-historica
 import type { NormalizedTradeFact } from '@/lib/dynasty-import/types'
 import type { NormalizedImportResult, NormalizedTransaction } from '@/lib/league-import/types'
 
-/** Sleeper's own shape for a traded pick, as passed through untouched by the history mapper. */
+/**
+ * Sleeper's own shape for a traded pick, as passed through untouched by the history mapper.
+ *
+ * ⚠ The id fields are typed `string | number` because this is an untyped provider payload reaching
+ * us through `unknown[]`, and only Sleeper puts numbers in them. Narrowing them to `number` is what
+ * invited the `Number(...)` calls this file used to make.
+ */
 interface RawTradedPick {
   season?: string | number
   round?: number
-  roster_id?: number
-  previous_owner_id?: number
-  owner_id?: number
+  roster_id?: string | number
+  previous_owner_id?: string | number
+  owner_id?: string | number
 }
 
-function toNumberMap(input: Record<string, string> | undefined): Record<string, number> | null {
+/**
+ * 🛑 THIS WAS `toNumberMap`, AND DROPPING A "NON-NUMERIC ROSTER ID" IS THE BUG IT DOCUMENTED AS A
+ * SAFEGUARD. Its comment said a non-numeric id "cannot be matched against `rosterIds` downstream" —
+ * true only because `rosterIds` was itself being coerced to numbers two lines below. Both sides are
+ * provider-native strings now, so Yahoo's `461.l.1000.t.1` matches itself and nothing is dropped.
+ *
+ * The claim that dropping was "visible in the counts" did not hold either: a discarded add left the
+ * trade's own `roster_ids` intact, so the trade still reached the writer and simply recorded no
+ * players moving. See `NormalizedTradeFact` for the full account.
+ */
+function toRosterMap(input: Record<string, string> | undefined): Record<string, string> | null {
   if (!input) return null
-  const out: Record<string, number> = {}
+  const out: Record<string, string> = {}
   for (const [playerId, rosterId] of Object.entries(input)) {
-    const n = Number(rosterId)
-    // A non-numeric roster id cannot be matched against `rosterIds` downstream, and writing it
-    // would silently attribute the player to nobody. Dropping it is visible in the counts.
-    if (Number.isFinite(n)) out[playerId] = n
+    const id = String(rosterId ?? '')
+    if (id !== '') out[playerId] = id
   }
   return Object.keys(out).length > 0 ? out : null
 }
@@ -65,16 +79,21 @@ function toTradeFact(t: NormalizedTransaction, season: number): NormalizedTradeF
      * week it could not establish — so this adds no new sentinel to the column.
      */
     week: t.week ?? 0,
-    rosterIds: t.roster_ids.map(Number).filter((n) => Number.isFinite(n)),
-    adds: toNumberMap(t.adds),
-    drops: toNumberMap(t.drops),
+    /*
+     * `NormalizedTransaction.roster_ids` is already `string[]` and already provider-native — this
+     * line used to re-derive it with `.map(Number).filter(isFinite)`, which is where a Yahoo team
+     * id left the pipeline. Empty ids are still dropped; nothing else is.
+     */
+    rosterIds: t.roster_ids.map((r) => String(r ?? '')).filter((r) => r !== ''),
+    adds: toRosterMap(t.adds),
+    drops: toRosterMap(t.drops),
     draftPicks: picks
       .map((p) => ({
         season: String(p.season ?? ''),
         round: Number(p.round ?? 0),
-        rosterId: Number(p.roster_id ?? 0),
-        previousOwnerId: Number(p.previous_owner_id ?? 0),
-        ownerId: Number(p.owner_id ?? 0),
+        rosterId: String(p.roster_id ?? ''),
+        previousOwnerId: String(p.previous_owner_id ?? ''),
+        ownerId: String(p.owner_id ?? ''),
       }))
       .filter((p) => p.season !== '' && Number.isFinite(p.round)),
     created: Date.parse(t.created_at) || 0,
@@ -116,6 +135,10 @@ export async function persistLiveTrades(input: {
    * roster id -> owner id, from the rosters this same sync already normalized.
    * `persistTradesForSeason` needs it to resolve each side to a `LeagueTradeHistory` row, and
    * building it from the payload keeps this function free of its own database reads.
+   *
+   * 🛑 THIS MAP IS KEYED ON THE PROVIDER'S TEAM ID VERBATIM, AND IT ALWAYS WAS — which is why
+   * coercing the OTHER side to a number broke the join rather than merely reformatting it. MFL's
+   * "0001" is a key here; `Number("0001")` looked it up as "1" and missed every time.
    */
   const rosterIdToOwner = new Map<string, string>()
   for (const r of normalized.rosters ?? []) {
@@ -126,7 +149,7 @@ export async function persistLiveTrades(input: {
 
   const facts = trades.map((t) => toTradeFact(t, season))
   const skippedNoOwner = facts.filter(
-    (f) => !f.rosterIds.some((rid) => rosterIdToOwner.has(String(rid))),
+    (f) => !f.rosterIds.some((rid) => rosterIdToOwner.has(rid)),
   ).length
 
   const rowsWritten = await persistTradesForSeason(

@@ -52,14 +52,34 @@ function tx(over: Partial<NormalizedTransaction> = {}): NormalizedTransaction {
   }
 }
 
-function normalized(transactions: NormalizedTransaction[]): NormalizedImportResult {
+/**
+ * The subset of `NormalizedTradeFact` these assertions read. Declared once so a field that changes
+ * shape breaks every reader at once rather than one cast at a time.
+ */
+type TradeFactShape = {
+  week: number
+  rosterIds: string[]
+  adds: Record<string, string> | null
+  drops: Record<string, string> | null
+}
+
+/**
+ * ⚠ THE ROSTERS ARE A PARAMETER, NOT A CONSTANT, AND THAT IS THE POINT. They used to be hard-coded
+ * to Sleeper's '1'/'2', so every test in this file agreed with the coercion under test — the map
+ * key and the coerced id were both "1" and nothing could disagree. A provider whose team ids are
+ * not small integers is the only input that can tell the two apart.
+ */
+function normalized(
+  transactions: NormalizedTransaction[],
+  rosters: Array<{ source_team_id: string; source_manager_id: string }> = [
+    { source_team_id: '1', source_manager_id: 'ownerA' },
+    { source_team_id: '2', source_manager_id: 'ownerB' },
+  ],
+): NormalizedImportResult {
   return {
     source: { source_provider: 'sleeper', source_league_id: 'L1', imported_at: '2026-09-05T00:00:00Z' },
     league: { name: 'Test', season: 2026 },
-    rosters: [
-      { source_team_id: '1', source_manager_id: 'ownerA' },
-      { source_team_id: '2', source_manager_id: 'ownerB' },
-    ],
+    rosters,
     transactions,
   } as unknown as NormalizedImportResult
 }
@@ -100,26 +120,70 @@ describe('persistLiveTrades', () => {
 
   it('carries the week through, since LeagueTrade.week is written from it', async () => {
     await run([tx({ week: 3 })])
-    const facts = persistTradesForSeasonMock.mock.calls[0][2] as Array<{ week: number }>
+    const facts = persistTradesForSeasonMock.mock.calls[0][2] as TradeFactShape[]
     expect(facts[0].week).toBe(3)
   })
 
   it('defaults an absent week to 0 rather than writing NaN', async () => {
     await run([tx({ week: undefined })])
-    const facts = persistTradesForSeasonMock.mock.calls[0][2] as Array<{ week: number }>
+    const facts = persistTradesForSeasonMock.mock.calls[0][2] as TradeFactShape[]
     expect(facts[0].week).toBe(0)
   })
 
-  it('converts roster ids and add/drop maps to numbers', async () => {
+  it('carries roster ids and add/drop maps through as provider-native strings', async () => {
     await run([tx()])
-    const facts = persistTradesForSeasonMock.mock.calls[0][2] as Array<{
-      rosterIds: number[]
-      adds: Record<string, number> | null
-      drops: Record<string, number> | null
-    }>
-    expect(facts[0].rosterIds).toEqual([1, 2])
-    expect(facts[0].adds).toEqual({ '4034': 2 })
-    expect(facts[0].drops).toEqual({ '4034': 1 })
+    const facts = persistTradesForSeasonMock.mock.calls[0][2] as TradeFactShape[]
+    expect(facts[0].rosterIds).toEqual(['1', '2'])
+    expect(facts[0].adds).toEqual({ '4034': '2' })
+    expect(facts[0].drops).toEqual({ '4034': '1' })
+  })
+
+  /*
+   * 🛑 THE TWO REGRESSIONS BELOW ARE THE REASON THIS FILE CHANGED, AND THE TEST THEY REPLACE WAS
+   * ASSERTING THE BUG. It read `expect(facts[0].rosterIds).toEqual([1, 2])` — green, honest about
+   * what the code did, and it pinned in place the one step that made Yahoo and MFL unrepresentable.
+   * A passing test that locks in a defect is the expensive kind; these two fail on the old code.
+   *
+   * Both are end-to-end through `persistLiveTrades` rather than unit tests of a converter, because
+   * the defect lived in the SEAM: the roster→owner map was always keyed on the provider's id
+   * verbatim, and only the other side of the join was being coerced.
+   */
+  it('REGRESSION: a Yahoo dotted team id survives instead of becoming NaN and vanishing', async () => {
+    const yahoo = ['461.l.1000.t.1', '461.l.1000.t.2']
+    const r = await persistLiveTrades({
+      platformLeagueId: 'L1',
+      season: 2026,
+      normalized: normalized([tx({ roster_ids: yahoo, adds: { '4034': yahoo[1] }, drops: { '4034': yahoo[0] } })], [
+        { source_team_id: yahoo[0], source_manager_id: 'ownerA' },
+        { source_team_id: yahoo[1], source_manager_id: 'ownerB' },
+      ]),
+    })
+
+    // Number('461.l.1000.t.1') is NaN, so the old code filtered both sides out and reported the
+    // trade as belonging to no known owner.
+    expect(r.skippedNoOwner).toBe(0)
+    const facts = persistTradesForSeasonMock.mock.calls[0][2] as TradeFactShape[]
+    expect(facts[0].rosterIds).toEqual(yahoo)
+    expect(facts[0].adds).toEqual({ '4034': yahoo[1] })
+  })
+
+  it('REGRESSION: an MFL zero-padded team id still matches its own roster→owner key', async () => {
+    const r = await persistLiveTrades({
+      platformLeagueId: 'L1',
+      season: 2026,
+      normalized: normalized([tx({ roster_ids: ['0001', '0002'], adds: { '4034': '0002' } })], [
+        { source_team_id: '0001', source_manager_id: 'ownerA' },
+        { source_team_id: '0002', source_manager_id: 'ownerB' },
+      ]),
+    })
+
+    // Number('0001') is 1, which is a perfectly valid roster id — it just is not THIS league's.
+    // The old code looked up '1' against a map keyed '0001' and missed on every trade.
+    expect(r.skippedNoOwner).toBe(0)
+    const facts = persistTradesForSeasonMock.mock.calls[0][2] as TradeFactShape[]
+    expect(facts[0].rosterIds).toEqual(['0001', '0002'])
+    const map = persistTradesForSeasonMock.mock.calls[0][3] as Map<string, string>
+    expect(facts[0].rosterIds.every((rid) => map.has(rid))).toBe(true)
   })
 
   it('builds the roster→owner map the writer needs from the same payload', async () => {

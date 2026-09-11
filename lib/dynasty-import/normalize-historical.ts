@@ -72,8 +72,29 @@ export async function persistDynastySeason(
 }
 
 /**
+ * `LeagueTrade.partnerRosterId` is `Int?`, but a roster id is a provider-native string and Yahoo's
+ * and MFL's are not integers. Rather than widen the column (a migration, and this field is
+ * secondary display data), store it only when the round-trip is LOSSLESS and `null` otherwise.
+ *
+ * 🛑 "0001" MUST BECOME `null`, NOT `1`. Consumers join `partnerRosterId` against
+ * `LeagueTeam.externalId`, which is a String column holding "0001" — so writing `1` produces a
+ * value that looks populated and can never match, which is strictly worse than an honest null.
+ * This is the same shape as the documented `previous_owner_roster_id` gap on `NormalizedTradedPick`.
+ */
+function toPartnerRosterColumn(rosterId: string | undefined): number | null {
+  if (!rosterId) return null;
+  const n = Number(rosterId);
+  if (!Number.isInteger(n)) return null;
+  return String(n) === rosterId ? n : null;
+}
+
+/**
  * Persist trades for one season: create LeagueTradeHistory per user involved, then LeagueTrade per (history, transaction).
- * rosterIdToOwner: roster_id (string) -> Sleeper user_id (string).
+ * rosterIdToOwner: roster_id (provider-native string) -> owner id (string).
+ *
+ * ⚠ EVERY ROSTER COMPARISON BELOW IS A STRING COMPARISON, DELIBERATELY. These were `Number(...)`
+ * equality checks, which silently collapsed MFL's zero-padded ids and NaN'd Yahoo's dotted ones.
+ * See `NormalizedTradeFact` for the measurement.
  */
 export async function persistTradesForSeason(
   platformLeagueId: string,
@@ -85,7 +106,7 @@ export async function persistTradesForSeason(
   const ownerIdsNeeded = new Set<string>();
   for (const t of trades) {
     for (const rid of t.rosterIds) {
-      const owner = rosterIdToOwner.get(String(rid));
+      const owner = rosterIdToOwner.get(rid);
       if (owner) ownerIdsNeeded.add(owner);
     }
   }
@@ -118,16 +139,15 @@ export async function persistTradesForSeason(
     const drops = t.drops ?? {};
     const picks = t.draftPicks ?? [];
     for (const rosterId of rosterIds) {
-      const ownerId = rosterIdToOwner.get(String(rosterId));
+      const ownerId = rosterIdToOwner.get(rosterId);
       if (!ownerId) continue;
       const historyId = historyByOwner.get(ownerId);
       if (!historyId) continue;
-      const ridNum = Number(rosterId);
-      const partnerRosterId = rosterIds.find((r) => Number(r) !== ridNum);
-      const playersReceived = Object.entries(adds).filter(([, r]) => Number(r) === ridNum).map(([pid]) => pid);
-      const playersGiven = Object.entries(drops).filter(([, r]) => Number(r) === ridNum).map(([pid]) => pid);
-      const picksReceived = picks.filter((p) => p.ownerId === ridNum).map((p) => ({ season: p.season, round: p.round }));
-      const picksGiven = picks.filter((p) => p.previousOwnerId === ridNum).map((p) => ({ season: p.season, round: p.round }));
+      const partnerRosterId = rosterIds.find((r) => r !== rosterId);
+      const playersReceived = Object.entries(adds).filter(([, r]) => r === rosterId).map(([pid]) => pid);
+      const playersGiven = Object.entries(drops).filter(([, r]) => r === rosterId).map(([pid]) => pid);
+      const picksReceived = picks.filter((p) => p.ownerId === rosterId).map((p) => ({ season: p.season, round: p.round }));
+      const picksGiven = picks.filter((p) => p.previousOwnerId === rosterId).map((p) => ({ season: p.season, round: p.round }));
       await prisma.leagueTrade.upsert({
         where: {
           historyId_transactionId: { historyId, transactionId: t.transactionId },
@@ -139,7 +159,7 @@ export async function persistTradesForSeason(
           playersReceived: playersReceived as any,
           picksGiven: picksGiven as any,
           picksReceived: picksReceived as any,
-          partnerRosterId: partnerRosterId != null ? Number(partnerRosterId) : null,
+          partnerRosterId: toPartnerRosterColumn(partnerRosterId),
           tradeDate: t.created ? new Date(t.created) : null,
         },
         create: {
@@ -151,7 +171,7 @@ export async function persistTradesForSeason(
           playersReceived: playersReceived as any,
           picksGiven: picksGiven as any,
           picksReceived: picksReceived as any,
-          partnerRosterId: partnerRosterId != null ? Number(partnerRosterId) : null,
+          partnerRosterId: toPartnerRosterColumn(partnerRosterId),
           partnerName: null,
           tradeDate: t.created ? new Date(t.created) : null,
           platform: "sleeper",
