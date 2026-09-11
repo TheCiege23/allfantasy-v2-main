@@ -266,6 +266,15 @@ describe('PINNED LIMIT: the label survives in the shape of the response', () => 
  * THIS REPO — missing relative imports, dynamic `await import(...)`, re-export facades and test
  * mocks. This scan walks the production trees and reads every import form, and it carries positive
  * controls, because a census that silently finds nothing is indistinguishable from a safe one.
+ *
+ * 🛑 `scripts/` IS OUT OF SCOPE HERE ON PURPOSE, AND THE EXCLUSION IS NAMED BECAUSE AN UNSTATED ONE
+ * READS AS AN OVERSIGHT. A reviewer's own census found `scripts/decision-os-suite-conformance.ts`
+ * reaching this stack through a DYNAMIC `await import('../lib/decision-os/userOs')` — and it is the
+ * one place a non-session `managerId` is passed. It is hand-run, absent from package.json and CI,
+ * and is not a request path, so it is outside milestone 32's criterion ("public API paths"). That
+ * is a judgement about REACHABILITY BY A USER, not a claim the file is harmless: anyone moving that
+ * script behind a route inherits the multi-manager problem this block exists to catch, and would
+ * not be warned by these assertions.
  */
 describe('PRECONDITION: manager recommendations stay self-scoped', () => {
   const ROOTS = ['app', 'lib', 'server', 'components']
