@@ -430,10 +430,56 @@ function orphanPolarity(whereClause: string): OrphanPolarity {
   const namesActiveHelper = /ACTIVE_TEAM_WHERE/.test(w)
   const namesOrphanHelper = /ORPHAN_TEAM_WHERE/.test(w)
   const namesField = /isOrphan/.test(w)
-  if (!namesActiveHelper && !namesOrphanHelper && !namesField) return 'none'
+
+  /*
+   * 🛑 THE LIFECYCLE SELECTORS ARE FILTERS TOO, AND THIS GUARD COULD NOT SEE THEM.
+   *
+   * `orphanPolarity` knew exactly one vocabulary — `isOrphan` and the two helpers built on it —
+   * so the moment a reader migrated to `lib/league-import/teamLifecycle.ts` the guard reported it
+   * as an UNFILTERED league-wide enumeration. That is the correct failure for an unknown
+   * predicate (undetermined means unprotected here, deliberately), but it makes the guard fire on
+   * every correct migration, and a check that goes red on success is one people learn to skip.
+   *
+   * Each selector is classified by the lifecycle values it admits, not by its name:
+   *   CURRENT_FRANCHISES_INCLUDING_UNKNOWN   CURRENT + UNKNOWN          -> excludes ARCHIVED
+   *   ELIGIBLE_FRANCHISES_INCLUDING_UNKNOWN  CURRENT + UNKNOWN, not out -> excludes ARCHIVED
+   *   HUMAN_RECIPIENTS_INCLUDING_UNKNOWN     CURRENT + UNKNOWN, claimed -> excludes ARCHIVED
+   *   CLAIMABLE_FRANCHISES                   CURRENT only               -> excludes ARCHIVED
+   *   ARCHIVED_FRANCHISES                    ARCHIVED only              -> archived-only
+   *   UNCLASSIFIED_FRANCHISES                UNKNOWN only               -> neither; see below
+   */
+  const namesLifecycleActive =
+    /CURRENT_FRANCHISES_INCLUDING_UNKNOWN|ELIGIBLE_FRANCHISES_INCLUDING_UNKNOWN|HUMAN_RECIPIENTS_INCLUDING_UNKNOWN|CLAIMABLE_FRANCHISES/.test(
+      w,
+    )
+  const namesLifecycleArchived = /ARCHIVED_FRANCHISES/.test(w)
+  const namesUnclassified = /UNCLASSIFIED_FRANCHISES/.test(w)
+
+  if (
+    !namesActiveHelper &&
+    !namesOrphanHelper &&
+    !namesField &&
+    !namesLifecycleActive &&
+    !namesLifecycleArchived &&
+    !namesUnclassified
+  ) {
+    return 'none'
+  }
 
   /* A disjunction can satisfy the query without the predicate ever applying. */
   if (/\bOR\s*:/.test(w)) return 'unknown'
+
+  /*
+   * ⚠ `UNCLASSIFIED_FRANCHISES` IS NOT AN ARCHIVAL FILTER AND MUST NOT PASS AS ONE. It selects
+   * `lifecycleState: 'UNKNOWN'` — an audit/backfill set that says nothing about whether a team
+   * departed. Reporting it keeps a human in the loop, which is the point: an enumeration built on
+   * it is measuring the unclassified population, not reading the league.
+   */
+  if (namesUnclassified) return 'unknown'
+
+  /* Same both-polarities rule the isOrphan helpers follow: naming both is not a clean filter. */
+  if (namesLifecycleArchived) return namesLifecycleActive ? 'unknown' : 'archived-only'
+  if (namesLifecycleActive) return namesActiveHelper || namesOrphanHelper ? 'unknown' : 'active'
 
   /* Checked before the active helper: a clause naming both is not a clean active filter. */
   if (namesOrphanHelper) return namesActiveHelper ? 'unknown' : 'archived-only'
@@ -456,7 +502,19 @@ function orphanPolarity(whereClause: string): OrphanPolarity {
   return 'unknown'
 }
 
-const CONSUMER_FILTER = ['selectActiveTeams', 'isActiveTeam']
+/*
+ * ⚠ THE LIFECYCLE PAIR BELONGS HERE FOR THE SAME REASON THE SELECTORS BELONG IN `orphanPolarity`.
+ * A reader that fetches rows and then calls `selectCurrentOrUnknown` is filtered in application
+ * code exactly as `selectActiveTeams` was — and several readers must filter that way rather than
+ * in the `where`, because filtering the query starves a historical map (see BroadcastModeEngine).
+ * Omitting them would report every such migration as unprotected.
+ */
+const CONSUMER_FILTER = [
+  'selectActiveTeams',
+  'isActiveTeam',
+  'selectCurrentOrUnknown',
+  'isCurrentOrUnknown',
+]
 
 /** Sentinel binding: the call is wrapped directly in a filter, so there is no name to trace. */
 const INLINE_PROTECTED = '<inline>'

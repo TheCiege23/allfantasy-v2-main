@@ -1,6 +1,6 @@
 import 'server-only'
 import { prisma } from '@/lib/prisma'
-import { ACTIVE_TEAM_WHERE } from '@/lib/league-import/activeTeams'
+import { CURRENT_FRANCHISES_INCLUDING_UNKNOWN } from '@/lib/league-import/teamLifecycle'
 
 /**
  * RESOLVE A LEAGUE THE USER NAMED, WITHOUT EVER TRUSTING THE MODEL WITH AN ID.
@@ -325,7 +325,7 @@ async function settleDuplicates(candidates: NamedLeague[]): Promise<LeagueNameLo
       ...l,
       /* Populated means CURRENT seats — an archived team must not make an empty league look real. */
       teamCount: await prisma.leagueTeam
-        .count({ where: { ...ACTIVE_TEAM_WHERE, leagueId: l.id } })
+        .count({ where: { ...CURRENT_FRANCHISES_INCLUDING_UNKNOWN, leagueId: l.id } })
         .catch(() => 0),
     })),
   )
