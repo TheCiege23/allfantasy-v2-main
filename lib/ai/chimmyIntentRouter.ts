@@ -50,8 +50,28 @@ export function resolveChimmyIntentRoute(message: string): ChimmyIntentRoute {
   const text = String(message ?? "").trim()
   if (!text) return route("dashboard_general", "user_context", "genericChimmy", "charge_after_success", "premium_ai")
 
-  const isWorldCup = WORLD_CUP_RE.test(text) || BRACKET_RE.test(text)
-  if (isWorldCup && LIVE_DATA_RE.test(text)) {
+  /*
+   * ⚠ THE STRONG CLAIM NEEDS THE STRONG SIGNAL, WHICH IS WHY THESE ARE TWO
+   * SEPARATE TESTS AND NOT ONE.
+   *
+   * A bracket word is enough to route a question to World Cup GROUNDING — that
+   * is a soft default, no_charge, and harmless when wrong. It is NOT enough to
+   * declare "we have no live provider for this sport", because that refusal
+   * names a sport and blocks the turn.
+   *
+   * BRACKET_RE carries "champion", "bracket", "quarterfinal", "group stage" —
+   * none of them soccer words. Measured 2026-09-11: "Any injuries on the Chiefs
+   * playoff bracket?", "NFL playoff bracket injuries", "Who is the defending
+   * champion and are there injuries?" and "Is my quarterfinal lineup locked?"
+   * all landed on unsupported_live_data with tokenPolicy blocked_no_charge. That
+   * suppressed the client's spend-confirm preflight
+   * (app/components/ChimmyChat.tsx:427), and once lib/ai/deterministic.ts began
+   * preferring this refusal over a cache miss it answered a Chiefs injury
+   * question with World Cup copy.
+   */
+  const namesWorldCup = WORLD_CUP_RE.test(text)
+  const isWorldCup = namesWorldCup || BRACKET_RE.test(text)
+  if (namesWorldCup && LIVE_DATA_RE.test(text)) {
     return route("unsupported_live_data", "none", "worldCupChimmyGroundingService", "blocked_no_charge", "safe_refusal")
   }
   if (isWorldCup && WORLD_CUP_SCORING_RE.test(text)) {
