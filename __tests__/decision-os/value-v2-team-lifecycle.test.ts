@@ -126,17 +126,24 @@ describe('unrecognised input fails closed', () => {
 })
 
 /**
- * 🛑 THE MIRROR-DRIFT GUARD, AND IT IS WRITTEN TO GO RED WHEN #697 LANDS.
+ * 🛑 THE MIRROR-DRIFT GUARD. IT WAS WRITTEN TO GO RED WHEN THE ENUMS LANDED, AND IT DID.
  *
- * `teamLifecycle.ts` mirrors two Prisma enums rather than importing them, because the enum is not
- * on `origin/main` yet and importing it would make the module uncompilable there. A mirror nobody
- * checks is a copy that drifts, so this asserts the CURRENT state of the schema explicitly: the
- * enums are absent.
+ * `teamLifecycle.ts` mirrors two Prisma enums rather than importing them, because when this file
+ * was written the enums were not on `origin/main` and importing one would have made the module
+ * uncompilable there. A mirror nobody checks is a copy that drifts, so this asserts the state of
+ * the schema explicitly rather than skipping until the enums appear.
  *
- * When Platform Import Batch A lands, this test FAILS. That is the design. Its failure is the
- * signal to (a) enable the real comparison below and (b) wire the seam — not a regression. The
- * alternative, a test that quietly skips until the enum appears, is a check that cannot fail, and
- * it would let the mirror drift for exactly as long as nobody thought to look.
+ * ⚠ THE TRIPWIRE FIRED ON RECONCILIATION, EXACTLY AS DESIGNED. `LeagueTeamLifecycleState` and
+ * `LeagueTeamManagerKind` are absent at this branch's original base (`1a43ebbd8`) and present on
+ * `origin/main` at `72796c248`, so rebasing turned this red with the test file byte-identical —
+ * an environmental signal, not a regression and not an edit. Per its own instruction the two
+ * expectations are now `true`, which is what ARMS the two comparisons below: they were `runIf`
+ * no-ops for as long as the enums were missing, and from here they guard the mirror for real.
+ * Both were confirmed green against the schema rather than assumed — members match exactly
+ * (UNKNOWN/CURRENT/ARCHIVED and UNKNOWN/HUMAN/VACANT/AI).
+ *
+ * Flipping these back to `false` would silently disarm both guards, so treat a failure here as
+ * "the schema moved", never as "relax the expectation".
  */
 describe('the enum mirror, and the signal that it is time to wire the seam', () => {
   const schema = readFileSync(path.join(process.cwd(), 'prisma', 'schema.prisma'), 'utf8')
@@ -149,12 +156,13 @@ describe('the enum mirror, and the signal that it is time to wire the seam', () 
     return m[1].split('\n').map(l => l.replace(/\/\/.*$/, '').trim()).filter(l => /^[A-Z_]+$/.test(l))
   }
 
-  it('records that the enums are NOT in this checkout yet — flip this when #697 lands', () => {
+  it('records that BOTH enums are now in this checkout — the two guards below are armed', () => {
     /*
-     * If this line fails, Batch A has landed. Change the two expectations to `true`, and the two
-     * tests below stop being no-ops and start guarding the mirror for real.
+     * If this line fails, the schema moved: an enum was renamed or removed. Find out which before
+     * touching this expectation — setting it back to `false` disarms the two comparisons below
+     * (they are `runIf`-gated on exactly these booleans) and lets the mirror drift unwatched.
      */
-    expect({ hasLifecycle, hasManagerKind }).toEqual({ hasLifecycle: false, hasManagerKind: false })
+    expect({ hasLifecycle, hasManagerKind }).toEqual({ hasLifecycle: true, hasManagerKind: true })
   })
 
   it.runIf(hasLifecycle)('lifecycle mirror matches the schema exactly', () => {
