@@ -23,6 +23,8 @@ import { theSportsDbProvider } from '@/lib/workers/providers/thesportsdb'
 import { cfbdProvider } from '@/lib/workers/providers/cfbd'
 import { espnProvider } from '@/lib/workers/providers/espn'
 import { persistNormalizedSportsRows } from '@/lib/workers/sports-cache-persist'
+import { pickFreshestSourceRows } from '@/lib/scores/liveSourceSelection'
+import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
 
 function isPopulatedResult(value: unknown): boolean {
   if (value == null) return false
@@ -154,6 +156,82 @@ function getFindManyModel(name: string): FindManyModel | null {
   return candidate as unknown as FindManyModel
 }
 
+/**
+ * Rows are served only while `expiresAt` is in the future. Every one of the five
+ * normalized tables carries `expiresAt` and `fetchedAt`; none of them was read.
+ */
+function freshOnly(now: Date): { expiresAt: { gt: Date } } {
+  return { expiresAt: { gt: now } }
+}
+
+/**
+ * Real age of the freshest row backing a response, in seconds.
+ *
+ * `undefined` — not `0` — when nothing measurable came back. The caller used to
+ * stamp a literal `cacheAge: 0` on every normalized read, which reported
+ * month-old rows as having been fetched this instant.
+ */
+function measuredCacheAge(rows: Array<Record<string, unknown>>, nowMs: number): number | undefined {
+  let newest = 0
+  for (const row of rows) {
+    const fetchedAt = row.fetchedAt
+    if (fetchedAt instanceof Date) newest = Math.max(newest, fetchedAt.getTime())
+  }
+  if (newest <= 0) return undefined
+  return Math.max(0, Math.floor((nowMs - newest) / 1000))
+}
+
+/**
+ * Narrowing dimensions this reader does not implement.
+ *
+ * Serving a `sport + season` row set to a request that also asked for a single
+ * date or a single game is how an unrelated fixture answers a question about
+ * another one. None of these is passed by any current caller — the point is
+ * that adding one later must not silently widen the result, so an unhandled
+ * narrowing key sends the request to the providers instead of to this table.
+ *
+ * ⚠ A DATE IS NOT A UTC DAY HERE. `contracts/rolling-insights/GAPS.md` records
+ * that `/live/{date}` is keyed on the US EASTERN date, so a UTC-day window puts
+ * Sunday night football on Monday. Implement the offset deliberately before
+ * removing `date` from this list.
+ */
+const UNSCOPED_GAME_DIMENSIONS = ['date', 'dates', 'day', 'gameId', 'gameID', 'eventId'] as const
+
+function hasUnscopedDimension(mergedQuery: Record<string, unknown>): boolean {
+  return UNSCOPED_GAME_DIMENSIONS.some((key) => {
+    const value = mergedQuery[key]
+    return value != null && String(value).trim() !== ''
+  })
+}
+
+/**
+ * The normalized-table fast path, read before any provider is called.
+ *
+ * 🛑 THIS PATH HAD NO FRESHNESS GATE, NO REQUEST SCOPING BEYOND `season`, AND ITS
+ * CALLER STAMPED `cacheAge: 0` ON WHATEVER IT RETURNED.
+ *
+ * A row of any age satisfied a request and suppressed the provider chain
+ * permanently, while the response reported itself as brand new. The
+ * `sportsDataCache` branch immediately above the call site has always checked
+ * `expiresAt` and computed a real age from `createdAt`; this one is now held to
+ * the same contract.
+ *
+ * 🛑 THE GAME BRANCH WAS THE SHARP END, AND THE COLUMNS WERE ALREADY THERE.
+ *
+ * `SportsGame` stores `homeScore`, `awayScore`, `week` and `seasonType`, and is
+ * indexed on `[sport, season, seasonType, week]`. This reader selected none of
+ * them and filtered on none of them — so a `scores` request was answered with
+ * schedule rows carrying no score fields at all, taken from up to 200 arbitrary
+ * games of the season regardless of week, team or status. The live-scores
+ * service asks for exactly that: `dataType: 'scores'` with `{ season }` alone.
+ *
+ * ⚠ AND THE TABLE HOLDS ONE ROW PER SOURCE PER GAME (`@@unique([sport,
+ * externalId, source])`), so an un-deduped read returns the same fixture once
+ * per feed — some copies scored, some not. `pickFreshestSourceRows` is the rule
+ * `lib/sports-live-scores-service.ts` already learned this with; it now lives in
+ * `lib/scores/liveSourceSelection.ts` so both readers share one implementation
+ * rather than two that can drift.
+ */
 async function readFromNormalizedTables(
   chainSport: ApiChainSport,
   dataType: string,
@@ -161,22 +239,27 @@ async function readFromNormalizedTables(
 ): Promise<ChainFetchResult | null> {
   const dbSport = apiChainSportToDbSport(chainSport)
   const limit = toPositiveInt(mergedQuery.limit, 200)
+  const now = new Date()
+  const nowMs = now.getTime()
+
+  const nameQ = typeof mergedQuery.playerName === 'string' ? mergedQuery.playerName.trim() : ''
+  const teamQ =
+    typeof mergedQuery.team === 'string'
+      ? mergedQuery.team.trim()
+      : typeof mergedQuery.teamAbbr === 'string'
+        ? mergedQuery.teamAbbr.trim()
+        : ''
+  const seasonNum = Number(mergedQuery.season)
+  const weekNum = Number(mergedQuery.week)
 
   if (dataType === 'players') {
     const model = getFindManyModel('sportsPlayer')
     if (!model) return null
 
-    const nameQ = typeof mergedQuery.playerName === 'string' ? mergedQuery.playerName.trim() : ''
-    const teamQ =
-      typeof mergedQuery.team === 'string'
-        ? mergedQuery.team.trim()
-        : typeof mergedQuery.teamAbbr === 'string'
-          ? mergedQuery.teamAbbr.trim()
-          : ''
-
     const rows = await model.findMany({
       where: {
         sport: dbSport,
+        ...freshOnly(now),
         ...(nameQ ? { name: { contains: nameQ, mode: 'insensitive' } } : {}),
         ...(teamQ ? { team: { equals: teamQ, mode: 'insensitive' } } : {}),
       },
@@ -190,6 +273,7 @@ async function readFromNormalizedTables(
         teamId: true,
         status: true,
         imageUrl: true,
+        fetchedAt: true,
       },
     })
 
@@ -206,6 +290,7 @@ async function readFromNormalizedTables(
         })),
         fromCache: true,
         source: 'cache',
+        cacheAge: measuredCacheAge(rows, nowMs),
       }
     }
     return null
@@ -216,7 +301,7 @@ async function readFromNormalizedTables(
     if (!model) return null
 
     const rows = await model.findMany({
-      where: { sport: dbSport },
+      where: { sport: dbSport, ...freshOnly(now) },
       orderBy: [{ updatedAt: 'desc' }],
       take: limit,
       select: {
@@ -225,6 +310,7 @@ async function readFromNormalizedTables(
         shortName: true,
         city: true,
         logo: true,
+        fetchedAt: true,
       },
     })
 
@@ -239,6 +325,7 @@ async function readFromNormalizedTables(
         })),
         fromCache: true,
         source: 'cache',
+        cacheAge: measuredCacheAge(rows, nowMs),
       }
     }
     return null
@@ -248,8 +335,21 @@ async function readFromNormalizedTables(
     const model = getFindManyModel('sportsInjury')
     if (!model) return null
 
+    /*
+     * Scoped by season and week where the caller asked for them — the table is
+     * indexed on `[sport, season, week]` for exactly this. An unscoped read
+     * answered "who is hurt in week 3" with the most recent 200 injuries of any
+     * week, which is unsafe for the lineup and waiver advice built on it.
+     */
     const rows = await model.findMany({
-      where: { sport: dbSport },
+      where: {
+        sport: dbSport,
+        ...freshOnly(now),
+        ...(Number.isFinite(seasonNum) ? { season: Math.floor(seasonNum) } : {}),
+        ...(Number.isFinite(weekNum) ? { week: Math.floor(weekNum) } : {}),
+        ...(teamQ ? { team: { equals: teamQ, mode: 'insensitive' } } : {}),
+        ...(nameQ ? { playerName: { contains: nameQ, mode: 'insensitive' } } : {}),
+      },
       orderBy: [{ date: 'desc' }],
       take: limit,
       select: {
@@ -260,6 +360,7 @@ async function readFromNormalizedTables(
         status: true,
         description: true,
         date: true,
+        fetchedAt: true,
       },
     })
 
@@ -276,6 +377,7 @@ async function readFromNormalizedTables(
         })),
         fromCache: true,
         source: 'cache',
+        cacheAge: measuredCacheAge(rows, nowMs),
       }
     }
     return null
@@ -286,7 +388,12 @@ async function readFromNormalizedTables(
     if (!model) return null
 
     const rows = await model.findMany({
-      where: { sport: dbSport },
+      where: {
+        sport: dbSport,
+        ...freshOnly(now),
+        ...(teamQ ? { team: { equals: teamQ, mode: 'insensitive' } } : {}),
+        ...(nameQ ? { playerName: { contains: nameQ, mode: 'insensitive' } } : {}),
+      },
       orderBy: [{ publishedAt: 'desc' }],
       take: limit,
       select: {
@@ -295,6 +402,7 @@ async function readFromNormalizedTables(
         description: true,
         content: true,
         publishedAt: true,
+        fetchedAt: true,
       },
     })
 
@@ -309,6 +417,7 @@ async function readFromNormalizedTables(
         })),
         fromCache: true,
         source: 'cache',
+        cacheAge: measuredCacheAge(rows, nowMs),
       }
     }
     return null
@@ -323,42 +432,105 @@ async function readFromNormalizedTables(
     const model = getFindManyModel('sportsGame')
     if (!model) return null
 
-    const seasonNum = Number(mergedQuery.season)
+    if (hasUnscopedDimension(mergedQuery)) return null
+
+    const seasonTypeQ =
+      typeof mergedQuery.seasonType === 'string' ? mergedQuery.seasonType.trim() : ''
+    const statusQ = typeof mergedQuery.status === 'string' ? mergedQuery.status.trim() : ''
+    const teamKey = teamQ ? normalizeTeamAbbrev(teamQ) || teamQ : ''
+
     const rows = await model.findMany({
       where: {
         sport: dbSport,
-        ...(Number.isFinite(seasonNum) ? { season: seasonNum } : {}),
+        ...freshOnly(now),
+        ...(Number.isFinite(seasonNum) ? { season: Math.floor(seasonNum) } : {}),
+        ...(Number.isFinite(weekNum) ? { week: Math.floor(weekNum) } : {}),
+        ...(seasonTypeQ ? { seasonType: seasonTypeQ } : {}),
+        ...(statusQ ? { status: { equals: statusQ, mode: 'insensitive' } } : {}),
+        ...(teamKey
+          ? {
+              OR: [
+                { homeTeam: { equals: teamKey, mode: 'insensitive' } },
+                { awayTeam: { equals: teamKey, mode: 'insensitive' } },
+              ],
+            }
+          : {}),
       },
       orderBy: [{ startTime: 'desc' }],
-      take: limit,
+      /*
+       * Over-read, because the dedup below happens in memory and discards whole
+       * SOURCES. Taking `limit` here and then dropping every row that did not
+       * come from the winning feed would return a fraction of what the caller
+       * asked for — the result is sliced back to `limit` after the dedup.
+       *
+       * ⚠ A cross-source dedup by id is not available: `externalId` is the
+       * PROVIDER's own id (`game.gameId` from Rolling Insights, `idEvent` from
+       * TheSportsDB), so the same fixture carries a different id in each feed
+       * and nothing matches them up. Choosing one feed wholesale is the only
+       * dedup this table supports, which is why `pickFreshestSourceRows` works
+       * the way it does.
+       */
+      take: Math.min(limit * 4, 1000),
       select: {
         externalId: true,
         homeTeam: true,
         awayTeam: true,
+        homeScore: true,
+        awayScore: true,
         status: true,
         startTime: true,
         venue: true,
+        week: true,
+        seasonType: true,
         season: true,
+        source: true,
+        fetchedAt: true,
       },
     })
 
-    if (rows.length > 0) {
-      return {
-        data: rows.map((r) => ({
-          id: r.externalId,
-          gameId: r.externalId,
-          homeTeam: r.homeTeam,
-          awayTeam: r.awayTeam,
-          status: r.status,
-          date: toIsoString(r.startTime),
-          venue: r.venue,
-          season: r.season,
-        })),
-        fromCache: true,
-        source: 'cache',
-      }
+    if (rows.length === 0) return null
+
+    const deduped = (
+      pickFreshestSourceRows(
+        rows as unknown as Array<{ source: string | null; fetchedAt: Date | null }>,
+        nowMs
+      ) as unknown as Array<Record<string, unknown>>
+    ).slice(0, limit)
+
+    /*
+     * A schedule row is not an answer to a scores question.
+     *
+     * Before this, `scores` and `live_game` were satisfied by any game row —
+     * and since the reader never selected the score columns, the answer could
+     * not have contained a score even when one was stored. Falling through to
+     * the providers costs one call on a slate that has genuinely not kicked off
+     * yet, which is the right direction to be wrong in: the provider is the
+     * thing that knows a game is scheduled rather than simply unrecorded.
+     */
+    const wantsScores = dataType === 'scores' || dataType === 'live_game'
+    if (wantsScores && !deduped.some((r) => r.homeScore != null || r.awayScore != null)) {
+      return null
     }
-    return null
+
+    return {
+      data: deduped.map((r) => ({
+        id: r.externalId,
+        gameId: r.externalId,
+        homeTeam: r.homeTeam,
+        awayTeam: r.awayTeam,
+        homeScore: r.homeScore ?? null,
+        awayScore: r.awayScore ?? null,
+        status: r.status,
+        date: toIsoString(r.startTime),
+        venue: r.venue,
+        week: r.week ?? null,
+        seasonType: r.seasonType ?? null,
+        season: r.season,
+      })),
+      fromCache: true,
+      source: 'cache',
+      cacheAge: measuredCacheAge(deduped, nowMs),
+    }
   }
 
   return null
@@ -429,10 +601,15 @@ export async function fetchWithChain(
     try {
       const normalized = await readFromNormalizedTables(chainSport, dt, merged)
       if (normalized && isPopulatedResult(normalized.data)) {
-        return {
-          ...normalized,
-          cacheAge: 0,
-        }
+        /*
+         * Returned as-is. This used to spread `cacheAge: 0` over the result,
+         * which is why a row written months ago reported itself as fetched this
+         * instant — the one number a consumer has for deciding whether to trust
+         * a cached fact was hardcoded to the most reassuring possible value.
+         * `readFromNormalizedTables` now measures it from `fetchedAt`, and
+         * leaves it undefined rather than 0 when there is nothing to measure.
+         */
+        return normalized
       }
     } catch (e) {
       console.warn('[api-chain] normalized lookup failed:', e)
