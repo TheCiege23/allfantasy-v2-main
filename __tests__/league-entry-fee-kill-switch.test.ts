@@ -91,6 +91,7 @@ const sessionsCreateMock = vi.hoisted(() => vi.fn())
 const leagueFindUniqueMock = vi.hoisted(() => vi.fn())
 const getOrCreateLeagueFinanceMock = vi.hoisted(() => vi.fn())
 const resolveSeasonForLeagueMock = vi.hoisted(() => vi.fn())
+const resolveLeagueMembershipMock = vi.hoisted(() => vi.fn())
 
 vi.mock("next-auth", () => ({ getServerSession: getServerSessionMock }))
 vi.mock("@/lib/auth", () => ({ authOptions: {} }))
@@ -99,6 +100,8 @@ vi.mock("@/lib/stripe-client", () => ({ getStripeClient: getStripeClientMock }))
 vi.mock("@/lib/prisma", () => ({
   prisma: { league: { findUnique: leagueFindUniqueMock } },
 }))
+// The route checks membership before it reads the league (a non-member must not reach Stripe).
+vi.mock("@/lib/league-access", () => ({ resolveLeagueMembership: resolveLeagueMembershipMock }))
 vi.mock("@/lib/league-finance/leagueFinanceService", () => ({
   getOrCreateLeagueFinance: getOrCreateLeagueFinanceMock,
   resolveSeasonForLeague: resolveSeasonForLeagueMock,
@@ -117,6 +120,7 @@ describe("entry-checkout route", () => {
       currency: "usd",
     })
     resolveSeasonForLeagueMock.mockResolvedValue(2026)
+    resolveLeagueMembershipMock.mockResolvedValue({ ok: true, access: { leagueId: "lg1" } })
     sessionsCreateMock.mockResolvedValue({ url: "https://checkout.stripe.test/s/cs_1" })
     getStripeClientMock.mockReturnValue({
       checkout: { sessions: { create: sessionsCreateMock } },
@@ -186,6 +190,25 @@ describe("entry-checkout route", () => {
     expect(getServerSessionMock).toHaveBeenCalled()
     expect(leagueFindUniqueMock).toHaveBeenCalled()
     // But still never charged anyone.
+    expect(sessionsCreateMock).not.toHaveBeenCalled()
+  })
+
+  /*
+   * A signed-in user who is not in the league is refused before the league is read, so a
+   * non-member cannot learn a private league's name or fee, or pay into it, even with the
+   * kill switch open.
+   */
+  it("refuses a non-member before reading the league, even when the kill switch is open", async () => {
+    process.env[ENV] = "true"
+    resolveLeagueMembershipMock.mockResolvedValue({ ok: false, reason: "not_member", status: 403 })
+    const { POST } = await import(
+      "@/app/api/leagues/[leagueId]/finance/entry-checkout/route"
+    )
+    const res = await POST(post() as any, { params: Promise.resolve({ leagueId: "lg1" }) })
+
+    expect(res.status).toBe(403)
+    expect(resolveLeagueMembershipMock).toHaveBeenCalledWith("lg1", "u1")
+    expect(leagueFindUniqueMock).not.toHaveBeenCalled()
     expect(sessionsCreateMock).not.toHaveBeenCalled()
   })
 })
