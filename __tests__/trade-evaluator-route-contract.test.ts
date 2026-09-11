@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest"
+import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { createMockNextRequest } from "@/__tests__/helpers/createMockNextRequest"
 const getServerSessionMock = vi.fn()
@@ -70,6 +70,26 @@ function buildValidTradeEvaluatorBody(overrides?: Record<string, unknown>) {
 }
 
 describe("POST /api/trade-evaluator contract", () => {
+  /*
+   * 🛑 WARM THE ROUTE MODULE OUTSIDE ANY TEST'S CLOCK.
+   *
+   * Every test here does `await import("@/app/api/trade-evaluator/route")`. Within a worker that
+   * import is cached, so only the FIRST one pays for the module graph — but it pays inside a
+   * test, so the cost lands on whichever test happens to run first. This suite passes alone and
+   * fails in a batch: measured twice on a contended box, `returns 401 when unauthenticated` and
+   * `returns 403 when user is not a member of league` — the first two tests — died with
+   * `Test timed out in 30000ms`. Not an assertion failure, and nothing to do with the route's
+   * behaviour; the module simply had not finished loading.
+   *
+   * Importing once here is semantically identical (same cached instance either way) and moves
+   * the cost off the tests. The explicit hook timeout is generous on purpose: this box routinely
+   * runs several `tsc` and vitest processes at once, and a red suite caused by contention is the
+   * false-negative this repo keeps paying for.
+   */
+  beforeAll(async () => {
+    await import("@/app/api/trade-evaluator/route")
+  }, 180_000)
+
   beforeEach(() => {
     vi.clearAllMocks()
     isToolTradeAnalyzerEnabledMock.mockResolvedValue(true)
@@ -355,6 +375,35 @@ describe("POST /api/trade-evaluator contract", () => {
       const res = await POST(req as any)
       expect(res.status).not.toBe(422)
       expect(requireFeatureEntitlementMock).toHaveBeenCalled()
+    })
+  })
+
+  /**
+   * 🛑 `qb_format` defaulted to 'sf' IN THE SCHEMA, so omitting it priced every quarterback on
+   * a superflex board — the scarcer, more expensive one — and nothing said so.
+   */
+  describe("superflex resolution", () => {
+    /*
+     * ⚠ ONLY THE SCHEMA CASE IS TESTED AT THE ROUTE, DELIBERATELY. This suite cannot reach a
+     * graded 200 — the one that exists comes from a MOCKED CACHE HIT, and a real run dies in
+     * `pricePlayer` with no database. The resolution rule itself is unit-tested against
+     * `resolveSuperflex` in __tests__/trade-value/superflexResolution.test.ts, where it can
+     * actually fail for the right reasons.
+     */
+    it("rejects a qb_format that is neither '1qb' nor 'sf' rather than defaulting", async () => {
+      const { POST } = await import("@/app/api/trade-evaluator/route")
+      const req = createMockNextRequest("http://localhost/api/trade-evaluator", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(
+          buildValidTradeEvaluatorBody({
+            league: { format: "dynasty", sport: "NFL", qb_format: "2qb" },
+          })
+        ),
+      })
+      const res = await POST(req as any)
+      expect(res.status).toBe(400)
+      expect(requireFeatureEntitlementMock).not.toHaveBeenCalled()
     })
   })
 })
