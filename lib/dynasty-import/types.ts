@@ -33,14 +33,38 @@ export interface NormalizedStandingRow {
   champion: boolean;
 }
 
+/**
+ * One completed trade, normalized.
+ *
+ * 🛑 EVERY ROSTER IDENTITY HERE IS A PROVIDER-NATIVE STRING, AND IT USED TO BE A `number`.
+ * That coercion was silently correct for the only two providers whose team ids happen to be
+ * integers (Sleeper "1".."12", ESPN) and silently WRONG for the rest:
+ *
+ *   Yahoo    "461.l.1000.t.1"  ->  Number(...) = NaN  -> dropped by the producer's isFinite filter
+ *   MFL      "0001"            ->  Number(...) = 1    -> no longer matches the "0001" map key
+ *
+ * Neither failed loudly. Both landed in `persistLiveTrades`'s `skippedNoOwner` counter, which
+ * reads as "this league's rosters are unknown" rather than "this provider cannot be represented",
+ * so a Yahoo or MFL league synced forever and wrote zero `LeagueTrade` rows.
+ *
+ * The rest of the normalized layer already settled on strings — `NormalizedStandingRow.rosterId`
+ * above, `NormalizedTransaction.roster_ids` and `NormalizedTradedPick.original_roster_id` in
+ * `lib/league-import/types.ts`, all keyed to match `league_teams.externalId`, which is a String
+ * column. This type was the one place that narrowed them, so it was the one place that lost data.
+ *
+ * ⚠ COMPARE THESE WITH `===`, NEVER BY COERCING BACK TO A NUMBER. Reintroducing `Number(...)`
+ * anywhere downstream reinstates the whole bug on a type that now looks safe.
+ */
 export interface NormalizedTradeFact {
   transactionId: string;
   season: number;
   week: number;
-  rosterIds: number[];
-  adds: Record<string, number> | null;
-  drops: Record<string, number> | null;
-  draftPicks: Array<{ season: string; round: number; rosterId: number; previousOwnerId: number; ownerId: number }>;
+  rosterIds: string[];
+  /** player id -> the roster id that received them. */
+  adds: Record<string, string> | null;
+  /** player id -> the roster id that gave them up. */
+  drops: Record<string, string> | null;
+  draftPicks: Array<{ season: string; round: number; rosterId: string; previousOwnerId: string; ownerId: string }>;
   created: number;
   creator: string;
 }
