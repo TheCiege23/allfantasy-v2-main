@@ -5,6 +5,7 @@ import path from "node:path";
 import { execSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
 import { parseChangedLineNumbers } from "./db-first-diff-lines.mjs";
+import { listGitVisibleFiles } from "./git-visible-files.mjs";
 
 const DATA_API_HOST_PATTERNS = [
   // ⚠ FANTRAX WAS INVISIBLE TO THIS GUARD ENTIRELY, and it is a full data API:
@@ -654,69 +655,13 @@ function getChangedFiles(base, head) {
     .filter((filePath) => SOURCE_EXTENSIONS.has(path.extname(filePath).toLowerCase()));
 }
 
-/**
- * Candidate files as GIT sees them: tracked files, plus untracked files that no ignore rule
- * covers. Returns null — never an empty array — when git cannot answer, so the caller falls
- * back to the filesystem walk below rather than concluding there is nothing to scan.
- *
- * ⚠ WHY THIS EXISTS. The walk below prunes a hardcoded directory list, so it descends into
- * anything gitignored that is not on it. Measured 2026-09-11 in the primary checkout: a full
- * scan reported 329 findings, of which 220 came from `.tmp-pr671/` — a 2.4G scratch COPY of
- * this repo that `.gitignore:123:.tmp-*` already covers. Tracked-source total was 109. That is
- * the `.claude/worktrees/` and `.next-dev-3101` failure met a third time, and the third time is
- * the one that says stop enumerating names: two readers had already hand-subtracted those 220
- * before this was fixed.
- *
- * CI runs `--changed`, whose file list comes from `git diff`, so CI never saw any of it. Only a
- * local full scan — which is what a weekly audit is — pays the cost.
- *
- * ⚠ THIS DOES NOT REPLACE EXCLUDED_DIRS, and the reason is measurable: `.claude/` is NOT
- * gitignored here (only `.claude/settings.local.json*` and `.claude/scheduled_tasks.lock` are),
- * so `git ls-files --others` lists every concurrent session's worktree copy. Both filters are
- * load-bearing; dropping either restores a duplicate flood.
- *
- * ⚠ AND TRACKED FILES ARE SCANNED UNCONDITIONALLY, which is the property that keeps this from
- * being a way to hide a violation. `--cached` is listed separately and git does not report a
- * tracked path as ignored, so committing a file into a `tmp-*` directory does not exempt it.
+/*
+ * The git-visible enumeration moved to `scripts/git-visible-files.mjs` on 2026-09-11,
+ * shared with `check-decision-engine-boundary.mjs`, which carried an equivalent copy.
+ * Read the contract there before changing this caller — it returns null rather than an
+ * empty array when git cannot answer, and EXCLUDED_DIRS below is still load-bearing on
+ * top of it.
  */
-function listGitVisibleFiles(rootDir) {
-  let output;
-  try {
-    output = execSync('git ls-files -z --cached --others --exclude-standard', {
-      cwd: rootDir,
-      encoding: 'utf8',
-      maxBuffer: 256 * 1024 * 1024,
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
-  } catch (error) {
-    console.warn(
-      `db-first boundary: git could not enumerate files (${error.message}). Falling back to a filesystem walk, which may report duplicates out of gitignored directories.`
-    );
-    return null;
-  }
-
-  const paths = output
-    .split('\0')
-    .map((entry) => entry.trim())
-    .filter(Boolean);
-
-  /*
-   * An empty answer is not the answer "no source files". It is a git that ran and told us
-   * nothing useful, and treating it as a clean tree is precisely the guard-goes-quiet failure
-   * this change has to avoid. Fall back and be noisy instead.
-   */
-  if (paths.length === 0) {
-    console.warn(
-      'db-first boundary: git listed no files. Falling back to a filesystem walk.'
-    );
-    return null;
-  }
-
-  return [...new Set(paths)].filter((filePath) =>
-    SOURCE_EXTENSIONS.has(path.extname(filePath).toLowerCase())
-  );
-}
-
 function getAllSourceFiles(rootDir) {
   const EXCLUDED_DIRS = new Set([
     '.git',
@@ -769,7 +714,10 @@ function getAllSourceFiles(rootDir) {
       .split('/')
       .some((segment) => EXCLUDED_DIRS.has(segment) || isBuildOutputDir(segment));
 
-  const gitVisibleFiles = listGitVisibleFiles(rootDir);
+  const gitVisibleFiles = listGitVisibleFiles(rootDir, {
+    extensions: SOURCE_EXTENSIONS,
+    label: "db-first boundary",
+  });
   if (gitVisibleFiles) {
     return gitVisibleFiles.filter((filePath) => !isExcludedPath(filePath));
   }
