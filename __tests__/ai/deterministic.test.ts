@@ -356,6 +356,30 @@ describe('tryDeterministicAnswer', () => {
     expect(miss?.text).toContain("I don't have fresh live provider data")
   })
 
+  /*
+   * ⚠ THE MISS CASE ON A MISROUTED QUESTION — the half the test above does not
+   * cover, and the regression that shipped in 862fcd104 because of it.
+   *
+   * The router called this NFL question unsupported_live_data (BRACKET_RE alone
+   * satisfied its isWorldCup), so the yield-on-miss guard fired and answered a
+   * Chiefs injury question with "World Cup scoring rules, saved bracket picks,
+   * pool standings". Nothing was charged and nothing was invented; it was simply
+   * the wrong sport.
+   *
+   * Deliberately no assertion on `kind`. An empty NFL injury cache is currently
+   * typed `answer`, which is the separate defect tracked for the nine
+   * reliableUnavailable() misses — pinning it here would make this test fail
+   * when that is fixed, for a reason that has nothing to do with what it guards.
+   */
+  it('answers a non-soccer bracket injury miss from the NFL cache, not with a World Cup refusal', async () => {
+    mockSportsInjuryFindMany.mockResolvedValueOnce([])
+
+    const result = await tryDeterministicAnswerDetailed('Any injuries on the Chiefs playoff bracket?')
+
+    expect(result?.text).toContain('cached NFL injury data')
+    expect(result?.text).not.toContain('fresh live provider data')
+  })
+
   it('refuses exact stat-event questions when event data is unavailable', async () => {
     const result = await tryDeterministicAnswer('Who hit home runs across MLB yesterday?')
 
