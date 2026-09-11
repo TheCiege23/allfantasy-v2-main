@@ -66,6 +66,8 @@ type OverlayEntry = {
   onClose: () => void
   /** Where focus sat when this overlay activated. May be unmounted by close. */
   restoreTo: HTMLElement | null
+  /** Used when `restoreTo` survives but is no longer focusable. See the hook option. */
+  restoreFallbackRef: RefObject<HTMLElement | null> | null
 }
 
 /** Bottom-to-top. The last entry is the only one that answers Escape and Tab. */
@@ -248,6 +250,19 @@ export type OverlayContainmentOptions = {
    * explicit close button for keyboard users.
    */
   keepClickableRefs?: ReadonlyArray<RefObject<HTMLElement | null>>
+  /**
+   * Where focus goes if the opener is still mounted but can no longer take it.
+   *
+   * Only needed by an overlay whose opener can VANISH while the overlay is open
+   * — which in practice means a breakpoint crossing, not an unmount. The league
+   * tray is the case: its opener `.af-rail-handle` is `display: none` above
+   * 720px, so widening the viewport with the tray open leaves a perfectly
+   * attached button that cannot be focused, and focus lands on <body>.
+   *
+   * Omit it for an overlay whose opener is either present or gone: the
+   * `isConnected`/`isFocusable` check handles that on its own.
+   */
+  restoreFallbackRef?: RefObject<HTMLElement | null>
 }
 
 export function useOverlayContainment({
@@ -257,6 +272,7 @@ export function useOverlayContainment({
   initialFocusRef,
   keepInteractiveRefs,
   keepClickableRefs,
+  restoreFallbackRef,
 }: OverlayContainmentOptions): void {
   /*
    * ⚠ THE CALLBACK GOES THROUGH A REF AND IS NOT AN EFFECT DEPENDENCY, AND THAT
@@ -294,6 +310,7 @@ export function useOverlayContainment({
        * failure restoration exists to prevent.
        */
       restoreTo: document.activeElement instanceof HTMLElement ? document.activeElement : null,
+      restoreFallbackRef: restoreFallbackRef ?? null,
     }
 
     overlayStack.push(entry)
@@ -386,8 +403,31 @@ export function useOverlayContainment({
         focusEntry(revealed)
         return
       }
+      /*
+       * 🛑 `isConnected` IS NOT ENOUGH, AND THE COMMENT ON `restoreTo` ABOVE
+       * ALREADY NAMES WHY WITHOUT COVERING THIS HALF: focusing a node that
+       * cannot take focus silently sends focus to <body>. A DETACHED opener was
+       * guarded. A still-attached but `display: none` one was not, and it
+       * reaches the same <body>.
+       *
+       * The live case is a breakpoint crossing, not an unmount. `.af-rail-handle`
+       * is the phone tray's opener and is `display: none` above 720px, so
+       * resizing phone → desktop with the tray open deactivates this overlay,
+       * restores to a hidden button, and drops focus off the page entirely.
+       * Measured in Chromium: activeElement was BODY, while `.af-rail-toggle` —
+       * the desktop control that replaces the handle — sat right there, visible.
+       *
+       * `isFocusable` is the existing test and already covers it: getClientRects()
+       * is empty for display:none. The fallback is supplied by the caller because
+       * only the caller knows which control REPLACES the vanished one.
+       */
       const restoreTo = entry.restoreTo
-      if (restoreTo && restoreTo.isConnected) restoreTo.focus()
+      if (restoreTo && isFocusable(restoreTo)) {
+        restoreTo.focus()
+        return
+      }
+      const fallback = entry.restoreFallbackRef?.current
+      if (fallback && isFocusable(fallback)) fallback.focus()
     }
   }, [active, containerRef, initialFocusRef])
 }

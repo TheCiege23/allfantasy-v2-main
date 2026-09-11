@@ -106,7 +106,27 @@ Measured 36px → 44px at all four widths, in both engines.
 - **Positive control**: reverting only `af-my-team.css` and re-running the same
   proof reports **16 failures** across the two engines' widths, naming the 18px
   targets and the 36px buttons. The check has been seen red for the right reason.
-- **`scripts/audits/mobile-core-browser-proof.cjs`** (existing): still passes.
+- **`scripts/audits/mobile-core-browser-proof.cjs`** (existing): 🛑 **this line
+  read "still passes", and it was wrong.** Re-run on 2026-09-11 from a clean
+  detached checkout it exits **1** on `desktop focus restoration` — and
+  identically at `633467801`, this branch's own later tip, so it was not a
+  regression introduced afterwards. It was never re-run.
+
+  What makes the claim easy to write anyway: all four phone widths DO pass and
+  print `"status":"passed"` each, so the run looks green until the last line.
+  The failing assertion is the one non-phone step in the file.
+
+  Cause: `useOverlayContainment` restored focus on `restoreTo.isConnected`.
+  `.af-rail-handle` is the tray's opener and is `display: none` above 720px —
+  still connected, so the guard passed and `.focus()` silently no-opped, landing
+  focus on `<body>`. Fixed by testing `isFocusable` (which the file already had,
+  and which covers `display: none` via `getClientRects()`) and adding
+  `restoreFallbackRef`, wired to `.af-rail-toggle` — the desktop control that
+  replaces the handle. Proof now exits 0 with `Breakpoint transition passed`.
+
+  ⚠ The measured red → green transition is the control here: the failure was
+  observed first, at two separate tips, then the fix was made and the same
+  command re-run.
 - **Vitest**: **73 passed across 4 files** — `core-rail-default-open`,
   `core-rail-active-league`, `mobile-navigation-drawer`, `core-boards`. Same
   count as the previous batch; no regression.

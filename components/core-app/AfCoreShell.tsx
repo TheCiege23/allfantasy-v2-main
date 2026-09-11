@@ -1136,6 +1136,14 @@ export function AfCoreShell(props: AfCoreShellProps) {
   const railOpen = railChoice === 'open'
   const railRef = useRef<HTMLElement>(null)
   const railHandleRef = useRef<HTMLButtonElement>(null)
+  /*
+   * The DESKTOP control that replaces the phone handle above 720px, and so the
+   * only sane place for focus to land when the viewport widens with the tray
+   * open. The handle itself is `display: none` by then — still mounted, which is
+   * exactly why the overlay hook's old `isConnected` check waved it through and
+   * focus fell to <body>.
+   */
+  const railToggleRef = useRef<HTMLButtonElement>(null)
   const [phoneLayout, setPhoneLayout] = useState(false)
   const mobileRailOpen = phoneLayout && railOpen
   /** The tray's close control lives outside the tray — see the hook call below. */
@@ -1168,6 +1176,7 @@ export function AfCoreShell(props: AfCoreShellProps) {
     onClose: () => setRailChoice('closed'),
     initialFocusRef: railHandleRef,
     keepInteractiveRefs: railKeepRefs,
+    restoreFallbackRef: railToggleRef,
   })
 
   // Only the desktop column is a saved preference. A phone overlay must
@@ -1283,6 +1292,7 @@ export function AfCoreShell(props: AfCoreShellProps) {
           state so a screen reader announces what pressing it will do.
         */}
         <button
+          ref={railToggleRef}
           type="button"
           className="af-rail-toggle"
           aria-expanded={railOpen}
