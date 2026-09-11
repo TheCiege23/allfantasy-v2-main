@@ -239,21 +239,20 @@ export type ImportStatusRow = {
  * choice. `recognized` is false for exactly that case, so a misconfiguration is
  * visible instead of being rendered as an intentional disable.
  *
- * ⚠ AND THE FLAG IS NOT THE ANSWER — A TIMESTAMP WOULD BE. A flag says what is
+ * ⚠ AND THE FLAG IS NOT THE ANSWER — THE TIMESTAMP IS. A flag says what is
  * permitted; only a run record says what happened.
  *
- * 🛑 WHICH THIS JOB DOES NOT WRITE. `/api/cron/fantasy-os-exec-sync` returns JSON
- * and records no `SyncJobRun`, so there is nothing here to read. A `lastRunAt`
- * field would therefore be null forever — reporting "never ran" about a job that
- * may be running perfectly, which is a worse lie than saying nothing.
+ * This field reported `runsObservable: false` for exactly one commit, because the
+ * heartbeat wrote no `SyncJobRun` and a `lastRunAt` would have read null forever —
+ * announcing "never ran" about a job that might be running perfectly. The route
+ * now records both paths (gated and executing), so the effect is readable and
+ * `lastRunAt` means what it says.
  *
- * So the gap is NAMED instead of papered over: `runsObservable: false` means this
- * surface cannot see the effect, as distinct from seeing it and finding nothing.
- * Those are the same distinction as `configured` vs `enabled` above, and
- * collapsing either one produces a confident wrong answer.
- *
- * Closing it means making the route record a run — a writer, not a reader, and a
- * separate change. Until then `enabled` is the honest limit of what is known.
+ * ⚠ `enabled` AND `lastRunAt` ANSWER DIFFERENT QUESTIONS AND YOU NEED BOTH.
+ * `enabled: true` with a null `lastRunAt` is the alarming combination — the gate
+ * is open and nothing is coming through it, which is a dead scheduler rather than
+ * a disabled feature. `enabled: false` with a recent `lastRunAt` is the calm one:
+ * firing on time, deliberately doing nothing.
  */
 export type SyncGateStatus = {
   envVar: 'FANTASY_OS_EXEC_SYNC_LIVE'
@@ -263,13 +262,15 @@ export type SyncGateStatus = {
   enabled: boolean
   /** Present, but not a value anyone meant: neither `'true'` nor `'false'`. */
   recognized: boolean
-  /**
-   * False: the heartbeat writes no run record, so this surface cannot report
-   * whether it actually executed. NOT the same as "it has not executed".
-   */
+  /** The heartbeat records runs, so a null `lastRunAt` means it has not run. */
   runsObservable: boolean
-  /** Why the effect cannot be read, so nobody has to rediscover it. */
-  runsObservableNote: string
+  /**
+   * Last recorded heartbeat, or null. Null is meaningful now: the job writes a
+   * row on every invocation, gated or not, so nothing here means nothing fired
+   * within the lookback window.
+   */
+  lastRunAt: string | null
+  lastRunStatus: string | null
 }
 
 export type ImportStatusResult = {
@@ -298,15 +299,23 @@ export async function getImportStatus(): Promise<ImportStatusResult> {
    * a credential report the first time someone widens it.
    */
   const raw = process.env.FANTASY_OS_EXEC_SYNC_LIVE
+  /*
+   * Matched on the job name the route registers (`cron-fantasy-os-exec-sync`).
+   * `runs` is already ordered `startedAt desc`, so the first hit is the latest.
+   */
+  const execRun = runs.find((r) => String(r.jobName ?? '') === 'cron-fantasy-os-exec-sync') ?? null
   const syncGate: SyncGateStatus = {
     envVar: 'FANTASY_OS_EXEC_SYNC_LIVE',
     configured: raw !== undefined,
     enabled: raw === 'true',
     recognized: raw === undefined || raw === 'true' || raw === 'false',
-    runsObservable: false,
-    runsObservableNote:
-      'app/api/cron/fantasy-os-exec-sync writes no SyncJobRun, so whether the heartbeat ' +
-      'executed cannot be read here. Absence of a run record is not evidence it did not run.',
+    runsObservable: true,
+    lastRunAt: execRun
+      ? execRun.startedAt instanceof Date
+        ? execRun.startedAt.toISOString()
+        : ((execRun.startedAt as string | null) ?? null)
+      : null,
+    lastRunStatus: execRun ? execRun.status : null,
   }
 
   return {
