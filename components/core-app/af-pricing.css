@@ -565,3 +565,32 @@
   align-items: center;
   min-height: 44px;
 }
+
+/* ── The billing-period toggle, phone only ────────────────────────────
+ *
+ * 🛑 MEASURED AT 27px TALL. `padding: 7px 18px` over a `12.5px/1` font is
+ * 26.5px, and that is the control a phone user taps to choose between monthly
+ * and yearly billing — the one interaction on this page that changes what they
+ * pay. Both engines, 86x27 and 71x27 at 390px.
+ *
+ * ⚠ 44px OF HEIGHT NEEDS SOMEWHERE TO GO. The button is a flex item inside
+ * `.af-pr-toggle`, which is `inline-flex` with 3px of padding, so the pill
+ * grows to 50px and the two buttons stay side by side. `align-items: center`
+ * keeps the label centred rather than top-aligned once the box is taller than
+ * its text — `min-height` alone would have moved the text off centre.
+ *
+ * Phone only, deliberately: 27px clears the WCAG 2.5.8 AA floor of 24px on a
+ * precise pointer, and widening the desktop pill is a visual decision outside
+ * what the phone gate is asking for.
+ *
+ * 780px matches this file's existing phone band rather than introducing a
+ * fourth breakpoint.
+ */
+@media (max-width: 780px) {
+  .af-core .af-pr-toggle-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 44px;
+  }
+}

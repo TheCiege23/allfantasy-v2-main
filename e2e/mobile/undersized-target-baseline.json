@@ -23,16 +23,11 @@
     "/": [
       { "cls": "af-lp-lang-opt af-num", "label": "EN", "seen": "36x44" },
       { "cls": "af-lp-lang-opt af-num", "label": "ES", "seen": "36x44" },
-      { "cls": "af-btn af-lp-cta", "label": "Get started free", "seen": "132x36" },
-      { "cls": "af-btn af-lp-cta-lg", "label": "Get started free", "seen": "132x36" },
-      { "cls": "af-btn af-btn--ghost af-lp-cta-lg", "label": "See how it works", "seen": "139x36" },
       { "cls": "rounded-xl border px-3 py-2 text-xs font", "label": "Current theme: Dark", "seen": "52x34" }
     ],
     "/login": [],
     "/pricing": [
       { "cls": "af-pr-nav-link", "label": "Sign in", "seen": "42x44" },
-      { "cls": "af-pr-toggle-btn", "label": "Monthly", "seen": "86x27" },
-      { "cls": "af-pr-toggle-btn", "label": "Yearly", "seen": "71x27" },
       { "cls": "af-pr-cta af-pr-cta--ghost", "label": "Create an account", "seen": "315x35" },
       { "cls": "rounded-xl border px-3 py-2 text-xs font", "label": "Current theme: Dark", "seen": "52x34" }
     ]

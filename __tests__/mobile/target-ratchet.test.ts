@@ -131,8 +131,13 @@ describe("committed baseline file", () => {
    * Lowering it is the expected direction and is what fixing a control looks
    * like.
    */
-  it("holds no more known debt than the day the lane was enabled", () => {
+  /*
+   * Ratcheted 11 -> 6 on 2026-09-11 when the landing hero/header CTAs and the
+   * pricing billing toggle were fixed. Lowering this number is what fixing a
+   * control looks like; raising it needs a deliberate edit and a reason.
+   */
+  it("holds no more known debt than the last time this was ratcheted down", () => {
     const total = Object.values(baseline.routes).reduce((n, e) => n + e.length, 0)
-    expect(total).toBeLessThanOrEqual(11)
+    expect(total).toBeLessThanOrEqual(6)
   })
 })

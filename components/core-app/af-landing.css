@@ -1167,3 +1167,58 @@
 .af-core .af-lp-partners {
   min-height: 44px;
 }
+
+/* ── The hero CTAs, which declared a 46px floor and never got one ──────
+ *
+ * 🛑 `.af-lp-cta-lg` HAS SAID `min-height: 46px` ALL ALONG. It lost, silently,
+ * and the measurement is what found it: 132x36 at 390px in both engines, on the
+ * primary "Get started free" conversion control.
+ *
+ * `.af-core .af-btn` is (0,2,0) and sets `min-height: 36px`. A bare
+ * `.af-lp-cta-lg` is (0,1,0), so it never applied anywhere `.af-core` wraps the
+ * page — which is the whole landing page. Nothing was broken, no rule was
+ * missing, and reading the file suggested the floor was already there.
+ *
+ * ⚠ AND THE FIX ABOVE IS NOT ENOUGH HERE. The `.af-lp-x, .af-core .af-lp-x`
+ * pair used by the 44px block above resolves a bare class losing to `.af-core a`
+ * — but it tops out at (0,2,0), which TIES `.af-core .af-btn`. A tie is decided
+ * by which rule lands later in the bundle, and af-my-team.css records this repo
+ * measuring exactly that going the wrong way: a rule present 27,374 lines after
+ * the primitive still lost, because `next dev` emits one concatenated page.css
+ * whose chunk order is not stable between builds.
+ *
+ * So qualify on the class the element already carries: `.af-btn.af-lp-cta-lg`
+ * is (0,3,0) and cannot be reordered out.
+ */
+.af-core .af-btn.af-lp-cta-lg {
+  min-height: 46px;
+}
+
+/*
+ * The compact header CTA, phone only.
+ *
+ * Unlike the hero pair this one never declared a floor — 36px is deliberate in
+ * the desktop header, where the pointer is precise and the row is tight. Only
+ * the phone needs the thumb target, so only the phone gets it; raising it
+ * everywhere would be a desktop design change nobody asked for.
+ *
+ * BLAST RADIUS, CHECKED RATHER THAN ASSUMED, BECAUSE `.af-lp-cta` IS NOT ONLY
+ * THE LANDING PAGE'S. Three surfaces render `af-btn af-lp-cta` and all three
+ * root as `af-core af-lp`, so the root class does not separate them:
+ *
+ *   LandingV4             imports this sheet -> 44px on a phone (intended)
+ *   Partners              imports this sheet -> 44px on a phone (also a phone
+ *                                              target; it was 36px too)
+ *   app/import/[platform] does NOT           -> unaffected, keeps its own 52px
+ *
+ * The import route imports only af-core.css + af-landing-import.css and renders
+ * neither of the other two, so this rule is not in its CSS at all. That matters:
+ * af-landing-import.css sets `.af-core .af-lp-cta { min-height: 52px }` at
+ * (0,2,0), so if this (0,3,0) rule ever DID reach that route it would win and
+ * shrink that button to 44px. Re-check this list before widening the selector.
+ */
+@media (max-width: 720px) {
+  .af-core .af-btn.af-lp-cta {
+    min-height: 44px;
+  }
+}

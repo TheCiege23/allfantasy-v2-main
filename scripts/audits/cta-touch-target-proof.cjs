@@ -1,0 +1,167 @@
+/**
+ * Cascade proof for the two CTA touch-target fixes.
+ *
+ * WHAT IS ACTUALLY IN DOUBT. Both fixes are one-line `min-height` rules, and a
+ * `min-height` rule is not interesting. What is interesting is whether it WINS:
+ * `.af-core .af-btn` is (0,2,0) and sets `min-height: 36px`, and the rule it was
+ * beating — `.af-lp-cta-lg` at (0,1,0) — had been declaring 46px since it was
+ * written. The bug was never a missing rule. It was a losing one.
+ *
+ * 🛑 SO THE PROOF HAS TO BE ORDER-INDEPENDENT, BECAUSE THE PAGE IS. af-my-team.css
+ * records this repo measuring a rule that sat 27,374 lines AFTER the primitive and
+ * still lost, because `next dev` emits one concatenated page.css whose chunk order
+ * is not stable between builds — and it records a component harness getting the
+ * answer WRONG for exactly that reason, by bundling its own CSS in a lucky order.
+ *
+ * A tie at equal specificity is decided by order and is therefore unsafe. A win on
+ * specificity is decided by the cascade and cannot be reordered out. This script
+ * bundles the two stylesheets in BOTH orders and asserts the computed value is the
+ * same either way — which is the difference between the two, made visible.
+ *
+ * It renders the markup, not the components: these are cascade questions, and
+ * LandingV4/PricingV4 would drag in props and data that decide nothing here.
+ *
+ * Run: node scripts/audits/cta-touch-target-proof.cjs
+ */
+const fs = require("fs");
+const path = require("path");
+const os = require("os");
+const http = require("http");
+const assert = require("assert/strict");
+const root = path.resolve(__dirname, "../..").split(path.sep).join("/");
+const { chromium } = require(root + "/node_modules/playwright");
+
+const outDir = fs.mkdtempSync(path.join(os.tmpdir(), "af-cta-proof-"));
+
+const CORE = fs.readFileSync(root + "/components/core-app/af-core.css", "utf8");
+const LANDING = fs.readFileSync(root + "/components/core-app/af-landing.css", "utf8");
+const PRICING = fs.readFileSync(root + "/components/core-app/af-pricing.css", "utf8");
+
+/*
+ * The real markup, copied from the two screens. `af-core` on the root is what
+ * brings `.af-core .af-btn` into play at all — without it the primitive never
+ * applies and the whole question disappears, which would make this proof pass
+ * for the wrong reason.
+ */
+const BODY = `
+<div class="af-core af-lp">
+  <a class="af-btn af-lp-cta" href="#">Get started free</a>
+  <a class="af-btn af-lp-cta-lg" href="#">Get started free</a>
+  <a class="af-btn af-btn--ghost af-lp-cta-lg" href="#">See how it works</a>
+</div>
+<div class="af-core af-pr">
+  <div class="af-pr-toggle">
+    <button class="af-pr-toggle-btn" data-on="true">Monthly</button>
+    <button class="af-pr-toggle-btn">Yearly</button>
+  </div>
+</div>`;
+
+/** Both orders. If the fix depends on either, these disagree and the run fails. */
+const ORDERS = {
+  "core-first": [CORE, LANDING, PRICING],
+  "core-last": [LANDING, PRICING, CORE],
+};
+
+const TARGETS = [
+  { sel: ".af-lp-cta", label: "Get started free (header)", min: 44, phoneOnly: true },
+  { sel: ".af-lp-cta-lg:not(.af-btn--ghost)", label: "Get started free (hero)", min: 44, phoneOnly: false },
+  { sel: ".af-btn--ghost.af-lp-cta-lg", label: "See how it works", min: 44, phoneOnly: false },
+  { sel: ".af-pr-toggle-btn[data-on='true']", label: "Monthly", min: 44, phoneOnly: true },
+  { sel: ".af-pr-toggle-btn:not([data-on])", label: "Yearly", min: 44, phoneOnly: true },
+];
+
+function serve() {
+  return new Promise((resolve) => {
+    const server = http.createServer((req, res) => {
+      const name = (req.url || "/").split("?")[0].replace(/^\//, "") || "core-first";
+      const sheets = ORDERS[name] || ORDERS["core-first"];
+      res.writeHead(200, { "Content-Type": "text/html" });
+      res.end(
+        '<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1">' +
+          "<style>*,*::before,*::after{box-sizing:border-box}body{margin:0}</style>" +
+          "<style>" + sheets.join("\n") + "</style>" +
+          BODY,
+      );
+    });
+    server.listen(0, "127.0.0.1", () => resolve(server));
+  });
+}
+
+const MEASURE = (sel) => `(() => {
+  const el = document.querySelector(${JSON.stringify(sel)});
+  if (!el) return null;
+  const r = el.getBoundingClientRect();
+  return { h: Math.round(r.height), w: Math.round(r.width),
+           minHeight: getComputedStyle(el).minHeight };
+})()`;
+
+async function main() {
+  const server = await serve();
+  const port = server.address().port;
+  const browser = await chromium.launch();
+  const rows = [];
+  let failures = 0;
+
+  for (const width of [390, 1280]) {
+    for (const order of Object.keys(ORDERS)) {
+      const page = await browser.newPage({ viewport: { width, height: 900 } });
+      await page.goto(`http://127.0.0.1:${port}/${order}`);
+      for (const t of TARGETS) {
+        const m = await page.evaluate(MEASURE(t.sel));
+        assert(m, `${t.label}: selector ${t.sel} matched nothing — the proof would pass vacuously`);
+        const applies = width <= 720 || !t.phoneOnly;
+        const ok = !applies || m.h >= t.min;
+        if (!ok) failures++;
+        rows.push({ width, order, label: t.label, ...m, applies, ok });
+      }
+      await page.close();
+    }
+  }
+  await browser.close();
+  server.close();
+
+  console.log("=".repeat(78));
+  console.log("CTA TOUCH-TARGET CASCADE PROOF");
+  console.log("=".repeat(78));
+  for (const r of rows) {
+    console.log(
+      `  ${String(r.width).padStart(4)}px ${r.order.padEnd(10)} ` +
+        `${r.ok ? "PASS" : "FAIL"}  ${String(r.h).padStart(3)}px tall ` +
+        `(min-height ${r.minHeight.padEnd(6)}) ${r.applies ? "" : "[not expected at this width] "}` +
+        r.label,
+    );
+  }
+
+  /*
+   * The order-independence assertion, which is the whole point. If a fix relies
+   * on landing later in the bundle, these two differ and the page is a coin toss.
+   */
+  console.log("");
+  let drift = 0;
+  for (const width of [390, 1280]) {
+    for (const t of TARGETS) {
+      const a = rows.find((r) => r.width === width && r.order === "core-first" && r.label === t.label);
+      const b = rows.find((r) => r.width === width && r.order === "core-last" && r.label === t.label);
+      if (a.h !== b.h) {
+        drift++;
+        console.log(`  *** ORDER-DEPENDENT at ${width}px: ${t.label} is ${a.h}px vs ${b.h}px ***`);
+      }
+    }
+  }
+  console.log(
+    drift === 0
+      ? "  ORDER-INDEPENDENT: every measurement identical with the primitive first and last."
+      : `  ${drift} measurement(s) change with stylesheet order — the fix is a coin toss.`,
+  );
+
+  if (failures || drift) {
+    console.log(`\nFAILED: ${failures} undersized, ${drift} order-dependent`);
+    process.exit(1);
+  }
+  console.log("\nAll CTA targets >= 44px where expected, in both stylesheet orders.");
+}
+
+main().catch((e) => {
+  console.error(e);
+  process.exit(1);
+});
