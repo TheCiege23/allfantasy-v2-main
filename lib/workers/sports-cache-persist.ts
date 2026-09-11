@@ -260,6 +260,43 @@ export async function persistNormalizedSportsRows(
         ? Math.floor(seasonRaw)
         : new Date().getUTCFullYear()
 
+      /*
+       * 🛑 SCORES, WEEK AND SEASON TYPE WERE FETCHED AND THEN THROWN AWAY.
+       *
+       * `SportsGame` has held `homeScore`, `awayScore`, `week` and `seasonType`
+       * all along — and carries `@@index([sport, season, seasonType, week])` —
+       * but this upsert named none of them. So the api-chain persisted every
+       * `scores` payload it fetched as a bare schedule row, and its own reader
+       * then had nothing to read. The two halves failed together, which is why
+       * fixing either one alone changes nothing.
+       *
+       * ⚠ ABSENT IS NOT ZERO, AND IT IS NOT NULL EITHER. A `schedule` payload
+       * legitimately carries no score, and writing `null` for it would wipe the
+       * score a `scores` run stored minutes earlier — this upsert is keyed on
+       * `[sport, externalId, source]`, so both data types land on the SAME ROW.
+       * Only a value actually present in the payload is written.
+       */
+      const toScore = (value: unknown): number | undefined => {
+        if (value == null || value === '') return undefined
+        const n = Number(value)
+        return Number.isFinite(n) ? Math.trunc(n) : undefined
+      }
+      const homeScore = toScore(game.homeScore ?? game.homePoints ?? game.home_score)
+      const awayScore = toScore(game.awayScore ?? game.awayPoints ?? game.away_score)
+      const weekRaw = Number(game.week)
+      const week = Number.isFinite(weekRaw) ? Math.floor(weekRaw) : undefined
+      const seasonType =
+        typeof game.seasonType === 'string' && game.seasonType.trim()
+          ? game.seasonType.trim()
+          : undefined
+
+      const scoring = {
+        ...(homeScore === undefined ? {} : { homeScore }),
+        ...(awayScore === undefined ? {} : { awayScore }),
+        ...(week === undefined ? {} : { week }),
+        ...(seasonType === undefined ? {} : { seasonType }),
+      }
+
       await prisma.sportsGame
         .upsert({
           where: {
@@ -281,6 +318,7 @@ export async function persistNormalizedSportsRows(
                   : null,
             venue: typeof game.venue === 'string' ? game.venue : null,
             season,
+            ...scoring,
             fetchedAt: new Date(),
             expiresAt: exp,
           },
@@ -299,6 +337,7 @@ export async function persistNormalizedSportsRows(
             venue: typeof game.venue === 'string' ? game.venue : null,
             season,
             source,
+            ...scoring,
             fetchedAt: new Date(),
             expiresAt: exp,
           },
