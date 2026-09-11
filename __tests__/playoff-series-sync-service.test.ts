@@ -1080,7 +1080,16 @@ describe("syncPlayoffChallengeSeries", () => {
   it("falls back from empty Rolling Insights rows to ESPN games", async () => {
     const { fetchLivePlayoffSeriesGames } = await import("@/lib/playoffs/playoffSeriesSyncService")
     const liveScores = await import("@/lib/sports-live-scores-service")
-    vi.spyOn(liveScores, "fetchRollingInsightsScheduleSeason").mockResolvedValue([])
+    /*
+     * 🛑 THE SERVICE CALLS THE `WithDiagnostics` VARIANT, NOT THIS NAME.
+     * Spying `fetchRollingInsightsScheduleSeason` intercepted nothing, so the real fetcher ran
+     * and this test timed out at 30s — intermittently, which is why it reddened `main` at random
+     * while never appearing in the vitest baseline. 14 other tests in this file already spy the
+     * correct name; these were missed when the diagnostics variant was introduced.
+     */
+    vi.spyOn(liveScores, "fetchRollingInsightsScheduleSeasonWithDiagnostics").mockResolvedValue(
+      scheduleResult("NBA", 2026, []),
+    )
     vi.spyOn(liveScores, "fetchRollingInsightsScoreboard").mockResolvedValue([])
     vi.spyOn(liveScores, "fetchEspnScoreboard").mockResolvedValue([
       {
@@ -1121,6 +1130,15 @@ describe("syncPlayoffChallengeSeries", () => {
   it("reports all attempted providers when Rolling Insights and ESPN are empty", async () => {
     const { fetchLivePlayoffSeriesGames } = await import("@/lib/playoffs/playoffSeriesSyncService")
     const liveScores = await import("@/lib/sports-live-scores-service")
+    /*
+     * 🛑 THE SCHEDULE FETCHER WAS NOT STUBBED AT ALL HERE, so the real one ran and this test
+     * timed out at 30s. The assertion below expects `rolling_insights_schedule_season` among the
+     * attempted providers — i.e. this test depends on that call happening, which is exactly why
+     * leaving it live went unnoticed: the expectation still described the right behaviour.
+     */
+    vi.spyOn(liveScores, "fetchRollingInsightsScheduleSeasonWithDiagnostics").mockResolvedValue(
+      scheduleResult("NBA", 2026, []),
+    )
     vi.spyOn(liveScores, "fetchRollingInsightsScoreboard").mockResolvedValue([])
     vi.spyOn(liveScores, "fetchEspnScoreboard").mockResolvedValue([])
 
