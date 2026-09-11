@@ -224,10 +224,59 @@ export type ImportStatusRow = {
   completedAt: string | null
 }
 
+/**
+ * Whether the import heartbeat is actually allowed to do anything.
+ *
+ * 🛑 `/api/cron/fantasy-os-exec-sync` NO-OPS UNLESS `FANTASY_OS_EXEC_SYNC_LIVE === 'true'`,
+ * AND IT RETURNS 200 WHEN IT DOES. So the cron looks healthy, the workflow goes
+ * green, and every imported league quietly stops being refreshed. Nothing in the
+ * product distinguishes "synced 20 minutes ago" from "has not synced since the
+ * flag was last set", which is the whole reason this is surfaced here.
+ *
+ * ⚠ `configured` AND `enabled` ARE DIFFERENT QUESTIONS AND BOTH MATTER.
+ * Unset, set to `false`, and set to `TRUE` are three distinct operator states
+ * that all mean "off" — and the third is a typo that reads as a deliberate
+ * choice. `recognized` is false for exactly that case, so a misconfiguration is
+ * visible instead of being rendered as an intentional disable.
+ *
+ * ⚠ AND THE FLAG IS NOT THE ANSWER — A TIMESTAMP WOULD BE. A flag says what is
+ * permitted; only a run record says what happened.
+ *
+ * 🛑 WHICH THIS JOB DOES NOT WRITE. `/api/cron/fantasy-os-exec-sync` returns JSON
+ * and records no `SyncJobRun`, so there is nothing here to read. A `lastRunAt`
+ * field would therefore be null forever — reporting "never ran" about a job that
+ * may be running perfectly, which is a worse lie than saying nothing.
+ *
+ * So the gap is NAMED instead of papered over: `runsObservable: false` means this
+ * surface cannot see the effect, as distinct from seeing it and finding nothing.
+ * Those are the same distinction as `configured` vs `enabled` above, and
+ * collapsing either one produces a confident wrong answer.
+ *
+ * Closing it means making the route record a run — a writer, not a reader, and a
+ * separate change. Until then `enabled` is the honest limit of what is known.
+ */
+export type SyncGateStatus = {
+  envVar: 'FANTASY_OS_EXEC_SYNC_LIVE'
+  /** The variable is present at all (whatever its value). */
+  configured: boolean
+  /** Exactly `'true'` — the only value the route accepts. */
+  enabled: boolean
+  /** Present, but not a value anyone meant: neither `'true'` nor `'false'`. */
+  recognized: boolean
+  /**
+   * False: the heartbeat writes no run record, so this surface cannot report
+   * whether it actually executed. NOT the same as "it has not executed".
+   */
+  runsObservable: boolean
+  /** Why the effect cannot be read, so nobody has to rediscover it. */
+  runsObservableNote: string
+}
+
 export type ImportStatusResult = {
   recent: ImportStatusRow[]
   failedLast24h: number
   succeededLast24h: number
+  syncGate: SyncGateStatus
 }
 
 export async function getImportStatus(): Promise<ImportStatusResult> {
@@ -242,7 +291,26 @@ export async function getImportStatus(): Promise<ImportStatusResult> {
     if (["failed", "error", "failure"].includes(s)) failed++
     else if (["success", "completed", "real", "cached_only"].includes(s)) succeeded++
   }
+  /*
+   * The value is read but never returned — only three booleans derived from it.
+   * This endpoint is admin-gated rather than secret-free, and echoing raw
+   * environment values back out of a health surface is how a flag report becomes
+   * a credential report the first time someone widens it.
+   */
+  const raw = process.env.FANTASY_OS_EXEC_SYNC_LIVE
+  const syncGate: SyncGateStatus = {
+    envVar: 'FANTASY_OS_EXEC_SYNC_LIVE',
+    configured: raw !== undefined,
+    enabled: raw === 'true',
+    recognized: raw === undefined || raw === 'true' || raw === 'false',
+    runsObservable: false,
+    runsObservableNote:
+      'app/api/cron/fantasy-os-exec-sync writes no SyncJobRun, so whether the heartbeat ' +
+      'executed cannot be read here. Absence of a run record is not evidence it did not run.',
+  }
+
   return {
+    syncGate,
     recent: runs.slice(0, 40).map((r) => ({
       jobName: r.jobName,
       scope: r.jobScope ?? null,
