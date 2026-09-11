@@ -1,0 +1,1170 @@
+{
+  "schedulePeriod": {
+    "ordinal": 1,
+    "low": {
+      "ordinal": 1,
+      "season": 2021,
+      "startEpochMilli": "1631008800000"
+    },
+    "value": 1
+  },
+  "eligibleSchedulePeriods": [
+    {
+      "ordinal": 1,
+      "low": {
+        "ordinal": 1,
+        "season": 2021,
+        "startEpochMilli": "1631008800000"
+      },
+      "value": 1
+    },
+    {
+      "ordinal": 2,
+      "low": {
+        "ordinal": 2,
+        "season": 2021,
+        "startEpochMilli": "1631613600000"
+      },
+      "value": 2
+    },
+    {
+      "ordinal": 3,
+      "low": {
+        "ordinal": 3,
+        "season": 2021,
+        "startEpochMilli": "1632218400000"
+      },
+      "value": 3
+    },
+    {
+      "ordinal": 4,
+      "low": {
+        "ordinal": 4,
+        "season": 2021,
+        "startEpochMilli": "1632823200000"
+      },
+      "value": 4
+    },
+    {
+      "ordinal": 5,
+      "low": {
+        "ordinal": 5,
+        "season": 2021,
+        "startEpochMilli": "1633428000000"
+      },
+      "value": 5
+    },
+    {
+      "ordinal": 6,
+      "low": {
+        "ordinal": 6,
+        "season": 2021,
+        "startEpochMilli": "1634032800000"
+      },
+      "value": 6
+    },
+    {
+      "ordinal": 7,
+      "low": {
+        "ordinal": 7,
+        "season": 2021,
+        "startEpochMilli": "1634637600000"
+      },
+      "value": 7
+    },
+    {
+      "ordinal": 8,
+      "low": {
+        "ordinal": 8,
+        "season": 2021,
+        "startEpochMilli": "1635242400000"
+      },
+      "value": 8
+    },
+    {
+      "ordinal": 9,
+      "low": {
+        "ordinal": 9,
+        "season": 2021,
+        "startEpochMilli": "1635847200000"
+      },
+      "value": 9
+    },
+    {
+      "ordinal": 10,
+      "low": {
+        "ordinal": 10,
+        "season": 2021,
+        "startEpochMilli": "1636455600000"
+      },
+      "value": 10
+    },
+    {
+      "ordinal": 11,
+      "low": {
+        "ordinal": 11,
+        "season": 2021,
+        "startEpochMilli": "1637060400000"
+      },
+      "value": 11
+    },
+    {
+      "ordinal": 12,
+      "low": {
+        "ordinal": 12,
+        "season": 2021,
+        "startEpochMilli": "1637665200000"
+      },
+      "value": 12
+    },
+    {
+      "ordinal": 13,
+      "low": {
+        "ordinal": 13,
+        "season": 2021,
+        "startEpochMilli": "1638270000000"
+      },
+      "value": 13
+    },
+    {
+      "ordinal": 14,
+      "low": {
+        "ordinal": 14,
+        "season": 2021,
+        "startEpochMilli": "1638874800000"
+      },
+      "value": 14
+    },
+    {
+      "ordinal": 15,
+      "low": {
+        "ordinal": 15,
+        "season": 2021,
+        "startEpochMilli": "1639479600000"
+      },
+      "value": 15
+    },
+    {
+      "ordinal": 16,
+      "low": {
+        "ordinal": 16,
+        "season": 2021,
+        "startEpochMilli": "1640170800000"
+      },
+      "value": 16
+    }
+  ],
+  "games": [
+    {
+      "id": "47213760",
+      "away": {
+        "id": 1373883,
+        "name": "Manitoba Marmots",
+        "recordOverall": {
+          "wins": 4,
+          "losses": 9,
+          "winPercentage": {
+            "value": 0.30769232,
+            "formatted": ".308"
+          },
+          "rank": 12,
+          "formatted": "4-9"
+        },
+        "recordDivision": {
+          "wins": 2,
+          "losses": 4,
+          "winPercentage": {
+            "value": 0.33333334,
+            "formatted": ".333"
+          },
+          "rank": 3,
+          "formatted": "2-4"
+        },
+        "recordPostseason": {
+          "wins": 2,
+          "losses": 1,
+          "winPercentage": {
+            "value": 0.6666667,
+            "formatted": ".667"
+          },
+          "rank": 12,
+          "formatted": "2-1"
+        },
+        "pointsFor": {
+          "value": 1842.9,
+          "formatted": "1,842.9"
+        },
+        "pointsAgainst": {
+          "value": 1842.04,
+          "formatted": "1,842.04"
+        },
+        "streak": {
+          "value": 1,
+          "formatted": "W1"
+        },
+        "waiverAcquisitionBudget": {
+          "value": 100,
+          "formatted": "$100"
+        },
+        "newItemCounts": {
+          "activityUnread": 2,
+          "messagesUnread": 1
+        },
+        "initials": "MM"
+      },
+      "home": {
+        "id": 1373393,
+        "name": "Philadelphia Fire",
+        "logoUrl": "https://s3.amazonaws.com/fleaflicker/t1373393_0_150x150.jpg",
+        "recordOverall": {
+          "wins": 11,
+          "losses": 2,
+          "winPercentage": {
+            "value": 0.84615386,
+            "formatted": ".846"
+          },
+          "rank": 1,
+          "formatted": "11-2"
+        },
+        "recordDivision": {
+          "wins": 6,
+          "winPercentage": {
+            "value": 1,
+            "formatted": "1.000"
+          },
+          "rank": 1,
+          "formatted": "6-0"
+        },
+        "recordPostseason": {
+          "wins": 2,
+          "winPercentage": {
+            "value": 1,
+            "formatted": "1.000"
+          },
+          "rank": 2,
+          "formatted": "2-0"
+        },
+        "pointsFor": {
+          "value": 2063.12,
+          "formatted": "2,063.12"
+        },
+        "pointsAgainst": {
+          "value": 1513.62,
+          "formatted": "1,513.62"
+        },
+        "streak": {
+          "value": 7,
+          "formatted": "W7"
+        },
+        "waiverAcquisitionBudget": {
+          "value": 100,
+          "formatted": "$100"
+        },
+        "newItemCounts": {
+          "activityUnread": 6
+        },
+        "initials": "PF"
+      },
+      "awayScore": {
+        "score": {
+          "value": 169.61,
+          "formatted": "169.61"
+        }
+      },
+      "homeScore": {
+        "score": {
+          "value": 263.49,
+          "formatted": "263.49"
+        }
+      },
+      "homeResult": "WIN",
+      "awayResult": "LOSE",
+      "isFinalScore": true,
+      "isDivisional": true
+    },
+    {
+      "id": "47213754",
+      "away": {
+        "id": 1373973,
+        "name": "Red River Land Thunder",
+        "logoUrl": "https://s3.amazonaws.com/fleaflicker/t1373973_0_150x150.jpg",
+        "recordOverall": {
+          "wins": 4,
+          "losses": 9,
+          "winPercentage": {
+            "value": 0.30769232,
+            "formatted": ".308"
+          },
+          "rank": 13,
+          "formatted": "4-9"
+        },
+        "recordDivision": {
+          "wins": 3,
+          "losses": 3,
+          "winPercentage": {
+            "value": 0.5,
+            "formatted": ".500"
+          },
+          "rank": 3,
+          "formatted": "3-3"
+        },
+        "recordPostseason": {
+          "wins": 2,
+          "winPercentage": {
+            "value": 1,
+            "formatted": "1.000"
+          },
+          "rank": 13,
+          "formatted": "2-0"
+        },
+        "pointsFor": {
+          "value": 1436.08,
+          "formatted": "1,436.08"
+        },
+        "pointsAgainst": {
+          "value": 1634.71,
+          "formatted": "1,634.71"
+        },
+        "streak": {
+          "value": 3,
+          "formatted": "W3"
+        },
+        "waiverAcquisitionBudget": {
+          "value": 100,
+          "formatted": "$100"
+        },
+        "newItemCounts": {
+          "activityUnread": 7,
+          "messagesUnread": 1
+        },
+        "initials": "RR"
+      },
+      "home": {
+        "id": 1371776,
+        "name": "Winter Hill Black Shamrocks",
+        "logoUrl": "https://s3.amazonaws.com/fleaflicker/t1371776_0_150x150.jpg",
+        "recordOverall": {
+          "wins": 5,
+          "losses": 8,
+          "winPercentage": {
+            "value": 0.3846154,
+            "formatted": ".385"
+          },
+          "rank": 11,
+          "formatted": "5-8"
+        },
+        "recordDivision": {
+          "wins": 4,
+          "losses": 2,
+          "winPercentage": {
+            "value": 0.6666667,
+            "formatted": ".667"
+          },
+          "rank": 2,
+          "formatted": "4-2"
+        },
+        "recordPostseason": {
+          "losses": 1,
+          "winPercentage": {
+            "formatted": ".000"
+          },
+          "rank": 11,
+          "formatted": "0-1"
+        },
+        "pointsFor": {
+          "value": 1379.9,
+          "formatted": "1,379.9"
+        },
+        "pointsAgainst": {
+          "value": 1503.94,
+          "formatted": "1,503.94"
+        },
+        "streak": {
+          "value": -1,
+          "formatted": "L1"
+        },
+        "waiverAcquisitionBudget": {
+          "value": 100,
+          "formatted": "$100"
+        },
+        "initials": "WH"
+      },
+      "awayScore": {
+        "score": {
+          "value": 124,
+          "formatted": "124"
+        }
+      },
+      "homeScore": {
+        "score": {
+          "value": 198.45,
+          "formatted": "198.45"
+        }
+      },
+      "homeResult": "WIN",
+      "awayResult": "LOSE",
+      "isFinalScore": true,
+      "isDivisional": true
+    },
+    {
+      "id": "47213761",
+      "away": {
+        "id": 1373988,
+        "name": "Springfield Isotopes",
+        "logoUrl": "https://s3.amazonaws.com/fleaflicker/t1373988_0_150x150.jpg",
+        "recordOverall": {
+          "wins": 3,
+          "losses": 10,
+          "winPercentage": {
+            "value": 0.23076923,
+            "formatted": ".231"
+          },
+          "rank": 15,
+          "formatted": "3-10"
+        },
+        "recordDivision": {
+          "losses": 6,
+          "winPercentage": {
+            "formatted": ".000"
+          },
+          "rank": 4,
+          "formatted": "0-6"
+        },
+        "recordPostseason": {
+          "wins": 1,
+          "losses": 1,
+          "winPercentage": {
+            "value": 0.5,
+            "formatted": ".500"
+          },
+          "rank": 15,
+          "formatted": "1-1"
+        },
+        "pointsFor": {
+          "value": 1351.8,
+          "formatted": "1,351.8"
+        },
+        "pointsAgainst": {
+          "value": 1849.52,
+          "formatted": "1,849.52"
+        },
+        "streak": {
+          "value": -1,
+          "formatted": "L1"
+        },
+        "waiverAcquisitionBudget": {
+          "value": 100,
+          "formatted": "$100"
+        },
+        "newItemCounts": {
+          "activityUnread": 6,
+          "messagesUnread": 1
+        },
+        "initials": "SI"
+      },
+      "home": {
+        "id": 1373535,
+        "name": "Winterthur Angry Ducks",
+        "logoUrl": "https://s3.amazonaws.com/fleaflicker/t1373535_0_150x150.jpg",
+        "recordOverall": {
+          "wins": 6,
+          "losses": 7,
+          "winPercentage": {
+            "value": 0.46153846,
+            "formatted": ".462"
+          },
+          "rank": 9,
+          "formatted": "6-7"
+        },
+        "recordDivision": {
+          "wins": 4,
+          "losses": 2,
+          "winPercentage": {
+            "value": 0.6666667,
+            "formatted": ".667"
+          },
+          "rank": 2,
+          "formatted": "4-2"
+        },
+        "recordPostseason": {
+          "losses": 1,
+          "winPercentage": {
+            "formatted": ".000"
+          },
+          "rank": 9,
+          "formatted": "0-1"
+        },
+        "pointsFor": {
+          "value": 1676.93,
+          "formatted": "1,676.93"
+        },
+        "pointsAgainst": {
+          "value": 1776.36,
+          "formatted": "1,776.36"
+        },
+        "streak": {
+          "value": -1,
+          "formatted": "L1"
+        },
+        "waiverAcquisitionBudget": {
+          "value": 100,
+          "formatted": "$100"
+        },
+        "newItemCounts": {
+          "activityUnread": 6,
+          "messagesUnread": 73
+        },
+        "initials": "WA"
+      },
+      "awayScore": {
+        "score": {
+          "value": 118.2,
+          "formatted": "118.2"
+        }
+      },
+      "homeScore": {
+        "score": {
+          "value": 133.98,
+          "formatted": "133.98"
+        }
+      },
+      "homeResult": "WIN",
+      "awayResult": "LOSE",
+      "isFinalScore": true,
+      "isDivisional": true
+    },
+    {
+      "id": "47213755",
+      "away": {
+        "id": 1373991,
+        "name": "Top City Terrors",
+        "logoUrl": "https://s3.amazonaws.com/fleaflicker/t1373991_0_150x150.jpg",
+        "recordOverall": {
+          "wins": 4,
+          "losses": 9,
+          "winPercentage": {
+            "value": 0.30769232,
+            "formatted": ".308"
+          },
+          "rank": 14,
+          "formatted": "4-9"
+        },
+        "recordDivision": {
+          "wins": 2,
+          "losses": 4,
+          "winPercentage": {
+            "value": 0.33333334,
+            "formatted": ".333"
+          },
+          "rank": 4,
+          "formatted": "2-4"
+        },
+        "recordPostseason": {
+          "wins": 1,
+          "losses": 1,
+          "winPercentage": {
+            "value": 0.5,
+            "formatted": ".500"
+          },
+          "rank": 14,
+          "formatted": "1-1"
+        },
+        "pointsFor": {
+          "value": 1293.36,
+          "formatted": "1,293.36"
+        },
+        "pointsAgainst": {
+          "value": 1583.49,
+          "formatted": "1,583.49"
+        },
+        "streak": {
+          "value": 1,
+          "formatted": "W1"
+        },
+        "waiverAcquisitionBudget": {
+          "value": 100,
+          "formatted": "$100"
+        },
+        "newItemCounts": {
+          "activityUnread": 7
+        },
+        "initials": "TC"
+      },
+      "home": {
+        "id": 1373501,
+        "name": "Midgard Gallows",
+        "logoUrl": "https://s3.amazonaws.com/fleaflicker/t1373501_0_150x150.jpg",
+        "recordOverall": {
+          "wins": 6,
+          "losses": 7,
+          "winPercentage": {
+            "value": 0.46153846,
+            "formatted": ".462"
+          },
+          "rank": 4,
+          "formatted": "6-7"
+        },
+        "recordDivision": {
+          "wins": 3,
+          "losses": 3,
+          "winPercentage": {
+            "value": 0.5,
+            "formatted": ".500"
+          },
+          "rank": 1,
+          "formatted": "3-3"
+        },
+        "recordPostseason": {
+          "losses": 1,
+          "winPercentage": {
+            "formatted": ".000"
+          },
+          "rank": 4,
+          "formatted": "0-1"
+        },
+        "pointsFor": {
+          "value": 1323.95,
+          "formatted": "1,323.95"
+        },
+        "pointsAgainst": {
+          "value": 1444.33,
+          "formatted": "1,444.33"
+        },
+        "streak": {
+          "value": -2,
+          "formatted": "L2"
+        },
+        "waiverAcquisitionBudget": {
+          "value": 100,
+          "formatted": "$100"
+        },
+        "newItemCounts": {
+          "activityUnread": 7,
+          "messagesUnread": 74
+        },
+        "initials": "MG"
+      },
+      "awayScore": {
+        "score": {
+          "value": 156.42,
+          "formatted": "156.42"
+        }
+      },
+      "homeScore": {
+        "score": {
+          "value": 98.85,
+          "formatted": "98.85"
+        }
+      },
+      "homeResult": "LOSE",
+      "awayResult": "WIN",
+      "isFinalScore": true,
+      "isDivisional": true
+    },
+    {
+      "id": "47213756",
+      "away": {
+        "id": 1374252,
+        "name": "Central City Crusaders",
+        "logoUrl": "https://s3.amazonaws.com/fleaflicker/t1374252_0_150x150.jpg",
+        "recordOverall": {
+          "wins": 7,
+          "losses": 6,
+          "winPercentage": {
+            "value": 0.53846157,
+            "formatted": ".538"
+          },
+          "rank": 7,
+          "formatted": "7-6"
+        },
+        "recordDivision": {
+          "wins": 2,
+          "losses": 4,
+          "winPercentage": {
+            "value": 0.33333334,
+            "formatted": ".333"
+          },
+          "rank": 3,
+          "formatted": "2-4"
+        },
+        "recordPostseason": {
+          "wins": 2,
+          "winPercentage": {
+            "value": 1,
+            "formatted": "1.000"
+          },
+          "rank": 7,
+          "formatted": "2-0"
+        },
+        "pointsFor": {
+          "value": 2168.25,
+          "formatted": "2,168.25"
+        },
+        "pointsAgainst": {
+          "value": 1842.15,
+          "formatted": "1,842.15"
+        },
+        "streak": {
+          "value": 2,
+          "formatted": "W2"
+        },
+        "waiverAcquisitionBudget": {
+          "value": 100,
+          "formatted": "$100"
+        },
+        "newItemCounts": {
+          "activityUnread": 7,
+          "messagesUnread": 33
+        },
+        "initials": "CC"
+      },
+      "home": {
+        "id": 1373475,
+        "name": "Winterfell Dire Wolves",
+        "logoUrl": "https://s3.amazonaws.com/fleaflicker/t1373475_0_150x150.jpg",
+        "recordOverall": {
+          "wins": 11,
+          "losses": 2,
+          "winPercentage": {
+            "value": 0.84615386,
+            "formatted": ".846"
+          },
+          "rank": 2,
+          "formatted": "11-2"
+        },
+        "recordDivision": {
+          "wins": 4,
+          "losses": 2,
+          "winPercentage": {
+            "value": 0.6666667,
+            "formatted": ".667"
+          },
+          "rank": 1,
+          "formatted": "4-2"
+        },
+        "recordPostseason": {
+          "wins": 1,
+          "losses": 1,
+          "winPercentage": {
+            "value": 0.5,
+            "formatted": ".500"
+          },
+          "rank": 1,
+          "formatted": "1-1"
+        },
+        "pointsFor": {
+          "value": 2305.65,
+          "formatted": "2,305.65"
+        },
+        "pointsAgainst": {
+          "value": 1859.69,
+          "formatted": "1,859.69"
+        },
+        "streak": {
+          "value": -1,
+          "formatted": "L1"
+        },
+        "waiverAcquisitionBudget": {
+          "value": 100,
+          "formatted": "$100"
+        },
+        "initials": "WD"
+      },
+      "awayScore": {
+        "score": {
+          "value": 158.85,
+          "formatted": "158.85"
+        }
+      },
+      "homeScore": {
+        "score": {
+          "value": 207.1,
+          "formatted": "207.1"
+        }
+      },
+      "homeResult": "WIN",
+      "awayResult": "LOSE",
+      "isFinalScore": true,
+      "isDivisional": true
+    },
+    {
+      "id": "47213757",
+      "away": {
+        "id": 1374255,
+        "name": "Mushroom City Karts",
+        "logoUrl": "https://s3.amazonaws.com/fleaflicker/t1374255_0_150x150.jpg",
+        "recordOverall": {
+          "wins": 7,
+          "losses": 6,
+          "winPercentage": {
+            "value": 0.53846157,
+            "formatted": ".538"
+          },
+          "rank": 8,
+          "formatted": "7-6"
+        },
+        "recordDivision": {
+          "wins": 2,
+          "losses": 4,
+          "winPercentage": {
+            "value": 0.33333334,
+            "formatted": ".333"
+          },
+          "rank": 4,
+          "formatted": "2-4"
+        },
+        "recordPostseason": {
+          "wins": 1,
+          "losses": 1,
+          "winPercentage": {
+            "value": 0.5,
+            "formatted": ".500"
+          },
+          "rank": 8,
+          "formatted": "1-1"
+        },
+        "pointsFor": {
+          "value": 2127.03,
+          "formatted": "2,127.03"
+        },
+        "pointsAgainst": {
+          "value": 2107.73,
+          "formatted": "2,107.73"
+        },
+        "streak": {
+          "value": -1,
+          "formatted": "L1"
+        },
+        "waiverAcquisitionBudget": {
+          "value": 100,
+          "formatted": "$100"
+        },
+        "newItemCounts": {
+          "activityUnread": 7
+        },
+        "initials": "MC"
+      },
+      "home": {
+        "id": 1373480,
+        "name": "Goldenrod City Nightmares",
+        "logoUrl": "https://s3.amazonaws.com/fleaflicker/t1373480_0_150x150.jpg",
+        "recordOverall": {
+          "wins": 9,
+          "losses": 4,
+          "winPercentage": {
+            "value": 0.6923077,
+            "formatted": ".692"
+          },
+          "rank": 6,
+          "formatted": "9-4"
+        },
+        "recordDivision": {
+          "wins": 4,
+          "losses": 2,
+          "winPercentage": {
+            "value": 0.6666667,
+            "formatted": ".667"
+          },
+          "rank": 2,
+          "formatted": "4-2"
+        },
+        "recordPostseason": {
+          "losses": 1,
+          "winPercentage": {
+            "formatted": ".000"
+          },
+          "rank": 6,
+          "formatted": "0-1"
+        },
+        "pointsFor": {
+          "value": 1856.02,
+          "formatted": "1,856.02"
+        },
+        "pointsAgainst": {
+          "value": 1760.17,
+          "formatted": "1,760.17"
+        },
+        "streak": {
+          "value": -1,
+          "formatted": "L1"
+        },
+        "waiverAcquisitionBudget": {
+          "value": 100,
+          "formatted": "$100"
+        },
+        "newItemCounts": {
+          "messagesUnread": 3
+        },
+        "initials": "GC"
+      },
+      "awayScore": {
+        "score": {
+          "value": 224.06,
+          "formatted": "224.06"
+        }
+      },
+      "homeScore": {
+        "score": {
+          "value": 176.9,
+          "formatted": "176.9"
+        }
+      },
+      "homeResult": "LOSE",
+      "awayResult": "WIN",
+      "isFinalScore": true,
+      "isDivisional": true
+    },
+    {
+      "id": "47213758",
+      "away": {
+        "id": 1374271,
+        "name": "Clutch City Ballers",
+        "logoUrl": "https://s3.amazonaws.com/fleaflicker/t1374271_0_150x150.jpg",
+        "recordOverall": {
+          "wins": 10,
+          "losses": 3,
+          "winPercentage": {
+            "value": 0.7692308,
+            "formatted": ".769"
+          },
+          "rank": 3,
+          "formatted": "10-3"
+        },
+        "recordDivision": {
+          "wins": 6,
+          "winPercentage": {
+            "value": 1,
+            "formatted": "1.000"
+          },
+          "rank": 1,
+          "formatted": "6-0"
+        },
+        "recordPostseason": {
+          "wins": 2,
+          "losses": 1,
+          "winPercentage": {
+            "value": 0.6666667,
+            "formatted": ".667"
+          },
+          "rank": 3,
+          "formatted": "2-1"
+        },
+        "pointsFor": {
+          "value": 2191.73,
+          "formatted": "2,191.73"
+        },
+        "pointsAgainst": {
+          "value": 1660.24,
+          "formatted": "1,660.24"
+        },
+        "streak": {
+          "value": 1,
+          "formatted": "W1"
+        },
+        "waiverAcquisitionBudget": {
+          "value": 100,
+          "formatted": "$100"
+        },
+        "newItemCounts": {
+          "activityUnread": 4
+        },
+        "initials": "CC"
+      },
+      "home": {
+        "id": 1373970,
+        "name": "Bamenda Herd",
+        "logoUrl": "https://s3.amazonaws.com/fleaflicker/t1373970_0_150x150.jpg",
+        "recordOverall": {
+          "wins": 9,
+          "losses": 4,
+          "winPercentage": {
+            "value": 0.6923077,
+            "formatted": ".692"
+          },
+          "rank": 5,
+          "formatted": "9-4"
+        },
+        "recordDivision": {
+          "wins": 4,
+          "losses": 2,
+          "winPercentage": {
+            "value": 0.6666667,
+            "formatted": ".667"
+          },
+          "rank": 2,
+          "formatted": "4-2"
+        },
+        "recordPostseason": {
+          "wins": 1,
+          "losses": 2,
+          "winPercentage": {
+            "value": 0.33333334,
+            "formatted": ".333"
+          },
+          "rank": 5,
+          "formatted": "1-2"
+        },
+        "pointsFor": {
+          "value": 1960.11,
+          "formatted": "1,960.11"
+        },
+        "pointsAgainst": {
+          "value": 1805.74,
+          "formatted": "1,805.74"
+        },
+        "streak": {
+          "value": -2,
+          "formatted": "L2"
+        },
+        "waiverAcquisitionBudget": {
+          "value": 100,
+          "formatted": "$100"
+        },
+        "initials": "BH"
+      },
+      "awayScore": {
+        "score": {
+          "value": 219.65,
+          "formatted": "219.65"
+        }
+      },
+      "homeScore": {
+        "score": {
+          "value": 206.18,
+          "formatted": "206.18"
+        }
+      },
+      "homeResult": "LOSE",
+      "awayResult": "WIN",
+      "isFinalScore": true,
+      "isDivisional": true
+    },
+    {
+      "id": "47213759",
+      "away": {
+        "id": 1374315,
+        "name": "Shanghai Communists",
+        "recordOverall": {
+          "wins": 2,
+          "losses": 11,
+          "winPercentage": {
+            "value": 0.15384616,
+            "formatted": ".154"
+          },
+          "rank": 16,
+          "formatted": "2-11"
+        },
+        "recordDivision": {
+          "wins": 1,
+          "losses": 5,
+          "winPercentage": {
+            "value": 0.16666667,
+            "formatted": ".167"
+          },
+          "rank": 4,
+          "formatted": "1-5"
+        },
+        "recordPostseason": {
+          "losses": 2,
+          "winPercentage": {
+            "formatted": ".000"
+          },
+          "rank": 16,
+          "formatted": "0-2"
+        },
+        "pointsFor": {
+          "value": 1392.48,
+          "formatted": "1,392.48"
+        },
+        "pointsAgainst": {
+          "value": 1948.06,
+          "formatted": "1,948.06"
+        },
+        "streak": {
+          "value": -3,
+          "formatted": "L3"
+        },
+        "waiverAcquisitionBudget": {
+          "value": 100,
+          "formatted": "$100"
+        },
+        "newItemCounts": {
+          "activityUnread": 7,
+          "messagesUnread": 56
+        },
+        "initials": "SC"
+      },
+      "home": {
+        "id": 1373993,
+        "name": "Boomtown Sly Foxes",
+        "logoUrl": "https://s3.amazonaws.com/fleaflicker/t1373993_0_150x150.jpg",
+        "recordOverall": {
+          "wins": 6,
+          "losses": 7,
+          "winPercentage": {
+            "value": 0.46153846,
+            "formatted": ".462"
+          },
+          "rank": 10,
+          "formatted": "6-7"
+        },
+        "recordDivision": {
+          "wins": 1,
+          "losses": 5,
+          "winPercentage": {
+            "value": 0.16666667,
+            "formatted": ".167"
+          },
+          "rank": 3,
+          "formatted": "1-5"
+        },
+        "recordPostseason": {
+          "wins": 1,
+          "losses": 2,
+          "winPercentage": {
+            "value": 0.33333334,
+            "formatted": ".333"
+          },
+          "rank": 10,
+          "formatted": "1-2"
+        },
+        "pointsFor": {
+          "value": 1483.75,
+          "formatted": "1,483.75"
+        },
+        "pointsAgainst": {
+          "value": 1721.27,
+          "formatted": "1,721.27"
+        },
+        "streak": {
+          "value": -2,
+          "formatted": "L2"
+        },
+        "waiverAcquisitionBudget": {
+          "value": 100,
+          "formatted": "$100"
+        },
+        "newItemCounts": {
+          "activityUnread": 7
+        },
+        "initials": "BS"
+      },
+      "awayScore": {
+        "score": {
+          "value": 83.06,
+          "formatted": "83.06"
+        }
+      },
+      "homeScore": {
+        "score": {
+          "value": 175,
+          "formatted": "175"
+        }
+      },
+      "homeResult": "WIN",
+      "awayResult": "LOSE",
+      "isFinalScore": true,
+      "isDivisional": true
+    }
+  ]
+}

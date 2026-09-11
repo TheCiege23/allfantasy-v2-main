@@ -17,7 +17,7 @@ meta:
   vendor: Fleaflicker
   base_url: https://www.fleaflicker.com/api
   base_url_env: none   # no override exists in the codebase today
-  contract_version: 0.2.0   # bumped: first real probe landed (see FetchLeagueScoreboard)
+  contract_version: 0.3.0   # bumped: game/matchup row observed and team identity proven (G-01b, G-04)
   captured_at: 2026-09-03
   docs_url: https://www.fleaflicker.com/api-docs/index.html
   data_classification: fantasy_platform   # not a real-world sports-data vendor; see README
@@ -111,10 +111,12 @@ endpoints:
     note: No scores at all — current roster composition only.
 
   FetchLeagueScoreboard:
-    status: ENVELOPE_CONFIRMED_GAME_SHAPE_UNVERIFIED   # <-- see GAPS.md G-01. Promoted from
-      # PARAMS_CONFIRMED_SHAPE_UNVERIFIED by a real probe on 2026-09-03, but do not promote to
-      # INTEGRATED yet — the one thing a writer actually needs (a game/matchup row) has never
-      # been observed. See the note below for why.
+    status: GAME_SHAPE_CONFIRMED_NOT_INTEGRATED   # <-- see GAPS.md G-01/G-04. Promoted
+      # 2026-09-11 by a probe of a league with a REAL PLAYED SCHEDULE (206154, season 2025,
+      # scoring_period 1 — fixtures/scoreboard.NFL.week1.json, 8 final games). The game row and
+      # its team identity are now observed, not guessed. Still NOT integrated: no caller fetches
+      # this endpoint yet, and G-05(b)/G-06 (a future week inside an active season; a bye) remain
+      # unobserved — a 16-team league plays 8 games and has no byes.
     method: GET
     path: /FetchLeagueScoreboard
     path_confirmed_via: "https://www.fleaflicker.com/api-docs/index.html — vendor's own published
@@ -138,11 +140,41 @@ endpoints:
       }
       SchedulePeriod = { ordinal: number, value: number, low: { ordinal: number, startEpochMilli: string (epoch ms, as a string) } }
 
-      STILL UNKNOWN: the key holding actual games/matchups, and everything about a game row's
-      shape (team identity, scores, status). Do NOT guess a key name (e.g. "games") for this —
-      it has never been observed in any captured response. Re-probe once a league with a
-      completed draft and a generated schedule is available.
+      CONFIRMED 2026-09-11 for a league WITH a generated, played schedule
+      (fixtures/scoreboard.NFL.week1.json — league 206154, season 2025, period 1):
+      {
+        schedulePeriod: SchedulePeriod,
+        eligibleSchedulePeriods: SchedulePeriod[],
+        games: Game[]                              # the key; absent entirely pre-draft
+      }
+      Game = {
+        id: number,                                # fantasy_game_id — the key FetchLeagueBoxscore takes
+        home: Team, away: Team,                    # SAME shape as a FetchLeagueStandings team
+        homeScore: { score: { value: number, formatted: string } },
+        awayScore: { same },
+        homeResult: "WIN" | "LOSE",                # observed values only; a tie was not observed
+        awayResult: "WIN" | "LOSE",
+        isFinalScore: boolean,
+        isDivisional: boolean
+      }
+
+      ⚠ `games` IS ABSENT, NOT EMPTY, BEFORE A DRAFT. The pre-schedule fixture
+      (scoreboard.NFL.json, league 356670) has no `games` key at all for any scoring_period.
+      A writer must treat "no games key" as "nothing to write yet", never as a fetch failure.
+
+      ⚠ A TIE WAS NOT OBSERVED. `homeResult`/`awayResult` are documented as the two values seen.
+      Do not add a third from memory — probe a tied week, per the rule this contract exists for.
     fields:
+      - "games[].home.id / games[].away.id: integer — THE SAME ID SPACE as
+         FetchLeagueStandings and FetchLeagueRosters. PROVEN 2026-09-11, not inferred from the
+         shape looking similar: all 16 scoreboard team sides in league 206154 season 2025 week 1
+         joined to that league's own standings on id AND name, 16/16, zero mismatches. This is
+         GAPS.md G-04, the field flagged as mattering most for correctness — a writer may join a
+         matchup row to LeagueTeam on this id."
+      - "games[].id: integer — the fantasy_game_id FetchLeagueBoxscore takes."
+      - "games[].homeScore.score.value: number (points); .formatted: string, pre-rounded by
+         Fleaflicker. Prefer .value for arithmetic."
+      - "games[].isFinalScore: boolean — true for every game in the played-week fixture."
       - "schedulePeriod.ordinal: integer, 1-indexed, matches value in every fixture seen so far"
       - "schedulePeriod.value: integer — the actual week/period number to pass as `scoring_period`"
       - "schedulePeriod.low.startEpochMilli: string — epoch milliseconds (as a JSON string, not a number) when this period starts"
