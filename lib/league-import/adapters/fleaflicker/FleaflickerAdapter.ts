@@ -136,7 +136,38 @@ export const FleaflickerAdapter: ILeagueImportAdapter<FleaflickerImportPayload> 
         historicalRosterSnapshots: { state: 'missing' },
         scoringSettings: { state: 'missing', note: 'Fleaflicker scoring rules not mapped in v1' },
         playoffSettings: { state: 'partial' },
-        currentStandings: { state: 'full' },
+        /*
+         * ⚠ MEASURED, NOT ASSERTED — AND `lg.size` IS WHAT MAKES THAT POSSIBLE.
+         *
+         * This was a bare `{ state: 'full' }`: an assertion that every team's
+         * standing came across, made without looking. `standings` is derived
+         * from `teamsFlat`, so its length is knowable, and `lg.size` is an
+         * INDEPENDENT count from the league object — comparing the two is a real
+         * completeness check rather than a tautology.
+         *
+         * ⚠ EXCEPT WHEN `lg.size` IS ABSENT, where `leagueSize` falls back to
+         * `teamsFlat.length` and the comparison becomes circular — it would
+         * always agree with itself and always say 'full'. That case reports
+         * `partial` with a named reason instead, because "we could not verify"
+         * and "we verified it is complete" are different answers and only one of
+         * them should let a surface present the standings as whole.
+         */
+        currentStandings:
+          normalizedRosters.length === 0
+            ? { state: 'missing' }
+            : typeof lg.size !== 'number'
+              ? {
+                  state: 'partial',
+                  count: normalizedRosters.length,
+                  note: 'Fleaflicker did not report a league size, so standings completeness could not be verified',
+                }
+              : normalizedRosters.length >= lg.size
+                ? { state: 'full', count: normalizedRosters.length }
+                : {
+                    state: 'partial',
+                    count: normalizedRosters.length,
+                    note: `Standings cover ${normalizedRosters.length} of ${lg.size} teams`,
+                  },
         currentSchedule: { state: 'missing' },
         draftHistory: { state: 'missing' },
         tradeHistory: { state: 'missing' },
