@@ -210,6 +210,131 @@ describe('sleeper scope fetcher', () => {
   })
 })
 
+/**
+ * The checkpoint is the whole incremental-sync mechanism, and three of its four scopes had no test.
+ *
+ * 🛑 THE `transactions` CASE IS THE ONE THAT MATTERS, AND ITS CLAIM WAS UNASSERTED. Its fingerprint
+ * deliberately covers ONLY completed trades. `sleeperScopeFetcher` says why: "Hashing every
+ * transaction would make the checkpoint move on waiver churn and free-agent adds, so the scope
+ * would re-apply constantly while changing nothing — the checkpoint's whole job is to say 'nothing
+ * to do'."
+ *
+ * ⚠ A REGRESSION THERE IS SILENT AND TOTAL. In a waiver-active league — the common case — a
+ * checkpoint that moves on every add would make the scope re-apply on every single run while the
+ * apply step still reported `unchanged`. The accounting would look healthy, the work would be
+ * wasted, and nothing would go red. That is the failure this block exists to catch.
+ */
+describe('sleeper scope fetcher — checkpoint scope isolation', () => {
+  const TRADE = {
+    source_transaction_id: 'tx-trade-1',
+    type: 'trade' as const,
+    status: 'complete',
+    created_at: '2025-11-01T00:00:00.000Z',
+    roster_ids: ['1', '2'],
+    week: 9,
+  }
+  const WAIVER = {
+    source_transaction_id: 'tx-waiver-1',
+    type: 'waiver' as const,
+    status: 'complete',
+    created_at: '2025-11-02T00:00:00.000Z',
+    roster_ids: ['1'],
+    week: 9,
+  }
+
+  function withTransactions(transactions: unknown[]) {
+    return { ...makeSleeperNormalized(), transactions } as ReturnType<typeof makeSleeperNormalized>
+  }
+
+  async function tokenFor(scope: 'league_state' | 'teams_rosters' | 'traded_picks' | 'transactions', normalized: ReturnType<typeof makeSleeperNormalized>) {
+    const f = createSleeperScopeFetcher({ loadNormalized: async () => normalized })
+    return (await f(scope, null, new Date())).nextCheckpoint
+  }
+
+  it('🛑 waiver and free-agent churn does NOT move the transactions checkpoint', async () => {
+    const quiet = await tokenFor('transactions', withTransactions([TRADE]))
+    const churny = await tokenFor(
+      'transactions',
+      withTransactions([
+        TRADE,
+        WAIVER,
+        { ...WAIVER, source_transaction_id: 'tx-waiver-2' },
+        { ...WAIVER, source_transaction_id: 'tx-fa-1', type: 'free_agent' as const },
+      ]),
+    )
+    expect(churny).toBe(quiet)
+  })
+
+  it('but a NEW COMPLETED TRADE does move it — the checkpoint must not be inert', async () => {
+    /*
+     * The mirror of the case above, and the reason it is not enough on its own: a fingerprint that
+     * ignored everything would also pass "churn does not move it", and would never sync a trade
+     * again. Both directions or neither.
+     */
+    const before = await tokenFor('transactions', withTransactions([TRADE]))
+    const after = await tokenFor(
+      'transactions',
+      withTransactions([TRADE, { ...TRADE, source_transaction_id: 'tx-trade-2' }]),
+    )
+    expect(after).not.toBe(before)
+  })
+
+  it('is stable under provider reordering, which Sleeper per-week order is not', async () => {
+    const t2 = { ...TRADE, source_transaction_id: 'tx-trade-2' }
+    const forward = await tokenFor('transactions', withTransactions([TRADE, t2]))
+    const reversed = await tokenFor('transactions', withTransactions([t2, TRADE]))
+    expect(reversed).toBe(forward)
+  })
+
+  it('ignores a trade that never happened, matching what the apply step writes', async () => {
+    // persistLiveTrades writes only `complete` trades; a checkpoint that moved on a proposal would
+    // re-apply the scope for a trade that may never be accepted.
+    const settled = await tokenFor('transactions', withTransactions([TRADE]))
+    const withProposal = await tokenFor(
+      'transactions',
+      withTransactions([TRADE, { ...TRADE, source_transaction_id: 'tx-prop', status: 'proposed' }]),
+    )
+    expect(withProposal).toBe(settled)
+  })
+
+  it('🛑 a roster change does not move the transactions or traded_picks checkpoints', async () => {
+    /*
+     * Scope isolation is what makes per-scope checkpoints worth having. If any change moved every
+     * token, the collector would re-apply all four scopes on every run and the mechanism would cost
+     * more than it saves.
+     */
+    const base = withTransactions([TRADE])
+    const moved = {
+      ...makeSleeperNormalized({
+        rosters: [
+          { teamId: '1', managerId: 'u1', players: ['p1', 'p9'], starters: ['p9'] },
+          { teamId: '2', managerId: 'u2', players: ['p5'], starters: ['p5'] },
+        ],
+      }),
+      transactions: base.transactions,
+    } as ReturnType<typeof makeSleeperNormalized>
+
+    expect(await tokenFor('transactions', moved)).toBe(await tokenFor('transactions', base))
+    expect(await tokenFor('traded_picks', moved)).toBe(await tokenFor('traded_picks', base))
+    // Control: the scope that DID change must move, or the three assertions above prove nothing.
+    expect(await tokenFor('teams_rosters', moved)).not.toBe(await tokenFor('teams_rosters', base))
+  })
+
+  it('traded_picks and league_state are idempotent and notice their own changes', async () => {
+    const base = makeSleeperNormalized()
+    expect(await tokenFor('traded_picks', base)).toBe(await tokenFor('traded_picks', makeSleeperNormalized()))
+    expect(await tokenFor('league_state', base)).toBe(await tokenFor('league_state', makeSleeperNormalized()))
+
+    const renamed = makeSleeperNormalized({ name: 'A Different League Name' })
+    expect(await tokenFor('league_state', renamed)).not.toBe(await tokenFor('league_state', base))
+
+    const traded = makeSleeperNormalized({
+      tradedPicks: [{ season: 2026, round: 1, original: '1', owner: '2' }],
+    })
+    expect(await tokenFor('traded_picks', traded)).not.toBe(await tokenFor('traded_picks', base))
+  })
+})
+
 // ── Runner integration through the collector's fetcher (completed + immutable + lock) ──
 class MemStore implements SyncStore {
   checkpoints = new Map<string, string>()
