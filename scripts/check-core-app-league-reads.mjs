@@ -110,6 +110,43 @@ const RAW_TOUCHES_LEAGUES = /\b(from|join|update|into)\s+"?leagues"?\b/i
 const VIEWER_COLUMN = /\b("?userId"?|claimedByUserId|platformUserId|creatorId)\b/
 
 /**
+ * The third check: a file that reads a league's CHILD rows must gate the league.
+ *
+ * 🛑 DELETING A GATE TRIPS NOTHING, WHICH IS THE HOLE THIS CLOSES. The other two
+ * checks watch reads of the `leagues` table — but in a gated loader the gate IS
+ * that read. Remove the `loadLeagueFor` call from `myTeam.ts` and there is no
+ * bare `prisma.league` read left to flag, no raw SQL, and no failing test: the
+ * file silently becomes ungated while still returning every `leagueTeam` row for
+ * a league id that arrived on the query string.
+ *
+ * ⚠ SO THE SUBJECT IS THE FILE, NOT THE QUERY. A child read keyed on a league
+ * with no viewer column is safe exactly when something upstream proved the
+ * viewer may see that league, and that is not decidable from the query. What is
+ * asserted is the weaker, checkable thing: the file calls a gate, or the read
+ * carries a marker naming what gates it instead.
+ *
+ * AUDITED 2026-09-10, all 34 child reads under `lib/core-app/`: 18 are
+ * viewer-scoped in their own brace-matched `where`; 12 sit behind a
+ * `loadLeagueFor` / `loadLeagueForOwner` / `resolveLeagueMembership` call on the
+ * same path, each with a confirmed early return on null; 4 are safe because
+ * their ids are viewer-derived by a caller. ZERO were unauthorised. Those 4
+ * carry markers, because a caller-held invariant is precisely what this check
+ * cannot see — and a marker is the only honest way to record one.
+ */
+const CHILD_READ = /prisma\s*\.\s*(league[A-Z]\w*)\s*\.\s*(findUnique|findFirst|findMany|count|aggregate|groupBy)/
+/** A `where` that selects a whole league's rows rather than one viewer's. */
+const LEAGUE_KEYED = /\b(leagueId|sleeperLeagueId|platformLeagueId)\b|\bleague\s*:/
+const GATE_CALL = /\b(loadLeagueFor|loadLeagueForOwner|resolveLeagueMembership|resolveLeagueAccess)\s*\(/
+/**
+ * ⚠ `ownerUserId` IS IN THIS LIST AND NOT IN `VIEWER_COLUMN`, DELIBERATELY. The
+ * franchise tables name the viewer that way (`link: { ownerUserId }` in
+ * `leaguePairing.ts`), and a census that omitted it reported that read as
+ * unscoped — it is not. The raw-SQL list stays narrower because no raw statement
+ * here uses the column.
+ */
+const VIEWER_IN_WHERE = /\b(userId|claimedByUserId|platformUserId|creatorId|ownerUserId)\b/
+
+/**
  * The raw statement beginning at `start`, bounded by its own backticks.
  *
  * ⚠ A FIXED FORWARD WINDOW IS NOT GOOD ENOUGH, AND THE THROWAWAY PROBE THAT
@@ -207,6 +244,9 @@ function main() {
   const violations = []
   const exemptions = []
   const scoped = []
+  /* Kept separate from `violations`: a different question with a different fix,
+     and it must not move the League-read baseline. */
+  const childViolations = []
 
   for (const file of sourceFiles(SCAN_DIR)) {
     const rel = relative(ROOT, file)
@@ -228,6 +268,34 @@ function main() {
        * that first measured this cleared `railMatchups.ts` on a `platformUserId`
        * it was SELECTING, which is how that read would have been waved through.
        */
+      /*
+       * ── a league's CHILD rows, in a file that gates nothing ──────────────
+       *
+       * Reported against the FILE's gate, not the query's `where`, because the
+       * query cannot know. Uses the same brace-matched clause as below: a
+       * viewer column in a `select:` scopes nothing.
+       */
+      const childHit = CHILD_READ.exec(lines[i])
+      if (childHit) {
+        const clause = whereClause(lines, i)
+        const leagueKeyed = clause && LEAGUE_KEYED.test(clause)
+        const viewerKeyed = clause && VIEWER_IN_WHERE.test(clause)
+        if (leagueKeyed && !viewerKeyed && !GATE_CALL.test(stripped)) {
+          let reason = null
+          for (let back = 0; back <= MARKER_LOOKBACK && i - back >= 0; back += 1) {
+            const m = MARKER.exec(rawLines[i - back])
+            if (m) {
+              reason = m[1].replace(/\*\/\s*$/, '').trim()
+              break
+            }
+          }
+          const where = `${rel}:${i + 1}`
+          if (reason) exemptions.push({ where, reason })
+          else childViolations.push({ where, line: `${childHit[1]} read, and this file calls no gate` })
+        }
+        continue
+      }
+
       if (RAW_ANCHOR.test(lines[i])) {
         const sql = rawStatement(rawLines, i)
         if (sql && RAW_TOUCHES_LEAGUES.test(sql)) {
@@ -367,6 +435,31 @@ ${scoped.length} League read(s) already scoped inline by userId (no gate needed)
     const written = Object.values(next).reduce((a, b) => a + b, 0)
     console.log(`\nBaseline written: ${Object.keys(next).length} file(s), ${written} read(s).`)
     return
+  }
+
+  /*
+   * ⚠ REPORTED BEFORE THE BASELINE COMPARISON AND NOT COUNTED BY IT. This
+   * question is "does the file gate at all", which has no pre-existing debt to
+   * ratchet — it was audited to zero on the day it was added. Folding it into
+   * the per-file League-read counts would let a gate deletion hide inside a
+   * file's existing allowance.
+   */
+  if (childViolations.length) {
+    console.error(`\n${childViolations.length} league child-table read(s) in a file that gates nothing:\n`)
+    for (const v of childViolations) console.error(`  ${v.where}\n      ${v.line}`)
+    console.error(`
+A read keyed on a league but not on the viewer is safe only if something upstream
+proved the viewer may see that league. Either call the gate in this file:
+
+  const league = await loadLeagueFor(userId, leagueId, { id: true })
+  if (!league) return null
+
+or, when the ids are already viewer-derived by the caller, say so and say what
+would break it:
+
+  // core-app-league-read: <what gates this instead>
+`)
+    process.exit(1)
   }
 
   const regressions = []
