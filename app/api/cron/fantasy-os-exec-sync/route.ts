@@ -8,6 +8,21 @@ import {
 } from '@/lib/import-os/collector'
 import { refreshProfilesForExternalLeagues } from '@/lib/psychological-profiles/ProfileRefreshService'
 import { materializeSleeperDraftSessions } from '@/lib/sleeper/sync/materializeSleeperDraftSessions'
+import { recordSyncJobRun, withSyncJobRun } from '@/lib/production-health/syncJobRunTelemetry'
+
+/**
+ * 🛑 THIS HEARTBEAT RECORDED NOTHING, SO "GATED OFF" AND "NEVER FIRED" WERE THE SAME.
+ *
+ * The route returned JSON and wrote no `SyncJobRun`, so no surface could tell
+ * whether it had run — and because the disabled path still answers 200, a cron
+ * that had been switched off for weeks looked exactly like a healthy one. Admin
+ * health could only report the flag, never the effect.
+ *
+ * Both paths now record a run, including the gated one. A gated heartbeat that
+ * writes nothing is the single most important row here: it is the state that is
+ * otherwise invisible.
+ */
+const JOB = 'cron-fantasy-os-exec-sync'
 
 /**
  * Fantasy OS — season-aware read-model refresh heartbeat, all providers (durable cron entrypoint).
@@ -75,6 +90,35 @@ export async function GET(req: NextRequest) {
   const liveEnabled = process.env.FANTASY_OS_EXEC_SYNC_LIVE === 'true'
   if (!liveEnabled) {
     // Safe default: the heartbeat records the season decision but does not touch the provider.
+    /*
+     * ⚠ RECORDED, NOT SKIPPED — AND `enabled` IS WHY.
+     *
+     * A gated run and a run that found no work are otherwise the same row: zero
+     * read, zero written, status success. Those are opposite situations — one
+     * means the feature is switched off, the other means every league is already
+     * fresh — and without this field a freshness monitor reports a permanently
+     * disabled job as a permanently healthy one. Same reasoning, and the same
+     * field name, as `cron-commissioner-workspace-refresh`.
+     *
+     * `status` stays `success` on purpose: the heartbeat did exactly what it is
+     * configured to do. Being switched off is not a failure, and marking it one
+     * would train whoever watches this to ignore the signal.
+     */
+    await recordSyncJobRun(
+      { jobName: JOB, provider: 'sleeper', trigger: 'cron' },
+      {
+        status: 'success',
+        rowsRead: 0,
+        rowsWritten: 0,
+        metadata: {
+          enabled: false,
+          seasonState,
+          cadenceMinutes,
+          reason: 'FANTASY_OS_EXEC_SYNC_LIVE is not "true"',
+        },
+      },
+      0,
+    )
     return NextResponse.json({
       ...heartbeat,
       executed: false,
@@ -115,109 +159,145 @@ export async function GET(req: NextRequest) {
 
   try {
     /*
-     * 🛑 THIS WAS `runDueSleeperLeagues`, AND THAT IS WHY ONLY ONE PLATFORM STAYED FRESH.
+     * The executing path records through `withSyncJobRun` rather than the one-shot
+     * recorder used by the gated path above, because this one can DIE MID-RUN.
      *
-     * ESPN, Yahoo and Fantrax got a weekly-matchup parity pass and nothing else — no league
-     * state, no rosters, no standings — while MFL and Fleaflicker got nothing at all. Every
-     * non-Sleeper league was a snapshot ageing from the moment it imported, which is a poor
-     * foundation for an OS that reasons about what changed.
+     * It writes a row at start and finishes it, so a heartbeat killed partway
+     * through leaves a visible stuck `running` row that the reaper sweeps — and a
+     * stuck row is a finding. A one-shot recorder at the end would leave no row at
+     * all, which reads as "never fired": the exact confusion this whole change
+     * exists to remove. The gated path cannot die mid-run, so the cheaper
+     * recorder is honest there.
      */
-    const summary = await runDueLeagues({ now, limit, concurrency })
+    const payload = await withSyncJobRun(
+      { jobName: JOB, provider: 'sleeper', trigger: 'cron' },
+      async () => {
+        /*
+         * 🛑 THIS WAS `runDueSleeperLeagues`, AND THAT IS WHY ONLY ONE PLATFORM STAYED FRESH.
+         *
+         * ESPN, Yahoo and Fantrax got a weekly-matchup parity pass and nothing else — no league
+         * state, no rosters, no standings — while MFL and Fleaflicker got nothing at all. Every
+         * non-Sleeper league was a snapshot ageing from the moment it imported, which is a poor
+         * foundation for an OS that reasons about what changed.
+         */
+        const summary = await runDueLeagues({ now, limit, concurrency })
 
-    // Psychological profiles are refreshed AFTER a sync lands, never at import:
-    // a freshly imported league has no drafts, trades or rosters yet, so
-    // profiling it would characterise every manager from nothing. Once the sync
-    // has written real history there is something to observe.
-    //
-    // Bounded and swallowed — profiling is enrichment and must never take down
-    // the collector it rides along with. `manager_psych_profiles` sat at 0 rows
-    // because the engine had no caller; this is that caller.
-    let profiles: unknown = { leaguesProfiled: 0, managersProfiled: 0 }
-    try {
-      const syncedExternalIds = (summary.results ?? [])
-        .filter((r) => r.executed && !r.error)
-        // runKey is `<provider>:<externalLeagueId>:<season>`.
-        .map((r) => String(r.runKey ?? '').split(':')[1] ?? '')
-        .filter(Boolean)
+        // Psychological profiles are refreshed AFTER a sync lands, never at import:
+        // a freshly imported league has no drafts, trades or rosters yet, so
+        // profiling it would characterise every manager from nothing. Once the sync
+        // has written real history there is something to observe.
+        //
+        // Bounded and swallowed — profiling is enrichment and must never take down
+        // the collector it rides along with. `manager_psych_profiles` sat at 0 rows
+        // because the engine had no caller; this is that caller.
+        let profiles: unknown = { leaguesProfiled: 0, managersProfiled: 0 }
+        try {
+          const syncedExternalIds = (summary.results ?? [])
+            .filter((r) => r.executed && !r.error)
+            // runKey is `<provider>:<externalLeagueId>:<season>`.
+            .map((r) => String(r.runKey ?? '').split(':')[1] ?? '')
+            .filter(Boolean)
 
-      if (syncedExternalIds.length > 0) {
-        const refreshed = await refreshProfilesForExternalLeagues({
-          externalLeagueIds: syncedExternalIds,
-          maxLeagues: 10,
-        })
-        profiles = {
-          leaguesProfiled: refreshed.leaguesProfiled,
-          managersProfiled: refreshed.managersProfiled,
+          if (syncedExternalIds.length > 0) {
+            const refreshed = await refreshProfilesForExternalLeagues({
+              externalLeagueIds: syncedExternalIds,
+              maxLeagues: 10,
+            })
+            profiles = {
+              leaguesProfiled: refreshed.leaguesProfiled,
+              managersProfiled: refreshed.managersProfiled,
+            }
+          }
+        } catch (profileErr) {
+          profiles = {
+            error: profileErr instanceof Error ? profileErr.message.slice(0, 160) : 'profile refresh failed',
+          }
         }
-      }
-    } catch (profileErr) {
-      profiles = {
-        error: profileErr instanceof Error ? profileErr.message.slice(0, 160) : 'profile refresh failed',
-      }
-    }
 
-    // Draft materialization rides the same heartbeat: a Sleeper league whose synced
-    // status has reached pre_draft/drafting gets a DraftSession + sleeperDraftId here,
-    // so the draft-tick mirror can populate its board without anyone visiting the page.
-    // Bounded and swallowed — same contract as the profile refresh above.
-    let draftSessions: unknown = null
-    try {
-      draftSessions = await materializeSleeperDraftSessions({ maxLeagues: 25 })
-    } catch (draftErr) {
-      draftSessions = {
-        error: draftErr instanceof Error ? draftErr.message.slice(0, 160) : 'draft session materialization failed',
-      }
-    }
+        // Draft materialization rides the same heartbeat: a Sleeper league whose synced
+        // status has reached pre_draft/drafting gets a DraftSession + sleeperDraftId here,
+        // so the draft-tick mirror can populate its board without anyone visiting the page.
+        // Bounded and swallowed — same contract as the profile refresh above.
+        let draftSessions: unknown = null
+        try {
+          draftSessions = await materializeSleeperDraftSessions({ maxLeagues: 25 })
+        } catch (draftErr) {
+          draftSessions = {
+            error: draftErr instanceof Error ? draftErr.message.slice(0, 160) : 'draft session materialization failed',
+          }
+        }
 
-    // ESPN/Yahoo weekly-matchup parity rides the same heartbeat. Sleeper
-    // leagues get WeeklyMatchup rows from ensureMatchupsCached inside the
-    // collector above; ESPN and Yahoo leagues had NO writer at all, so every
-    // WeeklyMatchup-backed surface was empty for them. The parity collector
-    // keeps its own 6h per-league cadence in SportsDataCache (full provider
-    // reads are heavier than Sleeper's), tries each importing user's stored
-    // credentials, and skips a league honestly when none work. Bounded and
-    // swallowed — same contract as the profile refresh and draft
-    // materialization above.
-    let externalMatchups: unknown = null
-    try {
-      externalMatchups = await runExternalMatchupParity({ now, maxLeagues: parityLeagues })
-    } catch (externalErr) {
-      externalMatchups = {
-        error: externalErr instanceof Error ? externalErr.message.slice(0, 160) : 'external matchup parity failed',
-      }
-    }
+        // ESPN/Yahoo weekly-matchup parity rides the same heartbeat. Sleeper
+        // leagues get WeeklyMatchup rows from ensureMatchupsCached inside the
+        // collector above; ESPN and Yahoo leagues had NO writer at all, so every
+        // WeeklyMatchup-backed surface was empty for them. The parity collector
+        // keeps its own 6h per-league cadence in SportsDataCache (full provider
+        // reads are heavier than Sleeper's), tries each importing user's stored
+        // credentials, and skips a league honestly when none work. Bounded and
+        // swallowed — same contract as the profile refresh and draft
+        // materialization above.
+        let externalMatchups: unknown = null
+        try {
+          externalMatchups = await runExternalMatchupParity({ now, maxLeagues: parityLeagues })
+        } catch (externalErr) {
+          externalMatchups = {
+            error: externalErr instanceof Error ? externalErr.message.slice(0, 160) : 'external matchup parity failed',
+          }
+        }
 
-    /*
-     * 🛑 THE WRITER IS THE HALF THAT IS EASY TO SKIP AND FATAL TO SKIP. A
-     * collector with no scheduled caller keeps its table empty in production
-     * while every local test of it passes — the same failure `ingestCFBDStats`
-     * shipped for months. Fantrax leagues had no WeeklyMatchup writer at all,
-     * which is why their league home reports "we cannot tell which week this
-     * league is in yet" and "no week has been scored yet".
-     *
-     * Bounded (one request per PLAYED period per league, three leagues a tick)
-     * and swallowed, same contract as the collectors above.
-     */
-    let fantraxMatchups: unknown = null
-    try {
-      fantraxMatchups = await runFantraxMatchupParity({ now, maxLeagues: parityLeagues })
-    } catch (fantraxErr) {
-      fantraxMatchups = {
-        error:
-          fantraxErr instanceof Error
-            ? fantraxErr.message.slice(0, 160)
-            : 'fantrax matchup parity failed',
-      }
-    }
+        /*
+         * 🛑 THE WRITER IS THE HALF THAT IS EASY TO SKIP AND FATAL TO SKIP. A
+         * collector with no scheduled caller keeps its table empty in production
+         * while every local test of it passes — the same failure `ingestCFBDStats`
+         * shipped for months. Fantrax leagues had no WeeklyMatchup writer at all,
+         * which is why their league home reports "we cannot tell which week this
+         * league is in yet" and "no week has been scored yet".
+         *
+         * Bounded (one request per PLAYED period per league, three leagues a tick)
+         * and swallowed, same contract as the collectors above.
+         */
+        let fantraxMatchups: unknown = null
+        try {
+          fantraxMatchups = await runFantraxMatchupParity({ now, maxLeagues: parityLeagues })
+        } catch (fantraxErr) {
+          fantraxMatchups = {
+            error:
+              fantraxErr instanceof Error
+                ? fantraxErr.message.slice(0, 160)
+                : 'fantrax matchup parity failed',
+          }
+        }
+        return { summary, profiles, draftSessions, externalMatchups, fantraxMatchups }
+      },
+      (r) => ({
+        rowsRead: r.summary.enumerated,
+        rowsWritten: r.summary.completed,
+        rowsSkipped: r.summary.notDue + r.summary.locked,
+        /*
+         * `partial` when any league failed. The heartbeat itself succeeded — it
+         * ran and reported — but recording that as plain success would hide a
+         * provider outage affecting a subset of leagues behind a green row.
+         */
+        status: r.summary.failed > 0 ? ('partial' as const) : ('success' as const),
+        metadata: {
+          enabled: true,
+          seasonState,
+          cadenceMinutes,
+          enumerated: r.summary.enumerated,
+          executed: r.summary.executed,
+          completed: r.summary.completed,
+          partial: r.summary.partial,
+          failed: r.summary.failed,
+          locked: r.summary.locked,
+          notDue: r.summary.notDue,
+        },
+      }),
+    )
 
     return NextResponse.json({
       ...heartbeat,
       executed: true,
-      summary,
-      profiles,
-      draftSessions,
-      externalMatchups,
-      fantraxMatchups,
+      ...payload,
     })
   } catch (err) {
     return NextResponse.json(
