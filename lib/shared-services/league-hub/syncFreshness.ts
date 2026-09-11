@@ -14,9 +14,23 @@
  * anywhere today — confirmed by grep — so it will not appear in real data
  * yet; this is disclosed, not fabricated.
  *
- * No background resync cron exists for any provider (see
- * `providerCapabilities.ts` header) — "stale" only ever clears when the
- * user (or a future OS module) explicitly re-imports.
+ * 🛑 RETRACTED 2026-09-11. This said: "No background resync cron exists for any provider (see
+ * `providerCapabilities.ts` header) — 'stale' only ever clears when the user (or a future OS
+ * module) explicitly re-imports."
+ *
+ * It was true when written, and it was inherited rather than independently checked — it cited the
+ * other file, so when that premise went stale this one went stale with it, silently. Both are
+ * corrected together; the retraction is recorded in both places for that reason.
+ *
+ * `/api/cron/fantasy-os-exec-sync` runs every ten minutes over every provider in
+ * `SYNCABLE_PROVIDERS`, so `stale` now clears on its own for a league the collector reaches.
+ *
+ * ⚠ `STALE_AFTER_MS` IS DELIBERATELY LEFT AT 24h AND IS WORTH A SECOND LOOK BY SOMEONE WITH
+ * PRODUCTION NUMBERS. Against a ten-minute cadence a full day is very generous — a league last
+ * synced twenty-three hours ago still reads `fresh`. It is not obviously wrong either: the
+ * collector works a rotation under a run budget, so a large portfolio legitimately goes many hours
+ * between turns, and tightening this without measuring that rotation would flip healthy leagues to
+ * `stale` en masse. Changed only with data, not with reasoning.
  */
 import type { LeagueHubProvider, SyncFreshness, SyncFreshnessState } from './types'
 

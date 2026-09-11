@@ -38,6 +38,7 @@
 import { prisma } from '@/lib/prisma'
 import { resolveActiveLeagueContext } from './activeLeagueContext'
 import { deriveImportType } from './providerCapabilities'
+import { resolveFantraxRefreshability } from './leagueRefreshability'
 import {
   buildCommissionerContext,
   buildLeagueHealthAssessment,
@@ -102,11 +103,23 @@ export interface CommissionerOsContext {
   syncFreshness: SyncFreshness
   /**
    * Part 18 — real, from `deriveImportType` (the same function every other
-   * League Hub provider badge already uses). `true` only for Fantrax
-   * (`csv_snapshot`) today. A one-time CSV upload can prove a lineup was
-   * empty AT THE MOMENT OF UPLOAD, but never a *repeated* or *ongoing*
-   * pattern (abandonment, inactivity trend) — generators must not phrase a
-   * snapshot-only observation as a live-activity conclusion.
+   * League Hub provider badge already uses). A one-time CSV upload can prove a
+   * lineup was empty AT THE MOMENT OF UPLOAD, but never a *repeated* or
+   * *ongoing* pattern (abandonment, inactivity trend) — generators must not
+   * phrase a snapshot-only observation as a live-activity conclusion.
+   *
+   * 🛑 PER-LEAGUE SINCE 2026-09-11, AND IT USED TO SAY "true only for Fantrax".
+   * That read as a property of the platform; it is a property of the ROW. A
+   * Fantrax league with `FantraxLeague.sourceLeagueId` set is re-read from the
+   * live API on the ten-minute collector, so repeated observation genuinely
+   * exists for it and the suppression above would now be hiding real signal
+   * from its commissioner. A CSV-era row has no source to re-read and never
+   * will, so it stays suppressed.
+   *
+   * ⚠ The unknown case resolves to `true` (suppressed) on purpose — see
+   * `leagueRefreshability.ts`. Staying quiet about a manager is the cheap
+   * failure; accusing one of abandonment on the strength of a months-old
+   * upload is not.
    */
   isSnapshotOnly: boolean
   /** The real, reused shared-services context — every field on it is real, live-computed data. */
@@ -152,6 +165,14 @@ export async function assembleCommissionerOsContext(args: {
     select: { platform: true, sport: true, season: true, isDynasty: true },
   })
   if (!league) return null
+
+  /*
+   * Whether THIS league is re-readable, which for Fantrax is a per-league fact and for everyone
+   * else is the provider's. It decides `isSnapshotOnly` below, and therefore whether this league's
+   * commissioner hears about an inactive manager at all — so it is resolved from
+   * `FantraxLeague.sourceLeagueId` rather than assumed from the platform name.
+   */
+  const refreshableByLeague = await resolveFantraxRefreshability([args.canonicalLeagueId])
 
   const provider = toProvider(league.platform)
   const currentSeason = typeof league.season === 'number' ? league.season : new Date().getFullYear()
@@ -217,7 +238,11 @@ export async function assembleCommissionerOsContext(args: {
     isDynasty: league.isDynasty,
     isCommissioner: true,
     syncFreshness: active.syncFreshness,
-    isSnapshotOnly: deriveImportType(provider) === 'csv_snapshot',
+    isSnapshotOnly:
+      deriveImportType({
+        provider,
+        isRefreshable: refreshableByLeague.get(args.canonicalLeagueId) ?? null,
+      }) === 'csv_snapshot',
     shared,
     health,
     attentionItems,
