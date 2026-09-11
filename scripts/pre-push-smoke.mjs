@@ -125,6 +125,7 @@ import {
 import { execFileSync, spawnSync } from 'node:child_process'
 import { tmpdir } from 'node:os'
 import { join, resolve, dirname } from 'node:path'
+import { clearStaleIndexLock, quarantineUntracked } from './smoke-worktree-hygiene.mjs'
 
 const ZEROS = /^0+$/
 
@@ -390,6 +391,22 @@ function ensureWorktree(dir, sha) {
 
   if (entry) {
     if (/(^|\n)locked/.test(entry)) git(['worktree', 'unlock', dir])
+
+    /*
+     * 🛑 AN ABANDONED `index.lock` FREEZES THIS WORKTREE FOR EVERY SESSION, NOT JUST THE ONE THAT
+     * CRASHED. With the index locked the checkout below cannot advance, the worktree stays pinned
+     * at whatever sha it last reached, and every file added to `main` since then reads as
+     * untracked — compiled by the ratchet, absent from its baseline, reported as a regression
+     * against a pusher who never touched them. Measured 2026-09-11: a zero-byte lock 5.3 hours
+     * old, 47 untracked paths behind it, two of my own pushes blocked before the worktree became
+     * the suspect.
+     *
+     * Age is the safety argument — see STALE_LOCK_MS. A fresh lock is left alone and the checkout
+     * below is allowed to fail on it, which is the correct outcome when a live git holds it.
+     */
+    const lock = clearStaleIndexLock(dir)
+    if (lock.cleared) process.stderr.write(`  … pre-push-smoke: ${lock.reason} in the smoke worktree\n`)
+
     const co = spawnSync('git', ['-C', dir, 'checkout', '--detach', '--force', sha], {
       encoding: 'utf8',
       // A checkout swap between two commits in an EXISTING worktree only
@@ -718,6 +735,36 @@ function main() {
   }
   const wtErr = ensureWorktree(worktreeDir, sha)
   if (wtErr) allow(wtErr)
+
+  /*
+   * 🛑 THE COMPILE SET MUST BE THE COMMIT, AND `checkout --force` DOES NOT PROMISE THAT.
+   * It overwrites tracked files and says nothing about untracked ones, so anything that reaches
+   * this shared directory by another route is compiled by every later run and charged to whoever
+   * is pushing. Run AFTER the checkout on purpose: a worktree that was stuck reports every file
+   * landed since as untracked, and checking out first re-tracks those, leaving only real strays.
+   *
+   * ⚠ MOVED, NEVER DELETED, and that is the whole design. `git clean -fd` is the obvious repair
+   * and running it here on 2026-09-11 would have destroyed three files of a peer's work that
+   * existed on no ref in the repository. The scan that proves a stray is backed up costs minutes;
+   * a rename costs nothing and is wrong in no case. See smoke-worktree-hygiene.mjs.
+   */
+  const quarantine = quarantineUntracked(worktreeDir, join(common, 'af-smoke-quarantine'))
+  if (quarantine.moved.length) {
+    process.stderr.write(
+      `  … pre-push-smoke: moved ${quarantine.moved.length} untracked file(s) out of the smoke worktree ` +
+        `so they are not compiled as part of your commit.\n` +
+        `     They are NOT deleted — they are at ${quarantine.dir}\n` +
+        `     ${quarantine.moved.slice(0, 5).join(', ')}${quarantine.moved.length > 5 ? `, +${quarantine.moved.length - 5} more` : ''}\n`,
+    )
+  }
+  if (quarantine.failed.length) {
+    // Not fatal: a stray that would not move stays where it was, which is the pre-existing
+    // behaviour. Said out loud because it is also the one case that can still mis-attribute.
+    process.stderr.write(
+      `  ⚠ pre-push-smoke: ${quarantine.failed.length} untracked file(s) could not be moved and will be ` +
+        `compiled with your commit: ${quarantine.failed.map((f) => f.rel).slice(0, 3).join(', ')}\n`,
+    )
+  }
 
   const nmSource = findNodeModulesSource()
   if (!nmSource) allow('no node_modules found anywhere to link against')
