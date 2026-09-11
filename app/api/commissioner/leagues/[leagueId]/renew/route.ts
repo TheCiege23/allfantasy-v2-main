@@ -275,39 +275,98 @@ export async function POST(
   /*
    * ─── 3. LABEL existing orphans properly ───
    *
-   * 🛑 THIS SWEEP IS THE WRITER THAT CREATED THE AMBIGUITY, AND IT IS LEFT UNCLASSIFIED ON
-   * PURPOSE. Its `OR` collects four populations that land on OPPOSITE sides of the lifecycle
-   * axis and then stamps one flag across all of them:
+   * 🛑 THIS SWEEP IS THE WRITER THAT CREATED THE AMBIGUITY. One `updateMany` collected four
+   * populations that land on OPPOSITE sides of the lifecycle axis and stamped one flag across all
+   * of them, which is how `isOrphan` came to mean seven things. It is now THREE statements, each
+   * with its own predicate and its own evidence, below.
    *
-   *   { isOrphan: true }                            already-flagged rows — ANY of the seven
-   *                                                 meanings, including a live open slot
-   *   { ownerName: 'Removed' }                      administratively removed  → ARCHIVED
-   *   { ownerName:      startsWith 'orphan-' }      an AI/orphan-managed seat → CURRENT
-   *   { platformUserId: startsWith 'orphan-' }      likewise CURRENT — `isOrphanPlatformUserId`
-   *                                                 in `lib/orphan-ai-manager/orphanRosterResolver`
-   *                                                 is what reads this prefix back
+   * ⚠ THE SPLIT DOES NOT FINISH THE JOB, AND SAYING SO IS THE POINT. Only what is provable from
+   * the predicate is written:
    *
-   * A single `lifecycleState` here would have to be wrong for at least two of those four. There
-   * is no per-row evidence available at this point in the request to split them — the sweep does
-   * not know which branch matched — so NOTHING is written to the new axes and the rows stay
-   * UNKNOWN, which is exactly what UNKNOWN is for.
+   *   (a) ownerName 'Removed'        -> ARCHIVED   single writer, unambiguous
+   *   (b) an `orphan-` prefix        -> CURRENT    lifecycle provable; manager axis NOT (see (b))
+   *   (c) a bare `isOrphan: true`    -> nothing    any of the seven meanings; unclassifiable
    *
-   * ⚠ DO NOT "FINISH" THIS SITE BY PICKING A STATE. Splitting it needs the four predicates run
-   * as separate statements with a reason each, and that is a behaviour change to a commissioner
-   * endpoint — out of scope for a corrective commit and listed as a follow-up instead.
+   * Bucket (c) is still left UNKNOWN on both axes on purpose. Nothing in this request can tell a
+   * live open slot from a departed team once the flag is all that remains, and guessing is the
+   * failure this whole batch exists to undo.
    *
-   * The write itself is a near no-op today (`isOrphan: true` onto rows mostly already true) and
-   * is kept only so the flag's meaning does not shift under the readers still consuming it.
+   * ⚠ BEHAVIOUR IS PRESERVED, NOT MERELY INTENDED TO BE. Every row the old `OR` matched is still
+   * matched by exactly one of the three, and every one still receives `isOrphan: true` — so no
+   * reader that has not migrated sees any change. The only additions are the new axes.
+   */
+  /*
+   * (a) ADMINISTRATIVELY REMOVED — the one branch that genuinely means departure. Single writer
+   * (`ownerName: 'Removed'` is set two statements above and nowhere else in the codebase), so the
+   * evidence is unambiguous and this is the only branch that may write ARCHIVED.
+   */
+  await prisma.leagueTeam.updateMany({
+    where: { leagueId, ownerName: 'Removed' },
+    data: {
+      isOrphan: true,
+      lifecycleState: 'ARCHIVED',
+      archivedAt: new Date(),
+      archiveReason: 'commissioner_removed_at_renewal',
+    },
+  })
+
+  /*
+   * (b) ORPHAN-PLACEHOLDER SEATS — still in the league, so CURRENT. `managerKind` is DELIBERATELY
+   * NOT SET, and that is a measured refusal rather than caution.
+   *
+   * 🛑 THE `orphan-` PREFIX IS ITSELF OVERLOADED, THE SAME WAY `isOrphan` WAS. Four writers
+   * produce it and they do not agree:
+   *   commissioner/managers/route.ts        "slot is preserved but no user is linked"  -> VACANT
+   *   leagues/[id]/downsize/handler.ts      vacating a seat while shrinking a league   -> VACANT
+   *   commissioner/managers/assign-ai       SAME plain prefix + ownerName 'AI Manager' -> AI
+   *   leagues/[id]/fill-empty-slots         `orphan-ai-<uuid>`, "AI Team N"            -> AI
+   * `startsWith('orphan-')` matches all four, including `orphan-ai-`. The only thing separating
+   * AI from vacant here is `ownerName: 'AI Manager'` — a DISPLAY STRING. Keying a durable state
+   * on a label that exists to be rendered is how the next one of these gets built; rename the
+   * label and the classification breaks with nothing going red.
+   *
+   * So this records what is provable (the franchise is current) and leaves the manager axis
+   * UNKNOWN, which is exactly what UNKNOWN is for. The writers themselves are where that gets
+   * fixed — `assign-ai` already writes `managerKind: 'AI'` on its own path.
    */
   await prisma.leagueTeam.updateMany({
     where: {
       leagueId,
+      NOT: { ownerName: 'Removed' },
       OR: [
-        { isOrphan: true },
         { ownerName: { startsWith: 'orphan-' } },
-        { ownerName: 'Removed' },
         { platformUserId: { startsWith: 'orphan-' } },
       ],
+    },
+    data: { isOrphan: true, lifecycleState: 'CURRENT' },
+  })
+
+  /*
+   * (c) ALREADY-FLAGGED, NO OTHER SIGNAL — genuinely unclassifiable, and left that way.
+   *
+   * A bare `isOrphan: true` carries any of the seven meanings, including a live open slot from
+   * canonical creation. Nothing here can tell them apart, so NO axis is written. The statement is
+   * retained rather than deleted because it is not quite a no-op: `lastUpdatedAt` is maintained by
+   * Prisma, so removing it would silently stop bumping it on these rows at renewal — a behaviour
+   * change smuggled inside a refactor.
+   *
+   * ⚠ THE TWO `NOT`s MAKE THE THREE STATEMENTS DISJOINT, WHICH THE FIRST DRAFT OF THIS SPLIT GOT
+   * WRONG. Without them a row that is BOTH flagged and `orphan-`-prefixed matched (b) and (c),
+   * so (c) re-wrote it after (b) had classified it. Harmless with today's payloads — (c) writes
+   * no axis — but it made "each row is handled by exactly one branch" false, and a reader would
+   * have had to re-derive the overlap to see that (c) cannot clobber (b).
+   */
+  await prisma.leagueTeam.updateMany({
+    where: {
+      leagueId,
+      isOrphan: true,
+      ownerName: { not: 'Removed' },
+      NOT: {
+        OR: [
+          { ownerName: { startsWith: 'orphan-' } },
+          { platformUserId: { startsWith: 'orphan-' } },
+        ],
+      },
     },
     data: { isOrphan: true },
   })

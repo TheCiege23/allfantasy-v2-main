@@ -174,6 +174,60 @@ describe('C2C commissioner renew / continue-to-next-year', () => {
     expect(removal.data.eliminatedAt, 'removal is not an elimination').toBeUndefined()
   })
 
+  it('🛑 the orphan sweep is three disjoint statements, and only ONE may archive', async () => {
+    /*
+     * The sweep used to be a single `updateMany` whose `OR` collected four populations sitting on
+     * OPPOSITE sides of the lifecycle axis and stamped one flag across all of them — which is how
+     * `isOrphan` came to mean seven things. It is now three statements, and this pins which one is
+     * allowed to say a franchise departed.
+     *
+     * ⚠ WRITTEN BECAUSE THE MUTATION CONTROL FOUND NOTHING. Flipping bucket (b) from CURRENT to
+     * ARCHIVED — turning every orphan-placeholder seat in the league into a departed one — left all
+     * 30 tests in this area green. A classification nobody guards is the thing this batch keeps
+     * finding, and I had just added one.
+     */
+    const { POST } = await import('@/app/api/commissioner/leagues/[leagueId]/renew/route')
+    const req = new Request('http://localhost/api/commissioner/leagues/league-1/renew', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    })
+    await POST(req as any, { params: Promise.resolve({ leagueId: 'league-1' }) })
+
+    const calls = leagueTeamUpdateManyMock.mock.calls.map((c) => c[0])
+
+    /* (a) administratively removed — the ONLY branch that may archive. */
+    const removed = calls.find((a) => a?.where?.ownerName === 'Removed')
+    expect(removed, 'the Removed branch is gone').toBeTruthy()
+    expect(removed.data.lifecycleState).toBe('ARCHIVED')
+    expect(removed.data.archiveReason).toBe('commissioner_removed_at_renewal')
+
+    /* (b) orphan-placeholder seats — CURRENT, and the manager axis deliberately untouched. */
+    const orphanish = calls.find((a) => a?.where?.NOT?.ownerName === 'Removed')
+    expect(orphanish, 'the orphan-prefix branch is gone').toBeTruthy()
+    expect(orphanish.data.lifecycleState, 'a placeholder seat has NOT left the league').toBe(
+      'CURRENT',
+    )
+    expect(orphanish.data.lifecycleState).not.toBe('ARCHIVED')
+    /*
+     * 🛑 THE PREFIX IS OVERLOADED, SO THE MANAGER AXIS MUST STAY UNKNOWN. `startsWith('orphan-')`
+     * matches seats written by four different writers — two meaning VACANT, two meaning AI, one of
+     * which reuses the same plain prefix — and the only discriminator is `ownerName: 'AI Manager'`,
+     * a DISPLAY STRING. Classifying on a label that exists to be rendered is how the next of these
+     * gets built.
+     */
+    expect(orphanish.data.managerKind, 'the orphan- prefix cannot prove a manager kind').toBeUndefined()
+    expect(orphanish.data.archivedAt).toBeUndefined()
+
+    /* (c) bare flagged rows — genuinely unclassifiable, so NO axis is written. */
+    const bare = calls.find((a) => a?.where?.isOrphan === true && a?.where?.NOT?.OR)
+    expect(bare, 'the unclassifiable branch is gone').toBeTruthy()
+    expect(bare.data.lifecycleState, 'a bare isOrphan proves nothing').toBeUndefined()
+    expect(bare.data.managerKind, 'a bare isOrphan proves nothing').toBeUndefined()
+    /* It still writes the legacy flag, so unmigrated readers see no change. */
+    expect(bare.data.isOrphan).toBe(true)
+  })
+
   it('allows commissioner league-type update to c2c and forces dynasty=true', async () => {
     leagueFindUniqueMock.mockResolvedValueOnce({
       userId: 'commissioner-1',
