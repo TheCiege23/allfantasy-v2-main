@@ -162,6 +162,22 @@ function reliableUnavailable(locale?: string): string {
   return RELIABLE_UNAVAILABLE_BY_LOCALE[safe] ?? RELIABLE_UNAVAILABLE_BY_LOCALE.en
 }
 
+/*
+ * ⚠ A CACHE MISS AND A CACHE HIT COME BACK FROM THE SAME BUILDER AS THE SAME
+ * TYPE, which is how "live World Cup odds and injuries" got answered with
+ * "I do not have cached SOCCER injury data" instead of the unsupported-live-data
+ * refusal the router had already chosen for it: the injury builder runs first,
+ * matched on the word "injuries", missed, and its miss ended the dispatch.
+ *
+ * This asks the ONE function that produces every such miss prefix whether a
+ * given string is one. Deliberately not a regex over the miss wording — a
+ * second implementation of that rule is how the wording and the test drift
+ * apart, which is the bug this repairs.
+ */
+function isReliableUnavailableMiss(text: string, locale?: string): boolean {
+  return text.startsWith(reliableUnavailable(locale))
+}
+
 function detectNewsQuestion(message: string): boolean {
   return /\b(news|latest|updates?|headlines?|report|reports|what happened|breaking)\b/i.test(message)
 }
@@ -811,12 +827,35 @@ export async function tryDeterministicAnswerDetailed(
   if (teamResult) return answer(teamResult)
   const fantasyCalcValue = await buildFantasyCalcValueAnswer(message, leagueId ?? null, leagueRequested)
   if (fantasyCalcValue) return answer(fantasyCalcValue)
+  /*
+   * DATA STILL WINS. A cache HIT from any of the three builders below is
+   * returned exactly as before, for every route. Only a MISS yields, and only
+   * when the router has already classified this message as live data we have no
+   * provider for — in which case the specific refusal further down is the true
+   * answer and the generic "no cached X" line is noise that also happens to be
+   * typed `answer`, so it suppresses the live-search escalation at
+   * app/api/chat/chimmy/route.ts:1413.
+   *
+   * ⚠ Do NOT widen this to hoist the category check above these builders.
+   * `isWorldCup` in the router is `WORLD_CUP_RE || BRACKET_RE`, and BRACKET_RE
+   * alone matches "champion", "bracket", "quarterfinal" — measured 2026-09-11,
+   * "Any injuries on the Chiefs playoff bracket?" and "NFL playoff bracket
+   * injuries" both classify as unsupported_live_data. Hoisting would answer
+   * those with a World Cup refusal while cached NFL injury rows sat unread.
+   */
+  const preferRouteRefusal = intentRoute.category === 'unsupported_live_data'
   const weather = await buildCachedWeatherAnswer(message, safeLocale)
-  if (weather) return answer(weather)
+  if (weather && !(preferRouteRefusal && isReliableUnavailableMiss(weather, safeLocale))) {
+    return answer(weather)
+  }
   const injuries = await buildCachedInjuryAnswer(message, safeLocale)
-  if (injuries) return answer(injuries)
+  if (injuries && !(preferRouteRefusal && isReliableUnavailableMiss(injuries, safeLocale))) {
+    return answer(injuries)
+  }
   const news = await buildCachedNewsAnswer(message, safeLocale)
-  if (news) return answer(news)
+  if (news && !(preferRouteRefusal && isReliableUnavailableMiss(news, safeLocale))) {
+    return answer(news)
+  }
   /*
    * Try to ANSWER the stat question before refusing it. The refusal below is
    * correct when there is no play-by-play in the window, and was previously the
