@@ -35,6 +35,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { execSync } from "node:child_process";
+import { listGitVisibleFiles } from "./git-visible-files.mjs";
 
 /**
  * Verdict-shaped exports, by domain. Each pattern must match a NAME that claims to answer the
@@ -170,52 +171,11 @@ function matchVerdict(name, kind) {
   return null;
 }
 
-/**
- * Candidate files as GIT sees them: tracked files, plus untracked files no ignore rule covers.
- * Returns null — never an empty array — when git cannot answer, so the caller falls back to the
- * walk rather than concluding the tree has no source in it.
- *
- * ⚠ TRACKED FILES ARE LISTED UNCONDITIONALLY via `--cached`, and git does not report a tracked
- * path as ignored. Committing a file into a `tmp-*` directory therefore does not exempt it — this
- * drops ignored SCRATCH, never source.
- *
- * ⚠ AND IT MUST NOT NARROW TO TRACKED-ONLY. `--others --exclude-standard` keeps brand-new files
- * visible before they are staged, which is exactly when a developer wants this guard to speak.
- *
- * Verified against the walk on the primary checkout, 2026-09-11: git's set is missing ZERO files
- * the walk finds outside the excluded dirs. The 302-file difference runs entirely the other way.
+/*
+ * The git-visible enumeration moved to `scripts/git-visible-files.mjs` on 2026-09-11,
+ * shared with `check-db-first-api-boundary.mjs`. EXCLUDED_DIRS and isBuildOutputDir above
+ * still apply on top of whatever git returns.
  */
-function listGitVisibleFiles(rootDir) {
-  let output;
-  try {
-    output = execSync("git ls-files -z --cached --others --exclude-standard", {
-      cwd: rootDir,
-      encoding: "utf8",
-      maxBuffer: 256 * 1024 * 1024,
-      stdio: ["ignore", "pipe", "pipe"],
-    });
-  } catch (err) {
-    console.warn(
-      `Decision-engine boundary: git could not enumerate files (${err?.message}). Falling back to ` +
-        "a filesystem walk, which may descend into ignored directories.",
-    );
-    return null;
-  }
-
-  const paths = output
-    .split("\0")
-    .map((s) => s.trim())
-    .filter(Boolean);
-
-  // An empty answer is not "there is no source here". Fall back and be noisy instead.
-  if (paths.length === 0) {
-    console.warn("Decision-engine boundary: git listed no files. Falling back to a filesystem walk.");
-    return null;
-  }
-
-  return [...new Set(paths)].filter((f) => SOURCE_EXTENSIONS.has(path.extname(f).toLowerCase()));
-}
-
 function getAllSourceFiles(rootDir) {
   // Segment-wise: git returns whole relative paths, not a directory to prune.
   const isExcludedPath = (rel) =>
@@ -223,7 +183,10 @@ function getAllSourceFiles(rootDir) {
       .split("/")
       .some((seg) => EXCLUDED_DIRS.has(seg) || isBuildOutputDir(seg));
 
-  const gitVisible = listGitVisibleFiles(rootDir);
+  const gitVisible = listGitVisibleFiles(rootDir, {
+    extensions: SOURCE_EXTENSIONS,
+    label: "Decision-engine boundary",
+  });
   if (gitVisible) return gitVisible.filter((f) => !isExcludedPath(f));
 
   const out = [];
