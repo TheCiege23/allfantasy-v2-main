@@ -1,4 +1,7 @@
 import { describe, expect, it } from 'vitest'
+import { readFileSync, readdirSync } from 'node:fs'
+import path from 'node:path'
+
 import { assembleManagerRecommendations } from '@/lib/decision-os/phase6/recommendations/recommendations'
 import type { ManagerRecommendationInput } from '@/lib/decision-os/phase6/recommendations/types'
 
@@ -23,6 +26,8 @@ import type { ManagerRecommendationInput } from '@/lib/decision-os/phase6/recomm
  * So the denylist below carries only the DISTINCTIVE compound tokens, and the real guarantee comes
  * from the equivalence test underneath it.
  */
+
+const root = process.cwd()
 
 /** Distinctive enough that an appearance is always a leak. Ordinary words are deliberately absent. */
 const LEAKY_TOKENS = [
@@ -192,10 +197,14 @@ describe('league-level archetypes are deliberately untouched', () => {
  * category-to-label mapping — or decides the residue is unacceptable and removes the tailoring —
  * this goes red and the decision is explicit instead of silent.
  *
- * ⚠ SCOPE, WHICH IS WHAT KEEPS IT PROPORTIONATE: these are SELF-SCOPED. `dashboard-intelligence.ts`
- * matches `p.managerId === managerId` and the only consumer resolves the session user's own
- * leagues, so a viewer can infer their OWN classification and never a third party's. Milestone 32
- * has no self carve-out, so this is a product decision, not a closed one.
+ * ✅ AND IT HAS BEEN RULED ON RATHER THAN LEFT OPEN. Guap, 2026-09-11, shown the measurement:
+ * "keep the recommendations, it's self-scoped." So these assertions are not a to-do list — they
+ * record an accepted residue. They exist so that a change to its SHAPE is visible, because the
+ * ruling was given about this shape and does not automatically transfer to another one.
+ *
+ * ⚠ THE RULING'S PREMISE IS ENFORCED IN THE LAST DESCRIBE BLOCK OF THIS FILE. Self-scoping is what
+ * made the residue acceptable; it is a reachability fact, and a future commit can break it without
+ * touching anything these tests read.
  */
 describe('PINNED LIMIT: the label survives in the shape of the response', () => {
   const LABELS = [
@@ -235,5 +244,86 @@ describe('PINNED LIMIT: the label survives in the shape of the response', () => 
     }
     // One distinct (category, priority, severity) per emitted recommendation = no collisions at all.
     expect(pairs.size).toBe(emitted)
+  })
+})
+
+/**
+ * 🛑 THE PRECONDITION THE PRODUCT RULING RESTS ON, ENFORCED RATHER THAN OBSERVED.
+ *
+ * Guap ruled on 2026-09-11: KEEP the tailored recommendations — the residual channel above is
+ * acceptable BECAUSE IT IS SELF-SCOPED. A viewer can infer their own classification and nobody
+ * else's. That ruling is conditional, and the condition is a reachability fact that a future commit
+ * can silently break.
+ *
+ * ⚠ THE LATENT PATH IS ALREADY IN THE FILE. `assembleRecommendations` — the unified orchestrator —
+ * does `input.managerInputs.map(assembleManagerRecommendations)`, i.e. MANY managers at once. It is
+ * exported from the phase6 barrel and has NO production caller today; only tests reach it. Wire it
+ * to a route and the ruling's premise is gone, with nothing else going red: the text still carries
+ * no label, the equivalence test still passes, and third parties' classifications become
+ * recoverable from the categories that fire for each of them.
+ *
+ * ⚠ A CALLER CENSUS BY `from '@/lib/x'` ALONE HAS GIVEN THE WRONG ANSWER FOUR SEPARATE TIMES IN
+ * THIS REPO — missing relative imports, dynamic `await import(...)`, re-export facades and test
+ * mocks. This scan walks the production trees and reads every import form, and it carries positive
+ * controls, because a census that silently finds nothing is indistinguishable from a safe one.
+ */
+describe('PRECONDITION: manager recommendations stay self-scoped', () => {
+  const ROOTS = ['app', 'lib', 'server', 'components']
+  const files: string[] = []
+  const walk = (dir: string) => {
+    for (const e of readdirSync(dir, { withFileTypes: true })) {
+      const p = path.join(dir, e.name)
+      if (e.isDirectory()) { if (e.name !== 'node_modules') walk(p) }
+      else if (/\.tsx?$/.test(e.name)) files.push(p.split(path.sep).join('/'))
+    }
+  }
+  for (const r of ROOTS) walk(path.join(root, r))
+  const rootPosix = root.split(path.sep).join('/')
+  const withText = (needle: string) =>
+    files.filter((f) => readFileSync(f, 'utf8').includes(needle))
+      .map((f) => f.slice(rootPosix.length + 1))
+
+  it('the census can see the repo at all', () => {
+    // Positive control. A broken walk returns [] and every assertion below would pass vacuously.
+    expect(files.length).toBeGreaterThan(500)
+    expect(withText('assembleManagerRecommendations')).toContain(
+      'lib/decision-os/dashboard-intelligence.ts',
+    )
+  })
+
+  it('exactly one production module calls the per-manager assembler', () => {
+    const refs = withText('assembleManagerRecommendations').filter(
+      (f) => f !== 'lib/decision-os/phase6/recommendations/recommendations.ts' // the definition
+        && f !== 'lib/decision-os/phase6/index.ts'                            // the barrel re-export
+        && f !== 'lib/validation-cohort/validation/compositionBridge.ts',     // a string literal, not a call
+    )
+    expect(refs).toEqual(['lib/decision-os/dashboard-intelligence.ts'])
+  })
+
+  it('that caller selects the profile by the requesting manager id', () => {
+    const src = readFileSync(path.join(root, 'lib/decision-os/dashboard-intelligence.ts'), 'utf8')
+    expect(src).toContain('p.managerId === managerId')
+  })
+
+  it('the route resolves the session user, never a managerId from the request', () => {
+    const src = readFileSync(
+      path.join(root, 'app/api/decision-os/manager-command-center/route.ts'), 'utf8')
+    expect(src).toContain('getServerSession')
+    expect(src).toMatch(/status:\s*401/)
+    // No managerId is read off the URL — that is what would let a caller name someone else.
+    expect(src).not.toMatch(/searchParams\.get\(\s*['"]managerId['"]\s*\)/)
+  })
+
+  it('the MANY-manager orchestrator still has no production caller', () => {
+    /*
+     * If this goes red, someone wired `assembleRecommendations`. That is not automatically wrong —
+     * but it removes the premise the 2026-09-11 ruling was given on, so it needs a fresh decision
+     * rather than inheriting this one.
+     */
+    const refs = withText('assembleRecommendations').filter(
+      (f) => f !== 'lib/decision-os/phase6/recommendations/recommendations.ts'
+        && f !== 'lib/decision-os/phase6/index.ts',
+    )
+    expect(refs).toEqual([])
   })
 })

@@ -138,12 +138,25 @@ function makeSet(
  * stop tailoring, which is the product. So it is recorded rather than "fixed", and the test file
  * pins the exact shape so a later change is visible instead of silent.
  *
- * ⚠ WHAT KEEPS THIS PROPORTIONATE IS SCOPE, NOT SIZE. These are SELF-SCOPED: the single producer
- * call site in `dashboard-intelligence.ts` matches `p.managerId === managerId`, and the only
- * consumer resolves the session user's own leagues. A viewer can infer their OWN classification,
- * never a third party's — which is the thing "competitive intelligence about a real person" was
- * always about. It is still not nothing, and milestone 32 has no self carve-out, so whether this
- * residue is acceptable is a product decision and is deliberately left to one.
+ * ✅ RULED 2026-09-11 BY GUAP, PRESENTED WITH THE MEASUREMENT ABOVE: "keep the recommendations,
+ * it's self-scoped." The tailored advice stays and the residual channel is accepted. Milestone 32
+ * has no self carve-out on paper, so this is a deliberate product judgement about THIS surface, not
+ * a claim that the criterion is met — recorded here so a later reader meets the decision rather
+ * than re-deriving it or quietly reversing it.
+ *
+ * 🛑 AND THE RULING IS CONDITIONAL ON THE SELF-SCOPING, WHICH IS NOW ENFORCED RATHER THAN OBSERVED.
+ * These are self-scoped because `dashboard-intelligence.ts` — the ONLY production caller — matches
+ * `p.managerId === managerId`, and `/api/decision-os/manager-command-center` resolves the session
+ * user's own leagues and never reads a managerId off the request. A viewer can infer their OWN
+ * classification and nobody else's.
+ *
+ * ⚠ THE PATH THAT WOULD BREAK IT IS ALREADY IN THIS FILE. `assembleRecommendations` does
+ * `input.managerInputs.map(assembleManagerRecommendations)` — many managers at once. It is exported
+ * from the phase6 barrel and has NO production caller today. Wire it to a route and third parties'
+ * classifications become recoverable, while every privacy test above still passes: the text carries
+ * no label, the equivalence property still holds, and nothing else goes red. So
+ * `manager-recommendations-withhold-identity.test.ts` asserts that caller set directly and fails if
+ * it changes — the ruling was given on a premise, and the premise is now a test.
  */
 const IDENTITY_WITHHELD_EVIDENCE =
   'Supported by an internal engagement assessment, which is not disclosed here'
