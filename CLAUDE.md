@@ -6,8 +6,10 @@ The API contracts are committed at `contracts/`:
 
 - `contracts/rolling-insights/`
 - `contracts/thesportsdb/`
+- `contracts/api-sports/`
+- `contracts/fleaflicker/`
 
-**Do not call either provider's API to determine a response shape.** Read
+**Do not call any of these providers' APIs to determine a response shape.** Read
 `ENDPOINTS.yaml` and `fixtures/` in the relevant contract directory. Unknowns are
 tracked in that directory's `GAPS.md` — append to it and ask. Do not probe to
 resolve them.
@@ -16,10 +18,30 @@ Probing is allowed only via the contract's own `scripts/probe.sh`, only when
 adding a new endpoint/sport combination, and the captured fixture must be
 committed in the same change. An uncommitted probe gets repeated.
 
-> `fixtures/` is referenced throughout both contracts but is **not yet
-> populated**. Until it is, `ENDPOINTS.yaml` is the only committed shape
-> authority, and its per-sport `confidence:` field tells you how much to trust
-> it — several sports are marked `low` or `none`.
+> ⚠ **`fixtures/` IS POPULATED NOW — 22 captures across 4 contracts — BUT VERY
+> UNEVENLY, AND THE UNEVENNESS IS THE POINT.** This note used to say "not yet
+> populated", which told every session that `ENDPOINTS.yaml` was the only shape
+> authority. That is no longer true, and reading it as still true means ignoring
+> 22 real captures.
+>
+> Measured on `origin/main` 2026-09-11:
+>
+> | contract | fixtures | what they cover |
+> |---|---:|---|
+> | `thesportsdb` | 15 | broad — leagues, events past/next, lineups, player + player stats, timeline, team search, across NFL and NCAAF (plus a `_manifest.json`) |
+> | `fleaflicker` | 3 | standings, rosters, scoreboard — NFL only |
+> | `rolling-insights` | 3 | **`live.*` ONLY** — MLB, NBA, NHL |
+> | `api-sports` | 1 | odds/bets |
+>
+> ⚠ **SO THE OLD ADVICE STILL HOLDS FOR ROLLING INSIGHTS, WHICH IS THE PROVIDER
+> IT MATTERS MOST FOR.** Its three fixtures are all the `live` endpoint. For
+> `schedule-season`, `team-info`, `player-info`, stats, injuries and depth charts
+> there is still no capture, so `ENDPOINTS.yaml` remains the only committed shape
+> authority there — and its per-sport `confidence:` field tells you how much to
+> trust it, with several sports marked `low` or `none`.
+>
+> Check before assuming either way; `find contracts -path '*fixtures*' -type f`
+> is the whole check, and it is cheaper than being wrong in either direction.
 
 ### Credentials
 
