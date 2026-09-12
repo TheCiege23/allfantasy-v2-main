@@ -101,6 +101,44 @@ test.describe("@db @mobile authenticated phone contract", () => {
     })
   })
 
+  /*
+   * ⚠ WARM BOTH ROUTES BEFORE ANY TEST IS ON THE CLOCK. `e2e/global-setup.ts`
+   * warms 33 public routes and neither of these, so the first test to reach each
+   * one paid a cold dev compile inside its own timeout: on PR #754 the first
+   * `/core/trades` attempt hit 240s and the retry passed in ~30s. That is one of
+   * two retries spent on every run, and a flake a slower runner turns red.
+   *
+   * Signed-OUT on purpose, and it still compiles the real page. Middleware does
+   * not gate either route (`requiresSessionAuth` covers neither); the redirect to
+   * `/login` is thrown DURING RENDER — `app/core/[[...screen]]/page.tsx` after
+   * `getServerSession`, `app/commissioner-os/layout.tsx` likewise — and the
+   * catch-all imports `TradeCenter` statically. `redirect: "manual"` stops at that
+   * 307: `/login` is already warm.
+   *
+   * Here rather than in global-setup because global-setup runs for EVERY lane,
+   * and the `/core` catch-all is 132 static imports that no other mobile lane
+   * visits. Like global-setup, it never gates the run: a failed warm-up only
+   * means the test pays the compile, which is today's behaviour.
+   */
+  test.beforeAll(async ({}, testInfo) => {
+    const WARM_TIMEOUT_MS = 180_000
+    test.setTimeout(WARM_TIMEOUT_MS * AUTHED_ROUTES.length + 30_000)
+    const baseURL = String(testInfo.project.use.baseURL)
+    for (const { route } of AUTHED_ROUTES) {
+      const started = Date.now()
+      try {
+        const res = await fetch(`${baseURL}${route}`, {
+          redirect: "manual",
+          signal: AbortSignal.timeout(WARM_TIMEOUT_MS),
+        })
+        await res.text().catch(() => "")
+        console.log(`[authed-warmup] ${route} ${res.status} ${Date.now() - started}ms`)
+      } catch (err) {
+        console.log(`[authed-warmup] ${route} skipped (${(err as Error).name}) ${Date.now() - started}ms`)
+      }
+    }
+  })
+
   for (const { route, login } of AUTHED_ROUTES) {
     test(`${route} holds the phone contract when signed in`, async ({ page }) => {
       const cssFailures: CssRequestFailure[] = []
