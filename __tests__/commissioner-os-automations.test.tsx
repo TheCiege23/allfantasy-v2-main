@@ -197,3 +197,58 @@ describe("commissioner-os automations — view", () => {
     expect(screen.getByText('Test automation')).toBeInTheDocument()
   })
 })
+
+describe("commissioner-os automations — hydration-safe dates", () => {
+  // 00:30 UTC on Sep 8 falls on Sep 7 in a US time zone. Formatting the date in
+  // the ambient zone gave the server and the browser different strings, so
+  // hydration of the automations page failed (React #422/#425) for any reader
+  // whose zone differs from the server's. An explicit en-US/UTC format pins the
+  // day to Sep 8 everywhere, so both renders agree.
+  const iso = '2026-09-08T00:30:00.000Z'
+
+  function withTimeZone(tz: string, run: () => void) {
+    const original = process.env.TZ
+    process.env.TZ = tz
+    try {
+      run()
+    } finally {
+      process.env.TZ = original
+    }
+  }
+
+  it("formats a catalog card's last-run date in UTC, not the ambient zone", () => {
+    withTimeZone('America/Los_Angeles', () => {
+      render(
+        <AutomationCenterView
+          catalog={[makeAutomation({ lastRunAt: iso })]}
+          historyByAutomationId={{ 'auto-1': [] }}
+          dataMode="demo"
+        />
+      )
+      expect(screen.getByText(/Last ran Sep 8/)).toBeInTheDocument()
+    })
+  })
+
+  it("formats a history row's date in UTC, not the ambient zone", () => {
+    withTimeZone('America/Los_Angeles', () => {
+      const entry: AutomationExecutionEntry = {
+        id: 'run-1',
+        automationId: 'auto-1',
+        startedAt: iso,
+        durationMs: 1200,
+        result: 'success',
+        summary: 'Ran fine',
+        detail: 'All good',
+      }
+      render(
+        <AutomationCenterView
+          catalog={[makeAutomation()]}
+          historyByAutomationId={{ 'auto-1': [entry] }}
+          dataMode="demo"
+        />
+      )
+      fireEvent.click(screen.getByRole('button', { name: /View History/i }))
+      expect(screen.getByText('Sep 8')).toBeInTheDocument()
+    })
+  })
+})

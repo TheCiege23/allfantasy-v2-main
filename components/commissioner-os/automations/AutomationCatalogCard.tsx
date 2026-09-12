@@ -63,7 +63,7 @@ export function AutomationCatalogCard({ automation, enabled, onToggle, onViewHis
         </p>
         {automation.lastRunAt && (
           <p className="text-xs" style={{ color: 'var(--muted2)' }}>
-            Last ran {new Date(automation.lastRunAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} · {automation.successRatePercent}%
+            Last ran {new Date(automation.lastRunAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })} · {automation.successRatePercent}%
             success over {automation.totalRunsCount} runs
           </p>
         )}
