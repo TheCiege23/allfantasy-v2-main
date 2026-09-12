@@ -66,6 +66,12 @@ export type FleaflickerImportPayload = {
   season: number
   standings: FleaflickerStandingsResponse
   rosters: FleaflickerRostersResponse
+  /**
+   * `FetchLeagueRules`, when it answered. NULL means the call failed and the
+   * import continued without scoring rules — an enrichment, never a reason to
+   * fail an import that could already read standings and rosters.
+   */
+  rules?: FleaflickerRulesResponse | null
 }
 
 /**
@@ -133,4 +139,81 @@ export type FleaflickerScoreboardResponse = {
   eligibleSchedulePeriods?: FleaflickerSchedulePeriod[]
   /** ⚠ ABSENT, NOT EMPTY, before a draft. "No games key" means nothing to write yet, never a fetch failure. */
   games?: FleaflickerScoreboardGame[]
+}
+
+/**
+ * `FetchLeagueRules` — the league's scoring rules and roster shape.
+ *
+ * Shape observed from `contracts/fleaflicker/fixtures/rules.NFL.json` (league
+ * 206154), not from the vendor's docs, which name the endpoint without
+ * describing its body.
+ *
+ * 🛑 THE OMISSION CONVENTION AGAIN, AND IT IS NOW A PATTERN ACROSS THIS API.
+ * A group with NO rules omits `scoringRules` entirely rather than sending `[]` —
+ * in the fixture, `Punting` carries 10 `allCategories` and no `scoringRules` key
+ * at all. Likewise 14 of 19 `rosterPositions` omit `min`/`max`/`start`. The
+ * scoreboard does the same with `games` and with every false boolean. Every
+ * optional marker below is measured, not defensive guessing.
+ */
+export type FleaflickerScoringCategory = {
+  id: number
+  abbreviation?: string
+  nameSingular?: string
+  namePlural?: string
+}
+
+export type FleaflickerScoringRule = {
+  category: FleaflickerScoringCategory
+  /** The headline number: "1" in "1 point for every 25 Passing Yards". */
+  points?: { value?: number; formatted?: string }
+  /** The divisor: 25 in that example. Absent on flat bonus rules. */
+  forEvery?: number
+  /**
+   * The already-divided rate (0.04). Present only when `forEvery` is not 1 —
+   * 13 of the fixture's 48 rules. Prefer this for arithmetic; use
+   * `points`/`forEvery` only to render the rule the way Fleaflicker words it.
+   */
+  pointsPer?: { value?: number; formatted?: string }
+  description?: string
+  /** Position codes. See `applyToAll` before treating this as a restriction. */
+  applyTo?: string[]
+  /**
+   * ⚠ `true` MEANS "EVERY POSITION", and `applyTo` then lists them all (10 of 10
+   * in the fixture). A rule with `applyToAll: true` is NOT position-restricted,
+   * so carrying its `applyTo` downstream would invent a restriction that does
+   * not exist.
+   */
+  applyToAll?: boolean
+  template?: string
+  /** Threshold machinery — a banded rule (QB rating tiers, FG distance bands). */
+  isBonus?: boolean
+  boundLower?: number
+  boundUpper?: number
+  rangeType?: string
+}
+
+export type FleaflickerScoringGroup = {
+  label?: string
+  allCategories?: FleaflickerScoringCategory[]
+  /** ⚠ ABSENT, not empty, when the group has no rules. */
+  scoringRules?: FleaflickerScoringRule[]
+}
+
+export type FleaflickerRosterPosition = {
+  label?: string
+  group?: string
+  eligibility?: string[]
+  /** ⚠ All three absent on bench/IR/taxi/multi-eligibility slots — 14 of 19 in the fixture. */
+  min?: number
+  max?: number
+  start?: number
+}
+
+export type FleaflickerRulesResponse = {
+  rosterPositions?: FleaflickerRosterPosition[]
+  groups?: FleaflickerScoringGroup[]
+  numStarters?: number
+  numBench?: number
+  maxActive?: number
+  maxRosterSize?: number
 }

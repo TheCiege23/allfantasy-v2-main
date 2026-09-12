@@ -51,18 +51,44 @@ case "$ENDPOINT" in
   standings) PATH_SEG="/FetchLeagueStandings" ;;
   rosters)   PATH_SEG="/FetchLeagueRosters" ;;
   scoreboard)
-    # 🛑 UNVERIFIED PATH — see GAPS.md G-01. This is the whole reason to run this probe.
+    # G-01 RESOLVED 2026-09-11 — two played-week fixtures committed. Kept probeable for
+    # the gaps that remain (an unplayed week, a bye).
     PATH_SEG="/FetchLeagueScoreboard"
+    ;;
+  rules)
+    # Endpoint NAME from Fleaflicker's own published Swagger docs, read 2026-09-12 —
+    # documentation, not a probe. The SHAPE is unknown, which is what this captures.
+    # Takes no season: rules are a property of the league, not of a year.
+    PATH_SEG="/FetchLeagueRules"
+    ;;
+  activity)
+    # ⚠ RETURNS REAL PEOPLE'S TRANSACTIONS. See the privacy note at the top of this file
+    # before committing anything it produces — a scoreboard's team names are one thing,
+    # a log of who dropped whom is another.
+    PATH_SEG="/FetchLeagueActivity"
+    ;;
+  transactions)
+    # ⚠ Same privacy consideration as `activity`.
+    PATH_SEG="/FetchLeagueTransactions"
     ;;
   *)
     echo "ERROR: unknown endpoint '${ENDPOINT}'. See ENDPOINTS.yaml." >&2
-    echo "       Known: standings, rosters, scoreboard." >&2
+    echo "       Known: standings, rosters, scoreboard, rules, activity, transactions." >&2
     exit 1
     ;;
 esac
 
-QS="sport=${SPORT}&league_id=${LEAGUE_ID}&season=${SEASON}"
-[[ -n "$SCORING_PERIOD" ]] && QS="${QS}&scoring_period=${SCORING_PERIOD}"
+# ⚠ NOT EVERY ENDPOINT TAKES `season`. Per Fleaflicker's published docs, FetchLeagueRules,
+# FetchLeagueActivity and FetchLeagueTransactions take only sport + league_id (+ paging).
+# Sending a parameter an endpoint does not accept is how a probe ends up documenting a
+# response to a request nobody will ever make.
+case "$ENDPOINT" in
+  rules|activity|transactions) QS="sport=${SPORT}&league_id=${LEAGUE_ID}" ;;
+  *)
+    QS="sport=${SPORT}&league_id=${LEAGUE_ID}&season=${SEASON}"
+    [[ -n "$SCORING_PERIOD" ]] && QS="${QS}&scoring_period=${SCORING_PERIOD}"
+    ;;
+esac
 
 URL="${BASE_URL}${PATH_SEG}?${QS}"
 echo "GET ${URL}" >&2   # nothing secret here — no token exists for this API

@@ -127,7 +127,9 @@ endpoints:
     note: No scores at all — current roster composition only.
 
   FetchLeagueScoreboard:
-    status: GAME_SHAPE_CONFIRMED_NOT_INTEGRATED   # <-- see GAPS.md G-01/G-04. Promoted
+    status: INTEGRATED   # <-- promoted 2026-09-12: `lib/import-os/collector/fleaflickerMatchupParity.ts`
+      # is a real caller. It was GAME_SHAPE_CONFIRMED_NOT_INTEGRATED, which was accurate for
+      # exactly one day. Originally promoted
       # 2026-09-11 by a probe of a league with a REAL PLAYED SCHEDULE (206154, season 2021,
       # scoring_period 1 — fixtures/scoreboard.NFL.2021.week1.json, 8 final games). The game row
       # and its team identity are now observed, not guessed. Still NOT integrated: no caller
@@ -263,6 +265,102 @@ endpoints:
       DIFFERENT case from what G-01/G-04 actually need: a real game/matchup row, with real team
       references, from a league that HAS drafted. Do not write a mapper against the game-row
       shape until that is captured — see GAPS.md G-01's remaining half.
+
+  FetchLeagueRules:
+    status: SHAPE_CAPTURED_NOT_INTEGRATED
+    method: GET
+    path: /FetchLeagueRules
+    path_confirmed_via: "Fleaflicker's own published Swagger docs (https://www.fleaflicker.com/api-docs/index.html),
+      read 2026-09-12. READING DOCUMENTATION, not probing the live data API — the same route that
+      settled G-02 and G-03."
+    params: [sport, league_id]
+    param_types:
+      sport: "string — NFL | MLB | NBA | NHL"
+      league_id: integer
+    note: >
+      ⚠ TAKES NO `season`, AND THAT IS A REAL FACT ABOUT THE MODEL RATHER THAN AN OMISSION IN
+      THE DOCS: rules belong to the league, not to a year. Do not send one — `scripts/probe.sh`
+      deliberately builds a shorter query string for this endpoint, because documenting a
+      response to a request nobody will ever make is worse than not documenting it.
+    envelope: |
+      CONFIRMED 2026-09-12 from fixtures/rules.NFL.json (league 206154, HTTP 200, 67KB):
+      {
+        rosterPositions: RosterPosition[],
+        groups: ScoringGroup[],
+        numStarters: number, numBench: number, maxActive: number, maxRosterSize: number,
+        allScoringRuleTypes: Array<{ template: string }>
+      }
+      ScoringGroup = {
+        label: string,                       # "Passing", "Rushing", … "Punting"
+        allCategories: Category[],
+        scoringRules?: ScoringRule[]         # ⚠ OPTIONAL — see the omission rule below
+      }
+      ScoringRule = {
+        category: { id: number, abbreviation: string, nameSingular: string, namePlural: string },
+        points: { value: number, formatted: string },
+        forEvery?: number,
+        pointsPer?: { value: number, formatted: string },
+        description: string,                 # "1 point for every 25 Passing Yards (0.04 per)"
+        applyTo: string[],                   # position codes the rule applies to
+        applyToAll: boolean,
+        template: string
+      }
+      RosterPosition = {
+        label: string, group: string, eligibility: string[], colors: string[],
+        min?: number, max?: number, start?: number   # ⚠ ALL THREE OPTIONAL
+      }
+
+      🛑 THE OMISSION CONVENTION AGAIN, AND IT IS NOW A PATTERN ACROSS THIS API RATHER THAN A
+      SCOREBOARD QUIRK. A group with no rules omits `scoringRules` ENTIRELY instead of sending
+      `[]`: in the committed fixture, `Punting` has `allCategories` (10) and NO `scoringRules`
+      key at all, while the other seven groups carry 2-14 rules each. Likewise 14 of the 19
+      `rosterPositions` omit `min`/`max`/`start` — every bench, IR, taxi and multi-eligibility
+      slot. The scoreboard does the same with `games` (absent pre-draft) and with every false
+      boolean. Treat ABSENT as the provider's way of saying "none", never as malformed, and
+      never index into one of these without checking.
+
+      ⚠ `pointsPer` AND `forEvery` ARE THE PAIR THAT ENCODES A RATE. "1 point for every 25
+      passing yards" arrives as points.value 1, forEvery 25, pointsPer.value 0.04. Prefer
+      `pointsPer.value` for arithmetic — it is the already-divided rate — and use
+      `points`/`forEvery` only to render the rule the way Fleaflicker words it.
+    source_of_truth: "fixtures/rules.NFL.json — league 206154, captured via scripts/probe.sh
+      2026-09-12. Contains league configuration only: zero owner, user, email or team-name
+      fields (checked, not assumed)."
+
+  FetchLeagueActivity:
+    status: DISCOVERED_NOT_CAPTURED
+    method: GET
+    path: /FetchLeagueActivity
+    path_confirmed_via: "Vendor Swagger docs, read 2026-09-12."
+    params: [sport, league_id, result_offset]
+    note: >
+      🛑 NOT CAPTURED, AND THE REASON IS PRIVACY RATHER THAN DIFFICULTY. This returns real
+      people's transactions — who dropped whom, and when. A scoreboard's team names are already
+      public-facing in a way a per-manager activity log is not, and this repo is PUBLIC. Capturing
+      a fixture here is a decision for the repo owner about whose league is used, not a routine
+      probe. `scripts/probe.sh activity` exists and carries the same warning.
+      ⚠ Takes no `season` — paging is by `result_offset`.
+
+  FetchLeagueTransactions:
+    status: DISCOVERED_NOT_CAPTURED
+    method: GET
+    path: /FetchLeagueTransactions
+    path_confirmed_via: "Vendor Swagger docs, read 2026-09-12."
+    params: [sport, league_id, team_id, result_offset]
+    note: >
+      Same privacy consideration as FetchLeagueActivity. Differs from it by accepting `team_id`,
+      so it can be scoped to one franchise. Takes no `season`.
+
+  FetchTrades:
+    status: DISCOVERED_NOT_CAPTURED
+    method: GET
+    path: /FetchTrades
+    path_confirmed_via: "Vendor Swagger docs, read 2026-09-12."
+    params: [sport, league_id, filter, result_offset]
+    note: >
+      Same privacy consideration. `filter`'s accepted values are UNKNOWN — the docs name the
+      parameter without enumerating it, and guessing one is exactly the kind of assumption this
+      contract exists to prevent.
 
   FetchLeagueBoxscore:
     status: DISCOVERED_NOT_YET_NEEDED

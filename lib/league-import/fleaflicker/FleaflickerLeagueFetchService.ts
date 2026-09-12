@@ -5,6 +5,7 @@ import type {
   FleaflickerRostersResponse,
   FleaflickerScoreboardResponse,
   FleaflickerScoreboardGame,
+  FleaflickerRulesResponse,
 } from '@/lib/league-import/fleaflicker/types'
 
 const API_BASE = 'https://www.fleaflicker.com/api'
@@ -101,9 +102,16 @@ export async function fetchFleaflickerLeagueForImport(sourceId: string): Promise
   const standingsUrl = `${API_BASE}/FetchLeagueStandings?sport=${encodeURIComponent(sport)}&league_id=${leagueId}&season=${season}`
   const rostersUrl = `${API_BASE}/FetchLeagueRosters?sport=${encodeURIComponent(sport)}&league_id=${leagueId}&season=${season}`
 
-  const [standings, rosters] = await Promise.all([
+  /*
+   * ⚠ RULES FAIL SOFT, LIKE ROSTERS AND UNLIKE STANDINGS. Standings carry the
+   * league identity this import is built on; rosters and rules are enrichments.
+   * An import that can name the league and its teams must not die because the
+   * scoring endpoint had a bad minute.
+   */
+  const [standings, rosters, rules] = await Promise.all([
     fetchJson<FleaflickerStandingsResponse>(standingsUrl),
     fetchJson<FleaflickerRostersResponse>(rostersUrl).catch(() => ({ rosters: [] })),
+    fetchFleaflickerRules(sport, leagueId).catch(() => null),
   ])
 
   if (!standings?.league?.id) {
@@ -115,6 +123,7 @@ export async function fetchFleaflickerLeagueForImport(sourceId: string): Promise
     season: standings.season ?? season,
     standings,
     rosters,
+    rules,
   }
 }
 
@@ -217,4 +226,24 @@ export async function fetchFleaflickerScoreboard(
         }
 
   return { week, periods, currentPeriod }
+}
+
+/**
+ * The league's scoring rules and roster shape.
+ *
+ * ⚠ TAKES NO `season`, AND THAT IS THE MODEL RATHER THAN AN OVERSIGHT: rules
+ * belong to the league, not to a year. Sending one would document a response to
+ * a request nobody makes — see `contracts/fleaflicker/ENDPOINTS.yaml`.
+ *
+ * ⚠ SO THE SEASON-CLAMP GUARD THAT `fetchFleaflickerScoreboard` CARRIES DOES NOT
+ * APPLY HERE, and its absence is deliberate rather than forgotten. There is no
+ * season to be clamped and no `schedulePeriod` to check one against.
+ */
+export async function fetchFleaflickerRules(
+  sport: FleaflickerSport,
+  leagueId: number,
+): Promise<FleaflickerRulesResponse> {
+  const url =
+    `${API_BASE}/FetchLeagueRules?sport=${encodeURIComponent(sport)}&league_id=${leagueId}`
+  return fetchJson<FleaflickerRulesResponse>(url)
 }

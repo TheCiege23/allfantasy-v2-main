@@ -21,6 +21,37 @@
 
 ---
 
+## Open — needs a decision from the repo owner, not more probing
+
+### `G-07` — whose league's transactions may be committed as a fixture?
+
+`FetchLeagueActivity`, `FetchLeagueTransactions` and `FetchTrades` are DISCOVERED
+(names from the vendor's published Swagger docs, 2026-09-12) and NOT CAPTURED.
+They are the remaining blocker on the "activity" third of the import audit's P2
+item 1.
+
+🛑 **THE OBSTACLE IS PRIVACY, NOT DIFFICULTY, AND IT IS NOT THE PROBE'S CALL.**
+These endpoints return a log of real people's roster moves — who dropped whom,
+and when. This repository is PUBLIC. A scoreboard's team names are already
+public-facing in a way a per-manager activity log is not, and `scripts/probe.sh`
+has carried a warning about publishing real league data since it was written.
+
+Capturing standings/rosters/scoreboard/rules for league 206154 added no new
+exposure, because that league's data was already committed and those payloads are
+league configuration and results. An activity log is a different kind of record.
+
+**What would resolve it:** the repo owner naming a league whose transaction
+history they are content to publish — ideally one they own. Until then the
+endpoints stay recorded-but-uncaptured, which is the honest state: we know they
+exist and what they take, and we have not looked inside.
+
+⚠ **AND `FetchTrades`'s `filter` PARAMETER IS UNDOCUMENTED.** The vendor names the
+parameter without enumerating its accepted values. Guessing one and probing is
+exactly the assumption this contract exists to prevent; it needs the same
+docs-or-ask treatment the endpoint names got.
+
+---
+
 ## Not gaps — already known from the existing, working integration
 
 Recorded here so nobody re-derives them by probing `FetchLeagueStandings` or
