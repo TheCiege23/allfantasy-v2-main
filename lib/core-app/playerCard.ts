@@ -3,6 +3,7 @@ import 'server-only'
 import { prisma } from '@/lib/prisma'
 import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
 import { isWatched } from '@/lib/waiver-wire/watchlist-service'
+import { readInjurySyncFreshness } from '@/lib/injuries/injurySyncState'
 import { buildNextGameMap, type FixtureRow } from './nextGameMap'
 import { getRosteredMarket } from './rosteredMarket'
 import { latestProjectionWeek, lookupProjections } from './playerProjections'
@@ -161,6 +162,49 @@ export type PlayerCardInjury = {
   source: string
 }
 
+/**
+ * When the injuries feed last ran for this sport — the stamp that makes the
+ * injury slot's SILENCE checkable.
+ *
+ * 🛑 THIS EXISTS BECAUSE "NO INJURY" AND "NOBODY LOOKED" LOOK IDENTICAL. The
+ * section renders "No injury designation reported in the last 14 days" for the
+ * overwhelming majority of players, and nothing on the card distinguishes a
+ * healthy player from a dead feed. Both are silence. Measured 2026-09-08:
+ * `api_sports` held 1,444 rows for rostered players and NOT ONE was fresher than
+ * seven days, so the dead-feed reading was the true one for that source.
+ *
+ * ⚠ ISO STRINGS, AND THE CLIENT FORMATS THEM. A relative time computed on the
+ * server ("12 minutes ago") freezes at render and is wrong for as long as the
+ * page is open. The sheet already has an `ago()` helper for `reportedAt`; this
+ * uses the same one.
+ *
+ * ⚠ AND THE SECTION IS UNAVAILABLE WHEN THERE IS NO ROW, rather than saying
+ * "never". Telemetry started today, so "never" would be a claim about the FEED
+ * made from the absence of a RECORD — two different things.
+ */
+export type PlayerCardInjuryFeed = {
+  /** Last run for this sport that completed without provider errors. */
+  checkedAt: string | null
+  /** Last run that failed. Never set in the same run as a success. */
+  erroredAt: string | null
+  /**
+   * CONSECUTIVE runs the budget never reached this sport, since the last one
+   * that did.
+   *
+   * 🛑 A STREAK, NOT A LIFETIME TOTAL, AND IT SHIPPED AS A TOTAL FIRST. The
+   * counter was only ever incremented, never reset, so one starved afternoon
+   * would have put "487 runs skipped for budget" on every card in that sport
+   * permanently — a number that climbs and never falls cannot answer "is it
+   * starving now", which is the only thing this card asks it. `recordInjurySyncRun`
+   * now zeroes it on any run that reaches the sport.
+   *
+   * `resolveSports` rotates seven sports on a 24-hour period against a 200s
+   * budget, so a sport can go a full day between leads and refresh in between
+   * only if the budget reaches it. A non-zero streak here is that happening.
+   */
+  skipped: number
+}
+
 /** Everything only a league can answer. Null on the universal card. */
 export type PlayerCardLeague = {
   leagueId: string
@@ -223,6 +267,15 @@ export type PlayerCardData = {
   news: SectionState<PlayerCardNews[]>
   /** His latest availability designation, when one was reported recently. */
   injury: SectionState<PlayerCardInjury>
+  /**
+   * When we last looked, for the sport this player is in.
+   *
+   * ⚠ IT ANNOTATES BOTH BRANCHES OF `injury`, not just the empty one. A stated
+   * designation is also a point-in-time claim, and "QUESTIONABLE, reported 2d
+   * ago, feed checked 12m ago" tells the reader the status is current rather
+   * than merely stored.
+   */
+  injuryFeed: SectionState<PlayerCardInjuryFeed>
   insight: PlayerCardInsight | null
   league: PlayerCardLeague | null
 }
@@ -1244,7 +1297,8 @@ export async function getPlayerCard(req: PlayerCardRequest): Promise<PlayerCardD
     ? valueBookFor(leagueBookRow.settings, leagueBookRow.leagueType)
     : UNIVERSAL_BOOK
 
-  const [market, ownershipBoard, projections, news, blurbs, injury, trades, league] = await Promise.all([
+  // prettier-ignore
+  const [market, ownershipBoard, projections, news, blurbs, injury, injuryFeedRow, trades, league] = await Promise.all([
     loadMarket(player.sleeperId, player.position, book),
     getRosteredMarket({ sport: 'NFL', dynastyOnly: null }).catch(() => null),
     player.sleeperId && projWeek
@@ -1253,6 +1307,13 @@ export async function getPlayerCard(req: PlayerCardRequest): Promise<PlayerCardD
     loadNews(player.name, player.sport),
     loadPlayerBlurbs(player.sleeperId, player.name, player.sport),
     loadInjury(player.sleeperId, player.name, player.sport),
+    /*
+     * ⚠ NOT INSIDE `loadInjury`. The stamp annotates the injury slot in BOTH
+     * states, including the unavailable one — and `SectionState`'s unavailable
+     * arm carries only a `reason` string, so a freshness value returned from
+     * there would be dropped exactly when it matters most.
+     */
+    readInjurySyncFreshness(player.sport),
     loadTrades(player.sleeperId),
     req.leagueId
       ? loadLeague(
@@ -1340,6 +1401,22 @@ export async function getPlayerCard(req: PlayerCardRequest): Promise<PlayerCardD
     comps,
     news: mergedNews,
     injury,
+    injuryFeed: injuryFeedRow
+      ? {
+          available: true as const,
+          data: {
+            checkedAt: injuryFeedRow.lastSuccessAt ? injuryFeedRow.lastSuccessAt.toISOString() : null,
+            erroredAt: injuryFeedRow.lastErrorAt ? injuryFeedRow.lastErrorAt.toISOString() : null,
+            skipped: injuryFeedRow.skipped,
+          },
+        }
+      : /*
+         * No row yet — the telemetry landed 2026-09-08 and the worker took it at
+         * 18:25Z, so every sport reads null until that sport's first tick. Say
+         * that, rather than "never checked", which would assert something about
+         * the FEED from the absence of a RECORD.
+         */
+        unavailable('No record of when this sport was last checked.'),
     insight: deriveInsight({ name: player.name, market, ownership, byeWeek, comps }),
     league,
   }
