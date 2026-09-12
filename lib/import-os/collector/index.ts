@@ -138,24 +138,37 @@ export {
  * Sleeper, ESPN, Yahoo or Fantrax, which are all fine because their team ids are already plain
  * integers — "1", not "0001".
  *
- * 🛑 THIS DOES NOT MEAN "BUILD THE MFL WRITER NOW." It removes exactly one of the three costly
- * decisions below — the readers are demonstrated safe to receive a zero-padded id — but MFL
- * still has no writer, and the choice of what a NEW writer should actually store is still open:
- *   - unpad `externalId` at MFL import → changes team IDENTITY for existing MFL leagues, and
- *     `traded_picks` joins on that same identity (see MflAdapter's own note about it) — STILL OPEN
- *   - pad in the readers → RESOLVED 2026-09-03, see above
- *   - a text rosterId column → PREPARED, NOT APPLIED. The SQL and the matching writer/reader
- *     code (all three writers, every reader whose lookup would otherwise break, tests) are
- *     written — see prisma/migrations-pending/20260903222531_weekly_matchup_roster_id_text/
- *     and its README.md entry for the full census. Applying it, flipping schema.prisma, and
- *     shipping the code together is still not this collector's call, or any single session's.
- * The remaining two are a real decision about one identity for a league's teams, not a collector
- * task. They belong with that work, not smuggled in beside a sync writer.
+ * ✅ AND AS OF 2026-09-12 THE OTHER TWO ARE SETTLED TOO, SO THE MFL WRITER IS NO LONGER BLOCKED.
+ * This paragraph said "THIS DOES NOT MEAN BUILD THE MFL WRITER NOW" and listed three costly
+ * decisions. Two have since been closed — one by a migration that was applied the same afternoon
+ * this was written, and one by that migration making it moot:
+ *   - unpad `externalId` at MFL import → MOOT. It was only ever a way to survive an Int column.
+ *     With `rosterId` text, a zero-padded id round-trips verbatim and team IDENTITY never has to
+ *     change, which is what made this option expensive. Do NOT do it.
+ *   - pad in the readers → RESOLVED 2026-09-03, see above.
+ *   - a text rosterId column → ✅ APPLIED TO PRODUCTION 2026-09-03, hours after this note called
+ *     it "PREPARED, NOT APPLIED". Verified 2026-09-12 against the live database rather than
+ *     against this file or the migration's own header: `information_schema` reports
+ *     `WeeklyMatchup.rosterId data_type=text, nullable=NO`, 49,180 rows, all four indexes
+ *     present including `WeeklyMatchup_leagueId_seasonYear_week_rosterId_key`.
+ *     `schema.prisma` already declares `rosterId String` and `applySchedule` already takes one.
  *
- * FLEAFLICKER IS ABSENT FOR A DIFFERENT AND SIMPLER REASON: it has no matchup source at all.
- * `FleaflickerLeagueFetchService` fetches `FetchLeagueStandings` and `FetchLeagueRosters` and
- * nothing else, so there is no schedule to write. Adding one means adding a provider endpoint;
- * `contracts/fleaflicker/` now has a committed contract with real fixtures (probed 2026-09-03),
- * but the game/matchup row shape itself is still not captured — see its GAPS.md G-01 — so this
- * is still a probe-and-capture job, not a wiring job, just further along than it was.
+ * 🛑 THIS COMMENT WAS THE ONLY REMAINING BLOCKER, WHICH IS WORTH SAYING PLAINLY. Every technical
+ * prerequisite had been satisfied for nine days; what persisted was a file telling each new
+ * session the work was gated on a decision that had already been made. That is the "stale absence
+ * claim" shape this repo records elsewhere — and it is more expensive than a wrong fact, because
+ * it is a wrong fact that stops people looking.
+ *
+ * ✅ FLEAFLICKER IS NO LONGER ABSENT — `fleaflickerMatchupParity` shipped 2026-09-11. This
+ * paragraph said it "has no matchup source at all" and that the game/matchup row shape "is still
+ * not captured — see its GAPS.md G-01". Both were true when written and are false now:
+ * `fetchFleaflickerScoreboard` exists, and G-01 is RESOLVED against two committed fixtures
+ * (a played regular-season week and a championship week).
+ *
+ * ⚠ TWO THINGS THAT CAPTURE FOUND ARE WORTH KNOWING BEFORE WRITING ANY PROVIDER COLLECTOR:
+ * Fleaflicker OMITS a false boolean rather than sending it, so `isFinalScore === false` is never
+ * true and an unplayed game must be detected by ABSENCE; and a `season` past a league's last is
+ * silently CLAMPED, returning that last season's completed games under HTTP 200 — so a sync that
+ * trusts the season it asked for will persist years-old finals as this week's results. See
+ * `contracts/fleaflicker/ENDPOINTS.yaml` and that collector's header.
  */
