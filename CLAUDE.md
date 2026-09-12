@@ -129,9 +129,40 @@ importing the constant was flagged as expected, then deleted.
 but it is a Phase-5 audit snapshot and is itself incomplete — its
 `clientLocations` for CFBD listed three files; there are six.
 
-**The code does not comply yet, and the guard says so.** A full scan reports 81
-violations across tracked source (the count drifts — re-run rather than quoting
-this number). Nothing is allowlisted to hide them.
+**The code does not comply yet, and the guard says so.** Measured 2026-09-12 in a
+detached worktree at `26d9e75bd`: **109** violations across tracked source, and
+**28** for the sibling `check-decision-engine-boundary.mjs`. The count drifts with
+every commit — re-run rather than quoting these. Nothing is allowlisted to hide them.
+
+🛑 **AND MEASURE IT IN A DETACHED WORKTREE AT A COMMIT, NEVER IN THE SHARED F:
+CHECKOUT, WHICH IS NOT `main` AND IS NOT ANY COMMIT ANYONE WILL BUILD.** Measured
+the same day: `F:\allfantasy-v2-main`'s own HEAD was `69c35ace2` — **283 commits
+behind `origin/main` AND 128 commits ahead of it**. Divergent, not merely stale, and
+nothing about the checkout announces that.
+
+The cost is not abstract. Scanning it produced **111** and **27** rather than 109 and
+28, and the discrepancy was confidently explained as `9bc2dfd75` having added two
+monitored hosts. That explanation was wrong. The two extra findings were
+`lib/geo/detectUserState.ts` on a tree where that commit's inverted split has not
+happened — on `origin/main` the fetches live in the allowlisted
+`lib/geo/geoIpFetch.ts` and contribute ZERO. The wrong figure was reported twice and
+reached a landed commit message.
+
+⚠ **A PLAUSIBLE CAUSAL STORY IS WHAT MADE IT STICK.** "Two hosts were added, so the
+count went up by two" is arithmetic that fits, so nobody looks further — the same
+shape this file records for the `exclude`-inheritance diagnosis: a wrong mechanism
+with a right-looking number attached. The check that settles it is one command:
+
+```bash
+git -C <checkout> rev-list --count HEAD..origin/main   # behind
+git -C <checkout> rev-list --count origin/main..HEAD   # ahead — the one people skip
+```
+
+⚠ **AND AN A/B ACROSS TWO GUARD VERSIONS ON ONE TREE IS STILL VALID THERE**, which is
+why this is easy to miss: the 333 → 111 set-diff that justified the ignore fix was run
+on that divergent tree and its conclusion holds exactly (222 ignored-copy lines removed,
+0 added), because both sides saw the same files. A DELTA survives a wrong tree. A TOTAL
+does not.
 
 ### CFBD is the worked example of what compliance looks like
 
