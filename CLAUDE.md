@@ -1350,6 +1350,59 @@ lands.** Had that claim been phrased impersonally it would have shipped, and the
 strongest sentence in a permanent incident record would have been its only false
 one.
 
+#### The fifth shape: a NEGATIVE, measured after your own write, with no control
+
+The shapes above are a check that cannot fail, one that fails and hands back a
+plausible value, one that passes against an artifact you did not ship, and a
+search hit read as attribution. This is the one that produces a **confident
+absence** — and absence is the hardest reading to doubt, because there is nothing
+there to look wrong.
+
+🛑 **THE RULE: AN ABSENCE YOU MEASURED *AFTER* MODIFYING THE THING IS NOT EVIDENCE
+ABOUT WHAT WAS THERE BEFORE.** You need the same predicate, on the same object,
+read BEFORE the write. A count is not that predicate. Neither is a sibling's
+timestamp.
+
+Measured 2026-09-11, on `node_modules/.prisma/client` in the shared checkout. A
+session ran an approved `npm rebuild`, then found `index.d.ts` missing and five
+zero-byte files dated three days earlier, and concluded the client had been broken
+for three days — heading for the standing claim that *every* typecheck in this
+checkout for three days had measured an inflated tree.
+
+Three things were wrong with it, and each is reusable:
+
+- **The before-measurement was a COUNT (14 files); the after-measurement was
+  FILENAMES.** Different predicates. A count of 14 is exactly what
+  one-file-removed-one-added looks like, which is what had happened.
+- **`index.d.ts` was a SIXTH file, outside the five that were timestamped.** "Those
+  five are dated 09-08" supports nothing whatever about a file that is not among
+  them. A control on neighbours is not a control on the subject.
+- **The refuting line was inside the evidence being quoted.** The same session's own
+  timestamp table listed six files rewritten by its own run minutes earlier. The
+  five that agreed were read; the line that disagreed was read past — the same
+  failure the attribution shape above records, in a different instrument.
+
+**What settled it was BEHAVIOURAL, and that is the general lesson.** A peer had run
+the ratchet on one commit through two different `node_modules` junctions:
+
+```
+junctioned to the stale client    147 errors, freezeStore.ts +4 (TS2339 leagueMaxPfFreeze)
+junctioned to the other client    143 errors, baseline 143, clean
+```
+
+A missing `index.d.ts` **inflates** an error count; it cannot clear one. So the
+client was demonstrably functional at the time of that run, and no file listing was
+needed to establish it. A second session reached the same conclusion independently
+from a `tsc --listFiles` naming the file. **Two positive measurements, different
+instruments, beat one negative taken after a write.**
+
+⚠ **AND THE WITHDRAWN CLAIM WAS THE EXPENSIVE PART, NOT THE MISDATING.** "Every
+typecheck here for three days was inflated" would have told every session to
+distrust three days of real measurements, including four landed attestations and an
+open PR. A wrong negative about shared state does not merely mislead one person —
+it retroactively invalidates everyone else's correct work. Say what you measured,
+when, and with which instrument, and let a positive measurement outrank an absence.
+
 ### 🛑 ONE SESSION BATCHES AND PUSHES TO `main`
 
 > ⚠ **SUPERSEDED AS THE DEFAULT 2026-09-08 — read "Queue-order self-push" below
