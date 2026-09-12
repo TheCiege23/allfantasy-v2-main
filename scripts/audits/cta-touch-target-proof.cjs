@@ -84,6 +84,7 @@ const BODY = `
   <a class="af-pr-cta af-pr-cta--ghost" href="#">Create an account</a>
 </div>
 <div class="af-core">
+  <input class="af-search-input" data-proof="shell-search" type="search" placeholder="Search">
   <div class="af-tc-actions">
     <p class="af-tc-caption">caption</p>
     <button type="button" class="af-btn" data-proof="tc-propose">Propose this trade</button>
@@ -129,6 +130,15 @@ const TARGETS = [
   { sel: "[data-proof='tc-accept']", label: "Accept offer", min: 44, phoneOnly: true },
   { sel: "[data-proof='tc-send']", label: "Send offer", min: 44, phoneOnly: true },
   { sel: "[data-proof='tc-partner']", label: "Trade partner chip", min: 44, phoneOnly: true },
+  /*
+   * ⚠ NOT A TAP TARGET — AN iOS ZOOM FLOOR. A text input under 16px makes Safari
+   * zoom the page in on focus and never back out. `.af-search-input` is 13px and
+   * lives in the SHELL, so it is on every authenticated /core screen. Found by the
+   * mobile-auth lane on its first green run; measured here in both orders because
+   * the rule is equal-specificity with its own base declaration and wins on source
+   * order within af-core.css — which is deterministic, unlike bundle order.
+   */
+  { sel: "[data-proof='shell-search']", label: "Shell search input", min: 16, phoneOnly: true, axis: "font" },
 ];
 
 function serve() {
@@ -152,8 +162,10 @@ const MEASURE = (sel) => `(() => {
   const el = document.querySelector(${JSON.stringify(sel)});
   if (!el) return null;
   const r = el.getBoundingClientRect();
+  const cs = getComputedStyle(el);
   return { h: Math.round(r.height), w: Math.round(r.width),
-           minHeight: getComputedStyle(el).minHeight };
+           fontPx: Math.round(parseFloat(cs.fontSize)),
+           minHeight: cs.minHeight };
 })()`;
 
 async function main() {
@@ -177,7 +189,18 @@ async function main() {
          * three of those a pass, which is exactly the gap in the my-team proof
          * that the census exists to cover.
          */
-        const measured = t.axis === "w" ? m.w : m.h;
+        /*
+         * ⚠ THREE AXES NOW, AND AN UNKNOWN ONE MUST NOT FALL THROUGH TO HEIGHT.
+         * `axis: "font"` was added for the iOS 16px zoom floor; before this switch
+         * knew about it, such a target would have been measured as HEIGHT and
+         * passed vacuously at 44px — a check reporting on the wrong property is
+         * the same defect this harness exists to prevent.
+         */
+        const measured = t.axis === "w" ? m.w : t.axis === "font" ? m.fontPx : m.h;
+        assert(
+          typeof measured === "number" && Number.isFinite(measured),
+          `${t.label}: axis "${t.axis}" produced no measurement — unknown axis?`,
+        );
         const ok = !applies || measured >= t.min;
         if (!ok) failures++;
         rows.push({ width, order, label: t.label, ...m, axis: t.axis, applies, ok });
@@ -194,7 +217,7 @@ async function main() {
   for (const r of rows) {
     console.log(
       `  ${String(r.width).padStart(4)}px ${r.order.padEnd(10)} ` +
-        `${r.ok ? "PASS" : "FAIL"}  ${String(r.axis === "w" ? r.w : r.h).padStart(3)}px ${r.axis === "w" ? "wide" : "tall"} ` +
+        `${r.ok ? "PASS" : "FAIL"}  ${String(r.axis === "w" ? r.w : r.axis === "font" ? r.fontPx : r.h).padStart(3)}px ${r.axis === "w" ? "wide" : r.axis === "font" ? "font" : "tall"} ` +
         `(min-height ${r.minHeight.padEnd(6)}) ${r.applies ? "" : "[not expected at this width] "}` +
         r.label,
     );
@@ -210,8 +233,8 @@ async function main() {
     for (const t of TARGETS) {
       const a = rows.find((r) => r.width === width && r.order === "core-first" && r.label === t.label);
       const b = rows.find((r) => r.width === width && r.order === "core-last" && r.label === t.label);
-      const av = t.axis === "w" ? a.w : a.h;
-      const bv = t.axis === "w" ? b.w : b.h;
+      const av = t.axis === "w" ? a.w : t.axis === "font" ? a.fontPx : a.h;
+      const bv = t.axis === "w" ? b.w : t.axis === "font" ? b.fontPx : b.h;
       if (av !== bv) {
         drift++;
         console.log(`  *** ORDER-DEPENDENT at ${width}px: ${t.label} is ${av}px vs ${bv}px ***`);

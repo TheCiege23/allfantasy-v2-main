@@ -727,3 +727,30 @@ html[data-mode='af'] .af-core {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
+
+/* ── iOS zoom floor ───────────────────────────────────────────────────
+ *
+ * 🛑 A TEXT INPUT UNDER 16px MAKES iOS SAFARI ZOOM THE PAGE IN ON FOCUS AND
+ * NEVER ZOOM BACK OUT. `.af-search-input` is 13px, which is right on desktop
+ * and a trap on a phone — and it is in the SHELL, so it is on every
+ * authenticated /core screen, not one of them.
+ *
+ * Found by `mobile-auth` on its first green run against /core/trades. It was
+ * already in the rendered census months earlier ("af-search-input 18px tall and
+ * 13px font") and never fixed, because nothing authenticated was ever gated:
+ * /core/* redirects to /login without a session, so every mobile check this repo
+ * had stopped at the marketing routes.
+ *
+ * ⚠ SAME SPECIFICITY, LATER IN THE SAME FILE — DELIBERATELY, AND NOT THE
+ * `.af-core` PREFIX USED ELSEWHERE IN THIS SWEEP. Order within ONE stylesheet is
+ * deterministic; it is only ACROSS files that the concatenated page.css decides
+ * ties, which is what made four Trade Center buttons a coin toss. And
+ * `.af-search-input` has TWO renderers — AfCoreShell and PlayerSearchBox — so a
+ * rule qualified on `.af-core` would silently miss any future mount outside the
+ * shell. Equal specificity in source order covers both without that assumption.
+ */
+@media (max-width: 720px) {
+  .af-search-input {
+    font-size: 16px;
+  }
+}
