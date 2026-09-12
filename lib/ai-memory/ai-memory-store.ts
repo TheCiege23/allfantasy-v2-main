@@ -4,6 +4,7 @@
  */
 
 import { prisma } from '@/lib/prisma'
+import { classifyDirectionSignal, classifyTradeMention } from '@/lib/ai-memory/memoryIntent'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
 import { recordChimmyQualityEvent } from '@/lib/chimmy-quality/ChimmyQualityAnalytics'
 
@@ -143,8 +144,17 @@ function parsePreferenceFlags(message: string): Record<string, unknown> {
   if (/\bdetailed\b|deep dive|more detail/.test(text)) updates.detailLevel = 'detailed'
   if (/\bcalm\b|steady tone/.test(text)) updates.toneStyle = 'calm'
   if (/\bhype\b|fun|banter/.test(text)) updates.toneStyle = 'engaging'
-  if (/\bcontend(er|ing)?\b|win[-\s]?now|playoff push|all-?in\b/.test(text)) updates.teamArchetype = 'contender'
-  if (/\brebuild\b|tank(ing)?\b|future assets|retool\b/.test(text)) updates.teamArchetype = 'rebuilder'
+  /*
+   * 🛑 A QUESTION IS NOT A DECISION. These two lines used to set the user's team direction
+   * from any message containing "rebuild" or "contend", so "should I rebuild?" silently
+   * rewrote a stored goal from one sentence. Brief scenario 11: a hypothetical must not
+   * "change the user's confirmed goals"; line 76: "explicit user direction overrides
+   * inferred goals" — direction, not speculation. Only a DECLARED signal writes.
+   */
+  const direction = classifyDirectionSignal(message)
+  if (direction.direction && direction.stance === 'declared') {
+    updates.teamArchetype = direction.direction
+  }
   if (/\bfull\s*ppr\b|\bppr\b/.test(text)) updates.scoringPreference = 'ppr'
   if (/\bhalf\s*ppr\b|0\.5\s*ppr/.test(text)) updates.scoringPreference = 'half_ppr'
   if (/\bstandard\b|\bnon[-\s]?ppr\b/.test(text)) updates.scoringPreference = 'non_ppr'
@@ -242,7 +252,15 @@ export async function rememberChimmyUserMessageMemory(input: {
     },
   })
 
-  if (/\btrade\b|offer|counter|accept|decline/i.test(message)) {
+  /*
+   * 🛑 ONLY A COMPLETED TRADE IS HISTORY. This used to fire on any message containing
+   * "trade", "offer", "accept" or "decline", so "what if I traded Jefferson for Chase?" was
+   * filed into `past_trades` as a trade that happened — and
+   * lib/ai-memory/chimmy-memory-context.ts then fed it back as the user's trade history.
+   * Exploration wins ties in the classifier: a missing memory is recoverable, a fabricated
+   * one is not.
+   */
+  if (classifyTradeMention(message) === 'completed') {
     const existingTrades = (await getAiMemory(input.userId, 'past_trades', { leagueId, key: 'recent' })) as
       | unknown[]
       | null
