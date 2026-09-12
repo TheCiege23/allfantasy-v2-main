@@ -1,0 +1,208 @@
+{
+  "orderedSelections": [
+    {
+      "team": {
+        "id": 1374271,
+        "name": "Clutch City Ballers",
+        "logoUrl": "https://s3.amazonaws.com/fleaflicker/t1374271_0_150x150.jpg",
+        "initials": "CC"
+      },
+      "player": {
+        "proPlayer": {
+          "id": 15563,
+          "nameFull": "Cam Akers",
+          "nameShort": "C. Akers",
+          "proTeamAbbreviation": "FA",
+          "position": "RB",
+          "headshotUrl": "https://d26bvpybnxg29h.cloudfront.net/nfl/15563.png",
+          "nameFirst": "Cam",
+          "nameLast": "Akers",
+          "proTeam": {
+            "abbreviation": "FA",
+            "location": "Free",
+            "name": "Agent",
+            "isFreeAgent": true
+          },
+          "positionEligibility": [
+            "RB"
+          ],
+          "percentOwnedRatio": 0.01
+        },
+        "viewingActualPoints": {
+          "formatted": "—"
+        },
+        "transactionStatus": {
+          "locked": {},
+          "isLineupStatusLocked": true
+        },
+        "requestedGamesPeriod": {
+          "ordinal": 1,
+          "startEpochMilli": "1788861600000",
+          "isNow": true
+        },
+        "viewingFormat": "TOTAL",
+        "viewingRange": {
+          "low": -1,
+          "high": -2
+        },
+        "displayGroup": "RUSHER",
+        "lastX": [
+          {
+            "duration": 1
+          },
+          {
+            "duration": 3
+          },
+          {
+            "duration": 5
+          }
+        ],
+        "isKeeper": true
+      },
+      "slot": {
+        "round": 1,
+        "slot": 6,
+        "overall": 6
+      },
+      "color": "DRAFT_BOARD_GREEN"
+    },
+    {
+      "team": {
+        "id": 1373475,
+        "name": "Winterfell Dire Wolves",
+        "logoUrl": "https://s3.amazonaws.com/fleaflicker/t1373475_0_150x150.jpg",
+        "initials": "WD"
+      },
+      "player": {
+        "proPlayer": {
+          "id": 15533,
+          "nameFull": "Tua Tagovailoa",
+          "nameShort": "T. Tagovailoa",
+          "proTeamAbbreviation": "ATL",
+          "position": "QB",
+          "headshotUrl": "https://d26bvpybnxg29h.cloudfront.net/nfl/15533.png",
+          "nflByeWeek": 11,
+          "injury": {
+            "typeAbbreviaition": "OUT",
+            "description": "Oblique",
+            "severity": "OUT",
+            "typeFull": "Out"
+          },
+          "nameFirst": "Tua",
+          "nameLast": "Tagovailoa",
+          "proTeam": {
+            "abbreviation": "ATL",
+            "location": "Atlanta",
+            "name": "Falcons"
+          },
+          "positionEligibility": [
+            "QB"
+          ],
+          "percentOwnedRatio": 0.33
+        },
+        "viewingActualPoints": {
+          "formatted": "—"
+        },
+        "transactionStatus": {
+          "locked": {},
+          "isLineupStatusLocked": true
+        },
+        "requestedGamesPeriod": {
+          "ordinal": 1,
+          "startEpochMilli": "1788861600000",
+          "isNow": true
+        },
+        "viewingFormat": "TOTAL",
+        "viewingRange": {
+          "low": -1,
+          "high": -2
+        },
+        "displayGroup": "PASSER",
+        "lastX": [
+          {
+            "duration": 1
+          },
+          {
+            "duration": 3
+          },
+          {
+            "duration": 5
+          }
+        ]
+      },
+      "slot": {
+        "round": 1,
+        "slot": 15,
+        "overall": 15
+      },
+      "color": "DRAFT_BOARD_RED"
+    },
+    {
+      "team": {
+        "id": 1374271,
+        "name": "Clutch City Ballers",
+        "logoUrl": "https://s3.amazonaws.com/fleaflicker/t1374271_0_150x150.jpg",
+        "initials": "CC"
+      },
+      "player": {
+        "proPlayer": {
+          "id": 15564,
+          "nameFull": "Van Jefferson",
+          "nameShort": "V. Jefferson",
+          "proTeamAbbreviation": "WAS",
+          "position": "WR",
+          "headshotUrl": "https://d26bvpybnxg29h.cloudfront.net/nfl/15564.png",
+          "nflByeWeek": 7,
+          "nameFirst": "Van",
+          "nameLast": "Jefferson",
+          "proTeam": {
+            "abbreviation": "WAS",
+            "location": "Washington",
+            "name": "Commanders"
+          },
+          "positionEligibility": [
+            "WR"
+          ],
+          "percentOwnedRatio": 0.02
+        },
+        "viewingActualPoints": {
+          "formatted": "—"
+        },
+        "transactionStatus": {
+          "locked": {},
+          "isLineupStatusLocked": true
+        },
+        "requestedGamesPeriod": {
+          "ordinal": 1,
+          "startEpochMilli": "1788861600000",
+          "isNow": true
+        },
+        "viewingFormat": "TOTAL",
+        "viewingRange": {
+          "low": -1,
+          "high": -2
+        },
+        "displayGroup": "RECEIVER",
+        "lastX": [
+          {
+            "duration": 1
+          },
+          {
+            "duration": 3
+          },
+          {
+            "duration": 5
+          }
+        ],
+        "isKeeper": true,
+        "isOnTradingBlock": true
+      },
+      "slot": {
+        "round": 4,
+        "slot": 3,
+        "overall": 51
+      },
+      "color": "DRAFT_BOARD_BLUE"
+    }
+  ]
+}
