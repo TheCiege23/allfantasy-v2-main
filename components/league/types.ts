@@ -180,6 +180,11 @@ export type LeagueTradeHistoryItem = {
   viewerIsReceiver?: boolean
   /** True when the viewer is the proposing roster on this trade (can cancel). */
   viewerIsProposer?: boolean
+  /** Set on EXECUTED trades, where the commissioner view names both sides rather than a "partner". */
+  proposerName?: string
+  receiverName?: string
+  /** When the trade executed (`processedAt`), for executed-trade rows. */
+  executedAt?: string
 }
 
 export type LeagueTradeBlockItem = {
