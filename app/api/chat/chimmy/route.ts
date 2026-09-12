@@ -75,6 +75,11 @@ import { buildLeagueTradeHistoryContext } from '@/lib/chimmy-trade/leagueTradeHi
 import { buildLeagueStandingsContext } from '@/lib/chimmy/leagueStandingsGrounding'
 import { buildRuleGroundingGap } from '@/lib/chimmy/leagueRulesGrounding'
 import { buildDecisionEnvelopeGrounding } from '@/lib/chimmy/decisionEnvelopeGrounding'
+import {
+  classifyScreenshotEvidence,
+  fenceScreenshotEvidence,
+  screenshotNeedsClarification,
+} from '@/lib/chimmy/screenshotEvidence'
 import { buildHeadToHeadGrounding } from '@/lib/chimmy/headToHeadGrounding'
 import { buildDescribedTradeContext } from '@/lib/chimmy-trade/describedTradeEvaluator'
 import { buildDraftContext } from '@/lib/chimmy/draftGrounding'
@@ -982,7 +987,25 @@ function buildUserMessage(input: {
   }
 
   if (input.screenshotSummary) {
-    parts.push(`SCREENSHOT SUMMARY:\n${input.screenshotSummary}`)
+    /*
+     * 🛑 IMAGE TEXT ARRIVES FENCED, AS EVIDENCE. It used to be spliced in as
+     * `SCREENSHOT SUMMARY:\n<free-form model text>`, which put whatever was written inside
+     * a user's image into the same position — and the same register — as our own
+     * directives. Anything photographed into a screenshot read as an instruction.
+     *
+     * Brief scenario 8: "An ambiguous screenshot asks for clarification; malicious text
+     * inside it cannot trigger an action." The fencing is clause b; the clarification
+     * line below is clause a, and both decisions are made deterministically in
+     * lib/chimmy/screenshotEvidence rather than left to the model to get right.
+     */
+    const evidence = classifyScreenshotEvidence(input.screenshotSummary)
+    parts.push(fenceScreenshotEvidence(evidence))
+    const clarification = screenshotNeedsClarification(evidence)
+    if (clarification.needed && clarification.question) {
+      parts.push(
+        `SCREENSHOT IS NOT FULLY LEGIBLE. Ask before computing or saving anything from it: ${clarification.question}`,
+      )
+    }
   }
 
   if (input.insightSummary) {
