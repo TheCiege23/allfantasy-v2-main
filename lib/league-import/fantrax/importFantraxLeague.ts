@@ -11,6 +11,9 @@
 
 import 'server-only'
 
+import { getFantraxDraftResults } from '@/lib/league-import/fantrax/fantraxApi'
+import { mapFantraxDraftResults } from '@/lib/league-import/fantrax/fantraxDraft'
+import type { NormalizedDraftPick } from '@/lib/league-import/types'
 import { prisma } from '@/lib/prisma'
 import { fantraxScoringRules, type FantraxScoringRule } from './fantraxScoring'
 import {
@@ -40,6 +43,27 @@ export type FantraxImportOutcome =
        */
       scoringRules: FantraxScoringRule[]
       scoringGaps: string[]
+      /**
+       * What the league's draft board actually contained.
+       *
+       * ⚠ RETURNED RATHER THAN STORED, for the same reason `scoringRules` above
+       * is: `FantraxLeague` has no draft column. Adding one is a migration, and a
+       * migration is not this import's call — so the capability lands first and
+       * the persistence decision stays with the repo owner. A caller that wants
+       * the picks has them here; nothing silently half-writes them.
+       *
+       * `picks` holds only the slots actually used —
+       * `NormalizedDraftPick.source_player_id` is required and an unmade slot has
+       * no player. `outstanding` says how many remain, so "156 of 192" is
+       * reportable rather than the gap being invisible.
+       */
+      draft: {
+        picks: NormalizedDraftPick[]
+        slots: number
+        made: number
+        outstanding: number
+        state: string | null
+      }
       /**
        * Where the league sits in its own calendar, and how much of it was
        * actually read.
@@ -89,12 +113,24 @@ export async function importFantraxLeague(args: {
    * The extra cost is bounded by the league's own calendar — a preseason league
    * spends zero additional requests. See `fetchFantraxScheduleWithScores`.
    */
-  const [rosters, standings, cfb, nfl, schedule] = await Promise.all([
+  /*
+   * ⚠ AND THE DRAFT IS A THIRD ENDPOINT NOBODY HAD CALLED. `getDraftResults` was
+   * catalogued in `FANTRAX_ENDPOINTS` with no wrapper function, so an imported
+   * Fantrax league's draft history reflected traded-pick events only — never the
+   * draft itself. Measured on Cream Bowl: a 192-slot board with 156 picks made,
+   * none of which reached this import.
+   *
+   * It fails SOFT, like the sport maps and unlike rosters: a league that has not
+   * drafted, or whose draft could not be read, is still worth importing. The
+   * coverage note reports which of those happened.
+   */
+  const [rosters, standings, cfb, nfl, schedule, draft] = await Promise.all([
     getFantraxTeamRosters(args.leagueId),
     getFantraxStandings(args.leagueId),
     getFantraxPlayerIds('CFB'),
     getFantraxPlayerIds('NFL'),
     fetchFantraxScheduleWithScores(args.leagueId, info.data),
+    getFantraxDraftResults(args.leagueId).catch(() => null),
   ])
   if (!rosters.ok) return { ok: false, error: rosters.failure.message }
   /* Only one map has to load. A league is one sport, so failing the whole
@@ -190,6 +226,13 @@ export async function importFantraxLeague(args: {
     return { ok: false, error: 'that league snapshot is already owned by a different AllFantasy account' }
   }
 
+  /*
+   * ⚠ `draft` IS A `FantraxResult`, NOT THE BOARD — and it is null when the fetch
+   * threw. Unwrapping both here keeps the failure in one place: a league with no
+   * readable draft yields an empty summary rather than a thrown import.
+   */
+  const draftSummary = mapFantraxDraftResults(draft && draft.ok ? draft.data : null, { season })
+
   const payload = {
     appUserId: args.appUserId,
     /*
@@ -259,6 +302,13 @@ export async function importFantraxLeague(args: {
     resolved: mine.resolved,
     total: mine.total,
     scoringRules: scoring.rules,
+    draft: {
+      picks: draftSummary.picks,
+      slots: draftSummary.slotCount,
+      made: draftSummary.madeCount,
+      outstanding: draftSummary.outstandingCount,
+      state: draftSummary.draftState,
+    },
     scoringGaps: scoring.gaps,
     seasonState: schedule.position?.state ?? null,
     currentPeriod: schedule.position?.period ?? null,
