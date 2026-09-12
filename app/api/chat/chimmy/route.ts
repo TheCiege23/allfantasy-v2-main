@@ -96,6 +96,7 @@ import {
   normalizeChimmyAssistantMode,
 } from '@/lib/chimmy-chat/assistant-mode'
 import { getChimmyFeatureFlags } from '@/lib/chimmy-chat/feature-flags'
+import { isLikelySportsResultQuestion } from '@/lib/chimmy-chat/sports-question-intent'
 /*
  * ⚠ NOT IMPORTED AT MODULE SCOPE. The loop pulls in the OpenAI SDK and every
  * grounding builder its tools wrap, and the flag is OFF by default — so a
@@ -409,7 +410,7 @@ const SPORTS_KEYWORDS = [
 function hasSportsContent(text: string, hasImage: boolean): boolean {
   if (hasImage) return true
   const lower = text.toLowerCase()
-  return SPORTS_KEYWORDS.some((keyword) => lower.includes(keyword))
+  return SPORTS_KEYWORDS.some((keyword) => lower.includes(keyword)) || isLikelySportsResultQuestion(text)
 }
 
 function parseConversationPayload(raw: FormDataEntryValue | null): unknown {

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import fs from 'node:fs'
 import path from 'node:path'
+import { isLikelySportsResultQuestion } from '@/lib/chimmy-chat/sports-question-intent'
 
 /**
  * The off-topic gate in `app/api/chat/chimmy/route.ts` is a keyword allowlist,
@@ -36,7 +37,7 @@ function sportsKeywords(): string[] {
 /** Mirrors `hasSportsContent` for text (the image branch short-circuits true). */
 function passes(text: string): boolean {
   const lower = text.toLowerCase()
-  return sportsKeywords().some((k) => lower.includes(k))
+  return sportsKeywords().some((k) => lower.includes(k)) || isLikelySportsResultQuestion(text)
 }
 
 describe('Chimmy off-topic gate', () => {
@@ -51,6 +52,7 @@ describe('Chimmy off-topic gate', () => {
 
   it('lets through ordinary questions phrased without jargon', () => {
     const asked = [
+      'did the yankees win today?',
       'is there any preseason games today?',
       'what games are on tonight?',
       'when does the season start?',
@@ -109,5 +111,9 @@ describe('Chimmy off-topic gate', () => {
     for (const k of ['game', 'season', 'schedule', 'score', 'week', 'team', 'news']) {
       expect(list, `"${k}" must stay in SPORTS_KEYWORDS`).toContain(k)
     }
+  })
+
+  it('does not turn every bare "who won" question into a result-gate match', () => {
+    expect(isLikelySportsResultQuestion('Who won the 1992 World Series?')).toBe(false)
   })
 })
