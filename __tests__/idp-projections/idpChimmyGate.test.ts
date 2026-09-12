@@ -28,15 +28,38 @@ describe('the Chimmy IDP gate is variant-aware', () => {
    * survived. The edge is the thing under test.
    */
   it('does not gate the IDP context builder on idpConfig alone', () => {
-    const call = PIPELINE.slice(
-      PIPELINE.indexOf('buildIdpContextForChimmy(ctx.leagueId'),
-    )
+    /*
+     * ⚠ The needle deliberately stops at the opening paren. It used to read
+     * `buildIdpContextForChimmy(ctx.leagueId`, which coupled this assertion to the NAME of the
+     * first argument — so the league-authorization fix (which threads `authorizedLeagueId` in
+     * place of the raw `ctx.leagueId`) made `indexOf` return -1, the slice empty, and this test
+     * fail for a reason that had nothing to do with the gate it guards. Verified at the time of
+     * the change: exactly ONE occurrence of `buildIdpContextForChimmy(` exists in the pipeline,
+     * so this is still an assertion about the call site and not about a comment mentioning it.
+     */
+    const callIdx = PIPELINE.indexOf('buildIdpContextForChimmy(')
+    const call = PIPELINE.slice(callIdx)
     // Walk back to the start of the gate expression.
-    const gateStart = PIPELINE.lastIndexOf('league.idpConfig', PIPELINE.indexOf('buildIdpContextForChimmy(ctx.leagueId'))
+    const gateStart = PIPELINE.lastIndexOf('league.idpConfig', callIdx)
     const gate = PIPELINE.slice(gateStart, gateStart + 200)
+    expect(callIdx).toBeGreaterThan(-1)
     expect(call.length).toBeGreaterThan(0)
     expect(gate).toContain('leagueVariant')
     expect(gate.toLowerCase()).toContain("includes('idp')")
+  })
+
+  /**
+   * 🛑 AND THE ID IT IS GIVEN MUST BE THE AUTHORIZED ONE, NOT THE ONE THE CLIENT SENT.
+   * `resolveAuthorizedLeagueId` is what proves the caller is a member of `ctx.leagueId`; passing
+   * the raw id here would hand a non-member's requested league straight to the IDP builder while
+   * the rest of the pipeline was gated. Pinned separately from the gate above because the two
+   * fail for unrelated reasons and a single assertion would not say which.
+   */
+  it('passes the AUTHORIZED league id to the IDP context builder', () => {
+    const callIdx = PIPELINE.indexOf('buildIdpContextForChimmy(')
+    const args = PIPELINE.slice(callIdx, PIPELINE.indexOf(')', callIdx))
+    expect(args).toContain('authorizedLeagueId')
+    expect(args).not.toContain('ctx.leagueId')
   })
 
   /**

@@ -26,6 +26,7 @@ import { buildCompressedSystemPrompt } from '@/lib/agents/prompt-compression'
 import { getChimmyCrossLeaguePlayerSummary } from '@/lib/shared-services/league-hub/crossLeaguePlayerPortfolio'
 import { resolveReplacementOptions } from '@/lib/shared-services/league-hub/replacementOptions'
 import { isLeagueGroundedContext, requiresLeagueGroundingFor } from '@/lib/agents/leagueGroundingGate'
+import { resolveLeagueAccess } from '@/lib/league-access'
 import { routeTextCall, routeStreamCall } from '@/lib/ai/providerRouter'
 import {
   buildAiCacheKey,
@@ -675,17 +676,58 @@ function inferInsightTypeForSportsContext(userMessage: string, ctx: UserContext)
   return null
 }
 
+/**
+ * 🛑 THIS PIPELINE TRUSTED `ctx.leagueId` AND QUERIED ON IT. No membership was proved
+ * anywhere in this file: `prisma.league.findUnique({ where: { id: ctx.leagueId } })` ran on
+ * whatever id the request carried, and the same context then loaded every roster, every
+ * roster-player payload, FAAB and waiver priority, and every team with owner names, records,
+ * ranks and strength/risk notes. An authenticated user holding another league's internal id
+ * could route that league's private data into an AI prompt.
+ *
+ * `resolveLeagueAccess` is this codebase's league-membership predicate and returns null for
+ * anonymous, not-found AND not-member alike — that distinction is deliberately not leaked.
+ * It queries `prisma.league` by the same `id` this pipeline uses, so there is no id-space
+ * mismatch between the check and the thing being checked.
+ *
+ * ⚠ FAILS CLOSED ON ERROR. A thrown predicate means "not proven", never "allow" — a database
+ * blip must not widen access. Both call sites degrade to their existing no-league behaviour,
+ * so a denial produces exactly what a user with no league selected already gets: no new code
+ * path and no new failure mode.
+ */
+export async function resolveAuthorizedLeagueId(ctx: UserContext): Promise<string | null> {
+  if (!ctx.leagueId) return null
+  try {
+    /*
+     * ⚠ BOUNDED, like every other external call in this file. The first version of this gate
+     * awaited the predicate unbounded, which added a database round trip to a path that
+     * previously made none — it hung the existing pipeline suite for 30s and would have put
+     * that latency in front of every league request in production. A timeout here is also a
+     * DENIAL, not a pass: "not proven in time" is the same answer as "not proven".
+     */
+    const access = await withTimeout(
+      resolveLeagueAccess(ctx.leagueId, ctx.userId),
+      STRUCTURED_CONTEXT_TIMEOUT_MS,
+      'League authorization timed out.'
+    )
+    return access ? ctx.leagueId : null
+  } catch {
+    return null
+  }
+}
+
 async function fetchSportsContext(
   userMessage: string,
   ctx: UserContext
 ): Promise<SportsContextResult> {
-  if (!ctx.leagueId) return null
+  /* Authorization, not presence: an id the caller cannot prove is the same as no id. */
+  const authorizedLeagueId = await resolveAuthorizedLeagueId(ctx)
+  if (!authorizedLeagueId) return null
 
   const insightType = inferInsightTypeForSportsContext(userMessage, ctx)
   if (!insightType) return null
 
   try {
-    const bundle = await getInsightBundle(ctx.leagueId, insightType, {
+    const bundle = await getInsightBundle(authorizedLeagueId, insightType, {
       teamId: ctx.teamId ?? undefined,
       season: ctx.season ?? undefined,
       week: ctx.week ?? undefined,
@@ -702,7 +744,7 @@ async function fetchSportsContext(
   } catch (error) {
     console.error('[anthropic-pipeline] Sports context fetch failed:', {
       userId: ctx.userId,
-      leagueId: ctx.leagueId,
+      leagueId: authorizedLeagueId,
       insightType,
       error: error instanceof Error ? error.message : error,
     })
@@ -1274,7 +1316,15 @@ async function buildStructuredFantasyContext(
     'Player context timed out.'
   ).catch(() => ({}))
 
-  if (!ctx.leagueId) {
+  /*
+   * ⚠ THE GATE THAT CLOSES TWELVE QUERIES. Every league/roster/team read below this point,
+   * and the idp/devy/c2c specialty builders too, run only after this early return is skipped
+   * — none of them authorize internally (verified: 0 membership refs in each). So proving
+   * membership HERE is what protects them, and control flow makes that coverage checkable
+   * rather than a list of call sites somebody has to keep complete.
+   */
+  const authorizedLeagueId = await resolveAuthorizedLeagueId(ctx)
+  if (!authorizedLeagueId) {
     // Player Command Center (Slice 3): with no single-league scope, ground
     // Chimmy in the user's CROSS-LEAGUE portfolio instead — injured/bye/
     // overexposed/action-needed players across every connected league.
@@ -1296,7 +1346,7 @@ async function buildStructuredFantasyContext(
 
   const [league, rosters, teams] = await Promise.all([
     prisma.league.findUnique({
-      where: { id: ctx.leagueId },
+      where: { id: authorizedLeagueId },
       select: {
         id: true,
         name: true,
@@ -1339,7 +1389,7 @@ async function buildStructuredFantasyContext(
       },
     }),
     prisma.roster.findMany({
-      where: { leagueId: ctx.leagueId },
+      where: { leagueId: authorizedLeagueId },
       select: {
         id: true,
         platformUserId: true,
@@ -1349,7 +1399,7 @@ async function buildStructuredFantasyContext(
       },
     }),
     prisma.leagueTeam.findMany({
-      where: { leagueId: ctx.leagueId },
+      where: { leagueId: authorizedLeagueId },
       select: {
         id: true,
         externalId: true,
@@ -1430,7 +1480,7 @@ async function buildStructuredFantasyContext(
       userTeam && league.season
         ? prisma.seasonSimulationResult.findFirst({
             where: {
-              leagueId: ctx.leagueId,
+              leagueId: authorizedLeagueId,
               season: league.season,
               teamId: userTeam.id,
             },
@@ -1445,7 +1495,7 @@ async function buildStructuredFantasyContext(
       userTeam && currentWeek != null
         ? prisma.matchupFact.findFirst({
             where: {
-              leagueId: ctx.leagueId,
+              leagueId: authorizedLeagueId,
               weekOrPeriod: currentWeek,
               OR: [{ teamA: userTeam.id }, { teamB: userTeam.id }],
             },
@@ -1461,7 +1511,7 @@ async function buildStructuredFantasyContext(
       userTeam && currentWeek != null
         ? prisma.matchupSimulationResult.findFirst({
             where: {
-              leagueId: ctx.leagueId,
+              leagueId: authorizedLeagueId,
               weekOrPeriod: currentWeek,
               OR: [{ teamAId: userTeam.id }, { teamBId: userTeam.id }],
             },
@@ -1500,10 +1550,10 @@ async function buildStructuredFantasyContext(
        * context, with getIdpLeagueConfig reporting a synthesised config (configId="").
        */
       league.idpConfig || String(league.leagueVariant ?? '').toLowerCase().includes('idp')
-        ? buildIdpContextForChimmy(ctx.leagueId, ctx.userId).catch(() => '')
+        ? buildIdpContextForChimmy(authorizedLeagueId, ctx.userId).catch(() => '')
         : Promise.resolve(''),
-      league.devyConfig ? buildDevyContextForChimmy(ctx.leagueId, ctx.userId).catch(() => '') : Promise.resolve(''),
-      league.c2cConfig ? buildC2CContextForChimmy(ctx.leagueId, ctx.userId).catch(() => '') : Promise.resolve(''),
+      league.devyConfig ? buildDevyContextForChimmy(authorizedLeagueId, ctx.userId).catch(() => '') : Promise.resolve(''),
+      league.c2cConfig ? buildC2CContextForChimmy(authorizedLeagueId, ctx.userId).catch(() => '') : Promise.resolve(''),
     ])
 
   const opponentTeamId =
@@ -1524,7 +1574,7 @@ async function buildStructuredFantasyContext(
     userTeam && opponentTeam
       ? await prisma.matchupFact.findMany({
           where: {
-            leagueId: ctx.leagueId,
+            leagueId: authorizedLeagueId,
             OR: [
               { teamA: userTeam.id, teamB: opponentTeam.id },
               { teamA: opponentTeam.id, teamB: userTeam.id },
@@ -1579,7 +1629,7 @@ async function buildStructuredFantasyContext(
   // of improvising. Exact full-name match only — never fuzzy-guessed; any
   // miss or timeout degrades to the pre-Slice-8 context unchanged.
   let replacementOptions: Record<string, unknown> | null = null
-  if (playerNames.length > 0 && ctx.leagueId && userRoster) {
+  if (playerNames.length > 0 && authorizedLeagueId && userRoster) {
     const wanted = new Set(playerNames.map((n) => n.trim().toLowerCase()).filter(Boolean))
     let affected: { id: string; name: string } | null = null
     for (const [id, meta] of userPlayerNameMap) {
@@ -1593,7 +1643,7 @@ async function buildStructuredFantasyContext(
       const result = await withTimeout(
         resolveReplacementOptions({
           appUserId: ctx.userId,
-          leagueId: ctx.leagueId,
+          leagueId: authorizedLeagueId,
           affectedPlayerId: affected.id,
         }),
         STRUCTURED_CONTEXT_TIMEOUT_MS,
