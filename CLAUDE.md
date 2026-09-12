@@ -397,15 +397,43 @@ staged set before committing.
 
 **This repo is public.** Secret-scan before every push.
 
-### ⚠ 2026-09-11: `enforce_admins` WENT ON FOR ABOUT TWO HOURS AND CAME BACK OFF
+### 🛑 READ `enforce_admins` BEFORE CHOOSING A LANDING ROUTE — IT MOVED THREE TIMES IN ONE NIGHT
 
-🛑 **DIRECT PUSHES TO `main` WORK. This section is a RECORD, not a rule.** The flag was
-enabled at the user's instruction at ~17:23 and reverted at their instruction ~2h later.
-Both endpoints now read `enforce_admins: false`. Nothing here changes how you land work —
-everything else in this chapter still applies verbatim.
+```bash
+gh api repos/TheCiege23/allfantasy-v2-main/branches/main/protection --jq '.enforce_admins.enabled'
+```
 
-It is kept because that window measured things that are true whether or not the flag is
-on, and because the episode itself is the most compact example of this file's own thesis.
+| reading | how work lands |
+|---|---|
+| `false` | direct push — the cherry-pick convention below, verbatim |
+| `true` | **PR only.** A direct push is refused by GitHub, and only AFTER the queue wait |
+
+🛑 **DO NOT MEMORISE A DIRECTION, AND DO NOT TRUST THIS PARAGRAPH'S.** On 2026-09-11 the
+flag went ON ~17:23, OFF ~2h later, and ON again before 04:00Z — every move at the user's
+instruction, every one settled rather than contested. This is a SETTING TO READ, not a
+decision to remember.
+
+⚠ **THE COST OF TREATING IT AS A DECISION IS MEASURED, AND THIS SECTION PAID IT.** Two
+sessions amended memory files during the first window; one was false fifteen minutes
+later. The version of this very section that opened *"DIRECT PUSHES TO `main` WORK — this
+is a RECORD, not a rule"* was landed at 23:24 and was wrong by 03:55. It was written
+BECAUSE the previous version had gone stale, by a session that had spent the evening
+arguing that a confident permanent paragraph is the failure this file exists to prevent.
+Stating a setting as a fact is what fails, not the particular direction chosen.
+
+⚠ **AND EVERY PEER REPORT OF THE FLAG WAS ACCURATE WHEN SENT AND STALE WHEN READ.** Three
+transitions, three correct messages, three sessions acting on a value that had already
+moved. Re-read the endpoint yourself before acting; it costs one command. Both endpoints
+agree, so either is fine — `/protection` and `/protection/enforce_admins`.
+
+🛑 **UNDER `true`, A RED REQUIRED CHECK ON `main`'s HEAD BLOCKS EVERYONE, NOT ITS AUTHOR.**
+With `strict: true` a PR must be up to date with `main`, so whatever is red at the tip is
+red for every open PR. Under `false` that same breakage is invisible, because the admin
+bypass absorbs it — which is exactly how `Unit tests (3/4)` stayed broken for hours.
+
+The rest of this section is kept because that first window measured things that are true
+whichever way the flag reads, and because the episode is the most compact example of this
+file's own thesis.
 
 **What the flip revealed, and these outlive it:**
 
@@ -428,6 +456,45 @@ on, and because the episode itself is the most compact example of this file's ow
   and `Playwright (core 2/3)`, which are NOT required and block nobody. Keep the LATEST run
   per name and intersect with the 14. ⚠ Count with `jq length`, not `grep -c` — grep
   returning 0 exits 1 and reads exactly like a failed command.
+- 🛑 **AND "KEEP THE LATEST RUN PER NAME" IS THE WRONG RULE FOR "DID THIS TEST PASS".** The
+  two questions diverge the moment a re-run is in flight: the latest run is `in_progress`,
+  so the rule discards a COMPLETED verdict from the previous generation and reports the
+  shard as pending. Measured 2026-09-11 on one commit carrying **nine** generations of the
+  same four shards — `1/4` failed at 01:32 and passed on all seven later runs, which is
+  the contended-box false red this file already records. Latest-per-name answers "can this
+  land right now" and nothing else. To ask whether a suite is broken, list every run with
+  `started_at` and read the completed ones:
+
+  ```bash
+  gh api "repos/<owner>/<repo>/commits/<sha>/check-runs?per_page=100" \
+    --jq '.check_runs[] | "\(.started_at)  \(.name)  \(.status)  \(.conclusion // "-")"' | sort
+  ```
+
+  🛑 **USE `gh --jq`, NOT A PIPE TO `jq` — STANDALONE `jq` IS NOT INSTALLED IN THIS REPO'S
+  GIT BASH.** `command -v jq` exits 1, so a piped `| jq …` dies with `command not found`
+  (127) and the pipeline's status is the LAST command's, which is what this chapter is
+  about. `gh` carries its own jq and `--jq` works. ⚠ The `jq length` advice in the bullet
+  above means `gh … --jq 'length'` for the same reason. Found by writing the piped form
+  into this very section and having it fail on the first run.
+
+  ⚠ A single snapshot cannot tell a slow shard from a failing one either — two of my
+  `IN_PROGRESS` readings completed green within seconds of being reported as blocking, and
+  a third completed `failure` about sixty seconds after I recorded it as pending.
+
+  🛑 **AND IT ERASES A FAILURE JUST AS READILY AS A PASS — THIS IS THE HALF THAT HIDES
+  FLAKES.** A shard that fails and is re-run green leaves only the green in a
+  latest-per-name view, so "was this ever red" becomes unanswerable by the same query that
+  correctly says "it is green now". Measured the same night: `Unit tests (4/4)` failed at
+  21:17 and succeeded at 21:26 with nobody having changed anything, and six red runs of
+  `Unit tests (3/4)` that predated the `enforce_admins` flip were recoverable ONLY because
+  the session asking enumerated every run rather than taking the latest. It was asking a
+  historical question and happened to reach for a historical instrument; latest-per-name
+  would have deleted the evidence the claim rested on.
+
+  ⚠ **A required check can also be red on a PR and green on `main` for a DOC-ONLY diff.**
+  `Playwright (retention-engagement)` did exactly that here — a branch differing from
+  `main` by markdown prose cannot affect an E2E run. Under `enforce_admins: true` it still
+  blocks, so budget a re-run rather than hunting a break you did not cause.
 - ⚠ **Under `strict: true`, PENDING blocks exactly as FAILING does.** "0 required in a
   failed state" is not "can land".
 
