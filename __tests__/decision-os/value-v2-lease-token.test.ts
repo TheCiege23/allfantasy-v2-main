@@ -116,13 +116,46 @@ describe('deterministic injection', () => {
   })
 })
 
+/**
+ * The secret is everything after the SECOND `-`, not `split('-')[2]`.
+ *
+ * ⚠ The random segment is base64url, whose alphabet INCLUDES `-` — the same character
+ * that separates the token's three parts (`leaseToken.ts` maps `+` to `-`). So
+ * `split('-')[2]` is only the secret up to its first inner `-`, sometimes a single
+ * character, and the 4-character redacted tail contains that fragment by chance. With
+ * real randomness the old check was a coin toss; it failed CI on PR #754 as
+ * `expected 'wkra-…JmzA' not to contain 'A'`.
+ */
+function secretOf(token: string): string {
+  return token.split('-').slice(2).join('-')
+}
+
+/** 16 bytes whose base64url is `A-BCDEFGHIJKLMNOPQRAAA`: a `-` at index 1, an `A` in the tail. */
+const DASH_IN_SECRET: LeaseTokenDeps = {
+  now: () => 1_700_000_000_000,
+  randomBytes: () => new Uint8Array([3, 224, 66, 12, 65, 70, 28, 130, 74, 44, 195, 78, 61, 4, 64, 0]),
+}
+
 describe('redaction', () => {
   it('never returns the full token', () => {
     const token = newLeaseToken('wkr-a')
     const redacted = redactLeaseToken(token)
     expect(redacted).not.toBe(token)
-    expect(redacted).not.toContain(token.split('-')[2])
+    expect(secretOf(token)).toHaveLength(22)
+    expect(redacted).not.toContain(secretOf(token))
     expect(redacted.startsWith('wkra-')).toBe(true)
+  })
+
+  it('reveals only a 4-character tail even when the secret contains the separator', () => {
+    const token = newLeaseToken('wkr-a', DASH_IN_SECRET)
+    const redacted = redactLeaseToken(token)
+    expect(isLeaseToken(token)).toBe(true)
+    // Premise: this is exactly the input that fooled the old `split('-')[2]` check.
+    expect(token.split('-')[2]).toBe('A')
+    expect(redacted).toContain(token.split('-')[2])
+    expect(secretOf(token)).toBe('A-BCDEFGHIJKLMNOPQRAAA')
+    expect(redacted).not.toContain(secretOf(token))
+    expect(redacted).toBe('wkra-…RAAA')
   })
 
   it('handles malformed input without throwing', () => {
