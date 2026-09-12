@@ -7,7 +7,19 @@
  * populate it, so imported Sleeper history doesn't move rank. This module derives
  * evidence rows from the normalized import result so imported facts count.
  *
- * Sleeper only (per Phase 3.1 scope). Pure function → unit-testable.
+ * ✅ EVERY PROVIDER, since 2026-09-12. This said "Sleeper only (per Phase 3.1 scope)",
+ * and the scope was the whole reason — nothing in here was Sleeper-specific except a
+ * hardcoded `sleeper:` prefix on `sourceReference`. Pure function → unit-testable.
+ *
+ * 🛑 ONE PRECONDITION HAD TO BE FIXED FIRST, AND IT WAS NOT IN THIS FILE. `championships`
+ * is written for every `rank === 1`, so a provider whose adapter SYNTHESISES rank would
+ * have had a title awarded to an arbitrary team in every league. Fleaflicker's adapter
+ * used `rank: i + 1` (array position) until the same change that widened this gate.
+ * ESPN, Yahoo, MFL and Fantrax were already safe: they use `team.rank ?? teams.length`,
+ * so an unknown rank falls to LAST place and can never win anything.
+ *
+ * ⚠ Before extending this to a SEVENTH provider, check that adapter's `rank` the same
+ * way. A rank that is really an array index is indistinguishable here from a real one.
  *
  * Evidence types written:
  *   - `championships`         (per season the roster finished rank=1)
@@ -58,7 +70,19 @@ export function deriveEvidenceRowsFromImport(
   options: Options = {},
 ): DerivedEvidenceRow[] {
   const sport = normalized.league.sport ?? 'nfl'
-  const sourceRef = `sleeper:${normalized.source.source_league_id}`
+  /*
+   * 🛑 THE PROVIDER WAS HARDCODED `sleeper:`, AND IT WAS THE ONLY PROVIDER-SPECIFIC
+   * LINE IN THIS FILE. Every other input — standings, sport, league id — is produced
+   * identically by all six adapters, so "Sleeper only (per Phase 3.1 scope)" in the
+   * header above was a SCOPE decision, not a technical limit.
+   *
+   * ⚠ IT IS ALSO THE DE-DUPLICATION KEY. `importPersistenceService` clears previous
+   * evidence by `sourceReference` before rewriting it, so a wrong prefix here would
+   * either fail to clear a league's old rows (duplicates on every refresh) or clear
+   * a DIFFERENT league's. Two leagues with the same numeric id on different providers
+   * is not hypothetical — ESPN and Fleaflicker ids are both bare integers.
+   */
+  const sourceRef = `${normalized.source.source_provider}:${normalized.source.source_league_id}`
   const standings: NormalizedStandingsEntry[] = normalized.standings ?? []
   if (standings.length === 0 && (options.previousSeasonCount ?? 0) === 0) {
     return []

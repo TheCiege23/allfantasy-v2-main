@@ -119,9 +119,29 @@ export const FleaflickerAdapter: ILeagueImportAdapter<FleaflickerImportPayload> 
       schedule: [],
       draft_picks: [],
       transactions: [],
+      /*
+       * 🛑 `rank: i + 1` WAS ARRAY POSITION, NOT A RANKING, AND IT WOULD HAVE
+       * FABRICATED A CHAMPIONSHIP. Whichever team happened to be first in the
+       * response got rank 1 — in every league, every import, regardless of record.
+       *
+       * That was latent while nothing read it. It stops being latent the moment
+       * legacy evidence covers this provider, because `deriveEvidenceRowsFromImport`
+       * writes a `championships` row for every `rank === 1`. A synthetic rank there
+       * is not a cosmetic wrong number: it awards a title to an arbitrary team, and
+       * the aggregator cannot tell it from a real one.
+       *
+       * ⚠ AND FLEAFLICKER PUBLISHED THE REAL RANK ALL ALONG — on `recordOverall`,
+       * which is why it was missed: the mapper already read `recordOverall.wins` and
+       * `.losses` and stopped one field short. Confirmed in
+       * contracts/fleaflicker/fixtures/scoreboard.NFL.2021.week16.json.
+       *
+       * The fallback is `teamsFlat.length` — LAST place — matching what the ESPN,
+       * Yahoo, MFL and Fantrax adapters all do. An unknown rank must never be a
+       * winning one.
+       */
       standings: normalizedRosters.map((r, i) => ({
         source_team_id: r.source_team_id,
-        rank: i + 1,
+        rank: teamsFlat[i]?.team?.recordOverall?.rank ?? teamsFlat.length,
         wins: r.wins,
         losses: r.losses,
         ties: r.ties,
