@@ -511,15 +511,29 @@ export async function finalizeAfLeagueTradeProcessing(input: { tradeId: string; 
   }))
 
   await prisma.$transaction(async (tx) => {
+    // 🛑 CLAIM FIRST, AND CONDITIONALLY. This was a bare `update({ where: { id } })` sitting
+    // AFTER the asset move, so it processed unconditionally: two concurrent finalizers each read
+    // a processable trade, each applied the assets, and each wrote `processed`. Assets applied
+    // twice, one row to show for it.
+    //
+    // That needed two humans acting at once until `processDueScheduledTrades` started sweeping
+    // due trades automatically — a cron running beside a manager pressing "process" makes it
+    // routine rather than exotic, so the guard lands with the sweep that creates the exposure.
+    //
+    // Claiming on the status we READ, before any asset moves, means the loser throws here and
+    // never touches a roster; the transaction rolls back whatever it had done.
+    const claimed = await tx.afLeagueTrade.updateMany({
+      where: { id: trade.id, status: trade.status },
+      data: { status: 'processed', processedAt: new Date() },
+    })
+    if (claimed.count === 0) {
+      throw new Error('TRADE_ALREADY_PROCESSED')
+    }
     await applyTradeAssetsInTransaction(tx, {
       leagueId: trade.leagueId,
       proposerRosterId: trade.proposerRosterId,
       receiverRosterId: trade.receiverRosterId,
       assets,
-    })
-    await tx.afLeagueTrade.update({
-      where: { id: trade.id },
-      data: { status: 'processed', processedAt: new Date() },
     })
     await appendAfTradeStatusHistory({
       tradeId: trade.id,
