@@ -17,7 +17,7 @@ meta:
   vendor: Fleaflicker
   base_url: https://www.fleaflicker.com/api
   base_url_env: none   # no override exists in the codebase today
-  contract_version: 0.3.0   # bumped: game/matchup row observed and team identity proven (G-01b, G-04)
+  contract_version: 0.4.0   # bumped: `season` is PER-ENDPOINT, not common — rules/activity 400 on it (G-08)
   captured_at: 2026-09-03
   docs_url: https://www.fleaflicker.com/api-docs/index.html
   data_classification: fantasy_platform   # not a real-world sports-data vendor; see README
@@ -48,9 +48,20 @@ transport:
       type: integer
       note: Platform-assigned, stable across seasons.
     season:
-      required: true
+      required: per-endpoint   # <-- was `true`, and that was WRONG for four endpoints. See below.
       type: integer
       format: four-digit year
+      # ⚠ These three lists must agree with each endpoint's own `params:` below, which
+      # remains the authority. An endpoint appears in `accepted_by` ONLY if `params`
+      # lists `season` AND we have a 200 to show for it.
+      accepted_by: [FetchLeagueStandings, FetchLeagueRosters, FetchLeagueScoreboard]
+      rejected_by: [FetchLeagueRules, FetchLeagueActivity]
+      # Not probed either way — do not assume. FetchLeagueBoxscore was drafted into
+      # `accepted_by` above on the reasoning that it is scoreboard-shaped, and a
+      # params-vs-lists consistency check caught it: its `params` are
+      # [sport, league_id, fantasy_game_id, scoring_period] and contain no `season`.
+      # That is precisely the unverified inference this contract exists to prevent.
+      unknown_for: [FetchLeagueTransactions, FetchTrades, FetchLeagueBoxscore]
       note: >
         🛑 A SEASON AFTER THE LEAGUE'S LAST IS SILENTLY CLAMPED TO THE LAST ONE, AND
         RETURNS THAT SEASON'S COMPLETE, PLAYED DATA UNDER HTTP 200. It does not error,
@@ -72,8 +83,46 @@ transport:
         `schedulePeriod.low.season`. Assert it against the season you requested and refuse
         the payload when they differ.
 
+        ══════════════════════════════════════════════════════════════════════════
+        🛑 AND `season` IS NOT A COMMON PARAMETER AT ALL — SENDING IT TO THE WRONG
+        ENDPOINT IS AN HTTP 400. This block previously said `required: true`, full
+        stop, which is what a shared URL builder would be written against.
+
+        Reported by the 2026-09-12 real-league audit, NOT re-probed here (no
+        fixture captured; see G-08 in GAPS.md): `FetchLeagueRules` and
+        `FetchLeagueActivity` return 400 when `season=2026` is included, and
+        succeed with the parameter omitted entirely.
+
+        ⚠ SO THE TWO FAMILIES FAIL IN OPPOSITE DIRECTIONS, AND THAT IS WHY ONE URL
+        BUILDER CANNOT SERVE BOTH:
+
+          standings / rosters / scoreboard   send season  -> 200, but SILENTLY
+                                             CLAMPED past the league's last season.
+                                             Wrong data, no error. Fails QUIETLY.
+
+          rules / activity                   send season  -> 400. No data at all.
+                                             Fails LOUDLY.
+
+        A builder that appends `season` everywhere breaks rules and activity
+        outright. A builder that drops it everywhere silently reads the wrong
+        season's standings on any league whose current season has not started. The
+        first bug you notice in an afternoon; the second can persist five-year-old
+        finals as this week's results and nothing goes red.
+
+        Build the query per endpoint from `params:` below — that list is the
+        authority, and it already distinguishes them. `params` WITHOUT `season`
+        means the parameter is rejected or unproven, never that it is optional.
+        ══════════════════════════════════════════════════════════════════════════
+
   status_codes:
     200: Valid JSON response.
+    400: >
+      Malformed request for THAT endpoint — observed only as "sent `season` to an
+      endpoint that does not take it" (FetchLeagueRules, FetchLeagueActivity;
+      2026-09-12 audit). The existing client does not differentiate it from any
+      other non-404 error, so today it surfaces as a generic API failure and the
+      cause is invisible. Worth mapping to its own error before either endpoint is
+      integrated.
     404: "No such league. FleaflickerImportLeagueNotFoundError in the existing client."
     other: Treated as a generic API error by the existing client; not yet differentiated.
 
@@ -282,6 +331,12 @@ endpoints:
       THE DOCS: rules belong to the league, not to a year. Do not send one — `scripts/probe.sh`
       deliberately builds a shorter query string for this endpoint, because documenting a
       response to a request nobody will ever make is worse than not documenting it.
+
+      🛑 CONFIRMED THE HARD WAY 2026-09-12: sending `season` here is not merely pointless, it
+      is an HTTP 400. This note previously read as style advice ("do not send one"); it is a
+      hard constraint. The 2026-09-12 real-league audit got 400 with `season=2026` and 200
+      with the parameter omitted. See `common_query_params.season` for why the sibling
+      endpoints fail in the opposite direction, and G-08 for what is still unprobed.
     envelope: |
       CONFIRMED 2026-09-12 from fixtures/rules.NFL.json (league 206154, HTTP 200, 67KB):
       {
@@ -339,7 +394,12 @@ endpoints:
       public-facing in a way a per-manager activity log is not, and this repo is PUBLIC. Capturing
       a fixture here is a decision for the repo owner about whose league is used, not a routine
       probe. `scripts/probe.sh activity` exists and carries the same warning.
-      ⚠ Takes no `season` — paging is by `result_offset`.
+
+      🛑 Takes no `season`, and sending one is an HTTP 400 — not a silent ignore. Reported by
+      the 2026-09-12 real-league audit (400 with `season=2026`, 200 without). Paging is by
+      `result_offset`. ⚠ Note what this means for whoever integrates it: the endpoint's FIRST
+      failure mode is a parameter mistake that looks like an outage, because the existing
+      client maps every non-404 to a generic error. See `common_query_params.season`.
 
   FetchLeagueTransactions:
     status: DISCOVERED_NOT_CAPTURED
