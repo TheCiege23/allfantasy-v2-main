@@ -6,6 +6,7 @@ import { FantraxRosterMapper } from './FantraxRosterMapper'
 import { FantraxScoringMapper } from './FantraxScoringMapper'
 import { FantraxScheduleMapper } from './FantraxScheduleMapper'
 import { FantraxHistoryMapper } from './FantraxHistoryMapper'
+import { emptyableHistoryCoverage } from '@/lib/league-import/coverageCompleteness'
 
 export const FantraxAdapter: ILeagueImportAdapter<FantraxImportPayload> = {
   provider: 'fantrax',
@@ -170,7 +171,11 @@ export const FantraxAdapter: ILeagueImportAdapter<FantraxImportPayload> = {
               : 'No Fantrax draft pick history was available from uploaded data.',
         },
         tradeHistory: {
-          state: history.transactions.length > 0 ? 'partial' : 'missing',
+          /* Same ambiguity as Yahoo and MFL: a required array, so `[]` proves nothing. */
+          state:
+            history.transactions.length > 0
+              ? 'partial'
+              : emptyableHistoryCoverage({ fetched: null, unit: 'trades' }).state,
           count: history.transactions.length,
           note:
             history.transactions.length > 0

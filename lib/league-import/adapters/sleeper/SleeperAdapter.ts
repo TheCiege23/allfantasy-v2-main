@@ -6,6 +6,7 @@ import { SleeperScoringMapper } from './SleeperScoringMapper'
 import { SleeperScheduleMapper } from './SleeperScheduleMapper'
 import { SleeperHistoryMapper } from './SleeperHistoryMapper'
 import { mapSleeperTradedPicks } from './SleeperTradedPicksMapper'
+import { emptyableHistoryCoverage } from '../../coverageCompleteness'
 import type { SleeperImportPayload } from './types'
 
 export const SleeperAdapter: ILeagueImportAdapter<SleeperImportPayload> = {
@@ -114,21 +115,30 @@ export const SleeperAdapter: ILeagueImportAdapter<SleeperImportPayload> = {
           state: history.draft_picks.length > 0 ? 'full' : 'missing',
           count: history.draft_picks.length,
         },
-        tradeHistory: {
-          state:
-            previousSeasonCount > 0
-              ? history.transactions.length > 0
-                ? 'partial'
-                : 'missing'
-              : history.transactions.length > 0
-                ? 'full'
-                : 'missing',
-          count: history.transactions.length,
-          note:
-            previousSeasonCount > 0
-              ? 'Preview normalization includes current-league transactions; full historical trade import happens during backfill.'
-              : null,
-        },
+        /*
+         * An empty transaction list is only a GAP when the provider was actually
+         * asked. `raw.transactions` is optional: `undefined` means this payload
+         * never carried them, `[]` means Sleeper was asked and the league has
+         * none — the same idiom this adapter already uses for `tradedPicks`.
+         *
+         * Reporting `missing` for a league that has simply not traded removes the
+         * Trades tab and prints "Sleeper doesn't publish trade history", which is
+         * false. Sleeper publishes it; there is nothing to publish.
+         */
+        tradeHistory:
+          history.transactions.length > 0
+            ? {
+                state: previousSeasonCount > 0 ? 'partial' : 'full',
+                count: history.transactions.length,
+                note:
+                  previousSeasonCount > 0
+                    ? 'Preview normalization includes current-league transactions; full historical trade import happens during backfill.'
+                    : null,
+              }
+            : emptyableHistoryCoverage({
+                fetched: raw.transactions !== undefined,
+                unit: 'trades',
+              }),
         previousSeasons: {
           state: previousSeasonCount > 0 ? 'full' : 'missing',
           count: previousSeasonCount,

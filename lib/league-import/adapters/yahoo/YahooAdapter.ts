@@ -1,7 +1,7 @@
 import type { ILeagueImportAdapter } from '../ILeagueImportAdapter'
 import type { NormalizedImportResult, SourceTracking } from '../../types'
 import type { YahooImportPayload } from './types'
-import { coverageAgainstExpected } from '@/lib/league-import/coverageCompleteness'
+import { coverageAgainstExpected, emptyableHistoryCoverage } from '@/lib/league-import/coverageCompleteness'
 
 function detectYahooScoringFormat(raw: YahooImportPayload): string | null {
   const receptionCategory = raw.settings?.statCategories.find((category) => {
@@ -287,7 +287,13 @@ export const YahooAdapter: ILeagueImportAdapter<YahooImportPayload> = {
               ? raw.previousSeasons.length > 0
                 ? 'partial'
                 : 'full'
-              : 'missing',
+              /*
+               * Yahoo types `transactions` as a required array, so `[]` cannot be
+               * told apart from a fetch that returned nothing. `partial` keeps the
+               * Trades tab and says so; `missing` would remove it and assert that
+               * Yahoo does not publish trade history, which is false.
+               */
+              : emptyableHistoryCoverage({ fetched: null, unit: 'trades' }).state,
           count: transactions.length,
           note:
             raw.previousSeasons.length > 0

@@ -66,3 +66,49 @@ export function coverageAgainstExpected(args: {
     note: `Covers ${actual} of ${expected} ${unit}.`,
   }
 }
+
+/**
+ * The coverage for a collection that is LEGITIMATELY ALLOWED TO BE EMPTY.
+ *
+ * 🛑 ZERO TRADES IS A NORMAL LEAGUE STATE AND WAS BEING REPORTED AS A FAILURE.
+ *
+ * Every adapter wrote `transactions.length > 0 ? … : 'missing'`, so a league that
+ * simply has not traded yet — which is most leagues in September — was treated
+ * identically to one whose trade history could not be retrieved.
+ *
+ * ⚠ AND `missing` IS NOT A COSMETIC LABEL HERE. It drives two things in
+ * `summarizeImportCoverage`: the `trades` capability flips false, which REMOVES
+ * THE TRADES TAB, and the banner reads "<Provider> doesn't publish trade
+ * history, so those aren't available for this league." That sentence is FALSE
+ * for Sleeper, ESPN, Yahoo and MFL — all four publish it. The league just has
+ * none. So the product told users their platform lacked a feature it has, and
+ * took away the screen that would have shown it was empty.
+ *
+ * An empty result is complete when the fetch succeeded: nothing is missing.
+ *
+ * ⚠ THE THREE-VALUED `fetched` IS THE POINT, NOT AN AFFECTATION. Only ESPN
+ * (`transactionsFetched`) and Sleeper (an OPTIONAL `transactions` field, where
+ * `undefined` means the provider was never asked — the same idiom its adapter
+ * already uses for `tradedPicks`) can distinguish a real empty from an unasked
+ * one. Yahoo, MFL and Fantrax type it as a required array, so `[]` is genuinely
+ * ambiguous and `null` is the honest answer: `partial` keeps the tab and says
+ * so, rather than asserting either completeness or provider failure.
+ */
+export function emptyableHistoryCoverage(args: {
+  /** `true` fetched, `false` known not fetched, `null` cannot tell. */
+  fetched: boolean | null
+  /** Plural noun for the note, e.g. "trades". */
+  unit: string
+}): ImportCoverageBucket {
+  if (args.fetched === true) {
+    return { state: 'full', count: 0, note: `This league has no ${args.unit} yet.` }
+  }
+  if (args.fetched === false) {
+    return { state: 'missing', count: 0 }
+  }
+  return {
+    state: 'partial',
+    count: 0,
+    note: `No ${args.unit} came across, and this provider does not say whether that means none exist or none were retrieved.`,
+  }
+}
