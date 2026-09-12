@@ -37,6 +37,31 @@ export async function saveRankingsSnapshot(args: {
   })
   const sportType = league?.sport ?? null
 
+  /*
+   * 🛑 STAMPED EXPLICITLY, ON BOTH BRANCHES, BECAUSE `createdAt` IS READ AS "WHEN DID WE LAST
+   * WRITE ONE" AND THE UPSERT'S UPDATE BRANCH WOULD OTHERWISE NEVER MOVE IT.
+   *
+   * `RankingsSnapshot` carries `createdAt @default(now())` and no `@updatedAt`. `@default` only
+   * applies on INSERT, so re-snapshotting a league for a (season, week) it already has left the
+   * column pinned to the first write, forever. Nothing failed and no row was wrong — the rows were
+   * freshly recomputed — but every consumer of the column asks the opposite question:
+   *
+   *   - `rankingsSweep` due-ness   `orderBy: { createdAt: 'desc' }` against an 18h TTL
+   *   - `api-health-monitor`       `orderBy: [{ createdAt: 'desc' }]`, a provider freshness probe
+   *
+   * A frozen value therefore made every already-snapshotted league PERMANENTLY due once 18h had
+   * passed — the TTL stopped suppressing re-work and the sweep spent its per-fire budget on
+   * leagues it had just refreshed — and made the health probe report a stale age for data written
+   * minutes earlier. Censused before changing the meaning: `backtest.ts` (x3), `getRankHistory`,
+   * `getLeagueSparklines` and `SeasonForecastEngine` order and filter by `rank`/`week`/`season`
+   * only, so NO reader wants "first created" and both readers that touch it are fixed by this.
+   *
+   * ⚠ ONE INSTANT FOR THE WHOLE SNAPSHOT, captured before the map rather than per row. A per-row
+   * `new Date()` scatters one logical write across milliseconds, which makes `max(createdAt)`
+   * answer a subtly different question per roster.
+   */
+  const writtenAt = new Date()
+
   await prisma.$transaction(
     args.teams.map((t) =>
       prisma.rankingsSnapshot.upsert({
@@ -49,6 +74,7 @@ export async function saveRankingsSnapshot(args: {
           }
         },
         update: {
+          createdAt: writtenAt,
           sportType,
           rank: Number(t.rank),
           composite: t.composite,
@@ -57,6 +83,7 @@ export async function saveRankingsSnapshot(args: {
           metricsJson: t.metricsJson ? (t.metricsJson as unknown as Prisma.InputJsonValue) : undefined,
         },
         create: {
+          createdAt: writtenAt,
           leagueId,
           sportType,
           season,
