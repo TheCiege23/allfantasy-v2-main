@@ -5,7 +5,19 @@
  */
 
 import { STARTER_NEEDS } from '@/lib/trade-value/teamProfile'
+import { FAAB_VALUE_PER_DOLLAR, normalizedFaabValue } from '@/lib/trade-value/faabValue'
 import type { TeamStance } from '@/lib/trade-value/types'
+
+/**
+ * The largest value gap this module will try to close with FAAB, expressed in DOLLARS.
+ *
+ * 🛑 WAS THE LITERAL `540`, WHICH IS $30 AT 18/DOLLAR — a fourth place the conversion rate was
+ * baked in, and the one where it was least visible. Deriving it keeps the cap meaning "thirty
+ * dollars" rather than "five hundred and forty points", so it cannot drift away from the
+ * converter the way the literal silently would.
+ */
+const FAAB_MAX_GAP_DOLLARS = 30
+const FAAB_MAX_GAP_VALUE = FAAB_MAX_GAP_DOLLARS * FAAB_VALUE_PER_DOLLAR
 
 export const DISCOVERY_WARNINGS = [
   'LOW_DATA_CONFIDENCE',
@@ -250,9 +262,22 @@ export function findPackages(input: {
 
   const mkPackage = (gives: DiscoveryPlayer[], receives: DiscoveryPlayer[], faab: number, idx: number): TradePackage => {
     const giveAssets: PackageAsset[] = gives.map(asset)
-    if (faab > 0) giveAssets.push({ kind: 'faab', faabAmount: faab, value: faab * 18 })
+    /*
+     * 🛑 WAS `faab * 18`, TWICE — the canonical engine's old per-dollar constant, copied.
+     * These values are summed with `val(p)` and compared against the partner's total, so FAAB
+     * is on the same 0–10000 asset scale here as everywhere else, and a private copy of the
+     * rate is how the app ended up with four of them disagreeing by up to 28x.
+     *
+     * ⚠ NO BUDGET IS PASSED, AND THAT IS ACCURATE RATHER THAN LAZY. `DiscoveryRoster` carries
+     * `faabBalance` — what is LEFT — and `normalizedFaabValue` wants the league's FULL season
+     * budget, which this module is never given. Omitting it applies `FAAB_DEFAULT_BUDGET`,
+     * which reproduces `faab * 18` exactly, so this swap changes no number today. When the
+     * caller can supply a real budget it is one argument away, and every other surface
+     * improves with it at the same moment.
+     */
+    if (faab > 0) giveAssets.push({ kind: 'faab', faabAmount: faab, value: normalizedFaabValue(faab) })
     const receiveAssets = receives.map(asset)
-    const myTotalValue = gives.reduce((s, p) => s + val(p), 0) + faab * 18
+    const myTotalValue = gives.reduce((s, p) => s + val(p), 0) + normalizedFaabValue(faab)
     const partnerTotalValue = receives.reduce((s, p) => s + val(p), 0)
     const valueDelta = partnerTotalValue - myTotalValue // positive = I receive more value
     const lowConfidence = anyMissingValue(...gives, ...receives)
@@ -307,8 +332,15 @@ export function findPackages(input: {
 
     // player + FAAB sweetener when I'm slightly short and FAAB is supported.
     const gap = val(receive) - val(give)
-    if (input.faabSupported && gap > 0 && gap <= 540 && (input.myRoster.faabBalance ?? 0) >= Math.ceil(gap / 18)) {
-      packages.push(mkPackage([give], [receive], Math.min(Math.ceil(gap / 18), Math.floor(input.myRoster.faabBalance ?? 0)), idx++))
+    /*
+     * The INVERSE conversion — a value gap turned back into dollars — and it has to use the
+     * same rate as the forward one above or the two disagree about what a dollar is worth.
+     * That is why the rate is imported rather than written here: `540` and `18` were separate
+     * literals that only happened to agree.
+     */
+    const gapInDollars = Math.ceil(gap / FAAB_VALUE_PER_DOLLAR)
+    if (input.faabSupported && gap > 0 && gap <= FAAB_MAX_GAP_VALUE && (input.myRoster.faabBalance ?? 0) >= gapInDollars) {
+      packages.push(mkPackage([give], [receive], Math.min(gapInDollars, Math.floor(input.myRoster.faabBalance ?? 0)), idx++))
     }
 
     // 2-for-1: two cheaper gives for a higher-value receive.

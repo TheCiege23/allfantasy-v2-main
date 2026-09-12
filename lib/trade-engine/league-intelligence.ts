@@ -14,6 +14,7 @@ import {
   PickProjected,
   ContenderTier
 } from './types'
+import { normalizedFaabValue } from '@/lib/trade-value/faabValue'
 
 // ============================================
 // HELPERS
@@ -356,7 +357,23 @@ export function buildLeagueIntelligence(
       assets.push({
         id: `faab:${roster.rosterId}`,
         type: 'FAAB',
-        value: Math.round(roster.faabRemaining * 20),
+        /*
+         * 🛑 WAS `* 20` — a FOURTH per-dollar rate for the one conversion, and the only one
+         * that never matched any of the others. Players in this same inventory are valued from
+         * `fantasyCalcValues` (line ~319), so FAAB sits on the identical 0–10000 scale and the
+         * rate had no business differing.
+         *
+         * ⚠ THIS ONE MOVES A NUMBER, unlike the trade-discovery swap beside it: 20/dollar
+         * becomes 18/dollar, so a manager's FAAB asset in the league inventory drops ~10%
+         * ($100 remaining: 2000 → 1800). 18 is the rate the canonical engine has always used
+         * and the one the other three surfaces now agree on; 20 is unattributed and appears
+         * nowhere else.
+         *
+         * ⚠ `faabRemaining` is a BALANCE, not the league's season budget, so no budget is
+         * passed — the default applies, as it does in trade discovery. Accurate today, and one
+         * argument away from being league-exact when a budget reaches this layer.
+         */
+        value: normalizedFaabValue(roster.faabRemaining),
         faabAmount: roster.faabRemaining,
         isCornerstone: false,
         tags: ['faab']
