@@ -23,6 +23,9 @@ const {
   mockAfLeagueTradeFindUniqueOrThrow,
   mockAfLeagueTradeUpdate,
   mockAfLeagueTradeUpdateMany,
+  mockSnapshotCreate,
+  mockTxRosterFindUnique,
+  mockEmitInTx,
   mockAfLeagueTradeVoteUpsert,
   mockAfLeagueTradeVoteCount,
   mockRosterCount,
@@ -38,6 +41,9 @@ const {
   mockAfLeagueTradeFindUniqueOrThrow: vi.fn(),
   mockAfLeagueTradeUpdate: vi.fn(),
   mockAfLeagueTradeUpdateMany: vi.fn(),
+  mockSnapshotCreate: vi.fn(),
+  mockTxRosterFindUnique: vi.fn(),
+  mockEmitInTx: vi.fn(),
   mockAfLeagueTradeVoteUpsert: vi.fn(),
   mockAfLeagueTradeVoteCount: vi.fn(),
   mockRosterCount: vi.fn(),
@@ -63,6 +69,16 @@ vi.mock('@/lib/prisma', () => ({
     afLeagueTradeVote: { upsert: mockAfLeagueTradeVoteUpsert, count: mockAfLeagueTradeVoteCount },
     $transaction: mockTransaction,
   },
+}))
+
+/*
+ * ⚠ THE EXECUTION SNAPSHOT EMITS ITS OUTBOX EVENT WITH `emitInTx`, WHICH PROPAGATES. The real
+ * publisher reaching for an outbox delegate this double does not have would fail the settlement
+ * transaction and turn every test here red for a reason unrelated to what they assert.
+ */
+vi.mock('@/lib/events', () => ({
+  EVENT: { TRADE_PROCESSED: 'transaction.trade.processed' },
+  getPlatformEvents: () => ({ emitInTx: mockEmitInTx }),
 }))
 
 vi.mock('@/server/services/leagueLifecycleService', () => ({
@@ -144,6 +160,9 @@ describe('tradeService live capture wiring (Trade Learning Phase 8)', () => {
     mockCaptureLiveTradeOutcome.mockResolvedValue('outcome-event-1')
     // The settlement transaction opens with a conditional claim; by default it succeeds.
     mockAfLeagueTradeUpdateMany.mockResolvedValue({ count: 1 })
+    mockEmitInTx.mockResolvedValue({ eventId: 'evt-live-1' })
+    mockSnapshotCreate.mockResolvedValue({ id: 'snap-live-1' })
+    mockTxRosterFindUnique.mockResolvedValue(null)
   })
 
   it('createAfLeagueTrade captures a live offer exactly once, with the real trade id and assets', async () => {
@@ -214,6 +233,9 @@ describe('tradeService live capture wiring (Trade Learning Phase 8)', () => {
       // double without it throws before the assertion this test is actually about.
       const tx = {
         afLeagueTrade: { update: mockAfLeagueTradeUpdate, updateMany: mockAfLeagueTradeUpdateMany },
+        // Read + written by the execution snapshot, on this same tx.
+        roster: { findUnique: mockTxRosterFindUnique },
+        tradeExecutionSnapshot: { create: mockSnapshotCreate },
       }
       await cb(tx)
       capturedCalledDuringTransaction = mockCaptureLiveTradeOutcome.mock.calls.length > 0
@@ -259,6 +281,9 @@ describe('tradeService live capture wiring (Trade Learning Phase 8)', () => {
     mockTransaction.mockImplementation(async (cb: (tx: unknown) => Promise<void>) => {
       await cb({
         afLeagueTrade: { update: mockAfLeagueTradeUpdate, updateMany: mockAfLeagueTradeUpdateMany },
+        // Read + written by the execution snapshot, on this same tx.
+        roster: { findUnique: mockTxRosterFindUnique },
+        tradeExecutionSnapshot: { create: mockSnapshotCreate },
       })
     })
 
@@ -268,6 +293,14 @@ describe('tradeService live capture wiring (Trade Learning Phase 8)', () => {
     expect(mockAfLeagueTradeUpdateMany).toHaveBeenCalledTimes(1)
     expect(mockAfLeagueTradeUpdateMany.mock.calls[0][0].where).toEqual({ id: 'trade-1', status: 'pending' })
     expect(order[0]).toBe('claim')
+
+    // Execution evidence is written on the SAME transaction, with the generic FK filled and the
+    // native one left alone — both are unique nullable FKs to different tables.
+    expect(mockSnapshotCreate).toHaveBeenCalledTimes(1)
+    expect(mockSnapshotCreate.mock.calls[0][0].data.genericTradeId).toBe('trade-1')
+    expect(mockSnapshotCreate.mock.calls[0][0].data.nativeTradeId).toBeUndefined()
+    expect(mockSnapshotCreate.mock.calls[0][0].data.executedByActorRole).toBe('user')
+    expect(mockEmitInTx).toHaveBeenCalledTimes(1)
   })
 
   it('throws instead of settling twice when the claim finds the trade already taken', async () => {
@@ -276,6 +309,9 @@ describe('tradeService live capture wiring (Trade Learning Phase 8)', () => {
     mockTransaction.mockImplementation(async (cb: (tx: unknown) => Promise<void>) => {
       await cb({
         afLeagueTrade: { update: mockAfLeagueTradeUpdate, updateMany: mockAfLeagueTradeUpdateMany },
+        // Read + written by the execution snapshot, on this same tx.
+        roster: { findUnique: mockTxRosterFindUnique },
+        tradeExecutionSnapshot: { create: mockSnapshotCreate },
       })
     })
 
