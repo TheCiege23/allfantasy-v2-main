@@ -1796,10 +1796,30 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
    * psychology-consistency, saved analysis, league intelligence and league context.
    *
    * ⚠ THE FLAG IS WHY THIS ONE IS SCOPED CONDITIONALLY, NOT WHY IT IS SAFE. A flag being off in
-   * tests says nothing about production. The deployed value of `DECISION_OS_GROUNDING_ENABLED` on
-   * the Railway `allfantasy-v2-main` service was NOT verified when this was written, so the live
-   * exposure is UNKNOWN: if the flag is off in production this was latent, and if it is on it was
-   * live. Either way the code defect is identical and is closed here.
+   * tests says nothing about production.
+   *
+   * 🛑 AND THE ANSWER IS NOW MEASURED, NOT ASSUMED: `DECISION_OS_GROUNDING_ENABLED` reads `true`
+   * on the Railway `allfantasy-v2-main` production service (read off the service's own variables,
+   * 2026-09-12). This paragraph previously said the deployed value "was NOT verified" and the live
+   * exposure was "UNKNOWN". It is verified, and the answer is the unfavourable one: the packet WAS
+   * assembling on every chat turn carrying a league, so this was LIVE rather than latent, on the
+   * widest of the four reader families. The code defect is identical either way and is closed
+   * here — what changes is the severity, and severity is not something to leave as a coin flip in
+   * a comment when one lookup settles it.
+   *
+   * ⚠ NOTE THE REPO CONTRADICTED ITSELF ON THIS FOR AS LONG AS IT WENT UNMEASURED.
+   * `app/api/admin/decision-os/grounding-proof/route.ts` asserted "`DECISION_OS_GROUNDING_ENABLED`
+   * is now on" while this comment said it was unknown — two files, opposite claims, neither
+   * carrying a measurement. The flag being SET is not the same fact as its value: it appears in
+   * the service's variable list regardless, and the code requires the literal string `'true'`.
+   *
+   * ⚠ AND DO NOT READ IT BACK WITH `list-variables`. That call has no filter and returns every
+   * variable on the service in plaintext — `DATABASE_URL`, `STRIPE_SECRET_KEY`, `NEXTAUTH_SECRET`,
+   * both `ROLLING_INSIGHTS_RSC_TOKEN`s — so fetching one boolean drags the entire production
+   * secret set into whatever is reading. Use the dashboard, or
+   * `/api/admin/decision-os/grounding-proof`, which returns `groundingEnabled` as a bare boolean.
+   * Same family as the `RSC_token` query parameter already recorded in CLAUDE.md: a secret escaping
+   * through an ordinary, careful action that nobody thinks of as touching secrets.
    *
    * Gating on `leagueSnapshot` is strictly stronger than the old gate AND than adding a `userId`
    * check: the snapshot is `leagueGrounding.ok ? … : null`, and `leagueGrounding` is only ever
