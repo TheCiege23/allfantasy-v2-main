@@ -14,6 +14,11 @@ import {
   emptyRankingsSweepCounts,
   type RankingsSweepCounts,
 } from '@/lib/rankings-engine/rankingsSweep'
+import {
+  runForecastSweep,
+  emptyForecastSweepCounts,
+  type ForecastSweepCounts,
+} from '@/lib/season-forecast/forecastSweep'
 
 /**
  * GET /api/cron/domain-os-refresh
@@ -173,6 +178,15 @@ type RefreshCounts = {
    * empty tables went unnoticed for months.
    */
   rankings: RankingsSweepCounts
+  /**
+   * The forecast sweep's own outcomes, kept SEPARATE from both sets above.
+   *
+   * 🛑 THREE WRITERS, THREE COUNTS. These count `season_forecast_snapshots` writes; `rankings`
+   * counts `rankings_snapshots`; the fields above count `domain_os_facts`. Summing any two
+   * produces a number that means neither, and a number nobody can attribute is exactly how this
+   * three-table chain sat empty for months.
+   */
+  forecast: ForecastSweepCounts
 }
 
 export async function GET(req: NextRequest) {
@@ -205,16 +219,21 @@ export async function GET(req: NextRequest) {
        * `rankings_snapshots`. The per-writer numbers stay separate in `metadata.rankings` below,
        * because a total nobody can attribute is exactly how three empty tables went unnoticed.
        */
-      rowsWritten: r.written + r.rankings.written,
-      rowsSkipped: r.skippedForTime + r.unavailable + r.rankings.skippedForTime + r.rankings.skipped,
-      errors: [...r.errors, ...r.rankings.errors],
+      rowsWritten: r.written + r.rankings.written + r.forecast.written,
+      rowsSkipped:
+        r.skippedForTime + r.unavailable +
+        r.rankings.skippedForTime + r.rankings.skipped +
+        r.forecast.skippedForTime + r.forecast.pastSeasonEnd,
+      errors: [...r.errors, ...r.rankings.errors, ...r.forecast.errors],
       /*
        * A rankings `failed` is a genuine fault and downgrades the run, the same as a feed failure.
        * `skipped` does NOT: a league whose settings Sleeper will not serve is a normal single-league
        * outcome, and reporting it as partial would make every fire partial forever.
        */
       status:
-        r.failed > 0 || r.writeFailed > 0 || r.rankings.failed > 0 ? 'partial' : 'success',
+        r.failed > 0 || r.writeFailed > 0 || r.rankings.failed > 0 || r.forecast.failed > 0
+          ? 'partial'
+          : 'success',
       metadata: {
         due: r.due,
         unavailable: r.unavailable,
@@ -232,6 +251,21 @@ export async function GET(req: NextRequest) {
           emptyRoster: r.rankings.emptyRoster,
           failed: r.rankings.failed,
           skippedForTime: r.rankings.skippedForTime,
+        },
+        /*
+         * The forecast sweep's outcomes, unsummed for the same reason. `due > 0 && written === 0`
+         * is the shape that means the writer ran and produced nothing; `pastSeasonEnd` is separated
+         * from `declined` so that late season — when every league is past the engine's 14-week
+         * default — does not read as a broken engine.
+         */
+        forecast: {
+          considered: r.forecast.considered,
+          due: r.forecast.due,
+          written: r.forecast.written,
+          pastSeasonEnd: r.forecast.pastSeasonEnd,
+          declined: r.forecast.declined,
+          failed: r.forecast.failed,
+          skippedForTime: r.forecast.skippedForTime,
         },
       },
     }),
@@ -355,6 +389,7 @@ async function run(): Promise<RefreshCounts> {
   const counts: RefreshCounts = {
     considered: 0, due: 0, written: 0, unavailable: 0, writeFailed: 0, failed: 0, skippedForTime: 0, errors: [],
     rankings: emptyRankingsSweepCounts(),
+    forecast: emptyForecastSweepCounts(),
   }
 
   // R3.2 — app-level sources first; see the note on refreshAppSources for why the order matters.
@@ -478,6 +513,34 @@ async function run(): Promise<RefreshCounts> {
      */
     const out = emptyRankingsSweepCounts()
     out.errors.push(`rankings_sweep: ${e instanceof Error ? e.message : String(e)}`)
+    return out
+  })
+
+  /*
+   * ── THE FORECAST SWEEP, AFTER THE RANKINGS SWEEP AND ON WHAT IS LEFT ───────────────────────
+   *
+   * 🛑 IT MUST RUN AFTER, NOT BEFORE, AND NOT INSTEAD. It can only forecast a league-week that
+   * ALREADY has a rankings snapshot, so running it first would forecast last fire's leagues and
+   * leave this fire's newly-ranked ones for thirty minutes later. Running it after means a league
+   * ranked seconds ago is eligible in the same fire.
+   *
+   * ⚠ AND IT IS THE CHEAP HALF, WHICH IS WHY IT GOES LAST RATHER THAN FIGHTING FOR THE BUDGET.
+   * The rankings sweep is ~1.4s/league of live Sleeper calls; this is ~62-85ms of local CPU plus a
+   * handful of indexed reads and NO external calls at all. Same shared budget, checked between
+   * units — a second budget would let the halves sum past the window this cron shares with
+   * thirteen other sub-hourly jobs.
+   *
+   * Off unless `DECISION_OS_FORECAST_SWEEP_ENABLED` is true, read at the sweep's own boundary —
+   * flag-off costs not one row read and not one simulation.
+   */
+  counts.forecast = await runForecastSweep({ budget }).catch((e: unknown) => {
+    /*
+     * The sweep isolates per unit internally, so reaching here means something structural. It must
+     * not fail the feed refresh and rankings sweep that already succeeded, so it is recorded and
+     * the run still reports their real counts.
+     */
+    const out = emptyForecastSweepCounts()
+    out.errors.push(`forecast_sweep: ${e instanceof Error ? e.message : String(e)}`)
     return out
   })
 
