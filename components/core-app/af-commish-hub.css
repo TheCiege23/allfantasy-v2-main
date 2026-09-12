@@ -275,7 +275,7 @@
  * is (0,1,0) and loses regardless of source order, which silently dropped this
  * button below the 44px touch floor. Same trap as the nav item's active border.
  */
-.af-core .af-ch-queue-action {
+.af-core .af-btn.af-ch-queue-action {
   flex: none;
   /* 44px so the queue is operable on a phone, where a commissioner is most
      likely to be reading it. */
@@ -533,7 +533,7 @@
   gap: 10px;
   flex-wrap: wrap;
 }
-.af-core .af-ch-publish-btn {
+.af-core .af-btn.af-ch-publish-btn {
   min-height: 44px;
   display: inline-flex;
   align-items: center;

@@ -164,7 +164,7 @@
  * handoff specifies for mobile. Measured, not assumed; this is the second time
  * this exact specificity pair has bitten (see af-my-team.css).
  */
-.af-core .af-au-submit {
+.af-core .af-btn.af-au-submit {
   width: 100%;
   min-height: 44px;
   font-size: 14px;

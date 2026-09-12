@@ -115,7 +115,7 @@
   line-height: 1.55;
   color: var(--text2);
 }
-.af-core .af-sy-alert-cta {
+.af-core .af-btn.af-sy-alert-cta {
   align-self: flex-start;
   margin-top: 4px;
   min-height: 44px;

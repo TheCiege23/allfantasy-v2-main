@@ -706,7 +706,7 @@
  * bitten — see af-auth.css and af-my-team.css — and it is the reason the submit
  * on this form would otherwise sit under the 44px minimum touch row.
  */
-.af-core .af-lp-demo-submit {
+.af-core .af-btn.af-lp-demo-submit {
   margin-top: 4px;
   min-height: 44px;
 }
@@ -859,7 +859,7 @@
     gap: 8px;
     margin-left: auto;
   }
-  .af-core .af-lp-mobile-primary {
+  .af-core .af-btn.af-lp-mobile-primary {
     min-height: 44px;
     padding-inline: 14px;
     font-size: 12px;
