@@ -58,6 +58,7 @@ vi.mock('@/lib/live/playByPlayFeed', () => ({
 import { prisma } from '@/lib/prisma'
 import {
   detectScheduleQuestion,
+  detectLiveGamesQuestion,
   checkScheduleContextAvailable,
   tryDeterministicAnswer,
   tryDeterministicAnswerDetailed,
@@ -104,6 +105,8 @@ describe('detectScheduleQuestion', () => {
     'NHL games tonight',
     'soccer games today',
     'ncaa games today',
+    /* The production wording that was NOT recognised, and so reached the forward-only tool. */
+    'what college football games are on right now?',
   ]
 
   const shouldNotMatch = [
@@ -128,6 +131,97 @@ describe('detectScheduleQuestion', () => {
       expect(detectScheduleQuestion(msg)).toBe(false)
     })
   }
+})
+
+// ── detectLiveGamesQuestion ───────────────────────────────────────────────────
+
+describe('detectLiveGamesQuestion', () => {
+  it('recognizes the exact natural-language phrasing used by the current-games UI report', () => {
+    expect(detectLiveGamesQuestion('what college football games are on right now?')).toBe(true)
+    expect(detectLiveGamesQuestion('Who is playing now?')).toBe(true)
+    expect(detectLiveGamesQuestion('Show me live NCAAF games')).toBe(true)
+  })
+
+  it('does not swallow ordinary forward-looking schedule questions', () => {
+    expect(detectLiveGamesQuestion('What games are on Saturday?')).toBe(false)
+    expect(detectLiveGamesQuestion('When is the next college football game?')).toBe(false)
+  })
+})
+
+// ── the live-games fast path ──────────────────────────────────────────────────
+
+/**
+ * 🛑 THE BUG THESE PIN IS NOT A TIMEZONE BUG. A live ESPN college-football slate was
+ * reported as "no games" because the wording was not recognised as a live-game request, so
+ * the model reached for the only games tool available — a forward-looking schedule tool that
+ * excludes anything already kicked off. An offset error moves games by hours; this dropped
+ * exactly the games that had STARTED.
+ */
+describe('the live-games fast path answers from the score cache', () => {
+  it('answers the reported college-football live-game wording from the DB without entering the model path', async () => {
+    const now = new Date()
+    const kickoff = new Date(now.getTime() - 90 * 60 * 1_000)
+    /*
+     * Two rows for ONE fixture, which is the normal shape: SportsGame is unique on
+     * (sport, externalId, source). The `cfbd` row is NEWER and says `scheduled`; the `espn`
+     * row is slightly older and says `in_progress`. Taking the newest row per fixture would
+     * report a game at 20-48 in the second half as not yet started.
+     */
+    mockSportsGameFindMany.mockResolvedValueOnce([
+      {
+        sport: 'NCAAF', externalId: 'cfbd-1', awayTeam: 'Arizona State', homeTeam: 'Texas A&M',
+        awayScore: null, homeScore: null, status: 'scheduled', startTime: kickoff,
+        source: 'cfbd', fetchedAt: now,
+      },
+      {
+        sport: 'NCAAF', externalId: 'espn-1', awayTeam: 'Arizona State', homeTeam: 'Texas A&M',
+        awayScore: 20, homeScore: 48, status: 'in_progress', startTime: kickoff,
+        source: 'espn', fetchedAt: new Date(now.getTime() - 30_000),
+      },
+    ])
+
+    const result = await tryDeterministicAnswerDetailed('what college football games are on right now?')
+
+    expect(result?.kind).toBe('answer')
+    expect(result?.text).toContain('Live NCAAF games')
+    expect(result?.text).toContain('Arizona State @ Texas A&M — 20-48')
+    expect(mockSportsGameFindMany).toHaveBeenCalledOnce()
+    /* `gameSchedule.count` is the schedule-availability probe: proving the slow path was skipped. */
+    expect(mockCount).not.toHaveBeenCalled()
+  })
+
+  it('does not claim there are no live games when the score cache is stale', async () => {
+    const now = new Date()
+    mockSportsGameFindMany.mockResolvedValueOnce([{
+      sport: 'NCAAF', externalId: 'espn-stale', awayTeam: 'Oklahoma', homeTeam: 'Michigan',
+      awayScore: null, homeScore: null, status: 'scheduled',
+      startTime: new Date(now.getTime() - 60 * 60 * 1_000),
+      source: 'espn', fetchedAt: new Date(now.getTime() - 10 * 60 * 1_000),
+    }])
+
+    const result = await tryDeterministicAnswerDetailed('Are any college football games live currently?')
+
+    expect(result?.kind).toBe('refusal')
+    expect(result?.text).toContain('too old to say what is on right now')
+    expect(result?.text).not.toContain('No live NCAAF games')
+  })
+
+  it('returns the next kickoff only after a fresh feed confirms no game is live', async () => {
+    const now = new Date()
+    mockSportsGameFindMany.mockResolvedValueOnce([{
+      sport: 'NCAAF', externalId: 'espn-next', awayTeam: 'Ohio State', homeTeam: 'Texas',
+      awayScore: null, homeScore: null, status: 'scheduled',
+      startTime: new Date(now.getTime() + 60 * 60 * 1_000),
+      source: 'espn', fetchedAt: new Date(now.getTime() - 30_000),
+    }])
+
+    const result = await tryDeterministicAnswerDetailed('Show me live college football games')
+
+    expect(result?.kind).toBe('answer')
+    expect(result?.text).toContain('No live NCAAF games are showing')
+    expect(result?.text).toContain('Next scheduled:')
+    expect(result?.text).toContain('Ohio State @ Texas')
+  })
 })
 
 // ── checkScheduleContextAvailable ────────────────────────────────────────────

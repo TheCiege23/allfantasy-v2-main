@@ -1228,7 +1228,19 @@ async function readCachedLiveScoreRows(options: {
        * Source SELECTION now happens in pickFreshestSourceRows below rather than
        * here, so adding a source cannot let a stale feed outrank a live one.
        */
-      source: { in: ['rolling_insights', 'espn_live', 'api_sports', 'thesportsdb'] },
+      /*
+       * 🛑 `espn` AND `espn_live` ARE DIFFERENT SOURCE STRINGS, AND THE LIVE ONE WAS MISSING.
+       * `lib/espn-data.ts` writes the current ESPN scoreboard as `espn` (four call sites);
+       * `espn_live` is written only by `lib/chat-data-enrichment.ts` and, per the note above,
+       * last wrote 2026-04-26. So this filter admitted the DEAD spelling and excluded the live
+       * one — dropping the only co-fresh source that reliably marks NFL/NCAAF games in progress.
+       *
+       * ⚠ `espn` is written by two jobs (the scoreboard ingest and the redraft canonical sync —
+       * "espn" is a member of NflRedraftProviderId). That is safe here for the reason the note
+       * above already gives: selection happens in pickFreshestSourceRows, per source, so the
+       * staler writer cannot outrank the live one.
+       */
+      source: { in: ['espn', 'espn_live', 'rolling_insights', 'api_sports', 'thesportsdb'] },
       ...(team
         ? {
             OR: [

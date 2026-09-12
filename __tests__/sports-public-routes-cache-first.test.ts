@@ -265,8 +265,15 @@ describe('public sports data routes are cache-first', () => {
            * exclusion's original "null scores" reasoning had been measured
            * against NFL only. Source SELECTION moved to pickFreshestSourceRows,
            * so widening this filter cannot let a stale feed outrank a live one.
+           *
+           * ⚠ AND `espn` JOINED IT FOR THE SAME REASON, ONE SPELLING LATER. `espn` and
+           * `espn_live` are different source strings: `lib/espn-data.ts` writes the current
+           * scoreboard as `espn`, while `espn_live` is written only by chat-data-enrichment
+           * and last wrote 2026-04-26. The list held the dead spelling and omitted the live
+           * one, so the reader ignored the only co-fresh source that marks NFL/NCAAF games
+           * in progress — which is how a live slate was reported as "no games".
            */
-          source: { in: ['rolling_insights', 'espn_live', 'api_sports', 'thesportsdb'] },
+          source: { in: ['espn', 'espn_live', 'rolling_insights', 'api_sports', 'thesportsdb'] },
         }),
       })
     )
