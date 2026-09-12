@@ -45,16 +45,29 @@ export function LeagueSelector({ leagues, activeLeagueId }: LeagueSelectorProps)
   }
 
   return (
-    <div className="relative">
+    /*
+     * 🛑 `min-w-0` ON EVERY LINK IN THE CHAIN, OR `truncate` BELOW IS DEAD.
+     * A flex item's `min-width` defaults to `auto` — its MIN-CONTENT width — so
+     * without this the selector cannot shrink below the league name however
+     * small the viewport, and the header row overflows instead. The span already
+     * had `truncate`; it simply never got the chance to act.
+     */
+    <div className="relative min-w-0">
       <button
         type="button"
         aria-haspopup="listbox"
         aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
-        className="focus-ring flex items-center gap-1 rounded-[var(--radius-standard)] px-3 py-1.5 text-sm font-medium"
+        className="focus-ring flex min-h-11 min-w-0 items-center gap-1 rounded-[var(--radius-standard)] px-3 py-1.5 text-sm font-medium sm:min-h-0"
         style={{ background: 'var(--panel2)', color: 'var(--text)', border: '1px solid var(--border)' }}
       >
-        <span className="max-w-[180px] truncate">{active?.name ?? 'Select league'}</span>
+        {/*
+          ⚠ THE CAP IS RESPONSIVE NOW. `max-w-[180px]` was a fixed 180px — nearly
+          half a 390px phone for one label, beside four icon buttons in a row that
+          could not wrap. Measured 206px wide on iPhone 12, contributing to a
+          481px header in a 390px viewport.
+        */}
+        <span className="max-w-[110px] truncate sm:max-w-[180px]">{active?.name ?? 'Select league'}</span>
         <ChevronDown size={16} aria-hidden />
       </button>
       {open && (
