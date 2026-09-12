@@ -8,6 +8,7 @@ import {
   applyRedraftTradeCapTransfersInTransaction,
   refreshCapProjections,
   validateRedraftTradeCap,
+  validateRedraftTradeCapInTransaction,
   type RedraftTradeCapTransferResult,
 } from '@/lib/idp/capEngine'
 import { settleRedraftTradeAssets } from '@/lib/redraft/tradeSettlement'
@@ -108,6 +109,8 @@ async function finalizeAcceptedTrade(
   const proposerOffers = mapLegacyOffers(proposal.assets ?? [], proposal.proposerRosterId, proposal.receiverRosterId)
   const receiverOffers = mapLegacyOffers(proposal.assets ?? [], proposal.receiverRosterId, proposal.proposerRosterId)
 
+  // A cheap early refusal, NOT the verdict that decides. The cap numbers it reads can change before
+  // the transaction below opens, so the check is repeated on `tx` after the claim — see there.
   const cap = await validateRedraftTradeCap(
     proposal.leagueId,
     proposal.proposerRosterId,
@@ -146,6 +149,27 @@ async function finalizeAcceptedTrade(
       })
       if (claimed.count === 0) {
         throw new Error('PROPOSAL_ALREADY_RESOLVED')
+      }
+      // 🛑 THE CAP CHECK THAT DECIDES, ON THE SETTLEMENT'S OWN TRANSACTION.
+      //
+      // The only cap check used to be the one above, run before this transaction existed. Anything
+      // that changed committed salary in between — another settlement, a cut, an extension — was
+      // invisible to it, so a trade could settle on a verdict computed against numbers that were no
+      // longer true. #742 moved the cap TRANSFER in here and named this as the gap it left.
+      //
+      // After the claim (only the race winner pays for the reads), before the transfer (so what it
+      // approves is exactly what then moves). A refusal throws, the transaction rolls back including
+      // the claim, and the catch below answers 409 with the message — the same shape as the early one.
+      const capInTx = await validateRedraftTradeCapInTransaction(
+        tx,
+        proposal.leagueId,
+        proposal.proposerRosterId,
+        proposal.receiverRosterId,
+        proposerOffers,
+        receiverOffers,
+      )
+      if (!capInTx.ok) {
+        throw new Error(capInTx.message)
       }
       // ⚠ BEFORE-STATE IS READ HERE AND NOWHERE LATER. Inside one transaction these rows stop
       // being "before" the moment the settlement writes them, so the evidence has to be taken
