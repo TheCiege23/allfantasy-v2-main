@@ -42,6 +42,7 @@
     "than the stylesheet. Baseline what you cannot fix mechanically; fix the rest."
   ],
   "routes": {
+    "/commissioner-os": [],
     "/core/trades": [
       {
         "cls": "af-help-dot",

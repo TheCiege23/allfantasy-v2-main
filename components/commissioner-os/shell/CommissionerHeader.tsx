@@ -38,14 +38,21 @@ export function CommissionerHeader({
 
   return (
     <header
-      className="sticky top-0 z-20 flex items-center gap-3 border-b px-4"
+      /*
+       * ⚠ `min-w-0` HERE TOO. The row is the flex container; the selector's own
+       * min-w-0 chain is only half of it, and without a shrinkable slot the row
+       * still sizes to its min-content width. Measured 481px in a 390px viewport
+       * before this — nav 36 + selector 206 + search 42 + bell 36 + help 36, five
+       * 12px gaps and 32px of padding, none of it able to give.
+       */
+      className="sticky top-0 z-20 flex min-w-0 items-center gap-3 border-b px-4"
       style={{ background: 'var(--panel)', borderColor: 'var(--border)', height: 'var(--control-height-large)' }}
     >
       <button
         type="button"
         aria-label="Open navigation"
         onClick={toggleMobileSidebar}
-        className="focus-ring rounded-[var(--radius-standard)] p-2 md:hidden"
+        className="focus-ring inline-flex min-h-11 min-w-11 items-center justify-center sm:min-h-0 sm:min-w-0 rounded-[var(--radius-standard)] p-2 md:hidden"
         style={{ color: 'var(--muted)' }}
       >
         <Menu size={20} aria-hidden />
@@ -70,7 +77,7 @@ export function CommissionerHeader({
         type="button"
         onClick={() => openService('search')}
         aria-label="Search Commissioner OS"
-        className="focus-ring flex items-center gap-2 rounded-[var(--radius-standard)] px-3 py-1.5 text-sm"
+        className="focus-ring flex min-h-11 min-w-11 items-center justify-center gap-2 rounded-[var(--radius-standard)] px-3 py-1.5 text-sm sm:min-h-0 sm:min-w-0"
         style={{ background: 'var(--panel2)', color: 'var(--muted)', border: '1px solid var(--border)' }}
       >
         <Search size={16} aria-hidden />
@@ -87,7 +94,7 @@ export function CommissionerHeader({
         type="button"
         onClick={() => openService('notifications')}
         aria-label={unreadNotificationCount > 0 ? `Notifications, ${unreadNotificationCount} unread` : 'Notifications'}
-        className="focus-ring relative rounded-[var(--radius-standard)] p-2"
+        className="focus-ring relative inline-flex min-h-11 min-w-11 items-center justify-center sm:min-h-0 sm:min-w-0 rounded-[var(--radius-standard)] p-2"
         style={{ color: 'var(--muted)' }}
       >
         <Bell size={20} aria-hidden />
@@ -105,7 +112,7 @@ export function CommissionerHeader({
       <Link
         href="/commissioner-os/help"
         aria-label="Help & Knowledge Center"
-        className="focus-ring rounded-[var(--radius-standard)] p-2"
+        className="focus-ring inline-flex min-h-11 min-w-11 items-center justify-center sm:min-h-0 sm:min-w-0 rounded-[var(--radius-standard)] p-2"
         style={{ color: 'var(--muted)' }}
       >
         <HelpCircle size={20} aria-hidden />
@@ -114,7 +121,7 @@ export function CommissionerHeader({
       <button
         type="button"
         aria-label="Profile menu"
-        className="focus-ring rounded-full p-1"
+        className="focus-ring inline-flex min-h-11 min-w-11 items-center justify-center rounded-full p-1 sm:min-h-0 sm:min-w-0"
         style={{ color: 'var(--muted)' }}
       >
         <UserCircle size={28} aria-hidden />

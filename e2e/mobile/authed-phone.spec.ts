@@ -5,6 +5,7 @@ import rawBaseline from "./undersized-target-baseline.authed.json"
 import { compareTargets, type BaselineTarget } from "./targetRatchet"
 import { probeGeometry } from "./geometryProbe"
 import { diagnoseStylesheets, probeStylesheets, unstyledFailureMessage, type CssRequestFailure } from "./stylesheetGuard"
+import { AUTHED_ROUTES } from "./authedRoutes"
 import { loginAs } from "../helpers/credentials-login"
 import { TC_TRADE_SEED } from "../../scripts/seed-redraft-trade-walkthrough.constants"
 
@@ -41,8 +42,6 @@ const BASELINE = rawBaseline as unknown as { routes: Record<string, BaselineTarg
 const MIN_TARGET = 44
 const MIN_FIELD_FONT = 16
 
-/** Authenticated screens worth a phone contract. Keep short; this lane is not free. */
-const AUTHED_ROUTES = ["/core/trades"] as const
 
 /**
  * 🛑 THIS SUITE SEEDS LEAGUES AND USERS, SO IT REFUSES TO RUN ANYWHERE BUT A
@@ -102,7 +101,7 @@ test.describe("@db @mobile authenticated phone contract", () => {
     })
   })
 
-  for (const route of AUTHED_ROUTES) {
+  for (const { route, login } of AUTHED_ROUTES) {
     test(`${route} holds the phone contract when signed in`, async ({ page }) => {
       const cssFailures: CssRequestFailure[] = []
       const isStylesheet = (req: { resourceType(): string; url(): string }) =>
@@ -115,7 +114,8 @@ test.describe("@db @mobile authenticated phone contract", () => {
           cssFailures.push({ url: res.url(), reason: `status ${res.status()}` })
       })
 
-      await loginAs(page, TC_TRADE_SEED.managerLogins[0]!, TC_TRADE_SEED.password)
+      const who = login === "commissioner" ? TC_TRADE_SEED.commissionerLogin : TC_TRADE_SEED.managerLogins[0]!
+      await loginAs(page, who, TC_TRADE_SEED.password)
 
       const response = await page.goto(route, { waitUntil: "domcontentloaded" })
       expect(response?.status(), `${route} should not be an error page`).toBeLessThan(400)
@@ -144,7 +144,9 @@ test.describe("@db @mobile authenticated phone contract", () => {
 
       expect(
         report.overflow,
-        `${route} scrolls sideways: scrollWidth ${report.scrollWidth} vs viewport ${report.innerWidth}`,
+        `${route} scrolls sideways: scrollWidth ${report.scrollWidth} vs viewport ${report.innerWidth}
+` +
+          `widest offenders (right edge past the viewport): ${JSON.stringify(report.overflowing)}`,
       ).toBeFalsy()
 
       expect(

@@ -7,6 +7,7 @@ import {
 } from "@/e2e/mobile/targetRatchet"
 import baselineFile from "@/e2e/mobile/undersized-target-baseline.json"
 import authedBaselineFile from "@/e2e/mobile/undersized-target-baseline.authed.json"
+import { AUTHED_ROUTES } from "@/e2e/mobile/authedRoutes"
 
 /**
  * The positive control for the phone gate's ratchet.
@@ -120,7 +121,15 @@ describe("committed baseline file", () => {
   const authed = authedBaselineFile as unknown as { routes: Record<string, BaselineTarget[]> }
 
   it("the authed baseline covers exactly the routes authed-phone.spec.ts visits", () => {
-    expect(Object.keys(authed.routes).sort()).toEqual(["/core/trades"])
+    /*
+     * 🛑 DERIVED FROM THE SPEC'S OWN ROUTE LIST, NOT A LITERAL. This assertion
+     * used to read `toEqual(["/core/trades"])`, which pinned the baseline to a
+     * hardcoded array — so it caught BASELINE drift and was blind to SPEC drift.
+     * Adding `/commissioner-os` to the spec without baselining it changed
+     * nothing and 29 tests still passed. The invariant everyone believed was in
+     * force was really "the baseline equals this literal".
+     */
+    expect(Object.keys(authed.routes).sort()).toEqual(AUTHED_ROUTES.map((r) => r.route).sort())
   })
 
   it("the two baselines never share a route", () => {
