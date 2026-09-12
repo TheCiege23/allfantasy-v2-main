@@ -74,3 +74,37 @@ Recorded here so nobody re-derives them by probing `FetchLeagueStandings` or
 - A pre-draft team (league not yet drafted) is a normal, non-error `FetchLeagueRosters` response
   with an empty `players` array on that team's roster — not a shape to special-case as broken.
   Confirmed 2026-09-03 against league 356670. See `ENDPOINTS.yaml`'s `FetchLeagueRosters` note.
+
+---
+
+### `G-08` — which endpoints reject `season`, beyond the two we have seen 400 on?
+
+**Status:** `UNVERIFIED` for `FetchLeagueTransactions` and `FetchTrades`.
+
+The 2026-09-12 real-league audit established that `FetchLeagueRules` and
+`FetchLeagueActivity` return **HTTP 400** when `season` is included, and 200 when
+it is omitted. `ENDPOINTS.yaml` now records `season` as `required: per-endpoint`
+rather than `required: true`, with `accepted_by` / `rejected_by` / `unknown_for`
+lists.
+
+🛑 **THE POINT OF THIS ENTRY IS THE `unknown_for` LIST.** `FetchLeagueTransactions`
+and `FetchTrades` were never probed either way. They *look* like activity — no
+`season` in their documented `params`, paging by `result_offset` — so the obvious
+inference is that they 400 too. **That inference is exactly what this file exists
+to stop being made silently.** Their absence from `params` is evidence they do not
+*need* `season`; it is not evidence of what happens if you send one.
+
+⚠ **This gap is cheap to resolve and expensive to guess at, in an asymmetric way.**
+Guess "accepted" and you get a 400 the existing client reports as a generic API
+error, so the cause is invisible. Guess "rejected" and nothing breaks — which is
+why the safe default is already encoded: build the query from `params:`.
+
+**What would resolve it:** one probe each, with and without `season`, recording
+only the status code. ⚠ That needs no fixture and therefore does **not** require
+G-07's privacy decision — a status code is not a transaction log. Note the two
+gaps are independent: G-07 blocks *capturing a body*, G-08 needs only a number.
+
+**Not resolved by re-reading the Swagger docs.** Documentation lists the
+parameters an endpoint takes; it does not say whether an extra one is ignored or
+rejected. The 400 was found by a live request, and the docs had already been read
+twice by then without revealing it.
