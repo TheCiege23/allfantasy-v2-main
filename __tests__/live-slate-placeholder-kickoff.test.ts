@@ -71,11 +71,22 @@ const SCHEDULE_DONORS = [
 
 const NOW = Date.parse('2026-08-29T12:15:00.000Z')
 
-/** Route the two queries the read path makes: slate rows, then kickoff donors. */
+/**
+ * Route the two queries the read path makes: slate rows, then kickoff donors.
+ *
+ * ⚠ DISCRIMINATE ON `cfbd`, NOT ON `espn`. This used to read
+ * `sources.includes('espn') || sources.includes('cfbd')`, which worked only while `espn` was
+ * absent from the SLATE query's source list. It since had to be added there — `lib/espn-data.ts`
+ * writes the live scoreboard as `espn`, and omitting it made the reader ignore the only
+ * co-fresh source that marks games in progress — at which point this mock answered BOTH
+ * queries with donor rows and four tests failed for a reason that had nothing to do with
+ * kickoff repair. `KICKOFF_DONOR_SOURCES` is `['espn', 'cfbd']`, so `cfbd` is the one member
+ * that still tells the two queries apart.
+ */
 function wireDb(options: { slate: unknown[]; donors: unknown[] }) {
   findMany.mockImplementation((args: { where?: { source?: { in?: string[] } } }) => {
     const sources = args?.where?.source?.in ?? []
-    if (sources.includes('espn') || sources.includes('cfbd')) return Promise.resolve(options.donors)
+    if (sources.includes('cfbd')) return Promise.resolve(options.donors)
     return Promise.resolve(options.slate)
   })
   // No team directory in the test store: crests resolve to nothing, losslessly.
@@ -259,7 +270,8 @@ describe('college team identity on restored rows', () => {
   it('fills the school name and crest an abbreviation stood in for', async () => {
     findMany.mockImplementation((args: { where?: { source?: { in?: string[] } } }) => {
       const sources = args?.where?.source?.in ?? []
-      if (sources.includes('espn') || sources.includes('cfbd')) {
+      /* `cfbd` only — see wireDb above: `espn` is in the SLATE list now and no longer discriminates. */
+      if (sources.includes('cfbd')) {
         return Promise.resolve(SCHEDULE_DONORS)
       }
       return Promise.resolve(ESPN_LIVE_TODAY.filter((r) => r.externalId === '401856766'))
@@ -279,7 +291,8 @@ describe('college team identity on restored rows', () => {
   it('leaves the row alone when the directory has never been ingested', async () => {
     findMany.mockImplementation((args: { where?: { source?: { in?: string[] } } }) => {
       const sources = args?.where?.source?.in ?? []
-      if (sources.includes('espn') || sources.includes('cfbd')) {
+      /* `cfbd` only — see wireDb above: `espn` is in the SLATE list now and no longer discriminates. */
+      if (sources.includes('cfbd')) {
         return Promise.resolve(SCHEDULE_DONORS)
       }
       return Promise.resolve(ESPN_LIVE_TODAY.filter((r) => r.externalId === '401856766'))

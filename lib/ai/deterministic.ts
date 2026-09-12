@@ -29,6 +29,8 @@ import { resolveLanguage } from '@/lib/i18n/constants'
 import { getFantasyDayWindowUTC } from '@/lib/time-engine/windows'
 import { detectUpcomingIntent, findUpcomingGames } from '@/lib/ai/upcomingGames'
 import { dedupeFixtures } from '@/lib/sports/dedupeFixtures'
+import { normalizeGameStatus } from '@/lib/sports/gameStatus'
+import { pickFreshestSourceRows } from '@/lib/scores/liveSourceSelection'
 import {
   detectStatFamily,
   findPlayerInText,
@@ -48,10 +50,36 @@ const SCHEDULE_PATTERNS: RegExp[] = [
   /\bgames?\s+(?:are\s+)?(today|tonight|now|being\s+played|on\s+today)\b/i,
   /\bwhat\s+sports?\s+(are\s+)?(on|playing|happening)\s+(today|tonight|now)\b/i,
   /\b(nfl|nba|mlb|nhl|soccer|ncaa)\s+games?\s+(today|tonight)\b/i,
+  /\b(?:what|which|any)\b[^?]*\bgames?\b[^?]*\b(?:right now|currently|live)\b/i,
 ]
 
 export function detectScheduleQuestion(message: string): boolean {
   return SCHEDULE_PATTERNS.some((p) => p.test(message))
+}
+
+/*
+ * 🛑 "WHAT GAMES ARE ON RIGHT NOW" IS NOT A SCHEDULE QUESTION, AND TREATING IT AS ONE
+ * REPORTS A LIVE SLATE AS EMPTY.
+ *
+ * Measured in production: "what college football games are on right now?" was not recognised
+ * as a live-game request, so it reached the model, which reached for the only games tool there
+ * is — a FORWARD-looking schedule tool that excludes anything already kicked off. ESPN's own
+ * scoreboard was showing live college football at that moment. The answer was "none", and it
+ * was produced by a tool that is incapable of returning a game in progress.
+ *
+ * ⚠ The failure was NOT a timezone bug, which is the first thing this looks like. A UTC/Eastern
+ * error moves games by hours; this dropped exactly the games that had STARTED, which is the
+ * signature of a forward-only window, not of an offset.
+ */
+const LIVE_GAMES_PATTERNS: RegExp[] = [
+  /\b(?:what|which|any)\b[^?]*\bgames?\b[^?]*\b(?:right now|currently|live)\b/i,
+  /\bgames?\s+(?:are\s+)?(?:on|playing|live|in[- ]progress)(?:\s+right)?\s+now\b/i,
+  /\bwho(?:'s|\s+is)\s+playing(?:\s+right)?\s+now\b/i,
+  /\blive\s+(?:[a-z]+\s+){0,3}games?\b/i,
+]
+
+export function detectLiveGamesQuestion(message: string): boolean {
+  return LIVE_GAMES_PATTERNS.some((pattern) => pattern.test(message))
 }
 
 // ── Schedule context availability ─────────────────────────────────────────────
@@ -275,6 +303,135 @@ function formatEt(value: Date | string | null | undefined): string {
     minute: '2-digit',
     timeZoneName: 'short',
   }).format(date)
+}
+
+type CurrentGameRow = {
+  sport: string
+  externalId: string
+  homeTeam: string
+  awayTeam: string
+  homeScore: number | null
+  awayScore: number | null
+  status: string | null
+  startTime: Date | null
+  fetchedAt: Date | null
+  source: string | null
+}
+
+const LIVE_GAME_LOOKBACK_MS = 8 * 60 * 60 * 1_000
+const LIVE_GAME_LOOKAHEAD_MS = 18 * 60 * 60 * 1_000
+const LIVE_GAME_STALE_MS = 5 * 60 * 1_000
+
+/**
+ * Fast, DB-only answer for "what games are on right now?". This must run BEFORE the
+ * model/tool loop: the tool set only has a forward-looking schedule tool, which excludes
+ * games after kickoff and so can turn a live slate into "none".
+ *
+ * ⚠ STALENESS IS A REFUSAL, NOT AN EMPTY SLATE. The two are indistinguishable downstream
+ * and only one of them is honest: a feed that stopped updating an hour ago cannot tell you
+ * nothing is live, it can only tell you it does not know. So an old cache returns
+ * `reliable: false` — which the dispatcher types `refusal`, letting the route escalate —
+ * rather than the far more damaging "no games are on".
+ */
+async function buildCurrentGamesAnswer(
+  message: string,
+  locale?: string,
+): Promise<{ text: string; reliable: boolean } | null> {
+  if (!detectLiveGamesQuestion(message)) return null
+
+  const sport = resolveSportFromMessage(message)
+  const now = new Date()
+  const rows = await (prisma as any).sportsGame?.findMany?.({
+    where: {
+      ...(sport ? { sport } : {}),
+      startTime: {
+        gte: new Date(now.getTime() - LIVE_GAME_LOOKBACK_MS),
+        lte: new Date(now.getTime() + LIVE_GAME_LOOKAHEAD_MS),
+      },
+    },
+    orderBy: { startTime: 'asc' },
+    take: 1200,
+    select: {
+      sport: true,
+      externalId: true,
+      homeTeam: true,
+      awayTeam: true,
+      homeScore: true,
+      awayScore: true,
+      status: true,
+      startTime: true,
+      fetchedAt: true,
+      source: true,
+    },
+  }).catch(() => null) as CurrentGameRow[] | null
+
+  const label = sport ?? 'sports'
+  if (!rows || rows.length === 0) {
+    return {
+      reliable: false,
+      text: `${reliableUnavailable(locale)} I could not verify the current ${label} slate from the live-score cache.`,
+    }
+  }
+
+  /*
+   * Select the best current provider independently PER SPORT. ESPN is the preferred co-fresh
+   * source for NFL/NCAAF because it reports in-progress state; `SportsGame` is unique on
+   * (sport, externalId, source), so one fixture carries a row per provider and taking the
+   * NEWEST row per fixture would let a later schedule-only writer replace ESPN's live state
+   * with "scheduled" — reporting a game in progress as not yet started.
+   */
+  const selected: CurrentGameRow[] = []
+  for (const sportName of [...new Set(rows.map((row) => row.sport))]) {
+    const candidates = rows.filter((row) => row.sport === sportName)
+    selected.push(...pickFreshestSourceRows(candidates, now.getTime()))
+  }
+
+  const fixtures = dedupeFixtures(selected)
+  const newestFetchedAt = selected.reduce<Date | null>((latest, row) => {
+    if (!row.fetchedAt) return latest
+    return !latest || row.fetchedAt > latest ? row.fetchedAt : latest
+  }, null)
+
+  if (!newestFetchedAt || now.getTime() - newestFetchedAt.getTime() > LIVE_GAME_STALE_MS) {
+    const age = newestFetchedAt ? ` It was last updated ${formatEt(newestFetchedAt)}.` : ''
+    return {
+      reliable: false,
+      text: `${reliableUnavailable(locale)} The ${label} live-score cache is too old to say what is on right now.${age}`,
+    }
+  }
+
+  const live = fixtures
+    .filter((game) => normalizeGameStatus(game.status) === 'live')
+    .sort((a, b) => (a.startTime?.getTime() ?? 0) - (b.startTime?.getTime() ?? 0))
+
+  const describe = (game: CurrentGameRow) => {
+    const score =
+      typeof game.awayScore === 'number' && typeof game.homeScore === 'number'
+        ? ` — ${game.awayScore}-${game.homeScore}`
+        : ''
+    return `- ${game.awayTeam} @ ${game.homeTeam}${score}`
+  }
+  const asOf = formatEt(newestFetchedAt)
+
+  if (live.length > 0) {
+    return {
+      reliable: true,
+      text: `Live ${label} games as of ${asOf}:\n${live.slice(0, 20).map(describe).join('\n')}\nSource: AllFantasy live-score cache.`,
+    }
+  }
+
+  const upcoming = fixtures
+    .filter((game) => normalizeGameStatus(game.status) === 'scheduled' && game.startTime && game.startTime > now)
+    .sort((a, b) => a.startTime!.getTime() - b.startTime!.getTime())
+    .slice(0, 3)
+
+  const next = upcoming.length > 0
+    ? `\nNext scheduled:\n${upcoming.map((game) => `${describe(game)} — ${formatEt(game.startTime)}`).join('\n')}`
+    : ''
+  return {
+    reliable: true,
+    text: `No live ${label} games are showing in the score feed as of ${asOf}.${next}\nSource: AllFantasy live-score cache.`,
+  }
 }
 
 function isFinalStatus(status: string | null | undefined): boolean {
@@ -847,6 +1004,25 @@ export async function tryDeterministicAnswerDetailed(
   const classify = (text: string): DeterministicResult =>
     isReliableUnavailableMiss(text, safeLocale) ? refusal(text) : answer(text)
   const intentRoute = resolveChimmyIntentRoute(message)
+  /*
+   * 🛑 FIRST, AND DELIBERATELY AHEAD OF EVERY OTHER BUILDER. A live-game question must never
+   * reach `buildUpcomingGamesAnswer` — that path asks a forward-only window and so answers
+   * "nothing" for a slate that is mid-game, which is how a live ESPN scoreboard was reported
+   * as empty in production.
+   *
+   * It costs nothing on the other paths: `buildCurrentGamesAnswer` returns null immediately
+   * unless `detectLiveGamesQuestion` matches, so the single indexed query only runs for the
+   * questions that need it.
+   *
+   * ⚠ Typed from the builder's OWN `reliable` flag rather than through `classify` below.
+   * `classify` infers a miss by testing the text against the locale's `reliableUnavailable`
+   * prefix, which is the right tool when all you have is a string; here reliability is known
+   * structurally, so say it directly and do not make a second mechanism re-derive it.
+   */
+  const currentGames = await buildCurrentGamesAnswer(message, safeLocale)
+  if (currentGames) {
+    return currentGames.reliable ? answer(currentGames.text) : refusal(currentGames.text)
+  }
   if (/\bwhen\s+(does|is|do).*\bworld\s*cup\b.*\b(start|begin|kick\s*off)|\bworld\s*cup\b.*\b(start|begin|kick\s*off)\b/i.test(message)) {
     /*
      * Alone among these builders this one is async AND nullable, and its null
