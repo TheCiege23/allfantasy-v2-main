@@ -9,6 +9,11 @@ import { createDraftOs, draftRulesSource } from '@/lib/decision-os/draft-os'
 import { createWaiverOs, waiverSettingsSource } from '@/lib/decision-os/waiver-os'
 import { createValueOs, marketValueSource, devyValueSource } from '@/lib/decision-os/value-os'
 import { createProjectionOs, canonicalProjectionSource } from '@/lib/decision-os/projection-os'
+import {
+  runRankingsSweep,
+  emptyRankingsSweepCounts,
+  type RankingsSweepCounts,
+} from '@/lib/rankings-engine/rankingsSweep'
 
 /**
  * GET /api/cron/domain-os-refresh
@@ -159,6 +164,15 @@ type RefreshCounts = {
   failed: number
   skippedForTime: number
   errors: string[]
+  /**
+   * The rankings sweep's own outcomes, kept SEPARATE from the feed counts above.
+   *
+   * 🛑 NOT FOLDED IN, AND THAT IS THE POINT. The fields above count `domain_os_facts` writes; these
+   * count `rankings_snapshots` writes. Summing them would produce a `written` that means neither,
+   * and the whole reason this sweep exists is that a number nobody can attribute is how three
+   * empty tables went unnoticed for months.
+   */
+  rankings: RankingsSweepCounts
 }
 
 export async function GET(req: NextRequest) {
@@ -185,11 +199,41 @@ export async function GET(req: NextRequest) {
      */
     (r) => ({
       rowsRead: r.considered,
-      rowsWritten: r.written,
-      rowsSkipped: r.skippedForTime + r.unavailable,
-      errors: r.errors,
-      status: r.failed > 0 || r.writeFailed > 0 ? 'partial' : 'success',
-      metadata: { due: r.due, unavailable: r.unavailable, writeFailed: r.writeFailed, failed: r.failed },
+      /*
+       * ⚠ BOTH WRITERS, SUMMED ONLY HERE. `rowsWritten` is the telemetry row's single headline, so
+       * it has to account for every row this fire persisted — `domain_os_facts` AND
+       * `rankings_snapshots`. The per-writer numbers stay separate in `metadata.rankings` below,
+       * because a total nobody can attribute is exactly how three empty tables went unnoticed.
+       */
+      rowsWritten: r.written + r.rankings.written,
+      rowsSkipped: r.skippedForTime + r.unavailable + r.rankings.skippedForTime + r.rankings.skipped,
+      errors: [...r.errors, ...r.rankings.errors],
+      /*
+       * A rankings `failed` is a genuine fault and downgrades the run, the same as a feed failure.
+       * `skipped` does NOT: a league whose settings Sleeper will not serve is a normal single-league
+       * outcome, and reporting it as partial would make every fire partial forever.
+       */
+      status:
+        r.failed > 0 || r.writeFailed > 0 || r.rankings.failed > 0 ? 'partial' : 'success',
+      metadata: {
+        due: r.due,
+        unavailable: r.unavailable,
+        writeFailed: r.writeFailed,
+        failed: r.failed,
+        /*
+         * The sweep's own outcomes, unsummed. `attempted > 0 && written === 0` is the shape that
+         * means the writer ran and produced nothing — the thing a green cron would otherwise hide.
+         */
+        rankings: {
+          considered: r.rankings.considered,
+          due: r.rankings.due,
+          written: r.rankings.written,
+          skipped: r.rankings.skipped,
+          emptyRoster: r.rankings.emptyRoster,
+          failed: r.rankings.failed,
+          skippedForTime: r.rankings.skippedForTime,
+        },
+      },
     }),
   )
 
@@ -310,6 +354,7 @@ async function run(): Promise<RefreshCounts> {
   const budget = createRunBudget()
   const counts: RefreshCounts = {
     considered: 0, due: 0, written: 0, unavailable: 0, writeFailed: 0, failed: 0, skippedForTime: 0, errors: [],
+    rankings: emptyRankingsSweepCounts(),
   }
 
   // R3.2 — app-level sources first; see the note on refreshAppSources for why the order matters.
@@ -406,6 +451,35 @@ async function run(): Promise<RefreshCounts> {
     }
     }
   }
+
+  /*
+   * ── THE RANKINGS SWEEP, LAST AND ON THE LEFTOVER BUDGET ────────────────────────────────────
+   *
+   * 🛑 ORDER IS DELIBERATE. Everything above is a handful of indexed Postgres reads; this is ~6
+   * LIVE Sleeper calls per league. Running it first would let a slow provider spend the budget the
+   * feed warming needs, and the feeds are what 244 warm scopes depend on. Running it last means
+   * the expensive, newest thing yields to the cheap, proven thing — and `runRankingsSweep` reports
+   * `skippedForTime` rather than silently doing less.
+   *
+   * ⚠ IT SHARES THE BUDGET RATHER THAN TAKING ITS OWN. A second independent budget would let the
+   * two halves sum past the window this cron shares with thirteen other sub-hourly jobs, two of
+   * them on a two-minute cadence. One budget, checked between units by both halves, is the only
+   * version that
+   * bounds the whole fire.
+   *
+   * Off unless `DECISION_OS_RANKINGS_SWEEP_ENABLED` is true, and the flag is read at the sweep's
+   * own boundary — flag-off costs no League read and no Sleeper call.
+   */
+  counts.rankings = await runRankingsSweep({ budget }).catch((e: unknown) => {
+    /*
+     * The sweep isolates per league internally, so reaching here means something structural — the
+     * League query, or the module itself. It must not fail the feed refresh that already
+     * succeeded above, so it is recorded and the run still reports its real feed counts.
+     */
+    const out = emptyRankingsSweepCounts()
+    out.errors.push(`rankings_sweep: ${e instanceof Error ? e.message : String(e)}`)
+    return out
+  })
 
   return counts
 }
