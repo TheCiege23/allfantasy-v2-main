@@ -85,6 +85,43 @@ export type FleaflickerImportPayload = {
    * fail an import that could already read standings and rosters.
    */
   rules?: FleaflickerRulesResponse | null
+  /**
+   * `FetchLeagueDraftBoard`, when it answered. Same soft-failure contract as
+   * `rules`: NULL means the call failed and the import continued without draft
+   * history.
+   *
+   * 🛑 AN EMPTY OBJECT IS NOT NULL AND MUST NOT BE COLLAPSED INTO ONE. Fleaflicker
+   * answers `{}` under HTTP 200 for a season with no board, and that is a real
+   * answer — "no draft this season" — not a failure. `null` means we could not
+   * ask; `{}` means we asked and there is none. The adapter reports those as
+   * different coverage states, so flattening them here would erase the
+   * distinction before anything could act on it.
+   */
+  draftBoard?: FleaflickerDraftBoardResponse | null
+}
+
+/**
+ * `FetchLeagueDraftBoard` — the draft board, in whichever of its two shapes.
+ *
+ * 🛑 THE ENVELOPE VARIES AND THE SEASON IS NOT THE RULE. One league, requests
+ * identical but for the season: 2019 returned `{draftOrder, rows, rosters}`, 2020
+ * returned `{orderedSelections}`, 2021 returned `{}`. All HTTP 200. Both shapes
+ * carry the SAME cell, which is why one mapper serves both — branch on which key
+ * is present, never on the year. See G-10 in contracts/fleaflicker/GAPS.md.
+ */
+export type FleaflickerDraftBoardResponse = {
+  rows?: Array<{ round?: number | null; cells?: FleaflickerDraftCellRaw[] | null }> | null
+  orderedSelections?: FleaflickerDraftCellRaw[] | null
+  draftOrder?: unknown
+  rosters?: unknown
+}
+
+/** One selection. Identical in both envelopes. */
+export type FleaflickerDraftCellRaw = {
+  team?: { id?: number | null; name?: string | null } | null
+  player?: { proPlayer?: FleaflickerProPlayer | null } | null
+  /** ⚠ `slot.slot` is the pick WITHIN the round; `slot.overall` is the overall one. */
+  slot?: { round?: number | null; slot?: number | null; overall?: number | null } | null
 }
 
 /**
