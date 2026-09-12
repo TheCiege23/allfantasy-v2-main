@@ -5,6 +5,8 @@ import {
   runDueLeagues,
   runExternalMatchupParity,
   runFantraxMatchupParity,
+  runFleaflickerMatchupParity,
+  runMflMatchupParity,
 } from '@/lib/import-os/collector'
 import { refreshProfilesForExternalLeagues } from '@/lib/psychological-profiles/ProfileRefreshService'
 import { materializeSleeperDraftSessions } from '@/lib/sleeper/sync/materializeSleeperDraftSessions'
@@ -267,7 +269,65 @@ export async function GET(req: NextRequest) {
                 : 'fantrax matchup parity failed',
           }
         }
-        return { summary, profiles, draftSessions, externalMatchups, fantraxMatchups }
+
+        /*
+         * 🛑 AND THE SAME OMISSION HAPPENED AGAIN, ONE PROVIDER LATER. The comment
+         * directly above names the trap in capitals, and `fleaflickerMatchupParity`
+         * still shipped on 2026-09-11 with no scheduled caller — exported from the
+         * collector index, covered by its own green unit tests, and never once run
+         * in production. A guard that asserted the EXPORT existed passed the whole
+         * time; nothing asserted this file called it. The test added alongside this
+         * change asserts the call, not the export.
+         *
+         * ⚠ Fleaflicker's writer is the most conservative of the three: it writes
+         * only games with `isFinalScore === true`, and Fleaflicker OMITS that key
+         * rather than sending `false`, so an in-progress game is skipped by absence.
+         * It also refuses a season it did not ask for — the API silently CLAMPS a
+         * season past the league's last one and echoes back whatever you requested,
+         * so a mismatch is treated as "skip this league", never as "write it".
+         *
+         * Bounded and swallowed, same contract as the collectors above.
+         */
+        let fleaflickerMatchups: unknown = null
+        try {
+          fleaflickerMatchups = await runFleaflickerMatchupParity({ now, maxLeagues: parityLeagues })
+        } catch (fleaflickerErr) {
+          fleaflickerMatchups = {
+            error:
+              fleaflickerErr instanceof Error
+                ? fleaflickerErr.message.slice(0, 160)
+                : 'fleaflicker matchup parity failed',
+          }
+        }
+        /*
+         * MFL, unwired for exactly the same reason and found by grepping for the
+         * sibling rather than by anyone reporting it. The audit that caught
+         * Fleaflicker did not mention MFL; `runMflMatchupParity` had the identical
+         * shape — exported from the collector index, zero callers anywhere under
+         * `app/` or `lib/`. Wiring one and not the other would have left the same
+         * defect in the same file for the next audit to find.
+         *
+         * ⚠ Its rows carry the franchise id VERBATIM, zero-padded ("0001"), because
+         * `String(Number(x))` turns that into "1" and never matches
+         * `LeagueTeam.externalId` again. Nothing here should normalise it.
+         */
+        let mflMatchups: unknown = null
+        try {
+          mflMatchups = await runMflMatchupParity({ now, maxLeagues: parityLeagues })
+        } catch (mflErr) {
+          mflMatchups = {
+            error: mflErr instanceof Error ? mflErr.message.slice(0, 160) : 'mfl matchup parity failed',
+          }
+        }
+        return {
+          summary,
+          profiles,
+          draftSessions,
+          externalMatchups,
+          fantraxMatchups,
+          fleaflickerMatchups,
+          mflMatchups,
+        }
       },
       (r) => ({
         rowsRead: r.summary.enumerated,
