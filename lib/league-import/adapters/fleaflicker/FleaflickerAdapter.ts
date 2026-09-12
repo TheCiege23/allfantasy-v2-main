@@ -129,7 +129,38 @@ export const FleaflickerAdapter: ILeagueImportAdapter<FleaflickerImportPayload> 
         league_type: isDynasty ? 'dynasty' : 'redraft',
         waiver_type: mapWaiverType(lg.waiverType),
         faab_budget: lg.defaultWaiverBudget ?? undefined,
-        playoff_team_count: Math.max(2, Math.floor(leagueSize / 2)),
+        /*
+         * 🛑 THIS WAS `Math.max(2, Math.floor(leagueSize / 2))` — A FABRICATED NUMBER,
+         * AND THE WORST KIND, BECAUSE IT IS USUALLY PLAUSIBLE. A 12-team league got 6,
+         * which is the single most common real answer, so the invention was invisible
+         * in exactly the leagues where anyone would have looked.
+         *
+         * It is not merely displayed. `lib/data/league-home.ts` does
+         * `standings.slice(0, playoff.playoff_team_count)` to seed a bracket, so a
+         * league that takes 4 or 8 rendered a six-team playoff picture drawn from
+         * nothing but its roster count.
+         *
+         * ⚠ AND IT CANNOT BE REPLACED BY AN IMPORT, WHICH IS WHY IT IS `undefined`
+         * RATHER THAN A BETTER FORMULA. No captured Fleaflicker endpoint carries a
+         * playoff setting at all — measured against the committed fixtures:
+         *   - FetchLeagueRules      67KB, 0 playoff-related leaf paths
+         *   - FetchLeagueStandings  `league` object has 22 leaf paths, none playoff
+         *   - FetchLeagueRosters    league configuration only
+         * The ONLY playoff evidence Fleaflicker exposes is per-GAME `isPlayoffs` /
+         * `isConsolation` on the scoreboard, which exists only once playoff games are
+         * scheduled. For a league mid-regular-season the count is genuinely unknown,
+         * and `undefined` is the honest answer. See G-09 in contracts/fleaflicker.
+         *
+         * ⚠ `recordPostseason` LOOKS like the shortcut and is not: it counts
+         * CONSOLATION games. In the week-16 fixture the consolation bracket's teams
+         * carry 2-1 and 1-1 postseason records, so counting teams with a non-zero
+         * `recordPostseason` returns the whole playing field, not the playoff field.
+         *
+         * This now matches every sibling adapter — ESPN, MFL and Fantrax all pass
+         * `undefined` when the provider does not say. `LeagueImportToExistingService`
+         * maps that to `null`, and the consumers already treat absence as "unknown".
+         */
+        playoff_team_count: undefined,
         settings: {
           fleaflicker: {
             leagueId: lg.id,
@@ -210,7 +241,18 @@ export const FleaflickerAdapter: ILeagueImportAdapter<FleaflickerImportPayload> 
               : raw.rules == null
                 ? { state: 'missing', note: 'FetchLeagueRules did not answer for this league' }
                 : { state: 'missing', note: 'FetchLeagueRules answered but declared no scoring rules' },
-        playoffSettings: { state: 'partial' },
+        /*
+         * ⚠ WAS `{ state: 'partial' }`, WHICH WAS A CLAIM ABOUT THE FABRICATED NUMBER
+         * ABOVE RATHER THAN ABOUT THE PROVIDER. "Partial" told a reader that some
+         * playoff configuration had been imported and some had not. Nothing had been
+         * imported: the count was computed from `leagueSize` and there is no playoff
+         * field in any captured Fleaflicker payload. A coverage map that reports the
+         * health of our own guess is worse than no coverage map.
+         */
+        playoffSettings: {
+          state: 'missing',
+          note: 'Fleaflicker exposes no playoff setting on any captured endpoint; only per-game isPlayoffs/isConsolation once the bracket is scheduled',
+        },
         /*
          * ⚠ MEASURED, NOT ASSERTED — AND `lg.size` IS WHAT MAKES THAT POSSIBLE.
          *
