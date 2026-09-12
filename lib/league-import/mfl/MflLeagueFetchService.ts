@@ -1127,6 +1127,39 @@ export async function fetchMflActivityForSync(
   }
 }
 
+/**
+ * The league's schedule, for the weekly-matchup collector.
+ *
+ * One endpoint, unlike `fetchMflActivityForSync`'s two: a matchup row needs no
+ * franchise profile, because `mflMatchupParity` resolves identity against
+ * `LeagueTeam` rather than against anything MFL returns here.
+ *
+ * 🛑 THE FRANCHISE ID IS RETURNED VERBATIM, ZERO-PADDING INTACT ("0001", not "1"),
+ * and that is the entire point. `LeagueTeam.externalId` holds MFL's own padded
+ * form, so anything that normalises here stops matching the row it has to join
+ * to. `WeeklyMatchup.rosterId` has been TEXT in production since 2026-09-03
+ * precisely so the padded id survives the write — see
+ * `lib/import-os/collector/index.ts`.
+ *
+ * ⚠ An unplayed week's sides carry `score: undefined`, not `0`
+ * (`extractMflMatchupSides`). The collector depends on that to tell a future
+ * fixture from a real nil-all result; do not "tidy" it into a zero.
+ */
+export async function fetchMflScheduleForSync(
+  userId: string,
+  leagueId: string,
+  season: number,
+): Promise<{ schedule: MflImportScheduleWeek[] }> {
+  const auth = await getMflAuthForUser(userId)
+  const scheduleRaw = await fetchMflEndpoint({
+    season,
+    leagueId,
+    type: 'schedule',
+    apiKey: auth.apiKey,
+  })
+  return { schedule: parseMflSchedule(scheduleRaw, season) }
+}
+
 export async function fetchMflLeagueForImport(
   userId: string,
   sourceInput: string,
