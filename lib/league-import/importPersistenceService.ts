@@ -223,6 +223,27 @@ export async function persistImportWithCanonicalAudit(input: {
      * be visible — and an import that wrote a league with no rosters stops being reported as
      * an unqualified success.
      */
+    /*
+     * 🛑 A FORCED RE-IMPORT REUSES THE RUN ROW, SO WARNINGS ACCUMULATED AGAINST IT FOREVER.
+     *
+     * The reuse above is deliberate and correct — deleting the run would discard the audit
+     * trail, salting the key would leave unbounded near-duplicates. But nothing cleared what
+     * HANGS OFF the reused row, and `ImportWarning` has no unique constraint and was written
+     * with a bare `create`. So every refresh of a league appended another full copy of its
+     * warnings to the same run: import twice, see each warning twice; ten times, ten times.
+     *
+     * Scoped to THIS run's id, so it is a no-op on a fresh run (nothing exists yet) and a
+     * replacement on a reused one. That is the right semantics for a row that describes the
+     * LATEST attempt of one logical import — which is exactly what the reuse comment above
+     * says the run row means.
+     *
+     * ⚠ DELETE-THEN-CREATE RATHER THAN A UNIQUE CONSTRAINT ON PURPOSE. An `@@unique` would
+     * need a migration, and a migration is not landable work — it is the user's to apply.
+     * This converges with no schema change. If a constraint is added later, this becomes
+     * redundant rather than wrong.
+     */
+    await prisma.importWarning.deleteMany({ where: { runId: run.id } })
+
     for (const w of [
       ...input.canonical.warnings,
       ...(input.additionalWarnings ?? []),
@@ -269,6 +290,19 @@ export async function persistImportWithCanonicalAudit(input: {
       })
     }
 
+    /*
+     * Same accumulation, same fix — but scoped far more narrowly, and the narrowing matters.
+     *
+     * ⚠ ONLY `open` `import_review` TASKS FOR THIS RUN. A RESOLVED task is history: somebody
+     * looked at this import and made a decision, and re-importing must not erase that. Other
+     * `taskType`s belong to other features entirely. Deleting by `runId` alone would take
+     * both, which would turn a duplicate-row bug into a lost-audit bug — strictly worse than
+     * what is being fixed.
+     */
+    await prisma.importReviewTask.deleteMany({
+      where: { runId: run.id, taskType: 'import_review', status: 'open' },
+    })
+
     if (input.canonical.reviewRequired) {
       await prisma.importReviewTask.create({
         data: {
@@ -304,6 +338,28 @@ export async function persistImportWithCanonicalAudit(input: {
           previousSeasonCount,
         })
         if (rows.length > 0) {
+          /*
+           * ⚠ `LegacyEvidenceRecord` HAS NEITHER `runId` NOR `leagueId`, so neither of the
+           * scopes used above is available here. What it does carry is `sourceReference`,
+           * which `deriveEvidenceRowsFromImport` sets to `sleeper:<source_league_id>` — a
+           * stable per-league key. Deleting by it clears exactly the rows a previous import
+           * of THIS league wrote and nothing belonging to any other league.
+           *
+           * Derived from the rows about to be written rather than rebuilt from the input, so
+           * the delete scope and the insert scope cannot drift apart.
+           */
+          const sourceRefs = [
+            ...new Set(
+              rows
+                .map((r) => r.sourceReference)
+                .filter((v): v is string => typeof v === 'string' && v.length > 0),
+            ),
+          ]
+          if (sourceRefs.length > 0) {
+            await prisma.legacyEvidenceRecord.deleteMany({
+              where: { sourceReference: { in: sourceRefs } },
+            })
+          }
           await prisma.legacyEvidenceRecord.createMany({ data: rows })
         }
         // Fire-and-forget recompute: `void` marks the promise as intentionally
@@ -387,6 +443,14 @@ export async function recordCanonicalImportAuditForExistingLeague(input: {
   })
 
   try {
+    /*
+     * The existing-league path has the SAME accumulation for the same reason, and it is the
+     * one that matters most: this path exists to import into a league that is already here,
+     * so it is re-run by construction rather than by exception. See the fuller note on the
+     * other path above.
+     */
+    await prisma.importWarning.deleteMany({ where: { runId: run.id } })
+
     for (const w of input.canonical.warnings) {
       await prisma.importWarning.create({
         data: {
@@ -428,6 +492,11 @@ export async function recordCanonicalImportAuditForExistingLeague(input: {
         },
       })
     }
+
+    /* Same narrow scope as the other path: open import_review tasks for this run only. */
+    await prisma.importReviewTask.deleteMany({
+      where: { runId: run.id, taskType: 'import_review', status: 'open' },
+    })
 
     if (input.canonical.reviewRequired) {
       await prisma.importReviewTask.create({
