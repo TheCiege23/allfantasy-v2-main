@@ -50,6 +50,7 @@ import {
 } from './load-league-structured-context'
 import { attachIntelligenceToChimmyPayload, buildAiToolPayload } from '@/lib/intelligence'
 import { clamp, sportsRecordToPricedAsset } from './sports-db-valuation'
+import { normalizedFaabValue } from '@/lib/trade-value/faabValue'
 import {
   benchAssetsNotInGive,
   inferThinPositionsFromRoster,
@@ -98,9 +99,24 @@ async function loadLeagueTradeHistoryNote(leagueId: string | null | undefined): 
 }
 
 function priceFaabAsset(amount: number, budget: number): PricedAsset {
-  const b = budget > 0 ? budget : 100
-  const ratio = clamp(amount / b, 0, 1)
-  const mv = Math.round(ratio * 2800)
+  /*
+   * 🛑 WAS `round(clamp(amount / budget, 0, 1) * 2800)` — this console's OWN conversion, and
+   * the last of the three the app used to carry. Measured 2026-09-11, $10 of FAAB out of a
+   * $100 budget priced as 10 in /api/trade-evaluator, 280 here, and 180 in the canonical
+   * engine: a 28x spread on one asset, across three surfaces feeding the same 0–10000 scale.
+   *
+   * The other two now route through `normalizedFaabValue`; this closes it. The SHAPE is
+   * unchanged — it was already budget-relative, which is the part this file had right — so
+   * only the constant moves: a full budget prices at 1800 rather than 2800, matching what the
+   * canonical engine has always paid for FAAB at the default $100 budget.
+   *
+   * ⚠ THAT IS A REAL GRADE CHANGE ON THIS SURFACE, and deliberately so. A console trade
+   * carrying a full budget loses ~1000 points of one side's total; one carrying $25 of a $100
+   * budget goes from 700 to 450. Nothing else in the trade moves. The alternative — keeping
+   * 2800 here and raising the other two — would have re-priced every canonical snapshot ever
+   * written, which is evidence, not a display value.
+   */
+  const mv = normalizedFaabValue(amount, budget)
   return {
     name: `FAAB $${amount}`,
     type: 'player',
