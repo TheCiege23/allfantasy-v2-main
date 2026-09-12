@@ -1,6 +1,13 @@
 import { expect, test } from "@playwright/test"
 import rawBaseline from "./undersized-target-baseline.json"
 import { compareTargets, type BaselineTarget } from "./targetRatchet"
+import { probeGeometry } from "./geometryProbe"
+import {
+  diagnoseStylesheets,
+  unstyledFailureMessage,
+  probeStylesheets,
+  type CssRequestFailure,
+} from "./stylesheetGuard"
 
 /**
  * The per-PR phone gate: invariants that must hold on every public route, on a
@@ -44,6 +51,26 @@ test.describe("@mobile phone smoke", () => {
 
   for (const route of PUBLIC_ROUTES) {
     test(`${route} holds the phone contract`, async ({ page }) => {
+      /*
+       * ⚠ REGISTERED BEFORE `goto`, OR THEY MISS THE ONLY EVENTS THAT MATTER.
+       * The stylesheet requests this is watching for are issued while the
+       * document is still parsing; a listener attached after the navigation
+       * resolves has already missed them and would report a clean run for the
+       * exact failure it exists to catch.
+       */
+      const cssFailures: CssRequestFailure[] = []
+      const isStylesheet = (req: { resourceType(): string; url(): string }) =>
+        req.resourceType() === "stylesheet" || /\.css(\?|$)/.test(req.url())
+
+      page.on("requestfailed", (req) => {
+        if (!isStylesheet(req)) return
+        cssFailures.push({ url: req.url(), reason: req.failure()?.errorText ?? "request failed" })
+      })
+      page.on("response", (res) => {
+        if (!isStylesheet(res.request())) return
+        if (res.status() >= 400) cssFailures.push({ url: res.url(), reason: `status ${res.status()}` })
+      })
+
       const response = await page.goto(route, { waitUntil: "domcontentloaded" })
 
       /*
@@ -53,81 +80,74 @@ test.describe("@mobile phone smoke", () => {
        */
       expect(response?.status(), `${route} should not be an error page`).toBeLessThan(400)
 
-      const report = await page.evaluate(
-        ({ minTarget, minFont }) => {
-          const visible = (el: Element): boolean => {
-            const cs = getComputedStyle(el)
-            if (cs.display === "none" || cs.visibility === "hidden") return false
-            if (Number(cs.opacity) === 0) return false
-            const r = el.getBoundingClientRect()
-            return r.width > 0 && r.height > 0
-          }
+      /*
+       * ⚠ `domContentLoaded` above is deliberate (a cold route compile is slow),
+       * but a `<link>`'s `.sheet` is legitimately null while it is still being
+       * fetched — so reading the per-sheet signal at DCL would red a PR for a
+       * stylesheet that was merely in flight. Wait for `load`, and SWALLOW the
+       * timeout: failing to reach load is itself suspicious, and the probe
+       * below describes it better than a bare Playwright timeout would.
+       */
+      await page.waitForLoadState("load", { timeout: 30_000 }).catch(() => {})
 
-          /*
-           * Fields whose computed font-size is under 16px, which is the size iOS
-           * Safari zooms the page in on focus — and it does not zoom back out.
-           * Only types that actually take a text caret can trigger it.
-           */
-          const zoomingTypes = ["checkbox", "radio", "range", "color", "submit", "button", "reset", "hidden", "image", "file"]
-          const smallFields: { tag: string; cls: string; fontPx: number }[] = []
-          document.querySelectorAll("input, select, textarea").forEach((el) => {
-            if (!visible(el)) return
-            const tag = el.tagName.toLowerCase()
-            const type = (el.getAttribute("type") || "").toLowerCase()
-            if (tag === "input" && zoomingTypes.includes(type)) return
-            const fontPx = parseFloat(getComputedStyle(el).fontSize)
-            if (fontPx < minFont) {
-              smallFields.push({ tag, cls: String(el.className || "").slice(0, 40), fontPx })
-            }
-          })
+      /*
+       * Probed in its own `page.evaluate` so the SAME function can be driven by
+       * `stylesheet-probe.spec.ts` against `page.setContent` — no dev server, no
+       * database. That testability is the entire repair: version one kept this
+       * inline, so nothing could exercise it, and it shipped unable to tell one
+       * dead sheet from a healthy page.
+       *
+       * ⚠ AND AN EARLIER COMMENT HERE CLAIMED BOTH PROBES HAD TO SHARE ONE
+       * EVALUATE "or they describe different paints". That was wrong and is
+       * withdrawn: a stylesheet that has parsed does not stop being in effect,
+       * so the failure is at LOAD time, not between two evaluates. Probing
+       * first, before a single rectangle is read, is what actually matters.
+       */
+      const stylesheet = await page.evaluate(probeStylesheets)
 
-          /*
-           * Targets are measured only INSIDE the initial viewport. A control
-           * further down the page can be undersized for reasons this gate is not
-           * trying to police yet; what must hold on every PR is that the first
-           * screen a phone user sees is tappable.
-           */
-          const smallTargets: { tag: string; cls: string; label: string; w: number; h: number }[] = []
-          document.querySelectorAll('button, a[href], [role="button"]').forEach((el) => {
-            if (!visible(el)) return
-            const r = el.getBoundingClientRect()
-            if (r.top < 0 || r.bottom > window.innerHeight) return
-            /*
-             * Round BEFORE comparing, and report the same rounded number.
-             * Comparing the raw rect while printing a rounded one produced a
-             * finding that read `44x44` and looked like a bug in the check: the
-             * control was 43.98px, which is 44px to anyone who taps it.
-             */
-            const w = Math.round(r.width)
-            const h = Math.round(r.height)
-            if (h >= minTarget && w >= minTarget) return
-            /*
-             * An inline link inside a paragraph is text, not a tap target, and
-             * holding body copy to 44px would mean 44px line height. Skip any
-             * anchor whose parent is a text block.
-             */
-            const parentTag = el.parentElement?.tagName.toLowerCase() ?? ""
-            if (el.tagName === "A" && ["p", "li", "span", "small", "label"].includes(parentTag)) return
-            smallTargets.push({
-              tag: el.tagName.toLowerCase(),
-              cls: String(el.className || "").slice(0, 40),
-              label: (el.getAttribute("aria-label") || el.textContent || "").trim().slice(0, 30),
-              w,
-              h,
-            })
-          })
+      const report = await page.evaluate(probeGeometry, {
+        minTarget: MIN_TARGET,
+        minFont: MIN_FIELD_FONT,
+      })
 
-          return {
-            /* +2px: sub-pixel layout rounding is not a sideways-scrolling page. */
-            overflow: document.documentElement.scrollWidth > window.innerWidth + 2,
-            scrollWidth: document.documentElement.scrollWidth,
-            innerWidth: window.innerWidth,
-            smallFields,
-            smallTargets,
-          }
-        },
-        { minTarget: MIN_TARGET, minFont: MIN_FIELD_FONT },
+      /*
+       * 🛑 THIS ASSERTION STAYS FIRST. Everything below it measures pixels, and
+       * pixels from an unstyled page are worse than no measurement: plausible,
+       * specific, and wrong. `response.status() < 400` above cannot catch that —
+       * a dev-server restart still returns 200 for the DOCUMENT; it is the
+       * subresources that die.
+       *
+       * ⚠ AND A CORRECTION, KEPT BECAUSE THE WRONG VERSION WAS CONFIDENT AND
+       * EXPENSIVE. This comment used to claim the lane's 20px-wide nav links
+       * WERE an unstyled render. They were not. The probe below reported
+       * `afRules: 248, deadLinks: [], cssFailures: []` on the failing run — the
+       * page was fully styled every time. The 20px links are the CLOSED mobile
+       * `<details>` menu, which `visible()` could not detect; see
+       * `geometryProbe.ts`. An entire stylesheet investigation, and a confident
+       * correction sent to a peer whose CSS diagnosis I called wrong, rested on
+       * reading one impossible number and never asking whether the DOM held a
+       * SECOND copy of those labels. It did.
+       *
+       * So this guard remains, because a restart resetting subresources is a
+       * real thing that would produce exactly the reading nobody could then
+       * disprove — but it is not why this lane was red, and it must not be
+       * described as if it were.
+       */
+      /*
+       * 🛑 REPORTED ON EVERY RUN, PASS OR FAIL, AND THAT IS NOT NOISE — IT IS
+       * THE REPAIR FOR HOW THIS GUARD FAILED THE FIRST TIME. Its first CI run
+       * met the exact failure it was built for, stayed silent, and left NO
+       * record of its own inputs: afRules, deadLinks and the rest were
+       * unrecoverable from the log, so "why did it abstain" could not be
+       * answered from the evidence. A guard that is quiet when it passes cannot
+       * be debugged when it is wrong to pass.
+       */
+      console.log(
+        `[stylesheet-guard] ${route} ${JSON.stringify(stylesheet)} cssFailures=${JSON.stringify(cssFailures)}`,
       )
+
+      const stylesheetVerdict = diagnoseStylesheets(stylesheet, cssFailures)
+      expect(stylesheetVerdict.styled, unstyledFailureMessage(route, stylesheetVerdict)).toBe(true)
 
       expect(
         report.overflow,
@@ -176,7 +196,16 @@ test.describe("@mobile phone smoke", () => {
         regressions,
         `${route} gained controls under ${MIN_TARGET}x${MIN_TARGET} that are not in ` +
           `e2e/mobile/undersized-target-baseline.json. Make them ${MIN_TARGET}px, ` +
-          `or add them to the baseline only if they are deliberate pre-existing debt.`,
+          `or add them to the baseline only if they are deliberate pre-existing debt.\n` +
+          /*
+           * ⚠ CARRIED INTO THIS MESSAGE ON PURPOSE. The stylesheet guard above
+           * has already passed by the time anyone reads this, and its verdict
+           * is the first thing that decides whether these numbers are real. A
+           * control reported NARROWER THAN ITS OWN FONT-SIZE is text collapsed
+           * to one character per line, not a small button — that is what an
+           * unstyled render looks like, and it is the reading that cost a day.
+           */
+          `stylesheet state at measurement: ${JSON.stringify(stylesheet)}`,
       ).toEqual([])
 
       /*
