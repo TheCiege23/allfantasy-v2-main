@@ -144,7 +144,9 @@ test.describe("@db @mobile authenticated phone contract", () => {
 
       expect(
         report.overflow,
-        `${route} scrolls sideways: scrollWidth ${report.scrollWidth} vs viewport ${report.innerWidth}`,
+        `${route} scrolls sideways: scrollWidth ${report.scrollWidth} vs viewport ${report.innerWidth}
+` +
+          `widest offenders (right edge past the viewport): ${JSON.stringify(report.overflowing)}`,
       ).toBeFalsy()
 
       expect(

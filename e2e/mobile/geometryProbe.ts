@@ -24,6 +24,19 @@ export type GeometryReport = {
   innerWidth: number
   smallFields: { tag: string; cls: string; fontPx: number }[]
   smallTargets: { tag: string; cls: string; label: string; w: number; h: number }[]
+  /**
+   * The elements whose right edge exceeds the viewport, widest first.
+   *
+   * 🛑 ADDED AFTER AN OVERFLOW FAILURE THAT NAMED NO CULPRIT. `/commissioner-os`
+   * reported `scrollWidth 481 vs viewport 390` and nothing else — 91px too wide,
+   * in both engines, with no indication of WHICH element. That is arithmetic, not
+   * a finding: nobody reading it can act, and neither could I.
+   *
+   * A check that detects a defect but cannot say where it is costs a whole extra
+   * CI round-trip to localise, and on a surface that only renders in CI that is
+   * the difference between a fix and a guess.
+   */
+  overflowing: { tag: string; cls: string; w: number; right: number }[]
 }
 
 export function probeGeometry({ minTarget, minFont }: GeometryProbeOptions): GeometryReport {
@@ -113,9 +126,37 @@ export function probeGeometry({ minTarget, minFont }: GeometryProbeOptions): Geo
     })
   })
 
+  /*
+   * Who is actually sticking out. Walk every element once and keep the ones whose
+   * right edge clears the viewport.
+   *
+   * ⚠ `right > innerWidth + 2` uses the SAME 2px tolerance as the overflow flag
+   * below, so the two can never disagree — a list that is empty while the flag is
+   * true would send the reader hunting for a culprit that the check does not
+   * believe in either.
+   *
+   * ⚠ Sorted widest-first and capped: one overflowing container usually drags a
+   * dozen descendants past the edge with it, and the useful answer is the widest
+   * ancestor rather than every leaf inside it.
+   */
+  const overflowing: { tag: string; cls: string; w: number; right: number }[] = []
+  document.querySelectorAll("*").forEach((el) => {
+    const r = el.getBoundingClientRect()
+    if (r.width <= 0 || r.right <= window.innerWidth + 2) return
+    const cls = typeof el.className === "string" ? el.className : String(el.getAttribute("class") || "")
+    overflowing.push({
+      tag: el.tagName.toLowerCase(),
+      cls: cls.slice(0, 60),
+      w: Math.round(r.width),
+      right: Math.round(r.right),
+    })
+  })
+  overflowing.sort((a, b) => b.w - a.w)
+
   return {
     /* +2px: sub-pixel layout rounding is not a sideways-scrolling page. */
     overflow: document.documentElement.scrollWidth > window.innerWidth + 2,
+    overflowing: overflowing.slice(0, 8),
     scrollWidth: document.documentElement.scrollWidth,
     innerWidth: window.innerWidth,
     smallFields,
