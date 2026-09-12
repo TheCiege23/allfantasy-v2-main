@@ -1434,6 +1434,49 @@ open PR. A wrong negative about shared state does not merely mislead one person 
 it retroactively invalidates everyone else's correct work. Say what you measured,
 when, and with which instrument, and let a positive measurement outrank an absence.
 
+🛑 **AND THE CLAIM WAS WRONG ABOUT THE SYMPTOM'S VISIBILITY TOO, WHICH IS THE HALF
+THAT MADE IT WORTH BROADCASTING.** It said a dead client *quietly* inflates every
+typecheck. It does not: **702 tracked files reference `@prisma/client`**, so a dead
+client is LOUD — anyone who ran a typecheck in that window would have known at once.
+So the story was wrong in two opposite directions, about WHEN and about whether it
+would have been NOTICED, and the second is the dangerous one. *"Silently wrong for
+three days"* is what turns a small error into an urgent broadcast; *"loudly wrong
+for two hours"* is a note to one person. **Before you escalate an incident, check
+your claim about why nobody spotted it — that claim is doing most of the work.**
+
+⚠ **THE ACTIONABLE LINE: THE REPAIR HAD ALREADY BEEN WRITTEN DOWN, WITH ITS REASON
+ATTACHED.** The correct instrument was `npm rebuild --ignore-scripts`, and that
+exact form sat in this project's memory under
+`npm-ci-postinstall-leaves-no-prisma-client`, commented *"restores `.bin` WITHOUT
+re-entering the postinstall path that just failed"*. The bare form was run instead,
+and re-entering that postinstall is what destroyed a healthy client on a tree that
+only needed its `.bin` back.
+
+**This is the file's own standing rule — before writing a new check, grep for the
+one that exists — applied to a REPAIR rather than a check.** Re-deriving an
+instrument re-derives its failure mode, and a repair has the worse blast radius of
+the two because it writes.
+
+⚠ **AND A COUNT PUBLISHED WITHOUT ITS PREDICATE IS NOT A MEASUREMENT** — which is
+this same shape in miniature, and it happened while writing this section. Two
+sessions reported the regenerated client as `47` and `945` matches of the same
+identifier and it read as a contradiction. It was neither method nor error. It was
+CASE:
+
+```
+grep -c   leagueMaxPfFreeze     47   lines   (the delegate, lowercase l)
+grep -c   LeagueMaxPfFreeze    906   lines   (the model type, capital L)
+grep -ic  leaguemaxpffreeze    945   lines   (either)
+grep -o … | wc -l               76   total occurrences, not lines
+```
+
+🛑 **`Select-String` IS CASE-INSENSITIVE BY DEFAULT AND `grep` IS NOT.** Neither
+session set that; it is a default, which is why neither suspected the predicate. The
+useful figure was the one that could be compared to something — 47 matched the
+pre-loss reading exactly, establishing the regenerated client as equivalent to the
+one destroyed. **Name what a number counts, or it cannot be compared with anyone
+else's.**
+
 ### 🛑 ONE SESSION BATCHES AND PUSHES TO `main`
 
 > ⚠ **SUPERSEDED AS THE DEFAULT 2026-09-08 — read "Queue-order self-push" below
