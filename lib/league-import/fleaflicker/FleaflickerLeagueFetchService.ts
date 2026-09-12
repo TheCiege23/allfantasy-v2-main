@@ -6,6 +6,7 @@ import type {
   FleaflickerScoreboardResponse,
   FleaflickerScoreboardGame,
   FleaflickerRulesResponse,
+  FleaflickerDraftBoardResponse,
 } from '@/lib/league-import/fleaflicker/types'
 
 const API_BASE = 'https://www.fleaflicker.com/api'
@@ -108,10 +109,18 @@ export async function fetchFleaflickerLeagueForImport(sourceId: string): Promise
    * An import that can name the league and its teams must not die because the
    * scoring endpoint had a bad minute.
    */
-  const [standings, rosters, rules] = await Promise.all([
+  const [standings, rosters, rules, draftBoard] = await Promise.all([
     fetchJson<FleaflickerStandingsResponse>(standingsUrl),
     fetchJson<FleaflickerRostersResponse>(rostersUrl).catch(() => ({ rosters: [] })),
     fetchFleaflickerRules(sport, leagueId).catch(() => null),
+    /*
+     * ⚠ THE DRAFT BOARD FAILS SOFT TO `null`, AND `null` IS NOT THE SAME AS THE `{}`
+     * THE ENDPOINT ITSELF RETURNS. `null` here means the call did not succeed; `{}`
+     * means it succeeded and there is no board for this season. Collapsing them would
+     * turn "we could not ask" into "this league never drafted", which is the more
+     * confident and more wrong of the two.
+     */
+    fetchFleaflickerDraftBoard(sport, leagueId, season).catch(() => null),
   ])
 
   if (!standings?.league?.id) {
@@ -124,6 +133,7 @@ export async function fetchFleaflickerLeagueForImport(sourceId: string): Promise
     standings,
     rosters,
     rules,
+    draftBoard,
   }
 }
 
@@ -246,4 +256,39 @@ export async function fetchFleaflickerRules(
   const url =
     `${API_BASE}/FetchLeagueRules?sport=${encodeURIComponent(sport)}&league_id=${leagueId}`
   return fetchJson<FleaflickerRulesResponse>(url)
+}
+
+/**
+ * The league's draft board for one season.
+ *
+ * ⚠ THIS ONE *DOES* TAKE A SEASON, UNLIKE `fetchFleaflickerRules` DIRECTLY ABOVE,
+ * and the two sit together deliberately so the difference is visible. Fleaflicker's
+ * endpoints split into a family that accepts `season` and a family that returns
+ * HTTP 400 if you send one — see `common_query_params.season` in
+ * `contracts/fleaflicker/ENDPOINTS.yaml`. One shared URL builder breaks both.
+ *
+ * 🛑 AND THE SEASON-CLAMP GUARD CANNOT BE APPLIED HERE, WHICH IS A GAP RATHER THAN
+ * A DECISION. `fetchFleaflickerScoreboard` can verify what it got because a
+ * scoreboard carries `schedulePeriod.low.season`. A draft board carries NO season
+ * marker in either envelope — `{draftOrder, rows, rosters}` and
+ * `{orderedSelections}` both lack one. So a request for a season past the league's
+ * last is silently clamped exactly as elsewhere, and nothing in the response can
+ * detect it. Callers get whatever season Fleaflicker decided to serve, and this
+ * function cannot tell them which. Do not add a guard that reads back the requested
+ * season and calls it verified — that is the circular check the standings note in
+ * ENDPOINTS.yaml already retracts.
+ *
+ * `draft_number` defaults to 1. ⚠ Without it the endpoint still answers 200, so its
+ * absence is not the cause of an empty board — measured both ways.
+ */
+export async function fetchFleaflickerDraftBoard(
+  sport: FleaflickerSport,
+  leagueId: number,
+  season: number,
+  draftNumber = 1,
+): Promise<FleaflickerDraftBoardResponse> {
+  const url =
+    `${API_BASE}/FetchLeagueDraftBoard?sport=${encodeURIComponent(sport)}` +
+    `&league_id=${leagueId}&season=${season}&draft_number=${draftNumber}`
+  return fetchJson<FleaflickerDraftBoardResponse>(url)
 }
