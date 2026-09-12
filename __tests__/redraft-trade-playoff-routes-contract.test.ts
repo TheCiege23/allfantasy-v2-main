@@ -5,6 +5,7 @@ import { createMockNextRequest } from './helpers/createMockNextRequest'
 const getServerSessionMock = vi.fn()
 const assertLeagueMemberMock = vi.fn()
 const validateRedraftTradeCapMock = vi.fn()
+const validateRedraftTradeCapInTransactionMock = vi.fn()
 const applyRedraftTradeCapTransfersInTransactionMock = vi.fn()
 const refreshCapProjectionsMock = vi.fn()
 const emitMock = vi.fn(async () => null)
@@ -121,6 +122,7 @@ vi.mock('@/lib/league/league-access', () => ({
 
 vi.mock('@/lib/idp/capEngine', () => ({
   validateRedraftTradeCap: validateRedraftTradeCapMock,
+  validateRedraftTradeCapInTransaction: validateRedraftTradeCapInTransactionMock,
   applyRedraftTradeCapTransfersInTransaction: applyRedraftTradeCapTransfersInTransactionMock,
   refreshCapProjections: refreshCapProjectionsMock,
 }))
@@ -216,6 +218,7 @@ describe('Redraft trade votes route contract', () => {
     getServerSessionMock.mockResolvedValue({ user: { id: 'u-2' } })
     assertLeagueMemberMock.mockResolvedValue({ ok: true, status: 200 })
     validateRedraftTradeCapMock.mockResolvedValue({ ok: true })
+    validateRedraftTradeCapInTransactionMock.mockResolvedValue({ ok: true })
     // `moved: 1` so the post-commit projection refresh is exercised rather than skipped —
     // a fixture of 0 would make the refresh assertions vacuous.
     applyRedraftTradeCapTransfersInTransactionMock.mockResolvedValue({ moved: 1, transactionIds: ['tx-out', 'tx-in'] })
@@ -366,6 +369,46 @@ describe('Redraft trade votes route contract', () => {
     expect(body.error).toBe('Proposal already resolved')
     expect(applyRedraftTradeCapTransfersInTransactionMock).not.toHaveBeenCalled()
     expect(prismaMock.redraftLeagueTrade.create).not.toHaveBeenCalled()
+    expect(refreshCapProjectionsMock).not.toHaveBeenCalled()
+  })
+
+  it('re-checks the cap on the settlement transaction, after the claim and before salary moves', async () => {
+    // 🛑 The early check runs before the transaction exists, so it cannot see salary that changed in
+    // between. The check that decides has to read on `tx`, and has to run where its verdict still
+    // describes what the transfer is about to move.
+    acceptFixture('p-capval')
+
+    const res = await postAccept('p-capval')
+    expect(res.status).toBe(200)
+
+    expect(validateRedraftTradeCapInTransactionMock).toHaveBeenCalledTimes(1)
+    expect(validateRedraftTradeCapInTransactionMock.mock.calls[0][0]).toBe(txMock)
+
+    const claimOrder = prismaMock.redraftTradeProposal.updateMany.mock.invocationCallOrder[0]
+    const checkOrder = validateRedraftTradeCapInTransactionMock.mock.invocationCallOrder[0]
+    const moveOrder = applyRedraftTradeCapTransfersInTransactionMock.mock.invocationCallOrder[0]
+    expect(claimOrder).toBeLessThan(checkOrder)
+    expect(checkOrder).toBeLessThan(moveOrder)
+  })
+
+  it('🛑 refuses when the cap changed between the early check and settlement', async () => {
+    // THE TOCTOU ITSELF. The early check approved; by the time the transaction reads, another
+    // settlement has pushed the receiver over. Before this, the trade settled anyway.
+    acceptFixture('p-toctou')
+    validateRedraftTradeCapMock.mockResolvedValueOnce({ ok: true })
+    validateRedraftTradeCapInTransactionMock.mockResolvedValueOnce({
+      ok: false,
+      message: 'Trade would put receiver over the salary cap.',
+    })
+
+    const res = await postAccept('p-toctou')
+
+    expect(res.status).toBe(409)
+    const body = await res.json()
+    expect(body.error).toBe('Trade would put receiver over the salary cap.')
+    // Nothing moved and no evidence was written for a trade that did not happen.
+    expect(applyRedraftTradeCapTransfersInTransactionMock).not.toHaveBeenCalled()
+    expect(prismaMock.tradeExecutionSnapshot.create).not.toHaveBeenCalled()
     expect(refreshCapProjectionsMock).not.toHaveBeenCalled()
   })
 

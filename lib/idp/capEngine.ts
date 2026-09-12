@@ -28,17 +28,26 @@ function isSalaryActiveInSeason(
   return rec.contractStartYear <= season && season <= contractEndYear(rec)
 }
 
+/**
+ * Either the module-level client or a caller's transaction. Cap reads that feed a settlement
+ * decision must be able to run on the settlement's own transaction — see
+ * `validateRedraftTradeCapInTransaction`.
+ */
+type CapDb = Prisma.TransactionClient | typeof prisma
+
 export async function getTeamCapSummary(
   leagueId: string,
   rosterId: string,
   season: number,
+  /** Optional, defaulting to `prisma`, so every existing three-argument caller is unchanged. */
+  db: CapDb = prisma,
 ): Promise<CapSummary> {
-  const cfg = await prisma.iDPCapConfig.findUnique({ where: { leagueId } })
+  const cfg = await db.iDPCapConfig.findUnique({ where: { leagueId } })
   if (!cfg) {
     throw new Error('No IDP cap configuration for this league')
   }
 
-  const salaryRows = await prisma.iDPSalaryRecord.findMany({
+  const salaryRows = await db.iDPSalaryRecord.findMany({
     where: { leagueId, rosterId, status: { in: [...ACTIVE_STATUSES] } },
   })
   let activeSalary = 0
@@ -46,7 +55,7 @@ export async function getTeamCapSummary(
     if (isSalaryActiveInSeason(r, season)) activeSalary += r.salary
   }
 
-  const deadRows = await prisma.iDPDeadMoney.findMany({
+  const deadRows = await db.iDPDeadMoney.findMany({
     where: { leagueId, rosterId, season },
   })
   const deadMoney = deadRows.reduce((s, d) => s + d.currentYearDead, 0)
@@ -599,14 +608,53 @@ function extractPlayerIdsFromOffers(offers: TradeOfferJson): string[] {
   return ids
 }
 
+export type RedraftTradeCapValidation = { ok: true } | { ok: false; message: string }
+
 export async function validateRedraftTradeCap(
   leagueId: string,
   proposerRosterId: string,
   receiverRosterId: string,
   proposerOffers: TradeOfferJson,
   receiverOffers: TradeOfferJson,
-): Promise<{ ok: true } | { ok: false; message: string }> {
-  const cfg = await prisma.iDPCapConfig.findUnique({ where: { leagueId } })
+): Promise<RedraftTradeCapValidation> {
+  return validateRedraftTradeCapOn(prisma, leagueId, proposerRosterId, receiverRosterId, proposerOffers, receiverOffers)
+}
+
+/**
+ * The same cap check, run on a CALLER-SUPPLIED transaction.
+ *
+ * 🛑 WHY THIS EXISTS. `/api/redraft/trade-votes` validated the cap BEFORE opening the settlement
+ * transaction, then moved salary inside it. Between the two, another settlement or a cut/extension
+ * could change either roster's committed salary, and the trade would settle on a verdict computed
+ * against numbers that were no longer true — an over-cap roster the check had just "approved".
+ *
+ * #742 moved the cap TRANSFER inside the transaction and named this as the remaining gap. Running
+ * the check on the same `tx`, after the proposal claim, means the numbers it reads are the numbers
+ * the transfer then moves.
+ *
+ * ⚠ Every read goes through `db`, including `getTeamCapSummary`. A check that took its config from
+ * the transaction and its salary totals from the module client would look transactional and not be.
+ */
+export async function validateRedraftTradeCapInTransaction(
+  tx: Prisma.TransactionClient,
+  leagueId: string,
+  proposerRosterId: string,
+  receiverRosterId: string,
+  proposerOffers: TradeOfferJson,
+  receiverOffers: TradeOfferJson,
+): Promise<RedraftTradeCapValidation> {
+  return validateRedraftTradeCapOn(tx, leagueId, proposerRosterId, receiverRosterId, proposerOffers, receiverOffers)
+}
+
+async function validateRedraftTradeCapOn(
+  db: CapDb,
+  leagueId: string,
+  proposerRosterId: string,
+  receiverRosterId: string,
+  proposerOffers: TradeOfferJson,
+  receiverOffers: TradeOfferJson,
+): Promise<RedraftTradeCapValidation> {
+  const cfg = await db.iDPCapConfig.findUnique({ where: { leagueId } })
   if (!cfg) return { ok: true }
 
   /** Players the proposer is trading away */
@@ -617,12 +665,12 @@ export async function validateRedraftTradeCap(
 
   const season = cfg.season
 
-  const proposerSummary = await getTeamCapSummary(leagueId, proposerRosterId, season)
-  const receiverSummary = await getTeamCapSummary(leagueId, receiverRosterId, season)
+  const proposerSummary = await getTeamCapSummary(leagueId, proposerRosterId, season, db)
+  const receiverSummary = await getTeamCapSummary(leagueId, receiverRosterId, season, db)
 
   const salarySum = async (rosterId: string, playerIds: string[]) => {
     if (playerIds.length === 0) return 0
-    const rows = await prisma.iDPSalaryRecord.findMany({
+    const rows = await db.iDPSalaryRecord.findMany({
       where: {
         leagueId,
         rosterId,
