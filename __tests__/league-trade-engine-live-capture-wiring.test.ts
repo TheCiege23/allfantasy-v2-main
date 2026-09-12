@@ -22,6 +22,7 @@ const {
   mockAfLeagueTradeFindFirst,
   mockAfLeagueTradeFindUniqueOrThrow,
   mockAfLeagueTradeUpdate,
+  mockAfLeagueTradeUpdateMany,
   mockAfLeagueTradeVoteUpsert,
   mockAfLeagueTradeVoteCount,
   mockRosterCount,
@@ -36,6 +37,7 @@ const {
   mockAfLeagueTradeFindFirst: vi.fn(),
   mockAfLeagueTradeFindUniqueOrThrow: vi.fn(),
   mockAfLeagueTradeUpdate: vi.fn(),
+  mockAfLeagueTradeUpdateMany: vi.fn(),
   mockAfLeagueTradeVoteUpsert: vi.fn(),
   mockAfLeagueTradeVoteCount: vi.fn(),
   mockRosterCount: vi.fn(),
@@ -56,6 +58,7 @@ vi.mock('@/lib/prisma', () => ({
       findFirst: mockAfLeagueTradeFindFirst,
       findUniqueOrThrow: mockAfLeagueTradeFindUniqueOrThrow,
       update: mockAfLeagueTradeUpdate,
+      updateMany: mockAfLeagueTradeUpdateMany,
     },
     afLeagueTradeVote: { upsert: mockAfLeagueTradeVoteUpsert, count: mockAfLeagueTradeVoteCount },
     $transaction: mockTransaction,
@@ -139,6 +142,8 @@ describe('tradeService live capture wiring (Trade Learning Phase 8)', () => {
     mockLeagueFindUnique.mockResolvedValue(makeLeague())
     mockCaptureLiveTradeOffer.mockResolvedValue('offer-event-1')
     mockCaptureLiveTradeOutcome.mockResolvedValue('outcome-event-1')
+    // The settlement transaction opens with a conditional claim; by default it succeeds.
+    mockAfLeagueTradeUpdateMany.mockResolvedValue({ count: 1 })
   })
 
   it('createAfLeagueTrade captures a live offer exactly once, with the real trade id and assets', async () => {
@@ -205,7 +210,11 @@ describe('tradeService live capture wiring (Trade Learning Phase 8)', () => {
     })
     let capturedCalledDuringTransaction = false
     mockTransaction.mockImplementation(async (cb: (tx: unknown) => Promise<void>) => {
-      const tx = { afLeagueTrade: { update: mockAfLeagueTradeUpdate } }
+      // `updateMany` is the CONDITIONAL CLAIM the settlement transaction now opens with; a tx
+      // double without it throws before the assertion this test is actually about.
+      const tx = {
+        afLeagueTrade: { update: mockAfLeagueTradeUpdate, updateMany: mockAfLeagueTradeUpdateMany },
+      }
       await cb(tx)
       capturedCalledDuringTransaction = mockCaptureLiveTradeOutcome.mock.calls.length > 0
     })
@@ -218,6 +227,64 @@ describe('tradeService live capture wiring (Trade Learning Phase 8)', () => {
       leagueId: LEAGUE_ID,
       status: 'processed',
     })
+  })
+
+  /*
+   * 🛑 THE SETTLEMENT CLAIM. `finalizeAfLeagueTradeProcessing` used to write `processed` with a
+   * bare `update({ where: { id } })` placed AFTER the asset move, so two concurrent finalizers
+   * each applied the assets and each marked it processed — assets twice, one row to show for it.
+   * It took two humans acting at once until `processDueScheduledTrades` began sweeping due trades
+   * on a schedule; a cron running beside a manager pressing "process" makes it ordinary.
+   */
+  function processableTrade() {
+    mockAfLeagueTradeFindUniqueOrThrow.mockResolvedValue({
+      id: 'trade-1',
+      leagueId: LEAGUE_ID,
+      status: 'pending',
+      proposerRosterId: PROPOSER_ROSTER,
+      receiverRosterId: RECEIVER_ROSTER,
+      processingDelayHours: 0,
+      scheduledProcessAt: null,
+      items: [],
+    })
+  }
+
+  it('claims the trade on the status it read, before any asset moves', async () => {
+    processableTrade()
+    const order: string[] = []
+    mockAfLeagueTradeUpdateMany.mockImplementation(async () => {
+      order.push('claim')
+      return { count: 1 }
+    })
+    mockTransaction.mockImplementation(async (cb: (tx: unknown) => Promise<void>) => {
+      await cb({
+        afLeagueTrade: { update: mockAfLeagueTradeUpdate, updateMany: mockAfLeagueTradeUpdateMany },
+      })
+    })
+
+    await finalizeAfLeagueTradeProcessing({ tradeId: 'trade-1', actorUserId: USER_ID })
+
+    // Conditional on the status READ — an unconditional `where: { id }` cannot lose a race.
+    expect(mockAfLeagueTradeUpdateMany).toHaveBeenCalledTimes(1)
+    expect(mockAfLeagueTradeUpdateMany.mock.calls[0][0].where).toEqual({ id: 'trade-1', status: 'pending' })
+    expect(order[0]).toBe('claim')
+  })
+
+  it('throws instead of settling twice when the claim finds the trade already taken', async () => {
+    processableTrade()
+    mockAfLeagueTradeUpdateMany.mockResolvedValue({ count: 0 })
+    mockTransaction.mockImplementation(async (cb: (tx: unknown) => Promise<void>) => {
+      await cb({
+        afLeagueTrade: { update: mockAfLeagueTradeUpdate, updateMany: mockAfLeagueTradeUpdateMany },
+      })
+    })
+
+    await expect(
+      finalizeAfLeagueTradeProcessing({ tradeId: 'trade-1', actorUserId: USER_ID }),
+    ).rejects.toThrow('TRADE_ALREADY_PROCESSED')
+
+    // The loser must not report a successful settlement to the learning capture either.
+    expect(mockCaptureLiveTradeOutcome).not.toHaveBeenCalled()
   })
 
   it('commissionerAfTradeDecision(reject) captures REJECTED', async () => {
