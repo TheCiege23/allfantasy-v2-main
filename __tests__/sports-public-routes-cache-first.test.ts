@@ -266,14 +266,14 @@ describe('public sports data routes are cache-first', () => {
            * against NFL only. Source SELECTION moved to pickFreshestSourceRows,
            * so widening this filter cannot let a stale feed outrank a live one.
            *
-           * ⚠ AND `espn` JOINED IT FOR THE SAME REASON, ONE SPELLING LATER. `espn` and
-           * `espn_live` are different source strings: `lib/espn-data.ts` writes the current
-           * scoreboard as `espn`, while `espn_live` is written only by chat-data-enrichment
-           * and last wrote 2026-04-26. The list held the dead spelling and omitted the live
-           * one, so the reader ignored the only co-fresh source that marks NFL/NCAAF games
-           * in progress — which is how a live slate was reported as "no games".
+           * 🛑 AND `espn` IS PINNED OUT, BECAUSE ADDING IT BROKE PRODUCTION. #757 added it and
+           * the public NCAAF scoreboard fell from 462 rows (weeks 2-5, 33 in progress) to 24
+           * (week 2, 6 in progress), measured before/after on the deployed SHA. pickFreshestSourceRows
+           * takes one source wholesale and ranks `espn` first; the `espn` games writer
+           * (fetchEspnGames) carries only a partial current-week slate. This assertion is what
+           * turns a re-add red — see the note beside the list in sports-live-scores-service.
            */
-          source: { in: ['espn', 'espn_live', 'rolling_insights', 'api_sports', 'thesportsdb'] },
+          source: { in: ['rolling_insights', 'espn_live', 'api_sports', 'thesportsdb'] },
         }),
       })
     )

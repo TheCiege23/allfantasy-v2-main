@@ -1229,18 +1229,35 @@ async function readCachedLiveScoreRows(options: {
        * here, so adding a source cannot let a stale feed outrank a live one.
        */
       /*
-       * 🛑 `espn` AND `espn_live` ARE DIFFERENT SOURCE STRINGS, AND THE LIVE ONE WAS MISSING.
-       * `lib/espn-data.ts` writes the current ESPN scoreboard as `espn` (four call sites);
-       * `espn_live` is written only by `lib/chat-data-enrichment.ts` and, per the note above,
-       * last wrote 2026-04-26. So this filter admitted the DEAD spelling and excluded the live
-       * one — dropping the only co-fresh source that reliably marks NFL/NCAAF games in progress.
+       * 🛑 `espn` IS DELIBERATELY ABSENT. ADDING IT SHIPPED A PRODUCTION REGRESSION, MEASURED.
        *
-       * ⚠ `espn` is written by two jobs (the scoreboard ingest and the redraft canonical sync —
-       * "espn" is a member of NflRedraftProviderId). That is safe here for the reason the note
-       * above already gives: selection happens in pickFreshestSourceRows, per source, so the
-       * staler writer cannot outrank the live one.
+       * It was added in #757 and removed the same afternoon. Same public endpoint, before and
+       * after the deploy, with /api/af-debug/sha confirming deployment 019a8d0b (aa9d583cc)
+       * answered every post-deploy request, 2026-09-12:
+       *
+       *   /api/sports/live-scores?sport=ncaaf   462 rows, weeks 2-5, 33 in progress
+       *                                      →   24 rows, week 2 only, 6 in progress
+       *   /api/sports/live-scores?sport=nfl     51 rows → 15
+       *
+       * Live FCS games with real scores (NC A&T @ NC Central, Stony Brook @ Ball State) vanished.
+       * Two readings four minutes apart were identical, so it was not a refresh in flight.
+       *
+       * THE MECHANISM IS THE INTERACTION, NOT EITHER PIECE. pickFreshestSourceRows returns ONE
+       * source's rows wholesale and ranks `espn` first. The SportsGame writer for `espn` is
+       * `fetchEspnGames` in lib/scores/gameScoreProviders.ts, which requests
+       * `scoreboard?limit=400` with no group or date parameter and so carries only a partial,
+       * current-week slate. The moment `espn` was admitted here it was the freshest feed, won,
+       * and a partial slate displaced a complete one.
+       *
+       * ⚠ The justification written for adding it was FALSE, and is corrected here so it is not
+       * repeated: `lib/espn-data.ts` contains four `source: 'espn'` sites, but they are
+       * syncESPNInjuriesToDb and syncESPNRostersToDb. They write injuries and rosters, not games.
+       * A grep matched the string and nobody checked what the writer wrote.
+       *
+       * Do not re-add `espn` until selection is coverage-aware or the espn writer carries the
+       * full slate. sports-public-routes-cache-first pins this exact list so a re-add goes red.
        */
-      source: { in: ['espn', 'espn_live', 'rolling_insights', 'api_sports', 'thesportsdb'] },
+      source: { in: ['rolling_insights', 'espn_live', 'api_sports', 'thesportsdb'] },
       ...(team
         ? {
             OR: [
