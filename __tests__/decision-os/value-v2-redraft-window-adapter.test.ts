@@ -44,7 +44,7 @@ function fakePrisma(over: {
       findUnique: async (args: unknown) => {
         log('league.findUnique')(args)
         if (over.leagueThrows) throw new Error('league read down')
-        return over.league === undefined ? { platformLeagueId: 'sleeper-1' } : over.league
+        return over.league === undefined ? { platformLeagueId: 'sleeper-1', platform: 'sleeper' } : over.league
       },
     },
     leagueTeam: {
@@ -270,6 +270,54 @@ describe('a resolved identity reaches the port in the right namespaces', () => {
     // The injury read is scoped by sport, because externalId is not unique across sports.
     const players = reads.find(r => r.model === 'sportsPlayer.findMany')!.args as { where: { sport: string } }
     expect(players.where.sport).toBe('NFL')
+  })
+
+  /*
+   * 🛑 THE ROSTER'S IDS ARE SLEEPER IDS, AND `SportsPlayer` KEEPS THOSE IN `sleeperId`.
+   *
+   * Matching them against `externalId` returned OTHER PLAYERS: measured in production, sleeper-
+   * source rows have zero numeric `externalId`s, while the numeric `externalId` space belongs to
+   * rolling_insights (ids 1..10,188, inside Sleeper's range). Eight of eight sampled matches were
+   * the wrong person — roster 9225 is Tank Bigsby and matched "Mitch Van Vooren" (INACT). Across
+   * 1,067 rosters the correct join moves average coverage 0.147 -> 0.983.
+   */
+  it('matches a sleeper league on sleeperId and the sleeper source, never externalId', async () => {
+    const { prisma, reads } = fakePrisma({
+      leagueTeams: [{ externalId: '7', isOrphan: false }],
+      rosterPlayers: [{ playerId: '9225' }, { playerId: '8130' }],
+      schedule: [{ week: 6 }],
+    })
+    await resolveRedraftTeamWindow({ ...base, prisma })
+    const players = reads.find(r => r.model === 'sportsPlayer.findMany')!.args as {
+      where: { sport: string; sleeperId?: { in: string[] }; externalId?: unknown; source?: string }
+    }
+    expect(players.where.sport).toBe('NFL')
+    expect(players.where.sleeperId).toEqual({ in: ['9225', '8130'] })
+    expect(players.where.source).toBe('sleeper')
+    // The column that returned other people's players must not be used for a sleeper league.
+    expect(players.where.externalId).toBeUndefined()
+  })
+
+  /*
+   * ⚠ THE OTHER DIRECTION. A non-sleeper league's roster ids are NOT sleeper ids, so they keep the
+   * previous `externalId` behaviour rather than being matched against a column that cannot hold
+   * them. This is why the platform is threaded through rather than the join being switched
+   * unconditionally.
+   */
+  it('leaves a non-sleeper league on externalId', async () => {
+    const { prisma, reads } = fakePrisma({
+      league: { platformLeagueId: 'espn-1', platform: 'espn' },
+      leagueTeams: [{ externalId: '7', isOrphan: false }],
+      rosterPlayers: [{ playerId: 'abc' }],
+      schedule: [{ week: 6 }],
+    })
+    await resolveRedraftTeamWindow({ ...base, prisma })
+    const players = reads.find(r => r.model === 'sportsPlayer.findMany')!.args as {
+      where: { externalId?: { in: string[] }; sleeperId?: unknown; source?: unknown }
+    }
+    expect(players.where.externalId).toEqual({ in: ['abc'] })
+    expect(players.where.sleeperId).toBeUndefined()
+    expect(players.where.source).toBeUndefined()
   })
 
   it('reads the injury roster from the PROPOSER roster the route validated', async () => {

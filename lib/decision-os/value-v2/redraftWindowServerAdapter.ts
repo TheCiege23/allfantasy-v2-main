@@ -141,20 +141,61 @@ async function stage<T>(gap: string, run: () => Promise<T>): Promise<StageRead<T
  * ⚠ A THROWN QUERY IS ALLOWED TO PROPAGATE rather than returning an empty map: an empty map is
  * indistinguishable from a fully-uncovered roster, which refuses for the wrong stated reason.
  */
-function availabilityLoader(prisma: PrismaClient) {
+/**
+ * 🛑 THE ROSTER'S IDS ARE THE PLATFORM'S, AND `SportsPlayer` KEEPS THE PLATFORM'S ID IN A COLUMN
+ * OF ITS OWN — NOT IN `externalId`. MATCHING ON `externalId` RETURNED OTHER PEOPLE'S PLAYERS.
+ *
+ * `redraft_roster_players.playerId` holds the source platform's player id. For Sleeper that is a
+ * 4-5 digit number, and `SportsPlayer` stores it in `sleeperId`. Measured 2026-09-12 in
+ * production: `sleeper`-source rows have **zero** numeric `externalId`s, while the numeric
+ * `externalId` space belongs to `rolling_insights` (9,564 rows, ids 1..10,188 — inside Sleeper's
+ * range) and `backfill` (261). So `externalId: { in: sleeperIds }` never matched the row it was
+ * looking for; it matched whichever vendor row happened to collide numerically. Verified by name,
+ * eight of eight wrong:
+ *
+ *     roster 9225  Tank Bigsby     -> matched "Mitch Van Vooren"  INACT  rolling_insights
+ *     roster 8130  Trey McBride    -> matched "Lance Robinson"    INACT  rolling_insights
+ *     roster 7528  Najee Harris    -> matched "Thayer Thomas"     INACT  rolling_insights
+ *
+ * That is also why `INACT` dominated the sample: 8,010 of 8,010 INACT rows are rolling_insights
+ * and ZERO are sleeper, and `deriveAvailabilityCategory` maps the SLEEPER vocabulary by its own
+ * documentation. The read was applying one vendor's status words to another vendor's player.
+ *
+ * Coverage across 1,067 rosters in forecast-covered redraft leagues:
+ *
+ *     externalId (before)            0.147 average,    2 rosters clear MIN_INJURY_COVERAGE
+ *     sleeperId, any source          0.742 average, 1053 clear
+ *     sleeperId + source 'sleeper'   0.983 average, 1067 clear
+ *
+ * ⚠ THE SOURCE FILTER IS PART OF THE FIX, NOT TIDINESS. 1,148 rolling_insights rows also carry a
+ * `sleeperId`, so without it a correct match can still be dragged to 'unknown' by a second vendor
+ * row disagreeing about the same player — which is the 0.742 column above.
+ *
+ * ⚠ AND THE `platform` GATE IS WHY THIS IS SAFE FOR EVERY OTHER PLATFORM. A non-Sleeper league's
+ * roster ids are not Sleeper ids, so they keep the previous `externalId` behaviour rather than
+ * being silently matched against a column that cannot hold them.
+ */
+function availabilityLoader(prisma: PrismaClient, platform: string | null) {
+  const isSleeper = (platform ?? '').trim().toLowerCase() === 'sleeper'
   return async (sport: string, ids: string[]): Promise<Map<string, string>> => {
     const out = new Map<string, string>()
     if (ids.length === 0) return out
-    const rows = await prisma.sportsPlayer.findMany({
-      where: { sport, externalId: { in: ids } },
-      select: { externalId: true, status: true },
-    })
+    const rows = isSleeper
+      ? (await prisma.sportsPlayer.findMany({
+          where: { sport, sleeperId: { in: ids }, source: 'sleeper' },
+          select: { sleeperId: true, status: true },
+        })).map(r => ({ key: r.sleeperId, status: r.status }))
+      : (await prisma.sportsPlayer.findMany({
+          where: { sport, externalId: { in: ids } },
+          select: { externalId: true, status: true },
+        })).map(r => ({ key: r.externalId, status: r.status }))
     const seen = new Map<string, string>()
     for (const row of rows) {
+      if (!row.key) continue
       const category = deriveAvailabilityCategory(row.status)
-      const prior = seen.get(row.externalId)
-      if (prior === undefined) seen.set(row.externalId, category)
-      else if (prior !== category) seen.set(row.externalId, 'unknown')
+      const prior = seen.get(row.key)
+      if (prior === undefined) seen.set(row.key, category)
+      else if (prior !== category) seen.set(row.key, 'unknown')
     }
     for (const [id, category] of seen) out.set(id, category)
     return out
@@ -324,7 +365,7 @@ export async function resolveRedraftTeamWindow(req: RedraftWindowRequest): Promi
   if (!Number.isSafeInteger(week) || week < 1) return refuse(WINDOW_GAP_PERIOD_UNRESOLVED)
 
   const leagueRead = await stage(WINDOW_GAP_LEAGUE_READ_FAILED, () =>
-    prisma.league.findUnique({ where: { id: leagueId }, select: { platformLeagueId: true } }),
+    prisma.league.findUnique({ where: { id: leagueId }, select: { platformLeagueId: true, platform: true } }),
   )
   if (!leagueRead.ok) return refuse(leagueRead.gap)
   if (!leagueRead.value) return refuse(WINDOW_GAP_LEAGUE_MISSING)
@@ -384,7 +425,7 @@ export async function resolveRedraftTeamWindow(req: RedraftWindowRequest): Promi
     platformLeagueId: leagueRead.value.platformLeagueId ?? null,
     sport,
     rosterPlayerIds,
-    loadAvailability: availabilityLoader(prisma),
+    loadAvailability: availabilityLoader(prisma, leagueRead.value.platform ?? null),
     // Already resolved above; the port hands back the one value rather than re-reading per week.
     loadRestOfSeason: async () => restOfSeason,
   })
