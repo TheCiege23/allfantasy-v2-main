@@ -185,6 +185,61 @@ describe('the MFL matchup writer exists now, and the constraint moved INTO it', 
     expect(index).toContain('runMflMatchupParity')
   })
 
+  /*
+   * 🛑 AND THE EXPORT TEST ABOVE IS EXACTLY THE GUARD THAT DID NOT CATCH THIS.
+   *
+   * It passed continuously from 2026-09-11 while `runFleaflickerMatchupParity` and
+   * `runMflMatchupParity` had ZERO callers anywhere under `app/` or `lib/`. Both
+   * were exported, both had green unit tests, and neither had ever run in
+   * production — the `ingestCFBDStats` failure this repo already records, in a
+   * file whose sibling comment names it in capitals.
+   *
+   * An export is not a schedule. Asserting the collector index mentions a writer
+   * proves the module is reachable, not that anything reaches it. The heartbeat is
+   * the only caller, so the heartbeat is what has to be asserted.
+   */
+  describe('…and the heartbeat actually CALLS each one — an export is not a schedule', () => {
+    const cron = codeOnly(read('app/api/cron/fantasy-os-exec-sync/route.ts'))
+
+    it('self-control: the stripper keeps code and drops prose', () => {
+      /* Without this, a test looking for `runMflMatchupParity(` would be satisfied
+         by the paragraph above explaining that it was missing. */
+      expect(cron).toContain('withSyncJobRun')
+      expect(codeOnly('/* runMflMatchupParity({ x }) */\nconst a = 1')).not.toContain(
+        'runMflMatchupParity({',
+      )
+      expect(codeOnly('const a = 1 // note')).toContain('const a = 1')
+    })
+
+    it.each([
+      ['external (ESPN/Yahoo)', 'runExternalMatchupParity'],
+      ['fantrax', 'runFantraxMatchupParity'],
+      ['fleaflicker', 'runFleaflickerMatchupParity'],
+      ['mfl', 'runMflMatchupParity'],
+    ])('the %s writer is invoked by the heartbeat, not merely imported', (_label, fn) => {
+      expect(cron).toContain(`await ${fn}(`)
+    })
+
+    it('every one of them is bounded by the shared per-tick league budget', () => {
+      /* An unbounded collector on a 10-minute heartbeat is a provider-rate-limit
+         incident, not a freshness improvement. */
+      for (const fn of [
+        'runExternalMatchupParity',
+        'runFantraxMatchupParity',
+        'runFleaflickerMatchupParity',
+        'runMflMatchupParity',
+      ]) {
+        expect(cron).toContain(`await ${fn}({ now, maxLeagues: parityLeagues })`)
+      }
+    })
+
+    it('a failing collector cannot take the heartbeat down with it', () => {
+      /* Four collectors, four catches. The heartbeat reporting a provider outage as
+         a dead cron is how `SyncJobRun` stopped being readable the last time. */
+      expect((cron.match(/matchup parity failed'/g) ?? []).length).toBe(4)
+    })
+  })
+
   it('🛑 the MFL writer does NOT canonicalise the franchise id', () => {
     /*
      * The one rule that keeps its rows readable. Every sibling collector maps ids
