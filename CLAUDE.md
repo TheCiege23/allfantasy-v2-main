@@ -1506,6 +1506,93 @@ mock still matched. Compare the blob of BOTH the test and the module across
 branches before concluding anything; the branch that is wrong is usually the one
 where everything is green.
 
+#### A fail-open that skips the operation is not failing open
+
+🛑 **`process.exit(0)` IS THE RIGHT ANSWER FOR A GATE AND A SILENT NO-OP FOR ITS
+IN-PROCESS CALLER.**
+
+`push-queue.mjs` had one `allow()` — a warning plus `process.exit(0)` — reached
+from two places. In the hook that is correct: exit 0 means "do not block git" and
+the push proceeds. But `cmdPush` calls `cmdWait` IN-PROCESS and then runs
+`git push` itself, so the same exit killed the program BEFORE the push. Measured
+2026-09-11: `"failing open, the push is allowed"` printed by a program that then
+did not push. Exit 0, ticket still `waiting`, `origin/main` unmoved, nothing red
+anywhere. Fixed in `52fca4ba9` by returning 0 instead, which means the same thing
+to both callers and is true for both.
+
+**It was caught only because the result was verified by `ls-remote` SHA rather
+than by exit status** — the habit this file already insists on, paying for itself
+on a failure mode nothing else would have surfaced.
+
+⚠ **THE TRIGGER WAS A NON-ATOMIC WRITE, AND IT GENERALISES.** Ticket files were
+rewritten in place on every heartbeat, so a concurrent reader caught one
+mid-write and the whole read went degraded. The file parsed perfectly seconds
+later. Any shared-state file written by `writeFileSync` onto its own path has
+this: write a temp beside it and `renameSync`, which is atomic within a
+directory, and make sure the temp name cannot match the reader's own glob.
+
+⚠ **AND WHEN AUDITING FOR THIS, ASK WHO CALLS THE EXITING FUNCTION, NOT WHETHER
+EXITING IS CORRECT.** Two of that file's three `allow()` sites were and remain
+right. Only the one whose caller had work left to do was a bug.
+
+#### A correct fix that stops you finding the cause
+
+⚠ **A WORKAROUND THAT WORKS IS THE MOST RELIABLE WAY TO NEVER DIAGNOSE
+SOMETHING**, because nothing ever makes you look again.
+
+`npx vitest` failed with `not recognized as an internal or external command`.
+Treated as a transient PATH problem; switched to
+`node node_modules/vitest/vitest.mjs`, which is the form this file mandates
+anyway; moved on. The real cause was `F:`'s `node_modules/.bin` being EMPTY — 0
+entries against C:'s 180 — and it stayed hidden for hours because the workaround
+never breaks. A peer independently hit the same shape on a red Playwright lane
+everyone had filed under "known".
+
+**The tell is a fix that is both correct and uninformative.** When one lands,
+spend the extra minute on *why the first thing failed* — that is the only moment
+you will ever be pointed at it.
+
+#### A check whose subject and whose control are the same bytes
+
+🛑 **A SOURCE-INSPECTION TEST CAN MATCH ITS OWN EXPLANATORY COMMENT.**
+
+A test asserted that `cmdWait` no longer contains `if (degraded) allow(`. The fix
+removed that statement — and its replacement comment NAMES the removed line, to
+explain why the other two sites are fine. The regex matched the prose and failed
+the fix for describing the bug it removed.
+
+It passed in one checkout and failed in another purely because the comment was
+worded differently in each, which is also a clean instance of *the artifact you
+tested is not the artifact you shipped*.
+
+**Anchor to line starts** (`/^\s*if \(degraded\) allow\(/m`): a statement begins a
+line, a comment line begins with `*` or `//`. Better still, assert on behaviour
+where you can — a source grep cannot distinguish "the bug is present" from "the
+bug is described", and code that documents its own history will trip it forever.
+
+#### A completeness check that agrees with itself by construction
+
+🛑 **WORSE THAN THE NAIVE VERSION, BECAUSE IT LOOKS RIGOROUS.**
+
+`state: rows.length > 0 ? 'full' : 'missing'` cannot tell SOME from ALL — eight of
+twelve teams reported complete. The obvious repair is to compare against a count,
+and Sleeper does exactly that (`standings.length === rosterCount`) legitimately,
+because those are built from different parts of its payload.
+
+Copying that shape into ESPN, Yahoo or MFL proves NOTHING: there
+`standings = raw.teams.map(...)`, so its length equals the team count by
+construction and the comparison always agrees. Same defect already sat in
+`FleaflickerAdapter`, where `leagueSize` falls back to `teamsFlat.length`
+whenever the provider omits a size — so the check self-compares exactly when it
+is most needed.
+
+**A completeness check is only worth the INDEPENDENCE of the two numbers.** Ask
+what the expected count is derived from before trusting it; if it descends from
+the same data as the actual, there is no check. When no independent count exists,
+report "could not verify" rather than either extreme — and note that
+`length > 0 ? 'full' : 'missing'` also fails in the other direction, calling a
+legitimately empty collection `missing`.
+
 #### A search hit is not attribution
 
 The shapes above are a check that cannot fail, one that fails and hands back a
@@ -1802,6 +1889,31 @@ one. Pinning which signal fired is what stops the other branch becoming dead cod
 under a green suite: a test asserting only "the rebind happened" would pass with
 the ancestor half deleted and patch-id quietly doing all the work. A rebind that
 silently declines is indistinguishable from having no rebind at all.
+
+🛑 **AND NEVER REBIND WHILE YOUR OWN `push` PROCESS IS STILL RUNNING — IT WILL
+TAKE A SECOND TICKET, AND THEN A THIRD.**
+
+`rebind` moves the ticket; it cannot reach into a live `push-queue.mjs push` that
+captured the old sha at start. On its next poll that process finds no ticket
+matching its sha and does the reasonable thing — takes a fresh one at the BACK.
+Release that one and it takes another. Measured 2026-09-11: `#000389`, then
+`#000391` seconds after it was released, while the same session still held
+`#000360` at position 2. One session, two places in a queue whose entire purpose
+is fairness.
+
+**The order that works: stop the push process, THEN rebuild, THEN rebind, THEN
+re-push.** Doing it in the other order IS the failure. `TaskStop` on the owning
+background task killed the node child cleanly here — verified by its output file
+ceasing to grow — which is worth recording because this file elsewhere documents
+TaskStop orphaning `tsc`. That orphaning is not universal.
+
+⚠ **AND IDENTIFYING YOUR OWN PROCESS IS HARDER THAN IT LOOKS.** `CommandLine` is
+identical across sessions; the working directory never appears in it (a peer lost
+an hour to `-like '*land-cf*'` matching nothing, because that string is a cwd);
+and `bash.exe` as parent does not discriminate, since every session's Bash tool
+has one. The ticket file's own `worktree` field is the reliable identifier. And
+`push:done --sha=` matches the FULL 40 characters — a 9-char prefix prints
+"no ticket — nothing to release", which reads exactly like success.
 
 ⚠ **AND DO NOT GENERALISE `sameWork` TO A MERGE DECISION.** Patch-id equality
 means "the same change", not "safe to treat as interchangeable". Here that
