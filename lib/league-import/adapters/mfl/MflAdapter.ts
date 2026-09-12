@@ -2,6 +2,7 @@ import type { ILeagueImportAdapter } from '../ILeagueImportAdapter'
 import type { NormalizedImportResult, SourceTracking } from '../../types'
 import type { MflImportPayload } from './types'
 import { resolveProviderScoringStatKey } from '@/lib/scoring-defaults/ScoringKeyAliasResolver'
+import { coverageAgainstExpected } from '@/lib/league-import/coverageCompleteness'
 
 /**
  * The league's scoring format, or `null` when MFL did not say.
@@ -342,10 +343,17 @@ export const MflAdapter: ILeagueImportAdapter<MflImportPayload> = {
               ? null
               : 'MFL playoff settings were only partially available from league metadata.',
         },
-        currentStandings: {
-          state: standings.length > 0 ? 'full' : 'missing',
-          count: standings.length,
-        },
+        /*
+         * Measured against the size the PROVIDER declared, not against the row
+         * count these standings were built from. `standings = raw.teams.map(...)`,
+         * so comparing the two would agree by construction and always say `full` —
+         * the circular check already caught in FleaflickerAdapter.
+         */
+        currentStandings: coverageAgainstExpected({
+          actual: standings.length,
+          expected: raw.league.size,
+          unit: 'teams',
+        }),
         currentSchedule: {
           state: schedule.length > 0 ? 'partial' : 'missing',
           count: schedule.length,

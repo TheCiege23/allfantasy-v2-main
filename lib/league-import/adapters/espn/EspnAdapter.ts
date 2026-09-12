@@ -1,6 +1,7 @@
 import type { ILeagueImportAdapter } from '../ILeagueImportAdapter'
 import type { NormalizedImportResult, SourceTracking } from '../../types'
 import type { EspnImportPayload } from './types'
+import { coverageAgainstExpected } from '@/lib/league-import/coverageCompleteness'
 
 function detectEspnScoringFormat(raw: EspnImportPayload): string | null {
   const receptionRule = raw.settings?.scoringItems.find((rule) => rule.statId === 53)
@@ -227,10 +228,17 @@ export const EspnAdapter: ILeagueImportAdapter<EspnImportPayload> = {
               ? null
               : 'ESPN playoff settings were only partially available from league metadata.',
         },
-        currentStandings: {
-          state: standings.length > 0 ? 'full' : 'missing',
-          count: standings.length,
-        },
+        /*
+         * Measured against the size the PROVIDER declared, not against the row
+         * count these standings were built from. `standings = raw.teams.map(...)`,
+         * so comparing the two would agree by construction and always say `full` —
+         * the circular check already caught in FleaflickerAdapter.
+         */
+        currentStandings: coverageAgainstExpected({
+          actual: standings.length,
+          expected: raw.league.size,
+          unit: 'teams',
+        }),
         currentSchedule: {
           state: schedule.length > 0 ? 'full' : 'missing',
           count: schedule.length,
