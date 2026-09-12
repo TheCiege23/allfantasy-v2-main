@@ -10,6 +10,11 @@ import { validateTradeAssets } from '@/lib/league-trade-engine/tradeValidationSe
 import { resolveLeagueTradeSettings } from '@/lib/league-trade-engine/tradeSettingsResolver'
 import { applyTradeAssetsInTransaction } from '@/lib/league-trade-engine/tradeProcessor'
 import {
+  captureGenericRosterState,
+  genericTradeActorRole,
+  writeGenericTradeExecutionSnapshot,
+} from '@/lib/league-trade-engine/tradeExecutionSnapshot'
+import {
   appendAfTradeProcessingEvent,
   appendAfTradeStatusHistory,
   logAfTradeAudit,
@@ -529,11 +534,46 @@ export async function finalizeAfLeagueTradeProcessing(input: { tradeId: string; 
     if (claimed.count === 0) {
       throw new Error('TRADE_ALREADY_PROCESSED')
     }
+    // ⚠ BEFORE-STATE IS READ HERE AND NOWHERE LATER. `applyTradeAssetsInTransaction` overwrites
+    // `playerData` and `faabRemaining` on both rosters, so inside this transaction these rows stop
+    // being "before" the moment it runs. After the claim, so only the race winner captures.
+    const beforeState = await captureGenericRosterState(tx, [
+      trade.proposerRosterId,
+      trade.receiverRosterId,
+    ])
     await applyTradeAssetsInTransaction(tx, {
       leagueId: trade.leagueId,
       proposerRosterId: trade.proposerRosterId,
       receiverRosterId: trade.receiverRosterId,
       assets,
+    })
+
+    // IMMUTABLE EVIDENCE FOR THE GENERIC PATH. The native redraft route got this first; this side
+    // was left explicitly uncovered, with `TradeExecutionSnapshot.genericTradeId` and its relation
+    // sitting unused, so half of all executed trades still left a reversal nothing to restore to.
+    await writeGenericTradeExecutionSnapshot(tx, {
+      tradeId: trade.id,
+      leagueId: trade.leagueId,
+      proposerRosterId: trade.proposerRosterId,
+      receiverRosterId: trade.receiverRosterId,
+      executedByActorId: input.actorUserId,
+      // From the status that was READ — the same value the claim above is conditional on.
+      executedByActorRole: genericTradeActorRole(trade.status),
+      governance: {
+        statusWhenFinalized: trade.status,
+        reviewType: trade.reviewType ?? null,
+        vetoThresholdPercent: trade.vetoThresholdPercent ?? null,
+        processingDelayHours: delayH,
+        scheduledProcessAt: trade.scheduledProcessAt?.toISOString() ?? null,
+      },
+      validations: { rosterTransactionGate: 'ok' },
+      assetSummary: { items: assets.length, assets },
+      beforeState,
+      afterState: await captureGenericRosterState(tx, [
+        trade.proposerRosterId,
+        trade.receiverRosterId,
+      ]),
+      executedAt: new Date(),
     })
     await appendAfTradeStatusHistory({
       tradeId: trade.id,
