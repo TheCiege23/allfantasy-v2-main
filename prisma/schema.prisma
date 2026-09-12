@@ -6529,6 +6529,7 @@ model ImportRun {
   warnings         ImportWarning[]
   reviewTasks      ImportReviewTask[]
   entityMappings   ExternalEntityMapping[]
+  attempts         ImportRunAttempt[]
 
   @@index([userId, startedAt])
   @@index([provider, sourceLeagueId, season])
@@ -18293,4 +18294,40 @@ model LeagueMaxPfFreezeCorrection {
   @@index([freezeId])
   @@index([freezeId, teamId])
   @@map("league_max_pf_freeze_corrections")
+}
+
+/// One row per import ATTEMPT, alongside the logical `ImportRun`.
+///
+/// 🛑 WHY THIS EXISTS. A forced re-import REUSES the `import_runs` row — the
+/// idempotency key is unique so a fresh insert would collide, deleting the row
+/// would discard the audit trail the table exists for, and salting the key would
+/// leave unbounded near-duplicates. The cost was that each re-run OVERWROTE the
+/// previous attempt's status, error, payload hash and summary: a league that
+/// failed twice then succeeded looked, forever after, like one that succeeded
+/// once.
+///
+/// `ImportRun` keeps its identity and its unique key; the per-attempt detail
+/// lives here. Nothing that already joined on `runId` changed shape.
+model ImportRunAttempt {
+  id               String    @id @default(cuid())
+  runId            String
+  /// 1-based, scoped to the run.
+  ///
+  /// ⚠ NOT SAFE TO DERIVE FROM `count + 1` OUTSIDE A TRANSACTION — two concurrent
+  /// writes read the same count and both claim the same number, which is the race
+  /// `idempotencyKey` prevents one level up. The unique constraint below turns
+  /// that into a write error rather than silent history corruption, and the
+  /// writer retries on it.
+  attemptNumber    Int
+  status           String    @default("running") @db.VarChar(24)
+  rawPayloadHash   String?   @db.VarChar(64)
+  canonicalSummary Json?
+  error            String?   @db.Text
+  startedAt        DateTime  @default(now())
+  completedAt      DateTime?
+  run              ImportRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@unique([runId, attemptNumber])
+  @@index([runId, startedAt])
+  @@map("import_run_attempts")
 }
