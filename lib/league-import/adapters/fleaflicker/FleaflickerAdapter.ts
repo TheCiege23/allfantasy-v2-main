@@ -147,7 +147,25 @@ export const FleaflickerAdapter: ILeagueImportAdapter<FleaflickerImportPayload> 
        * consumer can tell "no rules" from "rules we could not read" — the coverage
        * block below carries which.
        */
-      scoring: scoringRules.length > 0 ? { rules: scoringRules } : null,
+      scoring:
+        scoringRules.length > 0
+          ? {
+              /*
+               * ⚠ NULL, NOT A DERIVED GUESS, AND THE TYPE ASKS FOR EXACTLY THAT.
+               * `scoring_format` is nullable on purpose — its own doc records that MFL
+               * once assigned "standard" to every league that did not describe itself,
+               * and a fabricated format is indistinguishable from a measured one.
+               *
+               * Fleaflicker's rules endpoint declares no format name. It is tempting to
+               * derive PPR from whether receptions score, but this league's fixture
+               * carries TWO `Catch` rules (one per catch AND one per two catches), so
+               * even that reading is ambiguous here. A null flows into the coverage
+               * block honestly; the RULES themselves are carried in full either way.
+               */
+              scoring_format: null,
+              rules: scoringRules,
+            }
+          : null,
       schedule: [],
       draft_picks: [],
       transactions: [],
