@@ -2,6 +2,10 @@ import type { ILeagueImportAdapter } from '../ILeagueImportAdapter'
 import type { FleaflickerImportPayload } from '@/lib/league-import/fleaflicker/types'
 import type { NormalizedImportResult, NormalizedRoster, SourceTracking } from '../../types'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
+import {
+  normalizeFleaflickerScoringRules,
+  summarizeFleaflickerRosterShape,
+} from '@/lib/league-import/fleaflicker/fleaflickerScoringRules'
 
 function mapWaiverType(raw: string | null | undefined): string {
   const s = String(raw ?? '').toUpperCase()
@@ -47,8 +51,24 @@ export const FleaflickerAdapter: ILeagueImportAdapter<FleaflickerImportPayload> 
       rosterByTeamId.set(r.team.id, r)
     }
 
+    /*
+     * Scoring rules, from `FetchLeagueRules`. `raw.rules` is null when that call
+     * failed — an enrichment, so the import proceeds and `coverage.scoringSettings`
+     * says so honestly rather than claiming rules that were never read.
+     */
+    const scoringRules = normalizeFleaflickerScoringRules(raw.rules)
+    const rosterShape = summarizeFleaflickerRosterShape(raw.rules)
+
     const leagueSize = typeof lg.size === 'number' ? lg.size : teamsFlat.length
-    const rosterSize = lg.rosterRequirements?.rosterSize ?? 40
+    /*
+     * ⚠ THE `?? 40` WAS A GUESS, AND `FetchLeagueRules` KNOWS THE ANSWER. The
+     * standings league object carries `rosterRequirements.rosterSize` only
+     * sometimes; the rules endpoint reports `maxRosterSize` outright (68 in the
+     * committed fixture, against a hardcoded fallback of 40). Preferring the
+     * provider's own number over a constant is the whole point of reading rules.
+     * The 40 stays as the last resort for a league where NEITHER answered.
+     */
+    const rosterSize = lg.rosterRequirements?.rosterSize ?? rosterShape.maxRosterSize ?? 40
 
     const sportNorm = normalizeToSupportedSport(sport === 'NFL' ? 'NFL' : sport)
 
@@ -111,11 +131,23 @@ export const FleaflickerAdapter: ILeagueImportAdapter<FleaflickerImportPayload> 
         faab_budget: lg.defaultWaiverBudget ?? undefined,
         playoff_team_count: Math.max(2, Math.floor(leagueSize / 2)),
         settings: {
-          fleaflicker: { leagueId: lg.id, season },
+          fleaflicker: {
+            leagueId: lg.id,
+            season,
+            /* From FetchLeagueRules; null when it did not answer. */
+            starters: rosterShape.starters,
+            bench: rosterShape.bench,
+          },
         },
       },
       rosters: normalizedRosters,
-      scoring: null,
+      /*
+       * ⚠ `null` UNTIL 2026-09-12, and the coverage note said so in as many words.
+       * Now populated from FetchLeagueRules. Still null when that call failed, so a
+       * consumer can tell "no rules" from "rules we could not read" — the coverage
+       * block below carries which.
+       */
+      scoring: scoringRules.length > 0 ? { rules: scoringRules } : null,
       schedule: [],
       draft_picks: [],
       transactions: [],
@@ -134,7 +166,12 @@ export const FleaflickerAdapter: ILeagueImportAdapter<FleaflickerImportPayload> 
         leagueSettings: { state: 'full' },
         currentRosters: normalizedRosters.some((x) => x.player_ids.length > 0) ? { state: 'full' } : { state: 'partial', note: 'Roster players depend on FetchLeagueRosters' },
         historicalRosterSnapshots: { state: 'missing' },
-        scoringSettings: { state: 'missing', note: 'Fleaflicker scoring rules not mapped in v1' },
+        scoringSettings:
+            scoringRules.length > 0
+              ? { state: 'full' }
+              : raw.rules == null
+                ? { state: 'missing', note: 'FetchLeagueRules did not answer for this league' }
+                : { state: 'missing', note: 'FetchLeagueRules answered but declared no scoring rules' },
         playoffSettings: { state: 'partial' },
         /*
          * ⚠ MEASURED, NOT ASSERTED — AND `lg.size` IS WHAT MAKES THAT POSSIBLE.
