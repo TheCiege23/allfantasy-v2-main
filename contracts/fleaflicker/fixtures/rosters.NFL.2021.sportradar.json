@@ -1,0 +1,357 @@
+{
+  "rosters": [
+    {
+      "team": {
+        "id": 1371776,
+        "name": "Winter Hill Black Shamrocks",
+        "logoUrl": "https://s3.amazonaws.com/fleaflicker/t1371776_0_150x150.jpg",
+        "recordOverall": {
+          "wins": 5,
+          "losses": 8,
+          "winPercentage": {
+            "value": 0.3846154,
+            "formatted": ".385"
+          },
+          "rank": 11,
+          "formatted": "5-8"
+        },
+        "recordDivision": {
+          "wins": 4,
+          "losses": 2,
+          "winPercentage": {
+            "value": 0.6666667,
+            "formatted": ".667"
+          },
+          "rank": 2,
+          "formatted": "4-2"
+        },
+        "recordPostseason": {
+          "losses": 1,
+          "winPercentage": {
+            "formatted": ".000"
+          },
+          "rank": 11,
+          "formatted": "0-1"
+        },
+        "pointsFor": {
+          "value": 1379.9,
+          "formatted": "1,379.9"
+        },
+        "pointsAgainst": {
+          "value": 1503.94,
+          "formatted": "1,503.94"
+        },
+        "streak": {
+          "value": -1,
+          "formatted": "L1"
+        },
+        "waiverAcquisitionBudget": {
+          "value": 100,
+          "formatted": "$100"
+        },
+        "initials": "WH"
+      },
+      "players": [
+        {
+          "proPlayer": {
+            "id": 8512,
+            "nameFull": "Lamar Miller",
+            "nameShort": "L. Miller",
+            "proTeamAbbreviation": "FA",
+            "position": "RB",
+            "headshotUrl": "https://d26bvpybnxg29h.cloudfront.net/nfl/8512.png",
+            "nameFirst": "Lamar",
+            "nameLast": "Miller",
+            "proTeam": {
+              "abbreviation": "FA",
+              "location": "Free",
+              "name": "Agent",
+              "isFreeAgent": true
+            },
+            "externalIds": [
+              {
+                "id": "a212c5d8-67f8-48b9-99be-2c121ee56366"
+              }
+            ],
+            "positionEligibility": [
+              "RB"
+            ]
+          },
+          "viewingActualPoints": {
+            "formatted": "—"
+          },
+          "transactionStatus": {
+            "locked": {},
+            "isLineupStatusLocked": true
+          },
+          "requestedGamesPeriod": {
+            "ordinal": 1,
+            "startEpochMilli": "1788861600000",
+            "isNow": true
+          },
+          "viewingFormat": "TOTAL",
+          "viewingRange": {
+            "low": -1,
+            "high": -2
+          },
+          "displayGroup": "RUSHER",
+          "lastX": [
+            {
+              "duration": 1
+            },
+            {
+              "duration": 3
+            },
+            {
+              "duration": 5
+            }
+          ],
+          "isKeeper": true
+        },
+        {
+          "proPlayer": {
+            "id": 11259,
+            "nameFull": "Za'Darius Smith",
+            "nameShort": "Z. Smith",
+            "proTeamAbbreviation": "ATL",
+            "position": "LB",
+            "headshotUrl": "https://d26bvpybnxg29h.cloudfront.net/nfl/11259.png",
+            "nflByeWeek": 11,
+            "injury": {
+              "typeAbbreviaition": "Q",
+              "description": "Shoulder",
+              "severity": "QUESTIONABLE",
+              "typeFull": "Questionable"
+            },
+            "nameFirst": "Za'Darius",
+            "nameLast": "Smith",
+            "proTeam": {
+              "abbreviation": "ATL",
+              "location": "Atlanta",
+              "name": "Falcons"
+            },
+            "externalIds": [
+              {
+                "id": "af3599a5-5eb4-4dd4-87ab-e0032ebfa644"
+              }
+            ],
+            "positionEligibility": [
+              "LB",
+              "LB"
+            ],
+            "percentOwnedRatio": 0.05
+          },
+          "viewingActualPoints": {
+            "formatted": "—"
+          },
+          "transactionStatus": {
+            "locked": {},
+            "isLineupStatusLocked": true
+          },
+          "requestedGamesPeriod": {
+            "ordinal": 1,
+            "startEpochMilli": "1788861600000",
+            "isNow": true
+          },
+          "viewingFormat": "TOTAL",
+          "viewingRange": {
+            "low": -1,
+            "high": -2
+          },
+          "displayGroup": "DEFENDER",
+          "lastX": [
+            {
+              "duration": 1
+            },
+            {
+              "duration": 3
+            },
+            {
+              "duration": 5
+            }
+          ],
+          "isOnTradingBlock": true
+        }
+      ]
+    },
+    {
+      "team": {
+        "id": 1373883,
+        "name": "Manitoba Marmots",
+        "recordOverall": {
+          "wins": 4,
+          "losses": 9,
+          "winPercentage": {
+            "value": 0.30769232,
+            "formatted": ".308"
+          },
+          "rank": 12,
+          "formatted": "4-9"
+        },
+        "recordDivision": {
+          "wins": 2,
+          "losses": 4,
+          "winPercentage": {
+            "value": 0.33333334,
+            "formatted": ".333"
+          },
+          "rank": 3,
+          "formatted": "2-4"
+        },
+        "recordPostseason": {
+          "wins": 2,
+          "losses": 1,
+          "winPercentage": {
+            "value": 0.6666667,
+            "formatted": ".667"
+          },
+          "rank": 12,
+          "formatted": "2-1"
+        },
+        "pointsFor": {
+          "value": 1842.9,
+          "formatted": "1,842.9"
+        },
+        "pointsAgainst": {
+          "value": 1842.04,
+          "formatted": "1,842.04"
+        },
+        "streak": {
+          "value": 1,
+          "formatted": "W1"
+        },
+        "waiverAcquisitionBudget": {
+          "value": 100,
+          "formatted": "$100"
+        },
+        "newItemCounts": {
+          "activityUnread": 2,
+          "messagesUnread": 1
+        },
+        "initials": "MM"
+      },
+      "players": [
+        {
+          "proPlayer": {
+            "id": 14694,
+            "nameFull": "A.J. Brown",
+            "nameShort": "A. Brown",
+            "proTeamAbbreviation": "NE",
+            "position": "WR",
+            "headshotUrl": "https://d26bvpybnxg29h.cloudfront.net/nfl/14694.png",
+            "nflByeWeek": 11,
+            "injury": {
+              "typeAbbreviaition": "IR",
+              "description": "Ankle",
+              "severity": "OUT",
+              "typeFull": "Injured Reserve"
+            },
+            "nameFirst": "A.J.",
+            "nameLast": "Brown",
+            "proTeam": {
+              "abbreviation": "NE",
+              "location": "New England",
+              "name": "Patriots"
+            },
+            "externalIds": [
+              {
+                "id": "a9e580f2-1fbe-46fb-887c-c84089b507e4"
+              }
+            ],
+            "positionEligibility": [
+              "WR"
+            ],
+            "percentOwnedRatio": 0.99
+          },
+          "viewingActualPoints": {
+            "formatted": "—"
+          },
+          "transactionStatus": {
+            "locked": {},
+            "isLineupStatusLocked": true
+          },
+          "requestedGamesPeriod": {
+            "ordinal": 1,
+            "startEpochMilli": "1788861600000",
+            "isNow": true
+          },
+          "viewingFormat": "TOTAL",
+          "viewingRange": {
+            "low": -1,
+            "high": -2
+          },
+          "displayGroup": "RECEIVER",
+          "lastX": [
+            {
+              "duration": 1
+            },
+            {
+              "duration": 3
+            },
+            {
+              "duration": 5
+            }
+          ],
+          "isKeeper": true
+        },
+        {
+          "proPlayer": {
+            "id": 13750,
+            "nameFull": "Sony Michel",
+            "nameShort": "S. Michel",
+            "proTeamAbbreviation": "FA",
+            "position": "RB",
+            "headshotUrl": "https://d26bvpybnxg29h.cloudfront.net/nfl/13750.png",
+            "nameFirst": "Sony",
+            "nameLast": "Michel",
+            "proTeam": {
+              "abbreviation": "FA",
+              "location": "Free",
+              "name": "Agent",
+              "isFreeAgent": true
+            },
+            "externalIds": [
+              {
+                "id": "1376da0d-0448-4a37-bd99-842c4580eeda"
+              }
+            ],
+            "positionEligibility": [
+              "RB"
+            ]
+          },
+          "viewingActualPoints": {
+            "formatted": "—"
+          },
+          "transactionStatus": {
+            "locked": {},
+            "isLineupStatusLocked": true
+          },
+          "requestedGamesPeriod": {
+            "ordinal": 1,
+            "startEpochMilli": "1788861600000",
+            "isNow": true
+          },
+          "viewingFormat": "TOTAL",
+          "viewingRange": {
+            "low": -1,
+            "high": -2
+          },
+          "displayGroup": "RUSHER",
+          "lastX": [
+            {
+              "duration": 1
+            },
+            {
+              "duration": 3
+            },
+            {
+              "duration": 5
+            }
+          ],
+          "isKeeper": true,
+          "isOnTradingBlock": true
+        }
+      ]
+    }
+  ]
+}

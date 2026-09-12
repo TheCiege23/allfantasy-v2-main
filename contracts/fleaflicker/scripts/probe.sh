@@ -104,10 +104,15 @@ esac
 case "$ENDPOINT" in
   rules|activity|transactions) QS="sport=${SPORT}&league_id=${LEAGUE_ID}" ;;
   draft)
-    # `draft_number` is documented and defaults to 1 here. ⚠ WITHOUT IT THE ENDPOINT
-    # RETURNS HTTP 200 AND AN EMPTY OBJECT `{}` — measured on league 206154 season 2021.
-    # A 200 with no keys is the worst shape to debug: it is not an error, not a 404, and
-    # reads as "this league never drafted" when it means "you did not say which draft".
+    # `draft_number` is documented and defaults to 1 here.
+    #
+    # ⚠ CORRECTED 2026-09-12. This comment previously claimed that OMITTING
+    # `draft_number` is what makes the endpoint return `{}`. That was the first guess,
+    # and the measurement disproved it: league 206154 season 2021 returns HTTP 200 `{}`
+    # WITH `draft_number=1` and without it. The empty board is a property of that
+    # season, not of the parameter. A 200 with no keys is still the worst shape to debug
+    # — not an error, not a 404 — but "you forgot draft_number" is not the cause. See
+    # G-10 in ../GAPS.md.
     QS="sport=${SPORT}&league_id=${LEAGUE_ID}&season=${SEASON}&draft_number=${SCORING_PERIOD:-1}"
     ;;
   *)
@@ -115,6 +120,32 @@ case "$ENDPOINT" in
     [[ -n "$SCORING_PERIOD" ]] && QS="${QS}&scoring_period=${SCORING_PERIOD}"
     ;;
 esac
+
+# `external_id_type` — opt-in via environment, e.g.
+#   EXTERNAL_ID_TYPE=SPORTRADAR ./probe.sh rosters NFL 206154 2021
+#
+# Documented (vendor Swagger, read 2026-09-12) on FetchLeagueRosters,
+# FetchLeagueDraftBoard, FetchPlayerListing and FetchRoster, with ONE enum value:
+# SPORTRADAR. The schema's `ExternalIdMapping` is `{ type, id: string }`; the docs do
+# not say which response field carries it — that is what a probe with this set answers.
+#
+# ⚠ A SEPARATE NAME SUFFIX IS MANDATORY, not cosmetic. Without it a rosters probe
+# writes `rosters.NFL.2021.json` — a committed, TRIMMED fixture — and silently
+# replaces a key-union-verified file with a 1MB raw response.
+EXTERNAL_ID_TYPE="${EXTERNAL_ID_TYPE:-}"
+NAME_SUFFIX=""
+if [[ -n "$EXTERNAL_ID_TYPE" ]]; then
+  case "$ENDPOINT" in
+    rosters|draft)
+      QS="${QS}&external_id_type=${EXTERNAL_ID_TYPE}"
+      NAME_SUFFIX=".$(echo "$EXTERNAL_ID_TYPE" | tr '[:upper:]' '[:lower:]')"
+      ;;
+    *)
+      echo "ERROR: external_id_type is documented only for rosters and draft here, not '${ENDPOINT}'." >&2
+      exit 1
+      ;;
+  esac
+fi
 
 URL="${BASE_URL}${PATH_SEG}?${QS}"
 echo "GET ${URL}" >&2   # nothing secret here — no token exists for this API
@@ -209,7 +240,7 @@ case "$ENDPOINT" in
   *) NAME="${NAME}.${SEASON}" ;;
 esac
 [[ -n "$SCORING_PERIOD" ]] && NAME="${NAME}.week${SCORING_PERIOD}"
-OUT="${FIXTURE_DIR}/${NAME}.json"
+OUT="${FIXTURE_DIR}/${NAME}${NAME_SUFFIX}.json"   # suffix set only when EXTERNAL_ID_TYPE is — see above
 json_write "$TMP" "$OUT"
 
 echo >&2
