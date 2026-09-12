@@ -527,7 +527,66 @@ only for a remote ref of `refs/heads/main` (cmdCheck ~line 1022) and its default
 its turn, pays the ~25s secret scan and a cold typecheck — **and is only then refused by
 GitHub.** Every message it prints on the way says *rebuild onto current main*; none says
 *open a PR*. A session can burn 40+ minutes being told by our own tooling that it is nearly
-there. Fix that text BEFORE the flag, not after.
+there.
+
+✅ **THAT TEXT IS FIXED AND LANDED — `1d22e2f3b`, refined by `c0c0040d7`.** It happened the
+other way round from the advice above: the flag went on first, the refusal was met, and the
+fix was written from the real `GH006` rejection rather than from a guess about it. `cmdPush`
+now pipes git's stderr (still echoing it verbatim), classifies a branch-protection refusal by
+git's own words, prints PR instructions instead of "rebuild onto current main", and RECORDS it
+so the next session is refused at TICKET time rather than after its own full wait.
+
+🛑 **AND THE FIRST VERSION OF THAT RECORD DEADLOCKED THE ROOM, WHICH IS THE LESSON WORTH MORE
+THAN THE FEATURE.** The marker was cleared only by a successful direct push — and the marker
+is what prevents the push. Protection was reverted ~25 min after being enabled and the marker
+then refused every session for a FALSE reason, with a 12h expiry and an env var nobody knew
+about as the only escape. It had to be deleted by hand. It now re-probes: a marker older than
+`AF_PUSH_QUEUE_PROTECTION_REPROBE_MS` (default 10 min) lets ONE push through to re-test,
+stamping `lastProbeAt` first so nine sessions do not all probe at once. **A guard whose stale
+state blocks work is worse than the waste it prevents, and "clears on success" is not
+self-healing when the block is what stops success.**
+
+#### How to actually land a PR here, measured 2026-09-12
+
+**`gh pr merge <n> --rebase --auto` is the mechanism. An external rebase loop is not.**
+
+⚠ **`--admin` IS REFUSED WHILE `enforce_admins` IS TRUE**, which is that setting working rather
+than a tooling problem. The refusal is specific and useful:
+
+```
+GraphQL: Required status check "Unit tests (4/4)" is queued. (mergePullRequest)
+```
+
+🛑 **AND UNDER `strict: true` AN EXTERNAL LOOP CANNOT WIN, BY CONSTRUCTION.** `strict` means the
+branch must be up to date AT MERGE TIME. Every rebase resets all 14 checks; the full set takes
+~15 min; `main` moves every 5–10 min with nine sessions pushing. Measured on one doc-only,
+one-file PR: it reached **13 of 14 green three separate times** and was knocked back to 0/14
+each time, **three full CI runs burned**, with zero failures throughout. Auto-merge ends it
+because GitHub sequences the update and the merge internally instead of racing an outside
+observer. Stop your own loop before arming it, or you and GitHub reset each other's CI.
+
+⚠ **VERIFY IT ARMED FROM THE API — `gh pr merge --auto` PRINTS NOTHING ON SUCCESS**, and silence
+is not confirmation:
+
+```bash
+gh pr view <n> --json autoMergeRequest \
+  --jq 'if .autoMergeRequest == null then "NOT ARMED" else .autoMergeRequest.mergeMethod end'
+```
+
+⚠ **`strict` MOVED TOO — it was `true` for roughly two hours tonight and is `false` now.** The
+section title above says read `enforce_admins`; read `required_status_checks.strict` in the same
+breath, because it decides whether being BEHIND blocks you and nothing announces a change.
+
+**`mergeStateStatus` vocabulary, because two of these read as failure and are not:**
+
+| value | means |
+|---|---|
+| `BLOCKED` | a required check is not satisfied yet |
+| `BEHIND` | only that the branch is not up to date — `strict: true` only |
+| `UNSTABLE` | **mergeable**; the only red checks are NOT required |
+| `CLEAN` | nothing outstanding |
+
+A PR sitting at `UNSTABLE` with `Playwright (mobile-smoke)` red is waiting for nothing.
 
 ### 🛑 CHERRY-PICK ONTO `main`. DO NOT MERGE IN THE SHARED TREE.
 
