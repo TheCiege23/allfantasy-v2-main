@@ -169,8 +169,29 @@ export interface WindowEvidence {
   assembledAt: string
 }
 
-/** Below this share of the roster, a rest-of-season total is not a roster's total. */
-export const MIN_ROS_COVERAGE = 0.5
+/**
+ * Below this share of the roster, a rest-of-season total is not a roster's total.
+ *
+ * 🛑 RAISED FROM 0.5 TO 0.75 BECAUSE THE SHARE CARRIES A COVERAGE BIAS, MEASURED BEFORE SHIPPING.
+ * An uncovered player contributes 0 to his roster's projected total, so a roster's share partly
+ * measures how WELL IT IS PROJECTED rather than how strong it is. Across 1,067 Sleeper rosters
+ * (2026-09-12, after the PlayerIdentityMap crosswalk made coverage non-zero at all):
+ *
+ *     coverage (excl. team DEF)   rosters   avg futureBase
+ *     >= 0.90                         434         0.532
+ *     0.75 - 0.90                     543         0.488
+ *     <  0.75                          90         0.420
+ *
+ * corr(coverage, futureBase) was 0.719, and 14 rosters fell under the 0.38 rebuild line — ALL of
+ * them in the < 0.75 band. At 0.5 every one of those rosters resolved, so a thinly projected team
+ * was labelled rebuilding for want of projections. At 0.75 those 90 refuse by name instead.
+ *
+ * ⚠ THIS REDUCES THE BIAS; IT DOES NOT REMOVE IT. Among the 977 rosters that still resolve,
+ * corr(coverage, futureBase) is 0.609 — lower, not zero — with 0 under the rebuild line and 0 over
+ * the contender line. A coverage-normalised share would address it at the root; that is a separate
+ * decision with its own assumption, and was deliberately not taken here.
+ */
+export const MIN_ROS_COVERAGE = 0.75
 
 export interface WindowFactsResult {
   facts: TeamWindowFacts | null
