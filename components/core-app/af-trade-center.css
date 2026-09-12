@@ -640,7 +640,21 @@
   .af-tc-caption {
     display: none;
   }
-  .af-tc-actions .af-btn {
+  /*
+   * 🛑 `.af-core` IS LOAD-BEARING HERE, NOT DECORATION. Without it this selector
+   * is (0,2,0) — exactly equal to `.af-core .af-btn { min-height: 36px }` in
+   * af-core.css:456 — and an equal-specificity tie is decided by whichever sheet
+   * lands last in the concatenated page.css, which no component controls.
+   * Measured at 390px, both orders, before the prefix was added:
+   *
+   *     core-then-trade  44px      trade-then-core  36px
+   *
+   * so the 44px rule applied or did not apply on a coin toss. Prefixing with the
+   * shell class the screen already sits inside makes it (0,3,0) and
+   * order-independent, with no markup change. Same defect and same fix as
+   * `.af-core .af-btn.af-lp-cta-lg` in af-landing.css.
+   */
+  .af-core .af-tc-actions .af-btn {
     flex: 1 1 auto;
     min-height: 44px;
   }
@@ -773,7 +787,7 @@
     grid-template-columns: 1fr;
   }
   /* The two sides of an offer stay side by side — that pairing IS the trade. */
-  .af-tc-offer-actions .af-btn {
+  .af-core .af-tc-offer-actions .af-btn {
     min-height: 44px;
   }
 }
@@ -816,7 +830,7 @@
   .af-tc-propose-partner {
     min-height: 44px;
   }
-  .af-tc-propose .af-btn {
+  .af-core .af-tc-propose .af-btn {
     min-height: 44px;
     width: 100%;
   }

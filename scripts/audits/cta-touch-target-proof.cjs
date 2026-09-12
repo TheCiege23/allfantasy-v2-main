@@ -36,6 +36,7 @@ const outDir = fs.mkdtempSync(path.join(os.tmpdir(), "af-cta-proof-"));
 const CORE = fs.readFileSync(root + "/components/core-app/af-core.css", "utf8");
 const LANDING = fs.readFileSync(root + "/components/core-app/af-landing.css", "utf8");
 const PRICING = fs.readFileSync(root + "/components/core-app/af-pricing.css", "utf8");
+const TRADE = fs.readFileSync(root + "/components/core-app/af-trade-center.css", "utf8");
 
 /*
  * The global theme toggle is styled by TAILWIND UTILITIES, not by a stylesheet
@@ -82,12 +83,28 @@ const BODY = `
   </div>
   <a class="af-pr-cta af-pr-cta--ghost" href="#">Create an account</a>
 </div>
+<div class="af-core">
+  <div class="af-tc-actions">
+    <p class="af-tc-caption">caption</p>
+    <button type="button" class="af-btn" data-proof="tc-propose">Propose this trade</button>
+    <button type="button" class="af-btn af-btn--ghost" data-proof="tc-reset">Reset</button>
+  </div>
+  <div class="af-tc-offer-actions">
+    <button type="button" class="af-btn" data-proof="tc-accept">Accept</button>
+  </div>
+  <div class="af-tc-propose">
+    <button type="button" class="af-btn" data-proof="tc-send">Send offer</button>
+  </div>
+  <div class="af-tc-partner-chips">
+    <button type="button" class="af-tc-chip af-tc-partner-chip" data-proof="tc-partner">Partner</button>
+  </div>
+</div>
 <button data-proof="theme-toggle" class="rounded-xl border px-3 py-2 text-xs font-semibold shadow-lg backdrop-blur max-[720px]:inline-flex max-[720px]:min-h-[44px] max-[720px]:min-w-[44px] max-[720px]:items-center max-[720px]:justify-center">Dark</button>`;
 
 /** Both orders. If the fix depends on either, these disagree and the run fails. */
 const ORDERS = {
-  "core-first": [CORE, LANDING, PRICING, TOGGLE],
-  "core-last": [TOGGLE, LANDING, PRICING, CORE],
+  "core-first": [CORE, LANDING, PRICING, TRADE, TOGGLE],
+  "core-last": [TOGGLE, LANDING, PRICING, TRADE, CORE],
 };
 
 const TARGETS = [
@@ -99,6 +116,19 @@ const TARGETS = [
   { sel: ".af-pr-cta--ghost", label: "Create an account", min: 44, phoneOnly: true },
   { sel: ".af-pr-nav-link", label: "Sign in", min: 44, phoneOnly: true, axis: "w" },
   { sel: "[data-proof='theme-toggle']", label: "Theme toggle", min: 44, phoneOnly: true },
+  /*
+   * ⚠ TRADE CENTER, ADDED 2026-09-12 AFTER FOUR OF ITS CONTROLS WERE FOUND TO BE
+   * A COIN TOSS. `.af-tc-actions .af-btn` was (0,2,0) — dead equal to
+   * `.af-core .af-btn { min-height: 36px }` — so the 44px rule applied or did not
+   * depending on sheet order alone. Measured before the fix: core-then-trade 44px,
+   * trade-then-core 36px. The partner chip was always fine; it is not an `.af-btn`,
+   * so there was never a tie to lose.
+   */
+  { sel: "[data-proof='tc-propose']", label: "Propose this trade", min: 44, phoneOnly: true },
+  { sel: "[data-proof='tc-reset']", label: "Trade reset", min: 44, phoneOnly: true },
+  { sel: "[data-proof='tc-accept']", label: "Accept offer", min: 44, phoneOnly: true },
+  { sel: "[data-proof='tc-send']", label: "Send offer", min: 44, phoneOnly: true },
+  { sel: "[data-proof='tc-partner']", label: "Trade partner chip", min: 44, phoneOnly: true },
 ];
 
 function serve() {
