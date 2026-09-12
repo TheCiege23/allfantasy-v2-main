@@ -641,6 +641,62 @@ positioned to notice, and only if they look before building. Having superseded
 landed work, say so to its author and let the user rule — here the ruling was
 that it stands, but that was a decision, not a default.
 
+#### 🛑 PATCH-ID INEQUALITY IS NOT EVIDENCE THAT WORK IS UNLANDED
+
+Everything above mandates `patch-id` over ancestry, and that is right **for the
+question it asks there**: *is MY unmodified commit inside THIS range I just built.*
+That is an identity check about a commit that has not changed between the two
+points being compared, and patch-id answers it exactly. Keep using it there.
+
+🛑 **IT DOES NOT ANSWER "HAS THIS WORK REACHED `main` IN ANY FORM", AND UNDER THIS
+REPO'S CONVENTION IT FAILS IN THE MOST EXPENSIVE DIRECTION.** Evolving a commit
+changes its patch-id. A cherry-pick-and-improve convention therefore *guarantees*
+the test reports **absent** precisely for the commits whose work was IMPROVED on
+the way in — it is least reliable exactly where the stakes are highest.
+
+Measured 2026-09-11. Two sessions independently censused local `main` (119 ahead,
+261 behind, diverged 2026-09-06) against `origin/main` by patch-id and reported
+**15** and **16** genuinely-unlanded commits. Every commit then went through a
+decisive test and the real number was **3**:
+
+```
+ 8  superseded         (6 by subject match, 2 by content superset)
+ 1  already in flight  (equal patch-id under another sha)
+ 1  folded by author
+ 1  landed meanwhile
+ 1  unclear
+ 3  genuinely unlanded and unowned
+```
+
+⚠ **TWO INDEPENDENT RUNS OF THE SAME METHOD PRODUCED THE SAME ~5x INFLATION.** That
+is what makes this a property of the method rather than of either session's care,
+and it is the strongest form the evidence takes.
+
+**The commit that shows the cost.** `cabc72677` was on both "unlanded" lists. Main's
+`scripts/pre-push-smoke.mjs` is **+308/−27** against it and carries `AF_SMOKE_COLD`
+four times, which that commit does not contain at all — the change that takes a
+push's smoke check from a 20-minute budget to ~83 seconds. Landing it as "unlanded
+backlog" would have reverted a live performance fix: no conflict, no failing test,
+nothing red anywhere. Same silent shape as the supersede above, reached from the
+opposite side.
+
+**The decisive tests, cheapest first:**
+
+1. **Attempt the pick.** `The previous cherry-pick is now empty` is unambiguous
+   where patch-id is silent.
+2. **Read the per-file diff DIRECTION** — `git diff <local>:<path>
+   origin/main:<path> --shortstat`, plus a marker grep for something the newer
+   version introduced. Main having MORE is the tell, and no empty-pick signal ever
+   fires for it.
+3. Only after both may "absent" be read as absent.
+
+⚠ **AND DO NOT TREAT A STALE LOCAL BRANCH AS A BACKLOG.** Local `main` in this
+checkout mixes already-landed debris with a handful of genuinely unlanded commits,
+and nothing separates them without a per-commit test. Neither resetting it (drops
+real work) nor building on it (a five-day-stale tree) is safe. Build from
+`origin/main` in a detached worktree — already the landing convention, and the
+finding is that it has to be the STARTING convention too.
+
 ### ⚠ A CHECK THAT CANNOT FAIL READS AS A PASS
 
 Three sessions hit this in one day, each in a different tool, each believing
@@ -1485,6 +1541,67 @@ one session can hold **two live tickets under two SHAs and take two turns**,
 which is the exact unfairness the queue exists to remove. The dishonest half is
 not solvable without session identity, which does not exist here — but every
 rebind and release is journaled, so it is detectable after the fact.
+
+#### 🛑 `push:main` CAN EXIT 0 HAVING PUSHED NOTHING
+
+And the trigger is **another session's corrupt ticket**, so any session can hit it
+through no fault of its own. Measured 2026-09-11, and this is the ENTIRE log:
+
+```
+push-queue: #000417 — position 5 of 6, waiting…
+  ⚠ push-queue: ticket 000416.json is unreadable — failing open, the push is allowed.
+DONE=0
+```
+
+No secret-scan, no `pre-push-smoke`, no push attempt. The wrapper took the fail-open
+path on a PEER's unreadable ticket and returned success without pushing. Confirmed
+three ways: the file was absent from `origin/main`, `merge-base --is-ancestor`
+returned 1, and the ticket was still `state: waiting` — never `pushing`, never
+released. Nothing in the output or the exit status said so.
+
+**The tell is the absence of BOTH the secret-scan block AND the `pre-push-smoke`
+line.** ⚠ Absence of smoke ALONE is not it — a build-inflight refusal prints the
+full secret-scan and then stops before smoke, and that is a healthy refusal. A rule
+written on smoke alone misreads the good case as the bad one.
+
+⚠ **THE CALLER-SIDE HALF COMPOSES WITH IT INTO A SILENT SUCCESS WITH NO TELL AT
+ALL.** `cmd; echo "DONE=$?"` reports the ECHO's status, not the command's — so a
+wrapper that exits non-zero still logs `DONE=0`, and a harness watching the shell
+reports "completed (exit code 0)". Write `cmd; rc=$?; echo "SENTINEL=$rc"; exit $rc`.
+Five push runs in one session carried the broken form and stayed honest only because
+`ls-remote` was read every time; the sentinel itself was never evidence.
+
+**So verify a push by SHA, always**: `git ls-remote origin refs/heads/main` against
+the sha you pushed. The queue script is honest — it prints `⚠ push did NOT land —
+origin/main is X, not Y` and keeps your ticket. It is the exit status that lies.
+
+⚠ The fix for this landed later than the bug and **the shared F: tree is not
+`main`** — a session that greps the working tree will find the repair present and
+conclude the hazard is closed while `origin/main` still carries the broken wrapper.
+Check `git show origin/main:scripts/push-queue.mjs`, not the checkout.
+
+#### 🛑 `push` TAKES NO FLAGS, AND PASSING ONE SILENTLY DISABLES TWO GUARDS
+
+In `cmdPush`:
+
+```js
+const passthrough = argv.length ? argv : ['origin', `${ctx.sha}:refs/heads/main`]
+if (!argv.length && nowHead && nowHead !== ctx.sha) {   // HEAD-moved guard
+if (!argv.length) {                                     // stale-base guard
+```
+
+Any argv is forwarded **verbatim to `git push`** — so `push --sha=<sha>` exits 129 —
+AND switches off both checks. The stale-base guard is the one that reports *"you
+queued X, origin/main is Y, N commits landed since"* and refuses **before contacting
+the remote**, which is what turns a non-fast-forward rejection into a kept ticket and
+a clean re-pick. A typo'd flag removes it with no warning.
+
+**Bare `push`, with `HEAD` already at the commit you mean, is the only correct
+invocation.** ⚠ Two relatives in the same script: `drop` takes its argument
+positionally and exits 0 when it matches nothing, and `rebind --from` matches on the
+FULL 40 characters — an abbreviation prints "no ticket … nothing to release", which
+reads exactly like success. Read the ticket file back after a rebind rather than its
+success line.
 
 #### The pusher gate — one session pushes, and it is enforced
 
