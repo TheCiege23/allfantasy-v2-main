@@ -1,7 +1,7 @@
 import type { ILeagueImportAdapter } from '../ILeagueImportAdapter'
 import type { NormalizedImportResult, SourceTracking } from '../../types'
 import type { EspnImportPayload } from './types'
-import { coverageAgainstExpected } from '@/lib/league-import/coverageCompleteness'
+import { coverageAgainstExpected, emptyableHistoryCoverage } from '@/lib/league-import/coverageCompleteness'
 
 function detectEspnScoringFormat(raw: EspnImportPayload): string | null {
   const receptionRule = raw.settings?.scoringItems.find((rule) => rule.statId === 53)
@@ -266,17 +266,30 @@ export const EspnAdapter: ILeagueImportAdapter<EspnImportPayload> = {
                 ? 'The ESPN draft detail endpoint returned no picks for this league preview.'
                 : 'ESPN draft detail was not available from the provider response for this league preview.',
         },
+        /*
+         * ⚠ THE `transactionsFetched` BRANCH WAS INVERTED IN EFFECT.
+         *
+         * A SUCCESSFUL fetch that returned nothing reported `missing`, while a
+         * fetch that never happened reported `partial` — so the league we knew
+         * most about was described most pessimistically. `missing` removes the
+         * Trades tab and prints "ESPN doesn't publish trade history", which is
+         * false for any season from 2019 on.
+         *
+         * Pre-2019 stays `missing` and is the one honest use of it here: ESPN
+         * genuinely does not expose that activity, so the sentence is true.
+         */
         tradeHistory: {
           state:
             transactions.length > 0
               ? raw.previousSeasons.length > 0
                 ? 'partial'
                 : 'full'
-              : raw.transactionsFetched
+              : raw.league.season != null && raw.league.season < 2019
                 ? 'missing'
-                : raw.league.season != null && raw.league.season < 2019
-                  ? 'missing'
-                  : 'partial',
+                : emptyableHistoryCoverage({
+                    fetched: raw.transactionsFetched,
+                    unit: 'trades',
+                  }).state,
           count: transactions.length,
           note:
             transactions.length > 0
