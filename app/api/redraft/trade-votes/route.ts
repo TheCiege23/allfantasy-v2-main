@@ -16,6 +16,7 @@ import {
   captureRedraftRosterState,
   writeRedraftTradeExecutionSnapshot,
 } from '@/lib/redraft/tradeExecutionSnapshot'
+import { evaluateNativeTradeReversalReadiness, reverseNativeTrade } from '@/lib/redraft/tradeReversal'
 import { getPlatformEvents, EVENT } from '@/lib/events'
 import { recordRedraftTradeMarketEvent, type RedraftMarketEventType } from '@/lib/trade-market/redraftTradeMarketEvents'
 import { enqueueCollusionScan } from '@/lib/integrity/enqueueCollusionScan'
@@ -33,6 +34,8 @@ type TradeAction =
   | 'commissioner_veto'
   | 'vote_approve'
   | 'vote_veto'
+  | 'commissioner_reverse_preflight'
+  | 'commissioner_reverse'
 
 type TradeAssetRow = {
   fromRosterId: string
@@ -401,6 +404,69 @@ export async function POST(req: NextRequest) {
 
   const gate = await assertLeagueMember(proposal.leagueId, userId)
   if (!gate.ok) return NextResponse.json({ error: 'Forbidden' }, { status: gate.status })
+
+  /*
+   * REVERSAL, AND WHY IT SITS ABOVE THE `pending` CHECK BELOW.
+   *
+   * Every other action here acts on a proposal still awaiting a decision, so this route refuses any
+   * non-pending proposal before it even reads the action. A reversal is the one action that targets
+   * an ACCEPTED proposal — placed below that check, it could never run at all.
+   *
+   * Commissioner permission is computed here rather than reused: `isCommissioner` further down is
+   * only evaluated after the pending and expiry checks, which a reversal never reaches.
+   *
+   * ⚠ This route has no certified game-evidence lock, unlike the generic process route. None is
+   * invented here; if redraft settlement ever gains one, reversal must sit behind it too.
+   */
+  if (action === 'commissioner_reverse_preflight' || action === 'commissioner_reverse') {
+    if (!(await isCommissionerOrCo(proposal.leagueId, userId))) {
+      return NextResponse.json({ error: 'Commissioner access required' }, { status: 403 })
+    }
+
+    if (action === 'commissioner_reverse_preflight') {
+      const readiness = await evaluateNativeTradeReversalReadiness(prisma, proposal.id)
+      return NextResponse.json({ readiness })
+    }
+
+    const reason = String(body.reason ?? '').trim()
+    if (!reason) {
+      return NextResponse.json({ error: 'A reason is required to reverse a trade.' }, { status: 400 })
+    }
+
+    let result
+    try {
+      result = await reverseNativeTrade({
+        proposalId: proposal.id,
+        actorUserId: userId,
+        // The gate above already refused anyone who is not a commissioner or co-commissioner.
+        actorRole: 'commissioner',
+        reason,
+      })
+    } catch (e) {
+      return NextResponse.json(
+        { error: e instanceof Error ? e.message : 'Trade reversal failed', code: 'REVERSAL_FAILED' },
+        { status: 409 },
+      )
+    }
+    if (!result.ok) {
+      return NextResponse.json(
+        { error: 'Trade cannot be reversed', code: 'REVERSAL_BLOCKED', readiness: result.readiness },
+        { status: 409 },
+      )
+    }
+
+    // POST-COMMIT, same reason as settlement: IDPCapProjection is derived, and refreshing it inside
+    // the transaction would publish projections for a reversal that could still roll back.
+    if (result.capRecordsRestored > 0) {
+      for (const rosterId of new Set(result.rosterIds)) {
+        await refreshCapProjections(proposal.leagueId, rosterId).catch((e) =>
+          console.error('[redraft/trade-votes] cap projection refresh after reversal failed', rosterId, e),
+        )
+      }
+    }
+    // `result` already carries `ok: true`; spreading it after a literal `ok` is a duplicate key (TS2783).
+    return NextResponse.json(result)
+  }
 
   if (proposal.status !== 'pending') {
     return NextResponse.json({ error: 'Proposal is not pending', proposal }, { status: 409 })
