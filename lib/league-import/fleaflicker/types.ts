@@ -21,7 +21,20 @@ export type FleaflickerTeamStub = {
   name: string
   logoUrl?: string | null
   waiverAcquisitionBudget?: { value?: number } | null
-  recordOverall?: { wins?: number; losses?: number; ties?: number }
+  recordOverall?: {
+    wins?: number
+    losses?: number
+    ties?: number
+    /**
+     * ⚠ FLEAFLICKER PUBLISHES A REAL RANK AND THIS ADAPTER IGNORED IT. It sits on
+     * `recordOverall`, not on the team, which is why it was missed — the mapper read
+     * `recordOverall.wins`/`.losses` and stopped there. Confirmed in
+     * `contracts/fleaflicker/fixtures/scoreboard.NFL.2021.week16.json`:
+     * `recordOverall.rank = 2` alongside `recordDivision.rank` and
+     * `recordPostseason.rank`.
+     */
+    rank?: number
+  }
   pointsFor?: { value?: number }
   pointsAgainst?: { value?: number }
   owners?: Array<{ id: number; displayName?: string }>

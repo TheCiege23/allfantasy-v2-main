@@ -321,7 +321,22 @@ export async function persistImportWithCanonicalAudit(input: {
     // from imported standings + previous-season chain, (b) trigger a rank
     // recompute for the league. Wrapped in a single try/catch so a legacy-engine
     // hiccup can NEVER fail the import — the import is already committed above.
-    if (input.provider === 'sleeper') {
+    /*
+     * 🛑 THIS WAS `if (input.provider === 'sleeper')`, SO FIVE OF SIX PROVIDERS GOT NO
+     * LEGACY EVIDENCE AT ALL — their imported history never moved a manager's rank.
+     * `importedFactsToEvidence`'s own header called it "Phase 3.1 scope", and the only
+     * Sleeper-specific thing in it was a hardcoded `sleeper:` prefix, now derived from
+     * the real provider.
+     *
+     * ⚠ THE GATE WAS ALSO ACCIDENTALLY PROTECTING AGAINST A FABRICATED CHAMPIONSHIP,
+     * which is why widening it needed a fix elsewhere first rather than being a
+     * one-line change. `deriveEvidenceRowsFromImport` writes a `championships` row for
+     * every `rank === 1`, and Fleaflicker's adapter synthesised rank from ARRAY
+     * POSITION — so the first team in the response would have been crowned in every
+     * league. Fixed in the same change; ESPN, Yahoo, MFL and Fantrax were already safe
+     * because their unknown-rank fallback is LAST place.
+     */
+    {
       try {
         const { deriveEvidenceRowsFromImport } = await import(
           '@/lib/legacy-score-engine/importedFactsToEvidence'
