@@ -12,9 +12,20 @@ import { deriveWantFromIntent } from '@/lib/decision-os/grounding/intentToWant'
  *
  * 🛑 THE POINT: SEE EXACTLY WHAT CHIMMY SEES (5.1, D11).
  *
- * `DECISION_OS_GROUNDING_ENABLED` is now on, so the packet is being assembled on every chat turn
+ * `DECISION_OS_GROUNDING_ENABLED` is on, so the packet is being assembled on every chat turn
  * with a league — and until this route existed there was no way to look at one. The only evidence
  * was whether an answer "seemed better", which is not evidence.
+ *
+ * ⚠ THAT SENTENCE WAS AN ASSERTION UNTIL 2026-09-12, AND ANOTHER FILE ASSERTED THE OPPOSITE.
+ * `app/api/chat/chimmy/route.ts` recorded the deployed value as "NOT verified … UNKNOWN" while
+ * this line said it was on. Both were written by people reasoning rather than looking. It now
+ * reads `true` on the Railway `allfantasy-v2-main` production service, measured — so this line is
+ * correct, and was correct by luck rather than by evidence. Two files disagreeing about one
+ * boolean, neither carrying a measurement, is the shape worth noticing here.
+ *
+ * ⚠ `groundingEnabled` in this route's own response is the cheap way to re-check it. Reading it
+ * from `list-variables` instead returns every variable on the service in plaintext, secrets
+ * included, which is a large price for one boolean.
  *
  * It returns BOTH halves, because they fail differently:
  *   packet      the structured object, with every slice's age, provenance, verdict and gap
