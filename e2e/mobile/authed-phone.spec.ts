@@ -142,14 +142,23 @@ test.describe("@db @mobile authenticated phone contract", () => {
 
       const report = await page.evaluate(probeGeometry, { minTarget: MIN_TARGET, minFont: MIN_FIELD_FONT })
 
-      expect(
+      /*
+       * ⚠ SOFT FROM HERE DOWN, HARD ABOVE — AND THE SPLIT IS THE POINT. The three
+       * checks above decide whether this is the right page at all (not an error,
+       * not a redirect, actually styled); if one fails, every number below
+       * describes the wrong screen, so the test must stop. The four below are
+       * independent measurements of the right screen. As hard asserts, the first
+       * red one hid the rest: /commissioner-os reported only its 481px overflow,
+       * and its four 36px controls surfaced one whole CI round-trip later.
+       */
+      expect.soft(
         report.overflow,
         `${route} scrolls sideways: scrollWidth ${report.scrollWidth} vs viewport ${report.innerWidth}
 ` +
           `widest offenders (right edge past the viewport): ${JSON.stringify(report.overflowing)}`,
       ).toBeFalsy()
 
-      expect(
+      expect.soft(
         report.smallFields,
         `${route} has form fields under ${MIN_FIELD_FONT}px, which makes iOS Safari zoom in on focus and never back out`,
       ).toEqual([])
@@ -163,7 +172,7 @@ test.describe("@db @mobile authenticated phone contract", () => {
        */
       const { regressions, stale } = compareTargets(report.smallTargets, BASELINE.routes[route] ?? [])
 
-      expect(
+      expect.soft(
         regressions,
         `${route} has controls under ${MIN_TARGET}x${MIN_TARGET} that are not in ` +
           /*
@@ -179,7 +188,7 @@ test.describe("@db @mobile authenticated phone contract", () => {
           `stylesheet state at measurement: ${JSON.stringify(stylesheet)}`,
       ).toEqual([])
 
-      expect(
+      expect.soft(
         stale,
         `${route} has baseline entries that are no longer undersized — delete them`,
       ).toEqual([])

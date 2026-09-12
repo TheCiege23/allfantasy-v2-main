@@ -149,14 +149,23 @@ test.describe("@mobile phone smoke", () => {
       const stylesheetVerdict = diagnoseStylesheets(stylesheet, cssFailures)
       expect(stylesheetVerdict.styled, unstyledFailureMessage(route, stylesheetVerdict)).toBe(true)
 
-      expect(
+      /*
+       * ⚠ SOFT FROM HERE DOWN, HARD ABOVE — AND THE SPLIT IS THE POINT. The two
+       * checks above decide whether this is the right page at all (not an error
+       * page, actually styled); if one fails, every number below
+       * describes the wrong screen, so the test must stop. The four below are
+       * independent measurements of the right screen. As hard asserts, the first
+       * red one hid the rest: /commissioner-os reported only its 481px overflow,
+       * and its four 36px controls surfaced one whole CI round-trip later.
+       */
+      expect.soft(
         report.overflow,
         `${route} scrolls sideways: scrollWidth ${report.scrollWidth} vs viewport ${report.innerWidth}
 ` +
           `widest offenders (right edge past the viewport): ${JSON.stringify(report.overflowing)}`,
       ).toBeFalsy()
 
-      expect(
+      expect.soft(
         report.smallFields,
         `${route} has form fields under ${MIN_FIELD_FONT}px, which makes iOS Safari zoom in on focus and never back out`,
       ).toEqual([])
@@ -194,7 +203,7 @@ test.describe("@mobile phone smoke", () => {
         BASELINE.routes[route] ?? [],
       )
 
-      expect(
+      expect.soft(
         regressions,
         `${route} gained controls under ${MIN_TARGET}x${MIN_TARGET} that are not in ` +
           `e2e/mobile/undersized-target-baseline.json. Make them ${MIN_TARGET}px, ` +
@@ -216,7 +225,7 @@ test.describe("@mobile phone smoke", () => {
        * defect later — a ratchet that only ever loosens. Same failure the TS
        * ratchet avoids by regenerating its baseline.
        */
-      expect(
+      expect.soft(
         stale,
         `${route} has baseline entries that are no longer undersized — delete them ` +
           `from e2e/mobile/undersized-target-baseline.json`,
