@@ -1,0 +1,123 @@
+# Trade-shadow readiness — the Phase 3 flip gate, watched rather than remembered.
+#
+# WHAT THIS EXISTS TO CATCH. `AF_TRADE_UNIFICATION_BRIEF.md` has Phases 0, 0.5, 1 and 2 executed;
+# Phase 3 (flipping each trade surface onto the canonical verdict) is gated on shadow telemetry
+# showing the canonical answer agrees. That gate reads `decision_parity_record`. If the surface
+# flags are off, the table stays empty, and the gate is not "not ready" — it is BLIND, which looks
+# identical from the outside.
+#
+# It went unnoticed for the entire life of the programme once already: measured 2026-09-04,
+# `manager.trade.evaluate` had never recorded a single row. Collection has since started on ONE of
+# six surfaces (9 rows, newest 2026-09-07) and stopped. Nothing announced either fact — a human
+# had to go and look, twice.
+#
+# 🛑 THIS IS A REPORT, NOT A GATE. `check-trade-shadow-readiness.mjs` always exits 0 by design, and
+# so does this workflow. Failing a build over an unset telemetry flag would be worse than the
+# silence it replaces, and would tempt someone to flip a flag to turn CI green rather than because
+# the programme wanted it on.
+#
+# ⚠ AND IT MUST NOT BE ABLE TO PASS WHILE MEASURING NOTHING. That is the failure this repo keeps
+# paying for — a check that runs, goes green, and had no access to the thing it claims to report.
+# The observation counts come from the PRODUCTION database; without a connection there is nothing
+# to say. So the no-secret path prints a loud SKIPPED line into the job summary rather than a quiet
+# success, and a probe failure is reported as a failure to measure rather than as zero rows.
+name: Trade Shadow Readiness
+
+on:
+  schedule:
+    # Weekly, Monday. Offset an hour from the DB-First weekly audit ('0 14 * * 1') so two
+    # long-running audits do not share a runner window.
+    - cron: '0 15 * * 1'
+  workflow_dispatch:
+
+# Read-only reporting. No writes to the repo, no deploys.
+permissions:
+  contents: read
+
+jobs:
+  trade-shadow-readiness:
+    name: Trade shadow readiness (report only)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+
+      # The guard shells out to `scripts/db-readonly-probe.mjs`, which uses `pg` directly rather
+      # than importing Prisma — deliberately, so the script cannot write and cannot pull `.env`
+      # into a process that might. Installing just `pg` is far cheaper than a full `npm ci`.
+      - name: Install the probe's only dependency
+        run: npm install --no-save --no-audit --no-fund pg@^8.20.0
+
+      - name: Report trade-shadow readiness
+        id: readiness
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DIRECT_URL: ${{ secrets.DIRECT_URL }}
+        shell: bash
+        run: |
+          set -uo pipefail
+
+          # ⚠ NO SECRET MEANS NO MEASUREMENT, AND IT SAYS SO OUT LOUD. Reporting "0 observations"
+          # when the real answer is "could not look" is the lie this whole file guards against.
+          if [ -z "${DATABASE_URL:-}${DIRECT_URL:-}" ]; then
+            {
+              echo "## Trade shadow readiness — SKIPPED"
+              echo
+              echo "Neither \`DATABASE_URL\` nor \`DIRECT_URL\` is set, so production observation"
+              echo "counts could not be read. **This is not a clean report — it is no report.**"
+              echo "Add a read-only connection string as a repository secret to enable it."
+            } >> "$GITHUB_STEP_SUMMARY"
+            echo "::warning title=Trade shadow readiness::No database secret — readiness was NOT measured."
+            exit 0
+          fi
+
+          # `scripts/db-readonly-probe.mjs` resolves its connection from env FILES (`--env=local`
+          # names the production endpoint), not from the environment, so the secret is written to
+          # the file it expects. The runner is ephemeral and the value is masked in logs.
+          printf 'DATABASE_URL=%s\nDIRECT_URL=%s\n' "${DATABASE_URL:-}" "${DIRECT_URL:-${DATABASE_URL:-}}" > .env.local
+
+          set +e
+          node scripts/check-trade-shadow-readiness.mjs > readiness.log 2>&1
+          CODE=$?
+          set -e
+
+          rm -f .env.local
+
+          echo "exit_code=$CODE" >> "$GITHUB_OUTPUT"
+          cat readiness.log
+
+          {
+            echo "## Trade shadow readiness"
+            echo
+            echo "Gate for Phase 3 of \`AF_TRADE_UNIFICATION_BRIEF.md\`. Report only — never fails a build."
+            echo
+            echo '```'
+            cat readiness.log
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          # The script always exits 0 by design; a non-zero status therefore means the SCRIPT
+          # broke, not that readiness is bad. Surface that as its own condition rather than
+          # letting a crashed run read like a clean one.
+          if [ "$CODE" -ne 0 ]; then
+            echo "::warning title=Trade shadow readiness::The readiness script exited $CODE — it is designed to exit 0, so this is a script failure, not a readiness finding."
+          fi
+
+          # A surface at zero is the condition the programme cares about. Name it in the log so the
+          # run is legible at a glance without opening the summary.
+          if grep -qE '\bnever\b' readiness.log; then
+            echo "::notice title=Trade shadow readiness::At least one trade surface has recorded no observations. Phase 3 cannot gate on a surface it cannot see."
+          fi
+
+      - name: Upload readiness log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trade-shadow-readiness
+          path: readiness.log
+          if-no-files-found: ignore
+          retention-days: 14
