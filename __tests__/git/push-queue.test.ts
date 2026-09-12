@@ -1484,3 +1484,86 @@ describe('push-queue — a protection marker must not deadlock the room', () => 
     expect(second.stderr).toContain('needs a pull request')
   })
 })
+
+describe('push-queue — going to the back of the line is never silent', () => {
+  /**
+   * 🛑 MEASURED LOSS, 2026-09-12: a 3-commit tip rebuilt as a 4-commit tip in a DIFFERENT
+   * worktree matched neither inheritance rule — the tip's patch-id changed, and the worktree gate
+   * blocked the ancestry path — so a fresh ticket was created at the back and 84 minutes of queue
+   * position went without a word. The position was recoverable by `rebind` the whole time; the
+   * author had no reason to run it because nothing said so.
+   *
+   * ⚠ The same signal has a SECOND meaning and that is why it warns even for someone else's
+   * ticket: an unlanded queued commit sitting inside your tip means you may be about to push a
+   * peer's unattested work. Both readings are worth interrupting for.
+   *
+   * ⚠ AND IT MUST NOT FIRE ON LANDED WORK, which is the common case: everyone's tip descends
+   * from main, so every ticket already on main is an ancestor of everyone's tip. Without that
+   * exclusion this would warn on essentially every push and be ignored within a day.
+   */
+  let repo: string
+  let worktree: string
+  let base: string
+  let mid: string
+  let tip: string
+
+  const g = (args: string[]) =>
+    execFileSync('git', ['-c', 'user.email=t@e.com', '-c', 'user.name=t', '-c', 'commit.gpgsign=false', ...args],
+      { encoding: 'utf8', cwd: repo }).trim()
+
+  beforeEach(() => {
+    repo = mkdtempSync(join(tmpdir(), 'af-pq-back-'))
+    g(['init', '-q', '-b', 'main'])
+    g(['commit', '-q', '--allow-empty', '-m', 'c0']); base = g(['rev-parse', 'HEAD'])
+    g(['commit', '-q', '--allow-empty', '-m', 'c1']); mid = g(['rev-parse', 'HEAD'])
+    g(['commit', '-q', '--allow-empty', '-m', 'c2']); tip = g(['rev-parse', 'HEAD'])
+    /*
+     * ⚠ SEED THE WORKTREE THE WAY THE TOOL DERIVES IT, not the mkdtemp path. `ctx.worktree` is
+     * `git rev-parse --show-toplevel`, which on Windows returns FORWARD slashes while mkdtempSync
+     * returns backslashes — so `t.worktree === ctx.worktree` compared unequal and a same-worktree
+     * case presented as a cross-worktree one. Two wrong diagnoses were made from that before the
+     * warning's own message named the mismatched path and gave it away.
+     */
+    worktree = g(['rev-parse', '--show-toplevel'])
+  })
+  afterEach(() => rmSync(repo, { recursive: true, force: true }))
+
+  it('a SAME-worktree descendant still inherits — no warning is needed because nothing is lost', () => {
+    // 🛑 This assertion was originally written the other way round, expecting the warning, and the
+    // test corrected the author's model of his own bug: same-worktree + descendant is exactly what
+    // the ancestry rule inherits, so no ticket is created and there is nothing to report. The loss
+    // being guarded against was CROSS-worktree specifically. Pinned so nobody "fixes" the warning
+    // to fire here and makes it noise on the working path.
+    seed(1, mid, { worktree })
+    const res = check(tip, { AF_PUSH_QUEUE_NO_REMOTE: '0', AF_PUSH_QUEUE_REMOTE_SHA: base }, repo)
+
+    expect(res.stderr).not.toContain('UNLANDED commit inside the tip')
+    const t = tickets().find((x) => x.seq === 1)
+    expect(t?.sha).toBe(tip) // the SAME ticket now covers the new tip
+    expect(tickets()).toHaveLength(1) // and no second ticket was taken
+  })
+
+  it('names the OTHER-worktree case differently — you may be carrying a peer\'s commit', () => {
+    seed(1, mid, { worktree: '/some/other/session/wt-peer' })
+    const res = check(tip, { AF_PUSH_QUEUE_NO_REMOTE: '0', AF_PUSH_QUEUE_REMOTE_SHA: base }, repo)
+
+    expect(res.stderr).toContain('ANOTHER worktree')
+    expect(res.stderr).toContain("peer's unattested commit")
+    expect(res.stderr).not.toContain('push:rebind')
+  })
+
+  it('🛑 does NOT warn when that ticket is already on main — the common case, or it warns always', () => {
+    // Same shape, except main is at `mid`, so the ticket's commit has landed.
+    seed(1, mid, { worktree })
+    const res = check(tip, { AF_PUSH_QUEUE_NO_REMOTE: '0', AF_PUSH_QUEUE_REMOTE_SHA: mid }, repo)
+
+    expect(res.stderr).not.toContain('UNLANDED commit inside the tip')
+  })
+
+  it('does not warn when no live ticket is an ancestor at all', () => {
+    seed(1, SHA_A, { worktree })
+    const res = check(tip, { AF_PUSH_QUEUE_NO_REMOTE: '0', AF_PUSH_QUEUE_REMOTE_SHA: base }, repo)
+
+    expect(res.stderr).not.toContain('UNLANDED commit inside the tip')
+  })
+})
