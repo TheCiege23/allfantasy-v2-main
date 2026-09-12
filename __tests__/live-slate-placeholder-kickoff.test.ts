@@ -75,13 +75,13 @@ const NOW = Date.parse('2026-08-29T12:15:00.000Z')
  * Route the two queries the read path makes: slate rows, then kickoff donors.
  *
  * ⚠ DISCRIMINATE ON `cfbd`, NOT ON `espn`. This used to read
- * `sources.includes('espn') || sources.includes('cfbd')`, which worked only while `espn` was
- * absent from the SLATE query's source list. It since had to be added there — `lib/espn-data.ts`
- * writes the live scoreboard as `espn`, and omitting it made the reader ignore the only
- * co-fresh source that marks games in progress — at which point this mock answered BOTH
- * queries with donor rows and four tests failed for a reason that had nothing to do with
- * kickoff repair. `KICKOFF_DONOR_SOURCES` is `['espn', 'cfbd']`, so `cfbd` is the one member
- * that still tells the two queries apart.
+ * `sources.includes('espn') || sources.includes('cfbd')`, which is correct only while `espn` is
+ * absent from the SLATE query's source list. #757 briefly added it there, and this mock then
+ * answered BOTH queries with donor rows — four tests failed for a reason unrelated to kickoff
+ * repair. (`espn` was removed again the same day because it broke the public scoreboard; see the
+ * note beside that list in sports-live-scores-service.) `KICKOFF_DONOR_SOURCES` is
+ * `['espn', 'cfbd']`, so `cfbd` is the member that tells the two queries apart whatever the
+ * slate list holds — keyed on it so this mock cannot silently collapse again.
  */
 function wireDb(options: { slate: unknown[]; donors: unknown[] }) {
   findMany.mockImplementation((args: { where?: { source?: { in?: string[] } } }) => {
@@ -270,7 +270,7 @@ describe('college team identity on restored rows', () => {
   it('fills the school name and crest an abbreviation stood in for', async () => {
     findMany.mockImplementation((args: { where?: { source?: { in?: string[] } } }) => {
       const sources = args?.where?.source?.in ?? []
-      /* `cfbd` only — see wireDb above: `espn` is in the SLATE list now and no longer discriminates. */
+      /* `cfbd` only — see wireDb above: it discriminates whatever the slate list holds. */
       if (sources.includes('cfbd')) {
         return Promise.resolve(SCHEDULE_DONORS)
       }
@@ -291,7 +291,7 @@ describe('college team identity on restored rows', () => {
   it('leaves the row alone when the directory has never been ingested', async () => {
     findMany.mockImplementation((args: { where?: { source?: { in?: string[] } } }) => {
       const sources = args?.where?.source?.in ?? []
-      /* `cfbd` only — see wireDb above: `espn` is in the SLATE list now and no longer discriminates. */
+      /* `cfbd` only — see wireDb above: it discriminates whatever the slate list holds. */
       if (sources.includes('cfbd')) {
         return Promise.resolve(SCHEDULE_DONORS)
       }
