@@ -11,6 +11,10 @@ import {
   type RedraftTradeCapTransferResult,
 } from '@/lib/idp/capEngine'
 import { settleRedraftTradeAssets } from '@/lib/redraft/tradeSettlement'
+import {
+  captureRedraftRosterState,
+  writeRedraftTradeExecutionSnapshot,
+} from '@/lib/redraft/tradeExecutionSnapshot'
 import { getPlatformEvents, EVENT } from '@/lib/events'
 import { recordRedraftTradeMarketEvent, type RedraftMarketEventType } from '@/lib/trade-market/redraftTradeMarketEvents'
 import { enqueueCollusionScan } from '@/lib/integrity/enqueueCollusionScan'
@@ -48,6 +52,7 @@ type ProposalWithAssets = {
   proposerRosterId: string
   receiverRosterId: string
   status: string
+  vetoMode?: string | null
   vetoThreshold: number | null
   expiresAt: Date | null
   assets: TradeAssetRow[]
@@ -72,6 +77,17 @@ function mapLegacyOffers(assets: TradeAssetRow[], fromRosterId: string, toRoster
     })
 }
 
+/**
+ * Who executed the trade, for the snapshot's `executedByActorRole`.
+ *
+ * ⚠ PASSED EXPLICITLY, NOT DERIVED FROM `terminalEventType`. The first version of this derived the
+ * role from that argument and could not work: there is no `vote_passed` market event, and the
+ * league-vote path calls `finalizeAcceptedTrade` without a terminal type at all — so a trade voted
+ * through by the league would have been recorded as an ordinary `user` accept. That is precisely
+ * the governance blurring the execution-evidence ADR complains about.
+ */
+type SnapshotActorRole = 'user' | 'commissioner' | 'league_vote'
+
 async function finalizeAcceptedTrade(
   proposal: ProposalWithAssets,
   proposerOwnerId: string | undefined,
@@ -79,6 +95,7 @@ async function finalizeAcceptedTrade(
   decidedByUserId: string,
   decisionReason?: string,
   terminalEventType: RedraftMarketEventType = 'proposal_accepted',
+  executedByRole: SnapshotActorRole = 'user',
 ) {
   const failEvent = () =>
     recordRedraftTradeMarketEvent({
@@ -130,6 +147,13 @@ async function finalizeAcceptedTrade(
       if (claimed.count === 0) {
         throw new Error('PROPOSAL_ALREADY_RESOLVED')
       }
+      // ⚠ BEFORE-STATE IS READ HERE AND NOWHERE LATER. Inside one transaction these rows stop
+      // being "before" the moment the settlement writes them, so the evidence has to be taken
+      // after the claim (only the race winner gets this far) and before anything moves.
+      const beforeState = await captureRedraftRosterState(tx, [
+        proposal.proposerRosterId,
+        proposal.receiverRosterId,
+      ])
       capTransfer = await applyRedraftTradeCapTransfersInTransaction(
         tx,
         proposal.leagueId,
@@ -138,11 +162,53 @@ async function finalizeAcceptedTrade(
         proposerOffers,
         receiverOffers,
       )
-      await settleRedraftTradeAssets(tx, {
+      const settlement = await settleRedraftTradeAssets(tx, {
         proposerRosterId: proposal.proposerRosterId,
         receiverRosterId: proposal.receiverRosterId,
         assets: proposal.assets ?? [],
       })
+
+      // IMMUTABLE EVIDENCE, WRITTEN WITH THE TRADE RATHER THAN AFTER IT.
+      //
+      // 🛑 `TradeExecutionSnapshot` had NO writer anywhere in this codebase — the model, its
+      // `TradeReversal` counterpart and the documents describing both were all on main, and not one
+      // row was ever created. A reversal had nothing to restore to.
+      //
+      // ⚠ This also MOVES the `TRADE_PROCESSED` emit into the transaction (same deterministic
+      // idempotency key), because the snapshot's `eventId` is NOT NULL and unique: evidence that
+      // points at an event which may never have been written is not evidence. The post-commit emit
+      // below now sends only TRADE_ACCEPTED.
+      await writeRedraftTradeExecutionSnapshot(tx, {
+        proposalId: proposal.id,
+        leagueId: proposal.leagueId,
+        seasonId: proposal.seasonId,
+        proposerRosterId: proposal.proposerRosterId,
+        receiverRosterId: proposal.receiverRosterId,
+        executedByActorId: decidedByUserId,
+        executedByActorRole: executedByRole,
+        governance: {
+          vetoMode: proposal.vetoMode ?? null,
+          vetoThreshold: proposal.vetoThreshold ?? null,
+          terminalEventType,
+          decisionReason: decisionReason ?? null,
+        },
+        validations: { idpCap: 'ok', capTransfersApplied: capTransfer.moved },
+        assetSummary: {
+          proposerOffers,
+          receiverOffers,
+          playersMoved: settlement.playersMoved,
+          faabTransferred: settlement.faabTransferred,
+          picksRecorded: settlement.picksRecorded,
+        },
+        sourceTransactionIds: capTransfer.transactionIds,
+        beforeState,
+        afterState: await captureRedraftRosterState(tx, [
+          proposal.proposerRosterId,
+          proposal.receiverRosterId,
+        ]),
+        executedAt: new Date(),
+      })
+
       return tx.redraftTradeProposal.findUniqueOrThrow({ where: { id: proposal.id } })
     })
   } catch (e) {
@@ -188,7 +254,10 @@ async function finalizeAcceptedTrade(
       subjects: [{ kind: 'trade', id: proposal.id }],
     }
     await events.emit(EVENT.TRADE_ACCEPTED, { ...ctx, idempotencyKey: `trade.accepted:${proposal.id}`, payload: { tradeId: proposal.id } })
-    await events.emit(EVENT.TRADE_PROCESSED, { ...ctx, idempotencyKey: `trade.processed:${proposal.id}`, payload: { tradeId: proposal.id } })
+    // ⚠ TRADE_PROCESSED IS NO LONGER EMITTED HERE. It moved into the settlement transaction, under
+    // the SAME deterministic key, because `TradeExecutionSnapshot.eventId` is NOT NULL and unique —
+    // the snapshot cannot reference an event that a best-effort post-commit emit might never write.
+    // Re-adding it here would either duplicate the event or, worse, look like the only emit.
   }
 
   if (proposerOwnerId && receiverOwnerId) {
@@ -501,7 +570,7 @@ export async function POST(req: NextRequest) {
           { status: 409 },
         )
       }
-      return finalizeAcceptedTrade(proposal as ProposalWithAssets, proposerOwnerId, receiverOwnerId, userId, body.reason, 'commissioner_approved')
+      return finalizeAcceptedTrade(proposal as ProposalWithAssets, proposerOwnerId, receiverOwnerId, userId, body.reason, 'commissioner_approved', 'commissioner')
     }
 
     const updated = await prisma.redraftTradeProposal.update({
@@ -614,6 +683,8 @@ export async function POST(req: NextRequest) {
         receiverOwnerId,
         userId,
         `League vote approval threshold reached (${approveCount}/${threshold})`,
+        'proposal_accepted',
+        'league_vote',
       )
       if (!accepted.ok) return accepted
       const payload = (await accepted.json()) as { proposal: unknown; resolved: boolean }

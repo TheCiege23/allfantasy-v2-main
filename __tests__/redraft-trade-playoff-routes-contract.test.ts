@@ -7,6 +7,8 @@ const assertLeagueMemberMock = vi.fn()
 const validateRedraftTradeCapMock = vi.fn()
 const applyRedraftTradeCapTransfersInTransactionMock = vi.fn()
 const refreshCapProjectionsMock = vi.fn()
+const emitMock = vi.fn(async () => null)
+const emitInTxMock = vi.fn(async () => ({ eventId: 'evt-contract-1' }))
 const enqueueCollusionScanMock = vi.fn()
 
 const prismaMock = {
@@ -51,6 +53,14 @@ const prismaMock = {
   },
   redraftRosterPlayer: {
     updateMany: vi.fn(),
+    // Read by `captureRedraftRosterState` for the execution snapshot's before/after evidence.
+    findMany: vi.fn(async () => []),
+  },
+  // ⚠ THE EXECUTION SNAPSHOT IS WRITTEN INSIDE THE SETTLEMENT TRANSACTION. Without this delegate
+  // the settlement throws and every accept test 409s — the loud half of a double that stopped
+  // matching its module.
+  tradeExecutionSnapshot: {
+    create: vi.fn(async () => ({ id: 'snap-1' })),
   },
   // T2 value snapshot capture (best-effort in the route; defaults keep the contract test focused).
   adpDataRecord: {
@@ -117,6 +127,25 @@ vi.mock('@/lib/idp/capEngine', () => ({
 
 vi.mock('@/lib/integrity/enqueueCollusionScan', () => ({
   enqueueCollusionScan: enqueueCollusionScanMock,
+}))
+
+/*
+ * ⚠ THE EVENTS MODULE HAS TO BE DOUBLED NOW, AND DID NOT BEFORE.
+ *
+ * The route used to emit TRADE_PROCESSED post-commit through `emit`, which swallows every error by
+ * design — so the real module running against a mock prisma was harmless. The execution snapshot
+ * moved that emit INSIDE the transaction via `emitInTx`, which PROPAGATES, so the real publisher
+ * reaching for an outbox delegate this double does not have turned every accept into a 409.
+ */
+vi.mock('@/lib/events', () => ({
+  EVENT: {
+    TRADE_ACCEPTED: 'transaction.trade.accepted',
+    TRADE_PROCESSED: 'transaction.trade.processed',
+  },
+  getPlatformEvents: () => ({
+    emit: emitMock,
+    emitInTx: emitInTxMock,
+  }),
 }))
 
 vi.mock('@/lib/prisma', () => ({
@@ -248,6 +277,11 @@ describe('Redraft trade votes route contract', () => {
     expect(applyRedraftTradeCapTransfersInTransactionMock).toHaveBeenCalledTimes(1)
     expect(prismaMock.redraftLeagueTrade.create).toHaveBeenCalledTimes(1)
     expect(enqueueCollusionScanMock).toHaveBeenCalledTimes(1)
+    // Execution evidence is written WITH the trade. `TradeExecutionSnapshot` had no writer at all
+    // before this, so a settled trade left nothing for a reversal to restore to.
+    expect(prismaMock.tradeExecutionSnapshot.create).toHaveBeenCalledTimes(1)
+    expect(prismaMock.tradeExecutionSnapshot.create.mock.calls[0][0].data.executedByActorRole).toBe('user')
+    expect(emitInTxMock).toHaveBeenCalledTimes(1)
   })
 
   /*
@@ -456,6 +490,10 @@ describe('Redraft trade votes route contract', () => {
     expect(applyRedraftTradeCapTransfersInTransactionMock).toHaveBeenCalledTimes(1)
     expect(prismaMock.redraftLeagueTrade.create).toHaveBeenCalledTimes(1)
     expect(enqueueCollusionScanMock).toHaveBeenCalledTimes(1)
+    // ⚠ The role is PASSED, not derived: there is no `vote_passed` market event and the vote path
+    // sends no terminal type, so a derived role would record a league vote as an ordinary user
+    // accept — the exact governance blurring this evidence exists to prevent.
+    expect(prismaMock.tradeExecutionSnapshot.create.mock.calls[0][0].data.executedByActorRole).toBe('commissioner')
   })
 
   it('accepts when league vote approval threshold is reached', async () => {
@@ -510,6 +548,10 @@ describe('Redraft trade votes route contract', () => {
     expect(applyRedraftTradeCapTransfersInTransactionMock).toHaveBeenCalledTimes(1)
     expect(prismaMock.redraftLeagueTrade.create).toHaveBeenCalledTimes(1)
     expect(enqueueCollusionScanMock).toHaveBeenCalledTimes(1)
+    // ⚠ The role is PASSED, not derived: there is no `vote_passed` market event and the vote path
+    // sends no terminal type, so a derived role would record a league vote as an ordinary user
+    // accept — the exact governance blurring this evidence exists to prevent.
+    expect(prismaMock.tradeExecutionSnapshot.create.mock.calls[0][0].data.executedByActorRole).toBe('league_vote')
   })
 })
 
