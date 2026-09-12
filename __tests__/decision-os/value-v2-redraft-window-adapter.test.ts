@@ -247,9 +247,25 @@ describe('a resolved identity reaches the port in the right namespaces', () => {
     expect(matchup.where.leagueId).toBe('sleeper-999')
     expect(matchup.where.leagueId).not.toBe('af-league-uuid')
 
-    // ...while the AllFantasy uuid is what keys the forecast.
+    /*
+     * 🛑 AND THE FORECAST IS KEYED THE SAME WAY. This assertion previously read
+     * `.toBe('af-league-uuid')`, under the comment "the AllFantasy uuid is what keys the
+     * forecast" — a belief written down in two test files and never checked against a row.
+     *
+     * `season_forecast_snapshots.leagueId` holds the PLATFORM id, and every writer is forced to:
+     * the forecast engine resolves its context from `rankings_snapshots`, keyed by the id
+     * `computeLeagueRankingsV2` hands to `getLeagueInfo()` — a live Sleeper call that a uuid
+     * cannot satisfy. Measured in production 2026-09-12: 40 forecast rows and 704 rankings rows,
+     * ZERO uuid-shaped, and the live window refused with `season_forecast_missing` over rows
+     * sitting in the table.
+     *
+     * ⚠ `dynasty` is the exception and stays on the uuid — its writer resolves the route param
+     * with `resolveLeagueByAnyId` and persists `league.id`. The namespaces genuinely differ per
+     * table; do not unify them.
+     */
     const forecast = reads.find(r => r.model === 'seasonForecastSnapshot.findFirst')!.args as { where: { leagueId: string } }
-    expect(forecast.where.leagueId).toBe('af-league-uuid')
+    expect(forecast.where.leagueId).toBe('sleeper-999')
+    expect(forecast.where.leagueId).not.toBe('af-league-uuid')
 
     // The injury read is scoped by sport, because externalId is not unique across sports.
     const players = reads.find(r => r.model === 'sportsPlayer.findMany')!.args as { where: { sport: string } }

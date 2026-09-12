@@ -90,8 +90,17 @@ function fixtures(over: Partial<Fixtures> = {}): Fixtures {
       { leagueId: LEAGUE, externalId: '1', teamName: 'Anvil Chorus', ownerName: 'Rae' },
       { leagueId: LEAGUE, externalId: '4', teamName: 'Ditchwater', ownerName: 'Sam' },
     ],
+    /*
+     * 🛑 SEEDED UNDER `PLATFORM`, NOT `LEAGUE`, AND THAT IS THE BUG THIS FILE USED TO HIDE.
+     * `season_forecast_snapshots` is keyed by the PLATFORM league id — every writer is forced to,
+     * because the forecast engine resolves its context from `rankings_snapshots`, which is keyed
+     * by the id `computeLeagueRankingsV2` hands to Sleeper. Seeding these under the AF `League.id`
+     * made the port's wrong-key read pass, so the suite was green against a read that could never
+     * match a real row. ⚠ `teams` above and `dynasty` below stay on `LEAGUE` — those tables really
+     * are keyed that way, and "making it consistent" would break the two reads that were right.
+     */
     forecasts: [4, 5, 6].map(week => ({
-      leagueId: LEAGUE, season: SEASON, week,
+      leagueId: PLATFORM, season: SEASON, week,
       teamForecasts: teamForecasts({ '1': 94.5, '4': 2.5 }),
       generatedAt: new Date(`2026-10-0${week}T12:00:00.000Z`),
     })),
@@ -226,12 +235,79 @@ describe('league and season isolation', () => {
     const { gaps } = await assembleWindowFacts(scope('1'), port)
     expect(gaps).toContain('all_play_record_missing')
   })
+
+  /*
+   * 🛑 THE KEY SPACES ARE PINNED PER TABLE, BECAUSE THEY GENUINELY DIFFER AND A SWEEP THAT
+   * "MAKES THEM CONSISTENT" BREAKS ONE OF THEM.
+   *
+   *   rankings_snapshots / season_forecast_snapshots / WeeklyMatchup  ->  PLATFORM league id
+   *   league_teams / dynasty_projection_snapshots                     ->  AF League.id
+   *
+   * The forecast read used `scope.leagueId` and so could never match a real row; measured
+   * 2026-09-12 in production, 40 forecast rows and 704 rankings rows, zero UUID-shaped. These
+   * three assertions are what stop it drifting back.
+   */
+  it('does NOT find a forecast stored under the AF League.id', async () => {
+    const f = fixtures({ forecasts: [{
+      leagueId: LEAGUE, season: SEASON, week: 6,
+      teamForecasts: teamForecasts({ '1': 94.5 }), generatedAt: new Date('2026-10-06T12:00:00.000Z'),
+    }] })
+    const { gaps } = await assembleWindowFacts(scope('1'), makePort(f))
+    expect(gaps).toContain('season_forecast_missing')
+  })
+
+  /*
+   * ⚠ THIS ASSERTS THE QUERY IS NEVER ISSUED, NOT THAT THE GAP APPEARS — and the distinction is
+   * the whole test. With the guard removed the read still returns nothing (a `null` leagueId
+   * matches no row), so `expect(gaps).toContain('season_forecast_missing')` passes EITHER WAY:
+   * verified by mutation, it stayed green at 33/33 against a port with the guard deleted. What
+   * the guard actually buys is not sending Prisma a `where` whose key is null, so that is what
+   * is measured.
+   */
+  it('never issues the forecast query when the platform league id is absent', async () => {
+    const f = fixtures()
+    const real = fakePrisma(f)
+    let calls = 0
+    const counting = {
+      ...(real as object),
+      seasonForecastSnapshot: {
+        findFirst: async (args: unknown) => {
+          calls += 1
+          return (real as unknown as { seasonForecastSnapshot: { findFirst: (a: unknown) => Promise<unknown> } })
+            .seasonForecastSnapshot.findFirst(args)
+        },
+      },
+    } as unknown as PrismaClient
+    const port = createWindowFactsPrismaPort({
+      prisma: counting, platformLeagueId: null, sport: 'nfl',
+      rosterPlayerIds: healthyRoster, loadAvailability: healthy,
+    })
+    const { gaps } = await assembleWindowFacts(scope('1'), port)
+    expect(calls).toBe(0)
+    expect(gaps).toContain('season_forecast_missing')
+  })
+
+  /*
+   * ⚠ THE OTHER DIRECTION, AND IT IS THE ONE A CONSISTENCY SWEEP WOULD BREAK. `dynasty` is
+   * CORRECT on `scope.leagueId`: its writer resolves the route param via `resolveLeagueByAnyId`
+   * and persists `league.id`. A projection stored under the PLATFORM id must NOT be found.
+   */
+  it('does NOT find a dynasty projection stored under the platform id', async () => {
+    const f = fixtures({ dynasty: [{
+      leagueId: PLATFORM, teamId: '1', season: SEASON,
+      projectedStrength3Years: 88, projectedStrengthNextYear: 84,
+      windowStartYear: 2026, windowEndYear: 2029, confidenceScore: 76,
+      generatedAt: new Date('2026-10-06T12:00:00.000Z'),
+    }] })
+    const { gaps } = await assembleWindowFacts(scope('1'), makePort(f))
+    expect(gaps).toContain('dynasty_projection_missing')
+  })
 })
 
 describe('stale and missing facts', () => {
   it('refuses when the newest forecast is more than one week behind', async () => {
     const f = fixtures({ forecasts: [{
-      leagueId: LEAGUE, season: SEASON, week: 2,
+      leagueId: PLATFORM, season: SEASON, week: 2,
       teamForecasts: teamForecasts({ '1': 94.5 }), generatedAt: new Date('2026-09-08T12:00:00.000Z'),
     }] })
     const { facts, gaps } = await assembleWindowFacts(scope('1'), makePort(f))
@@ -241,7 +317,7 @@ describe('stale and missing facts', () => {
 
   it('accepts a forecast exactly one week behind', async () => {
     const f = fixtures({ forecasts: [{
-      leagueId: LEAGUE, season: SEASON, week: 5,
+      leagueId: PLATFORM, season: SEASON, week: 5,
       teamForecasts: teamForecasts({ '1': 94.5 }), generatedAt: new Date('2026-10-01T12:00:00.000Z'),
     }] })
     const { gaps } = await assembleWindowFacts(scope('1'), makePort(f))
