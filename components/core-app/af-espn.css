@@ -149,7 +149,7 @@
   color: var(--text);
 }
 
-.af-core .af-espn-go {
+.af-core .af-btn.af-espn-go {
   align-self: stretch;
   min-height: 48px;
   padding: 0 20px;
@@ -373,7 +373,7 @@
   flex-wrap: wrap;
 }
 
-.af-core .af-espn-save {
+.af-core .af-btn.af-espn-save {
   min-height: 44px;
   padding: 0 18px;
 }

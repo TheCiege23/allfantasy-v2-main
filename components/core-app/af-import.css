@@ -477,7 +477,7 @@
 
 /* Same specificity trap as af-auth / af-my-team: `.af-core .af-btn` sets
    min-height 36px and beats a bare single-class rule. */
-.af-core .af-im-submit {
+.af-core .af-btn.af-im-submit {
   align-self: flex-start;
   display: inline-flex;
   align-items: center;
@@ -733,7 +733,7 @@
 }
 
 /* Same specificity trap as the submit below — `.af-core .af-btn` wins otherwise. */
-.af-core .af-im-league-btn {
+.af-core .af-btn.af-im-league-btn {
   margin-left: auto;
   flex: 0 0 auto;
   min-height: 44px;

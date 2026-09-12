@@ -349,14 +349,14 @@
   flex-wrap: wrap;
 }
 
-.af-core .af-done-go {
+.af-core .af-btn.af-done-go {
   min-height: 50px;
   padding: 0 24px;
   font-size: 15px;
   flex: 1 1 240px;
 }
 
-.af-core .af-done-alt {
+.af-core .af-btn.af-done-alt {
   min-height: 50px;
   padding: 0 20px;
   font-size: 14px;

@@ -199,7 +199,7 @@
   display: block;
 }
 
-.af-core .af-wv-browse {
+.af-core .af-btn.af-wv-browse {
   align-self: flex-start;
   min-height: 44px;
   display: inline-flex;

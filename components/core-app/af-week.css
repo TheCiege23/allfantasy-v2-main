@@ -639,7 +639,7 @@
  */
 
 .af-wk-btn,
-.af-core .af-wk-btn {
+.af-core .af-btn.af-wk-btn {
   min-height: 44px;
 }
 

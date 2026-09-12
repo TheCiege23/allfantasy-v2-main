@@ -706,7 +706,7 @@
   color: var(--muted);
 }
 
-.af-core .af-pf-verdict-cta {
+.af-core .af-btn.af-pf-verdict-cta {
   justify-content: center;
   min-height: 44px;
 }
@@ -1007,7 +1007,7 @@
  */
 
 .af-pf-search-btn,
-.af-core .af-pf-search-btn {
+.af-core .af-btn.af-pf-search-btn {
   display: inline-flex;
   align-items: center;
   min-height: 44px;
@@ -1293,7 +1293,7 @@
   color: var(--faint);
   font-weight: 500;
 }
-.af-core .af-pf-move-btn {
+.af-core .af-btn.af-pf-move-btn {
   min-height: 40px;
   text-decoration: none;
 }
@@ -1400,7 +1400,7 @@
   gap: 8px;
   flex-wrap: wrap;
 }
-.af-core .af-pf-lv-btn {
+.af-core .af-btn.af-pf-lv-btn {
   min-height: 40px;
   text-decoration: none;
 }
@@ -1434,7 +1434,7 @@
   display: none;
   gap: 8px;
 }
-.af-core .af-pf-verdict-open {
+.af-core .af-btn.af-pf-verdict-open {
   flex: 1 1 0;
   min-height: 44px;
   text-decoration: none;
@@ -1590,7 +1590,7 @@
   .af-core .af-pf-lv-actions {
     width: 100%;
   }
-  .af-core .af-pf-lv-btn {
+  .af-core .af-btn.af-pf-lv-btn {
     flex: 1 1 0;
     min-height: 44px;
   }
@@ -1807,7 +1807,7 @@
   gap: 8px;
   flex-wrap: wrap;
 }
-.af-core .af-pf-tv-btn {
+.af-core .af-btn.af-pf-tv-btn {
   min-height: 40px;
   text-decoration: none;
 }
@@ -1835,7 +1835,7 @@
     line-height: 1;
   }
   /* Stacked, full width: "Open Trade Center" does not fit half of 343px. */
-  .af-core .af-pf-tv-btn {
+  .af-core .af-btn.af-pf-tv-btn {
     flex: 1 1 100%;
     min-height: 44px;
   }
@@ -1918,7 +1918,7 @@
   gap: 8px;
   flex-wrap: wrap;
 }
-.af-core .af-pf-tw-btn {
+.af-core .af-btn.af-pf-tw-btn {
   min-height: 40px;
   text-decoration: none;
 }
@@ -1939,7 +1939,7 @@
   .af-core .af-pf-tw-row:not(:first-child) {
     display: none;
   }
-  .af-core .af-pf-tw-btn {
+  .af-core .af-btn.af-pf-tw-btn {
     flex: 1 1 100%;
     min-height: 44px;
   }
@@ -2475,7 +2475,7 @@
   flex-wrap: wrap;
   gap: 8px;
 }
-.af-core .af-pf-gameday-btn {
+.af-core .af-btn.af-pf-gameday-btn {
   min-height: 44px;
   display: inline-flex;
   flex-direction: column;

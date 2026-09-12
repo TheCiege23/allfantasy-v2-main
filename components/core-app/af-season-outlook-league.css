@@ -175,7 +175,7 @@
 }
 
 /* Prefixed: `.af-core .af-btn` is (0,2,0) and would otherwise win. */
-.af-core .af-sol-clinch-cta {
+.af-core .af-btn.af-sol-clinch-cta {
   align-self: flex-start;
   min-height: 44px;
   display: inline-flex;

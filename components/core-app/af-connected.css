@@ -152,13 +152,13 @@
  * near-identical targets — the case where a 4px shortfall actually costs a
  * mis-tap, and where mis-tapping means pressing Disconnect.
  */
-.af-core .af-ca-fix {
+.af-core .af-btn.af-ca-fix {
   min-height: 44px;
   padding: 0 16px;
 }
 
-.af-core .af-ca-manage,
-.af-core .af-ca-disconnect {
+.af-core .af-btn.af-ca-manage,
+.af-core .af-btn.af-ca-disconnect {
   min-height: 44px;
   padding: 0 14px;
   font-size: 12.5px;
@@ -221,7 +221,7 @@
   flex-wrap: wrap;
 }
 
-.af-core .af-ca-add {
+.af-core .af-btn.af-ca-add {
   min-height: 44px;
   padding: 0 18px;
   text-decoration: none;
