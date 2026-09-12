@@ -44,11 +44,19 @@ vi.mock('@/lib/weather/weatherService', () => ({
    * refetched on every run. Mocking this with a fake would hide a repeat of
    * exactly that: the point is that the route and the writer agree.
    */
-  buildWeatherGameCacheKey: (sport: string, gameId: string) =>
-    `weather:game:${sport.toLowerCase()}:${gameId}`,
+  buildWeatherCoordsCacheKey: (lat: number, lng: number, date: Date) =>
+    `weather:coords:${lat.toFixed(2)}:${lng.toFixed(2)}:${date.toISOString().slice(0, 10)}`,
 }))
+/*
+ * ⚠ `lon`, NOT `lng` — THE REAL TABLE'S FIELD NAME.
+ *
+ * This mock said `lng` and nothing noticed, because the cron only read `.lat`
+ * and `.lon` to pass along to a mocked fetch. The moment the CACHE KEY started
+ * depending on the longitude, `undefined.toFixed()` would have thrown — the
+ * fixture had been wrong all along and only became load-bearing here.
+ */
 vi.mock('@/lib/openweathermap', () => ({
-  NFL_VENUE_COORDS: { 'Test Park': { lat: 1, lng: 2 } },
+  NFL_VENUE_COORDS: { 'Test Park': { lat: 1, lon: 2, dome: false } },
 }))
 vi.mock('@/app/api/cron/_auth', () => ({ requireCronAuth: () => true }))
 
@@ -61,6 +69,18 @@ function games(n: number) {
     venue: 'Test Park',
     startTime: new Date(soon + i * 1000),
   }))
+}
+
+/**
+ * The key the ROUTE will look up for the first fixture game.
+ *
+ * Built from the same inputs the route uses — mocked venue coords and the game's
+ * own startTime — so a change to either side fails here rather than silently
+ * missing the cache, which is the defect this suite exists to catch.
+ */
+function coordsKeyForFirstGame(): string {
+  const g = games(1)[0]!
+  return `weather:coords:${(1).toFixed(2)}:${(2).toFixed(2)}:${g.startTime.toISOString().slice(0, 10)}`
 }
 
 beforeEach(() => {
@@ -124,7 +144,7 @@ describe('weather refresh budget', () => {
      */
     const fresh = new Date()
     findUniqueMock.mockResolvedValue({
-      cacheKey: 'weather:game:nfl:g0',
+      cacheKey: coordsKeyForFirstGame(),
       // Comfortably unexpired and fetched moments ago.
       expiresAt: new Date(Date.now() + 6 * 60 * 60 * 1000),
       fetchedAt: fresh,
@@ -152,7 +172,7 @@ describe('weather refresh budget', () => {
 
   it('still refreshes a fresh row when kickoff is close, because the forecast moves', async () => {
     findUniqueMock.mockResolvedValue({
-      cacheKey: 'weather:game:nfl:g0',
+      cacheKey: coordsKeyForFirstGame(),
       expiresAt: new Date(Date.now() + 6 * 60 * 60 * 1000),
       fetchedAt: new Date(),
     })
@@ -176,7 +196,7 @@ describe('weather refresh budget', () => {
     // Near kickoff with a fresh row: call it, but let the service's own cache
     // answer. `forceRefresh: true` there means a paid provider request.
     findUniqueMock.mockResolvedValue({
-      cacheKey: 'weather:game:nfl:g0',
+      cacheKey: coordsKeyForFirstGame(),
       expiresAt: new Date(Date.now() + 6 * 60 * 60 * 1000),
       fetchedAt: new Date(),
     })
