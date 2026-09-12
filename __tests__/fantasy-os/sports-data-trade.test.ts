@@ -100,6 +100,21 @@ describe('5E-f Trade — settlement paths invoke certified evidence before persi
     expect(src).toMatch(/code: 'SPORTS_DATA_LOCK'/)
     expect(noProvider(src)).toBe(false)
   })
+  it('process: the DESTRUCTIVE reversal branch is below the evidence lock, the read-only one above', () => {
+    /*
+     * ⚠ Reversal writes rosters exactly as settlement does, so a week the certified-evidence lock
+     * has closed must bind it too. This was written the other way round first — the branch sat
+     * above the guard and would have mutated rosters through a lock. The read-only preflight
+     * stays above it on purpose, or a commissioner cannot see WHY a reversal is refused.
+     */
+    const src = read(PROCESS)
+    const lock = src.indexOf("code: 'SPORTS_DATA_LOCK'")
+    const preflight = src.indexOf("body.action === 'reverse_preflight'")
+    const reverse = src.indexOf("body.action === 'reverse'")
+    expect(preflight).toBeGreaterThan(-1)
+    expect(preflight).toBeLessThan(lock)
+    expect(reverse).toBeGreaterThan(lock)
+  })
 })
 
 describe('5E-f Trade — analysis path is informational and deterministic', () => {
