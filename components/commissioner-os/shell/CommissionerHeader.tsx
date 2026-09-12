@@ -121,7 +121,7 @@ export function CommissionerHeader({
       <button
         type="button"
         aria-label="Profile menu"
-        className="focus-ring rounded-full p-1"
+        className="focus-ring inline-flex min-h-11 min-w-11 items-center justify-center rounded-full p-1 sm:min-h-0 sm:min-w-0"
         style={{ color: 'var(--muted)' }}
       >
         <UserCircle size={28} aria-hidden />

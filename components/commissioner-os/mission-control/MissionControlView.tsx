@@ -71,13 +71,13 @@ export function MissionControlView({ leagueHealth, recommendations, managerHighl
       </div>
 
       <div className="mb-4 flex flex-wrap gap-2">
-        <Button size="sm" variant="secondary">
+        <Button size="sm" variant="secondary" className="h-11 min-h-11 sm:h-9 sm:min-h-[36px]">
           <Send size={14} aria-hidden /> Send League Digest
         </Button>
-        <Button size="sm" variant="outline">
+        <Button size="sm" variant="outline" className="h-11 min-h-11 sm:h-9 sm:min-h-[36px]">
           <ListChecks size={14} aria-hidden /> Review Pending Trades
         </Button>
-        <Button size="sm" variant="outline">
+        <Button size="sm" variant="outline" className="h-11 min-h-11 sm:h-9 sm:min-h-[36px]">
           <UserPlus size={14} aria-hidden /> Invite Co-Commissioner
         </Button>
       </div>
