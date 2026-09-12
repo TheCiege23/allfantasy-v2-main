@@ -1,5 +1,5 @@
 import { prisma } from '@/lib/prisma'
-import type { IDPDeadMoney, IDPSalaryRecord } from '@prisma/client'
+import type { IDPDeadMoney, IDPSalaryRecord, Prisma } from '@prisma/client'
 
 export type CapSummary = {
   totalCap: number
@@ -745,6 +745,124 @@ export async function applyRedraftTradeCapTransfers(
   for (const r of rosterIds) {
     await refreshCapProjections(leagueId, r)
   }
+}
+
+export type RedraftTradeCapTransferResult = {
+  /** IDP salary records actually moved. 0 for a league with no `IDPCapConfig`. */
+  moved: number
+  /** `IDPCapTransaction` row ids created here, in creation order (trade_out, trade_in per move). */
+  transactionIds: string[]
+}
+
+/**
+ * The same cap transfer as `applyRedraftTradeCapTransfers`, run on a CALLER-SUPPLIED transaction.
+ *
+ * 🛑 WHY THIS EXISTS. The non-transactional version opens its own `$transaction`, so the cap moves
+ * are atomic among themselves and atomic with NOTHING ELSE. `/api/redraft/trade-votes` called it
+ * before opening the transaction that claims the proposal and moves rosters, which left two real
+ * failure modes:
+ *
+ *  - **Half-applied settlement.** Cap transfer commits, then `settleRedraftTradeAssets` throws
+ *    (bad ownership, insufficient FAAB) or the claim loses its race. The salary records have already
+ *    moved and nothing rolls them back: IDP cap says the trade happened, the rosters say it did not.
+ *  - **Double-applied cap.** Two racing finalizers (double-click, or vote-threshold against
+ *    commissioner-approve) BOTH ran the cap transfer before either tried to claim the proposal,
+ *    because the claim lived in the later transaction. One won the claim; the loser had already
+ *    moved salary a second time and then returned 409.
+ *
+ * Called inside the settlement transaction AFTER the conditional claim, both close: the loser of the
+ * race never reaches this function, and any later throw rolls the cap movement back with everything
+ * else.
+ *
+ * ⚠ It does NOT refresh `IDPCapProjection`. That is a derived view, and recomputing it from inside
+ * the transaction would write projections for a settlement that may still roll back. The caller
+ * refreshes AFTER commit — see `refreshCapProjections`, which the non-transactional version calls
+ * post-commit for exactly the same reason. Dropping that call is a silent regression: the ledger
+ * (`IDPCapTransaction`) stays right and the projection goes stale, which nothing type-checks.
+ *
+ * ⚠ Rows are created one at a time rather than with `createMany` so each id can be returned. The
+ * trade execution snapshot needs them for `dependencies.sourceTransactionIds`; that writer does not
+ * exist yet, and the ids are returned now so it does not have to re-derive them later.
+ */
+export async function applyRedraftTradeCapTransfersInTransaction(
+  tx: Prisma.TransactionClient,
+  leagueId: string,
+  proposerRosterId: string,
+  receiverRosterId: string,
+  proposerOffers: TradeOfferJson,
+  receiverOffers: TradeOfferJson,
+): Promise<RedraftTradeCapTransferResult> {
+  const cfg = await tx.iDPCapConfig.findUnique({ where: { leagueId } })
+  if (!cfg) return { moved: 0, transactionIds: [] }
+
+  const directions = [
+    ...extractPlayerIdsFromOffers(proposerOffers).map((playerId) => ({
+      playerId,
+      fromRosterId: proposerRosterId,
+      toRosterId: receiverRosterId,
+    })),
+    ...extractPlayerIdsFromOffers(receiverOffers).map((playerId) => ({
+      playerId,
+      fromRosterId: receiverRosterId,
+      toRosterId: proposerRosterId,
+    })),
+  ]
+
+  let moved = 0
+  const transactionIds: string[] = []
+
+  for (const direction of directions) {
+    const rec = await tx.iDPSalaryRecord.findFirst({
+      where: {
+        leagueId,
+        rosterId: direction.fromRosterId,
+        playerId: direction.playerId,
+        status: { in: [...ACTIVE_STATUSES] },
+      },
+    })
+    if (!rec) continue
+
+    await tx.iDPSalaryRecord.update({
+      where: { id: rec.id },
+      data: { rosterId: direction.toRosterId },
+    })
+
+    const tradeOut = await tx.iDPCapTransaction.create({
+      data: {
+        leagueId,
+        rosterId: direction.fromRosterId,
+        playerId: rec.playerId,
+        playerName: rec.playerName,
+        isDefensive: rec.isDefensive,
+        transactionType: 'trade_out',
+        salary: rec.salary,
+        contractYears: rec.yearsRemaining,
+        deadMoneyCreated: 0,
+        capImpact: -rec.salary,
+        season: cfg.season,
+      },
+    })
+    const tradeIn = await tx.iDPCapTransaction.create({
+      data: {
+        leagueId,
+        rosterId: direction.toRosterId,
+        playerId: rec.playerId,
+        playerName: rec.playerName,
+        isDefensive: rec.isDefensive,
+        transactionType: 'trade_in',
+        salary: rec.salary,
+        contractYears: rec.yearsRemaining,
+        deadMoneyCreated: 0,
+        capImpact: rec.salary,
+        season: cfg.season,
+      },
+    })
+
+    transactionIds.push(tradeOut.id, tradeIn.id)
+    moved += 1
+  }
+
+  return { moved, transactionIds }
 }
 
 export async function expireContractsForNewSeason(

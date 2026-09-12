@@ -4,7 +4,12 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { assertLeagueMember } from '@/lib/league/league-access'
-import { applyRedraftTradeCapTransfers, validateRedraftTradeCap } from '@/lib/idp/capEngine'
+import {
+  applyRedraftTradeCapTransfersInTransaction,
+  refreshCapProjections,
+  validateRedraftTradeCap,
+  type RedraftTradeCapTransferResult,
+} from '@/lib/idp/capEngine'
 import { settleRedraftTradeAssets } from '@/lib/redraft/tradeSettlement'
 import { getPlatformEvents, EVENT } from '@/lib/events'
 import { recordRedraftTradeMarketEvent, type RedraftMarketEventType } from '@/lib/trade-market/redraftTradeMarketEvents'
@@ -98,26 +103,21 @@ async function finalizeAcceptedTrade(
     return NextResponse.json({ error: cap.message }, { status: 409 })
   }
 
-  try {
-    await applyRedraftTradeCapTransfers(
-      proposal.leagueId,
-      proposal.proposerRosterId,
-      proposal.receiverRosterId,
-      proposerOffers,
-      receiverOffers,
-    )
-  } catch (e) {
-    console.error('[redraft/trade-votes] IDP cap transfer failed', e)
-    await failEvent()
-    return NextResponse.json(
-      { error: e instanceof Error ? e.message : 'Cap transfer failed' },
-      { status: 409 },
-    )
-  }
-
-  // Settle the trade for real: move RedraftRosterPlayer rows + transfer faabBalance atomically with
-  // the status flip. (IDP salary records were moved above; this handles the standard redraft roster.)
+  // Settle the trade for real, in ONE transaction: claim the proposal, move the IDP salary records,
+  // move RedraftRosterPlayer rows, transfer faabBalance. Either all of it happens or none of it does.
+  //
+  // 🛑 THE CAP TRANSFER USED TO RUN HERE, BEFORE THIS TRANSACTION OPENED, AND IT BROKE TWO WAYS.
+  // `applyRedraftTradeCapTransfers` opens its own transaction, so the cap moves were atomic among
+  // themselves and atomic with nothing else:
+  //   - A settlement that then threw (bad ownership, insufficient FAAB) left the IDP cap saying the
+  //     trade happened while the rosters said it had not. Nothing rolled the salary records back.
+  //   - Worse, the claim that decides which of two racing finalizers wins lived in THIS transaction,
+  //     below — so both racers ran the cap transfer first and moved salary TWICE, and the loser then
+  //     returned 409 having already written.
+  // Running it after the claim, on the same `tx`, closes both: the loser never reaches it, and a
+  // later throw rolls it back with everything else.
   let updated
+  let capTransfer: RedraftTradeCapTransferResult = { moved: 0, transactionIds: [] }
   try {
     updated = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       // Concurrency guard: atomically claim the proposal BEFORE moving any rosters.
@@ -130,6 +130,14 @@ async function finalizeAcceptedTrade(
       if (claimed.count === 0) {
         throw new Error('PROPOSAL_ALREADY_RESOLVED')
       }
+      capTransfer = await applyRedraftTradeCapTransfersInTransaction(
+        tx,
+        proposal.leagueId,
+        proposal.proposerRosterId,
+        proposal.receiverRosterId,
+        proposerOffers,
+        receiverOffers,
+      )
       await settleRedraftTradeAssets(tx, {
         proposerRosterId: proposal.proposerRosterId,
         receiverRosterId: proposal.receiverRosterId,
@@ -150,6 +158,22 @@ async function finalizeAcceptedTrade(
     )
   }
   await upsertDecision(proposal.id, 'accepted', decidedByUserId, decisionReason)
+
+  // POST-COMMIT, and deliberately not inside the transaction above. `IDPCapProjection` is a derived
+  // view; recomputing it from inside would publish projections for a settlement that can still roll
+  // back. `applyRedraftTradeCapTransfers` — the non-transactional version this path used to call —
+  // refreshed post-commit for the same reason, so omitting it here would silently regress projection
+  // freshness on every redraft trade while the ledger stayed correct and nothing went red.
+  //
+  // Best-effort: the trade is already committed and a stale projection must not turn a settled trade
+  // into an error response.
+  if (capTransfer.moved > 0) {
+    for (const rosterId of new Set([proposal.proposerRosterId, proposal.receiverRosterId])) {
+      await refreshCapProjections(proposal.leagueId, rosterId).catch((e) =>
+        console.error('[redraft/trade-votes] cap projection refresh failed', rosterId, e),
+      )
+    }
+  }
 
   // G15.2b — best-effort emit (never throws; only the race-winning finalizer reaches here,
   // and deterministic keys dedupe → exactly one accepted+processed event per trade).
