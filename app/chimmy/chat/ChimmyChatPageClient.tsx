@@ -2,11 +2,12 @@
 
 import Link from 'next/link'
 import { ChevronLeft } from 'lucide-react'
-import { useMemo } from 'react'
+import { useMemo, useRef } from 'react'
 import ChimmyChatShell from '@/components/chimmy/ChimmyChatShell'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
 import { usePlayerComparisonUI } from '@/components/player-comparison-ui'
 import { buildAiPlayerCompareToolUrl } from '@/lib/chimmy-actions/aiPlayerComparisonBridge'
+import { useVisibleViewportHeight } from '@/app/chimmy/hooks/useVisibleViewportHeight'
 
 export function ChimmyChatPageClient(props: {
   prompt?: string | null
@@ -19,8 +20,28 @@ export function ChimmyChatPageClient(props: {
   const sport = useMemo(() => normalizeToSupportedSport(props.sport), [props.sport])
   const { openComparison } = usePlayerComparisonUI()
 
+  /*
+   * 🛑 THE KEYBOARD DOES NOT SHRINK `100dvh`. The dynamic viewport units track
+   * browser chrome, not the virtual keyboard — that is governed by the viewport
+   * meta's `interactive-widget`, whose default is `resizes-visual`: the VISUAL
+   * viewport shrinks and the LAYOUT viewport does not. So focusing the composer
+   * left it underneath the keyboard, because the container it sits at the bottom
+   * of never changed size.
+   *
+   * ⚠ `null` means "use the stylesheet", so with no `visualViewport` (older
+   * Safari, SSR) or no keyboard this renders byte-identically to before. The
+   * inline height only ever appears when something is actually covering the
+   * viewport.
+   */
+  const mainRef = useRef<HTMLElement | null>(null)
+  const visibleHeight = useVisibleViewportHeight(mainRef)
+
   return (
-    <main className="mode-surface flex h-[calc(100dvh-8.5rem)] min-h-0 flex-col px-3 py-4 sm:px-6 sm:py-6 lg:h-[calc(100dvh-3.5rem)]">
+    <main
+      ref={mainRef}
+      className="mode-surface flex h-[calc(100dvh-8.5rem)] min-h-0 flex-col px-3 py-4 sm:px-6 sm:py-6 lg:h-[calc(100dvh-3.5rem)]"
+      style={visibleHeight === null ? undefined : { height: visibleHeight }}
+    >
       <div className="mx-auto flex h-full min-h-0 w-full max-w-4xl flex-col">
         <Link
           href="/chimmy"
