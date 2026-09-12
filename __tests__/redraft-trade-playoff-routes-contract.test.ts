@@ -177,7 +177,16 @@ describe('Redraft trade votes route contract', () => {
     enqueueCollusionScanMock.mockResolvedValue(undefined)
   })
 
-  it('accepts a pending proposal by receiver owner', async () => {
+  /*
+   * 🛑 THIS TEST USED `vetoMode: 'commissioner'` AND ASSERTED THE TRADE SETTLED ON ACCEPT.
+   *
+   * That is the defect, written down as a contract: a league that configured commissioner review
+   * got none, because the receiver's accept called settlement directly. The fixture is now
+   * `no_veto` — the ONE mode where settling on accept is correct — so this still proves the
+   * settlement path works end to end. The review modes are covered by the two tests below, which
+   * assert they do NOT settle.
+   */
+  it('accepts a pending proposal by receiver owner when no review is configured', async () => {
     prismaMock.redraftTradeProposal.findFirst.mockResolvedValueOnce({
       id: 'p-1',
       leagueId: 'l-1',
@@ -186,7 +195,8 @@ describe('Redraft trade votes route contract', () => {
       receiverRosterId: 'r-2',
       status: 'pending',
       expiresAt: null,
-      vetoMode: 'commissioner',
+      acceptedAt: null,
+      vetoMode: 'no_veto',
       vetoThreshold: 4,
       votes: [],
       assets: [],
@@ -223,6 +233,58 @@ describe('Redraft trade votes route contract', () => {
     expect(enqueueCollusionScanMock).toHaveBeenCalledTimes(1)
   })
 
+  /**
+   * 🛑 THE REGRESSION GUARD FOR THE GOVERNANCE BYPASS.
+   *
+   * Accepting a trade in a review league must record the acceptance and STOP. If this ever goes
+   * green on `resolved: true`, commissioner review is decoration again and trades execute before
+   * anyone can look at them.
+   */
+  it('does NOT settle on accept when the league requires commissioner review', async () => {
+    prismaMock.redraftTradeProposal.findFirst.mockResolvedValueOnce({
+      id: 'p-rev',
+      leagueId: 'l-1',
+      seasonId: 's-1',
+      proposerRosterId: 'r-1',
+      receiverRosterId: 'r-2',
+      status: 'pending',
+      expiresAt: null,
+      acceptedAt: null,
+      vetoMode: 'commissioner',
+      vetoThreshold: 4,
+      votes: [],
+      assets: [],
+    })
+    prismaMock.redraftRoster.findMany.mockResolvedValueOnce([
+      { id: 'r-1', ownerId: 'u-1' },
+      { id: 'r-2', ownerId: 'u-2' },
+    ])
+    prismaMock.league.findFirst.mockResolvedValueOnce({ userId: 'u-1', teams: [] })
+    prismaMock.redraftTradeProposal.findUnique.mockResolvedValueOnce({
+      id: 'p-rev',
+      status: 'pending',
+      acceptedAt: new Date(),
+    })
+    prismaMock.redraftTradeDecision.findFirst.mockResolvedValueOnce(null)
+    prismaMock.redraftTradeDecision.create.mockResolvedValueOnce({ id: 'd-rev' })
+
+    const { POST } = await import('../app/api/redraft/trade-votes/route')
+    const req = createMockNextRequest('http://localhost/api/redraft/trade-votes', {
+      method: 'POST',
+      body: { proposalId: 'p-rev', action: 'accept' },
+    })
+
+    const res = await POST(req as any)
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body.resolved).toBe(false)
+    expect(body.awaitingReview).toBe('commissioner')
+    // Nothing moved: no cap transfer, no legacy mirror, no collusion scan.
+    expect(applyRedraftTradeCapTransfersMock).not.toHaveBeenCalled()
+    expect(prismaMock.redraftLeagueTrade.create).not.toHaveBeenCalled()
+    expect(enqueueCollusionScanMock).not.toHaveBeenCalled()
+  })
+
   it('accepts when commissioner approves', async () => {
     prismaMock.redraftTradeProposal.findFirst.mockResolvedValueOnce({
       id: 'p-2',
@@ -232,6 +294,9 @@ describe('Redraft trade votes route contract', () => {
       receiverRosterId: 'r-2',
       status: 'pending',
       expiresAt: null,
+      // The receiver has accepted; the trade is awaiting the commissioner. Approving a proposal
+      // with `acceptedAt: null` is now refused — see the guard test below.
+      acceptedAt: new Date('2026-09-01T00:00:00Z'),
       vetoMode: 'commissioner',
       vetoThreshold: 4,
       votes: [],
@@ -281,6 +346,9 @@ describe('Redraft trade votes route contract', () => {
       receiverRosterId: 'r-2',
       status: 'pending',
       expiresAt: null,
+      // Voting opens only after the receiver accepts — a league cannot vote through a trade
+      // nobody agreed to.
+      acceptedAt: new Date('2026-09-01T00:00:00Z'),
       vetoMode: 'league_vote',
       vetoThreshold: 1,
       votes: [],

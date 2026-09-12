@@ -363,7 +363,71 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Only receiver can accept/reject' }, { status: 403 })
     }
     if (action === 'accept') {
-      return finalizeAcceptedTrade(proposal as ProposalWithAssets, proposerOwnerId, receiverOwnerId, userId, body.reason, 'proposal_accepted')
+      /*
+       * 🛑 ACCEPTANCE IS NOT APPROVAL. THIS SETTLED THE TRADE REGARDLESS OF `vetoMode`.
+       *
+       * `finalizeAcceptedTrade` moves players, FAAB and IDP cap. Calling it straight from the
+       * receiver's accept meant a league that had configured commissioner review or a league vote
+       * got neither: the trade executed the moment the receiver clicked accept, and the review
+       * system it had turned on was decoration. A commissioner could veto only something that had
+       * already happened.
+       *
+       * Only `no_veto` may settle here. Every other mode records the acceptance and waits.
+       *
+       * ⚠ STATUS DELIBERATELY STAYS `pending`, AND `acceptedAt` CARRIES THE STATE INSTEAD.
+       * `finalizeAcceptedTrade` claims the row with `updateMany({ where: { status: 'pending' } })`
+       * — that conditional claim is what stops two settlements racing. Inventing an
+       * `accepted_pending_review` status would break the claim and would also hide the proposal
+       * from any caller listing `?status=pending`, which is how the receiver's own screen finds
+       * it. `acceptedAt` already exists on the model and means exactly this.
+       */
+      if (proposal.acceptedAt) {
+        return NextResponse.json(
+          { error: 'This trade has already been accepted and is awaiting review.' },
+          { status: 409 },
+        )
+      }
+
+      if (proposal.vetoMode === 'no_veto') {
+        return finalizeAcceptedTrade(proposal as ProposalWithAssets, proposerOwnerId, receiverOwnerId, userId, body.reason, 'proposal_accepted')
+      }
+
+      /*
+       * Conditional on BOTH the status and `acceptedAt` being unset, so two simultaneous accepts
+       * cannot both record one — the same reason the settlement claim is conditional.
+       */
+      const claimedAccept = await prisma.redraftTradeProposal.updateMany({
+        where: { id: proposal.id, status: 'pending', acceptedAt: null },
+        data: { acceptedAt: new Date() },
+      })
+      if (claimedAccept.count === 0) {
+        return NextResponse.json({ error: 'This trade is no longer awaiting your acceptance.' }, { status: 409 })
+      }
+
+      const awaitingReview = await prisma.redraftTradeProposal.findUnique({ where: { id: proposal.id } })
+      /*
+       * `accepted` is the RECEIVER'S decision, and it is true the moment he makes it — the
+       * decision record captures who decided what, not whether the trade has settled. Settlement
+       * records itself separately via the market event and the status claim.
+       */
+      await upsertDecision(proposal.id, 'accepted', userId, body.reason)
+      await recordRedraftTradeMarketEvent({
+        leagueId: proposal.leagueId,
+        seasonId: proposal.seasonId,
+        tradeProposalId: proposal.id,
+        eventType: 'proposal_accepted',
+        actorUserId: userId,
+      })
+      /*
+       * `resolved: false` is the honest answer and the field callers already branch on: the
+       * receiver has acted, the trade has NOT executed. Naming what it waits on lets the UI say
+       * so instead of implying the deal is done.
+       */
+      return NextResponse.json({
+        proposal: awaitingReview,
+        resolved: false,
+        awaitingReview: proposal.vetoMode === 'league_vote' ? 'league_vote' : 'commissioner',
+      })
     }
 
     const updated = await prisma.redraftTradeProposal.update({
@@ -390,6 +454,29 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Commissioner action required' }, { status: 403 })
     }
     if (action === 'commissioner_approve') {
+      /*
+       * 🛑 A COMMISSIONER MAY APPROVE A TRADE. HE MAY NOT MAKE IT ON THE RECEIVER'S BEHALF.
+       *
+       * This settled a proposal that was merely `pending`, so a commissioner could execute an
+       * offer the other manager had never seen, let alone agreed to. Approval is the SECOND gate;
+       * the receiver's acceptance is the first, and `acceptedAt` is what records it.
+       */
+      if (!proposal.acceptedAt) {
+        return NextResponse.json(
+          { error: 'The receiving manager has not accepted this trade yet — there is nothing to approve.' },
+          { status: 409 },
+        )
+      }
+      /*
+       * ⚠ AND ONLY WHERE COMMISSIONER REVIEW IS THE CONFIGURED MODE. Approving a `league_vote`
+       * trade by hand bypasses the vote exactly the way accept used to bypass review.
+       */
+      if (proposal.vetoMode !== 'commissioner') {
+        return NextResponse.json(
+          { error: `This league resolves trades by ${proposal.vetoMode}, not commissioner approval.` },
+          { status: 409 },
+        )
+      }
       return finalizeAcceptedTrade(proposal as ProposalWithAssets, proposerOwnerId, receiverOwnerId, userId, body.reason, 'commissioner_approved')
     }
 
@@ -418,6 +505,20 @@ export async function POST(req: NextRequest) {
   if (action === 'vote_approve' || action === 'vote_veto') {
     if (proposal.vetoMode !== 'league_vote') {
       return NextResponse.json({ error: 'League vote mode not enabled for this proposal' }, { status: 409 })
+    }
+    /*
+     * 🛑 A LEAGUE CANNOT VOTE A TRADE THROUGH THAT NOBODY AGREED TO.
+     *
+     * Votes were accepted while the proposal was still `pending`, and reaching the approval
+     * threshold calls `finalizeAcceptedTrade` — so a league could execute an offer the receiving
+     * manager had never accepted, or had been about to reject. The vote decides whether an agreed
+     * trade STANDS; it is not a substitute for the agreement.
+     */
+    if (!proposal.acceptedAt) {
+      return NextResponse.json(
+        { error: 'Voting opens once the receiving manager accepts this trade.' },
+        { status: 409 },
+      )
     }
     if (isProposerOwner || isReceiverOwner) {
       return NextResponse.json({ error: 'Trade parties cannot vote on their own proposal' }, { status: 403 })
