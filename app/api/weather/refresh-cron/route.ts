@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { NFL_VENUE_COORDS } from '@/lib/openweathermap'
 import {
-  buildWeatherGameCacheKey,
+  buildWeatherCoordsCacheKey,
   getWeatherForEvent,
   MLB_VENUE_COORDS,
 } from '@/lib/weather/weatherService'
@@ -122,8 +122,41 @@ export async function POST(request: NextRequest) {
        * Now: the key is built by the same function that writes it, and the
        * refresh is forced only when it is actually warranted — inside 48 hours
        * of kickoff, or when the stored row has genuinely gone stale.
+       *
+       * 🛑 AND THAT FIX MADE THE CRON SELF-CONSISTENT WHILE LEAVING IT UNREADABLE.
+       *
+       * Aligning the gate with the write was right, and it is exactly why this
+       * stayed hidden: the cron now reports accurate cache hits on rows NO
+       * CONSUMER CAN FIND. `weather:game:{sport}:{externalId}` is written here
+       * and read by nothing —
+       *
+       *   `getGameWeather` (lib/core-app/gameWeather.ts, the My Team surface)
+       *      reads `weather:coords:{lat}:{lng}:{utcDay}`
+       *   `getCachedGameWeather` (chat enrichment, ai/deterministic, /api/sports/weather)
+       *      reads `weather:game:{sport}:{gameId ?? TEAM}` — and NO caller passes
+       *      a gameId, so it looks up `weather:game:nfl:KC`
+       *
+       * Three key spaces, one writer, zero overlap.
+       *
+       * ⚠ ONLY ONE OF THEM ACTUALLY BREAKS, WHICH IS WHY THIS WRITES THE COORDS
+       * KEY AND NOT THE OTHER. `getCachedGameWeather` falls through to
+       * `getCachedWeatherByCoords`, which fetches live and writes on a miss — so
+       * its callers were paying for calls this cron could have saved, a cost
+       * problem, not a correctness one. `getGameWeather` does a bare `findMany`
+       * and returns NOTHING on a miss, so My Team has been showing no weather at
+       * all while this cron ran every three hours.
+       *
+       * The coordinates match by construction for NFL: this route resolves them
+       * out of `NFL_VENUE_COORDS`, and `resolveVenueForTeam` reaches the same
+       * table row via `NFL_TEAM_VENUES[abbrev]`. Same row, same `toFixed(2)`,
+       * same UTC day bucket, same key.
+       *
+       * ⚠ MLB IS NOT COVERED BY THAT ARGUMENT and is deliberately not claimed:
+       * this route reads `MLB_VENUE_COORDS` while `resolveVenueForTeam` reads
+       * `MLB_TEAM_BALLPARK`. Two tables, so the keys agree only if the
+       * coordinates happen to. Prewarming MLB needs those reconciled first.
        */
-      const cacheKey = buildWeatherGameCacheKey(g.sport, g.externalId)
+      const cacheKey = buildWeatherCoordsCacheKey(coords.lat, coords.lng, g.startTime)
       const row = await prisma.weatherCache
         .findUnique({ where: { cacheKey } })
         .catch(() => null)
@@ -147,6 +180,16 @@ export async function POST(request: NextRequest) {
         gameTime: g.startTime,
         sport: g.sport,
         eventId: g.externalId,
+        /*
+         * ⚠ THE OVERRIDE IS LOAD-BEARING, NOT TIDINESS. Without it
+         * `getWeatherForEvent` derives its own key, and because `eventId` and
+         * `sport` are both present it picks `buildWeatherGameCacheKey` — the
+         * space nothing reads. Passing the key the gate just used is what makes
+         * the write land where `getGameWeather` will look for it.
+         *
+         * `eventId`/`sport` stay for the service's own logging and dome checks.
+         */
+        cacheKey,
         // Only bypass the service's own cache when we established a reason to.
         forceRefresh: stale,
       })
