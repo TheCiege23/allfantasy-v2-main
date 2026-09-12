@@ -898,3 +898,183 @@ export function parseFantraxLeagueId(input: string): string | null {
 
   return null
 }
+
+/* ------------------------------------------------------------------ *
+ * Draft
+ *
+ * 🛑 BOTH ENDPOINTS WERE CATALOGUED IN `FANTRAX_ENDPOINTS` AND NEVER CALLED.
+ * Every other entry in that list had a `getFantraxX` wrapper; `getDraftPicks`
+ * and `getDraftResults` had none, so the adapter's own coverage reported
+ * `draftHistory` as "currently reflects traded draft-pick events when
+ * available" — real draft results were sitting one unwritten function away.
+ * ------------------------------------------------------------------ */
+
+/** One slot in the draft board. `playerId` is ABSENT until the pick is made. */
+export type FantraxDraftResultPick = {
+  round: number
+  /** OVERALL pick number, 1..(rounds × teams). See the warning on `FantraxOutstandingPick`. */
+  pick: number
+  /** Pick number WITHIN the round, 1..teams. */
+  pickInRound: number
+  teamId: string
+  /** Epoch milliseconds the pick was made, when it has been. */
+  time: number | null
+  /**
+   * ⚠ ABSENT, NOT NULL, FOR AN UNMADE PICK. Measured on Cream Bowl: 192 slots,
+   * 156 carrying `playerId` and 36 with the key simply missing. Same omission
+   * convention this repo has now recorded for Fleaflicker.
+   */
+  playerId: string | null
+}
+
+export type FantraxDraftResults = {
+  picks: FantraxDraftResultPick[]
+  /** "completed", and whatever else Fantrax uses — not enumerated, so kept as a string. */
+  draftState: string | null
+  /** "snake" here. Do NOT assume it: a linear or auction league orders picks differently. */
+  draftType: string | null
+  /** Team ids in first-round order. */
+  draftOrder: string[]
+  draftDate: string | null
+  startDate: string | null
+  endDate: string | null
+}
+
+/**
+ * A pick that has not been used yet, from `getDraftPicks`.
+ *
+ * 🛑 `pick` HERE IS THE PICK-IN-ROUND, NOT THE OVERALL PICK NUMBER, AND THE TWO
+ * ENDPOINTS USE THE SAME FIELD NAME FOR DIFFERENT QUANTITIES. Measured on Cream
+ * Bowl: `getDraftResults.pick` ranges 1-192 while `getDraftPicks.pick` ranges
+ * 1-12 in a twelve-team league. Joining the two on `round + pick + teamId`
+ * returns ZERO matches — I tried it, got 36 vs 36 with no overlap, and only then
+ * looked at the ranges. Join on `round + pickInRound + teamId` and the two sets
+ * are exactly equal (36/36, verified with a control that fires when one element
+ * is perturbed).
+ */
+export type FantraxOutstandingPick = {
+  round: number
+  /** ⚠ PICK-IN-ROUND. See the warning above before joining this to a draft result. */
+  pick: number
+  teamId: string
+}
+
+export type FantraxDraftPickInventory = {
+  /** Current-season picks not yet used. */
+  current: FantraxOutstandingPick[]
+  /**
+   * Future-season picks — the dynasty asset.
+   *
+   * ⚠ EMPTY IN THE ONLY LEAGUE MEASURED, so the element shape is UNVERIFIED and
+   * is typed as the same row only because that is the sibling field's shape.
+   * Do not build a traded-pick feature on this without seeing one first.
+   */
+  future: FantraxOutstandingPick[]
+}
+
+function toFiniteNumber(value: unknown): number | null {
+  const n = Number(value)
+  return Number.isFinite(n) ? n : null
+}
+
+/**
+ * The draft board: every slot, with the player where a pick has been made.
+ *
+ * Returns a failure rather than an empty draft when Fantrax reports no picks —
+ * a league that has not drafted and a league whose draft could not be read are
+ * different states, and the caller decides what to do about each.
+ */
+export async function getFantraxDraftResults(
+  leagueId: string,
+): Promise<FantraxResult<FantraxDraftResults>> {
+  const res = await fxeaGet<unknown>(`/getDraftResults?leagueId=${encodeURIComponent(leagueId)}`)
+  if (!res.ok) return res
+
+  const body = (res.data ?? {}) as Record<string, unknown>
+  const rawPicks = Array.isArray(body.draftPicks) ? body.draftPicks : null
+  if (!rawPicks || rawPicks.length === 0) {
+    return {
+      ok: false,
+      failure: { kind: 'api_error', message: 'Fantrax returned no draft results for this league' },
+    }
+  }
+
+  const picks: FantraxDraftResultPick[] = []
+  for (const raw of rawPicks) {
+    const row = (raw ?? {}) as Record<string, unknown>
+    const round = toFiniteNumber(row.round)
+    const pick = toFiniteNumber(row.pick)
+    const pickInRound = toFiniteNumber(row.pickInRound)
+    const teamId = String(row.teamId ?? '').trim()
+    /* A slot with no round/pick/team is not a pick; dropping it beats inventing one. */
+    if (round == null || pick == null || pickInRound == null || !teamId) continue
+
+    const playerIdRaw = row.playerId
+    picks.push({
+      round,
+      pick,
+      pickInRound,
+      teamId,
+      time: toFiniteNumber(row.time),
+      /* ABSENT means unmade. Normalised to null here so callers test one thing. */
+      playerId: typeof playerIdRaw === 'string' && playerIdRaw.trim() ? playerIdRaw.trim() : null,
+    })
+  }
+
+  const order = Array.isArray(body.draftOrder)
+    ? body.draftOrder.map((t) => String(t ?? '').trim()).filter(Boolean)
+    : []
+
+  const str = (v: unknown) => (typeof v === 'string' && v.trim() ? v.trim() : null)
+
+  return {
+    ok: true,
+    data: {
+      picks,
+      draftState: str(body.draftState),
+      draftType: str(body.draftType),
+      draftOrder: order,
+      draftDate: str(body.draftDate),
+      startDate: str(body.startDate),
+      endDate: str(body.endDate),
+    },
+  }
+}
+
+/**
+ * Outstanding pick ownership — current season and future.
+ *
+ * ⚠ AN EMPTY INVENTORY IS A LEGITIMATE ANSWER, unlike an empty draft board: a
+ * league whose draft is complete and which trades no future picks genuinely owns
+ * no outstanding picks. So this returns `ok` with empty arrays rather than a
+ * failure.
+ */
+export async function getFantraxDraftPicks(
+  leagueId: string,
+): Promise<FantraxResult<FantraxDraftPickInventory>> {
+  const res = await fxeaGet<unknown>(`/getDraftPicks?leagueId=${encodeURIComponent(leagueId)}`)
+  if (!res.ok) return res
+
+  const body = (res.data ?? {}) as Record<string, unknown>
+  const read = (value: unknown): FantraxOutstandingPick[] => {
+    if (!Array.isArray(value)) return []
+    const out: FantraxOutstandingPick[] = []
+    for (const raw of value) {
+      const row = (raw ?? {}) as Record<string, unknown>
+      const round = toFiniteNumber(row.round)
+      const pick = toFiniteNumber(row.pick)
+      const teamId = String(row.teamId ?? '').trim()
+      if (round == null || pick == null || !teamId) continue
+      out.push({ round, pick, teamId })
+    }
+    return out
+  }
+
+  return {
+    ok: true,
+    data: {
+      current: read(body.currentDraftPicks),
+      future: read(body.futureDraftPicks),
+    },
+  }
+}
