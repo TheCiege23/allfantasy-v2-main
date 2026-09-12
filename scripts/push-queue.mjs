@@ -1131,6 +1131,48 @@ function ticketFor(dir, sha, ctx, { create = true } = {}) {
   }
 
   if (!mine && create) {
+    /*
+     * 🛑 GOING TO THE BACK OF THE LINE MUST NOT BE SILENT. The inheritance rules above are
+     * deliberately conservative — patch-id crosses worktrees, ancestry does not — and when they
+     * all decline, this used to create a fresh ticket with no comment. Measured 2026-09-12: a
+     * 3-commit tip rebuilt as a 4-commit tip in a DIFFERENT worktree matched neither rule
+     * (the tip's patch-id changed, and the worktree gate blocked the ancestry path), so 84
+     * minutes of queue position were lost without a word. The position was recoverable the
+     * whole time, by `rebind`, which the author had no reason to run because nothing said so.
+     *
+     * ⚠ THE SAME SIGNAL HAS A SECOND, WORSE MEANING, which is why it is worth reporting even
+     * when it is not your own ticket: a live ticket whose sha is an ANCESTOR of yours and is
+     * NOT yet on origin/main means an unlanded queued commit is sitting inside your tip. If it
+     * is not yours, you are about to push a peer's unattested work — the exact accident this
+     * repo already records ("one session pushed three other sessions' commits").
+     *
+     * Advisory only: the ticket is still created and no ownership is changed. Fails silent on
+     * any git trouble rather than inventing a warning.
+     */
+    try {
+      const upstream = remoteMain()
+      for (const t of live) {
+        if (!t?.sha || t.sha === sha) continue
+        if (isAncestor(t.sha, sha) !== true) continue
+        if (upstream && isAncestor(t.sha, upstream) === true) continue // already landed: uninteresting
+        const ownedHere = t.worktree === ctx.worktree
+        process.stderr.write(
+          `\n  ⚠ push-queue: #${pad(t.seq)} (${String(t.sha).slice(0, 9)}) is an UNLANDED commit inside the tip\n` +
+            `    you are queueing, and it did not carry forward — so this takes a NEW ticket at the back.\n` +
+            (ownedHere
+              ? `    It is from THIS worktree, so it is almost certainly your own work under a new tip.\n` +
+                `    Keep its place instead of starting again:\n` +
+                `       npm run push:rebind -- --from=${String(t.sha).slice(0, 9)} --to=${String(sha).slice(0, 9)}\n`
+              : `    It is from ANOTHER worktree (${String(t.worktree || 'unknown').split('/').pop()}), so your tip may\n` +
+                `    carry a peer's unattested commit. Check ${'`'}git log ${String(t.sha).slice(0, 9)}~1..${String(sha).slice(0, 9)}${'`'} before pushing.\n`) +
+            `\n`,
+        )
+        break
+      }
+    } catch {
+      // no warning is better than a wrong one
+    }
+
     mine = createTicket(dir, { sha, label: ctx.subject, branch: ctx.branch, worktree: ctx.worktree })
     if (!mine) return { degraded: true, reason: 'could not create a ticket' }
     live.push(mine)
