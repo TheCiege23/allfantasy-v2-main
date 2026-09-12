@@ -6,6 +6,10 @@ import {
   normalizeFleaflickerScoringRules,
   summarizeFleaflickerRosterShape,
 } from '@/lib/league-import/fleaflicker/fleaflickerScoringRules'
+import {
+  mapFleaflickerDraftBoard,
+  describeFleaflickerDraftCoverage,
+} from '@/lib/league-import/fleaflicker/fleaflickerDraft'
 
 function mapWaiverType(raw: string | null | undefined): string {
   const s = String(raw ?? '').toUpperCase()
@@ -58,6 +62,20 @@ export const FleaflickerAdapter: ILeagueImportAdapter<FleaflickerImportPayload> 
      */
     const scoringRules = normalizeFleaflickerScoringRules(raw.rules)
     const rosterShape = summarizeFleaflickerRosterShape(raw.rules)
+
+    /*
+     * Draft history, from `FetchLeagueDraftBoard`. Same soft contract as rules —
+     * but with THREE outcomes rather than two, which is why the summary is kept
+     * whole instead of being reduced to an array here:
+     *
+     *   raw.draftBoard == null   the call failed; we do not know
+     *   envelope === 'empty'     it answered `{}`; there is no board this season
+     *   picks.length > 0         a real draft
+     *
+     * ⚠ An empty `picks` array means all three of those, so the coverage note is
+     * built from the SUMMARY and not from the array's length.
+     */
+    const draft = mapFleaflickerDraftBoard(raw.draftBoard, { season })
 
     const leagueSize = typeof lg.size === 'number' ? lg.size : teamsFlat.length
     /*
@@ -198,7 +216,13 @@ export const FleaflickerAdapter: ILeagueImportAdapter<FleaflickerImportPayload> 
             }
           : null,
       schedule: [],
-      draft_picks: [],
+      /*
+       * ⚠ WAS A HARDCODED `[]`, WHICH IS INDISTINGUISHABLE FROM "THIS LEAGUE HAS NO
+       * DRAFT HISTORY" AND WAS NEVER TRUE — nothing had ever asked Fleaflicker for a
+       * draft. The endpoint was not even in the contract. `coverage.draftHistory`
+       * below now carries the reason an empty array is empty.
+       */
+      draft_picks: draft.picks,
       transactions: [],
       /*
        * 🛑 `rank: i + 1` WAS ARRAY POSITION, NOT A RANKING, AND IT WOULD HAVE
@@ -286,7 +310,26 @@ export const FleaflickerAdapter: ILeagueImportAdapter<FleaflickerImportPayload> 
                     note: `Standings cover ${normalizedRosters.length} of ${lg.size} teams`,
                   },
         currentSchedule: { state: 'missing' },
-        draftHistory: { state: 'missing' },
+        /*
+         * ⚠ WAS A FLAT `{ state: 'missing' }` — true by accident, because nothing
+         * fetched a draft. Now it is measured, and it distinguishes the three ways
+         * `draft_picks` can be empty:
+         *
+         *   the call failed            -> missing, "could not be read"
+         *   the board was `{}`         -> missing, "no board for this season"
+         *   some cells were unusable   -> partial, with the counts
+         *
+         * Those read identically downstream if all you have is an empty array, and
+         * the second one is a fact about the league while the first is a fact about
+         * our request.
+         */
+        draftHistory:
+          raw.draftBoard == null
+            ? {
+                state: 'missing' as const,
+                note: 'FetchLeagueDraftBoard did not answer for this league; draft history was not read.',
+              }
+            : describeFleaflickerDraftCoverage(draft),
         tradeHistory: { state: 'missing' },
         previousSeasons: { state: 'missing' },
         playerIdentityMap: Object.keys(player_map).length > 0 ? { state: 'full' } : { state: 'partial' },
