@@ -107,8 +107,8 @@ jobs:
         # regression that only surfaces on the nightly push run is a regression
         # somebody has already merged.
         include: ${{ github.event_name == 'pull_request'
-          && fromJSON('[{"label":"retention-engagement","lane":"retention-engagement","job-timeout":60},{"label":"onboarding-activation","lane":"onboarding-activation","job-timeout":60},{"label":"referral-growth-db","lane":"referral-growth-db","job-timeout":60},{"label":"mobile-smoke","lane":"mobile-smoke","job-timeout":45}]')
-          || fromJSON('[{"label":"core 1/3","lane":"core-shard-1","shard":"1/3","job-timeout":180},{"label":"core 2/3","lane":"core-shard-2","shard":"2/3","job-timeout":180},{"label":"core 3/3","lane":"core-shard-3","shard":"3/3","job-timeout":180},{"label":"retention-engagement","lane":"retention-engagement","job-timeout":60},{"label":"onboarding-activation","lane":"onboarding-activation","job-timeout":60},{"label":"referral-growth-db","lane":"referral-growth-db","job-timeout":60},{"label":"mobile-smoke","lane":"mobile-smoke","job-timeout":45}]') }}
+          && fromJSON('[{"label":"retention-engagement","lane":"retention-engagement","job-timeout":60},{"label":"onboarding-activation","lane":"onboarding-activation","job-timeout":60},{"label":"referral-growth-db","lane":"referral-growth-db","job-timeout":60},{"label":"mobile-smoke","lane":"mobile-smoke","job-timeout":45},{"label":"mobile-auth","lane":"mobile-auth","job-timeout":60}]')
+          || fromJSON('[{"label":"core 1/3","lane":"core-shard-1","shard":"1/3","job-timeout":180},{"label":"core 2/3","lane":"core-shard-2","shard":"2/3","job-timeout":180},{"label":"core 3/3","lane":"core-shard-3","shard":"3/3","job-timeout":180},{"label":"retention-engagement","lane":"retention-engagement","job-timeout":60},{"label":"onboarding-activation","lane":"onboarding-activation","job-timeout":60},{"label":"referral-growth-db","lane":"referral-growth-db","job-timeout":60},{"label":"mobile-smoke","lane":"mobile-smoke","job-timeout":45},{"label":"mobile-auth","lane":"mobile-auth","job-timeout":60}]') }}
     services:
       postgres:
         image: postgres:16
@@ -143,7 +143,7 @@ jobs:
         # webkit). Folding it under the 'chromium' key would let a chromium-only
         # job win the cache save and leave this lane re-downloading webkit on
         # every run — the same failure this key was split to avoid.
-        key: playwright-${{ runner.os }}-${{ startsWith(matrix.lane, 'core-shard-') && 'all' || matrix.lane == 'mobile-smoke' && 'mobile' || 'chromium' }}-${{ hashFiles('package-lock.json') }}
+        key: playwright-${{ runner.os }}-${{ startsWith(matrix.lane, 'core-shard-') && 'all' || startsWith(matrix.lane, 'mobile-') && 'mobile' || 'chromium' }}-${{ hashFiles('package-lock.json') }}
     - name: Install Playwright Browsers
       if: startsWith(matrix.lane, 'core-shard-')
       run: npx playwright install --with-deps
@@ -151,7 +151,7 @@ jobs:
       if: matrix.lane == 'referral-growth-db' || matrix.lane == 'onboarding-activation' || matrix.lane == 'retention-engagement'
       run: npx playwright install --with-deps chromium
     - name: Install Playwright Chromium + WebKit
-      if: matrix.lane == 'mobile-smoke'
+      if: startsWith(matrix.lane, 'mobile-')
       run: npx playwright install --with-deps chromium webkit
     # Schema bootstrap — applied to both `referral-growth-db` (always
     # needed) and `core` (added in fix/ci-playwright-core-schema-bootstrap).
@@ -167,7 +167,7 @@ jobs:
     # both `/` and `/pricing` import `getMonetizationCatalog`, so two of the
     # three public routes reach Postgres. `/login` alone would not need it.
     - name: Prepare DB schema
-      if: matrix.lane == 'referral-growth-db' || matrix.lane == 'onboarding-activation' || matrix.lane == 'mobile-smoke' || startsWith(matrix.lane, 'core-shard-')
+      if: matrix.lane == 'referral-growth-db' || matrix.lane == 'onboarding-activation' || startsWith(matrix.lane, 'mobile-') || startsWith(matrix.lane, 'core-shard-')
       env:
         DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/allfantasy_ci
         DIRECT_URL: postgresql://postgres:postgres@127.0.0.1:5432/allfantasy_ci
@@ -177,7 +177,7 @@ jobs:
     # league creation dies on `leagues_tenantId_fkey`. That is what has been
     # failing the three core shards while the other lanes pass.
     - name: Seed the default tenant
-      if: matrix.lane == 'referral-growth-db' || matrix.lane == 'onboarding-activation' || matrix.lane == 'mobile-smoke' || startsWith(matrix.lane, 'core-shard-')
+      if: matrix.lane == 'referral-growth-db' || matrix.lane == 'onboarding-activation' || startsWith(matrix.lane, 'mobile-') || startsWith(matrix.lane, 'core-shard-')
       env:
         DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/allfantasy_ci
         DIRECT_URL: postgresql://postgres:postgres@127.0.0.1:5432/allfantasy_ci
@@ -262,6 +262,26 @@ jobs:
         NEXTAUTH_SECRET: ci-nextauth-secret
         NEXTAUTH_URL: http://localhost:3000
       run: npm run test:e2e:mobile
+    # ⚠ THE AUTHENTICATED PHONE LANE. Separate from mobile-smoke on purpose: it
+    # seeds leagues and users and signs in, which is exactly what phone-smoke.spec.ts
+    # refuses to do ("an authenticated phone journey ... belongs in its own lane").
+    # The split is by TAG, not by path — `test:e2e:mobile` is --grep-invert "@db"
+    # and this is --grep "@db", so both run the same two device projects and
+    # neither can silently pick up the other's specs.
+    #
+    # ⚠ NEXTAUTH_URL names port 3000 while the dev server listens on 3101. That
+    # mismatch is copied DELIBERATELY from the core lane, which performs real
+    # credential logins with it and passes; the `json=true` callback does not rely
+    # on NextAuth's redirect URL. Do not "correct" it without measuring — the lane
+    # that proves it works is the one it was copied from.
+    - name: Run Playwright tests (mobile auth)
+      if: matrix.lane == 'mobile-auth'
+      env:
+        DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/allfantasy_ci
+        DIRECT_URL: postgresql://postgres:postgres@127.0.0.1:5432/allfantasy_ci
+        NEXTAUTH_SECRET: ci-nextauth-secret
+        NEXTAUTH_URL: http://localhost:3000
+      run: npm run test:e2e:mobile:auth
     - uses: actions/upload-artifact@v4
       if: ${{ !cancelled() }}
       with:

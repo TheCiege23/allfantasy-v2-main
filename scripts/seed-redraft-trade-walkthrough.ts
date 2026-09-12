@@ -14,6 +14,9 @@
 import { PrismaClient } from '@prisma/client'
 import bcrypt from 'bcryptjs'
 import { assertSafeSeedTarget } from './_assert-safe-seed-target'
+import { TC_TRADE_SEED } from './seed-redraft-trade-walkthrough.constants'
+
+export { TC_TRADE_SEED }
 
 const prisma = new PrismaClient()
 
@@ -22,17 +25,6 @@ if (process.env.NODE_ENV === 'production' && process.env.ALLOW_TC_SEED !== 'true
   process.exit(1)
 }
 
-export const TC_TRADE_SEED = {
-  password: 'Password123!',
-  commissionerUserId: 'tc-commish-user',
-  commissionerLogin: 'tc_commish',
-  managerUserIds: ['tc-mgr-1-user', 'tc-mgr-2-user', 'tc-mgr-3-user', 'tc-mgr-4-user'],
-  managerLogins: ['tc_mgr_1', 'tc_mgr_2', 'tc_mgr_3', 'tc_mgr_4'],
-  leagues: {
-    nfl: { leagueId: 'tc-nfl-league', seasonId: 'tc-nfl-season' },
-    ncaaf: { leagueId: 'tc-ncaaf-league', seasonId: 'tc-ncaaf-season' },
-  },
-} as const
 
 const now = new Date()
 const nextMonth = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000)
