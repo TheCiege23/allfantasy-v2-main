@@ -86,6 +86,21 @@ export {
   type FleaflickerMatchupParityResult,
   type FleaflickerMatchupLeagueResult,
 } from './fleaflickerMatchupParity'
+// MFL weekly-matchup parity — the last provider to get a writer, and the only one
+// whose absence was a real blocker rather than an oversight. Shaped like
+// externalMatchupParity because MFL needs a per-user API key, unlike Fantrax and
+// Fleaflicker.
+//
+// 🛑 IT WRITES THE ZERO-PADDED FRANCHISE ID VERBATIM ("0001", never "1"), which is
+// the whole reason it could not exist until `WeeklyMatchup.rosterId` became TEXT.
+// Every other collector here canonicalises ids through `String(Number(x))` and is
+// right to; copying that into the MFL one silently reintroduces the original bug.
+export {
+  runMflMatchupParity,
+  enumerateMflMatchupConnections,
+  type MflMatchupParityResult,
+  type MflMatchupLeagueResult,
+} from './mflMatchupParity'
 
 /*
  * 🛑 MFL STILL HAS NO WEEKLY-MATCHUP WRITER, AND IT IS STILL NOT "NOBODY GOT ROUND TO IT" —
