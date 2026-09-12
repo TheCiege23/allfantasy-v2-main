@@ -5,6 +5,7 @@
 import { createHash } from 'crypto'
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
+import { startImportAttempt, finishImportAttempt } from '@/lib/league-import/importRunAttempts'
 import type { ImportProvider, ImportWarningRecord, NormalizedImportResult } from '@/lib/league-import/types'
 import type { CanonicalImportBundle } from '@/lib/league-import/types'
 import {
@@ -196,6 +197,17 @@ export async function persistImportWithCanonicalAudit(input: {
           canonicalSummary: input.canonical as object,
         })
 
+  /*
+   * ⚠ OPENED AFTER THE RUN ROW IS SETTLED AND BEFORE ANY WORK, so a crash mid-import
+   * leaves a `running` attempt rather than no record that the attempt happened. The
+   * missing row is exactly what made a twice-failed import indistinguishable from a
+   * clean one.
+   */
+  const attemptId = await startImportAttempt(run.id, {
+    rawPayloadHash: run.rawPayloadHash,
+    canonicalSummary: input.canonical as unknown,
+  })
+
   try {
     const persisted = await persistImportedLeagueFromNormalization({
       userId: input.userId,
@@ -215,6 +227,12 @@ export async function persistImportWithCanonicalAudit(input: {
         completedAt: new Date(),
       },
     })
+    /*
+     * ⚠ THE RUN ROW IS OVERWRITTEN BY THE NEXT ATTEMPT; THIS ONE IS NOT. That is the
+     * entire point — after this, "succeeded on the third try" and "succeeded first
+     * time" stop looking identical.
+     */
+    await finishImportAttempt(attemptId, { status: 'completed' })
 
     /*
      * ⚠ `persisted.incompleteSteps` JOINS THE WARNINGS THAT ALREADY PERSIST HERE, rather than
@@ -408,6 +426,12 @@ export async function persistImportWithCanonicalAudit(input: {
       where: { id: run.id },
       data: { status: 'failed', error: msg, completedAt: new Date() },
     })
+    /*
+     * ⚠ THE FAILURE THAT USED TO VANISH. The next forced re-import overwrites the run
+     * row's `status` and `error`, so a league that failed here and succeeded later kept
+     * no trace of having failed. The attempt row survives that overwrite.
+     */
+    await finishImportAttempt(attemptId, { status: 'failed', error: msg })
     throw e
   }
 }
@@ -455,6 +479,13 @@ export async function recordCanonicalImportAuditForExistingLeague(input: {
       rawPayloadHash: hashPayload(input.normalized),
       canonicalSummary: input.canonical as object,
     },
+  })
+
+  /* Same reasoning as the fresh-import path: opened before any work, so a crash
+     leaves a `running` attempt rather than no record that it happened. */
+  const attemptId = await startImportAttempt(run.id, {
+    rawPayloadHash: run.rawPayloadHash,
+    canonicalSummary: input.canonical as unknown,
   })
 
   try {
@@ -533,6 +564,7 @@ export async function recordCanonicalImportAuditForExistingLeague(input: {
         completedAt: new Date(),
       },
     })
+    await finishImportAttempt(attemptId, { status: 'completed' })
 
     return { runId: run.id }
   } catch (e) {
@@ -541,6 +573,7 @@ export async function recordCanonicalImportAuditForExistingLeague(input: {
       where: { id: run.id },
       data: { status: 'failed', error: msg, completedAt: new Date() },
     })
+    await finishImportAttempt(attemptId, { status: 'failed', error: msg })
     throw e
   }
 }
