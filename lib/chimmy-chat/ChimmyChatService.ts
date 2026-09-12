@@ -234,7 +234,16 @@ function toMeta(rawMeta: unknown): ChimmyMessageMeta | undefined {
   }
 }
 
-export async function sendChimmyMessage(input: SendChimmyMessageInput): Promise<SendChimmyMessageResult> {
+/**
+ * Internal only. Set when we are re-sending after collecting consent the server asked for,
+ * so a second 409 cannot start an infinite prompt/retry loop.
+ */
+type SendChimmyMessageRetryState = { consentAlreadyRequested?: boolean }
+
+export async function sendChimmyMessage(
+  input: SendChimmyMessageInput,
+  retryState: SendChimmyMessageRetryState = {},
+): Promise<SendChimmyMessageResult> {
   const promptForTokenSpend = input.promptForTokenSpend ?? true
   /*
    * Starts at what the caller claims and is only ever raised by an actual "yes"
@@ -425,6 +434,52 @@ export async function sendChimmyMessage(input: SendChimmyMessageInput): Promise<
       : typeof data?.response === "string"
         ? data.response
         : ""
+  /*
+   * 🛑 "CONFIRM THE SPEND" AND "YOU CANNOT HAVE THIS" ARE DIFFERENT ANSWERS, AND THEY WERE
+   * BEING SHOWN THE SAME COPY.
+   *
+   * response-copy.ts files `token_confirmation_required` under PREMIUM_GATE_CODES alongside
+   * `feature_not_entitled` and `insufficient_token_balance`, so all three collapsed into
+   * CHIMMY_PREMIUM_FEATURE_MESSAGE — "Upgrade to AF Pro". But requireFeatureEntitlement
+   * returns that code ONLY after confirming `preview.canSpend` is true. The user can pay.
+   * They were simply never asked, and we answered their question with a sales pitch.
+   *
+   * How they get here without being asked: app/components/ChimmyChat.tsx skips its own
+   * preflight for any no-charge intent (isNoChargeChimmyIntent), which is right for the
+   * turns the deterministic layer answers free — but a World-Cup-family question that
+   * reaches the paid path anyway arrives unconfirmed. Narrowing that skip cannot fix it:
+   * the client cannot know in advance whether the deterministic layer will answer.
+   *
+   * So recover where the truth is known — here, holding the server's own verdict. Ask once,
+   * then retry. `retryState` makes a second 409 terminal, so a server that always demands
+   * confirmation cannot loop the prompt.
+   */
+  const confirmationRequired = data?.code === "token_confirmation_required"
+  if (confirmationRequired && !retryState.consentAlreadyRequested) {
+    try {
+      const { confirmed, preview } = await confirmTokenSpend("ai_chimmy_chat_message")
+      if (!preview.canSpend) {
+        /* Genuinely out of balance — the upgrade path below IS the right answer. */
+      } else if (!confirmed) {
+        return {
+          ok: false,
+          response: "Token spend cancelled.",
+          error: "Token spend cancelled by user.",
+        }
+      } else {
+        return await sendChimmyMessage(
+          { ...input, promptForTokenSpend: false, tokenSpendConfirmed: true },
+          { consentAlreadyRequested: true },
+        )
+      }
+    } catch (error) {
+      /* Preview unreachable: fall through to the existing gate copy rather than charging. */
+      console.error(
+        "[sendChimmyMessage] Confirmation retry preview failed:",
+        error instanceof Error ? error.message : error,
+      )
+    }
+  }
   const upgradeRequired = isChimmyPremiumGateResponse({
     status: res.status,
     code: data?.code,

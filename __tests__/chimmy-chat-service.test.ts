@@ -188,6 +188,101 @@ describe("sendChimmyMessage", () => {
     expect(JSON.parse(String(init?.body)).confirmTokenSpend).toBe(false)
   })
 
+  /*
+   * ⚠ A 409 token_confirmation_required MEANS "ASK THEM", NOT "SELL TO THEM".
+   *
+   * requireFeatureEntitlement returns that code only after it has confirmed
+   * preview.canSpend is true, so the user can pay and simply was not asked.
+   * response-copy.ts files the code under PREMIUM_GATE_CODES with
+   * feature_not_entitled, so it used to render "Upgrade to AF Pro" — answering a
+   * paying user's question with a sales pitch. These cover the recovery.
+   */
+  describe("a 409 asking for confirmation is recovered, not sold against", () => {
+    const gate409 = () =>
+      new Response(JSON.stringify({ code: "token_confirmation_required", preview: { tokenCost: 15 } }), {
+        status: 409,
+        headers: { "Content-Type": "application/json" },
+      })
+    const ok = (text: string) =>
+      new Response(JSON.stringify({ result: text }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      })
+    const preview = (over: Record<string, unknown> = {}) => ({
+      ruleCode: "ai_chimmy_chat_message",
+      featureLabel: "Chimmy chat message",
+      tokenCost: 15,
+      currentBalance: 100,
+      canSpend: true,
+      requiresConfirmation: true,
+      ...over,
+    })
+
+    it("asks, then retries with consent, and returns the real answer", async () => {
+      const f = global.fetch as unknown as ReturnType<typeof vi.fn>
+      f.mockResolvedValueOnce(gate409()).mockResolvedValueOnce(ok("Start him."))
+      confirmTokenSpendMock.mockResolvedValueOnce({ confirmed: true, preview: preview() })
+
+      const { sendChimmyMessage } = await import("@/lib/chimmy-chat/ChimmyChatService")
+      const result = await sendChimmyMessage({
+        message: "Who should I start?",
+        promptForTokenSpend: false,
+      })
+
+      expect(confirmTokenSpendMock).toHaveBeenCalledWith("ai_chimmy_chat_message")
+      expect(f).toHaveBeenCalledTimes(2)
+      /* The retry must carry the consent, or the server answers 409 again. */
+      const [, retryInit] = f.mock.calls[1]!
+      expect(JSON.parse(String(retryInit?.body)).confirmTokenSpend).toBe(true)
+      expect(result.response).toBe("Start him.")
+      expect(result.upgradeRequired).not.toBe(true)
+    })
+
+    it("does not retry, and does not sell, when the user declines", async () => {
+      const f = global.fetch as unknown as ReturnType<typeof vi.fn>
+      f.mockResolvedValueOnce(gate409())
+      confirmTokenSpendMock.mockResolvedValueOnce({ confirmed: false, preview: preview() })
+
+      const { sendChimmyMessage } = await import("@/lib/chimmy-chat/ChimmyChatService")
+      const result = await sendChimmyMessage({ message: "Who should I start?", promptForTokenSpend: false })
+
+      expect(f).toHaveBeenCalledTimes(1)
+      expect(result.ok).toBe(false)
+      expect(result.error).toMatch(/cancelled/i)
+      expect(result.upgradeRequired).not.toBe(true)
+    })
+
+    /* Out of balance is the one case where the upgrade path IS the right answer. */
+    it("still shows the upgrade path when the balance genuinely cannot cover it", async () => {
+      const f = global.fetch as unknown as ReturnType<typeof vi.fn>
+      f.mockResolvedValueOnce(gate409())
+      confirmTokenSpendMock.mockResolvedValueOnce({
+        confirmed: false,
+        preview: preview({ canSpend: false, currentBalance: 0 }),
+      })
+
+      const { sendChimmyMessage } = await import("@/lib/chimmy-chat/ChimmyChatService")
+      const result = await sendChimmyMessage({ message: "Who should I start?", promptForTokenSpend: false })
+
+      expect(f).toHaveBeenCalledTimes(1)
+      expect(result.upgradeRequired).toBe(true)
+    })
+
+    /* A server that always demands confirmation must not loop the prompt. */
+    it("gives up after one retry rather than prompting forever", async () => {
+      const f = global.fetch as unknown as ReturnType<typeof vi.fn>
+      f.mockResolvedValueOnce(gate409()).mockResolvedValueOnce(gate409())
+      confirmTokenSpendMock.mockResolvedValue({ confirmed: true, preview: preview() })
+
+      const { sendChimmyMessage } = await import("@/lib/chimmy-chat/ChimmyChatService")
+      const result = await sendChimmyMessage({ message: "Who should I start?", promptForTokenSpend: false })
+
+      expect(f).toHaveBeenCalledTimes(2)
+      expect(confirmTokenSpendMock).toHaveBeenCalledTimes(1)
+      expect(result.upgradeRequired).toBe(true)
+    })
+  })
+
   afterEach(() => {
     global.fetch = originalFetch
   })
