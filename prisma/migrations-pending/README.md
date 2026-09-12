@@ -519,3 +519,52 @@ by `80849f9c5` and the old path no longer resolves).
 With a hard delete the `League` row is gone, so its `groupBy` and its
 `resolveLeagueIdsForConnection` fan-out cannot find it; a guard there would be
 dead code. That stops being true the day anyone converts this to a soft delete.
+
+### `20260912020000_import_run_attempt`
+
+🛑 **NOT APPLIED.** Written 2026-09-12 for P1 item 7 of the six-provider import
+audit — "keep individual import-attempt history instead of overwriting the latest
+logical ImportRun". The repo owner chose the child-table option over dropping the
+unique key; applying it is still theirs to do.
+
+**What is lost today.** A forced re-import REUSES the `import_runs` row:
+`prisma.importRun.update({ where: { idempotencyKey }, ... })`. That reuse is
+deliberate and correct — the key is unique so a fresh insert would collide,
+deleting the row would discard the audit trail the table exists for, and salting
+the key would leave unbounded near-duplicates. But each re-run overwrites the
+previous attempt's `status`, `error`, `rawPayloadHash` and `canonicalSummary`. A
+league that failed twice then succeeded looks, forever after, like one that
+succeeded once.
+
+**Why a child table rather than dropping `idempotencyKey @unique`.** The simpler
+option was rejected for three measured reasons:
+
+* the unique key is what turns a double-submit into a clean
+  `ImportRunInFlightError` instead of an unhandled 500 (Sentry
+  ALLFANTASY-V2-MAIN-K). Dropping it gives that protection away.
+* `import_warnings`, `import_review_tasks` and `external_entity_mappings` all
+  hang off `runId`. With one row per attempt, "the warnings for this import"
+  stops being answerable without first picking an attempt.
+* the logical import is an entity readers already join to; splitting it into N
+  rows changes what every existing consumer means by "a run".
+
+**Additive only** — one table, one FK, two indexes. No column added to an
+existing table, nothing dropped, nothing rewritten. Currently deployed code
+cannot observe it, so applying the SQL ahead of the code is safe; the dangerous
+direction is the opposite, because a client that knows a table production lacks
+raises P2021.
+
+**Order** (same as `weekly_matchup_roster_id_text`): apply the SQL → add the
+model to `schema.prisma` and regenerate → ship the writer.
+
+⚠ `attemptNumber` is **not** safe to derive from `count + 1` at write time — two
+concurrent writes both read the same count and produce two attempt 3s, the same
+race `idempotencyKey` prevents one level up. The unique index on
+`(runId, attemptNumber)` makes that a write error rather than silent history
+corruption; allocate the number inside the transaction that inserts the row.
+
+⚠ **The model is NOT in `schema.prisma` yet, deliberately.** It was validated
+against a COPY (`prisma validate`, with the datasource pinned to an unreachable
+sentinel so nothing could connect) — valid, with a deliberately broken variant
+confirming the check discriminates. Flipping the real schema before the SQL is
+applied is what raises P2021.
