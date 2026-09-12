@@ -164,7 +164,16 @@ test.describe("@db @mobile authenticated phone contract", () => {
       expect(
         regressions,
         `${route} has controls under ${MIN_TARGET}x${MIN_TARGET} that are not in ` +
-          `e2e/mobile/undersized-target-baseline.json.\n` +
+          /*
+           * ⚠ NAME THE AUTHED FILE, NOT THE PUBLIC ONE. This message said
+           * `undersized-target-baseline.json` while the spec reads
+           * `.authed.json` — so it sent the reader to edit the wrong file, where
+           * adding the route would then break `target-ratchet.test.ts`'s
+           * "covers exactly the smoke routes" pin. A misleading error message
+           * that causes a SECOND failure is worse than a vague one.
+           */
+          `e2e/mobile/undersized-target-baseline.authed.json — NOT the public baseline,\n` +
+          `which target-ratchet.test.ts pins to exactly the three smoke routes.\n` +
           `stylesheet state at measurement: ${JSON.stringify(stylesheet)}`,
       ).toEqual([])
 

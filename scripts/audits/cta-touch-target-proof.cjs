@@ -37,6 +37,7 @@ const CORE = fs.readFileSync(root + "/components/core-app/af-core.css", "utf8");
 const LANDING = fs.readFileSync(root + "/components/core-app/af-landing.css", "utf8");
 const PRICING = fs.readFileSync(root + "/components/core-app/af-pricing.css", "utf8");
 const TRADE = fs.readFileSync(root + "/components/core-app/af-trade-center.css", "utf8");
+const SHELL = fs.readFileSync(root + "/components/core-app/af-core-shell.css", "utf8");
 
 /*
  * The global theme toggle is styled by TAILWIND UTILITIES, not by a stylesheet
@@ -85,6 +86,7 @@ const BODY = `
 </div>
 <div class="af-core">
   <input class="af-search-input" data-proof="shell-search" type="search" placeholder="Search">
+  <button type="button" class="af-nav-support" data-proof="shell-support">Contact support</button>
   <div class="af-tc-actions">
     <p class="af-tc-caption">caption</p>
     <button type="button" class="af-btn" data-proof="tc-propose">Propose this trade</button>
@@ -104,8 +106,8 @@ const BODY = `
 
 /** Both orders. If the fix depends on either, these disagree and the run fails. */
 const ORDERS = {
-  "core-first": [CORE, LANDING, PRICING, TRADE, TOGGLE],
-  "core-last": [TOGGLE, LANDING, PRICING, TRADE, CORE],
+  "core-first": [CORE, LANDING, PRICING, TRADE, SHELL, TOGGLE],
+  "core-last": [TOGGLE, LANDING, PRICING, TRADE, SHELL, CORE],
 };
 
 const TARGETS = [
@@ -139,6 +141,7 @@ const TARGETS = [
    * order within af-core.css — which is deterministic, unlike bundle order.
    */
   { sel: "[data-proof='shell-search']", label: "Shell search input", min: 16, phoneOnly: true, axis: "font" },
+  { sel: "[data-proof='shell-support']", label: "Shell support button", min: 44, phoneOnly: true },
 ];
 
 function serve() {

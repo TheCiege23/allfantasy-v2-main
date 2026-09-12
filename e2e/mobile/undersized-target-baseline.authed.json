@@ -31,9 +31,32 @@
     "`.af-core .af-btn { min-height: 36px }`, so 44px applied on a coin toss",
     "decided by stylesheet order. Fixed by prefixing with `.af-core`. If entries",
     "appear here for `.af-btn` controls, check the specificity before baselining —",
-    "a losing rule looks exactly like a missing one."
+    "a losing rule looks exactly like a missing one.",
+    "",
+    "WHAT THE FIRST RUNS FOUND, AND WHY ONLY THE DOTS ARE HERE. /core/trades came",
+    "back with three undersized shell controls and three sub-16px fields. Two were",
+    "FIXED rather than baselined, because both were mechanical: .af-search-input at",
+    "13px (iOS Safari zooms on focus and never back out) and .af-nav-support at 36px",
+    "tall, 8px short of a floor the rest of /core already holds. Only the help dots",
+    "are deferred, and only because reaching 44px there changes the design rather",
+    "than the stylesheet. Baseline what you cannot fix mechanically; fix the rest."
   ],
   "routes": {
-    "/core/trades": []
+    "/core/trades": [
+      {
+        "cls": "af-help-dot",
+        "label": "Read-only by design",
+        "w": 15,
+        "h": 15,
+        "why": "DEFERRED DESIGN WORK, NOT A SIZING OVERSIGHT. A 15x15 info dot cannot reach 44x44 by min-height: it needs an expanded hit area (a pseudo-element or padding that does not move the dot), which shifts layout around a deliberately small affordance. That is a design decision, not a CSS one. Sized alongside its sibling below when the shell's help affordances are next touched."
+      },
+      {
+        "cls": "af-help-dot",
+        "label": "Plan tokens",
+        "w": 15,
+        "h": 15,
+        "why": "Same control, second instance. See above."
+      }
+    ]
   }
 }
