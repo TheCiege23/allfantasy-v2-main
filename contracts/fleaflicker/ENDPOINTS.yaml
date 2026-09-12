@@ -54,7 +54,11 @@ transport:
       # ⚠ These three lists must agree with each endpoint's own `params:` below, which
       # remains the authority. An endpoint appears in `accepted_by` ONLY if `params`
       # lists `season` AND we have a 200 to show for it.
-      accepted_by: [FetchLeagueStandings, FetchLeagueRosters, FetchLeagueScoreboard]
+      # ⚠ `FetchLeagueDraftBoard` is the sharpest case in this list: the season does not
+      # merely select WHICH data comes back, it selects the ENVELOPE SHAPE — 2019 returns
+      # `{draftOrder, rows, rosters}`, 2020 returns `{orderedSelections}`, 2021 returns
+      # `{}`, all HTTP 200, all the same league. See that endpoint's note.
+      accepted_by: [FetchLeagueStandings, FetchLeagueRosters, FetchLeagueScoreboard, FetchLeagueDraftBoard]
       rejected_by: [FetchLeagueRules, FetchLeagueActivity]
       # Not probed either way — do not assume. FetchLeagueBoxscore was drafted into
       # `accepted_by` above on the reasoning that it is scoreboard-shaped, and a
@@ -434,3 +438,78 @@ endpoints:
       a FetchLeagueScoreboard row. Likely useful for lineup-level detail (bench vs. starters)
       beyond what a WeeklyMatchup row needs, but that is a future decision, not this one. Not
       probed; not blocking anything today.
+
+  FetchLeagueDraftBoard:
+    status: SHAPE_CAPTURED_NOT_INTEGRATED
+    method: GET
+    path: /FetchLeagueDraftBoard
+    path_confirmed_via: "Fleaflicker's own published Swagger docs, read 2026-09-12 —
+      documentation, not probing. Shapes then captured by scripts/probe.sh against league
+      206154 (already this contract's subject league)."
+    params: [sport, league_id, season, draft_number, external_id_type]
+    param_types:
+      sport: "string — NFL | MLB | NBA | NHL"
+      league_id: integer
+      season: "integer — accepted; see the 🛑 below, the response SHAPE depends on it"
+      draft_number: "integer — documented; `1` is the observed default"
+      external_id_type: "string — documented, NOT probed. Plausibly requests a foreign
+        player-id space (sportradar et al). If it does, it is the cheapest route to cross-
+        provider player identity and is worth a probe before any name-matching is written."
+    note: >
+      🛑 THIS ENDPOINT RETURNS TWO STRUCTURALLY DIFFERENT ENVELOPES, AND WHICH ONE YOU GET
+      DEPENDS ON THE SEASON. Measured 2026-09-12 against league 206154, one league, one
+      request otherwise identical:
+
+        season=2019  ->  { draftOrder, rows, rosters }       a BOARD (grid of rounds)
+        season=2020  ->  { orderedSelections }               a FLAT LIST
+        season=2021  ->  { }                                 HTTP 200, zero keys
+        no season    ->  { draftOrder, rows, rosters }       the largest payload
+
+      A mapper written against either envelope alone reads the other as "no draft". This is
+      not an error path — every one of those is HTTP 200.
+
+      ⚠ THE PICK OBJECT IS THE SAME IN BOTH, WHICH IS WHAT MAKES A SINGLE MAPPER POSSIBLE.
+      `rows[].cells[]` and `orderedSelections[]` hold the identical shape:
+      `{ team, player, slot, color }`. So: flatten `rows[].cells[]` when `rows` is present,
+      else take `orderedSelections`, then map ONE cell shape. Do not write two mappers.
+
+      🛑 AN EMPTY OBJECT IS NOT AN ERROR AND NOT "NEVER DRAFTED". season=2021 returns `{}`
+      with HTTP 200 for a league that demonstrably drafted in 2019 and 2020. Treat zero keys
+      as "no board for this season/draft", never as a fetch failure and never as a league
+      that has no draft history — the SAME league answers richly for other seasons. This is
+      the worst shape to debug: not a 404, not an error, and it reads as an empty league.
+
+      ⚠ `draft_number` did NOT change the 2021 result (`{}` with and without it), so the
+      empty response is a property of that season, not a missing parameter. Recorded because
+      "you forgot draft_number" is the first thing anyone will assume.
+    envelope: |
+      CAPTURED 2026-09-12, league 206154. All three fixtures are TRIMMED — see the note
+      below the shapes.
+
+      (a) BOARD form — fixtures/draftBoard.NFL.2019.json
+      {
+        draftOrder: Array<{ id: number, name: string, initials: string }>,   # 16, = teams
+        rows: Array<{ round: number, cells: Cell[] }>,                       # 5 rounds x 16
+        rosters: Array<{ teamId: number, lineup: unknown[] }>
+      }
+
+      (b) LIST form — fixtures/draftBoard.NFL.2020.json
+      { orderedSelections: Cell[] }                                          # 80 = 5 x 16
+
+      (c) EMPTY form — fixtures/draftBoard.NFL.2021.empty.json
+      { }
+
+      Cell (identical in both (a) and (b)) = {
+        team:   { id: number, name: string, logoUrl?: string, initials: string },
+        player: { proPlayer: ProPlayer, ... },        # same ProPlayer as FetchLeagueRosters
+        slot:   { ... },
+        color:  string
+      }
+
+      ⚠ TRIMMED FIXTURES, AND THE TRIM IS ASSERTED RATHER THAN EYEBALLED. The real responses
+      are 191KB (2019), 72KB (2020) and 1.05MB (rosters), dominated by repetition rather than
+      by shape. Each fixture keeps a MINIMAL SUBSET OF ARRAY ELEMENTS THAT COVERS THE FULL KEY
+      UNION of the original — 116, 52 and 86 distinct key paths respectively, zero lost. That
+      matters more here than elsewhere because Fleaflicker OMITS a field rather than sending
+      it false or null, so a naive "first two elements" trim silently under-documents the
+      shape. The trimmer refuses to write a file that loses a key path.

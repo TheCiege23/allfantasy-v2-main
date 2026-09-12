@@ -158,3 +158,57 @@ eliminated some; a six-team bracket with two byes looks like four teams if you r
 the wrong week. That is N extra scoreboard requests per league per season and it
 still answers nothing for a league whose playoffs have not started, which is why it
 was not built here.
+### `G-10` — what selects the draft-board ENVELOPE? Season is the correlate, not the cause
+
+**Status:** `UNVERIFIED`. Both shapes captured; the *rule* is not known.
+
+`FetchLeagueDraftBoard` returns two structurally different envelopes for the same
+league on otherwise identical requests (measured 2026-09-12, league 206154):
+
+```
+season=2019  ->  { draftOrder, rows, rosters }    a BOARD  (5 rounds x 16 cells)
+season=2020  ->  { orderedSelections }            a FLAT LIST (80 cells)
+season=2021  ->  { }                              HTTP 200, zero keys
+no season    ->  { draftOrder, rows, rosters }    largest payload
+```
+
+🛑 **DO NOT ENCODE "2019-STYLE vs 2020-STYLE" — THE SEASON IS ALMOST CERTAINLY A
+PROXY FOR SOMETHING ELSE.** Plausible causes, none verified: draft *type* (snake vs
+auction vs rookie), whether the draft was conducted on-platform, whether a live
+draft room ever existed, or a platform change between 2019 and 2020. Keying a
+mapper on the year would work on this league and fail on the next one.
+
+✅ **The safe implementation does not need the answer.** The pick object is
+IDENTICAL in both — `rows[].cells[]` and `orderedSelections[]` both hold
+`{ team, player, slot, color }`. Branch on WHICH KEY IS PRESENT, not on the season:
+flatten `rows[].cells[]` when `rows` exists, else take `orderedSelections`, else
+treat as no board. That is correct under every hypothesis above.
+
+⚠ **And `{}` is not "this league never drafted".** The same league answers richly
+for 2019 and 2020. `draft_number` does not change it (tested with and without).
+Treat zero keys as "no board for this season", never as a fetch failure and never
+as absence of draft history.
+
+**What would resolve it:** one draft board from a league whose draft TYPE is known
+and different (an auction, say). Until then the presence-branch above is the
+contract.
+
+---
+
+### `G-11` — does `external_id_type` return foreign player ids?
+
+**Status:** `UNVERIFIED` — documented, never sent.
+
+`FetchLeagueDraftBoard` and `FetchLeagueRosters` both document an
+`external_id_type` parameter. It was not probed.
+
+⚡ **Worth resolving before anyone writes name-matching.** Fleaflicker identifies
+players by its own `proPlayer.id` (an integer — 8512 for Lamar Miller, 15539 for
+Clyde Edwards-Helaire). Joining that to this codebase's canonical player identity
+currently has no bridge. If `external_id_type` hands back a sportradar or similar
+id, that bridge is a query parameter rather than a fuzzy-matching project — and
+this repo already records what fuzzy name matching costs (two implementations of
+one normalizer disagreeing on 7.2% of rows).
+
+**What would resolve it:** one probe of an accepted value. ⚠ The accepted VALUES
+are not in the docs page we read; that is the first unknown, not the behaviour.
