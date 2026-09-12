@@ -23,21 +23,42 @@ import { buildRosterIdMap, rosterIdsMatch } from '@/lib/core-app/rosterIdMatch'
  * externalId alongside the raw one, so `String(row.rosterId)` finds an MFL team too, and is a
  * no-op for the four providers that were already fine.
  *
- * ⚠ THIS DOES NOT MEAN MFL CAN WRITE MATCHUPS NOW. `MflAdapter` still stores
- * `source_team_id: team.franchiseId` verbatim, and the DECISION about what a real MFL writer
- * should store (padded, unpadded, or a schema change) is still open — see the note in
- * lib/import-os/collector/index.ts. Only one of that note's three costly options has
- * actually been done; a second (the schema change) is now PREPARED but NOT APPLIED — see
- * prisma/migrations-pending/20260903222531_weekly_matchup_roster_id_text/README.md entry.
- * This file's job is now split in two: prove the read-side fix really works, and keep
- * confirming the writer itself is still, correctly, absent.
+ * ✅ AND AS OF 2026-09-12 MFL CAN WRITE MATCHUPS. This paragraph said it could not, and called
+ * the schema change "PREPARED but NOT APPLIED" — but that migration had ALREADY been applied to
+ * production on 2026-09-03, hours after the sentence was written. Verified against the live
+ * database rather than against the migration's own header or this comment, because neither is a
+ * schema measurement: `information_schema` reports `WeeklyMatchup.rosterId data_type=text`.
  *
- * This file exists because everything needed to BUILD that collector already exists —
- * getMflAuthForUser, the TYPE=schedule fetch, parseMflSchedule, applySchedule — so the next
- * person to look will find a short, obvious, wrong task if they skip straight to writing it.
+ * ⚠ `MflAdapter` STILL STORES `source_team_id: team.franchiseId` VERBATIM, and that is now the
+ * CORRECT behaviour rather than the blocker it was. A text column round-trips "0001", so team
+ * identity never has to change — which is what made the "unpad at import" option expensive and
+ * is why it is now moot rather than merely unchosen.
+ *
+ * 🛑 SO THIS FILE'S JOB CHANGED, AND THE GUARD DID NOT DISAPPEAR — IT MOVED. It used to prove
+ * the writer was absent. It now proves the one rule that keeps the writer's rows readable: that
+ * `mflMatchupParity` never canonicalises the padded id. Every sibling collector does canonicalise
+ * and is right to, so the MFL exception looks like an inconsistency to anyone tidying — and that
+ * tidy is the failure this guards.
  */
 
 const read = (p: string) => readFileSync(resolve(process.cwd(), p), 'utf8').replace(/\r\n/g, '\n')
+
+/**
+ * Source with comments stripped.
+ *
+ * 🛑 A SOURCE-TEXT ASSERTION IS TRIPPED BY THE PROSE THAT EXPLAINS IT. The MFL
+ * writer's own header warns that it must never canonicalise the way its siblings
+ * do — and names the pattern while doing so. A test forbidding that pattern
+ * therefore matches the very comment warning against it, and fails on a
+ * perfectly correct file. Measured here 2026-09-12; the same shape bit a
+ * `tokenExpiresAt` assertion elsewhere in this repo.
+ */
+const codeOnly = (text: string) =>
+  text
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .split('\n')
+    .map((line) => line.replace(/(^|[^:])\/\/.*$/, '$1'))
+    .join('\n')
 
 /** The join a NAIVE reader performs, reduced to the one thing that breaks it for MFL. */
 const survivesTheJoin = (externalId: string) => String(Number(externalId)) === externalId
@@ -132,32 +153,82 @@ describe('rosterIdMatch.ts actually resolves a zero-padded id, not just in theor
   })
 })
 
-describe('the absence of an MFL matchup writer is recorded, not accidental', () => {
+describe('the MFL matchup writer exists now, and the constraint moved INTO it', () => {
   /*
-   * If someone reconciles the id space and adds the collector, this test SHOULD fail — the
-   * note above it is then wrong and must be updated in the same change. That is the point:
-   * the constraint and its explanation move together, or neither moves.
+   * 🛑 THIS BLOCK USED TO ASSERT THE WRITER DID NOT EXIST, and it said of itself:
+   * "If someone reconciles the id space and adds the collector, this test SHOULD
+   * fail — the note above it is then wrong and must be updated in the same change.
+   * That is the point: the constraint and its explanation move together, or
+   * neither moves."
+   *
+   * That is exactly what happened on 2026-09-12, and it caught the change that did
+   * it. `WeeklyMatchup.rosterId` became TEXT in production on 2026-09-03, which
+   * removed the reason for the absence, and `mflMatchupParity` was built.
+   *
+   * ⚠ SO THE GUARD IS NOT DELETED — IT MOVES TO WHAT NOW MATTERS. The absence was
+   * only ever protecting one invariant: that a zero-padded franchise id must never
+   * be canonicalised, because "0001" -> 1 -> "1" never matches
+   * `LeagueTeam.externalId` again and produces rows no reader can resolve. The
+   * writer existing does not retire that risk; it relocates it to a single line
+   * inside the writer, where it looks like an inconsistency somebody should tidy.
    */
   const index = read('lib/import-os/collector/index.ts')
+  const writerSource = read('lib/import-os/collector/mflMatchupParity.ts')
+  /* ⚠ Comments stripped — see `codeOnly`. The writer's own header names the very
+     pattern the next test forbids, so asserting on raw source fails on a correct file. */
+  const writer = codeOnly(writerSource)
 
-  it('exports the writers whose ids are safe', () => {
+  it('exports every matchup writer, MFL included', () => {
     expect(index).toContain('runExternalMatchupParity')
     expect(index).toContain('runFantraxMatchupParity')
+    expect(index).toContain('runFleaflickerMatchupParity')
+    expect(index).toContain('runMflMatchupParity')
   })
 
-  it('exports no MFL matchup writer', () => {
-    expect(index).not.toMatch(/runMflMatchupParity/)
+  it('🛑 the MFL writer does NOT canonicalise the franchise id', () => {
+    /*
+     * The one rule that keeps its rows readable. Every sibling collector maps ids
+     * through `String(Number(x))` and is right to; this one must not, and a future
+     * session tidying the inconsistency is the failure mode this guards.
+     */
+    expect(writer).not.toMatch(/String\(\s*Number\(/)
+    expect(writer).not.toMatch(/parseInt\(/)
+    expect(writer).not.toMatch(/\.replace\(\s*\/\^0\+/)
   })
 
-  it('says why, in a form the next reader will actually hit', () => {
-    expect(index).toContain('MFL STILL HAS NO WEEKLY-MATCHUP WRITER')
+  it('says WHY the id is written verbatim, where the next reader will hit it', () => {
+    /* Deliberately the UNstripped source: this one asserts on the prose itself. */
+    expect(writerSource).toContain('0001')
+    expect(writerSource).toMatch(/NEVER NORMALISE, PAD OR UNPAD/)
+  })
+
+  it('self-control: codeOnly keeps code and drops prose', () => {
+    /*
+     * Without this, a stripper that returned '' would make every `not.toMatch`
+     * above pass vacuously — the guard would be decoration.
+     */
+    expect(codeOnly('const a = 1 // note')).toContain('const a = 1')
+    expect(codeOnly('/* String(Number(x)) */\nconst b = 2')).not.toContain('String(Number')
+    expect(codeOnly('/* x */\nconst b = 2')).toContain('const b = 2')
+    // a URL's // must survive, or the stripper eats real code
+    expect(codeOnly("const u = 'https://x.test/a'")).toContain('https://x.test/a')
+  })
+
+  it('records that the column change is what unblocked it, with the evidence', () => {
     expect(index).toContain('0001')
-    // The read-side fix is dated so nobody mistakes this comment for describing the
-    // pre-2026-09-03 state, where the readers themselves were also part of the problem.
+    // The read-side fix stays dated so nobody mistakes this for the pre-2026-09-03 state.
     expect(index).toContain('RESOLVED 2026-09-03')
     expect(index).toContain('rosterIdMatch.ts')
-    // Fleaflicker is absent for a different reason and conflating them would send
-    // someone hunting an id bug in a provider that has no schedule endpoint at all.
-    expect(index).toContain('FLEAFLICKER IS ABSENT FOR A DIFFERENT AND SIMPLER REASON')
+    expect(index).toContain('APPLIED TO PRODUCTION 2026-09-03')
+  })
+
+  it('no longer claims MFL or Fleaflicker are absent', () => {
+    /*
+     * Both claims were true when written and are false now. Asserting their
+     * ABSENCE as live prose is what stops the file drifting back into telling the
+     * next session that shipped work is still blocked.
+     */
+    expect(index).toMatch(/MFL NOW HAS A WEEKLY-MATCHUP WRITER/)
+    expect(index).toMatch(/FLEAFLICKER IS NO LONGER ABSENT/)
   })
 })

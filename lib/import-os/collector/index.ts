@@ -103,15 +103,21 @@ export {
 } from './mflMatchupParity'
 
 /*
- * 🛑 MFL STILL HAS NO WEEKLY-MATCHUP WRITER, AND IT IS STILL NOT "NOBODY GOT ROUND TO IT" —
- * but one of the three reasons below is now fixed. Read to the "RESOLVED 2026-09-03" note
- * before assuming this paragraph describes the current state end to end.
+ * ✅ MFL NOW HAS A WEEKLY-MATCHUP WRITER — `mflMatchupParity`, 2026-09-12. This paragraph read
+ * "MFL STILL HAS NO WEEKLY-MATCHUP WRITER" and everything below it is kept as the record of WHY
+ * it did not, because the reason was real and is worth not re-deriving.
  *
- * Everything needed to build a writer already exists — `getMflAuthForUser`, the `TYPE=schedule`
- * fetch, `parseMflSchedule` (which returns weeks with `franchiseId1/2` and `points1/2`), and
- * `applySchedule` itself. It would be a short collector. It would ALSO have written rows that
- * NOTHING COULD READ, which is worse than the empty board it replaces — that was true, and is
- * why nobody built it.
+ * Everything needed already existed — `getMflAuthForUser`, the `TYPE=schedule` fetch,
+ * `parseMflSchedule` (weeks with `franchiseId1/2` and `points1/2`), and `applySchedule` itself.
+ * It would have been a short collector. It would ALSO have written rows that NOTHING COULD READ,
+ * which is worse than the empty board it replaces — and that is why nobody built it until the
+ * column changed underneath it.
+ *
+ * 🛑 SO THE CONSTRAINT DID NOT DISAPPEAR, IT MOVED INTO THE WRITER. The one rule that keeps
+ * those rows readable is that `mflMatchupParity` writes the zero-padded franchise id VERBATIM
+ * and never canonicalises it. Every other collector here does canonicalise, correctly, because
+ * their ids are plain integers — so the MFL one is the exception and looks like a mistake to
+ * anyone tidying. `__tests__/weekly-matchup-roster-id-space.test.ts` enforces it.
  *
  * ⚠ THE ID SPACES STILL DO NOT MEET ON THE WRITE SIDE, measured rather than assumed:
  *
