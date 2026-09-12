@@ -2,7 +2,7 @@ import type { ILeagueImportAdapter } from '../ILeagueImportAdapter'
 import type { NormalizedImportResult, SourceTracking } from '../../types'
 import type { MflImportPayload } from './types'
 import { resolveProviderScoringStatKey } from '@/lib/scoring-defaults/ScoringKeyAliasResolver'
-import { coverageAgainstExpected } from '@/lib/league-import/coverageCompleteness'
+import { coverageAgainstExpected, emptyableHistoryCoverage } from '@/lib/league-import/coverageCompleteness'
 
 /**
  * The league's scoring format, or `null` when MFL did not say.
@@ -383,7 +383,8 @@ export const MflAdapter: ILeagueImportAdapter<MflImportPayload> = {
               ? raw.previousSeasons.length > 0
                 ? 'partial'
                 : 'full'
-              : 'missing',
+              /* Same ambiguity as Yahoo: a required array, so `[]` proves nothing. */
+              : emptyableHistoryCoverage({ fetched: null, unit: 'trades' }).state,
           count: transactions.length,
           note:
             transactions.length > 0
