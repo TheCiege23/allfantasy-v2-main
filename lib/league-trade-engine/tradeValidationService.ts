@@ -163,8 +163,34 @@ export function validateTradeAssets(params: {
       if (t === 'devy_pick' && !settings.devyTradingAllowed) {
         return { ok: false, code: 'DEVY_TRADE_BLOCKED', message: 'Devy asset trading is not allowed.' }
       }
+      /*
+       * 🛑 THIS BRANCH WAS AN EMPTY BLOCK — `{ /* c2c flag also used for cross-layer picks *\/ }`.
+       *
+       * The condition was evaluated and nothing happened, so a league with C2C trading switched OFF
+       * still accepted `future_pick` assets. Its two siblings immediately above (draft picks, devy)
+       * both refuse; this one read as a guard, passed review as a guard, and was not one. Nothing
+       * type-checks an empty block and no test covered the branch.
+       *
+       * The refusal below is the author's stated intent from that comment, implemented — not a new
+       * rule: when the C2C (cross-layer) flag is off, a cross-layer pick is not tradeable.
+       *
+       * ⚠ REACHABILITY, MEASURED RATHER THAN ASSUMED, because it decides the blast radius:
+       * `c2cTradingAllowed` resolves as `leagueType.includes('c2c') || Boolean(ext.c2cTrading ?? true)`.
+       * The default is TRUE, and the first clause means a C2C-TYPE LEAGUE CAN NEVER TURN IT OFF.
+       * So this refusal fires in exactly one case: a non-C2C league that explicitly set
+       * `c2cTrading: false`. Every other league is unaffected by filling the block in.
+       *
+       * ⚠ THAT `||` IS LEFT ALONE DELIBERATELY. `devyTradingAllowed` has the identical shape, so
+       * "a devy league always permits devy assets, a C2C league always permits cross-layer picks"
+       * is a consistent product reading rather than a slip — and changing it would silently start
+       * blocking assets in leagues built around them. It is reported, not rewritten.
+       */
       if (t === 'future_pick' && !settings.c2cTradingAllowed) {
-        /* c2c flag also used for cross-layer picks */
+        return {
+          ok: false,
+          code: 'C2C_TRADE_BLOCKED',
+          message: 'Cross-layer (C2C) pick trading is not allowed in this league.',
+        }
       }
       const ref = String(a.itemReference ?? '').trim()
       if (!ref) {
