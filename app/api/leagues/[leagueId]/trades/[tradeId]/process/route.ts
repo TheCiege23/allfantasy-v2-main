@@ -85,7 +85,8 @@ export async function POST(
         { status: 409 },
       )
     }
-    return NextResponse.json({ ok: true, ...result })
+    // `result` already carries `ok: true`; spreading it after a literal `ok` is a duplicate key (TS2783).
+    return NextResponse.json(result)
   }
 
 

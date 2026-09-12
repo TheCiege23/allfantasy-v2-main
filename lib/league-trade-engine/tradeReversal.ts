@@ -192,7 +192,9 @@ export async function reverseGenericTrade(
         source: 'lib:league-trade-engine',
         subjects: [{ kind: 'trade', id: trade.id }],
         idempotencyKey: `af-trade.reversed:${trade.id}`,
-        payload: { tradeId: trade.id, reason: input.reason },
+        // `{ tradeId }` only — the TRADE_CANCELED payload schema in the event catalog admits nothing
+        // else. The reason is not lost: it is a NOT NULL column on the TradeReversal row below.
+        payload: { tradeId: trade.id },
       })
 
       const reversal = await tx.tradeReversal.create({
