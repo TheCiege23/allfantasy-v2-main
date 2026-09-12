@@ -164,6 +164,48 @@ on that divergent tree and its conclusion holds exactly (222 ignored-copy lines 
 0 added), because both sides saw the same files. A DELTA survives a wrong tree. A TOTAL
 does not.
 
+#### Triaged 2026-09-12: 109 findings are SIX actionable violations, and three you must not touch
+
+**109 findings is not 109 violations.** They are 69 distinct files: 60 lines in `lib`,
+20 in `scripts`, 19 in `__tests__`, 6 in `app`, 3 in `server`, 1 in `contracts`. The
+`app/` and `server/` ones are the highest-signal subset because a `route.ts` is a request
+path BY DEFINITION — no caller census needed to establish exposure.
+
+🛑 **THREE OF THOSE EIGHT ARE THE ACCEPTED READ-THROUGH CACHE. Do not "fix" them** — the
+provider call is the cache-MISS path, exactly as this file already sanctions for
+`getSportsData` and `getFantasyCalcValuesDbFirst`:
+
+| file | shape |
+|---|---|
+| `app/api/players/profile/route.ts:42` | `sportsDataCache` read → fetch on miss → `upsert` |
+| `server/api-route-modules/legacy/player-game-logs/route.ts:111` | explicit cache-hit return, then `// Cache miss: fetch from Sleeper` |
+| ` …/player-game-logs/route.ts:124` | the schedule fetch, inside that same miss branch |
+
+**The six that are genuinely naked live vendor calls on a request path:**
+
+| file | vendor |
+|---|---|
+| `app/api/league/live-roster/route.ts:22` | `api.sleeper.app` |
+| `app/api/mfl/import/route.ts:46` | `api.myfantasyleague.com` |
+| `app/api/mfl/leagues/route.ts:39` | `api.myfantasyleague.com` |
+| `app/api/music/artists/route.ts:93` | `theaudiodb.com` |
+| `app/api/music/track-info/route.ts:66` | `theaudiodb.com` |
+| `server/api-route-modules/legacy/trade/analyze/route.ts:434` | `thesportsdb.com` |
+
+⚠ **THE TWO MFL ONES ALSO PUT A CREDENTIAL ON THE WIRE FROM A REQUEST PATH**, sending
+`Cookie: MFL_USER_ID=${connection.mflCookie}`. That is the `RSC_token`-in-a-query-parameter
+shape reached a different way — and note the `db-first-auth-exchange:` marker correctly
+covers only `app/api/auth/mfl/route.ts`'s `/login`. These are DATA calls; the marker does
+not reach them and must not be pasted onto them.
+
+🛑 **AND THE SHORTCUT THAT PRODUCED A WRONG ANSWER — it misclassified 2 of the 8.** Grepping
+the lines around each finding for cache signals (`prisma.`, `findUnique`, `sportsDataCache`,
+`cached`) reported both MFL routes as cache-guarded. They are not. The prisma call it
+matched is `getMFLConnection()` — a CREDENTIAL lookup — and the fetch that follows is
+unguarded. *"Is there a prisma call nearby"* is not *"is this fetch cache-guarded"*, and the
+proximity grep cannot tell a cache read from a credential read. The classification above
+comes from reading all eight; two of them contradict the heuristic that found them.
+
 ### CFBD is the worked example of what compliance looks like
 
 CFBD is at **zero** violations, and it got there by moving surfaces rather than
