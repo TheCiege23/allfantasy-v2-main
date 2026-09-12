@@ -6,6 +6,7 @@ import {
   type MeasuredTarget,
 } from "@/e2e/mobile/targetRatchet"
 import baselineFile from "@/e2e/mobile/undersized-target-baseline.json"
+import authedBaselineFile from "@/e2e/mobile/undersized-target-baseline.authed.json"
 
 /**
  * The positive control for the phone gate's ratchet.
@@ -105,6 +106,39 @@ describe("committed baseline file", () => {
 
   it("covers exactly the routes the smoke spec visits", () => {
     expect(Object.keys(baseline.routes).sort()).toEqual(["/", "/login", "/pricing"])
+  })
+
+  /*
+   * 🛑 THE AUTHED LANE GETS THE SAME PIN, AND IT EXISTS BECAUSE THE ONE ABOVE
+   * CAUGHT A REAL MISTAKE. `/core/trades` was first added to the PUBLIC baseline,
+   * which broke the assertion above on its first CI run — correctly, because the
+   * smoke spec never visits that route, so its entries could never be matched or
+   * retired. The tempting repair was to relax that check to a union of two specs'
+   * routes; that would have weakened a guard doing real work in order to
+   * accommodate a new lane. A second file keeps both exact.
+   */
+  const authed = authedBaselineFile as unknown as { routes: Record<string, BaselineTarget[]> }
+
+  it("the authed baseline covers exactly the routes authed-phone.spec.ts visits", () => {
+    expect(Object.keys(authed.routes).sort()).toEqual(["/core/trades"])
+  })
+
+  it("the two baselines never share a route", () => {
+    /*
+     * ⚠ An overlap would mean two specs ratcheting the same entries, where
+     * retiring a control in one lane makes the other lane's copy STALE and red.
+     */
+    const shared = Object.keys(authed.routes).filter((r) => r in baseline.routes)
+    expect(shared, `routes present in BOTH baselines: ${shared.join(", ")}`).toEqual([])
+  })
+
+  it("gives every authed entry a non-empty class and label", () => {
+    for (const [route, entries] of Object.entries(authed.routes)) {
+      for (const e of entries) {
+        expect(e.cls.length, `${route}: empty cls`).toBeGreaterThan(0)
+        expect(typeof e.label, `${route}: label must be a string`).toBe("string")
+      }
+    }
   })
 
   it("has no duplicate identities within a route", () => {

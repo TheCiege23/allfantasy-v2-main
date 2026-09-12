@@ -1,0 +1,62 @@
+{
+  "_comment": [
+    "Known sub-44px controls on AUTHENTICATED phone screens, measured by",
+    "authed-phone.spec.ts in the `mobile-auth` lane. Same contract and same",
+    "ratchet semantics as undersized-target-baseline.json: the spec fails on",
+    "anything NOT listed here, so this file can only shrink.",
+    "",
+    "IT IS A SEPARATE FILE ON PURPOSE, AND THE REASON IS A TEST THAT CAUGHT ME.",
+    "The public baseline is pinned by target-ratchet.test.ts to cover EXACTLY the",
+    "routes the smoke spec visits — no more, no less — because a route present in",
+    "one and absent from the other either turns every known control into a",
+    "regression or hides them all. Adding /core/trades to that file broke the",
+    "assertion immediately, which is the invariant working. Relaxing it to a union",
+    "of two specs' routes would have weakened a check that does real work in order",
+    "to accommodate a new lane; a second file keeps it exact.",
+    "",
+    "The two lanes also have different lifecycles. `mobile-smoke` gates every PR;",
+    "`mobile-auth` is new, is not a required context, and is expected to churn",
+    "while authenticated screens get measured for the first time. Mixing their",
+    "debt into one file would make neither readable.",
+    "",
+    "/core/trades STARTS EMPTY because nothing has ever rendered it at 390px.",
+    "`/core/*` redirects to /login without a session and to /import without a",
+    "league, so every mobile check this repo had stopped at the marketing routes.",
+    "A red first run is debt being surfaced for the first time, not a regression",
+    "anyone introduced — baseline what it finds deliberately, one entry at a time,",
+    "and only where the control is genuinely pre-existing debt being deferred.",
+    "",
+    "⚠ Trade Center's four primary actions were sized by CSS specificity, not by",
+    "this file: `.af-tc-actions .af-btn` was (0,2,0), dead equal to",
+    "`.af-core .af-btn { min-height: 36px }`, so 44px applied on a coin toss",
+    "decided by stylesheet order. Fixed by prefixing with `.af-core`. If entries",
+    "appear here for `.af-btn` controls, check the specificity before baselining —",
+    "a losing rule looks exactly like a missing one.",
+    "",
+    "WHAT THE FIRST RUNS FOUND, AND WHY ONLY THE DOTS ARE HERE. /core/trades came",
+    "back with three undersized shell controls and three sub-16px fields. Two were",
+    "FIXED rather than baselined, because both were mechanical: .af-search-input at",
+    "13px (iOS Safari zooms on focus and never back out) and .af-nav-support at 36px",
+    "tall, 8px short of a floor the rest of /core already holds. Only the help dots",
+    "are deferred, and only because reaching 44px there changes the design rather",
+    "than the stylesheet. Baseline what you cannot fix mechanically; fix the rest."
+  ],
+  "routes": {
+    "/core/trades": [
+      {
+        "cls": "af-help-dot",
+        "label": "Read-only by design",
+        "w": 15,
+        "h": 15,
+        "why": "DEFERRED DESIGN WORK, NOT A SIZING OVERSIGHT. A 15x15 info dot cannot reach 44x44 by min-height: it needs an expanded hit area (a pseudo-element or padding that does not move the dot), which shifts layout around a deliberately small affordance. That is a design decision, not a CSS one. Sized alongside its sibling below when the shell's help affordances are next touched."
+      },
+      {
+        "cls": "af-help-dot",
+        "label": "Plan tokens",
+        "w": 15,
+        "h": 15,
+        "why": "Same control, second instance. See above."
+      }
+    ]
+  }
+}

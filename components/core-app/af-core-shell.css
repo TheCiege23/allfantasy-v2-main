@@ -2151,3 +2151,25 @@ html[data-mode='light'] .af-core {
     background-image: none;
   }
 }
+
+/* ── 44px touch floor for the rail's support button ──────────────────────
+ *
+ * `.af-nav-support` renders 117x36 on a phone — 8px short of the 44px floor the
+ * rest of /core holds to. Found by the `mobile-auth` lane on /core/trades, and
+ * it is in the RAIL, so it is on every authenticated screen rather than one.
+ *
+ * ⚠ APPENDED AS ITS OWN TOP-LEVEL @media, per the convention this file already
+ * states above: inserting a block inside an existing @media closes the outer
+ * query early and silently moves every rule below it into the narrower one.
+ * af-matchup.css lost four rules that way and nothing went red.
+ *
+ * ⚠ EQUAL SPECIFICITY, LATER IN THE SAME FILE — not a `.af-core` prefix. Source
+ * order within ONE stylesheet is deterministic; it is only ACROSS files that the
+ * concatenated page.css decides ties, which is what made four Trade Center
+ * buttons a coin toss in this same branch.
+ */
+@media (max-width: 720px) {
+  .af-nav-support {
+    min-height: 44px;
+  }
+}

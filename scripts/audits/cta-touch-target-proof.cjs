@@ -36,6 +36,8 @@ const outDir = fs.mkdtempSync(path.join(os.tmpdir(), "af-cta-proof-"));
 const CORE = fs.readFileSync(root + "/components/core-app/af-core.css", "utf8");
 const LANDING = fs.readFileSync(root + "/components/core-app/af-landing.css", "utf8");
 const PRICING = fs.readFileSync(root + "/components/core-app/af-pricing.css", "utf8");
+const TRADE = fs.readFileSync(root + "/components/core-app/af-trade-center.css", "utf8");
+const SHELL = fs.readFileSync(root + "/components/core-app/af-core-shell.css", "utf8");
 
 /*
  * The global theme toggle is styled by TAILWIND UTILITIES, not by a stylesheet
@@ -82,12 +84,30 @@ const BODY = `
   </div>
   <a class="af-pr-cta af-pr-cta--ghost" href="#">Create an account</a>
 </div>
+<div class="af-core">
+  <input class="af-search-input" data-proof="shell-search" type="search" placeholder="Search">
+  <button type="button" class="af-nav-support" data-proof="shell-support">Contact support</button>
+  <div class="af-tc-actions">
+    <p class="af-tc-caption">caption</p>
+    <button type="button" class="af-btn" data-proof="tc-propose">Propose this trade</button>
+    <button type="button" class="af-btn af-btn--ghost" data-proof="tc-reset">Reset</button>
+  </div>
+  <div class="af-tc-offer-actions">
+    <button type="button" class="af-btn" data-proof="tc-accept">Accept</button>
+  </div>
+  <div class="af-tc-propose">
+    <button type="button" class="af-btn" data-proof="tc-send">Send offer</button>
+  </div>
+  <div class="af-tc-partner-chips">
+    <button type="button" class="af-tc-chip af-tc-partner-chip" data-proof="tc-partner">Partner</button>
+  </div>
+</div>
 <button data-proof="theme-toggle" class="rounded-xl border px-3 py-2 text-xs font-semibold shadow-lg backdrop-blur max-[720px]:inline-flex max-[720px]:min-h-[44px] max-[720px]:min-w-[44px] max-[720px]:items-center max-[720px]:justify-center">Dark</button>`;
 
 /** Both orders. If the fix depends on either, these disagree and the run fails. */
 const ORDERS = {
-  "core-first": [CORE, LANDING, PRICING, TOGGLE],
-  "core-last": [TOGGLE, LANDING, PRICING, CORE],
+  "core-first": [CORE, LANDING, PRICING, TRADE, SHELL, TOGGLE],
+  "core-last": [TOGGLE, LANDING, PRICING, TRADE, SHELL, CORE],
 };
 
 const TARGETS = [
@@ -99,6 +119,29 @@ const TARGETS = [
   { sel: ".af-pr-cta--ghost", label: "Create an account", min: 44, phoneOnly: true },
   { sel: ".af-pr-nav-link", label: "Sign in", min: 44, phoneOnly: true, axis: "w" },
   { sel: "[data-proof='theme-toggle']", label: "Theme toggle", min: 44, phoneOnly: true },
+  /*
+   * ⚠ TRADE CENTER, ADDED 2026-09-12 AFTER FOUR OF ITS CONTROLS WERE FOUND TO BE
+   * A COIN TOSS. `.af-tc-actions .af-btn` was (0,2,0) — dead equal to
+   * `.af-core .af-btn { min-height: 36px }` — so the 44px rule applied or did not
+   * depending on sheet order alone. Measured before the fix: core-then-trade 44px,
+   * trade-then-core 36px. The partner chip was always fine; it is not an `.af-btn`,
+   * so there was never a tie to lose.
+   */
+  { sel: "[data-proof='tc-propose']", label: "Propose this trade", min: 44, phoneOnly: true },
+  { sel: "[data-proof='tc-reset']", label: "Trade reset", min: 44, phoneOnly: true },
+  { sel: "[data-proof='tc-accept']", label: "Accept offer", min: 44, phoneOnly: true },
+  { sel: "[data-proof='tc-send']", label: "Send offer", min: 44, phoneOnly: true },
+  { sel: "[data-proof='tc-partner']", label: "Trade partner chip", min: 44, phoneOnly: true },
+  /*
+   * ⚠ NOT A TAP TARGET — AN iOS ZOOM FLOOR. A text input under 16px makes Safari
+   * zoom the page in on focus and never back out. `.af-search-input` is 13px and
+   * lives in the SHELL, so it is on every authenticated /core screen. Found by the
+   * mobile-auth lane on its first green run; measured here in both orders because
+   * the rule is equal-specificity with its own base declaration and wins on source
+   * order within af-core.css — which is deterministic, unlike bundle order.
+   */
+  { sel: "[data-proof='shell-search']", label: "Shell search input", min: 16, phoneOnly: true, axis: "font" },
+  { sel: "[data-proof='shell-support']", label: "Shell support button", min: 44, phoneOnly: true },
 ];
 
 function serve() {
@@ -122,8 +165,10 @@ const MEASURE = (sel) => `(() => {
   const el = document.querySelector(${JSON.stringify(sel)});
   if (!el) return null;
   const r = el.getBoundingClientRect();
+  const cs = getComputedStyle(el);
   return { h: Math.round(r.height), w: Math.round(r.width),
-           minHeight: getComputedStyle(el).minHeight };
+           fontPx: Math.round(parseFloat(cs.fontSize)),
+           minHeight: cs.minHeight };
 })()`;
 
 async function main() {
@@ -147,7 +192,18 @@ async function main() {
          * three of those a pass, which is exactly the gap in the my-team proof
          * that the census exists to cover.
          */
-        const measured = t.axis === "w" ? m.w : m.h;
+        /*
+         * ⚠ THREE AXES NOW, AND AN UNKNOWN ONE MUST NOT FALL THROUGH TO HEIGHT.
+         * `axis: "font"` was added for the iOS 16px zoom floor; before this switch
+         * knew about it, such a target would have been measured as HEIGHT and
+         * passed vacuously at 44px — a check reporting on the wrong property is
+         * the same defect this harness exists to prevent.
+         */
+        const measured = t.axis === "w" ? m.w : t.axis === "font" ? m.fontPx : m.h;
+        assert(
+          typeof measured === "number" && Number.isFinite(measured),
+          `${t.label}: axis "${t.axis}" produced no measurement — unknown axis?`,
+        );
         const ok = !applies || measured >= t.min;
         if (!ok) failures++;
         rows.push({ width, order, label: t.label, ...m, axis: t.axis, applies, ok });
@@ -164,7 +220,7 @@ async function main() {
   for (const r of rows) {
     console.log(
       `  ${String(r.width).padStart(4)}px ${r.order.padEnd(10)} ` +
-        `${r.ok ? "PASS" : "FAIL"}  ${String(r.axis === "w" ? r.w : r.h).padStart(3)}px ${r.axis === "w" ? "wide" : "tall"} ` +
+        `${r.ok ? "PASS" : "FAIL"}  ${String(r.axis === "w" ? r.w : r.axis === "font" ? r.fontPx : r.h).padStart(3)}px ${r.axis === "w" ? "wide" : r.axis === "font" ? "font" : "tall"} ` +
         `(min-height ${r.minHeight.padEnd(6)}) ${r.applies ? "" : "[not expected at this width] "}` +
         r.label,
     );
@@ -180,8 +236,8 @@ async function main() {
     for (const t of TARGETS) {
       const a = rows.find((r) => r.width === width && r.order === "core-first" && r.label === t.label);
       const b = rows.find((r) => r.width === width && r.order === "core-last" && r.label === t.label);
-      const av = t.axis === "w" ? a.w : a.h;
-      const bv = t.axis === "w" ? b.w : b.h;
+      const av = t.axis === "w" ? a.w : t.axis === "font" ? a.fontPx : a.h;
+      const bv = t.axis === "w" ? b.w : t.axis === "font" ? b.fontPx : b.h;
       if (av !== bv) {
         drift++;
         console.log(`  *** ORDER-DEPENDENT at ${width}px: ${t.label} is ${av}px vs ${bv}px ***`);
