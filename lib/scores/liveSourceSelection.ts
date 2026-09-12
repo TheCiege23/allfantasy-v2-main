@@ -73,18 +73,85 @@ const LIVE_SOURCE_DEAD_AFTER_MS = 6 * 60 * 60 * 1000
  */
 const LIVE_SOURCE_STALENESS_BUCKET_MS = 5 * 60 * 1000
 
-export type SourcedRow = { source: string | null; fetchedAt: Date | null }
+/**
+ * The feeds that may answer a live-score question, in preference order.
+ *
+ * Exported so every live-score QUERY filters to the same set. A caller that admits an unranked
+ * feed changes the answer: `cfbd` holds 303 NCAAF week-2 rows (the most of any feed) with ZERO in
+ * progress, because it has no live status at all — it is a kickoff-time donor, not a live feed.
+ */
+export const LIVE_SCORE_SOURCES: readonly string[] = LIVE_SOURCE_PREFERENCE
 
 /**
- * Pick one source's rows — never a blend.
+ * A ranked feed must carry at least this share of the games the best-covered RANKED feed carries
+ * in the same season-week, or it is disqualified before rank is consulted.
+ *
+ * Sized on production 2026-09-12 (production Neon, database neondb; NFL + NCAAF, the current week
+ * and five ahead): every legitimate ranked feed covered 93-100% of its week; the one partial feed —
+ * `espn` on NCAAF week 2 — covered 18% (24 of 131). 80% sits 13 points below the lowest legitimate
+ * feed and 62 above the partial one. Two readings, not a law: re-measure before moving it.
+ */
+const LIVE_SOURCE_COVERAGE_FLOOR = 0.8
+
+export type SourcedRow = {
+  source: string | null
+  fetchedAt: Date | null
+  season?: number | null
+  week?: number | null
+}
+
+/*
+ * ⚠ SEASON + WEEK, NEVER `seasonType`. Measured on production: espn, cfbd, api_sports and
+ * rolling_insights write `seasonType = 'regular'` while thesportsdb and espn_live write NULL for the
+ * SAME games, and api_sports labels NCAAF week 3 (kickoffs Sep 17-20) as 'post'. Keying on it would
+ * put one week's feeds in different slices, select a winner in each, and render every game twice.
+ * Week labels, by contrast, agreed on every one of 606 + 79 + 32 + 23 + 22 + 15 cross-feed pairs.
+ *
+ * Rows missing either field share one slice, which is exactly the old whole-call behaviour — so a
+ * caller that never selects them (weekly redraft scoring) is unchanged. There is deliberately no
+ * date fallback: it would split callers that already group by week, and a game keyed by week in one
+ * feed and by date in another would be selected twice.
+ */
+function sliceKey(row: SourcedRow): string {
+  return row.season != null && row.week != null ? `${row.season}:${row.week}` : ''
+}
+
+/**
+ * One source per season-week — never a blend WITHIN a week.
  *
  * Mixing sources is what produces a scoreboard where the same fixture appears
  * two or three times with different scores: this table deliberately keeps one
  * row PER SOURCE per game, so an un-deduped read shows a game once per feed.
+ *
+ * 🛑 IT USED TO BE ONE SOURCE FOR THE WHOLE CALL, AND THAT IS WHAT MADE A PARTIAL FEED A REGRESSION.
+ * `espn` is ranked first (2026-09-06) and carries only a current-week scoreboard. The moment it was
+ * admitted to the public reader (#757) it won the whole call, and NCAAF fell from 462 rows across
+ * weeks 2-5 with 33 games in progress to 24 rows in week 2 with 6 (#762 reverted it). Per week, the
+ * same ranking keeps `espn` where it covers the week — NFL week 1, 15 of 15 — and TheSportsDB fills
+ * the weeks `espn` does not carry at all.
+ *
+ * Input order is preserved, because callers sort by kickoff before selecting.
  */
 export function pickFreshestSourceRows<T extends SourcedRow>(rows: T[], now = Date.now()): T[] {
   if (rows.length === 0) return rows
 
+  const slices = new Map<string, T[]>()
+  for (const row of rows) {
+    const key = sliceKey(row)
+    const slice = slices.get(key)
+    if (slice) slice.push(row)
+    else slices.set(key, [row])
+  }
+  if (slices.size === 1) return pickOneSource(rows, now)
+
+  const keep = new Set<T>()
+  for (const slice of slices.values()) {
+    for (const row of pickOneSource(slice, now)) keep.add(row)
+  }
+  return rows.filter((row) => keep.has(row))
+}
+
+function pickOneSource<T extends SourcedRow>(rows: T[], now: number): T[] {
   const bySource = new Map<string, { rows: T[]; newest: number }>()
   for (const row of rows) {
     const key = row.source ?? ''
@@ -102,12 +169,36 @@ export function pickFreshestSourceRows<T extends SourcedRow>(rows: T[], now = Da
   // Prefer live feeds; fall back to everything only if none is current, so a
   // fully stale sport still renders something rather than an empty screen.
   const live = all.filter(([, v]) => now - v.newest <= LIVE_SOURCE_DEAD_AFTER_MS)
-  const pool = live.length > 0 ? live : all
+  const available = live.length > 0 ? live : all
 
   const rank = (source: string): number => {
     const i = (LIVE_SOURCE_PREFERENCE as readonly string[]).indexOf(source)
     return i === -1 ? LIVE_SOURCE_PREFERENCE.length : i
   }
+
+  /*
+   * 🛑 COVERAGE BEFORE RANK. A ranked feed carrying far fewer games than the best-covered ranked
+   * feed in this week is disqualified here, so rank cannot hand the week to a partial slate.
+   *
+   * ⚠ ONLY RANKED FEEDS SET THE BAR, AND AN UNRANKED FEED IS NEVER DISQUALIFIED BY IT. Callers
+   * that do not filter to LIVE_SCORE_SOURCES (weekly redraft scoring, the week signal) still pass
+   * `cfbd` rows, and `cfbd` has the most rows of any NCAAF feed with no live status. If it set the
+   * bar, TheSportsDB (131 of 303, 43%) and api_sports (42%) would both fall below it and `cfbd`
+   * would win by default. Leaving unranked feeds out of the bar keeps them exactly where rank
+   * already put them: a last resort. The best-covered ranked feed always clears its own bar, so
+   * the pool can never be emptied by this step.
+   */
+  const unranked = LIVE_SOURCE_PREFERENCE.length
+  const rankedMax = available.reduce(
+    (max, [source, v]) => (rank(source) < unranked ? Math.max(max, v.rows.length) : max),
+    0,
+  )
+  const pool =
+    rankedMax === 0
+      ? available
+      : available.filter(
+          ([source, v]) => rank(source) === unranked || v.rows.length >= LIVE_SOURCE_COVERAGE_FLOOR * rankedMax,
+        )
 
   // ⚠ FRESHNESS OUTRANKS PREFERENCE, IN BUCKETS.
   //

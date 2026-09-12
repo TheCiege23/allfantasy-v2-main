@@ -266,14 +266,14 @@ describe('public sports data routes are cache-first', () => {
            * against NFL only. Source SELECTION moved to pickFreshestSourceRows,
            * so widening this filter cannot let a stale feed outrank a live one.
            *
-           * 🛑 AND `espn` IS PINNED OUT, BECAUSE ADDING IT BROKE PRODUCTION. #757 added it and
-           * the public NCAAF scoreboard fell from 462 rows (weeks 2-5, 33 in progress) to 24
-           * (week 2, 6 in progress), measured before/after on the deployed SHA. pickFreshestSourceRows
-           * takes one source wholesale and ranks `espn` first; the `espn` games writer
-           * (fetchEspnGames) carries only a partial current-week slate. This assertion is what
-           * turns a re-add red — see the note beside the list in sports-live-scores-service.
+           * 🛑 AND IT IS NOW EXACTLY LIVE_SCORE_SOURCES — `espn` INCLUDED — BECAUSE SELECTION CHANGED.
+           * #757 added `espn` while selection took ONE source for the whole call, and the public
+           * NCAAF scoreboard fell from 462 rows to 24; #762 removed it. Selection is now per
+           * season-week with an 80% coverage floor, which keeps `espn` for the NFL week it fully
+           * covers and drops it for the college week it carries 18% of. The order is the ranking's.
+           * `cfbd` stays out because it has no live status. This assertion pins the set.
            */
-          source: { in: ['rolling_insights', 'espn_live', 'api_sports', 'thesportsdb'] },
+          source: { in: ['espn', 'espn_live', 'thesportsdb', 'rolling_insights', 'api_sports'] },
         }),
       })
     )

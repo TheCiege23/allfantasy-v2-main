@@ -76,12 +76,13 @@ const NOW = Date.parse('2026-08-29T12:15:00.000Z')
  *
  * ⚠ DISCRIMINATE ON `cfbd`, NOT ON `espn`. This used to read
  * `sources.includes('espn') || sources.includes('cfbd')`, which is correct only while `espn` is
- * absent from the SLATE query's source list. #757 briefly added it there, and this mock then
- * answered BOTH queries with donor rows — four tests failed for a reason unrelated to kickoff
- * repair. (`espn` was removed again the same day because it broke the public scoreboard; see the
- * note beside that list in sports-live-scores-service.) `KICKOFF_DONOR_SOURCES` is
- * `['espn', 'cfbd']`, so `cfbd` is the member that tells the two queries apart whatever the
- * slate list holds — keyed on it so this mock cannot silently collapse again.
+ * absent from the SLATE query's source list — and it is not. The slate query reads
+ * LIVE_SCORE_SOURCES, which includes `espn`: added in #757, removed in #762 after it broke the
+ * public scoreboard, and readmitted once selection became per-week and coverage-gated. With `espn`
+ * in both lists the old mock answered BOTH queries with donor rows, and four tests failed for a
+ * reason unrelated to kickoff repair. `KICKOFF_DONOR_SOURCES` is `['espn', 'cfbd']`, and `cfbd` is
+ * not a live feed, so it is the member that tells the two queries apart whatever the slate list
+ * holds — keyed on it so this mock cannot silently collapse again.
  */
 function wireDb(options: { slate: unknown[]; donors: unknown[] }) {
   findMany.mockImplementation((args: { where?: { source?: { in?: string[] } } }) => {
