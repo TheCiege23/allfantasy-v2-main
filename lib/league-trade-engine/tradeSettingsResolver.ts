@@ -65,8 +65,26 @@ export function resolveLeagueTradeSettings(league: League): ResolvedLeagueTradeS
     tradesAllowed = false
   }
 
-  const faabTradingAllowed =
-    Boolean((ext as { faabTradable?: boolean }).faabTradable ?? league.draftPickTrading !== false)
+  /*
+   * 🛑 THIS DEFAULTED TO THE DRAFT-PICK SETTING, WHICH DEFAULTS TO FALSE.
+   *
+   *   Boolean(ext.faabTradable ?? league.draftPickTrading !== false)
+   *
+   * `League.draftPickTrading` is `Boolean @default(false)` in the schema, so for every league that
+   * never turned draft-pick trading ON — the default — this resolved FALSE and the validator refused
+   * every FAAB asset with `FAAB_TRADE_BLOCKED`. Two unrelated settings wired to one switch, and the
+   * one doing the wiring is off unless a commissioner goes looking for it.
+   *
+   * ⚠ IT WAS INVISIBLE TO THE TEST SUITE BY CONSTRUCTION. `buildEngineTestLeague` sets
+   * `draftPickTrading: true`, so every existing suite that touches trade settings runs in the one
+   * configuration where the defect cannot appear.
+   *
+   * `?? true` matches `devyTrading` and `c2cTrading` immediately below: tradable unless the league
+   * says otherwise. The explicit `faabTradable: false` escape hatch is unchanged, and the sender's
+   * `faabRemaining` sufficiency check in `validateTradeAssets` still bounds the amount — this
+   * governs WHETHER FAAB may be traded, never HOW MUCH.
+   */
+  const faabTradingAllowed = Boolean((ext as { faabTradable?: boolean }).faabTradable ?? true)
 
   const draftPickTradingAllowed = league.draftPickTrading !== false
 
