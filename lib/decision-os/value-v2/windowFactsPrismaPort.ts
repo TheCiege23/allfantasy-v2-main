@@ -202,10 +202,36 @@ export function createWindowFactsPrismaPort(deps: WindowFactsPrismaDeps): Window
     },
 
     async forecast(scope: WindowFactsScope): Promise<StoredForecast | null> {
+      /*
+       * 🛑 KEYED ON `platformLeagueId`, NOT `scope.leagueId` — THIS READ USED THE WRONG ID SPACE
+       * AND COULD NEVER MATCH A ROW.
+       *
+       * `season_forecast_snapshots.leagueId` holds the PLATFORM league id, and every writer of that
+       * table is forced to: `runSeasonForecast` resolves its context by reading
+       * `rankings_snapshots` under the same id, and `computeLeagueRankingsV2` uses that id as
+       * `sleeperLeagueId` / `platformLeagueId` and hands it to `getLeagueInfo()` — a live Sleeper
+       * call. A `League.id` UUID cannot produce rankings at all, so no writer can ever key this
+       * table by one.
+       *
+       * Reading it by `scope.leagueId` therefore matched nothing, ever, and surfaced as
+       * `season_forecast_missing` — a statement that the league has no forecast, made about rows
+       * sitting in the table. Measured 2026-09-12 on league `c45f7d9d-…` / plid
+       * `1313568100624375808`: 1 row by platform id, 0 by `League.id`; across the whole table,
+       * 40 rows and 0 UUID-shaped. The same held for `rankings_snapshots` (704 rows, 0 UUID).
+       *
+       * ⚠ `allPlay` DIRECTLY ABOVE ALREADY DOES THIS, null guard included — the correct pattern
+       * was eight lines away. `WeeklyMatchup` is platform-keyed too and its read says so.
+       *
+       * 🛑 AND `dynasty` BELOW IS CORRECT AS IT STANDS — DO NOT "MAKE IT CONSISTENT". That table
+       * genuinely uses the other id space: its writer resolves the route param via
+       * `resolveLeagueByAnyId` and persists `league.id`. The two tables disagree on purpose; a
+       * consistency sweep here would break the one read that was right.
+       */
+      if (!platformLeagueId) return null
       // The most recent snapshot at or before the requested week. The assembler
       // decides whether that lag is acceptable; this only reports what exists.
       const row = await prisma.seasonForecastSnapshot.findFirst({
-        where: { leagueId: scope.leagueId, season: scope.season, week: { lte: scope.week } },
+        where: { leagueId: platformLeagueId, season: scope.season, week: { lte: scope.week } },
         orderBy: { week: 'desc' },
         select: { season: true, week: true, teamForecasts: true, generatedAt: true },
       }).catch(e => { throw new WindowPortReadError('forecast', e) })
