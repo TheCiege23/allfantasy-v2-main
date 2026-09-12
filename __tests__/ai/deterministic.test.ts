@@ -523,6 +523,68 @@ describe('tryDeterministicAnswer', () => {
     expect(empty?.text).toContain("I don't have reliable data")
   })
 
+  /*
+   * ⚠ EVERY "WE HAVE NOTHING" REPLY MUST BE TYPED `refusal`, NOT `answer`.
+   *
+   * Nine of the eleven such strings in deterministic.ts used to come back as `answer`,
+   * because the builders return plain strings and the dispatcher wrapped every non-null
+   * one identically. That is not cosmetic: app/api/chat/chimmy/route.ts escalates to the
+   * citation-required live search ONLY on `kind === 'refusal'`, so a miss typed `answer`
+   * is a dead end the caller cannot distinguish from data — which is the exact
+   * distinction this result type exists to carry.
+   *
+   * Each row below is driven through a DIFFERENT builder, because the bug was per-builder
+   * and a single representative case would have passed while eight others stayed broken.
+   * The `answer` row at the end is the control: it fails if `classify` ever starts calling
+   * everything a refusal, which would be the same bug with the sign flipped.
+   */
+  describe('a cache miss is a refusal, not an answer', () => {
+    const prefix = "I don't have reliable data for that yet."
+
+    it('types a cached INJURY miss as a refusal', async () => {
+      mockSportsInjuryFindMany.mockResolvedValueOnce([])
+      const r = await tryDeterministicAnswerDetailed('Any Chiefs injuries?')
+      expect(r?.text.startsWith(prefix)).toBe(true)
+      expect(r?.kind).toBe('refusal')
+    })
+
+    it('types a cached NEWS miss as a refusal', async () => {
+      getEnrichedNewsFeedMock.mockResolvedValueOnce([])
+      const r = await tryDeterministicAnswerDetailed('Any NFL news today?')
+      expect(r?.text.startsWith(prefix)).toBe(true)
+      expect(r?.kind).toBe('refusal')
+    })
+
+    it('types a cached WEATHER miss as a refusal', async () => {
+      getCachedGameWeatherMock.mockResolvedValueOnce(null)
+      const r = await tryDeterministicAnswerDetailed('What is the weather for the Chiefs game?')
+      expect(r?.text.startsWith(prefix)).toBe(true)
+      expect(r?.kind).toBe('refusal')
+    })
+
+    /*
+     * This builder had NO locale parameter and its miss opened with its own sentence, so it
+     * was invisible to the miss predicate however the dispatcher was written. Covered
+     * explicitly because fixing the dispatcher alone would have left it an `answer`.
+     */
+    it('types a TEAM RESULT miss as a refusal', async () => {
+      mockSportsGameFindMany.mockResolvedValue([])
+      const r = await tryDeterministicAnswerDetailed('Did the Knicks win last night?')
+      expect(r?.text.startsWith(prefix)).toBe(true)
+      expect(r?.kind).toBe('refusal')
+    })
+
+    /* The control: real cached data must still be an answer. */
+    it('still types a cached HIT as an answer', async () => {
+      mockSportsInjuryFindMany.mockResolvedValueOnce([
+        { playerName: 'Patrick Mahomes', team: 'KC', status: 'Questionable' },
+      ])
+      const r = await tryDeterministicAnswerDetailed('Any Chiefs injuries?')
+      expect(r?.kind).toBe('answer')
+      expect(r?.text).toContain('Patrick Mahomes')
+    })
+  })
+
   it('still returns null for a question it has no shortcut for', async () => {
     mockCount.mockResolvedValue(0)
     expect(await tryDeterministicAnswerDetailed('tell me a joke about punters')).toBeNull()

@@ -313,7 +313,7 @@ async function buildWorldCupStartAnswer(locale?: string): Promise<string | null>
   return 'The 2026 FIFA World Cup is scheduled to start on June 11, 2026. I do not have the opening-match fixture cached here yet, so I will not claim the exact first matchup from provider data.'
 }
 
-async function buildTeamResultAnswer(message: string): Promise<string | null> {
+async function buildTeamResultAnswer(message: string, locale?: string): Promise<string | null> {
   if (!/\b(did|do|does|won|win|winner|result|score)\b/i.test(message)) return null
   const sport = resolveSportFromMessage(message)
   const team = resolveTeamAlias(message, sport)
@@ -338,7 +338,13 @@ async function buildTeamResultAnswer(message: string): Promise<string | null> {
     teamFieldMatches(row.homeTeam, team.aliases) || teamFieldMatches(row.awayTeam, team.aliases)
   ) ?? games[0]
   if (!game) {
-    return `I do not have reliable cached ${sport ?? 'sports'} score data for ${team.canonical} from ${targetDay} yet.`
+    /*
+     * Routed through `reliableUnavailable` like every other miss in this file, so that
+     * ONE predicate can tell a miss from a hit. It previously opened with its own
+     * sentence, which made it invisible to `isReliableUnavailableMiss` and therefore
+     * typed `answer` — a "we have nothing" reply that told the caller it was data.
+     */
+    return `${reliableUnavailable(locale)} I have no cached ${sport ?? 'sports'} score for ${team.canonical} from ${targetDay}.`
   }
 
   const homeScore = typeof game.homeScore === 'number' ? game.homeScore : null
@@ -367,7 +373,7 @@ async function buildTeamResultAnswer(message: string): Promise<string | null> {
  * that path only ever queries a single day window — which is exactly why they
  * used to fall through to a model holding no schedule at all.
  */
-async function buildUpcomingGamesAnswer(message: string): Promise<string | null> {
+async function buildUpcomingGamesAnswer(message: string, locale?: string): Promise<string | null> {
   const intent = detectUpcomingIntent(message, resolveSportFromMessage)
   if (!intent) return null
 
@@ -381,7 +387,13 @@ async function buildUpcomingGamesAnswer(message: string): Promise<string | null>
     const what = [intent.seasonType === 'pre' ? 'preseason' : null, intent.sport]
       .filter(Boolean)
       .join(' ')
-    return `${reliableUnavailable()} I have no upcoming ${what || 'games'} on the schedule I can verify. Source: cached SportsGame rows.`
+    /*
+     * ⚠ `reliableUnavailable()` was called with NO locale here while every sibling passes
+     * one, so a Spanish or French caller got the English prefix — and, because the
+     * miss predicate compares against the LOCALE's prefix, the miss also failed to be
+     * recognised as one for any non-English caller. One missing argument, two bugs.
+     */
+    return `${reliableUnavailable(locale)} I have no upcoming ${what || 'games'} on the schedule I can verify. Source: cached SportsGame rows.`
   }
 
   const describe = (game: any) => {
@@ -813,6 +825,27 @@ export async function tryDeterministicAnswerDetailed(
   const answer = (text: string): DeterministicResult => ({ kind: 'answer', text })
   const refusal = (text: string): DeterministicResult => ({ kind: 'refusal', text })
   const safeLocale = resolveLanguage(locale)
+  /*
+   * 🛑 A MISS IS A REFUSAL. IT WAS BEING TYPED AS AN ANSWER, AND THAT SILENCED THE ONE
+   * THING THAT CAN ACT ON IT.
+   *
+   * Nine of the eleven "we have nothing" strings in this file reached the caller as
+   * `answer`, because the builders return a plain string and the dispatcher wrapped every
+   * non-null string the same way. Only `buildUnsupportedStatEventAnswer` and the schedule
+   * refusal were typed honestly.
+   *
+   * The cost is specific, not cosmetic: app/api/chat/chimmy/route.ts escalates to the
+   * citation-required live search ONLY on `kind === 'refusal'`. An `answer` that says "I
+   * have no cached NFL injury data" is a dead end that looks like a result — the caller
+   * cannot tell it apart from data and will not look further, which is exactly the
+   * distinction this result type was introduced to carry.
+   *
+   * ⚠ Everything user-visible is unchanged. The TEXT is identical; only `kind` moves. And
+   * a refusal still costs nothing: the escalation is flag-gated, then checks the spender
+   * can pay BEFORE searching and charges only after a sourced answer exists.
+   */
+  const classify = (text: string): DeterministicResult =>
+    isReliableUnavailableMiss(text, safeLocale) ? refusal(text) : answer(text)
   const intentRoute = resolveChimmyIntentRoute(message)
   if (/\bwhen\s+(does|is|do).*\bworld\s*cup\b.*\b(start|begin|kick\s*off)|\bworld\s*cup\b.*\b(start|begin|kick\s*off)\b/i.test(message)) {
     /*
@@ -823,10 +856,10 @@ export async function tryDeterministicAnswerDetailed(
     const worldCupStart = await buildWorldCupStartAnswer(safeLocale)
     return worldCupStart === null ? null : answer(worldCupStart)
   }
-  const teamResult = await buildTeamResultAnswer(message)
-  if (teamResult) return answer(teamResult)
+  const teamResult = await buildTeamResultAnswer(message, safeLocale)
+  if (teamResult) return classify(teamResult)
   const fantasyCalcValue = await buildFantasyCalcValueAnswer(message, leagueId ?? null, leagueRequested)
-  if (fantasyCalcValue) return answer(fantasyCalcValue)
+  if (fantasyCalcValue) return classify(fantasyCalcValue)
   /*
    * DATA STILL WINS. A cache HIT from any of the three builders below is
    * returned exactly as before, for every route. Only a MISS yields, and only
@@ -846,15 +879,15 @@ export async function tryDeterministicAnswerDetailed(
   const preferRouteRefusal = intentRoute.category === 'unsupported_live_data'
   const weather = await buildCachedWeatherAnswer(message, safeLocale)
   if (weather && !(preferRouteRefusal && isReliableUnavailableMiss(weather, safeLocale))) {
-    return answer(weather)
+    return classify(weather)
   }
   const injuries = await buildCachedInjuryAnswer(message, safeLocale)
   if (injuries && !(preferRouteRefusal && isReliableUnavailableMiss(injuries, safeLocale))) {
-    return answer(injuries)
+    return classify(injuries)
   }
   const news = await buildCachedNewsAnswer(message, safeLocale)
   if (news && !(preferRouteRefusal && isReliableUnavailableMiss(news, safeLocale))) {
-    return answer(news)
+    return classify(news)
   }
   /*
    * Try to ANSWER the stat question before refusing it. The refusal below is
@@ -863,17 +896,17 @@ export async function tryDeterministicAnswerDetailed(
    * the fallback, never the other way round.
    */
   const statLeaders = await buildStatLeaderAnswer(message, safeLocale)
-  if (statLeaders) return answer(statLeaders)
+  if (statLeaders) return classify(statLeaders)
   /* One named player, before the blanket refusal that used to swallow these. */
   const playerStat = await buildPlayerStatAnswer(message, safeLocale)
-  if (playerStat) return answer(playerStat)
+  if (playerStat) return classify(playerStat)
   const unsupportedStatEvent = buildUnsupportedStatEventAnswer(message, safeLocale)
   if (unsupportedStatEvent) return refusal(unsupportedStatEvent)
   /* Forward-looking first: the cached path below only knows about today. */
-  const upcoming = await buildUpcomingGamesAnswer(message)
-  if (upcoming) return answer(upcoming)
+  const upcoming = await buildUpcomingGamesAnswer(message, safeLocale)
+  if (upcoming) return classify(upcoming)
   const cachedGames = await buildCachedGamesAnswer(message)
-  if (cachedGames) return answer(cachedGames)
+  if (cachedGames) return classify(cachedGames)
   if (intentRoute.category === 'world_cup_scoring') {
     return answer(buildWorldCupScoringAnswer(safeLocale))
   }
