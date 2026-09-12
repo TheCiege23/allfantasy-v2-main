@@ -108,3 +108,53 @@ gaps are independent: G-07 blocks *capturing a body*, G-08 needs only a number.
 parameters an endpoint takes; it does not say whether an extra one is ignored or
 rejected. The 400 was found by a live request, and the docs had already been read
 twice by then without revealing it.
+
+---
+
+### `G-09` — Fleaflicker exposes NO playoff setting, on any captured endpoint
+
+**Status:** `RESOLVED` as a question about the API — the answer is "it isn't there."
+`WONTFIX` as an import, until a bracket exists.
+
+The import audit's P1 item 14 reported the playoff count as "guessed instead of
+imported", which is half right and the other half matters: it **was** guessed —
+`FleaflickerAdapter` computed `Math.max(2, Math.floor(leagueSize / 2))` — but
+there is nothing to import it from.
+
+Measured against the committed fixtures, not asserted:
+
+| endpoint | fixture | playoff-related leaf paths |
+|---|---|---|
+| `FetchLeagueRules` | `rules.NFL.json`, 67KB | **0** |
+| `FetchLeagueStandings` | `standings.NFL.json` (`league` object, 22 leaves) | **0** |
+| `FetchLeagueScoreboard` | `scoreboard.NFL.2021.week1.json` | 0 games flagged |
+| `FetchLeagueScoreboard` | `scoreboard.NFL.2021.week16.json` | 2 of 4 games `isPlayoffs` |
+
+🛑 **THE ONLY PLAYOFF EVIDENCE FLEAFLICKER EXPOSES IS PER-GAME, AND ONLY ONCE THE
+BRACKET IS SCHEDULED.** For a league mid-regular-season the count is genuinely
+unknown. The adapter now sends `undefined`, matching ESPN, MFL and Fantrax, all of
+which already say "unknown" when their provider is silent. Fleaflicker was the
+only adapter inventing a value.
+
+⚠ **Why the invention was dangerous rather than untidy.** A 12-team league got 6 —
+the single most common real answer — so it was invisible in exactly the leagues
+anyone would have checked. And `lib/data/league-home.ts` does
+`standings.slice(0, playoff.playoff_team_count)` to seed a bracket, so a league
+that takes 4 or 8 rendered a six-team playoff picture derived from its roster
+count and nothing else.
+
+🛑 **`recordPostseason` IS THE TRAP, AND IT LOOKS EXACTLY LIKE THE ANSWER.** Every
+team object carries one, so "teams with a non-zero postseason record made the
+playoffs" is the obvious derivation. It counts **consolation** games: in the
+week-16 fixture the two consolation games' four teams carry 1-1, 2-0, 2-1 and 1-2.
+That heuristic returns the whole playing field, not the playoff field. A regression
+test pins this.
+
+**What a real import would take,** if someone wants the count for a COMPLETED
+season: union the distinct teams across every scoring period whose scoreboard has
+any `isPlayoffs: true` game. ⚠ One week is not enough — week 16 of the fixture
+league shows only 4 teams in playoff games, because the earlier round has already
+eliminated some; a six-team bracket with two byes looks like four teams if you read
+the wrong week. That is N extra scoreboard requests per league per season and it
+still answers nothing for a league whose playoffs have not started, which is why it
+was not built here.
