@@ -21,6 +21,8 @@
  * the callback it used before, so nothing regresses while the env var is missing.
  */
 
+import { isSafeInternalPath } from '@/lib/auth/auth-intent-resolver'
+
 /** Yahoo Fantasy Sports, read scope. Required for any fantasy data. */
 export const YAHOO_FANTASY_SCOPE = 'fspt-r'
 
@@ -171,6 +173,12 @@ export function sanitizeYahooReturnTo(value: string | null | undefined): string 
   for (let i = 0; i < trimmed.length; i += 1) {
     if (trimmed.charCodeAt(i) <= 0x1f) return YAHOO_DEFAULT_RETURN_TO
   }
+
+  // ⚠ The checks above were not enough on their own. Dot segments collapse during
+  // parsing, so a value with one leading slash can resolve to a pathname starting
+  // "//" — and /api/league/yahoo/callback writes that pathname into its Location
+  // header via relativeRedirect. The shared guard parses the path the way the sink does.
+  if (!isSafeInternalPath(trimmed)) return YAHOO_DEFAULT_RETURN_TO
 
   return trimmed
 }

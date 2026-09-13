@@ -2,7 +2,13 @@ import { getServerSession } from "next-auth"
 import { redirect } from "next/navigation"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { safeInternalPathOr } from "@/lib/auth/auth-intent-resolver"
 import ChooseUsernameForm from "./ChooseUsernameForm"
+
+function resolveCallbackUrl(callbackUrl: string | undefined): string {
+  const safe = safeInternalPathOr(callbackUrl, "/dashboard")
+  return safe.startsWith("/choose-username") ? "/dashboard" : safe
+}
 
 interface Props {
   searchParams: Promise<{ callbackUrl?: string }>
@@ -25,13 +31,7 @@ export default async function ChooseUsernamePage({ searchParams }: Props) {
   // JWT already has a username → gate clears, send them on
   if (session.user.username) {
     const { callbackUrl } = await searchParams
-    const dest =
-      typeof callbackUrl === "string" &&
-      callbackUrl.startsWith("/") &&
-      !callbackUrl.startsWith("/choose-username")
-        ? callbackUrl
-        : "/dashboard"
-    redirect(dest)
+    redirect(resolveCallbackUrl(callbackUrl))
   }
 
   // Read the auto-generated username from DB so we can pre-fill the input.
@@ -45,12 +45,7 @@ export default async function ChooseUsernamePage({ searchParams }: Props) {
     .catch(() => null)
 
   const { callbackUrl } = await searchParams
-  const safeCallbackUrl =
-    typeof callbackUrl === "string" &&
-    callbackUrl.startsWith("/") &&
-    !callbackUrl.startsWith("/choose-username")
-      ? callbackUrl
-      : "/dashboard"
+  const safeCallbackUrl = resolveCallbackUrl(callbackUrl)
 
   return (
     <main className="flex min-h-screen items-center justify-center bg-slate-950 px-4">

@@ -17,6 +17,7 @@ import '@/components/core-app/af-auth.css'
 import { trackOnce } from '@/lib/analytics/dataLayer'
 import { isSocialProviderEnabled, type SocialProvider } from '@/lib/auth/SocialProviderResolver'
 import { resolveLoginErrorMessage } from '@/lib/auth/AuthErrorMessageResolver'
+import { safeRedirectPath } from '@/lib/auth/auth-intent-resolver'
 
 /**
  * Auth — the "landing, auth & import" handoff, wired to the real endpoints.
@@ -554,7 +555,9 @@ function AuthInner({ mode }: { mode: AuthMode }) {
   const params = useSearchParams()
   // Honour the callbackUrl the rest of the app already passes around, so a
   // deep link that bounced through sign-in returns where it started.
-  const callbackUrl = params?.get('callbackUrl')?.trim() || '/core'
+  // ⚠ It reaches router.replace after a credentials sign-in with redirect: false, so next-auth's
+  // redirect callback never sees it — this is the only guard between the query string and navigation.
+  const callbackUrl = safeRedirectPath(params?.get('callbackUrl'))
 
   return mode === 'signin' ? (
     <SignIn callbackUrl={callbackUrl} />

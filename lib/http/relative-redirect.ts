@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { isSafeInternalPath } from "@/lib/auth/auth-intent-resolver"
 
 /**
  * Relative redirects, for the same reason lib/http/served-origin.ts exists: a route
@@ -21,10 +22,17 @@ import { NextResponse } from "next/server"
 export function relativeRedirect(path: string | URL, status = 307): NextResponse {
   const target = typeof path === "string" ? relativeUrl(path) : path
   // Only pathname + search + hash is ever emitted, so the placeholder base below
-  // cannot escape and this cannot become an off-site redirect.
+  // cannot escape. ⚠ That alone did NOT make it safe: dot segments collapse during
+  // parsing, so a path with one leading slash can come out with a pathname that
+  // starts "//", and "//host" in a Location header is another site. Checked here as
+  // well as in relativeUrl because a caller can edit the URL in between.
+  const location = `${target.pathname}${target.search}${target.hash}`
+  if (location.startsWith("//")) {
+    throw new Error(`expected a site-relative path, got ${JSON.stringify(location)}`)
+  }
   return new NextResponse(null, {
     status,
-    headers: { Location: `${target.pathname}${target.search}${target.hash}` },
+    headers: { Location: location },
   })
 }
 
@@ -34,7 +42,7 @@ export function relativeRedirect(path: string | URL, status = 307): NextResponse
  * reaches the response.
  */
 export function relativeUrl(path: string): URL {
-  if (!path.startsWith("/") || path.startsWith("//")) {
+  if (!isSafeInternalPath(path)) {
     throw new Error(`expected a site-relative path, got ${JSON.stringify(path)}`)
   }
   return new URL(path, "http://relative.invalid")

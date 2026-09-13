@@ -1,3 +1,4 @@
+import { isSafeInternalPath, safeInternalPathOr } from "@/lib/auth/auth-intent-resolver"
 import { relativeRedirect, relativeUrl } from "@/lib/http/relative-redirect"
 import { prisma } from "@/lib/prisma"
 import { sha256Hex } from "@/lib/tokens"
@@ -5,8 +6,7 @@ import { sha256Hex } from "@/lib/tokens"
 export const runtime = "nodejs"
 
 function safeReturnTo(input: string | null): string {
-  if (!input) return "/dashboard"
-  return input.startsWith("/") ? input : "/dashboard"
+  return safeInternalPathOr(input, "/dashboard")
 }
 
 /**
@@ -22,7 +22,7 @@ function safeReturnTo(input: string | null): string {
  */
 function redirectTo(path: string, returnTo?: string | null) {
   const target = relativeUrl(path)
-  if (returnTo && returnTo.startsWith("/")) {
+  if (isSafeInternalPath(returnTo)) {
     target.searchParams.set("returnTo", returnTo)
   }
   return relativeRedirect(target)

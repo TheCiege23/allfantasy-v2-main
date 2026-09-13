@@ -8,6 +8,7 @@ import {
   normalizePhoneE164,
 } from '@/lib/auth/ForgotPasswordFlowController'
 import { resolvePasswordResetErrorMessage } from '@/lib/auth/AuthErrorMessageResolver'
+import { safeInternalPathOr } from '@/lib/auth/auth-intent-resolver'
 import {
   requestPasswordResetByEmail,
   requestPasswordResetBySms,
@@ -95,7 +96,7 @@ function PasswordRules({ password, confirm }: { password: string; confirm: strin
 export function PasswordResetV4() {
   const searchParams = useSearchParams()
   const requestedReturnTo = searchParams?.get('returnTo') || ''
-  const safeReturnTo = requestedReturnTo.startsWith('/') ? requestedReturnTo : '/core'
+  const safeReturnTo = safeInternalPathOr(requestedReturnTo, '/core')
   const loginHref = `/login?callbackUrl=${encodeURIComponent(safeReturnTo)}`
   const startMethod: Method = searchParams?.get('method') === 'sms' ? 'sms' : 'email'
 

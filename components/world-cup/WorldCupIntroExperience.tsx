@@ -2,16 +2,13 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
+import { safeInternalPathOr } from '@/lib/auth/auth-intent-resolver'
 
 const SESSION_KEY = 'af_world_cup_intro_seen'
 const AUTO_ADVANCE_MS = 4200
 
 function safeIntroDestination(value: string | null | undefined) {
-  const trimmed = value?.trim()
-  if (!trimmed || !trimmed.startsWith('/') || trimmed.startsWith('//')) {
-    return '/brackets'
-  }
-  return trimmed
+  return safeInternalPathOr(value, '/brackets')
 }
 
 /**

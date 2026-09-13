@@ -1,4 +1,9 @@
-import { loginUrlWithIntent, safeRedirectPath, signupUrlWithIntent } from "@/lib/auth/auth-intent-resolver"
+import {
+  isSafeInternalPath,
+  loginUrlWithIntent,
+  safeRedirectPath,
+  signupUrlWithIntent,
+} from "@/lib/auth/auth-intent-resolver"
 import {
   isAllowedSignupPostAuthDestination,
   isAuthEntrySurfacePathname,
@@ -25,12 +30,6 @@ export interface PostAuthIntentInput {
   fallback?: string
   /** When true, skip auth shells and unknown internal paths so new signups default to the app hub. */
   forSignup?: boolean
-}
-
-function isSafeInternalPath(value: string | null | undefined): value is string {
-  if (!value || typeof value !== "string") return false
-  const trimmed = value.trim()
-  return trimmed.startsWith("/") && !trimmed.startsWith("//")
 }
 
 function resolveIntentAlias(intent: string | null | undefined): string | null {

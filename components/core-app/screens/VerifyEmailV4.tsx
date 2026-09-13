@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import { useResendCooldown } from '@/hooks/useResendCooldown'
+import { safeInternalPathOr } from '@/lib/auth/auth-intent-resolver'
 import {
   BangGlyph,
   CheckGlyph,
@@ -67,7 +68,7 @@ export function VerifyEmailV4({ email, alreadyVerified, signedIn }: VerifyEmailV
   const verified = searchParams?.get('verified')
   const methodParam = searchParams?.get('method')
   const requestedReturnTo = searchParams?.get('returnTo') || ''
-  const safeReturnTo = requestedReturnTo.startsWith('/') ? requestedReturnTo : '/core'
+  const safeReturnTo = safeInternalPathOr(requestedReturnTo, '/core')
 
   const [tab, setTab] = useState<Tab>(methodParam === 'phone' ? 'phone' : 'email')
   const [sending, setSending] = useState(false)
