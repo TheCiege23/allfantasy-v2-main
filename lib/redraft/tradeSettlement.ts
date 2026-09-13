@@ -18,6 +18,7 @@
  */
 
 import type { Prisma } from '@prisma/client'
+import { applyRedraftFaabDeltasInTransaction } from './faabTransfer'
 
 export type TradeSettlementTx = Prisma.TransactionClient
 
@@ -103,22 +104,9 @@ export async function settleRedraftTradeAssets(
     throw new Error(`Unsupported trade asset type: ${asset.assetType}`)
   }
 
-  // Apply net FAAB transfers with sufficiency checks.
-  let faabTransferred = 0
-  for (const [rosterId, delta] of faabDelta) {
-    if (delta === 0) continue
-    const roster = await tx.redraftRoster.findUnique({
-      where: { id: rosterId },
-      select: { faabBalance: true },
-    })
-    const current = roster?.faabBalance ?? 0
-    const next = current + delta
-    if (next < 0) {
-      throw new Error('Insufficient FAAB balance to complete trade')
-    }
-    await tx.redraftRoster.update({ where: { id: rosterId }, data: { faabBalance: next } })
-    if (delta > 0) faabTransferred += delta
-  }
+  // Apply net FAAB transfers as conditional in-database arithmetic, so two trades settling at once from the
+  // same roster cannot both spend the same balance. See ./faabTransfer.ts.
+  const faabTransferred = await applyRedraftFaabDeltasInTransaction(tx, faabDelta)
 
   return { playersMoved, faabTransferred, picksRecorded }
 }

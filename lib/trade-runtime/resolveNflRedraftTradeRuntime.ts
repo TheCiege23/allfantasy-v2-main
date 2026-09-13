@@ -5,6 +5,7 @@ import { resolveCanonicalLeagueRules } from '@/lib/league-runtime'
 import type { CanonicalLeagueRuntimeEvent } from '@/lib/league-runtime/leagueRuntimeEvents'
 import { resolveRedraftRosterConfig } from '@/lib/redraft/rosterConfigResolver'
 import { resolveRedraftTradeGovernance } from '@/lib/redraft/tradeGovernance'
+import { applyRedraftFaabDeltasInTransaction } from '@/lib/redraft/faabTransfer'
 import { hydrateRedraftLineupLocksForRosters } from '@/lib/redraft/lineupLock'
 import {
   validateRedraftLineup,
@@ -605,12 +606,9 @@ async function applyExecutedTrade(input: {
       }
     }
 
-    for (const [rosterId, delta] of faabDelta) {
-      if (delta === 0) continue
-      const roster = await tx.redraftRoster.findUnique({ where: { id: rosterId }, select: { faabBalance: true } })
-      const next = Math.max(0, (roster?.faabBalance ?? 0) + delta)
-      await tx.redraftRoster.update({ where: { id: rosterId }, data: { faabBalance: next } })
-    }
+    // Conditional in-database arithmetic: no lost debit between concurrent trades, and no clamping a short
+    // sender to 0 while crediting the receiver in full. See lib/redraft/faabTransfer.ts.
+    await applyRedraftFaabDeltasInTransaction(tx, faabDelta)
 
     for (const rosterId of [proposal.proposerRosterId, proposal.receiverRosterId]) {
       await tx.redraftLeagueTransaction.create({
