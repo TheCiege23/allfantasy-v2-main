@@ -142,10 +142,79 @@ describe('My games — starters, one row per player, leagues behind a disclosure
     expect(screen.queryByText('Bench League')).toBeNull()
   })
 
+  it('the whole starter list collapses behind its heading, and starts open', () => {
+    const { container } = render(<LiveScores data={page('my')} />)
+    const head = container.querySelector('.af-live-tieins-toggle') as HTMLButtonElement
+    expect(head.getAttribute('aria-expanded')).toBe('true')
+    expect(container.querySelectorAll('.af-live-mine-row')).toHaveLength(1)
+
+    fireEvent.click(head)
+    expect(head.getAttribute('aria-expanded')).toBe('false')
+    expect(container.querySelectorAll('.af-live-mine-row')).toHaveLength(0)
+    // The heading stays, so it can be opened again.
+    expect(screen.getByText(/Your starters · 1 player · 2 leagues/)).toBeInTheDocument()
+
+    fireEvent.click(head)
+    expect(container.querySelectorAll('.af-live-mine-row')).toHaveLength(1)
+  })
+
+  it('the player name is its own player-card button, separate from the leagues toggle', () => {
+    const { container } = render(<LiveScores data={page('my')} />)
+    const row = container.querySelector('.af-live-mine-row') as HTMLElement
+    const name = within(row).getByRole('button', { name: 'Bucky Irving' })
+    expect(name.className).toContain('af-pc-trigger')
+    // Not nested inside the toggle, and clicking it does not open the leagues.
+    expect(name.closest('.af-live-mine-toggle')).toBeNull()
+    fireEvent.click(name)
+    expect((row.querySelector('.af-live-mine-toggle') as HTMLElement).getAttribute('aria-expanded')).toBe('false')
+  })
+
+  it('with a league in hand, the row shows THAT league\'s points, not the range', () => {
+    const { container } = render(<LiveScores data={page('my')} selectedLeagueId="L2" />)
+    const row = container.querySelector('.af-live-mine-row') as HTMLElement
+    expect(row.getAttribute('data-selected')).toBe('true')
+    const pts = row.querySelector('.af-live-mine-pts') as HTMLElement
+    expect(pts.textContent).toBe('11.1 pts')
+    expect(pts.getAttribute('title')).toBe('Points in Bravo League')
+  })
+
+  it('control: a league you do not start him in keeps the cross-league range', () => {
+    const { container } = render(<LiveScores data={page('my')} selectedLeagueId="L3" />)
+    const row = container.querySelector('.af-live-mine-row') as HTMLElement
+    expect((row.querySelector('.af-live-mine-pts') as HTMLElement).textContent).toBe('8.4–11.1 pts')
+  })
+
   it('control: a game whose only tie-in is a bench player shows no starter list', () => {
     const g = game({ tieIns: [tie({ isStarter: false })] })
     const { container } = render(<LiveScores data={page('my', g)} />)
     expect(container.querySelector('.af-live-tieins')).toBeNull()
+  })
+})
+
+describe('Live plays — who, what kind of play, how far', () => {
+  it('renders the name as a player-card button, then the play with its yardage and passer', () => {
+    const data = page('all')
+    data.impact.plays = [
+      {
+        id: 'pbp:1:77:BIG_PLAY',
+        gameId: '1',
+        type: 'BIG_PLAY',
+        playerName: 'Marvin Harrison Jr.',
+        sleeperId: '11632',
+        team: 'ARI',
+        teamLogoUrl: null,
+        imageUrl: null,
+        position: 'WR',
+        headline: 'Marvin Harrison Jr. (WR) 33-yard catch from Kyler Murray',
+        action: '33-yard catch from Kyler Murray',
+        yards: 33,
+        detectedAt: '2026-09-13T18:00:00Z',
+      },
+    ]
+    const { container } = render(<LiveScores data={data} />)
+    const row = container.querySelector('.af-live-play') as HTMLElement
+    expect(within(row).getByRole('button', { name: 'Marvin Harrison Jr.' })).toBeInTheDocument()
+    expect(row.querySelector('.af-live-play-line')!.textContent).toBe('Marvin Harrison Jr. (WR) 33-yard catch from Kyler Murray')
   })
 })
 

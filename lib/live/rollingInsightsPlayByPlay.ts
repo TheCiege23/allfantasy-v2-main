@@ -231,6 +231,8 @@ export function playsToLiveEvents(
     if (!type) continue
     const who = subjectOf(play, type)
     if (!who) continue
+    // Only a pass has a passer; on a run or a return this is null.
+    const passer = play.players.find((x) => x.role === 'passer') ?? null
 
     out.push({
       gameId: game.gameId,
@@ -247,6 +249,16 @@ export function playsToLiveEvents(
          sequence identify a play uniquely, so a re-poll cannot double-notify. */
       idempotencyKey: `pbp:${game.gameId}:${play.sequence}:${type}`,
       detail: play.description,
+      /*
+       * Who did what, so a sentence can say it. `stat` above is the play's
+       * `event` ('pass' / 'run'), which alone cannot tell the receiver of a pass
+       * from the passer — the headline used to read it as a stat key and call
+       * every catch a run. The passer rides along when he is not the subject, so
+       * a receiving touchdown can name who threw it and his managers can be told.
+       */
+      role: who.role,
+      passerId: passer && passer !== who && passer.id != null ? String(passer.id) : null,
+      passerName: passer && passer !== who ? passer.name : null,
     })
   }
 

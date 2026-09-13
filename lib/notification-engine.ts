@@ -140,6 +140,14 @@ function buildSourceKey(event: NotificationEvent): string {
   if (event.meta?.playerId) parts.push(String(event.meta.playerId))
   if (event.meta?.playerName) parts.push(String(event.meta.playerName))
   if (event.meta?.tradeId) parts.push(String(event.meta.tradeId))
+  /*
+   * A live play is its own event. Without its key, a player's second touchdown
+   * inside `live_score_swing`'s 10-minute cooldown shares the first one's source
+   * key and is silently dropped for every manager who got the first. The key
+   * still dedupes the SAME play re-sent by an overlapping tick. Only the live-play
+   * notifier sets `meta.idempotencyKey` on this path.
+   */
+  if (event.meta?.idempotencyKey) parts.push(String(event.meta.idempotencyKey))
   return parts.join(':').slice(0, 200)
 }
 

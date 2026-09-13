@@ -16,6 +16,7 @@ import { runLiveScoringForActiveSeasons } from '@/server/services/liveScoring/li
 import { RollingInsightsLiveProvider } from '@/lib/live/rollingInsightsLiveProvider'
 import { runPollLoop, createCadenceGate, LIVE_POLL_INTERVAL_MS, PBP_POLL_INTERVAL_MS, POLL_BUDGET_MS } from '@/lib/live/gamedayPoller'
 import { refreshPlayByPlayFeed } from '@/lib/live/playByPlayFeed'
+import { refreshLiveSleeperPoints, LIVE_POINTS_INTERVAL_MS } from '@/lib/live/liveSleeperPointsSync'
 
 /**
  * Opt-in Rolling Insights live provider, PRESEASON ONLY.
@@ -110,6 +111,7 @@ export async function GET(request: NextRequest) {
      */
     let loop: Awaited<ReturnType<typeof runPollLoop>> | null = null
     let pbp: Awaited<ReturnType<typeof refreshPlayByPlayFeed>> | null = null
+    let points: Awaited<ReturnType<typeof refreshLiveSleeperPoints>> | null = null
 
     const report = await withSyncJobRun(
       {
@@ -143,9 +145,17 @@ export async function GET(request: NextRequest) {
          * contract says arrive every 35.
          */
         const pbpDue = createCadenceGate(PBP_POLL_INTERVAL_MS)
+        /*
+         * League points on their own, slower clock: one Sleeper matchup call per
+         * league per pass, so it runs every two minutes rather than every tick. It
+         * gates itself on a game being in progress, and like plays it must never
+         * take down scoring.
+         */
+        const pointsDue = createCadenceGate(LIVE_POINTS_INTERVAL_MS)
         const tickOnce = async () => {
           const scored = await runLiveScoringForActiveSeasons(prisma, provider ? { provider } : {})
           if (pbpDue()) pbp = await refreshPlayByPlayFeed().catch(() => pbp)
+          if (pointsDue()) points = await refreshLiveSleeperPoints().catch(() => points)
           return scored
         }
         let last = await tickOnce()
@@ -186,6 +196,12 @@ export async function GET(request: NextRequest) {
           pbpGamesPolled: pbp?.gamesPolled ?? 0,
           pbpNewEvents: pbp?.newEvents ?? 0,
           pbpSkipped: pbp?.skipped ?? null,
+          /* 'no-live-games' on a Tuesday is correct; 'no-leagues' on a Sunday means no
+             claimed Sleeper league for the season, which is worth seeing in telemetry. */
+          pointsLeaguesSynced: points?.leaguesSynced ?? 0,
+          pointsScoresUpserted: points?.scoresUpserted ?? 0,
+          pointsErrors: points?.errors ?? 0,
+          pointsSkipped: points?.skipped ?? null,
         },
       }),
     )

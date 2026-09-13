@@ -137,6 +137,44 @@ describe('playsToLiveEvents — the classification traps', () => {
   })
 })
 
+describe('playsToLiveEvents — who did what, for the sentence and the alert', () => {
+  const passTd = {
+    ...basePlay,
+    event: 'pass',
+    yardsGained: 34,
+    isTouchdown: true,
+    isScoringPlay: true,
+    description: 'K.Cousins pass deep right to D.London for 34 yards, TOUCHDOWN.',
+    players: [
+      { id: 11, name: 'Kirk Cousins', role: 'passer', action: 'pass', position: 'QB', teamAbbr: 'ATL' },
+      { id: 12, name: 'Drake London', role: 'receiver', action: 'receive', position: 'WR', teamAbbr: 'ATL' },
+    ],
+  }
+
+  it('a receiving touchdown carries the receiver as subject, his role, and the passer', () => {
+    const [ev] = playsToLiveEvents(parsePlayByPlay(game([passTd]))[0]!)
+    expect(ev).toMatchObject({
+      type: 'TOUCHDOWN',
+      playerId: '12',
+      playerName: 'Drake London',
+      role: 'receiver',
+      passerId: '11',
+      passerName: 'Kirk Cousins',
+      delta: 34,
+    })
+  })
+
+  it('a run has a rusher and no passer', () => {
+    const [ev] = playsToLiveEvents(parsePlayByPlay(game([{ ...basePlay, yardsGained: 25 }]))[0]!)
+    expect(ev).toMatchObject({ role: 'rusher', passerId: null, passerName: null })
+  })
+
+  it('a pass whose only named player is the passer does not name him as his own passer', () => {
+    const [ev] = playsToLiveEvents(parsePlayByPlay(game([{ ...passTd, players: [passTd.players[0]] }]))[0]!)
+    expect(ev).toMatchObject({ playerName: 'Kirk Cousins', role: 'passer', passerId: null, passerName: null })
+  })
+})
+
 describe('playsToLiveEvents — sequence is a high-water mark, not a count', () => {
   it('emits only plays after the given sequence, despite sparse numbering', () => {
     // The contract warns sequence is monotonic but sparse — never 1..N.

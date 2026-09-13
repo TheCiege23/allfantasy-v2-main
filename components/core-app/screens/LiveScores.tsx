@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import MiniPlayerImg from '@/components/MiniPlayerImg'
+import PlayerName from '@/components/core-app/player-card/PlayerName'
 import { gameDetailHref } from '@/lib/live/gameDetailLink'
 import type { LiveGameCard, LivePageData } from '@/lib/live/liveScoresPage'
 import { matchesLiveGameQuery } from '@/lib/live/liveGameSearch'
@@ -413,8 +414,10 @@ export function LiveScores({ data: initial, selectedLeagueId = null }: LiveScore
                   /* Keyed on the feed's own idempotency key — the same key it
                      dedupes on, so re-polling cannot duplicate a row. */
                   <li key={p.id} className="af-live-play" data-tone={playTone(p.type)}>
+                    {/* The Sleeper id is the headshot fallback for the ~85% of players
+                        with no image on file; without it every row was a letter. */}
                     <MiniPlayerImg
-                      sleeperId={null}
+                      sleeperId={p.sleeperId}
                       name={p.playerName}
                       avatarUrl={p.imageUrl}
                       size={28}
@@ -446,18 +449,24 @@ export function LiveScores({ data: initial, selectedLeagueId = null }: LiveScore
                         ) : null}
                       </span>
                       {/*
-                        `headline` already reads "Bijan Robinson (RB) ran for 17
-                        yards" — it carries the name and the position, so those
-                        are not repeated beside it.
-
-                        ⚠ AND `yards` IS NOT RENDERED, ON PURPOSE. It is
-                        `Math.round(delta)` of whatever stat moved, so it is a
-                        yardage only for yardage stats; on a touchdown the stat
-                        is a counter and the delta is 1, which would print as
-                        "+1" next to a scoring play. The headline is the composed
-                        sentence that already knows the difference.
+                        The name, then what he did: "Ashton Jeanty (RB) 34-yard
+                        rushing TD". The name is a player-card button; `action`
+                        already carries the yardage, the play type and the passer,
+                        so `yards` is not printed again beside it.
                       */}
-                      <span className="af-live-play-line">{p.headline}</span>
+                      <span className="af-live-play-line">
+                        <PlayerName
+                          sport="NFL"
+                          sleeperId={p.sleeperId}
+                          name={p.playerName}
+                          position={p.position}
+                          team={p.team}
+                          imageUrl={p.imageUrl}
+                          className="af-live-play-name"
+                        />
+                        {p.position ? <span className="af-live-play-pos"> ({p.position})</span> : null}
+                        {p.action ? ` ${p.action}` : null}
+                      </span>
                     </span>
                   </li>
                 ))}
@@ -626,12 +635,20 @@ export function GameCard({
           <p className="af-live-lastplay-text">{lastPlay.headline}</p>
           <span className="af-live-lastplay-who">
             <MiniPlayerImg
-              sleeperId={null}
+              sleeperId={lastPlay.sleeperId}
               name={lastPlay.playerName}
               avatarUrl={lastPlay.imageUrl}
               size={20}
             />
-            <span className="af-live-lastplay-name">{lastPlay.playerName}</span>
+            <PlayerName
+              sport="NFL"
+              sleeperId={lastPlay.sleeperId}
+              name={lastPlay.playerName}
+              position={lastPlay.position}
+              team={lastPlay.team}
+              imageUrl={lastPlay.imageUrl}
+              className="af-live-lastplay-name"
+            />
             {/* Only when the identity map actually resolved it — the feed sends
                 team: null on every Rolling Insights event, so a blank chip here
                 would be the normal case rather than the exception. */}
@@ -675,7 +692,7 @@ export function GameCard({
       ) : null}
 
       {starters.length > 0 ? (
-        <MyStarters gameId={game.gameId} groups={starters} selectedLeagueId={selectedLeagueId} />
+        <MyStarters gameId={game.gameId} sport={game.sport} groups={starters} selectedLeagueId={selectedLeagueId} />
       ) : null}
     </article>
   )
@@ -974,74 +991,119 @@ function Leaders({ game }: { game: LiveGameCard }) {
  */
 function MyStarters({
   gameId,
+  sport,
   groups,
   selectedLeagueId,
 }: {
   gameId: string
+  sport: string
   groups: StarterGroup[]
   selectedLeagueId: string | null
 }) {
+  /*
+   * The whole list collapses (user request, 2026-09-13): on a game you start
+   * eight players in, this list is most of the card, and someone following the
+   * score does not always want it. It starts OPEN — the list is the reason
+   * "My games" exists.
+   */
+  const [open, setOpen] = useState(true)
+  const listId = `af-live-mine-list-${gameId}`
   const leagueCount = new Set(groups.flatMap((g) => g.leagues.map((l) => l.leagueId))).size
   return (
-    <div className="af-live-tieins">
-      <p className="af-label af-live-tieins-head">
-        Your starters · {groups.length} {groups.length === 1 ? 'player' : 'players'} · {leagueCount}{' '}
-        {leagueCount === 1 ? 'league' : 'leagues'}
-      </p>
-      <ul className="af-live-mine">
-        {groups.map((g) => (
-          <StarterRow key={g.playerId} gameId={gameId} group={g} selectedLeagueId={selectedLeagueId} />
-        ))}
-      </ul>
+    <div className="af-live-tieins" data-open={open}>
+      <button
+        type="button"
+        className="af-live-tieins-toggle"
+        aria-expanded={open}
+        aria-controls={open ? listId : undefined}
+        onClick={() => setOpen((o) => !o)}
+      >
+        <span className="af-label af-live-tieins-head">
+          Your starters · {groups.length} {groups.length === 1 ? 'player' : 'players'} · {leagueCount}{' '}
+          {leagueCount === 1 ? 'league' : 'leagues'}
+        </span>
+        <span className="af-live-mine-chev" aria-hidden />
+      </button>
+      {open ? (
+        <ul id={listId} className="af-live-mine">
+          {groups.map((g) => (
+            <StarterRow key={g.playerId} gameId={gameId} sport={sport} group={g} selectedLeagueId={selectedLeagueId} />
+          ))}
+        </ul>
+      ) : null}
     </div>
   )
 }
 
 function StarterRow({
   gameId,
+  sport,
   group,
   selectedLeagueId,
 }: {
   gameId: string
+  sport: string
   group: StarterGroup
   selectedLeagueId: string | null
 }) {
   const [open, setOpen] = useState(false)
   const summary = pointsSummary(group)
   const panelId = `af-live-mine-${gameId}-${group.playerId}`
-  const holdsSelected = selectedLeagueId != null && group.leagues.some((l) => l.leagueId === selectedLeagueId)
+  const selected =
+    selectedLeagueId != null ? (group.leagues.find((l) => l.leagueId === selectedLeagueId) ?? null) : null
   const n = group.leagues.length
+  /*
+   * Each league scores the same play its own way. With a league in hand the row
+   * shows THAT league's points; across leagues it is a range, and the disclosure
+   * lists every league's own number. An em dash when nobody has reported.
+   */
+  const points = selected
+    ? selected.points == null
+      ? '—'
+      : `${selected.points.toFixed(1)} pts`
+    : summary == null
+      ? '—'
+      : summary.min === summary.max
+        ? `${summary.max.toFixed(1)} pts`
+        : `${summary.min.toFixed(1)}–${summary.max.toFixed(1)} pts`
 
   return (
-    <li className="af-live-mine-row" data-open={open} data-selected={holdsSelected}>
-      <button
-        type="button"
-        className="af-live-mine-toggle"
-        aria-expanded={open}
-        aria-controls={open ? panelId : undefined}
-        onClick={() => setOpen((o) => !o)}
-      >
+    <li className="af-live-mine-row" data-open={open} data-selected={selected != null}>
+      <div className="af-live-mine-head">
         <MiniPlayerImg sleeperId={group.playerId} name={group.playerName} avatarUrl={group.imageUrl} size={30} />
+        {/*
+          The name opens the player card; the rest of the row opens the leagues.
+          Two separate buttons — a button inside a button is invalid HTML, and a
+          screen reader could not tell the two actions apart.
+        */}
         <span className="af-live-mine-name">
-          {group.playerName}
+          <PlayerName
+            sport={sport}
+            sleeperId={group.playerId}
+            name={group.playerName}
+            position={group.position}
+            imageUrl={group.imageUrl}
+            leagueId={selected?.leagueId ?? null}
+            className="af-live-mine-player"
+          />
           {group.position ? <span className="af-live-mine-pos"> {group.position}</span> : null}
         </span>
-        <span className="af-live-mine-count">
-          {n} {n === 1 ? 'league' : 'leagues'}
-        </span>
-        {/*
-          A range across leagues, never one league's number — each league scores
-          the same play its own way. An em dash when nobody has reported.
-        */}
-        <span className="af-live-mine-pts af-num">
-          {summary == null
-            ? '—'
-            : summary.min === summary.max
-              ? `${summary.max.toFixed(1)} pts`
-              : `${summary.min.toFixed(1)}–${summary.max.toFixed(1)} pts`}
-        </span>
-        <span className="af-live-mine-chev" aria-hidden />
-      </button>
+        <button
+          type="button"
+          className="af-live-mine-toggle"
+          aria-expanded={open}
+          aria-controls={open ? panelId : undefined}
+          onClick={() => setOpen((o) => !o)}
+        >
+          <span className="af-live-mine-count">
+            {n} {n === 1 ? 'league' : 'leagues'}
+          </span>
+          <span className="af-live-mine-pts af-num" title={selected ? `Points in ${selected.leagueName}` : undefined}>
+            {points}
+          </span>
+          <span className="af-live-mine-chev" aria-hidden />
+        </button>
+      </div>
       {open ? (
         <ul id={panelId} className="af-live-mine-leagues">
           {group.leagues.map((l) => (

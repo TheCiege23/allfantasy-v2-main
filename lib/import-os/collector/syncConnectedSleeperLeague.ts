@@ -28,6 +28,7 @@ import { createPrismaSleeperSyncStore } from './prismaSyncStore'
 import { createAutomationSyncLock } from './automationSyncLock'
 import { ensureMatchupsCached } from '@/lib/rankings-engine/sleeper-matchup-cache'
 import { ingestSleeperPlayerScoresForWeek } from '@/lib/sleeper/sync/ingestSleeperPlayerScores'
+import { sleeperScoreTargetWeeks } from '@/lib/sleeper/sync/sleeperScoreTargetWeeks'
 
 /** NFL regular season + playoffs. The cache only fetches weeks it lacks. */
 const MAX_WEEKS = 18
@@ -347,26 +348,8 @@ export async function syncConnectedLeague(
      * cache: enrichment must never fail a sync that already succeeded.
      */
     try {
-      const weekRows = await prisma.weeklyMatchup.groupBy({
-        by: ['week'],
-        where: { leagueId: connection.externalLeagueId, seasonYear: connection.season },
-        _sum: { pointsFor: true },
-        orderBy: { week: 'asc' },
-      })
-      let frontier: number | null = null
-      for (const r of weekRows) {
-        if ((r._sum.pointsFor ?? 0) === 0) {
-          frontier = r.week
-          break
-        }
-      }
-      const targetWeeks = new Set<number>()
-      if (frontier !== null) {
-        targetWeeks.add(frontier)
-        if (frontier > 1) targetWeeks.add(frontier - 1)
-      } else if (weekRows.length > 0) {
-        targetWeeks.add(weekRows[weekRows.length - 1].week)
-      }
+      // Shared with the live-game refresh (`lib/live/liveSleeperPointsSync.ts`) so both target the same weeks.
+      const targetWeeks = await sleeperScoreTargetWeeks(connection.externalLeagueId, connection.season)
       for (const week of targetWeeks) {
         const scores = await ingestSleeperPlayerScoresForWeek(
           connection.externalLeagueId,

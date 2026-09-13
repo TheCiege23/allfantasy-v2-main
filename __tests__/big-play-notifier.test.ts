@@ -14,7 +14,7 @@ vi.mock('@/lib/prisma', () => ({
 }))
 vi.mock('@/lib/notification-engine', () => ({ ingestBatch: h.ingestBatch }))
 
-import { notifyBigPlays, notificationTitleFor } from '@/lib/live/bigPlayNotifier'
+import { notifyBigPlays, notificationTitleFor, ownersByPlayerId } from '@/lib/live/bigPlayNotifier'
 import type { LiveEvent } from '@/lib/live/eventDetector'
 
 const ev = (over: Partial<LiveEvent> = {}): LiveEvent =>
@@ -24,11 +24,12 @@ const ev = (over: Partial<LiveEvent> = {}): LiveEvent =>
     playerName: 'Bijan Robinson',
     team: 'ATL',
     type: 'BIG_PLAY',
-    stat: 'rushing_yards',
+    stat: 'run',
+    role: 'rusher',
     delta: 24,
-    value: 88,
+    value: 24,
     detectedAt: new Date('2026-09-20T18:00:00Z'),
-    idempotencyKey: '20260920-1-26:42:BIG_PLAY',
+    idempotencyKey: 'pbp:20260920-1-26:42:BIG_PLAY',
     ...over,
   }) as LiveEvent
 
@@ -49,33 +50,44 @@ beforeEach(() => {
 })
 
 describe('who gets told', () => {
-  it('notifies only the managers who roster the player', async () => {
-    // The whole feature. An alert for every 20-yard run in the league is a
-    // notification every few seconds on a Sunday, which trains people to mute.
+  it('notifies the managers starting the player', async () => {
     const res = await notifyBigPlays([ev()])
     expect(res.notificationsSent).toBe(1)
     expect(h.ingestBatch.mock.calls[0][0][0].userIds).toEqual(['user-1'])
   })
 
-  it('sends nothing when nobody rosters the player', async () => {
+  it('sends nothing when nobody starts the player', async () => {
     h.findMany.mockResolvedValue([])
     const res = await notifyBigPlays([ev()])
     expect(res.skipped).toBe('no-rosters')
     expect(h.ingestBatch).not.toHaveBeenCalled()
   })
 
-  it('excludes dropped players and inactive seasons at the query', async () => {
+  it('STARTERS ONLY: bench, IR and taxi slots are excluded at the query, in both spellings', async () => {
+    // User decision 2026-09-13: a benched player's touchdown scores nothing for you.
     await notifyBigPlays([ev()])
     const where = h.findMany.mock.calls[0][0].where
-    // A dropped player keeps his row until droppedAt is set — without this a
-    // manager hears about someone they cut last week.
+    expect(where.NOT.slotType.in).toEqual(expect.arrayContaining(['bench', 'BENCH', 'IR', 'TAXI']))
+    // A dropped player keeps his row until droppedAt is set.
     expect(where.droppedAt).toBeNull()
     expect(where.roster.season.status).toBe('active')
     // ...and queries by the TRANSLATED Sleeper id, never the RI feed id.
     expect(where.playerId.in).toEqual(['11560'])
   })
 
-  it('tells a manager once even when they hold the player in several leagues', async () => {
+  it('STARTERS ONLY on imported leagues too: the lineup array, not the whole roster', async () => {
+    await notifyBigPlays([ev()])
+    expect(h.rawQuery.mock.calls[0][0]).toContain(`->'starters'`)
+    expect(h.rawQuery.mock.calls[0][0]).not.toContain(`->'players'`)
+  })
+
+  it('control: the injury importer still gets the whole roster by default', async () => {
+    await ownersByPlayerId(['101'])
+    expect(h.findMany.mock.calls[0][0].where.NOT).toBeUndefined()
+    expect(h.rawQuery.mock.calls[0][0]).toContain(`->'players'`)
+  })
+
+  it('tells a manager once even when they start the player in several leagues', async () => {
     h.findMany.mockResolvedValue([
       { playerId: '11560', roster: { ownerId: 'user-1' } },
       { playerId: '11560', roster: { ownerId: 'user-1' } },
@@ -86,37 +98,75 @@ describe('who gets told', () => {
   })
 })
 
+describe('a passing play is told to both ends', () => {
+  const td = ev({
+    type: 'TOUCHDOWN', stat: 'pass', role: 'receiver', delta: 34, value: 34,
+    playerId: '101', playerName: 'Drake London', passerId: '202', passerName: 'Kirk Cousins',
+    idempotencyKey: 'pbp:20260920-1-26:77:TOUCHDOWN',
+  })
+
+  beforeEach(() => {
+    h.identityFind.mockResolvedValue([
+      { rollingInsightsId: '101', sleeperId: '11560' },
+      { rollingInsightsId: '202', sleeperId: '5000' },
+    ])
+    h.findMany.mockResolvedValue([
+      { playerId: '11560', roster: { ownerId: 'user-wr' } },
+      { playerId: '5000', roster: { ownerId: 'user-qb' } },
+      // Starts both: hears it once, from the scorer's side.
+      { playerId: '5000', roster: { ownerId: 'user-wr' } },
+    ])
+  })
+
+  it("the receiver's managers and the passer's managers each get their own line", async () => {
+    const res = await notifyBigPlays([td])
+    expect(res.notificationsSent).toBe(2)
+    const [receiver, passer] = h.ingestBatch.mock.calls[0][0]
+    expect(receiver.userIds).toEqual(['user-wr'])
+    expect(receiver.body).toBe('Drake London 34-yard receiving TD from Kirk Cousins')
+    expect(passer.userIds).toEqual(['user-qb'])
+    expect(passer.body).toBe('Kirk Cousins 34-yard TD pass to Drake London')
+    // Looked up both players in one pass.
+    expect(h.identityFind.mock.calls[0][0].where.rollingInsightsId.in).toEqual(['101', '202'])
+  })
+
+  it('each side is its own device notification', async () => {
+    await notifyBigPlays([td])
+    const [receiver, passer] = h.ingestBatch.mock.calls[0][0]
+    expect(receiver.meta.pushTag).not.toBe(passer.meta.pushTag)
+    expect(receiver.meta.playerId).toBe('101')
+    expect(passer.meta.playerId).toBe('202')
+  })
+})
+
 describe('the correction guard', () => {
   it('NEVER alerts on a negative delta', async () => {
-    // A cumulative stat going down is a stat correction, not a play. The vendor
-    // reprocesses for ~12h after a game and ships no correction flag, so a
-    // revision is indistinguishable from a new event except by its sign.
+    // A cumulative stat going down is a stat correction, not a play.
     const res = await notifyBigPlays([ev({ delta: -24 })])
     expect(res.eventsAlertable).toBe(0)
     expect(h.ingestBatch).not.toHaveBeenCalled()
   })
 
   it('still alerts on a genuine zero-yard touchdown', async () => {
-    // A 0-yard plunge is a real touchdown. Only NEGATIVE means correction.
     const res = await notifyBigPlays([ev({ type: 'TOUCHDOWN', delta: 0 })])
     expect(res.notificationsSent).toBe(1)
   })
 })
 
-describe('what is worth interrupting a Sunday for', () => {
-  it('covers the plays a manager actually wants', async () => {
-    for (const type of ['TOUCHDOWN', 'BIG_PLAY', 'DEFENSIVE_SCORE', 'SPECIAL_TEAMS_SCORE', 'TURNOVER'] as const) {
+describe('every score and every 20+ yard play', () => {
+  it('covers every scoring type, big plays and turnovers', async () => {
+    for (const type of ['TOUCHDOWN', 'BIG_PLAY', 'FIELD_GOAL', 'DEFENSIVE_SCORE', 'SPECIAL_TEAMS_SCORE', 'TURNOVER'] as const) {
       h.ingestBatch.mockClear()
       const res = await notifyBigPlays([ev({ type })])
       expect(res.notificationsSent, `${type} should alert`).toBe(1)
     }
   })
 
-  it('does NOT alert on a field goal', async () => {
-    // Real event, bad notification: the kicker's owner cares, nobody else does,
-    // and it fires several times a game.
-    const res = await notifyBigPlays([ev({ type: 'FIELD_GOAL' })])
-    expect(res.eventsAlertable).toBe(0)
+  it('a field goal is a score now (user decision 2026-09-13)', async () => {
+    await notifyBigPlays([ev({ type: 'FIELD_GOAL', stat: 'field_goal', role: 'kicker' })])
+    const n = h.ingestBatch.mock.calls[0][0][0]
+    expect(n.title).toBe('Field goal')
+    expect(n.severity).toBe('medium')
   })
 
   it('wakes you for a touchdown, not for a 21-yard catch', async () => {
@@ -129,33 +179,33 @@ describe('what is worth interrupting a Sunday for', () => {
 })
 
 describe('the payload', () => {
-  it('carries the idempotency key so an alert can be retracted', async () => {
-    // Officiating reversals happen and the vendor ships no correction flag.
-    // Without this key a later reversal cannot find the notification it needs
-    // to correct, and the manager keeps believing an overturned touchdown.
+  it('carries the idempotency key so an alert can be retracted and a second TD is not collapsed', async () => {
     await notifyBigPlays([ev()])
-    expect(h.ingestBatch.mock.calls[0][0][0].meta.idempotencyKey)
-      .toBe('20260920-1-26:42:BIG_PLAY')
+    expect(h.ingestBatch.mock.calls[0][0][0].meta.idempotencyKey).toBe('pbp:20260920-1-26:42:BIG_PLAY')
   })
 
-  it('reads like a sentence, not a stat key', async () => {
+  it('names its own push tag, per play', async () => {
+    await notifyBigPlays([ev(), ev({ idempotencyKey: 'pbp:20260920-1-26:55:BIG_PLAY' })])
+    const [a, b] = h.ingestBatch.mock.calls[0][0]
+    expect(a.meta.pushTag).toBe('live-play:pbp:20260920-1-26:42:BIG_PLAY:subject')
+    expect(a.meta.pushTag).not.toBe(b.meta.pushTag)
+  })
+
+  it('reads like a sentence with the yardage, and opens Live Scores', async () => {
     await notifyBigPlays([ev()])
     const n = h.ingestBatch.mock.calls[0][0][0]
     expect(n.title).toBe('Big play')
-    expect(n.body).toContain('Bijan Robinson')
-    expect(n.body).toContain('24')
+    expect(n.body).toBe('Bijan Robinson 24-yard run')
+    expect(n.actionHref).toBe('/core/live?sport=NFL')
   })
 
-  it('never emails a big play — in-app + push only', async () => {
-    // The category default is in-app + email; an email per big play is a
-    // Sunday inbox flood that burns the sending domain.
+  it('never emails or texts a play — in-app + push only', async () => {
     await notifyBigPlays([ev()])
     expect(h.ingestBatch.mock.calls[0][0][0].skipChannels).toEqual({ email: true, sms: true })
   })
 
   it('never throws when the notification engine fails', async () => {
     h.ingestBatch.mockRejectedValue(new Error('queue down'))
-    // This runs behind live scoring. A missed alert must not cost a score.
     await expect(notifyBigPlays([ev()])).resolves.toMatchObject({ notificationsSent: 0 })
   })
 
@@ -167,6 +217,7 @@ describe('the payload', () => {
 describe('notificationTitleFor', () => {
   it('names each event the way a person would', () => {
     expect(notificationTitleFor(ev({ type: 'TOUCHDOWN' }))).toBe('Touchdown')
+    expect(notificationTitleFor(ev({ type: 'FIELD_GOAL' }))).toBe('Field goal')
     expect(notificationTitleFor(ev({ type: 'DEFENSIVE_SCORE' }))).toBe('Defensive touchdown')
     expect(notificationTitleFor(ev({ type: 'SPECIAL_TEAMS_SCORE' }))).toBe('Special teams touchdown')
   })
@@ -174,25 +225,18 @@ describe('notificationTitleFor', () => {
 
 describe('imported leagues', () => {
   it('notifies Sleeper managers, who outnumber redraft managers 4 to 1', async () => {
-    // 205 redraft roster rows against 914 imported ones. Querying only the
-    // first fires for a fifth of the league and looks broken to everyone else.
     h.findMany.mockResolvedValue([])
-    h.identityFind.mockResolvedValue([{ rollingInsightsId: '101', sleeperId: '11560' }])
     h.rawQuery.mockResolvedValue([{ platformUserId: 'sleeper-user-9' }])
     h.profileFind.mockResolvedValue([{ userId: 'af-user-9', sleeperUserId: 'sleeper-user-9' }])
 
     const res = await notifyBigPlays([ev()])
     expect(res.notificationsSent).toBe(1)
-    // The Sleeper user id is translated to OUR user id — the dispatcher
-    // silently drops ids it cannot find a settings profile for.
+    // The Sleeper user id is translated to OUR user id.
     expect(h.ingestBatch.mock.calls[0][0][0].userIds).toEqual(['af-user-9'])
   })
 
   it('crosses RI ids to Sleeper ids rather than assuming they match', async () => {
-    h.identityFind.mockResolvedValue([{ rollingInsightsId: '101', sleeperId: '11560' }])
-    h.rawQuery.mockResolvedValue([])
     await notifyBigPlays([ev()])
-    // The feed speaks Rolling Insights ids; rosters hold Sleeper ids.
     expect(h.identityFind.mock.calls[0][0].where.rollingInsightsId.in).toEqual(['101'])
     expect(h.rawQuery.mock.calls[0][1]).toBe(JSON.stringify(['11560']))
   })
@@ -206,8 +250,6 @@ describe('imported leagues', () => {
   })
 
   it('still alerts redraft managers when the imported roster lookup fails', async () => {
-    // Imported resolution is additive. A failure there must not mean nobody
-    // gets an alert.
     h.rawQuery.mockRejectedValue(new Error('db down'))
     const res = await notifyBigPlays([ev()])
     expect(res.notificationsSent).toBe(1)
@@ -216,7 +258,6 @@ describe('imported leagues', () => {
 
   it('merges both league types for the same player without duplicates', async () => {
     h.findMany.mockResolvedValue(rostered('11560', 'redraft-user'))
-    h.identityFind.mockResolvedValue([{ rollingInsightsId: '101', sleeperId: '11560' }])
     h.rawQuery.mockResolvedValue([{ platformUserId: 'sleeper-user-9' }, { platformUserId: 'sleeper-user-9' }])
     h.profileFind.mockResolvedValue([{ userId: 'af-user-9', sleeperUserId: 'sleeper-user-9' }])
     await notifyBigPlays([ev()])
