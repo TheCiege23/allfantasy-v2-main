@@ -318,6 +318,12 @@ export async function POST(
       if (commandResult.handled && !commandResult.ok) {
         return NextResponse.json({ error: commandResult.error ?? 'Survivor command failed' }, { status: commandResult.status ?? 400 })
       }
+      // A recorded ballot is private. Posting the raw "vote Team Alpha" to the tribe or league chat
+      // would show everyone who voted for whom; the official Tribal Council endpoint posts nothing.
+      const isRecordedBallot =
+        commandResult.handled &&
+        commandResult.ok &&
+        (commandResult.intent === 'vote' || commandResult.intent === 'jury_vote')
       const messageMetadata =
         body?.metadata && typeof body.metadata === 'object' && !Array.isArray(body.metadata)
           ? (body.metadata as Record<string, unknown>)
@@ -328,6 +334,9 @@ export async function POST(
         metadata: messageMetadata,
         source,
         parentMessageId,
+        ...(isRecordedBallot
+          ? { isPrivate: true, visibleToUserId: user.appUserId, messageSubtype: 'survivor_private_ballot' }
+          : {}),
       })
       return NextResponse.json({
         status: 'ok',
