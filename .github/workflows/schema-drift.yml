@@ -1,0 +1,167 @@
+name: Schema drift
+
+# Alerts when prisma/schema.prisma and the production database stop agreeing in a NEW way.
+#
+# WHY THIS EXISTS
+# `prisma migrate status` compares migration folders with ledger rows and never looks at tables.
+# On 2026-09-13 it said "up to date" while schema.prisma would have DROPPED two live tables on the
+# next `migrate dev` or `db push`. The guard that sees this (scripts/check-schema-drift.ts, #799)
+# was first written in June and never ran, because nothing ran it. This is the thing that runs it.
+#
+# WHAT IT DOES
+# `npm run db:drift:ci`, against the DATABASE_URL secret: a read-only `prisma migrate diff` from the
+# live database to the schema, ratcheted against scripts/schema-drift-baseline.json. The baseline
+# holds production's known, human-decision-pending drift; only something NOT in it fails.
+#
+#   exit 0  nothing new                 -> closes the alert issue if one is open
+#   exit 1  new drift                   -> opens / comments on ONE alert issue
+#   exit 2  could not measure           -> same issue, labelled as not-a-verdict
+#
+# 🛑 READ-ONLY, AND PINNED BY A TEST. No step applies SQL, pushes a schema, or rewrites the
+# baseline — __tests__/schema-drift-workflow.test.ts fails if one is added. Re-baselining is a
+# reviewed PR (`npm run db:drift:baseline`), never an automated step, or the ratchet ratchets
+# itself open.
+#
+# ⚠ THE DERIVED URL IS MASKED BY HAND. GitHub masks the exact DATABASE_URL string. The direct
+# (non-pooler) URL derived from it is a DIFFERENT string containing the same password, so it is
+# not masked unless registered with ::add-mask:: before first use. The guard itself never prints
+# a URL and redacts Prisma's stderr; the mask is the second layer, not the only one.
+#
+# ⚠ WHY THE DIRECT HOST. Neon's `-pooler` endpoint is PgBouncer in transaction mode, which Prisma's
+# schema engine does not reliably work through. Neon's direct host is the same host without
+# `-pooler`. Target identity is unaffected — db-target-identity.cjs strips `-pooler` too.
+#
+# REQUIRED CONFIGURATION
+#   repository secret  DATABASE_URL   — already set for cron-freshness.yml. Read-only access is
+#                                     sufficient; this issues only introspection queries.
+# With it unset the job logs a notice and exits green.
+#
+# ⚠ GITHUB DROPS SCHEDULED TRIGGERS (6 of 24 hourly slots, measured 2026-08-28 — see
+# cron-freshness.yml). Two daily slots plus the push trigger make a silent multi-day gap unlikely,
+# not impossible. A schema change on main always runs it.
+
+on:
+  schedule:
+    - cron: "41 5 * * *"
+    - cron: "41 17 * * *"
+  push:
+    branches: [main]
+    paths:
+      - prisma/schema.prisma
+      - scripts/check-schema-drift.ts
+      - scripts/schema-drift-baseline.json
+      - scripts/schema-drift-summary.mjs
+      - .github/workflows/schema-drift.yml
+  workflow_dispatch:
+    inputs:
+      report_only:
+        description: 'Print the report without failing the run or touching the alert issue'
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: schema-drift
+  cancel-in-progress: false
+
+jobs:
+  drift:
+    name: Check schema drift
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      # Exactly the two tools the guard needs, at the lockfile's versions (pinned by the test), into
+      # a scratch prefix. `npm ci` on this repo is minutes and would run postinstall's prisma
+      # generate for nothing. node_modules is a symlink so the guard finds prisma where it looks.
+      - name: Install prisma and tsx
+        run: |
+          set -euo pipefail
+          npm install --prefix "$RUNNER_TEMP/drift-tools" --no-save --no-audit --no-fund --no-package-lock prisma@5.22.0 tsx@4.21.0
+          ln -s "$RUNNER_TEMP/drift-tools/node_modules" node_modules
+          node node_modules/prisma/build/index.js --version | head -1
+
+      # ⚠ DELIBERATELY NOT `set -e`. Exit 1 and exit 2 ARE the signal; failing the step here would
+      # skip the summary and the alert, which are what make the signal reach anyone.
+      - name: Measure drift
+        id: check
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          set -uo pipefail
+          if [ -z "${DATABASE_URL:-}" ]; then
+            echo "::notice::DATABASE_URL is not set -- skipping the schema drift check."
+            echo "skipped=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "skipped=false" >> "$GITHUB_OUTPUT"
+          DIRECT=$(printf '%s' "$DATABASE_URL" | sed -E 's#(@[^/@.]+)-pooler\.#\1.#')
+          MASK=${DIRECT//%/%25}
+          echo "::add-mask::$MASK"
+          DIRECT_URL="$DIRECT" DATABASE_URL="$DIRECT" node node_modules/tsx/dist/cli.mjs scripts/check-schema-drift.ts --ci --json > drift.json 2> drift.err
+          RC=$?
+          echo "rc=$RC" >> "$GITHUB_OUTPUT"
+          echo "--- guard stderr ---"
+          cat drift.err
+          echo "guard exit: $RC"
+
+      - name: Summarise
+        if: always() && steps.check.outputs.skipped == 'false'
+        env:
+          RC: ${{ steps.check.outputs.rc }}
+        run: |
+          set -uo pipefail
+          node scripts/schema-drift-summary.mjs --rc "${RC:-missing}" --report drift.json --stderr drift.err --out drift-summary.md
+          cat drift-summary.md >> "$GITHUB_STEP_SUMMARY"
+
+      # ONE open issue, commented on, never one per run — an alarm that spams gets muted. Closed
+      # automatically once a run is back within the baseline, so an open issue always means "now".
+      - name: Open, update or close the alert issue
+        if: always() && steps.check.outputs.skipped == 'false' && inputs.report_only != true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          RC: ${{ steps.check.outputs.rc }}
+        run: |
+          set -uo pipefail
+          [ -f drift-summary.md ] || printf 'Summary unavailable (guard exit %s).\n' "${RC:-missing}" > drift-summary.md
+          printf '\n%s\n' "$RUN_URL" >> drift-summary.md
+          EXISTING=$(gh issue list --repo "$REPO" --label schema-drift --state open --limit 1 --json number --jq '.[0].number' 2>/dev/null || echo "")
+          if [ "${RC:-}" = "0" ]; then
+            if [ -n "$EXISTING" ]; then
+              gh issue comment "$EXISTING" --repo "$REPO" --body-file drift-summary.md || echo "::warning::could not comment on #$EXISTING"
+              gh issue close "$EXISTING" --repo "$REPO" --reason completed || echo "::warning::could not close #$EXISTING"
+            fi
+            exit 0
+          fi
+          if [ -n "$EXISTING" ]; then
+            gh issue comment "$EXISTING" --repo "$REPO" --body-file drift-summary.md || echo "::warning::could not comment on #$EXISTING"
+          else
+            gh label create schema-drift --repo "$REPO" --color B60205 --description "schema.prisma and production diverged beyond the baseline" 2>/dev/null || true
+            if [ "${RC:-}" = "1" ]; then TITLE="Schema drift: new drift beyond the baseline"; else TITLE="Schema drift: guard could not measure (exit ${RC:-missing})"; fi
+            gh issue create --repo "$REPO" --label schema-drift --title "$TITLE" --body-file drift-summary.md || echo "::warning::could not open an issue"
+          fi
+
+      - name: Verdict
+        if: always() && steps.check.outputs.skipped == 'false'
+        env:
+          RC: ${{ steps.check.outputs.rc }}
+          REPORT_ONLY: ${{ inputs.report_only }}
+        run: |
+          set -uo pipefail
+          if [ "${REPORT_ONLY:-false}" = "true" ]; then echo "::notice::report_only -- not failing the run"; exit 0; fi
+          case "${RC:-}" in
+            0) echo "no new schema drift" ;;
+            1) echo "::error::new schema drift beyond the baseline"; exit 1 ;;
+            *) echo "::error::schema drift guard could not measure (exit ${RC:-missing})"; exit 1 ;;
+          esac
