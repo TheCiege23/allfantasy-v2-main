@@ -71,7 +71,7 @@ export function AutomationHistoryDialog({ automation, history, onOpenChange }: A
                           }}
                           className="focus-ring cursor-pointer"
                         >
-                          <TableCell>{new Date(entry.startedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</TableCell>
+                          <TableCell>{new Date(entry.startedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })}</TableCell>
                           <TableCell>
                             <span style={{ color: style.text }}>{AUTOMATION_RESULT_LABELS[entry.result]}</span>
                           </TableCell>
