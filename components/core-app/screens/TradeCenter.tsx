@@ -416,6 +416,10 @@ export function TradeCenter(props: {
     (r) => r.rosterId !== rosterData?.viewerTeamRosterId,
   )
   const theirLabel = partnerRoster?.ownerName ?? props.opponentLabel ?? 'Their team'
+  const valueActions = (myRoster?.players ?? [])
+    .filter((player) => player.stock === 'up' || player.stock === 'down')
+    .sort((a, b) => Math.abs(b.stockDelta ?? 0) - Math.abs(a.stockDelta ?? 0))
+    .slice(0, 5)
 
   const addAsset = useCallback(
     (side: 'give' | 'get', asset: PickedAsset) => {
@@ -705,6 +709,27 @@ export function TradeCenter(props: {
 
   const legend = assetTypesFor(props.leagueType, props.leagueVariant)
 
+  const valueSources = Array.from(
+    new Set(
+      [...(result?.players?.give ?? give), ...(result?.players?.get ?? get)]
+        .map((line) => line.pricedSource?.trim())
+        .filter((source): source is string => Boolean(source)),
+    ),
+  )
+  const yourIncentive = intel?.contenderRecommendation ?? intel?.why ??
+    (balance?.diff != null && balance.diff >= 0
+      ? `You receive about ${money(balance.diff)} more in current market value.`
+      : 'The deal may improve your roster construction even when the raw market total is close.')
+  const theirIncentive = balance?.diff != null && balance.diff <= 0
+    ? `They receive about ${money(Math.abs(balance.diff))} more in current market value.`
+    : `They receive ${give.length} asset${give.length === 1 ? '' : 's'}, which may fit a different timeline or positional need.`
+  const agreementBlocker = intel?.tradeWarnings?.[0] ??
+    (balance?.diff != null && balance.diff > 0
+      ? `The current market baseline favors you by ${money(balance.diff)}, so they may ask for another asset.`
+      : unpricedCount([...give, ...get]) > 0
+        ? 'One or more assets are unpriced, which lowers confidence until fresh data is available.'
+        : 'Manager preference, roster limits, and each team’s competitive window can still prevent agreement.')
+
   /*
    * Hand the deal to Chimmy.
    *
@@ -860,6 +885,24 @@ export function TradeCenter(props: {
         onCounter={startCounter}
         reloadToken={inboxReloadToken}
       />
+
+      {valueActions.length > 0 ? (
+        <section className="af-tc-value-actions">
+          <div className="af-label">Value changes · actions for {props.league?.name ?? 'this league'}</div>
+          <div className="af-tc-value-action-list">
+            {valueActions.map((player) => (
+              <div key={player.id} className="af-tc-value-action" data-direction={player.stock}>
+                {player.imageUrl ? <img src={player.imageUrl} alt="" width={32} height={32} /> : <span className="af-tc-glyph">{player.position?.slice(0, 1) ?? 'P'}</span>}
+                <div>
+                  <strong>{player.name}</strong>
+                  <span>{player.position ?? 'Player'} · {player.stock === 'up' ? `up ${money(Math.abs(player.stockDelta ?? 0))}` : `down ${money(Math.abs(player.stockDelta ?? 0))}`} over 30 days</span>
+                </div>
+                <b>{player.stock === 'up' ? 'Hold or investigate a sell-high offer' : 'Review the cause before selling; consider a buy-low window'}</b>
+              </div>
+            ))}
+          </div>
+        </section>
+      ) : null}
 
       {/*
         Naming the other side is not decoration. It is what turns on the whole
@@ -1316,6 +1359,31 @@ export function TradeCenter(props: {
               <div className="af-tc-pair-label">Wins long term</div>
               <div className="af-tc-pair-value">{intel.whoWinsLongTerm ?? '—'}</div>
             </div>
+          </div>
+
+          <div className="af-tc-incentives">
+            <div className="af-tc-incentive" data-side="you">
+              <div className="af-tc-pair-label">Why you may accept</div>
+              <p>{yourIncentive}</p>
+            </div>
+            <div className="af-tc-incentive" data-side="them">
+              <div className="af-tc-pair-label">Why {theirLabel} may accept</div>
+              <p>{theirIncentive}</p>
+            </div>
+            <div className="af-tc-incentive" data-side="blocker">
+              <div className="af-tc-pair-label">What may stop agreement</div>
+              <p>{agreementBlocker}</p>
+            </div>
+          </div>
+
+          <div className="af-label">How these values become advice</div>
+          <div className="af-tc-value-layers">
+            <div><span>Market baseline</span><strong>{money(balance?.give)} sent · {money(balance?.get)} received</strong></div>
+            <div><span>Lineup effect</span><strong>{result?.needNotes?.[0] ?? 'No league-specific lineup edge was measured.'}</strong></div>
+            <div><span>Consolidation</span><strong>{give.length} assets out · {get.length} assets in{result?.scaleNotes?.[0] ? ` · ${result.scaleNotes[0]}` : ''}</strong></div>
+            <div><span>Team direction</span><strong>{result?.postureNotes?.[0] ?? intel?.rebuilderRecommendation ?? 'Use the contender and rebuilder reads for your current direction.'}</strong></div>
+            <div><span>Data freshness</span><strong>{valueSources.length ? `Latest available ${valueSources.join(' + ')} snapshots` : 'No priced source was returned for this deal.'}</strong></div>
+            <div><span>Source agreement</span><strong>{valueSources.length > 1 ? `Sources are shown separately because their methods can disagree; this verdict combines ${valueSources.length} available baselines.` : valueSources.length === 1 ? `One market source (${valueSources[0]}) priced the deal, so there is no cross-source consensus yet.` : 'No source comparison is possible until the assets are priced.'}</strong></div>
           </div>
 
           {/*

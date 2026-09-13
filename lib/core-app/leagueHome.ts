@@ -21,6 +21,7 @@ import { getLeagueScoreboard, type LeagueScoreboard } from './leagueScoreboard'
 import { extractScoringSettings } from '@/lib/projections/leagueScoring'
 import { latestProjectionWeek } from './playerProjections'
 import { getRecentTrades } from './recentTrades'
+import { scanPendingSleeperTrades } from '@/lib/provider-trades/scanPendingSleeperTrades'
 import { getMatchupData } from '@/lib/core-app/matchup'
 import { getRivalRecords } from '@/lib/core-app/dash3aPanels'
 import { getDraftHqAll } from './draftHqAll'
@@ -379,11 +380,48 @@ export async function getLeagueHomeData(
    * two managers traded the pick, and resolving it to whoever it later became
    * would rewrite the deal they made.
    */
-  const recentTrades = await getRecentTrades(
+  let recentTrades = await getRecentTrades(
     [{ id: league.id, name: league.name ?? 'League', platformLeagueId: league.platformLeagueId }],
     new Date(),
     6,
   ).catch(() => [])
+  if (String(league.platform).toLowerCase() === 'sleeper') {
+    const owner = await prisma.userProfile.findUnique({
+      where: { userId },
+      select: { sleeperUserId: true },
+    }).catch(() => null)
+    if (owner?.sleeperUserId) {
+      const live = await scanPendingSleeperTrades({
+        platformLeagueId: league.platformLeagueId,
+        ownerSleeperId: owner.sleeperUserId,
+        sport: String(league.sport),
+      }).catch(() => null)
+      const fresh = (live?.completedTrades ?? []).map((trade) => {
+        const assets = (items: typeof trade.assetsReceived) => items.map((asset) => ({
+          kind: asset.isPick ? 'pick' as const : 'player' as const,
+          name: asset.isPick ? (asset.pickRound ?? asset.playerName) : asset.playerName,
+          position: asset.isPick ? null : asset.position,
+        }))
+        return {
+          id: trade.transactionId,
+          leagueId: league.id,
+          leagueName: league.name ?? 'League',
+          platformLeagueId: league.platformLeagueId,
+          acceptedAt: trade.proposedAt ?? new Date().toISOString(),
+          sides: [
+            { rosterId: Number(trade.viewerRosterExternalId) || 0, managerName: 'You', teamName: null, received: assets(trade.assetsReceived) },
+            { rosterId: Number(trade.counterpartyRosterExternalId) || 0, managerName: trade.proposedBy, teamName: null, received: assets(trade.assetsGiven) },
+          ],
+          partial: trade.assetsReceived.length === 0 || trade.assetsGiven.length === 0,
+          verdict: null,
+        }
+      })
+      const liveIds = new Set(fresh.map((trade) => trade.id))
+      recentTrades = [...fresh, ...recentTrades.filter((trade) => ![...liveIds].some((id) => trade.id === id || trade.id.endsWith(`:${id}`)))]
+        .sort((a, b) => Date.parse(b.acceptedAt) - Date.parse(a.acceptedAt))
+        .slice(0, 6)
+    }
+  }
   /*
    * ⚠ AND THE WAIVERS THE PANEL SAID WERE "NOT READ". They are read — the
    * Decision-OS activity cron writes completed Sleeper waivers, free-agent

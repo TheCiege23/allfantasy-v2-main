@@ -248,6 +248,8 @@ export interface NormalizedTransaction {
    * what the historical importer already stores for a trade whose week it could not establish.
    */
   week?: number
+  /** Explicit provider lifecycle observations, when its feed exposes them. */
+  lifecycle_events?: Array<{ stage: string; occurred_at: string; team_id?: string | null; description?: string | null }>
 }
 
 /**

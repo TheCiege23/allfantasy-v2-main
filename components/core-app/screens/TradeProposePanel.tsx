@@ -164,6 +164,7 @@ export function TradeProposePanel(props: {
 
   const [sending, setSending] = useState(false)
   const [outcome, setOutcome] = useState<{ ok: boolean; message: string } | null>(null)
+  const [offerMessage, setOfferMessage] = useState('')
 
   const hasDeal = give.length + get.length > 0
 
@@ -206,6 +207,7 @@ export function TradeProposePanel(props: {
           proposerRosterId: mine.rosterId,
           receiverRosterId: partner.rosterId,
           assets: reconciled.assets,
+          metadata: offerMessage.trim() ? { offerMessage: offerMessage.trim() } : undefined,
         }),
       })
       const j = (await r.json().catch(() => ({}))) as { ok?: boolean; error?: string }
@@ -241,7 +243,7 @@ export function TradeProposePanel(props: {
     } finally {
       setSending(false)
     }
-  }, [leagueId, mine, partner, reconciled, counteringTradeId, onSent])
+  }, [leagueId, mine, partner, reconciled, counteringTradeId, offerMessage, onSent])
 
   if (!leagueId || !hasDeal) return null
 
@@ -362,6 +364,20 @@ export function TradeProposePanel(props: {
                 {partner.ownerName ?? 'them'}. They answer it in AllFantasy.
               </p>
             )
+          ) : null}
+
+          {partner?.canReceiveProposal ? (
+            <label className="af-tc-offer-message">
+              <span className="af-label">Message to {partner.ownerName ?? 'the other manager'}</span>
+              <textarea
+                value={offerMessage}
+                maxLength={500}
+                rows={3}
+                onChange={(event) => setOfferMessage(event.target.value)}
+                placeholder="Explain why this helps both teams, or invite a counter."
+              />
+              <span className="af-tc-row-sub">{offerMessage.length}/500 · You can edit this before sending.</span>
+            </label>
           ) : null}
 
           {outcome ? (

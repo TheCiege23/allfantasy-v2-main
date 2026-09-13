@@ -23,6 +23,14 @@ export interface TradeAssetSummary {
   playerId: string | null
   playerName: string | null
   faabAmount: number | null
+  itemReference?: string | null
+  position?: string | null
+  team?: string | null
+  pickSeason?: number | null
+  pickRound?: number | null
+  pickNumber?: number | null
+  pickOriginalRosterId?: string | null
+  pickLabel?: string | null
 }
 
 /** One participating roster's side of the trade (multi-team capable). */

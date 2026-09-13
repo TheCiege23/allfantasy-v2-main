@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { AfCrest } from '@/components/core-app/AfCrest'
-import { useCallback, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { CareerData } from '@/lib/core-app/career'
 import '@/components/core-app/af-career-share.css'
 
@@ -82,6 +82,26 @@ const CARD_STYLES = [
 
 type CardStyleId = (typeof CARD_STYLES)[number]['id']
 
+type LeagueWrapped = {
+  season: number
+  manager: {
+    record: string | null
+    rank: number | null
+    moves: number
+    trades: number
+    draftPicks: number
+    bestTrade: { partner: string | null; differential: number | null; season: number } | null
+    outlook: string
+  }
+  commissioner: {
+    teams: number
+    trades: number
+    rosterChanges: number
+    draftPicks: number
+    leader: { teamId: string; record: string; pointsFor: number } | null
+  } | null
+}
+
 export type CareerShareProps = {
   career: CareerData
   /**
@@ -130,6 +150,9 @@ export function CareerShare({
   const [error, setError] = useState<string | null>(null)
   const [copied, setCopied] = useState<'caption' | 'image' | null>(null)
   const [generations, setGenerations] = useState(0)
+  const [wrapped, setWrapped] = useState<LeagueWrapped | null>(null)
+  const [wrappedLoading, setWrappedLoading] = useState(false)
+  const [edition, setEdition] = useState<'manager' | 'commissioner'>('manager')
   const cardRef = useRef<HTMLDivElement | null>(null)
 
   const league = useMemo(
@@ -138,6 +161,24 @@ export function CareerShare({
   )
   const limit = PLATFORMS.find((p) => p.id === platform)!.limit
   const overBy = Math.max(0, caption.length - limit)
+
+  useEffect(() => {
+    if (!leagueId) {
+      setWrapped(null)
+      return
+    }
+    const controller = new AbortController()
+    setWrappedLoading(true)
+    fetch(`/api/league/wrapped?leagueId=${encodeURIComponent(leagueId)}`, { signal: controller.signal })
+      .then(async (response) => response.ok ? response.json() as Promise<LeagueWrapped> : null)
+      .then((value) => {
+        setWrapped(value)
+        if (!value?.commissioner) setEdition('manager')
+      })
+      .catch(() => setWrapped(null))
+      .finally(() => setWrappedLoading(false))
+    return () => controller.abort()
+  }, [leagueId])
 
   const generate = useCallback(async () => {
     setStatus('working')
@@ -219,8 +260,8 @@ export function CareerShare({
   return (
     <div className="af-cs">
       <header className="af-cs-head">
-        <p className="af-cs-eyebrow af-label">Career Share</p>
-        <h1 className="af-display af-cs-title">Make a card worth posting</h1>
+        <p className="af-cs-eyebrow af-label">AllFantasy League Wrapped</p>
+        <h1 className="af-display af-cs-title">Turn a season into a recap worth sharing</h1>
         <p className="af-cs-sub">
           Chimmy writes the caption; you decide whether it goes out.{' '}
           <b>AllFantasy never posts for you.</b>
@@ -259,6 +300,44 @@ export function CareerShare({
               </>
             )}
           </div>
+
+          {league ? (
+            <div className="af-cs-block af-cs-wrapped">
+              <div className="af-cs-blockhead">
+                <h2 className="af-cs-blocktitle">{wrapped?.season ?? 'Season'} recap</h2>
+                {wrapped?.commissioner ? (
+                  <div className="af-cs-chips af-cs-chips--tight">
+                    <button type="button" className="af-cs-chip" data-on={edition === 'manager'} onClick={() => setEdition('manager')}>My team</button>
+                    <button type="button" className="af-cs-chip" data-on={edition === 'commissioner'} onClick={() => setEdition('commissioner')}>Commissioner</button>
+                  </div>
+                ) : null}
+              </div>
+              {wrappedLoading ? <p className="af-cs-note">Building the recap from league history…</p> : wrapped ? (
+                edition === 'commissioner' && wrapped.commissioner ? (
+                  <>
+                    <dl className="af-cs-stats">
+                      <div><dt>Teams</dt><dd>{wrapped.commissioner.teams}</dd></div>
+                      <div><dt>Trades</dt><dd>{wrapped.commissioner.trades}</dd></div>
+                      <div><dt>Changes</dt><dd>{wrapped.commissioner.rosterChanges}</dd></div>
+                      <div><dt>Drafted</dt><dd>{wrapped.commissioner.draftPicks}</dd></div>
+                    </dl>
+                    <p className="af-cs-note">League leader: {wrapped.commissioner.leader ? `${wrapped.commissioner.leader.teamId} · ${wrapped.commissioner.leader.record} · ${wrapped.commissioner.leader.pointsFor.toFixed(1)} PF` : 'standings not available yet'}.</p>
+                  </>
+                ) : (
+                  <>
+                    <dl className="af-cs-stats">
+                      <div><dt>Record</dt><dd>{wrapped.manager.record ?? '—'}</dd></div>
+                      <div><dt>Rank</dt><dd>{wrapped.manager.rank ? `#${wrapped.manager.rank}` : '—'}</dd></div>
+                      <div><dt>Trades</dt><dd>{wrapped.manager.trades}</dd></div>
+                      <div><dt>Drafted</dt><dd>{wrapped.manager.draftPicks}</dd></div>
+                    </dl>
+                    <p className="af-cs-note"><b>Best measured trade:</b> {wrapped.manager.bestTrade ? `${wrapped.manager.bestTrade.partner ? `with ${wrapped.manager.bestTrade.partner}` : 'graded from league history'}${wrapped.manager.bestTrade.differential != null ? ` · ${wrapped.manager.bestTrade.differential >= 0 ? '+' : ''}${Math.round(wrapped.manager.bestTrade.differential)} value` : ''}` : 'No graded historical trade is available yet.'}</p>
+                    <p className="af-cs-note"><b>Next-season outlook:</b> {wrapped.manager.outlook}</p>
+                  </>
+                )
+              ) : <p className="af-cs-note af-cs-note--warn">This league does not have enough imported history for a Wrapped recap yet.</p>}
+            </div>
+          ) : null}
 
           {/*
             The stats. Loaded, not requested — there is no button here on purpose.
@@ -483,7 +562,7 @@ export function CareerShare({
                       loading="lazy"
                     />
                   ) : null}
-                  <span className="af-cs-card-league">{league?.name ?? 'Career'}</span>
+                  <span className="af-cs-card-league">{league?.name ?? 'Career'} · Wrapped</span>
                 </div>
 
                 <div className="af-cs-card-body">
@@ -498,16 +577,16 @@ export function CareerShare({
 
                 <div className="af-cs-card-stats">
                   <span>
-                    <b className="af-num">{career.games > 0 ? `${career.wins}–${career.losses}` : '—'}</b>
+                    <b className="af-num">{wrapped?.manager.record ?? (career.games > 0 ? `${career.wins}–${career.losses}` : '—')}</b>
                     record
                   </span>
                   <span>
-                    <b className="af-num">{career.championships}</b>
-                    {career.championships === 1 ? 'title' : 'titles'}
+                    <b className="af-num">{wrapped?.manager.trades ?? career.championships}</b>
+                    {wrapped ? 'trades' : career.championships === 1 ? 'title' : 'titles'}
                   </span>
                   <span>
-                    <b className="af-num">{career.seasonsPlayed}</b>
-                    {career.seasonsPlayed === 1 ? 'season' : 'seasons'}
+                    <b className="af-num">{wrapped?.manager.draftPicks ?? career.seasonsPlayed}</b>
+                    {wrapped ? 'draft picks' : career.seasonsPlayed === 1 ? 'season' : 'seasons'}
                   </span>
                 </div>
 

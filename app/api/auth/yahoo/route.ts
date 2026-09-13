@@ -103,6 +103,9 @@ export const GET = withApiUsage({ endpoint: "/api/auth/yahoo", tool: "AuthYahoo"
   // fantasy league. The League Sync flow always requested it; this one never did.
   params.append('scope', YAHOO_FANTASY_SCOPE)
   params.append('state', state)
+  // Yahoo can provision Fantasy API access after an app review. Force a fresh
+  // consent grant so a token issued before that approval is not silently reused.
+  params.append('prompt', 'consent')
   
   const authUrl = `https://api.login.yahoo.com/oauth2/request_auth?${params.toString()}`
   

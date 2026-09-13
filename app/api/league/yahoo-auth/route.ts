@@ -83,6 +83,7 @@ export async function GET(request: NextRequest) {
     response_type: 'code',
     scope: YAHOO_FANTASY_SCOPE,
     state,
+    prompt: 'consent',
   });
 
   const response = NextResponse.redirect(`${YAHOO_AUTH_URL}?${params.toString()}`);
@@ -103,6 +104,7 @@ export async function GET(request: NextRequest) {
     domain: getYahooStateCookieDomain(request.headers.get('host')),
   };
   response.cookies.set('yahoo_league_oauth_state', state, cookieBase);
+  response.cookies.set('yahoo_oauth_user_id', userId, cookieBase);
   response.cookies.set(
     YAHOO_RETURN_TO_COOKIE,
     sanitizeYahooReturnTo(request.nextUrl.searchParams.get('returnTo')),

@@ -386,7 +386,7 @@ test.describe("@growth @db referral system + growth incentives", () => {
     // signed-in test flow should assert the dashboard hero instead.
     await expect(
       referrerPage.getByRole("heading", { name: "Grow the league, earn the upside" }),
-    ).toBeVisible()
+    ).toBeVisible({ timeout: 30_000 })
 
     // Dashboard defaults to the "overview" tab which only shows a
     // claimable-rewards *count*; the actual `referral-claim-${id}`
@@ -400,7 +400,11 @@ test.describe("@growth @db referral system + growth incentives", () => {
     await expect(claimButton).toBeVisible()
     await claimButton.click()
 
-    await expect(referrerPage.getByText("Claimed").first()).toBeVisible()
+    // This suite runs against the real database and a cold Next.js route. The
+    // claim request can include route compilation on CI, so use the same
+    // bounded wait as the backend state assertion below instead of Playwright's
+    // five-second UI default.
+    await expect(referrerPage.getByText("Claimed").first()).toBeVisible({ timeout: 20_000 })
 
     await expect
       .poll(

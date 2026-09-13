@@ -451,6 +451,10 @@ export function normalizedPickValue(input: {
   teams?: number | null
   /** Pick within the round, 1-indexed. Omit ⇒ the round's mid slot. */
   slot?: number | null
+  /** Probability that the pick lands in each third of its round. Values are normalized. */
+  slotProbability?: { early: number; middle: number; late: number } | null
+  /** 0.85..1.15 multiplier from a separately sourced draft-class assessment. */
+  classStrength?: number | null
 }): number {
   const round = Number.isFinite(input.round as number) ? Math.max(1, Math.round(input.round as number)) : 5
   /*
@@ -460,12 +464,26 @@ export function normalizedPickValue(input: {
    * right policy for this and valueEngine simply was not using it: hold the last OBSERVED share
    * rather than inventing a decay past where the data ran out.
    */
-  let value = pickValueByOverall({
-    round,
-    teams: input.teams,
-    slot: input.slot,
-    firstRoundValue: PICK_ROUND_BASE[1],
-  })
+  const teams = Number.isFinite(input.teams as number) ? Math.max(2, Math.round(input.teams as number)) : 12
+  const p = input.slotProbability
+  let value: number
+  if (p && [p.early, p.middle, p.late].every((v) => Number.isFinite(v) && v >= 0) && p.early + p.middle + p.late > 0) {
+    const total = p.early + p.middle + p.late
+    const anchors = [Math.max(1, Math.round(teams / 6)), Math.round((teams + 1) / 2), Math.max(1, Math.round((teams * 5) / 6))]
+    const values = anchors.map((slot) => pickValueByOverall({ round, teams, slot, firstRoundValue: PICK_ROUND_BASE[1] }))
+    value = Math.round((values[0]! * p.early + values[1]! * p.middle + values[2]! * p.late) / total)
+  } else {
+    value = pickValueByOverall({
+      round,
+      teams,
+      slot: input.slot,
+      firstRoundValue: PICK_ROUND_BASE[1],
+    })
+  }
+  const classStrength = Number.isFinite(input.classStrength as number)
+    ? clamp(input.classStrength as number, 0.85, 1.15)
+    : 1
+  value = Math.round(value * classStrength)
   if (input.pickSeason != null && input.currentSeason != null && input.pickSeason > input.currentSeason) {
     const yearsOut = input.pickSeason - input.currentSeason
     value = Math.round(value * Math.pow(1 - PICK_FUTURE_DISCOUNT, yearsOut))

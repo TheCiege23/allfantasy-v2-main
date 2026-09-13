@@ -1114,7 +1114,10 @@ export function AfCoreShell(props: AfCoreShellProps) {
     const byKey = new Map(navItems(props).map((i) => [i.key, i]))
     return MOBILE_BAR_KEYS.flatMap((k) => {
       const item = byKey.get(k)
-      return item ? [item] : []
+      /* Mobile Home is the escape hatch from a selected league. Keeping the
+         league query here sent it straight back to that league and made /core
+         unreachable on a phone. */
+      return item ? [{ ...item, href: item.key === 'home' ? '/core' : item.href }] : []
     })
   }, [props])
   const { leagues, syncAge, syncEligibleCount, plan, weekLabel, active, children, comms } = props
@@ -1432,7 +1435,9 @@ export function AfCoreShell(props: AfCoreShellProps) {
                   ) : (
                     <span className="af-rail-row-line">
                       <span className="af-rail-row-team">
-                        no head-to-head on file this week
+                        {String(l.platform).toLowerCase() === 'espn'
+                          ? 'ESPN did not return a matchup schedule for this league'
+                          : 'no head-to-head on file this week'}
                       </span>
                     </span>
                   )}

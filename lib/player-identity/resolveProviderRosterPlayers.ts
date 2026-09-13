@@ -34,6 +34,7 @@ export type ResolvedProviderPlayer = {
   name: string
   position: string | null
   team: string | null
+  imageUrl: string | null
   sport: string
 }
 
@@ -71,6 +72,7 @@ export async function resolveProviderRosterPlayers(
       position: true,
       currentTeam: true,
       sport: true,
+      sleeperId: true,
       espnId: true,
       fantraxId: true,
       fleaflickerId: true,
@@ -78,15 +80,39 @@ export async function resolveProviderRosterPlayers(
     },
   })
 
+  /*
+   * Provider identity rows intentionally hold only identity. Headshots live on
+   * SportsPlayer, whose stable cross-provider bridge is sleeperId. Hydrate the
+   * whole league in one query so ESPN/Fantrax/Fleaflicker rows have the same
+   * display payload as Sleeper rows without ever treating a provider id as a
+   * Sleeper id.
+   */
+  const sleeperIds = [...new Set(rows.map((row) => row.sleeperId).filter((id): id is string => Boolean(id)))]
+  const portraits = sleeperIds.length
+    ? await prisma.sportsPlayer.findMany({
+        where: { sport, sleeperId: { in: sleeperIds }, imageUrl: { not: null } },
+        select: { sleeperId: true, imageUrl: true, position: true, team: true },
+        orderBy: { fetchedAt: 'desc' },
+      }).catch(() => [])
+    : []
+  const portraitBySleeperId = new Map<string, (typeof portraits)[number]>()
+  for (const portrait of portraits) {
+    if (portrait.sleeperId && !portraitBySleeperId.has(portrait.sleeperId)) {
+      portraitBySleeperId.set(portrait.sleeperId, portrait)
+    }
+  }
+
   const matches = new Map<string, number>()
   for (const row of rows) {
     const key = row[column]
     if (!key) continue
     matches.set(key, (matches.get(key) ?? 0) + 1)
+    const portrait = row.sleeperId ? portraitBySleeperId.get(row.sleeperId) : undefined
     out.set(key, {
       name: row.canonicalName,
-      position: row.position,
-      team: row.currentTeam,
+      position: row.position ?? portrait?.position ?? null,
+      team: row.currentTeam ?? portrait?.team ?? null,
+      imageUrl: portrait?.imageUrl ?? null,
       sport: row.sport,
     })
   }

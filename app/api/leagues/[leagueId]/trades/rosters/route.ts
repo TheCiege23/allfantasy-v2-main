@@ -6,6 +6,7 @@ import { assertLeagueMember } from '@/lib/league/league-access'
 import { getRosterPlayerIds } from '@/lib/waiver-wire/roster-utils'
 import { listProposablePicks } from '@/lib/league-trade-engine/tradeValidationService'
 import { resolveSleeperRosterPlayers } from '@/lib/player-identity/resolveSleeperRosterPlayers'
+import { resolveProviderRosterPlayers } from '@/lib/player-identity/resolveProviderRosterPlayers'
 import { byeForTeam, resolveTeamByeWeeks } from '@/lib/schedule/teamByeWeeks'
 import { FIRST_ROUND_IN_MARKET_UNITS, pickValueByOverall } from '@/lib/pick-curve'
 import { getPlayerValuesForNamesDbFirst } from '@/lib/fantasycalc-db'
@@ -168,7 +169,7 @@ export async function GET(
    * receiver, an NBA guard and an NCAAB player. The resolver is scoped by this value.
    */
   const league = await prisma.league
-    .findUnique({ where: { id: leagueId }, select: { season: true, sport: true } })
+    .findUnique({ where: { id: leagueId }, select: { season: true, sport: true, platform: true } })
     .catch(() => null)
   const currentSeason = Number(league?.season) || null
 
@@ -235,10 +236,10 @@ export async function GET(
    * back, which is what makes one map safe for all of them.
    */
   const allRosterPlayerIds = [...new Set(rosters.flatMap((r) => getRosterPlayerIds(r.playerData)))]
-  const resolvedForLeague = await resolveSleeperRosterPlayers(
-    allRosterPlayerIds,
-    String(league?.sport ?? 'NFL'),
-  )
+  const platform = String(league?.platform ?? 'sleeper').trim().toLowerCase()
+  const resolvedForLeague = platform === 'sleeper'
+    ? await resolveSleeperRosterPlayers(allRosterPlayerIds, String(league?.sport ?? 'NFL'))
+    : await resolveProviderRosterPlayers(platform, allRosterPlayerIds, String(league?.sport ?? 'NFL'))
 
   const result: TradeableRoster[] = await Promise.all(
     rosters.map(async (r) => {

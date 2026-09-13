@@ -29,6 +29,8 @@ export interface AssetValueSources {
 /** Immutable per-asset snapshot row. */
 export interface AssetValueSnapshot {
   kind: TradeAssetKind
+  /** Canonical asset class before adaptation (keeper/devy/etc.). */
+  canonicalAssetType?: string | null
   fromRosterId: string
   toRosterId: string
   // player
@@ -40,8 +42,23 @@ export interface AssetValueSnapshot {
   pickSeason?: number | null
   pickRound?: number | null
   pickLabel?: string | null
+  pickOriginalRosterId?: string | null
+  pickTeams?: number | null
+  pickProjectedSlot?: number | null
+  pickSlotProbability?: { early: number; middle: number; late: number } | null
+  pickClassStrength?: number | null
   // faab
   faabAmount?: number | null
+  faabContext?: {
+    originalBudget?: number | null
+    senderRemaining?: number | null
+    receiverRemaining?: number | null
+    opponentRemaining?: readonly number[] | null
+    currentWeek?: number | null
+    regularSeasonWeeks?: number | null
+    waiverPoolStrength?: number | null
+    rollover?: boolean | null
+  } | null
   sources: AssetValueSources
   /** Deterministic normalized 0–10000 trade value for this asset. */
   internalValue: number
@@ -158,6 +175,26 @@ export interface TradeValueSnapshot {
   sides: SideTotals[]
   grade: TradeGrade
   commissionerReview: CommissionerReview
+  /** Per-asset safety gate. A blocked snapshot must not produce an actionable grade. */
+  coverage?: TradeAssetCoverage
+}
+
+export type TradeAssetCoverageStatus = 'complete' | 'partial' | 'blocked'
+
+export interface TradeAssetCoverageItem {
+  key: string
+  assetClass: 'offense' | 'idp' | 'kicker' | 'college_devy' | 'faab' | 'draft_pick' | 'specialty' | 'unknown'
+  resolved: boolean
+  reason: string | null
+}
+
+export interface TradeAssetCoverage {
+  status: TradeAssetCoverageStatus
+  coveragePct: number
+  resolvedCount: number
+  totalCount: number
+  items: TradeAssetCoverageItem[]
+  warnings: string[]
 }
 
 export type TeamStance = 'contender' | 'rebuilder' | 'middle'

@@ -10,7 +10,7 @@
  * actually get?" was computed on every import and thrown away at the last step.
  *
  * The consequence was a product that could not tell the difference between a ten-year
- * Sleeper dynasty and a Fleaflicker league with no scoring, no schedule, no draft, no
+ * Sleeper dynasty and an import with no scoring, no schedule, no draft, no
  * trades and no history. Both said "Imported", both got the same tabs, and one of them
  * led to an empty screen with no explanation.
  *
@@ -19,7 +19,7 @@
  * disagree — two copies of this rule would drift within a release.
  *
  * ⚠ THE LIMIT IS THE PLATFORM'S, AND THE COPY MUST SAY SO. "We couldn't get your trade
- * history" reads as our failure; "Fleaflicker doesn't publish trade history" is the truth
+ * history" reads as our failure; naming the specific provider limitation is the truth
  * and is the only version a user can do anything with (switch platform, or stop looking).
  * Every sentence built here names the provider.
  */

@@ -278,7 +278,7 @@ function buildDataQuality(normalized: NormalizedImportResult): ImportPreviewData
     /*
      * The provider comes off the payload rather than a parameter so this cannot be told a
      * different provider than the one that produced the coverage — the sentence names the
-     * platform ("Fleaflicker doesn't publish trade history"), and naming the wrong one would turn
+     * platform (for example, a provider may omit an older history category), and naming the wrong one would turn
      * an honest limitation into a false accusation about someone else's product.
      */
     coverageNarrative: summarizeImportCoverage(

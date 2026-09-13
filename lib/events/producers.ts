@@ -45,6 +45,10 @@ export interface EmitContext {
   causationId?: string | null
   /** Origin tag; defaults to 'engine'. */
   source?: string
+  /** Immutable domain time; defaults to publisher time. */
+  occurredAt?: string | Date
+  /** Additive audit metadata. Never used as a decision input. */
+  metadata?: Record<string, unknown>
 }
 
 export type EmitArgs<T extends EventType> = EmitContext & { payload: PayloadByType[T] }
@@ -62,6 +66,7 @@ export class PlatformEventProducer {
       type,
       schemaVersion: EVENT_SCHEMA_VERSION[type],
       payload: args.payload,
+      occurredAt: args.occurredAt,
       sport: args.sport ?? null,
       leagueConcept: args.leagueConcept ?? null,
       leagueId: args.leagueId ?? null,
@@ -71,6 +76,7 @@ export class PlatformEventProducer {
       subjects: args.subjects ?? [],
       idempotencyKey: args.idempotencyKey,
       metadata: {
+        ...(args.metadata ?? {}),
         source: args.source ?? 'engine',
         correlationId: args.correlationId ?? null,
         causationId: args.causationId ?? null,

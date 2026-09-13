@@ -141,7 +141,7 @@ describe('⚠ the route reports the scan, not just its result', () => {
      */
     expect(ROUTE.split('pending: {').length - 1).toBe(3)
     expect(ROUTE).toContain('scanned: pendingScan.scanned')
-    expect(ROUTE).toContain('pendingOffers: builderOffers(providerPending)')
+    expect(ROUTE).toContain('pendingOffers: builderOffers(providerPending, providerEvaluations)')
   })
 
   it('says which platform it could not read, and which two it can', () => {

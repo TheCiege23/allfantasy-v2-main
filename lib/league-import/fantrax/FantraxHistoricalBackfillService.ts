@@ -12,6 +12,7 @@ import type {
   FantraxImportTeam,
   FantraxImportTransaction,
 } from '@/lib/league-import/adapters/fantrax/types'
+import { persistProviderTransactionFacts } from '@/lib/league-import/persistProviderTransactionFacts'
 
 const SEASON_END_ROSTER_SNAPSHOT_PERIOD = 0
 
@@ -246,23 +247,22 @@ async function persistFantraxSeasonWarehouseFacts(args: {
     )
   )
 
-  const transactionCreates = args.payload.transactions.flatMap((transaction) =>
-    buildFantraxTransactionEntries(transaction).map((entry) =>
-      prisma.transactionFact.create({
-        data: {
-          leagueId: args.leagueId,
-          sport,
-          type: entry.type,
-          playerId: entry.playerId ?? null,
-          managerId: entry.rosterId ?? null,
-          rosterId: entry.rosterId ?? null,
-          payload: entry.payload as Prisma.InputJsonValue,
-          season,
-          weekOrPeriod: null,
-          createdAt: entry.createdAt ?? undefined,
-        },
-      })
-    )
+  const transactionRows = args.payload.transactions.flatMap((transaction) =>
+    buildFantraxTransactionEntries(transaction).map((entry, entryIndex) => ({
+      provider: 'fantrax',
+      upstreamTransactionId: transaction.transactionId,
+      entryIndex,
+      leagueId: args.leagueId,
+      sport,
+      type: entry.type,
+      playerId: entry.playerId ?? null,
+      managerId: entry.rosterId ?? null,
+      rosterId: entry.rosterId ?? null,
+      payload: entry.payload,
+      season,
+      weekOrPeriod: null,
+      occurredAt: entry.createdAt,
+    }))
   )
 
   const draftRows = args.payload.draftPicks
@@ -294,12 +294,6 @@ async function persistFantraxSeasonWarehouseFacts(args: {
         season,
       },
     }),
-    prisma.transactionFact.deleteMany({
-      where: {
-        leagueId: args.leagueId,
-        season,
-      },
-    }),
     prisma.draftFact.deleteMany({
       where: {
         leagueId: args.leagueId,
@@ -308,14 +302,14 @@ async function persistFantraxSeasonWarehouseFacts(args: {
     }),
     ...snapshotCreates,
     ...matchupCreates,
-    ...transactionCreates,
     ...draftCreates,
   ])
+  const transactionFactsPersisted = await persistProviderTransactionFacts(transactionRows)
 
   return {
     rosterSnapshotsPersisted: snapshotCreates.length,
     matchupFactsPersisted: matchupCreates.length,
-    transactionFactsPersisted: transactionCreates.length,
+    transactionFactsPersisted,
     draftFactsPersisted: draftCreates.length,
   }
 }

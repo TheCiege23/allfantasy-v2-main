@@ -26,6 +26,7 @@ import type { TeamProfile, TradeValueContext, TradeValueSnapshot } from '@/lib/t
 // reverse type import is erased at compile, so the approved flow CanonicalWorld → TradeWorldResolver →
 // CanonicalTradeMemo introduces NO runtime import cycle.
 import type { TradeWorld } from './tradeWorld'
+import { projectPickSlotDistribution } from '@/lib/trade-intel/pickOutlook'
 
 /**
  * Trade adds direction to a reusable asset (ADR-DOS-003 §3). The `CanonicalAsset` records only its
@@ -208,6 +209,7 @@ export function toEnrichedAsset(
   return {
     asset: {
       kind,
+      canonicalAssetType: asset.assetType,
       fromRosterId: movement.fromRosterId,
       toRosterId: movement.toRosterId,
       playerId,
@@ -217,6 +219,7 @@ export function toEnrichedAsset(
       pickSeason: asset.metadata.pick?.season ?? null,
       pickRound: asset.metadata.pick?.round ?? null,
       pickLabel: asset.metadata.pick?.label ?? null,
+      pickOriginalRosterId: asset.metadata.pick?.originalRosterId ?? null,
       faabAmount: asset.metadata.faab?.amount ?? null,
       sources: {
         projectionValue: projection ?? null,
@@ -239,6 +242,85 @@ export function toEnrichedAsset(
       },
     },
     notes,
+  }
+}
+
+type SituationalAssetContext = {
+  teamCount: number
+  currentSeason: number | null
+  currentWeek: number | null
+  faabBudget: number | null
+  rankByRosterId: Record<string, number | null>
+  nameByRosterId: Record<string, string | null>
+  faabRemainingByRosterId: Record<string, number | null>
+}
+
+/** Adds only facts already present in the league world; absent facts remain null. */
+function applySituationalAssetContext(
+  assets: EnrichedTradeAsset[],
+  context: SituationalAssetContext,
+): EnrichedTradeAsset[] {
+  return assets.map((asset) => {
+    if (
+      asset.kind === 'draft_pick' &&
+      asset.pickSeason != null &&
+      asset.pickRound != null &&
+      context.currentSeason != null &&
+      context.teamCount >= 2
+    ) {
+      const originalRosterId = asset.pickOriginalRosterId ?? null
+      const outlook = projectPickSlotDistribution({
+        season: asset.pickSeason,
+        round: asset.pickRound,
+        currentSeason: context.currentSeason,
+        senderRank: originalRosterId ? context.rankByRosterId[originalRosterId] ?? null : null,
+        teamCount: context.teamCount,
+        senderName: originalRosterId ? context.nameByRosterId[originalRosterId] ?? null : null,
+      })
+      return {
+        ...asset,
+        pickTeams: context.teamCount,
+        pickSlot: outlook.expectedSlot,
+        pickSlotProbability: { early: outlook.early, middle: outlook.middle, late: outlook.late },
+      }
+    }
+    if (asset.kind === 'faab') {
+      const opponentRemaining = Object.entries(context.faabRemainingByRosterId)
+        .filter(([rosterId, value]) => rosterId !== asset.toRosterId && typeof value === 'number' && Number.isFinite(value))
+        .map(([, value]) => value as number)
+      return {
+        ...asset,
+        faabContext: {
+          originalBudget: context.faabBudget,
+          senderRemaining: context.faabRemainingByRosterId[asset.fromRosterId] ?? null,
+          receiverRemaining: context.faabRemainingByRosterId[asset.toRosterId] ?? null,
+          opponentRemaining,
+          currentWeek: context.currentWeek,
+        },
+      }
+    }
+    return asset
+  })
+}
+
+function situationFromCanonicalWorld(world: CanonicalWorld, currentSeason: number | null): SituationalAssetContext {
+  const rankByRosterId: Record<string, number | null> = {}
+  const nameByRosterId: Record<string, string | null> = {}
+  const faabRemainingByRosterId: Record<string, number | null> = {}
+  for (const roster of world.rosters) {
+    const team = roster.teamId ? world.teams.find((candidate) => candidate.teamId === roster.teamId) : null
+    rankByRosterId[roster.rosterId] = team?.rank ?? null
+    nameByRosterId[roster.rosterId] = team?.displayName ?? null
+    faabRemainingByRosterId[roster.rosterId] = team?.faab.remaining ?? null
+  }
+  return {
+    teamCount: world.teams.length,
+    currentSeason,
+    currentWeek: world.league.currentWeek,
+    faabBudget: world.league.waiverSettings.budget,
+    rankByRosterId,
+    nameByRosterId,
+    faabRemainingByRosterId,
   }
 }
 
@@ -311,16 +393,19 @@ export function computeMemoCompleteness(
  */
 export function buildCanonicalTradeMemo(input: BuildCanonicalTradeMemoInput): CanonicalTradeMemo {
   const enrich = input.enrichment ?? {}
+  const currentSeason = input.currentSeason ?? input.world.league.season ?? null
 
   const adapted = input.movements.map((m) => toEnrichedAsset(m, enrich))
-  const enriched = adapted.map((x) => x.asset)
+  const enriched = applySituationalAssetContext(
+    adapted.map((x) => x.asset),
+    situationFromCanonicalWorld(input.world, currentSeason),
+  )
   const adapterNotes = adapted.flatMap((x) => x.notes)
 
   const proposer = profileForRoster(input.world, input.proposerRosterId, enrich)
   const receiver = profileForRoster(input.world, input.receiverRosterId, enrich)
   const profiles = { a: proposer.profile, b: receiver.profile }
 
-  const currentSeason = input.currentSeason ?? input.world.league.season ?? null
   const context: TradeValueContext = {
     sport: input.context?.sport ?? input.world.league.sport,
     leagueType: input.context?.leagueType ?? (input.world.league.isDynasty ? 'dynasty' : 'redraft'),
@@ -386,10 +471,23 @@ export function buildTradeMemo(tradeWorld: TradeWorld): CanonicalTradeMemo {
     adpByPlayerId: tradeWorld.marketContext.adpByPlayerId,
     projectionByPlayerId: tradeWorld.marketContext.projectionByPlayerId,
     positionByPlayerId: tradeWorld.marketContext.positionByPlayerId,
+    marketValueByPlayerId: tradeWorld.marketContext.marketValueByPlayerId,
+    idpValueByPlayerId: tradeWorld.marketContext.idpValueByPlayerId,
+    liquidityByPlayerId: tradeWorld.marketContext.liquidityByPlayerId,
+    trend30dByPlayerId: tradeWorld.marketContext.trend30dByPlayerId,
+    thinlyPricedIds: tradeWorld.marketContext.thinlyPricedIds,
   }
 
   const adapted = tradeWorld.assets.map((m) => toEnrichedAsset(m, enrich))
-  const enriched = adapted.map((x) => x.asset)
+  const enriched = applySituationalAssetContext(adapted.map((x) => x.asset), {
+    teamCount: tradeWorld.leagueContext.teamCount,
+    currentSeason: tradeWorld.leagueContext.currentSeason,
+    currentWeek: tradeWorld.leagueContext.currentWeek,
+    faabBudget: tradeWorld.leagueContext.faabBudget,
+    rankByRosterId: tradeWorld.leagueContext.teamRankByRosterId,
+    nameByRosterId: tradeWorld.leagueContext.teamNameByRosterId,
+    faabRemainingByRosterId: tradeWorld.leagueContext.faabRemainingByRosterId,
+  })
   const adapterNotes = adapted.flatMap((x) => x.notes)
 
   const proposer = tradeWorld.participants.find((p) => p.role === 'proposer')

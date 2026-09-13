@@ -107,6 +107,45 @@ export type FleaflickerImportPayload = {
    * distinction before anything could act on it.
    */
   draftBoard?: FleaflickerDraftBoardResponse | null
+  /** Explicit provider transaction feed. Null means the optional call failed. */
+  transactions?: FleaflickerTransactionsResponse | null
+}
+
+export type FleaflickerActivityTradeType =
+  | 'TRADE_ACCEPTED'
+  | 'TRADE_ACCEPTED_FINAL'
+  | 'TRADE_CANCELLED'
+  | 'TRADE_EXECUTION_DELAYED'
+  | 'TRADE_INVALIDATED'
+  | 'TRADE_MESSAGE'
+  | 'TRADE_PROPOSED'
+  | 'TRADE_REJECTED'
+  | 'TRADE_REJECTED_MESSAGE'
+  | 'TRADE_TO_REVIEW'
+  | 'TRADE_VETOED'
+
+export type FleaflickerActivityItem = {
+  timeEpochMilli?: string | number | null
+  trade?: {
+    tradeId?: number | null
+    type?: FleaflickerActivityTradeType | string | null
+    team?: FleaflickerTeamStub | null
+    description?: string | null
+  } | null
+  transaction?: {
+    type?: string | null
+    player?: { proPlayer?: FleaflickerProPlayer | null } | null
+    draftPick?: { season?: number | null; round?: number | null } | null
+    team?: FleaflickerTeamStub | null
+    bidAmount?: number | null
+    tradeId?: number | null
+  } | null
+}
+
+export type FleaflickerTransactionsResponse = {
+  items?: FleaflickerActivityItem[] | null
+  resultOffsetNext?: number | null
+  resultTotal?: number | null
 }
 
 /**

@@ -10,6 +10,7 @@ import {
   mapFleaflickerDraftBoard,
   describeFleaflickerDraftCoverage,
 } from '@/lib/league-import/fleaflicker/fleaflickerDraft'
+import { normalizeFleaflickerTransactions } from '@/lib/league-import/fleaflicker/fleaflickerTransactions'
 
 function mapWaiverType(raw: string | null | undefined): string {
   const s = String(raw ?? '').toUpperCase()
@@ -76,6 +77,7 @@ export const FleaflickerAdapter: ILeagueImportAdapter<FleaflickerImportPayload> 
      * built from the SUMMARY and not from the array's length.
      */
     const draft = mapFleaflickerDraftBoard(raw.draftBoard, { season })
+    const transactions = normalizeFleaflickerTransactions(raw.transactions, source.imported_at)
 
     const leagueSize = typeof lg.size === 'number' ? lg.size : teamsFlat.length
     /*
@@ -244,7 +246,7 @@ export const FleaflickerAdapter: ILeagueImportAdapter<FleaflickerImportPayload> 
        * below now carries the reason an empty array is empty.
        */
       draft_picks: draft.picks,
-      transactions: [],
+      transactions,
       /*
        * 🛑 `rank: i + 1` WAS ARRAY POSITION, NOT A RANKING, AND IT WOULD HAVE
        * FABRICATED A CHAMPIONSHIP. Whichever team happened to be first in the
@@ -351,7 +353,12 @@ export const FleaflickerAdapter: ILeagueImportAdapter<FleaflickerImportPayload> 
                 note: 'FetchLeagueDraftBoard did not answer for this league; draft history was not read.',
               }
             : describeFleaflickerDraftCoverage(draft),
-        tradeHistory: { state: 'missing' },
+        tradeHistory:
+          raw.transactions == null
+            ? { state: 'missing', note: 'FetchLeagueTransactions did not answer for this league.' }
+            : transactions.length > 0
+              ? { state: 'full', count: transactions.length }
+              : { state: 'full', count: 0, note: 'Fleaflicker returned no trade transactions.' },
         previousSeasons: { state: 'missing' },
         playerIdentityMap: Object.keys(player_map).length > 0 ? { state: 'full' } : { state: 'partial' },
       },
