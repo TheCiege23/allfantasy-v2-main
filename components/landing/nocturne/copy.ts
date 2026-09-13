@@ -120,6 +120,11 @@ export interface NocturneCopy {
     teaserCaption: string
     trustNote: string
     nonSleeperNote: string
+    /**
+     * Trust line for a platform that takes no identifier (Yahoo): the visitor signs in with the
+     * platform after creating an account, and we list their leagues. `{label}` interpolated.
+     */
+    accountNote: string
     /** Shown on the trust line when the selected provider isn't live. `{label}` interpolated. */
     comingSoonNote: string
     /** Chip / <option> suffix for a not-yet-available platform. */
@@ -371,6 +376,7 @@ export const NOCTURNE_COPY: NocturneCopy = {
     // {label} interpolated in the component.
     trustNote: 'Create a free account to connect your {label} league — read-only, no password, ever.',
     nonSleeperNote: 'Create a free account to finish connecting {label} — no password, ever.',
+    accountNote: 'Create a free account, then sign in with {label} — we list your leagues for you, no league ID needed. Read-only.',
     comingSoonNote: "{label} isn't available yet — coming soon.",
     platformSoon: 'Coming soon',
   },

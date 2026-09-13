@@ -35,15 +35,21 @@ type PlatformMeta = {
   label: string
   initial: string
   color: string
-  /** Word used in the trust line and which `/import` param prefills the value. */
-  inputKind: 'username' | 'league ID'
+  /**
+   * Word used in the trust line and which `/import` param prefills the value.
+   *
+   * `account` takes NO identifier: the platform lists leagues from the account the visitor
+   * connects after signing up (Yahoo, over OAuth). It gets no input box and sends no value —
+   * asking for a league ID the import then ignores is a question with no use.
+   */
+  inputKind: 'username' | 'league ID' | 'account'
   placeholder: string
 }
 
 const PLATFORMS: readonly PlatformMeta[] = [
   { id: 'sleeper', label: 'Sleeper', initial: 'S', color: '#1f2a4d', inputKind: 'username', placeholder: 'e.g. gridiron_gary' },
   { id: 'espn', label: 'ESPN', initial: 'E', color: '#4a1414', inputKind: 'league ID', placeholder: 'e.g. 1948204' },
-  { id: 'yahoo', label: 'Yahoo', initial: 'Y', color: '#3a1d55', inputKind: 'league ID', placeholder: 'e.g. 428931' },
+  { id: 'yahoo', label: 'Yahoo', initial: 'Y', color: '#3a1d55', inputKind: 'account', placeholder: '' },
   { id: 'mfl', label: 'MFL', initial: 'M', color: '#143a2e', inputKind: 'league ID', placeholder: 'e.g. 60184' },
   { id: 'fantrax', label: 'Fantrax', initial: 'F', color: '#5a3a14', inputKind: 'league ID', placeholder: 'e.g. abc123xy' },
   { id: 'fleaflicker', label: 'Fleaflicker', initial: 'FL', color: '#14324a', inputKind: 'league ID', placeholder: 'e.g. 12345' },
@@ -56,10 +62,17 @@ const PLATFORMS: readonly PlatformMeta[] = [
  * `leagueId`/`sourceId` (→ non-Sleeper source prefill). No new contract.
  */
 export function buildImportIntentPath(platform: Pick<PlatformMeta, 'id' | 'inputKind'>, rawValue: string): string {
-  const clean = rawValue.trim()
-  const key = platform.inputKind === 'username' ? 'username' : 'leagueId'
   const params = new URLSearchParams({ provider: platform.id })
-  if (clean) params.set(key, clean)
+  /*
+   * An `account` platform sends the provider and nothing else. `/import?provider=yahoo` selects
+   * Yahoo and its connect step; there is no identifier to carry. Anything typed before switching
+   * to that chip is dropped here rather than sent as a `leagueId` the import would ignore.
+   */
+  if (platform.inputKind !== 'account') {
+    const clean = rawValue.trim()
+    const key = platform.inputKind === 'username' ? 'username' : 'leagueId'
+    if (clean) params.set(key, clean)
+  }
   return `/import?${params.toString()}`
 }
 
@@ -75,6 +88,8 @@ export function NocturneImport({ variant }: { variant: 'mini' | 'full' }) {
   // Availability comes from the SAME authoritative provider-ui-config the
   // canonical import UI uses — never hardcoded here.
   const platformAvailable = isImportProviderAvailable(platform.id)
+  // `account` platforms (Yahoo) take nothing typed; see `inputKind`.
+  const needsInput = platform.inputKind !== 'account'
   const submitLabel = variant === 'mini' ? C.importFlow.submitMini : C.importFlow.submitFull
 
   function selectPlatform(id: PlatformId) {
@@ -85,7 +100,7 @@ export function NocturneImport({ variant }: { variant: 'mini' | 'full' }) {
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     const clean = value.trim()
-    if (!clean) return
+    if (needsInput && !clean) return
     // A provider that isn't available end-to-end must NOT create a signup/import
     // intent — no dead-end into a blocked import flow.
     if (!isImportProviderAvailable(platform.id)) return
@@ -120,24 +135,26 @@ export function NocturneImport({ variant }: { variant: 'mini' | 'full' }) {
             </option>
           ))}
         </select>
-        <input
-          className="n-input"
-          type="text"
-          inputMode="text"
-          autoComplete="off"
-          autoCapitalize="off"
-          spellCheck={false}
-          placeholder={platform.placeholder}
-          aria-label={`${platform.label} ${platform.inputKind}`}
-          value={value}
-          onChange={(e) => setValue(e.target.value)}
-          data-testid="nocturne-import-mini-input"
-        />
+        {needsInput ? (
+          <input
+            className="n-input"
+            type="text"
+            inputMode="text"
+            autoComplete="off"
+            autoCapitalize="off"
+            spellCheck={false}
+            placeholder={platform.placeholder}
+            aria-label={`${platform.label} ${platform.inputKind}`}
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            data-testid="nocturne-import-mini-input"
+          />
+        ) : null}
         <button
           type="submit"
           className="btn btn-primary"
           style={{ minHeight: 46, padding: '0 20px', fontSize: 14, flex: 'none' }}
-          disabled={!value.trim() || !platformAvailable}
+          disabled={(needsInput && !value.trim()) || !platformAvailable}
           data-testid="nocturne-import-mini-submit"
         >
           {submitLabel}
@@ -171,25 +188,27 @@ export function NocturneImport({ variant }: { variant: 'mini' | 'full' }) {
         })}
       </div>
       <div className="n-import-row">
-        <input
-          className="n-input"
-          type="text"
-          inputMode="text"
-          autoComplete="off"
-          autoCapitalize="off"
-          spellCheck={false}
-          placeholder={platform.placeholder}
-          aria-label={`${platform.label} ${platform.inputKind}`}
-          value={value}
-          onChange={(e) => setValue(e.target.value)}
-          data-testid="nocturne-import-full-input"
-          style={{ flex: 1, minWidth: 220, minHeight: 48, fontSize: 15 }}
-        />
+        {needsInput ? (
+          <input
+            className="n-input"
+            type="text"
+            inputMode="text"
+            autoComplete="off"
+            autoCapitalize="off"
+            spellCheck={false}
+            placeholder={platform.placeholder}
+            aria-label={`${platform.label} ${platform.inputKind}`}
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            data-testid="nocturne-import-full-input"
+            style={{ flex: 1, minWidth: 220, minHeight: 48, fontSize: 15 }}
+          />
+        ) : null}
         <button
           type="submit"
           className="btn btn-primary"
           style={{ minHeight: 48, padding: '0 24px', fontSize: 15, flex: 'none' }}
-          disabled={!value.trim() || !platformAvailable}
+          disabled={(needsInput && !value.trim()) || !platformAvailable}
           data-testid="nocturne-import-full-submit"
         >
           {submitLabel} <ArrowRight size={16} style={{ marginLeft: 2 }} />
@@ -221,9 +240,11 @@ function TrustLine({
     gap: 6,
     color: 'var(--color-neutral-600)',
   }
-  const text = available
-    ? copy.importFlow.trustNote.replace('{label}', platform.label)
-    : copy.importFlow.comingSoonNote.replace('{label}', platform.label)
+  const text = !available
+    ? copy.importFlow.comingSoonNote.replace('{label}', platform.label)
+    : platform.inputKind === 'account'
+      ? copy.importFlow.accountNote.replace('{label}', platform.label)
+      : copy.importFlow.trustNote.replace('{label}', platform.label)
   return (
     <p className="n-import-status" style={base}>
       <Lock size={13} style={{ flex: 'none' }} />
