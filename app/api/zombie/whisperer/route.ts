@@ -4,6 +4,7 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { requireCommissionerOnly } from '@/lib/league/permissions'
 import { applyAmbush, selectWhisperer } from '@/lib/zombie/whispererEngine'
+import { canViewerSeeWhisperer } from '@/lib/zombie/whispererVisibility'
 
 export const dynamic = 'force-dynamic'
 
@@ -60,7 +61,16 @@ export async function GET(req: Request) {
   const rec = z.whispererRecord
   if (isComm) return NextResponse.json({ whisperer: rec })
 
-  if (rec.isPubliclyRevealed) {
+  // The league's secrecy setting wins over the record. `isPubliclyRevealed` defaults to true and
+  // `selectWhisperer` never sets it, so on its own it revealed secret-league Whisperers.
+  if (
+    canViewerSeeWhisperer({
+      whispererIsPublic: z.whispererIsPublic,
+      isPubliclyRevealed: rec.isPubliclyRevealed,
+      viewerIsCommissioner: false,
+      viewerIsWhisperer: rec.userId === userId,
+    })
+  ) {
     return NextResponse.json({
       whisperer: {
         displayName: rec.displayName,
