@@ -190,6 +190,9 @@ describe('reverseGenericTrade', () => {
     expect(res.ok).toBe(true)
     if (!res.ok) throw new Error('unreachable')
     expect(res.rostersRestored).toBe(2)
+    // The key the route dispatches the league notice with — the same string stored on the row.
+    expect(res.noticeKey).toBe('af_trade:t-1:reversed')
+    expect(db.tradeReversal.create.mock.calls[0][0].data.noticeKey).toBe(res.noticeKey)
 
     // Written back from the SNAPSHOT, never recomputed.
     expect(db.roster.update).toHaveBeenCalledTimes(2)

@@ -194,6 +194,8 @@ export type ReverseNativeTradeResult =
       capRecordsRestored: number
       /** Rosters touched, so the caller can refresh derived cap projections AFTER commit. */
       rosterIds: string[]
+      /** `TradeReversal.noticeKey`, for the caller's post-commit league notice. */
+      noticeKey: string
     }
   | { ok: false; readiness: NativeReversalReadiness }
 
@@ -332,6 +334,8 @@ export async function reverseNativeTrade(input: ReverseNativeTradeInput): Promis
         payload: { tradeId: proposal.id },
       })
 
+      // Computed once: the row stores it and the caller dispatches the league notice with it.
+      const noticeKey = `redraft_trade:${proposal.id}:reversed`
       const reversal = await tx.tradeReversal.create({
         data: {
           tradeId: proposal.id,
@@ -346,7 +350,7 @@ export async function reverseNativeTrade(input: ReverseNativeTradeInput): Promis
           readiness: readiness as unknown as Prisma.InputJsonValue,
           restoredState: { rosters: before, capReversalTransactionIds } as unknown as Prisma.InputJsonValue,
           eventId: event.eventId,
-          noticeKey: `redraft_trade:${proposal.id}:reversed`,
+          noticeKey,
           reversedAt: new Date(),
         },
         select: { id: true },
@@ -359,6 +363,7 @@ export async function reverseNativeTrade(input: ReverseNativeTradeInput): Promis
         playersRestored,
         capRecordsRestored: moves.length,
         rosterIds: before.map((r) => r.rosterId),
+        noticeKey,
       }
     })
   } catch (e) {

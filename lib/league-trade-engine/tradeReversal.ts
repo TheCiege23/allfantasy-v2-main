@@ -136,7 +136,7 @@ export type ReverseGenericTradeInput = {
 }
 
 export type ReverseGenericTradeResult =
-  | { ok: true; reversalId: string; eventId: string; rostersRestored: number }
+  | { ok: true; reversalId: string; eventId: string; rostersRestored: number; noticeKey: string }
   | { ok: false; readiness: ReversalReadiness }
 
 export async function reverseGenericTrade(
@@ -197,6 +197,8 @@ export async function reverseGenericTrade(
         payload: { tradeId: trade.id },
       })
 
+      // Computed once: the row stores it and the caller dispatches the league notice with it.
+      const noticeKey = `af_trade:${trade.id}:reversed`
       const reversal = await tx.tradeReversal.create({
         data: {
           tradeId: trade.id,
@@ -212,7 +214,7 @@ export async function reverseGenericTrade(
           readiness: readiness as unknown as Prisma.InputJsonValue,
           restoredState: { rosters: before } as unknown as Prisma.InputJsonValue,
           eventId: event.eventId,
-          noticeKey: `af_trade:${trade.id}:reversed`,
+          noticeKey,
           reversedAt: new Date(),
         },
         select: { id: true },
@@ -223,6 +225,7 @@ export async function reverseGenericTrade(
         reversalId: reversal.id,
         eventId: event.eventId,
         rostersRestored: before.length,
+        noticeKey,
       }
     })
   } catch (e) {

@@ -193,6 +193,9 @@ describe('reverseNativeTrade', () => {
     expect(res.ok).toBe(true)
     if (!res.ok) throw new Error('unreachable')
     expect(res.playersRestored).toBe(2)
+    // The key the route dispatches the league notice with — the same string stored on the row.
+    expect(res.noticeKey).toBe('redraft_trade:p-1:reversed')
+    expect(db.tradeReversal.create.mock.calls[0][0].data.noticeKey).toBe(res.noticeKey)
 
     const calls = db.redraftRosterPlayer.updateMany.mock.calls.map((c) => c[0])
     // `c` came r2 -> r1; it goes back to r2 as the STARTER it was, not the BENCH trade settlement made it.

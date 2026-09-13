@@ -10,6 +10,7 @@ import {
   evaluateGenericTradeReversalReadiness,
   reverseGenericTrade,
 } from '@/lib/league-trade-engine/tradeReversal'
+import { publishTradeReversalNotice } from '@/lib/trade-reversal/notice'
 
 export const dynamic = 'force-dynamic'
 
@@ -85,6 +86,16 @@ export async function POST(
         { status: 409 },
       )
     }
+    // POST-COMMIT AND BEST-EFFORT. The reversal has already committed; a notice that fails must not turn a
+    // completed reversal into an error response, or the commissioner retries and is told ALREADY_REVERSED.
+    await publishTradeReversalNotice({
+      leagueId,
+      tradeId,
+      noticeKey: result.noticeKey,
+      engine: 'generic',
+      actorUserId: userId,
+    }).catch((e) => console.error('[trades/process] reversal notice failed', tradeId, e))
+
     // `result` already carries `ok: true`; spreading it after a literal `ok` is a duplicate key (TS2783).
     return NextResponse.json(result)
   }
