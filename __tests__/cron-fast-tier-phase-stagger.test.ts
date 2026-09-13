@@ -279,6 +279,24 @@ describe('avoidCrossGroupCollision', () => {
     for (const p of soloPoints) expect(dangerPoints).not.toContain(p)
   })
 
+  it('finds another offset when the preferred half-interval still collides', () => {
+    const thirty = ['/a', '/b', '/c', '/d'].map((path) => ({
+      path,
+      intervalMs: 1_800_000,
+      phaseMs: 0,
+    }))
+    assignPhases(thirty)
+    const solo = { path: '/ten', intervalMs: 600_000, phaseMs: 0 }
+
+    avoidCrossGroupCollision([...thirty, solo])
+
+    expect(solo.phaseMs).not.toBe(300_000)
+    const dangerPoints = new Set(thirty.map((job) => job.phaseMs))
+    for (let point = solo.phaseMs; point < 1_800_000; point += solo.intervalMs) {
+      expect(dangerPoints).not.toContain(point)
+    }
+  })
+
   it('does not move a job that has siblings at its own interval -- assignPhases already placed it', () => {
     // alert-sweep/import-news shape: a 2-member 15-minute group. import-news already moved;
     // alert-sweep is the group's own phase-0 anchor and must be left alone, even though 15
@@ -403,14 +421,13 @@ describe('the real cron schedule, after this fix', () => {
     }
   })
 
-  it('names the five jobs from the actual incident and confirms they now spread', () => {
+  it('keeps the four remaining 30-minute incident jobs spread and the trade watcher on fifteen minutes', () => {
     const { fast } = classifyCrons(readVercelCrons())
     const named = [
       '/api/cron/fantasy-os-exec-sync',
       '/api/cron/domain-os-refresh',
       '/api/cron/import-injuries',
       '/api/cron/draft-pool-prewarm',
-      '/api/cron/trade-grade-notify',
     ]
     const present = named.filter((p) => fast.some((c: { path: string }) => c.path === p))
     // If the schedule has changed since the incident, this documents that rather than failing
@@ -426,10 +443,13 @@ describe('the real cron schedule, after this fix', () => {
       }))
     assignPhases(jobs)
     const phases = jobs.map((j: { phaseMs: number }) => j.phaseMs)
-    expect(new Set(phases).size).toBe(5)
+    expect(new Set(phases).size).toBe(4)
+
+    const tradeWatcher = fast.find((c: { path: string }) => c.path === '/api/cron/trade-grade-notify')
+    expect(tradeWatcher?.schedule).toBe('*/15 * * * *')
   })
 
-  it('the five incident jobs stay minutes apart in the CATCH-UP schedule too, not just steady state', () => {
+  it('the remaining 30-minute incident jobs stay minutes apart in CATCH-UP too', () => {
     // The second half of the regression: assignPhases alone was proven above, but the incident
     // that prompted seedCatchupDueTimes happened on a build that already had assignPhases -- the
     // gap was the startup catch-up ignoring phaseMs, not the recurring boundary math. Running the
@@ -441,7 +461,6 @@ describe('the real cron schedule, after this fix', () => {
       '/api/cron/domain-os-refresh',
       '/api/cron/import-injuries',
       '/api/cron/draft-pool-prewarm',
-      '/api/cron/trade-grade-notify',
     ]
     const jobs = fast
       .filter((c: { path: string }) => named.includes(c.path))
@@ -479,7 +498,7 @@ describe('the real cron schedule, after this fix', () => {
     avoidCrossGroupCollision(jobs)
 
     const thirtyMinPhases = jobs.filter((j) => j.intervalMs === 1_800_000).map((j) => j.phaseMs)
-    expect(thirtyMinPhases.length, 'the five */30 jobs must still be on the fast tier').toBe(5)
+    expect(thirtyMinPhases.length, 'the four remaining */30 jobs must still be on the fast tier').toBe(4)
 
     const decisionOs = jobs.find((j) => j.path === '/api/cron/decision-os-intelligence-maintenance')
     expect(decisionOs, 'the incident job must still be on the fast tier').toBeTruthy()

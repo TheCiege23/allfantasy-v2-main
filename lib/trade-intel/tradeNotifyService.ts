@@ -335,7 +335,7 @@ export async function detectAndNotifyAll(limit = 50, priorityLimit = 0): Promise
   /*
    * Recently opened leagues are the latency lane. The cursor still guarantees
    * eventual coverage for every imported league, while this small second query
-   * makes the leagues people are using today run on every five-minute fire.
+   * makes the leagues people are using today run on every fifteen-minute fire.
    * `distinct` keeps duplicate season rows from spending the budget twice.
    */
   const priority = priorityLimit > 0

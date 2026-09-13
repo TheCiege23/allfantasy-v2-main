@@ -349,10 +349,10 @@ export function seedCatchupDueTimes(jobs, startedAt) {
  * genuinely SOLO job -- no siblings to coordinate with -- is safe to move unilaterally, and it is
  * worth moving because nothing here can tell a future-slow job apart from a currently-fast one.
  *
- * Shifted by HALF the job's own interval, which is enough to clear this schedule's actual danger
- * points (0/6/12/18/24 min) for the one real case today (a 10-minute job lands on 5/15/25) --
- * verified directly against the real schedule in the test suite, not assumed to generalize to
- * every possible future interval combination.
+ * Prefer HALF the job's own interval, then try whole-minute offsets until none of the recurring
+ * points land on the dangerous group's phases. This matters when membership of the longer group
+ * changes: four 30-minute jobs sit at 0/7.5/15/22.5, so the old fixed 5-minute offset would still
+ * collide at :15. The search is deterministic and bounded to one shorter-job interval.
  *
  * ⚠ THIS TRADES ONE COLLISION FOR A SMALLER ONE, NOT A PERFECT FIX. Halving a 10-minute interval
  * lands on the odd minutes, which is exactly live-score-tick's own phase (every 2 minutes from
@@ -385,7 +385,24 @@ export function avoidCrossGroupCollision(jobs) {
     if (job.intervalMs >= dangerousIntervalMs) continue // nothing longer for it to divide into
     if (dangerousIntervalMs % job.intervalMs !== 0) continue // would not hit every dangerous tick
     if ((groupSizes.get(job.intervalMs) ?? 0) >= 2) continue // has siblings -- not solo, assignPhases already placed it
-    job.phaseMs = job.intervalMs / 2
+    const dangerPoints = new Set(
+      jobs.filter((candidate) => candidate.intervalMs === dangerousIntervalMs).map((candidate) => candidate.phaseMs),
+    )
+    const preferred = job.intervalMs / 2
+    const candidates = [
+      preferred,
+      ...Array.from(
+        { length: Math.max(0, Math.floor(job.intervalMs / 60_000) - 1) },
+        (_, index) => (index + 1) * 60_000,
+      ).filter((candidate) => candidate !== preferred),
+    ]
+    const safe = candidates.find((candidate) => {
+      for (let point = candidate; point < dangerousIntervalMs; point += job.intervalMs) {
+        if (dangerPoints.has(point)) return false
+      }
+      return true
+    })
+    if (safe != null) job.phaseMs = safe
   }
 
   return jobs
