@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "measuredAt": "2026-09-13T13:23:29.347Z",
+  "measuredAt": "2026-09-13T16:37:50.921Z",
   "target": {
     "endpoint": "ep-curly-block-ad0dlt9o",
     "database": "neondb",
@@ -71,15 +71,6 @@
     "ALTER TABLE \"intelligence_projection_checkpoint\" ALTER COLUMN \"updatedAt\" DROP DEFAULT",
     "ALTER TABLE \"league_max_pf_freeze_corrections\" ADD CONSTRAINT \"league_max_pf_freeze_corrections_freezeId_fkey\" FOREIGN KEY (\"freezeId\") REFERENCES \"league_max_pf_freezes\"(\"id\") ON DELETE CASCADE ON UPDATE CASCADE",
     "ALTER TABLE \"league_member_histories\" ADD CONSTRAINT \"league_member_histories_leagueId_fkey\" FOREIGN KEY (\"leagueId\") REFERENCES \"leagues\"(\"id\") ON DELETE CASCADE ON UPDATE CASCADE",
-    "ALTER TABLE \"playoff_bracket_entries\" DROP COLUMN \"correct_picks\"",
-    "ALTER TABLE \"playoff_bracket_entries\" DROP COLUMN \"is_locked\"",
-    "ALTER TABLE \"playoff_bracket_entries\" DROP COLUMN \"rank\"",
-    "ALTER TABLE \"playoff_bracket_entries\" DROP COLUMN \"submitted_at\"",
-    "ALTER TABLE \"playoff_bracket_entries\" DROP COLUMN \"total_score\"",
-    "ALTER TABLE \"playoff_bracket_picks\" DROP COLUMN \"is_correct\"",
-    "ALTER TABLE \"playoff_bracket_picks\" DROP COLUMN \"points_awarded\"",
-    "ALTER TABLE \"playoff_bracket_series\" DROP COLUMN \"away_wins\"",
-    "ALTER TABLE \"playoff_bracket_series\" DROP COLUMN \"home_wins\"",
     "ALTER TABLE \"redraft_trade_block_items\" ALTER COLUMN \"updatedAt\" DROP DEFAULT",
     "ALTER TABLE \"redraft_trade_interests\" ALTER COLUMN \"updatedAt\" DROP DEFAULT",
     "ALTER TABLE \"resume_archetypes\" ADD CONSTRAINT \"resume_archetypes_snapshotId_fkey\" FOREIGN KEY (\"snapshotId\") REFERENCES \"resume_snapshots\"(\"id\") ON DELETE CASCADE ON UPDATE CASCADE",
@@ -246,7 +237,6 @@
     "DROP INDEX \"TenantWebhook_events_gin_idx\"",
     "DROP INDEX \"draft_sessions_leagueId_seasonYear_key\"",
     "DROP INDEX \"dw_transaction_facts_league_tx_key\"",
-    "DROP INDEX \"playoff_bracket_entries_challenge_id_total_score_idx\"",
     "DROP TABLE \"decision_strategy_events\"",
     "DROP TABLE \"decision_strategy_states\""
   ]
