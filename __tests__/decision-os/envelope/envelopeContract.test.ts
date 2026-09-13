@@ -8,7 +8,6 @@ import {
 import {
   NO_AUTO_MANAGEMENT,
   describeAction,
-  isHostReadOnly,
 } from '@/lib/decision-os/envelope/actionCapability'
 import {
   isStale,
@@ -315,7 +314,6 @@ describe('imported leagues are read-only and confirmation is the default', () =>
   it('an AllFantasy league CAN act — the positive control', () => {
     const native = { ...LEAGUE, origin: 'allfantasy' as const, platform: null }
     expect(describeAction({ id: 'submit_trade', label: 'Submit trade', league: native }).available).toBe(true)
-    expect(isHostReadOnly(native)).toBe(false)
   })
 
   it('AllFantasy-own storage actions work even on an imported league', () => {

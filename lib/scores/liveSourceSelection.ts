@@ -51,9 +51,12 @@
  * the same module as the incident above.
  *
  * Order is Guap's call, 2026-09-06: ESPN, then TheSportsDB, then Rolling Insights. `espn_live`
- * sits next to `espn` as the same vendor in the same shape, and `api_sports` sits last because it
- * is plan-blocked for the current season ("Free plans do not have access to this season") and
- * reliably returns nothing — see the note in the import-scores route.
+ * sits next to `espn` as the same vendor in the same shape, and `api_sports` sits last.
+ *
+ * ⚠ `api_sports` IS NOT AN EMPTY FEED. The Free plan refuses only API-Sports' SEASON-WIDE games
+ * query ("Free plans do not have access to this season"); its other calls still write
+ * `source='api_sports'` rows. See the note in `app/api/cron/import-scores/route.ts` before treating
+ * it as inert.
  *
  * ⚠ THIS RANKS FEEDS, IT DOES NOT INSPECT THEM. A source that goes scoreless in future still wins
  * its rank while it stays fresh. The durable fix is to prefer a feed that actually carries scores
