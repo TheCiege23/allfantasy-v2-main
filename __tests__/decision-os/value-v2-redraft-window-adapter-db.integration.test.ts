@@ -35,6 +35,12 @@ const REDRAFT_SEASON = `${RUN}-redraft-season`
 const PLAYERS = ['p1', 'p2', 'p3', 'p4'].map(p => `${RUN}-${p}`)
 const OTHER_ROSTER = `${RUN}-other-roster`
 const OTHER_PLAYERS = ['q1', 'q2', 'q3', 'q4'].map(p => `${RUN}-${p}`)
+/**
+ * The canonical identity for a fixture player. On a Sleeper league the roster carries the SLEEPER
+ * id and `AFProjectionSnapshot.playerId` carries `PlayerIdentityMap.id`, so the fixture has to seed
+ * both halves of that crosswalk or it tests a join production never makes.
+ */
+const canonOf = (sleeperId: string) => `${sleeperId}-canon`
 const SEASON = 2999
 const WEEK = 6
 
@@ -145,18 +151,35 @@ describe.skipIf(NO_DB)('the redraft adapter against real rows', () => {
      * is deliberately left without a row: coverage stays above the floor and the roster is still
      * counted honestly rather than scored as zero for the missing man.
      */
+    await prisma.playerIdentityMap.createMany({
+      data: [...PLAYERS, ...OTHER_PLAYERS].map((sleeperId, i) => ({
+        id: canonOf(sleeperId), sleeperId, sport: 'NFL',
+        canonicalName: `Fixture ${i}`, normalizedName: `fixture ${i} ${RUN}`,
+      })),
+    })
+    /*
+     * ⚠ 3 OF 4 PLAYERS PROJECTED IS EXACTLY `MIN_ROS_COVERAGE` (0.75), which resolves because the
+     * assembler's comparison is strict. That is deliberate: a change to either the constant or the
+     * comparison refuses this fixture and fails the resolve test below.
+     */
     await prisma.aFProjectionSnapshot.createMany({
-      data: [...PLAYERS.slice(0, 3), ...OTHER_PLAYERS].map((playerId, i) => ({
-        playerId, playerName: `Fixture ${i}`, sport: 'NFL', position: 'WR', season: SEASON,
+      data: [...PLAYERS.slice(0, 3), ...OTHER_PLAYERS].map((sleeperId, i) => ({
+        playerId: canonOf(sleeperId), playerName: `Fixture ${i}`, sport: 'NFL', position: 'WR', season: SEASON,
         baselineProjection: 10, afProjection: 12,
-        rosProjection: PLAYERS.includes(playerId) ? 200 - i * 10 : 60,
+        rosProjection: PLAYERS.includes(sleeperId) ? 200 - i * 10 : 60,
         rosWeeksRemaining: 11,
-        snapshotLookupKey: `${playerId}|${SEASON}|w|none`,
+        snapshotLookupKey: `${canonOf(sleeperId)}|${SEASON}|w|none`,
       })),
     })
     await prisma.sportsPlayer.createMany({
+      /*
+       * 🛑 `sleeperId` + `source: 'sleeper'`, BECAUSE #760 CHANGED THE INJURY READ AND THIS SEED WAS
+       * LEFT BEHIND. A Sleeper league's availability is now matched on those two columns; seeding
+       * `externalId` with `source: RUN` gives this fixture zero injury coverage. The suite is skipped
+       * without a database, so nothing went red when #760 landed.
+       */
       data: PLAYERS.map((externalId, i) => ({
-        sport: 'NFL', externalId, name: `Fixture ${i}`, source: RUN,
+        sport: 'NFL', externalId, sleeperId: externalId, name: `Fixture ${i}`, source: 'sleeper',
         // One unavailable out of four: real evidence, comfortably above the coverage floor.
         status: i === 0 ? 'out' : 'active',
         expiresAt: new Date(Date.now() + 86_400_000),
@@ -173,11 +196,12 @@ describe.skipIf(NO_DB)('the redraft adapter against real rows', () => {
 
   afterAll(async () => {
     await prisma.$executeRawUnsafe(`DELETE FROM "WeeklyMatchup" WHERE "leagueId" = $1`, PLATFORM).catch(() => 0)
-    await prisma.aFProjectionSnapshot.deleteMany({ where: { playerId: { in: [...PLAYERS, ...OTHER_PLAYERS] } } }).catch(() => null)
+    await prisma.aFProjectionSnapshot.deleteMany({ where: { playerId: { in: [...PLAYERS, ...OTHER_PLAYERS].map(canonOf) } } }).catch(() => null)
+    await prisma.playerIdentityMap.deleteMany({ where: { sleeperId: { in: [...PLAYERS, ...OTHER_PLAYERS] } } }).catch(() => null)
     await prisma.redraftRosterPlayer.deleteMany({ where: { rosterId: { in: [REDRAFT_ROSTER, OTHER_ROSTER] } } }).catch(() => null)
     await prisma.redraftRoster.deleteMany({ where: { id: { in: [REDRAFT_ROSTER, OTHER_ROSTER] } } }).catch(() => null)
     await prisma.redraftSeason.deleteMany({ where: { id: REDRAFT_SEASON } }).catch(() => null)
-    await prisma.sportsPlayer.deleteMany({ where: { source: RUN } }).catch(() => null)
+    await prisma.sportsPlayer.deleteMany({ where: { sport: 'NFL', source: 'sleeper', externalId: { in: PLAYERS } } }).catch(() => null)
     await prisma.dynastyProjectionSnapshot.deleteMany({ where: { leagueId: LEAGUE } }).catch(() => null)
     await prisma.seasonForecastSnapshot.deleteMany({ where: { leagueId: LEAGUE } }).catch(() => null)
     await prisma.leagueTeam.deleteMany({ where: { leagueId: LEAGUE } }).catch(() => null)

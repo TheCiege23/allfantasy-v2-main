@@ -209,17 +209,29 @@ function availabilityLoader(prisma: PrismaClient, platform: string | null) {
  * The column's own schema comment says readers must fall back and never treat it as zero. Summing
  * a roster whose projections are half-missing produces a plausible small number, and a plausible
  * small number classifies a contender as rebuilding — so a player without a projection counts as
- * UNCOVERED, never as zero points, and the assembler refuses below 50% coverage.
+ * UNCOVERED, never as zero points, and the assembler refuses below `MIN_ROS_COVERAGE` (0.75).
  *
  * ⚠ THE SHARE IS LEAGUE-RELATIVE BECAUSE PROJECTED POINTS HAVE NO ABSOLUTE SCALE. 1,400 points is
  * strong in one league and average in another. The denominator is every roster in THIS season, so
  * the figure means "this share of what is left to be scored", with `1 / teamsCovered` as average.
  */
+/**
+ * A Sleeper team-defense roster slot: its "player id" is the team abbreviation (`KC`, `PHI`).
+ *
+ * Measured 2026-09-12 across every rostered Sleeper redraft slot in forecast-covered leagues: all 26
+ * non-numeric ids were team abbreviations, and every real Sleeper player id was numeric. A team
+ * defense can never carry a player projection, so counting it in `rosterSize` only ever lowers a
+ * roster's coverage — it penalised a roster for carrying a DEF.
+ */
+const SLEEPER_TEAM_DEFENSE_ID = /^[A-Z]{2,4}$/
+
 function restOfSeasonLoader(
   prisma: PrismaClient,
   seasonId: string,
   proposerRosterId: string,
   season: number,
+  platform: string | null,
+  sport: string,
 ) {
   return async (_scope: WindowFactsScope): Promise<RestOfSeasonStrength | null> => {
     /*
@@ -250,8 +262,41 @@ function restOfSeasonLoader(
      * guaranteed to push down to SQL on every connector/version, and if it resolves in memory the
      * loop is what still guarantees newest-per-player. Correctness does not depend on which.
      */
+    /*
+     * 🛑 ON A SLEEPER LEAGUE THE ROSTER HOLDS SLEEPER IDS, AND THE PROJECTIONS DO NOT.
+     *
+     * `AFProjectionSnapshot.playerId` for NFL is the CANONICAL identity — measured 2026-09-12, 1,578
+     * of 1,578 distinct NFL playerIds are `PlayerIdentityMap.id` (0 are SportsPlayer.id, 0 are
+     * Player.id). Looking them up by the roster's Sleeper id matched NOTHING, so this loader returned
+     * null for every Sleeper league and the window refused with `rest_of_season_projection_missing`
+     * — a statement that no projections exist, made about 3,154 NFL projection rows in the table.
+     *
+     * `PlayerIdentityMap.sleeperId` is `@unique`, so the crosswalk is one-to-one: no disambiguation
+     * is needed, and 0 of 667 rostered Sleeper ids mapped to more than one row. Across 1,067 Sleeper
+     * rosters average coverage moves 0.000 -> 0.856 through it. The 36 unmapped rostered ids were 26
+     * team defenses (excluded below) and 10 real players the map does not know.
+     *
+     * ⚠ AND THE SPORT FILTER IS NEW ON BOTH PATHS. This query had none, and the table holds six
+     * sports: 11,998 NCAAF rows carry numeric ids of their own. An id-shaped collision across sports
+     * is never a correct match.
+     *
+     * A non-Sleeper league keeps the direct lookup: its roster ids are not Sleeper ids, so they are
+     * not pushed through a column that cannot hold them.
+     */
+    const isSleeper = (platform ?? '').trim().toLowerCase() === 'sleeper'
+    const canonicalBySleeper = new Map<string, string>()
+    if (isSleeper) {
+      const identities = await prisma.playerIdentityMap.findMany({
+        where: { sleeperId: { in: playerIds }, sport },
+        select: { id: true, sleeperId: true },
+      })
+      for (const m of identities) if (m.sleeperId) canonicalBySleeper.set(m.sleeperId, m.id)
+    }
+    const projectionIds = isSleeper ? [...new Set(canonicalBySleeper.values())] : playerIds
+    if (projectionIds.length === 0) return null
+
     const projections = await prisma.aFProjectionSnapshot.findMany({
-      where: { playerId: { in: playerIds }, season },
+      where: { playerId: { in: projectionIds }, season, sport },
       select: { playerId: true, rosProjection: true, rosWeeksRemaining: true, computedAt: true },
       orderBy: [{ playerId: 'asc' }, { computedAt: 'desc' }],
       distinct: ['playerId'],
@@ -275,8 +320,10 @@ function restOfSeasonLoader(
 
     for (const row of rosterRows) {
       const isMine = row.rosterId === proposerRosterId
-      if (isMine) mineSize += 1
-      const hit = row.playerId ? byPlayer.get(row.playerId) : undefined
+      const isTeamDefense = isSleeper && !!row.playerId && SLEEPER_TEAM_DEFENSE_ID.test(row.playerId)
+      if (isMine && !isTeamDefense) mineSize += 1
+      const key = row.playerId ? (isSleeper ? canonicalBySleeper.get(row.playerId) : row.playerId) : undefined
+      const hit = key ? byPlayer.get(key) : undefined
       if (!hit) continue
       if (isMine) mineCovered += 1
       totals.set(row.rosterId, (totals.get(row.rosterId) ?? 0) + hit.ros)
@@ -369,6 +416,13 @@ export async function resolveRedraftTeamWindow(req: RedraftWindowRequest): Promi
   )
   if (!leagueRead.ok) return refuse(leagueRead.gap)
   if (!leagueRead.value) return refuse(WINDOW_GAP_LEAGUE_MISSING)
+  /*
+   * Captured once, here, because it is read inside a `stage(() => ...)` closure below. TypeScript
+   * narrows `leagueRead.value` after the guard above but does NOT carry property narrowing into a
+   * callback, so reading it inside the arrow is TS18047 "possibly null" — a bug no test catches,
+   * since vitest does not typecheck.
+   */
+  const leaguePlatform = leagueRead.value.platform ?? null
 
   const team = await resolveRequestingTeam(prisma, leagueId, userId)
   if (!team.ok) return refuse(team.gap)
@@ -415,7 +469,7 @@ export async function resolveRedraftTeamWindow(req: RedraftWindowRequest): Promi
    * here it is attributable, which is what a stage-specific projection failure was asked for.
    */
   const rosRead = await stage(WINDOW_GAP_PROJECTION_READ_FAILED, () =>
-    restOfSeasonLoader(prisma, seasonId, proposerRosterId, season)({ leagueId, teamId: team.externalId, season, week }),
+    restOfSeasonLoader(prisma, seasonId, proposerRosterId, season, leaguePlatform, sport)({ leagueId, teamId: team.externalId, season, week }),
   )
   if (!rosRead.ok) return refuse(rosRead.gap)
   const restOfSeason = rosRead.value

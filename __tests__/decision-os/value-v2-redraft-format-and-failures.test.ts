@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { assembleWindowFacts, type WindowFactsPort, type WindowFactsScope } from '@/lib/decision-os/value-v2/windowFacts'
+import { assembleWindowFacts, MIN_ROS_COVERAGE, type WindowFactsPort, type WindowFactsScope } from '@/lib/decision-os/value-v2/windowFacts'
 import { allPlayAsOfWeek } from '@/lib/decision-os/value-v2/windowFactsPrismaPort'
 import {
   DEFAULT_WINDOW_COEFFICIENTS, REDRAFT_WINDOW_COEFFICIENTS, resolveCompetitiveWindow,
@@ -90,6 +90,36 @@ describe('a redraft league is judged only on this season', () => {
       }),
     }), { format: 'redraft' })
     expect(gaps).toContain('rest_of_season_coverage_below_floor')
+  })
+
+  /*
+   * 🛑 THE FLOOR IS 0.75, AND BOTH SIDES OF IT ARE PINNED. At 0.5 a thinly projected roster resolved,
+   * and because an uncovered player adds 0 points, it read as weak: across 1,067 Sleeper rosters all
+   * 14 that fell under the 0.38 rebuild line had coverage below 0.75. The boundary is asserted on
+   * both sides so a later edit to the constant OR the comparison (`<` vs `<=`) shows up here.
+   */
+  it('the rest-of-season coverage floor is 0.75', () => {
+    expect(MIN_ROS_COVERAGE).toBe(0.75)
+  })
+
+  it('refuses coverage just under the floor', async () => {
+    const { gaps } = await assembleWindowFacts(scope, redraftPort({
+      restOfSeason: async () => ({
+        share: 0.08, playersCovered: 74, rosterSize: 100, teamsCovered: 12,
+        weeksRemaining: 11, source: 'AFProjectionSnapshot.rosProjection', generatedAt: null,
+      }),
+    }), { format: 'redraft' })
+    expect(gaps).toContain('rest_of_season_coverage_below_floor')
+  })
+
+  it('accepts coverage exactly at the floor', async () => {
+    const { gaps } = await assembleWindowFacts(scope, redraftPort({
+      restOfSeason: async () => ({
+        share: 0.08, playersCovered: 3, rosterSize: 4, teamsCovered: 12,
+        weeksRemaining: 11, source: 'AFProjectionSnapshot.rosProjection', generatedAt: null,
+      }),
+    }), { format: 'redraft' })
+    expect(gaps).not.toContain('rest_of_season_coverage_below_floor')
   })
 
   it('a dynasty coefficient set cannot score redraft facts', () => {
@@ -190,13 +220,14 @@ describe('team state, and what this schema can and cannot prove about it', () =>
 
 // ── 3. FAILURE PROVENANCE, ONE STAGE AT A TIME ───────────────────────────────────────────────
 
-type Stage = 'league' | 'team' | 'schedule' | 'roster' | 'projection' | 'matchup' | 'forecast' | 'injury'
+type Stage = 'league' | 'team' | 'schedule' | 'roster' | 'projection' | 'identityMap' | 'matchup' | 'forecast' | 'injury'
 
 /** A prisma double where exactly ONE stage is made to throw. Everything else succeeds. */
 function stagedPrisma(broken: Stage | null) {
   const boom = (s: Stage) => { if (broken === s) throw new Error(`${s} read down`) }
   return {
-    league: { findUnique: async () => { boom('league'); return { platformLeagueId: 'p1' } } },
+    // A SLEEPER league, so the rest-of-season crosswalk read is inside the stage under test.
+    league: { findUnique: async () => { boom('league'); return { platformLeagueId: 'p1', platform: 'sleeper' } } },
     leagueTeam: {
       findMany: async () => { boom('team'); return [{ externalId: '7', isOrphan: false }] },
       findFirst: async () => { boom('team'); return { externalId: '7', teamName: 'A', ownerName: 'R' } },
@@ -211,6 +242,9 @@ function stagedPrisma(broken: Stage | null) {
       },
     },
     aFProjectionSnapshot: { findMany: async () => { boom('projection'); return [] } },
+    // The PlayerIdentityMap crosswalk runs inside the projection stage, so its failure must be
+    // attributed there too rather than surfacing as a broad evidence failure.
+    playerIdentityMap: { findMany: async () => { boom('identityMap'); return [{ id: 'c1', sleeperId: 'p1' }] } },
     weeklyMatchup: { findMany: async () => { boom('matchup'); return [] } },
     seasonForecastSnapshot: { findFirst: async () => { boom('forecast'); return null } },
     dynastyProjectionSnapshot: { findFirst: async () => null },
@@ -230,6 +264,7 @@ describe('a failed query is never reported as a successful absence — all SEVEN
     ['schedule', WINDOW_GAP_SCHEDULE_READ_FAILED],
     ['roster', WINDOW_GAP_ROSTER_READ_FAILED],
     ['projection', WINDOW_GAP_PROJECTION_READ_FAILED],
+    ['identityMap', WINDOW_GAP_PROJECTION_READ_FAILED],
     ['matchup', WINDOW_GAP_MATCHUP_READ_FAILED],
     ['forecast', WINDOW_GAP_FORECAST_READ_FAILED],
     ['injury', WINDOW_GAP_INJURY_READ_FAILED],

@@ -35,6 +35,8 @@ function fakePrisma(over: {
   scheduleThrows?: boolean
   projections?: Array<{ playerId: string; rosProjection: number | null; rosWeeksRemaining: number | null; computedAt: Date }>
   projectionThrows?: boolean
+  identityMap?: Array<{ id: string; sleeperId: string }>
+  identityMapThrows?: boolean
   leagueThrows?: boolean
 } = {}) {
   const reads: Read[] = []
@@ -89,7 +91,19 @@ function fakePrisma(over: {
       findMany: async (args: unknown) => {
         log('aFProjectionSnapshot.findMany')(args)
         if (over.projectionThrows) throw new Error('projection read down')
-        return over.projections ?? []
+        // Applies the id filter the real client would, so a loader that asks for the WRONG ids gets
+        // the wrong rows here rather than every fixture row regardless of what it asked for.
+        const ids = (args as { where?: { playerId?: { in?: string[] } } })?.where?.playerId?.in
+        const rows = over.projections ?? []
+        return ids ? rows.filter(r => ids.includes(r.playerId)) : rows
+      },
+    },
+    playerIdentityMap: {
+      findMany: async (args: unknown) => {
+        log('playerIdentityMap.findMany')(args)
+        if (over.identityMapThrows) throw new Error('identity map read down')
+        const ids = (args as { where?: { sleeperId?: { in?: string[] } } })?.where?.sleeperId?.in ?? []
+        return (over.identityMap ?? []).filter(m => ids.includes(m.sleeperId))
       },
     },
     weeklyMatchup: { findMany: async (args: unknown) => { log('weeklyMatchup.findMany')(args); return [] } },
@@ -340,5 +354,116 @@ describe('a resolved identity reaches the port in the right namespaces', () => {
     expect(d.teamFit).toEqual(NEUTRAL_TEAM_FIT)
     // It got far enough to identify the team, so the echo carries it.
     expect(d.identity.teamId).toBe('7')
+  })
+})
+
+// ── REST-OF-SEASON PROJECTIONS ARE KEYED ON THE CANONICAL IDENTITY ───────────────────────────────
+
+type RosEvidence = { share: number; playersCovered: number; rosterSize: number; teamsCovered: number } | null
+const rosOf = (d: unknown) => (d as { evidence?: { restOfSeason?: RosEvidence } }).evidence?.restOfSeason ?? null
+
+describe('rest-of-season projections are reached through PlayerIdentityMap on a sleeper league', () => {
+  const identityMap = [
+    { id: 'canon-a', sleeperId: '9225' },
+    { id: 'canon-b', sleeperId: '8130' },
+    { id: 'canon-c', sleeperId: '7528' },
+  ]
+  const at = new Date('2026-10-01T00:00:00Z')
+  const projections = [
+    { playerId: 'canon-a', rosProjection: 200, rosWeeksRemaining: 11, computedAt: at },
+    { playerId: 'canon-b', rosProjection: 150, rosWeeksRemaining: 11, computedAt: at },
+    { playerId: 'canon-c', rosProjection: 300, rosWeeksRemaining: 11, computedAt: at },
+    // A DECOY keyed by a RAW sleeper id. A loader that looks projections up by roster id finds this
+    // 9,999-point row, so the wrong join produces a wrong NUMBER rather than merely a missing one.
+    { playerId: '9225', rosProjection: 9999, rosWeeksRemaining: 11, computedAt: at },
+  ]
+
+  /*
+   * THE REGRESSION. NFL `AFProjectionSnapshot.playerId` is `PlayerIdentityMap.id` (1,578 of 1,578
+   * measured), and the roster holds Sleeper ids, so the direct lookup matched nothing for every
+   * Sleeper league and the window refused with `rest_of_season_projection_missing`.
+   */
+  it('crosswalks sleeper ids to canonical ids, then reads projections by canonical id and sport', async () => {
+    const { prisma, reads } = fakePrisma({
+      leagueTeams: [{ externalId: '7', isOrphan: false }],
+      rosterPlayers: [{ playerId: '9225' }, { playerId: '8130' }],
+      schedule: [{ week: 4 }, { week: 5 }, { week: 6 }],
+      leagueRosterPlayers: [
+        { rosterId: 'redraft-roster-cuid', playerId: '9225' },
+        { rosterId: 'redraft-roster-cuid', playerId: '8130' },
+        { rosterId: 'other-roster', playerId: '7528' },
+      ],
+      identityMap, projections,
+    })
+    const d = await resolveRedraftTeamWindow({ ...base, prisma })
+
+    const map = reads.find(r => r.model === 'playerIdentityMap.findMany')!.args as { where: { sleeperId: { in: string[] }; sport: string } }
+    expect(new Set(map.where.sleeperId.in)).toEqual(new Set(['9225', '8130', '7528']))
+    expect(map.where.sport).toBe('NFL')
+
+    const proj = reads.find(r => r.model === 'aFProjectionSnapshot.findMany')!.args as { where: { playerId: { in: string[] }; sport: string } }
+    expect(new Set(proj.where.playerId.in)).toEqual(new Set(['canon-a', 'canon-b', 'canon-c']))
+    expect(proj.where.playerId.in).not.toContain('9225')
+    expect(proj.where.sport).toBe('NFL')
+
+    const ros = rosOf(d)
+    expect(ros).not.toBeNull()
+    expect(ros!.share).toBeCloseTo(350 / 650, 10)
+    expect(ros!.playersCovered).toBe(2)
+    expect(ros!.rosterSize).toBe(2)
+    expect(ros!.teamsCovered).toBe(2)
+  })
+
+  /*
+   * A TEAM DEFENSE CAN NEVER HAVE A PLAYER PROJECTION, so it must not count against coverage.
+   * Measured: all 26 non-numeric rostered Sleeper ids are team abbreviations.
+   */
+  it('does not count a sleeper team-defense slot in rosterSize', async () => {
+    const { prisma } = fakePrisma({
+      leagueTeams: [{ externalId: '7', isOrphan: false }],
+      rosterPlayers: [{ playerId: '9225' }, { playerId: '8130' }, { playerId: 'KC' }],
+      schedule: [{ week: 4 }, { week: 5 }, { week: 6 }],
+      leagueRosterPlayers: [
+        { rosterId: 'redraft-roster-cuid', playerId: '9225' },
+        { rosterId: 'redraft-roster-cuid', playerId: '8130' },
+        { rosterId: 'redraft-roster-cuid', playerId: 'KC' },
+        { rosterId: 'other-roster', playerId: '7528' },
+      ],
+      identityMap, projections,
+    })
+    const ros = rosOf(await resolveRedraftTeamWindow({ ...base, prisma }))
+    expect(ros).not.toBeNull()
+    expect(ros!.rosterSize).toBe(2)
+    expect(ros!.playersCovered).toBe(2)
+  })
+
+  /*
+   * THE OTHER DIRECTION, AND A PIN RATHER THAN EVIDENCE: a non-sleeper league's roster ids are not
+   * sleeper ids, so they keep the direct lookup. This passes against the pre-fix loader too; the
+   * platform-gate mutation is what makes it mean something.
+   */
+  it('leaves a non-sleeper league on the direct lookup, never touching the identity map', async () => {
+    const { prisma, reads } = fakePrisma({
+      league: { platformLeagueId: 'espn-1', platform: 'espn' },
+      leagueTeams: [{ externalId: '7', isOrphan: false }],
+      rosterPlayers: [{ playerId: 'e1' }, { playerId: 'e2' }],
+      schedule: [{ week: 4 }, { week: 5 }, { week: 6 }],
+      leagueRosterPlayers: [
+        { rosterId: 'redraft-roster-cuid', playerId: 'e1' },
+        { rosterId: 'redraft-roster-cuid', playerId: 'e2' },
+        { rosterId: 'other-roster', playerId: 'e3' },
+      ],
+      identityMap: [{ id: 'canon-x', sleeperId: 'e1' }],
+      projections: [
+        { playerId: 'e1', rosProjection: 100, rosWeeksRemaining: 11, computedAt: at },
+        { playerId: 'e2', rosProjection: 100, rosWeeksRemaining: 11, computedAt: at },
+        { playerId: 'e3', rosProjection: 200, rosWeeksRemaining: 11, computedAt: at },
+      ],
+    })
+    const d = await resolveRedraftTeamWindow({ ...base, prisma })
+    expect(reads.map(r => r.model)).not.toContain('playerIdentityMap.findMany')
+    const proj = reads.find(r => r.model === 'aFProjectionSnapshot.findMany')!.args as { where: { playerId: { in: string[] } } }
+    expect(new Set(proj.where.playerId.in)).toEqual(new Set(['e1', 'e2', 'e3']))
+    expect(rosOf(d)!.share).toBeCloseTo(200 / 400, 10)
   })
 })
