@@ -65,7 +65,8 @@ describe('NocturneImport — canonical landing funnel (no legacy guest import)',
 
   /*
    * ⚠ THE AVAILABILITY TABLE FLIPPED, AND THIS TEST HELD THE OLD ONE. Fantrax,
-   * MFL and Fleaflicker all shipped; YAHOO is the one that is deliberately off.
+   * MFL and Fleaflicker all shipped, and Yahoo — the last one held off — was
+   * switched on 2026-09-13, so every provider is available.
    * Read from lib/league-import/provider-ui-config.ts, which its own header
    * declares the authority for exactly this question.
    *
@@ -74,29 +75,45 @@ describe('NocturneImport — canonical landing funnel (no legacy guest import)',
    * a contract test is to fail when the table changes so a human confirms the
    * change was intended.
    */
-  it('availability comes from the authoritative provider-ui-config (Yahoo is the one that is off)', () => {
+  it('availability comes from the authoritative provider-ui-config (every provider is on)', () => {
     expect(isImportProviderAvailable('sleeper')).toBe(true)
     expect(isImportProviderAvailable('espn')).toBe(true)
     expect(isImportProviderAvailable('fantrax')).toBe(true)
     expect(isImportProviderAvailable('mfl')).toBe(true)
     expect(isImportProviderAvailable('fleaflicker')).toBe(true)
-    expect(isImportProviderAvailable('yahoo')).toBe(false)
+    expect(isImportProviderAvailable('yahoo')).toBe(true)
   })
 
-  it('an unavailable provider is visibly marked "Coming soon" and cannot create an import intent', () => {
-    render(<NocturneImport variant="full" />)
-    // Yahoo, not Fantrax — Fantrax shipped. Yahoo is the deliberate hold-out.
-    fireEvent.click(screen.getByTestId('nocturne-plat-chip-yahoo'))
-    // Visibly identified as coming soon…
-    expect(screen.getByTestId('nocturne-plat-chip-yahoo')).toHaveTextContent(/coming soon/i)
-    // …and it cannot navigate/create a signup-import intent.
-    fireEvent.change(screen.getByTestId('nocturne-import-full-input'), {
-      target: { value: '1234567' },
+  it('an unavailable provider is visibly marked "Coming soon" and cannot create an import intent', async () => {
+    /*
+     * ⚠ THE REAL CONFIG HAS NO UNAVAILABLE PROVIDER LEFT TO TEST THIS WITH. Yahoo was the last
+     * one off, and it flipped on 2026-09-13. A path that renders for nobody is the path that rots
+     * unnoticed and comes back broken the day a provider is switched off again — so mock one off,
+     * the same way the 6a screen test does for its rule 3.
+     */
+    vi.resetModules()
+    vi.doMock('@/lib/league-import/provider-ui-config', async (importOriginal) => {
+      const actual = await importOriginal<typeof import('@/lib/league-import/provider-ui-config')>()
+      return { ...actual, isImportProviderAvailable: (p: string) => p !== 'yahoo' }
     })
-    const submit = screen.getByTestId('nocturne-import-full-submit')
-    expect(submit).toBeDisabled()
-    fireEvent.click(submit)
-    expect(pushMock).not.toHaveBeenCalled()
+    try {
+      const { NocturneImport: Scoped } = await import('@/components/landing/nocturne/NocturneImport')
+      render(<Scoped variant="full" />)
+      fireEvent.click(screen.getByTestId('nocturne-plat-chip-yahoo'))
+      // Visibly identified as coming soon…
+      expect(screen.getByTestId('nocturne-plat-chip-yahoo')).toHaveTextContent(/coming soon/i)
+      // …and it cannot navigate/create a signup-import intent.
+      fireEvent.change(screen.getByTestId('nocturne-import-full-input'), {
+        target: { value: '1234567' },
+      })
+      const submit = screen.getByTestId('nocturne-import-full-submit')
+      expect(submit).toBeDisabled()
+      fireEvent.click(submit)
+      expect(pushMock).not.toHaveBeenCalled()
+    } finally {
+      vi.doUnmock('@/lib/league-import/provider-ui-config')
+      vi.resetModules()
+    }
   })
 
   it('shows all six intended platforms on the landing page', () => {

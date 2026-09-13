@@ -394,16 +394,41 @@ describe('6e — the completion bar counts live platforms', () => {
    * someone reported as 5-of-6 for a platform they cannot connect.
    */
   it('takes the denominator from the live-provider config', async () => {
-    render(<ConnectedPlatforms sleeperUsername={null} />)
-    await waitFor(() => expect(document.querySelector('.af-ca-progress')).toBeTruthy())
     /*
-     * ⚠ ROWS ARE NOT THE DENOMINATOR. Counting `.af-ca-row` counts every platform
-     * INCLUDING the coming-soon ones, which is exactly the number the bar must not
-     * use — a switched-off platform is not something you have failed to connect.
-     * This asserted "of 6" against a bar correctly saying "of 5".
+     * ⚠ SINCE 2026-09-13 THE REAL CONFIG HAS NO PROVIDER SWITCHED OFF. Yahoo was the last one, so
+     * rows and live platforms are now the same number, and this test could no longer tell a bar
+     * reading its denominator from config apart from one counting rows. Switch one provider off
+     * here, the way the 6a screen test does for its rule 3, so the two numbers differ again.
      */
-    expect(document.querySelectorAll('.af-ca-row').length).toBeGreaterThan(LIVE.length)
-    expect(screen.getByText(new RegExp(`of ${LIVE.length} live platforms`, 'i'))).toBeTruthy()
+    vi.resetModules()
+    vi.doMock('@/lib/league-import/provider-ui-config', async (importOriginal) => {
+      const actual = await importOriginal<typeof import('@/lib/league-import/provider-ui-config')>()
+      const options = actual.IMPORT_PROVIDER_UI_OPTIONS.map((o) =>
+        o.provider === 'fleaflicker' ? { ...o, available: false } : o,
+      )
+      return {
+        ...actual,
+        IMPORT_PROVIDER_UI_OPTIONS: options,
+        isImportProviderAvailable: (p: string) => options.some((o) => o.provider === p && o.available),
+      }
+    })
+    try {
+      const { ConnectedPlatforms: Scoped } = await import('@/components/core-app/import/ConnectedPlatforms')
+      const scopedLive = LIVE.filter((o) => o.provider !== 'fleaflicker')
+      render(<Scoped sleeperUsername={null} />)
+      await waitFor(() => expect(document.querySelector('.af-ca-progress')).toBeTruthy())
+      /*
+       * ⚠ ROWS ARE NOT THE DENOMINATOR. Counting `.af-ca-row` counts every platform
+       * INCLUDING the coming-soon ones, which is exactly the number the bar must not
+       * use — a switched-off platform is not something you have failed to connect.
+       * This asserted "of 6" against a bar correctly saying "of 5".
+       */
+      expect(document.querySelectorAll('.af-ca-row').length).toBeGreaterThan(scopedLive.length)
+      expect(screen.getByText(new RegExp(`of ${scopedLive.length} live platforms`, 'i'))).toBeTruthy()
+    } finally {
+      vi.doUnmock('@/lib/league-import/provider-ui-config')
+      vi.resetModules()
+    }
   })
 })
 

@@ -26,40 +26,31 @@ export const IMPORT_PROVIDER_UI_OPTIONS: {
   { provider: 'sleeper', label: 'Sleeper', available: true, supportsDiscovery: true, supportedSports: ['NFL'] },
   { provider: 'espn', label: 'ESPN', available: true, supportedSports: ['NFL'] },
   /*
-   * yahoo: NOT AVAILABLE, flipped 2026-08-29. Discovery lists leagues from the user's
+   * yahoo: AVAILABLE, flipped 2026-09-13 on the owner's instruction, once `YAHOO_REDIRECT_URI` was
+   * set on the WEB service to the registered www callback
+   * (https://www.allfantasy.ai/api/league/yahoo/callback). Discovery lists leagues from the user's
    * CONNECTED Yahoo account (OAuth use_login=1) — no account identifier input.
    *
-   * ⚠ IT HAS NEVER IMPORTED A LEAGUE, AND THE FLOW CANNOT SUCCEED AS WIRED. Measured in
-   * production the day this flipped:
+   * ⚠ THE ROW-COUNT GATE THIS COMMENT USED TO CARRY WAS NOT MET WHEN IT FLIPPED. Measured in
+   * production that day, read-only:
    *
-   *     leagues where platform='yahoo'  0     import_runs provider='yahoo'  0 (ever)
-   *     YahooLeague / YahooConnection   0/0   league_auths yahoo row  1, oauthToken NULL
+   *     import_runs provider='yahoo'  0     leagues platform='yahoo'  0
+   *     league_auths yahoo            1 row, oauthToken NULL, last updated 2026-08-28
    *
-   * The cause is two rival credential stores that cannot see each other. /api/auth/yahoo
-   * — the ONLY connect entry point this screen offers — writes `YahooConnection`, which
-   * has zero rows; the league-import callback writes `league_auths`; and /api/yahoo/leagues
-   * reads only `YahooConnection`. So "Connect Yahoo" returns the user to a screen that
-   * still asks them to connect Yahoo. A loop with no exit is worse than a closed door,
-   * because the person keeps paying for the attempt.
+   * So the credential-store repair — `lib/yahoo/yahooCredentialStore.ts`, both callbacks writing
+   * `league_auths`, `/api/yahoo/leagues` reading it — had still never carried a real league. The
+   * owner chose to open the door and let the first real import be the verification. The check is
+   * unchanged and is one query: `select count(*) from import_runs where provider='yahoo'`. Run it
+   * after the first people connect. If it stays 0 while they try, flip this back rather than
+   * leaving a door that does not open.
    *
-   * Left `true` while the landing page stopped advertising Yahoo would have been the worst
-   * of both: no longer promised, still offered.
+   * History: flipped to false 2026-08-29, when two rival credential stores (`YahooConnection` vs
+   * `league_auths`) sent "Connect Yahoo" back to a screen still asking to connect Yahoo.
    *
-   * ⚠ THE TWO STORES ARE NOW RECONCILED IN CODE, AND THIS FLAG STILL DOES NOT MOVE.
-   * `lib/yahoo/yahooCredentialStore.ts` made `league_auths` the single credential and
-   * demoted `YahooConnection` to the identity record the 2026-09-04 migration had already
-   * declared it to be; both callbacks write through it and `/api/yahoo/leagues` reads it
-   * instead of a cookie. That was the first half of the sentence below, and it is done.
-   *
-   * ⚠ FLIPPING BACK NEEDS A ROW, NOT A REPAIRED CODE PATH — which is the half that is NOT
-   * done, and deliberately so. Require `select count(*) from import_runs where
-   * provider='yahoo'` to be non-zero before this becomes `true`; the repair was written
-   * and tested without Yahoo credentials in hand, so no real league has been through it.
-   * A code path that should work is exactly the evidence this file already refuses once.
-   * The Yahoo app itself must NOT be deleted or recreated while doing so; its fantasy-read
-   * permission is captured at consent time and cannot be re-granted to a new app.
+   * The Yahoo app itself must NOT be deleted or recreated; its fantasy-read permission is captured
+   * at consent time and cannot be re-granted to a new app.
    */
-  { provider: 'yahoo', label: 'Yahoo', available: false, supportsDiscovery: true, supportedSports: ['NFL'] },
+  { provider: 'yahoo', label: 'Yahoo', available: true, supportsDiscovery: true, supportedSports: ['NFL'] },
   /*
    * fantrax: LIVE. Fantrax turned out to have a real read API (`fxea`), so the
    * CSV upload is no longer the only way in — a league id is enough.
