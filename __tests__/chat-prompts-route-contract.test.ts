@@ -190,4 +190,89 @@ describe('chat prompt contracts', () => {
     await expect(res.json()).resolves.toMatchObject({ status: 'ok', notified: 0 })
     expect(dispatchNotificationMock).not.toHaveBeenCalled()
   })
+
+  async function postToLeagueRoom(body: string) {
+    const { POST } = await import('../app/api/shared/chat/threads/[threadId]/messages/route')
+    const req = new Request('http://localhost/api/shared/chat/threads/league:l1/messages', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ body }),
+    })
+    return POST(req as any, { params: { threadId: 'league:l1' } } as any)
+  }
+
+  it('keeps a Survivor ballot typed in league chat private to the voter', async () => {
+    const survivor = await import('@/lib/survivor/SurvivorOfficialCommandService')
+    vi.mocked(survivor.processSurvivorOfficialCommand).mockResolvedValueOnce({
+      handled: true,
+      ok: true,
+      status: 200,
+      intent: 'vote',
+      message: 'Vote recorded for Team Alpha.',
+    })
+
+    const res = await postToLeagueRoom('vote Team Alpha')
+    expect(res.status).toBe(200)
+    expect(createLeagueChatMessageMock).toHaveBeenCalledTimes(1)
+    expect(createLeagueChatMessageMock).toHaveBeenCalledWith(
+      'l1',
+      'u1',
+      'vote Team Alpha',
+      expect.objectContaining({ isPrivate: true, visibleToUserId: 'u1', messageSubtype: 'survivor_private_ballot' })
+    )
+  })
+
+  it('keeps a Survivor jury ballot typed in league chat private to the juror', async () => {
+    const survivor = await import('@/lib/survivor/SurvivorOfficialCommandService')
+    vi.mocked(survivor.processSurvivorOfficialCommand).mockResolvedValueOnce({
+      handled: true,
+      ok: true,
+      status: 200,
+      intent: 'jury_vote',
+      message: 'Final jury vote recorded for Team Beta.',
+    })
+
+    const res = await postToLeagueRoom('jury vote Team Beta')
+    expect(res.status).toBe(200)
+    expect(createLeagueChatMessageMock).toHaveBeenCalledWith(
+      'l1',
+      'u1',
+      'jury vote Team Beta',
+      expect.objectContaining({ isPrivate: true, visibleToUserId: 'u1' })
+    )
+  })
+
+  it('leaves a non-ballot Survivor command and an ordinary message public', async () => {
+    const survivor = await import('@/lib/survivor/SurvivorOfficialCommandService')
+    vi.mocked(survivor.processSurvivorOfficialCommand).mockResolvedValueOnce({
+      handled: true,
+      ok: true,
+      status: 200,
+      intent: 'challenge_pick',
+      message: 'Challenge submission recorded for trivia.',
+    })
+
+    expect((await postToLeagueRoom('submit challenge left')).status).toBe(200)
+    expect((await postToLeagueRoom('good luck everyone')).status).toBe(200)
+    expect(createLeagueChatMessageMock).toHaveBeenCalledTimes(2)
+    for (const call of createLeagueChatMessageMock.mock.calls) {
+      const options = call[3] as { isPrivate?: boolean; visibleToUserId?: string }
+      expect(options.isPrivate).toBeUndefined()
+      expect(options.visibleToUserId).toBeUndefined()
+    }
+  })
+
+  it('does not post a ballot the command service rejected', async () => {
+    const survivor = await import('@/lib/survivor/SurvivorOfficialCommandService')
+    vi.mocked(survivor.processSurvivorOfficialCommand).mockResolvedValueOnce({
+      handled: true,
+      ok: false,
+      status: 400,
+      error: 'No tribal council open for voting',
+    })
+
+    const res = await postToLeagueRoom('vote Team Alpha')
+    expect(res.status).toBe(400)
+    expect(createLeagueChatMessageMock).not.toHaveBeenCalled()
+  })
 })
