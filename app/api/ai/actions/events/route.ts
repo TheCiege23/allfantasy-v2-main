@@ -13,7 +13,7 @@ const BodySchema = z.object({
   leagueId: z.string().optional().nullable(),
   teamId: z.string().optional().nullable(),
   sport: z.string().optional().nullable(),
-  event: z.enum(['shown', 'clicked', 'confirmed', 'completed', 'dismissed', 'saved', 'failed']),
+  event: z.enum(['shown', 'clicked', 'confirmed', 'staged', 'completed', 'dismissed', 'saved', 'failed']),
   timestamp: z.number().int(),
   durationMs: z.number().int().optional(),
   metadata: z.record(z.unknown()).optional(),

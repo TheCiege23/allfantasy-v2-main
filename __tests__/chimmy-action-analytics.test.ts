@@ -138,4 +138,28 @@ describe('buildLearningSnapshotFromEvents', () => {
     expect(snapshot.measurableOutcomesByType[0]?.outcomeType).toBe('lineup_points_delta')
     expect(snapshot.measurableOutcomesByType[0]?.avgValue).toBe(12)
   })
+
+  it('does not count a staged action as a completion or derive an outcome from it', () => {
+    const base = {
+      action_type: 'claim_player',
+      surface: 'waiver_wire',
+      user_id: 'user-1',
+      league_id: 'league-1',
+      team_id: 'team-1',
+      sport: 'NFL',
+      timestamp: new Date().toISOString(),
+      duration_ms: null,
+    }
+    const rows = [
+      { ...base, id: 's-1', event: 'clicked', metadata: null },
+      { ...base, id: 's-2', event: 'staged', metadata: { followedSuggestion: true } },
+    ] as any
+
+    const snapshot = buildLearningSnapshotFromEvents(rows, { minActionEvents: 1 })
+
+    expect(snapshot.totals.completed).toBe(0)
+    expect(snapshot.totals.measurableOutcomes).toBe(0)
+    const claim = snapshot.actionMetrics.find((m) => m.actionType === 'claim_player')
+    expect(claim?.completed ?? 0).toBe(0)
+  })
 })

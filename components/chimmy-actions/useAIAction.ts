@@ -27,6 +27,10 @@ type ExecuteRouteResponse = {
   ok: boolean
   message?: string
   error?: string
+  outcome?: 'staged' | 'failed'
+  executed?: false
+  writeScope?: string | null
+  sourceLink?: { href: string; label: string } | null
   data?: {
     prefillTarget?: string | null
     prefillData?: Record<string, unknown>
@@ -139,18 +143,29 @@ export function useAIAction(): UseAIActionReturn {
             })
           }
 
+          // Staged, not completed: the route validated and prefilled, and the manager still has
+          // to submit. Logging 'completed' here is what made every staged action a "completion".
           await trackAIActionEvent({
             action,
             context,
-            event: 'completed',
+            event: 'staged',
             metadata: {
               source: 'use_ai_action',
               followedSuggestion: true,
             },
           })
 
-          toast.success(`${action.label} — ready!`, {
+          const sourceLink = result.sourceLink ?? null
+          toast.success(`${action.label} — ${result.writeScope ? 'staged' : 'ready!'}`, {
             description: result.message ?? 'Workflow prefill is ready.',
+            ...(sourceLink
+              ? {
+                  action: {
+                    label: sourceLink.label,
+                    onClick: () => window.open(sourceLink.href, '_blank', 'noopener,noreferrer'),
+                  },
+                }
+              : {}),
           })
 
           const workflowType = result.data?.workflowPrefill?.workflowType ?? null

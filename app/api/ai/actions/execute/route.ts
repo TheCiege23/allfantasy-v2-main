@@ -3,6 +3,8 @@ import { getServerSession } from 'next-auth'
 import { z } from 'zod'
 import { authOptions } from '@/lib/auth'
 import { executeAIAction } from '@/lib/chimmy-actions/AIActionBindingService'
+import { resolveActionLeagueWrite } from '@/lib/chimmy-actions/AIActionLeagueWriteContext'
+import { getAIActionWriteScope } from '@/lib/chimmy-actions/AIActionWriteScope'
 import { AI_ACTION_REGISTRY } from '@/lib/chimmy-actions/AIActionRegistry'
 import { validateActionExecutionServerSide } from '@/lib/chimmy-actions/AIActionServerValidation'
 import type { AIAction, AIActionContext, AIActionType } from '@/lib/chimmy-actions/AIActionModel'
@@ -123,7 +125,10 @@ export async function POST(request: NextRequest) {
     )
   }
 
-  const result = await executeAIAction(action, precheck.context)
+  // From the AUTHORIZED context, never the client's action.leagueId.
+  const writeScope = getAIActionWriteScope(action.type)
+  const leagueWrite = await resolveActionLeagueWrite(precheck.context.leagueId, writeScope)
+  const result = await executeAIAction(action, precheck.context, leagueWrite)
   if (!result.success) {
     return NextResponse.json(
       {
@@ -139,13 +144,15 @@ export async function POST(request: NextRequest) {
     leagueId: precheck.context.leagueId ?? null,
     teamId: precheck.context.teamId ?? null,
     source: precheck.context.role === 'commissioner' ? 'commissioner' : 'actions',
-    eventType: 'action_executed',
+    eventType: 'action_staged',
     content: `${action.type} on ${action.surface}`,
     sport: precheck.context.sport,
     metadata: {
       actionId: action.id,
       requiresConfirmation: action.requiresConfirmation,
       success: true,
+      executed: false,
+      writeScope,
     },
   })
 

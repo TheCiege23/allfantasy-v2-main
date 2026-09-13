@@ -14,7 +14,7 @@ type EventRow = {
   league_id: string | null
   team_id: string | null
   sport: string | null
-  event: 'shown' | 'clicked' | 'confirmed' | 'completed' | 'dismissed' | 'saved' | 'failed'
+  event: 'shown' | 'clicked' | 'confirmed' | 'staged' | 'completed' | 'dismissed' | 'saved' | 'failed'
   timestamp: string
   duration_ms: number | null
   metadata: Record<string, unknown> | null
