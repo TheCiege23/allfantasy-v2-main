@@ -9,7 +9,7 @@ import { fetchWithChain } from '@/lib/workers/api-chain'
 import { legacySupportedSportToApiChain } from '@/lib/workers/api-config'
 import { ESPN_SITE_API_BASE } from '@/lib/providers/espnUrls'
 import { normalizeGameStatus, type CanonicalGameStatus } from '@/lib/scores/gameScoreProviders'
-import { pickFreshestSourceRows } from '@/lib/scores/liveSourceSelection'
+import { LIVE_SCORE_SOURCES, pickFreshestSourceRows } from '@/lib/scores/liveSourceSelection'
 import { loadCollegeTeamIndex } from '@/lib/sport-teams/collegeTeamIndexStore'
 import { resolveCollegeTeam } from '@/lib/sport-teams/collegeTeamIdentity'
 
@@ -1229,35 +1229,29 @@ async function readCachedLiveScoreRows(options: {
        * here, so adding a source cannot let a stale feed outrank a live one.
        */
       /*
-       * 🛑 `espn` IS DELIBERATELY ABSENT. ADDING IT SHIPPED A PRODUCTION REGRESSION, MEASURED.
+       * 🛑 EVERY RANKED LIVE FEED AND NO OTHER — THE SAME SET CHIMMY AND api-chain QUERY.
        *
-       * It was added in #757 and removed the same afternoon. Same public endpoint, before and
-       * after the deploy, with /api/af-debug/sha confirming deployment 019a8d0b (aa9d583cc)
-       * answered every post-deploy request, 2026-09-12:
+       * `espn` was admitted here in #757 and shipped a production regression, measured on the
+       * public endpoint: NCAAF fell from 462 rows (weeks 2-5, 33 in progress) to 24 (week 2
+       * only, 6 in progress), NFL from 51 to 15. #762 removed it. The mechanism was selection,
+       * not the feed: pickFreshestSourceRows took ONE source for the whole call and ranks `espn`
+       * first, and the `espn` games writer (`fetchEspnGames`, `scoreboard?limit=400`, no group or
+       * date parameter) carries only a partial current-week slate.
        *
-       *   /api/sports/live-scores?sport=ncaaf   462 rows, weeks 2-5, 33 in progress
-       *                                      →   24 rows, week 2 only, 6 in progress
-       *   /api/sports/live-scores?sport=nfl     51 rows → 15
+       * It is back because selection changed, not because the feed did. Selection is now per
+       * season-week and disqualifies a ranked feed carrying under 80% of that week's best ranked
+       * coverage (LIVE_SOURCE_COVERAGE_FLOOR). Measured on production 2026-09-12, that keeps
+       * `espn` for NFL week 1 (15 of 15 — the 2026-09-06 ranking's intent) and drops it for
+       * NCAAF week 2 (24 of 131), where TheSportsDB carries 32 games in progress, corroborated
+       * by api_sports independently reporting 33.
        *
-       * Live FCS games with real scores (NC A&T @ NC Central, Stony Brook @ Ball State) vanished.
-       * Two readings four minutes apart were identical, so it was not a refresh in flight.
+       * ⚠ #757's justification — "lib/espn-data.ts writes the scoreboard as `espn`" — was false:
+       * those four sites are syncESPNInjuriesToDb and syncESPNRostersToDb. Corrected here so it
+       * is not repeated.
        *
-       * THE MECHANISM IS THE INTERACTION, NOT EITHER PIECE. pickFreshestSourceRows returns ONE
-       * source's rows wholesale and ranks `espn` first. The SportsGame writer for `espn` is
-       * `fetchEspnGames` in lib/scores/gameScoreProviders.ts, which requests
-       * `scoreboard?limit=400` with no group or date parameter and so carries only a partial,
-       * current-week slate. The moment `espn` was admitted here it was the freshest feed, won,
-       * and a partial slate displaced a complete one.
-       *
-       * ⚠ The justification written for adding it was FALSE, and is corrected here so it is not
-       * repeated: `lib/espn-data.ts` contains four `source: 'espn'` sites, but they are
-       * syncESPNInjuriesToDb and syncESPNRostersToDb. They write injuries and rosters, not games.
-       * A grep matched the string and nobody checked what the writer wrote.
-       *
-       * Do not re-add `espn` until selection is coverage-aware or the espn writer carries the
-       * full slate. sports-public-routes-cache-first pins this exact list so a re-add goes red.
+       * sports-public-routes-cache-first pins this list.
        */
-      source: { in: ['rolling_insights', 'espn_live', 'api_sports', 'thesportsdb'] },
+      source: { in: [...LIVE_SCORE_SOURCES] },
       ...(team
         ? {
             OR: [

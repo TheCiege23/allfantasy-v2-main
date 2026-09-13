@@ -222,6 +222,56 @@ describe('the live-games fast path answers from the score cache', () => {
     expect(result?.text).toContain('Next scheduled:')
     expect(result?.text).toContain('Ohio State @ Texas')
   })
+
+  /**
+   * 🛑 THE PARTIAL-FEED CASE, IN PRODUCTION'S SHAPE. Measured 2026-09-12: for NCAAF week 2 `espn`
+   * carried 24 of TheSportsDB's 131 games, and 27 of TheSportsDB's 33 games in progress were FCS
+   * games `espn` did not carry at all. Before per-week, coverage-gated selection this answer took
+   * `espn` wholesale and listed only the games `espn` had.
+   *
+   * ⚠ The mock ignores `where`, so it also returns `cfbd` rows — which is exactly what an unfiltered
+   * caller would pass. `cfbd` has the most rows and no live status; it must not win, and it must
+   * not be allowed to set the coverage bar that knocks TheSportsDB out.
+   */
+  it('lists every live game in a week the preferred feed only partly covers, and asks for ranked feeds only', async () => {
+    const now = new Date()
+    const kickoff = new Date(now.getTime() - 90 * 60 * 1_000)
+    const later = new Date(now.getTime() + 3 * 60 * 60 * 1_000)
+    const base = { sport: 'NCAAF', season: 2026, week: 2, fetchedAt: new Date(now.getTime() - 30_000) }
+    const tsdb = (id: string, away: string, home: string, a: number | null, h: number | null, status: string, startTime: Date) =>
+      ({ ...base, externalId: `tsdb-${id}`, awayTeam: away, homeTeam: home, awayScore: a, homeScore: h, status, startTime, source: 'thesportsdb' })
+
+    mockSportsGameFindMany.mockResolvedValueOnce([
+      // espn: the two FBS games it carries, named in its own mascot style.
+      { ...base, externalId: 'espn-1', awayTeam: 'Oregon Ducks', homeTeam: 'Oklahoma State Cowboys', awayScore: 31, homeScore: 36, status: 'in_progress', startTime: kickoff, source: 'espn' },
+      { ...base, externalId: 'espn-2', awayTeam: 'Utah State Aggies', homeTeam: 'Washington Huskies', awayScore: 7, homeScore: 10, status: 'in_progress', startTime: kickoff, source: 'espn' },
+      // thesportsdb: the same two, plus FCS games espn does not carry, plus the rest of the day.
+      tsdb('1', 'Oregon', 'Oklahoma State', 31, 36, 'in_progress', kickoff),
+      tsdb('2', 'Utah State', 'Washington', 7, 10, 'in_progress', kickoff),
+      tsdb('3', 'North Carolina A&T', 'North Carolina Central', 14, 30, 'in_progress', kickoff),
+      tsdb('4', 'Stony Brook', 'Ball State', 3, 21, 'in_progress', kickoff),
+      ...Array.from({ length: 6 }, (_, i) => tsdb(`s${i}`, `Visitor ${i}`, `Host ${i}`, null, null, 'scheduled', later)),
+      // cfbd: more rows than anyone, and not one of them live.
+      ...Array.from({ length: 20 }, (_, i) => ({
+        ...base, externalId: `cfbd-${i}`, awayTeam: `Away ${i}`, homeTeam: `Home ${i}`,
+        awayScore: null, homeScore: null, status: 'scheduled', startTime: kickoff, source: 'cfbd',
+      })),
+    ])
+
+    const result = await tryDeterministicAnswerDetailed('what college football games are on right now?')
+
+    expect(result?.kind).toBe('answer')
+    expect(result?.text).toContain('Live NCAAF games')
+    expect(result?.text).toContain('North Carolina A&T @ North Carolina Central — 14-30')
+    expect(result?.text).toContain('Stony Brook @ Ball State — 3-21')
+    expect(result?.text).toContain('Oregon @ Oklahoma State — 31-36')
+    expect(result?.text).not.toContain('Oregon Ducks')
+    expect(result?.text).not.toContain('Away 0')
+
+    const query = mockSportsGameFindMany.mock.calls[0]?.[0]
+    expect(query?.where?.source).toEqual({ in: ['espn', 'espn_live', 'thesportsdb', 'rolling_insights', 'api_sports'] })
+    expect(query?.select).toEqual(expect.objectContaining({ season: true, week: true }))
+  })
 })
 
 // ── checkScheduleContextAvailable ────────────────────────────────────────────

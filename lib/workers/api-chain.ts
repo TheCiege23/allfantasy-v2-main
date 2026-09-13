@@ -23,7 +23,7 @@ import { theSportsDbProvider } from '@/lib/workers/providers/thesportsdb'
 import { cfbdProvider } from '@/lib/workers/providers/cfbd'
 import { espnProvider } from '@/lib/workers/providers/espn'
 import { persistNormalizedSportsRows } from '@/lib/workers/sports-cache-persist'
-import { pickFreshestSourceRows } from '@/lib/scores/liveSourceSelection'
+import { LIVE_SCORE_SOURCES, pickFreshestSourceRows } from '@/lib/scores/liveSourceSelection'
 import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
 
 function isPopulatedResult(value: unknown): boolean {
@@ -443,6 +443,15 @@ async function readFromNormalizedTables(
       where: {
         sport: dbSport,
         ...freshOnly(now),
+        /*
+         * A live-score question reads only the ranked live feeds — the same LIVE_SCORE_SOURCES as
+         * the scoreboard reader and Chimmy. A schedule question does not filter: `cfbd` is the
+         * broadest schedule feed, and pickFreshestSourceRows only lets an unranked feed win when
+         * every ranked feed is dead, which is what a schedule lookup should fall back to.
+         */
+        ...(dataType === 'scores' || dataType === 'live_game'
+          ? { source: { in: [...LIVE_SCORE_SOURCES] } }
+          : {}),
         ...(Number.isFinite(seasonNum) ? { season: Math.floor(seasonNum) } : {}),
         ...(Number.isFinite(weekNum) ? { week: Math.floor(weekNum) } : {}),
         ...(seasonTypeQ ? { seasonType: seasonTypeQ } : {}),

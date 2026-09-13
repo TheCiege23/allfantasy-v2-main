@@ -274,6 +274,65 @@ describe('api-chain normalized reader', () => {
     expect(rollingInsightsProviderMock).not.toHaveBeenCalled()
   })
 
+  /*
+   * A scores question reads only the ranked live feeds (LIVE_SCORE_SOURCES); a schedule question
+   * is deliberately unfiltered, because `cfbd` is the broadest schedule feed.
+   *
+   * ⚠ WHY `cfbd` IS THE FRESHER FEED IN BOTH TESTS. `cfbd` is unranked, and pickFreshestSourceRows
+   * lets an unranked feed win only by being in a fresher 5-minute bucket than every ranked one. If
+   * both feeds were equally fresh, TheSportsDB would win on rank with or without the filter, and
+   * these tests would pass with the filter deleted — which is exactly how the first version of the
+   * change had no coverage for this line at all (a mutation removing it left 17/17 green).
+   *
+   * The shared `fakeFindMany` does not apply `source`, so this wraps it rather than editing it:
+   * the other tests in this file keep exactly the fake they were written against.
+   */
+  function sourceAwareFindMany(rows: GameRow[]) {
+    return async (args: Record<string, unknown>) => {
+      const where = (args.where ?? {}) as Record<string, unknown>
+      const allowed = (where.source as { in?: string[] } | undefined)?.in
+      const visible = allowed ? rows.filter((r) => allowed.includes(String(r.source))) : rows
+      return fakeFindMany(visible)(args)
+    }
+  }
+
+  const cfbdFreshButUnranked = () =>
+    game({ externalId: 'g-cfbd', source: 'cfbd', homeScore: 99, awayScore: 98, status: 'final', fetchedAt: new Date() })
+  const tsdbRankedButOlder = () =>
+    game({
+      externalId: 'g-tsdb',
+      source: 'thesportsdb',
+      homeScore: 28,
+      awayScore: 9,
+      status: 'final',
+      fetchedAt: new Date(Date.now() - 20 * 60 * 1000),
+    })
+
+  it('answers a scores request from ranked live feeds only, even when an unranked feed is fresher', async () => {
+    sportsGameFindMany.mockImplementation(sourceAwareFindMany([cfbdFreshButUnranked(), tsdbRankedButOlder()]))
+
+    const { fetchWithChain } = await import('@/lib/workers/api-chain')
+    const result = await fetchWithChain({ sport: 'nfl', dataType: 'scores', query: { season: 2026 } })
+
+    const games = result.data as Array<Record<string, unknown>>
+    expect(result.fromCache).toBe(true)
+    expect(games).toHaveLength(1)
+    expect(games[0]!.homeScore).toBe(28)
+    expect(games[0]!.awayScore).toBe(9)
+  })
+
+  it('does not filter a schedule request, so the broadest schedule feed can still answer it', async () => {
+    sportsGameFindMany.mockImplementation(sourceAwareFindMany([cfbdFreshButUnranked(), tsdbRankedButOlder()]))
+
+    const { fetchWithChain } = await import('@/lib/workers/api-chain')
+    const result = await fetchWithChain({ sport: 'nfl', dataType: 'schedule', query: { season: 2026 } })
+
+    const games = result.data as Array<Record<string, unknown>>
+    expect(result.fromCache).toBe(true)
+    expect(games).toHaveLength(1)
+    expect(games[0]!.homeScore).toBe(99)
+  })
+
   it('returns one row per fixture when several feeds hold the same game', async () => {
     const fresh = Date.now()
     sportsGameFindMany.mockImplementation(

@@ -30,7 +30,7 @@ import { getFantasyDayWindowUTC } from '@/lib/time-engine/windows'
 import { detectUpcomingIntent, findUpcomingGames } from '@/lib/ai/upcomingGames'
 import { dedupeFixtures } from '@/lib/sports/dedupeFixtures'
 import { normalizeGameStatus } from '@/lib/sports/gameStatus'
-import { pickFreshestSourceRows } from '@/lib/scores/liveSourceSelection'
+import { LIVE_SCORE_SOURCES, pickFreshestSourceRows } from '@/lib/scores/liveSourceSelection'
 import {
   detectStatFamily,
   findPlayerInText,
@@ -316,6 +316,9 @@ type CurrentGameRow = {
   startTime: Date | null
   fetchedAt: Date | null
   source: string | null
+  /** Selected so pickFreshestSourceRows can choose one source per season-week. */
+  season?: number | null
+  week?: number | null
 }
 
 const LIVE_GAME_LOOKBACK_MS = 8 * 60 * 60 * 1_000
@@ -348,6 +351,11 @@ async function buildCurrentGamesAnswer(
         gte: new Date(now.getTime() - LIVE_GAME_LOOKBACK_MS),
         lte: new Date(now.getTime() + LIVE_GAME_LOOKAHEAD_MS),
       },
+      /*
+       * Ranked live feeds only — the same set as the public scoreboard reader. Without this the
+       * query also returned `cfbd`, which has no live status at all.
+       */
+      source: { in: [...LIVE_SCORE_SOURCES] },
     },
     orderBy: { startTime: 'asc' },
     take: 1200,
@@ -362,6 +370,13 @@ async function buildCurrentGamesAnswer(
       startTime: true,
       fetchedAt: true,
       source: true,
+      /*
+       * ⚠ Selected so pickFreshestSourceRows can choose per season-week. Without them every row
+       * shares one slice, the old whole-call selection returns, and the partial `espn` college
+       * slate (24 of 131 week-2 games) wins this answer again.
+       */
+      season: true,
+      week: true,
     },
   }).catch(() => null) as CurrentGameRow[] | null
 
