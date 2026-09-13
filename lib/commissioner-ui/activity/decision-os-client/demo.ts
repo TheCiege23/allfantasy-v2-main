@@ -7,8 +7,17 @@ import { demoReportsClient } from '../../reports/decision-os-client/demo'
 import { demoWorkspaceClient } from '../../workspace/decision-os-client/demo'
 import { conditionToEventSeverity } from '../../notifications/decision-os-client/severityMapping'
 
-function daysAgo(n: number) {
-  const date = new Date()
+/**
+ * ⚠ `now` IS PASSED IN, NOT READ HERE. This helper used to call `new Date()`
+ * itself, once per event, and the demo pushes events that share an offset
+ * (`daysAgo(1, now)` twice, `daysAgo(2, now)` twice). When the clock ticked between two
+ * of those calls, the later-built event came out 1 ms NEWER than the one before
+ * it, so a list promised newest-first was not — and CI failed on it
+ * (2026-09-13, `…008` then `…009`). `getEvents` reads the clock once and every
+ * timestamp is derived from that single value.
+ */
+function daysAgo(n: number, now: number) {
+  const date = new Date(now)
   date.setDate(date.getDate() - n)
   return date.toISOString()
 }
@@ -22,6 +31,8 @@ function daysAgo(n: number) {
  */
 export const demoActivityClient: ActivityClient = {
   async getEvents() {
+    // One clock read for the whole response — see `daysAgo`.
+    const now = Date.now()
     const [risks, recommendations, automations, reportHistory, tasks] = await Promise.all([
       demoLeagueHealthClient.getRisks(),
       demoRecommendationsClient.getQueue(),
@@ -51,7 +62,7 @@ export const demoActivityClient: ActivityClient = {
         initiator: 'system',
         summary: risk.description,
         evidenceHref: '/commissioner-os/league-health',
-        timestamp: daysAgo(0),
+        timestamp: daysAgo(0, now),
       })
     }
 
@@ -64,7 +75,7 @@ export const demoActivityClient: ActivityClient = {
         initiator: 'system',
         summary: `${lineupAutomation.name} failed on its last run.`,
         evidenceHref: '/commissioner-os/automations',
-        timestamp: daysAgo(1),
+        timestamp: daysAgo(1, now),
       })
     }
 
@@ -77,7 +88,7 @@ export const demoActivityClient: ActivityClient = {
         initiator: 'system',
         summary: `${failedReport.templateName} failed to generate.`,
         evidenceHref: '/commissioner-os/reports',
-        timestamp: daysAgo(1),
+        timestamp: daysAgo(1, now),
       })
     }
 
@@ -90,7 +101,7 @@ export const demoActivityClient: ActivityClient = {
         initiator: 'system',
         summary: tradeDeadlineRecommendation.title,
         evidenceHref: '/commissioner-os/recommendations',
-        timestamp: daysAgo(2),
+        timestamp: daysAgo(2, now),
       })
     }
 
@@ -103,7 +114,7 @@ export const demoActivityClient: ActivityClient = {
         initiator: 'human',
         summary: completedTask.title,
         evidenceHref: '/commissioner-os/workspace',
-        timestamp: daysAgo(2),
+        timestamp: daysAgo(2, now),
       })
     }
 
@@ -116,7 +127,7 @@ export const demoActivityClient: ActivityClient = {
         initiator: 'system',
         summary: standingsRecommendation.title,
         evidenceHref: '/commissioner-os/recommendations',
-        timestamp: daysAgo(3),
+        timestamp: daysAgo(3, now),
       })
     }
 
@@ -129,7 +140,7 @@ export const demoActivityClient: ActivityClient = {
         initiator: 'human',
         summary: archivedTask.title,
         evidenceHref: '/commissioner-os/workspace',
-        timestamp: daysAgo(4),
+        timestamp: daysAgo(4, now),
       })
     }
 
@@ -142,7 +153,7 @@ export const demoActivityClient: ActivityClient = {
         initiator: 'system',
         summary: `${tradeReminderAutomation.name} ran successfully.`,
         evidenceHref: '/commissioner-os/automations',
-        timestamp: daysAgo(5),
+        timestamp: daysAgo(5, now),
       })
     }
 
@@ -155,7 +166,7 @@ export const demoActivityClient: ActivityClient = {
         initiator: 'system',
         summary: `${readyReport.templateName} generated successfully.`,
         evidenceHref: '/commissioner-os/reports',
-        timestamp: daysAgo(6),
+        timestamp: daysAgo(6, now),
       })
     }
 
@@ -163,7 +174,7 @@ export const demoActivityClient: ActivityClient = {
       data: events,
       error: null,
       source: 'demo',
-      timestamp: daysAgo(0),
+      timestamp: daysAgo(0, now),
     }
   },
 }
