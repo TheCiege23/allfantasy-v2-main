@@ -1627,6 +1627,16 @@ export default async function AfCorePage({
     playedLeagues.map((l) => ({
       id: l.id,
       platformLeagueId: (l as { platformLeagueId?: string | null }).platformLeagueId ?? null,
+      /* The rail must know this before it pairs a schedule. Some providers
+         publish matchup ids even for a guillotine field; those ids do not turn
+         an elimination race into head-to-head. */
+      elimination:
+        resolveLeagueCardTypeKey({
+          leagueType: l.leagueType,
+          leagueVariant: l.leagueVariant,
+          settings: l.settings ?? undefined,
+          isDynasty: l.isDynasty,
+        }) === 'guillotine',
     })),
   ).catch(() => null)
 

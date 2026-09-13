@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { AfCrest } from '@/components/core-app/AfCrest'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { CareerData } from '@/lib/core-app/career'
+import { chooseShareVideoFormat } from '@/lib/core-app/shareVideo'
 import '@/components/core-app/af-career-share.css'
 
 /**
@@ -292,24 +293,43 @@ export function CareerShare({
   }, [drawDownloadCard, league?.name])
 
   const downloadVideo = useCallback(async () => {
+    const canvas = document.createElement('canvas')
+    const fallbackToPng = async (reason: string) => {
+      drawDownloadCard(canvas)
+      const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/png'))
+      if (!blob) throw new Error('The share card could not be created in this browser.')
+      downloadBlob(blob, `${safeFilename(league?.name ?? 'league')}-wrapped.png`)
+      setDownloadState('idle')
+      setDownloadError(`${reason} A PNG was downloaded automatically.`)
+    }
+
     try {
       setDownloadError(null)
       setDownloadState('video')
-      const canvas = document.createElement('canvas')
       drawDownloadCard(canvas, 0)
-      if (typeof MediaRecorder === 'undefined' || typeof canvas.captureStream !== 'function') {
-        throw new Error('Animated downloads are not supported by this browser. The PNG download still works.')
+      if (
+        typeof MediaRecorder === 'undefined' ||
+        typeof MediaRecorder.isTypeSupported !== 'function' ||
+        typeof canvas.captureStream !== 'function'
+      ) {
+        await fallbackToPng('This browser cannot record an animated card.')
+        return
+      }
+      const output = chooseShareVideoFormat((mime) => MediaRecorder.isTypeSupported(mime))
+      if (!output) {
+        await fallbackToPng('This browser does not provide a supported MP4 or WebM recorder.')
+        return
       }
       const stream = canvas.captureStream(30)
-      const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp9')
-        ? 'video/webm;codecs=vp9'
-        : 'video/webm'
-      const recorder = new MediaRecorder(stream, { mimeType })
+      const recorder = new MediaRecorder(stream, { mimeType: output.mime })
       const chunks: BlobPart[] = []
       recorder.ondataavailable = (event) => { if (event.data.size > 0) chunks.push(event.data) }
       const finished = new Promise<void>((resolve) => {
         recorder.onstop = () => {
-          downloadBlob(new Blob(chunks, { type: mimeType }), `${safeFilename(league?.name ?? 'league')}-wrapped.webm`)
+          downloadBlob(
+            new Blob(chunks, { type: output.mime }),
+            `${safeFilename(league?.name ?? 'league')}-wrapped.${output.extension}`,
+          )
           stream.getTracks().forEach((track) => track.stop())
           resolve()
         }
@@ -329,8 +349,16 @@ export function CareerShare({
       await finished
       setDownloadState('idle')
     } catch (cause) {
-      setDownloadState('error')
-      setDownloadError(cause instanceof Error ? cause.message : 'The video could not be created.')
+      try {
+        await fallbackToPng(
+          cause instanceof Error
+            ? `The animated card could not be created: ${cause.message}`
+            : 'The animated card could not be created.',
+        )
+      } catch (fallbackCause) {
+        setDownloadState('error')
+        setDownloadError(fallbackCause instanceof Error ? fallbackCause.message : 'The share card could not be created.')
+      }
     }
   }, [drawDownloadCard, league?.name])
 
@@ -771,7 +799,7 @@ export function CareerShare({
                 {downloadState === 'image' ? 'Creating PNG…' : 'Download PNG'}
               </button>
               <button type="button" className="af-cs-act" onClick={() => void downloadVideo()} disabled={downloadState === 'image' || downloadState === 'video'}>
-                {downloadState === 'video' ? 'Creating video…' : 'Download video'}
+                {downloadState === 'video' ? 'Creating animation…' : 'Download animation'}
               </button>
               <button type="button" className="af-cs-act" onClick={copyCardText}>
                 {copied === 'image' ? 'Card text copied' : 'Copy card text'}
@@ -782,6 +810,8 @@ export function CareerShare({
             </div>
 
             {downloadError ? <p className="af-cs-note af-cs-note--warn" role="status">{downloadError}</p> : null}
+
+            <p className="af-cs-note">Animation downloads as MP4 when the browser supports it, WebM otherwise, with automatic PNG fallback.</p>
 
             <p className="af-cs-note">
               <b>AllFantasy never posts for you.</b> Copy what you want and post it yourself —

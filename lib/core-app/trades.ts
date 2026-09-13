@@ -10,6 +10,7 @@ import {
   type PendingTradeAsset,
 } from '@/lib/provider-trades/scanPendingSleeperTrades'
 import { evaluatePendingOffer, type PendingOfferEvaluation } from './pendingOfferEvaluation'
+import { collapseMirroredTradeRows } from './tradeHistorySelection'
 
 /**
  * Trades — "offer, grade, counter, all scored against this league's own rules".
@@ -138,7 +139,8 @@ export type GradedTrade = {
  */
 async function resolveGrades(
   platformLeagueId: string | null,
-  book: ValueBook
+  book: ValueBook,
+  viewerPlatformUserId: string | null,
 ): Promise<SectionState<GradedTrade[]>> {
   if (!platformLeagueId) {
     return { available: false, reason: 'this league has no source platform id, so its trades cannot be matched' }
@@ -146,7 +148,7 @@ async function resolveGrades(
 
   const histories = await prisma.leagueTradeHistory.findMany({
     where: { sleeperLeagueId: platformLeagueId },
-    select: { id: true },
+    select: { id: true, sleeperUsername: true },
   })
   if (histories.length === 0) {
     return { available: false, reason: 'no trade history has been synced for this league' }
@@ -157,17 +159,29 @@ async function resolveGrades(
     select: {
       transactionId: true, season: true, week: true,
       playersGiven: true, playersReceived: true,
+      history: { select: { sleeperUsername: true } },
     },
     orderBy: [{ season: 'desc' }, { week: 'desc' }],
-    take: 60,
+    /* One source row exists per manager involved. Read enough rows to return
+       sixty distinct trades after the mirrored copies are collapsed. */
+    take: 240,
   })
   if (trades.length === 0) {
     return { available: false, reason: 'no trades on file for this league' }
   }
 
+  /*
+   * One grade per platform transaction. Prefer the viewer's mirrored row so
+   * "received" and "gave" are from the same point of view as the page. Before
+   * this collapse the grade list could contain two or more entries for one deal
+   * while Completed trades contained none, which made the two sections look as
+   * though they described different leagues.
+   */
+  const distinctTrades = collapseMirroredTradeRows(trades, viewerPlatformUserId, 60)
+
   // Latest snapshot per player. Ranks, not raw values — see tradeGrading.
   const ids = new Set<string>()
-  for (const t of trades) {
+  for (const t of distinctTrades) {
     for (const arr of [t.playersGiven, t.playersReceived]) {
       if (Array.isArray(arr)) arr.forEach((x) => ids.add(String(x)))
     }
@@ -209,7 +223,7 @@ async function resolveGrades(
     if (!rankById.has(s.sleeperId) && s.overallRank != null) rankById.set(s.sleeperId, s.overallRank)
   }
 
-  const graded: GradedTrade[] = trades.map((t) => {
+  const graded: GradedTrade[] = distinctTrades.map((t) => {
     const recv = (Array.isArray(t.playersReceived) ? t.playersReceived : []).map(String)
     const gave = (Array.isArray(t.playersGiven) ? t.playersGiven : []).map(String)
     const toSide = (label: string, list: string[]) => ({
@@ -478,9 +492,19 @@ export async function getTradesData(leagueId: string, userId: string): Promise<T
   })
   if (!league) return null
 
-  const teamCount = await prisma.leagueTeam.count({ where: { leagueId } })
+  const [teamCount, myTeam] = await Promise.all([
+    prisma.leagueTeam.count({ where: { leagueId } }),
+    prisma.leagueTeam.findFirst({
+      where: { leagueId, claimedByUserId: userId },
+      select: { externalId: true, platformUserId: true },
+    }),
+  ])
   const book = valueBookFor(league.settings, league.leagueType)
-  const grades = await resolveGrades(league.platformLeagueId ?? null, book)
+  const grades = await resolveGrades(
+    league.platformLeagueId ?? null,
+    book,
+    myTeam?.platformUserId?.trim() || null,
+  )
 
   const base = {
     league: {
@@ -519,11 +543,6 @@ export async function getTradesData(leagueId: string, userId: string): Promise<T
     deadline: resolveDeadline(league.settings),
   }
 
-  const myTeam = await prisma.leagueTeam.findFirst({
-    where: { leagueId, claimedByUserId: userId },
-    select: { externalId: true },
-  })
-
   const facts = await prisma.transactionFact.findMany({
     where: { leagueId, type: 'trade' },
     orderBy: [{ season: 'desc' }, { weekOrPeriod: 'desc' }],
@@ -537,10 +556,6 @@ export async function getTradesData(leagueId: string, userId: string): Promise<T
       createdAt: true,
     },
   })
-
-  if (facts.length === 0) {
-    return { ...base, history: { available: false, reason: 'no trades ingested for this league' } }
-  }
 
   const teams = await prisma.leagueTeam.findMany({
     where: { leagueId },
@@ -580,10 +595,23 @@ export async function getTradesData(leagueId: string, userId: string): Promise<T
    * to resolve every referenced id to a name — rather than a lookup per row.
    */
   const txIds = [...bySleeperTx.keys()]
-  const tradeRows = txIds.length
+  /*
+   * Completed history and grades now share LeagueTrade as a source. Transaction
+   * facts remain the richer warehouse path for every provider, but a Sleeper
+   * league whose historical importer populated LeagueTrade first must not show
+   * "no trades" above grades created from those exact rows.
+   */
+  const tradeRows = league.platformLeagueId || txIds.length
     ? await prisma.leagueTrade
         .findMany({
-          where: { transactionId: { in: txIds } },
+          where: league.platformLeagueId
+            ? {
+                OR: [
+                  ...(txIds.length ? [{ transactionId: { in: txIds } }] : []),
+                  { history: { sleeperLeagueId: league.platformLeagueId } },
+                ],
+              }
+            : { transactionId: { in: txIds } },
           /*
            * ⚠ ORDERED BEFORE IT IS GROUPED, DELIBERATELY. The two mirror rows for
            * one trade tie on every payload field, so without a deterministic key
@@ -594,10 +622,18 @@ export async function getTradesData(leagueId: string, userId: string): Promise<T
           orderBy: [{ transactionId: 'asc' }, { historyId: 'asc' }],
           select: {
             transactionId: true,
+            season: true,
+            week: true,
             playersGiven: true,
             playersReceived: true,
+            picksGiven: true,
+            picksReceived: true,
+            partnerName: true,
+            tradeDate: true,
+            createdAt: true,
             history: { select: { sleeperUsername: true } },
           },
+          take: 400,
         })
         .catch(() => [])
     : []
@@ -676,6 +712,74 @@ export async function getTradesData(leagueId: string, userId: string): Promise<T
       }).filter((sideRow) => sideRow.received.length > 0),
     })
     if (history.length >= 60) break
+  }
+
+  /*
+   * Fill any transaction missing from the warehouse facts from the same
+   * mirrored LeagueTrade rows used by the grade section. This is an additive
+   * fallback: ESPN/Yahoo/Fantrax/MFL facts keep their existing path, while
+   * Sleeper history becomes complete as soon as either importer has seen it.
+   */
+  const renderedIds = new Set(history.map((trade) => trade.transactionId))
+  const legacyByTransaction = new Map<string, typeof tradeRows>()
+  for (const row of tradeRows) {
+    const bucket = legacyByTransaction.get(row.transactionId) ?? []
+    bucket.push(row)
+    legacyByTransaction.set(row.transactionId, bucket)
+  }
+
+  const countJsonArray = (value: unknown): number => Array.isArray(value) ? value.length : 0
+  for (const [txId, rows] of legacyByTransaction) {
+    if (history.length >= 60) break
+    if (renderedIds.has(txId)) continue
+
+    const ownRow = rows.find((row) =>
+      myTeam?.platformUserId
+        ? row.history.sleeperUsername === myTeam.platformUserId
+        : false,
+    ) ?? rows[0]
+    if (!ownRow) continue
+
+    const namedSides = (sidesByTx.get(txId) ?? []).map((sideRow) => {
+      const team = sideRow.username ? teamByPlatformUser.get(sideRow.username) : undefined
+      return {
+        manager: team ? (team.teamName ?? team.ownerName ?? null) : null,
+        isYou: !!(team && team.claimedByUserId === userId),
+        received: sideRow.ids.flatMap((id) => {
+          const hit = playerBySleeperId.get(id)
+          return hit ? [hit] : []
+        }),
+      }
+    }).filter((sideRow) => sideRow.received.length > 0)
+
+    const otherTeam = rows
+      .map((row) => teamByPlatformUser.get(row.history.sleeperUsername))
+      .find((team) => team && team.platformUserId !== myTeam?.platformUserId)
+
+    history.push({
+      transactionId: txId,
+      season: ownRow.season ?? null,
+      week: ownRow.week ?? null,
+      rosterIds: rows.flatMap((row) => {
+        const team = teamByPlatformUser.get(row.history.sleeperUsername)
+        return team?.externalId ? [String(team.externalId)] : []
+      }),
+      yourSide: ownRow.history.sleeperUsername === myTeam?.platformUserId ? 'in' : 'unknown',
+      playersIn: countJsonArray(ownRow.playersReceived),
+      playersOut: countJsonArray(ownRow.playersGiven),
+      picks: countJsonArray(ownRow.picksGiven) + countJsonArray(ownRow.picksReceived),
+      partnerTeamName:
+        ownRow.partnerName?.trim() || otherTeam?.teamName || otherTeam?.ownerName || null,
+      at: ownRow.tradeDate ?? ownRow.createdAt,
+      players: namedSides,
+    })
+    renderedIds.add(txId)
+  }
+
+  history.sort((a, b) => b.at.getTime() - a.at.getTime())
+
+  if (history.length === 0) {
+    return { ...base, history: { available: false, reason: 'no completed trades are on file for this league' } }
   }
 
   return { ...base, history: { available: true, data: history } }
