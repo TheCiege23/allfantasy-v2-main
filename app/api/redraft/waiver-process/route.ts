@@ -5,6 +5,10 @@ import { requireAdminOrBearer } from '@/lib/adminAuth'
 import { requireCronAuth } from '@/app/api/cron/_auth'
 import { engineSeasonScope } from '@/lib/redraft/seasonStatus'
 import { withSyncJobRun } from '@/lib/production-health/syncJobRunTelemetry'
+import {
+  expireDueRedraftTradeProposals,
+  type RedraftTradeExpirySweepResult,
+} from '@/lib/redraft/tradeProposalExpiry'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -75,6 +79,37 @@ export async function GET(request: Request) {
    * platform kills at maxDuration, which executes no user code afterwards and so never closes
    * the row — still leaves a usable started_at for the freshness probe.
    */
+  /*
+   * REDRAFT TRADE PROPOSALS EXPIRE HERE, BECAUSE NOTHING ELSE EXPIRES THEM (audit #25).
+   *
+   * A proposal's `expiresAt` was only ever checked when someone acted on it, so dead offers sat `pending`
+   * and league votes that never reached a threshold never closed. See lib/redraft/tradeProposalExpiry.ts.
+   *
+   * ⚠ IT RIDES THIS ROUTE ON PURPOSE. No new API routes (the repo sits against a route ceiling), and
+   * `trade-grade-notify` — which hosts the generic scheduled-trade processor — already runs over its own
+   * maxDuration. This is the redraft domain's hourly job; review windows are measured in days.
+   *
+   * ⚠ GUARDED, AND ON ITS OWN JOB IDENTITY. Waiver processing is this route's job, so a sweep failure must
+   * never cost the league its waivers, and the sweep's health is judged on its own output rather than
+   * inheriting this route's heartbeat.
+   */
+  let tradeExpiry: RedraftTradeExpirySweepResult & { error?: string } = { due: 0, expired: 0, skipped: 0, failures: [] }
+  try {
+    tradeExpiry = await withSyncJobRun(
+      { jobName: 'cron-redraft-trade-proposal-expiry', trigger: 'cron' },
+      () => expireDueRedraftTradeProposals(),
+      (r) => ({
+        rowsRead: r.due,
+        rowsWritten: r.expired,
+        errors: r.failures.map((f) => `${f.proposalId}: ${f.error}`),
+      }),
+    )
+  } catch (e) {
+    const error = e instanceof Error ? e.message : String(e)
+    console.error('[redraft/waiver-process] trade proposal expiry sweep failed', e)
+    tradeExpiry = { due: 0, expired: 0, skipped: 0, failures: [], error }
+  }
+
   const out = await withSyncJobRun(
     { jobName: JOB, trigger: 'cron' },
     () => processDueWaiverWindows(),
@@ -83,5 +118,5 @@ export async function GET(request: Request) {
       metadata: { seasonsProcessed: r.results.length },
     }),
   )
-  return NextResponse.json(out)
+  return NextResponse.json({ ...out, tradeExpiry })
 }
