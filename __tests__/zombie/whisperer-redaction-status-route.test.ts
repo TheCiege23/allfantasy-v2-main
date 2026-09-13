@@ -9,6 +9,7 @@ const hm = vi.hoisted(() => ({
   zombieLeagueFindUnique: vi.fn(),
   rosterFindFirst: vi.fn(),
   resolveWhispererViewer: vi.fn(),
+  resolveLeagueAccess: vi.fn(),
 }))
 
 vi.mock('next-auth', () => ({ getServerSession: hm.getServerSession }))
@@ -19,6 +20,7 @@ vi.mock('@/lib/prisma', () => ({
 vi.mock('@/lib/prisma-json', () => ({ toPrismaJsonInput: (value: unknown) => value }))
 vi.mock('@/lib/league/permissions', () => ({ requireCommissionerOnly: vi.fn() }))
 vi.mock('@/lib/zombie/whispererViewer', () => ({ resolveWhispererViewer: hm.resolveWhispererViewer }))
+vi.mock('@/lib/league-access', () => ({ resolveLeagueAccess: hm.resolveLeagueAccess }))
 
 const HIDDEN = { canSee: false, identity: { rosterIds: new Set([W_ROSTER]), userIds: new Set([W_USER]) } }
 const VISIBLE = { canSee: true, identity: HIDDEN.identity }
@@ -41,6 +43,7 @@ describe('GET /api/zombie/status — Whisperer secrecy', () => {
     hm.getServerSession.mockResolvedValue({ user: { id: 'user-member' } })
     hm.zombieLeagueFindUnique.mockResolvedValue({ teams: TEAMS })
     hm.resolveWhispererViewer.mockResolvedValue(HIDDEN)
+    hm.resolveLeagueAccess.mockResolvedValue({ isMember: true, isCommissioner: false })
   })
 
   it('does not mark the Whisperer team for a member of a secret league', async () => {
@@ -67,5 +70,13 @@ describe('GET /api/zombie/status — Whisperer secrecy', () => {
     hm.resolveWhispererViewer.mockResolvedValue(VISIBLE)
     const res = await get('')
     expect(res.text).toMatch(/"status":"Whisperer"/)
+  })
+
+  it('refuses a signed-in user who is not in the league, before reading it', async () => {
+    hm.resolveLeagueAccess.mockResolvedValue(null)
+    const res = await get('')
+    expect(res.status).toBe(403)
+    expect(hm.resolveLeagueAccess).toHaveBeenCalledWith('league-1', 'user-member')
+    expect(hm.zombieLeagueFindUnique).not.toHaveBeenCalled()
   })
 })

@@ -10,6 +10,7 @@ const hm = vi.hoisted(() => ({
   buildZombieAIContext: vi.fn(),
   generateZombieAI: vi.fn(),
   buildAiCacheKey: vi.fn(),
+  getLeagueRole: vi.fn(),
 }))
 
 vi.mock('next-auth', () => ({ getServerSession: hm.getServerSession }))
@@ -41,6 +42,7 @@ vi.mock('@/lib/ai-result-cache', () => ({
   writeAiResultCache: vi.fn(async () => undefined),
 }))
 vi.mock('@/lib/zombie/whispererViewer', () => ({ resolveWhispererViewer: hm.resolveWhispererViewer }))
+vi.mock('@/lib/league/permissions', () => ({ getLeagueRole: hm.getLeagueRole }))
 
 const IDENTITY = { rosterIds: new Set([W_ROSTER]), userIds: new Set([W_USER]) }
 
@@ -66,18 +68,18 @@ function context() {
     serumBalanceByRoster: {},
     weaponBalanceByRoster: {},
     chompinBlockCandidates: [],
-    collusionFlags: [],
-    dangerousDropFlags: [],
+    collusionFlags: [{ rosterIdA: 'roster-2', rosterIdB: 'roster-3', flagType: 'trade_ring' }],
+    dangerousDropFlags: [{ rosterId: 'roster-3', playerId: 'player-9', estimatedValue: 42, threshold: 30 }],
     historicalContext: null,
   }
 }
 
-async function post() {
+async function post(type = 'weekly_zombie_recap') {
   const { POST } = await import('@/app/api/leagues/[leagueId]/zombie/ai/route')
   const req = new Request('http://localhost/api/leagues/league-1/zombie/ai', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ type: 'weekly_zombie_recap', week: 3 }),
+    body: JSON.stringify({ type, week: 3 }),
   })
   const res = await POST(req as never, { params: Promise.resolve({ leagueId: 'league-1' }) })
   const text = await res.text()
@@ -91,6 +93,7 @@ describe('POST /api/leagues/[leagueId]/zombie/ai — Whisperer secrecy', () => {
     hm.buildZombieAIContext.mockImplementation(async () => context())
     hm.generateZombieAI.mockResolvedValue({ narrative: 'ok', model: 'test-model' })
     hm.buildAiCacheKey.mockImplementation((_feature: string, inputs: unknown) => ({ resultKey: 'k', inputHash: JSON.stringify(inputs) }))
+    hm.getLeagueRole.mockResolvedValue('member')
   })
 
   it('keeps the Whisperer out of the response, the cache key and the model context for a secret-league member', async () => {
@@ -115,5 +118,33 @@ describe('POST /api/leagues/[leagueId]/zombie/ai — Whisperer secrecy', () => {
     const res = await post()
     expect(res.body.deterministic.whispererRosterId).toBe(W_ROSTER)
     expect(hm.generateZombieAI.mock.calls[0][0].whispererRosterId).toBe(W_ROSTER)
+  })
+
+  it('keeps collusion and dangerous-drop flags away from a member, in the response and the model context', async () => {
+    hm.resolveWhispererViewer.mockResolvedValue({ canSee: true, identity: IDENTITY })
+    const res = await post()
+    expect(res.status).toBe(200)
+    expect(res.body.deterministic.collusionFlags).toEqual([])
+    expect(res.body.deterministic.dangerousDropFlags).toEqual([])
+    expect(hm.generateZombieAI.mock.calls[0][0].collusionFlags).toEqual([])
+    expect(hm.generateZombieAI.mock.calls[0][0].dangerousDropFlags).toEqual([])
+    expect(res.text).not.toContain('trade_ring')
+  })
+
+  it('refuses the commissioner review summary to a member before building context', async () => {
+    hm.resolveWhispererViewer.mockResolvedValue({ canSee: true, identity: IDENTITY })
+    const res = await post('commissioner_review_summary')
+    expect(res.status).toBe(403)
+    expect(hm.buildZombieAIContext).not.toHaveBeenCalled()
+    expect(hm.generateZombieAI).not.toHaveBeenCalled()
+  })
+
+  it.each(['commissioner', 'co_commissioner'])('gives the flags and the review summary to a %s', async (role) => {
+    hm.getLeagueRole.mockResolvedValue(role)
+    hm.resolveWhispererViewer.mockResolvedValue({ canSee: true, identity: IDENTITY })
+    const res = await post('commissioner_review_summary')
+    expect(res.status).toBe(200)
+    expect(res.body.deterministic.collusionFlags).toHaveLength(1)
+    expect(hm.generateZombieAI.mock.calls[0][0].dangerousDropFlags).toHaveLength(1)
   })
 })

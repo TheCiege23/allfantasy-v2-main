@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const hm = vi.hoisted(() => ({
   getServerSession: vi.fn(),
   zombieLeagueFindUnique: vi.fn(),
+  resolveLeagueAccess: vi.fn(),
 }))
 
 vi.mock('next-auth', () => ({ getServerSession: hm.getServerSession }))
@@ -11,6 +12,7 @@ vi.mock('@/lib/auth', () => ({ authOptions: {} }))
 vi.mock('@/lib/prisma', () => ({ prisma: { zombieLeague: { findUnique: hm.zombieLeagueFindUnique } } }))
 vi.mock('@/lib/league/permissions', () => ({ requireCommissionerOnly: vi.fn() }))
 vi.mock('@/lib/zombie/whispererEngine', () => ({ applyAmbush: vi.fn(), selectWhisperer: vi.fn() }))
+vi.mock('@/lib/league-access', () => ({ resolveLeagueAccess: hm.resolveLeagueAccess }))
 
 const WHISPERER_NAME = 'Quiet Menace'
 
@@ -44,6 +46,7 @@ describe('GET /api/zombie/whisperer', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     hm.zombieLeagueFindUnique.mockResolvedValue(leagueRow())
+    hm.resolveLeagueAccess.mockResolvedValue({ isMember: true, isCommissioner: false })
   })
 
   it('hides the Whisperer from a member of a secret league even though the record says revealed', async () => {
@@ -67,5 +70,13 @@ describe('GET /api/zombie/whisperer', () => {
   it('lets the Whisperer see their own record in a secret league', async () => {
     const res = await getAs('user-whisperer')
     expect(res.body.whisperer).toMatchObject({ displayName: WHISPERER_NAME })
+  })
+
+  it('refuses a signed-in user who is not in the league, before reading it', async () => {
+    hm.resolveLeagueAccess.mockResolvedValue(null)
+    const res = await getAs('user-outsider')
+    expect(res.status).toBe(403)
+    expect(res.text).not.toContain(WHISPERER_NAME)
+    expect(hm.zombieLeagueFindUnique).not.toHaveBeenCalled()
   })
 })
