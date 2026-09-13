@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import MiniPlayerImg from '@/components/MiniPlayerImg'
 import type { LiveGameCard, LivePageData, LiveRosterTieIn } from '@/lib/live/liveScoresPage'
+import { matchesLiveGameQuery } from '@/lib/live/liveGameSearch'
 import '@/components/core-app/af-live.css'
 
 /**
@@ -71,6 +72,7 @@ export function LiveScores({ data: initial, selectedLeagueId = null }: LiveScore
   const [sport, setSport] = useState(initial.sport)
   const [now, setNow] = useState<number | null>(null)
   const [refreshing, setRefreshing] = useState(false)
+  const [query, setQuery] = useState('')
   // Guards against a slow response for an old sport landing after a new one.
   const seqRef = useRef(0)
 
@@ -101,6 +103,10 @@ export function LiveScores({ data: initial, selectedLeagueId = null }: LiveScore
   }, [])
 
   const anyLive = data.games.some((g) => g.isLive)
+  const visibleGames = useMemo(
+    () => data.games.filter((game) => matchesLiveGameQuery(game, query)),
+    [data.games, query],
+  )
 
   useEffect(() => {
     const id = window.setInterval(() => void load(sport, scope), anyLive ? LIVE_POLL_MS : IDLE_POLL_MS)
@@ -201,6 +207,17 @@ export function LiveScores({ data: initial, selectedLeagueId = null }: LiveScore
             </button>
           </div>
 
+          <label className="af-live-search">
+            <span aria-hidden>⌕</span>
+            <input
+              type="search"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Search team, game, or your player"
+              aria-label="Search this live scoreboard by team, game, player, or league"
+            />
+          </label>
+
           <span className="af-live-freshness" data-live={anyLive} aria-live="polite">
             {anyLive ? <span className="af-live-pulse" aria-hidden /> : null}
             {anyLive ? 'Live' : 'Idle'}
@@ -269,15 +286,24 @@ export function LiveScores({ data: initial, selectedLeagueId = null }: LiveScore
             {activeSportLabel} · sorted by leagues affected
           </h2>
 
-          {data.games.length === 0 ? (
-            <EmptySlate
-              scope={scope}
-              hasRosterData={data.hasRosterData}
-              loadFailed={data.loadFailed}
-              rosterFailed={data.rosterFailed}
-            />
+          {visibleGames.length === 0 ? (
+            query.trim() ? (
+              <div className="af-live-empty">
+                <p className="af-live-empty-title">No scoreboard match for “{query.trim()}”.</p>
+                <p className="af-live-empty-body">
+                  Try a team name, abbreviation, rostered player, or league name.
+                </p>
+              </div>
+            ) : (
+              <EmptySlate
+                scope={scope}
+                hasRosterData={data.hasRosterData}
+                loadFailed={data.loadFailed}
+                rosterFailed={data.rosterFailed}
+              />
+            )
           ) : (
-            data.games.map((game) => (
+            visibleGames.map((game) => (
               <GameCard
                 key={game.gameId}
                 game={game}

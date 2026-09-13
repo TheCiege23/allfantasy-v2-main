@@ -150,6 +150,21 @@ describe('B — the source season rolls back when the newest was never played', 
     expect(r.sourceSeasonFallback).toBeNull()
   })
 
+  it('rolls back at the Thursday-to-Sunday boundary when no-game refusals dominate', async () => {
+    state.seasons = [2025, 2026]
+    state.linesBySeason[2026] = [
+      ...Array.from({ length: 9 }, (_, i) => emptyLine(`p${i}`)),
+      { playerId: 'sample-tail', stats: null },
+    ]
+    state.linesBySeason[2025] = Array.from({ length: 10 }, (_, i) => playedLine(`p${i}`))
+
+    const r = await writeAfProjectionSnapshots({ sport: 'NFL' })
+
+    expect(r.sourceSeason).toBe(2025)
+    expect(r.written).toBe(10)
+    expect(r.sourceSeasonFallback?.reason).toMatch(/90%.*no games played/i)
+  })
+
   it('keeps the FIRST attempt when the rollback is also empty', async () => {
     // Reporting the older season as the source of an empty run misdescribes what happened.
     state.seasons = [2025, 2026]

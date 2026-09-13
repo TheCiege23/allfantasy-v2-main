@@ -416,3 +416,37 @@
   font-size: 12px;
   color: var(--faint);
 }
+
+.af-tr-offer-eval {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding-top: 9px;
+  border-top: 1px solid var(--line);
+}
+
+.af-tr-offer-grade {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 11px;
+  border: 1px solid var(--accent-line);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 18px;
+  font-weight: 900;
+}
+
+.af-tr-offer-eval-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--text2);
+}
+
+.af-tr-offer-eval-copy strong { color: var(--text); }
+.af-tr-offer-eval-copy small { color: var(--faint); }

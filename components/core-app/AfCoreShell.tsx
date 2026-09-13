@@ -12,6 +12,7 @@ import PlayerCardProvider from '@/components/core-app/player-card/PlayerCardProv
 import { SUPPORT_OPEN_EVENT } from '@/components/core-app/comms/commsEvents'
 import MiniPlayerImg from '@/components/MiniPlayerImg'
 import { useOverlayContainment } from '@/components/core-app/useOverlayContainment'
+import { matchLeagueSearchHits, type LeagueSearchHit } from '@/lib/core-app/topSearch'
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import '@/components/core-app/af-core.css'
 import '@/components/core-app/af-core-shell.css'
@@ -755,7 +756,8 @@ function navSections(props: AfCoreShellProps): NavSection[] {
  */
 const MOBILE_BAR_KEYS: CoreNavKey[] = ['home', 'my-team', 'week', 'live', 'notifications']
 
-type TopSearchHit = {
+type PlayerSearchHit = {
+  kind: 'player'
   id: string
   name: string
   position: string | null
@@ -764,6 +766,8 @@ type TopSearchHit = {
   sleeperId: string | null
   slug: string
 }
+
+type TopSearchHit = PlayerSearchHit | LeagueSearchHit
 
 /**
  * The shell's topbar search. Types into a real `<input>` and routes to
@@ -776,10 +780,10 @@ type TopSearchHit = {
  * least functional of the app's three "search any player or league" controls,
  * the other two (dashboard, dash-v2 topbar) at least navigated somewhere.
  */
-function TopSearch() {
+function TopSearch({ leagues }: { leagues: RailLeague[] }) {
   const router = useRouter()
   const [q, setQ] = useState('')
-  const [hits, setHits] = useState<TopSearchHit[]>([])
+  const [playerHits, setPlayerHits] = useState<PlayerSearchHit[]>([])
   const [open, setOpen] = useState(false)
   const [active, setActive] = useState(-1)
   const [loading, setLoading] = useState(false)
@@ -789,7 +793,7 @@ function TopSearch() {
   useEffect(() => {
     const term = q.trim()
     if (term.length < 2) {
-      setHits([])
+      setPlayerHits([])
       setLoading(false)
       return
     }
@@ -802,11 +806,11 @@ function TopSearch() {
           cache: 'no-store',
         })
         if (!res.ok) {
-          setHits([])
+          setPlayerHits([])
           return
         }
-        const data = (await res.json()) as TopSearchHit[]
-        setHits(Array.isArray(data) ? data : [])
+        const data = (await res.json()) as Omit<PlayerSearchHit, 'kind'>[]
+        setPlayerHits(Array.isArray(data) ? data.map((hit) => ({ ...hit, kind: 'player' })) : [])
         setActive(-1)
       } catch {
         // Aborted or offline — leave the previous list rather than flashing empty.
@@ -820,6 +824,9 @@ function TopSearch() {
     }
   }, [q])
 
+  const leagueHits = useMemo(() => matchLeagueSearchHits(leagues, q, 4), [leagues, q])
+  const hits = useMemo<TopSearchHit[]>(() => [...leagueHits, ...playerHits.slice(0, 8)], [leagueHits, playerHits])
+
   useEffect(() => {
     function onDown(e: MouseEvent) {
       if (!wrapRef.current?.contains(e.target as Node)) setOpen(false)
@@ -831,7 +838,7 @@ function TopSearch() {
   function go(hit: TopSearchHit) {
     setOpen(false)
     setQ('')
-    router.push(`/players/${hit.slug}`)
+    router.push(hit.kind === 'league' ? `/core?league=${encodeURIComponent(hit.id)}` : `/players/${hit.slug}`)
   }
 
   function onKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
@@ -866,7 +873,7 @@ function TopSearch() {
           className="af-search-input"
           name="q"
           type="search"
-          placeholder="Search any player or league"
+          placeholder="Find a player or jump to a league"
           aria-label="Search any player or league"
           autoComplete="off"
           role="combobox"
@@ -887,14 +894,14 @@ function TopSearch() {
       </form>
 
       {showList ? (
-        <ul className="af-search-ac" id={listId} role="listbox" aria-label="Player results">
+        <ul className="af-search-ac" id={listId} role="listbox" aria-label="Player and league results">
           {hits.length === 0 ? (
             <li className="af-search-ac-empty" role="presentation">
-              {loading ? 'Searching…' : 'No players match that.'}
+              {loading ? 'Searching…' : 'No players or leagues match that.'}
             </li>
           ) : (
             hits.map((hit, i) => (
-              <li key={hit.id} role="presentation">
+              <li key={`${hit.kind}-${hit.id}`} role="presentation">
                 <button
                   type="button"
                   role="option"
@@ -903,11 +910,17 @@ function TopSearch() {
                   onMouseEnter={() => setActive(i)}
                   onClick={() => go(hit)}
                 >
-                  <MiniPlayerImg sleeperId={hit.sleeperId} name={hit.name} avatarUrl={hit.imageUrl} size={28} />
+                  {hit.kind === 'league' ? (
+                    <RailMark src={hit.imageUrl} letter={hit.mark} />
+                  ) : (
+                    <MiniPlayerImg sleeperId={hit.sleeperId} name={hit.name} avatarUrl={hit.imageUrl} size={32} />
+                  )}
                   <span className="af-search-ac-text">
                     <span className="af-search-ac-name">{hit.name}</span>
                     <span className="af-search-ac-meta">
-                      {[hit.position, hit.team].filter(Boolean).join(' · ') || '—'}
+                      {hit.kind === 'league'
+                        ? `League · ${hit.platform}`
+                        : [hit.position, hit.team].filter(Boolean).join(' · ') || 'Player'}
                     </span>
                   </span>
                 </button>
@@ -1542,7 +1555,7 @@ export function AfCoreShell(props: AfCoreShellProps) {
       {/* ── Main column ─────────────────────────────────────────────── */}
       <div className="af-main">
         <header className="af-topbar">
-          <TopSearch />
+          <TopSearch leagues={leagues} />
 
           <div className="af-topbar-right">
             <span className="af-readonly">
