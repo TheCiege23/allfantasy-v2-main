@@ -17,6 +17,8 @@ import { isNflRedraftCoreDashboardFromUserLeague } from '@/lib/league/is-nfl-red
 import { shadowDisclosure } from '@/lib/league/write-authority'
 import { ProposeTradeModal } from './ProposeTradeModal'
 import { LeagueSurfaceState } from '@/components/league/LeagueSurfaceState'
+import { ReverseTradeDialog } from '@/components/league-trade/ReverseTradeDialog'
+import { previewGenericTradeReversal, requestGenericTradeReversal } from '@/lib/trade-reversal/client'
 
 /**
  * The league Trades tab — design-refs/trade-center-handoff, League artboard.
@@ -59,6 +61,8 @@ type LogFilter = 'all' | 'completed' | 'pending'
 type PanelResponse = {
   tradeBlock?: LeagueTradeBlockPanelItem[]
   activeTrades?: LeagueTradeHistoryItem[]
+  /** Commissioner-only, native leagues only: trades that have executed and may be reversed. */
+  executedTrades?: LeagueTradeHistoryItem[]
   activeCount?: number
   providerPendingCount?: number
   providerLeagueUrl?: string
@@ -785,6 +789,7 @@ export function TradesTab({ league, teams }: TradesTabProps) {
   const tradeShadowNotice = useMemo(() => shadowDisclosure(league.platform), [league.platform])
   const [tradeBlock, setTradeBlock] = useState<LeagueTradeBlockPanelItem[]>([])
   const [activeTrades, setActiveTrades] = useState<LeagueTradeHistoryItem[]>([])
+  const [executedTrades, setExecutedTrades] = useState<LeagueTradeHistoryItem[]>([])
   /** Pending trades proposed ON the provider (Sleeper). Read-only in AllFantasy. */
   const [providerPending, setProviderPending] = useState(0)
   const [providerUrl, setProviderUrl] = useState<string | null>(null)
@@ -800,6 +805,7 @@ export function TradesTab({ league, teams }: TradesTabProps) {
   const [proposeOpen, setProposeOpen] = useState(false)
   const [actionBusyId, setActionBusyId] = useState<string | null>(null)
   const [actionErr, setActionErr] = useState<string | null>(null)
+  const [reversing, setReversing] = useState<LeagueTradeHistoryItem | null>(null)
   const [yourTab, setYourTab] = useState<YourTab>('active')
   const [logFilter, setLogFilter] = useState<LogFilter>('all')
   const [onlyMine, setOnlyMine] = useState(false)
@@ -838,6 +844,7 @@ export function TradesTab({ league, teams }: TradesTabProps) {
         setErr('Could not load trades.')
         setTradeBlock([])
         setActiveTrades([])
+        setExecutedTrades([])
         setProviderPending(0)
         setProviderUrl(null)
         setPendingScan(null)
@@ -846,6 +853,7 @@ export function TradesTab({ league, teams }: TradesTabProps) {
       }
       setTradeBlock(Array.isArray(data?.tradeBlock) ? data.tradeBlock : [])
       setActiveTrades(Array.isArray(data?.activeTrades) ? (data.activeTrades as LeagueTradeHistoryItem[]) : [])
+      setExecutedTrades(Array.isArray(data?.executedTrades) ? (data.executedTrades as LeagueTradeHistoryItem[]) : [])
       setProviderPending(typeof data?.providerPendingCount === 'number' ? data.providerPendingCount : 0)
       setProviderUrl(typeof data?.providerLeagueUrl === 'string' ? data.providerLeagueUrl : null)
       setPendingScan(data?.pending && typeof data.pending === 'object' ? data.pending : null)
@@ -854,6 +862,7 @@ export function TradesTab({ league, teams }: TradesTabProps) {
       setErr('Could not load trades.')
       setTradeBlock([])
       setActiveTrades([])
+      setExecutedTrades([])
       setProviderPending(0)
       setProviderUrl(null)
       setPendingScan(null)
@@ -1257,6 +1266,63 @@ export function TradesTab({ league, teams }: TradesTabProps) {
         </section>
       ) : null}
 
+
+      {/* ── Executed trades (commissioner) ───────────────────────────── */}
+      {/*
+       * Commissioner-only and native-league-only on the SERVER; the shadow check here is a second line,
+       * not the gate. The Reverse control additionally requires the row's own `viewerIsCommissioner`.
+       */}
+      {!loading && !err && !tradeShadowNotice && executedTrades.length > 0 ? (
+        <section className="flex flex-col gap-2.5" data-testid="executed-trades-section">
+          <div className="flex items-baseline gap-2">
+            <span className={`${EYEBROW} text-[10px] text-white/60`}>Executed trades</span>
+            <span className="h-px flex-1 bg-white/[0.07]" aria-hidden />
+            <span className="text-[10px] text-white/35">Commissioner only · most recent first</span>
+          </div>
+          <ul className="grid gap-2 md:grid-cols-2">
+            {executedTrades.map((t) => {
+              const proposer = t.proposerName ?? 'Team A'
+              const receiver = t.receiverName ?? 'Team B'
+              return (
+                <li
+                  key={t.id}
+                  className="rounded-lg border border-white/10 bg-black/20 p-3 text-[11px] text-white/80"
+                  data-testid="executed-trade-row"
+                >
+                  <p className="font-semibold text-white">
+                    {proposer} ⇄ {receiver}
+                  </p>
+                  <p className="mt-1 text-white/55">
+                    {proposer} sent {t.sent.map((a) => a.label).join(', ') || '—'}
+                  </p>
+                  <p className="text-white/55">
+                    {receiver} sent {t.received.map((a) => a.label).join(', ') || '—'}
+                  </p>
+                  {t.viewerIsCommissioner ? (
+                    <button
+                      type="button"
+                      onClick={() => setReversing(t)}
+                      className="mt-2 min-h-[44px] rounded-lg border border-rose-400/40 px-3 text-[11px] font-semibold text-rose-300"
+                      data-testid="executed-trade-reverse"
+                    >
+                      Reverse trade
+                    </button>
+                  ) : null}
+                </li>
+              )
+            })}
+          </ul>
+        </section>
+      ) : null}
+      {reversing ? (
+        <ReverseTradeDialog
+          title={`${reversing.proposerName ?? 'Team A'} ⇄ ${reversing.receiverName ?? 'Team B'}`}
+          preflight={() => previewGenericTradeReversal(league.id, reversing.id)}
+          reverse={(reason) => requestGenericTradeReversal(league.id, reversing.id, reason)}
+          onClose={() => setReversing(null)}
+          onReversed={() => void load()}
+        />
+      ) : null}
 
       {/* ── Provider scan honesty ────────────────────────────────────── */}
       {!loading && !err && pendingScan && !pendingScan.scanned ? (

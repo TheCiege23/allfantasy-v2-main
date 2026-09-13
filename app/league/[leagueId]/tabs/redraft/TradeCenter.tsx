@@ -18,6 +18,8 @@ import {
   type RedraftTradeProposal,
   type RedraftTradeSettings,
 } from '@/lib/redraft/client'
+import { ReverseTradeDialog } from '@/components/league-trade/ReverseTradeDialog'
+import { previewNativeTradeReversal, requestNativeTradeReversal } from '@/lib/trade-reversal/client'
 
 function rosterName(row: RedraftRosterRow | undefined, fallbackId: string): string {
   return row?.teamName ?? row?.ownerName ?? fallbackId.slice(0, 6)
@@ -65,6 +67,7 @@ export function TradeCenter({
 }) {
   const [proposals, setProposals] = useState<RedraftTradeProposal[]>([])
   const [loading, setLoading] = useState(false)
+  const [reversingId, setReversingId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [busyProposalId, setBusyProposalId] = useState<string | null>(null)
   const [modalOpen, setModalOpen] = useState(false)
@@ -301,6 +304,33 @@ export function TradeCenter({
                       </button>
                     ) : null}
                   </div>
+                ) : null}
+                {/*
+                 * Reverse is offered only on an ACCEPTED proposal, and only to a commissioner. The server
+                 * enforces both; this keeps the control off screens where pressing it could only be refused.
+                 */}
+                {p.status === 'accepted' && (isCommissioner || settingsCommissioner) ? (
+                  <div className="mt-2">
+                    <button
+                      type="button"
+                      className="min-h-[44px] rounded border border-rose-500/40 px-3 py-1 text-rose-300 disabled:opacity-50"
+                      disabled={busyProposalId === p.id}
+                      onClick={() => setReversingId(p.id)}
+                      data-testid="trade-proposal-reverse"
+                    >
+                      Reverse trade
+                    </button>
+                  </div>
+                ) : null}
+                {reversingId === p.id ? (
+                  <ReverseTradeDialog
+                    title={`${rosterNameById.get(p.proposerRosterId) ?? 'Team A'} ⇄ ${rosterNameById.get(p.receiverRosterId) ?? 'Team B'}`}
+                    note="Players who were locked before this trade come back unlocked — the trade record does not keep their lock state."
+                    preflight={() => previewNativeTradeReversal(p.id)}
+                    reverse={(reason) => requestNativeTradeReversal(p.id, reason)}
+                    onClose={() => setReversingId(null)}
+                    onReversed={() => void refresh()}
+                  />
                 ) : null}
                 {isCommissioner || settingsCommissioner ? <CommissionerReviewPanel proposalId={p.id} /> : null}
               </div>

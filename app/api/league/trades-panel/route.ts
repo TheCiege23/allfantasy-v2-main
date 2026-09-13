@@ -6,6 +6,7 @@ import { toPrismaJsonInput } from '@/lib/prisma-json'
 import type { LeagueTradeBlockPanelItem, LeagueTradeHistoryItem, LeagueTradeAsset } from '@/components/league/types'
 import { listAfLeagueTrades } from '@/lib/league-trade-engine/tradeService'
 import { isElevatedCommissioner } from '@/server/services/permissionService'
+import { resolveWriteAuthority } from '@/lib/league/write-authority'
 import { getLeagueContext } from '@/lib/league-context/leagueContextService'
 import { getMarketValues } from '@/lib/trade-intel/marketValueService'
 import {
@@ -99,6 +100,63 @@ async function buildNativeActiveTrades(leagueId: string, userId: string): Promis
         viewerIsProposer,
       }
     })
+}
+
+/**
+ * Trades that have already EXECUTED, for a commissioner who may need to reverse one.
+ *
+ * ⚠ SEPARATE FROM `buildNativeActiveTrades`, AND `activeTrades` IS UNTOUCHED. That list feeds the tab's
+ * "Needs your action" section and is filtered to non-terminal statuses; a `processed` trade in it would
+ * render as something waiting on someone. Executed trades are a different list with a different
+ * audience.
+ *
+ * ⚠ COMMISSIONER-ONLY ON THE SERVER, not merely hidden by the UI. Reversal is a commissioner action, and
+ * a manager has no use for a list of other people's settled trades with a reverse control beside them.
+ *
+ * The caller gates this to NATIVE write authority as well: on an imported (shadow) league the trade
+ * happened on the provider, AllFantasy holds no execution record, and there is nothing it may undo.
+ */
+async function buildNativeExecutedTrades(leagueId: string, userId: string): Promise<LeagueTradeHistoryItem[]> {
+  const isCommissioner = await isElevatedCommissioner(leagueId, userId)
+  if (!isCommissioner) return []
+
+  const trades = await listAfLeagueTrades(leagueId, { status: 'processed', take: 20 })
+  if (trades.length === 0) return []
+
+  const rosterIds = [...new Set(trades.flatMap((t) => [t.proposerRosterId, t.receiverRosterId]))]
+  const rosters = await prisma.roster.findMany({
+    where: { id: { in: rosterIds } },
+    select: { id: true, platformUserId: true },
+  })
+  const userIds = [...new Set(rosters.map((r) => r.platformUserId))]
+  const users = await prisma.appUser.findMany({
+    where: { id: { in: userIds } },
+    select: { id: true, displayName: true, username: true },
+  })
+  const nameByUserId = new Map(users.map((u) => [u.id, u.displayName?.trim() || u.username]))
+  const userIdByRosterId = new Map(rosters.map((r) => [r.id, r.platformUserId]))
+  const nameOf = (rosterId: string) => nameByUserId.get(userIdByRosterId.get(rosterId) ?? '') ?? 'Manager'
+
+  return trades.map((t) => ({
+    id: t.id,
+    direction: 'complete' as const,
+    partnerName: nameOf(t.receiverRosterId),
+    proposerName: nameOf(t.proposerRosterId),
+    receiverName: nameOf(t.receiverRosterId),
+    timestamp: t.createdAt.toISOString(),
+    executedAt: (t.processedAt ?? t.createdAt).toISOString(),
+    // What each side SENT: `sent` is the proposer's outgoing assets, `received` the receiver's.
+    sent: t.items
+      .filter((i) => i.fromRosterId === t.proposerRosterId)
+      .map((i) => ({ id: i.id, ...assetLabel(i), headshotUrl: null, accent: 'blue' as const })),
+    received: t.items
+      .filter((i) => i.fromRosterId === t.receiverRosterId)
+      .map((i) => ({ id: i.id, ...assetLabel(i), headshotUrl: null, accent: 'teal' as const })),
+    status: t.status,
+    viewerIsCommissioner: true,
+    viewerIsReceiver: false,
+    viewerIsProposer: false,
+  }))
 }
 
 /** Map a provider asset onto the panel's asset shape. */
@@ -275,10 +333,14 @@ export async function GET(req: NextRequest) {
       })
     }
 
+    const executedTrades =
+      resolveWriteAuthority(league.platform) === 'NATIVE' ? await buildNativeExecutedTrades(leagueId, userId) : []
+
     return NextResponse.json({
       draft,
       tradeBlock: [] as LeagueTradeBlockPanelItem[],
       activeTrades,
+      executedTrades,
       activeCount: activeTrades.length,
       source: 'native' as const,
       /*
