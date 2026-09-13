@@ -244,8 +244,10 @@ function clockLabel(row: LiveScoreRow, sport: string): string | null {
   /*
    * Baseball has no clock, and "P7" said nothing about which half. ESPN's own
    * status text ("Bot 7th", "Mid 3rd") is the label every scoreboard uses.
+   * Keyed on the baseball DATA as well as MLB, so a baseball feed from a sport
+   * the app has not added yet (college baseball) is labelled the same way.
    */
-  if (sport === 'MLB') return String(row.statusDetail ?? '').trim() || null
+  if (sport === 'MLB' || row.situation?.baseball) return String(row.statusDetail ?? '').trim() || null
   const clock = String(row.clock ?? '').trim()
   const periodLabel =
     sport === 'NFL' || sport === 'NCAAF'

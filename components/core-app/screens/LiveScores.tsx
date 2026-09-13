@@ -530,6 +530,14 @@ export function GameCard({
   const weekLabel = game.week != null ? `${game.sport} · Week ${game.week}` : game.sport
   const isFootball = game.sport === 'NFL' || game.sport === 'NCAAF'
   const situation = game.situation
+  /*
+   * Baseball is recognised by its DATA, not by `sport === 'MLB'` (2026-09-13):
+   * runners/count from the feed, or hits reported per team (only a baseball
+   * scoreboard sends those). College baseball is not a sport in the app yet; when
+   * it is added, its cards get the diamond and the R-H-E box with no change here.
+   */
+  const isBaseball =
+    game.sport === 'MLB' || situation?.baseball != null || game.home.hits != null || game.away.hits != null
   const starters = scope === 'my' ? groupStartersByPlayer(game.tieIns) : []
 
   return (
@@ -567,7 +575,7 @@ export function GameCard({
         />
       </div>
 
-      <Linescore game={game} isFootball={isFootball} isBaseball={game.sport === 'MLB'} />
+      <Linescore game={game} isFootball={isFootball} isBaseball={isBaseball} />
 
       {/*
         ── Field strip ─────────────────────────────────────────────────────────
@@ -579,7 +587,7 @@ export function GameCard({
         than a ball at a guessed yard line.
       */}
       {isFootball && situation ? <FieldStrip game={game} /> : null}
-      {game.sport === 'MLB' && situation?.baseball ? <Diamond game={game} /> : null}
+      {situation?.baseball ? <Diamond game={game} /> : null}
 
       {/*
         Last play: ESPN's own play text when the scoreboard carries it — it is
