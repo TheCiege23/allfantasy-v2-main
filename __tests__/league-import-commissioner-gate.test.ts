@@ -25,12 +25,20 @@ vi.mock('@/lib/league-sync-core', () => ({
 }))
 
 class YahooImportLeagueNotFoundErrorMock extends Error {}
+class YahooApiResponseErrorMock extends Error {
+  status: number
+  constructor(status: number, message: string) {
+    super(message)
+    this.status = status
+  }
+}
 class EspnImportLeagueNotFoundErrorMock extends Error {}
 class MflImportLeagueNotFoundErrorMock extends Error {}
 
 vi.mock('@/lib/league-import/yahoo/YahooLeagueFetchService', () => ({
   fetchYahooLeagueForImport: yahooFetchMock,
   YahooImportLeagueNotFoundError: YahooImportLeagueNotFoundErrorMock,
+  YahooApiResponseError: YahooApiResponseErrorMock,
 }))
 
 vi.mock('@/lib/league-import/espn/EspnLeagueFetchService', () => ({
@@ -363,6 +371,40 @@ describe('assertImportCommissioner', () => {
     const result = await assertImportCommissioner({ appUserId: 'u1', provider: 'yahoo', sourceLeagueId: '401.l.1' })
     expect(result.ok).toBe(false)
     expect(result.notFound).toBeFalsy()
+  })
+
+  /*
+   * The exact body Yahoo returned in production on 2026-09-13 for a pasted league URL. The gate used
+   * to hand it to every import route as `reason`, and the routes return `reason` to the client.
+   */
+  const YAHOO_403_BODY =
+    '{"error":{"xml:lang":"en-us","yahoo:uri":"\\/fantasy\\/v2\\/league\\/nfl.l.1361311?format=json",' +
+    '"description":"This application is not authorized to perform this action.","detail":""}}'
+
+  it('maps a Yahoo 403 to the plain-language sentence and never passes Yahoo\'s body through as the reason', async () => {
+    yahooFetchMock.mockRejectedValue(new YahooApiResponseErrorMock(403, YAHOO_403_BODY))
+    const { assertImportCommissioner } = await import('@/lib/league-import/commissionerGate')
+    const { describeYahooRejection } = await import('@/lib/league-import/yahoo/yahooRejection')
+    const result = await assertImportCommissioner({ appUserId: 'u1', provider: 'yahoo', sourceLeagueId: 'nfl.l.1361311' })
+
+    expect(result.ok).toBe(false)
+    expect(result.reason).toBe(describeYahooRejection(403))
+    expect(result.status).toBe(403)
+    expect(result.notFound).toBeFalsy()
+    for (const leak of ['yahoo:uri', '/fantasy/v2/', '\\/fantasy\\/v2', 'not authorized to perform']) {
+      expect(result.reason ?? '').not.toContain(leak)
+    }
+  })
+
+  it('treats a Yahoo 404 response as not found, with the mapped sentence', async () => {
+    yahooFetchMock.mockRejectedValue(new YahooApiResponseErrorMock(404, '{"error":{"description":"League not found"}}'))
+    const { assertImportCommissioner } = await import('@/lib/league-import/commissionerGate')
+    const { describeYahooRejection } = await import('@/lib/league-import/yahoo/yahooRejection')
+    const result = await assertImportCommissioner({ appUserId: 'u1', provider: 'yahoo', sourceLeagueId: 'nfl.l.1' })
+
+    expect(result.ok).toBe(false)
+    expect(result.notFound).toBe(true)
+    expect(result.reason).toBe(describeYahooRejection(404))
   })
 })
 
