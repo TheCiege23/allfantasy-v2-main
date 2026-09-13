@@ -3,6 +3,7 @@ import { toPrismaJsonInput } from '@/lib/prisma-json'
 import { resolveCanonicalLeagueRules } from '@/lib/league-runtime'
 import type { CanonicalLeagueRuntimeEvent } from '@/lib/league-runtime'
 import { resolveRedraftRosterConfig } from '@/lib/redraft/rosterConfigResolver'
+import { hydrateRedraftLineupLocksForRosters } from '@/lib/redraft/lineupLock'
 import { validateRedraftLineup } from '@/lib/redraft/lineupValidation'
 import { updateStandings } from '@/lib/redraft/standingsEngine'
 import { getNormalizedPlayerData } from '@/lib/player-data/getNormalizedPlayerData'
@@ -208,9 +209,19 @@ export async function resolveNflRedraftLiveScoringRuntime(input: {
     where: { seasonId: season.id, leagueId: season.leagueId },
     orderBy: { id: 'asc' },
   })
-  const rosterPlayers = await prisma.redraftRosterPlayer.findMany({
+  const storedRosterPlayers = await prisma.redraftRosterPlayer.findMany({
     where: { roster: { seasonId: season.id, leagueId: season.leagueId }, droppedAt: null },
     orderBy: { addedAt: 'asc' },
+  })
+  // `RedraftRosterPlayer.isLocked` is never stored as true: the lineup lock is derived from the
+  // game schedule at read time (lib/redraft/lineupLock.ts), so it is only meaningful after this.
+  const { players: rosterPlayers } = await hydrateRedraftLineupLocksForRosters(prisma, {
+    sport: season.sport,
+    season: season.season,
+    week,
+    leagueSettings: league?.settings ?? null,
+    players: storedRosterPlayers,
+    now: input.now,
   })
   const playersByRosterId = new Map<string, typeof rosterPlayers>()
   for (const player of rosterPlayers) {

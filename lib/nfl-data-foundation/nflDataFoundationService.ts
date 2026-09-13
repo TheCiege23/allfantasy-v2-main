@@ -10,6 +10,7 @@ import {
 } from '@/lib/draft-room/player-canonical-identity'
 import { getResolvedDraftPoolForLeague } from '@/lib/draft-room/getResolvedDraftPoolForLeague'
 import { buildAllFantasyProjection } from '@/lib/redraft/projectionEngine'
+import { hydrateRedraftLineupLocks } from '@/lib/redraft/lineupLock'
 import { getCanonicalNflDataCoverage } from './nflDataCoverage'
 import type {
   CanonicalNflAiContext,
@@ -1134,7 +1135,7 @@ function canonicalFact(player: CanonicalNflPlayer): CanonicalNflAiPlayerFact {
 
 export async function getCanonicalNflRosterContext(
   rosterId: string,
-  options?: { week?: number; season?: number; prismaClient?: DbClient },
+  options?: { week?: number; season?: number; prismaClient?: DbClient; now?: Date },
 ): Promise<CanonicalNflRosterPlayer[]> {
   const db = (options?.prismaClient ?? prisma) as DbClient
   const roster = (await (db as any).redraftRoster
@@ -1144,7 +1145,8 @@ export async function getCanonicalNflRosterContext(
     })
     .catch(() => null)) as
     | {
-        season: { season: number; currentWeek: number }
+        leagueId: string
+        season: { season: number; currentWeek: number; sport: string }
         players: Array<{
           playerId: string
           playerName: string
@@ -1159,8 +1161,25 @@ export async function getCanonicalNflRosterContext(
   if (!roster) return []
   const season = Number(options?.season ?? roster.season.season)
   const week = Number(options?.week ?? roster.season.currentWeek ?? 1)
+  const league = (await (db as any).league
+    .findUnique({ where: { id: roster.leagueId }, select: { settings: true } })
+    .catch(() => null)) as { settings: unknown } | null
+  // `RedraftRosterPlayer.isLocked` is never stored as true: the lineup lock is derived from the
+  // game schedule at read time (lib/redraft/lineupLock.ts). Fail open like the rest of this module,
+  // so a schedule read error cannot take the roster context down with it.
+  const rosterRows = await hydrateRedraftLineupLocks(db, {
+    sport: roster.season.sport || 'NFL',
+    season,
+    week,
+    rosterId,
+    leagueSettings: league?.settings ?? null,
+    players: roster.players,
+    now: options?.now,
+  })
+    .then((result) => result.players)
+    .catch(() => roster.players)
   const players = await Promise.all(
-    roster.players.map(async (row) => {
+    rosterRows.map(async (row) => {
       const player =
         (await getCanonicalNflPlayerContext(row.playerId, { season, week, prismaClient: db })) ??
         (await getCanonicalNflPlayerByNameTeam(row.playerName, row.team, {
