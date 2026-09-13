@@ -281,6 +281,17 @@ jobs:
         DIRECT_URL: postgresql://postgres:postgres@127.0.0.1:5432/allfantasy_ci
         NEXTAUTH_SECRET: ci-nextauth-secret
         NEXTAUTH_URL: http://localhost:3000
+        # ⚠ SAME HEAP AS THE CORE LANE, AND FOR THE SAME REASON. Without it the dev
+        # server runs on scripts/playwright-dev-server.cjs's 4096MB default, and global
+        # setup's 33 warm routes leave the heap past next dev's 0.8 x heap_size_limit
+        # line. The next request trips "Server is approaching the used memory threshold,
+        # restarting..." (exit 77, respawn), and a navigation issued into that window
+        # never answers. Measured on 2026-09-12: every mobile-auth 240s timeout followed
+        # a restart landing 4.6-25.7s after "Running N tests". The authed-phone warm-up
+        # hook only absorbed the restart by tripping it itself. Headroom, not a guarantee
+        # (see the core lane's note above): judge this by the restart line's count in the
+        # log, not by a green run.
+        NODE_OPTIONS: --max-old-space-size=8192
       run: npm run test:e2e:mobile:auth
     - uses: actions/upload-artifact@v4
       if: ${{ !cancelled() }}
