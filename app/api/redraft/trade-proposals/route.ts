@@ -3,6 +3,11 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { assertLeagueMember } from '@/lib/league/league-access'
+import {
+  REDRAFT_TRADE_GOVERNANCE_REFUSAL,
+  prohibitedRedraftGovernanceFields,
+  resolveRedraftTradeGovernance,
+} from '@/lib/redraft/tradeGovernance'
 import { recordAfLearningEvent } from '@/lib/ai-learning-system/recordEvent'
 import { resolveLeagueSport } from '@/lib/ai-learning-system/resolveLeagueSport'
 import { captureRedraftTradeValueSnapshot } from '@/lib/trade-value/captureSnapshot'
@@ -26,11 +31,6 @@ type TradeAssetInput = {
   pickRound?: number
   pickNumber?: number
   metadata?: unknown
-}
-
-function parseVetoMode(input: string | undefined): 'commissioner' | 'league_vote' | 'no_veto' {
-  if (input === 'league_vote' || input === 'no_veto') return input
-  return 'commissioner'
 }
 
 export async function GET(req: NextRequest) {
@@ -77,8 +77,6 @@ export async function POST(req: NextRequest) {
     seasonId?: string
     proposerRosterId?: string
     receiverRosterId?: string
-    vetoMode?: string
-    vetoThreshold?: number
     reason?: string
     expiresInHours?: number
     assets?: TradeAssetInput[]
@@ -87,6 +85,12 @@ export async function POST(req: NextRequest) {
     body = (await req.json()) as typeof body
   } catch {
     return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
+  }
+
+  // Governance is the league's decision: see lib/redraft/tradeGovernance.ts.
+  const prohibited = prohibitedRedraftGovernanceFields(body)
+  if (prohibited.length) {
+    return NextResponse.json({ error: REDRAFT_TRADE_GOVERNANCE_REFUSAL, prohibitedFields: prohibited }, { status: 400 })
   }
 
   const leagueId = body.leagueId?.trim()
@@ -117,9 +121,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Only proposer roster owner can create trade' }, { status: 403 })
   }
 
-  const vetoMode = parseVetoMode(body.vetoMode?.trim())
-  const thresholdInput = Number(body.vetoThreshold)
-  const vetoThreshold = Number.isFinite(thresholdInput) && thresholdInput > 0 ? Math.floor(thresholdInput) : 4
+  const { vetoMode, vetoThreshold } = await resolveRedraftTradeGovernance(prisma, leagueId)
   const expiresHoursInput = Number(body.expiresInHours)
   const expiresHours = Number.isFinite(expiresHoursInput) && expiresHoursInput > 0 ? Math.floor(expiresHoursInput) : 48
   const expiresAt = new Date(Date.now() + expiresHours * 3600 * 1000)

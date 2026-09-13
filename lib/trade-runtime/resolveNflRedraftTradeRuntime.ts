@@ -4,6 +4,7 @@ import type { Prisma } from '@prisma/client'
 import { resolveCanonicalLeagueRules } from '@/lib/league-runtime'
 import type { CanonicalLeagueRuntimeEvent } from '@/lib/league-runtime/leagueRuntimeEvents'
 import { resolveRedraftRosterConfig } from '@/lib/redraft/rosterConfigResolver'
+import { resolveRedraftTradeGovernance } from '@/lib/redraft/tradeGovernance'
 import { hydrateRedraftLineupLocksForRosters } from '@/lib/redraft/lineupLock'
 import {
   validateRedraftLineup,
@@ -60,8 +61,6 @@ export type CreateNflRedraftTradeProposalInput = {
   proposerRosterId: string
   receiverRosterId: string
   assets: NflRedraftTradeAssetInput[]
-  vetoMode?: string | null
-  vetoThreshold?: number | null
   reason?: string | null
   expiresInHours?: number | null
   actorUserId?: string | null
@@ -103,12 +102,6 @@ function positiveHours(value: unknown, fallback: number): number {
   return parsed == null || parsed <= 0 ? fallback : Math.max(1, Math.floor(parsed))
 }
 
-function normalizeVetoMode(value: unknown): 'commissioner' | 'league_vote' | 'no_veto' {
-  const raw = String(value ?? 'commissioner').trim().toLowerCase()
-  if (raw === 'league_vote') return 'league_vote'
-  if (raw === 'no_veto' || raw === 'none' || raw === 'instant') return 'no_veto'
-  return 'commissioner'
-}
 
 async function resolveSeason(input: { seasonId?: string | null; leagueId?: string | null }) {
   return prisma.redraftSeason.findFirst({
@@ -495,8 +488,8 @@ export async function createNflRedraftTradeProposal(input: CreateNflRedraftTrade
   if (!validation.ok) throw new Error(validation.message)
 
   const proposalId = crypto.randomUUID()
-  const vetoMode = normalizeVetoMode(input.vetoMode)
-  const vetoThreshold = Math.max(1, Math.floor(Number(input.vetoThreshold ?? 4)))
+  // Governance is the league's decision, never the caller's: see lib/redraft/tradeGovernance.ts.
+  const { vetoMode, vetoThreshold } = await resolveRedraftTradeGovernance(prisma, resolved.state.leagueId)
   const expiresAt = new Date(Date.now() + positiveHours(input.expiresInHours, resolved.state.settings.reviewHours) * 3600 * 1000)
   const created = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
     const proposal = await tx.redraftTradeProposal.create({

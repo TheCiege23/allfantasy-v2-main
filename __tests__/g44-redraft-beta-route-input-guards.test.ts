@@ -22,6 +22,9 @@ const prismaMock = {
     findFirst: vi.fn(),
     findUnique: vi.fn(),
   },
+  redraftRoster: {
+    findFirst: vi.fn(),
+  },
 }
 
 vi.mock('next-auth', () => ({
@@ -152,6 +155,48 @@ describe('G44 redraft beta route input guards', () => {
     expect(res.status).toBe(400)
     await expect(res.json()).resolves.toEqual({ error: 'week must be a positive integer' })
     expect(resolveTradeRuntimeMock).not.toHaveBeenCalled()
+  })
+
+  it('🛑 refuses a caller-chosen vetoMode or vetoThreshold before touching the trade runtime', async () => {
+    // The runtime copied these onto the proposal, so a direct caller could pick `no_veto` for their own trade.
+    const { createNflRedraftTradeProposal } = await import('@/lib/trade-runtime')
+    const { POST } = await import('../app/api/redraft/trade-runtime/route')
+    const req = createMockNextRequest('http://localhost/api/redraft/trade-runtime', {
+      method: 'POST',
+      body: {
+        action: 'create_proposal',
+        leagueId: 'league-1',
+        proposerRosterId: 'r-1',
+        receiverRosterId: 'r-2',
+        assets: [],
+        vetoMode: 'no_veto',
+        vetoThreshold: 1,
+      },
+    })
+
+    const res = await POST(req as any)
+    expect(res.status).toBe(400)
+    await expect(res.json()).resolves.toMatchObject({ prohibitedFields: ['vetoMode', 'vetoThreshold'] })
+    expect(createNflRedraftTradeProposal).not.toHaveBeenCalled()
+  })
+
+  it('does not forward governance to the runtime, which resolves it from league settings', async () => {
+    const { createNflRedraftTradeProposal } = await import('@/lib/trade-runtime')
+    prismaMock.redraftRoster.findFirst.mockResolvedValue({ id: 'r-1', ownerId: 'user-1', seasonId: 'season-1', leagueId: 'league-1' })
+    vi.mocked(createNflRedraftTradeProposal).mockResolvedValue({ proposal: { id: 'p-1' }, validation: { ok: true } } as never)
+    resolveTradeRuntimeMock.mockResolvedValue({ ok: false, reason: 'season_not_found' })
+
+    const { POST } = await import('../app/api/redraft/trade-runtime/route')
+    const req = createMockNextRequest('http://localhost/api/redraft/trade-runtime', {
+      method: 'POST',
+      body: { action: 'create_proposal', leagueId: 'league-1', proposerRosterId: 'r-1', receiverRosterId: 'r-2', assets: [] },
+    })
+
+    const res = await POST(req as any)
+    expect(res.status).toBe(200)
+    const forwarded = vi.mocked(createNflRedraftTradeProposal).mock.calls[0]![0] as Record<string, unknown>
+    expect(forwarded).not.toHaveProperty('vetoMode')
+    expect(forwarded).not.toHaveProperty('vetoThreshold')
   })
 
   it('rejects invalid schedule action week before advancing the schedule', async () => {
