@@ -17,6 +17,7 @@ import {
   writeRedraftTradeExecutionSnapshot,
 } from '@/lib/redraft/tradeExecutionSnapshot'
 import { evaluateNativeTradeReversalReadiness, reverseNativeTrade } from '@/lib/redraft/tradeReversal'
+import { publishTradeReversalNotice } from '@/lib/trade-reversal/notice'
 import { getPlatformEvents, EVENT } from '@/lib/events'
 import { recordRedraftTradeMarketEvent, type RedraftMarketEventType } from '@/lib/trade-market/redraftTradeMarketEvents'
 import { enqueueCollusionScan } from '@/lib/integrity/enqueueCollusionScan'
@@ -464,6 +465,16 @@ export async function POST(req: NextRequest) {
         )
       }
     }
+    // POST-COMMIT AND BEST-EFFORT, after the projection refresh. The reversal has already committed; a
+    // notice that fails must not turn it into an error response.
+    await publishTradeReversalNotice({
+      leagueId: proposal.leagueId,
+      tradeId: proposal.id,
+      noticeKey: result.noticeKey,
+      engine: 'native',
+      actorUserId: userId,
+    }).catch((e) => console.error('[redraft/trade-votes] reversal notice failed', proposal.id, e))
+
     // `result` already carries `ok: true`; spreading it after a literal `ok` is a duplicate key (TS2783).
     return NextResponse.json(result)
   }
