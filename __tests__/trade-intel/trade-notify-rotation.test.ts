@@ -164,4 +164,14 @@ describe('🛑 the sweep rotates instead of re-reading the same page', () => {
     await detectAndNotifyAll()
     expect(h.leagueFindMany.mock.calls[0][0].take).toBe(50)
   })
+
+  it('adds a recently-viewed priority lane when the cron requests one', async () => {
+    await detectAndNotifyAll(12, 8)
+    expect(h.leagueFindMany).toHaveBeenCalledTimes(2)
+    expect(h.leagueFindMany.mock.calls[1][0]).toMatchObject({
+      where: { lastViewedAt: { not: null } },
+      orderBy: { lastViewedAt: 'desc' },
+      take: 8,
+    })
+  })
 })

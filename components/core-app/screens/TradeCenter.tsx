@@ -3,6 +3,7 @@
 import { useCallback, useMemo, useState } from 'react'
 import { SourceActionLink } from '@/components/league-links/SourceActionLink'
 import type { SourceScreenLink } from '@/lib/league-links/sourceLinkResolver'
+import type { CrossLeagueValueAction } from '@/lib/core-app/crossLeagueValueActions'
 import {
   RosterPlayerRow,
   StockMark,
@@ -272,6 +273,8 @@ export function TradeCenter(props: {
   leagueVariant?: string | null
   /** Every connected league, for the cross-league offers strip. Omit to hide the strip. */
   leagues?: StripLeague[] | null
+  /** Portfolio-wide value changes, already scoped to rosters owned by this manager. */
+  valueActions?: CrossLeagueValueAction[] | null
   /**
    * Where to actually send the finished trade — the platform's own trade page.
    * Null for a native league, or when the resolver could not verify a host.
@@ -416,10 +419,7 @@ export function TradeCenter(props: {
     (r) => r.rosterId !== rosterData?.viewerTeamRosterId,
   )
   const theirLabel = partnerRoster?.ownerName ?? props.opponentLabel ?? 'Their team'
-  const valueActions = (myRoster?.players ?? [])
-    .filter((player) => player.stock === 'up' || player.stock === 'down')
-    .sort((a, b) => Math.abs(b.stockDelta ?? 0) - Math.abs(a.stockDelta ?? 0))
-    .slice(0, 5)
+  const valueActions = props.valueActions ?? []
 
   const addAsset = useCallback(
     (side: 'give' | 'get', asset: PickedAsset) => {
@@ -888,16 +888,17 @@ export function TradeCenter(props: {
 
       {valueActions.length > 0 ? (
         <section className="af-tc-value-actions">
-          <div className="af-label">Value changes · actions for {props.league?.name ?? 'this league'}</div>
+          <div className="af-label">Value change alerts · every connected league</div>
           <div className="af-tc-value-action-list">
             {valueActions.map((player) => (
-              <div key={player.id} className="af-tc-value-action" data-direction={player.stock}>
+              <div key={player.playerId} className="af-tc-value-action" data-direction={player.stock}>
                 {player.imageUrl ? <img src={player.imageUrl} alt="" width={32} height={32} /> : <span className="af-tc-glyph">{player.position?.slice(0, 1) ?? 'P'}</span>}
                 <div>
                   <strong>{player.name}</strong>
                   <span>{player.position ?? 'Player'} · {player.stock === 'up' ? `up ${money(Math.abs(player.stockDelta ?? 0))}` : `down ${money(Math.abs(player.stockDelta ?? 0))}`} over 30 days</span>
+                  <span>{player.affectedLeagues.map((league) => league.name).join(' · ')}</span>
                 </div>
-                <b>{player.stock === 'up' ? 'Hold or investigate a sell-high offer' : 'Review the cause before selling; consider a buy-low window'}</b>
+                <b>{player.advice}</b>
               </div>
             ))}
           </div>

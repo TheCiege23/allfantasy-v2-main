@@ -314,7 +314,7 @@ async function writeCursor(after: string): Promise<void> {
  * shift under the offset and one gets silently skipped. Ordering by `platformLeagueId` and asking
  * for the next ids greater than the last one processed cannot skip a row, only revisit one.
  */
-export async function detectAndNotifyAll(limit = 50): Promise<LeagueNotifyResult[]> {
+export async function detectAndNotifyAll(limit = 50, priorityLimit = 0): Promise<LeagueNotifyResult[]> {
   const after = await readCursor()
   const page = async (from: string) =>
     prisma.league.findMany({
@@ -332,8 +332,25 @@ export async function detectAndNotifyAll(limit = 50): Promise<LeagueNotifyResult
    */
   if (leagues.length === 0 && after !== '') leagues = await page('')
 
+  /*
+   * Recently opened leagues are the latency lane. The cursor still guarantees
+   * eventual coverage for every imported league, while this small second query
+   * makes the leagues people are using today run on every five-minute fire.
+   * `distinct` keeps duplicate season rows from spending the budget twice.
+   */
+  const priority = priorityLimit > 0
+    ? await prisma.league.findMany({
+        where: { platform: 'sleeper', platformLeagueId: { not: '' }, lastViewedAt: { not: null } },
+        select: { platformLeagueId: true },
+        distinct: ['platformLeagueId'],
+        orderBy: { lastViewedAt: 'desc' },
+        take: priorityLimit,
+      }).catch(() => [] as Array<{ platformLeagueId: string }>)
+    : []
+  const work = [...new Map([...priority, ...leagues].map((league) => [league.platformLeagueId, league])).values()]
+
   const results: LeagueNotifyResult[] = []
-  for (const l of leagues) {
+  for (const l of work) {
     if (!l.platformLeagueId) continue
     results.push(await detectAndNotifyLeague(l.platformLeagueId))
   }

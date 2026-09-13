@@ -911,6 +911,18 @@ describe('EspnAdapter – normalize', () => {
     expect(matchup.points_2).toBe(120)
   })
 
+  it('treats ESPN total-points leagues as complete without inventing head-to-head opponents', async () => {
+    const raw = makeEspnPayload({
+      settings: { scoringType: 'TOTAL_POINTS', scoringItems: [], lineupSlotCounts: [], raw: {} },
+      schedule: [],
+    })
+    const result = await getAdapter('espn').normalize(raw)
+
+    expect(result.league.matchup_frequency).toBe('total_points')
+    expect(result.coverage?.currentSchedule).toMatchObject({ state: 'full', count: 0 })
+    expect(result.coverage?.currentSchedule.note).toContain('no paired head-to-head schedule')
+  })
+
   it('maps draft picks with round and player info', async () => {
     const raw = makeEspnPayload()
     const adapter = getAdapter('espn')
