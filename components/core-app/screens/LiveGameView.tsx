@@ -4,6 +4,11 @@ import Link from 'next/link'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import MiniPlayerImg from '@/components/MiniPlayerImg'
 import type {
+  BasketballBoxPlayer,
+  BasketballBoxTeam,
+  BasketballDetail,
+  BasketballPlay,
+  BasketballShot,
   GameDetailDrive,
   GameDetailLeader,
   GameDetailPlay,
@@ -90,7 +95,7 @@ export function LiveGameView({
           <p className="af-live-empty-body">
             {payload?.failed
               ? 'This is a problem on our end, not the game. Retrying automatically.'
-              : 'Game views are available for NFL and college football games.'}
+              : 'Game views are available for NFL, college football and NBA games.'}
           </p>
         </div>
       </div>
@@ -117,10 +122,29 @@ export function LiveGameView({
           <TeamStatsPanel detail={detail} />
         </div>
         <div className="af-gv-col" data-col="main">
-          <DrivePanel detail={detail} />
-          <PlayByPlayPanel detail={detail} tab={tab} onTab={setTab} />
+          {detail.basketball ? (
+            <>
+              <ShotChart detail={detail} basketball={detail.basketball} />
+              {detail.lastPlay ? (
+                <section className="af-gv-card" aria-labelledby="af-gv-lastplay-h">
+                  <h2 className="af-label" id="af-gv-lastplay-h">
+                    Last play
+                  </h2>
+                  <LastPlay detail={detail} play={detail.lastPlay} />
+                </section>
+              ) : null}
+              <BasketballPlayByPlay detail={detail} basketball={detail.basketball} tab={tab} onTab={setTab} />
+            </>
+          ) : (
+            <>
+              <DrivePanel detail={detail} />
+              <PlayByPlayPanel detail={detail} tab={tab} onTab={setTab} />
+            </>
+          )}
         </div>
       </div>
+
+      {detail.basketball ? <BoxScore detail={detail} basketball={detail.basketball} /> : null}
 
       <GameFooter detail={detail} />
     </div>
@@ -428,8 +452,9 @@ function EndZone({ team }: { team: GameDetailTeam }) {
 
 const PASS_GROUPS = ['passing', 'receiving', 'defensive', 'interceptions', 'rushing']
 const RUSH_GROUPS = ['rushing', 'defensive', 'receiving', 'passing']
-const ANY_GROUPS = ['passing', 'rushing', 'receiving', 'defensive', 'interceptions', 'kicking', 'punting', 'kickReturns', 'puntReturns', 'fumbles']
+const ANY_GROUPS = ['passing', 'rushing', 'receiving', 'defensive', 'interceptions', 'kicking', 'punting', 'kickReturns', 'puntReturns', 'fumbles', 'basketball']
 const PREFERRED_STATS: Record<string, string[]> = {
+  basketball: ['PTS', 'REB', 'AST', 'FG'],
   passing: ['C/ATT', 'YDS', 'TD', 'INT'],
   rushing: ['CAR', 'YDS', 'TD', 'LONG'],
   receiving: ['REC', 'YDS', 'TD', 'TGTS'],
@@ -677,6 +702,305 @@ function DriveRow({
         </ol>
       ) : null}
     </li>
+  )
+}
+
+/* ── basketball ────────────────────────────────────────────────────────────── */
+
+/**
+ * ⚠ ESPN'S SHOT `y` IS FEET FROM THE RIM, NOT FROM THE BASELINE. Measured on NBA
+ * CHI @ GS (401810798) against 159 shots whose text states a distance ("26-foot
+ * three"): with the rim at (25, 0) the median error is 0.66 ft (p90 1.24); with
+ * the rim at the baseline-relative 5.25 ft it is 3.1 ft. Layups and dunks sit at
+ * y 0–6. So the drawing puts the rim 5.25 ft below the baseline edge and shifts
+ * every shot by that much, and anything past half court (a heave) is left off.
+ */
+const RIM_FROM_BASELINE = 5.25
+const HALF_COURT = 47
+
+function ShotChart({ detail, basketball }: { detail: LiveGameDetail; basketball: BasketballDetail }) {
+  const [side, setSide] = useState<'both' | 'away' | 'home'>('both')
+  const colors = { away: teamColor(detail.away, 'var(--accent)'), home: teamColor(detail.home, 'var(--warn)') }
+  const sideOf = (s: BasketballShot): 'home' | 'away' | null =>
+    s.teamId === detail.home.id ? 'home' : s.teamId === detail.away.id ? 'away' : null
+  const onCourt = basketball.shots.filter((s) => {
+    const y = s.y + RIM_FROM_BASELINE
+    return y >= 0 && y <= HALF_COURT
+  })
+  const visible = side === 'both' ? onCourt : onCourt.filter((s) => sideOf(s) === side)
+  const made = visible.filter((s) => s.made).length
+
+  if (basketball.shots.length === 0) return null
+  return (
+    <section className="af-gv-card" aria-labelledby="af-gv-shots">
+      <div className="af-gv-shots-head">
+        <h2 className="af-label" id="af-gv-shots">
+          Shot chart
+        </h2>
+        <span className="af-gv-muted af-num">
+          {made}/{visible.length} FG
+        </span>
+      </div>
+      <div className="af-live-scope af-gv-tabs" role="group" aria-label="Whose shots to show">
+        {(
+          [
+            ['both', 'Both'],
+            ['away', detail.away.abbrev],
+            ['home', detail.home.abbrev],
+          ] as const
+        ).map(([key, label]) => (
+          <button
+            key={key}
+            type="button"
+            className="af-live-scope-btn"
+            data-active={side === key}
+            aria-pressed={side === key}
+            onClick={() => setSide(key)}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+      <svg
+        className="af-gv-court"
+        viewBox={`0 0 50 ${HALF_COURT}`}
+        role="img"
+        aria-label={`Shot chart: ${made} of ${visible.length} field goals made`}
+      >
+        <rect className="af-gv-court-floor" x="0" y="0" width="50" height={HALF_COURT} />
+        <g className="af-gv-court-lines">
+          <rect x="17" y="0" width="16" height="19" />
+          <circle cx="25" cy="19" r="6" />
+          <path d="M3 0 L3 14.2 A23.75 23.75 0 0 0 47 14.2 L47 0" />
+          <path d="M21 5.25 A4 4 0 0 0 29 5.25" />
+          <line x1="22" y1="4" x2="28" y2="4" />
+          <circle cx="25" cy={RIM_FROM_BASELINE} r="0.75" />
+          <path d="M19 47 A6 6 0 0 1 31 47" />
+        </g>
+        {visible.map((s) => {
+          const cx = s.x
+          const cy = s.y + RIM_FROM_BASELINE
+          const color = colors[sideOf(s) ?? 'away']
+          return s.made ? (
+            <circle key={s.id} className="af-gv-shot" data-made="true" cx={cx} cy={cy} r={0.85} fill={color}>
+              <title>{s.text}</title>
+            </circle>
+          ) : (
+            <g key={s.id} className="af-gv-shot" data-made="false" stroke={color}>
+              <line x1={cx - 0.7} y1={cy - 0.7} x2={cx + 0.7} y2={cy + 0.7} />
+              <line x1={cx - 0.7} y1={cy + 0.7} x2={cx + 0.7} y2={cy - 0.7} />
+              <title>{s.text}</title>
+            </g>
+          )
+        })}
+      </svg>
+      <p className="af-gv-shots-key af-gv-muted">● made · ✕ missed · free throws not shown</p>
+    </section>
+  )
+}
+
+function BasketballPlayByPlay({
+  detail,
+  basketball,
+  tab,
+  onTab,
+}: {
+  detail: LiveGameDetail
+  basketball: BasketballDetail
+  tab: 'scoring' | 'all'
+  onTab: (t: 'scoring' | 'all') => void
+}) {
+  /*
+   * ⚠ ONE QUARTER AT A TIME. The first version listed every scoring play of the
+   * game at once — ~170 rows on CHI @ GS, a 6,400px desktop page and a 21,000px
+   * phone page (measured on the rendered view). Basketball scores too often for
+   * an all-game list; ESPN pages it by quarter and so does this. It opens on the
+   * newest quarter, which is the live end of the game.
+   */
+  const periods = useMemo(
+    () =>
+      [...new Set(basketball.plays.map((p) => p.period).filter((n): n is number => n != null))].sort(
+        (a, b) => a - b,
+      ),
+    [basketball.plays],
+  )
+  const [picked, setPicked] = useState<number | null>(null)
+  const active = picked != null && periods.includes(picked) ? picked : (periods[periods.length - 1] ?? null)
+  const plays = useMemo(
+    () =>
+      basketball.plays
+        .filter((p) => p.period === active && (tab === 'scoring' ? p.scoring : !/substitution/i.test(p.type ?? '')))
+        .reverse(),
+    [basketball.plays, active, tab],
+  )
+  const groups: Array<{ period: number | null; plays: BasketballPlay[] }> =
+    active != null ? [{ period: active, plays }] : []
+  const periodShort = (n: number) => (n <= 4 ? `Q${n}` : n === 5 ? 'OT' : `${n - 4}OT`)
+
+  const teamFor = (id: string | null) => (id === detail.home.id ? detail.home : id === detail.away.id ? detail.away : null)
+
+  return (
+    <section className="af-gv-card" aria-labelledby="af-gv-bpbp">
+      <h2 className="af-label" id="af-gv-bpbp">
+        Play-by-play
+      </h2>
+      <div className="af-live-scope af-gv-tabs" role="group" aria-label="Which plays to show">
+        <button
+          type="button"
+          className="af-live-scope-btn"
+          data-active={tab === 'scoring'}
+          aria-pressed={tab === 'scoring'}
+          onClick={() => onTab('scoring')}
+        >
+          Scoring plays
+        </button>
+        <button
+          type="button"
+          className="af-live-scope-btn"
+          data-active={tab === 'all'}
+          aria-pressed={tab === 'all'}
+          onClick={() => onTab('all')}
+        >
+          All plays
+        </button>
+      </div>
+      {periods.length > 1 ? (
+        <div className="af-live-scope af-gv-tabs" role="group" aria-label="Quarter">
+          {periods.map((n) => (
+            <button
+              key={n}
+              type="button"
+              className="af-live-scope-btn"
+              data-active={n === active}
+              aria-pressed={n === active}
+              onClick={() => setPicked(n)}
+            >
+              {periodShort(n)}
+            </button>
+          ))}
+        </div>
+      ) : null}
+      {groups.length === 0 || groups[0]!.plays.length === 0 ? (
+        <p className="af-gv-none">{tab === 'scoring' ? 'No scoring plays in this period.' : 'No plays yet.'}</p>
+      ) : (
+        groups.map((g) => (
+          <div key={`${g.period}`} className="af-gv-period">
+            <h3 className="af-label af-gv-period-head">{periodName(g.period)}</h3>
+            <ol className="af-gv-plays af-gv-bplays">
+              {g.plays.map((p, i) => {
+                const team = teamFor(p.teamId)
+                return (
+                  <li key={p.id || i} className="af-gv-bplay" data-scoring={p.scoring}>
+                    {team ? <TeamLogo team={team} size={18} /> : <span className="af-gv-logo" aria-hidden />}
+                    <span className="af-gv-bplay-clock af-num">{p.clock ?? ''}</span>
+                    <span className="af-gv-play-desc">{p.text}</span>
+                    {p.scoring && p.awayScore != null && p.homeScore != null ? (
+                      <span className="af-gv-bplay-score af-num">
+                        {p.awayScore}–{p.homeScore}
+                      </span>
+                    ) : (
+                      <span />
+                    )}
+                  </li>
+                )
+              })}
+            </ol>
+          </div>
+        ))
+      )}
+    </section>
+  )
+}
+
+function BoxScore({ detail, basketball }: { detail: LiveGameDetail; basketball: BasketballDetail }) {
+  const teams = [
+    { team: detail.away, box: basketball.box.away },
+    { team: detail.home, box: basketball.box.home },
+  ].filter((t): t is { team: GameDetailTeam; box: BasketballBoxTeam } => t.box != null)
+  if (teams.length === 0) return null
+  return (
+    <section className="af-gv-card af-gv-box" aria-labelledby="af-gv-box">
+      <h2 className="af-label" id="af-gv-box">
+        Box score
+      </h2>
+      {teams.map(({ team, box }) => (
+        <BoxTeam key={team.id} team={team} box={box} />
+      ))}
+    </section>
+  )
+}
+
+function BoxTeam({ team, box }: { team: GameDetailTeam; box: BasketballBoxTeam }) {
+  const played = box.players.filter((p) => !p.didNotPlay)
+  const starters = played.filter((p) => p.starter)
+  const bench = played.filter((p) => !p.starter)
+  const dnp = box.players.filter((p) => p.didNotPlay)
+  const cols = box.labels.length
+
+  const row = (p: BasketballBoxPlayer) => (
+    <tr key={p.athleteId}>
+      <th scope="row" className="af-gv-box-name">
+        {p.shortName ?? p.name}
+        {p.position ? <span className="af-gv-leader-pos"> {p.position}</span> : null}
+      </th>
+      {box.labels.map((_, i) => (
+        <td key={i}>{p.stats[i] ?? ''}</td>
+      ))}
+    </tr>
+  )
+
+  return (
+    <div className="af-gv-box-team" data-team={team.id}>
+      <div className="af-gv-box-team-head">
+        <TeamLogo team={team} size={22} />
+        <strong>{team.name}</strong>
+      </div>
+      <div className="af-gv-box-scroll">
+        <table className="af-gv-box-table af-num">
+          <thead>
+            <tr>
+              <th scope="col" className="af-gv-box-name">
+                Starters
+              </th>
+              {box.labels.map((l) => (
+                <th key={l} scope="col">
+                  {l}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {starters.map(row)}
+            {bench.length > 0 ? (
+              <tr className="af-gv-box-group">
+                <th scope="rowgroup" colSpan={cols + 1}>
+                  Bench
+                </th>
+              </tr>
+            ) : null}
+            {bench.map(row)}
+            {dnp.map((p) => (
+              <tr key={p.athleteId} className="af-gv-box-dnp">
+                <th scope="row" className="af-gv-box-name">
+                  {p.shortName ?? p.name}
+                </th>
+                <td colSpan={cols}>{p.reason ? `DNP · ${p.reason}` : 'Did not play'}</td>
+              </tr>
+            ))}
+            {box.totals.some((t) => t) ? (
+              <tr className="af-gv-box-total">
+                <th scope="row" className="af-gv-box-name">
+                  Team
+                </th>
+                {box.labels.map((_, i) => (
+                  <td key={i}>{box.totals[i] ?? ''}</td>
+                ))}
+              </tr>
+            ) : null}
+          </tbody>
+        </table>
+      </div>
+    </div>
   )
 }
 
