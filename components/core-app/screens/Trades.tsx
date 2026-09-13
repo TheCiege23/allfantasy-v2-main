@@ -71,6 +71,24 @@ function OfferCard({ offer }: { offer: PendingOffer }) {
         {side('You send', offer.give)}
         {side('You get', offer.get)}
       </div>
+      <div className="af-tr-offer-eval" data-graded={offer.evaluation.graded}>
+        {offer.evaluation.graded ? (
+          <>
+            <span className="af-tr-offer-grade af-num">{offer.evaluation.letter}</span>
+            <span className="af-tr-offer-eval-copy">
+              <strong>{offer.evaluation.sharePct}% of traded value to you</strong>
+              <span>{offer.evaluation.recommendation}</span>
+              <small>{offer.evaluation.basis}</small>
+            </span>
+          </>
+        ) : (
+          <span className="af-tr-offer-eval-copy">
+            <strong>Grade withheld</strong>
+            <span>{offer.evaluation.reason}</span>
+            <small>{offer.evaluation.basis}</small>
+          </span>
+        )}
+      </div>
     </li>
   )
 }

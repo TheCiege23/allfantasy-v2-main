@@ -183,9 +183,22 @@ export type LeagueTradeHistoryItem = {
   /** Set on EXECUTED trades, where the commissioner view names both sides rather than a "partner". */
   proposerName?: string
   receiverName?: string
-  /** When the trade executed (`processedAt`), for executed-trade rows. */
-  executedAt?: string
-}
+    /** When the trade executed (`processedAt`), for executed-trade rows. */
+    executedAt?: string
+    /** Proposal-time model snapshot, when live capture existed for this native offer. */
+    proposalGrade?: string | null
+    proposalValueGiven?: number | null
+    proposalValueReceived?: number | null
+    proposalCapturedAt?: string | null
+    proposalModelVersion?: string | null
+    /** Current-market regrade; null when a historical asset cannot be resolved honestly. */
+    currentGrade?: string | null
+    currentValueGiven?: number | null
+    currentValueReceived?: number | null
+    currentPricedAt?: string | null
+    currentPricingComplete?: boolean
+    currentUnresolvedAssets?: string[]
+  }
 
 export type LeagueTradeBlockItem = {
   id: string

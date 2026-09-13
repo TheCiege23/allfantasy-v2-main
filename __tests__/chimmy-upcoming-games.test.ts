@@ -15,7 +15,7 @@ const SPORT_ALIASES: Array<[string, RegExp]> = [
   ['NBA', /\b(nba|basketball)\b/i],
   ['MLB', /\b(mlb|baseball)\b/i],
   ['NHL', /\b(nhl|hockey)\b/i],
-  ['NFL', /\b(nfl|football|bills|chiefs)\b/i],
+  ['NFL', /\b(nfl|football|bills|chiefs|jets)\b/i],
 ]
 const resolveSport = (m: string) => SPORT_ALIASES.find(([, p]) => p.test(m))?.[0] ?? null
 
@@ -51,6 +51,14 @@ describe('detectUpcomingIntent', () => {
     expect(
       detectUpcomingIntent('when does the college football season start?', resolveSport),
     ).toMatchObject({ kind: 'season-start', sport: 'NCAAF', seasonType: 'regular' })
+  })
+
+  it('recognises a first-game question about a named team', () => {
+    expect(detectUpcomingIntent('when is the first Jets game?', resolveSport)).toEqual({
+      kind: 'next-game',
+      sport: 'NFL',
+      seasonType: null,
+    })
   })
 
   /*
@@ -96,6 +104,31 @@ describe('findUpcomingGames', () => {
     h.findMany.mockClear()
     await findUpcomingGames({ kind: 'next-game', sport: 'NFL', seasonType: null }, NOW)
     expect(h.findMany.mock.calls[0][0].where).not.toHaveProperty('seasonType')
+  })
+
+  it('narrows a team schedule without broadening to other games', async () => {
+    h.findMany.mockResolvedValue([
+      game({ homeTeam: 'Tennessee Titans', awayTeam: 'New York Jets' }),
+    ])
+    const intent = {
+      kind: 'next-game' as const,
+      sport: 'NFL',
+      seasonType: null,
+      team: { canonical: 'New York Jets', aliases: ['jets', 'new york jets', 'NYJ'] },
+    }
+
+    const result = await findUpcomingGames(intent, NOW)
+
+    expect(result.games).toHaveLength(1)
+    expect(h.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({
+        sport: 'NFL',
+        OR: expect.arrayContaining([
+          { homeTeam: { contains: 'jets', mode: 'insensitive' } },
+          { awayTeam: { contains: 'NYJ', mode: 'insensitive' } },
+        ]),
+      }),
+    }))
   })
 
   /*

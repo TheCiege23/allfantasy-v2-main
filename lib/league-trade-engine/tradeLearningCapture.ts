@@ -22,6 +22,7 @@ import { computeTradeDrivers, type TradeDriverData } from '@/lib/trade-engine/tr
 import { getCalibratedWeights, calibrateAcceptProbability } from '@/lib/trade-engine/accept-calibration'
 import { logTradeOfferEvent, logTradeOutcomeEvent, type TradeOutcomeStatus } from '@/lib/trade-engine/trade-event-logger'
 import type { Asset } from '@/lib/trade-engine/types'
+import { projectedLetterFor } from '@/lib/trade-intel/gradeScale'
 
 /**
  * Conservative flat fallback for any asset whose real value can't be
@@ -64,28 +65,54 @@ export function mapAfTradeStatusToOutcome(status: string): TradeOutcomeStatus | 
 }
 
 /**
- * Derives isSuperFlex from the league's own canonical settings snapshot
- * (RosterSettingsSlice.starterSlots), not any provider-specific format —
- * satisfies the ADR's provider-independence requirement. TE-premium
- * detection is not implemented (defaults false) — a documented, bounded
- * simplification, not a correctness bug: it affects scoring precision for
- * TEP leagues only, never produces a wrong accept/reject direction.
+ * Derives the format book used for the proposal-time snapshot from the
+ * league itself. Superflex comes from canonical starter slots; redraft versus
+ * dynasty/keeper and PPR weight come from the normalized League fields.
+ * TE-premium detection remains a bounded gap and defaults false.
  */
-function resolveLeagueScoringContext(league: League): { isSuperFlex: boolean; isTEP: boolean } {
+type TradeScoringLeague = Pick<League, 'leagueType' | 'leagueVariant' | 'isDynasty' | 'scoring' | 'settings'>
+
+export function resolveLeagueScoringContext(league: TradeScoringLeague): {
+  isSuperFlex: boolean
+  isTEP: boolean
+  isDynasty: boolean
+  ppr: 0 | 0.5 | 1
+  scoringType: 'standard' | 'half_ppr' | 'ppr'
+} {
+  const leagueType = String(league.leagueType ?? league.leagueVariant ?? '').toLowerCase()
+  const isDynasty = Boolean(league.isDynasty) || leagueType.includes('dynasty') || leagueType.includes('keeper')
+  const scoring = String(league.scoring ?? '').toLowerCase()
+  const scoringType = scoring.includes('half')
+    ? 'half_ppr' as const
+    : scoring.includes('ppr')
+      ? 'ppr' as const
+      : 'standard' as const
+  const ppr = scoringType === 'ppr' ? 1 as const : scoringType === 'half_ppr' ? 0.5 as const : 0 as const
   try {
     const snap = parseSettingsSnapshot((league as { settings?: unknown }).settings ?? null)
     const starterSlots = (snap?.rosterSettings?.starterSlots ?? {}) as Record<string, unknown>
     const qbSlots = Number(starterSlots.QB ?? starterSlots.qb ?? 1)
-    return { isSuperFlex: Number.isFinite(qbSlots) && qbSlots >= 2, isTEP: false }
+    return { isSuperFlex: Number.isFinite(qbSlots) && qbSlots >= 2, isTEP: false, isDynasty, ppr, scoringType }
   } catch {
-    return { isSuperFlex: false, isTEP: false }
+    return { isSuperFlex: false, isTEP: false, isDynasty, ppr, scoringType }
   }
+}
+
+export interface CurrentTradeMarketSnapshot {
+  grade: ReturnType<typeof projectedLetterFor>
+  valueGiven: number | null
+  valueReceived: number | null
+  pricedAt: string
+  fullyPriced: boolean
+  unresolvedAssets: string[]
 }
 
 interface ResolvedAssetValue {
   name: string
   value: number
   type: 'player' | 'pick' | 'faab' | string
+  /** False when the numeric value is only a conservative fallback. */
+  resolved: boolean
 }
 
 function resolveItemValue(
@@ -100,6 +127,7 @@ function resolveItemValue(
       name: fc?.player.name ?? `Player ${ref || 'unknown'}`,
       value: fc?.value ?? LIVE_CAPTURE_FALLBACK_VALUE,
       type: 'player',
+      resolved: Boolean(fc),
     }
   }
 
@@ -111,16 +139,16 @@ function resolveItemValue(
       Number.isFinite(season) && Number.isFinite(round)
         ? getPickValue(season, round, isDynasty)
         : LIVE_CAPTURE_FALLBACK_VALUE
-    return { name: `${item.itemType} pick`, value, type: 'pick' }
+    return { name: `${item.itemType} pick`, value, type: 'pick', resolved: Number.isFinite(season) && Number.isFinite(round) }
   }
 
   if (item.itemType === 'faab') {
-    return { name: 'FAAB', value: item.faabAmount ?? 0, type: 'faab' }
+    return { name: 'FAAB', value: item.faabAmount ?? 0, type: 'faab', resolved: false }
   }
 
   // 'specialty_asset' and any future item type: conservative flat fallback,
   // documented limitation (see the ADR) — not silently invented math.
-  return { name: item.itemType, value: LIVE_CAPTURE_FALLBACK_VALUE, type: item.itemType }
+  return { name: item.itemType, value: LIVE_CAPTURE_FALLBACK_VALUE, type: item.itemType, resolved: false }
 }
 
 function toAsset(resolved: ResolvedAssetValue, id: string): Asset {
@@ -130,6 +158,81 @@ function toAsset(resolved: ResolvedAssetValue, id: string): Asset {
     value: resolved.value,
     name: resolved.name,
   }
+}
+
+/**
+ * Reprice native trades against one current league market book. The original
+ * proposal snapshot stays immutable; this produces the separate "Now" view.
+ * A consumed historical pick is deliberately left unresolved until the
+ * outcome ledger can map that pick to the player who was selected.
+ */
+export async function priceTradesAtCurrentMarket(input: {
+  leagueId: string
+  league: TradeScoringLeague
+  trades: Array<{
+    id: string
+    proposerRosterId: string
+    items: CaptureTradeItem[]
+  }>
+}): Promise<Map<string, CurrentTradeMarketSnapshot>> {
+  const snapshots = new Map<string, CurrentTradeMarketSnapshot>()
+  if (input.trades.length === 0) return snapshots
+
+  try {
+    const { isSuperFlex, isDynasty, ppr } = resolveLeagueScoringContext(input.league)
+    const rosterCount = await prisma.roster.count({ where: { leagueId: input.leagueId } })
+    const fcPlayers = await getFantasyCalcValuesDbFirst({
+      isDynasty,
+      numQbs: isSuperFlex ? 2 : 1,
+      numTeams: rosterCount > 0 ? rosterCount : 12,
+      ppr,
+    })
+    const currentYear = new Date().getUTCFullYear()
+    const pricedAt = new Date().toISOString()
+
+    for (const trade of input.trades) {
+      const given = trade.items
+        .filter((item) => item.fromRosterId === trade.proposerRosterId)
+        .map((item) => resolveItemValue(item, fcPlayers, isDynasty))
+      const received = trade.items
+        .filter((item) => item.toRosterId === trade.proposerRosterId)
+        .map((item) => resolveItemValue(item, fcPlayers, isDynasty))
+      const consumedPickLabels: string[] = []
+      for (const item of trade.items) {
+        if (!['rookie_pick', 'devy_pick', 'future_pick'].includes(item.itemType)) continue
+        const meta = item.metadata && typeof item.metadata === 'object'
+          ? item.metadata as Record<string, unknown>
+          : {}
+        const season = Number(meta.season)
+        if (Number.isFinite(season) && season < currentYear) consumedPickLabels.push(`${season} draft pick`)
+      }
+
+      const unresolvedAssets = [
+        ...given.filter((asset) => !asset.resolved).map((asset) => asset.name),
+        ...received.filter((asset) => !asset.resolved).map((asset) => asset.name),
+        ...consumedPickLabels,
+      ]
+      const fullyPriced = given.length + received.length > 0 && unresolvedAssets.length === 0
+      const valueGiven = fullyPriced ? given.reduce((sum, asset) => sum + asset.value, 0) : null
+      const valueReceived = fullyPriced ? received.reduce((sum, asset) => sum + asset.value, 0) : null
+      const percentDiff = valueGiven != null && valueGiven > 0 && valueReceived != null
+        ? ((valueReceived - valueGiven) / valueGiven) * 100
+        : null
+
+      snapshots.set(trade.id, {
+        grade: projectedLetterFor({ percentDiff, hasSignal: fullyPriced }),
+        valueGiven,
+        valueReceived,
+        pricedAt,
+        fullyPriced,
+        unresolvedAssets: [...new Set(unresolvedAssets)],
+      })
+    }
+  } catch (err) {
+    console.error('[TradeLearningCapture] Failed to price current trade history (non-blocking):', err)
+  }
+
+  return snapshots
 }
 
 /**
@@ -147,26 +250,29 @@ export async function captureLiveTradeOffer(input: {
   league: League
 }): Promise<string | null> {
   try {
-    const { isSuperFlex, isTEP } = resolveLeagueScoringContext(input.league)
+    const { isSuperFlex, isTEP, isDynasty, ppr, scoringType } = resolveLeagueScoringContext(input.league)
     const rosterCount = await prisma.roster.count({ where: { leagueId: input.leagueId } })
 
     const fcPlayers = await getFantasyCalcValuesDbFirst({
-      isDynasty: true, // matches the existing hardcoded convention in every hypothetical-evaluation tool (see the ADR)
+      isDynasty,
       numQbs: isSuperFlex ? 2 : 1,
       numTeams: rosterCount > 0 ? rosterCount : 12,
-      ppr: 1,
+      ppr,
     })
 
     const giveItems = input.items.filter((i) => i.fromRosterId === input.proposerRosterId)
     const receiveItems = input.items.filter((i) => i.toRosterId === input.proposerRosterId)
     if (giveItems.length === 0 && receiveItems.length === 0) return null
 
-    const give: Asset[] = giveItems.map((item, idx) =>
-      toAsset(resolveItemValue(item, fcPlayers, true), `${input.tradeId}-give-${idx}`),
-    )
-    const receive: Asset[] = receiveItems.map((item, idx) =>
-      toAsset(resolveItemValue(item, fcPlayers, true), `${input.tradeId}-recv-${idx}`),
-    )
+    const giveResolved = giveItems.map((item) => resolveItemValue(item, fcPlayers, isDynasty))
+    const receiveResolved = receiveItems.map((item) => resolveItemValue(item, fcPlayers, isDynasty))
+    const give: Asset[] = giveResolved.map((item, idx) => toAsset(item, `${input.tradeId}-give-${idx}`))
+    const receive: Asset[] = receiveResolved.map((item, idx) => toAsset(item, `${input.tradeId}-recv-${idx}`))
+    const giveTotal = giveResolved.reduce((sum, item) => sum + item.value, 0)
+    const receiveTotal = receiveResolved.reduce((sum, item) => sum + item.value, 0)
+    const fullyPriced = [...giveResolved, ...receiveResolved].every((item) => item.resolved)
+    const percentDiff = giveTotal > 0 ? ((receiveTotal - giveTotal) / giveTotal) * 100 : null
+    const proposalGrade = projectedLetterFor({ percentDiff, hasSignal: fullyPriced })
 
     const calWeights = await getCalibratedWeights(undefined, { isSuperFlex, scoringType: undefined })
     const drivers: TradeDriverData = computeTradeDrivers(
@@ -204,6 +310,7 @@ export async function captureLiveTradeOffer(input: {
       rawAcceptProb: isotonicApplied ? drivers.acceptProbability : undefined,
       isotonicApplied,
       verdict: drivers.verdict,
+      grade: proposalGrade,
       confidenceScore: drivers.confidenceScore,
       driverSet: drivers.acceptDrivers?.map((d) => ({
         id: d.id,
@@ -211,6 +318,8 @@ export async function captureLiveTradeOffer(input: {
       })),
       mode: 'LIVE_PROPOSAL',
       isSuperFlex,
+      leagueFormat: isDynasty ? 'dynasty' : 'redraft',
+      scoringType,
       afLeagueTradeId: input.tradeId,
     })
   } catch (err) {

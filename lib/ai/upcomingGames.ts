@@ -25,13 +25,15 @@ export type UpcomingIntent = {
   kind: 'next-game' | 'season-start'
   sport: string | null
   seasonType: 'pre' | 'regular' | null
+  /** Optional team scope attached by the deterministic router after sport detection. */
+  team?: { canonical: string; aliases: string[] } | null
 }
 
 const SEASON_START_RE =
   /\b(when|what date)\b[^?]*\b(season|year)\b[^?]*\b(start|starts|begin|begins|open|opens|kick(?:s)?\s*off)\b|\bseason\s+(opener|start)\b/i
 
 const NEXT_GAME_RE =
-  /\b(next|upcoming|coming up|when\s+(?:is|are|do|does)\b[^?]*\bplay)\b[^?]*\b(game|games|matchup|fixture|kickoff)\b|\bwhen\s+(?:is|are)\s+the\s+next\b|\bnext\s+(game|games)\b/i
+  /\b(next|first|upcoming|coming up|when\s+(?:is|are|do|does)\b[^?]*\bplay)\b[^?]*\b(game|games|matchup|fixture|kickoff)\b|\bwhen\s+(?:is|are)\s+the\s+(?:next|first)\b|\b(?:next|first)\s+(game|games)\b/i
 
 /** Read the schedule question out of a message, or null if it is not one. */
 export function detectUpcomingIntent(
@@ -118,6 +120,12 @@ export async function findUpcomingGames(
   const where: Record<string, unknown> = { startTime: { gt: now } }
   if (intent.sport) where.sport = intent.sport
   if (intent.seasonType) where.seasonType = intent.seasonType
+  if (intent.team?.aliases.length) {
+    where.OR = [
+      ...intent.team.aliases.map((alias) => ({ homeTeam: { contains: alias, mode: 'insensitive' } })),
+      ...intent.team.aliases.map((alias) => ({ awayTeam: { contains: alias, mode: 'insensitive' } })),
+    ]
+  }
 
   const rows = (await (prisma as any).sportsGame
     ?.findMany?.({

@@ -748,8 +748,22 @@ export async function writeAfProjectionSnapshots(
   if (first.written > 0 || first.refused === 0) return first
   if (!first.olderSeasonAvailable) return first
 
-  const reasons = Object.keys(first.refusalsByReason)
-  if (reasons.length !== 1 || reasons[0] !== NO_PRODUCTION_REFUSAL) return first
+  const noProduction = first.refusalsByReason[NO_PRODUCTION_REFUSAL] ?? 0
+  /*
+   * The first Sunday boundary is not perfectly pure. After Thursday night,
+   * current-season rows exist for the full player pool: most refuse because
+   * they have not played (`no_games_played`), while a small tail refuses the
+   * ordinary sample floor. Production on 2026-09-13 was 1,197 + 124 and wrote
+   * zero, so the former "exactly one reason" guard blocked the fallback and
+   * left Thursday's projections untouched for three days.
+   *
+   * Zero output is still required, an older season is still required, and at
+   * least 80% of refusals must explicitly say the season has not been played.
+   * That keeps genuine all-insufficient-sample failures loud while allowing
+   * the normal Thursday-to-Sunday transition to use last year's full history.
+   */
+  const noProductionShare = first.refused > 0 ? noProduction / first.refused : 0
+  if (noProductionShare < 0.8) return first
 
   const fallbackSeason = first.sourceSeason - 1
   const retry = await writeAfProjectionSnapshotsForSeason({ ...opts, sourceSeason: fallbackSeason })
@@ -763,8 +777,8 @@ export async function writeAfProjectionSnapshots(
     from: first.sourceSeason,
     to: fallbackSeason,
     reason:
-      `Season ${first.sourceSeason} had ${first.statLinesRead} stat lines and no games played in any ` +
-      `of them; rolled back to ${fallbackSeason}.`,
+      `Season ${first.sourceSeason} wrote no projections and ${Math.round(noProductionShare * 100)}% ` +
+      `of refusals were no games played; rolled back to ${fallbackSeason}.`,
   }
   /*
    * ⚠ AND IF THE ROLLBACK ALSO PRODUCED NOTHING, THE FIRST ATTEMPT IS THE HONEST ANSWER. Returning

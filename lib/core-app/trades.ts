@@ -9,6 +9,7 @@ import {
   scanPendingSleeperTrades,
   type PendingTradeAsset,
 } from '@/lib/provider-trades/scanPendingSleeperTrades'
+import { evaluatePendingOffer, type PendingOfferEvaluation } from './pendingOfferEvaluation'
 
 /**
  * Trades — "offer, grade, counter, all scored against this league's own rules".
@@ -306,6 +307,8 @@ export type PendingOffer = {
   give: PendingOfferLine[]
   /** Arriving on the viewer's roster. */
   get: PendingOfferLine[]
+  /** Precomputed before render from this league's value book. */
+  evaluation: PendingOfferEvaluation
 }
 
 export type TradeDeadline = {
@@ -372,6 +375,8 @@ function offerLine(a: PendingTradeAsset): PendingOfferLine {
 async function resolvePendingOffers(
   league: { id: string; platform: string | null; platformLeagueId: string | null; sport: string | null },
   userId: string,
+  book: ValueBook,
+  teamCount: number,
 ): Promise<{ inbox: SectionState<PendingOffer[]>; sent: SectionState<PendingOffer[]> }> {
   const platform = String(league.platform ?? 'manual').toLowerCase()
 
@@ -422,6 +427,25 @@ async function resolvePendingOffers(
     return { inbox: { available: false, reason }, sent: { available: false, reason } }
   }
 
+  const playerIds = [...new Set(scan.trades.flatMap((trade) => [...trade.assetsGiven, ...trade.assetsReceived])
+    .flatMap((asset) => asset.playerId ? [asset.playerId] : []))]
+  const valueRows = playerIds.length > 0
+    ? await prisma.playerValueSnapshot.findMany({
+        where: {
+          sleeperId: { in: playerIds },
+          source: book.source,
+          format: book.format,
+          qbFormat: book.qbFormat,
+        },
+        select: { sleeperId: true, value: true, capturedAt: true },
+        orderBy: { capturedAt: 'desc' },
+      }).catch(() => [])
+    : []
+  const playerValues = new Map<string, number>()
+  for (const row of valueRows) {
+    if (!playerValues.has(row.sleeperId)) playerValues.set(row.sleeperId, row.value)
+  }
+
   const map = (t: (typeof scan.trades)[number]): PendingOffer => ({
     id: t.transactionId,
     partnerName: t.proposedByViewer ? 'You' : t.proposedBy,
@@ -430,6 +454,13 @@ async function resolvePendingOffers(
        the manager sent is not rendered back to front. */
     give: t.assetsGiven.map(offerLine),
     get: t.assetsReceived.map(offerLine),
+    evaluation: evaluatePendingOffer({
+      received: t.assetsReceived,
+      sent: t.assetsGiven,
+      playerValues,
+      book,
+      teamCount,
+    }),
   })
 
   return {
@@ -448,7 +479,8 @@ export async function getTradesData(leagueId: string, userId: string): Promise<T
   if (!league) return null
 
   const teamCount = await prisma.leagueTeam.count({ where: { leagueId } })
-  const grades = await resolveGrades(league.platformLeagueId ?? null, valueBookFor(league.settings, league.leagueType))
+  const book = valueBookFor(league.settings, league.leagueType)
+  const grades = await resolveGrades(league.platformLeagueId ?? null, book)
 
   const base = {
     league: {
@@ -482,7 +514,7 @@ export async function getTradesData(leagueId: string, userId: string): Promise<T
      * written to a table, and should not be. A pending offer is answered on the
      * platform, and a cached copy would go stale the moment it was accepted.
      */
-    ...(await resolvePendingOffers(league, userId)),
+    ...(await resolvePendingOffers(league, userId, book, teamCount)),
     grades,
     deadline: resolveDeadline(league.settings),
   }

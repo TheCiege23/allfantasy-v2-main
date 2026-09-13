@@ -2913,6 +2913,26 @@ function LeagueHeader({
           groups (Decide · Draft · Roster · League · Legacy · Commish) with the
           active group's tabs as a sub-row. Presentation-only — every tab id,
           deep link, testid, and the roster-issue badge survive unchanged. */}
+      {tabs.some((tab) => tab.id === 'trades') ? (
+        <Link
+          href={`/league/${leagueId}?view=trades`}
+          aria-current={activeTab === 'trades' ? 'page' : undefined}
+          data-testid="league-mobile-trades-shortcut"
+          onClick={(event) => {
+            event.preventDefault()
+            onTabChange('trades')
+          }}
+          className={cn(
+            'relative z-20 mx-3 mt-2 flex min-h-[44px] w-[calc(100%-1.5rem)] touch-manipulation items-center justify-center gap-2 rounded-xl border px-4 py-2.5 text-xs font-black uppercase tracking-wide sm:hidden',
+            activeTab === 'trades'
+              ? 'border-[#ff3d81] bg-[#ff3d81]/20 text-white shadow-[0_8px_24px_rgba(255,61,129,0.16)]'
+              : 'border-[#ff3d81]/45 bg-[#ff3d81]/[0.09] text-[#ffb8d1]',
+          )}
+        >
+          <LeagueTabNavGlyph tabId="trades" active={activeTab === 'trades'} className="h-4 w-4" />
+          {activeTab === 'trades' ? 'Viewing trades' : 'Open trades'}
+        </Link>
+      ) : null}
       <div className="scrollbar-none mt-2 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:px-5 sm:pb-3">
         {(() => {
           const tabGroups = buildLeagueTabGroups(tabs)

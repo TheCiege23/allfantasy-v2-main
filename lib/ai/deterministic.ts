@@ -265,6 +265,16 @@ function resolveTeamAlias(message: string, sport: string | null): { canonical: s
       }
     }
   }
+  /* The weather resolver already carries all 32 NFL clubs. Reuse that complete
+   * registry for results and schedules too, instead of maintaining a second
+   * three-team NFL list that silently excluded ordinary questions about the Jets. */
+  if (!sport || sport === 'NFL') {
+    for (const team of NFL_TEAM_ABBREV_ALIASES) {
+      if (team.aliases.some((alias) => new RegExp(`\\b${alias.replace(/\s+/g, '\\s+')}\\b`, 'i').test(lower))) {
+        return { canonical: team.label, aliases: [...new Set([...team.aliases, team.abbrev])] }
+      }
+    }
+  }
   return null
 }
 
@@ -549,14 +559,16 @@ async function buildUpcomingGamesAnswer(message: string, locale?: string): Promi
   const intent = detectUpcomingIntent(message, resolveSportFromMessage)
   if (!intent) return null
 
-  const { games, alreadyUnderway } = await findUpcomingGames(intent)
+  const team = resolveTeamAlias(message, intent.sport)
+  const scopedIntent = team ? { ...intent, team } : intent
+  const { games, alreadyUnderway } = await findUpcomingGames(scopedIntent)
 
   /*
    * Nothing scheduled is a real answer, and a far better one than widening the
    * search until something matches a question nobody asked.
    */
   if (games.length === 0) {
-    const what = [intent.seasonType === 'pre' ? 'preseason' : null, intent.sport]
+    const what = [team?.canonical, intent.seasonType === 'pre' ? 'preseason' : null, intent.sport]
       .filter(Boolean)
       .join(' ')
     /*
@@ -576,7 +588,7 @@ async function buildUpcomingGamesAnswer(message: string, locale?: string): Promi
   }
 
   const first = games[0]
-  const label = `${first.sport}${intent.seasonType === 'pre' ? ' preseason' : ''}`
+  const label = `${team?.canonical ?? first.sport}${intent.seasonType === 'pre' ? ' preseason' : ''}`
 
   if (intent.kind === 'season-start') {
     /*
