@@ -2063,3 +2063,65 @@
     padding: 5px 6px;
   }
 }
+
+/* ── Game view: hockey (rink shot map, strength tags) ────────────────────────── */
+
+.af-gv-rink {
+  display: block;
+  width: 100%;
+  max-width: 560px;
+  margin: 0 auto;
+}
+.af-gv-rink-ice {
+  fill: color-mix(in srgb, #ffffff 7%, var(--surface2));
+  stroke: color-mix(in srgb, var(--text) 40%, transparent);
+  stroke-width: 0.5;
+}
+/* Rink markings are red and blue on every rink; these do not follow the theme. */
+.af-gv-rink-red {
+  stroke: #c8102e;
+  stroke-width: 0.6;
+  opacity: 0.75;
+}
+.af-gv-rink-blue {
+  stroke: #1d4ed8;
+  stroke-width: 1;
+  opacity: 0.7;
+}
+.af-gv-rink-crease {
+  fill: color-mix(in srgb, #3b82f6 25%, transparent);
+  stroke: #c8102e;
+  stroke-width: 0.3;
+}
+.af-gv-rink-net {
+  fill: none;
+  stroke: color-mix(in srgb, var(--text) 60%, transparent);
+  stroke-width: 0.35;
+}
+.af-gv-rink-circle {
+  fill: none;
+  stroke: #c8102e;
+  stroke-width: 0.3;
+  opacity: 0.6;
+}
+.af-gv-rink-dot {
+  fill: #c8102e;
+  opacity: 0.7;
+}
+.af-gv-hshot {
+  stroke-width: 0.45;
+}
+.af-gv-hshot[data-kind='goal'] {
+  stroke: #ffffff;
+  stroke-width: 0.6;
+}
+.af-gv-strength {
+  display: inline-block;
+  margin-right: 6px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--warn-soft);
+  color: var(--warn);
+  font-size: 9.5px;
+  font-weight: 800;
+}
