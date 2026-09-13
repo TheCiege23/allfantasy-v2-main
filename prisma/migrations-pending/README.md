@@ -568,3 +568,56 @@ against a COPY (`prisma validate`, with the datasource pinned to an unreachable
 sentinel so nothing could connect) — valid, with a deliberately broken variant
 confirming the check discriminates. Flipping the real schema before the SQL is
 applied is what raises P2021.
+
+---
+
+## 🛑 A ledger row that says "applied" for a table that does not exist
+
+**`20260909130000_decision_os_market_observations`**. Measured 2026-09-12, read-only
+against production. **Repo owner's decision the same day: document it, do not fix it yet.**
+
+`_prisma_migrations` records this migration as done. Its `finished_at` is set, it was
+not rolled back, and it looks like a normal applied migration. It is not:
+
+| evidence | value |
+|---|---|
+| `applied_steps_count` | **0** — no SQL statements ran |
+| `started_at` vs `finished_at` | **identical to the millisecond** |
+| `logs` | empty string |
+| the table, in production | **absent**: no `information_schema` match for `market_observation` |
+| the migration file | **nowhere on `origin/main`**, in neither this directory nor `prisma/migrations/` |
+| code that reads the table | **none**. `marketObservation` in `lib/decision-os/value-v2/*` is an in-memory TypeScript field, with 0 Prisma delegates |
+
+Zero steps with identical timestamps is the signature of
+`prisma migrate resolve --applied`, which **marks a migration done without running it**.
+Two of these were written ten minutes apart on 2026-09-09.
+
+**The consequence, and why it stays quiet:** `prisma migrate deploy` skips a migration
+the ledger says is applied, so **this table will never be created by a normal deploy**.
+Nothing breaks today only because nothing reads it.
+
+### If you build the feature that needs this table
+
+1. **Don't trust the ledger. Check the object:**
+   `select to_regclass('public.<table_name>')`. Null means it is not there, whatever
+   `_prisma_migrations` says.
+2. **The fix is to delete that one `_prisma_migrations` row** so the migration runs for
+   real. That is a **write to production's migration history**. It belongs to the repo
+   owner and is not a routine step. Do it with the same care as applying any migration
+   (see the top of this file).
+3. **Commit the migration SQL first.** It does not exist anywhere in the repo, so there is
+   currently nothing reviewable to re-run.
+
+### The sibling row is a different problem, and must not get the same fix
+
+`20260909140000_decision_os_strategy_state` has the **same** resolve-only signature (0
+steps, identical timestamps). But its table, `decision_strategy_states`, **does exist** in
+production (10 columns, 2 indexes, 0 rows), and **no model in `schema.prisma` maps to
+it**. That makes it an **orphan table**, not a missing one. Deleting its ledger row and
+re-running would try to create a table that is already there. Diagnose the object before
+touching either row.
+
+⚠ **More broadly: this directory's name is not evidence of anything's state.** Measured
+the same day, 11 of the 20 entries here were already applied to production, and 7 applied
+migrations existed nowhere in the repo at all. `_prisma_migrations` plus the live object
+is the only authority, and as the rows above show, even the ledger alone is not enough.
