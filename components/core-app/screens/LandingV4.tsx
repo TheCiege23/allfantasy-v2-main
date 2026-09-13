@@ -61,11 +61,16 @@ import '@/components/core-app/af-landing.css'
  * `select count(*) from import_runs where provider='yahoo'` — and it must be non-zero
  * BEFORE this says `live` again. See the note in lib/i18n/landing-copy.ts for the two
  * rival Yahoo token stores that have to be reconciled first.
+ *
+ * ⚠ 2026-09-13: Yahoo flipped back to `live` on the owner's instruction BEFORE that count was
+ * non-zero — it read 0 that day, read-only — once `YAHOO_REDIRECT_URI` was set and the token stores
+ * had been reconciled in code. The first real import is the verification. Re-run the query after it,
+ * and flip this back if it stays 0. Kept in step with provider-ui-config.ts, which gates the screen.
  */
 const PLATFORMS = [
   { name: 'Sleeper', state: 'live' as const },
   { name: 'ESPN', state: 'live' as const },
-  { name: 'Yahoo', state: 'soon' as const },
+  { name: 'Yahoo', state: 'live' as const },
   { name: 'MFL · Fantrax', state: 'soon' as const },
 ]
 

@@ -17,29 +17,17 @@ const EXPECTED_AVAILABILITY: Record<string, boolean> = {
   sleeper: true,
   espn: true,
   /*
-   * ⚠ FLIPPED TO FALSE 2026-08-29 — the only entry here moving in this direction, and it
-   * is the audit this file asks for, run against production rather than against the code:
+   * ⚠ FLIPPED BACK TO TRUE 2026-09-13, on the owner's instruction, BEFORE the row this entry used
+   * to demand existed. `YAHOO_REDIRECT_URI` was set on the web service to the registered www
+   * callback that day; production still read `import_runs provider='yahoo'` = 0 and no Yahoo
+   * `league_auths` row with a token. The first real import is the verification — see the comment
+   * on the yahoo entry in provider-ui-config.ts for the query to re-run and when to flip it back.
    *
-   *     leagues where platform='yahoo'  0     import_runs provider='yahoo'  0 (EVER)
-   *     YahooLeague / YahooConnection   0/0   league_auths yahoo row  1, oauthToken NULL
-   *
-   * Not "unverified" like MFL below — actively broken, and structurally so. Two credential
-   * stores cannot see each other: /api/auth/yahoo (the only connect entry point /import
-   * offers) writes `YahooConnection`, the league-import callback writes `league_auths`, and
-   * /api/yahoo/leagues reads only the former. Its returnTo was `/import?provider=yahoo`, so
-   * pressing "Connect Yahoo" returned the user to a screen still asking them to connect
-   * Yahoo. `hasFullAdapter()` passes throughout, which is the blind spot this file exists
-   * to cover.
-   *
-   * ⚠ THE STORES ARE RECONCILED NOW (`lib/yahoo/yahooCredentialStore.ts`) AND THIS STAYS
-   * `false`. That was the prerequisite, not the standard. The standard is the next
-   * sentence, and it is unchanged: require `select count(*) from import_runs where
-   * provider='yahoo'` to be non-zero. A repaired code path is not evidence; a row is —
-   * and the repair was built without Yahoo credentials to test against, so it has never
-   * carried a real league. And do NOT delete or recreate the Yahoo app while doing it —
-   * its fantasy-read permission is captured at consent time.
+   * History: false since 2026-08-29, when two rival credential stores made "Connect Yahoo" a loop;
+   * reconciled in `lib/yahoo/yahooCredentialStore.ts` since. Do NOT delete or recreate the Yahoo
+   * app — its fantasy-read permission is captured at consent time.
    */
-  yahoo: false,
+  yahoo: true,
   /*
    * Flipped 2026-08-27 with the missing piece built, not to unblock anything.
    * Fantrax has a live read API (`fxea`), so the import runs from a league id:
