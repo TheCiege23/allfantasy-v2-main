@@ -2125,3 +2125,153 @@
   font-size: 9.5px;
   font-weight: 800;
 }
+
+/* ── Game view: baseball (at-bat, strike zone, spray chart, box) ─────────────── */
+
+.af-gv-atbat {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 190px;
+  gap: 14px;
+  align-items: start;
+}
+.af-gv-atbat-main {
+  min-width: 0;
+}
+.af-gv-zone {
+  display: block;
+  width: 100%;
+  max-width: 190px;
+  margin: 0 auto;
+}
+.af-gv-zone-box {
+  fill: color-mix(in srgb, var(--text) 6%, transparent);
+  stroke: var(--text2);
+  stroke-width: 1.5;
+}
+.af-gv-pitch circle {
+  stroke: var(--surface);
+  stroke-width: 1.5;
+}
+.af-gv-pitch text {
+  fill: #0b0f17;
+  font-size: 10px;
+  font-weight: 800;
+  text-anchor: middle;
+  dominant-baseline: central;
+}
+.af-gv-pitch[data-kind='ball'] circle,
+.af-gv-pitch-n[data-kind='ball'] {
+  fill: var(--good);
+  background: var(--good);
+}
+.af-gv-pitch[data-kind='strike'] circle,
+.af-gv-pitch[data-kind='foul'] circle,
+.af-gv-pitch-n[data-kind='strike'],
+.af-gv-pitch-n[data-kind='foul'] {
+  fill: var(--bad);
+  background: var(--bad);
+}
+.af-gv-pitch[data-kind='inplay'] circle,
+.af-gv-pitch-n[data-kind='inplay'] {
+  fill: var(--accent);
+  background: var(--accent);
+}
+.af-gv-pitches {
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 12px;
+}
+.af-gv-pitches li {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+}
+.af-gv-pitch-n {
+  display: inline-grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  color: #0b0f17;
+  font-size: 10px;
+  font-weight: 800;
+}
+.af-gv-diamond {
+  display: block;
+  width: 100%;
+  max-width: 520px;
+  margin: 0 auto;
+}
+.af-gv-diamond-grass {
+  fill: color-mix(in srgb, var(--good) 14%, var(--surface2));
+  stroke: var(--line2);
+  stroke-width: 2;
+}
+.af-gv-diamond-dirt {
+  fill: color-mix(in srgb, #b7793e 28%, var(--surface2));
+}
+.af-gv-diamond-line {
+  fill: none;
+  stroke: var(--text2);
+  stroke-width: 1.5;
+  opacity: 0.55;
+}
+.af-gv-diamond-path {
+  fill: none;
+  stroke: var(--text2);
+  stroke-width: 1.5;
+  opacity: 0.7;
+}
+.af-gv-diamond-mound,
+.af-gv-diamond-base {
+  fill: var(--text2);
+  opacity: 0.8;
+}
+/* A light halo keeps dark team colours (SEA 005c5c) readable on the green outfield. */
+.af-gv-bb {
+  stroke-width: 2.5;
+  filter: drop-shadow(0 0 1.5px rgba(255, 255, 255, 0.65));
+}
+.af-gv-bb[data-kind='hr'] {
+  stroke: #ffffff;
+  stroke-width: 3;
+}
+.af-gv-bevent {
+  display: block;
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--muted);
+}
+.af-gv-decisions {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.af-gv-decision {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.af-gv-box-table tr[data-sub='true'] .af-gv-box-name {
+  padding-left: 20px;
+}
+.af-gv-bbox-total th,
+.af-gv-bbox-total td {
+  border-top: 1px solid var(--line2);
+  font-weight: 800;
+}
+
+@media (max-width: 620px) {
+  .af-gv-atbat {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
