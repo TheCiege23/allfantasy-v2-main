@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useMemo, useState } from 'react'
+import Link from 'next/link'
 import { SourceActionLink } from '@/components/league-links/SourceActionLink'
 import type { SourceScreenLink } from '@/lib/league-links/sourceLinkResolver'
 import type { CrossLeagueValueAction } from '@/lib/core-app/crossLeagueValueActions'
@@ -237,6 +238,81 @@ const NOTE_GROUPS: Array<{ key: keyof AnalyzeResult; tone: string; title: string
   { key: 'needNotes', tone: 'need', title: "What it's worth to you" },
   { key: 'byeNotes', tone: 'bye', title: 'Bye-week collisions' },
 ]
+
+function AllLeaguesTradeHub(props: {
+  leagues: StripLeague[]
+  valueActions: CrossLeagueValueAction[]
+}) {
+  const [query, setQuery] = useState('')
+  const needle = query.trim().toLowerCase()
+  const visibleLeagues = needle
+    ? props.leagues.filter((league) => `${league.name} ${league.platform} ${league.meta ?? ''}`.toLowerCase().includes(needle))
+    : props.leagues
+
+  return (
+    <div className="af-tc af-tc--hub">
+      <header className="af-tc-head af-tc-hub-head">
+        <div className="af-label">Core · Trades</div>
+        <h1>Trade command center</h1>
+        <p className="af-tc-lede">See what needs attention across your leagues, then open one league to review, counter or build a deal.</p>
+      </header>
+
+      <TradeLeagueStrip leagues={props.leagues} activeLeagueId={null} />
+
+      {props.valueActions.length > 0 ? (
+        <section className="af-tc-hub-actions">
+          <div className="af-tc-hub-section-head">
+            <div>
+              <div className="af-label">Market moves affecting your teams</div>
+              <h2>Turn value changes into actions</h2>
+            </div>
+            <span>{props.valueActions.length} players moved</span>
+          </div>
+          <div className="af-tc-value-action-list">
+            {props.valueActions.slice(0, 6).map((player) => (
+              <article key={player.playerId} className="af-tc-value-action" data-direction={player.stock}>
+                {player.imageUrl ? <img src={player.imageUrl} alt="" width={32} height={32} /> : <span className="af-tc-glyph">{player.position?.slice(0, 1) ?? 'P'}</span>}
+                <div>
+                  <strong>{player.name}</strong>
+                  <span>{player.position ?? 'Player'} · {player.stock === 'up' ? `up ${money(Math.abs(player.stockDelta ?? 0))}` : `down ${money(Math.abs(player.stockDelta ?? 0))}`} over 30 days</span>
+                  <span className="af-tc-value-leagues">
+                    {player.affectedLeagues.map((league, index) => (
+                      <span key={league.id}>{index > 0 ? ' · ' : ''}<Link href={`/core/trades?league=${encodeURIComponent(league.id)}`}>{league.name}</Link></span>
+                    ))}
+                  </span>
+                </div>
+                <b>{player.advice}</b>
+              </article>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
+      <section className="af-tc-hub-leagues">
+        <div className="af-tc-hub-section-head">
+          <div>
+            <div className="af-label">All connected leagues</div>
+            <h2>Choose where you want to trade</h2>
+          </div>
+          <label className="af-tc-hub-search">
+            <span className="af-sr-only">Search leagues</span>
+            <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search league or platform" />
+          </label>
+        </div>
+        <div className="af-tc-hub-league-grid">
+          {visibleLeagues.map((league) => (
+            <Link key={league.id} href={`/core/trades?league=${encodeURIComponent(league.id)}`} className="af-tc-hub-league">
+              <span className="af-tc-mark af-platform" data-platform={league.platform.toLowerCase()} aria-hidden>{league.mark}</span>
+              <span><strong>{league.name}</strong><small>{league.platform}{league.meta ? ` · ${league.meta}` : ''}</small></span>
+              <b aria-hidden>→</b>
+            </Link>
+          ))}
+        </div>
+        {visibleLeagues.length === 0 ? <p className="af-tc-timeline-empty">No connected league matches that search.</p> : null}
+      </section>
+    </div>
+  )
+}
 
 /**
  * Into the shape `TradeConsoleAnalyzeInput` accepts.
@@ -764,6 +840,10 @@ export function TradeCenter(props: {
     )
   }, [give, get, props.league?.name, result])
 
+  if (!props.league) {
+    return <AllLeaguesTradeHub leagues={props.leagues ?? []} valueActions={valueActions} />
+  }
+
   return (
     <div className="af-tc">
       <header className="af-tc-head">
@@ -799,7 +879,10 @@ export function TradeCenter(props: {
 
       {/* Every league at a glance, before this one's context — see the strip's own header. */}
       {props.leagues && props.leagues.length > 0 ? (
-        <TradeLeagueStrip leagues={props.leagues} activeLeagueId={props.league?.id ?? null} />
+        <details className="af-tc-switcher">
+          <summary>Switch league <span>{props.leagues.length} connected</span></summary>
+          <TradeLeagueStrip leagues={props.leagues} activeLeagueId={props.league?.id ?? null} />
+        </details>
       ) : null}
 
       {props.league ? (
@@ -832,19 +915,20 @@ export function TradeCenter(props: {
         deal contains. Scoped by the league's type when the caller knows it; the
         full six otherwise, because an unknown type must not read as a rule.
       */}
-      <div className="af-tc-legend">
-        <span className="af-tc-legend-label">
-          {legend.scoped ? 'Asset types in this league' : 'Asset types supported'}
-        </span>
-        {legend.types.map((a) => (
-          <span key={a.key} className="af-tc-asset-pill">
-            <span className="af-tc-glyph" style={{ background: a.color }}>
-              {a.glyph}
-            </span>
-            {a.label}
+      <details className="af-tc-disclosure">
+        <summary>{legend.types.length} tradeable asset types <span>View league rules</span></summary>
+        <div className="af-tc-legend">
+          <span className="af-tc-legend-label">
+            {legend.scoped ? 'Asset types in this league' : 'Asset types supported'}
           </span>
-        ))}
-      </div>
+          {legend.types.map((a) => (
+            <span key={a.key} className="af-tc-asset-pill">
+              <span className="af-tc-glyph" style={{ background: a.color }}>{a.glyph}</span>
+              {a.label}
+            </span>
+          ))}
+        </div>
+      </details>
 
       {/*
         ⚠ FORMAT BLOCKERS LEAD THE PAGE. This is a correctness statement rather
@@ -887,8 +971,8 @@ export function TradeCenter(props: {
       />
 
       {valueActions.length > 0 ? (
-        <section className="af-tc-value-actions">
-          <div className="af-label">Value change alerts · every connected league</div>
+        <details className="af-tc-value-actions">
+          <summary><span>Value change alerts</span><b>{valueActions.length} players across your leagues</b></summary>
           <div className="af-tc-value-action-list">
             {valueActions.map((player) => (
               <div key={player.playerId} className="af-tc-value-action" data-direction={player.stock}>
@@ -896,13 +980,17 @@ export function TradeCenter(props: {
                 <div>
                   <strong>{player.name}</strong>
                   <span>{player.position ?? 'Player'} · {player.stock === 'up' ? `up ${money(Math.abs(player.stockDelta ?? 0))}` : `down ${money(Math.abs(player.stockDelta ?? 0))}`} over 30 days</span>
-                  <span>{player.affectedLeagues.map((league) => league.name).join(' · ')}</span>
+                  <span className="af-tc-value-leagues">
+                    {player.affectedLeagues.map((league, index) => (
+                      <span key={league.id}>{index > 0 ? ' · ' : ''}<Link href={`/core/trades?league=${encodeURIComponent(league.id)}`}>{league.name}</Link></span>
+                    ))}
+                  </span>
                 </div>
                 <b>{player.advice}</b>
               </div>
             ))}
           </div>
-        </section>
+        </details>
       ) : null}
 
       {/*
