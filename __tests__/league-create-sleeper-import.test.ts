@@ -12,6 +12,7 @@ const {
   leagueFindUniqueMock,
   leagueWaiverSettingsFindUniqueMock,
   leagueWaiverSettingsUpsertMock,
+  trackMetaServerEventMock,
 } = vi.hoisted(() => ({
   getServerSessionMock: vi.fn(),
   requireVerifiedUserMock: vi.fn(),
@@ -51,6 +52,7 @@ const {
   leagueFindUniqueMock: vi.fn(),
   leagueWaiverSettingsFindUniqueMock: vi.fn(),
   leagueWaiverSettingsUpsertMock: vi.fn(),
+  trackMetaServerEventMock: vi.fn(),
 }))
 
 class ImportedLeagueConflictErrorMock extends Error {}
@@ -89,6 +91,21 @@ vi.mock('@/lib/viral-loop', () => ({
   buildLeagueInviteUrl: vi.fn(() => 'https://invite.test/league'),
 }))
 
+/*
+ * 🛑 THIS SUITE MUST NEVER SEND A REAL META CONVERSION.
+ *
+ * Creating a league fires a Meta "Lead" through `trackMetaServerEvent`, and a conversion that
+ * reaches Meta cannot be taken back: it trains the ad optimiser on a person who does not exist.
+ * Before this mock the only thing stopping that was `META_CONVERSIONS_API_TOKEN` happening to be
+ * unset in the test environment — the run logged "not set, skipping CAPI event". That is luck,
+ * not a guard, and it ends the day someone exports the token in a shell or the env loading
+ * changes. Only the sender is replaced; the rest of the module stays real.
+ */
+vi.mock('@/lib/meta-capi', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/meta-capi')>()),
+  trackMetaServerEvent: trackMetaServerEventMock,
+}))
+
 vi.mock('@/lib/league-import/ImportedLeagueNormalizationPipeline', () => ({
   runImportedLeagueNormalizationPipeline: runImportedLeagueNormalizationPipelineMock,
 }))
@@ -111,6 +128,8 @@ vi.mock('@/lib/league-import/ImportedLeagueCommitService', () => ({
 describe('POST /api/league/create Sleeper import flow', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    // The route chains `.catch` on this, so it must return a promise.
+    trackMetaServerEventMock.mockResolvedValue({ success: true })
     getServerSessionMock.mockResolvedValue({ user: { id: 'u1' } })
     requireVerifiedUserMock.mockResolvedValue({
       ok: true,
@@ -196,7 +215,42 @@ describe('POST /api/league/create Sleeper import flow', () => {
       league: { id: 'league-1', name: 'Imported Sleeper League', sport: 'NFL' },
       historicalBackfill: { status: 'queued' },
       importRunId: 'run-1',
+      /*
+       * Returned on purpose since b9033d3c8 (2026-06-05). The league-creation screens hand this
+       * response to `trackMetaEventsFromResponse`, which fires the browser pixel with the SAME
+       * deterministic `eventId` the server sent, so Meta counts one Lead rather than two. It carries
+       * the caller's own league name and id and nothing about the user.
+       */
+      metaEvent: {
+        eventName: 'Lead',
+        eventId: 'af_Lead_fantasy_league:league-1',
+        customData: {
+          content_name: 'Imported Sleeper League',
+          content_category: 'Fantasy League',
+          content_ids: ['league-1'],
+          value: 0,
+          currency: 'USD',
+          league_id: 'league-1',
+          sport: 'NFL',
+          league_type: 'imported',
+          draft_type: null,
+        },
+      },
     })
+
+    /*
+     * The dedupe only works if the server event and the returned one share an id, so pin that
+     * here rather than trusting two builders to agree.
+     */
+    expect(trackMetaServerEventMock).toHaveBeenCalledTimes(1)
+    expect(trackMetaServerEventMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        eventName: 'Lead',
+        eventId: 'af_Lead_fantasy_league:league-1',
+        userId: 'u1',
+        source: 'sleeper_import_league_create',
+      }),
+    )
 
     expect(runImportedLeagueNormalizationPipelineMock).toHaveBeenCalledWith({
       provider: 'sleeper',
