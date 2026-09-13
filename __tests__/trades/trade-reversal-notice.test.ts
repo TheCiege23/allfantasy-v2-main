@@ -12,6 +12,15 @@ const publishMock = vi.fn()
 vi.mock('@/lib/league-events/publisher', () => ({
   publishLeagueFanoutEvent: (...a: unknown[]) => publishMock(...a),
 }))
+// The direct notice to the two managers is covered in trade-reversal-party-notice.test.ts. Here the trade
+// resolves to nobody, so only the league announcement is observed.
+vi.mock('@/lib/notification-engine', () => ({ ingest: vi.fn(), tradeEvent: (opts: unknown) => opts }))
+vi.mock('@/lib/prisma', () => ({
+  prisma: {
+    afLeagueTrade: { findUnique: async () => null },
+    redraftTradeProposal: { findUnique: async () => null },
+  },
+}))
 
 describe('publishTradeReversalNotice', () => {
   beforeEach(() => {
