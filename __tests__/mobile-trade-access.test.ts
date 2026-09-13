@@ -16,7 +16,10 @@ describe('mobile trade access', () => {
 
   it('pins a direct Trades shortcut in the league phone navigation', () => {
     expect(leagueShell).toContain('data-testid="league-mobile-trades-shortcut"')
-    expect(leagueShell).toContain("onClick={() => onTabChange('trades')}")
+    expect(leagueShell).toContain('href={`/league/${leagueId}?view=trades`}')
+    expect(leagueShell).toContain("onTabChange('trades')")
+    expect(leagueShell).toContain('event.preventDefault()')
+    expect(leagueShell).toContain('min-h-[44px]')
     expect(leagueShell).toContain('sm:hidden')
   })
 

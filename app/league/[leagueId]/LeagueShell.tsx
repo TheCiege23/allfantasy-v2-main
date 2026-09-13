@@ -2913,6 +2913,26 @@ function LeagueHeader({
           groups (Decide · Draft · Roster · League · Legacy · Commish) with the
           active group's tabs as a sub-row. Presentation-only — every tab id,
           deep link, testid, and the roster-issue badge survive unchanged. */}
+      {tabs.some((tab) => tab.id === 'trades') ? (
+        <Link
+          href={`/league/${leagueId}?view=trades`}
+          aria-current={activeTab === 'trades' ? 'page' : undefined}
+          data-testid="league-mobile-trades-shortcut"
+          onClick={(event) => {
+            event.preventDefault()
+            onTabChange('trades')
+          }}
+          className={cn(
+            'relative z-20 mx-3 mt-2 flex min-h-[44px] w-[calc(100%-1.5rem)] touch-manipulation items-center justify-center gap-2 rounded-xl border px-4 py-2.5 text-xs font-black uppercase tracking-wide sm:hidden',
+            activeTab === 'trades'
+              ? 'border-[#ff3d81] bg-[#ff3d81]/20 text-white shadow-[0_8px_24px_rgba(255,61,129,0.16)]'
+              : 'border-[#ff3d81]/45 bg-[#ff3d81]/[0.09] text-[#ffb8d1]',
+          )}
+        >
+          <LeagueTabNavGlyph tabId="trades" active={activeTab === 'trades'} className="h-4 w-4" />
+          {activeTab === 'trades' ? 'Viewing trades' : 'Open trades'}
+        </Link>
+      ) : null}
       <div className="scrollbar-none mt-2 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:px-5 sm:pb-3">
         {(() => {
           const tabGroups = buildLeagueTabGroups(tabs)
@@ -2933,24 +2953,6 @@ function LeagueHeader({
                 role="tablist"
                 aria-label="League navigation"
               >
-                {tabs.some((tab) => tab.id === 'trades') ? (
-                  <button
-                    type="button"
-                    role="tab"
-                    aria-selected={activeTab === 'trades'}
-                    data-testid="league-mobile-trades-shortcut"
-                    onClick={() => onTabChange('trades')}
-                    className={cn(
-                      'touch-manipulation flex min-h-[40px] shrink-0 items-center gap-1.5 rounded-lg border px-3 py-2 text-[11px] font-black uppercase tracking-wide sm:hidden',
-                      activeTab === 'trades'
-                        ? 'border-[#ff3d81] bg-[#ff3d81]/15 text-[#ffb8d1]'
-                        : 'border-[#ff3d81]/35 bg-[#ff3d81]/[0.07] text-[#ff9ec0]',
-                    )}
-                  >
-                    <LeagueTabNavGlyph tabId="trades" active={activeTab === 'trades'} className="h-4 w-4" />
-                    Trades
-                  </button>
-                ) : null}
                 {tabGroups.map((group) => {
                   const isActiveGroup = group.id === activeGroup?.id
                   return (
