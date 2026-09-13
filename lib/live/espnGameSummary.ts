@@ -198,6 +198,14 @@ export type BasketballBoxTeam = {
 }
 
 export type BasketballDetail = {
+  /**
+   * "halves" when the plays' periods are named halves — men's college basketball
+   * ("1st Half", "2nd Half", then "OT" on NCAAB 401825532) — else "quarters".
+   * Read from the data, not the sport code.
+   */
+  periods: 'halves' | 'quarters'
+  /** Which court to draw: the NCAA men's lane and 3-point line, or the NBA's. */
+  court: 'college' | 'pro'
   /** Every play, in game order. */
   plays: BasketballPlay[]
   shots: BasketballShot[]
@@ -736,9 +744,10 @@ function mapPlayers(boxPlayers: unknown[]): Record<string, GameDetailPlayerLine[
   return out
 }
 
-const NON_BASKETBALL_PLAY = /timeout|end (of )?(period|quarter|half|game)|end game|jumpball|jump ball|substitution|review/i
+// "Coach's Challenge (Stands)" is the last non-end play of some college games (NCAAB 401858383).
+const NON_BASKETBALL_PLAY = /timeout|end (of )?(period|quarter|half|game)|end game|jumpball|jump ball|substitution|review|challenge/i
 
-function mapBasketball(root: Obj, home: GameDetailTeam, away: GameDetailTeam): BasketballDetail {
+function mapBasketball(root: Obj, home: GameDetailTeam, away: GameDetailTeam, sport: string): BasketballDetail {
   const plays: BasketballPlay[] = []
   const shots: BasketballShot[] = []
   for (const p of arr(root.plays).map(obj)) {
@@ -778,7 +787,12 @@ function mapBasketball(root: Obj, home: GameDetailTeam, away: GameDetailTeam): B
       x >= 0 &&
       x <= 50 &&
       y >= 0 &&
-      !/free throw/i.test(type ?? '')
+      // ⚠ Free throws never go on the chart, and the two leagues spell them differently.
+      // NBA: "Free Throw - 1 of 2" with the sentinel spot. College: makes AND misses are
+      // "MadeFreeThrow" — no space — with a REAL spot at the rim, (25, 0), on 130 of 130
+      // across three NCAAB games. The old /free throw/ let every one of those onto the
+      // chart; the optional space is the whole fix.
+      !/free ?throw/i.test(type ?? '')
     ) {
       shots.push({
         id,
@@ -828,7 +842,10 @@ function mapBasketball(root: Obj, home: GameDetailTeam, away: GameDetailTeam): B
   }
   const teams = arr(pick(root, 'boxscore', 'players')).map(obj)
   const teamRaw = (id: string) => teams.find((t) => str(pick(t, 'team', 'id')) === id) ?? null
+  const halves = arr(root.plays).some((p) => /half/i.test(str(pick(obj(p), 'period', 'displayValue')) ?? ''))
   return {
+    periods: halves ? 'halves' : 'quarters',
+    court: sport === 'NCAAB' ? 'college' : 'pro',
     plays,
     shots,
     box: { home: boxFor(teamRaw(home.id)), away: boxFor(teamRaw(away.id)) },
@@ -1217,7 +1234,7 @@ export function trimEspnGameSummary(
   const flatPlays = Array.isArray(root.plays) && !drivesRoot
   const baseball = flatPlays && isBaseball ? mapBaseball(root, comp, homeRaw, awayRaw, state) : null
   const hockey = flatPlays && isHockey ? mapHockey(root, home, away) : null
-  const basketball = flatPlays && !isBaseball && !isHockey ? mapBasketball(root, home, away) : null
+  const basketball = flatPlays && !isBaseball && !isHockey ? mapBasketball(root, home, away, opts.sport) : null
   // Baseball's last play is the last at-bat that has a result, not the pitch in progress.
   const lastAtBat = baseball ? ([...baseball.atBats].reverse().find((a) => a.result) ?? null) : null
   const lastFlat =
@@ -1348,9 +1365,12 @@ export function trimEspnGameSummary(
  * was measured 2026-09-13 on CHI @ GS (401810798); NHL's hockey shape (full-rink
  * coordinates, forwards/defenses/goalies box score) on LA @ BOS (401803363); MLB's
  * baseball shape (pitch-level plays grouped by at-bat, batting/pitching box score)
- * on COL @ DET (401816920) and KC @ BOS live (401816922).
+ * on COL @ DET (401816920) and KC @ BOS live (401816922). Men's college basketball
+ * shares the NBA shape with two halves and a real free-throw spot, measured on UConn
+ * vs Michigan (401856600), Oklahoma vs Baylor (401858383) and Illinois @ UCLA in OT
+ * (401825532).
  */
-export const GAME_VIEW_SPORTS: readonly string[] = ['NFL', 'NCAAF', 'NBA', 'NHL', 'MLB']
+export const GAME_VIEW_SPORTS: readonly string[] = ['NFL', 'NCAAF', 'NBA', 'NCAAB', 'NHL', 'MLB']
 
 const NAME_SUFFIX = /\s+(jr|sr|ii|iii|iv|v)\.?$/i
 

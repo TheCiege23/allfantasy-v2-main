@@ -254,6 +254,7 @@ describe('cache lifetime and card link', () => {
     expect(gameDetailHref({ sport: 'NFL', gameId: '401872925', espnDetail: true }, '/core/live')).toBe('/core/live?sport=NFL&game=401872925')
     expect(gameDetailHref({ sport: 'NCAAF', gameId: '401856682', espnDetail: true }, '/live')).toBe('/live?sport=NCAAF&game=401856682')
     expect(gameDetailHref({ sport: 'NBA', gameId: '401810798', espnDetail: true }, '/live')).toBe('/live?sport=NBA&game=401810798')
+    expect(gameDetailHref({ sport: 'NCAAB', gameId: '401825532', espnDetail: true }, '/live')).toBe('/live?sport=NCAAB&game=401825532')
     expect(gameDetailHref({ sport: 'NHL', gameId: '401803363', espnDetail: true }, '/live')).toBe('/live?sport=NHL&game=401803363')
     expect(gameDetailHref({ sport: 'MLB', gameId: '401816920', espnDetail: true }, '/live')).toBe('/live?sport=MLB&game=401816920')
     expect(gameDetailHref({ sport: 'SOCCER', gameId: '401872925', espnDetail: true }, '/live')).toBeNull()
