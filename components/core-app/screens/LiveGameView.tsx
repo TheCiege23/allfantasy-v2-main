@@ -14,6 +14,11 @@ import type {
   GameDetailPlay,
   GameDetailPlayerLine,
   GameDetailTeam,
+  HockeyBoxTeam,
+  HockeyDetail,
+  HockeyPlay,
+  HockeyPlayer,
+  HockeyShot,
   LiveGameDetail,
 } from '@/lib/live/espnGameSummary'
 import '@/components/core-app/af-core.css'
@@ -95,7 +100,7 @@ export function LiveGameView({
           <p className="af-live-empty-body">
             {payload?.failed
               ? 'This is a problem on our end, not the game. Retrying automatically.'
-              : 'Game views are available for NFL, college football and NBA games.'}
+              : 'Game views are available for NFL, college football, NBA and NHL games.'}
           </p>
         </div>
       </div>
@@ -135,6 +140,19 @@ export function LiveGameView({
               ) : null}
               <BasketballPlayByPlay detail={detail} basketball={detail.basketball} tab={tab} onTab={setTab} />
             </>
+          ) : detail.hockey ? (
+            <>
+              <RinkShotMap detail={detail} hockey={detail.hockey} />
+              {detail.lastPlay ? (
+                <section className="af-gv-card" aria-labelledby="af-gv-lastplay-hk">
+                  <h2 className="af-label" id="af-gv-lastplay-hk">
+                    Last play
+                  </h2>
+                  <LastPlay detail={detail} play={detail.lastPlay} />
+                </section>
+              ) : null}
+              <HockeyPlayByPlay detail={detail} hockey={detail.hockey} tab={tab} onTab={setTab} />
+            </>
           ) : (
             <>
               <DrivePanel detail={detail} />
@@ -145,6 +163,7 @@ export function LiveGameView({
       </div>
 
       {detail.basketball ? <BoxScore detail={detail} basketball={detail.basketball} /> : null}
+      {detail.hockey ? <HockeyBoxScore detail={detail} hockey={detail.hockey} /> : null}
 
       <GameFooter detail={detail} />
     </div>
@@ -157,16 +176,35 @@ function teamColor(team: GameDetailTeam, fallback: string): string {
   return team.color && /^[0-9a-f]{6}$/i.test(team.color) ? `#${team.color}` : fallback
 }
 
+/**
+ * A team colour that stays visible as a marker on the dark rink. Many NHL teams
+ * are black — measured: BOS `231f20`, LA `121212`, neither with an alternate —
+ * and rendered as-is their shots vanish into the ice. Too dark → the alternate
+ * colour if that is readable → the fallback. Two teams landing on the same
+ * colour would make the map unreadable, so the caller resolves that too.
+ */
+export function markerColor(team: Pick<GameDetailTeam, 'color' | 'altColor'>, fallback: string): string {
+  const luminance = (hex: string | null) => {
+    if (!hex || !/^[0-9a-f]{6}$/i.test(hex)) return -1
+    const [r, g, b] = [0, 2, 4].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255)
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b
+  }
+  if (luminance(team.color) >= 0.18) return `#${team.color}`
+  if (luminance(team.altColor) >= 0.18) return `#${team.altColor}`
+  return fallback
+}
+
 function ordinal(n: number): string {
   const s = ['th', 'st', 'nd', 'rd']
   const v = n % 100
   return `${n}${s[(v - 20) % 10] || s[v] || s[0]}`
 }
 
-function periodName(n: number | null): string {
+function periodName(n: number | null, kind: 'quarter' | 'period' = 'quarter'): string {
   if (n == null) return 'Other'
-  if (n <= 4) return `${ordinal(n)} Quarter`
-  return n === 5 ? 'Overtime' : `${n - 4}OT`
+  const regulation = kind === 'period' ? 3 : 4
+  if (n <= regulation) return `${ordinal(n)} ${kind === 'period' ? 'Period' : 'Quarter'}`
+  return n === regulation + 1 ? 'Overtime' : `${n - regulation}OT`
 }
 
 function TeamLogo({ team, size }: { team: GameDetailTeam; size: number }) {
@@ -191,7 +229,9 @@ function GameHeader({ detail }: { detail: LiveGameDetail }) {
         ? 'home'
         : 'away'
       : null
-  const periods = Math.max(4, home.linescores.length, away.linescores.length)
+  // Hockey has three regulation periods; football and basketball have four quarters.
+  const regulation = detail.hockey ? 3 : 4
+  const periods = Math.max(regulation, home.linescores.length, away.linescores.length)
   const showLines = home.linescores.length > 0 || away.linescores.length > 0
 
   return (
@@ -209,7 +249,7 @@ function GameHeader({ detail }: { detail: LiveGameDetail }) {
                 <th scope="col" aria-label="Team" />
                 {Array.from({ length: periods }, (_, i) => (
                   <th key={i} scope="col">
-                    {i < 4 ? i + 1 : i === 4 ? 'OT' : `${i - 3}OT`}
+                    {i < regulation ? i + 1 : i === regulation ? 'OT' : `${i - regulation + 1}OT`}
                   </th>
                 ))}
                 <th scope="col">T</th>
@@ -452,9 +492,28 @@ function EndZone({ team }: { team: GameDetailTeam }) {
 
 const PASS_GROUPS = ['passing', 'receiving', 'defensive', 'interceptions', 'rushing']
 const RUSH_GROUPS = ['rushing', 'defensive', 'receiving', 'passing']
-const ANY_GROUPS = ['passing', 'rushing', 'receiving', 'defensive', 'interceptions', 'kicking', 'punting', 'kickReturns', 'puntReturns', 'fumbles', 'basketball']
+const ANY_GROUPS = [
+  'passing',
+  'rushing',
+  'receiving',
+  'defensive',
+  'interceptions',
+  'kicking',
+  'punting',
+  'kickReturns',
+  'puntReturns',
+  'fumbles',
+  'basketball',
+  'forwards',
+  'defenses',
+  'goalies',
+]
 const PREFERRED_STATS: Record<string, string[]> = {
   basketball: ['PTS', 'REB', 'AST', 'FG'],
+  // `S` is the shot count; ESPN's skater `SOG` column is all zeros (see SKATER_COLUMNS).
+  forwards: ['G', 'A', 'S', '+/-'],
+  defenses: ['G', 'A', 'S', '+/-'],
+  goalies: ['SV', 'SA', 'GA', 'SV%'],
   passing: ['C/ATT', 'YDS', 'TD', 'INT'],
   rushing: ['CAR', 'YDS', 'TD', 'LONG'],
   receiving: ['REC', 'YDS', 'TD', 'TGTS'],
@@ -1000,6 +1059,317 @@ function BoxTeam({ team, box }: { team: GameDetailTeam; box: BasketballBoxTeam }
           </tbody>
         </table>
       </div>
+    </div>
+  )
+}
+
+/* ── hockey ────────────────────────────────────────────────────────────────── */
+
+/**
+ * One offensive zone, net on the right. Shots arrive already normalised so each
+ * team attacks +x (see `hockeyAttackSigns`); x is feet from centre ice, the goal
+ * line sits at 89, and the end boards round off with a 28 ft corner radius.
+ */
+function RinkShotMap({ detail, hockey }: { detail: LiveGameDetail; hockey: HockeyDetail }) {
+  const [side, setSide] = useState<'both' | 'away' | 'home'>('both')
+  const away = markerColor(detail.away, 'var(--accent)')
+  const home = markerColor(detail.home, 'var(--warn)')
+  const colors = { away, home: home.toLowerCase() === away.toLowerCase() ? 'var(--warn)' : home }
+  const sideOf = (s: HockeyShot): 'home' | 'away' | null =>
+    s.teamId === detail.home.id ? 'home' : s.teamId === detail.away.id ? 'away' : null
+  const visible = side === 'both' ? hockey.shots : hockey.shots.filter((s) => sideOf(s) === side)
+  const goals = visible.filter((s) => s.kind === 'goal').length
+  const onGoal = visible.filter((s) => s.kind !== 'missed').length
+
+  if (hockey.shots.length === 0) return null
+  return (
+    <section className="af-gv-card" aria-labelledby="af-gv-rink">
+      <div className="af-gv-shots-head">
+        <h2 className="af-label" id="af-gv-rink">
+          Shot map
+        </h2>
+        <span className="af-gv-muted af-num">
+          {goals} G · {onGoal} SOG
+        </span>
+      </div>
+      <div className="af-live-scope af-gv-tabs" role="group" aria-label="Whose shots to show">
+        {(
+          [
+            ['both', 'Both'],
+            ['away', detail.away.abbrev],
+            ['home', detail.home.abbrev],
+          ] as const
+        ).map(([key, label]) => (
+          <button
+            key={key}
+            type="button"
+            className="af-live-scope-btn"
+            data-active={side === key}
+            aria-pressed={side === key}
+            onClick={() => setSide(key)}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+      <svg
+        className="af-gv-rink"
+        viewBox="0 -42.5 100 85"
+        role="img"
+        aria-label={`Shot map: ${goals} goals, ${onGoal} shots on goal`}
+      >
+        <path className="af-gv-rink-ice" d="M0 -42.5 L72 -42.5 A28 28 0 0 1 100 -14.5 L100 14.5 A28 28 0 0 1 72 42.5 L0 42.5 Z" />
+        <line className="af-gv-rink-red" x1="0.4" y1="-42.5" x2="0.4" y2="42.5" />
+        <line className="af-gv-rink-blue" x1="25" y1="-42.5" x2="25" y2="42.5" />
+        <line className="af-gv-rink-red" x1="89" y1="-36.7" x2="89" y2="36.7" />
+        <path className="af-gv-rink-crease" d="M89 -6 A6 6 0 0 0 89 6 Z" />
+        <rect className="af-gv-rink-net" x="89" y="-3" width="3.3" height="6" />
+        {[-22, 22].map((y) => (
+          <g key={y}>
+            <circle className="af-gv-rink-circle" cx="69" cy={y} r="15" />
+            <circle className="af-gv-rink-dot" cx="69" cy={y} r="1" />
+            <circle className="af-gv-rink-dot" cx="20" cy={y} r="1" />
+          </g>
+        ))}
+        {visible.map((s) => {
+          const color = colors[sideOf(s) ?? 'away']
+          return (
+            <circle
+              key={s.id}
+              className="af-gv-hshot"
+              data-kind={s.kind}
+              cx={s.x}
+              cy={s.y}
+              r={s.kind === 'goal' ? 2.1 : 1.3}
+              fill={s.kind === 'missed' ? 'none' : color}
+              stroke={color}
+            >
+              <title>{s.text}</title>
+            </circle>
+          )
+        })}
+      </svg>
+      <p className="af-gv-shots-key af-gv-muted">
+        large = goal · filled = shot on goal · hollow = missed · every team shown attacking the right-hand net
+      </p>
+    </section>
+  )
+}
+
+function HockeyPlayByPlay({
+  detail,
+  hockey,
+  tab,
+  onTab,
+}: {
+  detail: LiveGameDetail
+  hockey: HockeyDetail
+  tab: 'scoring' | 'all'
+  onTab: (t: 'scoring' | 'all') => void
+}) {
+  const periods = useMemo(
+    () =>
+      [...new Set(hockey.plays.map((p) => p.period).filter((n): n is number => n != null))].sort((a, b) => a - b),
+    [hockey.plays],
+  )
+  const [picked, setPicked] = useState<number | null>(null)
+  const active = picked != null && periods.includes(picked) ? picked : (periods[periods.length - 1] ?? null)
+  // Goals are few enough to show for the whole game; all plays page by period.
+  const plays = useMemo(
+    () =>
+      (tab === 'scoring'
+        ? hockey.plays.filter((p) => p.scoring)
+        : hockey.plays.filter((p) => p.period === active)
+      ).slice().reverse(),
+    [hockey.plays, active, tab],
+  )
+  const teamFor = (id: string | null) => (id === detail.home.id ? detail.home : id === detail.away.id ? detail.away : null)
+  const periodShort = (n: number) => (n <= 3 ? ordinal(n) : n === 4 ? 'OT' : `${n - 3}OT`)
+  const strengthTag = (s: string | null) => (s && !/even/i.test(s) ? (/power/i.test(s) ? 'PP' : /short/i.test(s) ? 'SH' : s) : null)
+
+  return (
+    <section className="af-gv-card" aria-labelledby="af-gv-hpbp">
+      <h2 className="af-label" id="af-gv-hpbp">
+        Play-by-play
+      </h2>
+      <div className="af-live-scope af-gv-tabs" role="group" aria-label="Which plays to show">
+        <button
+          type="button"
+          className="af-live-scope-btn"
+          data-active={tab === 'scoring'}
+          aria-pressed={tab === 'scoring'}
+          onClick={() => onTab('scoring')}
+        >
+          Goals
+        </button>
+        <button
+          type="button"
+          className="af-live-scope-btn"
+          data-active={tab === 'all'}
+          aria-pressed={tab === 'all'}
+          onClick={() => onTab('all')}
+        >
+          All plays
+        </button>
+      </div>
+      {tab === 'all' && periods.length > 1 ? (
+        <div className="af-live-scope af-gv-tabs" role="group" aria-label="Period">
+          {periods.map((n) => (
+            <button
+              key={n}
+              type="button"
+              className="af-live-scope-btn"
+              data-active={n === active}
+              aria-pressed={n === active}
+              onClick={() => setPicked(n)}
+            >
+              {periodShort(n)}
+            </button>
+          ))}
+        </div>
+      ) : null}
+      {tab === 'all' && active != null ? (
+        <h3 className="af-label af-gv-period-head">{periodName(active, 'period')}</h3>
+      ) : null}
+      {plays.length === 0 ? (
+        <p className="af-gv-none">{tab === 'scoring' ? 'No goals yet.' : 'No plays yet.'}</p>
+      ) : (
+        <ol className="af-gv-plays af-gv-bplays">
+          {plays.map((p: HockeyPlay, i) => {
+            const team = teamFor(p.teamId)
+            const tag = p.scoring ? strengthTag(p.strength) : null
+            return (
+              <li key={p.id || i} className="af-gv-bplay" data-scoring={p.scoring}>
+                {team ? <TeamLogo team={team} size={18} /> : <span className="af-gv-logo" aria-hidden />}
+                <span className="af-gv-bplay-clock af-num">
+                  {p.clock ?? ''}
+                  {tab === 'scoring' && p.period != null ? ` ${periodShort(p.period)}` : ''}
+                </span>
+                <span className="af-gv-play-desc">
+                  {tag ? <span className="af-gv-strength af-num">{tag}</span> : null}
+                  {p.text}
+                </span>
+                {p.scoring && p.awayScore != null && p.homeScore != null ? (
+                  <span className="af-gv-bplay-score af-num">
+                    {p.awayScore}–{p.homeScore}
+                  </span>
+                ) : (
+                  <span />
+                )}
+              </li>
+            )
+          })}
+        </ol>
+      )}
+    </section>
+  )
+}
+
+// ⚠ Shots are `S`, not `SOG`: in ESPN's skater rows `SOG` read 0 for all 36
+// skaters of LA @ BOS while `S` summed to the team shot totals (16 / 23).
+const SKATER_COLUMNS = ['G', 'A', '+/-', 'S', 'HT', 'BS', 'PIM', 'FO%', 'TOI']
+const GOALIE_COLUMNS = ['SA', 'GA', 'SV', 'SV%', 'TOI']
+
+function HockeyBoxScore({ detail, hockey }: { detail: LiveGameDetail; hockey: HockeyDetail }) {
+  const teams = [
+    { team: detail.away, box: hockey.box.away },
+    { team: detail.home, box: hockey.box.home },
+  ].filter((t): t is { team: GameDetailTeam; box: HockeyBoxTeam } => t.box != null)
+  if (teams.length === 0) return null
+  return (
+    <section className="af-gv-card af-gv-box" aria-labelledby="af-gv-hbox">
+      <h2 className="af-label" id="af-gv-hbox">
+        Box score
+      </h2>
+      {teams.map(({ team, box }) => (
+        <HockeyBoxTeamTable key={team.id} team={team} box={box} />
+      ))}
+    </section>
+  )
+}
+
+function HockeyBoxTeamTable({ team, box }: { team: GameDetailTeam; box: HockeyBoxTeam }) {
+  const skaterCols = SKATER_COLUMNS.filter((c) => box.skaterLabels.includes(c))
+  const goalieCols = GOALIE_COLUMNS.filter((c) => box.goalieLabels.includes(c))
+  const cell = (p: HockeyPlayer, labels: string[], col: string) => p.stats[labels.indexOf(col)] ?? ''
+  const forwards = box.skaters.filter((s) => s.unit === 'F')
+  const defense = box.skaters.filter((s) => s.unit === 'D')
+  const skaterRow = (p: HockeyPlayer) => (
+    <tr key={p.athleteId}>
+      <th scope="row" className="af-gv-box-name">
+        {p.shortName ?? p.name}
+        {p.position ? <span className="af-gv-leader-pos"> {p.position}</span> : null}
+      </th>
+      {skaterCols.map((c) => (
+        <td key={c}>{cell(p, box.skaterLabels, c)}</td>
+      ))}
+    </tr>
+  )
+  return (
+    <div className="af-gv-box-team" data-team={team.id}>
+      <div className="af-gv-box-team-head">
+        <TeamLogo team={team} size={22} />
+        <strong>{team.name}</strong>
+      </div>
+      {skaterCols.length > 0 ? (
+        <div className="af-gv-box-scroll">
+          <table className="af-gv-box-table af-num">
+            <thead>
+              <tr>
+                <th scope="col" className="af-gv-box-name">
+                  Forwards
+                </th>
+                {skaterCols.map((c) => (
+                  <th key={c} scope="col">
+                    {c}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {forwards.map(skaterRow)}
+              {defense.length > 0 ? (
+                <tr className="af-gv-box-group">
+                  <th scope="rowgroup" colSpan={skaterCols.length + 1}>
+                    Defense
+                  </th>
+                </tr>
+              ) : null}
+              {defense.map(skaterRow)}
+            </tbody>
+          </table>
+        </div>
+      ) : null}
+      {box.goalies.length > 0 && goalieCols.length > 0 ? (
+        <div className="af-gv-box-scroll">
+          <table className="af-gv-box-table af-num" data-kind="goalies">
+            <thead>
+              <tr>
+                <th scope="col" className="af-gv-box-name">
+                  Goalies
+                </th>
+                {goalieCols.map((c) => (
+                  <th key={c} scope="col">
+                    {c}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {box.goalies.map((g) => (
+                <tr key={g.athleteId}>
+                  <th scope="row" className="af-gv-box-name">
+                    {g.shortName ?? g.name}
+                  </th>
+                  {goalieCols.map((c) => (
+                    <td key={c}>{cell(g, box.goalieLabels, c)}</td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : null}
     </div>
   )
 }

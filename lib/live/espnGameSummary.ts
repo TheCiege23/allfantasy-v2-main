@@ -204,6 +204,74 @@ export type BasketballDetail = {
   box: { home: BasketballBoxTeam | null; away: BasketballBoxTeam | null }
 }
 
+/* ── hockey ────────────────────────────────────────────────────────────────── */
+
+/**
+ * One shot with a rink spot, NORMALISED so every team attacks the +x net.
+ *
+ * ⚠ ESPN'S RINK COORDINATES ARE FULL-RINK AND TEAMS SWITCH ENDS EVERY PERIOD.
+ * Measured on NHL LA @ BOS (401803363, Final/OT): x −99…99, y −42…41 centred at
+ * centre ice. BOS shot at +x in P1 (mean +33), −x in P2 (−36.8), +x in P3 (+38.9);
+ * LA the mirror. The overtime winner sat at x −83 — the P2 end — so overtime
+ * follows the even periods. Plotting raw spots would scatter one team's shots
+ * across both nets; `hockeyAttackSigns` works out each team's period-1 end and
+ * every shot is mirrored to one offensive zone.
+ */
+export type HockeyShot = {
+  id: string
+  teamId: string | null
+  athleteId: string | null
+  /** Feet from centre ice toward the attacked net (goal line at 89). */
+  x: number
+  y: number
+  kind: 'goal' | 'shot' | 'missed'
+  period: number | null
+  clock: string | null
+  strength: string | null
+  text: string
+}
+
+export type HockeyPlay = {
+  id: string
+  text: string
+  type: string | null
+  period: number | null
+  clock: string | null
+  teamId: string | null
+  scoring: boolean
+  /** "Even Strength", "Power Play", "Shorthanded". */
+  strength: string | null
+  awayScore: number | null
+  homeScore: number | null
+  athleteIds: string[]
+}
+
+export type HockeyPlayer = {
+  athleteId: string
+  name: string
+  shortName: string | null
+  headshot: string | null
+  jersey: string | null
+  position: string | null
+  stats: string[]
+}
+
+export type HockeyBoxTeam = {
+  teamId: string
+  skaterLabels: string[]
+  /** Forwards then defense. */
+  skaters: Array<HockeyPlayer & { unit: 'F' | 'D' }>
+  goalieLabels: string[]
+  goalies: HockeyPlayer[]
+}
+
+export type HockeyDetail = {
+  /** Every play in game order, stoppages dropped. */
+  plays: HockeyPlay[]
+  shots: HockeyShot[]
+  box: { home: HockeyBoxTeam | null; away: HockeyBoxTeam | null }
+}
+
 export type LiveGameDetail = {
   gameId: string
   sport: string
@@ -230,6 +298,8 @@ export type LiveGameDetail = {
   attendance: number | null
   /** Shots, box score and the full play list — present only for a basketball summary. */
   basketball: BasketballDetail | null
+  /** Rink shots, skater/goalie box score and plays — present only for a hockey summary. */
+  hockey: HockeyDetail | null
   fetchedAt: string
 }
 
@@ -288,6 +358,8 @@ const LEADER_ORDER = [
   'receivingYards',
   'sacks',
   'totalTackles',
+  // NHL sends goals / assists / points; NBA points / rebounds / assists.
+  'goals',
   'points',
   'rebounds',
   'assists',
@@ -320,9 +392,15 @@ function mapLeaders(raw: unknown): GameDetailLeader[] {
       shortName: str(athlete?.shortName),
       position: str(pick(athlete, 'position', 'abbreviation')) ?? str(athlete?.position),
       headshot: href(athlete?.headshot),
-      mainValue: str(pick(entry, 'mainStat', 'value')),
+      // NHL leaders carry no `mainStat` or `summary` — only `displayValue` ("1").
+      // A bare number there IS the big number; anything longer stays the summary line.
+      mainValue:
+        str(pick(entry, 'mainStat', 'value')) ??
+        (/^\d+(\.\d+)?$/.test(str(entry.displayValue) ?? '') ? str(entry.displayValue) : null),
       mainLabel: str(pick(entry, 'mainStat', 'label')),
-      summary: str(entry.summary) ?? str(entry.displayValue),
+      summary:
+        str(entry.summary) ??
+        (/^\d+(\.\d+)?$/.test(str(entry.displayValue) ?? '') ? null : str(entry.displayValue)),
     })
   }
   return out.sort((a, b) => {
@@ -422,6 +500,19 @@ const BASKETBALL_TEAM_STATS: TeamStatSpec[] = [
   { key: 'pointsInPaint', label: 'Points in Paint', kind: 'count' },
   { key: 'fastBreakPoints', label: 'Fast Break Points', kind: 'count' },
   { key: 'largestLead', label: 'Largest Lead', kind: 'count' },
+]
+
+/* NHL team stat names, measured on 401803363. */
+const HOCKEY_TEAM_STATS: TeamStatSpec[] = [
+  { key: 'shotsTotal', label: 'Shots', kind: 'count' },
+  { key: 'faceoffPercent', label: 'Faceoff %', kind: 'count' },
+  { key: 'powerPlayGoals', label: 'Power Play Goals', kind: 'count' },
+  { key: 'powerPlayOpportunities', label: 'Power Plays', kind: 'count' },
+  { key: 'hits', label: 'Hits', kind: 'count' },
+  { key: 'blockedShots', label: 'Blocked Shots', kind: 'count' },
+  { key: 'takeaways', label: 'Takeaways', kind: 'count' },
+  { key: 'giveaways', label: 'Giveaways', kind: 'count' },
+  { key: 'penaltyMinutes', label: 'Penalty Minutes', kind: 'count' },
 ]
 
 const TEAM_STATS: TeamStatSpec[] = [
@@ -619,6 +710,122 @@ function mapBasketball(root: Obj, home: GameDetailTeam, away: GameDetailTeam): B
   }
 }
 
+const NON_HOCKEY_PLAY = /period (start|end)|end of game|game end|stoppage/i
+const HOCKEY_SHOT_KIND: Record<string, HockeyShot['kind']> = { goal: 'goal', shot: 'shot', missed: 'missed' }
+
+/**
+ * Each team's attacking direction in PERIOD 1: +1 toward +x, −1 toward −x.
+ *
+ * Teams switch ends every period, overtime included (measured, see HockeyShot),
+ * so a team attacks the same end in periods 1 and 3 and the other end in 2 and
+ * OT. Evidence is pooled across regulation — a shot at +x in period 2 counts as
+ * a vote for −x in period 1 — because one period's handful of shots can mislead
+ * (BOS's three overtime shots split 2–1 the "wrong" way around its winner).
+ */
+export function hockeyAttackSigns(
+  shots: ReadonlyArray<{ teamId: string | null; period: number | null; x: number }>,
+): Map<string, 1 | -1> {
+  const evidence = new Map<string, number>()
+  for (const s of shots) {
+    if (!s.teamId || s.period == null || s.period < 1 || s.period > 3 || s.x === 0) continue
+    const flip = s.period % 2 === 1 ? 1 : -1
+    evidence.set(s.teamId, (evidence.get(s.teamId) ?? 0) + Math.sign(s.x) * flip)
+  }
+  const out = new Map<string, 1 | -1>()
+  for (const [teamId, e] of evidence) out.set(teamId, e < 0 ? -1 : 1)
+  return out
+}
+
+function mapHockey(root: Obj, home: GameDetailTeam, away: GameDetailTeam): HockeyDetail {
+  const plays: HockeyPlay[] = []
+  const rawShots: HockeyShot[] = []
+  for (const p of arr(root.plays).map(obj)) {
+    if (!p) continue
+    const type = str(pick(p, 'type', 'text'))
+    // Stoppages are an eighth of the list (40 of 309) and say nothing a viewer reads.
+    if (/^stoppage$/i.test(type ?? '')) continue
+    const id = str(p.id) ?? str(p.sequenceNumber) ?? ''
+    const text = (str(p.text) ?? '').replace(/\s+/g, ' ').trim()
+    const period = num(pick(p, 'period', 'number'))
+    const clock = str(pick(p, 'clock', 'displayValue'))
+    const teamId = str(pick(p, 'team', 'id'))
+    const strength = str(pick(p, 'strength', 'text'))
+    const athleteIds = arr(p.participants)
+      .map((x) => str(pick(obj(x), 'athlete', 'id')))
+      .filter((x): x is string => x != null)
+    plays.push({
+      id,
+      text,
+      type,
+      period,
+      clock,
+      teamId,
+      scoring: p.scoringPlay === true,
+      strength,
+      awayScore: num(p.awayScore),
+      homeScore: num(p.homeScore),
+      athleteIds,
+    })
+    const kind = HOCKEY_SHOT_KIND[(type ?? '').toLowerCase()]
+    const x = num(pick(p, 'coordinate', 'x'))
+    const y = num(pick(p, 'coordinate', 'y'))
+    if (kind && x != null && y != null && Math.abs(x) <= 100 && Math.abs(y) <= 42.5) {
+      rawShots.push({ id, teamId, athleteId: athleteIds[0] ?? null, x, y, kind, period, clock, strength, text })
+    }
+  }
+
+  const signs = hockeyAttackSigns(rawShots)
+  const shots = rawShots
+    .map((s) => {
+      const base = (s.teamId ? signs.get(s.teamId) : undefined) ?? 1
+      const dir = s.period != null && s.period % 2 === 0 ? -base : base
+      return { ...s, x: s.x * dir, y: s.y * dir }
+    })
+    // A shot from behind centre ice after normalising is a clearance, not a chance.
+    .filter((s) => s.x >= 0)
+
+  const teams = arr(pick(root, 'boxscore', 'players')).map(obj)
+  const group = (t: Obj | null, name: string) => arr(t?.statistics).map(obj).find((g) => str(g?.name) === name) ?? null
+  const people = (g: Obj | null): HockeyPlayer[] =>
+    arr(g?.athletes)
+      .map(obj)
+      .map((entry): HockeyPlayer | null => {
+        const athlete = obj(entry?.athlete)
+        const athleteId = str(athlete?.id)
+        const name = str(athlete?.displayName)
+        if (!entry || !athleteId || !name) return null
+        return {
+          athleteId,
+          name,
+          shortName: str(athlete?.shortName),
+          headshot: href(athlete?.headshot),
+          jersey: str(athlete?.jersey),
+          position: str(pick(athlete, 'position', 'abbreviation')) ?? str(athlete?.position),
+          stats: arr(entry.stats).map((s) => str(s) ?? ''),
+        }
+      })
+      .filter((x): x is HockeyPlayer => x != null)
+  const boxFor = (id: string): HockeyBoxTeam | null => {
+    const t = teams.find((x) => str(pick(x, 'team', 'id')) === id) ?? null
+    if (!t) return null
+    const forwards = group(t, 'forwards')
+    const defenses = group(t, 'defenses')
+    const goalies = group(t, 'goalies')
+    return {
+      teamId: id,
+      skaterLabels: arr((forwards ?? defenses)?.labels).map((l) => str(l) ?? ''),
+      skaters: [
+        ...people(forwards).map((p) => ({ ...p, unit: 'F' as const })),
+        ...people(defenses).map((p) => ({ ...p, unit: 'D' as const })),
+      ],
+      goalieLabels: arr(goalies?.labels).map((l) => str(l) ?? ''),
+      goalies: people(goalies),
+    }
+  }
+
+  return { plays, shots, box: { home: boxFor(home.id), away: boxFor(away.id) } }
+}
+
 /* ── entry point ───────────────────────────────────────────────────────────── */
 
 /**
@@ -660,29 +867,38 @@ export function trimEspnGameSummary(
   const drive = current ?? drives[drives.length - 1] ?? null
   const players = mapPlayers(arr(pick(root, 'boxscore', 'players')))
 
-  // A basketball summary carries a flat `plays` list and no `drives` (NBA 401810798).
-  const basketball = Array.isArray(root.plays) && !drivesRoot ? mapBasketball(root, home, away) : null
-  const lastBasketballPlay = basketball
-    ? [...basketball.plays].reverse().find((p) => p.text && !NON_BASKETBALL_PLAY.test(p.type ?? '')) ?? null
-    : null
+  // Basketball and hockey summaries both carry a flat `plays` list and no `drives`.
+  // Hockey is told apart by its box score: it has a `goalies` group (NHL 401803363).
+  const isHockey = arr(pick(root, 'boxscore', 'players')).some((t) =>
+    arr(obj(t)?.statistics).some((g) => str(obj(g)?.name) === 'goalies'),
+  )
+  const flatPlays = Array.isArray(root.plays) && !drivesRoot
+  const hockey = flatPlays && isHockey ? mapHockey(root, home, away) : null
+  const basketball = flatPlays && !isHockey ? mapBasketball(root, home, away) : null
+  const lastFlat =
+    (basketball
+      ? [...basketball.plays].reverse().find((p) => p.text && !NON_BASKETBALL_PLAY.test(p.type ?? ''))
+      : hockey
+        ? [...hockey.plays].reverse().find((p) => p.text && !NON_HOCKEY_PLAY.test(p.type ?? ''))
+        : null) ?? null
 
   const allPlays = (drive?.plays ?? []).filter((p) => !NON_SNAP.test(p.type ?? ''))
-  const lastPlay: GameDetailPlay | null = lastBasketballPlay
+  const lastPlay: GameDetailPlay | null = lastFlat
     ? {
-        id: lastBasketballPlay.id,
-        text: lastBasketballPlay.text,
-        type: lastBasketballPlay.type,
+        id: lastFlat.id,
+        text: lastFlat.text,
+        type: lastFlat.type,
         typeAbbrev: null,
-        period: lastBasketballPlay.period,
-        clock: lastBasketballPlay.clock,
+        period: lastFlat.period,
+        clock: lastFlat.clock,
         downDistance: null,
         startBallOn: null,
         endBallOn: null,
         statYardage: null,
         yardsAfterCatch: null,
-        scoring: lastBasketballPlay.scoring,
-        awayScore: lastBasketballPlay.awayScore,
-        homeScore: lastBasketballPlay.homeScore,
+        scoring: lastFlat.scoring,
+        awayScore: lastFlat.awayScore,
+        homeScore: lastFlat.homeScore,
       }
     : (allPlays[allPlays.length - 1] ?? null)
 
@@ -714,8 +930,8 @@ export function trimEspnGameSummary(
     situation: state === 'in' ? mapSituation(currentRaw ?? null, home, away) : null,
     lastPlay,
     // Basketball plays name their athletes by id; football plays only in text.
-    lastPlayAthleteIds: lastBasketballPlay
-      ? lastBasketballPlay.athleteIds.slice(0, 2)
+    lastPlayAthleteIds: lastFlat
+      ? lastFlat.athleteIds.slice(0, 2)
       : lastPlay
         ? athletesInPlayText(lastPlay.text, players)
         : [],
@@ -738,7 +954,7 @@ export function trimEspnGameSummary(
       arr(pick(root, 'boxscore', 'teams')),
       home,
       away,
-      basketball ? BASKETBALL_TEAM_STATS : TEAM_STATS,
+      basketball ? BASKETBALL_TEAM_STATS : hockey ? HOCKEY_TEAM_STATS : TEAM_STATS,
     ),
     players,
     winProbability:
@@ -754,6 +970,7 @@ export function trimEspnGameSummary(
     weather: temp != null ? `${temp}°${condition ? ` · ${condition}` : ''}` : condition,
     attendance: num(pick(root, 'gameInfo', 'attendance')),
     basketball,
+    hockey,
     fetchedAt: opts.fetchedAt,
   }
 }
@@ -761,9 +978,10 @@ export function trimEspnGameSummary(
 /**
  * Sports the clicked-game view covers. NFL and NCAAF share the football summary
  * shape; NBA's basketball shape (flat plays, shot spots, single box-score group)
- * was measured 2026-09-13 on CHI @ GS (401810798).
+ * was measured 2026-09-13 on CHI @ GS (401810798); NHL's hockey shape (full-rink
+ * coordinates, forwards/defenses/goalies box score) on LA @ BOS (401803363).
  */
-export const GAME_VIEW_SPORTS: readonly string[] = ['NFL', 'NCAAF', 'NBA']
+export const GAME_VIEW_SPORTS: readonly string[] = ['NFL', 'NCAAF', 'NBA', 'NHL']
 
 const NAME_SUFFIX = /\s+(jr|sr|ii|iii|iv|v)\.?$/i
 
