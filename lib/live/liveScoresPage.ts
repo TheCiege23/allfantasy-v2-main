@@ -13,7 +13,7 @@ import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
 import { composePlayerIdentities } from '@/lib/core-app/playerIdentityCompose'
 import { isRosteredPlayer, rosterNameKeys } from '@/lib/live/rosterPlayMatch'
 import { isSupportedSport, type SupportedSport } from '@/lib/sport-scope'
-import type { BaseballSituation } from '@/lib/live/espnGamePresentation'
+import { espnScoreboardDatesForWindow, type BaseballSituation } from '@/lib/live/espnGamePresentation'
 import type { LeagueSport } from '@prisma/client'
 
 /**
@@ -413,13 +413,22 @@ function isInSlateWindow(row: LiveScoreRow, now: number): boolean {
 async function loadActiveSlate(
   sport: LeagueSport,
 ): Promise<{ scores: LiveScoreRow[]; fetchedAt: string | null }> {
-  const result = await getLiveScoresForSport({ sport, team: null })
+  const now = Date.now()
+  /*
+   * College football asks ESPN for the DAYS this slate window covers. Its
+   * undated scoreboard is a 24-game featured subset (the dated FBS day was 80,
+   * measured 2026-09-13), and a game ESPN did not report arrives with no down,
+   * distance or ball position — so most college cards could not draw the field.
+   * Only NCAAF: the pro scoreboards were not measured as partial.
+   */
+  const espnDates =
+    sport === 'NCAAF' ? espnScoreboardDatesForWindow(now - SLATE_BEFORE_MS, now + SLATE_AFTER_MS) : undefined
+  const result = await getLiveScoresForSport({ sport, team: null, espnDates })
   /*
    * ⚠ THE SLATE NEEDS A WINDOW. A cached fallback can hold a whole season, and a
    * "live scores" page listing every fixture from August to January is not a live
    * scores page.
    */
-  const now = Date.now()
   const inWindow = result.scores.filter((row) => isInSlateWindow(row, now))
   if (inWindow.length > 0) return { scores: inWindow, fetchedAt: result.fetchedAt }
 

@@ -291,6 +291,44 @@ export function formatVenueLocation(
   return city ?? region ?? null
 }
 
+const THREE_HOURS_MS = 3 * 60 * 60 * 1000
+const ESPN_DATE_FORMAT = new Intl.DateTimeFormat('en-CA', {
+  timeZone: 'America/New_York',
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+})
+
+/**
+ * The ESPN `dates=YYYYMMDD` values covering a time window, as US EASTERN days.
+ *
+ * ⚠ WHY COLLEGE FOOTBALL NEEDS THIS AND THE PROS DO NOT. Measured 2026-09-13 on
+ * ESPN's college-football scoreboard: the UNDATED call returns 24 featured
+ * games spread across the week (Thu–Sat), with or without `limit=300`, while
+ * the DATED call returns the whole FBS day — 80 games for 2026-09-12, 71 for
+ * 2026-09-19. The live refresh used the undated call, so on a college Saturday
+ * roughly two games in three arrived without `situation` and drew no field.
+ *
+ * ⚠ EASTERN, NOT UTC. ESPN keys the scoreboard on the US date, like Rolling
+ * Insights' `/live/{date}` (see contracts/rolling-insights/GAPS.md): a 10pm ET
+ * kickoff is 02:00Z the NEXT day, and a UTC date would ask for the wrong slate
+ * through every late window.
+ *
+ * Steps in three-hour hops so no calendar day inside the window is skipped;
+ * returns days in order, without duplicates.
+ */
+export function espnScoreboardDatesForWindow(fromMs: number, toMs: number): string[] {
+  if (!Number.isFinite(fromMs) || !Number.isFinite(toMs) || toMs < fromMs) return []
+  const out: string[] = []
+  const push = (ms: number) => {
+    const day = ESPN_DATE_FORMAT.format(new Date(ms)).replace(/-/g, '')
+    if (!out.includes(day)) out.push(day)
+  }
+  for (let t = fromMs; t < toMs; t += THREE_HOURS_MS) push(t)
+  push(toMs)
+  return out
+}
+
 /** Per-period points, in period order. Anything non-numeric ends the list. */
 export function linescoreValues(
   linescores: Array<{ value?: number; displayValue?: string }> | undefined | null,

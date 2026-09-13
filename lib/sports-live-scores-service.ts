@@ -1428,6 +1428,18 @@ export async function getLiveScoresForSport(options: {
    * was actually measured and what is still unexplained.
    */
   preferRollingInsights?: boolean
+  /**
+   * Ask ESPN for these `YYYYMMDD` scoreboard days instead of its undated
+   * default, falling back to the undated call when they return nothing.
+   *
+   * ⚠ OPT-IN, AND ONLY THE LIVE PAGE PASSES IT, FOR NCAAF. The undated college
+   * scoreboard is a 24-game featured subset (measured 2026-09-13; the dated
+   * day is 80), which left most college games without down, distance or ball
+   * position. Every other caller — `espn-playoff-sync` among them — keeps the
+   * undated behaviour it was written against; widening this to them, or to
+   * another sport, should follow a measurement of that caller or sport.
+   */
+  espnDates?: string[]
 }): Promise<{
   scores: LiveScoreRow[]
   source: string
@@ -1501,7 +1513,12 @@ export async function getLiveScoresForSport(options: {
       const rows =
         candidate === 'rolling_insights'
           ? await fetchRollingInsightsScoreboard(sport, { forceRefresh: refresh })
-          : await fetchEspnScoreboard(sport)
+          : options.espnDates?.length
+            ? await fetchEspnScoreboard(sport, { dates: options.espnDates }).then((dated) =>
+                // An empty day (a Tuesday) falls back to exactly what this call did before.
+                dated.length > 0 ? dated : fetchEspnScoreboard(sport),
+              )
+            : await fetchEspnScoreboard(sport)
       if (rows.length === 0) continue
       await syncLiveScoresToDb(sport, rows, candidate)
       scores = rows
