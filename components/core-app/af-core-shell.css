@@ -1403,22 +1403,8 @@
   white-space: nowrap;
 }
 
-/*
- * ⚠ THIS LINE WAS HORIZONTAL — `you v them` — AND HAD TO STOP BEING. Each side
- * now carries three lines (name + score, then PROJ, then AF), and three lines
- * beside three more inside 300px leaves each team about 90px of name, which is
- * not a name. Stacking the sides trades vertical space, which the rail scrolls,
- * for horizontal space, which it does not have.
- */
+/* One compact score table per league: labels once, then one row per team. */
 .af-core .af-rail-row-line {
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  gap: 3px;
-  min-width: 0;
-}
-
-.af-core .af-rail-row-side {
   display: flex;
   flex-direction: column;
   align-items: stretch;
@@ -1426,12 +1412,26 @@
   min-width: 0;
 }
 
-/* The name-and-score line, which is the only part that stays horizontal. */
-.af-core .af-rail-row-head {
-  display: flex;
+.af-core .af-rail-row-side {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr) 42px 42px;
   align-items: center;
-  gap: 6px;
+  column-gap: 5px;
+  min-height: 18px;
   min-width: 0;
+}
+
+/* Sleeper-style compact score table. One header serves both team rows instead
+   of repeating PROJ/AF beneath every name. */
+.af-core .af-rail-row-labels {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 42px 42px;
+  column-gap: 5px;
+  padding-left: 21px;
+  color: var(--faint);
+  font: 700 7px/1 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  letter-spacing: 0.08em;
+  text-align: right;
 }
 
 /*
@@ -1453,7 +1453,6 @@
 }
 
 .af-core .af-rail-row-team {
-  flex: 1 1 auto;
   font: 500 10px/1.3 var(--font-archivo, 'Archivo', system-ui, sans-serif);
   color: var(--muted);
   overflow: hidden;
@@ -1466,83 +1465,27 @@
 }
 
 .af-core .af-rail-row-score {
-  flex: none;
+  text-align: right;
   font: 800 11px/1 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
   font-variant-numeric: tabular-nums;
   color: var(--text2);
 }
 
-/*
- * The two projected totals, indented under the name so they read as belonging
- * to that side rather than to the row.
- *
- * ⚠ STACKED, NOT SIDE BY SIDE, AND THE KEY IS A FIXED COLUMN. Both fit on one
- * line at this size, but two numbers sharing a line invite being read as a range
- * or a pair, and the AF figure is a DIFFERENT measurement of the same lineup —
- * a claim that deserves its own row. The 30px key column keeps `PROJ` and `AF`
- * left-aligned so the two values line up under each other and the difference
- * between them is readable at a glance.
- */
-.af-core .af-rail-row-projs {
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  gap: 1px;
-  min-width: 0;
-  padding-left: 22px;
-}
-
-.af-core .af-rail-row-proj {
-  display: flex;
-  align-items: baseline;
-  gap: 6px;
-  min-width: 0;
-}
-
-
-/*
- * ⚠ THE LABEL IS NOT DECORATION. An unlabelled number beside a score reads as a
- * score, which is the one mistake every matchup surface here is built to avoid.
- * PROJ is the vendor feed under generic PPR; AF is the same starters under this
- * league's own rules.
- */
-.af-core .af-rail-row-proj-k {
-  flex: none;
-  /* A fixed column, so the two values line up under one another. */
-  width: 30px;
-  font: 700 8px/1 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
-  letter-spacing: 0.08em;
+.af-core .af-rail-row-projected {
+  text-align: right;
   color: var(--faint);
-}
-
-.af-core .af-rail-row-proj[data-kind='af'] .af-rail-row-proj-k {
-  color: var(--accent);
-}
-
-.af-core .af-rail-row-proj-v {
-  font: 600 10px/1 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font: 700 10px/1 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
   font-variant-numeric: tabular-nums;
-  color: var(--muted);
 }
 
-/*
- * A total built from only some of the lineup. Marked rather than hidden, and
- * marked cheaply — the count itself is in the `title`, because "projected from 7
- * of 9 starters" does not fit here and a partial total passing for a complete
- * one is the thing worth guarding against.
- */
-.af-core .af-rail-row-projs[data-partial='true'] .af-rail-row-proj-v {
-  opacity: 0.7;
-  text-decoration: underline dotted;
-  text-underline-offset: 2px;
+.af-core .af-rail-row-side[data-side='them'] {
+  border-top: 1px solid color-mix(in srgb, var(--line) 68%, transparent);
+  padding-top: 2px;
 }
 
-.af-core .af-rail-row-vs {
-  flex: none;
-  align-self: flex-start;
-  padding-left: 5px;
-  font: 700 9px/1 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
-  color: var(--faint);
+.af-core .af-rail-row-side[data-partial='true'] .af-rail-row-projected::after {
+  content: '*';
+  color: var(--warn);
 }
 
 /*

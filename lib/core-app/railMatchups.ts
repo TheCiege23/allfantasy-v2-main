@@ -5,6 +5,7 @@ import { resolveCurrentWeek } from './currentWeek'
 import { managerArtUrl } from './leagueArt'
 import { latestProjectionWeek, lookupProjections } from './playerProjections'
 import { computeLeagueProjectedPoints, extractScoringSettings } from '@/lib/projections/leagueScoring'
+import { resolveRailMatchupMode } from './railMatchupMode'
 
 /**
  * This week's head-to-head for every league, for the expanded league rail.
@@ -194,12 +195,25 @@ const EMPTY: RailMatchups = { byLeague: {}, season: null, week: null, projection
 
 export async function getRailMatchups(
   userId: string,
-  leagues: Array<{ id: string; platformLeagueId?: string | null }>,
+  leagues: Array<{
+    id: string
+    platformLeagueId?: string | null
+    /** Explicitly resolved by the caller from league type, variant and settings. */
+    elimination?: boolean
+  }>,
 ): Promise<RailMatchups> {
   const platformIds = leagues
     .map((l) => l.platformLeagueId)
     .filter((v): v is string => typeof v === 'string' && v.length > 0)
   if (platformIds.length === 0) return EMPTY
+
+  const leagueByPlatformId = new Map(
+    leagues.flatMap((league) =>
+      league.platformLeagueId
+        ? [[league.platformLeagueId, league] as const]
+        : [],
+    ),
+  )
 
   const latest = await resolveCurrentWeek(platformIds)
   if (!latest) return EMPTY
@@ -330,6 +344,7 @@ export async function getRailMatchups(
     opponent: TeamMeta | null
     row: MatchupRow
     unpaired: boolean
+    elimination: boolean
     /** Every roster in this league's week, for the standing. Only filled when unpaired. */
     field: MatchupRow[]
   }
@@ -357,8 +372,9 @@ export async function getRailMatchups(
      * scoreline with the opponent left unnamed — which is honest — rather than
      * being dropped from the rail entirely.
      */
+    const elimination = leagueByPlatformId.get(m.leagueId)?.elimination === true
     let opponent: TeamMeta | null = null
-    if (m.matchupId != null) {
+    if (!elimination && m.matchupId != null) {
       const pair = pairs.get(`${m.leagueId}:${m.matchupId}`) ?? []
       const other = pair.find((r) => String(r.rosterId) !== String(m.rosterId))
       if (other) opponent = teamByKey.get(`${m.leagueId}:${other.rosterId}`) ?? null
@@ -373,12 +389,17 @@ export async function getRailMatchups(
      * roster. Asking the schedule "is there another team in this fixture" is the
      * question the rail actually has, and it answers it for all seven.
      */
-    const unpaired = opponent == null
+    /* Guillotine is a field race even when a provider happens to assign paired
+       matchup ids. A synthetic opponent must never replace the user's survival
+       rank or distance from the weekly cut. */
+    const mode = resolveRailMatchupMode(elimination, opponent != null)
+    const unpaired = mode !== 'head_to_head'
     fixtures.push({
       you,
-      opponent,
+      opponent: unpaired ? null : opponent,
       row: m,
       unpaired,
+      elimination,
       field: unpaired ? (rowsByLeague.get(m.leagueId) ?? []) : [],
     })
   }
@@ -428,7 +449,7 @@ export async function getRailMatchups(
             yourRosterId: String(row.rosterId),
             sides: priced?.sides ?? new Map(),
             scored,
-            elimination: priced?.elimination ?? false,
+            elimination: f.elimination || priced?.elimination === true,
           })
         : null,
       scored,

@@ -987,48 +987,27 @@ function RailSide({
     projection != null &&
     projection.pricedFrom > 0 &&
     projection.pricedFrom < projection.starterCount
+  const projected = projection?.afProjected ?? projection?.projected ?? null
 
   return (
-    <span className="af-rail-row-side" data-side={them ? 'them' : undefined}>
-      <span className="af-rail-row-head">
-        <span className="af-rail-row-av" aria-hidden>
-          <RailMark src={avatarUrl} letter={initial} />
-        </span>
-        <span className="af-rail-row-team">{name}</span>
-        <span className="af-rail-row-score">{score == null ? '—' : score.toFixed(1)}</span>
+    <span
+      className="af-rail-row-side"
+      data-side={them ? 'them' : undefined}
+      data-partial={partial ? 'true' : undefined}
+      title={projection
+        ? `Projected from ${projection.pricedFrom} of ${projection.starterCount} starters${
+            projection.afProjected == null
+              ? ' · using the provider projection because this league’s scoring could not be re-scored'
+              : ' · re-scored with this league’s settings'
+          }`
+        : undefined}
+    >
+      <span className="af-rail-row-av" aria-hidden>
+        <RailMark src={avatarUrl} letter={initial} />
       </span>
-
-      {projection ? (
-        <span
-          className="af-rail-row-projs"
-          /*
-            The coverage lives in the title rather than on screen: a 300px rail
-            has no room for "projected from 7 of 9", and a partial total that
-            passes for a complete one is the thing worth guarding against. The
-            `data-partial` hook lets the CSS mark it without spending width.
-          */
-          title={
-            `Projected from ${projection.pricedFrom} of ${projection.starterCount} starters` +
-            (projection.afProjected == null
-              ? ' · no AF total: this league’s scoring did not match the projected stat line'
-              : '')
-          }
-          data-partial={partial ? 'true' : undefined}
-        >
-          <span className="af-rail-row-proj">
-            <span className="af-rail-row-proj-k">PROJ</span>
-            <span className="af-rail-row-proj-v">
-              {projection.projected == null ? '—' : projection.projected.toFixed(1)}
-            </span>
-          </span>
-          <span className="af-rail-row-proj" data-kind="af">
-            <span className="af-rail-row-proj-k">AF</span>
-            <span className="af-rail-row-proj-v">
-              {projection.afProjected == null ? '—' : projection.afProjected.toFixed(1)}
-            </span>
-          </span>
-        </span>
-      ) : null}
+      <span className="af-rail-row-team">{name}</span>
+      <span className="af-rail-row-score">{score == null ? '—' : score.toFixed(1)}</span>
+      <span className="af-rail-row-projected">{projected == null ? '—' : projected.toFixed(1)}</span>
     </span>
   )
 }
@@ -1395,6 +1374,11 @@ export function AfCoreShell(props: AfCoreShellProps) {
                   <span className="af-rail-row-name">{l.name}</span>
                   {m ? (
                     <span className="af-rail-row-line">
+                      <span className="af-rail-row-labels" aria-hidden>
+                        <span />
+                        <span>LIVE</span>
+                        <span>PROJ</span>
+                      </span>
                       <RailSide
                         name={m.yourTeam ?? 'Your team'}
                         avatarUrl={m.yourAvatarUrl}
@@ -1419,9 +1403,7 @@ export function AfCoreShell(props: AfCoreShellProps) {
                         <RailStanding standing={m.standing ?? null} />
                       ) : (
                         <>
-                          <span className="af-rail-row-vs" aria-hidden>
-                            v
-                          </span>
+                          <span className="af-sr-only">versus</span>
                           <RailSide
                             them
                             name={m.opponentTeam ?? 'opponent not named'}
