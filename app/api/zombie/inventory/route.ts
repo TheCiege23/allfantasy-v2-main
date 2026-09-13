@@ -5,6 +5,7 @@ import { prisma } from '@/lib/prisma'
 import { assertLeagueMember } from '@/lib/league/league-access'
 import { requireCommissionerOnly } from '@/lib/league/permissions'
 import { getZombieRulesForSport } from '@/lib/zombie/zombieRules'
+import { resolveWhispererViewer } from '@/lib/zombie/whispererViewer'
 
 export const dynamic = 'force-dynamic'
 
@@ -80,6 +81,8 @@ export async function GET(req: Request) {
     select: { userId: true, ambushesRemaining: true },
   })
 
+  const viewer = await resolveWhispererViewer(leagueId, session.user.id)
+
   const now = new Date()
   const pendingBash = await prisma.zombieBashingEvent.findFirst({
     where: {
@@ -132,7 +135,8 @@ export async function GET(req: Request) {
     rules: await getZombieRulesForSport(z.sport),
     history,
     resolution,
-    whispererUserId: whisperer?.userId ?? null,
+    // Only a viewer allowed to know the Whisperer learns who it is.
+    whispererUserId: viewer.canSee ? (whisperer?.userId ?? null) : null,
     isWhisperer: whisperer?.userId === targetUserId,
     ambushesRemaining: whisperer?.userId === targetUserId ? whisperer.ambushesRemaining : null,
     isCommissionerView: targetUserId !== session.user.id,

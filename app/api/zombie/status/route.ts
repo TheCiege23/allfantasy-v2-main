@@ -4,6 +4,8 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { toPrismaJsonInput } from '@/lib/prisma-json'
 import { requireCommissionerOnly } from '@/lib/league/permissions'
+import { resolveWhispererViewer } from '@/lib/zombie/whispererViewer'
+import { redactZombieTeam } from '@/lib/zombie/whispererRedaction'
 
 export const dynamic = 'force-dynamic'
 
@@ -24,17 +26,22 @@ export async function GET(req: Request) {
   })
   if (!z) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
+  // A viewer who may not know the Whisperer sees its team disguised as a Survivor.
+  const viewer = await resolveWhispererViewer(leagueId, session.user.id)
+  const shown = <T extends { rosterId: string; status?: string | null }>(team: T): T =>
+    viewer.canSee ? team : redactZombieTeam(team, viewer.identity)
+
   if (filterUserId) {
     const roster = await prisma.roster.findFirst({
       where: { leagueId, platformUserId: filterUserId },
     })
     if (!roster) return NextResponse.json({ team: null })
     const team = z.teams.find((t) => t.rosterId === roster.id)
-    return NextResponse.json({ team })
+    return NextResponse.json({ team: team ? shown(team) : team })
   }
 
   return NextResponse.json({
-    teams: z.teams.map((t) => ({
+    teams: z.teams.map(shown).map((t) => ({
       id: t.id,
       rosterId: t.rosterId,
       status: t.status,

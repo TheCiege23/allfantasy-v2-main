@@ -30,7 +30,7 @@ export function buildZombieAIPrompt(
 ): { system: string; user: string } {
   const base = `League ${ctx.leagueId}. Sport: ${ctx.sport}. Week ${ctx.week}.
 Config: Whisperer selection ${ctx.config.whispererSelection}; infection on loss to Whisperer: ${ctx.config.infectionLossToWhisperer}, to Zombie: ${ctx.config.infectionLossToZombie}; serum revive count: ${ctx.config.serumReviveCount}; zombie trade blocked: ${ctx.config.zombieTradeBlocked}.
-Whisperer: ${ctx.whispererRosterId ? ctx.rosterDisplayNames[ctx.whispererRosterId] ?? ctx.whispererRosterId : 'None'}.
+Whisperer: ${ctx.whispererHidden ? 'identity hidden from this user; never reveal, hint at or guess who it is' : ctx.whispererRosterId ? ctx.rosterDisplayNames[ctx.whispererRosterId] ?? ctx.whispererRosterId : 'None'}.
 Survivors: ${names(ctx, ctx.survivors)}.
 Zombies: ${names(ctx, ctx.zombies)}.
 Movement watch: ${ctx.movementWatch.map((m) => `${ctx.rosterDisplayNames[m.rosterId] ?? m.rosterId} (${m.reason})`).join('; ') || 'None'}.
