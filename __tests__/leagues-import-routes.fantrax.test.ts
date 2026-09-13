@@ -261,6 +261,17 @@ describe('Fantrax import API routes', () => {
          */
         existed: false,
         skipped: false,
+        /*
+         * Same reason, two later fields. `incompleteSteps` (c2c8d4002) lists post-create bootstrap
+         * steps that failed non-fatally, so "Imported" stops being an unqualified claim over a
+         * league with no rosters; empty means every step finished. `joinedExisting` (3bd1d3a58)
+         * says this request attached to a league a DIFFERENT account had already imported,
+         * rather than creating a duplicate. Both are part of what a caller reads to describe the
+         * outcome, so both belong in the exact contract. The mocked persistence result carries
+         * neither, which is exactly the default path: `[]` and `false`.
+         */
+        incompleteSteps: [],
+        joinedExisting: false,
       })
       expect(persistImportWithCanonicalAuditMock).toHaveBeenCalledWith(
         expect.objectContaining({
