@@ -2752,10 +2752,10 @@ model FantasyPlayer {
   byeWeek            Int?     @map("bye_week")
   depthChartPosition String?  @map("depth_chart_position")
   source             String
-  fetchedAt          DateTime @default(now()) @map("fetched_at")
-  expiresAt          DateTime @map("expires_at")
-  createdAt          DateTime @default(now()) @map("created_at")
-  updatedAt          DateTime @updatedAt @map("updated_at")
+  fetchedAt          DateTime @default(now()) @map("fetched_at") @db.Timestamptz(6)
+  expiresAt          DateTime @map("expires_at") @db.Timestamptz(6)
+  createdAt          DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   @@index([sport, fullName])
   @@index([sport, team])
@@ -2776,10 +2776,10 @@ model FantasyProjection {
   projectedPoints Float    @map("projected_points")
   stats           Json
   source          String
-  fetchedAt       DateTime @default(now()) @map("fetched_at")
-  expiresAt       DateTime @map("expires_at")
-  createdAt       DateTime @default(now()) @map("created_at")
-  updatedAt       DateTime @updatedAt @map("updated_at")
+  fetchedAt       DateTime @default(now()) @map("fetched_at") @db.Timestamptz(6)
+  expiresAt       DateTime @map("expires_at") @db.Timestamptz(6)
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   @@unique([playerId, sport, season, week, scoringPresetId, source], name: "uniq_fantasy_projection_player_week_scoring_source")
   @@index([sport, season, week])
@@ -2801,10 +2801,10 @@ model FantasyStatLine {
   stats                        Json
   fantasyPointsByScoringPreset Json     @map("fantasy_points_by_scoring_preset")
   source                       String
-  fetchedAt                    DateTime @default(now()) @map("fetched_at")
-  expiresAt                    DateTime @map("expires_at")
-  createdAt                    DateTime @default(now()) @map("created_at")
-  updatedAt                    DateTime @updatedAt @map("updated_at")
+  fetchedAt                    DateTime @default(now()) @map("fetched_at") @db.Timestamptz(6)
+  expiresAt                    DateTime @map("expires_at") @db.Timestamptz(6)
+  createdAt                    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                    DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   @@unique([playerId, sport, season, week, source], name: "uniq_fantasy_stat_line_player_week_source")
   @@index([sport, season, week])
@@ -2823,15 +2823,15 @@ model FantasyScheduleGame {
   week           Int
   homeTeam       String    @map("home_team")
   awayTeam       String    @map("away_team")
-  kickoffTime    DateTime? @map("kickoff_time")
+  kickoffTime    DateTime? @map("kickoff_time") @db.Timestamptz(6)
   status         String?
   score          Json?
   providerGameId String    @map("provider_game_id")
   source         String
-  fetchedAt      DateTime  @default(now()) @map("fetched_at")
-  expiresAt      DateTime  @map("expires_at")
-  createdAt      DateTime  @default(now()) @map("created_at")
-  updatedAt      DateTime  @updatedAt @map("updated_at")
+  fetchedAt      DateTime  @default(now()) @map("fetched_at") @db.Timestamptz(6)
+  expiresAt      DateTime  @map("expires_at") @db.Timestamptz(6)
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   @@unique([sport, providerGameId, source], name: "uniq_fantasy_schedule_game_provider")
   @@index([sport, season, week])
@@ -4205,7 +4205,7 @@ model WorldCupOfficialFixture {
   round             String?
   stage             String?
   groupName         String?       @map("group_name")
-  startsAt          DateTime?     @map("starts_at")
+  startsAt          DateTime?     @map("starts_at") @db.Timestamptz(6)
   status            String        @default("scheduled")
   apiStatusShort    String?       @map("api_status_short")
   elapsedMinute     Int?          @map("elapsed_minute")
@@ -4229,8 +4229,8 @@ model WorldCupOfficialFixture {
   homePenaltyScore  Int?          @map("home_penalty_score")
   awayPenaltyScore  Int?          @map("away_penalty_score")
   sourcePayload     Json?         @map("source_payload")
-  createdAt         DateTime      @default(now()) @map("created_at")
-  updatedAt         DateTime      @updatedAt @map("updated_at")
+  createdAt         DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime      @updatedAt @map("updated_at") @db.Timestamptz(6)
   homeTeam          WorldCupTeam? @relation("WorldCupOfficialFixtureHomeTeam", fields: [homeTeamId], references: [id], onDelete: SetNull, onUpdate: Cascade)
   awayTeam          WorldCupTeam? @relation("WorldCupOfficialFixtureAwayTeam", fields: [awayTeamId], references: [id], onDelete: SetNull, onUpdate: Cascade)
   winnerTeam        WorldCupTeam? @relation("WorldCupOfficialFixtureWinnerTeam", fields: [winnerTeamId], references: [id], onDelete: SetNull, onUpdate: Cascade)
@@ -4267,8 +4267,8 @@ model WorldCupOfficialGroupStanding {
   losses               Int          @default(0)
   isThirdPlaceAdvancer Boolean      @default(false) @map("is_third_place_advancer")
   sourcePayload        Json?        @map("source_payload")
-  createdAt            DateTime     @default(now()) @map("created_at")
-  updatedAt            DateTime     @updatedAt @map("updated_at")
+  createdAt            DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt            DateTime     @updatedAt @map("updated_at") @db.Timestamptz(6)
   team                 WorldCupTeam @relation("WorldCupOfficialGroupStandingTeam", fields: [teamId], references: [id], onDelete: Cascade, onUpdate: Cascade)
 
   @@unique([providerName, seasonYear, groupName, teamId])
@@ -5326,7 +5326,52 @@ model ManagerPsychProfile {
   @@unique([leagueId, managerId])
   @@index([leagueId, sport])
   @@index([managerId])
+  @@index([managerId, sport, format])
   @@map("manager_psych_profiles")
+}
+
+/// Per-season psychology snapshots — the trajectory the single overwritten profile row cannot hold.
+///
+/// 🛑 MODELLED FROM PRODUCTION, NOT FROM A DESIGN DOC. Every column, nullability, default and index
+/// name below was read from production's information_schema / pg_indexes on 2026-09-13. The table
+/// was applied by hand (prisma/migrations-pending/20260902060000_manager_psych_seasons and
+/// 20260902193000_manager_psych_seasons_nullable_scores), so it has no `_prisma_migrations` row.
+///
+/// ⚠ WHY A MODEL AT ALL: without one, `prisma migrate dev` and `prisma db push` see a table the
+/// schema does not describe and propose DROP TABLE — destroying live rows. The model exists so the
+/// schema stops proposing that. It is NOT a switch to the Prisma delegate: the writer in
+/// lib/psychological-profiles/ProfileSeasonSnapshot.ts stays raw SQL deliberately, for the reasons
+/// its own header gives.
+///
+/// ⚠ THE FIVE SCORES ARE NULLABLE WITH NO DEFAULT, ON PURPOSE. The docs/decision-os roadmap draft
+/// declares them `Float @default(0)` — that predates R4b.3, which dropped NOT NULL and the default
+/// so "never measured" cannot be stored as "measured, and it was zero". `sampleSize` keeps its
+/// default: zero observations is a real answer.
+model ManagerPsychProfileSeason {
+  /// `${leagueId}:${managerId}:${season}`, written by raw SQL. No database default.
+  id                  String   @id
+  leagueId            String   @db.VarChar(64)
+  managerId           String   @db.VarChar(128)
+  sport               String   @db.VarChar(16)
+  /// dynasty | redraft | keeper | bestball | guillotine | devy. Null = not yet resolved.
+  format              String?  @db.VarChar(24)
+  season              Int
+  profileLabels       Json     @default("[]")
+  aggressionScore     Float?
+  activityScore       Float?
+  tradeFrequencyScore Float?
+  waiverFocusScore    Float?
+  riskToleranceScore  Float?
+  /// Observations behind this snapshot. Zero is a real answer.
+  sampleSize          Int      @default(0)
+  /// Null = below the evidence floor. Never zero-as-unknown.
+  confidence          Float?
+  computedAt          DateTime @default(now())
+
+  @@unique([leagueId, managerId, season], map: "manager_psych_profile_seasons_league_manager_season_key")
+  @@index([managerId, sport, season], map: "manager_psych_profile_seasons_manager_sport_season_idx")
+  @@index([leagueId, season], map: "manager_psych_profile_seasons_league_season_idx")
+  @@map("manager_psych_profile_seasons")
 }
 
 /// Psychological Profiles Engine â€” evidence backing a profile (draft, trade, waiver, etc.).
@@ -7413,12 +7458,43 @@ model TournamentShell {
   nameRecords             TournamentNameRecord[]
   participants            TournamentParticipant[]
   rounds                  TournamentRound[]
+  grants                  TournamentShellGrant[]
   commissioner            AppUser                      @relation("TournamentShellCommissioner", fields: [commissionerId], references: [id], onDelete: Cascade)
   creator                 AppUser                      @relation("TournamentShellCreator", fields: [createdBy], references: [id], onDelete: Cascade)
 
   @@index([status])
   @@index([commissionerId])
   @@map("tournament_shells")
+}
+
+/// Tournament access grants: who besides the commissioner can see and act on a tournament.
+///
+/// 🛑 MODELLED FROM PRODUCTION, NOT GUESSED. The table was created by
+/// prisma/migrations/20260831_tournament_grants (whose header wrongly says PARKED) and exists in
+/// production; columns, defaults, the FK and every index name here were read from production's
+/// information_schema / pg_constraint / pg_indexes on 2026-09-13. Without this model
+/// `prisma migrate dev` proposes DROP TABLE "tournament_shell_grants".
+///
+/// ⚠ `userId` and `grantedByUserId` deliberately carry NO relation — production has no FK on
+/// either, and declaring one here would make the schema propose adding it.
+model TournamentShellGrant {
+  id              String          @id @default(cuid())
+  tournamentId    String
+  userId          String
+  /// Human label only. The booleans below are what is enforced.
+  role            String          @default("viewer") @db.VarChar(32)
+  canBroadcast    Boolean         @default(false)
+  canAdvance      Boolean         @default(false)
+  canEditSettings Boolean         @default(false)
+  grantedByUserId String
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  tournament      TournamentShell @relation(fields: [tournamentId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  @@unique([tournamentId, userId])
+  @@index([tournamentId])
+  @@index([userId])
+  @@map("tournament_shell_grants")
 }
 
 model TournamentConference {
@@ -16681,7 +16757,7 @@ model SponsorCouponRedemption {
 /// One row per LLM call (or deterministic bypass). Never mutate rows.
 /// Used for billing reconciliation, debugging, compliance, and cost monitoring.
 model AiInteractionLog {
-  id                String   @id @default(cuid())
+  id                String   @id @default(cuid()) @db.VarChar(30)
   /// Null for unauthenticated / guest requests.
   userId            String?  @db.VarChar(64)
   /// SportKey: "world_cup" | "nba" | "nfl" | etc.
@@ -18230,8 +18306,8 @@ model CommissionerReportRun {
   generatedAt      DateTime @default(now()) @map("generated_at")
   createdAt        DateTime @default(now()) @map("created_at")
 
-  @@index([leagueId, generatedAt])
-  @@index([leagueId, templateId, generatedAt])
+  @@index([leagueId, generatedAt(sort: Desc)])
+  @@index([leagueId, templateId, generatedAt(sort: Desc)])
   @@map("commissioner_report_runs")
 }
 

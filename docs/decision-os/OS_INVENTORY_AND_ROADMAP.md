@@ -4097,6 +4097,12 @@ cascade away with them.
 
 #### Prisma models to match — add to `schema.prisma`
 
+> ⚠ **SUPERSEDED — do not copy this block.** It predates R4b.3
+> (`prisma/migrations-pending/20260902193000_manager_psych_seasons_nullable_scores`), which made the
+> five `*Score` columns nullable with **no default** so "never measured" cannot be stored as zero.
+> It also omits production's index names, so copying it produces a rename diff. Use the model in
+> `prisma/schema.prisma`, which was taken from production's `information_schema`.
+
 ```prisma
 model ManagerPsychProfileSeason {
   id                  String   @id @default(cuid())

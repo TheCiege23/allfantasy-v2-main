@@ -54,6 +54,14 @@
 -- TournamentShellGrant model to schema.prisma so the schema matches what production has, or
 -- decide the feature is off and drop the table AND the migration together. Guessing the model
 -- here would be worse than leaving it named.
+--
+-- ✅ RESOLVED 2026-09-13 — the model half, NOT guessed. `TournamentShellGrant` was added to
+-- schema.prisma from production's own information_schema / pg_constraint / pg_indexes. Measured
+-- with `prisma migrate diff --from-schema-datasource --to-schema-datamodel --script` against
+-- production, same moment, before and after: 2 statements naming "tournament_shell_grants"
+-- (the DROP TABLE and its FK) before, 0 after. The "zero code reads it" and "not in
+-- schema.prisma" lines further down are the 2026-08-31 record and are no longer true of the
+-- schema; they are left as written. Whether the feature stays on is still the author's call.
 -- ══════════════════════════════════════════════════════════════════════════════════════════
 --
 -- Everything below is kept as the record of what was checked and how. STEP 0 remains useful —

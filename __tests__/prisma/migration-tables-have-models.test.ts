@@ -11,10 +11,11 @@ import { describe, expect, it } from 'vitest'
  * the history but has no model is a difference — so Prisma proposes **dropping it**, as a normal,
  * expected-looking migration. Applied, that destroys a live table.
  *
- * `tournament_shell_grants` is exactly this today: the migration is applied in production (its own
- * header says "🛑 PARKED, NOT APPLIED", which was wrong), and `TournamentShellGrant` is in no
- * schema. Nothing in this repo could see it — `lib/prisma/schema-drift.ts` detects only the
- * opposite direction, P2022, "the schema has something the database lacks".
+ * `tournament_shell_grants` was exactly this until 2026-09-13: the migration is applied in
+ * production (its own header says "🛑 PARKED, NOT APPLIED", which was wrong), and
+ * `TournamentShellGrant` was in no schema — it has since been modelled from production's own
+ * information_schema. Nothing in this repo could see it — `lib/prisma/schema-drift.ts` detects
+ * only the opposite direction, P2022, "the schema has something the database lacks".
  *
  * ── ⚠ COMMENTS ARE STRIPPED FIRST, AND THAT IS NOT FUSSINESS ────────────────────────────────
  * The probe that found this reported a table called `so`, from the line
@@ -68,9 +69,9 @@ function tablesModelled(): Set<string> {
  * not a way past a red test.
  */
 const KNOWN_ORPHANS: Record<string, string> = {
-  // Shipped 2026-08-31, applied in production despite its own header saying PARKED. The feature's
-  // panels exist under app/tournament-hub/, so the model is owed rather than the table unwanted.
-  tournament_shell_grants: 'tournament grants — feature is live, model never added',
+  // tournament_shell_grants was here until 2026-09-13, when `TournamentShellGrant` was modelled from
+  // production's own information_schema. Removed rather than left in: the stale-entry test below
+  // would fail on it, which is that test doing its job.
   // All five from 20260410143800_fix_schema_drift, which created tables to match a schema that
   // has since moved on. Predate this guard; nothing reads them.
   supplemental_drafts: 'pre-existing, 20260410143800_fix_schema_drift',
