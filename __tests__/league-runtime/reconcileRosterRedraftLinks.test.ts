@@ -178,3 +178,213 @@ describe('resolveRedraftRosterId — the guard against decay', () => {
     expect(await resolveRedraftRosterId('L1', 'nope')).toBeNull()
   })
 })
+
+// ── A CLAIMED ROSTER IS FOUND THROUGH ITS IMPORT RECORD ─────────────────────────────────────────
+
+/*
+ * Fakes that honour `where`, so a reconciler that asks the wrong question gets the wrong rows rather
+ * than every fixture row regardless. The call SHAPE decides the answer here, not the call ORDER.
+ */
+type RosterRow = {
+  id: string
+  leagueId: string
+  platformUserId: string
+  redraftRosterId: string | null
+  playerData?: unknown
+}
+type RedraftRow = { id: string; leagueId: string; ownerId: string }
+
+function world(rosters: RosterRow[], redraft: RedraftRow[]) {
+  h.rosterFindMany.mockImplementation(
+    async (args: { where: Record<string, any>; select: Record<string, boolean> }) => {
+      const w = args.where
+      let rows = rosters
+      if (w.leagueId !== undefined) rows = rows.filter((r) => r.leagueId === w.leagueId)
+      if (w.id?.in) rows = rows.filter((r) => w.id.in.includes(r.id))
+      if (w.redraftRosterId?.not === null) rows = rows.filter((r) => r.redraftRosterId != null)
+      return rows.map((r) =>
+        Object.fromEntries(Object.keys(args.select).map((k) => [k, (r as any)[k]])),
+      )
+    },
+  )
+  h.redraftFindMany.mockImplementation(async (args: { where: Record<string, any> }) => {
+    const w = args.where
+    let rows = redraft
+    if (w.leagueId !== undefined) rows = rows.filter((r) => r.leagueId === w.leagueId)
+    if (w.ownerId?.in) rows = rows.filter((r) => w.ownerId.in.includes(r.ownerId))
+    return rows.map(({ id, ownerId }) => ({ id, ownerId }))
+  })
+}
+
+const AF_USER = '651c92f9-e89f-45c5-a7f3-7c4a1af4a858'
+const SLEEPER_USER = '266066723277377536'
+const imported = (sourceManagerId: unknown) => ({
+  players: ['9225'],
+  import: { sourceManagerId, sourceTeamId: '5' },
+})
+const linkedTo = () =>
+  h.rosterUpdate.mock.calls.map(([a]) => [a.where.id, a.data.redraftRosterId])
+
+describe('reconcileRosterRedraftLinks — a claimed roster links through playerData.import.sourceManagerId', () => {
+  /*
+   * THE REGRESSION. Claiming rewrites `Roster.platformUserId` to the AF user id, while
+   * `RedraftRoster.ownerId` keeps the Sleeper id. Measured 2026-09-12: 333 of 333 claimed Sleeper
+   * rosters unlinked, so every claimed team's RedraftRoster stayed empty. The import record still
+   * carries the Sleeper id (equal to `LeagueTeam.platformUserId` on 333 of 333), on the roster itself.
+   */
+  it('links a claimed roster whose platformUserId is an AF user id', async () => {
+    world(
+      [
+        {
+          id: 'r-claimed',
+          leagueId: 'L1',
+          platformUserId: AF_USER,
+          redraftRosterId: null,
+          playerData: imported(SLEEPER_USER),
+        },
+      ],
+      [{ id: 'rr-claimed', leagueId: 'L1', ownerId: SLEEPER_USER }],
+    )
+    const out = await reconcileRosterRedraftLinks('L1')
+    expect(linkedTo()).toEqual([['r-claimed', 'rr-claimed']])
+    expect(out).toEqual({ linked: 1, unlinked: 0, alreadyLinked: 0 })
+  })
+
+  it('🛑 the platform id still wins: a direct owner takes its redraft roster before any import record', async () => {
+    /*
+     * A stale import record naming the same manager as a roster that owns it directly must not take
+     * the target first. Direct matches are settled in full before the fallback runs, so this does not
+     * depend on row order: the claimed roster is listed FIRST on purpose.
+     */
+    world(
+      [
+        {
+          id: 'r-stale',
+          leagueId: 'L1',
+          platformUserId: AF_USER,
+          redraftRosterId: null,
+          playerData: imported('111'),
+        },
+        { id: 'r-direct', leagueId: 'L1', platformUserId: '111', redraftRosterId: null },
+      ],
+      [{ id: 'rr1', leagueId: 'L1', ownerId: '111' }],
+    )
+    const out = await reconcileRosterRedraftLinks('L1')
+    expect(linkedTo()).toEqual([['r-direct', 'rr1']])
+    expect(out).toEqual({ linked: 1, unlinked: 1, alreadyLinked: 0 })
+  })
+
+  it('🛑 excludes a target another roster already holds, rather than overwriting it', async () => {
+    world(
+      [
+        { id: 'r-holder', leagueId: 'L1', platformUserId: '999', redraftRosterId: 'rr-claimed' },
+        {
+          id: 'r-claimed',
+          leagueId: 'L1',
+          platformUserId: AF_USER,
+          redraftRosterId: null,
+          playerData: imported(SLEEPER_USER),
+        },
+      ],
+      [{ id: 'rr-claimed', leagueId: 'L1', ownerId: SLEEPER_USER }],
+    )
+    const out = await reconcileRosterRedraftLinks('L1')
+    expect(h.rosterUpdate).not.toHaveBeenCalled()
+    expect(out).toEqual({ linked: 0, unlinked: 1, alreadyLinked: 1 })
+  })
+
+  it('🛑 refuses when two rosters carry the same import record: neither links, no winner is picked', async () => {
+    world(
+      [
+        {
+          id: 'r-a',
+          leagueId: 'L1',
+          platformUserId: AF_USER,
+          redraftRosterId: null,
+          playerData: imported(SLEEPER_USER),
+        },
+        {
+          id: 'r-b',
+          leagueId: 'L1',
+          platformUserId: 'other-af-user',
+          redraftRosterId: null,
+          playerData: imported(SLEEPER_USER),
+        },
+      ],
+      [{ id: 'rr-claimed', leagueId: 'L1', ownerId: SLEEPER_USER }],
+    )
+    const out = await reconcileRosterRedraftLinks('L1')
+    expect(h.rosterUpdate).not.toHaveBeenCalled()
+    expect(out.unlinked).toBe(2)
+  })
+
+  it('🛑 refuses when the import record names an owner with more than one redraft roster', async () => {
+    world(
+      [
+        {
+          id: 'r-claimed',
+          leagueId: 'L1',
+          platformUserId: AF_USER,
+          redraftRosterId: null,
+          playerData: imported(SLEEPER_USER),
+        },
+      ],
+      [
+        { id: 'rr-2025', leagueId: 'L1', ownerId: SLEEPER_USER },
+        { id: 'rr-2026', leagueId: 'L1', ownerId: SLEEPER_USER },
+      ],
+    )
+    await reconcileRosterRedraftLinks('L1')
+    expect(h.rosterUpdate).not.toHaveBeenCalled()
+  })
+
+  it('🛑 scopes the fallback by league, so an import record never reaches another league', async () => {
+    world(
+      [
+        {
+          id: 'r-claimed',
+          leagueId: 'L1',
+          platformUserId: AF_USER,
+          redraftRosterId: null,
+          playerData: imported(SLEEPER_USER),
+        },
+      ],
+      [{ id: 'rr-elsewhere', leagueId: 'L2', ownerId: SLEEPER_USER }],
+    )
+    const out = await reconcileRosterRedraftLinks('L1')
+    expect(h.rosterUpdate).not.toHaveBeenCalled()
+    expect(out).toEqual({ linked: 0, unlinked: 1, alreadyLinked: 0 })
+  })
+
+  it.each([
+    ['no playerData', undefined],
+    ['no import record', { players: [] }],
+    ['an empty sourceManagerId', imported('')],
+    ['a whitespace sourceManagerId', imported('   ')],
+    ['a non-string sourceManagerId', imported(266066723277377536)],
+  ])('leaves a roster with %s unlinked', async (_label, playerData) => {
+    world(
+      [{ id: 'r-claimed', leagueId: 'L1', platformUserId: AF_USER, redraftRosterId: null, playerData }],
+      [
+        { id: 'rr-claimed', leagueId: 'L1', ownerId: SLEEPER_USER },
+        { id: 'rr-blank', leagueId: 'L1', ownerId: '' },
+        { id: 'rr-space', leagueId: 'L1', ownerId: '   ' },
+      ],
+    )
+    const out = await reconcileRosterRedraftLinks('L1')
+    expect(h.rosterUpdate).not.toHaveBeenCalled()
+    expect(out.unlinked).toBe(1)
+  })
+
+  it('does not read playerData when every roster resolves by platform id', async () => {
+    // playerData carries the whole roster blob; the fallback must cost nothing when it is not needed.
+    world(
+      [{ id: 'r1', leagueId: 'L1', platformUserId: '111', redraftRosterId: null, playerData: imported('111') }],
+      [{ id: 'rr1', leagueId: 'L1', ownerId: '111' }],
+    )
+    await reconcileRosterRedraftLinks('L1')
+    const selects = h.rosterFindMany.mock.calls.map(([a]) => Object.keys(a.select))
+    expect(selects.flat()).not.toContain('playerData')
+    expect(linkedTo()).toEqual([['r1', 'rr1']])
+  })
+})
