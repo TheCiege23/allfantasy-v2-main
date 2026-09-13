@@ -11,6 +11,9 @@ const refreshCapProjectionsMock = vi.fn()
 const emitMock = vi.fn(async () => null)
 const emitInTxMock = vi.fn(async () => ({ eventId: 'evt-contract-1' }))
 const enqueueCollusionScanMock = vi.fn()
+// Creation-time validation (audit #14). Defaults to valid so the other route tests stay focused;
+// its own behaviour is tested in __tests__/redraft/trade-proposal-validation.test.ts.
+const validateProposalMock = vi.fn(async () => ({ ok: true, warnings: [] as string[], source: 'nfl_runtime' }))
 
 const prismaMock = {
   redraftTradeProposal: {
@@ -158,6 +161,10 @@ vi.mock('@/lib/prisma', () => ({
   prisma: prismaMock,
 }))
 
+vi.mock('@/lib/redraft/tradeProposalValidation', () => ({
+  validateRedraftTradeProposalAtCreation: validateProposalMock,
+}))
+
 describe('Redraft trade proposals route contract', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -290,6 +297,63 @@ describe('Redraft trade proposals route contract', () => {
     expect(res.status).toBe(200)
     expect(prismaMock.redraftLeagueExtendedSettings.findUnique).toHaveBeenCalledTimes(1)
     expect(create.mock.calls[0]![0].data).toMatchObject({ vetoMode: 'commissioner', vetoThreshold: 4 })
+  })
+
+  /*
+   * 🛑 A PROPOSAL WAS CREATED WITHOUT CHECKING THE SENDER OWNED WHAT IT OFFERED (audit #14).
+   * The route checked asset type and direction only; ownership and FAAB failed at settlement, days later.
+   */
+  it('🛑 refuses an invalid trade before creating anything, with the validator code', async () => {
+    // ⚠ Not arrangeCreatableProposal(): this route never opens the transaction, so its one-shot `$transaction`
+    // would go unconsumed and hand the next test that settles a trade a client with no delegates (a 409).
+    prismaMock.redraftSeason.findFirst.mockResolvedValueOnce({ id: 's-1', leagueId: 'l-1' })
+    prismaMock.redraftRoster.findFirst
+      .mockResolvedValueOnce({ id: 'r-1', ownerId: 'u-1' })
+      .mockResolvedValueOnce({ id: 'r-2', ownerId: 'u-2' })
+    validateProposalMock.mockResolvedValueOnce({
+      ok: false,
+      code: 'PLAYER_NOT_OWNED',
+      message: 'beta-wr is not active on the sending roster.',
+      source: 'nfl_runtime',
+    } as never)
+
+    const { POST } = await import('../app/api/redraft/trade-proposals/route')
+    const res = await POST(
+      createMockNextRequest('http://localhost/api/redraft/trade-proposals', { method: 'POST', body: governanceBody() }) as any,
+    )
+
+    expect(res.status).toBe(400)
+    await expect(res.json()).resolves.toMatchObject({ code: 'PLAYER_NOT_OWNED', error: 'beta-wr is not active on the sending roster.' })
+    expect(prismaMock.$transaction).not.toHaveBeenCalled()
+  })
+
+  it('validates the parsed assets for this league, season and pair of rosters', async () => {
+    arrangeCreatableProposal()
+    const { POST } = await import('../app/api/redraft/trade-proposals/route')
+    const res = await POST(
+      createMockNextRequest('http://localhost/api/redraft/trade-proposals', {
+        method: 'POST',
+        body: governanceBody({
+          assets: [
+            { fromRosterId: 'r-1', toRosterId: 'r-2', assetType: 'player', playerId: 'p-9', playerName: 'P Nine' },
+            { fromRosterId: 'r-1', toRosterId: 'r-2', assetType: 'faab', metadata: { amount: 25 } },
+          ],
+        }),
+      }) as any,
+    )
+
+    expect(res.status).toBe(200)
+    expect(validateProposalMock).toHaveBeenCalledTimes(1)
+    expect(validateProposalMock.mock.calls[0]![0]).toMatchObject({
+      leagueId: 'l-1',
+      seasonId: 's-1',
+      proposerRosterId: 'r-1',
+      receiverRosterId: 'r-2',
+      assets: [
+        expect.objectContaining({ assetType: 'player', playerId: 'p-9', fromRosterId: 'r-1', toRosterId: 'r-2' }),
+        expect.objectContaining({ assetType: 'faab', metadata: { amount: 25 } }),
+      ],
+    })
   })
 })
 
