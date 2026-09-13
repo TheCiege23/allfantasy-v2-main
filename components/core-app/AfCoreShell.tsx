@@ -1403,7 +1403,6 @@ export function AfCoreShell(props: AfCoreShellProps) {
                         <RailStanding standing={m.standing ?? null} />
                       ) : (
                         <>
-                          <span className="af-sr-only">versus</span>
                           <RailSide
                             them
                             name={m.opponentTeam ?? 'opponent not named'}
