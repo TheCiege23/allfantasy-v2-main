@@ -2,6 +2,7 @@
 
 import type { LiveGameCard, LivePageData } from '@/lib/live/liveScoresPage'
 import { GameCard } from '@/components/core-app/screens/LiveScores'
+import { gameDetailHref } from '@/lib/live/gameDetailLink'
 import '@/components/core-app/af-core.css'
 
 /**
@@ -34,7 +35,13 @@ export function MatchupCard({
 }) {
   return (
     <div className="af-core live-card-scope">
-      <GameCard game={game} scope={scope} selectedLeagueId={null} lastPlay={lastPlay} />
+      <GameCard
+        game={game}
+        scope={scope}
+        selectedLeagueId={null}
+        lastPlay={lastPlay}
+        detailHref={gameDetailHref(game, '/live')}
+      />
     </div>
   )
 }

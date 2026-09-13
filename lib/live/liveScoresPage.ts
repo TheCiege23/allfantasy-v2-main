@@ -141,6 +141,13 @@ export type LiveGameCard = {
   situation: LiveGameSituation | null
   venue: { name: string; location: string | null } | null
   broadcast: string | null
+  /**
+   * True when this card's row came from ESPN's scoreboard (directly or via the
+   * remembered presentation), so its `gameId` is an ESPN event id and the
+   * clicked-game view can load it. A cache row from another feed carries another
+   * vendor's id; linking it would open a page that can only fail.
+   */
+  espnDetail: boolean
   /** Your leagues STARTING someone in this game (bench/IR excluded), highest points first. */
   tieIns: LiveRosterTieIn[]
   /** Distinct leagues affected — the sort key for "My games". */
@@ -810,6 +817,7 @@ export async function getLivePageData(opts: {
         : null,
       venue: row.venue ? { name: row.venue, location: row.venueLocation ?? null } : null,
       broadcast: row.broadcast ?? null,
+      espnDetail: row.leaders !== undefined,
       winProbability: estimateWinProbability({
         homeScore: row.homeScore,
         awayScore: row.awayScore,

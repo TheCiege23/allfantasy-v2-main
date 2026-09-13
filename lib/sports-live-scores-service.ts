@@ -18,6 +18,12 @@ import {
   type GameLeader,
   type GameSituation,
 } from '@/lib/live/espnGamePresentation'
+import {
+  GAME_VIEW_SPORTS,
+  summaryTtlMs,
+  trimEspnGameSummary,
+  type LiveGameDetail,
+} from '@/lib/live/espnGameSummary'
 import { normalizeGameStatus, type CanonicalGameStatus } from '@/lib/scores/gameScoreProviders'
 import { LIVE_SCORE_SOURCES, pickFreshestSourceRows } from '@/lib/scores/liveSourceSelection'
 import { loadCollegeTeamIndex } from '@/lib/sport-teams/collegeTeamIndexStore'
@@ -538,6 +544,70 @@ export async function fetchEspnScoreboard(
   } catch (e) {
     console.error('[LiveScores] ESPN fetch failed:', sport, e)
     return []
+  }
+}
+
+/**
+ * The clicked-game view's data: ESPN's per-game summary, trimmed and cached.
+ *
+ * ⚠ READ-THROUGH, LIKE `getLiveScoresForSport`. The page and its 20s poll never
+ * call ESPN themselves: this serves the `SportsDataCache` copy while it is fresh
+ * and refreshes it when it is not, so N viewers of one live game cost one ESPN
+ * call per `summaryTtlMs` window (20s live, 5min pre-game, 6h final), not N.
+ *
+ * ⚠ ONLY THE TRIMMED SHAPE IS STORED. The raw summary is ~535 KB (measured
+ * 2026-09-13); `trimEspnGameSummary` drops news, odds, videos and the rest
+ * before the write.
+ *
+ * ⚠ A FAILED REFRESH SERVES THE LAST COPY WITH ITS REAL `fetchedAt`, never a
+ * fresh timestamp over stale data — the view renders the age from it.
+ *
+ * `gameId` is validated as ESPN's numeric event id before it reaches the URL or
+ * the cache key.
+ */
+export async function getEspnGameSummary(opts: {
+  sport: string
+  gameId: string
+}): Promise<{ detail: LiveGameDetail | null; stale: boolean; failed: boolean }> {
+  const sport = normalizeToSupportedSport(opts.sport)
+  const gameId = String(opts.gameId ?? '').trim()
+  const path = ESPN_SPORT_SITE_PATH[sport]
+  if (!/^\d{5,12}$/.test(gameId) || !path || !GAME_VIEW_SPORTS.includes(sport)) {
+    return { detail: null, stale: false, failed: false }
+  }
+
+  const cacheKey = `espn:summary:v1:${sport}:${gameId}`
+  const cached = await prisma.sportsDataCache
+    .findUnique({ where: { cacheKey }, select: { data: true, expiresAt: true } })
+    .catch(() => null)
+  const cachedDetail = (cached?.data as { detail?: LiveGameDetail } | null)?.detail ?? null
+  if (cached && cachedDetail && cached.expiresAt.getTime() > Date.now()) {
+    return { detail: cachedDetail, stale: false, failed: false }
+  }
+
+  try {
+    const url = new URL(`${ESPN_SITE_API_BASE}/${path}/summary`)
+    url.searchParams.set('event', gameId)
+    const response = await fetch(url.toString(), { cache: 'no-store' })
+    if (!response.ok) throw new Error(`ESPN summary HTTP ${response.status}`)
+    const fetchedAt = new Date().toISOString()
+    const detail = trimEspnGameSummary(await response.json(), { sport, gameId, fetchedAt })
+    if (!detail) throw new Error('ESPN summary had no two-team header')
+    const expiresAt = new Date(Date.now() + summaryTtlMs(detail.status.state))
+    await prisma.sportsDataCache
+      .upsert({
+        where: { cacheKey },
+        update: { data: { detail } as unknown as object, expiresAt },
+        create: { cacheKey, data: { detail } as unknown as object, expiresAt },
+      })
+      .catch((err) => console.error('[LiveScores] summary cache write failed:', sport, gameId, err))
+    return { detail, stale: false, failed: false }
+  } catch (err) {
+    // Log the sport and id, never a URL — this host carries no credential, but the rule is the rule.
+    console.error('[LiveScores] ESPN summary fetch failed:', sport, gameId, err instanceof Error ? err.message : err)
+    return cachedDetail
+      ? { detail: cachedDetail, stale: true, failed: false }
+      : { detail: null, stale: false, failed: true }
   }
 }
 
