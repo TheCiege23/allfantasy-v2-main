@@ -17,6 +17,7 @@ import {
 } from '@/lib/zombie/ai/ZombieAIService'
 import { getZombieHordeSitOutStateForWeek } from '@/lib/zombie/ZombieHordeSitOutEngine'
 import { resolveWhispererViewer } from '@/lib/zombie/whispererViewer'
+import { getLeagueRole } from '@/lib/league/permissions'
 import { redactZombieAIContext, withWhispererRoster } from '@/lib/zombie/whispererRedaction'
 import {
   FeatureGateService,
@@ -92,6 +93,14 @@ export async function POST(
     return NextResponse.json({ error: 'Invalid type', validTypes: VALID_TYPES }, { status: 400 })
   }
 
+  // Collusion and dangerous-drop flags are accusations for the commissioners to review. A member
+  // gets neither the commissioner summary nor the raw flags, in the response or the model context.
+  const role = await getLeagueRole(leagueId, userId).catch(() => null)
+  const isCommissioner = role === 'commissioner' || role === 'co_commissioner'
+  if (type === 'commissioner_review_summary' && !isCommissioner) {
+    return NextResponse.json({ error: 'Commissioner only' }, { status: 403 })
+  }
+
   const week = Math.max(1, parseInt(String(body.week ?? 1), 10) || 1)
 
   const deterministic = await buildZombieAIContext({ leagueId, week, userId })
@@ -102,9 +111,12 @@ export async function POST(
   // The Whisperer's identity reaches the response, the cache key and the model prompt only for a
   // viewer allowed to know it. Everything below reads `context`, never `deterministic`.
   const viewer = await resolveWhispererViewer(leagueId, userId)
-  const context = viewer.canSee
+  const visibleContext = viewer.canSee
     ? deterministic
     : redactZombieAIContext(deterministic, withWhispererRoster(viewer.identity, deterministic.whispererRosterId))
+  const context = isCommissioner
+    ? visibleContext
+    : { ...visibleContext, collusionFlags: [], dangerousDropFlags: [] }
 
   const deterministicResponse = {
     leagueId: context.leagueId,

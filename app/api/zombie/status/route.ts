@@ -6,6 +6,7 @@ import { toPrismaJsonInput } from '@/lib/prisma-json'
 import { requireCommissionerOnly } from '@/lib/league/permissions'
 import { resolveWhispererViewer } from '@/lib/zombie/whispererViewer'
 import { redactZombieTeam } from '@/lib/zombie/whispererRedaction'
+import { resolveLeagueAccess } from '@/lib/league-access'
 
 export const dynamic = 'force-dynamic'
 
@@ -17,6 +18,10 @@ export async function GET(req: Request) {
   const leagueId = searchParams?.get('leagueId')
   const filterUserId = searchParams?.get('userId')
   if (!leagueId) return NextResponse.json({ error: 'leagueId required' }, { status: 400 })
+
+  // Team statuses are league information: members only, checked before the league is read.
+  const access = await resolveLeagueAccess(leagueId, session.user.id)
+  if (!access) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const z = await prisma.zombieLeague.findUnique({
     where: { leagueId },

@@ -5,6 +5,7 @@ import { prisma } from '@/lib/prisma'
 import { requireCommissionerOnly } from '@/lib/league/permissions'
 import { applyAmbush, selectWhisperer } from '@/lib/zombie/whispererEngine'
 import { canViewerSeeWhisperer } from '@/lib/zombie/whispererVisibility'
+import { resolveLeagueAccess } from '@/lib/league-access'
 
 export const dynamic = 'force-dynamic'
 
@@ -50,6 +51,10 @@ export async function GET(req: Request) {
   const { searchParams } = new URL(req.url)
   const leagueId = searchParams?.get('leagueId')
   if (!leagueId) return NextResponse.json({ error: 'leagueId required' }, { status: 400 })
+
+  // Members only, checked before the league is read.
+  const access = await resolveLeagueAccess(leagueId, userId)
+  if (!access) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const z = await prisma.zombieLeague.findUnique({
     where: { leagueId },
