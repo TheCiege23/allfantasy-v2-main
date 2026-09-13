@@ -29,6 +29,7 @@ const h = vi.hoisted(() => ({
   rosterFindMany: vi.fn(),
   leagueFindUnique: vi.fn(),
   sportsPlayerFindMany: vi.fn(),
+  identityMapFindMany: vi.fn(),
   rrpFindMany: vi.fn(),
   rrpCreate: vi.fn(),
   rrpUpdateMany: vi.fn(),
@@ -42,6 +43,7 @@ vi.mock('@/lib/prisma', () => ({
     roster: { findMany: h.rosterFindMany },
     league: { findUnique: h.leagueFindUnique },
     sportsPlayer: { findMany: h.sportsPlayerFindMany },
+    playerIdentityMap: { findMany: h.identityMapFindMany },
     redraftRosterPlayer: {
       findMany: h.rrpFindMany,
       create: h.rrpCreate,
@@ -74,6 +76,7 @@ beforeEach(() => {
   h.rrpUpdateMany.mockResolvedValue({ count: 0 })
   h.leagueFindUnique.mockResolvedValue({ sport: 'NFL', platform: 'sleeper' })
   h.sportsPlayerFindMany.mockResolvedValue([])
+  h.identityMapFindMany.mockResolvedValue([])
   // Dormant by default, which is what it measures as in production.
   h.unified.mockResolvedValue([])
 })
@@ -384,5 +387,109 @@ describe('🛑 what it refuses to do', () => {
     const out = await materializeRedraftRosterPlayersForLeague('L1')
     expect(out.rostersConsidered).toBe(0)
     expect(h.rrpCreate).not.toHaveBeenCalled()
+  })
+})
+
+// ── A NON-SLEEPER ROSTER IS NAMED THROUGH ITS PLATFORM'S IDENTITY COLUMN ───────────────────────
+
+const identity = (over: Record<string, unknown> = {}) => ({
+  canonicalName: 'Chuba Hubbard',
+  position: 'RB',
+  currentTeam: 'CAR',
+  sport: 'NFL',
+  espnId: 'p1',
+  fantraxId: null,
+  fleaflickerId: null,
+  mflId: null,
+  ...over,
+})
+
+describe('🛑 a non-Sleeper roster is named through PlayerIdentityMap, by its own id column', () => {
+  /*
+   * THE REGRESSION. The lookup ran for Sleeper leagues only, so every ESPN, Fantrax and Fleaflicker
+   * roster was written with the platform id as the NAME and `position: 'UNK'` — 1,873 rows measured
+   * on production 2026-09-13, unpriceable because values are looked up by name. ESPN NFL resolves
+   * 878 of 1,176 of them by `espnId`.
+   */
+  it('names an ESPN roster by espnId, scoped to the sport', async () => {
+    h.rosterFindMany.mockResolvedValue([roster()])
+    h.leagueFindUnique.mockResolvedValue({ sport: 'NFL', platform: 'espn' })
+    h.identityMapFindMany.mockResolvedValue([identity()])
+
+    const out = await materializeRedraftRosterPlayersForLeague('L1')
+
+    const where = h.identityMapFindMany.mock.calls[0][0].where
+    expect(where.espnId.in).toEqual(['p1', 'p2'])
+    expect(where.sport).toBe('NFL')
+    expect(JSON.stringify(where)).not.toContain('externalId')
+    expect(out.playersCreated).toBe(2)
+    expect(h.rrpCreate.mock.calls[0][0].data).toMatchObject({
+      playerId: 'p1', playerName: 'Chuba Hubbard', position: 'RB', team: 'CAR',
+    })
+    // The unresolved player keeps the honest residue: his id, and an unknown position.
+    expect(h.rrpCreate.mock.calls[1][0].data).toMatchObject({ playerId: 'p2', playerName: 'p2', position: 'UNK' })
+    expect(h.sportsPlayerFindMany).not.toHaveBeenCalled()
+  })
+
+  it('repairs an ESPN row still named by its id', async () => {
+    h.rosterFindMany.mockResolvedValue([roster({ playerData: { players: ['p1'] } })])
+    h.leagueFindUnique.mockResolvedValue({ sport: 'NFL', platform: 'espn' })
+    h.rrpFindMany.mockResolvedValue([{ playerId: 'p1' }])
+    h.identityMapFindMany.mockResolvedValue([identity()])
+    h.rrpUpdateMany.mockResolvedValue({ count: 1 })
+
+    const out = await materializeRedraftRosterPlayersForLeague('L1')
+
+    expect(out.playersRepaired).toBe(1)
+    const call = h.rrpUpdateMany.mock.calls[0][0]
+    expect(call.where).toMatchObject({ playerId: 'p1', playerName: 'p1' })
+    expect(call.data).toMatchObject({ playerName: 'Chuba Hubbard', position: 'RB', team: 'CAR' })
+  })
+
+  it('uses the column the provider capability names: a Fantrax league reads fantraxId', async () => {
+    h.rosterFindMany.mockResolvedValue([roster({ playerData: { players: ['06k5m'] } })])
+    h.leagueFindUnique.mockResolvedValue({ sport: 'NCAAF', platform: 'fantrax' })
+    h.identityMapFindMany.mockResolvedValue([
+      identity({ canonicalName: 'Arch Manning', position: 'QB', currentTeam: 'TEX', sport: 'NCAAF', espnId: null, fantraxId: '06k5m' }),
+    ])
+
+    await materializeRedraftRosterPlayersForLeague('L1')
+
+    const where = h.identityMapFindMany.mock.calls[0][0].where
+    expect(where.fantraxId.in).toEqual(['06k5m'])
+    expect(where.espnId).toBeUndefined()
+    expect(where.sport).toBe('NCAAF')
+    expect(h.rrpCreate.mock.calls[0][0].data).toMatchObject({ playerName: 'Arch Manning', position: 'QB' })
+  })
+
+  it('🛑 leaves an id that matches two identities unresolved rather than picking one', async () => {
+    h.rosterFindMany.mockResolvedValue([roster({ playerData: { players: ['p1'] } })])
+    h.leagueFindUnique.mockResolvedValue({ sport: 'NFL', platform: 'espn' })
+    h.identityMapFindMany.mockResolvedValue([identity(), identity({ canonicalName: 'Somebody Else', position: 'WR' })])
+
+    await materializeRedraftRosterPlayersForLeague('L1')
+
+    expect(h.rrpCreate.mock.calls[0][0].data).toMatchObject({ playerName: 'p1', position: 'UNK' })
+  })
+
+  it('a platform with no identity column does no identity lookup', async () => {
+    h.rosterFindMany.mockResolvedValue([roster()])
+    h.leagueFindUnique.mockResolvedValue({ sport: 'NFL', platform: 'manual' })
+
+    const out = await materializeRedraftRosterPlayersForLeague('L1')
+
+    expect(h.identityMapFindMany).not.toHaveBeenCalled()
+    expect(out.playersCreated).toBe(2)
+  })
+
+  it('survives the identity lookup throwing', async () => {
+    h.rosterFindMany.mockResolvedValue([roster({ playerData: { players: ['p1'] } })])
+    h.leagueFindUnique.mockResolvedValue({ sport: 'NFL', platform: 'espn' })
+    h.identityMapFindMany.mockRejectedValue(new Error('db down'))
+
+    const out = await materializeRedraftRosterPlayersForLeague('L1')
+
+    expect(out.playersCreated).toBe(1)
+    expect(h.rrpCreate.mock.calls[0][0].data).toMatchObject({ playerName: 'p1', position: 'UNK' })
   })
 })

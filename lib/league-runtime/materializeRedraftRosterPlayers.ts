@@ -6,6 +6,10 @@ import {
   resolveSleeperRosterPlayers,
   type ResolvedSleeperPlayer,
 } from '@/lib/player-identity/resolveSleeperRosterPlayers'
+import {
+  providerIdentityColumn,
+  resolveProviderRosterPlayers,
+} from '@/lib/player-identity/resolveProviderRosterPlayers'
 import { byeForTeam, resolveTeamByeWeeks } from '@/lib/schedule/teamByeWeeks'
 import { getNormalizedPlayerData } from '@/lib/player-data/getNormalizedPlayerData'
 import { serializeUnifiedPlayerForApi } from '@/lib/player-data/serializeUnifiedPlayerForApi'
@@ -69,6 +73,9 @@ const EMPTY: MaterializeResult = {
   rostersSkippedNoLink: 0,
   rostersSkippedNoPlayers: 0,
 }
+
+/** What a row needs from a resolved player, whichever platform's resolver answered. */
+type RosterPlayerMetadata = Pick<ResolvedSleeperPlayer, 'name' | 'position' | 'team' | 'sport'>
 
 function asRecord(v: unknown): Record<string, unknown> {
   return v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {}
@@ -185,10 +192,24 @@ export async function materializeRedraftRosterPlayersForLeague(
    *
    * So this uses `sleeperIdWhere`, which queries the dedicated `sleeperId` column.
    */
-  let bySleeperId = new Map<string, ResolvedSleeperPlayer>()
+  let byPlatformId = new Map<string, RosterPlayerMetadata>()
+  const allIds = () => [...new Set(rosters.flatMap((r) => getRosterPlayerIds(r.playerData)))]
   if (platform === 'sleeper') {
-    const allIds = [...new Set(rosters.flatMap((r) => getRosterPlayerIds(r.playerData)))]
-    bySleeperId = await resolveSleeperRosterPlayers(allIds, sport)
+    byPlatformId = await resolveSleeperRosterPlayers(allIds(), sport)
+  } else if (providerIdentityColumn(platform)) {
+    /*
+     * 🛑 EVERY OTHER PLATFORM WAS WRITTEN UNNAMED. This branch did not exist, so an ESPN, Fantrax
+     * or Fleaflicker roster got the platform id as each player's NAME and `position: 'UNK'` —
+     * 1,873 rows measured 2026-09-13, unpriceable because values are looked up by name. Those
+     * ids live in that platform's own `PlayerIdentityMap` column; see
+     * `resolveProviderRosterPlayers` for why it is that column and never `externalId`.
+     *
+     * Best-effort like the rest of the enrichment: a failed lookup leaves the row unnamed, it
+     * does not keep the roster empty.
+     */
+    byPlatformId = await resolveProviderRosterPlayers(platform, allIds(), sport).catch(
+      () => new Map<string, RosterPlayerMetadata>(),
+    )
   }
 
   for (const r of rosters) {
@@ -245,7 +266,7 @@ export async function materializeRedraftRosterPlayersForLeague(
     }
 
     for (const playerId of playerIds) {
-      const dto = bySleeperId.get(playerId)
+      const dto = byPlatformId.get(playerId)
       const extra = byUnifiedId.get(playerId)
 
       if (have.has(playerId)) {
