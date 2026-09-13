@@ -177,6 +177,65 @@ describe('assertImportCommissioner', () => {
     expect(reason).not.toMatch(/no connection needed|without connecting|from any device first/i)
   })
 
+  /*
+   * Owner decision "A1", 2026-09-12. `leagueReadable` lets the unified preview route SHOW a public
+   * ESPN league to someone who has not connected ESPN. That is safe only while the flag never rides
+   * beside `ok: true` — so these pin it through the commissioner and attestation branches too, which
+   * are exactly where a later refactor could spread `base` into a success.
+   */
+  it('marks a readable-but-unproven ESPN league leagueReadable and still refuses it, even with requireCommissioner and an attestation', async () => {
+    espnFetchMock.mockResolvedValue({
+      viewerTeamId: null,
+      commissionerTeamIds: [],
+      teams: [{ teamId: '3', managerId: 'espn-member-3' }],
+    })
+    const { assertImportCommissioner } = await import('@/lib/league-import/commissionerGate')
+
+    const variants = [
+      {},
+      { requireCommissioner: true },
+      { requireCommissioner: true, attestation: { accepted: true, statement: 'I run this league.' } },
+    ]
+    for (const extra of variants) {
+      const result = await assertImportCommissioner({
+        appUserId: 'u1',
+        provider: 'espn',
+        sourceLeagueId: '12345',
+        ...extra,
+      })
+      expect(result.ok).toBe(false)
+      expect(result.leagueReadable).toBe(true)
+      expect(result.verification).toBeUndefined()
+      expect(result.sourceManagerId).toBeUndefined()
+    }
+  })
+
+  it('does not mark an ESPN league leagueReadable when it could not be read, or once membership is proven', async () => {
+    const { assertImportCommissioner } = await import('@/lib/league-import/commissionerGate')
+    const args = { appUserId: 'u1', provider: 'espn' as const, sourceLeagueId: '12345' }
+
+    espnFetchMock.mockRejectedValueOnce(new EspnImportLeagueNotFoundErrorMock('ESPN league not found.'))
+    const missing = await assertImportCommissioner(args)
+    expect(missing.ok).toBe(false)
+    expect(missing.notFound).toBe(true)
+    expect(missing.leagueReadable).toBeUndefined()
+
+    // A private league without cookies throws from the fetch — it was never read.
+    espnFetchMock.mockRejectedValueOnce(new Error('ESPN returned 401 for this league.'))
+    const privateLeague = await assertImportCommissioner(args)
+    expect(privateLeague.ok).toBe(false)
+    expect(privateLeague.leagueReadable).toBeUndefined()
+
+    espnFetchMock.mockResolvedValueOnce({
+      viewerTeamId: '3',
+      commissionerTeamIds: [],
+      teams: [{ teamId: '3', managerId: 'espn-member-3' }],
+    })
+    const member = await assertImportCommissioner(args)
+    expect(member.ok).toBe(true)
+    expect(member.leagueReadable).toBeUndefined()
+  })
+
   it('requires explicit attestation for a full-league ESPN commit — real membership alone is not enough (Import Security Closure phase)', async () => {
     espnFetchMock.mockResolvedValue({
       viewerTeamId: '3',
