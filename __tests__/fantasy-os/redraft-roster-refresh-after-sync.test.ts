@@ -87,17 +87,70 @@ describe('the store records which leagues a sync changed the rosters of', () => 
 
 const counts = { playersDropped: 2, playersCreated: 1, playersRepaired: 0 }
 
-describe('the post-sync refresh', () => {
-  it('materializes each changed league once, however many connections named it', async () => {
+/** Discovery double: the leagues whose redraft rows disagree with their rosters. */
+const needs = (...entries: Array<[string, number, number?]>) => async () =>
+  entries.map(([leagueId, stale, missing = 0]) => ({ leagueId, stale, missing }))
+
+describe('the post-sync refresh works on leagues that need it', () => {
+  /*
+   * 🛑 THE FAILURE THIS PINS, MEASURED 2026-09-13 17:29Z. One sync changed rosters in ~40 leagues,
+   * 11 of which gained stale or missing rows; the pass reaches ~5 a run; nothing was dropped or
+   * added. Changed-but-clean leagues were spending the budget, and a league past the cap was lost.
+   */
+  it('materializes only leagues that need work, largest gap first, and counts clean ones as skipped', async () => {
+    const materialize = vi.fn(async (_leagueId: string) => counts)
+    const out = await refreshRedraftRosterPlayersAfterSync({
+      results: [{ rosterChangedLeagueIds: ['clean1', 'small', 'clean2', 'big'] }],
+      maxLeagues: 10,
+      budgetMs: 60_000,
+      materialize,
+      findLeaguesNeedingWork: needs(['small', 1], ['big', 3, 2]),
+    })
+    expect(materialize.mock.calls.map(([id]) => id)).toEqual(['big', 'small'])
+    expect(out).toMatchObject({
+      changedLeagues: 4, needingWork: 2, skippedClean: 2, carriedOver: 0, refreshed: 2, deferred: 0,
+      playersDropped: 4, playersCreated: 2, discoveryError: null,
+    })
+  })
+
+  it('🛑 carries over a league that needs work but did not change this run, after the changed ones', async () => {
+    // The deferral from an earlier run: nothing persisted it, and it is found again anyway.
+    const materialize = vi.fn(async (_leagueId: string) => counts)
+    const out = await refreshRedraftRosterPlayersAfterSync({
+      results: [{ rosterChangedLeagueIds: ['changed'] }],
+      maxLeagues: 10,
+      budgetMs: 60_000,
+      materialize,
+      findLeaguesNeedingWork: needs(['leftover', 9], ['changed', 1]),
+    })
+    expect(materialize.mock.calls.map(([id]) => id)).toEqual(['changed', 'leftover'])
+    expect(out).toMatchObject({ carriedOver: 1, refreshed: 2 })
+  })
+
+  it('refreshes leagues that need work even when no roster changed this run', async () => {
+    const materialize = vi.fn(async (_leagueId: string) => counts)
+    const out = await refreshRedraftRosterPlayersAfterSync({
+      results: [{ rosterChangedLeagueIds: [] }, {}],
+      maxLeagues: 10,
+      budgetMs: 60_000,
+      materialize,
+      findLeaguesNeedingWork: needs(['drifted', 2]),
+    })
+    expect(materialize.mock.calls.map(([id]) => id)).toEqual(['drifted'])
+    expect(out).toMatchObject({ changedLeagues: 0, carriedOver: 1, refreshed: 1 })
+  })
+
+  it('materializes each league once, however many connections named it', async () => {
     const materialize = vi.fn(async (_leagueId: string) => counts)
     const out = await refreshRedraftRosterPlayersAfterSync({
       results: [{ rosterChangedLeagueIds: ['L1', 'L2'] }, { rosterChangedLeagueIds: ['L2'] }, {}],
       maxLeagues: 10,
       budgetMs: 60_000,
       materialize,
+      findLeaguesNeedingWork: needs(['L1', 1], ['L2', 1]),
     })
-    expect(materialize.mock.calls.map(([id]) => id)).toEqual(['L1', 'L2'])
-    expect(out).toMatchObject({ changedLeagues: 2, refreshed: 2, deferred: 0, playersDropped: 4, playersCreated: 2 })
+    expect(materialize).toHaveBeenCalledTimes(2)
+    expect(out.changedLeagues).toBe(2)
   })
 
   it('🛑 stops at the league cap and REPORTS what it deferred', async () => {
@@ -107,6 +160,7 @@ describe('the post-sync refresh', () => {
       maxLeagues: 2,
       budgetMs: 60_000,
       materialize,
+      findLeaguesNeedingWork: needs(['L1', 3], ['L2', 2], ['L3', 1]),
     })
     expect(materialize).toHaveBeenCalledTimes(2)
     expect(out).toMatchObject({ refreshed: 2, deferred: 1 })
@@ -123,6 +177,7 @@ describe('the post-sync refresh', () => {
       maxLeagues: 10,
       budgetMs: 60_000,
       materialize,
+      findLeaguesNeedingWork: needs(['L1', 3], ['L2', 2], ['L3', 1]),
       now: () => clock,
     })
     expect(materialize).toHaveBeenCalledTimes(2)
@@ -139,20 +194,37 @@ describe('the post-sync refresh', () => {
       maxLeagues: 10,
       budgetMs: 60_000,
       materialize,
+      findLeaguesNeedingWork: needs(['L1', 2], ['L2', 1]),
     })
     expect(out.refreshed).toBe(1)
     expect(out.errors).toEqual([{ leagueId: 'L1', error: 'db down' }])
   })
 
-  it('does nothing when no rosters changed', async () => {
-    const materialize = vi.fn()
+  it('🛑 a failed discovery falls back to the changed leagues, and says so', async () => {
+    const materialize = vi.fn(async (_leagueId: string) => counts)
     const out = await refreshRedraftRosterPlayersAfterSync({
-      results: [{ rosterChangedLeagueIds: [] }, {}],
+      results: [{ rosterChangedLeagueIds: ['L1', 'L2'] }],
       maxLeagues: 10,
       budgetMs: 60_000,
       materialize,
+      findLeaguesNeedingWork: async () => {
+        throw new Error('query timeout')
+      },
+    })
+    expect(materialize.mock.calls.map(([id]) => id)).toEqual(['L1', 'L2'])
+    expect(out).toMatchObject({ discoveryError: 'query timeout', needingWork: null, refreshed: 2 })
+  })
+
+  it('does nothing when no league needs work', async () => {
+    const materialize = vi.fn()
+    const out = await refreshRedraftRosterPlayersAfterSync({
+      results: [{ rosterChangedLeagueIds: ['clean'] }],
+      maxLeagues: 10,
+      budgetMs: 60_000,
+      materialize,
+      findLeaguesNeedingWork: needs(),
     })
     expect(materialize).not.toHaveBeenCalled()
-    expect(out).toMatchObject({ changedLeagues: 0, refreshed: 0, deferred: 0 })
+    expect(out).toMatchObject({ changedLeagues: 1, needingWork: 0, skippedClean: 1, refreshed: 0, deferred: 0 })
   })
 })
