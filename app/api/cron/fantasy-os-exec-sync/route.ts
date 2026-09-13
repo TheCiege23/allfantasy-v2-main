@@ -378,6 +378,12 @@ export async function GET(req: NextRequest) {
           failed: r.summary.failed,
           locked: r.summary.locked,
           notDue: r.summary.notDue,
+          /*
+           * The post-sync redraft roster refresh, recorded in FULL. Until this, its result reached only
+           * the HTTP response, which the scheduler truncates to 400 characters — so on 2026-09-13 a run
+           * that changed ~40 leagues and dropped nothing could not say whether the pass ran at all.
+           */
+          redraftRosterPlayers: r.redraftRosterPlayers,
         },
       }),
     )
