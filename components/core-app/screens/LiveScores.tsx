@@ -496,7 +496,12 @@ export function LiveScores({ data: initial, selectedLeagueId = null }: LiveScore
  * someone was reading. Optional blocks reserve their space, and scores are
  * tabular so a 7→14 does not re-centre the row.
  */
-function GameCard({
+/**
+ * Exported because the public `/live` page renders this same card
+ * (`components/live/MatchupCard.tsx`) inside an `.af-core` wrapper — one game
+ * card for both surfaces, so the two cannot drift apart again.
+ */
+export function GameCard({
   game,
   scope,
   selectedLeagueId,

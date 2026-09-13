@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { LivePageData } from '@/lib/live/liveScoresPage'
 import { ScopeToggle } from './ScopeToggle'
 import { SportTabs } from './SportTabs'
@@ -69,6 +69,20 @@ export function LiveScoresClient({ initial }: { initial: LivePageData }) {
 
   const anyLive = data.games.some((g) => g.isLive)
 
+  /*
+   * Newest play per game, for the card's last-play fallback. `impact.plays` is
+   * newest-first, so the first entry seen for a gameId wins — the same rule, and
+   * the same reason, as `/core/live`.
+   */
+  const latestPlayByGame = useMemo(() => {
+    const byGame = new Map<string, LivePageData['impact']['plays'][number]>()
+    for (const p of data.impact.plays) {
+      if (!p.gameId || byGame.has(p.gameId)) continue
+      byGame.set(p.gameId, p)
+    }
+    return byGame
+  }, [data.impact.plays])
+
   useEffect(() => {
     const interval = window.setInterval(() => {
       void load(sport, scope)
@@ -116,7 +130,7 @@ export function LiveScoresClient({ initial }: { initial: LivePageData }) {
             className="live-mono text-[10px] font-bold uppercase tracking-widest"
             style={{ color: 'var(--muted2)' }}
           >
-            {data.sport} · sorted by leagues affected
+            {data.sport} · {scope === 'my' ? 'your starters, sorted by leagues affected' : 'all games'}
           </p>
           {data.games.length === 0 ? (
             <EmptyState
@@ -126,7 +140,14 @@ export function LiveScoresClient({ initial }: { initial: LivePageData }) {
               rosterFailed={data.rosterFailed}
             />
           ) : (
-            data.games.map((game) => <MatchupCard key={game.gameId} game={game} />)
+            data.games.map((game) => (
+              <MatchupCard
+                key={game.gameId}
+                game={game}
+                scope={scope}
+                lastPlay={latestPlayByGame.get(game.gameId) ?? null}
+              />
+            ))
           )}
         </main>
         <LiveImpactPanel
