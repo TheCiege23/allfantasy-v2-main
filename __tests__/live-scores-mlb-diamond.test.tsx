@@ -129,3 +129,42 @@ describe('MLB diamond', () => {
     expect(container.querySelector('.af-live-diamond')).toBeNull()
   })
 })
+
+/*
+ * The diamond is keyed on the DATA, not on `sport === 'MLB'` (2026-09-13), so a
+ * baseball feed the app has not added as a sport yet — college baseball is the
+ * one waiting — gets it with no card change. `NCAABASE` is a stand-in sport
+ * string: no such LeagueSport exists today, which is exactly the case covered.
+ */
+describe('baseball presentation for a non-MLB sport', () => {
+  it('draws the diamond and the R-H-E box when the feed sends baseball data', () => {
+    const g = mlbGame({ sport: 'NCAABASE', statusDetail: 'Top 3rd', clockLabel: 'Top 3rd' })
+    const { container } = render(<LiveScores data={page(g)} />)
+    expect(container.querySelector('.af-live-diamond')).not.toBeNull()
+    expect(container.querySelector('.af-live-base[data-base="first"]')?.getAttribute('data-on')).toBe('true')
+    const heads = [...container.querySelectorAll('.af-live-linescore thead th')].map((th) => th.textContent)
+    expect(heads.slice(-3)).toEqual(['R', 'H', 'E'])
+  })
+
+  it('a final with hits and errors but no live situation still gets R-H-E, and no diamond', () => {
+    const g = mlbGame({ sport: 'NCAABASE', isLive: false, completed: true, situation: null })
+    const { container } = render(<LiveScores data={page(g)} />)
+    expect(container.querySelector('.af-live-diamond')).toBeNull()
+    const heads = [...container.querySelectorAll('.af-live-linescore thead th')].map((th) => th.textContent)
+    expect(heads.slice(-3)).toEqual(['R', 'H', 'E'])
+  })
+
+  it('control: a football card with no baseball data gets a T column and no diamond', () => {
+    const g = mlbGame({
+      sport: 'NFL',
+      situation: null,
+      away: { abbrev: 'TB', name: 'Tampa Bay Buccaneers', logo: '', score: 3, record: null, linescores: [3, 0], hits: null, errors: null },
+      home: { abbrev: 'CIN', name: 'Cincinnati Bengals', logo: '', score: 14, record: null, linescores: [14, 0], hits: null, errors: null },
+    })
+    const { container } = render(<LiveScores data={page(g)} />)
+    expect(container.querySelector('.af-live-diamond')).toBeNull()
+    const heads = [...container.querySelectorAll('.af-live-linescore thead th')].map((th) => th.textContent)
+    expect(heads[heads.length - 1]).toBe('T')
+    expect(heads).not.toContain('H')
+  })
+})
