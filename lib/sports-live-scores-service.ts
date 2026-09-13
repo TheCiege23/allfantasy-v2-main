@@ -4,7 +4,14 @@ import { prisma } from '@/lib/prisma'
 import { redactSecrets } from '@/lib/security/redactSecrets'
 import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
 import type { LeagueSport } from '@prisma/client'
-import { DEFAULT_SPORT, isSupportedSport, normalizeToSupportedSport } from '@/lib/sport-scope'
+import {
+  DEFAULT_SPORT,
+  isLiveOnlySport,
+  isSupportedSport,
+  normalizeToLiveSport,
+  normalizeToSupportedSport,
+  type LiveSport,
+} from '@/lib/sport-scope'
 import { fetchWithChain } from '@/lib/workers/api-chain'
 import { legacySupportedSportToApiChain } from '@/lib/workers/api-config'
 import { ESPN_SITE_API_BASE } from '@/lib/providers/espnUrls'
@@ -30,6 +37,10 @@ import { loadCollegeTeamIndex } from '@/lib/sport-teams/collegeTeamIndexStore'
 import { resolveCollegeTeam } from '@/lib/sport-teams/collegeTeamIdentity'
 
 export const LIVE_SCORES_FRESHNESS_MS = 60 * 1000
+
+/** How long a live-only sport whose scoreboard came back empty waits before asking ESPN again. */
+export const EMPTY_LIVE_ONLY_BACKOFF_MS = 10 * 60 * 1000
+const emptyLiveOnlyUntil = new Map<string, number>()
 
 /**
  * The widget contract speaks ESPN's status vocabulary — `ScoresTab.tsx` and
@@ -166,7 +177,7 @@ export function hasStarted(rawStatus: unknown): boolean {
 }
 
 /** ESPN site.api path segments (after sports/) — scoreboard, standings, etc. */
-export const ESPN_SPORT_SITE_PATH: Record<LeagueSport, string | null> = {
+export const ESPN_SPORT_SITE_PATH: Record<LiveSport, string | null> = {
   NFL: 'football/nfl',
   NBA: 'basketball/nba',
   NHL: 'hockey/nhl',
@@ -174,6 +185,8 @@ export const ESPN_SPORT_SITE_PATH: Record<LeagueSport, string | null> = {
   NCAAF: 'football/college-football',
   NCAAB: 'basketball/mens-college-basketball',
   SOCCER: 'soccer/usa.1',
+  // Live Scores only (see LIVE_ONLY_SPORTS). ESPN league abbreviation CBASE.
+  NCAABASE: 'baseball/college-baseball',
 }
 
 export interface LiveScoreRow {
@@ -477,7 +490,7 @@ function dedupeLiveScoreRows(rows: LiveScoreRow[]): LiveScoreRow[] {
 }
 
 export async function fetchEspnScoreboard(
-  sport: LeagueSport,
+  sport: LiveSport,
   options: { dates?: string[] } = {},
 ): Promise<LiveScoreRow[]> {
   const path = ESPN_SPORT_SITE_PATH[sport]
@@ -569,7 +582,8 @@ export async function getEspnGameSummary(opts: {
   sport: string
   gameId: string
 }): Promise<{ detail: LiveGameDetail | null; stale: boolean; failed: boolean }> {
-  const sport = normalizeToSupportedSport(opts.sport)
+  // Live normalizer: the league one turns NCAABASE into NFL (see normalizeToLiveSport).
+  const sport = normalizeToLiveSport(opts.sport)
   const gameId = String(opts.gameId ?? '').trim()
   const path = ESPN_SPORT_SITE_PATH[sport]
   if (!/^\d{5,12}$/.test(gameId) || !path || !GAME_VIEW_SPORTS.includes(sport)) {
@@ -620,9 +634,11 @@ export function buildEspnScoreboardDateWindow(days = 7, start = new Date()): str
 }
 
 export async function fetchRollingInsightsScoreboard(
-  sport: LeagueSport,
+  sport: LiveSport,
   options: { forceRefresh?: boolean } = {},
 ): Promise<LiveScoreRow[]> {
+  // Rolling Insights has no college baseball feed; a live-only sport is ESPN only.
+  if (isLiveOnlySport(sport)) return []
   const chainSport = legacySupportedSportToApiChain(sport)
   const ri = await fetchWithChain({
     sport: chainSport,
@@ -896,7 +912,7 @@ export async function fetchRollingInsightsScheduleSeason(
   return (await fetchRollingInsightsScheduleSeasonWithDiagnostics(sport, seasonYear)).rows
 }
 
-async function syncLiveScoresToDb(sport: LeagueSport, scores: LiveScoreRow[], source: string): Promise<number> {
+async function syncLiveScoresToDb(sport: LiveSport, scores: LiveScoreRow[], source: string): Promise<number> {
   let synced = 0
   const now = new Date()
   const expiresAt = new Date(now.getTime() + LIVE_SCORES_FRESHNESS_MS * 5)
@@ -1023,7 +1039,7 @@ async function syncLiveScoresToDb(sport: LeagueSport, scores: LiveScoreRow[], so
  * distinct full name, rather than one that happens to match.
  */
 async function withCollegeTeamIdentity(
-  sport: LeagueSport,
+  sport: LiveSport,
   scores: LiveScoreRow[],
 ): Promise<LiveScoreRow[]> {
   if (sport !== 'NCAAF' || scores.length === 0) return scores
@@ -1299,7 +1315,7 @@ async function repairPlaceholderKickoffs<T extends KickoffRepairable>(
 }
 
 async function readCachedLiveScoreRows(options: {
-  sport: LeagueSport
+  sport: LiveSport
   team?: string | null
 }) {
   const sport = options.sport
@@ -1399,7 +1415,7 @@ export async function getCachedLiveScoresForSport(options: {
   isStale: boolean
   message: string | null
 }> {
-  const sport = normalizeToSupportedSport(options.sport)
+  const sport = normalizeToLiveSport(options.sport)
   const team = options.team?.trim() || null
   const cachedGames = await readCachedLiveScoreRows({ sport, team })
   // Was: RI-if-present, else EVERY row from every source blended together.
@@ -1468,7 +1484,7 @@ export async function getCachedLiveScoresForSport(options: {
  * made — measure a second sport before extending this.
  */
 export async function withOmittedFixtures(
-  sport: LeagueSport,
+  sport: LiveSport,
   source: string,
   live: LiveScoreRow[],
   cached: Array<Parameters<typeof dbRowToLiveScore>[0] & { source: string | null }>,
@@ -1518,7 +1534,7 @@ export async function getLiveScoresForSport(options: {
   nextRefreshMs: number
   fetchedAt: string | null
 }> {
-  const sport = normalizeToSupportedSport(options.sport)
+  const sport = normalizeToLiveSport(options.sport)
   const team = options.team?.trim() || null
   const refresh = options.forceRefresh === true
 
@@ -1536,7 +1552,18 @@ export async function getLiveScoresForSport(options: {
   let source: string = 'db_cache'
   let fetchedAt: string | null = cachedGames[0]?.fetchedAt?.toISOString() ?? null
 
-  if (refresh || stale) {
+  /*
+   * ⚠ AN EMPTY CACHE IS ALWAYS "STALE", SO AN OUT-OF-SEASON SPORT REFETCHES ON
+   * EVERY POLL. College baseball runs roughly February to June; the rest of the
+   * year its tab would call ESPN every 20s–2min for a scoreboard that is empty.
+   * A live-only sport that came back empty waits EMPTY_LIVE_ONLY_BACKOFF_MS
+   * before asking again (per process; a forced refresh ignores it). The league
+   * sports keep their existing behaviour.
+   */
+  const backingOff =
+    !refresh && isLiveOnlySport(sport) && (emptyLiveOnlyUntil.get(sport) ?? 0) > now.getTime()
+
+  if ((refresh || stale) && !backingOff) {
     /*
      * Both branches persist through `syncLiveScoresToDb`, so whichever feed wins,
      * the next reader is served from the database. That is the point of routing
@@ -1600,6 +1627,10 @@ export async function getLiveScoresForSport(options: {
 
     if (scores.length > 0) {
       scores = await withOmittedFixtures(sport, source, scores, cachedGames)
+    }
+    if (isLiveOnlySport(sport)) {
+      if (scores.length === 0) emptyLiveOnlyUntil.set(sport, now.getTime() + EMPTY_LIVE_ONLY_BACKOFF_MS)
+      else emptyLiveOnlyUntil.delete(sport)
     }
   }
 
