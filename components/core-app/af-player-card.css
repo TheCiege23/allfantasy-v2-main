@@ -168,6 +168,27 @@
 }
 
 /*
+ * When we last looked — the stamp under the designation, or under the sentence
+ * saying there isn't one.
+ *
+ * ⚠ `flex-basis: 100%` PUTS IT ON ITS OWN ROW, and that is the whole layout
+ * decision. `.af-pc-injury` is a baseline-aligned wrapping flex row, so without
+ * it this trails the source label and reads as part of the designation — which
+ * inverts the meaning. It is a statement about the FEED, not about the player,
+ * and it has to be legible as a separate claim, most of all on the empty branch
+ * where the line above it is the only other thing in the box.
+ *
+ * Quieter than `.af-pc-absent`: a reader looking for "can I start him" should
+ * pass over it, and a reader asking "is this current" should find it.
+ */
+.af-pc-feed {
+  flex-basis: 100%;
+  margin: 0;
+  font: 500 10px/1.5 'Archivo', system-ui, sans-serif;
+  color: var(--faint);
+}
+
+/*
  * The ☆ watchlist toggle, in the top bar beside the close control.
  *
  * ⚠ THE SIZE IS SET ON THE BUTTON, NOT ONLY ON THE GLYPH, because this is a tap
