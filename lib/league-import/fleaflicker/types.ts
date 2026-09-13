@@ -10,6 +10,15 @@ export type FleaflickerProPlayer = {
   nameFull?: string
   position?: string
   nameShort?: string
+  /**
+   * Present ONLY when the request sends `external_id_type=SPORTRADAR`.
+   *
+   * 🛑 `type` IS DECLARED OPTIONAL BECAUSE THE WIRE DOES NOT SEND IT. Fleaflicker's
+   * Swagger schema says `ExternalIdMapping { type, id }`; every entry observed (761/761
+   * rostered players, 80/80 draft picks) carries only `id`. A reader requiring
+   * `type === 'SPORTRADAR'` matches nothing — see G-11 in contracts/fleaflicker.
+   */
+  externalIds?: Array<{ id?: string | null; type?: string | null }>
 }
 
 export type FleaflickerRosterPlayer = {

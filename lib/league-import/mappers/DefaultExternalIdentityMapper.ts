@@ -45,13 +45,22 @@ function buildTeamAndManagerMappings(
 
 function buildPlayerMappings(
   provider: ImportProvider,
-  playerMap: Record<string, { name: string; position: string; team: string }>
+  playerMap: Record<
+    string,
+    { name: string; position: string; team: string; external_ids?: ExternalIdentityMapping['external_ids'] }
+  >
 ): ExternalIdentityMapping[] {
-  return Object.keys(playerMap).map((sourcePlayerId) => ({
+  return Object.entries(playerMap).map(([sourcePlayerId, entry]) => ({
     source_provider: provider,
     entity_type: 'player',
     source_id: sourcePlayerId,
     stable_key: toStableKey(provider, 'player', sourcePlayerId),
+    /*
+     * Copied through, never synthesised: a mapping carries `external_ids` only when the
+     * provider's own `player_map` entry did. Providers that expose no foreign id space get
+     * exactly the mapping they got before this field existed.
+     */
+    ...(entry?.external_ids ? { external_ids: entry.external_ids } : {}),
   }))
 }
 
