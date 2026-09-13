@@ -1,0 +1,732 @@
+{
+  "draftOrder": [
+    {
+      "id": 1374315,
+      "name": "Shanghai Communists",
+      "initials": "SC"
+    },
+    {
+      "id": 1373993,
+      "name": "Boomtown Sly Foxes",
+      "logoUrl": "https://s3.amazonaws.com/fleaflicker/t1373993_0_150x150.jpg",
+      "initials": "BS"
+    },
+    {
+      "id": 1373501,
+      "name": "Midgard Gallows",
+      "logoUrl": "https://s3.amazonaws.com/fleaflicker/t1373501_0_150x150.jpg",
+      "initials": "MG"
+    },
+    {
+      "id": 1373970,
+      "name": "Bamenda Herd",
+      "logoUrl": "https://s3.amazonaws.com/fleaflicker/t1373970_0_150x150.jpg",
+      "initials": "BH"
+    },
+    {
+      "id": 1374252,
+      "name": "Central City Crusaders",
+      "logoUrl": "https://s3.amazonaws.com/fleaflicker/t1374252_0_150x150.jpg",
+      "initials": "CC"
+    },
+    {
+      "id": 1373393,
+      "name": "Philadelphia Fire",
+      "logoUrl": "https://s3.amazonaws.com/fleaflicker/t1373393_0_150x150.jpg",
+      "initials": "PF"
+    },
+    {
+      "id": 1373883,
+      "name": "Manitoba Marmots",
+      "initials": "MM"
+    },
+    {
+      "id": 1374271,
+      "name": "Clutch City Ballers",
+      "logoUrl": "https://s3.amazonaws.com/fleaflicker/t1374271_0_150x150.jpg",
+      "initials": "CC"
+    },
+    {
+      "id": 1371776,
+      "name": "Winter Hill Black Shamrocks",
+      "logoUrl": "https://s3.amazonaws.com/fleaflicker/t1371776_0_150x150.jpg",
+      "initials": "WH"
+    },
+    {
+      "id": 1373480,
+      "name": "Goldenrod City Nightmares",
+      "logoUrl": "https://s3.amazonaws.com/fleaflicker/t1373480_0_150x150.jpg",
+      "initials": "GC"
+    },
+    {
+      "id": 1373475,
+      "name": "Winterfell Dire Wolves",
+      "logoUrl": "https://s3.amazonaws.com/fleaflicker/t1373475_0_150x150.jpg",
+      "initials": "WD"
+    },
+    {
+      "id": 1373973,
+      "name": "Red River Land Thunder",
+      "logoUrl": "https://s3.amazonaws.com/fleaflicker/t1373973_0_150x150.jpg",
+      "initials": "RR"
+    },
+    {
+      "id": 1374255,
+      "name": "Mushroom City Karts",
+      "logoUrl": "https://s3.amazonaws.com/fleaflicker/t1374255_0_150x150.jpg",
+      "initials": "MC"
+    },
+    {
+      "id": 1373535,
+      "name": "Winterthur Angry Ducks",
+      "logoUrl": "https://s3.amazonaws.com/fleaflicker/t1373535_0_150x150.jpg",
+      "initials": "WA"
+    },
+    {
+      "id": 1373988,
+      "name": "Springfield Isotopes",
+      "logoUrl": "https://s3.amazonaws.com/fleaflicker/t1373988_0_150x150.jpg",
+      "initials": "SI"
+    },
+    {
+      "id": 1373991,
+      "name": "Top City Terrors",
+      "logoUrl": "https://s3.amazonaws.com/fleaflicker/t1373991_0_150x150.jpg",
+      "initials": "TC"
+    }
+  ],
+  "rows": [
+    {
+      "round": 1,
+      "cells": [
+        {
+          "team": {
+            "id": 1374315,
+            "name": "Shanghai Communists",
+            "initials": "SC"
+          },
+          "player": {
+            "proPlayer": {
+              "id": 14673,
+              "nameFull": "Josh Jacobs",
+              "nameShort": "J. Jacobs",
+              "proTeamAbbreviation": "GB",
+              "position": "RB",
+              "headshotUrl": "https://d26bvpybnxg29h.cloudfront.net/nfl/14673.png",
+              "nflByeWeek": 11,
+              "injury": {
+                "typeAbbreviaition": "EX",
+                "description": "Exempt",
+                "severity": "OUT",
+                "typeFull": "Reserve Exempt"
+              },
+              "nameFirst": "Josh",
+              "nameLast": "Jacobs",
+              "proTeam": {
+                "abbreviation": "GB",
+                "location": "Green Bay",
+                "name": "Packers"
+              },
+              "externalIds": [
+                {
+                  "id": "61694ab9-b099-408e-b48d-6a643dd069ec"
+                }
+              ],
+              "positionEligibility": [
+                "RB"
+              ],
+              "percentOwnedRatio": 0.92
+            },
+            "viewingActualPoints": {
+              "formatted": "—"
+            },
+            "transactionStatus": {
+              "locked": {},
+              "isLineupStatusLocked": true
+            },
+            "requestedGamesPeriod": {
+              "ordinal": 1,
+              "startEpochMilli": "1788861600000",
+              "isNow": true
+            },
+            "viewingFormat": "TOTAL",
+            "viewingRange": {
+              "low": -1,
+              "high": -2
+            },
+            "displayGroup": "RUSHER",
+            "lastX": [
+              {
+                "duration": 1
+              },
+              {
+                "duration": 3
+              },
+              {
+                "duration": 5
+              }
+            ],
+            "isKeeper": true
+          },
+          "slot": {
+            "round": 1,
+            "slot": 1,
+            "overall": 1
+          },
+          "color": "DRAFT_BOARD_GREEN"
+        },
+        {
+          "team": {
+            "id": 1374252,
+            "name": "Central City Crusaders",
+            "logoUrl": "https://s3.amazonaws.com/fleaflicker/t1374252_0_150x150.jpg",
+            "initials": "CC"
+          },
+          "player": {
+            "proPlayer": {
+              "id": 14662,
+              "nameFull": "N'Keal Harry",
+              "nameShort": "N. Harry",
+              "proTeamAbbreviation": "FA",
+              "position": "WR",
+              "headshotUrl": "https://d26bvpybnxg29h.cloudfront.net/nfl/14662.png",
+              "nameFirst": "N'Keal",
+              "nameLast": "Harry",
+              "proTeam": {
+                "abbreviation": "FA",
+                "location": "Free",
+                "name": "Agent",
+                "isFreeAgent": true
+              },
+              "externalIds": [
+                {
+                  "id": "3e6e15ce-1c81-408e-9a94-b0a2924d0b8c"
+                }
+              ],
+              "positionEligibility": [
+                "WR"
+              ]
+            },
+            "viewingActualPoints": {
+              "formatted": "—"
+            },
+            "transactionStatus": {
+              "locked": {},
+              "isLineupStatusLocked": true
+            },
+            "requestedGamesPeriod": {
+              "ordinal": 1,
+              "startEpochMilli": "1788861600000",
+              "isNow": true
+            },
+            "viewingFormat": "TOTAL",
+            "viewingRange": {
+              "low": -1,
+              "high": -2
+            },
+            "displayGroup": "RECEIVER",
+            "lastX": [
+              {
+                "duration": 1
+              },
+              {
+                "duration": 3
+              },
+              {
+                "duration": 5
+              }
+            ],
+            "isKeeper": true
+          },
+          "slot": {
+            "round": 1,
+            "slot": 4,
+            "overall": 4
+          },
+          "tradeId": 4710153,
+          "fromOtherTeam": true,
+          "color": "DRAFT_BOARD_BLUE"
+        }
+      ]
+    },
+    {
+      "round": 2,
+      "cells": [
+        {
+          "team": {
+            "id": 1373993,
+            "name": "Boomtown Sly Foxes",
+            "logoUrl": "https://s3.amazonaws.com/fleaflicker/t1373993_0_150x150.jpg",
+            "initials": "BS"
+          },
+          "player": {
+            "proPlayer": {
+              "id": 14751,
+              "nameFull": "Darrell Henderson",
+              "nameShort": "D. Henderson",
+              "proTeamAbbreviation": "FA",
+              "position": "RB",
+              "headshotUrl": "https://d26bvpybnxg29h.cloudfront.net/nfl/14751.png",
+              "nameFirst": "Darrell",
+              "nameLast": "Henderson",
+              "proTeam": {
+                "abbreviation": "FA",
+                "location": "Free",
+                "name": "Agent",
+                "isFreeAgent": true
+              },
+              "externalIds": [
+                {
+                  "id": "380c4d9b-d4c8-456c-ba50-25519edde899"
+                }
+              ],
+              "positionEligibility": [
+                "RB"
+              ],
+              "percentOwnedRatio": 0.01
+            },
+            "viewingActualPoints": {
+              "formatted": "—"
+            },
+            "transactionStatus": {
+              "locked": {},
+              "isLineupStatusLocked": true
+            },
+            "requestedGamesPeriod": {
+              "ordinal": 1,
+              "startEpochMilli": "1788861600000",
+              "isNow": true
+            },
+            "viewingFormat": "TOTAL",
+            "viewingRange": {
+              "low": -1,
+              "high": -2
+            },
+            "displayGroup": "RUSHER",
+            "lastX": [
+              {
+                "duration": 1
+              },
+              {
+                "duration": 3
+              },
+              {
+                "duration": 5
+              }
+            ],
+            "isKeeper": true
+          },
+          "slot": {
+            "round": 2,
+            "slot": 2,
+            "overall": 18
+          },
+          "color": "DRAFT_BOARD_GREEN"
+        },
+        {
+          "team": {
+            "id": 1373393,
+            "name": "Philadelphia Fire",
+            "logoUrl": "https://s3.amazonaws.com/fleaflicker/t1373393_0_150x150.jpg",
+            "initials": "PF"
+          },
+          "player": {
+            "proPlayer": {
+              "id": 14671,
+              "nameFull": "Brian Burns",
+              "nameShort": "B. Burns",
+              "proTeamAbbreviation": "NYG",
+              "position": "EDR",
+              "headshotUrl": "https://d26bvpybnxg29h.cloudfront.net/nfl/14671.png",
+              "nflByeWeek": 8,
+              "nameFirst": "Brian",
+              "nameLast": "Burns",
+              "proTeam": {
+                "abbreviation": "NYG",
+                "location": "New York",
+                "name": "Giants"
+              },
+              "externalIds": [
+                {
+                  "id": "dbf199a9-542e-4279-8764-3341b9f80910"
+                }
+              ],
+              "positionEligibility": [
+                "EDR",
+                "LB"
+              ],
+              "percentOwnedRatio": 0.9
+            },
+            "viewingActualPoints": {
+              "formatted": "—"
+            },
+            "transactionStatus": {
+              "locked": {},
+              "isLineupStatusLocked": true
+            },
+            "requestedGamesPeriod": {
+              "ordinal": 1,
+              "startEpochMilli": "1788861600000",
+              "isNow": true
+            },
+            "viewingFormat": "TOTAL",
+            "viewingRange": {
+              "low": -1,
+              "high": -2
+            },
+            "displayGroup": "DEFENDER",
+            "lastX": [
+              {
+                "duration": 1
+              },
+              {
+                "duration": 3
+              },
+              {
+                "duration": 5
+              }
+            ],
+            "isKeeper": true
+          },
+          "slot": {
+            "round": 2,
+            "slot": 9,
+            "overall": 25
+          },
+          "tradeId": 4607058,
+          "fromOtherTeam": true,
+          "color": "DRAFT_BOARD_PURPLE"
+        }
+      ]
+    }
+  ],
+  "rosters": [
+    {
+      "teamId": 1374315,
+      "lineup": [
+        {
+          "position": {
+            "label": "RB",
+            "group": "START",
+            "eligibility": [
+              "RB"
+            ],
+            "min": 2,
+            "max": 15,
+            "start": 2,
+            "colors": [
+              "DRAFT_BOARD_GREEN"
+            ]
+          },
+          "player": {
+            "proPlayer": {
+              "id": 14673,
+              "nameFull": "Josh Jacobs",
+              "nameShort": "J. Jacobs",
+              "proTeamAbbreviation": "GB",
+              "position": "RB",
+              "headshotUrl": "https://d26bvpybnxg29h.cloudfront.net/nfl/14673.png",
+              "nflByeWeek": 11,
+              "injury": {
+                "typeAbbreviaition": "EX",
+                "description": "Exempt",
+                "severity": "OUT",
+                "typeFull": "Reserve Exempt"
+              },
+              "nameFirst": "Josh",
+              "nameLast": "Jacobs",
+              "proTeam": {
+                "abbreviation": "GB",
+                "location": "Green Bay",
+                "name": "Packers"
+              },
+              "externalIds": [
+                {
+                  "id": "61694ab9-b099-408e-b48d-6a643dd069ec"
+                }
+              ],
+              "positionEligibility": [
+                "RB"
+              ],
+              "percentOwnedRatio": 0.92
+            },
+            "viewingActualPoints": {
+              "formatted": "—"
+            },
+            "transactionStatus": {
+              "locked": {},
+              "isLineupStatusLocked": true
+            },
+            "requestedGamesPeriod": {
+              "ordinal": 1,
+              "startEpochMilli": "1788861600000",
+              "isNow": true
+            },
+            "viewingFormat": "TOTAL",
+            "viewingRange": {
+              "low": -1,
+              "high": -2
+            },
+            "displayGroup": "RUSHER",
+            "lastX": [
+              {
+                "duration": 1
+              },
+              {
+                "duration": 3
+              },
+              {
+                "duration": 5
+              }
+            ],
+            "isKeeper": true
+          },
+          "draftedAt": {
+            "round": 1,
+            "slot": 1,
+            "overall": 1
+          },
+          "eligibleCount": 1
+        },
+        {
+          "position": {
+            "label": "WR",
+            "group": "START",
+            "eligibility": [
+              "WR"
+            ],
+            "min": 2,
+            "max": 15,
+            "start": 2,
+            "colors": [
+              "DRAFT_BOARD_BLUE"
+            ]
+          },
+          "player": {
+            "proPlayer": {
+              "id": 14774,
+              "nameFull": "Riley Ridley",
+              "nameShort": "R. Ridley",
+              "proTeamAbbreviation": "FA",
+              "position": "WR",
+              "headshotUrl": "https://d26bvpybnxg29h.cloudfront.net/nfl/14774.png",
+              "nameFirst": "Riley",
+              "nameLast": "Ridley",
+              "proTeam": {
+                "abbreviation": "FA",
+                "location": "Free",
+                "name": "Agent",
+                "isFreeAgent": true
+              },
+              "externalIds": [
+                {
+                  "id": "9c04ad60-9726-42d3-9836-7d95723f8eb6"
+                }
+              ],
+              "positionEligibility": [
+                "WR"
+              ]
+            },
+            "viewingActualPoints": {
+              "formatted": "—"
+            },
+            "transactionStatus": {
+              "locked": {},
+              "isLineupStatusLocked": true
+            },
+            "requestedGamesPeriod": {
+              "ordinal": 1,
+              "startEpochMilli": "1788861600000",
+              "isNow": true
+            },
+            "viewingFormat": "TOTAL",
+            "viewingRange": {
+              "low": -1,
+              "high": -2
+            },
+            "displayGroup": "RECEIVER",
+            "lastX": [
+              {
+                "duration": 1
+              },
+              {
+                "duration": 3
+              },
+              {
+                "duration": 5
+              }
+            ],
+            "isKeeper": true
+          },
+          "draftedAt": {
+            "round": 5,
+            "slot": 1,
+            "overall": 65
+          },
+          "eligibleCount": 2
+        }
+      ]
+    },
+    {
+      "teamId": 1373993,
+      "lineup": [
+        {
+          "position": {
+            "label": "RB",
+            "group": "START",
+            "eligibility": [
+              "RB"
+            ],
+            "min": 2,
+            "max": 15,
+            "start": 2,
+            "colors": [
+              "DRAFT_BOARD_GREEN"
+            ]
+          },
+          "player": {
+            "proPlayer": {
+              "id": 14716,
+              "nameFull": "David Montgomery",
+              "nameShort": "D. Montgomery",
+              "proTeamAbbreviation": "HOU",
+              "position": "RB",
+              "headshotUrl": "https://d26bvpybnxg29h.cloudfront.net/nfl/14716.png",
+              "nflByeWeek": 8,
+              "nameFirst": "David",
+              "nameLast": "Montgomery",
+              "proTeam": {
+                "abbreviation": "HOU",
+                "location": "Houston",
+                "name": "Texans"
+              },
+              "externalIds": [
+                {
+                  "id": "1c9e1cd5-8cb1-4a15-a2c8-3a0c0fd5423c"
+                }
+              ],
+              "positionEligibility": [
+                "RB"
+              ],
+              "percentOwnedRatio": 0.97
+            },
+            "viewingActualPoints": {
+              "formatted": "—"
+            },
+            "transactionStatus": {
+              "locked": {},
+              "isLineupStatusLocked": true
+            },
+            "requestedGamesPeriod": {
+              "ordinal": 1,
+              "startEpochMilli": "1788861600000",
+              "isNow": true
+            },
+            "viewingFormat": "TOTAL",
+            "viewingRange": {
+              "low": -1,
+              "high": -2
+            },
+            "displayGroup": "RUSHER",
+            "lastX": [
+              {
+                "duration": 1
+              },
+              {
+                "duration": 3
+              },
+              {
+                "duration": 5
+              }
+            ],
+            "isKeeper": true
+          },
+          "draftedAt": {
+            "round": 1,
+            "slot": 2,
+            "overall": 2
+          },
+          "eligibleCount": 3
+        },
+        {
+          "position": {
+            "label": "RB",
+            "group": "START",
+            "eligibility": [
+              "RB"
+            ],
+            "min": 2,
+            "max": 15,
+            "start": 2,
+            "colors": [
+              "DRAFT_BOARD_GREEN"
+            ]
+          },
+          "player": {
+            "proPlayer": {
+              "id": 14751,
+              "nameFull": "Darrell Henderson",
+              "nameShort": "D. Henderson",
+              "proTeamAbbreviation": "FA",
+              "position": "RB",
+              "headshotUrl": "https://d26bvpybnxg29h.cloudfront.net/nfl/14751.png",
+              "nameFirst": "Darrell",
+              "nameLast": "Henderson",
+              "proTeam": {
+                "abbreviation": "FA",
+                "location": "Free",
+                "name": "Agent",
+                "isFreeAgent": true
+              },
+              "externalIds": [
+                {
+                  "id": "380c4d9b-d4c8-456c-ba50-25519edde899"
+                }
+              ],
+              "positionEligibility": [
+                "RB"
+              ],
+              "percentOwnedRatio": 0.01
+            },
+            "viewingActualPoints": {
+              "formatted": "—"
+            },
+            "transactionStatus": {
+              "locked": {},
+              "isLineupStatusLocked": true
+            },
+            "requestedGamesPeriod": {
+              "ordinal": 1,
+              "startEpochMilli": "1788861600000",
+              "isNow": true
+            },
+            "viewingFormat": "TOTAL",
+            "viewingRange": {
+              "low": -1,
+              "high": -2
+            },
+            "displayGroup": "RUSHER",
+            "lastX": [
+              {
+                "duration": 1
+              },
+              {
+                "duration": 3
+              },
+              {
+                "duration": 5
+              }
+            ],
+            "isKeeper": true
+          },
+          "draftedAt": {
+            "round": 2,
+            "slot": 2,
+            "overall": 18
+          },
+          "eligibleCount": 3
+        }
+      ]
+    }
+  ]
+}

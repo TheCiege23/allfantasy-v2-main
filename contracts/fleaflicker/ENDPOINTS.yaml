@@ -17,7 +17,7 @@ meta:
   vendor: Fleaflicker
   base_url: https://www.fleaflicker.com/api
   base_url_env: none   # no override exists in the codebase today
-  contract_version: 0.4.0   # bumped: `season` is PER-ENDPOINT, not common — rules/activity 400 on it (G-08)
+  contract_version: 0.5.0   # bumped: external_id_type=SPORTRADAR probed; entries are `{ id }` with NO `type`, 91.1% exact join (G-11)
   captured_at: 2026-09-03
   docs_url: https://www.fleaflicker.com/api-docs/index.html
   data_classification: fantasy_platform   # not a real-world sports-data vendor; see README
@@ -169,15 +169,25 @@ endpoints:
     status: INTEGRATED
     method: GET
     path: /FetchLeagueRosters
-    params: [sport, league_id, season]
+    params: [sport, league_id, season, external_id_type]
     envelope: |
-      { rosters: [ { team: TeamStub, players: [ { proPlayer: { id, nameFull?, position?, nameShort? } } ] } ] }
+      { rosters: [ { team: TeamStub, players: [ { proPlayer: { id, nameFull?, position?, nameShort?,
+                                                              externalIds? } } ] } ] }
+      # `externalIds` appears ONLY when `external_id_type=SPORTRADAR` is sent, and its
+      # entries are `{ id }` with NO `type` — see FetchLeagueDraftBoard.external_ids.
     source_of_truth: lib/league-import/fleaflicker/types.ts (FleaflickerRostersResponse);
-      real fixture at fixtures/rosters.NFL.json — note this particular fixture has an empty
-      `players` array on its one roster (the league has not drafted), so it does NOT
-      demonstrate the `players[].proPlayer` shape; that part still rests on the existing
-      TypeScript types only.
-    note: No scores at all — current roster composition only.
+      real fixtures — fixtures/rosters.NFL.json (league 356670, PRE-DRAFT, one roster with an
+      empty `players` array), fixtures/rosters.NFL.2021.json (league 206154, a PLAYED season,
+      16 rosters / 761 players, trimmed by key-union cover — the fixture that proves the
+      `players[].proPlayer` shape, which the pre-draft one could not), and
+      fixtures/rosters.NFL.2021.sportradar.json (same request with external_id_type=SPORTRADAR).
+      ⚠ This entry said, until 2026-09-12, that the proPlayer shape "still rests on the existing
+      TypeScript types only". That stopped being true when the 2021 fixture landed and nobody
+      updated it — a stale absence claim.
+    note: >
+      No scores at all — current roster composition only. `proPlayer.id` is an INTEGER; every
+      consumer that needs a string id (e.g. `NormalizedDraftPick.source_player_id`) must
+      stringify it without reformatting.
 
   FetchLeagueScoreboard:
     status: INTEGRATED   # <-- promoted 2026-09-12: `lib/import-os/collector/fleaflickerMatchupParity.ts`
@@ -452,9 +462,33 @@ endpoints:
       league_id: integer
       season: "integer — accepted; see the 🛑 below, the response SHAPE depends on it"
       draft_number: "integer — documented; `1` is the observed default"
-      external_id_type: "string — documented, NOT probed. Plausibly requests a foreign
-        player-id space (sportradar et al). If it does, it is the cheapest route to cross-
-        provider player identity and is worth a probe before any name-matching is written."
+      external_id_type: "string — PROBED 2026-09-12. One documented enum value: SPORTRADAR.
+        Adds `proPlayer.externalIds` to every player. See `external_ids` below."
+    external_ids: |
+      PROBED 2026-09-12 via scripts/probe.sh against league 206154. Fixtures:
+      fixtures/rosters.NFL.2021.sportradar.json, fixtures/draftBoard.NFL.2019.sportradar.json
+      (both TRIMMED by key-union cover — 88 and 120 key paths, zero lost).
+
+      Sending `external_id_type=SPORTRADAR` adds, on every proPlayer:
+        externalIds: Array<{ id: string }>     # a Sportradar UUID
+
+      🛑 THE LIVE RESPONSE OMITS `type`. The Swagger schema declares ExternalIdMapping as
+      `{ type, id }`; every entry observed carries ONLY `id` — 761/761 rostered players and
+      80/80 draft picks. A reader that filters on `type === 'SPORTRADAR'` matches NOTHING.
+      Measured, not guessed: the first join attempt reported 0 of 761 until the filter was
+      dropped. Read `id`; the request already chose the type.
+
+      Present on FetchLeagueRosters (players) AND FetchLeagueDraftBoard (pick cells and the
+      board's roster lineups). ABSENT unless requested: the committed fixtures probed
+      without the parameter carry no `externalIds` key at all.
+
+      ⚡ MEASURED JOIN, read-only against production, exact id, no name matching:
+      Player.provider_ids.sportradar (bare UUIDs, 10,395 rows) resolves 693 of 761 distinct
+      Fleaflicker ids (91.1%). Normalized-name agreement on matches: 693/694, the one
+      "mismatch" being the same player (Hollywood Brown / Marquise Brown). 693 ids returned
+      694 rows because one Sportradar id sits on two Player rows — Ronald Jones RB, a known
+      NFL duplicate group that must not be merged. The 68 unmatched skew defensive and K
+      (S 15, EDR 12, CB 8, LB 8, K 8, IL 5; offense 12).
     note: >
       🛑 THIS ENDPOINT RETURNS TWO STRUCTURALLY DIFFERENT ENVELOPES, AND WHICH ONE YOU GET
       DEPENDS ON THE SEASON. Measured 2026-09-12 against league 206154, one league, one

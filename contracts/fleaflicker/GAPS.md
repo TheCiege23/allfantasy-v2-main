@@ -197,7 +197,22 @@ contract.
 
 ### `G-11` — does `external_id_type` return foreign player ids?
 
-**Status:** `UNVERIFIED` — documented, never sent.
+**Status:** `RESOLVED 2026-09-12` — **yes.** Probed via `scripts/probe.sh`; fixtures
+`rosters.NFL.2021.sportradar.json` and `draftBoard.NFL.2019.sportradar.json`. Full shape
+and join measurement in `ENDPOINTS.yaml` → `FetchLeagueDraftBoard.external_ids`.
+
+- **One accepted value:** `SPORTRADAR` (vendor Swagger enum).
+- **Where it lands:** `proPlayer.externalIds`, on every player in `FetchLeagueRosters`
+  and every pick in `FetchLeagueDraftBoard`. Only present when requested.
+- 🛑 **Entries carry `id` ONLY — no `type`** — contradicting the documented
+  `ExternalIdMapping { type, id }`. Filtering on `type` matches zero. Not hypothetical:
+  the first join did exactly that and reported 0 of 761.
+- ⚡ **91.1% exact-id join:** 693 of 761 distinct ids resolve to
+  `Player.provider_ids.sportradar` in production; name agreement 693/694 (the one
+  exception is a nickname for the same player). Unmatched skew defensive and K.
+
+The bridge the paragraph below asked about is real, and it is a query parameter, not a
+fuzzy-matching project. Nothing reads it yet.
 
 `FetchLeagueDraftBoard` and `FetchLeagueRosters` both document an
 `external_id_type` parameter. It was not probed.
@@ -210,5 +225,8 @@ id, that bridge is a query parameter rather than a fuzzy-matching project — an
 this repo already records what fuzzy name matching costs (two implementations of
 one normalizer disagreeing on 7.2% of rows).
 
-**What would resolve it:** one probe of an accepted value. ⚠ The accepted VALUES
-are not in the docs page we read; that is the first unknown, not the behaviour.
+**What resolved it (kept for the record):** one probe of an accepted value — and the
+two unknowns turned out to need different sources. The accepted VALUE (`SPORTRADAR`) was
+in the vendor's Swagger enum after all, on a second read. The BEHAVIOUR could not come
+from the docs at all: they say `{ type, id }`, and the wire says `{ id }`. Reading the
+schema would have produced a reader that matches nothing. Only the probe could say so.
