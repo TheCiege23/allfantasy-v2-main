@@ -102,23 +102,35 @@ test.describe("@db @mobile authenticated phone contract", () => {
   })
 
   /*
-   * ⚠ WARM BOTH ROUTES BEFORE ANY TEST IS ON THE CLOCK. `e2e/global-setup.ts`
-   * warms 33 public routes and neither of these, so the first test to reach each
-   * one paid a cold dev compile inside its own timeout: on PR #754 the first
-   * `/core/trades` attempt hit 240s and the retry passed in ~30s. That is one of
-   * two retries spent on every run, and a flake a slower runner turns red.
+   * 🛑 THIS HOOK WORKS, BUT NOT BY COMPILING ANYTHING. IT ABSORBS A DEV-SERVER
+   * RESTART THAT OTHERWISE LANDS INSIDE THE FIRST TEST. Do not remove it.
    *
-   * Signed-OUT on purpose, and it still compiles the real page. Middleware does
-   * not gate either route (`requiresSessionAuth` covers neither); the redirect to
-   * `/login` is thrown DURING RENDER — `app/core/[[...screen]]/page.tsx` after
-   * `getServerSession`, `app/commissioner-os/layout.tsx` likewise — and the
-   * catch-all imports `TradeCenter` statically. `redirect: "manual"` stops at that
-   * 307: `/login` is already warm.
+   * `next dev` (14.2) checks the heap in the `finally` of EVERY request and exits
+   * to be respawned once `used_heap_size > 0.8 * heap_size_limit`, logging
+   * "Server is approaching the used memory threshold, restarting...". This lane
+   * sets no NODE_OPTIONS, so the wrapper's `--max-old-space-size=4096` applies,
+   * and global-setup's 33 route compiles leave the heap past that line — so the
+   * FIRST request after global-setup trips it. Without this hook, that request is
+   * the test's own login, and the navigation issued into the respawn window
+   * hangs silently until the 240s test timeout. Measured over 55 mobile-auth jobs
+   * up to 2026-09-12, PR #754's run 34717571125 among them:
    *
-   * Here rather than in global-setup because global-setup runs for EVERY lane,
-   * and the `/core` catch-all is 132 static imports that no other mobile lane
-   * visits. Like global-setup, it never gates the run: a failed warm-up only
-   * means the test pays the compile, which is today's behaviour.
+   *   no hook, no restart                          11 jobs   0 timeouts
+   *   no hook, restart at/before test start         8 jobs   0 timeouts
+   *   no hook, restart 3–26s into the tests        32 jobs  25 timeouts
+   *   this hook (restart fires inside it, 0–3s)     4 jobs   0 timeouts
+   *
+   * Every one of the 25 timeouts followed a restart. It is NOT a cold compile:
+   * global-setup's `/dashboard` hop is redirected to `/core` and already compiles
+   * the catch-all, and this hook sees `/core/trades 200 ~1s`, not a 307. The warm
+   * fetches' status is irrelevant — their job is to be the request that trips the
+   * restart, which is why `/commissioner-os` often logs `skipped (TypeError)`.
+   *
+   * ⚠ IT IS A RACE, NOT A FIX. One hooked job (34722623272) still flaked with
+   * `ECONNREFUSED` in loginAs: the test began before the respawn finished. The
+   * lever the core lane already pulled for the same restarts is
+   * `NODE_OPTIONS: --max-old-space-size=8192` in `.github/workflows/playwright.yml`.
+   * Why a navigation into the window HANGS rather than erroring is not measured.
    */
   test.beforeAll(async ({}, testInfo) => {
     const WARM_TIMEOUT_MS = 180_000
