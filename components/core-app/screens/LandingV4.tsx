@@ -6,6 +6,7 @@ import {
   type LandingLang,
 } from '@/lib/i18n/landing-copy'
 import { getPlanPresentations, getMonthlyPriceRange } from '@/lib/monetization/planPresentation'
+import { getLandingConnectPlatforms } from '@/components/core-app/screens/landingConnectPlatforms'
 // af-core.css carries the .af-core token layer (--surface, --line, --accent …).
 // AfCoreShell imports it for every screen inside the shell — but this one renders
 // standalone at `/`, so without this line every `var(--surface)` and `var(--line)`
@@ -45,34 +46,20 @@ import '@/components/core-app/af-landing.css'
 /*
  * Platform names are brands, so they are not translated; only the "soon" chip is.
  *
- * ⚠ `state` IS A CLAIM ABOUT PRODUCTION, NOT A ROADMAP. Anything marked `live` here is
- * being promised to a stranger who has not signed up yet, so it has to be true of the
- * database, not of the code that exists.
+ * ⚠ `state` IS A CLAIM ABOUT PRODUCTION, NOT A ROADMAP. Anything marked `live` here is being
+ * promised to a stranger who has not signed up yet, so it has to be true of what a real user can
+ * import today, not of the code that exists.
  *
- * Yahoo was marked `live` and has NEVER imported a league. Measured 2026-08-29:
+ * 🛑 SO THIS NO LONGER KEEPS ITS OWN LIST. It reads `lib/league-import/provider-ui-config.ts`, the
+ * same flag that decides whether the import screen lets someone in, through
+ * `getLandingConnectPlatforms`. The hardcoded list that stood here said "MFL · Fantrax — soon" for
+ * over two weeks after both went live (2026-08-27), and never listed Fleaflicker at all. Two lists
+ * about one fact drift; one does not.
  *
- *     leagues where platform='yahoo'   0        import_runs provider='yahoo'   0 (ever)
- *     YahooLeague / YahooConnection    0 / 0    league_auths yahoo row         1, oauthToken NULL
- *
- * Sleeper (70 leagues) and ESPN (2 leagues, 2 completed import runs) are genuinely live.
- * ESPN is thin but real; Yahoo is not real at all.
- *
- * ⚠ FLIPPING THIS BACK NEEDS A ROW, NOT A REPAIRED CODE PATH. The check is one query —
- * `select count(*) from import_runs where provider='yahoo'` — and it must be non-zero
- * BEFORE this says `live` again. See the note in lib/i18n/landing-copy.ts for the two
- * rival Yahoo token stores that have to be reconciled first.
- *
- * ⚠ 2026-09-13: Yahoo flipped back to `live` on the owner's instruction BEFORE that count was
- * non-zero — it read 0 that day, read-only — once `YAHOO_REDIRECT_URI` was set and the token stores
- * had been reconciled in code. The first real import is the verification. Re-run the query after it,
- * and flip this back if it stays 0. Kept in step with provider-ui-config.ts, which gates the screen.
+ * The standard for flipping a provider lives beside its flag now, not here. Yahoo's entry records
+ * that it went live on 2026-09-13 before its first real import, and gives the query to re-check.
  */
-const PLATFORMS = [
-  { name: 'Sleeper', state: 'live' as const },
-  { name: 'ESPN', state: 'live' as const },
-  { name: 'Yahoo', state: 'live' as const },
-  { name: 'MFL · Fantrax', state: 'soon' as const },
-]
+const PLATFORMS = getLandingConnectPlatforms()
 
 /*
  * The uplift figure in the hero card's summary strip.

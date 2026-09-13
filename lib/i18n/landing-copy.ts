@@ -155,7 +155,7 @@ const EN = (prices: MonthlyPriceRange | null): LandingCopy => ({
     items: [
       {
         q: 'Can I import my Sleeper and ESPN leagues?',
-        a: 'Yes — read-only. We copy your real rosters, matchups and scoring, and never change anything on the platform. MFL and Fantrax are not connected yet.',
+        a: 'Yes — read-only. We copy your real rosters, matchups and scoring, and never change anything on the platform.',
       },
       {
         q: 'How does the cross-league player finder work?',
@@ -282,7 +282,7 @@ const ES = (prices: MonthlyPriceRange | null): LandingCopy => ({
     items: [
       {
         q: '¿Puedo importar mis ligas de Sleeper y ESPN?',
-        a: 'Sí — en modo solo lectura. Copiamos tus rosters, enfrentamientos y reglas de puntuación reales, y nunca cambiamos nada en la plataforma original. MFL y Fantrax todavía no están conectados.',
+        a: 'Sí — en modo solo lectura. Copiamos tus rosters, enfrentamientos y reglas de puntuación reales, y nunca cambiamos nada en la plataforma original.',
       },
       {
         q: '¿Cómo funciona el buscador de jugadores entre ligas?',
