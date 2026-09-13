@@ -26,9 +26,18 @@ const state: {
   scheduleBound: number | null
   /** Set to make the bound lookup throw, to prove the writer fails OPEN rather than stalling. */
   scheduleThrows: boolean
+  /**
+   * Seasons present ONLY as IDP per-game rows (`rolling_insights_pbp`). A read that excludes that
+   * source cannot see them; a read that does not, can.
+   */
+  idpOnlySeasons: number[]
+  /** Every args object the writer passed to fantasyStatLine reads, to pin the source filter. */
+  statLineWheres: any[]
 } = {
   seasons: [],
   linesBySeason: {},
+  idpOnlySeasons: [],
+  statLineWheres: [],
   scheduleBound: null,
   scheduleThrows: false,
 }
@@ -37,16 +46,22 @@ vi.mock('@/lib/prisma', () => ({
   prisma: {
     fantasyStatLine: {
       findFirst: vi.fn(async (args: any) => {
+        state.statLineWheres.push(args?.where)
         const lt = args?.where?.season?.lt
+        const excludesIdp = args?.where?.source?.not === 'rolling_insights_pbp'
+        const all = excludesIdp ? state.seasons : [...state.seasons, ...state.idpOnlySeasons]
         const pool = lt != null
-          ? state.seasons.filter((s) => s < Number(lt))
-          : state.seasons
+          ? all.filter((s) => s < Number(lt))
+          : all
         if (pool.length === 0) return null
         return { season: String(Math.max(...pool)) }
       }),
       findMany: vi.fn(async (args: any) => {
+        state.statLineWheres.push(args?.where)
         const season = Number(args?.where?.season)
-        return state.linesBySeason[season] ?? []
+        const lines = (state.linesBySeason[season] ?? []) as Array<{ source?: string }>
+        const excluded = args?.where?.source?.not
+        return excluded ? lines.filter((l) => l.source !== excluded) : lines
       }),
     },
     playerGameStat: { findMany: vi.fn(async () => []) },
@@ -88,6 +103,8 @@ beforeEach(() => {
   state.linesBySeason = {}
   state.scheduleBound = null
   state.scheduleThrows = false
+  state.idpOnlySeasons = []
+  state.statLineWheres = []
 })
 
 describe('B — the source season rolls back when the newest was never played', () => {
@@ -319,5 +336,205 @@ describe('D — targetSeason is clamped to a season the sport actually plays', (
     expect(r.targetSeasonClamp).toBeNull()
     expect(r.written).toBeGreaterThan(0)
     expect(r.errors.some((e) => e.includes('target-season bound lookup failed'))).toBe(true)
+  })
+})
+
+// ── E: THE SEASON BEING PLAYED ──────────────────────────────────────────────────────────────────
+
+/** A real season aggregate with `gp` games played. */
+const linePlayed = (playerId: string, gp: number) => ({
+  playerId,
+  source: 'rolling_insights',
+  stats: {
+    position: 'WR',
+    riPlayerName: playerId,
+    regular_season: { games_played: gp, DK_fantasy_points_per_game: 12.5 },
+  },
+})
+
+/** An IDP per-game row as `persistIdpLines` writes it: no season aggregate at all. */
+const idpRow = (playerId: string) => ({
+  playerId,
+  source: 'rolling_insights_pbp',
+  stats: { gameId: '20260829-3-28', position: 'CB', playerName: playerId, idp_solo_tackle: 2 },
+})
+
+async function upsertedSeasonRows() {
+  const { prisma } = (await import('@/lib/prisma')) as any
+  return (prisma.aFProjectionSnapshot.upsert as any).mock.calls
+    .map((c: any[]) => c[0].create)
+    .filter((d: any) => d.week === null)
+}
+
+describe('E — IDP per-game rows are not season lines', () => {
+  beforeEach(async () => {
+    const { prisma } = (await import('@/lib/prisma')) as any
+    ;(prisma.aFProjectionSnapshot.upsert as any).mockClear()
+  })
+
+  /*
+   * 🛑 THE PRODUCTION STALL, 2026-09-11 TO 09-13. `persistIdpLines` writes per-game IDP rows into
+   * `fantasy_stat_lines` under `rolling_insights_pbp`. The writer read every row for the season, so
+   * each of 1,197 IDP rows was parsed as a season aggregate and refused `no_games_played` — which is
+   * exactly the refusal count, and 1,197 + 124 real lines is exactly the 1,321 rows read.
+   */
+  it('reads no IDP per-game row as a season line, anywhere', async () => {
+    state.seasons = [2025, 2026]
+    state.linesBySeason[2026] = [linePlayed('real', 17), idpRow('name:A.Collins'), idpRow('4362628')]
+    state.linesBySeason[2025] = []
+
+    const r = await writeAfProjectionSnapshots({ sport: 'NFL', sourceSeason: 2026 })
+
+    expect(r.refusalsByReason.no_games_played ?? 0).toBe(0)
+    expect(r.statLinesRead).toBe(1)
+    expect(r.written).toBe(1)
+    for (const where of state.statLineWheres) expect(where.source).toEqual({ not: 'rolling_insights_pbp' })
+  })
+
+  it('does not let a season that holds only IDP rows become the source season', async () => {
+    state.seasons = [2025]
+    state.idpOnlySeasons = [2026]
+    state.linesBySeason[2025] = [linePlayed('p1', 17)]
+
+    const r = await writeAfProjectionSnapshots({ sport: 'NFL' })
+
+    expect(r.sourceSeason).toBe(2025)
+    expect(r.written).toBe(1)
+  })
+})
+
+describe('E — while a season is being played, a player is projected from last season until he has 3 games', () => {
+  beforeEach(async () => {
+    const { prisma } = (await import('@/lib/prisma')) as any
+    ;(prisma.aFProjectionSnapshot.upsert as any).mockClear()
+  })
+
+  /*
+   * 🛑 THE SECOND STALL THIS PREVENTS. After week 1 almost every player has ONE game, refuses
+   * `insufficient_sample`, and the season-level fallback (which needs no-games refusals) never
+   * fires — so the writer would have written nothing until week 2 ended, and then projected from
+   * two games. The per-player basis keeps every player on a full prior season until his current
+   * sample is worth using.
+   */
+  it('reproduces production on 2026-09-13 and writes every player', async () => {
+    state.seasons = [2025, 2026]
+    state.linesBySeason[2026] = [
+      ...Array.from({ length: 4 }, (_, i) => linePlayed(`tnf${i}`, 1)),
+      ...Array.from({ length: 30 }, (_, i) => idpRow(`idp${i}`)),
+    ]
+    state.linesBySeason[2025] = Array.from({ length: 10 }, (_, i) => linePlayed(`tnf${i}`, 17)).map((l, i) =>
+      i < 4 ? l : { ...l, playerId: `vet${i}` },
+    )
+
+    const r = await writeAfProjectionSnapshots({ sport: 'NFL' })
+
+    expect(r.written).toBe(10)
+    expect(r.refused).toBe(0)
+    expect(r.sourceSeason).toBe(2026)
+    expect(r.sourceSeasonFallback).toBeNull()
+    expect(r.basisSeasonCounts).toEqual({ '2025': 10 })
+    expect(r.priorSeasonBasis).toMatchObject({ season: 2025, minCurrentSeasonGames: 3, players: 10 })
+    const rows = await upsertedSeasonRows()
+    expect(rows.every((d: any) => d.season === 2026 && d.adjustmentFactors.sourceSeason === 2025)).toBe(true)
+  })
+
+  it('🛑 the boundary is 3: two games stays on last season, three games moves to this one', async () => {
+    state.seasons = [2025, 2026]
+    state.linesBySeason[2026] = [linePlayed('two', 2), linePlayed('three', 3)]
+    state.linesBySeason[2025] = [linePlayed('two', 17), linePlayed('three', 17)]
+
+    const r = await writeAfProjectionSnapshots({ sport: 'NFL' })
+
+    const rows = await upsertedSeasonRows()
+    const basisOf = (id: string) => rows.find((d: any) => d.playerId === id)?.adjustmentFactors.sourceSeason
+    expect(basisOf('two')).toBe(2025)
+    expect(basisOf('three')).toBe(2026)
+    expect(r.basisSeasonCounts).toEqual({ '2025': 1, '2026': 1 })
+  })
+
+  it('includes a player who has no line this season yet from last season', async () => {
+    state.seasons = [2025, 2026]
+    state.linesBySeason[2026] = [linePlayed('played', 4)]
+    state.linesBySeason[2025] = [linePlayed('played', 17), linePlayed('not-yet', 17)]
+
+    const r = await writeAfProjectionSnapshots({ sport: 'NFL' })
+
+    const rows = await upsertedSeasonRows()
+    expect(rows.map((d: any) => d.playerId).sort()).toEqual(['not-yet', 'played'])
+    expect(r.written).toBe(2)
+  })
+
+  it('a rookie with no prior season is judged on this season alone', async () => {
+    state.seasons = [2025, 2026]
+    state.linesBySeason[2026] = [linePlayed('rookie-one', 1), linePlayed('rookie-two', 2), linePlayed('vet', 4)]
+    state.linesBySeason[2025] = [linePlayed('vet', 17)]
+
+    const r = await writeAfProjectionSnapshots({ sport: 'NFL' })
+
+    expect(r.refusalsByReason).toEqual({ insufficient_sample: 1 })
+    const rows = await upsertedSeasonRows()
+    expect(rows.find((d: any) => d.playerId === 'rookie-two')?.adjustmentFactors.sourceSeason).toBe(2026)
+  })
+
+  it('never blends an explicitly requested season', async () => {
+    state.seasons = [2025, 2026]
+    state.linesBySeason[2026] = [linePlayed('p1', 1)]
+    state.linesBySeason[2025] = [linePlayed('p1', 17), linePlayed('p2', 17)]
+
+    const r = await writeAfProjectionSnapshots({ sport: 'NFL', sourceSeason: 2026 })
+
+    expect(r.written).toBe(0)
+    expect(r.refusalsByReason).toEqual({ insufficient_sample: 1 })
+    expect(r.priorSeasonBasis).toBeNull()
+  })
+
+  it('leaves a true preseason to the season-level fallback, which is not a blend', async () => {
+    // No player has a game this season, so nothing is "being played" — the existing rollback owns it.
+    state.seasons = [2025, 2026]
+    state.linesBySeason[2026] = Array.from({ length: 5 }, (_, i) => linePlayed(`p${i}`, 0))
+    state.linesBySeason[2025] = Array.from({ length: 5 }, (_, i) => linePlayed(`p${i}`, 17))
+
+    const r = await writeAfProjectionSnapshots({ sport: 'NFL' })
+
+    expect(r.sourceSeason).toBe(2025)
+    expect(r.sourceSeasonFallback).not.toBeNull()
+    expect(r.priorSeasonBasis).toBeNull()
+  })
+})
+
+describe('E — a blended player\'s weekly evidence comes from his basis season', () => {
+  /*
+   * A prior-season projection weighted by this season's single game would be neither one thing nor
+   * the other. The double returns weekly games PER SEASON, so reading the wrong season's games
+   * changes how many weeks the projection says it used.
+   */
+  it('uses last season\'s weeks for a player on last season\'s basis', async () => {
+    const { prisma } = (await import('@/lib/prisma')) as any
+    ;(prisma.aFProjectionSnapshot.upsert as any).mockClear()
+    ;(prisma.playerIdentityMap.findMany as any).mockImplementation(async () => [{ id: 'p1', sleeperId: 's1' }])
+    ;(prisma.playerGameStat.findMany as any).mockImplementation(async (args: any) => {
+      const weeks = args?.where?.season === 2025 ? [1, 2, 3, 4, 5, 6] : [1]
+      return weeks.map((w) => ({
+        playerId: 's1',
+        weekOrRound: w,
+        opponent: 'KC',
+        normalizedStatMap: { pts_ppr: 11, pts_half_ppr: 10, pts_std: 9, rec: 4, rec_yd: 60 },
+      }))
+    })
+
+    state.seasons = [2025, 2026]
+    state.linesBySeason[2026] = [linePlayed('p1', 1)]
+    state.linesBySeason[2025] = [linePlayed('p1', 17)]
+
+    try {
+      await writeAfProjectionSnapshots({ sport: 'NFL' })
+      const rows = await upsertedSeasonRows()
+      const row = rows.find((d: any) => d.playerId === 'p1')
+      expect(row?.adjustmentFactors.sourceSeason).toBe(2025)
+      expect(row?.adjustmentFactors.weeklyWeeksUsed).toBe(6)
+    } finally {
+      ;(prisma.playerIdentityMap.findMany as any).mockImplementation(async () => [])
+      ;(prisma.playerGameStat.findMany as any).mockImplementation(async () => [])
+    }
   })
 })

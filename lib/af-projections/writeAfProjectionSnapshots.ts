@@ -29,6 +29,7 @@ import {
 import { extractSeasonAggregate, perGameRates, toWeeklyObservation } from './core'
 import { rosFromPerGame, weeksRemaining } from './restOfSeason'
 import { KICKER_CANONICAL_RULES } from './kickerScoring'
+import { IDP_PBP_SOURCE } from '@/lib/idp/realStatLines'
 import type { ProjectionOutcome, ScoringFormat, WeeklyObservation } from './types'
 
 export interface WriteSnapshotsResult {
@@ -79,6 +80,14 @@ export interface WriteSnapshotsResult {
    * the fallback picked. Null on the normal path, including when a caller passed `targetSeason`.
    */
   targetSeasonClamp: { from: number; to: number; reason: string } | null
+  /** Written season rows by the season their production came from, e.g. `{ "2025": 1480, "2026": 96 }`. */
+  basisSeasonCounts: Record<string, number>
+  /**
+   * Set when the season being played was blended with the prior one, player by player: a player
+   * with fewer than `minCurrentSeasonGames` games this season is projected from `season`.
+   * `players` counts the prior-season lines in the plan. Null when no blend happened.
+   */
+  priorSeasonBasis: { season: number; minCurrentSeasonGames: number; players: number } | null
   errors: string[]
 }
 
@@ -112,6 +121,38 @@ function snapshotKey(playerId: string, season: number, week: number | null, even
 }
 
 /**
+ * 🛑 THE SEASON LINES ARE NOT THE WHOLE TABLE.
+ *
+ * `persistIdpLines` writes per-game IDP rows into `fantasy_stat_lines` under `rolling_insights_pbp`:
+ * keyed by Rolling Insights id or `name:…`, carrying one game's defensive counts and no season
+ * aggregate, preseason games included. Read as season lines, every one refuses
+ * `no_games_played`. Measured 2026-09-11 to 09-13: the NFL run read 1,321 rows, refused 1,197 of
+ * them for no games — the 1,197 IDP rows exactly — and 124 for `insufficient_sample`, and wrote
+ * nothing for three days. The same rows made 2026 look like the newest season with 1,273 players.
+ * Every read of season lines here excludes that source.
+ */
+const SEASON_LINE_SOURCE_FILTER = { not: IDP_PBP_SOURCE }
+
+/**
+ * Games a player needs in the season being played before his projection moves off last season.
+ *
+ * 🛑 WITHOUT THIS THE WRITER STALLS AGAIN AFTER EVERY WEEK 1. Once week 1 is played nearly every
+ * player has ONE game and refuses `insufficient_sample`; the season-level fallback needs
+ * no-games refusals and never fires; nothing is written until week 2 ends, and then projections
+ * rest on two games. So while a season is being played the basis is chosen PER PLAYER: three
+ * games or more uses this season, fewer uses the prior season when he has one. Above the
+ * engine's own two-game floor on purpose — a projection built from two games is not yet better
+ * than a full season.
+ */
+export const MIN_CURRENT_SEASON_GAMES = 3
+
+function gamesPlayedOf(stats: unknown): number {
+  return stats && typeof stats === 'object'
+    ? extractSeasonAggregate(stats as Record<string, unknown>)?.gamesPlayed ?? 0
+    : 0
+}
+
+/**
  * One pass at ONE source season. Exported for tests; production callers use
  * {@link writeAfProjectionSnapshots}, which adds the fallback described there.
  */
@@ -126,7 +167,7 @@ export async function writeAfProjectionSnapshotsForSeason(
 
   // --- resolve the source season ------------------------------------------------------
   const newest = await prisma.fantasyStatLine.findFirst({
-    where: { sport },
+    where: { sport, source: SEASON_LINE_SOURCE_FILTER },
     orderBy: { season: 'desc' },
     select: { season: true },
   })
@@ -141,7 +182,7 @@ export async function writeAfProjectionSnapshotsForSeason(
    * data, rather than each forming its own opinion.
    */
   const older = await prisma.fantasyStatLine.findFirst({
-    where: { sport, season: { lt: String(sourceSeason) } },
+    where: { sport, season: { lt: String(sourceSeason) }, source: SEASON_LINE_SOURCE_FILTER },
     orderBy: { season: 'desc' },
     select: { season: true },
   })
@@ -236,8 +277,41 @@ export async function writeAfProjectionSnapshotsForSeason(
   }
 
   const statLines = await prisma.fantasyStatLine.findMany({
-    where: { sport, season: String(sourceSeason) },
+    where: { sport, season: String(sourceSeason), source: SEASON_LINE_SOURCE_FILTER },
   })
+
+  /*
+   * ── THE PER-PLAYER BASIS, WHILE A SEASON IS BEING PLAYED ────────────────────────────────
+   * "Being played" means at least one player has a game in it. A season with NO games is a
+   * preseason and stays with the season-level rollback in `writeAfProjectionSnapshots`, which
+   * already handles it and is pinned by its own tests. An explicit `sourceSeason` is never
+   * blended: a caller naming a season gets that season.
+   *
+   * The plan covers every player in EITHER season: this season's line when he has enough games
+   * or no prior line, his prior line otherwise, and the prior line alone for a player with no
+   * line this season yet. Both seasons key `fantasy_stat_lines` by canonical id, so the join is
+   * exact.
+   */
+  const priorSeason = older ? Number(older.season) : null
+  const seasonUnderway = statLines.some((l) => gamesPlayedOf(l.stats) >= 1)
+  const blend = opts.sourceSeason == null && priorSeason != null && seasonUnderway
+  const priorLines = blend
+    ? await prisma.fantasyStatLine.findMany({
+        where: { sport, season: String(priorSeason), source: SEASON_LINE_SOURCE_FILTER },
+      })
+    : []
+  const priorByPlayer = new Map(priorLines.map((l) => [l.playerId, l]))
+  const plan: Array<{ line: (typeof statLines)[number]; season: number }> = []
+  const planned = new Set<string>()
+  for (const line of statLines) {
+    const prior = blend && gamesPlayedOf(line.stats) < MIN_CURRENT_SEASON_GAMES ? priorByPlayer.get(line.playerId) : undefined
+    plan.push(prior ? { line: prior, season: priorSeason as number } : { line, season: sourceSeason })
+    planned.add(line.playerId)
+  }
+  for (const line of priorLines) {
+    if (!planned.has(line.playerId)) plan.push({ line, season: priorSeason as number })
+  }
+  const priorPlanned = plan.filter((p) => p.season !== sourceSeason).length
 
   // --- identity bridge ----------------------------------------------------------------
   // fantasyStatLine is keyed by canonical uuid; playerGameStat by Sleeper id. Only ~53% of
@@ -250,22 +324,36 @@ export async function writeAfProjectionSnapshotsForSeason(
     identity.filter((r) => r.sleeperId).map((r) => [r.id, r.sleeperId as string]),
   )
 
-  const games = await prisma.playerGameStat.findMany({
-    where: { sportType: sport, season: sourceSeason },
-    select: { playerId: true, weekOrRound: true, normalizedStatMap: true, opponent: true },
-  })
-  const obsBySleeper = new Map<string, WeeklyObservation[]>()
-  const rawBySleeper = new Map<string, WeeklyRawStats[]>()
-  for (const g of games) {
-    const obs = toWeeklyObservation(g.weekOrRound, g.normalizedStatMap)
-    if (obs) obsBySleeper.set(g.playerId, [...(obsBySleeper.get(g.playerId) ?? []), obs])
-    const statMap = g.normalizedStatMap as Record<string, unknown> | null
-    if (statMap && typeof statMap === 'object') {
-      rawBySleeper.set(g.playerId, [
-        ...(rawBySleeper.get(g.playerId) ?? []),
-        { week: g.weekOrRound, statMap },
-      ])
+  const loadGames = (season: number) =>
+    prisma.playerGameStat.findMany({
+      where: { sportType: sport, season },
+      select: { playerId: true, weekOrRound: true, normalizedStatMap: true, opponent: true },
+    })
+  const games = await loadGames(sourceSeason)
+  /*
+   * A player's weekly evidence comes from the SAME season as his basis line. A prior-season
+   * projection weighted by this season's single game would be neither one thing nor the other.
+   */
+  const gamesBySeason = new Map<number, typeof games>([[sourceSeason, games]])
+  if (blend && priorPlanned > 0) gamesBySeason.set(priorSeason as number, await loadGames(priorSeason as number))
+  const obsBySeason = new Map<number, Map<string, WeeklyObservation[]>>()
+  const rawBySeason = new Map<number, Map<string, WeeklyRawStats[]>>()
+  for (const [season, seasonGames] of gamesBySeason) {
+    const obsBySleeper = new Map<string, WeeklyObservation[]>()
+    const rawBySleeper = new Map<string, WeeklyRawStats[]>()
+    for (const g of seasonGames) {
+      const obs = toWeeklyObservation(g.weekOrRound, g.normalizedStatMap)
+      if (obs) obsBySleeper.set(g.playerId, [...(obsBySleeper.get(g.playerId) ?? []), obs])
+      const statMap = g.normalizedStatMap as Record<string, unknown> | null
+      if (statMap && typeof statMap === 'object') {
+        rawBySleeper.set(g.playerId, [
+          ...(rawBySleeper.get(g.playerId) ?? []),
+          { week: g.weekOrRound, statMap },
+        ])
+      }
     }
+    obsBySeason.set(season, obsBySleeper)
+    rawBySeason.set(season, rawBySleeper)
   }
 
   // --- depth-chart role, indexed by player name --------------------------------------
@@ -344,7 +432,9 @@ export async function writeAfProjectionSnapshotsForSeason(
   // projection rows the forward look fetched. The season baseline never carries a matchup
   // adjustment — it is not a week-specific forecast.
   const ptsKey = `pts_${scoringFormat}`
+  const historyBySeason = new Map<number, Map<string, Array<{ opponent: string; points: number }>>>()
   const historyBySleeper = new Map<string, Array<{ opponent: string; points: number }>>()
+  historyBySeason.set(sourceSeason, historyBySleeper)
   /** `${opponent}|${position}` -> weekOrRound -> points that position scored on that defense. */
   const allowedByDefensePos = new Map<string, Map<number, number>>()
   const leagueAvgAllowedByPos = new Map<string, number>()
@@ -378,6 +468,18 @@ export async function writeAfProjectionSnapshotsForSeason(
     for (const [pos, s] of sums) {
       if (s.games > 0) leagueAvgAllowedByPos.set(pos, s.total / s.games)
     }
+    for (const [season, seasonGames] of gamesBySeason) {
+      if (season === sourceSeason) continue
+      const byPlayer = new Map<string, Array<{ opponent: string; points: number }>>()
+      for (const g of seasonGames) {
+        const m = g.normalizedStatMap as Record<string, unknown> | null
+        const raw = m && typeof m === 'object' ? m[ptsKey] : null
+        const points = typeof raw === 'number' && Number.isFinite(raw) ? raw : null
+        if (points == null || !g.opponent) continue
+        byPlayer.set(g.playerId, [...(byPlayer.get(g.playerId) ?? []), { opponent: g.opponent, points }])
+      }
+      historyBySeason.set(season, byPlayer)
+    }
   }
 
   const result: WriteSnapshotsResult = {
@@ -386,7 +488,7 @@ export async function writeAfProjectionSnapshotsForSeason(
     sourceSeason,
     scoringFormat,
     idpPreset,
-    statLinesRead: statLines.length,
+    statLinesRead: statLines.length + priorLines.length,
     written: 0,
     refused: 0,
     refusalsByReason: {},
@@ -403,10 +505,14 @@ export async function writeAfProjectionSnapshotsForSeason(
     olderSeasonAvailable,
     sourceSeasonFallback: null,
     targetSeasonClamp,
+    basisSeasonCounts: {},
+    priorSeasonBasis: blend
+      ? { season: priorSeason as number, minCurrentSeasonGames: MIN_CURRENT_SEASON_GAMES, players: priorPlanned }
+      : null,
     errors,
   }
 
-  for (const line of statLines) {
+  for (const { line, season: lineSeason } of plan) {
     const stats = line.stats as Record<string, unknown> | null
     if (!stats) {
       bumpRefusal(result, 'no_stats_payload')
@@ -432,14 +538,14 @@ export async function writeAfProjectionSnapshotsForSeason(
       // `no_scoring_basis` no matter how many stat lines they have.
       sport,
       aggregate,
-      weekly: sleeperId ? obsBySleeper.get(sleeperId) ?? [] : [],
-      weeklyRaw: sleeperId ? rawBySleeper.get(sleeperId) ?? [] : [],
+      weekly: sleeperId ? obsBySeason.get(lineSeason)?.get(sleeperId) ?? [] : [],
+      weeklyRaw: sleeperId ? rawBySeason.get(lineSeason)?.get(sleeperId) ?? [] : [],
       sleeperProjection: sleeperId ? weekBoard?.[sleeperId]?.stats ?? null : null,
       position,
       depthSlot: slotByName.get(nameKey) ?? null,
       injuryStatus: injuryByName.get(nameKey) ?? null,
       scoringFormat,
-      basisIsPriorSeason: sourceSeason < targetSeason,
+      basisIsPriorSeason: lineSeason < targetSeason,
       idpRules,
       /*
        * The canonical kicker baseline. One stored snapshot serves every league; the league's own
@@ -462,6 +568,7 @@ export async function writeAfProjectionSnapshotsForSeason(
     }
 
     result.basisCounts[outcome.basis] = (result.basisCounts[outcome.basis] ?? 0) + 1
+    result.basisSeasonCounts[String(lineSeason)] = (result.basisSeasonCounts[String(lineSeason)] ?? 0) + 1
     result.confidenceCounts[outcome.confidence.level] =
       (result.confidenceCounts[outcome.confidence.level] ?? 0) + 1
     if (outcome.idp?.usedMeasuredTackleSplit) result.usedTackleSplitEstimate++
@@ -476,7 +583,7 @@ export async function writeAfProjectionSnapshotsForSeason(
       engine: 'af-projections/v1',
       basis: outcome.basis,
       scoringFormat,
-      sourceSeason,
+      sourceSeason: lineSeason,
       idpPreset: outcome.idp ? idpPreset : null,
       weeklyWeeksUsed: outcome.weeklyWeeksUsed,
       confidenceScore: outcome.confidence.score,
@@ -546,14 +653,14 @@ export async function writeAfProjectionSnapshotsForSeason(
       let weeklyOutcome: ProjectionOutcome = outcome
       let opponentFactors: Record<string, unknown> | null = null
       if (opponent && sleeperId) {
-        const history = historyBySleeper.get(sleeperId) ?? []
+        const history = historyBySeason.get(lineSeason)?.get(sleeperId) ?? []
         const vsThisDefense = history.filter((h) => h.opponent === opponent)
         // The player's own typical output — the value the opponent effect is measured against.
         const baselineAverage = history.length
           ? history.reduce((sum, h) => sum + h.points, 0) / history.length
           : outcome.baselineProjection
         const playerVsDefense = computeOpponentAdjustment({
-          gamesVsOpponent: vsThisDefense.map((h) => ({ season: sourceSeason, fantasyPoints: h.points })),
+          gamesVsOpponent: vsThisDefense.map((h) => ({ season: lineSeason, fantasyPoints: h.points })),
           baselineAverage,
           currentSeason: targetSeason,
           opponentLabel: opponent,
@@ -571,7 +678,7 @@ export async function writeAfProjectionSnapshotsForSeason(
           Math.round(Math.max(-4, Math.min(4, playerVsDefense.points + defenseVsPosition.points)) * 100) / 100
         opponentFactors = {
           opponent,
-          evidenceSeason: sourceSeason,
+          evidenceSeason: lineSeason,
           playerVsDefense,
           defenseVsPosition,
           combinedPoints: combined,
@@ -599,7 +706,7 @@ export async function writeAfProjectionSnapshotsForSeason(
               engine: 'af-projections/v1',
               basis: weeklyOutcome.basis,
               scoringFormat,
-              sourceSeason,
+              sourceSeason: lineSeason,
               idpPreset: weeklyOutcome.idp ? idpPreset : null,
               weeklyWeeksUsed: weeklyOutcome.weeklyWeeksUsed,
               confidenceScore: weeklyOutcome.confidence.score,

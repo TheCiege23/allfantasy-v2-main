@@ -216,6 +216,10 @@ async function runOneSport(
               // above: it changes which season the rows are keyed to, and the 1,712 MLB rows
               // stamped 2027 on 2026-09-07 were invisible precisely because nothing said so.
               targetSeasonClamp: result.targetSeasonClamp,
+              // Which season each written projection's production came from, and whether the season
+              // being played was blended player by player — a 2025-based row is a different claim.
+              basisSeasonCounts: result.basisSeasonCounts,
+              priorSeasonBasis: result.priorSeasonBasis,
               refusalRate: Number(v.refusalRate.toFixed(4)),
               refusalsByReason: result.refusalsByReason,
               noSourceSeasonYet: v.noSourceSeasonYet,
@@ -249,6 +253,8 @@ async function runOneSport(
         targetSeason: r.targetSeason,
         /** Non-null when the season was pulled back to one the sport actually has games in. */
         targetSeasonClamp: r.targetSeasonClamp,
+        basisSeasonCounts: r.basisSeasonCounts,
+        priorSeasonBasis: r.priorSeasonBasis,
         scoringFormat: r.scoringFormat,
         idpPreset: r.idpPreset,
         statLinesRead: r.statLinesRead,
