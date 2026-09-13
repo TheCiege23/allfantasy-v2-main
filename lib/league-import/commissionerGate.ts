@@ -13,7 +13,12 @@ import { prisma } from '@/lib/prisma'
 import { getDecryptedAuth } from '@/lib/league-sync-core'
 import type { ImportProvider } from './types'
 import { fetchEspnLeagueForImport, EspnImportLeagueNotFoundError } from './espn/EspnLeagueFetchService'
-import { fetchYahooLeagueForImport, YahooImportLeagueNotFoundError } from './yahoo/YahooLeagueFetchService'
+import {
+  fetchYahooLeagueForImport,
+  YahooApiResponseError,
+  YahooImportLeagueNotFoundError,
+} from './yahoo/YahooLeagueFetchService'
+import { describeYahooRejection } from './yahoo/yahooRejection'
 import { fetchMflUserLeagues, parseMflSourceInput, MflImportLeagueNotFoundError } from './mfl/MflLeagueFetchService'
 import { MEMBERSHIP_VERIFIED_UNDETERMINED_COMMISSIONER } from './attestationProviders'
 
@@ -217,6 +222,27 @@ async function checkYahoo(appUserId: string, sourceLeagueId: string): Promise<Co
       isCommissioner,
     }
   } catch (err) {
+    /*
+     * 🛑 YAHOO'S RAW JSON STILL REACHED THE SCREEN THROUGH HERE AFTER 2c57df34d FIXED IT ELSEWHERE.
+     * The message on a `YahooApiResponseError` IS Yahoo's response body. That commit routed the
+     * import pipeline and discovery through `describeYahooRejection`, but every import route runs
+     * this gate FIRST and returns `gate.reason` to the client. So a refused league never reached the
+     * pipeline's mapping. Measured 2026-09-13 on a pasted league URL, the screen showed
+     * `{ "error": { "xml:lang": "en-us", "yahoo:uri": "\/fantasy\/v2\/league\/nfl.l.1361311…`:
+     * our own API path, and no hint that the fix is an app-permission re-approval.
+     *
+     * Status in, sentence out — the same mapper, so the gate, discovery and the pipeline cannot say
+     * three different things. The body stays out of the log too; the status is the diagnosis.
+     */
+    if (err instanceof YahooApiResponseError) {
+      console.warn('[Yahoo gate] user=%s REJECTED yahoo_status=%d', appUserId.slice(0, 8), err.status)
+      return {
+        ok: false,
+        notFound: err.status === 404,
+        status: err.status,
+        reason: describeYahooRejection(err.status),
+      }
+    }
     return {
       ok: false,
       // Yahoo Commissioner Import Certification phase — shared provider
