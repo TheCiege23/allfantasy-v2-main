@@ -1,7 +1,7 @@
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
-import { resolveCurrentWeek } from './currentWeek'
+import { resolveCurrentWeekFrom } from './currentWeek'
 import { managerArtUrl } from './leagueArt'
 import { latestProjectionWeek, lookupProjections } from './playerProjections'
 import { computeLeagueProjectedPoints, extractScoringSettings } from '@/lib/projections/leagueScoring'
@@ -16,12 +16,13 @@ import { resolveRailMatchupMode } from './railMatchupMode'
  *
  * ── Cost, because this runs inside a shell on EVERY /core page ──────────────
  *
- * Six set-based queries, no matter how many leagues: the current week (from
- * `resolveCurrentWeek`, itself two bounded reads), every WeeklyMatchup row for
- * that week across the caller's platform league ids, every LeagueTeam in those
- * leagues so both sides can be named, then — for the projection lines — the
- * scoring rulebook of the leagues in play, the starters of the rosters in play,
- * and one projection read over the union of those starters.
+ * Six set-based core queries, no matter how many leagues: newest season per
+ * league, schedule rows for those seasons, every LeagueTeam so both sides can be
+ * named, then — for the projection lines — the scoring rulebook of the leagues
+ * in play, starters of the rosters in play, and one projection read over the
+ * union of those starters. A seventh MatchupFact read runs only for leagues with
+ * no WeeklyMatchup cache, preserving older importer coverage without replacing
+ * a live-cache answer.
  *
  * ⚠ THE LAST THREE READ JSON SUBPATHS, NOT WHOLE COLUMNS, AND THAT IS THE WHOLE
  * REASON THEY ARE AFFORDABLE. Measured against production (94 claimed teams, 93
@@ -135,6 +136,10 @@ export type RailStanding = {
    * which one it drew.
    */
   basis: 'points' | 'projected'
+  /** Number of ranking places between this team and the weekly cut position. */
+  placesAboveCut: number
+  /** The score/projection currently defining the cut line. */
+  cutLine: number
   /**
    * The league is an elimination format, so the bottom of this table goes home.
    *
@@ -171,6 +176,10 @@ export type RailMatchup = {
   standing: RailStanding | null
   /** False when the fixture exists but has not been played. */
   scored: boolean
+  /** Newest provider-written row used by this card. Drives the visible freshness label. */
+  freshAt: string | null
+  /** Live cache rows can refresh; history fallback rows are labelled LAST in the UI. */
+  source: 'live_cache' | 'history_fallback'
   season: number
   week: number
 }
@@ -215,9 +224,6 @@ export async function getRailMatchups(
     ),
   )
 
-  const latest = await resolveCurrentWeek(platformIds)
-  if (!latest) return EMPTY
-
   /*
    * ⚠ BOTH ROW TYPES ARE NAMED, BECAUSE `.catch(() => [])` WIDENS TO A UNION.
    * The empty literal infers `never[]`, so `typeof matchups` becomes
@@ -228,10 +234,14 @@ export async function getRailMatchups(
    */
   type MatchupRow = {
     leagueId: string
+    seasonYear: number
+    week: number
     rosterId: string
     matchupId: number | null
     pointsFor: number
     pointsAgainst: number
+    updatedAt: Date
+    source: 'live_cache' | 'history_fallback'
   }
   type TeamRow = {
     externalId: string | null
@@ -243,23 +253,18 @@ export async function getRailMatchups(
     league: { id: string; platform: string | null; platformLeagueId: string | null } | null
   }
 
-  const [matchups, teams]: [MatchupRow[], TeamRow[]] = await Promise.all([
+  type SeasonRow = { leagueId: string; _max: { seasonYear: number | null } }
+
+  /* Resolve the active week PER LEAGUE. A single earliest-unplayed week across
+     the whole portfolio lets one stale provider hold every other card back. */
+  const [seasonRows, teams]: [SeasonRow[], TeamRow[]] = await Promise.all([
     prisma.weeklyMatchup
-      .findMany({
-        where: {
-          leagueId: { in: platformIds },
-          seasonYear: latest.seasonYear,
-          week: latest.week,
-        },
-        select: {
-          leagueId: true,
-          rosterId: true,
-          matchupId: true,
-          pointsFor: true,
-          pointsAgainst: true,
-        },
+      .groupBy({
+        by: ['leagueId'],
+        where: { leagueId: { in: platformIds } },
+        _max: { seasonYear: true },
       })
-      .catch((): MatchupRow[] => []),
+      .catch((): SeasonRow[] => []),
     prisma.leagueTeam
       .findMany({
         where: { league: { platformLeagueId: { in: platformIds } } },
@@ -277,6 +282,128 @@ export async function getRailMatchups(
       })
       .catch((): TeamRow[] => []),
   ])
+
+  const seasonByLeague = new Map(
+    seasonRows.flatMap((row) => row._max.seasonYear == null ? [] : [[row.leagueId, row._max.seasonYear] as const]),
+  )
+  const seasons = [...new Set(seasonByLeague.values())]
+  const seasonCandidates: MatchupRow[] = await prisma.weeklyMatchup
+    .findMany({
+      where: { leagueId: { in: platformIds }, seasonYear: { in: seasons } },
+      select: {
+        leagueId: true,
+        seasonYear: true,
+        week: true,
+        rosterId: true,
+        matchupId: true,
+        pointsFor: true,
+        pointsAgainst: true,
+        updatedAt: true,
+      },
+    })
+    .then((rows) => rows.map((row) => ({ ...row, source: 'live_cache' as const })))
+    .catch((): MatchupRow[] => [])
+
+  const rowsByCandidateLeague = new Map<string, MatchupRow[]>()
+  for (const row of seasonCandidates) {
+    if (seasonByLeague.get(row.leagueId) !== row.seasonYear) continue
+    const list = rowsByCandidateLeague.get(row.leagueId)
+    if (list) list.push(row)
+    else rowsByCandidateLeague.set(row.leagueId, [row])
+  }
+
+  const currentByLeague = new Map<string, { seasonYear: number; week: number }>()
+  for (const [leagueId, rows] of rowsByCandidateLeague) {
+    const current = resolveCurrentWeekFrom(rows)
+    if (current) currentByLeague.set(leagueId, { seasonYear: current.season, week: current.week })
+  }
+  let matchups = seasonCandidates.filter((row) => {
+    const current = currentByLeague.get(row.leagueId)
+    return current?.seasonYear === row.seasonYear && current.week === row.week
+  })
+
+  /* Some importers historically materialized their schedule in MatchupFact
+     before WeeklyMatchup parity existed. Use that canonical history only when
+     the live cache has no row at all, so those leagues get their real opponent
+     and score instead of a generic missing-schedule sentence. */
+  const missingLeagues = leagues.filter((league) =>
+    league.platformLeagueId && !currentByLeague.has(league.platformLeagueId),
+  )
+  if (missingLeagues.length > 0) {
+    type FactRow = {
+      matchupId: string
+      leagueId: string
+      weekOrPeriod: number
+      teamA: string
+      teamB: string
+      scoreA: number
+      scoreB: number
+      season: number | null
+      createdAt: Date
+    }
+    const facts: FactRow[] = await prisma.matchupFact.findMany({
+      where: { leagueId: { in: missingLeagues.map((league) => league.id) } },
+      select: {
+        matchupId: true,
+        leagueId: true,
+        weekOrPeriod: true,
+        teamA: true,
+        teamB: true,
+        scoreA: true,
+        scoreB: true,
+        season: true,
+        createdAt: true,
+      },
+    }).catch((): FactRow[] => [])
+    const factRowsByLeague = new Map<string, FactRow[]>()
+    for (const fact of facts) {
+      const list = factRowsByLeague.get(fact.leagueId)
+      if (list) list.push(fact)
+      else factRowsByLeague.set(fact.leagueId, [fact])
+    }
+    const missingById = new Map(missingLeagues.map((league) => [league.id, league]))
+    const fallbackRows: MatchupRow[] = []
+    for (const [dbLeagueId, leagueFacts] of factRowsByLeague) {
+      const league = missingById.get(dbLeagueId)
+      if (!league?.platformLeagueId) continue
+      const inferredSeason = Math.max(...leagueFacts.map((fact) => fact.season ?? 0))
+      const current = resolveCurrentWeekFrom(leagueFacts.map((fact) => ({
+        seasonYear: fact.season ?? inferredSeason,
+        week: fact.weekOrPeriod,
+        pointsFor: fact.scoreA,
+        pointsAgainst: fact.scoreB,
+      })))
+      if (!current) continue
+      currentByLeague.set(league.platformLeagueId, { seasonYear: current.season, week: current.week })
+      leagueFacts
+        .filter((fact) => (fact.season ?? inferredSeason) === current.season && fact.weekOrPeriod === current.week)
+        .forEach((fact, index) => {
+          const common = {
+            leagueId: league.platformLeagueId!,
+            seasonYear: current.season,
+            week: current.week,
+            matchupId: index + 1,
+            updatedAt: fact.createdAt,
+            source: 'history_fallback' as const,
+          }
+          fallbackRows.push({ ...common, rosterId: fact.teamA, pointsFor: fact.scoreA, pointsAgainst: fact.scoreB })
+          fallbackRows.push({ ...common, rosterId: fact.teamB, pointsFor: fact.scoreB, pointsAgainst: fact.scoreA })
+        })
+    }
+    matchups = [...matchups, ...fallbackRows]
+  }
+
+  const resolved = [...currentByLeague.values()]
+  if (resolved.length === 0) return EMPTY
+  const latestSeason = Math.max(...resolved.map((row) => row.seasonYear))
+  const weeksInLatest = resolved.filter((row) => row.seasonYear === latestSeason).map((row) => row.week)
+  const weekCounts = new Map<number, number>()
+  for (const week of weeksInLatest) weekCounts.set(week, (weekCounts.get(week) ?? 0) + 1)
+  const projectionWeek = [...weekCounts.entries()].sort((a, b) => b[1] - a[1] || a[0] - b[0])[0]?.[0] ?? 1
+  const sharedWeek = new Set(resolved.map((row) => `${row.seasonYear}:${row.week}`)).size === 1
+    ? resolved[0]!.week
+    : null
+  const latest = { seasonYear: latestSeason, week: projectionWeek }
 
   type TeamMeta = {
     leagueId: string
@@ -405,7 +532,7 @@ export async function getRailMatchups(
   }
 
   if (fixtures.length === 0) {
-    return { byLeague: {}, season: latest.seasonYear, week: latest.week, projectionWeek: null }
+    return { byLeague: {}, season: latest.seasonYear, week: sharedWeek, projectionWeek: null }
   }
 
   const projections = await loadRailProjections({
@@ -453,15 +580,17 @@ export async function getRailMatchups(
           })
         : null,
       scored,
-      season: latest.seasonYear,
-      week: latest.week,
+      freshAt: row.updatedAt?.toISOString?.() ?? null,
+      source: row.source,
+      season: row.seasonYear,
+      week: row.week,
     }
   }
 
   return {
     byLeague,
     season: latest.seasonYear,
-    week: latest.week,
+    week: sharedWeek,
     projectionWeek: projections.projectionWeek,
   }
 }
@@ -740,6 +869,8 @@ function standingIn(args: {
     outOf: valued.length,
     overCut: isLowest ? null : Math.round((yours.value - lowest.value) * 100) / 100,
     basis,
+    placesAboveCut: Math.max(0, valued.length - (index + 1)),
+    cutLine: Math.round(lowest.value * 100) / 100,
     elimination: args.elimination,
   }
 }

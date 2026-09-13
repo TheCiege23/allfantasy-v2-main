@@ -83,12 +83,28 @@ type NativeRow = {
   partnerName: string
   status?: string
   /** Leaving the viewer's roster / arriving on it. Labels only — see `assetLabel`. */
-  sent: Array<{ id: string; label: string }>
-  received: Array<{ id: string; label: string }>
+  sent: Array<{ id: string; label: string; sublabel?: string | null }>
+  received: Array<{ id: string; label: string; sublabel?: string | null }>
+  timestamp?: string
+  executedAt?: string
+  proposerName?: string
+  receiverName?: string
+  proposalGrade?: string | null
+  proposalValueGiven?: number | null
+  proposalValueReceived?: number | null
+  currentGrade?: string | null
+  currentValueGiven?: number | null
+  currentValueReceived?: number | null
+  currentPricedAt?: string | null
+  currentPricingComplete?: boolean
+  currentUnresolvedAssets?: string[]
+  decisionAction?: 'accept' | 'counter' | 'decline' | 'review'
+  decisionRecommendation?: string | null
 }
 
 type PanelResponse = {
   activeTrades?: NativeRow[]
+  historyTrades?: NativeRow[]
   pending?: {
     scanned: boolean
     reason: string | null
@@ -168,6 +184,41 @@ function assetLine(a: OfferAsset): string {
   if (a.isPick) return a.name
   const meta = [a.position, a.team].filter(Boolean).join(' · ')
   return meta ? `${a.name} — ${meta}` : a.name
+}
+
+type TimelineFilter = 'all' | 'needs_you' | 'sent' | 'completed' | 'closed'
+
+function statusLabel(status?: string): string {
+  const normalized = String(status ?? '').toLowerCase()
+  if (normalized.startsWith('completed_on_') || normalized === 'processed') return 'Completed'
+  if (normalized === 'rejected') return 'Declined'
+  if (normalized === 'cancelled') return 'Cancelled'
+  if (normalized === 'countered') return 'Countered'
+  if (normalized === 'expired') return 'Expired'
+  if (normalized === 'vetoed') return 'Vetoed'
+  if (normalized === 'reversed') return 'Reversed'
+  if (normalized === 'awaiting_votes') return 'League vote'
+  if (normalized === 'awaiting_commissioner') return 'Commissioner review'
+  if (normalized === 'accepted' || normalized === 'scheduled') return 'Processing'
+  return 'Open'
+}
+
+function isCompleteStatus(status?: string): boolean {
+  const value = String(status ?? '').toLowerCase()
+  return value === 'processed' || value.startsWith('completed_on_') || value === 'reversed'
+}
+
+function isClosedStatus(status?: string): boolean {
+  return ['rejected', 'cancelled', 'countered', 'expired', 'vetoed'].includes(String(status ?? '').toLowerCase())
+}
+
+function valueNet(given?: number | null, received?: number | null): number | null {
+  return given != null && received != null ? received - given : null
+}
+
+function formatTradeValue(value: number | null): string {
+  if (value == null) return '—'
+  return `${value >= 0 ? '+' : '−'}${Math.abs(Math.round(value)).toLocaleString()}`
 }
 
 /**
@@ -263,6 +314,7 @@ export function TradeInbox(props: {
   const [data, setData] = useState<PanelResponse | null>(null)
   const [state, setState] = useState<'idle' | 'loading' | 'failed'>('idle')
   const [countering, setCountering] = useState<{ id: string; state: 'loading' | 'failed' } | null>(null)
+  const [timelineFilter, setTimelineFilter] = useState<TimelineFilter>('all')
 
   const { leagueId, onLoad, onCounter, reloadToken = 0 } = props
 
@@ -376,6 +428,20 @@ export function TradeInbox(props: {
    * and call it a negotiation — `cancel` is the control for that, and it exists.
    */
   const nativeIncoming = nativeOpen.filter((t) => t.direction === 'incoming')
+
+  const timeline = (() => {
+    const rows = [...(data?.activeTrades ?? []), ...(data?.historyTrades ?? [])]
+    const unique = Array.from(new Map(rows.map((row) => [row.id, row])).values())
+    return unique
+      .filter((row) => {
+        if (timelineFilter === 'needs_you') return row.direction === 'incoming' && !isCompleteStatus(row.status) && !isClosedStatus(row.status)
+        if (timelineFilter === 'sent') return row.direction === 'outgoing'
+        if (timelineFilter === 'completed') return isCompleteStatus(row.status)
+        if (timelineFilter === 'closed') return isClosedStatus(row.status)
+        return true
+      })
+      .sort((a, b) => Date.parse(b.executedAt ?? b.timestamp ?? '') - Date.parse(a.executedAt ?? a.timestamp ?? ''))
+  })()
 
   const column = (title: string, rows: Offer[], emptyWhenScanned: string) => (
     <section className="af-tc-inbox-col">
@@ -506,6 +572,71 @@ export function TradeInbox(props: {
           AllFantasy — accept and reject live on the league page.
         </p>
       ) : null}
+
+      <section className="af-tc-timeline" aria-labelledby="trade-timeline-title">
+        <header className="af-tc-timeline-head">
+          <div>
+            <div className="af-label">Unified trade timeline</div>
+            <h2 id="trade-timeline-title">Every offer, outcome and regrade</h2>
+            <p>Proposal-time grades stay beside today&rsquo;s value so you can measure how the decision aged.</p>
+          </div>
+          <div className="af-tc-timeline-filters" aria-label="Filter trade timeline">
+            {([
+              ['all', 'All'],
+              ['needs_you', 'Needs you'],
+              ['sent', 'Sent'],
+              ['completed', 'Completed'],
+              ['closed', 'Declined & expired'],
+            ] as Array<[TimelineFilter, string]>).map(([key, label]) => (
+              <button key={key} type="button" data-on={timelineFilter === key} onClick={() => setTimelineFilter(key)}>
+                {label}
+              </button>
+            ))}
+          </div>
+        </header>
+
+        {state === 'loading' && data == null ? (
+          <p className="af-tc-row-sub">Loading the timeline&hellip;</p>
+        ) : timeline.length === 0 ? (
+          <p className="af-tc-timeline-empty">No trades match this view yet.</p>
+        ) : (
+          <div className="af-tc-timeline-list">
+            {timeline.map((trade) => {
+              const proposedNet = valueNet(trade.proposalValueGiven, trade.proposalValueReceived)
+              const currentNet = valueNet(trade.currentValueGiven, trade.currentValueReceived)
+              const isCompleted = isCompleteStatus(trade.status)
+              const party = trade.proposerName && trade.receiverName
+                ? `${trade.proposerName} ↔ ${trade.receiverName}`
+                : trade.partnerName || 'Trade partner'
+              return (
+                <article key={trade.id} className="af-tc-timeline-row" data-status={isCompleted ? 'complete' : isClosedStatus(trade.status) ? 'closed' : 'open'}>
+                  <div className="af-tc-timeline-marker" aria-hidden />
+                  <div className="af-tc-timeline-main">
+                    <div className="af-tc-timeline-titleline">
+                      <strong>{party}</strong>
+                      <span className="af-tc-timeline-status">{statusLabel(trade.status)}</span>
+                      <time>{whenLabel(trade.executedAt ?? trade.timestamp ?? null) ?? 'date unavailable'}</time>
+                    </div>
+                    <div className="af-tc-timeline-assets">
+                      <div><span>{trade.proposerName ? `${trade.proposerName} sent` : trade.direction === 'complete' ? 'Side A sent' : 'You send'}</span><b>{trade.sent.map((asset) => asset.label).join(', ') || 'Nothing'}</b></div>
+                      <div><span>{trade.receiverName ? `${trade.receiverName} sent` : trade.direction === 'complete' ? 'Side B sent' : 'You receive'}</span><b>{trade.received.map((asset) => asset.label).join(', ') || 'Nothing'}</b></div>
+                    </div>
+                    {trade.decisionRecommendation ? <p className="af-tc-timeline-advice">{trade.decisionRecommendation}</p> : null}
+                    {trade.currentUnresolvedAssets && trade.currentUnresolvedAssets.length > 0 ? (
+                      <p className="af-tc-timeline-gap">Current grade excludes: {trade.currentUnresolvedAssets.join(', ')}</p>
+                    ) : null}
+                  </div>
+                  <div className="af-tc-timeline-grades" aria-label="Trade grade then and now">
+                    <div><span>Then</span><strong>{trade.proposalGrade ?? '—'}</strong><small>{formatTradeValue(proposedNet)}</small></div>
+                    <span className="af-tc-timeline-arrow" aria-hidden>→</span>
+                    <div><span>Now</span><strong>{trade.currentGrade ?? (isCompleted ? '—' : trade.proposalGrade ?? '—')}</strong><small>{formatTradeValue(currentNet ?? proposedNet)}</small></div>
+                  </div>
+                </article>
+              )
+            })}
+          </div>
+        )}
+      </section>
     </div>
   )
 }

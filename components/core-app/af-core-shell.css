@@ -2118,3 +2118,171 @@ html[data-mode='light'] .af-core {
     min-height: 44px;
   }
 }
+
+/* ── Live league command rail ─────────────────────────────────────────
+ * A compact scoreboard rhythm: league identity once, then two manager rows.
+ * These overrides are intentionally last so desktop and the mobile tray share
+ * the same score card without duplicating layout rules inside media blocks.
+ */
+.af-core .af-rail-row-headline {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.af-core .af-rail-row-headline .af-rail-row-name {
+  flex: 1 1 auto;
+}
+
+.af-core .af-rail-live-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 7px;
+  color: var(--good);
+  font: 800 8px/1 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  letter-spacing: .08em;
+}
+
+.af-core .af-rail-live-state::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  box-shadow: 0 0 0 3px color-mix(in srgb, currentColor 18%, transparent);
+}
+
+.af-core .af-rail-swing {
+  flex: none;
+  padding: 2px 5px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--accent);
+  font: 800 8px/1 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  white-space: nowrap;
+}
+
+.af-core .af-rail-row-fresh {
+  flex: none;
+  color: var(--faint);
+  font: 700 7px/1 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.af-core .af-rail-row-fresh[data-stale='true'] {
+  color: var(--warn);
+}
+
+.af-core .af-rail-tile[data-score-changed='true'] {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--line));
+  background: color-mix(in srgb, var(--accent) 7%, transparent);
+}
+
+.af-core .af-rail-row-av {
+  width: 19px;
+  height: 19px;
+}
+
+.af-core .af-rail-row-side {
+  grid-template-columns: 19px minmax(0, 1fr) 44px 44px;
+  min-height: 21px;
+}
+
+.af-core .af-rail-row-labels {
+  grid-template-columns: minmax(0, 1fr) 44px 44px;
+  padding-left: 24px;
+}
+
+.af-core .af-rail-row-rank-space {
+  padding: 2px 5px;
+  border-radius: 999px;
+  background: var(--chip);
+  color: var(--text2);
+  font: 700 8px/1.2 var(--font-archivo, 'Archivo', system-ui, sans-serif);
+  white-space: nowrap;
+}
+
+.af-core .af-rail-row-rank[data-tone='bad'] .af-rail-row-rank-space {
+  background: color-mix(in srgb, var(--bad) 12%, transparent);
+  color: var(--bad);
+}
+
+/* The permanent controls identify both their action and destination when the
+   rail is expanded. Collapsed mode retains the same familiar square marks. */
+.af-core .af-rail-foot-copy {
+  display: none;
+  min-width: 0;
+  text-align: left;
+}
+
+.af-core .af-rail-foot-copy strong,
+.af-core .af-rail-foot-copy small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.af-core .af-rail-foot-copy strong {
+  color: var(--text2);
+  font: 800 10px/1.2 var(--font-archivo, 'Archivo', system-ui, sans-serif);
+}
+
+.af-core .af-rail-foot-copy small {
+  margin-top: 2px;
+  color: var(--faint);
+  font: 600 8px/1.2 var(--font-archivo, 'Archivo', system-ui, sans-serif);
+}
+
+.af-core .af-rail-foot-icon {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 8px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 17px;
+}
+
+@media (min-width: 721px) {
+  .af-core.af-shell:not([data-rail-open='false']) .af-rail-foot .af-rail-tile,
+  .af-core.af-shell[data-rail-open='true'] .af-rail-foot .af-rail-tile {
+    display: flex;
+    justify-content: flex-start;
+    gap: 8px;
+    min-width: 0;
+    padding: 6px 8px;
+  }
+
+  .af-core.af-shell:not([data-rail-open='false']) .af-rail-foot-copy,
+  .af-core.af-shell[data-rail-open='true'] .af-rail-foot-copy {
+    display: block;
+    flex: 1 1 auto;
+  }
+}
+
+@media (max-width: 720px) {
+  .af-core .af-rail-foot .af-rail-tile {
+    flex: 1 1 0;
+  }
+
+  .af-core .af-rail-foot-copy {
+    display: block;
+    flex: 1 1 auto;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .af-core .af-rail-live-state::before {
+    animation: af-rail-live-pulse 1.8s ease-out infinite;
+  }
+}
+
+@keyframes af-rail-live-pulse {
+  0%, 45% { box-shadow: 0 0 0 0 color-mix(in srgb, currentColor 32%, transparent); }
+  100% { box-shadow: 0 0 0 7px transparent; }
+}

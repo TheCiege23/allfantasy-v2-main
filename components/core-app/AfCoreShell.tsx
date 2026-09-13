@@ -75,6 +75,8 @@ export type RailStandingSummary = {
   /** Points over the lowest team in the league. Null when you ARE the lowest. */
   overCut: number | null
   basis: 'points' | 'projected'
+  placesAboveCut: number
+  cutLine: number
   /** The bottom of this table goes home, so the copy says "cut" rather than "last". */
   elimination: boolean
 }
@@ -99,6 +101,8 @@ export type RailMatchupSummary = {
   standing?: RailStandingSummary | null
   /** False when the fixture exists but has not been played. Drawn as a dash. */
   scored: boolean
+  freshAt?: string | null
+  source?: 'live_cache' | 'history_fallback'
 }
 
 export type CoreNavKey =
@@ -988,6 +992,7 @@ function RailSide({
     projection.pricedFrom > 0 &&
     projection.pricedFrom < projection.starterCount
   const projected = projection?.afProjected ?? projection?.projected ?? null
+  const remaining = score != null && projected != null ? Math.max(0, projected - score) : null
 
   return (
     <span
@@ -999,7 +1004,7 @@ function RailSide({
             projection.afProjected == null
               ? ' · using the provider projection because this league’s scoring could not be re-scored'
               : ' · re-scored with this league’s settings'
-          }`
+          }${remaining != null ? ` · about ${remaining.toFixed(1)} projected points still available` : ''}`
         : undefined}
     >
       <span className="af-rail-row-av" aria-hidden>
@@ -1056,6 +1061,11 @@ function RailStanding({ standing }: { standing: RailStandingSummary | null }) {
             : 'bottom of the league'
           : `+${standing.overCut.toFixed(1)} ${standing.elimination ? 'over the cut' : 'over last'}`}
       </span>
+      <span className="af-rail-row-rank-space">
+        {standing.placesAboveCut === 0
+          ? 'cut position'
+          : `${standing.placesAboveCut} ${standing.placesAboveCut === 1 ? 'place' : 'places'} clear`}
+      </span>
       <span className="af-rail-row-rank-basis">
         {standing.basis === 'points' ? 'on points' : 'on projection'}
       </span>
@@ -1088,6 +1098,7 @@ function HelpDot({ title, body }: { title: string; body: string }) {
 }
 
 export function AfCoreShell(props: AfCoreShellProps) {
+  const router = useRouter()
   const sections = useMemo(() => navSections(props), [props])
   const mobileItems = useMemo(() => {
     const byKey = new Map(navItems(props).map((i) => [i.key, i]))
@@ -1120,6 +1131,58 @@ export function AfCoreShell(props: AfCoreShellProps) {
    *   'open'    chose expanded  desktop 300px,        mobile tray OPEN
    */
   const [railChoice, setRailChoice] = useState<'open' | 'closed' | null>(null)
+  const [railClock, setRailClock] = useState<number | null>(null)
+  const [railSwings, setRailSwings] = useState<Record<string, number>>({})
+  const previousMargins = useRef<Record<string, number>>({})
+
+  /* The rail is a live surface. Refresh the server snapshot while games are on,
+     then back off between slates. Hidden tabs never spend a refresh. */
+  useEffect(() => {
+    setRailClock(Date.now())
+    const clock = window.setInterval(() => setRailClock(Date.now()), 15_000)
+    const refreshMs = props.liveGameCount && props.liveGameCount > 0 ? 20_000 : 120_000
+    const refresh = window.setInterval(() => {
+      if (document.visibilityState === 'visible') router.refresh()
+    }, refreshMs)
+    return () => {
+      window.clearInterval(clock)
+      window.clearInterval(refresh)
+    }
+  }, [props.liveGameCount, router])
+
+  /* Show the consequence of a scoring update, rather than making the manager
+     compare two tiny totals from memory. In elimination leagues the survival
+     margin is the meaningful delta; elsewhere it is matchup margin. */
+  useEffect(() => {
+    const next: Record<string, number> = {}
+    const changed: Record<string, number> = {}
+    for (const [leagueId, matchup] of Object.entries(props.railMatchups ?? {})) {
+      const margin = matchup.unpaired
+        ? matchup.standing?.overCut ?? 0
+        : matchup.yourScore - matchup.opponentScore
+      next[leagueId] = margin
+      const previous = previousMargins.current[leagueId]
+      if (previous != null && Math.abs(margin - previous) >= 0.05) {
+        changed[leagueId] = Math.round((margin - previous) * 10) / 10
+      }
+    }
+    previousMargins.current = next
+    if (Object.keys(changed).length > 0) {
+      setRailSwings(changed)
+      const clear = window.setTimeout(() => setRailSwings({}), 18_000)
+      return () => window.clearTimeout(clear)
+    }
+  }, [props.railMatchups])
+
+  const freshestRailAt = useMemo(() => {
+    const times = Object.values(props.railMatchups ?? {})
+      .map((matchup) => Date.parse(matchup.freshAt ?? ''))
+      .filter(Number.isFinite)
+    return times.length > 0 ? Math.max(...times) : null
+  }, [props.railMatchups])
+  const railFreshLabel = railClock != null && freshestRailAt != null
+    ? `${Math.max(0, Math.floor((railClock - freshestRailAt) / 60_000))}m`
+    : null
 
   /*
    * ⚠ FALSE WHILE THE PREFERENCE IS UNREAD, INCLUDING ON A DESKTOP THAT IS
@@ -1301,6 +1364,9 @@ export function AfCoreShell(props: AfCoreShellProps) {
           <span className="af-rail-toggle-text">
             {leagues.length} {leagues.length === 1 ? 'league' : 'leagues'}
             {props.railWeekLabel ? ` · ${props.railWeekLabel}` : ''}
+            {props.liveGameCount && props.liveGameCount > 0 ? (
+              <span className="af-rail-live-state">LIVE{railFreshLabel ? ` · ${railFreshLabel}` : ''}</span>
+            ) : null}
           </span>
         </button>
 
@@ -1322,6 +1388,10 @@ export function AfCoreShell(props: AfCoreShellProps) {
         <div className="af-rail-scroll" id="af-rail-scroll">
           {leagues.map((l) => {
             const m = props.railMatchups?.[l.id]
+            const mFreshAt = m?.freshAt ? Date.parse(m.freshAt) : Number.NaN
+            const mFreshMinutes = railClock != null && Number.isFinite(mFreshAt)
+              ? Math.max(0, Math.floor((railClock - mFreshAt) / 60_000))
+              : null
             return (
               <Link
                 key={l.id}
@@ -1340,6 +1410,7 @@ export function AfCoreShell(props: AfCoreShellProps) {
                  * already uses `aria-current="page"` for the page itself.
                  */
                 data-active={l.id === props.selectedLeagueId}
+                data-score-changed={railSwings[l.id] != null ? 'true' : undefined}
                 aria-current={l.id === props.selectedLeagueId ? 'true' : undefined}
                 title={`${l.name} · ${l.platform}`}
                 aria-label={`${l.name} on ${l.platform}`}
@@ -1371,12 +1442,28 @@ export function AfCoreShell(props: AfCoreShellProps) {
                   one accessible name either way.
                 */}
                 <span className="af-rail-row">
-                  <span className="af-rail-row-name">{l.name}</span>
+                  <span className="af-rail-row-headline">
+                    <span className="af-rail-row-name">{l.name}</span>
+                    {railSwings[l.id] != null ? (
+                      <span className="af-rail-swing">
+                        {railSwings[l.id] > 0 ? '+' : ''}{railSwings[l.id].toFixed(1)} swing
+                      </span>
+                    ) : null}
+                    {m ? (
+                      <span className="af-rail-row-fresh" data-stale={m.source === 'history_fallback' || (mFreshMinutes != null && mFreshMinutes > 10) ? 'true' : undefined}>
+                        {m.source === 'history_fallback'
+                          ? 'last import'
+                          : mFreshMinutes == null
+                            ? 'sync age unknown'
+                            : mFreshMinutes < 1 ? 'now' : `${mFreshMinutes}m`}
+                      </span>
+                    ) : null}
+                  </span>
                   {m ? (
                     <span className="af-rail-row-line">
                       <span className="af-rail-row-labels" aria-hidden>
                         <span />
-                        <span>LIVE</span>
+                        <span>{m.source === 'history_fallback' ? 'LAST' : 'SCORE'}</span>
                         <span>PROJ</span>
                       </span>
                       <RailSide
@@ -1435,7 +1522,8 @@ export function AfCoreShell(props: AfCoreShellProps) {
         */}
         <div className="af-rail-foot">
         <Link href="/import" className="af-rail-tile af-rail-add" aria-label="Add a league">
-          +
+          <span className="af-rail-foot-icon" aria-hidden>+</span>
+          <span className="af-rail-foot-copy"><strong>Add league</strong><small>Connect a platform</small></span>
         </Link>
 
         <Link href="/settings" className="af-rail-tile af-rail-profile" title="Profile, settings and modes">
@@ -1452,6 +1540,7 @@ export function AfCoreShell(props: AfCoreShellProps) {
             src={props.profile?.imageUrl}
             letter={(Array.from(props.profile?.name?.trim() || '•')[0] ?? '•').toUpperCase()}
           />
+          <span className="af-rail-foot-copy"><strong>{props.profile?.name?.trim() || 'Your account'}</strong><small>Profile &amp; settings</small></span>
         </Link>
         </div>
       </nav>
