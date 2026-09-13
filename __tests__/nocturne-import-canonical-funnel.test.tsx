@@ -34,6 +34,29 @@ describe('NocturneImport — canonical landing funnel (no legacy guest import)',
     ).toBe('/import?provider=espn&leagueId=1948204')
   })
 
+  /*
+   * Yahoo takes no identifier — it lists leagues from the account the visitor connects — so its
+   * intent is the provider alone. The second case is the one that matters: a value typed before
+   * switching to Yahoo must be dropped, not sent as a leagueId the import ignores.
+   */
+  it('buildImportIntentPath sends a Yahoo intent with no identifier', () => {
+    expect(buildImportIntentPath({ id: 'yahoo', inputKind: 'account' }, '')).toBe('/import?provider=yahoo')
+    expect(buildImportIntentPath({ id: 'yahoo', inputKind: 'account' }, ' 428931 ')).toBe(
+      '/import?provider=yahoo',
+    )
+  })
+
+  it('landing Yahoo asks for nothing: no input box, and submit goes straight to the canonical Yahoo import', () => {
+    render(<NocturneImport variant="full" />)
+    fireEvent.click(screen.getByTestId('nocturne-plat-chip-yahoo'))
+    expect(screen.queryByTestId('nocturne-import-full-input')).toBeNull()
+    const submit = screen.getByTestId('nocturne-import-full-submit')
+    expect(submit).not.toBeDisabled()
+    fireEvent.click(submit)
+    const dest = pushMock.mock.calls[0]![0] as string
+    expect(nextParam(dest)).toBe('/import?provider=yahoo')
+  })
+
   it('landing Sleeper submit → signup intent → canonical /import (never guest-import, never guest board)', () => {
     render(<NocturneImport variant="full" />)
     fireEvent.change(screen.getByTestId('nocturne-import-full-input'), {
@@ -94,14 +117,15 @@ describe('NocturneImport — canonical landing funnel (no legacy guest import)',
     vi.resetModules()
     vi.doMock('@/lib/league-import/provider-ui-config', async (importOriginal) => {
       const actual = await importOriginal<typeof import('@/lib/league-import/provider-ui-config')>()
-      return { ...actual, isImportProviderAvailable: (p: string) => p !== 'yahoo' }
+      return { ...actual, isImportProviderAvailable: (p: string) => p !== 'mfl' }
     })
     try {
       const { NocturneImport: Scoped } = await import('@/components/landing/nocturne/NocturneImport')
       render(<Scoped variant="full" />)
-      fireEvent.click(screen.getByTestId('nocturne-plat-chip-yahoo'))
+      // MFL, not Yahoo: Yahoo takes no identifier and has no input box to type into.
+      fireEvent.click(screen.getByTestId('nocturne-plat-chip-mfl'))
       // Visibly identified as coming soon…
-      expect(screen.getByTestId('nocturne-plat-chip-yahoo')).toHaveTextContent(/coming soon/i)
+      expect(screen.getByTestId('nocturne-plat-chip-mfl')).toHaveTextContent(/coming soon/i)
       // …and it cannot navigate/create a signup-import intent.
       fireEvent.change(screen.getByTestId('nocturne-import-full-input'), {
         target: { value: '1234567' },
