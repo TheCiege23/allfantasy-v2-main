@@ -13,6 +13,7 @@ import {
 import { byeForTeam, resolveTeamByeWeeks } from '@/lib/schedule/teamByeWeeks'
 import { getNormalizedPlayerData } from '@/lib/player-data/getNormalizedPlayerData'
 import { serializeUnifiedPlayerForApi } from '@/lib/player-data/serializeUnifiedPlayerForApi'
+import { resolveWriteAuthority } from '@/lib/league/write-authority'
 import { reconcileRosterRedraftLinks } from './reconcileRosterRedraftLinks'
 
 
@@ -62,6 +63,8 @@ export interface MaterializeResult {
   rostersSkippedNoLink: number
   /** Linked, but `playerData` held no players. An empty roster is a real state. */
   rostersSkippedNoPlayers: number
+  /** Imported rows retired because the player is no longer on the platform's roster. */
+  playersDropped: number
 }
 
 const EMPTY: MaterializeResult = {
@@ -72,6 +75,7 @@ const EMPTY: MaterializeResult = {
   playersAlreadyPresent: 0,
   rostersSkippedNoLink: 0,
   rostersSkippedNoPlayers: 0,
+  playersDropped: 0,
 }
 
 /** What a row needs from a resolved player, whichever platform's resolver answered. */
@@ -100,6 +104,28 @@ function idOf(entry: unknown): string {
  * vocabulary, genuinely different matcher — sharing would mean giving the id-based case a name
  * fallback it does not need and cannot exercise.
  */
+/**
+ * Every player id the roster names anywhere — the flat list, starters, IR, taxi and every lineup
+ * section. A player is only gone when he appears on NONE of them.
+ */
+function idsOnAnyRosterList(playerData: unknown): Set<string> {
+  const data = asRecord(playerData)
+  const ids = new Set<string>()
+  const add = (list: unknown) => {
+    if (!Array.isArray(list)) return
+    for (const entry of list) {
+      const id = idOf(entry)
+      if (id) ids.add(id)
+    }
+  }
+  add(data.players)
+  add(data.starters)
+  add(data.reserve)
+  add(data.taxi)
+  for (const section of Object.values(asRecord(data.lineup_sections ?? data.lineupSections))) add(section)
+  return ids
+}
+
 function slotTypeFor(playerData: unknown, playerId: string, position: string | null): string {
   const data = asRecord(playerData)
 
@@ -162,6 +188,21 @@ export async function materializeRedraftRosterPlayersForLeague(
     .catch(() => null)
   const sport = String(opts?.sport ?? league?.sport ?? 'NFL')
   const platform = String(league?.platform ?? '').toLowerCase()
+  /*
+   * 🛑 WHO OWNS THE ROSTER DECIDES WHETHER A MISSING PLAYER IS GONE.
+   *
+   * On an imported league the platform is the system of record and `Roster.playerData` is its
+   * latest word, so a player it no longer names has left. Nothing retired those rows: the
+   * collector rewrites `playerData` every ten minutes and this module only ever created.
+   * Measured 2026-09-13: 1,261 active imported rows for players on no list of their roster, 234
+   * of them ALSO active on another team in the same league — which the waiver engine reads as
+   * "already rostered in this season" and denies the claim.
+   *
+   * On a NATIVE league it is the other way round: the redraft engines own the roster and
+   * `playerData` can be the stale side, so nothing is ever dropped there. A league whose platform
+   * could not be read resolves to NATIVE as well, which is the direction that drops nothing.
+   */
+  const platformOwnsRoster = league != null && resolveWriteAuthority(league.platform) !== 'NATIVE'
 
   /*
    * The bye is a property of the TEAM and this table has a real `Int?` column for it that
@@ -227,9 +268,37 @@ export async function materializeRedraftRosterPlayersForLeague(
 
     const existing = await prisma.redraftRosterPlayer.findMany({
       where: { rosterId: r.redraftRosterId, droppedAt: null },
-      select: { playerId: true },
+      select: { playerId: true, acquisitionType: true },
     })
     const have = new Set(existing.map((e) => e.playerId))
+
+    if (platformOwnsRoster) {
+      /*
+       * ⚠ ONLY ROWS THIS MODULE WROTE. `acquisitionType: 'imported'` is the projection's own
+       * signature; a waiver, trade or draft row belongs to an engine and is never retired from
+       * `playerData`. The empty-roster guard above has already returned, so a provider response
+       * that names nobody cannot empty a roster from here.
+       *
+       * Soft, like every other drop in this table: `droppedAt` is set and the row is kept, so the
+       * history survives and a player who comes back is simply created again.
+       */
+      const onRoster = idsOnAnyRosterList(r.playerData)
+      const gone = existing
+        .filter((e) => e.acquisitionType === 'imported' && !onRoster.has(e.playerId))
+        .map((e) => e.playerId)
+      if (gone.length > 0) {
+        const dropped = await prisma.redraftRosterPlayer.updateMany({
+          where: {
+            rosterId: r.redraftRosterId,
+            playerId: { in: gone },
+            droppedAt: null,
+            acquisitionType: 'imported',
+          },
+          data: { droppedAt: new Date() },
+        })
+        result.playersDropped += dropped.count
+      }
+    }
 
     /*
      * Enrichment is best-effort and the row is written either way. A player with no metadata still

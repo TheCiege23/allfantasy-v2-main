@@ -100,6 +100,8 @@ export interface SyncConnectedResult {
   status?: RunResult['status']
   advancedFreshness?: boolean
   removed?: number
+  /** Leagues whose rosters this run changed — input to the post-sync redraft roster refresh. */
+  rosterChangedLeagueIds?: string[]
   notes?: string[]
   result?: RunResult
   warning?: string
@@ -396,6 +398,7 @@ export async function syncConnectedLeague(
     status: result.status,
     advancedFreshness: result.advancedFreshness,
     removed: store.removedTotal(),
+    rosterChangedLeagueIds: store.rosterChangedLeagueIds(),
     notes: store.notes,
     result,
   }

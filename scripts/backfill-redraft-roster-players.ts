@@ -56,7 +56,7 @@ async function main() {
 
   console.log(`${apply ? 'APPLY' : 'DRY RUN'} — ${leagues.length} league(s)\n`)
 
-  let totals = { leagues: 0, created: 0, repaired: 0, present: 0, noLink: 0, noPlayers: 0, emptyRosters: 0, idNamedPlayers: 0 }
+  let totals = { leagues: 0, created: 0, repaired: 0, present: 0, noLink: 0, noPlayers: 0, emptyRosters: 0, idNamedPlayers: 0, staleImportedPlayers: 0, dropped: 0 }
 
   for (const l of leagues) {
     /*
@@ -78,16 +78,41 @@ async function main() {
       JOIN redraft_rosters rr ON rr.id = p."rosterId"
       WHERE rr."leagueId" = ${l.id} AND p."droppedAt" IS NULL AND p."playerName" = p."playerId"
     `
-    if (emptyRosters === 0 && idNamedPlayers === 0) continue
+    /*
+     * ⚠ AND A PLAYER WHO LEFT THE TEAM ON THE PLATFORM. An imported row stays active after the
+     * platform stops listing the player, because nothing retired it — 1,261 such rows measured
+     * 2026-09-13, in leagues with no empty roster and no id-named player, so both counts above
+     * skipped them. This is a COUNT to decide whether to materialize; the materializer applies
+     * the exact rule (every lineup section, the NATIVE gate), so the two can differ at the margin.
+     */
+    const [{ staleImportedPlayers }] = await prisma.$queryRaw<Array<{ staleImportedPlayers: number }>>`
+      SELECT count(*)::int AS "staleImportedPlayers"
+      FROM redraft_roster_players p
+      JOIN redraft_rosters rr ON rr.id = p."rosterId"
+      JOIN rosters g ON g."redraftRosterId" = rr.id
+      WHERE rr."leagueId" = ${l.id}
+        AND p."droppedAt" IS NULL
+        AND p."acquisitionType" = 'imported'
+        AND jsonb_typeof(g."playerData"->'players') = 'array'
+        AND jsonb_array_length(g."playerData"->'players') > 0
+        AND NOT (
+          coalesce(g."playerData"->'players', '[]'::jsonb) ? p."playerId"
+          OR coalesce(g."playerData"->'starters', '[]'::jsonb) ? p."playerId"
+          OR coalesce(g."playerData"->'reserve', '[]'::jsonb) ? p."playerId"
+          OR coalesce(g."playerData"->'taxi', '[]'::jsonb) ? p."playerId"
+        )
+    `
+    if (emptyRosters === 0 && idNamedPlayers === 0 && staleImportedPlayers === 0) continue
 
     if (!apply) {
       console.log(
         `  would fix  ${l.id}  ${String(l.leagueType ?? '?').padEnd(11)} ${emptyRosters} empty roster(s)  ` +
-          `${idNamedPlayers} id-named player(s)  ${l.name ?? ''}`,
+          `${idNamedPlayers} id-named player(s)  ${staleImportedPlayers} stale player(s)  ${l.name ?? ''}`,
       )
       totals.leagues += 1
       totals.emptyRosters += emptyRosters
       totals.idNamedPlayers += idNamedPlayers
+      totals.staleImportedPlayers += staleImportedPlayers
       continue
     }
 
@@ -98,8 +123,10 @@ async function main() {
     totals.present += r.playersAlreadyPresent
     totals.noLink += r.rostersSkippedNoLink
     totals.noPlayers += r.rostersSkippedNoPlayers
+    totals.dropped += r.playersDropped
     console.log(
       `  ${l.id}  created ${String(r.playersCreated).padStart(4)}  repaired ${String(r.playersRepaired).padStart(4)}  ` +
+        `dropped ${String(r.playersDropped).padStart(4)}  ` +
         `linked ${r.rostersLinked}/${r.rostersConsidered}  ` +
         `no-link ${r.rostersSkippedNoLink}  no-players ${r.rostersSkippedNoPlayers}  ${l.name ?? ''}`,
     )
@@ -114,7 +141,8 @@ async function main() {
      * look like 229 -> 226 and read as "it did nothing".
      */
     console.log(
-      `${totals.leagues} league(s) hold ${totals.emptyRosters} empty roster(s) and ${totals.idNamedPlayers} id-named player(s).`,
+      `${totals.leagues} league(s) hold ${totals.emptyRosters} empty roster(s), ${totals.idNamedPlayers} id-named player(s) ` +
+        `and ${totals.staleImportedPlayers} stale imported player(s).`,
     )
     console.log('Re-run with --apply to write.')
   } else {
@@ -127,6 +155,7 @@ async function main() {
      * exist, so a create-only pass skips them forever.
      */
     console.log(`players repaired     ${totals.repaired}`)
+    console.log(`players dropped      ${totals.dropped}`)
     console.log(`already present      ${totals.present}`)
     /*
      * ⚠ THESE TWO ARE REPORTED, NOT HIDDEN. A roster with no link has nowhere to write and stays

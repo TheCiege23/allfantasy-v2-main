@@ -10,6 +10,7 @@ import {
 } from '@/lib/import-os/collector'
 import { refreshProfilesForExternalLeagues } from '@/lib/psychological-profiles/ProfileRefreshService'
 import { materializeSleeperDraftSessions } from '@/lib/sleeper/sync/materializeSleeperDraftSessions'
+import { refreshRedraftRosterPlayersAfterSync } from '@/lib/import-os/collector/refreshRedraftRosterPlayersAfterSync'
 import { recordSyncJobRun, withSyncJobRun } from '@/lib/production-health/syncJobRunTelemetry'
 
 /**
@@ -158,6 +159,10 @@ export async function GET(req: NextRequest) {
   const parityRaw = Number(url.searchParams.get('parityLeagues'))
   const parityLeagues =
     Number.isFinite(parityRaw) && parityRaw > 0 ? Math.min(Math.floor(parityRaw), 50) : 10
+  /* Leagues whose redraft rows are refreshed after the sync, per tick. Overridable for ops. */
+  const rosterRaw = Number(url.searchParams.get('rosterLeagues'))
+  const rosterLeagues =
+    Number.isFinite(rosterRaw) && rosterRaw > 0 ? Math.min(Math.floor(rosterRaw), 50) : 10
 
   try {
     /*
@@ -183,6 +188,28 @@ export async function GET(req: NextRequest) {
          * foundation for an OS that reasons about what changed.
          */
         const summary = await runDueLeagues({ now, limit, concurrency })
+
+        /*
+         * 🛑 A SYNC THAT CHANGES A ROSTER MUST CHANGE ITS REDRAFT ROWS TOO. Nothing followed a
+         * rewritten `playerData` into `RedraftRosterPlayer`, so a player who left a team on the
+         * platform stayed active on it here — 1,261 such rows measured 2026-09-13, 234 of them
+         * double-rostered, which the waiver engine denies as "already rostered".
+         *
+         * Bounded and swallowed, same contract as the passes below: it is enrichment, and a slow
+         * league must never fail the collector. Leagues past the bound are reported as `deferred`.
+         */
+        let redraftRosterPlayers: unknown = null
+        try {
+          redraftRosterPlayers = await refreshRedraftRosterPlayersAfterSync({
+            results: summary.results ?? [],
+            maxLeagues: rosterLeagues,
+            budgetMs: 60_000,
+          })
+        } catch (rosterErr) {
+          redraftRosterPlayers = {
+            error: rosterErr instanceof Error ? rosterErr.message.slice(0, 160) : 'redraft roster refresh failed',
+          }
+        }
 
         // Psychological profiles are refreshed AFTER a sync lands, never at import:
         // a freshly imported league has no drafts, trades or rosters yet, so
@@ -321,6 +348,7 @@ export async function GET(req: NextRequest) {
         }
         return {
           summary,
+          redraftRosterPlayers,
           profiles,
           draftSessions,
           externalMatchups,

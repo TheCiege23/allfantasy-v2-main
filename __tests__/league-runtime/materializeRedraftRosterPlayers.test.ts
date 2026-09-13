@@ -493,3 +493,100 @@ describe('🛑 a non-Sleeper roster is named through PlayerIdentityMap, by its o
     expect(h.rrpCreate.mock.calls[0][0].data).toMatchObject({ playerName: 'p1', position: 'UNK' })
   })
 })
+
+// ── A PLAYER WHO LEFT AN IMPORTED ROSTER IS RETIRED ────────────────────────────────────────────
+
+const imported = (playerId: string) => ({ playerId, acquisitionType: 'imported' })
+const dropCalls = () => h.rrpUpdateMany.mock.calls.filter(([a]) => a.data?.droppedAt instanceof Date)
+
+describe('🛑 a player the platform no longer lists is retired from an imported roster', () => {
+  /*
+   * THE REGRESSION. Nothing set `droppedAt` for an imported league: the collector rewrites
+   * `playerData` every ten minutes and this module only created. Measured 2026-09-13: 1,261 active
+   * imported rows for players on no list of their roster, 234 also active on another team in the
+   * same league, which the waiver engine denies as "already rostered in this season".
+   */
+  it('drops an imported row whose player is on no list of an imported roster', async () => {
+    h.rosterFindMany.mockResolvedValue([roster()])
+    h.rrpFindMany.mockResolvedValue([imported('p1'), imported('p2'), imported('gone')])
+    h.rrpUpdateMany.mockResolvedValue({ count: 1 })
+
+    const out = await materializeRedraftRosterPlayersForLeague('L1')
+
+    expect(dropCalls()).toHaveLength(1)
+    const [{ where }] = dropCalls()[0]
+    expect(where).toMatchObject({ rosterId: 'rr-a', droppedAt: null, acquisitionType: 'imported' })
+    expect(where.playerId.in).toEqual(['gone'])
+    expect(out.playersDropped).toBe(1)
+    expect(h.rrpCreate).not.toHaveBeenCalled()
+  })
+
+  it('🛑 never drops anything in a NATIVE league, where the redraft engines own the roster', async () => {
+    h.rosterFindMany.mockResolvedValue([roster()])
+    h.leagueFindUnique.mockResolvedValue({ sport: 'NFL', platform: 'manual' })
+    h.rrpFindMany.mockResolvedValue([imported('p1'), imported('p2'), imported('gone')])
+
+    const out = await materializeRedraftRosterPlayersForLeague('L1')
+
+    expect(dropCalls()).toHaveLength(0)
+    expect(out.playersDropped).toBe(0)
+  })
+
+  it('🛑 never drops a row an engine wrote, however stale playerData looks', async () => {
+    h.rosterFindMany.mockResolvedValue([roster()])
+    h.rrpFindMany.mockResolvedValue([
+      imported('p1'), imported('p2'),
+      { playerId: 'waived-in', acquisitionType: 'waiver' },
+      { playerId: 'traded-in', acquisitionType: 'trade' },
+      { playerId: 'drafted', acquisitionType: 'drafted' },
+    ])
+
+    await materializeRedraftRosterPlayersForLeague('L1')
+
+    expect(dropCalls()).toHaveLength(0)
+  })
+
+  it('keeps a player who is only on starters, IR, taxi or a lineup section', async () => {
+    h.rosterFindMany.mockResolvedValue([
+      roster({
+        playerData: {
+          players: ['p1'],
+          starters: ['on-starters'],
+          reserve: ['on-ir'],
+          taxi: [{ id: 'on-taxi' }],
+          lineup_sections: { bench: ['on-bench-section'] },
+        },
+      }),
+    ])
+    h.rrpFindMany.mockResolvedValue([
+      imported('p1'), imported('on-starters'), imported('on-ir'), imported('on-taxi'), imported('on-bench-section'),
+      imported('gone'),
+    ])
+    h.rrpUpdateMany.mockResolvedValue({ count: 1 })
+
+    await materializeRedraftRosterPlayersForLeague('L1')
+
+    expect(dropCalls()).toHaveLength(1)
+    expect(dropCalls()[0][0].where.playerId.in).toEqual(['gone'])
+  })
+
+  it('🛑 drops nothing when the roster names no players at all', async () => {
+    // An empty list is a provider response that learned nothing, not a roster that cut everyone.
+    h.rosterFindMany.mockResolvedValue([roster({ playerData: { players: [] } })])
+    h.rrpFindMany.mockResolvedValue([imported('p1'), imported('p2')])
+
+    await materializeRedraftRosterPlayersForLeague('L1')
+
+    expect(dropCalls()).toHaveLength(0)
+  })
+
+  it('drops nothing when the league itself could not be read', async () => {
+    h.rosterFindMany.mockResolvedValue([roster()])
+    h.leagueFindUnique.mockRejectedValue(new Error('db down'))
+    h.rrpFindMany.mockResolvedValue([imported('p1'), imported('p2'), imported('gone')])
+
+    await materializeRedraftRosterPlayersForLeague('L1')
+
+    expect(dropCalls()).toHaveLength(0)
+  })
+})

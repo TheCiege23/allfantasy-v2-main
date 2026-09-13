@@ -25,6 +25,11 @@ export interface PrismaSleeperSyncStore extends SyncStore {
   /** Per-run apply notes (removals, empty-guard engagements) accumulated for telemetry. */
   readonly notes: string[]
   removedTotal(): number
+  /**
+   * Leagues whose rosters this run changed (created, changed or reconciled away). The cron route
+   * refreshes their `RedraftRosterPlayer` rows afterwards; see `refreshRedraftRosterPlayersAfterSync`.
+   */
+  rosterChangedLeagueIds(): string[]
 }
 
 export function createPrismaSleeperSyncStore(deps: {
@@ -35,6 +40,7 @@ export function createPrismaSleeperSyncStore(deps: {
   const { connection } = deps
   const notes: string[] = []
   let removed = 0
+  const rosterChanged = new Set<string>()
 
   async function ensureRow(): Promise<{ checkpoints: Record<string, unknown>; consecutiveFailures: number }> {
     const row = await prisma.leagueSyncState.upsert({
@@ -55,6 +61,7 @@ export function createPrismaSleeperSyncStore(deps: {
   return {
     notes,
     removedTotal: () => removed,
+    rosterChangedLeagueIds: () => [...rosterChanged],
 
     async getCheckpoint(_runKey: string, scope: SyncScope): Promise<string | null> {
       const row = await prisma.leagueSyncState.findUnique({
@@ -89,6 +96,12 @@ export function createPrismaSleeperSyncStore(deps: {
           normalized,
           options: { reconcileRemovals: deps.reconcileRemovals },
         })
+        /*
+         * ⚠ RECORDED, NOT ACTED ON. A changed roster leaves `RedraftRosterPlayer` behind it, but
+         * materializing here would spend this connection's run budget on enrichment. `unchanged`
+         * rosters are skipped on purpose: nothing moved, so nothing is newly stale.
+         */
+        if (scope === 'teams_rosters' && (r.imported > 0 || r.removed > 0)) rosterChanged.add(l.id)
         agg = {
           imported: agg.imported + r.imported,
           unchanged: agg.unchanged + r.unchanged,
