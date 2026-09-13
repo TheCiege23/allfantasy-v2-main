@@ -167,6 +167,49 @@ export type LockablePlayer = {
   isLocked?: boolean | null
 }
 
+type LockContext = {
+  mode: LineupLockMode
+  manualLocked: boolean
+  overrides: LockOverride[]
+  kickoffs: WeekKickoffs
+}
+
+async function loadLockContext(
+  prisma: PrismaClient,
+  args: { sport: string; season: number; week: number; leagueSettings: unknown },
+): Promise<LockContext> {
+  const { mode, manualLockedWeeks, overrides } = readLineupLockSettings(args.leagueSettings)
+  // manual mode needs no schedule; kickoff-based modes do.
+  const kickoffs =
+    mode === 'manual'
+      ? { byTeam: new Map<string, Date>(), firstKickoff: null as Date | null, warnings: [] as string[] }
+      : await buildWeekKickoffMap(prisma, { sport: args.sport, season: args.season, week: args.week })
+  return { mode, manualLocked: manualLockedWeeks.has(args.week), overrides, kickoffs }
+}
+
+function stampLineupLock<T extends LockablePlayer>(
+  player: T,
+  ctx: LockContext,
+  scope: { week: number; rosterId: string; now: Date },
+): T {
+  const emergencyUnlocked = ctx.overrides.some(
+    (o) =>
+      (o.week == null || Number(o.week) === scope.week) &&
+      (o.rosterId == null || o.rosterId === scope.rosterId) &&
+      (o.playerId == null || o.playerId === player.playerId),
+  )
+  const playerKickoffUtc = ctx.kickoffs.byTeam.get(normalizeNflTeam(player.team)) ?? null
+  const isLocked = computeLineupLock({
+    mode: ctx.mode,
+    now: scope.now,
+    playerKickoffUtc,
+    firstKickoffUtc: ctx.kickoffs.firstKickoff,
+    manualLocked: ctx.manualLocked,
+    emergencyUnlocked,
+  })
+  return { ...player, isLocked }
+}
+
 /**
  * Stamp derived `isLocked` onto each roster player for the given week. Reuses the
  * pure `computeLineupLock` so what we test is what enforces. Returns the players
@@ -185,33 +228,30 @@ export async function hydrateRedraftLineupLocks<T extends LockablePlayer>(
   },
 ): Promise<{ players: T[]; warnings: string[] }> {
   const now = args.now ?? new Date()
-  const { mode, manualLockedWeeks, overrides } = readLineupLockSettings(args.leagueSettings)
-  const manualLocked = manualLockedWeeks.has(args.week)
+  const ctx = await loadLockContext(prisma, args)
+  const players = args.players.map((p) => stampLineupLock(p, ctx, { week: args.week, rosterId: args.rosterId, now }))
+  return { players, warnings: ctx.kickoffs.warnings }
+}
 
-  // manual mode needs no schedule; kickoff-based modes do.
-  const kickoffs =
-    mode === 'manual'
-      ? { byTeam: new Map<string, Date>(), firstKickoff: null as Date | null, warnings: [] as string[] }
-      : await buildWeekKickoffMap(prisma, { sport: args.sport, season: args.season, week: args.week })
-
-  const players = args.players.map((p) => {
-    const emergencyUnlocked = overrides.some(
-      (o) =>
-        (o.week == null || Number(o.week) === args.week) &&
-        (o.rosterId == null || o.rosterId === args.rosterId) &&
-        (o.playerId == null || o.playerId === p.playerId),
-    )
-    const playerKickoffUtc = kickoffs.byTeam.get(normalizeNflTeam(p.team)) ?? null
-    const isLocked = computeLineupLock({
-      mode,
-      now,
-      playerKickoffUtc,
-      firstKickoffUtc: kickoffs.firstKickoff,
-      manualLocked,
-      emergencyUnlocked,
-    })
-    return { ...p, isLocked }
-  })
-
-  return { players, warnings: kickoffs.warnings }
+/**
+ * The same derivation for every roster in a league at once: ONE schedule read, not
+ * one per roster. Each player carries its own `rosterId`, which scopes emergency
+ * overrides exactly as `hydrateRedraftLineupLocks` does for a single roster.
+ */
+export async function hydrateRedraftLineupLocksForRosters<T extends LockablePlayer & { rosterId: string }>(
+  prisma: PrismaClient,
+  args: {
+    sport: string
+    season: number
+    week: number
+    leagueSettings: unknown
+    players: T[]
+    now?: Date
+  },
+): Promise<{ players: T[]; warnings: string[] }> {
+  if (args.players.length === 0) return { players: [], warnings: [] }
+  const now = args.now ?? new Date()
+  const ctx = await loadLockContext(prisma, args)
+  const players = args.players.map((p) => stampLineupLock(p, ctx, { week: args.week, rosterId: p.rosterId, now }))
+  return { players, warnings: ctx.kickoffs.warnings }
 }
