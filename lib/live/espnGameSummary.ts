@@ -136,6 +136,74 @@ export type GameDetailPlayerLine = {
   stats: string[]
 }
 
+/* ── basketball ────────────────────────────────────────────────────────────── */
+
+/**
+ * One field-goal attempt with a court spot.
+ *
+ * ⚠ ESPN WRITES A SENTINEL, NOT NULL, FOR PLAYS WITH NO SPOT. Measured on NBA
+ * CHI @ GS (401810798): free throws carry `coordinate: { x: -214748340,
+ * y: -214748365 }`. Plotted as-is they land 200 million feet off the court, so
+ * only in-bounds spots are kept and free throws are dropped outright.
+ */
+export type BasketballShot = {
+  id: string
+  teamId: string | null
+  athleteId: string | null
+  /** Feet across the court, 0–50. */
+  x: number
+  /** Feet from the rim end, as ESPN reports it. */
+  y: number
+  made: boolean
+  value: number | null
+  period: number | null
+  clock: string | null
+  text: string
+}
+
+export type BasketballPlay = {
+  id: string
+  text: string
+  type: string | null
+  period: number | null
+  clock: string | null
+  teamId: string | null
+  scoring: boolean
+  scoreValue: number | null
+  awayScore: number | null
+  homeScore: number | null
+  /** Unlike football, NBA plays name their athletes by id. */
+  athleteIds: string[]
+}
+
+export type BasketballBoxPlayer = {
+  athleteId: string
+  name: string
+  shortName: string | null
+  headshot: string | null
+  jersey: string | null
+  position: string | null
+  starter: boolean
+  didNotPlay: boolean
+  /** "LEFT ANKLE SPRAIN", "COACH'S DECISION" — ESPN's own words. */
+  reason: string | null
+  stats: string[]
+}
+
+export type BasketballBoxTeam = {
+  teamId: string
+  labels: string[]
+  players: BasketballBoxPlayer[]
+  totals: string[]
+}
+
+export type BasketballDetail = {
+  /** Every play, in game order. */
+  plays: BasketballPlay[]
+  shots: BasketballShot[]
+  box: { home: BasketballBoxTeam | null; away: BasketballBoxTeam | null }
+}
+
 export type LiveGameDetail = {
   gameId: string
   sport: string
@@ -160,6 +228,8 @@ export type LiveGameDetail = {
   venue: { name: string; location: string | null } | null
   weather: string | null
   attendance: number | null
+  /** Shots, box score and the full play list — present only for a basketball summary. */
+  basketball: BasketballDetail | null
   fetchedAt: string
 }
 
@@ -212,13 +282,25 @@ function mapTeam(raw: Obj): GameDetailTeam {
   }
 }
 
-const LEADER_ORDER = ['passingYards', 'rushingYards', 'receivingYards', 'sacks', 'totalTackles']
+const LEADER_ORDER = [
+  'passingYards',
+  'rushingYards',
+  'receivingYards',
+  'sacks',
+  'totalTackles',
+  'points',
+  'rebounds',
+  'assists',
+]
 const LEADER_LABEL: Record<string, string> = {
   passingYards: 'Passing Yards',
   rushingYards: 'Rushing Yards',
   receivingYards: 'Receiving Yards',
   sacks: 'Sacks',
   totalTackles: 'Tackles',
+  points: 'Points',
+  rebounds: 'Rebounds',
+  assists: 'Assists',
 }
 
 function mapLeaders(raw: unknown): GameDetailLeader[] {
@@ -320,7 +402,29 @@ function mapSituation(drive: Obj | null, home: GameDetailTeam, away: GameDetailT
   }
 }
 
-const TEAM_STATS: Array<{ key: string; label: string; kind: 'count' | 'ratio' | 'time' }> = [
+type TeamStatSpec = { key: string; label: string; kind: 'count' | 'ratio' | 'time' }
+
+/*
+ * Basketball's made-attempted stats are keyed by their composite ESPN names
+ * ("fieldGoalsMade-fieldGoalsAttempted"), measured on NBA 401810798. The bars
+ * compare shooting RATE, so 50/112 against 47/100 is not read as volume.
+ */
+const BASKETBALL_TEAM_STATS: TeamStatSpec[] = [
+  { key: 'fieldGoalsMade-fieldGoalsAttempted', label: 'Field Goals', kind: 'ratio' },
+  { key: 'threePointFieldGoalsMade-threePointFieldGoalsAttempted', label: '3-Pointers', kind: 'ratio' },
+  { key: 'freeThrowsMade-freeThrowsAttempted', label: 'Free Throws', kind: 'ratio' },
+  { key: 'totalRebounds', label: 'Rebounds', kind: 'count' },
+  { key: 'offensiveRebounds', label: 'Offensive Rebounds', kind: 'count' },
+  { key: 'assists', label: 'Assists', kind: 'count' },
+  { key: 'steals', label: 'Steals', kind: 'count' },
+  { key: 'blocks', label: 'Blocks', kind: 'count' },
+  { key: 'totalTurnovers', label: 'Turnovers', kind: 'count' },
+  { key: 'pointsInPaint', label: 'Points in Paint', kind: 'count' },
+  { key: 'fastBreakPoints', label: 'Fast Break Points', kind: 'count' },
+  { key: 'largestLead', label: 'Largest Lead', kind: 'count' },
+]
+
+const TEAM_STATS: TeamStatSpec[] = [
   { key: 'totalYards', label: 'Total Yards', kind: 'count' },
   { key: 'turnovers', label: 'Turnovers', kind: 'count' },
   { key: 'firstDowns', label: '1st Downs', kind: 'count' },
@@ -343,7 +447,12 @@ function statNumber(display: string, kind: 'count' | 'ratio' | 'time'): number {
   return Number.isFinite(parts[0]) ? parts[0]! : 0
 }
 
-function mapTeamStats(boxTeams: unknown[], home: GameDetailTeam, away: GameDetailTeam): GameDetailTeamStat[] {
+function mapTeamStats(
+  boxTeams: unknown[],
+  home: GameDetailTeam,
+  away: GameDetailTeam,
+  specs: TeamStatSpec[] = TEAM_STATS,
+): GameDetailTeamStat[] {
   const byTeam = new Map<string, Map<string, string>>()
   for (const t of boxTeams.map(obj)) {
     const id = str(pick(t, 'team', 'id'))
@@ -361,7 +470,7 @@ function mapTeamStats(boxTeams: unknown[], home: GameDetailTeam, away: GameDetai
   const a = byTeam.get(away.id)
   if (!h || !a) return []
   const out: GameDetailTeamStat[] = []
-  for (const spec of TEAM_STATS) {
+  for (const spec of specs) {
     const hv = h.get(spec.key)
     const av = a.get(spec.key)
     if (hv == null || av == null) continue
@@ -386,8 +495,9 @@ function mapPlayers(boxPlayers: unknown[]): Record<string, GameDetailPlayerLine[
   for (const team of boxPlayers.map(obj)) {
     const teamId = str(pick(team, 'team', 'id'))
     for (const group of arr(team?.statistics).map(obj)) {
-      const groupName = str(group?.name)
       const labels = arr(group?.labels).map((l) => str(l) ?? '')
+      // NBA's single box-score group has no `name`; its PTS column identifies it.
+      const groupName = str(group?.name) ?? (labels.includes('PTS') ? 'basketball' : null)
       if (!groupName) continue
       for (const entry of arr(group?.athletes).map(obj)) {
         const athlete = obj(entry?.athlete)
@@ -408,6 +518,105 @@ function mapPlayers(boxPlayers: unknown[]): Record<string, GameDetailPlayerLine[
     }
   }
   return out
+}
+
+const NON_BASKETBALL_PLAY = /timeout|end (of )?(period|quarter|half|game)|end game|jumpball|jump ball|substitution|review/i
+
+function mapBasketball(root: Obj, home: GameDetailTeam, away: GameDetailTeam): BasketballDetail {
+  const plays: BasketballPlay[] = []
+  const shots: BasketballShot[] = []
+  for (const p of arr(root.plays).map(obj)) {
+    if (!p) continue
+    const id = str(p.id) ?? str(p.sequenceNumber) ?? ''
+    const type = str(pick(p, 'type', 'text'))
+    // Substitutions are a sixth of the play list (95 of 568 on 401810798) and the
+    // view never shows them; they are dropped before the cache write.
+    if (/substitution/i.test(type ?? '')) continue
+    const text = (str(p.text) ?? '').replace(/\s+/g, ' ').trim()
+    const period = num(pick(p, 'period', 'number'))
+    const clock = str(pick(p, 'clock', 'displayValue'))
+    const teamId = str(pick(p, 'team', 'id'))
+    const athleteIds = arr(p.participants)
+      .map((x) => str(pick(obj(x), 'athlete', 'id')))
+      .filter((x): x is string => x != null)
+    plays.push({
+      id,
+      text,
+      type,
+      period,
+      clock,
+      teamId,
+      scoring: p.scoringPlay === true,
+      scoreValue: num(p.scoreValue),
+      awayScore: num(p.awayScore),
+      homeScore: num(p.homeScore),
+      athleteIds,
+    })
+    const x = num(pick(p, 'coordinate', 'x'))
+    const y = num(pick(p, 'coordinate', 'y'))
+    if (
+      p.shootingPlay === true &&
+      x != null &&
+      y != null &&
+      // The court bounds are what reject ESPN's -214748340 sentinel; there is no separate check.
+      x >= 0 &&
+      x <= 50 &&
+      y >= 0 &&
+      !/free throw/i.test(type ?? '')
+    ) {
+      shots.push({
+        id,
+        teamId,
+        athleteId: athleteIds[0] ?? null,
+        x,
+        y,
+        made: p.scoringPlay === true,
+        value: num(p.scoreValue) ?? num(p.pointsAttempted),
+        period,
+        clock,
+        text,
+      })
+    }
+  }
+
+  const boxFor = (teamRaw: Obj | null): BasketballBoxTeam | null => {
+    const teamId = str(pick(teamRaw, 'team', 'id'))
+    const group = obj(arr(teamRaw?.statistics)[0])
+    if (!teamId || !group) return null
+    return {
+      teamId,
+      labels: arr(group.labels).map((l) => str(l) ?? ''),
+      totals: arr(group.totals).map((t) => str(t) ?? ''),
+      players: arr(group.athletes)
+        .map(obj)
+        .map((entry): BasketballBoxPlayer | null => {
+          const athlete = obj(entry?.athlete)
+          const athleteId = str(athlete?.id)
+          const name = str(athlete?.displayName)
+          if (!entry || !athleteId || !name) return null
+          return {
+            athleteId,
+            name,
+            shortName: str(athlete?.shortName),
+            headshot: href(athlete?.headshot),
+            jersey: str(athlete?.jersey),
+            position: str(pick(athlete, 'position', 'abbreviation')) ?? str(athlete?.position),
+            starter: entry.starter === true,
+            didNotPlay: entry.didNotPlay === true,
+            reason: str(entry.reason),
+            stats: arr(entry.stats).map((s) => str(s) ?? ''),
+          }
+        })
+        .filter((x): x is BasketballBoxPlayer => x != null),
+    }
+  }
+  const teams = arr(pick(root, 'boxscore', 'players')).map(obj)
+  const teamRaw = (id: string) => teams.find((t) => str(pick(t, 'team', 'id')) === id) ?? null
+  return {
+    plays,
+    shots,
+    box: { home: boxFor(teamRaw(home.id)), away: boxFor(teamRaw(away.id)) },
+  }
 }
 
 /* ── entry point ───────────────────────────────────────────────────────────── */
@@ -451,8 +660,31 @@ export function trimEspnGameSummary(
   const drive = current ?? drives[drives.length - 1] ?? null
   const players = mapPlayers(arr(pick(root, 'boxscore', 'players')))
 
+  // A basketball summary carries a flat `plays` list and no `drives` (NBA 401810798).
+  const basketball = Array.isArray(root.plays) && !drivesRoot ? mapBasketball(root, home, away) : null
+  const lastBasketballPlay = basketball
+    ? [...basketball.plays].reverse().find((p) => p.text && !NON_BASKETBALL_PLAY.test(p.type ?? '')) ?? null
+    : null
+
   const allPlays = (drive?.plays ?? []).filter((p) => !NON_SNAP.test(p.type ?? ''))
-  const lastPlay = allPlays[allPlays.length - 1] ?? null
+  const lastPlay: GameDetailPlay | null = lastBasketballPlay
+    ? {
+        id: lastBasketballPlay.id,
+        text: lastBasketballPlay.text,
+        type: lastBasketballPlay.type,
+        typeAbbrev: null,
+        period: lastBasketballPlay.period,
+        clock: lastBasketballPlay.clock,
+        downDistance: null,
+        startBallOn: null,
+        endBallOn: null,
+        statYardage: null,
+        yardsAfterCatch: null,
+        scoring: lastBasketballPlay.scoring,
+        awayScore: lastBasketballPlay.awayScore,
+        homeScore: lastBasketballPlay.homeScore,
+      }
+    : (allPlays[allPlays.length - 1] ?? null)
 
   const wp = arr(root.winprobability).map(obj)
   const lastWp = wp[wp.length - 1]
@@ -481,7 +713,12 @@ export function trimEspnGameSummary(
     drive,
     situation: state === 'in' ? mapSituation(currentRaw ?? null, home, away) : null,
     lastPlay,
-    lastPlayAthleteIds: lastPlay ? athletesInPlayText(lastPlay.text, players) : [],
+    // Basketball plays name their athletes by id; football plays only in text.
+    lastPlayAthleteIds: lastBasketballPlay
+      ? lastBasketballPlay.athleteIds.slice(0, 2)
+      : lastPlay
+        ? athletesInPlayText(lastPlay.text, players)
+        : [],
     drives,
     scoringPlays: arr(root.scoringPlays)
       .map(obj)
@@ -497,7 +734,12 @@ export function trimEspnGameSummary(
         awayScore: num(p.awayScore),
         homeScore: num(p.homeScore),
       })),
-    teamStats: mapTeamStats(arr(pick(root, 'boxscore', 'teams')), home, away),
+    teamStats: mapTeamStats(
+      arr(pick(root, 'boxscore', 'teams')),
+      home,
+      away,
+      basketball ? BASKETBALL_TEAM_STATS : TEAM_STATS,
+    ),
     players,
     winProbability:
       homePct != null
@@ -511,12 +753,17 @@ export function trimEspnGameSummary(
       : null,
     weather: temp != null ? `${temp}°${condition ? ` · ${condition}` : ''}` : condition,
     attendance: num(pick(root, 'gameInfo', 'attendance')),
+    basketball,
     fetchedAt: opts.fetchedAt,
   }
 }
 
-/** Sports the clicked-game view covers (v1, 2026-09-13): same ESPN summary shape. */
-export const GAME_VIEW_SPORTS: readonly string[] = ['NFL', 'NCAAF']
+/**
+ * Sports the clicked-game view covers. NFL and NCAAF share the football summary
+ * shape; NBA's basketball shape (flat plays, shot spots, single box-score group)
+ * was measured 2026-09-13 on CHI @ GS (401810798).
+ */
+export const GAME_VIEW_SPORTS: readonly string[] = ['NFL', 'NCAAF', 'NBA']
 
 const NAME_SUFFIX = /\s+(jr|sr|ii|iii|iv|v)\.?$/i
 
