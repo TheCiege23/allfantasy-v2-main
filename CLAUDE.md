@@ -961,6 +961,17 @@ bytes in them and say what the byte count should be.
   junction in a worktree which had none, and nearly triggered a destructive
   cleanup. For a junction, ask the filesystem: PowerShell
   `(Get-Item <path> -Force).LinkType` is null when there is no link.
+- 🛑 **AND GIT BASH'S `ls` MISRENDERS A JUNCTION'S *CONTENTS*, NOT JUST ITS EXIT
+  STATUS.** The entry above is about a pipeline's status lying. This one is
+  about the listing itself lying. Measured 2026-09-12 on a worktree's
+  `node_modules` junction: `ls node_modules` printed **one** entry named
+  `node_modules@`, and `ls -1A node_modules | wc -l` returned **1**, while
+  PowerShell reported `LinkType=Junction`, the correct target, and **695**
+  entries. The junction was fine. The listing made it look nested or broken,
+  which is the diagnosis that invites a "repair" of shared state. **Count a
+  junction's entries with PowerShell `(Get-ChildItem <path> -Force).Count`,
+  never with `ls`**, and treat a count of 1 from `ls` as a rendering artifact
+  until PowerShell agrees.
 - `npx tsc --noEmit` OOMs at the default heap on this repo, prints a V8 crash
   dump instead of diagnostics, and `grep -c "error TS"` then returns 0 — which
   reads exactly like a clean typecheck. Use the repo's own setting rather than a

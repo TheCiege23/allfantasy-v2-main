@@ -25,6 +25,14 @@
 
 ### `G-07` — whose league's transactions may be committed as a fixture?
 
+**Status:** `DEFERRED 2026-09-12 — owner decision: skip activity for now.` Offered four
+routes (use a league the owner runs, use a consenting league, commit an anonymised
+fixture, or skip), the repo owner chose to skip. So the three endpoints below stay
+recorded-but-uncaptured, and Fleaflicker activity is out of scope until this is
+reopened. Nothing is blocked on it: this was the last open Fleaflicker import-audit
+item, and the rest of the provider ships without it. Reopening it needs the same
+decision: whose league's activity this public repo may publish.
+
 `FetchLeagueActivity`, `FetchLeagueTransactions` and `FetchTrades` are DISCOVERED
 (names from the vendor's published Swagger docs, 2026-09-12) and NOT CAPTURED.
 They are the remaining blocker on the "activity" third of the import audit's P2
