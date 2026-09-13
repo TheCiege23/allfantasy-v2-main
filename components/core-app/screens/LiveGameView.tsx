@@ -104,7 +104,7 @@ export function LiveGameView({
           <p className="af-live-empty-body">
             {payload?.failed
               ? 'This is a problem on our end, not the game. Retrying automatically.'
-              : 'Game views are available for NFL, college football, NBA, NHL and MLB games.'}
+              : 'Game views are available for NFL, college football, NBA, college basketball, NHL and MLB games.'}
           </p>
         </div>
       </div>
@@ -220,10 +220,11 @@ function ordinal(n: number): string {
   return `${n}${s[(v - 20) % 10] || s[v] || s[0]}`
 }
 
-function periodName(n: number | null, kind: 'quarter' | 'period' = 'quarter'): string {
+function periodName(n: number | null, kind: 'quarter' | 'period' | 'half' = 'quarter'): string {
   if (n == null) return 'Other'
-  const regulation = kind === 'period' ? 3 : 4
-  if (n <= regulation) return `${ordinal(n)} ${kind === 'period' ? 'Period' : 'Quarter'}`
+  const regulation = kind === 'half' ? 2 : kind === 'period' ? 3 : 4
+  const unit = kind === 'half' ? 'Half' : kind === 'period' ? 'Period' : 'Quarter'
+  if (n <= regulation) return `${ordinal(n)} ${unit}`
   return n === regulation + 1 ? 'Overtime' : `${n - regulation}OT`
 }
 
@@ -250,9 +251,9 @@ function GameHeader({ detail }: { detail: LiveGameDetail }) {
         : 'away'
       : null
   // Baseball has nine innings and extras are just more innings; hockey three
-  // periods; football and basketball four quarters.
+  // periods; college basketball two halves; football and NBA four quarters.
   const baseball = detail.baseball
-  const regulation = baseball ? 9 : detail.hockey ? 3 : 4
+  const regulation = baseball ? 9 : detail.hockey ? 3 : detail.basketball?.periods === 'halves' ? 2 : 4
   const periods = Math.max(regulation, home.linescores.length, away.linescores.length)
   const showLines = home.linescores.length > 0 || away.linescores.length > 0
 
@@ -579,6 +580,18 @@ export function lineForPlay(lines: GameDetailPlayerLine[], playType: string | nu
   return lines[0] ?? null
 }
 
+/**
+ * A play type a person can read. College basketball sends ESPN's internal names —
+ * "LayUpShot", "JumpShot", and "MadeFreeThrow" even for a MISSED free throw — so
+ * camelCase is split and the free throw loses its misleading "Made". Types that
+ * are already words ("Pass Reception", "Driving Layup Shot") pass through untouched.
+ */
+export function playTypeLabel(type: string | null): string | null {
+  if (!type) return null
+  if (/^madefreethrow$/i.test(type)) return 'Free Throw'
+  return type.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/\bLay Up\b/g, 'Layup')
+}
+
 export function statCells(line: GameDetailPlayerLine): Array<{ label: string; value: string }> {
   const want = PREFERRED_STATS[line.group] ?? line.labels.slice(0, 4)
   const cells: Array<{ label: string; value: string }> = []
@@ -596,7 +609,7 @@ function LastPlay({ detail, play }: { detail: LiveGameDetail; play: GameDetailPl
   const title =
     play.statYardage != null && /pass|rush|reception/i.test(play.type ?? '')
       ? `${play.statYardage}-yd ${/rush/i.test(play.type ?? '') ? 'Run' : 'Pass'}`
-      : play.type ?? 'Last play'
+      : playTypeLabel(play.type) ?? 'Last play'
   const cards = detail.lastPlayAthleteIds
     .map((id) => {
       const lines = detail.players[id]
@@ -869,10 +882,20 @@ function ShotChart({ detail, basketball }: { detail: LiveGameDetail; basketball:
         aria-label={`Shot chart: ${made} of ${visible.length} field goals made`}
       >
         <rect className="af-gv-court-floor" x="0" y="0" width="50" height={HALF_COURT} />
-        <g className="af-gv-court-lines">
-          <rect x="17" y="0" width="16" height="19" />
+        <g className="af-gv-court-lines" data-court={basketball.court}>
+          {basketball.court === 'college' ? (
+            <>
+              {/* NCAA men: 12 ft lane; 3-point arc 22 ft 1.75 in, 21 ft 7.75 in in the corners. */}
+              <rect x="19" y="0" width="12" height="19" />
+              <path d="M3.35 0 L3.35 9.93 A22.15 22.15 0 0 0 46.65 9.93 L46.65 0" />
+            </>
+          ) : (
+            <>
+              <rect x="17" y="0" width="16" height="19" />
+              <path d="M3 0 L3 14.2 A23.75 23.75 0 0 0 47 14.2 L47 0" />
+            </>
+          )}
           <circle cx="25" cy="19" r="6" />
-          <path d="M3 0 L3 14.2 A23.75 23.75 0 0 0 47 14.2 L47 0" />
           <path d="M21 5.25 A4 4 0 0 0 29 5.25" />
           <line x1="22" y1="4" x2="28" y2="4" />
           <circle cx="25" cy={RIM_FROM_BASELINE} r="0.75" />
@@ -936,7 +959,11 @@ function BasketballPlayByPlay({
   )
   const groups: Array<{ period: number | null; plays: BasketballPlay[] }> =
     active != null ? [{ period: active, plays }] : []
-  const periodShort = (n: number) => (n <= 4 ? `Q${n}` : n === 5 ? 'OT' : `${n - 4}OT`)
+  // College plays two halves ("1st Half", "2nd Half", then "OT" on NCAAB 401825532).
+  const halves = basketball.periods === 'halves'
+  const regulation = halves ? 2 : 4
+  const periodShort = (n: number) =>
+    n <= regulation ? `${halves ? 'H' : 'Q'}${n}` : n === regulation + 1 ? 'OT' : `${n - regulation}OT`
 
   const teamFor = (id: string | null) => (id === detail.home.id ? detail.home : id === detail.away.id ? detail.away : null)
 
@@ -966,7 +993,7 @@ function BasketballPlayByPlay({
         </button>
       </div>
       {periods.length > 1 ? (
-        <div className="af-live-scope af-gv-tabs" role="group" aria-label="Quarter">
+        <div className="af-live-scope af-gv-tabs" role="group" aria-label={halves ? 'Half' : 'Quarter'}>
           {periods.map((n) => (
             <button
               key={n}
@@ -986,7 +1013,7 @@ function BasketballPlayByPlay({
       ) : (
         groups.map((g) => (
           <div key={`${g.period}`} className="af-gv-period">
-            <h3 className="af-label af-gv-period-head">{periodName(g.period)}</h3>
+            <h3 className="af-label af-gv-period-head">{periodName(g.period, halves ? 'half' : 'quarter')}</h3>
             <ol className="af-gv-plays af-gv-bplays">
               {g.plays.map((p, i) => {
                 const team = teamFor(p.teamId)

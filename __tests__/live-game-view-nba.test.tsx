@@ -58,6 +58,8 @@ function nbaDetail(over: Partial<LiveGameDetail> = {}): LiveGameDetail {
     weather: null,
     attendance: 18064,
     basketball: {
+      periods: 'quarters',
+      court: 'pro',
       plays: [
         { id: 'm3', text: 'Draymond Green makes 26-foot three point jumper', type: 'Jump Shot', period: 1, clock: '10:58', teamId: '9', scoring: true, scoreValue: 3, awayScore: 0, homeScore: 4, athleteIds: ['green'] },
         { id: 'miss', text: 'Matas Buzelis misses 15-foot pullup jump shot', type: 'Pullup Jump Shot', period: 1, clock: '10:40', teamId: '4', scoring: false, scoreValue: null, awayScore: 0, homeScore: 4, athleteIds: ['buz'] },
@@ -110,6 +112,8 @@ describe('LiveGameView — NBA', () => {
     // 26-foot three at ESPN (33, 25) is drawn 5.25 ft further from the baseline.
     const three = [...court.querySelectorAll('circle.af-gv-shot')].find((c) => c.getAttribute('cx') === '33')!
     expect(three.getAttribute('cy')).toBe('30.25')
+    // The NBA court: a 16 ft lane.
+    expect(court.querySelector('.af-gv-court-lines[data-court="pro"] rect')!.getAttribute('width')).toBe('16')
 
     fireEvent.click(screen.getByRole('button', { name: 'CHI' }))
     expect(court.querySelectorAll('.af-gv-shot')).toHaveLength(2)
