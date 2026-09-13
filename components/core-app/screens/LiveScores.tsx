@@ -2,8 +2,9 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import MiniPlayerImg from '@/components/MiniPlayerImg'
-import type { LiveGameCard, LivePageData, LiveRosterTieIn } from '@/lib/live/liveScoresPage'
+import type { LiveGameCard, LivePageData } from '@/lib/live/liveScoresPage'
 import { matchesLiveGameQuery } from '@/lib/live/liveGameSearch'
+import { groupStartersByPlayer, pointsSummary, type StarterGroup } from '@/lib/live/liveTieInGroups'
 import '@/components/core-app/af-live.css'
 
 /**
@@ -283,7 +284,7 @@ export function LiveScores({ data: initial, selectedLeagueId = null }: LiveScore
           tabIndex={-1}
         >
           <h2 className="af-label af-live-slate-head">
-            {activeSportLabel} · sorted by leagues affected
+            {activeSportLabel} · {scope === 'my' ? 'your starters, sorted by leagues affected' : 'all games'}
           </h2>
 
           {visibleGames.length === 0 ? (
@@ -307,6 +308,7 @@ export function LiveScores({ data: initial, selectedLeagueId = null }: LiveScore
               <GameCard
                 key={game.gameId}
                 game={game}
+                scope={scope}
                 selectedLeagueId={selectedLeagueId}
                 lastPlay={latestPlayByGame.get(game.gameId) ?? null}
               />
@@ -494,12 +496,20 @@ export function LiveScores({ data: initial, selectedLeagueId = null }: LiveScore
  * someone was reading. Optional blocks reserve their space, and scores are
  * tabular so a 7→14 does not re-centre the row.
  */
-function GameCard({
+/**
+ * Exported because the public `/live` page renders this same card
+ * (`components/live/MatchupCard.tsx`) inside an `.af-core` wrapper — one game
+ * card for both surfaces, so the two cannot drift apart again.
+ */
+export function GameCard({
   game,
+  scope,
   selectedLeagueId,
   lastPlay,
 }: {
   game: LiveGameCard
+  /** "My games" adds your starters under the game; "All games" is the game alone. */
+  scope: 'my' | 'all'
   selectedLeagueId: string | null
   /*
    * The newest play from THIS game, or null. The handoff puts the last play
@@ -517,6 +527,9 @@ function GameCard({
 }) {
   const wp = game.winProbability
   const weekLabel = game.week != null ? `${game.sport} · Week ${game.week}` : game.sport
+  const isFootball = game.sport === 'NFL' || game.sport === 'NCAAF'
+  const situation = game.situation
+  const starters = scope === 'my' ? groupStartersByPlayer(game.tieIns) : []
 
   return (
     <article className="af-live-game" data-live={game.isLive}>
@@ -532,40 +545,56 @@ function GameCard({
             <span className="af-num">{game.statusDetail}</span>
           </span>
         )}
+        {game.broadcast ? <span className="af-live-broadcast af-num">{game.broadcast}</span> : null}
       </div>
 
       <div className="af-live-teams">
-        <Side side={game.away} align="start" leading={leads(game.away.score, game.home.score)} />
+        <Side
+          side={game.away}
+          align="start"
+          leading={leads(game.away.score, game.home.score)}
+          hasBall={situation?.possession === 'away'}
+        />
         <span className="af-live-at af-num" aria-hidden>
           @
         </span>
-        <Side side={game.home} align="end" leading={leads(game.home.score, game.away.score)} />
+        <Side
+          side={game.home}
+          align="end"
+          leading={leads(game.home.score, game.away.score)}
+          hasBall={situation?.possession === 'home'}
+        />
       </div>
 
+      <Linescore game={game} isFootball={isFootball} />
+
       {/*
-        ── Last play, in the card it happened in ──────────────────────────────
-        ⚠ NO FIELD DIAGRAM, AND THAT IS THE HONEST READING OF THE HANDOFF.
-        The design draws a football field with the play plotted on it and a
-        baseball diamond with occupied bases — both need data this system does
-        not have and structurally cannot get. `PlayFeedItem` is
-        {type, playerName, team, teamLogoUrl, headline}: no yard line, no
-        down-and-distance, no bases, no outs. That is not an oversight in the
-        feed reader — `lib/live/eventDetector.ts` DERIVES plays from cumulative
-        stat deltas and says so in its header ("No play-by-play required, and no
-        guessing"), so a 25-yard run is inferred from carries+1 and yards+25.
-        It never knew where the ball was.
-
-        Drawing the diagram anyway would mean choosing a yard line, which is
-        inventing the one detail the picture exists to convey — on the screen
-        whose promise is that the numbers are real. Same refusal as the
-        determinate progress bar on the import screen, and the same reason
-        lib/ai/deterministic.ts already declines to "invent … box-score details".
-
-        The panel treatment itself is the part that carries over, and it is
-        worth having on its own: the play is grouped into a --surface2 block
-        under a LAST PLAY label, beside the score it changed.
+        ── Field strip ─────────────────────────────────────────────────────────
+        This card used to carry a note refusing a field diagram because "the
+        data layer has no yard line". The ESPN scoreboard we already fetch has
+        one (`situation.possessionText`) — the mapper was discarding it. The
+        strip is drawn only when `ballOn` could be PLACED from that text; an
+        unplaceable position renders the down and distance with no ball rather
+        than a ball at a guessed yard line.
       */}
-      {lastPlay ? (
+      {isFootball && situation ? <FieldStrip game={game} /> : null}
+
+      {/*
+        Last play: ESPN's own play text when the scoreboard carries it — it is
+        the play of THIS game by construction. The derived NFL play feed stays
+        as the fallback, e.g. on a poll served from the cache.
+      */}
+      {situation?.lastPlay ? (
+        <div className="af-live-lastplay">
+          <span className="af-label af-live-lastplay-head">
+            Last play
+            {situation.lastPlayType ? (
+              <span className="af-live-lastplay-type af-num">{situation.lastPlayType}</span>
+            ) : null}
+          </span>
+          <p className="af-live-lastplay-text">{situation.lastPlay}</p>
+        </div>
+      ) : lastPlay ? (
         <div className="af-live-lastplay" data-tone={playTone(lastPlay.type)}>
           <span className="af-label af-live-lastplay-head">
             Last play
@@ -597,6 +626,13 @@ function GameCard({
         otherwise: `isEstimate` is a literal `true` on WinProbability precisely
         so this cannot be rendered as a measured number.
       */}
+      <Leaders game={game} />
+
+      {/*
+        Labelled "estimate" because the type makes it impossible to honestly do
+        otherwise. Omitted before kickoff rather than drawn as a "not estimated"
+        row — the card is the game, and an empty placeholder is not part of it.
+      */}
       {wp ? (
         <div className="af-live-wp">
           <span className="af-label">Win prob · est</span>
@@ -608,74 +644,285 @@ function GameCard({
             {game.away.abbrev} {wp.away}% · {game.home.abbrev} {wp.home}%
           </span>
         </div>
-      ) : (
-        <div className="af-live-wp" data-missing="true">
-          <span className="af-label">Win prob</span>
-          <span className="af-live-wp-why">not estimated before kickoff</span>
-        </div>
-      )}
+      ) : null}
 
-      <div className="af-live-top" data-empty={game.topPerformer == null}>
-        <span className="af-label">Top performer</span>
-        {game.topPerformer ? (
-          <>
-            <span className="af-live-top-name">{game.topPerformer.name}</span>
-            <span className="af-live-top-line af-num">{game.topPerformer.statLine}</span>
-          </>
-        ) : (
-          <span className="af-live-top-why">no leader published for this game yet</span>
-        )}
-      </div>
+      {game.venue ? (
+        <p className="af-live-venue">
+          <span className="af-live-venue-name">{game.venue.name}</span>
+          {game.venue.location ? <span> · {game.venue.location}</span> : null}
+        </p>
+      ) : null}
 
-      {game.tieIns.length > 0 ? (
-        <div className="af-live-tieins">
-          <p className="af-label af-live-tieins-head">
-            {game.leaguesAffected === 1
-              ? 'Rostered in 1 of your leagues'
-              : `Rostered in ${game.leaguesAffected} of your leagues`}
-          </p>
-          <ul>
-            {game.tieIns.map((t) => (
-              <TieIn key={`${t.leagueId}-${t.playerId}`} tie={t} isSelected={t.leagueId === selectedLeagueId} />
-            ))}
-          </ul>
-        </div>
+      {starters.length > 0 ? (
+        <MyStarters gameId={game.gameId} groups={starters} selectedLeagueId={selectedLeagueId} />
       ) : null}
     </article>
   )
 }
 
-function TieIn({ tie, isSelected }: { tie: LiveRosterTieIn; isSelected: boolean }) {
+/** Per-period scores with a total column — the "1 2 3 4 T" grid. */
+function Linescore({ game, isFootball }: { game: LiveGameCard; isFootball: boolean }) {
+  const awayLines = game.away.linescores ?? []
+  const homeLines = game.home.linescores ?? []
+  const played = Math.max(awayLines.length, homeLines.length)
+  if (played === 0) return null
+  // Football always shows four quarters so a first-quarter grid is not two columns wide.
+  const columns = Math.max(played, isFootball ? 4 : played)
+  const label = (i: number) => (isFootball && i >= 4 ? (i === 4 ? 'OT' : `OT${i - 3}`) : String(i + 1))
+
   return (
-    <li className="af-live-tiein" data-starter={tie.isStarter} data-selected={isSelected}>
-      <span className="af-live-tiein-tag af-label">
-        {tie.leagueName} · {tie.isStarter ? 'Starting' : 'Bench'}
-      </span>
-      {/*
-        The face, added 2026-09-07. `MiniPlayerImg` already falls back to
-        initials, so a player with no stored headshot renders a mark rather than
-        a broken image — which is the common case, not a failure.
-      */}
-      <MiniPlayerImg
-        sleeperId={tie.playerId}
-        name={tie.playerName}
-        avatarUrl={tie.imageUrl}
-        size={22}
-        className="af-live-tiein-face"
-      />
-      <span className="af-live-tiein-name">
-        {tie.playerName}
-        {tie.position ? <span className="af-live-tiein-pos"> {tie.position}</span> : null}
-      </span>
-      {/*
-        A bench player scoring is not the same fact as a starter scoring, so the
-        points are toned down rather than shown in the same green. Null points —
-        the player is rostered but has not been scored yet — is an em dash, not
-        a zero.
-      */}
-      <span className="af-live-tiein-pts af-num">
-        {tie.points != null ? `${tie.points.toFixed(1)} pts` : '—'}
-      </span>
+    <div className="af-live-linescore-wrap">
+      <table className="af-live-linescore af-num">
+        <thead>
+          <tr>
+            <th scope="col" aria-label="Team" />
+            {Array.from({ length: columns }, (_, i) => (
+              <th key={i} scope="col">
+                {label(i)}
+              </th>
+            ))}
+            <th scope="col">T</th>
+          </tr>
+        </thead>
+        <tbody>
+          {[
+            { side: game.away, lines: awayLines },
+            { side: game.home, lines: homeLines },
+          ].map(({ side, lines }) => (
+            <tr key={side.abbrev}>
+              <th scope="row">{side.abbrev}</th>
+              {Array.from({ length: columns }, (_, i) => (
+                <td key={i}>{lines[i] ?? ''}</td>
+              ))}
+              <td className="af-live-linescore-total">{side.score ?? '—'}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+const YARD_MARKS = [10, 20, 30, 40, 50, 60, 70, 80, 90]
+
+/**
+ * The field: away end zone on the left, home on the right, ball at `ballOn`
+ * (0–100 from the away goal line), first-down line when the distance is known.
+ */
+function FieldStrip({ game }: { game: LiveGameCard }) {
+  const s = game.situation
+  if (!s) return null
+  const ball = s.ballOn
+  const toward = s.possession === 'away' ? 1 : s.possession === 'home' ? -1 : 0
+  const goalToGo = /goal/i.test(s.shortDownDistance ?? s.downDistance ?? '')
+  const firstDown =
+    ball != null && s.distance != null && toward !== 0 && !goalToGo
+      ? Math.min(100, Math.max(0, ball + toward * s.distance))
+      : null
+  const offense = s.possession === 'away' ? game.away : s.possession === 'home' ? game.home : null
+
+  return (
+    <div className="af-live-field-block">
+      <div className="af-live-field-meta">
+        {s.downDistance || s.shortDownDistance ? (
+          <span className="af-live-down af-num">{s.downDistance ?? s.shortDownDistance}</span>
+        ) : null}
+        {s.isRedZone ? <span className="af-live-redzone af-label">Red zone</span> : null}
+        <span className="af-live-timeouts">
+          <Timeouts abbrev={game.away.abbrev} left={s.awayTimeouts} />
+          <Timeouts abbrev={game.home.abbrev} left={s.homeTimeouts} />
+        </span>
+      </div>
+
+      {ball != null ? (
+        <div
+          className="af-live-field"
+          role="img"
+          aria-label={`${offense ? `${offense.abbrev} ball` : 'Ball'}${s.downDistance ? `, ${s.downDistance}` : ''}`}
+        >
+          <EndZone side={game.away} />
+          <div className="af-live-grass" data-redzone={s.isRedZone ? (toward > 0 ? 'home' : 'away') : undefined}>
+            {YARD_MARKS.map((y) => (
+              <span key={y} className="af-live-yard" style={{ left: `${y}%` }}>
+                <span className="af-live-yard-num af-num">{y <= 50 ? y : 100 - y}</span>
+              </span>
+            ))}
+            {firstDown != null ? <span className="af-live-firstdown" style={{ left: `${firstDown}%` }} /> : null}
+            <span
+              className="af-live-ball"
+              data-dir={toward > 0 ? 'right' : toward < 0 ? 'left' : 'none'}
+              style={{ left: `${ball}%` }}
+            />
+          </div>
+          <EndZone side={game.home} />
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
+function EndZone({ side }: { side: LiveGameCard['home'] }) {
+  return (
+    <span className="af-live-endzone">
+      {side.logo ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={side.logo} alt="" width={20} height={20} loading="lazy" />
+      ) : (
+        <span className="af-num">{side.abbrev}</span>
+      )}
+    </span>
+  )
+}
+
+function Timeouts({ abbrev, left }: { abbrev: string; left: number | null }) {
+  if (left == null) return null
+  return (
+    <span className="af-live-to" aria-label={`${abbrev} ${left} timeouts left`}>
+      <span className="af-num">{abbrev}</span>
+      {[0, 1, 2].map((i) => (
+        <span key={i} className="af-live-to-dot" data-used={i >= left} aria-hidden />
+      ))}
+    </span>
+  )
+}
+
+/**
+ * PASS / RUSH / REC with headshots, the way ESPN's game strip lays them out.
+ * Falls back to the single top performer when only that is known, and to
+ * nothing at all before kickoff.
+ */
+function Leaders({ game }: { game: LiveGameCard }) {
+  const leaders = game.leaders ?? []
+  if (leaders.length > 0) {
+    return (
+      <ul className="af-live-leaders" aria-label="Game leaders">
+        {leaders.map((l) => (
+          <li key={`${l.label ?? ''}-${l.name}`} className="af-live-leader">
+            <span className="af-label af-live-leader-cat">{l.label ?? ''}</span>
+            <MiniPlayerImg
+              sleeperId={null}
+              name={l.name}
+              avatarUrl={l.headshot}
+              size={34}
+              className="af-live-leader-face"
+            />
+            <span className="af-live-leader-text">
+              <span className="af-live-leader-name">
+                {l.name}
+                {l.position || l.teamAbbrev ? (
+                  <span className="af-live-leader-meta">
+                    {' '}
+                    {[l.position, l.teamAbbrev].filter(Boolean).join(' · ')}
+                  </span>
+                ) : null}
+              </span>
+              <span className="af-live-leader-line af-num">{l.statLine}</span>
+            </span>
+          </li>
+        ))}
+      </ul>
+    )
+  }
+  if (game.topPerformer) {
+    return (
+      <div className="af-live-top">
+        <span className="af-label">Top performer</span>
+        <span className="af-live-top-name">{game.topPerformer.name}</span>
+        <span className="af-live-top-line af-num">{game.topPerformer.statLine}</span>
+      </div>
+    )
+  }
+  return null
+}
+
+/**
+ * "My games": your STARTERS in this game, one row per player, and the leagues
+ * he starts in behind a disclosure. Bench, IR and taxi are not listed — user
+ * decision 2026-09-13; the old list printed one row per league with bench
+ * included, which is how one game card reached forty-six rows.
+ */
+function MyStarters({
+  gameId,
+  groups,
+  selectedLeagueId,
+}: {
+  gameId: string
+  groups: StarterGroup[]
+  selectedLeagueId: string | null
+}) {
+  const leagueCount = new Set(groups.flatMap((g) => g.leagues.map((l) => l.leagueId))).size
+  return (
+    <div className="af-live-tieins">
+      <p className="af-label af-live-tieins-head">
+        Your starters · {groups.length} {groups.length === 1 ? 'player' : 'players'} · {leagueCount}{' '}
+        {leagueCount === 1 ? 'league' : 'leagues'}
+      </p>
+      <ul className="af-live-mine">
+        {groups.map((g) => (
+          <StarterRow key={g.playerId} gameId={gameId} group={g} selectedLeagueId={selectedLeagueId} />
+        ))}
+      </ul>
+    </div>
+  )
+}
+
+function StarterRow({
+  gameId,
+  group,
+  selectedLeagueId,
+}: {
+  gameId: string
+  group: StarterGroup
+  selectedLeagueId: string | null
+}) {
+  const [open, setOpen] = useState(false)
+  const summary = pointsSummary(group)
+  const panelId = `af-live-mine-${gameId}-${group.playerId}`
+  const holdsSelected = selectedLeagueId != null && group.leagues.some((l) => l.leagueId === selectedLeagueId)
+  const n = group.leagues.length
+
+  return (
+    <li className="af-live-mine-row" data-open={open} data-selected={holdsSelected}>
+      <button
+        type="button"
+        className="af-live-mine-toggle"
+        aria-expanded={open}
+        aria-controls={open ? panelId : undefined}
+        onClick={() => setOpen((o) => !o)}
+      >
+        <MiniPlayerImg sleeperId={group.playerId} name={group.playerName} avatarUrl={group.imageUrl} size={30} />
+        <span className="af-live-mine-name">
+          {group.playerName}
+          {group.position ? <span className="af-live-mine-pos"> {group.position}</span> : null}
+        </span>
+        <span className="af-live-mine-count">
+          {n} {n === 1 ? 'league' : 'leagues'}
+        </span>
+        {/*
+          A range across leagues, never one league's number — each league scores
+          the same play its own way. An em dash when nobody has reported.
+        */}
+        <span className="af-live-mine-pts af-num">
+          {summary == null
+            ? '—'
+            : summary.min === summary.max
+              ? `${summary.max.toFixed(1)} pts`
+              : `${summary.min.toFixed(1)}–${summary.max.toFixed(1)} pts`}
+        </span>
+        <span className="af-live-mine-chev" aria-hidden />
+      </button>
+      {open ? (
+        <ul id={panelId} className="af-live-mine-leagues">
+          {group.leagues.map((l) => (
+            <li key={l.leagueId} data-selected={l.leagueId === selectedLeagueId}>
+              <span className="af-live-mine-league">{l.leagueName}</span>
+              <span className="af-live-mine-league-pts af-num">
+                {l.points == null ? '—' : `${l.points.toFixed(1)} pts`}
+              </span>
+            </li>
+          ))}
+        </ul>
+      ) : null}
     </li>
   )
 }
@@ -684,10 +931,12 @@ function Side({
   side,
   align,
   leading,
+  hasBall,
 }: {
   side: LiveGameCard['home']
   align: 'start' | 'end'
   leading: boolean
+  hasBall: boolean
 }) {
   return (
     <div className="af-live-side-team" data-align={align}>
@@ -707,7 +956,12 @@ function Side({
         </span>
       )}
       <span className="af-live-team-text">
-        <span className="af-live-team-name">{side.name}</span>
+        <span className="af-live-team-name">
+          {side.name}
+          {hasBall ? (
+            <span className="af-live-possession" role="img" aria-label="has the ball" title="Possession" />
+          ) : null}
+        </span>
         {/* Records are not published for every league/sport; withheld, not "0—0". */}
         <span className="af-live-team-record af-num">{side.record ?? '—'}</span>
       </span>

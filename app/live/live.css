@@ -101,3 +101,14 @@
     grid-template-columns: minmax(0, 1fr) 320px;
   }
 }
+
+/*
+ * The game cards are the /core/live card (`GameCard`), which reads the `.af-core`
+ * token set, so each is wrapped in `.af-core`. That scope also paints
+ * `background: var(--bg)` on itself; here the wrapper must stay transparent so
+ * the card sits on this page's ground. Specificity (0,3,0) beats `.af-core`
+ * (0,1,0) whichever stylesheet the bundle happens to load last.
+ */
+.live-page .af-core.live-card-scope {
+  background: transparent;
+}

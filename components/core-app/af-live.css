@@ -442,7 +442,9 @@
 .af-live-tieins-head {
   color: var(--accent);
 }
-.af-live-tieins ul {
+/* Direct child only: the league disclosure nested inside a row is also a <ul>
+   and must keep its own indent. */
+.af-live-tieins > ul {
   margin: 0;
   padding: 0;
   list-style: none;
@@ -450,54 +452,115 @@
   flex-direction: column;
   gap: 8px;
 }
-.af-live-tiein {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
+/* Your starters: one row per player, leagues behind a disclosure. */
+.af-live-mine {
+  gap: 6px;
 }
-.af-live-tiein-tag {
-  padding: 4px 6px;
-  border-radius: 4px;
-  background: var(--chip);
-  border: 1px solid var(--chip-line);
-  color: var(--muted);
-}
-.af-live-tiein[data-starter='true'] .af-live-tiein-tag {
-  background: var(--accent-soft);
-  border-color: var(--accent-line);
-  color: var(--accent);
+.af-live-mine-row {
+  border-radius: 10px;
+  background: var(--surface);
+  border: 1px solid var(--line);
 }
 /* The league you are holding in the rail, marked. Everything else on this
    screen is cross-league, so without this the row you came for is anonymous. */
-.af-live-tiein[data-selected='true'] .af-live-tiein-tag {
-  background: var(--accent);
+.af-live-mine-row[data-selected='true'] {
   border-color: var(--accent);
-  color: var(--accent-ink);
 }
-.af-live-tiein-name {
-  flex: 1 1 auto;
+.af-live-mine-toggle {
+  width: 100%;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto auto;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 10px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  border-radius: 10px;
+}
+.af-live-mine-toggle:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.af-live-mine-name {
   min-width: 0;
-  font-weight: 600;
-  font-size: 12px;
-  color: var(--faint);
+  font-weight: 700;
+  font-size: 13px;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
-.af-live-tiein[data-starter='true'] .af-live-tiein-name {
-  color: var(--text2);
-}
-.af-live-tiein-pos {
+.af-live-mine-pos {
   color: var(--faint);
   font-weight: 500;
+  font-size: 11px;
 }
-.af-live-tiein-pts {
-  font-size: 13px;
+.af-live-mine-count {
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--accent);
+  padding: 3px 7px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  border: 1px solid var(--accent-line);
+  white-space: nowrap;
+}
+.af-live-mine-pts {
+  font-size: 12.5px;
   font-weight: 800;
-  color: var(--faint);
-  font-variant-numeric: tabular-nums;
-}
-/* A bench player scoring is a different fact from a starter scoring. */
-.af-live-tiein[data-starter='true'] .af-live-tiein-pts {
   color: var(--good);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+/* Drawn with borders, not a ▾ glyph — the mono fallback font renders that as a dot. */
+.af-live-mine-chev {
+  width: 7px;
+  height: 7px;
+  margin: 0 3px 3px 2px;
+  border-right: 2px solid var(--muted);
+  border-bottom: 2px solid var(--muted);
+  transform: rotate(45deg);
+  transition: transform 0.15s ease;
+}
+.af-live-mine-row[data-open='true'] .af-live-mine-chev {
+  margin: 3px 3px 0 2px;
+  transform: rotate(225deg);
+}
+.af-live-mine-leagues {
+  margin: 0;
+  padding: 2px 12px 10px 50px;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.af-live-mine-leagues li {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 11.5px;
+  color: var(--text2);
+}
+.af-live-mine-leagues li[data-selected='true'] .af-live-mine-league {
+  color: var(--accent);
+  font-weight: 700;
+}
+.af-live-mine-league {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.af-live-mine-league-pts {
+  flex: none;
+  font-weight: 700;
+  color: var(--good);
+  font-variant-numeric: tabular-nums;
 }
 
 /* ── Side column ─────────────────────────────────────────────────────── */
@@ -781,53 +844,20 @@
   }
 
   /*
-   * ⚠ THE TIE-IN ROW WRAPS RAGGED ON A PHONE, AND THE POINTS ARE THE COLUMN THAT
-   * LOSES. `.af-live-tiein` is a wrapping flex row: tag, name, points. At 390px
-   * whether it fits depends on the LEAGUE NAME's length, so "Turf Wars ·
-   * Starting" keeps its points inline while "Chimmy's Champions · Starting"
-   * pushes them onto a new line — LEFT-aligned, because a wrapped flex line
-   * starts at the beginning. Measured at 390 with three leagues: row 1 inline,
-   * rows 2 and 3 broken, and the three point values landing at three different
-   * x-positions.
-   *
-   * That is the one number in the block a person is actually scanning for, and
-   * it ends up positioned by the length of a league name they did not choose.
-   *
-   * A grid fixes it because the columns stop depending on content: the tag takes
-   * its own row, and name/points share the next with the points pinned right. It
-   * is the same shape at every league-name length, which is the property the
-   * flex row could not have.
+   * The starter row keeps points pinned right at every name length — the old
+   * per-league row wrapped ragged here because a league name decided where the
+   * points landed. The league-count pill is the column that gives way on a
+   * phone; it is repeated in the disclosure anyway.
    */
-  /*
-   * ⚠ THE FACE NEEDS ITS OWN AREA OR IT AUTO-PLACES AND SHUNTS EVERY OTHER CELL.
-   * `grid-template-areas` names three cells; a fourth child with no `grid-area`
-   * lands in the next implicit row, which pushes the points line onto a row of
-   * its own. Adding the headshot without this rule looks fine on desktop (a flex
-   * row) and only breaks below 640px, which is exactly the width nobody checks.
-   */
-  .af-live-tiein {
-    display: grid;
-    grid-template-columns: auto minmax(0, 1fr) auto;
-    grid-template-areas:
-      'tag tag tag'
-      'face name pts';
-    align-items: center;
-    gap: 5px 10px;
+  .af-live-mine-toggle {
+    grid-template-columns: auto minmax(0, 1fr) auto auto;
+    gap: 8px;
   }
-  .af-live-tiein-face {
-    grid-area: face;
+  .af-live-mine-count {
+    display: none;
   }
-  .af-live-tiein-tag {
-    grid-area: tag;
-    justify-self: start;
-  }
-  .af-live-tiein-name {
-    grid-area: name;
-    min-width: 0;
-  }
-  .af-live-tiein-pts {
-    grid-area: pts;
-    justify-self: end;
+  .af-live-mine-leagues {
+    padding-left: 12px;
   }
 }
 
@@ -844,9 +874,8 @@
  * these two show the same kind of fact in different jobs: "what just happened
  * in this game" versus "what has been happening across the slate".
  *
- * ⚠ NO FIELD/DIAMOND DIAGRAM HERE. The design draws one; the data layer has no
- * yard line, down, base or out to draw it from (see the note at the JSX). The
- * panel treatment is the part that carries over.
+ * The field strip lives in its own block below (`.af-live-field*`), fed from the
+ * ESPN scoreboard's `situation`. No baseball diamond yet — not attempted.
  */
 .af-live-lastplay {
   display: flex;
@@ -929,4 +958,289 @@
   font-weight: 700;
   letter-spacing: 0.06em;
   color: var(--faint);
+}
+
+/* ── ESPN-style game presentation ───────────────────────────────────────────
+ * Broadcast, possession, line score, field strip, leaders, venue. Everything
+ * here is fed from the ESPN scoreboard (`lib/live/espnGamePresentation.ts`) and
+ * every block is omitted when its data is absent — none reserves empty space.
+ */
+
+.af-live-broadcast {
+  margin-left: auto;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--faint);
+}
+
+.af-live-possession {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-left: 7px;
+  border-radius: 50%;
+  vertical-align: middle;
+  background: var(--warn);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--warn) 25%, transparent);
+}
+
+.af-live-linescore-wrap {
+  overflow-x: auto;
+}
+.af-live-linescore {
+  width: auto;
+  border-collapse: collapse;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+.af-live-linescore th,
+.af-live-linescore td {
+  min-width: 30px;
+  padding: 3px 6px;
+  text-align: center;
+  font-weight: 600;
+}
+.af-live-linescore thead th {
+  font-size: 9.5px;
+  font-weight: 700;
+  color: var(--faint);
+}
+.af-live-linescore tbody th {
+  padding-left: 0;
+  text-align: left;
+  font-weight: 800;
+  color: var(--text2);
+}
+.af-live-linescore td.af-live-linescore-total {
+  border-left: 1px solid var(--line);
+  font-weight: 900;
+  color: var(--text);
+}
+
+.af-live-field-block {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.af-live-field-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.af-live-down {
+  font-size: 12.5px;
+  font-weight: 800;
+  color: var(--text);
+}
+.af-live-redzone {
+  padding: 3px 7px;
+  border-radius: 6px;
+  background: var(--bad-soft);
+  color: var(--bad);
+}
+.af-live-timeouts {
+  margin-left: auto;
+  display: inline-flex;
+  gap: 12px;
+}
+.af-live-to {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 9.5px;
+  font-weight: 700;
+  color: var(--faint);
+}
+.af-live-to .af-num {
+  margin-right: 3px;
+}
+.af-live-to-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--warn);
+}
+.af-live-to-dot[data-used='true'] {
+  background: var(--line2);
+}
+
+.af-live-field {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) 34px;
+  height: 54px;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+}
+.af-live-endzone {
+  display: grid;
+  place-items: center;
+  background: color-mix(in srgb, var(--good) 30%, var(--surface2));
+  font-size: 9px;
+  font-weight: 800;
+  color: var(--text2);
+}
+.af-live-endzone img {
+  width: 20px;
+  height: 20px;
+  object-fit: contain;
+}
+/* Ten-yard bands, alternating, so the eye can count yards without the numbers. */
+.af-live-grass {
+  position: relative;
+  background: repeating-linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--good) 15%, var(--surface2)) 0 10%,
+    color-mix(in srgb, var(--good) 22%, var(--surface2)) 10% 20%
+  );
+}
+.af-live-grass[data-redzone]::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 20%;
+  background: color-mix(in srgb, var(--bad) 9%, transparent);
+  border-left: 1px dashed color-mix(in srgb, var(--bad) 45%, transparent);
+  pointer-events: none;
+}
+.af-live-grass[data-redzone='home']::after {
+  right: 0;
+}
+.af-live-grass[data-redzone='away']::after {
+  left: 0;
+}
+.af-live-yard {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: color-mix(in srgb, var(--text) 20%, transparent);
+}
+.af-live-yard-num {
+  position: absolute;
+  bottom: 3px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 8.5px;
+  font-weight: 700;
+  color: color-mix(in srgb, var(--text) 55%, transparent);
+}
+.af-live-firstdown {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  margin-left: -1px;
+  background: var(--warn);
+  z-index: 1;
+}
+.af-live-ball {
+  position: absolute;
+  top: 50%;
+  width: 14px;
+  height: 9px;
+  margin: -4.5px 0 0 -7px;
+  border-radius: 50%;
+  /* A football is brown in both themes. */
+  background: #8a4b24;
+  border: 1px solid #f4e9dc;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 35%, transparent);
+  z-index: 2;
+}
+.af-live-ball[data-dir='right']::after,
+.af-live-ball[data-dir='left']::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  margin-top: -4px;
+  border: 4px solid transparent;
+}
+.af-live-ball[data-dir='right']::after {
+  left: 15px;
+  border-left-color: var(--accent);
+}
+.af-live-ball[data-dir='left']::after {
+  right: 15px;
+  border-right-color: var(--accent);
+}
+
+.af-live-leaders {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 8px;
+}
+.af-live-leader {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-areas:
+    'cat cat'
+    'face text';
+  align-items: center;
+  gap: 4px 10px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--surface2);
+}
+.af-live-leader-cat {
+  grid-area: cat;
+  color: var(--faint);
+}
+.af-live-leader-face {
+  grid-area: face;
+}
+.af-live-leader-text {
+  grid-area: text;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.af-live-leader-name {
+  font-size: 12.5px;
+  font-weight: 800;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.af-live-leader-meta {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--faint);
+}
+.af-live-leader-line {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text2);
+}
+
+.af-live-venue {
+  margin: 0;
+  font-size: 11px;
+  color: var(--faint);
+}
+.af-live-venue-name {
+  font-weight: 700;
+  color: var(--muted);
+}
+
+/* Phone overrides for the block above. A separate, trailing query on purpose:
+   these rules must come AFTER the base rules they override, and inserting them
+   into the 620px block further up would put them before those rules. */
+@media (max-width: 620px) {
+  .af-live-leaders {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .af-live-yard-num {
+    display: none;
+  }
+  .af-live-timeouts {
+    margin-left: 0;
+  }
 }

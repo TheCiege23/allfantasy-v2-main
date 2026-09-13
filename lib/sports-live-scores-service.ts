@@ -8,6 +8,16 @@ import { DEFAULT_SPORT, isSupportedSport, normalizeToSupportedSport } from '@/li
 import { fetchWithChain } from '@/lib/workers/api-chain'
 import { legacySupportedSportToApiChain } from '@/lib/workers/api-config'
 import { ESPN_SITE_API_BASE } from '@/lib/providers/espnUrls'
+import {
+  formatVenueLocation,
+  linescoreValues,
+  mapGameSituation,
+  pickGameLeaders,
+  type EspnLeaderCategory,
+  type EspnSituation,
+  type GameLeader,
+  type GameSituation,
+} from '@/lib/live/espnGamePresentation'
 import { normalizeGameStatus, type CanonicalGameStatus } from '@/lib/scores/gameScoreProviders'
 import { LIVE_SCORE_SOURCES, pickFreshestSourceRows } from '@/lib/scores/liveSourceSelection'
 import { loadCollegeTeamIndex } from '@/lib/sport-teams/collegeTeamIndexStore'
@@ -206,6 +216,22 @@ export interface LiveScoreRow {
    * (which is normal before kickoff). Never inferred from box-score guesses.
    */
   topPerformer: LiveScoreLeader | null
+  /*
+   * ── ESPN game presentation ────────────────────────────────────────────────
+   * OPTIONAL, and absent — not empty — on every row that did not come from the
+   * ESPN scoreboard (Rolling Insights, the DB cache). `leaders === undefined`
+   * therefore means "this feed does not carry leaders", while `[]` means "ESPN
+   * named none yet", and `getLivePageData` relies on that difference to decide
+   * whether a row is authoritative. See `lib/live/espnGamePresentation.ts`.
+   */
+  /** PASS / RUSH / REC (or the sport's equivalents), one per category. */
+  leaders?: GameLeader[]
+  /** Down, distance, ball position and last play. Null outside live play. */
+  situation?: GameSituation | null
+  /** "Cincinnati, OH". */
+  venueLocation?: string | null
+  homeLinescores?: number[]
+  awayLinescores?: number[]
 }
 
 /** One named performer with the feed's own stat line, verbatim. */
@@ -329,6 +355,7 @@ interface ESPNCompetitor {
   score: string
   homeAway: 'home' | 'away'
   records?: Array<{ summary: string }>
+  linescores?: Array<{ value?: number; displayValue?: string }>
 }
 
 /**
@@ -356,7 +383,8 @@ interface ESPNCompetition {
     displayClock: string
   }
   leaders?: ESPNLeaderCategory[]
-  venue?: { fullName: string }
+  venue?: { fullName: string; address?: { city?: string; state?: string; country?: string } }
+  situation?: EspnSituation
   odds?: Array<{ details: string; overUnder: number }>
   broadcasts?: Array<{ names: string[] }>
   startDate: string
@@ -483,6 +511,15 @@ export async function fetchEspnScoreboard(
         week: event.week?.number ?? null,
         season: event.season.year,
         topPerformer: pickTopPerformer(comp.leaders),
+        leaders: pickGameLeaders(comp.leaders as EspnLeaderCategory[] | undefined),
+        // Raw ESPN abbreviations on purpose: `possessionText` is written in
+        // ESPN's vocabulary, not in ours after normalizeTeamAbbrev.
+        situation: comp.status.type.completed
+          ? null
+          : mapGameSituation(comp.situation, home.team.abbreviation, away.team.abbreviation),
+        venueLocation: formatVenueLocation(comp.venue?.address),
+        homeLinescores: linescoreValues(home.linescores),
+        awayLinescores: linescoreValues(away.linescores),
       }
       }))
     }

@@ -81,6 +81,37 @@ export type LiveTeamSide = {
    */
   score: number | null
   record: string | null
+  /** Points per period ("1 2 3 4" on the card). Empty before kickoff or off-ESPN. */
+  linescores: number[]
+}
+
+/** One PASS / RUSH / REC leader, with the feed's own stat line. */
+export type LiveGameLeader = {
+  label: string | null
+  name: string
+  statLine: string
+  position: string | null
+  headshot: string | null
+  /** Our abbreviation for his team, when the feed's team id matched a side. */
+  teamAbbrev: string | null
+}
+
+/**
+ * Down, distance and where the ball is — ESPN's `situation`, reshaped for the
+ * field strip. Null outside live play (pre-game, halftime, final).
+ */
+export type LiveGameSituation = {
+  downDistance: string | null
+  shortDownDistance: string | null
+  distance: number | null
+  /** 0–100 from the AWAY goal line; null when the feed's text could not be placed. */
+  ballOn: number | null
+  possession: 'home' | 'away' | null
+  isRedZone: boolean
+  homeTimeouts: number | null
+  awayTimeouts: number | null
+  lastPlay: string | null
+  lastPlayType: string | null
 }
 
 export type LiveGameCard = {
@@ -99,7 +130,12 @@ export type LiveGameCard = {
   /** Our own model output — never a feed value. Null when the game cannot be timed. */
   winProbability: WinProbability | null
   topPerformer: LiveScoreRow['topPerformer']
-  /** Your leagues rostering someone in this game, starters first. */
+  /** Game leaders, football ordered PASS, RUSH, REC. Empty when the feed names none. */
+  leaders: LiveGameLeader[]
+  situation: LiveGameSituation | null
+  venue: { name: string; location: string | null } | null
+  broadcast: string | null
+  /** Your leagues STARTING someone in this game (bench/IR excluded), highest points first. */
   tieIns: LiveRosterTieIn[]
   /** Distinct leagues affected — the sort key for "My games". */
   leaguesAffected: number
@@ -404,6 +440,104 @@ async function loadActiveSlate(
   return { scores: cachedInWindow, fetchedAt: cached?.fetchedAt ?? result.fetchedAt }
 }
 
+/**
+ * The last ESPN presentation seen per game, held in process.
+ *
+ * ⚠ WITHOUT THIS THE CARD FLICKERS ON EVERY OTHER POLL. `getLiveScoresForSport`
+ * serves `SportsGame` rows whenever the cache is under 60s old, and those rows
+ * carry a score and nothing else — no leaders, no down and distance, no line
+ * score, and (for the pro leagues) not even a crest. With the page polling every
+ * 20s, two polls in three would strip the field strip and the leaders off a live
+ * game and the next would put them back.
+ *
+ * `leaders !== undefined` marks a row as ESPN-sourced (see LiveScoreRow), so it
+ * is remembered; a row without it is filled from memory. The score and status on
+ * the incoming row always win — only presentation is borrowed — and two parts are
+ * guarded because they can go stale in a way that would contradict the score:
+ *
+ *   - line scores are borrowed only when they still SUM to the row's total;
+ *   - down/distance is borrowed only while under SITUATION_TTL_MS old, since a
+ *     two-minute-old "1st & 5" is simply the wrong down.
+ *
+ * Railway runs a long-lived server, so this survives between polls. On a cold
+ * instance it is empty and the card renders plainly until the next ESPN refresh,
+ * which is the pre-change behaviour and not a regression.
+ */
+type RememberedPresentation = Pick<
+  LiveScoreRow,
+  | 'leaders'
+  | 'situation'
+  | 'venue'
+  | 'venueLocation'
+  | 'broadcast'
+  | 'homeLinescores'
+  | 'awayLinescores'
+  | 'homeLogo'
+  | 'awayLogo'
+  | 'homeTeamId'
+  | 'awayTeamId'
+  | 'topPerformer'
+>
+const PRESENTATION_TTL_MS = 3 * 60 * 60 * 1000
+const SITUATION_TTL_MS = 90 * 1000
+const MAX_REMEMBERED_GAMES = 600
+const rememberedPresentation = new Map<string, { at: number; value: RememberedPresentation }>()
+
+function sumsTo(values: number[] | undefined, total: number | null): boolean {
+  if (!values || values.length === 0 || total == null) return false
+  return values.reduce((a, b) => a + b, 0) === total
+}
+
+export function withRememberedPresentation(sport: string, row: LiveScoreRow, now: number): LiveScoreRow {
+  const key = `${sport}:${row.gameId}`
+
+  if (row.leaders !== undefined) {
+    rememberedPresentation.delete(key) // re-insert so Map order tracks recency
+    rememberedPresentation.set(key, {
+      at: now,
+      value: {
+        leaders: row.leaders,
+        situation: row.situation ?? null,
+        venue: row.venue,
+        venueLocation: row.venueLocation ?? null,
+        broadcast: row.broadcast,
+        homeLinescores: row.homeLinescores,
+        awayLinescores: row.awayLinescores,
+        homeLogo: row.homeLogo,
+        awayLogo: row.awayLogo,
+        homeTeamId: row.homeTeamId ?? null,
+        awayTeamId: row.awayTeamId ?? null,
+        topPerformer: row.topPerformer,
+      },
+    })
+    while (rememberedPresentation.size > MAX_REMEMBERED_GAMES) {
+      const oldest = rememberedPresentation.keys().next().value
+      if (oldest === undefined) break
+      rememberedPresentation.delete(oldest)
+    }
+    return row
+  }
+
+  const held = rememberedPresentation.get(key)
+  if (!held || now - held.at > PRESENTATION_TTL_MS) return row
+  const v = held.value
+  return {
+    ...row,
+    leaders: v.leaders,
+    situation: !row.completed && now - held.at <= SITUATION_TTL_MS ? v.situation : null,
+    venue: row.venue ?? v.venue,
+    venueLocation: v.venueLocation,
+    broadcast: row.broadcast ?? v.broadcast,
+    homeLinescores: sumsTo(v.homeLinescores, row.homeScore) ? v.homeLinescores : undefined,
+    awayLinescores: sumsTo(v.awayLinescores, row.awayScore) ? v.awayLinescores : undefined,
+    homeLogo: row.homeLogo || v.homeLogo,
+    awayLogo: row.awayLogo || v.awayLogo,
+    homeTeamId: row.homeTeamId ?? v.homeTeamId,
+    awayTeamId: row.awayTeamId ?? v.awayTeamId,
+    topPerformer: row.topPerformer ?? v.topPerformer,
+  }
+}
+
 /** Build the page payload. `userId` null = signed out; tie-ins are simply absent. */
 export async function getLivePageData(opts: {
   userId: string | null
@@ -545,7 +679,9 @@ export async function getLivePageData(opts: {
     byTeam.set(p.team, list)
   }
 
-  const games: LiveGameCard[] = rows.map((row) => {
+  const nowMs = Date.now()
+  const games: LiveGameCard[] = rows.map((sourceRow) => {
+    const row = withRememberedPresentation(sport, sourceRow, nowMs)
     const home = normalizeTeamAbbrev(row.homeTeam) || row.homeTeam
     const away = normalizeTeamAbbrev(row.awayTeam) || row.awayTeam
     const involved = [...(byTeam.get(home) ?? []), ...(byTeam.get(away) ?? [])]
@@ -553,6 +689,14 @@ export async function getLivePageData(opts: {
     const tieIns: LiveRosterTieIn[] = []
     for (const p of involved) {
       for (const l of p.leagues) {
+        /*
+         * STARTERS ONLY — user decision, 2026-09-13, replacing the handoff's
+         * "build rule 4" (bench players visible, dimmed). One WR rostered in
+         * fifteen leagues printed fifteen rows, bench included, and a game card
+         * several screens tall. A bench/IR/taxi slot does not score for you, so
+         * it is also dropped from the live-impact total that sums these.
+         */
+        if (!l.isStarter) continue
         tieIns.push({
           leagueId: l.leagueId,
           leagueName: l.leagueName,
@@ -565,18 +709,13 @@ export async function getLivePageData(opts: {
         })
       }
     }
-    /*
-     * Starters first, then by points. Build rule 4 keeps bench players VISIBLE —
-     * a benched player still explains why you are watching this game — so they
-     * are ordered last and dimmed by the UI, never filtered out.
-     */
-    tieIns.sort((a, b) => {
-      if (a.isStarter !== b.isStarter) return a.isStarter ? -1 : 1
-      return (b.points ?? 0) - (a.points ?? 0)
-    })
+    tieIns.sort((a, b) => (b.points ?? 0) - (a.points ?? 0))
 
     // ESPN sends 0-0 before kickoff; a score is only real once play began.
     const played = hasStarted(row.status) || row.completed
+    const sideFor = (teamId: string | null | undefined): 'home' | 'away' | null =>
+      teamId == null ? null : teamId === row.homeTeamId ? 'home' : teamId === row.awayTeamId ? 'away' : null
+    const s = row.completed ? null : row.situation ?? null
     return {
       gameId: row.gameId,
       sport,
@@ -593,6 +732,7 @@ export async function getLivePageData(opts: {
         logo: row.homeLogo,
         score: played ? row.homeScore : null,
         record: row.homeRecord,
+        linescores: played ? row.homeLinescores ?? [] : [],
       },
       away: {
         abbrev: away,
@@ -600,7 +740,35 @@ export async function getLivePageData(opts: {
         logo: row.awayLogo,
         score: played ? row.awayScore : null,
         record: row.awayRecord,
+        linescores: played ? row.awayLinescores ?? [] : [],
       },
+      leaders: (row.leaders ?? []).map((l) => {
+        const side = sideFor(l.teamId)
+        return {
+          label: l.label,
+          name: l.name,
+          statLine: l.statLine,
+          position: l.position,
+          headshot: l.headshot,
+          teamAbbrev: side === 'home' ? home : side === 'away' ? away : null,
+        }
+      }),
+      situation: s
+        ? {
+            downDistance: s.downDistanceText,
+            shortDownDistance: s.shortDownDistanceText,
+            distance: s.distance,
+            ballOn: s.ballOnFromAway,
+            possession: sideFor(s.possessionTeamId),
+            isRedZone: s.isRedZone,
+            homeTimeouts: s.homeTimeouts,
+            awayTimeouts: s.awayTimeouts,
+            lastPlay: s.lastPlayText,
+            lastPlayType: s.lastPlayType,
+          }
+        : null,
+      venue: row.venue ? { name: row.venue, location: row.venueLocation ?? null } : null,
+      broadcast: row.broadcast ?? null,
       winProbability: estimateWinProbability({
         homeScore: row.homeScore,
         awayScore: row.awayScore,
