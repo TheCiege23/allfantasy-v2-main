@@ -19,6 +19,8 @@ import { getLeagueChatMessages } from '@/lib/league-chat/LeagueChatMessageServic
 import { parseTribeIdFromSource } from '@/lib/survivor/constants'
 import { getTribeChatMemberRosterIds } from '@/lib/survivor/SurvivorChatMembershipService'
 import { processSurvivorOfficialCommand } from '@/lib/survivor/SurvivorOfficialCommandService'
+import { looksLikeOfficialCommand, parseSurvivorCommand } from '@/lib/survivor/SurvivorCommandParser'
+import type { SurvivorCommandIntent } from '@/lib/survivor/types'
 import { resolveSurvivorCurrentWeek } from '@/lib/survivor/SurvivorTimelineResolver'
 import { isMergeTriggered } from '@/lib/survivor/SurvivorMergeEngine'
 import { prisma } from '@/lib/prisma'
@@ -263,7 +265,28 @@ export async function POST(
         return NextResponse.json({ error: 'Not allowed to post in this tribe chat' }, { status: 403 })
       }
       const { createLeagueChatMessage } = await import('@/lib/league-chat/LeagueChatMessageService')
-      if (isChimmyPrompt) {
+      // "@Chimmy vote Team Alpha" is an official Survivor command, and the command service's own help
+      // text tells players to type it that way. Only text after @chimmy that starts with a command verb
+      // and parses to a known intent goes there. Every other @chimmy message, and a command the service
+      // does not handle (a non-Survivor league), keeps the private answer path below.
+      // Only intents processSurvivorOfficialCommand implements. The parser also yields immunity_choice,
+      // which the service answers with "Command not implemented", so "@chimmy immunity rules" stays a question.
+      const SURVIVOR_CHIMMY_COMMAND_INTENTS: ReadonlySet<SurvivorCommandIntent> = new Set<SurvivorCommandIntent>([
+        'vote',
+        'jury_vote',
+        'play_idol',
+        'sit_out_nominate',
+        'challenge_pick',
+        'confirm_minigame',
+      ])
+      const chimmyCommandText = isChimmyPrompt ? message.replace(/^@chimmy\b\s*/i, '').trim() : ''
+      const survivorChimmyCommand =
+        chimmyCommandText &&
+        looksLikeOfficialCommand(chimmyCommandText) &&
+        SURVIVOR_CHIMMY_COMMAND_INTENTS.has(parseSurvivorCommand(chimmyCommandText).intent)
+          ? await processSurvivorOfficialCommand({ leagueId, userId: user.appUserId, command: message, source })
+          : null
+      if (isChimmyPrompt && !survivorChimmyCommand?.handled) {
         const chimmyBody = message.replace(/^@chimmy\b\s*/i, '').trim()
         const created = await createLeagueChatMessage(leagueId, user.appUserId, chimmyBody || 'help', {
           type: messageType as 'text',
@@ -309,12 +332,14 @@ export async function POST(
           },
         })
       }
-      const commandResult = await processSurvivorOfficialCommand({
-        leagueId,
-        userId: user.appUserId,
-        command: message,
-        source,
-      })
+      const commandResult =
+        survivorChimmyCommand ??
+        (await processSurvivorOfficialCommand({
+          leagueId,
+          userId: user.appUserId,
+          command: message,
+          source,
+        }))
       if (commandResult.handled && !commandResult.ok) {
         return NextResponse.json({ error: commandResult.error ?? 'Survivor command failed' }, { status: commandResult.status ?? 400 })
       }
