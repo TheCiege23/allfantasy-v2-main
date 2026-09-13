@@ -194,6 +194,12 @@ type Phase =
       leagueName: string
       attested: boolean
       coverage: PreviewCoverage | null
+      /*
+       * Non-null when the server let us SEE the league but not import it — today, only a public ESPN
+       * league previewed without a connected ESPN account. The text is the gate's own reason, so the
+       * fix it names is the one the commit route actually enforces.
+       */
+      importBlockedReason: string | null
     }
   | { k: 'committing'; sourceId: string }
   | {
@@ -943,7 +949,12 @@ export function ImportV4({
     async (sourceId: string, attest = false) => {
       setError(null)
       setPhase({ k: 'previewing', sourceId })
-      const res = await fetchImportPreview(provider, sourceId, attest ? { accepted: true } : undefined)
+      const res = await fetchImportPreview(
+        provider,
+        sourceId,
+        attest ? { accepted: true } : undefined,
+        { allowPreviewOnly: true },
+      )
       if (!res.ok) {
         if (res.requiresAttestation) {
           setPhase({
@@ -962,12 +973,20 @@ export function ImportV4({
         // `unknown`, not `PreviewCoverage`: asserting the shape here would defeat the validation
         // in `readPreviewCoverage`, which exists precisely because this crossed a network.
         dataQuality?: { coverageNarrative?: unknown }
+        importable?: boolean
+        importBlockedReason?: unknown
       }
       setPhase({
         k: 'preview',
         sourceId,
         leagueName: payload?.league?.name?.trim() || 'Your league',
         attested: attest,
+        // Only an explicit `false` blocks. A missing field is an ordinary, importable preview.
+        importBlockedReason:
+          payload?.importable === false
+            ? (typeof payload.importBlockedReason === 'string' && payload.importBlockedReason.trim()) ||
+              'Connect this account before importing this league.'
+            : null,
         /*
          * Read defensively and default to null rather than to an empty summary. The field was
          * added 2026-09-11; a preview served by an older build has no `dataQuality.coverageNarrative`,
@@ -2536,7 +2555,9 @@ export function ImportV4({
       {phase.k === 'preview' ? (
         <section className="af-im-card" ref={outcomeRef}>
           <header className="af-im-result-head">
-            <h2 className="af-label">Ready to import</h2>
+            <h2 className="af-label">
+              {phase.importBlockedReason ? 'Preview only' : 'Ready to import'}
+            </h2>
           </header>
           <p className="af-im-league-name af-im-preview-name">{phase.leagueName}</p>
           <p className="af-im-field-help">
@@ -2575,10 +2596,16 @@ export function ImportV4({
               ) : null}
             </div>
           ) : null}
+          {phase.importBlockedReason ? (
+            <p className="af-im-field-help" role="status" data-testid="import-preview-blocked">
+              {phase.importBlockedReason}
+            </p>
+          ) : null}
           <div className="af-im-actions">
             <button
               type="button"
               className="af-btn af-im-submit"
+              disabled={phase.importBlockedReason !== null}
               onClick={() => void runCommit(phase.sourceId, phase.attested)}
             >
               Import this league

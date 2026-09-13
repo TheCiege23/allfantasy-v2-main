@@ -36,6 +36,8 @@ export async function POST(req: NextRequest) {
     provider?: string
     sourceId?: string
     attestation?: { accepted?: boolean; statement?: string }
+    /** Opt-in: accept a preview of a league the caller can read but not yet import. */
+    allowPreviewOnly?: boolean
   }
   try {
     body = await req.json()
@@ -70,7 +72,27 @@ export async function POST(req: NextRequest) {
       ? { accepted: true, statement: body.attestation.statement }
       : undefined,
   })
-  if (!gate.ok) {
+  /*
+   * Preview-only (owner decision "A1", 2026-09-12). A public ESPN league reads fine without cookies,
+   * but membership cannot be proven without them, so the gate refuses. Refusing the PREVIEW too
+   * meant a phone user saw nothing at all about a league anyone can open on espn.com.
+   *
+   * All three conditions, deliberately:
+   *   - `provider === 'espn'`       the only provider whose gate sets the flag; checked anyway so a
+   *                                 future setter cannot widen this silently.
+   *   - `gate.leagueReadable`       the league was actually read. A private league, a miss, or a
+   *                                 thrown fetch never carries it.
+   *   - `body.allowPreviewOnly`     the caller can render "you can see this, you cannot import it".
+   *                                 Surfaces that treat any 200 as ready-to-import keep their 403.
+   * `gate.ok` is still false. The commit routes never read `leagueReadable`, so this changes what
+   * someone can SEE and nothing about what they can import.
+   */
+  const previewOnly =
+    !gate.ok &&
+    provider === 'espn' &&
+    gate.leagueReadable === true &&
+    body.allowPreviewOnly === true
+  if (!gate.ok && !previewOnly) {
     return NextResponse.json(
       {
         error: gate.reason ?? 'Commissioner verification failed.',
@@ -113,5 +135,11 @@ export async function POST(req: NextRequest) {
   return NextResponse.json({
     ...result.preview,
     canonical: result.canonicalPreview,
+    ...(previewOnly
+      ? {
+          importable: false,
+          importBlockedReason: gate.reason ?? 'Connect this account before importing this league.',
+        }
+      : {}),
   })
 }
