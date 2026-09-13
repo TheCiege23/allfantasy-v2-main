@@ -5,6 +5,7 @@ import { getClientIp, rateLimit } from "@/lib/rate-limit"
 import { logPasswordResetAudit } from "@/lib/auth/password-reset-audit"
 import { getResendFromEmail } from "@/lib/resend-client"
 import { getServedOrigin } from "@/lib/http/served-origin"
+import { safeInternalPathOr } from "@/lib/auth/auth-intent-resolver"
 
 export const runtime = "nodejs"
 
@@ -270,7 +271,7 @@ export async function POST(req: Request) {
 
   const appBase = resolvePasswordResetAppBase(req)
 
-  const nextPath = returnTo && returnTo.startsWith("/") ? returnTo : "/dashboard"
+  const nextPath = safeInternalPathOr(returnTo, "/dashboard")
   const resetUrl = `${appBase}/reset-password?token=${encodeURIComponent(rawToken)}&returnTo=${encodeURIComponent(nextPath)}`
   const escapedResetUrl = escapeHtml(resetUrl)
 

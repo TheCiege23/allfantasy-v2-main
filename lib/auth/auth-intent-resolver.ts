@@ -6,17 +6,57 @@
 const DEFAULT_AFTER_LOGIN = "/core"
 const DEFAULT_AFTER_SIGNUP = "/core"
 
-/** Safe path: must start with / and not be a full URL (open redirect). */
+/** Safe path: must stay on this site once resolved (open redirect). */
 export function safeRedirectPath(path: string | null | undefined): string {
-  if (!isSafeInternalPath(path)) return DEFAULT_AFTER_LOGIN
-  const trimmed = path.trim()
-  return trimmed
+  return safeInternalPathOr(path, DEFAULT_AFTER_LOGIN)
 }
 
-function isSafeInternalPath(path: string | null | undefined): path is string {
-  if (path == null || typeof path !== "string") return false
+/** The trimmed path when {@link isSafeInternalPath} accepts it, otherwise `fallback`. */
+export function safeInternalPathOr(path: unknown, fallback: string): string {
+  return isSafeInternalPath(path) ? path.trim() : fallback
+}
+
+const PARSE_ORIGIN = "https://internal-path.invalid"
+const BACKSLASH = 92
+const DEL = 127
+
+/**
+ * Backslash, C0 controls and DEL. Browsers read a backslash as a slash and drop tab/CR/LF
+ * before parsing. Compared by char code rather than a regex so no escaping layer can turn
+ * the pattern into literal control bytes in this file.
+ */
+function hasUnsafePathChar(value: string): boolean {
+  for (let i = 0; i < value.length; i += 1) {
+    const code = value.charCodeAt(i)
+    if (code <= 0x1f || code === DEL || code === BACKSLASH) return true
+  }
+  return false
+}
+
+/**
+ * A path that still points at this site after a browser or a Location header resolves it.
+ *
+ * ⚠ `startsWith("/") && !startsWith("//")` IS NOT THAT TEST, and it was the whole check here.
+ * A path can pass it and still resolve to another host two ways:
+ *   - a backslash or tab after the first slash, which browsers normalise to "//"
+ *   - dot segments, which collapse during resolution into a pathname starting "//" — and
+ *     `relativeRedirect` writes the resolved pathname into the Location header
+ *
+ * So parse it the way the sink will. Callers keep the trimmed ORIGINAL string, never the parsed
+ * one: re-emitting the normalised pathname is exactly how a dot segment becomes "//host".
+ */
+export function isSafeInternalPath(path: unknown): path is string {
+  if (typeof path !== "string") return false
   const trimmed = path.trim()
-  return trimmed.startsWith("/") && !trimmed.startsWith("//")
+  if (!trimmed.startsWith("/") || trimmed.startsWith("//")) return false
+  if (hasUnsafePathChar(trimmed)) return false
+  let url: URL
+  try {
+    url = new URL(trimmed, PARSE_ORIGIN)
+  } catch {
+    return false
+  }
+  return url.origin === PARSE_ORIGIN && !url.pathname.startsWith("//")
 }
 
 /** Resolve redirect after successful login. Prefer callbackUrl, then next. */

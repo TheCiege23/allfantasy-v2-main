@@ -11,7 +11,7 @@ import {
 } from "@/lib/auth/ProviderFallbackFlowService"
 import { type SocialProvider } from "@/lib/auth/SocialProviderResolver"
 import { resolveFallbackRoute } from "@/lib/ui-state"
-import { signupUrlWithIntent } from "@/lib/auth/auth-intent-resolver"
+import { safeInternalPathOr, signupUrlWithIntent } from "@/lib/auth/auth-intent-resolver"
 
 const SUPPORTED_PROVIDER_IDS: SocialProvider[] = [
   "google",
@@ -35,8 +35,7 @@ function toProvider(value: string | null | undefined): SocialProvider {
 export default function ProviderPendingPage() {
   const searchParams = useSearchParams()
   const defaultDashboardHref = resolveFallbackRoute("dashboard").href
-  const callbackUrlRaw = searchParams?.get("callbackUrl") ?? defaultDashboardHref
-  const callbackUrl = callbackUrlRaw.startsWith("/") ? callbackUrlRaw : defaultDashboardHref
+  const callbackUrl = safeInternalPathOr(searchParams?.get("callbackUrl"), defaultDashboardHref)
   const provider = toProvider(searchParams?.get("provider") ?? null)
   const landingFallback = resolveFallbackRoute("home")
 

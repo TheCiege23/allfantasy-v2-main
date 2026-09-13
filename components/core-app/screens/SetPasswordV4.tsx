@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import { useEffect, useState } from 'react'
+import { safeInternalPathOr } from '@/lib/auth/auth-intent-resolver'
 import {
   BangGlyph,
   CheckGlyph,
@@ -78,7 +79,7 @@ export function SetPasswordV4() {
   const searchParams = useSearchParams()
   const token = searchParams?.get('token') || ''
   const requestedReturnTo = searchParams?.get('returnTo') || ''
-  const safeReturnTo = requestedReturnTo.startsWith('/') ? requestedReturnTo : '/core'
+  const safeReturnTo = safeInternalPathOr(requestedReturnTo, '/core')
   const loginHref = `/login?callbackUrl=${encodeURIComponent(safeReturnTo)}`
   const requestHref = `/forgot-password?returnTo=${encodeURIComponent(safeReturnTo)}`
 

@@ -5,6 +5,7 @@ import { ImportV4 } from "@/components/core-app/screens/ImportV4";
 import { normalizeIncomingImportProvider } from "@/lib/import/importSearchParams";
 import { IMPORT_PROVIDER_UI_OPTIONS } from "@/lib/league-import/provider-ui-config";
 import { prisma } from "@/lib/prisma";
+import { safeInternalPathOr } from "@/lib/auth/auth-intent-resolver";
 
 /**
  * /import — cut over to the V4 screen.
@@ -63,7 +64,7 @@ export default async function ImportPage({
    * two callers that genuinely have somewhere to go back to — Career and
    * Portfolio — pass ?returnTo= explicitly and are unaffected.
    */
-  const returnTo = returnToRaw.startsWith("/") ? returnToRaw : "";
+  const returnTo = safeInternalPathOr(returnToRaw, "");
 
   /*
    * ⚠ PARSING A PROVIDER IS NOT THE SAME AS OFFERING IT, AND THE DEEP LINK IS THE WAY IN.

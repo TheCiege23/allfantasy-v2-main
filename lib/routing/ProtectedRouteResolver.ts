@@ -6,6 +6,7 @@ import {
   resolveLoginHrefFromRequestedPath,
   resolveSignupHrefFromRequestedPath,
 } from "@/lib/auth/AuthRedirectResolver"
+import { isSafeInternalPath, safeInternalPathOr } from "@/lib/auth/auth-intent-resolver"
 
 /** Path prefixes that require an authenticated session. */
 const PROTECTED_PREFIXES = [
@@ -51,9 +52,7 @@ export function isAdminPath(pathname: string | null): boolean {
 
 /** Build login redirect URL that preserves the requested path as callbackUrl. */
 export function getLoginRedirectUrl(requestedPath: string | null): string {
-  const path = requestedPath && requestedPath.startsWith("/") && !requestedPath.startsWith("//")
-    ? requestedPath
-    : "/dashboard"
+  const path = safeInternalPathOr(requestedPath, "/dashboard")
   return resolveLoginHrefFromRequestedPath(path)
 }
 
@@ -66,7 +65,7 @@ export function getAdminLoginRedirectUrl(requestedPath: string | null): string {
   if (
     requestedPath &&
     requestedPath.startsWith("/admin") &&
-    !requestedPath.startsWith("//")
+    isSafeInternalPath(requestedPath)
   ) {
     next = requestedPath
   }
@@ -75,9 +74,7 @@ export function getAdminLoginRedirectUrl(requestedPath: string | null): string {
 
 /** Build signup redirect URL that preserves the requested path as next. */
 export function getSignupRedirectUrl(requestedPath: string | null): string {
-  const path = requestedPath && requestedPath.startsWith("/") && !requestedPath.startsWith("//")
-    ? requestedPath
-    : "/dashboard"
+  const path = safeInternalPathOr(requestedPath, "/dashboard")
   return resolveSignupHrefFromRequestedPath(path)
 }
 

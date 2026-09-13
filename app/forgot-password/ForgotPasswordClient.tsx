@@ -10,6 +10,7 @@ import {
   normalizePhoneE164,
 } from '@/lib/auth/ForgotPasswordFlowController'
 import { resolvePasswordResetErrorMessage } from '@/lib/auth/AuthErrorMessageResolver'
+import { safeInternalPathOr } from '@/lib/auth/auth-intent-resolver'
 import {
   requestPasswordResetByEmail,
   requestPasswordResetBySms,
@@ -115,7 +116,7 @@ export default function ForgotPasswordClient() {
   const searchParams = useSearchParams()
   const forceEmail = searchParams?.get('method') === 'email'
   const requestedReturnTo = searchParams?.get('returnTo') || ''
-  const safeReturnTo = requestedReturnTo.startsWith('/') ? requestedReturnTo : '/dashboard'
+  const safeReturnTo = safeInternalPathOr(requestedReturnTo, '/dashboard')
   const loginHref = `/login?callbackUrl=${encodeURIComponent(safeReturnTo)}`
 
   const [method, setMethod] = useState<Method | null>(forceEmail ? 'email' : null)

@@ -3,6 +3,8 @@
  * APIs may still exist; this is for browser redirects only.
  */
 
+import { isSafeInternalPath } from "@/lib/auth/auth-intent-resolver"
+
 const DASHBOARD = "/core"
 
 function splitPathAndQuery(fullPath: string): { pathname: string; search: string } {
@@ -20,7 +22,7 @@ export function canonicalizeProductRoute(path: string): string {
   const trimmed = path.trim()
   if (!trimmed) return DASHBOARD
   if (/^https?:\/\//i.test(trimmed)) return DASHBOARD
-  if (!trimmed.startsWith("/") || trimmed.startsWith("//")) return DASHBOARD
+  if (!isSafeInternalPath(trimmed)) return DASHBOARD
 
   const { pathname, search } = splitPathAndQuery(trimmed)
 
