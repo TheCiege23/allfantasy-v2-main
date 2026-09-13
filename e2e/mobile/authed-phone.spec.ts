@@ -102,23 +102,25 @@ test.describe("@db @mobile authenticated phone contract", () => {
   })
 
   /*
-   * ⚠ WARM BOTH ROUTES BEFORE ANY TEST IS ON THE CLOCK. `e2e/global-setup.ts`
-   * warms 33 public routes and neither of these, so the first test to reach each
-   * one paid a cold dev compile inside its own timeout: on PR #754 the first
-   * `/core/trades` attempt hit 240s and the retry passed in ~30s. That is one of
-   * two retries spent on every run, and a flake a slower runner turns red.
+   * ⚠ SIGNED-OUT WARM-UP OF BOTH ROUTES. Only `/commissioner-os` is measurably
+   * cold here; the `/core/trades` half is redundant, and was added on a theory CI
+   * then disproved. Measured on PR #767 (run 34721325020, mobile-auth):
    *
-   * Signed-OUT on purpose, and it still compiles the real page. Middleware does
-   * not gate either route (`requiresSessionAuth` covers neither); the redirect to
-   * `/login` is thrown DURING RENDER — `app/core/[[...screen]]/page.tsx` after
-   * `getServerSession`, `app/commissioner-os/layout.tsx` likewise — and the
-   * catch-all imports `TradeCenter` statically. `redirect: "manual"` stops at that
-   * 307: `/login` is already warm.
+   *   [global-setup] warmed 33 routes in 127s    incl. /dashboard 200 18957ms
+   *   [authed-warmup] /core/trades     200 1012ms   (758ms, second project)
+   *   [authed-warmup] /commissioner-os skipped (TypeError) 406ms, then 307 190ms
    *
-   * Here rather than in global-setup because global-setup runs for EVERY lane,
-   * and the `/core` catch-all is 132 static imports that no other mobile lane
-   * visits. Like global-setup, it never gates the run: a failed warm-up only
-   * means the test pays the compile, which is today's behaviour.
+   * `e2e/global-setup.ts` fetches `/dashboard` with `redirect: 'follow'`, and
+   * middleware `redirectDeprecatedDashboardRoutes` sends it to `/core` — so the
+   * `app/core/[[...screen]]/page.tsx` catch-all that renders `/core/trades` is
+   * ALREADY compiled before this hook runs. It answered 200, not a 307 to `/login`.
+   *
+   * 🛑 SO THE 240s FIRST-ATTEMPT `/core/trades` TIMEOUT ON PR #754 (run
+   * 34717571125, retry passed in ~30s) IS NOT A COLD COMPILE, AND IS UNEXPLAINED.
+   * Do not cite this hook as its fix.
+   *
+   * Kept for `/commissioner-os`, which global-setup does not visit. It never gates
+   * the run: a failed warm-up only means the test pays the compile.
    */
   test.beforeAll(async ({}, testInfo) => {
     const WARM_TIMEOUT_MS = 180_000
