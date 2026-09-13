@@ -384,11 +384,25 @@ describe('Guillotine full regression matrix', () => {
   })
 
   it('guillotine canonical creation disables playoffs and keeps trade settings configurable', async () => {
+    /*
+     * ⚠ THIS MOCK IS THE FUNCTION'S READ LIST, AND IT ROTS WHEN THE FUNCTION GROWS. Written 2026-04-20;
+     * `createCanonicalLeagueInTransaction` then gained `userProfile`/`appUser` reads (3e3d24013,
+     * 0e1849555: commissioner team naming and the finder rank band), `leagueInvite` and
+     * `findLeagueListing` (ae4753132) and `scoringSettingsSnapshot` (2c8d81d2c). The missing delegates
+     * threw a TypeError before any assertion ran, so this test stood red on main while guarding nothing.
+     */
     const tx: any = {
+      userProfile: {
+        findUnique: vi.fn().mockResolvedValue({ displayName: 'Blade Commissioner', xpLevel: 5, legacyCareerLevel: null }),
+      },
+      appUser: { findUnique: vi.fn().mockResolvedValue({ username: null, email: 'blade@example.com' }) },
       league: {
         findFirst: vi.fn().mockResolvedValue(null),
         create: vi.fn().mockResolvedValue({ id: 'league-1' }),
       },
+      scoringSettingsSnapshot: { create: vi.fn().mockResolvedValue({}) },
+      leagueInvite: { create: vi.fn().mockResolvedValue({ token: 'invite-token' }) },
+      findLeagueListing: { upsert: vi.fn().mockResolvedValue({}) },
       guillotineLeagueConfig: { upsert: vi.fn().mockResolvedValue({}) },
       leagueSettings: { create: vi.fn().mockResolvedValue({}) },
       leagueWaiverSettings: { create: vi.fn().mockResolvedValue({}) },
@@ -438,5 +452,12 @@ describe('Guillotine full regression matrix', () => {
 
     const extArg = tx.redraftLeagueExtendedSettings.create.mock.calls[0][0]
     expect(extArg.data.commissionerTradeReviewType).toBe('league_vote')
+
+    // The profile reads are consumed, not merely tolerated: with no username, the commissioner's team
+    // takes the profile display name (3e3d24013), never the league name.
+    expect(tx.userProfile.findUnique).toHaveBeenCalledWith(expect.objectContaining({ where: { userId: 'user-1' } }))
+    const teamArg = tx.leagueTeam.create.mock.calls[0][0]
+    expect(teamArg.data.ownerName).toBe('Blade Commissioner')
+    expect(teamArg.data.teamName).toBe("Blade Commissioner's Team")
   })
 })
