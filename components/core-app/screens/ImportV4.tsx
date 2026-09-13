@@ -418,7 +418,11 @@ const YAHOO_CONNECT_HREF = `/api/auth/yahoo?returnTo=${encodeURIComponent('/impo
  * and only fall back to our own when it gave none.
  */
 function describeYahooError(code: string, description?: string): string {
-  if (description) return description
+  const detail = description?.trim() ?? ''
+  if (/application is not authorized/i.test(detail)) {
+    return 'Yahoo sign-in worked, but Yahoo has not approved this AllFantasy app for Fantasy Sports API access yet. The app owner must submit or confirm the Fantasy Sports API application in Yahoo Developer Network, then reconnect Yahoo here after approval.'
+  }
+  if (detail) return detail
   switch (code) {
     case 'not_configured':
       return 'Yahoo is not configured on this deployment yet.'

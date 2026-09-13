@@ -81,6 +81,8 @@ export interface PendingProviderTrade {
   /** Provider roster/team ids, used only to join into canonical rosters. */
   viewerRosterExternalId?: string | null
   counterpartyRosterExternalId?: string | null
+  /** Provider lifecycle. Older callers can omit it and are treated as pending. */
+  lifecycleStatus?: 'pending' | 'complete'
 }
 
 type SleeperRosterRow = { roster_id?: number; owner_id?: string }
@@ -217,6 +219,8 @@ export function buildTradeAssetsForRoster(args: {
  */
 export type PendingTradeScan = {
   trades: PendingProviderTrade[]
+  /** Recently completed trades involving the viewer, from the same provider read. */
+  completedTrades?: PendingProviderTrade[]
   /** True only when Sleeper answered and the viewer's roster was identified. */
   scanned: boolean
   /** Why the scan did not run. Null when it did. */
@@ -285,6 +289,7 @@ export async function scanPendingSleeperTrades(args: {
     const weeks = args.weeks ?? Array.from({ length: 18 }, (_, i) => i + 1)
     const seen = new Set<string>()
     const out: PendingProviderTrade[] = []
+    const completed: PendingProviderTrade[] = []
     let weeksUnanswered = 0
 
     /*
@@ -337,7 +342,12 @@ export async function scanPendingSleeperTrades(args: {
 
       for (const tx of transactions) {
         if (tx.type !== 'trade') continue
-        if (!isPendingTradeStatus(tx.status)) continue
+        const lifecycleStatus = isPendingTradeStatus(tx.status)
+          ? 'pending' as const
+          : String(tx.status ?? '').toLowerCase() === 'complete'
+            ? 'complete' as const
+            : null
+        if (!lifecycleStatus) continue
         if (!tx.roster_ids?.includes(userRosterId)) continue
         if (seen.has(tx.transaction_id)) continue
         seen.add(tx.transaction_id)
@@ -350,22 +360,31 @@ export async function scanPendingSleeperTrades(args: {
 
         const creator = tx.creator ? userById.get(tx.creator) : undefined
         const proposedByViewer = Boolean(tx.creator && String(tx.creator) === String(ownerSleeperId))
-        out.push({
+        const otherRosterId = tx.roster_ids?.find((id) => Number(id) !== userRosterId)
+        const otherOwnerId = (Array.isArray(rosters) ? (rosters as SleeperRosterRow[]) : [])
+          .find((row) => Number(row.roster_id) === Number(otherRosterId))?.owner_id
+        const otherManager = otherOwnerId ? userById.get(otherOwnerId) : undefined
+        const row: PendingProviderTrade = {
           transactionId: tx.transaction_id,
-          proposedBy: proposedByViewer
-            ? 'You'
-            : creator?.metadata?.team_name ||
-              creator?.display_name ||
-              (tx.creator ? `Manager ${tx.creator.slice(0, 6)}` : 'Another team'),
+          proposedBy: lifecycleStatus === 'complete'
+            ? otherManager?.metadata?.team_name || otherManager?.display_name || 'Another team'
+            : proposedByViewer
+              ? 'You'
+              : creator?.metadata?.team_name ||
+                creator?.display_name ||
+                (tx.creator ? `Manager ${tx.creator.slice(0, 6)}` : 'Another team'),
           proposedByViewer,
           proposedAt: tx.created ? new Date(tx.created).toISOString() : null,
           assetsGiven,
           assetsReceived,
           readOnly: true,
           provider: 'sleeper',
+          lifecycleStatus,
           viewerRosterExternalId: String(userRosterId),
-          counterpartyRosterExternalId: String(tx.roster_ids?.find((id) => Number(id) !== userRosterId) ?? '') || null,
-        })
+          counterpartyRosterExternalId: String(otherRosterId ?? '') || null,
+        }
+        if (lifecycleStatus === 'pending') out.push(row)
+        else completed.push(row)
       }
     }
 
@@ -379,7 +398,8 @@ export async function scanPendingSleeperTrades(args: {
       }
     }
 
-    return { trades: out, scanned: true, reason: null, weeksUnanswered }
+    completed.sort((a, b) => Date.parse(b.proposedAt ?? '') - Date.parse(a.proposedAt ?? ''))
+    return { trades: out, completedTrades: completed.slice(0, 50), scanned: true, reason: null, weeksUnanswered }
   } catch {
     // Provider unavailability must never break the caller's own panel.
     return {

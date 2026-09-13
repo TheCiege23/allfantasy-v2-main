@@ -15,13 +15,13 @@ const PAGE = read('app/import/page.tsx')
 const AUTH_CB = read('app/api/auth/yahoo/callback/route.ts')
 const LEAGUE_CB = read('app/api/league/yahoo/callback/route.ts')
 
-describe('⚠ the two callbacks really do disagree', () => {
+describe('Yahoo callbacks share one credential and redirect contract', () => {
   it('the auth callback returns yahoo_connected=1', () => {
     expect(AUTH_CB).toContain("yahoo_connected: '1'")
   })
 
-  it('the league callback returns success=yahoo_connected', () => {
-    expect(LEAGUE_CB).toContain("dest.searchParams.set('success', 'yahoo_connected')")
+  it('the registered legacy callback delegates to the canonical callback', () => {
+    expect(LEAGUE_CB).toContain("export { GET } from '@/app/api/auth/yahoo/callback/route'")
   })
 
   it('the page reads both spellings rather than picking a winner', () => {

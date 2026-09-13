@@ -357,11 +357,16 @@ function mapProviderTrades(
     // 'incoming' would render their own offer backwards, with given/received
     // reversed relative to how they built it.
     direction: (trade.proposedByViewer ? 'outgoing' : 'incoming') as LeagueTradeHistoryItem['direction'],
-    partnerName: trade.proposedByViewer ? 'Awaiting response' : trade.proposedBy,
+    partnerName: trade.lifecycleStatus === 'complete'
+      ? trade.proposedBy
+      : trade.proposedByViewer ? 'Awaiting response' : trade.proposedBy,
     timestamp: trade.proposedAt ?? new Date().toISOString(),
     sent: trade.assetsGiven.map((a, i) => providerAsset(a, i, 'blue')),
     received: trade.assetsReceived.map((a, i) => providerAsset(a, i, 'teal')),
-    status: `pending_on_${trade.provider}`,
+    status: trade.lifecycleStatus === 'complete'
+      ? `completed_on_${trade.provider}`
+      : `pending_on_${trade.provider}`,
+    executedAt: trade.lifecycleStatus === 'complete' ? (trade.proposedAt ?? undefined) : undefined,
     decisionAction: evaluations.get(trade.transactionId)?.action,
     decisionRecommendation: evaluations.get(trade.transactionId)?.recommendation ?? null,
     decisionCoveragePct: evaluations.get(trade.transactionId)?.coveragePct ?? null,
@@ -628,7 +633,9 @@ export async function GET(req: NextRequest) {
   ])
 
   const providerPending: PendingProviderTrade[] = pendingScan.trades
+  const providerCompleted: PendingProviderTrade[] = pendingScan.completedTrades ?? []
   const providerEvaluations = await evaluatePendingProviderTrades({ leagueId, trades: providerPending }).catch(() => new Map())
+  const completedEvaluations = await evaluatePendingProviderTrades({ leagueId, trades: providerCompleted }).catch(() => new Map())
 
   // Native first (the viewer can act on those); provider proposals follow.
   const activeTrades = [...nativeTrades, ...mapProviderTrades(providerPending, providerEvaluations)]
@@ -663,7 +670,7 @@ export async function GET(req: NextRequest) {
     draft,
     tradeBlock,
     activeTrades,
-    historyTrades: nativeHistory,
+    historyTrades: [...mapProviderTrades(providerCompleted, completedEvaluations), ...nativeHistory],
     activeCount: activeTrades.length,
     source: 'sleeper' as const,
     leagueName: league.name ?? 'League',

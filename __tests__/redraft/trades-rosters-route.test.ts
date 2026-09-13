@@ -19,6 +19,7 @@ const findUniqueUserProfile = vi.fn()
 const findManySportsPlayer = vi.fn()
 const getPlayerValues = vi.fn()
 const resolveTeamByeWeeks = vi.fn()
+const resolveProviderPlayers = vi.fn()
 
 vi.mock('next-auth', () => ({ getServerSession: (...args: unknown[]) => getServerSession(...args) }))
 vi.mock('@/lib/auth', () => ({ authOptions: {} }))
@@ -71,6 +72,9 @@ vi.mock('@/lib/league/league-access', () => ({
 vi.mock('@/lib/fantasycalc-db', () => ({
   getPlayerValuesForNamesDbFirst: (...args: unknown[]) => getPlayerValues(...args),
 }))
+vi.mock('@/lib/player-identity/resolveProviderRosterPlayers', () => ({
+  resolveProviderRosterPlayers: (...args: unknown[]) => resolveProviderPlayers(...args),
+}))
 
 import { GET } from '@/app/api/leagues/[leagueId]/trades/rosters/route'
 
@@ -93,6 +97,7 @@ describe('GET /api/leagues/[leagueId]/trades/rosters', () => {
     findUniqueUserProfile.mockResolvedValue(null)
     getPlayerValues.mockResolvedValue(new Map())
     resolveTeamByeWeeks.mockResolvedValue(new Map())
+    resolveProviderPlayers.mockResolvedValue(new Map())
   })
 
   it('rejects a non-member (403), matching every other trade route\'s access gate', async () => {
@@ -117,6 +122,24 @@ describe('GET /api/leagues/[leagueId]/trades/rosters', () => {
     expect(body.rosters.map((r) => r.rosterId)).toEqual(['roster-a', 'roster-b'])
     expect(body.rosters[0].players.map((p) => p.id)).toEqual(['p1', 'p2'])
     expect(body.rosters[1].players.map((p) => p.id)).toEqual(['p3'])
+  })
+
+  it('resolves ESPN roster ids through the ESPN identity namespace and keeps the headshot', async () => {
+    assertLeagueMember.mockResolvedValue({ ok: true, league: {} })
+    findUniqueLeague.mockResolvedValue({ season: 2026, sport: 'NFL', platform: 'espn' })
+    findManyRoster.mockResolvedValue([
+      { id: 'roster-a', platformUserId: 'user-a', playerData: { players: ['4362628'] }, faabRemaining: null },
+    ])
+    resolveProviderPlayers.mockResolvedValue(new Map([
+      ['4362628', { name: 'Example Player', position: 'WR', team: 'WAS', imageUrl: 'https://img/player.png', sport: 'NFL' }],
+    ]))
+
+    const res = await GET(new Request('http://localhost/api/leagues/league-1/trades/rosters') as never, ctx('league-1'))
+    const player = ((await res.json()) as { rosters: Array<{ players: Array<Record<string, unknown>> }> }).rosters[0]!.players[0]!
+
+    expect(resolveProviderPlayers).toHaveBeenCalledWith('espn', ['4362628'], 'NFL')
+    expect(player).toMatchObject({ name: 'Example Player', position: 'WR', team: 'WAS', imageUrl: 'https://img/player.png' })
+    expect(player.name).not.toBe('4362628')
   })
 
   it('🛑 resolves every roster in ONE query, not one query per roster', async () => {

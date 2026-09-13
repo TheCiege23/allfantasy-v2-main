@@ -24,6 +24,7 @@ export async function POST(
     receiverRosterId?: string
     assets?: TradeAssetInput[]
     currentWeek?: number | null
+    metadata?: Record<string, unknown>
   }
   if (!body.proposerRosterId || !body.receiverRosterId || !Array.isArray(body.assets)) {
     return NextResponse.json({ error: 'proposerRosterId, receiverRosterId, assets required' }, { status: 400 })
@@ -38,6 +39,7 @@ export async function POST(
       assets: body.assets,
       parentTradeId: tradeId,
       currentWeek: body.currentWeek ?? null,
+      metadata: body.metadata,
     })
     return NextResponse.json({ ok: true, tradeId: id })
   } catch (e) {

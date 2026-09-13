@@ -224,6 +224,10 @@ describe('⚠ never write a row the counterparty cannot open', () => {
 })
 
 describe('⚠ no optimistic success', () => {
+  it('sends the editable manager message as proposal metadata', () => {
+    expect(PANEL).toContain('value={offerMessage}')
+    expect(PANEL).toContain("metadata: offerMessage.trim() ? { offerMessage: offerMessage.trim() } : undefined")
+  })
   it('reports the server’s own refusal text rather than a generic failure', () => {
     expect(PANEL).toContain("setOutcome({ ok: false, message: j.error ??")
   })
