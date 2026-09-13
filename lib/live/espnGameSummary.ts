@@ -983,15 +983,39 @@ const round1 = (n: number) => Math.round(n * 10) / 10
 
 function pitchKind(type: string | null): BaseballPitch['kind'] {
   const t = type ?? ''
-  if (/^(ball|intent|pitchout|hit-by-pitch)/.test(t)) return 'ball'
-  if (/^strike/.test(t)) return 'strike'
-  if (/^foul/.test(t)) return 'foul'
+  // "Automatic Ball/Strike" is a pitch-clock call; college games carry them (NCAA 401874442).
+  if (/^(ball|intent|pitchout|hit-by-pitch|automatic-ball)/.test(t)) return 'ball'
+  if (/^(strike|automatic-strike)/.test(t)) return 'strike'
+  /*
+   * ⚠ EXACT, NOT /^foul/. "foul-out" is a ball CAUGHT IN PLAY — an out with a
+   * spray-chart spot — and the prefix match filed it as a foul pitch, so foul
+   * outs never reached the chart. "bunted-foul" is a foul pitch (college).
+   */
+  if (t === 'foul-ball' || t === 'bunted-foul') return 'foul'
   return 'inplay'
 }
 
 /** ESPN sends a bare id string as `team` on at-bat plays, and `{ id }` on inning markers. */
 const playTeamId = (p: Obj | null) => str(p?.team) ?? str(pick(p, 'team', 'id'))
-const playType = (p: Obj | null) => str(pick(p, 'type', 'type'))
+
+/**
+ * ESPN's machine name for a play type ("play-result", "start-batterpitcher").
+ *
+ * ⚠ COLLEGE BASEBALL SENDS NO `type.type` — only the readable `type.text`
+ * ("Play Result", "Start Batter/Pitcher"), measured on three NCAA games
+ * (401874384, 401874442, 401874453). Every rule here keys on the machine name,
+ * so a college game produced 260 at-bats with no result and an empty spray
+ * chart. The machine name is derived from the text when absent: lowercase, "/"
+ * dropped, spaces to "-" — which reproduces ESPN's own `type.type` on 1,571 of
+ * 1,571 MLB plays that carry both.
+ */
+export function baseballPlayType(p: Obj | null): string | null {
+  const machine = str(pick(p, 'type', 'type'))
+  if (machine) return machine
+  const text = str(pick(p, 'type', 'text'))
+  return text ? text.toLowerCase().replace(/\//g, '').replace(/\s/g, '-') : null
+}
+const playType = baseballPlayType
 
 function mapBaseball(root: Obj, comp: Obj, homeRaw: Obj, awayRaw: Obj, state: GameDetailState): BaseballDetail {
   // Every play carries its at-bat's id (73 of 73 at-bats on 401816920), including
@@ -1370,7 +1394,7 @@ export function trimEspnGameSummary(
  * vs Michigan (401856600), Oklahoma vs Baylor (401858383) and Illinois @ UCLA in OT
  * (401825532).
  */
-export const GAME_VIEW_SPORTS: readonly string[] = ['NFL', 'NCAAF', 'NBA', 'NCAAB', 'NHL', 'MLB']
+export const GAME_VIEW_SPORTS: readonly string[] = ['NFL', 'NCAAF', 'NBA', 'NCAAB', 'NHL', 'MLB', 'NCAABASE']
 
 const NAME_SUFFIX = /\s+(jr|sr|ii|iii|iv|v)\.?$/i
 

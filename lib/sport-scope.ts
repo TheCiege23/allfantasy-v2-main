@@ -133,6 +133,45 @@ export function normalizeToSupportedSport(sport: string | null | undefined): Lea
   return DEFAULT_SPORT
 }
 
+/**
+ * Sports that exist on LIVE SCORES ONLY — a scoreboard tab and the clicked-game
+ * view, never a league.
+ *
+ * ⚠ DELIBERATELY NOT A `LeagueSport`, AND NOT IN `SUPPORTED_SPORTS`. Nobody can
+ * run a college baseball fantasy league here, and `SUPPORTED_SPORTS` is iterated
+ * by ~10 workers, league create flows and every AI-tool sport picker, so adding
+ * it there would offer a sport that does nothing. Adding it to the Prisma enum
+ * would also mean a migration for a value no league row can use. Live Scores
+ * stores its games in `SportsGame.sport`, a plain String, so a live-only key
+ * needs neither. User decision, 2026-09-13: College Baseball on Live Scores.
+ */
+export const LIVE_ONLY_SPORTS = ['NCAABASE'] as const
+export type LiveOnlySport = (typeof LIVE_ONLY_SPORTS)[number]
+/** A sport Live Scores can show: every league sport plus the live-only ones. */
+export type LiveSport = LeagueSport | LiveOnlySport
+
+export function isLiveOnlySport(s: string | null | undefined): s is LiveOnlySport {
+  return typeof s === 'string' && (LIVE_ONLY_SPORTS as readonly string[]).includes(s.toUpperCase())
+}
+
+export function isLiveSport(s: string | null | undefined): s is LiveSport {
+  return isSupportedSport(s) || isLiveOnlySport(s)
+}
+
+/**
+ * `normalizeToSupportedSport` for the live-scores path.
+ *
+ * ⚠ THE LEAGUE NORMALIZER TURNS ANY UNKNOWN SPORT INTO NFL, SILENTLY. On the live
+ * path that meant `?sport=NCAABASE` rendered the NFL slate and a clicked college
+ * game fetched an NFL summary under a college event id. Live-only aliases resolve
+ * here first; everything else keeps the league behaviour unchanged.
+ */
+export function normalizeToLiveSport(sport: string | null | undefined): LiveSport {
+  const u = (sport?.trim() ?? '').toUpperCase().replace(/[\s-]+/g, '_')
+  if (u === 'NCAABASE' || u === 'CBASE' || u === 'COLLEGE_BASEBALL' || u === 'NCAA_BASEBALL') return 'NCAABASE'
+  return normalizeToSupportedSport(sport)
+}
+
 export function supportsIdpLeagueSport(sport: string | null | undefined): boolean {
   const normalized = normalizeToSupportedSport(sport)
   return (IDP_SUPPORTED_SPORTS as readonly string[]).includes(normalized)

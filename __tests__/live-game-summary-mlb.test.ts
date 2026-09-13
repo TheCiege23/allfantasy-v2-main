@@ -76,6 +76,55 @@ describe('trimEspnGameSummary — MLB', () => {
     expect(d.players[IDS.jobe]![0]!.group).toBe('pitching')
   })
 
+  it('a college game with NO machine type names still builds at-bats, results and the spray chart', () => {
+    // NCAA summaries send only `type.text`. Strip every `type.type` from the MLB
+    // fixture and the at-bats must come out identical.
+    const raw = rawMlb()
+    raw.plays = raw.plays.map((p) => {
+      const type = p.type as { type?: string; text?: string } | undefined
+      if (!type) return p
+      // Readable names as ESPN writes them; the fixture's texts are pitch-call wording.
+      const text =
+        type.type === 'play-result' ? 'Play Result'
+          : type.type === 'start-batterpitcher' ? 'Start Batter/Pitcher'
+            : type.type === 'end-batterpitcher' ? 'End Batter/Pitcher'
+              : type.type === 'start-inning' ? 'Start Inning'
+                : type.type === 'end-inning' ? 'End Inning'
+                  : type.type === 'strike-looking' ? 'Strike Looking'
+                    : type.type === 'strike-swinging' ? 'Strike Swinging'
+                      : type.type === 'foul-ball' ? 'Foul Ball'
+                        : type.type === 'stolen-base' ? 'Stolen Base'
+                          : type.text
+      return { ...p, type: { text } }
+    })
+    const college = trimEspnGameSummary(raw, { ...MLB_OPTS, sport: 'NCAABASE' })!.baseball!
+    const mlb = final().baseball!
+    expect(college.atBats.map((a) => [a.id, a.result, a.resultType, a.battedBall?.kind ?? null, a.complete]))
+      .toEqual(mlb.atBats.map((a) => [a.id, a.result, a.resultType, a.battedBall?.kind ?? null, a.complete]))
+    expect(college.atBats[0]!.pitches.map((p) => p.kind)).toEqual(['strike', 'foul', 'strike'])
+  })
+
+  it('pitch-clock calls and bunted fouls are pitches, and a foul OUT is a ball in play', () => {
+    const raw = rawMlb()
+    const ab = '4018169200001'
+    const period = { type: 'Top', number: 1, displayValue: '1st Inning' }
+    const who = [{ type: 'pitcher', athlete: { id: IDS.jobe } }, { type: 'batter', athlete: { id: IDS.mccarthy } }]
+    raw.plays = [
+      { id: 'a', atBatId: ab, summaryType: 'A', type: { text: 'Start Batter/Pitcher' }, period, participants: who, team: '27' },
+      { id: 'b', atBatId: ab, summaryType: 'P', type: { text: 'Automatic Ball' }, period, participants: who, resultCount: { balls: 1, strikes: 0 } },
+      { id: 'c', atBatId: ab, summaryType: 'P', type: { text: 'Bunted Foul' }, period, participants: who, resultCount: { balls: 1, strikes: 1 }, hitCoordinate: { x: 120, y: 190 } },
+      { id: 'd', atBatId: ab, summaryType: 'P', type: { text: 'Foul Out' }, period, participants: who, resultCount: { balls: 1, strikes: 1 }, hitCoordinate: { x: 150, y: 190 }, trajectory: 'P' },
+      { id: 'e', atBatId: ab, summaryType: 'N', type: { text: 'Play Result' }, text: 'McCarthy fouled out to first. ', period, participants: who, team: '27', outs: 1 },
+      { id: 'f', atBatId: ab, type: { text: 'End Batter/Pitcher' }, period, participants: who, team: '27' },
+    ]
+    const [out] = trimEspnGameSummary(raw, { ...MLB_OPTS, sport: 'NCAABASE' })!.baseball!.atBats
+    expect(out!.pitches.map((p) => p.kind)).toEqual(['ball', 'foul', 'inplay'])
+    expect(out).toMatchObject({ result: 'McCarthy fouled out to first.', resultType: 'Foul Out', complete: true })
+    // The foul out is charted; the bunted foul's spot is not.
+    expect(out!.battedBall).toMatchObject({ kind: 'out', call: 'Foul Out' })
+    expect(out!.battedBall!.x).toBeGreaterThan(0)
+  })
+
   it('live: count, batter, pitcher and runners from situation; the at-bat in progress is incomplete', () => {
     const d = live()
     const b = d.baseball!

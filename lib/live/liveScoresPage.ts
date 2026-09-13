@@ -12,9 +12,8 @@ import { estimateWinProbability, type WinProbability } from '@/lib/live/winProba
 import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
 import { composePlayerIdentities } from '@/lib/core-app/playerIdentityCompose'
 import { isRosteredPlayer, rosterNameKeys } from '@/lib/live/rosterPlayMatch'
-import { isSupportedSport, type SupportedSport } from '@/lib/sport-scope'
+import { isLiveSport, type LiveSport } from '@/lib/sport-scope'
 import { espnScoreboardDatesForWindow, type BaseballSituation } from '@/lib/live/espnGamePresentation'
-import type { LeagueSport } from '@prisma/client'
 
 /**
  * Data for `/live` — the cross-league live-scoring page (handoff 15a).
@@ -33,7 +32,11 @@ import type { LeagueSport } from '@prisma/client'
  * join is wrong.
  */
 
-export const LIVE_SPORTS: SupportedSport[] = ['NFL', 'NBA', 'MLB', 'NHL', 'NCAAF', 'NCAAB', 'SOCCER']
+/**
+ * The tabs, in order. NCAABASE is a live-only sport (see `LIVE_ONLY_SPORTS`): it
+ * has a scoreboard and a game view here and no league anywhere else.
+ */
+export const LIVE_SPORTS: LiveSport[] = ['NFL', 'NBA', 'MLB', 'NHL', 'NCAAF', 'NCAAB', 'NCAABASE', 'SOCCER']
 
 /** Display labels; the tabs render these verbatim. */
 export const SPORT_LABELS: Record<string, string> = {
@@ -43,6 +46,7 @@ export const SPORT_LABELS: Record<string, string> = {
   NHL: 'NHL',
   NCAAF: 'College Football',
   NCAAB: 'College Basketball',
+  NCAABASE: 'College Baseball',
   SOCCER: 'Soccer',
 }
 
@@ -251,10 +255,12 @@ function clockLabel(row: LiveScoreRow, sport: string): string | null {
   /*
    * Baseball has no clock, and "P7" said nothing about which half. ESPN's own
    * status text ("Bot 7th", "Mid 3rd") is the label every scoreboard uses.
-   * Keyed on the baseball DATA as well as MLB, so a baseball feed from a sport
-   * the app has not added yet (college baseball) is labelled the same way.
+   * Keyed on the baseball DATA as well as the sport, so a baseball row whose
+   * situation did not come through is still labelled by its innings.
    */
-  if (sport === 'MLB' || row.situation?.baseball) return String(row.statusDetail ?? '').trim() || null
+  if (sport === 'MLB' || sport === 'NCAABASE' || row.situation?.baseball) {
+    return String(row.statusDetail ?? '').trim() || null
+  }
   const clock = String(row.clock ?? '').trim()
   const periodLabel =
     sport === 'NFL' || sport === 'NCAAF'
@@ -420,7 +426,7 @@ function isInSlateWindow(row: LiveScoreRow, now: number): boolean {
  * RI's live feed, is recorded at the ordering note in `getLiveScoresForSport`.
  */
 async function loadActiveSlate(
-  sport: LeagueSport,
+  sport: LiveSport,
 ): Promise<{ scores: LiveScoreRow[]; fetchedAt: string | null }> {
   const now = Date.now()
   /*
@@ -428,10 +434,17 @@ async function loadActiveSlate(
    * undated scoreboard is a 24-game featured subset (the dated FBS day was 80,
    * measured 2026-09-13), and a game ESPN did not report arrives with no down,
    * distance or ball position — so most college cards could not draw the field.
-   * Only NCAAF: the pro scoreboards were not measured as partial.
+   *
+   * College baseball asks for the days too. Its undated scoreboard could not be
+   * measured in season (this was built in September); the DATED day was — 81
+   * games on 2026-04-18 — so the dated call is the one known to be complete, and
+   * an empty day still falls back to the undated call in the service.
+   * The pro scoreboards were not measured as partial and keep the undated call.
    */
   const espnDates =
-    sport === 'NCAAF' ? espnScoreboardDatesForWindow(now - SLATE_BEFORE_MS, now + SLATE_AFTER_MS) : undefined
+    sport === 'NCAAF' || sport === 'NCAABASE'
+      ? espnScoreboardDatesForWindow(now - SLATE_BEFORE_MS, now + SLATE_AFTER_MS)
+      : undefined
   const result = await getLiveScoresForSport({ sport, team: null, espnDates })
   /*
    * ⚠ THE SLATE NEEDS A WINDOW. A cached fallback can hold a whole season, and a
@@ -588,7 +601,7 @@ export async function getLivePageData(opts: {
   scope?: 'my' | 'all'
 }): Promise<LivePageData> {
   const requested = String(opts.sport ?? 'NFL').toUpperCase()
-  const sport: SupportedSport = isSupportedSport(requested) ? (requested as SupportedSport) : 'NFL'
+  const sport: LiveSport = isLiveSport(requested) ? requested : 'NFL'
   const scope: 'my' | 'all' = opts.scope === 'all' ? 'all' : 'my'
 
   /*
@@ -611,8 +624,8 @@ export async function getLivePageData(opts: {
       const isActive = s === sport
       try {
         const result = isActive
-          ? await loadActiveSlate(s as LeagueSport)
-          : await getCachedLiveScoresForSport({ sport: s as LeagueSport, team: null })
+          ? await loadActiveSlate(s)
+          : await getCachedLiveScoresForSport({ sport: s, team: null })
         /*
          * ⚠ EVERY TAB GETS THE SAME SLATE WINDOW. The cached reader returns
          * whatever `SportsGame` holds — potentially a whole season with no
