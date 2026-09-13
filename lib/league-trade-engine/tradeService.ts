@@ -702,10 +702,29 @@ export async function cancelAfLeagueTrade(input: { tradeId: string; leagueId: st
   const elevated = await isElevatedCommissioner(input.leagueId, input.userId)
   if (!isProp && !elevated) throw new Error('Only proposer or commissioner can cancel')
 
-  await prisma.afLeagueTrade.update({
-    where: { id: trade.id },
+  /*
+   * 🛑 THE PROPOSER COULD WITHDRAW A TRADE THE OTHER MANAGER HAD ALREADY ACCEPTED. `scheduled` is set only
+   * by `finalizeAfLeagueTradeProcessing` when a processing delay applies: the trade was accepted (and
+   * approved, where review applies) and is waiting out the delay. Only a PENDING offer is still the
+   * proposer's to withdraw.
+   *
+   * A commissioner may still stop a scheduled trade before it processes — but only one who is not the
+   * proposer. A commissioner who proposed the trade is a party to it, and gets the proposer's rule.
+   */
+  if (trade.status === 'scheduled' && (isProp || !elevated)) {
+    throw new Error('This trade was accepted and is scheduled to process; only a commissioner can cancel it')
+  }
+
+  /*
+   * ⚠ CLAIM ON THE STATUS WE READ. This was a bare `update({ where: { id } })`, so a cancel that read
+   * `scheduled` and wrote a moment after the scheduled processor claimed the trade overwrote `processed`
+   * with `cancelled` — after the rosters had moved. Settlement claims the same way; the loser throws.
+   */
+  const claimed = await prisma.afLeagueTrade.updateMany({
+    where: { id: trade.id, status: trade.status },
     data: { status: 'cancelled', cancelledAt: new Date() },
   })
+  if (claimed.count === 0) throw new Error('Trade changed state before it could be cancelled')
   await appendAfTradeStatusHistory({
     tradeId: trade.id,
     fromStatus: trade.status,
