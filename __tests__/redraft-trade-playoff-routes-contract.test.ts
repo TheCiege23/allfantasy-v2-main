@@ -67,6 +67,10 @@ const prismaMock = {
   adpDataRecord: {
     findMany: vi.fn(async () => []),
   },
+  // The league's saved trade review type — the proposal route reads it to set governance.
+  redraftLeagueExtendedSettings: {
+    findUnique: vi.fn(async () => null),
+  },
   redraftTradeValueSnapshot: {
     create: vi.fn(async () => ({})),
     findUnique: vi.fn(async () => null),
@@ -209,6 +213,83 @@ describe('Redraft trade proposals route contract', () => {
     expect(res.status).toBe(200)
     const body = await res.json()
     expect(body.proposal.id).toBe('p-1')
+  })
+
+  /*
+   * 🛑 THE PROPOSER USED TO CHOOSE HOW THEIR OWN TRADE WAS REVIEWED.
+   *
+   * `vetoMode` and `vetoThreshold` were copied from the request body onto the proposal, so a direct caller
+   * could send `no_veto` and have the trade settle the moment the receiver accepted. And the Trade Center,
+   * which sends neither, recorded `commissioner` for every league — including leagues saved as league_vote.
+   */
+  const governanceBody = (extra: Record<string, unknown> = {}) => ({
+    leagueId: 'l-1',
+    seasonId: 's-1',
+    proposerRosterId: 'r-1',
+    receiverRosterId: 'r-2',
+    assets: [{ fromRosterId: 'r-1', toRosterId: 'r-2', assetType: 'future_consideration' }],
+    ...extra,
+  })
+
+  function arrangeCreatableProposal() {
+    prismaMock.redraftSeason.findFirst.mockResolvedValueOnce({ id: 's-1', leagueId: 'l-1' })
+    prismaMock.redraftRoster.findFirst
+      .mockResolvedValueOnce({ id: 'r-1', ownerId: 'u-1' })
+      .mockResolvedValueOnce({ id: 'r-2', ownerId: 'u-2' })
+    const create = vi.fn().mockResolvedValue({ id: 'p-gov' })
+    prismaMock.$transaction.mockImplementationOnce(async (cb: any) =>
+      cb({
+        redraftTradeProposal: {
+          create,
+          findUnique: vi.fn().mockResolvedValue({ id: 'p-gov', status: 'pending', assets: [], votes: [], decision: null }),
+        },
+        redraftTradeAsset: { createMany: vi.fn().mockResolvedValue({ count: 1 }) },
+      }),
+    )
+    return create
+  }
+
+  it('🛑 refuses a proposer-chosen vetoMode or vetoThreshold with 400, and creates nothing', async () => {
+    const { POST } = await import('../app/api/redraft/trade-proposals/route')
+    const req = createMockNextRequest('http://localhost/api/redraft/trade-proposals', {
+      method: 'POST',
+      body: governanceBody({ vetoMode: 'no_veto', vetoThreshold: 1 }),
+    })
+
+    const res = await POST(req as any)
+    expect(res.status).toBe(400)
+    await expect(res.json()).resolves.toMatchObject({ prohibitedFields: ['vetoMode', 'vetoThreshold'] })
+    expect(prismaMock.$transaction).not.toHaveBeenCalled()
+  })
+
+  it("records the league's saved review type on the proposal, not a default", async () => {
+    prismaMock.redraftLeagueExtendedSettings.findUnique.mockResolvedValueOnce({ commissionerTradeReviewType: 'league_vote' })
+    const create = arrangeCreatableProposal()
+
+    const { POST } = await import('../app/api/redraft/trade-proposals/route')
+    const res = await POST(
+      createMockNextRequest('http://localhost/api/redraft/trade-proposals', { method: 'POST', body: governanceBody() }) as any,
+    )
+
+    expect(res.status).toBe(200)
+    expect(prismaMock.redraftLeagueExtendedSettings.findUnique).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { leagueId: 'l-1' } }),
+    )
+    expect(create.mock.calls[0]![0].data).toMatchObject({ vetoMode: 'league_vote', vetoThreshold: 4 })
+  })
+
+  it('requires commissioner review when the league has no saved review type', async () => {
+    prismaMock.redraftLeagueExtendedSettings.findUnique.mockResolvedValueOnce(null)
+    const create = arrangeCreatableProposal()
+
+    const { POST } = await import('../app/api/redraft/trade-proposals/route')
+    const res = await POST(
+      createMockNextRequest('http://localhost/api/redraft/trade-proposals', { method: 'POST', body: governanceBody() }) as any,
+    )
+
+    expect(res.status).toBe(200)
+    expect(prismaMock.redraftLeagueExtendedSettings.findUnique).toHaveBeenCalledTimes(1)
+    expect(create.mock.calls[0]![0].data).toMatchObject({ vetoMode: 'commissioner', vetoThreshold: 4 })
   })
 })
 

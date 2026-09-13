@@ -4,6 +4,7 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { assertLeagueCommissioner, assertLeagueMember } from '@/lib/league/league-access'
 import { parseOptionalRedraftPositiveInteger } from '@/lib/redraft/betaRouteInput'
+import { REDRAFT_TRADE_GOVERNANCE_REFUSAL, prohibitedRedraftGovernanceFields } from '@/lib/redraft/tradeGovernance'
 import {
   actOnNflRedraftTradeProposal,
   castNflRedraftTradeVote,
@@ -35,8 +36,6 @@ type TradeRuntimeBody = {
   receiverRosterId?: string
   voterRosterId?: string
   assets?: NflRedraftTradeAssetInput[]
-  vetoMode?: string | null
-  vetoThreshold?: number | null
   reason?: string | null
   expiresInHours?: number | null
   commissionerOverride?: boolean
@@ -158,6 +157,11 @@ export async function POST(request: Request) {
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const body = await readBody(request)
+  // Governance is the league's decision: see lib/redraft/tradeGovernance.ts.
+  const prohibited = prohibitedRedraftGovernanceFields(body)
+  if (prohibited.length) {
+    return NextResponse.json({ error: REDRAFT_TRADE_GOVERNANCE_REFUSAL, prohibitedFields: prohibited }, { status: 400 })
+  }
   const action = body.action ?? 'create_proposal'
   const leagueId = await leagueIdFromInput({ seasonId: body.seasonId, leagueId: body.leagueId, proposalId: body.proposalId })
   if (!leagueId) return NextResponse.json({ error: 'seasonId, leagueId, or proposalId required' }, { status: 400 })
@@ -180,8 +184,6 @@ export async function POST(request: Request) {
         proposerRosterId,
         receiverRosterId,
         assets,
-        vetoMode: body.vetoMode,
-        vetoThreshold: body.vetoThreshold,
         reason: body.reason,
         expiresInHours: body.expiresInHours,
         actorUserId: userId,
