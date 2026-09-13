@@ -325,7 +325,6 @@ export function TradeCenter({
                 {reversingId === p.id ? (
                   <ReverseTradeDialog
                     title={`${rosterNameById.get(p.proposerRosterId) ?? 'Team A'} ⇄ ${rosterNameById.get(p.receiverRosterId) ?? 'Team B'}`}
-                    note="Players who were locked before this trade come back unlocked — the trade record does not keep their lock state."
                     preflight={() => previewNativeTradeReversal(p.id)}
                     reverse={(reason) => requestNativeTradeReversal(p.id, reason)}
                     onClose={() => setReversingId(null)}

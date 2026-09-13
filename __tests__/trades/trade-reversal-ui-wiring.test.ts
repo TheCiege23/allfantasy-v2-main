@@ -37,7 +37,11 @@ describe('reversal UI wiring', () => {
     expect(src).toContain('requestNativeTradeReversal(p.id, reason)')
     expect(src).not.toContain('GenericTradeReversal')
     expect(src).toContain("p.status === 'accepted' && (isCommissioner || settingsCommissioner)")
-    // The native engine cannot restore lock state; the commissioner is told before confirming.
-    expect(src).toMatch(/come back unlocked/)
+    // ⚠ NO LOCK CAVEAT, AND THIS ASSERTION USED TO REQUIRE ONE. The dialog once warned that locked
+    // players "come back unlocked". The lineup lock is derived from kickoff at read time and the stored
+    // column is always false (0 of 62,934 rows in production), so that warning told commissioners
+    // something untrue — and this test pinned it in place.
+    expect(src).not.toMatch(/come back unlocked/i)
+    expect(src).not.toMatch(/lock state/i)
   })
 })
