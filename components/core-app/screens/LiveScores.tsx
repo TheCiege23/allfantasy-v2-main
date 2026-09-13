@@ -5,6 +5,7 @@ import MiniPlayerImg from '@/components/MiniPlayerImg'
 import type { LiveGameCard, LivePageData } from '@/lib/live/liveScoresPage'
 import { matchesLiveGameQuery } from '@/lib/live/liveGameSearch'
 import { groupStartersByPlayer, pointsSummary, type StarterGroup } from '@/lib/live/liveTieInGroups'
+import type { BaseballPlayer } from '@/lib/live/espnGamePresentation'
 import '@/components/core-app/af-live.css'
 
 /**
@@ -566,7 +567,7 @@ export function GameCard({
         />
       </div>
 
-      <Linescore game={game} isFootball={isFootball} />
+      <Linescore game={game} isFootball={isFootball} isBaseball={game.sport === 'MLB'} />
 
       {/*
         ── Field strip ─────────────────────────────────────────────────────────
@@ -578,6 +579,7 @@ export function GameCard({
         than a ball at a guessed yard line.
       */}
       {isFootball && situation ? <FieldStrip game={game} /> : null}
+      {game.sport === 'MLB' && situation?.baseball ? <Diamond game={game} /> : null}
 
       {/*
         Last play: ESPN's own play text when the scoreboard carries it — it is
@@ -661,13 +663,22 @@ export function GameCard({
 }
 
 /** Per-period scores with a total column — the "1 2 3 4 T" grid. */
-function Linescore({ game, isFootball }: { game: LiveGameCard; isFootball: boolean }) {
+function Linescore({
+  game,
+  isFootball,
+  isBaseball,
+}: {
+  game: LiveGameCard
+  isFootball: boolean
+  isBaseball: boolean
+}) {
   const awayLines = game.away.linescores ?? []
   const homeLines = game.home.linescores ?? []
   const played = Math.max(awayLines.length, homeLines.length)
   if (played === 0) return null
-  // Football always shows four quarters so a first-quarter grid is not two columns wide.
-  const columns = Math.max(played, isFootball ? 4 : played)
+  // Football always shows four quarters and baseball nine innings, so an early
+  // grid is not two columns wide. Extra innings simply add columns.
+  const columns = Math.max(played, isFootball ? 4 : isBaseball ? 9 : played)
   const label = (i: number) => (isFootball && i >= 4 ? (i === 4 ? 'OT' : `OT${i - 3}`) : String(i + 1))
 
   return (
@@ -681,7 +692,15 @@ function Linescore({ game, isFootball }: { game: LiveGameCard; isFootball: boole
                 {label(i)}
               </th>
             ))}
-            <th scope="col">T</th>
+            {isBaseball ? (
+              <>
+                <th scope="col">R</th>
+                <th scope="col">H</th>
+                <th scope="col">E</th>
+              </>
+            ) : (
+              <th scope="col">T</th>
+            )}
           </tr>
         </thead>
         <tbody>
@@ -695,6 +714,12 @@ function Linescore({ game, isFootball }: { game: LiveGameCard; isFootball: boole
                 <td key={i}>{lines[i] ?? ''}</td>
               ))}
               <td className="af-live-linescore-total">{side.score ?? '—'}</td>
+              {isBaseball ? (
+                <>
+                  <td className="af-live-linescore-he">{side.hits ?? '—'}</td>
+                  <td className="af-live-linescore-he">{side.errors ?? '—'}</td>
+                </>
+              ) : null}
             </tr>
           ))}
         </tbody>
@@ -758,6 +783,93 @@ function FieldStrip({ game }: { game: LiveGameCard }) {
         </div>
       ) : null}
     </div>
+  )
+}
+
+/** Base centres on a 100×100 diamond: first on the right, second at the top, third on the left.
+ *  Listed in base order so the spoken label reads "first and second". */
+const BASES = [
+  { key: 'first', cx: 86, cy: 50 },
+  { key: 'second', cx: 50, cy: 14 },
+  { key: 'third', cx: 14, cy: 50 },
+] as const
+
+/**
+ * Baseball: runners on the diamond, balls/strikes/outs, and who is pitching to
+ * whom. Everything is ESPN's `situation`; a count ESPN did not send is left
+ * unlit rather than drawn as 0-0.
+ */
+function Diamond({ game }: { game: LiveGameCard }) {
+  const b = game.situation?.baseball
+  if (!b) return null
+  const on = { first: b.onFirst, second: b.onSecond, third: b.onThird }
+  const runners = BASES.filter((base) => on[base.key]).map((base) => base.key)
+  const basesLabel = runners.length === 0 ? 'Bases empty' : `Runner${runners.length > 1 ? 's' : ''} on ${runners.join(' and ')}`
+  const countLabel =
+    b.balls != null && b.strikes != null && b.outs != null
+      ? `, ${b.balls}-${b.strikes} count, ${b.outs} ${b.outs === 1 ? 'out' : 'outs'}`
+      : ''
+
+  return (
+    <div className="af-live-diamond-block">
+      <svg className="af-live-diamond" viewBox="0 0 100 100" role="img" aria-label={`${basesLabel}${countLabel}`}>
+        <path className="af-live-diamond-path" d="M50 86 L86 50 L50 14 L14 50 Z" />
+        {BASES.map((base) => (
+          <rect
+            key={base.key}
+            className="af-live-base"
+            data-base={base.key}
+            data-on={on[base.key]}
+            x={base.cx - 8}
+            y={base.cy - 8}
+            width={16}
+            height={16}
+            transform={`rotate(45 ${base.cx} ${base.cy})`}
+          />
+        ))}
+        <rect className="af-live-plate" x={44} y={80} width={12} height={12} transform="rotate(45 50 86)" />
+      </svg>
+
+      <div className="af-live-count" aria-hidden>
+        <CountRow label="B" n={b.balls} max={3} tone="good" />
+        <CountRow label="S" n={b.strikes} max={2} tone="bad" />
+        <CountRow label="O" n={b.outs} max={2} tone="warn" />
+      </div>
+
+      {b.pitcher || b.batter ? (
+        <ul className="af-live-atbat">
+          {b.pitcher ? <AtBatRow role="Pitching" player={b.pitcher} /> : null}
+          {b.batter ? <AtBatRow role="At bat" player={b.batter} /> : null}
+        </ul>
+      ) : null}
+    </div>
+  )
+}
+
+function CountRow({ label, n, max, tone }: { label: string; n: number | null; max: number; tone: 'good' | 'bad' | 'warn' }) {
+  return (
+    <span className="af-live-count-row" data-count={label}>
+      <span className="af-label">{label}</span>
+      {Array.from({ length: max }, (_, i) => (
+        <span key={i} className="af-live-count-dot" data-tone={tone} data-on={n != null && i < n} />
+      ))}
+    </span>
+  )
+}
+
+function AtBatRow({ role, player }: { role: string; player: BaseballPlayer }) {
+  return (
+    <li className="af-live-atbat-row">
+      <MiniPlayerImg sleeperId={null} name={player.name} avatarUrl={player.headshot} size={30} />
+      <span className="af-live-atbat-text">
+        <span className="af-label">{role}</span>
+        <span className="af-live-atbat-name">
+          {player.name}
+          {player.position ? <span className="af-live-leader-meta"> {player.position}</span> : null}
+        </span>
+        {player.summary ? <span className="af-live-atbat-line af-num">{player.summary}</span> : null}
+      </span>
+    </li>
   )
 }
 

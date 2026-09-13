@@ -13,6 +13,7 @@ import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
 import { composePlayerIdentities } from '@/lib/core-app/playerIdentityCompose'
 import { isRosteredPlayer, rosterNameKeys } from '@/lib/live/rosterPlayMatch'
 import { isSupportedSport, type SupportedSport } from '@/lib/sport-scope'
+import type { BaseballSituation } from '@/lib/live/espnGamePresentation'
 import type { LeagueSport } from '@prisma/client'
 
 /**
@@ -83,6 +84,9 @@ export type LiveTeamSide = {
   record: string | null
   /** Points per period ("1 2 3 4" on the card). Empty before kickoff or off-ESPN. */
   linescores: number[]
+  /** Baseball H and E for the R-H-E box. Null off-MLB, before first pitch, or off-ESPN. */
+  hits: number | null
+  errors: number | null
 }
 
 /** One PASS / RUSH / REC leader, with the feed's own stat line. */
@@ -112,6 +116,8 @@ export type LiveGameSituation = {
   awayTimeouts: number | null
   lastPlay: string | null
   lastPlayType: string | null
+  /** Runners, balls/strikes/outs, batter and pitcher. Null outside baseball. */
+  baseball: BaseballSituation | null
 }
 
 export type LiveGameCard = {
@@ -235,6 +241,11 @@ function isLiveRow(row: LiveScoreRow): boolean {
 function clockLabel(row: LiveScoreRow, sport: string): string | null {
   if (row.completed) return 'FINAL'
   if (!row.period || row.period < 1) return null
+  /*
+   * Baseball has no clock, and "P7" said nothing about which half. ESPN's own
+   * status text ("Bot 7th", "Mid 3rd") is the label every scoreboard uses.
+   */
+  if (sport === 'MLB') return String(row.statusDetail ?? '').trim() || null
   const clock = String(row.clock ?? '').trim()
   const periodLabel =
     sport === 'NFL' || sport === 'NCAAF'
@@ -472,6 +483,10 @@ type RememberedPresentation = Pick<
   | 'broadcast'
   | 'homeLinescores'
   | 'awayLinescores'
+  | 'homeHits'
+  | 'homeErrors'
+  | 'awayHits'
+  | 'awayErrors'
   | 'homeLogo'
   | 'awayLogo'
   | 'homeTeamId'
@@ -503,6 +518,10 @@ export function withRememberedPresentation(sport: string, row: LiveScoreRow, now
         broadcast: row.broadcast,
         homeLinescores: row.homeLinescores,
         awayLinescores: row.awayLinescores,
+        homeHits: row.homeHits ?? null,
+        homeErrors: row.homeErrors ?? null,
+        awayHits: row.awayHits ?? null,
+        awayErrors: row.awayErrors ?? null,
         homeLogo: row.homeLogo,
         awayLogo: row.awayLogo,
         homeTeamId: row.homeTeamId ?? null,
@@ -530,6 +549,12 @@ export function withRememberedPresentation(sport: string, row: LiveScoreRow, now
     broadcast: row.broadcast ?? v.broadcast,
     homeLinescores: sumsTo(v.homeLinescores, row.homeScore) ? v.homeLinescores : undefined,
     awayLinescores: sumsTo(v.awayLinescores, row.awayScore) ? v.awayLinescores : undefined,
+    // H and E cannot be checked against the row, so they ride with the line score:
+    // borrowed only while that side's innings still sum to its runs.
+    homeHits: sumsTo(v.homeLinescores, row.homeScore) ? v.homeHits : undefined,
+    homeErrors: sumsTo(v.homeLinescores, row.homeScore) ? v.homeErrors : undefined,
+    awayHits: sumsTo(v.awayLinescores, row.awayScore) ? v.awayHits : undefined,
+    awayErrors: sumsTo(v.awayLinescores, row.awayScore) ? v.awayErrors : undefined,
     homeLogo: row.homeLogo || v.homeLogo,
     awayLogo: row.awayLogo || v.awayLogo,
     homeTeamId: row.homeTeamId ?? v.homeTeamId,
@@ -733,6 +758,8 @@ export async function getLivePageData(opts: {
         score: played ? row.homeScore : null,
         record: row.homeRecord,
         linescores: played ? row.homeLinescores ?? [] : [],
+        hits: played ? row.homeHits ?? null : null,
+        errors: played ? row.homeErrors ?? null : null,
       },
       away: {
         abbrev: away,
@@ -741,6 +768,8 @@ export async function getLivePageData(opts: {
         score: played ? row.awayScore : null,
         record: row.awayRecord,
         linescores: played ? row.awayLinescores ?? [] : [],
+        hits: played ? row.awayHits ?? null : null,
+        errors: played ? row.awayErrors ?? null : null,
       },
       leaders: (row.leaders ?? []).map((l) => {
         const side = sideFor(l.teamId)
@@ -765,6 +794,7 @@ export async function getLivePageData(opts: {
             awayTimeouts: s.awayTimeouts,
             lastPlay: s.lastPlayText,
             lastPlayType: s.lastPlayType,
+            baseball: s.baseball ?? null,
           }
         : null,
       venue: row.venue ? { name: row.venue, location: row.venueLocation ?? null } : null,

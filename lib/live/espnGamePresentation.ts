@@ -33,7 +33,28 @@ export type EspnLeaderCategory = {
   }>
 }
 
+type EspnSituationAthlete = {
+  athlete?: {
+    displayName?: string
+    shortName?: string
+    headshot?: string | { href?: string }
+    position?: string | { abbreviation?: string }
+    team?: { id?: string }
+  }
+  /** Today's line, e.g. "0-1, 2 R, 2 BB, K" or "1.2 IP, 0 ER, H, K, BB". */
+  summary?: string
+}
+
 export type EspnSituation = {
+  /* Baseball — read from the live MLB scoreboard 2026-09-13, COL @ DET "Bot 7th". */
+  balls?: number
+  strikes?: number
+  outs?: number
+  onFirst?: boolean
+  onSecond?: boolean
+  onThird?: boolean
+  batter?: EspnSituationAthlete
+  pitcher?: EspnSituationAthlete
   down?: number
   distance?: number
   yardLine?: number
@@ -64,7 +85,29 @@ export type GameLeader = {
   teamId: string | null
 }
 
+export type BaseballPlayer = {
+  name: string
+  headshot: string | null
+  position: string | null
+  /** ESPN's line for today, verbatim. */
+  summary: string | null
+  teamId: string | null
+}
+
+/** Runners, count and the at-bat. Null for any sport whose situation carries none of it. */
+export type BaseballSituation = {
+  onFirst: boolean
+  onSecond: boolean
+  onThird: boolean
+  balls: number | null
+  strikes: number | null
+  outs: number | null
+  batter: BaseballPlayer | null
+  pitcher: BaseballPlayer | null
+}
+
 export type GameSituation = {
+  baseball: BaseballSituation | null
   /** "1st & 5 at CIN 12". */
   downDistanceText: string | null
   shortDownDistanceText: string | null
@@ -183,10 +226,59 @@ export function mapGameSituation(
     awayTimeouts: finite(situation.awayTimeouts),
     lastPlayText: text(situation.lastPlay?.text),
     lastPlayType: text(situation.lastPlay?.type?.text),
+    baseball: mapBaseballSituation(situation),
   }
   const hasAnything =
-    mapped.downDistanceText != null || mapped.ballOnFromAway != null || mapped.lastPlayText != null
+    mapped.downDistanceText != null ||
+    mapped.ballOnFromAway != null ||
+    mapped.lastPlayText != null ||
+    mapped.baseball != null
   return hasAnything ? mapped : null
+}
+
+function mapBaseballPlayer(p: EspnSituationAthlete | undefined): BaseballPlayer | null {
+  const a = p?.athlete
+  const name = text(a?.displayName) ?? text(a?.shortName)
+  if (!name) return null
+  const headshot = typeof a?.headshot === 'string' ? a.headshot : text(a?.headshot?.href)
+  const position = typeof a?.position === 'string' ? a.position : text(a?.position?.abbreviation)
+  return {
+    name,
+    headshot: text(headshot),
+    position: text(position),
+    summary: text(p?.summary),
+    teamId: text(a?.team?.id),
+  }
+}
+
+/**
+ * ⚠ ONLY WHEN THE FEED ACTUALLY SENT BASEBALL FIELDS. Football's situation has
+ * no `onFirst`, and reading a missing boolean as `false` would draw an empty
+ * diamond on an NFL card. The bases are booleans only once ESPN typed them so;
+ * the count is null — not 0 — when absent, because "0-0, no outs" is a real count.
+ */
+export function mapBaseballSituation(situation: EspnSituation | undefined | null): BaseballSituation | null {
+  if (!situation) return null
+  const hasBases =
+    typeof situation.onFirst === 'boolean' ||
+    typeof situation.onSecond === 'boolean' ||
+    typeof situation.onThird === 'boolean'
+  const balls = finite(situation.balls)
+  const strikes = finite(situation.strikes)
+  const outs = finite(situation.outs)
+  const batter = mapBaseballPlayer(situation.batter)
+  const pitcher = mapBaseballPlayer(situation.pitcher)
+  if (!hasBases && balls == null && strikes == null && outs == null && !batter && !pitcher) return null
+  return {
+    onFirst: situation.onFirst === true,
+    onSecond: situation.onSecond === true,
+    onThird: situation.onThird === true,
+    balls,
+    strikes,
+    outs,
+    batter,
+    pitcher,
+  }
 }
 
 /** "Cincinnati, OH" — or the country when there is no state, or null. */

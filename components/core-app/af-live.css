@@ -1244,3 +1244,131 @@
     margin-left: 0;
   }
 }
+
+/* ── Baseball: R-H-E, diamond, count, at-bat ─────────────────────────────── */
+
+.af-live-linescore td.af-live-linescore-he {
+  font-weight: 800;
+  color: var(--text2);
+}
+
+.af-live-diamond-block {
+  display: grid;
+  grid-template-columns: 88px auto minmax(0, 1fr);
+  align-items: center;
+  gap: 16px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: var(--surface2);
+}
+.af-live-diamond {
+  display: block;
+  width: 88px;
+  height: 88px;
+}
+.af-live-diamond-path {
+  fill: color-mix(in srgb, var(--good) 12%, transparent);
+  stroke: var(--line2);
+  stroke-width: 1.5;
+}
+.af-live-base {
+  fill: var(--surface);
+  stroke: var(--muted);
+  stroke-width: 1.5;
+}
+/* An occupied base is the one thing on this block a glance must catch. */
+.af-live-base[data-on='true'] {
+  fill: var(--warn);
+  stroke: var(--warn);
+}
+.af-live-plate {
+  fill: var(--text2);
+}
+
+.af-live-count {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.af-live-count-row {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.af-live-count-row .af-label {
+  width: 12px;
+  color: var(--muted);
+}
+.af-live-count-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--line2);
+}
+.af-live-count-dot[data-on='true'][data-tone='good'] {
+  background: var(--good);
+}
+.af-live-count-dot[data-on='true'][data-tone='bad'] {
+  background: var(--bad);
+}
+.af-live-count-dot[data-on='true'][data-tone='warn'] {
+  background: var(--warn);
+}
+
+.af-live-atbat {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+.af-live-atbat-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.af-live-atbat-text {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.af-live-atbat-name {
+  font-size: 12.5px;
+  font-weight: 800;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.af-live-atbat-line {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text2);
+}
+
+/* Trailing, for the same reason as the query above: overrides must follow their base rules. */
+@media (max-width: 620px) {
+  .af-live-diamond-block {
+    grid-template-columns: 88px minmax(0, 1fr);
+  }
+  .af-live-atbat {
+    grid-column: 1 / -1;
+  }
+  /*
+   * Nine innings plus R-H-E is 13 columns. At the desktop 30px minimum that is
+   * wider than a 390px card, so the overflow scroller hid R-H-E — the three
+   * numbers people look for first — off the right edge. At 20px the E column was
+   * still clipped at 390px (measured); 17px cells at 10px type fit with room.
+   */
+  .af-live-linescore {
+    font-size: 10px;
+  }
+  .af-live-linescore th,
+  .af-live-linescore td {
+    min-width: 17px;
+    padding: 3px 2px;
+  }
+}
