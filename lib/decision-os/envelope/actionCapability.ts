@@ -107,13 +107,3 @@ export function describeAction(args: {
     autoManaged,
   }
 }
-
-/**
- * True when the envelope must not imply any host write.
- *
- * Exported so a renderer can assert on one predicate rather than re-deriving
- * "is this imported" in each surface that needs to know.
- */
-export function isHostReadOnly(league: AuthorizedLeagueIdentity | null): boolean {
-  return league?.origin === 'imported'
-}

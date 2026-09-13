@@ -770,8 +770,10 @@ export async function fetchEspnGames(sport: 'NFL' | 'NCAAF'): Promise<ProviderRe
 /**
  * Providers to try, in order, for a sport.
  *
- * API-Sports is deliberately NOT included: it is plan-blocked for the current
- * season and returning zero from it first would just burn a request.
+ * API-Sports is deliberately NOT included. It has its own sync, `syncAPISportsGamesToDb`, which
+ * the import-scores route calls separately. Its Free plan refuses only the season-wide games
+ * query, so API-Sports still writes rows; it just does not go through this list. See the note in
+ * `app/api/cron/import-scores/route.ts`.
  */
 export async function fetchGamesForSport(
   sport: 'NFL' | 'NCAAF',
@@ -793,15 +795,16 @@ export async function fetchGamesForSport(
    * mechanism does not exist. `SportsGame` is `@@unique([sport, externalId, source])`, so every
    * feed writes its OWN row and none of them overwrites another; nothing is upgraded by running
    * later. Source selection happens at READ time in `pickFreshestSourceRows`
-   * (lib/sports-live-scores-service.ts), which buckets feeds by freshness at 5 minutes and then
+   * (lib/scores/liveSourceSelection.ts, re-exported by lib/sports-live-scores-service.ts), which
+   * buckets feeds by freshness at 5 minutes and then
    * picks by rank. A whole run finishes far inside that bucket — p50 10s — so every source in one
    * tick is co-fresh and write order cannot decide anything. Reordering is safe for that reason,
    * not by assumption; it was checked before it was changed.
    *
-   * ⚠ REORDERING HERE DOES NOT FIX THE READ SIDE, AND MUST NOT BE MISTAKEN FOR IT.
-   * `LIVE_SOURCE_PREFERENCE` still ranks `rolling_insights` first and does not list `espn` at
-   * all, so the scoreboard's own preference remains the opposite of this one. That is a separate
-   * decision in a separate module.
+   * ⚠ REORDERING HERE DOES NOT CHANGE THE READ SIDE, AND MUST NOT BE MISTAKEN FOR IT. What the
+   * scoreboard shows is decided by `LIVE_SOURCE_PREFERENCE` in lib/scores/liveSourceSelection.ts
+   * (today espn, espn_live, thesportsdb, rolling_insights, api_sports). That is a separate
+   * decision in a separate module: change the order there, not here, to change the scoreboard.
    */
   const planned: Array<{ source: string; run: () => Promise<ProviderResult> }> = [
     { source: 'espn', run: () => fetchEspnGames(sport) },
