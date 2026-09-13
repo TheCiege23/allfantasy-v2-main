@@ -37,6 +37,7 @@ const isElevatedCommissioner = vi.fn()
 const findUniqueTradeDraft = vi.fn()
 const findUniqueUserProfile = vi.fn()
 const findFirstLeagueTeam = vi.fn()
+const findManyTradeOfferEvent = vi.fn()
 
 vi.mock('next-auth', () => ({ getServerSession: (...args: unknown[]) => getServerSession(...args) }))
 vi.mock('@/lib/auth', () => ({ authOptions: {} }))
@@ -63,6 +64,7 @@ vi.mock('@/lib/prisma', () => ({
     },
     userProfile: { findUnique: (...args: unknown[]) => findUniqueUserProfile(...args) },
     leagueTeam: { findFirst: (...args: unknown[]) => findFirstLeagueTeam(...args) },
+    tradeOfferEvent: { findMany: (...args: unknown[]) => findManyTradeOfferEvent(...args) },
   },
 }))
 vi.mock('@/lib/league-trade-engine/tradeService', () => ({
@@ -114,6 +116,7 @@ describe('GET /api/league/trades-panel — native league real trade data', () =>
     findUniqueTradeDraft.mockResolvedValue(null)
     findUniqueUserProfile.mockResolvedValue(null)
     findFirstLeagueTeam.mockResolvedValue(null)
+    findManyTradeOfferEvent.mockResolvedValue([])
   })
 
   it('returns real pending AfLeagueTrade rows for a native league, not a hardcoded empty array', async () => {
@@ -180,11 +183,35 @@ describe('GET /api/league/trades-panel — native league real trade data', () =>
     ])
     findManyRoster.mockResolvedValue([])
     findManyAppUser.mockResolvedValue([])
+    findManyTradeOfferEvent.mockResolvedValue([
+      {
+        afLeagueTradeId: 'trade-done',
+        grade: 'B',
+        assetsGiven: [{ name: 'Player One', value: 4000 }],
+        assetsReceived: [{ name: 'Player Two', value: 5000 }],
+        createdAt: new Date('2026-01-01T00:00:05.000Z'),
+        modelVersion: 'v2.1.0',
+      },
+    ])
 
     const res = await GET(makeRequest('league-1'))
-    const body = (await res.json()) as { activeTrades: unknown[]; activeCount: number }
+    const body = (await res.json()) as {
+      activeTrades: unknown[]
+      historyTrades: Array<Record<string, unknown>>
+      activeCount: number
+    }
     expect(body.activeTrades).toEqual([])
     expect(body.activeCount).toBe(0)
+    expect(body.historyTrades).toEqual([
+      expect.objectContaining({
+        id: 'trade-done',
+        status: 'processed',
+        proposalGrade: 'B',
+        proposalValueGiven: 4000,
+        proposalValueReceived: 5000,
+        proposalModelVersion: 'v2.1.0',
+      }),
+    ])
   })
 
   /*

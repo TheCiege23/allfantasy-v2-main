@@ -18,6 +18,7 @@ const findManyRoster = vi.fn()
 const findManyAppUser = vi.fn()
 const listAfLeagueTrades = vi.fn()
 const isElevatedCommissioner = vi.fn()
+const findManyTradeOfferEvent = vi.fn()
 
 vi.mock('next-auth', () => ({ getServerSession: (...a: unknown[]) => getServerSession(...a) }))
 vi.mock('@/lib/auth', () => ({ authOptions: {} }))
@@ -33,6 +34,7 @@ vi.mock('@/lib/prisma', () => ({
     tradeDraft: { findUnique: vi.fn().mockResolvedValue(null), delete: vi.fn(), upsert: vi.fn() },
     userProfile: { findUnique: vi.fn().mockResolvedValue(null) },
     leagueTeam: { findFirst: vi.fn().mockResolvedValue(null) },
+    tradeOfferEvent: { findMany: (...a: unknown[]) => findManyTradeOfferEvent(...a) },
   },
 }))
 vi.mock('@/lib/league-trade-engine/tradeService', () => ({
@@ -81,6 +83,7 @@ describe('trades-panel executedTrades', () => {
     listAfLeagueTrades.mockImplementation(async (_l: string, opts?: { status?: string }) =>
       opts?.status === 'processed' ? [PROCESSED] : [PENDING, PROCESSED],
     )
+    findManyTradeOfferEvent.mockResolvedValue([])
     isElevatedCommissioner.mockResolvedValue(true)
   })
 

@@ -20,6 +20,7 @@ import { scanPendingYahooTrades } from '@/lib/provider-trades/scanPendingYahooTr
 export const dynamic = 'force-dynamic'
 
 const ACTIVE_STATUSES = new Set(['pending', 'awaiting_votes', 'awaiting_commissioner', 'accepted', 'scheduled'])
+const TERMINAL_STATUSES = new Set(['processed', 'rejected', 'cancelled', 'countered', 'expired', 'vetoed', 'reversed'])
 
 function assetLabel(item: { itemReference: string | null; metadata: unknown }): { label: string; sublabel: string | null } {
   const meta = item.metadata && typeof item.metadata === 'object' && !Array.isArray(item.metadata)
@@ -95,6 +96,100 @@ async function buildNativeActiveTrades(leagueId: string, userId: string): Promis
         sent,
         received,
         status: t.status,
+        viewerIsCommissioner: isCommissioner,
+        viewerIsReceiver,
+        viewerIsProposer,
+      }
+    })
+}
+
+/**
+ * Native trade history for the league timeline.
+ *
+ * Processed/reversed transactions are league facts and may be shown to every
+ * member. An offer that was rejected, cancelled, countered, vetoed or expired
+ * is visible only to either participant or a commissioner; this preserves the
+ * private negotiation while still giving each manager their own complete log.
+ */
+async function buildNativeTradeHistory(leagueId: string, userId: string): Promise<LeagueTradeHistoryItem[]> {
+  const [profile, isCommissioner, trades] = await Promise.all([
+    prisma.userProfile.findUnique({ where: { userId }, select: { sleeperUserId: true } }).catch(() => null),
+    isElevatedCommissioner(leagueId, userId),
+    listAfLeagueTrades(leagueId, { take: 200 }),
+  ])
+  const terminal = trades.filter((trade) => TERMINAL_STATUSES.has(trade.status))
+  if (terminal.length === 0) return []
+
+  const rosterIds = [...new Set(terminal.flatMap((trade) => [trade.proposerRosterId, trade.receiverRosterId]))]
+  const rosters = await prisma.roster.findMany({
+    where: { id: { in: rosterIds } },
+    select: { id: true, platformUserId: true },
+  })
+  const candidateIds = new Set(
+    [userId, profile?.sleeperUserId].filter((value): value is string => typeof value === 'string' && value.length > 0),
+  )
+  const myRosterIds = new Set(rosters.filter((roster) => candidateIds.has(roster.platformUserId)).map((roster) => roster.id))
+  const userIds = [...new Set(rosters.map((roster) => roster.platformUserId))]
+  const users = await prisma.appUser.findMany({
+    where: { id: { in: userIds } },
+    select: { id: true, displayName: true, username: true },
+  })
+  const nameByUserId = new Map(users.map((user) => [user.id, user.displayName?.trim() || user.username]))
+  const userIdByRosterId = new Map(rosters.map((roster) => [roster.id, roster.platformUserId]))
+  const nameOf = (rosterId: string) => nameByUserId.get(userIdByRosterId.get(rosterId) ?? '') ?? 'Manager'
+  const offerEvents = await prisma.tradeOfferEvent.findMany({
+    where: { afLeagueTradeId: { in: terminal.map((trade) => trade.id) } },
+    select: {
+      afLeagueTradeId: true,
+      grade: true,
+      assetsGiven: true,
+      assetsReceived: true,
+      createdAt: true,
+      modelVersion: true,
+    },
+  })
+  const offerByTradeId = new Map(offerEvents.map((event) => [event.afLeagueTradeId, event]))
+  const valueTotal = (assets: unknown): number | null => {
+    if (!Array.isArray(assets)) return null
+    const values = assets.map((asset) =>
+      asset && typeof asset === 'object' && typeof (asset as { value?: unknown }).value === 'number'
+        ? (asset as { value: number }).value
+        : null,
+    )
+    return values.every((value): value is number => value != null)
+      ? values.reduce((sum, value) => sum + value, 0)
+      : null
+  }
+
+  return terminal
+    .filter((trade) => {
+      if (trade.status === 'processed' || trade.status === 'reversed') return true
+      return isCommissioner || myRosterIds.has(trade.proposerRosterId) || myRosterIds.has(trade.receiverRosterId)
+    })
+    .map((trade) => {
+      const offer = offerByTradeId.get(trade.id)
+      const viewerIsProposer = myRosterIds.has(trade.proposerRosterId)
+      const viewerIsReceiver = myRosterIds.has(trade.receiverRosterId)
+      return {
+        id: trade.id,
+        direction: viewerIsProposer ? 'outgoing' as const : viewerIsReceiver ? 'incoming' as const : 'complete' as const,
+        partnerName: nameOf(viewerIsProposer ? trade.receiverRosterId : trade.proposerRosterId),
+        proposerName: nameOf(trade.proposerRosterId),
+        receiverName: nameOf(trade.receiverRosterId),
+        timestamp: trade.createdAt.toISOString(),
+        executedAt: (trade.processedAt ?? trade.rejectedAt ?? trade.cancelledAt ?? trade.updatedAt ?? trade.createdAt).toISOString(),
+        sent: trade.items
+          .filter((item) => item.fromRosterId === trade.proposerRosterId)
+          .map((item) => ({ id: item.id, ...assetLabel(item), headshotUrl: null, accent: 'blue' as const })),
+        received: trade.items
+          .filter((item) => item.fromRosterId === trade.receiverRosterId)
+          .map((item) => ({ id: item.id, ...assetLabel(item), headshotUrl: null, accent: 'teal' as const })),
+        status: trade.status,
+        proposalGrade: offer?.grade ?? null,
+        proposalValueGiven: valueTotal(offer?.assetsGiven),
+        proposalValueReceived: valueTotal(offer?.assetsReceived),
+        proposalCapturedAt: offer?.createdAt.toISOString() ?? null,
+        proposalModelVersion: offer?.modelVersion ?? null,
         viewerIsCommissioner: isCommissioner,
         viewerIsReceiver,
         viewerIsProposer,
@@ -287,7 +382,10 @@ export async function GET(req: NextRequest) {
     league.platform === 'sleeper' && league.platformLeagueId ? league.platformLeagueId : null
 
   if (!sleeperLeagueId) {
-    const activeTrades = await buildNativeActiveTrades(leagueId, userId)
+    const [activeTrades, historyTrades] = await Promise.all([
+      buildNativeActiveTrades(leagueId, userId),
+      buildNativeTradeHistory(leagueId, userId),
+    ])
     const platform = String(league.platform ?? 'manual').toLowerCase()
 
     /*
@@ -313,6 +411,7 @@ export async function GET(req: NextRequest) {
         draft,
         tradeBlock: [] as LeagueTradeBlockPanelItem[],
         activeTrades: [...activeTrades, ...mapProviderTrades(scan.trades)],
+        historyTrades,
         activeCount: activeTrades.length + scan.trades.length,
         source: 'yahoo' as const,
         leagueName: league.name ?? 'League',
@@ -340,6 +439,7 @@ export async function GET(req: NextRequest) {
       draft,
       tradeBlock: [] as LeagueTradeBlockPanelItem[],
       activeTrades,
+      historyTrades,
       executedTrades,
       activeCount: activeTrades.length,
       source: 'native' as const,
@@ -407,9 +507,13 @@ export async function GET(req: NextRequest) {
     return profile?.sleeperUserId?.trim() || null
   })()
 
-  const [nativeTrades, pendingScan] = await Promise.all([
+  const [nativeTrades, nativeHistory, pendingScan] = await Promise.all([
     buildNativeActiveTrades(leagueId, userId).catch((err) => {
       console.error('[trades-panel] native trades for imported league failed', { leagueId, err })
+      return [] as LeagueTradeHistoryItem[]
+    }),
+    buildNativeTradeHistory(leagueId, userId).catch((err) => {
+      console.error('[trades-panel] native trade history failed', { leagueId, err })
       return [] as LeagueTradeHistoryItem[]
     }),
     viewerSleeperId
@@ -467,6 +571,7 @@ export async function GET(req: NextRequest) {
     draft,
     tradeBlock,
     activeTrades,
+    historyTrades: nativeHistory,
     activeCount: activeTrades.length,
     source: 'sleeper' as const,
     leagueName: league.name ?? 'League',

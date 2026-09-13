@@ -19,6 +19,11 @@ import { ProposeTradeModal } from './ProposeTradeModal'
 import { LeagueSurfaceState } from '@/components/league/LeagueSurfaceState'
 import { ReverseTradeDialog } from '@/components/league-trade/ReverseTradeDialog'
 import { previewGenericTradeReversal, requestGenericTradeReversal } from '@/lib/trade-reversal/client'
+import {
+  groupTradeTimelineBySeason,
+  tradeSeasonFromIso,
+  tradeTimelineSeasons,
+} from '@/lib/trade-intel/tradeTimeline'
 
 /**
  * The league Trades tab — design-refs/trade-center-handoff, League artboard.
@@ -56,11 +61,13 @@ export type TradesTabProps = {
 }
 
 type YourTab = 'active' | 'completed'
-type LogFilter = 'all' | 'completed' | 'pending'
+type LogFilter = 'all' | 'completed' | 'pending' | 'closed'
 
 type PanelResponse = {
   tradeBlock?: LeagueTradeBlockPanelItem[]
   activeTrades?: LeagueTradeHistoryItem[]
+  /** Native completed and closed negotiation history, privacy-filtered by the server. */
+  historyTrades?: LeagueTradeHistoryItem[]
   /** Commissioner-only, native leagues only: trades that have executed and may be reversed. */
   executedTrades?: LeagueTradeHistoryItem[]
   activeCount?: number
@@ -110,6 +117,10 @@ type LogSide = {
   name: string
   you: boolean
   sends: string
+  /** Realized result in the trade's first scored season. */
+  initialGrade: GradeLetter | null
+  initialLabel: 'Then' | 'First'
+  /** Realized result through the latest scored season. */
   grade: GradeLetter | null
   /** Shown INSTEAD of a letter — why there is none. */
   gradeWhy: string | null
@@ -117,7 +128,8 @@ type LogSide = {
 
 type LogRow = {
   id: string
-  kind: 'pending' | 'completed'
+  kind: 'pending' | 'completed' | 'closed'
+  season: string | null
   when: string
   sortKey: number
   a: LogSide
@@ -245,6 +257,13 @@ function statusOf(t: LeagueTradeHistoryItem): LogRow['status'] {
   if (s === 'awaiting_commissioner') return { label: 'Commissioner review', tone: 'violet' }
   if (s === 'awaiting_votes') return { label: 'League vote', tone: 'violet' }
   if (s === 'accepted' || s === 'scheduled') return { label: 'Accepted · settling', tone: 'good' }
+  if (s === 'processed') return { label: 'Approved · completed', tone: 'good' }
+  if (s === 'reversed') return { label: 'Completed · reversed', tone: 'muted' }
+  if (s === 'rejected') return { label: 'Declined', tone: 'muted' }
+  if (s === 'cancelled') return { label: 'Cancelled', tone: 'muted' }
+  if (s === 'countered') return { label: 'Countered', tone: 'violet' }
+  if (s === 'vetoed') return { label: 'Vetoed', tone: 'muted' }
+  if (s === 'expired') return { label: 'Expired', tone: 'muted' }
   return { label: 'Pending', tone: 'warn' }
 }
 
@@ -260,8 +279,9 @@ function rowFromActive(t: LeagueTradeHistoryItem): LogRow {
       kind: 'pending',
       when: whenLabel(t.timestamp),
       sortKey: Date.parse(t.timestamp) || 0,
-      a: { name: 'You', you: true, sends: sent, grade: null, gradeWhy: why },
-      b: { name: t.partnerName, you: false, sends: received, grade: null, gradeWhy: why },
+      season: tradeSeasonFromIso(t.timestamp),
+      a: { name: 'You', you: true, sends: sent, initialGrade: null, initialLabel: 'Then', grade: null, gradeWhy: why },
+      b: { name: t.partnerName, you: false, sends: received, initialGrade: null, initialLabel: 'Then', grade: null, gradeWhy: why },
       extraSides: 0,
       status: statusOf(t),
       mine: true,
@@ -273,10 +293,11 @@ function rowFromActive(t: LeagueTradeHistoryItem): LogRow {
   return {
     id: t.id,
     kind: 'pending',
+    season: tradeSeasonFromIso(t.timestamp),
     when: whenLabel(t.timestamp),
     sortKey: Date.parse(t.timestamp) || 0,
-    a: { name: t.partnerName, you: false, sends: sent, grade: null, gradeWhy: why },
-    b: { name: 'Receiving team', you: false, sends: received, grade: null, gradeWhy: why },
+    a: { name: t.partnerName, you: false, sends: sent, initialGrade: null, initialLabel: 'Then', grade: null, gradeWhy: why },
+    b: { name: 'Receiving team', you: false, sends: received, initialGrade: null, initialLabel: 'Then', grade: null, gradeWhy: why },
     extraSides: 0,
     status: statusOf(t),
     mine: false,
@@ -293,13 +314,15 @@ function sideSends(side: GradedTrade['sides'][number]): string {
 function rowFromGraded(g: GradedTrade, viewerId: string | null): LogRow {
   const [s0, s1] = g.sides
   const side = (s: GradedTrade['sides'][number] | undefined): LogSide => {
-    if (!s) return { name: '—', you: false, sends: '—', grade: null, gradeWhy: 'no side' }
+    if (!s) return { name: '—', you: false, sends: '—', initialGrade: null, initialLabel: 'First', grade: null, gradeWhy: 'no side' }
     const you = Boolean(viewerId && s.ownerId === viewerId)
     return {
       name: s.teamName?.trim() || s.managerName,
       you,
       sends: sideSends(s),
       /* Provisional while a pick is unresolved — say so instead of scoring it. */
+      initialGrade: g.hasPendingPicks ? null : s.initialGrade,
+      initialLabel: 'First',
       grade: g.hasPendingPicks ? null : s.currentGrade,
       gradeWhy: g.hasPendingPicks ? 'picks pending' : null,
     }
@@ -310,6 +333,7 @@ function rowFromGraded(g: GradedTrade, viewerId: string | null): LogRow {
   return {
     id: g.id,
     kind: 'completed',
+    season: g.season,
     when: `Wk ${g.week} · ${g.season}`,
     sortKey: created,
     a,
@@ -329,6 +353,8 @@ function rowFromImported(t: ImportedTradeLedgerPayload['trades'][number]): LogRo
     you: false,
     /* The import records what each side RECEIVED; what it sent is the other side's haul. */
     sends: other ? joinNames(other.received.map((p) => ({ name: p.name ?? 'Unnamed player' }))) : '—',
+    initialGrade: null,
+    initialLabel: 'Then',
     grade: null,
     gradeWhy: 'not graded on this platform',
   })
@@ -336,6 +362,7 @@ function rowFromImported(t: ImportedTradeLedgerPayload['trades'][number]): LogRo
   return {
     id: t.id,
     kind: 'completed',
+    season: t.season ? String(t.season) : tradeSeasonFromIso(t.dateIso ?? ''),
     when: t.season ? `${t.season}${t.dateIso ? ` · ${whenLabel(t.dateIso)}` : ''}` : t.dateIso ? whenLabel(t.dateIso) : '—',
     sortKey: created,
     a: side(s0, s1),
@@ -344,6 +371,57 @@ function rowFromImported(t: ImportedTradeLedgerPayload['trades'][number]): LogRo
     status: { label: 'Completed', tone: 'good' },
     mine: false,
     direction: null,
+  }
+}
+
+/** A completed or closed AllFantasy-native negotiation. */
+function rowFromNativeHistory(t: LeagueTradeHistoryItem): LogRow {
+  const completed = t.status === 'processed' || t.status === 'reversed'
+  const viewerIsA = Boolean(t.viewerIsProposer)
+  const viewerIsB = Boolean(t.viewerIsReceiver)
+  const noGradeWhy = completed ? 'event-time value not captured' : 'closed before completion'
+  const proposalGrade = ['A', 'B', 'C', 'D', 'F'].includes(String(t.proposalGrade))
+    ? t.proposalGrade as GradeLetter
+    : null
+  const reversePercent =
+    typeof t.proposalValueGiven === 'number' &&
+    typeof t.proposalValueReceived === 'number' &&
+    t.proposalValueReceived > 0
+      ? ((t.proposalValueGiven - t.proposalValueReceived) / t.proposalValueReceived) * 100
+      : null
+  const receiverProposalGrade = projectedLetterFor({
+    percentDiff: reversePercent,
+    hasSignal: proposalGrade != null,
+  })
+  const currentWhy = proposalGrade ? 'current outcome not computed' : noGradeWhy
+  return {
+    id: `native:${t.id}`,
+    kind: completed ? 'completed' : 'closed',
+    season: tradeSeasonFromIso(t.timestamp),
+    when: whenLabel(t.executedAt ?? t.timestamp),
+    sortKey: Date.parse(t.executedAt ?? t.timestamp) || 0,
+    a: {
+      name: t.proposerName ?? (viewerIsA ? 'You' : t.partnerName),
+      you: viewerIsA,
+      sends: joinNames(t.sent),
+      initialGrade: proposalGrade,
+      initialLabel: 'Then',
+      grade: null,
+      gradeWhy: currentWhy,
+    },
+    b: {
+      name: t.receiverName ?? (viewerIsB ? 'You' : t.partnerName),
+      you: viewerIsB,
+      sends: joinNames(t.received),
+      initialGrade: receiverProposalGrade,
+      initialLabel: 'Then',
+      grade: null,
+      gradeWhy: currentWhy,
+    },
+    extraSides: 0,
+    status: statusOf(t),
+    mine: viewerIsA || viewerIsB,
+    direction: viewerIsA || viewerIsB ? 'done' : null,
   }
 }
 
@@ -789,6 +867,7 @@ export function TradesTab({ league, teams }: TradesTabProps) {
   const tradeShadowNotice = useMemo(() => shadowDisclosure(league.platform), [league.platform])
   const [tradeBlock, setTradeBlock] = useState<LeagueTradeBlockPanelItem[]>([])
   const [activeTrades, setActiveTrades] = useState<LeagueTradeHistoryItem[]>([])
+  const [historyTrades, setHistoryTrades] = useState<LeagueTradeHistoryItem[]>([])
   const [executedTrades, setExecutedTrades] = useState<LeagueTradeHistoryItem[]>([])
   /** Pending trades proposed ON the provider (Sleeper). Read-only in AllFantasy. */
   const [providerPending, setProviderPending] = useState(0)
@@ -808,6 +887,7 @@ export function TradesTab({ league, teams }: TradesTabProps) {
   const [reversing, setReversing] = useState<LeagueTradeHistoryItem | null>(null)
   const [yourTab, setYourTab] = useState<YourTab>('active')
   const [logFilter, setLogFilter] = useState<LogFilter>('all')
+  const [seasonFilter, setSeasonFilter] = useState('all')
   const [onlyMine, setOnlyMine] = useState(false)
 
   const persistWatch = useCallback(
@@ -844,6 +924,7 @@ export function TradesTab({ league, teams }: TradesTabProps) {
         setErr('Could not load trades.')
         setTradeBlock([])
         setActiveTrades([])
+        setHistoryTrades([])
         setExecutedTrades([])
         setProviderPending(0)
         setProviderUrl(null)
@@ -853,6 +934,7 @@ export function TradesTab({ league, teams }: TradesTabProps) {
       }
       setTradeBlock(Array.isArray(data?.tradeBlock) ? data.tradeBlock : [])
       setActiveTrades(Array.isArray(data?.activeTrades) ? (data.activeTrades as LeagueTradeHistoryItem[]) : [])
+      setHistoryTrades(Array.isArray(data?.historyTrades) ? (data.historyTrades as LeagueTradeHistoryItem[]) : [])
       setExecutedTrades(Array.isArray(data?.executedTrades) ? (data.executedTrades as LeagueTradeHistoryItem[]) : [])
       setProviderPending(typeof data?.providerPendingCount === 'number' ? data.providerPendingCount : 0)
       setProviderUrl(typeof data?.providerLeagueUrl === 'string' ? data.providerLeagueUrl : null)
@@ -862,6 +944,7 @@ export function TradesTab({ league, teams }: TradesTabProps) {
       setErr('Could not load trades.')
       setTradeBlock([])
       setActiveTrades([])
+      setHistoryTrades([])
       setExecutedTrades([])
       setProviderPending(0)
       setProviderUrl(null)
@@ -1070,23 +1153,35 @@ export function TradesTab({ league, teams }: TradesTabProps) {
 
 
   const completedRows = useMemo<LogRow[]>(() => {
-    if (ledger.kind === 'graded') return ledger.grades.trades.map((g) => rowFromGraded(g, ledger.viewerId))
-    if (ledger.kind === 'ungraded') return ledger.ledger.trades.map(rowFromImported)
-    return []
-  }, [ledger])
+    const imported = ledger.kind === 'graded'
+      ? ledger.grades.trades.map((g) => rowFromGraded(g, ledger.viewerId))
+      : ledger.kind === 'ungraded'
+        ? ledger.ledger.trades.map(rowFromImported)
+        : []
+    return [...imported, ...historyTrades.map(rowFromNativeHistory)]
+  }, [ledger, historyTrades])
 
   const pendingRows = useMemo<LogRow[]>(() => activeTrades.map(rowFromActive), [activeTrades])
 
+  const allLogRows = useMemo(
+    () => [...pendingRows, ...completedRows].sort((x, y) => y.sortKey - x.sortKey),
+    [pendingRows, completedRows],
+  )
+  const seasonOptions = useMemo(() => tradeTimelineSeasons(allLogRows), [allLogRows])
   const logRows = useMemo(() => {
-    const all = [...pendingRows, ...completedRows].sort((x, y) => y.sortKey - x.sortKey)
-    return all
+    return allLogRows
       .filter((r) => (logFilter === 'all' ? true : r.kind === logFilter))
+      .filter((r) => (seasonFilter === 'all' ? true : r.season === seasonFilter))
       .filter((r) => (onlyMine ? r.mine : true))
-  }, [pendingRows, completedRows, logFilter, onlyMine])
+  }, [allLogRows, logFilter, seasonFilter, onlyMine])
+  const logRowGroups = useMemo(() => groupTradeTimelineBySeason(logRows), [logRows])
 
   const yourActiveTrades = useMemo(() => activeTrades.filter((t) => t.direction !== 'complete'), [activeTrades])
   const yourActive = useMemo(() => pendingRows.filter((r) => r.mine), [pendingRows])
   const yourCompleted = useMemo(() => completedRows.filter((r) => r.mine), [completedRows])
+  const yourCompletedGroups = useMemo(() => groupTradeTimelineBySeason(yourCompleted), [yourCompleted])
+  const completedCount = useMemo(() => completedRows.filter((row) => row.kind === 'completed').length, [completedRows])
+  const closedCount = completedRows.length - completedCount
 
   const platformKey = String(league.platform ?? '').toLowerCase()
   const platformMark = PLATFORM_MARK[platformKey] ?? (league.name?.charAt(0).toUpperCase() || '·')
@@ -1179,8 +1274,8 @@ export function TradesTab({ league, teams }: TradesTabProps) {
         ) : null}
         <span className="flex-1" />
         <span className="font-mono text-[11px] font-bold text-[#8B9DB8]">
-          {ledger.kind === 'graded' || ledger.kind === 'ungraded'
-            ? `${completedRows.length} completed · ${activeTrades.length} pending`
+          {completedRows.length > 0 || ledger.kind === 'graded' || ledger.kind === 'ungraded'
+            ? `${completedCount} completed · ${activeTrades.length} pending${closedCount > 0 ? ` · ${closedCount} closed` : ''}`
             : `${activeTrades.length} pending`}
         </span>
         {deadlineChip ? (
@@ -1362,7 +1457,7 @@ export function TradesTab({ league, teams }: TradesTabProps) {
                     yourTab === k ? 'bg-[#ff3d81] text-black' : 'text-white/50 hover:text-white/80'
                   }`}
                 >
-                  {k === 'active' ? `Active · ${yourActive.length}` : `Completed · ${yourCompleted.length}`}
+                  {k === 'active' ? `Active · ${yourActive.length}` : `History · ${yourCompleted.length}`}
                 </button>
               ))}
             </div>
@@ -1415,7 +1510,12 @@ export function TradesTab({ league, teams }: TradesTabProps) {
                         : 'You have not completed a trade in this league.'}
               </p>
             ) : (
-              yourCompleted.map((r) => {
+              yourCompletedGroups.map(({ season, items }) => (
+                <div key={season} data-testid={`your-trades-season-${season}`}>
+                  <div className="border-b border-white/[0.06] bg-white/[0.025] px-4 py-2">
+                    <span className={`${EYEBROW} text-[9px] text-[#ffb8d1]`}>{season} season</span>
+                  </div>
+                  {items.map((r) => {
                 const youA = r.a.you
                 const you = youA ? r.a : r.b
                 const them = youA ? r.b : r.a
@@ -1438,16 +1538,24 @@ export function TradesTab({ league, teams }: TradesTabProps) {
                       <p className={`${EYEBROW} truncate text-[8.5px] text-emerald-300`}>You get · {them.name}</p>
                       <p className="mt-0.5 text-[12px] leading-snug text-[#CBD5E1]">{them.sends}</p>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <GradeTile letter={you.grade} why={you.gradeWhy} />
-                      {you.grade ? <span className="text-[10px] text-white/45">your side</span> : null}
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="flex items-center gap-1" title="Realized result in the first scored season">
+                        <span className={`${EYEBROW} text-[8px] text-white/35`}>{you.initialLabel}</span>
+                        <GradeTile letter={you.initialGrade} why={you.gradeWhy} size="sm" />
+                      </span>
+                      <span className="flex items-center gap-1" title="Realized result through the latest scored season">
+                        <span className={`${EYEBROW} text-[8px] text-white/35`}>Now</span>
+                        <GradeTile letter={you.grade} why={you.gradeWhy} size="sm" />
+                      </span>
                     </div>
                     <div className="md:justify-self-end">
                       <StatusChip status={r.status} />
                     </div>
                   </div>
                 )
-              })
+                  })}
+                </div>
+              ))
             )}
           </div>
           )}
@@ -1464,6 +1572,7 @@ export function TradesTab({ league, teams }: TradesTabProps) {
                 [
                   ['all', 'All'],
                   ['completed', 'Completed'],
+                  ['closed', 'Declined / closed'],
                   ['pending', 'Pending'],
                 ] as const
               ).map(([k, label]) => (
@@ -1499,6 +1608,23 @@ export function TradesTab({ league, teams }: TradesTabProps) {
               </span>
               Only mine
             </button>
+            {seasonOptions.length > 0 ? (
+              <label className="flex items-center gap-1.5 text-[10px] font-bold text-white/45">
+                Season
+                <select
+                  value={seasonFilter}
+                  onChange={(event) => setSeasonFilter(event.target.value)}
+                  className="min-h-[32px] rounded-md border border-white/10 bg-[#0a1228] px-2 text-[11px] font-bold text-white outline-none focus:border-[#ff3d81]"
+                  aria-label="Filter trades by season"
+                  data-testid="league-trade-season-filter"
+                >
+                  <option value="all">All years</option>
+                  {seasonOptions.map((season) => (
+                    <option key={season} value={season}>{season}</option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
             <span className="h-px flex-1 bg-white/[0.07]" aria-hidden />
             <span className="text-[10px] text-white/35">
               {ledger.kind === 'loading'
@@ -1514,7 +1640,7 @@ export function TradesTab({ league, teams }: TradesTabProps) {
           </div>
           <div className="overflow-hidden rounded-2xl border border-[#1E2A42] bg-[#131929]">
             <div className="hidden grid-cols-[56px_1.15fr_1.15fr_140px_120px] gap-3 border-b border-white/[0.06] px-4 py-2 md:grid">
-              {['When', 'Side A sends', 'Side B sends', 'Grades A · B', 'Status'].map((h, i) => (
+              {['When', 'Side A sends', 'Side B sends', 'Earlier / now · A and B', 'Status'].map((h, i) => (
                 <span key={h} className={`${EYEBROW} text-[9px] text-white/35 ${i === 4 ? 'text-right' : ''}`}>
                   {h}
                 </span>
@@ -1523,7 +1649,12 @@ export function TradesTab({ league, teams }: TradesTabProps) {
             {logRows.length === 0 ? (
               <p className="px-4 py-6 text-center text-[12px] text-white/40">No trades match this filter.</p>
             ) : (
-              logRows.map((r) => (
+              logRowGroups.map(({ season, items }) => (
+                <div key={season} data-testid={`league-trade-season-${season}`}>
+                  <div className="border-b border-white/[0.06] bg-white/[0.025] px-4 py-2">
+                    <span className={`${EYEBROW} text-[9px] text-[#ffb8d1]`}>{season} season</span>
+                  </div>
+                  {items.map((r) => (
                 <div
                   key={r.id}
                   className={`grid gap-3 border-b border-white/[0.06] px-4 py-3 last:border-b-0 md:grid-cols-[56px_1.15fr_1.15fr_140px_120px] md:items-center ${
@@ -1543,9 +1674,19 @@ export function TradesTab({ league, teams }: TradesTabProps) {
                       <p className="mt-0.5 text-[11.5px] leading-snug text-[#CBD5E1]">{s.sends}</p>
                     </div>
                   ))}
-                  <div className="flex items-center gap-1.5">
-                    <GradeTile letter={r.a.grade} why={null} size="sm" />
-                    <GradeTile letter={r.b.grade} why={null} size="sm" />
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                    <span className="flex items-center gap-1" title="Side A: first scored season, then current realized result">
+                      <span className={`${EYEBROW} text-[7.5px] text-white/30`}>A {r.a.initialLabel}</span>
+                      <GradeTile letter={r.a.initialGrade} why={null} size="sm" />
+                      <span className="text-[8px] text-white/25">→</span>
+                      <GradeTile letter={r.a.grade} why={null} size="sm" />
+                    </span>
+                    <span className="flex items-center gap-1" title="Side B: first scored season, then current realized result">
+                      <span className={`${EYEBROW} text-[7.5px] text-white/30`}>B {r.b.initialLabel}</span>
+                      <GradeTile letter={r.b.initialGrade} why={null} size="sm" />
+                      <span className="text-[8px] text-white/25">→</span>
+                      <GradeTile letter={r.b.grade} why={null} size="sm" />
+                    </span>
                     {!r.a.grade && !r.b.grade && r.a.gradeWhy ? (
                       <span className="max-w-[70px] text-[9.5px] leading-tight text-white/35">{r.a.gradeWhy}</span>
                     ) : null}
@@ -1553,6 +1694,8 @@ export function TradesTab({ league, teams }: TradesTabProps) {
                   <div className="md:justify-self-end">
                     <StatusChip status={r.status} />
                   </div>
+                </div>
+                  ))}
                 </div>
               ))
             )}
