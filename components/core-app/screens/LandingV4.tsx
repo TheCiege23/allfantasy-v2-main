@@ -57,7 +57,8 @@ import '@/components/core-app/af-landing.css'
  * about one fact drift; one does not.
  *
  * The standard for flipping a provider lives beside its flag now, not here. Yahoo's entry records
- * that it went live on 2026-09-13 before its first real import, and gives the query to re-check.
+ * why it is off (Yahoo has not approved AllFantasy's Fantasy Sports API access yet) and what has to be
+ * true before it is switched back on.
  */
 const PLATFORMS = getLandingConnectPlatforms()
 

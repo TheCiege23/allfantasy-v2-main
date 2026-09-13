@@ -26,14 +26,18 @@ export function describeYahooRejection(status: number): string {
     return 'Yahoo would not accept the saved authorisation for your account. Reconnect Yahoo and try again.'
   }
   if (status === 403) {
+    /*
+     * ⚠ THIS SENTENCE SENT PEOPLE ROUND A LOOP, AND IT WAS WRONG ABOUT THE CAUSE.
+     * It said the fix was re-approving the app: remove AllFantasy under Yahoo account settings and
+     * connect again. Measured 2026-09-13: a fresh consent that named "Yahoo Fantasy Sports — Read",
+     * with the permission ticked on the app, still got this 403 on every fantasy call. Yahoo gates the
+     * Fantasy Sports API behind an approval process, and until AllFantasy is approved there is nothing
+     * a manager can do — so say that, and do not ask them to repeat steps that cannot work.
+     */
     return (
-      'Yahoo will not share fantasy data with this connection. Two things cause that, and ' +
-      'the second is the likelier one if you have already checked the first: the app needs ' +
-      'Fantasy Sports read permission in Yahoo’s developer console, AND your approval has to ' +
-      'have been given AFTER that permission was added. Yahoo records what an app may see at ' +
-      'the moment you approve it and keeps that until you remove the app under your Yahoo ' +
-      'account settings — reconnecting on its own reuses the old approval. Remove AllFantasy ' +
-      'there, then connect again.'
+      'Yahoo hasn’t approved AllFantasy to read fantasy leagues yet, so Yahoo is turning down every ' +
+      'request from us. Nothing is wrong with your Yahoo account, and reconnecting won’t change it. ' +
+      'We’ve applied for access, and Yahoo import will open as soon as Yahoo approves it.'
     )
   }
   if (status === 404) {

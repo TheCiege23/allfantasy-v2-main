@@ -68,6 +68,21 @@ vi.mock('@/lib/league-import/sleeper/SleeperImportPreviewService', () => ({
   getSleeperImportPreview: getSleeperImportPreviewMock,
 }))
 
+/*
+ * Yahoo is switched OFF in the real provider config until Yahoo approves AllFantasy's Fantasy Sports
+ * API access, and the preview route answers 400 "not yet available" before it ever reaches the gate.
+ * This file guards what the gate shows when Yahoo refuses, which only matters once Yahoo is on — so it
+ * switches Yahoo on for itself. Without this the refusal path would go untested for exactly as long as
+ * Yahoo is off, and could come back leaking Yahoo's raw body the day it is switched on.
+ */
+vi.mock('@/lib/league-import/provider-ui-config', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/league-import/provider-ui-config')>()
+  return {
+    ...actual,
+    isImportProviderAvailable: (p: string) => p === 'yahoo' || actual.isImportProviderAvailable(p as never),
+  }
+})
+
 /* Byte for byte what Yahoo returned in production (the `\/` escapes are Yahoo's). */
 const YAHOO_403_BODY =
   '{"error":{"xml:lang":"en-us","yahoo:uri":"\\/fantasy\\/v2\\/league\\/nfl.l.1361311?format=json",' +

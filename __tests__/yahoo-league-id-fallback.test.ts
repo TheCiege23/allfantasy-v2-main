@@ -90,28 +90,22 @@ describe('⚠ the redirect loop', () => {
 })
 
 describe('⚠ Yahoo status is the diagnosis, and it was discarded', () => {
-  it('names BOTH causes of a 403, in the order they need checking', () => {
+  it('says a 403 is Yahoo not having approved the app, and does not send anyone round a reconnect loop', () => {
     /*
-     * ⚠ THE FIRST VERSION OF THIS MESSAGE WAS WRONG, AND WRONG IN THE EXPENSIVE
-     * DIRECTION: it said reconnecting would not help, so it steered people away
-     * from the fix.
-     *
-     * Yahoo's OAuth2 takes no `scope` parameter — the authorize request accepts
-     * client_id, redirect_uri, response_type, state and language, and nothing
-     * else. Permissions come entirely from the app registration AS IT STOOD WHEN
-     * THE USER APPROVED, and that approval survives until it is removed in Yahoo
-     * account settings. So an app can hold Fantasy Sports read and still be
-     * refused, forever, on an approval granted before the permission existed —
-     * which is exactly what was measured on 2026-08-27: a token issued at
-     * 22:36:31, refused two seconds later.
+     * ⚠ THIS TEST PINNED THE WRONG DIAGNOSIS FOR TWO WEEKS. It required the message to blame a stale
+     * approval and tell people to remove the app under Yahoo account settings and reconnect. On
+     * 2026-09-13 a fresh consent that named "Yahoo Fantasy Sports — Read", with the permission ticked,
+     * still got 403 on every fantasy call: Yahoo gates the Fantasy Sports API behind an approval
+     * AllFantasy does not have yet. Nothing on the manager's side can fix that, so the message must say
+     * so and must not ask them to repeat steps that cannot work.
      */
     const m = describeYahooRejection(403)
-    expect(m).toContain('Fantasy Sports read permission')
-    expect(m).toContain('developer console')
-    /* The stale-approval half is the one that was missing. */
-    expect(m).toContain('at the moment you approve')
-    expect(m).toContain('remove the app under your Yahoo account settings')
-    expect(m).toContain('reuses the old approval')
+    expect(m).toContain('approved AllFantasy')
+    expect(m).toContain('Nothing is wrong with your Yahoo account')
+    expect(m).toContain('reconnecting won’t change it')
+    for (const retired of ['Remove AllFantasy', 'developer console', 'remove the app under your Yahoo account settings', 'Try again']) {
+      expect(m).not.toContain(retired)
+    }
   })
 
   it('keeps 401 as the one that IS worth reconnecting', () => {
