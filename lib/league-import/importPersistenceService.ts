@@ -297,13 +297,13 @@ export async function persistImportWithCanonicalAudit(input: {
           sourceId: m.source_id,
           internalId: m.af_id ?? undefined,
           confidence: m.af_id ? 1 : 0.5,
-          metadata: { stable_key: m.stable_key },
+          metadata: { stable_key: m.stable_key, ...(m.external_ids ? { external_ids: m.external_ids } : {}) },
         },
         update: {
           runId: run.id,
           internalId: m.af_id ?? undefined,
           confidence: m.af_id ? 1 : 0.5,
-          metadata: { stable_key: m.stable_key },
+          metadata: { stable_key: m.stable_key, ...(m.external_ids ? { external_ids: m.external_ids } : {}) },
         },
       })
     }
@@ -528,13 +528,13 @@ export async function recordCanonicalImportAuditForExistingLeague(input: {
           sourceId: m.source_id,
           internalId: m.af_id ?? undefined,
           confidence: m.af_id ? 1 : 0.5,
-          metadata: { stable_key: m.stable_key },
+          metadata: { stable_key: m.stable_key, ...(m.external_ids ? { external_ids: m.external_ids } : {}) },
         },
         update: {
           runId: run.id,
           internalId: m.af_id ?? undefined,
           confidence: m.af_id ? 1 : 0.5,
-          metadata: { stable_key: m.stable_key },
+          metadata: { stable_key: m.stable_key, ...(m.external_ids ? { external_ids: m.external_ids } : {}) },
         },
       })
     }

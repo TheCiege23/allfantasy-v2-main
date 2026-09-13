@@ -327,7 +327,16 @@ export interface NormalizedImportResult {
   traded_picks?: NormalizedTradedPick[]
   transactions: NormalizedTransaction[]
   standings: NormalizedStandingsEntry[]
-  player_map: Record<string, { name: string; position: string; team: string }>
+  /**
+   * `external_ids` is OPTIONAL and additive — a provider that exposes a foreign player-id
+   * space (today: Fleaflicker, via `external_id_type=SPORTRADAR`) records it here, and
+   * `DefaultExternalIdentityMapper` copies it onto the player's identity mapping. Every
+   * provider that does not set it is unaffected.
+   */
+  player_map: Record<
+    string,
+    { name: string; position: string; team: string; external_ids?: ExternalIdentityMapping['external_ids'] }
+  >
   identity_mappings?: ExternalIdentityMapping[]
   league_branding?: { avatar_url?: string | null; name?: string }
   previous_seasons?: Array<{ season: string; source_league_id: string }>
@@ -351,6 +360,19 @@ export interface ExternalIdentityMapping {
   entity_type: 'player' | 'manager' | 'team' | 'league'
   af_id?: string | null
   stable_key?: string
+  /**
+   * Foreign ids the provider supplied for this entity, keyed by id space. CARRIED, NOT
+   * RESOLVED — persistence stores them in `ExternalEntityMapping.metadata` and does not
+   * touch `af_id`/`internalId`.
+   *
+   * ⚠ WHY NOT RESOLVE `af_id` FROM `sportradar` HERE: nothing in `lib/` or `app/` reads
+   * `ExternalEntityMapping` today (zero find/count sites, measured 2026-09-12), so a
+   * resolved `internalId` has no consumer; the mapper interface says `internalId` links to
+   * `PlayerIdentityMap`, a different id space from `Player.id`; and one Sportradar id is
+   * known to sit on TWO `Player` rows (Ronald Jones RB), so "resolve" is ambiguous for at
+   * least one player. Store the id; let a resolver with a real consumer decide.
+   */
+  external_ids?: { sportradar?: string }
 }
 
 export type ImportWarningSeverity = 'info' | 'warn' | 'error'

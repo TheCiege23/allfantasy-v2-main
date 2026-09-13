@@ -124,13 +124,34 @@ export const FleaflickerAdapter: ILeagueImportAdapter<FleaflickerImportPayload> 
       for (const p of r.players ?? []) {
         const id = String(p.proPlayer?.id ?? '')
         if (!id) continue
+        /*
+         * The Sportradar id, when the fetch requested it (`external_id_type=SPORTRADAR`).
+         *
+         * 🛑 ACCEPT AN ENTRY WHOSE `type` IS ABSENT, NOT ONLY ONE THAT SAYS 'SPORTRADAR'.
+         * The vendor schema declares `{ type, id }`, but the wire sends `{ id }` alone —
+         * every one of 761 rostered players. A `type === 'SPORTRADAR'` filter, which the
+         * docs invite, matches NOTHING; that exact filter reported 0 of 761 in the G-11
+         * probe. An entry that DOES carry a different `type` is still refused, so this
+         * never labels some other id space as Sportradar.
+         */
+        const sportradar = (p.proPlayer?.externalIds ?? []).find(
+          (m) => typeof m?.id === 'string' && m.id.length > 0 && (m.type == null || m.type === 'SPORTRADAR'),
+        )?.id
         player_map[id] = {
           name: p.proPlayer?.nameFull ?? id,
           position: p.proPlayer?.position ?? '?',
           team: p.proPlayer?.nameShort ?? '',
+          ...(sportradar ? { external_ids: { sportradar } } : {}),
         }
       }
     }
+    /*
+     * ⚠ THIS ADAPTER DELIBERATELY WRITES NO `identity_mappings`. `runImportNormalizationPipeline`
+     * builds the defaults (league, team, manager AND player) only when the adapter's list is
+     * EMPTY — it is all-or-nothing. Emitting even one player mapping here would silently drop
+     * every team, manager and league mapping. The Sportradar id reaches persistence through
+     * `player_map.external_ids`, which `DefaultExternalIdentityMapper` copies across.
+     */
 
     const isDynasty = detectDynasty(lg)
 

@@ -102,6 +102,12 @@ export async function fetchFleaflickerLeagueForImport(sourceId: string): Promise
 
   const standingsUrl = `${API_BASE}/FetchLeagueStandings?sport=${encodeURIComponent(sport)}&league_id=${leagueId}&season=${season}`
   const rostersUrl = `${API_BASE}/FetchLeagueRosters?sport=${encodeURIComponent(sport)}&league_id=${leagueId}&season=${season}`
+  /*
+   * Same request plus `external_id_type=SPORTRADAR`, which adds `proPlayer.externalIds` —
+   * a Sportradar UUID per player that joins `Player.provider_ids.sportradar` by exact id
+   * (693/761 = 91.1% measured in production; G-11 in contracts/fleaflicker).
+   */
+  const rostersWithIdsUrl = `${rostersUrl}&external_id_type=SPORTRADAR`
 
   /*
    * ⚠ RULES FAIL SOFT, LIKE ROSTERS AND UNLIKE STANDINGS. Standings carry the
@@ -111,7 +117,16 @@ export async function fetchFleaflickerLeagueForImport(sourceId: string): Promise
    */
   const [standings, rosters, rules, draftBoard] = await Promise.all([
     fetchJson<FleaflickerStandingsResponse>(standingsUrl),
-    fetchJson<FleaflickerRostersResponse>(rostersUrl).catch(() => ({ rosters: [] })),
+    /*
+     * 🛑 THE SPORTRADAR IDS ARE AN ENRICHMENT OF THE ROSTERS, SO THEY MUST NEVER COST THE
+     * ROSTERS. If the parameter is ever rejected, fall back to the plain request before
+     * falling back to no rosters at all. Without the middle step, a vendor change to one
+     * optional parameter would import every league with zero players — and an empty
+     * roster list looks like a league that has not drafted, not like a failure.
+     */
+    fetchJson<FleaflickerRostersResponse>(rostersWithIdsUrl)
+      .catch(() => fetchJson<FleaflickerRostersResponse>(rostersUrl))
+      .catch(() => ({ rosters: [] })),
     fetchFleaflickerRules(sport, leagueId).catch(() => null),
     /*
      * ⚠ THE DRAFT BOARD FAILS SOFT TO `null`, AND `null` IS NOT THE SAME AS THE `{}`
