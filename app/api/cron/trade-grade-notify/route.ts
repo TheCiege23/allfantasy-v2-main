@@ -69,7 +69,10 @@ export async function GET(req: NextRequest) {
 
     const results = await withSyncJobRun(
       { jobName: 'cron-trade-grade-notify', trigger: 'cron' },
-      () => detectAndNotifyAll(),
+      /* Eight recently viewed leagues every fifteen minutes, plus twelve from the
+       * durable cursor rotation. This keeps the route below its 300s budget
+       * while moving active-league latency from hours to minutes. */
+      () => detectAndNotifyAll(12, 8),
       (rs) => ({
         rowsRead: rs.length,
         rowsWritten: rs.reduce((a, r) => a + r.emailsSent, 0),

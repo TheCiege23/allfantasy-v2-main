@@ -29,6 +29,13 @@ function detectEspnDynasty(raw: EspnImportPayload): boolean {
   return keeperCount > 0
 }
 
+export function detectEspnMatchupFrequency(raw: EspnImportPayload): string {
+  const scoringType = raw.settings?.scoringType?.trim().toUpperCase() ?? ''
+  if (scoringType.includes('TOTAL_POINTS')) return 'total_points'
+  if (scoringType.includes('ROTO')) return 'rotisserie'
+  return 'head_to_head'
+}
+
 export const EspnAdapter: ILeagueImportAdapter<EspnImportPayload> = {
   provider: 'espn',
 
@@ -43,6 +50,8 @@ export const EspnAdapter: ILeagueImportAdapter<EspnImportPayload> = {
     }
 
     const scoringFormat = detectEspnScoringFormat(raw)
+    const matchupFrequency = detectEspnMatchupFrequency(raw)
+    const expectsPairedSchedule = matchupFrequency === 'head_to_head'
     const isDynasty = detectEspnDynasty(raw)
     const rosterPositions = raw.settings?.lineupSlotCounts ?? []
     const rosterSize =
@@ -168,7 +177,7 @@ export const EspnAdapter: ILeagueImportAdapter<EspnImportPayload> = {
           raw.league.regularSeasonLength ??
           undefined,
         schedule_unit: 'week',
-        matchup_frequency: 'head_to_head',
+        matchup_frequency: matchupFrequency,
         waiver_type: raw.settings?.usesFaab ? 'faab' : 'priority',
         faab_budget: raw.settings?.acquisitionBudget ?? null,
         roster_positions: rosterPositions.map((slot) => `${slot.slot}:${slot.count}`),
@@ -240,11 +249,13 @@ export const EspnAdapter: ILeagueImportAdapter<EspnImportPayload> = {
           unit: 'teams',
         }),
         currentSchedule: {
-          state: schedule.length > 0 ? 'full' : 'missing',
+          state: schedule.length > 0 || !expectsPairedSchedule ? 'full' : 'missing',
           count: schedule.length,
           note:
             schedule.length > 0
               ? null
+              : !expectsPairedSchedule
+                ? `ESPN reports this as ${matchupFrequency.replaceAll('_', ' ')} scoring, so there is no paired head-to-head schedule to import. Standings and points remain authoritative.`
               : 'No ESPN matchup schedule data was available for this league preview.',
         },
         draftHistory: {

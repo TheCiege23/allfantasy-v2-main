@@ -101,6 +101,7 @@ import { getPortfolio } from '@/lib/core-app/portfolio'
 import { getTodayStrip } from '@/lib/core-app/todayStrip'
 import { getPlayFeed } from '@/lib/live/playFeedPresentation'
 import { getRecentTrades } from '@/lib/core-app/recentTrades'
+import { getCrossLeagueValueActions } from '@/lib/core-app/crossLeagueValueActions'
 import { DashTradeBand } from '@/components/core-app/screens/DashTradeBand'
 import { hasRegularSeasonStarted } from '@/lib/core-app/seasonPhase'
 import { DashGameDayBand } from '@/components/core-app/screens/DashGameDayBand'
@@ -975,6 +976,19 @@ export default async function AfCorePage({
       ? await getTradesData(selectedLeagueId, userId).catch(() => null)
       : null
 
+  const tradeValueActions =
+    activeKey === 'trades' && selectedLeagueId
+      ? await getCrossLeagueValueActions(
+          userId,
+          playedLeagues.map((league) => ({
+            id: league.id,
+            name: league.name,
+            platform: String(league.platform ?? 'manual'),
+            sport: String(league.sport ?? 'NFL'),
+          })),
+        ).catch(() => [])
+      : []
+
   /*
    * The cross-league waiver board. Bounded to one candidate-pool read for the
    * whole portfolio — see `waiversBoard.ts` for why a per-league free-agent
@@ -1435,6 +1449,14 @@ export default async function AfCorePage({
     ? (playedLeagues.find((l) => l.id === homeUserOsAnchorId) ?? playedLeagues[0] ?? null)
     : null
 
+  const homeTradeWeek = isHome3a
+    ? await resolveCurrentWeek(
+        playedLeagues
+          .map((league) => (league as { platformLeagueId?: string | null }).platformLeagueId ?? '')
+          .filter(Boolean),
+      ).then((value) => value?.week ?? null).catch(() => null)
+    : null
+
   const [
     homeCareer,
     homeWeek,
@@ -1505,8 +1527,15 @@ export default async function AfCorePage({
             id: l.id,
             name: l.name,
             platformLeagueId: (l as { platformLeagueId?: string | null }).platformLeagueId ?? null,
+            platform: String(l.platform ?? ''),
           })),
           now,
+          3,
+          {
+            ownerSleeperId: leagueListPayload?.sleeperUserId ?? null,
+            currentWeek: homeTradeWeek,
+            maxLeagues: 8,
+          },
         ).catch(() => []),
       ])
     : [null, null, null, null, null, null, null, [], false, []]
@@ -2086,6 +2115,7 @@ export default async function AfCorePage({
               leagueType={tradeLeagueTypeKey}
               leagueVariant={tradeLeagueRow?.leagueVariant ?? null}
               leagues={tradeStripLeagues}
+              valueActions={tradeValueActions}
             />
             <Trades data={trades} />
           </>

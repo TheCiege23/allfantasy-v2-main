@@ -6,6 +6,7 @@ import {
   buildLegacyCanonicalGrade,
   type LegacyTradeAssetInput,
 } from '@/lib/decision-os/trade/legacyCanonicalGrade'
+import { scanPendingSleeperTrades } from '@/lib/provider-trades/scanPendingSleeperTrades'
 
 /**
  * Trades that landed in your leagues recently.
@@ -90,6 +91,52 @@ export type RecentTradesLeague = {
   id: string
   name: string
   platformLeagueId: string | null
+  platform?: string | null
+}
+
+export type RecentTradesLiveOptions = {
+  ownerSleeperId: string | null
+  currentWeek: number | null
+  /** Provider reads are bounded; the cache remains the source for the rest. */
+  maxLeagues?: number
+}
+
+function liveCompletedTrade(
+  league: RecentTradesLeague,
+  trade: NonNullable<Awaited<ReturnType<typeof scanPendingSleeperTrades>>['completedTrades']>[number],
+): RecentTrade | null {
+  if (!league.platformLeagueId || !trade.proposedAt) return null
+  const viewerRosterId = Number(trade.viewerRosterExternalId)
+  const otherRosterId = Number(trade.counterpartyRosterExternalId)
+  const toAsset = (asset: (typeof trade.assetsReceived)[number]): RecentTradeAsset => ({
+    kind: asset.isPick ? 'pick' : 'player',
+    name: asset.isPick ? (asset.pickRound ?? asset.playerName) : asset.playerName,
+    position: asset.isPick ? null : asset.position || null,
+  })
+  const sides: RecentTradeSide[] = [
+    {
+      rosterId: Number.isFinite(viewerRosterId) ? viewerRosterId : 0,
+      managerName: 'You',
+      teamName: null,
+      received: trade.assetsReceived.map(toAsset),
+    },
+    {
+      rosterId: Number.isFinite(otherRosterId) ? otherRosterId : -1,
+      managerName: trade.proposedBy || 'Another team',
+      teamName: null,
+      received: trade.assetsGiven.map(toAsset),
+    },
+  ]
+  return {
+    id: trade.transactionId,
+    leagueId: league.id,
+    leagueName: league.name,
+    platformLeagueId: league.platformLeagueId,
+    acceptedAt: trade.proposedAt,
+    sides,
+    partial: sides.some((side) => side.received.length === 0),
+    verdict: null,
+  }
 }
 
 function assetsOf(side: GradedTrade['sides'][number]): RecentTradeAsset[] {
@@ -195,6 +242,7 @@ export async function getRecentTrades(
   leagues: RecentTradesLeague[],
   now: Date = new Date(),
   limit = 3,
+  live?: RecentTradesLiveOptions,
 ): Promise<RecentTrade[]> {
   const byPlatformId = new Map<string, RecentTradesLeague>()
   for (const l of leagues) {
@@ -252,6 +300,46 @@ export async function getRecentTrades(
         verdict: null,
       })
       graded.set(`${platformLeagueId}:${trade.id}`, trade)
+    }
+  }
+
+  /*
+   * The durable grade cache is filled by the background pipeline. For leagues
+   * the manager is actively using, also read the current and adjacent Sleeper
+   * transaction weeks. Three weeks per league finds a just-accepted trade in
+   * minutes without repeating the old 18-weeks × every-league request fan-out.
+   * SleeperCacheLayer persists each transaction response for five minutes, so
+   * this remains DB-first on repeated dashboard loads.
+   */
+  if (live?.ownerSleeperId) {
+    const week = Math.min(18, Math.max(1, live.currentWeek ?? 1))
+    const weeks = [...new Set([week - 1, week, week + 1].filter((value) => value >= 1 && value <= 18))]
+    const liveLeagues = leagues
+      .filter((league) => String(league.platform ?? '').toLowerCase() === 'sleeper' && league.platformLeagueId)
+      .slice(0, live.maxLeagues ?? 8)
+    const scans: Array<Awaited<ReturnType<typeof scanPendingSleeperTrades>> | null> = new Array(liveLeagues.length).fill(null)
+    const concurrency = 4
+    for (let start = 0; start < liveLeagues.length; start += concurrency) {
+      await Promise.all(liveLeagues.slice(start, start + concurrency).map(async (league, offset) => {
+        scans[start + offset] = await scanPendingSleeperTrades({
+          platformLeagueId: league.platformLeagueId!,
+          ownerSleeperId: live.ownerSleeperId!,
+          sport: 'NFL',
+          weeks,
+        }).catch(() => null)
+      }))
+    }
+    const seen = new Set(out.map((trade) => `${trade.platformLeagueId}:${trade.id}`))
+    for (let i = 0; i < liveLeagues.length; i += 1) {
+      for (const trade of scans[i]?.completedTrades ?? []) {
+        const converted = liveCompletedTrade(liveLeagues[i], trade)
+        if (!converted) continue
+        if (new Date(converted.acceptedAt).getTime() < cutoff) continue
+        const key = `${converted.platformLeagueId}:${converted.id}`
+        if (seen.has(key)) continue
+        seen.add(key)
+        out.push(converted)
+      }
     }
   }
 

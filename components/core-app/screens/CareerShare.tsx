@@ -82,6 +82,19 @@ const CARD_STYLES = [
 
 type CardStyleId = (typeof CARD_STYLES)[number]['id']
 
+function downloadBlob(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob)
+  const anchor = document.createElement('a')
+  anchor.href = url
+  anchor.download = filename
+  anchor.click()
+  window.setTimeout(() => URL.revokeObjectURL(url), 1_000)
+}
+
+function safeFilename(value: string): string {
+  return value.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'league'
+}
+
 type LeagueWrapped = {
   season: number
   manager: {
@@ -153,6 +166,8 @@ export function CareerShare({
   const [wrapped, setWrapped] = useState<LeagueWrapped | null>(null)
   const [wrappedLoading, setWrappedLoading] = useState(false)
   const [edition, setEdition] = useState<'manager' | 'commissioner'>('manager')
+  const [downloadState, setDownloadState] = useState<'idle' | 'image' | 'video' | 'error'>('idle')
+  const [downloadError, setDownloadError] = useState<string | null>(null)
   const cardRef = useRef<HTMLDivElement | null>(null)
 
   const league = useMemo(
@@ -161,6 +176,163 @@ export function CareerShare({
   )
   const limit = PLATFORMS.find((p) => p.id === platform)!.limit
   const overBy = Math.max(0, caption.length - limit)
+
+  const drawDownloadCard = useCallback((canvas: HTMLCanvasElement, reveal = 1) => {
+    const dimensions: Record<AspectId, [number, number]> = {
+      square: [1080, 1080],
+      story: [1080, 1920],
+      wide: [1920, 1080],
+    }
+    const [width, height] = dimensions[aspect]
+    canvas.width = width
+    canvas.height = height
+    const ctx = canvas.getContext('2d')
+    if (!ctx) throw new Error('Your browser could not create the share card.')
+
+    const palettes: Record<CardStyleId, [string, string, string]> = {
+      nocturne: ['#070a18', '#0d1730', '#27d3ea'],
+      mono: ['#090a0d', '#242831', '#f4f7fb'],
+      gold: ['#130d05', '#38260c', '#f7c85c'],
+    }
+    const [start, end, accent] = palettes[cardStyle]
+    const gradient = ctx.createLinearGradient(0, 0, width, height)
+    gradient.addColorStop(0, start)
+    gradient.addColorStop(1, end)
+    ctx.fillStyle = gradient
+    ctx.fillRect(0, 0, width, height)
+
+    const pad = Math.round(width * 0.075)
+    const compact = aspect === 'wide'
+    const titleSize = Math.round(width * (compact ? 0.055 : 0.075))
+    const bodySize = Math.round(width * (compact ? 0.025 : 0.037))
+    ctx.fillStyle = accent
+    ctx.font = `800 ${Math.round(bodySize * 0.72)}px Arial, sans-serif`
+    ctx.fillText('ALLFANTASY LEAGUE WRAPPED', pad, pad)
+
+    ctx.fillStyle = '#ffffff'
+    ctx.font = `900 ${titleSize}px Arial, sans-serif`
+    ctx.fillText(league?.name ?? 'Your league', pad, pad + titleSize * 1.3, width - pad * 2)
+    ctx.fillStyle = 'rgba(255,255,255,.68)'
+    ctx.font = `700 ${bodySize}px Arial, sans-serif`
+    ctx.fillText(`${wrapped?.season ?? new Date().getFullYear()} · ${edition === 'commissioner' ? 'Commissioner edition' : 'Manager edition'}`, pad, pad + titleSize * 2.05)
+
+    const managerMetrics = [
+      ['RECORD', wrapped?.manager.record ?? (career.games > 0 ? `${career.wins}-${career.losses}` : '—')],
+      ['TRADES', String(wrapped?.manager.trades ?? 0)],
+      ['ROSTER MOVES', String(wrapped?.manager.moves ?? 0)],
+      ['DRAFT PICKS', String(wrapped?.manager.draftPicks ?? 0)],
+    ]
+    const commissionerMetrics = [
+      ['TEAMS', String(wrapped?.commissioner?.teams ?? 0)],
+      ['TRADES', String(wrapped?.commissioner?.trades ?? 0)],
+      ['ROSTER CHANGES', String(wrapped?.commissioner?.rosterChanges ?? 0)],
+      ['DRAFTED', String(wrapped?.commissioner?.draftPicks ?? 0)],
+    ]
+    const metrics = edition === 'commissioner' && wrapped?.commissioner ? commissionerMetrics : managerMetrics
+    const gridTop = compact ? Math.round(height * 0.39) : Math.round(height * 0.42)
+    const gap = Math.round(width * 0.018)
+    const columns = compact ? 4 : 2
+    const boxWidth = (width - pad * 2 - gap * (columns - 1)) / columns
+    const rows = Math.ceil(metrics.length / columns)
+    const boxHeight = Math.min(Math.round(height * (compact ? 0.25 : 0.16)), (height - gridTop - pad * 2) / rows - gap)
+    ctx.globalAlpha = Math.max(0.12, Math.min(1, reveal))
+    metrics.forEach(([label, value], index) => {
+      const col = index % columns
+      const row = Math.floor(index / columns)
+      const x = pad + col * (boxWidth + gap)
+      const y = gridTop + row * (boxHeight + gap)
+      ctx.fillStyle = 'rgba(255,255,255,.075)'
+      ctx.strokeStyle = 'rgba(255,255,255,.15)'
+      ctx.lineWidth = 2
+      ctx.beginPath()
+      ctx.roundRect(x, y, boxWidth, boxHeight, 24)
+      ctx.fill()
+      ctx.stroke()
+      ctx.fillStyle = accent
+      ctx.font = `800 ${Math.round(bodySize * 0.66)}px Arial, sans-serif`
+      ctx.fillText(label, x + gap, y + Math.round(boxHeight * 0.3))
+      ctx.fillStyle = '#ffffff'
+      ctx.font = `900 ${Math.round(titleSize * 0.72)}px Arial, sans-serif`
+      ctx.fillText(value, x + gap, y + Math.round(boxHeight * 0.72), boxWidth - gap * 2)
+    })
+    ctx.globalAlpha = 1
+
+    const footer = edition === 'manager'
+      ? wrapped?.manager.outlook ?? 'Your next season starts with the next decision.'
+      : wrapped?.commissioner?.leader
+        ? `League leader: ${wrapped.commissioner.leader.teamId} · ${wrapped.commissioner.leader.record}`
+        : 'Built for every manager in the league.'
+    ctx.fillStyle = 'rgba(255,255,255,.82)'
+    ctx.font = `600 ${bodySize}px Arial, sans-serif`
+    ctx.fillText(footer.slice(0, 92), pad, height - pad * 1.45, width - pad * 2)
+    ctx.fillStyle = accent
+    ctx.font = `900 ${Math.round(bodySize * 0.8)}px Arial, sans-serif`
+    ctx.fillText('allfantasy.ai', pad, height - pad * 0.65)
+  }, [aspect, cardStyle, career.games, career.losses, career.wins, edition, league?.name, wrapped])
+
+  const downloadImage = useCallback(() => {
+    try {
+      setDownloadError(null)
+      setDownloadState('image')
+      const canvas = document.createElement('canvas')
+      drawDownloadCard(canvas)
+      canvas.toBlob((blob) => {
+        if (!blob) {
+          setDownloadState('error')
+          setDownloadError('The image could not be created in this browser.')
+          return
+        }
+        downloadBlob(blob, `${safeFilename(league?.name ?? 'league')}-wrapped.png`)
+        setDownloadState('idle')
+      }, 'image/png')
+    } catch (cause) {
+      setDownloadState('error')
+      setDownloadError(cause instanceof Error ? cause.message : 'The image could not be created.')
+    }
+  }, [drawDownloadCard, league?.name])
+
+  const downloadVideo = useCallback(async () => {
+    try {
+      setDownloadError(null)
+      setDownloadState('video')
+      const canvas = document.createElement('canvas')
+      drawDownloadCard(canvas, 0)
+      if (typeof MediaRecorder === 'undefined' || typeof canvas.captureStream !== 'function') {
+        throw new Error('Animated downloads are not supported by this browser. The PNG download still works.')
+      }
+      const stream = canvas.captureStream(30)
+      const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp9')
+        ? 'video/webm;codecs=vp9'
+        : 'video/webm'
+      const recorder = new MediaRecorder(stream, { mimeType })
+      const chunks: BlobPart[] = []
+      recorder.ondataavailable = (event) => { if (event.data.size > 0) chunks.push(event.data) }
+      const finished = new Promise<void>((resolve) => {
+        recorder.onstop = () => {
+          downloadBlob(new Blob(chunks, { type: mimeType }), `${safeFilename(league?.name ?? 'league')}-wrapped.webm`)
+          stream.getTracks().forEach((track) => track.stop())
+          resolve()
+        }
+      })
+      recorder.start()
+      const started = performance.now()
+      await new Promise<void>((resolve) => {
+        const frame = (time: number) => {
+          const elapsed = time - started
+          drawDownloadCard(canvas, Math.min(1, elapsed / 1_600))
+          if (elapsed < 3_200) requestAnimationFrame(frame)
+          else resolve()
+        }
+        requestAnimationFrame(frame)
+      })
+      recorder.stop()
+      await finished
+      setDownloadState('idle')
+    } catch (cause) {
+      setDownloadState('error')
+      setDownloadError(cause instanceof Error ? cause.message : 'The video could not be created.')
+    }
+  }, [drawDownloadCard, league?.name])
 
   useEffect(() => {
     if (!leagueId) {
@@ -595,14 +767,12 @@ export function CareerShare({
             </div>
 
             <div className="af-cs-actions">
-              {/*
-                ⚠ "COPY CARD TEXT", NOT "DOWNLOAD IMAGE". The handoff draws a
-                Download action, and there is no image renderer behind this card —
-                it is live DOM, not a rasterised asset. A Download button wired to
-                a route that does not exist is exactly the unattached control this
-                build is meant not to ship, so the label matches what the click
-                actually does. When a card renderer lands, this becomes a download.
-              */}
+              <button type="button" className="af-cs-act" onClick={downloadImage} disabled={downloadState === 'image' || downloadState === 'video'}>
+                {downloadState === 'image' ? 'Creating PNG…' : 'Download PNG'}
+              </button>
+              <button type="button" className="af-cs-act" onClick={() => void downloadVideo()} disabled={downloadState === 'image' || downloadState === 'video'}>
+                {downloadState === 'video' ? 'Creating video…' : 'Download video'}
+              </button>
               <button type="button" className="af-cs-act" onClick={copyCardText}>
                 {copied === 'image' ? 'Card text copied' : 'Copy card text'}
               </button>
@@ -610,6 +780,8 @@ export function CareerShare({
                 Back to your career
               </Link>
             </div>
+
+            {downloadError ? <p className="af-cs-note af-cs-note--warn" role="status">{downloadError}</p> : null}
 
             <p className="af-cs-note">
               <b>AllFantasy never posts for you.</b> Copy what you want and post it yourself —

@@ -11,12 +11,18 @@ const { cacheFindMany, valueFindMany } = vi.hoisted(() => ({
   valueFindMany: vi.fn(),
 }))
 
+const { scanPendingSleeperTrades } = vi.hoisted(() => ({
+  scanPendingSleeperTrades: vi.fn(),
+}))
+
 vi.mock('@/lib/prisma', () => ({
   prisma: {
     sportsDataCache: { findMany: cacheFindMany },
     playerValueSnapshot: { findMany: valueFindMany },
   },
 }))
+
+vi.mock('@/lib/provider-trades/scanPendingSleeperTrades', () => ({ scanPendingSleeperTrades }))
 
 import { getRecentTrades } from '@/lib/core-app/recentTrades'
 
@@ -61,6 +67,9 @@ beforeEach(() => {
   cacheFindMany.mockResolvedValue([payload()])
   // By default nothing is priced, so no verdict is published.
   valueFindMany.mockResolvedValue([])
+  scanPendingSleeperTrades.mockResolvedValue({
+    trades: [], completedTrades: [], scanned: true, reason: null, weeksUnanswered: 0,
+  })
 })
 
 describe('getRecentTrades', () => {
@@ -207,5 +216,26 @@ describe('getRecentTrades', () => {
       throw new Error('db down')
     })
     expect(await getRecentTrades(LEAGUES, NOW)).toEqual([])
+  })
+
+  it('merges a just-completed Sleeper trade from the bounded live window', async () => {
+    scanPendingSleeperTrades.mockResolvedValue({
+      trades: [],
+      completedTrades: [{
+        transactionId: 'fresh-1', proposedBy: 'Trade Partner', proposedByViewer: false,
+        proposedAt: NOW.toISOString(),
+        assetsGiven: [{ playerId: '1', playerName: 'Sent Player', position: 'WR', team: 'NYJ' }],
+        assetsReceived: [{ playerId: '2', playerName: 'New Player', position: 'RB', team: 'BUF' }],
+        readOnly: true, provider: 'sleeper', lifecycleStatus: 'complete',
+        viewerRosterExternalId: '1', counterpartyRosterExternalId: '2',
+      }],
+      scanned: true, reason: null, weeksUnanswered: 0,
+    })
+    const out = await getRecentTrades(
+      [{ ...LEAGUES[0], platform: 'sleeper' }], NOW, 3,
+      { ownerSleeperId: 'owner-1', currentWeek: 2 },
+    )
+    expect(out[0]).toMatchObject({ id: 'fresh-1', leagueName: 'Bla bla bla' })
+    expect(scanPendingSleeperTrades).toHaveBeenCalledWith(expect.objectContaining({ weeks: [1, 2, 3] }))
   })
 })
