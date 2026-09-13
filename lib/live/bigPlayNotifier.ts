@@ -5,12 +5,16 @@ import { headlineFor } from '@/lib/live/playFeedPresentation'
 
 /**
  * Turn live play events into notifications — but only for the managers who
- * actually roster the player.
+ * actually START the player.
  *
  * ⚠ THE ROSTER SCOPE IS THE WHOLE FEATURE. An alert for every 20-yard run in
  * the league is a notification every few seconds on a Sunday, which trains
  * people to mute the app. Sleeper feels good because it tells you about YOUR
  * players. Everything below exists to keep that true.
+ *
+ * User decision, 2026-09-13: every score and every play of 20+ yards, to the
+ * managers STARTING the player (a benched player's touchdown scores nothing for
+ * you), by push + the in-app bell — never email or SMS.
  *
  * ⚠ NEVER ALERT ON A NEGATIVE DELTA. A cumulative stat going DOWN is a stat
  * correction, not a play — the vendor reprocesses for ~12h after a game and
@@ -19,20 +23,36 @@ import { headlineFor } from '@/lib/live/playFeedPresentation'
  * "20-yard run" for a run that was taken away.
  */
 
-/** What we will interrupt someone's Sunday for. */
+/**
+ * What we will interrupt someone's Sunday for.
+ *
+ * FIELD_GOAL was deliberately excluded until 2026-09-13 ("the kicker's owner
+ * cares, nobody else does"). The recipients are now exactly the managers
+ * starting that kicker, which is the one audience that argument granted, and the
+ * user asked for every score.
+ */
 const ALERTABLE: ReadonlySet<LiveEvent['type']> = new Set([
   'TOUCHDOWN',
   'BIG_PLAY',
+  'FIELD_GOAL',
   'DEFENSIVE_SCORE',
   'SPECIAL_TEAMS_SCORE',
   'TURNOVER',
 ])
 
 /**
- * A field goal is a real event and a bad notification: the kicker's owner cares,
- * nobody else does, and it fires several times a game. Deliberately excluded
- * rather than forgotten.
+ * Slots that do not score. Redraft rows spell them in both cases ('bench' and
+ * 'BENCH' are both written by different engines), so every spelling seen in the
+ * code is listed rather than trusting one.
  */
+const NON_STARTER_SLOTS = [
+  'bench', 'BENCH', 'Bench',
+  'ir', 'IR',
+  'taxi', 'TAXI',
+  'devy', 'DEVY',
+  'free_agent',
+  'pro_bench', 'pro_ir', 'college',
+]
 
 export type NotifyResult = {
   eventsConsidered: number
@@ -42,16 +62,20 @@ export type NotifyResult = {
 }
 
 /**
- * Map players to the users who roster them, for active seasons only.
+ * Map players to the users who roster them — or, with `startersOnly`, who have
+ * them in a starting lineup — for active seasons only.
  *
  * A dropped player keeps his row until `droppedAt` is set, so filtering on it
  * is what stops a manager being told about someone they cut last week.
  *
  * Exported for reuse by the injury importer — same recipients question, same
  * id-space rules (Rolling Insights ids in, AF user ids out; no identity row,
- * no guess).
+ * no guess). The importer wants the whole roster, so `startersOnly` defaults off.
  */
-export async function ownersByPlayerId(playerIds: string[]): Promise<Map<string, string[]>> {
+export async function ownersByPlayerId(
+  playerIds: string[],
+  opts: { startersOnly?: boolean } = {},
+): Promise<Map<string, string[]>> {
   const out = new Map<string, string[]>()
   if (playerIds.length === 0) return out
 
@@ -84,6 +108,7 @@ export async function ownersByPlayerId(playerIds: string[]): Promise<Map<string,
         playerId: { in: [...riIdBySleeperId.keys()] },
         droppedAt: null,
         roster: { season: { status: 'active' } },
+        ...(opts.startersOnly ? { NOT: { slotType: { in: NON_STARTER_SLOTS } } } : {}),
       },
       select: { playerId: true, roster: { select: { ownerId: true } } },
     })
@@ -104,29 +129,41 @@ export async function ownersByPlayerId(playerIds: string[]): Promise<Map<string,
   /*
    * ⚠ IMPORTED LEAGUES ARE THE MAJORITY AND LIVE IN A DIFFERENT SHAPE. Redraft
    * rosters are relational rows; imported (Sleeper) rosters are a JSON blob on
-   * `Roster.playerData`, holding SLEEPER player ids under `.players`. Measured:
-   * 205 redraft roster rows against 914 imported ones. Querying only the first
-   * means the feature fires for a fifth of the league and looks broken to
-   * everyone else.
+   * `Roster.playerData`, holding SLEEPER player ids under `.players` (the whole
+   * roster) and `.starters` (the lineup). Measured: 205 redraft roster rows
+   * against 914 imported ones. Querying only the first means the feature fires
+   * for a fifth of the league and looks broken to everyone else.
    *
    * The ids do not match either — the play feed speaks Rolling Insights ids —
    * so this crosses through PlayerIdentityMap, which carries both spellings on
    * the same row. A player with no identity row is skipped, not guessed at.
    */
-  await addImportedLeagueOwners(identities, out)
+  await addImportedLeagueOwners(identities, out, opts.startersOnly === true)
   return out
 }
+
+/*
+ * Two fixed statements rather than one with an interpolated key: the JSON key is
+ * never built from a string at runtime, so there is nothing to inject into.
+ */
+const ROSTERED_SQL = `SELECT DISTINCT r."platformUserId"
+         FROM rosters r
+         WHERE r."playerData"->'players' @> $1::jsonb`
+const STARTING_SQL = `SELECT DISTINCT r."platformUserId"
+         FROM rosters r
+         WHERE r."playerData"->'starters' @> $1::jsonb`
 
 /**
  * Resolve imported-league owners for the same players.
  *
- * Uses a JSONB containment test rather than loading every roster: `?` asks
- * whether the players array contains that id, which Postgres can answer
- * without us pulling 914 blobs into memory every poll.
+ * Uses a JSONB containment test rather than loading every roster: `@>` asks
+ * whether the array contains that id, which Postgres can answer without us
+ * pulling 914 blobs into memory every poll.
  */
 async function addImportedLeagueOwners(
   identities: Array<{ rollingInsightsId: string | null; sleeperId: string | null }>,
   out: Map<string, string[]>,
+  startersOnly: boolean,
 ): Promise<void> {
   try {
     if (identities.length === 0) return
@@ -139,9 +176,7 @@ async function addImportedLeagueOwners(
       if (!riId || !sleeperId) continue
 
       const rosters = await prisma.$queryRawUnsafe<Array<{ platformUserId: string }>>(
-        `SELECT DISTINCT r."platformUserId"
-         FROM rosters r
-         WHERE r."playerData"->'players' @> $1::jsonb`,
+        startersOnly ? STARTING_SQL : ROSTERED_SQL,
         JSON.stringify([sleeperId]),
       )
 
@@ -194,6 +229,8 @@ export function notificationTitleFor(event: LiveEvent): string {
       return 'Touchdown'
     case 'BIG_PLAY':
       return 'Big play'
+    case 'FIELD_GOAL':
+      return 'Field goal'
     case 'DEFENSIVE_SCORE':
       return 'Defensive touchdown'
     case 'SPECIAL_TEAMS_SCORE':
@@ -212,8 +249,73 @@ function severityFor(event: LiveEvent): NotificationEvent['severity'] {
   if (event.type === 'TOUCHDOWN' || event.type === 'DEFENSIVE_SCORE' || event.type === 'SPECIAL_TEAMS_SCORE') {
     return 'high'
   }
-  if (event.type === 'TURNOVER') return 'medium'
+  if (event.type === 'TURNOVER' || event.type === 'FIELD_GOAL') return 'medium'
   return 'low'
+}
+
+/**
+ * The same play told from the passer's side: "Kirk Cousins 34-yard TD pass to
+ * Drake London". A passing touchdown scores for the QB's managers too, and the
+ * play event is keyed on the receiver, so without this they heard nothing.
+ */
+function passerSide(event: LiveEvent): LiveEvent | null {
+  if (!event.passerId || !event.passerName) return null
+  if (event.type !== 'TOUCHDOWN' && event.type !== 'BIG_PLAY') return null
+  return {
+    ...event,
+    playerId: event.passerId,
+    playerName: event.passerName,
+    role: 'passer',
+    passerId: null,
+    passerName: null,
+    receiverName: event.playerName,
+  }
+}
+
+function notificationFor(event: LiveEvent, userIds: string[], side: 'subject' | 'passer'): NotificationEvent {
+  return {
+    type: 'live_score_swing',
+    title: notificationTitleFor(event),
+    body: headlineFor(event, null),
+    userIds,
+    severity: severityFor(event),
+    source: 'live-plays',
+    actionHref: '/core/live?sport=NFL',
+    actionLabel: 'Live scores',
+    /*
+     * ⚠ NEVER EMAIL A BIG PLAY. The category default is in-app + email, and
+     * an email per play on a Sunday is an inbox flood that burns the sending
+     * domain. In-app + push (matchup_results is a push category) is the
+     * whole interrupt.
+     */
+    skipChannels: { email: true, sms: true },
+    meta: {
+      gameId: event.gameId,
+      playerId: event.playerId,
+      playerName: event.playerName,
+      team: event.team,
+      eventType: event.type,
+      stat: event.stat,
+      yards: Number.isFinite(event.delta) ? Math.round(event.delta) : null,
+      /*
+       * ⚠ CARRIED SO AN ALERT CAN BE RETRACTED. Officiating reversals happen
+       * and the vendor ships no correction flag. Storing the key that
+       * produced this notification is what lets a later reversal find it and
+       * send a correction instead of leaving a manager believing a
+       * touchdown that was overturned.
+       *
+       * It is also what makes each play its OWN notification in the engine's
+       * cooldown key — see `buildSourceKey`.
+       */
+      idempotencyKey: event.idempotencyKey,
+      /*
+       * One device notification per play. The dispatcher's default tag is one
+       * per category, so a second touchdown would silently replace the first on
+       * the phone before anyone read it.
+       */
+      pushTag: `live-play:${event.idempotencyKey}:${side}`,
+    },
+  }
 }
 
 /**
@@ -238,7 +340,12 @@ export async function notifyBigPlays(events: LiveEvent[]): Promise<NotifyResult>
     return { eventsConsidered: events.length, eventsAlertable: 0, notificationsSent: 0, skipped: null }
   }
 
-  const owners = await ownersByPlayerId([...new Set(alertable.map((e) => e.playerId))])
+  const ids = new Set<string>()
+  for (const e of alertable) {
+    ids.add(e.playerId)
+    if (e.passerId) ids.add(e.passerId)
+  }
+  const owners = await ownersByPlayerId([...ids], { startersOnly: true })
   if (owners.size === 0) {
     return {
       eventsConsidered: events.length,
@@ -250,41 +357,15 @@ export async function notifyBigPlays(events: LiveEvent[]): Promise<NotifyResult>
 
   const batch: NotificationEvent[] = []
   for (const event of alertable) {
-    const userIds = owners.get(event.playerId)
-    if (!userIds || userIds.length === 0) continue
+    const subjectUsers = owners.get(event.playerId) ?? []
+    if (subjectUsers.length > 0) batch.push(notificationFor(event, subjectUsers, 'subject'))
 
-    batch.push({
-      type: 'live_score_swing',
-      title: notificationTitleFor(event),
-      body: headlineFor(event, null),
-      userIds,
-      severity: severityFor(event),
-      source: 'live-plays',
-      /*
-       * ⚠ NEVER EMAIL A BIG PLAY. The category default is in-app + email, and
-       * an email per play on a Sunday is an inbox flood that burns the sending
-       * domain. In-app + push (matchup_results is a push category) is the
-       * whole interrupt.
-       */
-      skipChannels: { email: true, sms: true },
-      meta: {
-        gameId: event.gameId,
-        playerId: event.playerId,
-        playerName: event.playerName,
-        team: event.team,
-        eventType: event.type,
-        stat: event.stat,
-        yards: Number.isFinite(event.delta) ? Math.round(event.delta) : null,
-        /*
-         * ⚠ CARRIED SO AN ALERT CAN BE RETRACTED. Officiating reversals happen
-         * and the vendor ships no correction flag. Storing the key that
-         * produced this notification is what lets a later reversal find it and
-         * send a correction instead of leaving a manager believing a
-         * touchdown that was overturned.
-         */
-        idempotencyKey: event.idempotencyKey,
-      },
-    })
+    const thrown = passerSide(event)
+    if (thrown) {
+      // A manager starting both ends of the play hears it once, from the scorer's side.
+      const passerUsers = (owners.get(thrown.playerId) ?? []).filter((u) => !subjectUsers.includes(u))
+      if (passerUsers.length > 0) batch.push(notificationFor(thrown, passerUsers, 'passer'))
+    }
   }
 
   if (batch.length === 0) {

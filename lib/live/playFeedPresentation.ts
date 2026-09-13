@@ -21,7 +21,7 @@ import { getPrimaryLogoUrlForTeam } from '@/lib/sport-teams/SportTeamMetadataReg
  *
  * Three things the raw `LiveEvent` cannot answer on its own:
  *   - a headshot: the event carries the Rolling Insights player id, not ours
- *   - a readable sentence: it carries `stat` + `delta`, not "ran for 17 yards"
+ *   - a readable sentence: it carries `stat` + `delta`, not "34-yard rushing TD"
  *   - a team: `teamAbbr` is null on every play RI has ever sent us, so the
  *     badge comes from our identity map rather than from the feed
  */
@@ -31,6 +31,14 @@ export type PlayFeedItem = {
   gameId: string
   type: LiveEvent['type']
   playerName: string
+  /**
+   * The player's Sleeper id, from the identity map. Two jobs: a headshot from
+   * Sleeper's CDN for the ~85% of players with no `imageUrl` on file (the row
+   * otherwise draws a letter), and the id the player card opens with. Null when
+   * the Rolling Insights id does not resolve — no guessed id, same rule as the
+   * headshot below.
+   */
+  sleeperId: string | null
   /**
    * ⚠ ROLLING INSIGHTS NEVER SENDS THIS, so it is backfilled from our own
    * identity map. Measured 2026-08-27: every one of the 12 events cached in
@@ -48,8 +56,14 @@ export type PlayFeedItem = {
   /** Null for the ~85% of players with no headshot on file. Render initials. */
   imageUrl: string | null
   position: string | null
-  /** Pre-composed for display, e.g. "Bijan Robinson ran for 17 yards". */
+  /** Pre-composed for display, e.g. "Ashton Jeanty (RB) 34-yard rushing TD". */
   headline: string
+  /**
+   * The headline without the player: "34-yard receiving TD from Kirk Cousins".
+   * The row renders the name itself as a player-card button, then this.
+   */
+  action: string
+  /** Yards on THIS play, or null when the event carries no play yardage. */
   yards: number | null
   detectedAt: string
 }
@@ -65,13 +79,10 @@ export type PlayFeedItem = {
  * guessing. A missing headshot is a cosmetic gap; the wrong headshot on a
  * touchdown alert is a visible, embarrassing error.
  */
-async function resolveHeadshots(
-  riPlayerIds: string[],
-): Promise<Map<string, { imageUrl: string | null; position: string | null; team: string | null }>> {
-  const out = new Map<
-    string,
-    { imageUrl: string | null; position: string | null; team: string | null }
-  >()
+type Resolved = { imageUrl: string | null; position: string | null; team: string | null; sleeperId: string | null }
+
+async function resolveHeadshots(riPlayerIds: string[]): Promise<Map<string, Resolved>> {
+  const out = new Map<string, Resolved>()
   // `name:<x>` is the parser's fallback when a play carries no player id at all.
   const ids = [...new Set(riPlayerIds.filter((id) => id && !id.startsWith('name:')))]
   if (ids.length === 0) return out
@@ -86,6 +97,10 @@ async function resolveHeadshots(
        * rows carry BOTH `rollingInsightsId` and `currentTeam`, while the
        * `Player` join below is lossy — D'Ernest Johnson resolves to a Player
        * row whose `team` is null but whose identity row says "NE".
+       *
+       * `sleeperId` rides along for the same reason: the identity row is the
+       * crosswalk, and the Sleeper id is what the headshot fallback and the
+       * player card both key on.
        */
       select: {
         rollingInsightsId: true,
@@ -93,6 +108,7 @@ async function resolveHeadshots(
         position: true,
         sport: true,
         currentTeam: true,
+        sleeperId: true,
       },
     })
     if (identities.length === 0) return out
@@ -117,6 +133,7 @@ async function resolveHeadshots(
         imageUrl: hit?.imageUrl ?? null,
         position: identity.position ?? hit?.position ?? null,
         team: identity.currentTeam ?? null,
+        sleeperId: identity.sleeperId ?? null,
       })
     }
   } catch {
@@ -127,37 +144,93 @@ async function resolveHeadshots(
   return out
 }
 
+/** Rolling Insights' `event` enum — the value `stat` carries on a play-by-play event. */
+const PBP_EVENTS = new Set([
+  'kickoff', 'pass', 'run', 'sack', 'interception', 'incompletion',
+  'fumble', 'penalty', 'field_goal', 'punt', 'safety', 'not_available',
+])
+
 /**
- * The sentence a user actually reads.
+ * The yards gained on THIS play, or null when the event does not carry them.
  *
- * Built from `stat` + `delta` rather than a vendor description string, because
- * the play-by-play `description` is prose we do not control and often names the
- * team in a format that does not match ours.
+ * Two sources, two meanings, and reading the wrong field is how a headline lies:
+ *   - play-by-play: `delta` IS the play's `yardsGained`;
+ *   - the box-score detector's `*_long` stats: the play's yards are the NEW long
+ *     (`value`), and `delta` is only how far the long moved;
+ *   - a touchdown COUNTER (`rushing_touchdowns`) has a delta of 1, not yards.
  */
-export function headlineFor(event: LiveEvent, position: string | null): string {
-  const who = position ? `${event.playerName} (${position})` : event.playerName
-  const yards = Math.round(event.delta)
+export function playYards(event: LiveEvent): number | null {
+  const n = /_long$/.test(event.stat)
+    ? event.value
+    : PBP_EVENTS.has(event.stat) || /_yards$/.test(event.stat)
+      ? event.delta
+      : null
+  return n != null && Number.isFinite(n) && n > 0 ? Math.round(n) : null
+}
+
+function unitOf(event: LiveEvent): 'rushing' | 'receiving' | 'passing' | null {
+  const role = event.role ?? null
+  const s = event.stat
+  if (role === 'passer' || s.startsWith('passing')) return 'passing'
+  if (role === 'receiver' || role === 'lateral_receiver' || s.startsWith('receiving')) return 'receiving'
+  if (role === 'rusher' || s.startsWith('rushing')) return 'rushing'
+  if (s === 'run') return 'rushing'
+  if (s === 'pass') return 'receiving'
+  return null
+}
+
+/**
+ * What the player did, without his name: "34-yard rushing TD",
+ * "34-yard receiving TD from Kirk Cousins", "33-yard catch from Kyler Murray".
+ *
+ * Built from structured fields rather than the vendor's `description`, which is
+ * prose we do not control and names teams in a format that does not match ours.
+ */
+export function playActionFor(event: LiveEvent): string {
+  const y = playYards(event)
+  const yd = y != null ? `${y}-yard ` : ''
+  const from = event.passerName ? ` from ${event.passerName}` : ''
+  const to = event.receiverName ? ` to ${event.receiverName}` : ''
+  const unit = unitOf(event)
 
   switch (event.type) {
     case 'TOUCHDOWN':
-      if (event.stat.startsWith('passing')) return `${who} threw a touchdown`
-      if (event.stat.startsWith('receiving')) return `${who} caught a touchdown`
-      return `${who} scored a touchdown`
+      if (unit === 'rushing') return `${yd}rushing TD`
+      if (unit === 'receiving') return `${yd}receiving TD${from}`
+      if (unit === 'passing') return `${yd}TD pass${to}`
+      return 'scored a touchdown'
     case 'BIG_PLAY':
-      if (event.stat.startsWith('receiving')) return `${who} caught a pass for ${yards} yards`
-      if (event.stat.startsWith('passing')) return `${who} threw for ${yards} yards`
-      return `${who} ran for ${yards} yards`
+      if (unit === 'rushing') return y != null ? `${y}-yard run` : 'long run'
+      if (unit === 'receiving') return y != null ? `${y}-yard catch${from}` : `long catch${from}`
+      if (unit === 'passing') return y != null ? `${y}-yard completion${to}` : `long completion${to}`
+      return y != null ? `${y}-yard gain` : 'big gain'
     case 'FIELD_GOAL':
-      return `${who} hit a field goal`
+      return 'made a field goal'
     case 'TURNOVER':
-      return `${who} turned it over`
+      if (event.role === 'interceptor') return 'intercepted a pass'
+      if (event.role === 'recoverer') return 'recovered a fumble'
+      if (event.stat === 'passing_interceptions') return 'threw an interception'
+      if (event.stat === 'fumbles_lost') return 'lost a fumble'
+      return 'turned it over'
     case 'DEFENSIVE_SCORE':
-      return `${who} scored on defense`
+      if (event.stat === 'interception' || event.stat === 'interception_touchdowns') return 'pick-six'
+      if (event.stat === 'fumble' || event.stat === 'fumble_return_touchdowns') return 'fumble return TD'
+      if (event.stat === 'safety') return 'safety'
+      return 'defensive TD'
     case 'SPECIAL_TEAMS_SCORE':
-      return `${who} scored on special teams`
+      if (event.stat === 'kickoff' || event.stat === 'kick_return_touchdowns') return 'kickoff return TD'
+      if (event.stat === 'punt' || event.stat === 'punt_return_touchdowns') return 'punt return TD'
+      return 'special teams TD'
     default:
-      return who
+      return ''
   }
+}
+
+/** The sentence a user actually reads, e.g. "Ashton Jeanty (RB) 34-yard rushing TD". */
+export function headlineFor(event: LiveEvent, position: string | null): string {
+  const who = position ? `${event.playerName} (${position})` : event.playerName
+  const action = playActionFor(event)
+  return action ? `${who} ${action}` : who
 }
 
 /**
@@ -194,13 +267,15 @@ export async function getPlayFeed(limit = 12): Promise<PlayFeedItem[]> {
       gameId: event.gameId,
       type: event.type,
       playerName: event.playerName,
+      sleeperId: extra?.sleeperId ?? null,
       team,
       // Only ever derived from a team we actually resolved — see the field doc.
       teamLogoUrl: team ? getPrimaryLogoUrlForTeam('NFL', team) : null,
       imageUrl: extra?.imageUrl ?? null,
       position,
       headline: headlineFor(event, position),
-      yards: Number.isFinite(event.delta) ? Math.round(event.delta) : null,
+      action: playActionFor(event),
+      yards: playYards(event),
       detectedAt:
         event.detectedAt instanceof Date
           ? event.detectedAt.toISOString()

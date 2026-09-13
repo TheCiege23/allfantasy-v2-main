@@ -75,6 +75,21 @@ export type LiveEvent = {
    */
   idempotencyKey: string
   detail: string
+  /**
+   * The subject's role on the play, from play-by-play ('rusher', 'receiver',
+   * 'passer', 'interceptor'…). Absent on box-score events, which have no plays.
+   *
+   * ⚠ WHY IT EXISTS: on play-by-play events `stat` is the play's `event` ('pass'
+   * or 'run'), which cannot say whether the subject threw or caught the ball. The
+   * headline read it as a stat key, matched nothing, and captioned every catch
+   * "ran for N yards" and every touchdown "scored a touchdown".
+   */
+  role?: string | null
+  /** The passer on a pass play whose subject is the receiver, so the line can say "from Kirk Cousins". */
+  passerId?: string | null
+  passerName?: string | null
+  /** The receiver, when an event is told from the passer's side ("TD pass to Drake London"). */
+  receiverName?: string | null
 }
 
 /** Counter stats where any increase is exactly one scoring event. */

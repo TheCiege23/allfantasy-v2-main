@@ -12,6 +12,7 @@ import { isUndeliverableEmailDomain } from "@/lib/email/undeliverableDomains"
 import { shouldSuppressTokenMonetizationNotification } from "@/lib/notifications/tokenMonetizationNotificationBypass"
 import { quietHoursSuppression } from "@/lib/notifications/quietHours"
 import { isCategoryAllowedForLeague } from "@/lib/notifications/leagueOverrides"
+import { pushTagFor } from "@/lib/notifications/pushTag"
 
 export type DispatchNotificationParams = {
   userIds: string[]
@@ -203,7 +204,8 @@ export async function dispatchNotification(params: DispatchNotificationParams): 
           title,
           body: body ?? undefined,
           href: actionHref,
-          tag: `notif-${category}-${meta?.leagueId ?? "global"}`,
+          // One tag per category unless the caller names one per event — see pushTagFor.
+          tag: pushTagFor(category, meta),
           type,
         }).catch((e) => console.error("[NotificationDispatcher] push error for user", userId, e))
       }

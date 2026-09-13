@@ -442,6 +442,30 @@
 .af-live-tieins-head {
   color: var(--accent);
 }
+/* The whole "Your starters" list collapses behind its heading. */
+.af-live-tieins-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  border-radius: 6px;
+}
+.af-live-tieins-toggle:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+.af-live-tieins[data-open='true'] > .af-live-tieins-toggle .af-live-mine-chev {
+  margin: 3px 3px 0 2px;
+  transform: rotate(225deg);
+}
 /* Direct child only: the league disclosure nested inside a row is also a <ul>
    and must keep its own indent. */
 .af-live-tieins > ul {
@@ -466,20 +490,35 @@
 .af-live-mine-row[data-selected='true'] {
   border-color: var(--accent);
 }
-.af-live-mine-toggle {
-  width: 100%;
+/* Headshot · name (player card) · leagues toggle. The name and the toggle are
+   separate buttons, so the row is a grid rather than one big button. */
+.af-live-mine-head {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto auto auto;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
   gap: 10px;
   padding: 7px 10px;
+}
+.af-live-mine-toggle {
+  display: grid;
+  grid-template-columns: auto auto auto;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 2px 4px 6px;
   border: 0;
   background: transparent;
   color: inherit;
   font: inherit;
   text-align: left;
   cursor: pointer;
-  border-radius: 10px;
+  border-radius: 8px;
+}
+.af-live-mine-player {
+  max-width: 100%;
+  font-weight: 700;
+  font-size: 13px;
+  color: var(--text);
+  vertical-align: bottom;
 }
 .af-live-mine-toggle:focus-visible {
   outline: 2px solid var(--accent);
@@ -701,6 +740,13 @@
   /* Sized in CSS as well as via the width/height attributes, so a 500px ESPN
      badge cannot blow out the row before it loads. */
 }
+.af-live-play-name {
+  font-weight: 700;
+  color: var(--text);
+}
+.af-live-play-pos {
+  color: var(--faint);
+}
 .af-live-play-line {
   font-size: 11px;
   line-height: 1.35;
@@ -849,8 +895,8 @@
    * points landed. The league-count pill is the column that gives way on a
    * phone; it is repeated in the disclosure anyway.
    */
+  .af-live-mine-head,
   .af-live-mine-toggle {
-    grid-template-columns: auto minmax(0, 1fr) auto auto;
     gap: 8px;
   }
   .af-live-mine-count {
