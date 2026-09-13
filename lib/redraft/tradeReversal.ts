@@ -19,10 +19,17 @@
  *   - recomputes readiness INSIDE the transaction; the preflight is only a courtesy
  *   - claims `accepted -> reversed` conditionally, and is idempotent by unique key
  *
- * ⚠ ONE THING IT CANNOT RESTORE, STATED RATHER THAN GUESSED: `isLocked`. Settlement sets
- * `isLocked: false` on every traded player, and the execution snapshot never recorded the prior
- * value. A player who was locked before the trade comes back UNLOCKED. Inventing a value would be
- * worse than leaving the one settlement wrote, so this module leaves it and says so.
+ * ⚠ `isLocked` IS NOT RESTORED, AND DOES NOT NEED TO BE — IT IS NOT STORED STATE. The lineup lock is
+ * derived from the game schedule at request time by `hydrateRedraftLineupLocks`
+ * (`lib/redraft/lineupLock.ts`), which stamps it onto players in memory and never writes the column.
+ * Measured 2026-09-12: 62,934 `redraft_roster_players` rows in production, 0 with `isLocked = true`.
+ * So there is no lock state for a snapshot to record or for a reversal to put back; a reversed
+ * player's lock is recomputed from kickoff on the next read. Restoring a recorded value would be
+ * actively wrong for a lock that expires with the scoring period.
+ *
+ * An earlier version of this header said locked players "come back UNLOCKED" after a reversal, and
+ * the reversal dialog repeated it to commissioners. That was never true, because nothing ever set the
+ * column to true in the first place.
  *
  * ⚠ THE CAP LEDGER IS NEVER EDITED OR DELETED. `IDPCapTransaction` has no status column and is the
  * history of what happened; the original `trade_out`/`trade_in` rows stay, and the reversal APPENDS
@@ -244,7 +251,7 @@ export async function reverseNativeTrade(input: ReverseNativeTradeInput): Promis
           const orig = original.get(p.playerId)
           if (!orig || orig.rosterId === r.rosterId) continue
           // The exact inverse of settlement's `updateMany` — same WHERE shape, moving every matching
-          // undropped row back. `isLocked` is left as settlement wrote it; see the header.
+          // undropped row back. `isLocked` is deliberately untouched: the lock is derived at read time; see the header.
           const moved = await tx.redraftRosterPlayer.updateMany({
             where: { rosterId: r.rosterId, playerId: p.playerId, droppedAt: null },
             data: { rosterId: orig.rosterId, slotType: orig.slotType, acquisitionType: orig.acquisitionType },

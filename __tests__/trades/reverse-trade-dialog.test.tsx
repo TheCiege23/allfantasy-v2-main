@@ -106,9 +106,10 @@ describe('ReverseTradeDialog', () => {
   })
 
   it('shows an engine-specific caveat when the host passes one', async () => {
-    mount({ note: 'Players who were locked before this trade come back unlocked.' })
+    // A neutral example: the prop is generic. The previous example repeated a claim that was false.
+    mount({ note: 'Example engine caveat for this trade.' })
     await screen.findByTestId('reverse-trade-confirm')
-    expect(screen.getByText(/come back unlocked/i)).toBeTruthy()
+    expect(screen.getByText(/example engine caveat/i)).toBeTruthy()
   })
 
   it('closes on Escape', async () => {
