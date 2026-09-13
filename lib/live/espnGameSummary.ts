@@ -272,6 +272,95 @@ export type HockeyDetail = {
   box: { home: HockeyBoxTeam | null; away: HockeyBoxTeam | null }
 }
 
+/* ── baseball ──────────────────────────────────────────────────────────────── */
+
+export type BaseballPitch = {
+  id: string
+  /** 1-based within the at-bat. */
+  number: number | null
+  /** ESPN's call, verbatim: "Ball", "Strike Swinging", "Foul Ball", "Single". */
+  call: string | null
+  kind: 'ball' | 'strike' | 'foul' | 'inplay'
+  pitchType: string | null
+  velocity: number | null
+  /** ESPN's pitch-location chart units (not inches); the view owns the zone box. */
+  x: number | null
+  y: number | null
+  /** The count AFTER this pitch (ESPN's `resultCount`). */
+  balls: number | null
+  strikes: number | null
+}
+
+export type BaseballBattedBall = {
+  /** Feet from home plate: +x toward right field, +y toward centre field. See SPRAY_PLATE. */
+  x: number
+  y: number
+  kind: 'hr' | 'hit' | 'out'
+  /** ESPN's trajectory letter: G ground, L line, F fly, P pop, B bunt. */
+  trajectory: string | null
+  call: string | null
+}
+
+export type BaseballAtBat = {
+  id: string
+  inning: number | null
+  half: 'top' | 'bottom' | null
+  battingTeamId: string | null
+  batterId: string | null
+  pitcherId: string | null
+  /** The at-bat's own result — the LAST play-result, e.g. "McGonigle tripled to center". */
+  result: string | null
+  /** "Single", "Strikeout", "Home Run" — the in-play call, else read off the final count. */
+  resultType: string | null
+  /** Results logged mid-at-bat, before the batter's own ("Peck stole second."). */
+  events: string[]
+  scoring: boolean
+  awayScore: number | null
+  homeScore: number | null
+  outs: number | null
+  pitches: BaseballPitch[]
+  battedBall: BaseballBattedBall | null
+  /** False while the batter is still up. */
+  complete: boolean
+}
+
+export type BaseballBoxPlayer = {
+  athleteId: string
+  name: string
+  shortName: string | null
+  headshot: string | null
+  /** The position played in THIS game, which is not always the roster position. */
+  position: string | null
+  batOrder: number | null
+  starter: boolean
+  /** Pitching decision, verbatim: "W, 2-2". */
+  note: string | null
+  stats: string[]
+}
+
+export type BaseballBoxTable = { labels: string[]; totals: string[]; players: BaseballBoxPlayer[] }
+
+export type BaseballBoxTeam = { teamId: string; batting: BaseballBoxTable | null; pitching: BaseballBoxTable | null }
+
+export type BaseballDetail = {
+  atBats: BaseballAtBat[]
+  /** The H and E of the R-H-E line score (R is the score). */
+  hitsErrors: { home: { hits: number | null; errors: number | null }; away: { hits: number | null; errors: number | null } }
+  /** Live only: ESPN's situation — the count, who is up, and occupied bases. */
+  current: {
+    balls: number | null
+    strikes: number | null
+    outs: number | null
+    batterId: string | null
+    pitcherId: string | null
+    on: { first: boolean; second: boolean; third: boolean }
+    runners: { first: string | null; second: string | null; third: string | null }
+  } | null
+  /** Pitchers of record on a final: winning, losing, save. */
+  decisions: Array<{ key: string; label: string; athleteId: string | null; name: string; teamId: string | null }>
+  box: { home: BaseballBoxTeam | null; away: BaseballBoxTeam | null }
+}
+
 export type LiveGameDetail = {
   gameId: string
   sport: string
@@ -300,6 +389,8 @@ export type LiveGameDetail = {
   basketball: BasketballDetail | null
   /** Rink shots, skater/goalie box score and plays — present only for a hockey summary. */
   hockey: HockeyDetail | null
+  /** At-bats with pitches, the spray chart, batting/pitching box score — present only for a baseball summary. */
+  baseball: BaseballDetail | null
   fetchedAt: string
 }
 
@@ -515,6 +606,35 @@ const HOCKEY_TEAM_STATS: TeamStatSpec[] = [
   { key: 'penaltyMinutes', label: 'Penalty Minutes', kind: 'count' },
 ]
 
+/*
+ * MLB team stats arrive GROUPED — { name: 'batting', stats: [{ name, displayValue }] } —
+ * measured on 401816920; `flattenStatGroups` keys them "batting.hits" for mapTeamStats.
+ */
+const BASEBALL_TEAM_STATS: TeamStatSpec[] = [
+  { key: 'batting.hits', label: 'Hits', kind: 'count' },
+  { key: 'batting.homeRuns', label: 'Home Runs', kind: 'count' },
+  { key: 'batting.walks', label: 'Walks', kind: 'count' },
+  { key: 'batting.strikeouts', label: 'Strikeouts', kind: 'count' },
+  { key: 'batting.stolenBases', label: 'Stolen Bases', kind: 'count' },
+  { key: 'batting.runnersLeftOnBase', label: 'Left on Base', kind: 'count' },
+  { key: 'batting.avg', label: 'Batting Avg', kind: 'count' },
+  { key: 'fielding.errors', label: 'Errors', kind: 'count' },
+  { key: 'pitching.pitches', label: 'Pitches Thrown', kind: 'count' },
+]
+
+function flattenStatGroups(boxTeams: unknown[]): unknown[] {
+  return boxTeams.map(obj).map((t) => ({
+    team: t?.team,
+    statistics: arr(t?.statistics)
+      .map(obj)
+      .flatMap((g) =>
+        arr(g?.stats)
+          .map(obj)
+          .map((s) => ({ name: `${str(g?.name)}.${str(s?.name)}`, displayValue: s?.displayValue })),
+      ),
+  }))
+}
+
 const TEAM_STATS: TeamStatSpec[] = [
   { key: 'totalYards', label: 'Total Yards', kind: 'count' },
   { key: 'turnovers', label: 'Turnovers', kind: 'count' },
@@ -588,7 +708,12 @@ function mapPlayers(boxPlayers: unknown[]): Record<string, GameDetailPlayerLine[
     for (const group of arr(team?.statistics).map(obj)) {
       const labels = arr(group?.labels).map((l) => str(l) ?? '')
       // NBA's single box-score group has no `name`; its PTS column identifies it.
-      const groupName = str(group?.name) ?? (labels.includes('PTS') ? 'basketball' : null)
+      // MLB's groups have no `name` either; they carry `type: 'batting' | 'pitching'`.
+      const type = str(group?.type)
+      const groupName =
+        str(group?.name) ??
+        (labels.includes('PTS') ? 'basketball' : null) ??
+        (type === 'batting' || type === 'pitching' ? type : null)
       if (!groupName) continue
       for (const entry of arr(group?.athletes).map(obj)) {
         const athlete = obj(entry?.athlete)
@@ -826,6 +951,222 @@ function mapHockey(root: Obj, home: GameDetailTeam, away: GameDetailTeam): Hocke
   return { plays, shots, box: { home: boxFor(home.id), away: boxFor(away.id) } }
 }
 
+/**
+ * ESPN's `hitCoordinate` is a spray-chart pixel space, not feet. Fitted on the
+ * four home runs whose play text prints a distance (COL @ DET 401816920 and
+ * KC @ BOS 401816922, 2026-09-13): home plate sits at (125.5, 205.5) and one unit
+ * is 2.37 ft, which reproduces all four printed distances to within 0.6 ft. With
+ * that origin every one of the 57 balls in play in both games lands inside the
+ * foul lines (±45°), and "to left" / "to right" in the text match the sign of x.
+ */
+export const SPRAY_PLATE = { x: 125.5, y: 205.5, feetPerUnit: 2.37 } as const
+
+const HIT_CALLS = /^(single|double|triple|ground-rule-double)$/
+const round1 = (n: number) => Math.round(n * 10) / 10
+
+function pitchKind(type: string | null): BaseballPitch['kind'] {
+  const t = type ?? ''
+  if (/^(ball|intent|pitchout|hit-by-pitch)/.test(t)) return 'ball'
+  if (/^strike/.test(t)) return 'strike'
+  if (/^foul/.test(t)) return 'foul'
+  return 'inplay'
+}
+
+/** ESPN sends a bare id string as `team` on at-bat plays, and `{ id }` on inning markers. */
+const playTeamId = (p: Obj | null) => str(p?.team) ?? str(pick(p, 'team', 'id'))
+const playType = (p: Obj | null) => str(pick(p, 'type', 'type'))
+
+function mapBaseball(root: Obj, comp: Obj, homeRaw: Obj, awayRaw: Obj, state: GameDetailState): BaseballDetail {
+  // Every play carries its at-bat's id (73 of 73 at-bats on 401816920), including
+  // the start/end-inning markers, which borrow the first/last at-bat's id.
+  const order: string[] = []
+  const groups = new Map<string, Obj[]>()
+  for (const p of arr(root.plays).map(obj)) {
+    const id = str(p?.atBatId)
+    if (!p || !id) continue
+    if (!groups.has(id)) {
+      groups.set(id, [])
+      order.push(id)
+    }
+    groups.get(id)!.push(p)
+  }
+
+  const atBats: BaseballAtBat[] = []
+  for (const id of order) {
+    const plays = (groups.get(id) ?? []).filter((p) => !/inning$/.test(playType(p) ?? ''))
+    if (plays.length === 0) continue
+    const start = plays.find((p) => playType(p) === 'start-batterpitcher') ?? plays[0]!
+    const results = plays.filter((p) => playType(p) === 'play-result')
+    const complete = plays.some((p) => playType(p) === 'end-batterpitcher')
+    // ⚠ Substitutions are play-results too, with the same summaryType, so "the last
+    // play-result" is not always what the batter did. Measured on TEX @ ARI
+    // (401816932): "Duran at third base." sat in the at-bat still in progress, and the
+    // last-result rule showed it as that batter's outcome. Two bounds:
+    //   - the game's last at-bat with no end marker is still going, so nothing in it is
+    //     the batter's result yet — a substitution, steal or wild pitch is an event;
+    //   - a play-result after the end-of-at-bat marker is an event (not seen in the five
+    //     games measured on 2026-09-13; guarded because it would mislabel the at-bat).
+    const endAt = plays.findIndex((p) => playType(p) === 'end-batterpitcher')
+    const inProgress = state === 'in' && !complete && id === order[order.length - 1]
+    const own = inProgress ? [] : plays.filter((p, i) => playType(p) === 'play-result' && (endAt < 0 || i < endAt))
+    const last = own[own.length - 1] ?? null
+    const before = last ? (plays[plays.indexOf(last) - 1] ?? null) : null
+    const pitchPlays = plays.filter((p) => p.summaryType === 'P')
+    const pitches = pitchPlays.map(
+      (p): BaseballPitch => ({
+        id: str(p.id) ?? '',
+        number: num(p.atBatPitchNumber),
+        call: str(pick(p, 'type', 'text')),
+        kind: pitchKind(playType(p)),
+        pitchType: str(pick(p, 'pitchType', 'text')),
+        velocity: num(p.pitchVelocity),
+        x: num(pick(p, 'pitchCoordinate', 'x')),
+        y: num(pick(p, 'pitchCoordinate', 'y')),
+        balls: num(pick(p, 'resultCount', 'balls')),
+        strikes: num(pick(p, 'resultCount', 'strikes')),
+      }),
+    )
+    // ⚠ The batted-ball spot is read ONLY off the in-play pitch. Foul balls and the
+    // end-of-at-bat marker repeat a coordinate too — a strikeout after a foul would
+    // otherwise plot a ball in play that never happened. The in-play pitch carried a
+    // spot 45 of 45 times; the play-result only 13 of 85.
+    const inPlay = [...pitchPlays].reverse().find((p) => pitchKind(playType(p)) === 'inplay') ?? null
+    const hx = num(pick(inPlay, 'hitCoordinate', 'x'))
+    const hy = num(pick(inPlay, 'hitCoordinate', 'y'))
+    const inPlayType = playType(inPlay)
+    const battedBall: BaseballBattedBall | null =
+      inPlay && hx != null && hy != null
+        ? {
+            x: round1((hx - SPRAY_PLATE.x) * SPRAY_PLATE.feetPerUnit),
+            y: round1((SPRAY_PLATE.y - hy) * SPRAY_PLATE.feetPerUnit),
+            kind: inPlayType === 'home-run' ? 'hr' : HIT_CALLS.test(inPlayType ?? '') ? 'hit' : 'out',
+            trajectory: str(inPlay.trajectory),
+            call: str(pick(inPlay, 'type', 'text')),
+          }
+        : null
+    // What ended the at-bat, read off the play just before the result: the in-play call,
+    // strike three, ball four, else that play's own name ("Hit By Pitch", "Pick Off").
+    const resultType =
+      !last || !before
+        ? null
+        : before.summaryType === 'P'
+          ? pitchKind(playType(before)) === 'inplay'
+            ? str(pick(before, 'type', 'text'))
+            : num(pick(before, 'resultCount', 'strikes')) === 3
+              ? 'Strikeout'
+              : num(pick(before, 'resultCount', 'balls')) === 4
+                ? 'Walk'
+                : str(pick(before, 'type', 'text'))
+          : playType(before) === 'start-batterpitcher'
+            ? null
+            : str(pick(before, 'type', 'text'))
+    const participant = (role: string) =>
+      str(pick(arr(start.participants).map(obj).find((x) => x?.type === role) ?? null, 'athlete', 'id'))
+    const half = str(pick(start, 'period', 'type'))
+    atBats.push({
+      id,
+      inning: num(pick(start, 'period', 'number')),
+      half: half === 'Top' ? 'top' : half === 'Bottom' ? 'bottom' : null,
+      battingTeamId: playTeamId(start),
+      batterId: participant('batter'),
+      pitcherId: participant('pitcher'),
+      result: last ? (str(last.text) ?? '').replace(/\s+/g, ' ').trim() || null : null,
+      resultType,
+      events: results
+        .filter((r) => r !== last)
+        .map((r) => (str(r.text) ?? '').replace(/\s+/g, ' ').trim())
+        .filter(Boolean),
+      scoring: results.some((r) => r.scoringPlay === true),
+      awayScore: num(last?.awayScore),
+      homeScore: num(last?.homeScore),
+      outs: num(last?.outs),
+      pitches,
+      battedBall,
+      complete,
+    })
+  }
+
+  const teams = arr(pick(root, 'boxscore', 'players')).map(obj)
+  const table = (teamRaw: Obj | null, type: 'batting' | 'pitching'): BaseballBoxTable | null => {
+    const g = arr(teamRaw?.statistics).map(obj).find((x) => str(x?.type) === type) ?? null
+    if (!g) return null
+    return {
+      labels: arr(g.labels).map((l) => str(l) ?? ''),
+      totals: arr(g.totals).map((t) => str(t) ?? ''),
+      players: arr(g.athletes)
+        .map(obj)
+        .map((entry): BaseballBoxPlayer | null => {
+          const athlete = obj(entry?.athlete)
+          const athleteId = str(athlete?.id)
+          const name = str(athlete?.displayName)
+          if (!entry || !athleteId || !name) return null
+          const note = arr(entry.notes).map(obj).find((n) => n?.type === 'pitchingDecision') ?? null
+          return {
+            athleteId,
+            name,
+            shortName: str(athlete?.shortName),
+            headshot: href(athlete?.headshot),
+            position: str(pick(entry, 'position', 'abbreviation')) ?? str(pick(athlete, 'position', 'abbreviation')),
+            batOrder: num(entry.batOrder),
+            starter: entry.starter === true,
+            note: str(note?.text),
+            stats: arr(entry.stats).map((s) => str(s) ?? ''),
+          }
+        })
+        .filter((x): x is BaseballBoxPlayer => x != null),
+    }
+  }
+  const boxFor = (teamId: string | null): BaseballBoxTeam | null => {
+    const t = teams.find((x) => str(pick(x, 'team', 'id')) === teamId) ?? null
+    return t && teamId ? { teamId, batting: table(t, 'batting'), pitching: table(t, 'pitching') } : null
+  }
+
+  // Situation, measured live on KC @ BOS: counts are numbers, the batter and pitcher
+  // are `{ playerId }` only, and an occupied base is `{ playerId }` — an empty one is absent.
+  const sit = obj(root.situation)
+  const runner = (key: string) => {
+    const v = obj(sit?.[key])
+    return { on: v != null, id: v ? (str(v.playerId) ?? str(pick(v, 'athlete', 'id'))) : null }
+  }
+  const [first, second, third] = [runner('onFirst'), runner('onSecond'), runner('onThird')]
+
+  return {
+    atBats,
+    hitsErrors: {
+      home: { hits: num(homeRaw.hits), errors: num(homeRaw.errors) },
+      away: { hits: num(awayRaw.hits), errors: num(awayRaw.errors) },
+    },
+    current:
+      state === 'in' && sit
+        ? {
+            balls: num(sit.balls),
+            strikes: num(sit.strikes),
+            outs: num(sit.outs),
+            batterId: str(pick(sit, 'batter', 'playerId')) ?? str(pick(sit, 'batter', 'athlete', 'id')),
+            pitcherId: str(pick(sit, 'pitcher', 'playerId')) ?? str(pick(sit, 'pitcher', 'athlete', 'id')),
+            on: { first: first.on, second: second.on, third: third.on },
+            runners: { first: first.id, second: second.id, third: third.id },
+          }
+        : null,
+    decisions: arr(pick(comp, 'status', 'featuredAthletes'))
+      .map(obj)
+      .map((f) => {
+        const name = str(pick(f, 'athlete', 'displayName'))
+        const label = str(f?.displayName) ?? str(f?.name)
+        if (!f || !name || !label) return null
+        return {
+          key: str(f.name) ?? label,
+          label,
+          athleteId: str(pick(f, 'athlete', 'id')),
+          name,
+          teamId: str(pick(f, 'team', 'id')),
+        }
+      })
+      .filter((x): x is BaseballDetail['decisions'][number] => x != null),
+    box: { home: boxFor(str(pick(homeRaw, 'team', 'id'))), away: boxFor(str(pick(awayRaw, 'team', 'id'))) },
+  }
+}
+
 /* ── entry point ───────────────────────────────────────────────────────────── */
 
 /**
@@ -867,14 +1208,18 @@ export function trimEspnGameSummary(
   const drive = current ?? drives[drives.length - 1] ?? null
   const players = mapPlayers(arr(pick(root, 'boxscore', 'players')))
 
-  // Basketball and hockey summaries both carry a flat `plays` list and no `drives`.
-  // Hockey is told apart by its box score: it has a `goalies` group (NHL 401803363).
-  const isHockey = arr(pick(root, 'boxscore', 'players')).some((t) =>
-    arr(obj(t)?.statistics).some((g) => str(obj(g)?.name) === 'goalies'),
-  )
+  // Basketball, hockey and baseball summaries all carry a flat `plays` list and no
+  // `drives`; the box score tells them apart. Baseball has a `type: 'pitching'` group
+  // (MLB 401816920), hockey a `goalies` group (NHL 401803363).
+  const boxGroups = arr(pick(root, 'boxscore', 'players')).flatMap((t) => arr(obj(t)?.statistics).map(obj))
+  const isBaseball = boxGroups.some((g) => str(g?.type) === 'pitching')
+  const isHockey = !isBaseball && boxGroups.some((g) => str(g?.name) === 'goalies')
   const flatPlays = Array.isArray(root.plays) && !drivesRoot
+  const baseball = flatPlays && isBaseball ? mapBaseball(root, comp, homeRaw, awayRaw, state) : null
   const hockey = flatPlays && isHockey ? mapHockey(root, home, away) : null
-  const basketball = flatPlays && !isHockey ? mapBasketball(root, home, away) : null
+  const basketball = flatPlays && !isBaseball && !isHockey ? mapBasketball(root, home, away) : null
+  // Baseball's last play is the last at-bat that has a result, not the pitch in progress.
+  const lastAtBat = baseball ? ([...baseball.atBats].reverse().find((a) => a.result) ?? null) : null
   const lastFlat =
     (basketball
       ? [...basketball.plays].reverse().find((p) => p.text && !NON_BASKETBALL_PLAY.test(p.type ?? ''))
@@ -883,7 +1228,24 @@ export function trimEspnGameSummary(
         : null) ?? null
 
   const allPlays = (drive?.plays ?? []).filter((p) => !NON_SNAP.test(p.type ?? ''))
-  const lastPlay: GameDetailPlay | null = lastFlat
+  const lastPlay: GameDetailPlay | null = lastAtBat
+    ? {
+        id: lastAtBat.id,
+        text: lastAtBat.result ?? '',
+        type: lastAtBat.resultType,
+        typeAbbrev: null,
+        period: lastAtBat.inning,
+        clock: null,
+        downDistance: null,
+        startBallOn: null,
+        endBallOn: null,
+        statYardage: null,
+        yardsAfterCatch: null,
+        scoring: lastAtBat.scoring,
+        awayScore: lastAtBat.awayScore,
+        homeScore: lastAtBat.homeScore,
+      }
+    : lastFlat
     ? {
         id: lastFlat.id,
         text: lastFlat.text,
@@ -930,7 +1292,9 @@ export function trimEspnGameSummary(
     situation: state === 'in' ? mapSituation(currentRaw ?? null, home, away) : null,
     lastPlay,
     // Basketball plays name their athletes by id; football plays only in text.
-    lastPlayAthleteIds: lastFlat
+    lastPlayAthleteIds: lastAtBat
+      ? [lastAtBat.batterId, lastAtBat.pitcherId].filter((id): id is string => id != null)
+      : lastFlat
       ? lastFlat.athleteIds.slice(0, 2)
       : lastPlay
         ? athletesInPlayText(lastPlay.text, players)
@@ -950,12 +1314,14 @@ export function trimEspnGameSummary(
         awayScore: num(p.awayScore),
         homeScore: num(p.homeScore),
       })),
-    teamStats: mapTeamStats(
-      arr(pick(root, 'boxscore', 'teams')),
-      home,
-      away,
-      basketball ? BASKETBALL_TEAM_STATS : hockey ? HOCKEY_TEAM_STATS : TEAM_STATS,
-    ),
+    teamStats: baseball
+      ? mapTeamStats(flattenStatGroups(arr(pick(root, 'boxscore', 'teams'))), home, away, BASEBALL_TEAM_STATS)
+      : mapTeamStats(
+          arr(pick(root, 'boxscore', 'teams')),
+          home,
+          away,
+          basketball ? BASKETBALL_TEAM_STATS : hockey ? HOCKEY_TEAM_STATS : TEAM_STATS,
+        ),
     players,
     winProbability:
       homePct != null
@@ -971,6 +1337,7 @@ export function trimEspnGameSummary(
     attendance: num(pick(root, 'gameInfo', 'attendance')),
     basketball,
     hockey,
+    baseball,
     fetchedAt: opts.fetchedAt,
   }
 }
@@ -979,9 +1346,11 @@ export function trimEspnGameSummary(
  * Sports the clicked-game view covers. NFL and NCAAF share the football summary
  * shape; NBA's basketball shape (flat plays, shot spots, single box-score group)
  * was measured 2026-09-13 on CHI @ GS (401810798); NHL's hockey shape (full-rink
- * coordinates, forwards/defenses/goalies box score) on LA @ BOS (401803363).
+ * coordinates, forwards/defenses/goalies box score) on LA @ BOS (401803363); MLB's
+ * baseball shape (pitch-level plays grouped by at-bat, batting/pitching box score)
+ * on COL @ DET (401816920) and KC @ BOS live (401816922).
  */
-export const GAME_VIEW_SPORTS: readonly string[] = ['NFL', 'NCAAF', 'NBA', 'NHL']
+export const GAME_VIEW_SPORTS: readonly string[] = ['NFL', 'NCAAF', 'NBA', 'NHL', 'MLB']
 
 const NAME_SUFFIX = /\s+(jr|sr|ii|iii|iv|v)\.?$/i
 

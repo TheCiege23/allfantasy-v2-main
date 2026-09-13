@@ -4,6 +4,10 @@ import Link from 'next/link'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import MiniPlayerImg from '@/components/MiniPlayerImg'
 import type {
+  BaseballAtBat,
+  BaseballBoxTable,
+  BaseballBoxTeam,
+  BaseballDetail,
   BasketballBoxPlayer,
   BasketballBoxTeam,
   BasketballDetail,
@@ -100,7 +104,7 @@ export function LiveGameView({
           <p className="af-live-empty-body">
             {payload?.failed
               ? 'This is a problem on our end, not the game. Retrying automatically.'
-              : 'Game views are available for NFL, college football, NBA and NHL games.'}
+              : 'Game views are available for NFL, college football, NBA, NHL and MLB games.'}
           </p>
         </div>
       </div>
@@ -124,10 +128,25 @@ export function LiveGameView({
       <div className="af-gv-grid">
         <div className="af-gv-col" data-col="side">
           <LeadersPanel detail={detail} />
+          {detail.baseball ? <DecisionsPanel detail={detail} baseball={detail.baseball} /> : null}
           <TeamStatsPanel detail={detail} />
         </div>
         <div className="af-gv-col" data-col="main">
-          {detail.basketball ? (
+          {detail.baseball ? (
+            <>
+              {state === 'in' ? <AtBatPanel detail={detail} baseball={detail.baseball} /> : null}
+              <SprayChart detail={detail} baseball={detail.baseball} />
+              {detail.lastPlay ? (
+                <section className="af-gv-card" aria-labelledby="af-gv-lastplay-mlb">
+                  <h2 className="af-label" id="af-gv-lastplay-mlb">
+                    Last play
+                  </h2>
+                  <LastPlay detail={detail} play={detail.lastPlay} />
+                </section>
+              ) : null}
+              <BaseballPlayByPlay detail={detail} baseball={detail.baseball} tab={tab} onTab={setTab} />
+            </>
+          ) : detail.basketball ? (
             <>
               <ShotChart detail={detail} basketball={detail.basketball} />
               {detail.lastPlay ? (
@@ -164,6 +183,7 @@ export function LiveGameView({
 
       {detail.basketball ? <BoxScore detail={detail} basketball={detail.basketball} /> : null}
       {detail.hockey ? <HockeyBoxScore detail={detail} hockey={detail.hockey} /> : null}
+      {detail.baseball ? <BaseballBoxScore detail={detail} baseball={detail.baseball} /> : null}
 
       <GameFooter detail={detail} />
     </div>
@@ -229,8 +249,10 @@ function GameHeader({ detail }: { detail: LiveGameDetail }) {
         ? 'home'
         : 'away'
       : null
-  // Hockey has three regulation periods; football and basketball have four quarters.
-  const regulation = detail.hockey ? 3 : 4
+  // Baseball has nine innings and extras are just more innings; hockey three
+  // periods; football and basketball four quarters.
+  const baseball = detail.baseball
+  const regulation = baseball ? 9 : detail.hockey ? 3 : 4
   const periods = Math.max(regulation, home.linescores.length, away.linescores.length)
   const showLines = home.linescores.length > 0 || away.linescores.length > 0
 
@@ -249,10 +271,16 @@ function GameHeader({ detail }: { detail: LiveGameDetail }) {
                 <th scope="col" aria-label="Team" />
                 {Array.from({ length: periods }, (_, i) => (
                   <th key={i} scope="col">
-                    {i < regulation ? i + 1 : i === regulation ? 'OT' : `${i - regulation + 1}OT`}
+                    {baseball || i < regulation ? i + 1 : i === regulation ? 'OT' : `${i - regulation + 1}OT`}
                   </th>
                 ))}
-                <th scope="col">T</th>
+                <th scope="col">{baseball ? 'R' : 'T'}</th>
+                {baseball ? (
+                  <>
+                    <th scope="col">H</th>
+                    <th scope="col">E</th>
+                  </>
+                ) : null}
               </tr>
             </thead>
             <tbody>
@@ -263,6 +291,16 @@ function GameHeader({ detail }: { detail: LiveGameDetail }) {
                     <td key={i}>{t.linescores[i] ?? ''}</td>
                   ))}
                   <td className="af-live-linescore-total">{t.score ?? '—'}</td>
+                  {baseball ? (
+                    <>
+                      <td className="af-live-linescore-he">
+                        {(t.id === home.id ? baseball.hitsErrors.home : baseball.hitsErrors.away).hits ?? ''}
+                      </td>
+                      <td className="af-live-linescore-he">
+                        {(t.id === home.id ? baseball.hitsErrors.home : baseball.hitsErrors.away).errors ?? ''}
+                      </td>
+                    </>
+                  ) : null}
                 </tr>
               ))}
             </tbody>
@@ -507,8 +545,12 @@ const ANY_GROUPS = [
   'forwards',
   'defenses',
   'goalies',
+  'batting',
+  'pitching',
 ]
 const PREFERRED_STATS: Record<string, string[]> = {
+  batting: ['H-AB', 'R', 'RBI', 'HR'],
+  pitching: ['IP', 'H', 'ER', 'K'],
   basketball: ['PTS', 'REB', 'AST', 'FG'],
   // `S` is the shot count; ESPN's skater `SOG` column is all zeros (see SKATER_COLUMNS).
   forwards: ['G', 'A', 'S', '+/-'],
@@ -1370,6 +1412,504 @@ function HockeyBoxTeamTable({ team, box }: { team: GameDetailTeam; box: HockeyBo
           </table>
         </div>
       ) : null}
+    </div>
+  )
+}
+
+/* ── baseball ──────────────────────────────────────────────────────────────── */
+
+/*
+ * ESPN's pitch-location chart units. The zone is the rectangle that best separates
+ * called strikes from balls across 195 umpire calls (COL @ DET 401816920 and
+ * KC @ BOS 401816922): it sorts 187 of them correctly. The frame covers every pitch
+ * seen across five games that day (x 31–212, y 78–262).
+ */
+const STRIKE_ZONE = { x0: 80, x1: 148, y0: 148, y1: 196 }
+const DIAMOND_BASES = [
+  { key: 'first', cx: 86, cy: 50 },
+  { key: 'second', cx: 50, cy: 14 },
+  { key: 'third', cx: 14, cy: 50 },
+] as const
+
+function halfLabel(half: BaseballAtBat['half'], inning: number | null, short = false): string {
+  if (inning == null) return ''
+  const h = half === 'top' ? 'Top' : half === 'bottom' ? (short ? 'Bot' : 'Bottom') : ''
+  return `${h} ${ordinal(inning)}`.trim()
+}
+
+function boxLine(detail: LiveGameDetail, id: string | null, group: 'batting' | 'pitching') {
+  const line = id ? detail.players[id]?.find((l) => l.group === group) : undefined
+  return {
+    line,
+    stat: (label: string) => {
+      const i = line ? line.labels.indexOf(label) : -1
+      return line && i >= 0 ? (line.stats[i] ?? null) || null : null
+    },
+  }
+}
+
+function AtBatPanel({ detail, baseball }: { detail: LiveGameDetail; baseball: BaseballDetail }) {
+  const cur = baseball.current
+  if (!cur) return null
+  const last = baseball.atBats[baseball.atBats.length - 1]
+  // Pitches belong to the at-bat still in progress; between batters the zone is empty.
+  const pitches = last && !last.complete ? last.pitches : []
+  const occupied = DIAMOND_BASES.filter((b) => cur.on[b.key]).map((b) => b.key)
+  const basesLabel =
+    occupied.length === 0 ? 'Bases empty' : `Runner${occupied.length > 1 ? 's' : ''} on ${occupied.join(' and ')}`
+  const pitcher = boxLine(detail, cur.pitcherId, 'pitching')
+  const batter = boxLine(detail, cur.batterId, 'batting')
+  const people = [
+    {
+      role: 'Pitching',
+      line: pitcher.line,
+      summary: [pitcher.stat('IP') && `${pitcher.stat('IP')} IP`, pitcher.stat('PC') && `${pitcher.stat('PC')} P`]
+        .filter(Boolean)
+        .join(' · '),
+    },
+    {
+      role: 'At bat',
+      line: batter.line,
+      summary: batter.stat('H-AB') ? `${batter.stat('H-AB')} today` : '',
+    },
+  ]
+
+  return (
+    <section className="af-gv-card" aria-labelledby="af-gv-atbat-h">
+      <h2 className="af-label" id="af-gv-atbat-h">
+        At bat
+      </h2>
+      <div className="af-gv-atbat">
+        <div className="af-gv-atbat-main">
+          <div className="af-live-diamond-block">
+            <svg
+              className="af-live-diamond"
+              viewBox="0 0 100 100"
+              role="img"
+              aria-label={`${basesLabel}${
+                cur.balls != null && cur.strikes != null ? `, ${cur.balls}-${cur.strikes} count` : ''
+              }${cur.outs != null ? `, ${cur.outs} ${cur.outs === 1 ? 'out' : 'outs'}` : ''}`}
+            >
+              <path className="af-live-diamond-path" d="M50 86 L86 50 L50 14 L14 50 Z" />
+              {DIAMOND_BASES.map((b) => (
+                <rect
+                  key={b.key}
+                  className="af-live-base"
+                  data-base={b.key}
+                  data-on={cur.on[b.key]}
+                  x={b.cx - 8}
+                  y={b.cy - 8}
+                  width={16}
+                  height={16}
+                  transform={`rotate(45 ${b.cx} ${b.cy})`}
+                />
+              ))}
+              <rect className="af-live-plate" x={44} y={80} width={12} height={12} transform="rotate(45 50 86)" />
+            </svg>
+            <div className="af-live-count" aria-hidden>
+              {(
+                [
+                  ['B', cur.balls, 3, 'good'],
+                  ['S', cur.strikes, 2, 'bad'],
+                  ['O', cur.outs, 2, 'warn'],
+                ] as const
+              ).map(([label, n, max, tone]) => (
+                <span key={label} className="af-live-count-row" data-count={label}>
+                  <span className="af-label">{label}</span>
+                  {Array.from({ length: max }, (_, i) => (
+                    <span key={i} className="af-live-count-dot" data-tone={tone} data-on={n != null && i < n} />
+                  ))}
+                </span>
+              ))}
+            </div>
+            <ul className="af-live-atbat">
+              {people.map((p) =>
+                p.line ? (
+                  <li key={p.role} className="af-live-atbat-row">
+                    <MiniPlayerImg sleeperId={null} name={p.line.name} avatarUrl={p.line.headshot} size={30} />
+                    <span className="af-live-atbat-text">
+                      <span className="af-label">{p.role}</span>
+                      <span className="af-live-atbat-name">{p.line.name}</span>
+                      {p.summary ? <span className="af-live-atbat-line af-num">{p.summary}</span> : null}
+                    </span>
+                  </li>
+                ) : null,
+              )}
+            </ul>
+          </div>
+          {pitches.length > 0 ? (
+            <ol className="af-gv-pitches">
+              {pitches.map((p, i) => (
+                <li key={p.id || i} data-kind={p.kind}>
+                  <span className="af-gv-pitch-n af-num" data-kind={p.kind}>
+                    {p.number ?? i + 1}
+                  </span>
+                  <span>{p.call ?? 'Pitch'}</span>
+                  <span className="af-gv-muted af-num">
+                    {[p.pitchType, p.velocity != null ? `${p.velocity} mph` : null].filter(Boolean).join(' · ')}
+                  </span>
+                </li>
+              ))}
+            </ol>
+          ) : null}
+        </div>
+        <svg
+          className="af-gv-zone"
+          viewBox="15 65 220 210"
+          role="img"
+          aria-label={`Pitch locations this at-bat: ${pitches.length}`}
+        >
+          <rect
+            className="af-gv-zone-box"
+            x={STRIKE_ZONE.x0}
+            y={STRIKE_ZONE.y0}
+            width={STRIKE_ZONE.x1 - STRIKE_ZONE.x0}
+            height={STRIKE_ZONE.y1 - STRIKE_ZONE.y0}
+          />
+          {pitches.map((p, i) =>
+            p.x != null && p.y != null ? (
+              <g key={p.id || i} className="af-gv-pitch" data-kind={p.kind}>
+                <circle cx={p.x} cy={p.y} r={9} />
+                <text x={p.x} y={p.y}>
+                  {p.number ?? i + 1}
+                </text>
+              </g>
+            ) : null,
+          )}
+        </svg>
+      </div>
+    </section>
+  )
+}
+
+/**
+ * Where every charted ball in play landed, in feet from the plate (see SPRAY_PLATE).
+ * The park outline is a generic 330–400 ft field for scale, not this ballpark.
+ */
+function SprayChart({ detail, baseball }: { detail: LiveGameDetail; baseball: BaseballDetail }) {
+  const [side, setSide] = useState<'both' | 'away' | 'home'>('both')
+  const away = markerColor(detail.away, 'var(--accent)')
+  const home = markerColor(detail.home, 'var(--warn)')
+  const colors = { away, home: home.toLowerCase() === away.toLowerCase() ? 'var(--warn)' : home }
+  const balls = baseball.atBats
+    .filter((a) => a.battedBall)
+    .map((a) => ({
+      ab: a,
+      bb: a.battedBall!,
+      side: a.battingTeamId === detail.home.id ? ('home' as const) : a.battingTeamId === detail.away.id ? ('away' as const) : null,
+    }))
+  if (balls.length === 0) return null
+  const visible = side === 'both' ? balls : balls.filter((b) => b.side === side)
+  const hits = visible.filter((b) => b.bb.kind !== 'out').length
+  const homers = visible.filter((b) => b.bb.kind === 'hr').length
+
+  return (
+    <section className="af-gv-card" aria-labelledby="af-gv-spray">
+      <div className="af-gv-shots-head">
+        <h2 className="af-label" id="af-gv-spray">
+          Spray chart
+        </h2>
+        <span className="af-gv-muted af-num">
+          {hits} hit{hits === 1 ? '' : 's'} · {homers} HR
+        </span>
+      </div>
+      <div className="af-live-scope af-gv-tabs" role="group" aria-label="Whose batted balls to show">
+        {(
+          [
+            ['both', 'Both'],
+            ['away', detail.away.abbrev],
+            ['home', detail.home.abbrev],
+          ] as const
+        ).map(([key, label]) => (
+          <button
+            key={key}
+            type="button"
+            className="af-live-scope-btn"
+            data-active={side === key}
+            aria-pressed={side === key}
+            onClick={() => setSide(key)}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+      <svg
+        className="af-gv-diamond"
+        viewBox="-310 -470 620 495"
+        role="img"
+        aria-label={`Spray chart: ${hits} hits, ${homers} home runs`}
+      >
+        <path className="af-gv-diamond-grass" d="M0 0 L-233 -233 Q0 -567 233 -233 Z" />
+        <path className="af-gv-diamond-dirt" d="M0 0 L-106 -106 A150 150 0 0 1 106 -106 Z" />
+        <path className="af-gv-diamond-line" d="M0 0 L-300 -300 M0 0 L300 -300" />
+        <path className="af-gv-diamond-path" d="M0 0 L63.6 -63.6 L0 -127.3 L-63.6 -63.6 Z" />
+        <circle className="af-gv-diamond-mound" cx={0} cy={-60.5} r={9} />
+        {[
+          [63.6, -63.6],
+          [0, -127.3],
+          [-63.6, -63.6],
+        ].map(([x, y]) => (
+          <rect key={`${x}`} className="af-gv-diamond-base" x={x! - 5} y={y! - 5} width={10} height={10} transform={`rotate(45 ${x} ${y})`} />
+        ))}
+        {visible.map(({ ab, bb, side: s }) => {
+          const color = colors[s ?? 'away']
+          return (
+            <circle
+              key={ab.id}
+              className="af-gv-bb"
+              data-kind={bb.kind}
+              cx={bb.x}
+              cy={-bb.y}
+              r={bb.kind === 'hr' ? 11 : 7}
+              fill={bb.kind === 'out' ? 'none' : color}
+              stroke={color}
+            >
+              <title>{ab.result ?? bb.call ?? ''}</title>
+            </circle>
+          )
+        })}
+      </svg>
+      <p className="af-gv-shots-key af-gv-muted">
+        large = home run · filled = hit · hollow = out or other · plate at the bottom, generic 330–400 ft park for scale
+      </p>
+    </section>
+  )
+}
+
+function BaseballPlayByPlay({
+  detail,
+  baseball,
+  tab,
+  onTab,
+}: {
+  detail: LiveGameDetail
+  baseball: BaseballDetail
+  tab: 'scoring' | 'all'
+  onTab: (t: 'scoring' | 'all') => void
+}) {
+  const innings = useMemo(
+    () => [...new Set(baseball.atBats.map((a) => a.inning).filter((n): n is number => n != null))].sort((a, b) => a - b),
+    [baseball.atBats],
+  )
+  const [picked, setPicked] = useState<number | null>(null)
+  const active = picked != null && innings.includes(picked) ? picked : (innings[innings.length - 1] ?? null)
+  const scoring = useMemo(() => baseball.atBats.filter((a) => a.scoring).slice().reverse(), [baseball.atBats])
+  // Newest first: within an inning the bottom half comes before the top.
+  const halves = useMemo(() => {
+    const inInning = baseball.atBats.filter((a) => a.inning === active)
+    return (['bottom', 'top'] as const)
+      .map((half) => ({ half, atBats: inInning.filter((a) => a.half === half).slice().reverse() }))
+      .filter((g) => g.atBats.length > 0)
+  }, [baseball.atBats, active])
+  const teamFor = (id: string | null) => (id === detail.home.id ? detail.home : id === detail.away.id ? detail.away : null)
+
+  const row = (a: BaseballAtBat, withInning: boolean) => {
+    const team = teamFor(a.battingTeamId)
+    const batterName = a.batterId ? detail.players[a.batterId]?.[0]?.name : null
+    return (
+      <li key={a.id} className="af-gv-bplay" data-scoring={a.scoring}>
+        {team ? <TeamLogo team={team} size={18} /> : <span className="af-gv-logo" aria-hidden />}
+        <span className="af-gv-bplay-clock af-num">
+          {withInning ? halfLabel(a.half, a.inning, true) : `${a.pitches.length} P`}
+        </span>
+        <span className="af-gv-play-desc">
+          {a.result ?? `${batterName ?? 'Batter'} at bat`}
+          {a.events.map((e, i) => (
+            <span key={i} className="af-gv-bevent">
+              {e}
+            </span>
+          ))}
+        </span>
+        {a.scoring && a.awayScore != null && a.homeScore != null ? (
+          <span className="af-gv-bplay-score af-num">
+            {a.awayScore}–{a.homeScore}
+          </span>
+        ) : (
+          <span />
+        )}
+      </li>
+    )
+  }
+
+  return (
+    <section className="af-gv-card" aria-labelledby="af-gv-mlbpbp">
+      <h2 className="af-label" id="af-gv-mlbpbp">
+        Play-by-play
+      </h2>
+      <div className="af-live-scope af-gv-tabs" role="group" aria-label="Which plays to show">
+        <button
+          type="button"
+          className="af-live-scope-btn"
+          data-active={tab === 'scoring'}
+          aria-pressed={tab === 'scoring'}
+          onClick={() => onTab('scoring')}
+        >
+          Scoring plays
+        </button>
+        <button
+          type="button"
+          className="af-live-scope-btn"
+          data-active={tab === 'all'}
+          aria-pressed={tab === 'all'}
+          onClick={() => onTab('all')}
+        >
+          All plays
+        </button>
+      </div>
+      {tab === 'scoring' ? (
+        scoring.length === 0 ? (
+          <p className="af-gv-none">No runs yet.</p>
+        ) : (
+          <ol className="af-gv-plays af-gv-bplays">{scoring.map((a) => row(a, true))}</ol>
+        )
+      ) : (
+        <>
+          {innings.length > 1 ? (
+            <div className="af-live-scope af-gv-tabs" role="group" aria-label="Inning">
+              {innings.map((n) => (
+                <button
+                  key={n}
+                  type="button"
+                  className="af-live-scope-btn"
+                  data-active={n === active}
+                  aria-pressed={n === active}
+                  onClick={() => setPicked(n)}
+                >
+                  {n}
+                </button>
+              ))}
+            </div>
+          ) : null}
+          {halves.length === 0 ? <p className="af-gv-none">No plays yet.</p> : null}
+          {halves.map((g) => (
+            <div key={g.half}>
+              <h3 className="af-label af-gv-period-head">{halfLabel(g.half, active)}</h3>
+              <ol className="af-gv-plays af-gv-bplays">{g.atBats.map((a) => row(a, false))}</ol>
+            </div>
+          ))}
+        </>
+      )}
+    </section>
+  )
+}
+
+function DecisionsPanel({ detail, baseball }: { detail: LiveGameDetail; baseball: BaseballDetail }) {
+  if (baseball.decisions.length === 0) return null
+  return (
+    <section className="af-gv-card" aria-labelledby="af-gv-decisions">
+      <h2 className="af-label" id="af-gv-decisions">
+        Pitchers of record
+      </h2>
+      <ul className="af-gv-decisions">
+        {baseball.decisions.map((d) => {
+          const team = d.teamId === detail.home.id ? detail.home : d.teamId === detail.away.id ? detail.away : null
+          const { line, stat } = boxLine(detail, d.athleteId, 'pitching')
+          const summary = [stat('IP') && `${stat('IP')} IP`, stat('ER') && `${stat('ER')} ER`, stat('K') && `${stat('K')} K`]
+            .filter(Boolean)
+            .join(' · ')
+          return (
+            <li key={d.key} className="af-gv-decision">
+              <MiniPlayerImg sleeperId={null} name={d.name} avatarUrl={line?.headshot ?? null} size={36} />
+              <span className="af-live-atbat-text">
+                <span className="af-label">{d.label}</span>
+                <span className="af-live-atbat-name">
+                  {d.name}
+                  {team ? <span className="af-gv-leader-pos"> {team.abbrev}</span> : null}
+                </span>
+                {summary ? <span className="af-live-atbat-line af-num">{summary}</span> : null}
+              </span>
+            </li>
+          )
+        })}
+      </ul>
+    </section>
+  )
+}
+
+const BATTING_COLUMNS = ['AB', 'R', 'H', 'RBI', 'HR', 'BB', 'K', 'AVG']
+const PITCHING_COLUMNS = ['IP', 'H', 'R', 'ER', 'BB', 'K', 'HR', 'PC', 'ERA']
+
+function BaseballBoxScore({ detail, baseball }: { detail: LiveGameDetail; baseball: BaseballDetail }) {
+  const teams = [
+    { team: detail.away, box: baseball.box.away },
+    { team: detail.home, box: baseball.box.home },
+  ].filter((t): t is { team: GameDetailTeam; box: BaseballBoxTeam } => t.box != null)
+  if (teams.length === 0) return null
+  return (
+    <section className="af-gv-card af-gv-box" aria-labelledby="af-gv-mlbbox">
+      <h2 className="af-label" id="af-gv-mlbbox">
+        Box score
+      </h2>
+      {teams.map(({ team, box }) => (
+        <div key={team.id} className="af-gv-box-team" data-team={team.id}>
+          <div className="af-gv-box-team-head">
+            <TeamLogo team={team} size={22} />
+            <strong>{team.name}</strong>
+          </div>
+          <BaseballBoxTableView kind="batting" heading="Batters" table={box.batting} columns={BATTING_COLUMNS} />
+          <BaseballBoxTableView kind="pitching" heading="Pitchers" table={box.pitching} columns={PITCHING_COLUMNS} />
+        </div>
+      ))}
+    </section>
+  )
+}
+
+function BaseballBoxTableView({
+  kind,
+  heading,
+  table,
+  columns,
+}: {
+  kind: 'batting' | 'pitching'
+  heading: string
+  table: BaseballBoxTable | null
+  columns: string[]
+}) {
+  if (!table) return null
+  const cols = columns.filter((c) => table.labels.includes(c))
+  if (cols.length === 0) return null
+  const cell = (stats: string[], c: string) => stats[table.labels.indexOf(c)] ?? ''
+  return (
+    <div className="af-gv-box-scroll">
+      <table className="af-gv-box-table af-num" data-kind={kind}>
+        <thead>
+          <tr>
+            <th scope="col" className="af-gv-box-name">
+              {heading}
+            </th>
+            {cols.map((c) => (
+              <th key={c} scope="col">
+                {c}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {table.players.map((p) => (
+            // A batter who came off the bench shares his slot's bat order and is not a starter.
+            <tr key={p.athleteId} data-sub={kind === 'batting' && !p.starter}>
+              <th scope="row" className="af-gv-box-name">
+                {p.shortName ?? p.name}
+                {kind === 'batting' && p.position ? <span className="af-gv-leader-pos"> {p.position}</span> : null}
+                {p.note ? <span className="af-gv-leader-pos"> ({p.note})</span> : null}
+              </th>
+              {cols.map((c) => (
+                <td key={c}>{cell(p.stats, c)}</td>
+              ))}
+            </tr>
+          ))}
+          {table.totals.some(Boolean) ? (
+            <tr className="af-gv-bbox-total">
+              <th scope="row" className="af-gv-box-name">
+                Team
+              </th>
+              {cols.map((c) => (
+                <td key={c}>{cell(table.totals, c)}</td>
+              ))}
+            </tr>
+          ) : null}
+        </tbody>
+      </table>
     </div>
   )
 }
