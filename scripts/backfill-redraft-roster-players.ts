@@ -56,7 +56,7 @@ async function main() {
 
   console.log(`${apply ? 'APPLY' : 'DRY RUN'} — ${leagues.length} league(s)\n`)
 
-  let totals = { leagues: 0, created: 0, repaired: 0, present: 0, noLink: 0, noPlayers: 0, emptyRosters: 0 }
+  let totals = { leagues: 0, created: 0, repaired: 0, present: 0, noLink: 0, noPlayers: 0, emptyRosters: 0, idNamedPlayers: 0 }
 
   for (const l of leagues) {
     /*
@@ -66,12 +66,28 @@ async function main() {
     const emptyRosters = await prisma.redraftRoster.count({
       where: { leagueId: l.id, players: { none: {} } },
     })
-    if (emptyRosters === 0) continue
+    /*
+     * ⚠ AN EMPTY ROSTER IS NOT THE ONLY THING THIS FIXES. A player row still named by its own id is
+     * the materializer's damage too, and the repair only runs when a league is materialized — so a
+     * league with no EMPTY roster was skipped here and its unnamed rows stayed unnamed forever.
+     * Measured 2026-09-13: 1,873 such rows, none of them in a league with an empty roster.
+     */
+    const [{ idNamedPlayers }] = await prisma.$queryRaw<Array<{ idNamedPlayers: number }>>`
+      SELECT count(*)::int AS "idNamedPlayers"
+      FROM redraft_roster_players p
+      JOIN redraft_rosters rr ON rr.id = p."rosterId"
+      WHERE rr."leagueId" = ${l.id} AND p."droppedAt" IS NULL AND p."playerName" = p."playerId"
+    `
+    if (emptyRosters === 0 && idNamedPlayers === 0) continue
 
     if (!apply) {
-      console.log(`  would fix  ${l.id}  ${String(l.leagueType ?? '?').padEnd(11)} ${emptyRosters} empty roster(s)  ${l.name ?? ''}`)
+      console.log(
+        `  would fix  ${l.id}  ${String(l.leagueType ?? '?').padEnd(11)} ${emptyRosters} empty roster(s)  ` +
+          `${idNamedPlayers} id-named player(s)  ${l.name ?? ''}`,
+      )
       totals.leagues += 1
       totals.emptyRosters += emptyRosters
+      totals.idNamedPlayers += idNamedPlayers
       continue
     }
 
@@ -97,7 +113,9 @@ async function main() {
      * thing that matters collapses. Reporting leagues alone made a 95% reduction in empty rosters
      * look like 229 -> 226 and read as "it did nothing".
      */
-    console.log(`${totals.leagues} league(s) hold ${totals.emptyRosters} empty roster(s).`)
+    console.log(
+      `${totals.leagues} league(s) hold ${totals.emptyRosters} empty roster(s) and ${totals.idNamedPlayers} id-named player(s).`,
+    )
     console.log('Re-run with --apply to write.')
   } else {
     console.log(`leagues touched      ${totals.leagues}`)
