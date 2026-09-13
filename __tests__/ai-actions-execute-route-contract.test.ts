@@ -5,6 +5,7 @@ const getServerSessionMock = vi.fn()
 const validateActionExecutionServerSideMock = vi.fn()
 const executeAIActionMock = vi.fn()
 const recordUnifiedMemoryInteractionMock = vi.fn()
+const resolveActionLeagueWriteMock = vi.fn()
 
 vi.mock('next-auth', () => ({
   getServerSession: getServerSessionMock,
@@ -21,6 +22,23 @@ vi.mock('@/lib/chimmy-actions/AIActionServerValidation', () => ({
 vi.mock('@/lib/chimmy-actions/AIActionBindingService', () => ({
   executeAIAction: executeAIActionMock,
 }))
+
+vi.mock('@/lib/chimmy-actions/AIActionLeagueWriteContext', () => ({
+  resolveActionLeagueWrite: resolveActionLeagueWriteMock,
+}))
+
+const LEAGUE_WRITE = {
+  platform: 'espn',
+  sourceLink: {
+    href: 'https://fantasy.espn.com/football/league?leagueId=123',
+    destinationType: 'league',
+    provider: 'espn',
+    providerLabel: 'ESPN Fantasy',
+    label: 'Manage Waivers in Test League',
+    isFallback: false,
+    opensExternally: true,
+  },
+}
 
 vi.mock('@/lib/ai-memory/unified-memory-system', () => ({
   recordUnifiedMemoryInteraction: recordUnifiedMemoryInteractionMock,
@@ -118,6 +136,7 @@ describe('POST /api/ai/actions/execute contract', () => {
       },
     })
     recordUnifiedMemoryInteractionMock.mockResolvedValue(undefined)
+    resolveActionLeagueWriteMock.mockResolvedValue(LEAGUE_WRITE)
   })
 
   it('returns 401 when unauthenticated', async () => {
@@ -180,5 +199,49 @@ describe('POST /api/ai/actions/execute contract', () => {
         prefillTarget: 'waiver_claim_modal',
       },
     })
+  })
+
+  it('resolves the league write context from the AUTHORIZED league and passes it to staging', async () => {
+    const allowed = await validateActionExecutionServerSideMock()
+    validateActionExecutionServerSideMock.mockClear()
+    validateActionExecutionServerSideMock.mockResolvedValueOnce({
+      ...allowed,
+      context: { ...allowed.context, leagueId: 'league-authorized' },
+    })
+
+    const { POST } = await import('@/app/api/ai/actions/execute/route')
+    const req = createMockNextRequest('http://localhost/api/ai/actions/execute', {
+      method: 'POST',
+      body: JSON.stringify(buildPayload()),
+      headers: { 'Content-Type': 'application/json' },
+    })
+
+    const res = await POST(req as any)
+    expect(res.status).toBe(200)
+    expect(resolveActionLeagueWriteMock).toHaveBeenCalledWith('league-authorized', 'waiver_claim')
+    expect(executeAIActionMock).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'claim_player' }),
+      expect.objectContaining({ leagueId: 'league-authorized' }),
+      LEAGUE_WRITE,
+    )
+  })
+
+  it('records the action in memory as staged, not executed', async () => {
+    const { POST } = await import('@/app/api/ai/actions/execute/route')
+    const req = createMockNextRequest('http://localhost/api/ai/actions/execute', {
+      method: 'POST',
+      body: JSON.stringify(buildPayload()),
+      headers: { 'Content-Type': 'application/json' },
+    })
+
+    const res = await POST(req as any)
+    expect(res.status).toBe(200)
+    expect(recordUnifiedMemoryInteractionMock).toHaveBeenCalledTimes(1)
+    expect(recordUnifiedMemoryInteractionMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        eventType: 'action_staged',
+        metadata: expect.objectContaining({ executed: false, writeScope: 'waiver_claim' }),
+      }),
+    )
   })
 })

@@ -22,6 +22,12 @@ import { isActionValidForSport, getSportSpecificPayload } from './AIActionSportA
 import { buildPrefillData, buildWorkflowPrefill, getPrefillTarget } from './AIActionWorkflowPrefiller'
 import { validateActionExecution } from './AIActionExecutionValidator'
 import { logAIActionEvent } from './AIActionLogger'
+import {
+  buildStagedWriteAuthority,
+  describeStagedAction,
+  getAIActionWriteScope,
+  type ActionLeagueWrite,
+} from './AIActionWriteScope'
 
 // ─── Recommendation → Action Type Inference ─────────────────────────────────────
 
@@ -271,11 +277,15 @@ export function confirmAIActionIfNeeded(action: AIAction): boolean {
  * Actual workflow execution (lineup saves, waiver submits, etc.) is performed
  * by the UI layer via prefillTarget + prefillData.
  *
- * Logs the 'completed' event on success.
+ * Logs 'staged' on success — never 'completed', because nothing has been written yet. The
+ * result says so too (`outcome: 'staged'`, `executed: false`), and for a league-changing action
+ * `leagueWrite` (resolved server-side from the authorized league) lets the message disclose
+ * that an imported league's host platform has not been touched.
  */
 export async function executeAIAction(
   action: AIAction,
   context: AIActionContext,
+  leagueWrite?: ActionLeagueWrite | null,
 ): Promise<AIActionResult> {
   const start = Date.now()
 
@@ -306,6 +316,8 @@ export async function executeAIAction(
       actionType: action.type,
       message: firstIssue?.message ?? validated.disabledReason ?? 'Action is not available.',
       error: firstIssue?.message ?? validated.disabledReason ?? 'Action unavailable',
+      outcome: 'failed',
+      executed: false,
       data: {
         issues: validatedExecution.issues,
       },
@@ -315,7 +327,7 @@ export async function executeAIAction(
   // Enrich with latest prefill
   const enriched = bindRecommendationToWorkflow(validated)
 
-  // Log completion
+  // Log staging — NOT completion. The manager has not submitted anything yet.
   await logAIActionEvent({
     id: crypto.randomUUID(),
     actionType: action.type,
@@ -324,16 +336,25 @@ export async function executeAIAction(
     leagueId: action.leagueId,
     teamId: action.teamId,
     sport: action.sport,
-    event: 'completed',
+    event: 'staged',
     timestamp: Date.now(),
     durationMs: Date.now() - start,
   })
+
+  const writeScope = getAIActionWriteScope(enriched.type)
+  const writeAuthority =
+    writeScope !== null && leagueWrite ? buildStagedWriteAuthority(leagueWrite.platform) : null
 
   return {
     success: true,
     actionId: enriched.id,
     actionType: enriched.type,
-    message: `Action "${enriched.label}" is ready.`,
+    message: describeStagedAction({ label: enriched.label, scope: writeScope, writeAuthority }),
+    outcome: 'staged',
+    executed: false,
+    writeScope,
+    writeAuthority,
+    sourceLink: writeAuthority?.shadow ? (leagueWrite?.sourceLink ?? null) : null,
     prefillApplied: Boolean(enriched.prefillData && Object.keys(enriched.prefillData).length > 0),
     navigateTo: enriched.deepDiveHref ?? null,
     data: {

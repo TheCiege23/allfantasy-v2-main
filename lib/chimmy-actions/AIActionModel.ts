@@ -4,6 +4,9 @@
  * Every Chimmy recommendation can be bound to an AIAction that connects to a real app workflow.
  */
 
+import type { SourceLink } from '@/lib/league-links/sourceLinkResolver'
+import type { AIActionWriteScope, StagedWriteAuthority } from './AIActionWriteScope'
+
 // ─── Action Types ──────────────────────────────────────────────────────────────
 
 export type AIActionType =
@@ -248,6 +251,19 @@ export interface AIActionResult {
   navigateTo?: string | null
   /** Extra data returned from the workflow */
   data?: Record<string, unknown>
+  /**
+   * What actually happened. `executeAIAction` only ever STAGES: it validates and returns a
+   * prefill, and the manager still has to submit it. Nothing here is a completed write.
+   */
+  outcome?: 'staged' | 'failed'
+  /** Always false today — no AI action writes on the manager's behalf. */
+  executed?: false
+  /** What the action would change once submitted; null when it changes nothing. */
+  writeScope?: AIActionWriteScope
+  /** Where a submit would land. Null when the league's authority could not be resolved. */
+  writeAuthority?: StagedWriteAuthority | null
+  /** For an imported league: the host-platform page where the change has to be made. */
+  sourceLink?: SourceLink | null
 }
 
 // ─── Telemetry Event ────────────────────────────────────────────────────────────
@@ -261,7 +277,11 @@ export interface AIActionEvent {
   leagueId?: string | null
   teamId?: string | null
   sport?: string | null
-  event: 'shown' | 'clicked' | 'confirmed' | 'completed' | 'dismissed' | 'saved' | 'failed'
+  /**
+   * `staged` — validated and prefilled, not yet submitted. `completed` is reserved for a change
+   * that actually happened; staging must never be logged as completion.
+   */
+  event: 'shown' | 'clicked' | 'confirmed' | 'staged' | 'completed' | 'dismissed' | 'saved' | 'failed'
   timestamp: number
   /** Time from click to completion in milliseconds */
   durationMs?: number

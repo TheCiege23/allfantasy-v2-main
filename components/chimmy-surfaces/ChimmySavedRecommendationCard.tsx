@@ -62,7 +62,7 @@ export default function ChimmySavedRecommendationCard({
         await trackAIActionEvent({
           action: saved.action,
           context,
-          event: 'completed',
+          event: 'staged', // `execute` stages the action; the manager has not submitted it yet.
           metadata: {
             source: 'saved_recommendation_card',
             followedSuggestion: true,
