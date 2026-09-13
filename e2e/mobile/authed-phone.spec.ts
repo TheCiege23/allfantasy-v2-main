@@ -102,25 +102,35 @@ test.describe("@db @mobile authenticated phone contract", () => {
   })
 
   /*
-   * ⚠ SIGNED-OUT WARM-UP OF BOTH ROUTES. Only `/commissioner-os` is measurably
-   * cold here; the `/core/trades` half is redundant, and was added on a theory CI
-   * then disproved. Measured on PR #767 (run 34721325020, mobile-auth):
+   * 🛑 THIS HOOK WORKS, BUT NOT BY COMPILING ANYTHING. IT ABSORBS A DEV-SERVER
+   * RESTART THAT OTHERWISE LANDS INSIDE THE FIRST TEST. Do not remove it.
    *
-   *   [global-setup] warmed 33 routes in 127s    incl. /dashboard 200 18957ms
-   *   [authed-warmup] /core/trades     200 1012ms   (758ms, second project)
-   *   [authed-warmup] /commissioner-os skipped (TypeError) 406ms, then 307 190ms
+   * `next dev` (14.2) checks the heap in the `finally` of EVERY request and exits
+   * to be respawned once `used_heap_size > 0.8 * heap_size_limit`, logging
+   * "Server is approaching the used memory threshold, restarting...". This lane
+   * sets no NODE_OPTIONS, so the wrapper's `--max-old-space-size=4096` applies,
+   * and global-setup's 33 route compiles leave the heap past that line — so the
+   * FIRST request after global-setup trips it. Without this hook, that request is
+   * the test's own login, and the navigation issued into the respawn window
+   * hangs silently until the 240s test timeout. Measured over 55 mobile-auth jobs
+   * up to 2026-09-12, PR #754's run 34717571125 among them:
    *
-   * `e2e/global-setup.ts` fetches `/dashboard` with `redirect: 'follow'`, and
-   * middleware `redirectDeprecatedDashboardRoutes` sends it to `/core` — so the
-   * `app/core/[[...screen]]/page.tsx` catch-all that renders `/core/trades` is
-   * ALREADY compiled before this hook runs. It answered 200, not a 307 to `/login`.
+   *   no hook, no restart                          11 jobs   0 timeouts
+   *   no hook, restart at/before test start         8 jobs   0 timeouts
+   *   no hook, restart 3–26s into the tests        32 jobs  25 timeouts
+   *   this hook (restart fires inside it, 0–3s)     4 jobs   0 timeouts
    *
-   * 🛑 SO THE 240s FIRST-ATTEMPT `/core/trades` TIMEOUT ON PR #754 (run
-   * 34717571125, retry passed in ~30s) IS NOT A COLD COMPILE, AND IS UNEXPLAINED.
-   * Do not cite this hook as its fix.
+   * Every one of the 25 timeouts followed a restart. It is NOT a cold compile:
+   * global-setup's `/dashboard` hop is redirected to `/core` and already compiles
+   * the catch-all, and this hook sees `/core/trades 200 ~1s`, not a 307. The warm
+   * fetches' status is irrelevant — their job is to be the request that trips the
+   * restart, which is why `/commissioner-os` often logs `skipped (TypeError)`.
    *
-   * Kept for `/commissioner-os`, which global-setup does not visit. It never gates
-   * the run: a failed warm-up only means the test pays the compile.
+   * ⚠ IT IS A RACE, NOT A FIX. One hooked job (34722623272) still flaked with
+   * `ECONNREFUSED` in loginAs: the test began before the respawn finished. The
+   * lever the core lane already pulled for the same restarts is
+   * `NODE_OPTIONS: --max-old-space-size=8192` in `.github/workflows/playwright.yml`.
+   * Why a navigation into the window HANGS rather than erroring is not measured.
    */
   test.beforeAll(async ({}, testInfo) => {
     const WARM_TIMEOUT_MS = 180_000
