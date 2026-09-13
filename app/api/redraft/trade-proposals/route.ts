@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { assertLeagueMember } from '@/lib/league/league-access'
+import { validateRedraftTradeProposalAtCreation } from '@/lib/redraft/tradeProposalValidation'
 import {
   REDRAFT_TRADE_GOVERNANCE_REFUSAL,
   prohibitedRedraftGovernanceFields,
@@ -159,6 +160,29 @@ export async function POST(req: NextRequest) {
     ) {
       return NextResponse.json({ error: 'Asset roster direction is invalid' }, { status: 400 })
     }
+  }
+
+  // Ownership, FAAB, duplicates, locks, roster limits, deadline — checked now, not at settlement days later.
+  // See lib/redraft/tradeProposalValidation.ts.
+  const validation = await validateRedraftTradeProposalAtCreation({
+    leagueId,
+    seasonId,
+    proposerRosterId,
+    receiverRosterId,
+    assets: assets.map((asset) => ({
+      fromRosterId: asset.fromRosterId!,
+      toRosterId: asset.toRosterId!,
+      assetType: asset.assetType!,
+      playerId: asset.playerId,
+      playerName: asset.playerName,
+      pickSeason: asset.pickSeason,
+      pickRound: asset.pickRound,
+      pickNumber: asset.pickNumber,
+      metadata: asset.metadata,
+    })),
+  })
+  if (!validation.ok) {
+    return NextResponse.json({ error: validation.message, code: validation.code }, { status: 400 })
   }
 
   const created = await prisma.$transaction(async (tx: any) => {
