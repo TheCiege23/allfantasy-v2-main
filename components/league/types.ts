@@ -191,6 +191,13 @@ export type LeagueTradeHistoryItem = {
     proposalValueReceived?: number | null
     proposalCapturedAt?: string | null
     proposalModelVersion?: string | null
+    /** Current-market regrade; null when a historical asset cannot be resolved honestly. */
+    currentGrade?: string | null
+    currentValueGiven?: number | null
+    currentValueReceived?: number | null
+    currentPricedAt?: string | null
+    currentPricingComplete?: boolean
+    currentUnresolvedAssets?: string[]
   }
 
 export type LeagueTradeBlockItem = {

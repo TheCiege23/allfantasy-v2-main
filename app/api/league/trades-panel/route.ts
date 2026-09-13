@@ -16,6 +16,8 @@ import {
   type PendingTradeScan,
 } from '@/lib/provider-trades/scanPendingSleeperTrades'
 import { scanPendingYahooTrades } from '@/lib/provider-trades/scanPendingYahooTrades'
+import { priceTradesAtCurrentMarket } from '@/lib/league-trade-engine/tradeLearningCapture'
+import type { League } from '@prisma/client'
 
 export const dynamic = 'force-dynamic'
 
@@ -111,7 +113,13 @@ async function buildNativeActiveTrades(leagueId: string, userId: string): Promis
  * is visible only to either participant or a commissioner; this preserves the
  * private negotiation while still giving each manager their own complete log.
  */
-async function buildNativeTradeHistory(leagueId: string, userId: string): Promise<LeagueTradeHistoryItem[]> {
+type NativeHistoryLeague = Pick<
+  League,
+  'id' | 'leagueType' | 'leagueVariant' | 'isDynasty' | 'scoring' | 'settings'
+>
+
+async function buildNativeTradeHistory(league: NativeHistoryLeague, userId: string): Promise<LeagueTradeHistoryItem[]> {
+  const leagueId = league.id
   const [profile, isCommissioner, trades] = await Promise.all([
     prisma.userProfile.findUnique({ where: { userId }, select: { sleeperUserId: true } }).catch(() => null),
     isElevatedCommissioner(leagueId, userId),
@@ -149,6 +157,15 @@ async function buildNativeTradeHistory(leagueId: string, userId: string): Promis
     },
   })
   const offerByTradeId = new Map(offerEvents.map((event) => [event.afLeagueTradeId, event]))
+  const currentMarket = await priceTradesAtCurrentMarket({
+    leagueId,
+    league,
+    trades: terminal.map((trade) => ({
+      id: trade.id,
+      proposerRosterId: trade.proposerRosterId,
+      items: trade.items,
+    })),
+  })
   const valueTotal = (assets: unknown): number | null => {
     if (!Array.isArray(assets)) return null
     const values = assets.map((asset) =>
@@ -168,6 +185,7 @@ async function buildNativeTradeHistory(leagueId: string, userId: string): Promis
     })
     .map((trade) => {
       const offer = offerByTradeId.get(trade.id)
+      const now = currentMarket.get(trade.id)
       const viewerIsProposer = myRosterIds.has(trade.proposerRosterId)
       const viewerIsReceiver = myRosterIds.has(trade.receiverRosterId)
       return {
@@ -190,6 +208,12 @@ async function buildNativeTradeHistory(leagueId: string, userId: string): Promis
         proposalValueReceived: valueTotal(offer?.assetsReceived),
         proposalCapturedAt: offer?.createdAt.toISOString() ?? null,
         proposalModelVersion: offer?.modelVersion ?? null,
+        currentGrade: now?.grade ?? null,
+        currentValueGiven: now?.valueGiven ?? null,
+        currentValueReceived: now?.valueReceived ?? null,
+        currentPricedAt: now?.pricedAt ?? null,
+        currentPricingComplete: now?.fullyPriced ?? false,
+        currentUnresolvedAssets: now?.unresolvedAssets ?? [],
         viewerIsCommissioner: isCommissioner,
         viewerIsReceiver,
         viewerIsProposer,
@@ -356,6 +380,11 @@ export async function GET(req: NextRequest) {
       platformLeagueId: true,
       name: true,
       sport: true,
+      scoring: true,
+      isDynasty: true,
+      leagueType: true,
+      leagueVariant: true,
+      settings: true,
     },
   })
 
@@ -384,7 +413,7 @@ export async function GET(req: NextRequest) {
   if (!sleeperLeagueId) {
     const [activeTrades, historyTrades] = await Promise.all([
       buildNativeActiveTrades(leagueId, userId),
-      buildNativeTradeHistory(leagueId, userId),
+      buildNativeTradeHistory(league, userId),
     ])
     const platform = String(league.platform ?? 'manual').toLowerCase()
 
@@ -512,7 +541,7 @@ export async function GET(req: NextRequest) {
       console.error('[trades-panel] native trades for imported league failed', { leagueId, err })
       return [] as LeagueTradeHistoryItem[]
     }),
-    buildNativeTradeHistory(leagueId, userId).catch((err) => {
+    buildNativeTradeHistory(league, userId).catch((err) => {
       console.error('[trades-panel] native trade history failed', { leagueId, err })
       return [] as LeagueTradeHistoryItem[]
     }),

@@ -70,7 +70,9 @@ export function mapAfTradeStatusToOutcome(status: string): TradeOutcomeStatus | 
  * dynasty/keeper and PPR weight come from the normalized League fields.
  * TE-premium detection remains a bounded gap and defaults false.
  */
-export function resolveLeagueScoringContext(league: League): {
+type TradeScoringLeague = Pick<League, 'leagueType' | 'leagueVariant' | 'isDynasty' | 'scoring' | 'settings'>
+
+export function resolveLeagueScoringContext(league: TradeScoringLeague): {
   isSuperFlex: boolean
   isTEP: boolean
   isDynasty: boolean
@@ -94,6 +96,15 @@ export function resolveLeagueScoringContext(league: League): {
   } catch {
     return { isSuperFlex: false, isTEP: false, isDynasty, ppr, scoringType }
   }
+}
+
+export interface CurrentTradeMarketSnapshot {
+  grade: ReturnType<typeof projectedLetterFor>
+  valueGiven: number | null
+  valueReceived: number | null
+  pricedAt: string
+  fullyPriced: boolean
+  unresolvedAssets: string[]
 }
 
 interface ResolvedAssetValue {
@@ -147,6 +158,81 @@ function toAsset(resolved: ResolvedAssetValue, id: string): Asset {
     value: resolved.value,
     name: resolved.name,
   }
+}
+
+/**
+ * Reprice native trades against one current league market book. The original
+ * proposal snapshot stays immutable; this produces the separate "Now" view.
+ * A consumed historical pick is deliberately left unresolved until the
+ * outcome ledger can map that pick to the player who was selected.
+ */
+export async function priceTradesAtCurrentMarket(input: {
+  leagueId: string
+  league: TradeScoringLeague
+  trades: Array<{
+    id: string
+    proposerRosterId: string
+    items: CaptureTradeItem[]
+  }>
+}): Promise<Map<string, CurrentTradeMarketSnapshot>> {
+  const snapshots = new Map<string, CurrentTradeMarketSnapshot>()
+  if (input.trades.length === 0) return snapshots
+
+  try {
+    const { isSuperFlex, isDynasty, ppr } = resolveLeagueScoringContext(input.league)
+    const rosterCount = await prisma.roster.count({ where: { leagueId: input.leagueId } })
+    const fcPlayers = await getFantasyCalcValuesDbFirst({
+      isDynasty,
+      numQbs: isSuperFlex ? 2 : 1,
+      numTeams: rosterCount > 0 ? rosterCount : 12,
+      ppr,
+    })
+    const currentYear = new Date().getUTCFullYear()
+    const pricedAt = new Date().toISOString()
+
+    for (const trade of input.trades) {
+      const given = trade.items
+        .filter((item) => item.fromRosterId === trade.proposerRosterId)
+        .map((item) => resolveItemValue(item, fcPlayers, isDynasty))
+      const received = trade.items
+        .filter((item) => item.toRosterId === trade.proposerRosterId)
+        .map((item) => resolveItemValue(item, fcPlayers, isDynasty))
+      const consumedPickLabels: string[] = []
+      for (const item of trade.items) {
+        if (!['rookie_pick', 'devy_pick', 'future_pick'].includes(item.itemType)) continue
+        const meta = item.metadata && typeof item.metadata === 'object'
+          ? item.metadata as Record<string, unknown>
+          : {}
+        const season = Number(meta.season)
+        if (Number.isFinite(season) && season < currentYear) consumedPickLabels.push(`${season} draft pick`)
+      }
+
+      const unresolvedAssets = [
+        ...given.filter((asset) => !asset.resolved).map((asset) => asset.name),
+        ...received.filter((asset) => !asset.resolved).map((asset) => asset.name),
+        ...consumedPickLabels,
+      ]
+      const fullyPriced = given.length + received.length > 0 && unresolvedAssets.length === 0
+      const valueGiven = fullyPriced ? given.reduce((sum, asset) => sum + asset.value, 0) : null
+      const valueReceived = fullyPriced ? received.reduce((sum, asset) => sum + asset.value, 0) : null
+      const percentDiff = valueGiven != null && valueGiven > 0 && valueReceived != null
+        ? ((valueReceived - valueGiven) / valueGiven) * 100
+        : null
+
+      snapshots.set(trade.id, {
+        grade: projectedLetterFor({ percentDiff, hasSignal: fullyPriced }),
+        valueGiven,
+        valueReceived,
+        pricedAt,
+        fullyPriced,
+        unresolvedAssets: [...new Set(unresolvedAssets)],
+      })
+    }
+  } catch (err) {
+    console.error('[TradeLearningCapture] Failed to price current trade history (non-blocking):', err)
+  }
+
+  return snapshots
 }
 
 /**

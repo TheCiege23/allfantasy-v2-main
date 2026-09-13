@@ -19,6 +19,7 @@ const findManyAppUser = vi.fn()
 const listAfLeagueTrades = vi.fn()
 const isElevatedCommissioner = vi.fn()
 const findManyTradeOfferEvent = vi.fn()
+const priceTradesAtCurrentMarket = vi.fn()
 
 vi.mock('next-auth', () => ({ getServerSession: (...a: unknown[]) => getServerSession(...a) }))
 vi.mock('@/lib/auth', () => ({ authOptions: {} }))
@@ -42,6 +43,9 @@ vi.mock('@/lib/league-trade-engine/tradeService', () => ({
 }))
 vi.mock('@/server/services/permissionService', () => ({
   isElevatedCommissioner: (...a: unknown[]) => isElevatedCommissioner(...a),
+}))
+vi.mock('@/lib/league-trade-engine/tradeLearningCapture', () => ({
+  priceTradesAtCurrentMarket: (...a: unknown[]) => priceTradesAtCurrentMarket(...a),
 }))
 
 import { NextRequest } from 'next/server'
@@ -84,6 +88,7 @@ describe('trades-panel executedTrades', () => {
       opts?.status === 'processed' ? [PROCESSED] : [PENDING, PROCESSED],
     )
     findManyTradeOfferEvent.mockResolvedValue([])
+    priceTradesAtCurrentMarket.mockResolvedValue(new Map())
     isElevatedCommissioner.mockResolvedValue(true)
   })
 

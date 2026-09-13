@@ -5,12 +5,12 @@
 
 ## Current verdict
 
-The trade system is **about 72% complete overall**. The foundation is stronger than the visible product suggested: AllFantasy already has league-specific value books, a rich trade engine, pending Sleeper offer discovery, IDP and kicker valuation modules, roster/context adjustments, counteroffer logic, manager tendencies, and a distinctive multi-year realized-outcome grader. The main issue is fragmentation. The simplest pending-offer surface does not always call the richest engine, several asset classes have weak or incomplete market coverage, and historical provider data is uneven.
+The trade system is **about 74% complete overall**. The foundation is stronger than the visible product suggested: AllFantasy already has league-specific value books, a rich trade engine, pending Sleeper offer discovery, IDP and kicker valuation modules, roster/context adjustments, counteroffer logic, manager tendencies, current-market native history regrading, and a distinctive multi-year realized-outcome grader. The main issue is fragmentation. The simplest pending-offer surface does not always call the richest engine, several asset classes have weak or incomplete market coverage, and historical provider data is uneven.
 
 | Area | Completion | Audit finding |
 |---|---:|---|
 | Trade discovery and inbox | 78% | Sleeper pending offers are read and pre-evaluated. Yahoo has a pending reader. ESPN, Fantrax, MFL, and Fleaflicker do not expose equivalent complete inbox behavior in AllFantasy. |
-| Mobile access | 92% | This release pins Trades in Core and league mobile navigation. Trade cards and tables already collapse for phones. Real-device browser testing remains. |
+| Mobile access | 96% | This release pins Trades in Core and league mobile navigation. Trade cards and tables already collapse for phones. Real-device browser testing remains. |
 | Offensive-player valuation | 82% | Format-matched FantasyCalc values, scoring fit, age, volatility, role and roster context exist. The production path still needs one canonical evaluator. |
 | Draft-pick valuation | 66% | Year, round, slot, format and time discount exist. Class strength and probabilistic pick slot need stronger modeling. |
 | IDP valuation | 61% | League-scored VORP and position-specific logic exist, but the global market snapshot contains no defenders and the Core pending path can therefore withhold IDP grades. |
@@ -18,7 +18,7 @@ The trade system is **about 72% complete overall**. The foundation is stronger t
 | College/devy valuation | 39% | The engine recognizes devy/college assets and prospect fields. Identity and market coverage remain too incomplete for dependable automatic grades. |
 | FAAB valuation | 31% | FAAB is recognized and one documented heuristic exists. The older engine's `amount / 10`, capped at 25, is much too crude. |
 | League/roster strategy | 73% | Need, depth, starter impact, contender/rebuild direction, scarcity and partner tendencies exist. Several inputs are partial or not consistently used on every surface. |
-| Historical regrading | 70% Sleeper / 24% other providers | Sleeper can follow up to 12 linked seasons and score assets only while held. Other imported providers list facts without equivalent grading. |
+| Historical regrading | 70% Sleeper / 55% native / 24% other providers | Native player-only history now gets a current-market regrade from one league-specific value book. Sleeper can follow up to 12 linked seasons and score assets only while held. Consumed picks, FAAB, missing player identities, and other imported providers still need fuller outcome mapping. |
 | Proposal/counter/decline history | 62% native / 15% imported | This release exposes privacy-filtered native closed states and existing counter chains. Imported provider history is mainly completed trades; declined/expired offers often are not available from provider APIs. |
 | Decision OS integration | 68% | Canonical assets and read-time trade memos exist. A persisted canonical trade memo for every provider event is still missing. |
 
@@ -31,6 +31,7 @@ The trade system is **about 72% complete overall**. The foundation is stronger t
 - Sleeper completed trades display two honest realized grades: **First** (the first scored season) and **Now** (the cumulative result through the latest scored season).
 - Native completed trades are visible league-wide; rejected, cancelled, countered, expired and vetoed negotiations are visible only to their participants and commissioners.
 - New native proposal snapshots now select the league's real redraft/dynasty/keeper, 1QB/superflex and standard/half-PPR/PPR value book. Fully priced proposals save a proposal-time grade; incomplete and FAAB-containing offers withhold that grade instead of laundering fallback values into a verdict.
+- Native historical trades now receive a separate **Now** grade from today's league-specific market values when every original asset still resolves. The proposal's **Then** snapshot is never overwritten. Consumed picks and unresolved assets show why a current grade is unavailable.
 - Pending and completed rows keep their existing phone-friendly stacked layout.
 
 No database migration is needed for these UI and grouping changes.
@@ -49,7 +50,7 @@ Every completed trade should keep three grades separate:
 2. **Now — market regrade:** today's values applied to the original assets, with drafted picks resolved to the selected player when known.
 3. **Outcome grade:** fantasy production, lineup value, playoff impact and championships actually produced while each acquired asset remained on that roster.
 
-The current Sleeper grader already provides the third view and now exposes its first-season and cumulative grades. It cannot honestly recreate a proposal-time market grade for dates before AllFantasy began storing daily value snapshots. Old trades should display **Then value unavailable — predates value history**, never a fabricated C.
+The current Sleeper grader already provides the third view and now exposes its first-season and cumulative grades. Native history now provides the second view for trades whose original assets all still resolve in today's league value book. It cannot honestly recreate a proposal-time market grade for dates before AllFantasy began storing daily value snapshots. Old trades should display **Then value unavailable — predates value history**, never a fabricated C.
 
 ## Visual and calculation audit by asset type
 
@@ -208,7 +209,7 @@ The current year/round/slot/time-discount basis is sound but incomplete. Pick va
 
 ### P1: make historical grading complete
 
-- Add **Then market**, **Now market**, and **Outcome** tabs per completed trade.
+- Promote the existing **Then** and **Now** columns into a completed-trade detail view with separate **Then market**, **Now market**, and **Outcome** tabs.
 - Backfill market-at-trade values only where a dated snapshot exists; display unavailable otherwise.
 - Resolve drafted picks to players while preserving the pick's original market value.
 - Show native proposal/counter/decline chains from `AfLeagueTradeStatusHistory` and `parentTradeId`.

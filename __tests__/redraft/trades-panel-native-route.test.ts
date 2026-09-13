@@ -38,6 +38,7 @@ const findUniqueTradeDraft = vi.fn()
 const findUniqueUserProfile = vi.fn()
 const findFirstLeagueTeam = vi.fn()
 const findManyTradeOfferEvent = vi.fn()
+const priceTradesAtCurrentMarket = vi.fn()
 
 vi.mock('next-auth', () => ({ getServerSession: (...args: unknown[]) => getServerSession(...args) }))
 vi.mock('@/lib/auth', () => ({ authOptions: {} }))
@@ -72,6 +73,9 @@ vi.mock('@/lib/league-trade-engine/tradeService', () => ({
 }))
 vi.mock('@/server/services/permissionService', () => ({
   isElevatedCommissioner: (...args: unknown[]) => isElevatedCommissioner(...args),
+}))
+vi.mock('@/lib/league-trade-engine/tradeLearningCapture', () => ({
+  priceTradesAtCurrentMarket: (...args: unknown[]) => priceTradesAtCurrentMarket(...args),
 }))
 
 import { readFileSync } from 'node:fs'
@@ -117,6 +121,7 @@ describe('GET /api/league/trades-panel — native league real trade data', () =>
     findUniqueUserProfile.mockResolvedValue(null)
     findFirstLeagueTeam.mockResolvedValue(null)
     findManyTradeOfferEvent.mockResolvedValue([])
+    priceTradesAtCurrentMarket.mockResolvedValue(new Map())
   })
 
   it('returns real pending AfLeagueTrade rows for a native league, not a hardcoded empty array', async () => {
@@ -193,6 +198,16 @@ describe('GET /api/league/trades-panel — native league real trade data', () =>
         modelVersion: 'v2.1.0',
       },
     ])
+    priceTradesAtCurrentMarket.mockResolvedValue(new Map([
+      ['trade-done', {
+        grade: 'A',
+        valueGiven: 3000,
+        valueReceived: 4800,
+        pricedAt: '2026-09-13T13:00:00.000Z',
+        fullyPriced: true,
+        unresolvedAssets: [],
+      }],
+    ]))
 
     const res = await GET(makeRequest('league-1'))
     const body = (await res.json()) as {
@@ -210,6 +225,10 @@ describe('GET /api/league/trades-panel — native league real trade data', () =>
         proposalValueGiven: 4000,
         proposalValueReceived: 5000,
         proposalModelVersion: 'v2.1.0',
+        currentGrade: 'A',
+        currentValueGiven: 3000,
+        currentValueReceived: 4800,
+        currentPricingComplete: true,
       }),
     ])
   })

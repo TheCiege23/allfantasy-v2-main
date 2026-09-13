@@ -393,7 +393,25 @@ function rowFromNativeHistory(t: LeagueTradeHistoryItem): LogRow {
     percentDiff: reversePercent,
     hasSignal: proposalGrade != null,
   })
-  const currentWhy = proposalGrade ? 'current outcome not computed' : noGradeWhy
+  const currentGrade = ['A', 'B', 'C', 'D', 'F'].includes(String(t.currentGrade))
+    ? t.currentGrade as GradeLetter
+    : null
+  const reverseCurrentPercent =
+    typeof t.currentValueGiven === 'number' &&
+    typeof t.currentValueReceived === 'number' &&
+    t.currentValueReceived > 0
+      ? ((t.currentValueGiven - t.currentValueReceived) / t.currentValueReceived) * 100
+      : null
+  const receiverCurrentGrade = projectedLetterFor({
+    percentDiff: reverseCurrentPercent,
+    hasSignal: currentGrade != null,
+  })
+  const unresolved = (t.currentUnresolvedAssets ?? []).slice(0, 2).join(', ')
+  const currentWhy = currentGrade
+    ? null
+    : unresolved
+      ? `Now unavailable: ${unresolved}`
+      : noGradeWhy
   return {
     id: `native:${t.id}`,
     kind: completed ? 'completed' : 'closed',
@@ -406,7 +424,7 @@ function rowFromNativeHistory(t: LeagueTradeHistoryItem): LogRow {
       sends: joinNames(t.sent),
       initialGrade: proposalGrade,
       initialLabel: 'Then',
-      grade: null,
+      grade: currentGrade,
       gradeWhy: currentWhy,
     },
     b: {
@@ -415,7 +433,7 @@ function rowFromNativeHistory(t: LeagueTradeHistoryItem): LogRow {
       sends: joinNames(t.received),
       initialGrade: receiverProposalGrade,
       initialLabel: 'Then',
-      grade: null,
+      grade: receiverCurrentGrade,
       gradeWhy: currentWhy,
     },
     extraSides: 0,
