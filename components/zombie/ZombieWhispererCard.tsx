@@ -5,10 +5,16 @@ import { UserCircle } from 'lucide-react'
 export interface ZombieWhispererCardProps {
   whispererRosterId: string | null
   displayNames: Record<string, string>
+  /** A Whisperer exists but this viewer may not know who. */
+  hidden?: boolean
 }
 
-export function ZombieWhispererCard({ whispererRosterId, displayNames }: ZombieWhispererCardProps) {
-  const name = whispererRosterId ? (displayNames[whispererRosterId] ?? whispererRosterId) : '—'
+export function ZombieWhispererCard({ whispererRosterId, displayNames, hidden = false }: ZombieWhispererCardProps) {
+  const name = hidden
+    ? 'Identity classified'
+    : whispererRosterId
+      ? (displayNames[whispererRosterId] ?? whispererRosterId)
+      : '—'
   return (
     <section className="rounded-2xl border border-amber-500/40 bg-amber-950/20 p-4 sm:p-6">
       <h2 className="mb-3 flex items-center gap-2 text-lg font-semibold text-amber-200">

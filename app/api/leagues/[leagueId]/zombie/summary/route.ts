@@ -18,6 +18,12 @@ import { getWeeklyBoardData } from '@/lib/zombie/ZombieWeeklyBoardService'
 import { getSerumBalance } from '@/lib/zombie/ZombieSerumEngine'
 import { getAmbushBalance } from '@/lib/zombie/ZombieAmbushEngine'
 import { prisma } from '@/lib/prisma'
+import { resolveWhispererViewer } from '@/lib/zombie/whispererViewer'
+import {
+  redactStatusEntries,
+  redactSurvivorAndZombieIds,
+  withWhispererRoster,
+} from '@/lib/zombie/whispererRedaction'
 
 export const dynamic = 'force-dynamic'
 
@@ -86,6 +92,16 @@ export async function GET(
     myResources = { serums, weapons, ambush }
   }
 
+  // Whisperer secrecy: the id, its status and its absence from the survivor/zombie lists would
+  // each identify it, so all three go through the viewer's permission.
+  const viewer = await resolveWhispererViewer(leagueId, userId)
+  const identity = withWhispererRoster(viewer.identity, whispererId)
+  const allStatuses = statuses.map((s) => ({ rosterId: s.rosterId, status: s.status }))
+  const shownStatuses = viewer.canSee ? allStatuses : redactStatusEntries(allStatuses, identity)
+  const lists = viewer.canSee
+    ? { survivors: board.survivors, zombies: board.zombies }
+    : redactSurvivorAndZombieIds(board, identity)
+
   return NextResponse.json({
     config: {
       whispererSelection: config.whispererSelection,
@@ -94,10 +110,11 @@ export async function GET(
       serumReviveCount: config.serumReviveCount,
       zombieTradeBlocked: config.zombieTradeBlocked,
     },
-    statuses: statuses.map((s) => ({ rosterId: s.rosterId, status: s.status })),
-    whispererRosterId: whispererId,
-    survivors: board.survivors,
-    zombies: board.zombies,
+    statuses: shownStatuses,
+    whispererRosterId: viewer.canSee ? whispererId : null,
+    whispererHidden: !viewer.canSee && whispererId != null,
+    survivors: lists.survivors,
+    zombies: lists.zombies,
     week,
     movementWatch: board.movementWatch,
     rosterDisplayNames,

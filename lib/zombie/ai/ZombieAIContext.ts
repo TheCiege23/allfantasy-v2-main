@@ -51,6 +51,8 @@ export interface ZombieAIDeterministicContext {
     zombieTradeBlocked: boolean
   }
   whispererRosterId: string | null
+  /** Set when the Whisperer's identity was redacted for this viewer (see lib/zombie/whispererRedaction). */
+  whispererHidden?: boolean
   survivors: string[]
   zombies: string[]
   statuses: { rosterId: string; status: string }[]

@@ -261,6 +261,7 @@ export function ZombieHome({ leagueId }: ZombieHomeProps) {
           <div className="grid gap-6 sm:grid-cols-2">
             <ZombieWhispererCard
               whispererRosterId={summary.whispererRosterId}
+              hidden={summary.whispererHidden === true}
               displayNames={names}
             />
             <ZombieResourcesSummary

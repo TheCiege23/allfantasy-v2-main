@@ -21,6 +21,8 @@ export interface ZombieSummary {
   config: ZombieSummaryConfig
   statuses: { rosterId: string; status: string }[]
   whispererRosterId: string | null
+  /** True when a Whisperer exists but this viewer may not know who. */
+  whispererHidden?: boolean
   survivors: string[]
   zombies: string[]
   week: number

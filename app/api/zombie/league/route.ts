@@ -8,6 +8,8 @@ import { getLeagueRole } from '@/lib/league/permissions'
 import { isZombieEligibleLeagueSport } from '@/lib/zombie/zombie-sport-eligibility'
 import { getRandomZombieTheme } from '@/lib/zombie/zombieBackgroundThemes'
 import { getZombieHordeSitOutStateForWeek } from '@/lib/zombie/ZombieHordeSitOutEngine'
+import { resolveWhispererViewer } from '@/lib/zombie/whispererViewer'
+import { redactWhispererRecord, redactZombieEvent, redactZombieTeam } from '@/lib/zombie/whispererRedaction'
 
 export const dynamic = 'force-dynamic'
 
@@ -239,9 +241,18 @@ export async function GET(req: Request) {
     })
     .slice(0, 5)
 
+  // Whisperer secrecy: every row that could name the Whisperer goes through the viewer's
+  // permission. Counts stay real; they only say that a Whisperer exists.
+  const viewer = await resolveWhispererViewer(leagueId, session.user.id)
+  const team = <T extends { rosterId: string; status?: string | null }>(t: T): T =>
+    viewer.canSee ? t : redactZombieTeam(t, viewer.identity)
+  const event = <T extends object>(e: T): T => (viewer.canSee ? e : redactZombieEvent(e, viewer.identity))
+
   return NextResponse.json({
     league: {
       ...z,
+      teams: z.teams.map(team),
+      whispererRecord: viewer.canSee ? z.whispererRecord : redactWhispererRecord(z.whispererRecord),
       counts: {
         ...counts,
         horde: horde,
@@ -261,15 +272,15 @@ export async function GET(req: Request) {
         : null,
       config,
       latestResolution,
-      topPerformers,
-      dangerZone,
-      recentInfections,
-      recentBashings,
-      recentMaulings,
+      topPerformers: topPerformers.map(team),
+      dangerZone: dangerZone.map(team),
+      recentInfections: recentInfections.map(event),
+      recentBashings: recentBashings.map(event),
+      recentMaulings: recentMaulings.map(event),
     },
     hordeSize: horde,
     survivorCount: surv,
-    myTeam,
+    myTeam: myTeam ? team(myTeam) : myTeam,
     myActiveItemCount,
     myPendingItemCount,
     myResources: {

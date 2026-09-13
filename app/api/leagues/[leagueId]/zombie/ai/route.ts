@@ -16,6 +16,8 @@ import {
   generateZombieAI,
 } from '@/lib/zombie/ai/ZombieAIService'
 import { getZombieHordeSitOutStateForWeek } from '@/lib/zombie/ZombieHordeSitOutEngine'
+import { resolveWhispererViewer } from '@/lib/zombie/whispererViewer'
+import { redactZombieAIContext, withWhispererRoster } from '@/lib/zombie/whispererRedaction'
 import {
   FeatureGateService,
   isFeatureGateAccessError,
@@ -97,21 +99,29 @@ export async function POST(
     return NextResponse.json({ error: 'Could not build context' }, { status: 500 })
   }
 
+  // The Whisperer's identity reaches the response, the cache key and the model prompt only for a
+  // viewer allowed to know it. Everything below reads `context`, never `deterministic`.
+  const viewer = await resolveWhispererViewer(leagueId, userId)
+  const context = viewer.canSee
+    ? deterministic
+    : redactZombieAIContext(deterministic, withWhispererRoster(viewer.identity, deterministic.whispererRosterId))
+
   const deterministicResponse = {
-    leagueId: deterministic.leagueId,
-    sport: deterministic.sport,
-    week: deterministic.week,
-    config: deterministic.config,
-    whispererRosterId: deterministic.whispererRosterId,
-    survivors: deterministic.survivors,
-    zombies: deterministic.zombies,
-    movementWatch: deterministic.movementWatch,
-    rosterDisplayNames: deterministic.rosterDisplayNames,
-    myRosterId: deterministic.myRosterId,
-    myResources: deterministic.myResources,
-    chompinBlockCandidates: deterministic.chompinBlockCandidates,
-    collusionFlags: deterministic.collusionFlags,
-    dangerousDropFlags: deterministic.dangerousDropFlags,
+    leagueId: context.leagueId,
+    sport: context.sport,
+    week: context.week,
+    config: context.config,
+    whispererRosterId: context.whispererRosterId,
+    whispererHidden: context.whispererHidden === true,
+    survivors: context.survivors,
+    zombies: context.zombies,
+    movementWatch: context.movementWatch,
+    rosterDisplayNames: context.rosterDisplayNames,
+    myRosterId: context.myRosterId,
+    myResources: context.myResources,
+    chompinBlockCandidates: context.chompinBlockCandidates,
+    collusionFlags: context.collusionFlags,
+    dangerousDropFlags: context.dangerousDropFlags,
   }
 
   const sitOutState = await getZombieHordeSitOutStateForWeek(leagueId, week, userId)
@@ -127,11 +137,11 @@ export async function POST(
     type,
     week,
     userId,
-    myRosterId: deterministic.myRosterId,
-    whispererRosterId: deterministic.whispererRosterId,
-    survivorRosterIds: deterministic.survivors.slice().sort(),
-    zombieRosterIds: deterministic.zombies.slice().sort(),
-    contextSummary: buildZombieAiCacheContextSummary(deterministic),
+    myRosterId: context.myRosterId,
+    whispererRosterId: context.whispererRosterId,
+    survivorRosterIds: context.survivors.slice().sort(),
+    zombieRosterIds: context.zombies.slice().sort(),
+    contextSummary: buildZombieAiCacheContextSummary(context),
     sitOutSummary,
   }
   const { resultKey, inputHash } = buildAiCacheKey('zombie-ai', cacheInputs)
@@ -172,7 +182,7 @@ export async function POST(
   }
 
   try {
-    const { narrative, model } = await generateZombieAI(deterministic, type, userId)
+    const { narrative, model } = await generateZombieAI(context, type, userId)
     const responsePayload = {
       deterministic: deterministicResponse,
       narrative,

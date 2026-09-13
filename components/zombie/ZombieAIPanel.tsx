@@ -42,6 +42,7 @@ const TYPE_LABELS: Record<ZombieAIType, string> = {
 
 interface DeterministicSnapshot {
   whispererRosterId: string | null
+  whispererHidden: boolean
   survivors: string[]
   zombies: string[]
   movementWatch: { rosterId: string; reason: string }[]
@@ -92,6 +93,7 @@ export function ZombieAIPanel({ leagueId, summary }: ZombieAIPanelProps) {
       if (det) {
         setDeterministic({
           whispererRosterId: det.whispererRosterId ?? null,
+          whispererHidden: det.whispererHidden === true,
           survivors: Array.isArray(det.survivors) ? det.survivors : [],
           zombies: Array.isArray(det.zombies) ? det.zombies : [],
           movementWatch: Array.isArray(det.movementWatch) ? det.movementWatch : [],
@@ -161,7 +163,7 @@ export function ZombieAIPanel({ leagueId, summary }: ZombieAIPanelProps) {
           <div className="mt-4 rounded-xl border border-white/20 bg-white/5 p-4">
             <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-white/50">Deterministic data (rules-driven)</h3>
             <ul className="space-y-1 text-sm text-white/80">
-              <li>Whisperer: {deterministic.whispererRosterId ? nameOrId(deterministic.rosterDisplayNames, deterministic.whispererRosterId) : 'None'}</li>
+              <li>Whisperer: {deterministic.whispererHidden ? 'Identity classified' : deterministic.whispererRosterId ? nameOrId(deterministic.rosterDisplayNames, deterministic.whispererRosterId) : 'None'}</li>
               <li>Survivors: {deterministic.survivors.length ? deterministic.survivors.map((id) => nameOrId(deterministic.rosterDisplayNames, id)).join(', ') : 'None'}</li>
               <li>Zombies: {deterministic.zombies.length ? deterministic.zombies.map((id) => nameOrId(deterministic.rosterDisplayNames, id)).join(', ') : 'None'}</li>
               <li>My resources: {deterministic.myResources.serums} serums, {deterministic.myResources.weapons} weapons, {deterministic.myResources.ambush} ambush</li>
