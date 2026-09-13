@@ -78,9 +78,73 @@ export function normalizedFaabValue(
   amount: number | null | undefined,
   budget?: number | null,
 ): number {
+  return situationalFaabValue({ amount, originalBudget: budget }).value
+}
+
+export interface SituationalFaabInput {
+  amount: number | null | undefined
+  originalBudget?: number | null
+  senderRemaining?: number | null
+  receiverRemaining?: number | null
+  opponentRemaining?: readonly number[] | null
+  currentWeek?: number | null
+  regularSeasonWeeks?: number | null
+  waiverPoolStrength?: number | null
+  rollover?: boolean | null
+}
+
+export interface SituationalFaabResult {
+  value: number
+  baseValue: number
+  multiplier: number
+  factors: { scarcity: number; timing: number; waiverPool: number; rollover: number }
+  basis: string[]
+}
+
+function finiteOrNull(value: number | null | undefined): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null
+}
+
+/**
+ * Prices the option value of FAAB when league state is available. With only amount/budget it is
+ * exactly backward compatible with the original linear conversion.
+ */
+export function situationalFaabValue(input: SituationalFaabInput): SituationalFaabResult {
+  const amount = finiteOrNull(input.amount)
+  const budget = finiteOrNull(input.originalBudget)
   const amt = Number.isFinite(amount as number) ? Math.max(0, amount as number) : 0
   const rawBudget = Number.isFinite(budget as number) ? (budget as number) : Number.NaN
   const effectiveBudget = rawBudget > 0 ? rawBudget : FAAB_DEFAULT_BUDGET
   const share = Math.min(amt / effectiveBudget, 1)
-  return Math.round(share * FAAB_FULL_BUDGET_VALUE)
+  const baseValue = Math.round(share * FAAB_FULL_BUDGET_VALUE)
+
+  const rivals = (input.opponentRemaining ?? []).filter((v) => Number.isFinite(v) && v >= 0)
+  const receiver = finiteOrNull(input.receiverRemaining)
+  const medianRival = rivals.length
+    ? [...rivals].sort((a, b) => a - b)[Math.floor(rivals.length / 2)]!
+    : null
+  // Dollars become more strategically useful when the receiver can move above the typical rival.
+  const scarcity = receiver != null && medianRival != null
+    ? Math.max(0.85, Math.min(1.2, 1 + ((receiver + amt - medianRival) / effectiveBudget) * 0.25))
+    : 1
+
+  const week = finiteOrNull(input.currentWeek)
+  const weeks = finiteOrNull(input.regularSeasonWeeks)
+  // Late-season dollars have fewer opportunities, but slightly more leverage per successful claim.
+  const timing = week != null && weeks != null && weeks > 0
+    ? Math.max(0.82, Math.min(1.08, 1.08 - (week / weeks) * 0.2))
+    : 1
+  const pool = finiteOrNull(input.waiverPoolStrength)
+  const waiverPool = pool == null ? 1 : Math.max(0.8, Math.min(1.2, 0.8 + pool * 0.4))
+  const rollover = input.rollover == null ? 1 : input.rollover ? 1.08 : 1
+  const multiplier = scarcity * timing * waiverPool * rollover
+  const value = Math.max(0, Math.min(FAAB_FULL_BUDGET_VALUE, Math.round(baseValue * multiplier)))
+  const basis = [
+    `${amt} of ${effectiveBudget} league FAAB`,
+    ...(scarcity !== 1 ? ['remaining-budget leverage'] : []),
+    ...(timing !== 1 ? ['season timing'] : []),
+    ...(waiverPool !== 1 ? ['waiver-pool quality'] : []),
+    ...(rollover !== 1 ? ['budget rollover'] : []),
+  ]
+  return { value, baseValue, multiplier, factors: { scarcity, timing, waiverPool, rollover }, basis }
 }

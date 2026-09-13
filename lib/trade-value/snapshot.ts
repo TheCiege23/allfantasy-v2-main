@@ -12,7 +12,6 @@ import {
   type TradeValueSnapshot,
 } from './types'
 import {
-  normalizedFaabValue,
   normalizedPickValue,
   normalizedPlayerValue,
   valueBasisFor,
@@ -21,9 +20,12 @@ import {
 import { gradeTrade } from './grader'
 import { applyFormatFit } from './formats/applyFormat'
 import { buildValueV2Shadow, valueV2ShadowEnabled } from '@/lib/decision-os/value-v2/shadow'
+import { assessTradeAssetCoverage } from './assetCoverage'
+import { situationalFaabValue, type SituationalFaabInput } from './faabValue'
 
 export interface EnrichedTradeAsset {
   kind: AssetValueSnapshot['kind']
+  canonicalAssetType?: string | null
   fromRosterId: string
   toRosterId: string
   playerId?: string | null
@@ -32,8 +34,14 @@ export interface EnrichedTradeAsset {
   team?: string | null
   pickSeason?: number | null
   pickRound?: number | null
+  pickOriginalRosterId?: string | null
   pickLabel?: string | null
   faabAmount?: number | null
+  pickTeams?: number | null
+  pickSlot?: number | null
+  pickSlotProbability?: { early: number; middle: number; late: number } | null
+  pickClassStrength?: number | null
+  faabContext?: Omit<SituationalFaabInput, 'amount'> | null
   /**
    * Player age, when the caller knows it. Dynasty and keeper format models read it; redraft ones
    * must not. Absent ⇒ any model needing it returns null rather than guessing.
@@ -67,9 +75,17 @@ function internalValueFor(
         scoring,
       })
     case 'draft_pick':
-      return normalizedPickValue({ round: asset.pickRound, pickSeason: asset.pickSeason, currentSeason })
+      return normalizedPickValue({
+        round: asset.pickRound,
+        pickSeason: asset.pickSeason,
+        currentSeason,
+        teams: asset.pickTeams,
+        slot: asset.pickSlot,
+        slotProbability: asset.pickSlotProbability,
+        classStrength: asset.pickClassStrength,
+      })
     case 'faab':
-      return normalizedFaabValue(asset.faabAmount)
+      return situationalFaabValue({ amount: asset.faabAmount, ...(asset.faabContext ?? {}) }).value
     case 'future_consideration':
     default:
       return 0
@@ -123,6 +139,7 @@ export function buildTradeValueSnapshot(input: {
    */
   const snapAssets: AssetValueSnapshot[] = input.assets.map((a) => ({
     kind: a.kind,
+    canonicalAssetType: a.canonicalAssetType ?? null,
     fromRosterId: a.fromRosterId,
     toRosterId: a.toRosterId,
     playerId: a.playerId ?? null,
@@ -132,7 +149,13 @@ export function buildTradeValueSnapshot(input: {
     pickSeason: a.pickSeason ?? null,
     pickRound: a.pickRound ?? null,
     pickLabel: a.pickLabel ?? null,
+    pickOriginalRosterId: a.pickOriginalRosterId ?? null,
+    pickTeams: a.pickTeams ?? null,
+    pickProjectedSlot: a.pickSlot ?? null,
+    pickSlotProbability: a.pickSlotProbability ?? null,
+    pickClassStrength: a.pickClassStrength ?? null,
     faabAmount: a.faabAmount ?? null,
+    faabContext: a.faabContext ?? null,
     sources: a.sources,
     internalValue: internalValueFor(a, currentSeason, input.scoring),
     /*
@@ -183,7 +206,27 @@ export function buildTradeValueSnapshot(input: {
 
   const sideA = sideFor(input.proposerRosterId)
   const sideB = sideFor(input.receiverRosterId)
-  const { grade, commissionerReview } = gradeTrade(sideA, sideB, input.profiles)
+  let { grade, commissionerReview } = gradeTrade(sideA, sideB, input.profiles)
+  const coverage = assessTradeAssetCoverage(snapAssets)
+  if (coverage.status !== 'complete') {
+    grade = {
+      grade: null,
+      valueDifference: sideA.total - sideB.total,
+      fairnessScore: null,
+      confidenceScore: coverage.coveragePct,
+      insufficientData: true,
+      bullets: [
+        `Trade grade withheld: ${coverage.resolvedCount} of ${coverage.totalCount} assets have supported values.`,
+        ...coverage.warnings.slice(0, 3),
+      ],
+    }
+    commissionerReview = {
+      fairnessScore: null,
+      lopsided: false,
+      reviewRecommended: true,
+      similarValueRange: null,
+    }
+  }
 
   /*
    * The V2 shadow, carried BESIDE the legacy verdict and never inside it.
@@ -210,6 +253,7 @@ export function buildTradeValueSnapshot(input: {
     sides: [sideA, sideB],
     grade,
     commissionerReview,
+    coverage,
     ...(shadow ? { valueV2Shadow: shadow } : {}),
   }
 }

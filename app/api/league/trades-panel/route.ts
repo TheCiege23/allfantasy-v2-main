@@ -16,7 +16,14 @@ import {
   type PendingTradeScan,
 } from '@/lib/provider-trades/scanPendingSleeperTrades'
 import { scanPendingYahooTrades } from '@/lib/provider-trades/scanPendingYahooTrades'
+import {
+  evaluatePendingProviderTrades,
+  type ProviderPendingEvaluation,
+} from '@/lib/provider-trades/evaluatePendingProviderTrades'
 import { priceTradesAtCurrentMarket } from '@/lib/league-trade-engine/tradeLearningCapture'
+import { evaluateCanonicalTrade } from '@/lib/decision-os/trade/canonicalEvaluator'
+import { resolveCanonicalWorld } from '@/lib/decision-os/world'
+import type { TradeAssetSummary } from '@/lib/decision-os/trade/dco'
 import type { League } from '@prisma/client'
 
 export const dynamic = 'force-dynamic'
@@ -72,10 +79,11 @@ async function buildNativeActiveTrades(leagueId: string, userId: string): Promis
   const nameByRosterId = new Map(rosterIds.map((id) => [id, nameByUserId.get(userIdByRosterId.get(id) ?? '') ?? 'Manager']))
 
   const isCommissioner = await isElevatedCommissioner(leagueId, userId)
+  const world = await resolveCanonicalWorld(leagueId).catch(() => null)
 
-  return active
+  return Promise.all(active
     .filter((t) => isCommissioner || t.proposerRosterId === myRosterId || t.receiverRosterId === myRosterId)
-    .map((t) => {
+    .map(async (t) => {
       const viewerIsProposer = myRosterId != null && t.proposerRosterId === myRosterId
       const viewerIsReceiver = myRosterId != null && t.receiverRosterId === myRosterId
       const direction: LeagueTradeHistoryItem['direction'] = viewerIsProposer
@@ -90,6 +98,37 @@ async function buildNativeActiveTrades(leagueId: string, userId: string): Promis
       const received: LeagueTradeAsset[] = t.items
         .filter((i) => i.toRosterId === (viewerIsReceiver ? t.receiverRosterId : t.proposerRosterId))
         .map((i) => ({ id: i.id, ...assetLabel(i), headshotUrl: null, accent: 'teal' as const }))
+      const decision = world ? await evaluateCanonicalTrade({
+        leagueId,
+        proposalId: t.id,
+        proposerRosterId: t.proposerRosterId,
+        receiverRosterId: t.receiverRosterId,
+        viewerRosterId: myRosterId ?? t.proposerRosterId,
+        assets: t.items.map((item): TradeAssetSummary => {
+          const metadata = item.metadata && typeof item.metadata === 'object' && !Array.isArray(item.metadata)
+            ? item.metadata as Record<string, unknown>
+            : {}
+          const stringValue = (value: unknown) => typeof value === 'string' && value.trim() ? value.trim() : null
+          const numberValue = (value: unknown) => typeof value === 'number' && Number.isFinite(value) ? value : null
+          return {
+            assetType: item.itemType,
+            itemReference: item.itemReference,
+            fromRosterId: item.fromRosterId,
+            toRosterId: item.toRosterId,
+            playerId: item.itemType.toLowerCase().includes('player') ? item.itemReference : stringValue(metadata.playerId),
+            playerName: stringValue(metadata.playerName ?? metadata.name),
+            position: stringValue(metadata.position),
+            team: stringValue(metadata.team),
+            pickSeason: numberValue(metadata.pickSeason ?? metadata.season),
+            pickRound: numberValue(metadata.pickRound ?? metadata.round),
+            pickNumber: numberValue(metadata.pickNumber),
+            pickOriginalRosterId: stringValue(metadata.originalRosterId),
+            pickLabel: stringValue(metadata.pickLabel),
+            faabAmount: item.faabAmount ?? numberValue(metadata.faabAmount),
+          }
+        }),
+        currentSeason: world.league.season ?? undefined,
+      }, { resolveWorld: async () => world }).catch(() => null) : null
       return {
         id: t.id,
         direction,
@@ -101,8 +140,15 @@ async function buildNativeActiveTrades(leagueId: string, userId: string): Promis
         viewerIsCommissioner: isCommissioner,
         viewerIsReceiver,
         viewerIsProposer,
+        decisionAction: decision?.action,
+        decisionRecommendation: decision?.recommendation ?? null,
+        decisionCoveragePct: decision?.coveragePct ?? null,
+        proposalGrade: decision?.grade ?? null,
+        proposalValueGiven: decision?.valueGiven ?? null,
+        proposalValueReceived: decision?.valueReceived ?? null,
+        proposalCapturedAt: decision?.evaluatedAt ?? null,
       }
-    })
+    }))
 }
 
 /**
@@ -301,9 +347,12 @@ function providerAsset(asset: PendingTradeAsset, idx: number, accent: 'blue' | '
  * unset: AllFantasy advises on these, it cannot execute them. `direction` is
  * still resolved so the tab renders the trade the right way round.
  */
-function mapProviderTrades(pending: PendingProviderTrade[]): LeagueTradeHistoryItem[] {
+function mapProviderTrades(
+  pending: PendingProviderTrade[],
+  evaluations: Map<string, ProviderPendingEvaluation> = new Map(),
+): LeagueTradeHistoryItem[] {
   return pending.map((trade) => ({
-    id: `sleeper:${trade.transactionId}`,
+    id: `${trade.provider}:${trade.transactionId}`,
     // Facing matters: a trade the viewer SENT is outgoing. Hardcoding
     // 'incoming' would render their own offer backwards, with given/received
     // reversed relative to how they built it.
@@ -312,7 +361,14 @@ function mapProviderTrades(pending: PendingProviderTrade[]): LeagueTradeHistoryI
     timestamp: trade.proposedAt ?? new Date().toISOString(),
     sent: trade.assetsGiven.map((a, i) => providerAsset(a, i, 'blue')),
     received: trade.assetsReceived.map((a, i) => providerAsset(a, i, 'teal')),
-    status: 'pending_on_sleeper',
+    status: `pending_on_${trade.provider}`,
+    decisionAction: evaluations.get(trade.transactionId)?.action,
+    decisionRecommendation: evaluations.get(trade.transactionId)?.recommendation ?? null,
+    decisionCoveragePct: evaluations.get(trade.transactionId)?.coveragePct ?? null,
+    proposalGrade: evaluations.get(trade.transactionId)?.grade ?? null,
+    proposalValueGiven: evaluations.get(trade.transactionId)?.valueGiven ?? null,
+    proposalValueReceived: evaluations.get(trade.transactionId)?.valueReceived ?? null,
+    proposalCapturedAt: evaluations.get(trade.transactionId)?.evaluatedAt ?? null,
     // Intentionally omitted: viewerIsReceiver / viewerIsProposer /
     // viewerIsCommissioner. Leaving them unset suppresses action controls the
     // provider API cannot honor.
@@ -332,7 +388,10 @@ function mapProviderTrades(pending: PendingProviderTrade[]): LeagueTradeHistoryI
  * sent and an offer they received both list what leaves their roster under
  * `give`. Flipping on direction would show their own outgoing offer backwards.
  */
-function builderOffers(pending: PendingProviderTrade[]) {
+function builderOffers(
+  pending: PendingProviderTrade[],
+  evaluations: Map<string, ProviderPendingEvaluation> = new Map(),
+) {
   const asset = (a: PendingTradeAsset) => ({
     playerId: a.playerId,
     name: a.playerName,
@@ -345,12 +404,14 @@ function builderOffers(pending: PendingProviderTrade[]) {
   })
 
   return pending.map((t) => ({
+    provider: t.provider,
     transactionId: t.transactionId,
     direction: t.proposedByViewer ? ('outgoing' as const) : ('incoming' as const),
     partnerName: t.proposedByViewer ? 'Awaiting response' : t.proposedBy,
     proposedAt: t.proposedAt,
     give: t.assetsGiven.map(asset),
     get: t.assetsReceived.map(asset),
+    evaluation: evaluations.get(t.transactionId) ?? null,
   }))
 }
 
@@ -435,11 +496,12 @@ export async function GET(req: NextRequest) {
         platformLeagueId: league.platformLeagueId,
         userId,
       }).catch(() => ({ trades: [], scanned: false, reason: 'Yahoo could not be reached' as string | null }))
+      const evaluations = await evaluatePendingProviderTrades({ leagueId, trades: scan.trades }).catch(() => new Map())
 
       return NextResponse.json({
         draft,
         tradeBlock: [] as LeagueTradeBlockPanelItem[],
-        activeTrades: [...activeTrades, ...mapProviderTrades(scan.trades)],
+        activeTrades: [...activeTrades, ...mapProviderTrades(scan.trades, evaluations)],
         historyTrades,
         activeCount: activeTrades.length + scan.trades.length,
         source: 'yahoo' as const,
@@ -457,7 +519,7 @@ export async function GET(req: NextRequest) {
           )}`,
           weeksUnanswered: 0,
         },
-        pendingOffers: builderOffers(scan.trades),
+        pendingOffers: builderOffers(scan.trades, evaluations),
       })
     }
 
@@ -566,9 +628,10 @@ export async function GET(req: NextRequest) {
   ])
 
   const providerPending: PendingProviderTrade[] = pendingScan.trades
+  const providerEvaluations = await evaluatePendingProviderTrades({ leagueId, trades: providerPending }).catch(() => new Map())
 
   // Native first (the viewer can act on those); provider proposals follow.
-  const activeTrades = [...nativeTrades, ...mapProviderTrades(providerPending)]
+  const activeTrades = [...nativeTrades, ...mapProviderTrades(providerPending, providerEvaluations)]
 
   // Slice 5 wiring: the LeagueContext envelope rides along so every trade
   // surface can label HOW its verdicts are framed (IDP scoring, pirate house
@@ -622,7 +685,7 @@ export async function GET(req: NextRequest) {
       leagueUrl: `https://sleeper.com/leagues/${encodeURIComponent(sleeperLeagueId)}`,
       weeksUnanswered: pendingScan.weeksUnanswered,
     },
-    pendingOffers: builderOffers(providerPending),
+    pendingOffers: builderOffers(providerPending, providerEvaluations),
   })
 }
 

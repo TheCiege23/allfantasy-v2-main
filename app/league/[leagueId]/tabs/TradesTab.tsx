@@ -91,6 +91,7 @@ export type BuilderOfferAsset = {
 }
 
 export type BuilderOffer = {
+  provider: 'sleeper' | 'yahoo'
   transactionId: string
   direction: 'incoming' | 'outgoing'
   partnerName: string
@@ -98,6 +99,18 @@ export type BuilderOffer = {
   /** From the VIEWER's side in both directions: what leaves their roster. */
   give: BuilderOfferAsset[]
   get: BuilderOfferAsset[]
+  evaluation?: {
+    action: 'accept' | 'counter' | 'decline' | 'review'
+    recommendation: string
+    valueGiven: number | null
+    valueReceived: number | null
+    /** Fairness grade from the canonical evaluator (A+…F), separate from each side's projected grade. */
+    grade: string | null
+    fairnessScore: number | null
+    confidenceScore: number
+    coverageStatus: 'complete' | 'partial' | 'blocked'
+    coveragePct: number
+  } | null
 }
 
 type GradesResponse =
@@ -254,6 +267,7 @@ function joinNames(xs: Array<{ label?: string; name?: string | null }>): string 
 function statusOf(t: LeagueTradeHistoryItem): LogRow['status'] {
   const s = t.status ?? 'pending'
   if (s === 'pending_on_sleeper') return { label: 'Pending · on Sleeper', tone: 'warn' }
+  if (s === 'pending_on_yahoo') return { label: 'Pending · on Yahoo', tone: 'warn' }
   if (s === 'awaiting_commissioner') return { label: 'Commissioner review', tone: 'violet' }
   if (s === 'awaiting_votes') return { label: 'League vote', tone: 'violet' }
   if (s === 'accepted' || s === 'scheduled') return { label: 'Accepted · settling', tone: 'good' }
@@ -272,7 +286,7 @@ function rowFromActive(t: LeagueTradeHistoryItem): LogRow {
   const viewerSide = t.direction !== 'complete'
   const sent = joinNames(t.sent)
   const received = joinNames(t.received)
-  const why = t.status === 'pending_on_sleeper' ? 'pending on Sleeper' : 'pending'
+  const why = t.status?.startsWith('pending_on_') ? `pending on ${t.status.slice('pending_on_'.length)}` : 'pending'
   if (viewerSide) {
     return {
       id: t.id,
@@ -728,7 +742,8 @@ export function PendingTradeCard(props: {
   onVeto: () => void
 }) {
   const { trade: t, offer, verdict } = props
-  const onSleeper = t.status === 'pending_on_sleeper'
+  const onSleeper = t.status?.startsWith('pending_on_') === true
+  const providerName = t.status === 'pending_on_yahoo' ? 'Yahoo' : 'Sleeper'
   const review = t.status === 'awaiting_commissioner'
   const commissionerView = t.direction === 'complete'
 
@@ -752,7 +767,7 @@ export function PendingTradeCard(props: {
       : `${t.partnerName} has proposed a trade`
 
   const role = onSleeper
-    ? { label: 'On Sleeper · read-only', cls: 'bg-[#1f2a4d] text-[#9fd4ff]' }
+    ? { label: `On ${providerName} · read-only`, cls: 'bg-[#1f2a4d] text-[#9fd4ff]' }
     : review
       ? { label: 'Commissioner review', cls: 'bg-violet-400/15 text-violet-200' }
       : t.direction === 'outgoing'
@@ -797,6 +812,17 @@ export function PendingTradeCard(props: {
 
       {/* ── The AllFantasy read ──────────────────────────────────────── */}
       <div className="rounded-xl border border-[#22d3ee]/25 bg-[#22d3ee]/[0.06] px-3 py-2.5">
+        {t.decisionRecommendation ? (
+          <div className="mb-2 flex items-start gap-2 rounded-lg border border-[#22d3ee]/20 bg-black/10 px-2.5 py-2">
+            <span className="rounded bg-[#22d3ee]/15 px-1.5 py-0.5 font-mono text-[9px] font-bold uppercase text-[#67e4f7]">
+              {t.decisionAction ?? 'review'}
+            </span>
+            <p className="text-[11.5px] leading-snug text-white/75">
+              {t.decisionRecommendation}
+              {typeof t.decisionCoveragePct === 'number' ? ` · ${t.decisionCoveragePct}% asset coverage` : ''}
+            </p>
+          </div>
+        ) : null}
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
           <span className={`${EYEBROW} text-[9px] text-[#67e4f7]`}>AF read</span>
           {!verdict || verdict.kind === 'loading' ? (
@@ -837,7 +863,7 @@ export function PendingTradeCard(props: {
                 rel="noopener noreferrer"
                 className="rounded-lg border border-[#22d3ee]/30 bg-[#22d3ee]/10 px-2.5 py-1.5 text-[11px] font-semibold text-[#67e4f7]"
               >
-                Act on it in Sleeper
+                Act on it in {providerName}
               </a>
             ) : null}
             <Link href={props.tradeCenterHref} className="rounded-lg border border-white/15 px-2.5 py-1.5 text-[11px] font-semibold text-white/70">
@@ -1087,7 +1113,7 @@ export function TradesTab({ league, teams }: TradesTabProps) {
 
   const offerById = useMemo(() => {
     const m = new Map<string, BuilderOffer>()
-    for (const o of pendingOffers) m.set(`sleeper:${o.transactionId}`, o)
+    for (const o of pendingOffers) m.set(`${o.provider}:${o.transactionId}`, o)
     return m
   }, [pendingOffers])
 
@@ -1110,6 +1136,63 @@ export function TradesTab({ league, teams }: TradesTabProps) {
       requested.current.add(t.id)
 
       const offer = offerById.get(t.id) ?? null
+      // Provider offers already passed through the canonical Decision OS on the
+      // server. Reuse that immutable read instead of calling the legacy analyzer
+      // and producing a second, potentially contradictory verdict.
+      if (offer?.evaluation) {
+        const evaluation = offer.evaluation
+        const degraded = evaluation.coverageStatus !== 'complete'
+        const valueGiven = evaluation.valueGiven
+        const valueReceived = evaluation.valueReceived
+        const hasSignal = !degraded && valueGiven != null && valueReceived != null
+        const viewerDiff = hasSignal && valueReceived !== 0
+          ? ((valueReceived - valueGiven) / Math.abs(valueReceived)) * 100
+          : null
+        const partnerDiff = hasSignal && valueGiven !== 0
+          ? ((valueGiven - valueReceived) / Math.abs(valueGiven)) * 100
+          : null
+        setVerdicts((prev) => ({
+          ...prev,
+          [t.id]: {
+            kind: 'ok',
+            fairnessScore: evaluation.fairnessScore,
+            fairnessLabel: evaluation.recommendation,
+            confidenceLabel: `${evaluation.confidenceScore}% confidence`,
+            degraded,
+            giveGrade: projectedLetterFor({ percentDiff: viewerDiff, hasSignal }),
+            getGrade: projectedLetterFor({ percentDiff: partnerDiff, hasSignal }),
+            giveTotal: valueGiven,
+            getTotal: valueReceived,
+            values: {},
+            dropped: [],
+          },
+        }))
+        continue
+      }
+      if (t.decisionRecommendation) {
+        const giveTotal = t.proposalValueGiven ?? null
+        const getTotal = t.proposalValueReceived ?? null
+        const hasSignal = giveTotal != null && getTotal != null && (t.decisionCoveragePct ?? 0) === 100
+        const percentDiff = hasSignal && getTotal !== 0 ? ((getTotal - giveTotal) / Math.abs(getTotal)) * 100 : null
+        const inversePercentDiff = hasSignal && giveTotal !== 0 ? ((giveTotal - getTotal) / Math.abs(giveTotal)) * 100 : null
+        setVerdicts((prev) => ({
+          ...prev,
+          [t.id]: {
+            kind: 'ok',
+            fairnessScore: null,
+            fairnessLabel: t.decisionRecommendation ?? 'Decision OS review',
+            confidenceLabel: typeof t.decisionCoveragePct === 'number' ? `${t.decisionCoveragePct}% asset coverage` : null,
+            degraded: !hasSignal,
+            giveGrade: projectedLetterFor({ percentDiff, hasSignal }),
+            getGrade: projectedLetterFor({ percentDiff: inversePercentDiff, hasSignal }),
+            giveTotal,
+            getTotal,
+            values: {},
+            dropped: [],
+          },
+        }))
+        continue
+      }
       const give = offer ? fromBuilderAssets(offer.give) : toAnalyzeAssets(t.sent)
       const get = offer ? fromBuilderAssets(offer.get) : toAnalyzeAssets(t.received)
       const dropped = [...give.dropped, ...get.dropped]

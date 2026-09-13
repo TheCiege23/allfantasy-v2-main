@@ -72,8 +72,11 @@ export function tradeProposalDelta(type: string): number {
   if (
     type === 'transaction.trade.accepted' ||
     type === 'transaction.trade.rejected' ||
+    type === 'transaction.trade.declined' ||
+    type === 'transaction.trade.countered' ||
     type === 'transaction.trade.canceled' ||
-    type === 'transaction.trade.vetoed'
+    type === 'transaction.trade.vetoed' ||
+    type === 'transaction.trade.expired'
   ) {
     return -1
   }

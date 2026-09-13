@@ -241,4 +241,27 @@ describe('computeTradeReplayMetrics', () => {
     expect(byBucket['5 to 10 (abs)']).toBe(1)
     expect(byBucket['10+ (abs)']).toBe(1)
   })
+
+  it('reports calibrated outcome quality and asset-class results', async () => {
+    mockReplayImportFindMany.mockResolvedValue([
+      makeReplay({ id: 'r1', payload: { assetsGiven: [{ name: 'Pick', value: 100, type: 'draft_pick' }], assetsReceived: [{ name: 'LB', value: 100, type: 'player', pos: 'LB' }] } }),
+      makeReplay({ id: 'r2', payload: { assetsGiven: [{ name: 'FAAB', value: 25, type: 'faab' }], assetsReceived: [{ name: 'WR', value: 25, type: 'player', pos: 'WR' }] } }),
+    ])
+    mockBacktestResultFindMany.mockResolvedValue([
+      makeBacktest({ replayId: 'r1', acceptProb: 0.8, verdict: 'Accept', realOutcome: { outcome: 'ACCEPTED', providerStatus: 'complete' } }),
+      makeBacktest({ replayId: 'r2', acceptProb: 0.3, verdict: 'Decline', realOutcome: { outcome: 'REJECTED', providerStatus: 'rejected' } }),
+    ])
+
+    const result = await computeTradeReplayMetrics()
+
+    expect(result.resolvedOutcomeCount).toBe(2)
+    expect(result.brierScore).toBeCloseTo(0.065, 5)
+    expect(result.thresholdAccuracy).toBe(1)
+    expect(result.calibration.reduce((sum, bucket) => sum + bucket.count, 0)).toBe(2)
+    expect(result.recommendationOutcomes).toEqual(expect.arrayContaining([
+      { verdict: 'Accept', count: 1, accepted: 1, acceptanceRate: 1 },
+      { verdict: 'Decline', count: 1, accepted: 0, acceptanceRate: 0 },
+    ]))
+    expect(result.assetClassOutcomes.map((row) => row.assetClass)).toEqual(expect.arrayContaining(['draft_pick', 'idp', 'faab']))
+  })
 })

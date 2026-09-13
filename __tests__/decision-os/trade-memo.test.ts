@@ -20,6 +20,7 @@ import {
 import type { CanonicalWorld, TeamFacts, RosterFacts } from '@/lib/decision-os/world/facts'
 import { buildTradeValueSnapshot, type EnrichedTradeAsset } from '@/lib/trade-value/snapshot'
 import { normalizedFaabValue, normalizedPickValue, POSITION_SCARCITY } from '@/lib/trade-value/valueEngine'
+import { projectPickSlotDistribution } from '@/lib/trade-intel/pickOutlook'
 
 /**
  * Phase E.2 — Canonical Trade Memo (ADR-DOS-003 §7).
@@ -53,7 +54,7 @@ function makeTeam(teamId: string, rank: number, wins: number, losses: number, pf
     pointsFor: pf,
     pointsAgainst: null,
     pointsAgainstBasis: 'unavailable',
-    faab: { budget: 100, used: 0, remaining: 100, remainingDerived: false },
+    faab: { budget: 100, used: null, remaining: null, remainingDerived: false },
     source: { sourceTeamId: null, sourceManagerId: null },
   }
 }
@@ -124,11 +125,18 @@ const FULL_ENRICHMENT: CanonicalMemoEnrichment = {
 
 // The equivalent redraft memo (pure core of the redraft capture path) fed the SAME sources.
 function redraftReferenceSnapshot() {
+  const pickOutlook = projectPickSlotDistribution({
+    season: 2026,
+    round: 1,
+    currentSeason: 2025,
+    senderRank: null,
+    teamCount: 2,
+  })
   const assets: EnrichedTradeAsset[] = [
     { kind: 'player', fromRosterId: 'rA', toRosterId: 'rB', playerId: 'p1', playerName: 'Josh Allen', position: 'QB', team: 'BUF', pickSeason: null, pickRound: null, pickLabel: null, faabAmount: null, sources: { projectionValue: 320, rankingValue: null, adpValue: 30, fantasyCalcValue: null } },
     { kind: 'faab', fromRosterId: 'rA', toRosterId: 'rB', playerId: null, playerName: null, position: null, team: null, pickSeason: null, pickRound: null, pickLabel: null, faabAmount: 20, sources: { projectionValue: null, rankingValue: null, adpValue: null, fantasyCalcValue: null } },
     { kind: 'player', fromRosterId: 'rB', toRosterId: 'rA', playerId: 'p2', playerName: 'Christian McCaffrey', position: 'RB', team: 'SF', pickSeason: null, pickRound: null, pickLabel: null, faabAmount: null, sources: { projectionValue: 340, rankingValue: null, adpValue: 5, fantasyCalcValue: null } },
-    { kind: 'draft_pick', fromRosterId: 'rB', toRosterId: 'rA', playerId: null, playerName: null, position: null, team: null, pickSeason: 2026, pickRound: 1, pickLabel: '2026 R1', faabAmount: null, sources: { projectionValue: null, rankingValue: null, adpValue: null, fantasyCalcValue: null } },
+    { kind: 'draft_pick', fromRosterId: 'rB', toRosterId: 'rA', playerId: null, playerName: null, position: null, team: null, pickSeason: 2026, pickRound: 1, pickLabel: '2026 R1', faabAmount: null, pickTeams: 2, pickSlot: pickOutlook.expectedSlot, pickSlotProbability: { early: pickOutlook.early, middle: pickOutlook.middle, late: pickOutlook.late }, sources: { projectionValue: null, rankingValue: null, adpValue: null, fantasyCalcValue: null } },
   ]
   return buildTradeValueSnapshot({
     proposerRosterId: 'rA',
@@ -141,6 +149,25 @@ function redraftReferenceSnapshot() {
 }
 
 describe('Phase E.2 — Canonical Trade Memo: adapter + engine reuse', () => {
+  it('does not drop market and IDP enrichment at the TradeWorld boundary', () => {
+    const world = makeWorld({ provider: 'sleeper' })
+    const movements = makeMovements()
+    movements[0]!.asset.metadata.player!.position = 'LB'
+    const enrichment: CanonicalMemoEnrichment = {
+      positionByPlayerId: { p1: 'LB', p2: 'RB' },
+      idpValueByPlayerId: { p1: 3100 },
+      marketValueByPlayerId: { p2: 4700 },
+    }
+    const memo = buildTradeMemo(resolveTradeWorld({
+      world, movements, proposerRosterId: 'rA', receiverRosterId: 'rB', enrichment,
+    }))
+    const byId = new Map(memo.snapshot.sides.flatMap((side) => side.assets).map((asset) => [asset.playerId, asset]))
+    expect(byId.get('p1')?.valuationBasis).toBe('idp')
+    expect(byId.get('p1')?.internalValue).toBe(3100)
+    expect(byId.get('p2')?.valuationBasis).toBe('market')
+    expect(byId.get('p2')?.internalValue).toBe(4700)
+  })
+
   it('adapts CanonicalAsset[] into the engine and produces a two-sided snapshot', () => {
     const memo = buildCanonicalTradeMemo({
       world: makeWorld({ provider: 'sleeper' }),
@@ -170,7 +197,47 @@ describe('Phase E.2 — Canonical Trade Memo: adapter + engine reuse', () => {
     const faab = all.find((a) => a.kind === 'faab')!
     const pick = all.find((a) => a.kind === 'draft_pick')!
     expect(faab.internalValue).toBe(normalizedFaabValue(20))
-    expect(pick.internalValue).toBe(normalizedPickValue({ round: 1, pickSeason: 2026, currentSeason: 2025 }))
+    expect(pick.internalValue).toBe(normalizedPickValue({
+      round: 1,
+      pickSeason: 2026,
+      currentSeason: 2025,
+      teams: 2,
+      slot: pick.pickProjectedSlot,
+      slotProbability: pick.pickSlotProbability,
+    }))
+  })
+
+  it('feeds league standings into pick probabilities and remaining budgets into FAAB value', () => {
+    const world = makeWorld({ provider: 'sleeper' })
+    world.league.waiverSettings.budget = 100
+    world.teams[0]!.faab.remaining = 90
+    world.teams[1]!.faab.remaining = 15
+    const rows = ITEMS.map((item) => item.id === 'i4'
+      ? { ...item, metadata: { ...item.metadata, originalRosterId: 'rA' } }
+      : item)
+    const inputs = fromAfLeagueTradeItems(rows, 'sleeper')
+    const assets = resolveCanonicalAssets(inputs)
+    const movements = assets.map((asset, index) => ({
+      asset,
+      fromRosterId: inputs[index]!.fromRosterId,
+      toRosterId: inputs[index]!.toRosterId,
+    }))
+    const memo = buildCanonicalTradeMemo({
+      world,
+      movements,
+      proposerRosterId: 'rA',
+      receiverRosterId: 'rB',
+      enrichment: FULL_ENRICHMENT,
+      currentSeason: 2025,
+    })
+    const all = memo.snapshot.sides.flatMap((side) => side.assets)
+    const pick = all.find((asset) => asset.kind === 'draft_pick')!
+    const faab = all.find((asset) => asset.kind === 'faab')!
+    expect(pick.pickOriginalRosterId).toBe('rA')
+    expect(pick.pickSlotProbability).not.toBeNull()
+    expect(faab.faabContext?.receiverRemaining).toBe(15)
+    expect(faab.faabContext?.senderRemaining).toBe(90)
+    expect(faab.internalValue).not.toBe(normalizedFaabValue(20))
   })
 })
 
@@ -242,7 +309,9 @@ describe('Phase E.2 — honest degradation', () => {
     // No projection/adp ⇒ player value floors to 0 (never fabricated), but pick/FAAB still value.
     expect(players.every((p) => p.internalValue === 0)).toBe(true)
     expect(players.every((p) => p.sources.projectionValue === null && p.sources.adpValue === null)).toBe(true)
-    expect(memo.snapshot.grade.confidenceScore).toBe(0)
+    expect(memo.snapshot.grade.confidenceScore).toBe(50)
+    expect(memo.snapshot.grade.insufficientData).toBe(true)
+    expect(memo.snapshot.coverage?.status).toBe('partial')
     expect(memo.completeness).toBeLessThan(100)
     expect(memo.uncertainty.some((u) => u.toLowerCase().includes('projection not yet sourced'))).toBe(true)
   })
@@ -444,7 +513,14 @@ describe('Phase E.3 — buildTradeMemo consumes TradeWorld (engine reused, not r
     const faab = all.find((a) => a.kind === 'faab')!
     const pick = all.find((a) => a.kind === 'draft_pick')!
     expect(faab.internalValue).toBe(normalizedFaabValue(20))
-    expect(pick.internalValue).toBe(normalizedPickValue({ round: 1, pickSeason: 2026, currentSeason: 2025 }))
+    expect(pick.internalValue).toBe(normalizedPickValue({
+      round: 1,
+      pickSeason: 2026,
+      currentSeason: 2025,
+      teams: 2,
+      slot: pick.pickProjectedSlot,
+      slotProbability: pick.pickSlotProbability,
+    }))
   })
 
   it('origin-blind through the world: native ≡ imported (provider only in provenance)', () => {

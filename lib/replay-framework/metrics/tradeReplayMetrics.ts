@@ -37,6 +37,12 @@ export interface TradeReplayMetricsSummary {
   benchDepthCount: number
   avgPredictedAcceptanceStarterInvolved: number | null
   avgPredictedAcceptanceBenchDepth: number | null
+  resolvedOutcomeCount: number
+  brierScore: number | null
+  thresholdAccuracy: number | null
+  calibration: Array<{ bucket: string; count: number; avgPredicted: number | null; actualAcceptanceRate: number | null }>
+  recommendationOutcomes: Array<{ verdict: string; count: number; accepted: number; acceptanceRate: number }>
+  assetClassOutcomes: Array<{ assetClass: string; count: number; accepted: number; acceptanceRate: number; brierScore: number }>
 }
 
 interface ReplayWithBacktest {
@@ -55,6 +61,21 @@ function computeValueDeltaPct(payload: TradeReplayPayload): number | null {
   const total = givenTotal + receivedTotal
   if (total <= 0) return null
   return ((receivedTotal - givenTotal) / total) * 100
+}
+
+function assetClasses(payload: TradeReplayPayload): string[] {
+  const classes = new Set<string>()
+  for (const asset of [...payload.assetsGiven, ...payload.assetsReceived]) {
+    const type = String(asset.type ?? '').toLowerCase()
+    const position = String(asset.pos ?? '').toUpperCase()
+    if (type.includes('pick')) classes.add('draft_pick')
+    else if (type.includes('faab')) classes.add('faab')
+    else if (position === 'K' || position === 'PK') classes.add('kicker')
+    else if (['DL', 'DE', 'DT', 'LB', 'CB', 'S', 'DB', 'IDP'].includes(position)) classes.add('idp')
+    else if (type.includes('college') || type.includes('devy')) classes.add('college_devy')
+    else classes.add('offense_or_other_player')
+  }
+  return [...classes]
 }
 
 /**
@@ -139,6 +160,34 @@ export async function computeTradeReplayMetrics(providerLeagueIds?: string[]): P
   const rowsWithDeltaThem = rows.filter((r) => r.backtestedOutput.deltaThem != null)
   const starterInvolvedRows = rowsWithDeltaThem.filter((r) => r.backtestedOutput.deltaThem !== 0)
   const benchDepthRows = rowsWithDeltaThem.filter((r) => r.backtestedOutput.deltaThem === 0)
+  const resolved = rows.filter((r) => r.realOutcome && r.realOutcome.outcome !== 'UNKNOWN')
+  const labeled = resolved.map((row) => ({
+    row,
+    probability: Math.max(0, Math.min(1, row.backtestedOutput.acceptProb)),
+    accepted: row.realOutcome?.outcome === 'ACCEPTED' ? 1 : 0,
+  }))
+  const brierScore = average(labeled.map((row) => (row.probability - row.accepted) ** 2))
+  const thresholdAccuracy = average(labeled.map((row) => (row.probability >= 0.5 ? 1 : 0) === row.accepted ? 1 : 0))
+  const calibration = Array.from({ length: 10 }, (_, index) => {
+    const low = index / 10
+    const high = (index + 1) / 10
+    const bucket = labeled.filter(({ probability }) => probability >= low && (index === 9 ? probability <= high : probability < high))
+    return {
+      bucket: `${index * 10}-${(index + 1) * 10}%`,
+      count: bucket.length,
+      avgPredicted: average(bucket.map((row) => row.probability)),
+      actualAcceptanceRate: average(bucket.map((row) => row.accepted)),
+    }
+  })
+  const recommendationMap = new Map<string, typeof labeled>()
+  const assetClassMap = new Map<string, typeof labeled>()
+  for (const item of labeled) {
+    const verdict = item.row.backtestedOutput.verdict || 'unknown'
+    recommendationMap.set(verdict, [...(recommendationMap.get(verdict) ?? []), item])
+    for (const assetClass of assetClasses(item.row.payload)) {
+      assetClassMap.set(assetClass, [...(assetClassMap.get(assetClass) ?? []), item])
+    }
+  }
 
   return {
     totalReplays: replays.length,
@@ -159,5 +208,22 @@ export async function computeTradeReplayMetrics(providerLeagueIds?: string[]): P
     benchDepthCount: benchDepthRows.length,
     avgPredictedAcceptanceStarterInvolved: average(starterInvolvedRows.map((r) => r.backtestedOutput.acceptProb)),
     avgPredictedAcceptanceBenchDepth: average(benchDepthRows.map((r) => r.backtestedOutput.acceptProb)),
+    resolvedOutcomeCount: resolved.length,
+    brierScore,
+    thresholdAccuracy,
+    calibration,
+    recommendationOutcomes: [...recommendationMap.entries()].map(([verdict, group]) => ({
+      verdict,
+      count: group.length,
+      accepted: group.reduce((sum, row) => sum + row.accepted, 0),
+      acceptanceRate: group.reduce((sum, row) => sum + row.accepted, 0) / group.length,
+    })),
+    assetClassOutcomes: [...assetClassMap.entries()].map(([assetClass, group]) => ({
+      assetClass,
+      count: group.length,
+      accepted: group.reduce((sum, row) => sum + row.accepted, 0),
+      acceptanceRate: group.reduce((sum, row) => sum + row.accepted, 0) / group.length,
+      brierScore: group.reduce((sum, row) => sum + (row.probability - row.accepted) ** 2, 0) / group.length,
+    })),
   }
 }

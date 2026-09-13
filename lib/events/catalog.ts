@@ -36,11 +36,14 @@ export const EVENT = {
   LINEUP_LOCKED: 'roster.lineup.locked',
   // Trades
   TRADE_PROPOSED: 'transaction.trade.proposed',
+  TRADE_COUNTERED: 'transaction.trade.countered',
   TRADE_ACCEPTED: 'transaction.trade.accepted',
+  TRADE_DECLINED: 'transaction.trade.declined',
   TRADE_REJECTED: 'transaction.trade.rejected',
   TRADE_CANCELED: 'transaction.trade.canceled',
   TRADE_VETOED: 'transaction.trade.vetoed',
   TRADE_PROCESSED: 'transaction.trade.processed',
+  TRADE_EXPIRED: 'transaction.trade.expired',
   // Waivers / free agency
   WAIVER_SUBMITTED: 'transaction.waiver.submitted',
   WAIVER_CANCELED: 'transaction.waiver.canceled',
@@ -106,11 +109,14 @@ export const EVENT_PAYLOAD_SCHEMAS = {
   [EVENT.LINEUP_LOCKED]: z.object({ rosterId: id }),
   // ── Trades ──
   [EVENT.TRADE_PROPOSED]: z.object({ tradeId: id, proposerRosterId: optId, receiverRosterId: optId }),
+  [EVENT.TRADE_COUNTERED]: z.object({ tradeId: id }),
   [EVENT.TRADE_ACCEPTED]: z.object({ tradeId: id }),
+  [EVENT.TRADE_DECLINED]: z.object({ tradeId: id }),
   [EVENT.TRADE_REJECTED]: z.object({ tradeId: id }),
   [EVENT.TRADE_CANCELED]: z.object({ tradeId: id }),
   [EVENT.TRADE_VETOED]: z.object({ tradeId: id, byUserId: optId }),
   [EVENT.TRADE_PROCESSED]: z.object({ tradeId: id }),
+  [EVENT.TRADE_EXPIRED]: z.object({ tradeId: id }),
   // ── Waivers ──
   [EVENT.WAIVER_SUBMITTED]: z.object({ claimId: id, rosterId: optId, addPlayerId: optId, dropPlayerId: optId, bid: z.number().optional() }),
   [EVENT.WAIVER_CANCELED]: z.object({ claimId: id }),

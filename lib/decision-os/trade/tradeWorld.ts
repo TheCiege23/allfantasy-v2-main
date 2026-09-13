@@ -68,6 +68,11 @@ export interface TradeLeagueContext {
   rosterFormat: string
   isDynasty: boolean
   currentWeek: number | null
+  teamCount: number
+  faabBudget: number | null
+  teamRankByRosterId: Record<string, number | null>
+  teamNameByRosterId: Record<string, string | null>
+  faabRemainingByRosterId: Record<string, number | null>
   /** Deterministic capture stamp (the world's `assembledAt`, NOT wall-clock) — parity-safe. */
   capturedAt: string
 }
@@ -81,6 +86,11 @@ export interface MarketContext {
   adpByPlayerId: Record<string, number | null | undefined>
   /** Market value per player — Phase F enrichment; honest-empty today. */
   marketValueByPlayerId: Record<string, number | null | undefined>
+  /** League-specific defender values; separate from market quotes. */
+  idpValueByPlayerId: Record<string, number | null | undefined>
+  liquidityByPlayerId: Record<string, number | null | undefined>
+  trend30dByPlayerId: Record<string, number | null | undefined>
+  thinlyPricedIds: readonly string[]
   /** Rest-of-season projection per player — honest-empty today (no canonical projection source yet). */
   projectionByPlayerId: Record<string, number | null | undefined>
   /** Position per player — from the D.1 `resolvePlayerMetadata` seam. */
@@ -175,7 +185,8 @@ function buildMarketContext(movements: TradeMovement[], enrich: CanonicalMemoEnr
   const withSignal = playerMovements.filter((m) => {
     const pid = m.asset.metadata.player?.playerId ?? null
     if (!pid) return false
-    return enrich.adpByPlayerId?.[pid] != null || enrich.projectionByPlayerId?.[pid] != null
+    return enrich.adpByPlayerId?.[pid] != null || enrich.projectionByPlayerId?.[pid] != null ||
+      enrich.marketValueByPlayerId?.[pid] != null || enrich.idpValueByPlayerId?.[pid] != null
   })
   const confidence = playerMovements.length === 0
     ? 100
@@ -183,7 +194,11 @@ function buildMarketContext(movements: TradeMovement[], enrich: CanonicalMemoEnr
 
   return {
     adpByPlayerId: enrich.adpByPlayerId ?? {},
-    marketValueByPlayerId: {},
+    marketValueByPlayerId: enrich.marketValueByPlayerId ?? {},
+    idpValueByPlayerId: enrich.idpValueByPlayerId ?? {},
+    liquidityByPlayerId: enrich.liquidityByPlayerId ?? {},
+    trend30dByPlayerId: enrich.trend30dByPlayerId ?? {},
+    thinlyPricedIds: enrich.thinlyPricedIds ?? [],
     projectionByPlayerId: enrich.projectionByPlayerId ?? {},
     positionByPlayerId: enrich.positionByPlayerId ?? {},
     projectionSource: null,
@@ -211,6 +226,16 @@ export function resolveTradeWorld(input: ResolveTradeWorldInput): TradeWorld {
   if (proposer.profile) teamProfiles[input.proposerRosterId] = proposer.profile
   if (receiver.profile) teamProfiles[input.receiverRosterId] = receiver.profile
 
+  const teamRankByRosterId: Record<string, number | null> = {}
+  const teamNameByRosterId: Record<string, string | null> = {}
+  const faabRemainingByRosterId: Record<string, number | null> = {}
+  for (const roster of world.rosters) {
+    const team = roster.teamId ? world.teams.find((candidate) => candidate.teamId === roster.teamId) : null
+    teamRankByRosterId[roster.rosterId] = team?.rank ?? null
+    teamNameByRosterId[roster.rosterId] = team?.displayName ?? null
+    faabRemainingByRosterId[roster.rosterId] = team?.faab.remaining ?? null
+  }
+
   const leagueContext: TradeLeagueContext = {
     sport: input.context?.sport ?? world.league.sport,
     season: world.league.season,
@@ -220,6 +245,11 @@ export function resolveTradeWorld(input: ResolveTradeWorldInput): TradeWorld {
     rosterFormat: input.context?.rosterFormat ?? 'unknown',
     isDynasty: world.league.isDynasty,
     currentWeek: world.league.currentWeek,
+    teamCount: world.teams.length,
+    faabBudget: world.league.waiverSettings.budget,
+    teamRankByRosterId,
+    teamNameByRosterId,
+    faabRemainingByRosterId,
     capturedAt: input.context?.capturedAt ?? world.provenance.assembledAt,
   }
 

@@ -7,6 +7,7 @@ import type {
   FleaflickerScoreboardGame,
   FleaflickerRulesResponse,
   FleaflickerDraftBoardResponse,
+  FleaflickerTransactionsResponse,
 } from '@/lib/league-import/fleaflicker/types'
 
 const API_BASE = 'https://www.fleaflicker.com/api'
@@ -115,7 +116,7 @@ export async function fetchFleaflickerLeagueForImport(sourceId: string): Promise
    * An import that can name the league and its teams must not die because the
    * scoring endpoint had a bad minute.
    */
-  const [standings, rosters, rules, draftBoard] = await Promise.all([
+  const [standings, rosters, rules, draftBoard, transactions] = await Promise.all([
     fetchJson<FleaflickerStandingsResponse>(standingsUrl),
     /*
      * 🛑 THE SPORTRADAR IDS ARE AN ENRICHMENT OF THE ROSTERS, SO THEY MUST NEVER COST THE
@@ -136,6 +137,7 @@ export async function fetchFleaflickerLeagueForImport(sourceId: string): Promise
      * confident and more wrong of the two.
      */
     fetchFleaflickerDraftBoard(sport, leagueId, season).catch(() => null),
+    fetchFleaflickerTransactions(sport, leagueId).catch(() => null),
   ])
 
   if (!standings?.league?.id) {
@@ -149,7 +151,38 @@ export async function fetchFleaflickerLeagueForImport(sourceId: string): Promise
     rosters,
     rules,
     draftBoard,
+    transactions,
   }
+}
+
+/**
+ * Fetch every page Fleaflicker exposes. The cursor is provider-owned and a
+ * repeated import simply sees the same trade IDs again; persistence dedupes
+ * those IDs instead of deleting and rebuilding the league ledger.
+ */
+export async function fetchFleaflickerTransactions(
+  sport: FleaflickerSport,
+  leagueId: number,
+  options: { maxPages?: number } = {},
+): Promise<FleaflickerTransactionsResponse> {
+  const items: NonNullable<FleaflickerTransactionsResponse['items']> = []
+  const seenOffsets = new Set<number>()
+  let offset = 0
+  let total: number | null = null
+  const maxPages = Math.max(1, Math.min(options.maxPages ?? 100, 250))
+
+  for (let page = 0; page < maxPages && !seenOffsets.has(offset); page++) {
+    seenOffsets.add(offset)
+    const url = `${API_BASE}/FetchLeagueTransactions?sport=${encodeURIComponent(sport)}&league_id=${leagueId}&result_offset=${offset}`
+    const body = await fetchJson<FleaflickerTransactionsResponse>(url)
+    items.push(...(body.items ?? []))
+    total = typeof body.resultTotal === 'number' ? body.resultTotal : total
+    const next = body.resultOffsetNext
+    if (typeof next !== 'number' || next <= offset || (total != null && items.length >= total)) break
+    offset = next
+  }
+
+  return { items, resultOffsetNext: offset, resultTotal: total ?? items.length }
 }
 
 /**

@@ -9,6 +9,7 @@ import {
   selectIngestableIdentities,
 } from '@/lib/league-import/providerPlayerIdentities'
 import type { EspnImportPayload, EspnImportTeam } from '@/lib/league-import/adapters/espn/types'
+import { persistProviderTransactionFacts } from '@/lib/league-import/persistProviderTransactionFacts'
 
 const SEASON_END_ROSTER_SNAPSHOT_PERIOD = 0
 
@@ -240,23 +241,22 @@ async function persistEspnSeasonWarehouseFacts(args: {
     )
   )
 
-  const transactionCreates = args.payload.transactions.flatMap((transaction) =>
-    buildEspnTransactionEntries(transaction).map((entry) =>
-      prisma.transactionFact.create({
-        data: {
-          leagueId: args.leagueId,
-          sport: args.payload.league.sport,
-          type: entry.type,
-          playerId: entry.playerId ?? null,
-          managerId: entry.rosterId ?? null,
-          rosterId: entry.rosterId ?? null,
-          payload: entry.payload as Prisma.InputJsonValue,
-          season,
-          weekOrPeriod: null,
-          createdAt: entry.createdAt ?? undefined,
-        },
-      })
-    )
+  const transactionRows = args.payload.transactions.flatMap((transaction) =>
+    buildEspnTransactionEntries(transaction).map((entry, entryIndex) => ({
+      provider: 'espn',
+      upstreamTransactionId: transaction.transactionId,
+      entryIndex,
+      leagueId: args.leagueId,
+      sport: args.payload.league.sport,
+      type: entry.type,
+      playerId: entry.playerId ?? null,
+      managerId: entry.rosterId ?? null,
+      rosterId: entry.rosterId ?? null,
+      payload: entry.payload,
+      season,
+      weekOrPeriod: null,
+      occurredAt: entry.createdAt,
+    }))
   )
 
   const draftCreates = args.payload.draftPicks.map((pick) =>
@@ -287,12 +287,6 @@ async function persistEspnSeasonWarehouseFacts(args: {
         season,
       },
     }),
-    prisma.transactionFact.deleteMany({
-      where: {
-        leagueId: args.leagueId,
-        season,
-      },
-    }),
     prisma.draftFact.deleteMany({
       where: {
         leagueId: args.leagueId,
@@ -301,9 +295,9 @@ async function persistEspnSeasonWarehouseFacts(args: {
     }),
     ...snapshotCreates,
     ...matchupCreates,
-    ...transactionCreates,
     ...draftCreates,
   ])
+  const transactionFactsPersisted = await persistProviderTransactionFacts(transactionRows)
 
   /*
    * ⚠ THE NAME WAS IN HAND AND WAS BEING THROWN AWAY.
@@ -372,7 +366,7 @@ async function persistEspnSeasonWarehouseFacts(args: {
   return {
     rosterSnapshotsPersisted: snapshotCreates.length,
     matchupFactsPersisted: matchupCreates.length,
-    transactionFactsPersisted: transactionCreates.length,
+    transactionFactsPersisted,
     draftFactsPersisted: draftCreates.length,
   }
 }

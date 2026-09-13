@@ -133,7 +133,7 @@ const defaultDeps: Pick<CanonicalTradeShadowDeps, 'resolveWorld' | 'resolveEnric
 }
 
 /** Collect the canonical player ids carried by the movements (player/keeper/devy slots). */
-function playerIdsFromMovements(movements: TradeMovement[]): string[] {
+export function playerIdsFromMovements(movements: TradeMovement[]): string[] {
   const ids: string[] = []
   for (const m of movements) {
     const meta = m.asset.metadata
@@ -154,21 +154,30 @@ function remapAssets(assets: TradeAssetSummary[], remap: Record<string, string>)
 }
 
 /** Stage the redraft trade-asset summaries into canonical `AfLeagueTradeItem` rows (neutral graph). */
-function toTradeItemRows(assets: TradeAssetSummary[]): AfLeagueTradeItemRow[] {
+export function toTradeItemRows(assets: TradeAssetSummary[]): AfLeagueTradeItemRow[] {
   return assets.map((a, i) => ({
     id: `mv_${i}`,
     itemType: a.assetType,
     // `fromAfLeagueTradeItems` reads `itemReference` as the player id for player-ish types.
-    itemReference: a.playerId,
+    itemReference: a.itemReference ?? a.playerId ?? a.pickLabel ?? null,
     fromRosterId: a.fromRosterId,
     toRosterId: a.toRosterId,
     faabAmount: a.faabAmount,
-    metadata: a.playerName ? { playerName: a.playerName } : {},
+    metadata: {
+      ...(a.playerName ? { playerName: a.playerName } : {}),
+      ...(a.position ? { position: a.position } : {}),
+      ...(a.team ? { team: a.team } : {}),
+      ...(a.pickSeason != null ? { pickSeason: a.pickSeason } : {}),
+      ...(a.pickRound != null ? { pickRound: a.pickRound } : {}),
+      ...(a.pickNumber != null ? { pickNumber: a.pickNumber } : {}),
+      ...(a.pickOriginalRosterId ? { originalRosterId: a.pickOriginalRosterId } : {}),
+      ...(a.pickLabel ? { pickLabel: a.pickLabel } : {}),
+    },
   }))
 }
 
 /** Stage assets → canonical movements (`CanonicalAsset` + direction). Pure; order-preserving. */
-function buildMovements(assets: TradeAssetSummary[], origin: string | null): TradeMovement[] {
+export function buildMovements(assets: TradeAssetSummary[], origin: string | null): TradeMovement[] {
   const rows = toTradeItemRows(assets)
   const inputs = fromAfLeagueTradeItems(rows, origin)
   const canonical = resolveCanonicalAssets(inputs)

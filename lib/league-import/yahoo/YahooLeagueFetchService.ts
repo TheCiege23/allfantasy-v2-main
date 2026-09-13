@@ -336,11 +336,12 @@ export async function fetchYahooActivityForSync(
 export async function fetchYahooPendingTrades(
   userId: string,
   leagueKey: string,
+  teamKey: string,
 ): Promise<
   | { ok: true; trades: YahooImportTransaction[] }
   | { ok: false; reason: string }
 > {
-  if (!userId?.trim() || !leagueKey?.trim()) {
+  if (!userId?.trim() || !leagueKey?.trim() || !teamKey?.trim()) {
     return { ok: false, reason: 'we do not know which Yahoo league this is' }
   }
 
@@ -363,7 +364,7 @@ export async function fetchYahooPendingTrades(
      */
     const resolved = await resolveYahooLeagueLookup(leagueKey, context)
     const data = await yahooApiFetchJson(
-      `${YAHOO_API_BASE}/league/${resolved.leagueKey}/transactions;types=trade;count=100?format=json`,
+      `${YAHOO_API_BASE}/league/${resolved.leagueKey}/transactions;types=pending_trade;team_key=${encodeURIComponent(teamKey)};count=100?format=json`,
       context,
     )
     const all = parseYahooTransactions(data)
@@ -373,7 +374,7 @@ export async function fetchYahooPendingTrades(
      * not be silently treated as settled.
      */
     const pending = all.filter(
-      (t) => t.type === 'trade' && ['pending', 'proposed'].includes(t.status),
+      (t) => ['trade', 'pending_trade'].includes(t.type) && ['pending', 'proposed'].includes(t.status),
     )
     return { ok: true, trades: pending }
   } catch {

@@ -50,6 +50,7 @@ export interface PendingTradeAsset {
    */
   pickYear?: number
   pickRoundNumber?: number
+  pickOriginalRosterExternalId?: string | null
   /** Set on a FAAB line, in dollars. */
   faabAmount?: number
 }
@@ -77,6 +78,9 @@ export interface PendingProviderTrade {
    * answer it, which is a worse failure than not showing it at all.
    */
   provider: 'sleeper' | 'yahoo'
+  /** Provider roster/team ids, used only to join into canonical rosters. */
+  viewerRosterExternalId?: string | null
+  counterpartyRosterExternalId?: string | null
 }
 
 type SleeperRosterRow = { roster_id?: number; owner_id?: string }
@@ -153,6 +157,7 @@ export function buildTradeAssetsForRoster(args: {
         pickRound: label,
         pickYear: Number(pick.season),
         pickRoundNumber: pick.round,
+        pickOriginalRosterExternalId: String((pick as { owner_id?: number }).owner_id ?? ''),
       })
     } else if (
       (pick as { previous_owner_id?: number }).previous_owner_id === userRosterId
@@ -166,6 +171,7 @@ export function buildTradeAssetsForRoster(args: {
         pickRound: label,
         pickYear: Number(pick.season),
         pickRoundNumber: pick.round,
+        pickOriginalRosterExternalId: String((pick as { owner_id?: number }).owner_id ?? ''),
       })
     }
   }
@@ -357,6 +363,8 @@ export async function scanPendingSleeperTrades(args: {
           assetsReceived,
           readOnly: true,
           provider: 'sleeper',
+          viewerRosterExternalId: String(userRosterId),
+          counterpartyRosterExternalId: String(tx.roster_ids?.find((id) => Number(id) !== userRosterId) ?? '') || null,
         })
       }
     }

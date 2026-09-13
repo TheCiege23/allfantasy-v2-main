@@ -110,7 +110,7 @@ export async function scanPendingYahooTrades(args: {
     }
   }
 
-  const result = await fetchYahooPendingTrades(userId, platformLeagueId)
+  const result = await fetchYahooPendingTrades(userId, platformLeagueId, teamKey)
   if (!result.ok) return { trades: [], scanned: false, reason: result.reason }
 
   /*
@@ -161,6 +161,8 @@ export async function scanPendingYahooTrades(args: {
       assetsReceived,
       readOnly: true,
       provider: 'yahoo',
+      viewerRosterExternalId: teamKey,
+      counterpartyRosterExternalId: otherKey,
     })
   }
 

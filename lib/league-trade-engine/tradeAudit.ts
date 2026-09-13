@@ -5,6 +5,7 @@
 import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { logAction } from '@/server/services/auditService'
+import { captureNativeTradeLifecycleSnapshot } from '@/lib/decision-os/trade/lifecycleSnapshot'
 
 export async function appendAfTradeStatusHistory(input: {
   tradeId: string
@@ -14,7 +15,7 @@ export async function appendAfTradeStatusHistory(input: {
   reason?: string | null
   metadata?: Record<string, unknown>
 }): Promise<void> {
-  await prisma.afLeagueTradeStatusHistory.create({
+  const history = await prisma.afLeagueTradeStatusHistory.create({
     data: {
       tradeId: input.tradeId,
       fromStatus: input.fromStatus,
@@ -23,6 +24,13 @@ export async function appendAfTradeStatusHistory(input: {
       reason: input.reason ?? null,
       metadata: (input.metadata ?? {}) as Prisma.InputJsonValue,
     },
+  })
+  await captureNativeTradeLifecycleSnapshot({
+    tradeId: input.tradeId,
+    lifecycleStatus: input.toStatus,
+    eventRevision: history.id,
+    actorUserId: input.actorUserId,
+    occurredAt: history.createdAt,
   })
 }
 

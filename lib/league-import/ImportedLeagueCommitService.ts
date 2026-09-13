@@ -9,6 +9,7 @@ import { resolveSeasonPlacement } from '@/lib/league-import/seasonPlacement'
 import { IMPORT_COVERAGE_SETTINGS_KEY } from '@/lib/league-import/importCoverageSummary'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
 import { clearLeagueTombstone, tombstoneKeyFor } from '@/lib/league-delete/leagueTombstones'
+import { persistProviderTransactionFacts, type ProviderTransactionFactInput } from '@/lib/league-import/persistProviderTransactionFacts'
 import type { ImportWarningRecord } from '@/lib/league-import/types'
 import type {
   CanonicalImportBundle,
@@ -980,6 +981,73 @@ export async function persistImportedLeagueFromNormalization(
       await materializeRedraftSeasonForImportedLeague(league.id)
     },
   )
+
+  if ((normalized.transactions?.length ?? 0) > 0) {
+    await runBootstrapStep(
+      'TRANSACTION_FACTS_FAILED',
+      'Provider trade history could not be saved',
+      'warn',
+      incompleteSteps,
+      async () => {
+        const rows: ProviderTransactionFactInput[] = []
+        const validDate = (value: string) => {
+          const parsed = new Date(value)
+          return Number.isFinite(parsed.getTime()) ? parsed : undefined
+        }
+        for (const transaction of normalized.transactions ?? []) {
+          const assets = Object.entries(transaction.adds ?? {})
+          const picks = Array.isArray(transaction.draft_picks) ? transaction.draft_picks : []
+          const base = {
+            provider,
+            upstreamTransactionId: transaction.source_transaction_id,
+            leagueId: league.id,
+            sport: resolvedSport,
+            type: transaction.type,
+            season: seasonYear,
+            occurredAt: validDate(transaction.created_at),
+            lifecycleStage: transaction.status,
+          }
+          assets.forEach(([playerId, rosterId], entryIndex) => rows.push({
+            ...base,
+            entryIndex,
+            playerId,
+            rosterId,
+            payload: { status: transaction.status, direction: 'obtained', providerTransactionId: transaction.source_transaction_id },
+          }))
+          picks.forEach((pick, pickIndex) => {
+            const record = typeof pick === 'object' && pick !== null ? pick as Record<string, unknown> : {}
+            rows.push({
+              ...base,
+              entryIndex: assets.length + pickIndex,
+              rosterId: typeof record.toRosterId === 'string' ? record.toRosterId : null,
+              payload: { ...record, status: transaction.status, assetType: 'draft_pick', providerTransactionId: transaction.source_transaction_id },
+            })
+          })
+          if (assets.length === 0 && picks.length === 0) rows.push({
+            ...base,
+            entryIndex: 0,
+            rosterId: transaction.roster_ids[0] ?? null,
+            payload: { status: transaction.status, rosterIds: transaction.roster_ids, providerTransactionId: transaction.source_transaction_id },
+          })
+          for (const [eventIndex, event] of (transaction.lifecycle_events ?? []).entries()) rows.push({
+            ...base,
+            // Keep lifecycle identity independent of how many assets a later provider response exposes.
+            entryIndex: 10_000 + eventIndex,
+            lifecycleStage: event.stage,
+            rosterId: event.team_id ?? null,
+            occurredAt: validDate(event.occurred_at),
+            payload: {
+              status: event.stage,
+              description: event.description ?? null,
+              providerTransactionId: transaction.source_transaction_id,
+              immutableLifecycleSnapshot: true,
+            },
+          })
+        }
+        await persistProviderTransactionFacts(rows)
+      },
+    )
+  }
 
   // Block F — persist future traded draft picks into `future_draft_picks`. Runs
   // AFTER the bootstrap so anything the bootstrap writes (league_teams etc.)

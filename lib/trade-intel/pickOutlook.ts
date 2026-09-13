@@ -50,6 +50,47 @@ export type PickOutlook = {
   basis: string
 }
 
+export type PickSlotDistribution = {
+  early: number
+  middle: number
+  late: number
+  expectedSlot: number
+  confidence: number
+  basis: string
+}
+
+/**
+ * Converts the point estimate into an auditable probability distribution. The farther the pick is
+ * from the next draft, the more probability returns to the middle third instead of pretending the
+ * current standings are precise.
+ */
+export function projectPickSlotDistribution(args: Parameters<typeof projectPickSlot>[0]): PickSlotDistribution {
+  const outlook = projectPickSlot(args)
+  const teams = Math.max(2, args.teamCount)
+  const slot = outlook.projectedSlot ?? (teams + 1) / 2
+  const third = teams / 3
+  const center = slot <= third ? 'early' : slot > third * 2 ? 'late' : 'middle'
+  const confidence = Math.max(0, Math.min(1, outlook.standingWeight))
+  const spread = 0.3 * confidence
+  const distribution = { early: (1 - confidence) / 3, middle: 1 - spread, late: (1 - confidence) / 3 }
+  if (center === 'early') {
+    distribution.early += spread
+    distribution.middle -= spread
+  } else if (center === 'late') {
+    distribution.late += spread
+    distribution.middle -= spread
+  }
+  const total = distribution.early + distribution.middle + distribution.late
+  return {
+    early: distribution.early / total,
+    middle: distribution.middle / total,
+    late: distribution.late / total,
+    expectedSlot: slot,
+    confidence,
+    basis: outlook.basis,
+  }
+}
+
 export function projectPickSlot(args: {
   /** The pick's draft year. */
   season: number
