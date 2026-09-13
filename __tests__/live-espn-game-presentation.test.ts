@@ -154,3 +154,52 @@ describe('groupStartersByPlayer', () => {
     expect(pointsSummary(g!)).toBeNull()
   })
 })
+
+/* Values from the live MLB scoreboard, 2026-09-13, COL @ DET "Bot 7th". */
+describe('baseball situation', () => {
+  const mlb = {
+    balls: 0,
+    strikes: 0,
+    outs: 2,
+    onFirst: true,
+    onSecond: true,
+    onThird: false,
+    batter: {
+      athlete: {
+        displayName: 'Zach McKinstry',
+        headshot: 'https://a.espncdn.com/i/headshots/mlb/players/full/38420.png',
+        position: 'RF',
+        team: { id: '6' },
+      },
+      summary: '0-1, 2 R, 2 BB, K',
+    },
+    pitcher: { athlete: { displayName: 'Jimmy Herget', team: { id: '27' } }, summary: '1.2 IP, 0 ER, H, K, BB' },
+    lastPlay: { text: 'Jimmy Herget pitches to Zach McKinstry', type: { text: 'Start Batter/Pitcher' } },
+  }
+
+  it('keeps runners, the count, batter and pitcher', () => {
+    const s = mapGameSituation(mlb, 'DET', 'COL')
+    expect(s?.baseball).toMatchObject({
+      onFirst: true,
+      onSecond: true,
+      onThird: false,
+      balls: 0,
+      strikes: 0,
+      outs: 2,
+      batter: { name: 'Zach McKinstry', position: 'RF', summary: '0-1, 2 R, 2 BB, K', teamId: '6' },
+      pitcher: { name: 'Jimmy Herget', summary: '1.2 IP, 0 ER, H, K, BB' },
+    })
+    // Nothing football-shaped is invented for a baseball game.
+    expect(s?.ballOnFromAway).toBeNull()
+  })
+
+  it('a count of 0-0 with nobody out is a real count, not a missing one', () => {
+    const s = mapGameSituation({ balls: 0, strikes: 0, outs: 0, onFirst: false, onSecond: false, onThird: false }, 'DET', 'COL')
+    expect(s?.baseball).toMatchObject({ balls: 0, strikes: 0, outs: 0, onFirst: false })
+  })
+
+  it('a football situation carries no baseball block', () => {
+    const s = mapGameSituation({ downDistanceText: '1st & 5 at CIN 12', possessionText: 'CIN 12' }, 'CIN', 'TB')
+    expect(s?.baseball).toBeNull()
+  })
+})

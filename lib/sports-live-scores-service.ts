@@ -232,6 +232,11 @@ export interface LiveScoreRow {
   venueLocation?: string | null
   homeLinescores?: number[]
   awayLinescores?: number[]
+  /** Baseball R-H-E: ESPN sends `hits` and `errors` per competitor. */
+  homeHits?: number | null
+  homeErrors?: number | null
+  awayHits?: number | null
+  awayErrors?: number | null
 }
 
 /** One named performer with the feed's own stat line, verbatim. */
@@ -356,6 +361,8 @@ interface ESPNCompetitor {
   homeAway: 'home' | 'away'
   records?: Array<{ summary: string }>
   linescores?: Array<{ value?: number; displayValue?: string }>
+  hits?: number
+  errors?: number
 }
 
 /**
@@ -520,6 +527,10 @@ export async function fetchEspnScoreboard(
         venueLocation: formatVenueLocation(comp.venue?.address),
         homeLinescores: linescoreValues(home.linescores),
         awayLinescores: linescoreValues(away.linescores),
+        homeHits: typeof home.hits === 'number' && Number.isFinite(home.hits) ? home.hits : null,
+        homeErrors: typeof home.errors === 'number' && Number.isFinite(home.errors) ? home.errors : null,
+        awayHits: typeof away.hits === 'number' && Number.isFinite(away.hits) ? away.hits : null,
+        awayErrors: typeof away.errors === 'number' && Number.isFinite(away.errors) ? away.errors : null,
       }
       }))
     }
