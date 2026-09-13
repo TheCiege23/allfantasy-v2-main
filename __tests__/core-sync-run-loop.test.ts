@@ -204,9 +204,29 @@ describe('selectResyncCandidates', () => {
     expect(selectResyncCandidates([{ ...sleeper, platformLeagueId: null }])).toEqual([])
   })
 
-  it('excludes an unavailable provider', () => {
-    /* Yahoo is registered but cannot complete an import, so it would fail every press. */
-    expect(selectResyncCandidates([{ ...sleeper, platform: 'yahoo' }])).toEqual([])
+  /*
+   * ⚠ THIS USED YAHOO AS ITS UNAVAILABLE PROVIDER, AND YAHOO FLIPPED ON 2026-09-13. Every provider in
+   * provider-ui-config is available now, so the real config has nothing left to exclude. The case
+   * mocks one provider off instead, and first proves that the same row IS a candidate under the real
+   * config. Without that first half, a mock that never took effect would pass for the wrong reason.
+   */
+  it('excludes an unavailable provider', async () => {
+    const mflRow = { ...sleeper, platform: 'mfl' }
+    expect(selectResyncCandidates([mflRow]).map((c) => c.key)).toEqual(['mfl:123'])
+
+    vi.resetModules()
+    vi.doMock('@/lib/league-import/provider-ui-config', async (importOriginal) => {
+      const actual = await importOriginal<typeof import('@/lib/league-import/provider-ui-config')>()
+      return { ...actual, isImportProviderAvailable: (p: string) => p !== 'mfl' }
+    })
+    try {
+      const { selectResyncCandidates: scoped } = await import('@/lib/core-app/resyncableLeagues')
+      /* Registered but switched off: it cannot complete an import, so it would fail every press. */
+      expect(scoped([mflRow])).toEqual([])
+    } finally {
+      vi.doUnmock('@/lib/league-import/provider-ui-config')
+      vi.resetModules()
+    }
   })
 
   it('excludes a native league, which has no provider to re-read from', () => {
