@@ -230,6 +230,17 @@ jobs:
         DIRECT_URL: postgresql://postgres:postgres@127.0.0.1:5432/allfantasy_ci
         NEXTAUTH_SECRET: ci-nextauth-secret
         NEXTAUTH_URL: http://localhost:3000
+        # ⚠ SAME 8192MB HEAP AS core AND mobile-auth, AND FOR THE SAME REASON. Without it
+        # the dev server runs on scripts/playwright-dev-server.cjs's 4096MB default, global
+        # setup's warm routes push the heap past next dev's 0.8 x heap_size_limit line, and
+        # the next request trips "Server is approaching the used memory threshold,
+        # restarting..." (exit 77, respawn). Navigations issued into that window hang or
+        # measure a half-rendered page. Measured 2026-09-13: 19 of 20 recent logs across
+        # retention/onboarding/referral/draft-room showed a restart, 12 of them a flaky test;
+        # mobile-smoke was 7/7 clean with 0 restarts and 13/17 flaky or failed with 1-2.
+        # #776 fixed mobile-auth this way (0 restarts after). Judge by the restart line's
+        # count in each lane's log, not by a green run.
+        NODE_OPTIONS: --max-old-space-size=8192
       run: npm run test:e2e:retention
     - name: Run Playwright tests (onboarding activation)
       if: matrix.lane == 'onboarding-activation'
@@ -238,6 +249,8 @@ jobs:
         DIRECT_URL: postgresql://postgres:postgres@127.0.0.1:5432/allfantasy_ci
         NEXTAUTH_SECRET: ci-nextauth-secret
         NEXTAUTH_URL: http://localhost:3000
+        # 8192MB heap: see the note on the retention-engagement step above.
+        NODE_OPTIONS: --max-old-space-size=8192
       run: npm run test:e2e:onboarding-activation
     - name: Run Playwright tests (referral growth db)
       if: matrix.lane == 'referral-growth-db'
@@ -246,6 +259,8 @@ jobs:
         DIRECT_URL: postgresql://postgres:postgres@127.0.0.1:5432/allfantasy_ci
         NEXTAUTH_SECRET: ci-nextauth-secret
         NEXTAUTH_URL: http://localhost:3000
+        # 8192MB heap: see the note on the retention-engagement step above.
+        NODE_OPTIONS: --max-old-space-size=8192
       run: npx playwright test e2e/referral-growth-suite.spec.ts --project=chromium
     # The phone gate. Two device projects over the public routes only — no login,
     # no fixture league, nothing that makes the core shards slow and flaky.
@@ -261,6 +276,8 @@ jobs:
         DIRECT_URL: postgresql://postgres:postgres@127.0.0.1:5432/allfantasy_ci
         NEXTAUTH_SECRET: ci-nextauth-secret
         NEXTAUTH_URL: http://localhost:3000
+        # 8192MB heap: see the note on the retention-engagement step above.
+        NODE_OPTIONS: --max-old-space-size=8192
       run: npm run test:e2e:mobile
     # ⚠ THE AUTHENTICATED PHONE LANE. Separate from mobile-smoke on purpose: it
     # seeds leagues and users and signs in, which is exactly what phone-smoke.spec.ts
@@ -361,6 +378,8 @@ jobs:
         DIRECT_URL: postgresql://postgres:postgres@127.0.0.1:5432/allfantasy_ci
         NEXTAUTH_SECRET: ci-nextauth-secret
         NEXTAUTH_URL: http://localhost:3000
+        # 8192MB heap: see the note on the retention-engagement step above.
+        NODE_OPTIONS: --max-old-space-size=8192
       run: npm run test:e2e:draft-room:chromium
     - uses: actions/upload-artifact@v4
       if: ${{ !cancelled() }}
