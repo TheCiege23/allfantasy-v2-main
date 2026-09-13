@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, within } from "@testing-library/react"
-import { describe, expect, it } from "vitest"
+import { describe, expect, it, vi } from "vitest"
 import { ActivityStreamView } from "@/components/commissioner-os/activity/ActivityStreamView"
 import { stubActivityClient } from "@/lib/commissioner-ui/activity/decision-os-client/stub"
 import { demoActivityClient } from "@/lib/commissioner-ui/activity/decision-os-client/demo"
@@ -53,6 +53,44 @@ describe("commissioner-os activity — client parity", () => {
     const response = await demoActivityClient.getEvents()
     const events = response.data!
     const timestamps = events.map((e) => new Date(e.timestamp).getTime())
+    const sorted = [...timestamps].sort((a, b) => b - a)
+    expect(timestamps).toEqual(sorted)
+  })
+
+  /*
+   * The test above is only as reliable as the wall clock: it failed CI once
+   * (2026-09-13, PR #817) with two events meant to be the same number of days
+   * apart landing 1 ms out of order — `…008` then `…009`. This makes that race
+   * deterministic: every argument-less `new Date()` and every `Date.now()`
+   * advances the clock by 1 ms, so a timestamp built from its own clock read
+   * cannot hide behind a fast machine.
+   */
+  it("demo events stay newest first even when the clock ticks between timestamps", async () => {
+    const RealDate = Date
+    const start = RealDate.UTC(2026, 8, 13, 12, 0, 0)
+    let tick = start
+    class TickingDate extends RealDate {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      constructor(...args: any[]) {
+        if (args.length === 0) super(tick++)
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        else super(...(args as [any]))
+      }
+      static now() {
+        return tick++
+      }
+    }
+    vi.stubGlobal("Date", TickingDate)
+    let timestamps: number[]
+    try {
+      const response = await demoActivityClient.getEvents()
+      timestamps = response.data!.map((e) => RealDate.parse(e.timestamp))
+    } finally {
+      vi.unstubAllGlobals()
+    }
+    // The stub must actually have been read, or this test proves nothing.
+    expect(tick - start).toBeGreaterThanOrEqual(1)
+    expect(timestamps.length).toBeGreaterThan(2)
     const sorted = [...timestamps].sort((a, b) => b - a)
     expect(timestamps).toEqual(sorted)
   })
