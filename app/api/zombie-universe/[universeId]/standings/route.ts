@@ -1,76 +1,51 @@
+/**
+ * GET: Zombie universe standings (all leagues, status, points, winnings, movement). PROMPT 353.
+ *
+ * Restored. From 2026-04-09 (7840b87f7) until this change the file held a copy of
+ * /api/zombie/whisperer, so the universe standings page received Whisperer-route responses.
+ *
+ * Readable by the universe owner and by members of any league in the universe. Each league's
+ * Whisperer is disguised for a viewer who may not know it.
+ */
+
 import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
-import { prisma } from '@/lib/prisma'
-import { requireCommissionerOnly } from '@/lib/league/permissions'
-import { applyAmbush, selectWhisperer } from '@/lib/zombie/whispererEngine'
+import { getUniverseStandings } from '@/lib/zombie/ZombieUniverseStandingsService'
+import { getMovementProjections } from '@/lib/zombie/ZombieMovementEngine'
+import { resolveZombieUniverseAccess } from '@/lib/zombie/zombieUniverseAccess'
+import { redactUniverseRowsForViewer } from '@/lib/zombie/zombieUniverseWhisperer'
 
 export const dynamic = 'force-dynamic'
 
-export async function POST(req: Request) {
-  const session = (await getServerSession(authOptions as never)) as { user?: { id?: string } } | null
+export async function GET(
+  req: Request,
+  ctx: { params: Promise<{ universeId: string }> }
+) {
+  const session = (await getServerSession(authOptions as any)) as { user?: { id?: string } } | null
   const userId = session?.user?.id
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const body = (await req.json().catch(() => ({}))) as Record<string, unknown>
-  const leagueId = typeof body.leagueId === 'string' ? body.leagueId : null
-  const action = typeof body.action === 'string' ? body.action : ''
-  if (!leagueId) return NextResponse.json({ error: 'leagueId required' }, { status: 400 })
+  const { universeId } = await ctx.params
+  if (!universeId) return NextResponse.json({ error: 'Missing universeId' }, { status: 400 })
 
-  const z = await prisma.zombieLeague.findUnique({ where: { leagueId } })
-  if (!z) return NextResponse.json({ error: 'Zombie league not found' }, { status: 404 })
+  const access = await resolveZombieUniverseAccess(universeId, userId)
+  if (!access.exists) return NextResponse.json({ error: 'Universe not found' }, { status: 404 })
+  if (!access.isMember) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
-  if (action === 'select') {
-    await requireCommissionerOnly(leagueId, userId)
-    const mode = typeof body.mode === 'string' ? body.mode : 'random'
-    const manualUserId = typeof body.manualUserId === 'string' ? body.manualUserId : undefined
-    const out = await selectWhisperer(z.id, mode, manualUserId)
-    return NextResponse.json(out)
-  }
+  const seasonParam = new URL(req.url).searchParams.get('season')
+  const parsedSeason = seasonParam ? Number.parseInt(seasonParam, 10) : Number.NaN
+  const season = Number.isFinite(parsedSeason) ? parsedSeason : undefined
 
-  if (action === 'ambush') {
-    const targetUserId = typeof body.targetUserId === 'string' ? body.targetUserId : null
-    const ambushType = typeof body.ambushType === 'string' ? body.ambushType : 'steal_winnings'
-    const week = typeof body.week === 'number' ? body.week : parseInt(String(body.week), 10)
-    if (!targetUserId || !Number.isFinite(week))
-      return NextResponse.json({ error: 'targetUserId and week required' }, { status: 400 })
-    const result = await applyAmbush(z.id, userId, targetUserId, week, ambushType)
-    return NextResponse.json(result)
-  }
+  const [standings, movement] = await Promise.all([
+    getUniverseStandings(universeId, season),
+    getMovementProjections(universeId, season),
+  ])
 
-  return NextResponse.json({ error: 'Unknown action' }, { status: 400 })
-}
-
-export async function GET(req: Request) {
-  const session = (await getServerSession(authOptions as never)) as { user?: { id?: string } } | null
-  const userId = session?.user?.id
-  if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-
-  const { searchParams } = new URL(req.url)
-  const leagueId = searchParams?.get('leagueId')
-  if (!leagueId) return NextResponse.json({ error: 'leagueId required' }, { status: 400 })
-
-  const z = await prisma.zombieLeague.findUnique({
-    where: { leagueId },
-    include: { whispererRecord: true, league: { select: { userId: true } } },
-  })
-  if (!z?.whispererRecord) return NextResponse.json({ whisperer: null })
-
-  const isComm = z.league.userId === userId
-  const rec = z.whispererRecord
-  if (isComm) return NextResponse.json({ whisperer: rec })
-
-  if (rec.isPubliclyRevealed) {
-    return NextResponse.json({
-      whisperer: {
-        displayName: rec.displayName,
-        ambushesRemaining: rec.ambushesRemaining,
-        wasDefeated: rec.wasDefeated,
-      },
-    })
-  }
   return NextResponse.json({
-    whisperer: { message: 'Whisperer identity hidden this season.' },
+    universeId,
+    season: season ?? new Date().getFullYear(),
+    standings: await redactUniverseRowsForViewer(standings, { userId, isOwner: access.isOwner }),
+    movementProjections: movement,
   })
 }
-
