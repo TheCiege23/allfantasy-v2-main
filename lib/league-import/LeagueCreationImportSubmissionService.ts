@@ -159,7 +159,12 @@ function importRequestErrorMessage(e: unknown): string {
 export async function fetchImportPreview(
   provider: ImportProvider,
   sourceInput: string,
-  attestation?: CommissionerAttestation
+  attestation?: CommissionerAttestation,
+  /**
+   * `allowPreviewOnly`: accept a 200 carrying `importable: false`. Pass it only from a screen that
+   * renders that state — a caller treating every 200 as ready-to-import must leave it off.
+   */
+  options?: { allowPreviewOnly?: boolean }
 ): Promise<FetchPreviewResult> {
   if (!isImportProviderAvailable(provider)) {
     return { ok: false, error: `Import from ${provider} is not yet available.` };
@@ -177,6 +182,7 @@ export async function fetchImportPreview(
         provider,
         sourceId: trimmed,
         ...(attestation?.accepted ? { attestation: toWireAttestation(provider, trimmed, attestation) } : {}),
+        ...(options?.allowPreviewOnly ? { allowPreviewOnly: true } : {}),
       }),
     });
     const data = await res.json();

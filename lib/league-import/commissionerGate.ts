@@ -73,6 +73,18 @@ export interface CommissionerGateResult {
    * gone.
    */
   status?: number | null
+  /**
+   * Set ONLY beside `ok: false`, and only by `checkEspn`, when the league was read successfully but
+   * the caller's membership could not be proven — no SWID cookie, so no `viewerTeamId`. That is the
+   * shape of a PUBLIC ESPN league previewed by someone who has not connected ESPN.
+   *
+   * 🛑 IT IS NOT AUTHORIZATION, AND NOTHING THAT WRITES MAY READ IT. `ok` stays `false`, so every
+   * commit path keeps refusing exactly as before. One caller reads it: the unified preview route,
+   * and only when the client opts in with `allowPreviewOnly`, to show what the league contains with
+   * Import disabled. Anyone holding a public league id can SEE that league — ESPN shows them the
+   * same thing — and still cannot import it. (Owner decision "A1", 2026-09-12.)
+   */
+  leagueReadable?: boolean
 }
 
 export const PROVIDER_LABELS: Partial<Record<ImportProvider, string>> = {
@@ -226,6 +238,8 @@ async function checkEspn(appUserId: string, sourceLeagueId: string): Promise<Com
     if (!viewerTeamId) {
       return {
         ok: false,
+        // Read fine, membership unproven. See `leagueReadable` on CommissionerGateResult.
+        leagueReadable: true,
         /*
          * 🛑 THE ONE MESSAGE MOST LIKELY TO REACH SOMEONE ON A PHONE, AND IT USED TO NAME NO
          * DEVICE. This branch is where a PUBLIC ESPN league lands when no cookies are stored:
