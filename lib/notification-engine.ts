@@ -26,6 +26,7 @@ export type NotificationEventType =
   | 'trade_accepted'
   | 'trade_rejected'
   | 'trade_countered'
+  | 'trade_reversed'
   | 'waiver_processed'
   | 'waiver_claim'
   | 'storyline_generated'
@@ -76,6 +77,11 @@ const EVENT_CATEGORY_MAP: Record<NotificationEventType, NotificationCategoryId> 
    * is the failure this notification exists to fix.
    */
   trade_countered: 'trade_accept_reject',
+  /*
+   * A commissioner undid your trade: what became of it, under the same toggle and for the
+   * same reason trade_countered is not a new category.
+   */
+  trade_reversed: 'trade_accept_reject',
   waiver_processed: 'waiver_processing',
   waiver_claim: 'waiver_processing',
   storyline_generated: 'league_announcements',
@@ -103,6 +109,8 @@ const DEFAULT_SEVERITY: Record<NotificationEventType, NotificationSeverity> = {
    * outcome that lapses into a loss if it goes unseen.
    */
   trade_countered: 'high',
+  /* HIGH: the recipient's roster changed without them doing anything. */
+  trade_reversed: 'high',
   waiver_processed: 'medium',
   waiver_claim: 'low',
   storyline_generated: 'low',
@@ -327,7 +335,7 @@ export function scoreSwing(opts: {
 export function tradeEvent(opts: {
   userIds: string[]
   leagueId: string
-  type: 'trade_proposed' | 'trade_accepted' | 'trade_rejected' | 'trade_countered'
+  type: 'trade_proposed' | 'trade_accepted' | 'trade_rejected' | 'trade_countered' | 'trade_reversed'
   tradeId: string
   title: string
   body?: string
