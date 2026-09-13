@@ -26,31 +26,28 @@ export const IMPORT_PROVIDER_UI_OPTIONS: {
   { provider: 'sleeper', label: 'Sleeper', available: true, supportsDiscovery: true, supportedSports: ['NFL'] },
   { provider: 'espn', label: 'ESPN', available: true, supportedSports: ['NFL'] },
   /*
-   * yahoo: AVAILABLE, flipped 2026-09-13 on the owner's instruction, once `YAHOO_REDIRECT_URI` was
-   * set on the WEB service to the registered www callback
-   * (https://www.allfantasy.ai/api/league/yahoo/callback). Discovery lists leagues from the user's
-   * CONNECTED Yahoo account (OAuth use_login=1) — no account identifier input.
+   * yahoo: NOT AVAILABLE — switched back off 2026-09-13, the same day it was switched on (#795).
    *
-   * ⚠ THE ROW-COUNT GATE THIS COMMENT USED TO CARRY WAS NOT MET WHEN IT FLIPPED. Measured in
-   * production that day, read-only:
+   * 🛑 YAHOO GATES THE FANTASY SPORTS API BEHIND AN APPROVAL, AND ALLFANTASY IS NOT APPROVED YET.
+   * Everything on our side now works: `PUBLIC_SITE_URL` points at www, connect reaches Yahoo, a real
+   * consent screen names "Yahoo Fantasy Sports — Read", and the token is saved to `league_auths`.
+   * Measured in production that day, Yahoo then answered every fantasy call — the account-wide league
+   * list AND a single named league — with 403 "This application is not authorized to perform this
+   * action", after a fresh consent as well as a cached one. The Yahoo Sports Developer Portal describes
+   * an application → review → access process, and an unapproved app gets exactly that 403 on every
+   * call however it is configured; re-authorizing, re-saving or recreating the app does not change it.
    *
-   *     import_runs provider='yahoo'  0     leagues platform='yahoo'  0
-   *     league_auths yahoo            1 row, oauthToken NULL, last updated 2026-08-28
+   * The owner submitted the access request on 2026-09-13 (https://sports.yahoo.com/developer/access/,
+   * read-only, existing Client ID). Left `true`, every manager who picked Yahoo would connect, approve,
+   * and then hit a refusal nothing on their side can fix.
    *
-   * So the credential-store repair — `lib/yahoo/yahooCredentialStore.ts`, both callbacks writing
-   * `league_auths`, `/api/yahoo/leagues` reading it — had still never carried a real league. The
-   * owner chose to open the door and let the first real import be the verification. The check is
-   * unchanged and is one query: `select count(*) from import_runs where provider='yahoo'`. Run it
-   * after the first people connect. If it stays 0 while they try, flip this back rather than
-   * leaving a door that does not open.
+   * FLIP BACK ONLY WHEN BOTH ARE TRUE: Yahoo has approved the app, and a real account has connected
+   * and imported — `select count(*) from import_runs where provider='yahoo'` non-zero. The landing
+   * strip and chips follow this flag on their own.
    *
-   * History: flipped to false 2026-08-29, when two rival credential stores (`YahooConnection` vs
-   * `league_auths`) sent "Connect Yahoo" back to a screen still asking to connect Yahoo.
-   *
-   * The Yahoo app itself must NOT be deleted or recreated; its fantasy-read permission is captured
-   * at consent time and cannot be re-granted to a new app.
+   * The Yahoo app must NOT be deleted or recreated; new apps are not offered Fantasy Sports at all.
    */
-  { provider: 'yahoo', label: 'Yahoo', available: true, supportsDiscovery: true, supportedSports: ['NFL'] },
+  { provider: 'yahoo', label: 'Yahoo', available: false, supportsDiscovery: true, supportedSports: ['NFL'] },
   /*
    * fantrax: LIVE. Fantrax turned out to have a real read API (`fxea`), so the
    * CSV upload is no longer the only way in — a league id is enough.

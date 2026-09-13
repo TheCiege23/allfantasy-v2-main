@@ -46,15 +46,35 @@ describe('NocturneImport — canonical landing funnel (no legacy guest import)',
     )
   })
 
-  it('landing Yahoo asks for nothing: no input box, and submit goes straight to the canonical Yahoo import', () => {
-    render(<NocturneImport variant="full" />)
-    fireEvent.click(screen.getByTestId('nocturne-plat-chip-yahoo'))
-    expect(screen.queryByTestId('nocturne-import-full-input')).toBeNull()
-    const submit = screen.getByTestId('nocturne-import-full-submit')
-    expect(submit).not.toBeDisabled()
-    fireEvent.click(submit)
-    const dest = pushMock.mock.calls[0]![0] as string
-    expect(nextParam(dest)).toBe('/import?provider=yahoo')
+  it('landing Yahoo asks for nothing: no input box, and submit goes straight to the canonical Yahoo import', async () => {
+    /*
+     * Yahoo is switched OFF in the real config until Yahoo approves AllFantasy's API access, so its chip
+     * is "coming soon" and submit is disabled. This case is about the account-shaped chip, not about
+     * availability, so it switches Yahoo on for itself — otherwise the behaviour it guards would go
+     * untested for exactly as long as Yahoo is off, and come back broken the day it is switched on.
+     */
+    vi.resetModules()
+    vi.doMock('@/lib/league-import/provider-ui-config', async (importOriginal) => {
+      const actual = await importOriginal<typeof import('@/lib/league-import/provider-ui-config')>()
+      return {
+        ...actual,
+        isImportProviderAvailable: (p: string) => p === 'yahoo' || actual.isImportProviderAvailable(p as never),
+      }
+    })
+    try {
+      const { NocturneImport: Scoped } = await import('@/components/landing/nocturne/NocturneImport')
+      render(<Scoped variant="full" />)
+      fireEvent.click(screen.getByTestId('nocturne-plat-chip-yahoo'))
+      expect(screen.queryByTestId('nocturne-import-full-input')).toBeNull()
+      const submit = screen.getByTestId('nocturne-import-full-submit')
+      expect(submit).not.toBeDisabled()
+      fireEvent.click(submit)
+      const dest = pushMock.mock.calls[0]![0] as string
+      expect(nextParam(dest)).toBe('/import?provider=yahoo')
+    } finally {
+      vi.doUnmock('@/lib/league-import/provider-ui-config')
+      vi.resetModules()
+    }
   })
 
   it('landing Sleeper submit → signup intent → canonical /import (never guest-import, never guest board)', () => {
@@ -98,13 +118,13 @@ describe('NocturneImport — canonical landing funnel (no legacy guest import)',
    * a contract test is to fail when the table changes so a human confirms the
    * change was intended.
    */
-  it('availability comes from the authoritative provider-ui-config (every provider is on)', () => {
+  it('availability comes from the authoritative provider-ui-config (Yahoo is off until Yahoo approves access)', () => {
     expect(isImportProviderAvailable('sleeper')).toBe(true)
     expect(isImportProviderAvailable('espn')).toBe(true)
     expect(isImportProviderAvailable('fantrax')).toBe(true)
     expect(isImportProviderAvailable('mfl')).toBe(true)
     expect(isImportProviderAvailable('fleaflicker')).toBe(true)
-    expect(isImportProviderAvailable('yahoo')).toBe(true)
+    expect(isImportProviderAvailable('yahoo')).toBe(false)
   })
 
   it('an unavailable provider is visibly marked "Coming soon" and cannot create an import intent', async () => {

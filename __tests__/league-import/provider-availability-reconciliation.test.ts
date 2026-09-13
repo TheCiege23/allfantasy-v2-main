@@ -17,17 +17,13 @@ const EXPECTED_AVAILABILITY: Record<string, boolean> = {
   sleeper: true,
   espn: true,
   /*
-   * ⚠ FLIPPED BACK TO TRUE 2026-09-13, on the owner's instruction, BEFORE the row this entry used
-   * to demand existed. `YAHOO_REDIRECT_URI` was set on the web service to the registered www
-   * callback that day; production still read `import_runs provider='yahoo'` = 0 and no Yahoo
-   * `league_auths` row with a token. The first real import is the verification — see the comment
-   * on the yahoo entry in provider-ui-config.ts for the query to re-run and when to flip it back.
-   *
-   * History: false since 2026-08-29, when two rival credential stores made "Connect Yahoo" a loop;
-   * reconciled in `lib/yahoo/yahooCredentialStore.ts` since. Do NOT delete or recreate the Yahoo
-   * app — its fantasy-read permission is captured at consent time.
+   * ⚠ OFF AGAIN 2026-09-13, the same day #795 switched it on. Yahoo gates the Fantasy Sports API behind
+   * an approval AllFantasy does not have yet: with connect fully working and a fresh consent, every
+   * fantasy call returned 403 "This application is not authorized to perform this action". The access
+   * request went in that day. Flip to true only once Yahoo approves AND a real Yahoo import exists — see
+   * the yahoo entry in provider-ui-config.ts. Do NOT delete or recreate the Yahoo app.
    */
-  yahoo: true,
+  yahoo: false,
   /*
    * Flipped 2026-08-27 with the missing piece built, not to unblock anything.
    * Fantrax has a live read API (`fxea`), so the import runs from a league id:
