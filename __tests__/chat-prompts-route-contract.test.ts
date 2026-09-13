@@ -275,4 +275,85 @@ describe('chat prompt contracts', () => {
     expect(res.status).toBe(400)
     expect(createLeagueChatMessageMock).not.toHaveBeenCalled()
   })
+
+  // The command service's own help text tells players to type "@Chimmy vote [manager]". Every
+  // @chimmy message used to take the private answer path, so that ballot was never recorded.
+  it('records "@Chimmy vote X" through the Survivor command service, privately', async () => {
+    const survivor = await import('@/lib/survivor/SurvivorOfficialCommandService')
+    vi.mocked(survivor.processSurvivorOfficialCommand).mockResolvedValueOnce({
+      handled: true,
+      ok: true,
+      status: 200,
+      intent: 'vote',
+      message: 'Vote recorded for Team Alpha.',
+    })
+
+    const res = await postToLeagueRoom('@Chimmy vote Team Alpha')
+    expect(res.status).toBe(200)
+    expect(survivor.processSurvivorOfficialCommand).toHaveBeenCalledWith(
+      expect.objectContaining({ leagueId: 'l1', userId: 'u1', command: '@Chimmy vote Team Alpha' })
+    )
+    expect(tryDeterministicAnswerMock).not.toHaveBeenCalled()
+    const json = await res.json()
+    expect(json?.commandResult).toMatchObject({ ok: true, intent: 'vote', message: 'Vote recorded for Team Alpha.' })
+    expect(createLeagueChatMessageMock).toHaveBeenCalledTimes(1)
+    expect(createLeagueChatMessageMock).toHaveBeenCalledWith(
+      'l1',
+      'u1',
+      '@Chimmy vote Team Alpha',
+      expect.objectContaining({ isPrivate: true, visibleToUserId: 'u1', messageSubtype: 'survivor_private_ballot' })
+    )
+  })
+
+  it('returns the command error for a rejected "@Chimmy vote X" and posts nothing', async () => {
+    const survivor = await import('@/lib/survivor/SurvivorOfficialCommandService')
+    vi.mocked(survivor.processSurvivorOfficialCommand).mockResolvedValueOnce({
+      handled: true,
+      ok: false,
+      status: 400,
+      error: 'No tribal council open for voting',
+    })
+
+    const res = await postToLeagueRoom('@chimmy vote Team Alpha')
+    expect(res.status).toBe(400)
+    await expect(res.json()).resolves.toMatchObject({ error: 'No tribal council open for voting' })
+    expect(tryDeterministicAnswerMock).not.toHaveBeenCalled()
+    expect(createLeagueChatMessageMock).not.toHaveBeenCalled()
+  })
+
+  it('keeps an @chimmy question that only mentions voting on the private answer path', async () => {
+    const survivor = await import('@/lib/survivor/SurvivorOfficialCommandService')
+
+    const res = await postToLeagueRoom('@chimmy how do I vote this week')
+    expect(res.status).toBe(200)
+    expect(survivor.processSurvivorOfficialCommand).not.toHaveBeenCalled()
+    expect(tryDeterministicAnswerMock).toHaveBeenCalled()
+    expect((await res.json())?.commandResult?.intent).toBe('chimmy_prompt')
+  })
+
+  it('keeps "@chimmy immunity rules" private: the command service has no immunity handler', async () => {
+    // The parser reads this as immunity_choice, which processSurvivorOfficialCommand does not implement
+    // ("Command not implemented for this context"). Routing it would turn a question into a 400.
+    const survivor = await import('@/lib/survivor/SurvivorOfficialCommandService')
+
+    const res = await postToLeagueRoom('@chimmy immunity rules')
+    expect(res.status).toBe(200)
+    expect(survivor.processSurvivorOfficialCommand).not.toHaveBeenCalled()
+    expect((await res.json())?.commandResult?.intent).toBe('chimmy_prompt')
+  })
+
+  it('falls back to the private answer when "@Chimmy vote X" is not a Survivor command in this league', async () => {
+    const survivor = await import('@/lib/survivor/SurvivorOfficialCommandService')
+    // Default mock: { handled: false }, which is what a non-Survivor league returns.
+
+    const res = await postToLeagueRoom('@Chimmy vote Team Alpha')
+    expect(res.status).toBe(200)
+    expect(survivor.processSurvivorOfficialCommand).toHaveBeenCalledTimes(1)
+    expect((await res.json())?.commandResult?.intent).toBe('chimmy_prompt')
+    for (const call of createLeagueChatMessageMock.mock.calls) {
+      const options = call[3] as { isPrivate?: boolean; visibleToUserId?: string }
+      expect(options.isPrivate).toBe(true)
+      expect(options.visibleToUserId).toBe('u1')
+    }
+  })
 })
