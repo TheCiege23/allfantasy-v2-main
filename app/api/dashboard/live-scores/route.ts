@@ -4,6 +4,7 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { getPlayFeed } from '@/lib/live/playFeedPresentation'
 import { getLivePageData } from '@/lib/live/liveScoresPage'
+import { getEspnGameSummary } from '@/lib/sports-live-scores-service'
 import type { DashboardLiveScore } from '@/lib/types/liveScoring'
 
 const SLEEPER_BASE = 'https://api.sleeper.app/v1' // db-first-exception: live scoring reads the platform feed
@@ -151,6 +152,18 @@ export async function GET(request: NextRequest) {
    * and still requires a session below.
    */
   const view = request.nextUrl.searchParams.get('view')
+  /*
+   * The clicked-game view's poll rides this route too (same ceiling). Public like
+   * `view=live`: it is one game's scoreboard data and names no user. The service
+   * validates sport and game id, and serves the DB cache before ESPN.
+   */
+  if (view === 'game') {
+    const data = await getEspnGameSummary({
+      sport: request.nextUrl.searchParams.get('sport') ?? '',
+      gameId: request.nextUrl.searchParams.get('game') ?? '',
+    })
+    return NextResponse.json(data)
+  }
   if (view === 'live') {
     const data = await getLivePageData({
       userId: session?.user?.id ?? null,

@@ -1,7 +1,9 @@
 'use client'
 
+import Link from 'next/link'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import MiniPlayerImg from '@/components/MiniPlayerImg'
+import { gameDetailHref } from '@/lib/live/gameDetailLink'
 import type { LiveGameCard, LivePageData } from '@/lib/live/liveScoresPage'
 import { matchesLiveGameQuery } from '@/lib/live/liveGameSearch'
 import { groupStartersByPlayer, pointsSummary, type StarterGroup } from '@/lib/live/liveTieInGroups'
@@ -312,6 +314,7 @@ export function LiveScores({ data: initial, selectedLeagueId = null }: LiveScore
                 scope={scope}
                 selectedLeagueId={selectedLeagueId}
                 lastPlay={latestPlayByGame.get(game.gameId) ?? null}
+                detailHref={gameDetailHref(game, '/core/live')}
               />
             ))
           )}
@@ -507,10 +510,13 @@ export function GameCard({
   scope,
   selectedLeagueId,
   lastPlay,
+  detailHref = null,
 }: {
   game: LiveGameCard
   /** "My games" adds your starters under the game; "All games" is the game alone. */
   scope: 'my' | 'all'
+  /** Link to the clicked-game view; null when this game has none (see `gameDetailHref`). */
+  detailHref?: string | null
   selectedLeagueId: string | null
   /*
    * The newest play from THIS game, or null. The handoff puts the last play
@@ -555,6 +561,11 @@ export function GameCard({
           </span>
         )}
         {game.broadcast ? <span className="af-live-broadcast af-num">{game.broadcast}</span> : null}
+        {detailHref ? (
+          <Link className="af-live-detail-link" href={detailHref}>
+            {game.isLive ? 'Gamecast →' : 'Game details →'}
+          </Link>
+        ) : null}
       </div>
 
       <div className="af-live-teams">

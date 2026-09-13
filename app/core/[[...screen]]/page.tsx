@@ -117,6 +117,7 @@ import SeasonOutlook from '@/components/core-app/screens/SeasonOutlook'
 import { getSeasonOutlook } from '@/lib/core-app/seasonOutlook'
 import SeasonOutlookLeague from '@/components/core-app/screens/SeasonOutlookLeague'
 import LiveScores from '@/components/core-app/screens/LiveScores'
+import { LiveGameView } from '@/components/core-app/screens/LiveGameView'
 /*
  * Model Admin's two panels, reused verbatim from the page this replaced. They
  * are client components that fetch their own data, so moving them onto the core
@@ -126,6 +127,7 @@ import { V3WeightsPanel } from '@/components/admin/V3WeightsPanel'
 import { UsageAnalyticsPanel } from '@/components/admin/UsageAnalyticsPanel'
 import { getAdminAccessState } from '@/lib/adminAuth'
 import { getLivePageData } from '@/lib/live/liveScoresPage'
+import { getEspnGameSummary } from '@/lib/sports-live-scores-service'
 import CommissionerHub from '@/components/core-app/screens/CommissionerHub'
 import { getCommissionerHub } from '@/lib/core-app/commissionerHub'
 import Standings from '@/components/core-app/screens/Standings'
@@ -1150,8 +1152,22 @@ export default async function AfCorePage({
    */
   const modelAdminAllowed = segment === 'model-admin' && isAdmin
 
+  /*
+   * The clicked-game view opens as `/core/live?game=<id>` — a query on the live
+   * screen, not a new route (the repo is at its route ceiling). When it is
+   * requested the slate itself is not loaded: the view has its own data.
+   */
+  const liveGameId = activeKey === 'live' && typeof sp.game === 'string' && sp.game ? sp.game : null
+  const liveGameSport = typeof sp.sport === 'string' ? sp.sport : 'NFL'
+  const liveGame = liveGameId
+    ? await getEspnGameSummary({ sport: liveGameSport, gameId: liveGameId }).catch((err) => {
+        console.error('[core/live] game view read threw:', err instanceof Error ? err.message : err)
+        return { detail: null, stale: false, failed: true }
+      })
+    : null
+
   const liveScores =
-    activeKey === 'live'
+    activeKey === 'live' && !liveGameId
       ? await getLivePageData({
           userId,
           sport: typeof sp.sport === 'string' ? sp.sport : 'NFL',
@@ -2451,7 +2467,14 @@ export default async function AfCorePage({
           )
         )
       ) : activeKey === 'live' ? (
-        liveScores ? (
+        liveGameId ? (
+          <LiveGameView
+            initial={liveGame}
+            sport={liveGameSport}
+            gameId={liveGameId}
+            backHref={`/core/live?sport=${encodeURIComponent(liveGameSport)}`}
+          />
+        ) : liveScores ? (
           <LiveScores data={liveScores} selectedLeagueId={selectedLeagueId} />
         ) : (
           <div className="af-frame" style={{ padding: 24, maxWidth: 720 }}>

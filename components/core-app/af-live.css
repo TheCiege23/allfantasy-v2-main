@@ -1372,3 +1372,560 @@
     padding: 3px 2px;
   }
 }
+
+/* ── Card → game view link ──────────────────────────────────────────────────── */
+
+.af-live-detail-link {
+  margin-left: auto;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--accent);
+  text-decoration: none;
+  white-space: nowrap;
+}
+.af-live-broadcast + .af-live-detail-link {
+  margin-left: 10px;
+}
+.af-live-detail-link:hover {
+  text-decoration: underline;
+}
+.af-live-detail-link:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* ── Clicked-game view ("gamecast") ─────────────────────────────────────────── */
+
+.af-gv {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.af-gv-back {
+  align-self: flex-start;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--muted);
+  text-decoration: none;
+}
+.af-gv-back:hover {
+  color: var(--text);
+}
+.af-gv-logo {
+  flex: none;
+  object-fit: contain;
+  border-radius: 50%;
+}
+.af-gv-muted {
+  color: var(--faint);
+  font-size: 10.5px;
+}
+
+.af-gv-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 16px;
+  padding: 18px;
+  border-radius: 16px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+}
+.af-gv[data-state='in'] .af-gv-head {
+  border-color: var(--accent-line);
+}
+.af-gv-team {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+.af-gv-team[data-side='home'] {
+  flex-direction: row-reverse;
+  text-align: right;
+}
+.af-gv-team-text {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+.af-gv-team-name {
+  font-size: 16px;
+  font-weight: 800;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.af-gv-rank {
+  color: var(--faint);
+  font-size: 12px;
+}
+.af-gv-team-record {
+  font-size: 10.5px;
+  color: var(--faint);
+}
+.af-gv-score {
+  font-size: 34px;
+  font-weight: 900;
+  line-height: 1;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.af-gv-score[data-leading='true'] {
+  color: var(--text);
+}
+.af-gv-center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+.af-gv-lines {
+  width: auto;
+}
+
+.af-gv-stale {
+  margin: 0;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: var(--warn-soft);
+  color: var(--warn);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.af-gv-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 340px) minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+.af-gv-col {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+.af-gv-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  border-radius: 16px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  min-width: 0;
+}
+.af-gv-none {
+  margin: 0;
+  font-size: 12px;
+  color: var(--faint);
+}
+
+/* Game leaders */
+.af-gv-vs {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--text2);
+}
+.af-gv-vs-team {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.af-gv-leaders {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+}
+.af-gv-leader-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 76px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  padding: 12px 0;
+  border-top: 1px solid var(--line);
+}
+.af-gv-leader-cat {
+  text-align: center;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--muted);
+  line-height: 1.25;
+}
+.af-gv-leader {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.af-gv-leader[data-side='home'] {
+  align-items: flex-end;
+  text-align: right;
+}
+.af-gv-leader-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.af-gv-leader[data-side='home'] .af-gv-leader-top {
+  flex-direction: row-reverse;
+}
+.af-gv-leader-value {
+  font-size: 20px;
+  font-weight: 900;
+}
+.af-gv-leader-name {
+  font-size: 11.5px;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+.af-gv-leader-pos {
+  color: var(--faint);
+  font-weight: 600;
+}
+.af-gv-leader-line {
+  font-size: 10px;
+  color: var(--muted);
+}
+
+/* Team stats */
+.af-gv-stats {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.af-gv-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.af-gv-stat-top {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 15px;
+  font-weight: 800;
+}
+.af-gv-stat-label {
+  text-align: center;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--muted);
+}
+.af-gv-stat-bars {
+  display: flex;
+  gap: 3px;
+  height: 6px;
+}
+.af-gv-bar {
+  flex-basis: 0;
+  min-width: 3px;
+  border-radius: 3px;
+}
+
+/* Drive */
+.af-gv-drive-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.af-gv-drive-title {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.af-gv-drive-desc {
+  font-size: 11px;
+  color: var(--muted);
+}
+.af-gv-downball {
+  display: flex;
+  justify-content: center;
+  gap: 32px;
+}
+.af-gv-downball > span {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+.af-gv-downball strong {
+  font-size: 14px;
+}
+.af-gv-field {
+  height: 84px;
+}
+/* Team colours come from ESPN and are validated as 6-digit hex before use. */
+.af-gv-endzone {
+  color: #fff;
+  font-size: 10px;
+  writing-mode: vertical-rl;
+}
+.af-gv-driveline {
+  position: absolute;
+  top: 50%;
+  height: 3px;
+  margin-top: -1.5px;
+  background: color-mix(in srgb, var(--text) 70%, transparent);
+  z-index: 1;
+}
+
+.af-gv-lastplay {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--surface2);
+  border: 1px solid var(--line);
+}
+.af-gv-lastplay-top {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.af-gv-lastplay-title {
+  font-size: 14px;
+}
+.af-gv-wp {
+  margin-left: auto;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text2);
+}
+.af-gv-lastplay-tag {
+  padding: 3px 7px;
+  border-radius: 6px;
+  background: var(--chip);
+  color: var(--muted);
+}
+.af-gv-lastplay-text {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text2);
+}
+.af-gv-lastplay-dd {
+  margin: 0;
+  font-size: 11px;
+  color: var(--faint);
+}
+.af-gv-involved {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 10px;
+}
+.af-gv-pcard {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+}
+.af-gv-pcard-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.af-gv-pcard-id {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.af-gv-pcard-name {
+  font-size: 13px;
+  font-weight: 800;
+}
+.af-gv-pcard-meta {
+  font-size: 10.5px;
+  color: var(--faint);
+}
+.af-gv-pcard-stats {
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+}
+.af-gv-pcard-stats > div {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+}
+.af-gv-pcard-stats dd {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+/* Play-by-play */
+.af-gv-tabs {
+  align-self: stretch;
+}
+.af-gv-tabs .af-live-scope-btn {
+  flex: 1 1 0;
+}
+.af-gv-period {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.af-gv-period-head {
+  color: var(--faint);
+}
+.af-gv-plays,
+.af-gv-drives,
+.af-gv-drive-plays {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.af-gv-score-play {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: start;
+  padding: 12px;
+  border-radius: 12px;
+  background: var(--surface2);
+  border: 1px solid var(--line);
+}
+.af-gv-score-play-text {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.af-gv-play-desc {
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text2);
+  overflow-wrap: anywhere;
+}
+.af-gv-running {
+  display: flex;
+  gap: 12px;
+  font-size: 14px;
+  font-weight: 800;
+}
+.af-gv-running > span {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.af-gv-running small {
+  font-size: 9.5px;
+  font-weight: 700;
+  color: var(--faint);
+}
+.af-gv-drive-row {
+  border-radius: 12px;
+  background: var(--surface2);
+  border: 1px solid var(--line);
+}
+.af-gv-drive-toggle {
+  width: 100%;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  border-radius: 12px;
+}
+.af-gv-drive-toggle:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.af-gv-drive-row-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  font-size: 12.5px;
+}
+.af-gv-drive-row[data-open='true'] .af-live-mine-chev {
+  margin: 3px 3px 0 2px;
+  transform: rotate(225deg);
+}
+.af-gv-drive-plays {
+  padding: 0 12px 12px 46px;
+}
+.af-gv-play {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-left: 10px;
+  border-left: 2px solid var(--line2);
+}
+.af-gv-play[data-scoring='true'] {
+  border-left-color: var(--good);
+}
+.af-gv-play-meta {
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--faint);
+}
+.af-gv-footer {
+  text-align: center;
+}
+
+@media (max-width: 900px) {
+  .af-gv-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  /* The drive is the reason to open this view mid-game; it leads on a phone. */
+  .af-gv-col[data-col='main'] {
+    order: -1;
+  }
+}
+
+@media (max-width: 620px) {
+  .af-gv-head {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
+    padding: 14px;
+  }
+  .af-gv-team[data-side='home'] {
+    flex-direction: row;
+    text-align: left;
+  }
+  .af-gv-center {
+    order: 3;
+  }
+  .af-gv-score {
+    font-size: 28px;
+  }
+  .af-gv-drive-plays {
+    padding-left: 12px;
+  }
+  .af-gv-downball {
+    gap: 20px;
+  }
+}
