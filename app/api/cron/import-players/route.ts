@@ -31,7 +31,7 @@ export const dynamic = "force-dynamic"
 export const maxDuration = 300
 
 /**
- * Time held back from the import for the ten maintenance phases that follow it.
+ * Time held back from the import for the maintenance phases that follow it.
  *
  * 60s, and the number is a floor rather than an estimate: every one of those phases is bounded
  * by COUNT and resumes where it stopped, so a short slice does less work rather than incorrect
@@ -41,9 +41,25 @@ export const maxDuration = 300
  * ⚠ IT DOES NOT GUARANTEE EVERY PHASE RUNS, AND IS NOT MEANT TO. `devyIntelSources` alone
  * refuses to start without ~150s of runway, which is why `?intel=1` exists as its own tick with
  * the whole window. This reserve is what lets the CHEAP phases — identity, sleeperRows,
- * canonicalBirthdays, espnIdentities, psychProfiles — stop being collateral damage.
+ * canonicalBirthdays, espnIdentities — stop being collateral damage.
+ *
+ * ⚠ psychProfiles WAS on that list and did not survive measurement: it moved to the `?intel=1`
+ * tick. The reserve fed the phases ahead of it and it was still starved — see the rotation block
+ * inside `if (intelOnly)` for the numbers.
  */
 const TAIL_PHASE_RESERVE_MS = 60_000
+
+/**
+ * Least runway the psych profile rotation needs before it may START on the `?intel=1` tick.
+ *
+ * ⚠ NOT MEASURED — a guard sized from the shape of the work. The rotation's prelude (trade
+ * backfill, then ONE batched Sleeper trade ingest for every picked league) is bounded by count,
+ * not time, and its budget is checked only BETWEEN leagues. What must not happen is entering that
+ * prelude with seconds left and carrying the request into the 270s response deadline. 90s leaves
+ * the prelude and a league room beneath it. Tune it from the heartbeat row's `durationMs`, which
+ * is the first place this phase's cost has ever been recorded.
+ */
+const PSYCH_MIN_RUNWAY_MS = 90_000
 
 async function handle(req: NextRequest) {
   const url = new URL(req.url)
@@ -188,10 +204,66 @@ async function handle(req: NextRequest) {
         },
       )
 
+      /*
+       * 🛑 THE PSYCH PROFILE ROTATION RUNS ON THIS TICK, NOT IN THE MAIN RUN — BY MEASUREMENT.
+       *
+       * It was the last maintenance phase of the main run, which fills its 240s budget on nearly
+       * every fire. The eight main-run fires after the tail reserve reached the worker
+       * (2026-09-12..13), read from the slow-tier dispatcher's echoed response bodies and from
+       * `manager_psych_profiles.updatedAt`:
+       *
+       *     2 of 8   stopped at the 270s response deadline   -> the phase was never reached
+       *     3 of 8   finished, psych NOT deferred, ZERO profile writes in the following 20 min
+       *     3 of 8   profile writes in the window            -> an UPPER bound: `fantasy-os-exec-sync`
+       *                                                         refreshes profiles and fires into
+       *                                                         the same minutes
+       *
+       * The zero-write fires are conclusive, not suggestive: the rotation has no staleness floor
+       * (it always picks up to 24 of ~245 candidates) and the engine rewrites every manager it
+       * reaches, so a fire that profiled one league moves `updatedAt`. Meanwhile 89 candidate
+       * leagues were more than 3 days stale and 23 more than 7.
+       *
+       * ⚠ ADMITTED, THEN STARVED — the likeliest mechanism, read from the code. The phase gate
+       * passes with seconds to spare, the unbounded enrichment prelude spends them, and the first
+       * between-league check stops at zero leagues. Nothing reported it, because the phase's result
+       * was persisted nowhere: the dispatcher echoes 1500 chars of the body, and `psychProfiles`
+       * sat past the cut.
+       *
+       * This tick finishes its own work in 10-23s over the same window, so the rotation gets most
+       * of a budget instead of a remainder — the move this mode was created for.
+       *
+       * ITS OWN HEARTBEAT, WITH THE RUNWAY DECISION INSIDE IT, so a fire that declines still writes
+       * a row. "Declined for runway" and "never fired" must not read alike.
+       */
+      const psychProfiles = await withSyncJobRun(
+        { jobName: 'cron-psych-profile-rotation', trigger: 'cron' },
+        async () => {
+          const remainingMs = budget.remainingMs()
+          if (remainingMs < PSYCH_MIN_RUNWAY_MS) return { skipped: 'no runway' as const, remainingMs }
+          return refreshStaleLeagueProfiles({ maxLeagues: 24, budget })
+        },
+        (r) =>
+          'skipped' in r
+            ? // A warning, so a tick that keeps declining reads as partial rather than healthy.
+              { warnings: [`no runway: ${r.remainingMs}ms left, needs ${PSYCH_MIN_RUNWAY_MS}ms`] }
+            : {
+                rowsWritten: r.managersProfiled,
+                metadata: {
+                  leaguesProfiled: r.leaguesProfiled,
+                  stoppedEarly: r.stoppedEarly,
+                  deferred: r.deferred,
+                  leagueIds: r.leagueIds,
+                },
+              },
+      ).catch((err: unknown) => ({
+        error: err instanceof Error ? err.message.slice(0, 160) : 'profile refresh failed',
+      }))
+
       return NextResponse.json({
         ok: true,
         mode: 'intel',
         ...outcome,
+        psychProfiles,
         durationMs: Date.now() - startedAt,
       })
     }
@@ -202,7 +274,7 @@ async function handle(req: NextRequest) {
      * `IMPORT_BUDGET_MS` defaults to 240s and `CRON_RUN_BUDGET_MS` is also 240s, so before this
      * the importer was entitled to spend the entire window and routinely did — measured in
      * production 2026-09-10 at 240,580 / 240,884 / 240,413 ms on three consecutive runs. Every
-     * one of the ten phases below then saw `budget.exhausted()` and deferred, on roughly half
+     * one of the ten phases then below saw `budget.exhausted()` and deferred, on roughly half
      * of all runs. The other half completed in 12-22s, which is why the tail ran at all.
      *
      * ⚠ THIS PRESENTED AS A PHASE-ORDERING BUG AND IS NOT ONE. `psychProfiles` is last and so
@@ -633,36 +705,15 @@ async function handle(req: NextRequest) {
       }
     }
 
-    let psychProfiles: unknown = { leaguesProfiled: 0, managersProfiled: 0 }
-    // Last phase, so it is the first to be dropped — and the cheapest to drop, since
-    // refreshStaleLeagueProfiles already drains stalest-first and simply resumes next run.
-    if (!dryRun && budget.exhausted()) {
-      deferredPhases.push('psychProfiles')
-    } else if (!dryRun) {
-      try {
-        /*
-         * ⚠ 24, NOT 3 — AND THE BUDGET IS WHAT MAKES THAT SAFE.
-         *
-         * Measured in production 2026-09-08: at a fixed 3 this drained 3-13 leagues/day against
-         * 287, a ~36-day cycle, with 66 team-carrying leagues (769 managers) never profiled at
-         * all. The rotation already orders never-profiled first and then stalest, so the cap was
-         * the only thing holding it back — it spent a 240s budget doing three leagues.
-         *
-         * The budget is now checked BETWEEN leagues, so this does as many as actually fit and
-         * stops cleanly instead of running to the 300s edge ceiling and 502ing. It can therefore
-         * only do MORE work per run than before, never overrun further.
-         *
-         * 24 rather than unbounded because `ingestSleeperTradeFacts` defaults to a 25-league
-         * take; staying under it keeps the enrichment set aligned with the profiling set even
-         * if the explicit `maxLeagues` pass-through there is ever lost.
-         */
-        psychProfiles = await refreshStaleLeagueProfiles({ maxLeagues: 24, budget })
-      } catch (psychErr) {
-        psychProfiles = {
-          error: psychErr instanceof Error ? psychErr.message.slice(0, 160) : 'profile refresh failed',
-        }
-      }
-    }
+    /*
+     * The psych profile rotation USED to be the last phase here. It moved to the `?intel=1` tick
+     * — see the block inside `if (intelOnly)` for why.
+     *
+     * ⚠ 24 LEAGUES PER FIRE IS UNCHANGED, AND SO IS ITS REASON. At a fixed 3 it drained 3-13
+     * leagues/day against 287 (measured 2026-09-08, a ~36-day cycle). 24 rather than unbounded
+     * because `ingestSleeperTradeFacts` defaults to a 25-league take; staying under it keeps the
+     * enrichment set aligned with the profiling set if the explicit pass-through is ever lost.
+     */
 
     return NextResponse.json({
       ok: true,
@@ -680,7 +731,6 @@ async function handle(req: NextRequest) {
       sleeperRows,
       canonicalBirthdays,
       espnIdentities,
-      psychProfiles,
       sports: result.sports,
       identity,
       staleFallbackApplied: result.staleFallbackApplied,
