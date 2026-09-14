@@ -82,6 +82,31 @@ export function slotForStarterIndex(
   return slots[index] ?? null
 }
 
+/**
+ * The league's starting seats in the optimizer's shape (`LineupSlotSpec` in
+ * `lib/lineup-optimizer/optimalLineup.ts`): one entry per starting slot, with the
+ * normalised positions it accepts — the SAME table `canFillSlot` answers from.
+ *
+ * ⚠ NULL WHEN ANY SLOT IS UNRECOGNISED, not a lineup with that seat dropped. An optimal
+ * lineup computed against fewer seats than the league runs is a smaller number that looks
+ * like a real one ("0.0 pts left on your bench"). Refusing is the honest answer.
+ *
+ * DEF accepts both `DEF` and `DST`, so a defence stored under either name seats.
+ */
+export function lineupSeatsFromSettings(
+  leagueSettings: unknown,
+): Array<{ slot: string; eligible: string[]; count: number }> | null {
+  const slots = startingSlots(leagueSettings)
+  if (!slots) return null
+  const seats: Array<{ slot: string; eligible: string[]; count: number }> = []
+  for (const slot of slots) {
+    const accepts = SLOT_ACCEPTS[slot]
+    if (!accepts) return null
+    seats.push({ slot, eligible: [...accepts], count: 1 })
+  }
+  return seats
+}
+
 /** Can a player at this position fill this slot? */
 export function canFillSlot(slot: string, position: string | null): boolean {
   const accepts = SLOT_ACCEPTS[slot.toUpperCase()]

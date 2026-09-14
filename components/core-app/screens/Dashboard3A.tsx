@@ -893,18 +893,19 @@ export function Dashboard3A({
             }
           />
           {/*
-            RECEIPTS (2026-09-14) — how your past trades turned out. Net points since the
-            trade, wins and losses stated the same way; never the sweep's letter, and too-early
-            trades counted rather than shown as even. Not rendered with nothing to say.
+            RECEIPTS (2026-09-14) — how your trades, waiver adds and lineups turned out. Points
+            only, wins and losses stated the same way; too-early, unscored and unreadable cases
+            counted rather than shown as a number. Not rendered with nothing to say.
           */}
           <ReceiptsCard
             data={receipts}
             help={
               <Help>
-                <b>How your trades turned out.</b>
-                Points credited to what you got minus what you gave, only while each player stayed
-                on your roster, scored with the league&apos;s own settings. Trades from the last few
-                weeks are left off until they have a result.
+                <b>How your moves turned out.</b>
+                Trades: points credited to what you got minus what you gave, only while each player
+                stayed on your roster. Waiver adds: what he scored for you after the add. Lineups:
+                the best legal lineup you could have started, minus what your starters scored. All
+                scored by your league&apos;s platform; recent moves wait until they have a result.
               </Help>
             }
           />

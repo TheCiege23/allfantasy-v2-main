@@ -9,11 +9,16 @@ import {
   type TradeGradesPayload,
   type TradeSideGrade,
 } from '@/lib/trade-intel/sleeperTradeGradeService'
+import { computeWeeklyMaxPf, type WeeklyRosterPlayer } from '@/lib/commissioner-os/efl/maxPfEngine'
+import { asIds, rosterCandidates } from './dash3aPanels'
+import { composePlayerIdentities } from './playerIdentityCompose'
+import { normalizePosition } from './positionNormalization'
+import { lineupSeatsFromSettings } from './slotEligibility'
 
 /**
  * Decision receipts — how your past moves turned out (retention item 6, user decisions
  * 2026-09-14): a weekly "receipts" card on the /core home, good and bad outcomes stated
- * plainly. Trades and waiver adds so far; start/sit and Chimmy advice follow.
+ * plainly. Trades, waiver adds and lineups (start/sit) so far; Chimmy advice follows.
  *
  * TRADES read the grade cache the 30-minute sweep already fills (`trade-grades:v2:*`),
  * the same one `recentTrades` reads — one `in` query, no provider call, nothing recomputed.
@@ -84,6 +89,24 @@ export type WaiverReceipt = {
   href: string
 }
 
+export type LineupReceipt = {
+  id: string
+  leagueId: string
+  leagueName: string
+  season: number
+  week: number
+  /** Best possible legal lineup minus what your starters scored. Never negative. */
+  pointsLeft: number
+  /** You started the best possible lineup. */
+  perfect: boolean
+  /** The best player you benched who belonged in the best lineup. */
+  benched: { name: string; points: number } | null
+  /** The weakest starter who did not belong in it. */
+  started: { name: string; points: number } | null
+  /** Core's lineup screen for that league. */
+  href: string
+}
+
 export type DecisionReceiptsData = {
   trades: TradeReceipt[]
   /** Your trades left off because it is too early to call them. */
@@ -96,6 +119,12 @@ export type DecisionReceiptsData = {
   waiversTooEarly?: number
   /** Adds old enough to call but with no weekly score on file for any week he was yours. */
   waiversUnscored?: number
+  /** Your lineups in the last few completed weeks. Absent = not read. */
+  lineups?: LineupReceipt[]
+  /** Completed weeks with no weekly scores on file for your roster. */
+  lineupsUnscored?: number
+  /** Weeks that could not be checked honestly (a starter's position, or the league's slots). */
+  lineupsUnreadable?: number
 }
 
 export type ReceiptsLeague = {
@@ -418,9 +447,192 @@ export async function getWaiverReceipts(args: {
   return { waivers: receipts.slice(0, MAX_WAIVER_RECEIPTS), tooEarly: early, unscored }
 }
 
+/* ── Lineups (start/sit) ──────────────────────────────────────────────────────── */
+
+/** Completed weeks looked back over. */
+export const LINEUP_RECEIPT_WEEKS = 3
+export const MAX_LINEUP_RECEIPTS = 5
+
+const isBestBall = (settings: unknown, leagueType: string | null | undefined) => {
+  const s = (settings ?? {}) as Record<string, unknown>
+  return String(leagueType ?? '').toLowerCase() === 'best_ball' || Boolean(s.best_ball) || Boolean(s.bestBall)
+}
+
+/**
+ * Points you left on your bench in each of the last few completed weeks.
+ *
+ * ⚠ THE BEST LINEUP IS THE EXACT OPTIMIZER, NOT A GREEDY PASS. `computeWeeklyMaxPf` (EFL's
+ * true Max PF engine) seats your players against the league's own starting slots with an
+ * exact matching — FLEX and superflex included — and reports `pointsLeftOnBench`. The Best
+ * Ball greedy optimizer can be 20 points wrong and is not used. The number is never called
+ * "Max PF": that name already means points scored elsewhere in this repo.
+ *
+ * ⚠ SCORES ARE THE PLATFORM'S, NEVER OURS. `league_player_weekly_scores` holds Sleeper's own
+ * points per player per week for the WHOLE roster (bench included, `isStarter` set).
+ *
+ * WITHHELD, NEVER SHOWN AS A NUMBER:
+ *   - a week with no score rows for your roster (only recent weeks are ingested) → unscored;
+ *   - a week where a STARTER has no position on file — his seat cannot be checked, so the
+ *     actual total would be compared against a lineup missing him → unreadable;
+ *   - a league whose slots are missing or include one we do not recognise, or a week where
+ *     the best lineup still leaves a seat empty → unreadable;
+ *   - the current week and later (`isFinalized` is never set, so "complete" = before it);
+ *   - best-ball leagues, which have no start/sit decision at all.
+ *
+ * ⚠ IR/TAXI IS APPROXIMATE. Per-week reserve and taxi membership is not stored, so a bench
+ * player on your CURRENT reserve/taxi list is left out of the best lineup (he could not have
+ * started). Membership that changed since that week is not reconstructed.
+ */
+export async function getLineupReceipts(args: {
+  userId: string
+  leagues: readonly ReceiptsLeague[]
+  currentWeek: number | null
+}): Promise<{ lineups: LineupReceipt[]; unscored: number; unreadable: number } | null> {
+  if (!args.userId || args.currentWeek == null) return null
+  const weeks = Array.from({ length: LINEUP_RECEIPT_WEEKS }, (_, i) => args.currentWeek! - 1 - i).filter((w) => w >= 1)
+  if (weeks.length === 0) return null
+
+  const sleeper = args.leagues
+    .filter((l) => isSleeper(l) && l.season != null && String(l.season).trim() !== '' && Number.isFinite(Number(l.season)))
+    .slice(0, MAX_WAIVER_LEAGUES)
+  if (sleeper.length === 0) return null
+
+  const teams = await prisma.leagueTeam.findMany({
+    where: { leagueId: { in: sleeper.map((l) => l.id) }, claimedByUserId: args.userId },
+    select: { leagueId: true, externalId: true, platformUserId: true },
+  })
+  const teamByLeague = new Map<string, { externalId: string; platformUserId: string | null }>()
+  const twice = new Set<string>()
+  for (const t of teams) {
+    if (teamByLeague.has(t.leagueId)) twice.add(t.leagueId)
+    if (t.externalId) teamByLeague.set(t.leagueId, { externalId: String(t.externalId), platformUserId: t.platformUserId ?? null })
+  }
+  for (const id of twice) teamByLeague.delete(id)
+  const mine = sleeper.filter((l) => teamByLeague.has(l.id) && Number.isFinite(Number(teamByLeague.get(l.id)!.externalId)))
+  if (mine.length === 0) return null
+
+  const meta = await prisma.league.findMany({
+    where: { id: { in: mine.map((l) => l.id) } },
+    select: { id: true, settings: true, leagueType: true },
+  })
+  const metaById = new Map(meta.map((m) => [m.id, m]))
+
+  let unreadable = 0
+  const seatsByLeague = new Map<string, NonNullable<ReturnType<typeof lineupSeatsFromSettings>>>()
+  for (const l of mine) {
+    const m = metaById.get(l.id)
+    if (!m || isBestBall(m.settings, m.leagueType)) continue
+    const seats = lineupSeatsFromSettings(m.settings)
+    if (!seats) {
+      unreadable += weeks.length
+      continue
+    }
+    seatsByLeague.set(l.id, seats)
+  }
+  const scoreable = mine.filter((l) => seatsByLeague.has(l.id))
+  if (scoreable.length === 0) return { lineups: [], unscored: 0, unreadable }
+
+  const [scores, rosters] = await Promise.all([
+    prisma.leaguePlayerWeeklyScore.findMany({
+      where: {
+        OR: scoreable.map((l) => ({
+          leagueId: l.platformLeagueId as string,
+          seasonYear: Number(l.season),
+          rosterId: Number(teamByLeague.get(l.id)!.externalId),
+          week: { in: weeks },
+        })),
+      },
+      select: { leagueId: true, week: true, playerId: true, isStarter: true, points: true },
+    }),
+    prisma.roster.findMany({
+      where: {
+        OR: scoreable.map((l) => ({
+          leagueId: l.id,
+          platformUserId: { in: rosterCandidates(teamByLeague.get(l.id)!, args.userId) },
+        })),
+      },
+      select: { leagueId: true, playerData: true },
+    }),
+  ])
+
+  const inactiveByLeague = new Map<string, Set<string>>()
+  for (const r of rosters) {
+    if (inactiveByLeague.has(r.leagueId)) continue
+    const pd = (r.playerData ?? {}) as Record<string, unknown>
+    inactiveByLeague.set(r.leagueId, new Set([...asIds(pd.reserve), ...asIds(pd.taxi)]))
+  }
+
+  const ids = [...new Set(scores.map((s) => s.playerId))]
+  const identities = composePlayerIdentities(
+    ids.length
+      ? await prisma.sportsPlayer.findMany({
+          where: { sleeperId: { in: ids } },
+          select: { sleeperId: true, name: true, position: true, team: true, sport: true, imageUrl: true },
+        })
+      : [],
+  )
+
+  let unscored = 0
+  const receipts: LineupReceipt[] = []
+  for (const l of scoreable) {
+    const inactive = inactiveByLeague.get(l.id) ?? new Set<string>()
+    for (const week of weeks) {
+      const rows = scores.filter((s) => s.leagueId === l.platformLeagueId && s.week === week)
+      if (rows.length === 0) {
+        unscored += 1
+        continue
+      }
+      const players: WeeklyRosterPlayer[] = []
+      let starterUnplaced = false
+      for (const r of rows) {
+        // A player on your reserve/taxi list could not have started, unless he did.
+        if (!r.isStarter && inactive.has(r.playerId)) continue
+        const who = identities.get(r.playerId)
+        const positions = String(who?.position ?? '')
+          .split('/')
+          .map((p) => normalizePosition(p))
+          .filter(Boolean)
+        if (positions.length === 0) {
+          if (r.isStarter) starterUnplaced = true
+          continue
+        }
+        players.push({ playerId: r.playerId, playerName: who?.name ?? null, positions, points: r.points, wasStarter: r.isStarter })
+      }
+      if (starterUnplaced) {
+        unreadable += 1
+        continue
+      }
+      const row = computeWeeklyMaxPf({ week, slots: seatsByLeague.get(l.id)!, teams: [{ teamId: l.id, players }] }).rows[0]
+      if (!row || row.optimal.unfilledSlots.length > 0) {
+        unreadable += 1
+        continue
+      }
+      const best = new Set(row.optimal.assignments.map((a) => a.playerId))
+      const benched = players.filter((p) => !p.wasStarter && best.has(p.playerId)).sort((a, b) => b.points - a.points)[0]
+      const started = players.filter((p) => p.wasStarter && !best.has(p.playerId)).sort((a, b) => a.points - b.points)[0]
+      const pointsLeft = Math.max(0, round1(row.pointsLeftOnBench))
+      receipts.push({
+        id: `${l.id}:${week}`,
+        leagueId: l.id,
+        leagueName: l.name ?? 'Your league',
+        season: Number(l.season),
+        week,
+        pointsLeft,
+        perfect: pointsLeft === 0,
+        benched: benched ? { name: benched.playerName ?? 'Unmatched player', points: round1(benched.points) } : null,
+        started: started ? { name: started.playerName ?? 'Unmatched player', points: round1(started.points) } : null,
+        href: `/core/my-team?league=${encodeURIComponent(l.id)}`,
+      })
+    }
+  }
+
+  receipts.sort((a, b) => b.week - a.week || b.pointsLeft - a.pointsLeft)
+  return { lineups: receipts.slice(0, MAX_LINEUP_RECEIPTS), unscored, unreadable }
+}
+
 /**
  * Every receipt the home card shows. Each kind fails on its own: a trade-cache miss never
- * hides your waiver receipts, and the reverse. Null only when neither kind has anything
+ * hides your waiver or lineup receipts, and the reverse. Null only when no kind has anything
  * to read.
  */
 export async function getDecisionReceipts(args: {
@@ -429,17 +641,21 @@ export async function getDecisionReceipts(args: {
   ownerSleeperId: string | null
   currentWeek: number | null
 }): Promise<DecisionReceiptsData | null> {
-  const [trades, waivers] = await Promise.all([
+  const [trades, waivers, lineups] = await Promise.all([
     getTradeReceipts(args).catch(() => null),
     getWaiverReceipts(args).catch(() => null),
+    getLineupReceipts(args).catch(() => null),
   ])
-  if (!trades && !waivers) return null
+  if (!trades && !waivers && !lineups) return null
   return {
     trades: trades?.trades ?? [],
     tooEarly: trades?.tooEarly ?? 0,
     uncoveredLeagues: trades?.uncoveredLeagues ?? args.leagues.filter((l) => !isSleeper(l)).length,
     ...(waivers
       ? { waivers: waivers.waivers, waiversTooEarly: waivers.tooEarly, waiversUnscored: waivers.unscored }
+      : {}),
+    ...(lineups
+      ? { lineups: lineups.lineups, lineupsUnscored: lineups.unscored, lineupsUnreadable: lineups.unreadable }
       : {}),
   }
 }

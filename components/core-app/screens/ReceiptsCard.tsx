@@ -2,16 +2,21 @@
 
 import type { ReactNode } from 'react'
 import Link from 'next/link'
-import type { DecisionReceiptsData, TradeReceipt, WaiverReceipt } from '@/lib/core-app/decisionReceipts'
+import type {
+  DecisionReceiptsData,
+  LineupReceipt,
+  TradeReceipt,
+  WaiverReceipt,
+} from '@/lib/core-app/decisionReceipts'
 
 /**
  * The home "Receipts" card — how your past moves turned out (retention item 6, user
- * decisions 2026-09-14). Trades and waiver adds. Good and bad outcomes read the same way:
- * the points and which side of them you are on, never a letter and never softened.
+ * decisions 2026-09-14). Trades, waiver adds and lineups. Good and bad outcomes read the
+ * same way: the points and which side of them you are on, never a letter and never softened.
  *
  * ⚠ NOT RENDERED WITH NOTHING TO SAY. `data` null, or no receipt of any kind AND nothing
- * too early or unscored to mention, renders nothing — an empty card on the home is noise,
- * not honesty.
+ * too early, unscored or unreadable to mention, renders nothing — an empty card on the home
+ * is noise, not honesty.
  */
 
 const OUTCOME_TEXT: Record<TradeReceipt['outcome'], string> = {
@@ -50,15 +55,40 @@ function WaiverRow({ w }: { w: WaiverReceipt }) {
   )
 }
 
+function LineupRow({ l }: { l: LineupReceipt }) {
+  return (
+    <li className="af3a-receipt" data-kind="lineup" data-outcome={l.perfect ? 'ahead' : undefined}>
+      <Link className="af3a-receipt-title" href={l.href}>
+        {l.perfect ? `Perfect lineup in week ${l.week}` : `You left ${l.pointsLeft.toFixed(1)} pts on your bench`}
+      </Link>
+      <span className="af3a-receipt-where af3a-mono">
+        {l.leagueName} · {l.season} wk {l.week}
+      </span>
+      {!l.perfect && (l.benched || l.started) ? (
+        <span className="af3a-receipt-swap">
+          {l.benched ? `Benched ${l.benched.name} (${l.benched.points.toFixed(1)})` : ''}
+          {l.benched && l.started ? ' · ' : ''}
+          {l.started ? `started ${l.started.name} (${l.started.points.toFixed(1)})` : ''}
+        </span>
+      ) : null}
+    </li>
+  )
+}
+
 export function ReceiptsCard({ data, help }: { data: DecisionReceiptsData | null; help?: ReactNode }) {
   if (!data) return null
   const waivers = data.waivers ?? []
   const waiversTooEarly = data.waiversTooEarly ?? 0
   const waiversUnscored = data.waiversUnscored ?? 0
+  const lineups = data.lineups ?? []
+  const lineupsUnscored = data.lineupsUnscored ?? 0
+  const lineupsUnreadable = data.lineupsUnreadable ?? 0
   const hasTrades = data.trades.length > 0 || data.tooEarly > 0
   const hasWaivers = waivers.length > 0 || waiversTooEarly > 0 || waiversUnscored > 0
-  if (!hasTrades && !hasWaivers) return null
-  const both = hasTrades && hasWaivers
+  const hasLineups = lineups.length > 0 || lineupsUnscored > 0 || lineupsUnreadable > 0
+  const kinds = [hasTrades, hasWaivers, hasLineups].filter(Boolean).length
+  if (kinds === 0) return null
+  const headed = kinds > 1
 
   return (
     <section className="af3a-card af3a-receipts">
@@ -69,7 +99,7 @@ export function ReceiptsCard({ data, help }: { data: DecisionReceiptsData | null
 
       {hasTrades ? (
         <>
-          {both ? <h3 className="af3a-receipt-group">Trades</h3> : null}
+          {headed ? <h3 className="af3a-receipt-group">Trades</h3> : null}
           {data.trades.length > 0 ? (
             <ul className="af3a-receipt-list">
               {data.trades.map((t) => (
@@ -106,7 +136,7 @@ export function ReceiptsCard({ data, help }: { data: DecisionReceiptsData | null
 
       {hasWaivers ? (
         <>
-          {both ? <h3 className="af3a-receipt-group">Waiver adds</h3> : null}
+          {headed ? <h3 className="af3a-receipt-group">Waiver adds</h3> : null}
           {waivers.length > 0 ? (
             <ul className="af3a-receipt-list">
               {waivers.map((w) => (
@@ -122,6 +152,30 @@ export function ReceiptsCard({ data, help }: { data: DecisionReceiptsData | null
           {waiversUnscored > 0 ? (
             <p className="af3a-exp-note">
               {waiversUnscored} add{waiversUnscored === 1 ? ' has' : 's have'} no weekly scores on file yet.
+            </p>
+          ) : null}
+        </>
+      ) : null}
+
+      {hasLineups ? (
+        <>
+          {headed ? <h3 className="af3a-receipt-group">Lineups</h3> : null}
+          {lineups.length > 0 ? (
+            <ul className="af3a-receipt-list">
+              {lineups.map((l) => (
+                <LineupRow key={l.id} l={l} />
+              ))}
+            </ul>
+          ) : null}
+          {lineupsUnscored > 0 ? (
+            <p className="af3a-exp-note">
+              {lineupsUnscored} recent week{lineupsUnscored === 1 ? ' has' : 's have'} no weekly scores on file yet.
+            </p>
+          ) : null}
+          {lineupsUnreadable > 0 ? (
+            <p className="af3a-exp-note">
+              {lineupsUnreadable} week{lineupsUnreadable === 1 ? '' : 's'} couldn’t be checked — a starter’s
+              position or the league’s lineup slots aren’t on file.
             </p>
           ) : null}
         </>
