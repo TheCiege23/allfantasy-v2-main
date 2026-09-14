@@ -221,7 +221,7 @@ export function Portfolio({ data, importHref = '/import?returnTo=%2Fcore%2Fportf
                 A CDN url that 404s removes itself and reveals the same monogram
                 beneath, the way the comms drawer handles player headshots.
               */}
-              <span className="af-pf-row-art" aria-hidden>
+              <span className="af-pf-row-art" aria-hidden data-platform={(l.platform || 'manual').toLowerCase()}>
                 <span className="af-pf-art-mark">{leagueMonogram(l.leagueName)}</span>
                 {l.avatarUrl ? (
                   <img
@@ -246,7 +246,7 @@ export function Portfolio({ data, importHref = '/import?returnTo=%2Fcore%2Fportf
                   {l.leagueName}
                 </span>
                 <span className="af-pf-row-meta">
-                  <span className="af-pf-platform" data-platform={l.platform}>
+                  <span className="af-pf-platform" data-platform={(l.platform || 'manual').toLowerCase()}>
                     {l.platform}
                   </span>
                   <span>{l.sport}</span>
