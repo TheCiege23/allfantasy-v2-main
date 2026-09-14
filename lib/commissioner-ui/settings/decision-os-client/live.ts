@@ -1,5 +1,5 @@
 import { resolveActiveLeagueId } from '../../resolveActiveLeagueId'
-import { readLeagueSettingsSnapshot } from '../leagueSettingsReads'
+import { readLeagueSettingsSnapshot } from '@/lib/commissioner-settings/leagueSettingsReads'
 import type { CommissionerErrorContract } from '../../contracts'
 import type { SettingsClient } from './types'
 

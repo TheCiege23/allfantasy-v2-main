@@ -1,7 +1,7 @@
 import { callDecisionOS } from '../../adapter/transport'
 import { isLiveReady } from '../../liveReadiness'
 import { resolveActiveLeagueId } from '../../resolveActiveLeagueId'
-import { resolveManagerDisplayNames, UNKNOWN_MANAGER_NAME } from '../managerNames'
+import { resolveManagerDisplayNames, UNKNOWN_MANAGER_NAME } from '@/lib/commissioner-managers/managerNames'
 import type { CommissionerErrorContract } from '../../contracts'
 import type { ManagerDnaProfile, ManagerIntelligenceClient } from './types'
 

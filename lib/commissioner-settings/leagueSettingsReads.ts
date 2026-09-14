@@ -4,7 +4,7 @@ import type {
   LeagueSettingEntry,
   LeagueSettingGroup,
   LeagueSettingsSnapshot,
-} from './decision-os-client/types'
+} from '@/lib/commissioner-ui/settings/decision-os-client/types'
 
 /**
  * Reads a league's settings as they were actually captured.

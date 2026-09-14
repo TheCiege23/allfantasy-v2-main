@@ -3,7 +3,7 @@
 import { HeartPulse, Lightbulb, Users, Briefcase, Zap, Send, UserPlus, ListChecks, BarChart3, FileText, Bell } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { KpiCard, RecommendationCard, SummaryCard, TimelineCard, StatusCard, InfoCard, TrendLineChart, type TimelineEntry } from '@/components/commissioner-os/cards'
-import type { LeagueActivityTrend } from '@/lib/commissioner-ui/missionControl/activityTrendReads'
+import type { LeagueActivityTrend } from '@/lib/commissioner-mission-control/activityTrendReads'
 import { EmptyState } from '@/components/commissioner-os/states'
 import { PreviewDataBanner } from '@/components/commissioner-os/PreviewDataBanner'
 import type { CommissionerDataMode } from '@/lib/commissioner-ui/demo-mode/constants'
