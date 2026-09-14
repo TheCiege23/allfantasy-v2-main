@@ -108,6 +108,18 @@ export async function createLeagueChannel(
   return { channelId: ch.id, channelName: ch.name ?? name }
 }
 
+/** Server owners and administrators retain access under Discord's permission model. */
+export function privateChannelOverwrites(guildId: string, botId: string, memberIds: string[]) {
+  if (![guildId, botId, ...memberIds].every(id => /^\d{17,20}$/.test(id))) throw new Error('Invalid Discord identity')
+  const readWrite = (1024n | 2048n | 16384n | 32768n | 65536n).toString()
+  const members = [...new Set([botId, ...memberIds])]
+  if (members.length > 99) throw new Error('Too many private channel members')
+  return [
+    { id: guildId, type: 0, deny: '1024', allow: '0' },
+    ...members.map(id => ({ id, type: 1, deny: '0', allow: readWrite })),
+  ]
+}
+
 export async function postMessage(
   channelId: string,
   content: string,
