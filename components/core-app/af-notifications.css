@@ -526,3 +526,35 @@
   .af-nt-mute { align-self: flex-start; margin-left: 17px; }
   .af-nt-mute-menu { left: 0; right: auto; }
 }
+
+/* ── Provider handoff (2026-09-14) ────────────────────────────────────
+ *
+ * "Open in Sleeper ↗" on a notification row. Top-level and appended after every
+ * @media block, like the mute rules above; both selectors carry the 44px floor
+ * for the reason the touch-floor block gives.
+ */
+
+.af-nt-handoff,
+.af-core .af-nt-handoff {
+  flex: none;
+  align-self: center;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 44px;
+  padding: 6px 10px;
+  border: 1px solid var(--line2);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  font-size: 11.5px;
+  font-weight: 700;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.af-nt-handoff:hover { border-color: var(--accent-line); color: var(--accent); }
+
+@media (max-width: 640px) {
+  .af-nt-handoff { align-self: flex-start; margin-left: 17px; }
+}

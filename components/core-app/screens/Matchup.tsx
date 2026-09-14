@@ -384,6 +384,23 @@ export function Matchup({ data }: MatchupProps) {
             className="af-btn af-mu-source"
           />
         ) : null}
+
+        {/*
+          The one tap from a swing alert to the fix (2026-09-14): the provider's lineup
+          screen for YOUR team. Resolved server-side and only when that format is
+          verified — see MatchupData.league.lineupLink.
+        */}
+        {data.league.lineupLink ? (
+          <a
+            className="af-btn af-mu-source"
+            data-handoff="lineup"
+            href={data.league.lineupLink.href}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            Set lineup in {data.league.lineupLink.platformLabel} <span aria-hidden>↗</span>
+          </a>
+        ) : null}
       </header>
 
       {/* ── Head to head ────────────────────────────────────────────── */}

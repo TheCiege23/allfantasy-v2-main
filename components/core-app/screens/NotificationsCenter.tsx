@@ -120,6 +120,25 @@ function Row({
       ) : null}
 
       {/*
+        One tap to the provider screen that acts on this (2026-09-14). The loader only
+        sets `handoff` for a VERIFIED destination — never a homepage fallback, never
+        MFL / Fantrax / Fleaflicker — so a row without one keeps just its in-app action.
+        Stored rows only: an "act today" row already carries its platform link as the action.
+      */}
+      {!urgent && row.handoff ? (
+        <a
+          className="af-nt-handoff"
+          href={row.handoff.href}
+          target="_blank"
+          rel="noopener noreferrer"
+          title={`${row.handoff.label} · ${row.handoff.screen}`}
+          onClick={() => onRead?.(row.id)}
+        >
+          {row.handoff.label} <span aria-hidden>↗</span>
+        </a>
+      ) : null}
+
+      {/*
         Mute from where the noise is seen (2026-09-14). Stored rows only: an "act today"
         row is a deadline derived from league state, not a notification anyone sent, so
         muting it would silence nothing.

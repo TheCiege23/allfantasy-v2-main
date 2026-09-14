@@ -15,6 +15,7 @@ import { normalizePositionForSport, normalizeTeamAbbrev } from '@/lib/team-abbre
 import { startingSlotTemplate } from './rosterSlots'
 import { identityGapNote } from './identityGap'
 import { resolveSourceLink, type SourceLink } from '@/lib/league-links/sourceLinkResolver'
+import { verifiedHandoff, type PlatformLink } from './platformLinks'
 
 /**
  * A crest we can actually render, or null.
@@ -170,6 +171,15 @@ export type MatchupData = {
      * site. Null for a native league, where there is no source to open.
      */
     sourceLink: SourceLink | null
+    /**
+     * "Set lineup in <platform>" — the provider's lineup screen for YOUR team.
+     *
+     * User decision 2026-09-14: a swing alert opens this screen, and this is the one tap
+     * from here to the fix. Only a VERIFIED lineup destination, and only once we know
+     * which team is yours; null for MFL / Fantrax / Fleaflicker, a native league, or an
+     * unclaimed team — never a guessed URL, never the league page under a lineup label.
+     */
+    lineupLink: PlatformLink | null
   }
   week: SectionState<{ week: number; season: number; isFinal: boolean }>
   /**
@@ -265,6 +275,8 @@ export async function getMatchupData(
         season: league.season,
         action: 'matchup',
       }),
+      /* Set once the user's team is known, below. */
+      lineupLink: null as PlatformLink | null,
     },
     /*
      * The default for every early-return path. Overridden the moment both
@@ -324,6 +336,26 @@ export async function getMatchupData(
       platformUserId: true, avatarUrl: true,
     },
   })
+
+  /*
+   * "Set lineup in <platform>" — only once we know which team is yours. ESPN and Yahoo
+   * lineup URLs carry that team's id; Sleeper's opens on the signed-in user's own team,
+   * but offering "your lineup" for a league where we cannot find your team would still
+   * be a guess. Verified-only: no league-page fallback under a lineup label.
+   */
+  base.league.lineupLink = myTeam?.externalId
+    ? verifiedHandoff(
+        {
+          id: league.id,
+          platform: league.platform,
+          platformLeagueId,
+          season: league.season,
+          name: league.name,
+          teamId: myTeam.externalId,
+        },
+        'lineup',
+      )
+    : null
 
   /*
    * ⚠ THE EARLIEST UNPLAYED WEEK, NOT `max(week)`. This screen named your

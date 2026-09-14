@@ -4,7 +4,9 @@ import { prisma } from '@/lib/prisma'
 import { resolveInjuryFacts } from '@/lib/injuries/injuryReadPort'
 import { normalizeMatchName } from '@/lib/player-match/verifiedNameMatch'
 import { asIds, isResolvableId, rosterCandidates } from './dash3aPanels'
+import { handoffFor } from './platformLinks'
 import type { RecentTrade } from './recentTrades'
+import type { SourceScreen } from '@/lib/league-links/sourceLinkResolver'
 
 /**
  * "Since your last visit" — what changed in your leagues while you were away.
@@ -119,7 +121,17 @@ function isMarker(value: unknown): value is VisitMarker {
 
 // ── Sections ───────────────────────────────────────────────────────────────────
 
-export type BriefTrade = { leagueId: string; leagueName: string; acceptedAt: string; summary: string }
+/** "Open in <platform>" for a brief line — a verified provider destination (2026-09-14). */
+export type BriefHandoff = { href: string; label: string; screen: string }
+
+export type BriefTrade = {
+  leagueId: string
+  leagueName: string
+  acceptedAt: string
+  summary: string
+  /** Present only when that league's trade screen (or league page) is a verified destination. */
+  handoff?: BriefHandoff
+}
 
 export type BriefInjury = {
   playerId: string
@@ -128,6 +140,10 @@ export type BriefInjury = {
   from: string | null
   to: string | null
   leagues: string[]
+  /** The same leagues by id, when known — a one-league injury links to that lineup. */
+  leagueIds?: string[]
+  /** Present only for a one-league injury with a verified destination. */
+  handoff?: BriefHandoff
 }
 
 export type BriefStanding = {
@@ -186,7 +202,7 @@ export function tradesSince(trades: RecentTrade[], since: Date, limit: number): 
 export function diffInjuries(
   baseline: VisitSnapshot | null,
   current: VisitSnapshot,
-  meta: Map<string, { name: string; position: string | null; leagues: string[] }>,
+  meta: Map<string, { name: string; position: string | null; leagues: string[]; leagueIds?: string[] }>,
 ): BriefInjury[] {
   if (!baseline) return []
   const out: BriefInjury[] = []
@@ -196,7 +212,16 @@ export function diffInjuries(
     if (from === to) continue
     const m = meta.get(playerId)
     if (!m) continue
-    out.push({ playerId, name: m.name, position: m.position, from, to, leagues: m.leagues })
+    out.push({
+      playerId,
+      name: m.name,
+      position: m.position,
+      from,
+      to,
+      leagues: m.leagues,
+      // Carried only when known, so a caller without ids gets exactly the old shape.
+      ...(m.leagueIds ? { leagueIds: m.leagueIds } : {}),
+    })
   }
   return out.sort((a, b) => b.leagues.length - a.leagues.length || a.name.localeCompare(b.name))
 }
@@ -321,9 +346,11 @@ async function snapshotInjuries(
   now: Date,
 ): Promise<{
   injuries: Record<string, string | null>
-  meta: Map<string, { name: string; position: string | null; leagues: string[] }>
+  meta: Map<string, { name: string; position: string | null; leagues: string[]; leagueIds: string[] }>
+  /** The user's own team id per league (LeagueTeam.externalId), for provider lineup links. */
+  teamIdByLeague: Map<string, string>
 }> {
-  const empty = { injuries: {}, meta: new Map() }
+  const empty = { injuries: {}, meta: new Map(), teamIdByLeague: new Map<string, string>() }
   /* Injury feeds cover the NFL; another sport's empty result would read as "nobody is hurt". */
   const nfl = leagues.filter((l) => String(l.sport ?? 'NFL').toUpperCase() === 'NFL')
   if (nfl.length === 0) return empty
@@ -337,6 +364,15 @@ async function snapshotInjuries(
     .catch(() => [])
   if (teams.length === 0) return empty
 
+  /* One claimed team per league; a league with two is ambiguous, so it gets no team-specific link. */
+  const teamIdByLeague = new Map<string, string>()
+  const twoTeams = new Set<string>()
+  for (const t of teams) {
+    if (teamIdByLeague.has(t.leagueId)) twoTeams.add(t.leagueId)
+    if (t.externalId) teamIdByLeague.set(t.leagueId, String(t.externalId))
+  }
+  for (const id of twoTeams) teamIdByLeague.delete(id)
+
   const rosters = await prisma.roster
     .findMany({
       where: {
@@ -347,6 +383,8 @@ async function snapshotInjuries(
     .catch(() => [])
 
   const leaguesByPlayer = new Map<string, Set<string>>()
+  /* The same leagues by id, so a one-league injury can link to that league's lineup. */
+  const leagueIdsByPlayer = new Map<string, Set<string>>()
   const seenLeague = new Set<string>()
   for (const r of rosters) {
     if (seenLeague.has(r.leagueId)) continue
@@ -357,6 +395,9 @@ async function snapshotInjuries(
       const set = leaguesByPlayer.get(id) ?? new Set<string>()
       set.add(nameById.get(r.leagueId) ?? 'Your league')
       leaguesByPlayer.set(id, set)
+      const leagueSet = leagueIdsByPlayer.get(id) ?? new Set<string>()
+      leagueSet.add(r.leagueId)
+      leagueIdsByPlayer.set(id, leagueSet)
     }
   }
   const ids = [...leaguesByPlayer.keys()].slice(0, MAX_INJURY_PLAYERS)
@@ -381,20 +422,86 @@ async function snapshotInjuries(
   if (!resolution || !resolution.coverage.sourceAvailable || resolution.feedStale) return empty
 
   const injuries: Record<string, string | null> = {}
-  const meta = new Map<string, { name: string; position: string | null; leagues: string[] }>()
+  const meta = new Map<string, { name: string; position: string | null; leagues: string[]; leagueIds: string[] }>()
   for (const [id, p] of playerById) {
     const fact = resolution.byPlayer.get(normalizeMatchName(p.name))
     /* No fact, or a stale one, is "we cannot say" — never stored, so never compared. */
     if (!fact || fact.stale) continue
     injuries[id] = fact.status ?? null
-    meta.set(id, { name: p.name, position: p.position, leagues: [...(leaguesByPlayer.get(id) ?? [])] })
+    meta.set(id, {
+      name: p.name,
+      position: p.position,
+      leagues: [...(leaguesByPlayer.get(id) ?? [])],
+      leagueIds: [...(leagueIdsByPlayer.get(id) ?? [])],
+    })
   }
-  return { injuries, meta }
+  return { injuries, meta, teamIdByLeague }
+}
+
+/** A league as the brief needs it to build a provider link. */
+export type BriefLeagueLink = {
+  id: string
+  name: string | null
+  platform?: string | null
+  platformLeagueId?: string | null
+  season?: number | string | null
+}
+
+/**
+ * One tap from a brief line to the provider screen that acts on it (user decision
+ * 2026-09-14).
+ *
+ * - A trade → that league's trade screen, else its verified league page.
+ * - An injury on ONE of your leagues → your lineup there, else that league's page.
+ * - An injury across several leagues gets no single button: which lineup to open is the
+ *   user's call, and a button naming one league would quietly hide the others.
+ *
+ * Verified destinations only (platformLinks.handoffFor), so MFL / Fantrax / Fleaflicker
+ * lines keep just their in-app link. The key is OMITTED, not null, when there is no link,
+ * so a brief with nothing to hand off is exactly the brief built before this existed.
+ */
+export function attachBriefHandoffs(
+  brief: SinceLastVisitBrief,
+  leagues: BriefLeagueLink[],
+  teamIdByLeague: Map<string, string>,
+): SinceLastVisitBrief {
+  const byId = new Map(leagues.map((l) => [l.id, l]))
+  const linkFor = (leagueId: string, screen: SourceScreen): BriefHandoff | null => {
+    const l = byId.get(leagueId)
+    if (!l) return null
+    const link = handoffFor(
+      {
+        id: l.id,
+        name: l.name,
+        platform: l.platform,
+        platformLeagueId: l.platformLeagueId ?? null,
+        season: l.season ?? null,
+        teamId: teamIdByLeague.get(l.id) ?? null,
+      },
+      screen,
+    )
+    return link ? { href: link.href, label: link.label, screen: link.screen } : null
+  }
+  return {
+    ...brief,
+    trades: {
+      ...brief.trades,
+      items: brief.trades.items.map((t) => {
+        const handoff = linkFor(t.leagueId, 'trade')
+        return handoff ? { ...t, handoff } : t
+      }),
+    },
+    injuries: brief.injuries.map((i) => {
+      const handoff = i.leagueIds?.length === 1 ? linkFor(i.leagueIds[0], 'lineup') : null
+      return handoff ? { ...i, handoff } : i
+    }),
+  }
 }
 
 export async function getSinceLastVisit(args: {
   userId: string
-  leagues: Array<{ id: string; name: string | null; sport?: string | null }>
+  /** platform + platformLeagueId + season build the brief's provider handoff links. */
+  leagues: Array<BriefLeagueLink & { sport?: string | null }>
   recentTrades: RecentTrade[]
   /** The `limit` the home passed to `getRecentTrades`. */
   tradesLimit: number
@@ -437,5 +544,5 @@ export async function getSinceLastVisit(args: {
 
   const somethingChanged =
     brief.trades.items.length > 0 || brief.injuries.length > 0 || brief.standings.length > 0 || brief.alerts.total > 0
-  return somethingChanged ? brief : null
+  return somethingChanged ? attachBriefHandoffs(brief, leagues, injurySnap.teamIdByLeague) : null
 }
