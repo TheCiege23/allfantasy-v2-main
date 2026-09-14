@@ -4,6 +4,7 @@
 
 import { prisma } from '@/lib/prisma'
 import type { GuillotineSurvivalStanding } from './types'
+import { resolveRosterDisplayNames } from './rosterDisplayNames'
 
 export interface GetSurvivalStandingsInput {
   leagueId: string
@@ -47,25 +48,13 @@ export async function getSurvivalStandings(
     ])
   )
 
-  const rosters = await prisma.roster.findMany({
-    where: { leagueId, id: { in: [...byRoster.keys()] } },
-    select: { id: true, platformUserId: true },
-  })
-  const userIds = [...new Set(rosters.map((r) => r.platformUserId).filter(Boolean))]
-  const users = await prisma.appUser.findMany({
-    where: { id: { in: userIds } },
-    select: { id: true, displayName: true, email: true },
-  })
-  const displayByUserId = Object.fromEntries(
-    users.map((u) => [u.id, u.displayName || u.email || u.id])
-  )
+  // Never email: these names render on the guillotine home and go into Chimmy's prompts. See rosterDisplayNames.ts.
+  const nameByRoster = await resolveRosterDisplayNames(leagueId, [...byRoster.keys()])
 
   const list = [...byRoster.entries()]
     .map(([rosterId, data]) => ({
       rosterId,
-      displayName: displayByUserId[
-        rosters.find((r) => r.id === rosterId)?.platformUserId ?? ''
-      ] as string | undefined,
+      displayName: nameByRoster.get(rosterId),
       ...data,
     }))
     .sort((a, b) => b.seasonPointsCumul - a.seasonPointsCumul)

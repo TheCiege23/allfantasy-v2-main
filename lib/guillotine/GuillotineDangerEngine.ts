@@ -6,6 +6,7 @@
 import { prisma } from '@/lib/prisma'
 import { getGuillotineConfig } from './GuillotineLeagueConfig'
 import type { GuillotineDangerRow, DangerTier } from './types'
+import { resolveRosterDisplayNames } from './rosterDisplayNames'
 
 export interface GetDangerTiersInput {
   leagueId: string
@@ -66,17 +67,14 @@ export async function getDangerTiers(input: GetDangerTiersInput): Promise<Guillo
   const dangerThreshold = minProjected + margin
   const bubbleCount = Math.min(4, sorted.length)
 
-  const rosters = await prisma.roster.findMany({
-    where: { leagueId: input.leagueId, id: { in: sorted.map(([id]) => id) } },
-    select: { id: true, platformUserId: true },
-  })
-  const userIds = [...new Set(rosters.map((r) => r.platformUserId).filter(Boolean))]
-  const users = await prisma.appUser.findMany({
-    where: { id: { in: userIds } },
-    select: { id: true, displayName: true, email: true },
-  })
-  const displayByUserId = Object.fromEntries(
-    users.map((u) => [u.id, u.displayName || u.email || u.id])
+  /*
+   * 🛑 NEVER EMAIL. These names render on the guillotine home, go into Chimmy's prompts, and are
+   * read by every other manager in the league. This block used to resolve `displayName || email`.
+   * See rosterDisplayNames.ts.
+   */
+  const nameByRoster = await resolveRosterDisplayNames(
+    input.leagueId,
+    sorted.map(([id]) => id),
   )
 
   const periodScores = await prisma.guillotinePeriodScore.findMany({
@@ -90,9 +88,7 @@ export async function getDangerTiers(input: GetDangerTiersInput): Promise<Guillo
       i === 0 ? 'chop_zone' : i < bubbleCount || projectedPoints <= dangerThreshold ? 'danger' : 'safe'
     return {
       rosterId,
-      displayName: displayByUserId[
-        rosters.find((r) => r.id === rosterId)?.platformUserId ?? ''
-      ] as string | undefined,
+      displayName: nameByRoster.get(rosterId),
       projectedPoints,
       seasonPointsCumul: seasonByRoster.get(rosterId) ?? 0,
       tier,
