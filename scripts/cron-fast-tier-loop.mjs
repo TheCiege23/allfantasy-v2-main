@@ -196,6 +196,25 @@ export function effectiveConcurrency(recentDurations, max = MAX_CONCURRENCY) {
  */
 const SYSTEMIC_FAILURE_MIN_ATTEMPTS = 3
 
+/**
+ * Operational jobs that must run on the GitHub/Railway fast tier without consuming another
+ * Vercel cron slot. Vercel is already at the project's cron ceiling, and its production scheduler
+ * can remain on an older deployment during a billing outage. Keeping this small overlay beside
+ * the loop makes the five-minute active import lane independent of that stale scheduler.
+ */
+export const FAST_TIER_OPERATIONAL_OVERLAYS = Object.freeze([
+  Object.freeze({ path: '/api/cron/fantasy-os-active-sync', schedule: '*/5 * * * *' }),
+])
+
+export function withFastTierOperationalOverlays(crons) {
+  const rows = Array.isArray(crons) ? [...crons] : []
+  const paths = new Set(rows.map((row) => row?.path))
+  for (const overlay of FAST_TIER_OPERATIONAL_OVERLAYS) {
+    if (!paths.has(overlay.path)) rows.push({ ...overlay })
+  }
+  return rows
+}
+
 /** `*` -> 60s, `*\/N` -> N*60s. Returns null for anything not a fast-tier minute field. */
 export function intervalMsForSchedule(schedule) {
   const minute = String(schedule ?? '').trim().split(/\s+/)[0]
@@ -603,7 +622,7 @@ async function main() {
   const baseUrl = process.env.APP_URL?.trim()
   const secret = process.env.CRON_SECRET?.trim()
 
-  const { fast, excluded } = classifyCrons(readVercelCrons())
+  const { fast, excluded } = classifyCrons(withFastTierOperationalOverlays(readVercelCrons()))
 
   const jobs = []
   for (const c of fast) {
