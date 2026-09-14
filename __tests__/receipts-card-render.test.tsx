@@ -71,7 +71,8 @@ describe('ReceiptsCard', () => {
     expect(screen.getByText(/\(still counting\)/)).toBeTruthy()
     expect(screen.getByText('2 picks not drafted yet — not counted')).toBeTruthy()
     expect(screen.getByText('1 newer trade is too early to call.')).toBeTruthy()
-    expect(screen.getByText('Trade receipts cover your Sleeper leagues for now.')).toBeTruthy()
+    // Receipts now span trades and waiver adds, both Sleeper-only for now (2026-09-14).
+    expect(screen.getByText('Receipts cover your Sleeper leagues for now.')).toBeTruthy()
   })
 
   it('only too-early trades still gets a card that says so', () => {
