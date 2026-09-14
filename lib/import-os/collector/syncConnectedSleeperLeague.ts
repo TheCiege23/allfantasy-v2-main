@@ -23,7 +23,9 @@ import { createSleeperScopeFetcher } from './sleeperScopeFetcher'
 import {
   fetchNormalizedForConnection,
   resolveStoredCredentialUserIds,
+  SyncLeagueGoneError,
 } from './normalizedLoader'
+import { isInLeagueGoneBackoff, LEAGUE_GONE_RECHECK_MS } from './leagueGone'
 import { createPrismaSleeperSyncStore } from './prismaSyncStore'
 import { createAutomationSyncLock } from './automationSyncLock'
 import { ensureMatchupsCached } from '@/lib/rankings-engine/sleeper-matchup-cache'
@@ -220,18 +222,28 @@ export async function syncConnectedLeague(
 
   const stateRow = await prisma.leagueSyncState.findUnique({
     where: { runKey: connection.runKey },
-    select: { lastAttemptedSyncAt: true },
+    select: { lastAttemptedSyncAt: true, syncStatus: true, lastError: true },
   })
   const lastAttempt = stateRow?.lastAttemptedSyncAt ? stateRow.lastAttemptedSyncAt.toISOString() : null
-  const due = deps.force === true || isSyncDue(lastAttempt, cadenceMinutes, now)
-  const nextEligibleAt = lastAttempt
-    ? new Date(new Date(lastAttempt).getTime() + cadenceMinutes * 60_000).toISOString()
-    : now.toISOString()
+  /* A league the provider said is gone is re-asked daily, not every cadence — see ./leagueGone. */
+  const goneBackoff = deps.force !== true && isInLeagueGoneBackoff(stateRow, now)
+  const due = deps.force === true || (!goneBackoff && isSyncDue(lastAttempt, cadenceMinutes, now))
+  const nextEligibleAt = goneBackoff && stateRow?.lastAttemptedSyncAt
+    ? new Date(stateRow.lastAttemptedSyncAt.getTime() + LEAGUE_GONE_RECHECK_MS).toISOString()
+    : lastAttempt
+      ? new Date(new Date(lastAttempt).getTime() + cadenceMinutes * 60_000).toISOString()
+      : now.toISOString()
 
   const base = { runKey: connection.runKey, seasonState, cadenceMinutes, due, nextEligibleAt, warning }
 
   if (!due) {
-    return { ...base, executed: false, reason: 'not due for this season cadence' }
+    return {
+      ...base,
+      executed: false,
+      reason: goneBackoff
+        ? 'league gone at provider; not due until its daily recheck'
+        : 'not due for this season cadence',
+    }
   }
 
   /*
@@ -287,6 +299,12 @@ export async function syncConnectedLeague(
     leaseMs: deps.leaseMs ?? 5 * 60_000,
     maxRetries: deps.maxRetries ?? 2,
     runTimeoutMs: deps.runTimeoutMs ?? 4 * 60_000,
+    /*
+     * 🛑 THE LOADER HAS ALWAYS CLASSIFIED THIS; UNTIL NOW NOTHING ACTED ON IT. Every scope retried
+     * it, and the memoized loader releases its slot on rejection, so each retry re-read the
+     * provider. See ./leagueGone for the production measurement.
+     */
+    isTerminalError: (err) => err instanceof SyncLeagueGoneError,
   })
 
   /*
@@ -332,7 +350,13 @@ export async function syncConnectedLeague(
    * Fleaflicker have no weekly-matchup writer yet — a known gap, recorded rather than papered
    * over by pointing a Sleeper fetcher at them.
    */
-  if (connection.provider === 'sleeper' && result.status !== 'locked' && isInSeason(seasonState)) {
+  /* Nor after a run the provider ended by saying the league is gone: both calls would 404 too. */
+  if (
+    connection.provider === 'sleeper' &&
+    result.status !== 'locked' &&
+    result.terminalError === undefined &&
+    isInSeason(seasonState)
+  ) {
     await ensureMatchupsCached(
       connection.externalLeagueId,
       MAX_WEEKS,

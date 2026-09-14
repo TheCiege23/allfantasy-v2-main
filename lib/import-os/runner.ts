@@ -42,6 +42,8 @@ export type RunResult = {
   startedAt: string
   finishedAt: string
   warnings: string[]
+  /** Set when a fetch threw an error the caller classified as terminal; the run stopped there. */
+  terminalError?: string
 }
 
 export interface Clock {
@@ -96,6 +98,13 @@ export type RunSyncOptions = {
   maxRetries?: number
   runTimeoutMs?: number
   baseBackoffMs?: number
+  /**
+   * An error that retrying cannot change — today only "the provider says this league is gone".
+   * It is not retried, and the run stops: every scope reads the same memoized payload, so the
+   * remaining scopes would each re-ask the provider the question the first one just answered.
+   * The run finishes `skipped` when nothing completed before it.
+   */
+  isTerminalError?: (err: unknown) => boolean
 }
 
 function emptyAccounting(): Accounting {
@@ -129,6 +138,7 @@ export async function runSync(opts: RunSyncOptions): Promise<RunResult> {
   const incomplete: SyncScope[] = []
   const checkpoints: Record<SyncScope, string> = {}
   const warnings: string[] = []
+  let terminalError: string | undefined
 
   const lock = await opts.lock.acquire(opts.runKey, leaseMs, startedAt)
   if (!lock.acquired || !lock.token) {
@@ -137,6 +147,11 @@ export async function runSync(opts: RunSyncOptions): Promise<RunResult> {
 
   try {
     for (const scope of opts.scopes) {
+      // A terminal error already answered for every scope; do not ask the provider again.
+      if (terminalError !== undefined) {
+        incomplete.push(scope)
+        continue
+      }
       if (opts.clock.now().getTime() - startedAt.getTime() > runTimeoutMs) {
         incomplete.push(scope)
         warnings.push(`run timeout before scope "${scope}"`)
@@ -175,6 +190,14 @@ export async function runSync(opts: RunSyncOptions): Promise<RunResult> {
           // A scope-level attempt that threw. Not final → a retry attempt (attempt, no terminal outcome).
           // Final → a terminal permanent failure (one attempt, one logical request classified as failed).
           acc.requestAttempts += 1
+          if (opts.isTerminalError?.(err)) {
+            // Retrying cannot change the answer: one attempt, one logical request, and the run stops.
+            acc.permanentFailures += 1
+            acc.logicalRequests += 1
+            terminalError = err instanceof Error ? err.message : 'terminal error'
+            warnings.push(`scope "${scope}" stopped: ${terminalError}`)
+            break
+          }
           if (attempt < maxRetries) {
             acc.retries += 1
             await opts.sleep(backoffMs(baseBackoff, attempt, opts.rng))
@@ -189,7 +212,10 @@ export async function runSync(opts: RunSyncOptions): Promise<RunResult> {
       else incomplete.push(scope)
     }
 
-    const status: RunStatus = incomplete.length === 0 ? 'completed' : completed.length > 0 ? 'partial' : 'failed'
+    const status: RunStatus =
+      terminalError !== undefined && completed.length === 0
+        ? 'skipped'
+        : incomplete.length === 0 ? 'completed' : completed.length > 0 ? 'partial' : 'failed'
     // Freshness advances ONLY on a fully completed run.
     const advanced = status === 'completed'
     if (advanced) await opts.store.setLastSuccessfulSyncAt(opts.runKey, opts.clock.now().toISOString())
@@ -213,6 +239,7 @@ export async function runSync(opts: RunSyncOptions): Promise<RunResult> {
       startedAt: startedAt.toISOString(),
       finishedAt: opts.clock.now().toISOString(),
       warnings,
+      ...(terminalError !== undefined ? { terminalError } : {}),
     }
   }
 }
