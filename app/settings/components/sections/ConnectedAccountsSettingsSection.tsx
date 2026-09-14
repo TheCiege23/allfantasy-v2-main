@@ -91,7 +91,19 @@ export function ConnectedAccountsSettingsSection({
       setStatusMessage("Discord is temporarily unavailable because its connection settings need attention. Please contact support.")
     } else if (discordStatus === "error") {
       setStatusTone("error")
-      setStatusMessage("Discord could not be connected. Check the Discord app redirect URL and try again.")
+      setStatusMessage("Discord could not be connected. Start a new connection from this page and try again.")
+    } else if (discordStatus === "session-expired" || discordStatus === "authorization-expired") {
+      setStatusTone("error")
+      setStatusMessage("This Discord connection attempt expired or was replaced. Start a new connection from this page in the same browser.")
+    } else if (discordStatus === "cancelled") {
+      setStatusTone("info")
+      setStatusMessage("Discord connection cancelled. Your account has not been changed.")
+    } else if (discordStatus === "provider-error") {
+      setStatusTone("error")
+      setStatusMessage("Discord could not complete the connection. Please try again shortly.")
+    } else if (discordStatus === "save-error") {
+      setStatusTone("error")
+      setStatusMessage("Discord authorized the connection, but AllFantasy could not save it. Please try again or contact support.")
     } else if (discordStatus === "account-required") {
       setStatusTone("error")
       setStatusMessage("Connect your Discord account before adding the AllFantasy bot to a server.")
