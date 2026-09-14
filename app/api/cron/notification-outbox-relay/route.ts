@@ -18,7 +18,6 @@ import { NextResponse } from "next/server"
 import { requireCronAuth } from "@/app/api/cron/_auth"
 import { relayNotificationOutbox } from "@/lib/notifications/outboxRelay"
 import { withSyncJobRun } from "@/lib/production-health/syncJobRunTelemetry"
-import { runActiveSyncHeartbeat } from "@/lib/import-os/collector/runActiveSyncHeartbeat"
 
 export const dynamic = "force-dynamic"
 export const maxDuration = 120
@@ -60,22 +59,12 @@ async function handle(req: NextRequest) {
           status: r.failed > 0 ? ("partial" as const) : ("success" as const),
         }))
 
-    // This existing five-minute heartbeat also carries the bounded active import lane,
-    // keeping the project inside its 60-cron production ceiling. The tasks are isolated:
-    // provider trouble is reported in its own heartbeat and cannot stop notification delivery.
-    const activeSyncPromise = dryRun
-      ? Promise.resolve({ executed: false as const, reason: "dry run" })
-      : runActiveSyncHeartbeat().catch((error) => ({
-          executed: false as const,
-          error: error instanceof Error ? error.message : "active provider sync failed",
-        }))
-    const [result, activeProviderSync] = await Promise.all([relayPromise, activeSyncPromise])
+    const result = await relayPromise
 
     return NextResponse.json({
       ok: true,
       dryRun,
       ...result,
-      activeProviderSync,
       durationMs: Date.now() - startedAt,
       timestamp: new Date().toISOString(),
     })
