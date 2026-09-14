@@ -34,6 +34,7 @@ import { DashUserOs } from '@/components/core-app/screens/DashUserOs'
 import { DashDraftsBand } from '@/components/core-app/screens/DashDraftsBand'
 import { resolveUserOsSnapshot } from '@/lib/decision-os/userOs'
 import { getCrossLeagueExposure, getRivalRecords } from '@/lib/core-app/dash3aPanels'
+import { getFollowingCard } from '@/lib/core-app/followingCard'
 import { getDash34Data, imageOf, type Dash34LeagueRow } from '@/lib/core-app/dash34'
 import { getChatUnread } from '@/lib/chat-core/unreadCounts'
 import LeagueHome from '@/components/core-app/screens/LeagueHome'
@@ -1570,6 +1571,7 @@ export default async function AfCorePage({
     homePlays,
     homeRegularSeason,
     homeTrades,
+    homeFollowing,
   ] = isHome3a
     ? await Promise.all([
         getCareerData(userId).catch(() => null),
@@ -1648,8 +1650,14 @@ export default async function AfCorePage({
             },
           },
         ).catch(() => []),
+        /*
+         * Players followed across every league (2026-09-14). One read of the follow list
+         * plus the injury port and one fixture window for the shown rows. Null when follows
+         * are unavailable, which hides the card.
+         */
+        getFollowingCard(userId, now).catch(() => null),
       ])
-    : [null, null, null, null, null, null, null, [], false, []]
+    : [null, null, null, null, null, null, null, [], false, [], null]
 
   /*
    * "Since your last visit" — lib/core-app/sinceLastVisit. Serial after the home
@@ -2960,6 +2968,7 @@ export default async function AfCorePage({
             <Dashboard3A
               issues={issues}
               exposure={homeExposure}
+              following={homeFollowing}
               rivals={homeRivals}
               winProb={winProb}
               data={dash34}

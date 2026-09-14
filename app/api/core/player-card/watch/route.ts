@@ -6,6 +6,8 @@ import { authOptions } from '@/lib/auth'
 import { buildRateLimit429, consumeRateLimit, getClientIp } from '@/lib/rate-limit'
 import { resolveLeagueMembership } from '@/lib/league-access'
 import { addToWatchlist, removeFromWatchlist } from '@/lib/waiver-wire/watchlist-service'
+import { prisma } from '@/lib/prisma'
+import { followKeyFor, followPlayer, unfollowPlayer } from '@/lib/follows/playerFollows'
 
 /**
  * The player card's ☆ — the one WRITE the card makes.
@@ -34,6 +36,19 @@ import { addToWatchlist, removeFromWatchlist } from '@/lib/waiver-wire/watchlist
  * distinguishable by the shape of the id. `waiver_watchlists` was EMPTY in
  * production when this shipped, so nothing was reinterpreted.
  */
+/*
+ * ── FOLLOW, ACROSS EVERY LEAGUE (user decisions, 2026-09-14) ─────────────────────────────
+ * A body WITHOUT `leagueId` is a cross-league follow, stored in `player_follows` through
+ * lib/follows/playerFollows. It needs a session and nothing else: following a player reveals
+ * nothing about any league, so there is no membership to check. A body WITH `leagueId` is the
+ * league watchlist above, unchanged, so a client built before this still works.
+ *
+ * ⚠ THE SNAPSHOT COMES FROM OUR PLAYER ROW, NEVER FROM THE REQUEST. The client sends only the
+ * ids; name, position and team are read from `SportsPlayer` exactly as the card reads them, so
+ * a follow list cannot be written with an invented name.
+ *
+ * 409 at the follow limit, 503 when follows are unavailable (the migration is not applied).
+ */
 export const dynamic = 'force-dynamic'
 
 const bodySchema = z.object({
@@ -42,7 +57,45 @@ const bodySchema = z.object({
   sport: z.string().min(2).max(16).optional(),
 })
 
-async function authorize(req: Request) {
+const followSchema = z
+  .object({
+    sport: z.string().min(2).max(16),
+    sleeperId: z.string().min(1).max(64).optional(),
+    externalId: z.string().min(1).max(128).optional(),
+  })
+  .refine((b) => Boolean(b.sleeperId || b.externalId), { message: 'sleeperId or externalId is required' })
+
+type FollowBody = z.infer<typeof followSchema>
+
+async function authorizeFollow(req: Request, raw: unknown) {
+  const parsed = followSchema.safeParse(raw)
+  if (!parsed.success) return { error: NextResponse.json({ error: 'Invalid body' }, { status: 400 }) }
+  const session = (await getServerSession(authOptions as never).catch(() => null)) as
+    | { user?: { id?: string } }
+    | null
+  const userId = session?.user?.id
+  if (!userId) return { error: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }) }
+  return { userId, body: parsed.data }
+}
+
+/** Our row for him, by the same lookup the card uses (newest provider row wins). */
+async function findPlayer(body: FollowBody) {
+  return prisma.sportsPlayer
+    .findFirst({
+      where: {
+        sport: { equals: body.sport, mode: 'insensitive' },
+        ...(body.sleeperId
+          ? { sleeperId: { equals: body.sleeperId, mode: 'insensitive' } }
+          : { externalId: body.externalId! }),
+      },
+      orderBy: [{ fetchedAt: 'desc' }],
+      select: { externalId: true, sleeperId: true, sport: true, name: true, position: true, team: true },
+    })
+    .catch(() => null)
+}
+
+/** One limit for both kinds of star. */
+function rateLimited(req: Request) {
   const rl = consumeRateLimit({
     scope: 'players',
     action: 'card-watch',
@@ -53,14 +106,44 @@ async function authorize(req: Request) {
     maxRequests: 60,
     windowMs: 60_000,
   })
-  if (!rl.success) {
-    return {
-      error: NextResponse.json(buildRateLimit429({ message: 'Too many watchlist changes. Please slow down.', rl }), {
-        status: 429,
-        headers: { 'Retry-After': String(rl.retryAfterSec) },
-      }),
-    }
+  if (rl.success) return null
+  return NextResponse.json(buildRateLimit429({ message: 'Too many watchlist changes. Please slow down.', rl }), {
+    status: 429,
+    headers: { 'Retry-After': String(rl.retryAfterSec) },
+  })
+}
+
+async function handleFollow(req: Request, raw: unknown, method: 'POST' | 'DELETE') {
+  const a = await authorizeFollow(req, raw)
+  if ('error' in a) return a.error
+  const player = await findPlayer(a.body)
+
+  if (method === 'DELETE') {
+    const key = followKeyFor(player ?? a.body)
+    if (!key) return NextResponse.json({ error: 'Invalid body' }, { status: 400 })
+    const out = await unfollowPlayer(a.userId, player?.sport ?? a.body.sport, key)
+    if (out === 'unavailable') return NextResponse.json({ error: 'Follows are unavailable' }, { status: 503 })
+    return NextResponse.json({ ok: true, following: false })
   }
+
+  if (!player) return NextResponse.json({ error: 'Player not found' }, { status: 404 })
+  const out = await followPlayer(a.userId, {
+    sport: player.sport,
+    externalId: player.externalId,
+    sleeperId: player.sleeperId,
+    name: player.name,
+    position: player.position,
+    team: player.team,
+  })
+  if (out === 'limit') return NextResponse.json({ error: 'You are following the maximum number of players' }, { status: 409 })
+  if (out === 'unavailable') return NextResponse.json({ error: 'Follows are unavailable' }, { status: 503 })
+  if (out === 'invalid') return NextResponse.json({ error: 'This player cannot be followed' }, { status: 400 })
+  return NextResponse.json({ ok: true, following: true })
+}
+
+async function authorize(req: Request) {
+  const limited = rateLimited(req)
+  if (limited) return { error: limited }
 
   const parsed = bodySchema.safeParse(await req.json().catch(() => ({})))
   if (!parsed.success) return { error: NextResponse.json({ error: 'Invalid body' }, { status: 400 }) }
@@ -81,7 +164,19 @@ async function authorize(req: Request) {
   return { userId, body: parsed.data }
 }
 
+/** A body without `leagueId` is a cross-league follow; it is read once and routed here. */
+async function followRoute(req: Request, method: 'POST' | 'DELETE') {
+  const raw = await req
+    .clone()
+    .json()
+    .catch(() => ({}))
+  if (raw && typeof raw === 'object' && 'leagueId' in raw) return null
+  return rateLimited(req) ?? handleFollow(req, raw, method)
+}
+
 export async function POST(req: Request) {
+  const follow = await followRoute(req, 'POST')
+  if (follow) return follow
   const a = await authorize(req)
   if ('error' in a) return a.error
   await addToWatchlist(a.body.leagueId, a.userId, a.body.sleeperId, a.body.sport ?? null)
@@ -89,6 +184,8 @@ export async function POST(req: Request) {
 }
 
 export async function DELETE(req: Request) {
+  const follow = await followRoute(req, 'DELETE')
+  if (follow) return follow
   const a = await authorize(req)
   if ('error' in a) return a.error
   await removeFromWatchlist(a.body.leagueId, a.userId, a.body.sleeperId)
