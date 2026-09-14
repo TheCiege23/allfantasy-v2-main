@@ -306,7 +306,7 @@ export function MatchupPulseBoard({
         being silently missing from a screen that claims to cover every league.
       */}
       {routable.length > 0 ? (
-        <section className="af-bd-sec" aria-labelledby="af-mp-needs">
+        <section className="af-bd-sec af-mp-needs" aria-labelledby="af-mp-needs">
           <SectionHead
             id="af-mp-needs"
             label="Needs you first"

@@ -6,14 +6,19 @@
  * link's colour in this suite before. Same reason as af-pick-league.css.
  */
 
+/*
+ * FLAT, NOT A CARD (handoff 2026-09-13). The section used to be a surface panel,
+ * which put every row on --bg inside a --surface box — a card of cards. The handoff
+ * draws the section open and the ROWS as the surface objects.
+ */
 .af-mp {
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: 16px;
-  padding: 18px;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
 }
 
 /* ── Header ──────────────────────────────────────────────────────────── */
@@ -21,7 +26,13 @@
 .af-mp-head {
   display: flex;
   align-items: baseline;
-  gap: 10px;
+  gap: 8px;
+}
+
+.af-core .af-mp-head .af-label {
+  font: 700 9px/1 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  letter-spacing: 0.12em;
+  color: var(--faint);
 }
 
 .af-mp-rule {
@@ -32,20 +43,21 @@
 
 .af-mp-count {
   flex: none;
-  font-size: 11px;
+  font: 400 10px/1 var(--font-archivo, 'Archivo', system-ui, sans-serif);
   color: var(--faint);
 }
 
 /*
   The basis note is not fine print. It states whether the numbers below are
   points or projections, and a reader who misses it reads the wrong thing.
+  ⚠ Kept at --muted, one step brighter than the handoff's --faint, for exactly
+  that reason: the design's dimmer tone would make it read as a caption.
 */
 .af-mp-basis {
   margin: 0;
-  font-size: 11.5px;
-  line-height: 1.55;
+  font: 500 11px/1.5 var(--font-archivo, 'Archivo', system-ui, sans-serif);
   color: var(--muted);
-  max-width: 78ch;
+  max-width: 760px;
 }
 
 .af-mp-gap {
@@ -175,6 +187,12 @@
   min-width: 0;
 }
 
+.af-core .af-mp-col-head {
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  margin: 0;
+}
+
 .af-mp-col-head[data-tone='good'] {
   color: var(--good);
 }
@@ -198,7 +216,8 @@
   align-items: center;
   gap: 11px;
   padding: 10px 12px;
-  background: var(--bg);
+  /* --surface now that the section is flat; it was --bg only because it sat inside a card. */
+  background: var(--surface);
   border: 1px solid var(--line);
   border-radius: 11px;
   text-decoration: none;
@@ -226,7 +245,7 @@
 .af-mp-face--none {
   display: grid;
   place-items: center;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.02em;
   color: var(--text2);
@@ -246,7 +265,7 @@
 .af-mp-crest--none {
   display: grid;
   place-items: center;
-  font-size: 8.5px;
+  font-size: 9px;
   font-weight: 800;
   color: var(--text2);
 }
@@ -274,6 +293,13 @@
   border-color: rgba(148, 88, 255, 0.3);
   color: #a685ff;
 }
+/* Fantrax had no tint and fell back to the neutral chip (handoff 2026-09-13 colours it green). */
+.af-mp-face--none[data-platform='fantrax'],
+.af-mp-crest--none[data-platform='fantrax'] {
+  background: rgba(52, 211, 153, 0.14);
+  border-color: rgba(52, 211, 153, 0.3);
+  color: #5fe0b4;
+}
 
 .af-mp-text {
   display: flex;
@@ -284,7 +310,7 @@
 }
 
 .af-mp-league {
-  font-size: 12.5px;
+  font-size: 12px;
   font-weight: 800;
   line-height: 1.2;
   overflow: hidden;
@@ -293,25 +319,67 @@
 }
 
 .af-mp-meta {
-  font-size: 10.5px;
-  line-height: 1.25;
+  font-size: 10px;
+  line-height: 1.2;
   color: var(--faint);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-/* The projected tag. Quiet, but never absent on a projected row. */
+/*
+ * The projected tag. Quiet, but never absent on a projected row.
+ * Plain mono text rather than a filled chip (handoff 2026-09-13) — beside a 15px
+ * margin a chip was the loudest thing on the row, which inverted the emphasis.
+ */
 .af-mp-tag {
   flex: none;
-  padding: 3px 6px;
-  border-radius: 5px;
-  background: var(--chip);
-  border: 1px solid var(--chip-line);
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+  border: 0;
   font: 700 8px/1 'JetBrains Mono', ui-monospace, monospace;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.06em;
+  color: var(--faint);
+}
+
+/* ── "Needs you first" — boxed rows on this screen only ──────────────────
+ * Every other board keeps the shared hairline `.af-bd-row`; the matchup handoff
+ * boxes these because they sit directly under a column of boxed rows and a
+ * hairline list there reads as a different kind of object.
+ */
+.af-core .af-mp-needs .af-bd-rows { gap: 10px; }
+.af-core .af-mp-needs .af-bd-row {
+  gap: 12px;
+  padding: 12px 14px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 11px;
+}
+.af-core .af-mp-needs a.af-bd-row:hover,
+.af-core .af-mp-needs a.af-bd-row:focus-visible {
+  border-color: var(--accent-line);
+  background: var(--chip);
+}
+.af-core .af-mp-needs .af-bd-rank {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border-radius: 9px;
+  background: var(--chip);
+  font: 700 13px/1 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
   color: var(--muted);
 }
+.af-core .af-mp-needs .af-bd-league--wide { width: auto; flex: 1; }
+/*
+ * The empty spacer only existed to push the CTA right; the league block now flexes
+ * instead. Left in, the shared phone rule gives it `flex-basis: 100%` and the boxed
+ * row grows a blank line with the link wrapped below it.
+ */
+.af-core .af-mp-needs .af-bd-mid { display: none; }
+.af-core .af-mp-needs .af-bd-sub { font-weight: 400; }
+.af-core .af-mp-needs .af-bd-cta { width: auto; font-weight: 700; }
 
 .af-mp-diff {
   flex: none;
@@ -335,8 +403,9 @@
     grid-template-columns: minmax(0, 1fr);
   }
 
+  /* Flat on every width now — a 14px inset here left the section misaligned with the page. */
   .af-mp {
-    padding: 14px;
+    padding: 0;
   }
 
   /* The crest is the first thing to go when 390px has to hold a margin. */
