@@ -19,6 +19,7 @@ import type { NotificationCategoryId } from '@/lib/notification-settings/types'
 import type { NewsCategory } from '@/lib/workers/x-news-ingestion'
 import { dispatchNotification } from '@/lib/notifications/NotificationDispatcher'
 import { classifyPlayerNewsCategory } from '@/lib/news/player-news-category'
+import { listFollowerIdsForPlayer } from '@/lib/follows/playerFollows'
 
 type OptionalPlayerNewsNotificationModel = {
   findFirst?: (args: unknown) => Promise<unknown>
@@ -318,6 +319,9 @@ export async function dispatchPendingPlayerNewsNotifications(input?: {
   scanned: number
   notified: number
   recipients: number
+  /** Of `recipients`, users told because they FOLLOW the player and roster him nowhere. */
+  followerRecipients: number
+  /** Rows with no rostering manager AND no follower — nobody to tell. */
   noRoster: number
   /** Rows fetched but never considered because the budget ran out. Zero means the run completed. */
   deferred: number
@@ -346,6 +350,7 @@ export async function dispatchPendingPlayerNewsNotifications(input?: {
 
   let notified = 0
   let recipients = 0
+  let followerRecipients = 0
   let noRoster = 0
   let deferred = 0
   const stamped: string[] = []
@@ -383,8 +388,6 @@ export async function dispatchPendingPlayerNewsNotifications(input?: {
       })
       .catch(() => [])
 
-    if (rosterPlayers.length === 0) { noRoster++; continue }
-
     // dispatchNotification takes ONE leagueId, so group recipients by league rather than
     // calling it per user — one call per league instead of one per manager.
     const byLeague = new Map<string, Set<string>>()
@@ -395,7 +398,23 @@ export async function dispatchPendingPlayerNewsNotifications(input?: {
       if (!byLeague.has(leagueId)) byLeague.set(leagueId, new Set())
       byLeague.get(leagueId)!.add(userId)
     }
-    if (byLeague.size === 0) { noRoster++; continue }
+
+    /*
+     * Followers (user decisions, 2026-09-14): anyone who followed this player from a card,
+     * rostered or not, under their own `followed_players` switch.
+     *
+     * ⚠ MINUS EVERYONE ALREADY TOLD THROUGH A ROSTER. The dedupe prefix collapses the in-app
+     * ROW, not the push — a manager who both rosters and follows him would otherwise get two
+     * buzzes for one story. The roster path wins because it carries the league.
+     *
+     * `null` is "follows unavailable" (the migration not applied): skipped, not an error.
+     */
+    const rostered = new Set<string>()
+    for (const ids of byLeague.values()) for (const id of ids) rostered.add(id)
+    const followers = await listFollowerIdsForPlayer(row.sport, row.playerName).catch(() => null)
+    const followersOnly = (followers ?? []).filter((id) => !rostered.has(id))
+
+    if (byLeague.size === 0 && followersOnly.length === 0) { noRoster++; continue }
 
     const icon = CATEGORY_ICONS[category] ?? '📰'
     const label = CATEGORY_LABELS[category] ?? 'News'
@@ -415,6 +434,23 @@ export async function dispatchPendingPlayerNewsNotifications(input?: {
       }).catch(() => {})
       recipients += userIds.size
     }
+
+    if (followersOnly.length > 0) {
+      await dispatchNotification({
+        userIds: followersOnly,
+        category: 'followed_players',
+        type: isInjury ? 'player_injury_update' : 'player_news_update',
+        title,
+        body: row.headline.slice(0, 500),
+        // No league: a follow belongs to none, so no league mute applies either.
+        leagueId: null,
+        severity: isInjury ? 'high' : 'medium',
+        dedupePrefix: `player-news:${row.id}`,
+        meta: { playerName: row.playerName, team: row.team, sport: row.sport, newsCategory: category, followed: true },
+      }).catch(() => {})
+      recipients += followersOnly.length
+      followerRecipients += followersOnly.length
+    }
     notified++
   }
 
@@ -426,5 +462,5 @@ export async function dispatchPendingPlayerNewsNotifications(input?: {
 
   // `scanned` counts rows actually considered, not rows fetched — otherwise a truncated run
   // reports the same number as a complete one and the deferral is invisible in the response.
-  return { scanned: stamped.length, notified, recipients, noRoster, deferred }
+  return { scanned: stamped.length, notified, recipients, followerRecipients, noRoster, deferred }
 }

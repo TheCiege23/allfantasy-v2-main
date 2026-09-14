@@ -25,6 +25,8 @@ export const PUSH_NOTIFICATION_CATEGORIES = [
   "injury_alerts",
   "trade_proposals",
   "trade_accept_reject",
+  // A player you follow (2026-09-14): the whole point of following is being told.
+  "followed_players",
 ] as const
 
 export type PushNotificationCategory = (typeof PUSH_NOTIFICATION_CATEGORIES)[number]

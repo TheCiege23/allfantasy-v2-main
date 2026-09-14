@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma'
 import { resolveInjuryFacts } from '@/lib/injuries/injuryReadPort'
 import { normalizeMatchName } from '@/lib/player-match/verifiedNameMatch'
 import { asIds, isResolvableId, rosterCandidates } from './dash3aPanels'
+import { listPlayerFollows } from '@/lib/follows/playerFollows'
 import { handoffFor } from './platformLinks'
 import type { RecentTrade } from './recentTrades'
 import type { SourceScreen } from '@/lib/league-links/sourceLinkResolver'
@@ -144,6 +145,12 @@ export type BriefInjury = {
   leagueIds?: string[]
   /** Present only for a one-league injury with a verified destination. */
   handoff?: BriefHandoff
+  /**
+   * You follow him (2026-09-14). Omitted, not false, when you do not — so a brief with no
+   * follows is exactly the brief built before follows existed. `leagues` is empty when he is
+   * on none of your rosters.
+   */
+  followed?: true
 }
 
 export type BriefStanding = {
@@ -202,7 +209,7 @@ export function tradesSince(trades: RecentTrade[], since: Date, limit: number): 
 export function diffInjuries(
   baseline: VisitSnapshot | null,
   current: VisitSnapshot,
-  meta: Map<string, { name: string; position: string | null; leagues: string[]; leagueIds?: string[] }>,
+  meta: Map<string, { name: string; position: string | null; leagues: string[]; leagueIds?: string[]; followed?: boolean }>,
 ): BriefInjury[] {
   if (!baseline) return []
   const out: BriefInjury[] = []
@@ -221,6 +228,7 @@ export function diffInjuries(
       leagues: m.leagues,
       // Carried only when known, so a caller without ids gets exactly the old shape.
       ...(m.leagueIds ? { leagueIds: m.leagueIds } : {}),
+      ...(m.followed ? { followed: true as const } : {}),
     })
   }
   return out.sort((a, b) => b.leagues.length - a.leagues.length || a.name.localeCompare(b.name))
@@ -346,23 +354,37 @@ async function snapshotInjuries(
   now: Date,
 ): Promise<{
   injuries: Record<string, string | null>
-  meta: Map<string, { name: string; position: string | null; leagues: string[]; leagueIds: string[] }>
+  meta: Map<string, { name: string; position: string | null; leagues: string[]; leagueIds: string[]; followed?: boolean }>
   /** The user's own team id per league (LeagueTeam.externalId), for provider lineup links. */
   teamIdByLeague: Map<string, string>
 }> {
   const empty = { injuries: {}, meta: new Map(), teamIdByLeague: new Map<string, string>() }
   /* Injury feeds cover the NFL; another sport's empty result would read as "nobody is hurt". */
   const nfl = leagues.filter((l) => String(l.sport ?? 'NFL').toUpperCase() === 'NFL')
-  if (nfl.length === 0) return empty
   const nameById = new Map(nfl.map((l) => [l.id, l.name ?? 'Your league']))
 
-  const teams = await prisma.leagueTeam
-    .findMany({
-      where: { leagueId: { in: nfl.map((l) => l.id) }, claimedByUserId: userId },
-      select: { leagueId: true, platformUserId: true, externalId: true },
-    })
-    .catch(() => [])
-  if (teams.length === 0) return empty
+  /*
+   * Players you follow join the lookup (2026-09-14), rostered or not. NFL follows with a
+   * Sleeper id only — the snapshot is keyed by Sleeper id. A failed or unavailable follow
+   * read (the migration not applied) is simply no follows; the roster brief is unchanged.
+   */
+  const [teams, follows] = await Promise.all([
+    nfl.length > 0
+      ? prisma.leagueTeam
+          .findMany({
+            where: { leagueId: { in: nfl.map((l) => l.id) }, claimedByUserId: userId },
+            select: { leagueId: true, platformUserId: true, externalId: true },
+          })
+          .catch(() => [])
+      : Promise.resolve([]),
+    listPlayerFollows(userId).catch(() => null),
+  ])
+  const followedIds = new Set(
+    (follows ?? [])
+      .filter((f) => f.sport === 'NFL' && f.sleeperId && isResolvableId(f.sleeperId))
+      .map((f) => f.sleeperId as string),
+  )
+  if (teams.length === 0 && followedIds.size === 0) return empty
 
   /* One claimed team per league; a league with two is ambiguous, so it gets no team-specific link. */
   const teamIdByLeague = new Map<string, string>()
@@ -373,14 +395,17 @@ async function snapshotInjuries(
   }
   for (const id of twoTeams) teamIdByLeague.delete(id)
 
-  const rosters = await prisma.roster
-    .findMany({
-      where: {
-        OR: teams.map((t) => ({ leagueId: t.leagueId, platformUserId: { in: rosterCandidates(t, userId) } })),
-      },
-      select: { leagueId: true, playerData: true },
-    })
-    .catch(() => [])
+  const rosters =
+    teams.length > 0
+      ? await prisma.roster
+          .findMany({
+            where: {
+              OR: teams.map((t) => ({ leagueId: t.leagueId, platformUserId: { in: rosterCandidates(t, userId) } })),
+            },
+            select: { leagueId: true, playerData: true },
+          })
+          .catch(() => [])
+      : []
 
   const leaguesByPlayer = new Map<string, Set<string>>()
   /* The same leagues by id, so a one-league injury can link to that league's lineup. */
@@ -400,7 +425,11 @@ async function snapshotInjuries(
       leagueIdsByPlayer.set(id, leagueSet)
     }
   }
-  const ids = [...leaguesByPlayer.keys()].slice(0, MAX_INJURY_PLAYERS)
+  /* Rostered players first, then followed-only ones, under the same bound. */
+  const ids = [
+    ...leaguesByPlayer.keys(),
+    ...[...followedIds].filter((id) => !leaguesByPlayer.has(id)),
+  ].slice(0, MAX_INJURY_PLAYERS)
   if (ids.length === 0) return empty
 
   const players = await prisma.sportsPlayer
@@ -422,7 +451,7 @@ async function snapshotInjuries(
   if (!resolution || !resolution.coverage.sourceAvailable || resolution.feedStale) return empty
 
   const injuries: Record<string, string | null> = {}
-  const meta = new Map<string, { name: string; position: string | null; leagues: string[]; leagueIds: string[] }>()
+  const meta = new Map<string, { name: string; position: string | null; leagues: string[]; leagueIds: string[]; followed?: boolean }>()
   for (const [id, p] of playerById) {
     const fact = resolution.byPlayer.get(normalizeMatchName(p.name))
     /* No fact, or a stale one, is "we cannot say" — never stored, so never compared. */
@@ -433,6 +462,7 @@ async function snapshotInjuries(
       position: p.position,
       leagues: [...(leaguesByPlayer.get(id) ?? [])],
       leagueIds: [...(leagueIdsByPlayer.get(id) ?? [])],
+      ...(followedIds.has(id) ? { followed: true } : {}),
     })
   }
   return { injuries, meta, teamIdByLeague }
