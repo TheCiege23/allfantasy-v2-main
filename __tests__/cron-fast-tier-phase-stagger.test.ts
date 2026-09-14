@@ -179,6 +179,24 @@ describe('seedCatchupDueTimes', () => {
     expect(times).toEqual([startedAt, startedAt + 3_000, startedAt + 6_000])
   })
 
+  it('starts tight-cadence game-day work before long maintenance jobs sharing phase zero', () => {
+    const jobs = [
+      { path: '/api/cron/domain-os-refresh', intervalMs: 1_800_000, phaseMs: 0 },
+      { path: '/api/cron/alert-sweep', intervalMs: 900_000, phaseMs: 0 },
+      { path: '/api/cron/fantasy-os-active-sync', intervalMs: 300_000, phaseMs: 0 },
+      { path: '/api/cron/import-scores', intervalMs: 120_000, phaseMs: 0 },
+      { path: '/api/cron/draft-tick', intervalMs: 60_000, phaseMs: 0 },
+    ]
+    const startedAt = 1_700_000_000_000
+    const due = seedCatchupDueTimes(jobs, startedAt)
+
+    expect(due.get('/api/cron/draft-tick')).toBe(startedAt)
+    expect(due.get('/api/cron/import-scores')).toBe(startedAt + 3_000)
+    expect(due.get('/api/cron/fantasy-os-active-sync')).toBe(startedAt + 6_000)
+    expect(due.get('/api/cron/alert-sweep')).toBe(startedAt + 9_000)
+    expect(due.get('/api/cron/domain-os-refresh')).toBe(startedAt + 12_000)
+  })
+
   it('THE ACTUAL INCIDENT: catch-up no longer fires phase-separated jobs mere seconds apart', () => {
     // Real phases from assignPhases on the five incident jobs -- not invented ones. Sorted
     // alphabetically these get 0, 360_000, 720_000, 1_080_000, 1_440_000 respectively.
