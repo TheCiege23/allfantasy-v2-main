@@ -22,6 +22,8 @@ import type { WeekAllData } from '@/lib/core-app/weekAll'
 import type { Dash34Data } from '@/components/core-app/screens/Dashboard34'
 import type { ExposureData, RivalsData, PanelState } from '@/lib/core-app/dash3aPanels'
 import { ExposureRowItem } from '@/components/core-app/screens/ExposureImpact'
+import { FollowingCard } from '@/components/core-app/screens/FollowingCard'
+import type { FollowingCardData } from '@/lib/core-app/followingCard'
 
 /**
  * Screen 3a — Dashboard, all leagues.
@@ -96,6 +98,12 @@ export type Dashboard3AProps = {
    * shows no probability rather than a hedged one.
    */
   winProb?: Record<string, number> | null
+  /**
+   * Players you follow across every league (2026-09-14). Null when follows are unavailable
+   * (the `player_follows` migration not applied, or the read failed) — the card is then
+   * not rendered at all, rather than inviting a follow that cannot save.
+   */
+  following?: FollowingCardData | null
 }
 
 const SEV_CLASS: Record<CoreIssue['severity'], string> = {
@@ -362,6 +370,7 @@ export function Dashboard3A({
   exposure = null,
   rivals = null,
   winProb = null,
+  following = null,
 }: Dashboard3AProps) {
   const now = new Date()
   const openCount = issues.length
@@ -825,6 +834,8 @@ export function Dashboard3A({
             starters: the question is how much of your season rides on one player,
             and a bench stash is still exposure.
            */}
+          {/* Exposure and Following share a column, so the bottom row stays three-up. */}
+          <div className="af3a-stack">
           <section className="af3a-card">
             <header className="af3a-cardhead">
               <span className="af3a-label">PORTFOLIO &amp; EXPOSURE</span>
@@ -856,6 +867,24 @@ export function Dashboard3A({
             )}
             <Link className="af3a-cardlink" href="/core/portfolio">Open Portfolio →</Link>
           </section>
+
+          {/*
+            FOLLOWING (2026-09-14) — players you follow across every league, from the ☆ on
+            any player card. Not rendered when follows are unavailable. A blank status means
+            nothing is reported, never "healthy"; when the injury feed cannot answer, the
+            card says so instead of leaving every status blank without a reason.
+          */}
+          <FollowingCard
+            data={following}
+            help={
+              <Help>
+                <b>Players you follow in every league.</b>
+                Tap ☆ on any player card. Status is the latest reported designation; next game is
+                his next fixture on file.
+              </Help>
+            }
+          />
+          </div>
 
           <section className="af3a-card">
             <header className="af3a-cardhead">

@@ -3,6 +3,7 @@ import 'server-only'
 import { prisma } from '@/lib/prisma'
 import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
 import { isWatched } from '@/lib/waiver-wire/watchlist-service'
+import { followKeyFor, isFollowingPlayer } from '@/lib/follows/playerFollows'
 import { buildNextGameMap, type FixtureRow } from './nextGameMap'
 import { getRosteredMarket } from './rosteredMarket'
 import { latestProjectionWeek, lookupProjections } from './playerProjections'
@@ -225,6 +226,15 @@ export type PlayerCardData = {
   injury: SectionState<PlayerCardInjury>
   insight: PlayerCardInsight | null
   league: PlayerCardLeague | null
+  /**
+   * Whether the signed-in reader follows him across every league (2026-09-14).
+   *
+   * Absent (or null) when there is no follow to show: signed out, a player with no stable
+   * key, or follows unavailable because the `player_follows` migration is not applied. The
+   * card then falls back to the league watchlist star — never an unlit follow star that
+   * cannot save.
+   */
+  follow?: { following: boolean } | null
 }
 
 /* ── tuning ──────────────────────────────────────────────────────────────── */
@@ -1322,6 +1332,19 @@ export async function getPlayerCard(req: PlayerCardRequest): Promise<PlayerCardD
         )
       : unavailable('No price for this player, so there is nothing to compare against.')
 
+  /*
+   * The cross-league follow (2026-09-14). Omitted — not false — whenever there is nothing
+   * the star could honestly show: signed out, no stable key, or follows unavailable (the
+   * store returns null for a missing table, and any other failure is swallowed the same way
+   * every section here swallows its own). The sheet then falls back to the league watchlist.
+   */
+  const followKey = followKeyFor(identity)
+  const following =
+    req.userId && followKey
+      ? await isFollowingPlayer(req.userId, player.sport, followKey).catch(() => null)
+      : null
+  const follow = following === null ? null : { following }
+
   return {
     context: league ? 'league' : 'universal',
     player: identity,
@@ -1342,5 +1365,6 @@ export async function getPlayerCard(req: PlayerCardRequest): Promise<PlayerCardD
     injury,
     insight: deriveInsight({ name: player.name, market, ownership, byeWeek, comps }),
     league,
+    ...(follow ? { follow } : {}),
   }
 }

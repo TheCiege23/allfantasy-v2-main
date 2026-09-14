@@ -216,11 +216,22 @@ export default function PlayerCardSheet({
    * optimistic value as an override that falls back to the payload means a new
    * payload is authoritative the moment it lands.
    */
-  const watched = watchOverride ?? league?.watched ?? false
+  /*
+   * ⚠ FOLLOW FIRST, LEAGUE WATCHLIST AS THE FALLBACK (user decisions, 2026-09-14). When the
+   * payload carries `follow`, the star is a cross-league follow and renders on EVERY card,
+   * league or not. `follow` is absent when follows are unavailable (signed out, or the
+   * `player_follows` migration not applied) — then the star is the league watchlist exactly
+   * as before, and still only on the league flavour.
+   */
+  const follow = data?.follow ?? null
+  const followSleeperId = p?.sleeperId ?? subject.sleeperId ?? null
+  const followExternalId = p?.externalId ?? subject.externalId ?? null
+  const useFollow = Boolean(follow && (followSleeperId || followExternalId))
+  const watched = watchOverride ?? (useFollow ? Boolean(follow?.following) : (league?.watched ?? false))
   const watchId = p?.sleeperId ?? subject.sleeperId ?? null
 
   const toggleWatch = async () => {
-    if (!league || !watchId) return
+    if (!useFollow && (!league || !watchId)) return
     const next = !watched
     // Flip first: this is a pop-up, and a star that waits for a round-trip
     // reads as a dropped click.
@@ -230,11 +241,19 @@ export default function PlayerCardSheet({
         method: next ? 'POST' : 'DELETE',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({
-          leagueId: league.leagueId,
-          sleeperId: watchId,
-          sport: p?.sport ?? subject.sport,
-        }),
+        body: JSON.stringify(
+          useFollow
+            ? {
+                sport: p?.sport ?? subject.sport,
+                ...(followSleeperId ? { sleeperId: followSleeperId } : {}),
+                ...(followExternalId ? { externalId: followExternalId } : {}),
+              }
+            : {
+                leagueId: league!.leagueId,
+                sleeperId: watchId,
+                sport: p?.sport ?? subject.sport,
+              },
+        ),
       })
       // ⚠ REVERT ON A REFUSAL, NOT ONLY ON A THROW. A 401 or 404 resolves
       // successfully; leaving the star lit there would tell the reader something
@@ -284,7 +303,22 @@ export default function PlayerCardSheet({
             NULL leagueId, so on the universal card there is nowhere to write —
             the same gate Propose Trade carries, for the same reason.
           */}
-          {league && watchId ? (
+          {useFollow ? (
+            <button
+              type="button"
+              className="af-pc-star"
+              onClick={toggleWatch}
+              aria-pressed={watched}
+              aria-label={watched ? `Unfollow ${name}` : `Follow ${name}`}
+              title={
+                watched
+                  ? 'Following in every league — click to stop'
+                  : 'Follow in every league: his status and next game on your home'
+              }
+            >
+              <span aria-hidden>{watched ? '★' : '☆'}</span>
+            </button>
+          ) : league && watchId ? (
             <button
               type="button"
               className="af-pc-star"

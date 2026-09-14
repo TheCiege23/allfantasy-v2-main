@@ -621,3 +621,32 @@ touching either row.
 the same day, 11 of the 20 entries here were already applied to production, and 7 applied
 migrations existed nowhere in the repo at all. `_prisma_migrations` plus the live object
 is the only authority, and as the rows above show, even the ledger alone is not enough.
+
+---
+
+## Parked 2026-09-14: `20260914190000_player_follows`
+
+🛑 **NOT APPLIED.** Retention item 3, "follow a player across every league". The user chose
+a new table and keeps the decision of when to apply it.
+
+**Additive only**: one table (`player_follows`), one unique index, one lookup index. No
+existing table is touched, and there is no backfill. `ROLLBACK.sql` drops it; that drop is
+destructive only to follows made after the apply.
+
+**Safe in both orders, unlike the model-first cases above.** The code that reads and writes
+the table (`lib/follows/playerFollows.ts`) uses raw SQL, not a Prisma model, and treats a
+missing table (42P01) as "follows unavailable":
+- the player card falls back to its league watchlist star;
+- the home "Following" card is not rendered;
+- a follow request gets a 503.
+
+So the code can be deployed before or after this SQL runs. **The model is deliberately NOT in
+`schema.prisma`.** Adding it before the apply would raise P2021 in the generated client and
+would show as new drift in the schema-drift guard on the next schema push to `main`.
+
+**Order:**
+1. Apply this SQL.
+2. Add `model PlayerFollow` (`@@map("player_follows")`) to `schema.prisma`.
+3. Swap the raw queries in `playerFollows.ts` for the model, in one change.
+
+Verify the apply by the object, not the ledger: `select to_regclass('public.player_follows')`.
