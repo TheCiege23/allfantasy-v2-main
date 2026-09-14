@@ -442,3 +442,27 @@
   align-items: center;
   min-height: 44px;
 }
+
+/* ── iOS zoom floor ───────────────────────────────────────────────────
+ *
+ * 🛑 A TEXT INPUT UNDER 16px MAKES iOS SAFARI ZOOM THE PAGE IN ON FOCUS AND NEVER
+ * ZOOM BACK OUT. `.af-au-field input` is 14px — the handoff's size, right on
+ * desktop — and nothing raised it on a phone: af-core.css's floor covers only
+ * `.af-search-input`. So every sign-in and signup field zoomed on tap, the
+ * password field included (`.af-au-pw` sits inside `.af-au-field`).
+ *
+ * ⚠ SAME SELECTOR, LATER IN THE SAME FILE, TOP-LEVEL — for the reason af-core.css
+ * gives for its own floor: order inside one stylesheet is deterministic, while a
+ * tie ACROSS files is decided by the concatenated page.css and is a coin toss.
+ * 720px matches that floor. Appended after every other block, so nothing here can
+ * be carried into a narrower query by an insertion point.
+ *
+ * Found 2026-09-14 by e2e/mobile/phone-smoke.spec.ts — which, on most runs, had
+ * been measuring the route's loading shell instead of this form. See
+ * e2e/mobile/routeReady.ts, and login-field-probe.spec.ts for the controls.
+ */
+@media (max-width: 720px) {
+  .af-au-field input {
+    font-size: 16px;
+  }
+}

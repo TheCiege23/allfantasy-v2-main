@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test"
 import rawBaseline from "./undersized-target-baseline.json"
 import { compareTargets, type BaselineTarget } from "./targetRatchet"
 import { probeGeometry } from "./geometryProbe"
+import { waitForRouteReady } from "./routeReady"
 import {
   diagnoseStylesheets,
   unstyledFailureMessage,
@@ -89,6 +90,15 @@ test.describe("@mobile phone smoke", () => {
        * below describes it better than a bare Playwright timeout would.
        */
       await page.waitForLoadState("load", { timeout: 30_000 }).catch(() => {})
+
+      /*
+       * 🛑 `load` IS NOT "THE FORM HAS RENDERED" ON A CLIENT-ONLY ROUTE. /login serves a
+       * loading shell and mounts its form after hydration, which can come after `load`;
+       * probed then, it had no inputs and its font-size check passed by measuring nothing.
+       * See routeReady.ts — this waits for the route's real content, hard, before any
+       * pixel below is read.
+       */
+      await waitForRouteReady(page, route)
 
       /*
        * Probed in its own `page.evaluate` so the SAME function can be driven by
