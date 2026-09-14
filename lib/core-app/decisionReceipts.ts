@@ -10,6 +10,7 @@ import {
   type TradeSideGrade,
 } from '@/lib/trade-intel/sleeperTradeGradeService'
 import { computeWeeklyMaxPf, type WeeklyRosterPlayer } from '@/lib/commissioner-os/efl/maxPfEngine'
+import { listAdviceForUser } from '@/lib/chimmy-advice/adviceStore'
 import { asIds, rosterCandidates } from './dash3aPanels'
 import { composePlayerIdentities } from './playerIdentityCompose'
 import { normalizePosition } from './positionNormalization'
@@ -18,8 +19,8 @@ import { lineupSeatsFromSettings } from './slotEligibility'
 /**
  * Decision receipts — how your past moves turned out (retention item 6, user decisions
  * 2026-09-14): a weekly "receipts" card on the /core home, good and bad outcomes stated
- * plainly. Trades, waiver adds, lineups (start/sit) and AutoCoach calls so far; the rest of
- * Chimmy's advice follows.
+ * plainly. Trades, waiver adds, lineups (start/sit), AutoCoach calls and Chimmy's start/sit
+ * advice so far; Chimmy chat suggestions follow.
  *
  * TRADES read the grade cache the 30-minute sweep already fills (`trade-grades:v2:*`),
  * the same one `recentTrades` reads — one `in` query, no provider call, nothing recomputed.
@@ -108,26 +109,34 @@ export type LineupReceipt = {
   href: string
 }
 
-export type AutoCoachReceipt = {
+/** "Start X over Y" advice, resolved against that week's platform scores. */
+export type StartCallReceipt = {
   id: string
   leagueId: string
   leagueName: string
   season: number
   week: number
   slot: string | null
-  /** The player AutoCoach said to start, and what he scored that week. */
+  /** The player the advice said to start, and what he scored that week. */
   recommended: { name: string; points: number }
-  /** The starter AutoCoach said to replace, and what he scored. */
+  /** The player it said to start him over, and what he scored. */
   instead: { name: string; points: number }
   /**
-   * What your lineup ON THE PLATFORM did that week. An AutoCoach swap on an imported league
-   * only rewrites AllFantasy's copy of the roster, so this is read from the platform's own
-   * starters, never assumed.
+   * What your lineup ON THE PLATFORM did that week. Neither an AutoCoach swap on an imported
+   * league nor Chimmy's advice changes the lineup Sleeper scores, so this is read from the
+   * platform's own starters, never assumed.
    */
   followed: 'yes' | 'no' | 'unclear'
-  /** Did the recommended player outscore the one he replaced? Within 1 point is "same". */
+  /** Did the recommended player outscore the other? Within 1 point is "same". */
   call: 'right' | 'wrong' | 'same'
   href: string
+}
+
+export type AutoCoachReceipt = StartCallReceipt
+
+export type ChimmyReceipt = StartCallReceipt & {
+  /** How confident Chimmy said it was when it gave the advice. */
+  confidencePct: number | null
 }
 
 export type DecisionReceiptsData = {
@@ -156,6 +165,14 @@ export type DecisionReceiptsData = {
   autocoachUnscored?: number
   /** Calls that could not be tied to a week or to your roster that week. */
   autocoachUnreadable?: number
+  /** Chimmy's recent start/sit advice. Absent = none, or advice is unavailable (table not applied). */
+  chimmy?: ChimmyReceipt[]
+  /** Advice for a week still being played. */
+  chimmyPending?: number
+  /** Advice with no weekly score on file for one of the two players. */
+  chimmyUnscored?: number
+  /** Advice that could not be tied to your roster that week. */
+  chimmyUnreadable?: number
 }
 
 export type ReceiptsLeague = {
@@ -732,14 +749,7 @@ export async function getAutoCoachReceipts(args: {
       : Promise.resolve([] as Array<{ startTime: Date | null; week: number | null; season: number | null }>),
   ])
 
-  const rosterByLeague = new Map<string, number>()
-  const twice = new Set<string>()
-  for (const t of teams) {
-    if (rosterByLeague.has(t.leagueId)) twice.add(t.leagueId)
-    const n = Number(t.externalId)
-    if (Number.isFinite(n)) rosterByLeague.set(t.leagueId, n)
-  }
-  for (const id of twice) rosterByLeague.delete(id)
+  const rosterByLeague = claimedRosterIds(teams)
 
   // One fixture arrives from up to four providers; they must agree on the week or it is unusable.
   const weekByStart = new Map<number, { week: number; season: number } | 'conflict'>()
@@ -775,23 +785,75 @@ export async function getAutoCoachReceipts(args: {
   }
   if (callable.length === 0) return { autocoach: [], pending, unscored: 0, unreadable }
 
+  const scored = await scoreStartCalls(
+    callable.map((c) => ({
+      league: c.league,
+      season: c.season,
+      week: c.week,
+      rosterId: c.rosterId,
+      slot: c.slotPosition || null,
+      rec: { key: c.playerInId, name: c.playerInName },
+      alt: { key: c.playerOutId, name: c.playerOutName },
+    })),
+  )
+  return {
+    autocoach: scored.receipts.slice(0, MAX_AUTOCOACH_RECEIPTS),
+    pending,
+    unscored: scored.unscored,
+    unreadable: unreadable + scored.unreadable,
+  }
+}
+
+/** Your Sleeper roster id per league, from your claimed teams. A league with two claims has none. */
+function claimedRosterIds(teams: ReadonlyArray<{ leagueId: string; externalId: string | null }>): Map<string, number> {
+  const rosterByLeague = new Map<string, number>()
+  const twice = new Set<string>()
+  for (const t of teams) {
+    if (rosterByLeague.has(t.leagueId)) twice.add(t.leagueId)
+    const n = Number(t.externalId)
+    if (Number.isFinite(n)) rosterByLeague.set(t.leagueId, n)
+  }
+  for (const id of twice) rosterByLeague.delete(id)
+  return rosterByLeague
+}
+
+type StartCall = {
+  league: ReceiptsLeague
+  season: number
+  week: number
+  rosterId: number
+  slot: string | null
+  rec: { key: string; name: string }
+  alt: { key: string; name: string }
+}
+
+/**
+ * Both players' weekly scores for each "start X over Y", one read for all of them — shared by
+ * AutoCoach and Chimmy so the two can never disagree about what "right" or "followed" means.
+ * Either player unscored is unscored; either player not on YOUR roster that week is unreadable.
+ * Newest weeks first.
+ */
+async function scoreStartCalls(
+  calls: readonly StartCall[],
+): Promise<{ receipts: StartCallReceipt[]; unscored: number; unreadable: number }> {
   const scores = await prisma.leaguePlayerWeeklyScore.findMany({
     where: {
-      OR: callable.map((c) => ({ leagueId: c.league.platformLeagueId as string, seasonYear: c.season, week: c.week })),
-      playerId: { in: [...new Set(callable.flatMap((c) => [c.playerInId, c.playerOutId]))] },
+      OR: calls.map((c) => ({ leagueId: c.league.platformLeagueId as string, seasonYear: c.season, week: c.week })),
+      playerId: { in: [...new Set(calls.flatMap((c) => [c.rec.key, c.alt.key]))] },
     },
     select: { leagueId: true, seasonYear: true, week: true, playerId: true, rosterId: true, isStarter: true, points: true },
   })
 
   let unscored = 0
-  const receipts: AutoCoachReceipt[] = []
-  for (const c of callable) {
+  let unreadable = 0
+  const receipts: StartCallReceipt[] = []
+  for (const c of calls) {
     const find = (playerId: string) =>
       scores.find(
         (s) => s.leagueId === c.league.platformLeagueId && s.seasonYear === c.season && s.week === c.week && s.playerId === playerId,
       )
-    const rec = find(c.playerInId)
-    const alt = find(c.playerOutId)
+    const rec = find(c.rec.key)
+    const alt = find(c.alt.key)
     if (!rec || !alt) {
       unscored += 1
       continue
@@ -802,14 +864,14 @@ export async function getAutoCoachReceipts(args: {
     }
     const delta = rec.points - alt.points
     receipts.push({
-      id: `${c.league.id}:${c.season}:${c.week}:${c.playerInId}:${c.playerOutId}`,
+      id: `${c.league.id}:${c.season}:${c.week}:${c.rec.key}:${c.alt.key}`,
       leagueId: c.league.id,
       leagueName: c.league.name ?? 'Your league',
       season: c.season,
       week: c.week,
-      slot: c.slotPosition || null,
-      recommended: { name: c.playerInName, points: round1(rec.points) },
-      instead: { name: c.playerOutName, points: round1(alt.points) },
+      slot: c.slot,
+      recommended: { name: c.rec.name, points: round1(rec.points) },
+      instead: { name: c.alt.name, points: round1(alt.points) },
       followed: rec.isStarter && !alt.isStarter ? 'yes' : alt.isStarter && !rec.isStarter ? 'no' : 'unclear',
       call: Math.abs(delta) < AUTOCOACH_SAME_BAND ? 'same' : delta > 0 ? 'right' : 'wrong',
       href: `/core/my-team?league=${encodeURIComponent(c.league.id)}`,
@@ -817,13 +879,88 @@ export async function getAutoCoachReceipts(args: {
   }
 
   receipts.sort((a, b) => b.season - a.season || b.week - a.week)
-  return { autocoach: receipts.slice(0, MAX_AUTOCOACH_RECEIPTS), pending, unscored, unreadable }
+  return { receipts, unscored, unreadable }
+}
+
+/* ── Chimmy's advice ──────────────────────────────────────────────────────────── */
+
+export const MAX_CHIMMY_RECEIPTS = 5
+/** How far back Chimmy's advice is read. */
+export const CHIMMY_LOOKBACK_DAYS = 45
+
+/**
+ * How Chimmy's start/sit advice turned out (user decisions, 2026-09-14). The advice is what
+ * `lib/chimmy-advice` recorded when it was given — the comparison's call, with both players'
+ * roster Sleeper ids — and the outcome is resolved here, from the same weekly scores and by the
+ * same rules as AutoCoach's calls (`scoreStartCalls`).
+ *
+ * 🛑 THE ADVICE TABLE IS PARKED. Until `20260914230000_chimmy_advice` is applied, the store
+ * answers `null` ("unavailable") and this returns null, so the card has no Chimmy section —
+ * never an empty one that reads as "Chimmy never advised you".
+ *
+ * Counted, never shown as a number: advice for a week still being played or with the week
+ * unknown (pending); either player with no score that week (unscored); no single claimed team,
+ * or either player not on your roster that week (unreadable). Only start/sit advice for now;
+ * waiver adds get their receipt with the chat capture.
+ */
+export async function getChimmyAdviceReceipts(args: {
+  userId: string
+  leagues: readonly ReceiptsLeague[]
+  currentWeek: number | null
+}): Promise<{ chimmy: ChimmyReceipt[]; pending: number; unscored: number; unreadable: number } | null> {
+  if (!args.userId) return null
+  const sleeper = args.leagues.filter(isSleeper).slice(0, MAX_WAIVER_LEAGUES)
+  if (sleeper.length === 0) return null
+
+  const advice = await listAdviceForUser({
+    userId: args.userId,
+    leagueIds: sleeper.map((l) => l.id),
+    since: new Date(Date.now() - CHIMMY_LOOKBACK_DAYS * 86_400_000),
+  })
+  const startSits = (advice ?? []).filter((a) => a.adviceType === 'start_sit' && a.alt)
+  if (startSits.length === 0) return null
+
+  const teams = await prisma.leagueTeam.findMany({
+    where: { leagueId: { in: [...new Set(startSits.map((a) => a.leagueId))] }, claimedByUserId: args.userId },
+    select: { leagueId: true, externalId: true },
+  })
+  const rosterByLeague = claimedRosterIds(teams)
+
+  let pending = 0
+  let unreadable = 0
+  const confidence = new Map<string, number | null>()
+  const callable: StartCall[] = []
+  for (const a of startSits) {
+    const league = sleeper.find((l) => l.id === a.leagueId)
+    const rosterId = rosterByLeague.get(a.leagueId)
+    if (!league || rosterId == null) {
+      unreadable += 1
+      continue
+    }
+    if (args.currentWeek == null || a.week >= args.currentWeek) {
+      pending += 1
+      continue
+    }
+    callable.push({ league, season: a.season, week: a.week, rosterId, slot: a.slot, rec: a.rec, alt: a.alt! })
+    confidence.set(`${league.id}:${a.season}:${a.week}:${a.rec.key}:${a.alt!.key}`, a.confidencePct)
+  }
+  if (callable.length === 0) return { chimmy: [], pending, unscored: 0, unreadable }
+
+  const scored = await scoreStartCalls(callable)
+  return {
+    chimmy: scored.receipts
+      .slice(0, MAX_CHIMMY_RECEIPTS)
+      .map((r) => ({ ...r, confidencePct: confidence.get(r.id) ?? null })),
+    pending,
+    unscored: scored.unscored,
+    unreadable: unreadable + scored.unreadable,
+  }
 }
 
 /**
  * Every receipt the home card shows. Each kind fails on its own: a trade-cache miss never
- * hides your waiver, lineup or AutoCoach receipts, and the reverse. Null only when no kind has
- * anything to read.
+ * hides your waiver, lineup, AutoCoach or Chimmy receipts, and the reverse. Null only when no
+ * kind has anything to read.
  */
 export async function getDecisionReceipts(args: {
   userId: string
@@ -831,13 +968,14 @@ export async function getDecisionReceipts(args: {
   ownerSleeperId: string | null
   currentWeek: number | null
 }): Promise<DecisionReceiptsData | null> {
-  const [trades, waivers, lineups, autocoach] = await Promise.all([
+  const [trades, waivers, lineups, autocoach, chimmy] = await Promise.all([
     getTradeReceipts(args).catch(() => null),
     getWaiverReceipts(args).catch(() => null),
     getLineupReceipts(args).catch(() => null),
     getAutoCoachReceipts(args).catch(() => null),
+    getChimmyAdviceReceipts(args).catch(() => null),
   ])
-  if (!trades && !waivers && !lineups && !autocoach) return null
+  if (!trades && !waivers && !lineups && !autocoach && !chimmy) return null
   return {
     trades: trades?.trades ?? [],
     tooEarly: trades?.tooEarly ?? 0,
@@ -854,6 +992,14 @@ export async function getDecisionReceipts(args: {
           autocoachPending: autocoach.pending,
           autocoachUnscored: autocoach.unscored,
           autocoachUnreadable: autocoach.unreadable,
+        }
+      : {}),
+    ...(chimmy
+      ? {
+          chimmy: chimmy.chimmy,
+          chimmyPending: chimmy.pending,
+          chimmyUnscored: chimmy.unscored,
+          chimmyUnreadable: chimmy.unreadable,
         }
       : {}),
   }

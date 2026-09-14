@@ -650,3 +650,29 @@ would show as new drift in the schema-drift guard on the next schema push to `ma
 3. Swap the raw queries in `playerFollows.ts` for the model, in one change.
 
 Verify the apply by the object, not the ledger: `select to_regclass('public.player_follows')`.
+
+---
+
+## Parked 2026-09-14: `20260914230000_chimmy_advice`
+
+🛑 **NOT APPLIED.** Retention item 6, "decision receipts" for Chimmy's advice. The user chose
+a new table and keeps the decision of when to apply it.
+
+**Additive only**: one table (`chimmy_advice`), one unique index, one lookup index. No existing
+table is touched and there is no backfill. `ROLLBACK.sql` drops it, which destroys only advice
+recorded after the apply.
+
+**Only what was SAID is stored.** Whether advice was right, and whether the user followed it,
+are resolved at read time from `league_player_weekly_scores`, so no resolver cron comes with it.
+
+**Safe in both orders.** `lib/chimmy-advice/adviceStore.ts` uses raw SQL, not a Prisma model,
+and treats a missing table (42P01) as "advice unavailable": the start/sit writer records nothing
+and the Receipts card leaves out its Chimmy section. **The model is deliberately NOT in
+`schema.prisma`**, for the same P2021 / schema-drift reason as `player_follows` above.
+
+**Order:**
+1. Apply this SQL.
+2. Add `model ChimmyAdvice` (`@@map("chimmy_advice")`) to `schema.prisma`.
+3. Swap the raw queries in `adviceStore.ts` for the model, in one change.
+
+Verify the apply by the object, not the ledger: `select to_regclass('public.chimmy_advice')`.

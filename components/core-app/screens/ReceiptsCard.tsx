@@ -3,18 +3,19 @@
 import type { ReactNode } from 'react'
 import Link from 'next/link'
 import type {
-  AutoCoachReceipt,
+  ChimmyReceipt,
   DecisionReceiptsData,
   LineupReceipt,
+  StartCallReceipt,
   TradeReceipt,
   WaiverReceipt,
 } from '@/lib/core-app/decisionReceipts'
 
 /**
  * The home "Receipts" card — how your past moves turned out (retention item 6, user
- * decisions 2026-09-14). Trades, waiver adds, lineups and AutoCoach calls. Good and bad
- * outcomes read the same way: the points and which side of them you are on, never a letter
- * and never softened.
+ * decisions 2026-09-14). Trades, waiver adds, lineups, AutoCoach calls and Chimmy's start/sit
+ * advice. Good and bad outcomes read the same way: the points and which side of them you are
+ * on, never a letter and never softened.
  *
  * ⚠ NOT RENDERED WITH NOTHING TO SAY. `data` null, or no receipt of any kind AND nothing
  * too early, pending, unscored or unreadable to mention, renders nothing — an empty card on
@@ -27,10 +28,10 @@ const OUTCOME_TEXT: Record<TradeReceipt['outcome'], string> = {
   even: 'about even',
 }
 
-const CALL_TEXT: Record<AutoCoachReceipt['call'], string> = {
-  right: 'AutoCoach was right',
-  wrong: 'AutoCoach was wrong',
-  same: 'about the same',
+type Adviser = 'AutoCoach' | 'Chimmy'
+
+function callText(who: Adviser, call: StartCallReceipt['call']): string {
+  return call === 'same' ? 'about the same' : `${who} was ${call}`
 }
 
 function signed(n: number): string {
@@ -83,31 +84,59 @@ function LineupRow({ l }: { l: LineupReceipt }) {
   )
 }
 
-function AutoCoachRow({ a }: { a: AutoCoachReceipt }) {
-  const outcome = a.call === 'right' ? 'ahead' : a.call === 'wrong' ? 'behind' : undefined
+/**
+ * "X said start A over B". Always SAID — neither AutoCoach on an imported league nor Chimmy
+ * changes the lineup the platform scores, so whether you followed it is its own line.
+ */
+function StartCallRow({ c, who, confidencePct }: { c: StartCallReceipt; who: Adviser; confidencePct?: number | null }) {
+  const outcome = c.call === 'right' ? 'ahead' : c.call === 'wrong' ? 'behind' : undefined
   return (
-    <li className="af3a-receipt" data-kind="autocoach" data-outcome={outcome}>
-      <Link className="af3a-receipt-title" href={a.href}>
-        AutoCoach said start {a.recommended.name} over {a.instead.name}
+    <li className="af3a-receipt" data-kind={who === 'AutoCoach' ? 'autocoach' : 'chimmy'} data-outcome={outcome}>
+      <Link className="af3a-receipt-title" href={c.href}>
+        {who} said start {c.recommended.name} over {c.instead.name}
       </Link>
       <span className="af3a-receipt-where af3a-mono">
-        {a.leagueName} · {a.season} wk {a.week}
-        {a.slot ? ` · ${a.slot}` : ''}
+        {c.leagueName} · {c.season} wk {c.week}
+        {c.slot ? ` · ${c.slot}` : ''}
+        {confidencePct != null ? ` · ${confidencePct}% confident` : ''}
       </span>
       <span className="af3a-receipt-result">
         <b className="af3a-mono">
-          {a.recommended.name} {a.recommended.points.toFixed(1)}
+          {c.recommended.name} {c.recommended.points.toFixed(1)}
         </b>{' '}
-        · {a.instead.name} {a.instead.points.toFixed(1)} — {CALL_TEXT[a.call]}
+        · {c.instead.name} {c.instead.points.toFixed(1)} — {callText(who, c.call)}
       </span>
       <span className="af3a-receipt-note">
-        {a.followed === 'yes'
-          ? `You started ${a.recommended.name} on Sleeper.`
-          : a.followed === 'no'
-            ? `You kept ${a.instead.name} in on Sleeper.`
+        {c.followed === 'yes'
+          ? `You started ${c.recommended.name} on Sleeper.`
+          : c.followed === 'no'
+            ? `You kept ${c.instead.name} in on Sleeper.`
             : 'Your Sleeper lineup didn’t match either way.'}
       </span>
     </li>
+  )
+}
+
+/** The counted-not-shown notes shared by the AutoCoach and Chimmy groups. */
+function CallNotes({ who, pending, unscored, unreadable }: { who: Adviser; pending: number; unscored: number; unreadable: number }) {
+  return (
+    <>
+      {pending > 0 ? (
+        <p className="af3a-exp-note">
+          {pending} {who} call{pending === 1 ? ' is' : 's are'} for a week still being played.
+        </p>
+      ) : null}
+      {unscored > 0 ? (
+        <p className="af3a-exp-note">
+          {unscored} call{unscored === 1 ? ' has' : 's have'} no weekly scores on file yet.
+        </p>
+      ) : null}
+      {unreadable > 0 ? (
+        <p className="af3a-exp-note">
+          {unreadable} call{unreadable === 1 ? '' : 's'} couldn’t be matched to a week or to your roster that week.
+        </p>
+      ) : null}
+    </>
   )
 }
 
@@ -123,11 +152,16 @@ export function ReceiptsCard({ data, help }: { data: DecisionReceiptsData | null
   const autocoachPending = data.autocoachPending ?? 0
   const autocoachUnscored = data.autocoachUnscored ?? 0
   const autocoachUnreadable = data.autocoachUnreadable ?? 0
+  const chimmy: ChimmyReceipt[] = data.chimmy ?? []
+  const chimmyPending = data.chimmyPending ?? 0
+  const chimmyUnscored = data.chimmyUnscored ?? 0
+  const chimmyUnreadable = data.chimmyUnreadable ?? 0
   const hasTrades = data.trades.length > 0 || data.tooEarly > 0
   const hasWaivers = waivers.length > 0 || waiversTooEarly > 0 || waiversUnscored > 0
   const hasLineups = lineups.length > 0 || lineupsUnscored > 0 || lineupsUnreadable > 0
   const hasAutoCoach = autocoach.length > 0 || autocoachPending > 0 || autocoachUnscored > 0 || autocoachUnreadable > 0
-  const kinds = [hasTrades, hasWaivers, hasLineups, hasAutoCoach].filter(Boolean).length
+  const hasChimmy = chimmy.length > 0 || chimmyPending > 0 || chimmyUnscored > 0 || chimmyUnreadable > 0
+  const kinds = [hasTrades, hasWaivers, hasLineups, hasAutoCoach, hasChimmy].filter(Boolean).length
   if (kinds === 0) return null
   const headed = kinds > 1
 
@@ -228,26 +262,25 @@ export function ReceiptsCard({ data, help }: { data: DecisionReceiptsData | null
           {autocoach.length > 0 ? (
             <ul className="af3a-receipt-list">
               {autocoach.map((a) => (
-                <AutoCoachRow key={a.id} a={a} />
+                <StartCallRow key={a.id} c={a} who="AutoCoach" />
               ))}
             </ul>
           ) : null}
-          {autocoachPending > 0 ? (
-            <p className="af3a-exp-note">
-              {autocoachPending} AutoCoach call{autocoachPending === 1 ? ' is' : 's are'} for a week still being played.
-            </p>
+          <CallNotes who="AutoCoach" pending={autocoachPending} unscored={autocoachUnscored} unreadable={autocoachUnreadable} />
+        </>
+      ) : null}
+
+      {hasChimmy ? (
+        <>
+          {headed ? <h3 className="af3a-receipt-group">Chimmy</h3> : null}
+          {chimmy.length > 0 ? (
+            <ul className="af3a-receipt-list">
+              {chimmy.map((c) => (
+                <StartCallRow key={c.id} c={c} who="Chimmy" confidencePct={c.confidencePct} />
+              ))}
+            </ul>
           ) : null}
-          {autocoachUnscored > 0 ? (
-            <p className="af3a-exp-note">
-              {autocoachUnscored} call{autocoachUnscored === 1 ? ' has' : 's have'} no weekly scores on file yet.
-            </p>
-          ) : null}
-          {autocoachUnreadable > 0 ? (
-            <p className="af3a-exp-note">
-              {autocoachUnreadable} call{autocoachUnreadable === 1 ? '' : 's'} couldn’t be matched to a week or to your
-              roster that week.
-            </p>
-          ) : null}
+          <CallNotes who="Chimmy" pending={chimmyPending} unscored={chimmyUnscored} unreadable={chimmyUnreadable} />
         </>
       ) : null}
 
