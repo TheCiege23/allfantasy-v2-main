@@ -20,8 +20,20 @@ import { resolve } from 'node:path'
  * that happens to leave the words behind.
  */
 
+/*
+ * 🛑 THE ROUTER MUST BE ONE OBJECT FOR THE WHOLE FILE. AfCoreShell's rail-clock
+ * effect lists `router` in its deps and calls `setRailClock(Date.now())`
+ * synchronously. A factory returning a fresh object per `useRouter()` call made
+ * every render re-run that effect, which re-rendered, which re-ran it — an
+ * infinite loop inside act() that starved the worker, so not even testTimeout
+ * fired and the suite printed nothing past RUN. Next's real router is stable.
+ */
+const nav = vi.hoisted(() => ({
+  router: { push: () => {}, replace: () => {}, prefetch: () => {}, refresh: () => {} },
+}))
+
 vi.mock('next/navigation', () => ({
-  useRouter: () => ({ push: vi.fn(), replace: vi.fn(), prefetch: vi.fn() }),
+  useRouter: () => nav.router,
   usePathname: () => '/core',
   useSearchParams: () => new URLSearchParams(),
 }))
