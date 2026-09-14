@@ -1414,3 +1414,287 @@
   font-weight: 700;
 }
 
+/*
+ * ══ Communications bubble — 2026-09-13 handoff (`design_handoff_communications_bubble`) ══
+ *
+ * Appended rather than edited in, so the handoff reads as one layer over the
+ * 23a/23b drawer and every rule above keeps its own history.
+ *
+ *  - launcher: the teal glow the design gives the bubble;
+ *  - panel: `--bg` ground, 18px radius, accent border while open;
+ *  - header: a mono COMMUNICATIONS label and a bare ✕, not a boxed button;
+ *  - tabs: filled pills — accent fill for the open tab — instead of underlines.
+ *    All FIVE tabs stay; the design draws four because it predates Discord;
+ *  - thread: 11px bubbles with the corner facing the speaker squared;
+ *  - composer: a 44px input row on a --surface2 bar;
+ *  - phones: an inset card (19px sides, 36px top, 20px bottom) instead of
+ *    full-bleed, with the close glyph kept on a 44px target.
+ *
+ * ⚠ CONTENT AND CONTRACTS ARE UNTOUCHED. The audience line, privacy notices,
+ * the public-answer notice and the scope chip are all still rendered — only
+ * their paint changes here.
+ */
+
+.af-cm-launch {
+  box-shadow: 0 20px 40px -16px rgba(34, 211, 238, 0.55);
+}
+
+.af-cm[data-mode='overlay'] {
+  background: var(--bg);
+  border-color: var(--accent-line);
+  border-radius: 18px;
+}
+
+.af-cm-head {
+  padding: 14px 16px 0;
+}
+.af-cm-title {
+  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+.af-cm-close {
+  width: 32px;
+  height: 32px;
+  margin-right: -8px;
+  border: 0;
+  background: none;
+  color: var(--faint);
+  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font-size: 13px;
+  font-weight: 700;
+}
+.af-cm-close:hover { background: var(--chip); color: var(--text); }
+
+.af-cm-tabs {
+  gap: 5px;
+  margin: 12px -4px 0;
+}
+.af-cm-tab {
+  min-height: 34px;
+  padding: 6px 4px;
+  border: 1px solid var(--chip-line);
+  border-radius: 8px;
+  background: var(--chip);
+  color: var(--muted);
+  font-family: var(--font-archivo, 'Archivo', system-ui, sans-serif);
+  font-size: 10.5px;
+  font-weight: 700;
+  transition: color 0.13s ease, background-color 0.13s ease;
+}
+.af-cm-tab:hover { color: var(--text2); }
+.af-cm-tab[data-on='true'] {
+  border-color: transparent;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-weight: 800;
+}
+.af-cm-tab:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.af-cm-audience {
+  padding: 8px 0 10px;
+}
+
+.af-cm-thread {
+  padding: 14px;
+  gap: 12px;
+}
+.af-cm-turn-text {
+  padding: 11px 12px;
+  border-radius: 11px;
+  font-size: 12px;
+  line-height: 1.55;
+}
+.af-cm-turn[data-role='you'] .af-cm-turn-text {
+  border-top-right-radius: 4px;
+  color: var(--text2);
+}
+.af-cm-turn[data-role='chimmy'] .af-cm-turn-text {
+  border-top-left-radius: 4px;
+  background: var(--surface);
+  border-color: var(--line);
+}
+
+.af-cm-empty-t {
+  font-size: 14px;
+}
+.af-cm-quick {
+  flex-direction: row;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+}
+.af-cm-quickbtn {
+  padding: 9px 11px;
+  border-color: var(--chip-line);
+  border-radius: 16px;
+  font-size: 10.5px;
+  font-weight: 700;
+  text-align: center;
+}
+
+.af-cm-composer {
+  align-items: stretch;
+  gap: 8px;
+  padding: 12px 14px;
+  background: var(--surface2);
+}
+.af-cm-input {
+  min-height: 44px;
+  padding: 11px 12px;
+  border-color: var(--line);
+  border-radius: 11px;
+  background: var(--surface);
+  font-size: 12px;
+}
+.af-cm-send {
+  min-height: 44px;
+  padding: 0 16px;
+  border-color: transparent;
+  border-radius: 11px;
+}
+.af-cm-costnote {
+  margin: 0;
+  padding: 0 14px 10px;
+  background: var(--surface2);
+}
+
+@media (max-width: 520px) {
+  /* The design's inset card, not full-bleed: the page stays visible around it. */
+  .af-cm[data-mode='overlay'] {
+    top: 36px;
+    bottom: 20px;
+    left: 19px;
+    right: 19px;
+    width: auto;
+    margin: 0;
+    border: 1px solid var(--accent-line);
+    border-radius: 18px;
+  }
+  .af-cm-close {
+    width: 44px;
+    height: 44px;
+    margin-right: -12px;
+  }
+}
+
+/*
+ * ── Adopted comms additions (unowned WIP, taken over 2026-09-14) ────────────
+ * League picker, screenshot attach, icon send, tab and brand icons, speaker
+ * labels. These classes had no styles anywhere: the WIP shipped markup only.
+ */
+.af-cm-brand {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--faint);
+}
+.af-cm-brand .af-cm-title { flex: none; }
+
+.af-cm-tab {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+}
+.af-cm-tab > svg { flex: none; }
+
+.af-cm-league-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 7px;
+}
+.af-cm-league-search {
+  flex: 1 1 160px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 36px;
+  padding: 0 10px;
+  border: 1px solid var(--chip-line);
+  border-radius: 9px;
+  background: var(--chip);
+  color: var(--faint);
+}
+.af-cm-league-search:focus-within { outline: 2px solid var(--accent); outline-offset: 1px; }
+.af-cm-league-search input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  outline: none;
+}
+.af-cm-league-picker select {
+  flex: 1 1 180px;
+  min-width: 0;
+  min-height: 36px;
+  padding: 0 10px;
+  border: 1px solid var(--chip-line);
+  border-radius: 9px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+}
+.af-cm-league-picker select:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+.af-cm-icon {
+  flex: none;
+  width: 44px;
+  min-height: 44px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: var(--surface);
+  color: var(--muted);
+  cursor: pointer;
+}
+.af-cm-icon:hover { color: var(--text); }
+.af-cm-icon:disabled { opacity: 0.45; cursor: default; }
+.af-cm-icon:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* The send button is an icon now; the cost lives in the note under it. */
+.af-cm-send {
+  width: 44px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+}
+
+.af-cm-welcome-icon {
+  display: block;
+  margin: 0 auto 10px;
+  color: var(--accent);
+}
+.af-cm-quickbtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.af-cm-turn-author {
+  display: block;
+  margin: 0 2px 4px;
+  font-family: var(--font-archivo, 'Archivo', system-ui, sans-serif);
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--faint);
+}
+.af-cm-turn[data-role='chimmy'] .af-cm-turn-author { color: var(--accent); }
+
+@media (max-width: 520px) {
+  /* Five pills on a 350px card: labels only, the icons would crowd them. */
+  .af-cm-tab > svg { display: none; }
+  .af-cm-league-search,
+  .af-cm-league-picker select { min-height: 44px; }
+}
+

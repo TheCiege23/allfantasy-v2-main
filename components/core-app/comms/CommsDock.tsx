@@ -1,6 +1,8 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
+import { useSession } from 'next-auth/react'
+import { MessageSquare } from 'lucide-react'
 import CommsDrawer, { type CommsLeague, type CommsTab } from './CommsDrawer'
 import SupportModal from '@/components/core-app/support/SupportModal'
 import { COMMS_OPEN_EVENT, SUPPORT_OPEN_EVENT, type CommsOpenDetail } from './commsEvents'
@@ -72,6 +74,7 @@ export function CommsDock({
   unread = 0,
   mentions = 0,
 }: CommsDockProps) {
+  const { data: session } = useSession()
   const [open, setOpen] = useState(false)
   const [tab, setTab] = useState<CommsTab>('chimmy')
   const [prefill, setPrefill] = useState<string | null>(null)
@@ -149,20 +152,7 @@ export function CommsDock({
             A round icon bubble — the accessible name lives on aria-label, and
             the unread count stays visible as the badge it always was.
           */}
-          <svg
-            className="af-cm-launch-icon"
-            viewBox="0 0 24 24"
-            width="26"
-            height="26"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            aria-hidden
-          >
-            <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
-          </svg>
+          <MessageSquare className="af-cm-launch-icon" size={22} aria-hidden />
           {/*
             One badge, two voices. A mention turns it accent-coloured and marks
             it with an @; ordinary unread stays quiet. Two separate badges on one
@@ -179,6 +169,8 @@ export function CommsDock({
       ) : null}
 
       <CommsDrawer
+        key={session?.user?.id ?? 'anonymous'}
+        userId={session?.user?.id}
         mode={mode}
         open={open}
         onClose={close}

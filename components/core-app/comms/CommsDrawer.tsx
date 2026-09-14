@@ -1,6 +1,19 @@
 'use client'
 
 import ThreadPanel from './ThreadPanel'
+import { LeagueScopePicker } from './LeagueScopePicker'
+import { useScopedConversation } from './useScopedConversation'
+import {
+  ArrowUpRight,
+  ImagePlus,
+  MessageCircle,
+  MessagesSquare,
+  Radio,
+  Send,
+  Sparkles,
+  Users,
+  X,
+} from 'lucide-react'
 import RichMessage from './RichMessage'
 import LeagueActivityFeed from './LeagueActivityFeed'
 import { MessageTime } from './MessageTime'
@@ -90,6 +103,8 @@ export type CommsLeague = {
 }
 
 export type CommsDrawerProps = {
+  /** Keys the saved Chimmy conversations, so one account's chat never loads for another. */
+  userId?: string
   mode?: 'overlay' | 'docked'
   open: boolean
   onClose: () => void
@@ -126,9 +141,16 @@ const DM_PRIVACY =
   'AllFantasy DMs are separate from Sleeper and ESPN messages. We do not read them, mirror them, or send ' +
   'anything back to those platforms.'
 
+/*
+ * 2026-09-14 (user's call): the fuller notice. The earlier text said only what
+ * the BOT can see, which left out the part a member most needs — Discord's own
+ * roles decide who can read the channel, and a server's owners and admins can
+ * read private channels regardless of anything AllFantasy does.
+ */
 const DISCORD_PRIVACY =
-  "Only your commissioner can connect, disconnect, or change what's bridged. The bot can see the one " +
-  'channel they link — nothing else in the server — and edits or deletes made in either place do not sync.'
+  'Only your commissioner can manage the league bridge. Discord roles and channel permissions control ' +
+  'access; server owners and administrators can read private channels. Private AllFantasy DMs are never ' +
+  'mirrored. Edits and deletes do not sync.'
 
 /**
  * The only phrasing allowed when Chimmy suggests a roster change.
@@ -178,6 +200,14 @@ const TABS: Array<{ id: CommsTab; label: string; audience: string }> = [
   { id: 'dms', label: 'DMs', audience: 'One person' },
   { id: 'discord', label: 'Discord', audience: "Everyone in one league's server" },
 ]
+
+const TAB_ICONS: Record<CommsTab, typeof Sparkles> = {
+  league: MessagesSquare,
+  chimmy: Sparkles,
+  huddle: Users,
+  dms: MessageCircle,
+  discord: Radio,
+}
 
 type ChatTurn = {
   id: string
@@ -319,6 +349,7 @@ function ChimmyPanel({
   homeSignals,
   pageSurface,
   initialDraft,
+  userId,
 }: {
   leagues: CommsLeague[]
   scopeId: string | null
@@ -331,12 +362,34 @@ function ChimmyPanel({
   pageSurface: CoreSurfaceKey | null
   /** A question a screen asked us to seed. Never auto-sent. */
   initialDraft?: string | null
+  /** Keys the saved conversation, so one account's chat never loads for another. */
+  userId?: string
 }) {
-  const [turns, setTurns] = useState<ChatTurn[]>([])
-  const [draft, setDraft] = useState(initialDraft ?? '')
+  /*
+   * Kept per scope in sessionStorage, so closing the bubble does not throw the
+   * conversation away.
+   *
+   * ⚠ A PUBLIC LEAGUE ANSWER AND A PRIVATE CHAT ABOUT THE SAME LEAGUE ARE
+   * DIFFERENT CONVERSATIONS. Keyed on the league alone, a private thread
+   * would reappear under the league tab's public mode — rendered as though
+   * the whole league could see it. The `public:` prefix keeps them apart.
+   */
+  const { turns, draft, setTurns, setDraft } = useScopedConversation<ChatTurn>(
+    userId,
+    `${publicMode ? 'public:' : ''}${scopeId ?? 'global'}`,
+  )
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const endRef = useRef<HTMLDivElement | null>(null)
+  const [screenshot, setScreenshot] = useState<File | null>(null)
+  const screenshotRef = useRef<HTMLInputElement | null>(null)
+
+  /* An attachment belongs to the scope it was picked in; switching scope drops it. */
+  useEffect(() => {
+    setScreenshot(null)
+    setError(null)
+    if (screenshotRef.current) screenshotRef.current.value = ''
+  }, [scopeId])
 
   const scope = useMemo(
     () => leagues.find((l) => l.id === scopeId) ?? null,
@@ -344,7 +397,8 @@ function ChimmyPanel({
   )
 
   useEffect(() => {
-    endRef.current?.scrollIntoView({ block: 'end' })
+    /* Nothing to scroll to on an empty thread — scrolling there jumped the empty state. */
+    if (turns.length || busy) endRef.current?.scrollIntoView({ block: 'end' })
   }, [turns.length, busy])
 
   /*
@@ -359,11 +413,18 @@ function ChimmyPanel({
   const send = useCallback(
     async (text: string) => {
       const question = text.trim()
-      if (!question || busy) return
+      /* Captured once: the retry after a consent prompt must send the same file. */
+      const attached = screenshot
+      if ((!question && !attached) || busy) return
       setDraft('')
       setError(null)
       setBusy(true)
-      setTurns((t) => [...t, { id: `you-${t.length}`, role: 'you', text: question }])
+      setScreenshot(null)
+      if (screenshotRef.current) screenshotRef.current.value = ''
+      setTurns((t) => [
+        ...t,
+        { id: `you-${t.length}`, role: 'you', text: question || `Screenshot: ${attached?.name ?? 'image'}` },
+      ])
 
       try {
         /*
@@ -376,6 +437,8 @@ function ChimmyPanel({
           const form = new FormData()
           form.append('message', question)
           if (confirmed) form.append('confirmTokenSpend', 'true')
+          /* The route validates it (validateScreenshotFile); the 5 MB cap is also checked at pick time. */
+          if (attached) form.append('image', attached)
           if (scopeId) form.append('leagueId', scopeId)
           /*
            * What the home is telling this user right now, so the assistant they
@@ -538,12 +601,14 @@ function ChimmyPanel({
           },
         ])
       } catch (e) {
+        /* A failed send hands the question back rather than losing what was typed. */
+        setDraft(question)
         setError(e instanceof Error ? e.message : 'Chimmy could not answer that.')
       } finally {
         setBusy(false)
       }
     },
-    [busy, homeSignals, pageSurface, publicMode, scope, scopeId, turns],
+    [busy, homeSignals, pageSurface, publicMode, scope, scopeId, turns, screenshot, setDraft, setTurns],
   )
 
   const quickPrompts = scope
@@ -555,28 +620,12 @@ function ChimmyPanel({
       {/* Scope selector. The current scope is always visible, by contract. */}
       <div className="af-cm-scope">
         <span className="af-cm-scope-label">Scope</span>
-        <div className="af-cm-scope-chips">
-          <button
-            type="button"
-            className="af-cm-chip"
-            data-on={scopeId == null}
-            onClick={() => onScope(null)}
-          >
-            All leagues
-            <span className="af-cm-chip-badge">GLOBAL</span>
-          </button>
-          {leagues.slice(0, 6).map((l) => (
-            <button
-              key={l.id}
-              type="button"
-              className="af-cm-chip"
-              data-on={l.id === scopeId}
-              onClick={() => onScope(l.id)}
-            >
-              {l.name}
-            </button>
-          ))}
-        </div>
+        {/*
+          A searchable picker, not chips. The chips showed the first six leagues
+          and silently dropped the rest — on a 60-league account, most leagues
+          could not be scoped to from here at all.
+        */}
+        <LeagueScopePicker leagues={leagues} value={scopeId} onChange={onScope} allowGlobal />
         {/*
           * ⚠ "ONLY" WAS A PROMISE THE SYSTEM DELIBERATELY DOES NOT KEEP. Scoped
           * to KBFL and asked "who can I pick up in the zombie league?", Chimmy
@@ -597,14 +646,20 @@ function ChimmyPanel({
       <div className="af-cm-thread">
         {turns.length === 0 ? (
           <div className="af-cm-empty">
+            <Sparkles className="af-cm-welcome-icon" size={28} aria-hidden />
             <p className="af-cm-empty-t">Nothing asked yet.</p>
             <p className="af-cm-empty-b">
               Opening this costs nothing. The first question is yours.
             </p>
             <div className="af-cm-quick">
               {quickPrompts.map((q) => (
-                <button key={q} type="button" className="af-cm-quickbtn" onClick={() => send(q)}>
-                  {q}
+                /*
+                 * Fills the box rather than sending. One tap on a suggestion used
+                 * to spend tokens on a question the user had not finished choosing.
+                 */
+                <button key={q} type="button" className="af-cm-quickbtn" onClick={() => setDraft(q)}>
+                  <span>{q}</span>
+                  <ArrowUpRight size={13} aria-hidden />
                 </button>
               ))}
             </div>
@@ -612,6 +667,7 @@ function ChimmyPanel({
         ) : (
           turns.map((t) => (
             <div key={t.id} className="af-cm-turn" data-role={t.role}>
+              <span className="af-cm-turn-author">{t.role === 'chimmy' ? 'Chimmy' : 'You'}</span>
               <p className="af-cm-turn-text">{t.text}</p>
 
               {/* Contract 1: a public answer says so. */}
@@ -679,6 +735,23 @@ function ChimmyPanel({
         <div ref={endRef} />
       </div>
 
+      {screenshot ? (
+        <div className="af-cm-replybar">
+          <span className="af-cm-replybar-label">Screenshot</span>
+          <span className="af-cm-replybar-text">{screenshot.name}</span>
+          <button
+            type="button"
+            className="af-cm-replybar-x"
+            aria-label="Remove screenshot"
+            onClick={() => {
+              setScreenshot(null)
+              if (screenshotRef.current) screenshotRef.current.value = ''
+            }}
+          >
+            <X size={14} aria-hidden />
+          </button>
+        </div>
+      ) : null}
       <form
         className="af-cm-composer"
         onSubmit={(e) => {
@@ -687,6 +760,32 @@ function ChimmyPanel({
         }}
       >
         <input
+          ref={screenshotRef}
+          type="file"
+          accept="image/png,image/jpeg,image/webp,image/gif"
+          hidden
+          onChange={(e) => {
+            const file = e.target.files?.[0]
+            if (file && file.size > 5 * 1024 * 1024) {
+              setError('Screenshot must be 5 MB or smaller.')
+            } else if (file) {
+              setScreenshot(file)
+              setError(null)
+            }
+            e.target.value = ''
+          }}
+        />
+        <button
+          type="button"
+          className="af-cm-icon"
+          aria-label="Attach screenshot"
+          title="Attach screenshot"
+          disabled={busy}
+          onClick={() => screenshotRef.current?.click()}
+        >
+          <ImagePlus size={18} aria-hidden />
+        </button>
+        <input
           className="af-cm-input"
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
@@ -694,14 +793,23 @@ function ChimmyPanel({
           aria-label="Message"
           disabled={busy}
         />
-        <button type="submit" className="af-cm-send" disabled={busy || !draft.trim()}>
-          {tokenCost != null ? `Send · ${tokenCost}` : 'Send'}
+        <button
+          type="submit"
+          className="af-cm-send"
+          aria-label="Send to Chimmy"
+          title="Send to Chimmy"
+          disabled={busy || (!draft.trim() && !screenshot)}
+        >
+          <Send size={16} aria-hidden />
         </button>
       </form>
-      {/* Cost before the spend, in the chrome, not after the click. */}
+      {/*
+        Cost before the spend, in the chrome, not after the click. "May": four
+        paths in the route answer for free, so "each answer costs" was untrue.
+      */}
       <p className="af-cm-costnote">
         {tokenCost != null
-          ? `Each answer costs ${tokenCost} tokens. Typing costs nothing.`
+          ? `AI answers may cost ${tokenCost} tokens. Free lookups and typing cost nothing.`
           : 'Chimmy answers are included in your plan.'}
       </p>
     </div>
@@ -732,11 +840,13 @@ function LeaguePanel({
   scopeId,
   onScope,
   chimmyTokenCost,
+  userId,
 }: {
   leagues: CommsLeague[]
   scopeId: string | null
   onScope: (id: string | null) => void
   chimmyTokenCost: number | null
+  userId?: string
 }) {
   const [messages, setMessages] = useState<LeagueMessage[]>([])
   const [loading, setLoading] = useState(false)
@@ -1142,13 +1252,7 @@ function LeaguePanel({
       <div className="af-cm-panel">
         <div className="af-cm-scope">
           <span className="af-cm-scope-label">League</span>
-          <div className="af-cm-scope-chips">
-            {leagues.slice(0, 8).map((l) => (
-              <button key={l.id} type="button" className="af-cm-chip" onClick={() => onScope(l.id)}>
-                {l.name}
-              </button>
-            ))}
-          </div>
+          <LeagueScopePicker leagues={leagues} value={scopeId} onChange={onScope} />
           <p className="af-cm-scope-note">
             League chat belongs to one league. Pick which one — chat is per league.
           </p>
@@ -1197,6 +1301,7 @@ function LeaguePanel({
           publicMode
           homeSignals={null}
           pageSurface={null}
+          userId={userId}
         />
       </div>
     )
@@ -1206,19 +1311,7 @@ function LeaguePanel({
     <div className="af-cm-panel">
       <div className="af-cm-scope">
         <span className="af-cm-scope-label">League</span>
-        <div className="af-cm-scope-chips">
-          {leagues.slice(0, 6).map((l) => (
-            <button
-              key={l.id}
-              type="button"
-              className="af-cm-chip"
-              data-on={l.id === scopeId}
-              onClick={() => onScope(l.id)}
-            >
-              {l.name}
-            </button>
-          ))}
-        </div>
+        <LeagueScopePicker leagues={leagues} value={scopeId} onChange={onScope} />
         <button type="button" className="af-cm-summon" onClick={() => setAskChimmy(true)}>
           @chimmy — ask the league&apos;s AI, publicly
         </button>
@@ -1365,7 +1458,10 @@ function LeaguePanel({
         decides what is shown, never what is permitted.
       */}
       <ChatComposer
+        /* A half-written message belongs to the league it was typed in. */
+        key={scopeId}
         leagueId={scopeId}
+        currentUserId={viewerUserId ?? undefined}
         /* `#` offers these by name alongside players, matched on the client. */
         autocompleteLeagues={leagues.map((l) => ({ id: l.id, name: l.name }))}
         chatType="league"
@@ -1472,13 +1568,7 @@ function DiscordPanel({
       <div className="af-cm-panel">
         <div className="af-cm-scope">
           <span className="af-cm-scope-label">League</span>
-          <div className="af-cm-scope-chips">
-            {leagues.slice(0, 8).map((l) => (
-              <button key={l.id} type="button" className="af-cm-chip" onClick={() => onScope(l.id)}>
-                {l.name}
-              </button>
-            ))}
-          </div>
+          <LeagueScopePicker leagues={leagues} value={scopeId} onChange={onScope} />
           <p className="af-cm-scope-note">
             Discord belongs to one league at a time. Pick which one.
           </p>
@@ -1491,19 +1581,7 @@ function DiscordPanel({
     <div className="af-cm-panel">
       <div className="af-cm-scope">
         <span className="af-cm-scope-label">League</span>
-        <div className="af-cm-scope-chips">
-          {leagues.slice(0, 6).map((l) => (
-            <button
-              key={l.id}
-              type="button"
-              className="af-cm-chip"
-              data-on={l.id === scopeId}
-              onClick={() => onScope(l.id)}
-            >
-              {l.name}
-            </button>
-          ))}
-        </div>
+        <LeagueScopePicker leagues={leagues} value={scopeId} onChange={onScope} />
       </div>
 
       <div className="af-cm-privacy">{DISCORD_PRIVACY}</div>
@@ -1600,6 +1678,7 @@ export function CommsDrawer({
   pageSurface = null,
   initialTab = 'chimmy',
   initialDraft = null,
+  userId,
 }: CommsDrawerProps) {
   const [tab, setTab] = useState<CommsTab>(initialTab)
   const [scopeId, setScopeId] = useState<string | null>(pageLeagueId)
@@ -1618,6 +1697,17 @@ export function CommsDrawer({
   useEffect(() => {
     if (open) setScopeId(pageLeagueId)
   }, [open, pageLeagueId])
+
+  /*
+   * CommsDock keeps this instance mounted and changes `initialTab` when an open
+   * request names a tab ("ask Chimmy about this"). Read once in useState, that
+   * request was ignored whenever the drawer had already been opened on another
+   * tab. It follows the prop when the prop changes — not on every open — so a
+   * plain reopen still returns to the tab the user left.
+   */
+  useEffect(() => {
+    setTab(initialTab)
+  }, [initialTab])
 
   /*
    * Full-screen overlay hygiene, from the one place that owns it: Escape, the
@@ -1688,31 +1778,38 @@ export function CommsDrawer({
       >
         <header className="af-cm-head">
           <div className="af-cm-headtop">
-            <h2 className="af-cm-title">Communications</h2>
+            <span className="af-cm-brand">
+              <MessagesSquare size={15} aria-hidden />
+              <h2 className="af-cm-title">Communications</h2>
+            </span>
             {/* Contract 4: current scope, always visible. */}
             <span className="af-cm-scopechip" data-global={scopeId == null}>
               {scopeName ?? 'GLOBAL'}
             </span>
             <button type="button" className="af-cm-close" onClick={onClose} aria-label="Close">
-              ✕
+              <X size={16} aria-hidden />
             </button>
           </div>
 
           <nav className="af-cm-tabs" role="tablist">
-            {TABS.map((t) => (
-              <button
-                key={t.id}
-                type="button"
-                role="tab"
-                aria-selected={tab === t.id}
-                className="af-cm-tab"
-                data-on={tab === t.id}
-                onClick={() => setTab(t.id)}
-                title={t.audience}
-              >
-                {t.label}
-              </button>
-            ))}
+            {TABS.map((t) => {
+              const Icon = TAB_ICONS[t.id]
+              return (
+                <button
+                  key={t.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={tab === t.id}
+                  className="af-cm-tab"
+                  data-on={tab === t.id}
+                  onClick={() => setTab(t.id)}
+                  title={t.audience}
+                >
+                  <Icon size={14} aria-hidden />
+                  <span>{t.label}</span>
+                </button>
+              )
+            })}
           </nav>
 
           {/* Who can see what you type here. The tabs' whole distinction. */}
@@ -1725,6 +1822,7 @@ export function CommsDrawer({
             scopeId={scopeId}
             onScope={setScopeId}
             chimmyTokenCost={chimmyTokenCost}
+            userId={userId}
           />
         ) : tab === 'chimmy' ? (
           <ChimmyPanel
@@ -1736,6 +1834,7 @@ export function CommsDrawer({
             homeSignals={homeSignals}
             pageSurface={pageSurface}
             initialDraft={initialDraft}
+            userId={userId}
           />
         ) : tab === 'huddle' ? (
           <ThreadPanel kind="group" privacy={HUDDLE_PRIVACY} />
