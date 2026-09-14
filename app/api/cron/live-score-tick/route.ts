@@ -201,6 +201,8 @@ export async function GET(request: NextRequest) {
           pointsLeaguesSynced: points?.leaguesSynced ?? 0,
           pointsScoresUpserted: points?.scoresUpserted ?? 0,
           pointsErrors: points?.errors ?? 0,
+          /* Starter swing alerts handed to the notification engine this tick. */
+          pointsSwingAlerts: points?.swingAlerts ?? 0,
           pointsSkipped: points?.skipped ?? null,
         },
       }),
