@@ -695,6 +695,120 @@
 .af-core .af-bd-cards--rich .af-bd-kvrow .af-bd-v[data-sev='good'] { color: var(--good); }
 .af-core .af-bd-cards--rich .af-bd-kvrow .af-bd-v[data-sev='bad'] { color: var(--bad); }
 
+/* ── waiver swap (Waivers) — handoff 2026-09-13 ─────────────────────────────
+ *
+ * Rides the rich card. Net gain as a tinted pill, the add and the drop as two
+ * tinted panels with an arrow between, the reasoning in its own box.
+ */
+.af-core .af-bd-pill {
+  flex: none;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+  padding: 7px 10px;
+  border-radius: 8px;
+  font: 900 13px/1 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+  background: color-mix(in srgb, var(--muted) 12%, transparent);
+  white-space: nowrap;
+}
+/* Tinted from the token, not `currentColor` — Chromium resolved that mix grey. */
+.af-core .af-bd-pill[data-sev='good'] { color: var(--good); background: color-mix(in srgb, var(--good) 13%, transparent); }
+.af-core .af-bd-pill[data-sev='bad'] { color: var(--bad); background: color-mix(in srgb, var(--bad) 13%, transparent); }
+.af-core .af-bd-pill-unit { font-size: 9px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; }
+
+.af-core .af-bd-cards--rich .af-bd-swap {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 16px minmax(0, 1fr);
+  align-items: stretch;
+  gap: 12px;
+}
+.af-core .af-bd-swap-arrow {
+  align-self: center;
+  text-align: center;
+  font: 700 14px/1 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  color: var(--faint);
+}
+.af-core .af-bd-swap .af-bd-side {
+  min-width: 0;
+  gap: 8px;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+.af-core .af-bd-swap .af-bd-side[data-tone='good'] {
+  background: color-mix(in srgb, var(--good) 7%, transparent);
+  border-color: color-mix(in srgb, var(--good) 32%, transparent);
+}
+.af-core .af-bd-swap .af-bd-side[data-tone='bad'] {
+  background: color-mix(in srgb, var(--bad) 6%, transparent);
+  border-color: color-mix(in srgb, var(--bad) 28%, transparent);
+}
+.af-core .af-bd-cards--rich .af-bd-swap .af-bd-side-label { padding-bottom: 0; font-weight: 800; }
+.af-core .af-bd-swap .af-bd-side[data-tone='good'] .af-bd-side-label { color: var(--good); }
+.af-core .af-bd-swap .af-bd-side[data-tone='bad'] .af-bd-side-label { color: var(--bad); }
+.af-core .af-bd-cards--rich .af-bd-swap .af-bd-asset {
+  padding: 0;
+  gap: 10px;
+  border-bottom: 0;
+  font: 800 14px/1.25 var(--font-archivo, 'Archivo', system-ui, sans-serif);
+  color: var(--text);
+}
+/* A panel has room to wrap; a clipped name or "no drop" reason is a lost fact. */
+.af-core .af-bd-swap .af-bd-asset-name { white-space: normal; }
+.af-core .af-bd-cards--rich .af-bd-swap .af-bd-asset--empty {
+  font: 500 12px/1.5 var(--font-archivo, 'Archivo', system-ui, sans-serif);
+  color: var(--muted);
+}
+.af-core .af-bd-swap .af-bd-asset-team {
+  display: block;
+  font: 500 11px/1.4 var(--font-archivo, 'Archivo', system-ui, sans-serif);
+}
+.af-core .af-bd-swap .af-bd-proj { display: flex; align-items: baseline; gap: 6px; }
+.af-core .af-bd-cards--rich .af-bd-swap .af-bd-proj .af-bd-asset-val {
+  font: 900 22px/1 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  color: var(--good);
+}
+/* The drop's number is what you give up, not a warning — the design greys it. */
+.af-core .af-bd-cards--rich .af-bd-swap .af-bd-proj .af-bd-asset-val[data-sev='bad'] { color: var(--muted); }
+.af-core .af-bd-cards--rich .af-bd-swap .af-bd-kvrow {
+  display: flex;
+  gap: 14px;
+  padding: 0;
+  border: 0;
+}
+.af-core .af-bd-cards--rich .af-bd-swap .af-bd-kvrow .af-bd-kv {
+  flex-direction: row;
+  align-items: baseline;
+  gap: 5px;
+  padding: 0;
+  border-left: 0;
+}
+.af-core .af-bd-cards--rich .af-bd-swap .af-bd-kvrow .af-bd-v {
+  font: 700 11px/1 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  color: var(--text2);
+}
+
+.af-core .af-bd-why {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--accent) 5%, transparent);
+}
+.af-core .af-bd-why-label {
+  flex: none;
+  font: 800 9px/1.9 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+.af-core .af-bd-cards--rich .af-bd-why .af-bd-reason { font-size: 12px; color: var(--text2); }
+.af-core .af-bd-card-foot .af-bd-cta { width: auto; margin-left: auto; }
+
 .af-core .af-bd-reason {
   font: 500 11.5px/1.5 var(--font-archivo, 'Archivo', system-ui, sans-serif);
   color: var(--muted);
@@ -1038,6 +1152,11 @@
   }
   .af-core .af-bd-cards--rich .af-bd-kvrow .af-bd-kv { padding: 0 12px; }
   .af-core .af-bd-cards--rich .af-bd-kvrow .af-bd-kv:nth-child(3n + 1) { padding-left: 0; border-left: 0; }
+  /* Waiver swap: panels stack, the arrow points down between them, and the
+     market line stays a flex row rather than the draft strip's grid. */
+  .af-core .af-bd-cards--rich .af-bd-swap { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+  .af-core .af-bd-swap-arrow { transform: rotate(90deg); }
+  .af-core .af-bd-cards--rich .af-bd-swap .af-bd-kvrow { display: flex; }
 }
 
 /*
