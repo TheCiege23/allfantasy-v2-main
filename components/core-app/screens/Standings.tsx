@@ -30,6 +30,11 @@ function n1(v: number): string {
   return v.toFixed(1)
 }
 
+/** "1,412.6" — grouped, one decimal. The locale is fixed so server and client render the same string. */
+function pts1(v: number): string {
+  return v.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 })
+}
+
 
 /**
  * Completed seasons, as the import recorded them.
@@ -133,48 +138,69 @@ export function Standings({ data }: StandingsProps) {
         </p>
       </header>
 
+      {/*
+        2026-09-13 handoff (the per-league Rankings design, landed here by the
+        user's call — one per-league points-for screen, not two): label over
+        value, and the fourth tile is the projected final PF whenever there is
+        enough scored to project. Record moves to the foot line in that case; it
+        is never dropped.
+      */}
       {you ? (
         <div className="af-st-tiles">
           <div className="af-st-tile">
-            <span className="af-st-tile-v af-num">{ordinal(you.rank)}</span>
-            <span className="af-label">Your rank</span>
-            <span className="af-st-tile-s">
-              of {teams.length} by points for
+            <span className="af-label">Current rank</span>
+            <span className="af-st-tile-row">
+              <span className="af-st-tile-v af-num">{ordinal(you.rank)}</span>
               {/*
                 Null movement is the first scored week — there is no prior rank
                 to compare against, which is a different fact from "no change".
               */}
               {you.movement != null && you.movement !== 0 ? (
                 <span className="af-st-move" data-dir={you.movement > 0 ? 'up' : 'down'}>
-                  {' '}
                   {you.movement > 0 ? '▲' : '▼'}
                   {Math.abs(you.movement)}
                 </span>
               ) : null}
             </span>
+            <span className="af-st-tile-s">of {teams.length} by points for · this week</span>
           </div>
 
           <div className="af-st-tile">
-            <span className="af-st-tile-v af-num">{n1(you.pointsFor)}</span>
-            <span className="af-label">Points for</span>
+            <span className="af-label">Points for · season</span>
+            <span className="af-st-tile-v af-num">{pts1(you.pointsFor)}</span>
             <span className="af-st-tile-s">
               over {you.weeksPlayed} scored {you.weeksPlayed === 1 ? 'week' : 'weeks'}
             </span>
           </div>
 
           <div className="af-st-tile">
-            <span className="af-st-tile-v af-num">{you.average != null ? n1(you.average) : '—'}</span>
-            <span className="af-label">Per week</span>
+            <span className="af-label">Avg per week</span>
+            <span className="af-st-tile-v af-num" data-tone={paceTone(you, teams)}>
+              {you.average != null ? n1(you.average) : '—'}
+            </span>
             <span className="af-st-tile-s">{describeVsLeague(you, teams)}</span>
           </div>
 
-          <div className="af-st-tile">
-            <span className="af-st-tile-v af-num">
-              {you.wins}—{you.losses}
-            </span>
-            <span className="af-label">Record</span>
-            <span className="af-st-tile-s">{describeLuck(you, teams)}</span>
-          </div>
+          {projection.available ? (
+            <div className="af-st-tile">
+              <span className="af-label">Projected final PF</span>
+              <span className="af-st-tile-v af-num" data-tone="accent">
+                ~{Math.round(projection.data.mid).toLocaleString('en-US')}
+              </span>
+              <span className="af-st-tile-s af-num">
+                {Math.round(projection.data.low).toLocaleString('en-US')} –{' '}
+                {Math.round(projection.data.high).toLocaleString('en-US')} pts
+              </span>
+            </div>
+          ) : (
+            <div className="af-st-tile">
+              <span className="af-label">Record</span>
+              <span className="af-st-tile-v af-num">
+                {you.wins}—{you.losses}
+              </span>
+              <span className="af-st-tile-s">{describeLuck(you, teams)}</span>
+            </div>
+          )}
         </div>
       ) : (
         <div className="af-st-noteam">
@@ -183,42 +209,25 @@ export function Standings({ data }: StandingsProps) {
         </div>
       )}
 
-      {/* ── Projection ──────────────────────────────────────────────── */}
-      <section className="af-st-projection" data-missing={!projection.available}>
-        <h2 className="af-label">Projected final points</h2>
-        {projection.available ? (
-          <>
-            <p className="af-st-proj-v">
-              <span className="af-num">{Math.round(projection.data.mid).toLocaleString()}</span>
-              <span className="af-st-proj-range af-num">
-                {Math.round(projection.data.low).toLocaleString()} –{' '}
-                {Math.round(projection.data.high).toLocaleString()}
-              </span>
-            </p>
-            <p className="af-st-proj-basis">{projection.data.basis}</p>
-          </>
-        ) : (
-          <p className="af-st-proj-why">{projection.reason}</p>
-        )}
-      </section>
-
-      <div className="af-st-split">
-        {/* ── Rank trend ────────────────────────────────────────────── */}
-        <section className="af-st-panel">
-          <h2 className="af-label">Rank by week</h2>
+      {/* ── Your rank this season ───────────────────────────────────── */}
+      <section className="af-st-section">
+        <h2 className="af-label af-st-seclabel">Your rank this season</h2>
+        <div className="af-st-panel">
           {trend.length > 1 ? (
-            <RankTrend trend={trend} teamCount={teams.length} />
+            <RankBars trend={trend} teamCount={teams.length} />
           ) : (
             <p className="af-st-panel-why">
               A trend needs at least two scored weeks. There{' '}
               {trend.length === 1 ? 'is one' : 'are none'} on file so far.
             </p>
           )}
-        </section>
+        </div>
+      </section>
 
+      <div className="af-st-split">
         {/* ── Recent weeks ──────────────────────────────────────────── */}
         <section className="af-st-panel">
-          <h2 className="af-label">Your recent weeks</h2>
+          <h2 className="af-label">Recent weeks</h2>
           {recent.length > 0 ? (
             <ul className="af-st-recent">
               {recent.map((r) => (
@@ -226,17 +235,20 @@ export function Standings({ data }: StandingsProps) {
                   <span className="af-st-recent-w af-label">Wk {r.week}</span>
                   <span className="af-st-recent-p af-num">{n1(r.pointsFor)}</span>
                   {/*
-                    Against your own average to that point, so the sign means
+                    Against your OWN average to that point, so the sign means
                     "better than your normal" rather than "better than last
-                    week" — one big week should not make the next read as a slump.
+                    week". The label says whose average: the league's is a
+                    different number, on the tile above.
                   */}
                   <span
                     className="af-st-recent-d af-num"
                     data-dir={r.delta == null ? 'none' : r.delta >= 0 ? 'up' : 'down'}
                   >
-                    {r.delta == null ? '—' : `${r.delta >= 0 ? '+' : '−'}${n1(Math.abs(r.delta))}`}
+                    {r.delta == null
+                      ? '—'
+                      : `${r.delta >= 0 ? '+' : '−'}${n1(Math.abs(r.delta))} vs your avg`}
                   </span>
-                  <span className="af-st-recent-r af-num">{ordinal(r.rank)}</span>
+                  <span className="af-st-recent-r af-num">rank {ordinal(r.rank)}</span>
                 </li>
               ))}
             </ul>
@@ -246,9 +258,47 @@ export function Standings({ data }: StandingsProps) {
             </p>
           )}
         </section>
+
+        {/* ── Projection ──────────────────────────────────────────────── */}
+        <section className="af-st-projection" data-missing={!projection.available}>
+          <h2 className="af-label">Projected final points</h2>
+          {projection.available ? (
+            <>
+              <p className="af-st-proj-v">
+                <span className="af-num">{Math.round(projection.data.mid).toLocaleString('en-US')}</span>
+                <span className="af-st-proj-range af-num">
+                  {projection.data.weeksRemaining} {projection.data.weeksRemaining === 1 ? 'week' : 'weeks'} left
+                </span>
+              </p>
+              <p className="af-st-proj-basis">{projection.data.basis}</p>
+              {/*
+                ⚠ THE LOADER'S OWN RANGE, NOT WIN-OUT / LOSE-OUT. The handoff drew
+                two record scenarios, but points for does not depend on wins and
+                nothing here models a team's scoring off its record. These rows are
+                the top and bottom of the projected range, labelled as exactly that;
+                the basis above says how it was made.
+              */}
+              <div className="af-st-projrows">
+                <div className="af-st-projrow" data-tone="good">
+                  <span className="af-label">High</span>
+                  <span className="af-st-projrow-note">Top of the projected range</span>
+                  <span className="af-num">{Math.round(projection.data.high).toLocaleString('en-US')}</span>
+                </div>
+                <div className="af-st-projrow" data-tone="bad">
+                  <span className="af-label">Low</span>
+                  <span className="af-st-projrow-note">Bottom of the projected range</span>
+                  <span className="af-num">{Math.round(projection.data.low).toLocaleString('en-US')}</span>
+                </div>
+              </div>
+            </>
+          ) : (
+            <p className="af-st-proj-why">{projection.reason}</p>
+          )}
+        </section>
       </div>
 
       {/* ── Board ───────────────────────────────────────────────────── */}
+      <h2 className="af-label af-st-seclabel">{league.name} · points-for ranking</h2>
       <p className="af-st-scroll-cue">Scroll sideways to compare every column.</p>
       <section className="af-st-tablewrap" aria-label="Current league standings" tabIndex={0}>
         <table className="af-st-table">
@@ -305,6 +355,10 @@ export function Standings({ data }: StandingsProps) {
       </section>
 
       <p className="af-st-foot">
+        {/* When the Record tile gave way to the projection, the record lives here instead. */}
+        {you && projection.available
+          ? `Record ${you.wins}—${you.losses}: ${describeLuck(you, teams)}. `
+          : null}
         Points-for rank is not the playoff picture — seeding runs on record first.{' '}
         <Link href={`/core/season-outlook?league=${encodeURIComponent(league.id)}`}>
           Season Outlook
@@ -317,51 +371,65 @@ export function Standings({ data }: StandingsProps) {
 }
 
 /**
- * The rank trend, drawn as inline SVG.
+ * Rank by week, as bars (2026-09-13 handoff).
  *
- * ⚠ RANK IS INVERTED ON PURPOSE. 1st is the best rank and the highest point on
- * the chart, so the y-axis runs from `teamCount` at the bottom to 1 at the top.
- * Plotting rank directly would draw a team climbing the table as a line going
- * down, which reads as exactly the opposite of what happened.
+ * ⚠ TALLER IS BETTER. 1st draws the tallest bar and last the shortest. The
+ * handoff's caption read "lower bar = better rank", which contradicts its own
+ * drawing (its rank-2 weeks are the tallest bars); the drawing is what a reader
+ * believes, so the caption here says what the bars actually do.
+ *
+ * The current week is marked, and so is every week at your season-best rank —
+ * where you are now and where you have been at your best are the two readings.
  */
-function RankTrend({ trend, teamCount }: { trend: RankTrendPoint[]; teamCount: number }) {
-  const W = 300
-  const H = 96
-  const padX = 6
-  const padY = 8
-  const span = Math.max(1, trend.length - 1)
+function RankBars({ trend, teamCount }: { trend: RankTrendPoint[]; teamCount: number }) {
   const worst = Math.max(teamCount, ...trend.map((p) => p.rank))
-
-  const x = (i: number) => padX + (i / span) * (W - padX * 2)
-  const y = (rank: number) =>
-    padY + ((rank - 1) / Math.max(1, worst - 1)) * (H - padY * 2)
-
-  const line = trend.map((p, i) => `${i === 0 ? 'M' : 'L'}${x(i).toFixed(1)},${y(p.rank).toFixed(1)}`).join(' ')
-  const area = `${line} L${x(trend.length - 1).toFixed(1)},${H - padY} L${x(0).toFixed(1)},${H - padY} Z`
+  const best = Math.min(...trend.map((p) => p.rank))
   const last = trend[trend.length - 1]
 
   return (
-    <figure className="af-st-trend">
-      <svg
-        viewBox={`0 0 ${W} ${H}`}
-        className="af-st-trend-svg"
+    <figure className="af-st-bars">
+      <div
+        className="af-st-bars-chart"
         role="img"
         aria-label={`Rank by week: ${trend.map((p) => `week ${p.week} ${ordinal(p.rank)}`).join(', ')}`}
       >
-        <path d={area} className="af-st-trend-area" />
-        <path d={line} className="af-st-trend-line" />
-        {/* The endpoint is emphasised — where you are now is the thing being read. */}
-        <circle cx={x(trend.length - 1)} cy={y(last.rank)} r="3.5" className="af-st-trend-dot" />
-      </svg>
-      <figcaption className="af-st-trend-cap">
-        <span>Wk {trend[0].week}</span>
-        <span>
-          best {ordinal(Math.min(...trend.map((p) => p.rank)))} · now {ordinal(last.rank)}
-        </span>
-        <span>Wk {last.week}</span>
+        <div className="af-st-bars-plot">
+          {trend.map((p, i) => {
+            const isNow = i === trend.length - 1
+            const tone = isNow ? 'now' : p.rank === best ? 'best' : undefined
+            const height = 18 + ((worst - p.rank) / Math.max(1, worst - 1)) * 82
+            return (
+              <div className="af-st-bar" key={p.week} data-tone={tone}>
+                <span className="af-st-bar-rank af-num">{p.rank}</span>
+                <span className="af-st-bar-fill" style={{ height: `${height.toFixed(1)}%` }} />
+              </div>
+            )
+          })}
+        </div>
+        <div className="af-st-bars-weeks">
+          {trend.map((p) => (
+            <span key={p.week} className="af-num">
+              W{p.week}
+            </span>
+          ))}
+        </div>
+      </div>
+      <figcaption className="af-st-bars-cap">
+        Taller bar = better rank. Best {ordinal(best)} · now {ordinal(last.rank)}. Rank only moves on
+        synced results, never estimated between weeks.
       </figcaption>
     </figure>
   )
+}
+
+/** Tone for the per-week tile: above or below the league average, or nothing when level or unknown. */
+function paceTone(you: StandingRow, teams: StandingRow[]): 'good' | 'bad' | undefined {
+  const withAvg = teams.filter((t) => t.average != null)
+  if (you.average == null || withAvg.length === 0) return undefined
+  const leagueAvg = withAvg.reduce((a, t) => a + (t.average ?? 0), 0) / withAvg.length
+  const diff = you.average - leagueAvg
+  if (Math.abs(diff) < 0.05) return undefined
+  return diff > 0 ? 'good' : 'bad'
 }
 
 function describeVsLeague(you: StandingRow, teams: StandingRow[]): string {

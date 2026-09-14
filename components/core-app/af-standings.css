@@ -533,3 +533,206 @@
     font-size: 11px;
   }
 }
+
+/*
+ * ══ 2026-09-13 handoff — the per-league Rankings design, landed on Standings ══
+ *
+ * User's call: one per-league points-for screen, restyled to the Rankings
+ * design, rather than a second screen carrying the same numbers. `/core/rankings`
+ * stays the cross-app XP ladder. Appended as one block so the handoff reads as a
+ * layer over 38a·7.
+ */
+
+.af-st-tile {
+  gap: 7px;
+  padding: 16px;
+}
+.af-st-tile .af-label {
+  font-size: 9px;
+  letter-spacing: 0.1em;
+}
+.af-st-tile-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.af-st-tile-v {
+  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font-size: 28px;
+  font-weight: 900;
+}
+.af-st-tile-v[data-tone='good'] { color: var(--good); }
+.af-st-tile-v[data-tone='bad'] { color: var(--bad); }
+.af-st-tile-v[data-tone='accent'] { color: var(--accent); }
+.af-st-tile-row .af-st-move { font-size: 12px; }
+.af-st-tile-s { font-size: 10.5px; }
+
+.af-st-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.af-core .af-st-seclabel {
+  margin: 0;
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  color: var(--faint);
+}
+
+/* Rank by week, as bars. */
+.af-st-bars {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.af-st-bars-chart {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.af-st-bars-plot {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+  height: 96px;
+}
+.af-st-bar {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 5px;
+}
+.af-st-bar-rank {
+  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--faint);
+}
+.af-st-bar-fill {
+  display: block;
+  width: 100%;
+  border-radius: 3px 3px 0 0;
+  background: var(--line2);
+}
+.af-st-bar[data-tone='best'] .af-st-bar-fill { background: var(--accent); }
+.af-st-bar[data-tone='best'] .af-st-bar-rank { color: var(--accent); }
+.af-st-bar[data-tone='now'] .af-st-bar-fill { background: var(--good); }
+.af-st-bar[data-tone='now'] .af-st-bar-rank { color: var(--good); }
+.af-st-bars-weeks {
+  display: flex;
+  gap: 6px;
+}
+.af-st-bars-weeks span {
+  flex: 1;
+  min-width: 0;
+  text-align: center;
+  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--faint);
+}
+.af-st-bars-cap {
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--faint);
+}
+
+/* Recent weeks: hairline rows, mono figures. */
+.af-st-recent { gap: 0; }
+.af-st-recent li {
+  grid-template-columns: 44px minmax(0, 1fr) auto auto;
+  align-items: center;
+  padding: 9px 0;
+  border-top: 1px solid var(--line);
+}
+.af-st-recent-p {
+  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font-size: 15px;
+  font-weight: 900;
+}
+.af-st-recent-d,
+.af-st-recent-r {
+  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+}
+.af-st-recent-d { font-size: 11px; }
+.af-st-recent-r { font-size: 10px; }
+
+/* Projection card: a surface with the accent border, and the range as two rows. */
+.af-st-projection {
+  background: var(--surface);
+  gap: 11px;
+}
+.af-st-projrows {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.af-st-projrow {
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 12px;
+  border-radius: 9px;
+}
+.af-st-projrow[data-tone='good'] { background: var(--good-soft); }
+.af-st-projrow[data-tone='bad'] { background: var(--bad-soft); }
+.af-core .af-st-projrow .af-label { font-size: 9px; }
+.af-core .af-st-projrow[data-tone='good'] .af-label,
+.af-st-projrow[data-tone='good'] .af-num { color: var(--good); }
+.af-core .af-st-projrow[data-tone='bad'] .af-label,
+.af-st-projrow[data-tone='bad'] .af-num { color: var(--bad); }
+.af-st-projrow-note {
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.4;
+  color: var(--text2);
+}
+.af-st-projrow .af-num {
+  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font-size: 15px;
+  font-weight: 900;
+}
+
+/* Board. */
+.af-st-table thead th {
+  font-size: 9px;
+  letter-spacing: 0.1em;
+}
+.af-st-table tbody th,
+.af-st-table tbody td {
+  padding: 10px 16px;
+}
+.af-st-table td.af-st-n {
+  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  color: var(--text2);
+}
+.af-st-table tbody td.af-st-n:first-of-type {
+  font-weight: 900;
+  color: var(--text);
+}
+/* The design marks your row with an accent "· YOU", not a filled chip. */
+.af-core .af-st-you {
+  padding: 0;
+  background: none;
+  color: var(--accent);
+}
+
+@media (max-width: 560px) {
+  .af-st-bars-plot,
+  .af-st-bars-weeks { gap: 3px; }
+  .af-st-bar-rank,
+  .af-st-bars-weeks span { font-size: 8px; }
+  .af-st-recent li { grid-template-columns: 40px minmax(0, 1fr) auto; }
+  .af-st-recent-r {
+    grid-column: 2 / -1;
+    text-align: left;
+  }
+  .af-st-projrow { grid-template-columns: 40px minmax(0, 1fr) auto; }
+}
