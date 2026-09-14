@@ -15,6 +15,7 @@ import type { NormalizedImportResult } from '@/lib/league-import/types'
 import type { RunResult, SyncStore, SyncScope } from '@/lib/import-os/runner'
 import { applySleeperScopeToLeague } from './applySleeperLeagueSync'
 import { resolveLeagueIdsForConnection } from './enumerate'
+import { LEAGUE_GONE_ERROR_PREFIX } from './leagueGone'
 import type { ApplyScopeResult, SleeperSyncConnection, SleeperSyncScope } from './types'
 
 function asRecord(v: unknown): Record<string, unknown> {
@@ -138,9 +139,19 @@ export function createPrismaSleeperSyncStore(deps: {
     async recordRun(result: RunResult): Promise<void> {
       const succeeded = result.status === 'completed'
       const failedOrPartial = result.status === 'failed' || result.status === 'partial'
+      /*
+       * The provider said the league does not exist (see ./leagueGone). Not a failure — a failure
+       * count against a provider answering correctly drives backoff and alerting at nothing — but
+       * the prefixed note is what the due check and both selectors read to stop re-asking.
+       */
+      const leagueGone = result.status === 'skipped' && typeof result.terminalError === 'string'
       const { consecutiveFailures } = await ensureRow()
       const nextFailures = succeeded ? 0 : failedOrPartial ? consecutiveFailures + 1 : consecutiveFailures
-      const lastError = failedOrPartial ? (result.warnings[0] ?? `run ${result.status}`) : null
+      const lastError = failedOrPartial
+        ? (result.warnings[0] ?? `run ${result.status}`)
+        : leagueGone
+          ? `${LEAGUE_GONE_ERROR_PREFIX}${result.terminalError}`
+          : null
 
       await prisma.leagueSyncState.update({
         where: { runKey: connection.runKey },
@@ -210,14 +221,19 @@ export function createPrismaSleeperSyncStore(deps: {
       }
 
       // Reflect failure/partiality on the mirror rows so the dashboard can surface honest freshness.
-      if (failedOrPartial) {
+      /*
+       * ⚠ A GONE LEAGUE STAYS `failed` ON `League`, deliberately unlike `leagueSyncState`. To a
+       * manager the league cannot refresh, and the surfaces that flag that (`formatHubs` reads
+       * `includes('fail')`) should keep doing so; only the collector's own bookkeeping changes.
+       */
+      if (failedOrPartial || leagueGone) {
         await prisma.league.updateMany({
           where: {
             platform: connection.provider,
             platformLeagueId: connection.externalLeagueId,
             season: connection.season,
           },
-          data: { syncStatus: result.status, syncError: lastError },
+          data: { syncStatus: leagueGone ? 'failed' : result.status, syncError: lastError },
         }).catch(() => undefined)
       }
     },

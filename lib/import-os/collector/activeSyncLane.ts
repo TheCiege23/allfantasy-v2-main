@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/prisma'
 import { isInSeason, resolveSeasonState } from '@/lib/import-os/season'
 import { enumerateConnectedLeagues } from './enumerate'
+import { isInLeagueGoneBackoff } from './leagueGone'
 import { runDueLeagues, type RunDueResult } from './runDueSleeperLeagues'
 import { SYNCABLE_PROVIDERS, type LeagueSyncConnection } from './types'
 
@@ -55,7 +56,7 @@ export async function selectActiveSyncConnections(input?: {
   const [states, leagueRows] = await Promise.all([
     prisma.leagueSyncState.findMany({
       where: { runKey: { in: eligible.map((connection) => connection.runKey) } },
-      select: { runKey: true, lastAttemptedSyncAt: true },
+      select: { runKey: true, lastAttemptedSyncAt: true, syncStatus: true, lastError: true },
     }),
     prisma.league.findMany({
       where: {
@@ -68,6 +69,12 @@ export async function selectActiveSyncConnections(input?: {
   ])
 
   const attemptedAt = new Map(states.map((row) => [row.runKey, row.lastAttemptedSyncAt?.getTime() ?? null]))
+  /*
+   * A league the provider said is gone stops advancing its attempt time for a day, so the
+   * oldest-attempt ordering below would hand it a slot every tick only for the due check to
+   * decline it. See ./leagueGone.
+   */
+  const goneBackoff = new Set(states.filter((row) => isInLeagueGoneBackoff(row, now)).map((row) => row.runKey))
   const viewedAt = new Map<string, number>()
   for (const row of leagueRows) {
     const key = `${String(row.platform).toLowerCase()}:${row.platformLeagueId}:${row.season}:${ACTIVE_LANE_SUFFIX}`
@@ -79,7 +86,7 @@ export async function selectActiveSyncConnections(input?: {
   let recentlyViewedSelected = 0
   for (const provider of SYNCABLE_PROVIDERS) {
     const rows = eligible
-      .filter((connection) => connection.provider === provider)
+      .filter((connection) => connection.provider === provider && !goneBackoff.has(connection.runKey))
       .map((connection, index) => ({
         connection,
         index,

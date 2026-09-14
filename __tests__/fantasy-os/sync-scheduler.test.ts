@@ -255,4 +255,42 @@ describe('sync runner', () => {
     expect(res.accounting.retries).toBe(2)
     expect(reconcileAccounting(res.accounting).ok).toBe(true)
   })
+
+  /*
+   * 🛑 A LEAGUE THE PROVIDER SAYS IS GONE WAS RETRIED ON EVERY SCOPE. With four scopes and
+   * maxRetries 2 that was up to twelve provider reads per run for an answer the first one gave.
+   */
+  class GoneError extends Error {}
+
+  it('stops the whole run at the first terminal error: no retries, no later scopes', async () => {
+    const store = new FakeStore()
+    const fetched: string[] = []
+    const res = await runSync({
+      ...base, clock: new FakeClock(base.clock.t), runKey: 'k', scopes: ['a', 'b', 'c'], lock: new FakeLock(), store, maxRetries: 2,
+      isTerminalError: (err) => err instanceof GoneError,
+      fetchScope: async (s) => { fetched.push(s); throw new GoneError('league not found') },
+    })
+    expect(fetched).toEqual(['a'])
+    expect(res.status).toBe('skipped')
+    expect(res.terminalError).toBe('league not found')
+    expect(res.incompleteScopes).toEqual(['a', 'b', 'c'])
+    expect(res.advancedFreshness).toBe(false)
+    expect(store.lastSuccess).toBeNull()
+    expect(store.runs).toHaveLength(1)
+    expect(res.accounting.requestAttempts).toBe(1)
+    expect(res.accounting.retries).toBe(0)
+    expect(reconcileAccounting(res.accounting).ok).toBe(true)
+  })
+
+  it('still retries an error the caller did not classify as terminal', async () => {
+    let n = 0
+    const res = await runSync({
+      ...base, clock: new FakeClock(base.clock.t), runKey: 'k', scopes: ['a'], lock: new FakeLock(), store: new FakeStore(), maxRetries: 2,
+      isTerminalError: (err) => err instanceof GoneError,
+      fetchScope: async () => { n++; throw new Error('throttled') },
+    })
+    expect(n).toBe(3)
+    expect(res.status).toBe('failed')
+    expect(res.terminalError).toBeUndefined()
+  })
 })

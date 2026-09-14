@@ -48,6 +48,25 @@ describe('active provider sync lane', () => {
     expect(selected.connections.every((row) => row.runKey.endsWith(':active'))).toBe(true)
   })
 
+  /*
+   * A league the provider said is gone stops advancing its attempt time for a day, so the
+   * oldest-attempt ordering would otherwise hand it a Sleeper slot on every five-minute tick.
+   */
+  it('does not spend a slot on a league the provider said is gone', async () => {
+    const now = new Date('2026-09-13T18:00:00Z')
+    h.stateFind.mockResolvedValue([
+      {
+        runKey: 'sleeper:L-sleeper:2026:active',
+        syncStatus: 'skipped',
+        lastError: 'league gone at provider: sleeper: League not found.',
+        lastAttemptedSyncAt: new Date(now.getTime() - 60 * 60_000),
+      },
+    ])
+    const selected = await selectActiveSyncConnections({ now, limitPerProvider: 2 })
+    expect(selected.connections.some((row) => row.provider === 'sleeper')).toBe(false)
+    expect(selected.connections).toHaveLength(5)
+  })
+
   it('runs only mutable scopes on the five-minute cadence', async () => {
     await runActiveSyncLane({ now: new Date('2026-09-13T18:00:00Z'), limitPerProvider: 1 })
     expect(h.runDue).toHaveBeenCalledWith(expect.objectContaining({

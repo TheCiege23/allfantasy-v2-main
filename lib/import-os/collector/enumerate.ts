@@ -34,6 +34,7 @@
 import { prisma } from '@/lib/prisma'
 import type { ImportProvider } from '@/lib/league-import/types'
 import { SYNCABLE_PROVIDERS, type LeagueSyncConnection } from './types'
+import { isInLeagueGoneBackoff } from './leagueGone'
 
 export function buildRunKey(provider: string, externalLeagueId: string, season: number): string {
   return `${provider}:${externalLeagueId}:${season}`
@@ -122,6 +123,11 @@ export async function enumerateConnectedLeagues(
  * ⚠ AND IT MUST NOT CONSULT `syncStatus`. A league left in `partial` or `failed` is exactly
  * the one that most needs re-attempting; gating on status is how 37 leagues sat frozen for 39
  * hours after a 17-minute incident.
+ *
+ * ⚠ THE ONE EXCLUSION IS A LEAGUE THE PROVIDER SAID IS GONE, INSIDE ITS RECHECK WINDOW — and it
+ * is not a status gate. Its attempt time deliberately stops advancing for a day, so the ordering
+ * above would put it at the head of every tick, where the due check declines it and the slot is
+ * wasted. See `./leagueGone`; the discriminator is the recorded note, not `syncStatus`.
  */
 async function selectStalestFirst(
   connections: LeagueSyncConnection[],
@@ -133,16 +139,22 @@ async function selectStalestFirst(
 
   const states = await prisma.leagueSyncState.findMany({
     where: { runKey: { in: connections.map((c) => c.runKey) } },
-    select: { runKey: true, lastAttemptedSyncAt: true },
+    select: { runKey: true, lastAttemptedSyncAt: true, syncStatus: true, lastError: true },
   })
+  const now = new Date()
   const lastAttemptAt = new Map<string, number | null>()
-  for (const row of states) lastAttemptAt.set(row.runKey, row.lastAttemptedSyncAt?.getTime() ?? null)
+  const goneBackoff = new Set<string>()
+  for (const row of states) {
+    lastAttemptAt.set(row.runKey, row.lastAttemptedSyncAt?.getTime() ?? null)
+    if (isInLeagueGoneBackoff(row, now)) goneBackoff.add(row.runKey)
+  }
 
   /*
    * Decorate-sort-undecorate carrying the original index, so the tie-break is explicit in the
    * comparator rather than relying on the engine's sort stability.
    */
   return connections
+    .filter((c) => !goneBackoff.has(c.runKey))
     .map((c, i) => ({ c, i, at: lastAttemptAt.get(c.runKey) ?? null }))
     .sort((a, b) => {
       if (a.at === null && b.at === null) return a.i - b.i
