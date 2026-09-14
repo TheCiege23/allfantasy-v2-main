@@ -10,6 +10,7 @@ import {
   LeagueCrest,
   RowTag,
   SectionHead,
+  platformKey,
   rankTiers,
   type Sev,
 } from '@/components/core-app/boards/BoardKit'
@@ -213,7 +214,12 @@ function Row({
         <Link className="af-bd-league" href={row.href}>
           <span className="af-bd-name">{row.leagueName}</span>
           <span className="af-bd-sub">
-            <span className="af-bd-plat" data-platform={row.platform}>
+            {/*
+              ⚠ LOWER-CASED THROUGH `platformKey`. The tint selectors match
+              `sleeper`, not `Sleeper`; the raw column let a capitalised value
+              render the platform word untinted. LeagueIdentity already did this.
+            */}
+            <span className="af-bd-plat" data-platform={platformKey(row.platform)}>
               {row.platform.toUpperCase()}
             </span>
             {' · '}
@@ -358,7 +364,7 @@ export function MyTeamBoard({ pulse, now, allHref }: MyTeamBoardProps) {
               lets a manager stop looking.
             */}
             {pulse.needs.length === 0 ? (
-              <p className="af-bd-note">
+              <p className="af-bd-note af-bd-note--plain">
                 Every one of the {pulse.checked.toLocaleString()} lineups we could read is set —
                 no empty slots, nobody ruled out
                 {pulse.byeChecked ? ', nobody on a bye' : ''}. These are the ones locking soonest.
@@ -424,7 +430,12 @@ export function MyTeamBoard({ pulse, now, allHref }: MyTeamBoardProps) {
       ) : null}
 
       {!pulse.byeChecked ? (
-        <p className="af-bd-note">
+        /*
+          Plain, not boxed (handoff 2026-09-13): it qualifies the rows rather than
+          warning about them. The two notes that ARE warnings — nothing could be
+          read, some teams could not be checked — stay boxed on purpose.
+        */
+        <p className="af-bd-note af-bd-note--plain">
           The bye check did not run this week — the ingested schedule was too incomplete to
           tell a bye from a gap in our own data, so no row claims to be bye-clear.
         </p>

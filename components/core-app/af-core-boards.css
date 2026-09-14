@@ -110,8 +110,14 @@
   border-bottom: 1px solid var(--line);
   color: inherit;
   text-decoration: none;
-  border-radius: 8px;
 }
+
+/*
+ * The radius only exists to round the HOVER fill, so only a link row carries it.
+ * On a plain <div> row (My Team) it rounded nothing visible and the handoff draws a
+ * square hairline row (2026-09-13).
+ */
+.af-core a.af-bd-row { border-radius: 8px; }
 
 .af-core a.af-bd-row:hover,
 .af-core a.af-bd-row:focus-visible {
@@ -202,9 +208,9 @@
  * and deliberately does not reuse it.
  */
 .af-core .af-bd-plat {
-  font-weight: 700;
+  font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.02em;
 }
 
 .af-core .af-bd-plat[data-platform='sleeper'] { color: var(--p-sleeper-fg); }
@@ -421,6 +427,21 @@
 .af-core .af-bd-note strong {
   color: var(--text2);
   font-weight: 700;
+}
+
+/*
+ * A note that QUALIFIES the rows rather than warning about them (handoff 2026-09-13
+ * draws these as a plain faint line). Opt-in per note: a gap the manager must act on
+ * — "we could not read a single lineup" — keeps the boxed treatment above, because a
+ * faint 11px line is exactly how that sentence would get missed.
+ */
+.af-core .af-bd-note--plain {
+  font: 500 11px/1.45 var(--font-archivo, 'Archivo', system-ui, sans-serif);
+  color: var(--faint);
+  padding: 2px 2px 0;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
 }
 
 /* ── two-column split (Week, Standings) ─────────────────────────────────── */
