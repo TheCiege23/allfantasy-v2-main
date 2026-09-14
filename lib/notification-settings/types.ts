@@ -27,6 +27,16 @@ export interface NotificationChannelPrefs {
   inApp: boolean
   email: boolean
   sms: boolean
+  /**
+   * Phone / browser push — its own switch since 2026-09-14 (user decision). Before that
+   * push simply followed `inApp`, so an alert could not stay in the bell and off the phone.
+   *
+   * ⚠ OPTIONAL, AND ABSENT MEANS "WHATEVER inApp SAYS". Every stored row predates this
+   * field. Reading absence as off would silence every phone on deploy; reading it as on
+   * would start buzzing people who had switched in-app off. Read it through
+   * `resolveNotificationPreferences` (or `push ?? inApp`), never raw.
+   */
+  push?: boolean
 }
 
 /**

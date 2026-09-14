@@ -273,9 +273,13 @@ describe('per-league overrides', () => {
     )
     expect(src).toContain('isCategoryAllowedForLeague(')
     expect(src).toContain('quietHoursSuppression(')
-    // The gates themselves, on the two channels that buzz a phone.
-    expect(src).toContain('!quiet.push')
+    // The gates themselves, on the two channels that buzz a phone. Since 2026-09-14 push goes
+    // through pushGate's shared rule, which applies the same quiet-hours suppression.
+    expect(src).toContain('decidePush(')
     expect(src).toContain('!quiet.sms')
+    const gate = readFileSync(join(process.cwd(), 'lib/notifications/pushGate.ts'), 'utf8')
+    expect(gate).toContain('quietHoursSuppression(')
+    expect(gate).toContain('quiet.push')
     // The profile timezone is the fallback; without it the stored zone is all we have.
     expect(src).toMatch(/profile\.timezone/)
   })

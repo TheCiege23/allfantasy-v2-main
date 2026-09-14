@@ -16,6 +16,12 @@ function toChannelPref(enabled: boolean, existing?: NotificationChannelPrefs): N
     // Preserve email/SMS selections managed in full notification settings.
     email: existing?.email ?? false,
     sms: existing?.sms ?? false,
+    /*
+     * And the push switch (2026-09-14). Rebuilding the object without it would silently reset a
+     * user's "no push for injuries" back to following in-app every time this toggle was saved.
+     * Absent stays absent, so it keeps following in-app as before.
+     */
+    ...(existing?.push !== undefined && { push: existing.push }),
   }
 }
 

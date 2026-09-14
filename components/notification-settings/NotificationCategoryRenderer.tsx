@@ -4,6 +4,7 @@ import { ChevronDown, ChevronRight } from "lucide-react"
 import type { NotificationCategoryId, NotificationChannelPrefs } from "@/lib/notification-settings"
 import { NOTIFICATION_CATEGORY_LABELS } from "@/lib/notification-settings"
 import { DELIVERY_LABELS, type DeliveryMethodAvailability } from "@/lib/notification-settings"
+import { isPushCategory } from "@/lib/push-notifications/categories"
 
 export interface NotificationCategoryRendererProps {
   categoryId: NotificationCategoryId
@@ -16,7 +17,12 @@ export interface NotificationCategoryRendererProps {
 }
 
 /**
- * Renders one notification category: expand/collapse, enabled toggle, and delivery toggles (in-app, email, SMS when available).
+ * Renders one notification category: expand/collapse, enabled toggle, and delivery toggles
+ * (in-app, push for categories that can push, email, SMS when available).
+ *
+ * ⚠ THE PUSH BOX SHOWS `push ?? inApp`. A saved row without a push switch pushes whenever
+ * in-app is on (that is how push worked before it had a switch), so the box has to show
+ * that, not an unticked default the server does not act on.
  */
 export function NotificationCategoryRenderer({
   categoryId,
@@ -79,6 +85,19 @@ export function NotificationCategoryRenderer({
               />
               <span style={{ color: "var(--text)" }}>{DELIVERY_LABELS.inApp}</span>
             </label>
+            {isPushCategory(categoryId) && deliveryAvailability.push !== false && (
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={prefs.push ?? prefs.inApp}
+                  onChange={(e) => onToggleChannel("push", e.target.checked)}
+                  className="h-3.5 w-3.5 rounded"
+                  style={{ accentColor: "var(--accent-cyan)" }}
+                  aria-label={`${label} ${DELIVERY_LABELS.push}`}
+                />
+                <span style={{ color: "var(--text)" }}>{DELIVERY_LABELS.push}</span>
+              </label>
+            )}
             {deliveryAvailability.email && (
               <label className="flex items-center gap-2 text-sm">
                 <input

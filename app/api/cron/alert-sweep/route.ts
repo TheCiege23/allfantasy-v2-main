@@ -48,6 +48,7 @@ import { detectInjuredStarterAlerts } from '@/lib/chimmy-alerts/ChimmyAlertDetec
 import { hydrateInjuredStarters } from '@/lib/chimmy-alerts/hydrateInjuredStarters'
 import { dispatchNotification } from '@/lib/notifications/NotificationDispatcher'
 import { sendPushToUser } from '@/lib/push-notifications'
+import { decidePushForUser } from '@/lib/notifications/pushGate'
 import { withSyncJobRun } from '@/lib/production-health/syncJobRunTelemetry'
 import { injuredStarterDedupeKey, injuredStarterHref, mergeAudience } from '@/lib/chimmy-alerts/sweepAudience'
 import { liveFirstSeen } from '@/lib/chimmy-alerts/liveStatusFold'
@@ -194,6 +195,11 @@ interface SweepUserResult {
   pushed: number
   /** True when today's message about this player and designation had already gone out. */
   deduped: boolean
+  /**
+   * Why the push was withheld by the user's own settings (pushGate reason), when it was. Not an
+   * error: a muted league or quiet hours is the setting working.
+   */
+  pushSkipped?: string
   errors: string[]
 }
 
@@ -258,6 +264,7 @@ async function handle(req: NextRequest) {
     let totalPushed = 0
     let totalAlerts = 0
     let totalDeduped = 0
+    let totalPushSkipped = 0
 
     for (const sub of subscribers) {
       const result: SweepUserResult = { userId: sub.userId, injuredStarters: 0, alerts: 0, pushed: 0, deduped: false, errors: [] }
@@ -337,6 +344,7 @@ async function handle(req: NextRequest) {
          * path to sendTemplatedEmail. SMS and push stay skipped: the targeted
          * push below is the only push, and SMS is not configured.
          */
+        const alertSeverity: 'high' | 'medium' = top.urgencySignal >= 78 ? 'high' : 'medium'
         await dispatchNotification({
           userIds: [sub.userId],
           category: 'injury_alerts',
@@ -348,7 +356,7 @@ async function handle(req: NextRequest) {
           actionHref: href,
           actionLabel: 'Open his card',
           leagueId: top.leagueId ?? null,
-          severity: top.urgencySignal >= 78 ? 'high' : 'medium',
+          severity: alertSeverity,
           meta: { chimmyAlert: true, class: top.class, alertType: top.type, ...(top.metadata ?? {}) },
           dedupePrefix,
           skipChannels: { email: injuryEmail == null, sms: true, push: true },
@@ -357,6 +365,26 @@ async function handle(req: NextRequest) {
 
         if (!pushConfigured) {
           result.errors.push('push not configured')
+          results.push(result)
+          continue
+        }
+
+        /*
+         * 🛑 THE PHONE FOLLOWS THE USER'S SETTINGS, like the bell entry and the email above.
+         * Until 2026-09-14 this push went to every subscriber: the dispatcher's category
+         * switch, league mute and quiet hours withheld the in-app row and the email, and
+         * this line buzzed the phone regardless. pushGate holds the dispatcher's own rule.
+         * A high-severity alert passes quiet hours only when the user allows critical
+         * alerts (user decision, 2026-09-14). A settings read that fails sends nothing.
+         */
+        const pushGate = await decidePushForUser(sub.userId, {
+          category: 'injury_alerts',
+          leagueId: top.leagueId ?? null,
+          severity: alertSeverity,
+        }).catch(() => null)
+        if (!pushGate || !pushGate.allowed) {
+          result.pushSkipped = pushGate ? pushGate.reason : 'settings_unavailable'
+          totalPushSkipped += 1
           results.push(result)
           continue
         }
@@ -395,6 +423,8 @@ async function handle(req: NextRequest) {
       alertsDetected: totalAlerts,
       usersDeduped: totalDeduped,
       pushesSent: totalPushed,
+      /** Pushes the user's own settings withheld (alert type off, push off, league muted, quiet hours). */
+      pushesSkippedBySettings: totalPushSkipped,
       usersWithErrors: withErrors.length,
       errors: withErrors.slice(0, 10).map((r) => ({ userId: r.userId, errors: r.errors })),
       durationMs: Date.now() - startedAt,

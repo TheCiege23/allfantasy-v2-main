@@ -76,11 +76,15 @@ export async function onWaiverRunComplete(
           meta: { leagueId, claimId: r.claimId, addPlayerId: r.addPlayerId, outcomeCode: r.outcomeCode ?? "won" },
           severity: "low",
         }).catch(() => {})
-      } else if (
-        r.outcomeCode === "insufficient_faab" ||
-        r.outcomeCode === "player_no_longer_available" ||
-        r.outcomeCode === "invalid_due_to_roster"
-      ) {
+      } else {
+        /*
+         * EVERY claim that did not go through, not three outcome codes. The waiver job used to
+         * queue its own "not awarded" bell entry for all failures beside this one, which is why
+         * this branch could afford to be narrow. That queue entry is gone (it duplicated the won
+         * announcement and skipped the user's settings — see processLeagueWaiversJob), so this
+         * is now the only announcement and must cover lost_priority and lost_tiebreaker, the
+         * common ways to lose a claim.
+         */
         void dispatchNotification({
           userIds: [uid.trim()],
           category: "waiver_processing",

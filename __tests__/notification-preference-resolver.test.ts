@@ -21,6 +21,8 @@ describe("notification preference resolver", () => {
       inApp: true,
       email: false,
       sms: false,
+      // No saved push switch: it follows in-app, which is how push worked before it had one.
+      push: true,
     })
     expect(resolved.categories?.lineup_reminders?.enabled).toBe(true)
   })

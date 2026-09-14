@@ -10,10 +10,11 @@ const DEFAULT_CHANNEL: NotificationChannelPrefs = {
   inApp: true,
   email: true,
   sms: false,
+  push: true,
 }
 
 /**
- * Returns default preferences (all categories enabled, in-app + email, no SMS).
+ * Returns default preferences (all categories enabled, in-app + push + email, no SMS).
  */
 export function getDefaultNotificationPreferences(): NotificationPreferences {
   const categories: Partial<Record<NotificationCategoryId, NotificationChannelPrefs>> = {}
@@ -52,11 +53,19 @@ export function resolveNotificationPreferences(
   for (const id of NOTIFICATION_CATEGORY_IDS) {
     const s = saved.categories[id]
     if (s) {
+      const inApp = s.inApp ?? defaults.categories?.[id]?.inApp ?? true
       categories[id] = {
         enabled: s.enabled ?? defaults.categories?.[id]?.enabled ?? true,
-        inApp: s.inApp ?? defaults.categories?.[id]?.inApp ?? true,
+        inApp,
         email: s.email ?? defaults.categories?.[id]?.email ?? true,
         sms: s.sms ?? defaults.categories?.[id]?.sms ?? false,
+        /*
+         * ⚠ ABSENT PUSH FOLLOWS THIS ROW'S inApp, NOT THE DEFAULT. Push had no switch before
+         * 2026-09-14 and simply followed in-app, so a row saved with in-app off has been
+         * push-silent all along. Defaulting it to true would start buzzing exactly the people
+         * who had turned this category's alerts down.
+         */
+        push: s.push ?? inApp,
       }
     }
   }
@@ -76,7 +85,8 @@ export function getNotificationPreferencesFingerprint(
   const resolved = resolveNotificationPreferences(prefs)
   const categories = NOTIFICATION_CATEGORY_IDS.map((id) => {
     const value = resolved.categories?.[id] ?? DEFAULT_CHANNEL
-    return `${id}:${value.enabled ? "1" : "0"}${value.inApp ? "1" : "0"}${value.email ? "1" : "0"}${value.sms ? "1" : "0"}`
+    const push = value.push ?? value.inApp
+    return `${id}:${value.enabled ? "1" : "0"}${value.inApp ? "1" : "0"}${value.email ? "1" : "0"}${value.sms ? "1" : "0"}${push ? "1" : "0"}`
   })
   return `${resolved.globalEnabled !== false ? "1" : "0"}|${categories.join("|")}`
 }
