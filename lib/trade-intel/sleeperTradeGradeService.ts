@@ -41,7 +41,9 @@ import {
  * same treatment automatically, forever.
  */
 
-const CACHE_PREFIX = 'trade-grades:v2:'
+/** Exported so a reader of the cache (decision receipts) never re-types the key. */
+export const TRADE_GRADES_CACHE_PREFIX = 'trade-grades:v2:'
+const CACHE_PREFIX = TRADE_GRADES_CACHE_PREFIX
 const CACHE_TTL_MS = 6 * 60 * 60 * 1000
 const MAX_CHAIN = 12
 const MAX_WEEKS = 18

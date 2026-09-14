@@ -24,6 +24,8 @@ import type { ExposureData, RivalsData, PanelState } from '@/lib/core-app/dash3a
 import { ExposureRowItem } from '@/components/core-app/screens/ExposureImpact'
 import { FollowingCard } from '@/components/core-app/screens/FollowingCard'
 import type { FollowingCardData } from '@/lib/core-app/followingCard'
+import { ReceiptsCard } from '@/components/core-app/screens/ReceiptsCard'
+import type { DecisionReceiptsData } from '@/lib/core-app/decisionReceipts'
 
 /**
  * Screen 3a — Dashboard, all leagues.
@@ -104,6 +106,11 @@ export type Dashboard3AProps = {
    * not rendered at all, rather than inviting a follow that cannot save.
    */
   following?: FollowingCardData | null
+  /**
+   * Decision receipts (2026-09-14): how your past trades turned out, in net points. Null
+   * when there is no Sleeper identity or no league the trade grades cover.
+   */
+  receipts?: DecisionReceiptsData | null
 }
 
 const SEV_CLASS: Record<CoreIssue['severity'], string> = {
@@ -371,6 +378,7 @@ export function Dashboard3A({
   rivals = null,
   winProb = null,
   following = null,
+  receipts = null,
 }: Dashboard3AProps) {
   const now = new Date()
   const openCount = issues.length
@@ -881,6 +889,22 @@ export function Dashboard3A({
                 <b>Players you follow in every league.</b>
                 Tap ☆ on any player card. Status is the latest reported designation; next game is
                 his next fixture on file.
+              </Help>
+            }
+          />
+          {/*
+            RECEIPTS (2026-09-14) — how your past trades turned out. Net points since the
+            trade, wins and losses stated the same way; never the sweep's letter, and too-early
+            trades counted rather than shown as even. Not rendered with nothing to say.
+          */}
+          <ReceiptsCard
+            data={receipts}
+            help={
+              <Help>
+                <b>How your trades turned out.</b>
+                Points credited to what you got minus what you gave, only while each player stayed
+                on your roster, scored with the league&apos;s own settings. Trades from the last few
+                weeks are left off until they have a result.
               </Help>
             }
           />
