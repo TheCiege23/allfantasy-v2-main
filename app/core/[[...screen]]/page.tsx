@@ -35,7 +35,7 @@ import { DashDraftsBand } from '@/components/core-app/screens/DashDraftsBand'
 import { resolveUserOsSnapshot } from '@/lib/decision-os/userOs'
 import { getCrossLeagueExposure, getRivalRecords } from '@/lib/core-app/dash3aPanels'
 import { getFollowingCard } from '@/lib/core-app/followingCard'
-import { getTradeReceipts } from '@/lib/core-app/decisionReceipts'
+import { getDecisionReceipts } from '@/lib/core-app/decisionReceipts'
 import { getDash34Data, imageOf, type Dash34LeagueRow } from '@/lib/core-app/dash34'
 import { getChatUnread } from '@/lib/chat-core/unreadCounts'
 import LeagueHome from '@/components/core-app/screens/LeagueHome'
@@ -1669,16 +1669,20 @@ export default async function AfCorePage({
           })),
         ).catch(() => null),
         /*
-         * Decision receipts (2026-09-14): how your trades turned out. One read of the
-         * trade-grade cache the sweep already fills — no provider call. Your side of each
-         * trade is found by your Sleeper user id; null without one, which hides the card.
+         * Decision receipts (2026-09-14): how your trades and waiver adds turned out.
+         * Trades: one read of the trade-grade cache the sweep already fills, your side found
+         * by your Sleeper user id. Waiver adds: this season's transaction facts for your
+         * claimed rosters plus the weekly scores of the players you added (five set-based
+         * queries, at most 12 leagues). Each kind fails on its own; null hides the card.
          */
-        getTradeReceipts({
+        getDecisionReceipts({
+          userId,
           leagues: playedLeagues.map((l) => ({
             id: l.id,
             name: l.name,
             platform: String(l.platform ?? ''),
             platformLeagueId: (l as { platformLeagueId?: string | null }).platformLeagueId ?? null,
+            season: (l as { season?: number | string | null }).season ?? null,
           })),
           ownerSleeperId: leagueListPayload?.sleeperUserId ?? null,
           currentWeek: homeTradeWeek,

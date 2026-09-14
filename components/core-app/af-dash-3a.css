@@ -612,6 +612,15 @@
 .af3a-receipt[data-outcome='ahead'] .af3a-receipt-result b { color: var(--good, var(--accent)); }
 .af3a-receipt[data-outcome='behind'] .af3a-receipt-result b { color: var(--bad); }
 .af3a-receipt-note { color: var(--muted); font: 400 11.5px/1.4 'Archivo', system-ui, sans-serif; }
+/* Group heading when the card holds more than one kind of receipt (trades, waiver adds). */
+.af3a-receipt-group {
+  margin: 14px 0 6px;
+  color: var(--muted);
+  font: 800 10.5px/1.2 'JetBrains Mono', monospace;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.af3a-receipt-group:first-of-type { margin-top: 2px; }
 
 /* ── Inline help badge ────────────────────────────────────────────────────────
  * ⚠ THIS WAS SHIPPED WITH NO RULE AT ALL, AND THE ABSENCE WAS INVISIBLE IN CODE.
