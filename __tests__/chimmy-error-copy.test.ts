@@ -17,7 +17,12 @@ const SRC = fs.readFileSync(
 describe('chimmy error copy', () => {
   it('never throws the raw API error code at the reader', () => {
     expect(SRC).not.toContain("new Error(payload.error ?? ")
-    expect(SRC).toContain('describeChimmyError(payload.error)')
+    /*
+     * `code` first: the route puts the machine-readable reason in `code` and a
+     * sentence in `error` (e.g. 409 token_confirmation_required), so keying the
+     * copy map on `error` alone never matched and fell through to the fallback.
+     */
+    expect(SRC).toContain('describeChimmyError(payload.code ?? payload.error)')
   })
 
   /*

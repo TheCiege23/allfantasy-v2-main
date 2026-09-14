@@ -17,6 +17,7 @@ import { ChatComposer, type LeagueComposerPayload } from '@/app/dashboard/compon
 import Link from 'next/link'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useOverlayContainment } from '../useOverlayContainment'
+import { confirmTokenSpend } from '@/lib/tokens/client-confirm'
 import '@/components/core-app/af-comms.css'
 import type { CoreSurfaceKey } from '@/lib/core-app/coreSurface'
 
@@ -371,28 +372,32 @@ function ChimmyPanel({
          * new route: the repo sits at Vercel's hard 2048-route ceiling and a
          * drawer is not worth one.
          */
-        const form = new FormData()
-        form.append('message', question)
-        if (scopeId) form.append('leagueId', scopeId)
-        /*
-         * What the home is telling this user right now, so the assistant they
-         * opened from the brief holds the brief's own facts instead of
-         * re-deriving them and disagreeing on the same screen. Ids and counts
-         * only; the server resolves names it has already confirmed they hold.
-         */
-        if (homeSignals) form.append('homeSignals', homeSignals)
-        if (pageSurface) form.append('coreSurface', pageSurface)
-        form.append(
-          'conversation',
-          JSON.stringify(
-            turns.slice(-6).map((t) => ({
-              role: t.role === 'chimmy' ? 'assistant' : 'user',
-              content: t.text,
-            })),
-          ),
-        )
+        const buildForm = (confirmed: boolean) => {
+          const form = new FormData()
+          form.append('message', question)
+          if (confirmed) form.append('confirmTokenSpend', 'true')
+          if (scopeId) form.append('leagueId', scopeId)
+          /*
+           * What the home is telling this user right now, so the assistant they
+           * opened from the brief holds the brief's own facts instead of
+           * re-deriving them and disagreeing on the same screen. Ids and counts
+           * only; the server resolves names it has already confirmed they hold.
+           */
+          if (homeSignals) form.append('homeSignals', homeSignals)
+          if (pageSurface) form.append('coreSurface', pageSurface)
+          form.append(
+            'conversation',
+            JSON.stringify(
+              turns.slice(-6).map((t) => ({
+                role: t.role === 'chimmy' ? 'assistant' : 'user',
+                content: t.text,
+              })),
+            ),
+          )
+          return form
+        }
 
-        const res = await fetch('/api/chat/chimmy', { method: 'POST', body: form })
+        let res = await fetch('/api/chat/chimmy', { method: 'POST', body: buildForm(false) })
         /*
          * ⚠ READ THE WHOLE ENVELOPE. This used to destructure `response` and
          * `error` alone and drop the rest, so `meta.leagueGrounding` — the only
@@ -400,9 +405,12 @@ function ChimmyPanel({
          * thrown away before it could be rendered. A grounding bug is invisible
          * from the UI if the UI never looks.
          */
-        const payload = (await res.json().catch(() => ({}))) as {
+        let payload = (await res.json().catch(() => ({}))) as {
           response?: string
           error?: string
+          /** Machine-readable reason. `error` is a sentence; this is the map key. */
+          code?: string
+          preview?: { ruleCode?: string }
           details?: { message?: string }
           meta?: {
             leagueGrounding?: ChimmyGrounding
@@ -416,6 +424,33 @@ function ChimmyPanel({
             tokenSpend?: { tokenCost?: number }
           }
         }
+
+        /*
+         * 🛑 EVERY PAID ANSWER FROM THIS DRAWER WAS REFUSED. `/api/chat/chimmy`
+         * returns 409 `token_confirmation_required` unless the request carries
+         * `confirmTokenSpend`, and every token rule is seeded with
+         * `requiresConfirmation: true` — so the drawer, which never sent the
+         * flag and had no way to, answered every paid question with "Confirm the
+         * token spend and ask again" and no control to do it.
+         *
+         * The fix is the app's own consent flow, not a new one: the draft room
+         * answers the same 409 by asking through `confirmTokenSpend` (the preview
+         * says whether a prompt is even needed) and retrying ONCE with the flag.
+         * A decline spends nothing and hands the question back unsent.
+         */
+        if (res.status === 409 && payload.code === 'token_confirmation_required') {
+          const consent = await confirmTokenSpend(payload.preview?.ruleCode ?? 'ai_chimmy_chat_message')
+          if (!consent.preview.canSpend) throw new Error(describeChimmyError('insufficient_token_balance'))
+          if (!consent.confirmed) {
+            setTurns((t) => (t.length && t[t.length - 1].role === 'you' ? t.slice(0, -1) : t))
+            setDraft(question)
+            setError('No tokens were spent — your question was not sent.')
+            return
+          }
+          res = await fetch('/api/chat/chimmy', { method: 'POST', body: buildForm(true) })
+          payload = (await res.json().catch(() => ({}))) as typeof payload
+        }
+
         if (!res.ok) {
           /*
            * A refusal is a first-class answer, not a crash. The route returns 412
@@ -439,7 +474,7 @@ function ChimmyPanel({
             ])
             return
           }
-          throw new Error(describeChimmyError(payload.error))
+          throw new Error(describeChimmyError(payload.code ?? payload.error))
         }
 
         /*
