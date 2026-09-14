@@ -24,6 +24,8 @@ const prismaMock = vi.hoisted(() => ({
   },
   leagueTeam: {
     updateMany: vi.fn(),
+    // Read by resolveRosterDisplayNames for the chop announcement's names.
+    findMany: vi.fn(),
   },
   appUser: {
     findMany: vi.fn(),
@@ -110,6 +112,7 @@ describe('Guillotine full regression matrix', () => {
     vi.clearAllMocks()
     prismaMock.roster.update.mockResolvedValue({ id: 'ok' })
     prismaMock.leagueTeam.updateMany.mockResolvedValue({ count: 1 })
+    prismaMock.leagueTeam.findMany.mockResolvedValue([])
     // Default to UNRESOLVED, which is the state of a league whose links have not been reconciled.
     resolveRedraftRosterIdMock.mockResolvedValue(null)
     resolveRedraftRosterIdsMock.mockResolvedValue(new Map<string, string>())
@@ -222,6 +225,9 @@ describe('Guillotine full regression matrix', () => {
     expect(appendEventMock).toHaveBeenCalledWith('league-1', 'chop', expect.any(Object))
     expect(appendEventMock).toHaveBeenCalledWith('league-1', 'chop_animation_trigger', expect.any(Object))
     expect(postChopToLeagueChatMock).toHaveBeenCalledTimes(1)
+    // The announcement is read by the whole league: a name, never the fixture's email.
+    expect(postChopToLeagueChatMock.mock.calls[0][0].displayNames).toEqual({ 'r-low': 'Lowest Team' })
+    expect(JSON.stringify(postChopToLeagueChatMock.mock.calls[0][0])).not.toContain('@test.com')
   })
 
   it('chops a league whose roster links are unreconciled, and issues no empty query', async () => {

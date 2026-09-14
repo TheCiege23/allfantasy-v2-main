@@ -11,6 +11,8 @@ import { appendEvent } from './GuillotineEventLog'
 import { postChopToLeagueChat } from './guillotineChat'
 import { resolveRedraftRosterId, resolveRedraftRosterIds } from '@/lib/league-runtime/reconcileRosterRedraftLinks'
 import { recordChopAudit } from './guillotineChopAudit'
+import { resolveRosterDisplayNames } from './rosterDisplayNames'
+import { UNKNOWN_MANAGER_NAME } from '@/lib/commissioner-managers/managerNames'
 import type { GuillotineChopResult, PeriodScoreRow } from './types'
 
 export interface RunEliminationInput {
@@ -383,20 +385,19 @@ export async function runElimination(input: RunEliminationInput): Promise<Guillo
   }
 }
 
+/**
+ * Names for the league-chat chop announcement, which every member of the league reads.
+ *
+ * 🛑 THIS USED TO FALL BACK TO `AppUser.email` AND THEN TO THE RAW PLATFORM ID, so a chopped
+ * manager without a display name had their email address posted into league chat. Names now come
+ * from `resolveRosterDisplayNames` (league team name, display name, @username — never email), and
+ * an unnamed roster reads as "Unknown manager" rather than an id.
+ */
 async function getDisplayNamesForRosters(leagueId: string, rosterIds: string[]): Promise<Record<string, string>> {
-  const rosters = await prisma.roster.findMany({
-    where: { leagueId, id: { in: rosterIds } },
-    select: { id: true, platformUserId: true },
-  })
-  const userIds = [...new Set(rosters.map((r) => r.platformUserId).filter(Boolean))]
-  const users = await prisma.appUser.findMany({
-    where: { id: { in: userIds } },
-    select: { id: true, displayName: true, email: true },
-  })
-  const byUserId = Object.fromEntries(users.map((u) => [u.id, u.displayName || u.email || u.id]))
+  const names = await resolveRosterDisplayNames(leagueId, rosterIds)
   const result: Record<string, string> = {}
-  for (const r of rosters) {
-    result[r.id] = byUserId[r.platformUserId] ?? r.platformUserId ?? r.id
+  for (const id of rosterIds) {
+    result[id] = names.get(id) ?? UNKNOWN_MANAGER_NAME
   }
   return result
 }
