@@ -15,7 +15,7 @@ import {
   PlayerFace,
   SectionHead,
   StatPair,
-  rankLabel,
+  platformKey,
 } from '@/components/core-app/boards/BoardKit'
 import '@/components/core-app/af-core-boards.css'
 
@@ -125,7 +125,7 @@ function TradeBody({ t, leagueId }: { t: BoardTrade; leagueId: string }) {
   )
 }
 
-function WindowCard({ row, i }: { row: TradeWindowRow; i: number }) {
+function WindowCard({ row }: { row: TradeWindowRow }) {
   const t = row.latest
   const urgent = row.weeksLeft != null && row.weeksLeft >= 0 && row.weeksLeft <= 1
 
@@ -143,11 +143,14 @@ function WindowCard({ row, i }: { row: TradeWindowRow; i: number }) {
 
   return (
     <li>
+      {/*
+        2026-09-13 handoff: league, deadline and the action in the header; the two
+        sides; then one footer line — the latest grade, a divider, the reasoning.
+        The rank numeral is gone (the section label states the rule) and the
+        bottom link row became the header button.
+      */}
       <article className="af-bd-card" data-sev={urgent ? 'bad' : undefined}>
         <header className="af-bd-card-head">
-          <span className="af-bd-rank" aria-hidden>
-            {rankLabel(i)}
-          </span>
           <LeagueCrest
             imageUrl={row.logoUrl}
             name={row.leagueName}
@@ -157,18 +160,34 @@ function WindowCard({ row, i }: { row: TradeWindowRow; i: number }) {
           <span className="af-bd-league">
             <span className="af-bd-name">{row.leagueName}</span>
             <span className="af-bd-sub">
-              <span className="af-bd-plat" data-platform={row.platform}>
+              <span className="af-bd-plat" data-platform={platformKey(row.platform)}>
                 {row.platform.toUpperCase()}
               </span>
               {` · ${row.tradesOnFile} ${row.tradesOnFile === 1 ? 'trade' : 'trades'} on file`}
             </span>
           </span>
+          {/*
+            An unknown or absent deadline is a fact about what we hold, not an
+            alert — so it reads faint, not in the accent it used to borrow.
+          */}
           <span
             className="af-bd-tag"
-            data-sev={urgent ? 'bad' : row.deadlineWeek != null ? 'warn' : 'info'}
+            data-sev={urgent ? 'bad' : row.deadlineWeek != null ? 'warn' : 'muted'}
           >
             {deadlineLabel}
           </span>
+          <Link className="af-bd-btn" href={row.href}>
+            Open trades →
+          </Link>
+        </header>
+
+        {t ? (
+          <TradeBody t={t} leagueId={row.leagueId} />
+        ) : (
+          <p className="af-bd-reason">No trade has been made in this league on any season we hold.</p>
+        )}
+
+        <div className="af-bd-card-foot">
           {/*
             ⚠ THE REFUSAL IS RENDERED HERE, NOT LEFT TO THE LOADER'S PROSE. The
             loader also mentions it in `reasoning`, but a card that shows a
@@ -181,37 +200,23 @@ function WindowCard({ row, i }: { row: TradeWindowRow; i: number }) {
           ) : t ? (
             <span className="af-bd-kv">
               <span className="af-bd-k">Latest grade</span>
-              <span className="af-bd-sub" style={{ maxWidth: 220 }}>
+              <span className="af-bd-sub" style={{ maxWidth: 260 }}>
                 ungraded: {t.withheldReason ?? 'no reason recorded'}
               </span>
             </span>
           ) : null}
-        </header>
-
-        {t ? (
-          <TradeBody t={t} leagueId={row.leagueId} />
-        ) : (
-          <p className="af-bd-reason">No trade has been made in this league on any season we hold.</p>
-        )}
-
-        <p className="af-bd-reason">{row.reasoning}</p>
-
-        <div className="af-bd-card-head">
-          <span className="af-bd-mid">
-            {t?.season != null ? (
-              <span className="af-bd-tag" data-sev="info">
-                LATEST
-                <span className="af-bd-tag-detail">
-                  {' '}
-                  {t.week != null ? `week ${t.week}, ` : ''}
-                  {t.season}
-                </span>
+          {t?.season != null ? (
+            <span className="af-bd-tag" data-sev="muted">
+              LATEST
+              <span className="af-bd-tag-detail">
+                {' '}
+                {t.week != null ? `week ${t.week}, ` : ''}
+                {t.season}
               </span>
-            ) : null}
-          </span>
-          <Link className="af-bd-cta" href={row.href}>
-            Open trades →
-          </Link>
+            </span>
+          ) : null}
+          {t ? <span className="af-bd-rule" aria-hidden /> : null}
+          <p className="af-bd-reason">{row.reasoning}</p>
         </div>
       </article>
     </li>
@@ -253,7 +258,7 @@ export function TradesBoard({ data, allHref }: TradesBoardProps) {
             label="Waiting on you"
             count={`${data.pending.length} pending`}
           />
-          <ul className="af-bd-cards">
+          <ul className="af-bd-cards af-bd-cards--rich">
             {data.pending.map((p) => (
               <li key={p.id}>
                 <article className="af-bd-card" data-sev="bad">
@@ -276,6 +281,12 @@ export function TradesBoard({ data, allHref }: TradesBoardProps) {
                     <span className="af-bd-tag" data-sev="bad">
                       {p.status.toUpperCase()}
                     </span>
+                    <Link
+                      className="af-bd-btn"
+                      href={`/core/trades?league=${encodeURIComponent(p.leagueId)}`}
+                    >
+                      Review it →
+                    </Link>
                   </header>
                   <div className="af-bd-side">
                     <span className="af-bd-side-label">On the table</span>
@@ -289,15 +300,6 @@ export function TradesBoard({ data, allHref }: TradesBoardProps) {
                         </span>
                       </span>
                     ))}
-                  </div>
-                  <div className="af-bd-card-head">
-                    <span className="af-bd-mid" />
-                    <Link
-                      className="af-bd-cta"
-                      href={`/core/trades?league=${encodeURIComponent(p.leagueId)}`}
-                    >
-                      Review it →
-                    </Link>
                   </div>
                 </article>
               </li>
@@ -331,9 +333,9 @@ export function TradesBoard({ data, allHref }: TradesBoardProps) {
                   : null
             }
           />
-          <ul className="af-bd-cards">
-            {data.windows.map((w, i) => (
-              <WindowCard key={w.leagueId} row={w} i={i} />
+          <ul className="af-bd-cards af-bd-cards--rich">
+            {data.windows.map((w) => (
+              <WindowCard key={w.leagueId} row={w} />
             ))}
           </ul>
         </section>
@@ -359,7 +361,7 @@ export function TradesBoard({ data, allHref }: TradesBoardProps) {
         </p>
       ) : null}
 
-      <p className="af-bd-note">
+      <p className="af-bd-note af-bd-note--plain">
         Grades price both sides against current market rank. A trade whose assets could not all
         be priced is shown with its reason instead of a letter — a &ldquo;C&rdquo; from no data
         would read as &ldquo;an average trade&rdquo;.
