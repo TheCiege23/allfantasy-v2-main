@@ -16,9 +16,10 @@
  * drains a DIFFERENT table — `lib/events/outboxStore.ts` reads `eventOutbox`/`domainEvent`, the
  * domain-event outbox. Grepping for "relay" finds it and looks like coverage. It is not.
  *
- * ⚠ WHAT THIS BLOCKS IF IT STOPS. `processLeagueWaiversJob` enqueues here — claim won, claim lost,
- * and the league-chat announcement. The waivers cron fires every 5 minutes and starts doing real
- * work in week 1, so a dead relay means every manager silently learns nothing about their claims.
+ * ⚠ WHAT THIS BLOCKS IF IT STOPS. `processLeagueWaiversJob` enqueues its league-chat announcement
+ * here. It used to enqueue per-claim won/lost bell entries too; those were removed 2026-09-14 as a
+ * duplicate of `onWaiverRunComplete`'s dispatcher announcement, which — unlike this relay — reads
+ * the user's notification settings. Claim results therefore no longer depend on this relay.
  *
  * DESIGN NOTES, each one a failure this repo has already had:
  *

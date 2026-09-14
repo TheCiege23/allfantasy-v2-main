@@ -5,7 +5,9 @@
  * - `processWaiverClaimsForLeague` — `lib/waiver-wire/process-engine.ts` (FAAB / rolling / reverse standings ordering).
  * - `runAutomationJob` — durable automation envelope + idempotency (`AutomationJob` / `AutomationRun`).
  * - `withAutomationLock` — `waiver:league:{leagueId}` mutex (Upstash or Postgres fallback).
- * - `NotificationOutbox` / `RealtimeEvent` — persist-only fan-out for future workers / realtime transports.
+ * - `NotificationOutbox` — the league-chat announcement only. Per-claim bell entries come from
+ *   `onWaiverRunComplete`, through the notification dispatcher (see notifyClaimOutcomes).
+ * - `RealtimeEvent` — per-claim realtime fan-out.
  */
 
 import { randomUUID } from "crypto"
@@ -21,7 +23,7 @@ import type {
 } from "@/lib/automation/jobs/waivers/waiverAutomationTypes"
 import type { WaiverAutomationSummary } from "@/lib/automation/jobs/waivers/waiverAutomationSummary"
 import { withAutomationLock } from "@/lib/automation/locks"
-import { enqueueLeagueChatNotification, enqueueUserNotification } from "@/lib/automation/notifications"
+import { enqueueLeagueChatNotification } from "@/lib/automation/notifications"
 import { publishRealtimeEvent } from "@/lib/automation/realtime"
 import type { AutomationResult } from "@/lib/automation/types"
 import { prisma } from "@/lib/prisma"
@@ -47,6 +49,19 @@ async function notifyClaimOutcomes(leagueId: string, rawResults: ProcessedClaimR
     const uid = userByRoster.get(r.rosterId)
     if (!uid) continue
 
+    /*
+     * 🛑 REALTIME ONLY. This used to queue a bell entry per claim as well, and that was a
+     * SECOND copy: processWaiverClaimsForLeague runs onWaiverRunComplete (run-hooks.ts),
+     * which already announces "Waiver claim awarded" / "not awarded" through the
+     * notification dispatcher. The queued copies were written by the outbox relay, which
+     * checks only the fatigue budget — so every won claim would reach the bell twice, and
+     * one of the two ignored the user's waiver switch and league mutes.
+     *
+     * Removed 2026-09-14. Measured on production that day: no waiver-claim notification of
+     * either kind in 30 days, and the outbox's last waiver rows date from June, so the
+     * duplicate had not yet reached anyone. The run hook now covers every failed claim,
+     * which this queue was the only path to announce.
+     */
     if (r.success) {
       await publishRealtimeEvent({
         leagueId,
@@ -57,18 +72,6 @@ async function notifyClaimOutcomes(leagueId: string, rawResults: ProcessedClaimR
           rosterId: r.rosterId,
           addPlayerId: r.addPlayerId,
           outcomeCode: r.outcomeCode ?? null,
-        },
-      })
-      await enqueueUserNotification({
-        userId: uid,
-        channel: "in_app",
-        eventType: "WAIVER_CLAIM_WON",
-        title: "Waiver claim awarded",
-        body: r.message ?? "Your waiver claim was awarded.",
-        metadata: {
-          claimId: r.claimId,
-          leagueId,
-          addPlayerId: r.addPlayerId,
         },
       })
     } else {
@@ -82,18 +85,6 @@ async function notifyClaimOutcomes(leagueId: string, rawResults: ProcessedClaimR
           addPlayerId: r.addPlayerId,
           outcomeCode: r.outcomeCode ?? null,
           message: r.message ?? null,
-        },
-      })
-      await enqueueUserNotification({
-        userId: uid,
-        channel: "in_app",
-        eventType: "WAIVER_CLAIM_FAILED",
-        title: "Waiver claim not awarded",
-        body: r.message ?? "Your waiver claim was not awarded.",
-        metadata: {
-          claimId: r.claimId,
-          leagueId,
-          addPlayerId: r.addPlayerId,
         },
       })
     }

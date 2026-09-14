@@ -116,7 +116,11 @@ export function NotificationsSettingsSection({
     })
   }
 
-  const setAllPushChannels = (inApp: boolean) => {
+  /*
+   * "All push" writes the push switch. Until 2026-09-14 push had no switch of its own and
+   * followed in-app, so this toggled `inApp` — which emptied the bell as a side effect.
+   */
+  const setAllPushChannels = (push: boolean) => {
     setDirty(true)
     setSaveError(null)
     setTestResultMessage(null)
@@ -124,14 +128,17 @@ export function NotificationsSettingsSection({
     setPrefs((prev) => {
       const categories = { ...prev.categories }
       for (const id of VISIBLE_CATEGORY_IDS) {
-        categories[id] = { ...(categories[id] ?? { ...defaultCh }), inApp }
+        categories[id] = { ...(categories[id] ?? { ...defaultCh }), push }
       }
       return { ...prev, categories }
     })
   }
 
   const allEmailOn = VISIBLE_CATEGORY_IDS.every((id) => prefs.categories?.[id]?.email === true)
-  const allPushOn = VISIBLE_CATEGORY_IDS.every((id) => prefs.categories?.[id]?.inApp === true)
+  const allPushOn = VISIBLE_CATEGORY_IDS.every((id) => {
+    const c = prefs.categories?.[id]
+    return (c?.push ?? c?.inApp) === true
+  })
 
   const handleSave = async () => {
     setSaving(true)

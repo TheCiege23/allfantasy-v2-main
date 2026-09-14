@@ -6,7 +6,8 @@ import { getDeliveryMethodAvailability } from "@/lib/notification-settings/Deliv
 import type { NotificationCategoryId, NotificationPreferences } from "@/lib/notification-settings/types"
 import { sendNotificationEmail, sendTemplatedEmail } from "@/lib/resend-client"
 import { sendSms } from "@/lib/twilio-client"
-import { sendPushToUser, isPushCategory } from "@/lib/push-notifications"
+import { sendPushToUser } from "@/lib/push-notifications"
+import { decidePush } from "@/lib/notifications/pushGate"
 import { retryWithBackoff } from "@/lib/error-handling"
 import { isUndeliverableEmailDomain } from "@/lib/email/undeliverableDomains"
 import { shouldSuppressTokenMonetizationNotification } from "@/lib/notifications/tokenMonetizationNotificationBypass"
@@ -193,13 +194,18 @@ export async function dispatchNotification(params: DispatchNotificationParams): 
         }
       }
 
-      if (
-        catPrefs.inApp &&
-        availability.inApp &&
-        isPushCategory(category) &&
-        !skipChannels?.push &&
-        !quiet.push
-      ) {
+      /*
+       * Push goes through pushGate's rule, the same one every direct push sender uses, so a
+       * switch honoured here cannot be ignored elsewhere. Since 2026-09-14 push has its own
+       * per-category switch; a row without one follows in-app, as push always did.
+       */
+      const push = decidePush(profile.notificationPreferences as NotificationPreferences | null, {
+        category,
+        leagueId: effectiveLeagueId,
+        severity,
+        fallbackTimezone: profile.timezone,
+      })
+      if (push.allowed && !skipChannels?.push) {
         sendPushToUser(userId, {
           title,
           body: body ?? undefined,

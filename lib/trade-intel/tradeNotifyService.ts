@@ -3,6 +3,7 @@ import 'server-only'
 import { prisma } from '@/lib/prisma'
 import { getBaseUrl } from '@/lib/get-base-url'
 import { sendPushToUser } from '@/lib/push-notifications'
+import { decidePushForUser } from '@/lib/notifications/pushGate'
 import { sendTemplatedEmail } from '@/lib/resend-client'
 import { createEmailUnsubscribeToken } from '@/lib/email/marketing-email'
 import { getTradeGrades } from '@/lib/trade-intel/sleeperTradeGradeService'
@@ -238,26 +239,41 @@ export async function detectAndNotifyLeague(sleeperLeagueId: string): Promise<Le
          * the subscription table, the send service, and a service worker that
          * already carries trade action buttons and a league-scoped deep link.
          *
-         * Sent per recipient, after the email, and deliberately not gated on
-         * the email preferences above: those govern email. Push is opt-in by
-         * construction — a user only has a subscription because they granted
-         * permission — and this loop has already applied the league-level
-         * filters that decide whether this person hears about this trade at
-         * all. No subscription is the normal case and costs one indexed read.
+         * Sent per recipient, after the email. No subscription is the normal case
+         * and costs one indexed read.
+         *
+         * 🛑 GATED ON THE USER'S NOTIFICATION SETTINGS since 2026-09-14. Having a
+         * subscription was treated as consent to every trade buzz, so a manager who
+         * switched trade alerts off, muted this league or set quiet hours was buzzed
+         * anyway — the push service looks at nothing but the subscription. pushGate is
+         * the dispatcher's own rule. It is checked against the recipient's OWN league
+         * row: imported leagues are per-user copies, so a mute is saved on theirs, not
+         * necessarily on afLeagues[0]. A settings read that fails sends nothing.
          */
+        const recipientLeagueId =
+          afLeagues.find(
+            (l) => l.userId === recipient.id || l.teams.some((t) => t.claimedByUserId === recipient.id),
+          )?.id ?? afLeagues[0].id
+        const pushGate = await decidePushForUser(recipient.id, {
+          category: isOffer ? 'trade_proposals' : 'trade_accept_reject',
+          leagueId: recipientLeagueId,
+          severity: 'medium',
+        }).catch(() => null)
         /*
          * ⚠ THE COPY FOLLOWS THE STATUS, same as the subject line above. "Trade accepted" on an
          * offer still awaiting your answer is worse than no notification: it tells a manager a
          * decision was made that was in fact left to them, and they will not open it.
          */
-        await sendPushToUser(recipient.id, {
-          title: isOffer ? `Trade offer in ${leagueName}` : `Trade accepted in ${leagueName}`,
-          body: subject,
-          href: `/league/${afLeagues[0].id}?view=legacy`,
-          tag: `trade:${afLeagues[0].id}:${trade.id}`,
-          type: 'trade',
-          leagueId: afLeagues[0].id,
-        }).catch(() => [])
+        if (pushGate?.allowed) {
+          await sendPushToUser(recipient.id, {
+            title: isOffer ? `Trade offer in ${leagueName}` : `Trade accepted in ${leagueName}`,
+            body: subject,
+            href: `/league/${afLeagues[0].id}?view=legacy`,
+            tag: `trade:${afLeagues[0].id}:${trade.id}`,
+            type: 'trade',
+            leagueId: afLeagues[0].id,
+          }).catch(() => [])
+        }
       }
     }
     return base

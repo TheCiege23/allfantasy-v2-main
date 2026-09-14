@@ -69,7 +69,7 @@ function notificationsBadge(profile: SettingsProfile): SettingsNavBadge | null {
   const anyChannelOn = NOTIFICATION_CATEGORY_IDS.some((id) => {
     const c = prefs.categories?.[id]
     if (!c || c.enabled === false) return false
-    return c.inApp === true || c.email === true || c.sms === true
+    return c.inApp === true || c.push === true || c.email === true || c.sms === true
   })
 
   return anyChannelOn ? null : { text: 'OFF', tone: 'warn' }
