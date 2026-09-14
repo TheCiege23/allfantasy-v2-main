@@ -107,6 +107,7 @@ import { getCrossLeagueValueActions } from '@/lib/core-app/crossLeagueValueActio
 import { DashTradeBand } from '@/components/core-app/screens/DashTradeBand'
 import { DashSinceLastVisit } from '@/components/core-app/screens/DashSinceLastVisit'
 import { getSinceLastVisit } from '@/lib/core-app/sinceLastVisit'
+import { getUrgencyBadges, recordPendingOffers } from '@/lib/core-app/urgencyBadges'
 import { isSpeculativeRequestHeaders } from '@/lib/http/speculativeRequest'
 import { hasRegularSeasonStarted } from '@/lib/core-app/seasonPhase'
 import { DashGameDayBand } from '@/components/core-app/screens/DashGameDayBand'
@@ -603,7 +604,7 @@ export default async function AfCorePage({
     playedLeagues.map((league) => league.id),
     playedLeagues.map((league) => String(league.sport ?? 'NFL')),
     new Date(),
-  ).catch(() => ({ gameDayActive: false, liveGameCount: 0, draftLive: false }))
+  ).catch(() => ({ gameDayActive: false, liveGameCount: 0, draftLive: false, liveDraftLeagueIds: [] as string[] }))
 
   const rail: RailLeague[] = playedLeagues.map((l) => ({
     id: l.id,
@@ -1636,6 +1637,15 @@ export default async function AfCorePage({
             ownerSleeperId: leagueListPayload?.sleeperUserId ?? null,
             currentWeek: homeTradeWeek,
             maxLeagues: 8,
+            /*
+             * The same scan sees offers waiting on you; the Trades urgency badge
+             * reads them from the cache instead of scanning again on every tab.
+             * Not awaited here: a badge that lags one render is inside the
+             * 10-minute freshness rule, and recording it must never slow the home.
+             */
+            onPendingOffers: (scanned) => {
+              void recordPendingOffers(userId, scanned, now).catch(() => undefined)
+            },
           },
         ).catch(() => []),
       ])
@@ -1995,6 +2005,27 @@ export default async function AfCorePage({
 
   const dockable = selectedLeagueId != null && DOCKABLE_KEYS.includes(activeKey)
 
+  /*
+   * Urgency counts on the tabs — lib/core-app/urgencyBadges. Computed last, after
+   * every loader above, so the home's lineup facts refresh the cache in the same
+   * render. Any other tab reuses the cache and reloads the lineup facts at most
+   * once per 10 minutes. A failure renders no badges — never a zero.
+   */
+  const urgencyBadges = await getUrgencyBadges({
+    userId,
+    leagues: playedLeagues.map((l) => ({
+      id: l.id,
+      platform: (l as { platform?: string | null }).platform ?? null,
+      draftDate: (l as { draftDate?: string | Date | null }).draftDate ?? null,
+      lastSyncedAt: (l as { lastSyncedAt?: Date | string | null }).lastSyncedAt ?? null,
+    })),
+    liveDraftLeagueIds: coreActivity.liveDraftLeagueIds,
+    now,
+    lineupLeagues: dash34?.allLeagues ?? null,
+    loadLineupLeagues: () =>
+      getDash34Data(userId, leagues as unknown as Dash34LeagueRow[], now).then((d) => d?.allLeagues ?? null),
+  }).catch(() => null)
+
   return (
     <AfCoreShell
       active={activeKey}
@@ -2024,6 +2055,7 @@ export default async function AfCorePage({
       liveGameCount={liveScores?.games.filter((g) => g.isLive).length ?? coreActivity.liveGameCount}
       gameDayActive={coreActivity.gameDayActive}
       draftLive={coreActivity.draftLive}
+      urgencyBadges={urgencyBadges}
       comms={{
         leagues: commsLeagueRows.map((l) => ({
           id: l.id,

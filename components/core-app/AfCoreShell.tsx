@@ -195,6 +195,14 @@ type NavItem = {
 }
 
 /**
+ * An urgency count as a nav badge, or nothing. Same rule as every other badge here:
+ * a zero is not drawn, and an unknown (null) is not drawn as a zero.
+ */
+function urgencyBadge(count: number | null | undefined): NavItem['badge'] {
+  return typeof count === 'number' && count > 0 ? { text: String(count), tone: 'count' } : undefined
+}
+
+/**
  * Nav sections.
  *
  * ⚠ THIS WAS A FLAT LIST OF SIXTEEN AND 38a TAKES IT TO NINETEEN. Sixteen
@@ -246,6 +254,17 @@ export type AfCoreShellProps = {
    * `warRoomLive` until 2026-09-08 and was never wired then either.
    */
   draftLive?: boolean
+  /**
+   * Leagues needing attention, per tab — lib/core-app/urgencyBadges. Each number is
+   * LEAGUES AFFECTED (user decision, 2026-09-14). Null, absent or zero renders no
+   * badge: an unknown count is not shown as a zero, and a zero is not shown at all.
+   */
+  urgencyBadges?: {
+    myTeam?: number | null
+    trades?: number | null
+    draftHq?: number | null
+    sync?: number | null
+  } | null
   /** Keeps league-scoped nav links pointed at the league in context. */
   selectedLeagueId?: string | null
   /**
@@ -427,6 +446,8 @@ function navItems(props: AfCoreShellProps): NavItem[] {
       href: props.selectedLeagueId
         ? `/core/my-team?league=${encodeURIComponent(props.selectedLeagueId)}`
         : '/core/my-team',
+      /* Leagues with an empty starting slot or a starter ruled out — see urgencyBadges. */
+      badge: urgencyBadge(props.urgencyBadges?.myTeam),
     },
     /* Only for leagues that actually roster defenders — see the CoreNavKey note. */
     ...(props.hasIdpDefense && props.selectedLeagueId
@@ -455,6 +476,8 @@ function navItems(props: AfCoreShellProps): NavItem[] {
       href: props.selectedLeagueId
         ? `/core/trades?league=${encodeURIComponent(props.selectedLeagueId)}`
         : '/core/trades',
+      /* Leagues with an offer waiting on you, from a trade scan in the last 10 minutes. */
+      badge: urgencyBadge(props.urgencyBadges?.trades),
     }),
     {
       key: 'waivers',
@@ -536,7 +559,12 @@ function navItems(props: AfCoreShellProps): NavItem[] {
        * the shell, which is chrome on every /core page and therefore a budgeted
        * read — see the note on `getRailMatchups`.
        */
-      badge: props.draftLive ? { text: 'LIVE', tone: 'live' } : undefined,
+      /*
+       * A running draft outranks a count — "LIVE" is the one thing on this tab that is
+       * happening right now, and a number beside it would bury it. Otherwise the badge
+       * counts leagues with a draft live or starting within a day (see urgencyBadges).
+       */
+      badge: props.draftLive ? { text: 'LIVE', tone: 'live' } : urgencyBadge(props.urgencyBadges?.draftHq),
     },
 
     {
@@ -683,6 +711,8 @@ function navItems(props: AfCoreShellProps): NavItem[] {
       href: props.selectedLeagueId
         ? `/core/sync?league=${encodeURIComponent(props.selectedLeagueId)}`
         : '/leagues',
+      /* Leagues whose data has gone stale, by the issues queue's own rule (isStaleLeague). */
+      badge: urgencyBadge(props.urgencyBadges?.sync),
     },
     { key: 'tools', label: 'Tools', glyph: '⚙', href: inLeague('/core/tools') },
     // Full page outside /core, like My Leagues and League Sync above. This is

@@ -21,6 +21,7 @@ import { getLeagueScoreboard, type LeagueScoreboard } from './leagueScoreboard'
 import { extractScoringSettings } from '@/lib/projections/leagueScoring'
 import { latestProjectionWeek } from './playerProjections'
 import { getRecentTrades } from './recentTrades'
+import { recordPendingOffers } from './urgencyBadges'
 import { scanPendingSleeperTrades } from '@/lib/provider-trades/scanPendingSleeperTrades'
 import { getMatchupData } from '@/lib/core-app/matchup'
 import { getRivalRecords } from '@/lib/core-app/dash3aPanels'
@@ -396,6 +397,21 @@ export async function getLeagueHomeData(
         ownerSleeperId: owner.sleeperUserId,
         sport: String(league.sport),
       }).catch(() => null)
+      /*
+       * This scan already knows the offers waiting on you in this league; the Trades
+       * urgency badge reads that instead of scanning again. Only an answered scan is
+       * recorded — a failed one says nothing about what is waiting.
+       */
+      if (live?.scanned) {
+        await recordPendingOffers(
+          userId,
+          [{
+            leagueId: league.id,
+            waiting: live.trades.filter((t) => !t.proposedByViewer && t.lifecycleStatus !== 'complete').length,
+          }],
+          new Date(),
+        ).catch(() => undefined)
+      }
       const fresh = (live?.completedTrades ?? []).map((trade) => {
         const assets = (items: typeof trade.assetsReceived) => items.map((asset) => ({
           kind: asset.isPick ? 'pick' as const : 'player' as const,

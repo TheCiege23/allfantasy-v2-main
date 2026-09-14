@@ -238,4 +238,43 @@ describe('getRecentTrades', () => {
     expect(out[0]).toMatchObject({ id: 'fresh-1', leagueName: 'Bla bla bla' })
     expect(scanPendingSleeperTrades).toHaveBeenCalledWith(expect.objectContaining({ weeks: [1, 2, 3] }))
   })
+
+  /*
+   * The Trades urgency badge. The scan already sees offers waiting on you; the
+   * callback hands them over so nothing reads the provider twice.
+   */
+  describe('pending offers for the Trades badge', () => {
+    const offer = (id: string, over: Record<string, unknown> = {}) => ({
+      transactionId: id, proposedBy: 'Partner', proposedByViewer: false, proposedAt: NOW.toISOString(),
+      assetsGiven: [], assetsReceived: [], readOnly: true, provider: 'sleeper', lifecycleStatus: 'pending',
+      ...over,
+    })
+    const TWO = [
+      { id: 'af-1', name: 'One', platformLeagueId: '111', platform: 'sleeper' },
+      { id: 'af-2', name: 'Two', platformLeagueId: '222', platform: 'sleeper' },
+    ]
+
+    it('reports offers waiting on YOU, per league, for every scan that answered', async () => {
+      scanPendingSleeperTrades.mockImplementation(async ({ platformLeagueId }: { platformLeagueId: string }) =>
+        platformLeagueId === '111'
+          ? {
+              trades: [offer('in-1'), offer('in-2'), offer('sent', { proposedByViewer: true })],
+              completedTrades: [], scanned: true, reason: null, weeksUnanswered: 0,
+            }
+          : { trades: [], completedTrades: [], scanned: false, reason: 'no roster', weeksUnanswered: 0 },
+      )
+      const onPendingOffers = vi.fn()
+      await getRecentTrades(TWO, NOW, 3, { ownerSleeperId: 'owner-1', currentWeek: 2, onPendingOffers })
+      /* af-2's scan did not answer, so it is absent — never reported as zero. */
+      expect(onPendingOffers).toHaveBeenCalledWith([{ leagueId: 'af-1', waiting: 2 }])
+    })
+
+    it('a failing callback never costs the trades', async () => {
+      const out = await getRecentTrades(
+        [{ ...LEAGUES[0], platform: 'sleeper' }], NOW, 3,
+        { ownerSleeperId: 'owner-1', currentWeek: 2, onPendingOffers: () => { throw new Error('boom') } },
+      )
+      expect(out.length).toBeGreaterThan(0)
+    })
+  })
 })

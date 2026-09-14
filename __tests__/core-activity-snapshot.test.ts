@@ -1,11 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const { findMany, count } = vi.hoisted(() => ({ findMany: vi.fn(), count: vi.fn() }))
+const { findMany, draftFindMany } = vi.hoisted(() => ({ findMany: vi.fn(), draftFindMany: vi.fn() }))
 
 vi.mock('@/lib/prisma', () => ({
   prisma: {
     sportsGame: { findMany },
-    draftSession: { count },
+    draftSession: { findMany: draftFindMany },
   },
 }))
 
@@ -16,8 +16,8 @@ const NOW = new Date('2026-09-13T17:15:00.000Z')
 
 beforeEach(() => {
   findMany.mockReset()
-  count.mockReset()
-  count.mockResolvedValue(0)
+  draftFindMany.mockReset()
+  draftFindMany.mockResolvedValue([])
 })
 
 describe('Core game-day activity', () => {
@@ -43,6 +43,7 @@ describe('Core game-day activity', () => {
       gameDayActive: true,
       liveGameCount: 1,
       draftLive: false,
+      liveDraftLeagueIds: [],
     })
   })
 
@@ -66,12 +67,25 @@ describe('Core game-day activity', () => {
         startTime: new Date('2026-09-13T17:00:00.000Z'), fetchedAt: NOW,
       },
     ])
-    count.mockResolvedValue(1)
+    draftFindMany.mockResolvedValue([{ leagueId: 'league-1' }])
 
     await expect(getCoreActivitySnapshot(['league-1'], ['NFL'], NOW)).resolves.toEqual({
       gameDayActive: false,
       liveGameCount: 0,
       draftLive: true,
+      liveDraftLeagueIds: ['league-1'],
     })
+  })
+
+  /* The Draft HQ badge counts leagues, so two sessions in one league are one league. */
+  it('names each league with a live draft once, asking only for your leagues and live statuses', async () => {
+    findMany.mockResolvedValue([])
+    draftFindMany.mockResolvedValue([{ leagueId: 'a' }, { leagueId: 'b' }, { leagueId: 'a' }])
+
+    const result = await getCoreActivitySnapshot(['a', 'b', 'a'], ['NFL'], NOW)
+    expect(result.liveDraftLeagueIds).toEqual(['a', 'b'])
+    const where = draftFindMany.mock.calls[0]![0].where
+    expect(where.leagueId).toEqual({ in: ['a', 'b'] })
+    expect(where.status).toEqual({ in: ['in_progress', 'paused', 'active', 'live'] })
   })
 })

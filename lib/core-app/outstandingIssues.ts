@@ -83,6 +83,29 @@ function platformHome(platform: string, league: UserLeague): { label: string; hr
 const NON_SYNCING_PLATFORMS = new Set(['allfantasy', 'af', 'manual', 'native'])
 
 /**
+ * Has this league's data gone stale? The ONE rule — the issues queue and the Sync
+ * tab's urgency badge both call it, so a badge can never count a league the queue
+ * does not list, or the reverse.
+ */
+export function isStaleLeague(
+  league: { platform?: string | null },
+  lastSync: Date | null,
+  now: Date,
+): boolean {
+  const platform = String(league.platform ?? '').toLowerCase()
+  if (NON_SYNCING_PLATFORMS.has(platform)) return false
+  return describeAge('roster', lastSync, now).stale
+}
+
+export function staleLeagueIds(
+  leagues: Array<{ id: string; platform?: string | null }>,
+  lastSyncByLeague: Record<string, Date | null>,
+  now: Date,
+): string[] {
+  return leagues.filter((l) => isStaleLeague(l, lastSyncByLeague[l.id] ?? null, now)).map((l) => l.id)
+}
+
+/**
  * `lastSyncByLeague` from the league-list payload.
  *
  * ⚠ BOTH CALLERS USED TO OMIT THE ARGUMENT ENTIRELY, WHICH MADE THE DETECTOR
@@ -168,7 +191,8 @@ export function deriveOutstandingIssues(input: {
 
     const lastSync = input.lastSyncByLeague?.[league.id] ?? null
     const age = describeAge('roster', lastSync, now)
-    if (age.stale) {
+    /* The same predicate the Sync tab's urgency badge counts — see isStaleLeague. */
+    if (isStaleLeague(league, lastSync, now)) {
       staleIssues.push({
         id: `${league.id}:stale`,
         severity: 'warn',
