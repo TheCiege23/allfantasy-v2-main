@@ -84,14 +84,20 @@ export function SectionHead({
   label,
   count,
   id,
+  tone,
 }: {
   label: string
   count?: string | null
   id?: string
+  /**
+   * Colours the label by what the section holds — LEADING green, TRAILING red,
+   * ON THE BUBBLE amber (handoff 2026-09-13). Omit for a neutral section.
+   */
+  tone?: 'good' | 'bad' | 'warn'
 }) {
   return (
     <div className="af-bd-sec-head">
-      <h2 className="af-bd-sec-label" id={id}>
+      <h2 className="af-bd-sec-label" id={id} data-tone={tone}>
         {label}
       </h2>
       <span className="af-bd-sec-rule" aria-hidden />

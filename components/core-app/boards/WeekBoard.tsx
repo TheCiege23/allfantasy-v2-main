@@ -73,15 +73,24 @@ function pctLabel(pct: number | null): string {
   return pct == null ? '—' : `${Math.round(pct)}%`
 }
 
-function MatchRow({ row, i, ahead }: { row: Row; i: number; ahead: boolean }) {
+/*
+ * 2026-09-13 handoff: one compact row per matchup — crest, league over
+ * "vs opponent · N% playoff odds", and the projected margin as the single value
+ * on the right.
+ *
+ * ⚠ NOTHING THE OLD ROW SAID IS GONE, IT MOVED. The rank numeral is dropped (the
+ * section label already states the order); the playoff % moved into the sub
+ * line; "% to win" sits under the margin; and "projected margin" is the value's
+ * accessible name, because a bare "+38.2" beside a league reads as a score.
+ */
+function MatchRow({ row, ahead }: { row: Row; ahead: boolean }) {
   const { m } = row
   const abs = Math.abs(row.margin).toFixed(1)
+  const win = Math.round(m.projection ? m.projection.winProbability * 100 : 0)
+  const sign = ahead ? '+' : '−'
   return (
     <li>
       <Link className="af-bd-row" href={m.href}>
-        <span className="af-bd-rank" aria-hidden>
-          {String(i + 1).padStart(2, '0')}
-        </span>
         <LeagueCrest name={m.leagueName} platform={m.platform} size="sm" />
         <span className="af-bd-league">
           <span className="af-bd-name">{m.leagueName}</span>
@@ -92,27 +101,23 @@ function MatchRow({ row, i, ahead }: { row: Row; i: number; ahead: boolean }) {
               own name here would invent a manager.
             */}
             {m.opponent.name ? `vs ${m.opponent.name}` : 'opponent not named'}
+            {row.playoffPct != null ? ` · ${pctLabel(row.playoffPct)} playoff odds` : ''}
             {m.elimination ? ' · lowest score is eliminated' : ''}
           </span>
         </span>
-        <span className="af-bd-mid">
-          <span className="af-bd-tag" data-sev={ahead ? 'good' : 'bad'}>
-            {ahead ? '+' : '−'}
-            {abs}
-            <span className="af-bd-tag-detail"> projected margin</span>
-          </span>
-        </span>
-        <span className="af-bd-stat af-bd-stat--narrow">
-          {Math.round(m.projection ? m.projection.winProbability * 100 : 0)}% to win
-        </span>
         <span
-          className="af-bd-stat af-bd-stat--narrow"
-          data-sev={
-            row.playoffPct == null ? undefined : row.playoffPct >= 50 ? 'good' : 'warn'
-          }
-          title="Simulated playoff probability over the remaining season"
+          className="af-bd-val"
+          data-sev={ahead ? 'good' : 'bad'}
+          aria-label={`${sign}${abs} projected margin, ${win}% to win`}
+          title="Projected margin this week"
         >
-          {pctLabel(row.playoffPct)} PO
+          <span aria-hidden>
+            {sign}
+            {abs}
+          </span>
+          <span className="af-bd-val-sub" aria-hidden>
+            {win}% to win
+          </span>
         </span>
       </Link>
     </li>
@@ -132,11 +137,11 @@ function Column({
 }) {
   return (
     <section className="af-bd-sec">
-      <SectionHead label={label} />
+      <SectionHead label={label} tone={ahead ? 'good' : 'bad'} />
       {rows.length > 0 ? (
-        <ul className="af-bd-rows">
-          {rows.map((r, i) => (
-            <MatchRow key={r.m.leagueId} row={r} i={i} ahead={ahead} />
+        <ul className="af-bd-rows af-bd-rows--compact">
+          {rows.map((r) => (
+            <MatchRow key={r.m.leagueId} row={r} ahead={ahead} />
           ))}
         </ul>
       ) : (
@@ -240,7 +245,7 @@ export function WeekBoard({
         />
       </div>
 
-      <p className="af-bd-note">
+      <p className="af-bd-note af-bd-note--plain">
         {/*
           ⚠ `model.basis` IS A WHOLE SENTENCE WHEN THERE IS NOTHING TO FIT, and
           appending ", fitted on 0 roster-weeks" to it produced "…nothing here is
@@ -251,7 +256,7 @@ export function WeekBoard({
           ? `Margins are projected from each league's own completed weeks — ${board.model.basis}, fitted on ${board.model.sampleSize.toLocaleString()} roster-weeks.`
           : board.model.basis}{' '}
         {outlook
-          ? ` The PO column is a simulated playoff probability over the remaining schedule; a league below ${DEAD_PATH_PCT}% is left out of the trailing column.`
+          ? ` Playoff odds are a simulated probability over the remaining schedule; a league below ${DEAD_PATH_PCT}% is left out of the trailing column.`
           : ' The playoff filter did not run this time, so the trailing column is every league you are behind in — not only the ones still live.'}
       </p>
 
@@ -262,7 +267,7 @@ export function WeekBoard({
         being trustworthy at sixty leagues.
       */}
       {dead > 0 || board.unprojected.length > 0 || board.withoutSchedule > 0 ? (
-        <p className="af-bd-note">
+        <p className="af-bd-note af-bd-note--plain">
           {dead > 0 ? (
             <>
               <strong>
