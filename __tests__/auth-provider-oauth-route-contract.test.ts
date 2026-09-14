@@ -118,7 +118,7 @@ describe("Auth provider OAuth route contracts", () => {
     )
 
     expect(res.status).toBe(307)
-    expect(res.headers.get("location")).toContain("/settings?tab=connected&discord=error")
+    expect(res.headers.get("location")).toContain("/settings?tab=connected&discord=session-expired")
     expect(deleteMock).toHaveBeenCalledWith("discord_oauth_state")
     expect(deleteMock).toHaveBeenCalledWith("discord_oauth_user_id")
     expect(global.fetch).not.toHaveBeenCalled()
