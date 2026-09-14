@@ -579,6 +579,17 @@
 .af3a-follow-status[data-status='doubtful'],
 .af3a-follow-status[data-status='suspended'] { color: var(--bad); }
 .af3a-follow-next { flex: none; margin-left: auto; color: var(--text2); font: 700 11px/1 'JetBrains Mono', monospace; }
+/* Waiver nudge (2026-09-14): its own line under the row; a link, so the 44px touch floor. */
+.af3a-follow-fa {
+  flex-basis: 100%;
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  color: var(--accent);
+  font: 700 11.5px/1.3 'Archivo', system-ui, sans-serif;
+  text-decoration: none;
+}
+.af3a-follow-fa:hover { text-decoration: underline; }
 
 /* ── Inline help badge ────────────────────────────────────────────────────────
  * ⚠ THIS WAS SHIPPED WITH NO RULE AT ALL, AND THE ABSENCE WAS INVISIBLE IN CODE.

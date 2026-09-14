@@ -1,6 +1,7 @@
 'use client'
 
 import type { ReactNode } from 'react'
+import Link from 'next/link'
 import PlayerName from '@/components/core-app/player-card/PlayerName'
 import type { FollowingCardData } from '@/lib/core-app/followingCard'
 
@@ -49,6 +50,17 @@ export function FollowingCard({ data, help }: { data: FollowingCardData | null; 
                 </span>
               ) : null}
               {r.next ? <span className="af3a-follow-next af3a-mono">{r.next}</span> : null}
+              {/*
+                The waiver nudge (2026-09-14): he is on nobody's roster in one of your leagues.
+                Only leagues whose every roster could be read — see freeAgentLeaguesFor.
+              */}
+              {r.freeAgentIn?.length ? (
+                <Link className="af3a-follow-fa" href={r.freeAgentIn[0].href}>
+                  {r.freeAgentIn.length === 1
+                    ? `Free agent in ${r.freeAgentIn[0].leagueName} →`
+                    : `Free agent in ${r.freeAgentIn.length} of your leagues →`}
+                </Link>
+              ) : null}
             </li>
           ))}
         </ul>
