@@ -81,52 +81,58 @@
       //
       // These three predate the boundary and are the entire migration debt for
       // invariant 2 on this surface — three files, not the 2,250 the repo-wide
-      // reading implies. They cannot move yet: a Commissioner OS read needs a
-      // tenant id, and nothing resolves one until T-101 lands the Tenant table
-      // and T-102 the bootstrap functions.
+      // reading implies. They still cannot move, but read the reason carefully,
+      // because the one this paragraph first gave has partly expired. It said
+      // they wait "until T-101 lands the Tenant table and T-102 the bootstrap
+      // functions". The Tenant table HAS landed (`model Tenant` is in the
+      // schema), so that half reads as satisfied and must not be taken as an
+      // invitation to migrate. The live blocker is that no Commissioner OS READ
+      // path resolves a tenant id for a request: `withTenant` has exactly ONE
+      // caller outside lib/domain/ (app/api/commissioner-os/sync-health/
+      // route.ts), measured at b77efef66. Re-measure before quoting that count.
       //
       // Listed individually rather than allowlisting a directory, so a FOURTH
       // one cannot be added without editing this file and explaining itself.
       // Delete each entry as it migrates; when the list is empty, delete the
       // override.
       //
-      // ─── 🛑 THE LIST IS NO LONGER THREE, AND THE THREE NEW ONES ARE A WORSE
-      //     CATEGORY THAN THE ORIGINAL THREE. Stated plainly because the
-      //     paragraph above is now half wrong and quietly editing it would hide
-      //     the distinction that matters.
+      // ─── ⚠ THIS LIST WAS BRIEFLY SIX. HOW IT GOT BACK TO THREE IS THE PART
+      //     WORTH KEEPING.
       //
-      //     The original three PREDATE the boundary (2026-09-04). These three
-      //     were added AFTER it, by Commissioner OS feature work on 2026-09-08
-      //     and 2026-09-09 (a03eca554, 6158b1fed, 1f6201d68), and the ratchet
-      //     caught them exactly as designed — this entry is the "explaining
-      //     itself" the rule demands, not an absolution.
+      //     Commissioner OS feature work on 2026-09-08/09 (a03eca554, 6158b1fed,
+      //     1f6201d68) added three Prisma readers under lib/commissioner-ui/
+      //     AFTER the boundary existed. The ratchet caught them and they were
+      //     exempted here. Under the owner's ruling that commissioner-ui stays
+      //     Prisma-free, they were then MOVED OUT, content unchanged, to the
+      //     domain siblings where lib/commissioner-automations/
+      //     automationLedgerReads.ts, lib/commissioner-reports/reportStore.ts and
+      //     lib/commissioner-workspace/taskStore.ts already live:
       //
-      //     Why they are exempted rather than migrated, per file:
+      //       lib/commissioner-managers/managerNames.ts
+      //       lib/commissioner-mission-control/activityTrendReads.ts
+      //       lib/commissioner-settings/leagueSettingsReads.ts
       //
-      //     · managers/managerNames.ts — reads `app_users` and `league_teams`.
-      //       NEITHER is in lib/domain/tenantScopedTables.ts, so `withTenant`
-      //       has nothing to scope: it would open a commish_app connection and
-      //       set a GUC that no policy on those tables reads. That is ceremony
-      //       that LOOKS like tenancy, which is worse than an honest exemption.
-      //     · missionControl/activityTrendReads.ts — same, for
-      //       `decision_os_behavioral_snapshot`.
-      //     · settings/leagueSettingsReads.ts — the real debt. It reads
-      //       `leagues`, which IS tenant-scoped, so this one genuinely belongs
-      //       behind lib/domain/ and should be the FIRST to migrate. Its T-006
-      //       half was fixed rather than exempted (findUnique -> findFirst); only
-      //       the import remains.
+      //     "Out of commissioner-ui" and "into lib/domain" are SEPARATE moves,
+      //     and only the second was ever blocked. It still is, per file:
       //
-      //     ⚠ WHAT WOULD LET THEM MOVE: withTenant has exactly ONE caller today
-      //     (app/api/commissioner-os/sync-health/route.ts), so it is not yet an
-      //     established read path. Migrate leagueSettingsReads first and the
-      //     other two become a tenantScopedTables question, not a plumbing one.
+      //     · managerNames reads `app_users` and `league_teams`;
+      //       activityTrendReads reads `decision_os_behavioral_snapshot`. None is
+      //       in lib/domain/tenantScopedTables.ts, so `withTenant` would open a
+      //       commish_app connection and set a GUC no policy on those tables
+      //       reads — ceremony that LOOKS like tenancy.
+      //     · leagueSettingsReads reads `leagues`, which IS tenant-scoped. It is
+      //       the real remaining debt, and the first to go behind lib/domain/
+      //       once a read path resolves a tenant id.
+      //
+      //     🛑 MOVING A FILE OUT OF A LINT GLOB IS NOT BY ITSELF A FIX — it is
+      //     exactly how a boundary gets laundered. It is legitimate here only
+      //     because the owner ruled where these reads belong and the siblings
+      //     already live there. Do not cite this to justify moving a violator
+      //     anywhere the rule happens not to look.
       "files": [
         "lib/commissioner-ui/decision-os-client/live.ts",
         "lib/commissioner-ui/managers/decision-os-client/live.ts",
-        "lib/commissioner-ui/resolveActiveLeagueId.ts",
-        "lib/commissioner-ui/managers/managerNames.ts",
-        "lib/commissioner-ui/missionControl/activityTrendReads.ts",
-        "lib/commissioner-ui/settings/leagueSettingsReads.ts"
+        "lib/commissioner-ui/resolveActiveLeagueId.ts"
       ],
       "rules": {
         "@typescript-eslint/no-restricted-imports": "off"

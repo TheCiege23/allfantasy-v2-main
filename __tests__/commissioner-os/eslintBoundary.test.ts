@@ -161,18 +161,17 @@ describe('T-005 · the migration debt is bounded and countable', () => {
    * The exempted set, NAMED. Kept here as the single expected value so the two
    * assertions below cannot drift apart.
    *
-   * ⚠ THE FIRST THREE PREDATE THE BOUNDARY; THE LAST THREE DO NOT. The latter
-   * were added by feature work on 2026-09-08/09 and caught by the ratchet — see
-   * the block comment on this override in .eslintrc.json for why each is
-   * exempted rather than migrated, and what would let it move.
+   * Back to the original three, all of which predate the boundary. The list was
+   * briefly six: three Prisma readers added under lib/commissioner-ui/ on
+   * 2026-09-08/09 were caught by the ratchet and exempted, then MOVED OUT
+   * unchanged to lib/commissioner-managers, lib/commissioner-mission-control and
+   * lib/commissioner-settings under the owner's ruling that commissioner-ui stays
+   * Prisma-free. See the block comment on this override in .eslintrc.json.
    */
   const EXEMPT = [
     'lib/commissioner-ui/decision-os-client/live.ts',
     'lib/commissioner-ui/managers/decision-os-client/live.ts',
     'lib/commissioner-ui/resolveActiveLeagueId.ts',
-    'lib/commissioner-ui/managers/managerNames.ts',
-    'lib/commissioner-ui/missionControl/activityTrendReads.ts',
-    'lib/commissioner-ui/settings/leagueSettingsReads.ts',
   ]
 
   it('the exempt importers are exempt', async () => {
