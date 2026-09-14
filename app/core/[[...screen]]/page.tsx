@@ -1653,9 +1653,19 @@ export default async function AfCorePage({
         /*
          * Players followed across every league (2026-09-14). One read of the follow list
          * plus the injury port and one fixture window for the shown rows. Null when follows
-         * are unavailable, which hides the card.
+         * are unavailable, which hides the card. The leagues feed the waiver nudge ("free
+         * agent in Ice Kings"), which reads every roster of up to 12 of your leagues once.
          */
-        getFollowingCard(userId, now).catch(() => null),
+        getFollowingCard(
+          userId,
+          now,
+          playedLeagues.map((l) => ({
+            id: l.id,
+            name: l.name,
+            platform: String(l.platform ?? ''),
+            sport: (l as { sport?: string | null }).sport ?? null,
+          })),
+        ).catch(() => null),
       ])
     : [null, null, null, null, null, null, null, [], false, [], null]
 
