@@ -8,6 +8,9 @@ import { MessageTime } from './MessageTime'
 import { censorProfanity } from '@/lib/chat-core/censorProfanity'
 import { QuotedMessage } from './QuotedMessage'
 import { SeenBy } from './SeenBy'
+import { MessageReactions } from './MessageReactions'
+import { readReactions } from '@/lib/chat-core/messageReactions'
+import { useSession } from 'next-auth/react'
 import { ChatComposer, type LeagueComposerPayload } from '@/app/dashboard/components/chat/ChatComposer'
 
 /**
@@ -64,6 +67,8 @@ type PlatformMessage = {
 }
 
 export function ThreadPanel({ kind, privacy }: { kind: 'dm' | 'group'; privacy: string }) {
+  const { data: session } = useSession()
+  const viewerId = session?.user?.id ?? null
   const [threads, setThreads] = useState<PlatformThread[] | null>(null)
   const [openThread, setOpenThread] = useState<PlatformThread | null>(null)
   const [messages, setMessages] = useState<PlatformMessage[]>([])
@@ -76,6 +81,8 @@ export function ThreadPanel({ kind, privacy }: { kind: 'dm' | 'group'; privacy: 
   const [error, setError] = useState<string | null>(null)
   const endRef = useRef<HTMLDivElement | null>(null)
   const streamRef = useRef<HTMLDivElement | null>(null)
+  const activeThreadId = useRef<string | null>(null)
+  useEffect(() => () => { activeThreadId.current = null }, [])
 
   const label = kind === 'dm' ? 'DMs' : 'huddles'
 
@@ -100,6 +107,7 @@ export function ThreadPanel({ kind, privacy }: { kind: 'dm' | 'group'; privacy: 
   }, [loadThreads])
 
   const loadMessages = useCallback(async (thread: PlatformThread) => {
+    if (activeThreadId.current !== thread.id) return
     setError(null)
     try {
       const res = await fetch(
@@ -111,6 +119,7 @@ export function ThreadPanel({ kind, privacy }: { kind: 'dm' | 'group'; privacy: 
         error?: string
       }
       if (!res.ok) throw new Error(data.error ?? 'Could not load messages.')
+      if (activeThreadId.current !== thread.id) return
       setMessages(data.messages ?? [])
 
       /*
@@ -120,15 +129,16 @@ export function ThreadPanel({ kind, privacy }: { kind: 'dm' | 'group'; privacy: 
        */
       void fetch(`/api/shared/chat/threads/${encodeURIComponent(thread.id)}/typing`)
         .then((r) => (r.ok ? r.json() : null))
-        .then((d) => setTyping(Array.isArray(d?.typing) ? d.typing : []))
-        .catch(() => setTyping([]))
+        .then((d) => { if (activeThreadId.current === thread.id) setTyping(Array.isArray(d?.typing) ? d.typing : []) })
+        .catch(() => { if (activeThreadId.current === thread.id) setTyping([]) })
 
       void fetch(`/api/shared/chat/threads/${encodeURIComponent(thread.id)}/read-receipts`)
         .then((r) => (r.ok ? r.json() : null))
-        .then((d) => setReceipts(Array.isArray(d?.receipts) ? d.receipts : []))
-        .catch(() => setReceipts([]))
+        .then((d) => { if (activeThreadId.current === thread.id) setReceipts(Array.isArray(d?.receipts) ? d.receipts : []) })
+        .catch(() => { if (activeThreadId.current === thread.id) setReceipts([]) })
       setHiddenBlocked(data.hiddenBlockedCount ?? 0)
     } catch (e) {
+      if (activeThreadId.current !== thread.id) return
       setMessages([])
       setError(e instanceof Error ? e.message : 'Could not load messages.')
     }
@@ -154,6 +164,9 @@ export function ThreadPanel({ kind, privacy }: { kind: 'dm' | 'group'; privacy: 
 
   const open = useCallback(
     (thread: PlatformThread) => {
+      activeThreadId.current = thread.id
+      setTyping([])
+      setReceipts([])
       setOpenThread(thread)
       /* A reply target belongs to one thread; it must not follow you into another. */
       setReplyTo(null)
@@ -214,6 +227,7 @@ export function ThreadPanel({ kind, privacy }: { kind: 'dm' | 'group'; privacy: 
           })),
           closeAt: payload.poll.closeAt.toISOString(),
           allowMultiple: payload.poll.allowMultiple,
+          anonymous: Boolean(payload.poll.anonymous),
         }
       }
 
@@ -237,6 +251,7 @@ export function ThreadPanel({ kind, privacy }: { kind: 'dm' | 'group'; privacy: 
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               body: displayText,
+              messageType: payload.poll ? 'poll' : 'text',
               ...(Object.keys(metadata).length > 0 ? { metadata } : {}),
               ...(replyTo ? { parentMessageId: replyTo.id } : {}),
             }),
@@ -347,6 +362,7 @@ export function ThreadPanel({ kind, privacy }: { kind: 'dm' | 'group'; privacy: 
 
         <div className="af-cm-threadhead">
           <button type="button" className="af-cm-back" onClick={() => {
+              activeThreadId.current = null
               setOpenThread(null)
               setReplyTo(null)
             }}>
@@ -410,7 +426,15 @@ export function ThreadPanel({ kind, privacy }: { kind: 'dm' | 'group'; privacy: 
                     </button>
                   </span>
                   <span className="af-cm-msg-text">{censorProfanity(m.body)}</span>
-                  <RichMessage metadata={m.metadata} />
+                  <RichMessage metadata={m.metadata} viewerUserId={viewerId}
+                    onVote={optionId => { void fetch(`/api/shared/chat/threads/${encodeURIComponent(openThread.id)}/messages/${encodeURIComponent(m.id)}/vote`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ optionId }) }).then(async r => { if (!r.ok) throw new Error('Could not record vote. The poll may be closed.'); await loadMessages(openThread) }).catch(e => setError(e.message)) }}
+                    onClosePoll={m.senderUserId === viewerId ? () => { void fetch(`/api/shared/chat/threads/${encodeURIComponent(openThread.id)}/messages/${encodeURIComponent(m.id)}/close-poll`, { method: 'POST' }).then(async r => { if (!r.ok) throw new Error('Could not close poll.'); await loadMessages(openThread) }).catch(e => setError(e.message)) } : undefined}
+                  />
+                  <MessageReactions reactions={readReactions(m.metadata, viewerId)} onToggle={emoji => {
+                    void fetch(`/api/shared/chat/threads/${encodeURIComponent(openThread.id)}/messages/${encodeURIComponent(m.id)}/reactions`, {
+                      method: readReactions(m.metadata, viewerId).some(r => r.emoji === emoji && r.mine) ? 'DELETE' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ emoji }),
+                    }).then(async r => { if (!r.ok) throw new Error('Could not update reaction.'); await loadMessages(openThread) }).catch(e => setError(e.message))
+                  }} />
                 </div>
               )
             })
@@ -468,8 +492,10 @@ export function ThreadPanel({ kind, privacy }: { kind: 'dm' | 'group'; privacy: 
         ) : null}
 
         <ChatComposer
+          key={openThread.id}
           leagueId=""
           threadId={openThread.id}
+          currentUserId={viewerId ?? undefined}
           chatType={kind === 'dm' ? 'dm' : 'huddle'}
           placeholder="Message"
           onSend={sendPayload}
