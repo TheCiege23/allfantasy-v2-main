@@ -10,7 +10,7 @@ import {
   type TradeSideGrade,
 } from '@/lib/trade-intel/sleeperTradeGradeService'
 import { computeWeeklyMaxPf, type WeeklyRosterPlayer } from '@/lib/commissioner-os/efl/maxPfEngine'
-import { listAdviceForUser } from '@/lib/chimmy-advice/adviceStore'
+import { listAdviceForUser, type ChimmyAdvice } from '@/lib/chimmy-advice/adviceStore'
 import { asIds, rosterCandidates } from './dash3aPanels'
 import { composePlayerIdentities } from './playerIdentityCompose'
 import { normalizePosition } from './positionNormalization'
@@ -19,8 +19,8 @@ import { lineupSeatsFromSettings } from './slotEligibility'
 /**
  * Decision receipts — how your past moves turned out (retention item 6, user decisions
  * 2026-09-14): a weekly "receipts" card on the /core home, good and bad outcomes stated
- * plainly. Trades, waiver adds, lineups (start/sit), AutoCoach calls and Chimmy's start/sit
- * advice so far; Chimmy chat suggestions follow.
+ * plainly: trades, waiver adds, lineups (start/sit), AutoCoach calls, and Chimmy's advice — its
+ * start/sit calls and the waiver claims its chat grounded on.
  *
  * TRADES read the grade cache the 30-minute sweep already fills (`trade-grades:v2:*`),
  * the same one `recentTrades` reads — one `in` query, no provider call, nothing recomputed.
@@ -139,6 +139,24 @@ export type ChimmyReceipt = StartCallReceipt & {
   confidencePct: number | null
 }
 
+/** "Chimmy said add X" — the waiver claim its chat grounded on, and what came of it. */
+export type ChimmyAddReceipt = {
+  id: string
+  leagueId: string
+  leagueName: string
+  season: number
+  /** The week Chimmy said to add him. */
+  week: number
+  playerName: string
+  confidencePct: number | null
+  /**
+   * Your add of him within ADD_FOLLOW_WEEKS of the advice, and what he did ON YOUR ROSTER while he
+   * was yours (the waiver receipts' tenure rule). Null = you didn't add him.
+   */
+  added: { week: number; points: number; starts: number; leftWeek: number | null } | null
+  href: string
+}
+
 export type DecisionReceiptsData = {
   trades: TradeReceipt[]
   /** Your trades left off because it is too early to call them. */
@@ -173,6 +191,14 @@ export type DecisionReceiptsData = {
   chimmyUnscored?: number
   /** Advice that could not be tied to your roster that week. */
   chimmyUnreadable?: number
+  /** Chimmy's "add X" calls. Absent = none, or advice is unavailable. */
+  chimmyAdds?: ChimmyAddReceipt[]
+  /** Add calls fewer than MIN_WEEKS_FOR_RECEIPT weeks old, or with the current week unknown. */
+  chimmyAddsTooEarly?: number
+  /** Adds you made on Chimmy's call with no weekly score on file for any week he was yours. */
+  chimmyAddsUnscored?: number
+  /** Add calls that cannot be checked yet — transactions not synced past the week, or no single claimed team. */
+  chimmyAddsUnknown?: number
 }
 
 export type ReceiptsLeague = {
@@ -292,6 +318,18 @@ type FactPayload = { adds?: unknown; drops?: unknown; waiverBid?: unknown; creat
 
 const idsIn = (v: unknown): string[] => (Array.isArray(v) ? v.map(String).filter(Boolean) : [])
 
+/** One of your waiver or free-agent adds, and the week it ended (when it did). */
+type SeasonAdd = {
+  league: ReceiptsLeague
+  rosterId: string
+  playerId: string
+  week: number
+  at: string
+  via: 'waiver' | 'free_agent'
+  faab: number | null
+  leftWeek: number | null
+}
+
 /**
  * Your waiver and free-agent adds this season, and what each player scored for you after.
  *
@@ -316,11 +354,10 @@ const idsIn = (v: unknown): string[] => (Array.isArray(v) ? v.map(String).filter
  * the weekly scores of the added players, and their names — five queries for up to
  * MAX_WAIVER_LEAGUES leagues.
  */
-export async function getWaiverReceipts(args: {
+async function loadSeasonAdds(args: {
   userId: string
   leagues: readonly ReceiptsLeague[]
-  currentWeek: number | null
-}): Promise<{ waivers: WaiverReceipt[]; tooEarly: number; unscored: number } | null> {
+}): Promise<{ mine: ReceiptsLeague[]; siblingIds: Map<string, string[]>; adds: SeasonAdd[] } | null> {
   // A missing season must exclude the league: Number(null) is 0, which is finite.
   const sleeper = args.leagues
     .filter((l) => isSleeper(l) && l.season != null && String(l.season).trim() !== '' && Number.isFinite(Number(l.season)))
@@ -366,22 +403,11 @@ export async function getWaiverReceipts(args: {
     select: { transactionId: true, leagueId: true, type: true, rosterId: true, weekOrPeriod: true, payload: true },
   })) as FactRow[]
 
-  type Add = {
-    league: ReceiptsLeague
-    rosterId: string
-    playerId: string
-    week: number
-    at: string
-    via: 'waiver' | 'free_agent'
-    faab: number | null
-    leftWeek: number | null
-  }
-
   // Which of your leagues a fact belongs to: the one whose sibling set holds its league id.
   const leagueOfFact = (f: FactRow) =>
     mine.find((l) => siblingIds.get(l.id)!.includes(f.leagueId) && teamByLeague.get(l.id) === String(f.rosterId ?? ''))
 
-  const adds: Add[] = []
+  const adds: SeasonAdd[] = []
   const byLeague = new Map<string, FactRow[]>()
   for (const f of facts) {
     const l = leagueOfFact(f)
@@ -418,16 +444,19 @@ export async function getWaiverReceipts(args: {
       }
     })
   }
-  if (adds.length === 0) return { waivers: [], tooEarly: 0, unscored: 0 }
+  return { mine, siblingIds, adds }
+}
 
-  let early = 0
-  const callable = adds.filter((a) => {
-    const ok = args.currentWeek != null && args.currentWeek - a.week >= MIN_WEEKS_FOR_RECEIPT
-    if (!ok) early += 1
-    return ok
-  })
-  if (callable.length === 0) return { waivers: [], tooEarly: early, unscored: 0 }
+type AddCredit = { add: SeasonAdd; points: number; starts: number; weeksScored: number; name: string | null; position: string | null }
 
+/**
+ * What each add scored ON YOUR ROSTER while he was yours — one read for all of them. Null for an
+ * add with no score row for any week he was yours (unless he was dropped before he could play,
+ * which is a real 0). Shared by waiver receipts and Chimmy's add calls, so the two can never
+ * credit the same add differently.
+ */
+async function creditAdds(callable: readonly SeasonAdd[], mine: readonly ReceiptsLeague[]): Promise<Array<AddCredit | null>> {
+  if (callable.length === 0) return []
   const playerIds = [...new Set(callable.map((a) => a.playerId))]
   const [scores, players] = await Promise.all([
     prisma.leaguePlayerWeeklyScore.findMany({
@@ -454,9 +483,7 @@ export async function getWaiverReceipts(args: {
     if (p.sleeperId && !nameOf.has(p.sleeperId)) nameOf.set(p.sleeperId, { name: p.name, position: p.position ?? null })
   }
 
-  let unscored = 0
-  const receipts: WaiverReceipt[] = []
-  for (const a of callable) {
+  return callable.map((a) => {
     const lastWeek = a.leftWeek != null ? a.leftWeek - 1 : Number.POSITIVE_INFINITY
     const inWindow = scores.filter(
       (s) =>
@@ -467,11 +494,46 @@ export async function getWaiverReceipts(args: {
         String(s.rosterId ?? '') === a.rosterId,
     )
     const droppedBeforePlaying = a.leftWeek != null && a.leftWeek <= a.week
-    if (inWindow.length === 0 && !droppedBeforePlaying) {
+    if (inWindow.length === 0 && !droppedBeforePlaying) return null
+    const who = nameOf.get(a.playerId)
+    return {
+      add: a,
+      points: round1(inWindow.reduce((sum, s) => sum + s.points, 0)),
+      starts: inWindow.filter((s) => s.isStarter).length,
+      weeksScored: inWindow.length,
+      name: who?.name ?? null,
+      position: who?.position ?? null,
+    }
+  })
+}
+
+/** Your waiver and free-agent adds this season, and what each did for you — see `loadSeasonAdds`. */
+export async function getWaiverReceipts(args: {
+  userId: string
+  leagues: readonly ReceiptsLeague[]
+  currentWeek: number | null
+}): Promise<{ waivers: WaiverReceipt[]; tooEarly: number; unscored: number } | null> {
+  const loaded = await loadSeasonAdds(args)
+  if (!loaded) return null
+  const { mine, adds } = loaded
+  if (adds.length === 0) return { waivers: [], tooEarly: 0, unscored: 0 }
+
+  let early = 0
+  const callable = adds.filter((a) => {
+    const ok = args.currentWeek != null && args.currentWeek - a.week >= MIN_WEEKS_FOR_RECEIPT
+    if (!ok) early += 1
+    return ok
+  })
+  if (callable.length === 0) return { waivers: [], tooEarly: early, unscored: 0 }
+
+  let unscored = 0
+  const receipts: WaiverReceipt[] = []
+  for (const c of await creditAdds(callable, mine)) {
+    if (!c) {
       unscored += 1
       continue
     }
-    const who = nameOf.get(a.playerId)
+    const a = c.add
     receipts.push({
       id: `${a.league.id}:${a.playerId}:${a.week}`,
       leagueId: a.league.id,
@@ -479,13 +541,13 @@ export async function getWaiverReceipts(args: {
       season: Number(a.league.season),
       week: a.week,
       playerId: a.playerId,
-      playerName: who?.name ?? 'Unmatched player',
-      position: who?.position ?? null,
+      playerName: c.name ?? 'Unmatched player',
+      position: c.position,
       via: a.via,
       faab: a.faab,
-      points: round1(inWindow.reduce((sum, s) => sum + s.points, 0)),
-      starts: inWindow.filter((s) => s.isStarter).length,
-      weeksScored: inWindow.length,
+      points: c.points,
+      starts: c.starts,
+      weeksScored: c.weeksScored,
       leftWeek: a.leftWeek,
       href: `/core/waivers?league=${encodeURIComponent(a.league.id)}`,
     })
@@ -907,7 +969,16 @@ export async function getChimmyAdviceReceipts(args: {
   userId: string
   leagues: readonly ReceiptsLeague[]
   currentWeek: number | null
-}): Promise<{ chimmy: ChimmyReceipt[]; pending: number; unscored: number; unreadable: number } | null> {
+}): Promise<{
+  chimmy: ChimmyReceipt[]
+  pending: number
+  unscored: number
+  unreadable: number
+  adds?: ChimmyAddReceipt[]
+  addsTooEarly?: number
+  addsUnscored?: number
+  addsUnknown?: number
+} | null> {
   if (!args.userId) return null
   const sleeper = args.leagues.filter(isSleeper).slice(0, MAX_WAIVER_LEAGUES)
   if (sleeper.length === 0) return null
@@ -917,9 +988,30 @@ export async function getChimmyAdviceReceipts(args: {
     leagueIds: sleeper.map((l) => l.id),
     since: new Date(Date.now() - CHIMMY_LOOKBACK_DAYS * 86_400_000),
   })
-  const startSits = (advice ?? []).filter((a) => a.adviceType === 'start_sit' && a.alt)
-  if (startSits.length === 0) return null
+  const all = advice ?? []
+  const startSits = all.filter((a) => a.adviceType === 'start_sit' && a.alt)
+  const addCalls = all.filter((a) => a.adviceType === 'add')
+  if (startSits.length === 0 && addCalls.length === 0) return null
 
+  const [starts, adds] = await Promise.all([
+    startSits.length > 0 ? chimmyStartSitReceipts(args, sleeper, startSits) : null,
+    addCalls.length > 0 ? chimmyAddReceipts(args, sleeper, addCalls) : null,
+  ])
+  return {
+    chimmy: starts?.chimmy ?? [],
+    pending: starts?.pending ?? 0,
+    unscored: starts?.unscored ?? 0,
+    unreadable: starts?.unreadable ?? 0,
+    ...(adds ? { adds: adds.adds, addsTooEarly: adds.tooEarly, addsUnscored: adds.unscored, addsUnknown: adds.unknown } : {}),
+  }
+}
+
+/** Chimmy's start/sit advice, resolved by the same rules as AutoCoach's calls. */
+async function chimmyStartSitReceipts(
+  args: { userId: string; currentWeek: number | null },
+  sleeper: readonly ReceiptsLeague[],
+  startSits: readonly ChimmyAdvice[],
+): Promise<{ chimmy: ChimmyReceipt[]; pending: number; unscored: number; unreadable: number }> {
   const teams = await prisma.leagueTeam.findMany({
     where: { leagueId: { in: [...new Set(startSits.map((a) => a.leagueId))] }, claimedByUserId: args.userId },
     select: { leagueId: true, externalId: true },
@@ -955,6 +1047,102 @@ export async function getChimmyAdviceReceipts(args: {
     unscored: scored.unscored,
     unreadable: unreadable + scored.unreadable,
   }
+}
+
+/** Chimmy said add him in week N; an add of yours in weeks N..N+this counts as taking the advice. */
+export const ADD_FOLLOW_WEEKS = 1
+
+/**
+ * Chimmy's "add X" calls — the waiver claims its chat grounded on — and what came of each (user
+ * decision 2026-09-14: waiver claims only).
+ *
+ * ⚠ "YOU ADDED HIM" USES THE WAIVER RECEIPTS' OWN READS AND TENURE RULE (`loadSeasonAdds`,
+ * `creditAdds`): your add of that Sleeper id within ADD_FOLLOW_WEEKS of the advice, credited only
+ * while he was on your roster.
+ *
+ * 🛑 "YOU DIDN'T ADD HIM" IS A CLAIM, MADE ONLY WHEN IT IS CHECKABLE. Transactions sync in batches,
+ * so "no add on file" means nothing until the league's facts — any roster's — reach past the follow
+ * window; until then the call is `unknown`, never a "you didn't". And no points are ever shown for a
+ * player you passed on: a free agent's weekly points are not on file.
+ *
+ * Too early (fewer than MIN_WEEKS_FOR_RECEIPT weeks, or the week unknown), unscored and unknown are
+ * counted, never shown as numbers. An advice season that is not the league's season is unknown.
+ */
+async function chimmyAddReceipts(
+  args: { userId: string; currentWeek: number | null },
+  sleeper: readonly ReceiptsLeague[],
+  calls: readonly ChimmyAdvice[],
+): Promise<{ adds: ChimmyAddReceipt[]; tooEarly: number; unscored: number; unknown: number }> {
+  let tooEarly = 0
+  const callable = calls.filter((a) => {
+    const ok = args.currentWeek != null && args.currentWeek - a.week >= MIN_WEEKS_FOR_RECEIPT
+    if (!ok) tooEarly += 1
+    return ok
+  })
+  if (callable.length === 0) return { adds: [], tooEarly, unscored: 0, unknown: 0 }
+
+  const loaded = await loadSeasonAdds({ userId: args.userId, leagues: sleeper })
+  if (!loaded) return { adds: [], tooEarly, unscored: 0, unknown: callable.length }
+
+  // How far each league's transactions have synced, across EVERY roster in it.
+  const synced = await prisma.transactionFact.groupBy({
+    by: ['leagueId'],
+    where: { leagueId: { in: [...new Set([...loaded.siblingIds.values()].flat())] } },
+    _max: { weekOrPeriod: true },
+  })
+  const syncedThrough = (league: ReceiptsLeague) => {
+    const ids = loaded.siblingIds.get(league.id) ?? [league.id]
+    return Math.max(-1, ...synced.filter((s) => ids.includes(s.leagueId)).map((s) => s._max.weekOrPeriod ?? -1))
+  }
+
+  let unknown = 0
+  const matched: Array<{ advice: ChimmyAdvice; league: ReceiptsLeague; add: SeasonAdd | null }> = []
+  for (const a of callable) {
+    const league = loaded.mine.find((l) => l.id === a.leagueId)
+    if (!league || Number(league.season) !== a.season) {
+      unknown += 1
+      continue
+    }
+    const add =
+      loaded.adds.find(
+        (x) => x.league.id === league.id && x.playerId === a.rec.key && x.week >= a.week && x.week <= a.week + ADD_FOLLOW_WEEKS,
+      ) ?? null
+    if (!add && syncedThrough(league) < a.week + ADD_FOLLOW_WEEKS) {
+      unknown += 1
+      continue
+    }
+    matched.push({ advice: a, league, add })
+  }
+
+  const followed = matched.filter((m) => m.add)
+  const credits = await creditAdds(followed.map((m) => m.add!), loaded.mine)
+  const creditOf = new Map<SeasonAdd, AddCredit | null>()
+  followed.forEach((m, i) => creditOf.set(m.add!, credits[i] ?? null))
+
+  let unscored = 0
+  const receipts: ChimmyAddReceipt[] = []
+  for (const m of matched) {
+    const credit = m.add ? creditOf.get(m.add) ?? null : null
+    if (m.add && !credit) {
+      unscored += 1
+      continue
+    }
+    receipts.push({
+      id: `${m.league.id}:${m.advice.season}:${m.advice.week}:add:${m.advice.rec.key}`,
+      leagueId: m.league.id,
+      leagueName: m.league.name ?? 'Your league',
+      season: m.advice.season,
+      week: m.advice.week,
+      playerName: m.advice.rec.name,
+      confidencePct: m.advice.confidencePct,
+      added:
+        m.add && credit ? { week: m.add.week, points: credit.points, starts: credit.starts, leftWeek: m.add.leftWeek } : null,
+      href: `/core/waivers?league=${encodeURIComponent(m.league.id)}`,
+    })
+  }
+
+  receipts.sort((x, y) => y.season - x.season || y.week - x.week)
+  return { adds: receipts.slice(0, MAX_CHIMMY_RECEIPTS), tooEarly, unscored, unknown }
 }
 
 /**
@@ -1000,6 +1188,14 @@ export async function getDecisionReceipts(args: {
           chimmyPending: chimmy.pending,
           chimmyUnscored: chimmy.unscored,
           chimmyUnreadable: chimmy.unreadable,
+          ...(chimmy.adds
+            ? {
+                chimmyAdds: chimmy.adds,
+                chimmyAddsTooEarly: chimmy.addsTooEarly,
+                chimmyAddsUnscored: chimmy.addsUnscored,
+                chimmyAddsUnknown: chimmy.addsUnknown,
+              }
+            : {}),
         }
       : {}),
   }

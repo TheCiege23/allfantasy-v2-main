@@ -119,6 +119,7 @@ import {
   serializeLeagueGroundingForPrompt,
 } from '@/lib/ai/leagueSportsGroundingPacket'
 import { buildDecisionOsGroundingPacket } from '@/lib/decision-os/grounding/packet'
+import { recordChatWaiverAdvice } from '@/lib/chimmy-advice/chatWaiverAdvice'
 import { serializeDecisionOsGroundingForPrompt } from '@/lib/decision-os/grounding/serialize'
 import { resolveLanguage } from '@/lib/i18n/constants'
 import {
@@ -1889,6 +1890,11 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
             leagueRules: true,
             // The intent router's four low-risk mappings — see the comment above this block.
             ...earlyWant,
+          },
+          // The waiver engine's top claim, kept for the home Receipts card. A side channel: never in
+          // the prompt, never awaited, and it cannot change or fail this turn.
+          onWaiverClaims: (claims, confidencePct) => {
+            void recordChatWaiverAdvice({ userId, leagueId: leagueSnapshot.id, claims, confidencePct }).catch(() => {})
           },
         })
           .then((packet) => {

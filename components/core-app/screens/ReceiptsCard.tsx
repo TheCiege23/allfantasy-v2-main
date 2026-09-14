@@ -3,6 +3,7 @@
 import type { ReactNode } from 'react'
 import Link from 'next/link'
 import type {
+  ChimmyAddReceipt,
   ChimmyReceipt,
   DecisionReceiptsData,
   LineupReceipt,
@@ -13,9 +14,9 @@ import type {
 
 /**
  * The home "Receipts" card — how your past moves turned out (retention item 6, user
- * decisions 2026-09-14). Trades, waiver adds, lineups, AutoCoach calls and Chimmy's start/sit
- * advice. Good and bad outcomes read the same way: the points and which side of them you are
- * on, never a letter and never softened.
+ * decisions 2026-09-14). Trades, waiver adds, lineups, AutoCoach calls and Chimmy's advice (its
+ * start/sit calls and the waiver claims its chat grounded on). Good and bad outcomes read the same
+ * way: the points and which side of them you are on, never a letter and never softened.
  *
  * ⚠ NOT RENDERED WITH NOTHING TO SAY. `data` null, or no receipt of any kind AND nothing
  * too early, pending, unscored or unreadable to mention, renders nothing — an empty card on
@@ -117,6 +118,35 @@ function StartCallRow({ c, who, confidencePct }: { c: StartCallReceipt; who: Adv
   )
 }
 
+/**
+ * "Chimmy said add X". Whether that was a good add is not judged here — the points he scored for
+ * you are the receipt. A player you passed on gets no points: a free agent's are not on file.
+ */
+function AddCallRow({ a }: { a: ChimmyAddReceipt }) {
+  return (
+    <li className="af3a-receipt" data-kind="chimmy-add">
+      <Link className="af3a-receipt-title" href={a.href}>
+        Chimmy said add {a.playerName}
+      </Link>
+      <span className="af3a-receipt-where af3a-mono">
+        {a.leagueName} · {a.season} wk {a.week}
+        {a.confidencePct != null ? ` · ${a.confidencePct}% confident` : ''}
+      </span>
+      <span className="af3a-receipt-result">
+        {a.added ? (
+          <>
+            <b className="af3a-mono">{a.added.points.toFixed(1)} pts</b> for you · you added him wk {a.added.week} ·{' '}
+            {a.added.starts} start{a.added.starts === 1 ? '' : 's'}
+            {a.added.leftWeek != null ? ` · gone wk ${a.added.leftWeek}` : ' (still yours)'}
+          </>
+        ) : (
+          'You didn’t add him.'
+        )}
+      </span>
+    </li>
+  )
+}
+
 /** The counted-not-shown notes shared by the AutoCoach and Chimmy groups. */
 function CallNotes({ who, pending, unscored, unreadable }: { who: Adviser; pending: number; unscored: number; unreadable: number }) {
   return (
@@ -156,11 +186,16 @@ export function ReceiptsCard({ data, help }: { data: DecisionReceiptsData | null
   const chimmyPending = data.chimmyPending ?? 0
   const chimmyUnscored = data.chimmyUnscored ?? 0
   const chimmyUnreadable = data.chimmyUnreadable ?? 0
+  const chimmyAdds: ChimmyAddReceipt[] = data.chimmyAdds ?? []
+  const chimmyAddsTooEarly = data.chimmyAddsTooEarly ?? 0
+  const chimmyAddsUnscored = data.chimmyAddsUnscored ?? 0
+  const chimmyAddsUnknown = data.chimmyAddsUnknown ?? 0
   const hasTrades = data.trades.length > 0 || data.tooEarly > 0
   const hasWaivers = waivers.length > 0 || waiversTooEarly > 0 || waiversUnscored > 0
   const hasLineups = lineups.length > 0 || lineupsUnscored > 0 || lineupsUnreadable > 0
   const hasAutoCoach = autocoach.length > 0 || autocoachPending > 0 || autocoachUnscored > 0 || autocoachUnreadable > 0
-  const hasChimmy = chimmy.length > 0 || chimmyPending > 0 || chimmyUnscored > 0 || chimmyUnreadable > 0
+  const hasChimmyAdds = chimmyAdds.length > 0 || chimmyAddsTooEarly > 0 || chimmyAddsUnscored > 0 || chimmyAddsUnknown > 0
+  const hasChimmy = chimmy.length > 0 || chimmyPending > 0 || chimmyUnscored > 0 || chimmyUnreadable > 0 || hasChimmyAdds
   const kinds = [hasTrades, hasWaivers, hasLineups, hasAutoCoach, hasChimmy].filter(Boolean).length
   if (kinds === 0) return null
   const headed = kinds > 1
@@ -281,6 +316,30 @@ export function ReceiptsCard({ data, help }: { data: DecisionReceiptsData | null
             </ul>
           ) : null}
           <CallNotes who="Chimmy" pending={chimmyPending} unscored={chimmyUnscored} unreadable={chimmyUnreadable} />
+          {chimmyAdds.length > 0 ? (
+            <ul className="af3a-receipt-list">
+              {chimmyAdds.map((a) => (
+                <AddCallRow key={a.id} a={a} />
+              ))}
+            </ul>
+          ) : null}
+          {chimmyAddsTooEarly > 0 ? (
+            <p className="af3a-exp-note">
+              {chimmyAddsTooEarly} add call{chimmyAddsTooEarly === 1 ? ' is' : 's are'} too early to call.
+            </p>
+          ) : null}
+          {chimmyAddsUnscored > 0 ? (
+            <p className="af3a-exp-note">
+              {chimmyAddsUnscored} add{chimmyAddsUnscored === 1 ? ' you made on Chimmy’s call has' : 's you made on Chimmy’s call have'} no
+              weekly scores on file yet.
+            </p>
+          ) : null}
+          {chimmyAddsUnknown > 0 ? (
+            <p className="af3a-exp-note">
+              {chimmyAddsUnknown} add call{chimmyAddsUnknown === 1 ? '' : 's'} couldn’t be checked yet — your league’s
+              transactions haven’t synced past that week.
+            </p>
+          ) : null}
         </>
       ) : null}
 

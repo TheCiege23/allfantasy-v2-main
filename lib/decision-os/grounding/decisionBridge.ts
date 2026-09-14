@@ -11,6 +11,7 @@ import { runCommissionerHealthDecision } from '../commissioner-health'
 import { buildProductionCommissionerHealthDecisionDeps } from '../commissioner-health/deps'
 import type { CommissionerActionSuggestion, CommissionerHealthAssessment } from '../commissioner-health/decision'
 import { runWaiverClaimDecision } from '../waiver'
+import type { WaiverClaimRecommendation } from '../waiver/decision'
 import { loadWaiverWorldFacts, worldInputFromFacts } from '../waiver/loader'
 import { buildLiveWaiverDecisionDeps } from '../waiver/deps'
 import { loadWaiverPool } from '../waiver/pool'
@@ -327,7 +328,19 @@ export async function loadCommissionerHealthDecisionSlice(
  * question is about waivers (`intent === 'waiver'`), so the pool read and the engine run land on
  * waiver questions and no others. That gate already existed; this producer relies on it.
  */
-export async function loadWaiverDecisionSlice(args: DecisionBridgeArgs): Promise<GroundedSlice<DecisionFact>> {
+export interface WaiverDecisionBridgeArgs extends DecisionBridgeArgs {
+  /**
+   * Receives the engine's claim recommendations, as produced — the side channel Chimmy advice
+   * receipts record from (user decision, 2026-09-14).
+   *
+   * 🛑 NEVER PART OF THE SLICE. The slice stays prompt text; these objects go only to the sink, so
+   * nothing here can put an id or a raw action into a prompt. A sink that throws is swallowed: it
+   * can never cost the packet its waiver slice.
+   */
+  onClaims?: (claims: readonly WaiverClaimRecommendation[], confidencePct: number | null) => void
+}
+
+export async function loadWaiverDecisionSlice(args: WaiverDecisionBridgeArgs): Promise<GroundedSlice<DecisionFact>> {
   const userId = args.userId ?? null
   const leagueId = args.leagueId ?? null
   if (!userId || !leagueId) {
@@ -413,6 +426,15 @@ export async function loadWaiverDecisionSlice(args: DecisionBridgeArgs): Promise
       },
       { decision: buildLiveWaiverDecisionDeps(facts) },
     )
+
+    if (args.onClaims) {
+      try {
+        const d = result.decision
+        args.onClaims(d?.recommended_actions ?? [], typeof d?.confidence === 'number' ? d.confidence : null)
+      } catch {
+        /* the sink is advisory; the slice below is what the packet needs */
+      }
+    }
 
     return decisionToSlice(result.decision, {
       reason: 'not_computed',
