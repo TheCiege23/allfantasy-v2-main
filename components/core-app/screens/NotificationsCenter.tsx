@@ -9,6 +9,7 @@ import type {
 } from '@/lib/core-app/notificationsCenter'
 import { EnableWebPushCard } from '@/components/notifications/EnableWebPushCard'
 import { InstallButton } from '@/components/pwa/PWAActions'
+import { NotificationRowMute } from '@/components/core-app/screens/NotificationRowMute'
 import '@/components/core-app/af-notifications.css'
 
 /**
@@ -116,6 +117,15 @@ function Row({
             {row.action.label}
           </Link>
         )
+      ) : null}
+
+      {/*
+        Mute from where the noise is seen (2026-09-14). Stored rows only: an "act today"
+        row is a deadline derived from league state, not a notification anyone sent, so
+        muting it would silence nothing.
+      */}
+      {!urgent && row.leagueId ? (
+        <NotificationRowMute leagueId={row.leagueId} leagueName={row.leagueName} category={row.category ?? null} />
       ) : null}
     </li>
   )
