@@ -2,6 +2,8 @@ import 'server-only'
 
 import { prisma } from '@/lib/prisma'
 import type { CoreIssue } from '@/lib/core-app/outstandingIssues'
+import { categoryFromMeta } from '@/lib/core-app/notificationMutes'
+import type { NotificationCategoryId } from '@/lib/notification-settings/types'
 
 /**
  * 22c — the notifications centre, and the push suppression rule behind it.
@@ -44,6 +46,12 @@ export type NotificationRow = {
   title: string
   /** The specific reason or deadline. Never generic. */
   detail: string
+  /**
+   * The notification category the dispatcher stamped, for the row's mute control. Null
+   * when there is none (derived "act today" rows, outbox rows, older rows): such a row
+   * offers only "everything from this league", never a type mute that would do nothing.
+   */
+  category?: NotificationCategoryId | null
   leagueId: string | null
   leagueName: string | null
   platform: string | null
@@ -320,6 +328,8 @@ export async function getNotificationsCenter(input: {
         createdAt: true,
         readAt: true,
         leagueId: true,
+        // For the row's mute control: the dispatcher stamps meta.notificationCategory.
+        meta: true,
         league: { select: { name: true, platform: true } },
       },
     })
@@ -337,6 +347,7 @@ export async function getNotificationsCenter(input: {
        * is true, and a blank detail is the generic message this screen forbids.
        */
       detail: n.body?.trim() || n.type,
+      category: categoryFromMeta(n.meta),
       leagueId: n.leagueId,
       leagueName: n.league?.name ?? null,
       platform: n.league?.platform ? String(n.league.platform).toLowerCase() : null,

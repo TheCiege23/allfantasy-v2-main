@@ -429,3 +429,100 @@
   align-items: center;
   min-height: 44px;
 }
+
+/* ── Row mute (2026-09-14) ────────────────────────────────────────────
+ *
+ * Top-level rules on purpose, appended after every @media block, so none of
+ * them can be carried into a narrower query by an insertion point.
+ */
+
+.af-nt-mute {
+  position: relative;
+  flex: none;
+  align-self: center;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.af-nt-mute-btn,
+.af-core .af-nt-mute-btn,
+.af-nt-mute-undo,
+.af-core .af-nt-mute-undo {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 6px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 11.5px;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.af-nt-mute-btn:hover { color: var(--text); border-color: var(--line2); }
+.af-nt-mute-btn:disabled { cursor: progress; opacity: 0.7; }
+
+.af-nt-mute-undo,
+.af-core .af-nt-mute-undo {
+  border-color: transparent;
+  color: var(--accent);
+}
+
+.af-nt-mute-done {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--faint);
+}
+
+.af-nt-mute-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 230px;
+  max-width: min(320px, 86vw);
+  padding: 6px;
+  border: 1px solid var(--line2);
+  border-radius: 10px;
+  background: var(--surface2);
+  box-shadow: 0 14px 34px -18px rgba(0, 0, 0, 0.65);
+}
+
+.af-nt-mute-item,
+.af-core .af-nt-mute-item {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text);
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.af-nt-mute-item:hover,
+.af-nt-mute-item:focus-visible { background: var(--chip); }
+
+.af-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+@media (max-width: 640px) {
+  .af-nt-mute { align-self: flex-start; margin-left: 17px; }
+  .af-nt-mute-menu { left: 0; right: auto; }
+}
