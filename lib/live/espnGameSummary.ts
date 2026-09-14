@@ -204,8 +204,16 @@ export type BasketballDetail = {
    * Read from the data, not the sport code.
    */
   periods: 'halves' | 'quarters'
-  /** Which court to draw: the NCAA men's lane and 3-point line, or the NBA's. */
-  court: 'college' | 'pro'
+  /**
+   * Which court to draw: the NCAA men's (12 ft lane, 22 ft 1.75 in arc), the NBA's
+   * (16 ft lane, 23 ft 9 in arc) or the WNBA's — the NBA lane with the college arc.
+   *
+   * The WNBA arc is measured, not assumed. With the rim at (25, 0), the longest
+   * above-the-break two and shortest three sit at 21.0 / 22.8 ft across four WNBA
+   * finals, against 22.4 / 24.0 ft on four NBA games and 22.0 / 22.5 ft on three
+   * NCAAB games.
+   */
+  court: 'college' | 'pro' | 'wnba'
   /** Every play, in game order. */
   plays: BasketballPlay[]
   shots: BasketballShot[]
@@ -845,7 +853,7 @@ function mapBasketball(root: Obj, home: GameDetailTeam, away: GameDetailTeam, sp
   const halves = arr(root.plays).some((p) => /half/i.test(str(pick(obj(p), 'period', 'displayValue')) ?? ''))
   return {
     periods: halves ? 'halves' : 'quarters',
-    court: sport === 'NCAAB' ? 'college' : 'pro',
+    court: sport === 'NCAAB' ? 'college' : sport === 'WNBA' ? 'wnba' : 'pro',
     plays,
     shots,
     box: { home: boxFor(teamRaw(home.id)), away: boxFor(teamRaw(away.id)) },
@@ -1392,9 +1400,12 @@ export function trimEspnGameSummary(
  * on COL @ DET (401816920) and KC @ BOS live (401816922). Men's college basketball
  * shares the NBA shape with two halves and a real free-throw spot, measured on UConn
  * vs Michigan (401856600), Oklahoma vs Baylor (401858383) and Illinois @ UCLA in OT
- * (401825532).
+ * (401825532). The WNBA shares the NBA shape with ten-minute quarters, measured on
+ * MIN @ ATL (401857186), LA @ SEA (401857187), GS @ POR (401857188) and NY @ DAL in
+ * OT (401892393): every scoring play sums to the final and 96–100% of each team's
+ * field-goal attempts carry a court spot.
  */
-export const GAME_VIEW_SPORTS: readonly string[] = ['NFL', 'NCAAF', 'NBA', 'NCAAB', 'NHL', 'MLB', 'NCAABASE']
+export const GAME_VIEW_SPORTS: readonly string[] = ['NFL', 'NCAAF', 'NBA', 'WNBA', 'NCAAB', 'NHL', 'MLB', 'NCAABASE']
 
 const NAME_SUFFIX = /\s+(jr|sr|ii|iii|iv|v)\.?$/i
 

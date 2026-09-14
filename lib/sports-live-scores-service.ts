@@ -17,6 +17,7 @@ import { legacySupportedSportToApiChain } from '@/lib/workers/api-config'
 import { ESPN_SITE_API_BASE } from '@/lib/providers/espnUrls'
 import {
   formatVenueLocation,
+  isBasketballSport,
   linescoreValues,
   mapGameSituation,
   pickGameLeaders,
@@ -191,6 +192,7 @@ export const ESPN_SPORT_SITE_PATH: Record<LiveSport, string | null> = {
   SOCCER: 'soccer/usa.1',
   // Live Scores only (see LIVE_ONLY_SPORTS). ESPN league abbreviation CBASE.
   NCAABASE: 'baseball/college-baseball',
+  WNBA: 'basketball/wnba',
 }
 
 export interface LiveScoreRow {
@@ -536,15 +538,22 @@ export async function fetchEspnScoreboard(
        *     season averages and season totals, which would read as tonight's game.
        */
       const teamBox = comp.status.type.state === 'in' || comp.status.type.state === 'post'
+      /*
+       * ⚠ A LIVE-ONLY SPORT KEEPS ESPN'S OWN ABBREVIATIONS. `normalizeTeamAbbrev` is
+       * the NFL table: it turned the WNBA's Los Angeles Sparks ("LA") into "LAR" and
+       * the Washington Mystics ("WSH") into "WAS". League sports keep it, because
+       * roster tie-ins match players to games through it.
+       */
+      const abbrev = (raw: string) => (isLiveOnlySport(sport) ? raw : normalizeTeamAbbrev(raw) || raw)
       return {
         gameId: event.id,
-        homeTeam: normalizeTeamAbbrev(home.team.abbreviation) || home.team.abbreviation,
+        homeTeam: abbrev(home.team.abbreviation),
         homeTeamId: home.team.id,
         homeTeamFull: home.team.displayName,
         homeLogo: home.team.logo,
         homeScore: parseInt(home.score, 10) || 0,
         homeRecord: home.records?.[0]?.summary ?? null,
-        awayTeam: normalizeTeamAbbrev(away.team.abbreviation) || away.team.abbreviation,
+        awayTeam: abbrev(away.team.abbreviation),
         awayTeamId: away.team.id,
         awayTeamFull: away.team.displayName,
         awayLogo: away.team.logo,
@@ -576,7 +585,7 @@ export async function fetchEspnScoreboard(
         homeErrors: typeof home.errors === 'number' && Number.isFinite(home.errors) ? home.errors : null,
         awayHits: typeof away.hits === 'number' && Number.isFinite(away.hits) ? away.hits : null,
         awayErrors: typeof away.errors === 'number' && Number.isFinite(away.errors) ? away.errors : null,
-        ...(sport === 'NBA' || sport === 'NCAAB'
+        ...(isBasketballSport(sport)
           ? {
               homeTeamLeaders: teamBox ? pickTeamLeaders(home.leaders) : [],
               awayTeamLeaders: teamBox ? pickTeamLeaders(away.leaders) : [],

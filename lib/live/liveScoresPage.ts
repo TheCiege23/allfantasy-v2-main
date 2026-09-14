@@ -12,10 +12,11 @@ import { estimateWinProbability, type WinProbability } from '@/lib/live/winProba
 import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
 import { composePlayerIdentities } from '@/lib/core-app/playerIdentityCompose'
 import { isRosteredPlayer, rosterNameKeys } from '@/lib/live/rosterPlayMatch'
-import { isLiveSport, type LiveSport } from '@/lib/sport-scope'
+import { isLiveOnlySport, isLiveSport, type LiveSport } from '@/lib/sport-scope'
 import {
   basketballPeriodLabel,
   espnScoreboardDatesForWindow,
+  isBasketballSport,
   type BaseballSituation,
   type TeamShooting,
 } from '@/lib/live/espnGamePresentation'
@@ -38,15 +39,17 @@ import {
  */
 
 /**
- * The tabs, in order. NCAABASE is a live-only sport (see `LIVE_ONLY_SPORTS`): it
- * has a scoreboard and a game view here and no league anywhere else.
+ * The tabs, in order. WNBA and NCAABASE are live-only sports (see
+ * `LIVE_ONLY_SPORTS`): each has a scoreboard and a game view here and no league
+ * anywhere else.
  */
-export const LIVE_SPORTS: LiveSport[] = ['NFL', 'NBA', 'MLB', 'NHL', 'NCAAF', 'NCAAB', 'NCAABASE', 'SOCCER']
+export const LIVE_SPORTS: LiveSport[] = ['NFL', 'NBA', 'WNBA', 'MLB', 'NHL', 'NCAAF', 'NCAAB', 'NCAABASE', 'SOCCER']
 
 /** Display labels; the tabs render these verbatim. */
 export const SPORT_LABELS: Record<string, string> = {
   NFL: 'NFL',
   NBA: 'NBA',
+  WNBA: 'WNBA',
   MLB: 'MLB',
   NHL: 'NHL',
   NCAAF: 'College Football',
@@ -277,7 +280,7 @@ function clockLabel(row: LiveScoreRow, sport: string): string | null {
    * computed label would print "Q2 · 0.0". Its own status text ("Halftime",
    * "End of 1st") is what the scoreboard shows instead.
    */
-  if (sport === 'NBA' || sport === 'NCAAB') {
+  if (isBasketballSport(sport)) {
     const status = String(row.status ?? '').toLowerCase()
     if (status.includes('halftime') || status.includes('end_period')) {
       return String(row.statusDetail ?? '').trim() || null
@@ -788,8 +791,10 @@ export async function getLivePageData(opts: {
   const nowMs = Date.now()
   const games: LiveGameCard[] = rows.map((sourceRow) => {
     const row = withRememberedPresentation(sport, sourceRow, nowMs)
-    const home = normalizeTeamAbbrev(row.homeTeam) || row.homeTeam
-    const away = normalizeTeamAbbrev(row.awayTeam) || row.awayTeam
+    // A live-only sport keeps ESPN's abbreviations: the NFL table would make the
+    // WNBA's "LA" Sparks "LAR" (see fetchEspnScoreboard).
+    const home = isLiveOnlySport(sport) ? row.homeTeam : normalizeTeamAbbrev(row.homeTeam) || row.homeTeam
+    const away = isLiveOnlySport(sport) ? row.awayTeam : normalizeTeamAbbrev(row.awayTeam) || row.awayTeam
     const involved = [...(byTeam.get(home) ?? []), ...(byTeam.get(away) ?? [])]
 
     const tieIns: LiveRosterTieIn[] = []

@@ -8,7 +8,12 @@ import { gameDetailHref } from '@/lib/live/gameDetailLink'
 import type { LiveGameCard, LivePageData } from '@/lib/live/liveScoresPage'
 import { matchesLiveGameQuery } from '@/lib/live/liveGameSearch'
 import { groupStartersByPlayer, pointsSummary, type StarterGroup } from '@/lib/live/liveTieInGroups'
-import { basketballPeriodLabel, type BaseballPlayer, type TeamShooting } from '@/lib/live/espnGamePresentation'
+import {
+  basketballPeriodLabel,
+  isBasketballSport,
+  type BaseballPlayer,
+  type TeamShooting,
+} from '@/lib/live/espnGamePresentation'
 import '@/components/core-app/af-live.css'
 
 /**
@@ -544,7 +549,7 @@ export function GameCard({
   const wp = game.winProbability
   const weekLabel = game.week != null ? `${game.sport} · Week ${game.week}` : game.sport
   const isFootball = game.sport === 'NFL' || game.sport === 'NCAAF'
-  const isBasketball = game.sport === 'NBA' || game.sport === 'NCAAB'
+  const isBasketball = isBasketballSport(game.sport)
   const situation = game.situation
   /*
    * Baseball is recognised by its DATA, not by `sport === 'MLB'` (2026-09-13):
@@ -714,10 +719,10 @@ function Linescore({
   const homeLines = game.home.linescores ?? []
   const played = Math.max(awayLines.length, homeLines.length)
   if (played === 0) return null
-  // Football and the NBA always show four quarters, baseball nine innings and
-  // college basketball two halves, so an early grid is not one column wide.
+  // Football, the NBA and the WNBA always show four quarters, baseball nine innings
+  // and college basketball two halves, so an early grid is not one column wide.
   // Overtimes and extra innings simply add columns.
-  const regulation = isFootball || game.sport === 'NBA' ? 4 : isBaseball ? 9 : game.sport === 'NCAAB' ? 2 : 0
+  const regulation = isBaseball ? 9 : game.sport === 'NCAAB' ? 2 : isFootball || isBasketballSport(game.sport) ? 4 : 0
   const columns = Math.max(played, regulation)
   const label = (i: number) =>
     basketballPeriodLabel(game.sport, i + 1) ??

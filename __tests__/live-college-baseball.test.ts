@@ -21,7 +21,7 @@ import { gameDetailHref } from '@/lib/live/gameDetailLink'
 
 describe('sport scope', () => {
   it('College Baseball is a live-only sport, never a league sport', () => {
-    expect(LIVE_ONLY_SPORTS).toEqual(['NCAABASE'])
+    expect(LIVE_ONLY_SPORTS).toEqual(['NCAABASE', 'WNBA'])
     expect(SUPPORTED_SPORTS).not.toContain('NCAABASE')
     expect(isLiveSport('NCAABASE')).toBe(true)
     expect(isLiveSport('ncaabase')).toBe(true)
