@@ -556,7 +556,7 @@ export async function getRailMatchups(
 
   for (const f of fixtures) {
     const { you, opponent, row } = f
-    const scored = row.pointsFor > 0 || row.pointsAgainst > 0
+    const scored = row.pointsFor !== 0 || row.pointsAgainst !== 0 || f.field.some(team => team.pointsFor !== 0)
     const priced = projections.byLeague.get(you.leagueId)
 
     byLeague[you.leagueId] = {
@@ -862,14 +862,14 @@ function standingIn(args: {
 
   const lowest = valued[valued.length - 1]!
   const yours = valued[index]!
-  const isLowest = index === valued.length - 1
+  const isLowest = yours.value === lowest.value
 
   return {
-    rank: index + 1,
+    rank: 1 + valued.filter(team => team.value > yours.value).length,
     outOf: valued.length,
     overCut: isLowest ? null : Math.round((yours.value - lowest.value) * 100) / 100,
     basis,
-    placesAboveCut: Math.max(0, valued.length - (index + 1)),
+    placesAboveCut: valued.filter(team => team.value < yours.value).length,
     cutLine: Math.round(lowest.value * 100) / 100,
     elimination: args.elimination,
   }

@@ -86,9 +86,15 @@ export function ConnectedAccountsSettingsSection({
     if (discordStatus === "connected") {
       setStatusTone("success")
       setStatusMessage("Discord connected. Your pool and league sharing tools can now use this account.")
+    } else if (discordStatus === "config-error") {
+      setStatusTone("error")
+      setStatusMessage("Discord is temporarily unavailable because its connection settings need attention. Please contact support.")
     } else if (discordStatus === "error") {
       setStatusTone("error")
       setStatusMessage("Discord could not be connected. Check the Discord app redirect URL and try again.")
+    } else if (discordStatus === "account-required") {
+      setStatusTone("error")
+      setStatusMessage("Connect your Discord account before adding the AllFantasy bot to a server.")
     } else if (discordStatus === "bot-linked") {
       /*
        * The BOT install statuses land on this page too, and until now this
@@ -100,14 +106,14 @@ export function ConnectedAccountsSettingsSection({
     } else if (discordStatus === "bot-unverified") {
       setStatusTone("error")
       setStatusMessage(
-        "Discord accepted the install but we cannot see the bot in that server yet. Give it a moment and reload, or re-run the install and pick the server again.",
+        "We could not verify server-management access. Connect the Discord account that manages this server, check that the bot is installed, and try again.",
       )
     } else if (discordStatus === "bot-not-ready") {
       setStatusTone("error")
       setStatusMessage("The AllFantasy Discord bot is not configured on this environment yet, so it cannot be installed.")
     } else if (discordStatus === "bot-error") {
       setStatusTone("error")
-      setStatusMessage("Discord did not tell us which server the bot was added to. Re-run the install and pick a server.")
+      setStatusMessage("The server installation could not be verified or is linked to another AllFantasy account. Restart the connection from Settings.")
     } else if (spotifyStatus === "connected") {
       setStatusTone("success")
       setStatusMessage("Spotify connected. Music controls are now available where supported.")

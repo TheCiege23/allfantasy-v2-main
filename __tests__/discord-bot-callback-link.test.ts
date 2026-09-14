@@ -5,11 +5,14 @@ const mocks = vi.hoisted(() => ({
   profileUpsert: vi.fn(),
   guildLinkUpsert: vi.fn(),
   getGuildBotPermissions: vi.fn(),
+  cookieGet: vi.fn(),
+  cookieDelete: vi.fn(),
 }))
 
 vi.mock('next-auth', () => ({ getServerSession: mocks.getServerSession }))
 vi.mock('@/lib/auth', () => ({ authOptions: {} }))
-vi.mock('@/lib/discord/bot', () => ({ getGuildBotPermissions: mocks.getGuildBotPermissions }))
+vi.mock('next/headers', () => ({ cookies: async () => ({ get: mocks.cookieGet, delete: mocks.cookieDelete }) }))
+vi.mock('@/lib/discord/guild-access', () => ({ verifyGuildManager: mocks.getGuildBotPermissions, linkVerifiedGuild: mocks.guildLinkUpsert }))
 vi.mock('@/lib/prisma', () => ({
   prisma: {
     userProfile: { upsert: mocks.profileUpsert },
@@ -19,7 +22,7 @@ vi.mock('@/lib/prisma', () => ({
 
 function req(guildId?: string) {
   const url = new URL(
-    `https://www.allfantasy.ai/api/discord/bot-callback${guildId ? `?guild_id=${guildId}` : ''}`,
+    `https://www.allfantasy.ai/api/discord/bot-callback${guildId ? `?guild_id=${guildId}&state=state` : ''}`,
   )
   return { nextUrl: url } as never
 }
@@ -29,8 +32,9 @@ describe('GET /api/discord/bot-callback', () => {
     vi.clearAllMocks()
     mocks.getServerSession.mockResolvedValue({ user: { id: 'me' } })
     mocks.profileUpsert.mockResolvedValue({})
-    mocks.guildLinkUpsert.mockResolvedValue({})
-    mocks.getGuildBotPermissions.mockResolvedValue(8n)
+    mocks.guildLinkUpsert.mockResolvedValue(true)
+    mocks.getGuildBotPermissions.mockResolvedValue({ discordUserId: 'discord-me', guildName: 'Server' })
+    mocks.cookieGet.mockImplementation((key: string) => ({ value: key === 'discord_bot_state' ? 'state' : 'me' }))
   })
 
   /*
@@ -42,9 +46,7 @@ describe('GET /api/discord/bot-callback', () => {
     const { GET } = await import('@/app/api/discord/bot-callback/route')
     const res = await GET(req('123'))
 
-    expect(mocks.guildLinkUpsert).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { guildId: '123' } }),
-    )
+    expect(mocks.guildLinkUpsert).toHaveBeenCalledWith('me', '123', 'Server')
     expect(res.headers.get('location')).toContain('discord=bot-linked')
   })
 
@@ -71,7 +73,7 @@ describe('GET /api/discord/bot-callback', () => {
   })
 
   it('treats a Discord failure as unverified rather than linking anyway', async () => {
-    mocks.getGuildBotPermissions.mockRejectedValue(new Error('discord down'))
+    mocks.getGuildBotPermissions.mockResolvedValue(null)
     const { GET } = await import('@/app/api/discord/bot-callback/route')
     const res = await GET(req('123'))
 
@@ -94,5 +96,24 @@ describe('GET /api/discord/bot-callback', () => {
 
     expect(res.headers.get('location')).toContain('/login')
     expect(mocks.guildLinkUpsert).not.toHaveBeenCalled()
+  })
+  it('rejects missing OAuth state before making any writes', async () => {
+    mocks.cookieGet.mockReturnValue(undefined)
+    const { GET } = await import('@/app/api/discord/bot-callback/route')
+    await GET(req('123'))
+    expect(mocks.guildLinkUpsert).not.toHaveBeenCalled()
+    expect(mocks.profileUpsert).not.toHaveBeenCalled()
+  })
+  it('rejects an installation started by another account', async () => {
+    mocks.cookieGet.mockImplementation((key: string) => ({ value: key === 'discord_bot_state' ? 'state' : 'other' }))
+    const { GET } = await import('@/app/api/discord/bot-callback/route')
+    await GET(req('123'))
+    expect(mocks.getGuildBotPermissions).not.toHaveBeenCalled()
+  })
+  it('does not overwrite the profile when another account owns the server link', async () => {
+    mocks.guildLinkUpsert.mockResolvedValue(false)
+    const { GET } = await import('@/app/api/discord/bot-callback/route')
+    await GET(req('123'))
+    expect(mocks.profileUpsert).not.toHaveBeenCalled()
   })
 })
