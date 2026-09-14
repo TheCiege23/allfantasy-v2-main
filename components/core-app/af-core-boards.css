@@ -565,6 +565,136 @@
   flex-wrap: wrap;
 }
 
+/* ── rich cards (Trades, Draft HQ) — handoff 2026-09-13 ────────────────────
+ *
+ * Opt-in on the <ul> (`af-bd-cards af-bd-cards--rich`), so Waivers and Live keep
+ * the base card until they are restyled. The handoff's card: radius 16, a 26px
+ * crest, a 16px name with the platform word INLINE, a mono status tag, and the
+ * primary action as a filled button in the header instead of a link row below.
+ */
+.af-core .af-bd-cards--rich { gap: 12px; }
+.af-core .af-bd-cards--rich .af-bd-card {
+  border-radius: 16px;
+  padding: 18px 20px;
+  gap: 14px;
+}
+/* Live keeps its accent border; the gradient wash is not in the handoff. */
+.af-core .af-bd-cards--rich .af-bd-card[data-live='true'] { background: var(--surface); }
+
+.af-core .af-bd-cards--rich .af-bd-card-head .af-bd-league {
+  flex-direction: row;
+  align-items: baseline;
+  flex-wrap: wrap;
+  column-gap: 10px;
+  row-gap: 3px;
+}
+.af-core .af-bd-cards--rich .af-bd-card-head .af-bd-name { font-size: 16px; line-height: 1.2; }
+.af-core .af-bd-cards--rich .af-bd-card-head .af-bd-sub { font-size: 11px; }
+.af-core .af-bd-cards--rich .af-bd-card-head .af-bd-plat {
+  font: 700 9px/1 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  letter-spacing: 0.06em;
+}
+.af-core .af-bd-cards--rich .af-bd-crest--sm { width: 26px; height: 26px; border-radius: 7px; }
+.af-core .af-bd-cards--rich .af-bd-crest--sm.af-bd-crest--none { font-size: 10px; }
+.af-core .af-bd-cards--rich .af-bd-card-head .af-bd-tag {
+  font: 800 11px/1 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+/* A running draft's status carries a dot, like the handoff. */
+.af-core .af-bd-cards--rich .af-bd-card[data-live='true'] .af-bd-card-head .af-bd-tag::before {
+  content: '';
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-right: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  vertical-align: 1px;
+}
+
+/* A status with no urgency — "deadline unknown", "no deadline". */
+.af-core .af-bd-tag[data-sev='muted'] { color: var(--faint); }
+
+/* The card's primary action. */
+.af-core .af-bd-btn {
+  box-sizing: border-box;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 9px 14px;
+  border-radius: 9px;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font: 800 11px/1 var(--font-archivo, 'Archivo', system-ui, sans-serif);
+  text-decoration: none;
+  white-space: nowrap;
+}
+.af-core .af-bd-btn:hover { filter: brightness(1.08); }
+.af-core .af-bd-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* Two trade sides (and a live draft's picks / queue), side by side. */
+.af-core .af-bd-cards--rich .af-bd-card-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 24px;
+}
+.af-core .af-bd-cards--rich .af-bd-side { min-width: 0; }
+.af-core .af-bd-cards--rich .af-bd-side-label { letter-spacing: 0.1em; padding-bottom: 4px; }
+.af-core .af-bd-cards--rich .af-bd-asset {
+  padding: 8px 0;
+  font-weight: 700;
+  color: var(--text2);
+}
+.af-core .af-bd-cards--rich .af-bd-asset:last-child { border-bottom: 1px solid var(--line); }
+.af-core .af-bd-cards--rich .af-bd-asset-val {
+  font-size: 12px;
+  font-weight: 900;
+  color: var(--accent);
+}
+.af-core .af-bd-cards--rich .af-bd-reason {
+  border-top: 0;
+  padding-top: 0;
+  font-size: 11px;
+}
+
+/* Footer row: latest grade | reasoning. */
+.af-core .af-bd-card-foot {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.af-core .af-bd-card-foot .af-bd-kv { flex-direction: row; align-items: baseline; gap: 6px; }
+.af-core .af-bd-card-foot .af-bd-sub { white-space: normal; }
+.af-core .af-bd-card-foot .af-bd-rule {
+  flex: none;
+  width: 1px;
+  height: 12px;
+  background: var(--line2);
+}
+.af-core .af-bd-card-foot .af-bd-reason { flex: 1; min-width: 200px; }
+
+/* Draft stat strip: hairlines above and below, dividers between. */
+.af-core .af-bd-cards--rich .af-bd-kvrow {
+  gap: 10px 0;
+  padding: 12px 0;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+.af-core .af-bd-cards--rich .af-bd-kvrow .af-bd-kv { padding: 0 18px; }
+.af-core .af-bd-cards--rich .af-bd-kvrow .af-bd-kv:first-child { padding-left: 0; }
+.af-core .af-bd-cards--rich .af-bd-kvrow .af-bd-kv + .af-bd-kv { border-left: 1px solid var(--line2); }
+.af-core .af-bd-cards--rich .af-bd-kvrow .af-bd-k { font-size: 9px; letter-spacing: 0.08em; }
+.af-core .af-bd-cards--rich .af-bd-kvrow .af-bd-v {
+  font: 800 14px/1.1 var(--font-archivo, 'Archivo', system-ui, sans-serif);
+  color: var(--text2);
+}
+.af-core .af-bd-cards--rich .af-bd-kvrow .af-bd-v[data-sev='accent'] { color: var(--accent); }
+.af-core .af-bd-cards--rich .af-bd-kvrow .af-bd-v[data-sev='good'] { color: var(--good); }
+.af-core .af-bd-cards--rich .af-bd-kvrow .af-bd-v[data-sev='bad'] { color: var(--bad); }
+
 .af-core .af-bd-reason {
   font: 500 11.5px/1.5 var(--font-archivo, 'Archivo', system-ui, sans-serif);
   color: var(--muted);
@@ -888,6 +1018,26 @@
     align-items: center;
     min-height: 44px;
   }
+
+  /* Rich cards on a phone: the filled button keeps a thumb-sized target without
+     stretching, and the two sides stack. */
+  .af-core .af-bd-btn { min-height: 44px; align-self: center; margin-left: auto; }
+  .af-core .af-bd-cards--rich .af-bd-card { padding: 16px; }
+  /* Crest + league take the whole first line (a truncated name was the only
+     thing on the card that said which league it is); status, clock and the
+     button share the second. */
+  .af-core .af-bd-cards--rich .af-bd-card-head .af-bd-league { flex: 1 1 calc(100% - 40px); }
+  .af-core .af-bd-cards--rich .af-bd-card-body { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+  .af-core .af-bd-card-foot .af-bd-rule { display: none; }
+  .af-core .af-bd-card-foot .af-bd-reason { flex-basis: 100%; min-width: 0; }
+  /* Stat strip as a three-up grid, so a wrapped line does not open on a divider. */
+  .af-core .af-bd-cards--rich .af-bd-kvrow {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px 0;
+  }
+  .af-core .af-bd-cards--rich .af-bd-kvrow .af-bd-kv { padding: 0 12px; }
+  .af-core .af-bd-cards--rich .af-bd-kvrow .af-bd-kv:nth-child(3n + 1) { padding-left: 0; border-left: 0; }
 }
 
 /*
