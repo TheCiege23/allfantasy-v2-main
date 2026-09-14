@@ -144,8 +144,9 @@ export function normalizeToSupportedSport(sport: string | null | undefined): Lea
  * would also mean a migration for a value no league row can use. Live Scores
  * stores its games in `SportsGame.sport`, a plain String, so a live-only key
  * needs neither. User decision, 2026-09-13: College Baseball on Live Scores.
+ * The WNBA joined on the same terms the same day, with its game view.
  */
-export const LIVE_ONLY_SPORTS = ['NCAABASE'] as const
+export const LIVE_ONLY_SPORTS = ['NCAABASE', 'WNBA'] as const
 export type LiveOnlySport = (typeof LIVE_ONLY_SPORTS)[number]
 /** A sport Live Scores can show: every league sport plus the live-only ones. */
 export type LiveSport = LeagueSport | LiveOnlySport
@@ -169,6 +170,7 @@ export function isLiveSport(s: string | null | undefined): s is LiveSport {
 export function normalizeToLiveSport(sport: string | null | undefined): LiveSport {
   const u = (sport?.trim() ?? '').toUpperCase().replace(/[\s-]+/g, '_')
   if (u === 'NCAABASE' || u === 'CBASE' || u === 'COLLEGE_BASEBALL' || u === 'NCAA_BASEBALL') return 'NCAABASE'
+  if (u === 'WNBA') return 'WNBA'
   return normalizeToSupportedSport(sport)
 }
 

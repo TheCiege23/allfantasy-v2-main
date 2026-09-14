@@ -252,18 +252,26 @@ export function teamShooting(statistics: EspnTeamStatistic[] | undefined): TeamS
   return out.fieldGoals || out.threePointers || out.freeThrows ? out : null
 }
 
+/** The basketball sports Live Scores shows: the pros in quarters, college in halves. */
+export const BASKETBALL_SPORTS: readonly string[] = ['NBA', 'WNBA', 'NCAAB']
+
+export function isBasketballSport(sport: string | null | undefined): boolean {
+  return typeof sport === 'string' && BASKETBALL_SPORTS.includes(sport)
+}
+
 /**
- * "Q3", "OT", "2OT" for the NBA; "1H", "2H", "OT", "2OT" for college basketball,
- * which plays halves. Null for every other sport, and for a period it cannot name.
+ * "Q3", "OT", "2OT" for the NBA and the WNBA; "1H", "2H", "OT", "2OT" for college
+ * basketball, which plays halves. Null for every other sport, and for a period it
+ * cannot name.
  *
  * Multiple overtimes read "2OT" because that is how ESPN's own final status spells
  * them ("Final/2OT", DEN @ NY 2026-02-04, six periods in the line score).
  */
 export function basketballPeriodLabel(sport: string, period: number): string | null {
   if (!Number.isInteger(period) || period < 1) return null
-  const regulation = sport === 'NBA' ? 4 : sport === 'NCAAB' ? 2 : null
+  const regulation = sport === 'NBA' || sport === 'WNBA' ? 4 : sport === 'NCAAB' ? 2 : null
   if (regulation == null) return null
-  if (period <= regulation) return sport === 'NBA' ? `Q${period}` : `${period}H`
+  if (period <= regulation) return regulation === 4 ? `Q${period}` : `${period}H`
   const overtime = period - regulation
   return overtime === 1 ? 'OT' : `${overtime}OT`
 }

@@ -104,7 +104,7 @@ export function LiveGameView({
           <p className="af-live-empty-body">
             {payload?.failed
               ? 'This is a problem on our end, not the game. Retrying automatically.'
-              : 'Game views are available for NFL, college football, NBA, college basketball, NHL and MLB games.'}
+              : 'Game views are available for NFL, college football, NBA, WNBA, college basketball, NHL, MLB and college baseball games.'}
           </p>
         </div>
       </div>
@@ -883,17 +883,18 @@ function ShotChart({ detail, basketball }: { detail: LiveGameDetail; basketball:
       >
         <rect className="af-gv-court-floor" x="0" y="0" width="50" height={HALF_COURT} />
         <g className="af-gv-court-lines" data-court={basketball.court}>
+          {/* Lane: 12 ft for NCAA men; 16 ft for the NBA and the WNBA. */}
           {basketball.court === 'college' ? (
-            <>
-              {/* NCAA men: 12 ft lane; 3-point arc 22 ft 1.75 in, 21 ft 7.75 in in the corners. */}
-              <rect x="19" y="0" width="12" height="19" />
-              <path d="M3.35 0 L3.35 9.93 A22.15 22.15 0 0 0 46.65 9.93 L46.65 0" />
-            </>
+            <rect x="19" y="0" width="12" height="19" />
           ) : (
-            <>
-              <rect x="17" y="0" width="16" height="19" />
-              <path d="M3 0 L3 14.2 A23.75 23.75 0 0 0 47 14.2 L47 0" />
-            </>
+            <rect x="17" y="0" width="16" height="19" />
+          )}
+          {/* 3-point line: 22 ft 1.75 in (21 ft 7.75 in in the corners) for NCAA men and
+              the WNBA; 23 ft 9 in (22 ft in the corners) for the NBA. */}
+          {basketball.court === 'pro' ? (
+            <path d="M3 0 L3 14.2 A23.75 23.75 0 0 0 47 14.2 L47 0" />
+          ) : (
+            <path d="M3.35 0 L3.35 9.93 A22.15 22.15 0 0 0 46.65 9.93 L46.65 0" />
           )}
           <circle cx="25" cy="19" r="6" />
           <path d="M21 5.25 A4 4 0 0 0 29 5.25" />
