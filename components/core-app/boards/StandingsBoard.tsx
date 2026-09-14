@@ -7,6 +7,7 @@ import {
   LeagueCrest,
   SectionHead,
   columnsTooUneven,
+  platformKey,
 } from '@/components/core-app/boards/BoardKit'
 import '@/components/core-app/af-core-boards.css'
 
@@ -59,23 +60,30 @@ function sevOf(pct: number): 'good' | 'warn' | 'bad' {
   return 'bad'
 }
 
-function Row({ league, i }: { league: Ranked; i: number }) {
+/*
+ * 2026-09-13 handoff: a compact row — crest, league over "record · N% playoff
+ * odds", and the seed stacked over its status on the right.
+ *
+ * ⚠ NOTHING THE OLD ROW SAID IS GONE, IT MOVED. The rank numeral is dropped (the
+ * section label states the order); the platform word and record stay on the sub
+ * line with the odds; `whatDecidesIt` gets its own second line rather than being
+ * cut to a status word; and IN / OUT sits under the seed.
+ */
+function Row({ league }: { league: Ranked }) {
   const you = league.you
   const pct = Math.round(you.playoffPct)
   const sev = sevOf(you.playoffPct)
   const record = you.wins === 0 && you.losses === 0 ? null : `${you.wins}-${you.losses}`
+  const inField = you.seed <= league.playoffTeams
 
   return (
     <li>
       <Link className="af-bd-row" href={league.href}>
-        <span className="af-bd-rank" aria-hidden>
-          {String(i + 1).padStart(2, '0')}
-        </span>
         <LeagueCrest name={league.leagueName} platform={league.platform} size="sm" />
         <span className="af-bd-league">
           <span className="af-bd-name">{league.leagueName}</span>
           <span className="af-bd-sub">
-            <span className="af-bd-plat" data-platform={league.platform}>
+            <span className="af-bd-plat" data-platform={platformKey(league.platform)}>
               {league.platform.toUpperCase()}
             </span>
             {' · '}
@@ -84,29 +92,30 @@ function Row({ league, i }: { league: Ranked; i: number }) {
               whole season of unplayed rows; printing "0-0" states a result.
             */}
             {record ?? 'no games played yet'}
+            {' · '}
+            {/*
+              ⚠ `modelled: false` MEANS TOO FEW WEEKS TO MODEL, so the percentage
+              behind it is the simulation's prior rather than a read on this team.
+              It is marked rather than hidden — the seed beside it is still real.
+            */}
+            {pct}%{you.modelled ? '' : '*'} playoff odds
           </span>
-        </span>
-        <span className="af-bd-mid">
           {/*
             The condition in words. `whatDecidesIt` is deliberately specific —
             "win once in three", not "in contention" — so it is printed rather
             than collapsed into a status word.
           */}
-          <span className="af-bd-tag" data-sev={sev}>
-            {you.seed <= league.playoffTeams ? 'IN' : 'OUT'}
-            <span className="af-bd-tag-detail"> {league.whatDecidesIt}</span>
+          <span className="af-bd-sub2" title={league.whatDecidesIt}>
+            {league.whatDecidesIt}
           </span>
         </span>
-        <span className="af-bd-stat af-bd-stat--narrow">
-          #{you.seed} of {league.teams.length}
-        </span>
-        <span className="af-bd-stat af-bd-stat--narrow" data-sev={sev}>
-          {/*
-            ⚠ `modelled: false` MEANS TOO FEW WEEKS TO MODEL, so the percentage
-            behind it is the simulation's prior rather than a read on this team.
-            It is marked rather than hidden — the seed beside it is still real.
-          */}
-          {pct}%{you.modelled ? '' : '*'}
+        <span className="af-bd-val af-bd-val--seed" data-sev={sev}>
+          <span>
+            #{you.seed} of {league.teams.length}
+          </span>
+          <span className="af-bd-val-sub af-bd-val-sub--status" data-sev={sev}>
+            {inField ? 'In' : 'Out'}
+          </span>
         </span>
       </Link>
     </li>
@@ -117,20 +126,20 @@ function Column({
   label,
   rows,
   quiet,
-  offset,
+  tone,
 }: {
   label: string
   rows: Ranked[]
   quiet: string
-  offset: number
+  tone: 'good' | 'warn'
 }) {
   return (
     <section className="af-bd-sec">
-      <SectionHead label={label} />
+      <SectionHead label={label} tone={tone} />
       {rows.length > 0 ? (
-        <ul className="af-bd-rows">
-          {rows.map((l, i) => (
-            <Row key={l.leagueId} league={l} i={i + offset} />
+        <ul className="af-bd-rows af-bd-rows--compact">
+          {rows.map((l) => (
+            <Row key={l.leagueId} league={l} />
           ))}
         </ul>
       ) : (
@@ -185,18 +194,18 @@ export function StandingsBoard({ outlook, allHref, totalLeagues }: StandingsBoar
             <Column
               label="Strongest seeds · top 5"
               rows={strongest}
-              offset={0}
+              tone="good"
               quiet="No league has a seed we can read yet."
             />
             <Column
               label="On the bubble · bottom 5"
               rows={bubble}
-              offset={strongest.length}
+              tone="warn"
               quiet="Nothing else is close enough to call a bubble."
             />
           </div>
 
-          <p className="af-bd-note">
+          <p className="af-bd-note af-bd-note--plain">
             Playoff odds are simulated over each league&apos;s real remaining schedule —{' '}
             {outlook.basis}
             {anyUnmodelled
