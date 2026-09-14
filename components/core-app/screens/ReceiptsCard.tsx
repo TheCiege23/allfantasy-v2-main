@@ -3,6 +3,7 @@
 import type { ReactNode } from 'react'
 import Link from 'next/link'
 import type {
+  AutoCoachReceipt,
   DecisionReceiptsData,
   LineupReceipt,
   TradeReceipt,
@@ -11,18 +12,25 @@ import type {
 
 /**
  * The home "Receipts" card — how your past moves turned out (retention item 6, user
- * decisions 2026-09-14). Trades, waiver adds and lineups. Good and bad outcomes read the
- * same way: the points and which side of them you are on, never a letter and never softened.
+ * decisions 2026-09-14). Trades, waiver adds, lineups and AutoCoach calls. Good and bad
+ * outcomes read the same way: the points and which side of them you are on, never a letter
+ * and never softened.
  *
  * ⚠ NOT RENDERED WITH NOTHING TO SAY. `data` null, or no receipt of any kind AND nothing
- * too early, unscored or unreadable to mention, renders nothing — an empty card on the home
- * is noise, not honesty.
+ * too early, pending, unscored or unreadable to mention, renders nothing — an empty card on
+ * the home is noise, not honesty.
  */
 
 const OUTCOME_TEXT: Record<TradeReceipt['outcome'], string> = {
   ahead: 'you’re ahead',
   behind: 'you’re behind',
   even: 'about even',
+}
+
+const CALL_TEXT: Record<AutoCoachReceipt['call'], string> = {
+  right: 'AutoCoach was right',
+  wrong: 'AutoCoach was wrong',
+  same: 'about the same',
 }
 
 function signed(n: number): string {
@@ -75,6 +83,34 @@ function LineupRow({ l }: { l: LineupReceipt }) {
   )
 }
 
+function AutoCoachRow({ a }: { a: AutoCoachReceipt }) {
+  const outcome = a.call === 'right' ? 'ahead' : a.call === 'wrong' ? 'behind' : undefined
+  return (
+    <li className="af3a-receipt" data-kind="autocoach" data-outcome={outcome}>
+      <Link className="af3a-receipt-title" href={a.href}>
+        AutoCoach said start {a.recommended.name} over {a.instead.name}
+      </Link>
+      <span className="af3a-receipt-where af3a-mono">
+        {a.leagueName} · {a.season} wk {a.week}
+        {a.slot ? ` · ${a.slot}` : ''}
+      </span>
+      <span className="af3a-receipt-result">
+        <b className="af3a-mono">
+          {a.recommended.name} {a.recommended.points.toFixed(1)}
+        </b>{' '}
+        · {a.instead.name} {a.instead.points.toFixed(1)} — {CALL_TEXT[a.call]}
+      </span>
+      <span className="af3a-receipt-note">
+        {a.followed === 'yes'
+          ? `You started ${a.recommended.name} on Sleeper.`
+          : a.followed === 'no'
+            ? `You kept ${a.instead.name} in on Sleeper.`
+            : 'Your Sleeper lineup didn’t match either way.'}
+      </span>
+    </li>
+  )
+}
+
 export function ReceiptsCard({ data, help }: { data: DecisionReceiptsData | null; help?: ReactNode }) {
   if (!data) return null
   const waivers = data.waivers ?? []
@@ -83,10 +119,15 @@ export function ReceiptsCard({ data, help }: { data: DecisionReceiptsData | null
   const lineups = data.lineups ?? []
   const lineupsUnscored = data.lineupsUnscored ?? 0
   const lineupsUnreadable = data.lineupsUnreadable ?? 0
+  const autocoach = data.autocoach ?? []
+  const autocoachPending = data.autocoachPending ?? 0
+  const autocoachUnscored = data.autocoachUnscored ?? 0
+  const autocoachUnreadable = data.autocoachUnreadable ?? 0
   const hasTrades = data.trades.length > 0 || data.tooEarly > 0
   const hasWaivers = waivers.length > 0 || waiversTooEarly > 0 || waiversUnscored > 0
   const hasLineups = lineups.length > 0 || lineupsUnscored > 0 || lineupsUnreadable > 0
-  const kinds = [hasTrades, hasWaivers, hasLineups].filter(Boolean).length
+  const hasAutoCoach = autocoach.length > 0 || autocoachPending > 0 || autocoachUnscored > 0 || autocoachUnreadable > 0
+  const kinds = [hasTrades, hasWaivers, hasLineups, hasAutoCoach].filter(Boolean).length
   if (kinds === 0) return null
   const headed = kinds > 1
 
@@ -176,6 +217,35 @@ export function ReceiptsCard({ data, help }: { data: DecisionReceiptsData | null
             <p className="af3a-exp-note">
               {lineupsUnreadable} week{lineupsUnreadable === 1 ? '' : 's'} couldn’t be checked — a starter’s
               position or the league’s lineup slots aren’t on file.
+            </p>
+          ) : null}
+        </>
+      ) : null}
+
+      {hasAutoCoach ? (
+        <>
+          {headed ? <h3 className="af3a-receipt-group">AutoCoach</h3> : null}
+          {autocoach.length > 0 ? (
+            <ul className="af3a-receipt-list">
+              {autocoach.map((a) => (
+                <AutoCoachRow key={a.id} a={a} />
+              ))}
+            </ul>
+          ) : null}
+          {autocoachPending > 0 ? (
+            <p className="af3a-exp-note">
+              {autocoachPending} AutoCoach call{autocoachPending === 1 ? ' is' : 's are'} for a week still being played.
+            </p>
+          ) : null}
+          {autocoachUnscored > 0 ? (
+            <p className="af3a-exp-note">
+              {autocoachUnscored} call{autocoachUnscored === 1 ? ' has' : 's have'} no weekly scores on file yet.
+            </p>
+          ) : null}
+          {autocoachUnreadable > 0 ? (
+            <p className="af3a-exp-note">
+              {autocoachUnreadable} call{autocoachUnreadable === 1 ? '' : 's'} couldn’t be matched to a week or to your
+              roster that week.
             </p>
           ) : null}
         </>

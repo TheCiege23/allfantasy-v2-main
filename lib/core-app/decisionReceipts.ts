@@ -18,7 +18,8 @@ import { lineupSeatsFromSettings } from './slotEligibility'
 /**
  * Decision receipts — how your past moves turned out (retention item 6, user decisions
  * 2026-09-14): a weekly "receipts" card on the /core home, good and bad outcomes stated
- * plainly. Trades, waiver adds and lineups (start/sit) so far; Chimmy advice follows.
+ * plainly. Trades, waiver adds, lineups (start/sit) and AutoCoach calls so far; the rest of
+ * Chimmy's advice follows.
  *
  * TRADES read the grade cache the 30-minute sweep already fills (`trade-grades:v2:*`),
  * the same one `recentTrades` reads — one `in` query, no provider call, nothing recomputed.
@@ -107,6 +108,28 @@ export type LineupReceipt = {
   href: string
 }
 
+export type AutoCoachReceipt = {
+  id: string
+  leagueId: string
+  leagueName: string
+  season: number
+  week: number
+  slot: string | null
+  /** The player AutoCoach said to start, and what he scored that week. */
+  recommended: { name: string; points: number }
+  /** The starter AutoCoach said to replace, and what he scored. */
+  instead: { name: string; points: number }
+  /**
+   * What your lineup ON THE PLATFORM did that week. An AutoCoach swap on an imported league
+   * only rewrites AllFantasy's copy of the roster, so this is read from the platform's own
+   * starters, never assumed.
+   */
+  followed: 'yes' | 'no' | 'unclear'
+  /** Did the recommended player outscore the one he replaced? Within 1 point is "same". */
+  call: 'right' | 'wrong' | 'same'
+  href: string
+}
+
 export type DecisionReceiptsData = {
   trades: TradeReceipt[]
   /** Your trades left off because it is too early to call them. */
@@ -125,6 +148,14 @@ export type DecisionReceiptsData = {
   lineupsUnscored?: number
   /** Weeks that could not be checked honestly (a starter's position, or the league's slots). */
   lineupsUnreadable?: number
+  /** AutoCoach's recent calls. Absent = you have none (or they could not be read). */
+  autocoach?: AutoCoachReceipt[]
+  /** Calls for a week still being played. */
+  autocoachPending?: number
+  /** Calls with no weekly score on file for one of the two players. */
+  autocoachUnscored?: number
+  /** Calls that could not be tied to a week or to your roster that week. */
+  autocoachUnreadable?: number
 }
 
 export type ReceiptsLeague = {
@@ -630,10 +661,169 @@ export async function getLineupReceipts(args: {
   return { lineups: receipts.slice(0, MAX_LINEUP_RECEIPTS), unscored, unreadable }
 }
 
+/* ── AutoCoach calls ──────────────────────────────────────────────────────────── */
+
+export const MAX_AUTOCOACH_RECEIPTS = 5
+/** How far back AutoCoach swaps are read. */
+export const AUTOCOACH_LOOKBACK_DAYS = 45
+/** Within this many points, the call is "about the same" either way. */
+const AUTOCOACH_SAME_BAND = 1
+
+/**
+ * How AutoCoach's recent calls turned out — the first of Chimmy's advice to get receipts
+ * (user decisions, 2026-09-14), and the one that needs no new table: `AutoCoachSwapLog`
+ * already records each swap with both players' ids.
+ *
+ * 🛑 ON AN IMPORTED LEAGUE A "SWAP" IS ADVICE, NOT A LINEUP CHANGE. `executeAutoCoachSwap`
+ * writes the log and then AllFantasy's own `Roster.playerData`; the Sleeper API has no write
+ * endpoint, so the lineup Sleeper actually scored is whatever the manager set there. So the
+ * receipt says "AutoCoach said start X", and `followed` comes from Sleeper's own starters that
+ * week (`league_player_weekly_scores.isStarter`) — never assumed from the log.
+ *
+ * ⚠ THE WEEK COMES ONLY FROM AN EXACT GAME MATCH. The log has no week column. It is taken from
+ * the regular-season `SportsGame` whose `startTime` equals the swap's `gameStartsAt` — never from
+ * `nflWeekForDate`, a calendar estimate its own callers pad by ±1 week. No match is unreadable.
+ *
+ * Counted, never shown as a number: a week still being played (pending); either player with
+ * no score that week (unscored); no game match, no single claimed team, or either player not
+ * on your roster that week (unreadable). Duplicate rows for one call count once.
+ */
+export async function getAutoCoachReceipts(args: {
+  userId: string
+  leagues: readonly ReceiptsLeague[]
+  currentWeek: number | null
+}): Promise<{ autocoach: AutoCoachReceipt[]; pending: number; unscored: number; unreadable: number } | null> {
+  if (!args.userId) return null
+  const sleeper = args.leagues.filter(isSleeper).slice(0, MAX_WAIVER_LEAGUES)
+  if (sleeper.length === 0) return null
+
+  const swaps = await prisma.autoCoachSwapLog.findMany({
+    where: {
+      userId: args.userId,
+      leagueId: { in: sleeper.map((l) => l.id) },
+      swapMadeAt: { gte: new Date(Date.now() - AUTOCOACH_LOOKBACK_DAYS * 86_400_000) },
+    },
+    orderBy: { swapMadeAt: 'desc' },
+    take: 60,
+    select: {
+      leagueId: true,
+      slotPosition: true,
+      playerOutId: true,
+      playerOutName: true,
+      playerInId: true,
+      playerInName: true,
+      gameStartsAt: true,
+    },
+  })
+  if (swaps.length === 0) return null
+
+  const involved = [...new Set(swaps.map((s) => s.leagueId))]
+  const starts = [...new Set(swaps.map((s) => s.gameStartsAt?.getTime()).filter((t): t is number => t != null))]
+  const [teams, games] = await Promise.all([
+    prisma.leagueTeam.findMany({
+      where: { leagueId: { in: involved }, claimedByUserId: args.userId },
+      select: { leagueId: true, externalId: true },
+    }),
+    starts.length > 0
+      ? prisma.sportsGame.findMany({
+          where: { sport: 'NFL', seasonType: 'regular', startTime: { in: starts.map((t) => new Date(t)) } },
+          select: { startTime: true, week: true, season: true },
+        })
+      : Promise.resolve([] as Array<{ startTime: Date | null; week: number | null; season: number | null }>),
+  ])
+
+  const rosterByLeague = new Map<string, number>()
+  const twice = new Set<string>()
+  for (const t of teams) {
+    if (rosterByLeague.has(t.leagueId)) twice.add(t.leagueId)
+    const n = Number(t.externalId)
+    if (Number.isFinite(n)) rosterByLeague.set(t.leagueId, n)
+  }
+  for (const id of twice) rosterByLeague.delete(id)
+
+  // One fixture arrives from up to four providers; they must agree on the week or it is unusable.
+  const weekByStart = new Map<number, { week: number; season: number } | 'conflict'>()
+  for (const g of games) {
+    if (!g.startTime || g.week == null || g.season == null) continue
+    const key = g.startTime.getTime()
+    const held = weekByStart.get(key)
+    if (!held) weekByStart.set(key, { week: g.week, season: g.season })
+    else if (held !== 'conflict' && (held.week !== g.week || held.season !== g.season)) weekByStart.set(key, 'conflict')
+  }
+
+  type Call = (typeof swaps)[number] & { league: ReceiptsLeague; week: number; season: number; rosterId: number }
+  let pending = 0
+  let unreadable = 0
+  const seen = new Set<string>()
+  const callable: Call[] = []
+  for (const s of swaps) {
+    const league = sleeper.find((l) => l.id === s.leagueId)
+    const rosterId = rosterByLeague.get(s.leagueId)
+    const when = s.gameStartsAt ? weekByStart.get(s.gameStartsAt.getTime()) : undefined
+    if (!league || rosterId == null || !when || when === 'conflict') {
+      unreadable += 1
+      continue
+    }
+    const key = `${s.leagueId}:${when.season}:${when.week}:${s.playerInId}:${s.playerOutId}`
+    if (seen.has(key)) continue
+    seen.add(key)
+    if (args.currentWeek == null || when.week >= args.currentWeek) {
+      pending += 1
+      continue
+    }
+    callable.push({ ...s, league, week: when.week, season: when.season, rosterId })
+  }
+  if (callable.length === 0) return { autocoach: [], pending, unscored: 0, unreadable }
+
+  const scores = await prisma.leaguePlayerWeeklyScore.findMany({
+    where: {
+      OR: callable.map((c) => ({ leagueId: c.league.platformLeagueId as string, seasonYear: c.season, week: c.week })),
+      playerId: { in: [...new Set(callable.flatMap((c) => [c.playerInId, c.playerOutId]))] },
+    },
+    select: { leagueId: true, seasonYear: true, week: true, playerId: true, rosterId: true, isStarter: true, points: true },
+  })
+
+  let unscored = 0
+  const receipts: AutoCoachReceipt[] = []
+  for (const c of callable) {
+    const find = (playerId: string) =>
+      scores.find(
+        (s) => s.leagueId === c.league.platformLeagueId && s.seasonYear === c.season && s.week === c.week && s.playerId === playerId,
+      )
+    const rec = find(c.playerInId)
+    const alt = find(c.playerOutId)
+    if (!rec || !alt) {
+      unscored += 1
+      continue
+    }
+    if (rec.rosterId !== c.rosterId || alt.rosterId !== c.rosterId) {
+      unreadable += 1
+      continue
+    }
+    const delta = rec.points - alt.points
+    receipts.push({
+      id: `${c.league.id}:${c.season}:${c.week}:${c.playerInId}:${c.playerOutId}`,
+      leagueId: c.league.id,
+      leagueName: c.league.name ?? 'Your league',
+      season: c.season,
+      week: c.week,
+      slot: c.slotPosition || null,
+      recommended: { name: c.playerInName, points: round1(rec.points) },
+      instead: { name: c.playerOutName, points: round1(alt.points) },
+      followed: rec.isStarter && !alt.isStarter ? 'yes' : alt.isStarter && !rec.isStarter ? 'no' : 'unclear',
+      call: Math.abs(delta) < AUTOCOACH_SAME_BAND ? 'same' : delta > 0 ? 'right' : 'wrong',
+      href: `/core/my-team?league=${encodeURIComponent(c.league.id)}`,
+    })
+  }
+
+  receipts.sort((a, b) => b.season - a.season || b.week - a.week)
+  return { autocoach: receipts.slice(0, MAX_AUTOCOACH_RECEIPTS), pending, unscored, unreadable }
+}
+
 /**
  * Every receipt the home card shows. Each kind fails on its own: a trade-cache miss never
- * hides your waiver or lineup receipts, and the reverse. Null only when no kind has anything
- * to read.
+ * hides your waiver, lineup or AutoCoach receipts, and the reverse. Null only when no kind has
+ * anything to read.
  */
 export async function getDecisionReceipts(args: {
   userId: string
@@ -641,12 +831,13 @@ export async function getDecisionReceipts(args: {
   ownerSleeperId: string | null
   currentWeek: number | null
 }): Promise<DecisionReceiptsData | null> {
-  const [trades, waivers, lineups] = await Promise.all([
+  const [trades, waivers, lineups, autocoach] = await Promise.all([
     getTradeReceipts(args).catch(() => null),
     getWaiverReceipts(args).catch(() => null),
     getLineupReceipts(args).catch(() => null),
+    getAutoCoachReceipts(args).catch(() => null),
   ])
-  if (!trades && !waivers && !lineups) return null
+  if (!trades && !waivers && !lineups && !autocoach) return null
   return {
     trades: trades?.trades ?? [],
     tooEarly: trades?.tooEarly ?? 0,
@@ -656,6 +847,14 @@ export async function getDecisionReceipts(args: {
       : {}),
     ...(lineups
       ? { lineups: lineups.lineups, lineupsUnscored: lineups.unscored, lineupsUnreadable: lineups.unreadable }
+      : {}),
+    ...(autocoach
+      ? {
+          autocoach: autocoach.autocoach,
+          autocoachPending: autocoach.pending,
+          autocoachUnscored: autocoach.unscored,
+          autocoachUnreadable: autocoach.unreadable,
+        }
       : {}),
   }
 }
