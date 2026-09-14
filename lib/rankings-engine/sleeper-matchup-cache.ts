@@ -25,6 +25,8 @@ export async function ensureMatchupsCached(
   leagueId: string,
   maxWeek: number,
   seasonYear: number,
+  /** Active-game lane may tighten the current-week refresh without changing historical cadence. */
+  staleThresholdMs = STALE_THRESHOLD_MS,
 ): Promise<void> {
   const existing = await prisma.weeklyMatchup.groupBy({
     by: ['week'],
@@ -74,7 +76,7 @@ export async function ensureMatchupsCached(
     const cached = cachedWeeks.get(w)
     if (!cached) {
       missingWeeks.push(w)
-    } else if (refreshWeeks.has(w) && now - cached.updatedAt.getTime() > STALE_THRESHOLD_MS) {
+    } else if (refreshWeeks.has(w) && now - cached.updatedAt.getTime() > staleThresholdMs) {
       await prisma.weeklyMatchup.deleteMany({ where: { leagueId, seasonYear, week: w } })
       missingWeeks.push(w)
     }

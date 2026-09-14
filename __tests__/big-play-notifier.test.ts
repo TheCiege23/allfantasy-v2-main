@@ -3,12 +3,15 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 const h = vi.hoisted(() => ({
   findMany: vi.fn(), ingestBatch: vi.fn(),
   identityFind: vi.fn(), rawQuery: vi.fn(), profileFind: vi.fn(),
+  rosterFind: vi.fn(), appUserFind: vi.fn(),
 }))
 vi.mock('@/lib/prisma', () => ({
   prisma: {
     redraftRosterPlayer: { findMany: h.findMany },
     playerIdentityMap: { findMany: h.identityFind },
     userProfile: { findMany: h.profileFind },
+    roster: { findMany: h.rosterFind },
+    appUser: { findMany: h.appUserFind },
     $queryRawUnsafe: h.rawQuery,
   },
 }))
@@ -47,6 +50,8 @@ beforeEach(() => {
   h.identityFind.mockResolvedValue([{ rollingInsightsId: '101', sleeperId: '11560' }])
   h.rawQuery.mockReset(); h.rawQuery.mockResolvedValue([])
   h.profileFind.mockReset(); h.profileFind.mockResolvedValue([])
+  h.rosterFind.mockReset(); h.rosterFind.mockResolvedValue([])
+  h.appUserFind.mockReset(); h.appUserFind.mockResolvedValue([])
 })
 
 describe('who gets told', () => {
@@ -216,14 +221,40 @@ describe('the payload', () => {
 
 describe('notificationTitleFor', () => {
   it('names each event the way a person would', () => {
-    expect(notificationTitleFor(ev({ type: 'TOUCHDOWN' }))).toBe('Touchdown')
+    expect(notificationTitleFor(ev({ type: 'TOUCHDOWN', delta: 19 }))).toBe('Touchdown')
+    expect(notificationTitleFor(ev({ type: 'TOUCHDOWN', delta: 20 }))).toBe('20-yard touchdown')
     expect(notificationTitleFor(ev({ type: 'FIELD_GOAL' }))).toBe('Field goal')
-    expect(notificationTitleFor(ev({ type: 'DEFENSIVE_SCORE' }))).toBe('Defensive touchdown')
-    expect(notificationTitleFor(ev({ type: 'SPECIAL_TEAMS_SCORE' }))).toBe('Special teams touchdown')
+    expect(notificationTitleFor(ev({ type: 'DEFENSIVE_SCORE', delta: 19 }))).toBe('Defensive touchdown')
+    expect(notificationTitleFor(ev({ type: 'SPECIAL_TEAMS_SCORE', delta: 19 }))).toBe('Special teams touchdown')
   })
 })
 
 describe('imported leagues', () => {
+  it('names the affected starter league and guillotine rank', async () => {
+    h.findMany.mockResolvedValue([])
+    h.identityFind.mockResolvedValue([{
+      rollingInsightsId: '101', sleeperId: '11560', espnId: null,
+      fantraxId: 'fx-101', mflId: null, fleaflickerId: null,
+    }])
+    h.rosterFind.mockResolvedValue([{
+      platformUserId: 'af-user-9',
+      playerData: { starters: ['fx-101'], players: ['fx-101'] },
+      redraftRoster: null,
+      league: {
+        id: 'league-cut', name: 'Sunday Guillotine', platform: 'fantrax', guillotineMode: true,
+        teams: [{ platformUserId: 'af-user-9', claimedByUserId: 'af-user-9', currentRank: 11 }],
+      },
+    }])
+    h.appUserFind.mockResolvedValue([{ id: 'af-user-9' }])
+
+    await notifyBigPlays([ev({ type: 'TOUCHDOWN', delta: 20 })])
+    const notification = h.ingestBatch.mock.calls[0][0][0]
+    expect(notification.userIds).toEqual(['af-user-9'])
+    expect(notification.title).toBe('20-yard touchdown')
+    expect(notification.body).toContain('Starting in Sunday Guillotine (#11, guillotine)')
+    expect(notification.meta.starterLeagueIds).toEqual(['league-cut'])
+  })
+
   it('notifies Sleeper managers, who outnumber redraft managers 4 to 1', async () => {
     h.findMany.mockResolvedValue([])
     h.rawQuery.mockResolvedValue([{ platformUserId: 'sleeper-user-9' }])

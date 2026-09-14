@@ -23,7 +23,7 @@
  * out of what the user sees as read-only history.
  *
  * ⚠ INCREMENTAL, NOT A REBUILD — AND THE TWO PATHS DIFFER, SO IT SAYS WHICH RAN.
- * A connected Sleeper league goes straight to the durable collector
+ * A connected league on any supported provider goes straight to the durable collector
  * (`manualRefreshConnectedSleeperLeague`), which resumes from the per-scope
  * checkpoints in `LeagueSyncState` and never refetches an immutable completed
  * scope. Its `force: true` bypasses the CADENCE due-check only — it does not
@@ -32,8 +32,7 @@
  *
  * ⚠ THE FULL IMPORT PIPELINE IS THE FALLBACK, NOT THE DEFAULT, AND IT IS NOT
  * INCREMENTAL. `resyncImportedLeague` re-fetches and re-normalizes the whole
- * league; it runs only where there is no durable collector to resume (ESPN,
- * Fantrax, MFL, Fleaflicker) or where a Sleeper league has no native record to
+ * league; it runs only where a dashboard record has no native League id to
  * authorize against — i.e. nothing to be incremental *from*. Reported as
  * `mode: 'full'` rather than quietly presented as the same operation.
  *
@@ -147,7 +146,7 @@ export async function POST(req: NextRequest) {
         done.add(candidate.key)
 
         /*
-         * ⚠ INCREMENTAL FIRST. A connected Sleeper league with a native record
+         * ⚠ INCREMENTAL FIRST. A connected provider league with a native record
          * resumes from its `LeagueSyncState` checkpoints — immutable completed
          * scopes are not refetched, and nothing is rebuilt. No `fetchNormalized`
          * is passed on purpose: the collector's own loader is lazy and memoized,
@@ -158,7 +157,7 @@ export async function POST(req: NextRequest) {
         const nativeLeagueId =
           typeof candidate.row.navigationLeagueId === 'string' ? candidate.row.navigationLeagueId : ''
 
-        if (candidate.provider === 'sleeper' && nativeLeagueId) {
+        if (nativeLeagueId) {
           const out = await manualRefreshConnectedSleeperLeague({
             userId: auth.userId,
             leagueId: nativeLeagueId,
@@ -197,10 +196,10 @@ export async function POST(req: NextRequest) {
         }
 
         /*
-         * ⚠ FALLBACK ONLY — THIS ONE IS A FULL RE-READ. There is no durable
-         * collector for these providers to resume from, so there is no delta to
-         * ingest and the whole league is re-fetched and re-normalized. It is
-         * labelled `full` rather than presented as the same operation.
+         * ⚠ FALLBACK ONLY — THIS ONE IS A FULL RE-READ. A legacy dashboard row
+         * without a native League id cannot authorize the durable collector, so
+         * the whole league is re-fetched and re-normalized. It remains labelled
+         * `full` rather than presented as the same operation.
          */
         const out = await resyncImportedLeague({
           userId: auth.userId,

@@ -2,6 +2,7 @@ import { prisma } from '@/lib/prisma'
 import { ingestBatch, type NotificationEvent } from '@/lib/notification-engine'
 import type { LiveEvent } from '@/lib/live/eventDetector'
 import { headlineFor } from '@/lib/live/playFeedPresentation'
+import { getNormalizedLineupSections } from '@/lib/roster/LineupTemplateValidation'
 
 /**
  * Turn live play events into notifications — but only for the managers who
@@ -59,6 +60,138 @@ export type NotifyResult = {
   eventsAlertable: number
   notificationsSent: number
   skipped: 'no-events' | 'no-rosters' | null
+}
+
+export type PlayerLeagueImpact = {
+  leagueId: string
+  leagueName: string
+  platform: string
+  guillotine: boolean
+  rank: number | null
+}
+
+type UserImpact = { userId: string; leagues: PlayerLeagueImpact[] }
+
+function idsFrom(value: unknown): string[] {
+  if (!Array.isArray(value)) return []
+  return value
+    .map((item) => typeof item === 'string' ? item : String((item as { id?: unknown } | null)?.id ?? ''))
+    .filter(Boolean)
+}
+
+/**
+ * Resolve the exact imported leagues in which each player is starting. The
+ * identity crosswalk covers every supported provider; Yahoo imports use the
+ * normalized Sleeper id until the schema gains a Yahoo-specific identity.
+ */
+export async function starterImpactsByPlayerId(playerIds: string[]): Promise<Map<string, UserImpact[]>> {
+  const out = new Map<string, UserImpact[]>()
+  const unique = [...new Set(playerIds.filter(Boolean))]
+  if (unique.length === 0) return out
+
+  const identities = await prisma.playerIdentityMap.findMany({
+    where: { rollingInsightsId: { in: unique } },
+    select: {
+      rollingInsightsId: true,
+      sleeperId: true,
+      espnId: true,
+      fantraxId: true,
+      mflId: true,
+      fleaflickerId: true,
+    },
+  }).catch(() => [])
+
+  const riByCandidate = new Map<string, string>()
+  for (const identity of identities) {
+    if (!identity.rollingInsightsId) continue
+    for (const candidate of [
+      identity.sleeperId,
+      identity.espnId,
+      identity.fantraxId,
+      identity.mflId,
+      identity.fleaflickerId,
+    ]) {
+      if (candidate) riByCandidate.set(String(candidate), identity.rollingInsightsId)
+    }
+  }
+  if (riByCandidate.size === 0) return out
+
+  const candidates = [...riByCandidate.keys()]
+  const rosters = await prisma.roster.findMany({
+    where: {
+      OR: candidates.map((id) => ({ playerData: { path: ['starters'], array_contains: [id] } })),
+    },
+    select: {
+      platformUserId: true,
+      playerData: true,
+      redraftRoster: { select: { ownerId: true } },
+      league: {
+        select: {
+          id: true,
+          name: true,
+          platform: true,
+          guillotineMode: true,
+          teams: {
+            select: { platformUserId: true, claimedByUserId: true, currentRank: true },
+          },
+        },
+      },
+    },
+  }).catch(() => [])
+
+  const possibleUserIds = [...new Set(rosters.flatMap((roster) => [
+    roster.platformUserId,
+    roster.redraftRoster?.ownerId ?? '',
+    ...roster.league.teams.map((team) => team.claimedByUserId ?? ''),
+  ]).filter(Boolean))]
+  const appUsers = await prisma.appUser.findMany({
+    where: { id: { in: possibleUserIds } },
+    select: { id: true },
+  }).catch(() => [])
+  const appUserIds = new Set(appUsers.map((user) => user.id))
+
+  for (const roster of rosters) {
+    const data = roster.playerData && typeof roster.playerData === 'object' && !Array.isArray(roster.playerData)
+      ? roster.playerData as Record<string, unknown>
+      : {}
+    const normalized = getNormalizedLineupSections(data)
+    const starters = new Set(
+      normalized.starters.length > 0
+        ? normalized.starters.map((row) => String(row.id))
+        : idsFrom(data.starters),
+    )
+    const team = roster.league.teams.find((row) => row.platformUserId === roster.platformUserId)
+      ?? roster.league.teams.find((row) => row.claimedByUserId === roster.platformUserId)
+    const userId = team?.claimedByUserId
+      ?? (appUserIds.has(roster.platformUserId) ? roster.platformUserId : null)
+      ?? (roster.redraftRoster?.ownerId && appUserIds.has(roster.redraftRoster.ownerId)
+        ? roster.redraftRoster.ownerId
+        : null)
+    if (!userId) continue
+
+    for (const candidate of starters) {
+      const riId = riByCandidate.get(candidate)
+      if (!riId) continue
+      const users = out.get(riId) ?? []
+      let user = users.find((row) => row.userId === userId)
+      if (!user) {
+        user = { userId, leagues: [] }
+        users.push(user)
+      }
+      if (!user.leagues.some((league) => league.leagueId === roster.league.id)) {
+        user.leagues.push({
+          leagueId: roster.league.id,
+          leagueName: roster.league.name ?? 'Imported league',
+          platform: roster.league.platform,
+          guillotine: roster.league.guillotineMode === true,
+          rank: team?.currentRank ?? null,
+        })
+      }
+      out.set(riId, users)
+    }
+  }
+
+  return out
 }
 
 /**
@@ -224,17 +357,18 @@ async function addImportedLeagueOwners(
 
 /** The line a manager actually reads on their phone. */
 export function notificationTitleFor(event: LiveEvent): string {
+  const yards = Number.isFinite(event.delta) ? Math.round(event.delta) : 0
   switch (event.type) {
     case 'TOUCHDOWN':
-      return 'Touchdown'
+      return yards >= 20 ? `${yards}-yard touchdown` : 'Touchdown'
     case 'BIG_PLAY':
       return 'Big play'
     case 'FIELD_GOAL':
       return 'Field goal'
     case 'DEFENSIVE_SCORE':
-      return 'Defensive touchdown'
+      return yards >= 20 ? `${yards}-yard defensive touchdown` : 'Defensive touchdown'
     case 'SPECIAL_TEAMS_SCORE':
-      return 'Special teams touchdown'
+      return yards >= 20 ? `${yards}-yard return touchdown` : 'Special teams touchdown'
     case 'TURNOVER':
       return 'Turnover'
     default:
@@ -272,11 +406,22 @@ function passerSide(event: LiveEvent): LiveEvent | null {
   }
 }
 
-function notificationFor(event: LiveEvent, userIds: string[], side: 'subject' | 'passer'): NotificationEvent {
+function notificationFor(
+  event: LiveEvent,
+  userIds: string[],
+  side: 'subject' | 'passer',
+  impact?: UserImpact,
+): NotificationEvent {
+  const leagues = impact?.leagues ?? []
+  const leagueLine = leagues.length > 0
+    ? ` Starting in ${leagues.map((league) =>
+      `${league.leagueName}${league.guillotine && league.rank ? ` (#${league.rank}, guillotine)` : ''}`
+    ).slice(0, 3).join(', ')}${leagues.length > 3 ? ` +${leagues.length - 3} more` : ''}.`
+    : ''
   return {
     type: 'live_score_swing',
     title: notificationTitleFor(event),
-    body: headlineFor(event, null),
+    body: leagueLine ? `${headlineFor(event, null)}.${leagueLine}`.replace('..', '.') : headlineFor(event, null),
     userIds,
     severity: severityFor(event),
     source: 'live-plays',
@@ -297,6 +442,8 @@ function notificationFor(event: LiveEvent, userIds: string[], side: 'subject' | 
       eventType: event.type,
       stat: event.stat,
       yards: Number.isFinite(event.delta) ? Math.round(event.delta) : null,
+      affectedLeagues: leagues,
+      starterLeagueIds: leagues.map((league) => league.leagueId),
       /*
        * ⚠ CARRIED SO AN ALERT CAN BE RETRACTED. Officiating reversals happen
        * and the vendor ships no correction flag. Storing the key that
@@ -345,7 +492,15 @@ export async function notifyBigPlays(events: LiveEvent[]): Promise<NotifyResult>
     ids.add(e.playerId)
     if (e.passerId) ids.add(e.passerId)
   }
-  const owners = await ownersByPlayerId([...ids], { startersOnly: true })
+  const [owners, impacts] = await Promise.all([
+    ownersByPlayerId([...ids], { startersOnly: true }),
+    starterImpactsByPlayerId([...ids]),
+  ])
+  for (const [playerId, rows] of impacts) {
+    const users = owners.get(playerId) ?? []
+    for (const row of rows) if (!users.includes(row.userId)) users.push(row.userId)
+    if (users.length > 0) owners.set(playerId, users)
+  }
   if (owners.size === 0) {
     return {
       eventsConsidered: events.length,
@@ -356,15 +511,25 @@ export async function notifyBigPlays(events: LiveEvent[]): Promise<NotifyResult>
   }
 
   const batch: NotificationEvent[] = []
+  const enqueue = (event: LiveEvent, userIds: string[], side: 'subject' | 'passer') => {
+    const contextual = impacts.get(event.playerId) ?? []
+    const withoutContext: string[] = []
+    for (const userId of userIds) {
+      const impact = contextual.find((row) => row.userId === userId)
+      if (impact) batch.push(notificationFor(event, [userId], side, impact))
+      else withoutContext.push(userId)
+    }
+    if (withoutContext.length > 0) batch.push(notificationFor(event, withoutContext, side))
+  }
   for (const event of alertable) {
     const subjectUsers = owners.get(event.playerId) ?? []
-    if (subjectUsers.length > 0) batch.push(notificationFor(event, subjectUsers, 'subject'))
+    if (subjectUsers.length > 0) enqueue(event, subjectUsers, 'subject')
 
     const thrown = passerSide(event)
     if (thrown) {
       // A manager starting both ends of the play hears it once, from the scorer's side.
       const passerUsers = (owners.get(thrown.playerId) ?? []).filter((u) => !subjectUsers.includes(u))
-      if (passerUsers.length > 0) batch.push(notificationFor(thrown, passerUsers, 'passer'))
+      if (passerUsers.length > 0) enqueue(thrown, passerUsers, 'passer')
     }
   }
 
