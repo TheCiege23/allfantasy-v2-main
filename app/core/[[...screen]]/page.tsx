@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation'
-import { cookies } from 'next/headers'
+import { cookies, headers } from 'next/headers'
 import { getServerSession } from 'next-auth'
 
 import { authOptions } from '@/lib/auth'
@@ -105,6 +105,9 @@ import { getPlayFeed } from '@/lib/live/playFeedPresentation'
 import { getRecentTrades } from '@/lib/core-app/recentTrades'
 import { getCrossLeagueValueActions } from '@/lib/core-app/crossLeagueValueActions'
 import { DashTradeBand } from '@/components/core-app/screens/DashTradeBand'
+import { DashSinceLastVisit } from '@/components/core-app/screens/DashSinceLastVisit'
+import { getSinceLastVisit } from '@/lib/core-app/sinceLastVisit'
+import { isSpeculativeRequestHeaders } from '@/lib/http/speculativeRequest'
 import { hasRegularSeasonStarted } from '@/lib/core-app/seasonPhase'
 import { DashGameDayBand } from '@/components/core-app/screens/DashGameDayBand'
 import { readPlayByPlayFeed } from '@/lib/live/playByPlayFeed'
@@ -150,6 +153,12 @@ import CoreLeagueContextBar from '@/components/core-app/CoreLeagueContextBar'
 import { touchLeagueViewed } from '@/lib/leagues/touchLeagueViewed'
 
 export const dynamic = 'force-dynamic'
+
+/**
+ * How many recent trades the home loads. Shared by the trade band's loader and the
+ * since-last-visit brief, which must know the list is capped to say "3+" honestly.
+ */
+const HOME_RECENT_TRADES_LIMIT = 3
 
 /**
  * AF Core — every screen from the design handoff, behind ONE route.
@@ -1622,7 +1631,7 @@ export default async function AfCorePage({
             platform: String(l.platform ?? ''),
           })),
           now,
-          3,
+          HOME_RECENT_TRADES_LIMIT,
           {
             ownerSleeperId: leagueListPayload?.sleeperUserId ?? null,
             currentWeek: homeTradeWeek,
@@ -1631,6 +1640,29 @@ export default async function AfCorePage({
         ).catch(() => []),
       ])
     : [null, null, null, null, null, null, null, [], false, []]
+
+  /*
+   * "Since your last visit" — lib/core-app/sinceLastVisit. Serial after the home
+   * reads because its trade line summarises the trades loaded just above; passing
+   * the same limit is what lets it say "3+" instead of a count it cannot stand
+   * behind. A prefetch reads the brief but never moves the visit: Next prefetches
+   * links as they scroll into view, and a window that reset on a hover would tell
+   * someone away for a week that nothing changed.
+   */
+  const homeBrief = isHome3a
+    ? await getSinceLastVisit({
+        userId,
+        leagues: playedLeagues.map((l) => ({
+          id: l.id,
+          name: l.name ?? null,
+          sport: (l as { sport?: string | null }).sport ?? null,
+        })),
+        recentTrades: homeTrades,
+        tradesLimit: HOME_RECENT_TRADES_LIMIT,
+        now,
+        recordVisit: !isSpeculativeRequestHeaders(await headers()),
+      }).catch(() => null)
+    : null
 
   /*
    * ⚠ PRICE THE CARDS THAT RENDER, NOT THE FIRST FOUR LEAGUES. Dashboard3A's
@@ -2796,6 +2828,14 @@ export default async function AfCorePage({
          */
         dash34 ? (
           <>
+            {/*
+              What changed since your last visit — leads the home, by the user's
+              decision (2026-09-14). It renders NOTHING when nothing changed, so a
+              quiet day costs no space above the live and draft bands; on a day
+              with news it is the first thing read, and each line links to the
+              band or screen that holds the detail.
+            */}
+            <DashSinceLastVisit brief={homeBrief} now={now} />
             {/*
               Drafts on the clock — leads the home whenever any league's draft
               is live right now (the founder's week). One card per live draft,

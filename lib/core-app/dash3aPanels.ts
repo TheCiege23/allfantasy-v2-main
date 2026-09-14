@@ -73,14 +73,14 @@ export type RivalsData = { rows: RivalRow[]; leaguesRead: number }
  * User uuid takes it to 93, and matches more than one roster for exactly zero
  * teams — recall without ever showing someone another manager's roster.
  */
-function rosterCandidates(
+export function rosterCandidates(
   team: { platformUserId: string | null; externalId: string | null },
   userId: string,
 ): string[] {
   return [team.platformUserId, team.externalId, userId].filter(Boolean) as string[]
 }
 
-function asIds(raw: unknown): string[] {
+export function asIds(raw: unknown): string[] {
   return Array.isArray(raw) ? raw.map(String).filter((s) => s.length > 0) : []
 }
 
@@ -88,8 +88,11 @@ function asIds(raw: unknown): string[] {
  * A starter stored as `"name:Lamar Jackson:QB:BAL"` is the importer's fallback
  * when it could not resolve a platform id. It can never join to a player row, so
  * it is dropped from exposure rather than counted as a distinct "player".
+ *
+ * Exported with `rosterCandidates` and `asIds` so the since-last-visit brief reads
+ * your rosters by the SAME rules as the exposure panel beside it.
  */
-function isResolvableId(raw: string): boolean {
+export function isResolvableId(raw: string): boolean {
   return raw.length > 0 && !raw.startsWith('name:')
 }
 
