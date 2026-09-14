@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation'
 import {
   AlertTriangle,
   Archive,
+  ArrowLeft,
   Bell,
   CreditCard,
   FileText,
@@ -81,30 +82,46 @@ function initialsFrom(name: string): string {
 }
 
 /**
+ * The optional profile fields the completion score counts, in the order the
+ * hub nudges for them. One list, so the percentage and the nudge cannot drift.
+ */
+const COMPLETION_FIELDS = ['displayName', 'bio', 'avatar', 'sports', 'timezone'] as const
+type CompletionField = (typeof COMPLETION_FIELDS)[number]
+
+function isFilled(profile: NonNullable<SettingsProfile>, field: CompletionField): boolean {
+  switch (field) {
+    case 'displayName':
+      return Boolean(profile.displayName)
+    case 'bio':
+      return Boolean(profile.bio)
+    case 'avatar':
+      return Boolean(profile.profileImageUrl || profile.avatarPreset)
+    case 'sports':
+      return Boolean(profile.preferredSports && profile.preferredSports.length > 0)
+    case 'timezone':
+      return Boolean(profile.timezone)
+  }
+}
+
+/**
  * Honest profile-completion score — measures which optional profile fields the
  * user has actually filled. No fabricated denominator.
  */
 function completionPct(profile: SettingsProfile): number {
   if (!profile) return 0
-  const checks = [
-    Boolean(profile.displayName),
-    Boolean(profile.bio),
-    Boolean(profile.profileImageUrl || profile.avatarPreset),
-    Boolean(profile.preferredSports && profile.preferredSports.length > 0),
-    Boolean(profile.timezone),
-  ]
-  return Math.round((checks.filter(Boolean).length / checks.length) * 100)
+  const filled = COMPLETION_FIELDS.filter((f) => isFilled(profile, f)).length
+  return Math.round((filled / COMPLETION_FIELDS.length) * 100)
 }
 
-function SidebarProfileCard({
-  profile,
-  planLabel,
-}: {
-  profile: SettingsProfile
-  planLabel: string | null
-}) {
+/** The first field still empty, for the hub's one-line nudge. Null when complete. */
+function firstMissingField(profile: SettingsProfile): CompletionField | null {
+  if (!profile) return null
+  return COMPLETION_FIELDS.find((f) => !isFilled(profile, f)) ?? null
+}
+
+/** The plan name the chrome shows — shared by the sidebar card and the hub, so they cannot disagree. */
+function usePlanText(planLabel: string | null) {
   const ent = useEntitlements()
-  const isPro = ent.hasAnyPaid
   // Same tier-priority order as BillingSettingsSection.tsx: supreme inherits every lower tier, so
   // it must win the label even though hasCommissioner/hasPro/hasWarRoom are all also true for it.
   // A fetch error must never be conflated with a verified free plan — the hook's own catch path
@@ -123,7 +140,17 @@ function SidebarProfileCard({
             : ent.hasWarRoom
               ? 'AF Legacy'
               : 'Free'
-  const planText = planLabel ?? derivedPlanText ?? '...'
+  return { ent, isPro: ent.hasAnyPaid, planText: planLabel ?? derivedPlanText ?? '...' }
+}
+
+function SidebarProfileCard({
+  profile,
+  planLabel,
+}: {
+  profile: SettingsProfile
+  planLabel: string | null
+}) {
+  const { ent, isPro, planText } = usePlanText(planLabel)
 
   const name = profile?.displayName || profile?.username || 'Your profile'
   const username = profile?.username
@@ -195,15 +222,233 @@ function SidebarProfileCard({
   )
 }
 
+/**
+ * Card order on the hub: the 2026-09-13 design's nine first, then the three
+ * tabs it does not draw (Command Center, Referrals, Account) — so no tab loses
+ * its way in from the landing.
+ */
+const HUB_ORDER: SettingsTabId[] = [
+  'profile',
+  'preferences',
+  'notifications',
+  'security',
+  'connected',
+  'billing',
+  'rank',
+  'legacy',
+  'legal',
+  'command',
+  'referral',
+  'account',
+]
+
+type HubCta = 'edit' | 'manage' | 'review' | 'view' | 'import'
+
+const HUB_CTA: Record<SettingsTabId, HubCta> = {
+  profile: 'edit',
+  preferences: 'edit',
+  notifications: 'manage',
+  security: 'review',
+  connected: 'manage',
+  billing: 'manage',
+  rank: 'view',
+  legacy: 'import',
+  legal: 'view',
+  command: 'edit',
+  referral: 'view',
+  account: 'manage',
+}
+
+const NAV_ICON = Object.fromEntries(NAV_DEFS.map((n) => [n.id, n.icon])) as Record<
+  SettingsTabId,
+  ComponentType<{ className?: string }>
+>
+
+/**
+ * `/settings` with no tab — the 2026-09-13 Settings handoff.
+ *
+ * ⚠ EVERY STATE ON THIS SCREEN IS READ, NEVER DRAWN. The design shows "AF Supreme
+ * — yearly, $199.99" and "15,000 tokens/mo"; nothing the client holds carries a
+ * price, a billing interval or a token allowance (`EntitlementSnapshot` is plans,
+ * status and period dates), so the plan banner names the plan, its status and
+ * its renewal date and stops there. The card badges are `settingsNavBadges` —
+ * the same derivation the sidebar uses — and a card with no real state carries
+ * no badge.
+ */
+function SettingsHub({
+  profile,
+  planLabel,
+  badges,
+  query,
+  onOpen,
+  notice,
+}: {
+  profile: SettingsProfile
+  planLabel: string | null
+  badges: ReturnType<typeof settingsNavBadges>
+  query: string
+  onOpen: (id: SettingsTabId) => void
+  notice?: ReactNode
+}) {
+  const { t } = useLanguage()
+  const { ent, isPro, planText } = usePlanText(planLabel)
+
+  const name = profile?.displayName || profile?.username || 'Your profile'
+  const username = profile?.username
+  const level = profile?.xpLevel
+  const tier = profile?.rankTier
+  const pct = completionPct(profile)
+  const missing = firstMissingField(profile)
+  const presetEmoji =
+    profile?.avatarPreset && !profile?.profileImageUrl
+      ? AVATAR_PRESET_EMOJI[profile.avatarPreset as keyof typeof AVATAR_PRESET_EMOJI]
+      : null
+
+  /* Search matches a card's description as well as its title — "password"
+     should find Security. */
+  const cards = useMemo(() => {
+    const q = query.trim().toLowerCase()
+    const all = HUB_ORDER.map((id) => ({
+      id,
+      title: t(`settings.nav.${id}`),
+      desc: t(`settings.hub.desc.${id}`),
+    }))
+    return q ? all.filter((c) => `${c.title} ${c.desc}`.toLowerCase().includes(q)) : all
+  }, [query, t])
+
+  const snap = ent.snapshot
+  const status = snap?.status ?? 'none'
+  const periodEnd = snap?.currentPeriodEnd ? new Date(snap.currentPeriodEnd).toLocaleDateString() : null
+  const planDetail = ent.loading
+    ? null
+    : status === 'none'
+      ? t('settings.hub.planFreeDetail')
+      : periodEnd
+        ? `${status === 'active' ? t('settings.billing.renews') : t('settings.billing.accessUntil')} ${periodEnd}`
+        : status.replace(/_/g, ' ')
+  /* Same gate as BillingSettingsSection: an admin bypass has no Stripe customer to open. */
+  const portal = ent.hasAnyPaid && !ent.isAdminBypassAccount
+
+  return (
+    <main className="ns-hub" data-testid="settings-hub">
+      <h1 className="ns-hub-title">{t('settings.title')}</h1>
+      {notice}
+
+      <section className="ns-hub-id" aria-label={name}>
+        <span className="ns-hub-avatar">
+          {profile?.profileImageUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={profile.profileImageUrl} alt="" />
+          ) : presetEmoji ? (
+            <span className="ns-avatar-emoji">{presetEmoji}</span>
+          ) : (
+            initialsFrom(name)
+          )}
+        </span>
+        <div className="ns-hub-who">
+          <div className="ns-hub-name-row">
+            <span className="ns-hub-name">{name}</span>
+            {username ? <span className="ns-hub-handle">@{username}</span> : null}
+          </div>
+          <div className="ns-hub-chips">
+            {level != null ? (
+              <span className="ns-hub-chip">
+                Lv.{level}
+                {tier ? ` · ${tier}` : ''}
+              </span>
+            ) : null}
+            <span className="ns-hub-chip" data-tone={isPro ? 'plan' : undefined}>
+              {planText}
+            </span>
+            {ent.isAdminBypassAccount ? (
+              <span className="ns-hub-chip" title="Admin bypass — not a real Stripe subscription">
+                bypass
+              </span>
+            ) : null}
+          </div>
+        </div>
+        <div className="ns-hub-completion">
+          <div className="ns-hub-completion-row">
+            <span>{t('settings.hub.completion')}</span>
+            <b>{pct}%</b>
+          </div>
+          <div className="ns-hub-meter" aria-hidden="true">
+            <span style={{ width: `${pct}%` }} />
+          </div>
+          <span className="ns-hub-nudge">
+            {missing ? t(`settings.hub.nudge.${missing}`) : t('settings.hub.nudge.done')}
+          </span>
+        </div>
+      </section>
+
+      <ul className="ns-hub-grid" aria-label={t('settings.aria.sections')}>
+        {cards.map((c) => {
+          const Icon = NAV_ICON[c.id]
+          const badge = badges[c.id]
+          return (
+            <li key={c.id}>
+              <button
+                type="button"
+                className="ns-hub-card"
+                data-tone={badge?.tone === 'warn' ? 'warn' : undefined}
+                data-testid={`settings-hub-card-${c.id}`}
+                onClick={() => onOpen(c.id)}
+              >
+                <span className="ns-hub-card-head">
+                  <span className="ns-hub-icon" aria-hidden="true">
+                    <Icon />
+                  </span>
+                  <span className="ns-hub-card-title">{c.title}</span>
+                  {badge ? (
+                    <span className="ns-nav-badge" data-tone={badge.tone}>
+                      {badge.text}
+                    </span>
+                  ) : null}
+                </span>
+                <span className="ns-hub-card-desc">{c.desc}</span>
+                <span className="ns-hub-cta" aria-hidden="true">
+                  {t(`settings.hub.cta.${HUB_CTA[c.id]}`)} →
+                </span>
+              </button>
+            </li>
+          )
+        })}
+      </ul>
+      {cards.length === 0 ? <p className="ns-hub-empty">No settings match “{query}”.</p> : null}
+
+      <section className="ns-hub-plan" aria-label={t('settings.billing.currentPlan')}>
+        <div className="ns-hub-plan-copy">
+          <span className="ns-hub-plan-label">{t('settings.billing.currentPlan')}</span>
+          <span className="ns-hub-plan-name">{planText}</span>
+          {planDetail ? <span className="ns-hub-plan-detail">{planDetail}</span> : null}
+        </div>
+        {ent.loading ? null : portal ? (
+          <a className="ns-hub-plan-btn" href="/api/subscription/billing-portal" data-testid="settings-hub-manage-billing">
+            {t('settings.billing.manageBilling')}
+          </a>
+        ) : (
+          <a className="ns-hub-plan-btn" href="/pricing" data-testid="settings-hub-pricing">
+            {ent.hasAnyPaid ? t('settings.billing.changePlan') : t('settings.billing.viewPlans')}
+          </a>
+        )}
+      </section>
+    </main>
+  )
+}
+
 export function SettingsChrome({
   activeTab,
   onTabChange,
+  onShowHub,
   profile = null,
   planLabel = null,
   children,
 }: {
-  activeTab: SettingsTabId
+  /** `null` is the hub — the card grid — rather than any one tab. */
+  activeTab: SettingsTabId | null
   onTabChange: (id: SettingsTabId) => void
+  /** Back to the hub from a tab. Absent, the sidebar offers no way back. */
+  onShowHub?: () => void
   profile?: SettingsProfile
   planLabel?: string | null
   children: ReactNode
@@ -226,7 +471,7 @@ export function SettingsChrome({
   }, [query, t])
 
   return (
-    <div className="nocturne-settings ns-root">
+    <div className="nocturne-settings ns-root" data-view={activeTab ? 'tab' : 'hub'}>
       <header className="ns-topbar">
         <div className="ns-brand">
           <span className="ns-brand-mark">AF</span>
@@ -257,8 +502,24 @@ export function SettingsChrome({
         </button>
       </header>
 
+      {activeTab == null ? (
+        <SettingsHub
+          profile={profile}
+          planLabel={planLabel}
+          badges={badges}
+          query={query}
+          onOpen={onTabChange}
+          notice={children}
+        />
+      ) : (
       <div className="ns-shell">
         <aside className="ns-sidebar" aria-label={t('settings.aria.navigation')}>
+          {onShowHub ? (
+            <button type="button" className="ns-back" onClick={onShowHub} data-testid="settings-show-hub">
+              <ArrowLeft />
+              {t('settings.hub.allSettings')}
+            </button>
+          ) : null}
           <SidebarProfileCard profile={profile} planLabel={planLabel} />
 
           <nav className="ns-nav" aria-label={t('settings.aria.sections')}>
@@ -293,6 +554,7 @@ export function SettingsChrome({
           <div className="ns-content-card">{children}</div>
         </main>
       </div>
+      )}
     </div>
   )
 }
