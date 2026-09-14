@@ -95,7 +95,7 @@ export function PreferencesSettingsSection({
       <div>
         <label className="mb-1 block text-sm font-medium" style={{ color: "var(--muted)" }}>{t("settings.preferences.language")}</label>
         <div
-          className="flex gap-2"
+          className="flex flex-wrap gap-2"
           data-testid="settings-language-toggle"
           role="radiogroup"
           aria-label={t("settings.preferences.languageToggleAria")}
@@ -212,7 +212,7 @@ export function PreferencesSettingsSection({
         <button
           type="submit"
           disabled={saving}
-          className="rounded-xl bg-gradient-to-r from-violet-500/90 to-purple-600/90 px-4 py-2 text-sm font-semibold text-white shadow-lg disabled:opacity-60"
+          className="ns-btn-primary"
         >
           {saving ? t("settings.actions.saving") : t("settings.preferences.save")}
         </button>

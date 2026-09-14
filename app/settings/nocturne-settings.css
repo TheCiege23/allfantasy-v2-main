@@ -31,8 +31,10 @@
    * contrast floor. Only these values moved — every section still reads the
    * remapped app vars below, so no section file changed to recolour.
    *
-   * ⚠ Hardcoded Tailwind hues inside sections (violet/purple plan chips, the
-   * pricing gradient) are not token-driven and do not move with this block.
+   * ⚠ Hardcoded Tailwind hues inside sections are not token-driven and do not
+   * move with this block. The four violet/purple primary-button gradients
+   * (Profile, Preferences, Notifications save; Billing pricing) were replaced
+   * by `.ns-btn-primary` on 2026-09-14 — see the tab-screens layer at the end.
    */
   --ns-bg: #06070f;
   --ns-panel: #0d1020;
@@ -602,4 +604,125 @@
   .nocturne-settings .ns-hub-plan { flex-wrap: wrap; }
   .nocturne-settings .ns-hub-plan-btn { width: 100%; min-height: 44px; }
   .nocturne-settings .ns-back { height: 44px; }
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+ * Tab screens, in the hub's visual language — user's call, 2026-09-14.
+ *
+ * The 2026-09-13 handoff designs only the hub; its README says each card's
+ * screen is "not designed in this file". Rather than leave twelve tabs in the
+ * old two-level card look, the user chose to carry the hub's language into all
+ * of them: panels are the hub's surface cards straight on the page ground (no
+ * card inside a card), headings are Archivo 900, field labels are tracked mono,
+ * secondary actions are chips, and a screen's one primary action is the teal
+ * fill (`.ns-btn-primary`). Every control and every value stays as it was.
+ *
+ * ⚠ THESE RULES KEY ON THE SECTIONS' TAILWIND CLASS STRINGS (`rounded-xl border`,
+ * `mb-1 block text-sm font-medium`, …) because that is the only structure the
+ * twelve files share. A section rewritten with different utilities drops out of
+ * this layer without breaking — it just keeps the old look. Screenshot the tab;
+ * do not assume it is covered.
+ *
+ * ⚠ `!important` appears only where sections set the same property inline via
+ * `style={{ … }}`, which no selector can otherwise beat. Scoped to
+ * data-view='tab', so the hub and the rest of the app are untouched.
+ * ══════════════════════════════════════════════════════════════════════ */
+
+/* Native checkboxes, selects and scrollbars render dark instead of white. */
+.nocturne-settings { color-scheme: dark; }
+
+.nocturne-settings[data-view='tab'] .ns-content-card {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+}
+
+/* Connected Accounts wraps the core import rows in `.af-core` for their tokens
+   (see ConnectedAccountsSettingsSection); that root also paints the core page
+   ground, which would sit as a darker slab inside the surface card. */
+.nocturne-settings[data-view='tab'] .ns-content-card .af-core { background: transparent; }
+
+/* Screen heading + its one-line description. */
+.nocturne-settings[data-view='tab'] .ns-content-card h2.text-lg {
+  font: 900 24px/1.1 var(--ns-sans);
+  letter-spacing: -0.03em;
+  color: var(--ns-text);
+}
+.nocturne-settings[data-view='tab'] .ns-content-card h2.text-lg + p {
+  margin-top: 6px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+/* Panels → the hub's surface cards. */
+.nocturne-settings[data-view='tab'] .ns-content-card :is(div, section, form, ul, li).rounded-xl.border {
+  background: var(--ns-panel) !important;
+  border-color: var(--ns-border-soft) !important;
+  border-radius: 14px;
+}
+
+/* A panel's title — its first line, alone or beside a header action. */
+.nocturne-settings[data-view='tab'] .ns-content-card :is(div, section).rounded-xl.border > :is(p.text-sm.font-medium, p.text-sm.font-semibold, h3.text-sm.font-semibold):first-child,
+.nocturne-settings[data-view='tab'] .ns-content-card :is(div, section).rounded-xl.border > div:first-child > :is(p.text-sm.font-medium, p.text-sm.font-semibold, h3.text-sm.font-semibold):first-child {
+  font: 800 14px/1.25 var(--ns-sans);
+  color: var(--ns-text) !important;
+}
+
+/* Field labels → the hub's tracked mono label ("CURRENT PLAN"). */
+.nocturne-settings[data-view='tab'] .ns-content-card label:is(.block.text-xs.font-medium, .mb-1.block.text-sm.font-medium, .mb-2.block.text-sm.font-medium) {
+  margin-bottom: 9px;
+  font: 700 10px/1.2 var(--ns-mono);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ns-muted) !important;
+}
+
+/* Secondary actions and option chips. */
+.nocturne-settings[data-view='tab'] .ns-content-card :is(button, a):is(.rounded-lg, .rounded-xl).border {
+  min-height: 36px;
+  border-radius: 9px;
+  font-size: 12.5px;
+  font-weight: 700;
+  transition: background-color 0.15s, border-color 0.15s, color 0.15s;
+}
+.nocturne-settings[data-view='tab'] .ns-content-card :is(button, a):is(.rounded-lg, .rounded-xl).border:hover:not(:disabled) {
+  border-color: var(--ns-border) !important;
+  color: var(--ns-text) !important;
+}
+
+/* Text inputs and selects. */
+.nocturne-settings[data-view='tab'] .ns-content-card :is(input:not([type='checkbox']):not([type='radio']):not([type='range']), select, textarea):is(.rounded-lg, .rounded-xl) {
+  min-height: 40px;
+  border-radius: 9px;
+  font-size: 13px;
+}
+.nocturne-settings[data-view='tab'] .ns-content-card input:is([type='checkbox'], [type='radio'], [type='range']) {
+  accent-color: var(--ns-accent);
+}
+
+/* A screen's primary action — the hub's "Manage billing" fill. */
+.nocturne-settings .ns-btn-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 40px;
+  padding: 0 17px;
+  border: 0;
+  border-radius: 9px;
+  background: var(--ns-accent);
+  color: var(--ns-accent-ink);
+  font: 800 12.5px/1 var(--ns-sans);
+  text-decoration: none;
+  cursor: pointer;
+  transition: background-color 0.15s;
+}
+.nocturne-settings .ns-btn-primary:hover:not(:disabled) { background: var(--ns-accent-bright); }
+.nocturne-settings .ns-btn-primary:disabled { opacity: 0.55; cursor: default; }
+
+@media (max-width: 560px) {
+  .nocturne-settings[data-view='tab'] .ns-content-card h2.text-lg { font-size: 21px; }
+  .nocturne-settings[data-view='tab'] .ns-content-card :is(button, a):is(.rounded-lg, .rounded-xl).border,
+  .nocturne-settings .ns-btn-primary { min-height: 44px; }
 }

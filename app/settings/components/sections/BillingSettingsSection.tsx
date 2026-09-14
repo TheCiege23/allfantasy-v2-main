@@ -19,34 +19,23 @@ export function BillingSettingsSection() {
 
   return (
     <section className="space-y-4" data-testid="settings-billing-section">
-      <h2 className="text-sm font-bold uppercase tracking-wider" style={{ color: "var(--muted2)" }}>{t("settings.nav.billing")}</h2>
+      <h2 className="text-lg font-semibold" style={{ color: "var(--text)" }}>{t("settings.nav.billing")}</h2>
 
-      <div className="rounded-2xl border p-5" style={{ borderColor: "var(--border)", background: "var(--panel)" }}>
+      <div className="rounded-xl border p-5" style={{ borderColor: "var(--border)", background: "var(--panel)" }}>
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
             <p className="mb-1 text-xs uppercase tracking-wider" style={{ color: "var(--muted2)" }}>{t("settings.billing.currentPlan")}</p>
             {hasAnySub ? (
               <div className="flex flex-wrap items-center gap-2">
+                {/* The hub's plan chip: gold for the top plan, neutral for the rest. */}
                 {ents.hasSupreme && (
-                  <span className="rounded-full border border-purple-400/30 bg-purple-500/10 px-2.5 py-0.5 text-xs font-bold text-purple-300">
+                  <span className="ns-hub-chip" data-tone="plan">
                     AF Supreme
                   </span>
                 )}
-                {!ents.hasSupreme && ents.hasCommissioner && (
-                  <span className="rounded-full border border-violet-400/30 bg-violet-500/10 px-2.5 py-0.5 text-xs font-bold text-violet-300">
-                    AF Commissioner
-                  </span>
-                )}
-                {!ents.hasSupreme && ents.hasPro && (
-                  <span className="rounded-full border border-sky-400/30 bg-sky-500/10 px-2.5 py-0.5 text-xs font-bold text-sky-300">
-                    AF Pro
-                  </span>
-                )}
-                {!ents.hasSupreme && ents.hasWarRoom && (
-                  <span className="rounded-full border border-amber-400/30 bg-amber-500/10 px-2.5 py-0.5 text-xs font-bold text-amber-300">
-                    AF Legacy
-                  </span>
-                )}
+                {!ents.hasSupreme && ents.hasCommissioner && <span className="ns-hub-chip">AF Commissioner</span>}
+                {!ents.hasSupreme && ents.hasPro && <span className="ns-hub-chip">AF Pro</span>}
+                {!ents.hasSupreme && ents.hasWarRoom && <span className="ns-hub-chip">AF Legacy</span>}
               </div>
             ) : (
               <p className="text-sm font-semibold text-white">{t("settings.billing.afFree")}</p>
@@ -148,7 +137,7 @@ export function BillingSettingsSection() {
         ) : null}
         <Link
           href="/pricing"
-          className="inline-flex min-h-[40px] items-center gap-1.5 rounded-xl bg-gradient-to-r from-violet-500 to-purple-500 px-4 py-2 text-sm font-bold text-[#0b0714] transition hover:from-violet-400 hover:to-purple-400"
+          className="ns-btn-primary"
           data-testid="settings-billing-pricing"
         >
           {hasAnySub ? t("settings.billing.changePlan") : t("settings.billing.viewPlans")}

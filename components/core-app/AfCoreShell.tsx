@@ -715,15 +715,16 @@ function navItems(props: AfCoreShellProps): NavItem[] {
       badge: urgencyBadge(props.urgencyBadges?.sync),
     },
     { key: 'tools', label: 'Tools', glyph: '⚙', href: inLeague('/core/tools') },
-    // Full page outside /core, like My Leagues and League Sync above. This is
-    // where appearance mode and language live (Settings → Preferences), and
-    // the rail's bottom profile tile was the only way there — a single-letter
-    // tile nobody reads as "settings". Deep-links straight to the Preferences
-    // tab because mode/language is what people come here for; the other tabs
-    // stay one click away in the settings chrome. Not ⚙: Tools owns that
-    // glyph, and two identical marks in one nav was exactly the mistake the
-    // Career entry above had to fix.
-    { key: 'settings', label: 'Settings', glyph: '◧', href: '/settings?tab=preferences' },
+    // Full page outside /core, like My Leagues and League Sync above. The rail's
+    // bottom profile tile was the only way there — a single-letter tile nobody
+    // reads as "settings". Not ⚙: Tools owns that glyph, and two identical marks
+    // in one nav was exactly the mistake the Career entry above had to fix.
+    //
+    // ⚠ BARE /settings, NOT A TAB. This used to deep-link to ?tab=preferences, so
+    // the 2026-09-13 Settings hub (the card grid every tab opens from) was
+    // unreachable from Core: the nav skipped straight past it, and the redesign
+    // read as "Settings did not change". Preferences is one card away.
+    { key: 'settings', label: 'Settings', glyph: '◧', href: '/settings' },
     /* Admins only — see the CoreNavKey note. Another full page outside /core. */
     ...(props.isAdmin
       ? [{ key: 'admin' as const, label: 'Admin', glyph: '⬢', href: '/admin' }]

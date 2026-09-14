@@ -548,12 +548,11 @@ export function NotificationsSettingsSection({
           disabled={saving || !dirty}
           onClick={handleSave}
           data-testid="notifications-save-button"
-          className={[
-            "rounded-xl border border-[var(--border)] px-4 py-2 text-sm font-semibold",
+          className={
             dirty && !saving
-              ? "bg-[linear-gradient(135deg,var(--accent-cyan),var(--accent-purple))] text-[var(--on-accent-bg)]"
-              : "bg-[var(--panel2)] text-[var(--muted)]",
-          ].join(" ")}
+              ? "ns-btn-primary"
+              : "rounded-xl border border-[var(--border)] bg-[var(--panel2)] px-4 py-2 text-sm font-semibold text-[var(--muted)]"
+          }
         >
           {saving ? t("settings.actions.saving") : t("settings.notifications.save")}
         </button>
