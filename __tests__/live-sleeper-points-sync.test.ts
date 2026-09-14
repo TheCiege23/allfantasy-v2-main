@@ -91,6 +91,49 @@ describe('refreshLiveSleeperPoints', () => {
     expect(h.cacheUpsert.mock.calls[0][0].update.data).toEqual({ offset: (40 + 40) % 45 })
   })
 
+  /*
+   * The writer rewrites every row and reports no diff, so a swing only exists if the
+   * rows are read immediately BEFORE it runs — and is only worth checking after a
+   * refresh that actually wrote scores.
+   */
+  it('snapshots each league-week before refreshing it, and checks for swings after', async () => {
+    h.leagueFindMany.mockResolvedValue(leagues(1))
+    const order: string[] = []
+    h.ingest.mockImplementation(async (_l: string, _s: number, week: number) => {
+      order.push(`ingest:${week}`)
+      return week === 2 ? { scoresUpserted: 4, error: null } : { scoresUpserted: 0, error: null }
+    })
+    const snapshotScores = vi.fn(async (_l: string, _s: number, week: number) => {
+      order.push(`snapshot:${week}`)
+      return [{ playerId: 'p', rosterId: 1, isStarter: true, points: week }]
+    })
+    const notifySwings = vi.fn(async () => 2)
+
+    const res = await refreshLiveSleeperPoints(NOW, { ...live, snapshotScores, notifySwings })
+
+    expect(order.indexOf('snapshot:2')).toBeLessThan(order.indexOf('ingest:2'))
+    expect(notifySwings).toHaveBeenCalledTimes(1)
+    expect(notifySwings).toHaveBeenCalledWith({
+      platformLeagueId: 'L00',
+      season: 2026,
+      week: 2,
+      beforeRows: [{ playerId: 'p', rosterId: 1, isStarter: true, points: 2 }],
+    })
+    expect(res.swingAlerts).toBe(2)
+  })
+
+  it('a failing swing check never costs the points refresh', async () => {
+    h.leagueFindMany.mockResolvedValue(leagues(1))
+    const res = await refreshLiveSleeperPoints(NOW, {
+      ...live,
+      snapshotScores: async () => [],
+      notifySwings: async () => {
+        throw new Error('boom')
+      },
+    })
+    expect(res).toMatchObject({ leaguesSynced: 1, errors: 0, swingAlerts: 0 })
+  })
+
   it('stops at its time budget and resumes from the first league it did not reach', async () => {
     h.leagueFindMany.mockResolvedValue(leagues(5))
     // The first read sets the deadline; every later read is past it.

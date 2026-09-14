@@ -2,6 +2,7 @@ import { prisma } from '@/lib/prisma'
 import { ingestSleeperPlayerScoresForWeek } from '@/lib/sleeper/sync/ingestSleeperPlayerScores'
 import { sleeperScoreTargetWeeks } from '@/lib/sleeper/sync/sleeperScoreTargetWeeks'
 import { inProgressRiGameIds } from '@/lib/live/playByPlayFeed'
+import { notifyStarterSwingsForLeagueWeek, snapshotLeagueWeekScores } from '@/lib/live/starterSwings'
 
 /**
  * Keep "Your starters" points current WHILE NFL games are being played.
@@ -39,6 +40,8 @@ export type LivePointsResult = {
   leaguesSynced: number
   scoresUpserted: number
   errors: number
+  /** Starter swing alerts handed to the notification engine this pass. */
+  swingAlerts: number
   skipped: 'no-live-games' | 'no-leagues' | null
 }
 
@@ -68,12 +71,27 @@ async function writeCursor(offset: number): Promise<void> {
 
 export async function refreshLiveSleeperPoints(
   now: Date = new Date(),
-  deps: { liveGameIds: (now: Date) => Promise<string[]>; clock: () => number } = {
+  deps: {
+    liveGameIds: (now: Date) => Promise<string[]>
+    clock: () => number
+    /** Injectable for tests; production reads the league-week's rows. */
+    snapshotScores?: typeof snapshotLeagueWeekScores
+    notifySwings?: typeof notifyStarterSwingsForLeagueWeek
+  } = {
     liveGameIds: inProgressRiGameIds,
     clock: () => Date.now(),
   },
 ): Promise<LivePointsResult> {
-  const result: LivePointsResult = { leaguesConsidered: 0, leaguesSynced: 0, scoresUpserted: 0, errors: 0, skipped: null }
+  const result: LivePointsResult = {
+    leaguesConsidered: 0,
+    leaguesSynced: 0,
+    scoresUpserted: 0,
+    errors: 0,
+    swingAlerts: 0,
+    skipped: null,
+  }
+  const snapshotScores = deps.snapshotScores ?? snapshotLeagueWeekScores
+  const notifySwings = deps.notifySwings ?? notifyStarterSwingsForLeagueWeek
 
   const live = await deps.liveGameIds(now).catch(() => [] as string[])
   if (live.length === 0) return { ...result, skipped: 'no-live-games' }
@@ -111,9 +129,20 @@ export async function refreshLiveSleeperPoints(
         const weeks = await sleeperScoreTargetWeeks(leagueId, season)
         let failed = false
         for (const week of weeks) {
+          /*
+           * ⚠ READ BEFORE THE WRITER, OR THERE IS NO "BEFORE". The writer rewrites
+           * every row and reports no diff, so a starter swing only exists relative to
+           * the rows as they stood immediately before this refresh. See starterSwings.
+           */
+          const beforeRows = await snapshotScores(leagueId, season, week).catch(() => null)
           const r = await ingestSleeperPlayerScoresForWeek(leagueId, season, week)
           result.scoresUpserted += r.scoresUpserted
           if (r.error) failed = true
+          // Only a refresh that actually wrote scores can have moved anyone.
+          if (beforeRows && r.scoresUpserted > 0 && !r.error) {
+            result.swingAlerts += await notifySwings({ platformLeagueId: leagueId, season, week, beforeRows })
+              .catch(() => 0)
+          }
         }
         if (failed) result.errors += 1
         else result.leaguesSynced += 1
