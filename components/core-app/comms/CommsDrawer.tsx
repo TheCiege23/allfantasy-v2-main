@@ -115,8 +115,8 @@ export type CommsDrawerProps = {
 const PUBLIC_ANSWER_NOTICE = 'Everyone in the league can see this answer.'
 
 const HUDDLE_PRIVACY =
-  'Nothing here can see your rosters. Huddle is a public feed across all of AllFantasy — no league data, ' +
-  'no lineups, no trades of yours are readable from it.'
+  'Private group conversation. Only members of this Huddle can read its messages. ' +
+  'League rosters and trades are not automatically shared here.'
 
 const DM_PRIVACY =
   'AllFantasy DMs are separate from Sleeper and ESPN messages. We do not read them, mirror them, or send ' +
@@ -170,7 +170,7 @@ function platformHandoffHref(league: CommsLeague): string {
 const TABS: Array<{ id: CommsTab; label: string; audience: string }> = [
   { id: 'league', label: 'League', audience: 'Everyone in one league' },
   { id: 'chimmy', label: 'Chimmy', audience: 'Just you' },
-  { id: 'huddle', label: 'Huddle', audience: 'Everyone on AllFantasy' },
+  { id: 'huddle', label: 'Huddle', audience: 'Only this Huddle’s members' },
   { id: 'dms', label: 'DMs', audience: 'One person' },
   { id: 'discord', label: 'Discord', audience: "Everyone in one league's server" },
 ]
