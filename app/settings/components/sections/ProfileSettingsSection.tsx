@@ -238,11 +238,7 @@ export function ProfileSettingsSection({
         <button
           type="submit"
           disabled={saving}
-          className="rounded-xl px-4 py-2 text-sm font-semibold"
-          style={{
-            background: "linear-gradient(135deg, var(--accent-cyan), var(--accent-purple))",
-            color: "var(--on-accent-bg)",
-          }}
+          className="ns-btn-primary"
         >
           {saving ? t("settings.actions.saving") : t("settings.profile.save")}
         </button>
