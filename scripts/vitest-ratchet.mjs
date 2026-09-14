@@ -33,6 +33,7 @@ import { readFileSync, writeFileSync, existsSync, mkdtempSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { dirname, resolve, join, relative } from 'node:path'
 import { tmpdir } from 'node:os'
+import { judge, summarizeRun } from './vitest-ratchet-judge.mjs'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const root = resolve(__dirname, '..')
@@ -107,17 +108,27 @@ function collectErrors(result) {
   return out
 }
 
-/** Run vitest and return { ran, failed, errors } as path sets plus per-file detail. */
+/**
+ * Run vitest and summarize what every scheduled file did: `{ scheduled, ran, failed, errors,
+ * incomplete, unhandled }` — see summarizeRun in vitest-ratchet-judge.mjs.
+ */
 function runVitest(passthrough) {
-  const out = join(mkdtempSync(join(tmpdir(), 'vitest-ratchet-')), 'results.json')
+  const dir = mkdtempSync(join(tmpdir(), 'vitest-ratchet-'))
+  const out = join(dir, 'results.json')
+  const record = join(dir, 'run-record.json')
+  const reporter = join(root, 'scripts', 'vitest-ratchet-reporter.mjs').split('\\').join('/')
   const argv = [
     'vitest',
     'run',
-    // BOTH reporters. `json` feeds the ratchet; `default` puts the human-readable failure back in
-    // the job log, where it was missing entirely.
+    // `json` feeds the ratchet; `default` puts the human-readable failure back in the job log, where
+    // it was missing entirely.
     '--reporter=default',
     '--reporter=json',
     `--outputFile=${out}`,
+    // 🛑 AND THE RUN RECORD, BECAUSE THE JSON REPORT CANNOT SEE A FILE THAT NEVER FINISHED. A worker
+    // killed mid-file is written there as "passed", and unhandled errors are not written at all.
+    // CI shard 2/4 of run 34855366587 lost a whole file that way and this script said "OK".
+    `--reporter=${reporter}`,
     // Integration tests need a live Postgres; a unit gate that needs a database fails for reasons
     // unrelated to the code under review.
     '--exclude',
@@ -125,27 +136,30 @@ function runVitest(passthrough) {
     ...passthrough,
   ]
   // Vitest exits non-zero when tests fail, which is the normal case here -- the ratchet decides
-  // whether that matters, so its exit code is deliberately ignored.
-  spawnSync('npx', argv, { cwd: root, stdio: 'inherit', shell: process.platform === 'win32' })
+  // whether that matters, so its exit code is deliberately ignored. That is safe only because the
+  // run record below carries the crash and unhandled-error signal the exit code would have.
+  spawnSync('npx', argv, {
+    cwd: root,
+    stdio: 'inherit',
+    shell: process.platform === 'win32',
+    env: { ...process.env, VITEST_RATCHET_RUN_RECORD: record },
+  })
 
   if (!existsSync(out)) {
     console.error('[vitest-ratchet] vitest produced no JSON output — treating as infrastructure failure')
     process.exit(1)
   }
-  const data = JSON.parse(readFileSync(out, 'utf8'))
-  const ran = new Set()
-  const failed = new Set()
-  const errors = {}
-  for (const r of data.testResults || []) {
-    if (!r?.name) continue
-    const rel = normalize(r.name)
-    ran.add(rel)
-    if (r.status === 'failed') {
-      failed.add(rel)
-      errors[rel] = collectErrors(r)
-    }
+  if (!existsSync(record)) {
+    console.error('[vitest-ratchet] the ratchet reporter wrote no run record — treating as infrastructure failure')
+    process.exit(1)
   }
-  return { ran, failed, errors }
+  return summarizeRun({
+    jsonReport: JSON.parse(readFileSync(out, 'utf8')),
+    runRecord: JSON.parse(readFileSync(record, 'utf8')),
+    // resolve() first: vitest reports absolute paths, but an error's VITEST_TEST_PATH may not be.
+    toRel: (p) => normalize(resolve(root, p)),
+    collectErrors,
+  })
 }
 
 function main() {
@@ -168,7 +182,9 @@ function main() {
     ...args.filter((a) => a.startsWith('--shard=')),
     ...args.filter((a) => !a.startsWith('--')),
   ]
-  const { ran, failed, errors } = runVitest(passthrough)
+  const summary = runVitest(passthrough)
+  const { scheduled, ran, failed, errors, incomplete, unhandled } = summary
+  const incompleteCount = Object.keys(incomplete).length
 
   // Always emit this run's result, so the baseline can be rebuilt from CI without scraping logs.
   // Scraping was tried first and is not reliable: GitHub truncates a large failed-job log, and one
@@ -178,16 +194,31 @@ function main() {
   // `errors` rides along BECAUSE THIS FILE IS THE ONLY THING THAT SURVIVES A RERUN. `gh run rerun`
   // overwrites both the job conclusion and the log, so a flake investigated after the fact has no
   // evidence left anywhere else -- which is exactly how four shard-4 failures went undiagnosed.
+  // `incomplete` and `unhandled` ride along for the same reason: a dead worker leaves nothing else.
   writeFileSync(
     shardOut,
-    JSON.stringify({ ran: [...ran].sort(), failed: [...failed].sort(), errors }, null, 2) + '\n',
+    JSON.stringify(
+      { ran: [...ran].sort(), failed: [...failed].sort(), errors, incomplete, unhandled },
+      null,
+      2,
+    ) + '\n',
     'utf8',
   )
-  console.log(`[vitest-ratchet] ran ${ran.size} files, ${failed.size} failed → ${relative(root, shardOut)}`)
+  console.log(
+    `[vitest-ratchet] scheduled ${scheduled.size} files: ${ran.size} finished, ${failed.size} failed, ` +
+      `${incompleteCount} did not finish, ${unhandled.length} unhandled error(s) → ${relative(root, shardOut)}`,
+  )
 
   if (has('--update')) {
     if (passthrough.some((a) => a.startsWith('--shard='))) {
       console.error('[vitest-ratchet] --update with --shard would delete the other shards\u2019 entries. Use --merge instead.')
+      process.exit(1)
+    }
+    if (incompleteCount || unhandled.length) {
+      // A baseline records FAILING files. A file that never finished is neither passing nor
+      // failing, so a snapshot of this run would describe a suite nobody actually ran.
+      console.error('[vitest-ratchet] refusing --update: this run had files that did not finish or unhandled errors.')
+      console.error('[vitest-ratchet] fix the crash first; a baseline cannot represent a file that never reported.')
       process.exit(1)
     }
     const written = writeBaseline([...failed])
@@ -204,32 +235,43 @@ function main() {
     return
   }
 
-  // Judge ONLY files this run executed. Under --shard the other three quarters were never run and
-  // must not be mistaken for fixed.
-  const regressions = [...failed].filter((f) => !baseline.has(f)).sort()
-  const fixed = [...baseline].filter((f) => ran.has(f) && !failed.has(f)).sort()
+  // Judge ONLY files this run scheduled. Under --shard the other three quarters were never run and
+  // must not be mistaken for fixed — or for missing.
+  const verdict = judge({ baseline, summary })
 
-  if (fixed.length) {
-    console.log(`\n[vitest-ratchet] ${fixed.length} baseline file(s) now PASS — tighten the ratchet by removing them:`)
-    for (const f of fixed) console.log(`  ✓ ${f}`)
+  if (verdict.fixed.length) {
+    console.log(`\n[vitest-ratchet] ${verdict.fixed.length} baseline file(s) now PASS — tighten the ratchet by removing them:`)
+    for (const f of verdict.fixed) console.log(`  ✓ ${f}`)
   }
 
-  if (regressions.length) {
-    console.error(`\n[vitest-ratchet] ${regressions.length} file(s) were passing and now FAIL:`)
+  if (!verdict.ok) {
+    // ⚠ KEEP "were passing and now FAIL" IN THIS LINE. scripts/pre-push-smoke.mjs classifies this
+    // script's output by that phrase: without it, a crashed file would read as an inconclusive run
+    // and the push guard would fail OPEN on exactly the case this change exists to catch.
+    console.error(
+      `\n[vitest-ratchet] ${verdict.regressions.length} file(s) were passing and now FAIL, did not finish, ` +
+        `or leaked an unhandled error; ${verdict.runErrors.length} unattributed unhandled error(s):`,
+    )
     // Print WHY, not just which. A bare filename cannot distinguish an assertion someone broke
     // from a worker that died, and those need opposite responses: fix the code, or investigate the
     // runner. Four investigations stalled on exactly this distinction.
-    for (const f of regressions) {
-      for (const e of errors[f] || []) console.error(`      ${e}`)
+    for (const r of verdict.regressions) {
+      console.error(`  ✗ ${r.file}`)
+      for (const why of r.reasons) console.error(`      ${why}`)
     }
-    for (const f of regressions) console.error(`  ✗ ${f}`)
-    console.error('\nThese are regressions, not pre-existing debt. Fix them, or if the failure is')
+    for (const why of verdict.runErrors) console.error(`  ✗ (no file) ${why}`)
+    console.error('\nA newly failing file is a regression, not pre-existing debt. Fix it, or if the failure is')
     console.error('intentional, add the file to scripts/vitest-failure-baseline.json in the same change')
     console.error('and say why in the commit message.')
+    console.error('A file that did not finish, or an unhandled error, is never excused by the baseline: its')
+    console.error('tests may not have run at all. Find the crash, hang or leak.')
     process.exit(1)
   }
 
-  console.log(`\n[vitest-ratchet] OK — no new failing files (${failed.size} failing, all allowlisted).`)
+  console.log(
+    `\n[vitest-ratchet] OK — every scheduled file finished, no unhandled errors, no new failing files ` +
+      `(${failed.size} failing, all allowlisted).`,
+  )
 }
 
 main()
