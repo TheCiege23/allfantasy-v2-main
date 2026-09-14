@@ -28,6 +28,7 @@ import { z } from 'zod'
 import { authOptions } from '@/lib/auth'
 import { assertLeagueMember } from '@/lib/league-access'
 import { createActionEvent } from '@/lib/chimmy-actions/server-store'
+import { recordStartVsAdvice } from '@/lib/chimmy-advice/startVsAdvice'
 import { prisma } from '@/lib/prisma'
 import {
   runTwoPlayerComparisonEngine,
@@ -236,6 +237,18 @@ export async function POST(req: Request, ctx: { params: Promise<{ leagueId: stri
       week_or_period: body.weekOrPeriod ?? null,
       coach_tiebreak: payload.coach_lens.tiebreak_applied,
     },
+  }).catch(() => {})
+
+  // The call, kept for the home Receipts card. Fire-and-forget: it never changes this response.
+  void recordStartVsAdvice({
+    userId,
+    leagueId,
+    winner: payload.winner,
+    confidencePct: payload.confidence_pct,
+    playerAName: engine.comparison.playerA.name,
+    playerBName: engine.comparison.playerB.name,
+    lineupSlot: body.lineupSlot ?? null,
+    weekOrPeriod: body.weekOrPeriod ?? null,
   }).catch(() => {})
 
   return NextResponse.json({
