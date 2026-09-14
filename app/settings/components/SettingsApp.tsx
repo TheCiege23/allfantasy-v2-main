@@ -39,22 +39,42 @@ export default function SettingsApp({
   const router = useRouter()
   const pathname = usePathname() ?? ""
   const tabFromQuery = searchParams?.get("tab")
-  const initialTab = isSettingsTabId(tabFromQuery) ? tabFromQuery : "profile"
-  const [activeTab, setActiveTab] = useState<SettingsTabId>(initialTab)
+  /*
+   * No `?tab` is the Settings hub (2026-09-13 handoff) — a card grid that opens
+   * the tabs — where it used to default to Profile. Every link that names a tab
+   * still lands on that tab.
+   */
+  const [activeTab, setActiveTab] = useState<SettingsTabId | null>(
+    isSettingsTabId(tabFromQuery) ? tabFromQuery : null,
+  )
   const { profile, loading, saving, error, updateProfile, fetchProfile } = useSettingsProfile()
 
+  /*
+   * Follows the URL only when the URL changes. Keyed on `activeTab` too, a local
+   * selection was reverted for a render by the stale query it had not yet
+   * replaced — and with the hub, a stale "no tab" would bounce a card straight
+   * back to the grid.
+   */
   useEffect(() => {
-    if (!isSettingsTabId(tabFromQuery)) return
-    if (tabFromQuery !== activeTab) {
-      setActiveTab(tabFromQuery)
-    }
-  }, [tabFromQuery, activeTab])
+    setActiveTab(isSettingsTabId(tabFromQuery) ? tabFromQuery : null)
+  }, [tabFromQuery])
 
   const handleTabSelect = (tabId: SettingsTabId) => {
+    const fromHub = activeTab == null
     setActiveTab(tabId)
     const params = new URLSearchParams(searchParams?.toString() ?? "")
     params.set("tab", tabId)
     router.replace(`${pathname}?${params.toString()}`, { scroll: false })
+    // A card sits anywhere down the grid; the tab it opens starts at its top.
+    if (fromHub && typeof window !== "undefined") window.scrollTo({ top: 0 })
+  }
+
+  const handleShowHub = () => {
+    setActiveTab(null)
+    const params = new URLSearchParams(searchParams?.toString() ?? "")
+    params.delete("tab")
+    const qs = params.toString()
+    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false })
   }
 
   if (loading && !profile) {
@@ -90,6 +110,7 @@ export default function SettingsApp({
     <SettingsChrome
       activeTab={activeTab}
       onTabChange={handleTabSelect}
+      onShowHub={handleShowHub}
       profile={profile}
       planLabel={planLabel}
     >

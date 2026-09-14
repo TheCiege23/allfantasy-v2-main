@@ -23,23 +23,38 @@
  */
 
 .nocturne-settings {
-  /* ── Nocturne ground + accent ─────────────────────────────────────── */
-  --ns-bg: #161826;
-  --ns-panel: #1c1e2b;
-  --ns-panel-2: #161826;
-  --ns-text: #e9e9ed;
-  --ns-muted: #9397ab;
-  --ns-muted-2: #b2b6ca;
-  --ns-dim: #75798c;
-  --ns-border: #33353f;
-  --ns-border-soft: #292b31;
-  --ns-accent: #9184d9;
-  --ns-accent-bright: #b5abfc;
-  --ns-accent-deep: #5d5294;
+  /* ── Ground + accent ──────────────────────────────────────────────────
+   *
+   * 2026-09-14: the /core palette, not the Nocturne blurple (user's call, with
+   * the 2026-09-13 Settings handoff). Values are `.af-core`'s dark tokens in
+   * components/core-app/af-core.css, including its raised `--muted`/`--faint`
+   * contrast floor. Only these values moved — every section still reads the
+   * remapped app vars below, so no section file changed to recolour.
+   *
+   * ⚠ Hardcoded Tailwind hues inside sections (violet/purple plan chips, the
+   * pricing gradient) are not token-driven and do not move with this block.
+   */
+  --ns-bg: #06070f;
+  --ns-panel: #0d1020;
+  --ns-panel-2: #0a0c1a;
+  --ns-text: #eef0fa;
+  --ns-muted: #989fc2;
+  --ns-muted-2: #c3c9e6;
+  --ns-dim: #7d84a8;
+  --ns-border: rgba(255, 255, 255, 0.13);
+  --ns-border-soft: rgba(255, 255, 255, 0.07);
+  --ns-accent: #22d3ee;
+  --ns-accent-bright: #67e8f9;
+  --ns-accent-deep: #0e7490;
+  --ns-accent-ink: #04050c;
+  --ns-chip: rgba(255, 255, 255, 0.05);
+  --ns-chip-line: rgba(255, 255, 255, 0.1);
+  --ns-sans: var(--font-archivo, 'Archivo'), system-ui, -apple-system, 'Segoe UI', Arial, sans-serif;
+  --ns-mono: var(--font-jetbrains-mono, 'JetBrains Mono'), ui-monospace, SFMono-Regular, Menlo, monospace;
   /* 38a·12 — the one semantic colour this palette lacked. Needed for a nav
      badge that reports a state the user probably did not intend (notifications
      entirely off); the accent would read as decoration rather than a flag. */
-  --ns-warn: #e0a83c;
+  --ns-warn: #fbbf24;
 
   /* ── Remap the app theme vars the sections consume ────────────────── */
   --bg: var(--ns-bg);
@@ -53,14 +68,14 @@
   --accent: var(--ns-accent);
   --accent-cyan: var(--ns-accent);
   --accent-cyan-strong: var(--ns-accent-bright);
-  --accent-purple: #796cbf; /* gives the accent gradients some depth */
-  --accent-red: #cf6b6f;
-  --accent-red-strong: #e5686c;
-  --on-accent-bg: #161826; /* dark text sits on the light-blurple accent */
+  --accent-purple: #3b82f6; /* the /core hero's blue — gives accent gradients depth */
+  --accent-red: #fb5b78;
+  --accent-red-strong: #fb7185;
+  --on-accent-bg: var(--ns-accent-ink); /* dark ink sits on the teal accent */
 
   background: var(--ns-bg);
   color: var(--ns-text);
-  font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Arial, sans-serif;
+  font-family: var(--ns-sans);
   -webkit-font-smoothing: antialiased;
 }
 
@@ -229,7 +244,7 @@
   text-transform: uppercase;
   letter-spacing: 0.03em;
 }
-.ns-plan.is-pro { background: color-mix(in srgb, var(--ns-accent) 28%, transparent); color: #d2cefd; }
+.ns-plan.is-pro { background: color-mix(in srgb, var(--ns-warn) 14%, transparent); color: var(--ns-warn); }
 .ns-plan.is-free { background: color-mix(in srgb, var(--ns-text) 8%, transparent); color: var(--ns-dim); }
 
 .ns-chips { display: flex; gap: 6px; margin-top: 12px; flex-wrap: wrap; }
@@ -369,4 +384,222 @@
 .nocturne-settings .ns-nav-badge[data-tone='count'] {
   background: color-mix(in srgb, var(--ns-text) 9%, transparent);
   color: var(--ns-muted-2);
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   Settings hub — 2026-09-13 handoff (`design_handoff_settings`).
+
+   `/settings` with no `?tab` is now a landing: identity card, a card per
+   tab, and the current plan. Each card opens its existing tab, which keeps
+   the sidebar chrome above (with an "All settings" way back). The 38a·12
+   objection to a grid — it would drop translated labels and the working
+   search — is answered by keeping both: card titles are the same
+   `settings.nav.*` strings, and the top-bar search filters the cards.
+
+   All twelve tabs are cards (user's call): the design draws nine, and
+   Command Center, Referrals and Account follow them rather than becoming
+   reachable only from inside another tab.
+   ══════════════════════════════════════════════════════════════════════ */
+
+.nocturne-settings[data-view='hub'] .ns-brand-title { display: none; }
+
+.nocturne-settings .ns-hub {
+  max-width: 1160px;
+  margin: 0 auto;
+  padding: 28px 20px 96px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+.nocturne-settings .ns-hub-title {
+  margin: 0;
+  font: 900 24px/1.1 var(--ns-sans);
+  letter-spacing: -0.03em;
+  color: var(--ns-text);
+}
+
+/* identity */
+.nocturne-settings .ns-hub-id {
+  display: flex;
+  align-items: center;
+  gap: 22px;
+  background: var(--ns-panel);
+  border: 1px solid var(--ns-border-soft);
+  border-radius: 16px;
+  padding: 22px;
+}
+.nocturne-settings .ns-hub-avatar {
+  width: 56px;
+  height: 56px;
+  flex: none;
+  overflow: hidden;
+  border-radius: 16px;
+  display: grid;
+  place-items: center;
+  background: var(--ns-accent);
+  color: var(--ns-accent-ink);
+  font: 900 20px/1 var(--ns-sans);
+}
+.nocturne-settings .ns-hub-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.nocturne-settings .ns-hub-avatar .ns-avatar-emoji { font-size: 26px; }
+.nocturne-settings .ns-hub-who { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 10px; }
+.nocturne-settings .ns-hub-name-row { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.nocturne-settings .ns-hub-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: 800 17px/1.2 var(--ns-sans);
+  color: var(--ns-text);
+}
+.nocturne-settings .ns-hub-handle { flex: none; font: 400 12px/1 var(--ns-sans); color: var(--ns-dim); }
+.nocturne-settings .ns-hub-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.nocturne-settings .ns-hub-chip {
+  padding: 5px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--ns-chip-line);
+  background: var(--ns-chip);
+  font: 700 10px/1 var(--ns-mono);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ns-muted-2);
+}
+.nocturne-settings .ns-hub-chip[data-tone='plan'] {
+  border-color: transparent;
+  background: color-mix(in srgb, var(--ns-warn) 12%, transparent);
+  color: var(--ns-warn);
+  letter-spacing: 0.06em;
+}
+.nocturne-settings .ns-hub-completion { width: 220px; flex: none; display: flex; flex-direction: column; gap: 7px; }
+.nocturne-settings .ns-hub-completion-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font: 600 11px/1 var(--ns-sans);
+  color: var(--ns-muted);
+}
+.nocturne-settings .ns-hub-completion-row > span { flex: 1; }
+.nocturne-settings .ns-hub-completion-row > b { font: 800 12px/1 var(--ns-mono); color: var(--ns-text); }
+.nocturne-settings .ns-hub-meter {
+  height: 6px;
+  border-radius: 3px;
+  overflow: hidden;
+  background: var(--ns-border);
+}
+.nocturne-settings .ns-hub-meter > span { display: block; height: 100%; background: var(--ns-accent); }
+.nocturne-settings .ns-hub-nudge { font: 400 10px/1.4 var(--ns-sans); color: var(--ns-dim); }
+
+/* the grid */
+.nocturne-settings .ns-hub-grid {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+.nocturne-settings .ns-hub-grid > li { display: flex; }
+.nocturne-settings .ns-hub-card {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 11px;
+  padding: 17px;
+  border: 1px solid var(--ns-border-soft);
+  border-radius: 14px;
+  background: var(--ns-panel);
+  color: var(--ns-text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+.nocturne-settings .ns-hub-card:hover {
+  border-color: var(--ns-border);
+  background: color-mix(in srgb, var(--ns-text) 2.5%, var(--ns-panel));
+}
+/* A card whose setting is in a state the user probably did not choose. */
+.nocturne-settings .ns-hub-card[data-tone='warn'] { border-color: color-mix(in srgb, var(--ns-warn) 36%, transparent); }
+.nocturne-settings .ns-hub-card-head { display: flex; align-items: center; gap: 12px; }
+.nocturne-settings .ns-hub-icon {
+  width: 32px;
+  height: 32px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  background: var(--ns-chip);
+  color: var(--ns-muted-2);
+}
+.nocturne-settings .ns-hub-icon > svg { width: 15px; height: 15px; }
+.nocturne-settings .ns-hub-card-title { flex: 1; min-width: 0; font: 800 14px/1.2 var(--ns-sans); }
+.nocturne-settings .ns-hub-card .ns-nav-badge { height: auto; padding: 5px 7px; font-size: 9px; letter-spacing: 0.04em; }
+.nocturne-settings .ns-hub-card-desc { flex: 1; font: 400 12px/1.5 var(--ns-sans); color: var(--ns-muted); }
+.nocturne-settings .ns-hub-cta { font: 700 11px/1 var(--ns-sans); color: var(--ns-accent); }
+.nocturne-settings .ns-hub-empty { margin: 0; font-size: 12px; color: var(--ns-muted); }
+
+/* current plan */
+.nocturne-settings .ns-hub-plan {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 18px 20px;
+  border: 1px solid color-mix(in srgb, var(--ns-accent) 28%, transparent);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--ns-accent) 4%, var(--ns-panel));
+}
+.nocturne-settings .ns-hub-plan-copy { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 5px; }
+.nocturne-settings .ns-hub-plan-label {
+  font: 700 9px/1 var(--ns-mono);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ns-accent);
+}
+.nocturne-settings .ns-hub-plan-name { font: 800 15px/1.3 var(--ns-sans); color: var(--ns-text); }
+.nocturne-settings .ns-hub-plan-detail { font: 400 11px/1.4 var(--ns-sans); color: var(--ns-muted); }
+.nocturne-settings .ns-hub-plan-btn {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 40px;
+  padding: 0 17px;
+  border-radius: 9px;
+  background: var(--ns-accent);
+  color: var(--ns-accent-ink);
+  font: 800 12px/1 var(--ns-sans);
+  text-decoration: none;
+  white-space: nowrap;
+}
+.nocturne-settings .ns-hub-plan-btn:hover { filter: brightness(1.08); }
+
+/* the way back from a tab */
+.nocturne-settings .ns-back {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 34px;
+  padding: 0 12px;
+  border: 1px solid var(--ns-border-soft);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ns-muted-2);
+  font: 600 12.5px/1 var(--ns-sans);
+  cursor: pointer;
+}
+.nocturne-settings .ns-back:hover { color: var(--ns-text); background: var(--ns-chip); }
+.nocturne-settings .ns-back > svg { width: 14px; height: 14px; }
+
+@media (max-width: 860px) {
+  .nocturne-settings .ns-hub { padding: 18px 14px 80px; gap: 18px; }
+  .nocturne-settings .ns-hub-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .nocturne-settings .ns-hub-id { flex-wrap: wrap; }
+  .nocturne-settings .ns-hub-completion { width: 100%; }
+}
+@media (max-width: 560px) {
+  .nocturne-settings .ns-hub-grid { grid-template-columns: minmax(0, 1fr); }
+  .nocturne-settings .ns-hub-plan { flex-wrap: wrap; }
+  .nocturne-settings .ns-hub-plan-btn { width: 100%; min-height: 44px; }
+  .nocturne-settings .ns-back { height: 44px; }
 }
