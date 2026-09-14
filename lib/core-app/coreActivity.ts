@@ -18,6 +18,8 @@ export type CoreActivitySnapshot = {
   gameDayActive: boolean
   liveGameCount: number
   draftLive: boolean
+  /** Which of the given leagues have a draft running now — the Draft HQ urgency badge counts these. */
+  liveDraftLeagueIds: string[]
 }
 
 /**
@@ -37,7 +39,7 @@ export async function getCoreActivitySnapshot(
   const from = new Date(now.getTime() - LOOKBACK_MS)
   const to = new Date(now.getTime() + LOOKAHEAD_MS)
 
-  const [games, liveDraftCount] = await Promise.all([
+  const [games, liveDrafts] = await Promise.all([
     normalizedSports.length > 0
       ? prisma.sportsGame.findMany({
           where: {
@@ -49,15 +51,23 @@ export async function getCoreActivitySnapshot(
           take: 400,
         })
       : Promise.resolve([]),
+    /*
+     * Which leagues, not just whether any — the Draft HQ urgency badge counts leagues
+     * affected. Still one query: distinct on the indexed league id, bounded by the
+     * user's own league list.
+     */
     leagueIds.length > 0
-      ? prisma.draftSession.count({
+      ? prisma.draftSession.findMany({
           where: {
             leagueId: { in: [...new Set(leagueIds)] },
             status: { in: ['in_progress', 'paused', 'active', 'live'] },
           },
+          select: { leagueId: true },
+          distinct: ['leagueId'],
         })
-      : Promise.resolve(0),
+      : Promise.resolve([] as Array<{ leagueId: string }>),
   ])
+  const liveDraftLeagueIds = [...new Set(liveDrafts.map((d) => d.leagueId))]
 
   // The table can hold the same fixture from several feeds. The newest row for
   // each source-independent game identity owns the shell signal.
@@ -82,5 +92,5 @@ export async function getCoreActivitySnapshot(
     if (elapsed >= -LOOKAHEAD_MS && elapsed <= expected) gameDayActive = true
   }
 
-  return { gameDayActive, liveGameCount, draftLive: liveDraftCount > 0 }
+  return { gameDayActive, liveGameCount, draftLive: liveDraftLeagueIds.length > 0, liveDraftLeagueIds }
 }

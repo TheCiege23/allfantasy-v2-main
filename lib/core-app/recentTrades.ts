@@ -99,6 +99,14 @@ export type RecentTradesLiveOptions = {
   currentWeek: number | null
   /** Provider reads are bounded; the cache remains the source for the rest. */
   maxLeagues?: number
+  /**
+   * The same scan also finds offers WAITING ON YOU. They are not trades that
+   * "landed", so this loader does not render them — but the Trades urgency badge
+   * needs them, and a second provider read to learn what this one already knows
+   * would be pure cost. Called once per completed pass with every league whose
+   * scan actually answered; a league that did not answer is absent, never "0".
+   */
+  onPendingOffers?: (scanned: Array<{ leagueId: string; waiting: number }>) => void
 }
 
 function liveCompletedTrade(
@@ -328,6 +336,27 @@ export async function getRecentTrades(
           weeks,
         }).catch(() => null)
       }))
+    }
+    if (live.onPendingOffers) {
+      /*
+       * Only leagues whose scan ANSWERED are reported. A scan that failed tells us
+       * nothing, and reporting it as zero would clear a badge for an offer that may
+       * still be waiting.
+       */
+      const scanned: Array<{ leagueId: string; waiting: number }> = []
+      for (let i = 0; i < liveLeagues.length; i += 1) {
+        const scan = scans[i]
+        if (!scan?.scanned) continue
+        scanned.push({
+          leagueId: liveLeagues[i]!.id,
+          waiting: scan.trades.filter((t) => !t.proposedByViewer && t.lifecycleStatus !== 'complete').length,
+        })
+      }
+      try {
+        live.onPendingOffers(scanned)
+      } catch {
+        // Recording a badge must never cost the trades this loader exists to return.
+      }
     }
     const seen = new Set(out.map((trade) => `${trade.platformLeagueId}:${trade.id}`))
     for (let i = 0; i < liveLeagues.length; i += 1) {
