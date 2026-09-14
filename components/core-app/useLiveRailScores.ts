@@ -22,7 +22,7 @@ export function useLiveRailScores(leagues: RailLeague[], enabled: boolean) {
           const batch = ids.slice(start, start + 8)
           try {
             const query = new URLSearchParams(batch.map(id => ['league', id]))
-            const response = await fetch(`/api/core/rail-scores?${query}`, { cache: 'no-store', signal: AbortSignal.any([controller.signal, AbortSignal.timeout(20_000)]) })
+            const response = await fetch(`/api/core/rail-scores?${query}`, { cache: 'no-store', signal: AbortSignal.any([controller.signal, AbortSignal.timeout(40_000)]) })
             if (!response.ok) throw new Error('Refresh unavailable')
             const data = await response.json() as { updates: Record<string, LiveScore>; unavailable: string[] }
             if (controller.signal.aborted) return

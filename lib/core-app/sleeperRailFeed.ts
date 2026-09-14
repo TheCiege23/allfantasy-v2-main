@@ -1,4 +1,5 @@
 import 'server-only'
+import { getLeagueInfo, getLeagueMatchups, getNflState } from '@/lib/sleeper-client'
 
 // Shared across users on this Railway process. Bound memory, deduplicate in-flight
 // requests, and pace starts below Sleeper's published per-minute guidance.
@@ -17,9 +18,14 @@ export async function sleeperRailFeed(path: string, ttlMs: number): Promise<unkn
     if (delay > 2000) throw new Error('Sleeper refresh busy')
     nextStart = Date.now() + delay + 125
     if (delay) await new Promise(resolve => setTimeout(resolve, delay))
-    const response = await fetch(`https://api.sleeper.app/v1/${path}`, { cache: 'no-store', signal: AbortSignal.timeout(6000) })
-    if (!response.ok) throw new Error(`Sleeper unavailable (${response.status})`)
-    const value: unknown = await response.json()
+    // Keep transport and its hard deadline in the existing provider client.
+    const parts = path.split('/')
+    const value: unknown = path === 'state/nfl'
+      ? await getNflState()
+      : parts.length === 2
+        ? await getLeagueInfo(parts[1])
+        : await getLeagueMatchups(parts[1], Number(parts[3]))
+    if (value == null || (Array.isArray(value) && value.length === 0)) throw new Error('Sleeper unavailable')
     if (cache.size >= 1000) cache.delete(cache.keys().next().value!)
     cache.set(path, { value, expires: Date.now() + ttlMs })
     return value
