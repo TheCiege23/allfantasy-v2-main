@@ -93,7 +93,10 @@ export function DashSinceLastVisit({ brief, now }: { brief: SinceLastVisitBrief 
           {injuries.length > 0 ? (
             <li className="af-brief-row" data-kind="injuries">
               <span className="af-brief-what">
-                {injuries.length} injury change{injuries.length === 1 ? '' : 's'} on your rosters
+                {injuries.length} injury change{injuries.length === 1 ? '' : 's'}{' '}
+                {injuries.some((i) => i.followed && i.leagues.length === 0)
+                  ? 'on your rosters and players you follow'
+                  : 'on your rosters'}
               </span>
               <ul className="af-brief-sub">
                 {injuries.slice(0, 6).map((i) => (
@@ -103,7 +106,12 @@ export function DashSinceLastVisit({ brief, now }: { brief: SinceLastVisitBrief 
                     <span className="af-brief-detail">
                       {' '}
                       {statusText(i.from)} → <b>{statusText(i.to)}</b> ·{' '}
-                      {i.leagues.length === 1 ? i.leagues[0] : `${i.leagues.length} of your leagues`}
+                      {/* A followed player on none of your rosters has no league to name (2026-09-14). */}
+                      {i.leagues.length === 0
+                        ? 'Following'
+                        : i.leagues.length === 1
+                          ? i.leagues[0]
+                          : `${i.leagues.length} of your leagues`}
                     </span>
                     {i.handoff ? (
                       <>

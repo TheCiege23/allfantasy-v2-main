@@ -45,3 +45,8 @@ CREATE UNIQUE INDEX IF NOT EXISTS "player_follows_user_id_sport_player_key_key"
 -- Senders fan out from a player to his followers (an injury on one player -> every follower).
 CREATE INDEX IF NOT EXISTS "player_follows_sport_player_key_idx"
   ON "player_follows"("sport", "player_key");
+
+-- The news sender knows only a player's NAME (player_news rows carry no id), so it finds
+-- followers by (sport, lower(name)) — see listFollowerIdsForPlayer.
+CREATE INDEX IF NOT EXISTS "player_follows_sport_lower_name_idx"
+  ON "player_follows"("sport", lower("name"));

@@ -21,6 +21,7 @@ export type NotificationCategoryId =
   | "draft_alerts"
   | "draft_intel_alerts"
   | "autocoach"
+  | "followed_players"
 
 export interface NotificationChannelPrefs {
   enabled: boolean
@@ -98,6 +99,7 @@ export const NOTIFICATION_CATEGORY_IDS: NotificationCategoryId[] = [
   "draft_alerts",
   "draft_intel_alerts",
   "autocoach",
+  "followed_players",
 ]
 
 export const NOTIFICATION_CATEGORY_LABELS: Record<NotificationCategoryId, string> = {
@@ -121,4 +123,8 @@ export const NOTIFICATION_CATEGORY_LABELS: Record<NotificationCategoryId, string
   draft_alerts: "Draft alerts (on the clock, timer, trade offers)",
   draft_intel_alerts: "Draft intelligence (AI queue, Chimmy DMs, recap)",
   autocoach: "Chimmy AutoCoach lineup swaps",
+  // Players followed from the ☆ on any player card (2026-09-14) — injuries and big news about
+  // them, including players on none of your rosters. Its own switch so a follow can stay in the
+  // bell and off the phone, or be silenced without touching roster injury alerts.
+  followed_players: "Players you follow — injuries & news",
 }

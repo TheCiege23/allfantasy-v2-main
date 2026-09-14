@@ -22,6 +22,7 @@ import {
   followKeyFor,
   followPlayer,
   isFollowingPlayer,
+  listFollowerIdsForPlayer,
   listPlayerFollows,
   unfollowPlayer,
 } from '@/lib/follows/playerFollows'
@@ -123,6 +124,23 @@ describe('reads', () => {
     expect(await isFollowingPlayer('u1', 'nfl', '9221')).toBe(true)
     expect(await isFollowingPlayer('u1', 'nfl', '9221')).toBe(false)
     expect(valuesOf($queryRaw.mock.calls[0])).toEqual(['u1', 'NFL', '9221'])
+  })
+
+  it('🛑 followers of a player are found by sport + case-insensitive name, deduped', async () => {
+    $queryRaw.mockResolvedValue([{ user_id: 'u1' }, { user_id: 'u2' }])
+    expect(await listFollowerIdsForPlayer('nfl', ' Jahmyr Gibbs ')).toEqual(['u1', 'u2'])
+    const call = $queryRaw.mock.calls[0]
+    expect(sqlOf(call)).toMatch(/SELECT DISTINCT "user_id"/)
+    expect(sqlOf(call)).toMatch(/lower\("name"\) = lower\(\?\)/)
+    expect(valuesOf(call).slice(0, 2)).toEqual(['NFL', 'Jahmyr Gibbs'])
+  })
+
+  it('🛑 follower lookup: missing table is null (skip), a blank name touches nothing', async () => {
+    $queryRaw.mockRejectedValue(MISSING_TABLE)
+    expect(await listFollowerIdsForPlayer('NFL', 'Jahmyr Gibbs')).toBeNull()
+    $queryRaw.mockReset()
+    expect(await listFollowerIdsForPlayer('NFL', '  ')).toEqual([])
+    expect($queryRaw).not.toHaveBeenCalled()
   })
 
   it('unfollow deletes by user + sport + key', async () => {

@@ -153,6 +153,35 @@ export async function followPlayer(userId: string, input: FollowPlayerInput): Pr
   }
 }
 
+/**
+ * Everyone following a player, for a sender that only knows his NAME (player news rows
+ * carry no id). Matched case-insensitively on the stored snapshot name within the sport;
+ * the snapshot is refreshed on every follow, and a name that matches two different players
+ * in one sport notifies both followers — the same trade-off the roster path already makes
+ * with its `contains` match, and narrower than it.
+ *
+ * `null` when follows are unavailable, so a sender skips rather than treating it as "nobody".
+ */
+export async function listFollowerIdsForPlayer(
+  sport: string,
+  playerName: string,
+  limit = 5000,
+): Promise<string[] | null> {
+  const name = String(playerName ?? '').trim()
+  if (!name) return []
+  try {
+    const rows = await prisma.$queryRaw<Array<{ user_id: string }>>`
+      SELECT DISTINCT "user_id" FROM "player_follows"
+      WHERE "sport" = ${normalizeFollowSport(sport)} AND lower("name") = lower(${name})
+      LIMIT ${limit}
+    `
+    return rows.map((r) => r.user_id)
+  } catch (err) {
+    if (isMissingDatabaseObjectError(err)) return null
+    throw err
+  }
+}
+
 export async function unfollowPlayer(
   userId: string,
   sport: string,
