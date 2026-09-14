@@ -2297,3 +2297,69 @@ html[data-mode='light'] .af-core {
   0%, 45% { box-shadow: 0 0 0 0 color-mix(in srgb, currentColor 32%, transparent); }
   100% { box-shadow: 0 0 0 7px transparent; }
 }
+
+/*
+ * ── Section nav — 2026-09-13 core-tabs handoff, desktop only ────────────
+ *
+ * The handoff's nav is quieter than this one was: 12px muted labels on 9px/8px
+ * rows, 9px mono section headings, a 7px-radius teal box for the active screen,
+ * no glyphs, and Home heading the column as a wordmark rather than one row
+ * among many. Measured before: every row 40px, 700 13.5px, with a glyph.
+ *
+ * ⚠ SCOPED TO (min-width: 1081px) BECAUSE THAT IS THE ONLY WIDTH THIS COLUMN
+ * EXISTS AT. ≤1080px hides `.af-nav`; ≤720px turns it into a horizontal row
+ * with its own 44px touch floor. Neither of those layouts is touched.
+ *
+ * ⚠ ITS OWN TOP-LEVEL @media AT END OF FILE, per this file's convention: a
+ * block dropped inside another closes the outer query early.
+ */
+@media (min-width: 1081px) {
+  .af-core .af-nav {
+    gap: 18px;
+    padding: 18px 14px;
+    background: var(--rail);
+  }
+  .af-core .af-nav-scroll {
+    gap: 18px;
+  }
+  .af-core .af-nav-group,
+  .af-core .af-nav-items {
+    gap: 2px;
+  }
+  .af-core .af-nav-heading.af-label {
+    padding: 0 8px 4px;
+    font-size: 9px;
+    letter-spacing: 0.12em;
+  }
+  .af-core .af-nav-item {
+    min-height: 32px;
+    padding: 9px 8px;
+    gap: 8px;
+    border-radius: 7px;
+    font: 600 12px/1 var(--font-archivo, 'Archivo', system-ui, sans-serif);
+    color: var(--muted);
+    transition: color 120ms ease, background-color 120ms ease;
+  }
+  .af-core .af-nav-item:hover {
+    color: var(--text2);
+    background: var(--chip);
+  }
+  /* Declared after :hover at equal specificity, so the active box wins. */
+  .af-core .af-nav-item[data-active='true'] {
+    font-weight: 700;
+    color: var(--accent);
+    background: var(--accent-soft);
+  }
+  .af-core .af-nav-glyph {
+    display: none;
+  }
+  /* Home is the first, heading-less group: the column's wordmark. */
+  .af-core .af-nav-scroll > .af-nav-group:first-child .af-nav-item {
+    font-size: 14px;
+    font-weight: 900;
+    color: var(--text);
+  }
+  .af-core .af-nav-scroll > .af-nav-group:first-child .af-nav-item[data-active='true'] {
+    color: var(--accent);
+  }
+}
