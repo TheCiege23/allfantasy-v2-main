@@ -3,6 +3,8 @@ import 'server-only'
 import { prisma } from '@/lib/prisma'
 import type { CoreIssue } from '@/lib/core-app/outstandingIssues'
 import { categoryFromMeta } from '@/lib/core-app/notificationMutes'
+import { handoffFor } from '@/lib/core-app/platformLinks'
+import type { SourceScreen } from '@/lib/league-links/sourceLinkResolver'
 import type { NotificationCategoryId } from '@/lib/notification-settings/types'
 
 /**
@@ -60,6 +62,13 @@ export type NotificationRow = {
   severity: 'bad' | 'warn' | 'info'
   /** Verb + destination. Null only when there is genuinely nowhere to go. */
   action: { label: string; href: string; external: boolean } | null
+  /**
+   * "Open in <platform>" — the provider screen this notification is acted on (trade,
+   * waivers, lineup, else the league page). Present only for a VERIFIED destination;
+   * absent for MFL / Fantrax / Fleaflicker, a native league, or a league without a
+   * provider id (user decision 2026-09-14). See platformLinks.handoffFor.
+   */
+  handoff?: { href: string; label: string; screen: string } | null
 }
 
 export type NotificationsCenterData = {
@@ -330,14 +339,66 @@ export async function getNotificationsCenter(input: {
         leagueId: true,
         // For the row's mute control: the dispatcher stamps meta.notificationCategory.
         meta: true,
-        league: { select: { name: true, platform: true } },
+        // platformLeagueId + season build the provider handoff link.
+        league: { select: { name: true, platform: true, platformLeagueId: true, season: true } },
       },
     })
     .catch(() => [])
 
+  /*
+   * The user's own team id per league, for the provider screens that need one: ESPN
+   * and Yahoo lineups, and Yahoo's trade screen. Read ONLY when such a league is in the
+   * list — Sleeper's verified screens open on the signed-in user's own team and need no
+   * id, so an all-Sleeper feed costs nothing extra. A league with two claimed teams is
+   * ambiguous and gets no team-specific link; it falls back to the league page.
+   */
+  const teamIdByLeague = new Map<string, string>()
+  const needTeam = [
+    ...new Set(
+      stored
+        .filter((n) => n.leagueId && ['espn', 'yahoo'].includes(String(n.league?.platform ?? '').toLowerCase()))
+        .map((n) => n.leagueId as string),
+    ),
+  ]
+  if (needTeam.length > 0) {
+    try {
+      const teams = await prisma.leagueTeam.findMany({
+        where: { leagueId: { in: needTeam }, claimedByUserId: input.userId },
+        select: { leagueId: true, externalId: true },
+      })
+      const ambiguous = new Set<string>()
+      for (const t of teams) {
+        if (teamIdByLeague.has(t.leagueId)) ambiguous.add(t.leagueId)
+        if (t.externalId) teamIdByLeague.set(t.leagueId, String(t.externalId))
+      }
+      for (const id of ambiguous) teamIdByLeague.delete(id)
+    } catch {
+      /* No team ids: those rows fall back to the verified league page. */
+    }
+  }
+
+  /* The provider screen a notification of this kind is acted on. */
+  const screenFor = (kind: NotificationFilter): SourceScreen =>
+    kind === 'trades' ? 'trade' : kind === 'waivers' ? 'waivers' : kind === 'lineups' ? 'lineup' : 'league'
+
   const rest: NotificationRow[] = stored.map((n) => {
     const kind = classify(`${n.type} ${n.title} ${n.body ?? ''}`)
+    const handoff =
+      n.leagueId && n.league
+        ? handoffFor(
+            {
+              id: n.leagueId,
+              platform: n.league.platform,
+              platformLeagueId: n.league.platformLeagueId,
+              season: n.league.season,
+              name: n.league.name,
+              teamId: teamIdByLeague.get(n.leagueId) ?? null,
+            },
+            screenFor(kind),
+          )
+        : null
     return {
+      ...(handoff ? { handoff: { href: handoff.href, label: handoff.label, screen: handoff.screen } } : {}),
       id: n.id,
       kind,
       title: n.title,

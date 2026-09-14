@@ -146,6 +146,42 @@ export function tradeLink(league: LinkLeague): { here: PlatformLink; there: Plat
 }
 
 /**
+ * A handoff to the provider — only when it LANDS where it says.
+ *
+ * User decision, 2026-09-14 (one-tap provider handoff): Core triage, notification
+ * rows, the since-last-visit brief and the matchup screen send the user to the
+ * provider screen that acts on what they are looking at. A destination the resolver
+ * cannot verify returns null — a homepage fallback, a missing league or team id, or
+ * MFL / Fantrax / Fleaflicker, whose per-league URLs cannot be built from what is
+ * stored — and the surface keeps its in-app destination. A button that promises
+ * "your lineup" and opens a homepage is worse than no button.
+ *
+ * ⚠ UNLIKE `lineupLink` / `claimLink` ABOVE, THIS NEVER RETURNS THE LEAGUE PAGE UNDER
+ * ANOTHER SCREEN'S NAME. Those fall back to the league page (labelled "League") so
+ * Player Finder always has somewhere to point; a handoff is either the named screen
+ * or nothing. `handoffFor` makes the league-page fallback an explicit, labelled choice.
+ */
+export function verifiedHandoff(league: LinkLeague, screen: SourceScreen): PlatformLink | null {
+  if (!normalizeSourcePlatform(league.platform)) return null
+  const resolved = resolveSourceScreenLink({
+    platform: league.platform,
+    sourceLeagueId: league.platformLeagueId ?? null,
+    leagueName: league.name ?? null,
+    season: league.season ?? null,
+    teamId: league.teamId ?? null,
+    partnerTeamId: league.partnerTeamId ?? null,
+    screen,
+  })
+  if (!resolved || !resolved.verified) return null
+  return fromResolved(resolved, league.platform)
+}
+
+/** The verified screen for the job, else that league's verified page (labelled "League"), else nothing. */
+export function handoffFor(league: LinkLeague, screen: SourceScreen): PlatformLink | null {
+  return verifiedHandoff(league, screen) ?? (screen === 'league' ? null : verifiedHandoff(league, 'league'))
+}
+
+/**
  * Every screen for a league, with what the link resolves to today and the
  * unverified URL each format would build — the verification pass's worksheet.
  */

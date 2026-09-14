@@ -2,6 +2,7 @@ import 'server-only'
 
 import type { UserLeague } from '@/app/dashboard/types'
 import { describeAge } from '@/lib/sports-data/freshnessPolicy'
+import { handoffFor } from './platformLinks'
 
 /**
  * The "outstanding issues" feed behind the AF Core home screen.
@@ -63,16 +64,33 @@ export type OutstandingIssuesResult = {
   detectorsUnavailable: Array<{ detector: IssueDetector; reason: string }>
 }
 
-/** Platform deep links. Never a write action — always "open the platform". */
-function platformHome(platform: string, league: UserLeague): { label: string; href: string } | null {
-  const p = platform.toLowerCase()
-  if (p === 'sleeper') {
-    const id = league.sleeperLeagueId ?? league.id
-    return { label: 'Open in Sleeper', href: `https://sleeper.com/leagues/${encodeURIComponent(id)}` }
-  }
-  if (p === 'espn') return { label: 'Open in ESPN', href: 'https://fantasy.espn.com/football/league' }
-  if (p === 'yahoo') return { label: 'Open in Yahoo', href: 'https://football.fantasysports.yahoo.com/' }
-  return null
+/**
+ * The provider's league page for an issue — a VERIFIED destination, or nothing.
+ * Never a write action; always "open the platform".
+ *
+ * 🛑 THIS USED TO BUILD URLS BY HAND, AND ALL THREE WERE WRONG IN DIFFERENT WAYS:
+ *   - ESPN and Yahoo went to the provider HOMEPAGE — no league id in the URL at all;
+ *   - Sleeper fell back to `league.id`, AllFantasy's OWN row id, whenever
+ *     `sleeperLeagueId` was absent: a sleeper.com URL for a league that does not exist;
+ *   - and `/leagues/{id}` is not the verified league-page format (`/leagues/{id}/league`).
+ * It now goes through the one verified resolver (`handoffFor`, user decision
+ * 2026-09-14), which needs the PROVIDER's league id and returns null rather than guess.
+ * The league-list rows carry `platformLeagueId` (see get-dashboard-league-list.ts);
+ * `UserLeague` just does not declare it.
+ */
+function platformHome(league: UserLeague): { label: string; href: string } | null {
+  const row = league as UserLeague & { platformLeagueId?: string | null }
+  const link = handoffFor(
+    {
+      id: league.id,
+      platform: league.platform,
+      platformLeagueId: row.platformLeagueId ?? league.sleeperLeagueId ?? null,
+      season: league.season ?? null,
+      name: league.name,
+    },
+    'league',
+  )
+  return link ? { label: link.label, href: link.href } : null
 }
 
 /**
@@ -152,7 +170,7 @@ export function deriveOutstandingIssues(input: {
 
   for (const league of input.leagues) {
     const platform = String(league.platform ?? '').toLowerCase()
-    const action = platformHome(platform, league)
+    const action = platformHome(league)
 
     // ── Detector: a draft with a known date that has not happened yet ──
     if (league.draftDate) {

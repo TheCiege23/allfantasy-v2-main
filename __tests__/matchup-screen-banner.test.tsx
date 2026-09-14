@@ -31,6 +31,7 @@ function data(over: Partial<MatchupData> = {}): MatchupData {
       platform: 'sleeper',
       logoUrl: null,
       sourceLink: null,
+      lineupLink: null,
     },
     week: { available: true, data: { week: 1, season: 2026, isFinal: false } },
     teams: {

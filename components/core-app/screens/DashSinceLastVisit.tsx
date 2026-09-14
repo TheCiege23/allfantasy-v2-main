@@ -70,6 +70,20 @@ export function DashSinceLastVisit({ brief, now }: { brief: SinceLastVisitBrief 
                       {t.leagueName}
                     </Link>
                     <span className="af-brief-detail"> — {t.summary}</span>
+                    {t.handoff ? (
+                      <>
+                        {' '}
+                        <a
+                          className="af-brief-handoff"
+                          href={t.handoff.href}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          title={`${t.handoff.label} · ${t.handoff.screen}`}
+                        >
+                          {t.handoff.label} <span aria-hidden>↗</span>
+                        </a>
+                      </>
+                    ) : null}
                   </li>
                 ))}
               </ul>
@@ -91,6 +105,20 @@ export function DashSinceLastVisit({ brief, now }: { brief: SinceLastVisitBrief 
                       {statusText(i.from)} → <b>{statusText(i.to)}</b> ·{' '}
                       {i.leagues.length === 1 ? i.leagues[0] : `${i.leagues.length} of your leagues`}
                     </span>
+                    {i.handoff ? (
+                      <>
+                        {' '}
+                        <a
+                          className="af-brief-handoff"
+                          href={i.handoff.href}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          title={`${i.handoff.label} · ${i.handoff.screen}`}
+                        >
+                          {i.handoff.label} <span aria-hidden>↗</span>
+                        </a>
+                      </>
+                    ) : null}
                   </li>
                 ))}
                 {injuries.length > 6 ? <li className="af-brief-more">+{injuries.length - 6} more</li> : null}

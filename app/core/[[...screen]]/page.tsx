@@ -1666,6 +1666,10 @@ export default async function AfCorePage({
           id: l.id,
           name: l.name ?? null,
           sport: (l as { sport?: string | null }).sport ?? null,
+          // For the brief's provider handoff links (2026-09-14).
+          platform: l.platform ?? null,
+          platformLeagueId: (l as { platformLeagueId?: string | null }).platformLeagueId ?? null,
+          season: l.season ?? null,
         })),
         recentTrades: homeTrades,
         tradesLimit: HOME_RECENT_TRADES_LIMIT,
