@@ -6,6 +6,7 @@ import { authOptions } from '@/lib/auth'
 import { buildRateLimit429, consumeRateLimit, getClientIp } from '@/lib/rate-limit'
 import { resolveLeagueMembership } from '@/lib/league-access'
 import { getPlayerCard } from '@/lib/core-app/playerCard'
+import { getPlayerLeagueImpact } from '@/lib/core-app/playerLeagueImpact'
 
 /**
  * The player card pop-up's payload — STATE 6 / STATE 7 of the 2026-09-07 design
@@ -31,6 +32,8 @@ const querySchema = z.object({
   externalId: z.string().min(1).max(64).optional(),
   sleeperId: z.string().min(1).max(64).optional(),
   leagueId: z.string().min(1).max(64).optional(),
+  /** `1`: the signed-in user's per-league "if he sits" win-chance breakdown instead of the card. */
+  impact: z.literal('1').optional(),
 })
 
 export async function GET(req: Request) {
@@ -59,6 +62,22 @@ export async function GET(req: Request) {
 
   const session = (await getServerSession(authOptions as never).catch(() => null)) as { user?: { id?: string } } | null
   const userId = typeof session?.user?.id === 'string' && session.user.id.trim() ? session.user.id.trim() : null
+
+  /*
+   * `impact=1` — the home exposure card's "if he sits" breakdown (user decisions,
+   * 2026-09-14): for each of YOUR leagues holding him, your win chance this week now vs.
+   * with him scoring 0. Fetched on tap for the same reason the card itself is: the home
+   * has already rendered, and pricing every league for every exposure row on each home
+   * load would cost a matchup read per league per row. It is always the signed-in user's
+   * own rosters, so it needs a session and ignores `leagueId`.
+   */
+  if (parsed.data.impact) {
+    if (!userId) return NextResponse.json({ error: 'Sign in to see your leagues' }, { status: 401 })
+    if (!parsed.data.sleeperId) return NextResponse.json({ error: 'sleeperId is required' }, { status: 400 })
+    const impact = await getPlayerLeagueImpact({ userId, rosterPlayerId: parsed.data.sleeperId }).catch(() => null)
+    if (!impact) return NextResponse.json({ error: 'Impact unavailable' }, { status: 503 })
+    return NextResponse.json({ impact }, { headers: { 'Cache-Control': 'private, no-store' } })
+  }
 
   let leagueId: string | null = null
   if (parsed.data.leagueId) {
