@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
-import { encode } from 'next-auth/jwt'
+import { signInAs } from './helpers/session-cookie'
 
 test.describe.configure({ mode: 'serial', timeout: 180_000 })
 
@@ -94,25 +94,16 @@ function createCard(
 }
 
 async function installDiscoveryRoutes(page: Page) {
-  const baseUrl = process.env.PLAYWRIGHT_BASE_URL ?? 'http://127.0.0.1:3000'
-  const sessionToken = await encode({
-    secret: 'playwright-secret',
-    token: {
-      sub: 'viewer-1',
-      email: 'viewer@allfantasy.test',
-      name: 'Ranked Viewer',
-    },
-  })
-
-  await page.context().addCookies([
-    {
-      name: 'next-auth.session-token',
-      value: sessionToken,
-      url: baseUrl,
-      httpOnly: true,
-      sameSite: 'Lax',
-    },
-  ])
+  /*
+   * ⚠ A REAL SESSION, NOT A COOKIE THE SERVER CANNOT READ. This used to mint its token with a
+   * hardcoded secret: 'playwright-secret', which never matches the server's NEXTAUTH_SECRET.
+   * The server logged ERR_JWE_DECRYPTION_FAILED for every request carrying it (34 times in one
+   * nightly core 3/3 run) and treated the viewer as signed OUT, while the /api/auth/session mock
+   * below told the client the opposite. The spec claimed a signed-in "Ranked Viewer" that only
+   * half the stack believed in. signInAs signs with the server's own secret and seeds the
+   * AppUser row the session needs; e2e/helpers/session-cookie.ts records why both are required.
+   */
+  await signInAs(page, { id: 'viewer-1', email: 'viewer@allfantasy.test', name: 'Ranked Viewer' })
 
   const alphaCreatorLeague = createCard('creator-league-1', {
     source: 'creator',
