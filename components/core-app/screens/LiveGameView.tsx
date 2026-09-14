@@ -197,6 +197,28 @@ function teamColor(team: GameDetailTeam, fallback: string): string {
 }
 
 /**
+ * Both teams' colours, never the same one twice.
+ *
+ * ⚠ TWO TEAMS CAN SHARE A PRIMARY COLOUR, AND IN COLLEGE THEY OFTEN DO. ESPN sends
+ * Wake Forest and Purdue both as `ceb888` (WAKE @ PUR, 401858224, 2026-09-12), so
+ * the stat bars and the two end zones drew one gold for both sides. The hockey and
+ * baseball maps already resolved this for their markers; these did not. On a clash
+ * the home side takes its alternate colour, or the fallback.
+ */
+export function distinctTeamColors(
+  away: Pick<GameDetailTeam, 'color' | 'altColor'>,
+  home: Pick<GameDetailTeam, 'color' | 'altColor'>,
+  fallback: { away: string; home: string },
+): { away: string; home: string } {
+  const hex = (c: string | null | undefined) => (c && /^[0-9a-f]{6}$/i.test(c) ? `#${c.toLowerCase()}` : null)
+  const a = hex(away.color) ?? fallback.away
+  const h = hex(home.color) ?? fallback.home
+  if (h.toLowerCase() !== a.toLowerCase()) return { away: a, home: h }
+  const alt = hex(home.altColor)
+  return { away: a, home: alt && alt !== a.toLowerCase() ? alt : fallback.home }
+}
+
+/**
  * A team colour that stays visible as a marker on the dark rink. Many NHL teams
  * are black — measured: BOS `231f20`, LA `121212`, neither with an alternate —
  * and rendered as-is their shots vanish into the ice. Too dark → the alternate
@@ -225,7 +247,26 @@ function periodName(n: number | null, kind: 'quarter' | 'period' | 'half' = 'qua
   const regulation = kind === 'half' ? 2 : kind === 'period' ? 3 : 4
   const unit = kind === 'half' ? 'Half' : kind === 'period' ? 'Period' : 'Quarter'
   if (n <= regulation) return `${ordinal(n)} ${unit}`
-  return n === regulation + 1 ? 'Overtime' : `${n - regulation}OT`
+  return n === regulation + 1 ? 'Overtime' : `${ordinal(n - regulation)} Overtime`
+}
+
+/** A football play's period as a scoreboard writes it: "3rd", then "OT", "2OT". */
+function footballPeriod(n: number): string {
+  return n <= 4 ? ordinal(n) : n === 5 ? 'OT' : `${n - 4}OT`
+}
+
+/**
+ * A football play's clock, or null when there is no clock to show.
+ *
+ * ⚠ COLLEGE OVERTIME IS UNTIMED, AND ESPN STILL SENDS A CLOCK. On WAKE @ PUR
+ * (401858224, Final/2OT) 25 of the 28 overtime plays read "0:00" — the rest "15:00"
+ * twice and "0:01" once, none of them a real time — and all four overtime scores
+ * printed "0:00 · 5th". The NFL's overtime period is timed, so its clock stays.
+ */
+function footballClock(sport: string, period: number | null, clock: string | null): string | null {
+  if (!clock) return null
+  if (sport === 'NCAAF' && period != null && period > 4) return null
+  return clock
 }
 
 function TeamLogo({ team, size }: { team: GameDetailTeam; size: number }) {
@@ -413,8 +454,10 @@ function LeaderSide({ leader, side }: { leader: GameDetailLeader | null; side: '
 
 function TeamStatsPanel({ detail }: { detail: LiveGameDetail }) {
   if (detail.teamStats.length === 0) return null
-  const awayColor = teamColor(detail.away, 'var(--accent)')
-  const homeColor = teamColor(detail.home, 'var(--muted)')
+  const { away: awayColor, home: homeColor } = distinctTeamColors(detail.away, detail.home, {
+    away: 'var(--accent)',
+    home: 'var(--muted)',
+  })
   return (
     <section className="af-gv-card" aria-labelledby="af-gv-teamstats">
       <h2 className="af-label" id="af-gv-teamstats">
@@ -456,6 +499,7 @@ function DrivePanel({ detail }: { detail: LiveGameDetail }) {
       ? Math.min(100, Math.max(0, ball + toward * s.distance))
       : null
   const driveTeam = drive.teamId === detail.home.id ? detail.home : drive.teamId === detail.away.id ? detail.away : null
+  const zones = distinctTeamColors(detail.away, detail.home, { away: '', home: '' })
 
   return (
     <section className="af-gv-card af-gv-drive" aria-labelledby="af-gv-drive">
@@ -491,7 +535,7 @@ function DrivePanel({ detail }: { detail: LiveGameDetail }) {
           role="img"
           aria-label={`${driveTeam ? `${driveTeam.abbrev} ball` : 'Ball'}${s?.possessionText ? ` on ${s.possessionText}` : ''}`}
         >
-          <EndZone team={detail.away} />
+          <EndZone team={detail.away} color={zones.away} />
           <div className="af-live-grass">
             {YARD_MARKS.map((y) => (
               <span key={y} className="af-live-yard" style={{ left: `${y}%` }}>
@@ -511,7 +555,7 @@ function DrivePanel({ detail }: { detail: LiveGameDetail }) {
               style={{ left: `${ball}%` }}
             />
           </div>
-          <EndZone team={detail.home} />
+          <EndZone team={detail.home} color={zones.home} />
         </div>
       ) : null}
 
@@ -520,8 +564,7 @@ function DrivePanel({ detail }: { detail: LiveGameDetail }) {
   )
 }
 
-function EndZone({ team }: { team: GameDetailTeam }) {
-  const color = teamColor(team, '')
+function EndZone({ team, color }: { team: GameDetailTeam; color: string }) {
   return (
     <span className="af-live-endzone af-gv-endzone" style={color ? { background: color } : undefined}>
       <span className="af-num">{team.abbrev}</span>
@@ -730,8 +773,9 @@ function PlayByPlayPanel({
                     <span className="af-gv-score-play-text">
                       <strong>{p.type ?? 'Score'}</strong>
                       <span className="af-num af-gv-muted">
-                        {p.clock ?? ''}
-                        {p.period != null ? ` · ${ordinal(p.period)}` : ''}
+                        {[footballClock(detail.sport, p.period, p.clock), p.period != null ? footballPeriod(p.period) : null]
+                          .filter(Boolean)
+                          .join(' · ')}
                       </span>
                       <span className="af-gv-play-desc">{p.text}</span>
                     </span>
@@ -807,8 +851,8 @@ function DriveRow({
             <li key={p.id || i} className="af-gv-play" data-scoring={p.scoring}>
               <span className="af-gv-play-meta af-num">
                 {p.downDistance ?? p.type ?? ''}
-                {p.clock ? ` · ${p.clock}` : ''}
-                {p.period != null ? ` ${ordinal(p.period)}` : ''}
+                {footballClock(detail.sport, p.period, p.clock) ? ` · ${p.clock}` : ''}
+                {p.period != null ? ` ${footballPeriod(p.period)}` : ''}
               </span>
               <span className="af-gv-play-desc">{p.text}</span>
             </li>
@@ -834,7 +878,7 @@ const HALF_COURT = 47
 
 function ShotChart({ detail, basketball }: { detail: LiveGameDetail; basketball: BasketballDetail }) {
   const [side, setSide] = useState<'both' | 'away' | 'home'>('both')
-  const colors = { away: teamColor(detail.away, 'var(--accent)'), home: teamColor(detail.home, 'var(--warn)') }
+  const colors = distinctTeamColors(detail.away, detail.home, { away: 'var(--accent)', home: 'var(--warn)' })
   const sideOf = (s: BasketballShot): 'home' | 'away' | null =>
     s.teamId === detail.home.id ? 'home' : s.teamId === detail.away.id ? 'away' : null
   const onCourt = basketball.shots.filter((s) => {
