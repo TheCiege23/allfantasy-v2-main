@@ -12,7 +12,7 @@ import {
   PlayerFace,
   SectionHead,
   StatPair,
-  rankLabel,
+  platformKey,
 } from '@/components/core-app/boards/BoardKit'
 import { DraftClock } from '@/components/core-app/boards/DraftClock'
 import '@/components/core-app/af-core-boards.css'
@@ -260,22 +260,30 @@ function LiveDetail({ row, picks }: { row: DraftHqAllRow; picks: LiveDraftPicks 
   )
 }
 
-function Card({ row, i, picks }: { row: DraftHqAllRow; i: number; picks?: LiveDraftPicks }) {
+function Card({ row, picks }: { row: DraftHqAllRow; picks?: LiveDraftPicks }) {
   const status = statusOf(row)
   const label = platformLabel(row.platform)
   const format = [row.modeLabel, row.draftType].filter(Boolean).join(' · ') || null
+  /*
+   * ⚠ "ON CLOCK" IS ONLY A NAME WHILE A DRAFT IS RUNNING. Off a live draft there
+   * is nobody on the clock, and the dash says so rather than repeating a stale
+   * name from whenever the draft last moved.
+   */
+  const onClock = row.yoursOnClock ? 'You' : row.phase === 'live' ? (row.onClockName ?? '—') : '—'
 
   return (
     <li>
+      {/*
+        2026-09-13 handoff: status and the action in the header, a divided stat
+        strip, the reasoning line. The rank numeral is gone (the section label
+        states the rule) and the bottom link row became the header button.
+      */}
       <article
         className="af-bd-card"
         data-live={row.phase === 'live' ? 'true' : undefined}
         data-sev={row.yoursOnClock ? 'bad' : undefined}
       >
         <header className="af-bd-card-head">
-          <span className="af-bd-rank" aria-hidden>
-            {rankLabel(i)}
-          </span>
           <LeagueCrest
             imageUrl={row.imageUrl}
             name={row.leagueName}
@@ -285,7 +293,7 @@ function Card({ row, i, picks }: { row: DraftHqAllRow; i: number; picks?: LiveDr
           <span className="af-bd-league">
             <span className="af-bd-name">{row.leagueName}</span>
             <span className="af-bd-sub">
-              <span className="af-bd-plat" data-platform={row.platform ?? undefined}>
+              <span className="af-bd-plat" data-platform={platformKey(row.platform)}>
                 {label.toUpperCase()}
               </span>
               {format ? ` · ${format}` : null}
@@ -300,14 +308,21 @@ function Card({ row, i, picks }: { row: DraftHqAllRow; i: number; picks?: LiveDr
             countdown cannot render against a draft that is not counting.
           */}
           {row.pickExpiresAt ? <DraftClock endsAt={row.pickExpiresAt} /> : null}
+          <Link
+            className="af-bd-btn"
+            href={`/core/draft-hq?league=${encodeURIComponent(row.leagueId)}`}
+          >
+            {row.phase === 'live' ? 'Open the board →' : 'Open board →'}
+          </Link>
         </header>
 
         <div className="af-bd-kvrow">
           <StatPair
             k="Your slot"
-            v={row.yourSlot != null && row.teamCount != null ? `${row.yourSlot} / ${row.teamCount}` : '—'}
+            v={row.yourSlot != null && row.teamCount != null ? `${row.yourSlot} of ${row.teamCount}` : '—'}
           />
           <StatPair k="Rounds" v={row.rounds != null ? String(row.rounds) : '—'} />
+          <StatPair k="On clock" v={onClock} sev={row.yoursOnClock ? 'bad' : undefined} />
           <StatPair
             k="Picks made"
             v={row.picksMade != null ? String(row.picksMade) : '—'}
@@ -331,16 +346,6 @@ function Card({ row, i, picks }: { row: DraftHqAllRow; i: number; picks?: LiveDr
         {row.phase === 'live' && picks ? <LiveDetail row={row} picks={picks} /> : null}
 
         <p className="af-bd-reason">{reasoningOf(row)}</p>
-
-        <div className="af-bd-card-head">
-          <span className="af-bd-mid" />
-          <Link
-            className="af-bd-cta"
-            href={`/core/draft-hq?league=${encodeURIComponent(row.leagueId)}`}
-          >
-            {row.phase === 'live' ? 'Open the board →' : 'Open board →'}
-          </Link>
-        </div>
       </article>
     </li>
   )
@@ -368,9 +373,9 @@ export function DraftHqBoard({ data, allHref, totalLeagues, picks }: DraftHqBoar
             label={`Top ${rows.length} · ranked by clock`}
             count={`${data.counts.live} live · ${data.counts.upcoming} upcoming · ${data.counts.done} complete`}
           />
-          <ul className="af-bd-cards">
-            {rows.map((r, i) => (
-              <Card key={r.leagueId} row={r} i={i} picks={picks} />
+          <ul className="af-bd-cards af-bd-cards--rich">
+            {rows.map((r) => (
+              <Card key={r.leagueId} row={r} picks={picks} />
             ))}
           </ul>
         </section>
@@ -388,7 +393,7 @@ export function DraftHqBoard({ data, allHref, totalLeagues, picks }: DraftHqBoar
         AllFantasy; the count says so in one line rather than filling the board.
       */}
       {data.withoutDraft > 0 ? (
-        <p className="af-bd-note">
+        <p className="af-bd-note af-bd-note--plain">
           {data.withoutDraft.toLocaleString()} of your leagues carry no draft we can read — either
           it never ran through AllFantasy, or the platform has not published one.
         </p>
