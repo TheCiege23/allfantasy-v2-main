@@ -77,6 +77,8 @@ export type GameLeader = {
   /** ESPN's own short label — "PASS", "RUSH", "REC", "PTS". */
   label: string | null
   name: string
+  /** "L. Ball" — ESPN's own short form, for layouts too narrow for the full name. */
+  shortName: string | null
   /** ESPN's displayValue verbatim, e.g. "9/12, 73 YDS". Never recomposed. */
   statLine: string
   position: string | null
@@ -171,6 +173,7 @@ export function pickGameLeaders(categories: EspnLeaderCategory[] | undefined, ma
     out.push({
       label: text(category.shortDisplayName) ?? text(category.displayName),
       name,
+      shortName: text(athlete?.shortName),
       statLine,
       position: text(position),
       headshot: text(headshot),
@@ -179,6 +182,90 @@ export function pickGameLeaders(categories: EspnLeaderCategory[] | undefined, ma
     })
   }
   return out
+}
+
+/**
+ * Basketball's in-game leader categories, in the order ESPN's own game strip uses.
+ *
+ * ⚠ AN ALLOWLIST, BECAUSE BEFORE TIP-OFF THE SAME ARRAY CARRIES SEASON NUMBERS.
+ * Measured 2026-09-13: a scheduled WNBA game's competitors sent `pointsPerGame`,
+ * `reboundsPerGame` and `assistsPerGame` ("19.3") in the very `leaders` field that
+ * carries `points` ("27") once the game is on. The fourth in-game category,
+ * `rating` ("27 PTS, 8 AST"), is ESPN's composite and repeats the other three.
+ * Across 90 finished NBA and college basketball team-games the in-game set was
+ * always exactly points, rebounds, assists, rating.
+ */
+const TEAM_LEADER_CATEGORIES = ['points', 'rebounds', 'assists']
+
+/** One team's PTS / REB / AST leaders, from that competitor's own `leaders`. */
+export function pickTeamLeaders(categories: EspnLeaderCategory[] | undefined): GameLeader[] {
+  if (!Array.isArray(categories)) return []
+  const inGame = TEAM_LEADER_CATEGORIES.map((name) => categories.find((c) => c?.name === name)).filter(
+    (c): c is EspnLeaderCategory => c != null,
+  )
+  return pickGameLeaders(inGame, TEAM_LEADER_CATEGORIES.length)
+}
+
+export type EspnTeamStatistic = { name?: string; abbreviation?: string; displayValue?: string }
+
+/** Made, attempted, and ESPN's own percentage text ("38.6"), never recomputed. */
+export type ShootingLine = { made: number; attempted: number; pct: string | null }
+
+export type TeamShooting = {
+  fieldGoals: ShootingLine | null
+  threePointers: ShootingLine | null
+  freeThrows: ShootingLine | null
+}
+
+function count(v: unknown): number | null {
+  if (typeof v !== 'string' || !/^\d+$/.test(v.trim())) return null
+  return Number(v.trim())
+}
+
+/**
+ * A basketball team's shooting, from its competitor `statistics`.
+ *
+ * Only `displayValue` is sent — there is no numeric `value` on these entries.
+ * `threePointFieldGoalPct` is the name read because college basketball sends only
+ * that one; the NBA sends it and a duplicate `threePointPct`.
+ *
+ * Checked against the score rather than trusted: on 90 of 90 finished NBA and
+ * college team-games, 2×FGM + 3PM + FTM equalled the team's points exactly.
+ *
+ * ⚠ BEFORE TIP-OFF THESE ARE SEASON TOTALS (1,254 field goals made on a scheduled
+ * WNBA game), so the caller must only ask once the game has started.
+ */
+export function teamShooting(statistics: EspnTeamStatistic[] | undefined): TeamShooting | null {
+  if (!Array.isArray(statistics)) return null
+  const byName = new Map(statistics.map((s) => [String(s?.name ?? ''), s]))
+  const line = (made: string, attempted: string, pct: string): ShootingLine | null => {
+    const m = count(byName.get(made)?.displayValue)
+    const a = count(byName.get(attempted)?.displayValue)
+    if (m == null || a == null || m > a) return null
+    return { made: m, attempted: a, pct: text(byName.get(pct)?.displayValue) }
+  }
+  const out: TeamShooting = {
+    fieldGoals: line('fieldGoalsMade', 'fieldGoalsAttempted', 'fieldGoalPct'),
+    threePointers: line('threePointFieldGoalsMade', 'threePointFieldGoalsAttempted', 'threePointFieldGoalPct'),
+    freeThrows: line('freeThrowsMade', 'freeThrowsAttempted', 'freeThrowPct'),
+  }
+  return out.fieldGoals || out.threePointers || out.freeThrows ? out : null
+}
+
+/**
+ * "Q3", "OT", "2OT" for the NBA; "1H", "2H", "OT", "2OT" for college basketball,
+ * which plays halves. Null for every other sport, and for a period it cannot name.
+ *
+ * Multiple overtimes read "2OT" because that is how ESPN's own final status spells
+ * them ("Final/2OT", DEN @ NY 2026-02-04, six periods in the line score).
+ */
+export function basketballPeriodLabel(sport: string, period: number): string | null {
+  if (!Number.isInteger(period) || period < 1) return null
+  const regulation = sport === 'NBA' ? 4 : sport === 'NCAAB' ? 2 : null
+  if (regulation == null) return null
+  if (period <= regulation) return sport === 'NBA' ? `Q${period}` : `${period}H`
+  const overtime = period - regulation
+  return overtime === 1 ? 'OT' : `${overtime}OT`
 }
 
 /**

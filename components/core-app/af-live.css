@@ -1266,6 +1266,78 @@
   color: var(--text2);
 }
 
+/* Basketball team box: away | home, each with its leaders and its shooting. */
+.af-live-teambox {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+.af-live-teambox-side {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--surface2);
+}
+.af-live-teambox-team {
+  color: var(--text2);
+}
+.af-live-teambox-leaders {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.af-live-teambox-leader {
+  display: grid;
+  grid-template-columns: 28px 22px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 6px;
+}
+.af-live-teambox-cat {
+  color: var(--faint);
+}
+.af-live-teambox-name {
+  font-size: 12px;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.af-live-teambox-val {
+  font-size: 12.5px;
+  font-weight: 900;
+  color: var(--text);
+}
+.af-live-teambox-shooting {
+  margin: 0;
+  padding-top: 6px;
+  border-top: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.af-live-teambox-shot {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  align-items: baseline;
+  gap: 6px;
+}
+.af-live-teambox-shot dd {
+  margin: 0;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--text2);
+}
+.af-live-teambox-pct {
+  font-weight: 600;
+  color: var(--faint);
+}
+
 .af-live-venue {
   margin: 0;
   font-size: 11px;
@@ -1288,6 +1360,21 @@
   }
   .af-live-timeouts {
     margin-left: 0;
+  }
+}
+
+/* A narrow phone keeps both teams side by side and gives the faces' room to the
+   names. Its own trailing query, after the base team-box rules it overrides. */
+@media (max-width: 420px) {
+  .af-live-teambox-side {
+    padding: 8px;
+  }
+  .af-live-teambox-face {
+    display: none;
+  }
+  .af-live-teambox-leader {
+    grid-template-columns: 28px minmax(0, 1fr) auto;
+    gap: 4px;
   }
 }
 

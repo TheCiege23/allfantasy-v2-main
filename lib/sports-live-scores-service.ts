@@ -20,10 +20,14 @@ import {
   linescoreValues,
   mapGameSituation,
   pickGameLeaders,
+  pickTeamLeaders,
+  teamShooting,
   type EspnLeaderCategory,
   type EspnSituation,
+  type EspnTeamStatistic,
   type GameLeader,
   type GameSituation,
+  type TeamShooting,
 } from '@/lib/live/espnGamePresentation'
 import {
   GAME_VIEW_SPORTS,
@@ -256,6 +260,14 @@ export interface LiveScoreRow {
   homeErrors?: number | null
   awayHits?: number | null
   awayErrors?: number | null
+  /**
+   * Basketball only: each team's PTS / REB / AST leader and its shooting. `[]` and
+   * null before tip-off; absent for every other sport and off-ESPN.
+   */
+  homeTeamLeaders?: GameLeader[]
+  awayTeamLeaders?: GameLeader[]
+  homeShooting?: TeamShooting | null
+  awayShooting?: TeamShooting | null
 }
 
 /** One named performer with the feed's own stat line, verbatim. */
@@ -382,6 +394,9 @@ interface ESPNCompetitor {
   linescores?: Array<{ value?: number; displayValue?: string }>
   hits?: number
   errors?: number
+  /** Basketball: this team's own leaders (the game itself names none). */
+  leaders?: EspnLeaderCategory[]
+  statistics?: EspnTeamStatistic[]
 }
 
 /**
@@ -404,7 +419,8 @@ interface ESPNLeaderCategory {
 interface ESPNCompetition {
   competitors: ESPNCompetitor[]
   status: {
-    type: { name: string; shortDetail: string; completed: boolean }
+    /** `state` is "pre", "in" or "post". */
+    type: { name: string; shortDetail: string; completed: boolean; state?: string }
     period: number
     displayClock: string
   }
@@ -510,6 +526,16 @@ export async function fetchEspnScoreboard(
       const comp = event.competitions[0]
       const home = comp.competitors.find((c) => c.homeAway === 'home')!
       const away = comp.competitors.find((c) => c.homeAway === 'away')!
+      /*
+       * Basketball's leaders and shooting sit on each TEAM: ESPN's NBA and college
+       * basketball scoreboards send no `competition.leaders` at all (measured
+       * 2026-09-13), which is why those cards rendered no leaders. Two gates:
+       *   - basketball only, because hockey competitors carry `points` and
+       *     `assists` categories too;
+       *   - only once play began, because before tip-off the SAME fields hold
+       *     season averages and season totals, which would read as tonight's game.
+       */
+      const teamBox = comp.status.type.state === 'in' || comp.status.type.state === 'post'
       return {
         gameId: event.id,
         homeTeam: normalizeTeamAbbrev(home.team.abbreviation) || home.team.abbreviation,
@@ -550,6 +576,14 @@ export async function fetchEspnScoreboard(
         homeErrors: typeof home.errors === 'number' && Number.isFinite(home.errors) ? home.errors : null,
         awayHits: typeof away.hits === 'number' && Number.isFinite(away.hits) ? away.hits : null,
         awayErrors: typeof away.errors === 'number' && Number.isFinite(away.errors) ? away.errors : null,
+        ...(sport === 'NBA' || sport === 'NCAAB'
+          ? {
+              homeTeamLeaders: teamBox ? pickTeamLeaders(home.leaders) : [],
+              awayTeamLeaders: teamBox ? pickTeamLeaders(away.leaders) : [],
+              homeShooting: teamBox ? teamShooting(home.statistics) : null,
+              awayShooting: teamBox ? teamShooting(away.statistics) : null,
+            }
+          : {}),
       }
       }))
     }

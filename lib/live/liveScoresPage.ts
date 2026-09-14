@@ -13,7 +13,12 @@ import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
 import { composePlayerIdentities } from '@/lib/core-app/playerIdentityCompose'
 import { isRosteredPlayer, rosterNameKeys } from '@/lib/live/rosterPlayMatch'
 import { isLiveSport, type LiveSport } from '@/lib/sport-scope'
-import { espnScoreboardDatesForWindow, type BaseballSituation } from '@/lib/live/espnGamePresentation'
+import {
+  basketballPeriodLabel,
+  espnScoreboardDatesForWindow,
+  type BaseballSituation,
+  type TeamShooting,
+} from '@/lib/live/espnGamePresentation'
 
 /**
  * Data for `/live` — the cross-league live-scoring page (handoff 15a).
@@ -91,12 +96,18 @@ export type LiveTeamSide = {
   /** Baseball H and E for the R-H-E box. Null off-MLB, before first pitch, or off-ESPN. */
   hits: number | null
   errors: number | null
+  /** Basketball: this team's PTS / REB / AST leaders. Empty off basketball, before tip-off, or off-ESPN. */
+  leaders: LiveGameLeader[]
+  /** Basketball: made-attempted and percentage from the field, from three and at the line. */
+  shooting: TeamShooting | null
 }
 
 /** One PASS / RUSH / REC leader, with the feed's own stat line. */
 export type LiveGameLeader = {
   label: string | null
   name: string
+  /** "L. Ball" — for the two-column basketball team box. */
+  shortName: string | null
   statLine: string
   position: string | null
   headshot: string | null
@@ -261,16 +272,41 @@ function clockLabel(row: LiveScoreRow, sport: string): string | null {
   if (sport === 'MLB' || sport === 'NCAABASE' || row.situation?.baseball) {
     return String(row.statusDetail ?? '').trim() || null
   }
+  /*
+   * Basketball between periods: ESPN's clock reads "0.0" at halftime, so a
+   * computed label would print "Q2 · 0.0". Its own status text ("Halftime",
+   * "End of 1st") is what the scoreboard shows instead.
+   */
+  if (sport === 'NBA' || sport === 'NCAAB') {
+    const status = String(row.status ?? '').toLowerCase()
+    if (status.includes('halftime') || status.includes('end_period')) {
+      return String(row.statusDetail ?? '').trim() || null
+    }
+  }
   const clock = String(row.clock ?? '').trim()
   const periodLabel =
-    sport === 'NFL' || sport === 'NCAAF'
+    basketballPeriodLabel(sport, row.period) ??
+    (sport === 'NFL' || sport === 'NCAAF'
       ? row.period > 4
         ? 'OT'
         : `Q${row.period}`
       : sport === 'SOCCER'
         ? `${row.period}H`
-        : `P${row.period}`
+        : `P${row.period}`)
   return clock ? `${periodLabel} · ${clock}` : periodLabel
+}
+
+/** A basketball team's own leaders, carrying that team's abbreviation. */
+function teamLeaders(leaders: LiveScoreRow['homeTeamLeaders'], abbrev: string): LiveGameLeader[] {
+  return (leaders ?? []).map((l) => ({
+    label: l.label,
+    name: l.name,
+    shortName: l.shortName ?? null,
+    statLine: l.statLine,
+    position: l.position,
+    headshot: l.headshot,
+    teamAbbrev: abbrev,
+  }))
 }
 
 /**
@@ -523,6 +559,10 @@ type RememberedPresentation = Pick<
   | 'homeTeamId'
   | 'awayTeamId'
   | 'topPerformer'
+  | 'homeTeamLeaders'
+  | 'awayTeamLeaders'
+  | 'homeShooting'
+  | 'awayShooting'
 >
 const PRESENTATION_TTL_MS = 3 * 60 * 60 * 1000
 const SITUATION_TTL_MS = 90 * 1000
@@ -558,6 +598,10 @@ export function withRememberedPresentation(sport: string, row: LiveScoreRow, now
         homeTeamId: row.homeTeamId ?? null,
         awayTeamId: row.awayTeamId ?? null,
         topPerformer: row.topPerformer,
+        homeTeamLeaders: row.homeTeamLeaders,
+        awayTeamLeaders: row.awayTeamLeaders,
+        homeShooting: row.homeShooting ?? null,
+        awayShooting: row.awayShooting ?? null,
       },
     })
     while (rememberedPresentation.size > MAX_REMEMBERED_GAMES) {
@@ -586,6 +630,12 @@ export function withRememberedPresentation(sport: string, row: LiveScoreRow, now
     homeErrors: sumsTo(v.homeLinescores, row.homeScore) ? v.homeErrors : undefined,
     awayHits: sumsTo(v.awayLinescores, row.awayScore) ? v.awayHits : undefined,
     awayErrors: sumsTo(v.awayLinescores, row.awayScore) ? v.awayErrors : undefined,
+    // Basketball team leaders and shooting move with every basket, so they ride
+    // with the line score too: a remembered 34-88 beside a newer score is wrong.
+    homeTeamLeaders: sumsTo(v.homeLinescores, row.homeScore) ? v.homeTeamLeaders : undefined,
+    homeShooting: sumsTo(v.homeLinescores, row.homeScore) ? v.homeShooting : undefined,
+    awayTeamLeaders: sumsTo(v.awayLinescores, row.awayScore) ? v.awayTeamLeaders : undefined,
+    awayShooting: sumsTo(v.awayLinescores, row.awayScore) ? v.awayShooting : undefined,
     homeLogo: row.homeLogo || v.homeLogo,
     awayLogo: row.awayLogo || v.awayLogo,
     homeTeamId: row.homeTeamId ?? v.homeTeamId,
@@ -791,6 +841,8 @@ export async function getLivePageData(opts: {
         linescores: played ? row.homeLinescores ?? [] : [],
         hits: played ? row.homeHits ?? null : null,
         errors: played ? row.homeErrors ?? null : null,
+        leaders: played ? teamLeaders(row.homeTeamLeaders, home) : [],
+        shooting: played ? row.homeShooting ?? null : null,
       },
       away: {
         abbrev: away,
@@ -801,12 +853,15 @@ export async function getLivePageData(opts: {
         linescores: played ? row.awayLinescores ?? [] : [],
         hits: played ? row.awayHits ?? null : null,
         errors: played ? row.awayErrors ?? null : null,
+        leaders: played ? teamLeaders(row.awayTeamLeaders, away) : [],
+        shooting: played ? row.awayShooting ?? null : null,
       },
       leaders: (row.leaders ?? []).map((l) => {
         const side = sideFor(l.teamId)
         return {
           label: l.label,
           name: l.name,
+          shortName: l.shortName ?? null,
           statLine: l.statLine,
           position: l.position,
           headshot: l.headshot,

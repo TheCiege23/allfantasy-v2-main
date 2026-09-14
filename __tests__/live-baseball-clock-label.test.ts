@@ -7,8 +7,9 @@ vi.mock('server-only', () => ({}))
  *
  * A baseball feed from a sport not yet added to the app (college baseball) would
  * otherwise read "P7" — a period number with no half — beside a working diamond.
- * NCAAB is used as the carrier sport only because it is a real supported sport
- * whose clock label would be "P7" without this rule.
+ * NHL is used as the carrier sport only because it is a real supported sport
+ * whose clock label would be "P7" without this rule. (It was NCAAB until the
+ * basketball labels landed: a college basketball period 7 now reads "5OT".)
  */
 const getLiveScoresForSport = vi.fn()
 const getCachedLiveScoresForSport = vi.fn()
@@ -77,7 +78,7 @@ async function labelFor(row: Record<string, unknown>) {
   })
   getCachedLiveScoresForSport.mockResolvedValue({ scores: [], fetchedAt: null })
   const { getLivePageData } = await import('@/lib/live/liveScoresPage')
-  const data = await getLivePageData({ userId: null, sport: 'NCAAB', scope: 'all' })
+  const data = await getLivePageData({ userId: null, sport: 'NHL', scope: 'all' })
   return data.games[0]?.clockLabel
 }
 

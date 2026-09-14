@@ -8,7 +8,7 @@ import { gameDetailHref } from '@/lib/live/gameDetailLink'
 import type { LiveGameCard, LivePageData } from '@/lib/live/liveScoresPage'
 import { matchesLiveGameQuery } from '@/lib/live/liveGameSearch'
 import { groupStartersByPlayer, pointsSummary, type StarterGroup } from '@/lib/live/liveTieInGroups'
-import type { BaseballPlayer } from '@/lib/live/espnGamePresentation'
+import { basketballPeriodLabel, type BaseballPlayer, type TeamShooting } from '@/lib/live/espnGamePresentation'
 import '@/components/core-app/af-live.css'
 
 /**
@@ -544,6 +544,7 @@ export function GameCard({
   const wp = game.winProbability
   const weekLabel = game.week != null ? `${game.sport} · Week ${game.week}` : game.sport
   const isFootball = game.sport === 'NFL' || game.sport === 'NCAAF'
+  const isBasketball = game.sport === 'NBA' || game.sport === 'NCAAB'
   const situation = game.situation
   /*
    * Baseball is recognised by its DATA, not by `sport === 'MLB'` (2026-09-13):
@@ -665,6 +666,7 @@ export function GameCard({
         so this cannot be rendered as a measured number.
       */}
       <Leaders game={game} />
+      {isBasketball ? <TeamBox game={game} /> : null}
 
       {/*
         Labelled "estimate" because the type makes it impossible to honestly do
@@ -712,10 +714,14 @@ function Linescore({
   const homeLines = game.home.linescores ?? []
   const played = Math.max(awayLines.length, homeLines.length)
   if (played === 0) return null
-  // Football always shows four quarters and baseball nine innings, so an early
-  // grid is not two columns wide. Extra innings simply add columns.
-  const columns = Math.max(played, isFootball ? 4 : isBaseball ? 9 : played)
-  const label = (i: number) => (isFootball && i >= 4 ? (i === 4 ? 'OT' : `OT${i - 3}`) : String(i + 1))
+  // Football and the NBA always show four quarters, baseball nine innings and
+  // college basketball two halves, so an early grid is not one column wide.
+  // Overtimes and extra innings simply add columns.
+  const regulation = isFootball || game.sport === 'NBA' ? 4 : isBaseball ? 9 : game.sport === 'NCAAB' ? 2 : 0
+  const columns = Math.max(played, regulation)
+  const label = (i: number) =>
+    basketballPeriodLabel(game.sport, i + 1) ??
+    (isFootball && i >= 4 ? (i === 4 ? 'OT' : `OT${i - 3}`) : String(i + 1))
 
   return (
     <div className="af-live-linescore-wrap">
@@ -981,6 +987,74 @@ function Leaders({ game }: { game: LiveGameCard }) {
     )
   }
   return null
+}
+
+/**
+ * Basketball: each team's points, rebounds and assists leader, and its shooting.
+ *
+ * ESPN's basketball scoreboard names no GAME leaders — the categories sit on each
+ * team — so before this every NBA and college basketball card showed none. Away on
+ * the left and home on the right, the same order as the score row above.
+ */
+function TeamBox({ game }: { game: LiveGameCard }) {
+  const sides = [game.away, game.home]
+  if (!sides.some((s) => (s.leaders ?? []).length > 0 || s.shooting)) return null
+  return (
+    <div className="af-live-teambox">
+      {sides.map((side) => (
+        <section key={side.abbrev} className="af-live-teambox-side" aria-label={`${side.abbrev} leaders`}>
+          <span className="af-label af-live-teambox-team">{side.abbrev}</span>
+          {(side.leaders ?? []).length > 0 ? (
+            <ul className="af-live-teambox-leaders">
+              {(side.leaders ?? []).map((l) => (
+                <li key={`${l.label ?? ''}-${l.name}`} className="af-live-teambox-leader">
+                  <span className="af-label af-live-teambox-cat">{l.label ?? ''}</span>
+                  <MiniPlayerImg
+                    sleeperId={null}
+                    name={l.name}
+                    avatarUrl={l.headshot}
+                    size={22}
+                    className="af-live-teambox-face"
+                  />
+                  <span className="af-live-teambox-name" title={l.name}>
+                    {l.shortName ?? l.name}
+                  </span>
+                  <span className="af-live-teambox-val af-num">{l.statLine}</span>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+          {side.shooting ? <Shooting shooting={side.shooting} /> : null}
+        </section>
+      ))}
+    </div>
+  )
+}
+
+const SHOOTING_ROWS = [
+  ['FG', 'fieldGoals'],
+  ['3PT', 'threePointers'],
+  ['FT', 'freeThrows'],
+] as const
+
+function Shooting({ shooting }: { shooting: TeamShooting }) {
+  return (
+    <dl className="af-live-teambox-shooting af-num">
+      {SHOOTING_ROWS.map(([label, key]) => {
+        const line = shooting[key]
+        if (!line) return null
+        return (
+          <div key={key} className="af-live-teambox-shot">
+            <dt className="af-label">{label}</dt>
+            <dd>
+              {line.made}-{line.attempted}
+              {line.pct ? <span className="af-live-teambox-pct"> {line.pct}%</span> : null}
+            </dd>
+          </div>
+        )
+      })}
+    </dl>
+  )
 }
 
 /**
