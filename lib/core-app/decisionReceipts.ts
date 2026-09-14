@@ -319,7 +319,7 @@ type FactPayload = { adds?: unknown; drops?: unknown; waiverBid?: unknown; creat
 const idsIn = (v: unknown): string[] => (Array.isArray(v) ? v.map(String).filter(Boolean) : [])
 
 /** One of your waiver or free-agent adds, and the week it ended (when it did). */
-type SeasonAdd = {
+export type SeasonAdd = {
   league: ReceiptsLeague
   rosterId: string
   playerId: string
@@ -354,7 +354,7 @@ type SeasonAdd = {
  * the weekly scores of the added players, and their names — five queries for up to
  * MAX_WAIVER_LEAGUES leagues.
  */
-async function loadSeasonAdds(args: {
+export async function loadSeasonAdds(args: {
   userId: string
   leagues: readonly ReceiptsLeague[]
 }): Promise<{ mine: ReceiptsLeague[]; siblingIds: Map<string, string[]>; adds: SeasonAdd[] } | null> {
@@ -867,7 +867,7 @@ export async function getAutoCoachReceipts(args: {
 }
 
 /** Your Sleeper roster id per league, from your claimed teams. A league with two claims has none. */
-function claimedRosterIds(teams: ReadonlyArray<{ leagueId: string; externalId: string | null }>): Map<string, number> {
+export function claimedRosterIds(teams: ReadonlyArray<{ leagueId: string; externalId: string | null }>): Map<string, number> {
   const rosterByLeague = new Map<string, number>()
   const twice = new Set<string>()
   for (const t of teams) {
