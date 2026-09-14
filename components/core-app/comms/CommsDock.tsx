@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react'
 import CommsDrawer, { type CommsLeague, type CommsTab } from './CommsDrawer'
 import SupportModal from '@/components/core-app/support/SupportModal'
 import { COMMS_OPEN_EVENT, SUPPORT_OPEN_EVENT, type CommsOpenDetail } from './commsEvents'
+import type { CoreSurfaceKey } from '@/lib/core-app/coreSurface'
 
 /**
  * Mounts the communications drawer (23a/23b) and the support modal (25b) once,
@@ -32,6 +33,8 @@ export type CommsDockProps = {
   chimmyTokenCost: number | null
   /** Ids+counts the /core home is showing — see lib/core-app/homeSignals.ts. */
   homeSignals?: string | null
+  /** Current Core workflow. Sent as a validated key, never as free-form prompt text. */
+  pageSurface?: CoreSurfaceKey | null
   /** True on league-scoped screens, where docking beside the content pays off. */
   dockable?: boolean
   /** Prefills the support form's reply address. */
@@ -63,6 +66,7 @@ export function CommsDock({
   pageLeagueId,
   chimmyTokenCost,
   homeSignals = null,
+  pageSurface = null,
   dockable = false,
   supportEmail = null,
   unread = 0,
@@ -182,6 +186,7 @@ export function CommsDock({
         pageLeagueId={pageLeagueId}
         chimmyTokenCost={chimmyTokenCost}
         homeSignals={homeSignals}
+        pageSurface={pageSurface}
         initialTab={tab}
         initialDraft={prefill}
       />

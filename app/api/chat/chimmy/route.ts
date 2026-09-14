@@ -6,6 +6,7 @@ import OpenAI from 'openai'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { parseHomeSignals, renderHomeSignalsPrompt } from '@/lib/core-app/homeSignals'
+import { CORE_SURFACE_KEYS, renderCoreSurfacePrompt } from '@/lib/core-app/coreSurface'
 import { requireAgeConfirmedUser } from '@/lib/auth-guard'
 import { buildUserTemporalContextForAI } from '@/lib/preferences/userTemporalContextForAI'
 import { runPECR } from '@/lib/ai/pecr'
@@ -341,6 +342,10 @@ const ChimmyFormSchema = z.object({
    * boundary: @chimmy answers are posted publicly in the league tab.
    */
   homeSignals: optionalTrimmedStringField(2000),
+  coreSurface: z.preprocess(
+    (value) => (value == null || value === '' ? undefined : value),
+    z.enum(CORE_SURFACE_KEYS).optional(),
+  ),
   conversation: z.array(ConversationTurnSchema).max(MAX_CONVERSATION_TURNS),
   hasImage: z.boolean(),
 })
@@ -1157,6 +1162,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     sportScope: formData.get('sportScope'),
     leagueName: formData.get('leagueName'),
     homeSignals: formData.get('homeSignals'),
+    coreSurface: formData.get('coreSurface'),
     conversation: conversationPayload,
     hasImage: imageValidation.hasImage,
   })
@@ -1197,10 +1203,12 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     sportScope,
     leagueName: requestedLeagueNameHint,
     homeSignals: rawHomeSignals,
+    coreSurface,
     conversation: parsedConversation,
     hasImage,
   } = parseResult.data
   const homeSignals = parseHomeSignals(rawHomeSignals)
+  const coreSurfaceBlock = coreSurface ? renderCoreSurfacePrompt(coreSurface) : null
   const selectedAssistantMode = normalizeChimmyAssistantMode(
     mode ?? assistantMode ?? strategyMode ?? riskMode
   )
@@ -2022,6 +2030,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const combinedMemorySection = [
     memPrompt.contextBlock,
     homeSignalsBlock ?? undefined,
+    coreSurfaceBlock ?? undefined,
     memorySection,
     leagueSportsGrounding
       ? `## NFL/NCAAF LEAGUE SPORTS GROUNDING\n${leagueSportsGrounding.serialized}`
@@ -2056,6 +2065,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   if (memorySection) dataSources.push('ai_memory', 'chat_history')
   if (memPrompt.contextBlock) dataSources.push('working_memory')
   if (homeSignalsBlock) dataSources.push('core_home_signals')
+  if (coreSurfaceBlock) dataSources.push('core_surface_context')
   if (leagueSportsGrounding) dataSources.push('league_sports_grounding_packet')
   // Declared so a response can be attributed. A grounding source the answer used but does not
   // name is untraceable afterwards, which is the whole reason dataSources exists.

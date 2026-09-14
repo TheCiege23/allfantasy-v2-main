@@ -10,6 +10,8 @@ import { AfCrest } from '@/components/core-app/AfCrest'
 import SyncNowButton from '@/components/core-app/SyncNowButton'
 import PlayerCardProvider from '@/components/core-app/player-card/PlayerCardProvider'
 import { SUPPORT_OPEN_EVENT } from '@/components/core-app/comms/commsEvents'
+import { isCoreSurfaceKey } from '@/lib/core-app/coreSurface'
+import { coreRefreshIntervalMs } from '@/lib/core-app/coreRefreshPolicy'
 import MiniPlayerImg from '@/components/MiniPlayerImg'
 import { useLiveRailScores } from './useLiveRailScores'
 import { useOverlayContainment } from '@/components/core-app/useOverlayContainment'
@@ -332,6 +334,8 @@ export type AfCoreShellProps = {
    * either way the badge is absent rather than showing a zero.
    */
   liveGameCount?: number | null
+  /** Expected active-game window, including a provider status that is one poll late. */
+  gameDayActive?: boolean
   children: React.ReactNode
 }
 
@@ -1144,7 +1148,7 @@ export function AfCoreShell(props: AfCoreShellProps) {
   useEffect(() => {
     setRailClock(Date.now())
     const clock = window.setInterval(() => setRailClock(Date.now()), 15_000)
-    const refreshMs = props.liveGameCount && props.liveGameCount > 0 ? 20_000 : 120_000
+    const refreshMs = coreRefreshIntervalMs(Boolean(props.gameDayActive), props.liveGameCount ?? 0)
     const refresh = window.setInterval(() => {
       if (document.visibilityState === 'visible') router.refresh()
     }, refreshMs)
@@ -1152,7 +1156,7 @@ export function AfCoreShell(props: AfCoreShellProps) {
       window.clearInterval(clock)
       window.clearInterval(refresh)
     }
-  }, [props.liveGameCount, router])
+  }, [props.gameDayActive, props.liveGameCount, router])
 
   /* Show the consequence of a scoring update, rather than making the manager
      compare two tiny totals from memory. In elimination leagues the survival
@@ -1791,6 +1795,7 @@ export function AfCoreShell(props: AfCoreShellProps) {
           pageLeagueId={props.selectedLeagueId ?? null}
           chimmyTokenCost={comms.chimmyTokenCost}
           homeSignals={comms.homeSignals ?? null}
+          pageSurface={isCoreSurfaceKey(active) ? active : null}
           dockable={comms.dockable}
           supportEmail={comms.supportEmail}
           unread={comms.unread ?? 0}

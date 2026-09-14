@@ -142,6 +142,10 @@ import { getNotificationsCenter } from '@/lib/core-app/notificationsCenter'
 import CareerShare from '@/components/core-app/screens/CareerShare'
 import { buildToolsHub } from '@/lib/core-app/toolsHub'
 import { getTokenSpendRuleMatrixEntry } from '@/lib/tokens/pricing-matrix'
+import { getCoreActivitySnapshot } from '@/lib/core-app/coreActivity'
+import { isCoreSurfaceKey } from '@/lib/core-app/coreSurface'
+import CoreLeagueContextBar from '@/components/core-app/CoreLeagueContextBar'
+import { touchLeagueViewed } from '@/lib/leagues/touchLeagueViewed'
 
 export const dynamic = 'force-dynamic'
 
@@ -547,6 +551,30 @@ export default async function AfCorePage({
    * the same reason.
    */
   const playedLeagues = leagues.filter((l) => (l as { hasUnifiedRecord?: boolean }).hasUnifiedRecord !== false)
+  const selectedLeagueRow = selectedLeagueId
+    ? (playedLeagues.find((league) => league.id === selectedLeagueId) ?? null)
+    : null
+
+  // A league query is also an authorization boundary. Do not let a stale,
+  // deleted, or hand-written id reach any provider-backed loader below.
+  if (selectedLeagueId && !selectedLeagueRow) {
+    const safeParams = new URLSearchParams()
+    for (const [key, value] of Object.entries(sp)) {
+      if (key !== 'league' && typeof value === 'string') safeParams.set(key, value)
+    }
+    const query = safeParams.toString()
+    redirect(`/core${segment ? `/${segment}` : ''}${query ? `?${query}` : ''}`)
+  }
+
+  // This demand signal moves the league into the five-minute active import
+  // lane. The helper ignores prefetches and swallows write failures.
+  if (selectedLeagueRow) void touchLeagueViewed(selectedLeagueRow.id)
+
+  const coreActivity = await getCoreActivitySnapshot(
+    playedLeagues.map((league) => league.id),
+    playedLeagues.map((league) => String(league.sport ?? 'NFL')),
+    new Date(),
+  ).catch(() => ({ gameDayActive: false, liveGameCount: 0, draftLive: false }))
 
   const rail: RailLeague[] = playedLeagues.map((l) => ({
     id: l.id,
@@ -600,9 +628,7 @@ export default async function AfCorePage({
    * for the cross-league offers strip. Resolved through the same
    * resolveLeagueCardTypeKey the rail uses, so the two never disagree.
    */
-  const tradeLeagueRow = selectedLeagueId
-    ? (playedLeagues.find((l) => l.id === selectedLeagueId) ?? null)
-    : null
+  const tradeLeagueRow = selectedLeagueRow
   const tradeLeagueTypeKey = tradeLeagueRow
     ? resolveLeagueCardTypeKey({
         leagueType: tradeLeagueRow.leagueType,
@@ -655,6 +681,30 @@ export default async function AfCorePage({
   const selectedLeagueName = selectedLeagueId
     ? (rail.find((l) => l.id === selectedLeagueId)?.name ?? null)
     : null
+
+  const selectedLeagueOs = selectedLeagueId && selectedLeagueName
+    ? await resolveUserOsSnapshot(selectedLeagueId, userId).catch(() => null)
+    : null
+  const selectedRecommendation =
+    selectedLeagueOs?.available && selectedLeagueOs.recommendations?.recommendations[0]
+      ? {
+          action:
+            selectedLeagueOs.recommendations.recommendations[0].recommendedActions[0]?.action ??
+            selectedLeagueOs.recommendations.recommendations[0].expectedImpact,
+          rationale:
+            selectedLeagueOs.recommendations.recommendations[0].recommendedActions[0]?.rationale ??
+            selectedLeagueOs.recommendations.recommendations[0].evidence[0] ??
+            selectedLeagueOs.recommendations.recommendations[0].expectedImpact,
+        }
+      : null
+  const selectedSyncAge = describeAge(
+    'roster',
+    selectedLeagueRow?.lastSyncedAt ? new Date(selectedLeagueRow.lastSyncedAt) : null,
+    new Date(),
+  )
+  const commsLeagueRows = selectedLeagueRow
+    ? [selectedLeagueRow, ...playedLeagues.filter((league) => league.id !== selectedLeagueRow.id).slice(0, 11)]
+    : playedLeagues.slice(0, 12)
 
   /*
    * ⚠ `playedLeagues`, AND THE REAL SYNC TIMESTAMPS.
@@ -1913,9 +1963,11 @@ export default async function AfCorePage({
        * screen in the product, which is exactly the cost the per-screen loader
        * pattern above exists to avoid.
        */
-      liveGameCount={liveScores?.games.filter((g) => g.isLive).length ?? null}
+      liveGameCount={liveScores?.games.filter((g) => g.isLive).length ?? coreActivity.liveGameCount}
+      gameDayActive={coreActivity.gameDayActive}
+      draftLive={coreActivity.draftLive}
       comms={{
-        leagues: playedLeagues.slice(0, 12).map((l) => ({
+        leagues: commsLeagueRows.map((l) => ({
           id: l.id,
           name: l.name,
           platform: String(l.platform ?? 'manual').toLowerCase(),
@@ -1970,6 +2022,22 @@ export default async function AfCorePage({
           leagueId={selectedLeagueId}
           leagueName={selectedLeagueName}
           activeKey={activeKey}
+          hasScoredWeek={leagueHasScoredWeek}
+          tradeSupported={importCoverageSummary.capabilities.trades !== false}
+          draftSupported={importCoverageSummary.capabilities.draft !== false}
+        />
+      ) : null}
+
+      {selectedLeagueId && selectedLeagueName && selectedLeagueRow && isCoreSurfaceKey(activeKey) ? (
+        <CoreLeagueContextBar
+          leagueName={selectedLeagueName}
+          platform={String(selectedLeagueRow.platform ?? 'manual')}
+          syncLabel={selectedSyncAge.label}
+          syncStale={selectedSyncAge.stale}
+          gameDayActive={coreActivity.gameDayActive}
+          decisionAvailable={selectedLeagueOs?.available === true}
+          recommendation={selectedRecommendation}
+          surface={activeKey}
         />
       ) : null}
 
