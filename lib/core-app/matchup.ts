@@ -9,8 +9,8 @@ import {
 import { displayPosition, inferSlotLabel } from './positionLabels'
 import { resolveCurrentWeekForLeague } from './currentWeek'
 import { leagueDisplayName, type SectionState, type UnavailableSection } from './leagueHome'
-import { loadSideProjections, winProbabilityFor } from './matchupProjections'
-import { myRosterCandidates } from './myRoster'
+import { winProbabilityFor } from './matchupProjections'
+import { loadMatchupSides, matchupCurrentPoints } from './matchupWinInputs'
 import { normalizePositionForSport, normalizeTeamAbbrev } from '@/lib/team-abbrev'
 import { startingSlotTemplate } from './rosterSlots'
 import { identityGapNote } from './identityGap'
@@ -432,64 +432,20 @@ export async function getMatchupData(
   const oppTeam = opponentRow ? teamByExternal.get(String(opponentRow.rosterId)) : undefined
 
   /*
-   * ⚠ THE ROSTER JOIN IS RESOLVED HERE, NOT ASSUMED. `Roster.platformUserId` is
-   * populated from several import paths and does not always hold the platform's
-   * user id — it sometimes holds our own User uuid. Passing `LeagueTeam.
-   * platformUserId` alone found a roster for 38 of 106 claimed teams elsewhere in
-   * this codebase, so both candidates are tried and the ACTUAL matching
-   * `Roster.platformUserId` is what gets handed on.
+   * Roster keys and projections for both sides — shared with the home exposure
+   * breakdown (`loadMatchupSides`) so the two cannot price one week differently. The
+   * roster-join and season/week notes live there with the code they describe.
    */
-  /*
-   * ⚠ AND `externalId` IS THE THIRD CANDIDATE, NOT AN OPTIONAL EXTRA. This list
-   * was `[platformUserId, userId]` and it is now `myRosterCandidates` — the
-   * repo's canonical set, whose own note records that dropping one key took the
-   * join from 93 claimed teams to 38. The cross-league pulse hit exactly this:
-   * keyed on `platformUserId` alone it resolved every OPPONENT's roster and not
-   * one of the user's own.
-   */
-  const yourCandidates = myRosterCandidates(
-    { platformUserId: myTeam.platformUserId, externalId: myTeam.externalId },
+  const sideProjections = await loadMatchupSides({
+    leagueId: league.id,
+    season: latest.seasonYear,
+    week: latest.week,
     userId,
-  )
-  const theirCandidates = [oppTeam?.platformUserId, opponentRow ? String(opponentRow.rosterId) : null]
-    .filter((v): v is string => typeof v === 'string' && v.length > 0)
-
-  const rosterCandidates = [...new Set([...yourCandidates, ...theirCandidates])]
-
-  const rosterRows = rosterCandidates.length
-    ? await prisma.roster.findMany({
-        where: { leagueId: league.id, platformUserId: { in: rosterCandidates } },
-        select: { platformUserId: true },
-      })
-    : []
-  const rosterIds = new Set(rosterRows.map((r) => r.platformUserId))
-  const yourRosterKey = yourCandidates.find((c) => rosterIds.has(c)) ?? null
-  /*
-   * ⚠ THE OPPONENT MUST NOT RESOLVE TO THE KEY THE USER JUST TOOK. `externalId`
-   * and a roster id are both small integers, so without this the two sides of a
-   * matchup can land on the same roster and the screen renders a team playing
-   * itself.
-   */
-  const oppRosterKey = theirCandidates.find((c) => c !== yourRosterKey && rosterIds.has(c)) ?? null
-
-  /*
-   * ⚠ SEASON AND WEEK COME FROM THE MATCHUP ROW, NOT FROM THE PROJECTION FEED, and
-   * that mismatch is load-bearing rather than a bug. Asking the feed for a week it
-   * has not written returns nothing, every starter lands in `unprojected`, and both
-   * sections below refuse — which is exactly right for a COMPLETED week. A
-   * projected final for a game that already finished is not a projection, it is
-   * noise printed over a result.
-   */
-  const sideProjections =
-    yourRosterKey && oppRosterKey
-      ? await loadSideProjections({
-          leagueId: league.id,
-          season: latest.seasonYear,
-          week: latest.week,
-          yourPlatformUserId: yourRosterKey,
-          opponentPlatformUserId: oppRosterKey,
-        }).catch(() => null)
-      : null
+    you: { platformUserId: myTeam.platformUserId, externalId: myTeam.externalId },
+    opponent: opponentRow
+      ? { platformUserId: oppTeam?.platformUserId ?? null, rosterId: String(opponentRow.rosterId) }
+      : null,
+  })
 
   const anyProjected =
     sideProjections != null &&
@@ -521,10 +477,7 @@ export async function getMatchupData(
    * already on the board plus what is left, rather than from projections alone.
    */
   const winProbability: MatchupData['winProbability'] = sideProjections
-    ? winProbabilityFor(sideProjections, {
-        you: mine.pointsFor,
-        opponent: opponentRow?.pointsFor ?? mine.pointsAgainst,
-      })
+    ? winProbabilityFor(sideProjections, matchupCurrentPoints(mine, opponentRow))
     : {
         available: false,
         reason: 'we could not match both sides of this matchup to an imported roster',

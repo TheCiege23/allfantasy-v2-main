@@ -21,6 +21,7 @@ import type { CareerData } from '@/lib/core-app/career'
 import type { WeekAllData } from '@/lib/core-app/weekAll'
 import type { Dash34Data } from '@/components/core-app/screens/Dashboard34'
 import type { ExposureData, RivalsData, PanelState } from '@/lib/core-app/dash3aPanels'
+import { ExposureRowItem } from '@/components/core-app/screens/ExposureImpact'
 
 /**
  * Screen 3a — Dashboard, all leagues.
@@ -836,23 +837,12 @@ export function Dashboard3A({
             {exposure?.available ? (
               <>
                 <div className="af3a-exposure">
+                  {/*
+                    Each row can open its "if he sits" breakdown (2026-09-14) — your win
+                    chance per league now vs. with him scoring 0. See ExposureImpact.tsx.
+                  */}
                   {exposure.data.rows.map((row) => (
-                    <div key={row.playerId} className="af3a-exp">
-                      <MiniPlayerImg sleeperId={row.playerId} name={row.name} size={24} className="af3a-exp-img" />
-                      <span className="af3a-exp-name">
-                        {row.name}
-                        {row.position ? <em> {row.position}</em> : null}
-                      </span>
-                      <span className="af3a-exp-bar">
-                        <span
-                          className={row.count === row.of ? 'af3a-exp-full' : 'af3a-exp-part'}
-                          style={{ width: `${Math.round((row.count / Math.max(1, row.of)) * 100)}%` }}
-                        />
-                      </span>
-                      <span className="af3a-exp-count af3a-mono">
-                        {row.count} of {row.of}
-                      </span>
-                    </div>
+                    <ExposureRowItem key={row.playerId} row={row} />
                   ))}
                 </div>
                 {exposure.data.note ? (
