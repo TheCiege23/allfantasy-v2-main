@@ -1,11 +1,15 @@
 import { describe, expect, it } from 'vitest'
 import {
   ballOnFromAwayGoal,
+  basketballPeriodLabel,
   formatVenueLocation,
   linescoreValues,
   mapGameSituation,
   pickGameLeaders,
+  pickTeamLeaders,
+  teamShooting,
 } from '@/lib/live/espnGamePresentation'
+import { CHA_LEADERS, CHA_STATS, DET_STATS, PRE_GAME_LEADERS } from './fixtures/espn-nba-scoreboard'
 import { groupStartersByPlayer, pointsSummary } from '@/lib/live/liveTieInGroups'
 
 /*
@@ -201,5 +205,59 @@ describe('baseball situation', () => {
   it('a football situation carries no baseball block', () => {
     const s = mapGameSituation({ downDistanceText: '1st & 5 at CIN 12', possessionText: 'CIN 12' }, 'CIN', 'TB')
     expect(s?.baseball).toBeNull()
+  })
+})
+
+/* Values from ESPN's NBA scoreboard, DET @ CHA 2026-04-10 (Final, CHA 100). */
+describe('basketball team box', () => {
+  it('keeps each team PTS, REB, AST in that order with short names, and drops the composite rating', () => {
+    const leaders = pickTeamLeaders(CHA_LEADERS)
+    expect(leaders.map((l) => [l.label, l.shortName, l.statLine])).toEqual([
+      ['Pts', 'L. Ball', '27'],
+      ['Reb', 'M. Bridges', '8'],
+      ['Ast', 'L. Ball', '8'],
+    ])
+    expect(leaders[0]).toMatchObject({ name: 'LaMelo Ball', position: 'G', teamId: '30' })
+  })
+
+  it('keeps the order even when the feed sends the categories shuffled', () => {
+    expect(pickTeamLeaders([...CHA_LEADERS].reverse()).map((l) => l.label)).toEqual(['Pts', 'Reb', 'Ast'])
+  })
+
+  it('takes nothing from a scheduled game: its categories are season averages', () => {
+    expect(pickTeamLeaders(PRE_GAME_LEADERS)).toEqual([])
+    expect(pickTeamLeaders(undefined)).toEqual([])
+  })
+
+  it('reads shooting as made-attempted with ESPN percentage text, and it adds up to the score', () => {
+    const cha = teamShooting(CHA_STATS)
+    expect(cha).toEqual({
+      fieldGoals: { made: 34, attempted: 88, pct: '38.6' },
+      threePointers: { made: 13, attempted: 47, pct: '27.7' },
+      freeThrows: { made: 19, attempted: 23, pct: '82.6' },
+    })
+    // 2×FGM + 3PM + FTM is the team's points: CHA scored 100.
+    expect(2 * cha!.fieldGoals!.made + cha!.threePointers!.made + cha!.freeThrows!.made).toBe(100)
+    // DET sends no `threePointPct` — the college basketball shape — and still reads.
+    expect(teamShooting(DET_STATS)?.threePointers).toEqual({ made: 9, attempted: 27, pct: '33.3' })
+  })
+
+  it('refuses a line it cannot read rather than printing a guess', () => {
+    expect(teamShooting(undefined)).toBeNull()
+    expect(teamShooting([{ name: 'fieldGoalsMade', displayValue: '40' }, { name: 'fieldGoalsAttempted', displayValue: '--' }])).toBeNull()
+    expect(teamShooting([{ name: 'fieldGoalsMade', displayValue: '50' }, { name: 'fieldGoalsAttempted', displayValue: '40' }])).toBeNull()
+    expect(teamShooting([{ name: 'freeThrowsMade', displayValue: '5' }, { name: 'freeThrowsAttempted', displayValue: '6' }])).toEqual({
+      fieldGoals: null,
+      threePointers: null,
+      freeThrows: { made: 5, attempted: 6, pct: null },
+    })
+  })
+
+  it('names basketball periods: NBA quarters, college halves, then OT, 2OT', () => {
+    expect([1, 2, 3, 4, 5, 6].map((p) => basketballPeriodLabel('NBA', p))).toEqual(['Q1', 'Q2', 'Q3', 'Q4', 'OT', '2OT'])
+    expect([1, 2, 3, 4].map((p) => basketballPeriodLabel('NCAAB', p))).toEqual(['1H', '2H', 'OT', '2OT'])
+    expect(basketballPeriodLabel('NBA', 0)).toBeNull()
+    expect(basketballPeriodLabel('NHL', 2)).toBeNull()
+    expect(basketballPeriodLabel('NFL', 5)).toBeNull()
   })
 })
