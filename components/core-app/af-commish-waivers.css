@@ -1,0 +1,159 @@
+/*
+ * Waiver Oversight — Commissioner Hub (handoff 2026-09-13). Sits inside .af-ch and
+ * reuses its card and section-head classes; only the rows, bars and chips are new.
+ * Every colour is a core token, so light, dark and AF modes all resolve.
+ */
+
+.af-core .af-chw {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.af-core .af-chw-rule {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.af-core .af-chw-rule h2 {
+  margin: 0;
+}
+.af-core .af-chw-line {
+  flex: 1;
+  height: 1px;
+  background: var(--line);
+}
+.af-core .af-chw-link {
+  font: 700 11px/1 var(--font-archivo, 'Archivo'), system-ui, sans-serif;
+  color: var(--accent);
+  text-decoration: none;
+}
+.af-core .af-chw-link:hover { text-decoration: underline; }
+
+.af-core .af-chw-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+  gap: 14px;
+}
+
+.af-core .af-chw-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+.af-core .af-chw-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 0;
+  border-top: 1px solid var(--line);
+  min-width: 0;
+}
+.af-core .af-chw-mark {
+  width: 26px;
+  height: 26px;
+  flex: none;
+  border-radius: 8px;
+  background: var(--chip);
+  color: var(--text2);
+  font-size: 10px;
+  font-weight: 800;
+  display: grid;
+  place-items: center;
+}
+.af-core .af-chw-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+.af-core .af-chw-name {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+.af-core .af-chw-sub {
+  font-size: 10.5px;
+  font-weight: 400;
+  color: var(--faint);
+}
+.af-core .af-chw-sub[data-tone='good'] { color: var(--good); }
+.af-core .af-chw-sub[data-tone='bad'] { color: var(--bad); }
+
+.af-core .af-chw-bar {
+  display: block;
+  height: 5px;
+  border-radius: 3px;
+  background: var(--chip);
+  overflow: hidden;
+}
+.af-core .af-chw-bar i {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+}
+.af-core .af-chw-bar i[data-tone='good'] { background: var(--good); }
+.af-core .af-chw-bar i[data-tone='warn'] { background: var(--warn); }
+.af-core .af-chw-bar i[data-tone='bad'] { background: var(--bad); }
+
+.af-core .af-chw-amt {
+  flex: none;
+  font-size: 13px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+.af-core .af-chw-amt[data-tone='good'] { color: var(--good); }
+.af-core .af-chw-amt[data-tone='warn'] { color: var(--warn); }
+.af-core .af-chw-amt[data-tone='bad'] { color: var(--bad); }
+
+.af-core .af-chw-chip {
+  flex: none;
+  font: 800 9px/1 var(--font-jetbrains-mono, 'JetBrains Mono'), ui-monospace, monospace;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  padding: 5px 8px;
+  border-radius: 6px;
+  color: var(--muted);
+  background: var(--chip);
+  white-space: nowrap;
+}
+.af-core .af-chw-chip[data-result='won'] { color: var(--good); background: var(--good-soft); }
+.af-core .af-chw-chip[data-result='short'],
+.af-core .af-chw-chip[data-result='blocked'] { color: var(--bad); background: var(--bad-soft); }
+
+.af-core .af-chw-why {
+  margin: 0;
+  padding: 10px 0 0;
+  border-top: 1px solid var(--line);
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+.af-core .af-chw-stuck {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 9px;
+  border: 1px solid var(--warn);
+  background: var(--warn-soft);
+  color: var(--text2);
+  font-size: 12px;
+  line-height: 1.45;
+}
+.af-core .af-chw-run {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 4px;
+}
+.af-core .af-chw-btn {
+  width: 100%;
+  min-height: 44px;
+  justify-content: center;
+}
+
+@media (max-width: 720px) {
+  .af-core .af-chw-grid { grid-template-columns: minmax(0, 1fr); }
+}

@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import '@/components/core-app/af-commish-hub.css'
 import { PublishStandingsToggle } from '@/components/core-app/PublishStandingsToggle'
+import { WaiverOversight } from '@/components/core-app/WaiverOversight'
 import type {
   CommissionerHubResult,
   CommissionerQueueItem,
@@ -130,6 +131,9 @@ export function CommissionerHub({ data, messageHref = null }: CommissionerHubPro
           </div>
         )}
       </section>
+
+      {/* ── Waiver oversight (handoff 2026-09-13) ─────────────────────── */}
+      {data.waivers ? <WaiverOversight data={data.waivers} /> : null}
 
       <div className="af-ch-split">
         {/* ── Settings ──────────────────────────────────────────────── */}
