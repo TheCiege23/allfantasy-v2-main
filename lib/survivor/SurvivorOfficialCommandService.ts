@@ -7,7 +7,7 @@ import { getCouncil } from './SurvivorTribalCouncilService'
 import { parseSurvivorCommand, looksLikeOfficialCommand } from './SurvivorCommandParser'
 import { applyIdolPower, getActiveIdolsForRoster } from './SurvivorIdolRegistry'
 import { resolveSurvivorCurrentWeek } from './SurvivorTimelineResolver'
-import { submitVote } from './SurvivorVoteEngine'
+import { submitVote as submitCouncilVote } from './survivorVoteService'
 import { submitChallengeAnswer, getCurrentOpenChallengesForWeek, getChallengeById } from './SurvivorChallengeEngine'
 import { getFinaleState, submitJuryVote } from './SurvivorFinaleEngine'
 import { getTribeForRoster } from './SurvivorTribeService'
@@ -24,6 +24,8 @@ import type { SurvivorChallengeType } from './types'
 interface SurvivorRosterDisplayContext {
   rosterDisplayNames: Record<string, string>
   rosterAliasLookup: Record<string, string>
+  /** rosterId → the manager's app user id (Roster.platformUserId). */
+  rosterUserIds: Record<string, string>
 }
 
 export interface SurvivorOfficialCommandInput {
@@ -70,7 +72,7 @@ async function buildRosterDisplayContext(leagueId: string): Promise<SurvivorRost
     select: { id: true, platformUserId: true },
   })
   if (rosters.length === 0) {
-    return { rosterDisplayNames: {}, rosterAliasLookup: {} }
+    return { rosterDisplayNames: {}, rosterAliasLookup: {}, rosterUserIds: {} }
   }
 
   const map = await getRosterTeamMap(leagueId)
@@ -90,7 +92,9 @@ async function buildRosterDisplayContext(leagueId: string): Promise<SurvivorRost
   const userById = Object.fromEntries(users.map((user) => [user.id, user]))
   const rosterDisplayNames: Record<string, string> = {}
   const rosterAliasLookup: Record<string, string> = {}
+  const rosterUserIds: Record<string, string> = {}
   for (const roster of rosters) {
+    if (roster.platformUserId) rosterUserIds[roster.id] = roster.platformUserId
     const teamId = map.rosterIdToTeamId.get(roster.id)
     const team = teamId ? teamById[teamId] : null
     const user = roster.platformUserId ? userById[roster.platformUserId] : null
@@ -109,7 +113,7 @@ async function buildRosterDisplayContext(leagueId: string): Promise<SurvivorRost
     addAlias(rosterAliasLookup, roster.id, roster.id)
   }
 
-  return { rosterDisplayNames, rosterAliasLookup }
+  return { rosterDisplayNames, rosterAliasLookup, rosterUserIds }
 }
 
 function resolveRosterIdFromDisplayName(
@@ -414,14 +418,14 @@ export async function processSurvivorOfficialCommand(
   }
 
   if (parsed.intent === 'vote') {
-    const councilId = input.councilId ?? (await getCouncil(leagueId, week))?.id ?? null
-    if (!councilId) {
-      return { handled: true, ok: false, status: 400, error: 'No tribal council open for voting' }
-    }
-
+    // The same ballot service as the Tribal Council panel's "Submit vote" (survivorVoteService). It
+    // records the voter and target user ids and the target's name (what the panel's "You voted" line
+    // reads), enforces the league's vote-change policy and late-vote rules, and writes the private
+    // audit entry. It votes in the league's active council.
     const rosterContext = await buildRosterDisplayContext(leagueId)
     const targetRosterId = resolveRosterIdFromDisplayName(parsed.targetDisplayName, rosterContext)
-    if (!targetRosterId) {
+    const targetUserId = targetRosterId ? rosterContext.rosterUserIds[targetRosterId] : undefined
+    if (!targetRosterId || !targetUserId) {
       return {
         handled: true,
         ok: false,
@@ -430,17 +434,18 @@ export async function processSurvivorOfficialCommand(
       }
     }
 
-    const result = await submitVote(councilId, myRosterId, targetRosterId)
+    const result = await submitCouncilVote(leagueId, userId, targetUserId)
     if (!result.ok) {
-      return { handled: true, ok: false, status: 400, error: result.error ?? 'Vote failed' }
+      return { handled: true, ok: false, status: result.status, error: result.error }
     }
 
+    const targetName = result.targetName ?? rosterContext.rosterDisplayNames[targetRosterId] ?? targetRosterId
     return {
       handled: true,
       ok: true,
       status: 200,
       intent: parsed.intent,
-      message: `Vote recorded for ${rosterContext.rosterDisplayNames[targetRosterId] ?? targetRosterId}.`,
+      message: `Vote recorded for ${targetName}. ${result.message}`,
     }
   }
 
@@ -462,7 +467,7 @@ export async function processSurvivorOfficialCommand(
 
     const rosterContext = parsed.targetDisplayName ? await buildRosterDisplayContext(leagueId) : null
     const targetRosterId = parsed.targetDisplayName
-      ? resolveRosterIdFromDisplayName(parsed.targetDisplayName, rosterContext ?? { rosterDisplayNames: {}, rosterAliasLookup: {} })
+      ? resolveRosterIdFromDisplayName(parsed.targetDisplayName, rosterContext ?? { rosterDisplayNames: {}, rosterAliasLookup: {}, rosterUserIds: {} })
       : null
     if (parsed.targetDisplayName && !targetRosterId) {
       return {
