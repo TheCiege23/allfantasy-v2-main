@@ -55,6 +55,24 @@ export default async function CommissionerHubPage() {
 
   return (
     <>
+      {/*
+       * Front door to the six format hubs (/core/hubs). Shown to anyone with a
+       * league — the hub itself works out which formats you play and opens on the
+       * first one you have, so there is nothing to pre-filter here.
+       */}
+      {leagues.length > 0 ? (
+        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-4 pt-4">
+          <p className="text-[13px] text-muted">
+            Zombie, Tournament, Survivor, C2C, Guillotine and EFL leagues each have their own hub.
+          </p>
+          <Link
+            href="/core/hubs"
+            className="rounded-xl border border-subtle px-3 py-2 text-[13px] font-semibold transition hover:brightness-95"
+          >
+            Open format hubs →
+          </Link>
+        </div>
+      ) : null}
       {showTournamentEntry ? (
         <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-4 pt-4">
           <p className="text-[13px] text-muted">

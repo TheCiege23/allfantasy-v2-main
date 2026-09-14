@@ -59,6 +59,8 @@ import { getTradesData } from '@/lib/core-app/trades'
 import { getTradesBoard } from '@/lib/core-app/tradesBoard'
 import TradesBoard from '@/components/core-app/boards/TradesBoard'
 import { resolveCurrentWeek } from '@/lib/core-app/currentWeek'
+import FormatHub from '@/components/core-app/screens/FormatHub'
+import { getFormatHub, parseHubFormat } from '@/lib/core-app/formatHubs'
 import Waivers from '@/components/core-app/screens/Waivers'
 import { getWaiversData } from '@/lib/core-app/waivers'
 import { getWaiversBoard } from '@/lib/core-app/waiversBoard'
@@ -228,6 +230,13 @@ const SCREEN_KEYS: Record<string, CoreNavKey> = {
   standings: 'standings',
   /* 38a·10 — per-league sync detail. */
   sync: 'sync',
+  /*
+   * Multi-league format hubs (2026-09-13). One segment for all six — the format is
+   * the second path segment (/core/hubs/guillotine), so six hubs cost zero routes.
+   * Rides the commissioner nav key for the same reason `discord` does: no new rail
+   * entry, and the branch below is matched on `segment`, above every activeKey branch.
+   */
+  hubs: 'commissioner',
 }
 
 /**
@@ -293,6 +302,10 @@ const TAB_META: Record<string, { title: string; description: string }> = {
   live: { title: 'Live Scores', description: 'Live scores across every sport, scored against your rosters.' },
   standings: { title: 'Standings', description: 'This league ranked by points scored, not by record.' },
   sync: { title: 'Sync', description: 'What AllFantasy reads for this league, and when it last read it.' },
+  hubs: {
+    title: 'Format hubs',
+    description: 'Every Zombie, Tournament, Survivor, C2C, Guillotine and EFL league you play in, one hub per format.',
+  },
 }
 
 /**
@@ -756,6 +769,12 @@ export default async function AfCorePage({
    * Home answers "what needs me now" from a queue; this answers "what do I have".
    */
   const portfolio = activeKey === 'portfolio' ? await getPortfolio(userId).catch(() => null) : null
+
+  // /core/hubs/<format>. An unknown or missing format opens the first hub the reader has leagues in.
+  const formatHub =
+    segment === 'hubs'
+      ? await getFormatHub(userId, parseHubFormat(screen?.[1])).catch(() => null)
+      : null
 
   // Career derives from imported history; ?platform= narrows it to one provider.
   const career =
@@ -2052,6 +2071,21 @@ export default async function AfCorePage({
             <p style={{ marginTop: 8, fontSize: 13, lineHeight: 1.5, color: 'var(--muted)' }}>
               The team list for this sport could not be read just now. Nothing is lost — reload, or
               pick another sport.
+            </p>
+          </div>
+        )
+      ) : segment === 'hubs' ? (
+        /* Segment-matched and above every activeKey branch — see the model-admin note below. */
+        formatHub ? (
+          <FormatHub data={formatHub} />
+        ) : (
+          <div className="af-frame" style={{ padding: 24, maxWidth: 720 }}>
+            <h1 className="af-display" style={{ margin: 0, fontSize: 22, letterSpacing: '-0.03em' }}>
+              Format hubs
+            </h1>
+            <p style={{ marginTop: 8, fontSize: 13, lineHeight: 1.5, color: 'var(--muted)' }}>
+              We could not read your leagues just now. This is a read failure on our side, not a sign
+              that you have none.
             </p>
           </div>
         )
