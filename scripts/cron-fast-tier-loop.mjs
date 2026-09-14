@@ -329,15 +329,20 @@ export function assignPhases(jobs) {
  * Adding `phaseMs` to the seed restores the REAL separation (minutes, not seconds) for jobs
  * assignPhases grouped. `i*STARTUP_STAGGER_MS` still spreads jobs that SHARE a phase -- every
  * every-minute job, plus any solo-interval job left at the phase-0 default -- by a few seconds
- * each, preserving the original "12 jobs must not hit the app in the same second" property. Sorted
- * by (phaseMs, path) rather than declared order so `i` clusters same-phase jobs together instead of
- * scattering the stagger across the whole array.
+ * each, preserving the original "12 jobs must not hit the app in the same second" property. Within
+ * a shared phase, tighter cadences start first. The cold-start concurrency floor is two, so a pair
+ * of 15/30-minute jobs could otherwise occupy both slots for their full 330-second client budget
+ * and prevent the 1/2/5-minute scoring and active-import lanes from starting on time. Path remains
+ * the deterministic final tiebreaker.
  *
  * Pure and exported so it is tested directly, the same way assignPhases is.
  */
 export function seedCatchupDueTimes(jobs, startedAt) {
   const ordered = [...jobs].sort(
-    (a, b) => a.phaseMs - b.phaseMs || (a.path < b.path ? -1 : a.path > b.path ? 1 : 0),
+    (a, b) =>
+      a.phaseMs - b.phaseMs ||
+      a.intervalMs - b.intervalMs ||
+      (a.path < b.path ? -1 : a.path > b.path ? 1 : 0),
   )
   const due = new Map()
   ordered.forEach((j, i) => due.set(j.path, startedAt + j.phaseMs + i * STARTUP_STAGGER_MS))
