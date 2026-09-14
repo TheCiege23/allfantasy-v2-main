@@ -79,6 +79,10 @@
   white-space: nowrap;
 }
 
+.af-core .af-bd-sec-label[data-tone='good'] { color: var(--good); }
+.af-core .af-bd-sec-label[data-tone='bad'] { color: var(--bad); }
+.af-core .af-bd-sec-label[data-tone='warn'] { color: var(--warn); }
+
 .af-core .af-bd-sec-rule {
   flex: 1;
   height: 1px;
@@ -272,6 +276,68 @@
 }
 
 .af-core .af-bd-cta:hover { text-decoration: underline; }
+
+/* ── compact two-column rows (Week, Standings) — handoff 2026-09-13 ───────
+ *
+ * Opt-in on the <ul>. Half-width columns cannot hold the full row's fixed
+ * 230px identity block plus two 92px stat columns, so these rows carry ONE
+ * headline value on the right with its qualifier stacked under it, and the
+ * league block flexes. No rank gutter: the section label states the rule.
+ */
+.af-core .af-bd-rows--compact .af-bd-row {
+  gap: 11px;
+  padding: 11px 4px;
+}
+.af-core .af-bd-rows--compact .af-bd-league {
+  width: auto;
+  flex: 1;
+  gap: 2px;
+}
+.af-core .af-bd-rows--compact .af-bd-sub { line-height: 1.2; }
+.af-core .af-bd-rows--compact .af-bd-crest--sm {
+  width: 24px;
+  height: 24px;
+  border-radius: 7px;
+}
+.af-core .af-bd-rows--compact .af-bd-crest--sm.af-bd-crest--none { font-size: 9px; }
+
+/* A second, quieter sub line — e.g. what decides a standings race. */
+.af-core .af-bd-sub2 {
+  font: 500 10.5px/1.25 var(--font-archivo, 'Archivo', system-ui, sans-serif);
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The row's headline value, right-aligned, with a qualifier under it. */
+.af-core .af-bd-val {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 3px;
+  text-align: right;
+  font: 900 15px/1 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+  color: var(--text);
+  white-space: nowrap;
+}
+.af-core .af-bd-val--seed { font-size: 13px; }
+.af-core .af-bd-val[data-sev='good'] { color: var(--good); }
+.af-core .af-bd-val[data-sev='warn'] { color: var(--warn); }
+.af-core .af-bd-val[data-sev='bad'] { color: var(--bad); }
+
+.af-core .af-bd-val-sub {
+  font: 600 10px/1.1 var(--font-archivo, 'Archivo', system-ui, sans-serif);
+  letter-spacing: 0.02em;
+  color: var(--faint);
+}
+.af-core .af-bd-val-sub--status { text-transform: uppercase; }
+.af-core .af-bd-val-sub[data-sev='good'] { color: var(--good); }
+.af-core .af-bd-val-sub[data-sev='warn'] { color: var(--warn); }
+.af-core .af-bd-val-sub[data-sev='bad'] { color: var(--bad); }
 
 /* ── crest ──────────────────────────────────────────────────────────────── */
 
