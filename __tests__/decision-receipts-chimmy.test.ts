@@ -115,9 +115,7 @@ describe('getChimmyAdviceReceipts', () => {
     expect(h.teamFind).not.toHaveBeenCalled()
   })
 
-  it('only start/sit advice with an alternative becomes a receipt (adds and chat swaps come later)', async () => {
-    db({ rows: [advice({ adviceType: 'add', alt: null })] })
-    expect(await getChimmyAdviceReceipts({ userId: USER, leagues: [ICE], currentWeek: 6 })).toBeNull()
+  it('a lineup swap is not a start/sit receipt (none is recorded; adds have their own receipt)', async () => {
     db({ rows: [advice({ adviceType: 'lineup_swap' })], scores: [score('in', 18, true), score('out', 6, false)] })
     expect(await getChimmyAdviceReceipts({ userId: USER, leagues: [ICE], currentWeek: 6 })).toBeNull()
   })

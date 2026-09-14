@@ -25,6 +25,7 @@ import {
   loadLineupDecisionSlice,
   loadCommissionerHealthDecisionSlice,
   loadWaiverDecisionSlice,
+  type WaiverDecisionBridgeArgs,
 } from './decisionBridge'
 import { loadIdpKickerValueSlice, rosterSleeperIdsFrom, rosterPositionsFrom } from './idpKickerSlice'
 import { loadRosterValueGradeSlice, type RosterValueGradeFact } from './rosterValueGradeSlice'
@@ -641,6 +642,12 @@ export interface GroundingPacketArgs {
      */
     waiverDecision?: boolean
   }
+  /**
+   * Receives the waiver engine's claims when `want.waiverDecision` runs it — the side channel Chimmy
+   * advice receipts record from (user decision, 2026-09-14). Never part of the packet or the prompt;
+   * see `WaiverDecisionBridgeArgs.onClaims`.
+   */
+  onWaiverClaims?: WaiverDecisionBridgeArgs['onClaims']
 }
 
 /**
@@ -828,7 +835,7 @@ export async function buildDecisionOsGroundingPacket(
    * it overlaps with them and costs roughly its own slowest read.
    */
   const pWaiverDecision = want.waiverDecision
-    ? kick('waiverDecision', loadWaiverDecisionSlice({ userId: args.userId, leagueId }))
+    ? kick('waiverDecision', loadWaiverDecisionSlice({ userId: args.userId, leagueId, onClaims: args.onWaiverClaims }))
     : Promise.resolve(null)
 
   /*
