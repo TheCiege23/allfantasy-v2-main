@@ -526,7 +526,14 @@ export default async function AfCorePage({
    * rather than apologise. Matched on `segment`, not `navKey`: /core/discord
    * shares the commissioner nav key and must keep rendering its own screen.
    */
-  if (segment === 'commissioner') {
+  /*
+   * ⚠ ONLY WITHOUT A LEAGUE. This used to redirect unconditionally, which made the
+   * per-league Commissioner screen below (tiles, attention queue, settings, access,
+   * public standings, and now Waiver Oversight) unreachable — its loader and render
+   * branch were dead code behind a redirect that fired first. The cross-league
+   * /commissioner-hub is still the answer when no league is picked.
+   */
+  if (segment === 'commissioner' && !selectedLeagueId) {
     redirect('/commissioner-hub')
   }
 

@@ -3,6 +3,7 @@ import 'server-only'
 import { prisma } from '@/lib/prisma'
 import { getLeagueRole, type LeagueRole } from '@/lib/league/permissions'
 import { leagueDisplayName, type SectionState, type UnavailableSection } from './leagueHome'
+import { getCommissionerWaiverOversight, type WaiverOversight } from './commissionerWaivers'
 import type { CoreIssue } from './outstandingIssues'
 
 /**
@@ -113,6 +114,8 @@ export type CommissionerHubData = {
    * be reminded it is still on.
    */
   publicStandings: { enabled: boolean; url: string }
+  /** FAAB left per manager and what the last waiver run did — see commissionerWaivers.ts. */
+  waivers: WaiverOversight
 }
 
 export type CommissionerHubResult = CommissionerHubData | CommissionerAccessDenied
@@ -233,7 +236,7 @@ export async function getCommissionerHub(input: {
    * cannot see would leak its shape through timing and through any error that
    * escaped, and it is work nobody is going to look at.
    */
-  const [teams, waiverSettings, rosterCount] = await Promise.all([
+  const [teams, waiverSettings, rosterCount, waivers] = await Promise.all([
     prisma.leagueTeam
       .findMany({
         where: { leagueId },
@@ -253,6 +256,17 @@ export async function getCommissionerHub(input: {
       })
       .catch(() => null),
     prisma.roster.count({ where: { leagueId } }).catch(() => 0),
+    getCommissionerWaiverOversight({
+      leagueId,
+      platform: String(league?.platform ?? 'manual'),
+      role,
+      now,
+    }).catch(
+      (): WaiverOversight => ({
+        available: false,
+        reason: 'Waiver data couldn’t be read just now. This is a read failure on our side, not a league with no waivers.',
+      }),
+    ),
   ])
 
   const teamCount = teams.length || rosterCount
@@ -439,6 +453,7 @@ export async function getCommissionerHub(input: {
         (league.settings as Record<string, unknown>).publicStandings === true,
       url: `/standings/${leagueId}`,
     },
+    waivers,
   }
 }
 
