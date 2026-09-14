@@ -1395,6 +1395,17 @@
   gap: 8px;
 }
 
+.af-core .af-rail-score-status {
+  font: 500 10px/1.4 system-ui, sans-serif;
+  letter-spacing: 0;
+  color: var(--faint);
+  overflow-wrap: anywhere;
+}
+
+.af-core .af-rail-score-status[data-delayed='true'] {
+  color: var(--warn);
+}
+
 .af-core .af-rail-row-name {
   font: 800 12px/1.2 var(--font-archivo, 'Archivo', system-ui, sans-serif);
   color: var(--text);

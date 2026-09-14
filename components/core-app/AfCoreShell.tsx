@@ -11,6 +11,7 @@ import SyncNowButton from '@/components/core-app/SyncNowButton'
 import PlayerCardProvider from '@/components/core-app/player-card/PlayerCardProvider'
 import { SUPPORT_OPEN_EVENT } from '@/components/core-app/comms/commsEvents'
 import MiniPlayerImg from '@/components/MiniPlayerImg'
+import { useLiveRailScores } from './useLiveRailScores'
 import { useOverlayContainment } from '@/components/core-app/useOverlayContainment'
 import { matchLeagueSearchHits, type LeagueSearchHit } from '@/lib/core-app/topSearch'
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
@@ -70,6 +71,7 @@ export type RailSideProjectionSummary = {
 
 /** Where you sit in a league that has no opponent to show. */
 export type RailStandingSummary = {
+  tied?: boolean
   rank: number
   outOf: number
   /** Points over the lowest team in the league. Null when you ARE the lowest. */
@@ -85,6 +87,8 @@ export type RailStandingSummary = {
  * This week's head-to-head for one league, for the expanded rail.
  */
 export type RailMatchupSummary = {
+  season?: number
+  week?: number
   yourTeam: string | null
   yourAvatarUrl: string | null
   yourScore: number
@@ -1045,18 +1049,18 @@ function RailStanding({ standing }: { standing: RailStandingSummary | null }) {
     )
   }
 
-  const last = standing.rank === standing.outOf
+  const last = standing.overCut == null
   const tone = last ? 'bad' : standing.rank > standing.outOf * 0.75 ? 'warn' : undefined
 
   return (
     <span className="af-rail-row-rank" data-tone={tone}>
       <span className="af-rail-row-rank-pos">
-        {ordinal(standing.rank)}
+        {standing.tied ? 'T-' : ''}{ordinal(standing.rank)}
         <span className="af-rail-row-rank-of"> of {standing.outOf}</span>
       </span>
       <span className="af-rail-row-rank-cut">
         {standing.overCut == null
-          ? standing.elimination
+          ? standing.tied ? 'tied lowest' : standing.elimination
             ? 'on the block'
             : 'bottom of the league'
           : `+${standing.overCut.toFixed(1)} ${standing.elimination ? 'over the cut' : 'over last'}`}
@@ -1192,6 +1196,9 @@ export function AfCoreShell(props: AfCoreShellProps) {
    * then reconciles this flag to it, so the two never disagree once mounted.
    */
   const railOpen = railChoice === 'open'
+  const liveRail = useLiveRailScores(leagues, railOpen)
+  const liveWeek = Object.values(liveRail.scores)[0]?.week
+  const railWeekLabel = liveWeek ? `Week ${liveWeek}` : props.railWeekLabel
   const railRef = useRef<HTMLElement>(null)
   const railHandleRef = useRef<HTMLButtonElement>(null)
   /*
@@ -1363,7 +1370,7 @@ export function AfCoreShell(props: AfCoreShellProps) {
           </span>
           <span className="af-rail-toggle-text">
             {leagues.length} {leagues.length === 1 ? 'league' : 'leagues'}
-            {props.railWeekLabel ? ` · ${props.railWeekLabel}` : ''}
+            {railWeekLabel ? ` · ${railWeekLabel}` : ''}
             {props.liveGameCount && props.liveGameCount > 0 ? (
               <span className="af-rail-live-state">LIVE{railFreshLabel ? ` · ${railFreshLabel}` : ''}</span>
             ) : null}
@@ -1387,7 +1394,21 @@ export function AfCoreShell(props: AfCoreShellProps) {
         */}
         <div className="af-rail-scroll" id="af-rail-scroll">
           {leagues.map((l) => {
-            const m = props.railMatchups?.[l.id]
+            const saved = props.railMatchups?.[l.id]
+            const live = liveRail.scores[l.id]
+            const sameWeek = live && saved?.season === live.season && saved?.week === live.week
+            const fieldRace = saved?.standing?.elimination === true
+            const standing = fieldRace ? live?.fieldStanding : live?.standing
+            const m = live ? {
+              ...live,
+              freshAt: live.updatedAt,
+              source: 'live_cache' as const,
+              unpaired: fieldRace || live.unpaired,
+              yourProjection: sameWeek ? saved?.yourProjection : null,
+              opponentProjection: sameWeek && saved?.opponentTeam === live.opponentTeam ? saved?.opponentProjection : null,
+              standing: standing ? { ...standing, elimination: fieldRace || standing.elimination } : null,
+            } : saved
+            const delayed = liveRail.delayed.includes(l.id) || Boolean(live && (railClock ?? Date.now()) - Date.parse(live.updatedAt) > 90_000)
             const mFreshAt = m?.freshAt ? Date.parse(m.freshAt) : Number.NaN
             const mFreshMinutes = railClock != null && Number.isFinite(mFreshAt)
               ? Math.max(0, Math.floor((railClock - mFreshAt) / 60_000))
@@ -1459,6 +1480,11 @@ export function AfCoreShell(props: AfCoreShellProps) {
                       </span>
                     ) : null}
                   </span>
+                  {l.platform.toLowerCase() === 'sleeper' && railOpen ? (
+                    <span className="af-rail-score-status" data-delayed={delayed || undefined}>
+                      {delayed ? 'Score update delayed' : live ? `W${live.week} scores updated ${new Date(live.updatedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}` : 'Refreshing scores...'}
+                    </span>
+                  ) : null}
                   {m ? (
                     <span className="af-rail-row-line">
                       <span className="af-rail-row-labels" aria-hidden>
