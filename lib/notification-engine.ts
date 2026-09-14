@@ -135,6 +135,11 @@ const COOLDOWN_MINUTES: Partial<Record<NotificationEventType, number>> = {
 // ── Source Key Builder (for deduplication) ──
 
 function buildSourceKey(event: NotificationEvent): string {
+  /* Provider event ids are exact. Using them prevents retry duplicates without
+     suppressing a second legitimate 20+ yard play by the same player. */
+  if (event.meta?.idempotencyKey) {
+    return `${event.type}:${String(event.meta.idempotencyKey)}`.slice(0, 200)
+  }
   const parts: string[] = [event.type]
   if (event.leagueId) parts.push(event.leagueId)
   if (event.meta?.playerId) parts.push(String(event.meta.playerId))
@@ -257,6 +262,7 @@ export async function ingest(event: NotificationEvent): Promise<IngestResult> {
       },
       severity,
       productType: 'app',
+      dedupePrefix: event.meta?.idempotencyKey ? sourceKey : undefined,
     })
 
     return { dispatched: true, sourceKey }

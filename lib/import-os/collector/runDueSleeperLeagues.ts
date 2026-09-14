@@ -21,6 +21,7 @@ import {
   type SyncConnectedResult,
 } from './syncConnectedSleeperLeague'
 import { SYNCABLE_PROVIDERS, type LeagueSyncConnection } from './types'
+import type { SyncScope } from '@/lib/import-os/runner'
 
 async function mapWithConcurrency<T, R>(
   items: T[],
@@ -89,6 +90,11 @@ export interface RunDueInput {
   providers?: readonly ImportProvider[]
   /** Tests inject fixtures and hold no real credentials. */
   skipCredentialPreflight?: boolean
+  /** Mutable-scope lane override; state isolation is the caller's responsibility. */
+  cadenceMinutesOverride?: number
+  scopes?: SyncScope[]
+  matchupStaleThresholdMs?: number
+  runTimeoutMs?: number
 }
 
 export async function runDueLeagues(input?: RunDueInput): Promise<RunDueResult> {
@@ -119,6 +125,10 @@ export async function runDueLeagues(input?: RunDueInput): Promise<RunDueResult> 
           fetchNormalized: input?.fetchNormalized,
           reconcileRemovals: input?.reconcileRemovals,
           skipCredentialPreflight: input?.skipCredentialPreflight,
+          cadenceMinutesOverride: input?.cadenceMinutesOverride,
+          scopes: input?.scopes,
+          matchupStaleThresholdMs: input?.matchupStaleThresholdMs,
+          runTimeoutMs: input?.runTimeoutMs,
         })
       } catch (err) {
         // Per-league isolation: a thrown error is contained so the rest of the portfolio still syncs.

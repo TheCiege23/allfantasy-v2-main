@@ -128,6 +128,10 @@ export interface SyncConnectedDeps {
   skipCredentialPreflight?: boolean
   /** Bypass the cadence due-check (manual refresh). Default false. */
   force?: boolean
+  /** A dedicated lane may run mutable scopes faster than the full season cadence. */
+  cadenceMinutesOverride?: number
+  /** Sleeper current-week matchup freshness; defaults to the ordinary 30-minute cache policy. */
+  matchupStaleThresholdMs?: number
   /** Reconcile removals from complete authoritative responses. Default true. */
   reconcileRemovals?: boolean
   /** Overridable scope set (tests may add an immutable scope to exercise skip-refetch). */
@@ -202,11 +206,17 @@ export async function syncConnectedLeague(
   now: Date,
   deps: SyncConnectedDeps = {},
 ): Promise<SyncConnectedResult> {
-  const { state: seasonState, cadenceMinutes, warning } = resolveCadence({
+  const resolvedCadence = resolveCadence({
     sport: connection.sport,
     provider: connection.provider,
     now,
   })
+  const seasonState = resolvedCadence.state
+  const cadenceMinutes =
+    typeof deps.cadenceMinutesOverride === 'number' && deps.cadenceMinutesOverride > 0
+      ? deps.cadenceMinutesOverride
+      : resolvedCadence.cadenceMinutes
+  const warning = resolvedCadence.warning
 
   const stateRow = await prisma.leagueSyncState.findUnique({
     where: { runKey: connection.runKey },
@@ -323,7 +333,12 @@ export async function syncConnectedLeague(
    * over by pointing a Sleeper fetcher at them.
    */
   if (connection.provider === 'sleeper' && result.status !== 'locked' && isInSeason(seasonState)) {
-    await ensureMatchupsCached(connection.externalLeagueId, MAX_WEEKS, connection.season).catch(
+    await ensureMatchupsCached(
+      connection.externalLeagueId,
+      MAX_WEEKS,
+      connection.season,
+      deps.matchupStaleThresholdMs,
+    ).catch(
       (err: unknown) => {
         console.warn(
           '[sync] weekly matchup cache failed',

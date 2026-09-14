@@ -33,7 +33,7 @@ const JOB = 'cron-fantasy-os-exec-sync'
  * Deploy this on a FREQUENT fixed schedule (every 30 min, per cron-schedule.json). Each invocation enumerates
  * the canonical imported leagues of every syncable provider and refreshes only the ones DUE for their
  * season-aware cadence
- * (≈30 min in season / 4h offseason) — the fixed heartbeat runs often, but the per-league scheduler
+ * (10 min in season / 4h offseason) — the fixed heartbeat runs often, but the per-league scheduler
  * decides due-ness, so refreshes never depend on a customer page view and the provider is never hammered.
  *
  * The live collector (rate-limited Sleeper fetch → normalize → idempotent canonical upsert, driven by
@@ -41,11 +41,9 @@ const JOB = 'cron-fantasy-os-exec-sync'
  * `FANTASY_OS_EXEC_SYNC_LIVE === 'true'`, so deploying this heartbeat is safe and does nothing until the
  * collector is explicitly enabled in an approved environment. Read-only against Sleeper.
  *
- * FUTURE (not in this batch): a live-game optimization could refresh event-sensitive scopes
- * (`teams_rosters` / matchups) more frequently during active game windows — either a second, tighter
- * cron or an in-season cadence override keyed on the game schedule. The durable runner already supports
- * per-scope checkpoints + a season-aware cadence resolver, so this is an additive cadence change, not an
- * architecture change; deliberately deferred to keep provider load bounded and this batch focused.
+ * Mutable roster and transaction scopes have their own bounded five-minute lane folded into
+ * the existing notification relay heartbeat; its separate run key means it never postpones
+ * this complete league-state/history pass. The dedicated route remains available for operations.
  */
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'

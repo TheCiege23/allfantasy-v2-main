@@ -5,7 +5,8 @@
  * maps it to a deterministic refresh cadence. Boundaries are evaluated on the UTC calendar DATE only, so a
  * clock shift (daylight-saving) can never change which cadence applies — the date is invariant to DST.
  *
- * Cadence: preseason / regular_season / postseason = 30 min; offseason = 240 min (4h);
+ * Full cadence: preseason / regular_season / postseason = 10 min; offseason = 240 min (4h).
+ * A separate active lane refreshes mutable roster/transaction scopes every 5 minutes.
  * unknown = 240 min fail-safe + an operational warning.
  */
 export type SeasonState = 'preseason' | 'regular_season' | 'postseason' | 'offseason' | 'unknown'

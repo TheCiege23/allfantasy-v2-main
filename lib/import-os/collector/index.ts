@@ -38,6 +38,13 @@ export {
   type ManualRefreshResult,
   type SyncStateInspection,
 } from './manualRefresh'
+export {
+  runActiveSyncLane,
+  selectActiveSyncConnections,
+  ACTIVE_SYNC_CADENCE_MINUTES,
+  ACTIVE_SYNC_SCOPES,
+  type ActiveSyncLaneResult,
+} from './activeSyncLane'
 export { applySleeperScopeToLeague, type ApplyLeagueSyncOptions } from './applySleeperLeagueSync'
 export { createPrismaSleeperSyncStore, type PrismaSleeperSyncStore } from './prismaSyncStore'
 export { createSleeperScopeFetcher } from './sleeperScopeFetcher'
