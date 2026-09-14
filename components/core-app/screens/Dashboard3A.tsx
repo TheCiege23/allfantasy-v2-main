@@ -26,6 +26,8 @@ import { FollowingCard } from '@/components/core-app/screens/FollowingCard'
 import type { FollowingCardData } from '@/lib/core-app/followingCard'
 import { ReceiptsCard } from '@/components/core-app/screens/ReceiptsCard'
 import type { DecisionReceiptsData } from '@/lib/core-app/decisionReceipts'
+import { YourWeekRoutine } from '@/components/core-app/screens/YourWeekRoutine'
+import type { WeeklyRoutineData } from '@/lib/core-app/weeklyRoutine'
 
 /**
  * Screen 3a — Dashboard, all leagues.
@@ -111,6 +113,11 @@ export type Dashboard3AProps = {
    * when there is no Sleeper identity or no league the trade grades cover.
    */
   receipts?: DecisionReceiptsData | null
+  /**
+   * The weekly routine (2026-09-14): Tue results, Wed waivers, Thu lineups, Sun game day, Mon
+   * recap, today's step highlighted in US Eastern. Null renders nothing.
+   */
+  routine?: WeeklyRoutineData | null
 }
 
 const SEV_CLASS: Record<CoreIssue['severity'], string> = {
@@ -379,6 +386,7 @@ export function Dashboard3A({
   winProb = null,
   following = null,
   receipts = null,
+  routine = null,
 }: Dashboard3AProps) {
   const now = new Date()
   const openCount = issues.length
@@ -572,6 +580,17 @@ export function Dashboard3A({
 
         <div className="af3a-body">
           <div className="af3a-col-main">
+            {/* ── Your week — the weekly routine, today's step first in the eye ── */}
+            <YourWeekRoutine
+              data={routine}
+              help={
+                <Help>
+                  <b>A fantasy week in five steps.</b>
+                  Results on Tuesday, waivers Wednesday, lineups Thursday, game day Sunday and the
+                  recap Monday (US Eastern). A check mark means we saw it done in your leagues.
+                </Help>
+              }
+            />
             {/* ── Outstanding issues ───────────────────────────────────── */}
             <section className="af3a-sec">
               <header className="af3a-sechead">

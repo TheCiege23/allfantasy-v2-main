@@ -688,6 +688,31 @@
   font: 800 12px/1.4 'Archivo', system-ui, sans-serif;
 }
 
+/* ── Your week — the weekly routine card (2026-09-14) ─────────────────────── */
+.af3a-routine { margin-bottom: 22px; }
+.af3a-routine-list { list-style: none; margin: 0; padding: 8px 10px; display: grid; gap: 2px; }
+.af3a-routine-step {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+  padding: 8px 6px;
+  border-radius: 8px;
+}
+.af3a-routine-step[data-today='true'] {
+  background: rgba(127, 127, 127, 0.1);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+.af3a-routine-day { flex: none; width: 30px; color: var(--muted); font: 700 11px/1 'JetBrains Mono', monospace; }
+.af3a-routine-step[data-today='true'] .af3a-routine-day { color: var(--accent); }
+.af3a-routine-title { color: var(--text); font: 800 13px/1.3 'Archivo', system-ui, sans-serif; text-decoration: none; }
+.af3a-routine-title:hover { color: var(--accent); }
+.af3a-routine-check { color: var(--good, var(--accent)); font: 800 12px/1 'Archivo', system-ui, sans-serif; }
+.af3a-routine-summary { flex: 1 1 220px; min-width: 0; color: var(--text2); font: 400 12px/1.4 'Archivo', system-ui, sans-serif; }
+.af3a-routine-recap { margin-top: 10px; display: grid; gap: 6px; }
+.af3a-routine-recap b { color: var(--text); font: 800 13px/1.3 'Archivo', system-ui, sans-serif; }
+.af3a-routine-recap ul { margin: 0; padding-left: 18px; color: var(--text2); font: 400 12px/1.5 'Archivo', system-ui, sans-serif; }
+
 /*
  * ⚠ Own top-level @media at end of file — see the same note in af-core-shell.css.
  *
@@ -697,7 +722,8 @@
  * the one most likely to be used one-handed.
  */
 @media (max-width: 720px) {
-  .af3a-cardlink {
+  .af3a-cardlink,
+  .af3a-routine-title {
     display: inline-flex;
     align-items: center;
     min-height: 44px;

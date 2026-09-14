@@ -57,6 +57,13 @@ export type WeekAllData = {
 export async function getWeekAll(
   userId: string,
   leagues: Array<{ id: string; name?: string | null; platform?: string | null; platformLeagueId?: string | null }>,
+  /**
+   * `previous`: the last FULLY PLAYED week instead of the one in play — what a results review
+   * and a recap are about (weekly routine, 2026-09-14). The current week is the earliest week
+   * still carrying an unplayed row, so the week before it has none; once every week of the
+   * season is played, the current week is itself complete and is returned.
+   */
+  opts: { previous?: boolean } = {},
 ): Promise<WeekAllData> {
   const empty: WeekAllData = {
     rows: [],
@@ -84,8 +91,22 @@ export async function getWeekAll(
    * simply not been looked at. See lib/core-app/currentWeek.ts for the
    * production measurement and the rule that survives both shapes.
    */
-  const latest = await resolveCurrentWeek(platformIds)
-  if (!latest) return empty
+  const current = await resolveCurrentWeek(platformIds)
+  if (!current) return empty
+  let latest = current
+  if (opts.previous) {
+    const stillUnplayed = await prisma.weeklyMatchup.count({
+      where: {
+        leagueId: { in: platformIds },
+        seasonYear: current.seasonYear,
+        week: current.week,
+        pointsFor: { lte: 0 },
+        pointsAgainst: { lte: 0 },
+      },
+    })
+    latest = stillUnplayed > 0 ? { seasonYear: current.seasonYear, week: current.week - 1 } : current
+    if (latest.week < 1) return empty
+  }
 
   const [matchups, myTeams] = await Promise.all([
     prisma.weeklyMatchup.findMany({

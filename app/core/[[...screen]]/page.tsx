@@ -116,6 +116,7 @@ import { DashGameDayBand } from '@/components/core-app/screens/DashGameDayBand'
 import { readPlayByPlayFeed } from '@/lib/live/playByPlayFeed'
 import { getDraftHqAll } from '@/lib/core-app/draftHqAll'
 import { getWeekAll, scoredMatchupLeagueIds } from '@/lib/core-app/weekAll'
+import { buildWeeklyRoutine, getRoutineFacts } from '@/lib/core-app/weeklyRoutine'
 import YourWeek from '@/components/core-app/screens/YourWeek'
 import WeekBoard from '@/components/core-app/boards/WeekBoard'
 import RivalryRadar from '@/components/core-app/screens/RivalryRadar'
@@ -1574,6 +1575,7 @@ export default async function AfCorePage({
     homeTrades,
     homeFollowing,
     homeReceipts,
+    homeRoutineFacts,
   ] = isHome3a
     ? await Promise.all([
         getCareerData(userId).catch(() => null),
@@ -1687,8 +1689,42 @@ export default async function AfCorePage({
           ownerSleeperId: leagueListPayload?.sleeperUserId ?? null,
           currentWeek: homeTradeWeek,
         }).catch(() => null),
+        /*
+         * The weekly routine's reads (2026-09-14): the last fully played week and its top
+         * starter, and this week's adds from the transaction facts the receipts already read.
+         * Each fails to null ("unknown"), never to "none".
+         */
+        getRoutineFacts({
+          userId,
+          leagues: playedLeagues.map((l) => ({
+            id: l.id,
+            name: l.name,
+            platform: String(l.platform ?? ''),
+            platformLeagueId: (l as { platformLeagueId?: string | null }).platformLeagueId ?? null,
+            season: (l as { season?: number | string | null }).season ?? null,
+          })),
+          currentWeek: homeTradeWeek,
+        }).catch(() => null),
       ])
-    : [null, null, null, null, null, null, null, [], false, [], null, null]
+    : [null, null, null, null, null, null, null, [], false, [], null, null, null]
+
+  /*
+   * The routine card, built from those reads plus what the home already holds: the injury book's
+   * starters in doubt (the triage band's own rule) and this week's schedule. A missing dash34 is
+   * "unknown" for lineups, not "no starters in doubt".
+   */
+  const homeRoutine = isHome3a
+    ? buildWeeklyRoutine({
+        now,
+        lastWeek: homeRoutineFacts?.lastWeek ?? null,
+        topScorer: homeRoutineFacts?.topScorer ?? null,
+        addsThisWeek: homeRoutineFacts?.addsThisWeek ?? null,
+        startersInDoubt: dash34
+          ? ((dash34.book ?? []) as unknown as TriageBookRow[]).filter((p) => p.tone === 'bad' && p.startingIn > 0).length
+          : null,
+        schedule: homeSchedule ?? null,
+      })
+    : null
 
   /*
    * "Since your last visit" — lib/core-app/sinceLastVisit. Serial after the home
@@ -3001,6 +3037,7 @@ export default async function AfCorePage({
               exposure={homeExposure}
               following={homeFollowing}
               receipts={homeReceipts}
+              routine={homeRoutine}
               rivals={homeRivals}
               winProb={winProb}
               data={dash34}
