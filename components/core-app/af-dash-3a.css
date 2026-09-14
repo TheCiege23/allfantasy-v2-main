@@ -591,6 +591,28 @@
 }
 .af3a-follow-fa:hover { text-decoration: underline; }
 
+/* Receipts (2026-09-14): how your trades turned out. Wins and losses share one layout; only
+   the result line's colour carries the direction. Top-level rules. */
+.af3a-receipt-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
+.af3a-receipt { display: grid; gap: 3px; }
+.af3a-receipt-title,
+.af-core .af3a-receipt-title {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  color: var(--text);
+  font: 700 13px/1.3 'Archivo', system-ui, sans-serif;
+  text-decoration: none;
+}
+.af3a-receipt-title:hover { color: var(--accent); }
+.af3a-receipt-where { color: var(--muted); font: 700 10.5px/1.2 'JetBrains Mono', monospace; }
+.af3a-receipt-swap { color: var(--text2); font: 400 12px/1.4 'Archivo', system-ui, sans-serif; }
+.af3a-receipt-result { color: var(--text2); font: 400 12px/1.4 'Archivo', system-ui, sans-serif; }
+.af3a-receipt-result b { color: var(--text); }
+.af3a-receipt[data-outcome='ahead'] .af3a-receipt-result b { color: var(--good, var(--accent)); }
+.af3a-receipt[data-outcome='behind'] .af3a-receipt-result b { color: var(--bad); }
+.af3a-receipt-note { color: var(--muted); font: 400 11.5px/1.4 'Archivo', system-ui, sans-serif; }
+
 /* ── Inline help badge ────────────────────────────────────────────────────────
  * ⚠ THIS WAS SHIPPED WITH NO RULE AT ALL, AND THE ABSENCE WAS INVISIBLE IN CODE.
  * `Help` in Dashboard3A.tsx renders `<span data-help>?<span data-help-body>…`,

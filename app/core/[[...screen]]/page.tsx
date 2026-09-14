@@ -35,6 +35,7 @@ import { DashDraftsBand } from '@/components/core-app/screens/DashDraftsBand'
 import { resolveUserOsSnapshot } from '@/lib/decision-os/userOs'
 import { getCrossLeagueExposure, getRivalRecords } from '@/lib/core-app/dash3aPanels'
 import { getFollowingCard } from '@/lib/core-app/followingCard'
+import { getTradeReceipts } from '@/lib/core-app/decisionReceipts'
 import { getDash34Data, imageOf, type Dash34LeagueRow } from '@/lib/core-app/dash34'
 import { getChatUnread } from '@/lib/chat-core/unreadCounts'
 import LeagueHome from '@/components/core-app/screens/LeagueHome'
@@ -1572,6 +1573,7 @@ export default async function AfCorePage({
     homeRegularSeason,
     homeTrades,
     homeFollowing,
+    homeReceipts,
   ] = isHome3a
     ? await Promise.all([
         getCareerData(userId).catch(() => null),
@@ -1666,8 +1668,23 @@ export default async function AfCorePage({
             sport: (l as { sport?: string | null }).sport ?? null,
           })),
         ).catch(() => null),
+        /*
+         * Decision receipts (2026-09-14): how your trades turned out. One read of the
+         * trade-grade cache the sweep already fills — no provider call. Your side of each
+         * trade is found by your Sleeper user id; null without one, which hides the card.
+         */
+        getTradeReceipts({
+          leagues: playedLeagues.map((l) => ({
+            id: l.id,
+            name: l.name,
+            platform: String(l.platform ?? ''),
+            platformLeagueId: (l as { platformLeagueId?: string | null }).platformLeagueId ?? null,
+          })),
+          ownerSleeperId: leagueListPayload?.sleeperUserId ?? null,
+          currentWeek: homeTradeWeek,
+        }).catch(() => null),
       ])
-    : [null, null, null, null, null, null, null, [], false, [], null]
+    : [null, null, null, null, null, null, null, [], false, [], null, null]
 
   /*
    * "Since your last visit" — lib/core-app/sinceLastVisit. Serial after the home
@@ -2979,6 +2996,7 @@ export default async function AfCorePage({
               issues={issues}
               exposure={homeExposure}
               following={homeFollowing}
+              receipts={homeReceipts}
               rivals={homeRivals}
               winProb={winProb}
               data={dash34}
