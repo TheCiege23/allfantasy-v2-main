@@ -180,6 +180,12 @@ const filesToKeep = new Set([
   // queue, and a build that ships the producer without the consumer restores the exact write-only
   // outbox this route was added to end.
   path.join('app', 'api', 'cron', 'notification-outbox-relay', 'route.ts').replace(/\\/g, '/'),
+  // These three routes are live `vercel.json` targets and have heartbeat probes.
+  // Keeping the schedule while excluding the handler makes a successful deploy
+  // manufacture permanent 404s, so the build guard requires them to ship.
+  path.join('app', 'api', 'cron', 'season-week-roll', 'route.ts').replace(/\\/g, '/'),
+  path.join('app', 'api', 'cron', 'reap-sync-runs', 'route.ts').replace(/\\/g, '/'),
+  path.join('app', 'api', 'cron', 'commissioner-workspace-refresh', 'route.ts').replace(/\\/g, '/'),
   // ── Sports-data ingestion crons — MUST ship (regression fix 2026-07-19) ──────
   // `app/api/cron` is disabled wholesale above under the comment "keep non-core
   // diagnostic/dev surfaces out of production route budget". That was never true of these
@@ -851,7 +857,10 @@ async function run() {
   writePlaceholder500(placeholder500, true)
 
   const nextArgs = process.argv.slice(2)
-  const nextBin = path.join(repoRoot, 'node_modules', 'next', 'dist', 'bin', 'next')
+  // Isolated git worktrees may intentionally share the parent checkout's
+  // dependency installation. Production keeps using the local path; the
+  // override only makes the exact deploy gate reproducible from a worktree.
+  const nextBin = process.env.AF_NEXT_BIN?.trim() || path.join(repoRoot, 'node_modules', 'next', 'dist', 'bin', 'next')
   let child
   const childEnv = {
     ...process.env,

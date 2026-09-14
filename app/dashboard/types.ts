@@ -57,6 +57,8 @@ export interface UserLeague {
   lifecycleState?: string | null
   /** ISO datetime when the league was imported into AF */
   importedAt?: string | null
+  /** ISO datetime of the most recent successful provider sync. */
+  lastSyncedAt?: string | null
   /** Prisma `League.tradeDeadlineWeek` — week number, not a date. */
   tradeDeadlineWeek?: number | null
   /** Prisma `League.playoffStartWeek` (default 14 when unset). */

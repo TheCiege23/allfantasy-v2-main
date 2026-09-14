@@ -18,6 +18,7 @@ import Link from 'next/link'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useOverlayContainment } from '../useOverlayContainment'
 import '@/components/core-app/af-comms.css'
+import type { CoreSurfaceKey } from '@/lib/core-app/coreSurface'
 
 /**
  * 23a — the communications drawer. 23b — the same drawer, docked on desktop.
@@ -101,6 +102,8 @@ export type CommsDrawerProps = {
   chimmyTokenCost: number | null
   /** Ids+counts the /core home is showing — see lib/core-app/homeSignals.ts. */
   homeSignals?: string | null
+  /** Validated server-side and used only to describe the Core workflow in view. */
+  pageSurface?: CoreSurfaceKey | null
   initialTab?: CommsTab
   /**
    * Seeds the private Chimmy composer with a question a screen wants asked.
@@ -313,6 +316,7 @@ function ChimmyPanel({
   tokenCost,
   publicMode,
   homeSignals,
+  pageSurface,
   initialDraft,
 }: {
   leagues: CommsLeague[]
@@ -323,6 +327,7 @@ function ChimmyPanel({
   publicMode: boolean
   /** Ids+counts the /core home is showing — see lib/core-app/homeSignals.ts. */
   homeSignals: string | null
+  pageSurface: CoreSurfaceKey | null
   /** A question a screen asked us to seed. Never auto-sent. */
   initialDraft?: string | null
 }) {
@@ -376,6 +381,7 @@ function ChimmyPanel({
          * only; the server resolves names it has already confirmed they hold.
          */
         if (homeSignals) form.append('homeSignals', homeSignals)
+        if (pageSurface) form.append('coreSurface', pageSurface)
         form.append(
           'conversation',
           JSON.stringify(
@@ -502,7 +508,7 @@ function ChimmyPanel({
         setBusy(false)
       }
     },
-    [busy, publicMode, scope, scopeId, tokenCost, turns],
+    [busy, homeSignals, pageSurface, publicMode, scope, scopeId, turns],
   )
 
   const quickPrompts = scope
@@ -1155,6 +1161,7 @@ function LeaguePanel({
           tokenCost={chimmyTokenCost}
           publicMode
           homeSignals={null}
+          pageSurface={null}
         />
       </div>
     )
@@ -1555,6 +1562,7 @@ export function CommsDrawer({
   pageLeagueId,
   chimmyTokenCost,
   homeSignals = null,
+  pageSurface = null,
   initialTab = 'chimmy',
   initialDraft = null,
 }: CommsDrawerProps) {
@@ -1691,6 +1699,7 @@ export function CommsDrawer({
             tokenCost={chimmyTokenCost}
             publicMode={false}
             homeSignals={homeSignals}
+            pageSurface={pageSurface}
             initialDraft={initialDraft}
           />
         ) : tab === 'huddle' ? (

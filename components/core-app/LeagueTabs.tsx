@@ -27,18 +27,45 @@ export type LeagueTabsProps = {
   leagueName: string
   /** The active /core segment, e.g. 'standings'. */
   activeKey: string
+  hasScoredWeek?: boolean | null
+  tradeSupported?: boolean
+  draftSupported?: boolean
 }
 
-const TABS: Array<{ key: string; label: string }> = [
+const TABS: Array<{
+  key: string
+  label: string
+  requires?: 'scores' | 'trades' | 'draft'
+}> = [
+  { key: '', label: 'Overview' },
   { key: 'my-team', label: 'My team' },
-  { key: 'matchup', label: 'Matchup' },
-  { key: 'week', label: 'Your week' },
-  { key: 'standings', label: 'Standings' },
-  { key: 'season-outlook', label: 'Outlook' },
+  { key: 'matchup', label: 'Matchup', requires: 'scores' },
+  { key: 'trades', label: 'Trades', requires: 'trades' },
+  { key: 'waivers', label: 'Waivers' },
+  { key: 'players', label: 'Players' },
+  { key: 'war-room', label: 'War Room' },
+  { key: 'draft-hq', label: 'Draft HQ', requires: 'draft' },
+  { key: 'week', label: 'Your week', requires: 'scores' },
+  { key: 'live', label: 'Live' },
+  { key: 'standings', label: 'Standings', requires: 'scores' },
+  { key: 'season-outlook', label: 'Outlook', requires: 'scores' },
 ]
 
-export function LeagueTabs({ leagueId, leagueName, activeKey }: LeagueTabsProps) {
+export function LeagueTabs({
+  leagueId,
+  leagueName,
+  activeKey,
+  hasScoredWeek = null,
+  tradeSupported = true,
+  draftSupported = true,
+}: LeagueTabsProps) {
   const q = `?league=${encodeURIComponent(leagueId)}`
+  const visibleTabs = TABS.filter((tab) => {
+    if (tab.requires === 'scores') return hasScoredWeek !== false
+    if (tab.requires === 'trades') return tradeSupported
+    if (tab.requires === 'draft') return draftSupported
+    return true
+  })
 
   return (
     <nav className="af-lt" aria-label={`${leagueName} views`}>
@@ -53,19 +80,20 @@ export function LeagueTabs({ leagueId, leagueName, activeKey }: LeagueTabsProps)
       </span>
 
       <div className="af-lt-tabs" role="list">
-        {TABS.map((t) => {
-          const active = t.key === activeKey
+        {visibleTabs.map((t) => {
+          const active = t.key ? t.key === activeKey : activeKey === 'home'
+          const href = t.key ? `/core/${t.key}${q}` : `/core${q}`
           return (
-            <Link
-              key={t.key}
-              role="listitem"
-              href={`/core/${t.key}${q}`}
-              className="af-lt-tab"
-              data-active={active}
-              aria-current={active ? 'page' : undefined}
-            >
-              {t.label}
-            </Link>
+            <span key={t.key || 'overview'} role="listitem">
+              <Link
+                href={href}
+                className="af-lt-tab"
+                data-active={active}
+                aria-current={active ? 'page' : undefined}
+              >
+                {t.label}
+              </Link>
+            </span>
           )
         })}
       </div>
