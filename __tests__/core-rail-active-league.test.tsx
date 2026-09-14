@@ -20,8 +20,17 @@ import { resolve } from 'node:path'
  * that happens to leave the words behind.
  */
 
+/*
+ * 🛑 ONE ROUTER OBJECT, NOT ONE PER CALL. The shell's rail-clock effect depends
+ * on `router` and sets state synchronously; a fresh object per render loops
+ * forever inside act() and the suite hangs silently. See core-admin-nav.test.tsx.
+ */
+const nav = vi.hoisted(() => ({
+  router: { push: () => {}, replace: () => {}, prefetch: () => {}, refresh: () => {} },
+}))
+
 vi.mock('next/navigation', () => ({
-  useRouter: () => ({ push: vi.fn(), replace: vi.fn(), prefetch: vi.fn() }),
+  useRouter: () => nav.router,
   usePathname: () => '/core',
   useSearchParams: () => new URLSearchParams(),
 }))
