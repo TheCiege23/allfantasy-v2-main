@@ -15,6 +15,7 @@ import { coreRefreshIntervalMs } from '@/lib/core-app/coreRefreshPolicy'
 import MiniPlayerImg from '@/components/MiniPlayerImg'
 import { useLiveRailScores } from './useLiveRailScores'
 import { useOverlayContainment } from '@/components/core-app/useOverlayContainment'
+import { CoreWelcomeTour } from '@/components/core-app/CoreWelcomeTour'
 import { matchLeagueSearchHits, type LeagueSearchHit } from '@/lib/core-app/topSearch'
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import '@/components/core-app/af-core.css'
@@ -1715,6 +1716,12 @@ export function AfCoreShell(props: AfCoreShellProps) {
           <TopSearch leagues={leagues} />
 
           <div className="af-topbar-right">
+            {props.isAdmin ? (
+              <Link className="af-admin-shortcut" href="/admin" aria-label="Open AllFantasy administration">
+                <span aria-hidden>⬢</span>
+                Admin
+              </Link>
+            ) : null}
             <span className="af-readonly">
               Read-only
               <HelpDot
@@ -1775,6 +1782,7 @@ export function AfCoreShell(props: AfCoreShellProps) {
             is exactly one permission flow and it lives in EnableWebPushCard.
           */}
           <GameDayAlertsBanner />
+          <CoreWelcomeTour leagueCount={leagues.length} />
           {/*
             The VISIBLE button, on the /core home screen: a real action row
             above the dashboard rather than a chip in the chrome. This is the

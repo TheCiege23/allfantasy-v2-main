@@ -28,6 +28,7 @@ import { ReceiptsCard } from '@/components/core-app/screens/ReceiptsCard'
 import type { DecisionReceiptsData } from '@/lib/core-app/decisionReceipts'
 import { YourWeekRoutine } from '@/components/core-app/screens/YourWeekRoutine'
 import type { WeeklyRoutineData } from '@/lib/core-app/weeklyRoutine'
+import { WorkbookBarChart } from '@/components/core-app/charts/WorkbookChart'
 
 /**
  * Screen 3a — Dashboard, all leagues.
@@ -422,6 +423,13 @@ export function Dashboard3A({
     leagueTotal > shownLeagues.length
       ? `${shownLeagues.length} of ${leagueTotal}`
       : `${leagueTotal} total`
+  const platformCounts = [...railLeagues.reduce((counts, league) => {
+    const platform = String(league.platform ?? 'AllFantasy').trim() || 'AllFantasy'
+    counts.set(platform, (counts.get(platform) ?? 0) + 1)
+    return counts
+  }, new Map<string, number>())]
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .map(([label, value]) => ({ label, value, displayValue: value.toLocaleString() }))
 
   /*
    * Two real sources, preferred in order. `Dash34League.score` is live and knows
@@ -853,6 +861,13 @@ export function Dashboard3A({
             </section>
           </div>
         </div>
+
+        <WorkbookBarChart
+          title="League portfolio by platform"
+          subtitle="Every connected league in Core"
+          valueLabel="Leagues"
+          data={platformCounts}
+        />
 
         {/* ── Bottom three-up ────────────────────────────────────────────── */}
         <div className="af3a-bottom">

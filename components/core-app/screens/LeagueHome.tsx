@@ -16,6 +16,7 @@ import type { LeagueHomeData, SectionState } from '@/lib/core-app/leagueHome'
 import type { CoreIssue } from '@/lib/core-app/outstandingIssues'
 import { LeagueScoreboardPanel } from '@/components/core-app/screens/LeagueScoreboardPanel'
 import { COMMS_OPEN_EVENT } from '@/components/core-app/comms/commsEvents'
+import { WorkbookBarChart } from '@/components/core-app/charts/WorkbookChart'
 
 /**
  * Jump to another week.
@@ -737,6 +738,17 @@ export function LeagueHome({ data, otherLeagueIssueCount, issues = [] }: LeagueH
           <StatePanel title="Standings" state={data.standings}>
             {(rows) => (
               <div className="af-standings-wrap">
+                <WorkbookBarChart
+                  title="Points for by team"
+                  subtitle="Current standings leaders"
+                  valueLabel="Points"
+                  data={rows.slice(0, 8).map((team) => ({
+                    label: team.teamName,
+                    value: team.pointsFor,
+                    displayValue: Math.round(team.pointsFor).toLocaleString(),
+                    tone: team.isYou ? 'good' : 'accent',
+                  }))}
+                />
                 {/*
                   Column heads, because three numeric columns without them is a
                   guessing game. FAAB rather than "waiver": this league bids,

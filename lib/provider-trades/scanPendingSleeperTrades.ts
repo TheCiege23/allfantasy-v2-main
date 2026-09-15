@@ -231,6 +231,9 @@ export type PendingTradeScan = {
    * should say so rather than round it up to a clean empty.
    */
   weeksUnanswered: number
+  /** Requested/answered counts make a successful empty scan auditable in the UI. */
+  weeksRequested?: number
+  weeksAnswered?: number
 }
 
 /**
@@ -395,11 +398,21 @@ export async function scanPendingSleeperTrades(args: {
         scanned: false,
         reason: 'Sleeper did not answer for this league',
         weeksUnanswered,
+        weeksRequested: weeks.length,
+        weeksAnswered: 0,
       }
     }
 
     completed.sort((a, b) => Date.parse(b.proposedAt ?? '') - Date.parse(a.proposedAt ?? ''))
-    return { trades: out, completedTrades: completed.slice(0, 50), scanned: true, reason: null, weeksUnanswered }
+    return {
+      trades: out,
+      completedTrades: completed.slice(0, 50),
+      scanned: true,
+      reason: null,
+      weeksUnanswered,
+      weeksRequested: weeks.length,
+      weeksAnswered: weeks.length - weeksUnanswered,
+    }
   } catch {
     // Provider unavailability must never break the caller's own panel.
     return {

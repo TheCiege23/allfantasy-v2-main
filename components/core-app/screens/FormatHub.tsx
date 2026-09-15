@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import type { FormatHubData, HubFormat } from '@/lib/core-app/formatHubs'
 import '@/components/core-app/af-format-hubs.css'
+import { WorkbookBarChart } from '@/components/core-app/charts/WorkbookChart'
 
 /**
  * Multi-league format hub — design_handoff_multi_league_hubs (2026-09-13).
@@ -399,6 +400,19 @@ export default function FormatHub({ data }: { data: FormatHubData }) {
 
       {has ? (
         <>
+          <WorkbookBarChart
+            title={`${theme.tab} league comparison`}
+            subtitle={theme.meterLabel}
+            valueLabel="Percent"
+            data={data.leagues
+              .filter((league) => league.meter)
+              .map((league) => ({
+                label: league.name,
+                value: league.meter?.pct ?? 0,
+                displayValue: league.meter?.value,
+                tone: league.meter?.tone ?? 'accent',
+              }))}
+          />
           <section aria-labelledby="afh-leagues" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             <div className="afh-rule">
               <h2 id="afh-leagues" className="afh-label" style={{ margin: 0 }}>
@@ -407,9 +421,8 @@ export default function FormatHub({ data }: { data: FormatHubData }) {
             </div>
             <div className="afh-grid">
               {data.leagues.map((l) => (
-                <Link
+                <article
                   key={l.leagueId}
-                  href={l.href}
                   className="afh-card"
                   data-tone={l.statusTone === 'good' || l.statusTone === 'warn' || l.statusTone === 'bad' ? l.statusTone : undefined}
                 >
@@ -456,7 +469,18 @@ export default function FormatHub({ data }: { data: FormatHubData }) {
                   <span className="afh-chip" data-tone={l.statusTone === 'muted' ? undefined : l.statusTone}>
                     {l.status}
                   </span>
-                </Link>
+                  <nav className="afh-card-actions" aria-label={`${l.name} tools`}>
+                    <Link href={l.href}>Overview</Link>
+                    <Link href={`/core/standings?league=${encodeURIComponent(l.leagueId)}`}>Standings</Link>
+                    <Link href={`/core/trades?league=${encodeURIComponent(l.leagueId)}`}>Trades</Link>
+                    <Link href={`/core/draft-hq?league=${encodeURIComponent(l.leagueId)}`}>Draft</Link>
+                    {l.youCommission ? (
+                      <Link className="afh-card-commissioner" href={`/core/commissioner?league=${encodeURIComponent(l.leagueId)}`}>
+                        Commissioner OS
+                      </Link>
+                    ) : null}
+                  </nav>
+                </article>
               ))}
             </div>
             {data.totalLeagues > data.leagues.length ? (

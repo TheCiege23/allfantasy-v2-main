@@ -838,7 +838,9 @@ export default async function AfCorePage({
    */
   const rankingsView = activeKey === 'rankings' ? (typeof sp.view === 'string' ? sp.view : null) : null
   const rankings =
-    activeKey === 'rankings' ? await getRankingsData(userId).catch(() => null) : null
+    activeKey === 'rankings'
+      ? await getRankingsData(userId, selectedLeagueId).catch(() => null)
+      : null
 
   // Only run the comparison when a handle was actually submitted — an empty box
   // is the initial state, not a failed lookup.

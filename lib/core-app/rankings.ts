@@ -10,6 +10,7 @@ import {
   RANK_XP_LEAGUE_SIZE_MULTIPLIER,
 } from '@/lib/rank/rank-xp-constants'
 import { computePrestige, winRateOf } from '@/lib/core-app/prestige'
+import { getLeagueStandings } from '@/lib/core-app/leagueStandings'
 
 /**
  * Rankings — the data layer for handoffs 14a (ladder + boards), 14b (FAQ) and
@@ -511,6 +512,27 @@ export type YourRank = {
   nextLevelName: string | null
 } | null
 
+export type RankingsScope = {
+  mode: 'all' | 'league'
+  title: string
+  detail: string
+  leagueId: string | null
+  leagueCount: number
+  seasonCount: number
+  platforms: Array<{ key: string; label: string; count: number }>
+  leagueBoard: {
+    available: boolean
+    reason: string | null
+    rows: Array<{
+      rank: number
+      name: string
+      record: string
+      pointsFor: number
+      isYou: boolean
+    }>
+  } | null
+}
+
 export type RankingsData = {
   you: YourRank
   xpRows: XpRow[]
@@ -524,17 +546,93 @@ export type RankingsData = {
   /** When this viewer's rank was last recomputed. */
   calculatedAt: string | null
   signedIn: boolean
+  /** The imports this render actually represents. */
+  scope: RankingsScope
 }
 
-export async function getRankingsData(userId: string | null): Promise<RankingsData> {
-  const [profiles, mine] = await Promise.all([
+export async function getRankingsData(userId: string | null, leagueId: string | null = null): Promise<RankingsData> {
+  const [profiles, mine, visibleLeagues] = await Promise.all([
     loadRankedProfiles(),
     userId
       ? prisma.$queryRaw<Array<{ rank_calculated_at: Date | null }>>`
           SELECT rank_calculated_at FROM user_profiles WHERE "userId" = ${userId} LIMIT 1
         `
       : Promise.resolve([]),
+    userId
+      ? prisma.league.findMany({
+          where: { OR: [{ userId }, { teams: { some: { claimedByUserId: userId } } }] },
+          select: { id: true, name: true, platform: true, season: true },
+          orderBy: [{ name: 'asc' }, { season: 'desc' }],
+        }).catch(() => [])
+      : Promise.resolve([]),
   ])
+
+  const allowedLeagueIds = visibleLeagues.map((league) => league.id)
+  const seasonRows = allowedLeagueIds.length
+    ? await prisma.leagueSeason.findMany({
+        where: { leagueId: { in: allowedLeagueIds } },
+        select: { leagueId: true, season: true },
+      }).catch(() => [])
+    : []
+  const recordedSeasonKeys = new Set([
+    ...visibleLeagues.map((league) => `${league.id}:${league.season}`),
+    ...seasonRows.map((season) => `${season.leagueId}:${season.season}`),
+  ])
+  const selected = leagueId ? visibleLeagues.find((league) => league.id === leagueId) ?? null : null
+  const platformCounts = new Map<string, number>()
+  for (const league of selected ? [selected] : visibleLeagues) {
+    const key = String(league.platform ?? 'allfantasy').trim().toLowerCase() || 'allfantasy'
+    platformCounts.set(key, (platformCounts.get(key) ?? 0) + 1)
+  }
+  const platforms = [...platformCounts]
+    .map(([key, count]) => ({ key, label: key.charAt(0).toUpperCase() + key.slice(1), count }))
+    .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label))
+
+  let leagueBoard: RankingsScope['leagueBoard'] = null
+  if (userId && selected) {
+    const standings = await getLeagueStandings(selected.id, userId).catch(() => null)
+    leagueBoard = standings?.available
+      ? {
+          available: true,
+          reason: null,
+          rows: standings.teams.map((team) => ({
+            rank: team.rank,
+            name: team.name ?? `Roster ${team.rosterId}`,
+            record: `${team.wins}-${team.losses}`,
+            pointsFor: team.pointsFor,
+            isYou: team.isYou,
+          })),
+        }
+      : {
+          available: false,
+          reason: standings?.reason ?? 'League standings could not be read just now.',
+          rows: [],
+        }
+  }
+  const selectedSeasonCount = selected
+    ? [...recordedSeasonKeys].filter((key) => key.startsWith(`${selected.id}:`)).length
+    : recordedSeasonKeys.size
+  const scope: RankingsScope = selected
+    ? {
+        mode: 'league',
+        title: selected.name?.trim() || 'Selected league',
+        detail: `League standings use this league’s own imported results. Career XP remains your all-platform AllFantasy rank.`,
+        leagueId: selected.id,
+        leagueCount: 1,
+        seasonCount: selectedSeasonCount,
+        platforms,
+        leagueBoard,
+      }
+    : {
+        mode: 'all',
+        title: 'All imported leagues',
+        detail: 'This view includes every connected league you own or have claimed, across every platform—not the first import.',
+        leagueId: null,
+        leagueCount: visibleLeagues.length,
+        seasonCount: recordedSeasonKeys.size,
+        platforms,
+        leagueBoard: null,
+      }
 
   const me = userId ? (profiles.find((p) => p.userId === userId) ?? null) : null
 
@@ -583,6 +681,7 @@ export async function getRankingsData(userId: string | null): Promise<RankingsDa
     suspectCount: profiles.filter(countersInconsistent).length,
     calculatedAt: mine[0]?.rank_calculated_at?.toISOString() ?? null,
     signedIn: userId != null,
+    scope,
   }
 }
 
