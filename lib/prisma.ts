@@ -8,6 +8,7 @@
  */
 import { PrismaClient, Prisma } from "@prisma/client";
 import { getDatabaseUrlOrThrow, isDomRuntime } from "@/lib/env/database-url";
+import { observeDbOperation } from "@/lib/observability/dbTelemetry";
 
 const READ_OPERATIONS = new Set([
   "findUnique",
@@ -249,42 +250,47 @@ function createPrismaClient(): ExtendedPrismaClient {
   return client.$extends({
     query: {
       async $allOperations({
+        model,
         operation,
         args,
         query,
       }: {
+        model?: string;
         operation: string;
         args: unknown;
         query: (args: unknown) => Promise<unknown>;
       }) {
-        const isReadOperation = READ_OPERATIONS.has(operation);
-        const retryCount = isReadOperation ? 3 : 1;
+        // Observed around the whole retry loop: a retried read costs the request every attempt.
+        return observeDbOperation({ model, operation }, async () => {
+          const isReadOperation = READ_OPERATIONS.has(operation);
+          const retryCount = isReadOperation ? 3 : 1;
 
-        for (let retryAttempt = 0; retryAttempt <= retryCount; retryAttempt++) {
-          try {
-            return await query(args);
-          } catch (error: unknown) {
-            const isLastAttempt = retryAttempt === retryCount;
+          for (let retryAttempt = 0; retryAttempt <= retryCount; retryAttempt++) {
+            try {
+              return await query(args);
+            } catch (error: unknown) {
+              const isLastAttempt = retryAttempt === retryCount;
 
-            if (!isConnectionError(error) || isLastAttempt) {
-              throw error;
+              if (!isConnectionError(error) || isLastAttempt) {
+                throw error;
+              }
+
+              const backoffMs =
+                150 * Math.pow(2, retryAttempt) + Math.floor(Math.random() * 50);
+
+              if (process.env.NODE_ENV !== "production") {
+                console.warn(
+                  `[Prisma] Retrying ${operation} after transient connection error ` +
+                    `(retry ${retryAttempt + 1} of ${retryCount}, waiting ${backoffMs}ms)`
+                );
+              }
+
+              await sleep(backoffMs);
             }
-
-            const backoffMs =
-              150 * Math.pow(2, retryAttempt) + Math.floor(Math.random() * 50);
-
-            if (process.env.NODE_ENV !== "production") {
-              console.warn(
-                `[Prisma] Retrying ${operation} after transient connection error ` +
-                  `(retry ${retryAttempt + 1} of ${retryCount}, waiting ${backoffMs}ms)`
-              );
-            }
-
-            await sleep(backoffMs);
           }
-        }
 
-        throw new Error("Prisma retry loop exited unexpectedly.");
+          throw new Error("Prisma retry loop exited unexpectedly.");
+        });
       },
     },
   }) as unknown as ExtendedPrismaClient;

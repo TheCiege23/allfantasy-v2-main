@@ -16,6 +16,7 @@
  * status/row/metadata branch is unit-testable without Prisma.
  */
 
+import { annotateJobTrace, jobTraceMetadata, type JobTrace } from "@/lib/observability/jobTelemetry"
 import { prisma } from "@/lib/prisma"
 import { redactAndCap } from "@/lib/security/redactSecrets"
 
@@ -273,7 +274,15 @@ export async function reapAllAbandonedRuns(
 }
 
 /** Best-effort: write the initial `running` row. Returns its id or null. */
-async function startRun(ctx: SyncJobContext): Promise<string | null> {
+/**
+ * The run's trace id rides in `metadata`, so a slow or failed row can be opened in Sentry. Check
+ * `traceSampled` before linking: most runs are deliberately not sampled (lib/observability/sampling.ts).
+ */
+function withTrace(payload: SyncJobRunPayload, trace: JobTrace | null): SyncJobRunPayload {
+  return trace ? { ...payload, metadata: { ...payload.metadata, ...jobTraceMetadata(trace) } } : payload
+}
+
+async function startRun(ctx: SyncJobContext, trace: JobTrace | null): Promise<string | null> {
   const model = getModel()
   if (!model) {
     reportTelemetryLoss("startRun", ctx, undefined)
@@ -287,7 +296,7 @@ async function startRun(ctx: SyncJobContext): Promise<string | null> {
         trigger: ctx.trigger ?? "cron",
         status: "running",
         startedAt: new Date(),
-        metadata: { sport: ctx.sport ?? null, provider: ctx.provider ?? null },
+        metadata: { sport: ctx.sport ?? null, provider: ctx.provider ?? null, ...jobTraceMetadata(trace) },
       },
     })
     return row.id
@@ -351,15 +360,16 @@ export async function withSyncJobRun<T>(
   // schedule via `reapAllAbandonedRuns`. (That route was previously impossible: the repo sat at
   // Vercel's 2048-route ceiling and carried a standing rule against new routes. Production moved
   // to Railway on 2026-09-02 and the rule was retired on 2026-09-05, so it exists now.)
+  const trace = annotateJobTrace(ctx.jobName)
   await reapAbandonedRuns(ctx.jobName)
-  const id = await startRun(ctx)
+  const id = await startRun(ctx, trace)
   try {
     const result = await fn()
     const outcome = extract ? safeExtract(extract, result) : {}
-    await finishRun(ctx, id, buildSyncJobRunPayload(ctx, outcome, null, Date.now() - startedAt))
+    await finishRun(ctx, id, withTrace(buildSyncJobRunPayload(ctx, outcome, null, Date.now() - startedAt), trace))
     return result
   } catch (error) {
-    await finishRun(ctx, id, buildSyncJobRunPayload(ctx, null, error, Date.now() - startedAt))
+    await finishRun(ctx, id, withTrace(buildSyncJobRunPayload(ctx, null, error, Date.now() - startedAt), trace))
     throw error
   }
 }
@@ -405,7 +415,7 @@ export async function recordSyncJobRun(ctx: SyncJobContext, outcome: SyncJobOutc
     reportTelemetryLoss("recordSyncJobRun", ctx, undefined)
     return
   }
-  const payload = buildSyncJobRunPayload(ctx, outcome, null, durationMs)
+  const payload = withTrace(buildSyncJobRunPayload(ctx, outcome, null, durationMs), annotateJobTrace(ctx.jobName))
   try {
     await model.create({
       data: {

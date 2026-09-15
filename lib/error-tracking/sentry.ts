@@ -17,6 +17,7 @@ type SentryCapture = (error: unknown, ctx?: Record<string, unknown>) => void
 type SentryModuleLike = {
   init: (options: Record<string, unknown>) => void
   captureException: (error: unknown, context?: { extra?: Record<string, unknown> }) => void
+  requestDataIntegration?: (options: { include?: Record<string, boolean> }) => unknown
 }
 
 let clientInitDone = false
@@ -108,6 +109,33 @@ function reportSentryInitStatus(stage: string, detail?: unknown): void {
   console.error(`[Sentry] server error reporting NOT active — ${stage}${suffix}`)
 }
 
+/**
+ * Tracing, sampling and redaction live in `lib/observability/serverSentryOptions.ts`, loaded lazily
+ * so none of it reaches the client bundles this module is also part of.
+ *
+ * ⚠ IF THOSE OPTIONS CANNOT BE BUILT, ERROR REPORTING STILL STARTS — errors-only, no tracing — and
+ * still never sends cookies or request bodies. The log line says TRACING is off, not reporting:
+ * "[Sentry] … NOT active" is reserved for the case where nothing is reported at all.
+ */
+async function buildServerInitOptions(Sentry: SentryModuleLike, dsn: string): Promise<Record<string, unknown>> {
+  try {
+    const { buildServerSentryOptions } = await import('@/lib/observability/serverSentryOptions')
+    return buildServerSentryOptions({ dsn, environment: process.env.NODE_ENV, sentry: Sentry })
+  } catch (err) {
+    // The DSN is a credential-bearing URL; never let an error message carry it into the log.
+    const detail = err instanceof Error ? `: ${err.message.split(dsn).join('<dsn>')}` : ''
+    console.error(`[Sentry] tracing NOT active — observability options could not be built${detail}`)
+    return {
+      dsn,
+      environment: process.env.NODE_ENV,
+      integrations:
+        typeof Sentry.requestDataIntegration === 'function'
+          ? [Sentry.requestDataIntegration({ include: { cookies: false, data: false } })]
+          : [],
+    }
+  }
+}
+
 export function initSentryServer(): void {
   if (serverInitDone || typeof window !== 'undefined') return
   const dsn = process.env.SENTRY_DSN ?? process.env.NEXT_PUBLIC_SENTRY_DSN
@@ -126,11 +154,7 @@ export function initSentryServer(): void {
         reportSentryInitStatus('the @sentry/nextjs module could not be loaded (optional dependency)')
         return
       }
-      Sentry.init({
-        dsn,
-        environment: process.env.NODE_ENV,
-        tracesSampleRate: 0.1,
-      })
+      Sentry.init(await buildServerInitOptions(Sentry, dsn))
       const capture: SentryCapture = (error, ctx) => {
         Sentry.captureException(error, { extra: ctx })
       }
