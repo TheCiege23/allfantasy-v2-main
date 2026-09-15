@@ -35,7 +35,7 @@ type BoundaryProps = { resetKey: string; onRetry: () => void; children: ReactNod
 type BoundaryState = { failed: boolean; resetKey: string }
 
 /** Next's navigation signals, by the digest it stamps on them (NEXT_REDIRECT;…, NEXT_NOT_FOUND). */
-function isNavigationSignal(error: unknown): boolean {
+export function isNavigationSignal(error: unknown): boolean {
   const digest = (error as { digest?: unknown } | null | undefined)?.digest
   return typeof digest === 'string' && (digest.startsWith('NEXT_REDIRECT') || digest === 'NEXT_NOT_FOUND')
 }
