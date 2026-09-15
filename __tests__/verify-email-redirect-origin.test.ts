@@ -24,6 +24,7 @@ const mocks = vi.hoisted(() => ({
   deleteToken: vi.fn(),
   transaction: vi.fn(),
   earlyAccessUpdateMany: vi.fn(),
+  getServerSession: vi.fn(),
 }))
 
 vi.mock("@/lib/prisma", () => ({
@@ -37,6 +38,12 @@ vi.mock("@/lib/prisma", () => ({
   },
 }))
 
+// The route reads the session to tell a link for ANOTHER account apart (see
+// verify-email-account-mismatch.test.ts). Signed out here, so every Location below
+// is the plain one this file was written against.
+vi.mock("next-auth", () => ({ getServerSession: mocks.getServerSession }))
+vi.mock("@/lib/auth", () => ({ authOptions: {} }))
+
 function requestAsNextBuildsIt(query: string): Request {
   return new Request(`${BOUND_ORIGIN}/verify/email${query}`)
 }
@@ -46,6 +53,7 @@ describe("verify/email redirects to the host the visitor reached", () => {
     vi.clearAllMocks()
     mocks.deleteToken.mockResolvedValue({})
     mocks.earlyAccessUpdateMany.mockResolvedValue({ count: 0 })
+    mocks.getServerSession.mockResolvedValue(null)
   })
 
   it("positive control: the fixture really does carry the bind address as its origin", () => {

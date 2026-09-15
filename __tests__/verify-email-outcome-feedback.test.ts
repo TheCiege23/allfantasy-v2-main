@@ -15,11 +15,23 @@ const SRC = fs.readFileSync(
 
 /** The expired / invalid / error branch — the screen a dead link lands on. */
 const BAD_LINK_AT = SRC.indexOf("if (state === 'expired' || state === 'invalid' || state === 'error')")
-const BAD_LINK_BLOCK = SRC.slice(BAD_LINK_AT, BAD_LINK_AT + 3500)
+/*
+ * Bounded by the NEXT state's marker, not a character count. This was a fixed
+ * 3500, and when the branch grew on 2026-09-15 five of the assertions below fell
+ * outside it. That failure was loud; the opposite one is not — a branch that
+ * SHRANK would leave a fixed window reaching into the cards that follow it, where
+ * `'rate_limited'`, `'already'`, `'login_required'` and `signedIn ?` all appear
+ * again, and those assertions would pass against the wrong state.
+ */
+const BAD_LINK_END = SRC.indexOf('/* ── State 4', BAD_LINK_AT)
+const BAD_LINK_BLOCK = SRC.slice(BAD_LINK_AT, BAD_LINK_END)
 
 describe('the expired-link screen reports what happened', () => {
   it('has the branch this test is about', () => {
     expect(BAD_LINK_AT).toBeGreaterThan(-1)
+    // The end marker must follow the start, or the slice above is empty and every
+    // negative assertion in this file passes vacuously.
+    expect(BAD_LINK_END).toBeGreaterThan(BAD_LINK_AT)
   })
 
   /*
