@@ -1,7 +1,7 @@
 import type { EspnImportTransaction } from '@/lib/league-import/adapters/espn/types'
 import type { MflImportTransaction } from '@/lib/league-import/adapters/mfl/types'
 import type { YahooImportTransaction } from '@/lib/league-import/adapters/yahoo/types'
-import type { ExternalIdentityMapping } from '@/lib/league-import/types'
+import type { ExternalIdentityMapping, NormalizedTransaction } from '@/lib/league-import/types'
 import {
   normalizeImportedActivityBatch,
   type ImportedActivityType,
@@ -42,12 +42,13 @@ import type { ImportedActivityStore } from './importedActivityStore'
  * Flattening them to a common denominator would throw away a distinction two of
  * the three genuinely report.
  *
- * ⚠ STILL UNCOVERED: Fantrax and Fleaflicker. Fantrax has no transaction
+ * ⚠ STILL UNCOVERED: Fantrax. Fantrax has no transaction
  * endpoint at all — its importer INFERS moves by diffing roster periods — so
  * emitting from it is a correctness question, not plumbing, and the decision on
  * record (2026-09-11) is that inferred events must carry explicit provenance so
- * a consumer can exclude them. Fleaflicker's `FetchLeagueActivity` exists and is
- * simply not requested yet.
+ * a consumer can exclude them. Fleaflicker's explicit transaction feed is wired
+ * below; accepted trades retain every lifecycle observation supplied by the
+ * provider and carry `provenance: provider_event`.
  */
 
 export interface PlatformEmitterSkip {
@@ -90,6 +91,16 @@ const MFL_TYPE_MAP: Readonly<Record<string, ImportedActivityType>> = {
   bbid_waiver: 'waiver',
   free_agent: 'roster_move',
 }
+
+const NORMALIZED_TYPE_MAP: Readonly<Record<NormalizedTransaction['type'], ImportedActivityType>> = {
+  trade: 'trade',
+  waiver: 'waiver',
+  free_agent: 'roster_move',
+  drop: 'roster_move',
+}
+
+/** Fleaflicker emits the whole trade lifecycle; only these stages mean assets moved. */
+const FLEAFLICKER_FINAL_STATUSES = new Set(['trade_accepted', 'trade_accepted_final'])
 
 function isFinal(status: string | null | undefined): boolean {
   return FINAL_STATUSES.has(String(status ?? '').trim().toLowerCase())
@@ -266,11 +277,125 @@ export function emitMflTransactionActivity(
 }
 
 /**
+ * Fleaflicker's canonical transaction rows → imported activity.
+ *
+ * The provider exposes proposals, reviews, rejections and accepted trades in one
+ * lifecycle feed. Decision OS behavior must count an actual roster-changing move,
+ * so only accepted stages enter the behavioral stream. The full lifecycle stays in
+ * the payload for trade-history explanations and the provider event is labelled as
+ * explicit evidence rather than inferred from a roster diff.
+ */
+export function emitFleaflickerTransactionActivity(
+  transactions: readonly NormalizedTransaction[],
+  ctx: {
+    leagueId: string
+    afLeagueId?: string | null
+    /** Fleaflicker team id → the stable owner id from standings. */
+    teamOwnerMap: ReadonlyMap<string, string | null>
+  },
+): { raws: RawImportedActivity[]; skipped: PlatformEmitterSkip[] } {
+  const raws: RawImportedActivity[] = []
+  const skipped: PlatformEmitterSkip[] = []
+  for (const tx of transactions) {
+    const providerEventId = tx.source_transaction_id?.trim() || null
+    const activityType = NORMALIZED_TYPE_MAP[tx.type]
+    if (!activityType) {
+      skipped.push({ providerEventId, reason: 'UNSUPPORTED_TRANSACTION_TYPE' })
+      continue
+    }
+    if (activityType === 'trade' && !FLEAFLICKER_FINAL_STATUSES.has(String(tx.status ?? '').trim().toLowerCase())) {
+      skipped.push({ providerEventId, reason: 'TRANSACTION_NOT_COMPLETE' })
+      continue
+    }
+    if (activityType !== 'trade' && !isFinal(tx.status)) {
+      skipped.push({ providerEventId, reason: 'TRANSACTION_NOT_COMPLETE' })
+      continue
+    }
+    raws.push({
+      provider: 'fleaflicker',
+      leagueId: ctx.leagueId,
+      afLeagueId: ctx.afLeagueId ?? null,
+      activityType,
+      providerEventId,
+      occurredAt: tx.created_at ?? null,
+      managerSourceIds: ownersOf(tx.roster_ids ?? [], ctx.teamOwnerMap),
+      payload: {
+        source: 'fleaflicker_transaction',
+        provenance: 'provider_event',
+        idSpace: 'fleaflicker',
+        transactionType: tx.type,
+        providerStatus: tx.status,
+        adds: Object.keys(tx.adds ?? {}).length ? tx.adds : null,
+        drops: Object.keys(tx.drops ?? {}).length ? tx.drops : null,
+        rosterIds: tx.roster_ids ?? [],
+        draftPicks: tx.draft_picks ?? [],
+        lifecycleEvents: tx.lifecycle_events ?? [],
+      },
+    })
+  }
+  return { raws, skipped }
+}
+
+/**
+ * Fantrax snapshot/CSV transactions → imported activity.
+ *
+ * This path intentionally does not emit roster-diff inferences. Rows here came
+ * from a recorded snapshot transaction and therefore retain `snapshot_event`
+ * provenance. Live API leagues still expose no transaction endpoint; inferred
+ * movements remain outside manager timing/behavior models until those consumers
+ * support an observed-time range rather than an invented exact timestamp.
+ */
+export function emitFantraxTransactionActivity(
+  transactions: readonly NormalizedTransaction[],
+  ctx: {
+    leagueId: string
+    afLeagueId?: string | null
+    teamOwnerMap: ReadonlyMap<string, string | null>
+  },
+): { raws: RawImportedActivity[]; skipped: PlatformEmitterSkip[] } {
+  const raws: RawImportedActivity[] = []
+  const skipped: PlatformEmitterSkip[] = []
+  for (const tx of transactions) {
+    const providerEventId = tx.source_transaction_id?.trim() || null
+    const activityType = NORMALIZED_TYPE_MAP[tx.type]
+    if (!activityType) {
+      skipped.push({ providerEventId, reason: 'UNSUPPORTED_TRANSACTION_TYPE' })
+      continue
+    }
+    if (!isFinal(tx.status)) {
+      skipped.push({ providerEventId, reason: 'TRANSACTION_NOT_COMPLETE' })
+      continue
+    }
+    raws.push({
+      provider: 'fantrax',
+      leagueId: ctx.leagueId,
+      afLeagueId: ctx.afLeagueId ?? null,
+      activityType,
+      providerEventId,
+      occurredAt: tx.created_at ?? null,
+      managerSourceIds: ownersOf(tx.roster_ids ?? [], ctx.teamOwnerMap),
+      payload: {
+        source: 'fantrax_transaction',
+        provenance: 'snapshot_event',
+        idSpace: 'fantrax',
+        transactionType: tx.type,
+        providerStatus: tx.status,
+        adds: Object.keys(tx.adds ?? {}).length ? tx.adds : null,
+        drops: Object.keys(tx.drops ?? {}).length ? tx.drops : null,
+        rosterIds: tx.roster_ids ?? [],
+        draftPicks: tx.draft_picks ?? [],
+      },
+    })
+  }
+  return { raws, skipped }
+}
+
+/**
  * One manager's identity for the normalizer: the AllFantasy user when the team
  * is claimed, else the provider's stable key. Mirrors buildSleeperManagerMapping.
  */
 export function buildPlatformManagerMapping(
-  provider: 'espn' | 'yahoo' | 'mfl',
+  provider: 'espn' | 'yahoo' | 'mfl' | 'fantrax' | 'fleaflicker',
   sourceId: string,
   afUserId: string | null,
 ): ExternalIdentityMapping {
@@ -289,12 +414,14 @@ export interface PlatformIngestionResult {
   normalizerSkipped: SkippedImportedActivity[]
 }
 
-/** Emit → normalize → write, for one ESPN, Yahoo or MFL league. Idempotent by natural key, like the Sleeper path. */
+/** Emit → normalize → write for a non-Sleeper provider with explicit activity. */
 export async function ingestPlatformImportedActivity(
   input:
     | { provider: 'espn'; providerLeagueId: string; afLeagueId?: string | null; transactions: readonly EspnImportTransaction[]; teamOwnerMap: ReadonlyMap<string, string | null> }
     | { provider: 'yahoo'; providerLeagueId: string; afLeagueId?: string | null; transactions: readonly YahooImportTransaction[]; teamOwnerMap: ReadonlyMap<string, string | null> }
-    | { provider: 'mfl'; providerLeagueId: string; afLeagueId?: string | null; transactions: readonly MflImportTransaction[]; teamOwnerMap: ReadonlyMap<string, string | null> },
+    | { provider: 'mfl'; providerLeagueId: string; afLeagueId?: string | null; transactions: readonly MflImportTransaction[]; teamOwnerMap: ReadonlyMap<string, string | null> }
+    | { provider: 'fantrax'; providerLeagueId: string; afLeagueId?: string | null; transactions: readonly NormalizedTransaction[]; teamOwnerMap: ReadonlyMap<string, string | null> }
+    | { provider: 'fleaflicker'; providerLeagueId: string; afLeagueId?: string | null; transactions: readonly NormalizedTransaction[]; teamOwnerMap: ReadonlyMap<string, string | null> },
   identityIndex: ManagerIdentityIndex,
   store: ImportedActivityStore,
 ): Promise<PlatformIngestionResult> {
@@ -305,12 +432,15 @@ export async function ingestPlatformImportedActivity(
    * handed MFL transactions to the Yahoo emitter, which reads `teamKeys` where MFL has
    * `franchiseIds`, and emitted every MFL move attributed to nobody. Nothing would have thrown.
    */
-  const emitted =
-    input.provider === 'espn'
-      ? emitEspnTransactionActivity(input.transactions, ctx)
-      : input.provider === 'yahoo'
-        ? emitYahooTransactionActivity(input.transactions, ctx)
-        : emitMflTransactionActivity(input.transactions, ctx)
+  const emitted = (() => {
+    switch (input.provider) {
+      case 'espn': return emitEspnTransactionActivity(input.transactions, ctx)
+      case 'yahoo': return emitYahooTransactionActivity(input.transactions, ctx)
+      case 'mfl': return emitMflTransactionActivity(input.transactions, ctx)
+      case 'fantrax': return emitFantraxTransactionActivity(input.transactions, ctx)
+      case 'fleaflicker': return emitFleaflickerTransactionActivity(input.transactions, ctx)
+    }
+  })()
   const { normalized, skipped: normalizerSkipped } = normalizeImportedActivityBatch(emitted.raws, identityIndex)
   const writer = await writeImportedActivity(normalized, store)
   return { writer, emitterSkipped: emitted.skipped, normalizerSkipped }

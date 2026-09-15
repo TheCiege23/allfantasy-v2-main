@@ -8,10 +8,13 @@ import { InMemoryImportedActivityStore } from '@/lib/decision-os/ingestion/impor
 import {
   buildPlatformManagerMapping,
   emitEspnTransactionActivity,
+  emitFantraxTransactionActivity,
+  emitFleaflickerTransactionActivity,
   emitMflTransactionActivity,
   emitYahooTransactionActivity,
   ingestPlatformImportedActivity,
 } from '@/lib/decision-os/ingestion/platformActivityEmitter'
+import type { NormalizedTransaction } from '@/lib/league-import/types'
 
 /*
  * ESPN and Yahoo transactions into the activity table the trade windows read.
@@ -205,6 +208,129 @@ describe('emitMflTransactionActivity', () => {
     ])
     // The ownerless franchise still emits an event — it simply names no manager.
     expect(raws.map((r) => [r.providerEventId, r.managerSourceIds])).toEqual([['o1', []]])
+  })
+})
+
+describe('emitFleaflickerTransactionActivity', () => {
+  const owners = new Map<string, string | null>([
+    ['101', 'owner-a'],
+    ['202', 'owner-b'],
+  ])
+  const tx = (status: string): NormalizedTransaction => ({
+    source_transaction_id: '88421',
+    type: 'trade',
+    status,
+    created_at: '2026-09-14T16:01:00.000Z',
+    adds: { '9001': '101', '9002': '202' },
+    roster_ids: ['101', '202'],
+    draft_picks: [{ season: 2027, round: 2, toRosterId: '101' }],
+    lifecycle_events: [
+      { stage: 'TRADE_PROPOSED', occurred_at: '2026-09-14T15:58:00.000Z', team_id: '101' },
+      { stage: status, occurred_at: '2026-09-14T16:01:00.000Z', team_id: '202' },
+    ],
+  })
+
+  it('emits accepted trades with explicit provider provenance and every observed lifecycle stage', () => {
+    const { raws, skipped } = emitFleaflickerTransactionActivity(
+      [tx('TRADE_ACCEPTED_FINAL')],
+      { leagueId: '356670', afLeagueId: 'af-flea', teamOwnerMap: owners },
+    )
+    expect(skipped).toEqual([])
+    expect(raws).toHaveLength(1)
+    expect(raws[0]).toMatchObject({
+      provider: 'fleaflicker',
+      leagueId: '356670',
+      afLeagueId: 'af-flea',
+      activityType: 'trade',
+      providerEventId: '88421',
+      managerSourceIds: ['owner-a', 'owner-b'],
+    })
+    expect(raws[0]!.payload).toMatchObject({
+      source: 'fleaflicker_transaction',
+      provenance: 'provider_event',
+      idSpace: 'fleaflicker',
+      providerStatus: 'TRADE_ACCEPTED_FINAL',
+      rosterIds: ['101', '202'],
+    })
+  })
+
+  it('does not count proposals, rejections or vetoes as completed manager behavior', () => {
+    const { raws, skipped } = emitFleaflickerTransactionActivity(
+      [tx('TRADE_PROPOSED'), tx('TRADE_REJECTED'), tx('TRADE_VETOED')],
+      { leagueId: '356670', teamOwnerMap: owners },
+    )
+    expect(raws).toEqual([])
+    expect(skipped).toHaveLength(3)
+    expect(skipped.every((row) => row.reason === 'TRANSACTION_NOT_COMPLETE')).toBe(true)
+  })
+
+  it('writes idempotently and resolves a claimed Fleaflicker manager', async () => {
+    const store = new InMemoryImportedActivityStore()
+    const index = buildManagerIdentityIndex([
+      buildPlatformManagerMapping('fleaflicker', 'owner-a', 'af-owner-a'),
+      buildPlatformManagerMapping('fleaflicker', 'owner-b', null),
+    ])
+    const input = {
+      provider: 'fleaflicker' as const,
+      providerLeagueId: '356670',
+      afLeagueId: 'af-flea',
+      teamOwnerMap: owners,
+      transactions: [tx('TRADE_ACCEPTED')],
+    }
+    const first = await ingestPlatformImportedActivity(input, index, store)
+    const second = await ingestPlatformImportedActivity(input, index, store)
+    expect(first.writer).toMatchObject({ created: 1 })
+    expect(second.writer).toMatchObject({ created: 0 })
+    const row = await store.getByNaturalKey(
+      deriveActivityNaturalKey('fleaflicker', '356670', 'trade', '88421'),
+    )
+    expect(row?.managerKeys).toEqual(['af-owner-a', 'fleaflicker:owner-b'])
+  })
+})
+
+describe('emitFantraxTransactionActivity', () => {
+  it('keeps snapshot transactions attributable while labelling their evidence source', () => {
+    const transaction: NormalizedTransaction = {
+      source_transaction_id: 'fantrax:snapshot:tx:4',
+      type: 'waiver',
+      status: 'completed',
+      created_at: '2026-09-14T13:30:00.000Z',
+      adds: { 'fantrax-player-4': 'team-4' },
+      roster_ids: ['team-4'],
+    }
+    const { raws, skipped } = emitFantraxTransactionActivity(
+      [transaction],
+      { leagueId: 'v2kzedypmm8jp61b', teamOwnerMap: new Map([['team-4', 'manager-4']]) },
+    )
+    expect(skipped).toEqual([])
+    expect(raws[0]).toMatchObject({
+      provider: 'fantrax',
+      activityType: 'waiver',
+      managerSourceIds: ['manager-4'],
+      payload: {
+        source: 'fantrax_transaction',
+        provenance: 'snapshot_event',
+        idSpace: 'fantrax',
+      },
+    })
+  })
+
+  it('does not promote an inferred or incomplete row into completed behavior', () => {
+    const transaction: NormalizedTransaction = {
+      source_transaction_id: 'fantrax:pending:5',
+      type: 'trade',
+      status: 'inferred',
+      created_at: '2026-09-14T13:30:00.000Z',
+      roster_ids: ['team-4', 'team-5'],
+    }
+    const result = emitFantraxTransactionActivity(
+      [transaction],
+      { leagueId: 'v2kzedypmm8jp61b', teamOwnerMap: new Map([['team-4', 'manager-4']]) },
+    )
+    expect(result.raws).toEqual([])
+    expect(result.skipped).toEqual([
+      { providerEventId: 'fantrax:pending:5', reason: 'TRANSACTION_NOT_COMPLETE' },
+    ])
   })
 })
 

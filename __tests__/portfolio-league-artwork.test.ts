@@ -14,6 +14,10 @@ const CSS = fs.readFileSync(
   path.join(process.cwd(), 'components', 'core-app', 'af-portfolio.css'),
   'utf8',
 )
+const CORE_PAGE = fs.readFileSync(
+  path.join(process.cwd(), 'app', 'core', '[[...screen]]', 'page.tsx'),
+  'utf8',
+)
 
 /** Mirrors leagueMonogram in the component. */
 function monogram(name: string): string {
@@ -145,5 +149,27 @@ describe('the roster count says whose roster it is', () => {
   it('keeps "not imported" and "imported but empty" as separate sentences', () => {
     expect(COMPONENT).toContain('no roster imported')
     expect(COMPONENT).toContain('no roster data')
+  })
+})
+
+describe('portfolio retention risk map', () => {
+  it('loads concentration and value movement only for the portfolio screen', () => {
+    expect(CORE_PAGE).toMatch(/activeKey === 'portfolio'[\s\S]{0,500}getCrossLeagueExposure/)
+    expect(CORE_PAGE).toMatch(/activeKey === 'portfolio'[\s\S]{0,900}getCrossLeagueValueActions/)
+    expect(CORE_PAGE).toContain('exposure={portfolioExposure}')
+    expect(CORE_PAGE).toContain('valueActions={portfolioValueActions}')
+  })
+
+  it('turns concentration into visible risk levels and concrete advice', () => {
+    expect(COMPONENT).toContain('Portfolio risk map')
+    expect(COMPONENT).toContain("share >= 70 ? 'high' : share >= 40 ? 'medium' : 'low'")
+    expect(COMPONENT).toContain('starts everywhere')
+    expect(COMPONENT).toContain('move.advice')
+    expect(COMPONENT).toContain('High concentration — set an injury contingency.')
+  })
+
+  it('is a one-column touch-friendly board on a phone', () => {
+    expect(CSS).toMatch(/@media \(max-width: 520px\)[\s\S]*?\.af-pf-risk-grid\s*\{\s*grid-template-columns:\s*1fr/)
+    expect(CSS).toMatch(/\.af-pf-risk-cell\s*\{[\s\S]*?min-height:\s*132px/)
   })
 })

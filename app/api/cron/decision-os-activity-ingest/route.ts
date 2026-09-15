@@ -6,6 +6,7 @@ import { buildPlatformManagerMapping, ingestPlatformImportedActivity } from "@/l
 import { fetchEspnActivityForSync } from "@/lib/league-import/espn/EspnLeagueFetchService"
 import { fetchYahooActivityForSync } from "@/lib/league-import/yahoo/YahooLeagueFetchService"
 import { fetchMflActivityForSync } from "@/lib/league-import/mfl/MflLeagueFetchService"
+import { runImportedLeagueNormalizationPipeline } from "@/lib/league-import/ImportedLeagueNormalizationPipeline"
 import { buildManagerIdentityIndex } from "@/lib/decision-os/ingestion/importedActivityNormalizer"
 import { PrismaImportedActivityStore } from "@/lib/decision-os/ingestion/prismaImportedActivityStore"
 import {
@@ -215,6 +216,8 @@ const ROTATION_CONFIG_KEY = "decision_os_activity_ingest_rotation"
  * no Yahoo ones today, so this cap is headroom, not a limit anyone has hit.
  */
 const PLATFORM_LEAGUE_CAP = 10
+/** Reserve half of each external-provider pass for leagues least recently attempted by this job. */
+const PLATFORM_STARVED_RESERVE = 5
 /**
  * ⚠ THE ESPN/YAHOO LOOP RUNS FIRST, UNDER ITS OWN BUDGET. Measured in sync_job_runs on 2026-09-05
  * and 2026-09-06: the Sleeper phase spends the whole `INGEST_BUDGET_MS` on every daily fire (34 and
@@ -376,10 +379,10 @@ async function ingestOneLeague(
   return { created: result.writer.created, updated: result.writer.updated, skipped: result.writer.skipped }
 }
 
-type PlatformLeagueRow = { id: string; platform: string; platformLeagueId: string | null; season: number | null; userId: string | null }
+type PlatformLeagueRow = EligibleLeagueRow & { platform: string; sport: string | null; userId: string | null }
 
 /**
- * One ESPN or Yahoo league: the importer's own fetch for teams + transactions, the team → owner
+ * One non-Sleeper league: the importer's own fetch for teams + transactions, the team → owner
  * map the emitter binds through, and the league's claimed teams as the identity index (a claimed
  * team attributes to its AllFantasy user; an unclaimed one to `<provider>:<manager id>`).
  */
@@ -394,9 +397,14 @@ async function ingestOnePlatformLeague(
         ? "yahoo"
         : league.platform === "mfl"
           ? "mfl"
-          : null
+          : league.platform === "fantrax"
+            ? "fantrax"
+            : league.platform === "fleaflicker"
+              ? "fleaflicker"
+              : null
   if (!provider) throw new Error(`unsupported_platform:${league.platform}`)
-  if (!league.userId) throw new Error("no_importing_user")
+  if (provider !== "fleaflicker" && !league.userId) throw new Error("no_importing_user")
+  const importingUserId = league.userId as string
   const sourceLeagueId = league.platformLeagueId as string
 
   const claimed = await prisma.leagueTeam.findMany({
@@ -407,7 +415,7 @@ async function ingestOnePlatformLeague(
   for (const t of claimed) if (t.platformUserId) afUserByManager.set(t.platformUserId, t.claimedByUserId ?? null)
 
   if (provider === "espn") {
-    const activity = await fetchEspnActivityForSync(league.userId, sourceLeagueId, league.season ?? new Date().getUTCFullYear())
+    const activity = await fetchEspnActivityForSync(importingUserId, sourceLeagueId, league.season ?? new Date().getUTCFullYear())
     const teamOwnerMap = new Map<string, string | null>(activity.teams.map((t) => [t.teamId, t.managerId || null]))
     const managerIds = [...new Set(activity.teams.map((t) => t.managerId).filter(Boolean))]
     const identityIndex = buildManagerIdentityIndex(managerIds.map((id) => buildPlatformManagerMapping("espn", id, afUserByManager.get(id) ?? null)))
@@ -426,7 +434,7 @@ async function ingestOnePlatformLeague(
      * the same fallback the ESPN branch above uses.
      */
     const activity = await fetchMflActivityForSync(
-      league.userId,
+      importingUserId,
       sourceLeagueId,
       league.season ?? new Date().getUTCFullYear(),
     )
@@ -446,12 +454,75 @@ async function ingestOnePlatformLeague(
   }
 
   if (provider === "yahoo") {
-    const activity = await fetchYahooActivityForSync(league.userId, sourceLeagueId)
+    const activity = await fetchYahooActivityForSync(importingUserId, sourceLeagueId)
     const teamOwnerMap = new Map<string, string | null>(activity.teams.map((t) => [t.teamKey, t.managerKey || null]))
     const managerIds = [...new Set(activity.teams.map((t) => t.managerKey).filter(Boolean))]
     const identityIndex = buildManagerIdentityIndex(managerIds.map((id) => buildPlatformManagerMapping("yahoo", id, afUserByManager.get(id) ?? null)))
     const r = await ingestPlatformImportedActivity(
       { provider: "yahoo", providerLeagueId: activity.leagueKey, afLeagueId: league.id, transactions: activity.transactions, teamOwnerMap },
+      identityIndex,
+      store,
+    )
+    return { created: r.writer.created, updated: r.writer.updated, skipped: r.writer.skipped, fetched: true }
+  }
+
+  if (provider === "fleaflicker") {
+    const season = league.season ?? new Date().getUTCFullYear()
+    const sport = String(league.sport ?? "NFL").toUpperCase()
+    const sourceId = sourceLeagueId.includes(":")
+      ? sourceLeagueId
+      : `${sport}:${sourceLeagueId}:${season}`
+    const imported = await runImportedLeagueNormalizationPipeline({
+      provider: "fleaflicker",
+      sourceId,
+      currentStateOnly: true,
+    })
+    if (!imported.success) throw new Error(`${imported.code}:${imported.error}`)
+
+    const teamOwnerMap = new Map<string, string | null>(
+      imported.normalized.rosters.map((roster) => [roster.source_team_id, roster.source_manager_id || null]),
+    )
+    const managerIds = [...new Set(imported.normalized.rosters.map((roster) => roster.source_manager_id).filter(Boolean))]
+    const identityIndex = buildManagerIdentityIndex(
+      managerIds.map((id) => buildPlatformManagerMapping("fleaflicker", id, afUserByManager.get(id) ?? null)),
+    )
+    const r = await ingestPlatformImportedActivity(
+      {
+        provider: "fleaflicker",
+        providerLeagueId: imported.normalized.source.source_league_id,
+        afLeagueId: league.id,
+        transactions: imported.normalized.transactions,
+        teamOwnerMap,
+      },
+      identityIndex,
+      store,
+    )
+    return { created: r.writer.created, updated: r.writer.updated, skipped: r.writer.skipped, fetched: true }
+  }
+
+  if (provider === "fantrax") {
+    const imported = await runImportedLeagueNormalizationPipeline({
+      provider: "fantrax",
+      sourceId: sourceLeagueId,
+      userId: importingUserId,
+      currentStateOnly: true,
+    })
+    if (!imported.success) throw new Error(`${imported.code}:${imported.error}`)
+    const teamOwnerMap = new Map<string, string | null>(
+      imported.normalized.rosters.map((roster) => [roster.source_team_id, roster.source_manager_id || null]),
+    )
+    const managerIds = [...new Set(imported.normalized.rosters.map((roster) => roster.source_manager_id).filter(Boolean))]
+    const identityIndex = buildManagerIdentityIndex(
+      managerIds.map((id) => buildPlatformManagerMapping("fantrax", id, afUserByManager.get(id) ?? null)),
+    )
+    const r = await ingestPlatformImportedActivity(
+      {
+        provider: "fantrax",
+        providerLeagueId: imported.normalized.source.source_league_id,
+        afLeagueId: league.id,
+        transactions: imported.normalized.transactions,
+        teamOwnerMap,
+      },
       identityIndex,
       store,
     )
@@ -548,8 +619,11 @@ export async function GET(request: Request) {
         .filter((l): l is EligibleLeagueRow => l !== undefined)
 
       /*
-       * ESPN and Yahoo leagues, read through their importers (2026-09-06); MFL added 2026-09-11.
-       * Ordered the same way, capped smaller.
+       * ESPN and Yahoo leagues, read through their importers (2026-09-06); MFL added 2026-09-11;
+       * Fantrax snapshot activity and Fleaflicker's explicit lifecycle feed joined 2026-09-14.
+       * They share Sleeper's persisted last-attempt map, so a quiet imported league cannot sit
+       * outside a permanent `updatedAt desc` top ten. Half the pass is reserved for the most
+       * starved external leagues while the remaining slots still favor active leagues.
        *
        * ⚠ THIS LIST AND THE `provider` RESOLUTION IN `ingestOnePlatformLeague` MUST AGREE, AND
        * ONLY ONE OF THEM FAILS LOUDLY. A platform selected here but unhandled there throws
@@ -557,18 +631,27 @@ export async function GET(request: Request) {
        * counters. A platform handled there and missing HERE is silent: the branch simply never
        * runs, and the provider looks quietly inactive rather than unwired.
        */
-      const platformLeagues = relayOnly ? ([] as PlatformLeagueRow[]) : (await prisma.league
+      const platformEligible = relayOnly ? ([] as PlatformLeagueRow[]) : (await prisma.league
         .findMany({
           where: {
-            platform: { in: ["espn", "yahoo", "mfl"] },
+            platform: { in: ["espn", "yahoo", "mfl", "fantrax", "fleaflicker"] },
             platformLeagueId: { not: "" },
             status: { notIn: ["complete", "completed", "archived"] },
           },
-          select: { id: true, platform: true, platformLeagueId: true, season: true, userId: true },
-          orderBy: { updatedAt: "desc" },
-          take: PLATFORM_LEAGUE_CAP,
+          select: { id: true, platform: true, platformLeagueId: true, season: true, sport: true, userId: true, updatedAt: true },
         })
         .catch(() => [])) as PlatformLeagueRow[]
+      const platformBuckets = buildRotationBuckets(platformEligible, rotationMap)
+      const platformRotation = mergeRotation({
+        starvedLeagueIds: platformBuckets.starvedLeagueIds,
+        demandLeagueIds: platformBuckets.demandLeagueIds,
+        cap: PLATFORM_LEAGUE_CAP,
+        starvedReserve: PLATFORM_STARVED_RESERVE,
+      })
+      const platformById = new Map(platformEligible.map((league) => [league.id, league]))
+      const platformLeagues = platformRotation.leagueIds
+        .map((id) => platformById.get(id))
+        .filter((league): league is PlatformLeagueRow => league !== undefined)
 
       let processed = 0
       let failed = 0
@@ -583,8 +666,8 @@ export async function GET(request: Request) {
       const attemptedLeagueIds: string[] = []
       const ingestDeadline = startedAt + INGEST_BUDGET_MS
 
-      // ESPN/Yahoo first, under their own budget — see PLATFORM_BUDGET_MS for why the order matters.
-      const platform = { discovered: platformLeagues.length, processed: 0, failed: 0, skippedForTime: 0, created: 0, updated: 0, unfetched: 0, errors: [] as string[] }
+      // External providers first, under their own budget — see PLATFORM_BUDGET_MS for why the order matters.
+      const platform = { discovered: platformEligible.length, selected: platformLeagues.length, processed: 0, failed: 0, skippedForTime: 0, created: 0, updated: 0, unfetched: 0, errors: [] as string[] }
       const platformDeadline = Math.min(startedAt + PLATFORM_BUDGET_MS, ingestDeadline)
       for (const league of platformLeagues) {
         if (Date.now() > platformDeadline) {
@@ -592,6 +675,7 @@ export async function GET(request: Request) {
           continue
         }
         const leagueDeadline = Math.min(Date.now() + LEAGUE_DEADLINE_MS, platformDeadline)
+        attemptedLeagueIds.push(league.id)
         try {
           const r = await withDeadline(ingestOnePlatformLeague(league, store), leagueDeadline, "platform_league_ingest")
           platform.processed += 1
@@ -749,7 +833,7 @@ export async function GET(request: Request) {
       warnings: [
         ...(s.skippedForTime > 0 ? [`${s.skippedForTime} leagues deferred by the ${INGEST_BUDGET_MS / 1000}s ingest budget`] : []),
         // A platform league deferred by its own budget wrote nothing — say so, or it reads as quiet.
-        ...((s.platform?.skippedForTime ?? 0) > 0 ? [`${s.platform!.skippedForTime} ESPN/Yahoo leagues deferred by the ${PLATFORM_BUDGET_MS / 1000}s platform budget`] : []),
+        ...((s.platform?.skippedForTime ?? 0) > 0 ? [`${s.platform!.skippedForTime} external-provider leagues deferred by the ${PLATFORM_BUDGET_MS / 1000}s platform budget`] : []),
         // A relay whose window closed before its first batch reports 0/0 with no error, which reads
         // as "nothing to do". Name it -- this is the failure that hid 7,645 rows for three days.
         ...(s.relay.starved ? ["outbox relay skipped: its window closed before the first batch"] : []),
