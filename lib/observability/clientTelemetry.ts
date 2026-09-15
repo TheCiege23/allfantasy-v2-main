@@ -112,20 +112,27 @@ type ClientSamplingContextLike = {
   location?: { pathname?: string }
 }
 
-export function clientTracesSampler(context: ClientSamplingContextLike): number {
-  try {
-    if (typeof context.parentSampled === 'boolean') return context.parentSampled ? 1 : 0
-    const attributes = context.attributes ?? {}
-    if (attributes['af.device'] === 'bot') return 0
-    const surface =
-      typeof attributes['af.surface'] === 'string'
-        ? attributes['af.surface']
-        : classifyRequest({ url: context.location?.pathname ?? context.name ?? '/' }).surface
-    if (surface === 'core') return CLIENT_SAMPLE_RATES.core
-    if (surface === 'auth') return CLIENT_SAMPLE_RATES.auth
-    if (surface === 'league') return CLIENT_SAMPLE_RATES.league
-    return CLIENT_SAMPLE_RATES.other
-  } catch {
-    return 0
+/** Outside production every page load is traced, matching the server sampler, so a local run shows data. */
+export function createClientTracesSampler(options: { production: boolean }) {
+  return function clientTracesSampler(context: ClientSamplingContextLike): number {
+    try {
+      if (typeof context.parentSampled === 'boolean') return context.parentSampled ? 1 : 0
+      const attributes = context.attributes ?? {}
+      if (attributes['af.device'] === 'bot') return 0
+      if (!options.production) return 1
+      const surface =
+        typeof attributes['af.surface'] === 'string'
+          ? attributes['af.surface']
+          : classifyRequest({ url: context.location?.pathname ?? context.name ?? '/' }).surface
+      if (surface === 'core') return CLIENT_SAMPLE_RATES.core
+      if (surface === 'auth') return CLIENT_SAMPLE_RATES.auth
+      if (surface === 'league') return CLIENT_SAMPLE_RATES.league
+      return CLIENT_SAMPLE_RATES.other
+    } catch {
+      return 0
+    }
   }
 }
+
+/** Next inlines `process.env.NODE_ENV` into the client bundle, so this is fixed per build. */
+export const clientTracesSampler = createClientTracesSampler({ production: process.env.NODE_ENV === 'production' })

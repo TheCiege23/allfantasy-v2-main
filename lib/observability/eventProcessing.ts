@@ -25,6 +25,7 @@ export type SentryEventLike = {
   breadcrumbs?: BreadcrumbLike[]
   exception?: { values?: Array<{ value?: string }> }
   message?: string
+  transaction?: string
 }
 
 function tagEvent(event: SentryEventLike): void {
@@ -65,6 +66,8 @@ function scrubEvent(event: SentryEventLike): void {
     if (typeof entry.value === 'string') entry.value = scrubUrl(entry.value)
   }
   if (typeof event.message === 'string') event.message = scrubUrl(event.message)
+  // Route patterns normally, but instrumentation we do not own has named spans with the raw request line.
+  if (typeof event.transaction === 'string') event.transaction = scrubUrl(event.transaction)
   if (event.extra && typeof event.extra === 'object') {
     for (const [key, value] of Object.entries(event.extra)) {
       if (typeof value === 'string') event.extra[key] = scrubUrl(value)

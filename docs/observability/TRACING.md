@@ -111,6 +111,24 @@ Nothing credential-shaped leaves the process (`lib/observability/redaction.ts`, 
 `__tests__/observability/` pins all of it, including a real-SDK suite that serialises what Sentry
 would receive. Each guarantee was checked by mutation — the suite goes red when the guard is removed.
 
+⚠ **Every string attribute is scrubbed, whatever its key.** A first version scrubbed only keys that
+sounded like URLs; a real `next dev` trace then carried a planted invite code and token under
+`next.span_name`, which Next's own tracing fills with the raw request line. The unit suites were green.
+
+## Verifying locally
+
+Unit tests cannot see what Next and the browser add on their own, so check the real stack before
+trusting a redaction change:
+
+1. Run a stand-in ingest that appends each POST body to a file, e.g. on `127.0.0.1:3108`.
+2. Start `next dev` with `NEXT_PUBLIC_SENTRY_DSN` and `SENTRY_DSN` set to `http://key@127.0.0.1:3108/1`
+   **and `AF_ENABLE_DEV_INSTRUMENTATION=1`** — `next.config.js` turns the instrumentation hook off in
+   development otherwise, and the server never initialises Sentry. Use a non-production database
+   (`.env.test`); confirm the host before starting.
+3. Request pages whose URL and headers carry planted, fake credentials, then search the captured file
+   for the planted values. The count must be zero, and the planted values must appear in the dev
+   server's own log — otherwise the zero proves nothing.
+
 ## Not covered yet
 
 - **Browser ↔ server trace linking.** Automatic propagation needs Next ≥ 14.3

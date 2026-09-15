@@ -6,8 +6,10 @@ import {
   beforeStartClientSpan,
   classifyClientDevice,
   clientSpanAttributes,
-  clientTracesSampler,
+  createClientTracesSampler,
 } from '@/lib/observability/clientTelemetry'
+
+const clientTracesSampler = createClientTracesSampler({ production: true })
 
 const IPHONE = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148'
 const MAC_SAFARI = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Safari/605.1.15'
@@ -74,6 +76,12 @@ describe('clientTracesSampler', () => {
   it('follows a parent decision when there is one', () => {
     expect(clientTracesSampler({ parentSampled: true, attributes: { 'af.surface': 'landing' } })).toBe(1)
     expect(clientTracesSampler({ parentSampled: false, attributes: { 'af.surface': 'core' } })).toBe(0)
+  })
+
+  it('traces every page load outside production — but still never a bot', () => {
+    const development = createClientTracesSampler({ production: false })
+    expect(development({ attributes: { 'af.surface': 'landing' } })).toBe(1)
+    expect(development({ attributes: { 'af.surface': 'landing', 'af.device': 'bot' } })).toBe(0)
   })
 })
 
