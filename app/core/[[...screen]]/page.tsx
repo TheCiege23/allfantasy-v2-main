@@ -1726,6 +1726,7 @@ export default async function AfCorePage({
           : null,
         schedule: homeSchedule ?? null,
         awards: homeRoutineFacts?.awards ?? [],
+        upsets: homeRoutineFacts?.upsets ?? [],
       })
     : null
 

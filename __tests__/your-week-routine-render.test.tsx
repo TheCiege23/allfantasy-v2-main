@@ -109,6 +109,32 @@ describe('YourWeekRoutine', () => {
     expect(container.querySelector('.af3a-routine-awards')).toBeNull()
   })
 
+  it('🛑 upset wins are listed with the SAVED pre-game chance and a share button for the upset card', async () => {
+    const upsets = [
+      { leagueId: 'af-dyn', leagueName: 'Dynasty', season: 2026, week: 1, winProbability: 0.08, winChance: '8%', pointsFor: 120, pointsAgainst: 100 },
+      { leagueId: 'af-ice', leagueName: 'Ice Kings', season: 2026, week: 1, winProbability: 0.35, winChance: '35%', pointsFor: 112.4, pointsAgainst: 98.1 },
+    ] as WeeklyRoutineData['upsets']
+    const { container } = render(<YourWeekRoutine data={data({ upsets })} />)
+    expect(screen.getByText('Week 1 upsets')).toBeTruthy()
+    const rows = container.querySelectorAll('.af3a-routine-upsets li')
+    expect([...rows].map((r) => r.textContent)).toEqual([
+      'Dynasty · won 120.0–100.0 · pre-game win chance 8%Share',
+      'Ice Kings · won 112.4–98.1 · pre-game win chance 35%Share',
+    ])
+    fireEvent.click(screen.getAllByRole('button', { name: 'Share' })[1]!)
+    expect(shareCardImage).toHaveBeenLastCalledWith(
+      '/api/share/rivalry-card?kind=upset&leagueId=af-ice&season=2026&week=1',
+      'upset-week-1.png',
+      'Upset win — Ice Kings, week 1',
+    )
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Card saved ✓' })).toBeTruthy())
+  })
+
+  it('no upsets, no upsets block', () => {
+    const { container } = render(<YourWeekRoutine data={data({ upsets: [] })} />)
+    expect(container.querySelector('.af3a-routine-upsets')).toBeNull()
+  })
+
   it('null renders nothing', () => {
     const { container } = render(<YourWeekRoutine data={null} />)
     expect(container.innerHTML).toBe('')

@@ -3,6 +3,7 @@ import 'server-only'
 import { prisma } from '@/lib/prisma'
 import { readCachedLeagueH2H } from '@/lib/league-history/sleeperH2HService'
 import { awardView, awardsWonBy, type AwardKind } from '@/lib/share/weeklyAwardCard'
+import { getWeeklyUpsetsForUser, type UpsetMoment } from '@/lib/share/weeklyUpset'
 import { claimedRosterIds, loadSeasonAdds, type ReceiptsLeague } from './decisionReceipts'
 import { DEFAULT_TIME_ZONE, localParts } from './managerActivityWindow'
 import { composePlayerIdentities } from './playerIdentityCompose'
@@ -73,6 +74,8 @@ export type WeeklyRoutineData = {
   recap: WeeklyRecap | null
   /** Awards you won in the last played week, each shareable as a card. */
   awards: AwardMoment[]
+  /** Upset wins in that played week, by the odds saved before kickoff (never recomputed). */
+  upsets: UpsetMoment[]
 }
 
 const STEP_ORDER: ReadonlyArray<Pick<RoutineStep, 'key' | 'day' | 'title' | 'href'>> = [
@@ -127,6 +130,7 @@ export function buildWeeklyRoutine(input: {
   startersInDoubt: number | null
   schedule: Pick<WeekBoard, 'coinFlips' | 'leaning' | 'unprojected'> | null
   awards?: readonly AwardMoment[]
+  upsets?: readonly UpsetMoment[]
 }): WeeklyRoutineData {
   const today = routineDayFor(input.now, input.timeZone)
   const recap = recapFrom(input.lastWeek, input.topScorer)
@@ -178,6 +182,7 @@ export function buildWeeklyRoutine(input: {
     steps: STEP_ORDER.map((s) => ({ ...s, today: s.key === today.key, ...detail[s.key] })),
     recap,
     awards: [...(input.awards ?? [])],
+    upsets: [...(input.upsets ?? [])],
   }
 }
 
@@ -293,6 +298,8 @@ export async function getRoutineFacts(args: {
   topScorer: WeeklyRecap['topScorer']
   addsThisWeek: number | null
   awards: AwardMoment[]
+  /** Upset wins in that played week, by the odds saved before kickoff (never recomputed). */
+  upsets: UpsetMoment[]
 }> {
   const [lastWeek, addsThisWeek] = await Promise.all([
     getWeekAll(args.userId, [...args.leagues], { previous: true }).catch(() => null),
@@ -302,11 +309,13 @@ export async function getRoutineFacts(args: {
           .then((loaded) => (loaded ? loaded.adds.filter((a) => a.week === args.currentWeek).length : null))
           .catch(() => null),
   ])
-  const [topScorer, awards] = lastWeek
+  const [topScorer, awards, upsets] = lastWeek
     ? await Promise.all([
         topStarterFor(args.userId, args.leagues, lastWeek).catch(() => null),
         awardsFor(args.ownerSleeperId, args.leagues, lastWeek).catch(() => []),
+        // Saved pre-game odds only: a parked snapshot table is none, and so is a failed read.
+        getWeeklyUpsetsForUser(args.userId, args.leagues, lastWeek).catch(() => []),
       ])
-    : [null, []]
-  return { lastWeek, topScorer, addsThisWeek, awards }
+    : [null, [], []]
+  return { lastWeek, topScorer, addsThisWeek, awards, upsets }
 }

@@ -16,6 +16,7 @@ export function YourWeekRoutine({ data, help }: { data: WeeklyRoutineData | null
   const todayStep = data.steps.find((s) => s.today)
   const recap = data.today === 'recap' ? data.recap : null
   const awards = data.awards ?? []
+  const upsets = data.upsets ?? []
 
   return (
     <section className="af3a-sec af3a-routine" aria-label="Your week">
@@ -96,6 +97,33 @@ export function YourWeekRoutine({ data, help }: { data: WeeklyRoutineData | null
                   url={`/api/share/rivalry-card?kind=award&leagueId=${encodeURIComponent(a.leagueId)}&award=${a.kind}`}
                   filename={`award-${a.kind}-week-${a.week}.png`}
                   title={`${a.label} — ${a.leagueName}, week ${a.week}`}
+                />
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+      {/*
+        Upset wins in the last played week (2026-09-14): a win you were given at most a 40% chance of
+        by the odds SAVED BEFORE kickoff. No saved odds, no upset — nothing here is recomputed.
+      */}
+      {upsets.length > 0 ? (
+        <div className="af3a-card af3a-routine-awards af3a-routine-upsets">
+          <b>Week {upsets[0]!.week} upsets</b>
+          <ul>
+            {upsets.map((u) => (
+              <li key={u.leagueId} className="af3a-routine-award" data-upset={u.leagueId}>
+                <span>
+                  {u.leagueName} · won{' '}
+                  <b className="af3a-mono">
+                    {u.pointsFor.toFixed(1)}–{u.pointsAgainst.toFixed(1)}
+                  </b>{' '}
+                  · pre-game win chance {u.winChance}
+                </span>
+                <ShareMomentButton
+                  url={`/api/share/rivalry-card?kind=upset&leagueId=${encodeURIComponent(u.leagueId)}&season=${u.season}&week=${u.week}`}
+                  filename={`upset-week-${u.week}.png`}
+                  title={`Upset win — ${u.leagueName}, week ${u.week}`}
                 />
               </li>
             ))}
