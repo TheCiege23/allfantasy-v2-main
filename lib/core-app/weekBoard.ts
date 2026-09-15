@@ -258,6 +258,14 @@ function normalCdf(z: number): number {
   return 0.5 * (1 + sign * y)
 }
 
+/**
+ * P(a beats b) under the model in this file's header. Exported so the pre-game odds snapshot
+ * (`matchupOddsSweep`) and the board can never compute a different number for the same matchup.
+ */
+export function winProbabilityOf(a: { mu: number; sigma: number }, b: { mu: number; sigma: number }): number {
+  return normalCdf((a.mu - b.mu) / Math.sqrt(a.sigma ** 2 + b.sigma ** 2))
+}
+
 function mean(values: number[]): number {
   return values.reduce((a, b) => a + b, 0) / values.length
 }
@@ -280,7 +288,7 @@ type LeagueInput = {
   leagueType?: string | null
 }
 
-type MatchupRow = {
+export type MatchupRow = {
   leagueId: string
   seasonYear: number
   week: number
@@ -415,7 +423,7 @@ async function readHistory(userId: string, leagues: LeagueInput[]): Promise<Hist
 }
 
 /** Per-roster scoring history, keyed "platformLeagueId:rosterId". */
-function buildProfiles(rows: MatchupRow[]): Map<string, { mu: number; sigma: number; n: number }> {
+export function buildProfiles(rows: MatchupRow[]): Map<string, { mu: number; sigma: number; n: number }> {
   const buckets = new Map<string, number[]>()
   for (const r of rows) {
     if (!isScored(r)) continue
@@ -439,7 +447,7 @@ function buildProfiles(rows: MatchupRow[]): Map<string, { mu: number; sigma: num
  * dropped rather than guessed at — inferring an opponent by, say, matching
  * pointsAgainst would silently pair two teams who never played each other.
  */
-type Pairing = {
+export type Pairing = {
   leagueId: string
   season: number
   week: number
@@ -447,7 +455,7 @@ type Pairing = {
   b: MatchupRow
 }
 
-function pairRows(rows: MatchupRow[]): Pairing[] {
+export function pairRows(rows: MatchupRow[]): Pairing[] {
   const groups = new Map<string, MatchupRow[]>()
   for (const r of rows) {
     if (r.matchupId == null) continue
@@ -558,12 +566,11 @@ export async function getWeekBoard(
 
     if (mineProfile && theirProfile) {
       const margin = mineProfile.mu - theirProfile.mu
-      const sigma = Math.sqrt(mineProfile.sigma ** 2 + theirProfile.sigma ** 2)
       card.projection = {
         you: mineProfile.mu,
         them: theirProfile.mu,
         margin,
-        winProbability: normalCdf(margin / sigma),
+        winProbability: winProbabilityOf(mineProfile, theirProfile),
       }
     }
 
@@ -608,13 +615,7 @@ export async function getWeekBoard(
         .map((p) => {
           const aProfile = profiles.get(`${pid}:${p.a.rosterId}`)
           const bProfile = profiles.get(`${pid}:${p.b.rosterId}`)
-          const aWinProbability =
-            aProfile && bProfile
-              ? normalCdf(
-                  (aProfile.mu - bProfile.mu) /
-                    Math.sqrt(aProfile.sigma ** 2 + bProfile.sigma ** 2),
-                )
-              : null
+          const aWinProbability = aProfile && bProfile ? winProbabilityOf(aProfile, bProfile) : null
           return {
             a: {
               rosterId: p.a.rosterId,

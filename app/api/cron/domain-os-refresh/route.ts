@@ -15,6 +15,11 @@ import {
   type RankingsSweepCounts,
 } from '@/lib/rankings-engine/rankingsSweep'
 import {
+  runMatchupOddsSweep,
+  emptyMatchupOddsSweepCounts,
+  type MatchupOddsSweepCounts,
+} from '@/lib/core-app/matchupOddsSweep'
+import {
   runForecastSweep,
   emptyForecastSweepCounts,
   type ForecastSweepCounts,
@@ -187,6 +192,12 @@ type RefreshCounts = {
    * three-table chain sat empty for months.
    */
   forecast: ForecastSweepCounts
+  /**
+   * The pre-game odds snapshot's outcomes (`matchup_odds_snapshots`), a fourth writer with its own
+   * counts for the same reason as the three above. `unavailable: 1` means the table's migration is
+   * still parked; `outsideWindow: 1` means the fire fell while last week may still be in play.
+   */
+  odds: MatchupOddsSweepCounts
 }
 
 export async function GET(req: NextRequest) {
@@ -219,19 +230,20 @@ export async function GET(req: NextRequest) {
        * `rankings_snapshots`. The per-writer numbers stay separate in `metadata.rankings` below,
        * because a total nobody can attribute is exactly how three empty tables went unnoticed.
        */
-      rowsWritten: r.written + r.rankings.written + r.forecast.written,
+      rowsWritten: r.written + r.rankings.written + r.forecast.written + r.odds.written,
       rowsSkipped:
         r.skippedForTime + r.unavailable +
         r.rankings.skippedForTime + r.rankings.skipped +
-        r.forecast.skippedForTime + r.forecast.pastSeasonEnd,
-      errors: [...r.errors, ...r.rankings.errors, ...r.forecast.errors],
+        r.forecast.skippedForTime + r.forecast.pastSeasonEnd +
+        r.odds.skippedForTime,
+      errors: [...r.errors, ...r.rankings.errors, ...r.forecast.errors, ...r.odds.errors],
       /*
        * A rankings `failed` is a genuine fault and downgrades the run, the same as a feed failure.
        * `skipped` does NOT: a league whose settings Sleeper will not serve is a normal single-league
        * outcome, and reporting it as partial would make every fire partial forever.
        */
       status:
-        r.failed > 0 || r.writeFailed > 0 || r.rankings.failed > 0 || r.forecast.failed > 0
+        r.failed > 0 || r.writeFailed > 0 || r.rankings.failed > 0 || r.forecast.failed > 0 || r.odds.failed > 0
           ? 'partial'
           : 'success',
       metadata: {
@@ -266,6 +278,22 @@ export async function GET(req: NextRequest) {
           declined: r.forecast.declined,
           failed: r.forecast.failed,
           skippedForTime: r.forecast.skippedForTime,
+        },
+        /*
+         * The pre-game odds snapshot, unsummed. `unavailable: 1` is the parked migration, not a
+         * fault; `due > 0 && written === 0` with nothing unprojected or started is the silent no-op.
+         */
+        odds: {
+          outsideWindow: r.odds.outsideWindow,
+          unavailable: r.odds.unavailable,
+          considered: r.odds.considered,
+          due: r.odds.due,
+          written: r.odds.written,
+          leaguesWritten: r.odds.leaguesWritten,
+          started: r.odds.started,
+          unprojected: r.odds.unprojected,
+          failed: r.odds.failed,
+          skippedForTime: r.odds.skippedForTime,
         },
       },
     }),
@@ -390,6 +418,7 @@ async function run(): Promise<RefreshCounts> {
     considered: 0, due: 0, written: 0, unavailable: 0, writeFailed: 0, failed: 0, skippedForTime: 0, errors: [],
     rankings: emptyRankingsSweepCounts(),
     forecast: emptyForecastSweepCounts(),
+    odds: emptyMatchupOddsSweepCounts(),
   }
 
   // R3.2 — app-level sources first; see the note on refreshAppSources for why the order matters.
@@ -541,6 +570,20 @@ async function run(): Promise<RefreshCounts> {
      */
     const out = emptyForecastSweepCounts()
     out.errors.push(`forecast_sweep: ${e instanceof Error ? e.message : String(e)}`)
+    return out
+  })
+
+  /*
+   * ── THE PRE-GAME ODDS SNAPSHOT, LAST ────────────────────────────────────────────────────────
+   *
+   * Postgres rows and arithmetic, no provider calls, so it goes last on the same shared budget and
+   * yields to everything above. Dormant (`unavailable: 1`, no matchup rows read) until the
+   * `matchup_odds_snapshots` migration is applied; a no-op Sunday–Tuesday 06:00 ET.
+   */
+  counts.odds = await runMatchupOddsSweep({ budget }).catch((e: unknown) => {
+    const out = emptyMatchupOddsSweepCounts()
+    out.failed = 1
+    out.errors.push(`odds_sweep: ${e instanceof Error ? e.message : String(e)}`)
     return out
   })
 

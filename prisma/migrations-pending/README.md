@@ -676,3 +676,31 @@ and the Receipts card leaves out its Chimmy section. **The model is deliberately
 3. Swap the raw queries in `adviceStore.ts` for the model, in one change.
 
 Verify the apply by the object, not the ledger: `select to_regclass('public.chimmy_advice')`.
+
+---
+
+## Parked 2026-09-15: `20260915010000_matchup_odds_snapshots`
+
+🛑 **NOT APPLIED.** Retention item 9, "shareable moments" — weekly upsets. The user chose to save
+pre-game win odds in a new table first and keeps the decision of when to apply it.
+
+**Additive only**: one table (`matchup_odds_snapshots`), one unique index, one lookup index. No
+existing table is touched and there is no backfill.
+
+⚠ **`ROLLBACK.sql` destroys data that cannot be rebuilt.** A pre-game probability cannot be
+recomputed after the week is scored (the scored week joins the model's history), so every upset
+moment for a captured week is lost with the table.
+
+**Safe in both orders, and the migration IS the switch.** `lib/core-app/matchupOddsSweep.ts` runs
+last in `/api/cron/domain-os-refresh` and reads this table first; a missing table (42P01) returns
+`odds.unavailable: 1` with no matchup rows read and no write. There is no feature flag: applying
+this SQL is what starts the captures, on the next fire outside Sunday–Tuesday 06:00 ET. **The model
+is deliberately NOT in `schema.prisma`**, for the same P2021 / schema-drift reason as `player_follows`.
+
+**Order:**
+1. Apply this SQL.
+2. Watch one fire's `metadata.odds` in `sync_job_runs` for `cron-domain-os-refresh`: `unavailable`
+   should read 0 and `written` should be > 0 on a Wednesday–Saturday fire with unplayed weeks.
+3. Add `model MatchupOddsSnapshot` (`@@map("matchup_odds_snapshots")`) and swap the raw queries.
+
+Verify the apply by the object, not the ledger: `select to_regclass('public.matchup_odds_snapshots')`.
