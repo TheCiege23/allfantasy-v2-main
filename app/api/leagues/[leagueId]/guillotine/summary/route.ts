@@ -10,6 +10,7 @@ import { canAccessLeagueDraft } from '@/lib/live-draft-engine/auth'
 import { isGuillotineLeague } from '@/lib/guillotine/GuillotineLeagueConfig'
 import { buildWeeklySummary } from '@/lib/guillotine/GuillotineWeeklySummaryService'
 import { getGuillotineConfig } from '@/lib/guillotine/GuillotineLeagueConfig'
+import { getGuillotineEscapesForUser } from '@/lib/share/guillotineEscape'
 
 export const dynamic = 'force-dynamic'
 
@@ -33,15 +34,18 @@ export async function GET(
   const weekParam = req.nextUrl.searchParams?.get('week')
   const weekOrPeriod = weekParam ? Math.max(1, parseInt(weekParam, 10)) || 1 : 1
 
-  const [summary, config] = await Promise.all([
+  const [summary, config, myEscapes] = await Promise.all([
     buildWeeklySummary({ leagueId, weekOrPeriod, includeDanger: true }),
     getGuillotineConfig(leagueId),
+    // Your escapes from chops that happened — shareable moments (2026-09-14). Never fails the summary.
+    getGuillotineEscapesForUser(leagueId, userId).catch(() => []),
   ])
 
   if (!summary) return NextResponse.json({ error: 'Summary not available' }, { status: 500 })
 
   return NextResponse.json({
     ...summary,
+    myEscapes,
     config: config
       ? {
           eliminationStartWeek: config.eliminationStartWeek,

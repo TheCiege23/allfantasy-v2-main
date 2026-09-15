@@ -13,6 +13,7 @@ import {
 } from 'lucide-react'
 import { GuillotineChopAnimation } from './GuillotineChopAnimation'
 import { GuillotineAIPanel } from './GuillotineAIPanel'
+import { shareCardImage } from '@/components/decide/shareCard'
 
 const GUILLOTINE_IMAGE = '/guillotine/Guillotine.png'
 
@@ -35,6 +36,8 @@ type Summary = {
   survivalStandings: { rosterId: string; displayName?: string; rank: number; seasonPointsCumul: number }[]
   dangerTiers?: { rosterId: string; displayName?: string; tier: string; pointsFromChopZone: number }[]
   recentChopEvents: { weekOrPeriod: number; choppedRosterIds: string[] }[]
+  /** Your escapes from chops that happened, newest first (shareable moments, 2026-09-14). */
+  myEscapes?: { weekOrPeriod: number; myPoints: number; chopLine: number; margin: number; choppedCount: number }[]
   assets: { leagueImage: string; introVideo: string }
   config?: {
     eliminationStartWeek: number
@@ -59,6 +62,7 @@ export function GuillotineHome({ leagueId, sport, leagueName }: GuillotineHomePr
   const [error, setError] = useState<string | null>(null)
   const [replayChop, setReplayChop] = useState<{ play: boolean; name?: string }>({ play: false })
   const [week, setWeek] = useState(1)
+  const [escapeShare, setEscapeShare] = useState<'idle' | 'working' | 'shared' | 'downloaded' | 'failed'>('idle')
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -92,6 +96,7 @@ export function GuillotineHome({ leagueId, sport, leagueName }: GuillotineHomePr
   const dangerTier = summary?.dangerTiers?.filter((d) => d.tier === 'danger') ?? []
   const safeTier = summary?.dangerTiers?.filter((d) => d.tier === 'safe') ?? []
   const bubbleTeams = [...chopZone, ...dangerTier].slice(0, 4)
+  const myEscape = summary?.myEscapes?.[0] ?? null
 
   if (loading && !summary) {
     return (
@@ -172,6 +177,48 @@ export function GuillotineHome({ leagueId, sport, leagueName }: GuillotineHomePr
           <Zap className="h-4 w-4" /> Waivers
         </Link>
       </div>
+
+      {/*
+        Your latest escape — from a chop that HAPPENED, never the live projection — with a share button
+        that builds the card image (shareable moments, 2026-09-14). Nothing renders without one.
+      */}
+      {myEscape ? (
+        <section
+          className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-emerald-500/30 bg-emerald-950/20 p-4"
+          data-testid="guillotine-my-escape"
+        >
+          <p className="text-sm text-emerald-100">
+            <span className="font-semibold">You survived week {myEscape.weekOrPeriod}&rsquo;s chop</span>{' '}
+            {myEscape.margin === 0 ? 'on the tiebreaker' : `by ${myEscape.margin.toFixed(1)} pts`} ·{' '}
+            <span className="tabular-nums">
+              {myEscape.myPoints.toFixed(1)} vs {myEscape.chopLine.toFixed(1)}
+            </span>
+          </p>
+          <button
+            type="button"
+            disabled={escapeShare === 'working'}
+            onClick={() => {
+              setEscapeShare('working')
+              void shareCardImage(
+                `/api/share/rivalry-card?kind=escape&leagueId=${encodeURIComponent(leagueId)}&week=${myEscape.weekOrPeriod}`,
+                `guillotine-escape-week-${myEscape.weekOrPeriod}.png`,
+                `Survived week ${myEscape.weekOrPeriod}'s chop`,
+              ).then(setEscapeShare)
+            }}
+            className="min-h-[36px] rounded-xl border border-emerald-400/40 px-3 py-1.5 text-xs font-semibold text-emerald-100 hover:bg-emerald-900/40 disabled:opacity-60"
+          >
+            {escapeShare === 'working'
+              ? 'Building card…'
+              : escapeShare === 'downloaded'
+                ? 'Card saved ✓'
+                : escapeShare === 'shared'
+                  ? 'Shared ✓'
+                  : escapeShare === 'failed'
+                    ? 'Retry share'
+                    : 'Share escape card'}
+          </button>
+        </section>
+      ) : null}
 
       {/* Survival Board */}
       <section
