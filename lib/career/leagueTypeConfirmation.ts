@@ -4,6 +4,7 @@ import {
   type SuggestedType,
   type TypeSuggestion,
 } from '@/lib/career/leagueTypeSuggestion'
+import { isLeagueConceptType } from '@/lib/league/leagueConceptOptions'
 
 /**
  * Read and confirm a league's format.
@@ -48,14 +49,14 @@ export type LeagueTypeState = {
   rankableType: SuggestedType | null
 }
 
-function readConfirmation(settings: unknown): LeagueTypeConfirmation | null {
+export function readLeagueTypeConfirmation(settings: unknown): LeagueTypeConfirmation | null {
   if (!settings || typeof settings !== 'object') return null
   const raw = (settings as Record<string, unknown>)[KEY]
   if (!raw || typeof raw !== 'object') return null
   const c = raw as Record<string, unknown>
-  if (typeof c.type !== 'string' || typeof c.confirmedByUserId !== 'string') return null
+  if (!isLeagueConceptType(c.type) || typeof c.confirmedByUserId !== 'string') return null
   return {
-    type: c.type as SuggestedType,
+    type: c.type,
     confirmedByUserId: c.confirmedByUserId,
     confirmedAt: typeof c.confirmedAt === 'string' ? c.confirmedAt : '',
     suggestedAtConfirmation:
@@ -85,7 +86,7 @@ export async function leagueTypeState(leagueId: string): Promise<LeagueTypeState
     guillotineMode: league.guillotineMode,
     currentType: league.leagueType,
   })
-  const confirmation = readConfirmation(league.settings)
+  const confirmation = readLeagueTypeConfirmation(league.settings)
 
   return {
     leagueId: league.id,
@@ -100,10 +101,6 @@ export async function leagueTypeState(leagueId: string): Promise<LeagueTypeState
 export type ConfirmResult =
   | { ok: true; state: LeagueTypeState }
   | { ok: false; reason: 'not-found' | 'invalid-type' | 'write-failed' }
-
-const VALID: ReadonlySet<string> = new Set([
-  'redraft', 'dynasty', 'guillotine', 'zombie', 'tournament', 'survivor',
-])
 
 /**
  * Record a human's decision about what this league is.
@@ -123,13 +120,13 @@ export async function confirmLeagueType(input: {
   userId: string
   buyIn?: number | null
 }): Promise<ConfirmResult> {
-  if (!VALID.has(input.type)) return { ok: false, reason: 'invalid-type' }
+  if (!isLeagueConceptType(input.type)) return { ok: false, reason: 'invalid-type' }
 
   const before = await leagueTypeState(input.leagueId)
   if (!before) return { ok: false, reason: 'not-found' }
 
   const confirmation: LeagueTypeConfirmation = {
-    type: input.type as SuggestedType,
+    type: input.type,
     confirmedByUserId: input.userId,
     confirmedAt: new Date().toISOString(),
     // Kept so a later disagreement between suggester and human is visible

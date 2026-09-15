@@ -41,6 +41,8 @@
  * right by accident.
  */
 
+import { resolveLeagueConcept } from '@/lib/league/leagueConceptOptions'
+
 /** The three columns that identify a book in `PlayerValueSnapshot`. */
 export type ValueBook = {
   /**
@@ -74,7 +76,7 @@ export function leagueVariantFor(
   const positions = Array.isArray(s.roster_positions)
     ? s.roster_positions.map((p) => String(p).toUpperCase())
     : []
-  const type = (leagueType ?? '').toLowerCase()
+  const type = (resolveLeagueConcept(settings, leagueType) ?? '').toLowerCase()
   return {
     superflex: positions.some((p) => SUPERFLEX_SLOTS.has(p)),
     dynasty: type.includes('dynasty'),

@@ -23,6 +23,7 @@ import { getLeagueContext } from '@/lib/league-context/leagueContextService'
 import { getMarketValues } from '@/lib/trade-intel/marketValueService'
 import { getTradeGrades } from '@/lib/trade-intel/sleeperTradeGradeService'
 import { getLeagueH2H } from '@/lib/league-history/sleeperH2HService'
+import { isLeagueConceptType, leagueConceptLabel, resolveLeagueConcept } from '@/lib/league/leagueConceptOptions'
 
 function withTimeout<T>(p: Promise<T | null>, ms: number): Promise<T | null> {
   return Promise.race([
@@ -46,7 +47,7 @@ export async function resolveLeagueIntelligenceGrounding(args: {
         id: leagueId,
         OR: [{ userId }, { teams: { some: { claimedByUserId: userId } } }],
       },
-      select: { name: true, platform: true, platformLeagueId: true },
+      select: { name: true, platform: true, platformLeagueId: true, leagueType: true, settings: true },
     })
     if (!league || league.platform !== 'sleeper' || !league.platformLeagueId) return null
     const sid = league.platformLeagueId
@@ -61,6 +62,7 @@ export async function resolveLeagueIntelligenceGrounding(args: {
     ])
 
     const lines: string[] = []
+    const leagueConcept = resolveLeagueConcept(league.settings, league.leagueType)
     const flags = [
       context.variant.idp ? `IDP (${context.scoring.idp.emphasis ?? 'balanced'} scoring)` : null,
       context.variant.superflex ? 'superflex' : null,
@@ -70,6 +72,11 @@ export async function resolveLeagueIntelligenceGrounding(args: {
     lines.push(
       `League: "${context.name}" (${context.teams} teams, ${context.scoring.format.replace('_', '-')}), format: ${flags.join(', ')}.`,
     )
+    if (isLeagueConceptType(leagueConcept)) {
+      lines.push(
+        `AllFantasy league concept: ${leagueConceptLabel(leagueConcept)}. Use this concept when reasoning about roster horizon, trade value, elimination risk, and league-specific strategy.`,
+      )
+    }
     if (context.houseRules.pirate?.active) {
       lines.push(
         'HOUSE RULE (declared): PIRATE league — every matchup winner steals a player from the loser. Weekly floor beats season ceiling; concentrated value is risk; weigh every roster/trade/draft answer accordingly.',

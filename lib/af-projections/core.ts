@@ -266,6 +266,7 @@ export function deriveConfidence(input: ConfidenceInput): ConfidenceResult {
     reasons.push('baseline is from a prior season')
   }
 
-  const level: ConfidenceResult['level'] = score >= 0.7 ? 'high' : score >= 0.45 ? 'medium' : 'low'
-  return { level, score: Math.round(score * 1000) / 1000, reasons }
+  const boundedScore = Math.max(0, Math.min(1, score))
+  const level: ConfidenceResult['level'] = boundedScore >= 0.7 ? 'high' : boundedScore >= 0.45 ? 'medium' : 'low'
+  return { level, score: Math.round(boundedScore * 1000) / 1000, reasons }
 }

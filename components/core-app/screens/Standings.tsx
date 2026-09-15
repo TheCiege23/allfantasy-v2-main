@@ -209,6 +209,8 @@ export function Standings({ data }: StandingsProps) {
         </div>
       )}
 
+      <StandingsRace teams={teams} you={you} />
+
       {/* ── Your rank this season ───────────────────────────────────── */}
       <section className="af-st-section">
         <h2 className="af-label af-st-seclabel">Your rank this season</h2>
@@ -367,6 +369,51 @@ export function Standings({ data }: StandingsProps) {
       </p>
       <SeasonHistory rows={history} />
     </div>
+  )
+}
+
+function StandingsRace({ teams, you }: { teams: StandingRow[]; you: StandingRow | null }) {
+  if (!teams.length) return null
+  const leaders = teams.slice(0, 5)
+  const visible = you && !leaders.some((team) => team.rosterId === you.rosterId)
+    ? [...leaders, you]
+    : leaders
+  const high = Math.max(...teams.map((team) => team.pointsFor))
+  const low = Math.min(...teams.map((team) => team.pointsFor))
+  const spread = Math.max(1, high - low)
+  const leader = teams[0]
+  return (
+    <section className="af-st-race" aria-labelledby="standings-race-title">
+      <header className="af-st-race-head">
+        <div>
+          <p className="af-label">Live league race</p>
+          <h2 id="standings-race-title">The points chase</h2>
+        </div>
+        {you ? (
+          <p><strong className="af-num">{ordinal(you.rank)}</strong><span>{you.rank === 1 ? 'setting the pace' : `${n1(leader.pointsFor - you.pointsFor)} points from first`}</span></p>
+        ) : null}
+      </header>
+      <div className="af-st-race-list">
+        {visible.map((team, index) => {
+          const width = 28 + ((team.pointsFor - low) / spread) * 72
+          const gap = leader.pointsFor - team.pointsFor
+          return (
+            <div className="af-st-race-row" key={team.rosterId} data-you={team.isYou ? 'true' : undefined} data-separated={index === 5 ? 'true' : undefined}>
+              <span className="af-st-race-rank af-num">{team.rank}</span>
+              {team.avatarUrl ? (
+                // Imported provider avatars can use arbitrary CDNs; a plain image preserves them.
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={team.avatarUrl} alt="" />
+              ) : <span className="af-st-race-avatar" aria-hidden>{(team.name ?? '?').slice(0, 1).toUpperCase()}</span>}
+              <span className="af-st-race-name"><strong>{team.name ?? 'Unnamed team'}</strong><small>{team.wins}–{team.losses}{team.isYou ? ' · You' : ''}</small></span>
+              <span className="af-st-race-track"><i style={{ width: `${width.toFixed(1)}%` }} /></span>
+              <span className="af-st-race-score af-num"><strong>{n1(team.pointsFor)}</strong><small>{gap === 0 ? 'leader' : `−${n1(gap)}`}</small></span>
+            </div>
+          )
+        })}
+      </div>
+      <p className="af-st-race-note">Bars show the points gap across this league. Scores move only when imported results are stored.</p>
+    </section>
   )
 }
 

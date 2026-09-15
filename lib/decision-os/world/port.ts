@@ -31,6 +31,7 @@ import type {
 } from './facts'
 import { loadLeagueIdpVorp } from '@/lib/idp-projections/leagueIdpVorp'
 import { mapRedraftRosterRowToRawRoster, unionRosterRows, type RawRedraftRosterRow } from './redraftRoster'
+import { resolveLeagueConcept } from '@/lib/league/leagueConceptOptions'
 
 export interface CanonicalWorldPort {
   loadLeague(leagueId: string): Promise<RawLeagueRow | null>
@@ -76,7 +77,7 @@ export const defaultCanonicalWorldPort: CanonicalWorldPort = {
       season: row.season,
       scoring: row.scoring ?? null,
       scoringPresetId: row.scoringPresetId ?? null,
-      leagueType: row.leagueType ?? null,
+      leagueType: resolveLeagueConcept(row.settings, row.leagueType),
       isDynasty: row.isDynasty,
       rosterSize: row.rosterSize ?? null,
       starters: row.starters ?? null,

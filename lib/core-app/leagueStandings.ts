@@ -29,6 +29,7 @@ import { isScored, resolveCurrentWeekFrom, type WeekScoreRow } from './currentWe
 export type StandingRow = {
   rosterId: string
   name: string | null
+  avatarUrl: string | null
   isYou: boolean
   /** Rank by points for, 1 = most. */
   rank: number
@@ -299,7 +300,7 @@ export async function getLeagueStandings(
     prisma.leagueTeam
       .findMany({
         where: { leagueId: league.id },
-        select: { externalId: true, teamName: true, ownerName: true },
+        select: { externalId: true, teamName: true, ownerName: true, avatarUrl: true },
       })
       .catch(() => []),
     prisma.leagueTeam
@@ -342,11 +343,13 @@ export async function getLeagueStandings(
   const seasonRows = rows.filter((r) => r.seasonYear === resolved.season)
 
   const nameByRoster = new Map<string, string>()
+  const avatarByRoster = new Map<string, string>()
   for (const t of teams) {
     if (!t.externalId) continue
     // teamName is what the platform's own UI shows; ownerName is the person.
     const label = t.teamName?.trim() || t.ownerName?.trim()
     if (label) nameByRoster.set(t.externalId, label)
+    if (t.avatarUrl?.trim()) avatarByRoster.set(t.externalId, t.avatarUrl)
   }
 
   const myRosters = new Set<string>()
@@ -396,6 +399,7 @@ export async function getLeagueStandings(
       return {
         rosterId,
         name: nameByRoster.get(rosterId) ?? null,
+        avatarUrl: avatarByRoster.get(rosterId) ?? null,
         isYou: myRosters.has(rosterId),
         rank,
         pointsFor,

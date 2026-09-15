@@ -263,7 +263,7 @@ describe('league career withholds what the warehouse cannot support', () => {
      * why the call is avoided.
      */
     expect(code('lib/core-app/leagueCareer.ts')).not.toMatch(
-      /from '@\/lib\/trade-intel\/sleeperTradeGradeService'/,
+      /^import\s+(?!type\b).*from '@\/lib\/trade-intel\/sleeperTradeGradeService'$/m,
     )
     expect(code('lib/core-app/leagueCareer.ts')).not.toMatch(/getTradeGrades\s*\(/)
   })

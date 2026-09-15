@@ -32,7 +32,9 @@ import type {
   ScoringFormat,
   SeasonAggregate,
   WeeklyObservation,
+  ProjectionCalibrationMap,
 } from './types'
+import { calibrationFor } from './calibrationMath'
 
 /** One week's raw stat map, needed for per-week IDP component scoring. */
 /** Recency-weighted mean of each component amount, matching how points were weighted. */
@@ -170,6 +172,8 @@ export interface BuildProjectionInput {
    * count the same matchup twice.
    */
   opponentAdjustment?: { points: number; reason: string } | null
+  /** Completed-week feedback, keyed by basis or POSITION|basis. */
+  accuracyCalibration?: ProjectionCalibrationMap | null
   scoringFormat: ScoringFormat
   /** True when the baseline season precedes the season being projected. */
   basisIsPriorSeason: boolean
@@ -408,7 +412,7 @@ export function buildAfProjection(input: BuildProjectionInput): ProjectionOutcom
   const depthRole = parseDepthRole(input.depthSlot)
 
   const confidence = deriveConfidence({
-    hasForwardProjection: basis === 'sleeper_weekly_projection' || basis === 'sleeper_weekly_idp_projection',
+    hasForwardProjection: basis.startsWith('sleeper_weekly'),
     gamesPlayed: aggregate.gamesPlayed,
     weeklyWeeksUsed,
     hasDepthRole: depthRole != null,
@@ -425,11 +429,20 @@ export function buildAfProjection(input: BuildProjectionInput): ProjectionOutcom
   // priced the matchup — applying ours too would double-count it), and floored at 0 so a
   // bad matchup can never project negative points.
   const opponentAdj = input.opponentAdjustment ?? null
-  const basisIsForwardProjection =
-    basis === 'sleeper_weekly_projection' || basis === 'sleeper_weekly_idp_projection'
+  const basisIsForwardProjection = basis.startsWith('sleeper_weekly')
   if (opponentAdj && opponentAdj.points !== 0 && !basisIsForwardProjection) {
     afProjection = Math.max(0, baselineProjection + opponentAdj.points)
     adjustmentsApplied.push(`opponent_history: ${opponentAdj.reason}`)
+  }
+
+  const calibration = !basisIsForwardProjection && input.accuracyCalibration
+    ? calibrationFor(input.accuracyCalibration, basis, effectivePosition)
+    : null
+  if (calibration && calibration.points !== 0) {
+    afProjection = Math.max(0, afProjection + calibration.points)
+    adjustmentsApplied.push(
+      `accuracy_feedback: ${calibration.points > 0 ? '+' : ''}${calibration.points.toFixed(2)} points from ${calibration.sample} completed player-games`,
+    )
   }
 
   const notes: string[] = []
@@ -468,6 +481,7 @@ export function buildAfProjection(input: BuildProjectionInput): ProjectionOutcom
     weeklyWeeksUsed,
     idp: idpBreakdown,
     kicker: kickerBreakdown,
+    calibration,
   }
 }
 

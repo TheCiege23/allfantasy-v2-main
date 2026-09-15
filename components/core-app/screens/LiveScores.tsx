@@ -76,6 +76,20 @@ export type LiveScoresProps = {
   selectedLeagueId?: string | null
 }
 
+export function scopeLiveGamesToLeague(
+  games: LiveGameCard[],
+  selectedLeagueId: string | null,
+): LiveGameCard[] {
+  if (!selectedLeagueId) return games
+  return games
+    .filter((game) => game.tieIns.some((tieIn) => tieIn.leagueId === selectedLeagueId))
+    .map((game) => ({
+      ...game,
+      tieIns: game.tieIns.filter((tieIn) => tieIn.leagueId === selectedLeagueId),
+      leaguesAffected: 1,
+    }))
+}
+
 export function LiveScores({ data: initial, selectedLeagueId = null }: LiveScoresProps) {
   const [data, setData] = useState<LivePageData>(initial)
   const [scope, setScope] = useState<'my' | 'all'>(initial.scope)
@@ -112,10 +126,14 @@ export function LiveScores({ data: initial, selectedLeagueId = null }: LiveScore
     }
   }, [])
 
-  const anyLive = data.games.some((g) => g.isLive)
+  const scopedGames = useMemo(
+    () => scopeLiveGamesToLeague(data.games, selectedLeagueId),
+    [data.games, selectedLeagueId],
+  )
+  const anyLive = scopedGames.some((g) => g.isLive)
   const visibleGames = useMemo(
-    () => data.games.filter((game) => matchesLiveGameQuery(game, query)),
-    [data.games, query],
+    () => scopedGames.filter((game) => matchesLiveGameQuery(game, query)),
+    [scopedGames, query],
   )
 
   useEffect(() => {
@@ -181,13 +199,14 @@ export function LiveScores({ data: initial, selectedLeagueId = null }: LiveScore
   }, [data.impact.plays])
 
   return (
-    <div className="af-live">
+    <div className="af-live" data-league-scoped={selectedLeagueId ? 'true' : undefined}>
       <header className="af-live-head">
         <p className="af-label af-live-eyebrow">Core · Live</p>
         <h1 className="af-display af-live-title">Live Scores</h1>
         <p className="af-live-lede">
-          Every live matchup across your {data.counts.length} sports, scored against your rosters in
-          real time.
+          {selectedLeagueId
+            ? 'Only games affecting starters in this league, scored with this league’s rules.'
+            : `Every live matchup across your ${data.counts.length} sports, scored against your rosters in real time.`}
         </p>
       </header>
 
@@ -196,7 +215,7 @@ export function LiveScores({ data: initial, selectedLeagueId = null }: LiveScore
         <div className="af-live-bar-top">
           <span className="af-live-bar-name">Live Scores</span>
 
-          <div className="af-live-scope" role="group" aria-label="Which games to show">
+          {!selectedLeagueId ? <div className="af-live-scope" role="group" aria-label="Which games to show">
             <button
               type="button"
               className="af-live-scope-btn"
@@ -215,7 +234,7 @@ export function LiveScores({ data: initial, selectedLeagueId = null }: LiveScore
             >
               All games
             </button>
-          </div>
+          </div> : null}
 
           <label className="af-live-search">
             <span aria-hidden>⌕</span>
@@ -293,7 +312,7 @@ export function LiveScores({ data: initial, selectedLeagueId = null }: LiveScore
           tabIndex={-1}
         >
           <h2 className="af-label af-live-slate-head">
-            {activeSportLabel} · {scope === 'my' ? 'your starters, sorted by leagues affected' : 'all games'}
+            {activeSportLabel} · {selectedLeagueId ? 'this league' : scope === 'my' ? 'your starters, sorted by leagues affected' : 'all games'}
           </h2>
 
           {visibleGames.length === 0 ? (

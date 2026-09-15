@@ -583,7 +583,9 @@ export default async function AfCorePage({
    * 604-tile rail and a 604-row home. Same filter the home loader applies, for
    * the same reason.
    */
-  const playedLeagues = leagues.filter((l) => (l as { hasUnifiedRecord?: boolean }).hasUnifiedRecord !== false)
+  const playedLeagues = leagues
+    .filter((l) => (l as { hasUnifiedRecord?: boolean }).hasUnifiedRecord !== false)
+    .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base', numeric: true }))
   const selectedLeagueRow = selectedLeagueId
     ? (playedLeagues.find((league) => league.id === selectedLeagueId) ?? null)
     : null
@@ -1086,7 +1088,7 @@ export default async function AfCorePage({
     activeKey === 'trades' && selectedLeagueId
       ? await getCrossLeagueValueActions(
           userId,
-          playedLeagues.map((league) => ({
+          playedLeagues.filter((league) => league.id === selectedLeagueId).map((league) => ({
             id: league.id,
             name: league.name,
             platform: String(league.platform ?? 'manual'),
@@ -2218,6 +2220,7 @@ export default async function AfCorePage({
 
       {selectedLeagueId && selectedLeagueName && selectedLeagueRow && isCoreSurfaceKey(activeKey) ? (
         <CoreLeagueContextBar
+          leagueId={selectedLeagueId}
           leagueName={selectedLeagueName}
           platform={String(selectedLeagueRow.platform ?? 'manual')}
           syncLabel={selectedSyncAge.label}
@@ -2411,7 +2414,7 @@ export default async function AfCorePage({
               sourceLink={trades.league.sourceLink}
               leagueType={tradeLeagueTypeKey}
               leagueVariant={tradeLeagueRow?.leagueVariant ?? null}
-              leagues={tradeStripLeagues}
+              leagues={tradeStripLeagues.filter((league) => league.id === selectedLeagueId)}
               valueActions={tradeValueActions}
             />
             <Trades data={trades} />

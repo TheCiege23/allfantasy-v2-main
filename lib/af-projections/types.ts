@@ -187,7 +187,18 @@ export interface ProjectionResult {
    * received a projection that could not honour its most distinctive rule.
    */
   kicker?: KickerScoringBreakdown | null
+  /** Prior completed-week error correction applied to this result, when sample gates were met. */
+  calibration?: ProjectionAccuracyCalibration | null
 }
+
+export type ProjectionAccuracyCalibration = {
+  points: number
+  sample: number
+  weeks: number
+  scope: 'basis' | 'position_basis'
+}
+
+export type ProjectionCalibrationMap = Record<string, ProjectionAccuracyCalibration>
 
 export type ProjectionOutcome = ProjectionResult | ProjectionRefusal
 

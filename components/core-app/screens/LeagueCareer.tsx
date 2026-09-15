@@ -1,6 +1,8 @@
 import Link from 'next/link'
 import type {
   CareerSeasonLine,
+  CareerTradeMoment,
+  CareerTradeStory,
   LeagueCareerResult,
   LeagueGrade,
 } from '@/lib/core-app/leagueCareer'
@@ -50,7 +52,7 @@ export function LeagueCareer({ data, allLeaguesHref }: LeagueCareerProps) {
     )
   }
 
-  const { league, seasons, totals, firstSeason, lastSeason, toughestRival, tradeGrade, waiverGrade } =
+  const { league, seasons, totals, firstSeason, lastSeason, toughestRival, tradeGrade, waiverGrade, tradeStory } =
     data
 
   const best = seasons.reduce<CareerSeasonLine | null>(
@@ -129,6 +131,13 @@ export function LeagueCareer({ data, allLeaguesHref }: LeagueCareerProps) {
         />
       </div>
 
+      {tradeStory.available ? <TradeStory story={tradeStory.data} /> : (
+        <section className="af-lc-panel">
+          <h2 className="af-label">Your trading journey</h2>
+          <p className="af-lc-panel-why">{tradeStory.reason}</p>
+        </section>
+      )}
+
       {/* ── Season by season ────────────────────────────────────────── */}
       <section className="af-lc-panel">
         <header className="af-lc-panel-head">
@@ -184,6 +193,111 @@ export function LeagueCareer({ data, allLeaguesHref }: LeagueCareerProps) {
       </section>
     </div>
   )
+}
+
+function TradeStory({ story }: { story: CareerTradeStory }) {
+  return (
+    <section className="af-lc-trade-story" aria-labelledby="trade-story-title">
+      <header className="af-lc-story-head">
+        <div>
+          <p className="af-label">League market history</p>
+          <h2 id="trade-story-title">Your trading journey</h2>
+        </div>
+        <div className="af-lc-story-total" data-tone={story.finalValue >= 0 ? 'good' : 'bad'}>
+          <strong className="af-num">{signed(story.finalValue)}</strong>
+          <span>realised value</span>
+        </div>
+      </header>
+
+      <JourneyChart story={story} />
+
+      <div className="af-lc-moments">
+        <TradeMoment title="Best trade" moment={story.best} tone="good" />
+        <TradeMoment title="Toughest trade" moment={story.worst} tone="bad" />
+      </div>
+
+      {story.awards.length ? (
+        <div className="af-lc-awards">
+          {story.awards.map((award) => (
+            <article key={award.key} className="af-lc-award" data-kind={award.key}>
+              <span className="af-lc-award-icon" aria-hidden>{awardIcon(award.key)}</span>
+              <span className="af-label">{award.subtitle}</span>
+              <h3>{award.title}</h3>
+              <strong>{award.winner}</strong>
+              <span className="af-num">{award.countLabel}</span>
+            </article>
+          ))}
+        </div>
+      ) : null}
+
+      <details className="af-lc-trade-list">
+        <summary>All completed trades <span className="af-num">{story.trades.length}</span></summary>
+        <div>
+          {story.trades.map((trade) => (
+            <div className="af-lc-trade-row" key={trade.id}>
+              <span className="af-lc-trade-grade" data-band={bandOf(trade.currentGrade)}>{trade.currentGrade}</span>
+              <span><strong>with {trade.partner}</strong><small>{formatDate(trade.date)} · Week {trade.week}</small></span>
+              <strong className="af-num" data-tone={trade.net >= 0 ? 'good' : 'bad'}>{signed(trade.net)}</strong>
+            </div>
+          ))}
+        </div>
+      </details>
+    </section>
+  )
+}
+
+function JourneyChart({ story }: { story: CareerTradeStory }) {
+  const values = [0, ...story.journey.map((point) => point.value)]
+  const min = Math.min(...values)
+  const max = Math.max(...values)
+  const range = Math.max(1, max - min)
+  const points = story.journey.map((point, index) => {
+    const x = story.journey.length === 1 ? 100 : (index / (story.journey.length - 1)) * 100
+    const y = 88 - ((point.value - min) / range) * 72
+    return `${x.toFixed(1)},${y.toFixed(1)}`
+  }).join(' ')
+  const zeroY = 88 - ((0 - min) / range) * 72
+  return (
+    <figure className="af-lc-journey">
+      <svg viewBox="0 0 100 100" preserveAspectRatio="none" role="img" aria-label={`Cumulative trade value ending at ${signed(story.finalValue)}`}>
+        <line x1="0" x2="100" y1={zeroY} y2={zeroY} className="af-lc-zero" />
+        {story.journey.length > 1 ? <polyline points={points} /> : <circle cx="50" cy={points.split(',')[1]} r="2" />}
+      </svg>
+      <figcaption><span>{formatDate(story.journey[0].date)}</span><span>Value after every completed deal</span><span>{formatDate(story.journey[story.journey.length - 1].date)}</span></figcaption>
+    </figure>
+  )
+}
+
+function TradeMoment({ title, moment, tone }: { title: string; moment: CareerTradeMoment; tone: 'good' | 'bad' }) {
+  return (
+    <article className="af-lc-moment" data-tone={tone}>
+      <span className="af-label">{title} · with hindsight</span>
+      <strong className="af-lc-moment-value af-num">{signed(moment.net)}</strong>
+      <span className="af-lc-moment-meta">vs {moment.partner} · {formatDate(moment.date)}</span>
+      <div className="af-lc-assets">
+        <p><span>Received</span>{moment.received.length ? moment.received.slice(0, 4).join(' · ') : 'No assets listed'}</p>
+        <p><span>Sent</span>{moment.sent.length ? moment.sent.slice(0, 4).join(' · ') : 'No assets listed'}</p>
+      </div>
+      <span className="af-lc-grade-change">Grade {moment.initialGrade} → {moment.currentGrade}</span>
+    </article>
+  )
+}
+
+function signed(value: number): string {
+  const rounded = Math.round(value).toLocaleString('en-US')
+  return value > 0 ? `+${rounded}` : value < 0 ? `−${Math.abs(Math.round(value)).toLocaleString('en-US')}` : '0'
+}
+
+function formatDate(value: string): string {
+  const date = new Date(value)
+  return Number.isFinite(date.getTime()) ? date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : value
+}
+
+function awardIcon(key: CareerTradeStory['awards'][number]['key']): string {
+  if (key === 'partners') return '↔'
+  if (key === 'active') return '⚡'
+  if (key === 'quiet') return '◒'
+  return '∅'
 }
 
 /**

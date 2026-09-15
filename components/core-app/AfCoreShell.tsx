@@ -1143,10 +1143,7 @@ export function AfCoreShell(props: AfCoreShellProps) {
     const byKey = new Map(navItems(props).map((i) => [i.key, i]))
     return MOBILE_BAR_KEYS.flatMap((k) => {
       const item = byKey.get(k)
-      /* Mobile Home is the escape hatch from a selected league. Keeping the
-         league query here sent it straight back to that league and made /core
-         unreachable on a phone. */
-      return item ? [{ ...item, href: item.key === 'home' ? '/core' : item.href }] : []
+      return item ? [item] : []
     })
   }, [props])
   const { leagues, syncAge, syncEligibleCount, plan, weekLabel, active, children, comms } = props
@@ -1170,6 +1167,7 @@ export function AfCoreShell(props: AfCoreShellProps) {
    *   'open'    chose expanded  desktop 300px,        mobile tray OPEN
    */
   const [railChoice, setRailChoice] = useState<'open' | 'closed' | null>(null)
+  const [mobileMoreOpen, setMobileMoreOpen] = useState(false)
   const [railClock, setRailClock] = useState<number | null>(null)
   const [railSwings, setRailSwings] = useState<Record<string, number>>({})
   const previousMargins = useRef<Record<string, number>>({})
@@ -1317,6 +1315,21 @@ export function AfCoreShell(props: AfCoreShellProps) {
   // "More" is current whenever the screen you are on is not one of the five
   // pinned ones — otherwise the bar shows nothing as active and reads broken.
   const activeInBar = mobileItems.some((i) => i.key === active)
+  const selectedLeagueName = leagues.find((league) => league.id === props.selectedLeagueId)?.name ?? null
+
+  useEffect(() => {
+    if (!mobileMoreOpen) return
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setMobileMoreOpen(false)
+    }
+    const previousOverflow = document.body.style.overflow
+    document.addEventListener('keydown', onKeyDown)
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.removeEventListener('keydown', onKeyDown)
+      document.body.style.overflow = previousOverflow
+    }
+  }, [mobileMoreOpen])
 
   return (
     <div
@@ -1361,7 +1374,9 @@ export function AfCoreShell(props: AfCoreShellProps) {
         <span className="af-rail-handle-mark">
           <AfCrest size={20} tone="inherit" />
         </span>
-        <span className="af-rail-handle-text">{railOpen ? 'Close' : 'Leagues'}</span>
+        <span className="af-rail-handle-text">
+          {railOpen ? 'Close' : selectedLeagueName ?? 'Leagues'}
+        </span>
       </button>
 
       {/* ── League rail ─────────────────────────────────────────────── */}
@@ -1478,9 +1493,15 @@ export function AfCoreShell(props: AfCoreShellProps) {
                   collapse under the click — `railOpen` there is a layout
                   preference the user set, not a transient overlay.
                 */
-                onClick={() => {
+                onClick={(event) => {
                   if (railOpen && typeof window !== 'undefined' && window.innerWidth <= 720) {
+                    /* On iOS, closing the full-screen tray can remove the tapped
+                       anchor before Next's delegated navigation finishes. Own
+                       the transition in that layout so one tap always both
+                       closes the tray and opens the selected league. */
+                    event.preventDefault()
                     setRailChoice('closed')
+                    router.push(`/core?league=${encodeURIComponent(l.id)}`)
                   }
                 }}
               >
@@ -1806,19 +1827,60 @@ export function AfCoreShell(props: AfCoreShellProps) {
             <span className="af-tabbar-label">{item.label}</span>
           </Link>
         ))}
-        {/*
-          Anchors to the nav strip rather than opening a sheet. The strip is
-          already on the page and already scrollable, so a sheet would be a
-          second copy of the same list — one more thing to keep in step with
-          navItems for no gain.
-        */}
-        <a className="af-tabbar-item" href="#af-nav" data-active={!activeInBar}>
+        <button
+          type="button"
+          className="af-tabbar-item"
+          data-active={!activeInBar || mobileMoreOpen}
+          aria-expanded={mobileMoreOpen}
+          aria-controls="af-mobile-more"
+          onClick={() => setMobileMoreOpen((open) => !open)}
+        >
           <span className="af-tabbar-glyph" aria-hidden>
             ⋯
           </span>
           <span className="af-tabbar-label">More</span>
-        </a>
+        </button>
       </nav>
+
+      {mobileMoreOpen ? (
+        <>
+          <button
+            type="button"
+            className="af-mobile-more-scrim"
+            aria-label="Close more menu"
+            onClick={() => setMobileMoreOpen(false)}
+          />
+          <section className="af-mobile-more" id="af-mobile-more" role="dialog" aria-modal="true" aria-label="More screens">
+            <header className="af-mobile-more-head">
+              <span>
+                <span className="af-label">More</span>
+                <strong>{selectedLeagueName ?? 'All leagues'}</strong>
+              </span>
+              <button type="button" aria-label="Close more menu" onClick={() => setMobileMoreOpen(false)}>×</button>
+            </header>
+            <div className="af-mobile-more-list">
+              {sections.map((section) => (
+                <div className="af-mobile-more-group" key={section.id}>
+                  {section.heading ? <span className="af-label">{section.heading}</span> : null}
+                  {section.items.map((item) => (
+                    <Link
+                      key={item.key}
+                      href={item.href}
+                      className="af-mobile-more-link"
+                      data-active={item.key === active}
+                      onClick={() => setMobileMoreOpen(false)}
+                    >
+                      <span aria-hidden>{item.glyph}</span>
+                      <span>{item.label}</span>
+                      {item.badge ? <b>{item.badge.text}</b> : null}
+                    </Link>
+                  ))}
+                </div>
+              ))}
+            </div>
+          </section>
+        </>
+      ) : null}
 
       {comms ? (
         <CommsDock

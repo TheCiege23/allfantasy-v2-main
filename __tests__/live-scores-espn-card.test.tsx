@@ -178,10 +178,10 @@ describe('My games — starters, one row per player, leagues behind a disclosure
     expect(pts.getAttribute('title')).toBe('Points in Bravo League')
   })
 
-  it('control: a league you do not start him in keeps the cross-league range', () => {
+  it('a league where he is benched does not leak starter points from other leagues', () => {
     const { container } = render(<LiveScores data={page('my')} selectedLeagueId="L3" />)
-    const row = container.querySelector('.af-live-mine-row') as HTMLElement
-    expect((row.querySelector('.af-live-mine-pts') as HTMLElement).textContent).toBe('8.4–11.1 pts')
+    expect(container.querySelector('.af-live-mine-row')).toBeNull()
+    expect(screen.queryByText('8.4–11.1 pts')).toBeNull()
   })
 
   it('control: a game whose only tie-in is a bench player shows no starter list', () => {

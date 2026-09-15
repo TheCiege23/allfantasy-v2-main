@@ -63,6 +63,8 @@ export interface SourceAccuracy {
   withoutActual: number
   /** AF only: error split by the snapshot's basis field. */
   byBasis?: Record<string, AccuracyAggregate>
+  /** AF only: exact position+basis buckets used by the next forecast's calibration layer. */
+  byPositionBasis?: Record<string, AccuracyAggregate>
   /** AF only: pairs whose basis was Sleeper's own forward projection (pass-through). */
   sleeperDerivedPairs?: number
   /** AF only: pairs with a genuinely independent basis. */
@@ -216,6 +218,7 @@ export async function computeProjectionAccuracyForWeek(
     overall: Sums
     byPosition: Map<string, Sums>
     byBasis: Map<string, Sums>
+    byPositionBasis: Map<string, Sums>
     methods: { rescoredFromStatLine: number; projectedPointsColumn: number }
     withoutActual: number
     sleeperDerived: number
@@ -234,6 +237,7 @@ export async function computeProjectionAccuracyForWeek(
         overall: newSums(),
         byPosition: new Map(),
         byBasis: new Map(),
+        byPositionBasis: new Map(),
         methods: { rescoredFromStatLine: 0, projectedPointsColumn: 0 },
         withoutActual: 0,
         sleeperDerived: 0,
@@ -272,6 +276,10 @@ export async function computeProjectionAccuracyForWeek(
       const basisSums = bucket.byBasis.get(b) ?? newSums()
       addErr(basisSums, err)
       bucket.byBasis.set(b, basisSums)
+      const positionBasisKey = `${position}|${b}`
+      const positionBasisSums = bucket.byPositionBasis.get(positionBasisKey) ?? newSums()
+      addErr(positionBasisSums, err)
+      bucket.byPositionBasis.set(positionBasisKey, positionBasisSums)
       if (b.startsWith('sleeper_weekly')) bucket.sleeperDerived += 1
       else bucket.independent += 1
     }
@@ -290,6 +298,9 @@ export async function computeProjectionAccuracyForWeek(
     }
     if (source === 'allfantasy') {
       entry.byBasis = Object.fromEntries([...bucket.byBasis].map(([b, s]) => [b, finish(s)]))
+      entry.byPositionBasis = Object.fromEntries(
+        [...bucket.byPositionBasis].map(([key, sums]) => [key, finish(sums)]),
+      )
       entry.sleeperDerivedPairs = bucket.sleeperDerived
       entry.independentPairs = bucket.independent
     }
