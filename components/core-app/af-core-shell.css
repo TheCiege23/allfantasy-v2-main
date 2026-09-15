@@ -658,6 +658,19 @@
   .af-shell {
     grid-template-columns: minmax(0, 1fr);
     grid-template-rows: auto auto minmax(0, 1fr);
+    min-height: 100dvh;
+  }
+  .af-main {
+    padding-top: env(safe-area-inset-top, 0px);
+  }
+  .af-shell::before {
+    content: '';
+    position: fixed;
+    inset: 0 0 auto;
+    z-index: 70;
+    height: env(safe-area-inset-top, 0px);
+    background: var(--bg);
+    pointer-events: none;
   }
   .af-nav {
     display: flex;
@@ -950,6 +963,10 @@
     border-radius: 10px;
     text-decoration: none;
     color: var(--faint);
+    border: 0;
+    background: transparent;
+    font-family: inherit;
+    cursor: pointer;
   }
   .af-core .af-tabbar-item[data-active='true'] {
     background: var(--accent-soft);
@@ -1031,6 +1048,92 @@
   .af-core .af-nav-items {
     flex-direction: row;
     gap: 6px;
+  }
+
+  .af-core .af-mobile-more-scrim {
+    position: fixed;
+    inset: 0;
+    z-index: 64;
+    border: 0;
+    background: rgba(2, 4, 12, 0.72);
+    -webkit-backdrop-filter: blur(4px);
+    backdrop-filter: blur(4px);
+  }
+
+  .af-core .af-mobile-more {
+    position: fixed;
+    left: 10px;
+    right: 10px;
+    bottom: calc(68px + env(safe-area-inset-bottom, 0px));
+    z-index: 65;
+    max-height: min(70dvh, 620px);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    border: 1px solid var(--accent-line);
+    border-radius: 18px;
+    background: var(--surface2);
+    box-shadow: 0 24px 70px rgba(0, 0, 0, 0.58);
+  }
+
+  .af-core .af-mobile-more-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 14px 14px 12px;
+    border-bottom: 1px solid var(--line);
+  }
+  .af-core .af-mobile-more-head > span { min-width: 0; }
+  .af-core .af-mobile-more-head strong {
+    display: block;
+    margin-top: 4px;
+    overflow: hidden;
+    color: var(--text);
+    font-size: 16px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .af-core .af-mobile-more-head button {
+    width: 44px;
+    height: 44px;
+    flex: none;
+    border: 1px solid var(--line2);
+    border-radius: 50%;
+    background: var(--chip);
+    color: var(--text);
+    font-size: 24px;
+  }
+  .af-core .af-mobile-more-list {
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: 10px;
+  }
+  .af-core .af-mobile-more-group + .af-mobile-more-group { margin-top: 14px; }
+  .af-core .af-mobile-more-group > .af-label {
+    display: block;
+    padding: 0 8px 6px;
+  }
+  .af-core .af-mobile-more-link {
+    display: grid;
+    grid-template-columns: 22px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 10px;
+    min-height: 48px;
+    padding: 0 12px;
+    border-radius: 11px;
+    color: var(--text2);
+    font-size: 14px;
+    font-weight: 750;
+    text-decoration: none;
+  }
+  .af-core .af-mobile-more-link[data-active='true'] {
+    background: var(--accent-soft);
+    color: var(--accent);
+  }
+  .af-core .af-mobile-more-link b {
+    color: var(--accent);
+    font: 800 10px/1 var(--font-jetbrains-mono, ui-monospace, monospace);
   }
 }
 
@@ -1599,6 +1702,7 @@
     cursor: pointer;
     /* This is the only way into the league list on a phone. */
     min-width: 44px;
+    max-width: min(58vw, 240px);
     min-height: 44px;
     box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
   }
@@ -1608,6 +1712,9 @@
     letter-spacing: 0.08em;
     text-transform: uppercase;
     writing-mode: horizontal-tb;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   /*

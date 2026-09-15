@@ -235,6 +235,12 @@
   position: sticky;
   top: 14px;
 }
+.af-live[data-league-scoped='true'] .af-live-grid {
+  grid-template-columns: minmax(0, 1fr);
+}
+.af-live[data-league-scoped='true'] .af-live-side {
+  display: none;
+}
 
 /* ── Game card ───────────────────────────────────────────────────────── */
 
