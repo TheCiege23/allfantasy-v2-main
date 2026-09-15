@@ -11,6 +11,7 @@ import type { TeamProfile, TradeValueContext, TradeValueSnapshot } from './types
 import { scoringContextFromWorld } from '@/lib/decision-os/trade/scoringContextFromWorld'
 import { resolveTradeEnrichment } from '@/lib/decision-os/trade/enrichmentPort'
 import { readConceptAliasTags } from '@/lib/league-contract/conceptAliasTags'
+import { resolveLeagueConcept } from '@/lib/league/leagueConceptOptions'
 
 type RawAsset = {
   fromRosterId: string
@@ -148,7 +149,7 @@ export async function computeRedraftTradeValueSnapshot(
       },
     })
     if (league) {
-      formatLeagueType = league.leagueType ?? null
+      formatLeagueType = resolveLeagueConcept(league.settings, league.leagueType)
       formatAliasTags = readConceptAliasTags(league.settings)
       formatIsDynasty = league.isDynasty ?? null
       formatKeeperCount = league.keeperCount ?? null

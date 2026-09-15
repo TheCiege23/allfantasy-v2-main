@@ -20,7 +20,9 @@
  * of its TE bonus.
  */
 
-export type SuggestedType = 'redraft' | 'dynasty' | 'guillotine' | 'zombie' | 'tournament' | 'survivor'
+import type { LeagueConceptType } from '@/lib/league/leagueConceptOptions'
+
+export type SuggestedType = LeagueConceptType
 
 export type TypeSuggestion = {
   suggested: SuggestedType | null

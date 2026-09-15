@@ -110,6 +110,61 @@
   color: var(--muted);
 }
 
+/* ── Trade story ─────────────────────────────────────────────────────── */
+
+.af-lc-trade-story {
+  display: grid;
+  gap: 16px;
+  padding: 20px;
+  border: 1px solid color-mix(in srgb, var(--accent) 36%, var(--line));
+  border-radius: 18px;
+  background:
+    radial-gradient(circle at 84% 0%, color-mix(in srgb, var(--accent) 12%, transparent), transparent 36%),
+    var(--surface);
+}
+.af-lc-story-head { display: flex; align-items: end; justify-content: space-between; gap: 18px; }
+.af-lc-story-head h2 { margin: 4px 0 0; font-size: 24px; letter-spacing: -.035em; }
+.af-lc-story-total { display: grid; text-align: right; }
+.af-lc-story-total strong { font-size: 28px; line-height: 1; }
+.af-lc-story-total span { margin-top: 5px; font-size: 10px; color: var(--faint); text-transform: uppercase; letter-spacing: .08em; }
+.af-lc-story-total[data-tone='good'] strong, .af-lc [data-tone='good'].af-num { color: var(--good); }
+.af-lc-story-total[data-tone='bad'] strong, .af-lc [data-tone='bad'].af-num { color: var(--bad); }
+.af-lc-journey { margin: 0; padding: 13px 13px 9px; border: 1px solid var(--line); border-radius: 13px; background: var(--chip); }
+.af-lc-journey svg { display: block; width: 100%; height: 178px; overflow: visible; }
+.af-lc-journey polyline { fill: none; stroke: var(--accent); stroke-width: 1.8; vector-effect: non-scaling-stroke; stroke-linecap: round; stroke-linejoin: round; }
+.af-lc-journey circle { fill: var(--accent); vector-effect: non-scaling-stroke; }
+.af-lc-journey .af-lc-zero { stroke: var(--line2); stroke-width: 1; stroke-dasharray: 3 3; vector-effect: non-scaling-stroke; }
+.af-lc-journey figcaption { display: flex; justify-content: space-between; gap: 12px; color: var(--faint); font: 700 9px/1.4 var(--font-jetbrains-mono, ui-monospace, monospace); }
+.af-lc-moments { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.af-lc-moment { display: grid; gap: 9px; padding: 18px; border: 1px solid var(--line); border-radius: 15px; background: var(--bg); }
+.af-lc-moment[data-tone='good'] { border-color: color-mix(in srgb, var(--good) 45%, var(--line)); background: linear-gradient(135deg, color-mix(in srgb, var(--good) 8%, var(--bg)), var(--bg)); }
+.af-lc-moment[data-tone='bad'] { border-color: color-mix(in srgb, var(--bad) 45%, var(--line)); background: linear-gradient(135deg, color-mix(in srgb, var(--bad) 8%, var(--bg)), var(--bg)); }
+.af-lc-moment-value { font-size: 36px; line-height: 1; letter-spacing: -.045em; }
+.af-lc-moment[data-tone='good'] .af-lc-moment-value { color: var(--good); }
+.af-lc-moment[data-tone='bad'] .af-lc-moment-value { color: var(--bad); }
+.af-lc-moment-meta, .af-lc-grade-change { font-size: 10.5px; color: var(--faint); }
+.af-lc-assets { display: grid; gap: 6px; padding: 10px; border-radius: 10px; background: var(--surface); }
+.af-lc-assets p { margin: 0; font-size: 11px; line-height: 1.45; color: var(--muted); }
+.af-lc-assets span { display: block; margin-bottom: 2px; color: var(--faint); font: 800 8px/1.3 var(--font-jetbrains-mono, ui-monospace, monospace); text-transform: uppercase; letter-spacing: .09em; }
+.af-lc-awards { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.af-lc-award { display: flex; flex-direction: column; align-items: center; min-width: 0; padding: 18px 12px; border: 1px solid var(--line); border-radius: 14px; text-align: center; background: var(--bg); }
+.af-lc-award-icon { display: grid; place-items: center; width: 42px; height: 42px; margin-bottom: 10px; border-radius: 12px; color: var(--accent); background: var(--accent-soft); font: 900 24px/1 var(--font-jetbrains-mono, monospace); }
+.af-lc-award h3 { margin: 5px 0 12px; font-size: 15px; letter-spacing: -.02em; }
+.af-lc-award strong { font-size: 13px; line-height: 1.3; overflow-wrap: anywhere; }
+.af-lc-award > .af-num { margin-top: 6px; font-size: 10px; color: var(--faint); }
+.af-lc-trade-list { border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+.af-lc-trade-list summary { cursor: pointer; padding: 13px 15px; color: var(--text2); font-size: 12px; font-weight: 800; }
+.af-lc-trade-list summary span { margin-left: 6px; color: var(--accent); }
+.af-lc-trade-list > div { border-top: 1px solid var(--line); }
+.af-lc-trade-row { display: grid; grid-template-columns: 36px minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 10px 14px; border-bottom: 1px solid var(--line); }
+.af-lc-trade-row:last-child { border-bottom: 0; }
+.af-lc-trade-row > span:nth-child(2) { display: grid; gap: 3px; font-size: 11px; }
+.af-lc-trade-row small { color: var(--faint); }
+.af-lc-trade-grade { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 9px; font-weight: 900; background: var(--chip); }
+.af-lc-trade-grade[data-band='good'] { color: var(--good); }
+.af-lc-trade-grade[data-band='mid'] { color: var(--warn); }
+.af-lc-trade-grade[data-band='bad'] { color: var(--bad); }
+
 /* ── Grades ──────────────────────────────────────────────────────────── */
 
 .af-lc-grades {
@@ -288,6 +343,7 @@
   .af-lc-grades {
     grid-template-columns: minmax(0, 1fr);
   }
+  .af-lc-awards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
 @media (max-width: 560px) {
@@ -315,4 +371,12 @@
   .af-lc-bar-track {
     height: 84px;
   }
+  .af-lc-trade-story { padding: 15px; }
+  .af-lc-story-head { align-items: flex-start; }
+  .af-lc-story-head h2 { font-size: 21px; }
+  .af-lc-story-total strong { font-size: 23px; }
+  .af-lc-moments { grid-template-columns: minmax(0, 1fr); }
+  .af-lc-awards { grid-template-columns: minmax(0, 1fr); }
+  .af-lc-journey svg { height: 130px; }
+  .af-lc-journey figcaption span:nth-child(2) { display: none; }
 }

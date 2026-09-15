@@ -7,6 +7,7 @@ import { normalizeToSupportedSport } from '@/lib/sport-scope'
 import { normalizeLeagueScoring } from '@/lib/league-context-engine/normalizeScoring'
 import { resolveMatchupPeriod } from '@/lib/league-context-engine/resolvePeriod'
 import { normalizeBestBallSettings } from '@/lib/bestball/rules'
+import { resolveLeagueConcept } from '@/lib/league/leagueConceptOptions'
 import type {
   LeagueSourceType,
   NormalizedLeagueContext,
@@ -140,7 +141,8 @@ export async function resolveNormalizedLeagueContext(
       : null,
   }
 
-  const lt = league.leagueType?.toLowerCase() ?? ''
+  const effectiveLeagueType = resolveLeagueConcept(league.settings, league.leagueType)
+  const lt = effectiveLeagueType?.toLowerCase() ?? ''
   const lv = (league.leagueVariant ?? '').toLowerCase()
   const flags = {
     isDynasty: league.isDynasty === true,
@@ -182,7 +184,7 @@ export async function resolveNormalizedLeagueContext(
       : null,
     sport: String(league.sport),
     leagueName: league.name,
-    leagueType: league.leagueType,
+    leagueType: effectiveLeagueType,
     leagueVariant: league.leagueVariant,
     sourceType: mapSourceType(league.platform),
     platform: league.platform,

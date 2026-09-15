@@ -31,6 +31,7 @@ import { rosFromPerGame, weeksRemaining } from './restOfSeason'
 import { KICKER_CANONICAL_RULES } from './kickerScoring'
 import { IDP_PBP_SOURCE } from '@/lib/idp/realStatLines'
 import type { ProjectionOutcome, ScoringFormat, WeeklyObservation } from './types'
+import { loadProjectionCalibrationMap } from './accuracyCalibration'
 
 export interface WriteSnapshotsResult {
   sport: string
@@ -389,6 +390,12 @@ export async function writeAfProjectionSnapshotsForSeason(
   // FOR the week being played outranks anything inferred from completed games, so this is
   // the strongest input the engine has; failure is non-fatal and falls back to history.
   const targetWeek = opts.targetWeek ?? inRegularSeason?.week ?? 1
+  // Feedback uses completed weeks strictly before the target week, so the forecast never
+  // learns from the game it is being asked to predict. Non-NFL sports currently have no
+  // canonical accuracy ruler and deliberately receive no correction.
+  const accuracyCalibration = sport === 'NFL'
+    ? await loadProjectionCalibrationMap(targetSeason, targetWeek)
+    : {}
 
   /*
    * Games left in the season, computed ONCE here so every row this run writes shares one horizon.
@@ -552,6 +559,7 @@ export async function writeAfProjectionSnapshotsForSeason(
        * rules are applied at READ time via `rescoreKickerForLeague`, exactly as IDP does.
        */
       kickerRules: KICKER_CANONICAL_RULES as Record<string, number>,
+      accuracyCalibration,
     }
     const outcome: ProjectionOutcome = buildAfProjection(buildInput)
 
@@ -592,6 +600,7 @@ export async function writeAfProjectionSnapshotsForSeason(
       // lever, and the reason a single-format row is not a dead end.
       perGameRates: aggregate ? perGameRates(aggregate) : null,
       idp: outcome.idp ?? null,
+      accuracyCalibration: outcome.calibration ?? null,
     }
     // Round-trip through JSON so Prisma's InputJsonValue is satisfied (a bare `null` inside
     // an object literal is not assignable) and so anything non-serializable fails here,
@@ -716,6 +725,7 @@ export async function writeAfProjectionSnapshotsForSeason(
               opponentAdjustment: opponentFactors,
               perGameRates: aggregate ? perGameRates(aggregate) : null,
               idp: weeklyOutcome.idp ?? null,
+              accuracyCalibration: weeklyOutcome.calibration ?? null,
             }),
           ) as Prisma.InputJsonValue
           const weeklyData = {

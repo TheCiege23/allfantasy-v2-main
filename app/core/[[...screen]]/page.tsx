@@ -2218,6 +2218,7 @@ export default async function AfCorePage({
 
       {selectedLeagueId && selectedLeagueName && selectedLeagueRow && isCoreSurfaceKey(activeKey) ? (
         <CoreLeagueContextBar
+          leagueId={selectedLeagueId}
           leagueName={selectedLeagueName}
           platform={String(selectedLeagueRow.platform ?? 'manual')}
           syncLabel={selectedSyncAge.label}

@@ -75,6 +75,48 @@
   color: var(--muted);
 }
 
+/* ── League race ────────────────────────────────────────────────────── */
+
+.af-st-race {
+  display: grid;
+  gap: 15px;
+  padding: 20px;
+  border: 1px solid color-mix(in srgb, var(--accent) 34%, var(--line));
+  border-radius: 18px;
+  background:
+    radial-gradient(circle at 88% -10%, color-mix(in srgb, var(--accent) 14%, transparent), transparent 35%),
+    var(--surface);
+}
+.af-st-race-head { display: flex; align-items: end; justify-content: space-between; gap: 18px; }
+.af-st-race-head h2 { margin: 4px 0 0; font-size: 23px; letter-spacing: -.035em; }
+.af-st-race-head > p { display: grid; margin: 0; text-align: right; }
+.af-st-race-head > p strong { color: var(--accent); font-size: 25px; line-height: 1; }
+.af-st-race-head > p span { margin-top: 4px; color: var(--faint); font-size: 10px; }
+.af-st-race-list { display: grid; gap: 7px; }
+.af-st-race-row {
+  display: grid;
+  grid-template-columns: 24px 38px minmax(110px, .7fr) minmax(100px, 1.3fr) 76px;
+  align-items: center;
+  gap: 10px;
+  min-height: 52px;
+  padding: 7px 10px;
+  border: 1px solid transparent;
+  border-radius: 12px;
+}
+.af-st-race-row[data-you='true'] { border-color: var(--accent-line); background: var(--accent-soft); }
+.af-st-race-row[data-separated='true'] { margin-top: 8px; border-top-style: dashed; }
+.af-st-race-rank { color: var(--faint); font-size: 12px; font-weight: 900; text-align: center; }
+.af-st-race-row img, .af-st-race-avatar { width: 36px; height: 36px; border-radius: 10px; object-fit: cover; }
+.af-st-race-avatar { display: grid; place-items: center; color: var(--accent); background: var(--chip); font-weight: 900; }
+.af-st-race-name { display: grid; min-width: 0; gap: 3px; }
+.af-st-race-name strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11.5px; }
+.af-st-race-name small, .af-st-race-score small { color: var(--faint); font-size: 9.5px; }
+.af-st-race-track { height: 7px; border-radius: 999px; overflow: hidden; background: var(--chip); }
+.af-st-race-track i { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, color-mix(in srgb, var(--accent) 52%, var(--surface)), var(--accent)); }
+.af-st-race-score { display: grid; gap: 2px; text-align: right; }
+.af-st-race-score strong { font-size: 12px; }
+.af-st-race-note { margin: 0; color: var(--faint); font-size: 10.5px; }
+
 /* ── Tiles ───────────────────────────────────────────────────────────── */
 
 .af-st-tiles {
@@ -418,6 +460,11 @@
   .af-st-proj-v > .af-num:first-child {
     font-size: 25px;
   }
+  .af-st-race { padding: 15px 11px; }
+  .af-st-race-head h2 { font-size: 20px; }
+  .af-st-race-row { grid-template-columns: 20px 34px minmax(0, 1fr) 62px; gap: 7px; padding-inline: 6px; }
+  .af-st-race-row img, .af-st-race-avatar { width: 32px; height: 32px; }
+  .af-st-race-track { grid-column: 3 / 5; grid-row: 2; }
 }
 
 /* ── Past seasons ──────────────────────────────────────────────────────────

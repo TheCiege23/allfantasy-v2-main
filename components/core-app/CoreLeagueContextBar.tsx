@@ -1,10 +1,19 @@
 'use client'
 
+import { useEffect, useId, useState } from 'react'
+
 import { COMMS_OPEN_EVENT } from '@/components/core-app/comms/commsEvents'
 import { CORE_SURFACE_LABELS, type CoreSurfaceKey } from '@/lib/core-app/coreSurface'
+import {
+  LEAGUE_CONCEPT_OPTIONS,
+  isLeagueConceptType,
+  leagueConceptLabel,
+  type LeagueConceptType,
+} from '@/lib/league/leagueConceptOptions'
 import '@/components/core-app/af-league-tabs.css'
 
 export type CoreLeagueContextBarProps = {
+  leagueId: string
   leagueName: string
   platform: string
   syncLabel: string
@@ -16,6 +25,7 @@ export type CoreLeagueContextBarProps = {
 }
 
 export default function CoreLeagueContextBar({
+  leagueId,
   leagueName,
   platform,
   syncLabel,
@@ -25,6 +35,57 @@ export default function CoreLeagueContextBar({
   recommendation,
   surface,
 }: CoreLeagueContextBarProps) {
+  const selectId = useId()
+  const [leagueType, setLeagueType] = useState<LeagueConceptType | null>(null)
+  const [canConfirm, setCanConfirm] = useState(false)
+  const [typeStatus, setTypeStatus] = useState<'loading' | 'ready' | 'saving' | 'saved' | 'error'>('loading')
+
+  useEffect(() => {
+    const controller = new AbortController()
+    setTypeStatus('loading')
+    fetch(`/api/leagues/${encodeURIComponent(leagueId)}/league-type`, {
+      cache: 'no-store',
+      signal: controller.signal,
+    })
+      .then(async (response) => {
+        if (!response.ok) throw new Error('league type unavailable')
+        return response.json() as Promise<{
+          confirmation?: { type?: unknown } | null
+          suggestion?: { suggested?: unknown }
+          storedType?: unknown
+          canConfirm?: boolean
+        }>
+      })
+      .then((payload) => {
+        const raw = payload.confirmation?.type ?? payload.storedType ?? payload.suggestion?.suggested
+        setLeagueType(isLeagueConceptType(raw) ? raw : null)
+        setCanConfirm(Boolean(payload.canConfirm))
+        setTypeStatus('ready')
+      })
+      .catch((error: unknown) => {
+        if ((error as { name?: string })?.name !== 'AbortError') setTypeStatus('error')
+      })
+    return () => controller.abort()
+  }, [leagueId])
+
+  const updateLeagueType = async (next: LeagueConceptType) => {
+    const previous = leagueType
+    setLeagueType(next)
+    setTypeStatus('saving')
+    try {
+      const response = await fetch(`/api/leagues/${encodeURIComponent(leagueId)}/league-type`, {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ type: next }),
+      })
+      if (!response.ok) throw new Error('save failed')
+      setTypeStatus('saved')
+      window.setTimeout(() => setTypeStatus('ready'), 1600)
+    } catch {
+      setLeagueType(previous)
+      setTypeStatus('error')
+    }
+  }
   const askChimmy = () => {
     window.dispatchEvent(
       new CustomEvent(COMMS_OPEN_EVENT, {
@@ -51,6 +112,29 @@ export default function CoreLeagueContextBar({
         <span className="af-lctx-chip" data-tone="chimmy">
           Chimmy · {CORE_SURFACE_LABELS[surface]}
         </span>
+        <div className="af-lctx-type">
+          <label htmlFor={selectId}>League type</label>
+          {canConfirm ? (
+            <select
+              id={selectId}
+              value={leagueType ?? ''}
+              disabled={typeStatus === 'loading' || typeStatus === 'saving'}
+              onChange={(event) => {
+                if (isLeagueConceptType(event.target.value)) void updateLeagueType(event.target.value)
+              }}
+            >
+              <option value="" disabled>Choose league type</option>
+              {LEAGUE_CONCEPT_OPTIONS.map((option) => (
+                <option key={option.id} value={option.id}>{option.label}</option>
+              ))}
+            </select>
+          ) : (
+            <span>{typeStatus === 'loading' ? 'Loading…' : leagueConceptLabel(leagueType)}</span>
+          )}
+          <small role="status" aria-live="polite">
+            {typeStatus === 'saving' ? 'Saving…' : typeStatus === 'saved' ? 'Saved to Sports OS' : typeStatus === 'error' ? 'Could not load or save' : ''}
+          </small>
+        </div>
       </div>
 
       {recommendation ? (

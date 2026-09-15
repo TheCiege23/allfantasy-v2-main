@@ -3,6 +3,7 @@ import 'server-only'
 import { prisma } from '@/lib/prisma'
 import { leagueDisplayName, type SectionState } from './leagueHome'
 import { letterFor, type GradeLetter } from '@/lib/trade-intel/gradeScale'
+import type { TradeGradesPayload, TradeSideGrade } from '@/lib/trade-intel/sleeperTradeGradeService'
 
 /**
  * Cache key prefix owned by `sleeperTradeGradeService`.
@@ -84,6 +85,39 @@ export type LeagueCareerData = {
   toughestRival: CareerRival | null
   tradeGrade: SectionState<LeagueGrade>
   waiverGrade: SectionState<LeagueGrade>
+  tradeStory: SectionState<CareerTradeStory>
+}
+
+export type CareerTradeMoment = {
+  id: string
+  date: string
+  season: string
+  week: number
+  partner: string
+  net: number
+  initialGrade: GradeLetter
+  currentGrade: GradeLetter
+  received: string[]
+  sent: string[]
+}
+
+export type CareerTradeJourneyPoint = { date: string; value: number }
+
+export type CareerTradeAward = {
+  key: 'partners' | 'active' | 'quiet' | 'frenemies'
+  title: string
+  subtitle: string
+  winner: string
+  countLabel: string
+}
+
+export type CareerTradeStory = {
+  trades: CareerTradeMoment[]
+  best: CareerTradeMoment
+  worst: CareerTradeMoment
+  journey: CareerTradeJourneyPoint[]
+  finalValue: number
+  awards: CareerTradeAward[]
 }
 
 export type LeagueCareerResult =
@@ -139,7 +173,10 @@ export async function getLeagueCareer(
     prisma.leagueTeam
       .findMany({
         where: { leagueId },
-        select: { externalId: true, teamName: true, ownerName: true, claimedByUserId: true },
+        select: {
+          externalId: true, teamName: true, ownerName: true, claimedByUserId: true,
+          platformUserId: true,
+        },
       })
       .catch(() => []),
   ])
@@ -262,9 +299,10 @@ export async function getLeagueCareer(
       }))
       .sort((a, b) => b.losses - a.losses || a.averageMargin - b.averageMargin)[0] ?? null
 
-  const [tradeGrade, waiverGrade] = await Promise.all([
+  const [tradeGrade, waiverGrade, tradeStory] = await Promise.all([
     gradeTrades(leagueId, league.platformLeagueId, userId),
     gradeWaivers(leagueId, userId),
+    loadTradeStory(league.platformLeagueId, userId, teams),
   ])
 
   return {
@@ -284,6 +322,136 @@ export async function getLeagueCareer(
     toughestRival,
     tradeGrade,
     waiverGrade,
+    tradeStory,
+  }
+}
+
+type CareerTeamIdentity = {
+  teamName: string
+  ownerName: string
+  claimedByUserId: string | null
+  platformUserId: string | null
+}
+
+function sideLabel(side: TradeSideGrade): string {
+  return side.teamName?.trim() || side.managerName?.trim() || 'Unnamed team'
+}
+
+function assetLabels(side: TradeSideGrade, direction: 'in' | 'out'): string[] {
+  const players = direction === 'in' ? side.playersIn : side.playersOut
+  const picks = direction === 'in' ? side.picksIn : side.picksOut
+  return [
+    ...players.map((asset) => asset.name),
+    ...picks.map((pick) => pick.label),
+  ].filter(Boolean)
+}
+
+function pairKey(a: string, b: string): string {
+  return [a, b].sort().join('::')
+}
+
+async function loadTradeStory(
+  platformLeagueId: string | null,
+  userId: string,
+  teams: CareerTeamIdentity[],
+): Promise<SectionState<CareerTradeStory>> {
+  if (!platformLeagueId) return { available: false, reason: 'Trade history has no provider league id.' }
+
+  const cached = await prisma.sportsDataCache
+    .findUnique({ where: { cacheKey: `${TRADE_GRADES_CACHE_PREFIX}${platformLeagueId}` } })
+    .catch(() => null)
+  const payload = cached?.data as unknown as TradeGradesPayload | null
+  if (!payload || payload.version !== 2 || !Array.isArray(payload.trades)) {
+    return { available: false, reason: 'The historical trade grading pass has not run for this league yet.' }
+  }
+
+  const ownerId = teams.find((team) => team.claimedByUserId === userId)?.platformUserId ?? null
+  if (!ownerId) return { available: false, reason: 'Your manager identity is not linked to this trade history.' }
+
+  const chronological = [...payload.trades].sort(
+    (a, b) => new Date(a.createdIso).getTime() - new Date(b.createdIso).getTime(),
+  )
+  const mine: CareerTradeMoment[] = []
+  const journey: CareerTradeJourneyPoint[] = []
+  let cumulative = 0
+
+  for (const trade of chronological) {
+    const side = trade.sides.find((candidate) => candidate.ownerId === ownerId)
+    if (!side) continue
+    const others = trade.sides.filter((candidate) => candidate.ownerId !== ownerId).map(sideLabel)
+    const moment: CareerTradeMoment = {
+      id: trade.id,
+      date: trade.createdIso,
+      season: trade.season,
+      week: trade.week,
+      partner: others.join(', ') || 'Unknown partner',
+      net: side.cumulativeNet,
+      initialGrade: side.initialGrade,
+      currentGrade: side.currentGrade,
+      received: assetLabels(side, 'in'),
+      sent: assetLabels(side, 'out'),
+    }
+    mine.push(moment)
+    cumulative += moment.net
+    journey.push({ date: trade.createdIso, value: Math.round(cumulative) })
+  }
+
+  if (mine.length === 0) {
+    return { available: false, reason: 'No completed trade involving your team is in this league history.' }
+  }
+
+  const managers = new Map<string, string>()
+  for (const team of teams) {
+    if (team.platformUserId) managers.set(team.platformUserId, team.teamName?.trim() || team.ownerName?.trim() || 'Unnamed team')
+  }
+  for (const trade of payload.trades) {
+    for (const side of trade.sides) if (side.ownerId) managers.set(side.ownerId, sideLabel(side))
+  }
+
+  const managerCounts = new Map<string, number>([...managers.keys()].map((id) => [id, 0]))
+  const pairCounts = new Map<string, number>()
+  for (const trade of payload.trades) {
+    const participants = [...new Set(trade.sides.map((side) => side.ownerId).filter((id): id is string => Boolean(id)))]
+    for (const id of participants) managerCounts.set(id, (managerCounts.get(id) ?? 0) + 1)
+    for (let i = 0; i < participants.length; i += 1) {
+      for (let j = i + 1; j < participants.length; j += 1) {
+        const key = pairKey(participants[i], participants[j])
+        pairCounts.set(key, (pairCounts.get(key) ?? 0) + 1)
+      }
+    }
+  }
+
+  const activity = [...managerCounts.entries()].sort((a, b) => b[1] - a[1])
+  const frequent = [...pairCounts.entries()].sort((a, b) => b[1] - a[1])[0]
+  let zeroPair: [string, string] | null = null
+  const ids = [...managers.keys()]
+  for (let i = 0; i < ids.length && !zeroPair; i += 1) {
+    for (let j = i + 1; j < ids.length; j += 1) {
+      if (!pairCounts.has(pairKey(ids[i], ids[j]))) { zeroPair = [ids[i], ids[j]]; break }
+    }
+  }
+
+  const awards: CareerTradeAward[] = []
+  if (frequent) {
+    const names = frequent[0].split('::').map((id) => managers.get(id) ?? 'Unknown team')
+    awards.push({ key: 'partners', title: 'Favorite trade partners', subtitle: 'Most deals together', winner: names.join(' & '), countLabel: `${frequent[1]} trades` })
+  }
+  if (activity[0]) awards.push({ key: 'active', title: 'The active desk', subtitle: 'Most trades completed', winner: managers.get(activity[0][0]) ?? 'Unknown team', countLabel: `${activity[0][1]} trades` })
+  const quiet = [...activity].sort((a, b) => a[1] - b[1])[0]
+  if (quiet) awards.push({ key: 'quiet', title: 'The quiet desk', subtitle: 'Fewest trades completed', winner: managers.get(quiet[0]) ?? 'Unknown team', countLabel: `${quiet[1]} trades` })
+  if (zeroPair) awards.push({ key: 'frenemies', title: 'Frenemies', subtitle: 'Still waiting on their first deal', winner: zeroPair.map((id) => managers.get(id) ?? 'Unknown team').join(' & '), countLabel: '0 trades' })
+
+  const byNet = [...mine].sort((a, b) => b.net - a.net)
+  return {
+    available: true,
+    data: {
+      trades: [...mine].reverse(),
+      best: byNet[0],
+      worst: byNet[byNet.length - 1],
+      journey,
+      finalValue: Math.round(cumulative),
+      awards,
+    },
   }
 }
 
