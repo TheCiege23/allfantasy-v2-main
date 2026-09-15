@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
+import { signOut } from 'next-auth/react'
 import { useEffect, useState } from 'react'
 import { useResendCooldown } from '@/hooks/useResendCooldown'
 import { safeInternalPathOr } from '@/lib/auth/auth-intent-resolver'
@@ -29,6 +30,11 @@ import {
  * server redirect already use (verified=email|phone, error=EXPIRED_LINK |
  * INVALID_LINK | AGE_REQUIRED | VERIFICATION_REQUIRED, status=…). No API route
  * was added or changed.
+ *
+ * ⚠ `account=other` (2026-09-15) is the one addition to that vocabulary. The link
+ * route sets it when the browser opening a link is signed in to a DIFFERENT
+ * account from the one the link was issued for — see `signedInAsAnotherAccount`
+ * in app/verify/email/route.ts. It carries that fact only, never an id or address.
  *
  * ⚠ THE PHONE TAB AND THE 18+ AGE GATE ARE NOT IN HANDOFF 16b AND ARE KEPT ANYWAY.
  * The handoff draws the five email states only, but ten live callers across the
@@ -110,17 +116,49 @@ export function VerifyEmailV4({ email, alreadyVerified, signedIn }: VerifyEmailV
 
   const state = resolveState()
 
+  /*
+   * Every status this screen reports is about the account SIGNED IN to this
+   * browser — the `alreadyVerified` prop, the resend, the success redirect. The
+   * link that brought the reader here can belong to a different account, and
+   * `account=other` says so when the link route could tell. Gated on `signedIn`:
+   * with no session there is no "other" account to be.
+   */
+  const linkForOtherAccount = signedIn && searchParams?.get('account') === 'other'
+  const verifiedHere = signedIn && alreadyVerified
+  const verifiedAnotherAccount = state === 'success' && verified === 'email' && linkForOtherAccount
+  const accountEmail = email ? <strong style={{ overflowWrap: 'anywhere' }}>{email}</strong> : null
+
   // 16b build note: the verified card "auto-continues". It returns the user to
   // where they were, which is what returnTo carries — falling back to /dashboard.
+  // Not when the link verified someone else: that returnTo belongs to the
+  // verified account's flow, and continuing would carry it into this one.
   useEffect(() => {
-    if (state !== 'success') return
+    if (state !== 'success' || verifiedAnotherAccount) return
     if (countdown <= 0) {
       router.push(safeReturnTo)
       return
     }
     const timer = window.setTimeout(() => setCountdown((c) => c - 1), 1000)
     return () => window.clearTimeout(timer)
-  }, [state, countdown, router, safeReturnTo])
+  }, [state, verifiedAnotherAccount, countdown, router, safeReturnTo])
+
+  /*
+   * Sign this browser out and come back signed in as the other account.
+   * next-auth's own signOut — /api/auth/logout only clears the admin cookie.
+   *
+   * ⚠ `redirect: false`, THEN NAVIGATE OURSELVES. signOut's own `callbackUrl` is
+   * resolved through the `redirect` callback in lib/auth.ts, which rewrites any
+   * /login destination to /core — so `signOut({ callbackUrl: '/login?…' })` signs
+   * the reader out and lands them on /core instead of the sign-in form.
+   */
+  async function switchAccount(afterSignIn: string) {
+    try {
+      await signOut({ redirect: false })
+    } catch {
+      // Still go to sign-in: signing in as the other account replaces this session anyway.
+    }
+    window.location.assign(`/login?callbackUrl=${encodeURIComponent(afterSignIn)}`)
+  }
 
   async function handleSend() {
     if (cooldown.active || sending) return
@@ -276,6 +314,37 @@ export function VerifyEmailV4({ email, alreadyVerified, signedIn }: VerifyEmailV
 
   /* ── State 2 · Verified ──────────────────────────────────────────── */
   if (state === 'success') {
+    if (verifiedAnotherAccount) {
+      /*
+       * The link worked — for the account it was sent to. This browser is signed in
+       * as someone else, so the usual "taking you back to where you were" would be
+       * about the wrong person. Say which account is here and offer the switch.
+       */
+      return (
+        <RecoveryShell>
+          <RecoveryCard eyebrow="VERIFIED" tone="good">
+            <RecoveryIcon tone="good">
+              <CheckGlyph />
+            </RecoveryIcon>
+            <RecoveryTitle>Email verified</RecoveryTitle>
+            <RecoverySub>
+              That link verified the account it was sent to. This browser is signed in to a different
+              account{accountEmail ? <> ({accountEmail})</> : null}. Sign in to the account you just
+              verified to carry on there.
+            </RecoverySub>
+            <div className="af-rc-actions">
+              <button type="button" className="af-rc-btn" onClick={() => void switchAccount(safeReturnTo)}>
+                Sign in to that account
+              </button>
+              <Link href="/core" className="af-rc-btn af-rc-btn--ghost">
+                Stay signed in
+              </Link>
+            </div>
+          </RecoveryCard>
+        </RecoveryShell>
+      )
+    }
+
     return (
       <RecoveryShell>
         <RecoveryCard eyebrow="VERIFIED" tone="good">
@@ -333,6 +402,44 @@ export function VerifyEmailV4({ email, alreadyVerified, signedIn }: VerifyEmailV
   /* ── Bad link states ─────────────────────────────────────────────── */
   if (state === 'expired' || state === 'invalid' || state === 'error') {
     const expired = state === 'expired'
+    /*
+     * ⚠ "THIS ADDRESS IS ALREADY VERIFIED" WAS SAID ABOUT THE WRONG ADDRESS.
+     *
+     * The resend on this card and the `alreadyVerified` prop both describe the
+     * account SIGNED IN to this browser; the link being complained about can belong
+     * to another one, and nothing here said which. Reported 2026-09-15 and measured
+     * against production: a never-verified account's dead link was opened in a
+     * session signed in as a verified account (same IP and user agent, separate
+     * cookies). The resend answered "already verified" three times — no token was
+     * ever created — while the import gate in the other session kept refusing the
+     * account that really was unverified. Each screen told the truth, about a
+     * different account.
+     *
+     * So the card names the signed-in address whenever it reports a status, and does
+     * not offer a resend that could only ever answer for the wrong account.
+     */
+    const accountNote = linkForOtherAccount ? (
+      <RecoveryAlert
+        tone="warn"
+        mark={<WarnGlyph />}
+        title="This link was sent to a different account than the one signed in here."
+        body={
+          <>
+            You&rsquo;re signed in as {accountEmail ?? 'another account'}
+            {verifiedHere ? ', which is already verified' : ''}. Sign in to the account the link was
+            for, then send a new link from there.
+          </>
+        }
+      />
+    ) : verifiedHere ? (
+      <RecoveryAlert
+        tone="warn"
+        mark={<CheckGlyph />}
+        title={<>You&rsquo;re signed in as {accountEmail ?? 'an account'}, and that account is already verified.</>}
+        body="If this link was for a different account, sign in to that account and send a new link from there."
+      />
+    ) : null
+
     return (
       <RecoveryShell>
         <RecoveryCard eyebrow={expired ? 'LINK EXPIRED' : 'LINK PROBLEM'} tone={expired ? 'warn' : 'bad'}>
@@ -350,9 +457,11 @@ export function VerifyEmailV4({ email, alreadyVerified, signedIn }: VerifyEmailV
             {expired
               ? 'Verification links last one hour and work once. Send yourself a new one.'
               : state === 'invalid'
-                ? 'It may already have been used. Send yourself a fresh link and try again.'
+                ? 'It has already been used, or a newer link replaced it. Send yourself a fresh link and try again.'
                 : 'Nothing was changed on your account. Send a new link and try once more.'}
           </RecoverySub>
+
+          {accountNote ? <div style={{ marginTop: 18 }}>{accountNote}</div> : null}
 
           {/*
             * ⚠ THIS BRANCH ONLY EVER REPORTED `send_failed`, so every OTHER
@@ -380,7 +489,7 @@ export function VerifyEmailV4({ email, alreadyVerified, signedIn }: VerifyEmailV
                     : outcome === 'rate_limited'
                       ? 'Too many requests just now. Wait for the countdown, then try once more — nothing was sent.'
                       : outcome === 'already'
-                        ? 'This address is already verified. You can carry on.'
+                        ? <>{accountEmail ?? 'The signed-in account'} is already verified. You can carry on.</>
                         : outcome === 'login_required'
                           ? 'Sign in first, then send yourself a new link.'
                           : "We couldn't send the verification email right now. Please try again."
@@ -390,14 +499,34 @@ export function VerifyEmailV4({ email, alreadyVerified, signedIn }: VerifyEmailV
           ) : null}
 
           {signedIn ? (
-            <button
-              type="button"
-              className="af-rc-btn af-rc-btn--block"
-              onClick={handleSend}
-              disabled={sending || cooldown.active}
-            >
-              {cooldown.active ? `Resend in ${cooldown.label}` : sending ? 'Sending…' : 'Send a new link'}
-            </button>
+            verifiedHere || linkForOtherAccount ? (
+              <div className="af-rc-actions">
+                {verifiedHere ? (
+                  <Link href={safeReturnTo} className="af-rc-btn">
+                    Continue
+                  </Link>
+                ) : null}
+                <button
+                  type="button"
+                  className={verifiedHere ? 'af-rc-btn af-rc-btn--ghost' : 'af-rc-btn'}
+                  onClick={() => void switchAccount(`/verify?returnTo=${encodeURIComponent(safeReturnTo)}`)}
+                >
+                  Use a different account
+                </button>
+              </div>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  className="af-rc-btn af-rc-btn--block"
+                  onClick={handleSend}
+                  disabled={sending || cooldown.active}
+                >
+                  {cooldown.active ? `Resend in ${cooldown.label}` : sending ? 'Sending…' : 'Send a new link'}
+                </button>
+                {accountEmail ? <p className="af-rc-foot">The new link goes to {accountEmail}.</p> : null}
+              </>
+            )
           ) : (
             <Link href="/login" className="af-rc-btn af-rc-btn--block">
               Sign in to resend
@@ -527,7 +656,7 @@ export function VerifyEmailV4({ email, alreadyVerified, signedIn }: VerifyEmailV
                 <RecoveryAlert
                   tone="warn"
                   mark={<CheckGlyph />}
-                  title="You're already verified."
+                  title={accountEmail ? <>{accountEmail} is already verified.</> : "You're already verified."}
                   body="Nothing more to do — refresh and this screen goes away."
                   slim
                 />
