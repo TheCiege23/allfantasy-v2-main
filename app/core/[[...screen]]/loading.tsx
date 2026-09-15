@@ -2,14 +2,19 @@ import '@/components/core-app/af-core.css'
 import '@/components/core-app/af-core-shell.css'
 
 /**
- * AF Core — the streaming boundary for every /core screen.
+ * AF Core — the streaming boundary for every /core screen, until its SHELL is ready.
  *
- * 🛑 WITHOUT THIS FILE THE WHOLE ROUTE BLOCKS ON ITS SERVER RENDER. `page.tsx`
- * is `force-dynamic` and awaits ~57 sequential loader stages before it returns
- * a single byte, and the shell carries no Suspense of its own. Next.js has
- * nothing to show in the meantime, so the browser sits on the PREVIOUS screen
- * rendering nothing at all — measured at p90 7.0s on /core/trades and 6.2s on
- * /core/waivers (Railway, 24h). The click registered; the app just looked dead.
+ * 🛑 WITHOUT THIS FILE THE ROUTE SHOWS NOTHING UNTIL THE SHELL CAN RENDER. `page.tsx`
+ * is `force-dynamic`, and before it returns a byte it reads the session, the league
+ * list and the shell's own chrome reads. Next.js has nothing to show in the
+ * meantime, so the browser sits on the PREVIOUS screen rendering nothing at all.
+ * When every screen loader also ran before that first byte — ~57 sequential stages —
+ * it measured p90 7.0s on /core/trades and 6.2s on /core/waivers (Railway, 24h).
+ * The click registered; the app just looked dead.
+ *
+ * ⚠ THE SCREEN NO LONGER WAITS BEHIND THIS BOUNDARY. The page now renders the real
+ * shell as soon as its chrome reads land and streams the screen in behind it, inside
+ * its own boundary (`CoreScreenSkeleton`). This fallback covers the shell phase only.
  *
  * ⚠ IT ALSO MAKES `<Link>` PREFETCH WORTH ANYTHING ON THIS ROUTE. App Router
  * prefetches a dynamic route only as far as its nearest loading boundary — with
@@ -22,9 +27,9 @@ import '@/components/core-app/af-core-shell.css'
  *
  * This is a fallback, NOT a fix for the render cost. The two real causes are
  * the service running in `sfo` against a `us-east-1` database (~65ms per
- * roundtrip, ~57 of them serial) and the loader chain being sequential where it
- * could be parallel. Both are still open; this only stops the wait being
- * invisible.
+ * roundtrip) and the loader chain being sequential where it could be parallel.
+ * The shell's reads now run together; the screens' own loaders and the region
+ * split are still open. This only stops the wait being invisible.
  */
 
 /*

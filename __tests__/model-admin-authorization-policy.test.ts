@@ -233,6 +233,29 @@ describe("model-admin on the core shell keeps the site-admin gate", () => {
     expect(chain).toContain("catch(() => false)")
   })
 
+  it("hands the screen body the gate's own value, with nothing in between that could substitute one", () => {
+    /*
+     * The chain test above reads the FIRST `const modelAdminAllowed =`. Since the screen streams
+     * behind the shell, that value then travels: the const → the `ctx` literal → `CoreScreenBody`'s
+     * destructure → `!modelAdminAllowed ?`. A `modelAdminAllowed: true` in the literal, or a second
+     * `const` inside the body, would leave the chain test green — so every line of CODE naming the
+     * gate is pinned here. Comment lines are excluded; they explain the gate and cannot change it.
+     */
+    const codeLines = coreSource()
+      .split("\n")
+      .map((line) => line.trim())
+      .filter((line) => !/^(\*|\/\/|\/\*)/.test(line))
+      .filter((line) => /\bmodelAdminAllowed\b/.test(line))
+
+    expect(codeLines).toEqual([
+      "const modelAdminAllowed = segment === 'model-admin' && isAdmin",
+      "modelAdminAllowed,", // the ctx literal, by shorthand
+      "modelAdminAllowed: boolean", // CoreScreenContext
+      "modelAdminAllowed,", // CoreScreenBody's destructure of ctx
+      "!modelAdminAllowed ? (",
+    ])
+  })
+
   it("renders the denial branch instead of the panels when the gate says no", () => {
     const source = coreSource()
 
