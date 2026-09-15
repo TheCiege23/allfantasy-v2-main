@@ -177,7 +177,7 @@ describe('decision-os-activity-ingest ?relayOnly=1', () => {
     // the same budget check never ran — five ESPN leagues skipped for time, silently, every day.
     prismaMock.league.findMany
       .mockResolvedValueOnce([{ id: 'L-sleeper', platformLeagueId: '1', season: 2026, updatedAt: new Date() }])
-      .mockResolvedValueOnce([{ id: 'L-espn', platform: 'espn', platformLeagueId: '919', season: 2026, userId: 'u1' }])
+      .mockResolvedValueOnce([{ id: 'L-espn', platform: 'espn', platformLeagueId: '919', season: 2026, sport: 'nfl', userId: 'u1', updatedAt: new Date() }])
     const realNow = Date.now
     let clockSkew = 0
     const nowSpy = vi.spyOn(Date, 'now').mockImplementation(() => realNow() + clockSkew)

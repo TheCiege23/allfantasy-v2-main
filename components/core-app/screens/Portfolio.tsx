@@ -1,9 +1,12 @@
 'use client'
 
 import { useState } from 'react'
+import type { CSSProperties } from 'react'
 import Link from 'next/link'
 import { LeagueInvitePanel } from '@/components/core-app/LeagueInvitePanel'
 import type { PortfolioData } from '@/lib/core-app/portfolio'
+import type { ExposureData, PanelState } from '@/lib/core-app/dash3aPanels'
+import type { CrossLeagueValueAction } from '@/lib/core-app/crossLeagueValueActions'
 import '@/components/core-app/af-portfolio.css'
 import '@/components/core-app/af-core-boards.css'
 
@@ -58,11 +61,18 @@ const PLATFORM_LABEL: Record<string, string> = {
 
 export type PortfolioProps = {
   data: PortfolioData
+  exposure?: PanelState<ExposureData> | null
+  valueActions?: CrossLeagueValueAction[] | null
   /** Where "import a league" should go — carries the return path. */
   importHref?: string
 }
 
-export function Portfolio({ data, importHref = '/import?returnTo=%2Fcore%2Fportfolio' }: PortfolioProps) {
+export function Portfolio({
+  data,
+  exposure,
+  valueActions = [],
+  importHref = '/import?returnTo=%2Fcore%2Fportfolio',
+}: PortfolioProps) {
   /*
    * ⚠ ONE OPEN AT A TIME, AND FETCHED ONLY WHEN OPENED. One production account
    * commissions 40 leagues. Rendering an invite panel per row would fire forty
@@ -100,6 +110,7 @@ export function Portfolio({ data, importHref = '/import?returnTo=%2Fcore%2Fportf
   }
 
   const leagues = data.leagues.data
+  const moveByPlayer = new Map((valueActions ?? []).map((move) => [move.playerId, move]))
 
   /*
    * ⚠ GROUPED BECAUSE SIXTY OF ONE PLATFORM BURIES ONE OF ANOTHER. A single
@@ -153,6 +164,70 @@ export function Portfolio({ data, importHref = '/import?returnTo=%2Fcore%2Fportf
           Import a league
         </Link>
       </header>
+
+      <section className="af-pf-risk" aria-labelledby="af-pf-risk-title">
+        <header className="af-pf-risk-head">
+          <div>
+            <p className="af-pf-kicker">Cross-league intelligence</p>
+            <h2 id="af-pf-risk-title" className="af-pf-risk-title">Portfolio risk map</h2>
+          </div>
+          {exposure?.available ? (
+            <span className="af-pf-risk-read af-num">{exposure.data.rostersRead} rosters read</span>
+          ) : null}
+        </header>
+
+        {exposure?.available ? (
+          <>
+            <p className="af-pf-risk-copy">
+              {exposure.data.note ?? 'Your roster exposure is spread out. Tap a player to inspect every affected league.'}
+            </p>
+            <div className="af-pf-risk-grid">
+              {exposure.data.rows.map((row) => {
+                const share = Math.round((row.count / Math.max(1, row.of)) * 100)
+                const move = moveByPlayer.get(row.playerId)
+                const level = share >= 70 ? 'high' : share >= 40 ? 'medium' : 'low'
+                return (
+                  <Link
+                    key={row.playerId}
+                    href={`/core/players?q=${encodeURIComponent(row.name)}&player=${encodeURIComponent(row.playerId)}`}
+                    className="af-pf-risk-cell"
+                    data-level={level}
+                    style={{ '--af-risk-share': `${share}%` } as CSSProperties}
+                  >
+                    <span className="af-pf-risk-topline">
+                      <strong>{row.name}</strong>
+                      <span className="af-num">{row.count}/{row.of}</span>
+                    </span>
+                    <span className="af-pf-risk-meta">
+                      {[row.position, row.team].filter(Boolean).join(' · ') || 'Player'}
+                      {row.everyStart ? ' · starts everywhere' : ''}
+                    </span>
+                    <span className="af-pf-risk-meter" aria-label={`${share}% portfolio exposure`}><span /></span>
+                    <span className="af-pf-risk-action">
+                      {move ? (
+                        <>
+                          <b data-stock={move.stock}>{move.stock === 'up' ? '▲' : '▼'} {Math.abs(Math.round(move.stockDelta))}</b>
+                          <span>{move.advice}</span>
+                        </>
+                      ) : (
+                        <span>{share >= 70 ? 'High concentration — set an injury contingency.' : 'Review every league holding this player.'}</span>
+                      )}
+                    </span>
+                  </Link>
+                )
+              })}
+            </div>
+            {(valueActions ?? []).some((move) => !exposure.data.rows.some((row) => row.playerId === move.playerId)) ? (
+              <p className="af-pf-risk-foot">More player-value moves are available in <Link href="/core/trades">Trades</Link>.</p>
+            ) : null}
+          </>
+        ) : (
+          <div className="af-pf-risk-empty">
+            <strong>Risk map is waiting for roster data.</strong>
+            <span>{exposure?.reason ?? 'We could not read cross-league exposure just now.'}</span>
+          </div>
+        )}
+      </section>
 
       {/*
         Platform tabs with counts — 2026-09-07 handoff.

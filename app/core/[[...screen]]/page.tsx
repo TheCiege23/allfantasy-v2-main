@@ -789,6 +789,21 @@ export default async function AfCorePage({
    * Home answers "what needs me now" from a queue; this answers "what do I have".
    */
   const portfolio = activeKey === 'portfolio' ? await getPortfolio(userId).catch(() => null) : null
+  const [portfolioExposure, portfolioValueActions] = activeKey === 'portfolio'
+    ? await Promise.all([
+        getCrossLeagueExposure(userId, playedLeagues.map((league) => league.id), 12).catch(() => null),
+        getCrossLeagueValueActions(
+          userId,
+          playedLeagues.map((league) => ({
+            id: league.id,
+            name: league.name,
+            platform: String(league.platform ?? ''),
+            sport: (league as { sport?: string | null }).sport ?? null,
+          })),
+          12,
+        ).catch(() => []),
+      ])
+    : [null, []]
 
   // /core/hubs/<format>. An unknown or missing format opens the first hub the reader has leagues in.
   const formatHub =
@@ -2919,7 +2934,7 @@ export default async function AfCorePage({
         )
       ) : activeKey === 'portfolio' ? (
         portfolio ? (
-          <Portfolio data={portfolio} />
+          <Portfolio data={portfolio} exposure={portfolioExposure} valueActions={portfolioValueActions} />
         ) : (
           <div className="af-frame" style={{ padding: 24, maxWidth: 720 }}>
             <h1 className="af-display" style={{ margin: 0, fontSize: 22, letterSpacing: '-0.03em' }}>
