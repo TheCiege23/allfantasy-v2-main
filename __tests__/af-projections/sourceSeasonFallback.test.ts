@@ -426,7 +426,9 @@ describe('E — while a season is being played, a player is projected from last 
       i < 4 ? l : { ...l, playerId: `vet${i}` },
     )
 
-    const r = await writeAfProjectionSnapshots({ sport: 'NFL' })
+    // This case exercises the per-player season blend. Pin the target season so
+    // the assertion does not depend on the live Sleeper calendar or network.
+    const r = await writeAfProjectionSnapshots({ sport: 'NFL', targetSeason: 2026 })
 
     expect(r.written).toBe(10)
     expect(r.refused).toBe(0)
@@ -435,7 +437,9 @@ describe('E — while a season is being played, a player is projected from last 
     expect(r.basisSeasonCounts).toEqual({ '2025': 10 })
     expect(r.priorSeasonBasis).toMatchObject({ season: 2025, minCurrentSeasonGames: 3, players: 10 })
     const rows = await upsertedSeasonRows()
-    expect(rows.every((d: any) => d.season === 2026 && d.adjustmentFactors.sourceSeason === 2025)).toBe(true)
+    expect(rows.map((d: any) => ({ season: d.season, sourceSeason: d.adjustmentFactors.sourceSeason }))).toEqual(
+      rows.map(() => ({ season: 2026, sourceSeason: 2025 })),
+    )
   })
 
   it('🛑 the boundary is 3: two games stays on last season, three games moves to this one', async () => {

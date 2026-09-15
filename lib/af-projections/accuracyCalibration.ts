@@ -17,10 +17,16 @@ export async function loadProjectionCalibrationMap(
   targetWeek: number,
 ): Promise<ProjectionCalibrationMap> {
   if (targetWeek <= 1) return {}
-  const rows = await prisma.sportsDataCache.findMany({
-    where: { cacheKey: { startsWith: `${PROJECTION_ACCURACY_CACHE_PREFIX}${season}:` } },
-    select: { data: true },
-  }).catch(() => [])
+  let rows: Array<{ data: unknown }> = []
+  try {
+    rows = await prisma.sportsDataCache.findMany({
+      where: { cacheKey: { startsWith: `${PROJECTION_ACCURACY_CACHE_PREFIX}${season}:` } },
+      select: { data: true },
+    })
+  } catch {
+    // Calibration is optional evidence. A cache outage—or an older isolated
+    // test double without this model—must leave the base projection available.
+  }
   const records = rows
     .map((row) => row.data as unknown as ProjectionAccuracyRecord)
     .filter((record) => record?.version === 1 && record.week < targetWeek)

@@ -14,8 +14,9 @@ describe('mobile trade access', () => {
     expect(coreShell).toContain("const MOBILE_BAR_KEYS: CoreNavKey[] = ['home', 'my-team', 'trades', 'week', 'live']")
   })
 
-  it('makes mobile Home leave league scope and return to the Core dashboard', () => {
-    expect(coreShell).toContain("href: item.key === 'home' ? '/core' : item.href")
+  it('keeps the selected league in scope when moving between mobile tabs', () => {
+    expect(coreShell).toContain('href={item.href}')
+    expect(coreShell).not.toContain("href: item.key === 'home' ? '/core' : item.href")
   })
 
   it('pins a direct Trades shortcut in the league phone navigation', () => {
