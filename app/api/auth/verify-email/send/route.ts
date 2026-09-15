@@ -51,7 +51,19 @@ export async function POST(req: Request) {
   const tokenHash = sha256Hex(rawToken)
   const expiresAt = new Date(Date.now() + 1000 * 60 * 60)
 
-  await (prisma as any).emailVerifyToken.deleteMany({ where: { userId } }).catch(() => {})
+  /*
+   * ⚠ OLDER LINKS ARE RETIRED ONLY AFTER THE NEW ONE IS DELIVERED — see the end of
+   * this handler. This used to `deleteMany({ where: { userId } })` right here, before
+   * the send, so a send that FAILED still destroyed the link already sitting in the
+   * user's inbox: the 502 said "try again", and the email they had stopped working
+   * too. Measured 2026-09-15, when production's Resend key was being rejected and
+   * therefore every resend failed.
+   *
+   * Deferring it is safe because every stored link was mailed to the address this
+   * account holds NOW: changing the address deletes them all, inside the change
+   * (app/api/user/contact/email/route.ts). Until a send succeeds, the older link is
+   * the only one the user can actually click.
+   */
   const tokenRecord = await (prisma as any).emailVerifyToken.create({ data: { userId, tokenHash, expiresAt } })
 
   // Preview-aware, spoof-safe origin (mirrors the register route): a resend on a PREVIEW
@@ -96,14 +108,29 @@ export async function POST(req: Request) {
     // Log the provider message ONLY — never the recipient, token, or verification URL.
     console.error(`[verify-email/send] verification email send failed: ${sendError}`)
     // The email did not go out — drop the just-created token so it is not left usable, and
-    // return an honest failure instead of a false success. (Auth, cooldown, and rate limits
-    // above are unchanged; a successful send still keeps its token and returns { ok: true }.)
+    // return an honest failure instead of a false success. ONLY that token: any earlier link
+    // the user already received stays valid. (Auth, cooldown, and rate limits above are
+    // unchanged; a successful send still keeps its token and returns { ok: true }.)
     await (prisma as any).emailVerifyToken.delete({ where: { id: tokenRecord.id } }).catch(() => {})
     return NextResponse.json(
       { error: "EMAIL_SEND_FAILED", message: "We couldn't send the verification email right now. Please try again." },
       { status: 502 }
     )
   }
+
+  /*
+   * Delivered, so the new link supersedes the older ones. Only tokens created BEFORE this
+   * one: two resends racing (two tabs, a double click past the button's guard) each run
+   * this, and "everything except mine" would let each delete the other's freshly-emailed
+   * link, leaving both emails dead. "Older than mine" always leaves the newest standing.
+   * `id: { not }` keeps this token safe even if `createdAt` were somehow absent — Prisma
+   * drops an undefined filter rather than matching nothing.
+   */
+  await (prisma as any).emailVerifyToken
+    .deleteMany({
+      where: { userId, id: { not: tokenRecord.id }, createdAt: { lt: tokenRecord.createdAt } },
+    })
+    .catch(() => {})
 
   return NextResponse.json({ ok: true })
 }
