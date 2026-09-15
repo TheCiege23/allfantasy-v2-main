@@ -1,7 +1,10 @@
 import React from 'react'
-import { describe, expect, it } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { describe, expect, it, vi } from 'vitest'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 
+vi.mock('@/components/decide/shareCard', () => ({ shareCardImage: vi.fn(async () => 'downloaded') }))
+
+import { shareCardImage } from '@/components/decide/shareCard'
 import { YourWeekRoutine } from '@/components/core-app/screens/YourWeekRoutine'
 import type { RoutineStep, WeeklyRoutineData } from '@/lib/core-app/weeklyRoutine'
 
@@ -78,6 +81,32 @@ describe('YourWeekRoutine', () => {
     expect(screen.queryByText(/Biggest win/)).toBeNull()
     expect(screen.queryByText(/Top scorer/)).toBeNull()
     expect(screen.getByText('Closest loss: Dynasty by 2.2')).toBeTruthy()
+  })
+
+  it('🛑 awards you won are listed with a share button that builds the award card image', async () => {
+    const awards = [
+      { leagueId: 'af-ice', leagueName: 'Ice Kings', season: 2026, week: 1, kind: 'topScore', label: 'Top score', value: 162.4, unit: 'pts' },
+      { leagueId: 'af-dyn', leagueName: 'Dynasty', season: 2026, week: 1, kind: 'narrowEscape', label: 'Narrow escape', value: 0.8, unit: 'margin' },
+    ] as WeeklyRoutineData['awards']
+    const { container } = render(<YourWeekRoutine data={data({ awards })} />)
+    expect(screen.getByText('Week 1 awards')).toBeTruthy()
+    const rows = container.querySelectorAll('li.af3a-routine-award')
+    expect([...rows].map((r) => r.textContent)).toEqual([
+      'Top score · Ice Kings · 162.4 ptsShare',
+      'Narrow escape · Dynasty · 0.8 pt marginShare',
+    ])
+    fireEvent.click(screen.getAllByRole('button', { name: 'Share' })[0]!)
+    expect(shareCardImage).toHaveBeenCalledWith(
+      '/api/share/rivalry-card?kind=award&leagueId=af-ice&award=topScore',
+      'award-topScore-week-1.png',
+      'Top score — Ice Kings, week 1',
+    )
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Card saved ✓' })).toBeTruthy())
+  })
+
+  it('no awards, no awards block', () => {
+    const { container } = render(<YourWeekRoutine data={data({ awards: [] })} />)
+    expect(container.querySelector('.af3a-routine-awards')).toBeNull()
   })
 
   it('null renders nothing', () => {

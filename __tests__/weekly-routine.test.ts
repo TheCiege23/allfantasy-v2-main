@@ -11,6 +11,7 @@ const h = vi.hoisted(() => ({
   teamFind: vi.fn(),
   scoreFind: vi.fn(),
   playerFind: vi.fn(),
+  h2hCache: vi.fn(),
 }))
 
 vi.mock('server-only', () => ({}))
@@ -22,6 +23,7 @@ vi.mock('@/lib/prisma', () => ({
   },
 }))
 vi.mock('@/lib/core-app/weekAll', () => ({ getWeekAll: h.weekAll }))
+vi.mock('@/lib/league-history/sleeperH2HService', () => ({ readCachedLeagueH2H: h.h2hCache }))
 vi.mock('@/lib/core-app/decisionReceipts', async (orig) => ({
   ...(await orig<typeof import('@/lib/core-app/decisionReceipts')>()),
   loadSeasonAdds: h.seasonAdds,
@@ -141,6 +143,12 @@ describe('buildWeeklyRoutine', () => {
     expect(build({ lastWeek: null }).recap).toBeNull()
   })
 
+  it('passes your awards through (none by default)', () => {
+    expect(build().awards).toEqual([])
+    const a = [{ leagueId: 'af-ice', leagueName: 'Ice Kings', season: 2026, week: 1, kind: 'topScore', label: 'Top score', value: 162.4, unit: 'pts' }] as never
+    expect(build({ awards: a }).awards).toEqual(a)
+  })
+
   it('the biggest win is the widest margin; the closest loss the narrowest', () => {
     const rows = [
       { ...lastWeek.rows[0], leagueName: 'A', pointsFor: 100, pointsAgainst: 90 },
@@ -178,7 +186,7 @@ describe('getRoutineFacts', () => {
     expect((await getRoutineFacts({ userId: 'u1', leagues: [ICE], currentWeek: 2 })).addsThisWeek).toBeNull()
     h.seasonAdds.mockRejectedValue(new Error('db'))
     h.weekAll.mockRejectedValue(new Error('db'))
-    expect(await getRoutineFacts({ userId: 'u1', leagues: [ICE], currentWeek: 2 })).toEqual({ lastWeek: null, topScorer: null, addsThisWeek: null })
+    expect(await getRoutineFacts({ userId: 'u1', leagues: [ICE], currentWeek: 2 })).toEqual({ lastWeek: null, topScorer: null, addsThisWeek: null, awards: [] })
   })
 
   it('🛑 the top scorer is your highest-scoring STARTER that week, on YOUR roster, named', async () => {
@@ -211,6 +219,54 @@ describe('getRoutineFacts', () => {
     const out = await getRoutineFacts({ userId: 'u1', leagues: [ICE, DYN], currentWeek: 2 })
     expect(h.teamFind.mock.calls[0][0].where.leagueId).toEqual({ in: ['af-ice'] })
     expect(out.topScorer).toBeNull()
+  })
+
+  const managers = [
+    { ownerId: 'me', name: 'TheCiege', teamName: null, avatar: null },
+    { ownerId: 'rival', name: 'Gooby', teamName: null, avatar: null },
+  ]
+  const weekAwards = (week: number, season = '2026') => ({
+    season,
+    week,
+    topScore: { ownerId: 'me', points: 162.44, season, week },
+    lowScore: { ownerId: 'rival', points: 70, season, week },
+    narrowEscape: { winnerOwnerId: 'rival', loserOwnerId: 'me', margin: 0.8, season, week },
+    biggestBlowout: { winnerOwnerId: 'me', loserOwnerId: 'rival', margin: 44.06, season, week },
+  })
+
+  it('🛑 your weekly awards come from the CACHED H2H, only for this played week, only yours', async () => {
+    h.weekAll.mockResolvedValue(lastWeek)
+    h.seasonAdds.mockResolvedValue(adds([]))
+    h.teamFind.mockResolvedValue([])
+    h.h2hCache.mockResolvedValue(
+      new Map([
+        ['sl-ice', { managers, latestWeekAwards: weekAwards(1) }],
+        // A cache still holding a different week shows none rather than the wrong ones.
+        ['sl-dyn', { managers, latestWeekAwards: weekAwards(2) }],
+      ]),
+    )
+    const out = await getRoutineFacts({ userId: 'u1', leagues: [ICE, DYN], currentWeek: 2, ownerSleeperId: 'me' })
+    expect(h.h2hCache).toHaveBeenCalledWith(['sl-ice', 'sl-dyn'])
+    expect(out.awards).toEqual([
+      { leagueId: 'af-ice', leagueName: 'Ice Kings', season: 2026, week: 1, kind: 'topScore', label: 'Top score', value: 162.4, unit: 'pts' },
+      { leagueId: 'af-ice', leagueName: 'Ice Kings', season: 2026, week: 1, kind: 'biggestBlowout', label: 'Biggest blowout', value: 44.1, unit: 'margin' },
+    ])
+  })
+
+  it('no awards without your Sleeper id, a played Sleeper league, the right season, or a cache read', async () => {
+    h.weekAll.mockResolvedValue(lastWeek)
+    h.seasonAdds.mockResolvedValue(adds([]))
+    h.teamFind.mockResolvedValue([])
+    h.h2hCache.mockResolvedValue(new Map([['sl-ice', { managers, latestWeekAwards: weekAwards(1, '2025') }]]))
+    expect((await getRoutineFacts({ userId: 'u1', leagues: [ICE], currentWeek: 2 })).awards).toEqual([])
+    expect(h.h2hCache).not.toHaveBeenCalled()
+    expect((await getRoutineFacts({ userId: 'u1', leagues: [{ ...ICE, platform: 'espn' }], currentWeek: 2, ownerSleeperId: 'me' })).awards).toEqual([])
+    expect(h.h2hCache).not.toHaveBeenCalled()
+    expect((await getRoutineFacts({ userId: 'u1', leagues: [ICE], currentWeek: 2, ownerSleeperId: 'me' })).awards).toEqual([])
+    h.h2hCache.mockRejectedValue(new Error('db'))
+    expect((await getRoutineFacts({ userId: 'u1', leagues: [ICE], currentWeek: 2, ownerSleeperId: 'me' })).awards).toEqual([])
+    h.weekAll.mockResolvedValue(null)
+    expect((await getRoutineFacts({ userId: 'u1', leagues: [ICE], currentWeek: 2, ownerSleeperId: 'me' })).awards).toEqual([])
   })
 
   it('an unnamed top starter is left out rather than replaced by a lower one', async () => {

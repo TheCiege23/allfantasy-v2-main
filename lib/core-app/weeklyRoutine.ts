@@ -1,6 +1,8 @@
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
+import { readCachedLeagueH2H } from '@/lib/league-history/sleeperH2HService'
+import { awardView, awardsWonBy, type AwardKind } from '@/lib/share/weeklyAwardCard'
 import { claimedRosterIds, loadSeasonAdds, type ReceiptsLeague } from './decisionReceipts'
 import { DEFAULT_TIME_ZONE, localParts } from './managerActivityWindow'
 import { composePlayerIdentities } from './playerIdentityCompose'
@@ -51,12 +53,26 @@ export type WeeklyRecap = {
   topScorer: { name: string; points: number; leagueName: string } | null
 }
 
+/** A weekly award you won in the last played week — a shareable moment (item 9, 2026-09-14). */
+export type AwardMoment = {
+  leagueId: string
+  leagueName: string
+  season: number
+  week: number
+  kind: AwardKind
+  label: string
+  value: number
+  unit: 'pts' | 'margin'
+}
+
 export type WeeklyRoutineData = {
   today: RoutineStepKey
   /** "Friday" — the Eastern weekday the highlight was chosen for. */
   todayLabel: string
   steps: RoutineStep[]
   recap: WeeklyRecap | null
+  /** Awards you won in the last played week, each shareable as a card. */
+  awards: AwardMoment[]
 }
 
 const STEP_ORDER: ReadonlyArray<Pick<RoutineStep, 'key' | 'day' | 'title' | 'href'>> = [
@@ -110,6 +126,7 @@ export function buildWeeklyRoutine(input: {
   /** Starters of yours who may not play. Null = the injury book was not read. */
   startersInDoubt: number | null
   schedule: Pick<WeekBoard, 'coinFlips' | 'leaning' | 'unprojected'> | null
+  awards?: readonly AwardMoment[]
 }): WeeklyRoutineData {
   const today = routineDayFor(input.now, input.timeZone)
   const recap = recapFrom(input.lastWeek, input.topScorer)
@@ -160,7 +177,51 @@ export function buildWeeklyRoutine(input: {
     todayLabel: today.label,
     steps: STEP_ORDER.map((s) => ({ ...s, today: s.key === today.key, ...detail[s.key] })),
     recap,
+    awards: [...(input.awards ?? [])],
   }
+}
+
+/**
+ * The weekly awards you won in the given played week, across your Sleeper leagues.
+ *
+ * 🛑 CACHE ONLY. `getLeagueH2H` would sync a whole league chain from Sleeper on a miss — per
+ * league, per render. The home reads the cached aggregation the Tuesday weekly-awards cron keeps
+ * fresh, and uses an award only when it is for THIS played week: a cache still holding last
+ * week's awards shows none rather than the wrong ones.
+ */
+async function awardsFor(
+  ownerSleeperId: string | null | undefined,
+  leagues: readonly ReceiptsLeague[],
+  week: WeekAllData,
+): Promise<AwardMoment[]> {
+  if (!ownerSleeperId || week.rows.length === 0 || week.season == null || week.week == null) return []
+  const played = new Set(week.rows.map((r) => r.leagueId))
+  const sleeper = leagues
+    .filter((l) => played.has(l.id) && String(l.platform ?? '').toLowerCase() === 'sleeper' && l.platformLeagueId)
+    .slice(0, MAX_ROUTINE_LEAGUES)
+  if (sleeper.length === 0) return []
+  const cached = await readCachedLeagueH2H(sleeper.map((l) => l.platformLeagueId as string))
+  const out: AwardMoment[] = []
+  for (const l of sleeper) {
+    const h2h = cached.get(l.platformLeagueId as string)
+    const awards = h2h?.latestWeekAwards
+    if (!h2h || !awards || awards.season !== String(week.season) || awards.week !== week.week) continue
+    for (const kind of awardsWonBy(awards, ownerSleeperId)) {
+      const v = awardView(h2h, kind)
+      if (!v) continue
+      out.push({
+        leagueId: l.id,
+        leagueName: l.name ?? 'Your league',
+        season: week.season,
+        week: week.week,
+        kind,
+        label: v.label,
+        value: round1(v.value),
+        unit: v.unit,
+      })
+    }
+  }
+  return out
 }
 
 /** Leagues read for the routine per render — the same cap as the receipts. */
@@ -225,7 +286,14 @@ export async function getRoutineFacts(args: {
   userId: string
   leagues: readonly ReceiptsLeague[]
   currentWeek: number | null
-}): Promise<{ lastWeek: WeekAllData | null; topScorer: WeeklyRecap['topScorer']; addsThisWeek: number | null }> {
+  /** Your Sleeper user id — awards are keyed by it. Absent means no awards are matched. */
+  ownerSleeperId?: string | null
+}): Promise<{
+  lastWeek: WeekAllData | null
+  topScorer: WeeklyRecap['topScorer']
+  addsThisWeek: number | null
+  awards: AwardMoment[]
+}> {
   const [lastWeek, addsThisWeek] = await Promise.all([
     getWeekAll(args.userId, [...args.leagues], { previous: true }).catch(() => null),
     args.currentWeek == null
@@ -234,6 +302,11 @@ export async function getRoutineFacts(args: {
           .then((loaded) => (loaded ? loaded.adds.filter((a) => a.week === args.currentWeek).length : null))
           .catch(() => null),
   ])
-  const topScorer = lastWeek ? await topStarterFor(args.userId, args.leagues, lastWeek).catch(() => null) : null
-  return { lastWeek, topScorer, addsThisWeek }
+  const [topScorer, awards] = lastWeek
+    ? await Promise.all([
+        topStarterFor(args.userId, args.leagues, lastWeek).catch(() => null),
+        awardsFor(args.ownerSleeperId, args.leagues, lastWeek).catch(() => []),
+      ])
+    : [null, []]
+  return { lastWeek, topScorer, addsThisWeek, awards }
 }

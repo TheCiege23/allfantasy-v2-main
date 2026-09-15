@@ -1704,6 +1704,8 @@ export default async function AfCorePage({
             season: (l as { season?: number | string | null }).season ?? null,
           })),
           currentWeek: homeTradeWeek,
+          // Weekly awards are keyed by your Sleeper user id; read from the H2H cache, never Sleeper.
+          ownerSleeperId: leagueListPayload?.sleeperUserId ?? null,
         }).catch(() => null),
       ])
     : [null, null, null, null, null, null, null, [], false, [], null, null, null]
@@ -1723,6 +1725,7 @@ export default async function AfCorePage({
           ? ((dash34.book ?? []) as unknown as TriageBookRow[]).filter((p) => p.tone === 'bad' && p.startingIn > 0).length
           : null,
         schedule: homeSchedule ?? null,
+        awards: homeRoutineFacts?.awards ?? [],
       })
     : null
 
