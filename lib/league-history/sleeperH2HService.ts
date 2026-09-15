@@ -583,3 +583,27 @@ export async function getLeagueH2H(sleeperLeagueId: string): Promise<LeagueH2HPa
     .catch(() => null)
   return fresh
 }
+
+/**
+ * The cached aggregation ONLY — never a Sleeper call. For render paths (the /core home), where
+ * `getLeagueH2H`'s miss path would walk a league chain and sync every season per league per render.
+ *
+ * ⚠ EXPIRY IS IGNORED ON PURPOSE. A stale payload is still the truth about the weeks it covers, and
+ * callers check the week they need (`latestWeekAwards.season` / `.week`) rather than trusting "now".
+ * The Tuesday weekly-awards cron refreshes the cache; a league it has never synced is simply absent.
+ */
+export async function readCachedLeagueH2H(sleeperLeagueIds: readonly string[]): Promise<Map<string, LeagueH2HPayload>> {
+  const ids = [...new Set(sleeperLeagueIds.filter((id) => typeof id === 'string' && id.length > 0))]
+  if (ids.length === 0) return new Map()
+  const rows = await prisma.sportsDataCache.findMany({
+    where: { cacheKey: { in: ids.map((id) => `${AGG_PREFIX}${id}`) } },
+    select: { cacheKey: true, data: true },
+  })
+  const out = new Map<string, LeagueH2HPayload>()
+  for (const r of rows) {
+    const data = r.data as unknown as LeagueH2HPayload | null
+    if (!data || typeof data !== 'object' || data.version !== 2) continue
+    out.set(r.cacheKey.slice(AGG_PREFIX.length), data)
+  }
+  return out
+}

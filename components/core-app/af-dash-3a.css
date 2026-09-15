@@ -712,6 +712,32 @@
 .af3a-routine-recap { margin-top: 10px; display: grid; gap: 6px; }
 .af3a-routine-recap b { color: var(--text); font: 800 13px/1.3 'Archivo', system-ui, sans-serif; }
 .af3a-routine-recap ul { margin: 0; padding-left: 18px; color: var(--text2); font: 400 12px/1.5 'Archivo', system-ui, sans-serif; }
+.af3a-routine-awards { margin-top: 10px; display: grid; gap: 8px; }
+.af3a-routine-awards > b { color: var(--text); font: 800 13px/1.3 'Archivo', system-ui, sans-serif; }
+.af3a-routine-awards ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.af3a-routine-award {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px 12px;
+  color: var(--text2);
+  font: 400 12px/1.4 'Archivo', system-ui, sans-serif;
+}
+.af3a-routine-award b { color: var(--text); }
+.af3a-share-btn {
+  flex: none;
+  min-height: 32px;
+  padding: 4px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  font: 700 12px/1 'Archivo', system-ui, sans-serif;
+  cursor: pointer;
+}
+.af3a-share-btn:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+.af3a-share-btn:disabled { opacity: 0.6; cursor: progress; }
 
 /*
  * ⚠ Own top-level @media at end of file — see the same note in af-core-shell.css.

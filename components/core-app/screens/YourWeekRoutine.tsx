@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import Link from 'next/link'
 import type { WeeklyRoutineData } from '@/lib/core-app/weeklyRoutine'
+import { ShareMomentButton } from '@/components/core-app/screens/ShareMomentButton'
 
 /**
  * "Your week" — the weekly routine card on the /core home (retention item 7, user decisions
@@ -14,6 +15,7 @@ export function YourWeekRoutine({ data, help }: { data: WeeklyRoutineData | null
   if (!data) return null
   const todayStep = data.steps.find((s) => s.today)
   const recap = data.today === 'recap' ? data.recap : null
+  const awards = data.awards ?? []
 
   return (
     <section className="af3a-sec af3a-routine" aria-label="Your week">
@@ -71,6 +73,33 @@ export function YourWeekRoutine({ data, help }: { data: WeeklyRoutineData | null
             ) : null}
           </ul>
           <p className="af3a-receipt-note">Monday night games may still change these.</p>
+        </div>
+      ) : null}
+      {/*
+        Awards you won in the last played week — shareable moments (2026-09-14). Shown all week, next
+        to the week they belong to; each share builds the card image from the league's own history.
+      */}
+      {awards.length > 0 ? (
+        <div className="af3a-card af3a-routine-awards">
+          <b>Week {awards[0]!.week} awards</b>
+          <ul>
+            {awards.map((a) => (
+              <li key={`${a.leagueId}:${a.kind}`} className="af3a-routine-award" data-award={a.kind}>
+                <span>
+                  {a.label} · {a.leagueName} ·{' '}
+                  <b className="af3a-mono">
+                    {a.value.toFixed(1)}
+                    {a.unit === 'pts' ? ' pts' : ' pt margin'}
+                  </b>
+                </span>
+                <ShareMomentButton
+                  url={`/api/share/rivalry-card?kind=award&leagueId=${encodeURIComponent(a.leagueId)}&award=${a.kind}`}
+                  filename={`award-${a.kind}-week-${a.week}.png`}
+                  title={`${a.label} — ${a.leagueName}, week ${a.week}`}
+                />
+              </li>
+            ))}
+          </ul>
         </div>
       ) : null}
     </section>
