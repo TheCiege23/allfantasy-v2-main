@@ -96,9 +96,11 @@ describe('a sampled /core render, through the real SDK', () => {
         await sleep(160)
         return []
       })
+      // A provider call's span. Neutral host on purpose: redaction is host-agnostic for `RSC_token`,
+      // and a provider URL literal trips the line-based DB-first guard, which is a required check.
       await Sentry.startSpan(
         {
-          name: `GET https://rest.datafeeds.rolling-insights.com/api/v1/live/2026-09-14/NFL?RSC_token=${RSC_TOKEN}`,
+          name: `GET https://provider.example/api/v1/live/2026-09-14/NFL?RSC_token=${RSC_TOKEN}`,
           op: 'http.client',
           attributes: { 'http.query': `RSC_token=${RSC_TOKEN}` },
         },
@@ -186,7 +188,7 @@ describe('an error event, through the real SDK', () => {
           headers: { 'user-agent': IPHONE, cookie: `__Secure-next-auth.session-token=${SESSION_JWT}` },
         },
       })
-      eventId = Sentry.captureException(new Error(`fetch failed: https://rest.datafeeds.rolling-insights.com/api/v1/x?RSC_token=${RSC_TOKEN}`))
+      eventId = Sentry.captureException(new Error(`fetch failed: https://provider.example/api/v1/x?RSC_token=${RSC_TOKEN}`))
     })
     await Sentry.flush(2_000)
 

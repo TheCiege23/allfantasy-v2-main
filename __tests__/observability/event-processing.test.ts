@@ -57,7 +57,8 @@ describe('enrichAndScrubEvent', () => {
   })
 
   it('scrubs a provider token out of an error message, extras and breadcrumbs', () => {
-    const url = `https://rest.datafeeds.rolling-insights.com/api/v1/live/2026-09-14/NFL?RSC_token=${RSC_TOKEN}`
+    // Neutral host on purpose: the rule is host-agnostic, and a provider URL literal trips the DB-first guard.
+    const url = `https://provider.example/api/v1/live/2026-09-14/NFL?RSC_token=${RSC_TOKEN}`
     const event: SentryEventLike = {
       exception: { values: [{ value: `fetch failed: ${url}` }] },
       extra: { lastUrl: url, attempt: 2 },
