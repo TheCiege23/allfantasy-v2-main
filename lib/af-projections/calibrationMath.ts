@@ -32,10 +32,10 @@ export function deriveProjectionCalibration(records: ProjectionAccuracyRecord[])
     const source = record.sources.allfantasy
     if (!source) continue
     for (const [key, aggregate] of Object.entries(source.byBasis ?? {})) {
-      if (!key.startsWith('sleeper_weekly')) add(basis, key, aggregate, record.week)
+      add(basis, key, aggregate, record.week)
     }
     for (const [key, aggregate] of Object.entries(source.byPositionBasis ?? {})) {
-      if (!key.includes('|sleeper_weekly')) add(exact, key, aggregate, record.week)
+      add(exact, key, aggregate, record.week)
     }
   }
   const out: ProjectionCalibrationMap = {}

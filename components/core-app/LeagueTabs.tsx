@@ -11,10 +11,8 @@ import '@/components/core-app/af-league-tabs.css'
  * league, show me the next thing about it".
  *
  * Losing that layer had a visible cost. Four rail items dropped `?league=`, so
- * moving between views quietly cleared the league you had chosen, and nothing
- * on screen said which league you were in to begin with. The named chip below
- * is half the fix — it states the league — and the tabs are the other half:
- * every one of them carries the id forward.
+ * moving between views quietly cleared the league you had chosen. The page
+ * header names the league once; this control carries that league id forward.
  *
  * ⚠ ONLY KEYS THAT HAVE A BUILT, LEAGUE-SCOPED SCREEN APPEAR HERE. The designs
  * also show a "Schedule" tab; there is no schedule screen, and a tab that lands
@@ -69,16 +67,6 @@ export function LeagueTabs({
 
   return (
     <nav className="af-lt" aria-label={`${leagueName} views`}>
-      {/*
-        The league is NAMED, not implied by a highlighted rail chip. "Which
-        league am I looking at" was answerable only by scanning the rail for
-        the active item, which is a poor answer on an account with sixty.
-      */}
-      <span className="af-lt-league" title={leagueName}>
-        <span className="af-label af-lt-league-eyebrow">In league</span>
-        <span className="af-lt-league-name">{leagueName}</span>
-      </span>
-
       <div className="af-lt-tabs" role="list">
         {visibleTabs.map((t) => {
           const active = t.key ? t.key === activeKey : activeKey === 'home'

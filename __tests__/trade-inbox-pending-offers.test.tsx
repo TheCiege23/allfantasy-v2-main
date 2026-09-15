@@ -177,6 +177,13 @@ describe('⚠ the inbox never claims an empty league it did not read', () => {
     expect(INBOX).toContain('pending.weeksUnanswered > 0')
   })
 
+  it('shows an auditable live-scan receipt and says manual entry is unnecessary', () => {
+    expect(ROUTE).toContain('weeksRequested: pendingScan.weeksRequested')
+    expect(ROUTE).toContain('weeksAnswered: pendingScan.weeksAnswered')
+    expect(INBOX).toContain('Live trade import check')
+    expect(INBOX).toContain('You do not enter them by hand')
+  })
+
   it('⚠ offers no accept, reject or counter — the provider has no write endpoint', () => {
     // A control AllFantasy cannot honour is a lie with a button on it.
     expect(INBOX).not.toContain("method: 'POST'")

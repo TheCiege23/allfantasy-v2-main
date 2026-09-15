@@ -37,15 +37,18 @@ describe('projection accuracy calibration', () => {
     expect(calibrationFor(map, 'weekly_actuals_recency', 'RB')?.scope).toBe('basis')
   })
 
-  it('withholds small samples and never calibrates sleeper pass-through projections', () => {
+  it('withholds small independent samples and calibrates measured Sleeper weekly bias', () => {
     const small = record(1, 4)
     small.sources.allfantasy!.byBasis!.weekly_actuals_recency!.n = 5
     small.sources.allfantasy!.byPositionBasis!['WR|weekly_actuals_recency']!.n = 5
     small.sources.allfantasy!.byBasis!.sleeper_weekly_projection = { n: 100, mae: 1, bias: 4 }
-    expect(deriveProjectionCalibration([small])).toEqual({})
+    const map = deriveProjectionCalibration([small])
+    expect(map.weekly_actuals_recency).toBeUndefined()
+    expect(map.sleeper_weekly_projection?.points).toBeLessThan(0)
+    expect(map.sleeper_weekly_projection?.sample).toBe(100)
   })
 
-  it('applies feedback to an independent forecast and leaves the provider forecast unchanged', () => {
+  it('applies measured feedback to independent and provider forecasts', () => {
     const base = {
       aggregate: { gamesPlayed: 8, components: {}, position: 'WR', team: 'BUF', playerName: 'Receiver', dkPointsPerGame: 12 },
       weekly: [{ week: 8, ptsPpr: 10, ptsHalfPpr: 9, ptsStd: 8, offSnaps: 50, teamOffSnaps: 65, targets: 7 }],
@@ -58,8 +61,14 @@ describe('projection accuracy calibration', () => {
     expect(independent.ok && independent.afProjection).toBe(8.5)
     expect(independent.ok && independent.calibration?.sample).toBe(120)
 
-    const forward = buildAfProjection({ ...base, sleeperProjection: { pts_ppr: 15 } })
-    expect(forward.ok && forward.afProjection).toBe(15)
-    expect(forward.ok && forward.calibration).toBeNull()
+    const forward = buildAfProjection({
+      ...base,
+      sleeperProjection: { pts_ppr: 15 },
+      accuracyCalibration: {
+        sleeper_weekly_projection: { points: -2, sample: 100, weeks: 4, scope: 'basis' as const },
+      },
+    })
+    expect(forward.ok && forward.afProjection).toBe(13)
+    expect(forward.ok && forward.calibration?.sample).toBe(100)
   })
 })

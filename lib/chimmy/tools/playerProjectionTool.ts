@@ -1,6 +1,10 @@
 import 'server-only'
 
 import { findAfProjectionsByName } from '@/lib/af-projections/readAfProjections'
+import { prisma } from '@/lib/prisma'
+import { normalizePlayerName } from '@/lib/player-identity/playerIdentityResolution'
+import { latestProjectionWeek, lookupProjections } from '@/lib/core-app/playerProjections'
+import { computeLeagueProjectedPoints, extractScoringSettings } from '@/lib/projections/leagueScoring'
 
 /**
  * What one player is projected for, for the model to read. Phase 7.2.
@@ -16,9 +20,9 @@ import { findAfProjectionsByName } from '@/lib/af-projections/readAfProjections'
  * Leaving the line out invites the model to fill the gap; printing `0` states that the player
  * will score nothing. Both are worse than saying we have not computed it.
  *
- * ── TAKES A NAME, NO IDS, NO LEAGUE ──────────────────────────────────────────────────────
- * Same rule as every tool in `chimmyTools.ts`. A projection is a property of the player and the
- * week — identical for every user — so there is nothing here to scope to a league.
+ * ── TAKES A NAME, NEVER A MODEL-SUPPLIED ID ───────────────────────────────────────────────
+ * The stored AF baseline is shared. When the verified conversation context carries a league,
+ * this tool also re-scores the provider component line under that league's imported rules.
  */
 
 const SPORTS = new Set(['NFL', 'NCAAF', 'NBA', 'MLB', 'NHL', 'NCAABB', 'SOCCER'])
@@ -46,6 +50,8 @@ export async function buildPlayerProjectionContext(args: {
   playerName: string
   sport?: string | null
   week?: number | null
+  /** Verified session scope from ChimmyToolContext; never accepted from model arguments. */
+  leagueId?: string | null
 }): Promise<string> {
   const asked = args.playerName.trim()
   if (!asked) {
@@ -140,6 +146,70 @@ export async function buildPlayerProjectionContext(args: {
     }
 
     if (r.adjustmentReason) lines.push(`- Reason on file: ${r.adjustmentReason}`)
+
+    if (args.leagueId && sport === 'NFL') {
+      try {
+        const [league, latest] = await Promise.all([
+          prisma.league.findUnique({
+            where: { id: args.leagueId },
+            select: { name: true, settings: true },
+          }),
+          latestProjectionWeek(),
+        ])
+        const scoring = extractScoringSettings(league?.settings ?? null)
+        const targetWeek = args.week ?? r.week ?? latest?.week ?? null
+        const targetSeason = String(r.season || latest?.season || '')
+
+        if (!league || !scoring || targetWeek == null || !targetSeason) {
+          lines.push(
+            '- League-specific points: NOT COMPUTED because this league’s imported scoring rules or matching weekly component line are unavailable. Do not present the standard number above as this league’s number.',
+          )
+        } else {
+          const candidates = await prisma.fantasyProjection.findMany({
+            where: {
+              season: targetSeason,
+              week: targetWeek,
+              source: { not: 'allfantasy' },
+            },
+            select: { playerId: true, stats: true },
+            take: 2500,
+          })
+          const targetName = normalizePlayerName(r.playerName)
+          const candidate = candidates.find((row) => {
+            const stats = row.stats && typeof row.stats === 'object' && !Array.isArray(row.stats)
+              ? row.stats as Record<string, unknown>
+              : null
+            return normalizePlayerName(typeof stats?.name === 'string' ? stats.name : '') === targetName
+          })
+          const projections = candidate
+            ? await lookupProjections(
+                [candidate.playerId],
+                { season: targetSeason, week: targetWeek },
+                {
+                  scoringSettings: scoring,
+                  positionBySleeperId: new Map([[candidate.playerId, r.position]]),
+                },
+                sport,
+              )
+            : new Map()
+          const componentStats = candidate ? projections.get(candidate.playerId)?.componentStats ?? null : null
+          const leaguePoints = componentStats ? computeLeagueProjectedPoints(componentStats, scoring) : null
+          if (leaguePoints) {
+            lines.push(
+              `- ${leaguePoints.points.toFixed(1)} points in ${league.name ?? 'the selected league'} for week ${targetWeek}, re-scored from the component projection under that league’s imported rules.`,
+            )
+          } else {
+            lines.push(
+              `- League-specific points: NOT COMPUTED for ${league.name ?? 'the selected league'} because no matching component projection could be scored. Do not present the standard number above as this league’s number.`,
+            )
+          }
+        }
+      } catch {
+        lines.push(
+          '- League-specific points: could not be read just now. Do not present the standard number above as this league’s number.',
+        )
+      }
+    }
     lines.push(`- Computed ${r.computedAt.toISOString()}.`)
   }
 

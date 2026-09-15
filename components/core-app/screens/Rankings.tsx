@@ -9,6 +9,7 @@ import {
   type XpRow,
 } from '@/lib/core-app/rankings'
 import '@/components/core-app/af-rankings-screen.css'
+import { WorkbookBarChart } from '@/components/core-app/charts/WorkbookChart'
 
 /**
  * Rankings — handoff 14a, the cross-user ladder.
@@ -255,10 +256,12 @@ function LeaderboardCard({
   boards,
   active,
   population,
+  leagueId,
 }: {
   boards: LeaderboardTab[]
   active: LeaderboardTab['key']
   population: number
+  leagueId?: string | null
 }) {
   const board = boards.find((b) => b.key === active) ?? boards[0]
 
@@ -268,7 +271,7 @@ function LeaderboardCard({
         {boards.map((b) => (
           <Link
             key={b.key}
-            href={`/core/rankings?board=${b.key}`}
+            href={`/core/rankings?board=${b.key}${leagueId ? `&league=${encodeURIComponent(leagueId)}` : ''}`}
             className="af-rk-tab"
             aria-current={b.key === board.key ? 'true' : undefined}
           >
@@ -310,6 +313,64 @@ function LeaderboardCard({
 
 /* ─────────────────────────────── the screen ─────────────────────────────── */
 
+function ScopeCard({ data }: { data: RankingsData }) {
+  const { scope } = data
+  const board = scope.leagueBoard
+  return (
+    <section className="af-rk-scope">
+      <div className="af-rk-scope-head">
+        <span>
+          <p className="af-rk-eyebrow">Ranking scope · {scope.mode === 'league' ? 'one league' : 'portfolio'}</p>
+          <h2>{scope.title}</h2>
+          <p>{scope.detail}</p>
+        </span>
+        <div className="af-rk-scope-counts">
+          <b>{scope.leagueCount}<small>{scope.leagueCount === 1 ? 'league' : 'leagues'}</small></b>
+          <b>{scope.seasonCount}<small>league-seasons</small></b>
+          <b>{scope.platforms.length}<small>platforms</small></b>
+        </div>
+        {scope.mode === 'league' ? <Link className="af-rk-btn" href="/core/rankings">View all imports</Link> : null}
+      </div>
+
+      {board?.available ? (
+        <div className="af-rk-scope-grid">
+          <WorkbookBarChart
+            title="League points leaderboard"
+            subtitle="Imported standings"
+            valueLabel="Points for"
+            data={board.rows.slice(0, 10).map((row) => ({
+              label: row.name,
+              value: row.pointsFor,
+              displayValue: Math.round(row.pointsFor).toLocaleString(),
+              tone: row.isYou ? 'good' : 'accent',
+            }))}
+          />
+          <ol className="af-rk-league-board">
+            {board.rows.slice(0, 10).map((row) => (
+              <li key={`${row.rank}-${row.name}`} data-you={row.isYou}>
+                <span>{row.rank}</span><b>{row.name}</b><em>{row.record}</em><strong>{Math.round(row.pointsFor).toLocaleString()}</strong>
+              </li>
+            ))}
+          </ol>
+        </div>
+      ) : board ? (
+        <p className="af-rk-empty">{board.reason}</p>
+      ) : (
+        <WorkbookBarChart
+          title="Imports by platform"
+          subtitle="All leagues included in this view"
+          valueLabel="Leagues"
+          data={scope.platforms.map((platform) => ({
+            label: platform.label,
+            value: platform.count,
+            displayValue: platform.count.toLocaleString(),
+          }))}
+        />
+      )}
+    </section>
+  )
+}
+
 export function Rankings({
   data,
   board,
@@ -319,6 +380,7 @@ export function Rankings({
 }) {
   const activeBoard = (data.boards.find((b) => b.key === board)?.key ??
     'top') as LeaderboardTab['key']
+  const leagueQuery = data.scope.leagueId ? `&league=${encodeURIComponent(data.scope.leagueId)}` : ''
 
   return (
     <div className="af-rk">
@@ -334,10 +396,10 @@ export function Rankings({
           </p>
         </div>
         <div className="af-rk-headact">
-          <Link className="af-rk-btn" href="/core/rankings?view=compare">
+          <Link className="af-rk-btn" href={`/core/rankings?view=compare${leagueQuery}`}>
             Compare a manager
           </Link>
-          <Link className="af-rk-btn af-rk-btn--primary" href="/core/rankings?view=faq">
+          <Link className="af-rk-btn af-rk-btn--primary" href={`/core/rankings?view=faq${leagueQuery}`}>
             How ranking works
           </Link>
         </div>
@@ -352,6 +414,8 @@ export function Rankings({
           and dropping them would quietly change the standings.
         </p>
       ) : null}
+
+      <ScopeCard data={data} />
 
       <div className="af-rk-grid">
         <div className="af-rk-col">
@@ -368,6 +432,7 @@ export function Rankings({
             boards={data.boards}
             active={activeBoard}
             population={data.rankedPopulation}
+            leagueId={data.scope.leagueId}
           />
         </div>
       </div>

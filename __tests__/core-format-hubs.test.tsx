@@ -199,6 +199,20 @@ describe('<FormatHub />', () => {
     expect(screen.getByText('Team count not on file yet')).toBeTruthy()
   })
 
+  it('opens every connected league tool from the hub and graphs real meter values', () => {
+    render(<FormatHub data={fixture({
+      leagues: [{
+        ...fixture().leagues[0],
+        meter: { value: '9 of 12 left', pct: 75, tone: 'good' },
+        youCommission: true,
+      }],
+    })} />)
+    expect(screen.getByRole('img', { name: /Guillotine league comparison/i })).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Standings' }).getAttribute('href')).toBe('/core/standings?league=L1')
+    expect(screen.getByRole('link', { name: 'Trades' }).getAttribute('href')).toBe('/core/trades?league=L1')
+    expect(screen.getByRole('link', { name: 'Commissioner OS' }).getAttribute('href')).toBe('/core/commissioner?league=L1')
+  })
+
   it('does not offer a broadcast the route would refuse', () => {
     render(<FormatHub data={fixture()} />)
     expect(screen.queryByRole('textbox')).toBeNull()

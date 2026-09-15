@@ -381,6 +381,23 @@
   flex-wrap: wrap;
 }
 
+.af-admin-shortcut {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 7px 11px;
+  border: 1px solid var(--accent-line);
+  border-radius: 9px;
+  color: var(--accent);
+  background: var(--accent-soft);
+  font: 800 11px/1 var(--font-archivo, Archivo), system-ui, sans-serif;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.af-admin-shortcut:hover,
+.af-admin-shortcut:focus-visible { color: var(--accent-ink); background: var(--accent); }
+
 .af-week {
   font-size: 10px;
   letter-spacing: 0.1em;

@@ -1,0 +1,38 @@
+.af-welcome {
+  position: fixed;
+  z-index: 170;
+  right: 24px;
+  bottom: 24px;
+  width: min(390px, calc(100vw - 32px));
+  padding: 20px;
+  border: 1px solid var(--accent-line);
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--surface) 96%, transparent);
+  box-shadow: 0 22px 70px rgba(0, 0, 0, .36);
+  backdrop-filter: blur(18px);
+}
+.af-welcome-progress { display: flex; gap: 5px; margin: 0 34px 16px 0; }
+.af-welcome-progress i { height: 3px; flex: 1; border-radius: 999px; background: var(--line2); }
+.af-welcome-progress i[data-active='true'] { background: var(--accent); }
+.af-welcome-close { position: absolute; top: 10px; right: 10px; width: 36px; height: 36px; border: 0; border-radius: 9px; color: var(--muted); background: transparent; font-size: 22px; cursor: pointer; }
+.af-welcome-kicker { color: var(--accent); font: 750 10px/1 var(--font-jetbrains-mono, 'JetBrains Mono'), monospace; letter-spacing: .14em; text-transform: uppercase; }
+.af-welcome h2 { margin: 9px 0 8px; color: var(--text); font: 900 22px/1.1 var(--font-archivo, Archivo), system-ui, sans-serif; letter-spacing: -.025em; }
+.af-welcome p { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.58; }
+.af-welcome-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; margin-top: 17px; }
+.af-welcome-actions a,
+.af-welcome-actions button { min-height: 42px; padding: 10px 13px; border: 1px solid var(--line2); border-radius: 10px; color: var(--text2); background: var(--chip); font: 800 12px/1 var(--font-archivo, Archivo), system-ui, sans-serif; text-decoration: none; cursor: pointer; }
+.af-welcome-actions a,
+.af-welcome-actions .af-welcome-next { color: var(--accent-ink); border-color: var(--accent); background: var(--accent); }
+
+@media (max-width: 720px) {
+  .af-welcome {
+    right: 12px;
+    bottom: calc(82px + env(safe-area-inset-bottom, 0px));
+    width: calc(100vw - 24px);
+    max-height: min(440px, calc(100dvh - 130px - env(safe-area-inset-top, 0px)));
+    overflow-y: auto;
+    padding: 17px;
+  }
+  .af-welcome h2 { font-size: 19px; }
+  .af-welcome-actions { flex-wrap: wrap; }
+}

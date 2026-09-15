@@ -711,6 +711,22 @@
   grid-column: 1 / -1;
   margin: 0;
 }
+.af-tc-scan-receipt {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--accent-line);
+  border-radius: 11px;
+  color: var(--muted);
+  background: var(--accent-soft);
+  font-size: 11px;
+  line-height: 1.45;
+}
+.af-tc-scan-receipt b { color: var(--accent); }
 
 /*
  * Open AllFantasy offers, each with its counter control. Spans the inbox grid the

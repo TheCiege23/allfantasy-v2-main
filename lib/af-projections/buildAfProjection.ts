@@ -435,7 +435,10 @@ export function buildAfProjection(input: BuildProjectionInput): ProjectionOutcom
     adjustmentsApplied.push(`opponent_history: ${opponentAdj.reason}`)
   }
 
-  const calibration = !basisIsForwardProjection && input.accuracyCalibration
+  // Completed-game calibration corrects observed source bias. It is independent
+  // from the opponent-history layer above, so it is valid for provider forward
+  // projections too and does not count a matchup twice.
+  const calibration = input.accuracyCalibration
     ? calibrationFor(input.accuracyCalibration, basis, effectivePosition)
     : null
   if (calibration && calibration.points !== 0) {

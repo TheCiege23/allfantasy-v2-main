@@ -111,7 +111,7 @@ export const CHIMMY_TOOL_SPECS = [
     function: {
       name: 'get_player_projection',
       description:
-        "How many fantasy points ONE named player is projected for — use for 'how many points will X score', 'is X worth starting', 'what's X projected for this week'. Returns TWO DIFFERENT NUMBERS: a per-game rate and a rest-of-season total. They are not interchangeable; quote whichever the user asked for and never average or compare them. Also returns the confidence, the baseline before weather, and the reason on file. Says plainly when no projection is stored, and a miss is NOT evidence the player is inactive.",
+        "How many fantasy points ONE named player is projected for — use for 'how many points will X score', 'is X worth starting', 'what's X projected for this week'. Returns TWO DIFFERENT numbers: a per-game rate and a rest-of-season total. When a league is selected it also attempts a separate weekly number re-scored under that league's imported rules. Never call the standard number league-specific. Also returns confidence, weather provenance and the reason on file.",
       parameters: {
         type: 'object',
         properties: {
@@ -373,8 +373,8 @@ export async function executeChimmyTool(
         return await buildPlayerValueContext({ playerName: asked })
       }
 
-      /* Same reasoning as get_player_value: no league gate, because a projection is the same
-       * number for every user and there is nothing here to scope. */
+      /* No league gate: the standard projection remains useful without one. When a verified
+       * scope exists, the builder also computes a league-scored number from component stats. */
       case 'get_player_projection': {
         const asked = typeof args.player === 'string' ? args.player : ''
         const sport = typeof args.sport === 'string' ? args.sport : null
@@ -386,7 +386,7 @@ export async function executeChimmyTool(
         const week = typeof args.week === 'number' && Number.isFinite(args.week)
           ? Math.floor(args.week)
           : null
-        return await buildPlayerProjectionContext({ playerName: asked, sport, week })
+        return await buildPlayerProjectionContext({ playerName: asked, sport, week, leagueId: ctx.leagueId })
       }
 
       case 'explain_value': {

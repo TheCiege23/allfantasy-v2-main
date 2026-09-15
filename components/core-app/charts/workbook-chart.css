@@ -1,0 +1,46 @@
+.af-workbook-chart {
+  min-width: 0;
+  margin: 0;
+  padding: 16px;
+  border: 1px solid var(--line2, var(--line));
+  border-radius: 14px;
+  background: var(--surface);
+}
+
+.af-workbook-chart figcaption {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+.af-workbook-chart figcaption > span { display: grid; gap: 3px; min-width: 0; }
+.af-workbook-chart figcaption b {
+  color: var(--text);
+  font: 800 13px/1.2 var(--font-archivo, Archivo), system-ui, sans-serif;
+}
+.af-workbook-chart figcaption small,
+.af-workbook-chart figcaption em {
+  color: var(--faint);
+  font: 600 10px/1.3 var(--font-jetbrains-mono, 'JetBrains Mono'), ui-monospace, monospace;
+  font-style: normal;
+}
+.af-workbook-chart figcaption em { margin-left: auto; text-transform: uppercase; letter-spacing: .1em; }
+
+.af-workbook-plot { position: relative; height: 190px; padding: 18px 6px 32px 34px; overflow-x: auto; }
+.af-workbook-grid { position: absolute; inset: 18px 6px 32px 34px; display: grid; grid-template-rows: repeat(4, 1fr); border-left: 1px solid var(--line2); border-bottom: 1px solid var(--line2); }
+.af-workbook-grid i { border-top: 1px solid color-mix(in srgb, var(--line) 72%, transparent); }
+.af-workbook-bars { position: relative; z-index: 1; height: 100%; min-width: min-content; display: flex; align-items: flex-end; gap: clamp(8px, 2vw, 18px); }
+.af-workbook-column { position: relative; width: clamp(42px, 7vw, 74px); height: 100%; flex: 1 0 42px; display: flex; align-items: flex-end; justify-content: center; }
+.af-workbook-bar { width: min(36px, 70%); min-height: 0; border-radius: 5px 5px 1px 1px; background: var(--accent); box-shadow: inset 0 1px rgba(255,255,255,.22); }
+.af-workbook-bar[data-tone='good'] { background: var(--good); }
+.af-workbook-bar[data-tone='warn'] { background: var(--warn); }
+.af-workbook-bar[data-tone='bad'] { background: var(--bad); }
+.af-workbook-bar[data-tone='muted'] { background: var(--muted); }
+.af-workbook-value { position: absolute; bottom: calc(var(--bar-height, 0%) + 7px); color: var(--text2); font: 700 10px/1 var(--font-jetbrains-mono, 'JetBrains Mono'), monospace; }
+.af-workbook-label { position: absolute; top: calc(100% + 8px); left: 0; right: 0; overflow: hidden; color: var(--faint); font: 600 9px/1.15 var(--font-archivo, Archivo), system-ui, sans-serif; text-align: center; text-overflow: ellipsis; white-space: nowrap; }
+
+@media (max-width: 720px) {
+  .af-workbook-chart { padding: 13px; }
+  .af-workbook-plot { height: 170px; padding-left: 22px; }
+  .af-workbook-grid { left: 22px; }
+}

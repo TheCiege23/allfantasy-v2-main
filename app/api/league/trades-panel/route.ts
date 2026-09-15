@@ -691,6 +691,8 @@ export async function GET(req: NextRequest) {
       platform: 'sleeper' as const,
       leagueUrl: `https://sleeper.com/leagues/${encodeURIComponent(sleeperLeagueId)}`,
       weeksUnanswered: pendingScan.weeksUnanswered,
+      weeksRequested: pendingScan.weeksRequested,
+      weeksAnswered: pendingScan.weeksAnswered,
     },
     pendingOffers: builderOffers(providerPending, providerEvaluations),
   })

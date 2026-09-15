@@ -111,6 +111,8 @@ type PanelResponse = {
     platform: string
     leagueUrl: string | null
     weeksUnanswered: number
+    weeksRequested?: number
+    weeksAnswered?: number
   }
   pendingOffers?: Offer[]
   error?: string
@@ -533,6 +535,13 @@ export function TradeInbox(props: {
 
   return (
     <div className="af-tc-inbox">
+      {pending?.scanned && pending.weeksRequested ? (
+        <p className="af-tc-scan-receipt">
+          <b>Live trade import check</b>
+          Sleeper answered {pending.weeksAnswered ?? pending.weeksRequested - pending.weeksUnanswered} of {pending.weeksRequested} transaction weeks.
+          Pending offers appear here during their live review window; accept, decline, or counter them in Sleeper. You do not enter them by hand.
+        </p>
+      ) : null}
       {column('Inbox', inbox, 'Nothing waiting on you right now.')}
       {column('Sent', sent, 'You have no offers out.')}
 
