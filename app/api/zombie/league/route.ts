@@ -4,7 +4,7 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { createZombieLeague } from '@/lib/zombie/setupEngine'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
-import { getLeagueRole } from '@/lib/league/permissions'
+import { getLeagueRole, requireCommissionerOnly } from '@/lib/league/permissions'
 import { isZombieEligibleLeagueSport } from '@/lib/zombie/zombie-sport-eligibility'
 import { getRandomZombieTheme } from '@/lib/zombie/zombieBackgroundThemes'
 import { getZombieHordeSitOutStateForWeek } from '@/lib/zombie/ZombieHordeSitOutEngine'
@@ -24,6 +24,24 @@ export async function POST(req: Request) {
   const body = (await req.json().catch(() => ({}))) as Record<string, unknown>
   const leagueId = typeof body.leagueId === 'string' ? body.leagueId : null
   if (!leagueId) return NextResponse.json({ error: 'leagueId required' }, { status: 400 })
+
+  /*
+   * ⚠ Head commissioner only. This handler used to check just for a session, so any signed-in user
+   * could force any league to snake drafts, clear its playoff weeks and create the ZombieLeague row
+   * that on its own makes a league count as a Zombie league (lib/core-app/formatHubs.ts). Checked
+   * before the body is validated, so a stranger learns nothing about the league from a 400. The one
+   * in-repo POST caller, app/api/zombie/universe/create, forwards the cookie of the user who has just
+   * created the league through /api/league/create, so it passes as the owner.
+   *
+   * ⚠ The helper THROWS a Response. Next 14 route handlers convert only redirect() and notFound()
+   * throws, so an uncaught Response becomes a 500 — return it as the 403 it is.
+   */
+  try {
+    await requireCommissionerOnly(leagueId, session.user.id)
+  } catch (denied) {
+    if (denied instanceof Response) return denied
+    throw denied
+  }
 
   const sportRaw = typeof body.sport === 'string' ? body.sport : 'NFL'
   if (!isZombieEligibleLeagueSport(sportRaw.toUpperCase())) {
