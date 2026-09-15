@@ -21,49 +21,71 @@ function resolveSafeReturnTo(value: string | undefined): string {
   return candidate.startsWith("/") ? candidate : "/settings"
 }
 
+/**
+ * Emails a link for the NEW address. Returns true only when the provider accepted it.
+ *
+ * Links issued for the previous address are NOT this function's job — they are deleted
+ * inside the address-change transaction in POST, unconditionally. See the note there for
+ * why this route must not copy verify-email/send's "keep older links until delivered".
+ *
+ * ⚠ THE SEND RESULT WAS NEVER READ. Resend resolves `{ data, error }` WITHOUT throwing
+ * when it rejects an email, so a rejection returned `true`, the response said
+ * `verificationEmailSent: true`, and Settings told the user to check an inbox nothing
+ * had been sent to — while the undelivered token sat in the table. Measured against
+ * production 2026-09-15, when every send was rejected with "API key is invalid".
+ */
 async function sendVerificationEmail(params: {
   userId: string
   targetEmail: string
   returnTo: string
 }): Promise<boolean> {
+  const { getBaseUrl } = await import("@/lib/get-base-url")
+  const baseUrl = getBaseUrl()
+  // Resolved before a token exists, so there is never a link nobody could be sent.
+  if (!baseUrl) return false
+
   const rawToken = makeToken(32)
   const tokenHash = sha256Hex(rawToken)
   const expiresAt = new Date(Date.now() + 60 * 60 * 1000)
-
-  await (prisma as any).emailVerifyToken.deleteMany({
-    where: { userId: params.userId },
-  }).catch(() => {})
 
   const tokenRecord = await (prisma as any).emailVerifyToken.create({
     data: { userId: params.userId, tokenHash, expiresAt },
   })
 
-  const { getBaseUrl } = await import("@/lib/get-base-url")
-  const baseUrl = getBaseUrl()
-  if (!baseUrl) return false
-
   const verifyUrl = `${baseUrl}/verify/email?token=${encodeURIComponent(rawToken)}&returnTo=${encodeURIComponent(params.returnTo)}`
 
-  const { getResendClient } = await import("@/lib/resend-client")
-  const { client, fromEmail } = await getResendClient()
-
+  const { getResendClient, resendSendError } = await import("@/lib/resend-client")
   const { buildVerificationEmailHtml } = await import("@/lib/email/verification-email-html")
   const { buildEmailIdempotencyKey } = await import("@/lib/email/idempotency")
 
-  await client.emails.send(
-    {
-      from: fromEmail || "AllFantasy.ai <noreply@allfantasy.ai>",
-      to: params.targetEmail,
-      subject: "Verify your updated email for AllFantasy.ai",
-      html: buildVerificationEmailHtml({
-        title: "Verify your updated email",
-        greeting: "Click the button below to verify this new email address.",
-        verifyUrl,
-        footerNote: "If you did not request this change, secure your account immediately.",
-      }),
-    },
-    { idempotencyKey: buildEmailIdempotencyKey("email-change", params.userId, tokenRecord.id) }
-  )
+  let sendError: string | null = null
+  try {
+    const { client, fromEmail } = await getResendClient()
+    const sendResult = await client.emails.send(
+      {
+        from: fromEmail || "AllFantasy.ai <noreply@allfantasy.ai>",
+        to: params.targetEmail,
+        subject: "Verify your updated email for AllFantasy.ai",
+        html: buildVerificationEmailHtml({
+          title: "Verify your updated email",
+          greeting: "Click the button below to verify this new email address.",
+          verifyUrl,
+          footerNote: "If you did not request this change, secure your account immediately.",
+        }),
+      },
+      { idempotencyKey: buildEmailIdempotencyKey("email-change", params.userId, tokenRecord.id) }
+    )
+    sendError = resendSendError(sendResult)
+  } catch (err) {
+    sendError = err instanceof Error ? err.message : "unknown error"
+  }
+
+  if (sendError) {
+    // Provider message ONLY — never the recipient, token, or verification URL.
+    console.error(`[user/contact/email] verification email send failed: ${sendError}`)
+    await (prisma as any).emailVerifyToken.delete({ where: { id: tokenRecord.id } }).catch(() => {})
+    return false
+  }
 
   return true
 }
@@ -143,6 +165,22 @@ export async function POST(req: Request) {
         where: { userId },
         data: { emailVerifiedAt: null },
       })
+
+      /*
+       * ⚠ EVERY EXISTING LINK DIES WITH THE OLD ADDRESS — UNCONDITIONALLY, AND HERE.
+       *
+       * A token names the ACCOUNT, not the address it was mailed to, and /verify/email
+       * marks whatever address the account holds NOW as verified. So a still-live link
+       * sent to the previous address would verify the new one without the new inbox
+       * ever being confirmed. That is why this route does the opposite of
+       * verify-email/send, which keeps older links until a replacement is delivered:
+       * there every link is for the same address; here none of the old ones are.
+       *
+       * Inside the transaction so it cannot be skipped separately from the change. It
+       * used to run afterwards with its error swallowed, which could leave the address
+       * changed and the old links alive. If it fails now, the address does not change.
+       */
+      await tx.emailVerifyToken.deleteMany({ where: { userId } })
     })
   } catch (err: any) {
     const code = err?.code
@@ -161,7 +199,13 @@ export async function POST(req: Request) {
       returnTo,
     })
   } catch (err) {
-    console.warn("[user/contact/email] verification email send failed:", err)
+    // Reached only if preparing the link fails (the token write, or a module failing to
+    // load); send failures are handled and logged inside sendVerificationEmail. The one
+    // query that can throw here carries the account id and a token HASH — never the raw
+    // token, the new address, or the verification URL.
+    console.warn(
+      `[user/contact/email] verification email could not be prepared: ${err instanceof Error ? err.message : "unknown error"}`
+    )
   }
 
   return NextResponse.json({
