@@ -6,6 +6,8 @@ import { prisma } from '@/lib/prisma'
 import { getLeagueH2H } from '@/lib/league-history/sleeperH2HService'
 import { getImportedLeagueH2H } from '@/lib/league-history/importedFactsH2HService'
 import { awardView, isAwardKind } from '@/lib/share/weeklyAwardCard'
+import { getGuillotineEscapesForUser } from '@/lib/share/guillotineEscape'
+import { resolveRosterDisplayNames } from '@/lib/guillotine/rosterDisplayNames'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -17,6 +19,9 @@ export const runtime = 'nodejs'
  * `?kind=award&leagueId=…&award=topScore|lowScore|narrowEscape|biggestBlowout` renders a weekly
  * award card from the SAME H2H payload instead (shareable moments, 2026-09-14). Folded in here rather
  * than a new route — see career-card on the route ceiling. Same auth: a signed-in member of the league.
+ *
+ * `?kind=escape&leagueId=…&week=N` renders YOUR guillotine escape from week N's chop — only a chop that
+ * happened (lib/share/guillotineEscape.ts). Your own roster in the league is the access check.
  */
 
 function initials(name: string): string {
@@ -150,12 +155,87 @@ async function awardCard(req: NextRequest, userId: string) {
   )
 }
 
+/** The guillotine escape card — your survival of one week's chop, from the chop log and that week's scores. */
+async function escapeCard(req: NextRequest, userId: string) {
+  const leagueId = req.nextUrl.searchParams?.get('leagueId')?.trim()
+  const week = Number(req.nextUrl.searchParams?.get('week'))
+  if (!leagueId || !Number.isInteger(week) || week < 1) {
+    return NextResponse.json({ error: 'Missing leagueId or a valid week' }, { status: 400 })
+  }
+  // Your own roster in the league is both the access check and whose escape this is.
+  const [league, roster] = await Promise.all([
+    prisma.league.findUnique({ where: { id: leagueId }, select: { name: true } }),
+    prisma.roster.findFirst({ where: { leagueId, platformUserId: userId }, select: { id: true } }),
+  ])
+  if (!league || !roster) return NextResponse.json({ error: 'League not found' }, { status: 404 })
+  const escape = (await getGuillotineEscapesForUser(leagueId, userId)).find((e) => e.weekOrPeriod === week)
+  if (!escape) return NextResponse.json({ error: 'No escape of yours from that chop' }, { status: 404 })
+  // Never an email: the league-scoped resolver or a plain fallback.
+  const teamName = (await resolveRosterDisplayNames(leagueId, [roster.id])).get(roster.id) ?? 'Your team'
+
+  return new ImageResponse(
+    (
+      <div
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          width: '100%',
+          height: '100%',
+          background: '#0b0e2a',
+          fontFamily: 'sans-serif',
+        }}
+      >
+        <div
+          style={{ display: 'flex', height: 8, width: '100%', background: 'linear-gradient(90deg,#34d399,#1e6cff)' }}
+        />
+        <div style={{ display: 'flex', flexDirection: 'column', padding: '34px 48px', flex: 1 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div style={{ display: 'flex', fontSize: 42, fontWeight: 900, fontStyle: 'italic', color: '#f0f2ff', letterSpacing: 1 }}>
+              SURVIVED THE CHOP
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
+              <div style={{ display: 'flex', fontSize: 22, fontWeight: 700, color: '#c6cbf5' }}>{league.name ?? 'Guillotine League'}</div>
+              <div style={{ display: 'flex', fontSize: 17, color: '#8b93cf' }}>{`Week ${escape.weekOrPeriod} chop`}</div>
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', marginTop: 40, flex: 1 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
+              <div style={{ display: 'flex', fontSize: 40, fontWeight: 800, color: '#f0f2ff' }}>{teamName}</div>
+              <div style={{ display: 'flex', fontSize: 22, color: '#8b93cf', marginTop: 10 }}>
+                {`${escape.myPoints.toFixed(1)} vs ${escape.chopLine.toFixed(1)}, the highest score chopped`}
+              </div>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', flex: 1 }}>
+              <div style={{ display: 'flex', fontSize: 110, fontWeight: 900, fontStyle: 'italic', color: '#34d399', lineHeight: 1 }}>
+                {escape.margin === 0 ? 'TIE' : `+${escape.margin.toFixed(1)}`}
+              </div>
+              <div style={{ display: 'flex', fontSize: 22, color: '#8b93cf', marginTop: 8 }}>
+                {escape.margin === 0 ? 'survived on the tiebreaker' : 'points above the chop'}
+              </div>
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ display: 'flex', fontSize: 15, color: '#5d64a3' }}>From the league&apos;s own chop log</div>
+            <div style={{ display: 'flex', fontSize: 18, fontWeight: 800, color: '#c6cbf5' }}>
+              AllFantasy.ai · a Brown Pig LLC product
+            </div>
+          </div>
+        </div>
+      </div>
+    ),
+    { width: 1200, height: 630 },
+  )
+}
+
 export async function GET(req: NextRequest) {
   const session = (await getServerSession(authOptions as never)) as { user?: { id?: string } } | null
   const userId = session?.user?.id
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   if (req.nextUrl.searchParams?.get('kind')?.trim() === 'award') return awardCard(req, userId)
+  if (req.nextUrl.searchParams?.get('kind')?.trim() === 'escape') return escapeCard(req, userId)
 
   const leagueId = req.nextUrl.searchParams?.get('leagueId')?.trim()
   const aId = req.nextUrl.searchParams?.get('a')?.trim()
