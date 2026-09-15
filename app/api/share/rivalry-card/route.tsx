@@ -8,6 +8,7 @@ import { getImportedLeagueH2H } from '@/lib/league-history/importedFactsH2HServi
 import { awardView, isAwardKind } from '@/lib/share/weeklyAwardCard'
 import { getGuillotineEscapesForUser } from '@/lib/share/guillotineEscape'
 import { resolveRosterDisplayNames } from '@/lib/guillotine/rosterDisplayNames'
+import { getUpsetForCard } from '@/lib/share/weeklyUpset'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -22,6 +23,9 @@ export const runtime = 'nodejs'
  *
  * `?kind=escape&leagueId=…&week=N` renders YOUR guillotine escape from week N's chop — only a chop that
  * happened (lib/share/guillotineEscape.ts). Your own roster in the league is the access check.
+ *
+ * `?kind=upset&leagueId=…&season=…&week=…` renders YOUR upset win that week — only by the odds saved
+ * before kickoff (lib/share/weeklyUpset.ts), never recomputed. Your claimed team is the access check.
  */
 
 function initials(name: string): string {
@@ -229,6 +233,77 @@ async function escapeCard(req: NextRequest, userId: string) {
   )
 }
 
+/** The weekly upset card — your win as the underdog, by the odds saved before kickoff. */
+async function upsetCard(req: NextRequest, userId: string) {
+  const leagueId = req.nextUrl.searchParams?.get('leagueId')?.trim()
+  const season = Number(req.nextUrl.searchParams?.get('season'))
+  const week = Number(req.nextUrl.searchParams?.get('week'))
+  if (!leagueId || !Number.isInteger(season) || season < 2000 || !Number.isInteger(week) || week < 1) {
+    return NextResponse.json({ error: 'Missing leagueId, or a valid season and week' }, { status: 400 })
+  }
+  // Your claimed team in the league is both the access check and whose upset this is.
+  const upset = await getUpsetForCard(userId, leagueId, season, week)
+  if (!upset) return NextResponse.json({ error: 'No upset of yours that week' }, { status: 404 })
+
+  return new ImageResponse(
+    (
+      <div
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          width: '100%',
+          height: '100%',
+          background: '#0b0e2a',
+          fontFamily: 'sans-serif',
+        }}
+      >
+        <div
+          style={{ display: 'flex', height: 8, width: '100%', background: 'linear-gradient(90deg,#f59e0b,#1e6cff)' }}
+        />
+        <div style={{ display: 'flex', flexDirection: 'column', padding: '34px 48px', flex: 1 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div style={{ display: 'flex', fontSize: 42, fontWeight: 900, fontStyle: 'italic', color: '#f0f2ff', letterSpacing: 1 }}>
+              UPSET WIN
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
+              <div style={{ display: 'flex', fontSize: 22, fontWeight: 700, color: '#c6cbf5' }}>{upset.leagueName}</div>
+              <div style={{ display: 'flex', fontSize: 17, color: '#8b93cf' }}>{`${upset.season} · Week ${upset.week}`}</div>
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', marginTop: 40, flex: 1 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
+              <div style={{ display: 'flex', fontSize: 40, fontWeight: 800, color: '#f0f2ff' }}>{upset.teamName}</div>
+              <div style={{ display: 'flex', fontSize: 26, color: '#c6cbf5', marginTop: 10 }}>
+                {`Won ${upset.pointsFor.toFixed(1)}–${upset.pointsAgainst.toFixed(1)}${upset.opponentName ? ` over ${upset.opponentName}` : ''}`}
+              </div>
+              <div style={{ display: 'flex', fontSize: 20, color: '#8b93cf', marginTop: 8 }}>
+                {`Projected ${upset.projectedPoints.toFixed(1)} vs ${upset.opponentProjectedPoints.toFixed(1)}`}
+              </div>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', flex: 1 }}>
+              <div style={{ display: 'flex', fontSize: 110, fontWeight: 900, fontStyle: 'italic', color: '#f59e0b', lineHeight: 1 }}>
+                {upset.winChance}
+              </div>
+              <div style={{ display: 'flex', fontSize: 22, color: '#8b93cf', marginTop: 8 }}>pre-game win chance</div>
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ display: 'flex', fontSize: 15, color: '#5d64a3' }}>
+              Odds saved before kickoff, from each team&apos;s own scoring history
+            </div>
+            <div style={{ display: 'flex', fontSize: 18, fontWeight: 800, color: '#c6cbf5' }}>
+              AllFantasy.ai · a Brown Pig LLC product
+            </div>
+          </div>
+        </div>
+      </div>
+    ),
+    { width: 1200, height: 630 },
+  )
+}
+
 export async function GET(req: NextRequest) {
   const session = (await getServerSession(authOptions as never)) as { user?: { id?: string } } | null
   const userId = session?.user?.id
@@ -236,6 +311,7 @@ export async function GET(req: NextRequest) {
 
   if (req.nextUrl.searchParams?.get('kind')?.trim() === 'award') return awardCard(req, userId)
   if (req.nextUrl.searchParams?.get('kind')?.trim() === 'escape') return escapeCard(req, userId)
+  if (req.nextUrl.searchParams?.get('kind')?.trim() === 'upset') return upsetCard(req, userId)
 
   const leagueId = req.nextUrl.searchParams?.get('leagueId')?.trim()
   const aId = req.nextUrl.searchParams?.get('a')?.trim()

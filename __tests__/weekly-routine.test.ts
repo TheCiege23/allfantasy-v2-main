@@ -12,6 +12,7 @@ const h = vi.hoisted(() => ({
   scoreFind: vi.fn(),
   playerFind: vi.fn(),
   h2hCache: vi.fn(),
+  upsets: vi.fn(),
 }))
 
 vi.mock('server-only', () => ({}))
@@ -24,6 +25,7 @@ vi.mock('@/lib/prisma', () => ({
 }))
 vi.mock('@/lib/core-app/weekAll', () => ({ getWeekAll: h.weekAll }))
 vi.mock('@/lib/league-history/sleeperH2HService', () => ({ readCachedLeagueH2H: h.h2hCache }))
+vi.mock('@/lib/share/weeklyUpset', () => ({ getWeeklyUpsetsForUser: h.upsets }))
 vi.mock('@/lib/core-app/decisionReceipts', async (orig) => ({
   ...(await orig<typeof import('@/lib/core-app/decisionReceipts')>()),
   loadSeasonAdds: h.seasonAdds,
@@ -65,6 +67,7 @@ const step = (d: ReturnType<typeof build>, key: string) => d.steps.find((s) => s
 
 beforeEach(() => {
   for (const f of Object.values(h)) f.mockReset()
+  h.upsets.mockResolvedValue([])
 })
 
 describe('routineDayFor', () => {
@@ -149,6 +152,12 @@ describe('buildWeeklyRoutine', () => {
     expect(build({ awards: a }).awards).toEqual(a)
   })
 
+  it('passes your upsets through (none by default)', () => {
+    expect(build().upsets).toEqual([])
+    const u = [{ leagueId: 'af-ice', leagueName: 'Ice Kings', season: 2026, week: 1, winProbability: 0.22, winChance: '22%', pointsFor: 120, pointsAgainst: 96.5 }]
+    expect(build({ upsets: u }).upsets).toEqual(u)
+  })
+
   it('the biggest win is the widest margin; the closest loss the narrowest', () => {
     const rows = [
       { ...lastWeek.rows[0], leagueName: 'A', pointsFor: 100, pointsAgainst: 90 },
@@ -186,7 +195,7 @@ describe('getRoutineFacts', () => {
     expect((await getRoutineFacts({ userId: 'u1', leagues: [ICE], currentWeek: 2 })).addsThisWeek).toBeNull()
     h.seasonAdds.mockRejectedValue(new Error('db'))
     h.weekAll.mockRejectedValue(new Error('db'))
-    expect(await getRoutineFacts({ userId: 'u1', leagues: [ICE], currentWeek: 2 })).toEqual({ lastWeek: null, topScorer: null, addsThisWeek: null, awards: [] })
+    expect(await getRoutineFacts({ userId: 'u1', leagues: [ICE], currentWeek: 2 })).toEqual({ lastWeek: null, topScorer: null, addsThisWeek: null, awards: [], upsets: [] })
   })
 
   it('🛑 the top scorer is your highest-scoring STARTER that week, on YOUR roster, named', async () => {
@@ -267,6 +276,23 @@ describe('getRoutineFacts', () => {
     expect((await getRoutineFacts({ userId: 'u1', leagues: [ICE], currentWeek: 2, ownerSleeperId: 'me' })).awards).toEqual([])
     h.weekAll.mockResolvedValue(null)
     expect((await getRoutineFacts({ userId: 'u1', leagues: [ICE], currentWeek: 2, ownerSleeperId: 'me' })).awards).toEqual([])
+  })
+
+  it('🛑 your upsets are read for the last PLAYED week only; a failed read is none', async () => {
+    const u = [{ leagueId: 'af-ice', leagueName: 'Ice Kings', season: 2026, week: 1, winProbability: 0.22, winChance: '22%', pointsFor: 120, pointsAgainst: 96.5 }]
+    h.weekAll.mockResolvedValue(lastWeek)
+    h.seasonAdds.mockResolvedValue(adds([]))
+    h.teamFind.mockResolvedValue([])
+    h.upsets.mockResolvedValue(u)
+    const out = await getRoutineFacts({ userId: 'u1', leagues: [ICE, DYN], currentWeek: 2 })
+    expect(h.upsets).toHaveBeenCalledWith('u1', [ICE, DYN], lastWeek)
+    expect(out.upsets).toBe(u)
+    h.upsets.mockRejectedValue(new Error('db'))
+    expect((await getRoutineFacts({ userId: 'u1', leagues: [ICE], currentWeek: 2 })).upsets).toEqual([])
+    h.upsets.mockClear()
+    h.weekAll.mockResolvedValue(null)
+    expect((await getRoutineFacts({ userId: 'u1', leagues: [ICE], currentWeek: 2 })).upsets).toEqual([])
+    expect(h.upsets).not.toHaveBeenCalled()
   })
 
   it('an unnamed top starter is left out rather than replaced by a lower one', async () => {
