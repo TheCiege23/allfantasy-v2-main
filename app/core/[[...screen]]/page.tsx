@@ -18,7 +18,6 @@ import { resolveDashboardAvatarUrl } from '@/lib/dashboard/resolve-dashboard-ava
 import { aiAccessResolver } from '@/lib/ai-access/AIAccessResolver'
 import AfCoreShell, { type CoreNavKey, type RailLeague } from '@/components/core-app/AfCoreShell'
 import type { UserLeague } from '@/app/dashboard/types'
-import Dashboard3A from '@/components/core-app/screens/Dashboard3A'
 import { DefenseHubClient } from '@/app/idp/defense-hub/[leagueId]/DefenseHubClient'
 import { resolveLeagueValueSurfaces } from '@/lib/values/valueSurfaceEligibility'
 import {
@@ -28,11 +27,7 @@ import {
 import DevyCore from '@/components/core-app/screens/DevyCore'
 import DevyLeagueTab from '@/components/core-app/screens/DevyLeagueTab'
 import { getDevyCoreData, leagueDevySlotCount } from '@/lib/core-app/devy'
-import { Dash3ATriage, type TriageBookRow } from '@/components/core-app/screens/Dash3ATriage'
-import { Dash34Carryover, Dash34Coverage } from '@/components/core-app/screens/Dash34Carryover'
-import { DashScheduleBand } from '@/components/core-app/screens/DashScheduleBand'
-import { DashUserOs } from '@/components/core-app/screens/DashUserOs'
-import { DashDraftsBand } from '@/components/core-app/screens/DashDraftsBand'
+import type { TriageBookRow } from '@/components/core-app/screens/Dash3ATriage'
 import { resolveUserOsSnapshot } from '@/lib/decision-os/userOs'
 import { getCrossLeagueExposure, getRivalRecords } from '@/lib/core-app/dash3aPanels'
 import { getFollowingCard } from '@/lib/core-app/followingCard'
@@ -107,13 +102,10 @@ import { getTodayStrip } from '@/lib/core-app/todayStrip'
 import { getPlayFeed } from '@/lib/live/playFeedPresentation'
 import { getRecentTrades } from '@/lib/core-app/recentTrades'
 import { getCrossLeagueValueActions } from '@/lib/core-app/crossLeagueValueActions'
-import { DashTradeBand } from '@/components/core-app/screens/DashTradeBand'
-import { DashSinceLastVisit } from '@/components/core-app/screens/DashSinceLastVisit'
 import { getSinceLastVisit } from '@/lib/core-app/sinceLastVisit'
 import { getUrgencyBadges, recordPendingOffers } from '@/lib/core-app/urgencyBadges'
 import { isSpeculativeRequestHeaders } from '@/lib/http/speculativeRequest'
 import { hasRegularSeasonStarted } from '@/lib/core-app/seasonPhase'
-import { DashGameDayBand } from '@/components/core-app/screens/DashGameDayBand'
 import { readPlayByPlayFeed } from '@/lib/live/playByPlayFeed'
 import { getDraftHqAll } from '@/lib/core-app/draftHqAll'
 import { getWeekAll, scoredMatchupLeagueIds } from '@/lib/core-app/weekAll'
@@ -161,8 +153,10 @@ import CoreLeagueContextBar, {
 import { touchLeagueViewed } from '@/lib/leagues/touchLeagueViewed'
 import CoreScreenSkeleton from '@/components/core-app/CoreScreenSkeleton'
 import CoreScreenErrorBoundary from '@/components/core-app/CoreScreenErrorBoundary'
-import { PublishShellSignals } from '@/components/core-app/shellSignals'
+import { PublishShellSignals, type ShellUrgencyBadges } from '@/components/core-app/shellSignals'
 import { recordRootDuration } from '@/lib/observability/rootTiming'
+import { CoreHomeCards, type HomeLoads } from '@/components/core-app/home/HomeCards'
+import { traceCard } from '@/lib/observability/cardTelemetry'
 
 export const dynamic = 'force-dynamic'
 
@@ -1026,6 +1020,15 @@ export default async function AfCorePage({
 
   recordRootDuration('af.shell_ms', shellStartedAt)
 
+  /*
+   * The error boundaries reset on ANY change of URL, not just screen or league: Back/Forward between two
+   * queries of one screen (`?week=`, `?player=`) must not carry a failure onto a URL that renders fine.
+   * A refresh of the SAME URL keeps the panel — retrying is the user's call, and re-rendering a failing
+   * screen on every game-day refresh would report the same failure every 20 seconds. The screen's
+   * boundary and each home card's boundary use this one key.
+   */
+  const errorResetKey = [segment, ...Object.entries(sp).map(([key, value]) => `${key}=${String(value)}`).sort()].join('|')
+
   const body = (
     <CoreScreenBody
       ctx={{
@@ -1052,6 +1055,7 @@ export default async function AfCorePage({
         plan,
         commissionerCount,
         now,
+        errorResetKey,
       }}
     />
   )
@@ -1075,13 +1079,6 @@ export default async function AfCorePage({
    * would keep the old league's screen up until the new one had finished loading.
    */
   const screenKey = `${segment}|${selectedLeagueId ?? ''}`
-  /*
-   * The error boundary resets on ANY change of URL, not just screen or league: Back/Forward between two
-   * queries of one screen (`?week=`, `?player=`) must not carry a failure onto a URL that renders fine.
-   * A refresh of the SAME URL keeps the panel — retrying is the user's call, and re-rendering a failing
-   * screen on every game-day refresh would report the same failure every 20 seconds.
-   */
-  const errorResetKey = [segment, ...Object.entries(sp).map(([key, value]) => `${key}=${String(value)}`).sort()].join('|')
 
   const showContextBar = Boolean(
     selectedLeagueId && selectedLeagueName && selectedLeagueRow && isCoreSurfaceKey(activeKey),
@@ -1244,6 +1241,25 @@ async function LeagueRecommendation({
 }
 
 /**
+ * The shell chrome only the screen can know, published once its values have been read. Rendered
+ * behind its own Suspense, so no screen waits for its tab badges (see `urgencyBadges` in the body).
+ */
+async function ScreenShellSignals({
+  urgencyBadges,
+  weekLabel,
+  homeSignals,
+  liveGameCount,
+}: {
+  urgencyBadges: Promise<ShellUrgencyBadges>
+  weekLabel: Promise<string | null> | string | null
+  homeSignals: Promise<string | null> | string | null
+  liveGameCount: number | undefined
+}) {
+  const [badges, week, signals] = await Promise.all([urgencyBadges, weekLabel, homeSignals])
+  return <PublishShellSignals weekLabel={week} urgencyBadges={badges} homeSignals={signals} liveGameCount={liveGameCount} />
+}
+
+/**
  * What a screen receives from the shell phase: values computed once above that screens also
  * read. Everything else a screen needs, it loads itself, inside its streamed boundary.
  */
@@ -1272,6 +1288,8 @@ type CoreScreenContext = {
   plan: { name: string; tokensLeft: number | null } | null
   commissionerCount: number
   now: Date
+  /** The URL key the error boundaries reset on — computed once, beside the screen's own. */
+  errorResetKey: string
 }
 
 /**
@@ -1312,6 +1330,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
     plan,
     commissionerCount,
     now,
+    errorResetKey,
   } = ctx
 
   // Screen 2 is the same route with a league selected — the handoff describes it
@@ -1925,12 +1944,16 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
 
 
   /*
-   * The 34a home. Only loaded when it is the screen being rendered — it reads
+   * The 34a summary. Only loaded when a screen that shows it is being rendered — it reads
    * rosters and the injury feed, and paying for that on /core/trades would be a
    * cost for something nobody is looking at.
+   *
+   * ⚠ AWAITED HERE FOR DASHBOARD V2 ONLY. The /core home starts the same read without waiting
+   * (`homeLoads.dash34` below) so each of its cards can stream the moment its own data lands.
+   * On every other screen this stays null.
    */
   const dash34 =
-    (activeKey === 'home' || segment === 'dashboard-v2') && !selectedLeagueId
+    segment === 'dashboard-v2' && !selectedLeagueId
       ? await getDash34Data(userId, leagues as unknown as Dash34LeagueRow[], now).catch(() => null)
       : null
 
@@ -1942,8 +1965,9 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
    * waiting on you" empty state key off this array, so without the merge the
    * queue could read clean while the brief two cards up says otherwise.
    * Synthesized from reads the loader already performed (the injury feed and
-   * the draft stage), never invented — and dash34 is null on every non-home
-   * screen, so the merge is the identity everywhere else.
+   * the draft stage), never invented — and dash34 is null on every screen but
+   * dashboard v2, so the merge is the identity everywhere else. The home applies
+   * this same merge to its streamed read (`homeLoads.issues`).
    */
   const issues = mergeDash34Issues(derivedIssues, dash34)
 
@@ -1983,60 +2007,42 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
   const isHome3a = activeKey === 'home' && segment !== 'dashboard-v2' && !selectedLeagueId
 
   /*
-   * P4-5: the /core home's ONE Decision OS read — the deterministic user-os
-   * snapshot for the league that most needs the user right now. "Most urgent"
-   * follows the same ladder the home itself leads with: dash34's first
-   * priority === 'urgent' league (a starter who cannot play), then its first
-   * priority === 'draft' league, then the head of the issues queue (already
-   * sorted severity-then-deadline inside deriveOutstandingIssues), falling
-   * back to the first played league.
-   * One league only, loaded only when the 3a home renders, and resolved
-   * directly rather than through /api/decision-os/user-os: membership is
-   * already established by the league list read above, and
-   * resolveUserOsSnapshot scopes every fact to the caller's own managerId.
-   * It never throws, and a null here renders NOTHING — see DashUserOs.
+   * ── THE HOME'S READS: STARTED HERE, AWAITED BY THE CARD THAT SHOWS THEM ──────────────────────
+   *
+   * Every read below used to be awaited in line — the summary, then the week, then thirteen reads
+   * together, then the brief, the win probabilities and the drafts — so the home arrived when its
+   * SLOWEST read finished. Now each is a promise, started immediately, and handed to
+   * `CoreHomeCards` (components/core-app/home/HomeCards.tsx), where every card waits only for what
+   * it shows. A read that depends on another chains on that one promise; nothing is read twice.
+   *
+   * Each keeps the fallback it had. A read that CANNOT fail by itself (a derived value built from
+   * reads that already degrade) is left to reject on a real bug — its card's error boundary then
+   * reports it — rather than being hidden behind a `.catch`.
+   *
+   * `traceCard` names each read in the request's trace (lib/observability/cardTelemetry.ts), so a
+   * slow card is attributable.
    */
-  const dash34Ranked = dash34?.allLeagues ?? dash34?.leagues ?? []
-  const homeUserOsAnchorId =
-    dash34Ranked.find((l) => l.priority === 'urgent')?.id ??
-    dash34Ranked.find((l) => l.priority === 'draft')?.id ??
-    issues.find((i) => i.leagueId != null)?.leagueId ??
-    null
-  const homeUserOsLeague = isHome3a
-    ? (playedLeagues.find((l) => l.id === homeUserOsAnchorId) ?? playedLeagues[0] ?? null)
-    : null
+  const homeRecordVisit = isHome3a ? !isSpeculativeRequestHeaders(await headers()) : false
+  const homeLoads: HomeLoads | null = !isHome3a
+    ? null
+    : (() => {
+        const summary = traceCard('dash34', () =>
+          getDash34Data(userId, leagues as unknown as Dash34LeagueRow[], now),
+        ).catch(() => null)
+        const mergedIssues = summary.then((data) => mergeDash34Issues(derivedIssues, data))
 
-  const homeTradeWeek = isHome3a
-    ? await resolveCurrentWeek(
-        playedLeagues
-          .map((league) => (league as { platformLeagueId?: string | null }).platformLeagueId ?? '')
-          .filter(Boolean),
-      ).then((value) => value?.week ?? null).catch(() => null)
-    : null
+        const tradeWeek = traceCard('trade-week', () =>
+          resolveCurrentWeek(
+            playedLeagues
+              .map((league) => (league as { platformLeagueId?: string | null }).platformLeagueId ?? '')
+              .filter(Boolean),
+          ),
+        )
+          .then((value) => value?.week ?? null)
+          .catch(() => null)
 
-  const [
-    homeCareer,
-    homeWeek,
-    homeExposure,
-    homeRivals,
-    homeUserOs,
-    homeSchedule,
-    homeStrip,
-    homePlays,
-    homeRegularSeason,
-    homeTrades,
-    homeFollowing,
-    homeReceipts,
-    homeRoutineFacts,
-  ] = isHome3a
-    ? await Promise.all([
-        getCareerData(userId).catch(() => null),
-        getWeekAll(userId, weekLeagues).catch(() => null),
-        getCrossLeagueExposure(userId, playedLeagues.map((l) => l.id)).catch(() => null),
-        getRivalRecords(userId, playedLeagues.map((l) => l.id)).catch(() => null),
-        homeUserOsLeague
-          ? resolveUserOsSnapshot(homeUserOsLeague.id, userId).catch(() => null)
-          : Promise.resolve(null),
+        const weekAll = traceCard('week', () => getWeekAll(userId, weekLeagues)).catch(() => null)
+
         /*
          * WHO you play, which getWeekAll cannot answer: it drops every 0-0 row
          * by design, so before a week is scored the matchup section has
@@ -2047,81 +2053,54 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
          * on this branch and 'week' on the other caller above, so the two are
          * mutually exclusive and nothing is fetched twice.
          */
-        getWeekBoard(userId, weekLeagues).catch(() => null),
-        /*
-         * The game-day pair. Both were built for the dashboard-v2 segment and
-         * mounted nowhere else, so the home had nothing that moved during the
-         * six hours a manager actually sits in it. getPlayFeed is
-         * readPlayByPlayFeed plus headshots and a composed headline; both
-         * return quiet values off a slate ([] and an unavailable record), and
-         * the band renders nothing on them.
-         */
-        getTodayStrip(
-          userId,
-          playedLeagues.map((l) => ({
-            id: l.id,
-            name: l.name,
-            sport: (l as { sport?: string | null }).sport ?? null,
-            platformLeagueId: (l as { platformLeagueId?: string | null }).platformLeagueId ?? null,
-            /* The health tile's primary gate — see the v2 caller's note. */
-            lastSyncedAt: (l as { lastSyncedAt?: Date | string | null }).lastSyncedAt ?? null,
-          })),
-          now,
-        ).catch(() => null),
-        getPlayFeed(12).catch(() => []),
-        /*
-         * Has the regular season actually kicked off? The game-day band claimed
-         * in prose that it must not render over preseason football and then did
-         * not enforce it — a live-looking band over a Saturday exhibition
-         * nobody's lineup scores. Cached and user-independent, so it costs
-         * nothing per viewer.
-         */
-        hasRegularSeasonStarted('NFL').catch(() => false),
+        const schedule = traceCard('schedule', () => getWeekBoard(userId, weekLeagues)).catch(() => null)
+
         /*
          * Trades that landed in the last fortnight. Reads the cache the
          * 30-minute grade sweep already fills — see lib/core-app/recentTrades
          * for why the product has been telling users this data does not exist.
          */
-        getRecentTrades(
+        const trades = tradeWeek
+          .then((currentWeek) =>
+            traceCard('trades', () =>
+              getRecentTrades(
+                playedLeagues.map((l) => ({
+                  id: l.id,
+                  name: l.name,
+                  platformLeagueId: (l as { platformLeagueId?: string | null }).platformLeagueId ?? null,
+                  platform: String(l.platform ?? ''),
+                })),
+                now,
+                HOME_RECENT_TRADES_LIMIT,
+                {
+                  ownerSleeperId: leagueListPayload?.sleeperUserId ?? null,
+                  currentWeek,
+                  maxLeagues: 8,
+                  /*
+                   * The same scan sees offers waiting on you; the Trades urgency badge
+                   * reads them from the cache instead of scanning again on every tab.
+                   * Not awaited here: a badge that lags one render is inside the
+                   * 10-minute freshness rule, and recording it must never slow the home.
+                   */
+                  onPendingOffers: (scanned) => {
+                    void recordPendingOffers(userId, scanned, now).catch(() => undefined)
+                  },
+                },
+              ),
+            ),
+          )
+          .catch(() => [])
+
+        // A fresh array per reader, as each had before: neither can see what the other does to its input.
+        const routineLeagues = () =>
           playedLeagues.map((l) => ({
             id: l.id,
             name: l.name,
+            platform: String(l.platform ?? ''),
             platformLeagueId: (l as { platformLeagueId?: string | null }).platformLeagueId ?? null,
-            platform: String(l.platform ?? ''),
-          })),
-          now,
-          HOME_RECENT_TRADES_LIMIT,
-          {
-            ownerSleeperId: leagueListPayload?.sleeperUserId ?? null,
-            currentWeek: homeTradeWeek,
-            maxLeagues: 8,
-            /*
-             * The same scan sees offers waiting on you; the Trades urgency badge
-             * reads them from the cache instead of scanning again on every tab.
-             * Not awaited here: a badge that lags one render is inside the
-             * 10-minute freshness rule, and recording it must never slow the home.
-             */
-            onPendingOffers: (scanned) => {
-              void recordPendingOffers(userId, scanned, now).catch(() => undefined)
-            },
-          },
-        ).catch(() => []),
-        /*
-         * Players followed across every league (2026-09-14). One read of the follow list
-         * plus the injury port and one fixture window for the shown rows. Null when follows
-         * are unavailable, which hides the card. The leagues feed the waiver nudge ("free
-         * agent in Ice Kings"), which reads every roster of up to 12 of your leagues once.
-         */
-        getFollowingCard(
-          userId,
-          now,
-          playedLeagues.map((l) => ({
-            id: l.id,
-            name: l.name,
-            platform: String(l.platform ?? ''),
-            sport: (l as { sport?: string | null }).sport ?? null,
-          })),
-        ).catch(() => null),
+            season: (l as { season?: number | string | null }).season ?? null,
+          }))
+
         /*
          * Decision receipts (2026-09-14): how your trades and waiver adds turned out.
          * Trades: one read of the trade-grade cache the sweep already fills, your side found
@@ -2129,145 +2108,253 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
          * claimed rosters plus the weekly scores of the players you added (five set-based
          * queries, at most 12 leagues). Each kind fails on its own; null hides the card.
          */
-        getDecisionReceipts({
-          userId,
-          leagues: playedLeagues.map((l) => ({
-            id: l.id,
-            name: l.name,
-            platform: String(l.platform ?? ''),
-            platformLeagueId: (l as { platformLeagueId?: string | null }).platformLeagueId ?? null,
-            season: (l as { season?: number | string | null }).season ?? null,
-          })),
-          ownerSleeperId: leagueListPayload?.sleeperUserId ?? null,
-          currentWeek: homeTradeWeek,
-        }).catch(() => null),
+        const receipts = tradeWeek
+          .then((currentWeek) =>
+            traceCard('receipts', () =>
+              getDecisionReceipts({
+                userId,
+                leagues: routineLeagues(),
+                ownerSleeperId: leagueListPayload?.sleeperUserId ?? null,
+                currentWeek,
+              }),
+            ),
+          )
+          .catch(() => null)
+
         /*
          * The weekly routine's reads (2026-09-14): the last fully played week and its top
          * starter, and this week's adds from the transaction facts the receipts already read.
          * Each fails to null ("unknown"), never to "none".
          */
-        getRoutineFacts({
-          userId,
-          leagues: playedLeagues.map((l) => ({
-            id: l.id,
-            name: l.name,
-            platform: String(l.platform ?? ''),
-            platformLeagueId: (l as { platformLeagueId?: string | null }).platformLeagueId ?? null,
-            season: (l as { season?: number | string | null }).season ?? null,
-          })),
-          currentWeek: homeTradeWeek,
-          // Weekly awards are keyed by your Sleeper user id; read from the H2H cache, never Sleeper.
-          ownerSleeperId: leagueListPayload?.sleeperUserId ?? null,
-        }).catch(() => null),
-      ])
-    : [null, null, null, null, null, null, null, [], false, [], null, null, null]
+        const routineFacts = tradeWeek
+          .then((currentWeek) =>
+            traceCard('routine-facts', () =>
+              getRoutineFacts({
+                userId,
+                leagues: routineLeagues(),
+                currentWeek,
+                // Weekly awards are keyed by your Sleeper user id; read from the H2H cache, never Sleeper.
+                ownerSleeperId: leagueListPayload?.sleeperUserId ?? null,
+              }),
+            ),
+          )
+          .catch(() => null)
 
-  /*
-   * The routine card, built from those reads plus what the home already holds: the injury book's
-   * starters in doubt (the triage band's own rule) and this week's schedule. A missing dash34 is
-   * "unknown" for lineups, not "no starters in doubt".
-   */
-  const homeRoutine = isHome3a
-    ? buildWeeklyRoutine({
-        now,
-        lastWeek: homeRoutineFacts?.lastWeek ?? null,
-        topScorer: homeRoutineFacts?.topScorer ?? null,
-        addsThisWeek: homeRoutineFacts?.addsThisWeek ?? null,
-        startersInDoubt: dash34
-          ? ((dash34.book ?? []) as unknown as TriageBookRow[]).filter((p) => p.tone === 'bad' && p.startingIn > 0).length
-          : null,
-        schedule: homeSchedule ?? null,
-        awards: homeRoutineFacts?.awards ?? [],
-        upsets: homeRoutineFacts?.upsets ?? [],
-      })
-    : null
-
-  /*
-   * "Since your last visit" — lib/core-app/sinceLastVisit. Serial after the home
-   * reads because its trade line summarises the trades loaded just above; passing
-   * the same limit is what lets it say "3+" instead of a count it cannot stand
-   * behind. A prefetch reads the brief but never moves the visit: Next prefetches
-   * links as they scroll into view, and a window that reset on a hover would tell
-   * someone away for a week that nothing changed.
-   */
-  const homeBrief = isHome3a
-    ? await getSinceLastVisit({
-        userId,
-        leagues: playedLeagues.map((l) => ({
-          id: l.id,
-          name: l.name ?? null,
-          sport: (l as { sport?: string | null }).sport ?? null,
-          // For the brief's provider handoff links (2026-09-14).
-          platform: l.platform ?? null,
-          platformLeagueId: (l as { platformLeagueId?: string | null }).platformLeagueId ?? null,
-          season: l.season ?? null,
-        })),
-        recentTrades: homeTrades,
-        tradesLimit: HOME_RECENT_TRADES_LIMIT,
-        now,
-        recordVisit: !isSpeculativeRequestHeaders(await headers()),
-      }).catch(() => null)
-    : null
-
-  /*
-   * ⚠ PRICE THE CARDS THAT RENDER, NOT THE FIRST FOUR LEAGUES. Dashboard3A's
-   * matchup grid shows `scored.slice(0, 4)` — live-scored leagues first, then
-   * weekAll's scored rows — and `scoredMatchupLeagueIds` replicates that exact
-   * derivation from the same inputs. Pricing `playedLeagues.slice(0, 4)` paid
-   * several queries per league for cards showing a DIFFERENT league — or,
-   * before the season starts, no card at all. When the scored set is empty,
-   * nothing is priced: zero round-trips instead of four.
-   *
-   * Serial after the Promise.all because it needs `homeWeek`; it only runs
-   * when at least one card will render, which is exactly when the work is
-   * visible.
-   */
-  const scoredIds = isHome3a
-    ? scoredMatchupLeagueIds(
-        (dash34?.leagues ?? []).filter((l) => l.score).map((l) => l.id),
-        homeWeek,
-      )
-    : []
-  const homeMatchups =
-    scoredIds.length > 0
-      ? await Promise.all(
-          scoredIds.map((id) =>
-            getMatchupData(id, userId)
-              .then((m) => ({ id, m }))
-              .catch(() => ({ id, m: null })),
-          ),
+        /*
+         * The routine card, built from those reads plus what the home already holds: the injury book's
+         * starters in doubt (the triage band's own rule) and this week's schedule. A missing dash34 is
+         * "unknown" for lineups, not "no starters in doubt".
+         */
+        const routine = Promise.all([routineFacts, summary, schedule]).then(([facts, data, board]) =>
+          buildWeeklyRoutine({
+            now,
+            lastWeek: facts?.lastWeek ?? null,
+            topScorer: facts?.topScorer ?? null,
+            addsThisWeek: facts?.addsThisWeek ?? null,
+            startersInDoubt: data
+              ? ((data.book ?? []) as unknown as TriageBookRow[]).filter((p) => p.tone === 'bad' && p.startingIn > 0).length
+              : null,
+            schedule: board ?? null,
+            awards: facts?.awards ?? [],
+            upsets: facts?.upsets ?? [],
+          }),
         )
-      : null
+
+        /*
+         * P4-5: the /core home's ONE Decision OS read — the deterministic user-os
+         * snapshot for the league that most needs the user right now. "Most urgent"
+         * follows the same ladder the home itself leads with: dash34's first
+         * priority === 'urgent' league (a starter who cannot play), then its first
+         * priority === 'draft' league, then the head of the issues queue (already
+         * sorted severity-then-deadline inside deriveOutstandingIssues), falling
+         * back to the first played league.
+         * One league only, loaded only when the 3a home renders, and resolved
+         * directly rather than through /api/decision-os/user-os: membership is
+         * already established by the league list read above, and
+         * resolveUserOsSnapshot scopes every fact to the caller's own managerId.
+         * It never throws, and a null here renders NOTHING — see DashUserOs.
+         */
+        const userOs = Promise.all([summary, mergedIssues]).then(async ([data, merged]) => {
+          const ranked = data?.allLeagues ?? data?.leagues ?? []
+          const anchorId =
+            ranked.find((l) => l.priority === 'urgent')?.id ??
+            ranked.find((l) => l.priority === 'draft')?.id ??
+            merged.find((i) => i.leagueId != null)?.leagueId ??
+            null
+          const league = playedLeagues.find((l) => l.id === anchorId) ?? playedLeagues[0] ?? null
+          if (!league) return { snapshot: null, league: null }
+          const snapshot = await traceCard('user-os', () => resolveUserOsSnapshot(league.id, userId)).catch(() => null)
+          return { snapshot, league: { id: league.id, name: league.name } }
+        })
+
+        /*
+         * "Since your last visit" — lib/core-app/sinceLastVisit. After the trades read
+         * because its trade line summarises the trades loaded just above; passing
+         * the same limit is what lets it say "3+" instead of a count it cannot stand
+         * behind. A prefetch reads the brief but never moves the visit: Next prefetches
+         * links as they scroll into view, and a window that reset on a hover would tell
+         * someone away for a week that nothing changed.
+         */
+        const brief = trades
+          .then((recentTrades) =>
+            traceCard('since-last-visit', () =>
+              getSinceLastVisit({
+                userId,
+                leagues: playedLeagues.map((l) => ({
+                  id: l.id,
+                  name: l.name ?? null,
+                  sport: (l as { sport?: string | null }).sport ?? null,
+                  // For the brief's provider handoff links (2026-09-14).
+                  platform: l.platform ?? null,
+                  platformLeagueId: (l as { platformLeagueId?: string | null }).platformLeagueId ?? null,
+                  season: l.season ?? null,
+                })),
+                recentTrades,
+                tradesLimit: HOME_RECENT_TRADES_LIMIT,
+                now,
+                recordVisit: homeRecordVisit,
+              }),
+            ),
+          )
+          .catch(() => null)
+
+        /*
+         * ⚠ PRICE THE CARDS THAT RENDER, NOT THE FIRST FOUR LEAGUES. Dashboard3A's
+         * matchup grid shows `scored.slice(0, 4)` — live-scored leagues first, then
+         * weekAll's scored rows — and `scoredMatchupLeagueIds` replicates that exact
+         * derivation from the same inputs. Pricing `playedLeagues.slice(0, 4)` paid
+         * several queries per league for cards showing a DIFFERENT league — or,
+         * before the season starts, no card at all. When the scored set is empty,
+         * nothing is priced: zero round-trips instead of four.
+         *
+         * After the summary and the week, because it needs both; it only prices when
+         * at least one card will render, which is exactly when the work is visible.
+         *
+         * Only leagues whose BOTH lineups priced land in the result. An absent entry renders no
+         * percentage at all rather than a hedged one — a greyed-out probability still
+         * reads as a probability.
+         */
+        const winProb = Promise.all([summary, weekAll]).then(async ([data, week]) => {
+          const scoredIds = scoredMatchupLeagueIds((data?.leagues ?? []).filter((l) => l.score).map((l) => l.id), week)
+          const priced = scoredIds.length
+            ? await traceCard('win-probability', () =>
+                Promise.all(
+                  scoredIds.map((id) =>
+                    getMatchupData(id, userId)
+                      .then((m) => ({ id, m }))
+                      .catch(() => ({ id, m: null })),
+                  ),
+                ),
+              )
+            : []
+          const probabilities: Record<string, number> = {}
+          for (const { id, m } of priced) {
+            if (m?.winProbability.available) probabilities[id] = m.winProbability.data.pWin
+          }
+          return probabilities
+        })
+
+        /*
+         * Drafts on the clock — the same cross-league aggregator the dashboard-v2
+         * segment reads (three set-based queries regardless of league count).
+         * playedLeagues, NOT leagues, for the same AF-Legacy reason as the v2 call
+         * site — the unfiltered list carries hundreds of past-season board rows. A
+         * loader failure is null, and null renders NOTHING — see DashDraftsBand.
+         */
+        const drafts = traceCard('drafts', () =>
+          getDraftHqAll(
+            userId,
+            playedLeagues.map((l) => ({
+              id: l.id,
+              name: l.name,
+              platform: String(l.platform ?? ''),
+              imageUrl: (l as { avatarUrl?: string | null }).avatarUrl ?? null,
+            })),
+          ),
+        ).catch(() => null)
+
+        // Derived values reject only on a bug, and their card reports it; mark them handled so a
+        // navigation that drops the card before it awaits never surfaces as an unhandled rejection.
+        for (const derived of [mergedIssues, routine, userOs, winProb]) derived.catch(() => undefined)
+
+        return {
+          dash34: summary,
+          issues: mergedIssues,
+          career: traceCard('career', () => getCareerData(userId)).catch(() => null),
+          week: weekAll,
+          winProb,
+          exposure: traceCard('exposure', () =>
+            getCrossLeagueExposure(userId, playedLeagues.map((l) => l.id)),
+          ).catch(() => null),
+          rivals: traceCard('rivals', () => getRivalRecords(userId, playedLeagues.map((l) => l.id))).catch(() => null),
+          /*
+           * Players followed across every league (2026-09-14). One read of the follow list
+           * plus the injury port and one fixture window for the shown rows. Null when follows
+           * are unavailable, which hides the card. The leagues feed the waiver nudge ("free
+           * agent in Ice Kings"), which reads every roster of up to 12 of your leagues once.
+           */
+          following: traceCard('following', () =>
+            getFollowingCard(
+              userId,
+              now,
+              playedLeagues.map((l) => ({
+                id: l.id,
+                name: l.name,
+                platform: String(l.platform ?? ''),
+                sport: (l as { sport?: string | null }).sport ?? null,
+              })),
+            ),
+          ).catch(() => null),
+          receipts,
+          routine,
+          userOs,
+          schedule,
+          /*
+           * The game-day pair. Both were built for the dashboard-v2 segment and
+           * mounted nowhere else, so the home had nothing that moved during the
+           * six hours a manager actually sits in it. getPlayFeed is
+           * readPlayByPlayFeed plus headshots and a composed headline; both
+           * return quiet values off a slate ([] and an unavailable record), and
+           * the band renders nothing on them.
+           */
+          strip: traceCard('today-strip', () =>
+            getTodayStrip(
+              userId,
+              playedLeagues.map((l) => ({
+                id: l.id,
+                name: l.name,
+                sport: (l as { sport?: string | null }).sport ?? null,
+                platformLeagueId: (l as { platformLeagueId?: string | null }).platformLeagueId ?? null,
+                /* The health tile's primary gate — see the v2 caller's note. */
+                lastSyncedAt: (l as { lastSyncedAt?: Date | string | null }).lastSyncedAt ?? null,
+              })),
+              now,
+            ),
+          ).catch(() => null),
+          plays: traceCard('plays', () => getPlayFeed(12)).catch(() => []),
+          /*
+           * Has the regular season actually kicked off? The game-day band claimed
+           * in prose that it must not render over preseason football and then did
+           * not enforce it — a live-looking band over a Saturday exhibition
+           * nobody's lineup scores. Cached and user-independent, so it costs
+           * nothing per viewer.
+           */
+          regularSeason: traceCard('regular-season', () => hasRegularSeasonStarted('NFL')).catch(() => false),
+          trades,
+          brief,
+          drafts,
+        }
+      })()
 
   /*
-   * Only leagues whose BOTH lineups priced land here. An absent entry renders no
-   * percentage at all rather than a hedged one — a greyed-out probability still
-   * reads as a probability.
-   */
-  const winProb: Record<string, number> = {}
-  for (const { id, m } of homeMatchups ?? []) {
-    if (m?.winProbability.available) winProb[id] = m.winProbability.data.pWin
-  }
-
-  /*
-   * Drafts on the clock — the same cross-league aggregator the dashboard-v2
-   * segment reads (three set-based queries regardless of league count), called
-   * here ONLY for the 3a home. `isHome3a` is false when segment ===
-   * 'dashboard-v2', so the v2 dispatch below never pays for this twice.
-   * playedLeagues, NOT leagues, for the same AF-Legacy reason as the v2 call
-   * site — the unfiltered list carries hundreds of past-season board rows. A
-   * loader failure is null, and null renders NOTHING — see DashDraftsBand.
-   */
-  /*
-   * ⚠ SHARED BY TWO SURFACES, ONE READ. The 3a home rail and the cross-league
-   * Draft HQ board want the same three set-based queries. `isHome3a` is false
-   * when segment === 'dashboard-v2', so the v2 dispatch further down still never
-   * pays for this twice.
+   * ⚠ THE CROSS-LEAGUE DRAFT HQ BOARD reads the same aggregate the home's drafts band does —
+   * the home now starts its own copy above, and this screen awaits it here. They are different
+   * screens, so it is still one read per render.
    *
    * The cross-league War Room used to be a third consumer. It is now the Scout
    * hub and reads no drafts at all.
    */
-  const wantsAllDrafts = isHome3a || (activeKey === 'draft-hq' && !selectedLeagueId)
+  const wantsAllDrafts = activeKey === 'draft-hq' && !selectedLeagueId
 
   const homeDrafts = wantsAllDrafts
     ? await getDraftHqAll(
@@ -2411,53 +2498,73 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
   }
 
   /*
-   * Urgency counts on the tabs — lib/core-app/urgencyBadges. Computed last, after
-   * every loader above, so the home's lineup facts refresh the cache in the same
-   * render. Any other tab reuses the cache and reloads the lineup facts at most
-   * once per 10 minutes. A failure renders no badges — never a zero.
+   * Urgency counts on the tabs — lib/core-app/urgencyBadges. On the home they wait for the
+   * summary read, so the home's lineup facts refresh the cache in the same render. Any other
+   * tab reuses the cache and reloads the lineup facts at most once per 10 minutes. A failure
+   * renders no badges — never a zero.
+   *
+   * ⚠ STARTED, NOT AWAITED — ON EVERY SCREEN. This was the last `await` in front of every
+   * screen's render, and a stale cache made it reload the whole cross-league summary: every
+   * ten minutes, /core/trades waited on a read it does not show. The badges now stream to the
+   * shell on their own (`ScreenShellSignals`, below) and the screen renders without them.
    */
-  const urgencyBadges = await getUrgencyBadges({
-    userId,
-    leagues: playedLeagues.map((l) => ({
-      id: l.id,
-      platform: (l as { platform?: string | null }).platform ?? null,
-      draftDate: (l as { draftDate?: string | Date | null }).draftDate ?? null,
-      lastSyncedAt: (l as { lastSyncedAt?: Date | string | null }).lastSyncedAt ?? null,
-    })),
-    liveDraftLeagueIds: coreActivity.liveDraftLeagueIds,
-    now,
-    lineupLeagues: dash34?.allLeagues ?? null,
-    loadLineupLeagues: () =>
-      getDash34Data(userId, leagues as unknown as Dash34LeagueRow[], now).then((d) => d?.allLeagues ?? null),
-  }).catch(() => null)
+  const urgencyBadges = (homeLoads ? homeLoads.dash34 : Promise.resolve(dash34))
+    .then((summary) =>
+      traceCard('urgency-badges', () =>
+        getUrgencyBadges({
+          userId,
+          leagues: playedLeagues.map((l) => ({
+            id: l.id,
+            platform: (l as { platform?: string | null }).platform ?? null,
+            draftDate: (l as { draftDate?: string | Date | null }).draftDate ?? null,
+            lastSyncedAt: (l as { lastSyncedAt?: Date | string | null }).lastSyncedAt ?? null,
+          })),
+          liveDraftLeagueIds: coreActivity.liveDraftLeagueIds,
+          now,
+          lineupLeagues: summary?.allLeagues ?? null,
+          loadLineupLeagues: () =>
+            getDash34Data(userId, leagues as unknown as Dash34LeagueRow[], now).then((d) => d?.allLeagues ?? null),
+        }),
+      ),
+    )
+    .catch(() => null)
 
   return (
     <>
       {/*
        * The chrome only this screen could know, published up to the shell that has already
-       * painted — see shellSignals.tsx. Each value is exactly what this page passed as a prop
-       * before the shell rendered first.
+       * painted — see shellSignals.tsx. Streamed on its own, so no screen waits for its badges.
        */}
-      <PublishShellSignals
-        weekLabel={dash34?.weekLabel ?? null}
-        urgencyBadges={urgencyBadges}
-        /*
-         * The home's own claims, handed to the assistant the user opens FROM
-         * those claims. Derived from the same dash34 facts that feed the brief
-         * and the issues queue, so the three cannot disagree. Ids and counts
-         * only — the route resolves names itself; see lib/core-app/homeSignals.ts
-         * for why nothing free-text crosses that boundary.
-         */
-        homeSignals={serializeHomeSignals(buildHomeSignals(dash34, issues.length))}
-        /*
-         * Only on the Live screen itself — the count comes from the payload already
-         * loaded there. Reading the slate on every /core page to decorate one nav badge
-         * would put a provider call in front of every screen in the product, which is
-         * exactly the cost the per-screen loader pattern above exists to avoid. Elsewhere
-         * this stays undefined and the shell keeps the activity snapshot's count.
-         */
-        liveGameCount={liveScores ? liveScores.games.filter((g) => g.isLive).length : undefined}
-      />
+      <Suspense fallback={null}>
+        <ScreenShellSignals
+          urgencyBadges={urgencyBadges}
+          weekLabel={homeLoads ? homeLoads.dash34.then((summary) => summary?.weekLabel ?? null) : (dash34?.weekLabel ?? null)}
+          /*
+           * The home's own claims, handed to the assistant the user opens FROM
+           * those claims. Derived from the same dash34 facts that feed the brief
+           * and the issues queue, so the three cannot disagree. Ids and counts
+           * only — the route resolves names itself; see lib/core-app/homeSignals.ts
+           * for why nothing free-text crosses that boundary.
+           */
+          homeSignals={
+            homeLoads
+              ? Promise.all([homeLoads.dash34, homeLoads.issues])
+                  .then(([summary, merged]) => serializeHomeSignals(buildHomeSignals(summary, merged.length)))
+                  // Chrome, not a card: a bug here must not take the screen down. The same merge feeds
+                  // the issues card, whose boundary reports it.
+                  .catch(() => null)
+              : serializeHomeSignals(buildHomeSignals(dash34, issues.length))
+          }
+          /*
+           * Only on the Live screen itself — the count comes from the payload already
+           * loaded there. Reading the slate on every /core page to decorate one nav badge
+           * would put a provider call in front of every screen in the product, which is
+           * exactly the cost the per-screen loader pattern above exists to avoid. Elsewhere
+           * this stays undefined and the shell keeps the activity snapshot's count.
+           */
+          liveGameCount={liveScores ? liveScores.games.filter((g) => g.isLive).length : undefined}
+        />
+      </Suspense>
 
       {segment === 'bracket' ? (
         bracket ? (
@@ -3186,136 +3293,22 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
          * facts stated once. The queue's one genuinely load-bearing feature, the
          * "not yet watched" disclosure, is carried across as `coverage`.
          */
-        dash34 ? (
-          <>
-            {/*
-              What changed since your last visit — leads the home, by the user's
-              decision (2026-09-14). It renders NOTHING when nothing changed, so a
-              quiet day costs no space above the live and draft bands; on a day
-              with news it is the first thing read, and each line links to the
-              band or screen that holds the detail.
-            */}
-            <DashSinceLastVisit brief={homeBrief} now={now} />
-            {/*
-              Drafts on the clock — leads the home whenever any league's draft
-              is live right now (the founder's week). One card per live draft,
-              capped at 4 with a Draft HQ overflow link. Zero live drafts, or a
-              loader failure, renders NOTHING — see DashDraftsBand's header for
-              the honesty rules (raw status shown, no invented timers).
-            */}
-            {/*
-              Game day leads everything while a slate is live — a running game
-              outranks a draft clock and a countdown. It renders only inside a
-              game window (a play detected in the last few hours, or a scored
-              matchup of the user's), so outside one this is not a quiet band,
-              it is no band at all.
-            */}
-            <DashGameDayBand
-              strip={homeStrip}
-              plays={homePlays}
-              now={now}
-              regularSeasonUnderway={homeRegularSeason}
-            />
-            <DashDraftsBand data={homeDrafts} now={now} />
-            {/*
-              Starters in doubt — the DECISION slice of the injury book.
-              ⚠ ITS POSITION HAS MOVED TWICE, AND BOTH MOVES WERE RIGHT. It
-              first led the page as the loader's whole 40-row book, which read
-              as a wall of headshots with no decision attached, so it was
-              filtered to starters-who-may-not-play and demoted. Now that the
-              ordering is value-aware — a first-round back outranks a bench
-              stash instead of losing to it alphabetically — the founder's
-              actual ask stands: an injured starter should be the first thing
-              he sees. It ranks above the trade band and the brief and below
-              only a live slate and a draft on the clock, both of which are
-              happening RIGHT NOW rather than needing a decision. On a day with
-              no lineup decision it still renders nothing at all, which is what
-              makes it safe to place this high.
-            */}
-            <Dash3ATriage
-              book={(dash34.book ?? null) as unknown as TriageBookRow[] | null}
-              now={now}
-              valueBasis={dash34.valueBasis ?? null}
-            />
-            {/*
-              A trade landing is news the moment it lands, and it was the one
-              thing the founder named that no surface showed at all. Below the
-              live/draft bands because it is not a deadline; above the brief
-              because it is a fact about his leagues, not a summary of them.
-            */}
-            <DashTradeBand trades={homeTrades} now={now} />
-            {/*
-              34a's four unique sections (first-lock band, honesty notice,
-              Chimmy brief, coverage list) — carried over so the cutover
-              loses nothing 3A doesn't render. See Dash34Carryover's header
-              for what was deliberately NOT carried and why.
-            */}
-            <Dash34Carryover data={dash34} />
-            {/*
-              P4-5: the first /core surface that reads Decision OS at all — the
-              deterministic user-os card for the most urgent league. Renders
-              NOTHING on any failure or coverage gap; see DashUserOs's header
-              for the render-nothing rules.
-            */}
-            <DashUserOs
-              snapshot={homeUserOs}
-              leagueId={homeUserOsLeague?.id ?? null}
-              leagueName={homeUserOsLeague?.name ?? null}
-            />
-            {/*
-              WHO you play this week, immediately above the section that can
-              only show scores. Until a week is scored — every week before
-              kickoff, and all of preseason — Dashboard3A's matchup grid is an
-              empty frame, because both of its sources drop unscored rows on
-              purpose. This band answers the half of the question that IS
-              knowable: opponent, league, first kickoff. It renders nothing
-              when the read fails or no league has a schedule on file.
-            */}
-            <DashScheduleBand
-              board={homeSchedule}
-              syncLabel={syncAge.stale ? null : syncAge.label}
-            />
-            {/*
-              3a mounted as the screen BODY. It ships its own rail/nav/topbar
-              for the standalone render it was built for; af-core-shell.css
-              suppresses that chrome under .af-content so the shell's own
-              rail, nav and topbar stand alone.
-            */}
-            <Dashboard3A
-              issues={issues}
-              exposure={homeExposure}
-              following={homeFollowing}
-              receipts={homeReceipts}
-              routine={homeRoutine}
-              rivals={homeRivals}
-              winProb={winProb}
-              data={dash34}
-              career={homeCareer}
-              week={homeWeek}
-              weekLabel={dash34.weekLabel ?? null}
-              planName={plan?.name ?? null}
-              commissionerCount={commissionerCount}
-              nowLabel={syncAge.stale ? null : syncAge.label}
-            />
-            {/*
-              The coverage disclosure, at the foot where a footnote belongs.
-              It used to sit third on the page: leading with everything we
-              cannot see sets the tone to apology before the reader has seen
-              anything the product does know.
-            */}
-            <Dash34Coverage data={dash34} />
-          </>
-        ) : (
-          <div className="af-frame" style={{ padding: 24, maxWidth: 720 }}>
-            <h1 className="af-display" style={{ margin: 0, fontSize: 22, letterSpacing: '-0.03em' }}>
-              Your leagues
-            </h1>
-            <p style={{ marginTop: 8, fontSize: 13, lineHeight: 1.5, color: 'var(--muted)' }}>
-              We could not read your leagues just now. This is a read failure on our side, not a sign
-              that you have none.
-            </p>
-          </div>
-        )
+        /*
+         * The cards stream one by one — each behind its own boundary, each waiting only for its
+         * own reads (components/core-app/home/HomeCards.tsx, which also carries the reasons for
+         * their order). `homeLoads` is always set on this branch: the league home and dashboard v2
+         * are handled above.
+         */
+        homeLoads ? (
+          <CoreHomeCards
+            loads={homeLoads}
+            now={now}
+            resetKey={errorResetKey}
+            planName={plan?.name ?? null}
+            commissionerCount={commissionerCount}
+            syncLabel={syncAge.stale ? null : syncAge.label}
+          />
+        ) : null
       ) : (
         <div className="af-frame" style={{ padding: 24, maxWidth: 720 }}>
           <h1 className="af-display" style={{ margin: 0, fontSize: 22, letterSpacing: '-0.03em' }}>

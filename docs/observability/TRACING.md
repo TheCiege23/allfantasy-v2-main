@@ -32,6 +32,7 @@ Stamped on the root span (queryable in the spans dataset) and as tags:
 | `af.db.count` / `af.db.ms` / `af.db.max_ms` / `af.db.slowest` / `af.db.errors` | per-request database totals | server, from `lib/prisma.ts` |
 | `af.sync_job` | the `withSyncJobRun` job name | server |
 | `af.shell_ms` | ms from the session read until the `/core` shell had everything it renders | server, `/core` only |
+| `af.card` | on `core.card` spans: the read feeding a `/core` card (`dash34`, `career`, `trades`, `urgency-badges`, …) — see `CoreCardRead` in `lib/observability/cardTelemetry.ts` | server, `/core` home + tab badges |
 
 ⚠ **On `/core`, `span.duration` is no longer what the user waited for before the app appeared.** The
 shell renders first and the screen streams in behind it, so the request lasts as long as the slowest
@@ -88,6 +89,17 @@ Time to the `/core` shell, and to the whole screen:
 is_transaction:true transaction:"GET /core/[[...screen]]" af.nav:document
 group by af.screen, af.device   →   p75(af.shell_ms), p75(span.duration)
 ```
+
+Which card the home is waiting for — each card's read is a `core.card` span, and its database spans
+nest under it:
+
+```
+span.op:core.card   group by af.card   →   p75(span.duration), p95(span.duration), count()
+```
+
+⚠ The home streams each card on its own, so its `span.duration` is its SLOWEST card, not what the user
+saw first. A render failure inside a card is reported as an error tagged `af.boundary:core-card` and
+`af.card:<card>` (the card, not the read — `issues`, `career`, …).
 
 Database load per screen (catches N+1 growth before it is slow):
 
@@ -149,6 +161,6 @@ trusting a redaction change:
   separate. Both carry `af.screen`/`af.device`, so per-screen budgets do not depend on the link.
 - **Import and notification delivery timing.** `import_runs` and `notification_outbox` hold the
   timestamps; nothing turns them into budgets yet.
-- **Per-card spans.** The `/core` screen streams as one unit behind the shell today; cards get their
-  own spans when they stream independently.
+- **Per-card spans outside the home.** The home's cards stream independently and each read has a
+  `core.card` span; every other `/core` screen still streams as one unit behind the shell.
 - **Edge/middleware errors** are not captured at all.

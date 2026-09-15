@@ -82,11 +82,37 @@ import { WorkbookBarChart } from '@/components/core-app/charts/WorkbookChart'
  * win probability.
  */
 
+/**
+ * Server-streamed replacements for this screen's cards, one per slot (2026-09-15).
+ *
+ * /core renders each card behind its own Suspense boundary so a slow read delays only its card —
+ * see components/core-app/home/HomeCards.tsx. A slot, when given, renders IN PLACE of the card this
+ * component would otherwise build from its data props; the layout around it is unchanged. Every
+ * card is also exported below (`Dash3AIssues`, …) so the streamed version renders exactly this markup.
+ */
+export type Dashboard3ASlots = Partial<
+  Record<
+    | 'routine'
+    | 'issues'
+    | 'matchups'
+    | 'chimmy'
+    | 'career'
+    | 'rivals'
+    | 'portfolioChart'
+    | 'exposure'
+    | 'following'
+    | 'receipts'
+    | 'leagues',
+    React.ReactNode
+  >
+>
+
 export type Dashboard3AProps = {
-  issues: CoreIssue[]
-  data: Dash34Data | null
-  career: CareerData | null
-  week: WeekAllData | null
+  issues?: CoreIssue[]
+  data?: Dash34Data | null
+  career?: CareerData | null
+  week?: WeekAllData | null
+  slots?: Dashboard3ASlots
   weekLabel?: string | null
   planName?: string | null
   tokensLeft?: number | null
@@ -373,10 +399,10 @@ function deadlineLabel(deadline: Date | null, now: Date): string | null {
 }
 
 export function Dashboard3A({
-  issues,
-  data,
-  career,
-  week,
+  issues = [],
+  data = null,
+  career = null,
+  week = null,
   weekLabel = null,
   planName = null,
   tokensLeft = null,
@@ -388,11 +414,8 @@ export function Dashboard3A({
   following = null,
   receipts = null,
   routine = null,
+  slots = {},
 }: Dashboard3AProps) {
-  const now = new Date()
-  const openCount = issues.length
-  const urgent = issues.slice(0, 3)
-  const rest = issues.slice(3, 8)
   const leagues = data?.leagues ?? []
   /*
    * ⚠ THE RAIL IS A SWITCHER OVER EVERY LEAGUE YOU PLAY, NOT THE "NEEDS
@@ -408,65 +431,6 @@ export function Dashboard3A({
   const RAIL_TILE_LIMIT = 8
   const railShown = railLeagues.slice(0, RAIL_TILE_LIMIT)
   const railOverflow = railLeagues.length - railShown.length
-  /*
-   * ⚠ `data.leagues` IS NOT EVERY LEAGUE, AND THIS HEADER CLAIMED IT WAS.
-   * `getDash34Data` caps that array at LIST_LIMIT = 8 because 34a's main column
-   * is a queue, not an inventory — so "8 total" was rendered for an account with
-   * 63 played leagues, directly under an issue row reading "63 leagues have
-   * never been read". `totalLeagues` is the real count the loader already
-   * carries; when the list is short of it, say so rather than letting the
-   * shorter number stand as the total.
-   */
-  const leagueTotal = data?.totalLeagues ?? leagues.length
-  const shownLeagues = leagues.slice(0, 5)
-  const leagueTotalLabel =
-    leagueTotal > shownLeagues.length
-      ? `${shownLeagues.length} of ${leagueTotal}`
-      : `${leagueTotal} total`
-  const platformCounts = [...railLeagues.reduce((counts, league) => {
-    const platform = String(league.platform ?? 'AllFantasy').trim() || 'AllFantasy'
-    counts.set(platform, (counts.get(platform) ?? 0) + 1)
-    return counts
-  }, new Map<string, number>())]
-    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
-    .map(([label, value]) => ({ label, value, displayValue: value.toLocaleString() }))
-
-  /*
-   * Two real sources, preferred in order. `Dash34League.score` is live and knows
-   * the OPPONENT'S NAME, which the design shows and `WeekRow` cannot supply.
-   * `weekAll` is the scored history and covers leagues with no live score. A
-   * league appears once: live wins, history fills the gap.
-   */
-  const liveKeys = new Set(leagues.filter((l) => l.score).map((l) => l.id))
-  const scored: Array<{
-    key: string
-    leagueName: string
-    platform: string | null
-    you: number
-    them: number
-    note: string
-  }> = [
-    ...leagues
-      .filter((l) => l.score)
-      .map((l) => ({
-        key: l.id,
-        leagueName: l.name,
-        platform: l.platform ?? null,
-        you: l.score!.you,
-        them: l.score!.opponent,
-        note: `vs ${l.score!.opponentName}`,
-      })),
-    ...(week?.rows ?? [])
-      .filter((r) => !liveKeys.has(r.leagueId))
-      .map((r) => ({
-        key: r.leagueId,
-        leagueName: r.leagueName,
-        platform: r.platform,
-        you: r.pointsFor,
-        them: r.pointsAgainst,
-        note: `Week ${r.week} · ${r.won ? 'you won' : 'you lost'}`,
-      })),
-  ]
 
   return (
     <div className="af-core af3a-shell">
@@ -589,17 +553,81 @@ export function Dashboard3A({
         <div className="af3a-body">
           <div className="af3a-col-main">
             {/* ── Your week — the weekly routine, today's step first in the eye ── */}
-            <YourWeekRoutine
-              data={routine}
-              help={
-                <Help>
-                  <b>A fantasy week in five steps.</b>
-                  Results on Tuesday, waivers Wednesday, lineups Thursday, game day Sunday and the
-                  recap Monday (US Eastern). A check mark means we saw it done in your leagues.
-                </Help>
-              }
-            />
+            {slots.routine ?? <Dash3ARoutine routine={routine} />}
             {/* ── Outstanding issues ───────────────────────────────────── */}
+            {slots.issues ?? <Dash3AIssues issues={issues} />}
+
+            {/* ── This week's matchups ─────────────────────────────────── */}
+            {slots.matchups ?? <Dash3AMatchups data={data} week={week} winProb={winProb} weekLabel={weekLabel} />}
+          </div>
+
+          {/* ── Right column ───────────────────────────────────────────── */}
+          <div className="af3a-col-side">
+            {slots.chimmy ?? <Dash3AChimmy openCount={issues.length} />}
+            {slots.career ?? <Dash3ACareer career={career} />}
+            {slots.rivals ?? <Dash3ARivals rivals={rivals} />}
+          </div>
+        </div>
+
+        {slots.portfolioChart ?? <Dash3APortfolioChart data={data} />}
+
+        {/* ── Bottom three-up ────────────────────────────────────────────── */}
+        <div className="af3a-bottom">
+          {/* Exposure and Following share a column, so the bottom row stays three-up. */}
+          <div className="af3a-stack">
+            {slots.exposure ?? <Dash3AExposure exposure={exposure} />}
+            {slots.following ?? <Dash3AFollowing following={following} />}
+            {slots.receipts ?? <Dash3AReceipts receipts={receipts} />}
+          </div>
+
+          {slots.leagues ?? <Dash3ALeagues data={data} />}
+
+          <section className="af3a-card">
+            <header className="af3a-cardhead">
+              <span className="af3a-label">TOOLS</span>
+            </header>
+            <div className="af3a-tools">
+              <Link className="af3a-tool" href="/trade-evaluator"><i>⇄</i>Trade analyzer</Link>
+              <Link className="af3a-tool" href="/core/waivers"><i>◷</i>Waiver assistant</Link>
+              <Link className="af3a-tool" href="/mock-draft"><i>▤</i>Mock draft</Link>
+              <Link className="af3a-tool" href="/rankings"><i>★</i>Rankings</Link>
+              {/*
+                Only renders for managers who are in at least one league that starts defenders
+                or kickers — the user-scoped question, because /core is not one league. See
+                lib/values/valueSurfaceEligibility.ts.
+              */}
+              <ValuesPageLink compact className="af3a-tool" />
+            </div>
+          </section>
+        </div>
+      </main>
+    </div>
+  )
+}
+
+/* ── The cards, one component each — so /core can stream each one on its own ─────────────── */
+
+export function Dash3ARoutine({ routine }: { routine: WeeklyRoutineData | null }) {
+  return (
+    <YourWeekRoutine
+      data={routine}
+      help={
+        <Help>
+          <b>A fantasy week in five steps.</b>
+          Results on Tuesday, waivers Wednesday, lineups Thursday, game day Sunday and the
+          recap Monday (US Eastern). A check mark means we saw it done in your leagues.
+        </Help>
+      }
+    />
+  )
+}
+
+export function Dash3AIssues({ issues }: { issues: CoreIssue[] }) {
+  const now = new Date()
+  const openCount = issues.length
+  const urgent = issues.slice(0, 3)
+  const rest = issues.slice(3, 8)
+  return (
             <section className="af3a-sec">
               <header className="af3a-sechead">
                 <h2>Outstanding issues</h2>
@@ -683,8 +711,58 @@ export function Dashboard3A({
                 </>
               )}
             </section>
+  )
+}
 
-            {/* ── This week's matchups ─────────────────────────────────── */}
+export function Dash3AMatchups({
+  data,
+  week,
+  winProb,
+  weekLabel,
+}: {
+  data: Dash34Data | null
+  week: WeekAllData | null
+  winProb: Record<string, number> | null
+  weekLabel: string | null
+}) {
+  const leagues = data?.leagues ?? []
+  /*
+   * Two real sources, preferred in order. `Dash34League.score` is live and knows
+   * the OPPONENT'S NAME, which the design shows and `WeekRow` cannot supply.
+   * `weekAll` is the scored history and covers leagues with no live score. A
+   * league appears once: live wins, history fills the gap.
+   */
+  const liveKeys = new Set(leagues.filter((l) => l.score).map((l) => l.id))
+  const scored: Array<{
+    key: string
+    leagueName: string
+    platform: string | null
+    you: number
+    them: number
+    note: string
+  }> = [
+    ...leagues
+      .filter((l) => l.score)
+      .map((l) => ({
+        key: l.id,
+        leagueName: l.name,
+        platform: l.platform ?? null,
+        you: l.score!.you,
+        them: l.score!.opponent,
+        note: `vs ${l.score!.opponentName}`,
+      })),
+    ...(week?.rows ?? [])
+      .filter((r) => !liveKeys.has(r.leagueId))
+      .map((r) => ({
+        key: r.leagueId,
+        leagueName: r.leagueName,
+        platform: r.platform,
+        you: r.pointsFor,
+        them: r.pointsAgainst,
+        note: `Week ${r.week} · ${r.won ? 'you won' : 'you lost'}`,
+      })),
+  ]
+  return (
             <section className="af3a-sec">
               <header className="af3a-sechead">
                 <h2>This week&rsquo;s matchups</h2>
@@ -736,10 +814,11 @@ export function Dashboard3A({
                 </div>
               )}
             </section>
-          </div>
+  )
+}
 
-          {/* ── Right column ───────────────────────────────────────────── */}
-          <div className="af3a-col-side">
+export function Dash3AChimmy({ openCount }: { openCount: number }) {
+  return (
             <section className="af3a-card af3a-chimmy">
               <header className="af3a-chimmy-head">
                 <span className="af3a-chimmy-av" aria-hidden="true">◕</span>
@@ -762,7 +841,11 @@ export function Dashboard3A({
                 platform.
               </p>
             </section>
+  )
+}
 
+export function Dash3ACareer({ career }: { career: CareerData | null }) {
+  return (
             <section className="af3a-card">
               <header className="af3a-cardhead">
                 <span className="af3a-label">YOUR CAREER</span>
@@ -818,13 +901,17 @@ export function Dashboard3A({
                 </p>
               )}
             </section>
+  )
+}
 
-            {/*
-              RIVALRY RADAR — real. WeeklyMatchup.matchupId pairs the two rosters in
-              a week, so every past meeting is stored and the record is counted, not
-              estimated. The design also shows when a rival is usually online; nothing
-              records that, so it is the one line omitted rather than guessed.
-             */}
+/*
+ * RIVALRY RADAR — real. WeeklyMatchup.matchupId pairs the two rosters in
+ * a week, so every past meeting is stored and the record is counted, not
+ * estimated. The design also shows when a rival is usually online; nothing
+ * records that, so it is the one line omitted rather than guessed.
+ */
+export function Dash3ARivals({ rivals }: { rivals: PanelState<RivalsData> | null }) {
+  return (
             <section className="af3a-card">
               <header className="af3a-cardhead">
                 <span className="af3a-label">RIVALRY RADAR</span>
@@ -859,25 +946,36 @@ export function Dashboard3A({
                 </p>
               )}
             </section>
-          </div>
-        </div>
+  )
+}
 
+export function Dash3APortfolioChart({ data }: { data: Dash34Data | null }) {
+  // The same inventory the rail switches over: every league you play, not the capped queue.
+  const railLeagues = data?.allLeagues ?? data?.leagues ?? []
+  const platformCounts = [...railLeagues.reduce((counts, league) => {
+    const platform = String(league.platform ?? 'AllFantasy').trim() || 'AllFantasy'
+    counts.set(platform, (counts.get(platform) ?? 0) + 1)
+    return counts
+  }, new Map<string, number>())]
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .map(([label, value]) => ({ label, value, displayValue: value.toLocaleString() }))
+  return (
         <WorkbookBarChart
           title="League portfolio by platform"
           subtitle="Every connected league in Core"
           valueLabel="Leagues"
           data={platformCounts}
         />
+  )
+}
 
-        {/* ── Bottom three-up ────────────────────────────────────────────── */}
-        <div className="af3a-bottom">
-          {/*
-            PORTFOLIO & EXPOSURE — real. Counts EVERY rostered player, not just
-            starters: the question is how much of your season rides on one player,
-            and a bench stash is still exposure.
-           */}
-          {/* Exposure and Following share a column, so the bottom row stays three-up. */}
-          <div className="af3a-stack">
+/*
+ * PORTFOLIO & EXPOSURE — real. Counts EVERY rostered player, not just
+ * starters: the question is how much of your season rides on one player,
+ * and a bench stash is still exposure.
+ */
+export function Dash3AExposure({ exposure }: { exposure: PanelState<ExposureData> | null }) {
+  return (
           <section className="af3a-card">
             <header className="af3a-cardhead">
               <span className="af3a-label">PORTFOLIO &amp; EXPOSURE</span>
@@ -909,13 +1007,17 @@ export function Dashboard3A({
             )}
             <Link className="af3a-cardlink" href="/core/portfolio">Open Portfolio →</Link>
           </section>
+  )
+}
 
-          {/*
-            FOLLOWING (2026-09-14) — players you follow across every league, from the ☆ on
-            any player card. Not rendered when follows are unavailable. A blank status means
-            nothing is reported, never "healthy"; when the injury feed cannot answer, the
-            card says so instead of leaving every status blank without a reason.
-          */}
+/*
+ * FOLLOWING (2026-09-14) — players you follow across every league, from the ☆ on
+ * any player card. Not rendered when follows are unavailable. A blank status means
+ * nothing is reported, never "healthy"; when the injury feed cannot answer, the
+ * card says so instead of leaving every status blank without a reason.
+ */
+export function Dash3AFollowing({ following }: { following: FollowingCardData | null }) {
+  return (
           <FollowingCard
             data={following}
             help={
@@ -926,11 +1028,16 @@ export function Dashboard3A({
               </Help>
             }
           />
-          {/*
-            RECEIPTS (2026-09-14) — how your trades, waiver adds and lineups turned out. Points
-            only, wins and losses stated the same way; too-early, unscored and unreadable cases
-            counted rather than shown as a number. Not rendered with nothing to say.
-          */}
+  )
+}
+
+/*
+ * RECEIPTS (2026-09-14) — how your trades, waiver adds and lineups turned out. Points
+ * only, wins and losses stated the same way; too-early, unscored and unreadable cases
+ * counted rather than shown as a number. Not rendered with nothing to say.
+ */
+export function Dash3AReceipts({ receipts }: { receipts: DecisionReceiptsData | null }) {
+  return (
           <ReceiptsCard
             data={receipts}
             help={
@@ -943,8 +1050,27 @@ export function Dashboard3A({
               </Help>
             }
           />
-          </div>
+  )
+}
 
+export function Dash3ALeagues({ data }: { data: Dash34Data | null }) {
+  const leagues = data?.leagues ?? []
+  /*
+   * ⚠ `data.leagues` IS NOT EVERY LEAGUE, AND THIS HEADER CLAIMED IT WAS.
+   * `getDash34Data` caps that array at LIST_LIMIT = 8 because 34a's main column
+   * is a queue, not an inventory — so "8 total" was rendered for an account with
+   * 63 played leagues, directly under an issue row reading "63 leagues have
+   * never been read". `totalLeagues` is the real count the loader already
+   * carries; when the list is short of it, say so rather than letting the
+   * shorter number stand as the total.
+   */
+  const leagueTotal = data?.totalLeagues ?? leagues.length
+  const shownLeagues = leagues.slice(0, 5)
+  const leagueTotalLabel =
+    leagueTotal > shownLeagues.length
+      ? `${shownLeagues.length} of ${leagueTotal}`
+      : `${leagueTotal} total`
+  return (
           <section className="af3a-card">
             <header className="af3a-cardhead">
               <span className="af3a-label">MY LEAGUES</span>
@@ -979,27 +1105,6 @@ export function Dashboard3A({
               </Link>
             ) : null}
           </section>
-
-          <section className="af3a-card">
-            <header className="af3a-cardhead">
-              <span className="af3a-label">TOOLS</span>
-            </header>
-            <div className="af3a-tools">
-              <Link className="af3a-tool" href="/trade-evaluator"><i>⇄</i>Trade analyzer</Link>
-              <Link className="af3a-tool" href="/core/waivers"><i>◷</i>Waiver assistant</Link>
-              <Link className="af3a-tool" href="/mock-draft"><i>▤</i>Mock draft</Link>
-              <Link className="af3a-tool" href="/rankings"><i>★</i>Rankings</Link>
-              {/*
-                Only renders for managers who are in at least one league that starts defenders
-                or kickers — the user-scoped question, because /core is not one league. See
-                lib/values/valueSurfaceEligibility.ts.
-              */}
-              <ValuesPageLink compact className="af3a-tool" />
-            </div>
-          </section>
-        </div>
-      </main>
-    </div>
   )
 }
 
