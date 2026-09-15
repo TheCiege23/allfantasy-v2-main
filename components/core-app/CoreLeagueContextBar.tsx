@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useId, useState } from 'react'
+import { useEffect, useId, useState, type ReactNode } from 'react'
 
 import { COMMS_OPEN_EVENT } from '@/components/core-app/comms/commsEvents'
 import { CORE_SURFACE_LABELS, type CoreSurfaceKey } from '@/lib/core-app/coreSurface'
@@ -12,6 +12,8 @@ import {
 } from '@/lib/league/leagueConceptOptions'
 import '@/components/core-app/af-league-tabs.css'
 
+export type CoreLeagueRecommendationValue = { action: string; rationale: string }
+
 export type CoreLeagueContextBarProps = {
   leagueId: string
   leagueName: string
@@ -19,9 +21,60 @@ export type CoreLeagueContextBarProps = {
   syncLabel: string
   syncStale: boolean
   gameDayActive: boolean
-  decisionAvailable: boolean
-  recommendation: { action: string; rationale: string } | null
+  decisionAvailable?: boolean
+  recommendation?: CoreLeagueRecommendationValue | null
   surface: CoreSurfaceKey
+  /*
+   * ⚠ SLOTS, SO THE BAR CAN PAINT BEFORE THE DECISION OS READ FINISHES. The page renders this
+   * bar with the shell; only the Decision OS chip and the recommendation wait on
+   * `resolveUserOsSnapshot`, so they stream into these slots instead of holding the league's
+   * name, source and sync age back. The bar must not be re-mounted to swap them in — it owns the
+   * league-type fetch and the select's state — which is why they are slots and not a fallback.
+   * When a slot is given it replaces the matching prop entirely.
+   */
+  decisionSlot?: ReactNode
+  recommendationSlot?: ReactNode
+}
+
+/** `available: null` is "not read yet": a muted chip that claims neither state. */
+export function CoreLeagueDecisionChip({ available }: { available: boolean | null }) {
+  const tone = available === null ? 'muted' : available ? 'decision' : 'muted'
+  const label = available === null ? 'checking' : available ? 'connected' : 'building context'
+  return (
+    <span className="af-lctx-chip" data-tone={tone}>
+      Decision OS {label}
+    </span>
+  )
+}
+
+export function CoreLeagueRecommendation({
+  leagueName,
+  surface,
+  recommendation,
+}: {
+  leagueName: string
+  surface: CoreSurfaceKey
+  recommendation: CoreLeagueRecommendationValue
+}) {
+  const askChimmy = () => {
+    window.dispatchEvent(
+      new CustomEvent(COMMS_OPEN_EVENT, {
+        detail: {
+          tab: 'chimmy',
+          prefill: `Review ${leagueName}'s ${CORE_SURFACE_LABELS[surface]} and tell me the most important action to take next.`,
+        },
+      }),
+    )
+  }
+  return (
+    <div className="af-lctx-action">
+      <span className="af-lctx-action-copy">
+        <strong>{recommendation.action}</strong>
+        <span>{recommendation.rationale}</span>
+      </span>
+      <button type="button" onClick={askChimmy}>Ask Chimmy</button>
+    </div>
+  )
 }
 
 export default function CoreLeagueContextBar({
@@ -34,6 +87,8 @@ export default function CoreLeagueContextBar({
   decisionAvailable,
   recommendation,
   surface,
+  decisionSlot,
+  recommendationSlot,
 }: CoreLeagueContextBarProps) {
   const selectId = useId()
   const [leagueType, setLeagueType] = useState<LeagueConceptType | null>(null)
@@ -86,17 +141,6 @@ export default function CoreLeagueContextBar({
       setTypeStatus('error')
     }
   }
-  const askChimmy = () => {
-    window.dispatchEvent(
-      new CustomEvent(COMMS_OPEN_EVENT, {
-        detail: {
-          tab: 'chimmy',
-          prefill: `Review ${leagueName}'s ${CORE_SURFACE_LABELS[surface]} and tell me the most important action to take next.`,
-        },
-      }),
-    )
-  }
-
   return (
     <section className="af-lctx" aria-label={`${leagueName} system status`}>
       <div className="af-lctx-statuses">
@@ -106,9 +150,7 @@ export default function CoreLeagueContextBar({
         <span className="af-lctx-chip" data-tone={gameDayActive ? 'live' : syncStale ? 'warn' : 'fresh'}>
           {gameDayActive ? 'Game-day view refresh · 20s' : `Synced ${syncLabel}`}
         </span>
-        <span className="af-lctx-chip" data-tone={decisionAvailable ? 'decision' : 'muted'}>
-          Decision OS {decisionAvailable ? 'connected' : 'building context'}
-        </span>
+        {decisionSlot !== undefined ? decisionSlot : <CoreLeagueDecisionChip available={Boolean(decisionAvailable)} />}
         <span className="af-lctx-chip" data-tone="chimmy">
           Chimmy · {CORE_SURFACE_LABELS[surface]}
         </span>
@@ -137,14 +179,10 @@ export default function CoreLeagueContextBar({
         </div>
       </div>
 
-      {recommendation ? (
-        <div className="af-lctx-action">
-          <span className="af-lctx-action-copy">
-            <strong>{recommendation.action}</strong>
-            <span>{recommendation.rationale}</span>
-          </span>
-          <button type="button" onClick={askChimmy}>Ask Chimmy</button>
-        </div>
+      {recommendationSlot !== undefined ? (
+        recommendationSlot
+      ) : recommendation ? (
+        <CoreLeagueRecommendation leagueName={leagueName} surface={surface} recommendation={recommendation} />
       ) : null}
     </section>
   )

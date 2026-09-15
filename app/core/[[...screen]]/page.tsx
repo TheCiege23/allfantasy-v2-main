@@ -1,3 +1,4 @@
+import { Suspense } from 'react'
 import { redirect } from 'next/navigation'
 import { cookies, headers } from 'next/headers'
 import { getServerSession } from 'next-auth'
@@ -152,9 +153,16 @@ import CareerShare from '@/components/core-app/screens/CareerShare'
 import { buildToolsHub } from '@/lib/core-app/toolsHub'
 import { getTokenSpendRuleMatrixEntry } from '@/lib/tokens/pricing-matrix'
 import { getCoreActivitySnapshot } from '@/lib/core-app/coreActivity'
-import { isCoreSurfaceKey } from '@/lib/core-app/coreSurface'
-import CoreLeagueContextBar from '@/components/core-app/CoreLeagueContextBar'
+import { isCoreSurfaceKey, type CoreSurfaceKey } from '@/lib/core-app/coreSurface'
+import CoreLeagueContextBar, {
+  CoreLeagueDecisionChip,
+  CoreLeagueRecommendation,
+} from '@/components/core-app/CoreLeagueContextBar'
 import { touchLeagueViewed } from '@/lib/leagues/touchLeagueViewed'
+import CoreScreenSkeleton from '@/components/core-app/CoreScreenSkeleton'
+import CoreScreenErrorBoundary from '@/components/core-app/CoreScreenErrorBoundary'
+import { PublishShellSignals } from '@/components/core-app/shellSignals'
+import { recordRootDuration } from '@/lib/observability/rootTiming'
 
 export const dynamic = 'force-dynamic'
 
@@ -506,6 +514,8 @@ export default async function AfCorePage({
     return <ImportV4 state={previewState} />
   }
 
+  // `af.shell_ms` on the request's root span measures from here to "the shell has everything".
+  const shellStartedAt = Date.now()
   const session = (await getServerSession(authOptions as never)) as { user?: { id?: string } } | null
   const userId = session?.user?.id
   if (!userId) {
@@ -605,12 +615,6 @@ export default async function AfCorePage({
   // lane. The helper ignores prefetches and swallows write failures.
   if (selectedLeagueRow) void touchLeagueViewed(selectedLeagueRow.id)
 
-  const coreActivity = await getCoreActivitySnapshot(
-    playedLeagues.map((league) => league.id),
-    playedLeagues.map((league) => String(league.sport ?? 'NFL')),
-    new Date(),
-  ).catch(() => ({ gameDayActive: false, liveGameCount: 0, draftLive: false, liveDraftLeagueIds: [] as string[] }))
-
   const rail: RailLeague[] = playedLeagues.map((l) => ({
     id: l.id,
     name: l.name,
@@ -681,30 +685,6 @@ export default async function AfCorePage({
   }))
 
   /*
-   * Whether the selected league has any scored week, for the nav gate.
-   *
-   * 🛑 FOUR TABS READ SCORED WEEKS AND NOTHING ELSE. On a league with none —
-   * an imported college league before week 1, measured with 60 fixtures and 0
-   * scores — Matchup, Your week, Standings and Season outlook each land on a
-   * variation of "we cannot tell which week this league is in yet". Offering
-   * them makes an early league look like a broken one.
-   *
-   * ⚠ NULL WHEN THERE IS NO LEAGUE IN CONTEXT, which the shell reads as unknown
-   * and shows everything. The cross-league screens are not gated by one league's
-   * emptiness.
-   */
-  const leagueHasScoredWeek = selectedLeagueId
-    ? (
-        await getLeagueDataSignals({
-          leagueId: selectedLeagueId,
-          platformLeagueId:
-            (playedLeagues.find((l) => l.id === selectedLeagueId) as { platformLeagueId?: string | null } | undefined)
-              ?.platformLeagueId ?? null,
-        }).catch(() => ({ hasScoredWeek: null }))
-      ).hasScoredWeek
-    : null
-
-  /*
    * The selected league's display name, for the in-league tab bar.
    *
    * ⚠ RESOLVED FROM THE RAIL, NOT QUERIED. The rail is the list the user picked
@@ -717,21 +697,6 @@ export default async function AfCorePage({
     ? (rail.find((l) => l.id === selectedLeagueId)?.name ?? null)
     : null
 
-  const selectedLeagueOs = selectedLeagueId && selectedLeagueName
-    ? await resolveUserOsSnapshot(selectedLeagueId, userId).catch(() => null)
-    : null
-  const selectedRecommendation =
-    selectedLeagueOs?.available && selectedLeagueOs.recommendations?.recommendations[0]
-      ? {
-          action:
-            selectedLeagueOs.recommendations.recommendations[0].recommendedActions[0]?.action ??
-            selectedLeagueOs.recommendations.recommendations[0].expectedImpact,
-          rationale:
-            selectedLeagueOs.recommendations.recommendations[0].recommendedActions[0]?.rationale ??
-            selectedLeagueOs.recommendations.recommendations[0].evidence[0] ??
-            selectedLeagueOs.recommendations.recommendations[0].expectedImpact,
-        }
-      : null
   const selectedSyncAge = describeAge(
     'roster',
     selectedLeagueRow?.lastSyncedAt ? new Date(selectedLeagueRow.lastSyncedAt) : null,
@@ -757,6 +722,597 @@ export default async function AfCorePage({
       playedLeagues as unknown as Array<{ id: string; lastSyncedAt?: Date | string | null }>,
     ),
   })
+
+  const now = new Date()
+
+  /*
+   * ── THE SHELL'S READS, TOGETHER ───────────────────────────────────────────
+   *
+   * Everything the chrome needs and nothing a screen needs. These used to run one after
+   * another, scattered through the screen loaders, so nothing painted until the slowest SCREEN
+   * read had finished and the whole page arrived at once. None depends on another — each needs
+   * only the league list above — so they run together, the shell renders as soon as they land,
+   * and the screen streams in behind it (`CoreScreenBody`, below).
+   *
+   * Each read keeps the fallback it had; one failure never blocks the others.
+   */
+  const shellReads = Promise.all([
+    getCoreActivitySnapshot(
+      playedLeagues.map((league) => league.id),
+      playedLeagues.map((league) => String(league.sport ?? 'NFL')),
+      now,
+    ).catch(() => ({ gameDayActive: false, liveGameCount: 0, draftLive: false, liveDraftLeagueIds: [] as string[] })),
+    /*
+     * Whether the selected league has any scored week, for the nav gate.
+     *
+     * 🛑 FOUR TABS READ SCORED WEEKS AND NOTHING ELSE. On a league with none —
+     * an imported college league before week 1, measured with 60 fixtures and 0
+     * scores — Matchup, Your week, Standings and Season outlook each land on a
+     * variation of "we cannot tell which week this league is in yet". Offering
+     * them makes an early league look like a broken one.
+     *
+     * ⚠ NULL WHEN THERE IS NO LEAGUE IN CONTEXT, which the shell reads as unknown
+     * and shows everything. The cross-league screens are not gated by one league's
+     * emptiness.
+     */
+    selectedLeagueId
+      ? getLeagueDataSignals({
+          leagueId: selectedLeagueId,
+          platformLeagueId:
+            (playedLeagues.find((l) => l.id === selectedLeagueId) as { platformLeagueId?: string | null } | undefined)
+              ?.platformLeagueId ?? null,
+        })
+          .then((signals) => signals.hasScoredWeek)
+          .catch(() => null)
+      : Promise.resolve(null),
+    /*
+     * Does this league score IDP? Gates the Defense Hub rail entry.
+     *
+     * ⚠ RUN ON EVERY LEAGUE-SCOPED RENDER, NOT ONLY ON ITS OWN SCREEN, WHICH IS THE OPPOSITE OF
+     * the per-screen loaders below — a nav item has to be decidable before you are on the screen
+     * it links to. It is one indexed read of the league's own settings, no provider call, and it
+     * degrades to false so an error hides the entry rather than surfacing a dead one.
+     */
+    selectedLeagueId
+      ? resolveLeagueValueSurfaces(prisma, selectedLeagueId)
+          .then((surfaces) => surfaces?.hasIdp ?? false)
+          .catch(() => false)
+      : Promise.resolve(false),
+    /*
+     * Devy slot count — computed for EVERY render, not just the devy screens, for the same
+     * reason `hasIdpDefense` is: it gates a nav item, and a nav item has to be decidable
+     * before you are on the screen it links to. One indexed read of DevyLeagueConfig, no
+     * provider call, degrading to 0 so an error hides the entry rather than showing a dead one.
+     */
+    selectedLeagueId ? leagueDevySlotCount(selectedLeagueId).catch(() => 0) : Promise.resolve(0),
+    /*
+     * What the selected league's import could actually deliver — same reasoning as
+     * `hasIdpDefense`: it gates nav items, so it has to be decidable before you are
+     * on the screen it links to. One read of the league's own settings, no provider call.
+     *
+     * ⚠ DEGRADES TO "SHOW EVERYTHING", NOT TO "HIDE EVERYTHING". The neighbouring gates
+     * degrade to hidden because a dead Defense Hub entry is worse than a missing one. This
+     * one is the opposite: a failed read here would strip Trades off a league that has
+     * trades, so `UNKNOWN_IMPORT_COVERAGE` (all flags true) is the safe fallback and
+     * `resolveImportCoverageSummary` already returns it for anything it cannot read.
+     */
+    selectedLeagueId
+      ? prisma.league
+          .findUnique({
+            where: { id: selectedLeagueId },
+            select: { settings: true, platform: true },
+          })
+          .then((row) =>
+            resolveImportCoverageSummary({ settings: row?.settings, platform: row?.platform }),
+          )
+          .catch(() => UNKNOWN_IMPORT_COVERAGE)
+      : Promise.resolve(UNKNOWN_IMPORT_COVERAGE),
+    /*
+     * ⚠ THE NAV BADGE IS ITS OWN READ, AND IT HAS TO BE. The first version drove it
+     * off `notifications?.unread`, which is only loaded when the notifications
+     * screen is the one being rendered — so the badge appeared exactly on the page
+     * where it was least useful and was absent everywhere else. This is an indexed
+     * count on (userId, readAt), which is cheap enough to pay on every screen.
+     *
+     * It counts STORED notifications only. The derived "act today" rows are part
+     * of the same unread number on the screen itself, but they are recomputed per
+     * request and are not worth a second pass here just to bump a badge.
+     */
+    Promise.all([
+      prisma.platformNotification.count({ where: { userId, readAt: null } }).catch(() => 0),
+      /*
+       * The rail's profile chip. Read fresh from app_users rather than
+       * session.user.image, which is frozen into the JWT at sign-in and goes
+       * stale. avatarUrl is a full sleepercdn URL for Sleeper sign-ins and can be
+       * a bare avatar hash on older rows — resolveDashboardAvatarUrl handles
+       * both. Null is a real state (account has no image) and renders the
+       * display-name initial, not an invented picture.
+       */
+      prisma.appUser
+        .findUnique({
+          where: { id: userId },
+          select: { username: true, displayName: true, avatarUrl: true },
+        })
+        .catch(() => null),
+    ]),
+    /*
+     * The launcher badge, on EVERY /core screen rather than only home — the dock
+     * is mounted in the shell, so a count that only existed on the dashboard would
+     * blink out the moment somebody navigated. Degrades to zeroes on failure
+     * rather than failing the page.
+     */
+    getChatUnread(userId),
+    /*
+     * This week's head-to-head per league, for the expanded league rail.
+     *
+     * ⚠ THE SHELL IS ON EVERY /core PAGE, SO THIS IS BUDGETED, NOT FREE. Three
+     * set-based reads regardless of league count — the same shape and cost as
+     * `getWeekAll`, which already runs on the home. It is loaded unconditionally
+     * because the rail is chrome: the user can expand it on any screen, and a
+     * rail that only carries scores on some pages is worse than one that never
+     * does. A failure is null and the rail simply renders names and crests.
+     */
+    getRailMatchups(
+      userId,
+      playedLeagues.map((l) => ({
+        id: l.id,
+        platformLeagueId: (l as { platformLeagueId?: string | null }).platformLeagueId ?? null,
+        /* The rail must know this before it pairs a schedule. Some providers
+           publish matchup ids even for a guillotine field; those ids do not turn
+           an elimination race into head-to-head. */
+        elimination:
+          resolveLeagueCardTypeKey({
+            leagueType: l.leagueType,
+            leagueVariant: l.leagueVariant,
+            settings: l.settings ?? undefined,
+            isDynasty: l.isDynasty,
+          }) === 'guillotine',
+      })),
+    ).catch(() => null),
+    /*
+     * The plan chip and token meter. The handoff is explicit that the meter must be
+     * visible BEFORE anything spends, and Chimmy is the only thing that spends — so
+     * the number belongs in the chrome, not on the screen that happens to open the
+     * chat. `null` on a read failure omits the chip rather than showing a made-up
+     * tier or a zero balance the user does not actually have.
+     */
+    aiAccessResolver.resolveForUser({ userId, now }).catch(() => null),
+  ])
+  // Awaited below the admin gate. Every read above degrades rather than throws, but should one
+  // ever reject while the gate is still being read, this keeps it from surfacing as unhandled;
+  // the `await` still throws it.
+  shellReads.catch(() => undefined)
+
+  /*
+   * Admin nav gate — computed every render for the same reason `hasIdpDefense` and
+   * `devySlotCount` are: it gates a nav item, and a nav item has to be
+   * decidable before you are on the screen it links to.
+   *
+   * ⚠ `modelAdminAllowed` NO LONGER ISSUES ITS OWN AUTH READ, AND THE ORIGINAL REASON IS WHY.
+   * That gate used to read the admin state lazily on its own segment, because running it on
+   * every /core render would put an extra auth read in front of every screen to decorate one
+   * admin page. That reasoning still holds — but the rail's Admin entry needs the same answer
+   * on EVERY render and cannot be resolved lazily, so this is the SINGLE such read in the file
+   * and `modelAdminAllowed` reuses it. One read per render, not two: strictly cheaper than
+   * the segment-scoped version was on the model-admin segment itself.
+   *
+   * ⚠ IT IS `getAdminAccessState`, THE PREDICATE /admin ITSELF ENFORCES, not a second
+   * email check written here. The two would drift, and the failure is silent in the
+   * worse direction: a rail offering a door the page then refuses to open. This is the
+   * AllFantasy admin allowlist, not league commissionership.
+   *
+   * Degrades to false: an errored gate hides the entry rather than surfacing a dead
+   * one, and denies rather than admits.
+   *
+   * ⚠ ITS OWN BINDING, OUTSIDE THE Promise.all, SO THE GATE STAYS ONE READABLE CHAIN —
+   * `modelAdminAllowed` → `isAdmin` → the admin state → status → catch — which
+   * model-admin-authorization-policy.test.ts follows. It costs no time: the reads above
+   * have already started, so this waits beside them rather than in front of them.
+   */
+  const isAdmin = await getAdminAccessState()
+    .then((state) => state.status === 'admin')
+    .catch(() => false)
+  const modelAdminAllowed = segment === 'model-admin' && isAdmin
+
+  const [
+    coreActivity,
+    leagueHasScoredWeek,
+    hasIdpDefense,
+    devySlotCount,
+    importCoverageSummary,
+    [unreadNotifications, shellUser],
+    chatUnread,
+    railMatchups,
+    access,
+  ] = await shellReads
+
+  const shellProfile = {
+    name: shellUser?.displayName?.trim() || shellUser?.username?.trim() || null,
+    imageUrl: resolveDashboardAvatarUrl(shellUser?.avatarUrl) ?? null,
+  }
+
+  /*
+   * ⚠ SYNC AGE IS NOW READ, NOT ASSUMED. This was hardcoded to `null` — "never
+   * synced" — with a comment saying a per-league timestamp was not wired through.
+   * It is: the league list already selects `League.lastSyncedAt`. Measured on
+   * production it is null for all 98 leagues, so the label does not change today,
+   * but it will the moment a sync runs, and the shell no longer lies about
+   * whether it is looking.
+   */
+  const lastSynced = playedLeagues.reduce<Date | null>((latest, l) => {
+    const raw = (l as { lastSyncedAt?: Date | string | null }).lastSyncedAt
+    if (!raw) return latest
+    const d = raw instanceof Date ? raw : new Date(raw)
+    if (Number.isNaN(d.getTime())) return latest
+    return latest == null || d > latest ? d : latest
+  }, null)
+  const syncAge = describeAge('roster', lastSynced, now)
+
+  const plan = access
+    ? {
+        // Plan ids are slugs — 'war_room', 'supreme'. Rendering one raw puts an
+        // internal identifier in the chrome of the signed-in home.
+        /*
+         * ⚠ NO TRIAL CHIP, BECAUSE THERE IS NO TRIAL TO CHIP.
+         *
+         * This read `access.trial.inTrial ? \`Trial · ${d}d left\` : 'Free'`. The trial
+         * confers NOTHING: the Chimmy route never consults AIAccessResolver, and the
+         * token floor that used to back it (TRIAL_DAILY_FREE_TOKENS, 5 answers a day)
+         * was deleted from lib/tokens/dailyFreeTokens.ts on 2026-08-28. A trialling
+         * account gets the same two free questions as everyone else.
+         *
+         * So the chip counted down days against an allowance that does not exist —
+         * which is the exact bug "The trial badge now stands for something"
+         * (129441a13) was written to fix, reintroduced when that work was overwritten.
+         * Showing 'Free' is true today. Restoring the chip is a SPEND decision: put the
+         * trial floor back first, then this line.
+         */
+        name: access.hasSubscription
+          ? titleCase(access.subscription.plans[0] ?? 'premium')
+          : 'Free',
+        tokensLeft: access.tokenBalance,
+      }
+    : null
+
+  const commissionerCount = playedLeagues.filter((l) => Boolean(l.isCommissioner)).length
+
+  /*
+   * The Chimmy price the drawer shows BEFORE the user sends anything, read from
+   * the real catalog rather than typed in. `ai_chimmy_chat_message` is the rule
+   * /api/chat/chimmy actually spends against.
+   */
+  const chimmyTokenCost = getTokenSpendRuleMatrixEntry('ai_chimmy_chat_message')?.tokenCost ?? null
+
+  /*
+   * 23b docks the drawer beside the content on league-scoped screens — a roster
+   * or a matchup, where "who should I flex" is asked about the thing on screen.
+   * Cross-league screens overlay instead: there is no single place to lose.
+   */
+  /*
+   * Which screens dock the Chimmy drawer beside the content instead of over it.
+   *
+   * The rule is whether there is ONE thing on screen to ask about. A roster, a
+   * matchup, a standings table, this league's season — all have a subject, so
+   * the drawer sits beside it and you can read both. Cross-league screens
+   * overlay, because there is no single place to lose your position in.
+   *
+   * ⚠ THE 38a TABS WERE ALL MISSING FROM THIS LIST. Standings, Season Outlook,
+   * League Career, Your Week, Commissioner and Sync are every bit as
+   * league-scoped as My Team, and asking Chimmy about the table you are looking
+   * at was covering that table up.
+   *
+   * `live` stays OFF deliberately: it carries a league id only to mark which
+   * tie-ins are this league's, and the slate itself is every sport across every
+   * league — there is no single subject to dock against.
+   */
+  const DOCKABLE_KEYS: CoreNavKey[] = [
+    'home',
+    'my-team',
+    'matchup',
+    'trades',
+    'waivers',
+    'draft-hq',
+    'war-room',
+    'week',
+    'standings',
+    'season-outlook',
+    'career',
+    'commissioner',
+    'notifications',
+    'sync',
+  ]
+
+  const dockable = selectedLeagueId != null && DOCKABLE_KEYS.includes(activeKey)
+
+  recordRootDuration('af.shell_ms', shellStartedAt)
+
+  const body = (
+    <CoreScreenBody
+      ctx={{
+        screen,
+        sp,
+        segment,
+        activeKey,
+        userId,
+        selectedLeagueId,
+        playerQuery,
+        selectedPlayerId,
+        leagueListPayload,
+        leagues,
+        playedLeagues,
+        rail,
+        tradeLeagueRow,
+        tradeLeagueTypeKey,
+        tradeStripLeagues,
+        derivedIssues,
+        coreActivity,
+        devySlotCount,
+        modelAdminAllowed,
+        syncAge,
+        plan,
+        commissionerCount,
+        now,
+      }}
+    />
+  )
+
+  /*
+   * Dashboard v2 renders OUTSIDE the shell — it brings its own 300px left panel (see its branch
+   * in the body). With no shell to paint first there is nothing to stream ahead of, so it keeps
+   * the fully awaited render it always had.
+   */
+  if (segment === 'dashboard-v2') return body
+
+  /*
+   * ⚠ THE SCREEN BOUNDARY'S KEY IS THE SCREEN AND THE LEAGUE. Changing either is a different
+   * screen, so the boundary re-suspends and shows the skeleton rather than leaving the previous
+   * screen on display under the new nav. Any other query change — a search, a week, a view, and
+   * every game-day `router.refresh()` — keeps the current screen visible while the next render
+   * streams in.
+   *
+   * The key is load-bearing for a league switch in particular: a query-only navigation updates this
+   * page IN PLACE (Next leaves search params out of the page's template key), so without it React
+   * would keep the old league's screen up until the new one had finished loading.
+   */
+  const screenKey = `${segment}|${selectedLeagueId ?? ''}`
+  /*
+   * The error boundary resets on ANY change of URL, not just screen or league: Back/Forward between two
+   * queries of one screen (`?week=`, `?player=`) must not carry a failure onto a URL that renders fine.
+   * A refresh of the SAME URL keeps the panel — retrying is the user's call, and re-rendering a failing
+   * screen on every game-day refresh would report the same failure every 20 seconds.
+   */
+  const errorResetKey = [segment, ...Object.entries(sp).map(([key, value]) => `${key}=${String(value)}`).sort()].join('|')
+
+  const showContextBar = Boolean(
+    selectedLeagueId && selectedLeagueName && selectedLeagueRow && isCoreSurfaceKey(activeKey),
+  )
+  // ONE read shared by the bar's two streamed slots (the promise, not two calls).
+  const leagueOs =
+    showContextBar && selectedLeagueId ? resolveUserOsSnapshot(selectedLeagueId, userId).catch(() => null) : null
+
+  return (
+    <AfCoreShell
+      active={activeKey}
+      leagues={rail}
+      syncAge={{ label: syncAge.label, stale: syncAge.stale }}
+      syncEligibleCount={syncEligibleCount}
+      leagueHasScoredWeek={leagueHasScoredWeek}
+      selectedLeagueId={selectedLeagueId}
+      hasIdpDefense={hasIdpDefense}
+      devySlotCount={devySlotCount}
+      isAdmin={isAdmin}
+      importCapabilities={importCoverageSummary.capabilities}
+      /* The screen publishes the week label, the tab badges and Chimmy's home signals when it
+         arrives — see PublishShellSignals in CoreScreenBody and shellSignals.tsx. */
+      weekLabel={null}
+      railMatchups={railMatchups?.byLeague}
+      railWeekLabel={railMatchups?.week != null ? `Week ${railMatchups.week}` : null}
+      plan={plan}
+      commissionerCount={commissionerCount}
+      notificationCount={unreadNotifications}
+      profile={shellProfile}
+      /*
+       * The activity snapshot's count, on every screen. The Live screen itself publishes the
+       * count from the slate it loaded, which replaces this one while that screen is open.
+       */
+      liveGameCount={coreActivity.liveGameCount}
+      gameDayActive={coreActivity.gameDayActive}
+      draftLive={coreActivity.draftLive}
+      comms={{
+        leagues: commsLeagueRows.map((l) => ({
+          id: l.id,
+          name: l.name,
+          platform: String(l.platform ?? 'manual').toLowerCase(),
+          // Carries the `@global` affordance into the drawer; the broadcast
+          // endpoint re-checks commissioner status against `League.userId`.
+          isCommissioner: Boolean(l.isCommissioner),
+          teamCount: Number((l as { teamCount?: number }).teamCount ?? 0) || 0,
+          /*
+           * The platform's OWN id for the league, which is what a Sleeper deep
+           * link needs. `l.id` is the AllFantasy uuid and 404s off-site; the
+           * drawer falls back to an in-app link where this is null.
+           */
+          platformLeagueId:
+            (l as { platformLeagueId?: string | null }).platformLeagueId ?? null,
+        })),
+        chimmyTokenCost,
+        dockable,
+        supportEmail: (session?.user as { email?: string | null } | undefined)?.email ?? null,
+        /*
+         * Carried over from the /core home's old floating bubble, which the
+         * shell's launcher replaced. Without this the badge would simply have
+         * disappeared when that bubble was removed.
+         */
+        /*
+         * Was `dash34?.chatUnread`, which nothing anywhere ever computed — the
+         * badge had been hardcoded to zero since it was written.
+         */
+        unread: chatUnread.total,
+        mentions: chatUnread.mentions,
+      }}
+    >
+      {/*
+       * 38a's in-league tab bar. Rendered once here rather than inside each of
+       * the twelve screens: every screen would otherwise grow its own copy, and
+       * the first one to drift would be the bug nobody notices.
+       *
+       * ⚠ ONLY WHEN A LEAGUE IS ACTUALLY SELECTED AND NAMED. Rendering it with a
+       * placeholder name would put "In league —" above a screen that is not in
+       * one, which is exactly the kind of confident-but-empty chrome the rest of
+       * this suite refuses to draw.
+       */}
+      {selectedLeagueId && selectedLeagueName ? (
+        <LeagueTabs
+          leagueId={selectedLeagueId}
+          leagueName={selectedLeagueName}
+          activeKey={activeKey}
+          hasScoredWeek={leagueHasScoredWeek}
+          tradeSupported={importCoverageSummary.capabilities.trades !== false}
+          draftSupported={importCoverageSummary.capabilities.draft !== false}
+        />
+      ) : null}
+
+      {showContextBar && selectedLeagueId && selectedLeagueName && selectedLeagueRow && isCoreSurfaceKey(activeKey) && leagueOs ? (
+        <CoreLeagueContextBar
+          leagueId={selectedLeagueId}
+          leagueName={selectedLeagueName}
+          platform={String(selectedLeagueRow.platform ?? 'manual')}
+          syncLabel={selectedSyncAge.label}
+          syncStale={selectedSyncAge.stale}
+          gameDayActive={coreActivity.gameDayActive}
+          surface={activeKey}
+          /*
+           * ⚠ KEYED ON THE LEAGUE, LIKE THE SCREEN BOUNDARY BELOW. Switching league in the rail changes
+           * only the query, and Next strips search params from the page's template key, so the bar is
+           * updated in place, not remounted. An unkeyed slot is then an already-visible boundary, and
+           * React holds the whole navigation — new league's tabs, skeleton, everything — until the new
+           * league's Decision OS read finishes, rather than hide what it is showing.
+           */
+          decisionSlot={
+            <Suspense key={selectedLeagueId} fallback={<CoreLeagueDecisionChip available={null} />}>
+              <LeagueDecisionChip snapshot={leagueOs} />
+            </Suspense>
+          }
+          recommendationSlot={
+            <Suspense key={selectedLeagueId} fallback={null}>
+              <LeagueRecommendation snapshot={leagueOs} leagueName={selectedLeagueName} surface={activeKey} />
+            </Suspense>
+          }
+        />
+      ) : null}
+
+      <CoreScreenErrorBoundary resetKey={errorResetKey}>
+        <Suspense key={screenKey} fallback={<CoreScreenSkeleton />}>
+          {body}
+        </Suspense>
+      </CoreScreenErrorBoundary>
+    </AfCoreShell>
+  )
+}
+
+type LeagueOsSnapshot = Awaited<ReturnType<typeof resolveUserOsSnapshot>> | null
+
+/** The Decision OS chip in the league context bar, once the league's snapshot has been read. */
+async function LeagueDecisionChip({ snapshot }: { snapshot: Promise<LeagueOsSnapshot> }) {
+  const os = await snapshot
+  return <CoreLeagueDecisionChip available={os?.available === true} />
+}
+
+/** The league's top recommendation, or nothing, once the snapshot has been read. */
+async function LeagueRecommendation({
+  snapshot,
+  leagueName,
+  surface,
+}: {
+  snapshot: Promise<LeagueOsSnapshot>
+  leagueName: string
+  surface: CoreSurfaceKey
+}) {
+  const os = await snapshot
+  const top = os?.available ? os.recommendations?.recommendations[0] : undefined
+  if (!top) return null
+  return (
+    <CoreLeagueRecommendation
+      leagueName={leagueName}
+      surface={surface}
+      recommendation={{
+        action: top.recommendedActions[0]?.action ?? top.expectedImpact,
+        rationale: top.recommendedActions[0]?.rationale ?? top.evidence[0] ?? top.expectedImpact,
+      }}
+    />
+  )
+}
+
+/**
+ * What a screen receives from the shell phase: values computed once above that screens also
+ * read. Everything else a screen needs, it loads itself, inside its streamed boundary.
+ */
+type CoreScreenContext = {
+  screen: string[] | undefined
+  sp: Record<string, string | string[] | undefined>
+  segment: string
+  activeKey: CoreNavKey
+  userId: string
+  selectedLeagueId: string | null
+  playerQuery: string
+  selectedPlayerId: string | null
+  leagueListPayload: { leagues: unknown[]; sleeperUserId?: string | null } | null
+  leagues: UserLeague[]
+  playedLeagues: UserLeague[]
+  rail: RailLeague[]
+  tradeLeagueRow: UserLeague | null
+  tradeLeagueTypeKey: ReturnType<typeof resolveLeagueCardTypeKey> | null
+  tradeStripLeagues: Array<{ id: string; name: string; platform: string; mark: string; meta: string | null }>
+  derivedIssues: ReturnType<typeof deriveOutstandingIssues>['issues']
+  coreActivity: { liveDraftLeagueIds: string[] }
+  devySlotCount: number
+  /** Decided in `AfCorePage` from the one admin read — see the gate there. */
+  modelAdminAllowed: boolean
+  syncAge: { label: string; stale: boolean }
+  plan: { name: string; tokensLeft: number | null } | null
+  commissionerCount: number
+  now: Date
+}
+
+/**
+ * Every /core screen's own loaders and its render, streamed inside the shell.
+ *
+ * ⚠ NOTHING HERE MAY REDIRECT. By the time this renders, the shell has been sent and its reads
+ * have run — so a redirect from here would paint the app, and read the user's data, for a visitor
+ * who was never allowed to see it, and only then send them away. Every redirect in this route —
+ * the sign-in gate, the commissioner and import forwards, and the league authorisation check —
+ * runs in `AfCorePage` above, before the shell renders. Keep new ones there.
+ *
+ * (None of them is an HTTP 307: `loading.tsx` already streams ahead of the page, so Next delivers
+ * each redirect inside the stream. Measured on `next dev`: a signed-out `/core` answers 200 with a
+ * meta refresh to /login.)
+ */
+async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
+  const {
+    screen,
+    sp,
+    segment,
+    activeKey,
+    userId,
+    selectedLeagueId,
+    playerQuery,
+    selectedPlayerId,
+    leagueListPayload,
+    leagues,
+    playedLeagues,
+    rail,
+    tradeLeagueRow,
+    tradeLeagueTypeKey,
+    tradeStripLeagues,
+    derivedIssues,
+    coreActivity,
+    devySlotCount,
+    modelAdminAllowed,
+    syncAge,
+    plan,
+    commissionerCount,
+    now,
+  } = ctx
 
   // Screen 2 is the same route with a league selected — the handoff describes it
   // as the main column becoming "that league's world", not a separate page.
@@ -1158,70 +1714,6 @@ export default async function AfCorePage({
       : null
 
   /*
-   * Does this league score IDP? Gates the Defense Hub rail entry.
-   *
-   * ⚠ RUN ON EVERY LEAGUE-SCOPED RENDER, NOT ONLY ON ITS OWN SCREEN, WHICH IS THE OPPOSITE OF
-   * the per-screen loaders above — a nav item has to be decidable before you are on the screen
-   * it links to. It is one indexed read of the league's own settings, no provider call, and it
-   * degrades to false so an error hides the entry rather than surfacing a dead one.
-   */
-  const hasIdpDefense = selectedLeagueId
-    ? (await resolveLeagueValueSurfaces(prisma, selectedLeagueId).catch(() => null))?.hasIdp ?? false
-    : false
-
-  /*
-   * Devy slot count — computed for EVERY render, not just the devy screens, for the same
-   * reason `hasIdpDefense` is: it gates a nav item, and a nav item has to be decidable
-   * before you are on the screen it links to. One indexed read of DevyLeagueConfig, no
-   * provider call, degrading to 0 so an error hides the entry rather than showing a dead one.
-   */
-  const devySlotCount = selectedLeagueId ? await leagueDevySlotCount(selectedLeagueId).catch(() => 0) : 0
-
-  /*
-   * Admin nav gate — computed every render for the same reason `hasIdpDefense` and
-   * `devySlotCount` above are: it gates a nav item, and a nav item has to be
-   * decidable before you are on the screen it links to.
-   *
-   * ⚠ THIS ANSWERS THE WARNING ON `modelAdminAllowed` BELOW RATHER THAN IGNORING IT.
-   * That comment is right that an auth read in front of every screen is a real cost
-   * to decorate one page. So this is now the SINGLE such read in the file, and
-   * `modelAdminAllowed` reuses it instead of issuing a second. A rail entry, unlike
-   * a per-segment panel, cannot be resolved lazily — it is drawn on every screen.
-   *
-   * ⚠ IT IS `getAdminAccessState`, THE PREDICATE /admin ITSELF ENFORCES, not a second
-   * email check written here. The two would drift, and the failure is silent in the
-   * worse direction: a rail offering a door the page then refuses to open.
-   *
-   * Degrades to false: an errored gate hides the entry rather than surfacing a dead
-   * one, and denies rather than admits.
-   */
-  const isAdmin = await getAdminAccessState()
-    .then((state) => state.status === 'admin')
-    .catch(() => false)
-  /*
-   * What the selected league's import could actually deliver — same reasoning as
-   * `hasIdpDefense` above: it gates nav items, so it has to be decidable before you are
-   * on the screen it links to. One read of the league's own settings, no provider call.
-   *
-   * ⚠ DEGRADES TO "SHOW EVERYTHING", NOT TO "HIDE EVERYTHING". The neighbouring gates
-   * degrade to hidden because a dead Defense Hub entry is worse than a missing one. This
-   * one is the opposite: a failed read here would strip Trades off a league that has
-   * trades, so `UNKNOWN_IMPORT_COVERAGE` (all flags true) is the safe fallback and
-   * `resolveImportCoverageSummary` already returns it for anything it cannot read.
-   */
-  const importCoverageSummary = selectedLeagueId
-    ? await prisma.league
-        .findUnique({
-          where: { id: selectedLeagueId },
-          select: { settings: true, platform: true },
-        })
-        .then((row) =>
-          resolveImportCoverageSummary({ settings: row?.settings, platform: row?.platform }),
-        )
-        .catch(() => UNKNOWN_IMPORT_COVERAGE)
-    : UNKNOWN_IMPORT_COVERAGE
-
-  /*
    * Devy data is loaded only on the devy screens — it is several queries across the whole
    * prospect pool and no other screen reads it.
    */
@@ -1245,21 +1737,6 @@ export default async function AfCorePage({
    * `scope` and `sport` are read from the URL so a shared link lands on the same
    * slate the sender was looking at; the client takes over from there.
    */
-  /*
-   * ⚠ THIS NO LONGER ISSUES ITS OWN AUTH READ, AND THE ORIGINAL REASON IS WHY.
-   * This gate used to call `getAdminAccessState()` lazily on its own segment,
-   * because running it on every /core render would put an extra auth read in
-   * front of every screen to decorate one admin page. That reasoning still
-   * holds — but the rail's Admin entry now needs the same answer on EVERY
-   * render and cannot be resolved lazily, so `isAdmin` above pays for it once
-   * and this reuses it. One read per render, not two: strictly cheaper than
-   * the segment-scoped version was on the model-admin segment itself.
-   *
-   * Still defaults to FALSE — an errored gate denies rather than admits. This
-   * is the AllFantasy admin allowlist, not league commissionership.
-   */
-  const modelAdminAllowed = segment === 'model-admin' && isAdmin
-
   /*
    * The clicked-game view opens as `/core/live?game=<id>` — a query on the live
    * screen, not a new route (the repo is at its route ceiling). When it is
@@ -1320,8 +1797,6 @@ export default async function AfCorePage({
     activeKey === 'standings' && selectedLeagueId
       ? await getLeagueStandings(selectedLeagueId, userId).catch(() => null)
       : null
-
-  const now = new Date()
 
   /*
    * ── 24a / 24b / 26b / 22c / 26a ────────────────────────────────────
@@ -1412,40 +1887,6 @@ export default async function AfCorePage({
         }).catch(() => null)
       : null
 
-  /*
-   * ⚠ THE NAV BADGE IS ITS OWN READ, AND IT HAS TO BE. The first version drove it
-   * off `notifications?.unread`, which is only loaded when the notifications
-   * screen is the one being rendered — so the badge appeared exactly on the page
-   * where it was least useful and was absent everywhere else. This is an indexed
-   * count on (userId, readAt), which is cheap enough to pay on every screen.
-   *
-   * It counts STORED notifications only. The derived "act today" rows are part
-   * of the same unread number on the screen itself, but they are recomputed per
-   * request and are not worth a second pass here just to bump a badge.
-   */
-  const [unreadNotifications, shellUser] = await Promise.all([
-    prisma.platformNotification.count({ where: { userId, readAt: null } }).catch(() => 0),
-    /*
-     * The rail's profile chip. Read fresh from app_users rather than
-     * session.user.image, which is frozen into the JWT at sign-in and goes
-     * stale. avatarUrl is a full sleepercdn URL for Sleeper sign-ins and can be
-     * a bare avatar hash on older rows — resolveDashboardAvatarUrl handles
-     * both. Null is a real state (account has no image) and renders the
-     * display-name initial, not an invented picture.
-     */
-    prisma.appUser
-      .findUnique({
-        where: { id: userId },
-        select: { username: true, displayName: true, avatarUrl: true },
-      })
-      .catch(() => null),
-  ])
-
-  const shellProfile = {
-    name: shellUser?.displayName?.trim() || shellUser?.username?.trim() || null,
-    imageUrl: resolveDashboardAvatarUrl(shellUser?.avatarUrl) ?? null,
-  }
-
   // 26a reads the same career payload the career screen does — no second source
   // of truth for the numbers that end up on a card the user posts publicly.
   const shareCareer =
@@ -1492,14 +1933,6 @@ export default async function AfCorePage({
     (activeKey === 'home' || segment === 'dashboard-v2') && !selectedLeagueId
       ? await getDash34Data(userId, leagues as unknown as Dash34LeagueRow[], now).catch(() => null)
       : null
-
-  /*
-   * The launcher badge, on EVERY /core screen rather than only home — the dock
-   * is mounted in the shell, so a count that only existed on the dashboard would
-   * blink out the moment somebody navigated. Degrades to zeroes on failure
-   * rather than failing the page.
-   */
-  const chatUnread = await getChatUnread(userId)
 
   /*
    * ONE URGENCY VOICE. dash34's brief states urgent facts — "N leagues have a
@@ -1849,34 +2282,6 @@ export default async function AfCorePage({
     : null
 
   /*
-   * This week's head-to-head per league, for the expanded league rail.
-   *
-   * ⚠ THE SHELL IS ON EVERY /core PAGE, SO THIS IS BUDGETED, NOT FREE. Three
-   * set-based reads regardless of league count — the same shape and cost as
-   * `getWeekAll`, which already runs on the home. It is loaded unconditionally
-   * because the rail is chrome: the user can expand it on any screen, and a
-   * rail that only carries scores on some pages is worse than one that never
-   * does. A failure is null and the rail simply renders names and crests.
-   */
-  const railMatchups = await getRailMatchups(
-    userId,
-    playedLeagues.map((l) => ({
-      id: l.id,
-      platformLeagueId: (l as { platformLeagueId?: string | null }).platformLeagueId ?? null,
-      /* The rail must know this before it pairs a schedule. Some providers
-         publish matchup ids even for a guillotine field; those ids do not turn
-         an elimination race into head-to-head. */
-      elimination:
-        resolveLeagueCardTypeKey({
-          leagueType: l.leagueType,
-          leagueVariant: l.leagueVariant,
-          settings: l.settings ?? undefined,
-          isDynasty: l.isDynasty,
-        }) === 'guillotine',
-    })),
-  ).catch(() => null)
-
-  /*
    * The tail of each LIVE draft's board, for the cross-league Draft HQ.
    *
    * ⚠ SCOPED TO THE LIVE LEAGUES ONLY, AND ONLY ON THAT SCREEN. Reading the pick
@@ -1922,60 +2327,8 @@ export default async function AfCorePage({
    */
 
   /*
-   * ⚠ SYNC AGE IS NOW READ, NOT ASSUMED. This was hardcoded to `null` — "never
-   * synced" — with a comment saying a per-league timestamp was not wired through.
-   * It is: the league list already selects `League.lastSyncedAt`. Measured on
-   * production it is null for all 98 leagues, so the label does not change today,
-   * but it will the moment a sync runs, and the shell no longer lies about
-   * whether it is looking.
-   */
-  const lastSynced = playedLeagues.reduce<Date | null>((latest, l) => {
-    const raw = (l as { lastSyncedAt?: Date | string | null }).lastSyncedAt
-    if (!raw) return latest
-    const d = raw instanceof Date ? raw : new Date(raw)
-    if (Number.isNaN(d.getTime())) return latest
-    return latest == null || d > latest ? d : latest
-  }, null)
-  const syncAge = describeAge('roster', lastSynced, now)
-
-  /*
-   * The plan chip and token meter. The handoff is explicit that the meter must be
-   * visible BEFORE anything spends, and Chimmy is the only thing that spends — so
-   * the number belongs in the chrome, not on the screen that happens to open the
-   * chat. `null` on a read failure omits the chip rather than showing a made-up
-   * tier or a zero balance the user does not actually have.
-   */
-  const access = await aiAccessResolver.resolveForUser({ userId, now }).catch(() => null)
-  const plan = access
-    ? {
-        // Plan ids are slugs — 'war_room', 'supreme'. Rendering one raw puts an
-        // internal identifier in the chrome of the signed-in home.
-        /*
-         * ⚠ NO TRIAL CHIP, BECAUSE THERE IS NO TRIAL TO CHIP.
-         *
-         * This read `access.trial.inTrial ? \`Trial · ${d}d left\` : 'Free'`. The trial
-         * confers NOTHING: the Chimmy route never consults AIAccessResolver, and the
-         * token floor that used to back it (TRIAL_DAILY_FREE_TOKENS, 5 answers a day)
-         * was deleted from lib/tokens/dailyFreeTokens.ts on 2026-08-28. A trialling
-         * account gets the same two free questions as everyone else.
-         *
-         * So the chip counted down days against an allowance that does not exist —
-         * which is the exact bug "The trial badge now stands for something"
-         * (129441a13) was written to fix, reintroduced when that work was overwritten.
-         * Showing 'Free' is true today. Restoring the chip is a SPEND decision: put the
-         * trial floor back first, then this line.
-         */
-        name: access.hasSubscription
-          ? titleCase(access.subscription.plans[0] ?? 'premium')
-          : 'Free',
-        tokensLeft: access.tokenBalance,
-      }
-    : null
-
-  /*
-   * Placed AFTER `plan` and `syncAge` are computed, not before. It reads both,
-   * and the first version of this dispatch sat above their declarations — tsc
-   * caught it as use-before-declaration rather than it failing at runtime.
+   * `plan` and `syncAge` arrive from the shell phase in `ctx`, computed once in `AfCorePage` for
+   * the chrome and reused here — this dispatch reads both.
    */
   if (segment === 'dashboard-v2') {
     /*
@@ -2057,56 +2410,6 @@ export default async function AfCorePage({
     )
   }
 
-  const commissionerCount = playedLeagues.filter((l) => Boolean(l.isCommissioner)).length
-
-  /*
-   * The Chimmy price the drawer shows BEFORE the user sends anything, read from
-   * the real catalog rather than typed in. `ai_chimmy_chat_message` is the rule
-   * /api/chat/chimmy actually spends against.
-   */
-  const chimmyTokenCost = getTokenSpendRuleMatrixEntry('ai_chimmy_chat_message')?.tokenCost ?? null
-
-  /*
-   * 23b docks the drawer beside the content on league-scoped screens — a roster
-   * or a matchup, where "who should I flex" is asked about the thing on screen.
-   * Cross-league screens overlay instead: there is no single place to lose.
-   */
-  /*
-   * Which screens dock the Chimmy drawer beside the content instead of over it.
-   *
-   * The rule is whether there is ONE thing on screen to ask about. A roster, a
-   * matchup, a standings table, this league's season — all have a subject, so
-   * the drawer sits beside it and you can read both. Cross-league screens
-   * overlay, because there is no single place to lose your position in.
-   *
-   * ⚠ THE 38a TABS WERE ALL MISSING FROM THIS LIST. Standings, Season Outlook,
-   * League Career, Your Week, Commissioner and Sync are every bit as
-   * league-scoped as My Team, and asking Chimmy about the table you are looking
-   * at was covering that table up.
-   *
-   * `live` stays OFF deliberately: it carries a league id only to mark which
-   * tie-ins are this league's, and the slate itself is every sport across every
-   * league — there is no single subject to dock against.
-   */
-  const DOCKABLE_KEYS: CoreNavKey[] = [
-    'home',
-    'my-team',
-    'matchup',
-    'trades',
-    'waivers',
-    'draft-hq',
-    'war-room',
-    'week',
-    'standings',
-    'season-outlook',
-    'career',
-    'commissioner',
-    'notifications',
-    'sync',
-  ]
-
-  const dockable = selectedLeagueId != null && DOCKABLE_KEYS.includes(activeKey)
-
   /*
    * Urgency counts on the tabs — lib/core-app/urgencyBadges. Computed last, after
    * every loader above, so the home's lineup facts refresh the cache in the same
@@ -2129,66 +2432,15 @@ export default async function AfCorePage({
   }).catch(() => null)
 
   return (
-    <AfCoreShell
-      active={activeKey}
-      leagues={rail}
-      syncAge={{ label: syncAge.label, stale: syncAge.stale }}
-      syncEligibleCount={syncEligibleCount}
-      leagueHasScoredWeek={leagueHasScoredWeek}
-      selectedLeagueId={selectedLeagueId}
-      hasIdpDefense={hasIdpDefense}
-      devySlotCount={devySlotCount}
-      isAdmin={isAdmin}
-      importCapabilities={importCoverageSummary.capabilities}
-      weekLabel={dash34?.weekLabel ?? null}
-      railMatchups={railMatchups?.byLeague}
-      railWeekLabel={railMatchups?.week != null ? `Week ${railMatchups.week}` : null}
-      plan={plan}
-      commissionerCount={commissionerCount}
-      notificationCount={unreadNotifications}
-      profile={shellProfile}
-      /*
-       * Only populated on the Live screen itself — the count comes from the
-       * payload we already loaded there. Reading the slate on every /core page
-       * to decorate one nav badge would put a provider call in front of every
-       * screen in the product, which is exactly the cost the per-screen loader
-       * pattern above exists to avoid.
-       */
-      liveGameCount={liveScores?.games.filter((g) => g.isLive).length ?? coreActivity.liveGameCount}
-      gameDayActive={coreActivity.gameDayActive}
-      draftLive={coreActivity.draftLive}
-      urgencyBadges={urgencyBadges}
-      comms={{
-        leagues: commsLeagueRows.map((l) => ({
-          id: l.id,
-          name: l.name,
-          platform: String(l.platform ?? 'manual').toLowerCase(),
-          // Carries the `@global` affordance into the drawer; the broadcast
-          // endpoint re-checks commissioner status against `League.userId`.
-          isCommissioner: Boolean(l.isCommissioner),
-          teamCount: Number((l as { teamCount?: number }).teamCount ?? 0) || 0,
-          /*
-           * The platform's OWN id for the league, which is what a Sleeper deep
-           * link needs. `l.id` is the AllFantasy uuid and 404s off-site; the
-           * drawer falls back to an in-app link where this is null.
-           */
-          platformLeagueId:
-            (l as { platformLeagueId?: string | null }).platformLeagueId ?? null,
-        })),
-        chimmyTokenCost,
-        dockable,
-        supportEmail: (session?.user as { email?: string | null } | undefined)?.email ?? null,
-        /*
-         * Carried over from the /core home's old floating bubble, which the
-         * shell's launcher replaced. Without this the badge would simply have
-         * disappeared when that bubble was removed.
-         */
-        /*
-         * Was `dash34?.chatUnread`, which nothing anywhere ever computed — the
-         * badge had been hardcoded to zero since it was written.
-         */
-        unread: chatUnread.total,
-        mentions: chatUnread.mentions,
+    <>
+      {/*
+       * The chrome only this screen could know, published up to the shell that has already
+       * painted — see shellSignals.tsx. Each value is exactly what this page passed as a prop
+       * before the shell rendered first.
+       */}
+      <PublishShellSignals
+        weekLabel={dash34?.weekLabel ?? null}
+        urgencyBadges={urgencyBadges}
         /*
          * The home's own claims, handed to the assistant the user opens FROM
          * those claims. Derived from the same dash34 facts that feed the brief
@@ -2196,43 +2448,16 @@ export default async function AfCorePage({
          * only — the route resolves names itself; see lib/core-app/homeSignals.ts
          * for why nothing free-text crosses that boundary.
          */
-        homeSignals: serializeHomeSignals(buildHomeSignals(dash34, issues.length)),
-      }}
-    >
-      {/*
-       * 38a's in-league tab bar. Rendered once here rather than inside each of
-       * the twelve screens: every screen would otherwise grow its own copy, and
-       * the first one to drift would be the bug nobody notices.
-       *
-       * ⚠ ONLY WHEN A LEAGUE IS ACTUALLY SELECTED AND NAMED. Rendering it with a
-       * placeholder name would put "In league —" above a screen that is not in
-       * one, which is exactly the kind of confident-but-empty chrome the rest of
-       * this suite refuses to draw.
-       */}
-      {selectedLeagueId && selectedLeagueName ? (
-        <LeagueTabs
-          leagueId={selectedLeagueId}
-          leagueName={selectedLeagueName}
-          activeKey={activeKey}
-          hasScoredWeek={leagueHasScoredWeek}
-          tradeSupported={importCoverageSummary.capabilities.trades !== false}
-          draftSupported={importCoverageSummary.capabilities.draft !== false}
-        />
-      ) : null}
-
-      {selectedLeagueId && selectedLeagueName && selectedLeagueRow && isCoreSurfaceKey(activeKey) ? (
-        <CoreLeagueContextBar
-          leagueId={selectedLeagueId}
-          leagueName={selectedLeagueName}
-          platform={String(selectedLeagueRow.platform ?? 'manual')}
-          syncLabel={selectedSyncAge.label}
-          syncStale={selectedSyncAge.stale}
-          gameDayActive={coreActivity.gameDayActive}
-          decisionAvailable={selectedLeagueOs?.available === true}
-          recommendation={selectedRecommendation}
-          surface={activeKey}
-        />
-      ) : null}
+        homeSignals={serializeHomeSignals(buildHomeSignals(dash34, issues.length))}
+        /*
+         * Only on the Live screen itself — the count comes from the payload already
+         * loaded there. Reading the slate on every /core page to decorate one nav badge
+         * would put a provider call in front of every screen in the product, which is
+         * exactly the cost the per-screen loader pattern above exists to avoid. Elsewhere
+         * this stays undefined and the shell keeps the activity snapshot's count.
+         */
+        liveGameCount={liveScores ? liveScores.games.filter((g) => g.isLive).length : undefined}
+      />
 
       {segment === 'bracket' ? (
         bracket ? (
@@ -3102,6 +3327,6 @@ export default async function AfCorePage({
           </p>
         </div>
       )}
-    </AfCoreShell>
+    </>
   )
 }

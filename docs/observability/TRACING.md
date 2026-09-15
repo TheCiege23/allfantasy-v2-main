@@ -31,6 +31,12 @@ Stamped on the root span (queryable in the spans dataset) and as tags:
 | `af.viewport` | `narrow` (<768px), `medium`, `wide` | browser |
 | `af.db.count` / `af.db.ms` / `af.db.max_ms` / `af.db.slowest` / `af.db.errors` | per-request database totals | server, from `lib/prisma.ts` |
 | `af.sync_job` | the `withSyncJobRun` job name | server |
+| `af.shell_ms` | ms from the session read until the `/core` shell had everything it renders | server, `/core` only |
+
+⚠ **On `/core`, `span.duration` is no longer what the user waited for before the app appeared.** The
+shell renders first and the screen streams in behind it, so the request lasts as long as the slowest
+screen read. `af.shell_ms` is the time to the shell; the difference is the time the screen skeleton
+was on display.
 
 Values are closed vocabularies on purpose — an unbounded value (league id, player slug) would make
 the dimension useless and the bill larger.
@@ -74,6 +80,13 @@ Spans dataset (Explore → Traces). Server render time by screen and device:
 ```
 is_transaction:true transaction:"GET /core/[[...screen]]" af.nav:document
 group by af.screen, af.device   →   p75(span.duration), p95(span.duration), count()
+```
+
+Time to the `/core` shell, and to the whole screen:
+
+```
+is_transaction:true transaction:"GET /core/[[...screen]]" af.nav:document
+group by af.screen, af.device   →   p75(af.shell_ms), p75(span.duration)
 ```
 
 Database load per screen (catches N+1 growth before it is slow):
@@ -136,5 +149,6 @@ trusting a redaction change:
   separate. Both carry `af.screen`/`af.device`, so per-screen budgets do not depend on the link.
 - **Import and notification delivery timing.** `import_runs` and `notification_outbox` hold the
   timestamps; nothing turns them into budgets yet.
-- **Per-card spans.** Cards will get their own spans when `/core` cards stream independently.
+- **Per-card spans.** The `/core` screen streams as one unit behind the shell today; cards get their
+  own spans when they stream independently.
 - **Edge/middleware errors** are not captured at all.

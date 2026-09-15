@@ -17,6 +17,7 @@ import { useLiveRailScores } from './useLiveRailScores'
 import { useOverlayContainment } from '@/components/core-app/useOverlayContainment'
 import { CoreWelcomeTour } from '@/components/core-app/CoreWelcomeTour'
 import { matchLeagueSearchHits, type LeagueSearchHit } from '@/lib/core-app/topSearch'
+import { ShellSignalsContext, withPublishedSignals, type ShellSignals } from '@/components/core-app/shellSignals'
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import '@/components/core-app/af-core.css'
 import '@/components/core-app/af-core-shell.css'
@@ -1137,7 +1138,15 @@ function HelpDot({ title, body }: { title: string; body: string }) {
   )
 }
 
-export function AfCoreShell(props: AfCoreShellProps) {
+export function AfCoreShell(incoming: AfCoreShellProps) {
+  /*
+   * The screen streams in after this shell paints, so the few pieces of chrome only a screen
+   * can know (week label, tab badges, Chimmy's home signals, the live slate count) arrive by
+   * publication instead of props — see shellSignals.tsx. Everything below reads the merged
+   * `props`, so nothing downstream had to change.
+   */
+  const [publishedSignals, setPublishedSignals] = useState<ShellSignals | null>(null)
+  const props = useMemo(() => withPublishedSignals(incoming, publishedSignals), [incoming, publishedSignals])
   const router = useRouter()
   const sections = useMemo(() => navSections(props), [props])
   const mobileItems = useMemo(() => {
@@ -1806,7 +1815,9 @@ export function AfCoreShell(props: AfCoreShellProps) {
             its own league through `PlayerCardLeagueScope`, which is why this
             mount takes no `leagueId` — the shell does not know one.
           */}
-          <PlayerCardProvider>{children}</PlayerCardProvider>
+          <ShellSignalsContext.Provider value={setPublishedSignals}>
+            <PlayerCardProvider>{children}</PlayerCardProvider>
+          </ShellSignalsContext.Provider>
         </main>
       </div>
 
