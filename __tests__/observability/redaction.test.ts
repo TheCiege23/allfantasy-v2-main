@@ -22,7 +22,12 @@ const TSDB_KEY = 'tsdbKEY555'
 const OAUTH_CODE = 'oauthCODE4242'
 const INVITE = 'inviteCODE777'
 
-const RI_URL = `https://rest.datafeeds.rolling-insights.com/api/v1/live/2026-09-14/NFL?RSC_token=${RSC_TOKEN}&_=1726300000000`
+/*
+ * ⚠ A NEUTRAL HOST, ON PURPOSE. `RSC_token` redaction does not depend on the host, and a literal
+ * scheme-plus-provider-host URL is reported by the DB-first boundary guard (a required check) even in
+ * a fixture that never makes a call — the guard is line-based. Do not "restore" the real host here.
+ */
+const RI_URL = `https://provider.example/api/v1/live/2026-09-14/NFL?RSC_token=${RSC_TOKEN}&_=1726300000000`
 
 describe('scrubUrl', () => {
   it('removes the Rolling Insights token from a query string', () => {
@@ -34,7 +39,9 @@ describe('scrubUrl', () => {
   })
 
   it('removes the TheSportsDB key from its path segment', () => {
-    const url = `https://www.thesportsdb.com/api/v1/json/${TSDB_KEY}/eventsday.php?d=2026-09-14`
+    // This rule IS host-specific, so the real host stays — without a scheme, which the DB-first guard's
+    // URL matcher requires and the redaction rule does not look at.
+    const url = `www.thesportsdb.com/api/v1/json/${TSDB_KEY}/eventsday.php?d=2026-09-14`
     expect(url).toContain(TSDB_KEY)
     expect(scrubUrl(url)).not.toContain(TSDB_KEY)
   })
