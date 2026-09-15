@@ -26,9 +26,6 @@ const SENSITIVE_HEADER_NAME = /authorization|cookie|token|secret|passw|session|s
  */
 const ACCESS_GRANTING_PARAM = /([?&](?:code|state|otp|invite|invite_?code|invite_?token|magic|ticket|nonce)=)[^&#\s]*/gi
 
-/** Span and breadcrumb attribute keys that can carry a URL, a query string or a header. */
-const URL_BEARING_KEY = /url|query|target|path|route|href|from|to$|location|referer|header/i
-
 export function scrubUrl(value: string): string {
   return redactSecrets(value).replace(ACCESS_GRANTING_PARAM, '$1***')
 }
@@ -115,7 +112,15 @@ export function scrubRequest<R extends RequestLikeEvent | undefined>(request: R)
 
 type AttributeBag = Record<string, unknown>
 
-/** Span attributes, breadcrumb data and `contexts.trace.data`: URL-bearing values and credential headers. */
+/**
+ * Span attributes, breadcrumb data and `contexts.trace.data`.
+ *
+ * ⚠ EVERY STRING VALUE IS SCRUBBED, WHATEVER ITS KEY. The first version scrubbed only keys that
+ * sounded like URLs (`url`, `query`, `path`…), and a real `next dev` trace carried a planted invite
+ * code and token straight through under `next.span_name` — Next's own tracing puts the full request
+ * line there. Instrumentation we do not own decides attribute names, so an allow-list of names is a
+ * guess. `redactSecrets` is a no-op on text without secrets; numbers and booleans pass untouched.
+ */
 export function scrubAttributes(bag: AttributeBag | undefined): AttributeBag | undefined {
   if (!bag || typeof bag !== 'object') return bag
   const out: AttributeBag = {}
@@ -123,10 +128,8 @@ export function scrubAttributes(bag: AttributeBag | undefined): AttributeBag | u
     if (/^http\.(?:request|response)\.header\./i.test(key)) {
       const headerName = key.replace(/^http\.(?:request|response)\.header\./i, '')
       out[key] = isSensitiveHeaderName(headerName) ? FILTERED : scrubUnknownString(value)
-    } else if (URL_BEARING_KEY.test(key)) {
-      out[key] = Array.isArray(value) ? value.map(scrubUnknownString) : scrubUnknownString(value)
     } else {
-      out[key] = value
+      out[key] = Array.isArray(value) ? value.map(scrubUnknownString) : scrubUnknownString(value)
     }
   }
   return out

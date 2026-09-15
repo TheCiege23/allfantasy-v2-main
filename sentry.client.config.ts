@@ -22,7 +22,21 @@ import { enrichAndScrubEvent } from '@/lib/observability/eventProcessing'
 import { scrubBreadcrumb, scrubSpanJson } from '@/lib/observability/redaction'
 
 const dsn = process.env.NEXT_PUBLIC_SENTRY_DSN
+/*
+ * ⚠ FAIL OPEN. This file is injected into the entry chunk of EVERY page, so a throw here is not a
+ * telemetry bug, it is every page's JavaScript failing. And no CI build exercises it: withSentryConfig
+ * only wraps the build when a DSN is present, which is production alone. Losing tracing for a deploy
+ * is cheap; a broken app is not.
+ */
 if (dsn) {
+  try {
+    initClient(dsn)
+  } catch (error) {
+    console.error('[Sentry] client init failed; tracing and error reporting are off for this page load', error)
+  }
+}
+
+function initClient(dsn: string): void {
   Sentry.init({
     dsn,
     environment: process.env.NODE_ENV,

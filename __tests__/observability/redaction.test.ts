@@ -146,6 +146,27 @@ describe('scrubSpanJson and scrubBreadcrumb', () => {
     expect(out.data['af.db.count']).toBe(7)
   })
 
+  it('scrubs a URL under an attribute name nobody would guess (found in a real Next dev trace)', () => {
+    /*
+     * Measured 2026-09-15 against `next dev` with a local ingest: Next's own tracing set
+     * `next.span_name` to the full request line, query string included. The first version of this
+     * scrubber only looked at keys that sounded like URLs, and sent a planted invite code and token
+     * straight through. So every string value is scrubbed now, whatever its key is called.
+     */
+    const planted = { invite: 'inviteCODE777', token: SESSION_JWT }
+    const data = {
+      'next.span_name': `GET /login?invite=${planted.invite}&token=${planted.token}&callbackUrl=/core`,
+      'some.future.attribute': `retrying https://provider.example/x?RSC_token=${RSC_TOKEN}`,
+      'af.db.count': 3,
+    }
+    expect(JSON.stringify(data)).toContain(planted.invite)
+    const out = scrubSpanJson({ data })
+    const serialised = JSON.stringify(out)
+    for (const secret of [planted.invite, planted.token, RSC_TOKEN]) expect(serialised).not.toContain(secret)
+    expect(out.data['next.span_name']).toContain('callbackUrl=/core')
+    expect(out.data['af.db.count']).toBe(3)
+  })
+
   it('scrubs a fetch breadcrumb URL', () => {
     const crumb = { category: 'fetch', data: { url: RI_URL, method: 'GET', status_code: 200 } }
     expect(crumb.data.url).toContain(RSC_TOKEN)
