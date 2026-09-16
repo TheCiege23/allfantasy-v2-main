@@ -27,6 +27,7 @@ import { priceTradesAtCurrentMarket } from '@/lib/league-trade-engine/tradeLearn
 import { evaluateCanonicalTrade } from '@/lib/decision-os/trade/canonicalEvaluator'
 import { resolveCanonicalWorld } from '@/lib/decision-os/world'
 import type { TradeAssetSummary } from '@/lib/decision-os/trade/dco'
+import { summarizeRosterImpact } from '@/lib/decision-os/trade/rosterImpactSummary'
 import type { League } from '@prisma/client'
 
 export const dynamic = 'force-dynamic'
@@ -101,6 +102,12 @@ async function buildNativeActiveTrades(leagueId: string, userId: string): Promis
       const received: LeagueTradeAsset[] = t.items
         .filter((i) => i.toRosterId === (viewerIsReceiver ? t.receiverRosterId : t.proposerRosterId))
         .map((i) => ({ id: i.id, ...assetLabel(i), headshotUrl: null, accent: 'teal' as const }))
+      /*
+       * ⚠ ONLY WHEN THE VIEWER IS A PARTY. A commissioner looking at someone else's offer falls back
+       * to `viewerRosterId: t.proposerRosterId` below, and a lineup effect computed there would be
+       * the PROPOSER's lineup rendered under "your projected starting lineup".
+       */
+      const wantImpact = viewerIsProposer || viewerIsReceiver
       const decision = world ? await evaluateCanonicalTrade({
         leagueId,
         proposalId: t.id,
@@ -131,6 +138,7 @@ async function buildNativeActiveTrades(leagueId: string, userId: string): Promis
           }
         }),
         currentSeason: world.league.season ?? undefined,
+        includeRosterImpact: wantImpact,
       }, { resolveWorld: async () => world }).catch(() => null) : null
       return {
         id: t.id,
@@ -150,6 +158,8 @@ async function buildNativeActiveTrades(leagueId: string, userId: string): Promis
         proposalValueGiven: decision?.valueGiven ?? null,
         proposalValueReceived: decision?.valueReceived ?? null,
         proposalCapturedAt: decision?.evaluatedAt ?? null,
+        // Asked for and the evaluation itself failed is still "asked for, not produced" — `null`.
+        rosterImpact: wantImpact ? (decision ? summarizeRosterImpact(decision.rosterImpact) ?? null : null) : undefined,
       }
     }))
 }
@@ -377,6 +387,7 @@ function mapProviderTrades(
     proposalValueGiven: evaluations.get(trade.transactionId)?.valueGiven ?? null,
     proposalValueReceived: evaluations.get(trade.transactionId)?.valueReceived ?? null,
     proposalCapturedAt: evaluations.get(trade.transactionId)?.evaluatedAt ?? null,
+    rosterImpact: evaluations.get(trade.transactionId)?.rosterImpact,
     // Intentionally omitted: viewerIsReceiver / viewerIsProposer /
     // viewerIsCommissioner. Leaving them unset suppresses action controls the
     // provider API cannot honor.
@@ -504,7 +515,11 @@ export async function GET(req: NextRequest) {
         platformLeagueId: league.platformLeagueId,
         userId,
       }).catch(() => ({ trades: [], scanned: false, reason: 'Yahoo could not be reached' as string | null }))
-      const evaluations = await evaluatePendingProviderTrades({ leagueId, trades: scan.trades }).catch(() => new Map())
+      const evaluations = await evaluatePendingProviderTrades({
+        leagueId,
+        trades: scan.trades,
+        includeRosterImpact: true,
+      }).catch(() => new Map())
 
       return NextResponse.json({
         draft,
@@ -640,7 +655,15 @@ export async function GET(req: NextRequest) {
 
   const providerPending: PendingProviderTrade[] = pendingScan.trades
   const providerCompleted: PendingProviderTrade[] = pendingScan.completedTrades ?? []
-  const providerEvaluations = await evaluatePendingProviderTrades({ leagueId, trades: providerPending }).catch(() => new Map())
+  /*
+   * ⚠ LINEUP EFFECT ON THE PENDING CALL ONLY. A completed trade's roster already holds the result,
+   * so there is no honest "before" to compute — see `includeRosterImpact` on the evaluator wrapper.
+   */
+  const providerEvaluations = await evaluatePendingProviderTrades({
+    leagueId,
+    trades: providerPending,
+    includeRosterImpact: true,
+  }).catch(() => new Map())
   const completedEvaluations = await evaluatePendingProviderTrades({ leagueId, trades: providerCompleted }).catch(() => new Map())
 
   // Native first (the viewer can act on those); provider proposals follow.
