@@ -729,6 +729,46 @@ export default async function AfCorePage({
   const now = new Date()
 
   /*
+   * ── THE SELECTED LEAGUE, READ ONCE ────────────────────────────────────────
+   *
+   * 🛑 TWO OF THE SHELL READS BELOW WERE EACH FETCHING THIS SAME ROW, AND A THIRD
+   * FACT ABOUT IT CAME FROM A DIFFERENT SOURCE ENTIRELY. `resolveLeagueValueSurfaces`
+   * read `{id, settings}` and the import-coverage summary read `{settings, platform}` —
+   * the same row, twice, in the same render.
+   *
+   * ⚠ REORDERING COULD NOT FIX IT, WHICH IS WHY THE ROW IS RESOLVED AS A PROMISE AND
+   * NOT AWAITED HERE. Both are entries in the `Promise.all` below, so they already run
+   * concurrently; awaiting a league read before that block would add a serial
+   * cross-coast round-trip in front of every league-scoped render and make the page
+   * slower to save a query. Creating the promise here and letting both entries `.then()`
+   * off it keeps everything in one parallel wave and issues one query instead of two.
+   *
+   * 🛑 AND THE CONSISTENCY HALF IS THE PART THAT WAS ACTUALLY WRONG. `platform` for one
+   * league was read from TWO sources in one render: the header chip and the absent-tab
+   * notes took `selectedLeagueRow.platform` — from the dashboard LIST payload, which
+   * SYNTHESISES that field for some rows (`normalizedSleeper` hardcodes `'sleeper'`,
+   * tournaments hardcode `'allfantasy'`) — while the coverage sentence took
+   * `prisma.league.platform`. Two answers to "which platform is this league on", inside
+   * one page, free to disagree. They now come from this row.
+   *
+   * ⚠ THE SCREEN LOADERS STILL READ IT THEMSELVES, deliberately and for now. Only one of
+   * them runs per request (they are mutually exclusive on `activeKey`), so that is one
+   * further read, not ten — and threading a row through ten signatures is a change worth
+   * making on its own rather than riding along here.
+   */
+  const selectedLeagueRead = selectedLeagueId
+    ? prisma.league
+        .findUnique({
+          where: { id: selectedLeagueId },
+          select: { id: true, settings: true, platform: true },
+        })
+        .catch(() => null)
+    : Promise.resolve(null)
+  /* Rejection is impossible (`.catch` above), but an unawaited promise that somehow
+     rejected before its `await` would surface as unhandled. Same guard as `shellReads`. */
+  selectedLeagueRead.catch(() => undefined)
+
+  /*
    * ── THE SHELL'S READS, TOGETHER ───────────────────────────────────────────
    *
    * Everything the chrome needs and nothing a screen needs. These used to run one after
@@ -777,7 +817,11 @@ export default async function AfCorePage({
      * degrades to false so an error hides the entry rather than surfacing a dead one.
      */
     selectedLeagueId
-      ? resolveLeagueValueSurfaces(prisma, selectedLeagueId)
+      ? /* ⚠ THE PROMISE, NOT `.then(row => …)`. Chaining would delay the CALL until the
+           shared read landed, which serialises a shell read the block exists to
+           parallelise — `core-page-shell-first` asserts every one of these has started
+           before any resolves, and it caught exactly that. The resolver awaits it. */
+        resolveLeagueValueSurfaces(prisma, selectedLeagueId, selectedLeagueRead)
           .then((surfaces) => surfaces?.hasIdp ?? false)
           .catch(() => false)
       : Promise.resolve(false),
@@ -800,11 +844,7 @@ export default async function AfCorePage({
      * `resolveImportCoverageSummary` already returns it for anything it cannot read.
      */
     selectedLeagueId
-      ? prisma.league
-          .findUnique({
-            where: { id: selectedLeagueId },
-            select: { settings: true, platform: true },
-          })
+      ? selectedLeagueRead
           .then((row) =>
             resolveImportCoverageSummary({ settings: row?.settings, platform: row?.platform }),
           )
@@ -928,6 +968,18 @@ export default async function AfCorePage({
     railMatchups,
     access,
   ] = await shellReads
+
+  /*
+   * Free by this point: the read was started before `shellReads` and has been in flight
+   * alongside every entry in it, so this `await` adds no round-trip.
+   *
+   * ⚠ FALLS BACK TO THE LIST ROW RATHER THAN TO A LITERAL. A failed read here must not
+   * turn an imported league into "AllFantasy" in the header — that is the one wrong
+   * answer worse than the stale one, because `platformLabel` maps an empty platform to
+   * the native league name and the chip would then confidently misattribute the league.
+   */
+  const selectedLeagueRecord = await selectedLeagueRead
+  const selectedLeaguePlatform = selectedLeagueRecord?.platform ?? selectedLeagueRow?.platform ?? null
 
   const shellProfile = {
     name: shellUser?.displayName?.trim() || shellUser?.username?.trim() || null,
@@ -1182,7 +1234,7 @@ export default async function AfCorePage({
            * sends you there does — and a native league resolves to
            * "AllFantasy" rather than printing a raw enum at the reader.
            */
-          platform={platformLabel(selectedLeagueRow?.platform)}
+          platform={platformLabel(selectedLeaguePlatform)}
         />
       ) : null}
 
@@ -1190,7 +1242,7 @@ export default async function AfCorePage({
         <CoreLeagueContextBar
           leagueId={selectedLeagueId}
           leagueName={selectedLeagueName}
-          platform={String(selectedLeagueRow.platform ?? 'manual')}
+          platform={String(selectedLeaguePlatform ?? 'manual')}
           logoUrl={selectedRailLeague?.imageUrl ?? null}
           logoLetter={selectedRailLeague?.mark}
           syncLabel={selectedSyncAge.label}
