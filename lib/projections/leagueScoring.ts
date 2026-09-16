@@ -56,13 +56,52 @@ const STAT_ALIASES: Record<string, string[]> = {
    * Sleeper PROJECTS `idp_sack` while leagues CONFIGURE `sack`. Offence simply never got the
    * same treatment, so defenders scored and skill players did not.
    */
-  rec: ['receptions'],
-  rec_yd: ['receiving_yards'],
-  rec_td: ['receiving_td'],
-  rush_yd: ['rushing_yards'],
-  rush_td: ['rushing_td'],
-  pass_yd: ['passing_yards'],
-  pass_td: ['passing_td'],
+  /*
+   * ⚠ AND TWO MORE VOCABULARIES ARRIVED AFTER THAT, WITH THE SAME SYMPTOM. Measured on staging
+   * 2026-09-16:
+   *
+   *   - Rolling Insights, in `AFProjectionSnapshot.adjustmentFactors.perGameRates` for every NFL
+   *     row: `receiving_touchdowns`, `rushing_touchdowns`, `passing_touchdowns`,
+   *     `passing_interceptions`, `fumbles`, `fumbles_lost`, `two_point_conversion_*_succeeded`.
+   *     Scored before these existed, touchdowns, interceptions, fumbles and two-point
+   *     conversions all landed in `unusedProjectedStats`: Josh Allen's rates read 14.19 per game
+   *     in a real full-PPR league against AF's own 23.26.
+   *   - CFBD, in the same field for every NCAAF row, which is what `lookupNcaafProjections` hands
+   *     to college surfaces as `componentStats`: `receiving.REC`, `passing.TD`, `fumbles.LOST`, …
+   *     NOT ONE of those matched any league key, so every college line returned null.
+   *
+   * The dotted CFBD names are namespaced by category, which is what makes `passing.INT` safe to
+   * bridge here when a bare `interceptions` is not (see `int` below).
+   *
+   * 🛑 `interception` (SINGULAR) IS DELIBERATELY ABSENT. `lib/schedule-stats/StatNormalizationService`
+   * renames BOTH `pass_int` and `int` to it, so in `player_game_stats.normalized_stat_map` one
+   * name holds a quarterback's thrown interceptions and a defender's caught ones (2025: 380 on
+   * 281 passer rows, 380 on 273 others). It is not a spelling of either stat, and aliasing it to
+   * one would score the other with the wrong sign. The fix belongs in that normalizer.
+   *
+   * ⚠ RI's `sacks` IS ABSENT FOR THE SAME REASON: on a quarterback's row it is sacks TAKEN.
+   */
+  rec: ['receptions', 'receiving.REC'],
+  rec_yd: ['receiving_yards', 'receiving.YDS'],
+  rec_td: ['receiving_td', 'receiving_touchdowns', 'receiving.TD'],
+  rush_yd: ['rushing_yards', 'rushing.YDS'],
+  rush_td: ['rushing_td', 'rushing_touchdowns', 'rushing.TD'],
+  rush_att: ['rushing_attempts', 'rushing.CAR'],
+  pass_yd: ['passing_yards', 'passing.YDS'],
+  pass_td: ['passing_td', 'passing_touchdowns', 'passing.TD'],
+  pass_att: ['passing_attempts', 'passing.ATT'],
+  pass_cmp: ['completions', 'passing.COMPLETIONS'],
+  /*
+   * Thrown interceptions only. RI prefixes them (`passing_interceptions`) and CFBD files them under
+   * `passing.`; both are unambiguous. RI's bare `interceptions` is the DEFENSIVE stat, nflverse's is
+   * the thrown one — the same spelling with opposite meanings, so it is bridged in neither direction.
+   */
+  pass_int: ['passing_interceptions', 'passing.INT'],
+  fum: ['fumbles', 'fumbles.FUM'],
+  fum_lost: ['fumbles_lost', 'fumbles.LOST'],
+  pass_2pt: ['two_point_conversion_pass_succeeded'],
+  rush_2pt: ['two_point_conversion_rush_succeeded'],
+  rec_2pt: ['two_point_conversion_reception_succeeded'],
 
   /*
    * ⚠ `int` IS NOT ALIASED TO `interceptions` AND MUST NOT BE. In a league's scoring `int` is a
@@ -111,9 +150,11 @@ const STAT_ALIASES: Record<string, string[]> = {
    * An alias picks an ALTERNATIVE SPELLING, not a subset to sum: a row carrying both would
    * double-count the same kick. `fgm_50p` is already present natively where it applies.
    */
-  xpm: ['pat_made'],
+  xpm: ['pat_made', 'kicking.XPM'],
   xpmiss: ['pat_missed'],
   fgm_40_49: ['fg_40_49'],
+  // CFBD carries only a college kicker's totals, no distance buckets; a league scoring flat `fgm` can use them.
+  fgm: ['kicking.FGM'],
 }
 
 export type LeagueScoringResult = {
@@ -165,6 +206,9 @@ const NON_SCORING_STATS = new Set([
   'pos_rank_ppr',
   'pos_rank_std',
   'pos_rank_half_ppr',
+  // Another vendor's already-scored total, carried beside the components in AF's `perGameRates`.
+  'DK_fantasy_points',
+  'DK_fantasy_points_per_game',
 ])
 
 function readNumber(v: unknown): number | null {
