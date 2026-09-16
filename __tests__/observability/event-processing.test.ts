@@ -85,6 +85,67 @@ describe('enrichAndScrubEvent', () => {
   })
 })
 
+/**
+ * 🛑 A NUMBER ON THE ROOT SPAN IS SENT BUT NOT QUERYABLE, AND THE TWO ARE INDISTINGUISHABLE UNTIL
+ * YOU TRY TO AGGREGATE. Measured off the wire 2026-09-16: `af.shell_ms` and every `af.db.*` really
+ * did arrive in `contexts.trace.data` — and Sentry answered "Unknown attribute" to every aggregate,
+ * because it indexes a transaction's searchable fields from tags and measurements only. Four of the
+ * five budget queries in docs/observability/TRACING.md could not run for that reason.
+ */
+describe('budget promotion', () => {
+  const withTrace = (data: Record<string, unknown>): SentryEventLike => ({
+    ...coreTransaction(),
+    contexts: { trace: { data: { ...data } } },
+  })
+
+  it('promotes the budgetable numbers to measurements, with units', () => {
+    const event = enrichAndScrubEvent(
+      withTrace({ 'af.shell_ms': 2135, 'af.db.count': 99, 'af.db.ms': 812.5, 'af.db.max_ms': 240.1, 'af.db.errors': 2 }),
+    )!
+    expect(event.measurements).toEqual({
+      'af.shell_ms': { value: 2135, unit: 'millisecond' },
+      'af.db.count': { value: 99, unit: 'none' },
+      'af.db.ms': { value: 812.5, unit: 'millisecond' },
+      'af.db.max_ms': { value: 240.1, unit: 'millisecond' },
+      'af.db.errors': { value: 2, unit: 'none' },
+    })
+  })
+
+  it('leaves the value on the span as well — a single trace must still read correctly', () => {
+    const event = enrichAndScrubEvent(withTrace({ 'af.shell_ms': 2135 }))!
+    expect(event.contexts?.trace?.data?.['af.shell_ms']).toBe(2135)
+  })
+
+  /* `af.sync_job` has the same defect in its string flavour, and needs a tag rather than a measurement. */
+  it('promotes af.sync_job to a tag so jobs can be grouped', () => {
+    const event = enrichAndScrubEvent(withTrace({ 'af.sync_job': 'trade-grade-notify' }))!
+    expect(event.tags?.['af.sync_job']).toBe('trade-grade-notify')
+    expect(event.measurements?.['af.sync_job']).toBeUndefined()
+  })
+
+  /*
+   * ⚠ CLOSED VOCABULARY. Promoting "anything numeric" would put unbounded cardinality in the bill,
+   * and `af.db.slowest` is a STRING — a query description — that must never become a measurement.
+   */
+  it('promotes nothing outside the table, and never a string as a number', () => {
+    const event = enrichAndScrubEvent(
+      withTrace({ 'af.db.slowest': 'SELECT 1', 'af.db.count': '99', 'some.other.ms': 5, 'af.shell_ms': Number.NaN }),
+    )!
+    expect(event.measurements).toBeUndefined()
+  })
+
+  it('does not touch an error event, which has no measurements', () => {
+    const event = enrichAndScrubEvent({ ...withTrace({ 'af.shell_ms': 10 }), type: undefined })!
+    expect(event.measurements).toBeUndefined()
+  })
+
+  it('never overwrites a measurement the SDK already set', () => {
+    const base = withTrace({ 'af.shell_ms': 2135 })
+    base.measurements = { 'af.shell_ms': { value: 1, unit: 'millisecond' } }
+    expect(enrichAndScrubEvent(base)!.measurements?.['af.shell_ms']).toEqual({ value: 1, unit: 'millisecond' })
+  })
+})
+
 describe('buildServerSentryOptions', () => {
   const requestDataCalls: unknown[] = []
   const sentry = {

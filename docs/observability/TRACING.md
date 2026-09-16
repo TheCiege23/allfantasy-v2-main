@@ -17,7 +17,8 @@ ran a flat 10% with no integrations. Do not recreate it — change the options m
 
 ## Dimensions on every trace
 
-Stamped on the root span (queryable in the spans dataset) and as tags:
+Stamped on the root span. **Not every row is queryable the same way** — see "Sent is not the same
+as queryable" below this table before writing an aggregate:
 
 | Attribute | Values | Set by |
 |---|---|---|
@@ -43,6 +44,33 @@ Values are closed vocabularies on purpose — an unbounded value (league id, pla
 the dimension useless and the bill larger.
 
 ⚠ `af.db.ms` is **database time**, not wall time: queries inside a `Promise.all` are summed.
+
+### 🛑 Sent is not the same as queryable — and this table used to imply otherwise
+
+The heading above said every row here is "queryable in the spans dataset". Measured 2026-09-16,
+**that was false for the numbers and for `af.sync_job`**, and four of the five budget queries below
+could not run:
+
+| | reached Sentry | queryable before | how it is queryable now |
+|---|---|---|---|
+| `af.surface` `af.screen` `af.device` `af.nav` `af.league_scoped` | yes | yes — set as **tags** | unchanged |
+| `af.card` | yes | yes — lives on **child** spans | unchanged |
+| `af.shell_ms` `af.db.count` `af.db.ms` `af.db.max_ms` `af.db.errors` | **yes** | **no** | promoted to **measurements** |
+| `af.sync_job` | **yes** | **no** | promoted to a **tag** |
+
+The values were never lost. Captured off the wire from a signed-in `/core` render, they sat in the
+transaction's `contexts.trace.data` exactly as written. But Sentry indexes a transaction's searchable
+fields from tags and measurements only, so every aggregate over root-span data answered
+**"Unknown attribute"** — which reads identically to "this was never sent", and was misdiagnosed as
+that first. `lib/observability/eventProcessing.ts` now copies them across at serialization; the
+writers are unchanged, and the value stays on the span for a single-trace read.
+
+⚠ **`af.db.slowest` is deliberately NOT promoted** — it is a query description, a string, and would be
+unbounded cardinality as a tag. Read it per trace.
+
+⚠ **The measurement query syntax below is unconfirmed until this deploys.** A field Sentry has never
+ingested is rejected by its validator either way, so it cannot be checked in advance. If
+`measurements.af.shell_ms` is rejected after deploy, the dotted name is the likely cause.
 
 ## Sampling
 
@@ -87,7 +115,7 @@ Time to the `/core` shell, and to the whole screen:
 
 ```
 is_transaction:true transaction:"GET /core/[[...screen]]" af.nav:document
-group by af.screen, af.device   →   p75(af.shell_ms), p75(span.duration)
+group by af.screen, af.device   →   p75(measurements.af.shell_ms), p75(span.duration)
 ```
 
 Which card the home is waiting for — each card's read is a `core.card` span, and the slow database
@@ -128,7 +156,7 @@ Database load per screen (catches N+1 growth before it is slow):
 
 ```
 is_transaction:true af.surface:core
-group by af.screen   →   p95(af.db.ms), p95(af.db.count)
+group by af.screen   →   p95(measurements.af.db.ms), p95(measurements.af.db.count)
 ```
 
 Slowest operations behind a screen:

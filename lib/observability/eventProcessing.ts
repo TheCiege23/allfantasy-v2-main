@@ -22,6 +22,7 @@ export type SentryEventLike = {
   tags?: Record<string, unknown>
   extra?: Record<string, unknown>
   contexts?: { trace?: TraceContextLike }
+  measurements?: Record<string, { value: number; unit: string }>
   breadcrumbs?: BreadcrumbLike[]
   exception?: { values?: Array<{ value?: string }> }
   message?: string
@@ -56,6 +57,58 @@ function tagEvent(event: SentryEventLike): void {
   }
 }
 
+/**
+ * 🛑 A NUMBER ON THE ROOT SPAN IS SENT BUT CANNOT BE QUERIED, AND THE TWO LOOK IDENTICAL IN THE UI.
+ *
+ * Measured 2026-09-16 off the wire: `af.shell_ms` and every `af.db.*` really do arrive, sitting in
+ * `contexts.trace.data` — the writers work. But Sentry only indexes a TRANSACTION's searchable
+ * fields from tags and measurements, so an aggregate over root-span data fails with "Unknown
+ * attribute", and four of the five budget queries in docs/observability/TRACING.md could not run.
+ * (`af.card` was fine throughout: it lives on CHILD spans, which the spans dataset does index.)
+ *
+ * Promoting here rather than at each writer is deliberate — `rootTiming`, `dbTelemetry` and
+ * `jobTelemetry` keep setting plain span data, one place decides what is budgetable, and a future
+ * numeric attribute becomes queryable by adding a line to this table rather than by touching the
+ * code that measures it.
+ *
+ * ⚠ CLOSED VOCABULARY, like the tags. Promoting "anything numeric" would put unbounded cardinality
+ * in the bill, and `af.db.slowest` is a STRING (a query description) that must never land here.
+ */
+const BUDGET_MEASUREMENTS: Record<string, 'millisecond' | 'none'> = {
+  'af.shell_ms': 'millisecond',
+  'af.db.ms': 'millisecond',
+  'af.db.max_ms': 'millisecond',
+  'af.db.count': 'none',
+  'af.db.errors': 'none',
+}
+
+/**
+ * The same defect in its STRING flavour, and it needs a tag rather than a measurement.
+ * `af.sync_job` is set on the root span by `jobTelemetry`, is documented in TRACING.md as a
+ * groupable dimension, and was equally unqueryable — "Unknown attribute", measured the same way.
+ */
+const BUDGET_TAGS = ['af.sync_job'] as const
+
+function measureEvent(event: SentryEventLike): void {
+  if (event.type !== 'transaction') return
+  const data = event.contexts?.trace?.data
+  if (!data) return
+  for (const [key, unit] of Object.entries(BUDGET_MEASUREMENTS)) {
+    const value = data[key]
+    if (typeof value !== 'number' || !Number.isFinite(value)) continue
+    const measurements = (event.measurements ??= {})
+    // A measurement the SDK already set wins: it was closer to the thing it measured.
+    if (measurements[key] === undefined) measurements[key] = { value, unit }
+  }
+  for (const key of BUDGET_TAGS) {
+    const value = data[key]
+    if (typeof value !== 'string' || value === '') continue
+    const tags = (event.tags ??= {})
+    // `tagEvent` ran first and its request-derived tags win; this only fills a gap.
+    if (tags[key] === undefined) tags[key] = value
+  }
+}
+
 function scrubEvent(event: SentryEventLike): void {
   if (event.request) event.request = scrubRequest(event.request)
   if (Array.isArray(event.breadcrumbs)) event.breadcrumbs = event.breadcrumbs.map((crumb) => scrubBreadcrumb(crumb))
@@ -82,6 +135,11 @@ export function enrichAndScrubEvent<E extends SentryEventLike | null>(event: E):
     tagEvent(target)
   } catch {
     // Untagged is fine.
+  }
+  try {
+    measureEvent(target)
+  } catch {
+    // Unbudgeted is fine — the value is still on the span for a single-trace read.
   }
   try {
     scrubEvent(target)
