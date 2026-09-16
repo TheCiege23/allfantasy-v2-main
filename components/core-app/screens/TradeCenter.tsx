@@ -1,6 +1,7 @@
 'use client'
 
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import Link from 'next/link'
 import { SourceActionLink } from '@/components/league-links/SourceActionLink'
 import type { SourceScreenLink } from '@/lib/league-links/sourceLinkResolver'
@@ -27,6 +28,7 @@ import { COMMS_OPEN_EVENT } from '@/components/core-app/comms/commsEvents'
 import { projectedLetterFor, type GradeLetter } from '@/lib/trade-intel/gradeScale'
 import { TradeFinderPanel } from '@/components/core-app/screens/TradeFinderPanel'
 import { TradeLeagueStrip, type StripLeague } from '@/components/core-app/screens/TradeLeagueStrip'
+import { TradeAssetSheet, usePhoneViewport } from '@/components/core-app/screens/TradeAssetSheet'
 import '@/components/core-app/af-core.css'
 import '@/components/core-app/af-trade-center.css'
 
@@ -321,6 +323,28 @@ function AllLeaguesTradeHub(props: {
  * allows — the FantasyCalc search path returns no id, so requiring one would
  * make the most common search result unusable.
  */
+/**
+ * The phone builder's three steps.
+ *
+ * ── WHY STEPS, AND WHY ONLY ON A PHONE ───────────────────────────────────────────────────────────
+ *
+ * At 390px the two team cards stack, each with its own roster list, so "what am I sending" and
+ * "what am I getting" sit several screens apart and the verdict is further still. One team per step
+ * keeps the deal on one screen at a time; the review step puts both sides and the verdict together.
+ *
+ * ⚠ CSS DOES THE HIDING, NOT CONDITIONAL RENDERING. Every section stays mounted and is tagged with
+ * the steps it belongs to (`data-mstep`), and the stylesheet hides the rest only below 720px. So a
+ * desktop render is byte-for-byte the page it was, a rotate or resize never loses picker or
+ * analyser state, and nothing depends on knowing the viewport before hydration.
+ */
+export type MobileStep = 'give' | 'get' | 'review'
+
+const MOBILE_STEPS: Array<{ key: MobileStep; label: string }> = [
+  { key: 'give', label: 'You send' },
+  { key: 'get', label: 'You get' },
+  { key: 'review', label: 'Review' },
+]
+
 function toInput(a: PickedAsset) {
   if (a.kind === 'player') {
     return {
@@ -379,6 +403,30 @@ export function TradeCenter(props: {
   const [countering, setCountering] = useState<{ tradeId: string; label: string } | null>(null)
   /** Bumped after a send lands, so the inbox refetches what the write changed. */
   const [inboxReloadToken, setInboxReloadToken] = useState(0)
+
+  /* Phone-only step state; see MobileStep. Ignored by the desktop layout. */
+  const [mobileStep, setMobileStep] = useState<MobileStep>('give')
+  const isPhone = usePhoneViewport()
+  const stepAnchorRef = useRef<HTMLDivElement | null>(null)
+  /* The "+ Add asset" button that opened the phone sheet — where focus returns on close. */
+  const sheetOpenerRef = useRef<HTMLElement | null>(null)
+
+  /**
+   * Change step, and bring the step's content into view.
+   *
+   * ⚠ SCROLLED ONLY ON A PHONE, and only when the anchor is ABOVE the viewport. A step switch
+   * changes the page's height under the manager's thumb; without this, choosing "You get" from the
+   * sticky bar halfway down a long inbox leaves them looking at the inbox with no sign anything
+   * happened. A switch made while the builder is already on screen must not jump the page.
+   */
+  const goToStep = useCallback((step: MobileStep) => {
+    setMobileStep(step)
+    const anchor = stepAnchorRef.current
+    if (!anchor || typeof window === 'undefined') return
+    if (anchor.getBoundingClientRect().top < 0) {
+      anchor.scrollIntoView({ block: 'start', behavior: 'smooth' })
+    }
+  }, [])
 
   /*
    * ── Who you are trading with ──────────────────────────────────────────
@@ -538,8 +586,10 @@ export function TradeCenter(props: {
        * looking at.
        */
       setCountering(null)
+      /* A loaded offer is a whole deal — on a phone, show both sides of it at once. */
+      goToStep('review')
     },
-    [],
+    [goToStep],
   )
 
   /**
@@ -560,8 +610,13 @@ export function TradeCenter(props: {
       setPartnerRosterId(input.partnerRosterId)
       setCountering({ tradeId: input.tradeId, label: input.label })
       setDraftNote(`Countering ${input.label} — change it, analyse it, then send it back.`)
+      /*
+       * A counter starts by CHANGING the deal, and what a manager usually changes is what they ask
+       * for — so the phone lands on "You get" rather than on a review of a deal they mean to alter.
+       */
+      goToStep('get')
     },
-    [],
+    [goToStep],
   )
 
   /*
@@ -844,8 +899,72 @@ export function TradeCenter(props: {
     return <AllLeaguesTradeHub leagues={props.leagues ?? []} valueActions={valueActions} />
   }
 
+  const hasAssets = giveAssets.length > 0 || getAssets.length > 0
+
+  /**
+   * One side's picker, with the props that make it send from the RIGHT roster.
+   *
+   * Extracted so the inline (desktop) and sheet (phone) placements cannot drift: the rule that
+   * each column picks from its own roster was written once and must stay written once.
+   */
+  const renderPicker = (side: 'give' | 'get') => {
+    const r = side === 'give' ? myRoster : partnerRoster
+    return (
+      <TradeAssetPicker
+        sport={null}
+        onClose={() => setPicking(null)}
+        onPick={(a) => addAsset(side, a)}
+        /*
+          Each column sends from its OWN roster, so each gets its own
+          picks. Passing the wrong side's would offer a manager a pick
+          they do not hold and the engine would refuse it on send.
+        */
+        rosterPicks={r?.picks ?? []}
+        rosterLabel={side === 'give' ? 'Your' : partnerRoster?.ownerName ?? null}
+        teamCount={props.league?.teamCount ?? null}
+        rosterKnown={Boolean(r)}
+        /*
+          Same rule as the picks directly above, for the same reason: each column sends
+          from its OWN roster. Offering a player from the wrong side builds an asset the
+          manager does not hold, and the engine only refuses it at send.
+        */
+        rosterPlayers={r?.players ?? []}
+        faabAvailable={r?.faabRemaining ?? null}
+        managerName={side === 'give' ? myRoster?.ownerName ?? 'You' : partnerRoster?.ownerName ?? null}
+        managerAvatarUrl={r?.avatarUrl ?? null}
+        /*
+          ⚠ NULL ONLY WHEN THE ROSTER IS UNKNOWN, never because the record is 0-0-0.
+          Pre-season every team is 0-0-0 and that is a real record, so collapsing it to
+          null here would make the header say "no record" for the whole of September.
+        */
+        managerRecord={r ? { wins: r.wins, losses: r.losses, ties: r.ties } : null}
+      />
+    )
+  }
+
+  /*
+   * What the persistent button does right now.
+   *
+   * ⚠ ON REVIEW, AN EMPTY SIDE SENDS YOU TO IT RATHER THAN TO THE ANALYSER. The analyze route
+   * refuses a one-sided deal ("Add at least one asset on each side."), measured on the phone flow:
+   * a manager who added only what they want got an error box after a network round trip. Naming
+   * the missing step is the same information a turn earlier, as a control instead of a complaint.
+   */
+  const primary: { label: string; disabled: boolean; run: () => void } =
+    mobileStep !== 'review'
+      ? { label: 'Review trade', disabled: !hasAssets, run: () => goToStep('review') }
+      : giveAssets.length === 0 && getAssets.length > 0
+        ? { label: 'Add what you send', disabled: false, run: () => goToStep('give') }
+        : getAssets.length === 0 && giveAssets.length > 0
+          ? { label: 'Add what you get', disabled: false, run: () => goToStep('get') }
+          : {
+              label: busy ? 'Analyzing…' : result ? 'Analyze again' : 'Analyze trade',
+              disabled: !hasAssets || busy,
+              run: () => void analyze(),
+            }
+
   return (
-    <div className="af-tc">
+    <div className="af-tc" data-mobile-step={mobileStep}>
       <header className="af-tc-head">
         <div className="af-label">Core · Trades</div>
         <h1>Trade Center</h1>
@@ -936,7 +1055,7 @@ export function TradeCenter(props: {
         note cards below.
       */}
       {blocked ? (
-        <div className="af-tc-banner af-tc-banner--blocked">
+        <div className="af-tc-banner af-tc-banner--blocked" data-mstep="review">
           <span className="af-tc-banner-glyph">!</span>
           <div>
             <p className="af-tc-banner-title">This trade can&rsquo;t be evaluated as shown</p>
@@ -994,12 +1113,74 @@ export function TradeCenter(props: {
       ) : null}
 
       {/*
+        ── PHONE STEP BAR ─────────────────────────────────────────────────────────────────────────
+        🛑 STUCK TO THE TOP, BECAUSE THE BOTTOM IS TAKEN. The action row used to stick to the
+        viewport bottom, and on /core that is where the shell draws its tab bar (z 40), the league
+        pill (z 60) and the Comms launcher (z 59). Measured at 390px: the tab bar covered the lower
+        half of the row, the league pill sat on "Analyze this trade" and the launcher on "Save
+        draft" — the two controls that finish the task were the two nobody could press. The top of
+        the viewport is the one edge the shell leaves free.
+
+        Hidden above 720px by the stylesheet; the desktop page never sees it.
+      */}
+      <div ref={stepAnchorRef} className="af-tc-step-anchor" aria-hidden />
+      <div className="af-tc-stepbar">
+        <nav className="af-tc-steps" aria-label="Trade builder steps">
+          {MOBILE_STEPS.map((s, i) => {
+            const count = s.key === 'give' ? giveAssets.length : s.key === 'get' ? getAssets.length : null
+            return (
+              <button
+                key={s.key}
+                type="button"
+                className="af-tc-step"
+                data-on={mobileStep === s.key}
+                aria-current={mobileStep === s.key ? 'step' : undefined}
+                onClick={() => goToStep(s.key)}
+              >
+                <span className="af-tc-step-num" aria-hidden>{i + 1}</span>
+                <span className="af-tc-step-label">{s.label}</span>
+                {count != null ? <span className="af-tc-step-count af-num">{count}</span> : null}
+              </button>
+            )
+          })}
+        </nav>
+        <div className="af-tc-stepbar-row">
+          {/*
+            ⚠ THE SAME PRICED-ONLY TOTALS AS THE VALUE RAIL, AND THE SAME EM DASH. A side with
+            nothing priced reads "—", never "0", for the reason every other total here gives.
+          */}
+          <span className="af-tc-stepbar-totals af-num" aria-live="polite">
+            <span>Send <b>{totalOf(give)}</b></span>
+            <span>Get <b>{totalOf(get)}</b></span>
+            {balance?.diff != null && balance.diff !== 0 ? (
+              <span className="af-tc-stepbar-delta" data-tone={balance.diff > 0 ? 'good' : 'bad'}>
+                {balance.diff > 0 ? '+' : '−'}
+                {Math.abs(balance.diff).toLocaleString()}
+              </span>
+            ) : null}
+          </span>
+          {/*
+            The persistent review control. On the building steps it moves to Review; on Review it
+            runs the analysis. Disabled on an empty deal for the same reason Analyze always was.
+          */}
+          <button
+            type="button"
+            className="af-btn af-tc-stepbar-primary"
+            disabled={primary.disabled}
+            onClick={primary.run}
+          >
+            {primary.label}
+          </button>
+        </div>
+      </div>
+
+      {/*
         Naming the other side is not decoration. It is what turns on the whole
         counterparty half of the ledger, and what lets each column offer the
         picks that roster actually holds.
       */}
       {otherRosters.length > 0 ? (
-        <div className="af-tc-partner">
+        <div className="af-tc-partner" data-mstep="get">
           <span className="af-label">Trading with</span>
           <div className="af-tc-partner-chips">
             {otherRosters.map((r) => (
@@ -1027,7 +1208,7 @@ export function TradeCenter(props: {
         </div>
       ) : null}
 
-      <div className="af-tc-builder">
+      <div className="af-tc-builder" data-mstep="give get">
         {([
           { side: 'give' as const, label: 'Your team', handle: '@you', isYou: true, lines: give },
           {
@@ -1038,7 +1219,7 @@ export function TradeCenter(props: {
             lines: get,
           },
         ]).map((side) => (
-          <div key={side.label} className="af-tc-team">
+          <div key={side.side} className="af-tc-team" data-mstep={side.side}>
             <div className="af-tc-team-head">
               <span className="af-tc-team-name">{side.label}</span>
               {side.handle ? <span className="af-tc-team-handle">{side.handle}</span> : null}
@@ -1134,60 +1315,48 @@ export function TradeCenter(props: {
               ))
             )}
 
-            {picking === side.side ? (
-              <TradeAssetPicker
-                sport={null}
-                onClose={() => setPicking(null)}
-                onPick={(a) => addAsset(side.side, a)}
-                /*
-                  Each column sends from its OWN roster, so each gets its own
-                  picks. Passing the wrong side's would offer a manager a pick
-                  they do not hold and the engine would refuse it on send.
-                */
-                rosterPicks={
-                  side.side === 'give' ? myRoster?.picks ?? [] : partnerRoster?.picks ?? []
-                }
-                rosterLabel={side.side === 'give' ? 'Your' : partnerRoster?.ownerName ?? null}
-                teamCount={props.league?.teamCount ?? null}
-                rosterKnown={Boolean(side.side === 'give' ? myRoster : partnerRoster)}
-                /*
-                  Same rule as the picks directly above, for the same reason: each column sends
-                  from its OWN roster. Offering a player from the wrong side builds an asset the
-                  manager does not hold, and the engine only refuses it at send.
-                */
-                rosterPlayers={
-                  side.side === 'give' ? myRoster?.players ?? [] : partnerRoster?.players ?? []
-                }
-                faabAvailable={
-                  side.side === 'give'
-                    ? myRoster?.faabRemaining ?? null
-                    : partnerRoster?.faabRemaining ?? null
-                }
-                managerName={
-                  side.side === 'give' ? myRoster?.ownerName ?? 'You' : partnerRoster?.ownerName ?? null
-                }
-                managerAvatarUrl={
-                  side.side === 'give' ? myRoster?.avatarUrl ?? null : partnerRoster?.avatarUrl ?? null
-                }
-                managerRecord={(() => {
-                  const r = side.side === 'give' ? myRoster : partnerRoster
-                  /*
-                    ⚠ NULL ONLY WHEN THE ROSTER IS UNKNOWN, never because the record is 0-0-0.
-                    Pre-season every team is 0-0-0 and that is a real record, so collapsing it to
-                    null here would make the header say "no record" for the whole of September.
-                  */
-                  return r ? { wins: r.wins, losses: r.losses, ties: r.ties } : null
-                })()}
-              />
+            {/*
+              ⚠ ON A PHONE THE PICKER IS A SHEET AND THE BUTTON STAYS. The sheet is portalled to
+              <body> so no ancestor's transform or backdrop-filter can become its containing block
+              and clip a `position: fixed` overlay to the card; the button remains in place so the
+              card does not jump when the sheet opens or closes.
+            */}
+            {picking === side.side && !isPhone ? (
+              renderPicker(side.side)
             ) : (
               <button
                 type="button"
                 className="af-tc-add"
-                onClick={() => setPicking(side.side)}
+                aria-haspopup={isPhone ? 'dialog' : undefined}
+                onClick={(e) => {
+                  sheetOpenerRef.current = e.currentTarget
+                  setPicking(side.side)
+                }}
               >
                 + Add asset
               </button>
             )}
+            {picking === side.side && isPhone && typeof document !== 'undefined'
+              ? createPortal(
+                  /*
+                    ⚠ THE TOKENS LIVE ON `.af-core` AND `.af-tc`, AND A PORTAL LEAVES BOTH BEHIND.
+                    Without this wrapper every `var(--surface)` in the sheet resolves to nothing.
+                    `display: contents` (af-trade-center.css) keeps the wrapper out of layout while
+                    custom properties still inherit through it; the theme itself is keyed on
+                    `html[data-mode]`, so light and AF modes reach the sheet unchanged.
+                  */
+                  <div className="af-core af-tc af-tc-sheet-root">
+                    <TradeAssetSheet
+                      label={side.side === 'give' ? 'Add an asset you send' : `Add an asset ${theirLabel} sends`}
+                      onClose={() => setPicking(null)}
+                      openerRef={sheetOpenerRef}
+                    >
+                      {renderPicker(side.side)}
+                    </TradeAssetSheet>
+                  </div>,
+                  document.body,
+                )
+              : null}
 
             {/*
               🛑 WHAT THIS TEAM ACTUALLY HAS, ON THE SCREEN.
@@ -1285,8 +1454,58 @@ export function TradeCenter(props: {
         verdict is: a bar under a "this cannot happen" banner still gets read as
         a comparison.
       */}
+      {/*
+        ── PHONE REVIEW: BOTH SIDES ON ONE SCREEN ───────────────────────────────────────────────
+        The builder cards are hidden on this step, so the deal is restated compactly with an Edit
+        control per side. Read-only on purpose: removing an asset belongs to the step that shows the
+        roster it came from. Hidden above 720px, where both cards are already side by side.
+      */}
+      <section className="af-tc-review" data-mstep="review" aria-label="Trade summary">
+        {([
+          { side: 'give' as const, title: 'You send', lines: give },
+          { side: 'get' as const, title: `You get${partnerRoster ? ` · from ${theirLabel}` : ''}`, lines: get },
+        ]).map((s) => (
+          <div key={s.side} className="af-tc-review-side">
+            <div className="af-tc-review-head">
+              <span className="af-label">{s.title}</span>
+              <span className="af-tc-spacer" />
+              <button type="button" className="af-tc-review-edit" onClick={() => goToStep(s.side)}>
+                Edit
+              </button>
+            </div>
+            {s.lines.length === 0 ? (
+              <p className="af-tc-row-sub">Nothing added yet.</p>
+            ) : (
+              <ul className="af-tc-review-list">
+                {s.lines.map((l, i) => (
+                  <li key={`${s.side}-${l.name}-${i}`}>
+                    <span className="af-tc-review-name">{l.name}</span>
+                    {l.position ? (
+                      <span className="af-tc-pos" data-pos={positionTone(l.position)}>{l.position}</span>
+                    ) : null}
+                    <span className="af-tc-spacer" />
+                    <span className="af-num" data-unpriced={l.marketValue == null ? 'true' : undefined}>
+                      {money(l.marketValue)}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <div className="af-tc-total">
+              <span>
+                Total
+                {unpricedCount(s.lines) > 0 ? (
+                  <span className="af-tc-total-note"> · {unpricedCount(s.lines)} unpriced</span>
+                ) : null}
+              </span>
+              <b className="af-num">{totalOf(s.lines)}</b>
+            </div>
+          </div>
+        ))}
+      </section>
+
       {balance && !blocked ? (
-        <div className="af-tc-balance">
+        <div className="af-tc-balance" data-mstep="review">
           <div className="af-tc-balance-head">
             <span className="af-label">Value balance</span>
             <span className="af-tc-row-sub">priced assets only</span>
@@ -1317,14 +1536,14 @@ export function TradeCenter(props: {
         </div>
       ) : null}
 
-      {error ? <p className="af-tc-nosignal">{error}</p> : null}
+      {error ? <p className="af-tc-nosignal" data-mstep="review">{error}</p> : null}
 
       {/*
         ⚠ THE VERDICT IS SUPPRESSED WHEN THE FORMAT BLOCKS THE DEAL. A score
         beneath a "this cannot happen" banner still gets read as a score.
       */}
       {result && !blocked ? (
-        <section className="af-tc-verdict">
+        <section className="af-tc-verdict" data-mstep="review">
           <div className="af-tc-verdict-head">
             <span className="af-label af-tc-verdict-eyebrow">The verdict</span>
             <span className="af-tc-row-sub">
@@ -1416,7 +1635,7 @@ export function TradeCenter(props: {
 
       {/* Additive context. Never merged with the verdict above. */}
       {result ? (
-        <div className="af-tc-notes">
+        <div className="af-tc-notes" data-mstep="review">
           {NOTE_GROUPS.map((g) => {
             const notes = (result[g.key] as string[] | undefined) ?? []
             if (notes.length === 0) return null
@@ -1435,7 +1654,7 @@ export function TradeCenter(props: {
       ) : null}
 
       {intel ? (
-        <section className="af-tc-dos">
+        <section className="af-tc-dos" data-mstep="review">
           <div className="af-label">Decision OS · this deal</div>
           {intel.why ? <p className="af-tc-why">{intel.why}</p> : null}
 
@@ -1543,6 +1762,11 @@ export function TradeCenter(props: {
         deal is the last thing you do, and putting the button next to the assets
         invites sending one before it has been priced.
       */}
+      {/*
+        Wrapped rather than tagged: the panel owns its own root element. `display: contents` on the
+        wrapper (stylesheet) keeps it out of the page's flex gap on every width.
+      */}
+      <div className="af-tc-mstep-wrap" data-mstep="review">
       <TradeProposePanel
         leagueId={props.league?.id ?? null}
         give={giveAssets}
@@ -1565,10 +1789,18 @@ export function TradeCenter(props: {
           setInboxReloadToken((n) => n + 1)
         }}
       />
+      </div>
 
-      <TradeFinderPanel leagueId={props.league?.id ?? null} />
+      {/*
+        The finder answers "who should I trade with", which is the question of the "You get" step.
+        ⚠ Its root reuses `.af-tc-dos`, the same class as the Decision OS section above — which is
+        exactly why steps are keyed on `data-mstep` and never on a class name.
+      */}
+      <div className="af-tc-mstep-wrap" data-mstep="get">
+        <TradeFinderPanel leagueId={props.league?.id ?? null} />
+      </div>
 
-      <div className="af-tc-actions">
+      <div className="af-tc-actions" data-mstep="review">
         <p className="af-tc-caption">
           Grades here are projected, not realized — they price the deal as it stands today rather
           than how it turns out.
