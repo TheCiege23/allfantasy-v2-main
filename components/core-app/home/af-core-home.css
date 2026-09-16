@@ -3,6 +3,21 @@
  * Token layer only — the light-mode clamp rewrites bare colours.
  */
 
+/*
+ * ⚠ A LOCAL VISUALLY-HIDDEN RULE. The global `.af-sr-only` lives in af-notifications.css, which is
+ * only on the page because /core happens to bundle the notifications screen; af-league-home.css
+ * records the same trap. Scoped here so these labels stay hidden wherever the home renders.
+ */
+.af-fresh .af-sr-only,
+.af-decisions .af-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
 /* ── Freshness line ─────────────────────────────────────────────────────── */
 .af-fresh {
   display: flex;
@@ -103,10 +118,11 @@
   }
   .af-decisions .af3a-row { flex-wrap: wrap; }
   .af-decisions .af3a-row-title { flex: 1 1 100%; }
+  /* 44px targets — the signed-in phone contract (e2e/mobile/authed-phone.spec.ts). */
   .af-decisions .af3a-row-title a {
     display: inline-flex;
     align-items: center;
-    min-height: 32px;
+    min-height: 44px;
   }
-  .af-home-scope a { margin-left: 0; }
+  .af-home-scope a { margin-left: 0; min-height: 44px; }
 }

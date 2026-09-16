@@ -8,7 +8,7 @@ import { CARD_USE_COOKIE, parseCardUsage, recordCardUse, serializeCardUsage } fr
  * The /core home's client-side behaviours, neither of which renders anything of its own:
  *
  *   HomeActivity  — records which card a tap came from (the card order's usage counts), and warms a
- *                   /core link the moment the reader shows intent to follow it.
+ *                   /core link when a mouse rests on it or it takes keyboard focus.
  *   HomePrefetch  — warms the few destinations the home can predict, once the page has settled.
  *
  * ⚠ THERE IS DELIBERATELY NO SCROLL RESTORER HERE. One was written for the 2026-09-16 brief ("restore
@@ -110,14 +110,18 @@ export function HomeActivity({ children }: { children: ReactNode }) {
       }
     }
 
+    /*
+     * ⚠ NO `touchstart`. It fires at the start of every scroll as well as every tap, so a swipe down
+     * the home spent the whole per-page allowance — six full server renders — on links nobody
+     * touched. Phones get the idle prewarm (`HomePrefetch`) instead; a resting mouse and keyboard
+     * focus are the intent signals that do not fire on a scroll.
+     */
     root.addEventListener('pointerover', onOver)
-    root.addEventListener('touchstart', onImmediate, { passive: true })
     root.addEventListener('focusin', onImmediate)
     root.addEventListener('click', onClick, true)
     return () => {
       if (dwell != null) window.clearTimeout(dwell)
       root.removeEventListener('pointerover', onOver)
-      root.removeEventListener('touchstart', onImmediate)
       root.removeEventListener('focusin', onImmediate)
       root.removeEventListener('click', onClick, true)
     }

@@ -8,6 +8,7 @@ import { freshnessStamp, latestInstant, type CardFreshnessStamp } from '@/lib/co
 import { rankDecisions } from '@/lib/core-app/decisionQueue'
 import type { HomeCardOrder } from '@/lib/core-app/homeCardOrder'
 import { homePrefetchTargets } from '@/lib/core-app/homePrefetchTargets'
+import { ScopeResetLink } from '@/components/core-app/ScopeSwitcher'
 import Dashboard3A, {
   Dash3ACareer,
   Dash3AChimmy,
@@ -98,6 +99,35 @@ export type HomeLoads = {
   offersSettled: Promise<void>
 }
 
+/**
+ * Every read already settled, empty — for a home that has nothing to read (a scope matching no
+ * league). Each value is the one its own loader falls back to on failure, so every card handles it.
+ */
+export function emptyHomeLoads(): HomeLoads {
+  const none = <T,>(value: T) => Promise.resolve(value)
+  return {
+    dash34: none(null),
+    issues: none([]),
+    career: none(null),
+    week: none(null),
+    winProb: none({}),
+    exposure: none(null),
+    rivals: none(null),
+    following: none(null),
+    receipts: none(null),
+    routine: none(null),
+    userOs: none({ snapshot: null, league: null }),
+    schedule: none(null),
+    strip: none(null) as HomeLoads['strip'],
+    plays: none([]) as HomeLoads['plays'],
+    regularSeason: none(false),
+    trades: none([]) as HomeLoads['trades'],
+    brief: none(null),
+    drafts: none(null),
+    offersSettled: none(undefined),
+  }
+}
+
 /** The render-failure boundaries' names (the `af.card` tag on a reported card failure). */
 export type HomeCardName =
   | 'since-last-visit'
@@ -145,6 +175,35 @@ export type HomeScopeInfo = {
 function injuriesAt(data: Dash34Result | null): string | null {
   const latest = latestInstant((data?.book ?? []).map((row) => (row as { reportedAt?: string | null }).reportedAt ?? null))
   return latest ? latest.toISOString() : null
+}
+
+/**
+ * The stamp on every card built from league syncs.
+ *
+ * ⚠ THE OLDEST SYNC, NOT THE NEWEST. These cards cover every league in view at once, so one league
+ * synced a minute ago said "updated 1m ago" over a portfolio whose other 59 leagues were days old —
+ * a fresh timestamp laundering stale ones. The oldest is the only instant every row is at least as
+ * new as. A league that has never synced makes the stamp stale whatever the others say; with none
+ * synced at all it reads "not read yet". AllFantasy-native leagues have nothing to sync and are not
+ * counted.
+ */
+function leagueDataStamp(
+  input: { oldestAt: string | null; neverSynced: number; syncable: number },
+  now: Date,
+): CardFreshnessStamp {
+  /*
+   * The warning has to say WHY. "⚠ Oldest league data updated 7 min ago" is a contradiction on its
+   * face when the reason is a league that has never been read — so that case names the count.
+   */
+  const unread = input.neverSynced > 0 && input.oldestAt
+    ? `${input.neverSynced} ${input.neverSynced === 1 ? 'league' : 'leagues'} never read · `
+    : ''
+  const source = `${unread}${input.syncable > 1 ? 'Oldest league data' : 'League data'}`
+  const stamp = freshnessStamp(source, input.oldestAt, now, {
+    staleRule: 'roster',
+    missing: input.syncable === 0 ? 'none-yet' : 'never-read',
+  })
+  return unread ? { ...stamp, stale: true } : stamp
 }
 
 function Stamps({ stamps }: { stamps: CardFreshnessStamp[] }) {
@@ -317,12 +376,18 @@ async function RivalsCard({ rivals, leagueStamp }: { rivals: HomeLoads['rivals']
   return <Dash3ARivals rivals={await rivals} freshness={<Stamps stamps={[leagueStamp]} />} />
 }
 
-async function PortfolioChartCard({ dash34, leagueStamp }: { dash34: HomeLoads['dash34'] } & LeagueStamp) {
+async function PortfolioChartCard({
+  dash34,
+  leagueStamp,
+  scope,
+}: { dash34: HomeLoads['dash34']; scope: HomeScopeInfo } & LeagueStamp) {
   const data = await dash34
   if (!data) return null
   return (
     <Dash3APortfolioChart
       platformCounts={platformCountsOf(data.allLeagues ?? data.leagues ?? [])}
+      // The chart counts what the summary read — on a filtered home, only the leagues in view.
+      subtitle={scope.scoped ? `${scope.label} in Core` : undefined}
       freshness={<Stamps stamps={[leagueStamp]} />}
     />
   )
@@ -366,7 +431,7 @@ function ScopeNote({ scope }: { scope: HomeScopeInfo }) {
         Showing <b>{scope.label}</b> — {scope.count} of {scope.total} {scope.total === 1 ? 'league' : 'leagues'}.
         Everything below covers only these.
       </span>
-      <Link href="/core?scope=all">Show all leagues</Link>
+      <ScopeResetLink>Show all leagues</ScopeResetLink>
     </p>
   )
 }
@@ -379,7 +444,7 @@ export function CoreHomeCards({
   commissionerCount,
   syncLabel,
   scope,
-  leagueDataAt,
+  leagueData,
   order,
   prefetch,
 }: {
@@ -392,8 +457,11 @@ export function CoreHomeCards({
   /** "synced 4m ago" when fresh; null when stale or unknown. */
   syncLabel: string | null
   scope: HomeScopeInfo
-  /** The newest `lastSyncedAt` among the leagues in scope, as ISO — the "League data" stamp. */
-  leagueDataAt: string | null
+  /**
+   * The "League data" stamp's inputs, over the syncable leagues in scope: the OLDEST sync, and how
+   * many have never synced at all. See `leagueDataStamp`.
+   */
+  leagueData: { oldestAt: string | null; neverSynced: number; syncable: number }
   /** Per-viewer card order — lib/core-app/homeCardOrder.ts. */
   order: HomeCardOrder
   /** What the prewarm needs beyond the queue itself. */
@@ -411,7 +479,7 @@ export function CoreHomeCards({
     </div>
   )
 
-  const leagueStamp = freshnessStamp('League data', leagueDataAt, now, { staleRule: 'roster' })
+  const leagueStamp = leagueDataStamp(leagueData, now)
 
   /*
    * ⚠ ONLY CARDS THAT ALWAYS RENDER GET A PLACEHOLDER. The bands above the dashboard and the
@@ -465,7 +533,7 @@ export function CoreHomeCards({
           <p>
             None of your leagues match &ldquo;{scope.label}&rdquo;
             {scope.key === 'fav' ? ' — star a league in the league picker at the top to add it here' : ''}.{' '}
-            <Link href="/core?scope=all">Show all leagues</Link>
+            <ScopeResetLink>Show all leagues</ScopeResetLink>
           </p>
         </div>
       ) : (
@@ -516,7 +584,7 @@ export function CoreHomeCards({
               rivals: card('rivals', <RivalsCard rivals={loads.rivals} leagueStamp={leagueStamp} />, 150),
               portfolioChart: card(
                 'portfolio-chart',
-                <PortfolioChartCard dash34={loads.dash34} leagueStamp={leagueStamp} />,
+                <PortfolioChartCard dash34={loads.dash34} leagueStamp={leagueStamp} scope={scope} />,
                 200,
               ),
               exposure: card('exposure', <ExposureCard exposure={loads.exposure} leagueStamp={leagueStamp} />, 180),

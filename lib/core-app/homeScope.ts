@@ -21,6 +21,9 @@
  * module's. The cookie is only ever a set of ids to intersect with the authorized list.
  */
 
+import { platformLabel as sourcePlatformLabel } from '@/lib/core-app/platformLinks'
+import { normalizeSourcePlatform } from '@/lib/league-links/sourceLinkResolver'
+
 export type HomeScope =
   | { kind: 'all' }
   | { kind: 'favorites' }
@@ -80,8 +83,16 @@ export function sportOf(league: ScopeLeague): string {
   return String(league.sport ?? 'NFL').toUpperCase()
 }
 
+/** The value a scope names this league's provider by. Every AllFantasy-native spelling is one bucket. */
+export const NATIVE_PLATFORM_KEY = 'allfantasy'
+
+/**
+ * ⚠ NORMALISED THROUGH THE SHARED RESOLVER, NOT LOWERCASED. League rows spell a native league
+ * `manual`, `allfantasy`, `af` or `native`; lowercasing alone gave each its own chip, two of them
+ * labelled "AllFantasy" under one React key.
+ */
 export function platformOf(league: ScopeLeague): string {
-  return String(league.platform ?? 'manual').toLowerCase()
+  return normalizeSourcePlatform(league.platform) ?? NATIVE_PLATFORM_KEY
 }
 
 /** The leagues a scope keeps, in their original order. `all` returns the input itself. */
@@ -133,21 +144,9 @@ export function serializeFavoriteIds(ids: Iterable<string>): string {
 
 export type ScopeOption = { value: string | null; label: string; count: number; group: 'all' | 'favorites' | 'sport' | 'platform' }
 
-const PLATFORM_LABEL: Record<string, string> = {
-  espn: 'ESPN',
-  mfl: 'MFL',
-  nfl: 'NFL.com',
-  cbs: 'CBS',
-  yahoo: 'Yahoo',
-  sleeper: 'Sleeper',
-  fantrax: 'Fantrax',
-  manual: 'AllFantasy',
-  allfantasy: 'AllFantasy',
-}
-
+/** One label table for the whole app — lib/core-app/platformLinks.ts. */
 export function platformLabel(platform: string): string {
-  const key = platform.toLowerCase()
-  return PLATFORM_LABEL[key] ?? key.charAt(0).toUpperCase() + key.slice(1)
+  return sourcePlatformLabel(platform)
 }
 
 /**

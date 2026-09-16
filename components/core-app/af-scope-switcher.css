@@ -6,6 +6,16 @@
  * and Comms layers, which own their own stacking.
  */
 
+/* Local visually-hidden rule — see the note in components/core-app/home/af-core-home.css. */
+.af-scope .af-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
 .af-scope {
   position: relative;
   flex: 0 0 auto;
@@ -229,10 +239,16 @@
   .af-shell .af-topbar .af-scope { order: 0; }
   .af-shell .af-topbar .af-topbar-right { order: 1; flex: 1 1 0; }
   .af-shell .af-topbar .af-search-wrap { order: 2; flex: 1 1 100%; }
+  /*
+   * ⚠ 44px, NOT LESS, ON EVERY CONTROL HERE. `e2e/mobile/authed-phone.spec.ts` fails any signed-in
+   * /core control under 44x44 that is not in its baseline — and a 40px button here did exactly that
+   * on /core/trades, the first run after it shipped.
+   */
   .af-scope-btn {
     max-width: min(52vw, 220px);
-    min-height: 40px;
+    min-height: 44px;
   }
+  .af-scope-chip { min-height: 44px; }
   .af-scope-kicker { display: none; }
   .af-scope-panel {
     top: auto;

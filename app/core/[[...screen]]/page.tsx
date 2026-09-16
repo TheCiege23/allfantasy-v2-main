@@ -163,7 +163,7 @@ import CoreScreenSkeleton from '@/components/core-app/CoreScreenSkeleton'
 import CoreScreenErrorBoundary from '@/components/core-app/CoreScreenErrorBoundary'
 import { PublishShellSignals, type ShellUrgencyBadges } from '@/components/core-app/shellSignals'
 import { recordRootDuration } from '@/lib/observability/rootTiming'
-import { CoreHomeCards, type HomeLoads } from '@/components/core-app/home/HomeCards'
+import { CoreHomeCards, emptyHomeLoads, type HomeLoads } from '@/components/core-app/home/HomeCards'
 import { traceCard } from '@/lib/observability/cardTelemetry'
 import {
   applyHomeScope,
@@ -179,7 +179,7 @@ import {
   sportOf,
   type HomeScope,
 } from '@/lib/core-app/homeScope'
-import { latestInstant } from '@/lib/core-app/cardFreshness'
+import { leagueDataFreshness } from '@/lib/core-app/cardFreshness'
 import { CARD_USE_COOKIE, orderHomeCards, parseCardUsage, timeSensitiveCards } from '@/lib/core-app/homeCardOrder'
 
 export const dynamic = 'force-dynamic'
@@ -2246,7 +2246,13 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
   const homeRecordVisit = isHome3a ? !isSpeculativeRequestHeaders(await headers()) : false
   const homeLoads: HomeLoads | null = !isHome3a
     ? null
-    : (() => {
+    : homeScoped && homePlayed.length === 0
+      ? /*
+         * A scope that matches no league renders only its "no leagues in this view" panel, so it
+         * reads nothing — not the summary, not the trade scan, not a single card's query.
+         */
+        emptyHomeLoads()
+      : (() => {
         const summary = traceCard('dash34', () =>
           getDash34Data(userId, homeLeagueRows as unknown as Dash34LeagueRow[], now),
         ).catch(() => null)
@@ -3641,11 +3647,9 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
               count: homePlayed.length,
               total: playedLeagues.length,
             }}
-            leagueDataAt={
-              latestInstant(
-                homePlayed.map((l) => (l as { lastSyncedAt?: Date | string | null }).lastSyncedAt ?? null),
-              )?.toISOString() ?? null
-            }
+            leagueData={leagueDataFreshness(
+              homePlayed as unknown as Array<{ platform?: string | null; lastSyncedAt?: Date | string | null }>,
+            )}
             order={orderHomeCards({
               usage: parseCardUsage(cookies().get(CARD_USE_COOKIE)?.value),
               timeSensitive: timeSensitiveCards({

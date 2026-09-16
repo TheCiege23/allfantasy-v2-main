@@ -7,7 +7,9 @@ import type { CoreIssue } from '@/lib/core-app/outstandingIssues'
  * screen loader, so this list is short on purpose and every entry is conditional on something the
  * home already knows. In order:
  *   1. the screen the top decision's action opens (e.g. that league's My team) — the likeliest tap;
- *   2. the home of the league that decision is about — the likeliest league switch;
+ *   2. the home of the most urgent decision that NAMES a league — the likeliest league switch.
+ *      Not necessarily the first decision's: an account-wide row (the collapsed "N leagues have
+ *      never been read") belongs to no league, so the next one that does is used;
  *   3. Notifications, only when something is unread;
  *   4. Your week, only while a slate is live;
  *   5. Trades, only when the trade band has something to show.
@@ -31,6 +33,7 @@ export function homePrefetchTargets(input: {
 
   const top = input.decisions[0]
   if (top?.action && !top.action.external) add(top.action.href)
+  // The first decision, in ranked order, that belongs to a league — point 2 above.
   const leagueId = input.decisions.find((d) => d.leagueId)?.leagueId
   if (leagueId) add(`/core?league=${encodeURIComponent(leagueId)}`)
   if (input.unreadNotifications > 0) add('/core/notifications')

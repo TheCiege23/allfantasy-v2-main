@@ -20,6 +20,7 @@ import { CoreWelcomeTour } from '@/components/core-app/CoreWelcomeTour'
 import { matchLeagueSearchHits, type LeagueSearchHit } from '@/lib/core-app/topSearch'
 import { ShellSignalsContext, withPublishedSignals, type ShellSignals } from '@/components/core-app/shellSignals'
 import { ScopeSwitcher, type ScopeSwitcherLeague } from '@/components/core-app/ScopeSwitcher'
+import { isLeagueScreen } from '@/lib/core-app/leagueScreens'
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import '@/components/core-app/af-core.css'
 import '@/components/core-app/af-core-shell.css'
@@ -1750,7 +1751,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
               label={props.scope.label}
               selectedLeagueId={props.selectedLeagueId ?? null}
               favoriteIds={props.scope.favoriteIds}
-              leagueScreen={isCoreSurfaceKey(active)}
+              leagueScreen={isLeagueScreen(active)}
             />
           ) : null}
           <TopSearch leagues={leagues} />
