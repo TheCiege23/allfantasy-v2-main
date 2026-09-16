@@ -15,7 +15,7 @@ route with a budget in traces-per-hour.
 | 1 | Performance budgets | `lib/sports-os/budgets.ts`, `budgetTelemetry.ts` | **new** — shell + every card instrumented |
 | 2 | Render the shell immediately | `app/core/[[...screen]]/page.tsx` — `af.shell_ms` | already built |
 | 3 | Stream cards independently | same page + `lib/observability/cardTelemetry.ts` | already built |
-| 4 | Screen-ready summaries | `lib/sports-os/summaries.ts` | **new** — seven screens wired, plus the home's three portfolio records (built by a peer on this layer) |
+| 4 | Screen-ready summaries | `lib/sports-os/summaries.ts` | **new** — seven screens wired: standings, week, season-outlook, career, career records, the trade board and the waiver board; plus the home's three portfolio records, built by a peer on this layer |
 | 5 | Layered caching | `lib/sports-os/layeredCache.ts`, `durableTier.ts` | **new** — memory + `SportsDataCache` |
 | 6 | Heavy work in jobs | `lib/jobs/`, `lib/queues/bullmq.ts` | already built — reached from `reactions.ts` |
 | 7 | One event system | `lib/events/` | already built — reaction table, relay consumer, `ingest.*` emit are new |
@@ -660,6 +660,54 @@ store one copy of the entire ladder **per viewer**. That global scan is a real c
 but it is a shared-read problem whose fix is a shared cache around `loadRankedProfiles`, not this
 layer. Recorded so the next session does not mistake *expensive* for *summary-shaped*.
 
+## The fifth surface: `/core/career` — and the first scope field added since
+
+`lib/core-app/careerSummary.ts`. This one COMPLETES a screen rather than starting one:
+`?view=records` already read through `careerRecordsSummary`, and this is the default view beside it.
+
+`getCareerData` derives the trophy room from everything the account has imported, reading **two**
+sources because neither alone is correct — `legacy_leagues` + `legacy_rosters` carry the rich
+per-season detail but are Sleeper-only, while `leagues.import_*` is the only source that knows which
+platform a season came from.
+
+🛑 **ZERO CLOCK REFERENCES — the check this layer now runs FIRST.** `career.ts` has no `new Date()`
+and no `Date.now()`. A career season is settled history: it changes when an **import** runs, not when
+time passes. This is the rule that disqualified `home`/`dash34`, applied as an entry criterion rather
+than discovered late: *a summary may cache a payload derived from rows, never one with a clock
+rendered into it.*
+
+### `?platform=` is part of the key, and the case-fold must agree
+
+Two filters are two different boards, so they must not share an entry — the same reason
+`focusLeagueId` is part of the season-outlook key. That needed a new `platform` field on
+`SummaryScope`.
+
+⚠ **THE NORMALISATION HAS TO AGREE WITH THE BUILDER'S, NOT MERELY EXIST.** `getCareerData` folds its
+argument with `.trim().toLowerCase() || null`, and `scopeKey` folds `platform` the same way. If only
+one of them folded, `?platform=Sleeper` and `?platform=sleeper` would share one cache entry while
+being computed as two different reads — **a key and its payload disagreeing, with no symptom until
+someone switches the dropdown and sees the wrong board.** The fold happens ONCE, in
+`readCareerSummary`, and that single value goes to both the scope and the builder. A mutation control
+pins it from both ends.
+
+🛑 **ADDING A SCOPE FIELD IS A CACHE-WIDE CHANGE, AND THE SAFETY IS ONE LINE OF `push`.** `scopeKey`'s
+`push` skips a null/undefined value entirely, so a screen that never sets `platform` emits the
+byte-identical key it emitted before the field existed — which is what let this be added without
+invalidating the four summaries already live on `main`. `push('pf', …)` is appended LAST for the same
+reason. A test asserts the exact key strings for the no-platform cases, and a mutation that makes
+`pf=` always emit turns it red.
+
+### ⚠ Its TTL is FIVE MINUTES, and that is the invalidation gap talking, not the data
+
+On volatility alone this could sit for hours — longer than any other summary here. It does not,
+because a user-scoped key carries no league id and so cannot be swept by league (`weekAllSummary`'s
+problem). The TTL is therefore the **only** thing that makes a newly imported league appear — and an
+import is exactly when someone opens this screen. Five minutes still collapses the repeated loads of
+one browsing session, which is where the seven prisma reads and the two-source merge actually hurt.
+
+A test pins the TTL at or below five minutes, so a later "the data would allow hours" optimisation
+fails rather than silently hiding fresh imports.
+
 ## The sixth surface: `/core/trades` — and the first to use `period`
 
 `lib/core-app/tradesBoardSummary.ts`. `getTradesBoard` reads every claimed team the account has, then
@@ -685,10 +733,14 @@ exactly that is red.
 ### 🛑 Why it uses a TTL when the fingerprint is the better tool
 
 Trades appear when a sync imports them — the same invalidation gap career has, and the fingerprint
-above solves it properly. It is not adopted here **purely for sequencing**: the fingerprint wants to
-be part of the cache key, `SummaryScope` has no field for it, and PR #943 already carries an unmerged
-change to `lib/sports-os/summaries.ts` adding `platform`. A second concurrent edit to the one module
-every summary depends on would put two branches of the same author in conflict over it.
+above solves it properly. It was not adopted here **purely for sequencing**: the fingerprint wants to
+be part of the cache key, `SummaryScope` has no field for it, and when this was written the fifth
+surface's change to `lib/sports-os/summaries.ts` (adding `platform`) was still unmerged — a second
+concurrent edit to the one module every summary depends on would have put two branches of the same
+author in conflict over it.
+
+⚠ **THAT BLOCKER IS NOW GONE:** the fifth surface landed, so the next change to `SummaryScope` is
+free to be the fingerprint's.
 
 So the TTL is the interim bound and **the fingerprint is the named follow-up for both `careerSummary`
 and `tradesBoardSummary`**, recorded here rather than left to be rediscovered.
@@ -724,11 +776,10 @@ lengthening it.
 
 Each of these is a separate decision with a real cost.
 
-1. ~~No screen has a registered summary.~~ **Done** — `/core/standings`, `/core/week`,
-   `/core/season-outlook` and `/core/career?view=records`, above. Four of nineteen. `home` and
-   `rankings` were examined and **rejected**, each for its own reason — see the fourth surface. The
-   open lead is not another screen: it is the uncached global `loadRankedProfiles` scan, which wants
-   a shared cache rather than a summary.
+1. ~~No screen has a registered summary.~~ **Done** — standings, week, season-outlook, career and
+   career records. **Five of nineteen.** `home` and `rankings` were examined and **rejected**, each
+   for its own reason — see the fourth surface. The open lead is still not another screen: it is the
+   uncached global `loadRankedProfiles` scan, which wants a shared cache rather than a summary.
 2. ~~No durable cache tier is wired.~~ **Done** — `lib/sports-os/durableTier.ts` over
    `SportsDataCache`, used by the standings summary.
 3. ~~No consumer calls `dispatchReactions`.~~ **Done** — see *The relay consumer* below.
