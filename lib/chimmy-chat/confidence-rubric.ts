@@ -9,9 +9,34 @@
  *   ≥ 82  → high
  *   ≥ 62  → medium
  *   < 62  → low
+ *
+ * Chimmy's track record (brief item 10) is a second bounded modifier (+/- 10): how calls shown at
+ * this band actually turned out. It is inert until the outcome loop has enough resolved calls.
  */
 
 import type { ChimmyAnswerType, ChimmyConfidenceBlock } from './response-contract'
+
+export type ChimmyConfidenceLevel = ChimmyConfidenceBlock['level']
+
+/** The one rule mapping a 0–100 confidence to its band — shared with the outcome loop. */
+export function confidenceLevelFor(score: number): ChimmyConfidenceLevel {
+  return score >= 82 ? 'high' : score >= 62 ? 'medium' : 'low'
+}
+
+/** How past calls shown at one band turned out (`lib/chimmy-outcomes/adviceLearning.ts`). */
+export type ChimmyTrackRecordBand = {
+  /** Share of resolved calls that were right, shrunk toward `shownRate` — 0–1. */
+  observedRate: number
+  /** The mean confidence those calls were shown with — 0–1. */
+  shownRate: number
+  /** Resolved calls behind it. */
+  n: number
+}
+
+export type ChimmyTrackRecord = Partial<Record<ChimmyConfidenceLevel, ChimmyTrackRecordBand>>
+
+/** The most the track record can move a score, either way. */
+export const TRACK_RECORD_MAX_DELTA = 10
 
 // ---------------------------------------------------------------------------
 // Input signals
@@ -42,6 +67,8 @@ export type ChimmyConfidenceSignals = {
   }
   /** Detected answer type (affects base score). */
   answerType: ChimmyAnswerType
+  /** How past calls of this answer type turned out, per band. Absent or empty → no effect. */
+  trackRecord?: ChimmyTrackRecord | null
 }
 
 // ---------------------------------------------------------------------------
@@ -156,12 +183,26 @@ export function computeChimmyConfidenceRubric(signals: ChimmyConfidenceSignals):
   breakdown.modelModifier = modelDelta
   score += modelDelta
 
+  /*
+   * 8. Track record (bounded ± 10). The band is the one this answer would have been shown at, and
+   * the delta is half the gap between how often those calls were right and how confident they were
+   * shown as. `observedRate` arrives already shrunk toward `shownRate`, so thin evidence moves the
+   * score by almost nothing — one bad week cannot swing it.
+   */
+  const band = signals.trackRecord?.[confidenceLevelFor(score)]
+  let trackDelta = 0
+  if (band && band.n > 0 && Number.isFinite(band.observedRate) && Number.isFinite(band.shownRate)) {
+    const raw = (band.observedRate - band.shownRate) * 100 * 0.5
+    trackDelta = Math.max(-TRACK_RECORD_MAX_DELTA, Math.min(TRACK_RECORD_MAX_DELTA, Math.round(raw)))
+    breakdown.trackRecord = trackDelta
+    score += trackDelta
+  }
+
   // Final clamp
   score = Math.max(0, Math.min(100, Math.round(score)))
 
   // Level band
-  const level: ChimmyConfidenceBlock['level'] =
-    score >= 82 ? 'high' : score >= 62 ? 'medium' : 'low'
+  const level = confidenceLevelFor(score)
 
   // Positive signals (contributed ≥ 1 pt)
   const positiveSignals: string[] = []
@@ -170,6 +211,7 @@ export function computeChimmyConfidenceRubric(signals: ChimmyConfidenceSignals):
   if (linkDelta > 0) positiveSignals.push('source_links')
   if (structDelta > 0) positiveSignals.push('response_structure')
   if (modelDelta > 0) positiveSignals.push('model_confidence')
+  if (trackDelta > 0) positiveSignals.push('track_record')
   if (positiveSignals.length === 0) positiveSignals.push('base_policy')
 
   // Missing signals (would raise score)
@@ -207,6 +249,12 @@ export function computeChimmyConfidenceRubric(signals: ChimmyConfidenceSignals):
       modelDelta > 0
         ? `model-reported confidence raised score by ${modelDelta}`
         : `model-reported confidence lowered score by ${Math.abs(modelDelta)}`
+    )
+  }
+  if (band && trackDelta !== 0) {
+    rationaleFragments.push(
+      `past calls at this confidence were right ${Math.round(band.observedRate * 100)}% of the time ` +
+        `(${band.n} checked), so the score was ${trackDelta > 0 ? 'raised' : 'lowered'} by ${Math.abs(trackDelta)}`,
     )
   }
 

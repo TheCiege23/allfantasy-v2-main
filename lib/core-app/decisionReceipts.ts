@@ -11,6 +11,7 @@ import {
 } from '@/lib/trade-intel/sleeperTradeGradeService'
 import { computeWeeklyMaxPf, type WeeklyRosterPlayer } from '@/lib/commissioner-os/efl/maxPfEngine'
 import { listAdviceForUser, type ChimmyAdvice } from '@/lib/chimmy-advice/adviceStore'
+import { addAdviceKey, startSitAdviceKey } from '@/lib/chimmy-advice/adviceKeys'
 import { asIds, rosterCandidates } from './dash3aPanels'
 import { composePlayerIdentities } from './playerIdentityCompose'
 import { normalizePosition } from './positionNormalization'
@@ -950,6 +951,39 @@ export const MAX_CHIMMY_RECEIPTS = 5
 /** How far back Chimmy's advice is read. */
 export const CHIMMY_LOOKBACK_DAYS = 45
 
+/*
+ * Receipt ids ARE advice keys (`lib/chimmy-advice/adviceKeys.ts`), so the drawer's buttons and the
+ * outcome loop name the same advice the card does. The start/sit form is also the id
+ * `scoreStartCalls` gives every start call — the confidence lookup below relies on the two agreeing.
+ */
+export { addAdviceKey, startSitAdviceKey }
+
+/**
+ * EVERY resolved outcome of a user's Chimmy advice — the Receipts card's rules, unsliced — plus the
+ * advice it was resolved from. The outcome loop (`lib/chimmy-outcomes/adviceLearning.ts`) reads
+ * this, so "right", "followed" and "you added him" can never mean one thing on the card and
+ * another in what Chimmy learns. Null when the advice table is unavailable.
+ */
+export async function resolveChimmyAdviceOutcomes(args: {
+  userId: string
+  leagues: readonly ReceiptsLeague[]
+  currentWeek: number | null
+  since: Date
+}): Promise<{ advice: ChimmyAdvice[]; startSits: ChimmyReceipt[]; adds: ChimmyAddReceipt[] } | null> {
+  if (!args.userId) return null
+  const sleeper = args.leagues.filter(isSleeper).slice(0, MAX_WAIVER_LEAGUES)
+  if (sleeper.length === 0) return { advice: [], startSits: [], adds: [] }
+  const advice = await listAdviceForUser({ userId: args.userId, leagueIds: sleeper.map((l) => l.id), since: args.since })
+  if (!advice) return null
+  const startSits = advice.filter((a) => a.adviceType === 'start_sit' && a.alt)
+  const addCalls = advice.filter((a) => a.adviceType === 'add')
+  const [starts, adds] = await Promise.all([
+    startSits.length > 0 ? chimmyStartSitReceipts(args, sleeper, startSits, Number.POSITIVE_INFINITY) : null,
+    addCalls.length > 0 ? chimmyAddReceipts(args, sleeper, addCalls, Number.POSITIVE_INFINITY) : null,
+  ])
+  return { advice, startSits: starts?.chimmy ?? [], adds: adds?.adds ?? [] }
+}
+
 /**
  * How Chimmy's start/sit advice turned out (user decisions, 2026-09-14). The advice is what
  * `lib/chimmy-advice` recorded when it was given — the comparison's call, with both players'
@@ -1011,6 +1045,7 @@ async function chimmyStartSitReceipts(
   args: { userId: string; currentWeek: number | null },
   sleeper: readonly ReceiptsLeague[],
   startSits: readonly ChimmyAdvice[],
+  limit: number = MAX_CHIMMY_RECEIPTS,
 ): Promise<{ chimmy: ChimmyReceipt[]; pending: number; unscored: number; unreadable: number }> {
   const teams = await prisma.leagueTeam.findMany({
     where: { leagueId: { in: [...new Set(startSits.map((a) => a.leagueId))] }, claimedByUserId: args.userId },
@@ -1034,14 +1069,14 @@ async function chimmyStartSitReceipts(
       continue
     }
     callable.push({ league, season: a.season, week: a.week, rosterId, slot: a.slot, rec: a.rec, alt: a.alt! })
-    confidence.set(`${league.id}:${a.season}:${a.week}:${a.rec.key}:${a.alt!.key}`, a.confidencePct)
+    confidence.set(startSitAdviceKey(league.id, a.season, a.week, a.rec.key, a.alt!.key), a.confidencePct)
   }
   if (callable.length === 0) return { chimmy: [], pending, unscored: 0, unreadable }
 
   const scored = await scoreStartCalls(callable)
   return {
     chimmy: scored.receipts
-      .slice(0, MAX_CHIMMY_RECEIPTS)
+      .slice(0, limit)
       .map((r) => ({ ...r, confidencePct: confidence.get(r.id) ?? null })),
     pending,
     unscored: scored.unscored,
@@ -1072,6 +1107,7 @@ async function chimmyAddReceipts(
   args: { userId: string; currentWeek: number | null },
   sleeper: readonly ReceiptsLeague[],
   calls: readonly ChimmyAdvice[],
+  limit: number = MAX_CHIMMY_RECEIPTS,
 ): Promise<{ adds: ChimmyAddReceipt[]; tooEarly: number; unscored: number; unknown: number }> {
   let tooEarly = 0
   const callable = calls.filter((a) => {
@@ -1146,7 +1182,7 @@ async function chimmyAddReceipts(
       continue
     }
     receipts.push({
-      id: `${m.league.id}:${m.advice.season}:${m.advice.week}:add:${m.advice.rec.key}`,
+      id: addAdviceKey(m.league.id, m.advice.season, m.advice.week, m.advice.rec.key),
       leagueId: m.league.id,
       leagueName: m.league.name ?? 'Your league',
       season: m.advice.season,
@@ -1160,7 +1196,7 @@ async function chimmyAddReceipts(
   }
 
   receipts.sort((x, y) => y.season - x.season || y.week - x.week)
-  return { adds: receipts.slice(0, MAX_CHIMMY_RECEIPTS), tooEarly, unscored, unknown }
+  return { adds: receipts.slice(0, limit), tooEarly, unscored, unknown }
 }
 
 /**

@@ -12,7 +12,11 @@ import type {
   ChimmyStoryContentPreference,
 } from './types'
 import { CHIMMY_PERSONALIZATION_DEFAULTS } from './types'
-import { shrunkRate } from '@/lib/chimmy-outcomes/shrinkage'
+import { shrunkRate, shrunkWeightedRate } from '@/lib/chimmy-outcomes/shrinkage'
+import { tallyFollowThrough } from '@/lib/chimmy-outcomes/followThrough'
+import { followThroughFor } from '@/lib/chimmy-outcomes/learningSnapshot'
+// Not `adviceLearning` — that module is server-only, and client components import this one.
+import { readAdviceLearningSnapshot } from '@/lib/chimmy-outcomes/learningStore'
 
 const PROFILE_KEY = 'chimmy_personalization_v1'
 
@@ -45,7 +49,7 @@ async function getExplicitSettings(userId: string): Promise<ChimmyPersonalizatio
 }
 
 async function inferSignals(userId: string): Promise<ChimmyPersonalizationInferenceSignals> {
-  const [events, leagues, profile] = await Promise.all([
+  const [events, leagues, profile, learning] = await Promise.all([
     prisma.aIUserFeedback.findMany({
       where: {
         userId,
@@ -63,7 +67,7 @@ async function inferSignals(userId: string): Promise<ChimmyPersonalizationInfere
       },
       orderBy: { createdAt: 'desc' },
       take: 220,
-      select: { actionType: true, result: true },
+      select: { actionType: true, result: true, createdAt: true },
     }),
     prisma.league.findMany({
       where: { userId },
@@ -71,11 +75,11 @@ async function inferSignals(userId: string): Promise<ChimmyPersonalizationInfere
       take: 120,
     }),
     prisma.aIUserProfile.findUnique({ where: { userId }, select: { riskMode: true, detailLevel: true, toneMode: true } }),
+    readAdviceLearningSnapshot(),
   ])
 
-  const recAccepted = events.filter((e) => e.actionType === 'chimmy_recommendation_accepted').length
-  const recRejected = events.filter((e) => e.actionType === 'chimmy_recommendation_rejected').length
-  const recTotal = recAccepted + recRejected
+  // Your "Did it / Not doing it" votes plus what the platform shows you did — one vote per advice.
+  const follow = tallyFollowThrough(events, followThroughFor(learning, userId), new Date())
 
   const alertClicked = events.filter((e) => e.actionType === 'chimmy_alert_clicked').length
   const alertDismissed = events.filter((e) => e.actionType === 'chimmy_alert_dismissed').length
@@ -112,12 +116,14 @@ async function inferSignals(userId: string): Promise<ChimmyPersonalizationInfere
    * accepted recommendation read as a 100% accept rate, crossed the 0.7 threshold below and switched
    * Chimmy to "one quick move" for every later answer. Rates now need ten real events and are
    * shrunk toward 50% (`lib/chimmy-outcomes/shrinkage.ts`): ten straight accepts read as 0.75.
+   * Votes are one per piece of advice and weighted by age (`lib/chimmy-outcomes/followThrough.ts`).
    */
+  const followCounts = (hits: number) => ({ hits, n: follow.total, rawN: follow.rawN })
   return {
     preferredSports,
     preferredLeagueTypes,
-    recommendationAcceptRate: nullableRate(shrunkRate(recAccepted, recTotal)),
-    recommendationRejectRate: nullableRate(shrunkRate(recRejected, recTotal)),
+    recommendationAcceptRate: nullableRate(shrunkWeightedRate(followCounts(follow.accepted))),
+    recommendationRejectRate: nullableRate(shrunkWeightedRate(followCounts(follow.rejected))),
     alertDismissRate: nullableRate(shrunkRate(alertDismissed, alertTotal)),
     alertClickRate: nullableRate(shrunkRate(alertClicked, alertTotal)),
   }

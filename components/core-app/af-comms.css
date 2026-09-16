@@ -580,6 +580,47 @@
 }
 
 /*
+ * "Did it / Not doing it" under advice Chimmy put on file. Quiet by design: it asks once, it is
+ * optional, and the answer above it matters more.
+ */
+.af-cm-follow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.af-cm-follow-q { margin-right: 2px; }
+
+.af-cm-follow-btn {
+  padding: 4px 10px;
+  border: 1px solid var(--line2);
+  border-radius: 8px;
+  background: var(--chip);
+  color: var(--text2);
+  font-family: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.af-cm-follow-btn:hover:not(:disabled) { background: var(--surface2); border-color: var(--accent-line); }
+.af-cm-follow-btn:disabled { cursor: default; opacity: 0.6; }
+
+.af-cm-follow-btn[aria-pressed='true'] {
+  border-color: var(--accent-line);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 700;
+  opacity: 1;
+}
+
+.af-cm-follow-note { flex-basis: 100%; color: var(--faint); }
+.af-cm-follow-note[data-tone='bad'] { color: var(--warn); }
+
+/*
  * Players named in an answer. The headshot sits ON TOP of the initials, so a
  * dead CDN URL (the img hides itself on error) reveals the fallback rather than
  * a broken-image glyph — a face that fails must degrade to a letter, never to a

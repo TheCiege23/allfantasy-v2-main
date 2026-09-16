@@ -2,6 +2,7 @@ import { z } from 'zod'
 import {
   computeChimmyConfidenceRubric,
   buildConfidenceBlockFromRubric,
+  type ChimmyTrackRecord,
 } from './confidence-rubric'
 
 export type ChimmyAnswerType =
@@ -310,6 +311,8 @@ export function buildChimmyAnswerContract(args: {
     caveats?: string[]
   } | null
   followUps?: Array<{ label?: string | null; prompt?: string | null }>
+  /** Chimmy's track record per answer type; only the detected type's entry is used. */
+  trackRecords?: Partial<Record<ChimmyAnswerType, ChimmyTrackRecord>> | null
 }): ChimmyAnswerContractResult {
   const answerType = detectAnswerType({
     insightType: args.insightType,
@@ -334,6 +337,7 @@ export function buildChimmyAnswerContract(args: {
       caveatsCount: structure?.caveats?.length ?? 0,
     },
     answerType,
+    trackRecord: args.trackRecords?.[answerType] ?? null,
   })
   const score = rubricResult.score
   const confidence = buildConfidenceBlockFromRubric(

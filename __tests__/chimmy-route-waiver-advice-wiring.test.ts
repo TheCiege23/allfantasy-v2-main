@@ -54,3 +54,36 @@ describe('Chimmy route → waiver advice wiring', () => {
     expect(src.match(/recordChatWaiverAdvice\(\{/g)).toHaveLength(1)
   })
 })
+
+/*
+ * Chimmy item 10: the drawer's "Did it / Not doing it" buttons need the key of the advice this
+ * answer put on file, and the confidence shown needs Chimmy's track record.
+ */
+describe('Chimmy route → outcome loop wiring', () => {
+  it('puts the recorded advice on meta before the response is sent', () => {
+    const recordAt = src.indexOf('recordChatWaiverAdvice({')
+    const call = src.slice(recordAt, src.indexOf('})', recordAt) + 2)
+    expect(call).toMatch(/onRecorded: \(advice\) => \{\s*meta\.advice = \{ key: advice\.key, type: 'add', playerName: advice\.playerName \}/)
+
+    // The recorder runs inside persistTasks, which are awaited before the response carries `meta`.
+    const settledAt = src.indexOf('await Promise.allSettled(persistTasks)', recordAt)
+    const sentAt = src.indexOf('meta,', settledAt)
+    expect(settledAt).toBeGreaterThan(recordAt)
+    expect(sentAt).toBeGreaterThan(settledAt)
+    expect(src.slice(settledAt, sentAt)).toContain('return NextResponse.json(')
+  })
+
+  it('declares the advice slot on meta, empty until something is recorded', () => {
+    const metaAt = src.indexOf('const meta = {')
+    expect(metaAt).toBeGreaterThan(-1)
+    expect(src.slice(metaAt, metaAt + 1200)).toMatch(/advice: undefined as \{ key: string; type: 'add'; playerName: string \} \| undefined/)
+  })
+
+  it('passes the track record into the answer contract', () => {
+    expect(src).toMatch(/const trackRecords = trackRecordsFrom\(await readAdviceLearningSnapshot\(\)\)/)
+    const buildAt = src.indexOf('buildChimmyAnswerContract({')
+    const args = src.slice(buildAt, src.indexOf('})', buildAt))
+    expect(args).toMatch(/\btrackRecords,/)
+    expect(src.indexOf('const trackRecords =')).toBeLessThan(buildAt)
+  })
+})

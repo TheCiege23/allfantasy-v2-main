@@ -187,3 +187,28 @@ describe('recordChatWaiverAdvice', () => {
     expect(await recordChatWaiverAdvice(base)).toBe('unavailable')
   })
 })
+
+/*
+ * The drawer's "Did it / Not doing it" buttons send back the key of the advice this answer put on
+ * file — the same key the Receipts card and the outcome loop use.
+ */
+describe('onRecorded', () => {
+  it('hands back the advice key and the player once the advice is on file', async () => {
+    db()
+    const onRecorded = vi.fn()
+    expect(await recordChatWaiverAdvice({ ...base, onRecorded })).toBe('recorded')
+    expect(onRecorded).toHaveBeenCalledTimes(1)
+    expect(onRecorded).toHaveBeenCalledWith({ key: 'af-ice:2026:6:add:11620', playerName: 'Jaylen Wright' })
+  })
+
+  it('is not called when nothing was recorded', async () => {
+    db()
+    const onRecorded = vi.fn()
+    h.record.mockResolvedValue('unavailable')
+    expect(await recordChatWaiverAdvice({ ...base, onRecorded })).toBe('unavailable')
+    h.rosterFind.mockResolvedValue({ playerData: { players: ['11620'] } })
+    expect(await recordChatWaiverAdvice({ ...base, onRecorded })).toBe('already_yours')
+    expect(await recordChatWaiverAdvice({ ...base, answer: 'Hold.', onRecorded })).toBe('not_in_answer')
+    expect(onRecorded).not.toHaveBeenCalled()
+  })
+})

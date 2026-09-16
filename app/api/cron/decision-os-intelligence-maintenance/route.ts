@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { resolveDraftRecommendationOutcomes } from '@/lib/ai/outcomes/resolveDraftRecommendationOutcomes'
+import { recomputeAdviceLearning } from '@/lib/chimmy-outcomes/adviceLearning'
 
 import { createManagedIntelligenceDeps } from '@/lib/decision-os/three-brain/phase2/realAdapters'
 import { runIntelligenceMaintenance } from '@/lib/decision-os/three-brain/phase2/maintenanceRunner'
@@ -93,6 +94,15 @@ export async function GET(request: Request) {
   const draftOutcomes = await resolveDraftRecommendationOutcomes({ limit: 100 }).catch((error) => ({
     error: error instanceof Error ? error.message.slice(0, 120) : 'resolve failed',
   }))
+  /*
+   * What Chimmy learns from how its advice turned out (brief item 10). Above the maintenance gate
+   * for the same reason as the resolver above. Rebuilds at most every six hours — most ticks are
+   * one indexed read — inside its own time budget, and never turns this cron red.
+   */
+  const adviceLearning = await recomputeAdviceLearning().catch((error) => ({
+    status: 'error' as const,
+    error: error instanceof Error ? error.message.slice(0, 120) : 'learning failed',
+  }))
   // Flush parity writes before responding. The emitters cannot await -- they sit inside decision
   // paths -- so writes are still in flight when the sweep returns, and on Vercel this instance can
   // be frozen the moment the response is sent, which kills them. A cron has no latency budget to
@@ -103,7 +113,7 @@ export async function GET(request: Request) {
   if (!maintenanceEnabled()) {
     // Authenticated but disabled → inert success for MAINTENANCE. Do NOT touch the DB, runner,
     // providers, tokens, or freshness. The sweep above is gated separately and reports its own state.
-    return NextResponse.json({ ok: true, enabled: false, status: 'maintenance_disabled', sweep, parityWrites, draftOutcomes })
+    return NextResponse.json({ ok: true, enabled: false, status: 'maintenance_disabled', sweep, parityWrites, draftOutcomes, adviceLearning })
   }
   try {
     // Minute-bucket tick id. Overlap is prevented by the ONE global maintenance lease (AutomationLock) inside
@@ -114,10 +124,10 @@ export async function GET(request: Request) {
       deps: createManagedIntelligenceDeps(),
       config: { refreshBatch: 20, reconcileBatch: 200 },
     })
-    return NextResponse.json({ ok: true, enabled: true, tickId, ...result, sweep, parityWrites, draftOutcomes })
+    return NextResponse.json({ ok: true, enabled: true, tickId, ...result, sweep, parityWrites, draftOutcomes, adviceLearning })
   } catch (error) {
     return NextResponse.json(
-      { ok: false, error: error instanceof Error ? error.message.slice(0, 200) : 'maintenance failed', sweep, draftOutcomes },
+      { ok: false, error: error instanceof Error ? error.message.slice(0, 200) : 'maintenance failed', sweep, draftOutcomes, adviceLearning },
       { status: 500 },
     )
   }
