@@ -28,11 +28,12 @@ import { buildProfiles, pairRows, winProbabilityOf, type MatchupRow } from './we
  * played, so during Sunday and Monday night the previous week's IN-PROGRESS points would feed the
  * next week's profiles. `ON CONFLICT DO NOTHING` keeps the first capture.
  *
- * 🛑 DORMANT UNTIL THE MIGRATION IS APPLIED. The table comes from the parked
- * `20260915010000_matchup_odds_snapshots`; until then the season-scoped read of existing
- * snapshots raises 42P01, which this reports as `unavailable` and returns — no matchup rows are
- * read, no work is done. Raw SQL, no Prisma model, for the same P2021 / schema-drift reason as
- * `player_follows`. No provider calls anywhere: this is Postgres rows and arithmetic.
+ * LIVE SINCE 2026-09-16. The table comes from `prisma/migrations/20260915010000_matchup_odds_snapshots`,
+ * applied to production that day. On a database without it (an old branch or test DB), the
+ * season-scoped read of existing snapshots raises 42P01, which this reports as `unavailable` and
+ * returns — no matchup rows are read, no work is done. The queries stay raw SQL even though
+ * `model MatchupOddsSnapshot` now mirrors the table: `ON CONFLICT DO NOTHING` keeps the first
+ * capture. No provider calls anywhere: this is Postgres rows and arithmetic.
  */
 
 export const ODDS_MODEL = 'history_normal_v1'

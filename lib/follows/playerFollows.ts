@@ -12,13 +12,12 @@ import { isMissingDatabaseObjectError } from '@/lib/canonical/getCanonicalPlayer
  * "Following" card, and (next) the brief, push senders and waiver nudges all go through
  * here, so what "following" means cannot drift between them.
  *
- * 🛑 RAW SQL, NOT A PRISMA MODEL, UNTIL THE MIGRATION IS APPLIED. The table is created by
- * `prisma/migrations-pending/20260914190000_player_follows`, whose apply is the user's call.
- * A model in schema.prisma before that would (a) raise P2021 on every query against a
- * database without the table, and (b) show up as NEW drift in the schema-drift guard on the
- * next schema push to main. The repo's rule for a new table is apply → model → writers; this
- * keeps the writers shippable without jumping that order. Once applied, swap these queries
- * for a model in one change.
+ * RAW SQL, ON PURPOSE. The table comes from `prisma/migrations/20260914190000_player_follows`,
+ * applied to production 2026-09-16, and `model PlayerFollow` now mirrors it. These queries stay
+ * raw: the follow is an `INSERT … ON CONFLICT` that refreshes the snapshot columns, and the news
+ * lookup matches on `lower(name)`, whose index Prisma cannot express. A database without the
+ * table (an old branch or test DB) still reads as "follows unavailable" through the 42P01 checks
+ * below.
  *
  * ⚠ A MISSING TABLE IS "UNAVAILABLE", NEVER "NOT FOLLOWING". Every read returns `null` for
  * 42P01, so a surface can hide the feature instead of showing an empty list that reads as

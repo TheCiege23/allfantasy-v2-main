@@ -12,9 +12,9 @@ import { isMissingDatabaseObjectError } from '@/lib/canonical/getCanonicalPlayer
  * week is scored it joins the history, and the week board's formula returns a DIFFERENT number for
  * the same game — so there is no fallback: no snapshot for that game, no upset.
  *
- * 🛑 DORMANT UNTIL THE MIGRATION IS APPLIED. The table comes from the parked
- * `20260915010000_matchup_odds_snapshots`; until then the read raises 42P01, which is "no upsets".
- * Raw SQL, no Prisma model, for the same schema-drift reason as the sweep.
+ * The table comes from `prisma/migrations/20260915010000_matchup_odds_snapshots`, applied to
+ * production 2026-09-16, so upsets exist only for weeks captured from then on. A database without
+ * the table raises 42P01 on the read, which is "no upsets". Raw SQL, like the sweep that writes it.
  *
  * ⚠ TWO ID SPACES. The snapshots and WeeklyMatchup carry the PLATFORM league id and the platform
  * roster id (see lib/core-app/weekAll.ts); the home and the card speak `League.id`. The bridge is
