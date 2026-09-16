@@ -15,7 +15,7 @@ route with a budget in traces-per-hour.
 | 1 | Performance budgets | `lib/sports-os/budgets.ts`, `budgetTelemetry.ts` | **new** — shell + every card instrumented |
 | 2 | Render the shell immediately | `app/core/[[...screen]]/page.tsx` — `af.shell_ms` | already built |
 | 3 | Stream cards independently | same page + `lib/observability/cardTelemetry.ts` | already built |
-| 4 | Screen-ready summaries | `lib/sports-os/summaries.ts` | **new** — five screens wired: standings, week, season-outlook, career and career records |
+| 4 | Screen-ready summaries | `lib/sports-os/summaries.ts` | **new** — six screens wired: standings, week, season-outlook, career, career records and the trade board; plus the home's three portfolio records, built by a peer on this layer |
 | 5 | Layered caching | `lib/sports-os/layeredCache.ts`, `durableTier.ts` | **new** — memory + `SportsDataCache` |
 | 6 | Heavy work in jobs | `lib/jobs/`, `lib/queues/bullmq.ts` | already built — reached from `reactions.ts` |
 | 7 | One event system | `lib/events/` | already built — reaction table, relay consumer, `ingest.*` emit are new |
@@ -607,7 +607,33 @@ window**, where the week board runs 2 minutes and 10. A test asserts both the ab
 and the floor on the TTL, so the next session cannot copy this TTL onto a surface that cannot bear
 it.
 
-### ⚠ `home` / `dash34` was this document's own named next candidate, and it is DISQUALIFIED
+### ⚠ `home` / `dash34` — this section said DISQUALIFIED, and that was too strong. **CORRECTED 2026-09-16.**
+
+🛑 **IT WAS DONE, BY SOMEONE ELSE, AND IT WORKS.** `lib/core-app/homePortfolioSummary.ts` (`b439f4b4`,
+2026-09-16) caches the home on **this layer** — `registerScreenSummary`, `readThrough`,
+`sportsDataCacheTier`, not a parallel one. The reasoning below is still right about what breaks; what
+it got wrong was treating it as the end of the argument. There was a third option this document did
+not consider:
+
+| option | verdict |
+|---|---|
+| cache the rendered clock-relative text | wrong — the stale countdown described below |
+| do not cache at all | what this document concluded |
+| **store the INSTANTS, recompute the text at read time** | **what actually works** |
+
+That module stores the instants, recomputes the countdown and every "reported 30 min ago" on every
+read, and additionally invalidates once a counted-down kickoff has passed. Keep the analysis below —
+it is why the naive version fails — but read it as *how* to cache the home, not as *do not*.
+
+⚠ **AND IT CLOSED THE INVALIDATION GAP THIS DOCUMENT CALLS UNAVOIDABLE.** Several summaries here say
+a user-scoped key cannot be swept by league and that the fix "needs league→members and is real work".
+`portfolioFingerprint` does it without any of that: hash every field the joins read from the league
+list, `lastSyncedAt` included, and a new import, a removed league or a finished sync changes the hash,
+so the next render rebuilds. No writer has to remember anything and no event has to be plumbed.
+**That is strictly better than a TTL for that gap**, and both `careerSummary` and
+`tradesBoardSummary` should adopt it — see the sixth surface for why they have not yet.
+
+The original note follows, and remains accurate about the failure mode:
 
 `getDash34Data(userId, leagues, now)` takes a clock and **renders it into the payload**: `countdown`
 is `formatCountdown(nextGame.startTime − now)`, `next24` is a window ending at `now + 24h`,
@@ -681,6 +707,43 @@ one browsing session, which is where the seven prisma reads and the two-source m
 
 A test pins the TTL at or below five minutes, so a later "the data would allow hours" optimisation
 fails rather than silently hiding fresh imports.
+
+## The sixth surface: `/core/trades` — and the first to use `period`
+
+`lib/core-app/tradesBoardSummary.ts`. `getTradesBoard` reads every claimed team the account has, then
+every `LeagueTrade` history row behind them, and re-orients each trade against the reader.
+
+🛑 **Clock check first, as an entry criterion.** `tradesBoard.ts` has no `new Date()` and no
+`Date.now()`, and `getTradesBoard(userId, currentWeek)` takes no `now` — the week arrives as a plain
+**number** the caller already resolved. That is an identifier for which slate the board is about, not
+a clock, and it belongs in the key.
+
+**`SummaryScope.period` already existed for this** ("a week for NFL, a gameday elsewhere") and was
+unused until now, so unlike career this needed **no new scope field** — which mattered, see below.
+
+⚠ **`build` TAKES THE WEEK OFF THE SCOPE, NEVER RE-RESOLVES IT.** Re-resolving could return a
+different week than the key was built from, filing one week's board under another week's key. A
+mutation hardcoding the week in `build` turns three tests red.
+
+⚠ **`null` (no week context) IS ITS OWN SCOPE.** `resolveCurrentWeek` returns null when no league has
+a `WeeklyMatchup` row to resolve from, and `getTradesBoard` treats that as a real board rather than an
+error. Folding it to `0` would serve a no-context board to a week that has one; a mutation doing
+exactly that is red.
+
+### 🛑 Why it uses a TTL when the fingerprint is the better tool
+
+Trades appear when a sync imports them — the same invalidation gap career has, and the fingerprint
+above solves it properly. It was not adopted here **purely for sequencing**: the fingerprint wants to
+be part of the cache key, `SummaryScope` has no field for it, and when this was written the fifth
+surface's change to `lib/sports-os/summaries.ts` (adding `platform`) was still unmerged — a second
+concurrent edit to the one module every summary depends on would have put two branches of the same
+author in conflict over it.
+
+⚠ **THAT BLOCKER IS NOW GONE:** the fifth surface landed, so the next change to `SummaryScope` is
+free to be the fingerprint's.
+
+So the TTL is the interim bound and **the fingerprint is the named follow-up for both `careerSummary`
+and `tradesBoardSummary`**, recorded here rather than left to be rediscovered.
 
 ## What is not done
 
