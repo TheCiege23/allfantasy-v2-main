@@ -27,7 +27,14 @@ describe('⚠ an id is only meaningful alongside its provider', () => {
   })
 
   it('reads the platform from the league rather than assuming one', () => {
-    expect(FILE).toContain('select: { platform: true }')
+    // The row comes from the render's shared league context, whose select carries `platform`.
+    const CTX = readFileSync(resolve(process.cwd(), 'lib/core-app/leagueContext.ts'), 'utf8')
+    const start = CTX.indexOf('export const LEAGUE_CONTEXT_SELECT')
+    expect(start).toBeGreaterThan(-1)
+    expect(CTX.slice(start, CTX.indexOf('} satisfies', start))).toContain('platform: true')
+    expect(FILE).toContain('const boardLeague = await lc.league().catch(() => null)')
+    expect(FILE).toContain("boardLeague?.platform ?? ''")
+    expect(FILE).toContain("league?.platform ?? ''")
     expect(FILE).toContain("const scoped = String(platform ?? '').trim().toLowerCase()")
   })
 

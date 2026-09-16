@@ -2,6 +2,7 @@ import 'server-only'
 
 import { prisma } from '@/lib/prisma'
 import { leagueDisplayName, type SectionState, type UnavailableSection } from './leagueHome'
+import { leagueContextFor, type LeagueContext } from './leagueContext'
 
 /**
  * The per-league draft board — "on the clock: board, queue, recommendations and
@@ -69,11 +70,17 @@ export type DraftBoardData = {
   advice: UnavailableSection
 }
 
-export async function getDraftBoardData(leagueId: string, userId: string): Promise<DraftBoardData | null> {
-  const league = await prisma.league.findUnique({
-    where: { id: leagueId },
-    select: { id: true, name: true, platform: true },
-  })
+export async function getDraftBoardData(
+  leagueId: string,
+  userId: string,
+  /**
+   * The render's shared league context — see `leagueContext.ts`. Draft HQ runs this beside
+   * `getDraftHqData` in one render, so without it the same row and team were read twice more.
+   */
+  ctx?: LeagueContext | null,
+): Promise<DraftBoardData | null> {
+  const lc = leagueContextFor(leagueId, userId, ctx)
+  const league = await lc.league()
   if (!league) return null
 
   const base = {
@@ -116,10 +123,7 @@ export async function getDraftBoardData(leagueId: string, userId: string): Promi
     return { ...base, session: none, clock: none, board: none }
   }
 
-  const myTeam = await prisma.leagueTeam.findFirst({
-    where: { leagueId, claimedByUserId: userId },
-    select: { externalId: true },
-  })
+  const myTeam = await lc.claimedTeam()
   const myRosterId = myTeam?.externalId != null ? String(myTeam.externalId) : null
 
   const order = Array.isArray(session.slotOrder)

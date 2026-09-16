@@ -5,6 +5,7 @@ import { computeLeagueProjectedPoints, extractScoringSettings } from '@/lib/proj
 import { loadIdpProjections, mergeIdpStatLine } from '@/lib/idp-projections/loadIdpProjections'
 import type { SectionState } from './leagueHome'
 import { leagueDisplayName } from './leagueHome'
+import { leagueContextFor, type LeagueContext } from './leagueContext'
 import { latestProjectionWeek } from './playerProjections'
 import { normalizePosition } from './positionNormalization'
 import { translateRostersToSleeperIds } from './rosterIdSpace'
@@ -111,22 +112,25 @@ export async function getPlayerLeagueView(
   leagueId: string,
   playerSleeperId: string,
   userId: string | null,
-  player?: { position: string | null }
+  player?: { position: string | null },
+  /** The render's shared league context — see `leagueContext.ts`. Used only with a signed-in viewer. */
+  ctx?: LeagueContext | null,
 ): Promise<PlayerLeagueView | null> {
-  const league = await prisma.league
-    .findUnique({
-      where: { id: leagueId },
-      select: {
-        id: true,
-        name: true,
-        platform: true,
-        platformLeagueId: true,
-        season: true,
-        settings: true,
-        leagueType: true,
-      },
-    })
-    .catch(() => null)
+  const league = await (userId
+    ? leagueContextFor(leagueId, userId, ctx).league()
+    : prisma.league.findUnique({
+        where: { id: leagueId },
+        select: {
+          id: true,
+          name: true,
+          platform: true,
+          platformLeagueId: true,
+          season: true,
+          settings: true,
+          leagueType: true,
+        },
+      })
+  ).catch(() => null)
   if (!league) return null
 
   const [teams, rawRosters] = await Promise.all([

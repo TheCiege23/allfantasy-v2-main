@@ -12,6 +12,7 @@ import {
 } from '@/lib/provider-trades/scanPendingSleeperTrades'
 import { evaluatePendingOffer, type PendingOfferEvaluation } from './pendingOfferEvaluation'
 import { collapseMirroredTradeRows } from './tradeHistorySelection'
+import { leagueContextFor, type LeagueContext } from './leagueContext'
 
 /**
  * Trades — "offer, grade, counter, all scored against this league's own rules".
@@ -395,6 +396,8 @@ async function resolvePendingOffers(
   userId: string,
   book: ValueBook,
   teamCount: number,
+  /** The loader's league context, so the claimed team is not read a second time. */
+  lc: LeagueContext,
 ): Promise<{ inbox: SectionState<PendingOffer[]>; sent: SectionState<PendingOffer[]> }> {
   const platform = String(league.platform ?? 'manual').toLowerCase()
 
@@ -417,9 +420,7 @@ async function resolvePendingOffers(
    * space shared across all of them.
    */
   const viewerSleeperId = await (async () => {
-    const claimed = await prisma.leagueTeam
-      .findFirst({ where: { leagueId: league.id, claimedByUserId: userId }, select: { platformUserId: true } })
-      .catch(() => null)
+    const claimed = await lc.claimedTeam().catch(() => null)
     const fromClaim = claimed?.platformUserId?.trim()
     if (fromClaim) return fromClaim
     const profile = await prisma.userProfile
@@ -484,21 +485,21 @@ async function resolvePendingOffers(
   }
 }
 
-export async function getTradesData(leagueId: string, userId: string): Promise<TradesData | null> {
-  const league = await prisma.league.findUnique({
-    where: { id: leagueId },
-    /* `sport` is selected for the pending-offer scan: Sleeper's player
-       dictionary is NFL-only, so a non-NFL league must not be handed one. */
-    select: { id: true, name: true, platform: true, leagueType: true, settings: true, platformLeagueId: true, season: true, sport: true },
-  })
+export async function getTradesData(
+  leagueId: string,
+  userId: string,
+  /** The render's shared league context — see `leagueContext.ts`. */
+  ctx?: LeagueContext | null,
+): Promise<TradesData | null> {
+  const lc = leagueContextFor(leagueId, userId, ctx)
+  /* The shared row. `sport` matters to the pending-offer scan: Sleeper's player
+     dictionary is NFL-only, so a non-NFL league must not be handed one. */
+  const league = await lc.league()
   if (!league) return null
 
   const [teamCount, myTeam] = await Promise.all([
     prisma.leagueTeam.count({ where: { leagueId } }),
-    prisma.leagueTeam.findFirst({
-      where: { leagueId, claimedByUserId: userId },
-      select: { externalId: true, platformUserId: true },
-    }),
+    lc.claimedTeam(),
   ])
   const book = valueBookFor(league.settings, league.leagueType)
   const grades = await resolveGrades(
@@ -539,7 +540,7 @@ export async function getTradesData(leagueId: string, userId: string): Promise<T
      * written to a table, and should not be. A pending offer is answered on the
      * platform, and a cached copy would go stale the moment it was accepted.
      */
-    ...(await resolvePendingOffers(league, userId, book, teamCount)),
+    ...(await resolvePendingOffers(league, userId, book, teamCount, lc)),
     grades,
     deadline: resolveDeadline(league.settings),
   }

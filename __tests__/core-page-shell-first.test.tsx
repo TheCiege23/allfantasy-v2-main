@@ -215,19 +215,45 @@ describe('/core renders the shell first', () => {
     ).toBe(1)
 
     /* Positive control: the one call is the shared read, asking for every field its
-       consumers need — not a narrower read that happens to be alone. The last three are the
-       Overview's "what's on file" panel, which takes this row rather than reading it again. */
-    expect(shell.leagueCoverage).toHaveBeenCalledWith({
-      where: { id: 'L1' },
-      select: {
-        id: true,
-        settings: true,
-        platform: true,
-        platformLeagueId: true,
-        syncStatus: true,
-        lastSyncedAt: true,
-      },
+       consumers need — not a narrower read that happens to be alone. `platformLeagueId`,
+       `syncStatus` and `lastSyncedAt` are the Overview's "what's on file" panel, which takes this
+       row rather than reading it again; the rest are the screen loaders' (see below). */
+    const { LEAGUE_CONTEXT_SELECT } = await import('@/lib/core-app/leagueContext')
+    expect(shell.leagueCoverage).toHaveBeenCalledWith({ where: { id: 'L1' }, select: LEAGUE_CONTEXT_SELECT })
+    expect(LEAGUE_CONTEXT_SELECT).toMatchObject({
+      id: true,
+      settings: true,
+      platform: true,
+      platformLeagueId: true,
+      syncStatus: true,
+      lastSyncedAt: true,
     })
+  })
+
+  /*
+   * 🛑 AND THE SCREEN'S LOADER READS IT THROUGH THE SAME CONTEXT (item 3, "one shared league
+   * context"). Loaders used to read the row again after the shell's wave had been awaited — one
+   * more serial cross-coast round trip on every league tab, and up to five on Draft HQ.
+   */
+  it('hands the screen loader the context the shell read through, so its row costs no query', { timeout: 180_000 }, async () => {
+    h.gated = false
+    h.osGate.resolve()
+    const AfCorePage = await loadPage()
+    const tree = await AfCorePage(pageArgs(['trades'], { league: 'L1' }))
+    const boundary = findElement(tree, (el) => el.type === Suspense && el.key === 'trades|L1')
+    const body = boundary!.props.children as AnyElement
+    await (body.type as (props: unknown) => Promise<unknown>)(body.props)
+
+    const handed = screens.trades.mock.calls[0]?.[2] as
+      | { leagueId: string; userId: string; league: () => Promise<unknown> }
+      | undefined
+    expect(handed, 'the trades loader was handed a league context').toBeTruthy()
+    expect([handed!.leagueId, handed!.userId]).toEqual(['L1', 'u1'])
+
+    const readsBefore = shell.leagueCoverage.mock.calls.length
+    expect(readsBefore, 'the shell read the row').toBe(1)
+    await expect(handed!.league()).resolves.toEqual({ settings: {}, platform: 'sleeper' })
+    expect(shell.leagueCoverage.mock.calls.length, 'the loader re-read the row').toBe(readsBefore)
   })
 
   /*
@@ -274,7 +300,7 @@ describe('/core renders the shell first', () => {
 
     // Positive control: the same spies DO see calls once the streamed body actually runs.
     await (body.type as (props: unknown) => Promise<unknown>)(body.props)
-    expect(screens.trades).toHaveBeenCalledWith('L1', 'u1')
+    expect(screens.trades).toHaveBeenCalledWith('L1', 'u1', expect.objectContaining({ leagueId: 'L1', userId: 'u1' }))
     expect(screens.urgency).toHaveBeenCalled()
   })
 

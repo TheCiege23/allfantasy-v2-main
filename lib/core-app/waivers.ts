@@ -3,6 +3,7 @@ import 'server-only'
 import { prisma } from '@/lib/prisma'
 import { myRosterCandidates } from './myRoster'
 import { leagueDisplayName, type SectionState } from './leagueHome'
+import { leagueContextFor, type LeagueContext } from './leagueContext'
 
 /**
  * Waivers — "targets, bids and claim order, priced against this league's FAAB
@@ -228,11 +229,14 @@ function readEngineNumber(config: unknown, key: string): number | null {
   return null
 }
 
-export async function getWaiversData(leagueId: string, userId: string): Promise<WaiversData | null> {
-  const league = await prisma.league.findUnique({
-    where: { id: leagueId },
-    select: { id: true, name: true, platform: true, leagueType: true },
-  })
+export async function getWaiversData(
+  leagueId: string,
+  userId: string,
+  /** The render's shared league context — see `leagueContext.ts`. */
+  ctx?: LeagueContext | null,
+): Promise<WaiversData | null> {
+  const lc = leagueContextFor(leagueId, userId, ctx)
+  const league = await lc.league()
   if (!league) return null
 
   const rules = await resolveWaiverRules(leagueId)
@@ -250,10 +254,7 @@ export async function getWaiversData(leagueId: string, userId: string): Promise<
     claimLimits: rules.claimLimits,
   }
 
-  const myTeam = await prisma.leagueTeam.findFirst({
-    where: { leagueId, claimedByUserId: userId },
-    select: { platformUserId: true, externalId: true },
-  })
+  const myTeam = await lc.claimedTeam()
 
   /*
    * ⚠ THIS WAS THE TWO-CANDIDATE JOIN, AND IT IS WHY ALL FOUR TILES READ "we cannot tell which

@@ -12,6 +12,7 @@ import {
   type TimelinePhase,
 } from './seasonTimeline'
 import { resolveCurrentWeekForLeague } from './currentWeek'
+import { leagueContextFor, type LeagueContext } from './leagueContext'
 import { resolvePairedHalf, type PairedHalf } from './leaguePairing'
 import { getLeagueActivity } from './leagueActivity'
 import { getAllPlayBoard, type AllPlayBoard } from './allPlay'
@@ -329,36 +330,25 @@ export async function getLeagueHomeData(
    * ask for week 40 and get an empty scoreboard that looks like missing data.
    */
   requestedWeek?: number | null,
+  /** The render's shared league context — see `leagueContext.ts`. */
+  ctx?: LeagueContext | null,
 ): Promise<LeagueHomeData | null> {
-  const league = await prisma.league.findUnique({
-    where: { id: leagueId },
-    select: {
-      id: true,
-      name: true,
-      platform: true,
-      sport: true,
-      season: true,
-      leagueType: true,
-      /* The trade-grade cache is keyed by the platform's league id. */
-      platformLeagueId: true,
-      updatedAt: true,
-      // Where the league is in its year. `status` is written by the platform import;
-      // `lifecycleState` is our own state machine, which has never run for imported
-      // leagues and sits at its in_season default. resolveLeagueStage prefers the
-      // former -- see lib/league-stage/leagueStage.ts.
-      status: true,
-      lifecycleState: true,
-      // The timeline used to be built from the week number alone. These two keys
-      // are present in League.settings on production Sleeper leagues, so the
-      // deadline and playoff stages can be placed from the league's OWN
-      // configuration instead of a generic NFL calendar.
-      settings: true,
-      // The one affirmative signal for an elimination format: a Sleeper import
-      // can only ever write 'IDP', 'DYNASTY_IDP', 'legacy_summary' or null into
-      // leagueVariant, so the format cannot be read from there.
-      guillotineMode: true,
-    },
-  })
+  const lc = leagueContextFor(leagueId, userId, ctx)
+  /*
+   * The shared row. What this screen reads off it, and why:
+   * - `platformLeagueId` keys the trade-grade cache.
+   * - `status` / `lifecycleState` place the league in its year. `status` is written by the
+   *   platform import; `lifecycleState` is our own state machine, which has never run for
+   *   imported leagues and sits at its in_season default. resolveLeagueStage prefers the
+   *   former -- see lib/league-stage/leagueStage.ts.
+   * - `settings`: the timeline used to be built from the week number alone. The deadline and
+   *   playoff keys are present in League.settings on production Sleeper leagues, so those
+   *   stages are placed from the league's OWN configuration, not a generic NFL calendar.
+   * - `guillotineMode`: the one affirmative signal for an elimination format. A Sleeper import
+   *   can only ever write 'IDP', 'DYNASTY_IDP', 'legacy_summary' or null into leagueVariant,
+   *   so the format cannot be read from there.
+   */
+  const league = await lc.league()
   if (!league) return null
 
   /*
@@ -745,7 +735,7 @@ export async function getLeagueHomeData(
    * second query, so two surfaces cannot disagree about one league's matchup.
    */
   const [matchupData, rivalData, pairing] = await Promise.all([
-    preSeason ? Promise.resolve(null) : getMatchupData(league.id, userId).catch(() => null),
+    preSeason ? Promise.resolve(null) : getMatchupData(league.id, userId, null, lc).catch(() => null),
     preSeason ? Promise.resolve(null) : getRivalRecords(userId, [league.id]).catch(() => null),
     /*
      * ⚠ NOT GATED ON `preSeason`, UNLIKE THE TWO ABOVE. A franchise pairing is a

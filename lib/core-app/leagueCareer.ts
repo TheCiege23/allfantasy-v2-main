@@ -2,6 +2,7 @@ import 'server-only'
 
 import { prisma } from '@/lib/prisma'
 import { leagueDisplayName, type SectionState } from './leagueHome'
+import { leagueContextFor, type LeagueContext } from './leagueContext'
 import { letterFor, type GradeLetter } from '@/lib/trade-intel/gradeScale'
 import type { TradeGradesPayload, TradeSideGrade } from '@/lib/trade-intel/sleeperTradeGradeService'
 
@@ -140,11 +141,11 @@ function isCompleted(f: { scoreA: number; scoreB: number; winnerTeamId: string |
 export async function getLeagueCareer(
   leagueId: string,
   userId: string,
+  /** The render's shared league context — see `leagueContext.ts`. */
+  ctx?: LeagueContext | null,
 ): Promise<LeagueCareerResult> {
-  const league = await prisma.league.findUnique({
-    where: { id: leagueId },
-    select: { id: true, name: true, platform: true, platformLeagueId: true },
-  })
+  const lc = leagueContextFor(leagueId, userId, ctx)
+  const league = await lc.league()
   const leagueName = leagueDisplayName(league?.name)
   if (!league) {
     return { available: false, leagueName, reason: 'this league could not be read' }
@@ -300,7 +301,7 @@ export async function getLeagueCareer(
       .sort((a, b) => b.losses - a.losses || a.averageMargin - b.averageMargin)[0] ?? null
 
   const [tradeGrade, waiverGrade, tradeStory] = await Promise.all([
-    gradeTrades(leagueId, league.platformLeagueId, userId),
+    gradeTrades(leagueId, league.platformLeagueId, userId, lc),
     gradeWaivers(leagueId, userId),
     loadTradeStory(league.platformLeagueId, userId, teams),
   ])
@@ -468,6 +469,7 @@ async function gradeTrades(
   leagueId: string,
   platformLeagueId: string | null,
   userId: string,
+  lc: LeagueContext,
 ): Promise<SectionState<LeagueGrade>> {
   if (!platformLeagueId) {
     return {
@@ -509,12 +511,7 @@ async function gradeTrades(
   }
 
   // Which Sleeper owner is this user, in this league?
-  const me = await prisma.leagueTeam
-    .findFirst({
-      where: { leagueId, claimedByUserId: userId },
-      select: { platformUserId: true },
-    })
-    .catch(() => null)
+  const me = await lc.claimedTeam().catch(() => null)
 
   const ownerId = me?.platformUserId ?? null
   if (!ownerId) {

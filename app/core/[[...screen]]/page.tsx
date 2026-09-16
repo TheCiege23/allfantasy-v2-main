@@ -21,6 +21,7 @@ import AfCoreShell, { type CoreNavKey, type RailLeague } from '@/components/core
 import type { UserLeague } from '@/app/dashboard/types'
 import { DefenseHubClient } from '@/app/idp/defense-hub/[leagueId]/DefenseHubClient'
 import { resolveLeagueValueSurfaces } from '@/lib/values/valueSurfaceEligibility'
+import { createLeagueContext, type LeagueContext } from '@/lib/core-app/leagueContext'
 import {
   resolveImportCoverageSummary,
   UNKNOWN_IMPORT_COVERAGE,
@@ -795,32 +796,19 @@ export default async function AfCorePage({
    * `prisma.league.platform`. Two answers to "which platform is this league on", inside
    * one page, free to disagree. They now come from this row.
    *
-   * ⚠ THE SCREEN LOADERS STILL READ IT THEMSELVES, deliberately and for now. Only one of
-   * them runs per request (they are mutually exclusive on `activeKey`), so that is one
-   * further read, not ten — and threading a row through ten signatures is a change worth
-   * making on its own rather than riding along here.
+   * 🛑 AND THE SCREEN LOADERS NOW SHARE IT TOO. They used to read the row again — each with
+   * its own column list, most with a second read of the viewer's claimed team, and the
+   * draft screen up to five times — AFTER this wave had been awaited, so every league tab
+   * paid one more serial cross-coast round trip for a row already in hand. `leagueCtx` is
+   * created once per render and passed to whichever loader runs; see
+   * `lib/core-app/leagueContext.ts` for why it is an explicit object and not `cache()`.
+   *
+   * The select is `LEAGUE_CONTEXT_SELECT`: every column any league loader reads, including
+   * the Overview's `platformLeagueId`, `syncStatus` and `lastSyncedAt` for its "what's on
+   * file" panel.
    */
-  const selectedLeagueRead = selectedLeagueId
-    ? prisma.league
-        .findUnique({
-          where: { id: selectedLeagueId },
-          /*
-           * `platformLeagueId`, `syncStatus` and `lastSyncedAt` are for the Overview's
-           * "what's on file" panel, which needs the provider id (two of its tables key on
-           * it) and whether the first sync has landed. Same row, same query — asking for
-           * three more scalar columns is cheaper than a third read of it.
-           */
-          select: {
-            id: true,
-            settings: true,
-            platform: true,
-            platformLeagueId: true,
-            syncStatus: true,
-            lastSyncedAt: true,
-          },
-        })
-        .catch(() => null)
-    : Promise.resolve(null)
+  const leagueCtx = selectedLeagueId ? createLeagueContext(selectedLeagueId, userId) : null
+  const selectedLeagueRead = leagueCtx ? leagueCtx.league().catch(() => null) : Promise.resolve(null)
   /* Rejection is impossible (`.catch` above), but an unawaited promise that somehow
      rejected before its `await` would surface as unhandled. Same guard as `shellReads`. */
   selectedLeagueRead.catch(() => undefined)
@@ -1263,6 +1251,7 @@ export default async function AfCorePage({
         errorResetKey,
         leagueHeaderShown: showContextBar,
         selectedLeagueRecord,
+        leagueCtx,
         homeScope,
         favoriteIds,
       }}
@@ -1536,6 +1525,11 @@ type CoreScreenContext = {
   leagueHeaderShown: boolean
   /** The selected league's row, read once by the shell. Null with no league or on a failed read. */
   selectedLeagueRecord: LeagueDataCoverageRecord | null
+  /**
+   * The same row, plus the viewer's claimed team, for the screen's loaders — the context the shell
+   * read it through, so a loader awaiting it costs no query. Null with no league selected.
+   */
+  leagueCtx: LeagueContext | null
   /** The home's scope — `all` everywhere else. See "THE HOME'S SCOPE" in `AfCorePage`. */
   homeScope: HomeScope
   /** Starred league ids, already intersected with `playedLeagues`. */
@@ -1584,6 +1578,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
     errorResetKey,
     leagueHeaderShown,
     selectedLeagueRecord,
+    leagueCtx,
     homeScope,
     favoriteIds,
   } = ctx
@@ -1610,6 +1605,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
           selectedLeagueId,
           userId,
           Number.isFinite(requestedWeek) ? requestedWeek : null,
+          leagueCtx,
         ).catch(() => null)
       : null
 
@@ -1845,9 +1841,13 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
    */
   const playerLeagueView =
     activeKey === 'players' && selectedLeagueId && playerDetail?.player.sleeperId
-      ? await getPlayerLeagueView(selectedLeagueId, playerDetail.player.sleeperId, userId, {
-          position: playerDetail.player.position,
-        }).catch(() => null)
+      ? await getPlayerLeagueView(
+          selectedLeagueId,
+          playerDetail.player.sleeperId,
+          userId,
+          { position: playerDetail.player.position },
+          leagueCtx,
+        ).catch(() => null)
       : null
 
   /*
@@ -1861,7 +1861,9 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
    */
   const playerTradeVisual =
     playerLeagueView?.ownership.kind === 'other' && selectedLeagueId && playerDetail?.player.sleeperId
-      ? await getPlayerTradeVisual(selectedLeagueId, playerDetail.player.sleeperId, userId).catch(() => null)
+      ? await getPlayerTradeVisual(selectedLeagueId, playerDetail.player.sleeperId, userId, leagueCtx).catch(
+          () => null,
+        )
       : null
 
   /*
@@ -1938,7 +1940,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
   // to pick rather than guessing at the user's "main" league.
   const myTeam =
     activeKey === 'my-team' && selectedLeagueId
-      ? await getMyTeamData(selectedLeagueId, userId).catch(() => null)
+      ? await getMyTeamData(selectedLeagueId, userId, leagueCtx).catch(() => null)
       : null
 
   /*
@@ -1957,7 +1959,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
 
   const matchup =
     activeKey === 'matchup' && selectedLeagueId
-      ? await getMatchupData(selectedLeagueId, userId).catch(() => null)
+      ? await getMatchupData(selectedLeagueId, userId, null, leagueCtx).catch(() => null)
       : null
 
   /*
@@ -2019,7 +2021,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
 
   const trades =
     activeKey === 'trades' && selectedLeagueId
-      ? await getTradesData(selectedLeagueId, userId).catch(() => null)
+      ? await getTradesData(selectedLeagueId, userId, leagueCtx).catch(() => null)
       : null
 
   const tradeValueActions =
@@ -2062,12 +2064,12 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
 
   const waivers =
     activeKey === 'waivers' && selectedLeagueId
-      ? await getWaiversData(selectedLeagueId, userId).catch(() => null)
+      ? await getWaiversData(selectedLeagueId, userId, leagueCtx).catch(() => null)
       : null
 
   const draftHq =
     activeKey === 'draft-hq' && selectedLeagueId
-      ? await getDraftHqData(selectedLeagueId, userId).catch(() => null)
+      ? await getDraftHqData(selectedLeagueId, userId, leagueCtx).catch(() => null)
       : null
 
   /*
@@ -2076,7 +2078,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
    */
   const draftBoard =
     activeKey === 'draft-hq' && selectedLeagueId
-      ? await getDraftBoardData(selectedLeagueId, userId).catch(() => null)
+      ? await getDraftBoardData(selectedLeagueId, userId, leagueCtx).catch(() => null)
       : null
 
   /*
@@ -2092,7 +2094,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
   /* The War Room's first room: every manager in the league, profiled. */
   const scout =
     activeKey === 'war-room' && !gamePlanView && selectedLeagueId
-      ? await getScoutData(selectedLeagueId, userId).catch(() => null)
+      ? await getScoutData(selectedLeagueId, userId, leagueCtx).catch(() => null)
       : null
 
   /*
@@ -2180,12 +2182,12 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
    */
   const leagueCareer =
     activeKey === 'career' && selectedLeagueId && sp.view !== 'share'
-      ? await getLeagueCareer(selectedLeagueId, userId).catch(() => null)
+      ? await getLeagueCareer(selectedLeagueId, userId, leagueCtx).catch(() => null)
       : null
 
   const leagueSync =
     activeKey === 'sync' && selectedLeagueId
-      ? await getLeagueSync(selectedLeagueId, userId).catch(() => null)
+      ? await getLeagueSync(selectedLeagueId, userId, undefined, leagueCtx).catch(() => null)
       : null
 
   /*
@@ -2222,14 +2224,14 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
 
   const standingsFresh =
     activeKey === 'standings' && selectedLeagueId && standingsOnSummary
-      ? await readLeagueStandingsSummary(selectedLeagueId, userId).catch(() => null)
+      ? await readLeagueStandingsSummary(selectedLeagueId, userId, leagueCtx).catch(() => null)
       : null
 
   const standings =
     activeKey === 'standings' && selectedLeagueId
       ? standingsOnSummary
         ? (standingsFresh?.data ?? null)
-        : await getLeagueStandings(selectedLeagueId, userId).catch(() => null)
+        : await getLeagueStandings(selectedLeagueId, userId, leagueCtx).catch(() => null)
       : null
 
   /*

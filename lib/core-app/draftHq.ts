@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma'
 import { getDraftReport, type DraftGradeLetter } from '@/lib/draft-intel/draftReportService'
 import { buildImportedDraftReport } from '@/lib/draft-intel/importedDraftReport'
 import { leagueDisplayName, type SectionState, type UnavailableSection } from './leagueHome'
+import { leagueContextFor, type LeagueContext } from './leagueContext'
 import { composePlayerIdentities } from './playerIdentityCompose'
 
 /**
@@ -401,10 +402,8 @@ async function loadDraftGrades(
   }
 }
 
-async function loadCompletedDraftBoard(
-  leagueId: string,
-  userId: string,
-): Promise<SectionState<CompletedDraft>> {
+async function loadCompletedDraftBoard(lc: LeagueContext): Promise<SectionState<CompletedDraft>> {
+  const { leagueId } = lc
   const unavailable = (reason: string) => ({ available: false as const, reason })
 
   const facts = await prisma.draftFact
@@ -423,17 +422,13 @@ async function loadCompletedDraftBoard(
 
   /* The provider that issued these ids — see resolvePlayerNames. Read before the
      fan-out because the name lookup cannot be scoped without it. */
-  const boardLeague = await prisma.league
-    .findUnique({ where: { id: leagueId }, select: { platform: true } })
-    .catch(() => null)
+  const boardLeague = await lc.league().catch(() => null)
 
   const [teams, mine, names] = await Promise.all([
     prisma.leagueTeam
       .findMany({ where: { leagueId }, select: { externalId: true, teamName: true, ownerName: true } })
       .catch(() => []),
-    prisma.leagueTeam
-      .findMany({ where: { leagueId, claimedByUserId: userId }, select: { externalId: true } })
-      .catch(() => []),
+    lc.claimedTeams().catch(() => []),
     resolvePlayerNames([...new Set(rows.map((r) => r.playerId))], boardLeague?.platform ?? ''),
   ])
 
@@ -489,16 +484,11 @@ async function loadCompletedDraftBoard(
   }
 }
 
-async function loadImportedDraftPicks(
-  leagueId: string,
-  userId: string,
-): Promise<SectionState<MadePick[]>> {
+async function loadImportedDraftPicks(lc: LeagueContext): Promise<SectionState<MadePick[]>> {
+  const { leagueId } = lc
   const unavailable = (reason: string) => ({ available: false as const, reason })
 
-  const myTeam = await prisma.leagueTeam.findFirst({
-    where: { leagueId, claimedByUserId: userId },
-    select: { externalId: true },
-  })
+  const myTeam = await lc.claimedTeam()
   if (!myTeam?.externalId) {
     return unavailable('no draft has been set up, and no team in this league is claimed by you')
   }
@@ -559,9 +549,7 @@ async function loadImportedDraftPicks(
    * statement about a pick we cannot resolve; a stranger's name is a false one,
    * and the screen gives the reader no way to tell them apart.
    */
-  const league = await prisma.league
-    .findUnique({ where: { id: leagueId }, select: { platform: true } })
-    .catch(() => null)
+  const league = await lc.league().catch(() => null)
 
   /*
    * ⚠ THE SHARED RESOLVER, NOT A SECOND COPY. This block used to inline its own
@@ -613,11 +601,18 @@ async function loadImportedDraftPicks(
   }
 }
 
-export async function getDraftHqData(leagueId: string, userId: string): Promise<DraftHqData | null> {
-  const league = await prisma.league.findUnique({
-    where: { id: leagueId },
-    select: { id: true, name: true, platform: true, leagueType: true, platformLeagueId: true },
-  })
+export async function getDraftHqData(
+  leagueId: string,
+  userId: string,
+  /**
+   * The render's shared league context — see `leagueContext.ts`. This screen read the league row
+   * three times and the viewer's team three times across its own helpers, before the draft board
+   * beside it read both again.
+   */
+  ctx?: LeagueContext | null,
+): Promise<DraftHqData | null> {
+  const lc = leagueContextFor(leagueId, userId, ctx)
+  const league = await lc.league()
   if (!league) return null
 
   const base = {
@@ -652,8 +647,8 @@ export async function getDraftHqData(leagueId: string, userId: string): Promise<
        and saying otherwise would invent one. The picks, however, may well exist. */
     const none = { available: false as const, reason: 'no draft has been set up for this league' }
     const [madePicks, board, grades] = await Promise.all([
-      loadImportedDraftPicks(leagueId, userId).catch(() => none),
-      loadCompletedDraftBoard(leagueId, userId).catch(() => none),
+      loadImportedDraftPicks(lc).catch(() => none),
+      loadCompletedDraftBoard(lc).catch(() => none),
       loadDraftGrades(leagueId, league.platform, league.platformLeagueId ?? null).catch(() => none),
     ])
 
@@ -686,10 +681,7 @@ export async function getDraftHqData(leagueId: string, userId: string): Promise<
     return { ...base, session: noSession, pickSlots: noSession, madePicks, board, grades }
   }
 
-  const myTeam = await prisma.leagueTeam.findFirst({
-    where: { leagueId, claimedByUserId: userId },
-    select: { externalId: true, teamName: true },
-  })
+  const myTeam = await lc.claimedTeam()
 
   const order = Array.isArray(session.slotOrder)
     ? (session.slotOrder as Array<{ slot?: number; rosterId?: string; displayName?: string }>)
@@ -789,7 +781,7 @@ export async function getDraftHqData(leagueId: string, userId: string): Promise<
 
   /* A live session and a completed board are not exclusive: a league can be mid-draft in
      one season and hold a finished board from the last one. */
-  const board = await loadCompletedDraftBoard(leagueId, userId).catch(() => ({
+  const board = await loadCompletedDraftBoard(lc).catch(() => ({
     available: false as const,
     reason: 'no completed draft has been imported for this league',
   }))
