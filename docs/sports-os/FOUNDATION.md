@@ -12,13 +12,13 @@ route with a budget in traces-per-hour.
 
 | # | Point | Where it lives | State |
 |---|---|---|---|
-| 1 | Performance budgets | `lib/sports-os/budgets.ts`, `budgetTelemetry.ts` | **new** |
+| 1 | Performance budgets | `lib/sports-os/budgets.ts`, `budgetTelemetry.ts` | **new** — shell + every card instrumented |
 | 2 | Render the shell immediately | `app/core/[[...screen]]/page.tsx` — `af.shell_ms` | already built |
 | 3 | Stream cards independently | same page + `lib/observability/cardTelemetry.ts` | already built |
 | 4 | Screen-ready summaries | `lib/sports-os/summaries.ts` | **new** — `/core/standings` wired |
 | 5 | Layered caching | `lib/sports-os/layeredCache.ts`, `durableTier.ts` | **new** — memory + `SportsDataCache` |
 | 6 | Heavy work in jobs | `lib/jobs/`, `lib/queues/bullmq.ts` | already built — reached from `reactions.ts` |
-| 7 | One event system | `lib/events/` | already built — reaction table + relay consumer are new |
+| 7 | One event system | `lib/events/` | already built — reaction table, relay consumer, `ingest.*` emit are new |
 | 8 | End-to-end observability | `lib/observability/`, `docs/observability/TRACING.md` | already built — budget verdicts are new |
 | 9 | Last-known data | `lib/sports-os/freshness.ts`, `components/sports-os/FreshnessChip` | **new** — visible on `/core/standings` |
 | 10 | Gradual rollout | `lib/sports-os/rollout.ts` | **new** |
@@ -167,8 +167,8 @@ it costs a redeploy (writing a Railway variable *is* a deploy).
 
 ## Testing
 
-`__tests__/sports-os/` (84, including the chip and the relay consumer), `__tests__/core-app/` (12)
-and `__tests__/fantasy-os/sync-invalidates-standings` (3) — no database, no queue, no network.
+`__tests__/sports-os/` (92), `__tests__/core-app/` (12), `__tests__/observability/` (5) and
+`__tests__/fantasy-os/sync-invalidates-standings` (6) — no database, no queue, no network.
 
 ⚠ **ELEVEN OF THE KEY ASSERTIONS WERE MUTATION-TESTED**, because a green check that has never gone
 red is not evidence. Injecting each of these turns the named suite red: giving `db` a device
@@ -350,6 +350,59 @@ So `ReactionJob['queue']` is narrowed to `'league_engine'` and its `kind` to `Le
 Widening it is a deliberate edit that must come **with** a handler that does the work, and the
 `Record` over the union in the consumer makes the compiler insist on a mapping.
 
+## Budget instrumentation
+
+Two sites, which is all it took to make point 1 measured rather than declared.
+
+**The shell** — `app/core/[[...screen]]/page.tsx`, beside the existing `recordRootDuration`.
+`af.shell_ms` says how long; `af.budget.shell_verdict` says whether that was acceptable for **this
+screen on this device**, which is the question a dashboard actually gets asked. The device is read
+from headers here because the shell budget is device-scaled.
+
+**Every card** — `traceCard`, via `recordBudgetOnActiveSpan`.
+
+🛑 **THE PER-CARD VERDICT GOES ON THE CARD'S OWN SPAN, NOT THE ROOT, AND THAT IS NOT A STYLE
+CHOICE.** The attribute name is keyed on the *phase*, so nineteen cards writing `af.budget.card_ms`
+to one root span is not nineteen measurements — it is one measurement of whichever card happened to
+finish last. `recordBudget` is for phases that occur once per request (`shell`, `screen`, `db`,
+`import`, `job`); `recordBudgetOnActiveSpan` is for those that repeat.
+
+⚠ **THE WRITE MUST PRECEDE THE SPAN CLOSE.** Sentry ends the span when the promise `startSpan`'s
+callback returns settles, so attaching the measurement with `.finally` and returning the *original*
+promise races that close — and a late attribute write on a closed span is **silently dropped**, a
+telemetry bug that leaves no trace anywhere. `traceCard` returns the derived promise instead, and a
+test asserts the ordering rather than assuming it.
+
+⚠ A rejected card read is still measured. A read that fails after nine seconds is the most
+over-budget thing on the page; dropping it because it threw is how a timeout looks fast in the data.
+
+⚠ And a verdict **decides nothing** — it never sheds a card or shortens a timeout. A performance
+budget that can fail a request turns a slow page into a broken one.
+
+## The import finally announces itself
+
+`syncConnectedSleeperLeague` emits one `ingest.league.completed` per AllFantasy league behind the
+connection. That is what closes the loop: until something emitted, the reaction path was inert no
+matter how well the consumer was tested.
+
+⚠ **OUTSIDE THE SLEEPER-ONLY BLOCK, DELIBERATELY.** `ingest.league.completed` is provider-agnostic —
+an ESPN or Fantrax league's rows come from the parity collectors and its consumers care just as
+much. Emitting inside that block would have quietly made the whole reaction path Sleeper-only.
+
+⚠ **THE ENVELOPE CARRIES OUR CANONICAL ID.** The sync scope holds only the provider's, so it resolves
+through `resolveLeagueIdsForConnection` — the same helper the sync store already uses on every
+scope, with the same query shape `setLastSuccessfulSyncAt` already pays on every successful run. The
+consumer's rollout bucket *and* its cache-key resolver both read `leagueId`, so emitting the platform
+id would bucket on a foreign id and resolve to nothing.
+
+⚠ **THE RUN'S CLOCK IS IN THE IDEMPOTENCY KEY.** `runKey` is `<provider>:<externalLeagueId>:<season>`
+— **stable across every run** — so a key built from it alone would dedupe the second sync of a league
+against the first, forever, and the reaction path would fire exactly once per league for all time.
+
+⚠ It does **not** replace the direct `invalidateLeagueStandings` call. That is synchronous and
+unconditional; the event reaches its consumer only when the relay next runs its cron, and only for
+the 10% inside the rollout. The direct call is the fast path for the one screen we know about.
+
 ## What is not done
 
 Each of these is a separate decision with a real cost.
@@ -359,10 +412,16 @@ Each of these is a separate decision with a real cost.
 2. ~~No durable cache tier is wired.~~ **Done** — `lib/sports-os/durableTier.ts` over
    `SportsDataCache`, used by the standings summary.
 3. ~~No consumer calls `dispatchReactions`.~~ **Done** — see *The relay consumer* below.
-4. **No ingestion path emits the new `ingest.*` events.** The catalog entries exist and validate;
-   nothing publishes them.
+4. ~~No ingestion path emits the new `ingest.*` events.~~ **Partly done** — the collector sync emits
+   `ingest.league.completed` for every provider. The other six `ingest.*` types still have no
+   producer.
 5. **The budgets are targets.** Nothing in the table is a p95 we have held. They need a week of
-   Sentry data before an `over` verdict should be treated as an incident.
-6. **`recordBudget` has no callers.** The two obvious ones are the existing `af.shell_ms` site in
-   `app/core/[[...screen]]/page.tsx` and `traceCard`.
+   Sentry data before an `over` verdict should be treated as an incident. **This is now the main
+   thing standing between point 1 and being real**, because the instrumentation below means the
+   data to calibrate against will exist within a week.
+6. ~~`recordBudget` has no callers.~~ **Done** — see *Budget instrumentation* below.
+7. **The card verdict is device-neutral.** `traceCard` has no request headers in scope, so it uses
+   the `unknown` multiplier. `af.budget.card_ms` is exact and the root span's `af.device` allows the
+   split in Sentry; threading a device through all nineteen call sites is the fix when the verdict
+   itself needs to be per-device.
 7. ~~The standings screen does not render its freshness.~~ **Done** — see *The freshness chip* below.

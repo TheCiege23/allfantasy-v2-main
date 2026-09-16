@@ -32,7 +32,7 @@ export {
   type BudgetEvaluation,
 } from './budgets'
 
-export { recordBudget, recordBudgetSince, measure } from './budgetTelemetry'
+export { recordBudget, recordBudgetOnActiveSpan, recordBudgetSince, measure } from './budgetTelemetry'
 
 export {
   fresh,

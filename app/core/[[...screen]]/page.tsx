@@ -140,6 +140,8 @@ import { getLeagueStandings } from '@/lib/core-app/leagueStandings'
 import { readLeagueStandingsSummary } from '@/lib/core-app/leagueStandingsSummary'
 import { isEnabled, DEFAULT_ROLLOUTS } from '@/lib/sports-os/rollout'
 import { freshnessLabel, freshnessMeta, shouldWarnAboutFreshness } from '@/lib/sports-os/freshness'
+import { recordBudgetSince } from '@/lib/sports-os/budgetTelemetry'
+import { classifyDevice } from '@/lib/observability/requestContext'
 import LeagueSync from '@/components/core-app/screens/LeagueSync'
 import { getLeagueSync } from '@/lib/core-app/leagueSync'
 import NotificationsCenter from '@/components/core-app/screens/NotificationsCenter'
@@ -1022,6 +1024,32 @@ export default async function AfCorePage({
   const dockable = selectedLeagueId != null && DOCKABLE_KEYS.includes(activeKey)
 
   recordRootDuration('af.shell_ms', shellStartedAt)
+
+  /*
+   * The same duration, against the budget it was measured against (`lib/sports-os/budgets.ts`).
+   * `af.shell_ms` says how long; `af.budget.shell_verdict` says whether that was acceptable for
+   * THIS screen on THIS device, which is the question a dashboard actually gets asked.
+   *
+   * ⚠ THE DEVICE IS READ HERE BECAUSE THE SHELL BUDGET IS DEVICE-SCALED (mobile x1.5). The route is
+   * already dynamic — `cookies()` and `headers()` are both used elsewhere in this file — so this
+   * adds no rendering constraint.
+   *
+   * ⚠ AND IT DECIDES NOTHING. A verdict is an observation; it never sheds a card or shortens a
+   * timeout. A performance budget that can fail a request turns a slow page into a broken one.
+   */
+  try {
+    const shellHeaders = await headers()
+    recordBudgetSince(
+      {
+        phase: 'shell',
+        name: activeKey,
+        device: classifyDevice(shellHeaders.get('user-agent'), shellHeaders.get('sec-ch-ua-mobile')),
+      },
+      shellStartedAt,
+    )
+  } catch {
+    // Telemetry must never fail a render.
+  }
 
   /*
    * The error boundaries reset on ANY change of URL, not just screen or league: Back/Forward between two

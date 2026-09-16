@@ -24,7 +24,30 @@
 import * as Sentry from '@sentry/nextjs'
 import { evaluateBudget, type BudgetEvaluation, type BudgetKey } from './budgets'
 
-/** Stamp an already-measured duration against its budget. Returns the evaluation for a caller log. */
+/**
+ * ⚠ TYPED AGAINST SENTRY'S OWN `Span`, NOT A STRUCTURAL SHAPE. `setAttributes` takes `SpanAttributes`
+ * — a narrower value type than `Record<string, unknown>` — so a hand-written structural parameter
+ * does not accept a real `Span`. The ratchet caught that; the first version of this helper added two
+ * errors to the baseline.
+ */
+function applyAttributes(span: Pick<Sentry.Span, 'setAttributes'>, evaluation: BudgetEvaluation): void {
+  const prefix = `af.budget.${evaluation.phase}`
+  span.setAttributes({
+    [`${prefix}_ms`]: evaluation.observedMs,
+    [`${prefix}_verdict`]: evaluation.verdict,
+    [`${prefix}_ratio`]: evaluation.ratio,
+  })
+}
+
+/**
+ * Stamp an already-measured duration against its budget, on the request's ROOT span.
+ *
+ * 🛑 ONLY FOR A PHASE THAT HAPPENS ONCE PER REQUEST — `shell`, `screen`, `db`, `import`, `job`.
+ * The attribute name is keyed on the PHASE, so a phase that occurs many times per request would
+ * have every occurrence overwrite the last on one span and leave an arbitrary winner: nineteen
+ * cards writing `af.budget.card_ms` to one root span is not nineteen measurements, it is one
+ * measurement of whichever card happened to finish last. Use `recordBudgetOnActiveSpan` for those.
+ */
 export function recordBudget(key: BudgetKey, observedMs: number): BudgetEvaluation {
   const evaluation = evaluateBudget(key, observedMs)
   try {
@@ -32,12 +55,26 @@ export function recordBudget(key: BudgetKey, observedMs: number): BudgetEvaluati
     if (!active) return evaluation
     const root = Sentry.getRootSpan(active)
     if (!root.isRecording()) return evaluation
-    const prefix = `af.budget.${key.phase}`
-    root.setAttributes({
-      [`${prefix}_ms`]: evaluation.observedMs,
-      [`${prefix}_verdict`]: evaluation.verdict,
-      [`${prefix}_ratio`]: evaluation.ratio,
-    })
+    applyAttributes(root, evaluation)
+  } catch {
+    // Telemetry must never fail a render.
+  }
+  return evaluation
+}
+
+/**
+ * The same, on the CURRENT span rather than the root — for a phase that repeats within one request.
+ *
+ * Each occurrence already has its own span (a `core.card` span per card, for instance), so the
+ * verdict lands beside the thing it describes and nothing overwrites anything. The root span's
+ * `af.device` and `af.screen` are still available to cross-tab against in Sentry.
+ */
+export function recordBudgetOnActiveSpan(key: BudgetKey, observedMs: number): BudgetEvaluation {
+  const evaluation = evaluateBudget(key, observedMs)
+  try {
+    const active = Sentry.getActiveSpan()
+    if (!active || !active.isRecording()) return evaluation
+    applyAttributes(active, evaluation)
   } catch {
     // Telemetry must never fail a render.
   }

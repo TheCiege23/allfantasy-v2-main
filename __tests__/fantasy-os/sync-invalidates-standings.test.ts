@@ -32,6 +32,7 @@ const h = vi.hoisted(() => ({
   ensureMatchupsCached: vi.fn(async () => undefined),
   ingestScores: vi.fn(async () => ({})),
   invalidateLeagueStandings: vi.fn(async () => 3),
+  emit: vi.fn(async () => undefined),
 }))
 
 vi.mock('@/lib/prisma', () => ({ prisma: h.prisma }))
@@ -46,6 +47,7 @@ vi.mock('@/lib/sleeper/sync/sleeperScoreTargetWeeks', () => ({ sleeperScoreTarge
 vi.mock('@/lib/core-app/leagueStandingsSummary', () => ({
   invalidateLeagueStandings: h.invalidateLeagueStandings,
 }))
+vi.mock('@/lib/events/producers', () => ({ getPlatformEvents: () => ({ emit: h.emit }) }))
 
 import { syncConnectedLeague } from '@/lib/import-os/collector/syncConnectedSleeperLeague'
 import type { LeagueSyncConnection } from '@/lib/import-os/collector/types'
@@ -69,6 +71,73 @@ beforeEach(() => {
   h.prisma.leagueSyncState.findUnique.mockResolvedValue(null)
   h.prisma.leagueSyncState.findMany.mockResolvedValue([])
   h.prisma.leagueSyncState.upsert.mockResolvedValue({ checkpoints: {}, consecutiveFailures: 0 })
+})
+
+describe('syncConnectedLeague — ingest.league.completed', () => {
+  /*
+   * 🛑 THE SYNC'S OWN SUITES DO NOT REACH THIS EITHER. They mock `prisma.league.findMany` to return
+   * [], so the emit block runs and emits nothing — green, and proving nothing. Point 7 is "an
+   * import triggers what it affects", and until something emits, the entire reaction path is inert
+   * no matter how well the consumer is tested.
+   */
+  it('emits one event per AllFantasy league, carrying the CANONICAL id', async () => {
+    h.prisma.league.findMany.mockResolvedValue([
+      { id: 'af-uuid-1', userId: 'u1' },
+      { id: 'af-uuid-2', userId: 'u2' },
+    ])
+
+    await syncConnectedLeague(CONNECTION, NOW, {
+      fetchNormalized: vi.fn(ok),
+      sleep: noSleep,
+      scopes: ['league_state'],
+    })
+
+    const ingestCalls = h.emit.mock.calls.filter((c) => String(c[0]).startsWith('ingest.league'))
+    expect(ingestCalls).toHaveLength(2)
+
+    const [type, args] = ingestCalls[0] as [string, Record<string, unknown>]
+    expect(type).toBe('ingest.league.completed')
+    /*
+     * ⚠ OUR UUID, NOT THE PROVIDER'S. A DomainEvent carries canonical ids by contract, and the
+     * consumer's rollout bucket and cache-key resolver both read `leagueId`. Emitting the platform
+     * id here would bucket on a foreign id and resolve to nothing.
+     */
+    expect(args.leagueId).toBe('af-uuid-1')
+    expect(args.subjects).toEqual([{ kind: 'league', id: 'af-uuid-1' }])
+    expect(args.source).toBe('ingestion:sleeper')
+
+    const payload = args.payload as Record<string, unknown>
+    expect(payload).toMatchObject({ leagueId: 'af-uuid-1', provider: 'sleeper' })
+    // `provider` is a SOURCE NAME. A provider URL here would put RSC_token in the outbox table.
+    expect(String(payload.provider)).not.toContain('http')
+  })
+
+  it('keys idempotency on the RUN, not just the connection', async () => {
+    /*
+     * ⚠ `runKey` IS `<provider>:<externalLeagueId>:<season>` — STABLE ACROSS EVERY RUN. A key built
+     * from it alone would dedupe the second sync of a league against the first, forever, and the
+     * reaction path would fire exactly once per league for all time.
+     */
+    h.prisma.league.findMany.mockResolvedValue([{ id: 'af-uuid-1', userId: 'u1' }])
+    const later = new Date(NOW.getTime() + 3_600_000)
+
+    await syncConnectedLeague(CONNECTION, NOW, { fetchNormalized: vi.fn(ok), sleep: noSleep, scopes: ['league_state'] })
+    await syncConnectedLeague(CONNECTION, later, { fetchNormalized: vi.fn(ok), sleep: noSleep, scopes: ['league_state'] })
+
+    const keys = h.emit.mock.calls
+      .filter((c) => String(c[0]).startsWith('ingest.league'))
+      .map((c) => (c[1] as Record<string, unknown>).idempotencyKey)
+    expect(keys).toHaveLength(2)
+    expect(keys[0]).not.toBe(keys[1])
+  })
+
+  it('never lets a failed emit fail the sync', async () => {
+    // The sync has already done its real work; it must not fail over an announcement.
+    h.prisma.league.findMany.mockRejectedValue(new Error('db down'))
+    await expect(
+      syncConnectedLeague(CONNECTION, NOW, { fetchNormalized: vi.fn(ok), sleep: noSleep, scopes: ['league_state'] }),
+    ).resolves.toBeDefined()
+  })
 })
 
 describe('syncConnectedLeague — cached standings invalidation', () => {
