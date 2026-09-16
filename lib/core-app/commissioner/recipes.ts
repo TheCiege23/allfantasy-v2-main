@@ -87,7 +87,7 @@ export const RECIPES: RecipeDefinition[] = [
   {
     key: 'inactivityWarning',
     label: 'Inactivity warnings',
-    description: 'A friendly weekly check-in naming teams with no lineup or transaction in 14 days.',
+    description: 'A friendly weekly check-in naming managers with no trade, waiver claim or roster move in 14 days.',
     cadence: 'Once a week at most',
     unavailableReason: () => null,
   },
@@ -258,7 +258,7 @@ export function dueRecipeMessages(values: Record<RecipeKey, boolean>, facts: Rec
       text: [
         `👋 Checking in: ${list(facts.inactiveTeams)} ${
           facts.inactiveTeams.length === 1 ? 'hasn’t' : 'haven’t'
-        } set a lineup or made a move in two weeks.`,
+        } made a trade, waiver claim or roster move in two weeks.`,
         'If you’re stepping away, tell the commissioner so the team can be covered.',
       ].join('\n'),
     })

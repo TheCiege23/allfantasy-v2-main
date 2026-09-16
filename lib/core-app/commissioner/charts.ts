@@ -275,7 +275,7 @@ export function engagementChart(
   return {
     key: 'engagement',
     title: 'Manager engagement',
-    subtitle: 'By last lineup or transaction · 14-day inactive window',
+    subtitle: 'Active vs. inactive managers · 14-day window',
     bars,
     takeaway: `${active} of ${managers.length} managers are active.`,
   }

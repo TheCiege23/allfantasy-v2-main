@@ -41,6 +41,14 @@ import {
 } from './commissioner/areas'
 import { balanceChart, engagementChart, scoringChart, type HubChart } from './commissioner/charts'
 import { RECIPES, RECIPES_SEND_TOGGLE, readRecipeSettings, type RecipeKey } from './commissioner/recipes'
+import {
+  ownedTeamNames,
+  resolveMemberActivity,
+  unownedTeamNames,
+  type LeagueMemberActivity,
+} from './commissioner/activity'
+import { readActivityWindow, readManagerActivity } from '@/lib/league-history/leagueWarehouseReads'
+import { MANAGER_INACTIVE_AFTER_DAYS } from '@/lib/decision-os/behavioral/manager-intelligence'
 
 /**
  * Commissioner Hub — 38a screen 9.
@@ -130,12 +138,7 @@ export type CommissionerGrant = {
   readonly teams: ReadonlyArray<{ name: string; platformUserId: string | null }>
 }
 
-export type MemberActivityRow = {
-  name: string
-  manager: string | null
-  status: 'active' | 'at_risk' | 'inactive' | 'unknown'
-  lastActionAt: string | null
-}
+export type { MemberActivityRow } from './commissioner/activity'
 
 export type CommissionerHubData = {
   allowed: true
@@ -155,7 +158,8 @@ export type CommissionerHubData = {
     score: SectionState<{ score: number; status: string; summary: string; confidencePct: number }>
     flags: HealthFlag[]
   }
-  members: SectionState<{ rows: MemberActivityRow[]; total: number; inactive: number; atRisk: number }>
+  /** Who is playing — see ./commissioner/activity.ts for why imported leagues are judged by moves. */
+  members: LeagueMemberActivity
   calendar: LeagueCalendar & { ics: string | null }
   areas: LeagueArea[]
   workflows: Workflow[]
@@ -407,6 +411,8 @@ export async function getCommissionerHub(input: {
     discordLink,
     weekStarts,
     sendEnabled,
+    importedManagers,
+    importedWindow,
   ] = await Promise.all([
     prisma.leagueTeam
       .findMany({
@@ -443,7 +449,8 @@ export async function getCommissionerHub(input: {
         reason: 'Waiver data couldn’t be read just now. This is a read failure on our side, not a league with no waivers.',
       }),
     ),
-    getLeagueManagerHealth(leagueId).catch(() => null),
+    // Roster timestamps describe managers only where AllFantasy runs the league — see activity.ts.
+    native ? getLeagueManagerHealth(leagueId).catch(() => null) : Promise.resolve(null),
     getCommissionerHubHealthForUser(userId, [
       {
         id: leagueId,
@@ -483,6 +490,8 @@ export async function getCommissionerHub(input: {
       .catch(() => null),
     readWeekStarts(league.season, sport),
     getBoolean(RECIPES_SEND_TOGGLE).catch(() => false),
+    native ? Promise.resolve(null) : readManagerActivity(leagueId, MANAGER_INACTIVE_AFTER_DAYS).catch(() => null),
+    native ? Promise.resolve(null) : readActivityWindow(leagueId).catch(() => null),
   ])
 
   const teamCount = teams.length || rosters.length
@@ -564,19 +573,28 @@ export async function getCommissionerHub(input: {
   const replaceGuide = inAppLink('Replace a manager', '#workflow-replace-manager')
   const duesTracker = readDuesTracker(settingsJson)
 
-  const memberRows: MemberActivityRow[] | null = managerHealth
-    ? managerHealth.rows.map((r) => ({
-        name: r.teamName || r.managerName || 'Unnamed team',
-        manager: r.managerName,
-        status: r.status,
-        lastActionAt: r.lastActionAt,
-      }))
-    : null
+  const memberActivity: LeagueMemberActivity = native
+    ? resolveMemberActivity({ kind: 'native', rows: managerHealth?.rows ?? null }, now, MANAGER_INACTIVE_AFTER_DAYS)
+    : importedManagers && importedWindow
+      ? resolveMemberActivity(
+          {
+            kind: 'imported',
+            managers: importedManagers,
+            teams: ownedTeamNames(teams),
+            lastActivityAt: importedWindow.lastActivityAt,
+            eventCount: importedWindow.eventCount,
+          },
+          now,
+          MANAGER_INACTIVE_AFTER_DAYS,
+        )
+      : { available: false, reason: 'League activity couldn’t be read just now.' }
+  const memberRows = memberActivity.available ? memberActivity.data.rows : null
 
   const flags = rankFlags([
     abandonedTeamsFlag({
       managers: memberRows,
-      orphanTeams: teams.filter((t) => t.isOrphan).map(teamLabel),
+      activityReason: memberActivity.available ? null : memberActivity.reason,
+      orphanTeams: unownedTeamNames(teams),
       totalTeams: teamCount,
       action: native
         ? inAppLink('Open orphan teams', `/league/${encodeURIComponent(leagueId)}/orphan-teams`)
@@ -587,9 +605,13 @@ export async function getCommissionerHub(input: {
       platform,
       inSeason,
       stale,
-      rosters: rosters.map((r) => {
+      /*
+       * A roster row with no team behind it is a leftover (a previous owner's row the
+       * sync no longer touches) — not a lineup anyone can set. Skipped, not named.
+       */
+      rosters: rosters.flatMap((r) => {
         const team = teamByPlatformUser.get(r.platformUserId)
-        return { name: team ? teamLabel(team) : 'Unmatched roster', starters: starterSlots(r.playerData) }
+        return team ? [{ name: teamLabel(team), starters: starterSlots(r.playerData) }] : []
       }),
       action: native
         ? inAppLink('Open league', `/league/${encodeURIComponent(leagueId)}`)
@@ -755,22 +777,22 @@ export async function getCommissionerHub(input: {
       key: 'managers',
       label: 'Active managers',
       tone:
-        !activityStale && managerHealth && managerHealth.totalManagers > 0
-          ? managerHealth.inactiveCount > 0
+        !activityStale && memberActivity.available
+          ? memberActivity.data.inactive > 0
             ? 'warn'
             : 'good'
           : 'neutral',
       state: activityStale
         ? { available: false, reason: `last sync was ${staleDays} days ago — activity isn’t judged on data that old` }
-        : managerHealth && managerHealth.totalManagers > 0
+        : memberActivity.available
           ? {
               available: true,
               data: {
-                value: String(managerHealth.rows.filter((r) => r.status === 'active').length),
-                sub: `of ${managerHealth.totalManagers} · ${managerHealth.inactiveCount} inactive`,
+                value: String(memberActivity.data.active),
+                sub: `of ${memberActivity.data.total} · ${memberActivity.data.inactive} with no move in ${MANAGER_INACTIVE_AFTER_DAYS} days`,
               },
             }
-          : { available: false, reason: 'no rosters have been imported for this league yet' },
+          : { available: false, reason: memberActivity.reason },
     },
     {
       key: 'claimed',
@@ -878,19 +900,7 @@ export async function getCommissionerHub(input: {
           ? 'This league has never synced, so nothing has been checked. An empty list here is not the same as a quiet league.'
           : 'Nothing in this league needs you right now.',
     health: { score: healthScore, flags },
-    members: activityStale
-      ? { available: false, reason: stale?.reason ?? '' }
-      : memberRows
-      ? {
-          available: true,
-          data: {
-            rows: memberRows,
-            total: managerHealth?.totalManagers ?? memberRows.length,
-            inactive: managerHealth?.inactiveCount ?? 0,
-            atRisk: managerHealth?.atRiskCount ?? 0,
-          },
-        }
-      : { available: false, reason: 'Manager activity couldn’t be read just now.' },
+    members: activityStale ? { available: false, reason: stale?.reason ?? '' } : memberActivity,
     calendar: { ...calendar, ics },
     areas: buildLeagueAreas(hubLeague),
     workflows: buildWorkflows(hubLeague),
