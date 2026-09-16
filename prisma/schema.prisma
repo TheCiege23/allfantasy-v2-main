@@ -1765,6 +1765,39 @@ model AiSavedRecommendation {
   @@map("ai_saved_recommendations")
 }
 
+/// Advice Chimmy GAVE a user — only what was said, never the outcome (that is resolved from
+/// `league_player_weekly_scores` / `dw_transaction_facts`). Applied to production 2026-09-16 from
+/// `prisma/migrations/20260914230000_chimmy_advice`.
+///
+/// ⚠ The writer stays raw SQL (`lib/chimmy-advice/adviceStore.ts`): its INSERT … ON CONFLICT
+/// refreshes `given_at` in one atomic statement. This model exists so `schema.prisma` matches
+/// the table — without it the drift guard reads the live table as a pending DROP.
+///
+/// ⚠ INDEX NAMES ARE MAPPED, NOT DEFAULTED. The SQL was written before the model; Prisma's
+/// generated names differ, and a mismatch is drift the guard reports as a rebuild.
+model ChimmyAdvice {
+  id            String   @id
+  userId        String   @map("user_id")
+  leagueId      String   @map("league_id")
+  sport         String   @db.VarChar(16)
+  season        Int
+  week          Int
+  adviceType    String   @map("advice_type") @db.VarChar(24)
+  surface       String   @db.VarChar(40)
+  recPlayerKey  String   @map("rec_player_key") @db.VarChar(128)
+  recName       String   @map("rec_name")
+  /// '' (not NULL) for an add, so the unique index still dedupes it.
+  altPlayerKey  String   @default("") @map("alt_player_key") @db.VarChar(128)
+  altName       String?  @map("alt_name")
+  slot          String?  @db.VarChar(16)
+  confidencePct Int?     @map("confidence_pct")
+  givenAt       DateTime @default(now()) @map("given_at")
+
+  @@unique([userId, leagueId, season, week, adviceType, recPlayerKey, altPlayerKey], map: "chimmy_advice_user_league_week_type_rec_alt_key")
+  @@index([userId, givenAt(sort: Desc)], map: "chimmy_advice_user_id_given_at_idx")
+  @@map("chimmy_advice")
+}
+
 model AIUserFeedback {
   id            String   @id @default(uuid())
   userId        String
