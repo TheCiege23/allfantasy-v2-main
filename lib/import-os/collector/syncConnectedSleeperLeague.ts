@@ -29,6 +29,7 @@ import { isInLeagueGoneBackoff, LEAGUE_GONE_RECHECK_MS } from './leagueGone'
 import { createPrismaSleeperSyncStore } from './prismaSyncStore'
 import { createAutomationSyncLock } from './automationSyncLock'
 import { ensureMatchupsCached } from '@/lib/rankings-engine/sleeper-matchup-cache'
+import { invalidateLeagueStandings } from '@/lib/core-app/leagueStandingsSummary'
 import { ingestSleeperPlayerScoresForWeek } from '@/lib/sleeper/sync/ingestSleeperPlayerScores'
 import { sleeperScoreTargetWeeks } from '@/lib/sleeper/sync/sleeperScoreTargetWeeks'
 
@@ -371,6 +372,27 @@ export async function syncConnectedLeague(
         )
       },
     )
+
+    /*
+     * ⚠ THE ROWS THE STANDINGS BOARD IS BUILT FROM HAVE JUST MOVED, SO DROP THE CACHED BOARDS.
+     *
+     * `lib/core-app/leagueStandingsSummary.ts` caches `/core/standings` keyed on the PLATFORM league
+     * id — the same id `ensureMatchupsCached` just wrote against, and the only one in scope here.
+     * That is not a coincidence; it is why the cache is keyed that way. `League.platformLeagueId`
+     * has no standalone index, so resolving our own UUID here would be an unindexed scan on a path
+     * that runs once per league per sync.
+     *
+     * ⚠ THIS IS A LATENCY OPTIMISATION, NOT A CORRECTNESS REQUIREMENT, AND IT MUST STAY THAT WAY.
+     * The summary is read-through with a two-minute TTL, so the worst a skipped invalidation costs
+     * is one TTL of staleness on a board that renders its own age. It is awaited only because it is
+     * two cheap deletes; it swallows its own failures and can never fail the sync above it, which
+     * has already done the real work.
+     *
+     * ⚠ AND IT RUNS EVEN WHEN `ensureMatchupsCached` REJECTED, deliberately: that call deletes stale
+     * weeks BEFORE refetching them, so a failure partway through still leaves the table changed.
+     * Skipping the sweep on error is how a board survives pointing at rows that no longer exist.
+     */
+    await invalidateLeagueStandings(connection.externalLeagueId)
 
     /*
      * Per-player weekly scores for the live weeks. `LeaguePlayerWeeklyScore`

@@ -29,6 +29,15 @@ export type DurableCacheTier = {
   read: (key: string) => Promise<Fresh<unknown> | null>
   write: (key: string, entry: Fresh<unknown>) => Promise<void>
   remove?: (key: string) => Promise<void>
+  /**
+   * Optional bounded prefix sweep. A tier may omit it — its entries then expire on their own TTL,
+   * which is correct because a summary is read-through.
+   *
+   * ⚠ ONLY EVER CALLED WITH A PREFIX THAT NAMES ONE LEAGUE (see `invalidateScreenForLeague`). A
+   * screen-wide prefix here would be an unbounded DELETE issued from whatever path happened to
+   * write a row.
+   */
+  removePrefix?: (prefix: string) => Promise<void>
 }
 
 export type LayeredCacheOptions<T> = {

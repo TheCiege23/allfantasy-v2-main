@@ -3,6 +3,7 @@ import { __resetLayeredCacheForTests } from '@/lib/sports-os/layeredCache'
 import {
   __resetSummaryRegistryForTests,
   invalidateScreen,
+  invalidateScreenForLeague,
   invalidateScreenSummary,
   readScreenSummary,
   registerScreenSummary,
@@ -22,11 +23,11 @@ describe('sports-os summaries', () => {
     // Two callers writing the same scope with the keys in a different order must land on ONE entry;
     // iterating the object would give them two and halve the hit rate silently.
     expect(scopeKey({ leagueId: 'l1', userId: 'u1' })).toBe(scopeKey({ userId: 'u1', leagueId: 'l1' }))
-    expect(scopeKey({ leagueId: 'l1', userId: 'u1' })).toBe('l=l1&u=u1')
+    expect(scopeKey({ leagueId: 'l1', userId: 'u1' })).toBe('l=l1&u=u1&')
     expect(scopeKey({})).toBe('global')
     expect(scopeKey({ leagueId: null, userId: undefined })).toBe('global')
-    expect(scopeKey({ sport: 'NFL' })).toBe('sp=nfl')
-    expect(scopeKey({ period: 3 })).toBe('p=3')
+    expect(scopeKey({ sport: 'NFL' })).toBe('sp=nfl&')
+    expect(scopeKey({ period: 3 })).toBe('p=3&')
   })
 
   it('drops an unbounded scope value rather than keying a cache on it', () => {
@@ -84,6 +85,59 @@ describe('sports-os summaries', () => {
 
     expect(invalidateScreen('standings')).toBe(2)
     expect((await readScreenSummary('portfolio', { leagueId: 'l1' })).source).toBe('cache')
+  })
+
+  it('emits leagueId FIRST and terminates every field — the two facts the league sweep rests on', () => {
+    // 🛑 THIS TEST EXISTS TO FAIL IF SOMEONE REORDERS scopeKey. `summaryLeaguePrefix` builds
+    // `…l=<id>&` and sweeps by prefix; if leagueId stopped being first, or the trailing `&` went
+    // away, the sweep would quietly stop matching and standings would serve stale with nothing red.
+    expect(scopeKey({ leagueId: 'lg1', userId: 'u1', seasonId: '2026' }).startsWith('l=lg1&')).toBe(true)
+
+    // The terminator is what stops `lg1` matching `lg10`. Without it this is a cross-league wipe.
+    expect(scopeKey({ leagueId: 'lg10', userId: 'u1' }).startsWith('l=lg1&')).toBe(false)
+  })
+
+  it('sweeps one league across users and seasons, and leaves neighbouring leagues alone', async () => {
+    registerScreenSummary({ screen: 'standings', version: 1, ttlMs: 600_000, build: async () => 'board', invalidatedBy: [] })
+
+    await readScreenSummary('standings', { leagueId: 'lg1', userId: 'u1', seasonId: '2026' })
+    await readScreenSummary('standings', { leagueId: 'lg1', userId: 'u2', seasonId: '2026' })
+    await readScreenSummary('standings', { leagueId: 'lg1', userId: 'u1', seasonId: '2025' })
+    await readScreenSummary('standings', { leagueId: 'lg10', userId: 'u1', seasonId: '2026' })
+
+    // Three entries for lg1 (two members, two seasons) — and NOT the lg10 entry.
+    expect(await invalidateScreenForLeague('standings', 'lg1')).toBe(3)
+    expect((await readScreenSummary('standings', { leagueId: 'lg10', userId: 'u1', seasonId: '2026' })).source).toBe('cache')
+  })
+
+  it('passes a bounded, league-scoped prefix to the durable tier', async () => {
+    registerScreenSummary({ screen: 'standings', version: 2, ttlMs: 600_000, build: async () => 'x', invalidatedBy: [] })
+    const removePrefix = vi.fn(async () => undefined)
+    const durable = { read: async () => null, write: async () => undefined, removePrefix }
+
+    await invalidateScreenForLeague('standings', 'lg1', durable)
+
+    // Version in the prefix, league in the prefix, terminated. A screen-wide prefix here would be
+    // an unbounded DELETE issued from a sync path.
+    expect(removePrefix).toHaveBeenCalledWith('sos:sum:standings:v2:l=lg1&')
+  })
+
+  it('never throws when the durable sweep fails', async () => {
+    // A failed invalidation costs one TTL of staleness on a labelled board. Failing the sync that
+    // triggered it would be strictly worse.
+    registerScreenSummary({ screen: 'standings', version: 1, ttlMs: 600_000, build: async () => 'x', invalidatedBy: [] })
+    const durable = {
+      read: async () => null,
+      write: async () => undefined,
+      removePrefix: async () => { throw new Error('db down') },
+    }
+    await expect(invalidateScreenForLeague('standings', 'lg1', durable)).resolves.toBe(0)
+  })
+
+  it('is a no-op for an unregistered screen or a blank league id', async () => {
+    expect(await invalidateScreenForLeague('nope', 'lg1')).toBe(0)
+    registerScreenSummary({ screen: 'standings', version: 1, ttlMs: 1, build: async () => 1, invalidatedBy: [] })
+    expect(await invalidateScreenForLeague('standings', '')).toBe(0)
   })
 
   it('throws on an unregistered screen instead of rendering nothing', async () => {

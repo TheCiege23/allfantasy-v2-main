@@ -137,6 +137,8 @@ import StandingsBoard from '@/components/core-app/boards/StandingsBoard'
 import PickALeague from '@/components/core-app/PickALeague'
 import LeagueTabs from '@/components/core-app/LeagueTabs'
 import { getLeagueStandings } from '@/lib/core-app/leagueStandings'
+import { readLeagueStandingsSummary } from '@/lib/core-app/leagueStandingsSummary'
+import { isEnabled, DEFAULT_ROLLOUTS } from '@/lib/sports-os/rollout'
 import LeagueSync from '@/components/core-app/screens/LeagueSync'
 import { getLeagueSync } from '@/lib/core-app/leagueSync'
 import NotificationsCenter from '@/components/core-app/screens/NotificationsCenter'
@@ -1812,9 +1814,35 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
       ? await getLeagueSync(selectedLeagueId, userId).catch(() => null)
       : null
 
+  /*
+   * ── Sports OS point 4 + 10: the first screen served from a precomputed summary ──
+   *
+   * `getLeagueStandings` reads every `WeeklyMatchup` row the league has and re-derives the board on
+   * every visit, for every member. `readLeagueStandingsSummary` is the same function behind
+   * `lib/sports-os/summaries.ts` — read-through, so a miss costs one rebuild and never a blank
+   * board, and the envelope it returns carries the timestamp the screen labels it with.
+   *
+   * ⚠ BEHIND A ROLLOUT, AND THE FALLBACK IS THE UNCHANGED CALL. Off-cohort users take exactly the
+   * path they took before this shipped, so widening the flag is the only thing that changes
+   * behaviour and narrowing it is a complete rollback. `userId` is the bucket subject, so a user
+   * does not flip cohort between two loads of the same screen.
+   *
+   * ⚠ `.catch(() => null)` IS KEPT ON BOTH ARMS. The screen already distinguishes a read failure
+   * from an unpicked league, and a summary rebuild can fail for exactly the reasons the direct read
+   * could. Letting it reject here would replace that message with a Suspense error boundary.
+   */
+  const standingsOnSummary = isEnabled('sports-os.screen-summaries', userId, DEFAULT_ROLLOUTS)
+
+  const standingsFresh =
+    activeKey === 'standings' && selectedLeagueId && standingsOnSummary
+      ? await readLeagueStandingsSummary(selectedLeagueId, userId).catch(() => null)
+      : null
+
   const standings =
     activeKey === 'standings' && selectedLeagueId
-      ? await getLeagueStandings(selectedLeagueId, userId).catch(() => null)
+      ? standingsOnSummary
+        ? (standingsFresh?.data ?? null)
+        : await getLeagueStandings(selectedLeagueId, userId).catch(() => null)
       : null
 
   /*

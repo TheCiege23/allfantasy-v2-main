@@ -67,6 +67,11 @@ export function registeredScreens(): string[] {
  * ⚠ FIELD ORDER IS FIXED, NOT `Object.keys` ORDER. Two callers passing the same scope with the keys
  * written in a different order must land on ONE cache entry; iterating the object would give them
  * two, halving the hit rate in a way nothing would ever report.
+ *
+ * ⚠ EVERY FIELD ENDS WITH `&`, INCLUDING THE LAST ONE, AND THAT TRAILING SEPARATOR IS LOAD-BEARING.
+ * It is what makes `summaryLeaguePrefix` safe: without it, the prefix `l=abc1` also matches
+ * `l=abc10`, so invalidating one league would silently sweep another whose id merely starts the
+ * same way. `scopeKeyStartsWithLeague` in the tests pins this.
  */
 export function scopeKey(scope: SummaryScope): string {
   const parts: string[] = []
@@ -74,14 +79,14 @@ export function scopeKey(scope: SummaryScope): string {
     if (value === null || value === undefined) return
     const raw = String(value).trim()
     if (!raw || raw.length > 64) return
-    parts.push(`${label}=${raw}`)
+    parts.push(`${label}=${raw}&`)
   }
   push('l', scope.leagueId)
   push('u', scope.userId)
   push('s', scope.seasonId)
   push('p', scope.period)
   push('sp', scope.sport ? String(scope.sport).toLowerCase() : null)
-  return parts.length ? parts.join('&') : 'global'
+  return parts.length ? parts.join('') : 'global'
 }
 
 /** `sos:sum:<screen>:v<version>:<scope>`. The prefix is what `invalidateScreenSummary` sweeps. */
@@ -147,6 +152,51 @@ export function invalidateScreen(screen: string): number {
   const definition = registry.get(screen)
   if (!definition) return 0
   return invalidatePrefix(summaryKeyPrefix(screen, definition.version))
+}
+
+/**
+ * The key prefix covering EVERY scope of one screen's summary for one league — all users, all
+ * seasons, all periods.
+ *
+ * ⚠ THIS WORKS ONLY BECAUSE `leagueId` IS THE FIRST FIELD `scopeKey` EMITS, and only because every
+ * field carries a trailing `&`. Both are asserted in the tests rather than left as a comment,
+ * because a reordering would not fail anything else: the sweep would simply stop matching and the
+ * cache would go on serving stale standings with nothing red.
+ */
+export function summaryLeaguePrefix(screen: string, version: number, leagueId: string): string {
+  return `${summaryKeyPrefix(screen, version)}l=${leagueId}&`
+}
+
+/**
+ * Drop every scope of one screen's summary for one league — the invalidation a writer performs when
+ * it has just changed that league's underlying rows.
+ *
+ * ⚠ BOUNDED, UNLIKE `invalidateScreen`. This is why the durable tier CAN be swept here: the key
+ * space is one league's members × seasons, not the whole table. `removePrefix` is optional on the
+ * tier, and a tier without it simply keeps its entries until their own TTL — the read stays correct
+ * either way, because a summary is read-through.
+ *
+ * Returns the number of MEMORY keys dropped. The durable count is not reported: the tier may not
+ * support a prefix sweep at all, and a caller that treated 0 as failure would be wrong.
+ */
+export async function invalidateScreenForLeague(
+  screen: string,
+  leagueId: string,
+  durable?: DurableCacheTier | null,
+): Promise<number> {
+  const definition = registry.get(screen)
+  if (!definition || !leagueId) return 0
+  const prefix = summaryLeaguePrefix(screen, definition.version, leagueId)
+  const removed = invalidatePrefix(prefix)
+  if (durable?.removePrefix) {
+    try {
+      await durable.removePrefix(prefix)
+    } catch {
+      // An invalidation that throws would fail the sync that triggered it. Memory is already
+      // clear and the durable entries still carry their own TTL.
+    }
+  }
+  return removed
 }
 
 /** Which registered screens an event type makes wrong. */
