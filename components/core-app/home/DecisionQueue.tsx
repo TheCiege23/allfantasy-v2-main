@@ -103,7 +103,10 @@ export function DecisionQueue({
       {total === 0 ? (
         <div className="af3a-card af3a-empty">
           <h3>Nothing is waiting on you.</h3>
-          <p>No empty slots, injured starters, drafts or stale leagues in {scopeLabel.toLowerCase()} we can read.</p>
+          <p>
+            No empty slots, injured starters, drafts or stale leagues
+            {scopeLabel === 'All leagues' ? ' in any league' : <> in your <b>{scopeLabel}</b></>} that we can read.
+          </p>
         </div>
       ) : (
         <>

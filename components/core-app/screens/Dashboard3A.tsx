@@ -1007,21 +1007,22 @@ export function Dash3ARivals({
  */
 export function Dash3APortfolioChart({
   platformCounts,
+  subtitle = 'Every connected league in Core',
   freshness = null,
 }: {
   platformCounts: PlatformCount[]
+  /** Overridden on a filtered home, where the counts are only the leagues in view. */
+  subtitle?: string
   freshness?: React.ReactNode
 }) {
   return (
-        <>
-          <WorkbookBarChart
-            title="League portfolio by platform"
-            subtitle="Every connected league in Core"
-            valueLabel="Leagues"
-            data={platformCounts}
-          />
-          {freshness}
-        </>
+        <WorkbookBarChart
+          title="League portfolio by platform"
+          subtitle={subtitle}
+          valueLabel="Leagues"
+          data={platformCounts}
+          footer={freshness}
+        />
   )
 }
 

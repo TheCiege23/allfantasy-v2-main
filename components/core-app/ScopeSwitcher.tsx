@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { useEffect, useId, useMemo, useRef, useState } from 'react'
+import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useOverlayContainment } from '@/components/core-app/useOverlayContainment'
 import {
   FAVORITES_COOKIE,
@@ -36,6 +36,22 @@ import '@/components/core-app/af-scope-switcher.css'
  * says so, rather than letting someone star leagues on a phone and wonder where they went.
  */
 
+/**
+ * "Show all leagues" outside the switcher — the filtered home's note and its empty panel.
+ *
+ * ⚠ IT MUST CLEAR THE REMEMBERED FILTER, NOT ONLY NAVIGATE. `?scope=all` shows every league for
+ * that one render, but the session cookie still names the old filter, so the very next tap on Home
+ * (a bare `/core`) put it straight back. A server component cannot write the cookie, so the link
+ * is a client component that does, on the click.
+ */
+export function ScopeResetLink({ children, className }: { children: ReactNode; className?: string }) {
+  return (
+    <Link href={`/core?${HOME_SCOPE_PARAM}=all`} className={className} onClick={() => writeCookie(SCOPE_COOKIE, null, null)}>
+      {children}
+    </Link>
+  )
+}
+
 export type ScopeSwitcherLeague = { id: string; name: string; platform: string; sport: string }
 
 type Props = {
@@ -46,7 +62,10 @@ type Props = {
   label: string
   selectedLeagueId: string | null
   favoriteIds: string[]
-  /** Whether the current screen can be shown for a single league (it carries `?league=`). */
+  /**
+   * Whether the current screen is one of the in-league tabs (lib/core-app/leagueScreens.ts). Only
+   * then does picking a league keep you on it; a cross-league screen sends you to the league's home.
+   */
   leagueScreen: boolean
 }
 
@@ -193,13 +212,14 @@ export function ScopeSwitcher({ leagues, scopeValue, label, selectedLeagueId, fa
                     <div className="af-scope-chips">
                       {inGroup.map((option) => {
                         const disabled = option.group === 'favorites' && option.count === 0
+                        const key = option.value ?? 'all'
                         return disabled ? (
-                          <span key={option.label} className="af-scope-chip" aria-disabled="true" title="Star a league below to use this">
+                          <span key={key} className="af-scope-chip" aria-disabled="true" title="Star a league below to use this">
                             ★ Favorites <b>0</b>
                           </span>
                         ) : (
                           <Link
-                            key={option.label}
+                            key={key}
                             href={filterHref(option.value)}
                             className="af-scope-chip"
                             aria-current={isCurrent(option) ? 'true' : undefined}

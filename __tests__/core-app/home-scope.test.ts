@@ -79,10 +79,27 @@ describe('scopeOptions / scopeLabel', () => {
       ['NBA', 1],
     ])
     expect(options.filter((o) => o.group === 'platform').map((o) => o.label)).toEqual(['Sleeper', 'ESPN', 'Yahoo'])
+    // Every option has a distinct value — the switcher keys its chips by it.
+    expect(new Set(options.map((o) => o.value)).size).toBe(options.length)
 
     const oneSport = scopeOptions([LEAGUES[0], LEAGUES[2]], new Set())
     expect(oneSport.some((o) => o.group === 'sport')).toBe(false)
     expect(oneSport.some((o) => o.group === 'platform')).toBe(false)
+  })
+
+  it('puts every native spelling in ONE platform bucket, labelled once', () => {
+    const natives = [
+      { id: 'n1', sport: 'NFL', platform: 'manual' },
+      { id: 'n2', sport: 'NFL', platform: 'allfantasy' },
+      { id: 'n3', sport: 'NFL', platform: 'AF' },
+      { id: 's1', sport: 'NFL', platform: 'sleeper' },
+    ]
+    const platforms = scopeOptions(natives, new Set()).filter((o) => o.group === 'platform')
+    expect(platforms.map((o) => [o.value, o.label, o.count])).toEqual([
+      ['platform:allfantasy', 'AllFantasy', 3],
+      ['platform:sleeper', 'Sleeper', 1],
+    ])
+    expect(applyHomeScope(natives, parseHomeScope('platform:allfantasy'), new Set()).map((l) => l.id)).toEqual(['n1', 'n2', 'n3'])
   })
 
   it('always names the scope — a selected league wins, and nothing is ever blank', () => {

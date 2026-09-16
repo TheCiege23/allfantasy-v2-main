@@ -471,6 +471,17 @@ describe('/core home cards stream independently', () => {
     expect(ids(badges.leagues).sort(), 'the badges count every league, not the scope').toEqual(['L1', 'L2'])
   })
 
+  it('reads nothing at all for a scope that matches no league', { timeout: 180_000 }, async () => {
+    // LEAGUE is NFL; nothing is NBA.
+    const bodyTree = await render(await screenBody([], { scope: 'sport:NBA' }, '|'))
+    await tick()
+    for (const name of ['dash34', 'tradeWeek', 'trades', 'week', 'schedule', 'career', 'exposure', 'rivals', 'following', 'receipts', 'routineFacts', 'strip', 'plays', 'regularSeason', 'drafts', 'brief', 'userOs', 'matchup']) {
+      expect(called(name), `${name} ran for an empty scope`).toBe(0)
+    }
+    const home = findAll(bodyTree, (el) => typeof el.props?.loads === 'object' && el.props?.resetKey !== undefined)[0]
+    expect((home.props.scope as { count: number; scoped: boolean }).count).toBe(0)
+  })
+
   // The positive control for the case above: unscoped, the same reads see every league.
   it('reads every league, moves the visit and refreshes the lineup cache when the home is not scoped', { timeout: 180_000 }, async () => {
     g.account.leagues = [LEAGUE, { ...LEAGUE, id: 'L2', name: 'Hoops', platform: 'espn', sport: 'NBA', platformLeagueId: 'p2' }]

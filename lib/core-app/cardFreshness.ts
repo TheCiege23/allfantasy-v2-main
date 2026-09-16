@@ -1,4 +1,5 @@
 import { isStale, type DataClass } from '@/lib/sports-data/freshnessPolicy'
+import { normalizeSourcePlatform } from '@/lib/league-links/sourceLinkResolver'
 
 /**
  * "When did the information behind this card last change?" — one shape for every /core home card.
@@ -65,6 +66,34 @@ export function freshnessStamp(
   }
 }
 
+/** The oldest valid instant in a list — null when none parses. */
+export function earliestInstant(values: Iterable<Date | string | null | undefined>): Date | null {
+  let earliest: Date | null = null
+  for (const value of values) {
+    const date = toDate(value)
+    if (date && (earliest == null || date < earliest)) earliest = date
+  }
+  return earliest
+}
+
+/**
+ * What the "League data" stamp needs from a set of leagues: the oldest sync among the leagues that
+ * CAN sync, and how many of those never have. AllFantasy-native leagues have no upstream and are
+ * left out of both — "never synced" is not a fault for them.
+ */
+export function leagueDataFreshness(
+  leagues: ReadonlyArray<{ platform?: string | null; lastSyncedAt?: Date | string | null }>,
+): { oldestAt: string | null; neverSynced: number; syncable: number } {
+  const syncable = leagues.filter((l) => normalizeSourcePlatform(l.platform) != null)
+  const synced = syncable.map((l) => toDate(l.lastSyncedAt)).filter((d): d is Date => d != null)
+  const oldest = earliestInstant(synced)
+  return {
+    oldestAt: oldest ? oldest.toISOString() : null,
+    neverSynced: syncable.length - synced.length,
+    syncable: syncable.length,
+  }
+}
+
 /** The newest valid instant in a list — null when none parses. */
 export function latestInstant(values: Iterable<Date | string | null | undefined>): Date | null {
   let latest: Date | null = null
@@ -76,16 +105,29 @@ export function latestInstant(values: Iterable<Date | string | null | undefined>
 }
 
 /**
- * "just now" / "4m ago" / "3h ago" / "2d ago". Shared by the server label and the client ticker so
- * the two never render the same instant differently. A time in the future (clock skew) reads as
- * "just now" rather than as a negative age.
+ * "just now" / "4 min ago" / "3h ago" / "2d ago" / "3w ago". Shared by the server label and the
+ * client ticker so the two never render the same instant differently. A time in the future (clock
+ * skew) reads as "just now" rather than as a negative age.
+ *
+ * ⚠ THE SAME WORDS AS `formatAgo` IN lib/core-app/dash34.ts, AND A TEST HOLDS THEM TOGETHER. The
+ * injury strip prints "reported 30 min ago" on each row from that function; a footer on the same
+ * strip saying "updated 30m ago" is one fact in two spellings. That function cannot be imported
+ * here — its module reads the database, and this one ships to the browser.
  */
 export function relativeAge(asOfMs: number, nowMs: number): string {
-  const seconds = Math.max(0, Math.floor((nowMs - asOfMs) / 1000))
-  if (seconds < 60) return 'just now'
-  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`
-  if (seconds < 86_400) return `${Math.floor(seconds / 3600)}h ago`
-  return `${Math.floor(seconds / 86_400)}d ago`
+  const ms = nowMs - asOfMs
+  if (ms < 60_000) return 'just now'
+  const mins = Math.floor(ms / 60_000)
+  if (mins < 60) return `${mins} min ago`
+  const hours = Math.floor(mins / 60)
+  if (hours < 24) return `${hours}h ago`
+  const days = Math.floor(hours / 24)
+  if (days < 7) return `${days}d ago`
+  const weeks = Math.floor(days / 7)
+  if (weeks < 5) return `${weeks}w ago`
+  const months = Math.floor(days / 30)
+  if (months < 12) return `${months}mo ago`
+  return `${Math.floor(days / 365)}y ago`
 }
 
 function toDate(value: Date | string | null | undefined): Date | null {
