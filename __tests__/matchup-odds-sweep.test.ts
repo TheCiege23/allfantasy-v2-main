@@ -3,7 +3,7 @@
  * The pre-game odds snapshot (weekly upsets, 2026-09-14): captured only while a week is entirely
  * unplayed, once, from the week board's own model — and dormant until its parked migration exists.
  */
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const h = vi.hoisted(() => ({ aggregate: vi.fn(), groupBy: vi.fn(), findMany: vi.fn(), queryRaw: vi.fn(), executeRaw: vi.fn() }))
 
@@ -20,6 +20,27 @@ import { inPlayWindow, runMatchupOddsSweep, ODDS_MODEL } from '@/lib/core-app/ma
 import { winProbabilityOf } from '@/lib/core-app/weekBoard'
 
 const WED = Date.parse('2026-09-16T15:00:00Z') // Wednesday 11:00 ET
+
+/*
+ * 🛑 PIN THE SYSTEM CLOCK TO `WED`, OR THIS SUITE IS A TIME BOMB.
+ *
+ * The sweep builds its deadline from the INJECTED `now()` — `now() + budget.remainingMs()` — and
+ * hands it to `remainingFor`, which compares it against the REAL `Date.now()`. In production those
+ * are the same clock, so the seam is invisible. In a test that injects a fixed instant they diverge,
+ * and once the real clock passes `WED + remainingMs` every unit is skippedForTime and eight tests go
+ * red at once, on a file nobody touched. Measured: this suite passed from 2026-09-14 until
+ * 2026-09-16T15:03:19Z and failed on every run after it.
+ */
+const useWedClock = () => {
+  beforeEach(() => {
+    // Date only: faking setTimeout/setInterval here would hang unrelated async work in the sweep.
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(WED)
+  })
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+}
 const budget = (exhausted = false, remaining = 200_000) => ({ exhausted: () => exhausted, elapsedMs: () => 0, remainingMs: () => remaining })
 const MISSING = Object.assign(new Error('relation "matchup_odds_snapshots" does not exist'), { code: 'P2010', meta: { code: '42P01' } })
 
@@ -67,6 +88,8 @@ describe('inPlayWindow', () => {
 })
 
 describe('runMatchupOddsSweep', () => {
+  useWedClock()
+
   it('🛑 snapshots the earliest unplayed week: both sides of each projected matchup, the board’s own probability', async () => {
     db()
     const out = await runMatchupOddsSweep({ budget: budget(), now: () => WED })
