@@ -137,6 +137,7 @@ import {
 } from '@/lib/chimmy-personalization'
 import { recordChimmyQualityEvent } from '@/lib/chimmy-quality/ChimmyQualityAnalytics'
 import { getAiMemory } from '@/lib/ai-memory/ai-memory-store'
+import { COACHING_PROFILE_KEY, mergeCoachingProfiles } from '@/lib/chimmy-personalization/remembered'
 import {
   appendOrchestrationFooterIfMissing,
   buildOrchestrationMeta,
@@ -1948,10 +1949,20 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const chimmyOrchestrationClassification = classifyChimmyIntent(message, recentUserSnippet)
   let coachingProfileForOrchestration: Record<string, unknown> | null = null
   if (userId) {
-    coachingProfileForOrchestration = (await getAiMemory(userId, 'user_preferences', {
-      leagueId: leagueId ?? null,
-      key: 'coaching_profile',
-    })) as Record<string, unknown> | null
+    /*
+     * What the user told Chimmy everywhere, overlaid by what they told it in THIS league — and
+     * THIS league is the membership-proven one. It used to read only the row under the client's
+     * `leagueId`, so "keep it short" said with no league selected vanished once one was, and the
+     * row consulted was whichever id the request carried. Users edit both rows in Settings →
+     * Preferences (`lib/chimmy-personalization/remembered.ts`).
+     */
+    const [globalCoaching, leagueCoaching] = await Promise.all([
+      getAiMemory(userId, 'user_preferences', { leagueId: null, key: COACHING_PROFILE_KEY }),
+      leagueSnapshot
+        ? getAiMemory(userId, 'user_preferences', { leagueId: leagueSnapshot.id, key: COACHING_PROFILE_KEY })
+        : Promise.resolve(null),
+    ])
+    coachingProfileForOrchestration = mergeCoachingProfiles(globalCoaching, leagueCoaching)
   }
   const chimmyMemorySummaryLine = buildMemorySummaryLine(coachingProfileForOrchestration)
   const chimmyOrchestrationPrompt = buildOrchestrationPromptSection({
@@ -3343,7 +3354,12 @@ ${describedTradeCtx}`
         }),
         rememberChimmyUserMessageMemory({
           userId,
-          leagueId: leagueId ?? null,
+          /*
+           * The proven league, never the client's field: this row is listed BY LEAGUE NAME in
+           * Settings, so writing under an arbitrary id would plant a league the user cannot read.
+           * A declaration made with no provable league is remembered for all leagues.
+           */
+          leagueId: leagueSnapshot?.id ?? null,
           sport,
           message: message || '[image-only request]',
         }),

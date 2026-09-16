@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react"
 import ChimmyVoiceSettingsCard from "@/components/settings/ChimmyVoiceSettingsCard"
+import ChimmyPreferencesCard from "@/components/settings/ChimmyPreferencesCard"
 import { useThemeMode } from "@/components/theme/ThemeProvider"
 import { useLanguage } from "@/components/i18n/LanguageProviderClient"
 import { DEFAULT_THEME, normalizeStoredTheme, type ThemeId } from "@/lib/theme"
@@ -207,6 +208,12 @@ export function PreferencesSettingsSection({
       </div>
 
       <ChimmyVoiceSettingsCard />
+
+      {/*
+        Saves on change through its own endpoint, not through this form's submit: a preference
+        Chimmy uses on the next message should not wait for "Save preferences".
+      */}
+      <ChimmyPreferencesCard />
 
       <div className="flex flex-wrap gap-2">
         <button
