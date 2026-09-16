@@ -207,11 +207,11 @@ export function buildTradeAssetsForRoster(args: {
  * What the scan was actually able to do.
  *
  * ⚠ AN EMPTY LIST IS NOT AN ANSWER ON ITS OWN. `scanPendingSleeperTradesForLeague`
- * returns `[]` for four different situations — nothing is pending, we could not
- * work out which roster is the viewer's, Sleeper did not answer, or the league
- * was never a Sleeper league. A surface that renders all four as "no offers
- * waiting" states a fact we never established, which is exactly the failure the
- * Trades screen's `inbox.reason` was written to avoid.
+ * returns `[]` for five different situations — nothing is pending, we could not
+ * work out which roster is the viewer's, Sleeper returned no rosters at all,
+ * Sleeper did not answer, or the league was never a Sleeper league. A surface that
+ * renders them all as "no offers waiting" states a fact we never established, which
+ * is exactly the failure the Trades screen's `inbox.reason` was written to avoid.
  *
  * So the scan reports whether it ran. Callers that want to say "nothing is
  * waiting" must check `scanned` first; callers that only want the rows can keep
@@ -408,7 +408,7 @@ export async function scanPendingSleeperTrades(args: {
         const creator = tx.creator ? userById.get(tx.creator) : undefined
         const proposedByViewer = Boolean(tx.creator && String(tx.creator) === String(ownerSleeperId))
         const otherRosterId = tx.roster_ids?.find((id) => Number(id) !== userRosterId)
-        const otherOwnerId = (Array.isArray(rosters) ? (rosters as SleeperRosterRow[]) : [])
+        const otherOwnerId = rosterRows
           .find((row) => Number(row.roster_id) === Number(otherRosterId))?.owner_id
         const otherManager = otherOwnerId ? userById.get(otherOwnerId) : undefined
         const row: PendingProviderTrade = {
@@ -460,7 +460,17 @@ export async function scanPendingSleeperTrades(args: {
       weeksAnswered: weeks.length - weeksUnanswered,
     }
   } catch {
-    // Provider unavailability must never break the caller's own panel.
+    /*
+     * Provider unavailability must never break the caller's own panel.
+     *
+     * ⚠ KNOWN GAP: THE STATUS IS THROWN AWAY HERE, SO A PERMANENT 404 LOOKS LIKE A 429.
+     * `sleeperGet` puts the code in the message (`Sleeper API ${status}`), and a league id that
+     * no longer resolves — a deleted league, or a shadow/mis-import — answers 404 on every render
+     * forever. Reported as `provider`, that holds /core's trade boundary open for the life of the
+     * row, which is the harm the provider/identity split exists to prevent, reached from the other
+     * side. Not fixed here: the fix is a typed error from the cache layer, not a regex over a
+     * message, and that is its own change.
+     */
     return {
       trades: [],
       scanned: false,

@@ -27,18 +27,24 @@ function agoLabel(from: string, now: Date): string {
 }
 
 /**
- * The same elapsed time at a FINER unit, for the one job `agoLabel` cannot do: distinguishing two
- * instants that round into the same bucket. In the days bucket that bucket is 24 hours wide, so
- * "same label" and "same moment" are very different claims.
+ * How much FURTHER back one instant is than another — a duration, not a point in time.
+ *
+ * 🛑 THE TRADE ROW'S NOTE IS A GAP FOR A REASON, AND TWO ABSOLUTE LABELS WERE TRIED FIRST. Both
+ * failed the same way: any second label formatted from the same clock has to be compared against
+ * the header's, and the comparison is where the bugs live. Printing `agoLabel` of the boundary
+ * collided with the header ("since 2h ago (last 2h)"); printing it at a finer unit read SMALLER
+ * than the header in 28% of the cases it fired — measured, e.g. "since 3d ago (last 2d 12h)" for a
+ * boundary an hour FURTHER back, because `agoLabel` rounds the day division and the finer form
+ * floored it. A gap cannot do either: it is monotone in the thing it describes, it is never
+ * comparable to the header, and it needs no materiality constant to stay honest.
  */
-function fineLabel(from: string, now: Date): string {
-  const mins = Math.max(1, Math.round((now.getTime() - new Date(from).getTime()) / 60000))
+function gapLabel(fromMs: number, toMs: number): string | null {
+  const mins = Math.round((toMs - fromMs) / 60000)
+  if (mins < 1) return null
   if (mins < 60) return `${mins}m`
-  const hours = Math.floor(mins / 60)
+  const hours = Math.round(mins / 60)
   if (hours < 48) return `${hours}h`
-  const days = Math.floor(hours / 24)
-  const rem = hours - days * 24
-  return rem === 0 ? `${days}d` : `${days}d ${rem}h`
+  return `${Math.round(hours / 24)}d`
 }
 
 function whenLabel(brief: SinceLastVisitBrief, now: Date): string {
@@ -52,36 +58,22 @@ function whenLabel(brief: SinceLastVisitBrief, now: Date): string {
  * lib/core-app/sinceLastVisit), so the card would otherwise print "since 1h ago" over a trade that
  * landed five hours ago — and the rows carry no dates of their own to contradict it.
  *
- * Null in the normal case, where the two are the same instant and the header is the whole truth.
+ * Null whenever the two round to the same minute, which is the normal case: the boundary tracks
+ * the visit window exactly unless a read came back blind.
  */
-function tradeReachLabel(brief: SinceLastVisitBrief, now: Date): string | null {
+function tradeReachLabel(brief: SinceLastVisitBrief): string | null {
   /*
    * ⚠ GUARDED AGAINST A VALUE THE TYPE SAYS CANNOT HAPPEN — in two different ways, because they
    * are two different inputs. Tests are not typechecked in this repo, so a fixture built before
    * this field existed hands over `undefined`; and a stored brief could carry a string that does
-   * not parse. Either would render "(last NaNd)" rather than nothing.
+   * not parse. Either would put NaN in the note rather than suppressing it.
    */
   if (typeof brief.tradesSinceAt !== 'string') return null
   const reach = new Date(brief.tradesSinceAt).getTime()
   if (!Number.isFinite(reach) || reach >= new Date(brief.sinceAt).getTime()) return null
-  /*
-   * ⚠ SUPPRESS ON AN IMMATERIAL GAP, NOT ON A COLLIDING LABEL — and those are not the same test.
-   *
-   * `agoLabel` rounds to one unit, so a boundary trailing by minutes printed "since 2h ago" above
-   * "(last 2h)", which reads as a typo. Suppressing whenever the two LABELS matched fixed that and
-   * introduced the opposite fault: measured across the 7-day range, two instants up to 1439
-   * minutes apart collide in the days bucket. The card then said nothing at all while the trade
-   * line genuinely reached a day further back than the header — the exact thing this function
-   * exists to prevent, moved into the bucket where the gap is largest.
-   *
-   * So: below an hour the two are the same story and the note is noise. Above it, say so — at a
-   * finer unit when the coarse labels would collide.
-   */
-  const gapMs = new Date(brief.sinceAt).getTime() - reach
-  if (gapMs < 60 * 60_000) return null
-  const coarse = agoLabel(brief.tradesSinceAt, now)
-  const label = coarse === agoLabel(brief.sinceAt, now) ? fineLabel(brief.tradesSinceAt, now) : coarse
-  return `last ${label}`
+  // No `now`: a gap between two stored instants does not depend on when it is rendered.
+  const gap = gapLabel(reach, new Date(brief.sinceAt).getTime())
+  return gap && `reaches ${gap} further back`
 }
 
 function statusText(status: string | null): string {
@@ -104,7 +96,7 @@ function resultText(s: BriefStanding): string {
 export function DashSinceLastVisit({ brief, now }: { brief: SinceLastVisitBrief | null; now: Date }) {
   if (!brief) return null
   const { trades, injuries, standings, alerts } = brief
-  const tradeReach = tradeReachLabel(brief, now)
+  const tradeReach = tradeReachLabel(brief)
 
   return (
     <section className="af-core af-brief" aria-label="Since your last visit">

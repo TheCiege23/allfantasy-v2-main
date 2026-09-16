@@ -68,7 +68,7 @@ beforeEach(() => {
   // By default nothing is priced, so no verdict is published.
   valueFindMany.mockResolvedValue([])
   scanPendingSleeperTrades.mockResolvedValue({
-    trades: [], completedTrades: [], scanned: true, reason: null, weeksUnanswered: 0,
+    trades: [], completedTrades: [], scanned: true, reason: null, unscannedKind: null, weeksUnanswered: 0,
   })
 })
 
@@ -261,7 +261,7 @@ describe('getRecentTrades', () => {
               trades: [offer('in-1'), offer('in-2'), offer('sent', { proposedByViewer: true })],
               completedTrades: [], scanned: true, reason: null, weeksUnanswered: 0,
             }
-          : { trades: [], completedTrades: [], scanned: false, reason: 'no roster', weeksUnanswered: 0 },
+          : { trades: [], completedTrades: [], scanned: false, reason: 'no roster', unscannedKind: 'identity', weeksUnanswered: 0 },
       )
       const onPendingOffers = vi.fn()
       await getRecentTrades(TWO, NOW, 3, { ownerSleeperId: 'owner-1', currentWeek: 2, onPendingOffers })
@@ -320,9 +320,18 @@ describe('getRecentTrades', () => {
         expect(onIncomplete).toHaveBeenCalledWith('grade-cache-unreadable')
       })
 
+      /*
+       * ⚠ THE FIXTURE MUST CARRY A KIND, and the reason it must is worth stating: this asserted
+       * `onIncomplete` WAS called, and with no `unscannedKind` it passed only because
+       * `undefined !== 'identity'`. So it pinned the ABSENCE of a field the type now requires,
+       * four tests above another that asserts the opposite for the same `reason` string. Tests
+       * are not typechecked here, so nothing else would have caught it.
+       */
       it('reports a league whose scan never answered', async () => {
         scanPendingSleeperTrades.mockImplementation(async ({ platformLeagueId }: { platformLeagueId: string }) =>
-          platformLeagueId === '111' ? answered : { ...answered, scanned: false, reason: 'no roster' },
+          platformLeagueId === '111'
+            ? answered
+            : { ...answered, scanned: false, reason: 'Sleeper did not answer', unscannedKind: 'provider' },
         )
         const onIncomplete = vi.fn()
         await getRecentTrades(TWO, NOW, 3, { ownerSleeperId: 'owner-1', currentWeek: 2, onIncomplete })

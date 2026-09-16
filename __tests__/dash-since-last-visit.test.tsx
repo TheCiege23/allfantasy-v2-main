@@ -104,7 +104,7 @@ describe('DashSinceLastVisit', () => {
    * its boundary held further back, the trade rows reach past "since Nh ago" — and they carry no
    * dates of their own, so without this the card states a window its own content does not obey.
    */
-  it('says how far the trade line reaches when its boundary was held back', () => {
+  it('says how much further the trade line reaches when its boundary was held back', () => {
     render(
       <DashSinceLastVisit
         brief={brief({ tradesSinceAt: new Date(NOW.getTime() - 26 * 3_600_000).toISOString() })}
@@ -112,22 +112,24 @@ describe('DashSinceLastVisit', () => {
       />,
     )
     expect(screen.getByText('since 5h ago')).toBeTruthy()
-    expect(screen.getByText(/\(last 26h\)/)).toBeTruthy()
+    // The GAP (26h − 5h), not a second absolute label that would have to agree with the header.
+    expect(screen.getByText(/\(reaches 21h further back\)/)).toBeTruthy()
   })
 
   /* And stays quiet in the normal case, where the two are the same instant. */
   it('adds no reach note when the trade line matches the visit window', () => {
     render(<DashSinceLastVisit brief={brief()} now={NOW} />)
-    expect(screen.queryByText(/\(last /)).toBeNull()
+    expect(screen.queryByText(/reaches /)).toBeNull()
   })
 
   /*
-   * 🛑 THE DAYS BUCKET IS 24 HOURS WIDE, so "the two labels match" is not "the two are the same
-   * moment". Suppressing on a matching label — the first fix for the noise case below — hid a
-   * genuine day of held reach, which is this function's whole purpose, in the bucket where the
-   * gap can be largest. Measured: up to 1439 minutes apart still render the same `Nd`.
+   * 🛑 THE DAYS BUCKET IS 24 HOURS WIDE, so two instants that render the same `Nd` can be a day
+   * apart. A note built from a second ABSOLUTE label had to be compared against the header's, and
+   * every version of that comparison was wrong in a different direction: suppressing on a match
+   * hid this case entirely, and dropping to a finer unit printed a SMALLER number than the header.
+   * A gap has nothing to compare against.
    */
-  it('still says how far the trades reach when a day of gap rounds to the same label', () => {
+  it('states a day of held reach that both timestamps round into the same label', () => {
     render(
       <DashSinceLastVisit
         brief={brief({
@@ -139,8 +141,29 @@ describe('DashSinceLastVisit', () => {
     )
     // Both timestamps round to `3d`, nearly 24 hours apart.
     expect(screen.getByText('since 3d ago')).toBeTruthy()
-    // So the note drops to a finer unit rather than colliding and saying nothing.
-    expect(screen.getByText(/\(last 3d 11h\)/)).toBeTruthy()
+    expect(screen.getByText(/\(reaches 24h further back\)/)).toBeTruthy()
+  })
+
+  /*
+   * 🛑 THE CASE THAT BROKE THE PREVIOUS FORMAT, kept as its regression test. A boundary ONE HOUR
+   * further back than a 59.5h window: both round to `3d`, and the "finer unit" form rendered
+   * "(last 2d 12h)" — a SMALLER number than the header, for a window that reaches further, because
+   * `agoLabel` rounds the day division and the finer form floored it. Measured at 28% of the cases
+   * that path fired. Any second absolute label can do this; a gap cannot.
+   */
+  it('never states a reach that reads smaller than the header', () => {
+    render(
+      <DashSinceLastVisit
+        brief={brief({
+          sinceAt: new Date(NOW.getTime() - 3570 * 60_000).toISOString(),
+          tradesSinceAt: new Date(NOW.getTime() - 3630 * 60_000).toISOString(),
+        })}
+        now={NOW}
+      />,
+    )
+    expect(screen.getByText('since 3d ago')).toBeTruthy()
+    expect(screen.getByText(/\(reaches 1h further back\)/)).toBeTruthy()
+    expect(screen.queryByText(/2d 12h/)).toBeNull()
   })
 
   /*
@@ -169,15 +192,15 @@ describe('DashSinceLastVisit', () => {
     else legacy.tradesSinceAt = value
     render(<DashSinceLastVisit brief={legacy} now={NOW} />)
     expect(screen.queryByText(/NaN/)).toBeNull()
-    expect(screen.queryByText(/\(last /)).toBeNull()
+    expect(screen.queryByText(/reaches /)).toBeNull()
   })
 
   /*
-   * ⚠ `agoLabel` rounds to one unit, so a boundary trailing the window by less than a bucket
-   * would print "since 2h ago" above "(last 2h)" — the normal case one render after a complete
-   * read, and it reads as a typo.
+   * The case that motivated the format change. A boundary trailing by minutes printed
+   * "since 2h ago (last 2h)", which reads as a typo, and suppressing it below a one-hour floor
+   * lost the information instead. A gap states the small true thing, and needs no threshold.
    */
-  it('adds no reach note when the two round to the same label', () => {
+  it('states a small gap plainly rather than duplicating the header', () => {
     render(
       <DashSinceLastVisit
         brief={brief({
@@ -188,7 +211,7 @@ describe('DashSinceLastVisit', () => {
       />,
     )
     expect(screen.getByText('since 2h ago')).toBeTruthy()
-    expect(screen.queryByText(/\(last /)).toBeNull()
+    expect(screen.getByText(/\(reaches 15m further back\)/)).toBeTruthy()
   })
 
   it('on a first visit, explains why injury and standings changes are not shown yet', () => {
