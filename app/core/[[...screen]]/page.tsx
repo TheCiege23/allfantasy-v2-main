@@ -2824,9 +2824,14 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
            * ⚠ ONLY WITH THE SHELL'S ROW FOR THIS SAME LEAGUE. The record is read by id, but a
            * mismatch here would print one league's history under another's name, so it is checked
            * rather than assumed. Without it the screen keeps its one-sentence banner.
+           *
+           * ⚠ AND ONLY FOR AN IMPORTED LEAGUE. A native one has no panel to show, so a slot would
+           * paint the skeleton and then collapse it to nothing — a layout jump for no content.
            */
           coverageSlot={
-            selectedLeagueRecord && selectedLeagueRecord.id === leagueHome.league.id ? (
+            selectedLeagueRecord &&
+            selectedLeagueRecord.id === leagueHome.league.id &&
+            isImportedPlatform(selectedLeagueRecord.platform) ? (
               <Suspense key={selectedLeagueRecord.id} fallback={<LeagueDataCoverageSkeleton />}>
                 <LeagueDataCoverageSection record={selectedLeagueRecord} />
               </Suspense>
