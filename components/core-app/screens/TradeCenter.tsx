@@ -29,6 +29,11 @@ import { projectedLetterFor, type GradeLetter } from '@/lib/trade-intel/gradeSca
 import { TradeFinderPanel } from '@/components/core-app/screens/TradeFinderPanel'
 import { TradeLeagueStrip, type StripLeague } from '@/components/core-app/screens/TradeLeagueStrip'
 import { TradeAssetSheet, usePhoneViewport } from '@/components/core-app/screens/TradeAssetSheet'
+import {
+  TradePartnerSuggestions,
+  suggestionToPickedAssets,
+} from '@/components/core-app/screens/TradePartnerSuggestions'
+import type { PartnerRecommendation } from '@/lib/trade-intel/partnerRanking'
 import '@/components/core-app/af-core.css'
 import '@/components/core-app/af-trade-center.css'
 
@@ -539,9 +544,21 @@ export function TradeCenter(props: {
   const myRoster =
     rosterData?.rosters.find((r) => r.rosterId === rosterData.viewerTeamRosterId) ?? null
   const partnerRoster = rosterData?.rosters.find((r) => r.rosterId === partnerRosterId) ?? null
-  const otherRosters = (rosterData?.rosters ?? []).filter(
-    (r) => r.rosterId !== rosterData?.viewerTeamRosterId,
-  )
+  /*
+   * ⚠ RANKED WHEN A RANKING ARRIVED, IN ROSTER ORDER OTHERWISE. The chip row lists everyone either
+   * way; the ranking only changes who comes first. A team the ranking did not cover keeps its place
+   * after the ranked ones rather than disappearing.
+   */
+  const partnerRanking = rosterData?.partnerRanking ?? null
+  const otherRosters = (() => {
+    const others = (rosterData?.rosters ?? []).filter((r) => r.rosterId !== rosterData?.viewerTeamRosterId)
+    if (!partnerRanking) return others
+    const rankOf = new Map(partnerRanking.partners.map((p) => [p.rosterId, p.rank]))
+    return others
+      .map((r, i) => ({ r, i }))
+      .sort((a, b) => (rankOf.get(a.r.rosterId) ?? Infinity) - (rankOf.get(b.r.rosterId) ?? Infinity) || a.i - b.i)
+      .map(({ r }) => r)
+  })()
   const theirLabel = partnerRoster?.ownerName ?? props.opponentLabel ?? 'Their team'
   const valueActions = props.valueActions ?? []
 
@@ -617,6 +634,38 @@ export function TradeCenter(props: {
       goToStep('get')
     },
     [goToStep],
+  )
+
+  /**
+   * Put a suggested partner's opening deal in the builder.
+   *
+   * ⚠ THE SAME CONTRACT AS LOADING AN OFFER: replaces the board, clears the verdict and leaves
+   * counter mode — a suggestion is a new deal, not an answer to anyone. The partner is set with it,
+   * because the deal only makes sense against that roster.
+   *
+   * ⚠ AN ASSET THAT CANNOT BE REBUILT IS NAMED, not silently left out; a shorter deal analyses as a
+   * different one.
+   */
+  const startSuggestedDeal = useCallback(
+    (p: PartnerRecommendation) => {
+      if (!p.suggestion || !rosterData) return
+      const target = rosterData.rosters.find((r) => r.rosterId === p.rosterId) ?? null
+      const mine = rosterData.rosters.find((r) => r.rosterId === rosterData.viewerTeamRosterId) ?? null
+      const { give, get, dropped } = suggestionToPickedAssets(p.suggestion, mine, target)
+      setGiveAssets(give)
+      setGetAssets(get)
+      setResult(null)
+      setError(null)
+      setCountering(null)
+      setPartnerRosterId(p.rosterId)
+      setDraftNote(
+        dropped.length > 0
+          ? `Started from a suggested deal with ${p.ownerName ?? 'that manager'}, without ${dropped.join(', ')} — that asset could not be rebuilt.`
+          : `Started from a suggested deal with ${p.ownerName ?? 'that manager'} — adjust it, then analyse it.`,
+      )
+      goToStep('review')
+    },
+    [rosterData, goToStep],
   )
 
   /*
@@ -1181,6 +1230,16 @@ export function TradeCenter(props: {
       */}
       {otherRosters.length > 0 ? (
         <div className="af-tc-partner" data-mstep="get">
+          {/* Item #8: who is worth trading with, and a deal to start from. */}
+          <TradePartnerSuggestions
+            ranking={partnerRanking}
+            selectedRosterId={partnerRosterId}
+            onChoose={(rosterId) => {
+              setPartnerRosterId(rosterId)
+              setResult(null)
+            }}
+            onStartWith={startSuggestedDeal}
+          />
           <span className="af-label">Trading with</span>
           <div className="af-tc-partner-chips">
             {otherRosters.map((r) => (

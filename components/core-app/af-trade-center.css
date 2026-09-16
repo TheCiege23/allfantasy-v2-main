@@ -2203,3 +2203,125 @@
     color: var(--faint);
   }
 }
+
+/*
+ * ── Best trade partners (item #8) ────────────────────────────────────────
+ *
+ * Sits at the top of the "Trading with" block, above the chip row it ranks.
+ * Appended after every @media block. Fit colour uses the THEME-aware core
+ * tokens, as the rest of the late additions in this file do.
+ */
+.af-tc-fits {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.af-tc-fits-head {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.af-tc-fits-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.af-tc-fit {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+}
+.af-tc-fit[data-on='true'] {
+  border-color: var(--accent-line);
+  background: var(--accent-soft);
+}
+.af-tc-fit-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.af-tc-fit-rank {
+  display: inline-grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--line2);
+  color: var(--text);
+  font-size: 11px;
+}
+.af-tc-fit-name {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text);
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.af-tc-fit-label {
+  flex: 0 0 auto;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+.af-tc-fit[data-fit='strong'] .af-tc-fit-label,
+.af-tc-fit[data-fit='good'] .af-tc-fit-label {
+  color: var(--good);
+}
+.af-tc-fit-score {
+  flex: 0 0 auto;
+  color: var(--text);
+  font-weight: 800;
+}
+.af-tc-fit-score small {
+  color: var(--faint);
+  font-weight: 400;
+}
+.af-tc-fit-reasons {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding-left: 16px;
+  color: var(--text2);
+  font-size: 12px;
+  line-height: 1.45;
+}
+.af-tc-fit-deal {
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: 9px;
+  background: var(--surface2);
+  color: var(--text);
+  font-size: 11px;
+  line-height: 1.45;
+}
+.af-tc-fit-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: auto;
+}
+/* (0,3,0) so the 44px floor beats `.af-core .af-btn` regardless of sheet order. */
+.af-core .af-tc-fit-actions .af-btn {
+  flex: 1 1 auto;
+  min-height: 44px;
+}
+.af-tc-fits-gaps {
+  margin: 0;
+  padding-left: 16px;
+  color: var(--faint);
+  font-size: 11px;
+  line-height: 1.45;
+}
