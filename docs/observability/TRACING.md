@@ -90,12 +90,16 @@ is_transaction:true transaction:"GET /core/[[...screen]]" af.nav:document
 group by af.screen, af.device   →   p75(af.shell_ms), p75(span.duration)
 ```
 
-Which card the home is waiting for — each card's read is a `core.card` span, and its database spans
-nest under it:
+Which card the home is waiting for — each card's read is a `core.card` span, and the slow database
+spans it issues take it as their parent:
 
 ```
 span.op:core.card   group by af.card   →   p75(span.duration), p95(span.duration), count()
 ```
+
+A read that waits for another (`trades` for the current week, `since-last-visit` for `trades`) is
+traced from the start of its chain, so its duration is how long that card waited, not just its own
+query.
 
 ⚠ The home streams each card on its own, so its `span.duration` is its SLOWEST card, not what the user
 saw first. A render failure inside a card is reported as an error tagged `af.boundary:core-card` and

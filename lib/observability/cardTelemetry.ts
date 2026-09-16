@@ -3,13 +3,18 @@
  *
  * Since the home's cards stream independently, the request's duration is its slowest card and
  * `af.shell_ms` is the time to the shell; neither says WHICH card the user was waiting for. Each
- * card's read runs inside a `core.card` span named for the card, so the database spans it issues
- * nest under it and the slowest card is one query away (see docs/observability/TRACING.md).
+ * card's read runs inside a `core.card` span named for the read, and the database spans it issues take
+ * that span as their parent, so the slowest card is one query away (see docs/observability/TRACING.md).
+ *
+ * ⚠ A CHAINED READ IS TRACED FROM THE START OF ITS CHAIN. `trades` waits for the current week and
+ * `since-last-visit` waits for `trades`; each span opens when its chain does, so a span's duration is
+ * how long that card waited — not only its own query, which would rank a card that waited behind two
+ * slow reads as fast.
  *
  * ⚠ CLOSED VOCABULARY. The name is a `CoreCardRead` literal, never a league or player id — an
  * unbounded span name would make the dimension useless and the bill larger. It names the READ that
- * feeds a card (`dash34` feeds five), not the card itself; `CoreCardBoundary` tags render failures by
- * card.
+ * feeds a card (`dash34` feeds eight), not the card itself; `CoreCardBoundary` tags render failures
+ * by card.
  *
  * ⚠ TELEMETRY MUST NEVER BREAK A CARD. If Sentry throws starting the span, the read runs untraced;
  * the read's own result or rejection is always what the caller gets. Outside a traced request

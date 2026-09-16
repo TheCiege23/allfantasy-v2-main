@@ -2060,36 +2060,49 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
          * 30-minute grade sweep already fills — see lib/core-app/recentTrades
          * for why the product has been telling users this data does not exist.
          */
-        const trades = tradeWeek
-          .then((currentWeek) =>
-            traceCard('trades', () =>
-              getRecentTrades(
-                playedLeagues.map((l) => ({
-                  id: l.id,
-                  name: l.name,
-                  platformLeagueId: (l as { platformLeagueId?: string | null }).platformLeagueId ?? null,
-                  platform: String(l.platform ?? ''),
-                })),
-                now,
-                HOME_RECENT_TRADES_LIMIT,
-                {
-                  ownerSleeperId: leagueListPayload?.sleeperUserId ?? null,
-                  currentWeek,
-                  maxLeagues: 8,
-                  /*
-                   * The same scan sees offers waiting on you; the Trades urgency badge
-                   * reads them from the cache instead of scanning again on every tab.
-                   * Not awaited here: a badge that lags one render is inside the
-                   * 10-minute freshness rule, and recording it must never slow the home.
-                   */
-                  onPendingOffers: (scanned) => {
-                    void recordPendingOffers(userId, scanned, now).catch(() => undefined)
-                  },
+        // Set when the trades read fails, so the brief below does not close the visit over trades it never saw.
+        let tradesFailed = false
+        // The pending-offers cache write the trade scan fires — see `offersSettled` below.
+        let offersRecorded: Promise<unknown> = Promise.resolve()
+        const trades = traceCard('trades', () =>
+          tradeWeek.then((currentWeek) =>
+            getRecentTrades(
+              playedLeagues.map((l) => ({
+                id: l.id,
+                name: l.name,
+                platformLeagueId: (l as { platformLeagueId?: string | null }).platformLeagueId ?? null,
+                platform: String(l.platform ?? ''),
+              })),
+              now,
+              HOME_RECENT_TRADES_LIMIT,
+              {
+                ownerSleeperId: leagueListPayload?.sleeperUserId ?? null,
+                currentWeek,
+                maxLeagues: 8,
+                /*
+                 * The same scan sees offers waiting on you; the Trades urgency badge
+                 * reads them from the cache instead of scanning again on every tab.
+                 * Not awaited by any card: a badge that lags one render is inside the
+                 * 10-minute freshness rule, and recording it must never slow the home.
+                 */
+                onPendingOffers: (scanned) => {
+                  offersRecorded = recordPendingOffers(userId, scanned, now).catch(() => undefined)
                 },
-              ),
+              },
             ),
-          )
-          .catch(() => [])
+          ),
+        ).catch(() => {
+          tradesFailed = true
+          return []
+        })
+        /*
+         * ⚠ THE TAB BADGES WAIT FOR THIS, NOT FOR THE SUMMARY ALONE. `getUrgencyBadges` and
+         * `recordPendingOffers` each read the one `core-urgency` cache row and write it back WHOLE.
+         * When the badges ran after every home read, the offers write had a head start; running
+         * independently, either could overwrite the other — dropping the new offers, or restoring an
+         * old lineup count. The badges stream, so waiting here costs no card anything.
+         */
+        const offersSettled = trades.then(() => offersRecorded).then(() => undefined)
 
         // A fresh array per reader, as each had before: neither can see what the other does to its input.
         const routineLeagues = () =>
@@ -2108,37 +2121,33 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
          * claimed rosters plus the weekly scores of the players you added (five set-based
          * queries, at most 12 leagues). Each kind fails on its own; null hides the card.
          */
-        const receipts = tradeWeek
-          .then((currentWeek) =>
-            traceCard('receipts', () =>
-              getDecisionReceipts({
-                userId,
-                leagues: routineLeagues(),
-                ownerSleeperId: leagueListPayload?.sleeperUserId ?? null,
-                currentWeek,
-              }),
-            ),
-          )
-          .catch(() => null)
+        const receipts = traceCard('receipts', () =>
+          tradeWeek.then((currentWeek) =>
+            getDecisionReceipts({
+              userId,
+              leagues: routineLeagues(),
+              ownerSleeperId: leagueListPayload?.sleeperUserId ?? null,
+              currentWeek,
+            }),
+          ),
+        ).catch(() => null)
 
         /*
          * The weekly routine's reads (2026-09-14): the last fully played week and its top
          * starter, and this week's adds from the transaction facts the receipts already read.
          * Each fails to null ("unknown"), never to "none".
          */
-        const routineFacts = tradeWeek
-          .then((currentWeek) =>
-            traceCard('routine-facts', () =>
-              getRoutineFacts({
-                userId,
-                leagues: routineLeagues(),
-                currentWeek,
-                // Weekly awards are keyed by your Sleeper user id; read from the H2H cache, never Sleeper.
-                ownerSleeperId: leagueListPayload?.sleeperUserId ?? null,
-              }),
-            ),
-          )
-          .catch(() => null)
+        const routineFacts = traceCard('routine-facts', () =>
+          tradeWeek.then((currentWeek) =>
+            getRoutineFacts({
+              userId,
+              leagues: routineLeagues(),
+              currentWeek,
+              // Weekly awards are keyed by your Sleeper user id; read from the H2H cache, never Sleeper.
+              ownerSleeperId: leagueListPayload?.sleeperUserId ?? null,
+            }),
+          ),
+        ).catch(() => null)
 
         /*
          * The routine card, built from those reads plus what the home already holds: the injury book's
@@ -2174,18 +2183,20 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
          * resolveUserOsSnapshot scopes every fact to the caller's own managerId.
          * It never throws, and a null here renders NOTHING — see DashUserOs.
          */
-        const userOs = Promise.all([summary, mergedIssues]).then(async ([data, merged]) => {
-          const ranked = data?.allLeagues ?? data?.leagues ?? []
-          const anchorId =
-            ranked.find((l) => l.priority === 'urgent')?.id ??
-            ranked.find((l) => l.priority === 'draft')?.id ??
-            merged.find((i) => i.leagueId != null)?.leagueId ??
-            null
-          const league = playedLeagues.find((l) => l.id === anchorId) ?? playedLeagues[0] ?? null
-          if (!league) return { snapshot: null, league: null }
-          const snapshot = await traceCard('user-os', () => resolveUserOsSnapshot(league.id, userId)).catch(() => null)
-          return { snapshot, league: { id: league.id, name: league.name } }
-        })
+        const userOs = traceCard('user-os', () =>
+          Promise.all([summary, mergedIssues]).then(async ([data, merged]) => {
+            const ranked = data?.allLeagues ?? data?.leagues ?? []
+            const anchorId =
+              ranked.find((l) => l.priority === 'urgent')?.id ??
+              ranked.find((l) => l.priority === 'draft')?.id ??
+              merged.find((i) => i.leagueId != null)?.leagueId ??
+              null
+            const league = playedLeagues.find((l) => l.id === anchorId) ?? playedLeagues[0] ?? null
+            if (!league) return { snapshot: null, league: null }
+            const snapshot = await resolveUserOsSnapshot(league.id, userId).catch(() => null)
+            return { snapshot, league: { id: league.id, name: league.name } }
+          }),
+        )
 
         /*
          * "Since your last visit" — lib/core-app/sinceLastVisit. After the trades read
@@ -2194,29 +2205,31 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
          * behind. A prefetch reads the brief but never moves the visit: Next prefetches
          * links as they scroll into view, and a window that reset on a hover would tell
          * someone away for a week that nothing changed.
+         *
+         * ⚠ NOR DOES A FAILED TRADES READ. Its fallback is `[]`, so the brief would say nothing traded
+         * AND close the window — and the trades it never read would never appear in any brief. With
+         * the home's reads now running together, a pool timeout is the likely way that happens.
          */
-        const brief = trades
-          .then((recentTrades) =>
-            traceCard('since-last-visit', () =>
-              getSinceLastVisit({
-                userId,
-                leagues: playedLeagues.map((l) => ({
-                  id: l.id,
-                  name: l.name ?? null,
-                  sport: (l as { sport?: string | null }).sport ?? null,
-                  // For the brief's provider handoff links (2026-09-14).
-                  platform: l.platform ?? null,
-                  platformLeagueId: (l as { platformLeagueId?: string | null }).platformLeagueId ?? null,
-                  season: l.season ?? null,
-                })),
-                recentTrades,
-                tradesLimit: HOME_RECENT_TRADES_LIMIT,
-                now,
-                recordVisit: homeRecordVisit,
-              }),
-            ),
-          )
-          .catch(() => null)
+        const brief = traceCard('since-last-visit', () =>
+          trades.then((recentTrades) =>
+            getSinceLastVisit({
+              userId,
+              leagues: playedLeagues.map((l) => ({
+                id: l.id,
+                name: l.name ?? null,
+                sport: (l as { sport?: string | null }).sport ?? null,
+                // For the brief's provider handoff links (2026-09-14).
+                platform: l.platform ?? null,
+                platformLeagueId: (l as { platformLeagueId?: string | null }).platformLeagueId ?? null,
+                season: l.season ?? null,
+              })),
+              recentTrades,
+              tradesLimit: HOME_RECENT_TRADES_LIMIT,
+              now,
+              recordVisit: homeRecordVisit && !tradesFailed,
+            }),
+          ),
+        ).catch(() => null)
 
         /*
          * ⚠ PRICE THE CARDS THAT RENDER, NOT THE FIRST FOUR LEAGUES. Dashboard3A's
@@ -2234,25 +2247,25 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
          * percentage at all rather than a hedged one — a greyed-out probability still
          * reads as a probability.
          */
-        const winProb = Promise.all([summary, weekAll]).then(async ([data, week]) => {
-          const scoredIds = scoredMatchupLeagueIds((data?.leagues ?? []).filter((l) => l.score).map((l) => l.id), week)
-          const priced = scoredIds.length
-            ? await traceCard('win-probability', () =>
-                Promise.all(
+        const winProb = traceCard('win-probability', () =>
+          Promise.all([summary, weekAll]).then(async ([data, week]) => {
+            const scoredIds = scoredMatchupLeagueIds((data?.leagues ?? []).filter((l) => l.score).map((l) => l.id), week)
+            const priced = scoredIds.length
+              ? await Promise.all(
                   scoredIds.map((id) =>
                     getMatchupData(id, userId)
                       .then((m) => ({ id, m }))
                       .catch(() => ({ id, m: null })),
                   ),
-                ),
-              )
-            : []
-          const probabilities: Record<string, number> = {}
-          for (const { id, m } of priced) {
-            if (m?.winProbability.available) probabilities[id] = m.winProbability.data.pWin
-          }
-          return probabilities
-        })
+                )
+              : []
+            const probabilities: Record<string, number> = {}
+            for (const { id, m } of priced) {
+              if (m?.winProbability.available) probabilities[id] = m.winProbability.data.pWin
+            }
+            return probabilities
+          }),
+        )
 
         /*
          * Drafts on the clock — the same cross-league aggregator the dashboard-v2
@@ -2343,6 +2356,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
           trades,
           brief,
           drafts,
+          offersSettled,
         }
       })()
 
@@ -2508,26 +2522,28 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
    * ten minutes, /core/trades waited on a read it does not show. The badges now stream to the
    * shell on their own (`ScreenShellSignals`, below) and the screen renders without them.
    */
-  const urgencyBadges = (homeLoads ? homeLoads.dash34 : Promise.resolve(dash34))
-    .then((summary) =>
-      traceCard('urgency-badges', () =>
-        getUrgencyBadges({
-          userId,
-          leagues: playedLeagues.map((l) => ({
-            id: l.id,
-            platform: (l as { platform?: string | null }).platform ?? null,
-            draftDate: (l as { draftDate?: string | Date | null }).draftDate ?? null,
-            lastSyncedAt: (l as { lastSyncedAt?: Date | string | null }).lastSyncedAt ?? null,
-          })),
-          liveDraftLeagueIds: coreActivity.liveDraftLeagueIds,
-          now,
-          lineupLeagues: summary?.allLeagues ?? null,
-          loadLineupLeagues: () =>
-            getDash34Data(userId, leagues as unknown as Dash34LeagueRow[], now).then((d) => d?.allLeagues ?? null),
-        }),
-      ),
-    )
-    .catch(() => null)
+  const urgencyBadges = traceCard('urgency-badges', () =>
+    // On the home: after the summary AND the trade scan's pending-offers write — see `offersSettled`.
+    (homeLoads
+      ? Promise.all([homeLoads.dash34, homeLoads.offersSettled]).then(([summary]) => summary)
+      : Promise.resolve(dash34)
+    ).then((summary) =>
+      getUrgencyBadges({
+        userId,
+        leagues: playedLeagues.map((l) => ({
+          id: l.id,
+          platform: (l as { platform?: string | null }).platform ?? null,
+          draftDate: (l as { draftDate?: string | Date | null }).draftDate ?? null,
+          lastSyncedAt: (l as { lastSyncedAt?: Date | string | null }).lastSyncedAt ?? null,
+        })),
+        liveDraftLeagueIds: coreActivity.liveDraftLeagueIds,
+        now,
+        lineupLeagues: summary?.allLeagues ?? null,
+        loadLineupLeagues: () =>
+          getDash34Data(userId, leagues as unknown as Dash34LeagueRow[], now).then((d) => d?.allLeagues ?? null),
+      }),
+    ),
+  ).catch(() => null)
 
   return (
     <>
@@ -2538,7 +2554,11 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
       <Suspense fallback={null}>
         <ScreenShellSignals
           urgencyBadges={urgencyBadges}
-          weekLabel={homeLoads ? homeLoads.dash34.then((summary) => summary?.weekLabel ?? null) : (dash34?.weekLabel ?? null)}
+          weekLabel={
+            homeLoads
+              ? homeLoads.dash34.then((summary) => summary?.weekLabel ?? null).catch(() => null)
+              : (dash34?.weekLabel ?? null)
+          }
           /*
            * The home's own claims, handed to the assistant the user opens FROM
            * those claims. Derived from the same dash34 facts that feed the brief
@@ -3296,8 +3316,13 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
         /*
          * The cards stream one by one — each behind its own boundary, each waiting only for its
          * own reads (components/core-app/home/HomeCards.tsx, which also carries the reasons for
-         * their order). `homeLoads` is always set on this branch: the league home and dashboard v2
-         * are handled above.
+         * their order).
+         *
+         * 🛑 `homeLoads` IS NULL HERE FOR A LEAGUE WHOSE HOME COULD NOT BE READ. `/core?league=<id>`
+         * reaches this branch whenever `leagueHome` is null — `getLeagueHomeData` threw (its error is
+         * swallowed above) or found no league row. That case used to fall into the summary's
+         * "could not read" panel; rendering nothing instead left a blank screen with no message and
+         * no report. The panel stays.
          */
         homeLoads ? (
           <CoreHomeCards
@@ -3308,7 +3333,17 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
             commissionerCount={commissionerCount}
             syncLabel={syncAge.stale ? null : syncAge.label}
           />
-        ) : null
+        ) : (
+          <div className="af-frame" style={{ padding: 24, maxWidth: 720 }}>
+            <h1 className="af-display" style={{ margin: 0, fontSize: 22, letterSpacing: '-0.03em' }}>
+              Your leagues
+            </h1>
+            <p style={{ marginTop: 8, fontSize: 13, lineHeight: 1.5, color: 'var(--muted)' }}>
+              We could not read your leagues just now. This is a read failure on our side, not a sign
+              that you have none.
+            </p>
+          </div>
+        )
       ) : (
         <div className="af-frame" style={{ padding: 24, maxWidth: 720 }}>
           <h1 className="af-display" style={{ margin: 0, fontSize: 22, letterSpacing: '-0.03em' }}>

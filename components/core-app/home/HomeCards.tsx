@@ -22,6 +22,7 @@ import { DashSinceLastVisit } from '@/components/core-app/screens/DashSinceLastV
 import { DashTradeBand } from '@/components/core-app/screens/DashTradeBand'
 import { DashUserOs } from '@/components/core-app/screens/DashUserOs'
 import type { Dash34Result } from '@/lib/core-app/dash34'
+import { platformCountsOf } from '@/components/core-app/screens/dash3aPortfolio'
 
 /**
  * The /core home, one streamed card at a time.
@@ -37,8 +38,15 @@ import type { Dash34Result } from '@/lib/core-app/dash34'
  * in the moment those land. The layout is `Dashboard3A`'s, unchanged: its cards render through
  * slots in the same places.
  *
- * ⚠ ONE READ, SHARED — NEVER A READ PER CARD. `dash34` feeds seven cards; they all await the SAME
- * promise, so it is fetched once, exactly as before.
+ * ⚠ ONE READ, SHARED — NEVER A READ PER CARD. `dash34` feeds eight cards directly (triage, carryover,
+ * issues, matchups, Chimmy, the portfolio chart, my leagues, coverage) and three more through reads
+ * that chain on it (routine, the Decision OS card, the tab badges); they all await the SAME promise,
+ * so it is fetched once, exactly as before.
+ *
+ * ⚠ SLICES ACROSS THE CLIENT BOUNDARY, NOT THE SUMMARY. `Dashboard3A`'s cards are client components,
+ * so their props are serialized into the page. Each gets only what it shows — the ranked league list,
+ * the total, pre-computed platform counts — never the whole summary (every league, the injury book),
+ * which would otherwise be sent once per card.
  *
  * ⚠ THE "COULD NOT READ YOUR LEAGUES" RULE SURVIVES, CARD BY CARD. When `dash34` failed, the home
  * used to be replaced by one honest panel, because its cards would otherwise claim "no leagues" or
@@ -71,6 +79,8 @@ export type HomeLoads = {
   trades: Promise<ComponentProps<typeof DashTradeBand>['trades']>
   brief: Promise<ComponentProps<typeof DashSinceLastVisit>['brief']>
   drafts: Promise<ComponentProps<typeof DashDraftsBand>['data']>
+  /** Not a card: settles once the trade scan's pending-offers cache write has. The tab badges wait on it. */
+  offersSettled: Promise<void>
 }
 
 /** The render-failure boundaries' names (the `af.card` tag on a reported card failure). */
@@ -176,7 +186,7 @@ async function IssuesCard({ dash34, issues }: Pick<HomeLoads, 'dash34' | 'issues
 async function MatchupsCard({ dash34, week, winProb }: Pick<HomeLoads, 'dash34' | 'week' | 'winProb'>) {
   const [data, weekAll, probabilities] = await Promise.all([dash34, week, winProb])
   if (!data) return null
-  return <Dash3AMatchups data={data} week={weekAll} winProb={probabilities} weekLabel={data.weekLabel ?? null} />
+  return <Dash3AMatchups leagues={data.leagues ?? []} week={weekAll} winProb={probabilities} weekLabel={data.weekLabel ?? null} />
 }
 
 async function ChimmyCard({ dash34, issues }: Pick<HomeLoads, 'dash34' | 'issues'>) {
@@ -196,7 +206,7 @@ async function RivalsCard({ rivals }: { rivals: HomeLoads['rivals'] }) {
 async function PortfolioChartCard({ dash34 }: { dash34: HomeLoads['dash34'] }) {
   const data = await dash34
   if (!data) return null
-  return <Dash3APortfolioChart data={data} />
+  return <Dash3APortfolioChart platformCounts={platformCountsOf(data.allLeagues ?? data.leagues ?? [])} />
 }
 
 async function ExposureCard({ exposure }: { exposure: HomeLoads['exposure'] }) {
@@ -214,7 +224,7 @@ async function ReceiptsCardSlot({ receipts }: { receipts: HomeLoads['receipts'] 
 async function LeaguesCard({ dash34 }: { dash34: HomeLoads['dash34'] }) {
   const data = await dash34
   if (!data) return null
-  return <Dash3ALeagues data={data} />
+  return <Dash3ALeagues leagues={data.leagues ?? []} totalLeagues={data.totalLeagues ?? null} />
 }
 
 async function CoverageCard({ dash34 }: { dash34: HomeLoads['dash34'] }) {
@@ -248,8 +258,14 @@ export function CoreHomeCards({
 
   /*
    * ⚠ ONLY CARDS THAT ALWAYS RENDER GET A PLACEHOLDER. The bands above the dashboard and the
-   * routine, following and receipts cards render NOTHING on a quiet day — a placeholder there would
-   * paint a grey block that then vanishes, which is worse than the space arriving late.
+   * following and receipts cards render NOTHING on a quiet day — a placeholder there would paint a
+   * grey block that then vanishes, which is worse than the space arriving late. The routine card
+   * always renders (`buildWeeklyRoutine` never returns null), and it sits above the issues, so it
+   * holds its place like the rest.
+   *
+   * ⚠ THE BANDS CAN STILL PUSH THE DASHBOARD DOWN when one with content lands after it. That is
+   * the trade for not holding the whole home behind the slowest band; measure it (CLS by screen in
+   * the browser traces) before reserving space for bands that are empty most days.
    */
   return (
     <>
@@ -335,7 +351,7 @@ export function CoreHomeCards({
         commissionerCount={commissionerCount}
         nowLabel={syncLabel}
         slots={{
-          routine: card('routine', <RoutineCard routine={loads.routine} />),
+          routine: card('routine', <RoutineCard routine={loads.routine} />, 150),
           issues: card('issues', <IssuesCard dash34={loads.dash34} issues={loads.issues} />, 180),
           matchups: card('matchups', <MatchupsCard dash34={loads.dash34} week={loads.week} winProb={loads.winProb} />, 160),
           chimmy: card('chimmy', <ChimmyCard dash34={loads.dash34} issues={loads.issues} />, 140),
