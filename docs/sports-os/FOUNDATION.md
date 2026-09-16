@@ -403,6 +403,81 @@ against the first, forever, and the reaction path would fire exactly once per le
 unconditional; the event reaches its consumer only when the relay next runs its cron, and only for
 the 10% inside the rollout. The direct call is the fast path for the one screen we know about.
 
+## Calibration: measured 2026-09-16, and the numbers stay as they are
+
+First pass at calibrating the budgets against production Sentry (`all-fantasy`, 7 days to
+2026-09-16). **The conclusion is to change nothing**, and that is a result rather than a punt.
+
+### What the data says
+
+Real `/core` document renders (`af.surface:core af.nav:document`), span duration:
+
+| device | n | p50 | p75 | p95 | declared target / ceiling |
+|---|---:|---:|---:|---:|---:|
+| desktop | 149 | 316 ms | **1,117 ms** | 4,225 ms | 1,200 / 2,500 |
+| mobile | 13 | 241 ms | **3,941 ms** | 16,096 ms | 1,800 / 3,750 |
+
+**The desktop target is validated.** p75 of 1,117 ms against a declared 1,200 ms is as close as a
+guess gets. That number was picked from the shape of the product and it turns out to be right.
+
+🛑 **THE MOBILE BUDGET MUST NOT BE RAISED TO MATCH ITS p75, AND THIS IS THE WHOLE POINT OF THE
+EXERCISE.** Mobile is 3.5x slower than desktop at p75 and blows its budget before any calibration.
+Moving the budget to 3,941 ms would enshrine a four-second mobile page load as acceptable and make
+the budget a mirror — **a check that cannot fail, in a new costume**, which is the failure this
+repository has paid for repeatedly. The budget is not wrong here. Mobile is slow, and the budget
+said so on day one, which is exactly what it is for.
+
+⚠ The ceilings are exceeded at p95 on both devices. With n=149 and n=13 and a tail dominated by a
+handful of very slow renders, that is not yet evidence the ceiling is mis-set rather than evidence
+of a slow tail. Revisit with volume.
+
+### Why per-screen calibration is not coming in a week
+
+**Traffic is ~23 real `/core` renders a day**, not the ~320/day `docs/observability/TRACING.md`
+estimated. Sampling is not the limit — core is sampled at effectively 100% and these *are* the
+renders. Per screen over 7 days: `home` 51, `hubs` 22, `trades` 12, `commissioner` 10, **`standings`
+2**, `live` 1.
+
+So a per-screen, per-device percentile is months away, not a week. **Calibrate at the phase level
+with screens pooled** until traffic grows; the per-name overrides in `budgets.ts` stay as reasoned
+guesses and should be labelled as such rather than given false precision.
+
+⚠ `af.screen` is `other` for 98 of ~220 core spans — the largest single bucket. Whatever is
+collapsing there is worth finding before anyone trusts a per-screen split.
+
+### 🛑 Two phases cannot be calibrated at all right now
+
+`af.shell_ms` and `af.db.ms` are **not queryable in Sentry**. Both come back as
+`INVALID — Unknown attribute`, typed as strings, while the string attributes on the very same spans
+(`af.surface`, `af.screen`, `af.card`) query fine.
+
+So every numeric attribute this layer adds — `af.budget.*_ms`, `af.budget.*_ratio` — lands in the
+same hole. The **verdict** is a string and will be queryable; the raw milliseconds will not.
+
+⚠ **THE MECHANISM IS NOT ESTABLISHED.** It could be a volume threshold before Sentry registers a
+numeric attribute, a type-registration issue, or something else; this was observed, not diagnosed.
+The fix that would sidestep it entirely is to give the shell phase **its own span**, because
+`span.duration` is a native field and queries fine — that is how the card numbers above were
+obtained. Not done here: it changes a hot path for an unproven diagnosis.
+
+### The queries, so this is repeatable
+
+```
+# per-card, the shape that works (span.duration is native, af.* numerics are not)
+dataset=spans  query="span.op:core.card"
+fields=[af.card, count(), p75(span.duration), p95(span.duration)]
+
+# per-device core renders, real navigations only
+dataset=spans  query="af.surface:core af.nav:document"
+fields=[af.device, count(), p50/p75/p95(span.duration)]
+
+# once the budget verdicts land in production (string, so queryable)
+dataset=spans  query="af.budget.shell_verdict:over"
+```
+
+⚠ And note the card table is **not** usable yet either: 19 cards, 18 of them with `count() == 1`
+across seven days — about 21 spans in total. A p95 from one sample is that sample.
+
 ## What is not done
 
 Each of these is a separate decision with a real cost.
@@ -415,10 +490,10 @@ Each of these is a separate decision with a real cost.
 4. ~~No ingestion path emits the new `ingest.*` events.~~ **Partly done** — the collector sync emits
    `ingest.league.completed` for every provider. The other six `ingest.*` types still have no
    producer.
-5. **The budgets are targets.** Nothing in the table is a p95 we have held. They need a week of
-   Sentry data before an `over` verdict should be treated as an incident. **This is now the main
-   thing standing between point 1 and being real**, because the instrumentation below means the
-   data to calibrate against will exist within a week.
+5. **The budgets are mostly still targets — but the desktop `screen` target is now measured.** See
+   *Calibration* above: desktop p75 is 1,117 ms against a declared 1,200 ms. The rest await volume,
+   and at ~23 `/core` renders a day that is months, not a week. Two phases (`shell`, `db`) cannot be
+   calibrated at all until their durations are queryable.
 6. ~~`recordBudget` has no callers.~~ **Done** — see *Budget instrumentation* below.
 7. **The card verdict is device-neutral.** `traceCard` has no request headers in scope, so it uses
    the `unknown` multiplier. `af.budget.card_ms` is exact and the root span's `af.device` allows the
