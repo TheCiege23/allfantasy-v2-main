@@ -112,6 +112,32 @@ export type LeagueHomeProps = {
    * That is a different rule and it is the honest one available.
    */
   issues?: CoreIssue[]
+  /**
+   * The /core shell's league header is already on screen above this one.
+   *
+   * 🛑 THEN THIS SCREEN MUST NOT NAME THE LEAGUE A SECOND TIME. Inside the shell
+   * `CoreLeagueContextBar` carries the crest, name, platform and sync age, so this
+   * header printing the same name, platform and sync label directly below it put
+   * each on the Overview twice. The line that stays — format, season, your record
+   * — is what the bar does not show.
+   *
+   * ⚠ THE `<h1>` STAYS, VISUALLY HIDDEN. The bar names the league in a `<strong>`,
+   * not a heading, because screens own the page heading; dropping this one would
+   * leave the Overview with none.
+   *
+   * Off by default: at /dashboard?league= this screen renders outside the shell,
+   * and there this header is the only thing naming the league.
+   */
+  identityInShell?: boolean
+  /**
+   * Replaces the one-sentence import banner with the fuller per-kind panel.
+   *
+   * A slot, so the panel's counts can stream in behind their own Suspense boundary
+   * without holding back the rest of this screen. When given, the banner is not
+   * rendered: every fact in the sentence is also a row in the panel, with the
+   * platform named the same way, and saying it twice is noise.
+   */
+  coverageSlot?: React.ReactNode
 }
 
 function Unavailable({ reason }: { reason: string }) {
@@ -398,7 +424,13 @@ function StatePanel<T>({
   )
 }
 
-export function LeagueHome({ data, otherLeagueIssueCount, issues = [] }: LeagueHomeProps) {
+export function LeagueHome({
+  data,
+  otherLeagueIssueCount,
+  issues = [],
+  identityInShell = false,
+  coverageSlot,
+}: LeagueHomeProps) {
   const { league } = data
   const platformLabel = league.platform === 'manual' ? 'your platform' : league.platform
 
@@ -414,11 +446,13 @@ export function LeagueHome({ data, otherLeagueIssueCount, issues = [] }: LeagueH
       {/* ── League identity ─────────────────────────────────────────── */}
       <header className="af-lh-head">
         <div className="af-lh-ident">
-          <h1 className="af-display af-lh-name">{league.name}</h1>
+          <h1 className={identityInShell ? 'af-lh-name--hidden' : 'af-display af-lh-name'}>{league.name}</h1>
           <div className="af-lh-sub">
-            <span className="af-platform af-lh-platform" data-platform={league.platform}>
-              {league.platform}
-            </span>
+            {identityInShell ? null : (
+              <span className="af-platform af-lh-platform" data-platform={league.platform}>
+                {league.platform}
+              </span>
+            )}
             {league.format ? <span>{league.format}</span> : null}
             {league.season ? <span className="af-num">{league.season}</span> : null}
             {data.yourTeam.available ? (
@@ -438,11 +472,15 @@ export function LeagueHome({ data, otherLeagueIssueCount, issues = [] }: LeagueH
             contract. At /dashboard?league= this screen renders outside
             AfCoreShell, so nothing else on the page carries it.
           */}
-          <span className="af-readonly">Read-only</span>
-          <span className="af-sync af-num" data-stale={data.syncAge.stale}>
-            {data.syncAge.stale ? '⚠ ' : ''}
-            {data.syncAge.label}
-          </span>
+          {identityInShell ? null : (
+            <>
+              <span className="af-readonly">Read-only</span>
+              <span className="af-sync af-num" data-stale={data.syncAge.stale}>
+                {data.syncAge.stale ? '⚠ ' : ''}
+                {data.syncAge.label}
+              </span>
+            </>
+          )}
           <Link href="/core" className="af-btn af-btn--ghost af-lh-back">
             Back to home →
           </Link>
@@ -464,7 +502,9 @@ export function LeagueHome({ data, otherLeagueIssueCount, issues = [] }: LeagueH
         our failure and invites a support ticket; "Fleaflicker doesn't publish
         trade history" is the truth and is something the reader can act on.
       */}
-      {data.importCoverage.sentence ? (
+      {coverageSlot !== undefined ? (
+        coverageSlot
+      ) : data.importCoverage.sentence ? (
         <section className="af-card af-lh-coverage" role="status" aria-label="Import coverage">
           <span className="af-lh-coverage-glyph" aria-hidden>
             ◑

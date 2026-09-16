@@ -312,3 +312,30 @@
     min-height: 44px;
   }
 }
+
+/* ── The source chip, as a link to "what's on file" ──────────────────────
+ *
+ * Carries `.af-core` for the reason at the top of this file. The focus ring
+ * comes from af-core.css's `:where(.af-core)` floor; this only adds a hover
+ * state that reads as "this goes somewhere" without out-shouting the chips
+ * beside it, which are not links.
+ */
+
+.af-lctx-chip--link,
+.af-core .af-lctx-chip--link {
+  color: var(--text2);
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.af-core .af-lctx-chip--link:hover {
+  color: var(--text);
+  border-color: var(--accent-line);
+}
+
+/* A link on a phone meets the suite's 44px touch floor; a status chip does not need to. */
+@media (max-width: 720px) {
+  .af-core .af-lctx-chip--link {
+    min-height: 44px;
+  }
+}

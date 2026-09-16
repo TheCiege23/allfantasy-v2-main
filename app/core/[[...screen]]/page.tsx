@@ -36,6 +36,13 @@ import { getDash34Data, imageOf, type Dash34LeagueRow } from '@/lib/core-app/das
 import { getChatUnread } from '@/lib/chat-core/unreadCounts'
 import LeagueHome from '@/components/core-app/screens/LeagueHome'
 import { getLeagueHomeData } from '@/lib/core-app/leagueHome'
+import {
+  LeagueDataCoverage,
+  LeagueDataCoverageSkeleton,
+  LEAGUE_DATA_COVERAGE_ANCHOR,
+} from '@/components/core-app/LeagueDataCoverage'
+import { getLeagueDataCoverage, type LeagueDataCoverageRecord } from '@/lib/core-app/leagueDataCoverage'
+import { isImportedPlatform } from '@/lib/league/isNativeLeague'
 import PlayerFinder from '@/components/core-app/screens/PlayerFinder'
 import { searchPlayers, getPlayerDetail } from '@/lib/core-app/playerFinder'
 import { getPlayerLeagueView } from '@/lib/core-app/playerLeagueView'
@@ -760,7 +767,20 @@ export default async function AfCorePage({
     ? prisma.league
         .findUnique({
           where: { id: selectedLeagueId },
-          select: { id: true, settings: true, platform: true },
+          /*
+           * `platformLeagueId`, `syncStatus` and `lastSyncedAt` are for the Overview's
+           * "what's on file" panel, which needs the provider id (two of its tables key on
+           * it) and whether the first sync has landed. Same row, same query — asking for
+           * three more scalar columns is cheaper than a third read of it.
+           */
+          select: {
+            id: true,
+            settings: true,
+            platform: true,
+            platformLeagueId: true,
+            syncStatus: true,
+            lastSyncedAt: true,
+          },
         })
         .catch(() => null)
     : Promise.resolve(null)
@@ -1090,6 +1110,17 @@ export default async function AfCorePage({
    */
   const errorResetKey = [segment, ...Object.entries(sp).map(([key, value]) => `${key}=${String(value)}`).sort()].join('|')
 
+  /*
+   * Whether the league header bar renders above the screen. Decided HERE, before the body, because
+   * the Overview reads it: when the bar already names the league, the screen must not name it again.
+   *
+   * ⚠ `dashboard-v2` RENDERS WITHOUT THE SHELL (see the early return below), so no bar is drawn
+   * there whatever the league state says.
+   */
+  const showContextBar =
+    segment !== 'dashboard-v2' &&
+    Boolean(selectedLeagueId && selectedLeagueName && selectedLeagueRow && isCoreSurfaceKey(activeKey))
+
   const body = (
     <CoreScreenBody
       ctx={{
@@ -1117,6 +1148,8 @@ export default async function AfCorePage({
         commissionerCount,
         now,
         errorResetKey,
+        leagueHeaderShown: showContextBar,
+        selectedLeagueRecord,
       }}
     />
   )
@@ -1141,9 +1174,6 @@ export default async function AfCorePage({
    */
   const screenKey = `${segment}|${selectedLeagueId ?? ''}`
 
-  const showContextBar = Boolean(
-    selectedLeagueId && selectedLeagueName && selectedLeagueRow && isCoreSurfaceKey(activeKey),
-  )
   // ONE read shared by the bar's two streamed slots (the promise, not two calls).
   const leagueOs =
     showContextBar && selectedLeagueId ? resolveUserOsSnapshot(selectedLeagueId, userId).catch(() => null) : null
@@ -1243,6 +1273,16 @@ export default async function AfCorePage({
           leagueId={selectedLeagueId}
           leagueName={selectedLeagueName}
           platform={String(selectedLeaguePlatform ?? 'manual')}
+          /*
+           * The source chip opens the Overview's "what's on file" panel, from any tab. Only for an
+           * imported league: a native one has no panel, and a link to a missing anchor lands on the
+           * top of the Overview and looks like it did nothing.
+           */
+          coverageHref={
+            isImportedPlatform(selectedLeaguePlatform)
+              ? `/core?league=${encodeURIComponent(selectedLeagueId)}#${LEAGUE_DATA_COVERAGE_ANCHOR}`
+              : null
+          }
           logoUrl={selectedRailLeague?.imageUrl ?? null}
           logoLetter={selectedRailLeague?.mark}
           syncLabel={selectedSyncAge.label}
@@ -1279,6 +1319,19 @@ export default async function AfCorePage({
 }
 
 type LeagueOsSnapshot = Awaited<ReturnType<typeof resolveUserOsSnapshot>> | null
+
+/**
+ * The Overview's "what's on file" panel, once its counts are in.
+ *
+ * ⚠ A NATIVE LEAGUE, OR A FAILED LOADER, RENDERS NOTHING — not the old banner. The loader returns
+ * null for a native league because nothing was imported, and a thrown loader is caught to null
+ * because one panel must not take the Overview down with it. Neither case has a coverage sentence
+ * worth showing: a native league has none, and the per-row reads already degrade individually.
+ */
+async function LeagueDataCoverageSection({ record }: { record: LeagueDataCoverageRecord }) {
+  const coverage = await getLeagueDataCoverage(record).catch(() => null)
+  return coverage ? <LeagueDataCoverage coverage={coverage} /> : null
+}
 
 /** The Decision OS chip in the league context bar, once the league's snapshot has been read. */
 async function LeagueDecisionChip({ snapshot }: { snapshot: Promise<LeagueOsSnapshot> }) {
@@ -1361,6 +1414,10 @@ type CoreScreenContext = {
   now: Date
   /** The URL key the error boundaries reset on — computed once, beside the screen's own. */
   errorResetKey: string
+  /** The shell's league header is drawn above this screen, so the screen must not repeat it. */
+  leagueHeaderShown: boolean
+  /** The selected league's row, read once by the shell. Null with no league or on a failed read. */
+  selectedLeagueRecord: LeagueDataCoverageRecord | null
 }
 
 /**
@@ -1402,6 +1459,8 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
     commissionerCount,
     now,
     errorResetKey,
+    leagueHeaderShown,
+    selectedLeagueRecord,
   } = ctx
 
   // Screen 2 is the same route with a league selected — the handoff describes it
@@ -2757,6 +2816,22 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
       ) : leagueHome ? (
         <LeagueHome
           data={leagueHome}
+          identityInShell={leagueHeaderShown}
+          /*
+           * "What's on file", streamed. Its nine counts wait behind their own boundary so the rest
+           * of the Overview never waits on them; the skeleton holds the panel's height.
+           *
+           * ⚠ ONLY WITH THE SHELL'S ROW FOR THIS SAME LEAGUE. The record is read by id, but a
+           * mismatch here would print one league's history under another's name, so it is checked
+           * rather than assumed. Without it the screen keeps its one-sentence banner.
+           */
+          coverageSlot={
+            selectedLeagueRecord && selectedLeagueRecord.id === leagueHome.league.id ? (
+              <Suspense key={selectedLeagueRecord.id} fallback={<LeagueDataCoverageSkeleton />}>
+                <LeagueDataCoverageSection record={selectedLeagueRecord} />
+              </Suspense>
+            ) : undefined
+          }
           otherLeagueIssueCount={issues.filter((i) => i.leagueId !== leagueHome.league.id).length}
           // 3b renders one urgent action. Already sorted by severity then
           // deadline inside deriveOutstandingIssues, so the head of this list is

@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import { useEffect, useId, useState, type ReactNode } from 'react'
 
 import { COMMS_OPEN_EVENT } from '@/components/core-app/comms/commsEvents'
@@ -31,6 +32,11 @@ export type CoreLeagueContextBarProps = {
    */
   logoUrl?: string | null
   logoLetter?: string
+  /**
+   * Where the source chip leads: the Overview's "what's on file" panel. Null for a
+   * native league, which has no import to describe — the chip is then plain text.
+   */
+  coverageHref?: string | null
   syncLabel: string
   syncStale: boolean
   gameDayActive: boolean
@@ -96,6 +102,7 @@ export default function CoreLeagueContextBar({
   platform,
   logoUrl = null,
   logoLetter,
+  coverageHref = null,
   syncLabel,
   syncStale,
   gameDayActive,
@@ -189,9 +196,28 @@ export default function CoreLeagueContextBar({
       </div>
 
       <div className="af-lctx-statuses">
-        <span className="af-lctx-chip" data-tone="source">
-          {platform.toUpperCase()} import
-        </span>
+        {coverageHref ? (
+          /*
+           * ⚠ A CLIENT NAVIGATION CANNOT BE TRUSTED TO LAND ON THE ANCHOR BY ITSELF. The
+           * panel streams in behind its own Suspense boundary, so when Next looks for the
+           * hash target after navigating, the element usually does not exist yet. The
+           * panel scrolls itself into view on mount when the hash names it
+           * (`ScrollToHashOnMount`), which covers a fresh load and a tab switch alike.
+           * A plain <a> would have side-stepped none of that and cost a full reload.
+           */
+          <Link
+            className="af-lctx-chip af-lctx-chip--link"
+            data-tone="source"
+            href={coverageHref}
+            title="What’s on file from this import"
+          >
+            {platform.toUpperCase()} import · what’s on file
+          </Link>
+        ) : (
+          <span className="af-lctx-chip" data-tone="source">
+            {platform.toUpperCase()} import
+          </span>
+        )}
         <span className="af-lctx-chip" data-tone={gameDayActive ? 'live' : syncStale ? 'warn' : 'fresh'}>
           {gameDayActive ? 'Game-day view refresh · 20s' : `Synced ${syncLabel}`}
         </span>

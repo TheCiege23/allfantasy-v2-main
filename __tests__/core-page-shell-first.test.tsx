@@ -214,11 +214,19 @@ describe('/core renders the shell first', () => {
       'prisma.league.findUnique calls for the selected league in one render',
     ).toBe(1)
 
-    /* Positive control: the one call is the shared read, asking for every field both
-       consumers need — not a narrower read that happens to be alone. */
+    /* Positive control: the one call is the shared read, asking for every field its
+       consumers need — not a narrower read that happens to be alone. The last three are the
+       Overview's "what's on file" panel, which takes this row rather than reading it again. */
     expect(shell.leagueCoverage).toHaveBeenCalledWith({
       where: { id: 'L1' },
-      select: { id: true, settings: true, platform: true },
+      select: {
+        id: true,
+        settings: true,
+        platform: true,
+        platformLeagueId: true,
+        syncStatus: true,
+        lastSyncedAt: true,
+      },
     })
   })
 
