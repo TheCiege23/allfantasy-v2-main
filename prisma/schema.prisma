@@ -1727,6 +1727,44 @@ model AiRecommendationOutcome {
   @@map("ai_recommendation_outcomes")
 }
 
+/// A Chimmy recommendation a user saved, in the shape `lib/chimmy-actions/server-store.ts`
+/// actually reads and writes.
+///
+/// Like AiActionEvent, this model has never existed while four accessors wrote to it through an
+/// `(prisma as any).aiSavedRecommendation` cast — so `/api/ai/actions/recommendations` and
+/// `/api/ai/actions/recommendations/[id]` have been 500ing.
+///
+/// ⚠ THIS IS THE `SavedAIRecommendation` SHAPE, NOT `UnifiedSavedRecommendation`. The two are
+/// different models for the same idea: this one is what the live accessors use, and the Unified
+/// one (title, summary, status, isArchived, payloadHash, confidence, riskLevel …) is what the
+/// separately-stubbed `lib/saved-recommendations/SavedRecommendationsService.ts` returns. They
+/// overlap on six fields and diverge on the rest. Making this table serve both is a product
+/// decision — a superset, a second table, or migrating the legacy writer — and is deliberately
+/// NOT decided here. Modelling the live shape is what un-breaks the two routes today.
+model AiSavedRecommendation {
+  id                 String    @id
+  userId             String    @map("user_id")
+  leagueId           String?   @map("league_id")
+  sport              String
+  leagueType         String    @map("league_type")
+  surface            String
+  recommendationText String    @map("recommendation_text")
+  /// The AIAction object the recommendation would perform.
+  action             Json
+  /// Caller-supplied save time; `listSavedRecommendations` orders on it.
+  savedAt            DateTime  @map("saved_at")
+  expiresAt          DateTime? @map("expires_at")
+  actedOn            Boolean   @default(false) @map("acted_on")
+  actedOnAt          DateTime? @map("acted_on_at")
+  /// Server insert time, kept alongside `savedAt` for the same reason AiActionEvent keeps one:
+  /// `savedAt` comes off the caller's clock, and a rate over a window needs one we vouch for.
+  createdAt          DateTime  @default(now()) @map("created_at")
+
+  @@index([userId, savedAt])
+  @@index([leagueId])
+  @@map("ai_saved_recommendations")
+}
+
 model AIUserFeedback {
   id            String   @id @default(uuid())
   userId        String
