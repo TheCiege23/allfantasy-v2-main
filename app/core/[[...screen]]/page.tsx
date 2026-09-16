@@ -34,6 +34,12 @@ import { getCrossLeagueExposure, getRivalRecords } from '@/lib/core-app/dash3aPa
 import { getFollowingCard } from '@/lib/core-app/followingCard'
 import { getDecisionReceipts } from '@/lib/core-app/decisionReceipts'
 import { getDash34Data, imageOf, type Dash34LeagueRow } from '@/lib/core-app/dash34'
+import {
+  readHomeExposure,
+  readHomePortfolio,
+  readHomeRivals,
+  type PortfolioSummaryMeta,
+} from '@/lib/core-app/homePortfolioSummary'
 import { getChatUnread } from '@/lib/chat-core/unreadCounts'
 import LeagueHome from '@/components/core-app/screens/LeagueHome'
 import { getLeagueHomeData } from '@/lib/core-app/leagueHome'
@@ -2404,6 +2410,11 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
     : derivedIssues
 
   const homeRecordVisit = isHome3a ? !isSpeculativeRequestHeaders(await headers()) : false
+  /*
+   * The portfolio summary rides the same flag and bucket as the week and standings summaries — see
+   * `weekOnSummary` above — and serves both the home and the tab badges on every other screen.
+   */
+  const portfolioOnSummary = standingsOnSummary
   const homeLoads: HomeLoads | null = !isHome3a
     ? null
     : homeScoped && homePlayed.length === 0
@@ -2413,8 +2424,15 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
          */
         emptyHomeLoads()
       : (() => {
+        /*
+         * The whole-portfolio home reads its prebuilt summary (lib/core-app/homePortfolioSummary.ts)
+         * for users on screen summaries; a scoped home always joins live, because a subset's result
+         * is not a filter of the whole one. Both reject the same way, so the fallback is unchanged.
+         */
         const summary = traceCard('dash34', () =>
-          getDash34Data(userId, homeLeagueRows as unknown as Dash34LeagueRow[], now),
+          portfolioOnSummary && !homeScoped
+            ? readHomePortfolio(userId, homeLeagueRows as unknown as Dash34LeagueRow[], now)
+            : getDash34Data(userId, homeLeagueRows as unknown as Dash34LeagueRow[], now),
         ).catch(() => null)
         const mergedIssues = summary.then((data) => mergeDash34Issues(homeDerivedIssues, data))
 
@@ -2748,10 +2766,22 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
           career: traceCard('career', () => getCareerData(userId)).catch(() => null),
           week: weekAll,
           winProb,
+          /*
+           * Exposure and rivals re-read every claim, roster and past result the user has — from
+           * their own portfolio summaries on an unscoped home for users on screen summaries
+           * (lib/core-app/homePortfolioSummary.ts), live otherwise. Separate records, so each
+           * card still streams on its own.
+           */
           exposure: traceCard('exposure', () =>
-            getCrossLeagueExposure(userId, homePlayed.map((l) => l.id)),
+            portfolioOnSummary && !homeScoped
+              ? readHomeExposure(userId, homeLeagueRows as unknown as Dash34LeagueRow[], now)
+              : getCrossLeagueExposure(userId, homePlayed.map((l) => l.id)),
           ).catch(() => null),
-          rivals: traceCard('rivals', () => getRivalRecords(userId, homePlayed.map((l) => l.id))).catch(() => null),
+          rivals: traceCard('rivals', () =>
+            portfolioOnSummary && !homeScoped
+              ? readHomeRivals(userId, homeLeagueRows as unknown as Dash34LeagueRow[], now)
+              : getRivalRecords(userId, homePlayed.map((l) => l.id)),
+          ).catch(() => null),
           /*
            * Players followed across every league (2026-09-14). One read of the follow list
            * plus the injury port and one fixture window for the shown rows. Null when follows
@@ -2998,10 +3028,31 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
         })),
         liveDraftLeagueIds: coreActivity.liveDraftLeagueIds,
         now,
-        // A scoped home's summary covers part of the portfolio; the badge cache is the whole of it.
-        lineupLeagues: homeScoped ? null : (summary?.allLeagues ?? null),
+        /*
+         * A scoped home's summary covers part of the portfolio; the badge cache is the whole of it.
+         *
+         * ⚠ AND A SUMMARY PAST ITS TTL DOES NOT REFRESH IT EITHER. The badge cache stamps what it is
+         * given with NOW, so handing it a `last-known` portfolio summary (served while it rebuilds)
+         * would relabel minutes-old lineup facts as fresh for another ten minutes.
+         */
+        lineupLeagues:
+          homeScoped || (summary as { summary?: PortfolioSummaryMeta } | null)?.summary?.source === 'last-known'
+            ? null
+            : (summary?.allLeagues ?? null),
+        /*
+         * Every other screen: when the badge cache is stale, read the SAME per-user summary the home
+         * reads rather than re-running the whole cross-league join for two counts. A `last-known`
+         * summary is not used, for the reason above; that read has already started its rebuild.
+         */
         loadLineupLeagues: () =>
-          getDash34Data(userId, leagues as unknown as Dash34LeagueRow[], now).then((d) => d?.allLeagues ?? null),
+          (portfolioOnSummary
+            ? readHomePortfolio(userId, leagues as unknown as Dash34LeagueRow[], now).then((d) =>
+                d.summary.source === 'last-known'
+                  ? getDash34Data(userId, leagues as unknown as Dash34LeagueRow[], now)
+                  : d,
+              )
+            : getDash34Data(userId, leagues as unknown as Dash34LeagueRow[], now)
+          ).then((d) => d?.allLeagues ?? null),
       }),
     ),
   ).catch(() => null)

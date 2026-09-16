@@ -179,9 +179,9 @@ vi.mock('@/lib/core-app/draftHqAll', () => ({ getDraftHqAll: held('drafts') }))
 vi.mock('@/lib/decision-os/userOs', () => ({ resolveUserOsSnapshot: held('userOs') }))
 vi.mock('@/lib/core-app/urgencyBadges', () => ({ getUrgencyBadges: held('urgency'), recordPendingOffers: held('offersWrite') }))
 /*
- * Screen summaries (lib/sports-os). Off by default, so every case above is about the live reads; the
- * week-summary cases below switch the shared flag on. The summary reader is stubbed — what it does is
- * its own suite's business; WHEN the home uses it is this one's.
+ * Screen summaries (lib/sports-os). Off by default here, so every case above is about the live
+ * reads; the week- and portfolio-summary cases below switch the shared flag on. The summary readers
+ * are stubbed: what they do is lib/core-app's own suites' business, WHEN the page uses them is this one's.
  */
 const summaries = vi.hoisted(() => ({ on: false }))
 vi.mock('@/lib/sports-os/rollout', async (importOriginal) => ({
@@ -189,6 +189,11 @@ vi.mock('@/lib/sports-os/rollout', async (importOriginal) => ({
   isEnabled: vi.fn(() => summaries.on),
 }))
 vi.mock('@/lib/core-app/weekAllSummary', () => ({ readWeekAllSummary: held('weekSummary') }))
+vi.mock('@/lib/core-app/homePortfolioSummary', () => ({
+  readHomePortfolio: held('portfolio'),
+  readHomeExposure: held('exposureSummary'),
+  readHomeRivals: held('rivalsSummary'),
+}))
 vi.mock('@/lib/analytics/recordDashboardActivation', () => ({ recordDashboardActivation: vi.fn(async () => undefined) }))
 // The league home — its loader failing is case 6.
 vi.mock('@/lib/core-app/leagueHome', () => ({ getLeagueHomeData: vi.fn(async () => g.leagueHome.data) }))
@@ -534,6 +539,68 @@ describe('/core home cards stream independently', () => {
     expect(called('weekSummary'), 'a scoped home read the whole-portfolio week summary').toBe(0)
     expect(called('week')).toBe(1)
     expect((g.fns.get('week')!.mock.calls[0][1] as Array<{ id: string }>).map((l) => l.id)).toEqual(['L2'])
+  })
+
+  /* ── The portfolio summary (lib/core-app/homePortfolioSummary.ts) ─────────────────────────── */
+
+  it('serves the whole-portfolio home from the portfolio summary, not a live join', { timeout: 180_000 }, async () => {
+    summaries.on = true
+    await render(await homeBody())
+    expect(called('portfolio')).toBe(1)
+    expect(called('dash34'), 'the live join ran beside the summary').toBe(0)
+    const [userId, rows] = g.fns.get('portfolio')!.mock.calls[0] as [string, Array<{ id: string }>]
+    expect(userId).toBe('u1')
+    expect(rows.map((l) => l.id)).toEqual(['L1'])
+  })
+
+  it('serves exposure and rivals from their own records — so each card still streams on its own', { timeout: 180_000 }, async () => {
+    summaries.on = true
+    const { cards } = await homeCards()
+    expect(called('exposureSummary')).toBe(1)
+    expect(called('rivalsSummary')).toBe(1)
+    expect(called('exposure'), 'the live exposure join ran beside its record').toBe(0)
+    expect(called('rivals'), 'the live rivals join ran beside its record').toBe(0)
+    // The exposure card waits for ITS record only — not the portfolio's.
+    const exposure = render(cards.get('exposure')!)
+    g.gate('exposureSummary').open({ available: false, reason: 'no rosters' })
+    expect(await within(exposure, 1_000)).not.toBe('pending')
+    expect(called('portfolio')).toBe(1)
+  })
+
+  it('joins live on a scoped home even for a user on summaries — a subset is not a filter of the whole', { timeout: 180_000 }, async () => {
+    summaries.on = true
+    g.account.leagues = [LEAGUE, { ...LEAGUE, id: 'L2', name: 'Hoops', platform: 'espn', sport: 'NBA', platformLeagueId: 'p2' }]
+    await render(await screenBody([], { scope: 'platform:espn' }, '|'))
+    expect(called('portfolio')).toBe(0)
+    expect(called('dash34')).toBe(1)
+    expect(called('exposureSummary') + called('rivalsSummary')).toBe(0)
+    expect(called('exposure')).toBe(1)
+    expect(called('rivals')).toBe(1)
+  })
+
+  it('reads the summary, not the live join, when another screen refreshes its tab badges', { timeout: 180_000 }, async () => {
+    summaries.on = true
+    await render(await screenBody(['trades'], { league: 'L1' }, 'trades|L1'))
+    await tick()
+    expect(called('urgency')).toBe(1)
+    const { loadLineupLeagues } = g.fns.get('urgency')!.mock.calls[0][0] as { loadLineupLeagues: () => Promise<unknown> }
+    const loaded = loadLineupLeagues()
+    g.gate('portfolio').open({ ...SUMMARY, allLeagues: [{ id: 'L1', emptyStarters: 1 }], summary: { builtAt: 'x', source: 'cache' } })
+    expect(await loaded).toEqual([{ id: 'L1', emptyStarters: 1 }])
+    expect(called('dash34'), 'the badges re-ran the whole join').toBe(0)
+  })
+
+  it('does not stamp a summary past its TTL into the badge cache as fresh', { timeout: 180_000 }, async () => {
+    summaries.on = true
+    await render(await homeBody())
+    g.gate('portfolio').open({ ...SUMMARY, allLeagues: [{ id: 'L1', emptyStarters: 1 }], summary: { builtAt: 'x', source: 'last-known' } })
+    g.gate('tradeWeek').open(3)
+    await tick()
+    g.gate('trades').open([])
+    g.gate('offersWrite').open(undefined)
+    for (let i = 0; i < 5; i += 1) await tick()
+    expect(called('urgency')).toBe(1)
+    expect((g.fns.get('urgency')!.mock.calls[0][0] as { lineupLeagues: unknown }).lineupLeagues).toBeNull()
   })
 
   it('never makes a screen wait for its tab badges', { timeout: 180_000 }, async () => {

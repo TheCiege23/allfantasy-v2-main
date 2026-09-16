@@ -391,15 +391,20 @@ const readNextGamesCached = unstable_cache(
           seasonType: true,
         },
       })
-      .catch(() => [])
+    /*
+     * ⚠ NO `.catch` INSIDE A CACHED FUNCTION. Whatever this returns, `unstable_cache` stores for 60s,
+     * so a swallowed failure became a cached "no games" served to every user for a minute — and to
+     * the portfolio summary (lib/core-app/homePortfolioSummary.ts) for its whole TTL. A rejection is
+     * not cached; the caller below falls back and reports it (`Dash34Options.onReadError`).
+     */
     return rows.map((g) => ({ ...g, startTime: g.startTime ? g.startTime.toISOString() : null }))
   },
   ['dash34-next-games'],
   { revalidate: 60 },
 )
 
-async function readNextGames(sports: string[], now: Date) {
-  const rows = await readNextGamesCached([...sports].sort()).catch(() => [])
+async function readNextGames(sports: string[], now: Date, options: Dash34Options = {}) {
+  const rows = await readNextGamesCached([...sports].sort()).catch(fellBack(options, 'next-games', []))
   return rows
     .map((g) => ({ ...g, startTime: g.startTime ? new Date(g.startTime) : null }))
     .filter((g) => g.startTime != null && g.startTime.getTime() >= now.getTime())
@@ -443,7 +448,8 @@ const readPlayerValuesCached = unstable_cache(
       source: 'FANTASYCALC',
       format,
       qbFormat,
-    }).catch(() => [])
+    })
+    // No `.catch` here — see the note in `readNextGamesCached`.
     return rows.map((r) => ({
       sleeperId: r.sleeperId,
       value: r.value,
@@ -468,9 +474,12 @@ async function readPlayerValues(
   sleeperIds: string[],
   format: 'DYNASTY' | 'REDRAFT',
   qbFormat: 'ONE_QB' | 'SUPERFLEX',
+  options: Dash34Options = {},
 ): Promise<Map<string, PlayerValueRead>> {
   const out = new Map<string, PlayerValueRead>()
-  const rows = await readPlayerValuesCached([...sleeperIds].sort(), format, qbFormat).catch(() => [])
+  const rows = await readPlayerValuesCached([...sleeperIds].sort(), format, qbFormat).catch(
+    fellBack(options, 'player-values', []),
+  )
   for (const r of rows) {
     if (!out.has(r.sleeperId)) {
       out.set(r.sleeperId, {
@@ -518,15 +527,15 @@ const readInjuryFeedCached = unstable_cache(
           team: true,
         },
       })
-      .catch(() => [])
+    // No `.catch` here — see the note in `readNextGamesCached`.
     return rows.map((i) => ({ ...i, date: i.date ? i.date.toISOString() : null }))
   },
   ['dash34-injury-feed'],
   { revalidate: 60 },
 )
 
-async function readInjuryFeed(sports: string[]) {
-  const rows = await readInjuryFeedCached([...sports].sort()).catch(() => [])
+async function readInjuryFeed(sports: string[], options: Dash34Options = {}) {
+  const rows = await readInjuryFeedCached([...sports].sort()).catch(fellBack(options, 'injury-feed', []))
   return rows.map((i) => ({ ...i, date: i.date ? new Date(i.date) : null }))
 }
 
@@ -539,15 +548,15 @@ const readNflFixturesCached = unstable_cache(
         take: 200,
         select: { startTime: true, homeTeam: true, awayTeam: true },
       })
-      .catch(() => [])
+    // No `.catch` here — see the note in `readNextGamesCached`.
     return rows.map((g) => ({ ...g, startTime: g.startTime ? g.startTime.toISOString() : null }))
   },
   ['dash34-nfl-fixtures'],
   { revalidate: 60 },
 )
 
-async function readNflFixtures(now: Date) {
-  const rows = await readNflFixturesCached().catch(() => [])
+async function readNflFixtures(now: Date, options: Dash34Options = {}) {
+  const rows = await readNflFixturesCached().catch(fellBack(options, 'nfl-fixtures', []))
   return rows
     .map((g) => ({ ...g, startTime: g.startTime ? new Date(g.startTime) : null }))
     .filter((g) => g.startTime != null && g.startTime.getTime() >= now.getTime())
@@ -555,10 +564,44 @@ async function readNflFixtures(now: Date) {
 
 /* ── The loader ──────────────────────────────────────────────────────────── */
 
+/** The reads `getDash34Data` degrades on — a failure in any of them yields an emptier result, not an error. */
+export type Dash34Read =
+  | 'teams'
+  | 'rosters'
+  | 'players'
+  | 'next-games'
+  | 'injury-feed'
+  | 'nfl-fixtures'
+  | 'player-values'
+
+export type Dash34Options = {
+  /**
+   * Told about every read that FAILED and fell back to empty.
+   *
+   * ⚠ THE RESULT STILL LOOKS COMPLETE. Every read degrades to `[]`, so a failed roster read renders
+   * as "no empty slots" and a failed injury read as "nobody hurt" — plausible values, which is fine
+   * for the one render that shows them and wrong for anything that KEEPS them. The portfolio summary
+   * uses this to refuse to cache such a result; a live render can ignore it.
+   */
+  onReadError?: (read: Dash34Read, error: unknown) => void
+}
+
+function fellBack<T>(options: Dash34Options, read: Dash34Read, fallback: T): (error: unknown) => T {
+  return (error) => {
+    try {
+      options.onReadError?.(read, error)
+    } catch {
+      // A reporter must never turn a degraded read into a failed render.
+    }
+    return fallback
+  }
+}
+
 export async function getDash34Data(
   userId: string,
   leagueRows: Dash34LeagueRow[],
-  now: Date = new Date()
+  now: Date = new Date(),
+  options: Dash34Options = {},
 ): Promise<Dash34Result> {
   /*
    * Historical board rows out of the list first, before anything expensive keys
@@ -601,13 +644,13 @@ export async function getDash34Data(
           isCoCommissioner: true,
         },
       })
-      .catch(() => []),
+      .catch(fellBack(options, 'teams', [])),
     /*
      * Enough future games to cover the next-24-hours feed as well as the single
      * next kickoff, in one read. Ordered by start time so the first row IS the
      * countdown target. Global — shared through the 60s cache above.
      */
-    readNextGames(sports, now),
+    readNextGames(sports, now, options),
   ])
 
   const teamByLeague = new Map(teams.map((t) => [t.leagueId, t]))
@@ -636,7 +679,7 @@ export async function getDash34Data(
           where: { OR: rosterOr },
           select: { leagueId: true, playerData: true },
         })
-        .catch(() => [])
+        .catch(fellBack(options, 'rosters', []))
     : []
 
   /**
@@ -703,7 +746,7 @@ export async function getDash34Data(
               imageUrl: true,
             },
           })
-          .catch(() => [])
+          .catch(fellBack(options, 'players', []))
       : Promise.resolve([]),
     /*
      * The injury feed — filtered to unexpired rows in SQL and shared through
@@ -711,7 +754,7 @@ export async function getDash34Data(
      * loader, where the brief, the chips, the urgent counts and the book all
      * inherit it at once.
      */
-    readInjuryFeed(sports),
+    readInjuryFeed(sports, options),
     /*
      * Next kickoff per NFL club, for "when does this player actually play".
      *
@@ -723,7 +766,7 @@ export async function getDash34Data(
      * of distinct games by about half and the map takes first-seen per club.
      * Global — shared through the 60s cache above.
      */
-    sports.includes('NFL') ? readNflFixtures(now) : Promise.resolve([]),
+    sports.includes('NFL') ? readNflFixtures(now, options) : Promise.resolve([]),
   ])
 
   /**
@@ -1341,6 +1384,7 @@ export async function getDash34Data(
     bookEntries.map((b) => b.sleeperId).filter(Boolean),
     valueFormat,
     'ONE_QB',
+    options,
   )
   const rankOf = (b: BookEntry): number | null =>
     valueBySleeperId.get(b.sleeperId)?.overallRank ?? null
