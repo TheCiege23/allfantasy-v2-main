@@ -11,6 +11,10 @@ import {
   processDueScheduledTrades,
   type ScheduledTradeSweepResult,
 } from '@/lib/automation/jobs/trades/processDueScheduledTrades'
+import {
+  sweepProviderTradeOffers,
+  type OfferSweepResult,
+} from '@/lib/provider-trades/syncProviderTradeOffers'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 300
@@ -67,6 +71,59 @@ export async function GET(req: NextRequest) {
       scheduledTrades = { due: 0, processed: 0, failures: [], error }
     }
 
+    /*
+     * PROVIDER TRADE-OFFER LEDGER — the second passenger on this route, for the reason the first
+     * one gives: no new API route gets added (the repo sits against a hard route ceiling), and
+     * this is already the 30-minute sweep that walks imported Sleeper leagues.
+     *
+     * ⚠ A ROTATION SLICE, NOT EVERY LEAGUE. Retiring an offer requires having read the WHOLE feed
+     * — 18 requests per league — so covering every league here would roughly double this route's
+     * provider traffic. The user's call (2026-09-15) was a bounded slice reading the full feed
+     * rather than every league reading a narrow window, because a narrow window can never retire
+     * anything: a withdrawn offer would sit in someone's "Needs you" bucket indefinitely, which is
+     * the stale badge the buckets exist to prevent.
+     *
+     * ⚠ IT DOES NOT SHARE THE NOTIFY PATH'S FETCHES, DELIBERATELY. `sleeperTradeSync` is uncached
+     * because there the completed-trade feed IS the detection signal; routing it through a cache
+     * to save this sweep some requests would trade that path's correctness for this one's cost.
+     *
+     * ⚠ GUARDED AND SEPARATELY IDENTIFIED, like the sweep above. Grading and notifying is this
+     * route's job; a ledger failure must not cost a league its grade emails, and a passenger job
+     * reporting the driver's heartbeat is not reporting anything.
+     */
+    let offerLedger: OfferSweepResult & { error?: string } = {
+      leaguesEligible: 0,
+      leaguesSwept: 0,
+      offersWritten: 0,
+      vanished: 0,
+      feedIncomplete: 0,
+      results: [],
+    }
+    try {
+      offerLedger = await withSyncJobRun(
+        { jobName: 'cron-provider-trade-offer-ledger', trigger: 'cron' },
+        () => sweepProviderTradeOffers({ maxLeagues: 15 }),
+        (r) => ({
+          rowsRead: r.leaguesSwept,
+          rowsWritten: r.offersWritten,
+          errors: r.results.filter((x) => x.error).map((x) => `${x.leagueId}: ${x.error}`),
+          /*
+           * `feedIncomplete` is reported rather than swallowed: those leagues had nothing retired
+           * this run, so a ledger that looks stale for them is explained rather than mysterious.
+           */
+          metadata: {
+            vanished: r.vanished,
+            feedIncomplete: r.feedIncomplete,
+            eligible: r.leaguesEligible,
+          },
+        }),
+      )
+    } catch (e) {
+      const error = e instanceof Error ? e.message : String(e)
+      console.error('[cron/trade-grade-notify] provider trade-offer sweep failed', e)
+      offerLedger = { ...offerLedger, error }
+    }
+
     const results = await withSyncJobRun(
       { jobName: 'cron-trade-grade-notify', trigger: 'cron' },
       /* Eight recently viewed leagues every fifteen minutes, plus twelve from the
@@ -83,6 +140,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({
       mode: 'cron' as const,
       scheduledTrades,
+      offerLedger,
       leagues: results.length,
       newTrades: results.reduce((a, r) => a + r.newTrades, 0),
       emailsSent: results.reduce((a, r) => a + r.emailsSent, 0),
