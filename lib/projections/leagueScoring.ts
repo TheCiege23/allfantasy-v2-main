@@ -77,7 +77,9 @@ const STAT_ALIASES: Record<string, string[]> = {
   tkl_loss: ['idp_tkl_loss'],
   sack: ['idp_sack'],
   sack_yd: ['idp_sack_yd'],
-  int: ['idp_int'],
+  // `dst_interception` is a TEAM DEFENSE's pick as `player_game_stats` stores it since the
+  // normalizer stopped folding it into `interception` (see StatNormalizationService).
+  int: ['idp_int', 'dst_interception'],
   ff: ['idp_ff'],
   fum_rec: ['idp_fum_rec'],
   pass_def: ['idp_pass_def'],

@@ -9,8 +9,21 @@ const NFL_ALIASES: Record<string, string> = {
   pass_yd: 'passing_yards',
   pass_yards: 'passing_yards',
   pass_td: 'passing_td',
-  pass_int: 'interception',
-  int: 'interception',
+  /*
+   * 🛑 `pass_int` AND `int` ARE TWO STATS AND USED TO SHARE ONE NAME. Both mapped to `interception`
+   * until 2026-09-16, so a quarterback's thrown pick and a team defense's caught one were
+   * indistinguishable in `player_game_stats.normalized_stat_map` (staging: 2,016 passer rows,
+   * 1,952 team-defense rows). The template scores `interception` at −2, so every defense LOST points
+   * for its own interceptions, and league scoring read neither name.
+   *
+   * `int` in this feed is the TEAM DEFENSE's stat — all 1,952 rows carry team ids (`ARI`, …);
+   * individual defenders arrive as `idp_int`, which passes through untouched. So it maps to the
+   * DST key, exactly as `sack` → `dst_sack` below.
+   *
+   * `pass_int` is NOT in this map: it is handled in `normalizeStatPayload`, which keeps it under its
+   * own name as well — see `THROWN_PICK_SPORTS`.
+   */
+  int: 'dst_interception',
   rush_yd: 'rushing_yards',
   rush_yards: 'rushing_yards',
   rush_td: 'rushing_td',
@@ -148,6 +161,25 @@ const SPORT_ALIASES: Record<string, Record<string, string>> = {
 }
 
 /**
+ * Sports whose feed reports a thrown interception as `pass_int`.
+ *
+ * ⚠ A THROWN PICK IS WRITTEN UNDER TWO NAMES, ON PURPOSE, AND THE SECOND IS DERIVED, NOT SUMMED.
+ *   - `pass_int` stays, because league scoring (`computeLeagueProjectedPoints`) reads the league's
+ *     own key and must never read `interception`: rows written before 2026-09-16 hold a team
+ *     defense's picks under that name too.
+ *   - `interception` is added, because the registry template and every stored `fantasyPoints`
+ *     are keyed on it.
+ * ⚠ THIS FUNCTION MUST STAY IDEMPOTENT: `projectionAccuracy` feeds STORED maps back through it,
+ * and a second pass that added `pass_int` to the stored `interception` would charge the
+ * quarterback twice. Two things prevent that, and each alone is enough: the copy is skipped when
+ * the input already states its own `interception` (which a stored map always does), and it is
+ * ASSIGNED from `pass_int` rather than summed. The skip also means a stored or provider-supplied
+ * value is never overwritten. No raw feed row carries `interception` (0 of 252,768 NFL and NCAAF
+ * rows on staging), so it never drops a real pick.
+ */
+const THROWN_PICK_SPORTS = new Set(['NFL', 'NCAAF'])
+
+/**
  * Normalize a raw stat payload to canonical stat keys for a sport.
  * Unknown keys are passed through as-is so canonical keys need no mapping.
  */
@@ -162,6 +194,9 @@ export function normalizeStatPayload(
     if (typeof value !== 'number' || Number.isNaN(value)) continue
     const canonical = aliases[key] ?? key
     out[canonical] = (out[canonical] ?? 0) + value
+  }
+  if (THROWN_PICK_SPORTS.has(sport) && out.pass_int != null && !('interception' in rawPayload)) {
+    out.interception = out.pass_int
   }
   return out
 }
