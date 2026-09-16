@@ -55,6 +55,11 @@ export type DbObserverConfig = {
   slowQueryMs: number
   /** Most slow-query spans one request may create; totals keep counting past it. */
   maxSlowSpansPerRoot: number
+  /**
+   * Most FAILED-operation spans one request may create, whatever their duration. Separate from the
+   * slow cap so a burst of slow successes cannot use up the budget that names the failures.
+   */
+  maxErrorSpansPerRoot?: number
   /** Monotonic milliseconds, for durations. */
   monotonicMs: () => number
   /** Epoch milliseconds, for span timestamps. */
@@ -68,10 +73,21 @@ type RootStats = {
   slowest: string
   errors: number
   slowSpans: number
+  errorSpans: number
+  /** Distinct `Model.op:CODE` labels, in first-seen order, capped at `MAX_ERROR_OPS`. */
+  errorOps: string[]
 }
 
 /** Sentry's status code for an errored span (OpenTelemetry `SpanStatusCode.ERROR`). */
 const SPAN_STATUS_ERROR = 2
+
+/**
+ * How many distinct failing operations one request names. A request that fails more distinct ways
+ * than this still counts every failure in `af.db.errors`; only the list stops growing.
+ */
+const MAX_ERROR_OPS = 8
+
+const DEFAULT_MAX_ERROR_SPANS = 10
 
 const round1 = (value: number) => Math.round(value * 10) / 10
 
@@ -79,21 +95,65 @@ export function operationName(operation: DbOperation): string {
   return operation.model ? `${operation.model}.${operation.operation}` : operation.operation
 }
 
+/**
+ * A SAFE label for why an operation failed: Prisma's error code, else the error's class name.
+ *
+ * 🛑 NEVER THE MESSAGE. A Prisma error message can quote the query, its arguments and the values
+ * that violated a constraint — user data, and on a raw query possibly anything. The code
+ * (`P2024` pool timeout, `P2021` missing table, `P2002` unique violation) is what a person needs to
+ * act on, and it cannot carry a value. A class name is the fallback, and anything that does not
+ * look like one collapses to `Error` rather than being passed through.
+ *
+ * WHY THIS EXISTS: `af.db.errors` measured 40 failures in 25 production /core home renders
+ * (2026-09-16), and a count cannot say which query failed or how. A failed operation only became a
+ * span when it was also SLOW, so fast failures — a missing table answers in milliseconds — were
+ * invisible.
+ */
+export function failureLabel(error: unknown): string {
+  const code = (error as { code?: unknown } | null)?.code
+  if (typeof code === 'string' && /^P\d{4}$/.test(code)) return code
+  const name = (error as { name?: unknown } | null)?.name
+  if (typeof name === 'string' && /^[A-Za-z][A-Za-z0-9]{0,59}$/.test(name)) return name
+  return 'Error'
+}
+
 export function createDbObserver(api: SpanApi, config: DbObserverConfig) {
   // Keyed by the root span object, so a request's totals are collected when the request is.
   const statsByRoot = new WeakMap<object, RootStats>()
 
-  function record(parent: SpanLike, operation: DbOperation, startedMonotonic: number, startedEpoch: number, failed: boolean) {
+  const maxErrorSpans = config.maxErrorSpansPerRoot ?? DEFAULT_MAX_ERROR_SPANS
+
+  function record(
+    parent: SpanLike,
+    operation: DbOperation,
+    startedMonotonic: number,
+    startedEpoch: number,
+    failure: { error: unknown } | null,
+  ) {
     const durationMs = Math.max(0, config.monotonicMs() - startedMonotonic)
     const root = api.getRootSpan(parent)
     // An unsampled request sends nothing, so it should cost nothing beyond the timing above.
     if (!root.isRecording()) return
 
     const name = operationName(operation)
-    const stats = statsByRoot.get(root) ?? { count: 0, totalMs: 0, maxMs: 0, slowest: '', errors: 0, slowSpans: 0 }
+    const stats: RootStats = statsByRoot.get(root) ?? {
+      count: 0,
+      totalMs: 0,
+      maxMs: 0,
+      slowest: '',
+      errors: 0,
+      slowSpans: 0,
+      errorSpans: 0,
+      errorOps: [],
+    }
     stats.count += 1
     stats.totalMs += durationMs
-    if (failed) stats.errors += 1
+    const label = failure ? failureLabel(failure.error) : null
+    if (label) {
+      stats.errors += 1
+      const op = `${name}:${label}`
+      if (!stats.errorOps.includes(op) && stats.errorOps.length < MAX_ERROR_OPS) stats.errorOps.push(op)
+    }
     if (durationMs >= stats.maxMs) {
       stats.maxMs = durationMs
       stats.slowest = name
@@ -106,10 +166,25 @@ export function createDbObserver(api: SpanApi, config: DbObserverConfig) {
       'af.db.max_ms': round1(stats.maxMs),
       'af.db.slowest': stats.slowest,
       'af.db.errors': stats.errors,
+      /*
+       * Only once something has failed, so a clean request carries exactly the attributes it always
+       * did. A string, so Sentry queries it by its bare name — unlike the numbers above, which need
+       * `tags[name,number]`.
+       */
+      ...(stats.errorOps.length > 0 ? { 'af.db.error_ops': stats.errorOps.join(',') } : {}),
     })
 
-    if (durationMs < config.slowQueryMs || stats.slowSpans >= config.maxSlowSpansPerRoot) return
-    stats.slowSpans += 1
+    /*
+     * A failure gets its own span whatever its duration, under its own cap. Before this, only a
+     * failure that was ALSO slow became visible, and fast failures are the common kind. A failure
+     * past its cap still becomes a span if it is slow and the slow cap has room.
+     */
+    const asError = label !== null && stats.errorSpans < maxErrorSpans
+    const asSlow = !asError && durationMs >= config.slowQueryMs && stats.slowSpans < config.maxSlowSpansPerRoot
+    if (!asError && !asSlow) return
+    if (asError) stats.errorSpans += 1
+    else stats.slowSpans += 1
+
     const span = api.withActiveSpan(parent, () =>
       api.startInactiveSpan({
         name,
@@ -120,11 +195,12 @@ export function createDbObserver(api: SpanApi, config: DbObserverConfig) {
           'db.system': 'postgresql',
           'db.operation.name': operation.operation,
           ...(operation.model ? { 'db.collection.name': operation.model } : {}),
-          'af.db.slow': true,
+          ...(durationMs >= config.slowQueryMs ? { 'af.db.slow': true } : {}),
+          ...(label ? { 'af.db.error': label } : {}),
         },
       }),
     )
-    if (failed) span.setStatus({ code: SPAN_STATUS_ERROR, message: 'internal_error' })
+    if (label) span.setStatus({ code: SPAN_STATUS_ERROR, message: 'internal_error' })
     span.end((startedEpoch + durationMs) / 1000)
   }
 
@@ -140,15 +216,15 @@ export function createDbObserver(api: SpanApi, config: DbObserverConfig) {
 
     const startedMonotonic = config.monotonicMs()
     const startedEpoch = config.epochMs()
-    let failed = false
+    let failure: { error: unknown } | null = null
     try {
       return await run()
     } catch (error) {
-      failed = true
+      failure = { error }
       throw error
     } finally {
       try {
-        record(parent, operation, startedMonotonic, startedEpoch, failed)
+        record(parent, operation, startedMonotonic, startedEpoch, failure)
       } catch {
         // See the header: a telemetry failure must not replace the operation's own outcome.
       }
