@@ -2,7 +2,12 @@ import 'server-only'
 
 import { prisma } from '@/lib/prisma'
 import { crosswalkToSleeperIds } from './rosterIdCrosswalk'
-import { computeLeagueProjectedPoints, extractScoringSettings } from '@/lib/projections/leagueScoring'
+import {
+  computeLeagueProjectedPoints,
+  extractScoringSettings,
+  hasScoringRules,
+  NO_LEAGUE_SCORING_REASON,
+} from '@/lib/projections/leagueScoring'
 import { computeWinProbability, type MatchupPlayer } from '@/lib/projections/winProbability'
 
 /**
@@ -193,12 +198,11 @@ export async function loadSideProjections(args: {
   return {
     you: build(yourIds),
     opponent: build(oppIds),
-    leagueScoring: scoring
+    // A metadata-only settings object is "no rules" too — see `hasScoringRules`. Without this the
+    // eight label-only leagues read "N starters could not be priced", blaming the feed.
+    leagueScoring: hasScoringRules(scoring)
       ? { available: true }
-      : {
-          available: false,
-          reason: 'we hold no scoring settings for this league, and a generic projection would not be yours',
-        },
+      : { available: false, reason: NO_LEAGUE_SCORING_REASON },
   }
 }
 

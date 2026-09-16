@@ -17,6 +17,8 @@ vi.mock('@/lib/prisma', () => ({
 }))
 
 import { getLeagueScoreboard } from '@/lib/core-app/leagueScoreboard'
+import { NOTHING_LEAGUE_SCORED_REASON } from '@/lib/core-app/playerProjections'
+import { NO_LEAGUE_SCORING_REASON } from '@/lib/projections/leagueScoring'
 
 const BASE = {
   leagueId: 'af-uuid',
@@ -128,7 +130,13 @@ describe('getLeagueScoreboard', () => {
     expect(sb!.games[0].teams[0].projected).toBe(12)
   })
 
-  it('falls back to the generic number when the league has no scoring on file', async () => {
+  /*
+   * 🛑 THIS TEST USED TO ASSERT THE OPPOSITE: "falls back to the generic number when the league
+   * has no scoring on file", expecting 20. The panel printed that total under "these are
+   * projections, under your league's scoring", while the Matchup tab refused the same league.
+   * User decision, 2026-09-16: refuse, like Matchup.
+   */
+  it('🛑 no rules on file: no totals, the shared reason, and no feed read', async () => {
     matchupFindMany.mockResolvedValue([
       { rosterId: '1', matchupId: 1, pointsFor: 0, win: 0 },
       { rosterId: '2', matchupId: 1, pointsFor: 0, win: 0 },
@@ -137,7 +145,76 @@ describe('getLeagueScoreboard', () => {
     pricedAll()
 
     const sb = await getLeagueScoreboard({ ...BASE, scoringSettings: null })
-    expect(sb!.games[0].teams[0].projected).toBe(20)
+    expect(sb!.games[0].teams.map((t) => t.projected)).toEqual([null, null])
+    expect(sb!.games[0].winProbability).toBeNull()
+    expect(sb!.unpricedReason).toBe(NO_LEAGUE_SCORING_REASON)
+    expect(sb!.projectionBasis).toBeNull()
+    expect(projFindMany).not.toHaveBeenCalled()
+  })
+
+  it('⚠ a label-only settings object is no rules either', async () => {
+    matchupFindMany.mockResolvedValue([
+      { rosterId: '1', matchupId: 1, pointsFor: 0, win: 0 },
+      { rosterId: '2', matchupId: 1, pointsFor: 0, win: 0 },
+    ])
+    fourTeams()
+    pricedAll()
+
+    const labelOnly = { rules: {}, sport: 'NFL', preset: 'ppr', modifiers: {}, scoringFormat: 'PPR' }
+    const sb = await getLeagueScoreboard({ ...BASE, scoringSettings: labelOnly })
+    expect(sb!.games[0].teams[0].projected).toBeNull()
+    expect(sb!.unpricedReason).toBe(NO_LEAGUE_SCORING_REASON)
+  })
+
+  it('🛑 a starter the rules cannot price is LEFT OUT, never counted at his generic figure', async () => {
+    matchupFindMany.mockResolvedValue([
+      { rosterId: '1', matchupId: 1, pointsFor: 0, win: 0 },
+      { rosterId: '2', matchupId: 1, pointsFor: 0, win: 0 },
+    ])
+    fourTeams()
+    projFindMany.mockResolvedValue([
+      // Scores 6 under { rec: 1, pass_td: 4 }.
+      { playerId: 'u1-a', projectedPoints: 10, stats: { stats: { rec: 2, pass_td: 1 } } },
+      // A defender: generic 0 and no component line. Was counted as a PRICED zero.
+      { playerId: 'u1-b', projectedPoints: 0, stats: { name: 'LB' } },
+      { playerId: 'u2-a', projectedPoints: 10, stats: { stats: { rec: 2, pass_td: 1 } } },
+      // A stat line the rules have no key for. Was counted at its generic 10.
+      { playerId: 'u2-b', projectedPoints: 10, stats: { stats: { def_int: 1 } } },
+    ])
+
+    const sb = await getLeagueScoreboard(BASE)
+    const [yours, theirs] = sb!.games[0].teams
+    expect([yours.projected, yours.projectedFrom, yours.starterCount]).toEqual([6, 1, 2])
+    expect([theirs.projected, theirs.projectedFrom, theirs.starterCount]).toEqual([6, 1, 2])
+    // Both short, so no margin and no odds — the coverage rule, now fed honest counts.
+    expect(sb!.games[0].margin).toBeNull()
+    expect(sb!.games[0].winProbability).toBeNull()
+    expect(sb!.unpricedReason).toBeNull()
+  })
+
+  it('rules that match no projected stat say so, rather than blaming the league', async () => {
+    matchupFindMany.mockResolvedValue([
+      { rosterId: '1', matchupId: 1, pointsFor: 0, win: 0 },
+      { rosterId: '2', matchupId: 1, pointsFor: 0, win: 0 },
+    ])
+    fourTeams()
+    pricedAll()
+
+    const sb = await getLeagueScoreboard({ ...BASE, scoringSettings: { sack_yds: 2 } })
+    expect(sb!.games[0].teams[0].projected).toBeNull()
+    expect(sb!.unpricedReason).toBe(NOTHING_LEAGUE_SCORED_REASON)
+  })
+
+  it('a scored week carries no pricing reason, whatever the rules', async () => {
+    matchupFindMany.mockResolvedValue([
+      { rosterId: '1', matchupId: 1, pointsFor: 118.2, win: 1 },
+      { rosterId: '2', matchupId: 1, pointsFor: 101.4, win: 0 },
+    ])
+    fourTeams()
+
+    const sb = await getLeagueScoreboard({ ...BASE, scoringSettings: null })
+    expect(sb!.unpricedReason).toBeNull()
+    expect(sb!.games[0].margin).toBeCloseTo(16.8, 1)
   })
 
   it('⚠ withholds the margin when the two sides were measured differently', async () => {

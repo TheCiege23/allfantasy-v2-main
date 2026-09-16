@@ -113,6 +113,7 @@ function data(over: Partial<MyTeamData> = {}): MyTeamData {
           avatarUrl: null, projected: 118.2, projectedFrom: 9, starterCount: 9,
         },
         bye: false,
+        unpricedReason: null,
       },
     },
     upcomingByes: [],
@@ -293,6 +294,40 @@ describe('My Team — the reported problems', () => {
       />,
     )
     expect(t).toContain('do not hold this league')
+  })
+
+  /*
+   * 🛑 LEAGUE SCORING OR NOTHING (scoring audit, 2026-09-16). The matchup totals used to fall back
+   * to the generic figure; now a league we cannot score shows two dashes, and the dashes must not
+   * be left to explain themselves.
+   */
+  it('🛑 a projected matchup with no totals says why, where the one-line read goes', () => {
+    const base = data()
+    if (!base.nextMatchup.available) throw new Error('fixture')
+    const m = base.nextMatchup.data
+    const t = text(
+      <MyTeam
+        data={data({
+          nextMatchup: {
+            available: true,
+            data: {
+              ...m,
+              you: { ...m.you, projected: null, projectedFrom: 0 },
+              opponent: { ...m.opponent!, projected: null, projectedFrom: 0 },
+              unpricedReason: 'we hold no scoring settings for this league, and a generic projection would not be yours',
+            },
+          },
+        })}
+      />,
+    )
+    expect(t).toContain('No projected totals — we hold no scoring settings for this league')
+    expect(t).not.toContain('projected ahead')
+  })
+
+  it('prints the read, and no pricing reason, when both totals are league-scored', () => {
+    const t = text(<MyTeam data={data()} />)
+    expect(t).toContain('You are projected ahead by 13.5')
+    expect(t).not.toContain('No projected totals')
   })
 
   it('offers to hand the question to Chimmy, seeded and unsent', () => {

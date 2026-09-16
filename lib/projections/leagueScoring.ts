@@ -414,6 +414,30 @@ function bridgeProviderScoringRules(s: Record<string, unknown>): Record<string, 
 }
 
 /**
+ * Why a league-scored projection cannot be shown. One sentence for every surface that refuses
+ * for this reason, so two tabs of one league cannot explain the same gap differently.
+ */
+export const NO_LEAGUE_SCORING_REASON =
+  'we hold no scoring settings for this league, and a generic projection would not be yours'
+
+/**
+ * Whether extracted settings carry at least one rule the engine can apply.
+ *
+ * ⚠ A TRUTHY SETTINGS OBJECT IS NOT A RULEBOOK. Eight production leagues store metadata —
+ * `{rules, sport, preset, modifiers, …}` with an empty nested `rules` — which
+ * `extractScoringSettings` returns as-is (see `lib/core-app/playerImpact.ts`). Every player then
+ * prices to null, and a caller that checks presence alone reports "no projection" for what is
+ * really "no rules". Only a finite, non-zero weight counts, matching the engine's own loop.
+ */
+export function hasScoringRules(scoringSettings: Record<string, unknown> | null | undefined): boolean {
+  if (!scoringSettings || typeof scoringSettings !== 'object') return false
+  return Object.values(scoringSettings).some((w) => {
+    const n = readNumber(w)
+    return n != null && n !== 0
+  })
+}
+
+/**
  * Pull `scoring_settings` out of a stored `League.settings` snapshot.
  *
  * Returns null rather than an empty object when absent: an empty rulebook would

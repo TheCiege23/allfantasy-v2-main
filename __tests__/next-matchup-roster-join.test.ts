@@ -32,7 +32,9 @@ vi.mock('@/lib/prisma', () => ({
   },
 }))
 
-vi.mock('@/lib/core-app/playerProjections', () => ({
+// Only the feed read is doubled; the pricing helpers are the real ones under test.
+vi.mock('@/lib/core-app/playerProjections', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/core-app/playerProjections')>()),
   lookupProjections: mocks.lookupProjections,
 }))
 
@@ -63,12 +65,14 @@ const TEAMS = [
   },
 ]
 
-/** Every starter is worth ten under the generic line; nobody is scored by rules. */
+/** Ten catches a week at a point each: worth ten under these rules. The generic figure is a decoy. */
+const RULES = { rec: 1 }
+type Projection = { projectedPoints: number; componentStats: Record<string, unknown> | null }
 function projections(ids: string[]) {
-  return new Map(ids.map((id) => [id, { projectedPoints: 10, componentStats: null }]))
+  return new Map<string, Projection>(ids.map((id) => [id, { projectedPoints: 99, componentStats: { rec: 10 } }]))
 }
 
-async function run() {
+async function run(scoringSettings: Record<string, unknown> | null = RULES) {
   const { getNextMatchup } = await import('@/lib/core-app/nextMatchup')
   return getNextMatchup({
     leagueId: LEAGUE_ID,
@@ -77,7 +81,7 @@ async function run() {
     userId: USER_ID,
     seasonYear: 2026,
     week: 1,
-    scoringSettings: null,
+    scoringSettings,
     projectionWeek: { season: '2026', week: 1 },
   })
 }
@@ -167,5 +171,71 @@ describe('getNextMatchup roster join', () => {
     const m = await run()
     expect(m?.you.projected).toBe(20)
     expect(m?.you.starterCount).toBe(2)
+  })
+})
+
+/*
+ * 🛑 LEAGUE SCORING OR NOTHING (scoring audit, 2026-09-16). This fell back to the generic
+ * figure per starter, so a total could be part league-scored and part standard PPR, and the
+ * Matchup tab refused the very league this screen priced.
+ */
+describe('getNextMatchup pricing', () => {
+  const lineups = [
+    { platformUserId: 'sleeper-user-3', playerData: { starters: ['a', 'b', 'c'] } },
+    { platformUserId: 'sleeper-user-7', playerData: { starters: ['d', 'e'] } },
+  ]
+
+  beforeEach(() => {
+    vi.resetModules()
+    vi.clearAllMocks()
+    mocks.weeklyMatchupFindMany.mockResolvedValue(MATCHUP_ROWS)
+    mocks.leagueTeamFindMany.mockResolvedValue(TEAMS)
+    mocks.rosterFindMany.mockResolvedValue(lineups)
+    mocks.lookupProjections.mockImplementation(async (ids: string[]) => projections(ids))
+  })
+
+  it('prices under the league rules, never at the generic figure', async () => {
+    const m = await run()
+    expect(m?.you.projected).toBe(30)
+    expect(m?.unpricedReason).toBeNull()
+  })
+
+  it('🛑 a starter the rules cannot price is LEFT OUT, not counted at his generic 99', async () => {
+    mocks.lookupProjections.mockImplementation(async (ids: string[]) => {
+      const map = projections(ids)
+      // A defender: generic 0 and no component line — unpriceable, not a priced zero.
+      map.set('b', { projectedPoints: 0, componentStats: null })
+      // A line the rules have no key for.
+      map.set('c', { projectedPoints: 99, componentStats: { def_int: 1 } })
+      return map
+    })
+    const m = await run()
+    expect(m?.you.projected).toBe(10)
+    expect(m?.you.projectedFrom).toBe(1)
+    expect(m?.you.starterCount).toBe(3)
+    expect(m?.unpricedReason).toBeNull()
+  })
+
+  it('🛑 no rules on file: no totals, the shared reason, and no feed read', async () => {
+    const { NO_LEAGUE_SCORING_REASON } = await import('@/lib/projections/leagueScoring')
+    const m = await run(null)
+    expect(m?.you.projected).toBeNull()
+    expect(m?.opponent?.projected).toBeNull()
+    expect(m?.unpricedReason).toBe(NO_LEAGUE_SCORING_REASON)
+    expect(mocks.lookupProjections).not.toHaveBeenCalled()
+  })
+
+  it('⚠ a label-only settings object is no rules either', async () => {
+    const { NO_LEAGUE_SCORING_REASON } = await import('@/lib/projections/leagueScoring')
+    const m = await run({ rules: {}, sport: 'NFL', preset: 'ppr', scoringFormat: 'PPR' })
+    expect(m?.you.projected).toBeNull()
+    expect(m?.unpricedReason).toBe(NO_LEAGUE_SCORING_REASON)
+  })
+
+  it('rules that match no projected stat say so, rather than blaming the league', async () => {
+    const { NOTHING_LEAGUE_SCORED_REASON } = await import('@/lib/core-app/playerProjections')
+    const m = await run({ sack_yds: 2 })
+    expect(m?.you.projected).toBeNull()
+    expect(m?.unpricedReason).toBe(NOTHING_LEAGUE_SCORED_REASON)
   })
 })
