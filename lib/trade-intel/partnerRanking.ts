@@ -33,6 +33,7 @@
  * ⚠ PURE. No Prisma, no fetch: every input arrives resolved, so every branch is testable offline.
  */
 import { DEFAULT_SLOT_ELIGIBILITY, fillLineup, type SlotEligibility } from '@/lib/decision-os/trade/rosterImpact'
+import { REFERENCE_NFL_BUCKETS } from '@/lib/sports-data-gateway/canonical/canonicalPosition'
 
 export type RankingPlayer = {
   id: string
@@ -97,19 +98,39 @@ const ELIGIBILITY: SlotEligibility = {
   ...DEFAULT_SLOT_ELIGIBILITY,
   WRRB_WRT: ['RB', 'WR', 'TE'],
   SF: ['QB', 'RB', 'WR', 'TE'],
-  DEF_FLEX: ['DL', 'LB', 'DB'],
+  /*
+   * 🛑 DETAILED IDP POSITIONS ARE ACCEPTED BY THE SLOT, NEVER RENAMED ON THE PLAYER. The first
+   * version of this file mapped each detailed defensive position to its broad bucket, and
+   * `__tests__/fantasy-os/unified-plane-provider-boundary.test.ts` (5H-b2) failed it in CI: that is
+   * the competing broad-collapse map the governed service replaces. The buckets come from
+   * `REFERENCE_NFL_BUCKETS` in `canonical/canonicalPosition.ts` as slot → accepted-positions lists.
+   */
+  DL: REFERENCE_NFL_BUCKETS.buckets.DL!,
+  LB: REFERENCE_NFL_BUCKETS.buckets.LB!,
+  DB: REFERENCE_NFL_BUCKETS.buckets.DB!,
+  IDP_FLEX: REFERENCE_NFL_BUCKETS.buckets.IDP_FLEX!,
+  DEF_FLEX: REFERENCE_NFL_BUCKETS.buckets.IDP_FLEX!,
+  DEF: ['DEF', 'DST'],
+  DST: ['DST', 'DEF'],
+  K: ['K', 'PK'],
 }
 
-/** Provider position spellings onto the slot vocabulary. */
-const POSITION_ALIAS: Record<string, string> = {
-  DST: 'DEF', 'D/ST': 'DEF', DE: 'DL', DT: 'DL', NT: 'DL', EDGE: 'DL',
-  ILB: 'LB', OLB: 'LB', MLB: 'LB', CB: 'DB', S: 'DB', SS: 'DB', FS: 'DB', PK: 'K',
+/**
+ * The single-position slot kinds, in the order a player's bucket is looked up. A player is grouped
+ * under the first of these whose slot accepts his (detailed) position — so a CB is weighed with the
+ * league's DB starters without his position ever being rewritten.
+ */
+const BUCKETS = ['QB', 'RB', 'WR', 'TE', 'K', 'DEF', 'DL', 'LB', 'DB'] as const
+
+function bucketOf(position: string): string {
+  for (const b of BUCKETS) if (ELIGIBILITY[b]?.includes(position)) return b
+  return position
 }
 
+/** Trimmed, upper-case. The player's own detailed position is kept — see `ELIGIBILITY`. */
 export function normalizePosition(position: string | null | undefined): string | null {
   const p = (position ?? '').trim().toUpperCase()
-  if (!p) return null
-  return POSITION_ALIAS[p] ?? p
+  return p || null
 }
 
 /** A lineup "hole" or weak spot must be this far below the league's typical starter to count. */
@@ -119,21 +140,25 @@ const FAIR_BAND = 0.15
 /** Past this gap, no package is offered at all — it would not be a realistic opening. */
 const MAX_APART = 0.35
 
+type PricedPlayer = RankingPlayer & { value: number; position: string; bucket: string }
+
 type Analysed = {
   roster: RankingRoster
-  priced: Array<RankingPlayer & { value: number; position: string }>
+  priced: PricedPlayer[]
   starters: Set<string>
-  /** Weakest starter value per position this league starts (0 when the slot went unfilled). */
+  /** Weakest starter value per slot bucket this league starts (0 when the slot went unfilled). */
   weakest: Map<string, number>
-  /** Non-starters by position, best first. */
-  spare: Map<string, Array<RankingPlayer & { value: number; position: string }>>
+  /** Non-starters by slot bucket, best first. */
+  spare: Map<string, PricedPlayer[]>
   unpriced: number
 }
 
 function analyse(roster: RankingRoster, slots: readonly string[], startingPositions: Set<string>): Analysed {
-  const priced = roster.players.flatMap((p) => {
+  const priced = roster.players.flatMap((p): PricedPlayer[] => {
     const position = normalizePosition(p.position)
-    return typeof p.value === 'number' && Number.isFinite(p.value) && position ? [{ ...p, value: p.value, position }] : []
+    return typeof p.value === 'number' && Number.isFinite(p.value) && position
+      ? [{ ...p, value: p.value, position, bucket: bucketOf(position) }]
+      : []
   })
   const fill = fillLineup(
     priced.map((p) => ({ playerId: p.id, position: p.position, projectedPoints: p.value })),
@@ -143,17 +168,17 @@ function analyse(roster: RankingRoster, slots: readonly string[], startingPositi
   const starters = new Set(fill.starterIds)
 
   const weakest = new Map<string, number>()
-  for (const position of startingPositions) {
-    const values = priced.filter((p) => starters.has(p.id) && p.position === position).map((p) => p.value)
-    weakest.set(position, values.length > 0 ? Math.min(...values) : 0)
+  for (const bucket of startingPositions) {
+    const values = priced.filter((p) => starters.has(p.id) && p.bucket === bucket).map((p) => p.value)
+    weakest.set(bucket, values.length > 0 ? Math.min(...values) : 0)
   }
 
-  const spare = new Map<string, Array<RankingPlayer & { value: number; position: string }>>()
+  const spare = new Map<string, PricedPlayer[]>()
   for (const p of priced) {
     if (starters.has(p.id)) continue
-    const list = spare.get(p.position) ?? []
+    const list = spare.get(p.bucket) ?? []
     list.push(p)
-    spare.set(p.position, list)
+    spare.set(p.bucket, list)
   }
   for (const list of spare.values()) list.sort((a, b) => b.value - a.value)
 
@@ -167,7 +192,8 @@ function median(values: number[]): number {
   return s.length % 2 === 1 ? s[mid]! : (s[mid - 1]! + s[mid]!) / 2
 }
 
-type Upgrade = { position: string; player: RankingPlayer & { value: number; position: string }; severity: number; gain: number; score: number; currentWeakest: number }
+/** `position` here is the slot BUCKET the upgrade is at (e.g. DB), not the player's detailed position. */
+type Upgrade = { position: string; player: PricedPlayer; severity: number; gain: number; score: number; currentWeakest: number }
 
 /**
  * The best spare player `from` holds that would start over `to`'s weakest player somewhere `to`
@@ -283,7 +309,7 @@ export function rankTradePartners(args: {
   }
 
   const startingPositions = new Set<string>()
-  for (const s of slots) for (const p of ELIGIBILITY[s] ?? []) startingPositions.add(p)
+  for (const s of slots) for (const p of ELIGIBILITY[s] ?? []) startingPositions.add(bucketOf(p))
 
   const analysed = new Map(args.rosters.map((r) => [r.rosterId, analyse(r, lineupKnown ? slots : [], startingPositions)]))
   const viewer = analysed.get(args.viewerRosterId)!
