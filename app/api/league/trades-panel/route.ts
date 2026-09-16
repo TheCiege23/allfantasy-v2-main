@@ -26,7 +26,7 @@ import {
 import { priceTradesAtCurrentMarket } from '@/lib/league-trade-engine/tradeLearningCapture'
 import { evaluateCanonicalTrade } from '@/lib/decision-os/trade/canonicalEvaluator'
 import { resolveCanonicalWorld } from '@/lib/decision-os/world'
-import type { TradeAssetSummary } from '@/lib/decision-os/trade/dco'
+import { afTradeItemToAssetSummary } from '@/lib/decision-os/trade/afTradeItemAsset'
 import type { League } from '@prisma/client'
 
 export const dynamic = 'force-dynamic'
@@ -107,29 +107,8 @@ async function buildNativeActiveTrades(leagueId: string, userId: string): Promis
         proposerRosterId: t.proposerRosterId,
         receiverRosterId: t.receiverRosterId,
         viewerRosterId: myRosterId ?? t.proposerRosterId,
-        assets: t.items.map((item): TradeAssetSummary => {
-          const metadata = item.metadata && typeof item.metadata === 'object' && !Array.isArray(item.metadata)
-            ? item.metadata as Record<string, unknown>
-            : {}
-          const stringValue = (value: unknown) => typeof value === 'string' && value.trim() ? value.trim() : null
-          const numberValue = (value: unknown) => typeof value === 'number' && Number.isFinite(value) ? value : null
-          return {
-            assetType: item.itemType,
-            itemReference: item.itemReference,
-            fromRosterId: item.fromRosterId,
-            toRosterId: item.toRosterId,
-            playerId: item.itemType.toLowerCase().includes('player') ? item.itemReference : stringValue(metadata.playerId),
-            playerName: stringValue(metadata.playerName ?? metadata.name),
-            position: stringValue(metadata.position),
-            team: stringValue(metadata.team),
-            pickSeason: numberValue(metadata.pickSeason ?? metadata.season),
-            pickRound: numberValue(metadata.pickRound ?? metadata.round),
-            pickNumber: numberValue(metadata.pickNumber),
-            pickOriginalRosterId: stringValue(metadata.originalRosterId),
-            pickLabel: stringValue(metadata.pickLabel),
-            faabAmount: item.faabAmount ?? numberValue(metadata.faabAmount),
-          }
-        }),
+        // Shared with the per-trade detail route — see lib/decision-os/trade/afTradeItemAsset.ts.
+        assets: t.items.map(afTradeItemToAssetSummary),
         currentSeason: world.league.season ?? undefined,
       }, { resolveWorld: async () => world }).catch(() => null) : null
       return {

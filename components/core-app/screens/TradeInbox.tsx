@@ -4,6 +4,7 @@ import { fetchTradesPanel } from '@/components/core-app/screens/tradesPanelFetch
 
 import { useCallback, useEffect, useState } from 'react'
 import type { PickedAsset } from '@/components/core-app/screens/TradeAssetPicker'
+import { LineupImpactPanel, type LineupImpactResult } from '@/components/core-app/trade/LineupImpactPanel'
 
 /**
  * Inbox & Sent on the Trade Center.
@@ -329,6 +330,18 @@ export function TradeInbox(props: {
   const [data, setData] = useState<PanelResponse | null>(null)
   const [state, setState] = useState<'idle' | 'loading' | 'failed'>('idle')
   const [countering, setCountering] = useState<{ id: string; state: 'loading' | 'failed' } | null>(null)
+  /*
+   * Lineup impact per offer, fetched the first time a manager opens it and kept after that.
+   *
+   * ⚠ CACHED PER OFFER ID FOR THE LIFE OF THE SCREEN, and deliberately not refetched on toggle. The
+   * route enriches a whole roster to answer this, and a manager flipping the panel open and shut
+   * while deciding should not pay that each time. A stale answer here is bounded by the screen's
+   * own lifetime, which is the same window the offer list itself is read for.
+   */
+  const [lineupOpen, setLineupOpen] = useState<string | null>(null)
+  const [lineupById, setLineupById] = useState<
+    Record<string, { state: 'loading' } | { state: 'failed' } | { state: 'ready'; result: LineupImpactResult }>
+  >({})
   const [timelineFilter, setTimelineFilter] = useState<TimelineFilter>('all')
 
   const { leagueId, onLoad, onCounter, reloadToken = 0 } = props
@@ -386,6 +399,45 @@ export function TradeInbox(props: {
    * engine matches players and picks by that id. The detail route returns the raw
    * items, so the counter is built from identifiers rather than from display text.
    */
+  /*
+   * ⚠ SAME ROUTE AS `counterOffer` BELOW, BUT WITH `?include=rosterImpact` — and that parameter is
+   * the whole cost control. Without it the route skips the whole-roster enrichment, which is why
+   * countering stays as cheap as it was. Opening the panel is the only thing that pays for it.
+   */
+  const toggleLineupImpact = useCallback(
+    async (tradeId: string) => {
+      if (lineupOpen === tradeId) {
+        setLineupOpen(null)
+        return
+      }
+      setLineupOpen(tradeId)
+      if (!leagueId) return
+      const existing = lineupById[tradeId]
+      if (existing && existing.state !== 'failed') return
+      setLineupById((prev) => ({ ...prev, [tradeId]: { state: 'loading' } }))
+      try {
+        const r = await fetch(
+          `/api/leagues/${encodeURIComponent(leagueId)}/trades/${encodeURIComponent(tradeId)}?include=rosterImpact`,
+          { cache: 'no-store' },
+        )
+        const j = (await r.json().catch(() => ({}))) as { rosterImpact?: LineupImpactResult }
+        /*
+         * ⚠ A 200 WITHOUT `rosterImpact` IS A FAILURE, NOT AN EMPTY IMPACT. The route omits the key
+         * only when the parameter was not honoured; rendering that as "no change" would state a
+         * result nobody computed.
+         */
+        if (!r.ok || !j.rosterImpact) {
+          setLineupById((prev) => ({ ...prev, [tradeId]: { state: 'failed' } }))
+          return
+        }
+        setLineupById((prev) => ({ ...prev, [tradeId]: { state: 'ready', result: j.rosterImpact! } }))
+      } catch {
+        setLineupById((prev) => ({ ...prev, [tradeId]: { state: 'failed' } }))
+      }
+    },
+    [leagueId, lineupOpen, lineupById],
+  )
+
   const counterOffer = useCallback(
     async (t: { id: string; partnerName?: string | null }) => {
       if (!leagueId || !onCounter) return
@@ -580,8 +632,30 @@ export function TradeInbox(props: {
               >
                 {countering?.id === t.id && countering.state === 'loading' ? 'Loading…' : 'Counter'}
               </button>
+              <button
+                type="button"
+                className="af-btn af-btn--ghost"
+                aria-expanded={lineupOpen === t.id}
+                aria-controls={`lineup-impact-${t.id}`}
+                onClick={() => void toggleLineupImpact(t.id)}
+              >
+                {lineupOpen === t.id ? 'Hide lineup impact' : 'Lineup impact'}
+              </button>
               {countering?.id === t.id && countering.state === 'failed' ? (
                 <span className="af-tc-nosignal">Could not load that offer to counter it.</span>
+              ) : null}
+              {lineupOpen === t.id ? (
+                <div id={`lineup-impact-${t.id}`} className="af-tc-lineup-impact-slot">
+                  {lineupById[t.id]?.state === 'ready' ? (
+                    <LineupImpactPanel
+                      result={(lineupById[t.id] as { state: 'ready'; result: LineupImpactResult }).result}
+                    />
+                  ) : lineupById[t.id]?.state === 'failed' ? (
+                    <span className="af-tc-nosignal">Could not load the lineup impact for this offer.</span>
+                  ) : (
+                    <span className="af-tc-row-sub">Working out what this does to your lineup…</span>
+                  )}
+                </div>
               ) : null}
             </div>
           ))}
