@@ -42,11 +42,18 @@ function benchIds(allIds: string[], starters: string[], reserve: string[], taxi:
   return allIds.filter((id) => !used.has(id))
 }
 
-async function resolveNames(
+/**
+ * Roster player id → name/position/team/injury, from `sportsPlayerRecord`.
+ *
+ * Exported so the Chimmy trade scenario names a whole league's rosters through the SAME lookup
+ * that names the viewer's own — `limit` is the only thing that differs (one roster vs. all of them).
+ */
+export async function resolveNames(
   sport: SupportedSport,
   ids: string[],
+  limit = 80,
 ): Promise<Map<string, { name: string | null; position: string | null; team: string | null; injury: string | null }>> {
-  const uniq = [...new Set(ids)].filter(Boolean).slice(0, 80)
+  const uniq = [...new Set(ids)].filter(Boolean).slice(0, limit)
   const out = new Map<string, { name: string | null; position: string | null; team: string | null; injury: string | null }>()
   if (uniq.length === 0) return out
 

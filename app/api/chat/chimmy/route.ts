@@ -84,6 +84,13 @@ import {
 } from '@/lib/chimmy/screenshotEvidence'
 import { buildHeadToHeadGrounding } from '@/lib/chimmy/headToHeadGrounding'
 import { buildDescribedTradeContext } from '@/lib/chimmy-trade/describedTradeEvaluator'
+import {
+  buildTradeScenario,
+  looksLikeDescribedTrade,
+  renderTradeScenarioBlock,
+  type ReadyTradeScenario,
+  type TradeScenario,
+} from '@/lib/chimmy/tradeScenarioGrounding'
 import { buildDraftContext } from '@/lib/chimmy/draftGrounding'
 import { buildWaiverContext } from '@/lib/chimmy/waiverGrounding'
 import { buildPlayerNewsContext } from '@/lib/chimmy/playerNewsGrounding'
@@ -2429,6 +2436,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   }
 
   let pecrIntent = 'general'
+  /** Set inside `plan` when a described trade resolves against this league's rosters. */
+  let tradeScenarioForMeta: ReadyTradeScenario | null = null
   try {
     const pecrResult = await runPECR(
       {
@@ -2897,11 +2906,45 @@ ${newsCtx}`
              * league-less one gets — which is also what keeps `not_member` and
              * `not_found` indistinguishable here.
              */
-            const describedTradeCtx = await buildDescribedTradeContext({
-              message: planInput.message,
-              leagueId: leagueSnapshot?.id ?? null,
-              sport,
-            })
+            /*
+             * Chimmy item 8 — the trade the message describes, run against THIS league's real
+             * rosters by the canonical evaluator: value on each side and the starting lineup
+             * before and after. See `lib/chimmy/tradeScenarioGrounding.ts`.
+             *
+             * 🛑 ONLY THE MEMBERSHIP-PROVEN LEAGUE AND A SIGNED-IN USER. It reads every roster in
+             * the league.
+             *
+             * ⚠ PREPENDED, because `applyGroundingBudget` drops blocks from the END and this is the
+             * most decision-bearing block a trade question can have. And when it resolves it
+             * SUPERSEDES the described-trade grade below — two grades for one sentence from two
+             * pricing paths is a contradiction the model would have to choose between.
+             */
+            let tradeScenario: TradeScenario | null = null
+            if (leagueSnapshot && userId && looksLikeDescribedTrade(planInput.message)) {
+              tradeScenario = await buildTradeScenario({
+                message: planInput.message,
+                leagueId: leagueSnapshot.id,
+                userId,
+              }).catch(() => null)
+            }
+            if (tradeScenario) {
+              const scenarioBlock = renderTradeScenarioBlock(tradeScenario)
+              legacyEnrichmentContext = legacyEnrichmentContext
+                ? `${scenarioBlock}\n\n${legacyEnrichmentContext}`
+                : scenarioBlock
+              if (tradeScenario.status === 'ready') {
+                tradeScenarioForMeta = tradeScenario
+                dataSources.push('trade_scenario')
+              }
+            }
+
+            const describedTradeCtx = tradeScenario?.status === 'ready'
+              ? null
+              : await buildDescribedTradeContext({
+                  message: planInput.message,
+                  leagueId: leagueSnapshot?.id ?? null,
+                  sport,
+                })
             if (describedTradeCtx) {
               legacyEnrichmentContext = legacyEnrichmentContext
                 ? `${legacyEnrichmentContext}
@@ -3255,6 +3298,8 @@ ${describedTradeCtx}`
       assistant: 'Chimmy',
       conversationId,
       players: playerCards.length > 0 ? playerCards : undefined,
+      /** The before/after the drawer renders; present only when the scenario resolved. */
+      scenario: tradeScenarioForMeta ?? undefined,
       /*
        * What this answer was actually grounded on. The drawer renders it, so a
        * "Chimmy is answering blind" state is VISIBLE rather than something you

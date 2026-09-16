@@ -21,6 +21,8 @@ import { PresenceStrip, type PresentViewer } from './PresenceStrip'
 import { MessageReactions } from './MessageReactions'
 import { QuotedMessage } from './QuotedMessage'
 import { ChimmyEvidenceBlock, type ChimmyEvidence } from './ChimmyEvidence'
+import { ChimmyScenarioCard } from './ChimmyScenario'
+import type { ReadyTradeScenario } from '@/lib/chimmy/tradeScenarioTypes'
 import { censorProfanity } from '@/lib/chat-core/censorProfanity'
 import { PinnedBoard } from './PinnedBoard'
 import { readPinnedRefs, type PinnedRef } from '@/lib/chat-core/pinnedMessages'
@@ -235,6 +237,8 @@ type ChatTurn = {
    * arrives with every answer and used to be discarded.
    */
   evidence?: ChimmyEvidence | null
+  /** A trade's before/after, computed from the league's rosters. Only a resolved one arrives. */
+  scenario?: ReadyTradeScenario | null
 }
 
 type ChimmyGrounding =
@@ -375,6 +379,7 @@ type ChimmyEnvelope = {
   meta?: {
     leagueGrounding?: ChimmyGrounding
     players?: ChimmyPlayerCard[]
+    scenario?: ReadyTradeScenario
     /** Answered without spending anything — do not print a price on it. */
     free?: boolean
     /**
@@ -664,6 +669,14 @@ function ChimmyPanel({
             grounding,
             players: payload.meta?.players ?? null,
             evidence: readEvidence(payload),
+            /*
+             * Only a well-formed, resolved scenario is kept. The route never sends anything else,
+             * but a card that renders a half-shaped object would print "undefined" into a number
+             * cell — a wrong number is worse than no card.
+             */
+            scenario: payload.meta?.scenario?.status === 'ready' && Array.isArray(payload.meta.scenario.give)
+              ? payload.meta.scenario
+              : null,
           },
         ])
       } catch (e) {
@@ -773,6 +786,8 @@ function ChimmyPanel({
               {t.role === 'chimmy' && t.evidence ? (
                 <ChimmyEvidenceBlock evidence={t.evidence} />
               ) : null}
+
+              {t.role === 'chimmy' && t.scenario ? <ChimmyScenarioCard scenario={t.scenario} /> : null}
 
               {t.role === 'chimmy' && t.players?.length ? (
                 <PlayerChips players={t.players} />
