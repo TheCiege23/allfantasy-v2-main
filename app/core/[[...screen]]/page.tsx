@@ -78,6 +78,7 @@ import Waivers from '@/components/core-app/screens/Waivers'
 import { getWaiversData } from '@/lib/core-app/waivers'
 import { getWaiversBoard } from '@/lib/core-app/waiversBoard'
 import { readWaiversBoardSummary } from '@/lib/core-app/waiversBoardSummary'
+import { readPortfolioSummary } from '@/lib/core-app/portfolioSummary'
 import WaiversBoard from '@/components/core-app/boards/WaiversBoard'
 import DraftHq from '@/components/core-app/screens/DraftHq'
 import DraftHqBoard from '@/components/core-app/boards/DraftHqBoard'
@@ -1619,7 +1620,41 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
    * Portfolio is the league INVENTORY — the thing /core home deliberately is not.
    * Home answers "what needs me now" from a queue; this answers "what do I have".
    */
-  const portfolio = activeKey === 'portfolio' ? await getPortfolio(userId).catch(() => null) : null
+  /*
+   * ── PORTFOLIO ON SUMMARIES ─────────────────────────────────────────
+   *
+   * ⚠ ONLY `getPortfolio` IS SUMMARISED — the two panels below it are NOT, and that boundary is
+   * forced rather than chosen. `ScreenSummaryDefinition.build` takes a `SummaryScope` and nothing
+   * else, and a scope holds short scalars; the exposure and value-action loaders take the league
+   * LIST, which cannot go in one. Having the builder re-derive that list would compile and pass,
+   * and would be wrong — the fingerprint in the key comes from the page's list, so a builder
+   * resolving its own could file one portfolio's panels under another's key. See the module header.
+   *
+   * ⚠ ITS COST IS A SERIAL FAN-OUT, NOT A WIDE JOIN: `getPortfolio` runs one `findRosterForTeam`
+   * per claimed team inside a sequential loop, so an eight-league account pays ten non-overlapping
+   * round trips. That is why a short list is worth caching here.
+   */
+  /*
+   * 🛑 `portfolioScreenOnSummary`, NOT `portfolioOnSummary` — THAT NAME IS ALREADY TAKEN, BY A
+   * DIFFERENT PORTFOLIO. `portfolioOnSummary` further down belongs to the HOME's portfolio card
+   * (lib/core-app/homePortfolioSummary.ts), which is the "what needs me now" queue. This is the
+   * `/core/portfolio` SCREEN — the league inventory, the thing home deliberately is not. Two
+   * unrelated surfaces both reasonably called "portfolio"; the collision was a redeclare error
+   * rather than a silent shadow only because both are `const` in one function scope.
+   */
+  const portfolioScreenOnSummary = isEnabled('sports-os.screen-summaries', userId, DEFAULT_ROLLOUTS)
+
+  const portfolioScreenFresh =
+    activeKey === 'portfolio' && portfolioScreenOnSummary
+      ? await readPortfolioSummary(userId, leagues as unknown as Dash34LeagueRow[]).catch(() => null)
+      : null
+
+  const portfolio =
+    activeKey === 'portfolio'
+      ? portfolioScreenOnSummary
+        ? (portfolioScreenFresh?.data ?? null)
+        : await getPortfolio(userId).catch(() => null)
+      : null
   const [portfolioExposure, portfolioValueActions] = activeKey === 'portfolio'
     ? await Promise.all([
         getCrossLeagueExposure(userId, playedLeagues.map((league) => league.id), 12).catch(() => null),
