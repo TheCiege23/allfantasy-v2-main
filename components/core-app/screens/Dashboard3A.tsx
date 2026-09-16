@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { useEffect, useId, useRef, useState } from 'react'
+import { Fragment, useEffect, useId, useRef, useState } from 'react'
 import MiniPlayerImg from '@/components/MiniPlayerImg'
 /*
  * ⚠ af-core.css FIRST, AND IT IS LOAD BEARING. This screen renders at /dashboard
@@ -113,6 +113,16 @@ type Dashboard3AChrome = {
   commissionerCount?: number
   /** Server-rendered clock, so the header does not hydrate to a different time. */
   nowLabel?: string | null
+  /**
+   * The order of the cards inside each column (lib/core-app/homeCardOrder.ts). A key left out of a
+   * column is not rendered there — the /core home leads with its decision queue above this screen,
+   * so it omits `issues`. Absent, the designed order stands.
+   */
+  order?: {
+    main?: Array<'routine' | 'issues' | 'matchups'>
+    side?: Array<'chimmy' | 'career' | 'rivals'>
+    stack?: Array<'exposure' | 'following' | 'receipts'>
+  }
 }
 
 /*
@@ -440,6 +450,9 @@ function cardsFromData(props: Dashboard3AData & Dashboard3AChrome): Dashboard3AS
 export function Dashboard3A(props: Dashboard3AProps) {
   const { planName = null, tokensLeft = null, nowLabel = null, commissionerCount = 0 } = props
   const slots = props.slots ?? cardsFromData(props)
+  const mainOrder = props.order?.main ?? (['routine', 'issues', 'matchups'] as const)
+  const sideOrder = props.order?.side ?? (['chimmy', 'career', 'rivals'] as const)
+  const stackOrder = props.order?.stack ?? (['exposure', 'following', 'receipts'] as const)
   // The hidden standalone rail below reads these; with slots it has no data, and it is hidden in the shell.
   const data = props.slots ? null : props.data
   const career = props.slots ? null : props.career
@@ -579,20 +592,20 @@ export function Dashboard3A(props: Dashboard3AProps) {
 
         <div className="af3a-body">
           <div className="af3a-col-main">
-            {/* ── Your week — the weekly routine, today's step first in the eye ── */}
-            {slots.routine}
-            {/* ── Outstanding issues ───────────────────────────────────── */}
-            {slots.issues}
-
-            {/* ── This week's matchups ─────────────────────────────────── */}
-            {slots.matchups}
+            {/*
+              Your week (the weekly routine), outstanding issues and this week's matchups — in the
+              order `order.main` gives, which on /core puts a live slate's matchups first.
+            */}
+            {mainOrder.map((key) => (
+              <Fragment key={key}>{slots[key]}</Fragment>
+            ))}
           </div>
 
           {/* ── Right column ───────────────────────────────────────────── */}
           <div className="af3a-col-side">
-            {slots.chimmy}
-            {slots.career}
-            {slots.rivals}
+            {sideOrder.map((key) => (
+              <Fragment key={key}>{slots[key]}</Fragment>
+            ))}
           </div>
         </div>
 
@@ -602,9 +615,9 @@ export function Dashboard3A(props: Dashboard3AProps) {
         <div className="af3a-bottom">
           {/* Exposure and Following share a column, so the bottom row stays three-up. */}
           <div className="af3a-stack">
-            {slots.exposure}
-            {slots.following}
-            {slots.receipts}
+            {stackOrder.map((key) => (
+              <Fragment key={key}>{slots[key]}</Fragment>
+            ))}
           </div>
 
           {slots.leagues}
@@ -746,12 +759,15 @@ export function Dash3AMatchups({
   week,
   winProb,
   weekLabel,
+  freshness = null,
 }: {
   /** The summary's ranked league list — only its live scores are read here. */
   leagues: Dash34League[]
   week: WeekAllData | null
   winProb: Record<string, number> | null
   weekLabel: string | null
+  /** The card's freshness line (components/core-app/home/CardFreshness.tsx), rendered at its foot. */
+  freshness?: React.ReactNode
 }) {
   /*
    * Two real sources, preferred in order. `Dash34League.score` is live and knows
@@ -840,6 +856,7 @@ export function Dash3AMatchups({
                   ))}
                 </div>
               )}
+              {freshness}
             </section>
   )
 }
@@ -871,7 +888,7 @@ export function Dash3AChimmy({ openCount }: { openCount: number }) {
   )
 }
 
-export function Dash3ACareer({ career }: { career: CareerData | null }) {
+export function Dash3ACareer({ career, freshness = null }: { career: CareerData | null; freshness?: React.ReactNode }) {
   return (
             <section className="af3a-card">
               <header className="af3a-cardhead">
@@ -927,6 +944,7 @@ export function Dash3ACareer({ career }: { career: CareerData | null }) {
                   completed season is imported.
                 </p>
               )}
+              {freshness}
             </section>
   )
 }
@@ -937,7 +955,13 @@ export function Dash3ACareer({ career }: { career: CareerData | null }) {
  * estimated. The design also shows when a rival is usually online; nothing
  * records that, so it is the one line omitted rather than guessed.
  */
-export function Dash3ARivals({ rivals }: { rivals: PanelState<RivalsData> | null }) {
+export function Dash3ARivals({
+  rivals,
+  freshness = null,
+}: {
+  rivals: PanelState<RivalsData> | null
+  freshness?: React.ReactNode
+}) {
   return (
             <section className="af3a-card">
               <header className="af3a-cardhead">
@@ -972,6 +996,7 @@ export function Dash3ARivals({ rivals }: { rivals: PanelState<RivalsData> | null
                   {rivals ? sentence(rivals.reason) : 'Head-to-head records have not been read yet.'}
                 </p>
               )}
+              {freshness}
             </section>
   )
 }
@@ -980,14 +1005,23 @@ export function Dash3ARivals({ rivals }: { rivals: PanelState<RivalsData> | null
  * Counts in, not league rows: the same inventory the rail switches over (every league you play, not
  * the capped queue), counted by `platformCountsOf` — on the server when the home streams.
  */
-export function Dash3APortfolioChart({ platformCounts }: { platformCounts: PlatformCount[] }) {
+export function Dash3APortfolioChart({
+  platformCounts,
+  freshness = null,
+}: {
+  platformCounts: PlatformCount[]
+  freshness?: React.ReactNode
+}) {
   return (
-        <WorkbookBarChart
-          title="League portfolio by platform"
-          subtitle="Every connected league in Core"
-          valueLabel="Leagues"
-          data={platformCounts}
-        />
+        <>
+          <WorkbookBarChart
+            title="League portfolio by platform"
+            subtitle="Every connected league in Core"
+            valueLabel="Leagues"
+            data={platformCounts}
+          />
+          {freshness}
+        </>
   )
 }
 
@@ -996,7 +1030,13 @@ export function Dash3APortfolioChart({ platformCounts }: { platformCounts: Platf
  * starters: the question is how much of your season rides on one player,
  * and a bench stash is still exposure.
  */
-export function Dash3AExposure({ exposure }: { exposure: PanelState<ExposureData> | null }) {
+export function Dash3AExposure({
+  exposure,
+  freshness = null,
+}: {
+  exposure: PanelState<ExposureData> | null
+  freshness?: React.ReactNode
+}) {
   return (
           <section className="af3a-card">
             <header className="af3a-cardhead">
@@ -1028,6 +1068,7 @@ export function Dash3AExposure({ exposure }: { exposure: PanelState<ExposureData
               </p>
             )}
             <Link className="af3a-cardlink" href="/core/portfolio">Open Portfolio →</Link>
+            {freshness}
           </section>
   )
 }
@@ -1075,7 +1116,15 @@ export function Dash3AReceipts({ receipts }: { receipts: DecisionReceiptsData | 
   )
 }
 
-export function Dash3ALeagues({ leagues, totalLeagues }: { leagues: Dash34League[]; totalLeagues: number | null }) {
+export function Dash3ALeagues({
+  leagues,
+  totalLeagues,
+  freshness = null,
+}: {
+  leagues: Dash34League[]
+  totalLeagues: number | null
+  freshness?: React.ReactNode
+}) {
   /*
    * ⚠ `data.leagues` IS NOT EVERY LEAGUE, AND THIS HEADER CLAIMED IT WAS.
    * `getDash34Data` caps that array at LIST_LIMIT = 8 because 34a's main column
@@ -1107,7 +1156,8 @@ export function Dash3ALeagues({ leagues, totalLeagues }: { leagues: Dash34League
                   <Link
                     key={l.id}
                     className="af3a-league"
-                    href={`/dashboard?league=${encodeURIComponent(l.id)}`}
+                    /* Straight to /core — /dashboard only redirects here, a round trip per tap. */
+                    href={`/core?league=${encodeURIComponent(l.id)}`}
                   >
                     <span className={`af3a-tile ${platformClass(l.platform)}`}>
                       <Mark src={l.imageUrl} alt={l.name ?? 'League'} letter={platformTile(l.platform)} />
@@ -1125,6 +1175,7 @@ export function Dash3ALeagues({ leagues, totalLeagues }: { leagues: Dash34League
                 Show all {leagueTotal} &rarr;
               </Link>
             ) : null}
+            {freshness}
           </section>
   )
 }
