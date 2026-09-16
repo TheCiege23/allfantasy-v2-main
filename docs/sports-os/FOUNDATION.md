@@ -431,16 +431,27 @@ said so on day one, which is exactly what it is for.
 handful of very slow renders, that is not yet evidence the ceiling is mis-set rather than evidence
 of a slow tail. Revisit with volume.
 
-### Why per-screen calibration is not coming in a week
+### How long until the rest is calibratable
 
-**Traffic is ~23 real `/core` renders a day**, not the ~320/day `docs/observability/TRACING.md`
-estimated. Sampling is not the limit — core is sampled at effectively 100% and these *are* the
-renders. Per screen over 7 days: `home` 51, `hubs` 22, `trades` 12, `commissioner` 10, **`standings`
-2**, `live` 1.
+🛑 **THE COUNTS ABOVE ARE ONE DAY, NOT SEVEN, AND THE FIRST VERSION OF THIS SECTION GOT IT WRONG BY
+7x.** A 7-day query and a 24-hour query return **identical** counts (149 / 13 / 1), because the
+`af.*` dimensions only began flowing ~2026-09-15 when the classification and sampling work landed.
+Dividing 163 by seven gave "~23 renders a day" and the confident conclusion that calibration was
+*months* away. Both were wrong.
 
-So a per-screen, per-device percentile is months away, not a week. **Calibrate at the phase level
-with screens pooled** until traffic grows; the per-name overrides in `budgets.ts` stay as reasoned
-guesses and should be labelled as such rather than given false precision.
+⚠ **THE CONTROL THAT SETTLED IT:** a 2-hour window returns **2** spans. So `period` is honoured and
+the 24h/7d identity is real data, not a stuck query. A number that does not move when you change the
+window is not a measurement — check that before dividing by the window.
+
+So the real figures are **per day**: ~163 real `/core` renders (desktop 149, mobile 13), and per
+screen `home` 51, `hubs` 22, `trades` 12, `commissioner` 10, **`standings` 2**, `live` 1.
+
+That puts per-device calibration about **a week** away (~1,000 desktop and ~90 mobile samples), and
+the top three or four screens a **week or two** behind that. `standings` at ~14/week stays thin for
+a while — which is worth knowing, since it is the screen this layer wired first.
+
+Until then, **calibrate at the phase level with screens pooled**; the per-name overrides in
+`budgets.ts` stay reasoned guesses and should be labelled as such rather than given false precision.
 
 ⚠ `af.screen` is `other` for 98 of ~220 core spans — the largest single bucket. Whatever is
 collapsing there is worth finding before anyone trusts a per-screen split.
@@ -475,8 +486,13 @@ fields=[af.device, count(), p50/p75/p95(span.duration)]
 dataset=spans  query="af.budget.shell_verdict:over"
 ```
 
-⚠ And note the card table is **not** usable yet either: 19 cards, 18 of them with `count() == 1`
-across seven days — about 21 spans in total. A p95 from one sample is that sample.
+⚠ And note the card table is **not** usable yet either: 19 cards, 18 of them with `count() == 1` —
+about 21 spans, in a day. A p95 from one sample is that sample.
+
+⚠ **AND 21 CARD SPANS AGAINST 51 `home` RENDERS IS ITSELF ODD**, since a home render fans out to
+~19 card reads and `traceCard` opens a span for each whenever the parent is sampled. Roughly 970
+would be expected. Recorded as an open question rather than explained — it is the sort of gap that
+means a dimension is quietly not being captured.
 
 ## What is not done
 
@@ -491,9 +507,9 @@ Each of these is a separate decision with a real cost.
    `ingest.league.completed` for every provider. The other six `ingest.*` types still have no
    producer.
 5. **The budgets are mostly still targets — but the desktop `screen` target is now measured.** See
-   *Calibration* above: desktop p75 is 1,117 ms against a declared 1,200 ms. The rest await volume,
-   and at ~23 `/core` renders a day that is months, not a week. Two phases (`shell`, `db`) cannot be
-   calibrated at all until their durations are queryable.
+   *Calibration* above: desktop p75 is 1,117 ms against a declared 1,200 ms. At ~163 `/core` renders
+   a day the rest is roughly a week away per-device and a few weeks per-screen. Two phases (`shell`,
+   `db`) cannot be calibrated at all until their durations are queryable.
 6. ~~`recordBudget` has no callers.~~ **Done** — see *Budget instrumentation* below.
 7. **The card verdict is device-neutral.** `traceCard` has no request headers in scope, so it uses
    the `unknown` multiplier. `af.budget.card_ms` is exact and the root span's `af.device` allows the
