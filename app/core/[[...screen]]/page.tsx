@@ -296,6 +296,12 @@ const SCREEN_KEYS: Record<string, CoreNavKey> = {
    * entry, and the branch below is matched on `segment`, above every activeKey branch.
    */
   hubs: 'commissioner',
+  /*
+   * The dashboard-v2 home: the home data without the shell (see the early return below
+   * the shell). It is listed so it is a KNOWN segment — it used to work only because an
+   * unknown segment fell back to home, and an unknown segment now redirects to /core.
+   */
+  'dashboard-v2': 'home',
 }
 
 /**
@@ -520,7 +526,7 @@ export default async function AfCorePage({
   }
   /*
    * ⚠ /core/import RESOLVED TO THE DASHBOARD, SILENTLY. `import` is not in
-   * SCREEN_KEYS, and an unknown segment falls back to `activeKey = 'home'` — so
+   * SCREEN_KEYS, and an unknown segment used to fall back to `activeKey = 'home'` — so
    * anyone who typed, bookmarked or linked /core/import landed on the home screen
    * with no indication they had asked for something else. LeaguePanel.tsx even
    * carries a comment warning contributors to link /import instead, which is a
@@ -550,6 +556,30 @@ export default async function AfCorePage({
     const previewState: ImportPreviewState =
       raw === 'connecting' || raw === 'result' ? raw : 'pick'
     return <ImportV4 state={previewState} />
+  }
+
+  /*
+   * ⚠ AN UNKNOWN SEGMENT REDIRECTS TO /core. IT NO LONGER RENDERS THE HOME IN PLACE.
+   *
+   * The old fallback kept a mistyped or stale link from 404ing, and the redirect keeps that:
+   * the user still lands on the home screen. What it removes is rendering the WHOLE home under
+   * the wrong URL. Measured in production 2026-09-16: `/core/contact_support` ran every home
+   * card for 11.9s. Scanner paths (`/core/.env`, `/core/phpinfo.php`) reached the same
+   * fallback. And telemetry tagged those renders `af.screen: other`, so they were missing
+   * from every home measurement.
+   *
+   * Placed after the ungated segments above, which return or redirect first, and BEFORE the
+   * session read, so an unknown path costs nothing. The query is carried: `?league=` is what
+   * selects a league, and dropping it would downgrade the landing to the cross-league home.
+   * The league gate below still checks it, exactly as for a typed `/core?league=`.
+   */
+  if (!navKey) {
+    const kept = new URLSearchParams()
+    for (const [key, value] of Object.entries(sp)) {
+      if (typeof value === 'string') kept.set(key, value)
+    }
+    const query = kept.toString()
+    redirect(query ? `/core?${query}` : '/core')
   }
 
   // `af.shell_ms` on the request's root span measures from here to "the shell has everything".
@@ -598,7 +628,7 @@ export default async function AfCorePage({
     redirect('/commissioner-hub')
   }
 
-  // Unknown segment: fall back to home rather than 404ing a nav link.
+  // An unknown segment has already redirected above; the fallback only satisfies the index type.
   const activeKey: CoreNavKey = navKey ?? 'home'
 
   // getDashboardLeagueListForUser returns { leagues, sleeperUserId } — NOT an
