@@ -3,6 +3,7 @@ import { valueBookFor, type ValueBook } from './valueBook'
 import { resolveSourceScreenLink, type SourceScreenLink } from '@/lib/league-links/sourceLinkResolver'
 
 import { prisma } from '@/lib/prisma'
+import { loadLatestPlayerValueSnapshots } from '@/lib/player-values/latestPlayerValueSnapshots'
 import { leagueDisplayName, type SectionState } from './leagueHome'
 import { describeNoSignal, gradeTrade } from '@/lib/projections/tradeGrading'
 import {
@@ -199,24 +200,27 @@ async function resolveGrades(
    * unfiltered query would silently start pricing trades on data we may not be
    * licensed to use commercially, and nothing would fail.
    */
-  const snaps = await prisma.playerValueSnapshot.findMany({
-    where: {
-      sleeperId: { in: [...ids] },
-      /*
-       * 🛑 THE BOOK IS THIS LEAGUE'S, NOT A HARDCODED DYNASTY/SUPERFLEX PAIR.
-       * These three literals used to be pinned here and copied verbatim into the
-       * player card and the cross-league trades board, so that the three could
-       * not disagree. They agreed and were jointly wrong: a redraft league was
-       * graded off the dynasty book, which prices a 22-year-old rookie above a
-       * 30-year-old who will outscore him this season. `valueBook.ts` carries the
-       * one derivation and the licence reasoning for `source`.
-       */
-      source: book.source,
-      format: book.format,
-      qbFormat: book.qbFormat,
-    },
-    select: { sleeperId: true, overallRank: true, capturedAt: true },
-    orderBy: { capturedAt: 'desc' },
+  /*
+   * ⚠ NEWEST ROW PER ID ONLY, AND ONE EDGE THAT MOVES WITH IT. The old read fetched every dated
+   * snapshot and kept the first with a NON-NULL rank — so a player whose newest row carried no rank
+   * silently borrowed one from an older day. Now he is unranked, which is what the newest data
+   * says. The ingest writes `overallRank ?? null`, so the case is possible; staging held zero such
+   * rows on 2026-09-16 (0 of 15,375), so it changes no grade that exists today.
+   */
+  const snaps = await loadLatestPlayerValueSnapshots({
+    sleeperIds: ids,
+    /*
+     * 🛑 THE BOOK IS THIS LEAGUE'S, NOT A HARDCODED DYNASTY/SUPERFLEX PAIR.
+     * These three literals used to be pinned here and copied verbatim into the
+     * player card and the cross-league trades board, so that the three could
+     * not disagree. They agreed and were jointly wrong: a redraft league was
+     * graded off the dynasty book, which prices a 22-year-old rookie above a
+     * 30-year-old who will outscore him this season. `valueBook.ts` carries the
+     * one derivation and the licence reasoning for `source`.
+     */
+    source: book.source,
+    format: book.format,
+    qbFormat: book.qbFormat,
   })
   const rankById = new Map<string, number>()
   for (const s of snaps) {
@@ -443,16 +447,13 @@ async function resolvePendingOffers(
 
   const playerIds = [...new Set(scan.trades.flatMap((trade) => [...trade.assetsGiven, ...trade.assetsReceived])
     .flatMap((asset) => asset.playerId ? [asset.playerId] : []))]
+  // Newest row per id only (`value` is non-null, so first-per-id was already newest-per-id).
   const valueRows = playerIds.length > 0
-    ? await prisma.playerValueSnapshot.findMany({
-        where: {
-          sleeperId: { in: playerIds },
-          source: book.source,
-          format: book.format,
-          qbFormat: book.qbFormat,
-        },
-        select: { sleeperId: true, value: true, capturedAt: true },
-        orderBy: { capturedAt: 'desc' },
+    ? await loadLatestPlayerValueSnapshots({
+        sleeperIds: playerIds,
+        source: book.source,
+        format: book.format,
+        qbFormat: book.qbFormat,
       }).catch(() => [])
     : []
   const playerValues = new Map<string, number>()

@@ -30,6 +30,7 @@ import type {
   RawWeatherRow,
 } from './facts'
 import { loadLeagueIdpVorp } from '@/lib/idp-projections/leagueIdpVorp'
+import { loadLatestPlayerValueSnapshots } from '@/lib/player-values/latestPlayerValueSnapshots'
 import { mapRedraftRosterRowToRawRoster, unionRosterRows, type RawRedraftRosterRow } from './redraftRoster'
 import { resolveLeagueConcept } from '@/lib/league/leagueConceptOptions'
 
@@ -866,28 +867,35 @@ export async function loadPlayerValueRows(
   ).slice(0, 200)
   if (clean.length === 0) return []
 
-  const rows = await prisma.playerValueSnapshot
-    .findMany({
-      where: { sleeperId: { in: clean }, source: 'FANTASYCALC', format, qbFormat },
-      // Freshest first, matching the dedup convention every other loader here
-      // uses — the caller keeps the first row it sees per id.
-      orderBy: { capturedAt: 'desc' },
-      select: {
-        sleeperId: true,
-        source: true,
-        format: true,
-        qbFormat: true,
-        value: true,
-        overallRank: true,
-        positionRank: true,
-        tradeFrequency: true,
-        trend30d: true,
-        capturedAt: true,
-      },
-    })
-    .catch(() => [])
+  /*
+   * ⚠ NEWEST ROW PER ID ONLY. This used to fetch every dated snapshot for every id and leave the
+   * caller to keep the first — `players × days-since-ingest-began` rows, growing daily. The caller
+   * (`enrichmentPort`) still dedups first-per-id, which is now a no-op rather than the mechanism.
+   *
+   * The mapped fields are exactly the ones the old `select` returned, so nothing downstream sees a
+   * field it did not see before (`marketStdDev` in particular stays unread here).
+   */
+  const rows = await loadLatestPlayerValueSnapshots({
+    sleeperIds: clean,
+    source: 'FANTASYCALC',
+    format,
+    qbFormat,
+  }).catch(() => [])
 
-  return rows as RawPlayerValueRow[]
+  return rows.map(
+    (r): RawPlayerValueRow => ({
+      sleeperId: r.sleeperId,
+      source: r.source,
+      format: r.format,
+      qbFormat: r.qbFormat,
+      value: r.value,
+      overallRank: r.overallRank,
+      positionRank: r.positionRank,
+      tradeFrequency: r.tradeFrequency,
+      trend30d: r.trend30d,
+      capturedAt: r.capturedAt,
+    }),
+  )
 }
 
 export async function loadProjectionRows(

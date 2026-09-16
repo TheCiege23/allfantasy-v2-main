@@ -2,6 +2,7 @@ import 'server-only'
 import { CROSS_LEAGUE_BOOK, valueBookFor, type ValueBook } from './valueBook'
 
 import { prisma } from '@/lib/prisma'
+import { loadLatestPlayerValueSnapshots } from '@/lib/player-values/latestPlayerValueSnapshots'
 import { describeNoSignal, gradeTrade } from '@/lib/projections/tradeGrading'
 import { leagueArtUrl } from './leagueArt'
 import { leagueDisplayName } from './leagueHome'
@@ -469,10 +470,25 @@ export async function getTradesBoard(
           .catch(() => [])
       : Promise.resolve([]),
     assetIds.size > 0
-      ? prisma.playerValueSnapshot
-          .findMany({
-            where: {
-              sleeperId: { in: [...assetIds] },
+      ? Promise.all(
+          /*
+           * 🛑 EVERY BOOK THIS USER'S LEAGUES NEED, NOT A PINNED
+           * DYNASTY/SUPERFLEX. This was two literals copied from
+           * `lib/core-app/trades.ts` so the board and the per-league screen
+           * could not disagree — they did not, and both graded a redraft
+           * league off the dynasty book. A cross-league board is precisely
+           * where this bites: one query priced a dynasty superflex league
+           * and a redraft 1QB league identically.
+           *
+           * ⚠ ONE QUERY PER BOOK NOW (at most four), where it used to be one
+           * query with an OR. The OR form returned every dated snapshot for
+           * every asset in every book; each of these returns one row per
+           * asset. The rows still carry `format`/`qbFormat`, so each is filed
+           * under the book it belongs to below.
+           */
+          booksInPlay.map((b) =>
+            loadLatestPlayerValueSnapshots({
+              sleeperIds: assetIds,
               /*
                * ⚠ `source: 'FANTASYCALC'` IS A LICENCE BOUNDARY, NOT A TIDY
                * FILTER. DynastyProcess's value files carry FantasyPros ECR
@@ -484,31 +500,12 @@ export async function getTradesBoard(
                * nothing would fail.
                */
               source: 'FANTASYCALC',
-              /*
-               * 🛑 EVERY BOOK THIS USER'S LEAGUES NEED, NOT A PINNED
-               * DYNASTY/SUPERFLEX. This was two literals copied from
-               * `lib/core-app/trades.ts` so the board and the per-league screen
-               * could not disagree — they did not, and both graded a redraft
-               * league off the dynasty book. A cross-league board is precisely
-               * where this bites: one query priced a dynasty superflex league
-               * and a redraft 1QB league identically.
-               *
-               * Still ONE query. The OR is over the distinct books in play
-               * (at most four), and the rows carry `format`/`qbFormat` so each
-               * row can be filed under the book it belongs to.
-               */
-              OR: booksInPlay.map((b) => ({ format: b.format, qbFormat: b.qbFormat })),
-            },
-            select: {
-              sleeperId: true,
-              value: true,
-              overallRank: true,
-              capturedAt: true,
-              format: true,
-              qbFormat: true,
-            },
-            orderBy: { capturedAt: 'desc' },
-          })
+              format: b.format,
+              qbFormat: b.qbFormat,
+            }),
+          ),
+        )
+          .then((perBook) => perBook.flat())
           .catch(() => [])
       : Promise.resolve([]),
   ])
