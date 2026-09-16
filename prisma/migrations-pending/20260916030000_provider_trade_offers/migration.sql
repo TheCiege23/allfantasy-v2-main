@@ -31,80 +31,79 @@
 -- not "when we last wrote this row". A default would let a write that never read the feed advance
 -- it, which is exactly the false-evidence this column exists to avoid.
 --
--- ⚠ `status = 'vanished'` IS NOT `'expired'`. An offer that stops appearing without a terminal
--- state may have been withdrawn, expired, or missed by a rate-limited sweep. `expired` is reserved
--- for a provider that says so. No CHECK constraint pins the vocabulary: a provider adding a status
--- should surface as an unmapped value to look at, not as a failed insert that drops the row.
+-- ⚠ THE DDL BELOW IS PRISMA'S OWN OUTPUT, PASTED VERBATIM, AND IT REPLACED A HAND-WRITTEN VERSION.
+--
+-- 🛑 HAND-WRITING IT WAS A REAL BUG AND IT WAS SILENT. Checked before applying, by generating the
+-- canonical DDL offline (`migrate diff --from-empty --to-schema-datamodel`, no database involved)
+-- and diffing. SEVEN index names disagreed and TWO column defaults were invented:
+--
+--   mine                                                Prisma's
+--   uniq_provider_trade_offer                           provider_trade_offers_provider_leagueId_providerTradeId_key
+--   provider_trade_offers_league_status_idx             provider_trade_offers_leagueId_status_idx
+--   provider_trade_offers_league_status_last_seen_idx   provider_trade_offers_leagueId_status_lastSeenAt_idx
+--   provider_trade_offers_league_season_week_idx        provider_trade_offers_leagueId_season_weekOrPeriod_idx
+--   provider_trade_offer_assets_offer_idx               provider_trade_offer_assets_offerId_idx
+--   provider_trade_offer_assets_player_idx              provider_trade_offer_assets_playerId_idx
+--   provider_trade_offer_assets_offer_type_idx          provider_trade_offer_assets_offerId_assetType_idx
+--   rosterIds ... DEFAULT ARRAY[]::TEXT[]               (no default — the schema declares none)
+--
+-- Every one of those would have applied cleanly and then drifted FOREVER: the tables would be
+-- functionally correct, nothing would fail, and `migrate diff` would want to rename seven indexes
+-- and drop two defaults on every run from then on. A migration that works is not the same as a
+-- migration that agrees with the schema it came from.
+--
+-- ⚠ `@@unique(..., name:)` IS THE TRAP THAT PRODUCED THE UNIQUE-INDEX HALF. In Prisma, `name:`
+-- names the CLIENT accessor (which the writer uses, correctly, as `uniq_provider_trade_offer`);
+-- `map:` is what names the database object. Reading `name:` as the constraint name is how the SQL
+-- and the schema came to disagree while both looked right.
+--
+-- So: generate this, never type it. The comments above are ours; every statement below is Prisma's.
 
 CREATE TABLE "provider_trade_offers" (
-  "id"                     TEXT         NOT NULL,
-  "leagueId"               VARCHAR(64)  NOT NULL,
-  "provider"               VARCHAR(16)  NOT NULL,
-  "providerTradeId"        VARCHAR(128) NOT NULL,
-  "sport"                  VARCHAR(12)  NOT NULL,
-  "season"                 INTEGER,
-  "weekOrPeriod"           INTEGER,
-  "status"                 VARCHAR(16)  NOT NULL,
-  "providerStatus"         VARCHAR(32),
-  "proposedByRosterId"     VARCHAR(64),
-  "rosterIds"              TEXT[]       NOT NULL DEFAULT ARRAY[]::TEXT[],
-  "consentedRosterIds"     TEXT[]       NOT NULL DEFAULT ARRAY[]::TEXT[],
-  "proposedAt"             TIMESTAMP(3),
-  "respondedAt"            TIMESTAMP(3),
-  "expiresAt"              TIMESTAMP(3),
-  "firstSeenAt"            TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  "lastSeenAt"             TIMESTAMP(3) NOT NULL,
-  "payload"                JSONB,
+    "id" TEXT NOT NULL,
+    "leagueId" VARCHAR(64) NOT NULL,
+    "provider" VARCHAR(16) NOT NULL,
+    "providerTradeId" VARCHAR(128) NOT NULL,
+    "sport" VARCHAR(12) NOT NULL,
+    "season" INTEGER,
+    "weekOrPeriod" INTEGER,
+    "status" VARCHAR(16) NOT NULL,
+    "providerStatus" VARCHAR(32),
+    "proposedByRosterId" VARCHAR(64),
+    "rosterIds" TEXT[],
+    "consentedRosterIds" TEXT[],
+    "proposedAt" TIMESTAMP(3),
+    "respondedAt" TIMESTAMP(3),
+    "expiresAt" TIMESTAMP(3),
+    "firstSeenAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "lastSeenAt" TIMESTAMP(3) NOT NULL,
+    "payload" JSONB,
 
-  CONSTRAINT "provider_trade_offers_pkey" PRIMARY KEY ("id")
+    CONSTRAINT "provider_trade_offers_pkey" PRIMARY KEY ("id")
 );
-
--- The provider's own id is the idempotency key. Scoped by league as well as provider because
--- `dw_transaction_facts` already carries a primary key that omits the league, and that omission is
--- recorded in this repo as a hazard rather than a pattern to copy.
-CREATE UNIQUE INDEX "uniq_provider_trade_offer"
-  ON "provider_trade_offers" ("provider", "leagueId", "providerTradeId");
-
--- "Needs you" and the pending/sent/completed buckets are all league + status reads.
-CREATE INDEX "provider_trade_offers_league_status_idx"
-  ON "provider_trade_offers" ("leagueId", "status");
-
--- Sweep bookkeeping: which offers in this league were NOT seen in the latest pass.
-CREATE INDEX "provider_trade_offers_league_status_last_seen_idx"
-  ON "provider_trade_offers" ("leagueId", "status", "lastSeenAt");
-
-CREATE INDEX "provider_trade_offers_league_season_week_idx"
-  ON "provider_trade_offers" ("leagueId", "season", "weekOrPeriod");
 
 CREATE TABLE "provider_trade_offer_assets" (
-  "id"                     TEXT        NOT NULL,
-  "offerId"                TEXT        NOT NULL,
-  "assetType"              VARCHAR(16) NOT NULL,
-  "playerId"               VARCHAR(64),
-  "pickSeason"             INTEGER,
-  "pickRound"              INTEGER,
-  "pickOriginalRosterId"   VARCHAR(64),
-  "faabAmount"             INTEGER,
-  "fromRosterId"           VARCHAR(64),
-  "toRosterId"             VARCHAR(64),
-  "metadata"               JSONB,
+    "id" TEXT NOT NULL,
+    "offerId" TEXT NOT NULL,
+    "assetType" VARCHAR(16) NOT NULL,
+    "playerId" VARCHAR(64),
+    "pickSeason" INTEGER,
+    "pickRound" INTEGER,
+    "pickOriginalRosterId" VARCHAR(64),
+    "faabAmount" INTEGER,
+    "fromRosterId" VARCHAR(64),
+    "toRosterId" VARCHAR(64),
+    "metadata" JSONB,
 
-  CONSTRAINT "provider_trade_offer_assets_pkey" PRIMARY KEY ("id")
+    CONSTRAINT "provider_trade_offer_assets_pkey" PRIMARY KEY ("id")
 );
 
-CREATE INDEX "provider_trade_offer_assets_offer_idx"
-  ON "provider_trade_offer_assets" ("offerId");
+CREATE INDEX "provider_trade_offers_leagueId_status_idx" ON "provider_trade_offers"("leagueId", "status");
+CREATE INDEX "provider_trade_offers_leagueId_status_lastSeenAt_idx" ON "provider_trade_offers"("leagueId", "status", "lastSeenAt");
+CREATE INDEX "provider_trade_offers_leagueId_season_weekOrPeriod_idx" ON "provider_trade_offers"("leagueId", "season", "weekOrPeriod");
+CREATE UNIQUE INDEX "provider_trade_offers_provider_leagueId_providerTradeId_key" ON "provider_trade_offers"("provider", "leagueId", "providerTradeId");
+CREATE INDEX "provider_trade_offer_assets_offerId_idx" ON "provider_trade_offer_assets"("offerId");
+CREATE INDEX "provider_trade_offer_assets_playerId_idx" ON "provider_trade_offer_assets"("playerId");
+CREATE INDEX "provider_trade_offer_assets_offerId_assetType_idx" ON "provider_trade_offer_assets"("offerId", "assetType");
 
--- Read-time join to canonical player identity; the provider id is stored, never rewritten.
-CREATE INDEX "provider_trade_offer_assets_player_idx"
-  ON "provider_trade_offer_assets" ("playerId");
-
-CREATE INDEX "provider_trade_offer_assets_offer_type_idx"
-  ON "provider_trade_offer_assets" ("offerId", "assetType");
-
--- CASCADE because an asset has no meaning without its offer, and the offer is a mirror of provider
--- state rather than a record anyone here authored — re-syncing recreates it.
-ALTER TABLE "provider_trade_offer_assets"
-  ADD CONSTRAINT "provider_trade_offer_assets_offerId_fkey"
-  FOREIGN KEY ("offerId") REFERENCES "provider_trade_offers"("id")
-  ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "provider_trade_offer_assets" ADD CONSTRAINT "provider_trade_offer_assets_offerId_fkey" FOREIGN KEY ("offerId") REFERENCES "provider_trade_offers"("id") ON DELETE CASCADE ON UPDATE CASCADE;
