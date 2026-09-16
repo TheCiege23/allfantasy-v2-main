@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import type { ReactNode } from 'react'
 import { ClubLogo } from '@/components/core-app/ClubLogo'
 import '@/components/core-app/af-core.css'
 import '@/components/core-app/af-dash-triage.css'
@@ -105,9 +106,12 @@ export function Dash3ATriage({
   book,
   now,
   valueBasis,
+  freshness = null,
 }: {
   book: TriageBookRow[] | null
   now: Date
+  /** The strip's freshness line — rendered only when the strip itself renders. */
+  freshness?: ReactNode
   /**
    * What the prices on these rows are. Stated once for the panel rather than
    * per row, and omitted entirely when no row carries a price.
@@ -284,6 +288,7 @@ export function Dash3ATriage({
           your league&rsquo;s settings, and NFL only.
         </p>
       ) : null}
+      {freshness}
     </section>
   )
 }

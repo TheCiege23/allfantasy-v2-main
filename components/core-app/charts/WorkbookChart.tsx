@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import '@/components/core-app/charts/workbook-chart.css'
 
 export type WorkbookDatum = {
@@ -21,11 +22,14 @@ export function WorkbookBarChart({
   subtitle,
   data,
   valueLabel = 'Value',
+  footer = null,
 }: {
   title: string
   subtitle?: string
   data: WorkbookDatum[]
   valueLabel?: string
+  /** Rendered inside the figure, under the plot — e.g. a freshness line, so it belongs to this card. */
+  footer?: ReactNode
 }) {
   const clean = data
     .filter((row) => Number.isFinite(row.value))
@@ -67,6 +71,7 @@ export function WorkbookBarChart({
           )})}
         </div>
       </div>
+      {footer}
     </figure>
   )
 }

@@ -52,6 +52,12 @@ export type WeekAllData = {
    */
   unscored: number
   record: { wins: number; losses: number } | null
+  /**
+   * When the newest of YOUR scored rows last changed (`WeeklyMatchup.updatedAt`), as ISO — the
+   * matchup card's freshness stamp. Null when no row is scored. Optional so older fixtures that
+   * predate it still type.
+   */
+  scoresAt?: string | null
 }
 
 export async function getWeekAll(
@@ -111,7 +117,7 @@ export async function getWeekAll(
   const [matchups, myTeams] = await Promise.all([
     prisma.weeklyMatchup.findMany({
       where: { leagueId: { in: platformIds }, seasonYear: latest.seasonYear, week: latest.week },
-      select: { leagueId: true, rosterId: true, pointsFor: true, pointsAgainst: true, win: true },
+      select: { leagueId: true, rosterId: true, pointsFor: true, pointsAgainst: true, win: true, updatedAt: true },
     }),
     prisma.leagueTeam.findMany({
       where: { league: { platformLeagueId: { in: platformIds } }, claimedByUserId: userId },
@@ -135,6 +141,7 @@ export async function getWeekAll(
   const rows: WeekRow[] = []
 
   let unscored = 0
+  let scoresAt: Date | null = null
   for (const m of matchups) {
     const meta = mine.get(`${m.leagueId}:${m.rosterId}`)
     if (!meta) continue // not the user's team in that league
@@ -158,6 +165,7 @@ export async function getWeekAll(
       continue
     }
 
+    if (m.updatedAt && (scoresAt == null || m.updatedAt > scoresAt)) scoresAt = m.updatedAt
     rows.push({
       leagueId: meta.leagueId,
       leagueName: meta.name,
@@ -190,6 +198,7 @@ export async function getWeekAll(
     withoutHistory: Math.max(0, leagues.length - rows.length),
     unscored,
     record,
+    scoresAt: scoresAt ? scoresAt.toISOString() : null,
   }
 }
 

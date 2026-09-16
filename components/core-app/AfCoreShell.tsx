@@ -19,6 +19,8 @@ import { useOverlayContainment } from '@/components/core-app/useOverlayContainme
 import { CoreWelcomeTour } from '@/components/core-app/CoreWelcomeTour'
 import { matchLeagueSearchHits, type LeagueSearchHit } from '@/lib/core-app/topSearch'
 import { ShellSignalsContext, withPublishedSignals, type ShellSignals } from '@/components/core-app/shellSignals'
+import { ScopeSwitcher, type ScopeSwitcherLeague } from '@/components/core-app/ScopeSwitcher'
+import { isLeagueScreen } from '@/lib/core-app/leagueScreens'
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import '@/components/core-app/af-core.css'
 import '@/components/core-app/af-core-shell.css'
@@ -270,6 +272,17 @@ export type AfCoreShellProps = {
   } | null
   /** Keeps league-scoped nav links pointed at the league in context. */
   selectedLeagueId?: string | null
+  /**
+   * What the scope switcher shows and offers — see components/core-app/ScopeSwitcher.tsx. Always
+   * rendered when present, so every screen states which leagues it is about. `label` is the
+   * server's `scopeLabel`, so the first paint already names the scope.
+   */
+  scope?: {
+    value: string | null
+    label: string
+    favoriteIds: string[]
+    leagues: ScopeSwitcherLeague[]
+  } | null
   /**
    * Does the selected league score IDP? Gates the Defense Hub nav entry.
    *
@@ -1727,6 +1740,20 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
       {/* ── Main column ─────────────────────────────────────────────── */}
       <div className="af-main">
         <header className="af-topbar">
+          {/*
+            The scope, stated on every screen and changeable from it — ahead of the search, because
+            it qualifies everything below it. See ScopeSwitcher's header.
+          */}
+          {props.scope ? (
+            <ScopeSwitcher
+              leagues={props.scope.leagues}
+              scopeValue={props.scope.value}
+              label={props.scope.label}
+              selectedLeagueId={props.selectedLeagueId ?? null}
+              favoriteIds={props.scope.favoriteIds}
+              leagueScreen={isLeagueScreen(active)}
+            />
+          ) : null}
           <TopSearch leagues={leagues} />
 
           <div className="af-topbar-right">
@@ -1878,7 +1905,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
             <header className="af-mobile-more-head">
               <span>
                 <span className="af-label">More</span>
-                <strong>{selectedLeagueName ?? 'All leagues'}</strong>
+                <strong>{selectedLeagueName ?? props.scope?.label ?? 'All leagues'}</strong>
               </span>
               <button type="button" aria-label="Close more menu" onClick={() => setMobileMoreOpen(false)}>×</button>
             </header>
