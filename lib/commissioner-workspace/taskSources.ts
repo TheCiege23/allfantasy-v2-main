@@ -258,6 +258,37 @@ export function detectOrphanTeams(orphanCount: number, totalTeams: number): Work
 }
 
 /**
+ * The move read, plus every owned team it left out, at zero moves.
+ *
+ * 🛑 `readManagerActivity` IS A LEADERBOARD OF MANAGERS WHO DID SOMETHING. It builds its answer
+ * from activity rows, so a manager with no move in the last two windows is absent — not listed at
+ * zero — and this detector, whose whole job is naming those managers, could never see them.
+ * Measured on production 2026-09-16: a 12-team league with 4 active managers carried a stored task
+ * reading "2 managers inactive"; the 6 who had done nothing for four weeks were missing from it.
+ * The read itself is left alone because Commissioner OS analytics uses it as exactly that
+ * leaderboard.
+ *
+ * ⚠ ONLY WHEN THE MOVE READ NAMED SOMEONE. An empty answer from a league whose feed is current
+ * means its moves could not be matched to managers (no roster snapshot to map owners through), not
+ * that every manager is idle. Filling that in would report "no manager has acted" off a mapping
+ * gap. The Commissioner Hub refuses in the same case (`resolveMemberActivity`).
+ *
+ * Names come from `ownedTeamNames`, which spells a team exactly as the move read does, so a
+ * manager who did move is never listed a second time at zero.
+ */
+export function withSilentManagers<T extends { managerName: string; currentCount: number }>(
+  moved: T[],
+  ownedTeamNames: string[],
+): Array<{ managerName: string; currentCount: number }> {
+  if (moved.length === 0) return moved
+  const listed = new Set(moved.map((m) => m.managerName))
+  const silent = ownedTeamNames
+    .filter((name) => !listed.has(name))
+    .map((managerName) => ({ managerName, currentCount: 0 }))
+  return [...moved, ...silent]
+}
+
+/**
  * Every candidate for one league. The reads are the same ones League Analytics already runs, so a
  * task can never disagree with the panel a commissioner would check to verify it.
  */
@@ -273,20 +304,22 @@ export async function detectLeagueTasks(leagueId: string, now = new Date()): Pro
   const stale = neverImported ? null : detectStaleImport(window.lastActivityAt, window.eventCount, now)
 
   /*
+   * Orphan seats are independent of the feed: a league can have current data and an empty seat, or
+   * no data and an empty seat, and the vacancy is equally real either way. So this one is
+   * deliberately not gated on the feed state below. It is read first because the manager check
+   * needs its list of owned teams.
+   */
+  const roster = await readOrphanTeamCounts(leagueId)
+  const orphans = detectOrphanTeams(roster.orphanCount, roster.totalTeams)
+
+  /*
    * The manager read is skipped entirely when the feed is stale or absent — not merely filtered
    * afterwards. It is the most expensive read here, and in both those states its answer is known in
    * advance and useless, so running it would spend the query to throw the result away.
    */
-  const managers = stale || neverImported ? [] : await readManagerActivity(leagueId, MANAGER_INACTIVE_AFTER_DAYS)
+  const moved = stale || neverImported ? [] : await readManagerActivity(leagueId, MANAGER_INACTIVE_AFTER_DAYS)
+  const managers = withSilentManagers(moved, roster.ownedTeamNames)
   const inactive = detectInactiveManagers(managers, window.lastActivityAt, now)
-
-  /*
-   * Orphan seats are independent of the feed: a league can have current data and an empty seat, or
-   * no data and an empty seat, and the vacancy is equally real either way. So this one is
-   * deliberately not gated on the feed state above.
-   */
-  const roster = await readOrphanTeamCounts(leagueId)
-  const orphans = detectOrphanTeams(roster.orphanCount, roster.totalTeams)
 
   return [neverImported, stale, inactive, orphans].filter((c): c is WorkspaceTaskCandidate => c !== null)
 }
