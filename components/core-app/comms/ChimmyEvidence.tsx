@@ -70,6 +70,8 @@ const SOURCE_LABELS: Record<string, string> = {
   chat_history: 'Earlier in this conversation',
   working_memory: 'This conversation',
   core_home_signals: 'What your home screen is showing',
+  core_surface_context: 'The screen you asked from',
+  sports_digest_db: 'Stored sports data (scores, injuries, news)',
   chimmy_personalization: 'Your saved preferences',
   chimmy_orchestration: 'Answer routing',
   stale_data_warning: 'A staleness warning',
@@ -109,10 +111,41 @@ const SIGNAL_LABELS: Record<string, string> = {
   fallback_policy: 'a fallback — the answer was not fully structured',
 }
 
+/**
+ * Slug FAMILIES the route builds by string concatenation.
+ *
+ * 🛑 THESE CANNOT BE LISTED AS LITERALS, WHICH IS WHY THEY GET THEIR OWN BRANCH.
+ * `dataSources.push(`agent_prompt_${specialistAgent}`)` and
+ * `dataSources.push(`decision_os_grounding_${grounding.outcome}`)` mint a new slug per
+ * specialist and per outcome, so any literal map of them is stale the moment somebody adds a
+ * specialist — and stale in the quiet way, where the entry simply stops matching and the
+ * fallback takes over without telling anyone.
+ *
+ * ⚠ CHECKED AFTER THE LITERAL MAP, NEVER BEFORE IT. `decision_os_grounding_packet` is a real
+ * literal meaning the packet arrived, not an outcome named "packet"; if this ran first it
+ * would render "Decision engine (packet)" and quietly outrank a correct label. There is a test
+ * pinning that order.
+ */
+const SLUG_FAMILIES: Array<{ prefix: string; render: (suffix: string) => string }> = [
+  { prefix: 'agent_prompt_', render: (s) => `Specialist: ${s.replace(/_/g, ' ')}` },
+  { prefix: 'decision_os_grounding_', render: (s) => `Decision engine (${s.replace(/_/g, ' ')})` },
+]
+
 function label(slug: string, map: Record<string, string>): string {
   const known = map[slug]
   if (known) return known
-  // `agent_prompt_waiver`, `decision_os_grounding_partial`, and anything added later.
+
+  for (const family of SLUG_FAMILIES) {
+    if (slug.startsWith(family.prefix) && slug.length > family.prefix.length) {
+      return family.render(slug.slice(family.prefix.length))
+    }
+  }
+
+  /*
+   * ⚠ STILL RENDERS. An unlabelled slug is de-underscored rather than dropped: hiding a source
+   * would understate what the answer touched, which is the opposite of what this block is for.
+   * The label map is a readability improvement, never a filter.
+   */
   return slug.replace(/_/g, ' ')
 }
 
