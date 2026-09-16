@@ -64,7 +64,16 @@ vi.mock('@/lib/prisma', () => ({
       upsert: vi.fn().mockResolvedValue({ updatedAt: new Date(0) }),
     },
     userProfile: { findUnique: (...args: unknown[]) => findUniqueUserProfile(...args) },
-    leagueTeam: { findFirst: (...args: unknown[]) => findFirstLeagueTeam(...args) },
+    /*
+     * ⚠ `findMany` IS USED BY THE SETTLED-PROVIDER-OFFER FEED, which resolves roster ids to team
+     * names for the "Declined & expired" timeline. Returning [] keeps every existing assertion
+     * unchanged — that path then contributes no rows, exactly as it did before it existed — while
+     * satisfying the census guard below, which is what caught its absence.
+     */
+    leagueTeam: {
+      findFirst: (...args: unknown[]) => findFirstLeagueTeam(...args),
+      findMany: vi.fn().mockResolvedValue([]),
+    },
     tradeOfferEvent: { findMany: (...args: unknown[]) => findManyTradeOfferEvent(...args) },
   },
 }))
