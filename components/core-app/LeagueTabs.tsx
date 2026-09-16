@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { LeagueTabsPrewarm } from '@/components/core-app/LeagueTabsPrewarm'
 import { LeagueTabsScroller } from '@/components/core-app/LeagueTabsScroller'
 import '@/components/core-app/af-league-tabs.css'
 
@@ -79,6 +80,21 @@ export function LeagueTabs({
 
   return (
     <nav className="af-lt" aria-label={`${leagueName} views`}>
+      {/*
+        Warms My team and Matchup once the screen you asked for has landed.
+
+        ⚠ IT READS `visibleTabs`, NOT THE FULL TAB LIST, so a league whose import
+        cannot support a screen never spends a render warming it. That is the
+        same `hiddenFor` gate the strip above draws from — one decision about
+        what this league can show, used for both, rather than a prewarm list
+        that can drift out of step with the tabs it is meant to anticipate.
+      */}
+      <LeagueTabsPrewarm
+        leagueId={leagueId}
+        activeKey={activeKey}
+        availableKeys={visibleTabs.map((tab) => tab.key)}
+      />
+
       <LeagueTabsScroller activeKey={activeKey}>
         {visibleTabs.map((t) => {
           const active = t.key ? t.key === activeKey : activeKey === 'home'
