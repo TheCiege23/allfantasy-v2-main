@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { LeagueTabsScroller } from '@/components/core-app/LeagueTabsScroller'
 import '@/components/core-app/af-league-tabs.css'
 
 /**
@@ -28,12 +29,23 @@ export type LeagueTabsProps = {
   hasScoredWeek?: boolean | null
   tradeSupported?: boolean
   draftSupported?: boolean
+  /**
+   * The platform's short name — "Sleeper", "ESPN" — for the absent-view notes.
+   *
+   * ⚠ IT NAMES THE PROVIDER FOR THE REASON `importCoverageSummary` ALREADY
+   * STATES IN ITS OWN HEADER: "We couldn't get your trade history" reads as our
+   * failure and invites a support ticket; "Fleaflicker doesn't publish trade
+   * history" is the truth and is something the reader can act on.
+   */
+  platform?: string | null
 }
+
+type TabRequirement = 'scores' | 'trades' | 'draft'
 
 const TABS: Array<{
   key: string
   label: string
-  requires?: 'scores' | 'trades' | 'draft'
+  requires?: TabRequirement
 }> = [
   { key: '', label: 'Overview' },
   { key: 'my-team', label: 'My team' },
@@ -56,18 +68,18 @@ export function LeagueTabs({
   hasScoredWeek = null,
   tradeSupported = true,
   draftSupported = true,
+  platform = null,
 }: LeagueTabsProps) {
   const q = `?league=${encodeURIComponent(leagueId)}`
-  const visibleTabs = TABS.filter((tab) => {
-    if (tab.requires === 'scores') return hasScoredWeek !== false
-    if (tab.requires === 'trades') return tradeSupported
-    if (tab.requires === 'draft') return draftSupported
-    return true
-  })
+  const hiddenFor = (requires: TabRequirement): boolean =>
+    requires === 'scores' ? hasScoredWeek === false : requires === 'trades' ? !tradeSupported : !draftSupported
+
+  const visibleTabs = TABS.filter((tab) => !tab.requires || !hiddenFor(tab.requires))
+  const notes = describeHiddenTabs({ hasScoredWeek, tradeSupported, draftSupported, platform })
 
   return (
     <nav className="af-lt" aria-label={`${leagueName} views`}>
-      <div className="af-lt-tabs" role="list">
+      <LeagueTabsScroller activeKey={activeKey}>
         {visibleTabs.map((t) => {
           const active = t.key ? t.key === activeKey : activeKey === 'home'
           const href = t.key ? `/core/${t.key}${q}` : `/core${q}`
@@ -84,9 +96,75 @@ export function LeagueTabs({
             </span>
           )
         })}
-      </div>
+      </LeagueTabsScroller>
+
+      {/*
+        🛑 A TAB THAT VANISHES WITHOUT A REASON IS THE BUG THIS GATING CREATED.
+        Removing an unusable tab is right — the note at the top of this file
+        argues it, and `importCoverageSummary` was built to decide it. But the
+        three gates above delete up to six of the twelve entries and said
+        nothing, so a Fleaflicker league and a Sleeper league differed by half
+        the navigation with no visible cause, and the honest answer
+        (`ImportCoverageSummary.sentence`) was already computed and rendered on
+        exactly one screen — the Overview — which is the one screen you may not
+        be on when you go looking for Trades.
+
+        ⚠ AND THE THREE REASONS ARE NOT THE SAME KIND, which is why this is a
+        list and not one sentence. "No week has been scored yet" is temporary
+        and ours; "the platform doesn't publish this" is permanent and theirs.
+        Collapsing them would tell someone to wait for something that is never
+        coming, or to give up on something that arrives on Sunday.
+      */}
+      {notes.length > 0 ? (
+        <ul className="af-lt-absent" aria-label="Views not available for this league">
+          {notes.map((note) => (
+            <li key={note}>{note}</li>
+          ))}
+        </ul>
+      ) : null}
     </nav>
   )
+}
+
+/**
+ * Why a tab is missing, in the league's own terms.
+ *
+ * Exported for its test: the mapping from three booleans to the sentences a
+ * user reads is the whole behaviour here, and asserting it through a rendered
+ * component would test JSX instead.
+ */
+export function describeHiddenTabs({
+  hasScoredWeek,
+  tradeSupported,
+  draftSupported,
+  platform,
+}: {
+  hasScoredWeek: boolean | null
+  tradeSupported: boolean
+  draftSupported: boolean
+  platform?: string | null
+}): string[] {
+  const notes: string[] = []
+  const label = (platform ?? '').trim() || 'This platform'
+
+  /*
+   * ⚠ `=== false`, NOT `!hasScoredWeek`. `null` means the signal was not read —
+   * the loader catches its own failure and returns null — and a failed read is
+   * not evidence that the season has not started. Saying "no week has been
+   * scored" there states a fact we do not have.
+   */
+  if (hasScoredWeek === false) {
+    notes.push(
+      'Matchup, Your week, Standings and Outlook open once this league has a scored week — they are all built from one.',
+    )
+  }
+  if (!tradeSupported) {
+    notes.push(`${label} doesn’t publish trade history, so there is no Trades view for this league.`)
+  }
+  if (!draftSupported) {
+    notes.push(`${label} doesn’t publish draft results, so there is no Draft HQ view for this league.`)
+  }
+  return notes
 }
 
 export default LeagueTabs
