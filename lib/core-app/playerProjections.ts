@@ -3,6 +3,7 @@ import 'server-only'
 import { prisma } from '@/lib/prisma'
 import { loadIdpProjections, mergeIdpStatLine } from '@/lib/idp-projections/loadIdpProjections'
 import type { IdpProjectionSuccess } from '@/lib/idp-projections/types'
+import { computeLeagueProjectedPoints, hasScoringRules, NO_LEAGUE_SCORING_REASON } from '@/lib/projections/leagueScoring'
 import { hasIdpScoring, isIdpPosition } from './scoringNotes'
 import { lookupNcaafProjections } from './ncaafProjections'
 
@@ -322,4 +323,50 @@ export function summariseLineup(
     projected++
   }
   return { total: Math.round(total * 100) / 100, projected, unprojected }
+}
+
+/**
+ * One lineup's projected total under THIS league's scoring, and how many starters it covers.
+ *
+ * 🛑 NEVER THE GENERIC NUMBER, NOT EVEN AS A FALLBACK. My Team's projected matchup and the league
+ * scoreboard both used `league ?? projectedPoints`, so a starter the league's rules could not
+ * price was quietly counted at his standard-PPR figure: a part-league, part-generic total under a
+ * "your league's scoring" label, and a defender — whose generic figure is a flat 0 — counted as a
+ * PRICED starter scoring nothing. A starter left unpriced here shows up in `projectedFrom`
+ * instead, which both screens already print beside the total and use to withhold a margin.
+ */
+export function leagueScoredLineupTotal(
+  starterIds: readonly string[],
+  projections: ReadonlyMap<string, PlayerProjection>,
+  scoringSettings: Record<string, unknown> | null,
+): { projected: number | null; projectedFrom: number } {
+  let total = 0
+  let from = 0
+  for (const id of starterIds) {
+    const componentStats = projections.get(id)?.componentStats
+    const scored = scoringSettings && componentStats ? computeLeagueProjectedPoints(componentStats, scoringSettings) : null
+    if (!scored) continue
+    total += scored.points
+    from += 1
+  }
+  return { projected: from > 0 ? Math.round(total * 100) / 100 : null, projectedFrom: from }
+}
+
+/** Why no starter anywhere could be priced although this league has rules. */
+export const NOTHING_LEAGUE_SCORED_REASON =
+  "no starter could be priced under this league's scoring — the projection feed does not carry these players, or this league's rules do not cover their stat lines"
+
+/**
+ * Why a projected board or matchup shows no totals at all, or null when it shows at least one.
+ *
+ * `pricedStarters` is summed over every lineup on the surface; `starters` likewise.
+ */
+export function leagueProjectionGap(args: {
+  scoringSettings: Record<string, unknown> | null
+  starters: number
+  pricedStarters: number
+}): string | null {
+  if (!hasScoringRules(args.scoringSettings)) return NO_LEAGUE_SCORING_REASON
+  if (args.starters > 0 && args.pricedStarters === 0) return NOTHING_LEAGUE_SCORED_REASON
+  return null
 }

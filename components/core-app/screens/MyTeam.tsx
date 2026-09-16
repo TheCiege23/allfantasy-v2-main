@@ -918,6 +918,11 @@ export function MyTeam({ data }: MyTeamProps) {
           </div>
           {edge(data.nextMatchup.data) ? (
             <p className="af-mt-mu-edge">{edge(data.nextMatchup.data)}</p>
+          ) : data.nextMatchup.data.unpricedReason ? (
+            // Two dashes and nothing else read as a broken screen; say why, where the read goes.
+            <p className="af-mt-mu-edge">
+              No projected totals — {data.nextMatchup.data.unpricedReason}.
+            </p>
           ) : null}
         </section>
       ) : (

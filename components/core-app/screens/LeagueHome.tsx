@@ -570,12 +570,17 @@ export function LeagueHome({
             */}
             {data.weekPicker?.isFuture ? (
               <p className="af-lh-weeknote">
-                Nothing in week {data.weekPicker.selected} has been played. Every number is
-                projected from today&apos;s rosters
-                {board.projectionBasis && !board.projectionBasis.matchesViewedWeek
-                  ? `, using week ${board.projectionBasis.week} projections — the feed does not carry week ${data.weekPicker.selected} yet`
-                  : ''}
-                .
+                Nothing in week {data.weekPicker.selected} has been played.
+                {/* With no league-scored totals there are no numbers to vouch for; the board says why. */}
+                {board.unpricedReason ? null : (
+                  <>
+                    {' '}Every number is projected from today&apos;s rosters
+                    {board.projectionBasis && !board.projectionBasis.matchesViewedWeek
+                      ? `, using week ${board.projectionBasis.week} projections — the feed does not carry week ${data.weekPicker.selected} yet`
+                      : ''}
+                    .
+                  </>
+                )}
               </p>
             ) : null}
             <LeagueScoreboardPanel

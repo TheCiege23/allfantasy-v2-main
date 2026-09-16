@@ -26,6 +26,8 @@ function board(over: Partial<LeagueScoreboard> = {}): LeagueScoreboard {
     week: 1,
     allUnplayed: false,
     unpaired: [],
+    projectionBasis: null,
+    unpricedReason: null,
     games: [
       {
         matchupId: 1,
@@ -95,6 +97,36 @@ describe('LeagueScoreboardPanel', () => {
     )
     expect(t).toContain('Nothing scored yet')
     expect(t).toContain('projections')
+  })
+
+  /*
+   * 🛑 "UNDER YOUR LEAGUE'S SCORING" WAS PRINTED OVER STANDARD-PPR TOTALS (scoring audit,
+   * 2026-09-16). With no league-scored totals the header now says why instead of vouching.
+   */
+  it('🛑 an unplayed board with no totals says why, and does not claim league scoring', () => {
+    const unpriced = board({
+      allUnplayed: true,
+      unpricedReason: 'we hold no scoring settings for this league, and a generic projection would not be yours',
+      games: [
+        {
+          matchupId: 1,
+          unplayed: true,
+          margin: null,
+          winProbability: null,
+          teams: [
+            team({ rosterId: '1', projected: null, projectedFrom: 0, isYou: true }),
+            team({ rosterId: '2', teamName: 'DynastyDan', projected: null, projectedFrom: 0 }),
+          ],
+        },
+      ],
+    })
+    const t = text(unpriced)
+    expect(t).toContain('Nothing scored yet — no projections, because we hold no scoring settings for this league')
+    expect(t).not.toContain('under your league')
+  })
+
+  it('keeps the league-scoring header when the board has league-scored totals', () => {
+    expect(text(board({ allUnplayed: true }))).toContain('these are projections, under your league’s scoring')
   })
 
   it('sets a projection back from a result so the two never read alike', () => {

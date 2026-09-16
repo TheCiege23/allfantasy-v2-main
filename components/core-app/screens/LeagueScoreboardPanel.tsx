@@ -106,9 +106,16 @@ export function LeagueScoreboardPanel({
         <span className="af-label">
           Week {board.week} · {board.games.length} {board.games.length === 1 ? 'game' : 'games'}
         </span>
+        {/*
+          ⚠ "UNDER YOUR LEAGUE'S SCORING" IS A CLAIM, and it was printed over totals that were
+          partly standard PPR. Totals are now league-scored or absent; when absent, the header
+          says why instead of vouching for numbers that are not there.
+        */}
         {board.allUnplayed ? (
           <span className="af-sb-proj-flag">
-            Nothing scored yet — these are projections, under your league&rsquo;s scoring
+            {board.unpricedReason
+              ? `Nothing scored yet — no projections, because ${board.unpricedReason}`
+              : 'Nothing scored yet — these are projections, under your league’s scoring'}
           </span>
         ) : null}
       </div>

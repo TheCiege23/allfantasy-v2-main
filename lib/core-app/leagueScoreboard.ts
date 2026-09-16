@@ -1,8 +1,8 @@
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
-import { computeLeagueProjectedPoints } from '@/lib/projections/leagueScoring'
-import { lookupProjections } from './playerProjections'
+import { hasScoringRules } from '@/lib/projections/leagueScoring'
+import { leagueProjectionGap, leagueScoredLineupTotal, lookupProjections } from './playerProjections'
 import { buildRosterIdMap } from './rosterIdMatch'
 
 /**
@@ -85,6 +85,12 @@ export type LeagueScoreboard = {
    * Null when nothing was projected (the week is scored, or the feed is empty).
    */
   projectionBasis: { season: string; week: number; matchesViewedWeek: boolean } | null
+  /**
+   * Why an unplayed board shows no projected totals, or null when it shows at least one (or the
+   * week has been scored). The panel's "these are projections, under your league's scoring"
+   * header is only true when this is null.
+   */
+  unpricedReason: string | null
 }
 
 /**
@@ -232,7 +238,8 @@ export async function getLeagueScoreboard(args: {
    * points exist they are the answer, and pricing twelve lineups to show a
    * number nobody will read is a lot of work for nothing.
    */
-  const everyStarter = anyScored ? [] : [...new Set([...startersBy.values()].flat())]
+  const everyStarter =
+    anyScored || !hasScoringRules(args.scoringSettings) ? [] : [...new Set([...startersBy.values()].flat())]
   const projections = everyStarter.length
     ? await lookupProjections(everyStarter, args.projectionWeek, {
         // Defenders are priced under this league's own rules here too, so a board that
@@ -245,24 +252,12 @@ export async function getLeagueScoreboard(args: {
     const t = teamBy.get(String(rosterId))
     const starters = startersBy.get(rosterId) ?? []
 
-    let total = 0
-    let from = 0
-    if (!anyScored) {
-      for (const pid of starters) {
-        const p = projections.get(pid)
-        if (!p) continue
-        // Scored the league's own way where possible, so every team on the
-        // board is measured identically.
-        const league =
-          args.scoringSettings && p.componentStats
-            ? computeLeagueProjectedPoints(p.componentStats, args.scoringSettings)
-            : null
-        const v = league?.points ?? p.projectedPoints
-        if (v == null) continue
-        total += v
-        from += 1
-      }
-    }
+    // The league's own rules only — never the generic figure — so every team on the board is
+    // measured identically and the header's "under your league's scoring" is true. See
+    // `leagueScoredLineupTotal`.
+    const { projected, projectedFrom } = anyScored
+      ? { projected: null, projectedFrom: 0 }
+      : leagueScoredLineupTotal(starters, projections, args.scoringSettings)
 
     return {
       rosterId,
@@ -270,8 +265,8 @@ export async function getLeagueScoreboard(args: {
       managerName: t?.ownerName ?? null,
       avatarUrl: t?.avatarUrl ?? null,
       points,
-      projected: !anyScored && from > 0 ? Math.round(total * 100) / 100 : null,
-      projectedFrom: from,
+      projected,
+      projectedFrom,
       starterCount: starters.length,
       isYou: args.yourRosterId != null && rosterId === args.yourRosterId,
     }
@@ -338,12 +333,15 @@ export async function getLeagueScoreboard(args: {
     })
     .sort((x, y) => Number(y.teams.some((t) => t.isYou)) - Number(x.teams.some((t) => t.isYou)))
 
+  const unpaired = unpairedRows.map((r) => build(r.rosterId, null))
+  const everyTeam = [...games.flatMap((g) => g.teams), ...unpaired]
+
   return {
     seasonYear,
     week,
     games,
     allUnplayed: !anyScored,
-    unpaired: unpairedRows.map((r) => build(r.rosterId, null)),
+    unpaired,
     projectionBasis:
       projections.size > 0 && args.projectionWeek
         ? {
@@ -352,5 +350,12 @@ export async function getLeagueScoreboard(args: {
             matchesViewedWeek: args.projectionWeek.week === week,
           }
         : null,
+    unpricedReason: anyScored
+      ? null
+      : leagueProjectionGap({
+          scoringSettings: args.scoringSettings,
+          starters: everyTeam.reduce((n, t) => n + t.starterCount, 0),
+          pricedStarters: everyTeam.reduce((n, t) => n + t.projectedFrom, 0),
+        }),
   }
 }

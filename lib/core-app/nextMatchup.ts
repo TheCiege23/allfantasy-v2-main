@@ -1,8 +1,8 @@
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
-import { computeLeagueProjectedPoints } from '@/lib/projections/leagueScoring'
-import { lookupProjections } from './playerProjections'
+import { hasScoringRules } from '@/lib/projections/leagueScoring'
+import { leagueProjectionGap, leagueScoredLineupTotal, lookupProjections } from './playerProjections'
 
 /**
  * Who you play next, and what both sides are projected to score.
@@ -42,6 +42,11 @@ export type NextMatchup = {
   opponent: MatchupSide | null
   /** Set when the league recorded a matchup with no second team in it. */
   bye: boolean
+  /**
+   * Why neither side shows a projected total, or null when at least one does. Printed in place
+   * of the one-line read, so a pair of dashes is never left to explain itself.
+   */
+  unpricedReason: string | null
 }
 
 function asIds(v: unknown): string[] {
@@ -176,7 +181,8 @@ export async function getNextMatchup(args: {
   }
 
   const everyId = [...new Set([...allStarters.values()].flat())]
-  const projections = everyId.length
+  // Without rules nothing can be priced this league's way, so the feed is not worth a read.
+  const projections = everyId.length && hasScoringRules(args.scoringSettings)
     ? await lookupProjections(everyId, args.projectionWeek, {
         scoringSettings: args.scoringSettings,
       }).catch(() => new Map())
@@ -185,45 +191,40 @@ export async function getNextMatchup(args: {
   function side(rosterId: string): MatchupSide {
     const team = teamBy.get(String(rosterId))
     const starters = allStarters.get(rosterId) ?? []
-
-    let total = 0
-    let from = 0
-    for (const pid of starters) {
-      const p = projections.get(pid)
-      if (!p) continue
-      /*
-       * Scored under the league's own rules where possible, so both sides are
-       * measured the same way and against the same number the roster above
-       * shows. Falls back to the generic figure rather than dropping the player
-       * — a total missing a starter reads low, and low is the direction that
-       * makes someone think they are losing when they are not.
-       */
-      const league =
-        args.scoringSettings && p.componentStats
-          ? computeLeagueProjectedPoints(p.componentStats, args.scoringSettings)
-          : null
-      const v = league?.points ?? p.projectedPoints
-      if (v == null) continue
-      total += v
-      from += 1
-    }
+    /*
+     * Under the league's own rules only, so both sides are measured the same way and against
+     * the number the roster above shows. This used to fall back to the generic figure "rather
+     * than drop the player, because a total missing a starter reads low" — but the coverage line
+     * beside the total and the withheld edge sentence already say when one is short, and a
+     * standard-PPR number summed in is wrong without saying so. See `leagueScoredLineupTotal`.
+     */
+    const { projected, projectedFrom } = leagueScoredLineupTotal(starters, projections, args.scoringSettings)
 
     return {
       rosterId,
       teamName: team?.teamName ?? null,
       managerName: team?.ownerName ?? null,
       avatarUrl: team?.avatarUrl ?? null,
-      projected: from > 0 ? Math.round(total * 100) / 100 : null,
-      projectedFrom: from,
+      projected,
+      projectedFrom,
       starterCount: starters.length,
     }
   }
 
+  const you = side(myRosterId)
+  const opponent = opponentRow ? side(opponentRow.rosterId) : null
+  const sides = opponent ? [you, opponent] : [you]
+
   return {
     seasonYear,
     week,
-    you: side(myRosterId),
-    opponent: opponentRow ? side(opponentRow.rosterId) : null,
+    you,
+    opponent,
     bye: mine.matchupId != null && opponentRow == null,
+    unpricedReason: leagueProjectionGap({
+      scoringSettings: args.scoringSettings,
+      starters: sides.reduce((n, s) => n + s.starterCount, 0),
+      pricedStarters: sides.reduce((n, s) => n + s.projectedFrom, 0),
+    }),
   }
 }
