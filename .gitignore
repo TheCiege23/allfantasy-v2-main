@@ -84,6 +84,8 @@ scripts/.fixture-accounts-snapshot-*.json
 scripts/.fixture-data-snapshot-*.json
 # Prior PlayerIdentityMap.normalizedName values, for reverting backfill-normalized-name.
 scripts/.normalized-name-snapshot-*.json
+# Prior player_game_stats maps and points, for reverting backfill-interception-split.
+scripts/.interception-split-snapshot-*.json
 
 # Player value reference docs (local updates; folder tracked via .gitkeep)
 app/player-values/*.md
