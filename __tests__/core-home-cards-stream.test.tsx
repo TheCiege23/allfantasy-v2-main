@@ -178,6 +178,17 @@ vi.mock('@/lib/core-app/matchup', () => ({ getMatchupData: held('matchup') }))
 vi.mock('@/lib/core-app/draftHqAll', () => ({ getDraftHqAll: held('drafts') }))
 vi.mock('@/lib/decision-os/userOs', () => ({ resolveUserOsSnapshot: held('userOs') }))
 vi.mock('@/lib/core-app/urgencyBadges', () => ({ getUrgencyBadges: held('urgency'), recordPendingOffers: held('offersWrite') }))
+/*
+ * Screen summaries (lib/sports-os). Off by default, so every case above is about the live reads; the
+ * week-summary cases below switch the shared flag on. The summary reader is stubbed — what it does is
+ * its own suite's business; WHEN the home uses it is this one's.
+ */
+const summaries = vi.hoisted(() => ({ on: false }))
+vi.mock('@/lib/sports-os/rollout', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/sports-os/rollout')>()),
+  isEnabled: vi.fn(() => summaries.on),
+}))
+vi.mock('@/lib/core-app/weekAllSummary', () => ({ readWeekAllSummary: held('weekSummary') }))
 vi.mock('@/lib/analytics/recordDashboardActivation', () => ({ recordDashboardActivation: vi.fn(async () => undefined) }))
 // The league home — its loader failing is case 6.
 vi.mock('@/lib/core-app/leagueHome', () => ({ getLeagueHomeData: vi.fn(async () => g.leagueHome.data) }))
@@ -257,6 +268,7 @@ beforeEach(() => {
   g.scan.incomplete = null
   g.account.sleeperUserId = 's1'
   g.account.leagues = null
+  summaries.on = false
   g.leagueHome.data = null
 })
 
@@ -501,6 +513,27 @@ describe('/core home cards stream independently', () => {
     g.gate('offersWrite').open(undefined)
     for (let i = 0; i < 4; i += 1) await tick()
     expect((g.fns.get('urgency')!.mock.calls[0][0] as { lineupLeagues: unknown }).lineupLeagues).toEqual(allLeagues)
+  })
+
+  /*
+   * The week card's summary is the user's WHOLE portfolio (lib/core-app/weekAllSummary.ts re-derives
+   * the league list itself). On a home scoped to a sport or platform it would show every league's
+   * scores under the scope note — so a scoped home reads its own leagues, live.
+   */
+  it('serves the week card from its summary on an unscoped home, for a user on summaries', { timeout: 180_000 }, async () => {
+    summaries.on = true
+    await render(await homeBody())
+    expect(called('weekSummary')).toBe(1)
+    expect(called('week'), 'the live week read ran beside its summary').toBe(0)
+  })
+
+  it('reads the week live, for the scoped leagues only, on a scoped home — even on summaries', { timeout: 180_000 }, async () => {
+    summaries.on = true
+    g.account.leagues = [LEAGUE, { ...LEAGUE, id: 'L2', name: 'Hoops', platform: 'espn', sport: 'NBA', platformLeagueId: 'p2' }]
+    await render(await screenBody([], { scope: 'platform:espn' }, '|'))
+    expect(called('weekSummary'), 'a scoped home read the whole-portfolio week summary').toBe(0)
+    expect(called('week')).toBe(1)
+    expect((g.fns.get('week')!.mock.calls[0][1] as Array<{ id: string }>).map((l) => l.id)).toEqual(['L2'])
   })
 
   it('never makes a screen wait for its tab badges', { timeout: 180_000 }, async () => {
