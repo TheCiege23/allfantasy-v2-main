@@ -28,14 +28,17 @@ import type { ChimmyAgentType } from '@/lib/agents/pipeline'
  * delete its gap entry, which is how the scoreboard stays true. Never widen an
  * expectation to make a gap disappear.
  *
- * 🛑 TWO EXPECTED AGENTS DO NOT EXIST. `general_research` and `commissioner` are
- * the specialist workflows the Chimmy brief asks for (item 4) that the agent
- * taxonomy has no entry for, so today those questions are served by whatever
- * the fallthrough picks — almost always `trade_analyzer`. They are expressed as
- * expectations on purpose: the gap IS the missing workflow.
+ * History worth keeping: the first version of this corpus (PR #924) expected two
+ * agents that did not exist yet, `general_research` and `commissioner`, and
+ * recorded 53 agent gaps — nearly every question the old picker missed fell
+ * through to `trade_analyzer`. Both agents were added and the picker was moved
+ * onto the orchestration intent in the following change, which closed all 53.
+ *
+ * `HELD_OUT` at the bottom was written AFTER that fix and never used to tune it.
+ * It is the check that the fix generalises rather than memorising this list.
  */
 
-export type ExpectedAgent = ChimmyAgentType | 'general_research' | 'commissioner'
+export type ExpectedAgent = ChimmyAgentType
 
 export type EvalCategory =
   | 'trade'
@@ -66,11 +69,7 @@ export type EvalCase = {
   gaps?: Partial<Record<Dimension, { today: string | boolean; why: string }>>
 }
 
-const NO_GENERAL_AGENT = 'no general-research specialist exists; the fallthrough is trade_analyzer'
-const NO_COMMISH_AGENT = 'no commissioner specialist exists'
-const START_IS_CALENDAR = 'bare `start` in the start_sit branch reads the calendar verb as a lineup decision'
-
-export const CHIMMY_EVAL_CORPUS: readonly EvalCase[] = [
+const TUNED: readonly EvalCase[] = [
   // ── trade ────────────────────────────────────────────────────────────────
   {
     q: 'Should I trade Josh Allen for Bijan Robinson in my dynasty league?',
@@ -95,7 +94,6 @@ export const CHIMMY_EVAL_CORPUS: readonly EvalCase[] = [
     grounding: true,
     orchestration: 'trade',
     agent: 'trade_analyzer',
-    gaps: { orchestration: { today: 'general', why: 'the trade branch has no `give` vocabulary' } },
   },
   {
     q: 'Should I accept this trade offer?',
@@ -122,7 +120,6 @@ export const CHIMMY_EVAL_CORPUS: readonly EvalCase[] = [
     grounding: true,
     orchestration: 'waiver',
     agent: 'waiver_wire',
-    gaps: { agent: { today: 'trade_analyzer', why: 'the agent waiver branch knows `waiver|faab|claim` but not `pick up`' } },
   },
   {
     q: 'How much FAAB should I bid on Bauer Sharp?',
@@ -139,7 +136,6 @@ export const CHIMMY_EVAL_CORPUS: readonly EvalCase[] = [
     grounding: true,
     orchestration: 'waiver',
     agent: 'waiver_wire',
-    gaps: { agent: { today: 'trade_analyzer', why: 'the agent waiver branch has no `drop`' } },
   },
   {
     q: 'Best waiver adds at running back?',
@@ -156,7 +152,6 @@ export const CHIMMY_EVAL_CORPUS: readonly EvalCase[] = [
     grounding: true,
     orchestration: 'waiver',
     agent: 'waiver_wire',
-    gaps: { agent: { today: 'trade_analyzer', why: 'the agent waiver branch has no `add` or `wire`' } },
   },
 
   // ── lineup ───────────────────────────────────────────────────────────────
@@ -167,7 +162,6 @@ export const CHIMMY_EVAL_CORPUS: readonly EvalCase[] = [
     grounding: true,
     orchestration: 'start_sit',
     agent: 'matchup_simulator',
-    gaps: { agent: { today: 'trade_analyzer', why: 'the agent knows only the literal `start/sit` / `start sit`' } },
   },
   {
     q: 'Start Bijan or Gibbs?',
@@ -176,7 +170,6 @@ export const CHIMMY_EVAL_CORPUS: readonly EvalCase[] = [
     grounding: true,
     orchestration: 'start_sit',
     agent: 'matchup_simulator',
-    gaps: { agent: { today: 'trade_analyzer', why: 'the agent knows only the literal `start/sit` / `start sit`' } },
   },
   {
     q: 'Who do I bench this week?',
@@ -185,10 +178,6 @@ export const CHIMMY_EVAL_CORPUS: readonly EvalCase[] = [
     grounding: true,
     orchestration: 'start_sit',
     agent: 'matchup_simulator',
-    gaps: {
-      orchestration: { today: 'general', why: 'the start_sit branch knows `bench him` but not a bare `bench`' },
-      agent: { today: 'trade_analyzer', why: 'the agent has no bench vocabulary' },
-    },
   },
   {
     q: 'Who should I play at flex?',
@@ -197,7 +186,6 @@ export const CHIMMY_EVAL_CORPUS: readonly EvalCase[] = [
     grounding: true,
     orchestration: 'start_sit',
     agent: 'matchup_simulator',
-    gaps: { agent: { today: 'trade_analyzer', why: 'the agent has no flex vocabulary' } },
   },
   {
     q: 'Sit Travis Kelce?',
@@ -206,7 +194,6 @@ export const CHIMMY_EVAL_CORPUS: readonly EvalCase[] = [
     grounding: true,
     orchestration: 'start_sit',
     agent: 'matchup_simulator',
-    gaps: { agent: { today: 'trade_analyzer', why: 'the agent knows only the literal `start/sit` / `start sit`' } },
   },
   {
     q: 'Set my lineup for Sunday',
@@ -215,7 +202,6 @@ export const CHIMMY_EVAL_CORPUS: readonly EvalCase[] = [
     grounding: true,
     orchestration: 'start_sit',
     agent: 'matchup_simulator',
-    gaps: { agent: { today: 'trade_analyzer', why: 'the agent has no lineup vocabulary' } },
   },
   {
     q: 'Who is my opponent this week?',
@@ -224,7 +210,6 @@ export const CHIMMY_EVAL_CORPUS: readonly EvalCase[] = [
     grounding: true,
     orchestration: 'matchup',
     agent: 'matchup_simulator',
-    gaps: { agent: { today: 'trade_analyzer', why: 'the agent knows `matchup` but not `opponent`' } },
   },
   {
     q: 'Given the matchup, is Kittle startable?',
@@ -243,7 +228,6 @@ export const CHIMMY_EVAL_CORPUS: readonly EvalCase[] = [
     grounding: false,
     orchestration: 'draft',
     agent: 'draft_assistant',
-    gaps: { orchestration: { today: 'general', why: 'the draft branch has no bare `draft` verb' } },
   },
   {
     q: "What is Brock Bowers' ADP?",
@@ -260,7 +244,6 @@ export const CHIMMY_EVAL_CORPUS: readonly EvalCase[] = [
     grounding: true,
     orchestration: 'draft',
     agent: 'draft_assistant',
-    gaps: { orchestration: { today: 'player_value', why: '`tiers` routes to player_value ahead of the draft branch' } },
   },
   {
     q: "When is my league's draft?",
@@ -269,12 +252,6 @@ export const CHIMMY_EVAL_CORPUS: readonly EvalCase[] = [
     grounding: true,
     orchestration: ['draft', 'general'],
     agent: 'draft_assistant',
-    gaps: {
-      agent: {
-        today: 'trade_analyzer',
-        why: 'the calendar guard excludes `draft` from draft_assistant when the question starts with `when`',
-      },
-    },
   },
   {
     q: 'Mock draft for a 12-team superflex league',
@@ -291,7 +268,6 @@ export const CHIMMY_EVAL_CORPUS: readonly EvalCase[] = [
     grounding: true,
     orchestration: 'draft',
     agent: 'draft_assistant',
-    gaps: { orchestration: { today: 'general', why: 'the draft branch has no bare `pick` or `draft`' } },
   },
 
   // ── commissioner ─────────────────────────────────────────────────────────
@@ -302,10 +278,6 @@ export const CHIMMY_EVAL_CORPUS: readonly EvalCase[] = [
     grounding: true,
     orchestration: 'commissioner',
     agent: 'commissioner',
-    gaps: {
-      orchestration: { today: 'trade', why: 'classifyChimmyIntent never returns `commissioner`, though the type allows it' },
-      agent: { today: 'trade_analyzer', why: NO_COMMISH_AGENT },
-    },
   },
   {
     q: 'How do I change the playoff format in my league?',
@@ -314,10 +286,6 @@ export const CHIMMY_EVAL_CORPUS: readonly EvalCase[] = [
     grounding: true,
     orchestration: 'commissioner',
     agent: 'commissioner',
-    gaps: {
-      orchestration: { today: 'general', why: 'classifyChimmyIntent never returns `commissioner`' },
-      agent: { today: 'trade_analyzer', why: NO_COMMISH_AGENT },
-    },
   },
   {
     q: 'Is there collusion in my league?',
@@ -326,7 +294,6 @@ export const CHIMMY_EVAL_CORPUS: readonly EvalCase[] = [
     grounding: true,
     orchestration: ['commissioner', 'manager_psychology'],
     agent: 'commissioner',
-    gaps: { agent: { today: 'trade_analyzer', why: NO_COMMISH_AGENT } },
   },
   {
     q: 'Can I make a rule change mid-season as commish?',
@@ -335,10 +302,6 @@ export const CHIMMY_EVAL_CORPUS: readonly EvalCase[] = [
     grounding: null,
     orchestration: 'commissioner',
     agent: 'commissioner',
-    gaps: {
-      orchestration: { today: 'general', why: 'classifyChimmyIntent never returns `commissioner`' },
-      agent: { today: 'trade_analyzer', why: NO_COMMISH_AGENT },
-    },
   },
   {
     q: 'How many teams make the playoffs in my league?',
@@ -347,7 +310,6 @@ export const CHIMMY_EVAL_CORPUS: readonly EvalCase[] = [
     grounding: true,
     orchestration: ['general', 'commissioner'],
     agent: ['general_research', 'commissioner'],
-    gaps: { agent: { today: 'trade_analyzer', why: NO_COMMISH_AGENT } },
   },
 
   // ── general research ─────────────────────────────────────────────────────
@@ -358,7 +320,6 @@ export const CHIMMY_EVAL_CORPUS: readonly EvalCase[] = [
     grounding: false,
     orchestration: ['general', 'player_value'],
     agent: 'general_research',
-    gaps: { agent: { today: 'trade_analyzer', why: NO_GENERAL_AGENT } },
   },
   {
     q: "What's the injury status of Christian McCaffrey?",
@@ -367,7 +328,6 @@ export const CHIMMY_EVAL_CORPUS: readonly EvalCase[] = [
     grounding: false,
     orchestration: ['general', 'injury', 'player_value'],
     agent: 'general_research',
-    gaps: { agent: { today: 'trade_analyzer', why: NO_GENERAL_AGENT } },
   },
   {
     q: 'Give me a rundown on Bijan Robinson',
@@ -376,7 +336,6 @@ export const CHIMMY_EVAL_CORPUS: readonly EvalCase[] = [
     grounding: false,
     orchestration: ['general', 'player_value'],
     agent: 'general_research',
-    gaps: { agent: { today: 'trade_analyzer', why: NO_GENERAL_AGENT } },
   },
   {
     q: 'Is my team a contender or should I rebuild?',
@@ -398,7 +357,6 @@ export const CHIMMY_EVAL_CORPUS: readonly EvalCase[] = [
         today: true,
         why: '`next season` forces a league for a ranking question that has nothing league-specific in it',
       },
-      orchestration: { today: 'general', why: 'no branch knows `rookies`' },
     },
   },
 
@@ -410,10 +368,6 @@ export const CHIMMY_EVAL_CORPUS: readonly EvalCase[] = [
     grounding: false,
     orchestration: ['draft', 'player_value'],
     agent: ['draft_assistant', 'c2c_specialist', 'dynasty_legacy'],
-    gaps: {
-      orchestration: { today: 'general', why: 'no branch knows `devy`' },
-      agent: { today: 'trade_analyzer', why: 'no agent branch knows `devy`' },
-    },
   },
   {
     q: 'When does the college football season start?',
@@ -422,10 +376,6 @@ export const CHIMMY_EVAL_CORPUS: readonly EvalCase[] = [
     grounding: false,
     orchestration: 'general',
     agent: 'general_research',
-    gaps: {
-      orchestration: { today: 'start_sit', why: START_IS_CALENDAR },
-      agent: { today: 'trade_analyzer', why: NO_GENERAL_AGENT },
-    },
   },
   {
     q: 'Best college football players to stash in devy?',
@@ -434,7 +384,6 @@ export const CHIMMY_EVAL_CORPUS: readonly EvalCase[] = [
     grounding: false,
     orchestration: ['general', 'player_value', 'draft'],
     agent: ['draft_assistant', 'c2c_specialist', 'dynasty_legacy'],
-    gaps: { agent: { today: 'trade_analyzer', why: 'no agent branch knows `devy` or `stash`' } },
   },
   {
     q: 'Should I trade my devy Jeremiah Smith for a 2027 first?',
@@ -466,7 +415,6 @@ export const CHIMMY_EVAL_CORPUS: readonly EvalCase[] = [
     grounding: null,
     orchestration: 'waiver',
     agent: 'waiver_wire',
-    gaps: { agent: { today: 'trade_analyzer', why: 'the agent waiver branch has no `stream`' } },
   },
   {
     q: 'Should I start Brandon Aubrey or Jake Elliott?',
@@ -475,7 +423,6 @@ export const CHIMMY_EVAL_CORPUS: readonly EvalCase[] = [
     grounding: true,
     orchestration: 'start_sit',
     agent: 'matchup_simulator',
-    gaps: { agent: { today: 'trade_analyzer', why: 'the agent knows only the literal `start/sit` / `start sit`' } },
   },
   {
     q: 'Is Brandon Aubrey worth rostering?',
@@ -484,7 +431,6 @@ export const CHIMMY_EVAL_CORPUS: readonly EvalCase[] = [
     grounding: true,
     orchestration: ['player_value', 'waiver'],
     agent: 'waiver_wire',
-    gaps: { agent: { today: 'trade_analyzer', why: 'the agent has no roster vocabulary' } },
   },
   {
     q: 'How many points do kickers get for a 50-yard field goal?',
@@ -493,7 +439,6 @@ export const CHIMMY_EVAL_CORPUS: readonly EvalCase[] = [
     grounding: false,
     orchestration: 'general',
     agent: 'general_research',
-    gaps: { agent: { today: 'trade_analyzer', why: NO_GENERAL_AGENT } },
   },
   {
     q: 'Who is the best available kicker on waivers?',
@@ -512,7 +457,6 @@ export const CHIMMY_EVAL_CORPUS: readonly EvalCase[] = [
     grounding: false,
     orchestration: ['general', 'player_value'],
     agent: 'general_research',
-    gaps: { agent: { today: 'trade_analyzer', why: NO_GENERAL_AGENT } },
   },
   {
     q: 'Best IDP linebacker to add?',
@@ -521,7 +465,6 @@ export const CHIMMY_EVAL_CORPUS: readonly EvalCase[] = [
     grounding: true,
     orchestration: 'waiver',
     agent: 'waiver_wire',
-    gaps: { agent: { today: 'trade_analyzer', why: 'the agent waiver branch has no `add`' } },
   },
   {
     q: 'How many points is a sack worth in my league?',
@@ -530,10 +473,6 @@ export const CHIMMY_EVAL_CORPUS: readonly EvalCase[] = [
     grounding: true,
     orchestration: ['general', 'commissioner'],
     agent: ['general_research', 'commissioner'],
-    gaps: {
-      orchestration: { today: 'player_value', why: '`worth` reads a scoring-rule question as a player valuation' },
-      agent: { today: 'trade_analyzer', why: NO_GENERAL_AGENT },
-    },
   },
   {
     q: 'Should I start Fred Warner or Roquan Smith at LB?',
@@ -542,7 +481,6 @@ export const CHIMMY_EVAL_CORPUS: readonly EvalCase[] = [
     grounding: true,
     orchestration: 'start_sit',
     agent: 'matchup_simulator',
-    gaps: { agent: { today: 'trade_analyzer', why: 'the agent knows only the literal `start/sit` / `start sit`' } },
   },
   {
     q: 'Who are the top EDGE rushers in IDP rankings?',
@@ -551,12 +489,6 @@ export const CHIMMY_EVAL_CORPUS: readonly EvalCase[] = [
     grounding: false,
     orchestration: ['general', 'player_value', 'draft'],
     agent: ['draft_assistant', 'general_research'],
-    gaps: {
-      agent: {
-        today: 'power_rankings',
-        why: '`rankings` sends a PLAYER ranking question to the agent that ranks league TEAMS',
-      },
-    },
   },
   {
     q: 'Explain how IDP scoring works',
@@ -565,7 +497,6 @@ export const CHIMMY_EVAL_CORPUS: readonly EvalCase[] = [
     grounding: false,
     orchestration: 'general',
     agent: 'general_research',
-    gaps: { agent: { today: 'trade_analyzer', why: NO_GENERAL_AGENT } },
   },
 
   // ── platform & scoring settings ──────────────────────────────────────────
@@ -576,10 +507,6 @@ export const CHIMMY_EVAL_CORPUS: readonly EvalCase[] = [
     grounding: false,
     orchestration: 'general',
     agent: 'general_research',
-    gaps: {
-      orchestration: { today: 'start_sit', why: '`superflex` is start_sit vocabulary even in a rules question' },
-      agent: { today: 'trade_analyzer', why: NO_GENERAL_AGENT },
-    },
   },
   {
     q: "What are my league's scoring settings?",
@@ -588,7 +515,6 @@ export const CHIMMY_EVAL_CORPUS: readonly EvalCase[] = [
     grounding: true,
     orchestration: 'general',
     agent: ['general_research', 'commissioner'],
-    gaps: { agent: { today: 'trade_analyzer', why: NO_GENERAL_AGENT } },
   },
   {
     q: 'Is this a TE premium league?',
@@ -597,7 +523,6 @@ export const CHIMMY_EVAL_CORPUS: readonly EvalCase[] = [
     grounding: null,
     orchestration: 'general',
     agent: 'general_research',
-    gaps: { agent: { today: 'trade_analyzer', why: NO_GENERAL_AGENT } },
   },
   {
     q: 'How do I import my Sleeper league?',
@@ -606,7 +531,6 @@ export const CHIMMY_EVAL_CORPUS: readonly EvalCase[] = [
     grounding: false,
     orchestration: 'general',
     agent: 'general_research',
-    gaps: { agent: { today: 'trade_analyzer', why: NO_GENERAL_AGENT } },
   },
   {
     q: 'Does ESPN or Yahoo support keeper leagues?',
@@ -615,7 +539,6 @@ export const CHIMMY_EVAL_CORPUS: readonly EvalCase[] = [
     grounding: false,
     orchestration: 'general',
     agent: 'general_research',
-    gaps: { agent: { today: 'trade_analyzer', why: NO_GENERAL_AGENT } },
   },
   {
     q: 'How do MFL and Fantrax handle IR slots?',
@@ -624,7 +547,6 @@ export const CHIMMY_EVAL_CORPUS: readonly EvalCase[] = [
     grounding: false,
     orchestration: 'general',
     agent: 'general_research',
-    gaps: { agent: { today: 'trade_analyzer', why: NO_GENERAL_AGENT } },
   },
   {
     q: 'What is half PPR?',
@@ -633,7 +555,6 @@ export const CHIMMY_EVAL_CORPUS: readonly EvalCase[] = [
     grounding: false,
     orchestration: 'general',
     agent: 'general_research',
-    gaps: { agent: { today: 'trade_analyzer', why: NO_GENERAL_AGENT } },
   },
   {
     q: "Is Ja'Marr Chase worth more in PPR or standard?",
@@ -642,7 +563,6 @@ export const CHIMMY_EVAL_CORPUS: readonly EvalCase[] = [
     grounding: false,
     orchestration: 'player_value',
     agent: ['player_comparison', 'general_research'],
-    gaps: { agent: { today: 'trade_analyzer', why: NO_GENERAL_AGENT } },
   },
   {
     q: 'Is Josh Allen worth more in a 2QB league?',
@@ -651,7 +571,6 @@ export const CHIMMY_EVAL_CORPUS: readonly EvalCase[] = [
     grounding: false,
     orchestration: 'player_value',
     agent: 'general_research',
-    gaps: { agent: { today: 'trade_analyzer', why: NO_GENERAL_AGENT } },
   },
 
   // ── real-world sport, not fantasy ────────────────────────────────────────
@@ -662,7 +581,6 @@ export const CHIMMY_EVAL_CORPUS: readonly EvalCase[] = [
     grounding: false,
     orchestration: 'general',
     agent: 'general_research',
-    gaps: { agent: { today: 'trade_analyzer', why: NO_GENERAL_AGENT } },
   },
   {
     q: 'When does the season start?',
@@ -671,10 +589,6 @@ export const CHIMMY_EVAL_CORPUS: readonly EvalCase[] = [
     grounding: false,
     orchestration: 'general',
     agent: 'general_research',
-    gaps: {
-      orchestration: { today: 'start_sit', why: START_IS_CALENDAR },
-      agent: { today: 'trade_analyzer', why: NO_GENERAL_AGENT },
-    },
   },
   {
     q: 'What time does the Chiefs game start tonight?',
@@ -683,10 +597,6 @@ export const CHIMMY_EVAL_CORPUS: readonly EvalCase[] = [
     grounding: false,
     orchestration: 'general',
     agent: 'general_research',
-    gaps: {
-      orchestration: { today: 'start_sit', why: START_IS_CALENDAR },
-      agent: { today: 'trade_analyzer', why: NO_GENERAL_AGENT },
-    },
   },
   {
     q: 'Did the 49ers win?',
@@ -695,7 +605,6 @@ export const CHIMMY_EVAL_CORPUS: readonly EvalCase[] = [
     grounding: false,
     orchestration: 'general',
     agent: 'general_research',
-    gaps: { agent: { today: 'trade_analyzer', why: NO_GENERAL_AGENT } },
   },
   {
     q: 'When is the NFL draft?',
@@ -704,7 +613,6 @@ export const CHIMMY_EVAL_CORPUS: readonly EvalCase[] = [
     grounding: false,
     orchestration: 'general',
     agent: 'general_research',
-    gaps: { agent: { today: 'trade_analyzer', why: NO_GENERAL_AGENT } },
   },
   {
     q: 'Tell me about free agency this year',
@@ -713,7 +621,6 @@ export const CHIMMY_EVAL_CORPUS: readonly EvalCase[] = [
     grounding: false,
     orchestration: 'general',
     agent: 'general_research',
-    gaps: { agent: { today: 'trade_analyzer', why: NO_GENERAL_AGENT } },
   },
 
   // ── substring collisions: every one of these was refused before 2026-09-16 ──
@@ -724,7 +631,6 @@ export const CHIMMY_EVAL_CORPUS: readonly EvalCase[] = [
     grounding: false,
     orchestration: ['general', 'player_value'],
     agent: 'general_research',
-    gaps: { agent: { today: 'trade_analyzer', why: NO_GENERAL_AGENT } },
   },
   {
     q: 'Jordan Addison rest-of-season outlook',
@@ -733,7 +639,6 @@ export const CHIMMY_EVAL_CORPUS: readonly EvalCase[] = [
     grounding: false,
     orchestration: ['general', 'player_value'],
     agent: 'general_research',
-    gaps: { agent: { today: 'trade_analyzer', why: NO_GENERAL_AGENT } },
   },
   {
     q: 'Is Tee Higgins an ideal WR2?',
@@ -742,7 +647,6 @@ export const CHIMMY_EVAL_CORPUS: readonly EvalCase[] = [
     grounding: false,
     orchestration: ['general', 'player_value'],
     agent: 'general_research',
-    gaps: { agent: { today: 'trade_analyzer', why: NO_GENERAL_AGENT } },
   },
   {
     q: 'George Pickens outlook for 2026',
@@ -751,7 +655,6 @@ export const CHIMMY_EVAL_CORPUS: readonly EvalCase[] = [
     grounding: false,
     orchestration: ['general', 'player_value'],
     agent: 'general_research',
-    gaps: { agent: { today: 'trade_analyzer', why: NO_GENERAL_AGENT } },
   },
   {
     q: 'Frank Gore career rushing yards',
@@ -760,7 +663,6 @@ export const CHIMMY_EVAL_CORPUS: readonly EvalCase[] = [
     grounding: false,
     orchestration: 'general',
     agent: 'general_research',
-    gaps: { agent: { today: 'trade_analyzer', why: NO_GENERAL_AGENT } },
   },
   {
     q: 'How do I claim my team?',
@@ -769,8 +671,50 @@ export const CHIMMY_EVAL_CORPUS: readonly EvalCase[] = [
     grounding: null,
     orchestration: 'general',
     agent: 'general_research',
-    gaps: {
-      agent: { today: 'waiver_wire', why: 'bare `claim` sends a team-claiming (import) question to the waiver agent' },
-    },
   },
 ]
+
+/*
+ * 🛑 HELD OUT. Written 2026-09-16 AFTER the agent-routing fix was built against `TUNED`, with the
+ * expectations set BEFORE the first run against them. The first run's result is recorded in the
+ * commit that added this list; any gap below was found here, not planted.
+ */
+const HELD_OUT: readonly EvalCase[] = [
+  { q: 'Should I sell high on Puka Nacua?', category: 'trade', pecr: 'general', grounding: false, orchestration: ['player_value', 'trade'], agent: ['general_research', 'trade_analyzer'] },
+  { q: 'Accept or decline: my Kelce for his Bowers?', category: 'trade', pecr: 'trade', grounding: true, orchestration: 'trade', agent: 'trade_analyzer', gaps: { pecr: { today: 'general', why: 'PECR has no accept/decline vocabulary; the orchestration classifier does' }, grounding: { today: false, why: 'follows the PECR miss: a trade decision about a named roster is answered without the league' } } },
+  { q: 'Is a 3-for-1 trade ever worth it?', category: 'trade', pecr: 'trade', grounding: null, orchestration: 'trade', agent: 'trade_analyzer' },
+  { q: "Who's a good waiver pickup at tight end?", category: 'waiver', pecr: 'waiver', grounding: true, orchestration: 'waiver', agent: 'waiver_wire' },
+  { q: 'Should I drop Najee Harris?', category: 'waiver', pecr: 'waiver', grounding: true, orchestration: 'waiver', agent: 'waiver_wire' },
+  { q: 'Is it too late to add a handcuff?', category: 'waiver', pecr: 'waiver', grounding: true, orchestration: 'waiver', agent: 'waiver_wire' },
+  { q: 'How much should I bid on Bucky Irving?', category: 'waiver', pecr: 'waiver', grounding: true, orchestration: 'waiver', agent: 'waiver_wire' },
+  { q: 'Is Jahmyr Gibbs a must-start this week?', category: 'lineup', pecr: ['roster', 'general'], grounding: null, orchestration: 'start_sit', agent: 'matchup_simulator' },
+  { q: 'Flex Tank Bigsby or Rhamondre Stevenson?', category: 'lineup', pecr: 'roster', grounding: true, orchestration: 'start_sit', agent: 'matchup_simulator' },
+  { q: 'Should I bench Kyler Murray against the 49ers defense?', category: 'lineup', pecr: 'roster', grounding: true, orchestration: 'start_sit', agent: 'matchup_simulator' },
+  { q: 'Should I start the Eagles defense or the Ravens defense?', category: 'lineup', pecr: 'roster', grounding: true, orchestration: 'start_sit', agent: 'matchup_simulator' },
+  { q: 'What round should I take a kicker in?', category: 'kicker', pecr: ['draft', 'general'], grounding: false, orchestration: 'draft', agent: 'draft_assistant' },
+  { q: 'Rank the top 5 rookie running backs', category: 'draft', pecr: 'draft', grounding: false, orchestration: 'draft', agent: 'draft_assistant' },
+  { q: "What's the ADP of Ashton Jeanty in dynasty startups?", category: 'draft', pecr: 'draft', grounding: false, orchestration: 'draft', agent: 'draft_assistant' },
+  { q: 'Who should I keep as my keeper?', category: 'draft', pecr: 'general', grounding: null, orchestration: ['general', 'draft'], agent: ['dynasty_legacy', 'general_research', 'draft_assistant'] },
+  { q: 'Is Travis Hunter a WR or CB in IDP leagues?', category: 'idp', pecr: 'general', grounding: false, orchestration: 'general', agent: 'general_research' },
+  { q: 'Best DL to stream in IDP this week', category: 'idp', pecr: ['general', 'waiver'], grounding: null, orchestration: 'waiver', agent: 'waiver_wire' },
+  { q: 'How does the waiver priority reset work on Sleeper?', category: 'platform_settings', pecr: ['general', 'waiver'], grounding: false, orchestration: 'general', agent: 'general_research', gaps: { grounding: { today: true, why: 'any `waiver` word hard-requires a league, even in a question about how a platform works' } } },
+  { q: 'What does TE premium do to Brock Bowers value?', category: 'platform_settings', pecr: 'general', grounding: false, orchestration: ['player_value', 'general'], agent: 'general_research' },
+  { q: 'Is Caleb Williams a top-12 QB in superflex?', category: 'platform_settings', pecr: 'general', grounding: false, orchestration: ['player_value', 'general'], agent: 'general_research' },
+  { q: 'When is the trade deadline in my league?', category: 'commissioner', pecr: 'trade', grounding: true, orchestration: ['commissioner', 'general', 'trade'], agent: ['commissioner', 'general_research'], gaps: { agent: { today: 'trade_analyzer', why: 'a deadline question reads as a trade intent, so the trade prompt answers a calendar question' } } },
+  { q: 'Can the commissioner reverse a trade on ESPN?', category: 'commissioner', pecr: 'trade', grounding: null, orchestration: 'commissioner', agent: 'commissioner' },
+  { q: 'Our league has a manager who never sets his lineup, what should I do as commish?', category: 'commissioner', pecr: 'roster', grounding: true, orchestration: 'commissioner', agent: 'commissioner' },
+  { q: 'Should we switch to half PPR next season?', category: 'commissioner', pecr: 'general', grounding: null, orchestration: ['commissioner', 'general'], agent: ['commissioner', 'general_research'] },
+  { q: 'Who is the strongest team in my league?', category: 'research', pecr: 'general', grounding: true, orchestration: 'league_strength', agent: 'power_rankings' },
+  { q: "Can you recap my league's week 3?", category: 'research', pecr: 'general', grounding: true, orchestration: 'story_recap', agent: 'storyline' },
+  { q: "What's Bijan's dynasty value?", category: 'research', pecr: 'general', grounding: false, orchestration: 'player_value', agent: ['dynasty_legacy', 'general_research'] },
+  { q: 'Compare Garrett Wilson and Drake London', category: 'research', pecr: 'general', grounding: false, orchestration: ['general', 'player_value'], agent: 'player_comparison' },
+  { q: 'Is Nick Chubb done?', category: 'research', pecr: 'general', grounding: false, orchestration: 'general', agent: 'general_research' },
+  { q: 'Is Jeremiyah Love a top devy asset?', category: 'college', pecr: 'general', grounding: false, orchestration: ['draft', 'player_value'], agent: ['draft_assistant', 'dynasty_legacy', 'c2c_specialist', 'general_research'] },
+  { q: 'Who won the Heisman last year?', category: 'college', pecr: 'general', grounding: false, orchestration: 'general', agent: 'general_research' },
+  { q: 'Who leads the NFL in receiving yards?', category: 'real_world', pecr: 'general', grounding: false, orchestration: 'general', agent: 'general_research' },
+  { q: 'Where can I stream the Bills game?', category: 'real_world', pecr: 'general', grounding: false, orchestration: 'general', agent: 'general_research' },
+  { q: 'Start time for Monday Night Football?', category: 'real_world', pecr: 'general', grounding: false, orchestration: 'general', agent: 'general_research' },
+]
+
+export const CHIMMY_EVAL_CORPUS: readonly EvalCase[] = [...TUNED, ...HELD_OUT]
+export const CHIMMY_EVAL_HELD_OUT_COUNT = HELD_OUT.length
