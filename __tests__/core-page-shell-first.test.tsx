@@ -329,3 +329,60 @@ describe('/core renders the shell first', () => {
     expect(plainAgain.resetKey).toBe(plain.resetKey)
   })
 })
+
+/**
+ * An unknown segment redirects to /core instead of rendering the whole home under the wrong URL.
+ * Production, 2026-09-16: `/core/contact_support` ran every home card for 11.9s and was tagged
+ * `af.screen: other`. The redirect must happen before the session read, so it costs nothing.
+ */
+describe('/core with an unknown segment', () => {
+  const redirectTarget = async (run: Promise<unknown>): Promise<string | null> => {
+    try {
+      await run
+      return null
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e)
+      if (!message.startsWith('NEXT_REDIRECT ')) throw e
+      return message.slice('NEXT_REDIRECT '.length)
+    }
+  }
+
+  beforeEach(async () => {
+    const { getServerSession } = await import('next-auth')
+    const { getDashboardLeagueListForUser } = await import('@/lib/dashboard/get-dashboard-league-list')
+    vi.mocked(getServerSession).mockClear()
+    vi.mocked(getDashboardLeagueListForUser).mockClear()
+  })
+
+  it('redirects to /core, keeping the query, before reading the session or any league', { timeout: 180_000 }, async () => {
+    h.gated = false
+    h.osGate.resolve()
+    const AfCorePage = await loadPage()
+    const { getServerSession } = await import('next-auth')
+    const { getDashboardLeagueListForUser } = await import('@/lib/dashboard/get-dashboard-league-list')
+
+    expect(await redirectTarget(AfCorePage(pageArgs(['contact_support'], { league: 'L1', week: '3' })))).toBe(
+      '/core?league=L1&week=3',
+    )
+    expect(await redirectTarget(AfCorePage(pageArgs(['.env'], {})))).toBe('/core')
+    expect(await redirectTarget(AfCorePage(pageArgs(['app', '.env'], {})))).toBe('/core')
+
+    expect(getServerSession).not.toHaveBeenCalled()
+    expect(getDashboardLeagueListForUser).not.toHaveBeenCalled()
+    const called = [...Object.entries(shell), ...Object.entries(screens)].filter(([, spy]) => spy.mock.calls.length > 0)
+    expect(called.map(([name]) => name), 'reads made for an unknown segment').toEqual([])
+  })
+
+  it('still renders known segments, dashboard-v2 and a differently cased one included', { timeout: 180_000 }, async () => {
+    h.gated = false
+    h.osGate.resolve()
+    const AfCorePage = await loadPage()
+    const { getServerSession } = await import('next-auth')
+
+    expect(await redirectTarget(AfCorePage(pageArgs(['dashboard-v2'], {})))).toBeNull()
+    expect(await redirectTarget(AfCorePage(pageArgs(['Trades'], { league: 'L1' })))).toBeNull()
+    expect(await redirectTarget(AfCorePage(pageArgs([], {})))).toBeNull()
+    // Positive control for the "before the session" assertion above: a known segment does read it.
+    expect(getServerSession).toHaveBeenCalled()
+  })
+})
