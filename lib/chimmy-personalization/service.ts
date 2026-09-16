@@ -12,6 +12,7 @@ import type {
   ChimmyStoryContentPreference,
 } from './types'
 import { CHIMMY_PERSONALIZATION_DEFAULTS } from './types'
+import { shrunkRate } from '@/lib/chimmy-outcomes/shrinkage'
 
 const PROFILE_KEY = 'chimmy_personalization_v1'
 
@@ -106,14 +107,24 @@ async function inferSignals(userId: string): Promise<ChimmyPersonalizationInfere
     preferredLeagueTypes.unshift('upside_profile')
   }
 
+  /*
+   * 🛑 ONE VOTE USED TO FLIP A USER'S ANSWER STYLE. The guard was `recTotal > 0`, so a single
+   * accepted recommendation read as a 100% accept rate, crossed the 0.7 threshold below and switched
+   * Chimmy to "one quick move" for every later answer. Rates now need ten real events and are
+   * shrunk toward 50% (`lib/chimmy-outcomes/shrinkage.ts`): ten straight accepts read as 0.75.
+   */
   return {
     preferredSports,
     preferredLeagueTypes,
-    recommendationAcceptRate: recTotal > 0 ? clampRate(recAccepted / recTotal) : null,
-    recommendationRejectRate: recTotal > 0 ? clampRate(recRejected / recTotal) : null,
-    alertDismissRate: alertTotal > 0 ? clampRate(alertDismissed / alertTotal) : null,
-    alertClickRate: alertTotal > 0 ? clampRate(alertClicked / alertTotal) : null,
+    recommendationAcceptRate: nullableRate(shrunkRate(recAccepted, recTotal)),
+    recommendationRejectRate: nullableRate(shrunkRate(recRejected, recTotal)),
+    alertDismissRate: nullableRate(shrunkRate(alertDismissed, alertTotal)),
+    alertClickRate: nullableRate(shrunkRate(alertClicked, alertTotal)),
   }
+}
+
+function nullableRate(value: number | null): number | null {
+  return value == null ? null : clampRate(value)
 }
 
 async function inferSettings(userId: string): Promise<ChimmyPersonalizationInference> {

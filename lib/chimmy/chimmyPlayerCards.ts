@@ -47,8 +47,11 @@ const MAX_CARDS = 6
  * inside "Amon-Ra", which puts the wrong face beside a recommendation — the one
  * outcome these cards must never produce. A hyphenated name still matches in
  * full, because the pattern is the whole name.
+ *
+ * Exported so the chat waiver-advice recorder decides "the answer named this player" by the
+ * same rule the player chips use.
  */
-function answerMentions(answer: string, name: string): boolean {
+export function answerMentions(answer: string, name: string): boolean {
   const trimmed = name.trim()
   if (trimmed.length < 3) return false
   const escaped = trimmed.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')

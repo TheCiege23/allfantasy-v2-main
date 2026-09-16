@@ -6,8 +6,12 @@
  * ⚠ A SOURCE CONTRACT, AND WHY. No suite exercises the grounding branch of this ~2,000-line route
  * (it is behind DECISION_OS_GROUNDING_ENABLED and a proved league membership), so deleting the
  * sink would leave every behavioural test green. The recorder and the bridge sink are tested for
- * behaviour elsewhere; this pins the one line that connects them, and that it stays fire-and-forget
- * inside the grounding call rather than awaited in the turn.
+ * behaviour elsewhere; this pins the lines that connect them.
+ *
+ * 🛑 THE CONTRACT CHANGED 2026-09-16 (Chimmy item 10). It used to record fire-and-forget INSIDE the
+ * grounding call, which ran before the token-spend confirmation, recorded advice from packets that
+ * had timed out, and stored the engine's confidence. The claims are now only HELD there, and
+ * recorded after the answer exists.
  */
 import { readFileSync } from 'node:fs'
 import path from 'node:path'
@@ -20,16 +24,33 @@ describe('Chimmy route → waiver advice wiring', () => {
     expect(src).toMatch(/import \{ recordChatWaiverAdvice \} from '@\/lib\/chimmy-advice\/chatWaiverAdvice'/)
   })
 
-  it('🛑 passes onWaiverClaims into buildDecisionOsGroundingPacket, recording fire-and-forget with the proved league id', () => {
+  it('only HOLDS the claims inside the grounding call — no recording there', () => {
     const call = src.slice(src.indexOf('withPacketCeiling(buildDecisionOsGroundingPacket({'))
     const args = call.slice(0, call.indexOf('.then((packet)'))
-    expect(args).toMatch(
-      /onWaiverClaims: \(claims, confidencePct\) => \{\s*void recordChatWaiverAdvice\(\{ userId, leagueId: leagueSnapshot\.id, claims, confidencePct \}\)\.catch\(\(\) => \{\}\)\s*\}/,
-    )
+    expect(args).toMatch(/onWaiverClaims: \(claims\) => \{\s*waiverClaimsSeen\.claims = claims\s*\}/)
+    expect(args).not.toMatch(/recordChatWaiverAdvice/)
   })
 
-  it('the recorder is referenced nowhere else in the route (never awaited in the turn)', () => {
-    expect(src.match(/recordChatWaiverAdvice/g)).toHaveLength(2)
-    expect(src).not.toMatch(/await recordChatWaiverAdvice/)
+  it('🛑 records once, after the unconfirmed-spend return, only when the packet was used', () => {
+    const recordAt = src.indexOf('recordChatWaiverAdvice({')
+    const confirmAt = src.indexOf("code: 'token_confirmation_required'")
+    expect(confirmAt).toBeGreaterThan(-1)
+    expect(recordAt).toBeGreaterThan(confirmAt)
+
+    const guard = src.slice(recordAt - 300, recordAt)
+    expect(guard).toMatch(/if \(waiverClaimsSeen\.claims && grounding\.outcome === 'ok' && leagueSnapshot\)/)
+
+    const call = src.slice(recordAt, src.indexOf('})', recordAt) + 2)
+    expect(call).toContain('leagueId: leagueSnapshot.id')
+    expect(call).toContain('claims: waiverClaimsSeen.claims')
+    // The confidence the user was SHOWN (`meta.confidencePct` is this same value).
+    expect(call).toContain('confidencePct: pecrOutput.responseContract.confidence ?? null')
+    expect(call).toContain('answer: assistantResponse')
+  })
+
+  it('the recorder is called in exactly one place', () => {
+    // The import, the holder's type, and the one call.
+    expect(src.match(/recordChatWaiverAdvice/g)).toHaveLength(3)
+    expect(src.match(/recordChatWaiverAdvice\(\{/g)).toHaveLength(1)
   })
 })

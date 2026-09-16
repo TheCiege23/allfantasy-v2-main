@@ -5,6 +5,7 @@ import { recordAdvice } from '@/lib/chimmy-advice/adviceStore'
 import { asIds, rosterCandidates } from '@/lib/core-app/dash3aPanels'
 import { resolveCurrentWeekForLeague } from '@/lib/core-app/currentWeek'
 import { normalizePlayerName } from '@/lib/player-identity/playerIdentityResolution'
+import { answerMentions } from '@/lib/chimmy/chimmyPlayerCards'
 import type { WaiverClaimRecommendation } from '@/lib/decision-os/waiver/decision'
 
 /**
@@ -38,17 +39,29 @@ export type ChatWaiverAdviceOutcome =
   | 'no_team'
   | 'already_yours'
   | 'no_week'
+  | 'not_in_answer'
 
 export async function recordChatWaiverAdvice(args: {
   userId: string
   leagueId: string
   claims: readonly WaiverClaimRecommendation[]
+  /** The confidence the user was SHOWN for this answer — never the engine's own score. */
   confidencePct: number | null
+  /** The answer as the user saw it (after the assistant-mode trim). */
+  answer: string
 }): Promise<ChatWaiverAdviceOutcome> {
   const top = [...(args.claims ?? [])]
     .filter((c) => c && c.addPlayerId && c.addPlayerName?.trim())
     .sort((a, b) => (a.priorityRank ?? Number.POSITIVE_INFINITY) - (b.priorityRank ?? Number.POSITIVE_INFINITY))[0]
   if (!top) return 'no_claim'
+
+  /*
+   * 🛑 "CHIMMY SAID ADD X" MUST BE SOMETHING CHIMMY SAID. The engine's top claim is what the answer
+   * was GROUNDED on, not what it said — a model can decline it, pick another name, or answer a
+   * different question. A receipt for advice the user never read is a fabricated receipt. Checked
+   * first because it is free and decides whether any of the queries below are worth running.
+   */
+  if (!answerMentions(args.answer ?? '', top.addPlayerName)) return 'not_in_answer'
 
   const league = await prisma.league.findUnique({
     where: { id: args.leagueId },

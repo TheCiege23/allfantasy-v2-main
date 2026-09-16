@@ -58,6 +58,18 @@ function pick(over: Record<string, unknown> = {}) {
   }
 }
 
+/**
+ * Every write that happened was a CLOSE — `resolvedAt` set on a still-open row, and no verdict.
+ * "We cannot say" must never become "followed" or "ignored".
+ */
+function expectOnlyCloses() {
+  for (const [arg] of h.updateMany.mock.calls) {
+    expect(arg.where).toMatchObject({ followed: null, resolvedAt: null })
+    expect(arg.data).not.toHaveProperty('followed')
+    expect(arg.data.resolvedAt).toBeInstanceOf(Date)
+  }
+}
+
 beforeEach(() => {
   vi.clearAllMocks()
   h.outcomeFindMany.mockResolvedValue([])
@@ -122,7 +134,9 @@ describe('rows that must be LEFT ALONE', () => {
       const r = await resolveDraftRecommendationOutcomes()
 
       expect(r).toMatchObject({ examined: 1, resolved: 0, skippedNonDecision: 1 })
-      expect(h.updateMany).not.toHaveBeenCalled()
+      // Closed, so it stops occupying the batch — but never scored as ignored.
+      expect(h.updateMany).toHaveBeenCalledTimes(1)
+      expectOnlyCloses()
     },
   )
 
@@ -134,7 +148,36 @@ describe('rows that must be LEFT ALONE', () => {
 
     const r = await resolveDraftRecommendationOutcomes()
 
-    expect(r).toMatchObject({ resolved: 0, pendingNoPickYet: 1 })
+    expect(r).toMatchObject({ resolved: 0, pendingNoPickYet: 1, closedAbandoned: 0 })
+    expect(h.updateMany).not.toHaveBeenCalled()
+  })
+
+  /*
+   * 🛑 THE STALL. A draft that was abandoned never produces a pick, so its row stayed open and
+   * oldest-first forever; once a batch's worth piled up, nothing newer was ever examined.
+   */
+  it('closes a recommendation whose manager has not picked in two weeks, without a verdict', async () => {
+    h.outcomeFindMany.mockResolvedValue(pending())
+    h.logFindMany.mockResolvedValue(log())
+    h.pickFindFirst.mockResolvedValue(null)
+
+    const now = new Date(SERVED_AT.getTime() + 15 * 86_400_000)
+    const r = await resolveDraftRecommendationOutcomes({ now })
+
+    expect(r).toMatchObject({ resolved: 0, pendingNoPickYet: 0, closedAbandoned: 1 })
+    expect(h.updateMany).toHaveBeenCalledTimes(1)
+    expectOnlyCloses()
+  })
+
+  it('keeps waiting inside the two-week window', async () => {
+    h.outcomeFindMany.mockResolvedValue(pending())
+    h.logFindMany.mockResolvedValue(log())
+    h.pickFindFirst.mockResolvedValue(null)
+
+    const now = new Date(SERVED_AT.getTime() + 13 * 86_400_000)
+    const r = await resolveDraftRecommendationOutcomes({ now })
+
+    expect(r).toMatchObject({ pendingNoPickYet: 1, closedAbandoned: 0 })
     expect(h.updateMany).not.toHaveBeenCalled()
   })
 
@@ -152,7 +195,8 @@ describe('rows that must be LEFT ALONE', () => {
     const r = await resolveDraftRecommendationOutcomes()
 
     expect(r).toMatchObject({ resolved: 0, skippedUnusable: 1 })
-    expect(h.updateMany).not.toHaveBeenCalled()
+    expect(h.updateMany).toHaveBeenCalledTimes(1)
+    expectOnlyCloses()
   })
 })
 
@@ -180,6 +224,8 @@ describe('what it refuses to invent', () => {
     expect(h.outcomeFindMany.mock.calls[0][0].where).toEqual({
       type: 'war_room_pick',
       followed: null,
+      // A CLOSED row is skipped — without this, closed rows would refill the batch forever.
+      resolvedAt: null,
     })
   })
 
