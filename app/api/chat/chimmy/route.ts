@@ -99,6 +99,7 @@ import {
 } from '@/lib/chimmy-chat/assistant-mode'
 import { getChimmyFeatureFlags } from '@/lib/chimmy-chat/feature-flags'
 import { isLikelySportsResultQuestion } from '@/lib/chimmy-chat/sports-question-intent'
+import { classifyPecrIntent, requiresLeagueGrounding } from '@/lib/chimmy-chat/question-routing'
 /*
  * ⚠ NOT IMPORTED AT MODULE SCOPE. The loop pulls in the OpenAI SDK and every
  * grounding builder its tools wrap, and the flag is OFF by default — so a
@@ -599,112 +600,6 @@ function sanitizeAssistantDisplayText(raw: string | null | undefined): string {
 function compactRecord<T extends Record<string, unknown>>(record: T): Record<string, unknown> {
   const entries = Object.entries(record).filter(([, value]) => value !== undefined)
   return Object.fromEntries(entries)
-}
-
-/*
- * ⚠ `start` MADE "WHEN DOES THE SEASON START?" A ROSTER QUESTION, and a roster
- * intent hard-requires league context — so one of the most ordinary questions
- * anybody can ask came back as a 412 telling them to open a league. Measured
- * against production: "When does the college football season start?" 412'd.
- *
- * The word is meant as "start a player". It is also the ordinary English verb,
- * and it appears in "season start", "when do the playoffs start", "start of the
- * week". Requiring a lineup-shaped neighbour keeps the fantasy sense and drops
- * the calendar one. `sit` and `bench` need no such guard — they have no common
- * schedule meaning.
- */
-const ROSTER_INTENT = /roster|lineup|sit\b|bench|flex|\bstarts?\s+(?:him|her|them|over|instead)|(?:who|should\s+i|do\s+i|would\s+you)\s+start\b|start\s*\/?\s*sit/i
-
-function classifyPecrIntent(message: string): string {
-  if (/trade|swap|offer|deal|give|receiv/i.test(message)) return 'trade'
-  /*
-   * ⚠ `pickup` MATCHED ONLY THE CLOSED COMPOUND, so "who can I pick up?" — the
-   * most natural way to ask this — fell through to the draft branch below on the
-   * bare word `pick`, and intent `draft` does not force league grounding unless
-   * the message also says "draft order" or "in MY league". The one question
-   * `get_available_players` exists for could never reach it.
-   *
-   * Third time this exact shape has bitten: `hrs?` in the stat guard and bare
-   * `start` in ROSTER_INTENT. The formal spelling was covered and the human one
-   * was not.
-   */
-  /*
-   * ⚠ AND THE BIDDING VOCABULARY WAS MISSING TOO. "How much FAAB should I bid
-   * on him?" and "should I claim him?" are the questions this branch exists for
-   * — they are asking about waiver MECHANICS, the exact thing we cannot see and
-   * must refuse honestly — and neither matched, so both fell through to
-   * `general` and never even acquired league context. The refusal could not
-   * fire because the question never reached the surface that would refuse.
-   *
-   * `claim` is deliberately narrow: bare `claim` also means "claim my team",
-   * which is an import action, so it is scoped to a player pronoun.
-   */
-  if (/waiver|wire|pick\s*up|drop|add|free.?agent|faab|\bbids?\b|\bbidding\b|claim\s+(?:him|her|them)/i.test(message)) return 'waiver'
-  if (ROSTER_INTENT.test(message)) return 'roster'
-  if (/draft|pick|adp|tier|rank/i.test(message)) return 'draft'
-  return 'general'
-}
-
-function requiresLeagueGrounding(args: {
-  message: string
-  intent: string
-  source?: string
-  teamId?: string
-  leagueId?: string
-  insightType?: InsightType
-}): boolean {
-  const message = args.message.toLowerCase()
-  const source = String(args.source ?? '').toLowerCase()
-  /*
-   * ⚠ THIS LISTED ONLY THE ABBREVIATIONS, so "college football" — the way people
-   * actually write NCAAF — was not global sport context and the escape hatch
-   * never fired for it. Same gap as `hrs?` in the stat guard: the formal
-   * spelling was covered and the human one was not. Spelled-out league and sport
-   * names added.
-   */
-  const hasGlobalSportContext = /\b(nfl|nba|mlb|nhl|ncaaf|ncaab|soccer|world\s+cup|champions\s+league|premier\s+league|major\s+league|college\s+(?:football|basketball)|football|basketball|baseball|hockey|fifa|ncaa)\b/.test(
-    message
-  )
-
-  if (args.teamId) return true
-  if (args.insightType === 'trade' || args.insightType === 'waiver' || args.insightType === 'dynasty') {
-    return true
-  }
-  if (source.includes('trade') || source.includes('waiver') || source.includes('lineup')) {
-    return true
-  }
-  if (['trade', 'waiver', 'roster'].includes(args.intent)) return true
-  /*
-   * ⚠ `in\s+.+\s+league` USED TO 412 EVERY QUESTION ABOUT A REAL COMPETITION.
-   * It was written for "in my dynasty league", but `.+` happily spans "the
-   * champions", so "who scored in the Champions League last night?" was
-   * rejected as a team-specific planning request. Premier League, Major League
-   * Baseball and "best team in the league this year" all failed the same way.
-   *
-   * The `hasGlobalSportContext` escape hatch below DOES list `champions league`
-   * — it just sits underneath this branch and never got the chance. Rather than
-   * reorder (which would drop grounding from "draft order in my NFL league",
-   * since that reads as global too), the pattern now requires the POSSESSIVE it
-   * always meant: my / our / this. No competition on earth is called "my
-   * league", so this keeps every real one out while still catching the phrasing
-   * the rule exists for.
-   */
-  const inTheirOwnLeague = /\bin\s+(?:my|our|this)\s+[\w\s]*league\b/
-  if (args.intent === 'draft' && (/\b(draft order|draft time|my\s+draft|our\s+draft)\b/.test(message) || inTheirOwnLeague.test(message))) {
-    return true
-  }
-  if (/\b(draft order|draft time|waiver|trade)\b/.test(message) || inTheirOwnLeague.test(message)) {
-    return true
-  }
-  if (/\b(my team|my roster|my lineup|our team|future|next season|for my team)\b/.test(message)) {
-    return true
-  }
-
-  // Global sports Q&A (schedule/scores/standings/historic facts) should not hard-require
-  // a league context, even when terms like "draft" are present (e.g. "when is the NFL draft?").
-  if (hasGlobalSportContext) return false
-
-  return false
 }
 
 /**
@@ -1262,7 +1157,6 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     intent: initialIntent,
     source,
     teamId: teamId ?? undefined,
-    leagueId: leagueId ?? undefined,
     insightType,
   })
 
