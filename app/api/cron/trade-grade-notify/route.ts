@@ -16,7 +16,7 @@ export const dynamic = 'force-dynamic'
 export const maxDuration = 300
 
 /**
- * Trade-completion sweep (cron, every 30 min via vercel.json):
+ * Trade-completion sweep (cron, every 15 min via cron-schedule.json):
  *  - Cron mode: `Authorization: Bearer ${CRON_SECRET}` → sweeps every imported
  *    Sleeper league, detects newly completed trades, emails instant grades.
  *  - Manual mode: a signed-in league member may pass ?leagueId=<AF league id>
@@ -39,7 +39,7 @@ export async function GET(req: NextRequest) {
     // ⚠ IT RIDES AN EXISTING ROUTE ON PURPOSE. The standing instruction is that no new API route
     // gets added (the repo sits against a hard route ceiling), so new scheduled work is folded
     // into a route that is already built and already declared in `cron-schedule.json` — this one,
-    // every 30 minutes. Delays are configured in HOURS, so 30-minute granularity is not the
+    // every 15 minutes. Delays are configured in HOURS, so that granularity is not the
     // limiting factor.
     //
     // ⚠ GUARDED SO IT CAN NEVER TAKE THE HOST DOWN. Trade grading is this route's job; a sweep

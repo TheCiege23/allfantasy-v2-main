@@ -229,7 +229,7 @@ describe('getRecentTrades', () => {
         readOnly: true, provider: 'sleeper', lifecycleStatus: 'complete',
         viewerRosterExternalId: '1', counterpartyRosterExternalId: '2',
       }],
-      scanned: true, reason: null, weeksUnanswered: 0,
+      scanned: true, reason: null, unscannedKind: null, weeksUnanswered: 0,
     })
     const out = await getRecentTrades(
       [{ ...LEAGUES[0], platform: 'sleeper' }], NOW, 3,
@@ -259,7 +259,7 @@ describe('getRecentTrades', () => {
         platformLeagueId === '111'
           ? {
               trades: [offer('in-1'), offer('in-2'), offer('sent', { proposedByViewer: true })],
-              completedTrades: [], scanned: true, reason: null, weeksUnanswered: 0,
+              completedTrades: [], scanned: true, reason: null, unscannedKind: null, weeksUnanswered: 0,
             }
           : { trades: [], completedTrades: [], scanned: false, reason: 'no roster', unscannedKind: 'identity', weeksUnanswered: 0 },
       )

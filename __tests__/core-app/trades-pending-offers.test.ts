@@ -107,11 +107,11 @@ describe('pending offers reach the Trades screen', () => {
     leagueRow = SLEEPER_LEAGUE
     claimedTeam = { platformUserId: SLEEPER_ID, externalId: '4' }
     profileRow = { sleeperUserId: SLEEPER_ID }
-    scanResult = { trades: [], scanned: true, reason: null, weeksUnanswered: 0 }
+    scanResult = { trades: [], scanned: true, reason: null, unscannedKind: null, weeksUnanswered: 0 }
   })
 
   it('splits offers into received and sent, viewer-relative in both directions', async () => {
-    scanResult = { trades: [OFFER_TO_ME, OFFER_FROM_ME], scanned: true, reason: null, weeksUnanswered: 0 }
+    scanResult = { trades: [OFFER_TO_ME, OFFER_FROM_ME], scanned: true, reason: null, unscannedKind: null, weeksUnanswered: 0 }
     const out = await (await load())(LEAGUE_ID, USER_ID)
 
     expect(out?.inbox.available).toBe(true)
@@ -174,8 +174,8 @@ describe('pending offers reach the Trades screen', () => {
 
   it('⚠ the retired sentence is gone on every path', async () => {
     const cases: unknown[] = [
-      { trades: [OFFER_TO_ME], scanned: true, reason: null, weeksUnanswered: 0 },
-      { trades: [], scanned: true, reason: null, weeksUnanswered: 0 },
+      { trades: [OFFER_TO_ME], scanned: true, reason: null, unscannedKind: null, weeksUnanswered: 0 },
+      { trades: [], scanned: true, reason: null, unscannedKind: null, weeksUnanswered: 0 },
       { trades: [], scanned: false, reason: 'Sleeper could not be reached', weeksUnanswered: 0 },
     ]
     for (const c of cases) {

@@ -2057,7 +2057,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
 
         /*
          * Trades that landed in the last fortnight. Reads the cache the
-         * 30-minute grade sweep already fills — see lib/core-app/recentTrades
+         * fifteen-minute grade cron already fills — see lib/core-app/recentTrades
          * for why the product has been telling users this data does not exist.
          */
         /*

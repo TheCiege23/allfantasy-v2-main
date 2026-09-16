@@ -40,7 +40,14 @@ import { scanPendingSleeperTrades } from '@/lib/provider-trades/scanPendingSleep
  * supply a trade the viewer is not in. `scanPendingSleeperTrades` keeps only transactions whose
  * `roster_ids` include the viewer's, and `liveCompletedTrade` hard-codes one side as "You". So
  * every trade between two OTHER managers reaches this loader through the cache or not at all, and
- * this loader never builds it — a cold row stays cold until that cron reaches the league.
+ * this loader never builds it.
+ *
+ * ⚠ AND THE CRON REACHING A LEAGUE IS NOT ENOUGH TO WARM IT. `detectAndNotifyLeague` grades only
+ * when the feed shows an id it has not seen, and its FIRST fire for a league takes the bootstrap
+ * path — it records the seen-set and grades nothing. So a league whose trades all predate that
+ * first fire never gets a row from this cron, and a trade landing between import and that fire
+ * is marked seen without ever being built. A cold row stays cold until a trade the cron has not
+ * seen lands in that league.
  *
  * ⚠ THE SWEEP'S OWN LETTER IS NOT USED, AND THAT IS THE POINT. It is a
  * RETROSPECTIVE grade scored on points already realised: days after a trade it

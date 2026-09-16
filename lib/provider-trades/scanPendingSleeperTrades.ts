@@ -470,18 +470,21 @@ export async function scanPendingSleeperTrades(args: {
      * provider/identity split was added to prevent, reached from the other side. `SleeperHttpError`
      * carries the status as a field so this does not have to parse it back out of a message.
      *
-     * 4xx other than 429 is the same story: the request is wrong, not the moment. 429 and every
-     * 5xx stay transient.
+     * 🛑 ONLY 404 AND 410, NOT "4xx EXCEPT 429". A wider cut was tried and is wrong twice over.
+     * Sleeper's v1 API is public and unauthenticated, so a 401 or 403 is an edge/WAF block, not a
+     * statement about the league; 408 and 425 are transient by definition. And `reason` is rendered
+     * VERBATIM to the manager (components/core-app/screens/TradeInbox.tsx), so a wrong permanent
+     * verdict does not just hold a boundary — it tells someone their league is gone when it is not.
+     * 404 is the one status this repo has actually measured for a deleted league
+     * (lib/import-os/collector/leagueGone.ts); 410 is the same statement by definition.
      */
     const status = err instanceof SleeperHttpError ? err.status : null
-    const permanent = status !== null && status >= 400 && status < 500 && status !== 429
+    const gone = status === 404 || status === 410
     return {
       trades: [],
       scanned: false,
-      reason: permanent
-        ? 'this league no longer exists on Sleeper'
-        : 'Sleeper could not be reached',
-      unscannedKind: permanent ? 'identity' : 'provider',
+      reason: gone ? 'this league no longer exists on Sleeper' : 'Sleeper could not be reached',
+      unscannedKind: gone ? 'identity' : 'provider',
       weeksUnanswered: 0,
     }
   }

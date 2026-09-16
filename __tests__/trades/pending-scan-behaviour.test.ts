@@ -11,6 +11,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
  * ⚠ THE EXISTING SUITE PASSED BEFORE AND AFTER THE FIX, so it proves nothing about it. These
  * tests fail if the loop ever goes back to serial, and — more importantly — if the concurrent
  * version quietly reorders the inbox.
+ *
+ * The file has since grown past concurrency — it also pins what the scan REPORTS: `scanned`,
+ * `weeksUnanswered`, and the `unscannedKind` split that decides whether /core treats a failure
+ * as permanent. Renamed from `pending-scan-concurrency` to match.
  */
 
 const calls = vi.hoisted(() => ({ order: [] as number[], inFlight: 0, maxInFlight: 0 }))
@@ -241,9 +245,25 @@ describe('⚠ a refusal is still not an empty week', () => {
       ['429, a rate limit', 429, 'provider'],
       ['500, a provider fault', 500, 'provider'],
       ['503, a provider fault', 503, 'provider'],
+      /*
+       * 🛑 THE ROWS THAT KEEP THE CUT NARROW. A first version classified every 4xx but 429 as
+       * permanent. Sleeper v1 is public and unauthenticated, so a 401/403 is an edge block and
+       * 408/425 are transient — and `reason` is rendered verbatim to the manager, so a wrong
+       * permanent verdict tells someone their league is gone when it is not.
+       */
+      ['401, an edge block', 401, 'provider'],
+      ['403, an edge block', 403, 'provider'],
+      ['408, a timeout', 408, 'provider'],
+      ['425, too early', 425, 'provider'],
+      ['400, a malformed request', 400, 'provider'],
     ])('classifies %s', async (_label, status, kind) => {
       getLeagueRosters.mockRejectedValue(new SleeperHttpError(status as number, '/league/L1/rosters'))
-      expect((await scanPendingSleeperTrades(args)).unscannedKind).toBe(kind)
+      const out = await scanPendingSleeperTrades(args)
+      expect(out.unscannedKind).toBe(kind)
+      // The copy travels with the verdict — TradeInbox renders `reason` verbatim.
+      expect(out.reason).toBe(
+        kind === 'identity' ? 'this league no longer exists on Sleeper' : 'Sleeper could not be reached',
+      )
     })
 
     /* An error that is not a SleeperHttpError says nothing about permanence — treat it as transient. */

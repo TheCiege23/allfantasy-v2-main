@@ -15,7 +15,7 @@
  * ⚠ THIS FILE IS HALF THE FIX. A processor nobody calls is the same bug in a new place — the
  * mistake `CLAUDE.md` records against `ingestCFBDStats`, which existed for months with no
  * scheduled caller while the surface reading its output looked healthy. The other half is the
- * guarded block in `app/api/cron/trade-grade-notify/route.ts` (every 30 min in
+ * guarded block in `app/api/cron/trade-grade-notify/route.ts` (every 15 min in
  * `cron-schedule.json`). Do not land one without the other.
  */
 
