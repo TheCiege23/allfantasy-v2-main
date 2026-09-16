@@ -11,12 +11,14 @@ type Team = { leagueId: string; platformUserId: string | null; externalId: strin
 type RosterRow = { leagueId: string; platformUserId: string; playerData: unknown }
 type LeagueRow = { id: string; name: string; platform: string; platformLeagueId: string | null }
 type WeekRow = { leagueId: string; rosterId: string; matchupId: number | null; pointsFor: number; pointsAgainst: number }
+type ScoreRow = { leagueId: string; playerId: string; points: number }
 
 const db = {
   teams: [] as Team[],
   rosters: [] as RosterRow[],
   leagues: [] as LeagueRow[],
   weeks: [] as WeekRow[],
+  scores: [] as ScoreRow[],
   rosterQueries: [] as unknown[],
   weekQueries: [] as string[],
   failWeekFor: null as string | null,
@@ -55,6 +57,11 @@ vi.mock('@/lib/prisma', () => ({
         if (where.leagueId === db.failWeekFor) throw new Error('read failed')
         return db.weeks.filter((w) => w.leagueId === where.leagueId)
       }),
+    },
+    leaguePlayerWeeklyScore: {
+      findMany: vi.fn(async ({ where }: { where: { leagueId: string; playerId: { in: string[] } } }) =>
+        db.scores.filter((s) => s.leagueId === where.leagueId && where.playerId.in.includes(s.playerId)),
+      ),
     },
   },
 }))
@@ -104,6 +111,7 @@ beforeEach(() => {
   db.rosters = []
   db.leagues = []
   db.weeks = []
+  db.scores = []
   db.rosterQueries = []
   db.weekQueries = []
   db.failWeekFor = null
@@ -230,9 +238,28 @@ describe('matchupCurrentPoints', () => {
     }))
     const level = await getPlayerLeagueImpact({ userId: USER, rosterPlayerId: HIM })
     db.weeks.find((w) => w.rosterId === '1')!.pointsFor = 40
+    // B's own row: the loader reads per-player scores from the PLATFORM league id.
+    db.scores.push({ leagueId: 'p-A', playerId: 'B', points: 40 })
     const ahead = await getPlayerLeagueImpact({ userId: USER, rosterPlayerId: HIM })
     const now = (r: typeof level) => (r.rows[0].impact.kind === 'priced' ? r.rows[0].impact.now : NaN)
     expect(now(ahead)).toBeGreaterThan(now(level))
+  })
+
+  /**
+   * 🛑 POINTS ON THE BOARD WITH NO PER-PLAYER SCORES ARE REFUSED, NOT GUESSED. With only a team
+   * total, nothing says how much of each starter's projection is left — the old code banked
+   * the total on the first starter and priced the rest as if nobody had played.
+   */
+  it('refuses a live matchup whose per-player scores were not imported', async () => {
+    addLeague('A', 'starters')
+    db.weeks.find((w) => w.rosterId === '1')!.pointsFor = 40
+    // A row keyed on OUR league id is the wrong id space and must not be read as his.
+    db.scores.push({ leagueId: 'A', playerId: 'B', points: 40 })
+    const out = await getPlayerLeagueImpact({ userId: USER, rosterPlayerId: HIM })
+    expect(out.rows[0].impact).toEqual({
+      kind: 'unpriced',
+      reason: expect.stringMatching(/per-player scores have not been imported/),
+    })
   })
 })
 

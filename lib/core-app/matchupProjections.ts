@@ -74,8 +74,9 @@ function startersOf(playerData: unknown): string[] {
 /**
  * Load starters for two rosters and price them against this week's projections.
  *
- * `actualByPlayer` carries points already scored, when the caller has them.
- * Anything absent is treated as not yet played, which is the safe direction: a
+ * Every starter comes back with `actualPoints: 0`; points already scored are applied
+ * later from `LivePoints` (see `winProbabilityFor` / `projectedFinalFor`), where a
+ * starter with no score row is treated as not yet played — the safe direction: a
  * player counted as still-to-come adds variance, whereas one wrongly counted as
  * final removes it and makes the model overconfident.
  */
@@ -202,6 +203,112 @@ export async function loadSideProjections(args: {
 }
 
 /**
+ * What is already on the board for one matchup.
+ *
+ * `team` is the scoreboard total for each side (`WeeklyMatchup.pointsFor`) — the number the
+ * screen prints, and the authority on how much has been banked. `byPlayer` is each starter's
+ * own points so far (`league_player_weekly_scores`), keyed by the id the ROSTER holds, or null
+ * when per-player scoring was not read. The model needs both: the team total says how much is
+ * banked, the per-player points say how much of each projection is still to come.
+ */
+export type LivePoints = {
+  team: { you: number; opponent: number }
+  byPlayer: ReadonlyMap<string, number> | null
+}
+
+/** Before kickoff: nothing banked, and per-player points are not needed. */
+export const NO_LIVE_POINTS: LivePoints = { team: { you: 0, opponent: 0 }, byPlayer: null }
+
+/**
+ * Why a live matchup cannot be priced when only team totals are known. Shared by the win
+ * probability and the projected final so the screen gives one reason, not two.
+ */
+export const LIVE_SCORES_UNATTRIBUTED_REASON =
+  "points are already on the board, but this league's per-player scores have not been imported, so we cannot tell how much of each starter's projection is still to come"
+
+/** A banked total with no player row behind it — see `liveSide`. Never a real player id. */
+const UNATTRIBUTED_BANKED = '__banked_unattributed__'
+
+/**
+ * A side with points on its scoreboard and not one per-player row behind them.
+ *
+ * ⚠ PER SIDE, NOT PER MATCHUP. The Sleeper ingester skips a roster that has not scored and
+ * writes every player of one that has, so rows can exist for one side and not the other when
+ * the two syncs are a pass apart. Checked across the matchup, that side's whole total would be
+ * banked while every one of its starters still counted his full projection as to come.
+ */
+const unattributable = (side: SideProjection, teamPoints: number, byPlayer: ReadonlyMap<string, number> | null) =>
+  teamPoints !== 0 && !side.lineup.some((slot) => byPlayer?.has(slot.playerId))
+
+const liveUnattributable = (sides: SideProjections, live: LivePoints): boolean =>
+  unattributable(sides.you, live.team.you, live.byPlayer) ||
+  unattributable(sides.opponent, live.team.opponent, live.byPlayer)
+
+/**
+ * One side's starters with their own points so far, plus whatever the scoreboard has banked
+ * that no player row accounts for.
+ *
+ * 🛑 PER PLAYER, NEVER A TEAM TOTAL ON ONE STARTER. This used to attach the whole team's points
+ * to the first starter, on the reasoning that only sums matter. They do not: the model takes
+ * each starter's remaining projection as `max(0, projected − actual)`, so the team total was
+ * subtracted from ONE player's projection (clamped at zero) while every other starter — games
+ * already over included — kept his full projection as still to come. A 20-point QB listed
+ * first, with a WR projected 14 who had already scored 25, came out at 115 instead of 121.
+ *
+ * ⚠ THE SCOREBOARD STAYS THE AUTHORITY ON WHAT IS BANKED. Per-player rows and team totals are
+ * written by different syncs and can drift apart mid-slate. When the team total is ahead, the
+ * difference is added as a finished, zero-projection entry: banked exactly once, never
+ * double-counted and never lost. When the player rows are ahead, their sum stands.
+ *
+ * A starter with no row is treated as not yet played — the model's safe direction (more
+ * uncertainty, never false certainty), the same stance `lib/live/starterSwings.ts` takes.
+ *
+ * ⚠ STILL UNKNOWN: WHETHER A STARTER'S GAME IS OVER. Nothing sets `isFinalized` on these rows
+ * (`ingestSleeperPlayerScores` always writes false), so a starter who finished UNDER his
+ * projection still counts the gap as to come. That overstates his side and widens the spread;
+ * a starter who BEAT his projection is no longer affected.
+ */
+function liveSide(side: SideProjection, teamPoints: number, byPlayer: ReadonlyMap<string, number> | null) {
+  const actualOf = (playerId: string) => byPlayer?.get(playerId) ?? 0
+  const starters: MatchupPlayer[] = side.starters.map((p) => ({ ...p, actualPoints: actualOf(p.playerId) }))
+  // Over the whole LINEUP: an unpriced starter's points are banked too, just not projectable.
+  const attributed = side.lineup.reduce((sum, slot) => sum + actualOf(slot.playerId), 0)
+  const unattributed = teamPoints - attributed
+  if (unattributed > 0.005) {
+    starters.push({ playerId: UNATTRIBUTED_BANKED, projectedPoints: 0, actualPoints: unattributed, isFinal: true })
+  }
+  const banked = Math.max(teamPoints, attributed)
+  const remaining = starters.reduce(
+    (sum, p) => (p.isFinal || p.projectedPoints == null ? sum : sum + Math.max(0, p.projectedPoints - p.actualPoints)),
+    0,
+  )
+  return { starters, banked, remaining }
+}
+
+/**
+ * Each side's projected final: what is banked plus what its priced starters are still
+ * projected to add. Before kickoff that is the plain projected total.
+ *
+ * Returns an explicit refusal when points are on the board but per-player scores are not —
+ * the one case where "what is left" cannot be known.
+ */
+export function projectedFinalFor(
+  sides: SideProjections,
+  live: LivePoints,
+): { available: true; data: { you: number; opponent: number } } | { available: false; reason: string } {
+  if (liveUnattributable(sides, live)) {
+    return { available: false, reason: LIVE_SCORES_UNATTRIBUTED_REASON }
+  }
+  const round2 = (n: number) => Math.round(n * 100) / 100
+  const you = liveSide(sides.you, live.team.you, live.byPlayer)
+  const opponent = liveSide(sides.opponent, live.team.opponent, live.byPlayer)
+  return {
+    available: true,
+    data: { you: round2(you.banked + you.remaining), opponent: round2(opponent.banked + opponent.remaining) },
+  }
+}
+
+/**
  * Win probability for a matchup, or an explicit reason there is none.
  *
  * ⚠ AN UNPROJECTED STARTER MAKES THE WHOLE MATCHUP UNANSWERABLE, NOT MERELY LESS
@@ -212,7 +319,7 @@ export async function loadSideProjections(args: {
  */
 export function winProbabilityFor(
   sides: SideProjections,
-  currentPoints: { you: number; opponent: number }
+  live: LivePoints
 ):
   | { available: true; data: { pWin: number; projectedMargin: number; confidence: string; detail: string } }
   | { available: false; reason: string } {
@@ -230,19 +337,14 @@ export function winProbabilityFor(
     }
   }
 
-  /*
-   * Points already on the board are attached to the first starter rather than
-   * spread, because only the TOTAL matters to the model — the margin and the
-   * variance are both computed from sums.
-   */
-  const withActuals = (side: SideProjection, points: number): MatchupPlayer[] =>
-    side.starters.length === 0
-      ? []
-      : side.starters.map((p, i) => (i === 0 ? { ...p, actualPoints: points } : p))
+  // Mid-slate with only team totals, "what is left" is unknowable — see `liveSide`.
+  if (liveUnattributable(sides, live)) {
+    return { available: false, reason: LIVE_SCORES_UNATTRIBUTED_REASON }
+  }
 
   const result = computeWinProbability(
-    { teamId: 'you', starters: withActuals(sides.you, currentPoints.you) },
-    { teamId: 'opponent', starters: withActuals(sides.opponent, currentPoints.opponent) }
+    { teamId: 'you', starters: liveSide(sides.you, live.team.you, live.byPlayer).starters },
+    { teamId: 'opponent', starters: liveSide(sides.opponent, live.team.opponent, live.byPlayer).starters }
   )
 
   if (!result.available) return { available: false, reason: result.reason }

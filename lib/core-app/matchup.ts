@@ -9,8 +9,8 @@ import {
 import { displayPosition, inferSlotLabel } from './positionLabels'
 import { resolveCurrentWeekForLeague } from './currentWeek'
 import { leagueDisplayName, type SectionState, type UnavailableSection } from './leagueHome'
-import { winProbabilityFor } from './matchupProjections'
-import { loadMatchupSides, matchupCurrentPoints } from './matchupWinInputs'
+import { projectedFinalFor, winProbabilityFor } from './matchupProjections'
+import { loadMatchupSides, matchupLivePoints } from './matchupWinInputs'
 import { normalizePositionForSport, normalizeTeamAbbrev } from '@/lib/team-abbrev'
 import { startingSlotTemplate } from './rosterSlots'
 import { identityGapNote } from './identityGap'
@@ -451,38 +451,6 @@ export async function getMatchupData(
     sideProjections != null &&
     sideProjections.you.starters.length + sideProjections.opponent.starters.length > 0
 
-  const projectedFinal: MatchupData['projectedFinal'] = anyProjected
-    ? {
-        available: true,
-        data: {
-          you: sideProjections!.you.projectedRemaining,
-          opponent: sideProjections!.opponent.projectedRemaining,
-          unprojected: {
-            you: sideProjections!.you.unprojected,
-            opponent: sideProjections!.opponent.unprojected,
-          },
-        },
-      }
-    : {
-        available: false,
-        reason: sideProjections
-          ? sideProjections.leagueScoring.available === false
-            ? sideProjections.leagueScoring.reason
-            : `no starter could be priced for ${latest.seasonYear} week ${latest.week} — the feed does not cover this week, or this league's rules cannot score its stat lines`
-          : 'we could not match both sides of this matchup to an imported roster',
-      }
-
-  /*
-   * Current points are passed in so an in-progress game is scored from what is
-   * already on the board plus what is left, rather than from projections alone.
-   */
-  const winProbability: MatchupData['winProbability'] = sideProjections
-    ? winProbabilityFor(sideProjections, matchupCurrentPoints(mine, opponentRow))
-    : {
-        available: false,
-        reason: 'we could not match both sides of this matchup to an imported roster',
-      }
-
   /* ── The slot-by-slot board ─────────────────────────────────────────────
    *
    * Your starter against theirs at the same slot, with a headshot on each.
@@ -581,6 +549,52 @@ export async function getMatchupData(
     if (row) identityBy.set(rosterId, row)
   }
   const actualBy = new Map(scoreRows.map((r) => [r.playerId, r.points]))
+
+  /*
+   * ── Projected final and win probability, from what is on the board ─────
+   *
+   * 🛑 COMPUTED AFTER THE PER-PLAYER SCORES, BECAUSE THEY NEED THEM. Both used to run
+   * before `scoreRows` was read, with only the two team totals to go on: the win
+   * probability banked a team's whole score on its first starter, and the projected
+   * final ignored the score entirely — "110 vs 110" beside a 25–0 scoreboard. Each
+   * starter's own points now decide how much of his projection is still to come
+   * (`lib/core-app/matchupProjections.ts`, `liveSide`). With points on the board and
+   * no per-player rows (every non-Sleeper league today), both refuse with one reason
+   * rather than guess.
+   */
+  const live = matchupLivePoints(mine, opponentRow, scoreRows.length ? actualBy : null)
+
+  const projectedFinal: MatchupData['projectedFinal'] = !anyProjected
+    ? {
+        available: false,
+        reason: sideProjections
+          ? sideProjections.leagueScoring.available === false
+            ? sideProjections.leagueScoring.reason
+            : `no starter could be priced for ${latest.seasonYear} week ${latest.week} — the feed does not cover this week, or this league's rules cannot score its stat lines`
+          : 'we could not match both sides of this matchup to an imported roster',
+      }
+    : (() => {
+        const totals = projectedFinalFor(sideProjections!, live)
+        if (!totals.available) return totals
+        return {
+          available: true as const,
+          data: {
+            you: totals.data.you,
+            opponent: totals.data.opponent,
+            unprojected: {
+              you: sideProjections!.you.unprojected,
+              opponent: sideProjections!.opponent.unprojected,
+            },
+          },
+        }
+      })()
+
+  const winProbability: MatchupData['winProbability'] = sideProjections
+    ? winProbabilityFor(sideProjections, live)
+    : {
+        available: false,
+        reason: 'we could not match both sides of this matchup to an imported roster',
+      }
 
   const cellFor = (
     entry: { playerId: string; projected: number | null } | undefined,
