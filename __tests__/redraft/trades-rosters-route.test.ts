@@ -76,6 +76,16 @@ vi.mock('@/lib/player-identity/resolveProviderRosterPlayers', () => ({
   resolveProviderRosterPlayers: (...args: unknown[]) => resolveProviderPlayers(...args),
 }))
 
+/*
+ * The history read has its own suite (`__tests__/trades/partner-history.test.ts`). Here it is a spy,
+ * defaulting to "not on file", so the route's plumbing — what it passes and what it does with a
+ * failure — is what these tests pin.
+ */
+const loadLeagueTradeHistory = vi.fn()
+vi.mock('@/lib/trade-intel/partnerHistory', () => ({
+  loadLeagueTradeHistory: (...args: unknown[]) => loadLeagueTradeHistory(...args),
+}))
+
 import { GET } from '@/app/api/leagues/[leagueId]/trades/rosters/route'
 
 function ctx(leagueId: string) {
@@ -516,5 +526,79 @@ describe('🛑 market value on the roster rows', () => {
     const players = ((await res.json()) as { rosters: Array<{ players: Array<Record<string, unknown>> }> }).rosters[0]!.players
     expect(players[0]!.name).toBe('Perry Vance')
     expect(players[0]!.value).toBeNull()
+  })
+})
+
+describe('partnerRanking (item #8)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    getServerSession.mockResolvedValue({ user: { id: 'user-a' } })
+    assertLeagueMember.mockResolvedValue({ ok: true, league: {} })
+    findManyAppUser.mockResolvedValue([])
+    findFirstLeagueTeam.mockResolvedValue(null)
+    findUniqueUserProfile.mockResolvedValue(null)
+    resolveTeamByeWeeks.mockResolvedValue(new Map())
+    findManySportsPlayer.mockResolvedValue([])
+    getPlayerValues.mockResolvedValue(new Map())
+    loadLeagueTradeHistory.mockResolvedValue(null)
+    findManyRoster.mockResolvedValue([
+      { id: 'roster-a', platformUserId: 'user-a', playerData: { players: [] } },
+      { id: 'roster-b', platformUserId: 'user-b', playerData: { players: [] } },
+    ])
+    findManyLeagueTeam.mockResolvedValue([
+      { platformUserId: 'user-a', teamName: 'Mine', externalId: '1', avatarUrl: null, wins: 0, losses: 0, ties: 0 },
+      { platformUserId: 'user-b', teamName: 'Theirs', externalId: '0002', avatarUrl: null, wins: 0, losses: 0, ties: 0 },
+    ])
+  })
+
+  const get = async () => {
+    const res = await GET(new Request('http://localhost/api/leagues/league-1/trades/rosters') as never, ctx('league-1'))
+    return (await res.json()) as { rosters: unknown[]; partnerRanking: { partners: Array<{ rosterId: string }>; gaps: string[] } | null }
+  }
+
+  it('ranks everyone but the viewer, from the league lineup it read', async () => {
+    findUniqueLeague.mockResolvedValue({ season: 2026, sport: 'NFL', platform: 'sleeper', starters: ['QB', 'RB', 'BN'] })
+    const body = await get()
+    expect(body.partnerRanking?.partners.map((p) => p.rosterId)).toEqual(['roster-b'])
+    // The lineup was on file, so the lineup gap is absent; history was not, so its gap is present.
+    expect(body.partnerRanking?.gaps.some((g) => /lineup is not on file/.test(g))).toBe(false)
+    expect(body.partnerRanking?.gaps).toContain('Trade history is not on file for this league, so past dealing did not count.')
+  })
+
+  it('asks for history in Roster.id space, with the provider ids it maps from', async () => {
+    findUniqueLeague.mockResolvedValue({ season: 2026, sport: 'NFL', platform: 'sleeper', starters: ['QB'] })
+    await get()
+    expect(loadLeagueTradeHistory).toHaveBeenCalledWith({
+      leagueId: 'league-1',
+      viewerRosterId: 'roster-a',
+      isNative: false,
+      teams: [
+        { externalId: '1', rosterId: 'roster-a' },
+        { externalId: '0002', rosterId: 'roster-b' },
+      ],
+    })
+  })
+
+  it('marks a native league as native, so zero trades there is a real zero', async () => {
+    findUniqueLeague.mockResolvedValue({ season: 2026, sport: 'NFL', platform: 'native', starters: ['QB'] })
+    await get()
+    expect(loadLeagueTradeHistory.mock.calls[0]![0]).toMatchObject({ isNative: true })
+  })
+
+  it('🛑 a failing history read costs the history, never the rosters or the ranking', async () => {
+    findUniqueLeague.mockResolvedValue({ season: 2026, sport: 'NFL', platform: 'sleeper', starters: ['QB'] })
+    loadLeagueTradeHistory.mockRejectedValue(new Error('relation does not exist'))
+    const body = await get()
+    expect(body.rosters).toHaveLength(2)
+    expect(body.partnerRanking?.partners).toHaveLength(1)
+    expect(body.partnerRanking?.gaps).toContain('Trade history is not on file for this league, so past dealing did not count.')
+  })
+
+  it('is null when the viewer has no team here — there is nobody to rank partners FOR', async () => {
+    getServerSession.mockResolvedValue({ user: { id: 'stranger' } })
+    findUniqueLeague.mockResolvedValue({ season: 2026, sport: 'NFL', platform: 'sleeper', starters: ['QB'] })
+    const body = await get()
+    expect(body.partnerRanking).toBeNull()
+    expect(loadLeagueTradeHistory).not.toHaveBeenCalled()
   })
 })

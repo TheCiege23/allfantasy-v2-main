@@ -11,6 +11,9 @@ import { byeForTeam, resolveTeamByeWeeks } from '@/lib/schedule/teamByeWeeks'
 import { FIRST_ROUND_IN_MARKET_UNITS, pickValueByOverall } from '@/lib/pick-curve'
 import { getPlayerValuesForNamesDbFirst } from '@/lib/fantasycalc-db'
 import { resolvePlayerStock, type StockDirection } from '@/lib/trade-intel/playerStock'
+import { rankTradePartners, type PartnerRanking } from '@/lib/trade-intel/partnerRanking'
+import { loadLeagueTradeHistory } from '@/lib/trade-intel/partnerHistory'
+import { resolveWriteAuthority } from '@/lib/league/write-authority'
 
 export const dynamic = 'force-dynamic'
 
@@ -169,7 +172,8 @@ export async function GET(
    * receiver, an NBA guard and an NCAAB player. The resolver is scoped by this value.
    */
   const league = await prisma.league
-    .findUnique({ where: { id: leagueId }, select: { season: true, sport: true, platform: true } })
+    // `starters` is the league's own lineup, read by the partner ranking below.
+    .findUnique({ where: { id: leagueId }, select: { season: true, sport: true, platform: true, starters: true } })
     .catch(() => null)
   const currentSeason = Number(league?.season) || null
 
@@ -438,9 +442,51 @@ export async function GET(
     }
   }
 
+  /*
+   * ── WHO TO TRADE WITH (item #8) ────────────────────────────────────────────────────────────
+   *
+   * Ranked HERE because every input is already in hand — every roster, priced — except the
+   * league's lineup (selected above) and its trade history (one light read). No provider is
+   * called; the finder that did lives on /af-legacy and fetches Sleeper live.
+   *
+   * ⚠ FAILURE-CONTAINED. This route's job is the rosters. A ranking that throws costs the ranking
+   * (`null`, which the screen reads as "not available") and never the builder.
+   *
+   * ⚠ ABSENT WITHOUT A VIEWER TEAM. Ranking "partners" for someone who is not in the league would
+   * rank everyone, including the team being looked at.
+   */
+  let partnerRanking: PartnerRanking | null = null
+  if (viewerTeamRosterId) {
+    try {
+      const teams = result.flatMap((r) =>
+        r.teamExternalId ? [{ externalId: r.teamExternalId, rosterId: r.rosterId }] : [],
+      )
+      const history = await loadLeagueTradeHistory({
+        leagueId,
+        viewerRosterId: viewerTeamRosterId,
+        isNative: resolveWriteAuthority(league?.platform) === 'NATIVE',
+        teams,
+      }).catch(() => null)
+      partnerRanking = rankTradePartners({
+        viewerRosterId: viewerTeamRosterId,
+        rosters: result.map((r) => ({
+          rosterId: r.rosterId,
+          ownerName: r.ownerName,
+          players: r.players.map((p) => ({ id: p.id, name: p.name, position: p.position, value: p.value })),
+          picks: r.picks.map((p) => ({ pickId: p.pickId, label: p.label, value: p.value })),
+        })),
+        starterSlots: league?.starters ?? null,
+        history,
+      })
+    } catch {
+      partnerRanking = null
+    }
+  }
+
   return NextResponse.json({
     rosters: result,
     viewerRosterId: viewerRosterId?.id ?? null,
     viewerTeamRosterId,
+    partnerRanking,
   })
 }

@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
+import type { PartnerRanking } from '@/lib/trade-intel/partnerRanking'
 
 /**
  * The league's rosters, read once and shared by everything on the Trade Center
@@ -89,6 +90,13 @@ export type LeagueRostersData = {
    * an import and offers the manager their own team to trade with.
    */
   viewerTeamRosterId: string | null
+  /**
+   * The other managers ranked as trade partners, with reasons and a starting package.
+   *
+   * ⚠ OPTIONAL AND NULLABLE. Absent: a server from before the ranking shipped. Null: no viewer
+   * team, or the ranking could not be produced. Either way the chips fall back to roster order.
+   */
+  partnerRanking?: PartnerRanking | null
 }
 
 export type LeagueRostersState = 'idle' | 'loading' | 'failed'
@@ -114,6 +122,7 @@ export function useLeagueRosters(
         rosters: Array.isArray(j.rosters) ? j.rosters : [],
         viewerRosterId: j.viewerRosterId ?? null,
         viewerTeamRosterId: j.viewerTeamRosterId ?? null,
+        partnerRanking: j.partnerRanking ?? null,
       })
       setState('idle')
     } catch {
