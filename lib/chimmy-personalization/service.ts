@@ -267,18 +267,28 @@ export async function resolveChimmyPersonalizationProfile(userId: string): Promi
   }
 }
 
+/**
+ * A settings change. `null` CLEARS a setting — the value goes back to whatever Chimmy infers, or
+ * the default — which is different from `undefined`, "leave it alone".
+ *
+ * ⚠ BEFORE 2026-09-16 AN EXPLICIT SETTING COULD NEVER BE UNSET. The merge spread `partial` over
+ * the stored object and dropped `undefined`, so once a user picked "detailed" there was no way
+ * back to "let Chimmy learn". The settings screen needs that way back.
+ */
+export type ChimmyPersonalizationSettingsPatch = {
+  [K in keyof ChimmyPersonalizationExplicitSettings]?: ChimmyPersonalizationExplicitSettings[K] | null
+}
+
 export async function updateChimmyPersonalizationSettings(
   userId: string,
-  partial: ChimmyPersonalizationExplicitSettings,
+  partial: ChimmyPersonalizationSettingsPatch,
 ): Promise<ChimmyPersonalizationExplicitSettings> {
   const current = await getExplicitSettings(userId)
-  const next: ChimmyPersonalizationExplicitSettings = {
-    ...current,
-    ...partial,
-    storyContentPreferences:
-      partial.storyContentPreferences !== undefined
-        ? [...new Set(partial.storyContentPreferences)]
-        : current.storyContentPreferences,
+  const next: Record<string, unknown> = { ...current }
+  for (const [key, value] of Object.entries(partial)) {
+    if (value === undefined) continue
+    if (value === null) delete next[key]
+    else next[key] = key === 'storyContentPreferences' && Array.isArray(value) ? [...new Set(value)] : value
   }
 
   await upsertAiMemory({
@@ -296,12 +306,14 @@ export async function updateChimmyPersonalizationSettings(
     eventType: 'explicit_preference_update',
     meta: {
       updatedKeys: Object.keys(partial),
-      storyContentPreferenceCount: next.storyContentPreferences?.length ?? 0,
+      clearedKeys: Object.keys(partial).filter((k) => partial[k as keyof ChimmyPersonalizationSettingsPatch] === null),
+      storyContentPreferenceCount: Array.isArray(next.storyContentPreferences) ? next.storyContentPreferences.length : 0,
       source: 'chimmy_personalization_settings',
     },
   })
 
-  return next
+  // Every value in `next` came from `getExplicitSettings` or a schema-validated patch.
+  return next as ChimmyPersonalizationExplicitSettings
 }
 
 export async function recordChimmyPersonalizationEvent(userId: string, event: ChimmyPersonalizationEventInput): Promise<void> {

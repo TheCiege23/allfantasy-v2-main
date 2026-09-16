@@ -184,7 +184,14 @@ export async function rememberChimmyUserMessageMemory(input: {
 
   const preferenceUpdates = parsePreferenceFlags(message)
   if (Object.keys(preferenceUpdates).length > 0) {
-    const existing = (await getAiMemory(input.userId, 'user_preferences', { leagueId })) as
+    /*
+     * 🛑 READ UNDER THE SAME KEY AS THE WRITE BELOW. This read omitted `key`, so it looked up
+     * `key: ''` while the write went to 'coaching_profile' — the lookup always missed, and every
+     * declaration REPLACED the profile instead of adding to it. "I'm rebuilding", then later "keep
+     * it short", left a profile that no longer knew the team was rebuilding. Found 2026-09-16 while
+     * building the settings screen that shows this profile.
+     */
+    const existing = (await getAiMemory(input.userId, 'user_preferences', { leagueId, key: 'coaching_profile' })) as
       | Record<string, unknown>
       | null
     await upsertAiMemory({
