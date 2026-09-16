@@ -129,6 +129,7 @@ import {
 } from '@/lib/ai/leagueSportsGroundingPacket'
 import { buildDecisionOsGroundingPacket } from '@/lib/decision-os/grounding/packet'
 import { recordChatWaiverAdvice } from '@/lib/chimmy-advice/chatWaiverAdvice'
+import { resolveCallerTeamId } from '@/lib/chimmy/callerTeam'
 import { readAdviceLearningSnapshot } from '@/lib/chimmy-outcomes/adviceLearning'
 import { trackRecordsFrom } from '@/lib/chimmy-outcomes/learningSnapshot'
 import { serializeDecisionOsGroundingForPrompt } from '@/lib/decision-os/grounding/serialize'
@@ -1250,6 +1251,19 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     )
   }
 
+  /*
+   * 🛑 THE CLIENT'S `teamId`, KEPT ONLY IF IT IS THE CALLER'S OWN TEAM IN THE VERIFIED LEAGUE.
+   * Every reader below takes `verifiedTeamId`, never `teamId`: the dynasty insight
+   * (`getInsightBundle` → `DynastyProjection` by league + team), the memory context's team
+   * snapshots (`getFullAIContext`), and the context the prompt calls "your team". Before this, a
+   * member could name another member's team and have it read back as their own.
+   *
+   * ⚠ The raw field still decides one thing: `requiresLeagueGrounding` above treats ANY team id as
+   * "this question is about a league", which only ever makes the route stricter, and it has to run
+   * before membership is known.
+   */
+  const verifiedTeamId = await resolveCallerTeamId({ leagueId: leagueSnapshot?.id, userId, teamId })
+
   // How the managers in this league have actually behaved. Entitlement is checked
   // inside, so an unentitled user grounds exactly as before; and the block names
   // the managers it has NOT observed, because a model handed a partial roster of
@@ -1664,7 +1678,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
      */
     leagueSnapshot && insightType
       ? getInsightBundle(leagueSnapshot.id, insightType, {
-          teamId,
+          teamId: verifiedTeamId ?? undefined,
           season: effectiveSeason ?? undefined,
           week,
           sport,
@@ -2182,7 +2196,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       leagueNameHint: leagueNameHint ?? undefined,
       sportScope: sportScope ?? undefined,
       sleeperUsername,
-      teamId,
+      teamId: verifiedTeamId ?? undefined,
       sport,
       season: effectiveSeason,
       week,
@@ -2200,7 +2214,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       sessionId,
     }),
     matchupData: insightType === 'matchup'
-      ? compactRecord({ leagueId, teamId, week, season: effectiveSeason, summary: insightSummary })
+      ? compactRecord({ leagueId, teamId: verifiedTeamId ?? undefined, week, season: effectiveSeason, summary: insightSummary })
       : undefined,
     projections: insightType === 'playoff' || /projection|projected|win probability/i.test(message)
       ? compactRecord({ season: effectiveSeason, week, summary: insightSummary })
@@ -2465,7 +2479,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         userId,
         leagueId: leagueId ?? undefined,
         sleeperUsername: sleeperUsername ?? undefined,
-        teamId: teamId ?? undefined,
+        teamId: verifiedTeamId ?? undefined,
       },
       {
         feature: 'chimmy',
@@ -2489,11 +2503,10 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
            * is never read, so it discloses nothing today. It is switched to the authorized id so
            * that whoever eventually implements it inherits the guard instead of the hole.
            *
-           * ⚠ `teamId` REMAINS THE RAW CLIENT FIELD AND IS DELIBERATELY LEFT. Once `leagueId` is
-           * authorized, `getTeamSnapshots` can still read ANOTHER MEMBER'S team within a league
-           * the caller legitimately belongs to. That is a real but materially different problem —
-           * intra-league, not cross-league — and fixing it needs a team-ownership predicate this
-           * route does not have. Reported, not silently widened into this change.
+           * ✅ `teamId` IS NOW THE VERIFIED ONE (`resolveCallerTeamId`, 2026-09-16). It used to be
+           * the raw client field here, so once `leagueId` was authorized `getTeamSnapshots` could
+           * still read ANOTHER MEMBER'S team within a league the caller belongs to. `planInput.teamId`
+           * is `verifiedTeamId`: the caller's own claimed team in the verified league, or nothing.
            */
           const [legacyEnrichment, legacyMemory] = await Promise.allSettled([
             enrichChatWithData(planInput.message, {

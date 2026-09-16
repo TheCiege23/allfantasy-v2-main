@@ -464,6 +464,60 @@ describe('🛑 the FULL 200 response — reached, not assumed', () => {
   })
 })
 
+/*
+ * 🛑 THE TEAM, NOT JUST THE LEAGUE. A member of the league could name ANOTHER member's team and have
+ * that team's dynasty projection read into their answer as their own. The id is now kept only when
+ * a `LeagueTeam` in the verified league is claimed by the caller (`lib/chimmy/callerTeam.ts`).
+ */
+describe("🛑 a team id is used only when it is the caller's own team", () => {
+  const MY_TEAM = { id: 'lt-mine', externalId: '3' }
+
+  beforeEach(() => {
+    prismaLeagueFindUniqueMock.mockResolvedValue({ ...PRIVATE_LEAGUE, userId: 'stranger-1' })
+    prismaLeagueTeamFindFirstMock.mockImplementation(
+      async (args: { where?: { leagueId?: string; claimedByUserId?: string; OR?: Array<Record<string, string>> } }) => {
+        const where = args?.where ?? {}
+        if (where.claimedByUserId !== 'stranger-1' || where.leagueId !== PRIVATE_LEAGUE.id) return null
+        const asked = (where.OR ?? []).flatMap((c) => [c.id, c.externalId]).filter(Boolean)
+        return asked.includes(MY_TEAM.id) || asked.includes(MY_TEAM.externalId) ? { externalId: MY_TEAM.externalId } : null
+      },
+    )
+  })
+
+  // Only the team-ID lookups — other readers query `leagueTeam` with their own `OR` (by owner).
+  const teamLookups = () =>
+    prismaLeagueTeamFindFirstMock.mock.calls
+      .map(([args]) => (args as { where?: { OR?: Array<Record<string, unknown>> } })?.where)
+      .filter((w) => Array.isArray(w?.OR) && w!.OR!.some((c) => 'id' in c || 'externalId' in c))
+
+  it("another member's team id never reaches the dynasty insight", async () => {
+    await post({ message: 'How does my team look?', leagueId: 'league-private', insightType: 'dynasty', teamId: 'lt-theirs' })
+    expect(getInsightBundleMock).toHaveBeenCalled()
+    expect(getInsightBundleMock.mock.calls[0][2].teamId).toBeUndefined()
+  })
+
+  it("the caller's own team resolves to its platform id, sent as either id", async () => {
+    for (const teamId of [MY_TEAM.id, MY_TEAM.externalId]) {
+      getInsightBundleMock.mockClear()
+      await post({ message: 'How does my team look?', leagueId: 'league-private', insightType: 'dynasty', teamId })
+      expect(getInsightBundleMock.mock.calls[0][2].teamId, teamId).toBe(MY_TEAM.externalId)
+    }
+  })
+
+  it('the lookup is scoped to the caller and the VERIFIED league', async () => {
+    await post({ message: 'How does my team look?', leagueId: 'league-private', insightType: 'dynasty', teamId: 'lt-theirs' })
+    expect(teamLookups()).toEqual([
+      { leagueId: PRIVATE_LEAGUE.id, claimedByUserId: 'stranger-1', OR: [{ id: 'lt-theirs' }, { externalId: 'lt-theirs' }] },
+    ])
+  })
+
+  it('an unverified league never looks a team up at all', async () => {
+    prismaLeagueFindUniqueMock.mockResolvedValue(PRIVATE_LEAGUE)
+    await post({ message: 'Who leads the NFL in rushing?', leagueId: 'league-private', teamId: MY_TEAM.id, confirmTokenSpend: 'true' })
+    expect(teamLookups()).toEqual([])
+  })
+})
+
 describe('ordinary global sports questions still work', () => {
   it('answers without a league and without any insight call', async () => {
     const { res } = await post({ message: 'Who won the 1992 World Series?' })
