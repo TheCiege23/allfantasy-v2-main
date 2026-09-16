@@ -29,7 +29,9 @@ import type {
   RawTeamRow,
   RawWeatherRow,
 } from './facts'
-import { loadLeagueIdpVorp } from '@/lib/idp-projections/leagueIdpVorp'
+import { priceIdpBoard, resolveLeagueIdpScoring } from '@/lib/idp-projections/leagueIdpVorp'
+import { memoizedIdpBoard } from '@/lib/idp-projections/idpBoardMemo'
+import { projectRosterSlots } from './derive'
 import { loadLatestPlayerValueSnapshots } from '@/lib/player-values/latestPlayerValueSnapshots'
 import { mapRedraftRosterRowToRawRoster, unionRosterRows, type RawRedraftRosterRow } from './redraftRoster'
 import { resolveLeagueConcept } from '@/lib/league/leagueConceptOptions'
@@ -820,6 +822,24 @@ export async function loadMarketValueRows(
  * It stays inside the port's contract regardless — Postgres only, no provider call, never
  * writes, never throws. An unpriceable league returns an empty array, which the seam reads as
  * "no IDP value here" rather than as an error.
+ *
+ * 🛑 `sleeperIds` ARE THE PLAYERS TO PRICE, NOT THE BOARD TO PRICE THEM ON. Until 2026-09-16 they
+ * were handed to `loadLeagueIdpVorp` as the league's roster, and every caller passes a TRADE's
+ * players. Replacement level is the first NON-starter at a position, and on a board of two or three
+ * traded defenders every one of them is a starter — so there was no replacement level and nobody
+ * was priced. Measured on staging: 0 IDP values across all 9 real trades with a priced defender,
+ * on the evaluator, its roster-impact variant and the capture path. The defenders were then graded
+ * off the generic AF projection instead of the league's own board.
+ *
+ * So the board is the league's rostered players, read through the SAME roster reader the canonical
+ * world uses (imported `Roster` rows and native redraft rosters alike), plus the requested ids in
+ * case one is not on a roster, and rows come back for the requested ids only. The scoring gate runs
+ * first, so a league that scores no IDP — nearly all of them — reads no roster and projects nobody.
+ *
+ * ⚠ THE PRICED BOARD IS MEMOISED IN-PROCESS (`memoizedIdpBoard`), BECAUSE PRICING IT IS THE COST.
+ * Projecting every rostered defender took the evaluator from a 570 ms median to 1,468 ms on staging,
+ * and the trades panel grades every pending offer in a league — the same board each time. The key
+ * carries everything that shapes the board, including any requested id that is on no roster.
  */
 export async function loadIdpValueRows(args: {
   leagueId: string
@@ -828,22 +848,46 @@ export async function loadIdpValueRows(args: {
   numTeams: number
   isDynasty: boolean
 }): Promise<RawIdpValueRow[]> {
-  const clean = Array.from(
+  const requested = Array.from(
     new Set(args.sleeperIds.filter((x) => typeof x === 'string' && x.length > 0)),
   )
-  if (clean.length === 0 || !prisma) return []
+  if (requested.length === 0 || !prisma) return []
+  const db = prisma
 
   try {
-    const res = await loadLeagueIdpVorp({
-      prisma,
-      leagueId: args.leagueId,
-      rosterPositions: args.starterSlots,
-      rosterPlayerIds: clean,
-      numTeams: args.numTeams,
-      isDynasty: args.isDynasty,
-    })
+    const resolved = await resolveLeagueIdpScoring(db, args.leagueId)
+    if (!resolved.ok) return []
+
+    const rosters = await defaultCanonicalWorldPort.loadRosters(resolved.leagueId)
+    const rostered = new Set<string>()
+    for (const r of rosters) {
+      for (const id of projectRosterSlots(r.playerData).playerIds) rostered.add(id)
+    }
+    const offRoster = requested.filter((id) => !rostered.has(id)).sort()
+
+    const key = [
+      resolved.leagueId,
+      args.isDynasty,
+      args.numTeams,
+      (args.starterSlots ?? []).join(','),
+      JSON.stringify(resolved.scoring),
+      offRoster.join(','),
+    ].join('|')
+    const scoring = resolved.scoring
+    const res = await memoizedIdpBoard(key, () =>
+      priceIdpBoard({
+        prisma: db,
+        scoring,
+        sleeperIds: [...rostered, ...offRoster],
+        rosterSlots: args.starterSlots,
+        numTeams: args.numTeams,
+        isDynasty: args.isDynasty,
+      }),
+    )
     const out: RawIdpValueRow[] = []
-    for (const [sleeperId, value] of res.valueBySleeperId) {
+    for (const sleeperId of requested) {
+      const value = res.valueBySleeperId.get(sleeperId)
+      if (value == null) continue
       out.push({
         sleeperId,
         value,
