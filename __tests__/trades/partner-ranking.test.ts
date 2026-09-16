@@ -185,13 +185,45 @@ describe('rankTradePartners', () => {
 })
 
 describe('normalizePosition', () => {
-  it('maps provider spellings onto the slot vocabulary', () => {
-    expect(normalizePosition('de')).toBe('DL')
-    expect(normalizePosition('CB')).toBe('DB')
-    expect(normalizePosition('DST')).toBe('DEF')
-    expect(normalizePosition('OLB')).toBe('LB')
+  it('trims and upper-cases, and KEEPS the detailed position (5H-b2: no broad-collapse map)', () => {
+    expect(normalizePosition(' de ')).toBe('DE')
+    expect(normalizePosition('cb')).toBe('CB')
     expect(normalizePosition(' wr ')).toBe('WR')
     expect(normalizePosition('')).toBeNull()
     expect(normalizePosition(null)).toBeNull()
+  })
+})
+
+describe('IDP slots accept detailed positions through the governed buckets', () => {
+  it('weighs a CB and an S as DB starters, and offers a spare corner for a DB hole', () => {
+    const slots = ['DB', 'DB', 'LB', 'BN']
+    const rosters: RankingRoster[] = [
+      // Viewer: one real DB, the second DB slot is a weak safety.
+      { rosterId: 'V', ownerName: 'You', players: [
+        { id: 'v1', name: 'Good Corner', position: 'CB', value: 900 },
+        { id: 'v2', name: 'Weak Safety', position: 'S', value: 100 },
+        { id: 'v3', name: 'Linebacker', position: 'OLB', value: 700 },
+        { id: 'v4', name: 'Spare Backer', position: 'ILB', value: 650 },
+      ], picks: [] },
+      // Partner: two starting DBs plus a spare corner, and a weak linebacker.
+      { rosterId: 'P', ownerName: 'Partner', players: [
+        { id: 'p1', name: 'Safety One', position: 'FS', value: 800 },
+        { id: 'p2', name: 'Corner Two', position: 'CB', value: 750 },
+        { id: 'p3', name: 'Spare Corner', position: 'CB', value: 700 },
+        { id: 'p4', name: 'Thin Backer', position: 'MLB', value: 150 },
+      ], picks: [] },
+      { rosterId: 'X', ownerName: 'Other', players: [
+        { id: 'x1', name: 'X1', position: 'SS', value: 600 },
+        { id: 'x2', name: 'X2', position: 'DB', value: 600 },
+        { id: 'x3', name: 'X3', position: 'LB', value: 600 },
+      ], picks: [] },
+    ]
+    const p = rankTradePartners({ viewerRosterId: 'V', rosters, starterSlots: slots, history: null }).partners
+      .find((x) => x.rosterId === 'P')!
+    expect(p.reasons[0]).toBe('Has a spare DB: Spare Corner (700) would start over your weakest DB (100).')
+    expect(p.reasons[1]).toBe('Thin at LB — your Spare Backer would start for them.')
+    // The detailed position survives onto the suggested asset.
+    expect(p.suggestion?.get[0]).toMatchObject({ name: 'Spare Corner', position: 'CB' })
+    expect(p.suggestion?.give[0]).toMatchObject({ name: 'Spare Backer', position: 'ILB' })
   })
 })
