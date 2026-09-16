@@ -31,6 +31,26 @@ import { buildRosterIdMap } from './rosterIdMatch'
 
 export type PanelState<T> = { available: true; data: T } | { available: false; reason: string }
 
+export type PanelReadOptions = {
+  /**
+   * Told when a read FAILED and fell back to empty. The panels degrade instead of throwing, so a
+   * failed read looks like "no claimed teams" or "no meetings yet" — fine for the one render that
+   * shows it, wrong for a cache that keeps it (lib/core-app/homePortfolioSummary.ts).
+   */
+  onReadError?: (error: unknown) => void
+}
+
+function panelFallback(options: PanelReadOptions) {
+  return (error: unknown): never[] => {
+    try {
+      options.onReadError?.(error)
+    } catch {
+      // A reporter must never turn a degraded read into a failed render.
+    }
+    return []
+  }
+}
+
 export type ExposureRow = {
   playerId: string
   name: string
@@ -107,7 +127,9 @@ export async function getCrossLeagueExposure(
   userId: string,
   leagueIds: string[],
   limit = 6,
+  options: PanelReadOptions = {},
 ): Promise<PanelState<ExposureData>> {
+  const fellBack = panelFallback(options)
   if (leagueIds.length === 0) {
     return { available: false, reason: 'no leagues imported yet' }
   }
@@ -117,7 +139,7 @@ export async function getCrossLeagueExposure(
       where: { leagueId: { in: leagueIds }, claimedByUserId: userId },
       select: { leagueId: true, platformUserId: true, externalId: true },
     })
-    .catch(() => [])
+    .catch(fellBack)
 
   if (teams.length === 0) {
     return {
@@ -136,7 +158,7 @@ export async function getCrossLeagueExposure(
       },
       select: { leagueId: true, playerData: true },
     })
-    .catch(() => [])
+    .catch(fellBack)
 
   if (rosters.length === 0) {
     return {
@@ -192,7 +214,7 @@ export async function getCrossLeagueExposure(
       where: { sleeperId: { in: ids } },
       select: { sleeperId: true, name: true, position: true, team: true },
     })
-    .catch(() => [])
+    .catch(fellBack)
   const byId = new Map(players.map((p) => [p.sleeperId, p]))
 
   const rows: ExposureRow[] = ranked.map(([id, agg]) => {
@@ -236,7 +258,9 @@ export async function getRivalRecords(
   userId: string,
   leagueIds: string[],
   limit = 4,
+  options: PanelReadOptions = {},
 ): Promise<PanelState<RivalsData>> {
+  const fellBack = panelFallback(options)
   if (leagueIds.length === 0) {
     return { available: false, reason: 'no leagues imported yet' }
   }
@@ -249,7 +273,7 @@ export async function getRivalRecords(
       where: { id: { in: leagueIds }, platformLeagueId: { not: '' } },
       select: { id: true, platformLeagueId: true },
     })
-    .catch(() => [])
+    .catch(fellBack)
   if (leagues.length === 0) {
     return {
       available: false,
@@ -262,7 +286,7 @@ export async function getRivalRecords(
       where: { leagueId: { in: leagues.map((l) => l.id) } },
       select: { leagueId: true, externalId: true, teamName: true, ownerName: true, claimedByUserId: true },
     })
-    .catch(() => [])
+    .catch(fellBack)
 
   const agg = new Map<string, { name: string; wins: number; losses: number; leagues: Set<string>; last: string | null }>()
   let leaguesRead = 0
@@ -287,10 +311,10 @@ export async function getRivalRecords(
         pointsFor: true,
       },
     })
-    .catch(() => [])
+    .catch(fellBack)
 
   /*
-   * The element type, not `typeof allRows`: the `.catch(() => [])` above makes
+   * The element type, not `typeof allRows`: the `.catch(fellBack)` above makes
    * the awaited type a union with `never[]`, and a Map valued at that union
    * types `push` as taking `never`.
    */

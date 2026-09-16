@@ -30,6 +30,7 @@ import { DashSinceLastVisit } from '@/components/core-app/screens/DashSinceLastV
 import { DashTradeBand } from '@/components/core-app/screens/DashTradeBand'
 import { DashUserOs } from '@/components/core-app/screens/DashUserOs'
 import type { Dash34Result } from '@/lib/core-app/dash34'
+import type { PortfolioSummaryMeta } from '@/lib/core-app/homePortfolioSummary'
 import { platformCountsOf } from '@/components/core-app/screens/dash3aPortfolio'
 
 /**
@@ -73,8 +74,12 @@ import { platformCountsOf } from '@/components/core-app/screens/dash3aPortfolio'
  */
 
 export type HomeLoads = {
-  /** The loader's own result — it carries `weekLabel` and `valueBasis` beyond the screens' `Dash34Data`. */
-  dash34: Promise<Dash34Result | null>
+  /**
+   * The loader's own result — it carries `weekLabel` and `valueBasis` beyond the screens' `Dash34Data`.
+   * `summary` is present when it was served from the per-user portfolio summary
+   * (lib/core-app/homePortfolioSummary.ts) rather than joined for this render.
+   */
+  dash34: Promise<(Dash34Result & { summary?: PortfolioSummaryMeta }) | null>
   issues: Promise<ComponentProps<typeof DecisionQueue>['issues']>
   career: Promise<ComponentProps<typeof Dash3ACareer>['career']>
   week: Promise<ComponentProps<typeof Dash3AMatchups>['week']>
@@ -206,6 +211,17 @@ function leagueDataStamp(
   return unread ? { ...stamp, stale: true } : stamp
 }
 
+/**
+ * "Summary updated 2m ago" — only when the queue was served from the stored portfolio summary. A
+ * summary built for this very render is not worth a line. One served past its TTL while it rebuilds
+ * (`last-known`) is marked stale, whatever its age: its rows may already be out of date.
+ */
+function summaryStamp(data: { summary?: PortfolioSummaryMeta } | null, now: Date): CardFreshnessStamp | null {
+  const meta = data?.summary
+  if (!meta || meta.source === 'live') return null
+  return { ...freshnessStamp('Summary', meta.builtAt, now), stale: meta.source === 'last-known' }
+}
+
 function Stamps({ stamps }: { stamps: CardFreshnessStamp[] }) {
   return <CardFreshness stamps={stamps} />
 }
@@ -252,7 +268,13 @@ async function DecisionsCard({
       scopeKey={scope.key}
       nowIso={now.toISOString()}
       freshness={
-        <Stamps stamps={[rostersStamp, freshnessStamp('Injury reports', injuriesAt(data), now, { missing: 'none-yet' })]} />
+        <Stamps
+          stamps={[
+            rostersStamp,
+            freshnessStamp('Injury reports', injuriesAt(data), now, { missing: 'none-yet' }),
+            ...(summaryStamp(data, now) ? [summaryStamp(data, now)!] : []),
+          ]}
+        />
       }
     >
       {/*
