@@ -36,6 +36,7 @@ import { RetryableAutomationError, toErrorMessage } from '@/lib/automation/error
 import { withAutomationLock } from '@/lib/automation/locks'
 import type { AutomationResult } from '@/lib/automation/types'
 import { getBoolean } from '@/lib/feature-toggle'
+import { resolveWriteAuthority } from '@/lib/league/write-authority'
 import { prisma } from '@/lib/prisma'
 import { getLeagueManagerHealth } from '@/lib/commissioner-hub/managerHealth'
 import { readViewerPoll, isPollClosed } from '@/lib/chat-core/messagePolls'
@@ -84,7 +85,17 @@ export async function readRecipeFacts(leagueId: string, now: Date): Promise<{
 } | null> {
   const league = await prisma.league.findUnique({
     where: { id: leagueId },
-    select: { id: true, name: true, userId: true, platform: true, sport: true, status: true, season: true, settings: true },
+    select: {
+      id: true,
+      name: true,
+      userId: true,
+      platform: true,
+      sport: true,
+      status: true,
+      season: true,
+      settings: true,
+      lastSyncedAt: true,
+    },
   })
   if (!league?.userId) return null
 
@@ -123,7 +134,10 @@ export async function readRecipeFacts(leagueId: string, now: Date): Promise<{
   ])
 
   const label = (t: { teamName?: string | null; ownerName?: string | null }) =>
-    t.teamName?.trim() || t.ownerName?.trim() || 'A team'
+    t.teamName?.trim() || t.ownerName?.trim() || 'An unnamed team'
+  const native = resolveWriteAuthority(league.platform) === 'NATIVE'
+  const dataStale =
+    !native && (!league.lastSyncedAt || now.getTime() - league.lastSyncedAt.getTime() > 2 * 24 * 60 * 60 * 1000)
   const byOwner = new Map(teams.filter((t) => t.platformUserId).map((t) => [t.platformUserId as string, t]))
 
   const emptyLineups = rosters.flatMap((r) => {
@@ -161,8 +175,11 @@ export async function readRecipeFacts(leagueId: string, now: Date): Promise<{
       kickoffs: kickoffs.flatMap((k) => (k.startTime ? [k.startTime] : [])),
       emptyLineups,
       inactiveTeams: managers
-        ? managers.rows.filter((r) => r.status === 'inactive').map((r) => r.teamName || r.managerName || 'A team')
+        ? managers.rows
+            .filter((r) => r.status === 'inactive')
+            .map((r) => r.teamName || r.managerName || 'An unnamed team')
         : [],
+      dataStale,
       polls: openPolls,
       standings,
     },

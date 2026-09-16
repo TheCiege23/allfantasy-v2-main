@@ -54,10 +54,10 @@ export type TaskCardsResult = {
 const RANK: Record<TaskCard['severity'], number> = { bad: 0, warn: 1, info: 2 }
 
 /** Workspace detectors whose condition a health flag or shell issue already shows. */
-const COVERED_BY: Record<string, (ctx: { flags: Set<string>; issueIds: Set<string> }) => boolean> = {
+const COVERED_BY: Record<string, (ctx: { flags: Set<string>; issueIds: Set<string>; staleCard: boolean }) => boolean> = {
   'inactive-managers:v1': ({ flags }) => flags.has('abandoned'),
   'orphan-teams:v1': ({ flags }) => flags.has('abandoned'),
-  'data-stale:v1': ({ issueIds }) => [...issueIds].some((id) => id.endsWith(':stale')),
+  'data-stale:v1': ({ issueIds, staleCard }) => staleCard || [...issueIds].some((id) => id.endsWith(':stale')),
 }
 
 function workspaceSeverity(priority: string): TaskCard['severity'] {
@@ -71,6 +71,14 @@ export function buildTaskCards(input: {
   flags: HealthFlag[]
   calendar: CalendarEvent[]
   workspace: WorkspaceFinding[]
+  /**
+   * This league's data is older than the activity checks can trust. The shell's
+   * own stale-sync issue folds every stale league into ONE row with no league id
+   * once several are stale, so the per-league hub would otherwise show nothing —
+   * while its health flags all point at a re-sync. Ignored when the shell already
+   * supplied a stale issue for this league.
+   */
+  staleSync?: { days: number; href: string; platformLabel: string } | null
   limit?: number
 }): TaskCardsResult {
   const limit = input.limit ?? 6
@@ -91,9 +99,36 @@ export function buildTaskCards(input: {
     })
   }
 
+  let staleCard = false
+  if (input.staleSync && !input.issues.some((i) => i.id.endsWith(':stale'))) {
+    staleCard = true
+    const { days, href, platformLabel } = input.staleSync
+    cards.push({
+      id: 'stale-sync',
+      severity: days > 7 ? 'bad' : 'warn',
+      source: 'issue',
+      title: `This league’s data is ${days} days old`,
+      detail: `AllFantasy hasn’t read it from ${platformLabel} since then, so activity, lineups and inactive managers can’t be checked.`,
+      due: null,
+      action: { label: 'Re-sync', href, external: false },
+      sortAt: 0,
+    })
+  }
+
+  /*
+   * A vote closing this week gets its own deadline card with the time on it. The
+   * unresolved-votes flag says the same thing without the time, so it steps aside
+   * whenever every open vote already has a deadline card.
+   */
+  const voteDeadlines = input.calendar.filter((e) => e.kind === 'vote' && e.status === 'soon').length
+
   const flagged = new Set<string>()
   for (const f of input.flags) {
     if (!f.measured || f.severity === 'good') continue
+    if (f.key === 'votes' && f.count <= voteDeadlines) {
+      flagged.add(f.key)
+      continue
+    }
     flagged.add(f.key)
     cards.push({
       id: `flag:${f.key}`,
@@ -127,7 +162,7 @@ export function buildTaskCards(input: {
   const issueIds = new Set(input.issues.map((i) => i.id))
   for (const w of input.workspace) {
     const covered = COVERED_BY[w.sourceKey]
-    if (covered && covered({ flags: flagged, issueIds })) continue
+    if (covered && covered({ flags: flagged, issueIds, staleCard })) continue
     cards.push({
       id: `workspace:${w.id}`,
       severity: workspaceSeverity(w.priority),

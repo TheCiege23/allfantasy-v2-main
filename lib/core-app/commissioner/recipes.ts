@@ -179,6 +179,14 @@ export type RecipeFacts = {
   kickoffs: Date[]
   emptyLineups: Array<{ name: string; empty: number }>
   inactiveTeams: string[]
+  /**
+   * True when an imported league has not synced for two days. Lineups and idle
+   * time are then last week's picture, and posting "these five managers have gone
+   * quiet" to the whole league off it would be a public accusation built on our
+   * own outage — measured on a test league whose stale sync made 13 of 12 teams
+   * look inactive. Both of those recipes wait for fresh data.
+   */
+  dataStale: boolean
   /** Open league-chat polls. */
   polls: Array<{ id: string; question: string; closesAt: string | null }>
   /** Teams by record, best first. */
@@ -224,7 +232,7 @@ export function dueRecipeMessages(values: Record<RecipeKey, boolean>, facts: Rec
     values[key] && (RECIPES.find((r) => r.key === key)?.unavailableReason(league) ?? null) === null
 
   // Lineup reminder — only on a day with NFL kickoffs, only in season, only when someone has a hole.
-  if (usable('lineupReminder') && inSeason) {
+  if (usable('lineupReminder') && inSeason && !facts.dataStale) {
     const today = easternDay(facts.now)
     const gameDay = facts.kickoffs.some((k) => easternDay(k) === today && k.getTime() > facts.now.getTime())
     if (gameDay && facts.emptyLineups.length > 0) {
@@ -243,7 +251,7 @@ export function dueRecipeMessages(values: Record<RecipeKey, boolean>, facts: Rec
 
   // Inactivity warning — at most weekly, never in the offseason.
   const status = (facts.status ?? '').toLowerCase()
-  if (usable('inactivityWarning') && status !== 'complete' && facts.inactiveTeams.length > 0) {
+  if (usable('inactivityWarning') && !facts.dataStale && status !== 'complete' && facts.inactiveTeams.length > 0) {
     out.push({
       recipe: 'inactivityWarning',
       windowKey: `inactive:${weekKey(facts.now)}`,

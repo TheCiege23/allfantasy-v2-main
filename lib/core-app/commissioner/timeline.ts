@@ -271,26 +271,59 @@ export function mergeTimeline(entries: TimelineEntry[], limit = 40): TimelineEnt
 }
 
 /**
- * Sync runs every thirty minutes, so a raw list is mostly "Synced — nothing had
- * changed". Consecutive uneventful syncs collapse into the newest one, which
- * keeps the timeline about things that happened.
+ * Sync runs every thirty minutes, so a raw list is mostly "Synced from Sleeper".
+ * Consecutive successful syncs collapse into the newest one, which carries the
+ * count and the records they updated between them — the timeline stays about
+ * things that happened. A failed sync is never folded in.
  */
 export function collapseQuietSyncs(entries: TimelineEntry[]): TimelineEntry[] {
   const out: TimelineEntry[] = []
-  let quietRun = 0
+  let run: { count: number; records: number } | null = null
+  const recordsOf = (e: TimelineEntry) => {
+    const m = /^([\d,]+) records? updated/.exec(e.detail ?? '')
+    return m ? Number(m[1].replace(/,/g, '')) : 0
+  }
   for (const e of entries) {
-    const quiet = e.kind === 'sync' && e.tone === 'good' && e.detail === 'Nothing had changed.'
-    if (quiet) {
-      quietRun += 1
-      if (quietRun === 1) out.push(e)
-      else {
-        const head = out[out.length - 1]
-        out[out.length - 1] = { ...head, detail: `Nothing had changed · ${quietRun} checks.` }
-      }
+    const ok = e.kind === 'sync' && e.tone === 'good'
+    if (!ok) {
+      run = null
+      out.push(e)
       continue
     }
-    quietRun = 0
+    if (!run) {
+      run = { count: 1, records: recordsOf(e) }
+      out.push(e)
+      continue
+    }
+    run.count += 1
+    run.records += recordsOf(e)
+    const head = out[out.length - 1]
+    out[out.length - 1] = {
+      ...head,
+      detail:
+        run.records > 0
+          ? `${run.count} syncs · ${run.records.toLocaleString('en-US')} records updated in all.`
+          : `Nothing had changed · ${run.count} checks.`,
+    }
+  }
+  return out
+}
+
+/**
+ * The cockpit's "Recent changes": the newest things a commissioner would call a
+ * change, with at most one sync row among them. Syncs are the league's
+ * heartbeat, not its news.
+ */
+export function recentChanges(entries: TimelineEntry[], limit = 5): TimelineEntry[] {
+  const out: TimelineEntry[] = []
+  let syncShown = false
+  for (const e of entries) {
+    if (e.kind === 'sync') {
+      if (syncShown) continue
+      syncShown = true
+    }
     out.push(e)
+    if (out.length >= limit) break
   }
   return out
 }

@@ -211,7 +211,7 @@ export type CommissionerHubResult = CommissionerHubData | CommissionerAccessDeni
  * replacement: it works the same way whether or not a scan exists.
  */
 const DISPUTES_REASON =
-  'Dispute detection only runs on leagues created in AllFantasy — it has no data to read for an imported league, so "none found" would not mean anything here. The “Resolve a dispute” guide below works for every league.'
+  'Dispute detection only runs on leagues created in AllFantasy — it has no data to read for an imported league, so "none found" would not mean anything here. The “Resolve a dispute” guide on this page works for every league.'
 
 const ROLE_LABEL: Record<'commissioner' | 'co_commissioner', string> = {
   commissioner: 'Commissioner',
@@ -546,6 +546,21 @@ export async function getCommissionerHub(input: {
 
   // ── Health flags ────────────────────────────────────────────────────────
   const inAppLink = (label: string, href: string) => ({ label, href, external: false })
+  /*
+   * ⚠ ACTIVITY IS NOT JUDGED ON DATA THAT HAS STOPPED ARRIVING. Manager idle time
+   * is `Roster.updatedAt`, which the sync touches; two days without a sync and
+   * the idle clock is measuring the sync, not the managers. Past that, the
+   * abandoned-team and lineup checks and the active-manager count say so and
+   * point at the re-sync — the stale-sync task card is then the real work.
+   */
+  const activityStale = !native && syncAgeMs != null && syncAgeMs > 2 * 24 * 60 * 60 * 1000
+  const staleDays = syncAgeMs != null ? Math.floor(syncAgeMs / (24 * 60 * 60 * 1000)) : 0
+  const stale = activityStale
+    ? {
+        reason: `AllFantasy last read this league ${staleDays} days ago, so every manager would look idle. Re-sync it to see who is really active.`,
+        action: inAppLink('Re-sync this league', `/core/sync?league=${encodeURIComponent(leagueId)}`),
+      }
+    : null
   const replaceGuide = inAppLink('Replace a manager', '#workflow-replace-manager')
   const duesTracker = readDuesTracker(settingsJson)
 
@@ -566,10 +581,12 @@ export async function getCommissionerHub(input: {
       action: native
         ? inAppLink('Open orphan teams', `/league/${encodeURIComponent(leagueId)}/orphan-teams`)
         : replaceGuide,
+      stale,
     }),
     missingLineupsFlag({
       platform,
       inSeason,
+      stale,
       rosters: rosters.map((r) => {
         const team = teamByPlatformUser.get(r.platformUserId)
         return { name: team ? teamLabel(team) : 'Unmatched roster', starters: starterSlots(r.playerData) }
@@ -669,6 +686,9 @@ export async function getCommissionerHub(input: {
   const tasks = buildTaskCards({
     issues,
     flags,
+    staleSync: activityStale
+      ? { days: staleDays, href: `/core/sync?league=${encodeURIComponent(leagueId)}`, platformLabel: platformName }
+      : null,
     calendar: calendar.events,
     workspace: workspaceTasks.map((w) => {
       const links = Array.isArray(w.relatedLinks) ? (w.relatedLinks as Array<Record<string, unknown>>) : []
@@ -704,7 +724,9 @@ export async function getCommissionerHub(input: {
             available: true,
             data: {
               value: String(Math.round(healthScore.data.score)),
-              sub: `${humanStatus(healthScore.data.status)} · ${Math.round(healthScore.data.confidencePct)}% confidence`,
+              sub: activityStale
+                ? `${humanStatus(healthScore.data.status)} · from data ${staleDays} days old`
+                : `${humanStatus(healthScore.data.status)} · ${Math.round(healthScore.data.confidencePct)}% confidence`,
             },
           }
         : { available: false, reason: healthScore.reason },
@@ -733,13 +755,14 @@ export async function getCommissionerHub(input: {
       key: 'managers',
       label: 'Active managers',
       tone:
-        managerHealth && managerHealth.totalManagers > 0
+        !activityStale && managerHealth && managerHealth.totalManagers > 0
           ? managerHealth.inactiveCount > 0
             ? 'warn'
             : 'good'
           : 'neutral',
-      state:
-        managerHealth && managerHealth.totalManagers > 0
+      state: activityStale
+        ? { available: false, reason: `last sync was ${staleDays} days ago — activity isn’t judged on data that old` }
+        : managerHealth && managerHealth.totalManagers > 0
           ? {
               available: true,
               data: {
@@ -855,7 +878,9 @@ export async function getCommissionerHub(input: {
           ? 'This league has never synced, so nothing has been checked. An empty list here is not the same as a quiet league.'
           : 'Nothing in this league needs you right now.',
     health: { score: healthScore, flags },
-    members: memberRows
+    members: activityStale
+      ? { available: false, reason: stale?.reason ?? '' }
+      : memberRows
       ? {
           available: true,
           data: {
@@ -900,7 +925,7 @@ export async function getCommissionerHub(input: {
       balance: balanceChart(
         teams.map((t) => ({ name: teamLabel(t), wins: t.wins, losses: t.losses, ties: t.ties, pointsFor: t.pointsFor })),
       ),
-      engagement: memberRows ? engagementChart(memberRows) : null,
+      engagement: memberRows && !activityStale ? engagementChart(memberRows) : null,
     },
     settings,
     access,

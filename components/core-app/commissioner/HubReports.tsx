@@ -1,7 +1,7 @@
 import type { CommissionerHubData } from '@/lib/core-app/commissionerHub'
 import type { ActivityCharts } from '@/lib/core-app/commissioner/reports'
 import type { SectionState } from '@/lib/core-app/leagueHome'
-import { TIMELINE_KIND_LABEL, type TimelineEntry } from '@/lib/core-app/commissioner/timeline'
+import { TIMELINE_KIND_LABEL, recentChanges, type TimelineEntry } from '@/lib/core-app/commissioner/timeline'
 import { HubBars, HubSection } from './HubSections'
 import { TimelineList } from './TimelineList'
 
@@ -52,8 +52,13 @@ export async function OperationalCharts({
       ) : (
         <p className="af-ch-muted">There isn’t enough played or imported data to chart yet.</p>
       )}
-      {!scoring ? (
-        <p className="af-ch-muted">Scoring appears once this season has a played week on file.</p>
+      {!scoring || !data.charts.balance ? (
+        <p className="af-ch-muted">
+          Scoring and competitive balance appear once this season has a played week on file.
+        </p>
+      ) : null}
+      {!engagement && data.members.available === false ? (
+        <p className="af-ch-muted">Manager engagement is left out while the league’s data is out of date.</p>
       ) : null}
     </HubSection>
   )
@@ -78,7 +83,7 @@ export async function RecentChanges({ timeline }: { timeline: Promise<SectionSta
       {loaded.available ? (
         loaded.data.length > 0 ? (
           <ol className="af-ch-recent">
-            {loaded.data.slice(0, 5).map((e) => (
+            {recentChanges(loaded.data).map((e) => (
               <li key={e.id} data-tone={e.tone}>
                 <span className="af-label">{TIMELINE_KIND_LABEL[e.kind]}</span>
                 <span className="af-ch-recent-title">{e.title}</span>

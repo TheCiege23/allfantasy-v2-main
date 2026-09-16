@@ -8,7 +8,7 @@ import {
   type CalendarInput,
 } from '@/lib/core-app/commissioner/calendar'
 import { buildTaskCards } from '@/lib/core-app/commissioner/tasks'
-import { abandonedTeamsFlag } from '@/lib/core-app/commissioner/health'
+import { abandonedTeamsFlag, unresolvedVotesFlag, type LeaguePoll } from '@/lib/core-app/commissioner/health'
 import type { CoreIssue } from '@/lib/core-app/outstandingIssues'
 
 const NOW = new Date('2026-10-12T15:00:00Z') // a Monday
@@ -196,6 +196,37 @@ describe('task cards', () => {
     expect(titles).not.toContain('Inactive')
     expect(titles).not.toContain('Stale')
     expect(titles).toContain('Never imported')
+  })
+
+  it('shows one card for a vote closing soon, not a flag card and a deadline card', () => {
+    const poll: LeaguePoll = {
+      id: 'm1',
+      question: 'Keepers?',
+      options: [{ id: 'a', text: 'Yes', count: 0, mine: false }],
+      totalVotes: 0,
+      closesAt: '2026-10-13T12:00:00Z',
+      closedByHand: false,
+      allowMultiple: false,
+      anonymous: false,
+      postedAt: '2026-10-11T00:00:00Z',
+    }
+    const flags = [unresolvedVotesFlag({ polls: [poll], now: NOW, action: null })]
+    const cal = buildLeagueCalendar(input({ polls: [{ id: 'm1', question: 'Keepers?', closesAt: poll.closesAt }] }))
+    const result = buildTaskCards({ issues: [], flags, calendar: cal.events, workspace: [] })
+    expect(result.cards.map((c) => c.title)).toEqual(['Vote closes: Keepers?'])
+    // A second poll with no deadline is not covered, so the flag card comes back.
+    const two = [poll, { ...poll, id: 'm2', closesAt: null }]
+    const both = buildTaskCards({ issues: [], flags: [unresolvedVotesFlag({ polls: two, now: NOW, action: null })], calendar: cal.events, workspace: [] })
+    expect(both.cards.map((c) => c.title)).toContain('2 league votes still open')
+  })
+
+  it('raises a per-league re-sync card when the shell folded stale leagues into one row', () => {
+    const stale = { days: 14, href: '/core/sync?league=L1', platformLabel: 'Sleeper' }
+    const result = buildTaskCards({ issues: [], flags: [], calendar: [], workspace: [], staleSync: stale })
+    expect(result.cards[0]).toMatchObject({ title: 'This league’s data is 14 days old', severity: 'bad' })
+    // Not twice when the shell already has one for this league.
+    const dup = buildTaskCards({ issues: [issue({})], flags: [], calendar: [], workspace: [], staleSync: stale })
+    expect(dup.cards.filter((c) => /days old/.test(c.title))).toHaveLength(1)
   })
 
   it('turns deadlines this week into cards, but not the weekly waiver run', () => {
