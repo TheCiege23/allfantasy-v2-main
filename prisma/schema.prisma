@@ -18407,3 +18407,130 @@ model ImportRunAttempt {
   @@index([runId, startedAt])
   @@map("import_run_attempts")
 }
+
+/// A trade that exists on the PROVIDER and has not settled — the row nothing has ever held.
+///
+/// ── 🛑 WHY THIS IS NOT A ROW IN `dw_transaction_facts` ──────────────────────────────────────────
+///
+/// That table is a SETTLED-EVENTS fact table and ten readers depend on that meaning, none of which
+/// filter by `type`. They count rows and mean "things that happened":
+///
+///   LeagueHistoryAggregator     raw count({leagueId})
+///   WarehouseQueryService       getTransactionVolumeByLeague — literally "volume"
+///   AnalyticsQueryLayer         count AND findLatestCreatedAt, so recency too
+///   app/api/league/wrapped      the user-facing season recap, grouped by type
+///   MetaAnalysisService         market-wide volume across every league
+///   decisionReceipts            _max(weekOrPeriod) — HOW FAR A LEAGUE HAS SYNCED
+///
+/// The last one is the sharpest: a pending week-14 offer written there would advance "how far this
+/// league has synced" past what has actually settled. That is not an inflated count, it is a
+/// different feature breaking, and nothing would throw.
+///
+/// ⚠ AND THE TWO MODELS ALREADY IN THE CODEBASE ARE INCOMPATIBLE. `persistProviderTransactionFacts`
+/// puts `lifecycleStage` in its deterministic id and says so: "a later state produces a new fact
+/// instead of overwriting this one" — pending then accepted would be TWO rows. Nothing passes
+/// `lifecycleStage` today, so the contradiction has never fired. Writing offer states into that
+/// table is what fires it.
+///
+/// ── WHY NOT `AfLeagueTrade` EITHER ─────────────────────────────────────────────────────────────
+///
+/// That is the NATIVE engine: it accepts, rejects, counters, vetoes and PROCESSES, with foreign
+/// keys to `Roster` and `AppUser`. Neither holds here. A pending Sleeper offer involves managers
+/// who may have no `AppUser` row, and `proposerRosterId`/`receiverRosterId` is two-sided by
+/// construction — it cannot express a three-team trade at all.
+///
+/// ⚠ READ-ONLY BY NATURE. Sleeper's public API has no write endpoint and Yahoo's offers are
+/// answered on Yahoo, so nothing here may render accept/reject controls. Same see-and-advise
+/// boundary `scanPendingSleeperTrades` already documents.
+model ProviderTradeOffer {
+  id              String @id @default(cuid())
+  /// Canonical AllFantasy league id, matching `dw_transaction_facts.leagueId`.
+  leagueId        String @db.VarChar(64)
+  provider        String @db.VarChar(16)
+  /// The provider's own transaction id — stable, and the natural idempotency key.
+  providerTradeId String @db.VarChar(128)
+  sport           String @db.VarChar(12)
+  season          Int?
+  weekOrPeriod    Int?
+
+  /// AllFantasy's normalised state: pending · accepted · rejected · expired · vanished · unknown.
+  ///
+  /// 🛑 `vanished` IS NOT `expired`, AND COLLAPSING THEM WOULD BE INVENTING EVIDENCE. An offer that
+  /// stops appearing in the feed without ever showing a terminal state may have been withdrawn,
+  /// expired, or simply missed by a sweep that was rate-limited. We know it is gone; we do not know
+  /// why. `expired` is reserved for a provider that actually says so.
+  status          String @db.VarChar(16)
+  /// The provider's own word, verbatim and uninterpreted, so a vocabulary change is visible rather
+  /// than silently remapped onto the nearest AllFantasy status.
+  providerStatus  String? @db.VarChar(32)
+
+  proposedByRosterId String? @db.VarChar(64)
+  /// Every roster the offer touches. An array because a trade is not always two-sided.
+  rosterIds          String[]
+  /// Rosters that have agreed so far — what "Needs you" is computed from.
+  consentedRosterIds String[]
+
+  proposedAt  DateTime?
+  respondedAt DateTime?
+  /// Only when the provider states one. Never derived from a sweep's silence.
+  expiresAt   DateTime?
+
+  /// ⚠ `lastSeenAt` IS THE EVIDENCE FOR `vanished` AND IS SET EXPLICITLY, NOT BY `@updatedAt`.
+  /// An `@updatedAt` column moves whenever any field is written, so it would answer "when did we
+  /// last touch this row", not "when did we last SEE this offer in the feed" — and the second is
+  /// the only one that can justify calling an offer gone.
+  firstSeenAt DateTime  @default(now())
+  lastSeenAt  DateTime
+  /// Provider record as fetched, for fields not modelled here.
+  payload     Json?
+
+  assets ProviderTradeOfferAsset[]
+
+  @@unique([provider, leagueId, providerTradeId], name: "uniq_provider_trade_offer")
+  @@index([leagueId, status])
+  @@index([leagueId, status, lastSeenAt])
+  @@index([leagueId, season, weekOrPeriod])
+  @@map("provider_trade_offers")
+}
+
+/// One asset moving inside a provider offer — a player, a pick, or FAAB.
+///
+/// Shaped after `AfLeagueTradeItem` on purpose: one row per movement, with `from`/`to` rosters, so
+/// a three-team deal is expressed by the rosters on its assets rather than by a side table that
+/// would then have to agree with them.
+///
+/// ⚠ PICK COORDINATES ARE COLUMNS, NOT A LABEL. `scanPendingSleeperTrades` already records why:
+/// "2027 1st" is right for a panel and useless to anything that has to rebuild the pick as an
+/// asset, and parsing the year and round back out of the label is a regex that breaks the first
+/// time the label is reworded.
+model ProviderTradeOfferAsset {
+  id        String @id @default(cuid())
+  offerId   String
+  /// player · pick · faab
+  assetType String @db.VarChar(16)
+
+  /// Provider player id. Resolution to a canonical player is a READ-TIME join, deliberately: this
+  /// table records what the provider said, and an identity match that improves later must not
+  /// require rewriting history.
+  playerId  String? @db.VarChar(64)
+
+  pickSeason           Int?
+  pickRound            Int?
+  /// Whose pick it originally was — a 1st from the worst team is not a 1st from the best, and
+  /// without this the asset cannot be valued at all.
+  pickOriginalRosterId String? @db.VarChar(64)
+
+  /// Whole dollars of FAAB.
+  faabAmount Int?
+
+  fromRosterId String? @db.VarChar(64)
+  toRosterId   String? @db.VarChar(64)
+  metadata     Json?
+
+  offer ProviderTradeOffer @relation(fields: [offerId], references: [id], onDelete: Cascade)
+
+  @@index([offerId])
+  @@index([playerId])
+  @@index([offerId, assetType])
+  @@map("provider_trade_offer_assets")
+}
