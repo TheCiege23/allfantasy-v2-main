@@ -626,8 +626,36 @@ is the only authority, and as the rows above show, even the ledger alone is not 
 
 ## Parked 2026-09-14: `20260914190000_player_follows`
 
-🛑 **NOT APPLIED.** Retention item 3, "follow a player across every league". The user chose
-a new table and keeps the decision of when to apply it.
+✅ **APPLIED TO PRODUCTION 2026-09-16 at 18:35Z, and moved to `prisma/migrations/`.** The user
+authorised it after Sentry showed the home's Following card and brief failing on the missing table
+(`$queryRaw` P2010 / 42P01). Applied second, one minute after `matchup_odds_snapshots` below,
+with the same gated run:
+- `ALLOW_PROD_MIGRATION=1 node scripts/prisma-migrate-deploy.cjs --prod`, from a worktree at
+  `67cc970d3`.
+- The run was gated on a fresh `migrate status` whose not-yet-applied list was exactly this
+  migration. The status parser was self-tested on 11 cases, including production's real diverged
+  output ("The migration have not yet been applied:" beside the 18 ledger-only rows).
+- The guard was first confirmed to REFUSE without the flag.
+- The SQL was rehearsed on `.env.test` in a rolled-back transaction, and the tables were confirmed
+  absent afterwards.
+
+Verified by the object on `ep-curly-block-ad0dlt9o/neondb`:
+- the table is present, with 10 columns, 0 rows and 4 indexes (the pkey, the unique index, and
+  both lookups, including `lower(name)`);
+- the ledger row is finished;
+- controls: `leagues` present, a made-up table absent;
+- no unfinished, un-rolled-back ledger row (the P3009 predicate).
+
+Deviations from the steps below:
+- **Step 2 is done.** `model PlayerFollow` maps every index name. Its canonical DDL was compared
+  offline with this SQL and is identical except the `(sport, lower(name))` index, which Prisma
+  cannot express. The drift guard does not report that index: measured against production with
+  the model in place, it found 0 new items.
+- **Step 3 was NOT taken.** The follow is an `INSERT … ON CONFLICT` refresh, and the news lookup
+  uses `lower(name)`. Both stay raw SQL.
+
+Original note: retention item 3, "follow a player across every league". The user chose a new
+table and kept the decision of when to apply it.
 
 **Additive only**: one table (`player_follows`), one unique index, one lookup index. No
 existing table is touched, and there is no backfill. `ROLLBACK.sql` drops it; that drop is
@@ -699,8 +727,19 @@ Verify the apply by the object, not the ledger: `select to_regclass('public.chim
 
 ## Parked 2026-09-15: `20260915010000_matchup_odds_snapshots`
 
-🛑 **NOT APPLIED.** Retention item 9, "shareable moments" — weekly upsets. The user chose to save
-pre-game win odds in a new table first and keeps the decision of when to apply it.
+✅ **APPLIED TO PRODUCTION 2026-09-16 at 18:34Z, and moved to `prisma/migrations/`.**
+- The user authorised it, first, so this week's odds are captured before Thursday's kickoff.
+- It was applied the same way as `player_follows` above: gated on `migrate status` listing
+  exactly this migration, from a worktree at `67cc970d3`.
+- Verified by the object on `ep-curly-block-ad0dlt9o/neondb`: the table is present, with
+  13 columns, 0 rows and 3 indexes; the ledger row is finished; the same controls pass.
+- **Step 3's model is added** (`model MatchupOddsSnapshot`, mapped index names). Its canonical
+  DDL is identical to this SQL, and a renamed-index control was caught.
+- The queries stay raw SQL: the sweep's `ON CONFLICT DO NOTHING` keeps the first capture.
+- **Step 2, watching a fire, is still owed** after the apply.
+
+Original note: retention item 9, "shareable moments" — weekly upsets. The user chose to save
+pre-game win odds in a new table first and kept the decision of when to apply it.
 
 **Additive only**: one table (`matchup_odds_snapshots`), one unique index, one lookup index. No
 existing table is touched and there is no backfill.
