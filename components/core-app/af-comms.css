@@ -488,6 +488,98 @@
 .af-cm-ev-link:hover { background: var(--accent-line); }
 
 /*
+ * A trade scenario's before/after (Chimmy item 8). Same tokens as the evidence block above: the
+ * change column is the one place colour carries meaning, so each direction is a token AND a sign.
+ * The table sits in its own scroll box so a long team name can never widen the drawer.
+ */
+.af-cm-scn {
+  margin-top: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--chip);
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--muted);
+  overflow-x: auto;
+}
+
+.af-cm-scn-title {
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.af-cm-scn-sides {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 12px;
+  margin: 4px 0 6px;
+  color: var(--text);
+}
+
+.af-cm-scn-label {
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--faint);
+}
+
+.af-cm-scn-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.af-cm-scn-table th,
+.af-cm-scn-table td {
+  padding: 3px 4px;
+  text-align: right;
+  border-top: 1px solid var(--line);
+  white-space: nowrap;
+}
+
+.af-cm-scn-table thead th {
+  border-top: 0;
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--faint);
+}
+
+.af-cm-scn-table tbody th {
+  text-align: left;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.af-cm-scn-grade,
+.af-cm-scn-unit {
+  font-weight: 400;
+  color: var(--faint);
+}
+
+.af-cm-scn-delta { font-weight: 700; color: var(--faint); }
+.af-cm-scn-delta[data-direction='up'] { color: var(--good); }
+.af-cm-scn-delta[data-direction='down'] { color: var(--bad); }
+
+/* "Not computed" is a statement, not an empty cell — left-aligned so it reads as one. */
+.af-cm-scn-table td.af-cm-scn-na {
+  text-align: left;
+  white-space: normal;
+  color: var(--faint);
+  font-style: italic;
+}
+
+.af-cm-scn-note {
+  margin: 6px 0 0;
+  color: var(--warn);
+}
+
+/*
  * Players named in an answer. The headshot sits ON TOP of the initials, so a
  * dead CDN URL (the img hides itself on error) reveals the fallback rather than
  * a broken-image glyph — a face that fails must degrade to a letter, never to a

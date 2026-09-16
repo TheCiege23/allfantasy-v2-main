@@ -87,8 +87,13 @@ export function extractPlayerNameCandidates(message: string): string[] {
   return [...out]
 }
 
-/** Which half of the sentence a name appears in decides which side it is on. */
-function splitSides(message: string): { left: string; right: string } | null {
+/**
+ * Which half of the sentence a name appears in decides which side it is on.
+ *
+ * Exported for `lib/chimmy/tradeScenarioGrounding.ts`, which must read the same two halves this
+ * module grades — two splitters would disagree about the same sentence.
+ */
+export function splitSides(message: string): { left: string; right: string } | null {
   const lower = message.toLowerCase()
   for (const sep of SEPARATORS) {
     const at = lower.indexOf(sep)

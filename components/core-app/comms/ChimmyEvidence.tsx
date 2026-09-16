@@ -72,6 +72,7 @@ const SOURCE_LABELS: Record<string, string> = {
   core_home_signals: 'What your home screen is showing',
   core_surface_context: 'The screen you asked from',
   sports_digest_db: 'Stored sports data (scores, injuries, news)',
+  trade_scenario: "This trade, run against your league's rosters",
   chimmy_personalization: 'Your saved preferences',
   chimmy_orchestration: 'Answer routing',
   stale_data_warning: 'A staleness warning',
