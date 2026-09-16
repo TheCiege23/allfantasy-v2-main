@@ -77,6 +77,7 @@ import { getFormatHub, parseHubFormat } from '@/lib/core-app/formatHubs'
 import Waivers from '@/components/core-app/screens/Waivers'
 import { getWaiversData } from '@/lib/core-app/waivers'
 import { getWaiversBoard } from '@/lib/core-app/waiversBoard'
+import { readWaiversBoardSummary } from '@/lib/core-app/waiversBoardSummary'
 import WaiversBoard from '@/components/core-app/boards/WaiversBoard'
 import DraftHq from '@/components/core-app/screens/DraftHq'
 import DraftHqBoard from '@/components/core-app/boards/DraftHqBoard'
@@ -1977,10 +1978,25 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
    * whole portfolio — see `waiversBoard.ts` for why a per-league free-agent
    * query is the fan-out that must not be reintroduced here.
    */
-  const waiversBoard =
-    activeKey === 'waivers' && !selectedLeagueId
-      ? await getWaiversBoard(userId).catch(() => null)
+  const wantsWaiversBoard = activeKey === 'waivers' && !selectedLeagueId
+
+  /*
+   * ⚠ THE SHORTEST TTL OF THE USER-SCOPED SUMMARIES (2 min), because this is the one screen where
+   * staleness could change what a reader DOES rather than only what they read: they are usually
+   * checking against a waiver deadline and deciding whether to bid. See the module header.
+   */
+  const waiversBoardOnSummary = isEnabled('sports-os.screen-summaries', userId, DEFAULT_ROLLOUTS)
+
+  const waiversBoardFresh =
+    wantsWaiversBoard && waiversBoardOnSummary
+      ? await readWaiversBoardSummary(userId).catch(() => null)
       : null
+
+  const waiversBoard = wantsWaiversBoard
+    ? waiversBoardOnSummary
+      ? (waiversBoardFresh?.data ?? null)
+      : await getWaiversBoard(userId).catch(() => null)
+    : null
 
   const waivers =
     activeKey === 'waivers' && selectedLeagueId

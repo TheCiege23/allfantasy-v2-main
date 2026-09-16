@@ -15,7 +15,7 @@ route with a budget in traces-per-hour.
 | 1 | Performance budgets | `lib/sports-os/budgets.ts`, `budgetTelemetry.ts` | **new** — shell + every card instrumented |
 | 2 | Render the shell immediately | `app/core/[[...screen]]/page.tsx` — `af.shell_ms` | already built |
 | 3 | Stream cards independently | same page + `lib/observability/cardTelemetry.ts` | already built |
-| 4 | Screen-ready summaries | `lib/sports-os/summaries.ts` | **new** — standings, week, season-outlook, career records and the trade board; plus the home's three portfolio records, built by a peer on this layer |
+| 4 | Screen-ready summaries | `lib/sports-os/summaries.ts` | **new** — seven screens wired, plus the home's three portfolio records (built by a peer on this layer) |
 | 5 | Layered caching | `lib/sports-os/layeredCache.ts`, `durableTier.ts` | **new** — memory + `SportsDataCache` |
 | 6 | Heavy work in jobs | `lib/jobs/`, `lib/queues/bullmq.ts` | already built — reached from `reactions.ts` |
 | 7 | One event system | `lib/events/` | already built — reaction table, relay consumer, `ingest.*` emit are new |
@@ -692,6 +692,33 @@ every summary depends on would put two branches of the same author in conflict o
 
 So the TTL is the interim bound and **the fingerprint is the named follow-up for both `careerSummary`
 and `tradesBoardSummary`**, recorded here rather than left to be rediscovered.
+
+## The seventh surface: `/core/waivers` — the simplest key, and the tightest TTL
+
+`lib/core-app/waiversBoardSummary.ts`. `getWaiversBoard(userId)` reads every claimed team the account
+has and the waiver state behind each, across every league.
+
+🛑 **Clock check first.** `waiversBoard.ts` has no `new Date()` and no `Date.now()`, and the function
+takes no `now`.
+
+⚠ **WAIVERS ARE THE MOST CLOCK-ADJACENT SCREEN TO PASS THAT CHECK, so the reasoning is worth
+stating.** A waiver has a processing time and the reader is often looking precisely because a
+deadline is near — but the deadline is a **stored instant** on the league's settings, not something
+this function renders against `now`. It derives no countdown and no "closes in 2 hours" string. That
+is the distinction this layer now turns on, and it is the same one `homePortfolioSummary` exploits
+from the other side: **a stored instant is data; a rendered countdown is not.**
+
+**`{ userId }` and nothing else** — the only summary here with no second key dimension. Worth noting
+only because the previous three each had one (a focus league, a platform filter, a week) and each
+needed a test pinning it.
+
+### ⚠ Its TTL is 2 minutes — the shortest of the user-scoped boards, and not for symmetry
+
+The other user-scoped boards sit at five: a trade or an import landing a few minutes late costs
+nothing. **This is the one screen where staleness could change what a reader DOES rather than only
+what they read** — they are usually checking against a deadline and deciding whether to bid. A test
+pins it at or below two minutes so a later "harmonise the TTLs" pass fails rather than quietly
+lengthening it.
 
 ## What is not done
 
