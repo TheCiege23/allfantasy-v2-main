@@ -1,6 +1,7 @@
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
+import { loadLatestPlayerValueSnapshots } from '@/lib/player-values/latestPlayerValueSnapshots'
 import { detectQbFormat } from './slotEligibility'
 import { BASELINE_SCORING, buildValueLedger } from '@/lib/trade-intel/valueLedger'
 
@@ -126,15 +127,22 @@ export async function getRosterGrade(args: {
   const format = isDynasty ? 'DYNASTY' : 'REDRAFT'
   const qbFormat = detectQbFormat(starters)
 
-  const rows = await prisma.playerValueSnapshot
-    .findMany({
-      where: { sleeperId: { in: everyId }, source: 'FANTASYCALC', format, qbFormat },
-      orderBy: { capturedAt: 'desc' },
-      select: { sleeperId: true, value: true, position: true, capturedAt: true },
-    })
-    .catch(() => [])
+  /*
+   * 🛑 THIS WAS THE HEAVIEST READER OF THE SNAPSHOT HISTORY. `everyId` is every rostered player in
+   * the league, and the old read returned every dated row for each of them — a 12-team league's
+   * ~250 players times every day since the daily ingest began. One row per id now.
+   *
+   * `newest` below is unchanged in meaning: the latest capture across the league is the max of
+   * each player's latest capture.
+   */
+  const rows = await loadLatestPlayerValueSnapshots({
+    sleeperIds: everyId,
+    source: 'FANTASYCALC',
+    format,
+    qbFormat,
+  }).catch(() => [])
 
-  // Newest capture per player; rows arrive newest-first so the first wins.
+  // Newest capture per player — one row per id already; the guard is belt and braces.
   const priced = new Map<string, { value: number; position: string | null }>()
   let newest: Date | null = null
   for (const r of rows) {
