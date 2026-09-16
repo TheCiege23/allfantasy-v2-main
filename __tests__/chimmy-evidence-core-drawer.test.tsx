@@ -73,9 +73,70 @@ describe('what an answer was built from', () => {
    * `decision_os_grounding_*` are built by string concatenation at the route.
    */
   it('degrades an unlabelled source rather than hiding it', () => {
-    render(<ChimmyEvidenceBlock evidence={evidence({ dataSources: ['agent_prompt_waiver'] })} />)
+    /*
+     * ⚠ THE FIXTURE MOVED AND THE ASSERTION DID NOT. This used `agent_prompt_waiver`, which is no
+     * longer unlabelled — that family now has a prefix branch. Keeping it here would have left a
+     * test named "unlabelled" that only ever exercised a LABELLED slug, which is a guard that
+     * silently stops guarding. A slug matching no literal and no family is the case this test is
+     * actually about.
+     */
+    render(<ChimmyEvidenceBlock evidence={evidence({ dataSources: ['some_future_source'] })} />)
     fireEvent.click(screen.getByRole('button', { name: /what is this based on/i }))
-    expect(screen.getByTestId('chimmy-evidence-detail').textContent).toContain('agent prompt waiver')
+    expect(screen.getByTestId('chimmy-evidence-detail').textContent).toContain('some future source')
+  })
+
+  /*
+   * The three slugs a real signed-in answer produced on 2026-09-16 that this map did not cover.
+   *
+   * ⚠ WORTH RECORDING WHY THEY WERE MISSED: the original map was built from a grep of the route
+   * that was TRUNCATED WITH `head -20`, and the result was treated as the whole list. Both
+   * `core_surface_context` (route ~2143) and `sports_digest_db` (route ~3197) were in the source
+   * the whole time, past the cut. The live envelope did not reveal something a grep could not —
+   * it revealed that the grep had been cut short.
+   */
+  it.each([
+    ['core_surface_context', 'The screen you asked from'],
+    ['sports_digest_db', 'Stored sports data'],
+  ])('labels %s', (slug, expected) => {
+    render(<ChimmyEvidenceBlock evidence={evidence({ dataSources: [slug] })} />)
+    fireEvent.click(screen.getByRole('button', { name: /what is this based on/i }))
+    expect(screen.getByTestId('chimmy-evidence-detail').textContent).toContain(expected)
+  })
+
+  /*
+   * Two families the route mints by concatenation, so they can never be listed as literals.
+   */
+  it.each([
+    ['agent_prompt_trade_analyzer', 'Specialist: trade analyzer'],
+    ['agent_prompt_waiver', 'Specialist: waiver'],
+    ['decision_os_grounding_timeout', 'Decision engine (timeout)'],
+    ['decision_os_grounding_empty', 'Decision engine (empty)'],
+  ])('reads the concatenated family %s', (slug, expected) => {
+    render(<ChimmyEvidenceBlock evidence={evidence({ dataSources: [slug] })} />)
+    fireEvent.click(screen.getByRole('button', { name: /what is this based on/i }))
+    expect(screen.getByTestId('chimmy-evidence-detail').textContent).toContain(expected)
+  })
+
+  /*
+   * 🛑 THE LITERAL MUST BEAT THE PREFIX. `decision_os_grounding_packet` means the packet arrived,
+   * not an outcome named "packet". Check the family first and it renders "Decision engine
+   * (packet)" — wrong, plausible, and it would outrank a correct label with nothing going red.
+   */
+  it('prefers an exact label over a family prefix that also matches', () => {
+    render(<ChimmyEvidenceBlock evidence={evidence({ dataSources: ['decision_os_grounding_packet'] })} />)
+    fireEvent.click(screen.getByRole('button', { name: /what is this based on/i }))
+    const detail = screen.getByTestId('chimmy-evidence-detail').textContent
+    expect(detail).toContain('Decision engine')
+    expect(detail).not.toContain('(packet)')
+  })
+
+  /* A bare prefix with no suffix is not a family member — it has nothing to name. */
+  it('does not treat a bare prefix as a family member', () => {
+    render(<ChimmyEvidenceBlock evidence={evidence({ dataSources: ['agent_prompt_'] })} />)
+    fireEvent.click(screen.getByRole('button', { name: /what is this based on/i }))
+    const detail = screen.getByTestId('chimmy-evidence-detail').textContent
+    expect(detail).toContain('agent prompt')
+    expect(detail).not.toContain('Specialist:')
   })
 
   /*
