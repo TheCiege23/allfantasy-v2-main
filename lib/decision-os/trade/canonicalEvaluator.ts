@@ -6,6 +6,7 @@ import { buildMovements, playerIdsFromMovements } from './canonicalShadow'
 import { resolveTradeEnrichment, type TradeEnrichmentResult } from './enrichmentPort'
 import { resolveTradeWorld } from './tradeWorld'
 import { buildTradeMemo, type CanonicalTradeMemo } from './canonicalMemo'
+import { computeRosterImpact, type ImpactPlayer, type RosterImpact } from './rosterImpact'
 
 export type CanonicalTradeAction = 'accept' | 'counter' | 'decline' | 'review'
 
@@ -24,6 +25,21 @@ export interface CanonicalTradeEvaluation {
   coverageStatus: 'complete' | 'partial' | 'blocked'
   coveragePct: number
   memo: CanonicalTradeMemo
+  /**
+   * What the trade does to the viewer's LINEUP, as opposed to the ledger.
+   *
+   * 🛑 PRESENT ONLY WHEN ASKED FOR, AND THAT IS A COST DECISION. Computing it means enriching the
+   * viewer's WHOLE ROSTER rather than the handful of traded players, so this — the production
+   * entry point for every two-team trade surface — would otherwise pay ~15 extra player lookups on
+   * every call. A surface that renders only the value verdict must not be charged for one it does
+   * not show.
+   *
+   * ⚠ `unit` IS NOT DECORATION. `AFProjectionSnapshot` carries a PER-GAME number and a
+   * REST-OF-SEASON one, and its own schema comment warns that confusing them understates a player
+   * by roughly the number of weeks remaining, silently. A consumer that renders this without
+   * reading the unit is one refactor from that mistake.
+   */
+  rosterImpact?: (RosterImpact & { unit: 'projected_points_per_game' }) | null
 }
 
 export interface EvaluateCanonicalTradeArgs {
@@ -35,6 +51,14 @@ export interface EvaluateCanonicalTradeArgs {
   assets: TradeAssetSummary[]
   currentSeason?: number | null
   evaluatedAt?: string
+  /**
+   * Compute `rosterImpact`. Off by default so no existing caller's cost changes.
+   *
+   * ⚠ OPT-IN RATHER THAN OPT-OUT DELIBERATELY. The alternative — compute always, let callers
+   * ignore it — silently widens the enrichment for ~60 trade routes at once, and the one that
+   * notices is whichever surface gets slow first.
+   */
+  includeRosterImpact?: boolean
 }
 
 export interface CanonicalTradeEvaluatorDeps {
@@ -67,7 +91,20 @@ export async function evaluateCanonicalTrade(
   }
   const movements = buildMovements(args.assets, world.provenance.provider)
   if (movements.length === 0) throw new Error('Trade has no canonical assets')
-  const playerIds = playerIdsFromMovements(movements)
+  const tradedPlayerIds = playerIdsFromMovements(movements)
+  const viewerRosterId = args.viewerRosterId ?? args.proposerRosterId
+  const viewerRoster = world.rosters.find((r) => r.rosterId === viewerRosterId) ?? null
+
+  /*
+   * ⚠ THE ROSTER IDS RIDE THE SAME ENRICHMENT CALL RATHER THAN A SECOND ONE. Positions and
+   * projections for the traded players are needed either way; asking for the roster separately
+   * would double the round trips to answer one question. Deduped, because a traded player is
+   * usually ON the roster and paying for him twice is the obvious version of this mistake.
+   */
+  const playerIds =
+    args.includeRosterImpact && viewerRoster
+      ? [...new Set([...tradedPlayerIds, ...viewerRoster.playerIds])]
+      : tradedPlayerIds
   let enrichment: TradeEnrichmentResult
   try {
     enrichment = await resolveEnrichment({
@@ -100,11 +137,78 @@ export async function evaluateCanonicalTrade(
     enrichment: enrichment.enrichment,
     context: { capturedAt: evaluatedAt },
   }))
-  const viewer = args.viewerRosterId ?? args.proposerRosterId
+  const viewer = viewerRosterId
   const given = memo.snapshot.sides.find((side) => side.rosterId === viewer)?.total ?? 0
   const received = memo.snapshot.sides.filter((side) => side.rosterId !== viewer).reduce((sum, side) => sum + side.total, 0)
   const coverage = memo.snapshot.coverage ?? { status: 'blocked' as const, coveragePct: 0 }
   const decision = recommendationFor(given, received, coverage.status === 'complete' && !memo.snapshot.grade.insufficientData)
+
+  /*
+   * ── ROSTER IMPACT ───────────────────────────────────────────────────────────────────────────
+   *
+   * ⚠ FAILURE-CONTAINED AND NULL RATHER THAN ABSENT ON FAILURE. `rosterImpact: null` says "asked
+   * for, could not be produced", which a surface can render as such; leaving the key off says "not
+   * asked for". Those are different facts and a renderer needs to tell them apart.
+   */
+  const rosterImpact = ((): CanonicalTradeEvaluation['rosterImpact'] => {
+    if (!args.includeRosterImpact) return undefined
+    if (!viewerRoster) return null
+    const positions = enrichment.enrichment.positionByPlayerId ?? {}
+    const projections = enrichment.enrichment.projectionByPlayerId ?? {}
+    const toImpact = (id: string): ImpactPlayer => ({
+      playerId: id,
+      position: (positions[id] ?? '').toUpperCase(),
+      /*
+       * ⚠ `?? null`, NOT `?? 0`. An absent projection is "not priced", and the repo-wide rule —
+       * restated on `AFProjectionSnapshot.rosProjection` — is that 0 is a real claim the value
+       * engine acts on. `computeRosterImpact` blocks on an unpriced TRADED asset for this reason.
+       */
+      projectedPoints: projections[id] ?? null,
+    })
+
+    /*
+     * ⚠ THE PLAYER ID IS NESTED AND THERE ARE THREE SLOTS FOR IT. `TradeMovement` carries no
+     * `playerId` of its own — `playerIdsFromMovements` reads
+     * `metadata.player ?? metadata.keeper ?? metadata.devy`, and a keeper or devy asset that only
+     * checked `.player` would read as a pick and vanish from the lineup maths entirely. Same
+     * accessor as that function on purpose; two spellings of one rule is the bug this repo keeps
+     * paying for.
+     */
+    const movementPlayerId = (m: (typeof movements)[number]): string | null => {
+      const meta = m.asset.metadata
+      return meta.player?.playerId ?? meta.keeper?.playerId ?? meta.devy?.playerId ?? null
+    }
+
+    const incoming: ImpactPlayer[] = []
+    const outgoingPlayerIds: string[] = []
+    for (const m of movements) {
+      const pid = movementPlayerId(m)
+      if (!pid) continue
+      if (m.toRosterId === viewerRosterId) incoming.push(toImpact(pid))
+      else if (m.fromRosterId === viewerRosterId) outgoingPlayerIds.push(pid)
+    }
+
+    /*
+     * 🛑 `starterSlots` IS NULLABLE AND A MISSING LINEUP IS NOT AN EMPTY ONE. With `[]` every
+     * lineup scores zero, both sides, and the delta comes out a confident 0.0 — "this trade
+     * changes nothing" about a league whose slots we simply do not know.
+     */
+    const slots = world.league.rosterSettings.starterSlots
+    if (!slots || slots.length === 0) return null
+
+    try {
+      const impact = computeRosterImpact({
+        roster: viewerRoster.playerIds.map(toImpact),
+        slots,
+        incoming,
+        outgoingPlayerIds,
+      })
+      return { ...impact, unit: 'projected_points_per_game' }
+    } catch {
+      return null
+    }
+  })()
+
   return {
     decisionType: 'manager.trade.evaluate',
     proposalId: args.proposalId,
@@ -119,5 +223,6 @@ export async function evaluateCanonicalTrade(
     coverageStatus: coverage.status,
     coveragePct: coverage.coveragePct,
     memo,
+    rosterImpact,
   }
 }
