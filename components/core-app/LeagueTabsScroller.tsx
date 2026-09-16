@@ -48,13 +48,26 @@ export function LeagueTabsScroller({
     if (!active) return
 
     /*
-     * `offsetLeft` is relative to the nearest positioned ancestor. The pills sit
-     * in a static `[role="listitem"]` inside a static scroller, so that ancestor
-     * is the scroller itself and the value is already in its scroll coordinate
-     * space. Measured against the element rather than assumed: if a future style
-     * positions the strip, this is the line that has to change.
+     * 🛑 NOT `offsetLeft`. That is measured from the nearest POSITIONED ancestor,
+     * and a static element is never one — so with this strip static (it is: no
+     * `position` anywhere in af-league-tabs.css) `offsetLeft` counts from whatever
+     * the shell positions, not from the strip. Measured in Chromium with a
+     * positioned ancestor 265px to the left: `offsetLeft` 1165, true position
+     * 900. The first version of this assumed the scroller was the offsetParent
+     * and centred every tab against the wrong box — a few pixels off on a phone,
+     * a whole rail's width off on desktop.
+     *
+     * The rect difference is the pill's position in the strip's SCROLL space
+     * whatever is or is not positioned: both rects move together as the page
+     * scrolls, and adding `scrollLeft` back undoes the strip's own scroll.
+     * `clientLeft` removes the strip's left border, which the rect includes and
+     * scroll coordinates do not.
      */
-    const pillStart = active.offsetLeft
+    const pillStart =
+      active.getBoundingClientRect().left -
+      scroller.getBoundingClientRect().left -
+      scroller.clientLeft +
+      scroller.scrollLeft
     const pillEnd = pillStart + active.offsetWidth
     const viewStart = scroller.scrollLeft
     const viewEnd = viewStart + scroller.clientWidth
