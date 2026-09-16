@@ -15,7 +15,7 @@ route with a budget in traces-per-hour.
 | 1 | Performance budgets | `lib/sports-os/budgets.ts`, `budgetTelemetry.ts` | **new** — shell + every card instrumented |
 | 2 | Render the shell immediately | `app/core/[[...screen]]/page.tsx` — `af.shell_ms` | already built |
 | 3 | Stream cards independently | same page + `lib/observability/cardTelemetry.ts` | already built |
-| 4 | Screen-ready summaries | `lib/sports-os/summaries.ts` | **new** — seven screens wired: standings, week, season-outlook, career, career records, the trade board and the waiver board; plus the home's three portfolio records, built by a peer on this layer |
+| 4 | Screen-ready summaries | `lib/sports-os/summaries.ts` | **new** — eight screens wired: standings, week, season-outlook, career, career records, the trade board, the waiver board and the portfolio inventory; plus the home's three portfolio records, built by a peer on this layer |
 | 5 | Layered caching | `lib/sports-os/layeredCache.ts`, `durableTier.ts` | **new** — memory + `SportsDataCache` |
 | 6 | Heavy work in jobs | `lib/jobs/`, `lib/queues/bullmq.ts` | already built — reached from `reactions.ts` |
 | 7 | One event system | `lib/events/` | already built — reaction table, relay consumer, `ingest.*` emit are new |
@@ -825,6 +825,77 @@ direction. One over less serves stale silently.
 input the way it is for the home's joins. It changes whenever a league is added, removed or synced —
 which is when this board changes — and the TTL remains the backstop for anything it misses. Stated
 because "the fingerprint is exactly their input" is true of `homePortfolioSummary` and not of this.
+
+## The eighth surface: `/core/portfolio` — and the first summary that stops HALF WAY on purpose
+
+The league inventory: "what do I have", as against home's "what needs me now". It passes the clock
+check — `portfolio.ts` has no `new Date()` and no `Date.now()`, and neither do the screen's two side
+panels — for the same reason `career` did: an inventory changes when an import runs, not when time
+passes.
+
+### ⚠ Its cost is a SERIAL FAN-OUT, which is a new shape on this layer
+
+Every summary before it paid a fixed handful of wide reads. `getPortfolio` pays a per-league trip:
+
+1. one `leagueTeam.findMany` for the claimed teams,
+2. one `leagueTeam.groupBy` for the team counts,
+3. **and then `findRosterForTeam` once per claimed team, inside a sequential `for` loop** — each a
+   `$queryRaw`, each awaited before the next begins.
+
+An eight-league account therefore pays ten round trips that do not overlap, and the cost grows with
+exactly the people who use the screen most. That is why a screen returning a short list is worth
+caching.
+
+⚠ **AND THE LOOP IS NOT A BUG TO FIX ON THE WAY PAST.** `findRosterForTeam` tries the durable
+`source_manager_id` before the direct column — the reason it reaches 96 of 98 claimed teams where the
+naive join reached 13 — and batching it is a real change to a predicate `myTeam.ts` and
+`playerImpact.ts` share with it deliberately. Caching the result does not touch it.
+
+### 🛑 Only ONE of the screen's three loaders is summarised, and the boundary is FORCED
+
+The screen loads three things in one `Promise.all`. Only the first is on the summary layer:
+
+| loader | inputs | summarisable |
+|---|---|---|
+| `getPortfolio(userId)` | the userId | ✅ buildable from the scope |
+| `getCrossLeagueExposure(userId, leagueIds, 12)` | the league ID **list** | ❌ |
+| `getCrossLeagueValueActions(userId, leagueRows, 12)` | league **rows** | ❌ |
+
+`ScreenSummaryDefinition.build` takes `(scope: SummaryScope)` and nothing else, and a scope holds
+short scalars — `scopeKey` drops any value over 64 characters. A league list cannot go in one, so the
+two panels cannot be rebuilt on a miss.
+
+⚠ **AND THE OBVIOUS WORKAROUND IS THE BUG.** Having `build` re-derive the league list itself would
+compile, pass every test, and be wrong: the fingerprint in the KEY comes from the page's list, so a
+builder resolving its own could file one portfolio's panels under another portfolio's key. That is
+precisely the failure `tradesBoardSummary` pins a test against for the week — **the builder must take
+what was keyed, never re-resolve it.**
+
+So the screen gets faster, not free, and that is recorded rather than quietly rounded up. Widening
+`build` to accept caller-held inputs is a change to the module every summary depends on, and belongs
+in its own change with the key/payload agreement worked out first.
+
+### Its TTL is 30 minutes, and that is the fingerprint talking rather than a copy
+
+Matching career's and trades', and arrived at the same way. An inventory changes on import, and the
+digest sees an import: a new league, a removed one or a finished sync moves the list, the key
+changes, the next read rebuilds cold.
+
+🛑 **IT IS NOT SHORT FOR WAIVERS' REASON, AND THAT IS THE DISTINCTION TO KEEP.** Waivers stays at two
+minutes because a claim changes with *nothing about the league list moving*, so its digest cannot see
+it. Nothing on this screen has that property — every field here derives from rows a sync writes, and
+a sync moves `lastSyncedAt`. The digest genuinely covers this board rather than proxying it, which is
+a stronger claim than the one `career` can make about itself.
+
+### ⚠ `portfolioOnSummary` was already taken, by a different portfolio
+
+Worth one line because it surfaced as a compile error and could just as easily have been a silent
+shadow. `app/core/[[...screen]]/page.tsx` already had a `portfolioOnSummary` — the **home's**
+portfolio card, from the peer's `homePortfolioSummary.ts`. This screen's flag is
+`portfolioScreenOnSummary`. Two unrelated surfaces are both reasonably called "portfolio"; only the
+fact that both are `const` in one function scope turned the collision into `TS2451` rather than into
+a flag silently reading the wrong bucket.
+
 
 ## What is not done
 
