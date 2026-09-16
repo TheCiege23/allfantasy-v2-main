@@ -141,6 +141,7 @@ import { getLeagueStandings } from '@/lib/core-app/leagueStandings'
 import { readLeagueStandingsSummary } from '@/lib/core-app/leagueStandingsSummary'
 import { readWeekAllSummary } from '@/lib/core-app/weekAllSummary'
 import { readSeasonOutlookSummary } from '@/lib/core-app/seasonOutlookSummary'
+import { readCareerRecordsSummary } from '@/lib/core-app/careerRecordsSummary'
 import { isEnabled, DEFAULT_ROLLOUTS } from '@/lib/sports-os/rollout'
 import { freshnessLabel, freshnessMeta, shouldWarnAboutFreshness } from '@/lib/sports-os/freshness'
 import { recordBudgetSince } from '@/lib/sports-os/budgetTelemetry'
@@ -1450,10 +1451,34 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
    * Career records — only for `?view=records`, because it reads every played
    * week this account has and no other tab needs it.
    */
-  const careerRecords =
+  const wantsCareerRecords =
     activeKey === 'career' && sp.view === 'records' && !selectedLeagueId
-      ? await getCareerRecords(userId).catch(() => null)
+
+  /*
+   * ── CAREER RECORDS ON SUMMARIES ────────────────────────────────────
+   *
+   * The cleanest of the four to cache: `careerRecords.ts` has no `new Date()` and no `Date.now()`
+   * anywhere, so a career record can only change when a week FINALIZES, never with the clock.
+   * Staleness costs a newly-set personal best appearing late, not a number that drifts while you
+   * look at it — which is why its TTL is 30 minutes where the week board's is two.
+   *
+   * ⚠ THE FLAG IS READ SEPARATELY FROM THE OTHER THREE. `standingsOnSummary` binds standings, week
+   * and outlook together because `/core/standings` renders more than one of them on one screen and
+   * split cohorts would be two experiments at once. This screen shares a page with none of them, so
+   * there is nothing to keep consistent — it just takes the same flag and subject.
+   */
+  const careerRecordsOnSummary = isEnabled('sports-os.screen-summaries', userId, DEFAULT_ROLLOUTS)
+
+  const careerRecordsFresh =
+    wantsCareerRecords && careerRecordsOnSummary
+      ? await readCareerRecordsSummary(userId).catch(() => null)
       : null
+
+  const careerRecords = wantsCareerRecords
+    ? careerRecordsOnSummary
+      ? (careerRecordsFresh?.data ?? null)
+      : await getCareerRecords(userId).catch(() => null)
+    : null
 
   /*
    * Rankings, its FAQ and the compare view share one screen key and one data

@@ -15,7 +15,7 @@ route with a budget in traces-per-hour.
 | 1 | Performance budgets | `lib/sports-os/budgets.ts`, `budgetTelemetry.ts` | **new** — shell + every card instrumented |
 | 2 | Render the shell immediately | `app/core/[[...screen]]/page.tsx` — `af.shell_ms` | already built |
 | 3 | Stream cards independently | same page + `lib/observability/cardTelemetry.ts` | already built |
-| 4 | Screen-ready summaries | `lib/sports-os/summaries.ts` | **new** — `/core/standings`, `/core/week` and `/core/season-outlook` wired |
+| 4 | Screen-ready summaries | `lib/sports-os/summaries.ts` | **new** — `/core/standings`, `/core/week`, `/core/season-outlook` and `/core/career?view=records` wired |
 | 5 | Layered caching | `lib/sports-os/layeredCache.ts`, `durableTier.ts` | **new** — memory + `SportsDataCache` |
 | 6 | Heavy work in jobs | `lib/jobs/`, `lib/queues/bullmq.ts` | already built — reached from `reactions.ts` |
 | 7 | One event system | `lib/events/` | already built — reaction table, relay consumer, `ingest.*` emit are new |
@@ -593,13 +593,56 @@ rather than against user patience: `ensureMatchupsCached` only refetches once it
 ~30 minutes, so a shorter TTL would re-run 49 million simulated games to reproduce the previous
 answer exactly — which the determinism above guarantees it would.
 
+## The fourth surface: `/core/career?view=records` — and two candidates REJECTED
+
+`lib/core-app/careerRecordsSummary.ts`. `getCareerRecords` reads **every played roster-week this
+account has ever had**, across every league it has ever imported; `page.tsx` already gates it behind
+`?view=records` because "no other tab needs it".
+
+🛑 **IT HAS ZERO CLOCK REFERENCES, AND THAT IS THE WHOLE REASON IT QUALIFIES.** `careerRecords.ts`
+contains no `new Date()` and no `Date.now()` anywhere, so a career record changes when a week
+FINALIZES and never with the passage of time. Staleness costs a newly-set personal best appearing
+late — not a number that drifts while you look at it. Hence a **30-minute TTL and a 2-hour stale
+window**, where the week board runs 2 minutes and 10. A test asserts both the absence of the clock
+and the floor on the TTL, so the next session cannot copy this TTL onto a surface that cannot bear
+it.
+
+### ⚠ `home` / `dash34` was this document's own named next candidate, and it is DISQUALIFIED
+
+`getDash34Data(userId, leagues, now)` takes a clock and **renders it into the payload**: `countdown`
+is `formatCountdown(nextGame.startTime − now)`, `next24` is a window ending at `now + 24h`,
+`reportedAgo` is `formatAgo(now − reportedAt)`, and the injury-staleness filter compares against
+`now`. A summary over it would serve a countdown reading "12 minutes" when the game kicks off in two,
+and keep already-started games in `firstLock`.
+
+`dash34.ts` had already solved its caching at the right granularity, and its own comment states the
+rule a summary would have broken: *"THE CLOCK INSIDE THE CACHED READ IS ITS OWN. `now` cannot be part
+of the cache key — a millisecond timestamp would defeat the cache — so each query filters on its own
+`new Date()` and the wrapper re-filters against the caller's `now`, dropping games that started
+inside the revalidation window."* It caches the three shared, user-independent queries through
+`unstable_cache` and deliberately leaves the user-scoped reads and the assembly uncached.
+
+**The rule that generalises: a summary may cache a payload derived from rows, never one with a clock
+rendered into it. Check for `now` in the signature before reaching for this layer.**
+
+### ⚠ `rankings` is expensive but the wrong SHAPE
+
+`getRankingsData` has no clock either, but it blends a global read — `loadRankedProfiles`, an
+**uncached** `$queryRaw` over every ranked manager on the product, run on every request to three
+views — with per-viewer fields (`you`, `reconciliation`, `scope`). Caching the blend per user would
+store one copy of the entire ladder **per viewer**. That global scan is a real cost and worth fixing,
+but it is a shared-read problem whose fix is a shared cache around `loadRankedProfiles`, not this
+layer. Recorded so the next session does not mistake *expensive* for *summary-shaped*.
+
 ## What is not done
 
 Each of these is a separate decision with a real cost.
 
-1. ~~No screen has a registered summary.~~ **Done** — `/core/standings`, `/core/week` and
-   `/core/season-outlook`, above. Three of nineteen. The next candidate is `home` (the `dash34`
-   fan-out, which feeds eight cards from one read).
+1. ~~No screen has a registered summary.~~ **Done** — `/core/standings`, `/core/week`,
+   `/core/season-outlook` and `/core/career?view=records`, above. Four of nineteen. `home` and
+   `rankings` were examined and **rejected**, each for its own reason — see the fourth surface. The
+   open lead is not another screen: it is the uncached global `loadRankedProfiles` scan, which wants
+   a shared cache rather than a summary.
 2. ~~No durable cache tier is wired.~~ **Done** — `lib/sports-os/durableTier.ts` over
    `SportsDataCache`, used by the standings summary.
 3. ~~No consumer calls `dispatchReactions`.~~ **Done** — see *The relay consumer* below.
