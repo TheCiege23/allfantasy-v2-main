@@ -2909,12 +2909,22 @@ ${newsCtx}`
              * pricing paths is a contradiction the model would have to choose between.
              */
             let tradeScenario: TradeScenario | null = null
-            if (leagueSnapshot && userId && looksLikeDescribedTrade(planInput.message)) {
-              tradeScenario = await buildTradeScenario({
-                message: planInput.message,
-                leagueId: leagueSnapshot.id,
-                userId,
-              }).catch(() => null)
+            /*
+             * ⚠ ITS OWN TRY, SEPARATE FROM THE READER BELOW. The scenario is an addition; a fault in
+             * it — including the synchronous shape check — must fall back to the described-trade
+             * grade, not skip it. Sharing one try made any scenario throw silently remove BOTH, which
+             * is how the first version of this failed `chimmy-unproven-league-id-readers`.
+             */
+            try {
+              if (leagueSnapshot && userId && looksLikeDescribedTrade(planInput.message)) {
+                tradeScenario = await buildTradeScenario({
+                  message: planInput.message,
+                  leagueId: leagueSnapshot.id,
+                  userId,
+                })
+              }
+            } catch {
+              tradeScenario = null
             }
             if (tradeScenario) {
               const scenarioBlock = renderTradeScenarioBlock(tradeScenario)

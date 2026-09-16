@@ -134,6 +134,20 @@ describe('the route sends it', () => {
     expect(ROUTE).toMatch(/if \(leagueSnapshot && userId && looksLikeDescribedTrade\(planInput\.message\)\)/)
   })
 
+  /*
+   * A fault in the scenario must fall back to the described-trade grade, not skip it. Sharing one
+   * `try` with that reader removed both on any scenario throw.
+   */
+  it('in its own try, ahead of the described-trade reader', () => {
+    const scenarioAt = ROUTE.indexOf('if (leagueSnapshot && userId && looksLikeDescribedTrade(planInput.message))')
+    const readerAt = ROUTE.indexOf('await buildDescribedTradeContext({')
+    const between = ROUTE.slice(scenarioAt, readerAt)
+    expect(scenarioAt).toBeGreaterThan(-1)
+    expect(readerAt).toBeGreaterThan(scenarioAt)
+    expect(between).toMatch(/\}\s*catch\s*\{\s*tradeScenario = null\s*\}/)
+    expect(ROUTE.slice(scenarioAt - 200, scenarioAt)).toMatch(/try \{\s*$/)
+  })
+
   it('in meta, and supersedes the described-trade grade when it resolves', () => {
     expect(ROUTE).toContain('scenario: tradeScenarioForMeta ?? undefined')
     expect(ROUTE).toMatch(/const describedTradeCtx = tradeScenario\?\.status === 'ready'\s*\? null/)

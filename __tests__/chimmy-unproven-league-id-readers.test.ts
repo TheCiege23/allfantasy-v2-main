@@ -108,7 +108,14 @@ vi.mock('@/lib/ai/deterministic', () => ({
   tryDeterministicAnswerDetailed: tryDeterministicAnswerDetailedMock,
   DETERMINISTIC_SOURCE: 'deterministic' as const,
 }))
-vi.mock('@/lib/chimmy-trade/describedTradeEvaluator', () => ({
+/*
+ * ⚠ THE REAL MODULE WITH ONE READER REPLACED, NOT A ONE-EXPORT FACTORY. The trade-scenario path
+ * (`lib/chimmy/tradeScenarioGrounding.ts`) imports this module's `splitSides` and
+ * `extractPlayerNameCandidates`; a factory without them made the scenario's shape check throw,
+ * which skipped the reader this file watches — a stale double, caught here on 2026-09-16.
+ */
+vi.mock('@/lib/chimmy-trade/describedTradeEvaluator', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/chimmy-trade/describedTradeEvaluator')>()),
   buildDescribedTradeContext: buildDescribedTradeContextMock,
 }))
 
