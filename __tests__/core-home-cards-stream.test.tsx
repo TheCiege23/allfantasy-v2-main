@@ -59,7 +59,7 @@ const g = vi.hoisted(() => {
     scanned: [],
     incomplete: null,
   }
-  const account: { sleeperUserId: string | null } = { sleeperUserId: 's1' }
+  const account: { sleeperUserId: string | null; leagues: unknown[] | null } = { sleeperUserId: 's1', leagues: null }
   /** The league home read: null is "could not read it", an object is a league that loaded. */
   const leagueHome: { data: unknown } = { data: null }
   return { gates, calls, fns, gate, scan, account, leagueHome }
@@ -103,7 +103,7 @@ vi.mock('next/navigation', () => ({
 }))
 vi.mock('next/headers', () => ({ cookies: () => ({ get: () => undefined }), headers: async () => new Headers() }))
 vi.mock('@/lib/dashboard/get-dashboard-league-list', () => ({
-  getDashboardLeagueListForUser: vi.fn(async () => ({ leagues: [LEAGUE], sleeperUserId: g.account.sleeperUserId })),
+  getDashboardLeagueListForUser: vi.fn(async () => ({ leagues: g.account.leagues ?? [LEAGUE], sleeperUserId: g.account.sleeperUserId })),
 }))
 vi.mock('@/lib/leagues/touchLeagueViewed', () => ({ touchLeagueViewed: vi.fn(async () => undefined) }))
 
@@ -256,6 +256,7 @@ beforeEach(() => {
   g.scan.scanned = []
   g.scan.incomplete = null
   g.account.sleeperUserId = 's1'
+  g.account.leagues = null
   g.leagueHome.data = null
 })
 
@@ -282,6 +283,8 @@ describe('/core home cards stream independently', () => {
   it('puts every card behind its own boundary', { timeout: 180_000 }, async () => {
     const { cards } = await homeCards()
     expect([...cards.keys()]).toEqual([
+      // The decision queue leads the home (2026-09-16) — ahead of every band.
+      'issues',
       'since-last-visit',
       'game-day',
       'drafts',
@@ -291,7 +294,6 @@ describe('/core home cards stream independently', () => {
       'user-os',
       'schedule',
       'routine',
-      'issues',
       'matchups',
       'chimmy',
       'career',
@@ -432,6 +434,62 @@ describe('/core home cards stream independently', () => {
      * standings and injury baselines — which this read got right — over a trade problem.
      */
     expect(g.fns.get('brief')!.mock.calls[0][0]).toMatchObject({ recordVisit: true, tradesComplete })
+  })
+
+  /*
+   * A scoped home (lib/core-app/homeScope.ts) reads only the leagues in scope — and must not write
+   * whole-portfolio state from that partial read: the "since your last visit" marker's baselines, and
+   * the tab badges' lineup cache. The badges themselves still count every league.
+   */
+  it('scopes every home read to the chosen leagues, and writes no whole-portfolio state from them', { timeout: 180_000 }, async () => {
+    const ESPN = { ...LEAGUE, id: 'L2', name: 'Hoops', platform: 'espn', sport: 'NBA', platformLeagueId: 'p2' }
+    g.account.leagues = [LEAGUE, ESPN]
+    const ids = (list: unknown) => (list as Array<{ id: string }>).map((l) => l.id)
+
+    await render(await screenBody([], { scope: 'platform:espn' }, '|'))
+    expect(ids(g.fns.get('dash34')!.mock.calls[0][1])).toEqual(['L2'])
+    expect(ids(g.fns.get('week')!.mock.calls[0][1])).toEqual(['L2'])
+    expect(ids(g.fns.get('schedule')!.mock.calls[0][1])).toEqual(['L2'])
+    expect(g.fns.get('exposure')!.mock.calls[0][1]).toEqual(['L2'])
+    expect(g.fns.get('rivals')!.mock.calls[0][1]).toEqual(['L2'])
+    expect(ids(g.fns.get('drafts')!.mock.calls[0][1])).toEqual(['L2'])
+
+    g.gate('tradeWeek').open(3)
+    await tick()
+    g.gate('trades').open([])
+    await tick()
+    await tick()
+    expect(g.fns.get('brief')!.mock.calls[0][0]).toMatchObject({ recordVisit: false })
+    expect(ids((g.fns.get('brief')!.mock.calls[0][0] as { leagues: unknown }).leagues)).toEqual(['L2'])
+
+    g.gate('dash34').open({ ...SUMMARY, allLeagues: [{ id: 'L2', emptyStarters: 1 }] })
+    g.gate('offersWrite').open(undefined)
+    for (let i = 0; i < 4; i += 1) await tick()
+    expect(called('urgency')).toBe(1)
+    const badges = g.fns.get('urgency')!.mock.calls[0][0] as { leagues: unknown; lineupLeagues: unknown }
+    expect(badges.lineupLeagues, 'a scoped summary refreshed the whole-portfolio lineup cache').toBeNull()
+    expect(ids(badges.leagues).sort(), 'the badges count every league, not the scope').toEqual(['L1', 'L2'])
+  })
+
+  // The positive control for the case above: unscoped, the same reads see every league.
+  it('reads every league, moves the visit and refreshes the lineup cache when the home is not scoped', { timeout: 180_000 }, async () => {
+    g.account.leagues = [LEAGUE, { ...LEAGUE, id: 'L2', name: 'Hoops', platform: 'espn', sport: 'NBA', platformLeagueId: 'p2' }]
+    const ids = (list: unknown) => (list as Array<{ id: string }>).map((l) => l.id).sort()
+
+    await render(await homeBody())
+    expect(ids(g.fns.get('dash34')!.mock.calls[0][1])).toEqual(['L1', 'L2'])
+    g.gate('tradeWeek').open(3)
+    await tick()
+    g.gate('trades').open([])
+    await tick()
+    await tick()
+    expect(g.fns.get('brief')!.mock.calls[0][0]).toMatchObject({ recordVisit: true })
+
+    const allLeagues = [{ id: 'L2', emptyStarters: 1 }]
+    g.gate('dash34').open({ ...SUMMARY, allLeagues })
+    g.gate('offersWrite').open(undefined)
+    for (let i = 0; i < 4; i += 1) await tick()
+    expect((g.fns.get('urgency')!.mock.calls[0][0] as { lineupLeagues: unknown }).lineupLeagues).toEqual(allLeagues)
   })
 
   it('never makes a screen wait for its tab badges', { timeout: 180_000 }, async () => {

@@ -1,0 +1,112 @@
+/*
+ * The /core home's own pieces: the decision queue, the per-card freshness line and the scope note.
+ * Token layer only — the light-mode clamp rewrites bare colours.
+ */
+
+/* ── Freshness line ─────────────────────────────────────────────────────── */
+.af-fresh {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 0;
+  margin: 10px 0 0;
+  color: var(--muted);
+  font: 500 11px/1.4 'JetBrains Mono', ui-monospace, monospace;
+  letter-spacing: 0.02em;
+}
+.af-fresh[data-stale='true'] { color: var(--warn); }
+.af-fresh time { color: inherit; }
+
+/* ── Decision queue ─────────────────────────────────────────────────────── */
+.af-decisions { margin-bottom: 18px; }
+.af-decisions .af3a-note b { color: var(--text2); font-weight: 800; }
+.af-decisions-top,
+.af-decisions-rest {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.af-decisions-rest { padding: 4px 6px; }
+.af-decisions-rest[hidden] { display: none; }
+.af-decision-meta { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; }
+.af-decision-when {
+  color: var(--text);
+  font: 800 11px/1 'JetBrains Mono', ui-monospace, monospace;
+  letter-spacing: 0.06em;
+}
+.af3a-bad .af-decision-when { color: var(--bad); }
+.af-decisions .af3a-row-title a { color: var(--text); text-decoration: none; }
+.af-decisions .af3a-row-title a:hover { color: var(--accent); }
+.af-decisions-toggle {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  margin: 2px 0 8px;
+  padding: 0 4px;
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  font: 800 13px/1 var(--font-archivo, 'Archivo', system-ui, sans-serif);
+  cursor: pointer;
+}
+
+/* ── Scope note (a filtered home says so above everything else) ───────── */
+.af-home-scope {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+  margin: 0 0 14px;
+  padding: 10px 14px;
+  border: 1px solid var(--accent-line);
+  border-radius: 12px;
+  background: var(--accent-soft);
+  color: var(--text);
+  font: 600 13px/1.35 var(--font-archivo, 'Archivo', system-ui, sans-serif);
+}
+.af-home-scope a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 36px;
+  margin-left: auto;
+  color: var(--accent);
+  font-weight: 800;
+}
+.af-home-scope-empty {
+  max-width: 720px;
+  padding: 24px;
+}
+.af-home-scope-empty h2 { margin: 0; font: 900 22px/1.15 var(--font-archivo, 'Archivo', system-ui, sans-serif); letter-spacing: -0.03em; }
+.af-home-scope-empty p { margin-top: 8px; color: var(--muted); font-size: 13px; line-height: 1.5; }
+
+/*
+ * ⚠ PHONES: ONE COLUMN, THE DECISION FIRST, THE DETAIL ON REQUEST. The urgent row is a three-part
+ * flex row on desktop; at phone width its button squeezed the title to a few characters a line. It
+ * stacks, the meta line clamps to one line, and the "show more" control carries the rest.
+ *
+ * ⚠ A SEPARATE TOP-LEVEL BLOCK AT THE END OF THE FILE — never nested (see CLAUDE.md, af-matchup.css).
+ */
+@media (max-width: 720px) {
+  .af-decisions .af-decision {
+    flex-wrap: wrap;
+    align-items: flex-start;
+  }
+  .af-decisions .af-decision .af3a-urgent-body { flex: 1 1 calc(100% - 60px); }
+  .af-decisions .af-decision .af3a-btn {
+    flex: 1 1 100%;
+    min-height: 44px;
+  }
+  .af-decisions .af-decision-meta {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    overflow: hidden;
+  }
+  .af-decisions .af3a-row { flex-wrap: wrap; }
+  .af-decisions .af3a-row-title { flex: 1 1 100%; }
+  .af-decisions .af3a-row-title a {
+    display: inline-flex;
+    align-items: center;
+    min-height: 32px;
+  }
+  .af-home-scope a { margin-left: 0; }
+}
