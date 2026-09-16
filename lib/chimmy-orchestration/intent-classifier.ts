@@ -65,6 +65,37 @@ export function classifyChimmyIntent(
     confidence: Math.min(0.97, 0.55 + weight * 0.12),
   })
 
+  /*
+   * The two guards below read the CURRENT question only. `text` carries the previous user turn
+   * too, and "who should I start?" one turn ago must not turn "when does the season start?" into
+   * a lineup decision now.
+   */
+  const current = message.toLowerCase()
+
+  /*
+   * 🛑 "WHAT TIME DOES THE CHIEFS GAME START TONIGHT?" WAS A START/SIT DECISION. Both start_sit
+   * branches match a bare `start`, and that label is rendered into the prompt, so the answering
+   * model was told it was handling a lineup call for a question about a kickoff time. Same bug the
+   * PECR classifier had and fixed with a lineup-shaped neighbour; here a calendar question with
+   * no lineup cue skips the start_sit branches entirely. Found by `__tests__/chimmy-eval/`.
+   */
+  const calendarStart =
+    /\b(when|what\s+time|what\s+day|what\s+date|how\s+long\s+until)\b|\bstart\s+(?:time|date)s?\b/.test(current) &&
+    !/\b(sit|bench|flex|lineups?|line\s*ups?)\b|\bstart(?:ing)?\s+(?:him|her|them)\b|\b(?:who|should\s+i|do\s+i)\s+start\b/.test(
+      current
+    )
+
+  /*
+   * ⚠ "HOW DOES SUPERFLEX SCORING WORK?" WAS ALSO START/SIT (`superflex` is lineup vocabulary),
+   * and "how many points is a sack worth?" was a player valuation (`worth`). A question about how
+   * a rule or format works is neither. It is answered as general help, after the commissioner
+   * branch so that "how do I change the playoff format?" still reaches the commissioner.
+   */
+  const asksHowRulesWork =
+    /\b(how\s+(?:does|do|is|are)|what\s+(?:is|are|does)|explain)\b[^?]*\b(scoring|works?|means?|settings?|format)\b/.test(
+      current
+    ) || /\bhow\s+many\s+points\b/.test(current)
+
   if (
     /\b(recaps?|storylines?|narratives?|tell the story|week\s*\d+\s*recaps?|hall of fame|social\s*clips?|captions?)\b/.test(text)
   ) {
@@ -97,6 +128,22 @@ export function classifyChimmyIntent(
   ) {
     return score('league_strength', 2.5)
   }
+  /*
+   * 🛑 `commissioner` WAS IN THE TYPE AND IN `LABELS` AND NO BRANCH EVER RETURNED IT. "Should I veto
+   * this trade as commissioner?" routed to trade, and `deriveWantFromIntent`'s
+   * `commissionerHealthDecision: intent === 'commissioner'` could never be true from this route.
+   * Collusion stays with manager_psychology above — its own test pins that.
+   */
+  if (
+    /\b(commissioners?|commish|veto(?:es|ed|ing)?|league\s+(?:rules?|dues|constitution|bylaws)|rules?\s+changes?|change\s+(?:the\s+)?rules?|playoff\s+format|dues)\b/.test(
+      text
+    )
+  ) {
+    return score('commissioner', 3)
+  }
+  if (asksHowRulesWork) {
+    return { intent: 'general', label: LABELS.general, confidence: 0.62 }
+  }
   if (
     /*
      * 🛑 `oppone` WAS DEAD VOCABULARY — no input could ever match it, because any continuation of
@@ -114,17 +161,36 @@ export function classifyChimmyIntent(
   ) {
     return score('matchup', 2.5)
   }
-  if (/\b(mock\s*drafts?|draft\s*picks?|rookie\s*class(es)?|adp|sleeper\s*picks?|draft\s*strateg(y|ies)|when\s*to\s*draft)\b/.test(text)) {
+  if (
+    /\b(mock\s*drafts?|draft\s*picks?|rookie\s*class(es)?|adp|sleeper\s*picks?|draft\s*strateg(y|ies)|when\s*to\s*draft)\b/.test(text) ||
+    /*
+     * ⚠ THE DRAFT VERB ITSELF WAS MISSING. "Who should I draft at 1.03?" and "who should I pick in
+     * round 3 of my draft?" routed to general. `pick` refuses a following `up`, because this branch
+     * sits above waiver and "who should I pick up?" is the most common waiver question there is.
+     */
+    /\b(?:should|do|would|could)\s+i\s+(?:draft|pick(?!\s*ups?\b))\b|\bwho\s+to\s+(?:draft|pick(?!\s*ups?\b))\b/.test(text) ||
+    /\b(?:my|our)\s+(?:league['’]?s\s+)?draft\b|\bdraft\s+tiers?\b/.test(text) ||
+    // "What round should I take a kicker in?" — held-out miss; the round is the draft signal.
+    /\bwhat\s+round\s+(?:should|do|would|could|to)\b/.test(text)
+  ) {
     return score('draft', 3)
   }
   if (
     // ⚠ The bare stems stay bare on purpose — `sit\w*` would match "situation". See the header.
+    !calendarStart &&
     /\b(start|sit|flex|superflex|who\s*do\s*i\s*start|bench|lineups?|line\s*ups?|this\s*week)\b/.test(text) &&
     /\b(or|vs\.?|versus|between|pick\s*(one|between))\b/.test(text)
   ) {
     return score('start_sit', 3.5)
   }
-  if (/\b(start|sit|flex|superflex|lineups?|bench\s*him|start\s*him)\b/.test(text)) {
+  /*
+   * `bench(?:ed|ing)?` rather than `bench\s*him`: "who do I bench this week?" routed to general.
+   * ⚠ `superflex` is NOT here any more, only in the paired branch above. On its own it names a
+   * league format far more often than a lineup slot — "is Caleb Williams a top-12 QB in
+   * superflex?" was a start/sit decision (held-out miss). "Superflex: Mahomes or Allen?" still
+   * reaches start_sit through the `or` above.
+   */
+  if (!calendarStart && /\b(start|sit|flex|lineups?|bench(?:ed|ing)?|start\s*him)\b/.test(text)) {
     return score('start_sit', 2)
   }
   /*
@@ -136,16 +202,40 @@ export function classifyChimmyIntent(
    * "addition" and "dropout", which would pull ordinary questions into this branch. The stems here
    * are common English words, so their inflections are enumerated rather than globbed.
    */
-  if (/\b(waivers?|wire|faab|free\s*agents?|pick(ed)?\s*up|pickups?|adds?|adding|drops?|dropping|dropped|stream\w*)\b/.test(text)) {
+  /*
+   * ⚠ HELD-OUT MISSES, 2026-09-16. `bids?` / `bidding` were in the PECR waiver branch and not here,
+   * so "how much should I bid on Bucky Irving?" was general. And `stream\w*` is safe inside a word
+   * but not in "where can I stream the Bills game?", which is about watching, not a free agent —
+   * so streaming a GAME is excluded, reading the current question only.
+   */
+  const streamsAGame =
+    /\b(?:where|how)\s+(?:can\s+i|do\s+i|to)\s+(?:stream|watch)\b|\bstream(?:ing)?\s+(?:the\s+)?(?:\w+\s+)?(?:game|match)\b/.test(
+      current
+    )
+  if (
+    /\b(waivers?|wire|faab|free\s*agents?|pick(ed)?\s*up|pickups?|adds?|adding|drops?|dropping|dropped|bids?|bidding)\b/.test(text) ||
+    (!streamsAGame && /\bstream\w*/.test(text))
+  ) {
     return score('waiver', 3)
   }
-  if (/\b(trades?|trading|traded|offers?|counter|accept|decline|deals?|swaps?|send|receive)\b/.test(text)) {
+  if (
+    /\b(trades?|trading|traded|offers?|counter|accept|decline|deals?|swaps?|send|receive)\b/.test(text) ||
+    // "What would you give for Puka?" — the question a trade asks most plainly, and it had no term here.
+    /\bwould\s+(?:you|i)\s+give\b|\bgive\s+(?:up\s+)?for\b/.test(text)
+  ) {
     return score('trade', 3)
   }
   if (
     /\b(values?|worth|ros|rest\s*of\s*season|outlooks?|sell\s*high|buy\s*low|tiers?|rank\s*him)\b/.test(text)
   ) {
     return score('player_value', 2.5)
+  }
+  /*
+   * Devy and rookie questions are draft questions — the player is on a board, not a lineup. Placed
+   * LAST so a trade or value question that happens to name a devy or rookie keeps its own intent.
+   */
+  if (/\b(devy|rookies?)\b/.test(text)) {
+    return score('draft', 2.5)
   }
 
   return {

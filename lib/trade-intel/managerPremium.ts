@@ -1,6 +1,7 @@
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
+import { loadLatestPlayerValueSnapshots } from '@/lib/player-values/latestPlayerValueSnapshots'
 import { FIRST_ROUND_IN_MARKET_UNITS, pickRoundShare } from '@/lib/pick-curve'
 
 /**
@@ -248,18 +249,13 @@ export async function loadManagerProfile(args: {
           select: { sleeperId: true, position: true },
         })
         .catch(() => []),
-      prisma.playerValueSnapshot
-        .findMany({
-          where: {
-            sleeperId: { in: ids },
-            source: 'FANTASYCALC',
-            format: args.isDynasty ? 'DYNASTY' : 'REDRAFT',
-            qbFormat: args.qbFormat,
-          },
-          orderBy: { capturedAt: 'desc' },
-          select: { sleeperId: true, value: true },
-        })
-        .catch(() => []),
+      // Newest row per id only; the loop below already kept only the first per id.
+      loadLatestPlayerValueSnapshots({
+        sleeperIds: ids,
+        source: 'FANTASYCALC',
+        format: args.isDynasty ? 'DYNASTY' : 'REDRAFT',
+        qbFormat: args.qbFormat,
+      }).catch(() => []),
     ])
 
     const positionOf = new Map<string, string>()

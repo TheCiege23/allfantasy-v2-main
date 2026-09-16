@@ -37,6 +37,13 @@ import { getDash34Data, imageOf, type Dash34LeagueRow } from '@/lib/core-app/das
 import { getChatUnread } from '@/lib/chat-core/unreadCounts'
 import LeagueHome from '@/components/core-app/screens/LeagueHome'
 import { getLeagueHomeData } from '@/lib/core-app/leagueHome'
+import {
+  LeagueDataCoverage,
+  LeagueDataCoverageSkeleton,
+  LEAGUE_DATA_COVERAGE_ANCHOR,
+} from '@/components/core-app/LeagueDataCoverage'
+import { getLeagueDataCoverage, type LeagueDataCoverageRecord } from '@/lib/core-app/leagueDataCoverage'
+import { isImportedPlatform } from '@/lib/league/isNativeLeague'
 import PlayerFinder from '@/components/core-app/screens/PlayerFinder'
 import { searchPlayers, getPlayerDetail } from '@/lib/core-app/playerFinder'
 import { getPlayerLeagueView } from '@/lib/core-app/playerLeagueView'
@@ -137,6 +144,7 @@ import Standings from '@/components/core-app/screens/Standings'
 import StandingsBoard from '@/components/core-app/boards/StandingsBoard'
 import PickALeague from '@/components/core-app/PickALeague'
 import LeagueTabs from '@/components/core-app/LeagueTabs'
+import { platformLabel } from '@/lib/core-app/platformLinks'
 import { getLeagueStandings } from '@/lib/core-app/leagueStandings'
 import { readLeagueStandingsSummary } from '@/lib/core-app/leagueStandingsSummary'
 import { readWeekAllSummary } from '@/lib/core-app/weekAllSummary'
@@ -164,8 +172,24 @@ import CoreScreenSkeleton from '@/components/core-app/CoreScreenSkeleton'
 import CoreScreenErrorBoundary from '@/components/core-app/CoreScreenErrorBoundary'
 import { PublishShellSignals, type ShellUrgencyBadges } from '@/components/core-app/shellSignals'
 import { recordCompletedSpan, recordRootDuration } from '@/lib/observability/rootTiming'
-import { CoreHomeCards, type HomeLoads } from '@/components/core-app/home/HomeCards'
+import { CoreHomeCards, emptyHomeLoads, type HomeLoads } from '@/components/core-app/home/HomeCards'
 import { traceCard } from '@/lib/observability/cardTelemetry'
+import {
+  applyHomeScope,
+  FAVORITES_COOKIE,
+  HOME_SCOPE_PARAM,
+  isScoped,
+  parseFavoriteIds,
+  parseHomeScope,
+  platformOf,
+  SCOPE_COOKIE,
+  scopeLabel,
+  serializeHomeScope,
+  sportOf,
+  type HomeScope,
+} from '@/lib/core-app/homeScope'
+import { leagueDataFreshness } from '@/lib/core-app/cardFreshness'
+import { CARD_USE_COOKIE, orderHomeCards, parseCardUsage, timeSensitiveCards } from '@/lib/core-app/homeCardOrder'
 
 export const dynamic = 'force-dynamic'
 
@@ -698,9 +722,17 @@ export default async function AfCorePage({
    * rail does not contain would put a league heading above a screen the user
    * has no membership in.
    */
-  const selectedLeagueName = selectedLeagueId
-    ? (rail.find((l) => l.id === selectedLeagueId)?.name ?? null)
+  /*
+   * ⚠ THE WHOLE RAIL ENTRY, NOT JUST ITS NAME. The header below needs the
+   * league's artwork and letter mark too, and the rail has already resolved
+   * both through `imageOf` → `resolveLeagueCardTypeKey` → `getLeagueTypeMedia`.
+   * Re-deriving them beside the header is how the rail chip and the header
+   * crest end up showing different artwork for one league.
+   */
+  const selectedRailLeague = selectedLeagueId
+    ? (rail.find((l) => l.id === selectedLeagueId) ?? null)
     : null
+  const selectedLeagueName = selectedRailLeague?.name ?? null
 
   const selectedSyncAge = describeAge(
     'roster',
@@ -729,6 +761,59 @@ export default async function AfCorePage({
   })
 
   const now = new Date()
+
+  /*
+   * ── THE SELECTED LEAGUE, READ ONCE ────────────────────────────────────────
+   *
+   * 🛑 TWO OF THE SHELL READS BELOW WERE EACH FETCHING THIS SAME ROW, AND A THIRD
+   * FACT ABOUT IT CAME FROM A DIFFERENT SOURCE ENTIRELY. `resolveLeagueValueSurfaces`
+   * read `{id, settings}` and the import-coverage summary read `{settings, platform}` —
+   * the same row, twice, in the same render.
+   *
+   * ⚠ REORDERING COULD NOT FIX IT, WHICH IS WHY THE ROW IS RESOLVED AS A PROMISE AND
+   * NOT AWAITED HERE. Both are entries in the `Promise.all` below, so they already run
+   * concurrently; awaiting a league read before that block would add a serial
+   * cross-coast round-trip in front of every league-scoped render and make the page
+   * slower to save a query. Creating the promise here and letting both entries `.then()`
+   * off it keeps everything in one parallel wave and issues one query instead of two.
+   *
+   * 🛑 AND THE CONSISTENCY HALF IS THE PART THAT WAS ACTUALLY WRONG. `platform` for one
+   * league was read from TWO sources in one render: the header chip and the absent-tab
+   * notes took `selectedLeagueRow.platform` — from the dashboard LIST payload, which
+   * SYNTHESISES that field for some rows (`normalizedSleeper` hardcodes `'sleeper'`,
+   * tournaments hardcode `'allfantasy'`) — while the coverage sentence took
+   * `prisma.league.platform`. Two answers to "which platform is this league on", inside
+   * one page, free to disagree. They now come from this row.
+   *
+   * ⚠ THE SCREEN LOADERS STILL READ IT THEMSELVES, deliberately and for now. Only one of
+   * them runs per request (they are mutually exclusive on `activeKey`), so that is one
+   * further read, not ten — and threading a row through ten signatures is a change worth
+   * making on its own rather than riding along here.
+   */
+  const selectedLeagueRead = selectedLeagueId
+    ? prisma.league
+        .findUnique({
+          where: { id: selectedLeagueId },
+          /*
+           * `platformLeagueId`, `syncStatus` and `lastSyncedAt` are for the Overview's
+           * "what's on file" panel, which needs the provider id (two of its tables key on
+           * it) and whether the first sync has landed. Same row, same query — asking for
+           * three more scalar columns is cheaper than a third read of it.
+           */
+          select: {
+            id: true,
+            settings: true,
+            platform: true,
+            platformLeagueId: true,
+            syncStatus: true,
+            lastSyncedAt: true,
+          },
+        })
+        .catch(() => null)
+    : Promise.resolve(null)
+  /* Rejection is impossible (`.catch` above), but an unawaited promise that somehow
+     rejected before its `await` would surface as unhandled. Same guard as `shellReads`. */
+  selectedLeagueRead.catch(() => undefined)
 
   /*
    * ── THE SHELL'S READS, TOGETHER ───────────────────────────────────────────
@@ -779,7 +864,11 @@ export default async function AfCorePage({
      * degrades to false so an error hides the entry rather than surfacing a dead one.
      */
     selectedLeagueId
-      ? resolveLeagueValueSurfaces(prisma, selectedLeagueId)
+      ? /* ⚠ THE PROMISE, NOT `.then(row => …)`. Chaining would delay the CALL until the
+           shared read landed, which serialises a shell read the block exists to
+           parallelise — `core-page-shell-first` asserts every one of these has started
+           before any resolves, and it caught exactly that. The resolver awaits it. */
+        resolveLeagueValueSurfaces(prisma, selectedLeagueId, selectedLeagueRead)
           .then((surfaces) => surfaces?.hasIdp ?? false)
           .catch(() => false)
       : Promise.resolve(false),
@@ -802,11 +891,7 @@ export default async function AfCorePage({
      * `resolveImportCoverageSummary` already returns it for anything it cannot read.
      */
     selectedLeagueId
-      ? prisma.league
-          .findUnique({
-            where: { id: selectedLeagueId },
-            select: { settings: true, platform: true },
-          })
+      ? selectedLeagueRead
           .then((row) =>
             resolveImportCoverageSummary({ settings: row?.settings, platform: row?.platform }),
           )
@@ -931,6 +1016,18 @@ export default async function AfCorePage({
     access,
   ] = await shellReads
 
+  /*
+   * Free by this point: the read was started before `shellReads` and has been in flight
+   * alongside every entry in it, so this `await` adds no round-trip.
+   *
+   * ⚠ FALLS BACK TO THE LIST ROW RATHER THAN TO A LITERAL. A failed read here must not
+   * turn an imported league into "AllFantasy" in the header — that is the one wrong
+   * answer worse than the stale one, because `platformLabel` maps an empty platform to
+   * the native league name and the chip would then confidently misattribute the league.
+   */
+  const selectedLeagueRecord = await selectedLeagueRead
+  const selectedLeaguePlatform = selectedLeagueRecord?.platform ?? selectedLeagueRow?.platform ?? null
+
   const shellProfile = {
     name: shellUser?.displayName?.trim() || shellUser?.username?.trim() || null,
     imageUrl: resolveDashboardAvatarUrl(shellUser?.avatarUrl) ?? null,
@@ -1029,6 +1126,41 @@ export default async function AfCorePage({
 
   const dockable = selectedLeagueId != null && DOCKABLE_KEYS.includes(activeKey)
 
+  /*
+   * ── THE HOME'S SCOPE ─────────────────────────────────────────────────────────────────────────
+   *
+   * Which of the played leagues the cross-league home is about — lib/core-app/homeScope.ts. From the
+   * URL when it names one, otherwise from the choice remembered for this browser session, so the
+   * Home link and the rail logo return to the view the reader left.
+   *
+   * ⚠ ONLY THE HOME APPLIES IT. Every other cross-league screen still reads every league, so on
+   * those the switcher must say "All leagues" — naming the remembered filter there would describe
+   * data the screen never filtered.
+   *
+   * ⚠ IT NARROWS `playedLeagues` AND NOTHING ELSE. The league-id authorization check above has
+   * already run on the full list; favorites are intersected with that list before use.
+   */
+  const cookieJar = cookies()
+  const favoriteIds = parseFavoriteIds(
+    cookieJar.get(FAVORITES_COOKIE)?.value,
+    playedLeagues.map((l) => l.id),
+  )
+  const appliesHomeScope = activeKey === 'home' && segment !== 'dashboard-v2' && !selectedLeagueId
+  const homeScope: HomeScope = appliesHomeScope
+    ? parseHomeScope(sp[HOME_SCOPE_PARAM] ?? cookieJar.get(SCOPE_COOKIE)?.value)
+    : { kind: 'all' }
+  const shellScope = {
+    value: serializeHomeScope(homeScope),
+    label: scopeLabel(homeScope, selectedLeagueName),
+    favoriteIds: [...favoriteIds],
+    leagues: playedLeagues.map((l) => ({
+      id: l.id,
+      name: l.name,
+      platform: platformOf(l),
+      sport: sportOf(l),
+    })),
+  }
+
   recordRootDuration('af.shell_ms', shellStartedAt)
 
   /*
@@ -1080,6 +1212,17 @@ export default async function AfCorePage({
    */
   const errorResetKey = [segment, ...Object.entries(sp).map(([key, value]) => `${key}=${String(value)}`).sort()].join('|')
 
+  /*
+   * Whether the league header bar renders above the screen. Decided HERE, before the body, because
+   * the Overview reads it: when the bar already names the league, the screen must not name it again.
+   *
+   * ⚠ `dashboard-v2` RENDERS WITHOUT THE SHELL (see the early return below), so no bar is drawn
+   * there whatever the league state says.
+   */
+  const showContextBar =
+    segment !== 'dashboard-v2' &&
+    Boolean(selectedLeagueId && selectedLeagueName && selectedLeagueRow && isCoreSurfaceKey(activeKey))
+
   const body = (
     <CoreScreenBody
       ctx={{
@@ -1100,6 +1243,7 @@ export default async function AfCorePage({
         tradeStripLeagues,
         derivedIssues,
         coreActivity,
+        unreadNotifications,
         devySlotCount,
         modelAdminAllowed,
         syncAge,
@@ -1107,6 +1251,10 @@ export default async function AfCorePage({
         commissionerCount,
         now,
         errorResetKey,
+        leagueHeaderShown: showContextBar,
+        selectedLeagueRecord,
+        homeScope,
+        favoriteIds,
       }}
     />
   )
@@ -1131,9 +1279,6 @@ export default async function AfCorePage({
    */
   const screenKey = `${segment}|${selectedLeagueId ?? ''}`
 
-  const showContextBar = Boolean(
-    selectedLeagueId && selectedLeagueName && selectedLeagueRow && isCoreSurfaceKey(activeKey),
-  )
   // ONE read shared by the bar's two streamed slots (the promise, not two calls).
   const leagueOs =
     showContextBar && selectedLeagueId ? resolveUserOsSnapshot(selectedLeagueId, userId).catch(() => null) : null
@@ -1146,6 +1291,7 @@ export default async function AfCorePage({
       syncEligibleCount={syncEligibleCount}
       leagueHasScoredWeek={leagueHasScoredWeek}
       selectedLeagueId={selectedLeagueId}
+      scope={shellScope}
       hasIdpDefense={hasIdpDefense}
       devySlotCount={devySlotCount}
       isAdmin={isAdmin}
@@ -1217,6 +1363,14 @@ export default async function AfCorePage({
           hasScoredWeek={leagueHasScoredWeek}
           tradeSupported={importCoverageSummary.capabilities.trades !== false}
           draftSupported={importCoverageSummary.capabilities.draft !== false}
+          /*
+           * ⚠ `platformLabel`, NOT `String(platform)`. It is the same resolver
+           * the "Open in <platform>" buttons use, so the sentence explaining
+           * why Trades is absent names the provider exactly as the button that
+           * sends you there does — and a native league resolves to
+           * "AllFantasy" rather than printing a raw enum at the reader.
+           */
+          platform={platformLabel(selectedLeaguePlatform)}
         />
       ) : null}
 
@@ -1224,7 +1378,19 @@ export default async function AfCorePage({
         <CoreLeagueContextBar
           leagueId={selectedLeagueId}
           leagueName={selectedLeagueName}
-          platform={String(selectedLeagueRow.platform ?? 'manual')}
+          platform={String(selectedLeaguePlatform ?? 'manual')}
+          /*
+           * The source chip opens the Overview's "what's on file" panel, from any tab. Only for an
+           * imported league: a native one has no panel, and a link to a missing anchor lands on the
+           * top of the Overview and looks like it did nothing.
+           */
+          coverageHref={
+            isImportedPlatform(selectedLeaguePlatform)
+              ? `/core?league=${encodeURIComponent(selectedLeagueId)}#${LEAGUE_DATA_COVERAGE_ANCHOR}`
+              : null
+          }
+          logoUrl={selectedRailLeague?.imageUrl ?? null}
+          logoLetter={selectedRailLeague?.mark}
           syncLabel={selectedSyncAge.label}
           syncStale={selectedSyncAge.stale}
           gameDayActive={coreActivity.gameDayActive}
@@ -1259,6 +1425,19 @@ export default async function AfCorePage({
 }
 
 type LeagueOsSnapshot = Awaited<ReturnType<typeof resolveUserOsSnapshot>> | null
+
+/**
+ * The Overview's "what's on file" panel, once its counts are in.
+ *
+ * ⚠ A NATIVE LEAGUE, OR A FAILED LOADER, RENDERS NOTHING — not the old banner. The loader returns
+ * null for a native league because nothing was imported, and a thrown loader is caught to null
+ * because one panel must not take the Overview down with it. Neither case has a coverage sentence
+ * worth showing: a native league has none, and the per-row reads already degrade individually.
+ */
+async function LeagueDataCoverageSection({ record }: { record: LeagueDataCoverageRecord }) {
+  const coverage = await getLeagueDataCoverage(record).catch(() => null)
+  return coverage ? <LeagueDataCoverage coverage={coverage} /> : null
+}
 
 /** The Decision OS chip in the league context bar, once the league's snapshot has been read. */
 async function LeagueDecisionChip({ snapshot }: { snapshot: Promise<LeagueOsSnapshot> }) {
@@ -1331,7 +1510,9 @@ type CoreScreenContext = {
   tradeLeagueTypeKey: ReturnType<typeof resolveLeagueCardTypeKey> | null
   tradeStripLeagues: Array<{ id: string; name: string; platform: string; mark: string; meta: string | null }>
   derivedIssues: ReturnType<typeof deriveOutstandingIssues>['issues']
-  coreActivity: { liveDraftLeagueIds: string[] }
+  coreActivity: { liveDraftLeagueIds: string[]; gameDayActive: boolean }
+  /** Stored unread notifications — the shell badge's count, reused by the home's prewarm. */
+  unreadNotifications: number
   devySlotCount: number
   /** Decided in `AfCorePage` from the one admin read — see the gate there. */
   modelAdminAllowed: boolean
@@ -1341,6 +1522,14 @@ type CoreScreenContext = {
   now: Date
   /** The URL key the error boundaries reset on — computed once, beside the screen's own. */
   errorResetKey: string
+  /** The shell's league header is drawn above this screen, so the screen must not repeat it. */
+  leagueHeaderShown: boolean
+  /** The selected league's row, read once by the shell. Null with no league or on a failed read. */
+  selectedLeagueRecord: LeagueDataCoverageRecord | null
+  /** The home's scope — `all` everywhere else. See "THE HOME'S SCOPE" in `AfCorePage`. */
+  homeScope: HomeScope
+  /** Starred league ids, already intersected with `playedLeagues`. */
+  favoriteIds: ReadonlySet<string>
 }
 
 /**
@@ -1375,6 +1564,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
     tradeStripLeagues,
     derivedIssues,
     coreActivity,
+    unreadNotifications,
     devySlotCount,
     modelAdminAllowed,
     syncAge,
@@ -1382,6 +1572,10 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
     commissionerCount,
     now,
     errorResetKey,
+    leagueHeaderShown,
+    selectedLeagueRecord,
+    homeScope,
+    favoriteIds,
   } = ctx
 
   // Screen 2 is the same route with a league selected — the handoff describes it
@@ -2182,18 +2376,51 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
    * `traceCard` names each read in the request's trace (lib/observability/cardTelemetry.ts), so a
    * slow card is attributable.
    */
+  /*
+   * The home's leagues, narrowed to its scope (`all` everywhere but a scoped home, where these are
+   * the same lists as above). Every home read below takes these, so every card describes the same
+   * set of leagues the switcher names.
+   *
+   * ⚠ A SCOPED HOME MUST NOT WRITE WHOLE-PORTFOLIO STATE FROM A PARTIAL READ:
+   *   - the "since your last visit" marker stores standings and injury baselines, and the next visit
+   *     diffs against them, skipping whatever is absent — so a scoped render does not move the visit;
+   *   - the tab badges' lineup cache is the whole portfolio's, so a scoped summary does not refresh
+   *     it (`lineupLeagues` below).
+   * The pending-offers write is per league and merges, so a scoped trade scan records only what it
+   * saw and forgets nothing.
+   */
+  const homeScoped = isHome3a && isScoped(homeScope)
+  const homePlayed = homeScoped ? applyHomeScope(playedLeagues, homeScope, favoriteIds) : playedLeagues
+  const homeIds = new Set(homePlayed.map((l) => l.id))
+  const homeLeagueRows = homeScoped ? leagues.filter((l) => homeIds.has(l.id)) : leagues
+  const homeWeekLeagues = homeScoped ? weekLeagues.filter((l) => homeIds.has(l.id)) : weekLeagues
+  const homeDerivedIssues = homeScoped
+    ? deriveOutstandingIssues({
+        leagues: homePlayed,
+        lastSyncByLeague: lastSyncByLeagueFrom(
+          homePlayed as unknown as Array<{ id: string; lastSyncedAt?: Date | string | null }>,
+        ),
+      }).issues
+    : derivedIssues
+
   const homeRecordVisit = isHome3a ? !isSpeculativeRequestHeaders(await headers()) : false
   const homeLoads: HomeLoads | null = !isHome3a
     ? null
-    : (() => {
+    : homeScoped && homePlayed.length === 0
+      ? /*
+         * A scope that matches no league renders only its "no leagues in this view" panel, so it
+         * reads nothing — not the summary, not the trade scan, not a single card's query.
+         */
+        emptyHomeLoads()
+      : (() => {
         const summary = traceCard('dash34', () =>
-          getDash34Data(userId, leagues as unknown as Dash34LeagueRow[], now),
+          getDash34Data(userId, homeLeagueRows as unknown as Dash34LeagueRow[], now),
         ).catch(() => null)
-        const mergedIssues = summary.then((data) => mergeDash34Issues(derivedIssues, data))
+        const mergedIssues = summary.then((data) => mergeDash34Issues(homeDerivedIssues, data))
 
         const tradeWeek = traceCard('trade-week', () =>
           resolveCurrentWeek(
-            playedLeagues
+            homePlayed
               .map((league) => (league as { platformLeagueId?: string | null }).platformLeagueId ?? '')
               .filter(Boolean),
           ),
@@ -2207,11 +2434,16 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
          * ⚠ STILL INSIDE `traceCard`, DELIBERATELY. The card span is what makes this read visible
          * per-card in Sentry and what carries its budget verdict; a cache HIT should show up there
          * as a fast card, not vanish from the trace. Measuring the cheap path is the point.
+         *
+         * 🛑 NEVER ON A SCOPED HOME (#928's scope switcher, lib/core-app/homeScope.ts). The summary is
+         * the user's WHOLE portfolio — its build re-derives the league list itself — so on a home
+         * filtered to one sport or platform it would show every league's scores under a
+         * "Showing NBA leagues" note. A scoped home reads its own leagues, live.
          */
         const weekAll = traceCard('week', () =>
-          weekOnSummary
+          weekOnSummary && !homeScoped
             ? readWeekAllSummary(userId).then((entry) => entry?.data ?? null)
-            : getWeekAll(userId, weekLeagues),
+            : getWeekAll(userId, homeWeekLeagues),
         ).catch(() => null)
 
         /*
@@ -2224,7 +2456,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
          * on this branch and 'week' on the other caller above, so the two are
          * mutually exclusive and nothing is fetched twice.
          */
-        const schedule = traceCard('schedule', () => getWeekBoard(userId, weekLeagues)).catch(() => null)
+        const schedule = traceCard('schedule', () => getWeekBoard(userId, homeWeekLeagues)).catch(() => null)
 
         /*
          * Trades that landed in the last fortnight. Reads the cache the
@@ -2251,7 +2483,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
         const trades = traceCard('trades', () =>
           tradeWeek.then((currentWeek) =>
             getRecentTrades(
-              playedLeagues.map((l) => ({
+              homePlayed.map((l) => ({
                 id: l.id,
                 name: l.name,
                 platformLeagueId: (l as { platformLeagueId?: string | null }).platformLeagueId ?? null,
@@ -2309,7 +2541,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
 
         // A fresh array per reader, as each had before: neither can see what the other does to its input.
         const routineLeagues = () =>
-          playedLeagues.map((l) => ({
+          homePlayed.map((l) => ({
             id: l.id,
             name: l.name,
             platform: String(l.platform ?? ''),
@@ -2394,7 +2626,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
               ranked.find((l) => l.priority === 'draft')?.id ??
               merged.find((i) => i.leagueId != null)?.leagueId ??
               null
-            const league = playedLeagues.find((l) => l.id === anchorId) ?? playedLeagues[0] ?? null
+            const league = homePlayed.find((l) => l.id === anchorId) ?? homePlayed[0] ?? null
             if (!league) return { snapshot: null, league: null }
             const snapshot = await resolveUserOsSnapshot(league.id, userId).catch(() => null)
             return { snapshot, league: { id: league.id, name: league.name } }
@@ -2433,7 +2665,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
           trades.then((recentTrades) =>
             getSinceLastVisit({
               userId,
-              leagues: playedLeagues.map((l) => ({
+              leagues: homePlayed.map((l) => ({
                 id: l.id,
                 name: l.name ?? null,
                 sport: (l as { sport?: string | null }).sport ?? null,
@@ -2445,7 +2677,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
               recentTrades,
               tradesLimit: HOME_RECENT_TRADES_LIMIT,
               now,
-              recordVisit: homeRecordVisit,
+              recordVisit: homeRecordVisit && !homeScoped,
               tradesComplete: !tradesFailed && !tradesIncomplete,
             }),
           ),
@@ -2497,7 +2729,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
         const drafts = traceCard('drafts', () =>
           getDraftHqAll(
             userId,
-            playedLeagues.map((l) => ({
+            homePlayed.map((l) => ({
               id: l.id,
               name: l.name,
               platform: String(l.platform ?? ''),
@@ -2517,9 +2749,9 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
           week: weekAll,
           winProb,
           exposure: traceCard('exposure', () =>
-            getCrossLeagueExposure(userId, playedLeagues.map((l) => l.id)),
+            getCrossLeagueExposure(userId, homePlayed.map((l) => l.id)),
           ).catch(() => null),
-          rivals: traceCard('rivals', () => getRivalRecords(userId, playedLeagues.map((l) => l.id))).catch(() => null),
+          rivals: traceCard('rivals', () => getRivalRecords(userId, homePlayed.map((l) => l.id))).catch(() => null),
           /*
            * Players followed across every league (2026-09-14). One read of the follow list
            * plus the injury port and one fixture window for the shown rows. Null when follows
@@ -2530,7 +2762,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
             getFollowingCard(
               userId,
               now,
-              playedLeagues.map((l) => ({
+              homePlayed.map((l) => ({
                 id: l.id,
                 name: l.name,
                 platform: String(l.platform ?? ''),
@@ -2553,7 +2785,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
           strip: traceCard('today-strip', () =>
             getTodayStrip(
               userId,
-              playedLeagues.map((l) => ({
+              homePlayed.map((l) => ({
                 id: l.id,
                 name: l.name,
                 sport: (l as { sport?: string | null }).sport ?? null,
@@ -2766,7 +2998,8 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
         })),
         liveDraftLeagueIds: coreActivity.liveDraftLeagueIds,
         now,
-        lineupLeagues: summary?.allLeagues ?? null,
+        // A scoped home's summary covers part of the portfolio; the badge cache is the whole of it.
+        lineupLeagues: homeScoped ? null : (summary?.allLeagues ?? null),
         loadLineupLeagues: () =>
           getDash34Data(userId, leagues as unknown as Dash34LeagueRow[], now).then((d) => d?.allLeagues ?? null),
       }),
@@ -2865,6 +3098,27 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
       ) : leagueHome ? (
         <LeagueHome
           data={leagueHome}
+          identityInShell={leagueHeaderShown}
+          /*
+           * "What's on file", streamed. Its nine counts wait behind their own boundary so the rest
+           * of the Overview never waits on them; the skeleton holds the panel's height.
+           *
+           * ⚠ ONLY WITH THE SHELL'S ROW FOR THIS SAME LEAGUE. The record is read by id, but a
+           * mismatch here would print one league's history under another's name, so it is checked
+           * rather than assumed. Without it the screen keeps its one-sentence banner.
+           *
+           * ⚠ AND ONLY FOR AN IMPORTED LEAGUE. A native one has no panel to show, so a slot would
+           * paint the skeleton and then collapse it to nothing — a layout jump for no content.
+           */
+          coverageSlot={
+            selectedLeagueRecord &&
+            selectedLeagueRecord.id === leagueHome.league.id &&
+            isImportedPlatform(selectedLeagueRecord.platform) ? (
+              <Suspense key={selectedLeagueRecord.id} fallback={<LeagueDataCoverageSkeleton />}>
+                <LeagueDataCoverageSection record={selectedLeagueRecord} />
+              </Suspense>
+            ) : undefined
+          }
           otherLeagueIssueCount={issues.filter((i) => i.leagueId !== leagueHome.league.id).length}
           // 3b renders one urgent action. Already sorted by severity then
           // deadline inside deriveOutstandingIssues, so the head of this list is
@@ -3570,6 +3824,24 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
             planName={plan?.name ?? null}
             commissionerCount={commissionerCount}
             syncLabel={syncAge.stale ? null : syncAge.label}
+            scope={{
+              label: scopeLabel(homeScope, null),
+              key: serializeHomeScope(homeScope) ?? 'all',
+              scoped: homeScoped,
+              count: homePlayed.length,
+              total: playedLeagues.length,
+            }}
+            leagueData={leagueDataFreshness(
+              homePlayed as unknown as Array<{ platform?: string | null; lastSyncedAt?: Date | string | null }>,
+            )}
+            order={orderHomeCards({
+              usage: parseCardUsage(cookies().get(CARD_USE_COOKIE)?.value),
+              timeSensitive: timeSensitiveCards({
+                gameDayActive: coreActivity.gameDayActive,
+                draftLive: coreActivity.liveDraftLeagueIds.length > 0,
+              }),
+            })}
+            prefetch={{ unreadNotifications, gameDayActive: coreActivity.gameDayActive }}
           />
         ) : (
           <div className="af-frame" style={{ padding: 24, maxWidth: 720 }}>

@@ -186,6 +186,64 @@ describe('/core renders the shell first', () => {
     await pending
   })
 
+  /*
+   * 🛑 THE SELECTED LEAGUE'S ROW IS READ ONCE PER RENDER, AND NOTHING ELSE ENFORCES IT.
+   * Two shell reads each used to fetch it — `resolveLeagueValueSurfaces` wanted
+   * `{id, settings}` and the import-coverage summary wanted `{settings, platform}` — so one
+   * render issued the same query twice. Both sit in the same `Promise.all`, so they were
+   * concurrent and no reordering could collapse them; the row is now resolved once and
+   * handed to both.
+   *
+   * ⚠ THE COST OF GETTING THIS WRONG IS NOT THE QUERY, IT IS DISAGREEMENT. Two reads of one
+   * row inside one render can straddle a settings write, and the nav gate would then be
+   * deciding which tabs to show from different bytes than the banner explaining why they
+   * are missing.
+   *
+   * ⚠ AND THE OBVIOUS FIX RE-SERIALISES THE SHELL. Passing the ROW (`sharedRead.then(row =>
+   * resolve(…, row))`) delays the CALL until the read lands, which the test above catches —
+   * it did, on the first attempt. The resolver takes the PROMISE and awaits it itself.
+   */
+  it('reads the selected league row once, however many shell reads want it', { timeout: 180_000 }, async () => {
+    const AfCorePage = await loadPage()
+    const pending = AfCorePage(pageArgs(['trades'], { league: 'L1' }))
+    h.gate.resolve()
+    await pending
+
+    expect(
+      shell.leagueCoverage.mock.calls.length,
+      'prisma.league.findUnique calls for the selected league in one render',
+    ).toBe(1)
+
+    /* Positive control: the one call is the shared read, asking for every field its
+       consumers need — not a narrower read that happens to be alone. The last three are the
+       Overview's "what's on file" panel, which takes this row rather than reading it again. */
+    expect(shell.leagueCoverage).toHaveBeenCalledWith({
+      where: { id: 'L1' },
+      select: {
+        id: true,
+        settings: true,
+        platform: true,
+        platformLeagueId: true,
+        syncStatus: true,
+        lastSyncedAt: true,
+      },
+    })
+  })
+
+  /*
+   * ⚠ AND NO READ AT ALL WHEN THERE IS NO LEAGUE. The row is resolved beside the shell reads
+   * rather than inside a screen, so an unscoped /core must not pay for it — the cross-league
+   * home is the most-visited screen in the product.
+   */
+  it('reads no league row when no league is selected', { timeout: 180_000 }, async () => {
+    const AfCorePage = await loadPage()
+    const pending = AfCorePage(pageArgs([], {}))
+    h.gate.resolve()
+    await pending
+
+    expect(shell.leagueCoverage).not.toHaveBeenCalled()
+  })
+
   it('resolves without running a screen loader, and puts the screen in a keyed Suspense', { timeout: 180_000 }, async () => {
     h.gated = false
     const AfCorePage = await loadPage()

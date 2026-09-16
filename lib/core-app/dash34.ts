@@ -3,6 +3,7 @@ import 'server-only'
 import { unstable_cache } from 'next/cache'
 
 import { prisma } from '@/lib/prisma'
+import { loadLatestPlayerValueSnapshots } from '@/lib/player-values/latestPlayerValueSnapshots'
 import { buildNameIndex, resolveVerifiedMatch } from '@/lib/player-match/verifiedNameMatch'
 import { composePlayerIdentities } from './playerIdentityCompose'
 import { getTeamInfo, normalizeTeamAbbrev } from '@/lib/team-abbrev'
@@ -433,19 +434,16 @@ async function readNextGames(sports: string[], now: Date) {
 const readPlayerValuesCached = unstable_cache(
   async (sleeperIds: string[], format: string, qbFormat: string) => {
     if (sleeperIds.length === 0) return []
-    const rows = await prisma.playerValueSnapshot
-      .findMany({
-        where: { sleeperId: { in: sleeperIds }, source: 'FANTASYCALC', format, qbFormat },
-        orderBy: { capturedAt: 'desc' },
-        select: {
-          sleeperId: true,
-          value: true,
-          overallRank: true,
-          positionRank: true,
-          capturedAt: true,
-        },
-      })
-      .catch(() => [])
+    /*
+     * Newest row per id only. The old read returned every dated snapshot, and this function's
+     * result is what `unstable_cache` STORES — so the cache entry grew by a day's rows daily too.
+     */
+    const rows = await loadLatestPlayerValueSnapshots({
+      sleeperIds,
+      source: 'FANTASYCALC',
+      format,
+      qbFormat,
+    }).catch(() => [])
     return rows.map((r) => ({
       sleeperId: r.sleeperId,
       value: r.value,

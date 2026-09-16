@@ -34,6 +34,10 @@
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
+import {
+  loadLatestPlayerValueSnapshots,
+  type LatestPlayerValueSnapshot,
+} from '@/lib/player-values/latestPlayerValueSnapshots'
 import { lookupProjections } from '@/lib/core-app/playerProjections'
 import { computeLeagueProjectedPoints } from '@/lib/projections/leagueScoring'
 import { valueAtRankFrom } from './afValue'
@@ -323,29 +327,46 @@ export async function buildValueLedger(args: {
    * Newest capture per player: the table keeps history, so an unfiltered read
    * would rank yesterday's price against today's.
    */
-  const rows = await prisma.playerValueSnapshot
-    .findMany({
-      where: {
+  type PopulationRow = Pick<
+    LatestPlayerValueSnapshot,
+    | 'sleeperId' | 'name' | 'position' | 'value' | 'overallRank' | 'trend30d'
+    | 'tradeFrequency' | 'marketStdDev' | 'capturedAt' | 'source'
+  >
+  /*
+   * 🛑 WITH A POPULATION — the only way anything calls this today (`rosterGrade`) — this read used
+   * to fetch EVERY dated snapshot for every rostered player in the league, the same history its
+   * caller had just fetched for the same ids. One row per id now.
+   *
+   * ⚠ WITHOUT ONE, it still reads the whole book's history and dedups here. Nothing in the tree
+   * takes that branch (census 2026-09-16: `rosterGrade` is the sole caller and always passes
+   * `populationIds`); if something starts to, give it a server-side "newest per player" read
+   * rather than shipping every day of every player to this process.
+   */
+  const rows: PopulationRow[] = args.populationIds
+    ? await loadLatestPlayerValueSnapshots({
+        sleeperIds: args.populationIds,
         source: 'FANTASYCALC',
         format,
         qbFormat,
-        ...(args.populationIds ? { sleeperId: { in: args.populationIds } } : {}),
-      },
-      orderBy: { capturedAt: 'desc' },
-      select: {
-        sleeperId: true,
-        name: true,
-        position: true,
-        value: true,
-        overallRank: true,
-        trend30d: true,
-        tradeFrequency: true,
-        marketStdDev: true,
-        capturedAt: true,
-        source: true,
-      },
-    })
-    .catch(() => [])
+      }).catch(() => [])
+    : await prisma.playerValueSnapshot
+        .findMany({
+          where: { source: 'FANTASYCALC', format, qbFormat },
+          orderBy: { capturedAt: 'desc' },
+          select: {
+            sleeperId: true,
+            name: true,
+            position: true,
+            value: true,
+            overallRank: true,
+            trend30d: true,
+            tradeFrequency: true,
+            marketStdDev: true,
+            capturedAt: true,
+            source: true,
+          },
+        })
+        .catch(() => [])
 
   const newest = new Map<string, (typeof rows)[number]>()
   for (const r of rows) if (!newest.has(r.sleeperId)) newest.set(r.sleeperId, r)

@@ -163,7 +163,15 @@ export async function runMatchupOddsSweep(deps: MatchupOddsSweepDeps): Promise<M
   let attempted = 0
   for (const unit of rotateForFairness(dueUnits, ROTATION_PERIOD_MS, now)) {
     if (attempted >= leagueCap) break
-    if (deps.budget.exhausted() || remainingFor(now() + deps.budget.remainingMs(), PER_UNIT_CAP_MS) === null) {
+    /*
+     * 🛑 `Date.now()`, NOT `now()`. `remainingFor` measures the deadline against the REAL clock, and
+     * `remainingMs()` is relative to the real clock too, so the deadline must be built on it. Built
+     * on the injectable `now()` it mixed two clocks: harmless in production (they are the same
+     * clock), and a time bomb in the tests, which pin `now` to 2026-09-16T15:00Z — every league was
+     * skipped for time once the wall clock passed 15:03:20Z that day, and the suite went red on
+     * every PR. `now()` still drives the window and the rotation, which is what it is for.
+     */
+    if (deps.budget.exhausted() || remainingFor(Date.now() + deps.budget.remainingMs(), PER_UNIT_CAP_MS) === null) {
       counts.skippedForTime = dueUnits.length - attempted
       break
     }

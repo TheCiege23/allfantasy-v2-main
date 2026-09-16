@@ -3,6 +3,9 @@ import path from 'node:path'
 
 import { describe, expect, it } from 'vitest'
 
+import type { InsightType } from '@/lib/ai-simulation-integration/types'
+import { requiresLeagueGrounding } from '@/lib/chimmy-chat/question-routing'
+
 /**
  * The `getInsightBundle` authorization hole, and the guard that closes it.
  *
@@ -71,20 +74,23 @@ describe('getInsightBundle reads the authorized snapshot, not the request field'
 })
 
 describe('the three insight types that fell through the earlier guard', () => {
-  const src = readFileSync(ROUTE, 'utf8')
-
   it('requiresLeagueGrounding still covers only trade, waiver and dynasty', () => {
     /*
      * Pinned so that if someone widens it, this test goes red and the comment
      * above stops being true — at which point both should be updated together.
+     *
+     * Driven through the real function since it moved out of the route
+     * (2026-09-16); it used to be a substring check on the route's source. The
+     * message carries no vocabulary of its own, so only `insightType` decides.
      */
-    const at = src.indexOf('function requiresLeagueGrounding')
-    const body = src.slice(at, at + 2000)
-    expect(body).toContain("args.insightType === 'trade'")
-    expect(body).toContain("args.insightType === 'waiver'")
-    expect(body).toContain("args.insightType === 'dynasty'")
-    expect(body).not.toContain("args.insightType === 'playoff'")
-    expect(body).not.toContain("args.insightType === 'matchup'")
+    const gate = (insightType: InsightType) =>
+      requiresLeagueGrounding({ message: 'how are things looking', intent: 'general', insightType })
+    expect(gate('trade')).toBe(true)
+    expect(gate('waiver')).toBe(true)
+    expect(gate('dynasty')).toBe(true)
+    expect(gate('playoff')).toBe(false)
+    expect(gate('matchup')).toBe(false)
+    expect(gate('draft')).toBe(false)
   })
 
   it('InsightType really does have six values, three of them uncovered', () => {

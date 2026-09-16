@@ -19,11 +19,12 @@
  *
  * Baseline lives at scripts/ts-error-baseline.json (committed).
  *
- * Usage:
- *   node scripts/ts-error-ratchet.mjs                # check against baseline
- *   node scripts/ts-error-ratchet.mjs --update       # re-snapshot the baseline
- *   node scripts/ts-error-ratchet.mjs --scope=redraft # zero-tolerance redraft gate
- *   node scripts/ts-error-ratchet.mjs --from <log>    # parse an existing tsc log
+ * Usage (value flags take `--flag value` or `--flag=value`):
+ *   node scripts/ts-error-ratchet.mjs                  # check against baseline
+ *   node scripts/ts-error-ratchet.mjs --update         # re-snapshot the baseline
+ *   node scripts/ts-error-ratchet.mjs --scope redraft  # zero-tolerance redraft gate
+ *   node scripts/ts-error-ratchet.mjs --from <log>     # parse an existing tsc log
+ *   node scripts/ts-error-ratchet.mjs --allow-zero     # accept a genuine zero-error run
  */
 import { spawnSync } from 'node:child_process'
 import { readFileSync, writeFileSync, existsSync } from 'node:fs'
@@ -34,12 +35,80 @@ const __dirname = dirname(fileURLToPath(import.meta.url))
 const root = resolve(__dirname, '..')
 const BASELINE_PATH = join(root, 'scripts', 'ts-error-baseline.json')
 
-const args = process.argv.slice(2)
-const has = (f) => args.includes(f)
-const valOf = (name) => {
-  const hit = args.find((a) => a.startsWith(`${name}=`))
-  return hit ? hit.slice(name.length + 1) : undefined
+/*
+ * ── ARGUMENTS ─────────────────────────────────────────────────────────────────
+ *
+ * 🛑 AN ARGUMENT THIS SCRIPT DOES NOT UNDERSTAND MUST STOP IT, NOT BE SKIPPED.
+ *
+ * The header documented `--from <log>`, and the parser only matched `--from=<log>`. So the
+ * documented spelling was dropped on the floor: no log was read, the script fell through to a
+ * fresh full `tsc` of the current tree, and printed an honest-looking verdict about something
+ * the caller never asked about. Measured 2026-09-16: a log with one planted error passed as
+ * "143 (baseline 143) ✓ no regressions" via `--from <log>`, and failed correctly via
+ * `--from=<log>`. A positive control built on that log read green for the wrong reason — the
+ * check-that-cannot-fail shape CLAUDE.md spends pages on, reached through argv. `--scope redraft`
+ * was dropped the same way, and quietly ran the full ratchet instead of the strict gate.
+ *
+ * So: both spellings for value flags, and anything else — an unknown flag, a typo, a value flag
+ * with no value, a stray positional — is a usage error. Exit 2, the same code the script already
+ * uses for "this run is not a verdict", and never a message containing the regression phrase
+ * `pre-push-smoke.mjs` matches on, so a usage error can only ever read as inconclusive there.
+ */
+const VALUE_FLAGS = new Set(['--from', '--scope'])
+const BOOLEAN_FLAGS = new Set(['--update', '--allow-zero'])
+const SCOPES = new Set(['redraft'])
+
+function usageError(message) {
+  console.error(
+    `✗ ts-error-ratchet: ${message}\n` +
+      '  Usage: node scripts/ts-error-ratchet.mjs [--update] [--allow-zero] [--scope redraft] [--from <tsc log>]\n' +
+      '  Value flags accept `--flag value` or `--flag=value`. No verdict was produced.',
+  )
+  process.exit(2)
 }
+
+function parseArgs(argv) {
+  const flags = new Set()
+  const values = new Map()
+  for (let i = 0; i < argv.length; i += 1) {
+    const arg = argv[i]
+    const eq = arg.indexOf('=')
+    const name = eq === -1 ? arg : arg.slice(0, eq)
+
+    if (VALUE_FLAGS.has(name)) {
+      let value
+      if (eq !== -1) {
+        value = arg.slice(eq + 1)
+      } else {
+        value = argv[i + 1]
+        /* A following flag is not a value: `--from --update` means the log path was forgotten. */
+        if (value !== undefined && value.startsWith('--')) value = undefined
+        else i += 1
+      }
+      if (!value) usageError(`${name} needs a value`)
+      if (values.has(name)) usageError(`${name} was given more than once`)
+      values.set(name, value)
+      continue
+    }
+
+    if (BOOLEAN_FLAGS.has(name) && eq === -1) {
+      flags.add(name)
+      continue
+    }
+
+    usageError(`unrecognised argument: ${arg}`)
+  }
+
+  const scope = values.get('--scope')
+  if (scope !== undefined && !SCOPES.has(scope)) {
+    usageError(`unknown --scope "${scope}" (known: ${[...SCOPES].join(', ')})`)
+  }
+  return { flags, values }
+}
+
+const parsedArgs = parseArgs(process.argv.slice(2))
+const has = (f) => parsedArgs.flags.has(f)
+const valOf = (name) => parsedArgs.values.get(name)
 
 const ERROR_LINE = /^(.+?)\((\d+),(\d+)\): error (TS\d+): (.*)$/
 
@@ -56,7 +125,12 @@ function isRedraftScoped(file) {
 
 function getTscOutput() {
   const from = valOf('--from')
-  if (from) return readFileSync(resolve(root, from), 'utf8')
+  if (from) {
+    const path = resolve(root, from)
+    /* A missing log is a usage error, not a crash whose ENOENT stack reads like an infra fault. */
+    if (!existsSync(path)) usageError(`--from log not found: ${path}`)
+    return readFileSync(path, 'utf8')
+  }
   const r = spawnSync(
     process.execPath,
     ['--max-old-space-size=8192', './node_modules/typescript/lib/tsc.js', '--noEmit'],

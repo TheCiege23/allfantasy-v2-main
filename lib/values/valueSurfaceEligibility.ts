@@ -49,9 +49,38 @@ const finish = (hasIdp: boolean, hasKicker: boolean): ValueSurfaceEligibility =>
 export async function resolveLeagueValueSurfaces(
   prisma: PrismaClient,
   leagueId: string,
+  /**
+   * The league row, when the caller has already read it.
+   *
+   * ⚠ AN OPTIMISATION ONLY — IT MUST NOT CHANGE THE ANSWER. `/core` reads this
+   * league's `settings` twice per render (here, and for the import-coverage
+   * summary) and both reads are entries in the SAME `Promise.all`, so they are
+   * already concurrent and reordering cannot collapse them. Handing the row in
+   * is the only way to make it one query — and it also makes the two
+   * derivations read the same bytes, where before a concurrent settings write
+   * could have had them disagree about one league inside one render.
+   *
+   * ⚠ ONLY PASS A ROW LOOKED UP BY `League.id`. The second branch below resolves
+   * a PLATFORM league id, and a caller passing a row it found some other way
+   * would silently skip that path.
+   *
+   * 🛑 A PROMISE IS ACCEPTED, AND THAT IS THE POINT — awaiting it is the CALLEE's
+   * job, not the caller's. `/core`'s shell reads all run in one `Promise.all` and
+   * a test asserts every one of them has STARTED before any has resolved, so a
+   * caller that wrote `sharedRead.then((row) => resolveLeagueValueSurfaces(…))`
+   * would not call this until the shared read landed — serialising a read the
+   * shell deliberately parallelises. That is exactly what happened, and
+   * `core-page-shell-first` caught it. Taking the promise lets the call start
+   * immediately and the await happen here, inside the work.
+   */
+  preloaded?:
+    | { id: string; settings: unknown }
+    | PromiseLike<{ id: string; settings: unknown } | null>
+    | null,
 ): Promise<ValueSurfaceEligibility> {
   try {
     const league =
+      (await preloaded) ??
       (await prisma.league
         .findUnique({ where: { id: leagueId }, select: { id: true, settings: true } })
         .catch(() => null)) ??

@@ -1,0 +1,135 @@
+/*
+ * "What's on file" — the import coverage panel on the league Overview.
+ *
+ * Its own file rather than an insert into af-league-home.css: that file ends in
+ * top-level @media blocks, and an insert in the wrong place silently moves every
+ * rule below it into a narrower query (see CLAUDE.md, the af-matchup.css note).
+ * Tokens come from af-core.css, which LeagueHome imports first.
+ */
+
+.af-ldc {
+  padding: 14px 16px;
+  /* The header chip links here; keep the heading clear of a sticky top bar. */
+  scroll-margin-top: 88px;
+}
+
+.af-ldc-head {
+  display: grid;
+  gap: 2px;
+  margin-bottom: 10px;
+}
+
+.af-ldc-title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  color: var(--text);
+}
+
+.af-ldc-sub {
+  margin: 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.af-ldc-rows {
+  display: grid;
+  /* 280px, not smaller: six rows at 240px split 4 + 2 on a desktop column and
+     the longer "not imported yet" reasons wrapped to four lines. 280px gives
+     3 + 3 there, 2 + 2 + 2 mid-width, and one column on a phone. */
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 6px 18px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.af-ldc-row {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 8px;
+  padding: 8px 0;
+  border-top: 1px solid var(--line);
+}
+
+.af-ldc-glyph {
+  display: inline-flex;
+  justify-content: center;
+  padding-top: 1px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--faint);
+}
+
+.af-ldc-row[data-status='available'] .af-ldc-glyph {
+  color: var(--good);
+}
+
+.af-ldc-row[data-status='importing'] .af-ldc-glyph,
+.af-ldc-row[data-status='unknown'] .af-ldc-glyph {
+  color: var(--warn);
+}
+
+.af-ldc-copy {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+}
+
+.af-ldc-label {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.af-ldc-detail {
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.af-ldc-status {
+  padding: 2px 7px;
+  border: 1px solid var(--chip-line);
+  border-radius: 999px;
+  background: var(--chip);
+  color: var(--text2);
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.af-ldc-row[data-status='available'] .af-ldc-status {
+  border-color: transparent;
+  background: var(--good-soft);
+  color: var(--good);
+}
+
+.af-ldc-row[data-status='importing'] .af-ldc-status,
+.af-ldc-row[data-status='unknown'] .af-ldc-status {
+  border-color: transparent;
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+
+.af-ldc-shimmer {
+  display: block;
+  height: 10px;
+  border-radius: 5px;
+  background: var(--chip);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .af-ldc-shimmer {
+    animation: af-ldc-pulse 1.4s ease-in-out infinite;
+  }
+}
+
+@keyframes af-ldc-pulse {
+  50% {
+    opacity: 0.55;
+  }
+}

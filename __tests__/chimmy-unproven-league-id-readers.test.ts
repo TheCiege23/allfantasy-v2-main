@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { createMockNextRequest } from '@/__tests__/helpers/createMockNextRequest'
 
@@ -70,9 +70,18 @@ const previewSpendMock = vi.fn()
 const spendTokensForRuleMock = vi.fn()
 const refundSpendByLedgerMock = vi.fn()
 
-/** The two observation points for this file. */
+/** The observation points for this file. */
 const tryDeterministicAnswerDetailedMock = vi.fn()
 const buildDescribedTradeContextMock = vi.fn()
+/*
+ * 🛑 THE THIRD READER, ADDED 2026-09-16. The tool loop is ON by default and was never mocked
+ * here, so every request below ran the REAL loop — handed `context.leagueId` straight from the
+ * form field. Two of its tools (`get_league_standings`, `get_head_to_head`) read a league with
+ * no membership check of their own. Mocked to resolve `null` so the request carries on past it,
+ * exactly as it does when the loop has nothing to say.
+ */
+const runChimmyToolLoopMock = vi.fn()
+vi.mock('@/lib/chimmy/tools/chimmyToolLoop', () => ({ runChimmyToolLoop: runChimmyToolLoopMock }))
 
 vi.mock('next-auth', () => ({ getServerSession: getServerSessionMock }))
 vi.mock('@/lib/auth', () => ({ authOptions: {} }))
@@ -229,6 +238,12 @@ function request(fields: Record<string, string>) {
  */
 vi.setConfig({ testTimeout: 120000 })
 
+const toolLoopEnvBefore = process.env.CHIMMY_TOOL_LOOP_ENABLED
+afterEach(() => {
+  if (toolLoopEnvBefore === undefined) delete process.env.CHIMMY_TOOL_LOOP_ENABLED
+  else process.env.CHIMMY_TOOL_LOOP_ENABLED = toolLoopEnvBefore
+})
+
 beforeEach(() => {
   vi.clearAllMocks()
   getServerSessionMock.mockResolvedValue({ user: { id: 'stranger-1' } })
@@ -280,6 +295,9 @@ beforeEach(() => {
    */
   tryDeterministicAnswerDetailedMock.mockResolvedValue(null)
   buildDescribedTradeContextMock.mockResolvedValue(null)
+  runChimmyToolLoopMock.mockResolvedValue(null)
+  /* Pinned rather than inherited: these tests are about the loop, so the loop must run. */
+  process.env.CHIMMY_TOOL_LOOP_ENABLED = 'true'
 
   previewSpendMock.mockResolvedValue({
     ruleCode: 'ai_chimmy_chat_message',
@@ -341,6 +359,11 @@ function describedTradeLeagueArg() {
   return buildDescribedTradeContextMock.mock.calls[0]?.[0]?.leagueId
 }
 
+/** `context.leagueId` as the tool loop received it — what every tool executor reads. */
+function toolLoopLeagueArg() {
+  return runChimmyToolLoopMock.mock.calls[0]?.[0]?.context?.leagueId
+}
+
 describe('🛑 the readers are actually reached — without this every assertion below is vacuous', () => {
   beforeEach(() => {
     // `stranger-1` owns it, so membership resolves and an id is available to pass.
@@ -353,34 +376,31 @@ describe('🛑 the readers are actually reached — without this every assertion
     expect(deterministicLeagueArg()).toBe(PRIVATE_LEAGUE.id)
   })
 
+  it('the tool loop runs, and receives the AUTHORIZED id', async () => {
+    await post({ message: VALUE_MESSAGE, leagueId: 'league-private', confirmTokenSpend: 'true' })
+    expect(runChimmyToolLoopMock).toHaveBeenCalledTimes(1)
+    expect(toolLoopLeagueArg()).toBe(PRIVATE_LEAGUE.id)
+  })
+
   /*
-   * 🛑 THE DESCRIBED-TRADE READER IS NOT COVERED HERE, AND THIS IS NOT AN
-   * OVERSIGHT — IT IS A MEASURED LIMIT, RECORDED SO THE NEXT ATTEMPT STARTS
-   * FURTHER ALONG.
+   * 🛑 THE DESCRIBED-TRADE READER WAS UNREACHED UNTIL 2026-09-16, AND THIS CONTROL IS WHY THE
+   * ASSERTIONS BELOW NOW MEAN SOMETHING.
    *
-   * `buildDescribedTradeContext` is called at route.ts:~2830, which sits inside
-   * the `plan` callback of `runPECR` (the callback spans 2389-2938). This
-   * fixture never enters it. Measured, not guessed: asserting on
-   * `enrichChatWithDataMock`, which is called at line 2415 near the TOP of the
-   * same callback, returns **0 calls** — so the request returns somewhere
-   * between the deterministic reader at 1440 and the `runPECR` invocation at
-   * 2378, and `plan` never runs at all.
+   * `buildDescribedTradeContext` sits inside `runPECR`'s `plan` callback. Before, every request
+   * here returned earlier, so four `it.todo`s stood in for the reader rather than assertions that
+   * would have passed for the wrong reason. The previous note named two candidates for the early
+   * return: the token spend and the tool loop. Measured (`AF_DEBUG_POST=1`): it was the SPEND —
+   * `409 token_confirmation_required`, because no request sent `confirmTokenSpend`. The tool
+   * loop was a real reader of its own, not the blocker, and is covered above.
    *
-   * ⚠ SO A "never handed the unproven id" ASSERTION ON THAT READER WOULD HAVE
-   * PASSED FOR THE WRONG REASON — the mock is not called under ANY fixture
-   * here, authorized or not, which is exactly the vacuous guard this file was
-   * written to avoid. Four such tests were written, went red on the positive
-   * control, and were removed rather than quietly deleted from the negative
-   * side to make the suite green.
-   *
-   * To finish it, find what returns before 2378 under this mock set — the token
-   * spend path at 2280-2313 and the `chimmyToolLoop` at 2331 are the candidates
-   * — and drive the request past it. The positive control below is the thing to
-   * write first; until `buildDescribedTradeContext` is observed being called
-   * with an AUTHORIZED id, no assertion about the unauthorized case means
-   * anything.
+   * So every request that must reach `plan` sends `confirmTokenSpend: 'true'` — which is also
+   * what a real client does. This control is the proof the reader is reached at all.
    */
-  it.todo('the described-trade reader runs, and receives the AUTHORIZED id')
+  it('the described-trade reader runs, and receives the AUTHORIZED id', async () => {
+    await post({ message: VALUE_MESSAGE, leagueId: 'league-private', confirmTokenSpend: 'true' })
+    expect(buildDescribedTradeContextMock).toHaveBeenCalled()
+    expect(describedTradeLeagueArg()).toBe(PRIVATE_LEAGUE.id)
+  })
 })
 
 describe('a league the caller is NOT a member of', () => {
@@ -396,8 +416,21 @@ describe('a league the caller is NOT a member of', () => {
     expect(deterministicRequestedArg()).toBe(true)
   })
 
-  /** Blocked on the same unreached callback — see the note on the control above. */
-  it.todo('the described-trade reader is never handed the unproven id')
+  /*
+   * 🛑 THE STANDINGS AND HEAD-TO-HEAD LEAK. Before the fix this received 'league-private', and
+   * the tools behind it would have answered "who leads The Secret Cartel?" for a stranger.
+   */
+  it('the tool loop is never handed the unproven id', async () => {
+    await post({ message: VALUE_MESSAGE, leagueId: 'league-private', confirmTokenSpend: 'true' })
+    expect(runChimmyToolLoopMock).toHaveBeenCalledTimes(1)
+    expect(toolLoopLeagueArg()).toBeNull()
+  })
+
+  it('the described-trade reader is never handed the unproven id', async () => {
+    await post({ message: VALUE_MESSAGE, leagueId: 'league-private', confirmTokenSpend: 'true' })
+    expect(buildDescribedTradeContextMock).toHaveBeenCalled()
+    expect(describedTradeLeagueArg()).toBeNull()
+  })
 })
 
 describe('a league that does not exist reads identically to one that is not yours', () => {
@@ -411,7 +444,17 @@ describe('a league that does not exist reads identically to one that is not your
     expect(deterministicRequestedArg()).toBe(true)
   })
 
-  it.todo('described-trade reader: same null id')
+  it('tool loop: same null id', async () => {
+    await post({ message: VALUE_MESSAGE, leagueId: 'league-does-not-exist', confirmTokenSpend: 'true' })
+    expect(runChimmyToolLoopMock).toHaveBeenCalledTimes(1)
+    expect(toolLoopLeagueArg()).toBeNull()
+  })
+
+  it('described-trade reader: same null id', async () => {
+    await post({ message: VALUE_MESSAGE, leagueId: 'league-does-not-exist', confirmTokenSpend: 'true' })
+    expect(buildDescribedTradeContextMock).toHaveBeenCalled()
+    expect(describedTradeLeagueArg()).toBeNull()
+  })
 })
 
 describe('a caller who named no league at all', () => {
@@ -428,5 +471,9 @@ describe('a caller who named no league at all', () => {
     expect(deterministicRequestedArg()).toBe(false)
   })
 
-  it.todo('and the described-trade reader still runs — it never required a league')
+  it('and the described-trade reader still runs — it never required a league', async () => {
+    await post({ message: VALUE_MESSAGE, confirmTokenSpend: 'true' })
+    expect(buildDescribedTradeContextMock).toHaveBeenCalled()
+    expect(describedTradeLeagueArg()).toBeNull()
+  })
 })

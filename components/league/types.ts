@@ -1,3 +1,5 @@
+import type { LineupImpactSummary } from '@/lib/decision-os/trade/rosterImpactSummary'
+
 export type LeagueTopTab = 'DRAFT' | 'TEAM' | 'PLAYERS' | 'LEAGUE'
 
 export type LeaguePlayersSubtab = 'search' | 'trend' | 'available' | 'leaders' | 'trade'
@@ -201,6 +203,11 @@ export type LeagueTradeHistoryItem = {
     currentPricedAt?: string | null
     currentPricingComplete?: boolean
     currentUnresolvedAssets?: string[]
+    /**
+     * The viewer's lineup effect, on OPEN offers they are a party to. Absent: not computed for this
+     * row. `null`: asked for and could not be produced. Render with `lineupImpactLine`.
+     */
+    rosterImpact?: LineupImpactSummary | null
   }
 
 export type LeagueTradeBlockItem = {

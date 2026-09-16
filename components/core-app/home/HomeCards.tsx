@@ -1,11 +1,19 @@
+import Link from 'next/link'
 import { Suspense, type ComponentProps, type ReactNode } from 'react'
 import CoreCardBoundary from '@/components/core-app/CoreCardBoundary'
+import { CardFreshness } from '@/components/core-app/home/CardFreshness'
+import { DecisionQueue } from '@/components/core-app/home/DecisionQueue'
+import { HomeActivity, HomePrefetch } from '@/components/core-app/home/HomeClientEffects'
+import { freshnessStamp, latestInstant, type CardFreshnessStamp } from '@/lib/core-app/cardFreshness'
+import { rankDecisions } from '@/lib/core-app/decisionQueue'
+import type { HomeCardOrder } from '@/lib/core-app/homeCardOrder'
+import { homePrefetchTargets } from '@/lib/core-app/homePrefetchTargets'
+import { ScopeResetLink } from '@/components/core-app/ScopeSwitcher'
 import Dashboard3A, {
   Dash3ACareer,
   Dash3AChimmy,
   Dash3AExposure,
   Dash3AFollowing,
-  Dash3AIssues,
   Dash3ALeagues,
   Dash3AMatchups,
   Dash3APortfolioChart,
@@ -51,15 +59,23 @@ import { platformCountsOf } from '@/components/core-app/screens/dash3aPortfolio'
  * ⚠ THE "COULD NOT READ YOUR LEAGUES" RULE SURVIVES, CARD BY CARD. When `dash34` failed, the home
  * used to be replaced by one honest panel, because its cards would otherwise claim "no leagues" or
  * "nothing is waiting on you" about data we never read. Now every card that depends on `dash34`
- * renders NOTHING without it, and the issues card — the first of them — shows that same panel.
- * Cards with their own reads (career, rivals, exposure, the bands) still render: they were never
- * about `dash34`, and a failed summary is no reason to hide a correct career record.
+ * renders NOTHING without it, and the decision queue (card `issues`, the first on the page) shows
+ * that same panel. Cards with their own reads (career, rivals, exposure, the bands) still render:
+ * they were never about `dash34`, and a failed summary is no reason to hide a correct career record.
+ *
+ * 2026-09-16 — the general view's brief, in one place:
+ *   - the decision queue leads the page (`DecisionQueue`, `lib/core-app/decisionQueue.ts`);
+ *   - the page covers the leagues the scope switcher names (`HomeScopeInfo`, `lib/core-app/homeScope.ts`);
+ *   - every major card says how old its data is (`CardFreshness`, `lib/core-app/cardFreshness.ts`);
+ *   - the bands and columns follow the viewer's order (`lib/core-app/homeCardOrder.ts`);
+ *   - likely destinations are prewarmed (`HomeClientEffects`), and the queue's "show more" survives
+ *     Back (`homeViewState.ts`). The scroll position already does — see HomeClientEffects' header.
  */
 
 export type HomeLoads = {
   /** The loader's own result — it carries `weekLabel` and `valueBasis` beyond the screens' `Dash34Data`. */
   dash34: Promise<Dash34Result | null>
-  issues: Promise<ComponentProps<typeof Dash3AIssues>['issues']>
+  issues: Promise<ComponentProps<typeof DecisionQueue>['issues']>
   career: Promise<ComponentProps<typeof Dash3ACareer>['career']>
   week: Promise<ComponentProps<typeof Dash3AMatchups>['week']>
   winProb: Promise<Record<string, number>>
@@ -81,6 +97,35 @@ export type HomeLoads = {
   drafts: Promise<ComponentProps<typeof DashDraftsBand>['data']>
   /** Not a card: settles once the trade scan's pending-offers cache write has. The tab badges wait on it. */
   offersSettled: Promise<void>
+}
+
+/**
+ * Every read already settled, empty — for a home that has nothing to read (a scope matching no
+ * league). Each value is the one its own loader falls back to on failure, so every card handles it.
+ */
+export function emptyHomeLoads(): HomeLoads {
+  const none = <T,>(value: T) => Promise.resolve(value)
+  return {
+    dash34: none(null),
+    issues: none([]),
+    career: none(null),
+    week: none(null),
+    winProb: none({}),
+    exposure: none(null),
+    rivals: none(null),
+    following: none(null),
+    receipts: none(null),
+    routine: none(null),
+    userOs: none({ snapshot: null, league: null }),
+    schedule: none(null),
+    strip: none(null) as HomeLoads['strip'],
+    plays: none([]) as HomeLoads['plays'],
+    regularSeason: none(false),
+    trades: none([]) as HomeLoads['trades'],
+    brief: none(null),
+    drafts: none(null),
+    offersSettled: none(undefined),
+  }
 }
 
 /** The render-failure boundaries' names (the `af.card` tag on a reported card failure). */
@@ -111,7 +156,134 @@ function CardSkeleton({ height }: { height: number }) {
   return <div className="af-sk-block" aria-hidden="true" style={{ height, borderRadius: 14, marginBottom: 12 }} />
 }
 
+/**
+ * What the home knows before any card streams: which leagues it covers, and when their data was
+ * last read. Built once in `page.tsx`.
+ */
+export type HomeScopeInfo = {
+  /** "All leagues", "NFL leagues"… */
+  label: string
+  /** The scope's URL value, or 'all' — keys the remembered disclosures. */
+  key: string
+  scoped: boolean
+  /** Leagues in scope, and in the whole portfolio. */
+  count: number
+  total: number
+}
+
+/** The newest injury report behind the summary's book — the triage and decision stamps. */
+function injuriesAt(data: Dash34Result | null): string | null {
+  const latest = latestInstant((data?.book ?? []).map((row) => (row as { reportedAt?: string | null }).reportedAt ?? null))
+  return latest ? latest.toISOString() : null
+}
+
+/**
+ * The stamp on every card built from league syncs.
+ *
+ * ⚠ THE OLDEST SYNC, NOT THE NEWEST. These cards cover every league in view at once, so one league
+ * synced a minute ago said "updated 1m ago" over a portfolio whose other 59 leagues were days old —
+ * a fresh timestamp laundering stale ones. The oldest is the only instant every row is at least as
+ * new as. A league that has never synced makes the stamp stale whatever the others say; with none
+ * synced at all it reads "not read yet". AllFantasy-native leagues have nothing to sync and are not
+ * counted.
+ */
+function leagueDataStamp(
+  input: { oldestAt: string | null; neverSynced: number; syncable: number },
+  now: Date,
+): CardFreshnessStamp {
+  /*
+   * The warning has to say WHY. "⚠ Oldest league data updated 7 min ago" is a contradiction on its
+   * face when the reason is a league that has never been read — so that case names the count.
+   */
+  const unread = input.neverSynced > 0 && input.oldestAt
+    ? `${input.neverSynced} ${input.neverSynced === 1 ? 'league' : 'leagues'} never read · `
+    : ''
+  const source = `${unread}${input.syncable > 1 ? 'Oldest league data' : 'League data'}`
+  const stamp = freshnessStamp(source, input.oldestAt, now, {
+    staleRule: 'roster',
+    missing: input.syncable === 0 ? 'none-yet' : 'never-read',
+  })
+  return unread ? { ...stamp, stale: true } : stamp
+}
+
+function Stamps({ stamps }: { stamps: CardFreshnessStamp[] }) {
+  return <CardFreshness stamps={stamps} />
+}
+
 /* ── The cards. Each awaits only what it shows. ───────────────────────────────────────────── */
+
+/**
+ * The decision queue — the home's first card. Also decides what to prewarm, because the queue is
+ * what the reader is most likely to act on (lib/core-app/homePrefetchTargets.ts).
+ */
+async function DecisionsCard({
+  dash34,
+  issues,
+  trades,
+  now,
+  scope,
+  rostersStamp,
+  prefetch,
+}: Pick<HomeLoads, 'dash34' | 'issues' | 'trades'> & {
+  now: Date
+  scope: HomeScopeInfo
+  rostersStamp: CardFreshnessStamp
+  prefetch: { unreadNotifications: number; gameDayActive: boolean }
+}) {
+  const [data, list] = await Promise.all([dash34, issues])
+  if (!data) {
+    // The panel that used to replace the whole home when this read failed — see the header.
+    return (
+      <div className="af-frame" style={{ padding: 24, maxWidth: 720 }}>
+        <h1 className="af-display" style={{ margin: 0, fontSize: 22, letterSpacing: '-0.03em' }}>
+          Your leagues
+        </h1>
+        <p style={{ marginTop: 8, fontSize: 13, lineHeight: 1.5, color: 'var(--muted)' }}>
+          We could not read your leagues just now. This is a read failure on our side, not a sign
+          that you have none.
+        </p>
+      </div>
+    )
+  }
+  return (
+    <DecisionQueue
+      issues={list}
+      scopeLabel={scope.label}
+      scopeKey={scope.key}
+      nowIso={now.toISOString()}
+      freshness={
+        <Stamps stamps={[rostersStamp, freshnessStamp('Injury reports', injuriesAt(data), now, { missing: 'none-yet' })]} />
+      }
+    >
+      {/*
+        Streamed on its own: the trade scan is the slowest read on the home, and prewarming is idle
+        work that must never hold the queue back. Renders nothing visible.
+      */}
+      <Suspense fallback={null}>
+        <PrefetchTargets decisions={rankDecisions(list)} trades={trades} prefetch={prefetch} />
+      </Suspense>
+    </DecisionQueue>
+  )
+}
+
+async function PrefetchTargets({
+  decisions,
+  trades,
+  prefetch,
+}: {
+  decisions: ReturnType<typeof rankDecisions>
+  trades: HomeLoads['trades']
+  prefetch: { unreadNotifications: number; gameDayActive: boolean }
+}) {
+  const recent = await trades.catch(() => [])
+  const targets = homePrefetchTargets({
+    decisions,
+    unreadNotifications: prefetch.unreadNotifications,
+    gameDayActive: prefetch.gameDayActive,
+    hasRecentTrades: Array.isArray(recent) && recent.length > 0,
+  })
+  return <HomePrefetch targets={targets} />
+}
 
 async function SinceLastVisitCard({ brief, now }: { brief: HomeLoads['brief']; now: Date }) {
   return <DashSinceLastVisit brief={await brief} now={now} />
@@ -139,6 +311,7 @@ async function TriageCard({ dash34, now }: { dash34: HomeLoads['dash34']; now: D
       book={(data.book ?? null) as unknown as TriageBookRow[] | null}
       now={now}
       valueBasis={data.valueBasis ?? null}
+      freshness={<Stamps stamps={[freshnessStamp('Injury reports', injuriesAt(data), now, { missing: 'none-yet' })]} />}
     />
   )
 }
@@ -164,29 +337,23 @@ async function RoutineCard({ routine }: { routine: HomeLoads['routine'] }) {
   return <Dash3ARoutine routine={await routine} />
 }
 
-async function IssuesCard({ dash34, issues }: Pick<HomeLoads, 'dash34' | 'issues'>) {
-  const [data, list] = await Promise.all([dash34, issues])
-  if (!data) {
-    // The panel that used to replace the whole home when this read failed — see the header.
-    return (
-      <div className="af-frame" style={{ padding: 24, maxWidth: 720 }}>
-        <h1 className="af-display" style={{ margin: 0, fontSize: 22, letterSpacing: '-0.03em' }}>
-          Your leagues
-        </h1>
-        <p style={{ marginTop: 8, fontSize: 13, lineHeight: 1.5, color: 'var(--muted)' }}>
-          We could not read your leagues just now. This is a read failure on our side, not a sign
-          that you have none.
-        </p>
-      </div>
-    )
-  }
-  return <Dash3AIssues issues={list} />
-}
-
-async function MatchupsCard({ dash34, week, winProb }: Pick<HomeLoads, 'dash34' | 'week' | 'winProb'>) {
+async function MatchupsCard({
+  dash34,
+  week,
+  winProb,
+  now,
+}: Pick<HomeLoads, 'dash34' | 'week' | 'winProb'> & { now: Date }) {
   const [data, weekAll, probabilities] = await Promise.all([dash34, week, winProb])
   if (!data) return null
-  return <Dash3AMatchups leagues={data.leagues ?? []} week={weekAll} winProb={probabilities} weekLabel={data.weekLabel ?? null} />
+  return (
+    <Dash3AMatchups
+      leagues={data.leagues ?? []}
+      week={weekAll}
+      winProb={probabilities}
+      weekLabel={data.weekLabel ?? null}
+      freshness={<Stamps stamps={[freshnessStamp('Scores', weekAll?.scoresAt ?? null, now, { missing: 'none-yet' })]} />}
+    />
+  )
 }
 
 async function ChimmyCard({ dash34, issues }: Pick<HomeLoads, 'dash34' | 'issues'>) {
@@ -195,22 +362,39 @@ async function ChimmyCard({ dash34, issues }: Pick<HomeLoads, 'dash34' | 'issues
   return <Dash3AChimmy openCount={list.length} />
 }
 
-async function CareerCard({ career }: { career: HomeLoads['career'] }) {
-  return <Dash3ACareer career={await career} />
+/*
+ * The cards below are all built from what the league syncs wrote — rosters, weekly results, league
+ * history — so they carry the same "League data" stamp: the newest sync among the leagues in view.
+ */
+type LeagueStamp = { leagueStamp: CardFreshnessStamp }
+
+async function CareerCard({ career, leagueStamp }: { career: HomeLoads['career'] } & LeagueStamp) {
+  return <Dash3ACareer career={await career} freshness={<Stamps stamps={[leagueStamp]} />} />
 }
 
-async function RivalsCard({ rivals }: { rivals: HomeLoads['rivals'] }) {
-  return <Dash3ARivals rivals={await rivals} />
+async function RivalsCard({ rivals, leagueStamp }: { rivals: HomeLoads['rivals'] } & LeagueStamp) {
+  return <Dash3ARivals rivals={await rivals} freshness={<Stamps stamps={[leagueStamp]} />} />
 }
 
-async function PortfolioChartCard({ dash34 }: { dash34: HomeLoads['dash34'] }) {
+async function PortfolioChartCard({
+  dash34,
+  leagueStamp,
+  scope,
+}: { dash34: HomeLoads['dash34']; scope: HomeScopeInfo } & LeagueStamp) {
   const data = await dash34
   if (!data) return null
-  return <Dash3APortfolioChart platformCounts={platformCountsOf(data.allLeagues ?? data.leagues ?? [])} />
+  return (
+    <Dash3APortfolioChart
+      platformCounts={platformCountsOf(data.allLeagues ?? data.leagues ?? [])}
+      // The chart counts what the summary read — on a filtered home, only the leagues in view.
+      subtitle={scope.scoped ? `${scope.label} in Core` : undefined}
+      freshness={<Stamps stamps={[leagueStamp]} />}
+    />
+  )
 }
 
-async function ExposureCard({ exposure }: { exposure: HomeLoads['exposure'] }) {
-  return <Dash3AExposure exposure={await exposure} />
+async function ExposureCard({ exposure, leagueStamp }: { exposure: HomeLoads['exposure'] } & LeagueStamp) {
+  return <Dash3AExposure exposure={await exposure} freshness={<Stamps stamps={[leagueStamp]} />} />
 }
 
 async function FollowingCardSlot({ following }: { following: HomeLoads['following'] }) {
@@ -221,10 +405,16 @@ async function ReceiptsCardSlot({ receipts }: { receipts: HomeLoads['receipts'] 
   return <Dash3AReceipts receipts={await receipts} />
 }
 
-async function LeaguesCard({ dash34 }: { dash34: HomeLoads['dash34'] }) {
+async function LeaguesCard({ dash34, leagueStamp }: { dash34: HomeLoads['dash34'] } & LeagueStamp) {
   const data = await dash34
   if (!data) return null
-  return <Dash3ALeagues leagues={data.leagues ?? []} totalLeagues={data.totalLeagues ?? null} />
+  return (
+    <Dash3ALeagues
+      leagues={data.leagues ?? []}
+      totalLeagues={data.totalLeagues ?? null}
+      freshness={<Stamps stamps={[leagueStamp]} />}
+    />
+  )
 }
 
 async function CoverageCard({ dash34 }: { dash34: HomeLoads['dash34'] }) {
@@ -233,6 +423,19 @@ async function CoverageCard({ dash34 }: { dash34: HomeLoads['dash34'] }) {
 
 /* ── The home ─────────────────────────────────────────────────────────────────────────────── */
 
+/** A filtered home says so above everything, with the way back to every league. */
+function ScopeNote({ scope }: { scope: HomeScopeInfo }) {
+  return (
+    <p className="af-home-scope" role="status">
+      <span>
+        Showing <b>{scope.label}</b> — {scope.count} of {scope.total} {scope.total === 1 ? 'league' : 'leagues'}.
+        Everything below covers only these.
+      </span>
+      <ScopeResetLink>Show all leagues</ScopeResetLink>
+    </p>
+  )
+}
+
 export function CoreHomeCards({
   loads,
   now,
@@ -240,6 +443,10 @@ export function CoreHomeCards({
   planName,
   commissionerCount,
   syncLabel,
+  scope,
+  leagueData,
+  order,
+  prefetch,
 }: {
   loads: HomeLoads
   now: Date
@@ -249,128 +456,152 @@ export function CoreHomeCards({
   commissionerCount: number
   /** "synced 4m ago" when fresh; null when stale or unknown. */
   syncLabel: string | null
+  scope: HomeScopeInfo
+  /**
+   * The "League data" stamp's inputs, over the syncable leagues in scope: the OLDEST sync, and how
+   * many have never synced at all. See `leagueDataStamp`.
+   */
+  leagueData: { oldestAt: string | null; neverSynced: number; syncable: number }
+  /** Per-viewer card order — lib/core-app/homeCardOrder.ts. */
+  order: HomeCardOrder
+  /** What the prewarm needs beyond the queue itself. */
+  prefetch: { unreadNotifications: number; gameDayActive: boolean }
 }) {
   const card = (name: HomeCardName, content: ReactNode, placeholderHeight?: number) => (
-    <CoreCardBoundary card={name} resetKey={resetKey}>
-      <Suspense fallback={placeholderHeight ? <CardSkeleton height={placeholderHeight} /> : null}>{content}</Suspense>
-    </CoreCardBoundary>
+    /*
+     * `data-home-card` is what the usage counts read (HomeActivity). `display: contents` keeps the
+     * wrapper out of the layout, so the grid and flex rules around each card are unchanged.
+     */
+    <div key={name} data-home-card={name} style={{ display: 'contents' }}>
+      <CoreCardBoundary card={name} resetKey={resetKey}>
+        <Suspense fallback={placeholderHeight ? <CardSkeleton height={placeholderHeight} /> : null}>{content}</Suspense>
+      </CoreCardBoundary>
+    </div>
   )
+
+  const leagueStamp = leagueDataStamp(leagueData, now)
 
   /*
    * ⚠ ONLY CARDS THAT ALWAYS RENDER GET A PLACEHOLDER. The bands above the dashboard and the
    * following and receipts cards render NOTHING on a quiet day — a placeholder there would paint a
    * grey block that then vanishes, which is worse than the space arriving late. The routine card
-   * always renders (`buildWeeklyRoutine` never returns null), and it sits above the issues, so it
-   * holds its place like the rest.
+   * always renders (`buildWeeklyRoutine` never returns null), and so does the decision queue.
    *
    * ⚠ THE BANDS CAN STILL PUSH THE DASHBOARD DOWN when one with content lands after it. That is
    * the trade for not holding the whole home behind the slowest band; measure it (CLS by screen in
    * the browser traces) before reserving space for bands that are empty most days.
+   *
+   * WHY EACH BAND SITS WHERE IT DOES BY DEFAULT — `order.bands` is this list unless a live slate, a
+   * live draft or the reader's own habits move a band up (lib/core-app/homeCardOrder.ts):
+   *   since-last-visit  news, leads the bands by the user's decision (2026-09-14); nothing on a quiet day.
+   *   game-day          only inside a game window; a running game outranks a countdown.
+   *   drafts            any league's draft live right now; capped at 4 with a Draft HQ link.
+   *   triage            an injured STARTER — the founder's ask. Value-aware, so a first-round back
+   *                     outranks a bench stash. Renders nothing when no lineup decision is pending.
+   *   trade-band        a trade landing is news the moment it lands; a fact, not a deadline.
+   *   carryover         34a's first-lock band, honesty notice, Chimmy brief (see Dash34Carryover).
+   *   user-os           the Decision OS card for the most urgent league; nothing on any gap.
+   *   schedule          WHO you play, above the section that can only show scores — before a week
+   *                     is scored the matchup grid is empty on purpose.
    */
+  const bands: Record<HomeCardOrder['bands'][number], ReactNode> = {
+    'since-last-visit': card('since-last-visit', <SinceLastVisitCard brief={loads.brief} now={now} />),
+    'game-day': card(
+      'game-day',
+      <GameDayCard strip={loads.strip} plays={loads.plays} regularSeason={loads.regularSeason} now={now} />,
+    ),
+    drafts: card('drafts', <DraftsCard drafts={loads.drafts} now={now} />),
+    triage: card('triage', <TriageCard dash34={loads.dash34} now={now} />),
+    'trade-band': card('trade-band', <TradeBandCard trades={loads.trades} now={now} />),
+    carryover: card('carryover', <CarryoverCard dash34={loads.dash34} />),
+    'user-os': card('user-os', <UserOsCard userOs={loads.userOs} />),
+    schedule: card('schedule', <ScheduleCard schedule={loads.schedule} syncLabel={syncLabel} />),
+  }
+
   return (
-    <>
-      {/*
-        What changed since your last visit — leads the home, by the user's
-        decision (2026-09-14). It renders NOTHING when nothing changed, so a
-        quiet day costs no space above the live and draft bands; on a day
-        with news it is the first thing read, and each line links to the
-        band or screen that holds the detail.
-      */}
-      {card('since-last-visit', <SinceLastVisitCard brief={loads.brief} now={now} />)}
-      {/*
-        Game day leads everything while a slate is live — a running game
-        outranks a draft clock and a countdown. It renders only inside a
-        game window (a play detected in the last few hours, or a scored
-        matchup of the user's), so outside one this is not a quiet band,
-        it is no band at all.
-      */}
-      {card('game-day', <GameDayCard strip={loads.strip} plays={loads.plays} regularSeason={loads.regularSeason} now={now} />)}
-      {/*
-        Drafts on the clock — leads the home whenever any league's draft
-        is live right now (the founder's week). One card per live draft,
-        capped at 4 with a Draft HQ overflow link. Zero live drafts, or a
-        loader failure, renders NOTHING — see DashDraftsBand's header for
-        the honesty rules (raw status shown, no invented timers).
-      */}
-      {card('drafts', <DraftsCard drafts={loads.drafts} now={now} />)}
-      {/*
-        Starters in doubt — the DECISION slice of the injury book.
-        ⚠ ITS POSITION HAS MOVED TWICE, AND BOTH MOVES WERE RIGHT. It
-        first led the page as the loader's whole 40-row book, which read
-        as a wall of headshots with no decision attached, so it was
-        filtered to starters-who-may-not-play and demoted. Now that the
-        ordering is value-aware — a first-round back outranks a bench
-        stash instead of losing to it alphabetically — the founder's
-        actual ask stands: an injured starter should be the first thing
-        he sees. It ranks above the trade band and the brief and below
-        only a live slate and a draft on the clock, both of which are
-        happening RIGHT NOW rather than needing a decision. On a day with
-        no lineup decision it still renders nothing at all, which is what
-        makes it safe to place this high.
-      */}
-      {card('triage', <TriageCard dash34={loads.dash34} now={now} />)}
-      {/*
-        A trade landing is news the moment it lands, and it was the one
-        thing the founder named that no surface showed at all. Below the
-        live/draft bands because it is not a deadline; above the brief
-        because it is a fact about his leagues, not a summary of them.
-      */}
-      {card('trade-band', <TradeBandCard trades={loads.trades} now={now} />)}
-      {/*
-        34a's four unique sections (first-lock band, honesty notice,
-        Chimmy brief, coverage list) — carried over so the cutover
-        loses nothing 3A doesn't render. See Dash34Carryover's header
-        for what was deliberately NOT carried and why.
-      */}
-      {card('carryover', <CarryoverCard dash34={loads.dash34} />)}
-      {/*
-        P4-5: the first /core surface that reads Decision OS at all — the
-        deterministic user-os card for the most urgent league. Renders
-        NOTHING on any failure or coverage gap; see DashUserOs's header
-        for the render-nothing rules.
-      */}
-      {card('user-os', <UserOsCard userOs={loads.userOs} />)}
-      {/*
-        WHO you play this week, immediately above the section that can
-        only show scores. Until a week is scored — every week before
-        kickoff, and all of preseason — Dashboard3A's matchup grid is an
-        empty frame, because both of its sources drop unscored rows on
-        purpose. This band answers the half of the question that IS
-        knowable: opponent, league, first kickoff. It renders nothing
-        when the read fails or no league has a schedule on file.
-      */}
-      {card('schedule', <ScheduleCard schedule={loads.schedule} syncLabel={syncLabel} />)}
-      {/*
-        3a mounted as the screen BODY. It ships its own rail/nav/topbar
-        for the standalone render it was built for; af-core-shell.css
-        suppresses that chrome under .af-content so the shell's own
-        rail, nav and topbar stand alone. Its cards arrive through slots.
-      */}
-      <Dashboard3A
-        planName={planName}
-        commissionerCount={commissionerCount}
-        nowLabel={syncLabel}
-        slots={{
-          routine: card('routine', <RoutineCard routine={loads.routine} />, 150),
-          issues: card('issues', <IssuesCard dash34={loads.dash34} issues={loads.issues} />, 180),
-          matchups: card('matchups', <MatchupsCard dash34={loads.dash34} week={loads.week} winProb={loads.winProb} />, 160),
-          chimmy: card('chimmy', <ChimmyCard dash34={loads.dash34} issues={loads.issues} />, 140),
-          career: card('career', <CareerCard career={loads.career} />, 150),
-          rivals: card('rivals', <RivalsCard rivals={loads.rivals} />, 150),
-          portfolioChart: card('portfolio-chart', <PortfolioChartCard dash34={loads.dash34} />, 200),
-          exposure: card('exposure', <ExposureCard exposure={loads.exposure} />, 180),
-          following: card('following', <FollowingCardSlot following={loads.following} />),
-          receipts: card('receipts', <ReceiptsCardSlot receipts={loads.receipts} />),
-          leagues: card('leagues', <LeaguesCard dash34={loads.dash34} />, 180),
-        }}
-      />
-      {/*
-        The coverage disclosure, at the foot where a footnote belongs.
-        It used to sit third on the page: leading with everything we
-        cannot see sets the tone to apology before the reader has seen
-        anything the product does know.
-      */}
-      {card('coverage', <CoverageCard dash34={loads.dash34} />)}
-    </>
+    <HomeActivity>
+      {scope.scoped ? <ScopeNote scope={scope} /> : null}
+
+      {scope.scoped && scope.count === 0 ? (
+        /*
+         * A scope that matches nothing — a sport or platform you no longer play, favorites on a new
+         * device. Said plainly, rather than rendering a home of cards that each claim "nothing here"
+         * about leagues that were simply filtered out.
+         */
+        <div className="af-frame af-home-scope-empty">
+          <h2>No leagues in this view</h2>
+          <p>
+            None of your leagues match &ldquo;{scope.label}&rdquo;
+            {scope.key === 'fav' ? ' — star a league in the league picker at the top to add it here' : ''}.{' '}
+            <ScopeResetLink>Show all leagues</ScopeResetLink>
+          </p>
+        </div>
+      ) : (
+        <>
+          {/*
+            The five most urgent decisions lead the home — the user's instruction (2026-09-16),
+            ahead of the news bands, because a decision is what the reader can act on. It replaced
+            the "Outstanding issues" section inside the dashboard below; see DecisionQueue.
+          */}
+          {card(
+            'issues',
+            <DecisionsCard
+              dash34={loads.dash34}
+              issues={loads.issues}
+              trades={loads.trades}
+              now={now}
+              scope={scope}
+              rostersStamp={leagueStamp}
+              prefetch={prefetch}
+            />,
+            220,
+          )}
+
+          {order.bands.map((name) => bands[name])}
+
+          {/*
+            3a mounted as the screen BODY. It ships its own rail/nav/topbar
+            for the standalone render it was built for; af-core-shell.css
+            suppresses that chrome under .af-content so the shell's own
+            rail, nav and topbar stand alone. Its cards arrive through slots.
+          */}
+          <Dashboard3A
+            planName={planName}
+            commissionerCount={commissionerCount}
+            nowLabel={syncLabel}
+            order={{ main: order.main, side: order.side, stack: order.stack }}
+            slots={{
+              routine: card('routine', <RoutineCard routine={loads.routine} />, 150),
+              // Rendered at the top of the home instead — `order.main` leaves it out.
+              issues: null,
+              matchups: card(
+                'matchups',
+                <MatchupsCard dash34={loads.dash34} week={loads.week} winProb={loads.winProb} now={now} />,
+                160,
+              ),
+              chimmy: card('chimmy', <ChimmyCard dash34={loads.dash34} issues={loads.issues} />, 140),
+              career: card('career', <CareerCard career={loads.career} leagueStamp={leagueStamp} />, 150),
+              rivals: card('rivals', <RivalsCard rivals={loads.rivals} leagueStamp={leagueStamp} />, 150),
+              portfolioChart: card(
+                'portfolio-chart',
+                <PortfolioChartCard dash34={loads.dash34} leagueStamp={leagueStamp} scope={scope} />,
+                200,
+              ),
+              exposure: card('exposure', <ExposureCard exposure={loads.exposure} leagueStamp={leagueStamp} />, 180),
+              following: card('following', <FollowingCardSlot following={loads.following} />),
+              receipts: card('receipts', <ReceiptsCardSlot receipts={loads.receipts} />),
+              leagues: card('leagues', <LeaguesCard dash34={loads.dash34} leagueStamp={leagueStamp} />, 180),
+            }}
+          />
+          {/*
+            The coverage disclosure, at the foot where a footnote belongs.
+            It used to sit third on the page: leading with everything we
+            cannot see sets the tone to apology before the reader has seen
+            anything the product does know.
+          */}
+          {card('coverage', <CoverageCard dash34={loads.dash34} />)}
+        </>
+      )}
+    </HomeActivity>
   )
 }

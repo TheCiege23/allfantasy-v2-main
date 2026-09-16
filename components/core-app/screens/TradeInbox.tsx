@@ -4,6 +4,7 @@ import { fetchTradesPanel } from '@/components/core-app/screens/tradesPanelFetch
 
 import { useCallback, useEffect, useState } from 'react'
 import type { PickedAsset } from '@/components/core-app/screens/TradeAssetPicker'
+import { lineupImpactDirection, lineupImpactLine, type LineupImpactSummary } from '@/lib/decision-os/trade/rosterImpactSummary'
 
 /**
  * Inbox & Sent on the Trade Center.
@@ -100,6 +101,8 @@ type NativeRow = {
   currentUnresolvedAssets?: string[]
   decisionAction?: 'accept' | 'counter' | 'decline' | 'review'
   decisionRecommendation?: string | null
+  /** Open offers the viewer is party to. Absent: not computed. `null`: asked for, not produced. */
+  rosterImpact?: LineupImpactSummary | null
 }
 
 type PanelResponse = {
@@ -627,6 +630,12 @@ export function TradeInbox(props: {
               const proposedNet = valueNet(trade.proposalValueGiven, trade.proposalValueReceived)
               const currentNet = valueNet(trade.currentValueGiven, trade.currentValueReceived)
               const isCompleted = isCompleteStatus(trade.status)
+              /*
+               * ⚠ OPEN ROWS ONLY, EVEN IF A ROW SOMEHOW CARRIES IT. A settled trade's roster already
+               * holds the result, so a lineup effect beside a completed or declined offer would be
+               * describing a decision that is no longer open.
+               */
+              const lineupLine = !isCompleted && !isClosedStatus(trade.status) ? lineupImpactLine(trade.rosterImpact) : null
               const party = trade.proposerName && trade.receiverName
                 ? `${trade.proposerName} ↔ ${trade.receiverName}`
                 : trade.partnerName || 'Trade partner'
@@ -644,6 +653,11 @@ export function TradeInbox(props: {
                       <div><span>{trade.receiverName ? `${trade.receiverName} sent` : trade.direction === 'complete' ? 'Side B sent' : 'You receive'}</span><b>{trade.received.map((asset) => asset.label).join(', ') || 'Nothing'}</b></div>
                     </div>
                     {trade.decisionRecommendation ? <p className="af-tc-timeline-advice">{trade.decisionRecommendation}</p> : null}
+                    {lineupLine ? (
+                      <p className="af-tc-timeline-lineup" data-direction={lineupImpactDirection(trade.rosterImpact)}>
+                        {lineupLine}
+                      </p>
+                    ) : null}
                     {trade.currentUnresolvedAssets && trade.currentUnresolvedAssets.length > 0 ? (
                       <p className="af-tc-timeline-gap">Current grade excludes: {trade.currentUnresolvedAssets.join(', ')}</p>
                     ) : null}

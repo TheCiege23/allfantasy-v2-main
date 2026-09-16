@@ -2,6 +2,13 @@ import { afterEach, describe, expect, it } from 'vitest'
 import fs from 'node:fs'
 import path from 'node:path'
 import { getChimmyFeatureFlags } from '@/lib/chimmy-chat/feature-flags'
+import {
+  classifyPecrIntent,
+  GLOBAL_SPORT_CONTEXT,
+  IN_THEIR_OWN_LEAGUE,
+  requiresLeagueGrounding,
+  ROSTER_INTENT,
+} from '@/lib/chimmy-chat/question-routing'
 
 /**
  * The wiring contract, asserted against the route source.
@@ -180,23 +187,14 @@ describe('live search fallback charges for what it costs', () => {
  * the deployed endpoint; the control was the same call with different wording,
  * which returned 200.
  *
- * The pattern is read out of the source because `requiresLeagueGrounding` is
- * module-private and importing this route in a test times out.
+ * These used to `eval` a regex copied out of the route's source, because the
+ * gate was module-private and importing the route in a test times out. It now
+ * lives in `lib/chimmy-chat/question-routing.ts`, so they drive the real
+ * function — the pattern AND the gate that combines it with everything else.
+ * The wider question set is `__tests__/chimmy-eval/`.
  */
 describe('league grounding is not required for real-world competitions', () => {
-  /*
-   * No trailing newline in this matcher: the file is checked out CRLF, `.` does
-   * not cross the \r, and anchoring on \n silently captured nothing — which
-   * made the pattern fall back to a never-matching regex and the "does NOT
-   * demand" cases pass for the wrong reason.
-   */
-  const match = ROUTE.match(/const inTheirOwnLeague = (\/.*\/)/)
-
-  it('still uses a possessive-scoped pattern', () => {
-    expect(match).not.toBeNull()
-  })
-
-  const pattern: RegExp = eval(match?.[1] ?? '/$^/')
+  const gate = (q: string) => requiresLeagueGrounding({ message: q, intent: classifyPecrIntent(q) })
 
   it.each([
     'who scored in the champions league last night?',
@@ -204,7 +202,8 @@ describe('league grounding is not required for real-world competitions', () => {
     'how many home runs in major league baseball yesterday',
     'who leads the national league in home runs',
   ])('does NOT demand a league for: %s', (question) => {
-    expect(pattern.test(question)).toBe(false)
+    expect(IN_THEIR_OWN_LEAGUE.test(question)).toBe(false)
+    expect(gate(question)).toBe(false)
   })
 
   /* The phrasing the rule actually exists for must still be caught. */
@@ -214,7 +213,35 @@ describe('league grounding is not required for real-world competitions', () => {
     'who is the worst manager in our keeper league',
     'how many teams are in this league',
   ])('still demands a league for: %s', (question) => {
-    expect(pattern.test(question)).toBe(true)
+    expect(IN_THEIR_OWN_LEAGUE.test(question)).toBe(true)
+    expect(gate(question)).toBe(true)
+  })
+
+  it('and the route no longer carries a private copy that could drift', () => {
+    expect(ROUTE).not.toMatch(/function requiresLeagueGrounding|function classifyPecrIntent|const ROSTER_INTENT/)
+    expect(ROUTE).toMatch(/import \{ classifyPecrIntent, requiresLeagueGrounding \} from '@\/lib\/chimmy-chat\/question-routing'/)
+  })
+})
+
+/*
+ * ⚠ THE SPECIALIST AGENT FOLLOWS THE ORCHESTRATION INTENT. Every route suite mocks
+ * `@/lib/agents/pipeline`, so none of them would notice the call site going back to classifying
+ * a joined string on its own — which is how the agent and the intent label disagreed for 53 of 71
+ * questions in `__tests__/chimmy-eval/`. Asserted on the source for that reason.
+ */
+describe('the specialist agent is chosen from the orchestration intent', () => {
+  it('passes the already-computed intent, not a joined string', () => {
+    expect(ROUTE).toMatch(
+      /inferAgentFromMessage\(message, \{\s*intent: chimmyOrchestrationClassification\.intent,/,
+    )
+    expect(ROUTE).not.toMatch(/inferAgentFromMessage\(\s*\[message/)
+  })
+
+  it('computes that intent before choosing the agent', () => {
+    const classified = ROUTE.indexOf('const chimmyOrchestrationClassification = classifyChimmyIntent(')
+    const chosen = ROUTE.indexOf('const specialistAgent = inferAgentFromMessage(')
+    expect(classified).toBeGreaterThan(-1)
+    expect(chosen).toBeGreaterThan(classified)
   })
 })
 
@@ -251,21 +278,18 @@ describe('tool loop system prompt', () => {
  * The word is meant as "start a player" and is also the ordinary English verb.
  */
 describe('calendar "start" is not lineup "start"', () => {
-  const match = ROUTE.match(/const ROSTER_INTENT = (\/.*\/i)/)
-
-  it('keeps the intent pattern where the test can read it', () => {
-    expect(match).not.toBeNull()
-  })
-
-  const pattern: RegExp = eval(match?.[1] ?? '/$^/')
+  const pattern = ROSTER_INTENT
 
   it.each([
     'when does the college football season start?',
     'when does the season start',
     'when do the playoffs start',
     'what time does the game start tonight',
+    'start time for the super bowl?',
+    'start of the season is when?',
   ])('does NOT demand a league for: %s', (q) => {
     expect(pattern.test(q)).toBe(false)
+    expect(requiresLeagueGrounding({ message: q, intent: classifyPecrIntent(q) })).toBe(false)
   })
 
   /* The fantasy sense must still be caught — that is what the rule is for. */
@@ -276,8 +300,25 @@ describe('calendar "start" is not lineup "start"', () => {
     'do i start him over hurts',
     'look at my roster',
     'who do i bench this week',
+    /* The imperative opener, which read as `general` until 2026-09-16. */
+    'start bijan or gibbs?',
+    'sit kelce this week?',
   ])('still reads as roster: %s', (q) => {
     expect(pattern.test(q)).toBe(true)
+  })
+
+  /*
+   * ⚠ BARE SUBSTRINGS MATCHED INSIDE OTHER WORDS. `flex` fired in "superflex",
+   * `bench` in "benchmark", `sit` in "deposit" — and a roster intent
+   * hard-requires a league, so "how does superflex scoring work?" was refused.
+   */
+  it.each([
+    'how does superflex scoring work?',
+    'is he a flexible player?',
+    'what is a good benchmark for a qb?',
+    'is there a deposit to join?',
+  ])('does not read a longer word as roster: %s', (q) => {
+    expect(pattern.test(q)).toBe(false)
   })
 
   /*
@@ -286,11 +327,8 @@ describe('calendar "start" is not lineup "start"', () => {
    * `hrs?` in the stat guard: formal spelling covered, human spelling not.
    */
   it('treats spelled-out sport names as global context', () => {
-    const globals = ROUTE.match(/const hasGlobalSportContext = (\/.*\/)\.test/)
-    expect(globals).not.toBeNull()
-    const re: RegExp = eval(globals![1])
     for (const q of ['college football', 'premier league', 'major league baseball', 'basketball']) {
-      expect(re.test(q), q).toBe(true)
+      expect(GLOBAL_SPORT_CONTEXT.test(q), q).toBe(true)
     }
   })
 })
@@ -306,22 +344,7 @@ describe('calendar "start" is not lineup "start"', () => {
  * above: the formal spelling was covered and the human one was not.
  */
 describe('a pickup question is a waiver question', () => {
-  const waiverMatch = ROUTE.match(/\((\/waiver\|[^\n]*?\/i)\.test\(message\)\) return 'waiver'/)
-  const draftMatch = ROUTE.match(/\((\/draft\|[^\n]*?\/i)\.test\(message\)\) return 'draft'/)
-
-  it('keeps both patterns where the test can read them', () => {
-    expect(waiverMatch).not.toBeNull()
-    expect(draftMatch).not.toBeNull()
-  })
-
-  /** Mirrors classifyPecrIntent's order: waiver is checked before draft. */
-  function classify(message: string): string {
-    const waiver: RegExp = eval(waiverMatch?.[1] ?? '/$^/')
-    const draft: RegExp = eval(draftMatch?.[1] ?? '/$^/')
-    if (waiver.test(message)) return 'waiver'
-    if (draft.test(message)) return 'draft'
-    return 'general'
-  }
+  const classify = classifyPecrIntent
 
   it.each([
     'who can i pick up in the zombie league?',
@@ -373,16 +396,7 @@ describe('a pickup question is a waiver question', () => {
  * the closed compound `pickup`.
  */
 describe('the bidding vocabulary reaches the waiver branch', () => {
-  const waiverMatch = ROUTE.match(/\((\/waiver\|[^\n]*?\/i)\.test\(message\)\) return 'waiver'/)
-  const draftMatch = ROUTE.match(/\((\/draft\|[^\n]*?\/i)\.test\(message\)\) return 'draft'/)
-
-  function classify(message: string): string {
-    const waiver: RegExp = eval(waiverMatch?.[1] ?? '/$^/')
-    const draft: RegExp = eval(draftMatch?.[1] ?? '/$^/')
-    if (waiver.test(message)) return 'waiver'
-    if (draft.test(message)) return 'draft'
-    return 'general'
-  }
+  const classify = classifyPecrIntent
 
   it.each([
     'how much FAAB should I bid on Bauer Sharp?',

@@ -587,14 +587,16 @@
 
 /* ── Mobile treatment ────────────────────────────────────────────────────
  *
- * ⚠ NO BOTTOM TAB BAR HERE, DELIBERATELY. The design shows one, but /core has
- * no bottom nav on any other screen — adding it to this one alone would make
- * the Trade Center look like a different app the moment a user navigated away.
- * That belongs to core chrome, not to a single tab.
+ * ⚠ THE BOTTOM EDGE BELONGS TO THE SHELL. This comment used to say "/core has no
+ * bottom nav on any other screen", and it stopped being true when the shell grew
+ * a phone tab bar (`.af-tabbar`, af-core-shell.css, fixed, z 40) — then a league
+ * pill (`.af-rail-handle`, fixed, z 60) and the Comms launcher (fixed, z 59) on
+ * top of it. The tab bar is still core chrome and still not this screen's to
+ * draw; what changed is that this screen can no longer put anything of its own
+ * there. See the phone step bar at the end of the file.
  *
- * What IS screen-local and does belong here: the action bar sticking, the chip
- * rows scrolling instead of wrapping into a wall, and touch targets that clear
- * 44px.
+ * What IS screen-local and does belong here: the chip rows scrolling instead of
+ * wrapping into a wall, and touch targets that clear 44px.
  */
 
 @media (max-width: 720px) {
@@ -623,17 +625,17 @@
   }
 
   /*
-   * The action row sticks to the bottom of the viewport. It carries the only
-   * two controls that end the task, and on a long page they are otherwise a
-   * scroll away from wherever the manager is reading.
+   * 🛑 THE ACTION ROW NO LONGER STICKS TO THE BOTTOM, AND MEASURING IS WHY.
+   * It was `position: sticky; bottom: 0` so the controls that end the task were
+   * always in reach. At 390px (2026-09-16) the shell's tab bar covered the row's
+   * lower 65px, the league pill sat on "Analyze this trade" and the Comms
+   * launcher on "Save draft": `elementFromPoint` at each button's centre
+   * returned something else for all three. The persistent control now lives in
+   * the sticky TOP step bar; this row is an ordinary block at the end of the
+   * Review step.
    */
   .af-tc-actions {
-    position: sticky;
-    bottom: 0;
-    z-index: 20;
-    margin: 0 -16px -16px;
-    padding: 12px 16px calc(12px + env(safe-area-inset-bottom, 0px));
-    background: var(--surface);
+    padding: 12px 0 0;
     border-top: 1px solid var(--line2);
   }
   /* The caption is the first thing to go — it is context, not a control. */
@@ -1911,5 +1913,293 @@
 @media (max-width: 720px) {
   .af-tc-actions {
     margin-inline: 0;
+  }
+}
+
+/*
+ * ── Lineup effect on an open timeline row (item #6) ───────────────────────
+ *
+ * Sits directly under `.af-tc-timeline-advice` and matches its size, because
+ * the two are read together: the advice says whether the price is fair, this
+ * says what the trade does to Sunday's lineup.
+ *
+ * ⚠ CORE `--good` / `--bad`, NOT `--tc-good` / `--tc-bad`. The `--tc-*` pair is
+ * a fixed dark-theme literal; the core tokens are redefined per theme, and the
+ * light theme's green is darkened for contrast on a white card. Same choice as
+ * `.af-tc-timeline-gap` above, which uses `--warn`.
+ *
+ * Appended at the end of the file, outside every `@media` block, on purpose.
+ */
+.af-tc-timeline-lineup {
+  margin: 4px 0 0;
+  color: var(--text2);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.4;
+}
+.af-tc-timeline-lineup[data-direction='up'] { color: var(--good); }
+.af-tc-timeline-lineup[data-direction='down'] { color: var(--bad); }
+.af-tc-timeline-lineup[data-direction='unknown'] { color: var(--muted); font-weight: 400; }
+
+/*
+ * ── Phone builder: step bar, review, asset sheet (item #9) ───────────────
+ *
+ * Appended as its own blocks, outside every existing @media — see the warning
+ * near the top of this file about inserting a query inside another.
+ *
+ * ⚠ ALL-WIDTH DEFAULTS FIRST. The step bar and review summary are always in the
+ * DOM (the markup is identical at every width) and must not exist above 720px;
+ * the two wrappers must never add a box or a flex gap at any width.
+ */
+.af-tc-stepbar,
+.af-tc-review,
+.af-tc-step-anchor {
+  display: none;
+}
+.af-tc-mstep-wrap,
+.af-tc-sheet-root {
+  display: contents;
+}
+
+/*
+ * The asset sheet. Only ever rendered at phone width (the component decides),
+ * so these need no query. z 1100: above the shell's floating chrome (tab bar
+ * 40, Comms launcher 59, league pill 60), below the player card (1200), which
+ * can open from a roster row inside the sheet.
+ */
+.af-tc-sheet-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 1100;
+  display: flex;
+  align-items: flex-end;
+  background: rgba(4, 5, 10, 0.72);
+}
+.af-tc-sheet {
+  width: 100%;
+  max-height: 88vh;
+  max-height: 88dvh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 8px 14px calc(16px + env(safe-area-inset-bottom, 0px));
+  border-top: 1px solid var(--line2);
+  border-radius: 18px 18px 0 0;
+  background: var(--surface);
+  box-shadow: 0 -12px 32px rgba(0, 0, 0, 0.35);
+}
+.af-tc-sheet-grip {
+  display: block;
+  width: 40px;
+  height: 4px;
+  margin: 2px auto 8px;
+  border-radius: 999px;
+  background: var(--line2);
+}
+/* Inside the sheet the picker IS the surface — no second card inside the first. */
+.af-tc-sheet .af-tc-picker {
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+/*
+ * The tabs and close control stay reachable while a long roster scrolls under
+ * them. `top` is the sheet's own top padding, negated, so the tab row meets the
+ * sheet edge instead of leaving an 8px strip for rows to show through.
+ */
+.af-tc-sheet .af-tc-picker-tabs {
+  position: sticky;
+  top: -8px;
+  z-index: 1;
+  padding: 8px 0;
+  background: var(--surface);
+}
+
+@media (max-width: 720px) {
+  .af-tc-step-anchor {
+    display: block;
+    height: 0;
+  }
+
+  /*
+   * 🛑 STICKY TO THE TOP. The bottom 140px of a /core phone screen is the
+   * shell's (tab bar, league pill, Comms launcher); the top edge is free.
+   */
+  /*
+   * `top: 6px`, not 0: flush against the viewport edge the bar's rounded top
+   * corners were clipped (seen in the 390px screenshot); the gap shows the page
+   * scrolling under it, which is the point of the blur.
+   */
+  .af-tc-stepbar {
+    position: sticky;
+    top: 6px;
+    z-index: 30;
+    display: grid;
+    gap: 8px;
+    padding: 8px 10px 10px;
+    border: 1px solid var(--line2);
+    border-radius: 14px;
+    background: color-mix(in srgb, var(--surface) 94%, transparent);
+    -webkit-backdrop-filter: blur(12px);
+    backdrop-filter: blur(12px);
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.28);
+  }
+  .af-tc-steps {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 4px;
+    padding: 3px;
+    border-radius: 11px;
+    background: var(--surface2);
+  }
+  /* (0,2,0) beats the base `button` rules; `.af-btn` is not involved here. */
+  .af-core .af-tc-step {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    min-width: 0;
+    min-height: 44px;
+    padding: 0 4px;
+    border: 0;
+    border-radius: 9px;
+    background: transparent;
+    color: var(--muted);
+    font: inherit;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+  }
+  .af-core .af-tc-step[data-on='true'] {
+    background: var(--accent-soft);
+    color: var(--text);
+    box-shadow: inset 0 0 0 1px var(--accent-line);
+  }
+  .af-core .af-tc-step:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: -2px;
+  }
+  .af-tc-step-num {
+    display: inline-grid;
+    flex: 0 0 auto;
+    place-items: center;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: var(--line2);
+    font-size: 10px;
+  }
+  .af-tc-step[data-on='true'] .af-tc-step-num {
+    background: var(--accent);
+    color: var(--accent-ink);
+  }
+  .af-tc-step-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .af-tc-step-count {
+    flex: 0 0 auto;
+    min-width: 18px;
+    padding: 1px 5px;
+    border-radius: 999px;
+    background: var(--line);
+    font-size: 10px;
+    text-align: center;
+  }
+  .af-tc-stepbar-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .af-tc-stepbar-totals {
+    display: flex;
+    flex: 1 1 auto;
+    flex-wrap: wrap;
+    gap: 2px 10px;
+    min-width: 0;
+    color: var(--muted);
+    font-size: 11px;
+  }
+  .af-tc-stepbar-totals b {
+    color: var(--text);
+    font-weight: 700;
+  }
+  .af-tc-stepbar-delta[data-tone='good'] { color: var(--good); }
+  .af-tc-stepbar-delta[data-tone='bad'] { color: var(--bad); }
+  /*
+   * (0,3,0), not (0,2,0): `.af-core .af-btn { min-height: 36px }` is (0,2,0),
+   * and a tie is decided by stylesheet order — the coin toss the note above
+   * `.af-core .af-tc-actions .af-btn` records.
+   */
+  .af-core .af-tc-stepbar .af-tc-stepbar-primary {
+    flex: 0 0 auto;
+    min-height: 44px;
+  }
+
+  /*
+   * One step at a time. Every section that belongs to particular steps says so
+   * in `data-mstep`; anything untagged (header, inbox, league context) shows on
+   * all three.
+   */
+  .af-tc[data-mobile-step='give'] [data-mstep]:not([data-mstep~='give']),
+  .af-tc[data-mobile-step='get'] [data-mstep]:not([data-mstep~='get']),
+  .af-tc[data-mobile-step='review'] [data-mstep]:not([data-mstep~='review']) {
+    display: none;
+  }
+
+  .af-tc[data-mobile-step='review'] .af-tc-review {
+    display: grid;
+    gap: 12px;
+  }
+  .af-tc-review-side {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 14px;
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    background: var(--surface);
+  }
+  .af-tc-review-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .af-core .af-tc-review-edit {
+    min-height: 44px;
+    padding: 0 14px;
+    border: 1px solid var(--line2);
+    border-radius: 10px;
+    background: transparent;
+    color: var(--accent);
+    font: inherit;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+  }
+  .af-tc-review-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .af-tc-review-list li {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 32px;
+    color: var(--text);
+    font-size: 13px;
+  }
+  .af-tc-review-name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .af-tc-review-list [data-unpriced='true'] {
+    color: var(--faint);
   }
 }

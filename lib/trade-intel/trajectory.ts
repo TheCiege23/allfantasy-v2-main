@@ -1,6 +1,7 @@
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
+import { loadLatestPlayerValueSnapshots } from '@/lib/player-values/latestPlayerValueSnapshots'
 
 /**
  * Layer 2 — trajectory. Where a player is going, not where he has been.
@@ -92,17 +93,24 @@ export async function loadFutureLeans(args: {
   const out = new Map<string, FutureLean>()
   if (args.sleeperIds.length === 0) return out
 
-  const rows = await prisma.playerValueSnapshot
-    .findMany({
-      where: {
-        sleeperId: { in: args.sleeperIds },
-        source: 'FANTASYCALC',
-        qbFormat: args.qbFormat,
-      },
-      orderBy: { capturedAt: 'desc' },
-      select: { sleeperId: true, format: true, value: true, name: true },
-    })
-    .catch(() => [])
+  /*
+   * ⚠ ONE READ PER BOOK, NEWEST ROW PER ID. This was one read across every format for the QB
+   * format, returning every dated snapshot, and the loop below kept the first per (format, id). The
+   * two books it actually uses are asked for by name now, so the loop's bucketing is unchanged and
+   * each read stops at one row per player.
+   */
+  const rows = (
+    await Promise.all(
+      (['DYNASTY', 'REDRAFT'] as const).map((format) =>
+        loadLatestPlayerValueSnapshots({
+          sleeperIds: args.sleeperIds,
+          source: 'FANTASYCALC',
+          format,
+          qbFormat: args.qbFormat,
+        }).catch(() => []),
+      ),
+    )
+  ).flat()
 
   const dyn = new Map<string, { value: number; name: string }>()
   const red = new Map<string, { value: number; name: string }>()

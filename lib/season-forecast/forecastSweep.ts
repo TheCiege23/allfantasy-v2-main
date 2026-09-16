@@ -223,7 +223,9 @@ export async function runForecastSweep(deps: ForecastSweepDeps): Promise<Forecas
       break
     }
     // And the half `exhausted()` cannot do: refuse to START a unit that cannot finish.
-    if (remainingFor(now() + deps.budget.remainingMs(), PER_UNIT_CAP_MS) === null) {
+    // `Date.now()`, not `now()`: `remainingFor` compares against the real clock, and so must the
+    // deadline. See the same line in lib/core-app/matchupOddsSweep.ts for the failure it caused.
+    if (remainingFor(Date.now() + deps.budget.remainingMs(), PER_UNIT_CAP_MS) === null) {
       counts.skippedForTime = dueUnits.length - attempted
       break
     }
