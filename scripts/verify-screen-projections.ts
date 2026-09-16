@@ -11,7 +11,7 @@
 import { getMyTeamData } from '../lib/core-app/myTeam'
 import { latestProjectionWeek } from '../lib/core-app/playerProjections'
 import { getPlayerDetail, searchPlayers, playerRef } from '../lib/core-app/playerFinder'
-import { loadSideProjections, winProbabilityFor } from '../lib/core-app/matchupProjections'
+import { loadSideProjections, NO_LIVE_POINTS, winProbabilityFor } from '../lib/core-app/matchupProjections'
 import { getPlayerImpact } from '../lib/core-app/playerImpact'
 import { prisma } from '../lib/prisma'
 
@@ -117,7 +117,7 @@ matchup (positive control at the feed's own week):`)
       opponentPlatformUserId: lg.rosters[1].platformUserId,
     })
     if (!sides) continue
-    const wp = winProbabilityFor(sides, { you: 0, opponent: 0 })
+    const wp = winProbabilityFor(sides, NO_LIVE_POINTS)
     if (!wp.available) continue
     matchupsPriced++
     console.log(

@@ -2,8 +2,8 @@ import { prisma } from '@/lib/prisma'
 import { resolveCurrentWeekForLeague } from './currentWeek'
 import { asIds, rosterCandidates } from './dash3aPanels'
 import { leagueDisplayName } from './leagueHome'
-import { winProbabilityFor, type SideProjections } from './matchupProjections'
-import { loadMatchupSides, matchupCurrentPoints } from './matchupWinInputs'
+import { winProbabilityFor, type LivePoints, type SideProjections } from './matchupProjections'
+import { liveLineupIds, loadLivePlayerPoints, loadMatchupSides, matchupLivePoints } from './matchupWinInputs'
 
 /**
  * "What does this one player do to my week, league by league?" — the portfolio
@@ -13,10 +13,9 @@ import { loadMatchupSides, matchupCurrentPoints } from './matchupWinInputs'
  * from the SAME model the Matchup screen and the swing alerts use; shown when a player
  * in the home exposure card is tapped; any player on 2+ of your rosters.
  *
- * ⚠ "SCORES 0" MEANS "ADDS NOTHING MORE FROM HERE". The sides carry each starter's
- * league-rescored projection but not his own points so far — current points arrive as
- * a TEAM total, which `winProbabilityFor` banks on the first starter. So his remaining
- * projection is removed and whatever the team has already banked stays. Before kickoff
+ * ⚠ "SCORES 0" MEANS "ADDS NOTHING MORE FROM HERE". His projection is set to zero, so
+ * the model counts none of it as still to come, while the points he has already scored
+ * (his own per-player row, applied by `winProbabilityFor`) stay banked. Before kickoff
  * that is exactly "he scores 0"; mid-game it is "he adds nothing more", which is the
  * question a manager deciding whether to bench him is actually asking.
  *
@@ -75,15 +74,15 @@ export function sidesWithoutPlayer(sides: SideProjections, rosterPlayerId: strin
  */
 export function winImpactFor(
   sides: SideProjections,
-  currentPoints: { you: number; opponent: number },
+  live: LivePoints,
   rosterPlayerId: string,
 ): WinImpact {
   if (!sides.you.lineup.some((slot) => slot.playerId === rosterPlayerId)) {
     return { kind: 'not_starting' }
   }
-  const now = winProbabilityFor(sides, currentPoints)
+  const now = winProbabilityFor(sides, live)
   if (!now.available) return { kind: 'unpriced', reason: now.reason }
-  const without = winProbabilityFor(sidesWithoutPlayer(sides, rosterPlayerId), currentPoints)
+  const without = winProbabilityFor(sidesWithoutPlayer(sides, rosterPlayerId), live)
   if (!without.available) return { kind: 'unpriced', reason: without.reason }
   return { kind: 'priced', now: now.data.pWin, without: without.data.pWin }
 }
@@ -148,7 +147,14 @@ async function priceLeague(
   if (!sides) {
     return { kind: 'unpriced', reason: 'we could not match both sides of this matchup to an imported roster' }
   }
-  return winImpactFor(sides, matchupCurrentPoints(mine, opponentRow), rosterPlayerId)
+  // The Matchup screen's own live inputs: scoreboard totals plus each starter's own points.
+  const byPlayer = await loadLivePlayerPoints({
+    platformLeagueId: league.platformLeagueId,
+    season: latest.seasonYear,
+    week: latest.week,
+    playerIds: liveLineupIds(sides),
+  })
+  return winImpactFor(sides, matchupLivePoints(mine, opponentRow, byPlayer), rosterPlayerId)
 }
 
 const dropOf = (row: LeagueImpactRow) => (row.impact.kind === 'priced' ? row.impact.now - row.impact.without : -1)

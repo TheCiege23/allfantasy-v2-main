@@ -1,4 +1,4 @@
-import { loadSideProjections, type SideProjections } from './matchupProjections'
+import { loadSideProjections, type LivePoints, type SideProjections } from './matchupProjections'
 import { myRosterCandidates } from './myRoster'
 import { prisma } from '@/lib/prisma'
 
@@ -90,4 +90,58 @@ export function matchupCurrentPoints(
   opponentRow: { pointsFor: number } | null | undefined,
 ): { you: number; opponent: number } {
   return { you: mine.pointsFor, opponent: opponentRow?.pointsFor ?? mine.pointsAgainst }
+}
+
+/**
+ * The lineup ids whose own scores the model can use — both sides, as the rosters hold them.
+ * An empty slot (`'0'`) and a `name:` descriptor can never have a score row.
+ */
+export function liveLineupIds(sides: SideProjections): string[] {
+  return [
+    ...new Set(
+      [...sides.you.lineup, ...sides.opponent.lineup]
+        .map((slot) => slot.playerId)
+        .filter((id) => id !== '0' && id.length > 0 && !id.startsWith('name:')),
+    ),
+  ]
+}
+
+/**
+ * Each lineup player's points so far, from the platform's own per-player scoring.
+ *
+ * ⚠ `league_player_weekly_scores.leagueId` IS THE PLATFORM LEAGUE ID, not ours — the same key
+ * `WeeklyMatchup` uses. Null, never an empty map, when nothing was read or the read failed:
+ * the model treats "no per-player scores" as a reason to refuse a live matchup, and an empty
+ * map would say the same thing less clearly.
+ */
+export async function loadLivePlayerPoints(args: {
+  platformLeagueId: string
+  season: number
+  week: number
+  playerIds: string[]
+}): Promise<Map<string, number> | null> {
+  if (args.playerIds.length === 0) return null
+  const rows = await Promise.resolve()
+    .then(() =>
+      prisma.leaguePlayerWeeklyScore.findMany({
+        where: {
+          leagueId: args.platformLeagueId,
+          seasonYear: args.season,
+          week: args.week,
+          playerId: { in: args.playerIds },
+        },
+        select: { playerId: true, points: true },
+      }),
+    )
+    .catch(() => [])
+  return rows.length > 0 ? new Map(rows.map((r) => [r.playerId, r.points])) : null
+}
+
+/** The scoreboard totals and the per-player points, as one `LivePoints`. */
+export function matchupLivePoints(
+  mine: { pointsFor: number; pointsAgainst: number },
+  opponentRow: { pointsFor: number } | null | undefined,
+  byPlayer: ReadonlyMap<string, number> | null,
+): LivePoints {
+  return { team: matchupCurrentPoints(mine, opponentRow), byPlayer }
 }

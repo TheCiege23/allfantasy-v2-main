@@ -10,7 +10,13 @@ vi.mock('server-only', () => ({}))
 vi.mock('@/lib/prisma', () => ({ prisma: {} }))
 
 import { sidesWithoutPlayer, winImpactFor } from '@/lib/core-app/playerLeagueImpact'
-import { winProbabilityFor, type SideProjections } from '@/lib/core-app/matchupProjections'
+import {
+  NO_LIVE_POINTS,
+  projectedFinalFor,
+  winProbabilityFor,
+  type LivePoints,
+  type SideProjections,
+} from '@/lib/core-app/matchupProjections'
 
 const starter = (playerId: string, projectedPoints: number) => ({ playerId, projectedPoints, actualPoints: 0, isFinal: false })
 
@@ -41,7 +47,7 @@ function sides(over: Partial<SideProjections> = {}): SideProjections {
   }
 }
 
-const ZERO = { you: 0, opponent: 0 }
+const ZERO = NO_LIVE_POINTS
 
 describe('winImpactFor', () => {
   it('🛑 prices "now" with exactly the Matchup screen\'s model, and "without" lower', () => {
@@ -77,12 +83,22 @@ describe('winImpactFor', () => {
   })
 
   it('mid-game, points already banked stay: only his remaining projection is removed', () => {
-    const live = { you: 40, opponent: 38 }
+    // A has 30 (past his 22), B has 10 of his 14, the opponent's X has 38.
+    const live: LivePoints = {
+      team: { you: 40, opponent: 38 },
+      byPlayer: new Map([['A', 30], ['B', 10], ['X', 38]]),
+    }
     const impact = winImpactFor(sides(), live, 'B')
     if (impact.kind !== 'priced') throw new Error('expected priced')
     const nowCheck = winProbabilityFor(sides(), live)
     expect(nowCheck.available && nowCheck.data.pWin).toBe(impact.now)
     expect(impact.without).toBeLessThan(impact.now)
+
+    // His 10 stay on the board; only his last 4 go. 40 banked + C's 11 + B's 4 → 55; without B → 51.
+    const final = projectedFinalFor(sides(), live)
+    const finalWithout = projectedFinalFor(sidesWithoutPlayer(sides(), 'B'), live)
+    expect(final.available && final.data.you).toBe(55)
+    expect(finalWithout.available && finalWithout.data.you).toBe(51)
   })
 })
 
