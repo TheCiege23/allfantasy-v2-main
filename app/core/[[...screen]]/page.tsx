@@ -157,6 +157,7 @@ import { readLeagueStandingsSummary } from '@/lib/core-app/leagueStandingsSummar
 import { readWeekAllSummary } from '@/lib/core-app/weekAllSummary'
 import { readSeasonOutlookSummary } from '@/lib/core-app/seasonOutlookSummary'
 import { readCareerRecordsSummary } from '@/lib/core-app/careerRecordsSummary'
+import { readCareerSummary } from '@/lib/core-app/careerSummary'
 import { isEnabled, DEFAULT_ROLLOUTS } from '@/lib/sports-os/rollout'
 import { freshnessLabel, freshnessMeta, shouldWarnAboutFreshness } from '@/lib/sports-os/freshness'
 import { recordBudgetSince } from '@/lib/sports-os/budgetTelemetry'
@@ -1641,11 +1642,35 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
       : null
 
   // Career derives from imported history; ?platform= narrows it to one provider.
+  const careerPlatform = typeof sp.platform === 'string' ? sp.platform : null
+
+  /*
+   * ── CAREER ON SUMMARIES ────────────────────────────────────────────
+   *
+   * Completes this screen: `?view=records` already reads through `careerRecordsSummary`, and this
+   * is the default view beside it. `career.ts` has no `new Date()` and no `Date.now()`, so the
+   * board is settled history — it changes when an IMPORT runs, not when time passes.
+   *
+   * ⚠ `?platform=` IS PART OF THE CACHE KEY, and `readCareerSummary` folds it once and hands that
+   * one value to both the key and the builder. Two filters are two different boards; the whole
+   * point of the filter is that it narrows what you are looking at.
+   *
+   * ⚠ ITS TTL IS FIVE MINUTES, NOT HOURS, AND THAT IS NOT A GUESS ABOUT TRAFFIC. A user-scoped key
+   * cannot be swept by league, so the TTL is the only thing that makes a newly imported league
+   * appear here — and an import is exactly when someone opens this screen. See the module header.
+   */
+  const careerOnSummary = isEnabled('sports-os.screen-summaries', userId, DEFAULT_ROLLOUTS)
+
+  const careerFresh =
+    activeKey === 'career' && careerOnSummary
+      ? await readCareerSummary(userId, careerPlatform).catch(() => null)
+      : null
+
   const career =
     activeKey === 'career'
-      ? await getCareerData(userId, typeof sp.platform === 'string' ? sp.platform : null).catch(
-          () => null
-        )
+      ? careerOnSummary
+        ? (careerFresh?.data ?? null)
+        : await getCareerData(userId, careerPlatform).catch(() => null)
       : null
 
   /*

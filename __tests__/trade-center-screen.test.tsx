@@ -291,6 +291,19 @@ describe('phase 2 — mobile and drafts', () => {
     expect(CSS).toContain('env(safe-area-inset-bottom')
   })
 
+  it('🛑 the phone inbox track has a ZERO minimum, or the filter row scrolls the whole page sideways', () => {
+    /*
+     * `1fr` is `minmax(auto, 1fr)`: the track grew to the timeline filter row's min-content (381px
+     * in a 366px inbox) and /core/trades was 393px wide at 390 — measured in WebKit and Chromium.
+     * The rule must sit in the phone block; outside it `repeat(auto-fit, minmax(280px, 1fr))` has
+     * a fixed minimum and is not affected.
+     */
+    const phoneInbox = CSS.match(/@media \(max-width: 720px\) \{[\s\S]*?\.af-tc-inbox \{\n\s*grid-template-columns: ([^;]+);/)
+    expect(phoneInbox?.[1]).toBe('minmax(0, 1fr)')
+    // [control] the pattern above really reads the phone rule, not the desktop one.
+    expect(CSS).toContain('grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));')
+  })
+
   it('⚠ a draft says which copy it got', () => {
     /*
      * Phase 2 shipped this device-local, with the banner saying so, because no

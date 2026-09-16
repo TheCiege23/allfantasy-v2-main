@@ -29,6 +29,14 @@ export type SummaryScope = {
   /** Period index — a week for NFL, a gameday elsewhere. Matches the event model's `period`. */
   period?: number | null
   sport?: string | null
+  /**
+   * Provider filter, for a screen whose answer narrows to one platform (`/core/career?platform=`).
+   *
+   * ⚠ APPENDED LAST IN `scopeKey` ON PURPOSE. `push` skips a null/undefined value entirely, so a
+   * screen that does not set this emits the byte-identical key it emitted before this field existed
+   * — which is what lets it be added without invalidating the four summaries already live.
+   */
+  platform?: string | null
 }
 
 export type ScreenSummaryDefinition<T = unknown> = {
@@ -101,6 +109,13 @@ export function scopeKey(scope: SummaryScope): string {
   push('s', scope.seasonId)
   push('p', scope.period)
   push('sp', scope.sport ? String(scope.sport).toLowerCase() : null)
+  /*
+   * ⚠ LOWERCASED, LIKE `sport`, AND THE CASE-FOLD MUST MATCH WHAT THE BUILDER DOES WITH IT.
+   * `getCareerData` normalises its filter with `.trim().toLowerCase() || null`; if the key folded
+   * case and the builder did not, `?platform=Sleeper` and `?platform=sleeper` would share one entry
+   * while meaning two different reads. They fold identically, so one entry is the correct answer.
+   */
+  push('pf', scope.platform ? String(scope.platform).toLowerCase() : null)
   return parts.length ? parts.join('') : 'global'
 }
 
