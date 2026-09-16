@@ -73,6 +73,7 @@ function internalValueFor(
         idpValue: asset.sources.idpValue,
         // Slice 16: real league scoring settings (superflex / TE premium / PPR).
         scoring,
+        projectionScoringFormat: asset.sources.projectionScoringFormat,
       })
     case 'draft_pick':
       return normalizedPickValue({

@@ -13,6 +13,12 @@ export type TradeAssetKind = 'player' | 'draft_pick' | 'faab' | 'future_consider
 export interface AssetValueSources {
   marketObservation?: import('@/lib/decision-os/value-v2/market').MarketObservationV2 | null
   projectionValue: number | null
+  /**
+   * The reception format `projectionValue` was scored in, so the engine can convert it to the
+   * league's own instead of lifting an already-PPR number a second time. `null` = not known;
+   * absent = a caller written before this field existed (the engine keeps its old behaviour).
+   */
+  projectionScoringFormat?: import('./valueEngine').ReceptionScoringFormat | null
   rankingValue: number | null
   adpValue: number | null
   fantasyCalcValue: number | null

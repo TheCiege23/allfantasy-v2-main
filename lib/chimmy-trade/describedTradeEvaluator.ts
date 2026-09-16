@@ -4,9 +4,16 @@ import { prisma } from '@/lib/prisma'
 import { gradeTrade } from '@/lib/trade-value/grader'
 import { explainPlayerValue, type ScoringContext, type ValueBasis } from '@/lib/trade-value/valueEngine'
 import { newestProjectionSeason } from '@/lib/af-projections/readAfProjections'
+import { AF_SNAPSHOT_SCORING_FORMAT } from '@/lib/af-projections/types'
 import { normalizePlayerName } from '@/lib/player-identity/playerIdentityResolution'
 import type { AssetValueSnapshot, SideTotals } from '@/lib/trade-value/types'
-import { scoringContextFromWorld } from '@/lib/decision-os/trade/scoringContextFromWorld'
+import {
+  scoringContextFromWorld,
+  scoringFormatFromPresetId,
+} from '@/lib/decision-os/trade/scoringContextFromWorld'
+
+/** Every projection this module prices is an `AFProjectionSnapshot.rosProjection`. */
+const AF_PROJECTION_FORMAT = scoringFormatFromPresetId(AF_SNAPSHOT_SCORING_FORMAT)
 
 /**
  * "IS CHASE FOR GIBBS FAIR?" — grading a trade the user DESCRIBES.
@@ -161,12 +168,24 @@ export function scoringContextFor(league: DescribedTradeLeague): ScoringContext 
     }
   }
 
+  /*
+   * No shape — but the RULEBOOK can still be read, and it outranks the label here exactly as it
+   * does above. Only the structural booleans are label-only on this path.
+   */
+  const fromSettings = scoringContextFromWorld({ teams: 0, starterSlots: null, scoringSettings: league.settings })
   const s = (league.scoring ?? '').toLowerCase()
   return {
     isSuperflex: s.includes('superflex') || s.includes('sflex'),
     is2QB: s.includes('2qb'),
-    tePremium: s.includes('te_premium') || s.includes('tep') ? 0.5 : null,
-    scoringFormat: s.includes('half') ? 'half_ppr' : s.includes('ppr') ? 'ppr' : 'standard',
+    tePremium: fromSettings?.tePremium ?? (s.includes('te_premium') || s.includes('tep') ? 0.5 : null),
+    /*
+     * 🛑 UNKNOWN IS null, NOT 'standard'. This used to default a league with no rulebook and no
+     * label to 'standard', which cost nothing while the PPR lift was absolute (standard = no lift).
+     * Once the engine converts a full-PPR projection DOWN to the league's format, that guess would
+     * cut every receiver in an unlabelled league by up to ~9% on no evidence at all.
+     */
+    scoringFormat:
+      fromSettings?.scoringFormat ?? (s.includes('half') ? 'half_ppr' : s.includes('ppr') ? 'ppr' : null),
   }
 }
 
@@ -206,6 +225,7 @@ function toAsset(p: PricedPlayer, from: string, to: string): AssetValueSnapshot 
        * pessimistic.
        */
       projectionValue: p.rosProjection,
+      projectionScoringFormat: p.rosProjection != null ? AF_PROJECTION_FORMAT : null,
       rankingValue: null,
       adpValue: p.adp,
       fantasyCalcValue: p.marketValue,
@@ -388,6 +408,7 @@ export async function buildDescribedTradeContext(args: {
       marketValue: market,
       idpValue: null,
       scoring,
+      projectionScoringFormat: ros != null ? AF_PROJECTION_FORMAT : null,
     })
     return {
       playerName: base.playerName,

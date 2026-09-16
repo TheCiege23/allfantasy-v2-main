@@ -108,10 +108,52 @@ describe('the label fallback, when there are no slots', () => {
     }
   })
 
-  it('degrades to standard for a league with no information at all', () => {
+  /*
+   * 🛑 THIS USED TO ASSERT 'standard'. That guess was free while the PPR lift was absolute
+   * (standard = no lift). Now the engine converts a full-PPR projection DOWN to the league's format,
+   * so "standard" on no evidence would cut every receiver in an unlabelled league.
+   */
+  it('reports an unknown reception format as null, not as standard', () => {
     const ctx = scoringContextFor(league())
     expect(ctx.isSuperflex).toBe(false)
     expect(ctx.is2QB).toBe(false)
-    expect(ctx.scoringFormat).toBe('standard')
+    expect(ctx.scoringFormat).toBeNull()
+  })
+
+  it('reads the rulebook before the label even without slots', () => {
+    const ctx = scoringContextFor(league({
+      scoring: 'PPR',
+      settings: { scoring_settings: { rec: 0.5, bonus_rec_te: 1 } },
+    }))
+    expect(ctx.scoringFormat).toBe('half_ppr')
+    expect(ctx.tePremium).toBe(1)
+  })
+})
+
+/**
+ * 🛑 THE CALLER PASSES `League.settings` — THE WHOLE BLOB. Every settings test above hands over a
+ * flat `{ rec }` map, which is not what `loadLeague` reads, and that is how a top-level read of
+ * `rec` survived: in a real league it sits under `scoring_settings`.
+ */
+describe('real League.settings shape', () => {
+  const settings = {
+    name: 'x',
+    roster_positions: STANDARD_12,
+    scoring: 'Standard', // a stale label, deliberately contradicting the rulebook
+    scoringSettings: { format: 'ppr', rules: { rec: 1, bonus_rec_te: 0.75 } },
+    scoring_settings: { rec: 1, bonus_rec_te: 0.75, pass_td: 4 },
+  }
+
+  it('reads PPR and TE premium from under scoring_settings on the shape path', () => {
+    const ctx = scoringContextFor(league({ settings, starters: STANDARD_12, teamCount: 12 }))
+    expect(ctx.shape).toBeTruthy()
+    expect(ctx.scoringFormat).toBe('ppr')
+    expect(ctx.tePremium).toBe(0.75)
+  })
+
+  it('and on the no-slots path', () => {
+    const ctx = scoringContextFor(league({ settings, scoring: 'Standard' }))
+    expect(ctx.scoringFormat).toBe('ppr')
+    expect(ctx.tePremium).toBe(0.75)
   })
 })

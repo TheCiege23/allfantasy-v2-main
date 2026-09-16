@@ -10,8 +10,11 @@ import { describe, expect, it } from 'vitest'
 import {
   scoringContextFromCanonicalWorld,
   scoringContextFromWorld,
+  scoringFormatFromPresetId,
   scoringFormatFromRec,
+  scoringRulesFrom,
 } from '@/lib/decision-os/trade/scoringContextFromWorld'
+import { narrowScoringSettings } from '@/lib/decision-os/world/assemble'
 
 const STANDARD_12 = ['QB', 'RB', 'RB', 'WR', 'WR', 'TE', 'FLEX', 'K', 'DEF']
 const SUPERFLEX_12 = [...STANDARD_12, 'SUPER_FLEX']
@@ -166,5 +169,118 @@ describe('POSITIVE CONTROL — the wire is not passing null', () => {
       })!
     expect(mk(SUPERFLEX_12).shape!.superflexSlots).toBe(1)
     expect(mk(STANDARD_12).shape!.superflexSlots).toBe(0)
+  })
+})
+
+/**
+ * 🛑 EVERY TEST ABOVE PASSES A FLAT `{ rec }` BLOB, AND THAT IS HOW THE BUG HID.
+ *
+ * No caller ever passed one. The canonical world carries `narrowScoringSettings(League.settings)`
+ * — `{ scoring_settings: { rec, … }, scoringSettings: { rules, … }, scoring }` — and the other two
+ * callers pass the raw `League.settings`. Reading `rec` off the top of either finds nothing, so
+ * `scoringFormat` and `tePremium` were null on every trade grade while this file stayed green.
+ * The fixture below has the key layout of a real staging Sleeper league (measured 2026-09-16);
+ * only the values are trimmed.
+ */
+const SLEEPER_LEAGUE_SETTINGS = {
+  name: 'Some League',
+  avatar: 'https://sleepercdn.com/avatars/abc',
+  roster_positions: ['QB', 'RB', 'RB', 'WR', 'WR', 'TE', 'FLEX', 'BN'],
+  source_tracking: { provider: 'sleeper' },
+  identity_mappings: {},
+  importCanonical: { source: 'sleeper' },
+  scoring: 'ppr',
+  scoringSettings: {
+    format: 'ppr',
+    source: 'sleeper',
+    scoringTemplateId: 'default',
+    // Sleeper's canonical rules use plain keys the provider translator does not touch.
+    rules: { rec: 1, rec_yd: 0.1, bonus_rec_te: 0.5, sack: 1, xpm: 1 },
+  },
+  scoring_settings: { rec: 1, rec_yd: 0.1, rec_td: 6, bonus_rec_te: 0.5, pass_td: 4 },
+}
+
+describe('the wrappers callers ACTUALLY pass', () => {
+  it('reads PPR and TE premium through the canonical world’s narrowed blob', () => {
+    const narrowed = narrowScoringSettings(SLEEPER_LEAGUE_SETTINGS)
+    // The precondition that made the old top-level read blind: `rec` is not at the top.
+    expect((narrowed as Record<string, unknown>).rec).toBeUndefined()
+
+    const ctx = scoringContextFromCanonicalWorld({
+      teams: Array.from({ length: 12 }, () => ({})),
+      league: {
+        scoringSettings: narrowed,
+        rosterSettings: { starterSlots: STANDARD_12, rosterSize: 16, irSlots: null, taxiSlots: null },
+        tradeSettings: { deadlineWeek: 12 },
+      },
+    })!
+    expect(ctx.scoringFormat).toBe('ppr')
+    expect(ctx.tePremium).toBe(0.5)
+  })
+
+  it('reads them through a raw League.settings, as the Chimmy and capture paths pass it', () => {
+    const ctx = scoringContextFromWorld({
+      teams: 12, starterSlots: STANDARD_12, scoringSettings: SLEEPER_LEAGUE_SETTINGS,
+    })!
+    expect(ctx.scoringFormat).toBe('ppr')
+    expect(ctx.tePremium).toBe(0.5)
+  })
+
+  it('tells a half-PPR league from a full-PPR one — the distinction that was invisible', () => {
+    const half = {
+      ...SLEEPER_LEAGUE_SETTINGS,
+      scoring_settings: { ...SLEEPER_LEAGUE_SETTINGS.scoring_settings, rec: 0.5, bonus_rec_te: 0 },
+    }
+    const ctx = scoringContextFromWorld({ teams: 12, starterSlots: STANDARD_12, scoringSettings: narrowScoringSettings(half) })!
+    expect(ctx.scoringFormat).toBe('half_ppr')
+    expect(ctx.tePremium).toBeNull()
+  })
+
+  it('reads an ESPN rulebook captured under provider keys (53 = receptions)', () => {
+    const espn = { scoringSettings: { rules: { espn_stat_53: 0.5, espn_stat_42: 0.1 } } }
+    const ctx = scoringContextFromWorld({ teams: 12, starterSlots: STANDARD_12, scoringSettings: espn })!
+    expect(ctx.scoringFormat).toBe('half_ppr')
+  })
+
+  it('stays null for settings that carry no rulebook, rather than reading a label as one', () => {
+    // A native league stores a preset, not a rulebook. That is not evidence of a reception value.
+    const manual = { scoringSettings: { preset: 'PPR', ppr: 1, scoringFormat: 'ppr' } }
+    const noScoring = { name: 'x', roster_positions: ['QB'] }
+    for (const blob of [manual, noScoring]) {
+      const ctx = scoringContextFromWorld({ teams: 12, starterSlots: STANDARD_12, scoringSettings: blob })!
+      expect(ctx.scoringFormat).toBeNull()
+      expect(ctx.tePremium).toBeNull()
+    }
+  })
+})
+
+describe('scoringRulesFrom', () => {
+  it('unwraps both spellings and passes a bare rulebook through', () => {
+    expect(scoringRulesFrom({ scoring_settings: { rec: 1 } })).toEqual({ rec: 1 })
+    expect(scoringRulesFrom({ scoringSettings: { rec: 0.5 } })).toEqual({ rec: 0.5 })
+    expect(scoringRulesFrom({ rec: 0 })).toEqual({ rec: 0 })
+  })
+
+  it('returns null for anything that is not an object', () => {
+    for (const blob of [null, undefined, 'ppr', 42, []]) expect(scoringRulesFrom(blob)).toBeNull()
+  })
+})
+
+describe('scoringFormatFromPresetId — projection rows only', () => {
+  it('maps the presets the projection writers use, with or without the fb_ prefix', () => {
+    expect(scoringFormatFromPresetId('ppr')).toBe('ppr')
+    expect(scoringFormatFromPresetId('fb_ppr')).toBe('ppr')
+    expect(scoringFormatFromPresetId('PPR')).toBe('ppr')
+    expect(scoringFormatFromPresetId('half_ppr')).toBe('half_ppr')
+    expect(scoringFormatFromPresetId('fb_half_ppr')).toBe('half_ppr')
+    expect(scoringFormatFromPresetId('half-ppr')).toBe('half_ppr')
+    expect(scoringFormatFromPresetId('std')).toBe('standard')
+    expect(scoringFormatFromPresetId('standard')).toBe('standard')
+  })
+
+  it('refuses to guess at anything else', () => {
+    for (const id of [null, undefined, '', 'superflex', '2qb', 'nba_points', 'tep']) {
+      expect(scoringFormatFromPresetId(id)).toBeNull()
+    }
   })
 })

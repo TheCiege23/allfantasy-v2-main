@@ -67,6 +67,52 @@ export const TE_PREMIUM_MAX_MULTIPLIER = 1.5
 /** Full-PPR lift by position (half-PPR applies half of it). */
 export const PPR_POSITION_LIFT: Record<string, number> = { WR: 0.08, TE: 0.10, RB: 0.04 }
 
+/** The three reception formats the engine can express. */
+export type ReceptionScoringFormat = 'standard' | 'half_ppr' | 'ppr'
+
+const FORMAT_LABEL: Record<ReceptionScoringFormat, string> = {
+  ppr: 'full PPR',
+  half_ppr: 'half PPR',
+  standard: 'standard (no PPR)',
+}
+
+/** Share of a full-PPR lift a format carries: none, half, all. */
+function pprShare(format: ReceptionScoringFormat): number {
+  return format === 'ppr' ? 1 : format === 'half_ppr' ? 0.5 : 0
+}
+
+/**
+ * How much to move a projection-based value for the league's reception scoring.
+ *
+ * ── 🛑 THE PROJECTION ALREADY HAS A FORMAT, AND THE LIFT USED TO IGNORE IT ──────────────────
+ * `PPR_POSITION_LIFT` was written as a lift ON TOP OF a standard-scored number. Nothing that
+ * feeds this engine is standard-scored: `AFProjectionSnapshot` stores ONE canonical full-PPR row
+ * per player (`AF_SNAPSHOT_SCORING_FORMAT`), and both writers into `fantasy_projections` write
+ * the `ppr` preset. So a PPR league lifted a full-PPR projection a second time, and a half-PPR or
+ * standard league priced its pass-catchers on receptions it does not score. The lift is therefore
+ * applied RELATIVE to the projection's own format: a PPR league on a PPR projection moves by
+ * exactly 1.0, and the other two move DOWN by the share of the lift they do not score.
+ *
+ * `projectionFormat`:
+ *   - a format → relative conversion, as above;
+ *   - `null`   → the projection's format is unknown, so there is nothing honest to convert FROM
+ *                and the factor is 1.0;
+ *   - omitted  → the pre-2026-09-16 absolute lift, kept for callers that have not said what
+ *                their projection is. Every trade path that reads real league settings says.
+ */
+export function pprConversionFactor(
+  position: string | null | undefined,
+  leagueFormat: ReceptionScoringFormat | null | undefined,
+  projectionFormat?: ReceptionScoringFormat | null,
+): number {
+  if (!position || !leagueFormat) return 1.0
+  const lift = PPR_POSITION_LIFT[position.toUpperCase()]
+  if (lift == null) return 1.0
+  if (projectionFormat === undefined) return 1 + pprShare(leagueFormat) * lift
+  if (projectionFormat === null) return 1.0
+  return (1 + pprShare(leagueFormat) * lift) / (1 + pprShare(projectionFormat) * lift)
+}
+
 export interface ScoringContext {
   /** Two QB-eligible starting slots where the second is a flex. */
   isSuperflex?: boolean | null
@@ -74,7 +120,7 @@ export interface ScoringContext {
   is2QB?: boolean | null
   /** Points per reception for TEs above the base rate (e.g. 0.5, 1). */
   tePremium?: number | null
-  scoringFormat?: 'standard' | 'half_ppr' | 'ppr' | null
+  scoringFormat?: ReceptionScoringFormat | null
   /**
    * The league's real structural shape — team count and starting slots.
    *
@@ -96,10 +142,14 @@ export interface ScoringContext {
 /**
  * Multiplier applied to a position's standard scarcity for this league's real
  * scoring settings. Returns exactly 1.0 when nothing relevant is configured.
+ *
+ * `projectionFormat` is the reception format the priced projection was scored in — see
+ * {@link pprConversionFactor} for what omitting it means.
  */
 export function scoringScarcityMultiplier(
   position: string | null | undefined,
   scoring?: ScoringContext | null,
+  projectionFormat?: ReceptionScoringFormat | null,
 ): number {
   if (!scoring || !position) return 1.0
   const pos = position.toUpperCase()
@@ -121,11 +171,7 @@ export function scoringScarcityMultiplier(
     multiplier *= Math.min(1 + scoring.tePremium * TE_PREMIUM_PER_POINT, TE_PREMIUM_MAX_MULTIPLIER)
   }
 
-  const lift = PPR_POSITION_LIFT[pos]
-  if (lift != null) {
-    if (scoring.scoringFormat === 'ppr') multiplier *= 1 + lift
-    else if (scoring.scoringFormat === 'half_ppr') multiplier *= 1 + lift / 2
-  }
+  multiplier *= pprConversionFactor(pos, scoring.scoringFormat, projectionFormat)
 
   return multiplier
 }
@@ -250,6 +296,8 @@ export function normalizedPlayerValue(input: {
    * i.e. byte-identical to the pre-slice-16 result.
    */
   scoring?: ScoringContext | null
+  /** Reception format `projection` was scored in. See {@link pprConversionFactor}. */
+  projectionScoringFormat?: ReceptionScoringFormat | null
 }): number {
   /*
    * The IDP value is checked FIRST and returns immediately. It is already the output of a
@@ -292,6 +340,7 @@ export function explainPlayerValue(input: {
   marketValue?: number | null
   idpValue?: number | null
   scoring?: ScoringContext | null
+  projectionScoringFormat?: ReceptionScoringFormat | null
 }): ValueDerivation {
   const basis = valueBasisFor(input)
   const steps: ValueDerivationStep[] = []
@@ -353,14 +402,31 @@ export function explainPlayerValue(input: {
     value: afterScale,
   })
 
-  const scarcity = scarcityFor(input.position) * scoringScarcityMultiplier(input.position, input.scoring)
+  const scarcity =
+    scarcityFor(input.position) *
+    scoringScarcityMultiplier(input.position, input.scoring, input.projectionScoringFormat)
   const afterScarcity = afterScale * scarcity
+  const pprFactor = pprConversionFactor(
+    input.position,
+    input.scoring?.scoringFormat,
+    input.projectionScoringFormat,
+  )
+  /*
+   * Only the RELATIVE conversion is named. It is the one that can move a value DOWN, and a manager
+   * whose receiver is priced below the market deserves to be told it is the league's reception
+   * scoring doing it, not a judgement on the player.
+   */
+  const pprNote =
+    input.projectionScoringFormat != null && input.scoring?.scoringFormat && Math.abs(pprFactor - 1) > 1e-9
+      ? ` Includes ${pprFactor < 1 ? '−' : '+'}${Math.abs((pprFactor - 1) * 100).toFixed(1)}% because the projection is scored ${FORMAT_LABEL[input.projectionScoringFormat]} and this league is ${FORMAT_LABEL[input.scoring.scoringFormat]}.`
+      : ''
   steps.push({
     label: `× ${scarcity.toFixed(2)} scarcity`,
     detail:
-      scarcity === 1
+      (scarcity === 1
         ? 'Position carries no scarcity adjustment in this league.'
-        : `How hard ${input.position ?? 'this position'} is to replace, given the league's starting slots and scoring.`,
+        : `How hard ${input.position ?? 'this position'} is to replace, given the league's starting slots and scoring.`) +
+      pprNote,
     value: afterScarcity,
   })
 
