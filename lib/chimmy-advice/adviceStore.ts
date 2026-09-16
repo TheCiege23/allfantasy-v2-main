@@ -103,6 +103,31 @@ export async function recordAdvice(input: AdviceInput): Promise<RecordAdviceResu
   }
 }
 
+/**
+ * Everyone who was given advice since a date, with the leagues it was for — most recently advised
+ * first. The outcome loop's work list. `null` when advice is unavailable.
+ */
+export async function listAdviceUsers(args: {
+  since: Date
+  limit: number
+}): Promise<Array<{ userId: string; leagueIds: string[] }> | null> {
+  const limit = Math.max(1, Math.floor(args.limit))
+  try {
+    const rows = await prisma.$queryRaw<Array<{ user_id: string; league_ids: string[] }>>`
+      SELECT "user_id", array_agg(DISTINCT "league_id") AS "league_ids"
+      FROM "chimmy_advice"
+      WHERE "given_at" >= ${args.since}
+      GROUP BY "user_id"
+      ORDER BY MAX("given_at") DESC
+      LIMIT ${limit}
+    `
+    return rows.map((r) => ({ userId: r.user_id, leagueIds: Array.isArray(r.league_ids) ? r.league_ids.map(String) : [] }))
+  } catch (err) {
+    if (isMissingDatabaseObjectError(err)) return null
+    throw err
+  }
+}
+
 type AdviceRow = {
   league_id: string
   sport: string

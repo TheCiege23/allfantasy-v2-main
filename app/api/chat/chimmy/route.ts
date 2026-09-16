@@ -129,6 +129,8 @@ import {
 } from '@/lib/ai/leagueSportsGroundingPacket'
 import { buildDecisionOsGroundingPacket } from '@/lib/decision-os/grounding/packet'
 import { recordChatWaiverAdvice } from '@/lib/chimmy-advice/chatWaiverAdvice'
+import { readAdviceLearningSnapshot } from '@/lib/chimmy-outcomes/adviceLearning'
+import { trackRecordsFrom } from '@/lib/chimmy-outcomes/learningSnapshot'
 import { serializeDecisionOsGroundingForPrompt } from '@/lib/decision-os/grounding/serialize'
 import { resolveLanguage } from '@/lib/i18n/constants'
 import {
@@ -3254,10 +3256,17 @@ ${describedTradeCtx}`
       )
     }
 
+    /*
+     * Chimmy's track record (brief item 10): how start/sit calls shown at each confidence band have
+     * actually turned out. A bounded ±10 in the rubric, silent until enough calls are resolved;
+     * memoised per instance and never throws, so it costs at most one read every few minutes.
+     */
+    const trackRecords = trackRecordsFrom(await readAdviceLearningSnapshot())
     const answerContractResult = buildChimmyAnswerContract({
       message,
       insightType: insightType ?? null,
       specialistAgent,
+      trackRecords,
       confidencePct: pecrOutput.responseContract.confidence ?? null,
       stalenessWarning: staleness.warning,
       staleMinutes: staleness.staleMinutes ?? null,
@@ -3328,6 +3337,11 @@ ${describedTradeCtx}`
       players: playerCards.length > 0 ? playerCards : undefined,
       /** The before/after the drawer renders; present only when the scenario resolved. */
       scenario: tradeScenarioForMeta ?? undefined,
+      /**
+       * The advice this answer put on file, set below once it is recorded — the drawer's
+       * "Did it / Not doing it" buttons send its key back. Absent when nothing was recorded.
+       */
+      advice: undefined as { key: string; type: 'add'; playerName: string } | undefined,
       /*
        * What this answer was actually grounded on. The drawer renders it, so a
        * "Chimmy is answering blind" state is VISIBLE rather than something you
@@ -3459,6 +3473,9 @@ ${describedTradeCtx}`
             claims: waiverClaimsSeen.claims,
             confidencePct: pecrOutput.responseContract.confidence ?? null,
             answer: assistantResponse,
+            onRecorded: (advice) => {
+              meta.advice = { key: advice.key, type: 'add', playerName: advice.playerName }
+            },
           }),
         )
       }

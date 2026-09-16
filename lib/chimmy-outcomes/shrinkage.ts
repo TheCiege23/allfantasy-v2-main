@@ -38,6 +38,19 @@ export function shrunkRate(hits: number, n: number, opts: ShrinkageOptions = BEH
 }
 
 /**
+ * `shrunkRate` over DECAYED counts. The minimum sample is checked against the RAW number of
+ * results (`rawN`) — decay changes how much each one weighs, never whether there is enough
+ * evidence to speak at all.
+ */
+export function shrunkWeightedRate(
+  counts: { hits: number; n: number; rawN: number },
+  opts: ShrinkageOptions = BEHAVIOR_RATE_DEFAULTS,
+): number | null {
+  if (!Number.isFinite(counts.rawN) || counts.rawN < opts.minSample) return null
+  return shrunkRate(counts.hits, counts.n, { ...opts, minSample: 0 })
+}
+
+/**
  * Exponential time decay: a result `ageDays` old counts `0.5^(ageDays / halfLifeDays)`.
  * Used where results span a season, so last month's run cannot outweigh this week's.
  */

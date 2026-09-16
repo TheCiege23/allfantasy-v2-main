@@ -38,6 +38,11 @@ const resolveOutcomesMock = vi.fn(async () => ({
 vi.mock('@/lib/ai/outcomes/resolveDraftRecommendationOutcomes', () => ({
   resolveDraftRecommendationOutcomes: (...args: unknown[]) => resolveOutcomesMock(...args),
 }))
+// The outcome loop's rebuild (Chimmy item 10) — added with its mock, per the note above.
+const adviceLearningMock = vi.fn(async () => ({ status: 'fresh' as const, computedAt: '2026-09-16T00:00:00.000Z' }))
+vi.mock('@/lib/chimmy-outcomes/adviceLearning', () => ({
+  recomputeAdviceLearning: (...args: unknown[]) => adviceLearningMock(...args),
+}))
 
 import { GET } from '@/app/api/cron/decision-os-intelligence-maintenance/route'
 
@@ -49,6 +54,7 @@ beforeEach(() => {
   saved = Object.fromEntries(ENV_KEYS.map((k) => [k, process.env[k]]))
   runMock.mockClear()
   depsMock.mockClear()
+  adviceLearningMock.mockClear()
   process.env.CRON_SECRET = SECRET
   delete process.env.DECISION_OS_MAINTENANCE_ENABLED
 })
@@ -146,5 +152,29 @@ describe('decision-os maintenance cron — activation gate', () => {
     await GET(authed())
     expect(runMock).not.toHaveBeenCalled() // runner (→ drains/reconcile/providers) never called
     expect(depsMock).not.toHaveBeenCalled() // real prisma-backed deps never even constructed
+  })
+})
+
+describe('decision-os maintenance cron — Chimmy outcome loop', () => {
+  it('rebuilds whether or not maintenance is enabled, and reports it', async () => {
+    delete process.env.DECISION_OS_MAINTENANCE_ENABLED
+    const off = await (await GET(authed())).json()
+    process.env.DECISION_OS_MAINTENANCE_ENABLED = 'true'
+    const on = await (await GET(authed())).json()
+    expect(adviceLearningMock).toHaveBeenCalledTimes(2)
+    expect(off.adviceLearning).toEqual({ status: 'fresh', computedAt: '2026-09-16T00:00:00.000Z' })
+    expect(on.adviceLearning).toEqual({ status: 'fresh', computedAt: '2026-09-16T00:00:00.000Z' })
+  })
+
+  it('never runs for an unauthorized caller', async () => {
+    await GET(req())
+    expect(adviceLearningMock).not.toHaveBeenCalled()
+  })
+
+  it('a failed rebuild is reported, not thrown', async () => {
+    adviceLearningMock.mockRejectedValueOnce(new Error('db down'))
+    const res = await GET(authed())
+    expect(res.status).toBe(200)
+    expect((await res.json()).adviceLearning).toEqual({ status: 'error', error: 'db down' })
   })
 })

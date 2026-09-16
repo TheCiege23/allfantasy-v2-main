@@ -34,7 +34,13 @@ vi.mock('@/lib/prisma', () => ({
 vi.mock('@/lib/trade-intel/sleeperTradeGradeService', () => ({ TRADE_GRADES_CACHE_PREFIX: 'trade-grades:v2:' }))
 vi.mock('@/lib/chimmy-advice/adviceStore', () => ({ listAdviceForUser: h.list }))
 
-import { MAX_CHIMMY_RECEIPTS, getChimmyAdviceReceipts, getDecisionReceipts } from '@/lib/core-app/decisionReceipts'
+import {
+  MAX_CHIMMY_RECEIPTS,
+  getChimmyAdviceReceipts,
+  getDecisionReceipts,
+  resolveChimmyAdviceOutcomes,
+  startSitAdviceKey,
+} from '@/lib/core-app/decisionReceipts'
 
 const USER = 'u1'
 const ICE = { id: 'af-ice', name: 'Ice Kings', platform: 'sleeper', platformLeagueId: 'sl-ice', season: 2026 }
@@ -176,5 +182,36 @@ describe('getDecisionReceipts + Chimmy', () => {
     h.list.mockRejectedValue(new Error('advice down'))
     const without = await getDecisionReceipts({ userId: USER, leagues: [ICE], ownerSleeperId: 'sl-me', currentWeek: 6 })
     expect(without && 'chimmy' in without).toBe(false)
+  })
+})
+
+/*
+ * Chimmy item 10: the outcome loop reads the card's own rules, unsliced, with the advice beside
+ * them — and a receipt's id is the advice's key, so the two can be joined.
+ */
+describe('resolveChimmyAdviceOutcomes', () => {
+  const SINCE = new Date('2026-06-01T00:00:00Z')
+
+  it('returns every resolved call, not the card’s five, with the advice they came from', async () => {
+    const rows = Array.from({ length: MAX_CHIMMY_RECEIPTS + 3 }, (_, i) => advice({ week: i + 1, rec: { key: `in${i}`, name: `In ${i}` }, alt: { key: `out${i}`, name: `Out ${i}` } }))
+    const scores = rows.flatMap((_, i) => [score(`in${i}`, 10, true, { week: i + 1 }), score(`out${i}`, 5, false, { week: i + 1 })])
+    db({ rows, scores })
+    const out = await resolveChimmyAdviceOutcomes({ userId: USER, leagues: [ICE], currentWeek: 12, since: SINCE })
+    expect(out?.startSits).toHaveLength(MAX_CHIMMY_RECEIPTS + 3)
+    expect(out?.advice).toHaveLength(MAX_CHIMMY_RECEIPTS + 3)
+    expect(h.list.mock.calls[0][0]).toMatchObject({ userId: USER, leagueIds: ['af-ice'], since: SINCE })
+    for (const r of out!.startSits) {
+      const a = out!.advice.find((x) => startSitAdviceKey(x.leagueId, x.season, x.week, x.rec.key, x.alt!.key) === r.id)
+      expect(a, r.id).toBeTruthy()
+    }
+  })
+
+  it('is null when advice is unavailable, and empty with no Sleeper league', async () => {
+    db({ rows: null })
+    expect(await resolveChimmyAdviceOutcomes({ userId: USER, leagues: [ICE], currentWeek: 6, since: SINCE })).toBeNull()
+    expect(
+      await resolveChimmyAdviceOutcomes({ userId: USER, leagues: [{ ...ICE, platform: 'espn' }], currentWeek: 6, since: SINCE }),
+    ).toEqual({ advice: [], startSits: [], adds: [] })
+    expect(await resolveChimmyAdviceOutcomes({ userId: '', leagues: [ICE], currentWeek: 6, since: SINCE })).toBeNull()
   })
 })

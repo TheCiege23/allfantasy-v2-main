@@ -2,6 +2,7 @@ import 'server-only'
 
 import { prisma } from '@/lib/prisma'
 import { recordAdvice } from '@/lib/chimmy-advice/adviceStore'
+import { addAdviceKey } from '@/lib/chimmy-advice/adviceKeys'
 import { asIds, rosterCandidates } from '@/lib/core-app/dash3aPanels'
 import { resolveCurrentWeekForLeague } from '@/lib/core-app/currentWeek'
 import { normalizePlayerName } from '@/lib/player-identity/playerIdentityResolution'
@@ -49,6 +50,11 @@ export async function recordChatWaiverAdvice(args: {
   confidencePct: number | null
   /** The answer as the user saw it (after the assistant-mode trim). */
   answer: string
+  /**
+   * Called once the advice is on file, with its key (`addAdviceKey`) and the player's name — what
+   * the drawer's "Did it / Not doing it" buttons send back. Never called for a refusal.
+   */
+  onRecorded?: (advice: { key: string; playerName: string }) => void
 }): Promise<ChatWaiverAdviceOutcome> {
   const top = [...(args.claims ?? [])]
     .filter((c) => c && c.addPlayerId && c.addPlayerName?.trim())
@@ -102,7 +108,8 @@ export async function recordChatWaiverAdvice(args: {
   const current = await resolveCurrentWeekForLeague(league.platformLeagueId).catch(() => null)
   if (!current) return 'no_week'
 
-  return recordAdvice({
+  const playerName = top.addPlayerName.trim()
+  const outcome = await recordAdvice({
     userId: args.userId,
     leagueId: league.id,
     sport: String(league.sport ?? 'NFL'),
@@ -110,9 +117,13 @@ export async function recordChatWaiverAdvice(args: {
     week: current.week,
     adviceType: 'add',
     surface: 'chimmy_chat_waiver',
-    rec: { key: sleeperId, name: top.addPlayerName.trim() },
+    rec: { key: sleeperId, name: playerName },
     alt: null,
     slot: null,
     confidencePct: args.confidencePct,
   })
+  if (outcome === 'recorded') {
+    args.onRecorded?.({ key: addAdviceKey(league.id, current.seasonYear, current.week, sleeperId), playerName })
+  }
+  return outcome
 }

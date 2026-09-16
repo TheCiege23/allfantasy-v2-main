@@ -22,6 +22,8 @@ import { MessageReactions } from './MessageReactions'
 import { QuotedMessage } from './QuotedMessage'
 import { ChimmyEvidenceBlock, type ChimmyEvidence } from './ChimmyEvidence'
 import { ChimmyScenarioCard } from './ChimmyScenario'
+import { ChimmyAdviceFollow, type ChimmyAdviceRef } from './ChimmyAdviceFollow'
+import { MAX_ADVICE_KEY_LENGTH } from '@/lib/chimmy-advice/adviceKeys'
 import type { ReadyTradeScenario } from '@/lib/chimmy/tradeScenarioTypes'
 import { censorProfanity } from '@/lib/chat-core/censorProfanity'
 import { PinnedBoard } from './PinnedBoard'
@@ -239,6 +241,8 @@ type ChatTurn = {
   evidence?: ChimmyEvidence | null
   /** A trade's before/after, computed from the league's rosters. Only a resolved one arrives. */
   scenario?: ReadyTradeScenario | null
+  /** Advice this answer put on file — renders "Did it / Not doing it", and keeps the vote. */
+  advice?: ChimmyAdviceRef | null
 }
 
 type ChimmyGrounding =
@@ -380,6 +384,8 @@ type ChimmyEnvelope = {
     leagueGrounding?: ChimmyGrounding
     players?: ChimmyPlayerCard[]
     scenario?: ReadyTradeScenario
+    /** Set only when the route recorded this answer's advice. */
+    advice?: { key?: unknown; type?: unknown; playerName?: unknown }
     /** Answered without spending anything — do not print a price on it. */
     free?: boolean
     /**
@@ -424,6 +430,19 @@ function readEvidence(payload: ChimmyEnvelope): ChimmyEvidence | null {
     syncedAt: meta?.syncFreshness?.sportsDigest?.overallLastSyncedAt ?? null,
     staleMinutes: meta?.staleness?.staleMinutes ?? null,
   }
+}
+
+/**
+ * The advice an answer put on file, or null. Only an `add` with a key and a name is kept — a
+ * half-shaped object would render a button that sends an unusable vote.
+ */
+export function readAdvice(payload: ChimmyEnvelope): ChimmyAdviceRef | null {
+  const a = payload.meta?.advice
+  if (!a || a.type !== 'add') return null
+  const key = typeof a.key === 'string' ? a.key.trim() : ''
+  const playerName = typeof a.playerName === 'string' ? a.playerName.trim() : ''
+  if (!key || key.length > MAX_ADVICE_KEY_LENGTH || !playerName) return null
+  return { key, type: 'add', playerName, vote: null }
 }
 
 // ── Chimmy panel ───────────────────────────────────────────────────────
@@ -677,6 +696,7 @@ function ChimmyPanel({
             scenario: payload.meta?.scenario?.status === 'ready' && Array.isArray(payload.meta.scenario.give)
               ? payload.meta.scenario
               : null,
+            advice: readAdvice(payload),
           },
         ])
       } catch (e) {
@@ -788,6 +808,17 @@ function ChimmyPanel({
               ) : null}
 
               {t.role === 'chimmy' && t.scenario ? <ChimmyScenarioCard scenario={t.scenario} /> : null}
+
+              {t.role === 'chimmy' && t.advice ? (
+                <ChimmyAdviceFollow
+                  advice={t.advice}
+                  onVoted={(vote) =>
+                    setTurns((all) =>
+                      all.map((x) => (x.id === t.id && x.advice ? { ...x, advice: { ...x.advice, vote } } : x)),
+                    )
+                  }
+                />
+              ) : null}
 
               {t.role === 'chimmy' && t.players?.length ? (
                 <PlayerChips players={t.players} />
