@@ -32,7 +32,20 @@ Stamped on the root span (queryable in the spans dataset) and as tags:
 | `af.db.count` / `af.db.ms` / `af.db.max_ms` / `af.db.slowest` / `af.db.errors` | per-request database totals | server, from `lib/prisma.ts` |
 | `af.sync_job` | the `withSyncJobRun` job name | server |
 | `af.shell_ms` | ms from the session read until the `/core` shell had everything it renders | server, `/core` only |
+| `core.shell` span | the SAME duration as a span, because `af.shell_ms` **cannot be aggregated** — see below | server, `/core` only |
 | `af.card` | on `core.card` spans: the read feeding a `/core` card (`dash34`, `career`, `trades`, `urgency-badges`, …) — see `CoreCardRead` in `lib/observability/cardTelemetry.ts` | server, `/core` home + tab badges |
+
+🛑 **A NUMERIC `af.*` ATTRIBUTE IS NOT QUERYABLE IN SENTRY, AND THAT IS WHY `core.shell` EXISTS.**
+Measured 2026-09-16 against the `all-fantasy` org: `af.shell_ms` and `af.db.ms` both come back as
+`INVALID — Unknown attribute`, typed as strings, while the string attributes on the very same spans
+(`af.surface`, `af.screen`, `af.card`) query fine. So those durations are readable on an individual
+trace and **cannot be aggregated** — no p75, no percentile, no budget calibration. `span.duration`
+is a native field with none of that problem, so the shell phase is now ALSO emitted as a
+`core.shell` span carrying `af.screen` and `af.device`.
+
+⚠ The attribute is kept alongside it: it is what an individual trace shows and what this document
+has always named. The span is the one an aggregate query can use. ⚠ **The same limit applies to
+`af.db.ms`** — it has no span equivalent yet, so the `db` budget still cannot be calibrated.
 
 ⚠ **On `/core`, `span.duration` is no longer what the user waited for before the app appeared.** The
 shell renders first and the screen streams in behind it, so the request lasts as long as the slowest

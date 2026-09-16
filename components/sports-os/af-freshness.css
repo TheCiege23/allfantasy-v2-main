@@ -1,0 +1,72 @@
+/* Sports OS freshness chip. Sized to sit inline in a screen header. */
+
+.af-fresh {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 9px 3px 7px;
+  border: 1px solid var(--chip-line);
+  border-radius: 999px;
+  background: var(--chip);
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.af-fresh-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--good);
+  flex: 0 0 auto;
+}
+
+.af-fresh-text time {
+  font-variant-numeric: tabular-nums;
+}
+
+.af-fresh-note {
+  padding-left: 6px;
+  border-left: 1px solid var(--chip-line);
+  color: var(--bad);
+}
+
+/*
+ * Stale and last-known are deliberately DIFFERENT states rather than one "not fresh".
+ * Stale means the value is past its TTL and a refresh is expected; last-known means a refresh
+ * already failed. Collapsing them would hide the case a reader can actually act on.
+ */
+.af-fresh[data-state='stale'] .af-fresh-dot {
+  background: var(--accent);
+}
+
+.af-fresh[data-state='last-known'] {
+  border-color: var(--bad-soft);
+  color: var(--text2);
+}
+
+.af-fresh[data-state='last-known'] .af-fresh-dot {
+  background: var(--bad);
+}
+
+/*
+ * ⚠ REDUCED MOTION IS THE DEFAULT HERE, NOT THE EXCEPTION. The pulse only ever runs for the
+ * last-known state, where it is carrying information, and it is switched OFF for anyone who asked
+ * for less motion — a persistent pulse is exactly what that preference is about.
+ */
+@media (prefers-reduced-motion: no-preference) {
+  .af-fresh[data-state='last-known'] .af-fresh-dot {
+    animation: af-fresh-pulse 2.4s ease-in-out infinite;
+  }
+}
+
+@keyframes af-fresh-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}

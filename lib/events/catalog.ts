@@ -70,6 +70,16 @@ export const EVENT = {
   // Subscription / entitlement
   SUBSCRIPTION_CHANGED: 'billing.subscription.changed',
   ENTITLEMENT_CHANGED: 'billing.entitlement.changed',
+  // Ingestion — the trigger side of "one event system" (see lib/sports-os/reactions.ts).
+  // These are emitted BY ingestion, never by a request path, and they are what makes an import
+  // fan out to the projections, rankings and alerts it invalidates.
+  INGEST_LEAGUE_STARTED: 'ingest.league.started',
+  INGEST_LEAGUE_COMPLETED: 'ingest.league.completed',
+  INGEST_LEAGUE_FAILED: 'ingest.league.failed',
+  INGEST_ROSTERS_REFRESHED: 'ingest.rosters.refreshed',
+  INGEST_SCORES_REFRESHED: 'ingest.scores.refreshed',
+  INGEST_PLAYER_VALUES_REFRESHED: 'ingest.player_values.refreshed',
+  INGEST_PROJECTIONS_REFRESHED: 'ingest.projections.refreshed',
 } as const
 
 const id = z.string().min(1)
@@ -143,6 +153,24 @@ export const EVENT_PAYLOAD_SCHEMAS = {
   // ── Billing ──
   [EVENT.SUBSCRIPTION_CHANGED]: z.object({ userId: id, status: z.string(), plan: z.string().optional() }),
   [EVENT.ENTITLEMENT_CHANGED]: z.object({ userId: id, feature: z.string(), granted: z.boolean() }),
+  // -- Ingestion --
+  // `provider` is the source name ('sleeper', 'mfl', 'rolling-insights'). NEVER a URL and never a
+  // token-bearing one: Rolling Insights passes RSC_token as a query parameter, so a provider URL in
+  // an event payload is a credential in the outbox (see CLAUDE.md, Credentials).
+  [EVENT.INGEST_LEAGUE_STARTED]: z.object({ leagueId: id, provider: z.string(), mode: z.string().optional() }),
+  [EVENT.INGEST_LEAGUE_COMPLETED]: z.object({
+    leagueId: id,
+    provider: z.string(),
+    mode: z.string().optional(),
+    durationMs: z.number().int().nonnegative().optional(),
+    rosterCount: z.number().int().nonnegative().optional(),
+    playerCount: z.number().int().nonnegative().optional(),
+  }),
+  [EVENT.INGEST_LEAGUE_FAILED]: z.object({ leagueId: id, provider: z.string(), stage: z.string().optional() }),
+  [EVENT.INGEST_ROSTERS_REFRESHED]: z.object({ leagueId: id, provider: z.string(), changedRosterCount: z.number().int().nonnegative().optional() }),
+  [EVENT.INGEST_SCORES_REFRESHED]: z.object({ leagueId: optId, sport: z.string().optional(), period: z.number().int().optional(), changedCount: z.number().int().nonnegative().optional() }),
+  [EVENT.INGEST_PLAYER_VALUES_REFRESHED]: z.object({ source: z.string(), playerCount: z.number().int().nonnegative().optional() }),
+  [EVENT.INGEST_PROJECTIONS_REFRESHED]: z.object({ sport: z.string().optional(), period: z.number().int().optional(), playerCount: z.number().int().nonnegative().optional() }),
 } satisfies Record<string, z.ZodType>
 
 export type EventType = keyof typeof EVENT_PAYLOAD_SCHEMAS
