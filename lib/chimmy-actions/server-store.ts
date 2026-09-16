@@ -21,7 +21,7 @@ type EventRow = {
 }
 
 export async function createActionEvent(event: AIActionEvent): Promise<void> {
-  await (prisma as any).aiActionEvent.create({
+  await prisma.aiActionEvent.create({
     data: {
       id: event.id,
       actionType: event.actionType,
@@ -39,7 +39,7 @@ export async function createActionEvent(event: AIActionEvent): Promise<void> {
 }
 
 export async function listActionEvents(userId: string, limit: number): Promise<EventRow[]> {
-  const rows = await (prisma as any).aiActionEvent.findMany({
+  const rows = await prisma.aiActionEvent.findMany({
     where: { userId },
     orderBy: { timestamp: 'desc' },
     take: limit,
@@ -61,7 +61,7 @@ export async function listActionEvents(userId: string, limit: number): Promise<E
 }
 
 export async function createSavedRecommendation(rec: SavedAIRecommendation): Promise<string> {
-  const created = await (prisma as any).aiSavedRecommendation.create({
+  const created = await prisma.aiSavedRecommendation.create({
     data: {
       id: rec.id,
       userId: rec.userId,
@@ -85,7 +85,7 @@ export async function getSavedRecommendationById(
   id: string,
   userId?: string
 ): Promise<SavedAIRecommendation | null> {
-  const row = await (prisma as any).aiSavedRecommendation.findFirst({
+  const row = await prisma.aiSavedRecommendation.findFirst({
     where: {
       id,
       ...(userId ? { userId } : {}),
@@ -100,7 +100,7 @@ export async function listSavedRecommendations(
   userId: string,
   limit: number
 ): Promise<SavedAIRecommendation[]> {
-  const rows = await (prisma as any).aiSavedRecommendation.findMany({
+  const rows = await prisma.aiSavedRecommendation.findMany({
     where: { userId },
     orderBy: { savedAt: 'desc' },
     take: limit,
@@ -110,7 +110,7 @@ export async function listSavedRecommendations(
 }
 
 export async function markSavedRecommendationActedOn(id: string, userId?: string): Promise<void> {
-  await (prisma as any).aiSavedRecommendation.updateMany({
+  await prisma.aiSavedRecommendation.updateMany({
     where: {
       id,
       ...(userId ? { userId } : {}),
