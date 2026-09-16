@@ -141,7 +141,7 @@ export async function enterRedraftOffseason(
       created = true
 
       // Phase 0 rank fix companion: `FranchiseSeason` (the table
-      // `getNativeLeagueRankRows` reads for the career-rank calc) has never
+      // `loadCareerLedger` reads for the career-rank calc) has never
       // been written anywhere in the codebase — native leagues silently
       // scored 0 toward rank. Write it here, from the SAME `records`/
       // `champion`/`runnerUp` this function already computed for

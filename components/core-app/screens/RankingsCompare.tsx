@@ -1,79 +1,166 @@
 import Link from 'next/link'
 import { getLevelIcon } from '@/lib/rank/levels'
-import { GRADE_SCALE, type CompareData, type CompareManager, type CompareResult } from '@/lib/core-app/rankings'
+import {
+  GRADE_SCALE,
+  PLAYER_POSITIONS,
+  type CompareData,
+  type CompareKind,
+  type CompareManager,
+  type CompareResult,
+  type LeagueCompareData,
+  type LeagueCompareSide,
+  type PlayerPickData,
+  type TeamCompareData,
+  type TeamCompareSide,
+} from '@/lib/core-app/rankings'
 import '@/components/core-app/af-rankings-screen.css'
 
 /**
- * Compare managers — handoff 14c.
+ * Compare — handoff 14c, widened from managers to four kinds.
  *
- * ⚠ THIS DOES NOT REPLACE `/manager-compare`, AND DELIBERATELY SO. That screen
- * is a client component that calls the Sleeper API directly from the browser,
- * which is the db-first boundary the repo's own guard exists to stop. Rather
- * than port that fetching into a new surface, this one compares what the
- * database already holds. The two can be reconciled once the older screen's
- * provider calls move server-side.
+ *   managers  your career against another ranked manager's, normalised
+ *   leagues   two of your own league-seasons — the setting and your result
+ *   teams     two teams in one league, from that league's standings
+ *   players   hands two players to the Player Finder's own side-by-side
  *
- * ⚠ THE SEARCH IS A PLAIN GET FORM. No client JavaScript, so a comparison URL is
- * shareable and the back button behaves. The `FOUND` validation tag in the
- * design is rendered after the round-trip, on a handle that actually resolved,
- * rather than guessed at while typing.
+ * ⚠ EVERY PICKER IS A PLAIN GET FORM, so a comparison is a URL and the back
+ * button behaves. Nothing is compared from numbers the browser sent: the server
+ * re-reads both sides from the database on every request.
  *
- * ⚠ SEASON-BY-SEASON AND HEAD-TO-HEAD RENDER AS UNANSWERED, NOT AS ZERO. Both
- * need per-season rows scoped to leagues the two managers shared, and the stored
- * career figures are lifetime totals with no league, season or opponent
- * dimension. Build rule 2 says a season one manager sat out is never scored as a
- * loss for them — with nothing per-season to compare, the honest table is an
- * empty one that explains itself.
+ * ⚠ HEAD-TO-HEAD RENDERS AS UNANSWERED, NOT AS ZERO. Imported history stores
+ * each manager's own season, not who played whom each week.
  */
 
-function initials(handle: string): string {
-  return handle.replace(/^@/, '').slice(0, 1).toUpperCase() || '?'
+const KINDS: Array<{ key: CompareKind; label: string }> = [
+  { key: 'managers', label: 'Managers' },
+  { key: 'leagues', label: 'Leagues' },
+  { key: 'teams', label: 'Teams' },
+  { key: 'players', label: 'Players' },
+]
+
+function qs(pairs: Array<[string, string | null | undefined]>): string {
+  const p = new URLSearchParams()
+  for (const [k, v] of pairs) if (v != null && v !== '') p.set(k, v)
+  const s = p.toString()
+  return s ? `?${s}` : ''
 }
 
-function Suspect({ what }: { what: string }) {
+export function RankingsCompare({
+  kind,
+  result,
+  query,
+  leagues,
+  teams,
+  players,
+  filterPairs = [],
+}: {
+  kind: CompareKind
+  result: CompareResult | null
+  query: string
+  leagues: LeagueCompareData | null
+  teams: TeamCompareData | null
+  players: PlayerPickData | null
+  filterPairs?: Array<[string, string]>
+}) {
   return (
-    <span
-      className="af-rk-suspect"
-      title={`${what} is derived from career counters that contradict each other — this manager's championship and playoff totals exceed their recorded league-seasons.`}
-      aria-label={`${what} unreliable`}
-    >
-      !
-    </span>
+    <div className="af-rk">
+      <header className="af-rk-head">
+        <div>
+          <h1 className="af-rk-title">Compare</h1>
+          <p className="af-rk-sub">Side by side, on the same scale the rankings use.</p>
+        </div>
+        <div className="af-rk-headact">
+          <Link className="af-rk-btn" href={`/core/rankings${qs(filterPairs)}`}>
+            ← Rankings
+          </Link>
+        </div>
+      </header>
+
+      <nav className="af-rk-tabs" aria-label="What to compare">
+        {KINDS.map((k) => (
+          <Link
+            key={k.key}
+            href={`/core/rankings${qs([['view', 'compare'], ['kind', k.key === 'managers' ? null : k.key], ...(k.key === 'managers' ? filterPairs : [])])}`}
+            className="af-rk-tab"
+            aria-current={k.key === kind ? 'page' : undefined}
+          >
+            {k.label}
+          </Link>
+        ))}
+      </nav>
+
+      {kind === 'managers' ? (
+        <ManagersCompare result={result} query={query} filterPairs={filterPairs} />
+      ) : kind === 'leagues' && leagues ? (
+        <LeaguesCompare data={leagues} />
+      ) : kind === 'teams' && teams ? (
+        <TeamsCompare data={teams} />
+      ) : kind === 'players' && players ? (
+        <PlayersCompare data={players} />
+      ) : (
+        <section className="af-rk-card">
+          <p className="af-rk-a">This comparison could not be loaded just now.</p>
+        </section>
+      )}
+    </div>
   )
 }
 
-function SearchBar({ value }: { value: string }) {
+/* ─────────────────────────────── managers ───────────────────────────────── */
+
+function ManagersCompare({
+  result,
+  query,
+  filterPairs,
+}: {
+  result: CompareResult | null
+  query: string
+  filterPairs: Array<[string, string]>
+}) {
   return (
-    <form className="af-rk-search" action="/core/rankings" method="get">
-      <input type="hidden" name="view" value="compare" />
-      <label className="af-rk-input">
-        <span aria-hidden="true">@</span>
-        <input
-          type="text"
-          name="user"
-          defaultValue={value}
-          placeholder="username"
-          aria-label="Manager username to compare against"
-          autoComplete="off"
-        />
-      </label>
-      <button type="submit" className="af-rk-btn af-rk-btn--primary">
-        Compare
-      </button>
-    </form>
+    <>
+      <form className="af-rk-search" action="/core/rankings" method="get" aria-label="Compare with a manager">
+        <input type="hidden" name="view" value="compare" />
+        {filterPairs.map(([k, v]) => (
+          <input key={k} type="hidden" name={k} value={v} />
+        ))}
+        <label className="af-rk-input">
+          <span aria-hidden="true">@</span>
+          <input type="text" name="user" defaultValue={query} placeholder="username" aria-label="Manager username to compare against" autoComplete="off" />
+        </label>
+        <button type="submit" className="af-rk-btn af-rk-btn--primary">
+          Compare
+        </button>
+      </form>
+
+      {result == null ? (
+        <section className="af-rk-card">
+          <p className="af-rk-a">
+            Enter a manager&apos;s username, or use a name on the community board. Only managers whose careers have been
+            ranked can be compared — the comparison reads the same ledger the boards do.
+          </p>
+        </section>
+      ) : !result.ok ? (
+        <section className="af-rk-card">
+          <h2 className="af-rk-q">No comparison</h2>
+          <p className="af-rk-a">{result.message}</p>
+          {result.reason === 'not-found' ? (
+            <p className="af-rk-note">
+              Handles are matched exactly against display names and usernames — a near miss is reported as a miss rather
+              than compared against somebody else.
+            </p>
+          ) : null}
+        </section>
+      ) : (
+        <ManagersBody data={result.data} />
+      )}
+    </>
   )
 }
 
 function ManagerCard({ m, side }: { m: CompareManager; side: 'you' | 'them' }) {
   return (
-    <section
-      className="af-rk-card"
-      style={
-        side === 'you'
-          ? { background: 'var(--accent-soft)', borderColor: 'var(--accent-line)' }
-          : undefined
-      }
-    >
+    <section className={`af-rk-card${side === 'you' ? ' af-rk-card--you' : ''}`}>
       <div className="af-rk-vsman">
         {m.avatarUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
@@ -84,173 +171,156 @@ function ManagerCard({ m, side }: { m: CompareManager; side: 'you' | 'them' }) {
           </span>
         )}
         <div style={{ minWidth: 0 }}>
-          <p className="af-rk-vsname">@{m.handle}</p>
+          <p className="af-rk-vsname">
+            @{m.handle}
+            {side === 'you' ? <span className="af-rk-sr"> (you)</span> : null}
+          </p>
           <p className="af-rk-vsmeta">
-            Lvl {m.level} {m.levelName}
-            {m.suspect ? '' : ` · ${m.seasons.toLocaleString()} league-seasons`}
+            Lvl {m.level} {m.levelName} · {m.leagueSeasons.toLocaleString()} league-seasons · {m.confidence} confidence
           </p>
         </div>
         <div className="af-rk-vsgrade">
-          <b>
-            {m.grade}
-            {m.suspect ? <Suspect what="This grade" /> : null}
-          </b>
-          <span>{m.gradeScore.toFixed(1)}</span>
+          <b aria-label={`Grade ${m.grade}`}>{m.grade}</b>
+          <span>{m.gradeScore == null ? '—' : m.gradeScore.toFixed(1)}</span>
         </div>
       </div>
     </section>
   )
 }
 
-function LifetimeTable({ data }: { data: CompareData }) {
-  return (
-    <section className="af-rk-card" style={{ padding: 0, overflowX: 'auto' }}>
-      <table className="af-rk-table">
-        <thead>
-          <tr>
-            <th style={{ textAlign: 'right' }}>@{data.you.handle}</th>
-            <th style={{ textAlign: 'center' }}>Lifetime</th>
-            <th>@{data.them.handle}</th>
-          </tr>
-        </thead>
-        <tbody>
-          {data.metrics.map((m) => (
-            <tr key={m.label} className={m.signature ? 'sig' : undefined}>
-              <td className={`n${m.leader === 'you' ? ' lead' : ''}`}>{m.you}</td>
-              <td style={{ textAlign: 'center', color: 'var(--muted)' }}>
-                {m.label}
-                {m.unavailable ? (
-                  <span
-                    style={{ display: 'block', fontSize: 11, color: 'var(--faint)', marginTop: 3 }}
-                  >
-                    {m.unavailable}
-                  </span>
-                ) : null}
-              </td>
-              <td className={`n${m.leader === 'them' ? ' lead' : ''}`} style={{ textAlign: 'left' }}>
-                {m.them}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </section>
-  )
-}
-
-function pctBar(v: number | null): number {
-  return v == null ? 0 : Math.max(0, Math.min(100, Math.round(v * 100)))
-}
-
-export function RankingsCompare({
-  result,
-  query,
-}: {
-  result: CompareResult | null
-  query: string
-}) {
-  return (
-    <div className="af-rk">
-      <header className="af-rk-head">
-        <div>
-          <h1 className="af-rk-title">Compare managers</h1>
-          <p className="af-rk-sub">Career against career, on the same scale as everyone else.</p>
-        </div>
-        <div className="af-rk-headact">
-          <SearchBar value={query} />
-          <Link className="af-rk-btn" href="/core/rankings">
-            ← Rankings
-          </Link>
-        </div>
-      </header>
-
-      {result == null ? (
-        <section className="af-rk-card">
-          <p className="af-rk-a">
-            Enter a manager&apos;s username above. Only managers whose careers have been ranked can be
-            compared — the comparison reads the same scored figures the ladder does, so an unranked
-            account has nothing to put on the table.
-          </p>
-        </section>
-      ) : !result.ok ? (
-        <section className="af-rk-card">
-          <h2 className="af-rk-q">No comparison</h2>
-          <p className="af-rk-a">{result.message}</p>
-          {result.reason === 'not-found' ? (
-            <p className="af-rk-note">
-              Handles are matched against display names and usernames exactly, without fuzzy
-              matching — a near miss is reported as a miss rather than quietly compared against
-              somebody else.
-            </p>
-          ) : null}
-        </section>
-      ) : (
-        <CompareBody data={result.data} />
-      )}
-    </div>
-  )
-}
-
-function CompareBody({ data }: { data: CompareData }) {
+function ManagersBody({ data }: { data: CompareData }) {
+  const pct = (v: number | null) => (v == null ? 0 : Math.max(0, Math.min(100, Math.round(v * 100))))
   return (
     <>
       <div className="af-rk-vs">
         <ManagerCard m={data.you} side="you" />
-        <div className="af-rk-vsmid">
+        <div className="af-rk-vsmid" aria-hidden="true">
           <b>VS</b>
-          {/*
-            The design puts the raw head-to-head record here. There is no
-            opponent ledger behind it, so this says so in the one place a reader
-            would otherwise take a number on trust.
-          */}
-          <span style={{ fontSize: 11, color: 'var(--faint)', lineHeight: 1.4 }}>
-            H2H not recorded
-          </span>
+          <span className="af-rk-cellsub">{data.filtersLabel}</span>
         </div>
         <ManagerCard m={data.them} side="them" />
       </div>
 
-      <div className="af-rk-head" style={{ minHeight: 0 }}>
-        <span className="af-rk-tab" aria-current="true">
-          Lifetime
-        </span>
-        <span
-          style={{ fontSize: 11.5, color: 'var(--faint)', marginLeft: 'auto' }}
-          className="af-rk-mono"
-        >
-          Grade scale {GRADE_SCALE.map((g) => `${g.grade} ${g.min === 0 ? 'below' : g.min}`).join(' · ')}
-        </span>
-      </div>
+      <p className="af-rk-note af-rk-mono">
+        Grade scale {GRADE_SCALE.map((g) => `${g.grade} ${g.min === 0 ? 'below' : g.min}`).join(' · ')} — from the AF manager
+        score
+      </p>
 
-      <LifetimeTable data={data} />
+      <section className="af-rk-card" style={{ padding: 0 }}>
+        <div className="af-rk-tablewrap" role="region" aria-label="Career comparison" tabIndex={0}>
+          <table className="af-rk-table">
+            <caption className="af-rk-sr">
+              @{data.you.handle} against @{data.them.handle}, {data.filtersLabel}
+            </caption>
+            <thead>
+              <tr>
+                <th scope="col" style={{ textAlign: 'right' }}>
+                  @{data.you.handle}
+                </th>
+                <th scope="col" style={{ textAlign: 'center' }}>
+                  Measure
+                </th>
+                <th scope="col">@{data.them.handle}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.metrics.map((m) => (
+                <tr key={m.label} className={m.signature ? 'sig' : undefined}>
+                  <td className={`n${m.leader === 'you' ? ' lead' : ''}`}>
+                    {m.you}
+                    {m.leader === 'you' ? <span className="af-rk-sr"> (leads)</span> : null}
+                  </td>
+                  <th scope="row" style={{ textAlign: 'center', color: 'var(--muted)', fontWeight: 600 }}>
+                    {m.label}
+                    {m.note || m.unavailable ? <span className="af-rk-cellsub">{m.unavailable ?? m.note}</span> : null}
+                  </th>
+                  <td className={`n${m.leader === 'them' ? ' lead' : ''}`} style={{ textAlign: 'left' }}>
+                    {m.them}
+                    {m.leader === 'them' ? <span className="af-rk-sr"> (leads)</span> : null}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
 
       <div className="af-rk-cmpfoot">
-        <section className="af-rk-card">
-          <p className="af-rk-eyebrow">
-            Season by season
-            <span className="af-rk-spacer" />
-            <span>shared leagues only</span>
-          </p>
-          {data.sharedSeasons.length === 0 ? (
-            <p className="af-rk-empty">{data.sharedSeasonsNote}</p>
-          ) : (
-            <table className="af-rk-table">
-              <tbody>
-                {data.sharedSeasons.map((s) => (
-                  <tr key={s.season}>
-                    <td className="af-rk-mono">{s.season}</td>
-                    <td>{s.you}</td>
-                    <td>{s.them}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-          <p className="af-rk-note">
-            Only seasons both managers actually played would be compared. Years one of you sat out are
-            excluded rather than counted as a loss.
-          </p>
-        </section>
+        <div className="af-rk-col">
+          <section className="af-rk-card">
+            <p className="af-rk-eyebrow">
+              Season by season
+              <span className="af-rk-spacer" />
+              <span>years you both played</span>
+            </p>
+            {data.sharedSeasons.length === 0 ? (
+              <p className="af-rk-empty">You have no season with results in common{data.filtersLabel !== 'All leagues' ? ` in ${data.filtersLabel}` : ''}.</p>
+            ) : (
+              <div className="af-rk-tablewrap" role="region" aria-label="Season by season" tabIndex={0}>
+                <table className="af-rk-table">
+                  <thead>
+                    <tr>
+                      <th scope="col">Season</th>
+                      <th scope="col">@{data.you.handle}</th>
+                      <th scope="col">@{data.them.handle}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {data.sharedSeasons.map((s) => (
+                      <tr key={s.season}>
+                        <th scope="row" className="af-rk-mono">
+                          {s.season}
+                        </th>
+                        <td className={s.youScore != null && s.themScore != null && s.youScore > s.themScore ? 'af-rk-tone-good' : undefined}>
+                          {s.you} · {s.youScore == null ? '—' : s.youScore.toFixed(1)}
+                        </td>
+                        <td className={s.youScore != null && s.themScore != null && s.themScore > s.youScore ? 'af-rk-tone-good' : undefined}>
+                          {s.them} · {s.themScore == null ? '—' : s.themScore.toFixed(1)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            <p className="af-rk-note">Each year is scored on its own leagues. A year one of you sat out is left out, never counted as a loss.</p>
+          </section>
+
+          <section className="af-rk-card">
+            <p className="af-rk-eyebrow">
+              Leagues you shared
+              <span className="af-rk-spacer" />
+              <span>{data.sharedLeagues.length}</span>
+            </p>
+            {data.sharedLeagues.length === 0 ? (
+              <p className="af-rk-empty">No league-season appears in both careers.</p>
+            ) : (
+              <div className="af-rk-tablewrap" role="region" aria-label="Shared leagues" tabIndex={0}>
+                <table className="af-rk-table">
+                  <thead>
+                    <tr>
+                      <th scope="col">League</th>
+                      <th scope="col">@{data.you.handle}</th>
+                      <th scope="col">@{data.them.handle}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {data.sharedLeagues.map((l, i) => (
+                      <tr key={`${l.season}-${l.league}-${i}`}>
+                        <th scope="row">
+                          {l.league}
+                          <span className="af-rk-cellsub">{l.season}</span>
+                        </th>
+                        <td>{l.you}</td>
+                        <td>{l.them}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </section>
+        </div>
 
         <div className="af-rk-col">
           {data.verdict ? (
@@ -260,43 +330,320 @@ function CompareBody({ data }: { data: CompareData }) {
               <p className="af-rk-a">{data.verdict.body}</p>
             </section>
           ) : null}
-
           <section className="af-rk-card">
             <p className="af-rk-eyebrow">Head to head</p>
             <p className="af-rk-empty">{data.headToHeadNote}</p>
           </section>
-
           <section className="af-rk-card">
-            <p className="af-rk-eyebrow">Title rate</p>
-            <div className="af-rk-ratebar">
-              <div className="af-rk-ratebar-l">
-                <span>@{data.you.handle}</span>
-                <b>{data.titleRate.you == null ? '—' : `${pctBar(data.titleRate.you)}%`}</b>
+            <p className="af-rk-eyebrow">Title conversion</p>
+            {(['you', 'them'] as const).map((side) => (
+              <div className="af-rk-ratebar" key={side}>
+                <div className="af-rk-ratebar-l">
+                  <span>@{data[side].handle}</span>
+                  <b>{data.titleRate[side] == null ? '—' : `${pct(data.titleRate[side])}%`}</b>
+                </div>
+                <div className="af-rk-split" aria-hidden="true">
+                  <i className={side} style={{ width: `${pct(data.titleRate[side])}%` }} />
+                </div>
               </div>
-              <div className="af-rk-split">
-                <i className="you" style={{ width: `${pctBar(data.titleRate.you)}%` }} />
-              </div>
-            </div>
-            <div className="af-rk-ratebar">
-              <div className="af-rk-ratebar-l">
-                <span>@{data.them.handle}</span>
-                <b>{data.titleRate.them == null ? '—' : `${pctBar(data.titleRate.them)}%`}</b>
-              </div>
-              <div className="af-rk-split">
-                <i className="them" style={{ width: `${pctBar(data.titleRate.them)}%` }} />
-              </div>
-            </div>
-            {/*
-              Build rule 5: the denominator is stated in the card, so the ratio
-              cannot be misread as a raw title count.
-            */}
-            <p className="af-rk-note">
-              Championships divided by playoff appearances — not by seasons played. A manager who
-              never reached the playoffs has no rate rather than a zero.
-            </p>
+            ))}
+            <p className="af-rk-note">Titles divided by playoff berths. A manager who never reached the playoffs has no rate rather than zero.</p>
           </section>
         </div>
       </div>
+    </>
+  )
+}
+
+/* ──────────────────────────────── leagues ───────────────────────────────── */
+
+function LeagueSelect({ name, label, value, options }: { name: string; label: string; value: string | null; options: LeagueCompareData['options'] }) {
+  const seasons = [...new Set(options.map((o) => o.season))]
+  return (
+    <label className="af-rk-field af-rk-field--wide">
+      <span>{label}</span>
+      <select name={name} defaultValue={value ?? ''}>
+        <option value="">Choose a league-season</option>
+        {seasons.map((season) => (
+          <optgroup key={season} label={String(season)}>
+            {options
+              .filter((o) => o.season === season)
+              .map((o) => (
+                <option key={o.key} value={o.key}>
+                  {o.label}
+                </option>
+              ))}
+          </optgroup>
+        ))}
+      </select>
+    </label>
+  )
+}
+
+function LeaguesCompare({ data }: { data: LeagueCompareData }) {
+  if (!data.signedIn) {
+    return (
+      <section className="af-rk-card">
+        <p className="af-rk-a">Sign in to compare your own leagues.</p>
+      </section>
+    )
+  }
+  const sides = [data.a, data.b].filter((s): s is LeagueCompareSide => s != null)
+  return (
+    <>
+      <form className="af-rk-filters" action="/core/rankings" method="get" aria-label="Choose two league-seasons">
+        <input type="hidden" name="view" value="compare" />
+        <input type="hidden" name="kind" value="leagues" />
+        <LeagueSelect name="a" label="First league-season" value={data.a?.key ?? null} options={data.options} />
+        <LeagueSelect name="b" label="Second league-season" value={data.b?.key ?? null} options={data.options} />
+        <div className="af-rk-filter-actions">
+          <button type="submit" className="af-rk-btn af-rk-btn--primary">
+            Compare
+          </button>
+        </div>
+      </form>
+      {data.options.length === 0 ? (
+        <p className="af-rk-empty">You have no imported league-seasons yet.</p>
+      ) : sides.length < 2 ? (
+        <p className="af-rk-empty">Choose two league-seasons to see them side by side.</p>
+      ) : (
+        <section className="af-rk-card" style={{ padding: 0 }}>
+          <div className="af-rk-tablewrap" role="region" aria-label="League comparison" tabIndex={0}>
+            <table className="af-rk-table">
+              <caption className="af-rk-sr">
+                {sides[0].title} against {sides[1].title}
+              </caption>
+              <thead>
+                <tr>
+                  <th scope="col">Measure</th>
+                  <th scope="col">{sides[0].title}</th>
+                  <th scope="col">{sides[1].title}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {sides[0].facts.map((f, i) => (
+                  <tr key={f.label}>
+                    <th scope="row">{f.label}</th>
+                    <td>{f.value}</td>
+                    <td>{sides[1].facts[i]?.value ?? '—'}</td>
+                  </tr>
+                ))}
+                {sides[0].score.components.map((c, i) => {
+                  const other = sides[1].score.components[i]
+                  const lead =
+                    c.credit != null && other?.credit != null && c.credit !== other.credit ? (c.credit > other.credit ? 0 : 1) : null
+                  return (
+                    <tr key={c.key} className={c.key === 'titles' ? 'sig' : undefined}>
+                      <th scope="row">
+                        {c.label}
+                        <span className="af-rk-cellsub">your result, normalised</span>
+                      </th>
+                      <td className={lead === 0 ? 'af-rk-tone-good' : undefined}>{c.value}</td>
+                      <td className={lead === 1 ? 'af-rk-tone-good' : undefined}>{other?.value ?? '—'}</td>
+                    </tr>
+                  )
+                })}
+                <tr className="sig">
+                  <th scope="row">Score for this league-season</th>
+                  <td className="af-rk-mono">{sides[0].score.score == null ? '—' : sides[0].score.score.toFixed(1)}</td>
+                  <td className="af-rk-mono">{sides[1].score.score == null ? '—' : sides[1].score.score.toFixed(1)}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p className="af-rk-note" style={{ padding: '0 16px 16px' }}>
+            A single league-season is a small sample, so each score is pulled toward average. Title odds are the 1-in-N chance
+            the league offered at the start.
+          </p>
+        </section>
+      )}
+    </>
+  )
+}
+
+/* ───────────────────────────────── teams ────────────────────────────────── */
+
+function TeamsCompare({ data }: { data: TeamCompareData }) {
+  const sides = [data.a, data.b].filter((s): s is TeamCompareSide => s != null)
+  return (
+    <>
+      <form className="af-rk-filters" action="/core/rankings" method="get" aria-label="Choose a league and two teams">
+        <input type="hidden" name="view" value="compare" />
+        <input type="hidden" name="kind" value="teams" />
+        <label className="af-rk-field af-rk-field--wide">
+          <span>League</span>
+          <select name="league" defaultValue={data.leagueId ?? ''}>
+            <option value="">Choose a league</option>
+            {data.leagues.map((l) => (
+              <option key={l.id} value={l.id}>
+                {l.name} · {l.season}
+              </option>
+            ))}
+          </select>
+        </label>
+        {data.teams.length > 0 ? (
+          <>
+            {(['a', 'b'] as const).map((k, i) => (
+              <label key={k} className="af-rk-field">
+                <span>{i === 0 ? 'First team' : 'Second team'}</span>
+                <select name={k} defaultValue={data[k]?.rosterId ?? ''}>
+                  <option value="">Choose a team</option>
+                  {data.teams.map((t) => (
+                    <option key={t.rosterId} value={t.rosterId}>
+                      {t.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ))}
+          </>
+        ) : null}
+        <div className="af-rk-filter-actions">
+          <button type="submit" className="af-rk-btn af-rk-btn--primary">
+            {data.teams.length > 0 ? 'Compare' : 'Load teams'}
+          </button>
+        </div>
+      </form>
+
+      {data.reason ? (
+        <p className="af-rk-empty">{data.reason}</p>
+      ) : !data.leagueId ? (
+        <p className="af-rk-empty">
+          {data.leagues.length === 0 ? 'You have no connected leagues yet.' : 'Choose one of your leagues, then two of its teams.'}
+        </p>
+      ) : sides.length < 2 ? (
+        <p className="af-rk-empty">Choose two teams from {data.leagueName ?? 'this league'}.</p>
+      ) : (
+        <section className="af-rk-card" style={{ padding: 0 }}>
+          <div className="af-rk-tablewrap" role="region" aria-label="Team comparison" tabIndex={0}>
+            <table className="af-rk-table">
+              <caption className="af-rk-sr">
+                {sides[0].name} against {sides[1].name} in {data.leagueName}
+              </caption>
+              <thead>
+                <tr>
+                  <th scope="col">{data.leagueName}</th>
+                  <th scope="col">
+                    {sides[0].name}
+                    {sides[0].isYou ? ' (you)' : ''}
+                  </th>
+                  <th scope="col">
+                    {sides[1].name}
+                    {sides[1].isYou ? ' (you)' : ''}
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {sides[0].facts.map((f, i) => {
+                  const g = sides[1].facts[i]
+                  const lead = f.raw != null && g?.raw != null && f.raw !== g.raw ? ((f.raw > g.raw) === f.higherIsBetter ? 0 : 1) : null
+                  return (
+                    <tr key={f.label}>
+                      <th scope="row">{f.label}</th>
+                      <td className={lead === 0 ? 'af-rk-tone-good' : undefined}>{f.value}</td>
+                      <td className={lead === 1 ? 'af-rk-tone-good' : undefined}>{g?.value ?? '—'}</td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+          <p className="af-rk-note" style={{ padding: '0 16px 16px' }}>
+            From this league&apos;s own scored weeks. Both teams play the same schedule length and scoring, so no
+            normalisation is needed inside one league.
+          </p>
+        </section>
+      )}
+    </>
+  )
+}
+
+/* ──────────────────────────────── players ───────────────────────────────── */
+
+function PlayersCompare({ data }: { data: PlayerPickData }) {
+  const pick = (side: 'a' | 'b', ref: string) =>
+    `/core/rankings${qs([
+      ['view', 'compare'],
+      ['kind', 'players'],
+      ['pos', data.position],
+      ['qa', data.qa],
+      ['qb', data.qb],
+      ['a', side === 'a' ? ref : data.a],
+      ['b', side === 'b' ? ref : data.b],
+    ])}`
+  const list = (side: 'a' | 'b') => {
+    const matches = side === 'a' ? data.matchesA : data.matchesB
+    const q = side === 'a' ? data.qa : data.qb
+    const chosen = side === 'a' ? data.a : data.b
+    if (q.length < 2) return <p className="af-rk-note">Type at least two letters.</p>
+    if (matches.length === 0) {
+      return <p className="af-rk-empty">No {data.position ?? ''} player matches “{q}”.</p>
+    }
+    return (
+      <ul className="af-rk-leaguepick" aria-label={side === 'a' ? 'First player results' : 'Second player results'}>
+        {matches.map((m) => (
+          <li key={m.ref}>
+            <Link href={pick(side, m.ref)} aria-current={chosen === m.ref ? 'true' : undefined} scroll={false}>
+              <b>{m.name}</b>
+              <small>
+                {[m.position, m.team, m.sport].filter(Boolean).join(' · ')}
+                {m.rosteredIn != null ? ` · in ${m.rosteredIn} of your leagues` : ''}
+              </small>
+            </Link>
+          </li>
+        ))}
+      </ul>
+    )
+  }
+  return (
+    <>
+      <form className="af-rk-filters" action="/core/rankings" method="get" aria-label="Find two players">
+        <input type="hidden" name="view" value="compare" />
+        <input type="hidden" name="kind" value="players" />
+        <label className="af-rk-field">
+          <span>Position</span>
+          <select name="pos" defaultValue={data.position ?? ''}>
+            <option value="">Any</option>
+            {PLAYER_POSITIONS.map((p) => (
+              <option key={p} value={p}>
+                {p}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="af-rk-field af-rk-field--wide">
+          <span>First player</span>
+          <input type="search" name="qa" defaultValue={data.qa} placeholder="Name" autoComplete="off" />
+        </label>
+        <label className="af-rk-field af-rk-field--wide">
+          <span>Second player</span>
+          <input type="search" name="qb" defaultValue={data.qb} placeholder="Name" autoComplete="off" />
+        </label>
+        <div className="af-rk-filter-actions">
+          <button type="submit" className="af-rk-btn af-rk-btn--primary">
+            Search
+          </button>
+        </div>
+      </form>
+      <div className="af-rk-cmpfoot af-rk-cmpfoot--even">
+        <section className="af-rk-card">
+          <p className="af-rk-eyebrow">First player</p>
+          {list('a')}
+        </section>
+        <section className="af-rk-card">
+          <p className="af-rk-eyebrow">Second player</p>
+          {list('b')}
+        </section>
+      </div>
+      <section className="af-rk-card">
+        {data.compareHref ? (
+          <Link className="af-rk-btn af-rk-btn--primary" href={data.compareHref}>
+            Open the side-by-side in Player Finder →
+          </Link>
+        ) : (
+          <p className="af-rk-a">Pick one player from each list. The comparison opens in Player Finder, which scores both in each of your leagues with that league&apos;s own settings.</p>
+        )}
+      </section>
     </>
   )
 }

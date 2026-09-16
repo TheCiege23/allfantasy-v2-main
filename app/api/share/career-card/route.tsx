@@ -5,6 +5,8 @@ import { authOptions } from '@/lib/auth'
 import { getCareerCard } from '@/lib/dashboard-intel/careerCardService'
 import { getShareCardData } from '@/lib/core-app/shareCard'
 import { ShareCard, SHARE_CARD_SIZE } from '@/components/career/ShareCard'
+import { getRankCardData } from '@/lib/core-app/rankings'
+import { RankShareCard, RANK_CARD_SIZE } from '@/components/core-app/rankings/RankShareCard'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -13,9 +15,10 @@ export const runtime = 'nodejs'
  * Shareable Manager Career Card (1200×630 PNG) — the viewer's aggregated
  * Legacy identity. Auth-gated, SELF only; shared as an image, never a URL.
  *
- * ⚠ TWO CARDS BEHIND ONE ROUTE, AND THE DEFAULT IS UNCHANGED. `?design=13b`
- * returns handoff 13b's 620×780 card; anything else returns the original
- * 1200×630 image. Folded in here rather than given its own route because this
+ * ⚠ THREE CARDS BEHIND ONE ROUTE, AND THE DEFAULT IS UNCHANGED. `?design=13b`
+ * returns handoff 13b's 620×780 card; `?design=rank` returns the Rankings card
+ * (board, filters and scope from the query, every number recomputed here for
+ * the signed-in viewer); anything else returns the original 1200×630 image. Folded in here rather than given its own route because this
  * repo sits against Vercel's 2048-route ceiling, and because the default output
  * is referenced as an OG image — changing its dimensions or content in place
  * would silently rewrite every link preview already in the wild.
@@ -39,7 +42,23 @@ export async function GET(req: Request) {
   const userId = session?.user?.id
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  if (new URL(req.url).searchParams.get('design') === '13b') {
+  const params = new URL(req.url).searchParams
+
+  if (params.get('design') === 'rank') {
+    const card = await getRankCardData(userId, Object.fromEntries(params.entries())).catch(() => null)
+    if (!card) {
+      return NextResponse.json(
+        { error: 'No rank to share for this view yet — you need a ranked career with results in it.' },
+        { status: 404 },
+      )
+    }
+    return new ImageResponse(<RankShareCard data={card} />, {
+      width: RANK_CARD_SIZE.width,
+      height: RANK_CARD_SIZE.height,
+    })
+  }
+
+  if (params.get('design') === '13b') {
     const share = await getShareCardData(userId)
     if (!share) {
       return NextResponse.json(

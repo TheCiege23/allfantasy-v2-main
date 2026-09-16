@@ -8,7 +8,22 @@ import {
   RANK_XP_LEAGUE_SIZE_MULTIPLIER,
 } from '@/lib/rank/rank-xp-constants'
 import { IMPROVEMENT_THRESHOLDS, MAX_UNJUSTIFIED_CLIMB } from '@/lib/rankings-engine/anti-gaming'
-import { GRADE_SCALE, WIN_RATE_MIN_LEAGUES, type RankingsData } from '@/lib/core-app/rankings'
+import { GRADE_SCALE, type RankingsData } from '@/lib/core-app/rankings'
+import {
+  DEFAULT_MIN_SAMPLE,
+  PLAYOFF_PRIOR,
+  PLAYOFF_RATIO_SPAN,
+  SCORE_WEIGHTS,
+  SCORING_COHORT_MIN,
+  SCORING_INDEX_CEILING,
+  SCORING_INDEX_FLOOR,
+  SCORING_PRIOR_GAMES,
+  TITLE_PRIOR,
+  TITLE_RATIO_SPAN,
+  WIN_RATE_CEILING,
+  WIN_RATE_FLOOR,
+  WIN_RATE_PRIOR_GAMES,
+} from '@/lib/core-app/rankingsEngine'
 import '@/components/core-app/af-rankings-screen.css'
 
 /**
@@ -103,6 +118,53 @@ export function RankingsFaq({ data }: { data: RankingsData }) {
             league is {exWins * RANK_XP_PER_IMPORT_WIN} + {RANK_XP_PER_PLAYOFF_APPEARANCE} +{' '}
             {RANK_XP_PER_DISTINCT_SEASON} + {exSize} = {exBase} XP. Win it and it&apos;s{' '}
             {exBase + RANK_XP_PER_CHAMPIONSHIP}.
+          </p>
+        </section>
+
+        {/* 1b — the normalised community score */}
+        <section className="af-rk-card af-rk-card--span" id="rk-faq-score">
+          <h2 className="af-rk-q">How is the AF manager score calculated?</h2>
+          <p className="af-rk-a">
+            XP is a ladder you climb; the AF manager score is how the community boards compare managers who played in
+            very different leagues. It is 0–100 and built from four parts, each judged against what that league made
+            likely:
+          </p>
+          <div className="af-rk-chips" style={{ marginTop: 12 }}>
+            <span className="af-rk-chip">WIN RATE {Math.round(SCORE_WEIGHTS.winRate * 100)}%</span>
+            <span className="af-rk-chip">SCORING {Math.round(SCORE_WEIGHTS.scoring * 100)}%</span>
+            <span className="af-rk-chip af-rk-chip--warn">TITLES {Math.round(SCORE_WEIGHTS.titles * 100)}%</span>
+            <span className="af-rk-chip af-rk-chip--good">PLAYOFFS {Math.round(SCORE_WEIGHTS.playoffs * 100)}%</span>
+          </div>
+          <ul className="af-rk-method">
+            <li>
+              <b>Win rate</b> is counted per game, so a 13-week and a 17-week season weigh by games played. It is blended
+              with {WIN_RATE_PRIOR_GAMES} games at .500 so a short hot streak cannot outrank a long record.{' '}
+              {Math.round(WIN_RATE_FLOOR * 100)}% earns nothing; {Math.round(WIN_RATE_CEILING * 100)}% earns full credit.
+            </li>
+            <li>
+              <b>Scoring</b> is points per game against the average AllFantasy team in the same sport, season, scoring
+              (PPR, half, standard), superflex and TE-premium setting, and best-ball flag — 100 is average. That removes
+              PPR inflation and schedule length. A group needs {SCORING_COHORT_MIN} teams before its average is used, and
+              each index is blended with {SCORING_PRIOR_GAMES} games at 100. {SCORING_INDEX_FLOOR} earns nothing;{' '}
+              {SCORING_INDEX_CEILING} earns full credit.
+            </li>
+            <li>
+              <b>Titles</b> are compared with the 1-in-N chance each completed league offered, so a 14-team title counts
+              for more than an 8-team one. Matching the expectation earns half credit and {TITLE_RATIO_SPAN}× earns full
+              credit ({TITLE_PRIOR} expected title is added to both sides to steady small samples).
+            </li>
+            <li>
+              <b>Playoffs</b> are compared with each league&apos;s own cut — 4 of 12 is harder than 6 of 10. Matching the
+              expectation earns half credit and {PLAYOFF_RATIO_SPAN}× earns full credit ({PLAYOFF_PRIOR} expected berths
+              steady small samples).
+            </li>
+          </ul>
+          <p className="af-rk-note">
+            If a part cannot be measured — no recorded points, say — it is left out and the other weights are scaled up;
+            the explanation for every row says so. Seasons still in progress never count towards titles or playoffs, and a
+            berth only counts once games have been played. Platform and league type never change a score; they are
+            filters. Opponent quality is not measured, because imported history stores only each manager&apos;s own
+            roster — field size and playoff cut stand in for competition strength.
           </p>
         </section>
 
@@ -271,6 +333,8 @@ export function RankingsFaq({ data }: { data: RankingsData }) {
           <h2 className="af-rk-q">AF Rank, GM prestige, legacy score — what&apos;s the difference?</h2>
           <p className="af-rk-a">
             <b style={{ color: 'var(--text)' }}>AF Rank</b> is a level from accumulated XP.{' '}
+            <b style={{ color: 'var(--text)' }}>AF manager score</b> is the normalised 0–100 score the community boards
+            rank by.{' '}
             <b style={{ color: 'var(--text)' }}>GM prestige</b> is a 0–100 blend of championships, win
             rate, tenure, leagues and playoff appearances, each capped so one huge number can&apos;t
             carry the score. <b style={{ color: 'var(--text)' }}>Legacy score</b> is a 0–100 weighted
@@ -301,10 +365,11 @@ export function RankingsFaq({ data }: { data: RankingsData }) {
 
         {/* 10 — win % eligibility */}
         <section className="af-rk-card">
-          <h2 className="af-rk-q">Who qualifies for the Win % board?</h2>
+          <h2 className="af-rk-q">Who appears on the community boards?</h2>
           <p className="af-rk-a">
-            Managers with at least {WIN_RATE_MIN_LEAGUES} league-seasons played. Without a minimum, one
-            3–0 season would top the board forever.
+            Every manager whose career has been ranked, once they have at least {DEFAULT_MIN_SAMPLE} league-seasons with
+            results in the view you are looking at. The minimum is a filter you can change; without one, a single 3–0
+            season would top the board. Each row also carries a confidence tag based on how much it rests on.
           </p>
         </section>
 
@@ -376,7 +441,8 @@ export function RankingsFaq({ data }: { data: RankingsData }) {
         <section className="af-rk-card af-rk-card--span">
           <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
             <p className="af-rk-a" style={{ flex: 1, minWidth: 260 }}>
-              Rank recalculates whenever a synced season result changes. If a league of yours
+              XP recalculates whenever an import finishes, and the community boards read the same league-seasons within a
+              minute. If a league of yours
               hasn&apos;t synced, its seasons simply aren&apos;t counted yet — nothing is estimated in
               the meantime.
             </p>
