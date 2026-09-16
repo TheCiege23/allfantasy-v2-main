@@ -140,6 +140,7 @@ import LeagueTabs from '@/components/core-app/LeagueTabs'
 import { getLeagueStandings } from '@/lib/core-app/leagueStandings'
 import { readLeagueStandingsSummary } from '@/lib/core-app/leagueStandingsSummary'
 import { readWeekAllSummary } from '@/lib/core-app/weekAllSummary'
+import { readSeasonOutlookSummary } from '@/lib/core-app/seasonOutlookSummary'
 import { isEnabled, DEFAULT_ROLLOUTS } from '@/lib/sports-os/rollout'
 import { freshnessLabel, freshnessMeta, shouldWarnAboutFreshness } from '@/lib/sports-os/freshness'
 import { recordBudgetSince } from '@/lib/sports-os/budgetTelemetry'
@@ -1885,6 +1886,13 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
    * is two experiments at once and neither cleanly measurable.
    */
   const weekOnSummary = standingsOnSummary
+  /*
+   * ⚠ AND THE SAME SUBJECT AGAIN, FOR THE THIRD SURFACE. `/core/standings` with no league held
+   * renders BOTH the standings board and the outlook, so splitting the cohorts would put one
+   * screen's two halves on different data paths — the one configuration nothing here could
+   * meaningfully measure.
+   */
+  const outlookOnSummary = standingsOnSummary
 
   const standingsFresh =
     activeKey === 'standings' && selectedLeagueId && standingsOnSummary
@@ -1976,10 +1984,37 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
    * The cost only lands on a standings request that has NO league held; with a
    * league selected the per-league screen loads instead and this stays null.
    */
-  const outlook =
+  const wantsOutlook =
     activeKey === 'season-outlook' ||
     ((activeKey === 'standings' || activeKey === 'week') && !selectedLeagueId && !rivalriesView)
-      ? await getSeasonOutlook(
+
+  /*
+   * ── 26b ON SUMMARIES ───────────────────────────────────────────────
+   *
+   * The most expensive read in this file by orders of magnitude: ~49 million simulated games on a
+   * 63-league account, on a `force-dynamic` route that pays it every visit. See
+   * `lib/core-app/seasonOutlookSummary.ts` for why the focus league is part of the cache key and
+   * why the summary cannot change the board's numbers — the model is seeded, so a hit and a cold
+   * run produce the same board.
+   *
+   * ⚠ `selectedLeagueId` IS PASSED THROUGH UNCHANGED ON BOTH ARMS. It is `getSeasonOutlook`'s
+   * `focusLeagueId`, and it is what guarantees the league on screen gets its swing card; handing
+   * the summary a different value than the direct call takes is how the two paths would come to
+   * disagree about a card's presence rather than its contents.
+   *
+   * ⚠ `.catch(() => null)` ON BOTH ARMS, as with standings: a rebuild fails for the same reasons
+   * the direct read does, and the screen already renders an outlook-less state. Rejecting here
+   * would replace it with a Suspense error boundary.
+   */
+  const outlookFresh =
+    wantsOutlook && outlookOnSummary
+      ? await readSeasonOutlookSummary(userId, selectedLeagueId).catch(() => null)
+      : null
+
+  const outlook = wantsOutlook
+    ? outlookOnSummary
+      ? (outlookFresh?.data ?? null)
+      : await getSeasonOutlook(
           userId,
           playedLeagues.map((l) => ({
             id: l.id,
@@ -1990,7 +2025,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
           })),
           selectedLeagueId,
         ).catch(() => null)
-      : null
+    : null
 
   const notifications =
     activeKey === 'notifications'

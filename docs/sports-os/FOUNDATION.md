@@ -15,7 +15,7 @@ route with a budget in traces-per-hour.
 | 1 | Performance budgets | `lib/sports-os/budgets.ts`, `budgetTelemetry.ts` | **new** — shell + every card instrumented |
 | 2 | Render the shell immediately | `app/core/[[...screen]]/page.tsx` — `af.shell_ms` | already built |
 | 3 | Stream cards independently | same page + `lib/observability/cardTelemetry.ts` | already built |
-| 4 | Screen-ready summaries | `lib/sports-os/summaries.ts` | **new** — `/core/standings` + `/core/week` wired |
+| 4 | Screen-ready summaries | `lib/sports-os/summaries.ts` | **new** — `/core/standings`, `/core/week` and `/core/season-outlook` wired |
 | 5 | Layered caching | `lib/sports-os/layeredCache.ts`, `durableTier.ts` | **new** — memory + `SportsDataCache` |
 | 6 | Heavy work in jobs | `lib/jobs/`, `lib/queues/bullmq.ts` | already built — reached from `reactions.ts` |
 | 7 | One event system | `lib/events/` | already built — reaction table, relay consumer, `ingest.*` emit are new |
@@ -548,12 +548,58 @@ both satisfy that constraint, so inference collapsed `T` and the return type los
 callers use. **The ratchet caught it: 185 against a baseline of 143 — 40 new errors in the page.**
 `T` is now unconstrained with the same internal casts the inline version used.
 
+## The third surface: `/core/season-outlook`
+
+`lib/core-app/seasonOutlookSummary.ts`, on the same flag and the same subject again — `/core/standings`
+with no league held renders **both** the standings board and the outlook, so splitting the cohorts
+would put one screen's two halves on different data paths.
+
+**This is the one that pays for the whole layer.** `getSeasonOutlook` plays each league's remaining
+schedule out ten thousand times. Its own header does the arithmetic: 63 connected leagues at ~78
+remaining games each is **≈49 million simulated games on a single page load**, on a `force-dynamic`
+route that pays it every visit. `TOTAL_GAME_BUDGET` stops that hitting the platform's ~300s edge
+kill — and it does so by **cutting iterations**, so a heavy account silently slides from 10,000 per
+league toward the 1,500 floor and `basis` reports the reduced number.
+
+So the cost is not only latency, it is answer quality, and a cache hit serves the **full-iteration**
+board a cold load might not have been able to afford.
+
+🛑 **CACHING CANNOT CHANGE WHAT THIS PAGE SAYS, ONLY HOW LONG IT TAKES TO SAY IT.** The model is
+seeded, not random: `createRng` is a mulberry32 fed from a hash of the platform league id, with no
+clock and no `Math.random()` anywhere in it. Identical rows produce a byte-identical board. Worth
+stating because a reader who assumes Monte Carlo means jitter would go looking for a
+"cached numbers differ from a fresh run" failure mode that does not exist here.
+
+🛑 **`focusLeagueId` IS PART OF THE KEY, AND OMITTING IT WOULD DROP A CARD SILENTLY.** The third
+argument is additive — it guarantees the focused league gets its branch simulations even when it is
+not among the eight most contested. A focused board is therefore a **superset**, and the two are not
+interchangeable in the direction that matters: serving a focused read a board built cross-league
+leaves that league's swing card missing, with no error and no empty state. The scope is
+`{ userId, leagueId: focusLeagueId }`, and a test asserts three separate build calls across
+`null`/`l1`/`l2` plus a hit on the repeat.
+
+⚠ **`invalidatedBy` IS EMPTY AGAIN, FOR A SHARPER REASON THAN `weekAllSummary`'s.** The week board's
+key carries no league id, so a prefix sweep could not match it. Here **half the keys do** — every
+focused scope — so a sweep *would* fire, and that is the problem. It would drop the focused board and
+leave the cross-league one standing, so `/core/standings` with a league held and without one would
+print different playoff percentages for the same team until the TTL caught up. That is precisely the
+"two surfaces, two different answers to *where do I sit*" failure `seasonOutlook.ts` exists to
+prevent, reintroduced through the cache instead of through the model. Both scopes expiring together
+is the consistent behaviour.
+
+⚠ **THE STALE WINDOW IS AN HOUR, MUCH LONGER THAN THE OTHER TWO.** Stale-while-revalidate is worth
+most exactly where a rebuild is most expensive. The 10-minute TTL is set against the rows underneath
+rather than against user patience: `ensureMatchupsCached` only refetches once its rows are older than
+~30 minutes, so a shorter TTL would re-run 49 million simulated games to reproduce the previous
+answer exactly — which the determinism above guarantees it would.
+
 ## What is not done
 
 Each of these is a separate decision with a real cost.
 
-1. ~~No screen has a registered summary.~~ **Done** — `/core/standings`, above. The next candidates
-   are `home` (the `dash34` fan-out, which feeds eight cards from one read) and `week`.
+1. ~~No screen has a registered summary.~~ **Done** — `/core/standings`, `/core/week` and
+   `/core/season-outlook`, above. Three of nineteen. The next candidate is `home` (the `dash34`
+   fan-out, which feeds eight cards from one read).
 2. ~~No durable cache tier is wired.~~ **Done** — `lib/sports-os/durableTier.ts` over
    `SportsDataCache`, used by the standings summary.
 3. ~~No consumer calls `dispatchReactions`.~~ **Done** — see *The relay consumer* below.
