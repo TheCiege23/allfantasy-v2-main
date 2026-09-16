@@ -36,9 +36,14 @@ export type PecrIntent = 'trade' | 'waiver' | 'roster' | 'draft' | 'general'
  * ⚠ `give` EXCLUDES "give me" / "give us". "What would you give for Puka?" is a
  * trade question; "give me your TE tiers" is a request, and it is one of the
  * commonest ways anybody opens a question at all.
+ *
+ * ⚠ "ACCEPT OR DECLINE: MY KELCE FOR HIS BOWERS?" READ AS `general` (eval gap, 2026-09-16): the
+ * verdict vocabulary was missing, so a trade question reached the model with no league. Only the
+ * PAIRED form is added — a bare `decline` is "is Kelce in decline?", a player question that would
+ * then 412 for anyone without a league selected.
  */
 const TRADE_INTENT =
-  /\b(?:trade[sd]?|trading|swap(?:s|ped|ping)?|offer(?:s|ed|ing)?|counteroffers?|deals?|give(?!\s+(?:me|us)\b)|receive[sd]?)\b/i
+  /\b(?:trade[sd]?|trading|swap(?:s|ped|ping)?|offer(?:s|ed|ing)?|counteroffers?|deals?|give(?!\s+(?:me|us)\b)|receive[sd]?|accept\s+or\s+(?:decline|reject))\b/i
 
 /*
  * ⚠ `pickup` MATCHED ONLY THE CLOSED COMPOUND, so "who can I pick up?" — the
@@ -149,6 +154,17 @@ export function requiresLeagueGrounding(args: {
   if (source.includes('trade') || source.includes('waiver') || source.includes('lineup')) {
     return true
   }
+  /*
+   * ⚠ "HOW DOES THE WAIVER PRIORITY RESET WORK ON SLEEPER?" WAS REFUSED FOR WANT OF A LEAGUE (eval
+   * gap, 2026-09-16). Any `waiver` or `trade` word forced grounding, even in a question about how a
+   * PLATFORM works. A how-does-it-work question with nobody's team in it is help, not advice — so it
+   * is released here, before the intent and vocabulary rules below. Anything personal ("my", "our",
+   * "I", "we") keeps the old behaviour: "how does waiver priority work if I drop him?" is about
+   * their league.
+   */
+  if (/\bhow\s+(?:does|do|is|are)\b[^?]*\bworks?\b/.test(message) && !/\b(?:my|our|i|me|we|us)\b/.test(message)) {
+    return false
+  }
   if (['trade', 'waiver', 'roster'].includes(args.intent)) return true
   if (args.intent === 'draft' && (/\b(draft order|draft time|my\s+draft|our\s+draft)\b/.test(message) || IN_THEIR_OWN_LEAGUE.test(message))) {
     return true
@@ -163,8 +179,12 @@ export function requiresLeagueGrounding(args: {
    * for "what are my league's scoring settings?". Bare `my league` stays out:
    * "how do I import my league?" is a help question, and forcing grounding on
    * it asks a multi-league user which league they mean before explaining how.
+   *
+   * ⚠ `next season` IS GONE (eval gap, 2026-09-16): "who are the best dynasty rookies for next
+   * season?" is a ranking question with nothing league-specific in it, and it was refused for want of
+   * a league. A season is a time, not a team.
    */
-  if (/\b(my team|my roster|my lineup|our team|future|next season|for my team|my\s+(?:opponent|matchup)s?|my\s+league['’]s)\b/.test(message)) {
+  if (/\b(my team|my roster|my lineup|our team|future|for my team|my\s+(?:opponent|matchup)s?|my\s+league['’]s)\b/.test(message)) {
     return true
   }
 

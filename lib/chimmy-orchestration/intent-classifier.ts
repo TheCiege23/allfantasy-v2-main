@@ -137,7 +137,14 @@ export function classifyChimmyIntent(
   if (
     /\b(commissioners?|commish|veto(?:es|ed|ing)?|league\s+(?:rules?|dues|constitution|bylaws)|rules?\s+changes?|change\s+(?:the\s+)?rules?|playoff\s+format|dues)\b/.test(
       text
-    )
+    ) ||
+    /*
+     * ⚠ "WHEN IS THE TRADE DEADLINE IN MY LEAGUE?" LOADED THE TRADE PROMPT (eval gap, 2026-09-16) —
+     * `trade` below won, so a calendar question about a league setting got a trade verdict. Only
+     * the WHEN form is taken here: "should I trade X before the deadline?" is still a trade
+     * question, and this branch runs before the trade one.
+     */
+    /\b(?:when|what\s+(?:week|day|date))\b[^?]*\bdeadlines?\b/.test(current)
   ) {
     return score('commissioner', 3)
   }
@@ -219,7 +226,12 @@ export function classifyChimmyIntent(
     return score('waiver', 3)
   }
   if (
-    /\b(trades?|trading|traded|offers?|counter|accept|decline|deals?|swaps?|send|receive)\b/.test(text) ||
+    /*
+     * ⚠ "IS TRAVIS KELCE IN DECLINE?" LOADED THE TRADE PROMPT (found 2026-09-16 by a boundary question
+     * added with the eval-gap fixes): a bare `decline` is the verb here but the noun there. The noun
+     * sense — "in decline", "on the decline", "a decline" — is excluded by what precedes it.
+     */
+    /\b(trades?|trading|traded|offers?|counter|accept|(?<!\b(?:in|the|a)\s)decline|deals?|swaps?|send|receive)\b/.test(text) ||
     // "What would you give for Puka?" — the question a trade asks most plainly, and it had no term here.
     /\bwould\s+(?:you|i)\s+give\b|\bgive\s+(?:up\s+)?for\b/.test(text)
   ) {

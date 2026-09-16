@@ -352,12 +352,35 @@ const TUNED: readonly EvalCase[] = [
     grounding: false,
     orchestration: ['draft', 'player_value'],
     agent: ['draft_assistant', 'dynasty_legacy'],
-    gaps: {
-      grounding: {
-        today: true,
-        why: '`next season` forces a league for a ranking question that has nothing league-specific in it',
-      },
-    },
+  },
+  /*
+   * The edges of the 2026-09-16 gap fixes, each pinned in the direction the fix must NOT reach:
+   * a bare "decline" is a player question; a how-does-it-work question about THEIR move is still
+   * theirs; a trade decision that mentions the deadline is still a trade.
+   */
+  {
+    q: 'Is Travis Kelce in decline?',
+    category: 'research',
+    pecr: 'general',
+    grounding: false,
+    orchestration: ['general', 'player_value'],
+    agent: ['general_research', 'dynasty_legacy'],
+  },
+  {
+    q: 'How does waiver priority work if I drop him?',
+    category: 'waiver',
+    pecr: 'waiver',
+    grounding: true,
+    orchestration: ['waiver', 'general'],
+    agent: ['waiver_wire', 'general_research'],
+  },
+  {
+    q: 'Should I trade Kelce before the deadline?',
+    category: 'trade',
+    pecr: 'trade',
+    grounding: true,
+    orchestration: 'trade',
+    agent: 'trade_analyzer',
   },
 
   // ── college / devy ───────────────────────────────────────────────────────
@@ -678,10 +701,15 @@ const TUNED: readonly EvalCase[] = [
  * 🛑 HELD OUT. Written 2026-09-16 AFTER the agent-routing fix was built against `TUNED`, with the
  * expectations set BEFORE the first run against them. The first run's result is recorded in the
  * commit that added this list; any gap below was found here, not planted.
+ *
+ * ⚠ THREE OF THESE ARE NO LONGER STRICTLY HELD OUT (2026-09-16): "Accept or decline…", "How does
+ * the waiver priority reset work…" and "When is the trade deadline…" were pinned gaps here and were
+ * then fixed against these exact questions. They still guard the fixes; they no longer measure
+ * generalisation.
  */
 const HELD_OUT: readonly EvalCase[] = [
   { q: 'Should I sell high on Puka Nacua?', category: 'trade', pecr: 'general', grounding: false, orchestration: ['player_value', 'trade'], agent: ['general_research', 'trade_analyzer'] },
-  { q: 'Accept or decline: my Kelce for his Bowers?', category: 'trade', pecr: 'trade', grounding: true, orchestration: 'trade', agent: 'trade_analyzer', gaps: { pecr: { today: 'general', why: 'PECR has no accept/decline vocabulary; the orchestration classifier does' }, grounding: { today: false, why: 'follows the PECR miss: a trade decision about a named roster is answered without the league' } } },
+  { q: 'Accept or decline: my Kelce for his Bowers?', category: 'trade', pecr: 'trade', grounding: true, orchestration: 'trade', agent: 'trade_analyzer' },
   { q: 'Is a 3-for-1 trade ever worth it?', category: 'trade', pecr: 'trade', grounding: null, orchestration: 'trade', agent: 'trade_analyzer' },
   { q: "Who's a good waiver pickup at tight end?", category: 'waiver', pecr: 'waiver', grounding: true, orchestration: 'waiver', agent: 'waiver_wire' },
   { q: 'Should I drop Najee Harris?', category: 'waiver', pecr: 'waiver', grounding: true, orchestration: 'waiver', agent: 'waiver_wire' },
@@ -697,10 +725,10 @@ const HELD_OUT: readonly EvalCase[] = [
   { q: 'Who should I keep as my keeper?', category: 'draft', pecr: 'general', grounding: null, orchestration: ['general', 'draft'], agent: ['dynasty_legacy', 'general_research', 'draft_assistant'] },
   { q: 'Is Travis Hunter a WR or CB in IDP leagues?', category: 'idp', pecr: 'general', grounding: false, orchestration: 'general', agent: 'general_research' },
   { q: 'Best DL to stream in IDP this week', category: 'idp', pecr: ['general', 'waiver'], grounding: null, orchestration: 'waiver', agent: 'waiver_wire' },
-  { q: 'How does the waiver priority reset work on Sleeper?', category: 'platform_settings', pecr: ['general', 'waiver'], grounding: false, orchestration: 'general', agent: 'general_research', gaps: { grounding: { today: true, why: 'any `waiver` word hard-requires a league, even in a question about how a platform works' } } },
+  { q: 'How does the waiver priority reset work on Sleeper?', category: 'platform_settings', pecr: ['general', 'waiver'], grounding: false, orchestration: 'general', agent: 'general_research' },
   { q: 'What does TE premium do to Brock Bowers value?', category: 'platform_settings', pecr: 'general', grounding: false, orchestration: ['player_value', 'general'], agent: 'general_research' },
   { q: 'Is Caleb Williams a top-12 QB in superflex?', category: 'platform_settings', pecr: 'general', grounding: false, orchestration: ['player_value', 'general'], agent: 'general_research' },
-  { q: 'When is the trade deadline in my league?', category: 'commissioner', pecr: 'trade', grounding: true, orchestration: ['commissioner', 'general', 'trade'], agent: ['commissioner', 'general_research'], gaps: { agent: { today: 'trade_analyzer', why: 'a deadline question reads as a trade intent, so the trade prompt answers a calendar question' } } },
+  { q: 'When is the trade deadline in my league?', category: 'commissioner', pecr: 'trade', grounding: true, orchestration: ['commissioner', 'general', 'trade'], agent: ['commissioner', 'general_research'] },
   { q: 'Can the commissioner reverse a trade on ESPN?', category: 'commissioner', pecr: 'trade', grounding: null, orchestration: 'commissioner', agent: 'commissioner' },
   { q: 'Our league has a manager who never sets his lineup, what should I do as commish?', category: 'commissioner', pecr: 'roster', grounding: true, orchestration: 'commissioner', agent: 'commissioner' },
   { q: 'Should we switch to half PPR next season?', category: 'commissioner', pecr: 'general', grounding: null, orchestration: ['commissioner', 'general'], agent: ['commissioner', 'general_research'] },
