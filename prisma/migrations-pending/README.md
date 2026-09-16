@@ -655,8 +655,26 @@ Verify the apply by the object, not the ledger: `select to_regclass('public.play
 
 ## Parked 2026-09-14: `20260914230000_chimmy_advice`
 
-🛑 **NOT APPLIED.** Retention item 6, "decision receipts" for Chimmy's advice. The user chose
-a new table and keeps the decision of when to apply it.
+✅ **APPLIED TO PRODUCTION 2026-09-16, and moved to `prisma/migrations/`.** The user authorised
+it for Chimmy brief item 10 (learn from outcomes). Applied with
+`ALLOW_PROD_MIGRATION=1 node scripts/prisma-migrate-deploy.cjs --prod` from a worktree at
+`632864c8a`. The run was gated in the same command on a fresh `migrate status` showing exactly
+this one migration pending (the guard was first confirmed to REFUSE without the flag).
+
+Verified by the object, with both controls:
+- `to_regclass('public.chimmy_advice')` is present;
+- `leagues` present, a made-up table absent;
+- 3 indexes and 15 columns;
+- the ledger row is finished.
+
+The steps below are kept as the record. Deviations:
+- **Step 2 is done.** `model ChimmyAdvice` uses MAPPED index names, and its canonical DDL was
+  compared offline against this SQL: identical, with a renamed-index control caught.
+- **Step 3 was deliberately NOT taken.** The raw `INSERT … ON CONFLICT` refreshes `given_at` in
+  one atomic statement, which a Prisma `upsert` does not.
+
+Original note: retention item 6, "decision receipts" for Chimmy's advice. The user chose a new
+table and kept the decision of when to apply it.
 
 **Additive only**: one table (`chimmy_advice`), one unique index, one lookup index. No existing
 table is touched and there is no backfill. `ROLLBACK.sql` drops it, which destroys only advice
