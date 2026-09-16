@@ -159,7 +159,7 @@ import { touchLeagueViewed } from '@/lib/leagues/touchLeagueViewed'
 import CoreScreenSkeleton from '@/components/core-app/CoreScreenSkeleton'
 import CoreScreenErrorBoundary from '@/components/core-app/CoreScreenErrorBoundary'
 import { PublishShellSignals, type ShellUrgencyBadges } from '@/components/core-app/shellSignals'
-import { recordRootDuration } from '@/lib/observability/rootTiming'
+import { recordCompletedSpan, recordRootDuration } from '@/lib/observability/rootTiming'
 import { CoreHomeCards, type HomeLoads } from '@/components/core-app/home/HomeCards'
 import { traceCard } from '@/lib/observability/cardTelemetry'
 
@@ -1039,14 +1039,28 @@ export default async function AfCorePage({
    */
   try {
     const shellHeaders = await headers()
-    recordBudgetSince(
-      {
-        phase: 'shell',
-        name: activeKey,
-        device: classifyDevice(shellHeaders.get('user-agent'), shellHeaders.get('sec-ch-ua-mobile')),
-      },
-      shellStartedAt,
-    )
+    const shellDevice = classifyDevice(shellHeaders.get('user-agent'), shellHeaders.get('sec-ch-ua-mobile'))
+
+    /*
+     * The shell as its own span, so its duration can be AGGREGATED.
+     *
+     * 🛑 `af.shell_ms` ABOVE IS NOT QUERYABLE IN SENTRY — it reports as an unknown, string-typed
+     * attribute, so there is no p75 to calibrate the shell budget against. `span.duration` is a
+     * native field and has none of that problem. Both are kept: the attribute is what
+     * `docs/observability/TRACING.md` documents and what an individual trace shows, and this span
+     * is the one an aggregate query can actually use.
+     *
+     * Created retroactively — see `recordCompletedSpan`. It cannot leak on the early returns
+     * between the auth gate and here, because it only exists if control reaches this line.
+     */
+    recordCompletedSpan({
+      name: 'shell',
+      op: 'core.shell',
+      startedAtMs: shellStartedAt,
+      attributes: { 'af.screen': activeKey, 'af.device': shellDevice },
+    })
+
+    recordBudgetSince({ phase: 'shell', name: activeKey, device: shellDevice }, shellStartedAt)
   } catch {
     // Telemetry must never fail a render.
   }

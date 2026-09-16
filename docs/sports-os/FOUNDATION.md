@@ -456,7 +456,7 @@ Until then, **calibrate at the phase level with screens pooled**; the per-name o
 ⚠ `af.screen` is `other` for 98 of ~220 core spans — the largest single bucket. Whatever is
 collapsing there is worth finding before anyone trusts a per-screen split.
 
-### 🛑 Two phases cannot be calibrated at all right now
+### 🛑 Two phases could not be calibrated at all — one is now fixed
 
 `af.shell_ms` and `af.db.ms` are **not queryable in Sentry**. Both come back as
 `INVALID — Unknown attribute`, typed as strings, while the string attributes on the very same spans
@@ -467,9 +467,21 @@ same hole. The **verdict** is a string and will be queryable; the raw millisecon
 
 ⚠ **THE MECHANISM IS NOT ESTABLISHED.** It could be a volume threshold before Sentry registers a
 numeric attribute, a type-registration issue, or something else; this was observed, not diagnosed.
-The fix that would sidestep it entirely is to give the shell phase **its own span**, because
-`span.duration` is a native field and queries fine — that is how the card numbers above were
-obtained. Not done here: it changes a hot path for an unproven diagnosis.
+
+✅ **SIDESTEPPED FOR THE SHELL**: it now also emits a `core.shell` span (`recordCompletedSpan` in
+`lib/observability/rootTiming.ts`), carrying `af.screen` and `af.device`. `span.duration` is a
+native field and queries fine — that is how the card numbers above were obtained. The span is
+created **retroactively**, back-dated to the phase start, because opening one where the phase begins
+would leak on every early return between `/core`'s auth gate and its shell; a span created and
+ended on one line cannot leak. It is **inactive**, so it never re-parents the `core.card` spans that
+stream behind it.
+
+⚠ **`af.db.ms` IS STILL UNCALIBRATABLE.** It has no span equivalent, and unlike the shell it is not
+one phase with two clean boundaries — it is a per-request sum accumulated in `lib/prisma.ts`. Left
+alone rather than guessed at.
+
+⚠ And the fix does not prove the diagnosis. It routes around an unexplained Sentry behaviour; if the
+numeric attributes start aggregating later, that is worth knowing rather than assuming this was why.
 
 ### The queries, so this is repeatable
 
@@ -509,7 +521,8 @@ Each of these is a separate decision with a real cost.
 5. **The budgets are mostly still targets — but the desktop `screen` target is now measured.** See
    *Calibration* above: desktop p75 is 1,117 ms against a declared 1,200 ms. At ~163 `/core` renders
    a day the rest is roughly a week away per-device and a few weeks per-screen. Two phases (`shell`,
-   `db`) cannot be calibrated at all until their durations are queryable.
+   `db`) cannot be calibrated at all until their durations are queryable; `shell` now emits a `core.shell` span and
+   is calibratable, `db` still is not.
 6. ~~`recordBudget` has no callers.~~ **Done** — see *Budget instrumentation* below.
 7. **The card verdict is device-neutral.** `traceCard` has no request headers in scope, so it uses
    the `unknown` multiplier. `af.budget.card_ms` is exact and the root span's `af.device` allows the
