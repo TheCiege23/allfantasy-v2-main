@@ -47,6 +47,8 @@
 import 'server-only'
 
 import { getTradesBoard, type TradesBoardData } from './tradesBoard'
+import { portfolioFingerprint } from './homePortfolioSummary'
+import type { Dash34LeagueRow } from './dash34'
 import { readScreenSummary, registerScreenSummary } from '@/lib/sports-os/summaries'
 import { sportsDataCacheTier } from '@/lib/sports-os/durableTier'
 import type { Fresh } from '@/lib/sports-os/freshness'
@@ -54,18 +56,23 @@ import type { Fresh } from '@/lib/sports-os/freshness'
 export const TRADES_BOARD_SCREEN = 'trades-board'
 
 /**
- * Five minutes, matching career's, and for the same reason rather than by copying the number.
+ * Thirty minutes — RAISED FROM FIVE, for the same reason career's was.
  *
- * A trade appears here when a sync imports it, and checking straight after a trade is exactly when
- * someone opens this board. With no sweep available the TTL is the only thing that surfaces it, so
- * it is short enough that "I just traded and it is not here" is one brief wait. Five minutes still
- * collapses the repeated loads of one browsing session, which is where the claimed-team and trade
- * history reads actually cost something.
+ * Five was never about the data. A trade appears when a sync imports it, and with no sweep reaching
+ * a user-scoped key the TTL was the only thing that would surface it — so it was set short enough
+ * that "I just traded and it is not here" was a brief wait rather than a long one.
+ *
+ * The fingerprint does that precisely now: the sync moves `lastSyncedAt`, the digest changes, the
+ * key changes, and the next read rebuilds. The TTL returns to being a backstop.
  */
-const TTL_MS = 5 * 60_000
+const TTL_MS = 30 * 60_000
 
-/** Half an hour. Past the TTL the previous board serves instantly while the rebuild runs behind it. */
-const STALE_WHILE_REVALIDATE_MS = 30 * 60_000
+/**
+ * Two hours. It was half an hour to bound how long a post-import board could be served stale; the
+ * fingerprint removes that case, because a post-import read has a different key and cannot be served
+ * the old board at all.
+ */
+const STALE_WHILE_REVALIDATE_MS = 2 * 60 * 60_000
 
 registerScreenSummary<TradesBoardData | null>({
   screen: TRADES_BOARD_SCREEN,
@@ -97,11 +104,12 @@ registerScreenSummary<TradesBoardData | null>({
 export async function readTradesBoardSummary(
   userId: string,
   currentWeek: number | null,
+  leagueRows: readonly Dash34LeagueRow[],
 ): Promise<Fresh<TradesBoardData | null> | null> {
   if (!userId) return null
   return readScreenSummary<TradesBoardData | null>(
     TRADES_BOARD_SCREEN,
-    { userId, period: currentWeek },
+    { userId, period: currentWeek, fingerprint: portfolioFingerprint(leagueRows) },
     { durable: sportsDataCacheTier() },
   )
 }

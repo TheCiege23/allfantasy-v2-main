@@ -37,6 +37,33 @@ export type SummaryScope = {
    * — which is what lets it be added without invalidating the four summaries already live.
    */
   platform?: string | null
+  /**
+   * A digest of the inputs a summary is derived from — `portfolioFingerprint` over the user's league
+   * list — so that a change to them yields a DIFFERENT KEY and therefore a cold rebuild.
+   *
+   * 🛑 THIS IS AN INVALIDATION MECHANISM WEARING A KEY'S CLOTHES, AND IT EXISTS BECAUSE THE SWEEP
+   * CANNOT REACH USER-SCOPED SUMMARIES. `invalidateScreenForLeague` matches a `l=<leagueId>&`
+   * prefix; a summary keyed on a userId alone has no league id in its key, so the sweep can never
+   * match it and `invalidatedBy` on such a screen is a documented no-op. Until now the TTL carried
+   * the whole correctness for those, which meant guessing how long a user would tolerate not seeing
+   * a league they had just imported.
+   *
+   * A fingerprint replaces the guess: a new import, a removed league or a finished sync moves
+   * `lastSyncedAt` (and the rest of the row), the digest changes, the key changes, and the next read
+   * is a miss that rebuilds. No writer has to remember anything and no event has to be plumbed.
+   *
+   * ⚠ KEYED RATHER THAN STORED, WHICH IS A DELIBERATE DIVERGENCE FROM `homePortfolioSummary`.
+   * That module stores the digest beside the payload and compares it on read, then forces a refresh
+   * on a mismatch. Both work. Keying is chosen here because it needs no change to the stored shape
+   * or the read path, and because it gives the changed portfolio a genuinely COLD build —
+   * stale-while-revalidate must not serve a pre-import board to the person who just imported. The
+   * cost is that a superseded key lingers unread until its own TTL expires, which is bounded and
+   * cheap at these TTLs.
+   *
+   * ⚠ AND IT MUST COVER AT LEAST WHAT THE BUILDER READS. A digest over MORE than the builder uses
+   * only causes extra rebuilds — the safe direction. One over less silently serves stale.
+   */
+  fingerprint?: string | null
 }
 
 export type ScreenSummaryDefinition<T = unknown> = {
@@ -116,6 +143,16 @@ export function scopeKey(scope: SummaryScope): string {
    * while meaning two different reads. They fold identically, so one entry is the correct answer.
    */
   push('pf', scope.platform ? String(scope.platform).toLowerCase() : null)
+  /*
+   * ⚠ LAST, LIKE EVERY FIELD ADDED AFTER THE FIRST FIVE. `push` skips a null/undefined value, so a
+   * screen that sets no fingerprint emits the byte-identical key it emitted before this field
+   * existed — which is what lets an invalidation mechanism be added to a shared module without
+   * dropping every live summary's cache on deploy.
+   *
+   * NOT case-folded, unlike `sport` and `platform`: a digest is already canonical, and lowercasing a
+   * hex string would only mask a caller passing something that is not one.
+   */
+  push('fp', scope.fingerprint)
   return parts.length ? parts.join('') : 'global'
 }
 

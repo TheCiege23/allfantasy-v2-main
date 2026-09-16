@@ -51,6 +51,8 @@
 import 'server-only'
 
 import { getCareerData, type CareerData } from './career'
+import { portfolioFingerprint } from './homePortfolioSummary'
+import type { Dash34LeagueRow } from './dash34'
 import { readScreenSummary, registerScreenSummary } from '@/lib/sports-os/summaries'
 import { sportsDataCacheTier } from '@/lib/sports-os/durableTier'
 import type { Fresh } from '@/lib/sports-os/freshness'
@@ -58,23 +60,26 @@ import type { Fresh } from '@/lib/sports-os/freshness'
 export const CAREER_SCREEN = 'career'
 
 /**
- * Five minutes — DELIBERATELY SHORTER THAN THE DATA'S VOLATILITY WOULD JUSTIFY.
+ * Thirty minutes — RAISED FROM FIVE, because the reason for five no longer holds.
  *
- * Career history changes only on import, so on the data alone this could sit for hours. It does not,
- * because of the invalidation gap above: with no event sweep, the TTL is the only thing that makes a
- * newly imported league appear, and an import is precisely when someone opens this screen. Five
- * minutes still collapses the repeated loads of one browsing session — which is where the seven
- * prisma reads and the two-source merge actually hurt — while keeping "I just connected a league and
- * it is not here" down to one short wait rather than an hour of it.
+ * Five minutes was never about the data: career history changes only on import, and on volatility
+ * alone this could sit for hours. It was short because a user-scoped key cannot be swept by league,
+ * so the TTL was the ONLY thing that would surface a league the user had just imported — and an
+ * import is exactly when someone opens this screen.
+ *
+ * The fingerprint now does that job precisely: an import moves `lastSyncedAt`, the digest changes,
+ * the key changes, and the next read rebuilds immediately rather than up to five minutes later. So
+ * the TTL goes back to being what it should always have been — a backstop for whatever the digest
+ * does not cover — and it is set against the data's real volatility instead of against a guess.
  */
-const TTL_MS = 5 * 60_000
+const TTL_MS = 30 * 60_000
 
 /**
- * Fifteen minutes. Shorter than `careerRecords`' two hours for the same reason the TTL is: serving a
- * board that predates a just-finished import for up to two hours would be the visible half of the
- * invalidation gap. Past this the read pays the rebuild rather than showing something older.
+ * Two hours, matching `careerRecords`. The reason it was fifteen minutes is the reason the TTL was
+ * five — serving a board that predated a just-finished import. The fingerprint removes that case
+ * entirely: a post-import read has a different key, so it can never be served the old board stale.
  */
-const STALE_WHILE_REVALIDATE_MS = 15 * 60_000
+const STALE_WHILE_REVALIDATE_MS = 2 * 60 * 60_000
 
 /** The one place the filter is folded. Both the scope and the builder take THIS value. */
 function normalisePlatform(platformFilter: string | null | undefined): string | null {
@@ -111,12 +116,19 @@ registerScreenSummary<CareerData | null>({
 export async function readCareerSummary(
   userId: string,
   platformFilter: string | null,
+  leagueRows: readonly Dash34LeagueRow[],
 ): Promise<Fresh<CareerData | null> | null> {
   if (!userId) return null
   const platform = normalisePlatform(platformFilter)
+  /*
+   * ⚠ THE UNFILTERED LIST, NOT `toPlayedLeagues`. `getCareerData` reads `legacy_leagues` too, and a
+   * legacy row is exactly what that filter drops — digesting the filtered list would miss a change
+   * this board shows. A digest covering more than the builder reads costs an extra rebuild; one
+   * covering less serves stale silently.
+   */
   return readScreenSummary<CareerData | null>(
     CAREER_SCREEN,
-    { userId, platform },
+    { userId, platform, fingerprint: portfolioFingerprint(leagueRows) },
     { durable: sportsDataCacheTier() },
   )
 }

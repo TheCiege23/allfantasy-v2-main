@@ -15,6 +15,11 @@ const { getScreenSummaryDefinition, screensInvalidatedBy, scopeKey } = await imp
 
 const BOARD = { seasons: [{ year: 2024 }], prestige: 71 }
 
+/** Two league lists that differ only in `lastSyncedAt` — i.e. exactly what a finished sync does. */
+const ROWS_BEFORE = [{ id: 'L1', name: 'A', platform: 'sleeper', lastSyncedAt: new Date('2026-09-16T10:00:00Z') }] as never
+const ROWS_AFTER = [{ id: 'L1', name: 'A', platform: 'sleeper', lastSyncedAt: new Date('2026-09-16T11:00:00Z') }] as never
+
+
 describe('careerSummary', () => {
   beforeEach(() => {
     __resetLayeredCacheForTests()
@@ -33,15 +38,32 @@ describe('careerSummary', () => {
     expect(screensInvalidatedBy('ingest.league.completed')).not.toContain(CAREER_SCREEN)
   })
 
-  it('🛑 keeps a SHORT ttl, because the TTL is the only thing that surfaces a new import', () => {
+  it('🛑 the fingerprint REPLACED the short ttl — and the ttl must not be short any more', async () => {
     /*
-     * The data itself would tolerate hours — career.ts has no clock and a season is settled history.
-     * The bound is the invalidation gap, not the volatility: with no league sweep available for a
-     * user-scoped key, a freshly connected league appears only when the TTL lapses, and an import is
-     * exactly when someone opens this screen. If someone later "optimises" this to hours, this fails.
+     * This test used to pin the TTL at or below five minutes, because the TTL was the only thing
+     * that would surface a newly imported league on a user-scoped key. The fingerprint now does
+     * that precisely, so a short TTL here is no longer protection — it is just extra rebuilds.
+     * Inverting the assertion is the point: if someone "restores" the five-minute TTL without
+     * removing the fingerprint, they have reintroduced the cost without the reason.
      */
     const d = getScreenSummaryDefinition(CAREER_SCREEN)!
-    expect(d.ttlMs).toBeLessThanOrEqual(5 * 60_000)
+    expect(d.ttlMs).toBeGreaterThan(5 * 60_000)
+
+    // And the mechanism that justifies it: a changed league list is a different key, so a rebuild.
+    await readCareerSummary('u1', null, ROWS_BEFORE)
+    await readCareerSummary('u1', null, ROWS_AFTER)
+    expect(getCareerData).toHaveBeenCalledTimes(2)
+  })
+
+  it('🛑 a sync that only moves lastSyncedAt still forces a rebuild', async () => {
+    // The whole point: no writer invalidates anything, and no event is plumbed. The digest changes
+    // because the row changed, so the key changes, so the read misses.
+    await readCareerSummary('u1', null, ROWS_BEFORE)
+    expect(getCareerData).toHaveBeenCalledTimes(1)
+    await readCareerSummary('u1', null, ROWS_BEFORE)
+    expect(getCareerData).toHaveBeenCalledTimes(1) // unchanged list -> hit
+    await readCareerSummary('u1', null, ROWS_AFTER)
+    expect(getCareerData).toHaveBeenCalledTimes(2) // moved lastSyncedAt -> miss
   })
 
   it('🛑 is cacheable at all ONLY because career.ts has no clock in it', () => {
@@ -53,21 +75,21 @@ describe('careerSummary', () => {
   })
 
   it('builds on a miss and serves the second read from cache', async () => {
-    const first = await readCareerSummary('u1', null)
+    const first = await readCareerSummary('u1', null, ROWS_BEFORE)
     expect(first).toMatchObject({ data: BOARD, source: 'live' })
-    expect((await readCareerSummary('u1', null))!.source).toBe('cache')
+    expect((await readCareerSummary('u1', null, ROWS_BEFORE))!.source).toBe('cache')
     expect(getCareerData).toHaveBeenCalledTimes(1)
   })
 
   it('🛑 keys on the PLATFORM FILTER — two filters are two different boards', async () => {
-    await readCareerSummary('u1', null)
-    await readCareerSummary('u1', 'sleeper')
-    await readCareerSummary('u1', 'espn')
+    await readCareerSummary('u1', null, ROWS_BEFORE)
+    await readCareerSummary('u1', 'sleeper', ROWS_BEFORE)
+    await readCareerSummary('u1', 'espn', ROWS_BEFORE)
     expect(getCareerData).toHaveBeenCalledTimes(3)
     expect(getCareerData.mock.calls.map((c) => c[1])).toEqual([null, 'sleeper', 'espn'])
 
     // ...and a repeat of one already built is a hit.
-    await readCareerSummary('u1', 'sleeper')
+    await readCareerSummary('u1', 'sleeper', ROWS_BEFORE)
     expect(getCareerData).toHaveBeenCalledTimes(3)
   })
 
@@ -81,8 +103,8 @@ describe('careerSummary', () => {
      * Asserted from BOTH ends: one build for the two spellings, and the builder receiving the folded
      * value rather than the raw one.
      */
-    await readCareerSummary('u1', 'Sleeper')
-    await readCareerSummary('u1', '  sleeper  ')
+    await readCareerSummary('u1', 'Sleeper', ROWS_BEFORE)
+    await readCareerSummary('u1', '  sleeper  ', ROWS_BEFORE)
     expect(getCareerData).toHaveBeenCalledTimes(1)
     expect(getCareerData.mock.calls[0]![1]).toBe('sleeper')
 
@@ -105,13 +127,13 @@ describe('careerSummary', () => {
   })
 
   it('does not share a board between two users', async () => {
-    await readCareerSummary('u1', null)
-    await readCareerSummary('u2', null)
+    await readCareerSummary('u1', null, ROWS_BEFORE)
+    await readCareerSummary('u2', null, ROWS_BEFORE)
     expect(getCareerData).toHaveBeenCalledTimes(2)
   })
 
   it('is a no-op without a user, and never calls the loader', async () => {
-    expect(await readCareerSummary('', null)).toBeNull()
+    expect(await readCareerSummary('', null, ROWS_BEFORE)).toBeNull()
     expect(getCareerData).not.toHaveBeenCalled()
   })
 })
