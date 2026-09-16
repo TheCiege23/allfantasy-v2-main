@@ -1664,7 +1664,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
 
   const careerFresh =
     activeKey === 'career' && careerOnSummary
-      ? await readCareerSummary(userId, careerPlatform).catch(() => null)
+      ? await readCareerSummary(userId, careerPlatform, leagues as unknown as Dash34LeagueRow[]).catch(() => null)
       : null
 
   const career =
@@ -1971,7 +1971,9 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
 
   const tradesBoardFresh =
     wantsTradesBoard && tradesBoardOnSummary
-      ? await readTradesBoardSummary(userId, tradesBoardWeek).catch(() => null)
+      ? await readTradesBoardSummary(userId, tradesBoardWeek, leagues as unknown as Dash34LeagueRow[]).catch(
+          () => null,
+        )
       : null
 
   const tradesBoard = wantsTradesBoard
@@ -2014,7 +2016,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
 
   const waiversBoardFresh =
     wantsWaiversBoard && waiversBoardOnSummary
-      ? await readWaiversBoardSummary(userId).catch(() => null)
+      ? await readWaiversBoardSummary(userId, leagues as unknown as Dash34LeagueRow[]).catch(() => null)
       : null
 
   const waiversBoard = wantsWaiversBoard

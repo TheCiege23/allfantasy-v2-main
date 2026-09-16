@@ -44,6 +44,8 @@
 import 'server-only'
 
 import { getWaiversBoard, type WaiversBoardData } from './waiversBoard'
+import { portfolioFingerprint } from './homePortfolioSummary'
+import type { Dash34LeagueRow } from './dash34'
 import { readScreenSummary, registerScreenSummary } from '@/lib/sports-os/summaries'
 import { sportsDataCacheTier } from '@/lib/sports-os/durableTier'
 import type { Fresh } from '@/lib/sports-os/freshness'
@@ -53,12 +55,15 @@ export const WAIVERS_BOARD_SCREEN = 'waivers-board'
 /**
  * Two minutes — the SHORTEST of the user-scoped summaries, and the reason is the waiver window.
  *
- * The other boards here tolerate five: a trade or an import that lands a few minutes late costs
- * nothing. A waiver claim is different, because the reader is usually checking against a deadline
- * and acting on what they see. Serving a five-minute-old claim list to someone deciding whether to
- * bid is the one staleness on this layer that could change what a user DOES, rather than only what
- * they read. Two minutes still collapses the reload burst that the claimed-team and per-league
- * waiver reads actually cost.
+ * 🛑 AND THE FINGERPRINT DOES NOT LICENSE RAISING IT, THOUGH IT RAISED CAREER'S AND TRADES'.
+ * Those two were short only because the TTL was standing in for invalidation on import; once the
+ * digest does that job precisely, their TTLs go back to the data's own volatility. **This one is
+ * short for a different reason entirely** — a waiver claim can change WITHOUT the league list
+ * changing at all (another manager places a bid; nothing about the league row moves), so the digest
+ * cannot see it. The reader is usually checking against a deadline and deciding whether to bid, so
+ * this is the one staleness on this layer that could change what a user DOES rather than only what
+ * they read. Two minutes still collapses the reload burst the claimed-team and per-league waiver
+ * reads actually cost.
  */
 const TTL_MS = 2 * 60_000
 
@@ -87,11 +92,12 @@ registerScreenSummary<WaiversBoardData | null>({
 /** Read the cross-league waiver board through the summary cache. Scoped on `userId` alone. */
 export async function readWaiversBoardSummary(
   userId: string,
+  leagueRows: readonly Dash34LeagueRow[],
 ): Promise<Fresh<WaiversBoardData | null> | null> {
   if (!userId) return null
   return readScreenSummary<WaiversBoardData | null>(
     WAIVERS_BOARD_SCREEN,
-    { userId },
+    { userId, fingerprint: portfolioFingerprint(leagueRows) },
     { durable: sportsDataCacheTier() },
   )
 }

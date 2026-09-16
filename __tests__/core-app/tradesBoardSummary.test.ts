@@ -17,6 +17,11 @@ const { getScreenSummaryDefinition, screensInvalidatedBy } = await import('@/lib
 
 const BOARD = { trades: [{ id: 't1' }], leaguesCounted: 4 }
 
+/** Two league lists that differ only in `lastSyncedAt` — i.e. exactly what a finished sync does. */
+const ROWS_BEFORE = [{ id: 'L1', name: 'A', platform: 'sleeper', lastSyncedAt: new Date('2026-09-16T10:00:00Z') }] as never
+const ROWS_AFTER = [{ id: 'L1', name: 'A', platform: 'sleeper', lastSyncedAt: new Date('2026-09-16T11:00:00Z') }] as never
+
+
 describe('tradesBoardSummary', () => {
   beforeEach(() => {
     __resetLayeredCacheForTests()
@@ -44,19 +49,19 @@ describe('tradesBoardSummary', () => {
   })
 
   it('builds on a miss and serves the second read from cache', async () => {
-    const first = await readTradesBoardSummary('u1', 3)
+    const first = await readTradesBoardSummary('u1', 3, ROWS_BEFORE)
     expect(first).toMatchObject({ data: BOARD, source: 'live' })
-    expect((await readTradesBoardSummary('u1', 3))!.source).toBe('cache')
+    expect((await readTradesBoardSummary('u1', 3, ROWS_BEFORE))!.source).toBe('cache')
     expect(getTradesBoard).toHaveBeenCalledTimes(1)
   })
 
   it('🛑 keys on the WEEK — week 3 and week 4 are not the same board', async () => {
-    await readTradesBoardSummary('u1', 3)
-    await readTradesBoardSummary('u1', 4)
+    await readTradesBoardSummary('u1', 3, ROWS_BEFORE)
+    await readTradesBoardSummary('u1', 4, ROWS_BEFORE)
     expect(getTradesBoard).toHaveBeenCalledTimes(2)
     expect(getTradesBoard.mock.calls.map((c) => c[1])).toEqual([3, 4])
 
-    await readTradesBoardSummary('u1', 3)
+    await readTradesBoardSummary('u1', 3, ROWS_BEFORE)
     expect(getTradesBoard).toHaveBeenCalledTimes(2) // week 3 is a hit
   })
 
@@ -67,30 +72,43 @@ describe('tradesBoardSummary', () => {
      * and a different one from any numbered week. Folding null into a numbered key would serve a
      * no-context board to a week that has one.
      */
-    await readTradesBoardSummary('u1', null)
-    await readTradesBoardSummary('u1', 3)
+    await readTradesBoardSummary('u1', null, ROWS_BEFORE)
+    await readTradesBoardSummary('u1', 3, ROWS_BEFORE)
     expect(getTradesBoard).toHaveBeenCalledTimes(2)
     expect(getTradesBoard.mock.calls[0]![1]).toBeNull()
 
-    await readTradesBoardSummary('u1', null)
+    await readTradesBoardSummary('u1', null, ROWS_BEFORE)
     expect(getTradesBoard).toHaveBeenCalledTimes(2) // the null scope is a hit too
   })
 
   it('🛑 the BUILDER takes the week off the scope, so the key and the payload agree', async () => {
     // Re-resolving inside build() could return a different week than the key was built from, filing
     // one week's board under another week's key. The builder must receive exactly the keyed value.
-    await readTradesBoardSummary('u1', 7)
+    await readTradesBoardSummary('u1', 7, ROWS_BEFORE)
     expect(getTradesBoard.mock.calls[0]![1]).toBe(7)
   })
 
+  it('🛑 a sync that only moves lastSyncedAt forces a rebuild, with no event plumbed', async () => {
+    await readTradesBoardSummary('u1', 3, ROWS_BEFORE)
+    expect(getTradesBoard).toHaveBeenCalledTimes(1)
+    await readTradesBoardSummary('u1', 3, ROWS_BEFORE)
+    expect(getTradesBoard).toHaveBeenCalledTimes(1)
+    await readTradesBoardSummary('u1', 3, ROWS_AFTER)
+    expect(getTradesBoard).toHaveBeenCalledTimes(2)
+  })
+
+  it('🛑 the fingerprint replaced the short ttl, so the ttl is no longer short', () => {
+    expect(getScreenSummaryDefinition(TRADES_BOARD_SCREEN)!.ttlMs).toBeGreaterThan(5 * 60_000)
+  })
+
   it('does not share a board between two users', async () => {
-    await readTradesBoardSummary('u1', 3)
-    await readTradesBoardSummary('u2', 3)
+    await readTradesBoardSummary('u1', 3, ROWS_BEFORE)
+    await readTradesBoardSummary('u2', 3, ROWS_BEFORE)
     expect(getTradesBoard).toHaveBeenCalledTimes(2)
   })
 
   it('is a no-op without a user, and never calls the loader', async () => {
-    expect(await readTradesBoardSummary('', 3)).toBeNull()
+    expect(await readTradesBoardSummary('', 3, ROWS_BEFORE)).toBeNull()
     expect(getTradesBoard).not.toHaveBeenCalled()
   })
 })

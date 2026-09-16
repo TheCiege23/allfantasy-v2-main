@@ -772,6 +772,60 @@ what they read** — they are usually checking against a deadline and deciding w
 pins it at or below two minutes so a later "harmonise the TTLs" pass fails rather than quietly
 lengthening it.
 
+## The fingerprint: three TTLs replaced by one precise trigger
+
+`SummaryScope.fingerprint`, adopted by `careerSummary`, `tradesBoardSummary` and
+`waiversBoardSummary`. The mechanism is `portfolioFingerprint` from the peer's
+`lib/core-app/homePortfolioSummary.ts` — a digest of every field the joins read from the league list,
+`lastSyncedAt` included.
+
+**What it fixes.** Three summaries here carried a note saying a user-scoped key cannot be swept by
+league (`invalidateScreenForLeague` matches an `l=<leagueId>&` prefix; their keys have no league id),
+so `invalidatedBy` on them is a documented no-op and the TTL carried the whole correctness. That
+meant **guessing how long a user would tolerate not seeing a league they had just imported** — and
+an import is exactly when someone opens these screens. A sync now moves `lastSyncedAt`, the digest
+changes, the key changes, and the next read is a miss that rebuilds. No writer remembers anything and
+no event is plumbed.
+
+### ⚠ So two of the three TTLs went UP, and that is the result, not a side effect
+
+| summary | TTL before | after | why |
+|---|---:|---:|---|
+| career | 5 min | **30 min** | 5 was standing in for invalidation; the digest does that now |
+| trades | 5 min | **30 min** | same |
+| **waivers** | 2 min | **2 min** | **unchanged — see below** |
+
+The two tests that pinned career's and trades' TTLs *short* are now **inverted**: they assert the TTL
+is no longer short. That is deliberate. Those pins protected a property the fingerprint provides
+better, so restoring a five-minute TTL alongside the digest would be cost without the reason — and a
+mutation doing exactly that turns them red.
+
+🛑 **WAIVERS KEPT ITS 2 MINUTES, AND THE REASON IS THE INTERESTING ONE.** Career's and trades' short
+TTLs were proxies for invalidation. Waivers' is not: **a waiver claim changes without the league list
+changing at all** — another manager places a bid and nothing about the league row moves — so the
+digest cannot see it. The two mechanisms are complementary there, not redundant, and a test asserts
+both halves: the digest still rebuilds it when a sync *does* move the list, and the TTL stays short
+for what the digest cannot reach.
+
+### ⚠ Keyed, not stored — a deliberate divergence from `homePortfolioSummary`
+
+That module stores the digest beside the payload and compares on read, forcing a refresh on a
+mismatch. Both work. Keying is chosen here because it needs no change to the stored shape or the read
+path, and because it gives a changed portfolio a genuinely **cold** build —
+stale-while-revalidate must not serve a pre-import board to the person who just imported. The cost is
+a superseded key lingering unread until its own TTL, which is bounded and cheap.
+
+⚠ **THE DIGEST MUST COVER AT LEAST WHAT THE BUILDER READS.** These pass the **unfiltered** league
+list, not `toPlayedLeagues`: `getCareerData` reads `legacy_leagues`, and a legacy row is exactly what
+that filter drops. A digest over MORE than the builder uses costs an extra rebuild — the safe
+direction. One over less serves stale silently.
+
+⚠ **AND FOR CAREER IT IS A PROXY, NOT AN EXACT INPUT.** `getCareerData` resolves its own leagues from
+`LeagueTeam.claimedByUserId` rather than from the dashboard list, so the digest is not literally its
+input the way it is for the home's joins. It changes whenever a league is added, removed or synced —
+which is when this board changes — and the TTL remains the backstop for anything it misses. Stated
+because "the fingerprint is exactly their input" is true of `homePortfolioSummary` and not of this.
+
 ## What is not done
 
 Each of these is a separate decision with a real cost.
