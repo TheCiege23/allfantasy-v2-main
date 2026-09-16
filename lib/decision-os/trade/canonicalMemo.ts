@@ -22,6 +22,7 @@ import { buildTradeValueSnapshot, type EnrichedTradeAsset } from '@/lib/trade-va
 import { buildTeamProfile } from '@/lib/trade-value/teamProfile'
 import { scoringContextFromCanonicalWorld } from './scoringContextFromWorld'
 import type { TeamProfile, TradeValueContext, TradeValueSnapshot } from '@/lib/trade-value/types'
+import type { ReceptionScoringFormat } from '@/lib/trade-value/valueEngine'
 // Type-only — the runtime edge is tradeWorld.ts → canonicalMemo.ts (it imports the leaf helpers). This
 // reverse type import is erased at compile, so the approved flow CanonicalWorld → TradeWorldResolver →
 // CanonicalTradeMemo introduces NO runtime import cycle.
@@ -65,9 +66,20 @@ export interface CanonicalMemoEnrichment {
    */
   projectionByPlayerId?: Record<string, number | null | undefined>
   /**
-   * AF's PER-GAME projection (`AFProjectionSnapshot.afProjection`), scored under the league's own
-   * rules. One unit, one source: a player AF did not project is absent, never filled from the
-   * per-WEEK provider feed (per week equals per game only in the NFL). Read by roster impact.
+   * The reception format each `projectionByPlayerId` entry was scored in (`ppr` for every AF row —
+   * `AF_SNAPSHOT_SCORING_FORMAT`; the row's own preset for a provider fallback). The engine converts
+   * from it to the league's format rather than lifting an already-PPR number again. A projection
+   * with no entry here is priced with NO reception conversion — unknown is not PPR.
+   */
+  projectionScoringFormatByPlayerId?: Record<string, ReceptionScoringFormat | null | undefined>
+  /**
+   * AF's PER-GAME projection (`AFProjectionSnapshot.afProjection`). One unit, one source: a player AF
+   * did not project is absent, never filled from the per-WEEK provider feed (per week equals per game
+   * only in the NFL). Read by roster impact.
+   *
+   * ⚠ CANONICAL FULL PPR, NOT THE LEAGUE'S SCORING. This comment used to say "scored under the
+   * league's own rules"; the snapshot stores one `AF_SNAPSHOT_SCORING_FORMAT` row per player, so a
+   * half-PPR league's lineup comparison is in full-PPR points.
    */
   perGameProjectionByPlayerId?: Record<string, number | null | undefined>
   /** Position per player — from the D.1 `resolvePlayerMetadata` seam; falls back to the asset's own metadata. */
@@ -245,6 +257,8 @@ export function toEnrichedAsset(
       faabAmount: asset.metadata.faab?.amount ?? null,
       sources: {
         projectionValue: projection ?? null,
+        projectionScoringFormat:
+          projection != null && playerId ? enrich.projectionScoringFormatByPlayerId?.[playerId] ?? null : null,
         rankingValue: null,
         adpValue: adp ?? null,
         /*
@@ -492,6 +506,7 @@ export function buildTradeMemo(tradeWorld: TradeWorld): CanonicalTradeMemo {
   const enrich: CanonicalMemoEnrichment = {
     adpByPlayerId: tradeWorld.marketContext.adpByPlayerId,
     projectionByPlayerId: tradeWorld.marketContext.projectionByPlayerId,
+    projectionScoringFormatByPlayerId: tradeWorld.marketContext.projectionScoringFormatByPlayerId,
     positionByPlayerId: tradeWorld.marketContext.positionByPlayerId,
     marketValueByPlayerId: tradeWorld.marketContext.marketValueByPlayerId,
     idpValueByPlayerId: tradeWorld.marketContext.idpValueByPlayerId,

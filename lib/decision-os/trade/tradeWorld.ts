@@ -93,6 +93,8 @@ export interface MarketContext {
   thinlyPricedIds: readonly string[]
   /** Rest-of-season projection per player — honest-empty today (no canonical projection source yet). */
   projectionByPlayerId: Record<string, number | null | undefined>
+  /** Reception format each projection was scored in — see `CanonicalMemoEnrichment`. */
+  projectionScoringFormatByPlayerId: NonNullable<CanonicalMemoEnrichment['projectionScoringFormatByPlayerId']>
   /** Position per player — from the D.1 `resolvePlayerMetadata` seam. */
   positionByPlayerId: Record<string, string | null | undefined>
   /** Provenance/debug only — never a decision branch. */
@@ -200,6 +202,7 @@ function buildMarketContext(movements: TradeMovement[], enrich: CanonicalMemoEnr
     trend30dByPlayerId: enrich.trend30dByPlayerId ?? {},
     thinlyPricedIds: enrich.thinlyPricedIds ?? [],
     projectionByPlayerId: enrich.projectionByPlayerId ?? {},
+    projectionScoringFormatByPlayerId: enrich.projectionScoringFormatByPlayerId ?? {},
     positionByPlayerId: enrich.positionByPlayerId ?? {},
     projectionSource: null,
     positionalScarcity: POSITION_SCARCITY,

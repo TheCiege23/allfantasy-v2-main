@@ -16,6 +16,20 @@
 export type ScoringFormat = 'ppr' | 'half_ppr' | 'std'
 
 /**
+ * The ONE reception format every `AFProjectionSnapshot` row is stored in.
+ *
+ * The table has no format column and one row per player per week (see the writer's header), so a
+ * row physically holds a single format and every reader has to know which. Written here so the
+ * writer's default and the readers that price these rows cite the same constant. Measured on
+ * staging 2026-09-16: every NFL row's `adjustmentFactors.scoringFormat` reads `ppr`.
+ *
+ * ⚠ `compute-projections` accepts `?format=` and a non-PPR run would overwrite rows in place with
+ * nothing but `adjustmentFactors` recording it — every reader assuming this constant would then be
+ * wrong. The scheduled run passes no format.
+ */
+export const AF_SNAPSHOT_SCORING_FORMAT: ScoringFormat = 'ppr'
+
+/**
  * How a projection's baseline was derived. Mirrors the honesty convention already used by
  * `ProjectionBasis` in resolveNormalizedPlayerSportsProfiles: the basis is carried, not hidden,
  * so a proxy can never be presented as a true weekly projection.

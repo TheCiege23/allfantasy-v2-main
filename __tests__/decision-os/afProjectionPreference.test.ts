@@ -251,3 +251,50 @@ describe('perGameProjectionByPlayerId', () => {
     expect(res.enrichment.perGameProjectionByPlayerId?.p1).toBe(21)
   })
 })
+
+/**
+ * The engine converts a projection from the format it was scored in to the league's, so each
+ * projection has to say which format that was. AF rows are canonical full PPR; a provider row says
+ * so itself through its preset — and the LEAGUE's preset must never be used in its place, because
+ * on staging all 225 Sleeper leagues read `fb_half_ppr` whatever their real `rec`.
+ */
+describe('projectionScoringFormatByPlayerId', () => {
+  const providerRow = (playerId: string, scoringPresetId: string, projectedPoints: number) => ({
+    playerId, sport: 'NFL', season: '2026', week: 5,
+    scoringPresetId, projectedPoints, stats: {},
+    source: 'sleeper', fetchedAt: NOW, expiresAt: new Date('2027-01-01'),
+  })
+
+  it('marks every AF projection as full PPR, and the provider fallback by its own row', async () => {
+    const res = await resolveTradeEnrichment(
+      // The league preset below is wrong on purpose — it must not leak into either entry.
+      { sport: 'NFL', playerIds: ['p1', 'p2', 'p3'], season: 2026, week: 5, scoringPresetId: 'fb_half_ppr' },
+      silentPort({
+        loadAfProjections: async () => [afRow()] as never,
+        loadProjections: async () => [providerRow('p2', 'ppr', 88), providerRow('p3', 'std', 70)] as never,
+      }),
+    )
+    expect(res.enrichment.projectionScoringFormatByPlayerId).toEqual({ p1: 'ppr', p2: 'ppr', p3: 'standard' })
+  })
+
+  it('has an entry for exactly the players that have a projection', async () => {
+    const res = await resolveTradeEnrichment(
+      { sport: 'NFL', playerIds: ['p1', 'p9'], season: 2026, week: 5 },
+      silentPort({
+        loadAfProjections: async () => [afRow(), afRow({ playerId: 'p9', rosProjection: null })] as never,
+      }),
+    )
+    expect(Object.keys(res.enrichment.projectionScoringFormatByPlayerId ?? {})).toEqual(
+      Object.keys(res.enrichment.projectionByPlayerId ?? {}),
+    )
+  })
+
+  it('records an unrecognised provider preset as unknown, not as PPR', async () => {
+    const res = await resolveTradeEnrichment(
+      { sport: 'NFL', playerIds: ['p2'], season: 2026, week: 5 },
+      silentPort({ loadProjections: async () => [providerRow('p2', 'custom_blend', 60)] as never }),
+    )
+    expect(res.enrichment.projectionByPlayerId?.p2).toBe(60)
+    expect(res.enrichment.projectionScoringFormatByPlayerId?.p2).toBeNull()
+  })
+})

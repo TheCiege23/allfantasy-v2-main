@@ -553,3 +553,75 @@ describe('Phase E.3 — architecture: resolver is pure, read-only, origin-blind,
     expect(code.includes('profileForRoster')).toBe(true)
   })
 })
+
+// ──────────────────────────────────────────────────────────────────────────
+// League reception scoring, end to end
+// ──────────────────────────────────────────────────────────────────────────
+
+/**
+ * 🛑 THE WORLD CARRIES `{ scoring_settings: { rec, … } }`, NOT `{ rec }`. Until 2026-09-16 the
+ * memo read `rec` off the top of that blob, so every league — full, half or no PPR, TE premium or
+ * not — was graded identically. These drive the real wrapper through both memo paths.
+ */
+describe('league reception scoring reaches the grade', () => {
+  const RECEIVER_ITEMS: AfLeagueTradeItemRow[] = [
+    { id: 'w1', itemType: 'player', itemReference: 'pW', fromRosterId: 'rA', toRosterId: 'rB', faabAmount: null, metadata: { playerName: 'Some Receiver', position: 'WR', team: 'MIA' } },
+    { id: 't1', itemType: 'player', itemReference: 'pT', fromRosterId: 'rB', toRosterId: 'rA', faabAmount: null, metadata: { playerName: 'Some Tight End', position: 'TE', team: 'LV' } },
+  ]
+  const receiverMovements = (): TradeMovement[] => {
+    const inputs = fromAfLeagueTradeItems(RECEIVER_ITEMS, 'native')
+    return resolveCanonicalAssets(inputs).map((asset, i) => ({
+      asset, fromRosterId: inputs[i].fromRosterId, toRosterId: inputs[i].toRosterId,
+    }))
+  }
+  const ENRICH: CanonicalMemoEnrichment = {
+    projectionByPlayerId: { pW: 200, pT: 150 },
+    projectionScoringFormatByPlayerId: { pW: 'ppr', pT: 'ppr' },
+    positionByPlayerId: { pW: 'WR', pT: 'TE' },
+  }
+  const worldWith = (rules: Record<string, number> | null): CanonicalWorld => {
+    const w = makeWorld({ provider: 'sleeper' })
+    // Exactly what `narrowScoringSettings` produces from a Sleeper `League.settings`.
+    w.league.scoringSettings = rules ? { scoring_settings: rules } : null
+    return w
+  }
+  const valuesFor = (world: CanonicalWorld, enrichment: CanonicalMemoEnrichment = ENRICH) => {
+    const input: BuildCanonicalTradeMemoInput = {
+      world, movements: receiverMovements(), proposerRosterId: 'rA', receiverRosterId: 'rB', enrichment, currentSeason: 2025,
+    }
+    const memo = buildCanonicalTradeMemo(input)
+    const byId = new Map(memo.snapshot.sides.flatMap((s) => s.assets).map((a) => [a.playerId, a.internalValue]))
+    return { memo, input, wr: byId.get('pW')!, te: byId.get('pT')! }
+  }
+
+  it('a full-PPR league prices a full-PPR projection exactly as a league with no rulebook — no double count', () => {
+    const ppr = valuesFor(worldWith({ rec: 1 }))
+    const none = valuesFor(worldWith(null))
+    expect(ppr.wr).toBe(none.wr)
+    expect(ppr.te).toBe(none.te)
+  })
+
+  it('a half-PPR league prices the receiver and the tight end BELOW a full-PPR league', () => {
+    const ppr = valuesFor(worldWith({ rec: 1 }))
+    const half = valuesFor(worldWith({ rec: 0.5 }))
+    expect(half.wr).toBeLessThan(ppr.wr)
+    expect(half.te).toBeLessThan(ppr.te)
+  })
+
+  it('a TE-premium league prices the tight end above the same league without one, and leaves the WR alone', () => {
+    const plain = valuesFor(worldWith({ rec: 1 }))
+    const tep = valuesFor(worldWith({ rec: 1, bonus_rec_te: 1 }))
+    expect(tep.te).toBeGreaterThan(plain.te)
+    expect(tep.wr).toBe(plain.wr)
+  })
+
+  it('a projection with no stated format gets no reception conversion', () => {
+    const noFormat = { ...ENRICH, projectionScoringFormatByPlayerId: undefined }
+    expect(valuesFor(worldWith({ rec: 0.5 }), noFormat).wr).toBe(valuesFor(worldWith({ rec: 1 }), noFormat).wr)
+  })
+
+  it('both memo paths stay byte-identical with the format carried through TradeWorld', () => {
+    const { input, memo } = valuesFor(worldWith({ rec: 0.5, bonus_rec_te: 0.5 }))
+    expect(buildTradeMemo(resolveTradeWorld(input))).toEqual(memo)
+  })
+})

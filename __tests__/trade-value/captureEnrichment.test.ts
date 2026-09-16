@@ -201,6 +201,51 @@ describe('honest degradation — a resolver failure must not lose what already w
   })
 })
 
+/**
+ * The league row's `settings` is the raw `League.settings` — the rulebook sits under
+ * `scoring_settings`. Until 2026-09-16 this path read `rec` off the top of it and priced every
+ * league as if it had no reception setting at all.
+ */
+describe('reception scoring on the capture path', () => {
+  const wrapped = (rec: number) => ({ name: 'x', scoring_settings: { rec, pass_td: 4 } })
+
+  it('carries the resolver projection’s format, and null for a client-supplied number', async () => {
+    enrichmentReturn = {
+      enrichment: {
+        projectionByPlayerId: { '6813': 311 },
+        projectionScoringFormatByPlayerId: { '6813': 'ppr' },
+      },
+    }
+    await captureRedraftTradeValueSnapshot(baseInput as never)
+    expect(assetFor('Jonathan Taylor')!.sources.projectionScoringFormat).toBe('ppr')
+
+    enrichmentReturn = { enrichment: { projectionScoringFormatByPlayerId: { '6813': 'ppr' } } }
+    await captureRedraftTradeValueSnapshot(baseInput as never)
+    // 240 came from the client, whose format nobody stated.
+    expect(assetFor('Jonathan Taylor')!.sources.projectionValue).toBe(240)
+    expect(assetFor('Jonathan Taylor')!.sources.projectionScoringFormat).toBeNull()
+  })
+
+  it('prices a half-PPR league’s back below a full-PPR league’s, from the real settings wrapper', async () => {
+    enrichmentReturn = {
+      enrichment: {
+        // Kept well under the soft knee, so the difference is not compressed away.
+        projectionByPlayerId: { '6813': 150 },
+        projectionScoringFormatByPlayerId: { '6813': 'ppr' },
+      },
+    }
+    league = { ...BASE_LEAGUE, settings: wrapped(1) }
+    await captureRedraftTradeValueSnapshot(baseInput as never)
+    const full = assetFor('Jonathan Taylor')!.internalValue
+
+    league = { ...BASE_LEAGUE, settings: wrapped(0.5) }
+    await captureRedraftTradeValueSnapshot(baseInput as never)
+    const half = assetFor('Jonathan Taylor')!.internalValue
+
+    expect(half).toBeLessThan(full)
+  })
+})
+
 describe('🛑 the league\'s real format reaches the value engine', () => {
   /*
    * WHAT THIS CLOSES, AND WHY THE OTHER GUILLOTINE TEST IS NOT ENOUGH.

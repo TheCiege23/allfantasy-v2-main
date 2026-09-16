@@ -30,7 +30,7 @@ import { extractSeasonAggregate, perGameRates, toWeeklyObservation } from './cor
 import { rosFromPerGame, weeksRemaining } from './restOfSeason'
 import { KICKER_CANONICAL_RULES } from './kickerScoring'
 import { IDP_PBP_SOURCE } from '@/lib/idp/realStatLines'
-import type { ProjectionOutcome, ScoringFormat, WeeklyObservation } from './types'
+import { AF_SNAPSHOT_SCORING_FORMAT, type ProjectionOutcome, type ScoringFormat, type WeeklyObservation } from './types'
 import { loadProjectionCalibrationMap } from './accuracyCalibration'
 
 export interface WriteSnapshotsResult {
@@ -161,7 +161,7 @@ export async function writeAfProjectionSnapshotsForSeason(
   opts: WriteSnapshotsOptions = {},
 ): Promise<WriteSnapshotsResult> {
   const sport = (opts.sport ?? 'NFL').toUpperCase()
-  const scoringFormat = opts.scoringFormat ?? 'ppr'
+  const scoringFormat = opts.scoringFormat ?? AF_SNAPSHOT_SCORING_FORMAT
   const idpPreset = opts.idpPreset ?? 'balanced'
   const now = opts.now ?? new Date()
   const errors: string[] = []

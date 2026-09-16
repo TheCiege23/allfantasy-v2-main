@@ -36,7 +36,10 @@ import {
   loadProjectionRows,
 } from '@/lib/decision-os/world/port'
 import { reprojectRos } from '@/lib/af-projections/restOfSeason'
+import { AF_SNAPSHOT_SCORING_FORMAT } from '@/lib/af-projections/types'
 import { projectProjectionContext } from '@/lib/decision-os/world/projectionEnrichedWorld'
+import { scoringFormatFromPresetId } from './scoringContextFromWorld'
+import type { ReceptionScoringFormat } from '@/lib/trade-value/valueEngine'
 import type { RawIdpValueRow, RawPlayerValueRow, RawProjectionRow } from '@/lib/decision-os/world/facts'
 import type { RawAfProjectionRow } from '@/lib/decision-os/world/port'
 
@@ -68,10 +71,14 @@ export interface TradeEnrichmentPort {
   /**
    * READ-ONLY: the AllFantasy engine's own projections (`AFProjectionSnapshot`).
    *
-   * 🛑 PREFERRED OVER `loadProjections`. `lib/af-projections/` scores a player under the league's
-   * own rules — including IDP components, which no provider feed carries — and its output was
-   * unreachable from valuation until now: the value chain read `fantasy_projections`, a different
-   * table, and that reader excludes AF's own mirror rows by design.
+   * 🛑 PREFERRED OVER `loadProjections`. `lib/af-projections/` projects every player — including IDP
+   * components, which no provider feed carries — and its output was unreachable from valuation
+   * until now: the value chain read `fantasy_projections`, a different table, and that reader
+   * excludes AF's own mirror rows by design.
+   *
+   * ⚠ ONE CANONICAL FORMAT PER ROW (`AF_SNAPSHOT_SCORING_FORMAT`, full PPR), NOT THE LEAGUE'S. This
+   * comment used to say "under the league's own rules"; that is true only of the READ-TIME IDP and
+   * kicker rescores, which this seam does not call.
    */
   loadAfProjections: (sport: string, playerIds: string[], season: number, week: number | null) => Promise<RawAfProjectionRow[]>
   /**
@@ -206,6 +213,11 @@ export async function resolveTradeEnrichment(
   const positionByPlayerId: Record<string, string | null> = {}
   // F2.5-fed below when the season/week anchor is present; otherwise honestly empty.
   const projectionByPlayerId: Record<string, number | null> = {}
+  /*
+   * The reception format each entry above was scored in, set in the SAME statement that sets the
+   * projection so the two cannot drift. The value engine converts from it to the league's own.
+   */
+  const projectionScoringFormatByPlayerId: Record<string, ReceptionScoringFormat | null> = {}
   /* AF per-game projections only — see the AF block below for why this map has no fallback. */
   const perGameProjectionByPlayerId: Record<string, number | null> = {}
   const marketValueByPlayerId: Record<string, number | null> = {}
@@ -253,8 +265,9 @@ export async function resolveTradeEnrichment(
 
   /*
    * ── AF PROJECTIONS FIRST ────────────────────────────────────────────────────────────────────
-   * The AllFantasy engine scores a player under real league rules — including IDP components, which
-   * no provider feed carries at all. Its output lives in `AFProjectionSnapshot` and was unreachable
+   * The AllFantasy engine projects every player, including IDP components, which no provider feed
+   * carries at all — in ONE canonical full-PPR format, not the league's (see
+   * `projectionScoringFormatByPlayerId` below). Its output lives in `AFProjectionSnapshot` and was unreachable
    * from here: this seam read `fantasy_projections`, a DIFFERENT table, and that reader excludes
    * AF's own mirror rows by design (`source: { not: 'allfantasy' }`). Shut out twice over.
    *
@@ -303,6 +316,7 @@ export async function resolveTradeEnrichment(
         if (value == null) continue
 
         projectionByPlayerId[row.playerId] = value
+        projectionScoringFormatByPlayerId[row.playerId] = scoringFormatFromPresetId(AF_SNAPSHOT_SCORING_FORMAT)
         projectionResolved += 1
         afProjectionResolved += 1
       }
@@ -338,6 +352,8 @@ export async function resolveTradeEnrichment(
         const ctx = projectProjectionContext(rowsByPlayer.get(id) ?? [], args.scoringPresetId ?? null, now)
         if (ctx.projectedPoints == null) continue
         projectionByPlayerId[id] = ctx.projectedPoints
+        // The ROW's preset, not the league's — the league's `scoringPresetId` is not a measurement.
+        projectionScoringFormatByPlayerId[id] = scoringFormatFromPresetId(ctx.scoringPresetId)
         projectionResolved += 1
         if (ctx.matchTier === 'any_scoring') scoringMismatch = true
       }
@@ -435,6 +451,7 @@ export async function resolveTradeEnrichment(
       adpByPlayerId,
       positionByPlayerId,
       projectionByPlayerId,
+      projectionScoringFormatByPlayerId,
       perGameProjectionByPlayerId,
       marketValueByPlayerId,
       idpValueByPlayerId,

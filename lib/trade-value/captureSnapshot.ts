@@ -248,6 +248,8 @@ export async function computeRedraftTradeValueSnapshot(
   const enriched: EnrichedTradeAsset[] = input.assets.map((a) => {
     const md = (a.metadata ?? {}) as Record<string, unknown>
     const kind = a.assetType as EnrichedTradeAsset['kind']
+    const resolvedProjection = a.playerId ? enrich.projectionByPlayerId?.[a.playerId] ?? null : null
+    const clientProjection = num(md.restOfSeasonProjection) ?? num(md.weeklyProjection)
     return {
       kind,
       fromRosterId: a.fromRosterId,
@@ -267,10 +269,15 @@ export async function computeRedraftTradeValueSnapshot(
          * `md.restOfSeasonProjection` is whatever the CLIENT supplied, which is weaker but is what
          * this path used before and must not be lost when the resolver has nothing.
          */
-        projectionValue:
-          (a.playerId ? enrich.projectionByPlayerId?.[a.playerId] ?? null : null) ??
-          num(md.restOfSeasonProjection) ??
-          num(md.weeklyProjection),
+        projectionValue: resolvedProjection ?? clientProjection,
+        /*
+         * The resolver says what format its number is in. The client's number carries no format,
+         * so it gets null — priced with no reception conversion rather than assumed to be PPR.
+         */
+        projectionScoringFormat:
+          resolvedProjection != null && a.playerId
+            ? enrich.projectionScoringFormatByPlayerId?.[a.playerId] ?? null
+            : null,
         /*
          * ⚠ STILL NULL, AND NOW DELIBERATELY SO RATHER THAN "DEFERRED". Nothing in this codebase
          * produces a ranking on the 0-10000 convention this field would need, and
