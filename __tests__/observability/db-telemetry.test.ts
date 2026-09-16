@@ -10,7 +10,13 @@ vi.mock('@sentry/nextjs', () => ({
   startInactiveSpan: () => ({}),
 }))
 
-import { createDbObserver, observeDbOperation, type SpanApi, type SpanLike } from '@/lib/observability/dbTelemetry'
+import {
+  createDbObserver,
+  failureLabel,
+  observeDbOperation,
+  type SpanApi,
+  type SpanLike,
+} from '@/lib/observability/dbTelemetry'
 
 class FakeSpan implements SpanLike {
   attributes: Record<string, unknown> = {}
@@ -141,6 +147,150 @@ describe('createDbObserver — slow operations become child spans', () => {
     await expect(h.observe({ model: 'League', operation: 'findFirst' }, failing)).rejects.toBe(original)
     expect(h.root.attributes['af.db.errors']).toBe(1)
     expect(h.started[0].span.status).toEqual({ code: 2, message: 'internal_error' })
+  })
+})
+
+/** An error shaped like Prisma's `PrismaClientKnownRequestError`. */
+function prismaError(code: string, message: string) {
+  return Object.assign(new Error(message), { name: 'PrismaClientKnownRequestError', code })
+}
+
+describe('createDbObserver — failed operations are NAMED, not just counted', () => {
+  const fail = (h: ReturnType<typeof harness>, ms: number, error: unknown) => async () => {
+    await h.takes(ms, null)()
+    throw error
+  }
+
+  /**
+   * 🛑 THE CASE THAT WAS INVISIBLE. Production /core home renders counted 40 failures in 25 renders
+   * with nothing to say which query failed, because only a failure that was also SLOW became a
+   * span. A missing table fails in milliseconds.
+   */
+  it('gives a FAST failure its own span, marked as an error and labelled with its code', async () => {
+    const h = harness()
+    const original = prismaError('P2021', 'The table `public.player_follows` does not exist')
+    await expect(h.observe({ model: 'PlayerFollow', operation: 'findMany' }, fail(h, 4, original))).rejects.toBe(original)
+
+    expect(h.started).toHaveLength(1)
+    const [{ options, span }] = h.started
+    expect(options.name).toBe('PlayerFollow.findMany')
+    expect(options.attributes).toMatchObject({ 'af.db.error': 'P2021' })
+    expect(options.attributes).not.toHaveProperty('af.db.slow')
+    expect(span.status).toEqual({ code: 2, message: 'internal_error' })
+    expect(span.endedAt).toBe((1_788_000_000_000 + 4) / 1000)
+  })
+
+  it('lists each distinct failing operation on the root, in the order first seen', async () => {
+    const h = harness()
+    const timeout = prismaError('P2024', 'Timed out fetching a new connection from the connection pool')
+    await h.observe({ model: 'SportsDataCache', operation: 'findUnique' }, fail(h, 2, timeout)).catch(() => {})
+    await h.observe({ model: 'League', operation: 'findMany' }, h.takes(3, []))
+    await h.observe({ model: 'TokenSpendRule', operation: 'upsert' }, fail(h, 2, prismaError('P2002', 'x'))).catch(() => {})
+    // The same operation failing the same way again is counted, not listed twice.
+    await h.observe({ model: 'SportsDataCache', operation: 'findUnique' }, fail(h, 2, timeout)).catch(() => {})
+
+    expect(h.root.attributes['af.db.errors']).toBe(3)
+    expect(h.root.attributes['af.db.error_ops']).toBe('SportsDataCache.findUnique:P2024,TokenSpendRule.upsert:P2002')
+  })
+
+  it('stops growing the list at eight entries while the count keeps going', async () => {
+    const h = harness({ maxSlowSpansPerRoot: 0 })
+    for (let i = 0; i < 12; i++) {
+      await h.observe({ model: `Model${i}`, operation: 'findMany' }, fail(h, 1, prismaError('P2021', 'x'))).catch(() => {})
+    }
+    expect(h.root.attributes['af.db.errors']).toBe(12)
+    expect(String(h.root.attributes['af.db.error_ops']).split(',')).toHaveLength(8)
+  })
+
+  it('adds no error attribute to a request where nothing failed', async () => {
+    const h = harness()
+    await h.observe({ model: 'League', operation: 'findMany' }, h.takes(3, []))
+    expect(h.root.attributes).not.toHaveProperty('af.db.error_ops')
+  })
+
+  it('caps failure spans separately, so slow successes cannot use up the budget that names failures', async () => {
+    const h = harness({ maxSlowSpansPerRoot: 1, slowQueryMs: 100 })
+
+    await h.observe({ model: 'Roster', operation: 'findMany' }, h.takes(500, [])) // uses the only slow slot
+    await h.observe({ model: 'Roster', operation: 'findMany' }, h.takes(500, [])) // over the slow cap: no span
+    await h.observe({ model: 'Roster', operation: 'count' }, fail(h, 5, prismaError('P2024', 'x'))).catch(() => {})
+
+    expect(h.started.map((s) => s.options.name)).toEqual(['Roster.findMany', 'Roster.count'])
+    expect(h.started[1].span.status).toEqual({ code: 2, message: 'internal_error' })
+  })
+
+  it('stops creating failure spans at its own cap', async () => {
+    const root = new FakeSpan('GET /core')
+    let current: SpanLike | undefined = new FakeSpan('function.nextjs')
+    const started: string[] = []
+    const api: SpanApi = {
+      getActiveSpan: () => current,
+      getRootSpan: () => root,
+      withActiveSpan: (span, callback) => {
+        const previous = current
+        current = span
+        try {
+          return callback()
+        } finally {
+          current = previous
+        }
+      },
+      startInactiveSpan: (options) => {
+        started.push(options.name)
+        return new FakeSpan(options.name)
+      },
+    }
+    let clock = 0
+    const observe = createDbObserver(api, {
+      slowQueryMs: 100,
+      maxSlowSpansPerRoot: 20,
+      maxErrorSpansPerRoot: 2,
+      monotonicMs: () => clock,
+      epochMs: () => clock,
+    })
+    for (let i = 0; i < 5; i++) {
+      await observe({ model: 'League', operation: `op${i}` }, async () => {
+        clock += 3
+        throw prismaError('P2024', 'x')
+      }).catch(() => {})
+    }
+    expect(started).toEqual(['League.op0', 'League.op1'])
+    expect(root.attributes['af.db.errors']).toBe(5)
+  })
+})
+
+describe('failureLabel — a code or a class name, never the message', () => {
+  it('prefers a Prisma error code', () => {
+    expect(failureLabel(prismaError('P2024', 'Timed out fetching a new connection'))).toBe('P2024')
+  })
+
+  /**
+   * 🛑 A Prisma message can quote the values that violated a constraint. Nothing from the message
+   * may reach a span attribute, however it is shaped.
+   */
+  it('never returns any part of the message', () => {
+    const leaky = prismaError('P2002', 'Unique constraint failed on the fields: (`email`) value alice@example.com')
+    expect(failureLabel(leaky)).toBe('P2002')
+    expect(failureLabel(new Error('alice@example.com'))).toBe('Error')
+    expect(failureLabel(Object.assign(new Error('x'), { code: 'alice@example.com' }))).toBe('Error')
+    /* The fallback path: no code, no usable class name, and a message that must not come through. */
+    const nameless = Object.assign(new Error('alice@example.com'), { name: '' })
+    expect(failureLabel(nameless)).toBe('Error')
+    expect(failureLabel({ message: 'alice@example.com' })).toBe('Error')
+  })
+
+  it('falls back to the class name for an error without a Prisma code', () => {
+    const unknown = Object.assign(new Error('boom'), { name: 'PrismaClientUnknownRequestError' })
+    expect(failureLabel(unknown)).toBe('PrismaClientUnknownRequestError')
+    expect(failureLabel(new TypeError('bad'))).toBe('TypeError')
+  })
+
+  it('collapses anything that is not a plausible class name to "Error"', () => {
+    expect(failureLabel(Object.assign(new Error('x'), { name: 'name with spaces and alice@example.com' }))).toBe('Error')
+    expect(failureLabel('a thrown string')).toBe('Error')
+    expect(failureLabel(null)).toBe('Error')
+    expect(failureLabel(undefined)).toBe('Error')
+    expect(failureLabel({ code: 42 })).toBe('Error')
   })
 })
 
