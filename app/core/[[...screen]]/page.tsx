@@ -136,6 +136,7 @@ import Standings from '@/components/core-app/screens/Standings'
 import StandingsBoard from '@/components/core-app/boards/StandingsBoard'
 import PickALeague from '@/components/core-app/PickALeague'
 import LeagueTabs from '@/components/core-app/LeagueTabs'
+import { platformLabel } from '@/lib/core-app/platformLinks'
 import { getLeagueStandings } from '@/lib/core-app/leagueStandings'
 import LeagueSync from '@/components/core-app/screens/LeagueSync'
 import { getLeagueSync } from '@/lib/core-app/leagueSync'
@@ -687,9 +688,17 @@ export default async function AfCorePage({
    * rail does not contain would put a league heading above a screen the user
    * has no membership in.
    */
-  const selectedLeagueName = selectedLeagueId
-    ? (rail.find((l) => l.id === selectedLeagueId)?.name ?? null)
+  /*
+   * ⚠ THE WHOLE RAIL ENTRY, NOT JUST ITS NAME. The header below needs the
+   * league's artwork and letter mark too, and the rail has already resolved
+   * both through `imageOf` → `resolveLeagueCardTypeKey` → `getLeagueTypeMedia`.
+   * Re-deriving them beside the header is how the rail chip and the header
+   * crest end up showing different artwork for one league.
+   */
+  const selectedRailLeague = selectedLeagueId
+    ? (rail.find((l) => l.id === selectedLeagueId) ?? null)
     : null
+  const selectedLeagueName = selectedRailLeague?.name ?? null
 
   const selectedSyncAge = describeAge(
     'roster',
@@ -1166,6 +1175,14 @@ export default async function AfCorePage({
           hasScoredWeek={leagueHasScoredWeek}
           tradeSupported={importCoverageSummary.capabilities.trades !== false}
           draftSupported={importCoverageSummary.capabilities.draft !== false}
+          /*
+           * ⚠ `platformLabel`, NOT `String(platform)`. It is the same resolver
+           * the "Open in <platform>" buttons use, so the sentence explaining
+           * why Trades is absent names the provider exactly as the button that
+           * sends you there does — and a native league resolves to
+           * "AllFantasy" rather than printing a raw enum at the reader.
+           */
+          platform={platformLabel(selectedLeagueRow?.platform)}
         />
       ) : null}
 
@@ -1174,6 +1191,8 @@ export default async function AfCorePage({
           leagueId={selectedLeagueId}
           leagueName={selectedLeagueName}
           platform={String(selectedLeagueRow.platform ?? 'manual')}
+          logoUrl={selectedRailLeague?.imageUrl ?? null}
+          logoLetter={selectedRailLeague?.mark}
           syncLabel={selectedSyncAge.label}
           syncStale={selectedSyncAge.stale}
           gameDayActive={coreActivity.gameDayActive}

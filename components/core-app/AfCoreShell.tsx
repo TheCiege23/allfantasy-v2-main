@@ -7,6 +7,7 @@ import { GameDayAlertsBanner } from '@/components/notifications/GameDayAlertsBan
 import CommsDock from '@/components/core-app/comms/CommsDock'
 import type { CommsLeague } from '@/components/core-app/comms/CommsDrawer'
 import { AfCrest } from '@/components/core-app/AfCrest'
+import { LeagueMark } from '@/components/core-app/LeagueMark'
 import SyncNowButton from '@/components/core-app/SyncNowButton'
 import PlayerCardProvider from '@/components/core-app/player-card/PlayerCardProvider'
 import { SUPPORT_OPEN_EVENT } from '@/components/core-app/comms/commsEvents'
@@ -985,11 +986,15 @@ function TopSearch({ leagues }: { leagues: RailLeague[] }) {
  * is worse than the letter it replaces — the Sleeper CDN 404s for some avatar
  * ids. `alt` is empty on purpose: the wrapping link already carries the
  * accessible name, and doubling it reads the league name twice.
+ *
+ * ⚠ THE BEHAVIOUR NOW LIVES IN `LeagueMark`, because the league header needs the
+ * same fallback at a different size. This stays as the rail's named wrapper so
+ * its five call sites keep reading the way they did, but there is exactly one
+ * implementation of "artwork 404s, show the letter" in the suite rather than a
+ * copy per surface.
  */
 function RailMark({ src, letter }: { src: string | null | undefined; letter: string }) {
-  const [failed, setFailed] = useState(false)
-  if (!src || failed) return <>{letter}</>
-  return <img src={src} alt="" className="af-rail-tile-img" onError={() => setFailed(true)} loading="lazy" />
+  return <LeagueMark src={src} letter={letter} className="af-rail-tile-img" />
 }
 
 /**
