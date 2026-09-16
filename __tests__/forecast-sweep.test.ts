@@ -83,6 +83,23 @@ describe('due-ness is a set difference', () => {
   })
 
   /*
+   * 🛑 AN INJECTED CLOCK MUST NOT DECIDE THE TIME BUDGET — see the same test in rankings-sweep and
+   * the 2026-09-16 time bomb in matchup-odds-sweep. `now()` years in the past must not read as
+   * "out of time".
+   */
+  it('runs a due unit when the injected clock is far in the past', async () => {
+    const f = fakePrisma([{ leagueId: 'L1', season: '2026', week: 1 }], [])
+    engine.mockResolvedValue(ok as never)
+    const out = await runForecastSweep({
+      prisma: f.prisma as never,
+      budget: budget(),
+      now: () => Date.parse('2020-01-01T00:00:00Z'),
+    })
+    expect(out.skippedForTime).toBe(0)
+    expect(out.written).toBe(1)
+  })
+
+  /*
    * 🛑 THE TYPE MISMATCH THIS PINS, AND IT IS THE EXPENSIVE ONE.
    *
    * `rankings_snapshots.season` is a String; `season_forecast_snapshots.season` is an Int. If the
