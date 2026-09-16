@@ -22,6 +22,7 @@
  */
 
 import * as Sentry from '@sentry/nextjs'
+import { recordBudgetOnActiveSpan } from '@/lib/sports-os/budgetTelemetry'
 
 export type CoreCardRead =
   | 'dash34'
@@ -56,8 +57,40 @@ export function traceCard<T>(card: CoreCardRead, load: () => Promise<T>): Promis
   let pending: Promise<T> | undefined
   try {
     return Sentry.startSpan({ name: card, op: 'core.card', onlyIfParent: true, attributes: { 'af.card': card } }, () => {
+      const startedAt = Date.now()
       pending = run()
-      return pending
+      /*
+       * The card's duration against its declared budget (`lib/sports-os/budgets.ts`), written on
+       * THIS span rather than the root — see `recordBudgetOnActiveSpan`. Nineteen cards all writing
+       * `af.budget.card_*` to one root span would be one arbitrary winner, not nineteen readings.
+       *
+       * ⚠ SETTLED THROUGH `.then`, NOT `.finally`, ON PURPOSE. Sentry ends the span when the
+       * promise this callback returns settles; attaching a side-effect and returning the ORIGINAL
+       * promise races the span's own close, and a late attribute write on a closed span is silently
+       * dropped. Returning the derived promise makes the write strictly precede the close.
+       *
+       * ⚠ A REJECTION IS STILL MEASURED. A read that fails after nine seconds is the most
+       * over-budget thing on the page, and dropping it because it threw is how a timeout looks
+       * fast in the data. The rejection is re-thrown unchanged.
+       *
+       * ⚠ DEVICE-NEUTRAL, WHICH IS A KNOWN LIMIT RATHER THAN AN OVERSIGHT. `traceCard` has no
+       * request headers in scope, so the verdict uses the `unknown` multiplier — a middle value
+       * between desktop and mobile. `af.budget.card_ms` is exact regardless, and the root span's
+       * `af.device` is there to split by in Sentry. Threading a device through all nineteen call
+       * sites is the fix when the verdict itself needs to be per-device.
+       */
+      const settle = <R,>(fn: () => R): R => {
+        try {
+          recordBudgetOnActiveSpan({ phase: 'card', name: card }, Date.now() - startedAt)
+        } catch {
+          // Telemetry must never break a card.
+        }
+        return fn()
+      }
+      return pending.then(
+        (value) => settle(() => value),
+        (error) => settle(() => { throw error }),
+      )
     })
   } catch {
     // Sentry failed. If the read already started, hand back THAT read — never start it twice.

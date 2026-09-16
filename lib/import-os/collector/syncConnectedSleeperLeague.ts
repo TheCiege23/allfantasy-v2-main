@@ -29,6 +29,10 @@ import { isInLeagueGoneBackoff, LEAGUE_GONE_RECHECK_MS } from './leagueGone'
 import { createPrismaSleeperSyncStore } from './prismaSyncStore'
 import { createAutomationSyncLock } from './automationSyncLock'
 import { ensureMatchupsCached } from '@/lib/rankings-engine/sleeper-matchup-cache'
+import { invalidateLeagueStandings } from '@/lib/core-app/leagueStandingsSummary'
+import { getPlatformEvents } from '@/lib/events/producers'
+import { EVENT } from '@/lib/events/catalog'
+import { resolveLeagueIdsForConnection } from './enumerate'
 import { ingestSleeperPlayerScoresForWeek } from '@/lib/sleeper/sync/ingestSleeperPlayerScores'
 import { sleeperScoreTargetWeeks } from '@/lib/sleeper/sync/sleeperScoreTargetWeeks'
 
@@ -373,6 +377,27 @@ export async function syncConnectedLeague(
     )
 
     /*
+     * ⚠ THE ROWS THE STANDINGS BOARD IS BUILT FROM HAVE JUST MOVED, SO DROP THE CACHED BOARDS.
+     *
+     * `lib/core-app/leagueStandingsSummary.ts` caches `/core/standings` keyed on the PLATFORM league
+     * id — the same id `ensureMatchupsCached` just wrote against, and the only one in scope here.
+     * That is not a coincidence; it is why the cache is keyed that way. `League.platformLeagueId`
+     * has no standalone index, so resolving our own UUID here would be an unindexed scan on a path
+     * that runs once per league per sync.
+     *
+     * ⚠ THIS IS A LATENCY OPTIMISATION, NOT A CORRECTNESS REQUIREMENT, AND IT MUST STAY THAT WAY.
+     * The summary is read-through with a two-minute TTL, so the worst a skipped invalidation costs
+     * is one TTL of staleness on a board that renders its own age. It is awaited only because it is
+     * two cheap deletes; it swallows its own failures and can never fail the sync above it, which
+     * has already done the real work.
+     *
+     * ⚠ AND IT RUNS EVEN WHEN `ensureMatchupsCached` REJECTED, deliberately: that call deletes stale
+     * weeks BEFORE refetching them, so a failure partway through still leaves the table changed.
+     * Skipping the sweep on error is how a board survives pointing at rows that no longer exist.
+     */
+    await invalidateLeagueStandings(connection.externalLeagueId)
+
+    /*
      * Per-player weekly scores for the live weeks. `LeaguePlayerWeeklyScore`
      * had a writer and NO scheduled caller — /live's personalization (My
      * games, leagues-affected, impact totals) read a table only a manual
@@ -407,6 +432,77 @@ export async function syncConnectedLeague(
     } catch (err: unknown) {
       console.warn(
         '[sync] player weekly score ingestion failed',
+        connection.externalLeagueId,
+        err instanceof Error ? err.message : err,
+      )
+    }
+  }
+
+  /*
+   * ── Sports OS point 7: the import announces itself, and knows nothing about who listens ──
+   *
+   * One `ingest.league.completed` per AllFantasy league behind this connection. The reaction table
+   * (`lib/sports-os/reactions.ts`) decides what that invalidates and what it makes due; nothing
+   * about that is visible from here, which is the entire point of having an event.
+   *
+   * ⚠ OUTSIDE THE SLEEPER-ONLY BLOCK ABOVE, DELIBERATELY. `ingest.league.completed` is
+   * provider-agnostic — an ESPN or Fantrax league's rows are written by the parity collectors and
+   * its consumers care just as much. Emitting inside that block would have quietly made the whole
+   * reaction path Sleeper-only.
+   *
+   * ⚠ THE ENVELOPE NEEDS OUR CANONICAL ID, AND THIS SCOPE ONLY HAS THE PROVIDER'S.
+   * `resolveLeagueIdsForConnection` is the resolver the sync store already uses on every scope, and
+   * its query shape — platform + platformLeagueId + season — is one `setLastSuccessfulSyncAt`
+   * already pays on every successful run. So this costs one more query of a shape already in the
+   * path, not a new unindexed scan.
+   *
+   * ⚠ AND IT IS NOT A REPLACEMENT FOR THE DIRECT `invalidateLeagueStandings` ABOVE. That call is
+   * synchronous and unconditional; this event reaches its consumer only when the outbox relay next
+   * runs on its cron, and only for the 10% of leagues inside the rollout. The direct call is the
+   * fast path for the one screen we know about; the event is the general mechanism for everything
+   * else. When the rollout is at 100% and relay latency is acceptable, the direct call can go.
+   *
+   * `emit` is best-effort and never throws by contract, but the resolve can, so the whole block is
+   * guarded: a sync that has already done its work must not fail over an announcement.
+   */
+  if (result.status !== 'locked' && result.terminalError === undefined) {
+    try {
+      const leagues = await resolveLeagueIdsForConnection(connection)
+      const events = getPlatformEvents()
+      for (const league of leagues) {
+        await events.emit(EVENT.INGEST_LEAGUE_COMPLETED, {
+          leagueId: league.id,
+          sport: connection.sport,
+          actor: { type: 'system' },
+          source: `ingestion:${connection.provider}`,
+          /*
+           * ⚠ THE RUN'S CLOCK IS IN THE KEY, AND IT HAS TO BE. `runKey` is
+           * `<provider>:<externalLeagueId>:<season>` — STABLE across every run — so a key built
+           * from it alone would dedupe the second sync of a league against the first, forever.
+           * `now` is this run's instant (see the note on the loader above), so this dedupes a
+           * retry within a run and nothing else.
+           */
+          idempotencyKey: `ingest.league.completed:${connection.runKey}:${league.id}:${now.toISOString()}`,
+          subjects: [{ kind: 'league', id: league.id }],
+          payload: {
+            leagueId: league.id,
+            provider: connection.provider,
+            mode: 'scheduled-sync',
+            /*
+             * ⚠ `provider` IS A SOURCE NAME, NEVER A URL. Rolling Insights passes `RSC_token` as a
+             * query parameter, so a provider URL in an event payload is a credential sitting in the
+             * outbox table forever.
+             *
+             * `rosterCount` / `playerCount` are in the schema and deliberately omitted: this scope
+             * has aggregate counts across every league on the connection, not per-league ones, and
+             * a plausible-looking wrong number is worse than an absent one.
+             */
+          },
+        })
+      }
+    } catch (err: unknown) {
+      console.warn(
+        '[sync] ingest event emit failed',
         connection.externalLeagueId,
         err instanceof Error ? err.message : err,
       )

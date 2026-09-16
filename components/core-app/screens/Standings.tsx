@@ -6,6 +6,8 @@ import type {
   StandingRow,
 } from '@/lib/core-app/leagueStandings'
 import '@/components/core-app/af-standings.css'
+import { FreshnessChip } from '@/components/sports-os/FreshnessChip'
+import type { FreshnessMeta } from '@/lib/sports-os/freshness'
 
 /**
  * Screen 38a·7 — Standings, this league's points-for board.
@@ -22,8 +24,24 @@ import '@/components/core-app/af-standings.css'
  * loader refuses and this renders the reason instead of a table.
  */
 
+/**
+ * How old the board is, when it came from the summary cache.
+ *
+ * ⚠ OPTIONAL BECAUSE THE ROLLOUT MAKES IT OPTIONAL. `sports-os.screen-summaries` is at 10%, so most
+ * readers still take the direct read, which has no envelope and nothing to label. `null` renders no
+ * chip at all — never a chip reading "unknown", which would claim the data is of uncertain age when
+ * it was in fact just computed.
+ */
+export type StandingsFreshness = {
+  meta: FreshnessMeta
+  /** Computed server-side; see the hydration note in FreshnessChip. */
+  initialLabel: string
+  initialWarn: boolean
+}
+
 export type StandingsProps = {
   data: LeagueStandingsResult
+  freshness?: StandingsFreshness | null
 }
 
 function n1(v: number): string {
@@ -104,13 +122,24 @@ function SeasonHistory({ rows }: { rows: SeasonHistoryRow[] }) {
   )
 }
 
-export function Standings({ data }: StandingsProps) {
+export function Standings({ data, freshness }: StandingsProps) {
+  /*
+   * ⚠ THE REFUSAL BRANCH IS LABELLED TOO, AND THAT IS NOT DECORATION. An `available: false` board is
+   * cached exactly like an available one, so "we could not read this league's results" can itself be
+   * four minutes old. A reader who has just fixed the cause deserves to see that the refusal is
+   * stale rather than assuming it is live and giving up.
+   */
+  const chip = freshness ? (
+    <FreshnessChip meta={freshness.meta} initialLabel={freshness.initialLabel} initialWarn={freshness.initialWarn} />
+  ) : null
+
   if (!data.available) {
     return (
       <div className="af-st">
         <header className="af-st-head">
           <p className="af-label af-st-eyebrow">{data.leagueName}</p>
           <h1 className="af-display af-st-title">Standings</h1>
+          {chip}
         </header>
         <div className="af-st-blocked">
           <span className="af-st-blocked-mark af-num" aria-hidden>
@@ -136,6 +165,7 @@ export function Standings({ data }: StandingsProps) {
           rather than who you drew. {season} ·{' '}
           {seasonComplete ? `season complete after week ${week}` : `through week ${week}`}.
         </p>
+        {chip}
       </header>
 
       {/*

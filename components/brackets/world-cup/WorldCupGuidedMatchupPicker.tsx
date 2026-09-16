@@ -610,6 +610,24 @@ export default function WorldCupGuidedMatchupPicker({
   }
 
   // ── Pick handler ───────────────────────────────────────────────────────
+  /*
+   * 🛑 THE AUTO-ADVANCE TIMER MUST BE OWNED, OR IT FIRES INTO A TORN-DOWN TREE.
+   *
+   * The save path below schedules a 120ms `setTimeout` that calls `setSaveState`. Nothing cancelled
+   * it, so a picker unmounted inside that window — a closed drawer, or a finished test — still had a
+   * live timer that reached React after the environment was gone. In jsdom that surfaces as an
+   * uncaught `ReferenceError: window is not defined` from react-dom's `getCurrentEventPriority`,
+   * which fails the whole suite from outside any test. In a browser it is a setState on an unmounted
+   * component. Same bug, two costumes.
+   */
+  const advanceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(
+    () => () => {
+      if (advanceTimerRef.current !== null) clearTimeout(advanceTimerRef.current)
+    },
+    []
+  )
+
   const handlePick = useCallback(
     async (side: "home" | "away") => {
       if (!currentMatch || isLocked || saveState === "saving") return
@@ -702,7 +720,9 @@ export default function WorldCupGuidedMatchupPicker({
         setSaveState("saved")
 
         // Auto-advance after short visual feedback
-        setTimeout(() => {
+        if (advanceTimerRef.current !== null) clearTimeout(advanceTimerRef.current)
+        advanceTimerRef.current = setTimeout(() => {
+          advanceTimerRef.current = null
           setSaveState("idle")
           goToNext(currentMatch.id, serverPicks)
         }, 120)

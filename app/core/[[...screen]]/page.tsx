@@ -7,6 +7,7 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { recordDashboardActivation } from '@/lib/analytics/recordDashboardActivation'
 import { getDashboardLeagueListForUser } from '@/lib/dashboard/get-dashboard-league-list'
+import { toPlayedLeagues } from '@/lib/core-app/playedLeagues'
 import { selectResyncCandidates } from '@/lib/core-app/resyncableLeagues'
 import { getLeagueDataSignals } from '@/lib/core-app/leagueDataSignals'
 import { getLeagueTypeMedia, resolveLeagueCardTypeKey } from '@/lib/league-media/leagueTypeMedia'
@@ -145,6 +146,14 @@ import PickALeague from '@/components/core-app/PickALeague'
 import LeagueTabs from '@/components/core-app/LeagueTabs'
 import { platformLabel } from '@/lib/core-app/platformLinks'
 import { getLeagueStandings } from '@/lib/core-app/leagueStandings'
+import { readLeagueStandingsSummary } from '@/lib/core-app/leagueStandingsSummary'
+import { readWeekAllSummary } from '@/lib/core-app/weekAllSummary'
+import { readSeasonOutlookSummary } from '@/lib/core-app/seasonOutlookSummary'
+import { readCareerRecordsSummary } from '@/lib/core-app/careerRecordsSummary'
+import { isEnabled, DEFAULT_ROLLOUTS } from '@/lib/sports-os/rollout'
+import { freshnessLabel, freshnessMeta, shouldWarnAboutFreshness } from '@/lib/sports-os/freshness'
+import { recordBudgetSince } from '@/lib/sports-os/budgetTelemetry'
+import { classifyDevice } from '@/lib/observability/requestContext'
 import LeagueSync from '@/components/core-app/screens/LeagueSync'
 import { getLeagueSync } from '@/lib/core-app/leagueSync'
 import NotificationsCenter from '@/components/core-app/screens/NotificationsCenter'
@@ -162,7 +171,7 @@ import { touchLeagueViewed } from '@/lib/leagues/touchLeagueViewed'
 import CoreScreenSkeleton from '@/components/core-app/CoreScreenSkeleton'
 import CoreScreenErrorBoundary from '@/components/core-app/CoreScreenErrorBoundary'
 import { PublishShellSignals, type ShellUrgencyBadges } from '@/components/core-app/shellSignals'
-import { recordRootDuration } from '@/lib/observability/rootTiming'
+import { recordCompletedSpan, recordRootDuration } from '@/lib/observability/rootTiming'
 import { CoreHomeCards, emptyHomeLoads, type HomeLoads } from '@/components/core-app/home/HomeCards'
 import { traceCard } from '@/lib/observability/cardTelemetry'
 import {
@@ -611,9 +620,11 @@ export default async function AfCorePage({
    * 604-tile rail and a 604-row home. Same filter the home loader applies, for
    * the same reason.
    */
-  const playedLeagues = leagues
-    .filter((l) => (l as { hasUnifiedRecord?: boolean }).hasUnifiedRecord !== false)
-    .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base', numeric: true }))
+  /*
+   * The rule moved to `lib/core-app/playedLeagues.ts` when `weekAllSummary` became a second caller.
+   * Copying the two lines would have put two implementations of one rule in the tree.
+   */
+  const playedLeagues = toPlayedLeagues(leagues)
   const selectedLeagueRow = selectedLeagueId
     ? (playedLeagues.find((league) => league.id === selectedLeagueId) ?? null)
     : null
@@ -1153,6 +1164,46 @@ export default async function AfCorePage({
   recordRootDuration('af.shell_ms', shellStartedAt)
 
   /*
+   * The same duration, against the budget it was measured against (`lib/sports-os/budgets.ts`).
+   * `af.shell_ms` says how long; `af.budget.shell_verdict` says whether that was acceptable for
+   * THIS screen on THIS device, which is the question a dashboard actually gets asked.
+   *
+   * ⚠ THE DEVICE IS READ HERE BECAUSE THE SHELL BUDGET IS DEVICE-SCALED (mobile x1.5). The route is
+   * already dynamic — `cookies()` and `headers()` are both used elsewhere in this file — so this
+   * adds no rendering constraint.
+   *
+   * ⚠ AND IT DECIDES NOTHING. A verdict is an observation; it never sheds a card or shortens a
+   * timeout. A performance budget that can fail a request turns a slow page into a broken one.
+   */
+  try {
+    const shellHeaders = await headers()
+    const shellDevice = classifyDevice(shellHeaders.get('user-agent'), shellHeaders.get('sec-ch-ua-mobile'))
+
+    /*
+     * The shell as its own span, so its duration can be AGGREGATED.
+     *
+     * 🛑 `af.shell_ms` ABOVE IS NOT QUERYABLE IN SENTRY — it reports as an unknown, string-typed
+     * attribute, so there is no p75 to calibrate the shell budget against. `span.duration` is a
+     * native field and has none of that problem. Both are kept: the attribute is what
+     * `docs/observability/TRACING.md` documents and what an individual trace shows, and this span
+     * is the one an aggregate query can actually use.
+     *
+     * Created retroactively — see `recordCompletedSpan`. It cannot leak on the early returns
+     * between the auth gate and here, because it only exists if control reaches this line.
+     */
+    recordCompletedSpan({
+      name: 'shell',
+      op: 'core.shell',
+      startedAtMs: shellStartedAt,
+      attributes: { 'af.screen': activeKey, 'af.device': shellDevice },
+    })
+
+    recordBudgetSince({ phase: 'shell', name: activeKey, device: shellDevice }, shellStartedAt)
+  } catch {
+    // Telemetry must never fail a render.
+  }
+
+  /*
    * The error boundaries reset on ANY change of URL, not just screen or league: Back/Forward between two
    * queries of one screen (`?week=`, `?player=`) must not carry a failure onto a URL that renders fine.
    * A refresh of the SAME URL keeps the panel — retrying is the user's call, and re-rendering a failing
@@ -1594,10 +1645,34 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
    * Career records — only for `?view=records`, because it reads every played
    * week this account has and no other tab needs it.
    */
-  const careerRecords =
+  const wantsCareerRecords =
     activeKey === 'career' && sp.view === 'records' && !selectedLeagueId
-      ? await getCareerRecords(userId).catch(() => null)
+
+  /*
+   * ── CAREER RECORDS ON SUMMARIES ────────────────────────────────────
+   *
+   * The cleanest of the four to cache: `careerRecords.ts` has no `new Date()` and no `Date.now()`
+   * anywhere, so a career record can only change when a week FINALIZES, never with the clock.
+   * Staleness costs a newly-set personal best appearing late, not a number that drifts while you
+   * look at it — which is why its TTL is 30 minutes where the week board's is two.
+   *
+   * ⚠ THE FLAG IS READ SEPARATELY FROM THE OTHER THREE. `standingsOnSummary` binds standings, week
+   * and outlook together because `/core/standings` renders more than one of them on one screen and
+   * split cohorts would be two experiments at once. This screen shares a page with none of them, so
+   * there is nothing to keep consistent — it just takes the same flag and subject.
+   */
+  const careerRecordsOnSummary = isEnabled('sports-os.screen-summaries', userId, DEFAULT_ROLLOUTS)
+
+  const careerRecordsFresh =
+    wantsCareerRecords && careerRecordsOnSummary
+      ? await readCareerRecordsSummary(userId).catch(() => null)
       : null
+
+  const careerRecords = wantsCareerRecords
+    ? careerRecordsOnSummary
+      ? (careerRecordsFresh?.data ?? null)
+      : await getCareerRecords(userId).catch(() => null)
+    : null
 
   /*
    * Rankings, its FAQ and the compare view share one screen key and one data
@@ -2006,10 +2081,68 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
       ? await getLeagueSync(selectedLeagueId, userId).catch(() => null)
       : null
 
+  /*
+   * ── Sports OS point 4 + 10: the first screen served from a precomputed summary ──
+   *
+   * `getLeagueStandings` reads every `WeeklyMatchup` row the league has and re-derives the board on
+   * every visit, for every member. `readLeagueStandingsSummary` is the same function behind
+   * `lib/sports-os/summaries.ts` — read-through, so a miss costs one rebuild and never a blank
+   * board, and the envelope it returns carries the timestamp the screen labels it with.
+   *
+   * ⚠ BEHIND A ROLLOUT, AND THE FALLBACK IS THE UNCHANGED CALL. Off-cohort users take exactly the
+   * path they took before this shipped, so widening the flag is the only thing that changes
+   * behaviour and narrowing it is a complete rollback. `userId` is the bucket subject, so a user
+   * does not flip cohort between two loads of the same screen.
+   *
+   * ⚠ `.catch(() => null)` IS KEPT ON BOTH ARMS. The screen already distinguishes a read failure
+   * from an unpicked league, and a summary rebuild can fail for exactly the reasons the direct read
+   * could. Letting it reject here would replace that message with a Suspense error boundary.
+   */
+  const standingsOnSummary = isEnabled('sports-os.screen-summaries', userId, DEFAULT_ROLLOUTS)
+  /*
+   * ⚠ THE SAME FLAG AND THE SAME SUBJECT AS STANDINGS, SO A USER IS WHOLLY ON SUMMARIES OR WHOLLY
+   * OFF. A second flag would put one user on a cached standings board and a live week board, which
+   * is two experiments at once and neither cleanly measurable.
+   */
+  const weekOnSummary = standingsOnSummary
+  /*
+   * ⚠ AND THE SAME SUBJECT AGAIN, FOR THE THIRD SURFACE. `/core/standings` with no league held
+   * renders BOTH the standings board and the outlook, so splitting the cohorts would put one
+   * screen's two halves on different data paths — the one configuration nothing here could
+   * meaningfully measure.
+   */
+  const outlookOnSummary = standingsOnSummary
+
+  const standingsFresh =
+    activeKey === 'standings' && selectedLeagueId && standingsOnSummary
+      ? await readLeagueStandingsSummary(selectedLeagueId, userId).catch(() => null)
+      : null
+
   const standings =
     activeKey === 'standings' && selectedLeagueId
-      ? await getLeagueStandings(selectedLeagueId, userId).catch(() => null)
+      ? standingsOnSummary
+        ? (standingsFresh?.data ?? null)
+        : await getLeagueStandings(selectedLeagueId, userId).catch(() => null)
       : null
+
+  /*
+   * Point 9's visible half. The envelope's age becomes a chip in the board's header.
+   *
+   * ⚠ THE LABEL IS COMPUTED HERE, ON THE SERVER, AND PASSED DOWN. `FreshnessChip` renders this
+   * exact string on first paint and only starts recomputing after mount, so SSR and hydration
+   * agree by construction rather than by luck — the same reason the board pins its number locale.
+   *
+   * ⚠ NULL FOR THE OFF-COHORT READ, DELIBERATELY. Most readers still take the direct call, which
+   * has no envelope; a chip over that board would be inventing an age for a value that was just
+   * computed. No envelope means no chip, never a chip reading "unknown".
+   */
+  const standingsFreshness = standingsFresh
+    ? {
+        meta: freshnessMeta(standingsFresh),
+        initialLabel: freshnessLabel(standingsFresh),
+        initialWarn: shouldWarnAboutFreshness(standingsFresh),
+      }
+    : null
 
   /*
    * ── 24a / 24b / 26b / 22c / 26a ────────────────────────────────────
@@ -2070,10 +2203,37 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
    * The cost only lands on a standings request that has NO league held; with a
    * league selected the per-league screen loads instead and this stays null.
    */
-  const outlook =
+  const wantsOutlook =
     activeKey === 'season-outlook' ||
     ((activeKey === 'standings' || activeKey === 'week') && !selectedLeagueId && !rivalriesView)
-      ? await getSeasonOutlook(
+
+  /*
+   * ── 26b ON SUMMARIES ───────────────────────────────────────────────
+   *
+   * The most expensive read in this file by orders of magnitude: ~49 million simulated games on a
+   * 63-league account, on a `force-dynamic` route that pays it every visit. See
+   * `lib/core-app/seasonOutlookSummary.ts` for why the focus league is part of the cache key and
+   * why the summary cannot change the board's numbers — the model is seeded, so a hit and a cold
+   * run produce the same board.
+   *
+   * ⚠ `selectedLeagueId` IS PASSED THROUGH UNCHANGED ON BOTH ARMS. It is `getSeasonOutlook`'s
+   * `focusLeagueId`, and it is what guarantees the league on screen gets its swing card; handing
+   * the summary a different value than the direct call takes is how the two paths would come to
+   * disagree about a card's presence rather than its contents.
+   *
+   * ⚠ `.catch(() => null)` ON BOTH ARMS, as with standings: a rebuild fails for the same reasons
+   * the direct read does, and the screen already renders an outlook-less state. Rejecting here
+   * would replace it with a Suspense error boundary.
+   */
+  const outlookFresh =
+    wantsOutlook && outlookOnSummary
+      ? await readSeasonOutlookSummary(userId, selectedLeagueId).catch(() => null)
+      : null
+
+  const outlook = wantsOutlook
+    ? outlookOnSummary
+      ? (outlookFresh?.data ?? null)
+      : await getSeasonOutlook(
           userId,
           playedLeagues.map((l) => ({
             id: l.id,
@@ -2084,7 +2244,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
           })),
           selectedLeagueId,
         ).catch(() => null)
-      : null
+    : null
 
   const notifications =
     activeKey === 'notifications'
@@ -2268,7 +2428,23 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
           .then((value) => value?.week ?? null)
           .catch(() => null)
 
-        const weekAll = traceCard('week', () => getWeekAll(userId, homeWeekLeagues)).catch(() => null)
+        /*
+         * Sports OS point 4: the cross-league week board from a precomputed summary.
+         *
+         * ⚠ STILL INSIDE `traceCard`, DELIBERATELY. The card span is what makes this read visible
+         * per-card in Sentry and what carries its budget verdict; a cache HIT should show up there
+         * as a fast card, not vanish from the trace. Measuring the cheap path is the point.
+         *
+         * 🛑 NEVER ON A SCOPED HOME (#928's scope switcher, lib/core-app/homeScope.ts). The summary is
+         * the user's WHOLE portfolio — its build re-derives the league list itself — so on a home
+         * filtered to one sport or platform it would show every league's scores under a
+         * "Showing NBA leagues" note. A scoped home reads its own leagues, live.
+         */
+        const weekAll = traceCard('week', () =>
+          weekOnSummary && !homeScoped
+            ? readWeekAllSummary(userId).then((entry) => entry?.data ?? null)
+            : getWeekAll(userId, homeWeekLeagues),
+        ).catch(() => null)
 
         /*
          * WHO you play, which getWeekAll cannot answer: it drops every 0-0 row
@@ -2735,14 +2911,22 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
           imageUrl: (l as { avatarUrl?: string | null }).avatarUrl ?? null,
         })),
       ).catch(() => null),
-      getWeekAll(
-        userId,
-        playedLeagues.map((l) => ({
-          id: l.id,
-          name: l.name,
-          platform: String(l.platform ?? ''),
-          platformLeagueId: (l as { platformLeagueId?: string | null }).platformLeagueId ?? null,
-        })),
+      /*
+       * The same board, same rollout as the home card above — so a user in the cohort gets the
+       * cached board on BOTH surfaces and one consistent answer, rather than a cached card beside
+       * a freshly-computed board disagreeing with it.
+       */
+      (weekOnSummary
+        ? readWeekAllSummary(userId).then((entry) => entry?.data ?? null)
+        : getWeekAll(
+            userId,
+            playedLeagues.map((l) => ({
+              id: l.id,
+              name: l.name,
+              platform: String(l.platform ?? ''),
+              platformLeagueId: (l as { platformLeagueId?: string | null }).platformLeagueId ?? null,
+            })),
+          )
       ).catch(() => null),
       /*
        * The three top cards. `lastSyncedAt` is passed through because it is the
@@ -3373,7 +3557,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
         )
       ) : activeKey === 'standings' ? (
         standings ? (
-          <Standings data={standings} />
+          <Standings data={standings} freshness={standingsFreshness} />
         ) : (
           /* Same split as Commissioner: a read failure is not an unpicked league. */
           selectedLeagueId ? (
