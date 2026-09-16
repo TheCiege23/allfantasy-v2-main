@@ -1,7 +1,8 @@
-import { LeagueSport } from '@prisma/client'
+import { LeagueSport, type Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { getLeagueRosters } from '@/lib/sleeper-client'
 import { getSleeperAvatarUrl, type SleeperLeague } from '@/lib/league/sleeper-import-process'
+import { carryAfOwnedLeagueSettings } from '@/lib/league/afOwnedLeagueSettings'
 
 function getScoringType(league: SleeperLeague): 'ppr' | 'half-ppr' | 'standard' {
   const rec = league.scoring_settings?.rec
@@ -88,6 +89,21 @@ export async function upsertSleeperRankingImportLeague(
     rankingImportAt: new Date().toISOString(),
   }
 
+  /*
+   * The update below replaces `settings` with Sleeper's raw object plus the ranking
+   * stamp. Carry AllFantasy's own keys across from the existing row so a ranking
+   * refresh cannot unpublish a league or drop its dues tracker — see
+   * lib/league/afOwnedLeagueSettings.ts.
+   */
+  const current = await Promise.resolve()
+    .then(() =>
+      prisma.league.findUnique({
+        where: { userId_platform_platformLeagueId_season: { userId, platform: 'sleeper', platformLeagueId, season } },
+        select: { settings: true },
+      }),
+    )
+    .catch(() => null)
+
   const league = await prisma.league.upsert({
     where: {
       userId_platform_platformLeagueId_season: {
@@ -114,7 +130,7 @@ export async function upsertSleeperRankingImportLeague(
       importFinalStanding: finalStanding,
       importPointsFor: fpts,
       isCommissioner: isSleeperCommissioner,
-      settings: { ...baseSettings, ...rankMeta },
+      settings: carryAfOwnedLeagueSettings(current?.settings, { ...baseSettings, ...rankMeta }) as Prisma.InputJsonValue,
     },
     create: {
       userId,

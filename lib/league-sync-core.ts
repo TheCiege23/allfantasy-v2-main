@@ -10,6 +10,7 @@ import {
   isLeagueTombstoned,
   LeagueDeletedByUserError,
 } from '@/lib/league-delete/leagueTombstones';
+import { carryAfOwnedLeagueSettings } from '@/lib/league/afOwnedLeagueSettings';
 import { XMLParser } from 'fast-xml-parser';
 
 export interface LeaguePayload {
@@ -458,22 +459,33 @@ export async function syncLeague(
 
   const leaguePayload = await fetchLeaguePayload(userId, platform, platformLeagueId);
   const season = leaguePayload.season;
+  const leagueKey = { userId, platform, platformLeagueId, season };
+
+  /*
+   * The row's current settings, read only so AllFantasy's own keys survive the
+   * update below — the payload is the platform's `settings` and nothing else. See
+   * lib/league/afOwnedLeagueSettings.ts. A read failure falls back to the fresh
+   * payload, which is exactly the behaviour before this read existed.
+   */
+  const current = await Promise.resolve()
+    .then(() =>
+      (prisma as any).league.findUnique({
+        where: { userId_platform_platformLeagueId_season: leagueKey },
+        select: { settings: true },
+      }),
+    )
+    .catch(() => null);
 
   const league = await (prisma as any).league.upsert({
     where: {
-      userId_platform_platformLeagueId_season: {
-        userId,
-        platform,
-        platformLeagueId,
-        season,
-      },
+      userId_platform_platformLeagueId_season: leagueKey,
     },
     update: {
       name: leaguePayload.name,
       leagueSize: leaguePayload.leagueSize,
       scoring: leaguePayload.scoring,
       isDynasty: leaguePayload.isDynasty,
-      settings: leaguePayload.settings,
+      settings: carryAfOwnedLeagueSettings(current?.settings, leaguePayload.settings),
       season,
       lastSyncedAt: new Date(),
       syncStatus: 'success',
