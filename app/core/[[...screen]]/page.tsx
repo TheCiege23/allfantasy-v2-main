@@ -2102,7 +2102,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
                   offersRecorded = recordPendingOffers(userId, scanned, now).catch(() => undefined)
                 },
                 // Every way this read can come back partial — see the flag above, and the loader's
-                // own note on the two bounds it deliberately does NOT report.
+                // own note on the three permanent bounds it deliberately does NOT report.
                 onIncomplete: () => {
                   tradesIncomplete = true
                 },
@@ -2245,10 +2245,18 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
          * part (`tradesIncomplete`), which is why the loader now reports that itself.
          *
          * ⚠ THIS HOLDS THE TRADE BOUNDARY, NOT THE VISIT — and the difference is the whole design.
-         * The marker also carries the standings and injury snapshot the NEXT visit diffs against,
-         * and those were read fine. Holding the whole marker back (the first version of this) meant
-         * one flaky league froze all three, and a new user whose first render had one league fail
-         * would sit at "we cannot compare yet" indefinitely. See `tradesSeenAt` in sinceLastVisit.
+         * Holding the whole marker back (the first version of this) meant one flaky league froze
+         * the standings and injury baselines too, and a new user whose first render had one league
+         * fail would sit at "we cannot compare yet" indefinitely. See `tradesSeenAt` in
+         * sinceLastVisit.
+         *
+         * 🛑 DO NOT READ THAT AS "THE OTHER READS SUCCEEDED". An earlier version of this note said
+         * exactly that, and nothing checks it: `snapshotStandings` and `snapshotInjuries` degrade
+         * to empty the same way the trades read does, and an empty snapshot is written as the NEXT
+         * visit's baseline, where the diffs skip everything absent from it. The standings half is
+         * PERMANENT, not one visit — results between a blind render and the one after it are never
+         * reported by any brief. A real defect on a different axis, named on `tradesSeenAt`, and
+         * NOT covered by this gate.
          */
         const brief = traceCard('since-last-visit', () =>
           trades.then((recentTrades) =>

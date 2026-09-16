@@ -628,6 +628,9 @@ export async function GET(req: NextRequest) {
            * apart — this one the manager can fix themselves.
            */
           reason: 'link your Sleeper account, or claim your team, so we know whose offers to read',
+          // Permanent until the manager links an account — the same class as the scan module's own
+          // identity returns, and never a reason to treat a trade read as transiently incomplete.
+          unscannedKind: 'identity',
           weeksUnanswered: 0,
         }),
   ])

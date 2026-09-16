@@ -236,8 +236,11 @@ export type PendingTradeScan = {
    * treating an `identity` result as a transient failure holds that window open for the life of
    * the league — re-reporting the same trades on every visit, with nothing able to clear it.
    * Null when `scanned` is true.
+   * ⚠ REQUIRED, NOT OPTIONAL, ON PURPOSE. A `?` here means the compiler cannot census the
+   * return sites, and this repo has four recorded cases of a grep census giving the wrong
+   * answer. A producer that knows the answer and silently omits it is the failure mode.
    */
-  unscannedKind?: 'provider' | 'identity' | null
+  unscannedKind: 'provider' | 'identity' | null
   /**
    * Weeks Sleeper refused while others answered. A partial scan still counts as
    * scanned — but "nothing waiting" is weaker than it looks, and the caller
@@ -274,14 +277,40 @@ export async function scanPendingSleeperTrades(args: {
   }
 
   try {
+    /*
+     * 🛑 THE ROSTERS READ IS NOT CAUGHT HERE, AND THAT IS THE WHOLE POINT.
+     *
+     * It used to be `.catch(() => [])`, which made "Sleeper refused the rosters call" and "you own
+     * no roster in this league" THE SAME VALUE at the lookup below — and once the caller started
+     * treating the second as permanent, a 429 during an eight-league fan-out was silently
+     * classified as permanent too, and /core closed its trade window over a league it never read.
+     * That is the exact bug the `unscannedKind` split was added to prevent, reintroduced by the
+     * split itself. Letting it throw sends it to the outer catch, which reports `provider`.
+     *
+     * `users` stays caught: it decorates names, and an empty list costs a label, not a verdict.
+     */
     const [rosters, users] = await Promise.all([
-      getLeagueRosters(platformLeagueId).catch(() => []),
+      getLeagueRosters(platformLeagueId),
       getLeagueUsers(platformLeagueId).catch(() => []),
     ])
 
-    const roster = (Array.isArray(rosters) ? (rosters as SleeperRosterRow[]) : []).find(
-      (r) => String(r.owner_id) === String(ownerSleeperId),
-    )
+    const rosterRows = Array.isArray(rosters) ? (rosters as SleeperRosterRow[]) : []
+    /*
+     * An empty-but-successful rosters response is not evidence about WHOSE rosters these are — we
+     * saw nothing, so we cannot conclude the viewer owns none. Only a list we actually read, with
+     * no entry of theirs in it, is an identity answer.
+     */
+    if (rosterRows.length === 0) {
+      return {
+        trades: [],
+        scanned: false,
+        reason: 'Sleeper returned no rosters for this league',
+        unscannedKind: 'provider',
+        weeksUnanswered: 0,
+      }
+    }
+
+    const roster = rosterRows.find((r) => String(r.owner_id) === String(ownerSleeperId))
     const userRosterId = Number(roster?.roster_id)
     if (!Number.isFinite(userRosterId)) {
       return {

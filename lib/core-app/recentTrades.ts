@@ -125,18 +125,27 @@ export type RecentTradesLiveOptions = {
    * the `maxLeagues` cap, a non-Sleeper league, and a scan that came back `unscannedKind:
    * 'identity'` (no roster of yours in that league). A permanent bound reported as a transient
    * failure holds the caller's window open for the life of the league, with nothing able to
-   * clear it. The first two have DIFFERENT reasons, and an earlier version of this note gave the
-   * cap's reason for both and was wrong about the second:
-   *   - The cap is not a blind spot. `byPlatformId` is built before the slice, so the grade
-   *     cache is read for every league with a platform id however many are capped out of the
-   *     live scan; the exposure is only a trade newer than the 30-minute grade sweep.
-   *   - A non-Sleeper league has no trade source here AT ALL. The cache is keyed by Sleeper
-   *     league id and written only by lib/trade-intel/sleeperTradeGradeService, so an ESPN or
-   *     Yahoo league has no row and never will — it is not "covered by the cache".
-   * What they share is that both are PERMANENT and deterministic: the league list is sorted by
-   * name, so the cap excludes the same leagues on every render, and a league's platform does not
-   * change. Reporting a permanent bound as a transient failure would hold the trade boundary
-   * open forever for anyone with nine leagues or one ESPN league.
+   * clear it. Their reasons are all DIFFERENT, and two earlier versions of this note got one or
+   * another of them wrong:
+   *   - `unscannedKind: 'identity'` costs nothing. The grade cache is read for that league anyway
+   *     (`byPlatformId` is built before any filter) and `trade-grades:v2:*` is LEAGUE-scoped, not
+   *     viewer-scoped. The live scan could never have added anything either: `completedTrades` is
+   *     filtered by the viewer's roster id, and there is no roster id.
+   *   - A non-Sleeper league has no trade source here AT ALL. The cache is keyed by Sleeper league
+   *     id and written only by lib/trade-intel/sleeperTradeGradeService, so an ESPN or Yahoo
+   *     league has no row and never will — it is not "covered by the cache".
+   *   - 🛑 THE `maxLeagues` CAP *IS* A BLIND SPOT, AND THIS NOTE SAID OTHERWISE. It claimed "the
+   *     exposure is only a trade newer than the 30-minute grade sweep", which is wrong in the way
+   *     that matters: that exposure is not bounded, it is LOST. A trade lands in capped league #12
+   *     at T−5min; this render does not live-scan it and the cache does not have it yet, so the
+   *     caller's boundary closes at T; when the sweep catches up, `tradesSince` filters on
+   *     `acceptedAt > T` and T−5min never qualifies. The trade appears in no brief, ever, and the
+   *     league list is sorted by name so it is the same leagues every render. It stays unreported
+   *     here only because reporting it would hold the boundary open forever for anyone with nine
+   *     Sleeper leagues — which is a bad trade, not a safe one. The real fix is a per-league
+   *     boundary or no cap; both are their own change.
+   * What all three share is being PERMANENT and deterministic. Reporting a permanent bound as a
+   * transient failure would hold the trade boundary open for the life of the league.
    */
   onIncomplete?: (reason: 'grade-cache-unreadable' | 'league-scan-unanswered' | 'league-scan-partial-weeks') => void
 }
@@ -395,11 +404,12 @@ export async function getRecentTrades(
       }))
     }
     /*
-     * What this pass could NOT see, reported before anything is returned. Two distinct causes,
-     * and `scanned` alone hides both: a league whose scan threw or whose roster was never
-     * identified is `null`/`scanned: false`, and a league that answered for one of its three
-     * weeks is `scanned: true` with `weeksUnanswered > 0` — its own docblock says "nothing
-     * waiting" is weaker than it looks there.
+     * What this pass could NOT see, reported before anything is returned. `scanned` alone hides
+     * all of it: a league whose scan threw is `null`, one Sleeper refused is `scanned: false`, and
+     * one that answered for a single week of three is `scanned: TRUE` with `weeksUnanswered > 0` —
+     * its own docblock says "nothing waiting" is weaker than it looks there.
+     *
+     * ⚠ `scanned: false` is NOT uniformly reportable, though; see the split below.
      */
     for (const scan of scans) {
       if (!scan?.scanned) {

@@ -122,6 +122,28 @@ describe('DashSinceLastVisit', () => {
   })
 
   /*
+   * 🛑 THE DAYS BUCKET IS 24 HOURS WIDE, so "the two labels match" is not "the two are the same
+   * moment". Suppressing on a matching label — the first fix for the noise case below — hid a
+   * genuine day of held reach, which is this function's whole purpose, in the bucket where the
+   * gap can be largest. Measured: up to 1439 minutes apart still render the same `Nd`.
+   */
+  it('still says how far the trades reach when a day of gap rounds to the same label', () => {
+    render(
+      <DashSinceLastVisit
+        brief={brief({
+          sinceAt: new Date(NOW.getTime() - 3570 * 60_000).toISOString(),
+          tradesSinceAt: new Date(NOW.getTime() - 5009 * 60_000).toISOString(),
+        })}
+        now={NOW}
+      />,
+    )
+    // Both timestamps round to `3d`, nearly 24 hours apart.
+    expect(screen.getByText('since 3d ago')).toBeTruthy()
+    // So the note drops to a finer unit rather than colliding and saying nothing.
+    expect(screen.getByText(/\(last 3d 11h\)/)).toBeTruthy()
+  })
+
+  /*
    * ⚠ Tests are not typechecked here, so a fixture written before `tradesSinceAt` existed hands
    * over `undefined` and still compiles.
    *
@@ -133,6 +155,14 @@ describe('DashSinceLastVisit', () => {
   it.each([
     ['missing', undefined],
     ['unparseable', 'not-a-date'],
+    /*
+     * 🛑 THE ONLY ROW THAT PINS THE `typeof` CHECK. The first two are both caught by
+     * `Number.isFinite` on their own — measured: with `typeof` deleted, both still pass. A truthy
+     * epoch NUMBER is the shape that defeats it, because it parses to a valid date and would
+     * render a confident, wrong reach. Same lesson as the sibling guard in sinceLastVisit, where
+     * a `0` in the first version of that test was falsy and caught the old way.
+     */
+    ['an epoch number', 1_700_000_000_000 as unknown as string],
   ])('renders no reach note at all when the field is %s', (_label, value) => {
     const legacy = brief()
     if (value === undefined) delete (legacy as Partial<SinceLastVisitBrief>).tradesSinceAt

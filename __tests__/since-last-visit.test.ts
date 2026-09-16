@@ -98,7 +98,7 @@ describe('resolveVisitWindow', () => {
    * read keeps coming back partial, and is bounded by the same 7-day floor.
    */
   describe('the trade boundary', () => {
-    it('falls back to the visit window on a marker written before it existed', () => {
+    it('has no boundary of its own on a marker written before the field existed', () => {
       const legacy = marker()
       // The whole reason nothing needs migrating: an existing row simply has no boundary.
       expect(legacy.tradesSeenAt).toBeUndefined()
@@ -156,6 +156,16 @@ describe('resolveVisitWindow', () => {
       const w = resolveVisitWindow(marker({ tradesSeenAt: value }), NOW)
       expect(w.tradesSeenAt.toISOString()).toBe(ago(5 * HOUR).toISOString())
       expect(w.tradesSinceAt.toISOString()).toBe(w.sinceAt.toISOString())
+    })
+
+    /*
+     * ⚠ CLAMPED AT THE TOP TOO. Clock skew between instances, or a corrupt row `isMarker` does not
+     * validate, puts the boundary in the FUTURE — where it persists forward on every blind render
+     * and quietly disables the hold entirely, which is this mechanism's one job.
+     */
+    it('never trusts a boundary in the future', () => {
+      const w = resolveVisitWindow(marker({ tradesSeenAt: new Date(NOW.getTime() + 6 * HOUR).toISOString() }), NOW)
+      expect(w.tradesSeenAt.toISOString()).toBe(NOW.toISOString())
     })
 
     it('is floored at 7 days, however long the read has been blind', () => {
@@ -399,6 +409,31 @@ describe('getSinceLastVisit', () => {
   it('reports the same boundary for both when the trades read was complete', async () => {
     const brief = await run(false, true)
     expect(brief?.tradesSinceAt).toBe(brief?.sinceAt)
+  })
+
+  /*
+   * 🛑 HOLD AND ADVANCE, AS A SEQUENCE — the mechanism's entire purpose, and each half was only
+   * tested in isolation. A hold that never releases is the sticky-brief bug; this pins that one
+   * complete read ends it and the boundary rejoins the visit.
+   */
+  it('releases the held boundary on the next complete read', async () => {
+    h.cacheFind.mockResolvedValue({ data: marker({ tradesSeenAt: ago(9 * HOUR).toISOString() }) })
+
+    await run(true, false)
+    const held = h.cacheUpsert.mock.calls[0]![0].update.data as VisitMarker
+    expect(held.tradesSeenAt).toBe(ago(9 * HOUR).toISOString())
+
+    // Next render, same marker state, but this time the trades read could stand behind itself.
+    h.cacheFind.mockResolvedValue({ data: held })
+    h.cacheUpsert.mockClear()
+    await run(true, true)
+    const released = h.cacheUpsert.mock.calls[0]![0].update.data as VisitMarker
+    expect(released.tradesSeenAt).toBe(NOW.toISOString())
+
+    // And the brief stops reaching back: the trade line rejoins the visit window.
+    h.cacheFind.mockResolvedValue({ data: released })
+    const after = await run(false, true)
+    expect(after?.tradesSinceAt).toBe(after?.sinceAt)
   })
 
   it('renders nothing when nothing changed', async () => {

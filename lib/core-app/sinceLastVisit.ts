@@ -146,6 +146,7 @@ function tradesOf(
   marker: VisitMarker,
   sinceAt: Date,
   floor: Date,
+  now: Date,
 ): Pick<VisitWindow, 'tradesSinceAt' | 'tradesSeenAt'> {
   /*
    * ⚠ THE FALLBACK IS `lastSeenAt`, NOT `sinceAt`, AND THAT IS THE SAME BUG AS THE ONE ABOVE.
@@ -159,7 +160,14 @@ function tradesOf(
   const raw = typeof marker.tradesSeenAt === 'string' ? new Date(marker.tradesSeenAt) : null
   const legacy = new Date(marker.lastSeenAt)
   const best = raw && Number.isFinite(raw.getTime()) ? raw : Number.isFinite(legacy.getTime()) ? legacy : sinceAt
-  const tradesSeenAt = new Date(Math.max(floor.getTime(), best.getTime()))
+  /*
+   * ⚠ CLAMPED AT BOTH ENDS. The floor stops a long blind run reaching back past the 7-day window;
+   * `now` stops a boundary in the FUTURE — clock skew between instances, or a corrupt row, which
+   * `isMarker` does not validate. A future value would persist forward on every blind render and
+   * quietly disable the hold entirely, which is the one failure this whole mechanism exists to
+   * prevent, arrived at from the opposite direction.
+   */
+  const tradesSeenAt = new Date(Math.min(now.getTime(), Math.max(floor.getTime(), best.getTime())))
   return { tradesSeenAt, tradesSinceAt: new Date(Math.min(sinceAt.getTime(), tradesSeenAt.getTime())) }
 }
 
@@ -179,7 +187,7 @@ export function resolveVisitWindow(marker: VisitMarker | null, now: Date): Visit
       firstVisit: marker.firstVisit,
       windowCapped: !sinceOk || marker.firstVisit,
       baseline: marker.baseline,
-      ...tradesOf(marker, sinceAt, floor),
+      ...tradesOf(marker, sinceAt, floor, now),
     }
   }
 
@@ -190,7 +198,7 @@ export function resolveVisitWindow(marker: VisitMarker | null, now: Date): Visit
     firstVisit: false,
     windowCapped: capped,
     baseline: marker.latest,
-    ...tradesOf(marker, sinceAt, floor),
+    ...tradesOf(marker, sinceAt, floor, now),
   }
 }
 

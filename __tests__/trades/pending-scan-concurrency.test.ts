@@ -15,11 +15,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const calls = vi.hoisted(() => ({ order: [] as number[], inFlight: 0, maxInFlight: 0 }))
 const getLeagueTransactions = vi.hoisted(() => vi.fn())
+// Hoisted so a test can make the ROSTERS read fail — the path that misclassified an outage.
+const getLeagueRosters = vi.hoisted(() => vi.fn())
 
 vi.mock('server-only', () => ({}))
 vi.mock('@/lib/api-cache/SleeperCacheLayer', () => ({
   getAllPlayers: vi.fn(async () => ({})),
-  getLeagueRosters: vi.fn(async () => [{ roster_id: 1, owner_id: 'me', players: [] }]),
+  getLeagueRosters,
   getLeagueUsers: vi.fn(async () => [{ user_id: 'them', display_name: 'Them' }]),
   getLeagueTransactions,
 }))
@@ -48,6 +50,8 @@ beforeEach(() => {
   calls.inFlight = 0
   calls.maxInFlight = 0
   getLeagueTransactions.mockReset()
+  getLeagueRosters.mockReset()
+  getLeagueRosters.mockResolvedValue([{ roster_id: 1, owner_id: 'me', players: [] }])
 })
 
 /** Each week resolves after a tick, so serial vs concurrent is observable. */
@@ -185,6 +189,36 @@ describe('⚠ a refusal is still not an empty week', () => {
 
     it('marks a missing Sleeper identity permanent', async () => {
       expect((await scanPendingSleeperTrades({ ...args, ownerSleeperId: '' })).unscannedKind).toBe('identity')
+    })
+
+    /*
+     * 🛑 THE CASE THAT LET A BLOCKER SHIP GREEN. The rosters read used to be `.catch(() => [])`,
+     * so "Sleeper refused the rosters call" and "you own no roster here" were the SAME value at
+     * the lookup — and once the caller began treating the second as permanent, an outage was
+     * classified permanent too and /core closed its trade window over a league it never read.
+     * Every test in this file mocked that call to SUCCEED, so nothing could see it.
+     */
+    it('marks a rosters-read failure transient, not permanent', async () => {
+      getLeagueRosters.mockRejectedValue(new Error('Sleeper API 429: /league/L1/rosters'))
+      const out = await scanPendingSleeperTrades(args)
+      expect(out.scanned).toBe(false)
+      expect(out.unscannedKind).toBe('provider')
+      /*
+       * ⚠ AND THE REASON, WHICH IS WHAT SEPARATES THIS FROM THE CASE BELOW. Two guards cover the
+       * classification — not catching the rosters read, and refusing to read identity out of an
+       * empty list — and the second alone makes `unscannedKind` right either way. Measured:
+       * restoring the `.catch(() => [])` leaves a kind-only assertion green. Only the reason
+       * distinguishes "the call failed" from "the call returned nothing".
+       */
+      expect(out.reason).toBe('Sleeper could not be reached')
+    })
+
+    /* An empty-but-successful list is not evidence about whose rosters these are either. */
+    it('marks an empty rosters list transient', async () => {
+      getLeagueRosters.mockResolvedValue([])
+      const out = await scanPendingSleeperTrades(args)
+      expect(out.unscannedKind).toBe('provider')
+      expect(out.reason).toBe('Sleeper returned no rosters for this league')
     })
 
     it('leaves it null on a scan that answered', async () => {

@@ -26,6 +26,21 @@ function agoLabel(from: string, now: Date): string {
   return `${Math.round(hours / 24)}d`
 }
 
+/**
+ * The same elapsed time at a FINER unit, for the one job `agoLabel` cannot do: distinguishing two
+ * instants that round into the same bucket. In the days bucket that bucket is 24 hours wide, so
+ * "same label" and "same moment" are very different claims.
+ */
+function fineLabel(from: string, now: Date): string {
+  const mins = Math.max(1, Math.round((now.getTime() - new Date(from).getTime()) / 60000))
+  if (mins < 60) return `${mins}m`
+  const hours = Math.floor(mins / 60)
+  if (hours < 48) return `${hours}h`
+  const days = Math.floor(hours / 24)
+  const rem = hours - days * 24
+  return rem === 0 ? `${days}d` : `${days}d ${rem}h`
+}
+
 function whenLabel(brief: SinceLastVisitBrief, now: Date): string {
   if (brief.firstVisit || brief.windowCapped) return 'last 7 days'
   return `since ${agoLabel(brief.sinceAt, now)} ago`
@@ -50,12 +65,23 @@ function tradeReachLabel(brief: SinceLastVisitBrief, now: Date): string | null {
   const reach = new Date(brief.tradesSinceAt).getTime()
   if (!Number.isFinite(reach) || reach >= new Date(brief.sinceAt).getTime()) return null
   /*
-   * ⚠ AND COMPARE WHAT IS RENDERED, NOT THE TIMESTAMPS. `agoLabel` rounds to one unit, so a
-   * boundary trailing the window by less than a rounding bucket — the normal case one render
-   * after a complete read — printed "since 2h ago" above "(last 2h)", which reads as a typo.
+   * ⚠ SUPPRESS ON AN IMMATERIAL GAP, NOT ON A COLLIDING LABEL — and those are not the same test.
+   *
+   * `agoLabel` rounds to one unit, so a boundary trailing by minutes printed "since 2h ago" above
+   * "(last 2h)", which reads as a typo. Suppressing whenever the two LABELS matched fixed that and
+   * introduced the opposite fault: measured across the 7-day range, two instants up to 1439
+   * minutes apart collide in the days bucket. The card then said nothing at all while the trade
+   * line genuinely reached a day further back than the header — the exact thing this function
+   * exists to prevent, moved into the bucket where the gap is largest.
+   *
+   * So: below an hour the two are the same story and the note is noise. Above it, say so — at a
+   * finer unit when the coarse labels would collide.
    */
-  const label = agoLabel(brief.tradesSinceAt, now)
-  return label === agoLabel(brief.sinceAt, now) ? null : `last ${label}`
+  const gapMs = new Date(brief.sinceAt).getTime() - reach
+  if (gapMs < 60 * 60_000) return null
+  const coarse = agoLabel(brief.tradesSinceAt, now)
+  const label = coarse === agoLabel(brief.sinceAt, now) ? fineLabel(brief.tradesSinceAt, now) : coarse
+  return `last ${label}`
 }
 
 function statusText(status: string | null): string {
