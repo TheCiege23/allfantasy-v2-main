@@ -2361,7 +2361,17 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         role: turn.role === 'assistant' ? ('assistant' as const) : ('user' as const),
         content: turn.content,
       })),
-      context: { leagueId: leagueId ?? null, userId: userId ?? null },
+      /*
+       * 🛑 THE MEMBERSHIP-PROVEN ID ONLY — NEVER `leagueId`. `leagueId` is the client's field,
+       * and the route refuses an unproven one only when the question REQUIRES a league. A
+       * general question with a stranger's league id reached this line unchanged, and two
+       * tools read it with no membership check of their own: `get_league_standings`
+       * (`buildLeagueStandingsContext` uses the user id only to mark the viewer's row) and
+       * `get_head_to_head` (`buildHeadToHeadGrounding` takes no user id at all). With the loop
+       * on by default, that was any league's standings and rivalry records for anyone signed
+       * in. Pinned in `__tests__/chimmy-unproven-league-id-readers.test.ts`.
+       */
+      context: { leagueId: leagueSnapshot?.id ?? null, userId: userId ?? null },
       enabled: true,
     }).catch(() => null)
 
