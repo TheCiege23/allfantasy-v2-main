@@ -158,11 +158,8 @@ describe('task cards', () => {
   it('puts the worst first and folds the rest behind a disclosure', () => {
     const flags = [
       abandonedTeamsFlag({
-        managers: [
-          { name: 'a', status: 'inactive' },
-          { name: 'b', status: 'inactive' },
-        ],
-        orphanTeams: [],
+        managers: [{ name: 'c', status: 'active' }],
+        orphanTeams: ['x', 'y'],
         totalTeams: 4,
         action: null,
       }),
@@ -196,6 +193,38 @@ describe('task cards', () => {
     expect(titles).not.toContain('Inactive')
     expect(titles).not.toContain('Stale')
     expect(titles).toContain('Never imported')
+  })
+
+  it('a green, measured abandoned-teams check retires the stored Workspace inactivity card', () => {
+    // The Workspace scan is up to days old; the hub's live read of the same moves is fresher.
+    const flags = [
+      abandonedTeamsFlag({
+        managers: [
+          { name: 'a', status: 'active' },
+          { name: 'b', status: 'active' },
+        ],
+        orphanTeams: [],
+        totalTeams: 2,
+        action: null,
+      }),
+    ]
+    const workspace = [
+      {
+        id: 'w1',
+        sourceKey: 'inactive-managers:v1',
+        title: '2 managers inactive for 14 days',
+        description: '',
+        priority: 'standard',
+        dueAt: null,
+        href: null,
+      },
+    ]
+    expect(buildTaskCards({ issues: [], flags, calendar: [], workspace }).cards).toEqual([])
+    // Not measured: the stored finding is still the best answer there is, so it stays.
+    const unmeasured = [abandonedTeamsFlag({ managers: null, orphanTeams: [], totalTeams: 2, action: null })]
+    expect(buildTaskCards({ issues: [], flags: unmeasured, calendar: [], workspace }).cards.map((c) => c.id)).toEqual([
+      'workspace:w1',
+    ])
   })
 
   it('shows one card for a vote closing soon, not a flag card and a deadline card', () => {

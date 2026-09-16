@@ -146,7 +146,7 @@ export function CommissionerHub({ data, messageHref = null }: CommissionerHubPro
         <Suspense fallback={<RecentChangesFallback />}>
           <RecentChanges timeline={timeline} />
         </Suspense>
-        <MemberActivity data={data} now={now} />
+        <MemberActivity data={data} />
       </div>
 
       {/* ── 3 · Health (item 7) ───────────────────────────────────────── */}

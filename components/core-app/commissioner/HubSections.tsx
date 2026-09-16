@@ -222,47 +222,35 @@ export function HealthPanel({ data }: { data: CommissionerHubData }) {
 
 const STATUS_LABEL = { active: 'Active', at_risk: 'Slowing down', inactive: 'Inactive', unknown: 'Can’t tell' } as const
 
-function ago(iso: string | null, now: Date): string {
-  if (!iso) return 'no activity on file'
-  const days = Math.floor((now.getTime() - Date.parse(iso)) / 86_400_000)
-  if (days <= 0) return 'active today'
-  if (days === 1) return 'last move yesterday'
-  return `last move ${days}d ago`
-}
-
-export function MemberActivity({ data, now }: { data: CommissionerHubData; now: Date }) {
+export function MemberActivity({ data }: { data: CommissionerHubData }) {
   const m = data.members
   return (
     <HubSection
       id="ch-members"
       title="Member activity"
-      note={m.available ? `${m.data.total - m.data.inactive} of ${m.data.total} active` : undefined}
+      note={m.available ? `${m.data.active} of ${m.data.total} active` : undefined}
     >
       {m.available ? (
-        m.data.rows.length > 0 ? (
+        <>
           <ul className="af-ch-members">
             {m.data.rows.slice(0, 8).map((r, i) => (
               <li key={`${r.name}-${i}`} data-status={r.status}>
                 <span className="af-ch-member-name">{r.name}</span>
-                <span className="af-ch-member-when">{ago(r.lastActionAt, now)}</span>
+                <span className="af-ch-member-when">{r.detail}</span>
                 <span className="af-ch-member-status af-label" data-status={r.status}>
                   {STATUS_LABEL[r.status]}
                 </span>
               </li>
             ))}
           </ul>
-        ) : (
-          <p className="af-ch-muted">No rosters have been imported for this league yet.</p>
-        )
+          <p className="af-ch-muted">
+            Judged by {m.data.basis}.
+            {m.data.rows.length > 8 ? ` Showing the 8 managers most in need of attention, of ${m.data.rows.length}.` : ''}
+          </p>
+        </>
       ) : (
         <p className="af-ch-muted">{m.reason}</p>
       )}
-      {m.available && m.data.rows.length > 8 ? (
-        <p className="af-ch-muted">
-          Showing the 8 managers most in need of attention.{' '}
-          <Link href={`/league/${encodeURIComponent(data.league.id)}/intelligence`}>See all {m.data.rows.length}</Link>
-        </p>
-      ) : null}
     </HubSection>
   )
 }

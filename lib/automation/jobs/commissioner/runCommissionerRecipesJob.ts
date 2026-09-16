@@ -39,6 +39,9 @@ import { getBoolean } from '@/lib/feature-toggle'
 import { resolveWriteAuthority } from '@/lib/league/write-authority'
 import { prisma } from '@/lib/prisma'
 import { getLeagueManagerHealth } from '@/lib/commissioner-hub/managerHealth'
+import { readActivityWindow, readManagerActivity } from '@/lib/league-history/leagueWarehouseReads'
+import { MANAGER_INACTIVE_AFTER_DAYS } from '@/lib/decision-os/behavioral/manager-intelligence'
+import { ownedTeamNames, resolveMemberActivity } from '@/lib/core-app/commissioner/activity'
 import { readViewerPoll, isPollClosed } from '@/lib/chat-core/messagePolls'
 import { createLeagueChatMessage } from '@/lib/league-chat/LeagueChatMessageService'
 import { getNormalizedLineupSections } from '@/lib/roster/LineupTemplateValidation'
@@ -100,13 +103,32 @@ export async function readRecipeFacts(leagueId: string, now: Date): Promise<{
   if (!league?.userId) return null
 
   const sport = String(league.sport ?? 'NFL')
-  const [teams, rosters, managers, polls, kickoffs] = await Promise.all([
+  const native = resolveWriteAuthority(league.platform) === 'NATIVE'
+  const [teams, rosters, managerHealth, importedManagers, importedWindow, polls, kickoffs] = await Promise.all([
     prisma.leagueTeam.findMany({
       where: { leagueId },
-      select: { teamName: true, ownerName: true, platformUserId: true, wins: true, losses: true, ties: true, pointsFor: true },
+      select: {
+        teamName: true,
+        ownerName: true,
+        platformUserId: true,
+        claimedByUserId: true,
+        isOrphan: true,
+        wins: true,
+        losses: true,
+        ties: true,
+        pointsFor: true,
+      },
     }),
     prisma.roster.findMany({ where: { leagueId }, select: { platformUserId: true, playerData: true } }),
-    getLeagueManagerHealth(leagueId).catch(() => null),
+    /*
+     * The same activity answer the Commissioner Hub shows — moves for an imported
+     * league, the roster clock only where AllFantasy runs the league. See
+     * lib/core-app/commissioner/activity.ts for why a synced roster's timestamp
+     * says nothing about its manager.
+     */
+    native ? getLeagueManagerHealth(leagueId).catch(() => null) : Promise.resolve(null),
+    native ? Promise.resolve(null) : readManagerActivity(leagueId, MANAGER_INACTIVE_AFTER_DAYS).catch(() => null),
+    native ? Promise.resolve(null) : readActivityWindow(leagueId).catch(() => null),
     prisma.leagueChatMessage
       .findMany({
         where: {
@@ -135,7 +157,6 @@ export async function readRecipeFacts(leagueId: string, now: Date): Promise<{
 
   const label = (t: { teamName?: string | null; ownerName?: string | null }) =>
     t.teamName?.trim() || t.ownerName?.trim() || 'An unnamed team'
-  const native = resolveWriteAuthority(league.platform) === 'NATIVE'
   const dataStale =
     !native && (!league.lastSyncedAt || now.getTime() - league.lastSyncedAt.getTime() > 2 * 24 * 60 * 60 * 1000)
   const byOwner = new Map(teams.filter((t) => t.platformUserId).map((t) => [t.platformUserId as string, t]))
@@ -153,6 +174,32 @@ export async function readRecipeFacts(leagueId: string, now: Date): Promise<{
     if (!poll || isPollClosed(poll, now.getTime())) return []
     return [{ id: p.id, question: poll.question, closesAt: poll.closesAt }]
   })
+
+  const activity = native
+    ? resolveMemberActivity({ kind: 'native', rows: managerHealth?.rows ?? null }, now, MANAGER_INACTIVE_AFTER_DAYS)
+    : importedManagers && importedWindow
+      ? resolveMemberActivity(
+          {
+            kind: 'imported',
+            managers: importedManagers,
+            teams: ownedTeamNames(teams),
+            lastActivityAt: importedWindow.lastActivityAt,
+            eventCount: importedWindow.eventCount,
+          },
+          now,
+          MANAGER_INACTIVE_AFTER_DAYS,
+        )
+      : null
+  /*
+   * Nobody named when activity can't be judged, and nobody named when EVERY manager
+   * is quiet — that is the league having a lull, and a public post listing all
+   * twelve managers would read as an accusation of the whole league.
+   */
+  const quietManagers = (): string[] => {
+    if (!activity?.available) return []
+    const quiet = activity.data.rows.filter((r) => r.status === 'inactive').map((r) => r.name)
+    return quiet.length === activity.data.rows.length ? [] : quiet
+  }
 
   const standings = [...teams]
     .sort((a, b) => b.wins - a.wins || b.pointsFor - a.pointsFor)
@@ -174,11 +221,7 @@ export async function readRecipeFacts(leagueId: string, now: Date): Promise<{
       playoffSpots: playoffSpots(league.settings),
       kickoffs: kickoffs.flatMap((k) => (k.startTime ? [k.startTime] : [])),
       emptyLineups,
-      inactiveTeams: managers
-        ? managers.rows
-            .filter((r) => r.status === 'inactive')
-            .map((r) => r.teamName || r.managerName || 'An unnamed team')
-        : [],
+      inactiveTeams: quietManagers(),
       dataStale,
       polls: openPolls,
       standings,

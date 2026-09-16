@@ -53,10 +53,20 @@ export type TaskCardsResult = {
 
 const RANK: Record<TaskCard['severity'], number> = { bad: 0, warn: 1, info: 2 }
 
-/** Workspace detectors whose condition a health flag or shell issue already shows. */
-const COVERED_BY: Record<string, (ctx: { flags: Set<string>; issueIds: Set<string>; staleCard: boolean }) => boolean> = {
-  'inactive-managers:v1': ({ flags }) => flags.has('abandoned'),
-  'orphan-teams:v1': ({ flags }) => flags.has('abandoned'),
+/**
+ * Workspace detectors whose condition the hub already answers.
+ *
+ * ⚠ KEYED ON THE FLAG BEING MEASURED, NOT ON IT BEING RED. The Workspace scan runs
+ * daily on a rotation, so its stored finding can be days older than the hub's live
+ * read of the same moves. When the hub has measured abandoned teams itself — found
+ * some or found none — its answer is the fresher one, and showing the stored card
+ * beside a green flag put "every team is active" and "2 managers inactive" on one
+ * screen.
+ */
+type Coverage = { flags: Set<string>; measured: Set<string>; issueIds: Set<string>; staleCard: boolean }
+const COVERED_BY: Record<string, (ctx: Coverage) => boolean> = {
+  'inactive-managers:v1': ({ measured }) => measured.has('abandoned'),
+  'orphan-teams:v1': ({ measured }) => measured.has('abandoned'),
   'data-stale:v1': ({ issueIds, staleCard }) => staleCard || [...issueIds].some((id) => id.endsWith(':stale')),
 }
 
@@ -123,6 +133,7 @@ export function buildTaskCards(input: {
   const voteDeadlines = input.calendar.filter((e) => e.kind === 'vote' && e.status === 'soon').length
 
   const flagged = new Set<string>()
+  const measured = new Set(input.flags.filter((f) => f.measured).map((f) => f.key))
   for (const f of input.flags) {
     if (!f.measured || f.severity === 'good') continue
     if (f.key === 'votes' && f.count <= voteDeadlines) {
@@ -162,7 +173,7 @@ export function buildTaskCards(input: {
   const issueIds = new Set(input.issues.map((i) => i.id))
   for (const w of input.workspace) {
     const covered = COVERED_BY[w.sourceKey]
-    if (covered && covered({ flags: flagged, issueIds, staleCard })) continue
+    if (covered && covered({ flags: flagged, measured, issueIds, staleCard })) continue
     cards.push({
       id: `workspace:${w.id}`,
       severity: workspaceSeverity(w.priority),

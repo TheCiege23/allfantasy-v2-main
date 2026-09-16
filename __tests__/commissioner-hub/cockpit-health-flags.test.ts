@@ -23,10 +23,9 @@ import {
 const NOW = new Date('2026-10-12T15:00:00Z')
 
 describe('abandoned teams', () => {
-  it('counts an ownerless team once even when it is also idle', () => {
+  it('keeps unowned seats and quiet managers apart, and calls quiet a warning', () => {
     const flag = abandonedTeamsFlag({
       managers: [
-        { name: 'Ghost Town', status: 'inactive' },
         { name: 'Busy Bees', status: 'active' },
         { name: 'Sleepy', status: 'inactive' },
       ],
@@ -37,8 +36,29 @@ describe('abandoned teams', () => {
     expect(flag.measured).toBe(true)
     if (!flag.measured) return
     expect(flag.count).toBe(2)
-    expect(flag.severity).toBe('bad')
-    expect(flag.names.sort()).toEqual(['Ghost Town', 'Sleepy'])
+    expect(flag.severity).toBe('warn')
+    expect(flag.headline).toBe('1 team with no owner · 1 manager with no moves in 14 days')
+    expect(flag.detail).toContain('No owner: Ghost Town.')
+    expect(flag.detail).toContain('Quiet isn’t the same as gone')
+    expect(flag.names).toEqual(['Ghost Town', 'Sleepy'])
+  })
+
+  it('is red only for two or more seats with nobody in them', () => {
+    const quietOnly = abandonedTeamsFlag({
+      managers: [
+        { name: 'a', status: 'inactive' },
+        { name: 'b', status: 'inactive' },
+        { name: 'c', status: 'active' },
+      ],
+      orphanTeams: [],
+      totalTeams: 3,
+      action: null,
+    })
+    expect(quietOnly.measured && quietOnly.severity).toBe('warn')
+    // Two unowned teams with the same imported name are still two teams.
+    const unowned = abandonedTeamsFlag({ managers: [], orphanTeams: ['Unnamed team', 'Unnamed team'], totalTeams: 14, action: null })
+    expect(unowned.measured && unowned.severity).toBe('bad')
+    expect(unowned.measured && unowned.headline).toBe('2 teams with no owner')
   })
 
   it('refuses rather than reporting zero when manager activity could not be read', () => {
@@ -65,6 +85,33 @@ describe('abandoned teams', () => {
       stale: { reason: 'old', action: resync },
     })
     expect(lineups.measured).toBe(false)
+  })
+
+  it('calls a league where nobody moved quiet, instead of naming every manager', () => {
+    const flag = abandonedTeamsFlag({
+      managers: [
+        { name: 'a', status: 'inactive' },
+        { name: 'b', status: 'inactive' },
+      ],
+      orphanTeams: [],
+      totalTeams: 2,
+      action: { label: 'x', href: '/x', external: false },
+    })
+    expect(flag.measured && flag.severity).toBe('warn')
+    expect(flag.measured && flag.headline).toBe('No manager has made a move in 14 days')
+    expect(flag.measured && flag.names).toEqual([])
+  })
+
+  it('says why activity was not judged', () => {
+    const flag = abandonedTeamsFlag({
+      managers: null,
+      activityReason: 'The newest imported move is 20 days old',
+      orphanTeams: [],
+      totalTeams: 12,
+      action: null,
+    })
+    expect(flag.measured).toBe(false)
+    expect(!flag.measured && flag.reason).toBe('The newest imported move is 20 days old')
   })
 
   it('is green only when every team is covered', () => {
@@ -253,12 +300,9 @@ it('ranks the worst flags first and unmeasured ones last', () => {
     unpaidDuesFlag({ tracker: null, teams: [], action: null }),
     abandonedTeamsFlag({ managers: [], orphanTeams: [], totalTeams: 2, action: null }),
     abandonedTeamsFlag({
-      managers: [
-        { name: 'a', status: 'inactive' },
-        { name: 'b', status: 'inactive' },
-      ],
-      orphanTeams: [],
-      totalTeams: 2,
+      managers: [{ name: 'c', status: 'active' }],
+      orphanTeams: ['x', 'y'],
+      totalTeams: 3,
       action: null,
     }),
   ])

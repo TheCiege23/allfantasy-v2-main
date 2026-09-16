@@ -74,10 +74,12 @@ function namesPreview(names: string[], max = 4): string {
 
 export type AbandonedInput = {
   /**
-   * Per-manager status from `getLeagueManagerHealth`. Null when that read
-   * failed — which is not the same thing as a league with no managers.
+   * Per-manager status from `resolveMemberActivity` (./activity.ts). Null when
+   * activity could not be judged — `activityReason` then says why, which is not
+   * the same thing as a league with no managers.
    */
   managers: Array<{ name: string; status: 'active' | 'at_risk' | 'inactive' | 'unknown' }> | null
+  activityReason?: string | null
   /** Teams the platform itself reports with no owner (`LeagueTeam.isOrphan`). */
   orphanTeams: string[]
   totalTeams: number
@@ -103,7 +105,9 @@ export function abandonedTeamsFlag(input: AbandonedInput): HealthFlag {
       key: 'abandoned',
       label,
       measured: false,
-      reason: 'Manager activity could not be read just now, so no team can be called abandoned or active.',
+      reason:
+        input.activityReason ??
+        'Manager activity could not be read just now, so no team can be called abandoned or active.',
       action: input.action,
     }
   }
@@ -118,32 +122,67 @@ export function abandonedTeamsFlag(input: AbandonedInput): HealthFlag {
   }
 
   /*
-   * One team is one count, whichever way it was found. A team the platform
-   * calls ownerless is usually ALSO idle, and adding the two lists would report
-   * it twice.
+   * Two different facts, kept apart on purpose.
+   *
+   *   unowned  a seat with nobody in it — genuinely abandoned. One entry per team,
+   *            so two teams both named "Unknown" count as two.
+   *   quiet    a manager with no trade, waiver claim or roster move in 14 days.
+   *            Early in a season that is common and says nothing about whether
+   *            they set a lineup, so it is a warning, never "nobody is running it".
    */
-  const names = new Set<string>(input.orphanTeams)
-  for (const m of input.managers ?? []) {
-    if (m.status === 'inactive') names.add(m.name)
+  const unowned = input.orphanTeams
+  const managers = input.managers ?? []
+  const quiet = managers.filter((m) => m.status === 'inactive').map((m) => m.name)
+  const count = unowned.length + quiet.length
+
+  // Everyone quiet in a league whose feed is current is a fact about the league.
+  if (unowned.length === 0 && managers.length > 1 && quiet.length === managers.length) {
+    return {
+      key: 'abandoned',
+      label,
+      measured: true,
+      severity: 'warn',
+      count,
+      headline: 'No manager has made a move in 14 days',
+      detail: `None of the ${managers.length} managers has made a trade, waiver claim or roster move in two weeks. That is the league being quiet, not one team being abandoned.`,
+      names: [],
+      action: null,
+    }
   }
-  const list = [...names]
-  const count = list.length
+
+  const headline =
+    count === 0
+      ? 'Every team has an owner and a recent move'
+      : [
+          unowned.length > 0 ? `${plural(unowned.length, 'team')} with no owner` : null,
+          quiet.length > 0 ? `${plural(quiet.length, 'manager')} with no moves in 14 days` : null,
+        ]
+          .filter(Boolean)
+          .join(' · ')
+
+  const detail =
+    count === 0
+      ? managers.length > 0
+        ? 'Every team has an owner, and every manager has made a move in the last 14 days.'
+        : 'Every team has an owner.'
+      : [
+          unowned.length > 0 ? `No owner: ${namesPreview(unowned)}.` : null,
+          quiet.length > 0
+            ? `No trade, waiver claim or roster move in 14 days: ${namesPreview(quiet)}. Quiet isn’t the same as gone — check in before replacing anyone.`
+            : null,
+        ]
+          .filter(Boolean)
+          .join(' ')
 
   return {
     key: 'abandoned',
     label,
     measured: true,
-    severity: count >= 2 ? 'bad' : count === 1 ? 'warn' : 'good',
+    severity: unowned.length >= 2 ? 'bad' : count > 0 ? 'warn' : 'good',
     count,
-    headline:
-      count === 0
-        ? 'Every team has an active manager'
-        : `${plural(count, 'team')} with nobody running ${count === 1 ? 'it' : 'them'}`,
-    detail:
-      count === 0
-        ? `All ${input.totalTeams} teams have an owner and a move in the last 14 days.`
-        : `${namesPreview(list)} — no owner, or no lineup or transaction in 14+ days.`,
-    names: list,
+    headline,
+    detail,
+    names: [...unowned, ...quiet],
     action: count > 0 ? input.action : null,
   }
 }
