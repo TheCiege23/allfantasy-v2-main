@@ -249,7 +249,33 @@ test.describe('@mock-draft-room click audit', () => {
 
     await page.setViewportSize({ width: 390, height: 844 })
     await page.goto('/e2e/mock-draft-room?mode=active')
-    await expect(page.getByTestId('mock-draft-back-button')).toBeVisible()
+
+    /*
+     * 🛑 WAIT FOR THE SERVER-RENDERED SHELL FIRST, THEN FOR THE LAZY CHUNK — THIS TEST WAS THE ONLY
+     * ONE HERE THAT DID NEITHER, AND IT IS THE ONLY ONE THAT WENT RED.
+     *
+     * `mock-draft-back-button` lives in `components/MockDraftSimulatorClient.tsx`, which
+     * `MockDraftSimulatorWrapper` pulls in via `dynamic(() => import(...), { ssr: false })` — a chunk
+     * the wrapper's own comment notes carries recharts and framer-motion. So the button is NOT in the
+     * first paint; it arrives only once that chunk has been compiled (on a cold `next dev`), fetched
+     * and mounted. Asserting it straight after `goto` on the default 5s expect timeout races all of
+     * that.
+     *
+     * The two sibling tests that navigate to `?mode=active` (`start, AI chat suggestion, ADP AI
+     * toggle, and back navigation are wired` and the roster-hint one) both gate on
+     * `mock-draft-wrapper-active` first and then do further work before touching the button, so they
+     * never pay the race. This one went from `goto` to the assertion in one step.
+     *
+     * ⚠ THE LONGER TIMEOUT IS A CORRECT BOUND, NOT A SUPPRESSION. If the button never renders the
+     * test still fails — just after a wait that matches what it is actually waiting for. The gate
+     * below is what keeps that honest: `mock-draft-wrapper-active` is server-rendered, so if the page
+     * itself is broken this fails fast on the shell instead of blaming the chunk.
+     *
+     * Measured: the same commit failed this assertion on all three attempts in one CI job and passed
+     * in another, with every file in the route's import closure byte-identical between them.
+     */
+    await expect(page.getByTestId('mock-draft-wrapper-active')).toBeVisible()
+    await expect(page.getByTestId('mock-draft-back-button')).toBeVisible({ timeout: 30_000 })
     await page.getByTestId('mock-draft-back-button').click()
     const setupVisible = await page.getByTestId('mock-draft-wrapper-setup').isVisible().catch(() => false)
     if (!setupVisible) {
