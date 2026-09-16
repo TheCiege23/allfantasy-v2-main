@@ -107,6 +107,24 @@ describe('due-ness is a read, not a guess', () => {
     const out = await runRankingsSweep({ prisma: f.prisma as never, budget: budget() })
     expect(out.written).toBe(1)
   })
+
+  /*
+   * 🛑 AN INJECTED CLOCK MUST NOT DECIDE THE TIME BUDGET. The budget's `remainingMs()` is measured
+   * on the real clock; building the deadline on `now()` made a pinned past `now` read as "already
+   * out of time" and skip every league — the time bomb that went off in matchup-odds-sweep on
+   * 2026-09-16. A `now` years in the past must not change whether a league is attempted.
+   */
+  it('attempts a league when the injected clock is far in the past', async () => {
+    const f = fakePrisma(['L1'])
+    compute.mockResolvedValue(rankings(10) as never)
+    const out = await runRankingsSweep({
+      prisma: f.prisma as never,
+      budget: budget(),
+      now: () => Date.parse('2020-01-01T00:00:00Z'),
+    })
+    expect(out.skippedForTime).toBe(0)
+    expect(out.written).toBe(1)
+  })
 })
 
 describe('the week is derived, never pinned', () => {
