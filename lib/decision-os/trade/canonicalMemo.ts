@@ -46,7 +46,19 @@ export interface TradeMovement {
 export interface CanonicalMemoEnrichment {
   /** ADP per player — from the provider-neutral `AdpDataRecord` (same source the redraft harness reads). */
   adpByPlayerId?: Record<string, number | null | undefined>
-  /** Rest-of-season projection per player. Honest-empty today: no canonical projection source yet (Phase F). */
+  /**
+   * Projected points per player.
+   *
+   * 🛑 THIS SAID "Honest-empty today: no canonical projection source yet (Phase F)" AND THAT WAS
+   * STALE. `resolveTradeEnrichment` fills it from `loadAfProjections` (`AFProjectionSnapshot` —
+   * AllFantasy's own, scored under the league's own rules including IDP) and falls back to
+   * `loadProjections` (`FantasyProjection`) only for players AF did not cover. The substrate is
+   * live: 26,453 snapshot rows measured 2026-09-16, 26,446 of them written within seven days.
+   *
+   * The stale sentence nearly stopped a build that depends on this field. If you need to know
+   * whether a particular call resolved anything, read `projectionResolved` or the writer — not a
+   * comment.
+   */
   projectionByPlayerId?: Record<string, number | null | undefined>
   /** Position per player — from the D.1 `resolvePlayerMetadata` seam; falls back to the asset's own metadata. */
   positionByPlayerId?: Record<string, string | null | undefined>
