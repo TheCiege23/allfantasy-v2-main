@@ -124,6 +124,21 @@ registerScreenSummary<LeagueStandingsResult>({
     EVENT.MATCHUP_FINALIZED,
     EVENT.STANDINGS_UPDATED,
   ],
+  /**
+   * A domain event names the league by OUR uuid; this cache is keyed on the provider's id. One
+   * primary-key lookup bridges them.
+   *
+   * ⚠ THIS IS THE CHEAP DIRECTION, AND THAT ASYMMETRY IS WHY THE KEY IS WHAT IT IS. Going the other
+   * way — provider id to our uuid, which is what the sync would need — has no index to use. Here we
+   * hold the primary key, so it is the cheapest query this codebase makes.
+   */
+  leagueKeyForEvent: async (event) => {
+    if (!event.leagueId) return null
+    const row = await prisma.league
+      .findUnique({ where: { id: event.leagueId }, select: { platformLeagueId: true } })
+      .catch(() => null)
+    return row?.platformLeagueId ?? null
+  },
   build: async (scope) => {
     const leagueId = scope.leagueId ?? ''
     const userId = scope.userId ?? ''

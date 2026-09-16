@@ -18,7 +18,7 @@ route with a budget in traces-per-hour.
 | 4 | Screen-ready summaries | `lib/sports-os/summaries.ts` | **new** — `/core/standings` wired |
 | 5 | Layered caching | `lib/sports-os/layeredCache.ts`, `durableTier.ts` | **new** — memory + `SportsDataCache` |
 | 6 | Heavy work in jobs | `lib/jobs/`, `lib/queues/bullmq.ts` | already built — reached from `reactions.ts` |
-| 7 | One event system | `lib/events/` | already built — the **reaction table** is new |
+| 7 | One event system | `lib/events/` | already built — reaction table + relay consumer are new |
 | 8 | End-to-end observability | `lib/observability/`, `docs/observability/TRACING.md` | already built — budget verdicts are new |
 | 9 | Last-known data | `lib/sports-os/freshness.ts`, `components/sports-os/FreshnessChip` | **new** — visible on `/core/standings` |
 | 10 | Gradual rollout | `lib/sports-os/rollout.ts` | **new** |
@@ -167,8 +167,8 @@ it costs a redeploy (writing a Railway variable *is* a deploy).
 
 ## Testing
 
-`__tests__/sports-os/` (74, including the chip), `__tests__/core-app/` (12) and
-`__tests__/fantasy-os/sync-invalidates-standings` (3) — no database, no queue, no network.
+`__tests__/sports-os/` (84, including the chip and the relay consumer), `__tests__/core-app/` (12)
+and `__tests__/fantasy-os/sync-invalidates-standings` (3) — no database, no queue, no network.
 
 ⚠ **ELEVEN OF THE KEY ASSERTIONS WERE MUTATION-TESTED**, because a green check that has never gone
 red is not evidence. Injecting each of these turns the named suite red: giving `db` a device
@@ -182,14 +182,26 @@ Five more for point 9: seeding the chip's clock from `Date.now()` on first rende
 bug); never ticking after mount (the frozen-label bug); collapsing `last-known` into plain stale;
 dropping the never-fetched guard; and removing the chip from the refusal branch.
 
-⚠ **THREE OF THOSE CONTROLS WERE WRONG ON THE FIRST ATTEMPT**, which is the part worth keeping. One
+Four more for the relay consumer: sweeping by the event's `leagueId` instead of the screen's own
+key; letting errors escape the handler; gating both halves on one flag; and bucketing on `eventId`
+instead of `leagueId`.
+
+⚠ **FIVE OF THOSE CONTROLS WERE WRONG ON THE FIRST ATTEMPT**, which is the part worth keeping. One
 let a promoted cache entry fall out of memory before the assertion ran, so the mutation was masked.
 One left the original call in place and added a second one, so the test never saw the condition. And
 the first version of the hydration test tried to read "first paint" out of testing-library's
 `render`, **which flushes effects synchronously** — so it was reading post-effect markup and could
 never have observed the thing it claimed to check; it was replaced with a real `hydrateRoot` against
-server HTML, asserting on React's own mismatch warning. **A control that stays green is a finding
-about the control, not a verdict on the code.**
+server HTML, asserting on React's own mismatch warning.
+
+And two more on the relay consumer, both instructive. The "never throws" test drove
+`leagueKeyForEvent` and `enqueue` — but **both are invoked inside `dispatchReactions`, which already
+catches per-item**, so the consumer's own `try/catch` was never reached and deleting it left the
+test green; `onResult` is the one call outside it, and that is what the test drives now. The
+bucketing test used **two** events at 50%, which is a coin flip that can land the same way by
+chance — and did, so an `eventId`-keyed mutation stayed green; it uses twelve now.
+
+**A control that stays green is a finding about the control, not a verdict on the code.**
 
 ⚠ **AND THE FIRST ATTEMPT AT THE `fetchedAt` CONTROL STAYED GREEN**, which is worth recording: the
 scenario let the promoted entry fall out of memory before the second read, so the mutation was
@@ -294,6 +306,50 @@ uncertainty about a value that was just computed.
 prop would serialize the entire computed standings board across the server/client boundary just to
 render "4m ago".
 
+## The relay consumer
+
+`lib/sports-os/reactionConsumer.ts`, registered in `/api/cron/decision-os-activity-ingest` beside
+the audit-feed and intelligence-snapshot consumers. That is the relay that **actually runs** — it is
+in `cron-schedule.json` as `?relayOnly=1`. This is what makes "an importer emits one event and knows
+nothing about what happens next" true in production rather than on paper.
+
+🛑 **IT MUST NEVER THROW, AND THAT IS A HARDER RULE HERE THAN ANYWHERE ELSE IN THIS LAYER.** The
+relay's contract is explicit: a consumer that throws fails the **whole event**, which is retried and
+then **dead-lettered**. So a cache invalidation that could not reach Postgres would permanently
+destroy a real domain event's delivery — *and take the audit feed and intelligence snapshots with
+it*, because they consume the same event. A reaction is a latency optimisation; it is not allowed to
+cost a fact.
+
+⚠ **THE TWO HALVES ARE SEPARATE FLAGS**, because their risk profiles are not comparable.
+`sports-os.reaction-invalidation` (10%) is a memory delete plus a league-bounded prefix delete whose
+worst case is one extra rebuild. `sports-os.ingest-reactions` (**0%**) enqueues jobs, multiplying
+load on a worker that is one JavaScript thread. One flag covering both would price the cheap half at
+the expensive half's risk. Both bucket on **leagueId**, so a league is wholly in or out — per-user
+bucketing would give one league's members different behaviour for the same event.
+
+⚠ **A SCREEN OWNS ITS OWN EVENT→CACHE-KEY MAPPING** (`leagueKeyForEvent`). A `DomainEvent` carries
+canonical ids by contract, so its `leagueId` is our UUID — while the standings cache is keyed on the
+**provider's** id. Without the hook the sweep would build a prefix from the wrong id, match nothing,
+and leave every board stale with nothing red. Note the asymmetry that makes this cheap: here we hold
+the primary key, so it is one `findUnique`; the sync going the other way has no index at all.
+
+### Two job types were removed rather than wired
+
+🛑 **THE REACTION TABLE ONCE PLANNED `ai:digest` AND A NOTIFICATION DISPATCH. NEITHER IS REAL, AND
+BOTH WERE CHECKED AGAINST THEIR WORKERS RATHER THAN ASSUMED:**
+
+- `lib/workers/ai-worker.ts`'s `digest` branch is an acknowledged **placeholder** — it logs and
+  returns ok, doing no work. Enqueuing it costs a Redis round trip and emits a log line that makes
+  the system look like it is reacting while nothing happens. **That is the
+  surface-pointed-at-a-table-nothing-refreshes failure in job form.**
+- `notification_fanout` **throws** without `payload.notification` (a full `NotificationJobPayload`
+  with userIds and a title). A generic reaction cannot know who to notify — only the trade or waiver
+  handler can — so routing there would enqueue a guaranteed-failing job.
+
+So `ReactionJob['queue']` is narrowed to `'league_engine'` and its `kind` to `LeagueEngineJobKind`.
+Widening it is a deliberate edit that must come **with** a handler that does the work, and the
+`Record` over the union in the consumer makes the compiler insist on a mapping.
+
 ## What is not done
 
 Each of these is a separate decision with a real cost.
@@ -302,10 +358,7 @@ Each of these is a separate decision with a real cost.
    are `home` (the `dash34` fan-out, which feeds eight cards from one read) and `week`.
 2. ~~No durable cache tier is wired.~~ **Done** — `lib/sports-os/durableTier.ts` over
    `SportsDataCache`, used by the standings summary.
-3. **No consumer calls `dispatchReactions`.** The standings summary declares `invalidatedBy`, and
-   nothing reads it yet: invalidation today is the direct call from the sync. The natural site is
-   `lib/events/outboxRelay.ts`, and it needs `enqueue` injected from `lib/jobs/enqueue.ts`, which is
-   `server-only`.
+3. ~~No consumer calls `dispatchReactions`.~~ **Done** — see *The relay consumer* below.
 4. **No ingestion path emits the new `ingest.*` events.** The catalog entries exist and validate;
    nothing publishes them.
 5. **The budgets are targets.** Nothing in the table is a p95 we have held. They need a week of

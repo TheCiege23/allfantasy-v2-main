@@ -32,9 +32,28 @@ describe('sports-os reactions', () => {
   })
 
   it('fans a finished import out to jobs', () => {
+    /*
+     * ⚠ ONE JOB, NOT TWO. This once also planned `ai:digest`, which was removed after checking its
+     * worker: `lib/workers/ai-worker.ts`'s digest branch is an acknowledged PLACEHOLDER that logs
+     * and returns ok. Enqueuing it produced a log line that made the system look like it was
+     * reacting while nothing happened.
+     */
     const plan = planReactions(event())
-    expect(plan.jobs.map((j) => `${j.queue}:${j.kind}`)).toEqual(['league_engine:standings_refresh', 'ai:digest'])
+    expect(plan.jobs.map((j) => `${j.queue}:${j.kind}`)).toEqual(['league_engine:standings_refresh'])
     expect(plan.jobs.every((j) => j.leagueId === 'lg_1')).toBe(true)
+  })
+
+  it('plans only jobs whose worker branch does real work', () => {
+    // A reaction that enqueues a no-op is the surface-pointed-at-a-table-nothing-refreshes failure
+    // in job form: it costs a Redis round trip and reports activity that did not happen.
+    for (const type of reactingEventTypes()) {
+      for (const job of planReactions(event({ type })).jobs) {
+        expect(job.queue, type).toBe('league_engine')
+        // `standings_refresh` runs runScoringWorker and needs only a leagueId, which it carries.
+        expect(job.kind, type).toBe('standings_refresh')
+        expect(job.leagueId, type).toBeTruthy()
+      }
+    }
   })
 
   it('plans no job for a live-cadence event', () => {
@@ -122,7 +141,7 @@ describe('sports-os reactions', () => {
     expect(invalidateFn).toHaveBeenCalledWith('standings', expect.objectContaining({ eventId: 'evt_1' }))
     expect(result.invalidated).toEqual(['standings'])
     expect(result.enqueued).toEqual([])
-    expect(result.failed).toHaveLength(2)
+    expect(result.failed).toHaveLength(1)
   })
 
   it('never throws, even when both handlers reject', async () => {
@@ -140,7 +159,7 @@ describe('sports-os reactions', () => {
     })
 
     expect(result.invalidated).toEqual([])
-    expect(result.failed.map((f) => f.kind)).toEqual(['invalidate:standings', 'league_engine:standings_refresh', 'ai:digest'])
+    expect(result.failed.map((f) => f.kind)).toEqual(['invalidate:standings', 'league_engine:standings_refresh'])
     expect(result.failed[0].error).toBe('cache exploded')
   })
 
@@ -151,8 +170,8 @@ describe('sports-os reactions', () => {
   it('reports every enqueue when they succeed', async () => {
     const enqueue = vi.fn(async () => ({ ok: true }))
     const result = await dispatchReactions(event(), { enqueue })
-    expect(enqueue).toHaveBeenCalledTimes(2)
-    expect(result.enqueued).toHaveLength(2)
+    expect(enqueue).toHaveBeenCalledTimes(1)
+    expect(result.enqueued).toHaveLength(1)
     expect(result.failed).toEqual([])
   })
 })

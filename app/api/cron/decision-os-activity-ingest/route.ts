@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 
 import { prisma } from "@/lib/prisma"
+import { createReactionConsumer } from "@/lib/sports-os/reactionConsumer"
 import { ingestSleeperImportedActivity } from "@/lib/decision-os/ingestion/sleeperActivityEmitter"
 import { buildPlatformManagerMapping, ingestPlatformImportedActivity } from "@/lib/decision-os/ingestion/platformActivityEmitter"
 import { fetchEspnActivityForSync } from "@/lib/league-import/espn/EspnLeagueFetchService"
@@ -739,6 +740,20 @@ export async function GET(request: Request) {
           consumers: [
             createPrismaAuditFeedConsumer(prisma as unknown as AuditFeedPrisma),
             createIntelligenceSnapshotConsumer(prisma as unknown as Parameters<typeof createIntelligenceSnapshotConsumer>[0]),
+            /*
+             * Sports OS point 7: an event invalidates the screen summaries it makes wrong and
+             * enqueues the jobs it makes due (lib/sports-os/reactions.ts).
+             *
+             * ⚠ SAFE TO SIT BESIDE THE TWO PROJECTION CONSUMERS ONLY BECAUSE IT CANNOT THROW. The
+             * relay fails the WHOLE event when any consumer throws, retries it, and dead-letters
+             * it — so a reaction that rethrew a cache error would destroy the audit-feed and
+             * intelligence-snapshot delivery of that same event. `createReactionConsumer` wraps
+             * everything for exactly this reason; do not "improve" it by letting errors out.
+             *
+             * ⚠ AND IT IS GATED. Invalidation runs for 10% of leagues, job enqueue for 0% — see
+             * DEFAULT_ROLLOUTS. Both are bucketed on leagueId, so a league is wholly in or out.
+             */
+            createReactionConsumer(),
           ],
           bus: inProcessEventBus,
           batchSize: RELAY_BATCH_SIZE,

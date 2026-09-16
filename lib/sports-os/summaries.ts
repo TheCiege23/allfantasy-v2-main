@@ -45,6 +45,21 @@ export type ScreenSummaryDefinition<T = unknown> = {
    * of summaries to drop.
    */
   invalidatedBy: readonly string[]
+  /**
+   * Turn a domain event into the league key THIS screen's cache is scoped by. Defaults to the
+   * event's own `leagueId`.
+   *
+   * 🛑 IT EXISTS BECAUSE A SCREEN'S CACHE KEY NEED NOT BE THE EVENT'S ID, AND STANDINGS IS EXACTLY
+   * THAT CASE. A `DomainEvent` carries CANONICAL ids by contract (see `lib/events/types.ts`), so
+   * its `leagueId` is our UUID — while the standings summary is keyed on the PROVIDER's league id,
+   * because that is the id its underlying `WeeklyMatchup` rows use and the only one the sync has.
+   * Without this hook the event-driven sweep would build a prefix out of the wrong id, match
+   * nothing, and leave every board stale with nothing red anywhere.
+   *
+   * Typed structurally rather than against `DomainEvent` so this module stays free of the event
+   * package.
+   */
+  leagueKeyForEvent?: (event: { leagueId: string | null }) => Promise<string | null> | string | null
 }
 
 const registry = new Map<string, ScreenSummaryDefinition<unknown>>()

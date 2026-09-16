@@ -22,12 +22,30 @@
 
 import { EVENT } from '@/lib/events/catalog'
 import type { DomainEvent } from '@/lib/events/types'
+import type { LeagueEngineJobKind } from '@/lib/jobs/types'
 import { screensInvalidatedBy } from './summaries'
 
-/** A job this event makes due. Queue names match `QUEUE_NAMES` in `lib/jobs/types.ts`. */
+/**
+ * A job this event makes due.
+ *
+ * 🛑 THE QUEUE UNION IS NARROWED TO WHAT HAS A REAL HANDLER, AND THAT IS NOT A PLACEHOLDER FOR
+ * "MORE LATER". An earlier version of this table also planned `ai:digest` and a notification
+ * dispatch. Both were checked against their workers and neither is real:
+ *
+ *   - `lib/workers/ai-worker.ts`'s `digest` branch is an acknowledged PLACEHOLDER — it logs and
+ *     returns ok, doing no work. Enqueuing it costs a Redis round trip and produces a log line that
+ *     makes the system look like it is reacting when nothing happens. That is the
+ *     surface-pointed-at-a-table-nothing-refreshes failure in job form.
+ *   - `notification_fanout` THROWS without `payload.notification` (a full `NotificationJobPayload`
+ *     with userIds and a title). A generic reaction cannot know who to notify — only the trade or
+ *     waiver handler can — so routing here would enqueue a guaranteed-failing job.
+ *
+ * Widening this union is a deliberate edit that must come WITH a handler that does the work, and
+ * the `Record` in the consumer's enqueue map makes the compiler insist on a mapping for it.
+ */
 export type ReactionJob = {
-  queue: 'league_engine' | 'ai' | 'notifications' | 'devy' | 'simulations'
-  kind: string
+  queue: 'league_engine'
+  kind: LeagueEngineJobKind
   leagueId?: string | null
   payload?: Record<string, unknown>
   /**
@@ -51,32 +69,28 @@ export type ReactionPlan = {
  * occurrence of its event, and `ingest.scores.refreshed` fires on a live-scoring cadence.
  */
 const JOB_ROWS: Record<string, ReadonlyArray<Pick<ReactionJob, 'queue' | 'kind'>>> = {
+  /*
+   * `standings_refresh` runs `runScoringWorker` for the league — real work, and it needs only a
+   * leagueId, which every row below carries.
+   *
+   * ⚠ EVERY ROW IS THE SAME JOB TODAY, AND THAT IS THE HONEST STATE rather than a table waiting to
+   * be filled in. The two other job types this once planned were checked against their workers and
+   * removed; see the note on `ReactionJob`.
+   */
   // A finished import is the one moment we KNOW a league's whole shape changed.
-  [EVENT.INGEST_LEAGUE_COMPLETED]: [
-    { queue: 'league_engine', kind: 'standings_refresh' },
-    { queue: 'ai', kind: 'digest' },
-  ],
-  // Rosters moved: standings are unaffected, but anything roster-shaped is stale.
+  [EVENT.INGEST_LEAGUE_COMPLETED]: [{ queue: 'league_engine', kind: 'standings_refresh' }],
   [EVENT.INGEST_ROSTERS_REFRESHED]: [{ queue: 'league_engine', kind: 'standings_refresh' }],
-  // Scores move on a live cadence. Summary invalidation only — NO job. Enqueueing per score tick is
-  // how one JS thread ends up with a 350s queue behind a sub-second job.
+  /*
+   * Scores move on a live cadence, so these are summary invalidation ONLY — no job. Enqueueing per
+   * score tick is how one JS thread ends up with a 350s queue behind a sub-second job.
+   */
   [EVENT.INGEST_SCORES_REFRESHED]: [],
   [EVENT.INGEST_PROJECTIONS_REFRESHED]: [],
   [EVENT.INGEST_PLAYER_VALUES_REFRESHED]: [],
-  // A processed trade or waiver changes standings AND is worth telling people about.
-  [EVENT.TRADE_PROCESSED]: [
-    { queue: 'league_engine', kind: 'standings_refresh' },
-    { queue: 'notifications', kind: 'dispatch' },
-  ],
-  [EVENT.WAIVER_WINDOW_PROCESSED]: [
-    { queue: 'league_engine', kind: 'standings_refresh' },
-    { queue: 'notifications', kind: 'dispatch' },
-  ],
+  [EVENT.TRADE_PROCESSED]: [{ queue: 'league_engine', kind: 'standings_refresh' }],
+  [EVENT.WAIVER_WINDOW_PROCESSED]: [{ queue: 'league_engine', kind: 'standings_refresh' }],
   [EVENT.MATCHUP_FINALIZED]: [{ queue: 'league_engine', kind: 'standings_refresh' }],
-  [EVENT.DRAFT_COMPLETED]: [
-    { queue: 'league_engine', kind: 'standings_refresh' },
-    { queue: 'ai', kind: 'digest' },
-  ],
+  [EVENT.DRAFT_COMPLETED]: [{ queue: 'league_engine', kind: 'standings_refresh' }],
 }
 
 /** At most this many jobs from one event, whatever the table says. A cap you never hit costs nothing. */

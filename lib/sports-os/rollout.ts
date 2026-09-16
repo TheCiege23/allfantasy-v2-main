@@ -151,9 +151,20 @@ export const DEFAULT_ROLLOUTS: Readonly<Record<string, RolloutRule>> = Object.fr
     percentage: 10,
     note: 'Serves screens from precomputed summaries. Read-through, so a miss costs one compute — widen once hit rate is observable.',
   },
+  /*
+   * ⚠ THE TWO HALVES OF A REACTION ARE SEPARATE FLAGS BECAUSE THEIR RISK PROFILES ARE NOT
+   * COMPARABLE. Invalidation is a memory delete plus a bounded prefix delete, and its worst case is
+   * one extra summary rebuild. Enqueueing multiplies load on a worker that is a single JavaScript
+   * thread. One flag covering both would price the cheap half at the expensive half's risk.
+   */
+  'sports-os.reaction-invalidation': {
+    enabled: true,
+    percentage: 10,
+    note: 'Event-driven summary invalidation. Cheap: a memory delete plus a league-bounded prefix delete. Worst case is one rebuild on the next read, because summaries are read-through.',
+  },
   'sports-os.ingest-reactions': {
     enabled: true,
     percentage: 0,
-    note: 'Fans an import out to projections/rankings/alerts. Starts at 0: enqueueing per import multiplies worker load, and the worker is a single JS thread (see CLAUDE.md).',
+    note: 'Enqueues jobs from events. Stays at 0 until someone measures whether standings_refresh after an import duplicates work the sync just did — the worker is a single JS thread (see CLAUDE.md).',
   },
 })
