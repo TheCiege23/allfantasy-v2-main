@@ -257,13 +257,15 @@ describe('phase 2 — mobile and drafts', () => {
     'utf8',
   ).replace(/\r\n/g, '\n')
 
-  it('⚠ does NOT add a bottom tab bar to one screen', () => {
+  it('⚠ does NOT draw its own bottom bar — the bottom edge belongs to the shell', () => {
     /*
-     * The design shows one, but /core has no bottom nav anywhere else. Adding it
-     * here alone would make the Trade Center look like a different app the
-     * moment a user navigated away. That belongs to core chrome.
+     * This used to assert "NO BOTTOM TAB BAR HERE", reasoning that /core had no bottom nav
+     * anywhere. The shell has one now (plus a league pill and the Comms launcher), so the rule
+     * survives with its reason inverted: the tab bar is still core chrome, and it is exactly why
+     * this screen may not put anything of its own at the bottom.
      */
-    expect(CSS).toContain('NO BOTTOM TAB BAR HERE, DELIBERATELY')
+    expect(CSS).toContain('THE BOTTOM EDGE BELONGS TO THE SHELL')
+    expect(CSS).not.toMatch(/\.af-tabbar\s*\{/)
   })
 
   it('scrolls chip rows on mobile rather than wrapping into a wall', () => {
@@ -273,8 +275,13 @@ describe('phase 2 — mobile and drafts', () => {
     expect(CSS).toContain('.af-tc-context .af-tc-spacer')
   })
 
-  it('sticks the action row and drops the caption first', () => {
-    expect(CSS).toContain('position: sticky')
+  it('sticks the phone step bar to the TOP and drops the caption first', () => {
+    /*
+     * The action row used to stick to the bottom; measured at 390px, the shell's tab bar, league
+     * pill and Comms launcher covered all three of its buttons. The persistent control moved into
+     * a top-sticky step bar — pinned in detail by __tests__/trades/trade-center-mobile-steps.
+     */
+    expect(CSS).toContain('position: sticky;\n    top: 6px;')
     // The caption is context, not a control.
     expect(CSS).toContain('.af-tc-caption {\n    display: none;')
   })
@@ -352,7 +359,11 @@ describe('⚠ naming the other side is what turns the counterparty layer on', ()
   it('gives each column the picks its OWN roster holds', () => {
     // Passing the wrong side's would offer a manager a pick they do not hold,
     // and the engine would refuse it on send.
-    expect(SRC).toContain("side.side === 'give' ? myRoster?.picks ?? [] : partnerRoster?.picks ?? []")
+    // One resolution of "whose roster is this side", then every roster-derived prop reads it —
+    // shared by the inline and phone-sheet pickers. Behaviour pinned by trade-center-mobile-steps
+    // ("each side's picker offers its OWN roster's picks").
+    expect(SRC).toContain("const r = side === 'give' ? myRoster : partnerRoster")
+    expect(SRC).toContain('rosterPicks={r?.picks ?? []}')
   })
 
   it('offers real picks above the hand-typed fallback, and labels which is which', () => {
