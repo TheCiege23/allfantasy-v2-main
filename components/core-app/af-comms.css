@@ -358,6 +358,136 @@
 }
 
 /*
+ * What the answer was built from — confidence, freshness, sources, and the
+ * inputs it did not have. Sits directly under the grounding line and reads as
+ * one block with it.
+ *
+ * Same token rule as `.af-cm-grounding` above, and it matters more here: the
+ * level badge is the one element on this screen whose COLOUR carries meaning,
+ * so a hardcoded pair rewritten by the `.mode-readable` light clamp would turn
+ * "low confidence" the same colour as "high" and leave the words doing all the
+ * work. Every state below is a token, and each also differs in weight so the
+ * distinction survives a monochrome render.
+ */
+.af-cm-evidence {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--line);
+}
+
+.af-cm-ev-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.af-cm-ev-level {
+  padding: 2px 7px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-weight: 700;
+  color: var(--faint);
+}
+
+.af-cm-ev-level[data-level='high'] { color: var(--good); border-color: var(--good); }
+.af-cm-ev-level[data-level='medium'] { color: var(--warn); border-color: var(--warn); }
+.af-cm-ev-level[data-level='low'] { color: var(--bad); border-color: var(--bad); }
+
+.af-cm-ev-fresh { color: var(--faint); }
+.af-cm-ev-fresh[data-freshness='stale'],
+.af-cm-ev-fresh[data-freshness='partial'] { color: var(--warn); font-weight: 700; }
+
+.af-cm-ev-count { color: var(--faint); }
+
+/*
+ * "N missing" is the only thing in the collapsed row that should pull an eye.
+ * It is the half of the contract that changes what somebody does with the
+ * answer, and it is the half a trust panel is always tempted to bury.
+ */
+.af-cm-ev-missing {
+  color: var(--warn);
+  font-weight: 700;
+}
+
+.af-cm-ev-toggle {
+  margin-left: auto;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font-size: 10px;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.af-cm-ev-toggle:hover { color: var(--text); }
+
+.af-cm-ev-detail {
+  margin-top: 6px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--chip);
+  font-size: 10px;
+  line-height: 1.5;
+  color: var(--faint);
+}
+
+.af-cm-ev-why {
+  margin: 0 0 6px;
+  color: var(--muted);
+}
+
+.af-cm-ev-group { margin-bottom: 6px; }
+
+.af-cm-ev-head {
+  display: block;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.af-cm-ev-list {
+  margin: 2px 0 0;
+  padding-left: 14px;
+}
+
+.af-cm-ev-group[data-missing='true'] .af-cm-ev-list { color: var(--warn); }
+
+.af-cm-ev-signals { margin: 4px 0 0; }
+
+.af-cm-ev-signals [data-league-context='available'] { color: var(--good); }
+.af-cm-ev-signals [data-league-context='partial'] { color: var(--warn); }
+.af-cm-ev-signals [data-league-context='missing'] { color: var(--bad); }
+
+.af-cm-ev-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.af-cm-ev-link {
+  padding: 3px 8px;
+  border: 1px solid var(--accent-line);
+  border-radius: 7px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 10px;
+  text-decoration: none;
+}
+
+.af-cm-ev-link:hover { background: var(--accent-line); }
+
+/*
  * Players named in an answer. The headshot sits ON TOP of the initials, so a
  * dead CDN URL (the img hides itself on error) reveals the fallback rather than
  * a broken-image glyph — a face that fails must degrade to a letter, never to a

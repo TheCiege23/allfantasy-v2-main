@@ -20,6 +20,7 @@ import { MessageTime } from './MessageTime'
 import { PresenceStrip, type PresentViewer } from './PresenceStrip'
 import { MessageReactions } from './MessageReactions'
 import { QuotedMessage } from './QuotedMessage'
+import { ChimmyEvidenceBlock, type ChimmyEvidence } from './ChimmyEvidence'
 import { censorProfanity } from '@/lib/chat-core/censorProfanity'
 import { PinnedBoard } from './PinnedBoard'
 import { readPinnedRefs, type PinnedRef } from '@/lib/chat-core/pinnedMessages'
@@ -228,6 +229,12 @@ type ChatTurn = {
   grounding?: ChimmyGrounding | null
   /** Players the answer named, with headshots. */
   players?: ChimmyPlayerCard[] | null
+  /**
+   * Confidence, freshness, what was read and what was missing — assembled from
+   * `meta` + `contract` by `readEvidence`. See ChimmyEvidence.tsx for why this
+   * arrives with every answer and used to be discarded.
+   */
+  evidence?: ChimmyEvidence | null
 }
 
 type ChimmyGrounding =
@@ -336,6 +343,82 @@ function PlayerChips({ players }: { players: ChimmyPlayerCard[] }) {
       ))}
     </div>
   )
+}
+
+/**
+ * The response envelope, as far as this drawer reads it.
+ *
+ * ⚠ `contract` IS A SIBLING OF `meta`, NOT A FIELD INSIDE IT. The route returns
+ * `{ response, sessionId, contract, meta }` — the confidence block with the
+ * rationale and the missing-inputs list lives on `contract.confidence`, while
+ * the percentage, the sources and the freshness live on `meta`. Reading only
+ * one of the two gets you half an evidence block and no way to tell that is
+ * what happened.
+ */
+type ChimmyEnvelope = {
+  response?: string
+  error?: string
+  /** Machine-readable reason. `error` is a sentence; this is the map key. */
+  code?: string
+  preview?: { ruleCode?: string }
+  details?: { message?: string }
+  contract?: {
+    confidence?: {
+      level?: 'high' | 'medium' | 'low'
+      rationale?: string
+      freshness?: 'fresh' | 'partial' | 'stale' | 'unknown'
+      basedOn?: string[]
+      missing?: string[]
+      leagueContext?: 'available' | 'partial' | 'missing'
+    }
+  }
+  meta?: {
+    leagueGrounding?: ChimmyGrounding
+    players?: ChimmyPlayerCard[]
+    /** Answered without spending anything — do not print a price on it. */
+    free?: boolean
+    /**
+     * What the server ACTUALLY charged. Present only on the path that
+     * spends; the deterministic, usage and off-topic paths never set it.
+     */
+    tokenSpend?: { tokenCost?: number }
+    confidencePct?: number
+    dataSources?: string[]
+    sourceLinks?: { label: string; href: string }[]
+    staleness?: { staleMinutes?: number | null; warning?: unknown }
+    syncFreshness?: { sportsDigest?: { overallLastSyncedAt?: string | null } }
+  }
+}
+
+/**
+ * Fold the envelope down to what the evidence block renders.
+ *
+ * ⚠ EVERY FIELD IS OPTIONAL BECAUSE FIVE PATHS IN THAT ROUTE ANSWER WITHOUT A
+ * CONTRACT. The deterministic answer sends `confidencePct: 100` and a one-entry
+ * `dataSources` and nothing else; the off-topic deflection sends `0`; the tool
+ * loop sends its tool names as the sources. All of those are real answers with
+ * real evidence, and a parser that insisted on the full PECR shape would render
+ * nothing under any of them — which is exactly the state this change exists to
+ * end. Missing means missing, never zero.
+ */
+function readEvidence(payload: ChimmyEnvelope): ChimmyEvidence | null {
+  const meta = payload.meta
+  const confidence = payload.contract?.confidence
+  if (!meta && !confidence) return null
+
+  return {
+    confidencePct: typeof meta?.confidencePct === 'number' ? meta.confidencePct : null,
+    level: confidence?.level ?? null,
+    rationale: confidence?.rationale ?? null,
+    freshness: confidence?.freshness ?? null,
+    leagueContext: confidence?.leagueContext ?? null,
+    basedOn: confidence?.basedOn ?? [],
+    missing: confidence?.missing ?? [],
+    dataSources: meta?.dataSources ?? [],
+    sourceLinks: meta?.sourceLinks ?? [],
+    syncedAt: meta?.syncFreshness?.sportsDigest?.overallLastSyncedAt ?? null,
+    staleMinutes: meta?.staleness?.staleMinutes ?? null,
+  }
 }
 
 // ── Chimmy panel ───────────────────────────────────────────────────────
@@ -468,25 +551,7 @@ function ChimmyPanel({
          * thrown away before it could be rendered. A grounding bug is invisible
          * from the UI if the UI never looks.
          */
-        let payload = (await res.json().catch(() => ({}))) as {
-          response?: string
-          error?: string
-          /** Machine-readable reason. `error` is a sentence; this is the map key. */
-          code?: string
-          preview?: { ruleCode?: string }
-          details?: { message?: string }
-          meta?: {
-            leagueGrounding?: ChimmyGrounding
-            players?: ChimmyPlayerCard[]
-            /** Answered without spending anything — do not print a price on it. */
-            free?: boolean
-            /**
-             * What the server ACTUALLY charged. Present only on the path that
-             * spends; the deterministic, usage and off-topic paths never set it.
-             */
-            tokenSpend?: { tokenCost?: number }
-          }
-        }
+        let payload = (await res.json().catch(() => ({}))) as ChimmyEnvelope
 
         /*
          * 🛑 EVERY PAID ANSWER FROM THIS DRAWER WAS REFUSED. `/api/chat/chimmy`
@@ -598,6 +663,7 @@ function ChimmyPanel({
             cost: payload.meta?.tokenSpend?.tokenCost ?? null,
             grounding,
             players: payload.meta?.players ?? null,
+            evidence: readEvidence(payload),
           },
         ])
       } catch (e) {
@@ -694,6 +760,18 @@ function ChimmyPanel({
                     Chimmy could not read your league for this answer.
                   </p>
                 )
+              ) : null}
+
+              {/*
+                Directly under the grounding line, because the two are one
+                statement: grounding says WHICH league it could see, this says
+                what inside it the answer actually rests on and what it could
+                not read. Above the platform hand-off on purpose — "go make this
+                change on Sleeper" is the most action-shaped thing here, and the
+                caveats belong before the action, not under it.
+              */}
+              {t.role === 'chimmy' && t.evidence ? (
+                <ChimmyEvidenceBlock evidence={t.evidence} />
               ) : null}
 
               {t.role === 'chimmy' && t.players?.length ? (
