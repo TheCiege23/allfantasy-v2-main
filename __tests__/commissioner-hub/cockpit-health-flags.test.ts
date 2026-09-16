@@ -46,6 +46,27 @@ describe('abandoned teams', () => {
     expect(flag.measured).toBe(false)
   })
 
+  it('refuses to judge activity on data that has stopped arriving', () => {
+    const resync = { label: 'Re-sync this league', href: '/core/sync?league=L1', external: false }
+    const flag = abandonedTeamsFlag({
+      managers: [{ name: 'Everyone', status: 'inactive' }],
+      orphanTeams: [],
+      totalTeams: 12,
+      action: null,
+      stale: { reason: 'AllFantasy last read this league 14 days ago', action: resync },
+    })
+    expect(flag.measured).toBe(false)
+    expect(flag.action).toEqual(resync)
+    const lineups = missingLineupsFlag({
+      platform: 'sleeper',
+      inSeason: true,
+      rosters: [{ name: 'Holes', starters: ['0'] }],
+      action: null,
+      stale: { reason: 'old', action: resync },
+    })
+    expect(lineups.measured).toBe(false)
+  })
+
   it('is green only when every team is covered', () => {
     const flag = abandonedTeamsFlag({
       managers: [{ name: 'A', status: 'active' }, { name: 'B', status: 'at_risk' }],

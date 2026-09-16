@@ -13,6 +13,7 @@ import {
   fromAutomationRun,
   fromSyncRun,
   mergeTimeline,
+  recentChanges,
 } from '@/lib/core-app/commissioner/timeline'
 import {
   activityChart,
@@ -71,6 +72,7 @@ describe('what the sender posts', () => {
     kickoffs: [new Date('2026-10-11T17:00:00Z')],
     emptyLineups: [{ name: 'Holes', empty: 2 }],
     inactiveTeams: ['Ghost Town'],
+    dataStale: false,
     polls: [
       { id: 'p1', question: 'Keepers?', closesAt: '2026-10-11T20:00:00Z' },
       { id: 'p2', question: 'Later', closesAt: '2026-10-20T20:00:00Z' },
@@ -116,6 +118,11 @@ describe('what the sender posts', () => {
     expect(dueRecipeMessages(allOn, facts({ currentWeek: 14 })).some((d) => d.recipe === 'playoffAnnouncement')).toBe(false)
   })
 
+  it('never posts lineup or inactivity messages off a stale sync — only the poll reminder still goes', () => {
+    const due = dueRecipeMessages(allOn, facts({ dataStale: true }))
+    expect(due.map((d) => d.recipe)).toEqual(['votingDeadline'])
+  })
+
   it('does not warn about inactivity once the season is over', () => {
     expect(dueRecipeMessages(allOn, facts({ status: 'complete' })).some((d) => d.recipe === 'inactivityWarning')).toBe(false)
   })
@@ -132,16 +139,39 @@ describe('audit timeline', () => {
     expect(b.detail).toBe('2 new tasks.')
   })
 
-  it('collapses a run of quiet syncs into one row', () => {
-    const quiet = (id: string, at: string) =>
-      fromSyncRun({ id, status: 'success', rowsWritten: 0, errorMessage: null, startedAt: new Date(at), completedAt: null }, 'Sleeper')
-    const busy = fromSyncRun({ id: 'b', status: 'success', rowsWritten: 12, errorMessage: null, startedAt: new Date('2026-10-10T00:00:00Z'), completedAt: null }, 'Sleeper')
+  it('collapses a run of successful syncs into one row, but never across other events', () => {
+    const sync = (id: string, at: string, rows = 0) =>
+      fromSyncRun({ id, status: 'success', rowsWritten: rows, errorMessage: null, startedAt: new Date(at), completedAt: null }, 'Sleeper')
+    const change = fromAuditLog({ id: 'c', actionType: 'settings_patch', entityType: 'league', metadata: null, createdAt: new Date('2026-10-10T12:00:00Z'), actorName: null })
     const out = collapseQuietSyncs(
-      mergeTimeline([quiet('q1', '2026-10-11T03:00:00Z'), quiet('q2', '2026-10-11T02:00:00Z'), quiet('q3', '2026-10-11T01:00:00Z'), busy]),
+      mergeTimeline([
+        sync('q1', '2026-10-11T03:00:00Z'),
+        sync('q2', '2026-10-11T02:00:00Z'),
+        sync('q3', '2026-10-11T01:00:00Z', 12),
+        change,
+        sync('q4', '2026-10-10T00:00:00Z'),
+        sync('q5', '2026-10-09T23:00:00Z'),
+      ]),
     )
-    expect(out).toHaveLength(2)
-    expect(out[0].detail).toBe('Nothing had changed · 3 checks.')
-    expect(out[1].detail).toBe('12 records updated.')
+    expect(out.map((e) => e.detail)).toEqual([
+      '3 syncs · 12 records updated in all.',
+      null,
+      'Nothing had changed · 2 checks.',
+    ])
+  })
+
+  it('does not fold a failed sync into the quiet ones', () => {
+    const ok = fromSyncRun({ id: 'a', status: 'success', rowsWritten: 0, errorMessage: null, startedAt: new Date('2026-10-11T03:00:00Z'), completedAt: null }, 'Sleeper')
+    const bad = fromSyncRun({ id: 'b', status: 'failed', rowsWritten: 0, errorMessage: 'x', startedAt: new Date('2026-10-11T02:00:00Z'), completedAt: null }, 'Sleeper')
+    expect(collapseQuietSyncs(mergeTimeline([ok, bad])).map((e) => e.tone)).toEqual(['good', 'bad'])
+  })
+
+  it('recent changes shows at most one sync, so a busy sync log cannot crowd out the news', () => {
+    const sync = (id: string, at: string) =>
+      fromSyncRun({ id, status: 'success', rowsWritten: 3, errorMessage: null, startedAt: new Date(at), completedAt: null }, 'Sleeper')
+    const change = fromAuditLog({ id: 'c', actionType: 'commissioner_edit_faab', entityType: 'roster', metadata: null, createdAt: new Date('2026-09-01T00:00:00Z'), actorName: null })
+    const list = mergeTimeline([sync('1', '2026-10-11T03:00:00Z'), sync('2', '2026-10-11T02:00:00Z'), sync('3', '2026-10-11T01:00:00Z'), change])
+    expect(recentChanges(list).map((e) => e.id)).toEqual(['sync:1', 'audit:c'])
   })
 
   it('never shows a raw sync error to the commissioner', () => {

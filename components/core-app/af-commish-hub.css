@@ -628,6 +628,12 @@
   font-size: 17px;
   line-height: 1.2;
   letter-spacing: -0.01em;
+  /* A poll question can be long; two lines, then an ellipsis — the full text is in the calendar. */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  overflow-wrap: anywhere;
 }
 
 .af-ch-muted {

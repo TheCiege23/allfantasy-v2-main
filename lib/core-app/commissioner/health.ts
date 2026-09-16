@@ -82,10 +82,22 @@ export type AbandonedInput = {
   orphanTeams: string[]
   totalTeams: number
   action: HealthFlagAction | null
+  /**
+   * Set when the league's data has stopped arriving. Idle time is read from
+   * `Roster.updatedAt`, which every sync touches — so when syncs stop, every
+   * manager drifts past the 14-day window together and the whole league reads
+   * as abandoned. Measured on a real Sleeper league whose last sync was 14 days
+   * old: "12 teams with nobody running them". The honest answer is "we can't
+   * tell until it syncs", with the re-sync as the action.
+   */
+  stale?: { reason: string; action: HealthFlagAction } | null
 }
 
 export function abandonedTeamsFlag(input: AbandonedInput): HealthFlag {
   const label = 'Abandoned teams'
+  if (input.stale) {
+    return { key: 'abandoned', label, measured: false, reason: input.stale.reason, action: input.stale.action }
+  }
   if (input.managers == null && input.orphanTeams.length === 0) {
     return {
       key: 'abandoned',
@@ -151,6 +163,8 @@ export type LineupsInput = {
     starters: unknown[] | null
   }>
   action: HealthFlagAction | null
+  /** Rosters from a sync that has stopped are last week's lineups — see `AbandonedInput.stale`. */
+  stale?: { reason: string; action: HealthFlagAction } | null
 }
 
 /**
@@ -172,6 +186,9 @@ export function missingLineupsFlag(input: LineupsInput): HealthFlag {
       reason: `${platform === 'mfl' ? 'MFL' : 'Fantrax'} imports don't say whether a blank lineup is empty or just not reported, so lineups aren't checked here.`,
       action: input.action,
     }
+  }
+  if (input.inSeason && input.stale) {
+    return { key: 'lineups', label, measured: false, reason: input.stale.reason, action: input.stale.action }
   }
   if (!input.inSeason) {
     return {
