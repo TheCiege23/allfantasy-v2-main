@@ -1,7 +1,24 @@
 import { render, screen } from '@testing-library/react'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 import { LeagueTabs, describeHiddenTabs } from '@/components/core-app/LeagueTabs'
+
+/*
+ * ⚠ THE TAB BAR NOW MOUNTS A CLIENT CHILD THAT USES THE APP ROUTER.
+ * `LeagueTabsPrewarm` calls `useRouter()`, which throws "invariant expected app
+ * router to be mounted" outside a real router — so all four tests in this file
+ * went red the moment the prewarm was added, before a single assertion ran. That
+ * is the suite doing its job. It is stubbed here rather than defended against
+ * inside the component: a component that works around its own missing router in
+ * tests is one whose tests no longer describe production.
+ *
+ * `prefetch` is a no-op here on purpose. What it warms, when, and the two cases
+ * where it must spend nothing are asserted against a spy in
+ * `core-league-tabs-prewarm`. This file is about the tabs.
+ */
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ prefetch() {}, push() {}, replace() {}, refresh() {} }),
+}))
 
 describe('league Core navigation', () => {
   it('keeps league context across every supported decision tab', () => {
