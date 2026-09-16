@@ -16,6 +16,8 @@ const NOW = new Date('2026-09-14T15:00:00Z')
 function brief(over: Partial<SinceLastVisitBrief> = {}): SinceLastVisitBrief {
   return {
     sinceAt: new Date(NOW.getTime() - 5 * 3_600_000).toISOString(),
+    // Same instant as `sinceAt` unless the trades read came back blind and its boundary was held.
+    tradesSinceAt: new Date(NOW.getTime() - 5 * 3_600_000).toISOString(),
     firstVisit: false,
     windowCapped: false,
     trades: {
@@ -95,6 +97,41 @@ describe('DashSinceLastVisit', () => {
       />,
     )
     expect(screen.getByText(/3\+ new trades/)).toBeTruthy()
+  })
+
+  /*
+   * 🛑 THE HEADER AND THE TRADE ROW CAN DESCRIBE DIFFERENT WINDOWS. When a blind trades read left
+   * its boundary held further back, the trade rows reach past "since Nh ago" — and they carry no
+   * dates of their own, so without this the card states a window its own content does not obey.
+   */
+  it('says how far the trade line reaches when its boundary was held back', () => {
+    render(
+      <DashSinceLastVisit
+        brief={brief({ tradesSinceAt: new Date(NOW.getTime() - 26 * 3_600_000).toISOString() })}
+        now={NOW}
+      />,
+    )
+    expect(screen.getByText('since 5h ago')).toBeTruthy()
+    expect(screen.getByText(/\(last 26h\)/)).toBeTruthy()
+  })
+
+  /* And stays quiet in the normal case, where the two are the same instant. */
+  it('adds no reach note when the trade line matches the visit window', () => {
+    render(<DashSinceLastVisit brief={brief()} now={NOW} />)
+    expect(screen.queryByText(/\(last /)).toBeNull()
+  })
+
+  /*
+   * ⚠ Tests are not typechecked here, so a fixture written before `tradesSinceAt` existed hands
+   * over `undefined` and still compiles — and `new Date(undefined)` is NaN, which would render
+   * "(last NaNm)" rather than nothing.
+   */
+  it('renders no reach note at all when the field is missing', () => {
+    const legacy = brief()
+    delete (legacy as Partial<SinceLastVisitBrief>).tradesSinceAt
+    render(<DashSinceLastVisit brief={legacy} now={NOW} />)
+    expect(screen.queryByText(/NaN/)).toBeNull()
+    expect(screen.queryByText(/\(last /)).toBeNull()
   })
 
   it('on a first visit, explains why injury and standings changes are not shown yet', () => {

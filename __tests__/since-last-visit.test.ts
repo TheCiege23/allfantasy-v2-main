@@ -112,10 +112,15 @@ describe('resolveVisitWindow', () => {
       expect(w.tradesSinceAt.toISOString()).toBe(ago(12 * HOUR).toISOString())
     })
 
-    /* Never AHEAD of the window: a boundary that drifted forward would skip trades. */
-    it('never moves past the visit window', () => {
+    /*
+     * Never AHEAD of the window: a boundary that drifted forward would skip trades. Note this
+     * clamps only what this RENDER measures from — `tradesSeenAt` is what gets carried forward,
+     * and it keeps the unclamped value so a blind reload cannot persist the projection.
+     */
+    it('clamps what it measures from to the visit window, but carries the real value forward', () => {
       const w = resolveVisitWindow(marker({ tradesSeenAt: ago(1 * HOUR).toISOString() }), NOW)
       expect(w.tradesSinceAt.toISOString()).toBe(w.sinceAt.toISOString())
+      expect(w.tradesSeenAt.toISOString()).toBe(ago(1 * HOUR).toISOString())
     })
 
     it('is floored at 7 days, however long the read has been blind', () => {
@@ -293,6 +298,29 @@ describe('getSinceLastVisit', () => {
     expect(written.tradesSeenAt).toBe(ago(5 * HOUR).toISOString())
   })
 
+  /*
+   * 🛑 AND IT MUST NOT MOVE BACKWARD EITHER — the case the test above is structurally blind to.
+   *
+   * With the default fixture the marker's `tradesSeenAt`, its `sinceAt` and the resolved window
+   * all collapse to the same instant, so "held the previous boundary" and "wrote the clamped
+   * projection" are indistinguishable. They are different values INSIDE a session, where
+   * `sinceAt` is the session's opening point: a complete read at 09:00 followed by one blind
+   * reload at 09:10 wrote a boundary from the previous day. Bounded and self-healing, but it
+   * re-reports trades the user has already been shown.
+   */
+  it('does not walk the boundary backward when a blind reload lands inside a session', async () => {
+    h.cacheFind.mockResolvedValue({
+      data: marker({
+        lastSeenAt: ago(10 * 60_000).toISOString(), // inside SESSION_GAP_MS: same session
+        sinceAt: ago(30 * HOUR).toISOString(), // the session opened yesterday
+        tradesSeenAt: ago(HOUR).toISOString(), // a COMPLETE read an hour ago
+      }),
+    })
+    await run(true, false)
+    const written = h.cacheUpsert.mock.calls[0]![0].update.data as VisitMarker
+    expect(written.tradesSeenAt).toBe(ago(HOUR).toISOString())
+  })
+
   it('advances the trade boundary when the trades read could stand behind itself', async () => {
     await run(true, true)
     const written = h.cacheUpsert.mock.calls[0]![0].update.data as VisitMarker
@@ -321,6 +349,17 @@ describe('getSinceLastVisit', () => {
     // `sinceAt` is one hour ago, so a visit-window read would have dropped this trade entirely.
     expect(brief?.sinceAt).toBe(ago(HOUR).toISOString())
     expect(brief?.trades.items.map((t) => t.leagueId)).toEqual(['L1'])
+    /*
+     * And the brief SAYS the trade line reaches further back, so the card can stop printing a
+     * window the rows do not obey — "since 1h ago" over a five-hour-old trade, with no date on
+     * the row to contradict it.
+     */
+    expect(brief?.tradesSinceAt).toBe(ago(9 * HOUR).toISOString())
+  })
+
+  it('reports the same boundary for both when the trades read was complete', async () => {
+    const brief = await run(false, true)
+    expect(brief?.tradesSinceAt).toBe(brief?.sinceAt)
   })
 
   it('renders nothing when nothing changed', async () => {

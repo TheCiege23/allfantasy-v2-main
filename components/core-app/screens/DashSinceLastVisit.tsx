@@ -18,13 +18,37 @@ import type { BriefStanding, SinceLastVisitBrief } from '@/lib/core-app/sinceLas
  * check this repo runs, and a brief nobody expands is not a brief.
  */
 
+function agoLabel(from: string, now: Date): string {
+  const mins = Math.round((now.getTime() - new Date(from).getTime()) / 60000)
+  if (mins < 60) return `${Math.max(1, mins)}m`
+  const hours = Math.round(mins / 60)
+  if (hours < 48) return `${hours}h`
+  return `${Math.round(hours / 24)}d`
+}
+
 function whenLabel(brief: SinceLastVisitBrief, now: Date): string {
   if (brief.firstVisit || brief.windowCapped) return 'last 7 days'
-  const mins = Math.round((now.getTime() - new Date(brief.sinceAt).getTime()) / 60000)
-  if (mins < 60) return `since ${Math.max(1, mins)}m ago`
-  const hours = Math.round(mins / 60)
-  if (hours < 48) return `since ${hours}h ago`
-  return `since ${Math.round(hours / 24)}d ago`
+  return `since ${agoLabel(brief.sinceAt, now)} ago`
+}
+
+/**
+ * ⚠ THE HEADER DOES NOT DESCRIBE THE TRADE ROW WHEN THE TRADE BOUNDARY IS HELD. A trades read that
+ * came back blind leaves its boundary further back than the visit window (see `tradesSeenAt` in
+ * lib/core-app/sinceLastVisit), so the card would otherwise print "since 1h ago" over a trade that
+ * landed five hours ago — and the rows carry no dates of their own to contradict it.
+ *
+ * Null in the normal case, where the two are the same instant and the header is the whole truth.
+ */
+function tradeReachLabel(brief: SinceLastVisitBrief, now: Date): string | null {
+  /*
+   * ⚠ GUARDED AGAINST AN ABSENT VALUE, WHICH THE TYPE SAYS CANNOT HAPPEN. Tests are not
+   * typechecked in this repo, so a fixture built before this field existed hands over
+   * `undefined` and compiles fine — and `new Date(undefined)` is NaN, which fails every
+   * comparison and would render "(last NaNm)" rather than nothing.
+   */
+  const reach = new Date(brief.tradesSinceAt ?? brief.sinceAt).getTime()
+  if (!Number.isFinite(reach) || reach >= new Date(brief.sinceAt).getTime()) return null
+  return `last ${agoLabel(brief.tradesSinceAt, now)}`
 }
 
 function statusText(status: string | null): string {
@@ -47,6 +71,7 @@ function resultText(s: BriefStanding): string {
 export function DashSinceLastVisit({ brief, now }: { brief: SinceLastVisitBrief | null; now: Date }) {
   if (!brief) return null
   const { trades, injuries, standings, alerts } = brief
+  const tradeReach = tradeReachLabel(brief, now)
 
   return (
     <section className="af-core af-brief" aria-label="Since your last visit">
@@ -62,6 +87,7 @@ export function DashSinceLastVisit({ brief, now }: { brief: SinceLastVisitBrief 
               <span className="af-brief-what">
                 {trades.atLeast ? `${trades.items.length}+` : trades.items.length} new trade
                 {trades.items.length === 1 && !trades.atLeast ? '' : 's'}
+                {tradeReach ? <span className="af-brief-detail"> ({tradeReach})</span> : null}
               </span>
               <ul className="af-brief-sub">
                 {trades.items.map((t) => (

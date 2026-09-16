@@ -117,15 +117,23 @@ export type RecentTradesLiveOptions = {
    *
    * That difference decides whether /core closes the "since your last visit" window, and
    * closing it over trades this read never saw means they never appear in any brief. Called
-   * once per cause, before the returned promise settles. `reason` is a closed vocabulary —
-   * never a league id, a provider id or an error message.
+   * once per OCCURRENCE — three unanswered leagues fire three times — before the returned
+   * promise settles. `reason` is a closed vocabulary: never a league id, a provider id or an
+   * error message.
    *
-   * ⚠ IT IS DELIBERATELY NOT CALLED FOR THE `maxLeagues` CAP, NOR FOR A NON-SLEEPER LEAGUE.
-   * Neither is a blind spot: the grade cache is read for EVERY league with a platform id,
-   * capped or not, so the only exposure is a trade newer than the 30-minute grade sweep.
-   * Both bounds are permanent and deterministic (the league list is sorted by name, so the
-   * cap excludes the same leagues on every render) — reporting a permanent bound as a
-   * transient failure would hold the window open forever for anyone with nine leagues.
+   * ⚠ IT IS DELIBERATELY NOT CALLED FOR THE `maxLeagues` CAP, NOR FOR A NON-SLEEPER LEAGUE, and
+   * the two have DIFFERENT reasons — an earlier version of this note gave the cap's reason for
+   * both and was wrong about the second:
+   *   - The cap is not a blind spot. `byPlatformId` is built before the slice, so the grade
+   *     cache is read for every league with a platform id however many are capped out of the
+   *     live scan; the exposure is only a trade newer than the 30-minute grade sweep.
+   *   - A non-Sleeper league has no trade source here AT ALL. The cache is keyed by Sleeper
+   *     league id and written only by lib/trade-intel/sleeperTradeGradeService, so an ESPN or
+   *     Yahoo league has no row and never will — it is not "covered by the cache".
+   * What they share is that both are PERMANENT and deterministic: the league list is sorted by
+   * name, so the cap excludes the same leagues on every render, and a league's platform does not
+   * change. Reporting a permanent bound as a transient failure would hold the trade boundary
+   * open forever for anyone with nine leagues or one ESPN league.
    */
   onIncomplete?: (reason: 'grade-cache-unreadable' | 'league-scan-unanswered' | 'league-scan-partial-weeks') => void
 }

@@ -327,6 +327,17 @@ describe('getRecentTrades', () => {
         const onIncomplete = vi.fn()
         await getRecentTrades(TWO, NOW, 3, { ownerSleeperId: 'owner-1', currentWeek: 2, onIncomplete })
         expect(onIncomplete).toHaveBeenCalledWith('league-scan-unanswered')
+        // One league failed, so exactly one report: the contract is once per OCCURRENCE, and
+        // `toHaveBeenCalledWith` alone would pass however many times it fired.
+        expect(onIncomplete).toHaveBeenCalledTimes(1)
+      })
+
+      /* The other half of "once per occurrence": both leagues blind means both are reported. */
+      it('reports each blind league separately', async () => {
+        scanPendingSleeperTrades.mockResolvedValue({ ...answered, scanned: false, reason: 'no roster' })
+        const onIncomplete = vi.fn()
+        await getRecentTrades(TWO, NOW, 3, { ownerSleeperId: 'owner-1', currentWeek: 2, onIncomplete })
+        expect(onIncomplete.mock.calls).toEqual([['league-scan-unanswered'], ['league-scan-unanswered']])
       })
 
       /*
@@ -342,11 +353,13 @@ describe('getRecentTrades', () => {
       })
 
       /*
-       * ⚠ AND IT STAYS QUIET FOR THE TWO BOUNDS THAT ARE PERMANENT. `maxLeagues` and the
-       * Sleeper-only filter exclude the same leagues on every render — the league list is sorted
-       * by name — and the grade cache above is read for ALL of them regardless. Reporting a
-       * deterministic bound as a transient failure would hold the trade boundary open forever for
-       * anyone with nine leagues.
+       * ⚠ AND IT STAYS QUIET FOR THE TWO BOUNDS THAT ARE PERMANENT — for DIFFERENT reasons, which
+       * an earlier version of this comment got wrong by giving the cap's reason for both. The cap
+       * is not a blind spot at all: the grade cache is read for every league with a platform id,
+       * before the slice. A non-Sleeper league is the opposite — it has no trade source here
+       * whatsoever, because that cache is keyed by Sleeper league id and only a Sleeper service
+       * writes it. What they share is permanence: reporting either as a transient failure would
+       * hold the trade boundary open forever for anyone with nine leagues or one ESPN league.
        */
       it('stays quiet about the maxLeagues cap and non-Sleeper leagues', async () => {
         scanPendingSleeperTrades.mockResolvedValue(answered)
