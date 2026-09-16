@@ -33,6 +33,13 @@ export async function GET(req: NextRequest) {
   const cronSecret = process.env.CRON_SECRET?.trim()
   const isCron = Boolean(cronSecret) && authHeader === `Bearer ${cronSecret}`
 
+  /*
+   * Taken before any work, so the ledger sweep at the bottom can tell how much of the route's
+   * `maxDuration` is already spent. Measured from here rather than from a per-job timer because
+   * the limit is on the INVOCATION: what matters to the passenger is what the driver has left.
+   */
+  const cronStartedAt = Date.now()
+
   if (isCron) {
     // DELAYED TRADES, SWEPT HERE BECAUSE NOTHING ELSE SWEEPS THEM.
     //
@@ -91,37 +98,13 @@ export async function GET(req: NextRequest) {
      * route's job; a ledger failure must not cost a league its grade emails, and a passenger job
      * reporting the driver's heartbeat is not reporting anything.
      */
-    let offerLedger: OfferSweepResult & { error?: string } = {
+    let offerLedger: OfferSweepResult & { error?: string; skipped?: string } = {
       leaguesEligible: 0,
       leaguesSwept: 0,
       offersWritten: 0,
       vanished: 0,
       feedIncomplete: 0,
       results: [],
-    }
-    try {
-      offerLedger = await withSyncJobRun(
-        { jobName: 'cron-provider-trade-offer-ledger', trigger: 'cron' },
-        () => sweepProviderTradeOffers({ maxLeagues: 15 }),
-        (r) => ({
-          rowsRead: r.leaguesSwept,
-          rowsWritten: r.offersWritten,
-          errors: r.results.filter((x) => x.error).map((x) => `${x.leagueId}: ${x.error}`),
-          /*
-           * `feedIncomplete` is reported rather than swallowed: those leagues had nothing retired
-           * this run, so a ledger that looks stale for them is explained rather than mysterious.
-           */
-          metadata: {
-            vanished: r.vanished,
-            feedIncomplete: r.feedIncomplete,
-            eligible: r.leaguesEligible,
-          },
-        }),
-      )
-    } catch (e) {
-      const error = e instanceof Error ? e.message : String(e)
-      console.error('[cron/trade-grade-notify] provider trade-offer sweep failed', e)
-      offerLedger = { ...offerLedger, error }
     }
 
     const results = await withSyncJobRun(
@@ -137,6 +120,63 @@ export async function GET(req: NextRequest) {
         metadata: { newTrades: rs.reduce((a, r) => a + r.newTrades, 0), bootstrapped: rs.filter((r) => r.bootstrap).length },
       }),
     )
+
+    /*
+     * 🛑 THE LEDGER SWEEP RUNS LAST, AND IT YIELDS THE ROUTE'S REMAINING BUDGET RATHER THAN TAKING
+     * IT. It was added AHEAD of the notify call, which was wrong on a route that is ALREADY OVER
+     * its own limit: `scripts/cron-fast-tier-loop.mjs` measures `trade-grade-notify` at p99 359s
+     * against `maxDuration = 300`, running alone. A passenger placed first spends budget the
+     * driver then does not have, and a timeout does not respect the try/catch around it — the
+     * whole invocation dies, and the grade emails that are this route's actual job are what get
+     * lost. Being second is the difference between "the ledger waits a cycle" and "nobody was told
+     * their trade was graded".
+     *
+     * ⚠ AND THE CADENCE IS EVERY FIFTEEN MINUTES, NOT THIRTY. `cron-schedule.json` declares this
+     * path on a fifteen-minute cron, and the notify comment above says "every fifteen minutes" —
+     * while this file's own top docblock still says "every 30 min via vercel.json", which is stale
+     * twice over, since `vercel.json` declares no crons at all any more. The sweep was sized
+     * against the 30 and was therefore wrong by a factor of two on its request RATE. A skipped
+     * cycle costs the ledger about fifteen minutes of freshness, not thirty.
+     *
+     * (The cron literal is spelled out in words on purpose: it contains the two characters that
+     * end a block comment, which is a footgun this repo has already documented.)
+     */
+    const SWEEP_BUDGET_FLOOR_MS = 120_000
+    const elapsedMs = Date.now() - cronStartedAt
+    if (elapsedMs > maxDuration * 1000 - SWEEP_BUDGET_FLOOR_MS) {
+      /*
+       * Not an error, and reported rather than silent: the ledger is eventually-consistent by
+       * design, so a skipped cycle is a normal outcome. A sweep that never reports skipping is
+       * indistinguishable from one that never had anything to do.
+       */
+      offerLedger = { ...offerLedger, skipped: `route had used ${Math.round(elapsedMs / 1000)}s of its ${maxDuration}s budget` }
+    } else {
+      try {
+        offerLedger = await withSyncJobRun(
+          { jobName: 'cron-provider-trade-offer-ledger', trigger: 'cron' },
+          () => sweepProviderTradeOffers({ maxLeagues: 15 }),
+          (r) => ({
+            rowsRead: r.leaguesSwept,
+            rowsWritten: r.offersWritten,
+            errors: r.results.filter((x) => x.error).map((x) => `${x.leagueId}: ${x.error}`),
+            /*
+             * `feedIncomplete` is reported rather than swallowed: those leagues had nothing retired
+             * this run, so a ledger that looks stale for them is explained rather than mysterious.
+             */
+            metadata: {
+              vanished: r.vanished,
+              feedIncomplete: r.feedIncomplete,
+              eligible: r.leaguesEligible,
+            },
+          }),
+        )
+      } catch (e) {
+        const error = e instanceof Error ? e.message : String(e)
+        console.error('[cron/trade-grade-notify] provider trade-offer sweep failed', e)
+        offerLedger = { ...offerLedger, error }
+      }
+    }
+
     return NextResponse.json({
       mode: 'cron' as const,
       scheduledTrades,
