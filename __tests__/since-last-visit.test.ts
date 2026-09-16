@@ -91,6 +91,47 @@ describe('resolveVisitWindow', () => {
     expect(w.sinceAt.getTime()).toBe(NOW.getTime() - MAX_WINDOW_MS)
     expect(w.windowCapped).toBe(true)
   })
+
+  /*
+   * The trade boundary. It exists because only the trade line can be read blind — see the
+   * `tradesSeenAt` note on VisitMarker — so it trails `sinceAt` for exactly as long as the trades
+   * read keeps coming back partial, and is bounded by the same 7-day floor.
+   */
+  describe('the trade boundary', () => {
+    it('falls back to the visit window on a marker written before it existed', () => {
+      const legacy = marker()
+      // The whole reason nothing needs migrating: an existing row simply has no boundary.
+      expect(legacy.tradesSeenAt).toBeUndefined()
+      const w = resolveVisitWindow(legacy, NOW)
+      expect(w.tradesSinceAt.toISOString()).toBe(w.sinceAt.toISOString())
+    })
+
+    it('sits further back while the trades read has been blind', () => {
+      const w = resolveVisitWindow(marker({ tradesSeenAt: ago(12 * HOUR).toISOString() }), NOW)
+      expect(w.sinceAt.toISOString()).toBe(ago(5 * HOUR).toISOString())
+      expect(w.tradesSinceAt.toISOString()).toBe(ago(12 * HOUR).toISOString())
+    })
+
+    /* Never AHEAD of the window: a boundary that drifted forward would skip trades. */
+    it('never moves past the visit window', () => {
+      const w = resolveVisitWindow(marker({ tradesSeenAt: ago(1 * HOUR).toISOString() }), NOW)
+      expect(w.tradesSinceAt.toISOString()).toBe(w.sinceAt.toISOString())
+    })
+
+    it('is floored at 7 days, however long the read has been blind', () => {
+      const w = resolveVisitWindow(marker({ tradesSeenAt: ago(40 * 24 * HOUR).toISOString() }), NOW)
+      expect(w.tradesSinceAt.getTime()).toBe(NOW.getTime() - MAX_WINDOW_MS)
+    })
+
+    it('holds across a reload inside the same session', () => {
+      const w = resolveVisitWindow(
+        marker({ lastSeenAt: ago(SESSION_GAP_MS - 60_000).toISOString(), tradesSeenAt: ago(40 * HOUR).toISOString() }),
+        NOW,
+      )
+      expect(w.sinceAt.toISOString()).toBe(ago(30 * HOUR).toISOString())
+      expect(w.tradesSinceAt.toISOString()).toBe(ago(40 * HOUR).toISOString())
+    })
+  })
 })
 
 describe('tradesSince', () => {
@@ -205,8 +246,10 @@ describe('getSinceLastVisit', () => {
     h.resolveInjuryFacts.mockResolvedValue(null)
   })
 
-  const run = (recordVisit: boolean) =>
-    getSinceLastVisit({ userId: 'user-1', leagues: LEAGUES, recentTrades: [], tradesLimit: 3, now: NOW, recordVisit })
+  const run = (recordVisit: boolean, tradesComplete = true) =>
+    getSinceLastVisit({
+      userId: 'user-1', leagues: LEAGUES, recentTrades: [], tradesLimit: 3, now: NOW, recordVisit, tradesComplete,
+    })
 
   it('builds the brief from the previous session and records this visit', async () => {
     const brief = await run(true)
@@ -228,6 +271,56 @@ describe('getSinceLastVisit', () => {
     const where = h.notifFind.mock.calls[0]![0].where
     expect(where).toMatchObject({ userId: 'user-1', readAt: null })
     expect(where.createdAt.gt.toISOString()).toBe(ago(5 * HOUR).toISOString())
+  })
+
+  /*
+   * 🛑 A BLIND TRADES READ HOLDS THE TRADE BOUNDARY, AND NOTHING ELSE.
+   *
+   * The marker is one blob: `lastSeenAt`, the visit window, AND the standings/injury snapshot the
+   * next visit diffs against. Refusing to write it at all — the first version of this fix — froze
+   * all three on any flaky league, and a new user whose first render had one league fail would
+   * report "we cannot compare yet" indefinitely. Only the trade line can be read blind, so only
+   * the trade line has a boundary to hold.
+   */
+  it('advances the visit and the snapshot on a blind trades read, but not the trade boundary', async () => {
+    await run(true, false)
+    expect(h.cacheUpsert).toHaveBeenCalledTimes(1)
+    const written = h.cacheUpsert.mock.calls[0]![0].update.data as VisitMarker
+    // The visit and the comparison baseline still move — those reads worked.
+    expect(written.lastSeenAt).toBe(NOW.toISOString())
+    expect(written.latest?.standings.L1).toEqual({ rank: 3, wins: 3, losses: 1, ties: 0 })
+    // The trade boundary stays where it was, so the unseen trades are still reportable next time.
+    expect(written.tradesSeenAt).toBe(ago(5 * HOUR).toISOString())
+  })
+
+  it('advances the trade boundary when the trades read could stand behind itself', async () => {
+    await run(true, true)
+    const written = h.cacheUpsert.mock.calls[0]![0].update.data as VisitMarker
+    expect(written.tradesSeenAt).toBe(NOW.toISOString())
+  })
+
+  it('measures the trade line from the held boundary, not from the visit', async () => {
+    // Two renders ago the trades read went blind; the trade from then has never been shown.
+    h.cacheFind.mockResolvedValue({
+      data: marker({ lastSeenAt: ago(HOUR).toISOString(), tradesSeenAt: ago(9 * HOUR).toISOString() }),
+    })
+    const brief = await getSinceLastVisit({
+      userId: 'user-1',
+      leagues: LEAGUES,
+      recentTrades: [
+        {
+          id: 't-old', leagueId: 'L1', leagueName: 'Dynasty Gridiron', platformLeagueId: '1',
+          acceptedAt: ago(5 * HOUR).toISOString(), sides: [], partial: false, verdict: null,
+        },
+      ],
+      tradesLimit: 3,
+      now: NOW,
+      recordVisit: false,
+      tradesComplete: true,
+    })
+    // `sinceAt` is one hour ago, so a visit-window read would have dropped this trade entirely.
+    expect(brief?.sinceAt).toBe(ago(HOUR).toISOString())
+    expect(brief?.trades.items.map((t) => t.leagueId)).toEqual(['L1'])
   })
 
   it('renders nothing when nothing changed', async () => {

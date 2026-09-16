@@ -114,9 +114,11 @@ not working.
 
 ⚠ **`urgency-badges` is CHROME, not one of the cards.** It carries an `af.card` value and lands in
 the same `span.op:core.card` grouping, but it feeds the tab counts in the shell, not the grid: no
-card waits for it, and it is outside `af.shell_ms` too. On the home it also waits for the trade
-scan's pending-offers write, so it is routinely the longest span in the group while holding nothing
-up. Exclude it (`!af.card:urgency-badges`) when ranking what the page is blocked on.
+card waits for it, and it is outside `af.shell_ms` too. On the home it *also* waits for the trade
+scan's pending-offers write — but only for an account with a Sleeper identity, since no other
+account produces that write — so its p75 is bimodal and it is routinely the longest span in the
+group while holding nothing up. Exclude it (`!af.card:urgency-badges`) when ranking what the page is
+blocked on, and do not read a short p75 as the chaining having regressed.
 
 ⚠ The home streams each card on its own, so its `span.duration` is its SLOWEST card, not what the user
 saw first. A render failure inside a card is reported as an error tagged `af.boundary:core-card` and

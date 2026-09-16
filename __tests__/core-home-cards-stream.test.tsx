@@ -21,8 +21,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
  *      pending-offers write, because both rewrite the same cache row whole. They wait ONLY when a
  *      write is actually coming: with no Sleeper identity the scan writes nothing.
  *   5. A trades read that cannot stand behind what it returned does not advance the "since your
- *      last visit" marker — a total failure, and a scan that answered for fewer leagues than it
- *      tried, which resolves successfully with the rest silently missing.
+ *      last visit" TRADE boundary — a total failure, and the three ways the read resolves while
+ *      blind to part of the picture. The visit itself moves either way: the standings and injury
+ *      snapshot in the same marker were read fine.
  *   6. A league whose home could not be read gets that league's failure panel, not a blank screen
  *      and not the account-wide "could not read your leagues" copy — and a league that DID load
  *      gets its screen, so 6 is a claim about the failure and not about the branch.
@@ -50,11 +51,14 @@ const g = vi.hoisted(() => {
     return existing
   }
   /*
-   * What the trade scan reports back through `onPendingOffers`, and whether the account has a
-   * Sleeper identity at all. Both are per-test: the scan only reports when there is an identity to
-   * scan for, and a pass that TRIED more leagues than answered must hold the visit marker open.
+   * What the trades read reports back: the offers a scan found, and whether it admits to having
+   * been blind to part of the picture. Both are per-test — the scan only reports offers when there
+   * is a Sleeper identity to scan for, and an incomplete read must hold the TRADE boundary open.
    */
-  const scan: { scanned: Array<{ leagueId: string; waiting: number }>; attempted: number } = { scanned: [], attempted: 0 }
+  const scan: { scanned: Array<{ leagueId: string; waiting: number }>; incomplete: string | null } = {
+    scanned: [],
+    incomplete: null,
+  }
   const account: { sleeperUserId: string | null } = { sleeperUserId: 's1' }
   /** The league home read: null is "could not read it", an object is a league that loaded. */
   const leagueHome: { data: unknown } = { data: null }
@@ -143,9 +147,10 @@ vi.mock('@/lib/core-app/todayStrip', () => ({ getTodayStrip: held('strip') }))
 vi.mock('@/lib/live/playFeedPresentation', () => ({ getPlayFeed: held('plays') }))
 vi.mock('@/lib/core-app/seasonPhase', () => ({ hasRegularSeasonStarted: held('regularSeason') }))
 /*
- * The trade scan reports pending offers as it lands, the way the real one does — including the
- * two halves the real one couples: it only reports at all when there is a Sleeper identity to scan
- * for, and it reports how many leagues the pass TRIED alongside the ones that answered.
+ * The trades read reports as it lands, the way the real one does — including the part the real one
+ * couples: offers are only reported when there is a Sleeper identity to scan for, while an
+ * incompleteness report needs no identity at all (its commonest cause is the grade-cache read,
+ * which runs for every account).
  */
 vi.mock('@/lib/core-app/recentTrades', () => ({
   getRecentTrades: vi.fn(
@@ -155,12 +160,14 @@ vi.mock('@/lib/core-app/recentTrades', () => ({
       _limit: unknown,
       options?: {
         ownerSleeperId?: string | null
-        onPendingOffers?: (scanned: Array<{ leagueId: string; waiting: number }>, meta: { attempted: number }) => void
+        onPendingOffers?: (scanned: Array<{ leagueId: string; waiting: number }>) => void
+        onIncomplete?: (reason: string) => void
       },
     ) => {
       g.calls.set('trades', (g.calls.get('trades') ?? 0) + 1)
       return g.gate('trades').promise.then((value) => {
-        if (options?.ownerSleeperId) options.onPendingOffers?.(g.scan.scanned, { attempted: g.scan.attempted })
+        if (g.scan.incomplete) options?.onIncomplete?.(g.scan.incomplete)
+        if (options?.ownerSleeperId) options.onPendingOffers?.(g.scan.scanned)
         return value
       })
     },
@@ -247,7 +254,7 @@ beforeEach(() => {
   for (const fn of g.fns.values()) fn.mockClear()
   // The per-test knobs, back to the defaults every other case assumes.
   g.scan.scanned = []
-  g.scan.attempted = 0
+  g.scan.incomplete = null
   g.account.sleeperUserId = 's1'
   g.leagueHome.data = null
 })
@@ -398,30 +405,21 @@ describe('/core home cards stream independently', () => {
   })
 
   it.each([
-    [
-      'lands complete',
-      (gate: { open: (v: unknown) => void; fail: (e: unknown) => void }) => gate.open([]),
-      { scanned: [{ leagueId: 'L1', waiting: 0 }], attempted: 1 },
-      true,
-    ],
+    ['lands complete', (gate: { open: (v: unknown) => void; fail: (e: unknown) => void }) => gate.open([]), null, true],
     ['fails outright', (gate: { open: (v: unknown) => void; fail: (e: unknown) => void }) => gate.fail(new Error('scan failed')), null, false],
     /*
-     * 🛑 THE ONE A REJECTION CHECK MISSES. Each league's scan catches its own failure, so a pass
-     * where five of eight leagues never answered RESOLVES — with those five leagues' trades simply
-     * absent. Closing the visit window there is the same harm as closing it on a total failure:
-     * the brief says nothing traded, and the trades it never read never appear in any brief.
+     * 🛑 THE ONES A REJECTION CHECK MISSES, AND THEY ARE THE COMMON CASE. Every source inside the
+     * read degrades instead of throwing, so it RESOLVES with trades simply absent: the grade cache
+     * — the primary source, and the only one that runs without a Sleeper identity — falls back to
+     * `[]`; a league's scan catches its own failure; a scan that answered one of three weeks still
+     * reports success. Closing the trade boundary on any of those loses those trades from every
+     * future brief.
      */
-    [
-      'answers for fewer leagues than it tried',
-      (gate: { open: (v: unknown) => void; fail: (e: unknown) => void }) => gate.open([]),
-      { scanned: [{ leagueId: 'L1', waiting: 0 }], attempted: 8 },
-      false,
-    ],
-  ])('moves the visit marker only when the trades read %s', { timeout: 180_000 }, async (_label, settle, scan, recordVisit) => {
-    if (scan) {
-      g.scan.scanned = scan.scanned
-      g.scan.attempted = scan.attempted
-    }
+    ['cannot read the grade cache', (gate: { open: (v: unknown) => void; fail: (e: unknown) => void }) => gate.open([]), 'grade-cache-unreadable', false],
+    ['has a league that never answered', (gate: { open: (v: unknown) => void; fail: (e: unknown) => void }) => gate.open([]), 'league-scan-unanswered', false],
+    ['has a scan missing weeks', (gate: { open: (v: unknown) => void; fail: (e: unknown) => void }) => gate.open([]), 'league-scan-partial-weeks', false],
+  ])('treats the trades read as complete only when it %s', { timeout: 180_000 }, async (_label, settle, incomplete, tradesComplete) => {
+    g.scan.incomplete = incomplete
     await render(await homeBody())
     g.gate('tradeWeek').open(3)
     await tick()
@@ -429,7 +427,11 @@ describe('/core home cards stream independently', () => {
     await tick()
     await tick()
     expect(called('brief')).toBe(1)
-    expect(g.fns.get('brief')!.mock.calls[0][0]).toMatchObject({ recordVisit })
+    /*
+     * ⚠ AND THE VISIT ITSELF MOVES EITHER WAY. Holding the whole marker back would freeze the
+     * standings and injury baselines — which this read got right — over a trade problem.
+     */
+    expect(g.fns.get('brief')!.mock.calls[0][0]).toMatchObject({ recordVisit: true, tradesComplete })
   })
 
   it('never makes a screen wait for its tab badges', { timeout: 180_000 }, async () => {

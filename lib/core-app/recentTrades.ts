@@ -105,13 +105,44 @@ export type RecentTradesLiveOptions = {
    * needs them, and a second provider read to learn what this one already knows
    * would be pure cost. Called once per completed pass with every league whose
    * scan actually answered; a league that did not answer is absent, never "0".
-   *
-   * `meta.attempted` is how many leagues the pass TRIED. Each league's scan catches its
-   * own failure and this read still resolves, so a caller with only `scanned` cannot tell
-   * "no offers anywhere" from "three of eight leagues answered" — and one of them decides
-   * whether to close the "since your last visit" window over trades it never saw.
    */
-  onPendingOffers?: (scanned: Array<{ leagueId: string; waiting: number }>, meta: { attempted: number }) => void
+  onPendingOffers?: (scanned: Array<{ leagueId: string; waiting: number }>) => void
+  /**
+   * 🛑 THIS READ RESOLVES WHILE MISSING TRADES, AND ALWAYS HAS. Every source below degrades
+   * rather than throwing: the grade-cache query falls back to `[]`, each league's live scan
+   * catches its own failure, and a scan that answered for only SOME of its weeks still
+   * reports `scanned: true` (see `weeksUnanswered` on PendingTradeScan). So a caller that
+   * watches only for a REJECTION cannot tell "nothing traded" from "we could not see most
+   * of it".
+   *
+   * That difference decides whether /core closes the "since your last visit" window, and
+   * closing it over trades this read never saw means they never appear in any brief. Called
+   * once per cause, before the returned promise settles. `reason` is a closed vocabulary —
+   * never a league id, a provider id or an error message.
+   *
+   * ⚠ IT IS DELIBERATELY NOT CALLED FOR THE `maxLeagues` CAP, NOR FOR A NON-SLEEPER LEAGUE.
+   * Neither is a blind spot: the grade cache is read for EVERY league with a platform id,
+   * capped or not, so the only exposure is a trade newer than the 30-minute grade sweep.
+   * Both bounds are permanent and deterministic (the league list is sorted by name, so the
+   * cap excludes the same leagues on every render) — reporting a permanent bound as a
+   * transient failure would hold the window open forever for anyone with nine leagues.
+   */
+  onIncomplete?: (reason: 'grade-cache-unreadable' | 'league-scan-unanswered' | 'league-scan-partial-weeks') => void
+}
+
+/**
+ * Report a gap in what this read could see. A throwing listener must never cost the trades
+ * this loader exists to return — same rule as `onPendingOffers`, and the same reason.
+ */
+function reportIncomplete(
+  live: RecentTradesLiveOptions | undefined,
+  reason: Parameters<NonNullable<RecentTradesLiveOptions['onIncomplete']>>[0],
+): void {
+  try {
+    live?.onIncomplete?.(reason)
+  } catch {
+    // A listener's failure is not this read's failure.
+  }
 }
 
 function liveCompletedTrade(
@@ -264,9 +295,19 @@ export async function getRecentTrades(
   if (byPlatformId.size === 0) return []
 
   const keys = [...byPlatformId.keys()].map((id) => `${CACHE_PREFIX}${id}`)
+  /*
+   * ⚠ THIS FALLBACK IS THE READ'S LARGEST BLIND SPOT, NOT A CORNER CASE — it is the PRIMARY
+   * source, and the live scan below only tops it up for Sleeper. Failing to `[]` keeps the
+   * card up, which is right; letting the caller believe that `[]` meant "nothing traded" is
+   * not. A pool timeout here is exactly how /core would close the visit window over every
+   * graded trade it holds, so the failure is reported rather than swallowed.
+   */
   const rows = await prisma.sportsDataCache
     .findMany({ where: { cacheKey: { in: keys } }, select: { cacheKey: true, data: true } })
-    .catch(() => [] as { cacheKey: string; data: unknown }[])
+    .catch(() => {
+      reportIncomplete(live, 'grade-cache-unreadable')
+      return [] as { cacheKey: string; data: unknown }[]
+    })
 
   const cutoff = now.getTime() - RECENT_DAYS * 24 * 60 * 60 * 1000
   const out: RecentTrade[] = []
@@ -342,6 +383,17 @@ export async function getRecentTrades(
         }).catch(() => null)
       }))
     }
+    /*
+     * What this pass could NOT see, reported before anything is returned. Two distinct causes,
+     * and `scanned` alone hides both: a league whose scan threw or whose roster was never
+     * identified is `null`/`scanned: false`, and a league that answered for one of its three
+     * weeks is `scanned: true` with `weeksUnanswered > 0` — its own docblock says "nothing
+     * waiting" is weaker than it looks there.
+     */
+    for (const scan of scans) {
+      if (!scan?.scanned) reportIncomplete(live, 'league-scan-unanswered')
+      else if (scan.weeksUnanswered > 0) reportIncomplete(live, 'league-scan-partial-weeks')
+    }
     if (live.onPendingOffers) {
       /*
        * Only leagues whose scan ANSWERED are reported. A scan that failed tells us
@@ -358,7 +410,7 @@ export async function getRecentTrades(
         })
       }
       try {
-        live.onPendingOffers(scanned, { attempted: liveLeagues.length })
+        live.onPendingOffers(scanned)
       } catch {
         // Recording a badge must never cost the trades this loader exists to return.
       }

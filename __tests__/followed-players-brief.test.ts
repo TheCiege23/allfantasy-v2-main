@@ -67,7 +67,9 @@ const facts = (entries: Array<[string, string | null]>) => ({
 })
 
 const run = (leagues: Array<{ id: string; name: string; sport?: string }> = []) =>
-  getSinceLastVisit({ userId: 'u1', leagues, recentTrades: [], tradesLimit: 5, now: NOW, recordVisit: false })
+  getSinceLastVisit({
+    userId: 'u1', leagues, recentTrades: [], tradesLimit: 5, now: NOW, recordVisit: false, tradesComplete: true,
+  })
 
 beforeEach(() => {
   for (const f of Object.values(h)) f.mockReset()

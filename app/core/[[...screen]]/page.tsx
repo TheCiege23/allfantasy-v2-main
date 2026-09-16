@@ -2062,9 +2062,14 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
          */
         /*
          * Set when the trades read cannot stand behind what it returned, so the brief below does not
-         * close the visit over trades it never saw: the whole read failed, or the live scan answered
-         * for fewer leagues than it tried (each league's scan catches its own failure and the read
-         * still resolves — the trades from those leagues are simply missing).
+         * close the TRADE window over trades it never saw. Two different things:
+         *   `tradesFailed`     — the whole read rejected. Rare, and its fallback is `[]`.
+         *   `tradesIncomplete` — the read RESOLVED while blind to part of the picture. That is the
+         *                        common case, because every source inside it degrades instead of
+         *                        throwing: the grade cache falls back to `[]`, each league's live
+         *                        scan catches its own failure, and a scan that answered for one of
+         *                        its three weeks still reports success. `onIncomplete` below is the
+         *                        loader saying which of those happened.
          */
         let tradesFailed = false
         let tradesIncomplete = false
@@ -2093,13 +2098,13 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
                  * Not awaited by any card: a badge that lags one render is inside the
                  * 10-minute freshness rule, and recording it must never slow the home.
                  */
-                onPendingOffers: (scanned, meta) => {
-                  if (meta && meta.attempted > scanned.length) tradesIncomplete = true
-                  // `Promise.resolve().then` so a synchronous throw lands in the catch rather than
-                  // leaving `offersRecorded` unassigned — which would quietly restore the race below.
-                  offersRecorded = Promise.resolve()
-                    .then(() => recordPendingOffers(userId, scanned, now))
-                    .catch(() => undefined)
+                onPendingOffers: (scanned) => {
+                  offersRecorded = recordPendingOffers(userId, scanned, now).catch(() => undefined)
+                },
+                // Every way this read can come back partial — see the flag above, and the loader's
+                // own note on the two bounds it deliberately does NOT report.
+                onIncomplete: () => {
+                  tradesIncomplete = true
                 },
               },
             ),
@@ -2119,8 +2124,13 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
          * nothing and writes nothing, so waiting on it would put the slowest read on the page in
          * front of the badges for no reason at all.
          *
-         * The real fix is for the two writers to stop sharing a row they each rewrite whole — a
-         * field-scoped write, so neither can clobber the other and the badges need not wait.
+         * ⚠ AND THERE IS A THIRD WRITER, safe today only by sequencing: lib/core-app/leagueHome.ts
+         * also calls `recordPendingOffers` on the `/core?league=<id>` path. Nothing orders it against
+         * these two except that `leagueHome` is awaited long before this runs. Move either read into
+         * the streaming set and it is the same clobber.
+         *
+         * The real fix is for all three to stop sharing a row they each rewrite whole — a
+         * field-scoped write, so none can clobber another and the badges need not wait.
          */
         const offersSettled = scanWillRecordOffers
           ? trades.then(() => offersRecorded).then(() => undefined)
@@ -2228,14 +2238,17 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
          * links as they scroll into view, and a window that reset on a hover would tell
          * someone away for a week that nothing changed.
          *
-         * ⚠ NOR DOES A FAILED TRADES READ. Its fallback is `[]`, so the brief would say nothing traded
-         * AND close the window — and the trades it never read would never appear in any brief. With
-         * the home's reads now running together, a pool timeout is the likely way that happens.
+         * ⚠ AND A TRADES READ THAT COULD NOT SEE EVERYTHING DOES NOT MOVE THE TRADE BOUNDARY. Its
+         * fallback is `[]` at every level, so the brief would say nothing traded AND close the
+         * window — and the trades it never read would never appear in any brief. A rejection
+         * (`tradesFailed`) is the rare shape; the common one is a resolve that is simply blind in
+         * part (`tradesIncomplete`), which is why the loader now reports that itself.
          *
-         * ⚠ AND A PARTIAL SCAN IS THE SAME HARM ONE LEVEL DOWN. `tradesFailed` only catches a total
-         * rejection; the scan itself falls back per league, so three of eight leagues answering
-         * resolves successfully with the other five silently missing. `tradesIncomplete` closes that:
-         * the window stays open unless every league the scan attempted actually answered.
+         * ⚠ THIS HOLDS THE TRADE BOUNDARY, NOT THE VISIT — and the difference is the whole design.
+         * The marker also carries the standings and injury snapshot the NEXT visit diffs against,
+         * and those were read fine. Holding the whole marker back (the first version of this) meant
+         * one flaky league froze all three, and a new user whose first render had one league fail
+         * would sit at "we cannot compare yet" indefinitely. See `tradesSeenAt` in sinceLastVisit.
          */
         const brief = traceCard('since-last-visit', () =>
           trades.then((recentTrades) =>
@@ -2253,7 +2266,8 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
               recentTrades,
               tradesLimit: HOME_RECENT_TRADES_LIMIT,
               now,
-              recordVisit: homeRecordVisit && !tradesFailed && !tradesIncomplete,
+              recordVisit: homeRecordVisit,
+              tradesComplete: !tradesFailed && !tradesIncomplete,
             }),
           ),
         ).catch(() => null)

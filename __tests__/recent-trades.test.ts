@@ -265,14 +265,8 @@ describe('getRecentTrades', () => {
       )
       const onPendingOffers = vi.fn()
       await getRecentTrades(TWO, NOW, 3, { ownerSleeperId: 'owner-1', currentWeek: 2, onPendingOffers })
-      /*
-       * af-2's scan did not answer, so it is absent — never reported as zero.
-       *
-       * ⚠ AND `attempted` IS HOW THE CALLER LEARNS THAT. With only the array, one of two leagues
-       * answering is indistinguishable from both answering with nothing waiting — and /core's home
-       * decides whether to close the "since your last visit" window on exactly that difference.
-       */
-      expect(onPendingOffers).toHaveBeenCalledWith([{ leagueId: 'af-1', waiting: 2 }], { attempted: 2 })
+      /* af-2's scan did not answer, so it is absent — never reported as zero. */
+      expect(onPendingOffers).toHaveBeenCalledWith([{ leagueId: 'af-1', waiting: 2 }])
     })
 
     it('a failing callback never costs the trades', async () => {
@@ -281,6 +275,99 @@ describe('getRecentTrades', () => {
         { ownerSleeperId: 'owner-1', currentWeek: 2, onPendingOffers: () => { throw new Error('boom') } },
       )
       expect(out.length).toBeGreaterThan(0)
+    })
+
+    /*
+     * 🛑 THIS READ RESOLVES WHILE BLIND, AND THE CALLER CANNOT SEE IT FROM THE RESULT. Every
+     * source degrades to empty rather than throwing, so `[]` means "nothing traded" OR "we could
+     * not look" — and /core closes the "since your last visit" trade boundary on that difference.
+     * One case per way it can happen, plus the case where it must stay QUIET.
+     */
+    describe('reporting what it could not see', () => {
+      const answered = {
+        trades: [], completedTrades: [], scanned: true, reason: null, weeksUnanswered: 0,
+      }
+      /*
+       * The scan mock is file-scoped; without this the cap case counts a previous test's calls.
+       * ⚠ Block body, not a concise one: vitest treats a FUNCTION returned from `beforeEach` as a
+       * teardown callback, and `mockClear()` returns the mock — so the arrow form had vitest
+       * calling the scan with no arguments after each test.
+       */
+      beforeEach(() => {
+        scanPendingSleeperTrades.mockClear()
+      })
+
+      it('says nothing when the cache read and every scan answered in full', async () => {
+        scanPendingSleeperTrades.mockResolvedValue(answered)
+        const onIncomplete = vi.fn()
+        await getRecentTrades(TWO, NOW, 3, { ownerSleeperId: 'owner-1', currentWeek: 2, onIncomplete })
+        expect(onIncomplete).not.toHaveBeenCalled()
+      })
+
+      /*
+       * The PRIMARY source, and the one a rejection check misses entirely: this fallback keeps the
+       * card up, which is right, but `[]` from it is not evidence that nothing traded. It is also
+       * the only one of these that fires for an account with no Sleeper identity at all.
+       */
+      it('reports a grade cache it could not read — even with no live scan to run', async () => {
+        cacheFindMany.mockRejectedValueOnce(new Error('pool timeout'))
+        const onIncomplete = vi.fn()
+        const out = await getRecentTrades(
+          [{ id: 'af-1', name: 'One', platformLeagueId: '111', platform: 'espn' }], NOW, 3,
+          { ownerSleeperId: null, currentWeek: 2, onIncomplete },
+        )
+        expect(out).toEqual([])
+        expect(onIncomplete).toHaveBeenCalledWith('grade-cache-unreadable')
+      })
+
+      it('reports a league whose scan never answered', async () => {
+        scanPendingSleeperTrades.mockImplementation(async ({ platformLeagueId }: { platformLeagueId: string }) =>
+          platformLeagueId === '111' ? answered : { ...answered, scanned: false, reason: 'no roster' },
+        )
+        const onIncomplete = vi.fn()
+        await getRecentTrades(TWO, NOW, 3, { ownerSleeperId: 'owner-1', currentWeek: 2, onIncomplete })
+        expect(onIncomplete).toHaveBeenCalledWith('league-scan-unanswered')
+      })
+
+      /*
+       * `scanned: true` with weeks missing. PendingTradeScan's own docblock says a partial scan
+       * still counts as scanned and that "nothing waiting" is weaker than it looks — a trade
+       * accepted in the week Sleeper refused is simply absent from a result that looks clean.
+       */
+      it('reports a scan that answered for only some of its weeks', async () => {
+        scanPendingSleeperTrades.mockResolvedValue({ ...answered, weeksUnanswered: 1 })
+        const onIncomplete = vi.fn()
+        await getRecentTrades(TWO, NOW, 3, { ownerSleeperId: 'owner-1', currentWeek: 2, onIncomplete })
+        expect(onIncomplete).toHaveBeenCalledWith('league-scan-partial-weeks')
+      })
+
+      /*
+       * ⚠ AND IT STAYS QUIET FOR THE TWO BOUNDS THAT ARE PERMANENT. `maxLeagues` and the
+       * Sleeper-only filter exclude the same leagues on every render — the league list is sorted
+       * by name — and the grade cache above is read for ALL of them regardless. Reporting a
+       * deterministic bound as a transient failure would hold the trade boundary open forever for
+       * anyone with nine leagues.
+       */
+      it('stays quiet about the maxLeagues cap and non-Sleeper leagues', async () => {
+        scanPendingSleeperTrades.mockResolvedValue(answered)
+        const onIncomplete = vi.fn()
+        const many = Array.from({ length: 5 }, (_, i) => ({
+          id: `af-${i}`, name: `L${i}`, platformLeagueId: `${i}`, platform: i < 3 ? 'sleeper' : 'espn',
+        }))
+        await getRecentTrades(many, NOW, 3, { ownerSleeperId: 'owner-1', currentWeek: 2, maxLeagues: 2, onIncomplete })
+        expect(scanPendingSleeperTrades).toHaveBeenCalledTimes(2)
+        expect(onIncomplete).not.toHaveBeenCalled()
+      })
+
+      it('a throwing listener never costs the trades', async () => {
+        cacheFindMany.mockRejectedValueOnce(new Error('pool timeout'))
+        scanPendingSleeperTrades.mockResolvedValue(answered)
+        await expect(
+          getRecentTrades(TWO, NOW, 3, {
+            ownerSleeperId: 'owner-1', currentWeek: 2, onIncomplete: () => { throw new Error('boom') },
+          }),
+        ).resolves.toEqual([])
+      })
     })
   })
 })
