@@ -9,12 +9,30 @@ export type ChimmyFeatureFlags = {
   /**
    * Let the model CALL for grounding instead of only being handed it.
    *
-   * Off by default and deliberately so: every other answer path in this route
-   * assembles context up front and refuses when it is missing, which is what
-   * makes the refusals trustworthy. A tool loop hands that judgement to the
-   * model, costs several provider calls per message where the spend rule
-   * charges for one, and is Grok-only. It gets proven behind a switch before it
-   * becomes the default for anybody.
+   * ⚠ ON BY DEFAULT SINCE 2026-09-15, BY THE USER'S DECISION. It shipped off,
+   * and the reason it was off still stands and is worth keeping in view: every
+   * other answer path in this route assembles context up front and refuses when
+   * it is missing, which is what makes the refusals trustworthy. This hands that
+   * judgement to the model, costs up to MAX_TOOL_TURNS provider calls where the
+   * spend rule charges for one, and is Grok-only.
+   *
+   * What makes the default safe rather than merely chosen:
+   * - `canRunChimmyToolLoop` returns false with no XAI/GROK key or with spend
+   *   disabled, and `runChimmyToolLoop` returns null on any provider failure or
+   *   empty result — every one of those falls through to the push path exactly
+   *   as before. Turning this on cannot break an answer; it can only change
+   *   which path produces it.
+   * - It runs AFTER the deterministic, refusal and league-grounding
+   *   short-circuits (route.ts ~2238), so the paths that answer for free or
+   *   refuse honestly are untouched.
+   * - No tool takes a `leagueId`. The league comes from the session, or from
+   *   `find_league_by_name` resolved server-side against leagues this user is
+   *   demonstrably in.
+   *
+   * ⚠ WHAT TO WATCH, SINCE THIS IS THE PART NO GUARD COVERS: unit cost. One
+   * charged message can now be up to four xAI round trips. If per-message spend
+   * matters more than the answer quality this buys, `CHIMMY_TOOL_LOOP_ENABLED=0`
+   * turns it off without a deploy of this file.
    */
   toolLoop: boolean
   /**
@@ -38,8 +56,8 @@ const DEFAULT_FLAGS: ChimmyFeatureFlags = {
   dailyDigest: false,
   voicePreview: false,
   aiKpiEvents: true,
-  toolLoop: false,
-  liveSearchFallback: false,
+  toolLoop: true,
+  liveSearchFallback: true,
 }
 
 function parseBoolean(raw: string | undefined, fallback: boolean): boolean {

@@ -1,6 +1,7 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 import fs from 'node:fs'
 import path from 'node:path'
+import { getChimmyFeatureFlags } from '@/lib/chimmy-chat/feature-flags'
 
 /**
  * The wiring contract, asserted against the route source.
@@ -26,6 +27,43 @@ const idx = (needle: string) => ROUTE.indexOf(needle)
 const LOOP_AT = idx('if (chimmyToolLoopEnabled)')
 const PECR_AT = idx('const pecrResult = await runPECR')
 const BLOCK = ROUTE.slice(LOOP_AT, PECR_AT)
+
+/*
+ * ⚠ THE DEFAULT IS THE WHOLE BEHAVIOUR HERE, AND NOTHING WATCHED IT.
+ *
+ * This loop shipped OFF and was turned ON by the user's decision on 2026-09-15.
+ * A one-character edit reverts that with no test going red and no reviewer
+ * necessarily noticing, which is how a deliberate product decision quietly
+ * becomes dead code. So the default is asserted, in both directions — a test
+ * that only checked the "on" state would pass with the env override deleted,
+ * and one that only checked the override would pass with the default reverted.
+ */
+describe('tool loop default state', () => {
+  const previous = process.env.CHIMMY_TOOL_LOOP_ENABLED
+
+  afterEach(() => {
+    if (previous === undefined) delete process.env.CHIMMY_TOOL_LOOP_ENABLED
+    else process.env.CHIMMY_TOOL_LOOP_ENABLED = previous
+  })
+
+  it('is ON when nothing sets the variable', () => {
+    delete process.env.CHIMMY_TOOL_LOOP_ENABLED
+    delete process.env.NEXT_PUBLIC_CHIMMY_TOOL_LOOP_ENABLED
+    expect(getChimmyFeatureFlags().toolLoop).toBe(true)
+  })
+
+  /*
+   * The escape hatch matters more than the default: this is the control that
+   * turns the loop off without deploying a code change, and it is what the
+   * flag's own comment tells a reader to reach for if unit cost bites.
+   */
+  it('can still be turned off without a code change', () => {
+    process.env.CHIMMY_TOOL_LOOP_ENABLED = '0'
+    expect(getChimmyFeatureFlags().toolLoop).toBe(false)
+    process.env.CHIMMY_TOOL_LOOP_ENABLED = 'false'
+    expect(getChimmyFeatureFlags().toolLoop).toBe(false)
+  })
+})
 
 describe('tool loop wiring', () => {
   it('is gated on the feature flag', () => {
