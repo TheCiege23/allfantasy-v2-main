@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { resolveDraftRecommendationOutcomes } from '@/lib/ai/outcomes/resolveDraftRecommendationOutcomes'
 
 import { createManagedIntelligenceDeps } from '@/lib/decision-os/three-brain/phase2/realAdapters'
 import { runIntelligenceMaintenance } from '@/lib/decision-os/three-brain/phase2/maintenanceRunner'
@@ -72,6 +73,26 @@ export async function GET(request: Request) {
   }
 
   const sweep = await sweepLineupShadow()
+
+  /*
+   * Fill in `followed` for draft recommendations whose manager has since picked.
+   *
+   * 🛑 DELIBERATELY ABOVE THE `maintenanceEnabled()` GATE, beside the sweep and for the same
+   * reason. This has nothing to do with Decision OS maintenance, and hanging it off that flag
+   * would mean a switch somebody turned off for an unrelated subsystem silently stops the only
+   * thing that ever resolves an outcome — the exact shape of a scheduled writer that exists,
+   * looks wired, and never runs.
+   *
+   * ⚠ AND IT IS THE SCHEDULED CALLER THAT MATTERS, NOT THE FUNCTION. `resolveRecommendationOutcome`
+   * has been in the tree with zero callers, which is why every follow-rate in getAIMetrics reads a
+   * column nothing writes. A resolver with no clock behind it is the same bug in a new place.
+   *
+   * Bounded to one batch and caught here: this cron runs every ten minutes alongside real work,
+   * and outcome telemetry must never be the reason it goes red.
+   */
+  const draftOutcomes = await resolveDraftRecommendationOutcomes({ limit: 100 }).catch((error) => ({
+    error: error instanceof Error ? error.message.slice(0, 120) : 'resolve failed',
+  }))
   // Flush parity writes before responding. The emitters cannot await -- they sit inside decision
   // paths -- so writes are still in flight when the sweep returns, and on Vercel this instance can
   // be frozen the moment the response is sent, which kills them. A cron has no latency budget to
@@ -82,7 +103,7 @@ export async function GET(request: Request) {
   if (!maintenanceEnabled()) {
     // Authenticated but disabled → inert success for MAINTENANCE. Do NOT touch the DB, runner,
     // providers, tokens, or freshness. The sweep above is gated separately and reports its own state.
-    return NextResponse.json({ ok: true, enabled: false, status: 'maintenance_disabled', sweep, parityWrites })
+    return NextResponse.json({ ok: true, enabled: false, status: 'maintenance_disabled', sweep, parityWrites, draftOutcomes })
   }
   try {
     // Minute-bucket tick id. Overlap is prevented by the ONE global maintenance lease (AutomationLock) inside
@@ -93,10 +114,10 @@ export async function GET(request: Request) {
       deps: createManagedIntelligenceDeps(),
       config: { refreshBatch: 20, reconcileBatch: 200 },
     })
-    return NextResponse.json({ ok: true, enabled: true, tickId, ...result, sweep, parityWrites })
+    return NextResponse.json({ ok: true, enabled: true, tickId, ...result, sweep, parityWrites, draftOutcomes })
   } catch (error) {
     return NextResponse.json(
-      { ok: false, error: error instanceof Error ? error.message.slice(0, 200) : 'maintenance failed', sweep },
+      { ok: false, error: error instanceof Error ? error.message.slice(0, 200) : 'maintenance failed', sweep, draftOutcomes },
       { status: 500 },
     )
   }
