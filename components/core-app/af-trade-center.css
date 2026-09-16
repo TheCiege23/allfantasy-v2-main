@@ -801,8 +801,18 @@
 }
 
 @media (max-width: 720px) {
+  /*
+   * 🛑 `minmax(0, 1fr)`, NOT `1fr` — `1fr` IS `minmax(auto, 1fr)`, AND ITS AUTO MINIMUM SCROLLED
+   * THE WHOLE PAGE SIDEWAYS. The timeline's filter row is a horizontal scroller, but a grid track
+   * sizes to its items' min-content anyway: five no-wrap chips (347px) plus the timeline's padding
+   * and border made the track 381px inside a 366px inbox, and the document 393px wide at a 390px
+   * viewport. Measured 2026-09-16 on /core/trades in WebKit and Chromium (desktop and mobile
+   * emulation — the latter hides it by widening innerWidth to 393). With a zero minimum the track
+   * is 366px, the filter row is 332px and scrolls its 347px of chips, and the page is 390px.
+   * The shell top bar was suspected first; it was not the cause.
+   */
   .af-tc-inbox {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
   /* The two sides of an offer stay side by side — that pairing IS the trade. */
   .af-core .af-tc-offer-actions .af-btn {
