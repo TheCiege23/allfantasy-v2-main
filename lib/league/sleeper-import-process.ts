@@ -2,6 +2,8 @@ import pLimit from "p-limit";
 import { LeagueSport } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
+import type { Prisma } from "@prisma/client";
+import { carryAfOwnedLeagueSettings } from "@/lib/league/afOwnedLeagueSettings";
 import { sleeperAvatarUrl } from "@/lib/sleeper-avatar";
 import { onMatchupCommentary } from "@/lib/commentary-engine";
 import { normalizeToSupportedSport } from "@/lib/sport-scope";
@@ -373,6 +375,36 @@ function buildLeagueUpdateData(leagueData: SleeperLeague, season: number, sportL
   };
 }
 
+/**
+ * The update payload with AllFantasy's own `settings` keys carried over from the
+ * existing row. `buildLeagueUpdateData` puts Sleeper's raw `settings` object in the
+ * payload, and writing it as-is erased every AllFantasy-owned key on the row — the
+ * publish-standings choice, the dues tracker, the invite code. See
+ * lib/league/afOwnedLeagueSettings.ts. No settings in the payload means the column
+ * is not written at all, so there is nothing to carry.
+ */
+async function withAfOwnedSettings<T extends { settings?: unknown }>(
+  key: { userId: string; platformLeagueId: string; season: number },
+  payload: T,
+): Promise<T> {
+  if (payload.settings === undefined) return payload;
+  const current = await Promise.resolve()
+    .then(() =>
+      prisma.league.findUnique({
+        where: { userId_platform_platformLeagueId_season: { ...key, platform: "sleeper" } },
+        select: { settings: true },
+      }),
+    )
+    .catch(() => null);
+  return {
+    ...payload,
+    settings: carryAfOwnedLeagueSettings(
+      current?.settings,
+      payload.settings as Record<string, unknown>,
+    ) as Prisma.InputJsonValue,
+  };
+}
+
 /** League row only (no rosters/matchups) — used for historical Sleeper seasons. */
 export async function upsertSleeperLeagueMetadataOnly(
   leagueData: SleeperLeague,
@@ -382,7 +414,10 @@ export async function upsertSleeperLeagueMetadataOnly(
 ) {
   const platformLeagueId = leagueData.league_id?.toString();
   if (!platformLeagueId) return null;
-  const leaguePayload = buildLeagueUpdateData(leagueData, season, sportLabel);
+  const leaguePayload = await withAfOwnedSettings(
+    { userId, platformLeagueId, season },
+    buildLeagueUpdateData(leagueData, season, sportLabel),
+  );
   return prisma.league.upsert({
     where: {
       userId_platform_platformLeagueId_season: {
@@ -412,7 +447,10 @@ export async function processLeague(
   if (!platformLeagueId) return null;
 
   const leaguePayload = {
-    ...buildLeagueUpdateData(leagueData, season, sportLabel),
+    ...(await withAfOwnedSettings(
+      { userId, platformLeagueId, season },
+      buildLeagueUpdateData(leagueData, season, sportLabel),
+    )),
     /** Full Sleeper hub sync supersedes ranking-only snapshot rows (`legacy_summary` / `ranking_only`). */
     leagueVariant: null,
     importWins: null,

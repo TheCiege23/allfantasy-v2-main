@@ -5,6 +5,7 @@ import type { Prisma } from "@prisma/client";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { requireCommissionerRole } from "@/lib/league/permissions";
+import { carryAfOwnedLeagueSettings } from "@/lib/league/afOwnedLeagueSettings";
 import { sleeperAvatarUrl } from "@/lib/sleeper-avatar";
 import { getLeagueInfo, getLeagueRosters, getLeagueUsers } from "@/lib/sleeper-client";
 
@@ -117,7 +118,14 @@ export async function POST(req: Request) {
       };
     });
 
-    const settingsJson = (lr.settings ?? league.settings) as Prisma.InputJsonValue | undefined;
+    /*
+     * Sleeper's `settings` replaces the row's — but AllFantasy's own keys (published
+     * standings, dues tracker, invite code …) are carried over from the row first,
+     * or a refresh would erase them. See lib/league/afOwnedLeagueSettings.ts.
+     */
+    const settingsJson = (
+      lr.settings ? carryAfOwnedLeagueSettings(league.settings, lr.settings) : league.settings
+    ) as Prisma.InputJsonValue | undefined;
 
     await prisma.league.update({
       where: { id: leagueId },

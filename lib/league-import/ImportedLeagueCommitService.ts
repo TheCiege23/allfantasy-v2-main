@@ -11,6 +11,7 @@ import { normalizeToSupportedSport } from '@/lib/sport-scope'
 import { clearLeagueTombstone, tombstoneKeyFor } from '@/lib/league-delete/leagueTombstones'
 import { persistProviderTransactionFacts, type ProviderTransactionFactInput } from '@/lib/league-import/persistProviderTransactionFacts'
 import type { ImportWarningRecord } from '@/lib/league-import/types'
+import { carryAfOwnedLeagueSettings } from '@/lib/league/afOwnedLeagueSettings'
 import type {
   CanonicalImportBundle,
   ImportProvider,
@@ -766,9 +767,19 @@ export async function persistImportedLeagueFromNormalization(
       }
     : {}
 
-  const settingsJson = canonicalBundle
-    ? mergeCanonicalBundleIntoSettings(normalized, canonicalBundle)
-    : buildImportedLeagueSettings(normalized)
+  /*
+   * 🛑 A RE-IMPORT REPLACES `settings` WITH THE PLATFORM'S PAYLOAD — AND USED TO TAKE
+   * ALLFANTASY'S OWN KEYS WITH IT. A published league went private, the dues tracker and
+   * its payment link vanished, a human-confirmed league type reverted to a guess.
+   * `carryAfOwnedLeagueSettings` carries exactly the AllFantasy-owned keys forward from the
+   * existing row and nothing else, so a rule the platform has since removed still goes.
+   */
+  const settingsJson = carryAfOwnedLeagueSettings(
+    existing?.settings,
+    canonicalBundle
+      ? mergeCanonicalBundleIntoSettings(normalized, canonicalBundle)
+      : buildImportedLeagueSettings(normalized),
+  )
 
   // Tier 0 (Block C) — passthrough for League columns whose values used to be
   // silently dropped and replaced by Prisma defaults. Every value comes from
