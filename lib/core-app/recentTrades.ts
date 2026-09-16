@@ -105,8 +105,13 @@ export type RecentTradesLiveOptions = {
    * needs them, and a second provider read to learn what this one already knows
    * would be pure cost. Called once per completed pass with every league whose
    * scan actually answered; a league that did not answer is absent, never "0".
+   *
+   * `meta.attempted` is how many leagues the pass TRIED. Each league's scan catches its
+   * own failure and this read still resolves, so a caller with only `scanned` cannot tell
+   * "no offers anywhere" from "three of eight leagues answered" — and one of them decides
+   * whether to close the "since your last visit" window over trades it never saw.
    */
-  onPendingOffers?: (scanned: Array<{ leagueId: string; waiting: number }>) => void
+  onPendingOffers?: (scanned: Array<{ leagueId: string; waiting: number }>, meta: { attempted: number }) => void
 }
 
 function liveCompletedTrade(
@@ -353,7 +358,7 @@ export async function getRecentTrades(
         })
       }
       try {
-        live.onPendingOffers(scanned)
+        live.onPendingOffers(scanned, { attempted: liveLeagues.length })
       } catch {
         // Recording a badge must never cost the trades this loader exists to return.
       }
