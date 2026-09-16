@@ -679,12 +679,19 @@ export async function GET(req: NextRequest) {
       const ledger = await getLeagueTradeLedgerForRoster({ leagueId, rosterId: viewerRosterId })
       const teamRows = await prisma.leagueTeam.findMany({
         where: { leagueId },
-        select: { externalId: true, name: true },
+        select: { externalId: true, teamName: true, ownerName: true },
       })
       const teamNames = new Map<string, string>()
       for (const t of teamRows) {
-        if (!t.name) continue
-        for (const key of rosterIdMapKeys(t.externalId)) teamNames.set(key, t.name)
+        /*
+         * ⚠ `teamName` THEN `ownerName` — AND THERE IS NO `name` COLUMN, which is what I first
+         * wrote. Both are non-null strings that can still be EMPTY, so the check is truthiness
+         * rather than null: an empty label would render the partner as a blank space, which reads
+         * as a rendering bug rather than as a team nobody named.
+         */
+        const label = t.teamName?.trim() || t.ownerName?.trim()
+        if (!label) continue
+        for (const key of rosterIdMapKeys(t.externalId)) teamNames.set(key, label)
       }
       return buildProviderOfferHistoryRows({
         offers: [...ledger.declined, ...ledger.gone],
