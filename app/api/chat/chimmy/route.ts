@@ -2210,9 +2210,18 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     riskMode: effectiveRiskMode,
   })
 
-  const specialistAgent = inferAgentFromMessage(
-    [message, effectiveStrategyMode, leagueFormat, insightType].filter(Boolean).join('\n')
-  )
+  /*
+   * ⚠ THE AGENT FOLLOWS THE ORCHESTRATION INTENT, so the specialist prompt and the intent label
+   * the model is shown cannot disagree. The mode and league format are hints for a question that
+   * names no workflow — they used to be joined into the classified text, which sent every
+   * Dynasty Lens trade question to the dynasty agent. See `inferAgentFromMessage`.
+   */
+  const specialistAgent = inferAgentFromMessage(message, {
+    intent: chimmyOrchestrationClassification.intent,
+    insightType,
+    mode: effectiveStrategyMode,
+    leagueFormat,
+  })
   const recentConversationContext = conversation
     .slice(-6)
     .map((turn) => `${turn.role}: ${turn.content}`)

@@ -19,6 +19,25 @@ vi.mock('@/lib/decision-os/three-brain/phase2/maintenanceRunner', () => ({
 vi.mock('@/lib/decision-os/three-brain/phase2/realAdapters', () => ({
   createManagedIntelligenceDeps: (...args: unknown[]) => depsMock(...args),
 }))
+/*
+ * ⚠ THIS MOCK WAS MISSING FOR A WEEK OF "Mock exactly what the route imports". PR #905 added the
+ * draft-outcome resolver to this route, ABOVE the maintenance gate, and did not add it here — so
+ * every authorized case ran the real prisma read against the test sentinel (`127.0.0.1:1`),
+ * retried, and 4b (five values in one test) blew the 30s timeout. Its late runner call then
+ * landed in test 5's count ("called 2 times"). Found 2026-09-16 by the author of #905.
+ */
+const resolveOutcomesMock = vi.fn(async () => ({
+  examined: 0,
+  resolved: 0,
+  followed: 0,
+  ignored: 0,
+  pendingNoPickYet: 0,
+  skippedNonDecision: 0,
+  skippedUnusable: 0,
+}))
+vi.mock('@/lib/ai/outcomes/resolveDraftRecommendationOutcomes', () => ({
+  resolveDraftRecommendationOutcomes: (...args: unknown[]) => resolveOutcomesMock(...args),
+}))
 
 import { GET } from '@/app/api/cron/decision-os-intelligence-maintenance/route'
 

@@ -223,6 +223,28 @@ describe('league grounding is not required for real-world competitions', () => {
   })
 })
 
+/*
+ * ⚠ THE SPECIALIST AGENT FOLLOWS THE ORCHESTRATION INTENT. Every route suite mocks
+ * `@/lib/agents/pipeline`, so none of them would notice the call site going back to classifying
+ * a joined string on its own — which is how the agent and the intent label disagreed for 53 of 71
+ * questions in `__tests__/chimmy-eval/`. Asserted on the source for that reason.
+ */
+describe('the specialist agent is chosen from the orchestration intent', () => {
+  it('passes the already-computed intent, not a joined string', () => {
+    expect(ROUTE).toMatch(
+      /inferAgentFromMessage\(message, \{\s*intent: chimmyOrchestrationClassification\.intent,/,
+    )
+    expect(ROUTE).not.toMatch(/inferAgentFromMessage\(\s*\[message/)
+  })
+
+  it('computes that intent before choosing the agent', () => {
+    const classified = ROUTE.indexOf('const chimmyOrchestrationClassification = classifyChimmyIntent(')
+    const chosen = ROUTE.indexOf('const specialistAgent = inferAgentFromMessage(')
+    expect(classified).toBeGreaterThan(-1)
+    expect(chosen).toBeGreaterThan(classified)
+  })
+})
+
 describe('tool loop system prompt', () => {
   /*
    * When the model fetches its own context, nothing upstream can guarantee the
