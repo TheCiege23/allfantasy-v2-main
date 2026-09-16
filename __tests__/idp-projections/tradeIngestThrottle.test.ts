@@ -12,9 +12,24 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
  * writes silence into the warehouse and it looks like data.
  */
 
+/*
+ * ⚠ `findFirst` IS LOAD-BEARING HERE EVEN THOUGH NOTHING BELOW ASSERTS ON IT. The sweep asks
+ * whether a season already holds rows before deciding how much of it to re-read, and a stub
+ * missing that delegate does not degrade gracefully — `prisma.transactionFact.findFirst is not a
+ * function` throws SYNCHRONOUSLY, so the `.catch()` at the call site never runs and all four
+ * throttling assertions die before a single request is made.
+ *
+ * Returning null pins this suite to the FIRST-PASS path deliberately: no existing rows means no
+ * checkpoint, so all 18 weeks are still walked and the concurrency and 429 assertions measure
+ * what they were written to measure. A stub returning a row would narrow the window to ~8 weeks
+ * and quietly WEAKEN the in-flight ceiling test rather than fail it.
+ */
 const prismaStub = {
   league: { findMany: vi.fn(async () => []) },
-  transactionFact: { upsert: vi.fn(async () => ({})) },
+  transactionFact: {
+    upsert: vi.fn(async () => ({})),
+    findFirst: vi.fn(async () => null),
+  },
 }
 vi.mock('@/lib/prisma', () => ({ prisma: prismaStub }))
 vi.mock('@/lib/psychological-profiles/SportBehaviorResolver', () => ({
