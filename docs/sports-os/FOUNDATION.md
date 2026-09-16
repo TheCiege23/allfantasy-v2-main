@@ -15,17 +15,17 @@ route with a budget in traces-per-hour.
 | 1 | Performance budgets | `lib/sports-os/budgets.ts`, `budgetTelemetry.ts` | **new** |
 | 2 | Render the shell immediately | `app/core/[[...screen]]/page.tsx` — `af.shell_ms` | already built |
 | 3 | Stream cards independently | same page + `lib/observability/cardTelemetry.ts` | already built |
-| 4 | Screen-ready summaries | `lib/sports-os/summaries.ts` | **new** — registry, no screens registered yet |
-| 5 | Layered caching | `lib/sports-os/layeredCache.ts` | **new** |
+| 4 | Screen-ready summaries | `lib/sports-os/summaries.ts` | **new** — `/core/standings` wired |
+| 5 | Layered caching | `lib/sports-os/layeredCache.ts`, `durableTier.ts` | **new** — memory + `SportsDataCache` |
 | 6 | Heavy work in jobs | `lib/jobs/`, `lib/queues/bullmq.ts` | already built — reached from `reactions.ts` |
 | 7 | One event system | `lib/events/` | already built — the **reaction table** is new |
 | 8 | End-to-end observability | `lib/observability/`, `docs/observability/TRACING.md` | already built — budget verdicts are new |
 | 9 | Last-known data | `lib/sports-os/freshness.ts` | **new** |
 | 10 | Gradual rollout | `lib/sports-os/rollout.ts` | **new** |
 
-🛑 **NOTHING IN THIS LAYER IS WIRED INTO A REQUEST PATH YET.** It is a foundation with tests and no
-callers. That is a deliberate stopping point, not an oversight — see *What is not done* at the end,
-which names every remaining step and why each is a separate decision.
+**One surface is live on it: `/core/standings`**, behind a 10% rollout — see *The first wired
+surface* below. The rest of the layer still has no callers, and *What is not done* at the end names
+every remaining step and why each is a separate decision.
 
 ## How the pieces compose
 
@@ -167,12 +167,22 @@ it costs a redeploy (writing a Railway variable *is* a deploy).
 
 ## Testing
 
-`__tests__/sports-os/` — 55 tests, no database, no queue, no network.
+`__tests__/sports-os/` (67), `__tests__/core-app/leagueStandingsSummary` (9) and
+`__tests__/fantasy-os/sync-invalidates-standings` (3) — no database, no queue, no network.
 
-⚠ **FOUR OF THE KEY ASSERTIONS WERE MUTATION-TESTED**, because a green check that has never gone red
-is not evidence. Injecting each of these turns the named suite red: giving `db` a device multiplier;
-dropping the per-flag salt from the rollout bucket; re-stamping `fetchedAt` when promoting a cache
-entry between tiers; making `combineFreshness` take the newest timestamp instead of the oldest.
+⚠ **ELEVEN OF THE KEY ASSERTIONS WERE MUTATION-TESTED**, because a green check that has never gone
+red is not evidence. Injecting each of these turns the named suite red: giving `db` a device
+multiplier; dropping the per-flag salt from the rollout bucket; re-stamping `fetchedAt` when
+promoting a cache entry between tiers; making `combineFreshness` take the newest timestamp; keying
+the standings summary on the AF uuid instead of the platform id; dropping the season from its scope;
+making the durable envelope check a bare cast; dropping `scopeKey`'s trailing separator; and — at the
+sync call site — passing a uuid, removing the call, and moving it into the success-only path.
+
+⚠ **TWO OF THOSE ELEVEN CONTROLS WERE WRONG ON THE FIRST ATTEMPT AND STAYED GREEN**, which is the
+part worth keeping. One let a promoted cache entry fall out of memory before the assertion ran, so
+the mutation was masked. The other left the original call in place and added a second one, so the
+test never saw the condition. **A control that stays green is a finding about the control, not a
+verdict on the code** — both were rebuilt until they bit.
 
 ⚠ **AND THE FIRST ATTEMPT AT THE `fetchedAt` CONTROL STAYED GREEN**, which is worth recording: the
 scenario let the promoted entry fall out of memory before the second read, so the mutation was
@@ -184,24 +194,85 @@ not from the one it was written for.
 repo-wide, and `next.config.js` sets `typescript.ignoreBuildErrors: true`. A mock can contradict its
 module's real contract indefinitely without anything going red. Run the suite.
 
+## The first wired surface: `/core/standings`
+
+`lib/core-app/leagueStandingsSummary.ts`, behind `sports-os.screen-summaries` at 10%.
+
+`getLeagueStandings` reads every `WeeklyMatchup` row the league has, every team, and the user's own
+rows, then ranks, computes week-by-week movement, builds a trend and projects a pace — on every
+visit, for every member, all season. It now runs behind the summary layer, with the
+`SportsDataCache`-backed durable tier so a board survives a deploy and is shared across replicas.
+
+TTL 2 minutes, stale-while-revalidate 10 minutes. The TTL is **sized against the data underneath
+it**, not picked for feel: `ensureMatchupsCached` only refetches the live week once its rows are
+older than its own 30-minute staleness threshold, so a shorter TTL here would rebuild an identical
+board from identical rows.
+
+🛑 **THE CACHE IS KEYED ON THE PROVIDER'S LEAGUE ID, NOT OUR UUID, AND REVERSING THAT BREAKS
+INVALIDATION SILENTLY.** Three facts force it:
+
+1. `WeeklyMatchup.leagueId` holds the provider's id — CLAUDE.md records that only 2 of those on
+   production match a `League.id`.
+2. `syncConnectedSleeperLeague`, the only place that knows those rows changed, holds
+   `connection.externalLeagueId` and has **no AF league id in scope at all**.
+3. `League.platformLeagueId` has **no standalone index** — only
+   `@@unique([userId, platform, platformLeagueId, season])`, which a lookup by platform id alone
+   cannot use as a left prefix.
+
+So keying on our UUID would turn every invalidation into an unindexed scan of `League`, on a path
+that runs once per league per sync. Keying on the provider's id — the same id the cached data is
+keyed on — makes it a bounded prefix delete with no lookup at all.
+
+⚠ **THE SEASON IS IN THE KEY TOO.** The platform id alone is not unique across seasons, and the
+board carries the league's display name from the AF row; without the season, two AF leagues sharing
+a platform id would collide and one would render the other's name.
+
+⚠ **`scopeKey` NOW TERMINATES EVERY FIELD WITH `&`, AND THAT IS LOAD-BEARING.** The sweep is a
+prefix match on `…l=<id>&`. Without the terminator, invalidating `lg1` also sweeps `lg10`. Two tests
+pin this — one on the ordering, one on the terminator — because a reordering would fail nothing else:
+the sweep would simply stop matching and boards would serve stale with nothing red.
+
+### On "migrate the read and wire the writer together"
+
+That rule is about a surface pointed at a table **nothing refreshes** — the `ingestCFBDStats` /
+`DevyPlayer` failure. It is structurally impossible here, because the summary is read-through: a
+missing or invalidated entry costs one rebuild on the next read, never a blank board. **The TTL is
+the correctness bound; the invalidation is a latency optimisation.** It swallows its own failures and
+can never fail the sync above it, which has already done the real work.
+
+⚠ **IT RUNS EVEN WHEN `ensureMatchupsCached` REJECTED**, deliberately: that call deletes stale weeks
+*before* refetching them, so a partial failure still leaves the table changed. Skipping the sweep on
+error is how a cached board survives pointing at rows that no longer exist. A mutation control pins
+this branch specifically.
+
+### What the sync's own tests did not cover
+
+🛑 **A POSITIVE CONTROL FOUND THAT `sleeper-sync-collector` AND `sleeper-sync-integration` NEVER
+REACH THIS CALL SITE.** Throwing unconditionally from `invalidateLeagueStandings` left both suites
+completely green — so their pass said nothing whatever about the wiring. `sync-invalidates-standings`
+was written against the `sync-league-gone` harness, which drives the real `syncConnectedLeague`
+rather than a helper, and it is mutation-controlled three ways: passing a UUID instead of the
+provider id, removing the call, and moving it into the success-only path.
+
 ## What is not done
 
-Each of these is a separate decision with a real cost attached, which is why the layer stops here.
+Each of these is a separate decision with a real cost.
 
-1. **No screen has a registered summary.** `registerScreenSummary` has no callers. Registering one
-   means writing its `build`, which is a per-screen data-modelling job, and pointing the screen at
-   it means moving a read — the migration CLAUDE.md says to do *together with* its writer or not at
-   all.
-2. **No durable cache tier is wired.** `readThrough` runs memory-only until a `DurableCacheTier` is
-   passed. `sportsDataCache` is the obvious candidate; it was left uninjected so this module stays
-   importable from a unit test and out of the browser bundle's type graph.
-3. **No consumer calls `dispatchReactions`.** The natural site is the outbox relay
-   (`lib/events/outboxRelay.ts`), and it needs `enqueue` injected from `lib/jobs/enqueue.ts`, which
-   is `server-only`.
+1. ~~No screen has a registered summary.~~ **Done** — `/core/standings`, above. The next candidates
+   are `home` (the `dash34` fan-out, which feeds eight cards from one read) and `week`.
+2. ~~No durable cache tier is wired.~~ **Done** — `lib/sports-os/durableTier.ts` over
+   `SportsDataCache`, used by the standings summary.
+3. **No consumer calls `dispatchReactions`.** The standings summary declares `invalidatedBy`, and
+   nothing reads it yet: invalidation today is the direct call from the sync. The natural site is
+   `lib/events/outboxRelay.ts`, and it needs `enqueue` injected from `lib/jobs/enqueue.ts`, which is
+   `server-only`.
 4. **No ingestion path emits the new `ingest.*` events.** The catalog entries exist and validate;
-   nothing publishes them yet.
-5. **The budgets are targets.** See above. They need a week of Sentry data before anyone should
-   treat an `over` verdict as an incident.
+   nothing publishes them.
+5. **The budgets are targets.** Nothing in the table is a p95 we have held. They need a week of
+   Sentry data before an `over` verdict should be treated as an incident.
 6. **`recordBudget` has no callers.** The two obvious ones are the existing `af.shell_ms` site in
-   `app/core/[[...screen]]/page.tsx` and `traceCard`, which would give every card a verdict for one
-   line of change each.
+   `app/core/[[...screen]]/page.tsx` and `traceCard`.
+7. **The standings screen does not render its freshness yet.** `readLeagueStandingsSummary` returns
+   the `Fresh<T>` envelope and the page currently unwraps `.data`. Point 9 is only half-delivered
+   until `Standings` shows the `last-known` label — a component prop change, deliberately not folded
+   into this one.
