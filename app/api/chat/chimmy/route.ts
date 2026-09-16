@@ -30,6 +30,7 @@ import { buildPsychologyGroundingLines } from '@/lib/psychological-profiles/Prof
 import { resolveNormalizedLeagueContext } from '@/lib/league-context-engine'
 import type { NormalizedLeagueContext } from '@/lib/league-context-engine/types'
 import { buildChimmySportDataDigest } from '@/lib/chimmy/chimmy-sport-data-digest'
+import { resolveEffectiveSeason } from '@/lib/chimmy/effectiveSeason'
 import {
   buildChimmySourceReferences,
   buildChimmyStalenessWarning,
@@ -1039,14 +1040,51 @@ function buildLeagueGroundingLine(args: {
   leagueNameHint?: string
   /** Set when a league WAS selected but could not be grounded. */
   groundingFailure?: ChimmyLeagueGroundingFailure | null
+  /** The season the answer is actually about, and where it came from. */
+  season?: { season: number | null; source: 'question' | 'league' | 'request' | 'none' }
 }): string | undefined {
   if (args.leagueSnapshot) {
     const s = args.leagueSnapshot
+
+    /*
+     * 🛑 SCORING WAS ABSENT FROM THIS LINE AND IS THE REASON THIS FUNCTION
+     * CHANGED. The snapshot has carried a verified `scoring` all along, and the
+     * only scoring statement reaching the model came from a CLIENT form field,
+     * rendered under a separate `LEAGUE CONTEXT:` block with equal apparent
+     * authority to this one. Nothing compared them. A client claiming
+     * "Scoring: Full PPR" over a half-PPR league got a confidently wrong
+     * start/sit call with a grounded-looking answer around it.
+     *
+     * ⚠ AND AN ABSENT SCORING IS STATED, NOT OMITTED. `.filter(Boolean)` below
+     * would drop a null, and silence reads to a model as "nothing worth
+     * mentioning" — the same reasoning as the NOT AVAILABLE branch further down.
+     * A league whose scoring we never stored must produce a refusal to name one,
+     * not a guess.
+     */
+    const scoring = s.scoring?.trim()
+      ? `scoring=${s.scoring}`
+      : 'scoring=UNKNOWN (not stored — do not state a scoring rule for this league)'
+
+    /*
+     * When the question reopened a past season, SAY SO and give this league's
+     * current season alongside it. A past-season answer that does not announce
+     * itself is indistinguishable from a current-season answer that is wrong.
+     */
+    const askedSeason = args.season
+    const seasonLine =
+      askedSeason?.source === 'question' && askedSeason.season != null && askedSeason.season !== s.season
+        ? `season=${askedSeason.season} (asked about in the question; this league's current season is ${s.season})`
+        : `season=${s.season}`
+
     return [
       `League: ${s.name ?? s.id}`,
       `id=${s.id}`,
       `sport=${s.sport}`,
-      `season=${s.season}`,
+      seasonLine,
+      scoring,
+      s.leagueSize != null ? `teams=${s.leagueSize}` : null,
+      `dynasty=${s.isDynasty}`,
+      s.leagueVariant ? `variant=${s.leagueVariant}` : null,
       `platform=${s.platform}`,
       `platformLeagueId=${s.platformLeagueId}`,
       s.importedAt ? `imported=${s.importedAt.toISOString()}` : null,
@@ -1334,7 +1372,38 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const digestSport: SupportedSport | 'all' =
     sportScope === 'all' && !leagueSnapshot ? 'all' : (sportExplicit ?? leagueSnapshot?.sport ?? DEFAULT_SPORT)
 
-  const sport: SupportedSport = sportExplicit ?? leagueSnapshot?.sport ?? DEFAULT_SPORT
+  /*
+   * 🛑 THE LEAGUE'S OWN SPORT WINS OVER THE CLIENT'S. It did not, and `sport`
+   * is not a label — it keys the sports reads inside
+   * `buildLeagueSportsGroundingPacket` (`loadPlayerPoolSummary`,
+   * `loadFantasyData`, `loadScheduleSummary`, provider health) and the insight
+   * bundle. A client field could therefore put an NBA player pool behind an
+   * answer about an NFL league, under a grounding line that said `sport=NFL`.
+   *
+   * ⚠ THE FLIP IS DELIBERATELY NOT APPLIED TO `digestSport` ABOVE, AND THAT IS
+   * THE WHOLE POINT OF SPLITTING THEM. The digest is world data — news,
+   * injuries, tonight's games — and it should follow the QUESTION. Somebody
+   * scoped to an NFL league who asks what NBA games are on tonight is asking a
+   * real question, and making the league outrank them there would answer a
+   * different one. League-scoped reads take the league's sport; world-data reads
+   * take the asker's.
+   *
+   * With no league in scope there is nothing to outrank the client field, so it
+   * still decides — unchanged behaviour for every global question.
+   */
+  const sport: SupportedSport = leagueSnapshot?.sport ?? sportExplicit ?? DEFAULT_SPORT
+
+  /*
+   * One resolution, used everywhere `season` used to go. See
+   * `resolveEffectiveSeason` for why the league wins by default and why an
+   * explicit year in the question reopens the past.
+   */
+  const effectiveSeasonResult = resolveEffectiveSeason({
+    leagueSeason: leagueSnapshot?.season ?? null,
+    requestedSeason: season ?? null,
+    message,
+  })
+  const effectiveSeason = effectiveSeasonResult.season
   const effectiveStrategyMode = selectedAssistantMode
 
   const selectedLeagueForManagerCheck =
@@ -1620,7 +1689,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         leagueId: leagueSnapshot.id,
         userId,
         sport: sport ?? undefined,
-        season: season ?? undefined,
+        season: effectiveSeason ?? undefined,
       })
       const usageAnswer = buildLeagueDataUsageAnswer(packet)
       return NextResponse.json({
@@ -1692,7 +1761,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     leagueSnapshot && insightType
       ? getInsightBundle(leagueSnapshot.id, insightType, {
           teamId,
-          season,
+          season: effectiveSeason ?? undefined,
           week,
           sport,
         })
@@ -1865,7 +1934,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
           leagueId: leagueSnapshot.id,
           userId,
           sport: normalizeToSupportedSport(sport),
-          season: season ?? new Date().getFullYear(),
+          season: effectiveSeason ?? new Date().getFullYear(),
           question: message,
           /*
            * ⚠ `values` WAS MISSING, AND THAT SILENTLY REMOVED THE WHOLE VALUATION LANE (R1.2).
@@ -1922,7 +1991,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
           leagueId: leagueSnapshot.id,
           userId,
           sport: sport ?? undefined,
-          season: season ?? undefined,
+          season: effectiveSeason ?? undefined,
         })
           .then((packet) => ({
             packet,
@@ -2113,6 +2182,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         leagueSnapshot,
         leagueNameHint: leagueNameHint ?? undefined,
         groundingFailure: leagueId && !leagueGrounding.ok ? leagueGrounding.reason : null,
+        season: effectiveSeasonResult,
       }),
       ...(psychologyGroundingLines.length > 0
         ? [psychologyGroundingLines.join(NEWLINE)]
@@ -2182,7 +2252,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       sleeperUsername,
       teamId,
       sport,
-      season,
+      season: effectiveSeason,
       week,
       insightType,
       privateMode,
@@ -2198,10 +2268,10 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       sessionId,
     }),
     matchupData: insightType === 'matchup'
-      ? compactRecord({ leagueId, teamId, week, season, summary: insightSummary })
+      ? compactRecord({ leagueId, teamId, week, season: effectiveSeason, summary: insightSummary })
       : undefined,
     projections: insightType === 'playoff' || /projection|projected|win probability/i.test(message)
-      ? compactRecord({ season, week, summary: insightSummary })
+      ? compactRecord({ season: effectiveSeason, week, summary: insightSummary })
       : undefined,
     rosterNeeds: /roster|lineup|need|depth/i.test(message)
       ? compactRecord({ summary: insightSummary || message.slice(0, 280) })
@@ -2233,7 +2303,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   const leagueSettings = compactRecord({
     sport,
-    season,
+    season: effectiveSeason,
     week,
     insightType,
     source,
@@ -2849,7 +2919,7 @@ ${commishCtx}`
             const slateCtx = await buildLiveSlateContext({
               rosters: leagueSportsGrounding?.packet.rosters ?? null,
               sport,
-              season: season ?? null,
+              season: effectiveSeason ?? null,
               week: week ?? null,
             })
             if (slateCtx) {
