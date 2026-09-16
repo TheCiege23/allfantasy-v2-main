@@ -29,6 +29,19 @@ export async function POST(request: NextRequest) {
     wildcardCount?: number
     bubbleEnabled?: boolean
     bubbleSize?: number
+    /*
+     * 🛑 THE REST OF THE CALENDAR. The form has always sent these four and this
+     * type did not list them, so they were dropped here — the importer received
+     * nothing, laid out a single "Regular season" round, and `executeAdvancement`
+     * marked the tournament COMPLETE at the first cut because it found no next
+     * play round. Nothing failed and nothing warned; the tournament simply ended
+     * in week 9. `SettingsPanel` has no week fields, so it could not be repaired
+     * afterwards either.
+     */
+    bubbleWeek?: number
+    redraftWeek?: number
+    eliteRedraftWeek?: number
+    championshipWeek?: number
   }
   try {
     body = await request.json()
@@ -39,6 +52,19 @@ export async function POST(request: NextRequest) {
   const toInt = (value: unknown, fallback: number) => {
     const n = Number(value)
     return Number.isFinite(n) ? Math.trunc(n) : fallback
+  }
+
+  /*
+   * ⚠ ABSENT IS NOT ZERO, WHICH IS WHY THIS IS NOT `toInt(x, 0)`. A commissioner
+   * who has not decided the championship week yet sends nothing, and week 0 is
+   * not "undecided" — it is a week before the regular season starts, which the
+   * scaffold rejects as out of order. Null leaves that stage unscheduled, which
+   * is what the importer expects.
+   */
+  const toWeek = (value: unknown): number | null => {
+    if (value === undefined || value === null || value === '') return null
+    const n = Number(value)
+    return Number.isFinite(n) ? Math.trunc(n) : null
   }
 
   const result = await importTournamentFromLeagues({
@@ -55,6 +81,10 @@ export async function POST(request: NextRequest) {
     wildcardCount: toInt(body.wildcardCount, 0),
     bubbleEnabled: Boolean(body.bubbleEnabled),
     bubbleSize: toInt(body.bubbleSize, 0),
+    bubbleWeek: toWeek(body.bubbleWeek),
+    redraftWeek: toWeek(body.redraftWeek),
+    eliteRedraftWeek: toWeek(body.eliteRedraftWeek),
+    championshipWeek: toWeek(body.championshipWeek),
   })
 
   if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status })
