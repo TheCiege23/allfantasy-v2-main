@@ -176,14 +176,28 @@ function readNumber(v: unknown): number | null {
 /**
  * Resolve a league scoring key to the projection value behind it, following
  * aliases when the direct name is absent.
+ *
+ * 🛑 AN ALIAS THE RULEBOOK SCORES UNDER ITS OWN NAME IS NOT AN ALIAS FOR THIS LEAGUE. In a Sleeper
+ * rulebook `sack` / `int` / `ff` / `fum_rec` / `safe` are TEAM-defense rules and `idp_sack` /
+ * `idp_int` / … are the individual-defender ones. The bare → `idp_*` bridge exists for rulebooks
+ * that carry only the bare key; when the rulebook carries the twin as well, following the bridge
+ * pays one individual stat twice — the D/ST weight here and the IDP weight under its own key.
+ * Measured on staging 2026-09-16: 26 of 43 IDP leagues weight both, and a real rulebook
+ * (sack 1, idp_sack 3) scored one IDP sack as 4.
+ *
+ * Presence, not weight, decides: a rulebook that writes `idp_sack: 0` has said individual sacks
+ * are worth nothing, and the D/ST weight must not bring them back. A direct key is never affected
+ * — a team-defense line carries `sack` itself and scores through it as before.
  */
 function projectedValueFor(
   scoringKey: string,
-  projection: Record<string, unknown>
+  projection: Record<string, unknown>,
+  scoringSettings: Record<string, unknown>
 ): number | null {
   const direct = readNumber(projection[scoringKey])
   if (direct != null) return direct
   for (const alias of STAT_ALIASES[scoringKey] ?? []) {
+    if (Object.prototype.hasOwnProperty.call(scoringSettings, alias)) continue
     const v = readNumber(projection[alias])
     if (v != null) return v
   }
@@ -222,7 +236,7 @@ export function computeLeagueProjectedPoints(
     if (weight == null || weight === 0) continue
     scoredKeys++
 
-    const value = projectedValueFor(key, projection)
+    const value = projectedValueFor(key, projection, scoringSettings)
     if (value == null) {
       unmatched.push(key)
       continue
