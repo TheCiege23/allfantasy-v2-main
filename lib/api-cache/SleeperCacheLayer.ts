@@ -120,12 +120,28 @@ function setMemoryCache(key: string, data: unknown, ttlMs: number): void {
   memoryCache.set(key, { data, fetchedAt: Date.now(), ttlMs })
 }
 
+/**
+ * A Sleeper failure that carries its HTTP status as a FIELD, not only in its message.
+ *
+ * ⚠ THE STATUS IS THE DIFFERENCE BETWEEN "RETRY" AND "NEVER". A 404 on a league means the league
+ * is gone from Sleeper — permanent, same answer on every render. A 429 or 5xx is a blip. Callers
+ * that treat those alike either hold a window open forever or close it over data they never read;
+ * both have happened here. The message keeps the status too, for logs, but nothing should have to
+ * parse it back out.
+ */
+export class SleeperHttpError extends Error {
+  constructor(readonly status: number, path: string) {
+    super(`Sleeper API ${status}: ${path}`)
+    this.name = 'SleeperHttpError'
+  }
+}
+
 async function sleeperGet<T>(path: string): Promise<T> {
   const res = await fetch(`${BASE_URL}${path}`, {
     headers: { 'Accept': 'application/json' },
     next: { revalidate: 60 },
   })
-  if (!res.ok) throw new Error(`Sleeper API ${res.status}: ${path}`)
+  if (!res.ok) throw new SleeperHttpError(res.status, path)
   return res.json() as Promise<T>
 }
 

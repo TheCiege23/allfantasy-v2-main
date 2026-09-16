@@ -19,13 +19,21 @@ const getLeagueTransactions = vi.hoisted(() => vi.fn())
 const getLeagueRosters = vi.hoisted(() => vi.fn())
 
 vi.mock('server-only', () => ({}))
-vi.mock('@/lib/api-cache/SleeperCacheLayer', () => ({
+/*
+ * ⚠ PARTIAL MOCK, so `SleeperHttpError` is the REAL class. The scan does `err instanceof
+ * SleeperHttpError` to tell a permanent 404 from a transient 429, and a duplicate class declared
+ * in this factory would be a different identity — the check would silently never match, which is
+ * the failure the error type exists to prevent.
+ */
+vi.mock('@/lib/api-cache/SleeperCacheLayer', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/api-cache/SleeperCacheLayer')>()),
   getAllPlayers: vi.fn(async () => ({})),
   getLeagueRosters,
   getLeagueUsers: vi.fn(async () => [{ user_id: 'them', display_name: 'Them' }]),
   getLeagueTransactions,
 }))
 
+import { SleeperHttpError } from '@/lib/api-cache/SleeperCacheLayer'
 import { scanPendingSleeperTrades } from '@/lib/provider-trades/scanPendingSleeperTrades'
 
 function trade(id: string, week: number) {
@@ -199,7 +207,7 @@ describe('⚠ a refusal is still not an empty week', () => {
      * Every test in this file mocked that call to SUCCEED, so nothing could see it.
      */
     it('marks a rosters-read failure transient, not permanent', async () => {
-      getLeagueRosters.mockRejectedValue(new Error('Sleeper API 429: /league/L1/rosters'))
+      getLeagueRosters.mockRejectedValue(new SleeperHttpError(429, '/league/L1/rosters'))
       const out = await scanPendingSleeperTrades(args)
       expect(out.scanned).toBe(false)
       expect(out.unscannedKind).toBe('provider')
@@ -219,6 +227,29 @@ describe('⚠ a refusal is still not an empty week', () => {
       const out = await scanPendingSleeperTrades(args)
       expect(out.unscannedKind).toBe('provider')
       expect(out.reason).toBe('Sleeper returned no rosters for this league')
+    })
+
+    /*
+     * 🛑 A 404 IS NOT UNAVAILABILITY. A league deleted on Sleeper, or a shadow/mis-import, answers
+     * 404 on every render for the life of the row. Classified `provider` it would hold /core's
+     * trade boundary open forever — the harm the provider/identity split exists to prevent,
+     * reached from the other side.
+     */
+    it.each([
+      ['404, a league that is gone', 404, 'identity'],
+      ['410, also gone', 410, 'identity'],
+      ['429, a rate limit', 429, 'provider'],
+      ['500, a provider fault', 500, 'provider'],
+      ['503, a provider fault', 503, 'provider'],
+    ])('classifies %s', async (_label, status, kind) => {
+      getLeagueRosters.mockRejectedValue(new SleeperHttpError(status as number, '/league/L1/rosters'))
+      expect((await scanPendingSleeperTrades(args)).unscannedKind).toBe(kind)
+    })
+
+    /* An error that is not a SleeperHttpError says nothing about permanence — treat it as transient. */
+    it('treats an untyped throw as transient', async () => {
+      getLeagueRosters.mockRejectedValue(new Error('socket hang up'))
+      expect((await scanPendingSleeperTrades(args)).unscannedKind).toBe('provider')
     })
 
     it('leaves it null on a scan that answered', async () => {

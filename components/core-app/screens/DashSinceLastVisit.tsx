@@ -70,9 +70,12 @@ function tradeReachLabel(brief: SinceLastVisitBrief): string | null {
    */
   if (typeof brief.tradesSinceAt !== 'string') return null
   const reach = new Date(brief.tradesSinceAt).getTime()
-  if (!Number.isFinite(reach) || reach >= new Date(brief.sinceAt).getTime()) return null
+  // ⚠ BOTH ends checked. Guarding only `tradesSinceAt` left `reaches NaNd further back` reachable
+  // through an unparseable `sinceAt`, because `reach >= NaN` is false and skips the early return.
+  const since = new Date(brief.sinceAt).getTime()
+  if (!Number.isFinite(reach) || !Number.isFinite(since) || reach >= since) return null
   // No `now`: a gap between two stored instants does not depend on when it is rendered.
-  const gap = gapLabel(reach, new Date(brief.sinceAt).getTime())
+  const gap = gapLabel(reach, since)
   return gap && `reaches ${gap} further back`
 }
 

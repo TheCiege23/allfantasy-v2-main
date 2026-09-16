@@ -175,6 +175,20 @@ describe('DashSinceLastVisit', () => {
    * fallback made the two values equal and the comparison returned null on its own. The input
    * the guard actually catches is a value that is PRESENT and does not parse.
    */
+  it('renders no reach note when sinceAt itself is unparseable', () => {
+    /*
+     * `reach >= NaN` is false, so guarding only `tradesSinceAt` let NaN through the early return
+     * and printed "reaches NaNd further back".
+     *
+     * ⚠ SCOPED TO THE NOTE. The HEADER still renders "since NaNd ago" here, because `whenLabel`
+     * formats `sinceAt` with no guard of its own. That is pre-existing and out of this change's
+     * scope; asserting no NaN anywhere would fail on it and make this test about something else.
+     */
+    const broken = brief({ sinceAt: 'not-a-date', tradesSinceAt: new Date(NOW.getTime() - 9e6).toISOString() })
+    render(<DashSinceLastVisit brief={broken} now={NOW} />)
+    expect(screen.queryByText(/reaches /)).toBeNull()
+  })
+
   it.each([
     ['missing', undefined],
     ['unparseable', 'not-a-date'],

@@ -22,20 +22,25 @@ import { scanPendingSleeperTrades } from '@/lib/provider-trades/scanPendingSleep
  * This reads that cache. One `in` query over the account's Sleeper league ids,
  * no provider call, no per-league fan-out, nothing recomputed.
  *
- * 🛑 BUT NOTHING FILLS THAT CACHE ON A SCHEDULE, AND THIS FILE SAID OTHERWISE FOR MONTHS.
- * The line above used to read "the trade-grade sweep runs every 30 minutes over every imported
- * Sleeper league", and every later claim in this file about bounded staleness was built on it.
- * Measured: there is NO scheduled caller of `getTradeGrades` anywhere in `app/api/cron`, scripts
- * or the worker; `CACHE_TTL_MS` is SIX HOURS, not thirty minutes; and this loader reads
- * `sportsDataCache` directly, so it never triggers a build itself. The row exists only because
- * some other surface — the league trade-grades route, the share card, the career card, Chimmy
- * grounding, the trade finder — happened to ask within the last six hours.
+ * WHAT FILLS THAT CACHE, measured rather than assumed — an earlier version of this note asserted
+ * under a 🛑 that nothing did, and that was FALSE. `/api/cron/trade-grade-notify` runs every fifteen minutes
+ * (cron-schedule.json, and it is in the live fast-tier loop) and calls `detectAndNotifyAll(12, 8)`,
+ * which reaches `getTradeGrades(id, { force: true })` through lib/trade-intel/tradeNotifyService
+ * and force-upserts this exact row. Twelve leagues per fire by cursor — so every imported Sleeper
+ * league is covered eventually — plus the eight most recently viewed, every fire. It diffs the
+ * league's OWN transaction feed, so a trade between two other managers is what triggers it.
  *
- * ⚠ WHICH MATTERS MOST FOR TRADES THE VIEWER IS NOT IN. The live Sleeper top-up below cannot
- * supply those at all: `scanPendingSleeperTrades` keeps only transactions whose `roster_ids`
- * include the viewer's, and `liveCompletedTrade` hard-codes one side as "You". So every trade
- * between two OTHER managers — most of them, in a twelve-team league — reaches this loader only
- * through a cache with no writer on a timer.
+ * ⚠ THE CENSUS THAT GOT THIS WRONG IS WORTH MORE THAN THE FACT. It was
+ * `grep -rln getTradeGrades app/api/cron` → empty → "no scheduled caller". The cron reaches it one
+ * module away, through `tradeNotifyService`. A grep scoped to a directory answers "does this
+ * directory MENTION the symbol", never "does anything in it REACH the symbol" — the same failure
+ * CLAUDE.md already records four times.
+ *
+ * ⚠ STILL TRUE, AND THE REASON THIS CACHE IS LOAD-BEARING: the live Sleeper top-up below cannot
+ * supply a trade the viewer is not in. `scanPendingSleeperTrades` keeps only transactions whose
+ * `roster_ids` include the viewer's, and `liveCompletedTrade` hard-codes one side as "You". So
+ * every trade between two OTHER managers reaches this loader through the cache or not at all, and
+ * this loader never builds it — a cold row stays cold until that cron reaches the league.
  *
  * ⚠ THE SWEEP'S OWN LETTER IS NOT USED, AND THAT IS THE POINT. It is a
  * RETROSPECTIVE grade scored on points already realised: days after a trade it
@@ -148,19 +153,20 @@ export type RecentTradesLiveOptions = {
    *     id and written only by lib/trade-intel/sleeperTradeGradeService, so an ESPN or Yahoo
    *     league has no row and never will — it is not "covered by the cache".
    *   - 🛑 THE `maxLeagues` CAP *IS* A BLIND SPOT, AND THIS NOTE SAID OTHERWISE. It claimed "the
-   *     exposure is only a trade newer than the 30-minute grade sweep", which was wrong twice:
-   *     there is no such sweep (see the module note above), and the exposure is not bounded, it
-   *     is LOST. A trade lands in capped league #12 at T−5min; this render does not live-scan it
-   *     and the cache does not have it, so the caller's boundary closes at T; whenever the cache
-   *     is next built, `tradesSince` filters on `acceptedAt > T` and T−5min never qualifies. The
-   *     trade appears in no brief, ever, and the league list is sorted by name so it is the same
-   *     leagues every render.
+   *     exposure is only a trade newer than the 30-minute grade sweep" — the cadence is every fifteen minutes
+   *     and the coverage is a cursor page plus the recently-viewed lane (see the module note), but
+   *     the shape of the claim was right and only the number was wrong. What it got wrong is that
+   *     the exposure is not bounded, it is LOST: a trade lands in capped league #12 at T−5min;
+   *     this render does not live-scan it and the cache does not have it yet, so the caller's
+   *     boundary closes at T; when the cache is next built, `tradesSince` filters on
+   *     `acceptedAt > T` and T−5min never qualifies. The league list is sorted by name, so it is
+   *     the same leagues every render.
    *
-   *     🛑 AND THE CAP IS NOT THE INTERESTING CASE. The same loss happens with NO cap, on a
-   *     fully healthy read, for any trade between two other managers that landed after the grade
-   *     cache was last built — because the live scan cannot see those trades at all. This
-   *     callback's complete/incomplete shape cannot express that: a read can be "complete" and
-   *     still be vouching only for a six-hour-old cache. What the boundary actually wants is the
+   *     ⚠ AND THE CAP IS NOT THE ONLY WAY IN. The same loss happens with no cap, on a healthy
+   *     read, for a trade between two other managers that lands between the cron reaching that
+   *     league and this render — because the live scan cannot see those trades at all. This
+   *     callback's complete/incomplete shape cannot express it: a read can be "complete" and still
+   *     be vouching for a cache built some minutes ago. What the boundary actually wants is the
    *     instant the read can stand behind, not a boolean. Recorded, not fixed here.
    * What all three share is being PERMANENT and deterministic. Reporting a permanent bound as a
    * transient failure would hold the trade boundary open for the life of the league.

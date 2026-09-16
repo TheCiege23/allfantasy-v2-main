@@ -285,7 +285,7 @@ describe('getRecentTrades', () => {
      */
     describe('reporting what it could not see', () => {
       const answered = {
-        trades: [], completedTrades: [], scanned: true, reason: null, weeksUnanswered: 0,
+        trades: [], completedTrades: [], scanned: true, reason: null, unscannedKind: null, weeksUnanswered: 0,
       }
       /*
        * The scan mock is file-scoped; without this the cap case counts a previous test's calls.

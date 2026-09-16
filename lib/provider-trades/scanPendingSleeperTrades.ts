@@ -2,6 +2,7 @@ import 'server-only'
 
 import type { SleeperTransaction } from '@/lib/sleeper-client'
 import {
+  SleeperHttpError,
   getAllPlayers,
   getLeagueRosters,
   getLeagueTransactions,
@@ -459,23 +460,28 @@ export async function scanPendingSleeperTrades(args: {
       weeksRequested: weeks.length,
       weeksAnswered: weeks.length - weeksUnanswered,
     }
-  } catch {
+  } catch (err) {
     /*
      * Provider unavailability must never break the caller's own panel.
      *
-     * ⚠ KNOWN GAP: THE STATUS IS THROWN AWAY HERE, SO A PERMANENT 404 LOOKS LIKE A 429.
-     * `sleeperGet` puts the code in the message (`Sleeper API ${status}`), and a league id that
-     * no longer resolves — a deleted league, or a shadow/mis-import — answers 404 on every render
-     * forever. Reported as `provider`, that holds /core's trade boundary open for the life of the
-     * row, which is the harm the provider/identity split exists to prevent, reached from the other
-     * side. Not fixed here: the fix is a typed error from the cache layer, not a regex over a
-     * message, and that is its own change.
+     * 🛑 BUT A 404 IS NOT UNAVAILABILITY. A league id that no longer resolves — deleted on Sleeper,
+     * or a shadow/mis-import — answers 404 on every render for the life of the row. Reported as
+     * `provider`, that holds /core's trade boundary open forever, which is the exact harm the
+     * provider/identity split was added to prevent, reached from the other side. `SleeperHttpError`
+     * carries the status as a field so this does not have to parse it back out of a message.
+     *
+     * 4xx other than 429 is the same story: the request is wrong, not the moment. 429 and every
+     * 5xx stay transient.
      */
+    const status = err instanceof SleeperHttpError ? err.status : null
+    const permanent = status !== null && status >= 400 && status < 500 && status !== 429
     return {
       trades: [],
       scanned: false,
-      reason: 'Sleeper could not be reached',
-      unscannedKind: 'provider',
+      reason: permanent
+        ? 'this league no longer exists on Sleeper'
+        : 'Sleeper could not be reached',
+      unscannedKind: permanent ? 'identity' : 'provider',
       weeksUnanswered: 0,
     }
   }
