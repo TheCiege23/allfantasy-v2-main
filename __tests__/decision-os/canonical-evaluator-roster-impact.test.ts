@@ -75,9 +75,22 @@ const PROJECTIONS: Record<string, number> = {
   qb1: 20, rb1: 15, rb2: 12, rb3: 6, wr1: 14, wr2: 11, te1: 9, wr9: 25,
 }
 
+/*
+ * 🛑 THE TWO PROJECTION MAPS CARRY DIFFERENT NUMBERS ON PURPOSE. `projectionByPlayerId` is
+ * rest-of-season (modelled here as 17 games' worth); `perGameProjectionByPlayerId` is per game.
+ * This stub used to supply only `projectionByPlayerId` with per-game-looking values, so it passed
+ * while production read a season total and labelled it per game — a "gains N pts per game" line
+ * ~17x too large. With distinct values, reading the wrong map moves every delta below.
+ */
 const enrichment = (projections: Record<string, number | null> = PROJECTIONS) =>
   vi.fn(async () => ({
-    enrichment: { positionByPlayerId: POSITIONS, projectionByPlayerId: projections },
+    enrichment: {
+      positionByPlayerId: POSITIONS,
+      perGameProjectionByPlayerId: projections,
+      projectionByPlayerId: Object.fromEntries(
+        Object.entries(projections).map(([id, v]) => [id, v == null ? null : v * 17]),
+      ),
+    },
     valuationSource: null,
     adpResolved: 0,
     positionResolved: 0,
@@ -114,6 +127,30 @@ describe('rosterImpact on the canonical evaluation', () => {
     const r = await run({ includeRosterImpact: true })
     expect(r.rosterImpact).toBeTruthy()
     expect(r.rosterImpact?.startingPointsDelta).toBe(19)
+  })
+
+  it('🛑 is denominated PER GAME — built from the per-game map, never the rest-of-season one', async () => {
+    const r = await run({ includeRosterImpact: true })
+    expect(r.rosterImpact?.unit).toBe('projected_points_per_game')
+    // Per game: QB20 RB15 RB12 WR14 WR11 TE9 FLEX(rb3 6) = 87. The ROS map would say 1,479.
+    expect(r.rosterImpact?.startingPointsBefore).toBe(87)
+    expect(r.rosterImpact?.startingPointsDelta).not.toBe(19 * 17)
+  })
+
+  it('treats a player with only a rest-of-season number as NOT projected per game', async () => {
+    const onlyRos = vi.fn(async () => ({
+      enrichment: {
+        positionByPlayerId: POSITIONS,
+        // wr9 (incoming) has a season total but no per-game value.
+        perGameProjectionByPlayerId: { ...PROJECTIONS, wr9: null },
+        projectionByPlayerId: { ...PROJECTIONS, wr9: 425 },
+      },
+      valuationSource: null, adpResolved: 0, positionResolved: 0, projectionResolved: 0,
+      idpValueResolved: 0, thinlyPricedIds: [], unresolvedIds: [], warnings: [],
+    })) as never
+    const r = await run({ includeRosterImpact: true }, { resolveEnrichment: onlyRos })
+    expect(r.rosterImpact?.startingPointsDelta).toBeNull()
+    expect(r.rosterImpact?.blockedReason).toMatch(/no projection/)
   })
 
   /**

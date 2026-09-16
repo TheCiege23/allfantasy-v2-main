@@ -206,6 +206,8 @@ export async function resolveTradeEnrichment(
   const positionByPlayerId: Record<string, string | null> = {}
   // F2.5-fed below when the season/week anchor is present; otherwise honestly empty.
   const projectionByPlayerId: Record<string, number | null> = {}
+  /* AF per-game projections only — see the AF block below for why this map has no fallback. */
+  const perGameProjectionByPlayerId: Record<string, number | null> = {}
   const marketValueByPlayerId: Record<string, number | null> = {}
   const liquidityByPlayerId: Record<string, number | null> = {}
   const trend30dByPlayerId: Record<string, number | null> = {}
@@ -267,7 +269,24 @@ export async function resolveTradeEnrichment(
     try {
       const afRows = await port.loadAfProjections(args.sport, ids, args.season, args.week ?? null)
       const seenAf = new Set<string>()
+      const seenPerGame = new Set<string>()
       for (const row of afRows) {
+        /*
+         * ── PER GAME, KEPT APART ──────────────────────────────────────────────────────────────
+         * The same row also carries `afProjection`, AF's PER-GAME number, which is the unit a
+         * lineup comparison needs ("what does my starting lineup score on a game day"). It goes in
+         * its own map and is read before the ROS skip below: a row written before the ROS columns
+         * existed still has a perfectly good per-game value.
+         *
+         * 🛑 NO PROVIDER FALLBACK FOR THIS MAP. `RawProjectionRow.projectedPoints` is per WEEK, which
+         * equals per game only in the NFL, and this seam serves every sport. A player AF did not
+         * project is absent here — "not projected" — never filled with a number in another unit.
+         */
+        if (row.playerId && !seenPerGame.has(row.playerId) && Number.isFinite(row.afProjection)) {
+          seenPerGame.add(row.playerId)
+          perGameProjectionByPlayerId[row.playerId] = row.afProjection
+        }
+
         // Rows arrive week-scoped first, then freshest — so the FIRST per player is best-informed.
         if (!row.playerId || seenAf.has(row.playerId)) continue
         if (row.rosProjection == null) continue
@@ -416,6 +435,7 @@ export async function resolveTradeEnrichment(
       adpByPlayerId,
       positionByPlayerId,
       projectionByPlayerId,
+      perGameProjectionByPlayerId,
       marketValueByPlayerId,
       idpValueByPlayerId,
       liquidityByPlayerId,
