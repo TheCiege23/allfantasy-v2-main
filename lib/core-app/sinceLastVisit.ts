@@ -68,6 +68,46 @@ export type VisitMarker = {
   baseline: VisitSnapshot | null
   /** The state as this session last saw it — the next session's baseline. */
   latest: VisitSnapshot | null
+  /**
+   * 🛑 THE TRADE LINE HAS ITS OWN BOUNDARY, BECAUSE ONLY IT CAN BE READ BLIND.
+   *
+   * The trade line is handed an array from `getRecentTrades`, and that read RESOLVES while
+   * missing trades (its grade cache falls back to `[]`, each league's live scan catches its own
+   * failure, a scan can answer for one of three weeks). An empty array means "nothing traded" or
+   * "we were blind", and only the caller knows which. Standings and injuries are snapshot diffs
+   * taken here, so this render can at least act on what it read.
+   *
+   * ⚠ THOUGH NOT BECAUSE THOSE READS CANNOT BE BLIND — they can, and this boundary does NOT cover
+   * them. `snapshotStandings` catches to `[]` and `snapshotInjuries` returns `empty` on a stale
+   * or unavailable feed, and that empty snapshot is written as `latest` and becomes the NEXT
+   * visit's baseline — where `diffInjuries`/`diffStandings` skip anything absent from it. So one
+   * stale injury feed silently reports "no injury changes" on the following visit, which is the
+   * same shape as the bug this boundary fixes, on a different axis. Pre-existing, deliberately
+   * not fixed here, and named so the next person does not read this note as a claim that those
+   * reads are safe.
+   *
+   * Holding the WHOLE marker back on a blind trade read was the first attempt, and it is worse
+   * than the bug: the marker also carries `latest`, so one flaky league would freeze the
+   * standings and injury baselines too — and a new user whose very first render had one league
+   * fail would sit at `comparisonPending` forever. With a Sleeper-shaped failure rate that is
+   * the common case, not the rare one.
+   *
+   * So this advances only when the trades read could stand behind what it returned. Absent on
+   * a marker written before this existed, which falls back to `lastSeenAt` — exactly the old
+   * behaviour, and the reason nothing needs migrating.
+   *
+   * ⚠ "NOTHING NEEDS MIGRATING" IS NOT "A ROLLBACK IS LOSSLESS". `isMarker` validates only
+   * version/lastSeenAt/sinceAt, so an older deploy reads one of these rows happily — and then
+   * drops this field on its next write. A held boundary is lost in that window and the unseen
+   * trades go unreported, i.e. it degrades exactly to the behaviour before this existed.
+   *
+   * ⚠ AND THE RECOVERY IS BOUNDED BY THE CALLER'S `limit`. `getRecentTrades` returns at most
+   * `limit` trades (3 from the /core home) and `tradesSince` filters that already-capped list,
+   * so holding the boundary re-surfaces at most that many — and none at all for an account whose
+   * newest 3 trades already fall inside the visit window. It stops the window CLOSING over
+   * unseen trades; it is not a backfill.
+   */
+  tradesSeenAt?: string
 }
 
 export type VisitWindow = {
@@ -76,35 +116,99 @@ export type VisitWindow = {
   /** True when the real last visit is older than MAX_WINDOW_MS, so the window was cut. */
   windowCapped: boolean
   baseline: VisitSnapshot | null
+  /**
+   * Where the TRADE line measures from — never later than `sinceAt`, and never past the floor.
+   * It sits further back exactly as long as the trades read keeps coming back partial.
+   */
+  tradesSinceAt: Date
+  /**
+   * 🛑 WHAT TO CARRY FORWARD WHEN THIS RENDER CANNOT ADVANCE THE BOUNDARY — and NOT the same
+   * value as `tradesSinceAt`, which is why both exist.
+   *
+   * `tradesSinceAt` is a per-render PROJECTION: clamped to `sinceAt`, because inside a session
+   * the brief must keep showing the same window rather than shrinking on every reload.
+   * Persisting that projection walks the boundary BACKWARD — measured: a complete read at 09:00
+   * inside a session that opened the previous day, then one blind reload, wrote a boundary 24
+   * hours older than the last read that could stand behind itself. Bounded by the floor and it
+   * self-heals on the next complete read, but it re-reports trades the user has already seen,
+   * and it is the exact opposite of what `tradesSeenAt` claims to mean.
+   */
+  tradesSeenAt: Date
+}
+
+/**
+ * The two trade timestamps for this window. `seen` is the last point a trades read could stand
+ * behind — carried forward untouched, so a blind render cannot move it. `since` is what this
+ * render measures from: `seen`, clamped so it is never later than the visit window (a reload
+ * inside a session must not shrink the brief) and never past the 7-day floor.
+ */
+function tradesOf(
+  marker: VisitMarker,
+  sinceAt: Date,
+  floor: Date,
+  now: Date,
+): Pick<VisitWindow, 'tradesSinceAt' | 'tradesSeenAt'> {
+  /*
+   * ⚠ THE FALLBACK IS `lastSeenAt`, NOT `sinceAt`, AND THAT IS THE SAME BUG AS THE ONE ABOVE.
+   * A marker written before this field existed has no boundary, and inside a session `sinceAt`
+   * is the session's OPENING point — so falling back to it and then persisting that on a blind
+   * read writes a boundary hours older than the last render, for every pre-existing marker at
+   * deploy and again after any rollback. `lastSeenAt` is the non-projected value, and it is what
+   * the old behaviour effectively used: before this field, each render closed the trade window
+   * at the render time that became the next window's start.
+   */
+  const raw = typeof marker.tradesSeenAt === 'string' ? new Date(marker.tradesSeenAt) : null
+  const legacy = new Date(marker.lastSeenAt)
+  const best = raw && Number.isFinite(raw.getTime()) ? raw : Number.isFinite(legacy.getTime()) ? legacy : sinceAt
+  /*
+   * ⚠ CLAMPED AT BOTH ENDS. The floor stops a long blind run reaching back past the 7-day window;
+   * `now` stops a boundary in the FUTURE — clock skew between instances, or a corrupt row, which
+   * `isMarker` does not validate. A future value would persist forward on every blind render and
+   * quietly disable the hold entirely, which is the one failure this whole mechanism exists to
+   * prevent, arrived at from the opposite direction.
+   */
+  const tradesSeenAt = new Date(Math.min(now.getTime(), Math.max(floor.getTime(), best.getTime())))
+  return { tradesSeenAt, tradesSinceAt: new Date(Math.min(sinceAt.getTime(), tradesSeenAt.getTime())) }
 }
 
 export function resolveVisitWindow(marker: VisitMarker | null, now: Date): VisitWindow {
   const floor = new Date(now.getTime() - MAX_WINDOW_MS)
-  if (!marker) return { sinceAt: floor, firstVisit: true, windowCapped: true, baseline: null }
+  if (!marker)
+    return { sinceAt: floor, firstVisit: true, windowCapped: true, baseline: null, tradesSinceAt: floor, tradesSeenAt: floor }
 
   const last = new Date(marker.lastSeenAt)
   const lastMs = last.getTime()
   if (Number.isFinite(lastMs) && now.getTime() >= lastMs && now.getTime() - lastMs < SESSION_GAP_MS) {
     const since = new Date(marker.sinceAt)
     const sinceOk = Number.isFinite(since.getTime()) && since.getTime() >= floor.getTime()
+    const sinceAt = sinceOk ? since : floor
     return {
-      sinceAt: sinceOk ? since : floor,
+      sinceAt,
       firstVisit: marker.firstVisit,
       windowCapped: !sinceOk || marker.firstVisit,
       baseline: marker.baseline,
+      ...tradesOf(marker, sinceAt, floor, now),
     }
   }
 
   const capped = !Number.isFinite(lastMs) || lastMs < floor.getTime()
+  const sinceAt = capped ? floor : last
   return {
-    sinceAt: capped ? floor : last,
+    sinceAt,
     firstVisit: false,
     windowCapped: capped,
     baseline: marker.latest,
+    ...tradesOf(marker, sinceAt, floor, now),
   }
 }
 
-export function nextVisitMarker(window: VisitWindow, current: VisitSnapshot, now: Date): VisitMarker {
+export function nextVisitMarker(
+  window: VisitWindow,
+  current: VisitSnapshot,
+  now: Date,
+  /** False when the trades read rejected or reported itself partial — see `tradesSeenAt`. */
+  tradesComplete = true,
+): VisitMarker {
   return {
     version: 1,
     lastSeenAt: now.toISOString(),
@@ -112,6 +216,9 @@ export function nextVisitMarker(window: VisitWindow, current: VisitSnapshot, now
     firstVisit: window.firstVisit,
     baseline: window.baseline,
     latest: current,
+    // ⚠ `tradesSeenAt`, NOT `tradesSinceAt` — carrying the clamped projection forward walks the
+    // boundary backward on a blind reload. See the note on VisitWindow.tradesSeenAt.
+    tradesSeenAt: (tradesComplete ? now : window.tradesSeenAt).toISOString(),
   }
 }
 
@@ -172,6 +279,13 @@ export type SinceLastVisitBrief = {
   sinceAt: string
   firstVisit: boolean
   windowCapped: boolean
+  /**
+   * ⚠ THE TRADE LINE CAN REACH FURTHER BACK THAN `sinceAt`, so the card cannot label it from the
+   * header. While the trades read is coming back blind its boundary is held (see `tradesSeenAt`),
+   * and the brief would otherwise print "since 1h ago" above a trade that landed five hours ago.
+   * Equal to `sinceAt` whenever the last read could stand behind itself, which is the normal case.
+   */
+  tradesSinceAt: string
   trades: { items: BriefTrade[]; atLeast: boolean }
   injuries: BriefInjury[]
   standings: BriefStanding[]
@@ -538,6 +652,12 @@ export async function getSinceLastVisit(args: {
   now: Date
   /** False for a prefetch or any speculative render: read the brief, never move the visit. */
   recordVisit: boolean
+  /**
+   * False when `recentTrades` is not the whole picture — the read rejected, or reported itself
+   * partial. The visit still moves; only the TRADE boundary is held, so the trades this read
+   * could not see are still there to report next time. See `tradesSeenAt`.
+   */
+  tradesComplete: boolean
 }): Promise<SinceLastVisitBrief | null> {
   const { userId, leagues, now } = args
   const marker = await readMarker(userId)
@@ -558,14 +678,16 @@ export async function getSinceLastVisit(args: {
   ])
 
   const current: VisitSnapshot = { takenAt: now.toISOString(), standings, injuries: injurySnap.injuries }
-  if (args.recordVisit) await writeMarker(userId, nextVisitMarker(window, current, now), now)
+  if (args.recordVisit) await writeMarker(userId, nextVisitMarker(window, current, now, args.tradesComplete), now)
 
   const leagueNames = new Map(leagues.map((l) => [l.id, l.name ?? 'Your league']))
   const brief: SinceLastVisitBrief = {
     sinceAt: window.sinceAt.toISOString(),
     firstVisit: window.firstVisit,
     windowCapped: window.windowCapped,
-    trades: tradesSince(args.recentTrades, window.sinceAt, args.tradesLimit),
+    // Its OWN boundary, which sits further back than `sinceAt` while the trades read is blind.
+    tradesSinceAt: window.tradesSinceAt.toISOString(),
+    trades: tradesSince(args.recentTrades, window.tradesSinceAt, args.tradesLimit),
     injuries: diffInjuries(window.baseline, current, injurySnap.meta),
     standings: diffStandings(window.baseline, current, leagueNames),
     alerts: groupAlerts(alertRows),

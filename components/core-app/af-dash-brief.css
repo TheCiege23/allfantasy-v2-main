@@ -64,6 +64,13 @@
 .af-brief-more {
   color: var(--muted);
 }
+/* How far the trade line reaches when its boundary was held back. It sits INSIDE
+   `.af-brief-what` (font-weight: 800), so it needs its own weight — `.af-brief-detail`
+   sets colour only, and reusing it here rendered a bold-muted aside. */
+.af-brief-reach {
+  color: var(--muted);
+  font-weight: 500;
+}
 .af-brief-pos {
   font-size: 10.5px;
   color: var(--muted);

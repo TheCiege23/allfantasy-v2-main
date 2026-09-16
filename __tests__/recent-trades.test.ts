@@ -68,7 +68,7 @@ beforeEach(() => {
   // By default nothing is priced, so no verdict is published.
   valueFindMany.mockResolvedValue([])
   scanPendingSleeperTrades.mockResolvedValue({
-    trades: [], completedTrades: [], scanned: true, reason: null, weeksUnanswered: 0,
+    trades: [], completedTrades: [], scanned: true, reason: null, unscannedKind: null, weeksUnanswered: 0,
   })
 })
 
@@ -229,7 +229,7 @@ describe('getRecentTrades', () => {
         readOnly: true, provider: 'sleeper', lifecycleStatus: 'complete',
         viewerRosterExternalId: '1', counterpartyRosterExternalId: '2',
       }],
-      scanned: true, reason: null, weeksUnanswered: 0,
+      scanned: true, reason: null, unscannedKind: null, weeksUnanswered: 0,
     })
     const out = await getRecentTrades(
       [{ ...LEAGUES[0], platform: 'sleeper' }], NOW, 3,
@@ -259,9 +259,9 @@ describe('getRecentTrades', () => {
         platformLeagueId === '111'
           ? {
               trades: [offer('in-1'), offer('in-2'), offer('sent', { proposedByViewer: true })],
-              completedTrades: [], scanned: true, reason: null, weeksUnanswered: 0,
+              completedTrades: [], scanned: true, reason: null, unscannedKind: null, weeksUnanswered: 0,
             }
-          : { trades: [], completedTrades: [], scanned: false, reason: 'no roster', weeksUnanswered: 0 },
+          : { trades: [], completedTrades: [], scanned: false, reason: 'no roster', unscannedKind: 'identity', weeksUnanswered: 0 },
       )
       const onPendingOffers = vi.fn()
       await getRecentTrades(TWO, NOW, 3, { ownerSleeperId: 'owner-1', currentWeek: 2, onPendingOffers })
@@ -275,6 +275,164 @@ describe('getRecentTrades', () => {
         { ownerSleeperId: 'owner-1', currentWeek: 2, onPendingOffers: () => { throw new Error('boom') } },
       )
       expect(out.length).toBeGreaterThan(0)
+    })
+
+    /*
+     * 🛑 THIS READ RESOLVES WHILE BLIND, AND THE CALLER CANNOT SEE IT FROM THE RESULT. Every
+     * source degrades to empty rather than throwing, so `[]` means "nothing traded" OR "we could
+     * not look" — and /core closes the "since your last visit" trade boundary on that difference.
+     * One case per way it can happen, plus the case where it must stay QUIET.
+     */
+    describe('reporting what it could not see', () => {
+      const answered = {
+        trades: [], completedTrades: [], scanned: true, reason: null, unscannedKind: null, weeksUnanswered: 0,
+      }
+      /*
+       * The scan mock is file-scoped; without this the cap case counts a previous test's calls.
+       * ⚠ Block body, not a concise one: vitest treats a FUNCTION returned from `beforeEach` as a
+       * teardown callback, and `mockClear()` returns the mock — so the arrow form had vitest
+       * calling the scan with no arguments after each test.
+       */
+      beforeEach(() => {
+        scanPendingSleeperTrades.mockClear()
+      })
+
+      it('says nothing when the cache read and every scan answered in full', async () => {
+        scanPendingSleeperTrades.mockResolvedValue(answered)
+        const onIncomplete = vi.fn()
+        await getRecentTrades(TWO, NOW, 3, { ownerSleeperId: 'owner-1', currentWeek: 2, onIncomplete })
+        expect(onIncomplete).not.toHaveBeenCalled()
+      })
+
+      /*
+       * The PRIMARY source, and the one a rejection check misses entirely: this fallback keeps the
+       * card up, which is right, but `[]` from it is not evidence that nothing traded. It is also
+       * the only one of these that fires for an account with no Sleeper identity at all.
+       */
+      it('reports a grade cache it could not read — even with no live scan to run', async () => {
+        cacheFindMany.mockRejectedValueOnce(new Error('pool timeout'))
+        const onIncomplete = vi.fn()
+        const out = await getRecentTrades(
+          [{ id: 'af-1', name: 'One', platformLeagueId: '111', platform: 'espn' }], NOW, 3,
+          { ownerSleeperId: null, currentWeek: 2, onIncomplete },
+        )
+        expect(out).toEqual([])
+        expect(onIncomplete).toHaveBeenCalledWith('grade-cache-unreadable')
+      })
+
+      /*
+       * ⚠ THE FIXTURE MUST CARRY A KIND, and the reason it must is worth stating: this asserted
+       * `onIncomplete` WAS called, and with no `unscannedKind` it passed only because
+       * `undefined !== 'identity'`. So it pinned the ABSENCE of a field the type now requires,
+       * four tests above another that asserts the opposite for the same `reason` string. Tests
+       * are not typechecked here, so nothing else would have caught it.
+       */
+      it('reports a league whose scan never answered', async () => {
+        scanPendingSleeperTrades.mockImplementation(async ({ platformLeagueId }: { platformLeagueId: string }) =>
+          platformLeagueId === '111'
+            ? answered
+            : { ...answered, scanned: false, reason: 'Sleeper did not answer', unscannedKind: 'provider' },
+        )
+        const onIncomplete = vi.fn()
+        await getRecentTrades(TWO, NOW, 3, { ownerSleeperId: 'owner-1', currentWeek: 2, onIncomplete })
+        expect(onIncomplete).toHaveBeenCalledWith('league-scan-unanswered')
+        // One league failed, so exactly one report: the contract is once per OCCURRENCE, and
+        // `toHaveBeenCalledWith` alone would pass however many times it fired.
+        expect(onIncomplete).toHaveBeenCalledTimes(1)
+      })
+
+      /* The other half of "once per occurrence": both leagues blind means both are reported. */
+      it('reports each blind league separately', async () => {
+        scanPendingSleeperTrades.mockResolvedValue({
+          ...answered, scanned: false, reason: 'Sleeper could not be reached', unscannedKind: 'provider',
+        })
+        const onIncomplete = vi.fn()
+        await getRecentTrades(TWO, NOW, 3, { ownerSleeperId: 'owner-1', currentWeek: 2, onIncomplete })
+        expect(onIncomplete.mock.calls).toEqual([['league-scan-unanswered'], ['league-scan-unanswered']])
+      })
+
+      /*
+       * 🛑 AND A SCAN THAT CANNOT EVER SUCCEED IS NOT A FAILURE TO REPORT. `scanned: false` also
+       * means "no roster in this league is owned by your linked account" — permanent, same answer
+       * on every render for the life of the league. Reporting it holds /core's trade window open
+       * FOREVER: the boundary never advances, the same trades are re-reported on every visit, and
+       * nothing can clear it, because the only thing that would is a complete scan that cannot
+       * happen. It is the rule this file already applies to the `maxLeagues` cap, reached from a
+       * direction the first version of this callback did not consider.
+       */
+      it('stays quiet about a league the account owns no roster in', async () => {
+        scanPendingSleeperTrades.mockResolvedValue({
+          ...answered,
+          scanned: false,
+          reason: 'no roster in this Sleeper league is owned by your linked account',
+          unscannedKind: 'identity',
+        })
+        const onIncomplete = vi.fn()
+        await getRecentTrades(TWO, NOW, 3, { ownerSleeperId: 'owner-1', currentWeek: 2, onIncomplete })
+        expect(onIncomplete).not.toHaveBeenCalled()
+      })
+
+      /* A mix: the permanent one is silent, the transient one is reported. */
+      it('separates a permanent identity result from a provider failure in the same pass', async () => {
+        scanPendingSleeperTrades.mockImplementation(async ({ platformLeagueId }: { platformLeagueId: string }) =>
+          platformLeagueId === '111'
+            ? { ...answered, scanned: false, reason: 'no roster', unscannedKind: 'identity' }
+            : { ...answered, scanned: false, reason: 'Sleeper could not be reached', unscannedKind: 'provider' },
+        )
+        const onIncomplete = vi.fn()
+        await getRecentTrades(TWO, NOW, 3, { ownerSleeperId: 'owner-1', currentWeek: 2, onIncomplete })
+        expect(onIncomplete.mock.calls).toEqual([['league-scan-unanswered']])
+      })
+
+      /* A scan the loader's own `.catch` turned into null knows nothing — treat it as the provider. */
+      it('reports a scan that threw, which has no kind of its own', async () => {
+        scanPendingSleeperTrades.mockRejectedValue(new Error('socket hang up'))
+        const onIncomplete = vi.fn()
+        await getRecentTrades([TWO[0]!], NOW, 3, { ownerSleeperId: 'owner-1', currentWeek: 2, onIncomplete })
+        expect(onIncomplete.mock.calls).toEqual([['league-scan-unanswered']])
+      })
+
+      /*
+       * `scanned: true` with weeks missing. PendingTradeScan's own docblock says a partial scan
+       * still counts as scanned and that "nothing waiting" is weaker than it looks — a trade
+       * accepted in the week Sleeper refused is simply absent from a result that looks clean.
+       */
+      it('reports a scan that answered for only some of its weeks', async () => {
+        scanPendingSleeperTrades.mockResolvedValue({ ...answered, weeksUnanswered: 1 })
+        const onIncomplete = vi.fn()
+        await getRecentTrades(TWO, NOW, 3, { ownerSleeperId: 'owner-1', currentWeek: 2, onIncomplete })
+        expect(onIncomplete).toHaveBeenCalledWith('league-scan-partial-weeks')
+      })
+
+      /*
+       * ⚠ AND IT STAYS QUIET FOR THE TWO BOUNDS THAT ARE PERMANENT — for DIFFERENT reasons, which
+       * an earlier version of this comment got wrong by giving the cap's reason for both. The cap
+       * is not a blind spot at all: the grade cache is read for every league with a platform id,
+       * before the slice. A non-Sleeper league is the opposite — it has no trade source here
+       * whatsoever, because that cache is keyed by Sleeper league id and only a Sleeper service
+       * writes it. What they share is permanence: reporting either as a transient failure would
+       * hold the trade boundary open forever for anyone with nine leagues or one ESPN league.
+       */
+      it('stays quiet about the maxLeagues cap and non-Sleeper leagues', async () => {
+        scanPendingSleeperTrades.mockResolvedValue(answered)
+        const onIncomplete = vi.fn()
+        const many = Array.from({ length: 5 }, (_, i) => ({
+          id: `af-${i}`, name: `L${i}`, platformLeagueId: `${i}`, platform: i < 3 ? 'sleeper' : 'espn',
+        }))
+        await getRecentTrades(many, NOW, 3, { ownerSleeperId: 'owner-1', currentWeek: 2, maxLeagues: 2, onIncomplete })
+        expect(scanPendingSleeperTrades).toHaveBeenCalledTimes(2)
+        expect(onIncomplete).not.toHaveBeenCalled()
+      })
+
+      it('a throwing listener never costs the trades', async () => {
+        cacheFindMany.mockRejectedValueOnce(new Error('pool timeout'))
+        scanPendingSleeperTrades.mockResolvedValue(answered)
+        await expect(
+          getRecentTrades(TWO, NOW, 3, {
+            ownerSleeperId: 'owner-1', currentWeek: 2, onIncomplete: () => { throw new Error('boom') },
+          }),
+        ).resolves.toEqual([])
+      })
     })
   })
 })

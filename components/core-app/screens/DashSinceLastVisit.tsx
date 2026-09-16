@@ -18,13 +18,65 @@ import type { BriefStanding, SinceLastVisitBrief } from '@/lib/core-app/sinceLas
  * check this repo runs, and a brief nobody expands is not a brief.
  */
 
+function agoLabel(from: string, now: Date): string {
+  const mins = Math.round((now.getTime() - new Date(from).getTime()) / 60000)
+  if (mins < 60) return `${Math.max(1, mins)}m`
+  const hours = Math.round(mins / 60)
+  if (hours < 48) return `${hours}h`
+  return `${Math.round(hours / 24)}d`
+}
+
+/**
+ * How much FURTHER back one instant is than another — a duration, not a point in time.
+ *
+ * 🛑 THE TRADE ROW'S NOTE IS A GAP FOR A REASON, AND TWO ABSOLUTE LABELS WERE TRIED FIRST. Both
+ * failed the same way: any second label formatted from the same clock has to be compared against
+ * the header's, and the comparison is where the bugs live. Printing `agoLabel` of the boundary
+ * collided with the header ("since 2h ago (last 2h)"); printing it at a finer unit read SMALLER
+ * than the header in 28% of the cases it fired — measured, e.g. "since 3d ago (last 2d 12h)" for a
+ * boundary an hour FURTHER back, because `agoLabel` rounds the day division and the finer form
+ * floored it. A gap cannot do either: it is monotone in the thing it describes, it is never
+ * comparable to the header, and it needs no materiality constant to stay honest.
+ */
+function gapLabel(fromMs: number, toMs: number): string | null {
+  const mins = Math.round((toMs - fromMs) / 60000)
+  if (mins < 1) return null
+  if (mins < 60) return `${mins}m`
+  const hours = Math.round(mins / 60)
+  if (hours < 48) return `${hours}h`
+  return `${Math.round(hours / 24)}d`
+}
+
 function whenLabel(brief: SinceLastVisitBrief, now: Date): string {
   if (brief.firstVisit || brief.windowCapped) return 'last 7 days'
-  const mins = Math.round((now.getTime() - new Date(brief.sinceAt).getTime()) / 60000)
-  if (mins < 60) return `since ${Math.max(1, mins)}m ago`
-  const hours = Math.round(mins / 60)
-  if (hours < 48) return `since ${hours}h ago`
-  return `since ${Math.round(hours / 24)}d ago`
+  return `since ${agoLabel(brief.sinceAt, now)} ago`
+}
+
+/**
+ * ⚠ THE HEADER DOES NOT DESCRIBE THE TRADE ROW WHEN THE TRADE BOUNDARY IS HELD. A trades read that
+ * came back blind leaves its boundary further back than the visit window (see `tradesSeenAt` in
+ * lib/core-app/sinceLastVisit), so the card would otherwise print "since 1h ago" over a trade that
+ * landed five hours ago — and the rows carry no dates of their own to contradict it.
+ *
+ * Null whenever the two round to the same minute, which is the normal case: the boundary tracks
+ * the visit window exactly unless a read came back blind.
+ */
+function tradeReachLabel(brief: SinceLastVisitBrief): string | null {
+  /*
+   * ⚠ GUARDED AGAINST A VALUE THE TYPE SAYS CANNOT HAPPEN — in two different ways, because they
+   * are two different inputs. Tests are not typechecked in this repo, so a fixture built before
+   * this field existed hands over `undefined`; and a stored brief could carry a string that does
+   * not parse. Either would put NaN in the note rather than suppressing it.
+   */
+  if (typeof brief.tradesSinceAt !== 'string') return null
+  const reach = new Date(brief.tradesSinceAt).getTime()
+  // ⚠ BOTH ends checked. Guarding only `tradesSinceAt` left `reaches NaNd further back` reachable
+  // through an unparseable `sinceAt`, because `reach >= NaN` is false and skips the early return.
+  const since = new Date(brief.sinceAt).getTime()
+  if (!Number.isFinite(reach) || !Number.isFinite(since) || reach >= since) return null
+  // No `now`: a gap between two stored instants does not depend on when it is rendered.
+  const gap = gapLabel(reach, since)
+  return gap && `reaches ${gap} further back`
 }
 
 function statusText(status: string | null): string {
@@ -47,6 +99,7 @@ function resultText(s: BriefStanding): string {
 export function DashSinceLastVisit({ brief, now }: { brief: SinceLastVisitBrief | null; now: Date }) {
   if (!brief) return null
   const { trades, injuries, standings, alerts } = brief
+  const tradeReach = tradeReachLabel(brief)
 
   return (
     <section className="af-core af-brief" aria-label="Since your last visit">
@@ -62,6 +115,7 @@ export function DashSinceLastVisit({ brief, now }: { brief: SinceLastVisitBrief 
               <span className="af-brief-what">
                 {trades.atLeast ? `${trades.items.length}+` : trades.items.length} new trade
                 {trades.items.length === 1 && !trades.atLeast ? '' : 's'}
+                {tradeReach ? <span className="af-brief-reach"> ({tradeReach})</span> : null}
               </span>
               <ul className="af-brief-sub">
                 {trades.items.map((t) => (

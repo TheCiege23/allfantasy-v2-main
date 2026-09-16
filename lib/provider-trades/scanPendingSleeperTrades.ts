@@ -2,6 +2,7 @@ import 'server-only'
 
 import type { SleeperTransaction } from '@/lib/sleeper-client'
 import {
+  SleeperHttpError,
   getAllPlayers,
   getLeagueRosters,
   getLeagueTransactions,
@@ -207,11 +208,11 @@ export function buildTradeAssetsForRoster(args: {
  * What the scan was actually able to do.
  *
  * ⚠ AN EMPTY LIST IS NOT AN ANSWER ON ITS OWN. `scanPendingSleeperTradesForLeague`
- * returns `[]` for four different situations — nothing is pending, we could not
- * work out which roster is the viewer's, Sleeper did not answer, or the league
- * was never a Sleeper league. A surface that renders all four as "no offers
- * waiting" states a fact we never established, which is exactly the failure the
- * Trades screen's `inbox.reason` was written to avoid.
+ * returns `[]` for five different situations — nothing is pending, we could not
+ * work out which roster is the viewer's, Sleeper returned no rosters at all,
+ * Sleeper did not answer, or the league was never a Sleeper league. A surface that
+ * renders them all as "no offers waiting" states a fact we never established, which
+ * is exactly the failure the Trades screen's `inbox.reason` was written to avoid.
  *
  * So the scan reports whether it ran. Callers that want to say "nothing is
  * waiting" must check `scanned` first; callers that only want the rows can keep
@@ -225,6 +226,25 @@ export type PendingTradeScan = {
   scanned: boolean
   /** Why the scan did not run. Null when it did. */
   reason: string | null
+  /**
+   * 🛑 WHETHER A CALLER SHOULD EVER EXPECT A DIFFERENT ANSWER. `scanned: false` covers two
+   * unrelated situations, and collapsing them is a bug in the caller rather than a nuance:
+   *   `provider` — Sleeper refused, or could not be reached. Try again and it may work.
+   *   `identity` — this account owns no roster in this league, we do not know which Sleeper
+   *                account is theirs, or the league no longer exists on Sleeper (404/410).
+   *                Same input, same answer, on every render forever.
+   *                ⚠ THREE PRODUCERS, AND THE THIRD CARRIES DIFFERENT USER-FACING COPY: a
+   *                caller that renders a remedy must read `reason`, not infer one from the kind.
+   *
+   * /core's "since your last visit" holds its trade window open while a read is incomplete, so
+   * treating an `identity` result as a transient failure holds that window open for the life of
+   * the league — re-reporting the same trades on every visit, with nothing able to clear it.
+   * Null when `scanned` is true.
+   * ⚠ REQUIRED, NOT OPTIONAL, ON PURPOSE. A `?` here means the compiler cannot census the
+   * return sites, and this repo has four recorded cases of a grep census giving the wrong
+   * answer. A producer that knows the answer and silently omits it is the failure mode.
+   */
+  unscannedKind: 'provider' | 'identity' | null
   /**
    * Weeks Sleeper refused while others answered. A partial scan still counts as
    * scanned — but "nothing waiting" is weaker than it looks, and the caller
@@ -255,25 +275,55 @@ export async function scanPendingSleeperTrades(args: {
       trades: [],
       scanned: false,
       reason: 'we do not know which Sleeper account is yours in this league',
+      unscannedKind: 'identity',
       weeksUnanswered: 0,
     }
   }
 
   try {
+    /*
+     * 🛑 THE ROSTERS READ IS NOT CAUGHT HERE, AND THAT IS THE WHOLE POINT.
+     *
+     * It used to be `.catch(() => [])`, which made "Sleeper refused the rosters call" and "you own
+     * no roster in this league" THE SAME VALUE at the lookup below — and once the caller started
+     * treating the second as permanent, a 429 during an eight-league fan-out was silently
+     * classified as permanent too, and /core closed its trade window over a league it never read.
+     * That is the exact bug the `unscannedKind` split was added to prevent, reintroduced by the
+     * split itself. Letting it throw sends it to the outer catch, which reports `provider` —
+     * unless the status says the league is GONE (404/410), which is the one throw that is
+     * permanent. See the classification in that catch.
+     *
+     * `users` stays caught: it decorates names, and an empty list costs a label, not a verdict.
+     */
     const [rosters, users] = await Promise.all([
-      getLeagueRosters(platformLeagueId).catch(() => []),
+      getLeagueRosters(platformLeagueId),
       getLeagueUsers(platformLeagueId).catch(() => []),
     ])
 
-    const roster = (Array.isArray(rosters) ? (rosters as SleeperRosterRow[]) : []).find(
-      (r) => String(r.owner_id) === String(ownerSleeperId),
-    )
+    const rosterRows = Array.isArray(rosters) ? (rosters as SleeperRosterRow[]) : []
+    /*
+     * An empty-but-successful rosters response is not evidence about WHOSE rosters these are — we
+     * saw nothing, so we cannot conclude the viewer owns none. Only a list we actually read, with
+     * no entry of theirs in it, is an identity answer.
+     */
+    if (rosterRows.length === 0) {
+      return {
+        trades: [],
+        scanned: false,
+        reason: 'Sleeper returned no rosters for this league',
+        unscannedKind: 'provider',
+        weeksUnanswered: 0,
+      }
+    }
+
+    const roster = rosterRows.find((r) => String(r.owner_id) === String(ownerSleeperId))
     const userRosterId = Number(roster?.roster_id)
     if (!Number.isFinite(userRosterId)) {
       return {
         trades: [],
         scanned: false,
         reason: 'no roster in this Sleeper league is owned by your linked account',
+        unscannedKind: 'identity',
         weeksUnanswered: 0,
       }
     }
@@ -364,7 +414,7 @@ export async function scanPendingSleeperTrades(args: {
         const creator = tx.creator ? userById.get(tx.creator) : undefined
         const proposedByViewer = Boolean(tx.creator && String(tx.creator) === String(ownerSleeperId))
         const otherRosterId = tx.roster_ids?.find((id) => Number(id) !== userRosterId)
-        const otherOwnerId = (Array.isArray(rosters) ? (rosters as SleeperRosterRow[]) : [])
+        const otherOwnerId = rosterRows
           .find((row) => Number(row.roster_id) === Number(otherRosterId))?.owner_id
         const otherManager = otherOwnerId ? userById.get(otherOwnerId) : undefined
         const row: PendingProviderTrade = {
@@ -397,6 +447,7 @@ export async function scanPendingSleeperTrades(args: {
         trades: [],
         scanned: false,
         reason: 'Sleeper did not answer for this league',
+        unscannedKind: 'provider',
         weeksUnanswered,
         weeksRequested: weeks.length,
         weeksAnswered: 0,
@@ -409,16 +460,37 @@ export async function scanPendingSleeperTrades(args: {
       completedTrades: completed.slice(0, 50),
       scanned: true,
       reason: null,
+      unscannedKind: null,
       weeksUnanswered,
       weeksRequested: weeks.length,
       weeksAnswered: weeks.length - weeksUnanswered,
     }
-  } catch {
-    // Provider unavailability must never break the caller's own panel.
+  } catch (err) {
+    /*
+     * Provider unavailability must never break the caller's own panel.
+     *
+     * 🛑 BUT A 404 IS NOT UNAVAILABILITY. A league id that no longer resolves — deleted on Sleeper,
+     * or a shadow/mis-import — answers 404 on every render for the life of the row. Reported as
+     * `provider`, that holds /core's trade boundary open forever, which is the exact harm the
+     * provider/identity split was added to prevent, reached from the other side. `SleeperHttpError`
+     * carries the status as a field so this does not have to parse it back out of a message.
+     *
+     * 🛑 ONLY 404 AND 410, NOT "4xx EXCEPT 429". A wider cut was tried and is wrong twice over.
+     * Sleeper's v1 API is public and unauthenticated, so a 401 or 403 is an edge/WAF block, not a
+     * statement about the league; 408 and 425 are transient by definition. And `reason` is rendered
+     * VERBATIM to the manager (components/core-app/screens/TradeInbox.tsx), so a wrong permanent
+     * verdict does not just hold a boundary — it tells someone their league is gone when it is not.
+     * 404 is the one status this repo has actually measured for a deleted league
+     * (lib/import-os/collector/leagueGone.ts). 410 is included as the same statement by
+     * definition, not because it has been observed — Sleeper is not known to emit it.
+     */
+    const status = err instanceof SleeperHttpError ? err.status : null
+    const gone = status === 404 || status === 410
     return {
       trades: [],
       scanned: false,
-      reason: 'Sleeper could not be reached',
+      reason: gone ? 'this league no longer exists on Sleeper' : 'Sleeper could not be reached',
+      unscannedKind: gone ? 'identity' : 'provider',
       weeksUnanswered: 0,
     }
   }

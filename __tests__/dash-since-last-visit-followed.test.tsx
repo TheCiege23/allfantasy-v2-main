@@ -15,6 +15,8 @@ const NOW = new Date('2026-09-14T15:00:00Z')
 function brief(injuries: BriefInjury[]): SinceLastVisitBrief {
   return {
     sinceAt: new Date(NOW.getTime() - 5 * 3_600_000).toISOString(),
+    // Same instant as `sinceAt` unless the trades read came back blind and its boundary was held.
+    tradesSinceAt: new Date(NOW.getTime() - 5 * 3_600_000).toISOString(),
     firstVisit: false,
     windowCapped: false,
     trades: { items: [], atLeast: false },

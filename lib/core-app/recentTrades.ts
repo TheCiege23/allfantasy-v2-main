@@ -14,15 +14,40 @@ import { scanPendingSleeperTrades } from '@/lib/provider-trades/scanPendingSleep
  * ⚠ THE DATA WAS NEVER MISSING. The /core home carries a coverage note saying
  * trades are not ingested, and the league home hard-codes its activity feed
  * unavailable "because league transactions are not ingested for this platform
- * yet". Both statements are false: the trade-grade sweep runs every 30 minutes
- * over every imported Sleeper league, resolves BOTH sides down to individual
- * players and draft picks, grades them, and caches the result. Two surfaces
- * have been declining to look, and one of them says so in words that are
- * wrong.
+ * yet". Both statements are false: `lib/trade-intel/sleeperTradeGradeService`
+ * resolves BOTH sides of a Sleeper trade down to individual players and draft
+ * picks, grades them, and caches the result. Two surfaces have been declining
+ * to look, and one of them says so in words that are wrong.
  *
  * This reads that cache. One `in` query over the account's Sleeper league ids,
- * no provider call, no per-league fan-out, nothing recomputed — the cron has
- * already paid for all of it.
+ * no provider call, no per-league fan-out, nothing recomputed.
+ *
+ * WHAT FILLS THAT CACHE, measured rather than assumed — an earlier version of this note asserted
+ * under a 🛑 that nothing did, and that was FALSE. `/api/cron/trade-grade-notify` runs every fifteen minutes
+ * (cron-schedule.json, and it is in the live fast-tier loop) and calls `detectAndNotifyAll(12, 8)`,
+ * which reaches `getTradeGrades(id, { force: true })` through lib/trade-intel/tradeNotifyService
+ * and force-upserts this exact row. Twelve leagues per fire by cursor — so every imported Sleeper
+ * league is reached eventually — plus the eight most recently viewed, every fire. It diffs the
+ * league's OWN transaction feed, so a trade between two other managers is what triggers it.
+ *
+ * ⚠ THE CENSUS THAT GOT THIS WRONG IS WORTH MORE THAN THE FACT. It was
+ * `grep -rln getTradeGrades app/api/cron` → empty → "no scheduled caller". The cron reaches it one
+ * module away, through `tradeNotifyService`. A grep scoped to a directory answers "does this
+ * directory MENTION the symbol", never "does anything in it REACH the symbol" — the same failure
+ * CLAUDE.md already records four times.
+ *
+ * ⚠ STILL TRUE, AND THE REASON THIS CACHE IS LOAD-BEARING: the live Sleeper top-up below cannot
+ * supply a trade the viewer is not in. `scanPendingSleeperTrades` keeps only transactions whose
+ * `roster_ids` include the viewer's, and `liveCompletedTrade` hard-codes one side as "You". So
+ * every trade between two OTHER managers reaches this loader through the cache or not at all, and
+ * this loader never builds it.
+ *
+ * ⚠ AND THE CRON REACHING A LEAGUE IS NOT ENOUGH TO WARM IT. `detectAndNotifyLeague` grades only
+ * when the feed shows an id it has not seen, and its FIRST fire for a league takes the bootstrap
+ * path — it records the seen-set and grades nothing. So a league whose trades all predate that
+ * first fire never gets a row from this cron, and a trade landing between import and that fire
+ * is marked seen without ever being built. A cold row stays cold until a trade the cron has not
+ * seen lands in that league.
  *
  * ⚠ THE SWEEP'S OWN LETTER IS NOT USED, AND THAT IS THE POINT. It is a
  * RETROSPECTIVE grade scored on points already realised: days after a trade it
@@ -107,6 +132,68 @@ export type RecentTradesLiveOptions = {
    * scan actually answered; a league that did not answer is absent, never "0".
    */
   onPendingOffers?: (scanned: Array<{ leagueId: string; waiting: number }>) => void
+  /**
+   * 🛑 THIS READ RESOLVES WHILE MISSING TRADES, AND ALWAYS HAS. Every source below degrades
+   * rather than throwing: the grade-cache query falls back to `[]`, each league's live scan
+   * catches its own failure, and a scan that answered for only SOME of its weeks still
+   * reports `scanned: true` (see `weeksUnanswered` on PendingTradeScan). So a caller that
+   * watches only for a REJECTION cannot tell "nothing traded" from "we could not see most
+   * of it".
+   *
+   * That difference decides whether /core closes the "since your last visit" window, and
+   * closing it over trades this read never saw means they never appear in any brief. Called
+   * once per OCCURRENCE — three unanswered leagues fire three times — before the returned
+   * promise settles. `reason` is a closed vocabulary: never a league id, a provider id or an
+   * error message.
+   *
+   * ⚠ NOR IS IT CALLED FOR ANYTHING PERMANENT, and that rule has three separate applications —
+   * the `maxLeagues` cap, a non-Sleeper league, and a scan that came back `unscannedKind:
+   * 'identity'` (no roster of yours in that league). A permanent bound reported as a transient
+   * failure holds the caller's window open for the life of the league, with nothing able to
+   * clear it. Their reasons are all DIFFERENT, and two earlier versions of this note got one or
+   * another of them wrong:
+   *   - `unscannedKind: 'identity'` costs nothing. The grade cache is read for that league anyway
+   *     (`byPlatformId` is built before any filter) and `trade-grades:v2:*` is LEAGUE-scoped, not
+   *     viewer-scoped. The live scan could never have added anything either: `completedTrades` is
+   *     filtered by the viewer's roster id, and there is no roster id.
+   *   - A non-Sleeper league has no trade source here AT ALL. The cache is keyed by Sleeper league
+   *     id and written only by lib/trade-intel/sleeperTradeGradeService, so an ESPN or Yahoo
+   *     league has no row and never will — it is not "covered by the cache".
+   *   - 🛑 THE `maxLeagues` CAP *IS* A BLIND SPOT, AND THIS NOTE SAID OTHERWISE. It claimed "the
+   *     exposure is only a trade newer than the 30-minute grade sweep" — the cadence is every fifteen minutes
+   *     and the coverage is a cursor page plus the recently-viewed lane (see the module note), but
+   *     the shape of the claim was right and only the number was wrong. What it got wrong is that
+   *     the exposure is not bounded, it is LOST: a trade lands in capped league #12 at T−5min;
+   *     this render does not live-scan it and the cache does not have it yet, so the caller's
+   *     boundary closes at T; when the cache is next built, `tradesSince` filters on
+   *     `acceptedAt > T` and T−5min never qualifies. The league list is sorted by name, so it is
+   *     the same leagues every render.
+   *
+   *     ⚠ AND THE CAP IS NOT THE ONLY WAY IN. The same loss happens with no cap, on a healthy
+   *     read, for a trade between two other managers that lands between the cron reaching that
+   *     league and this render — because the live scan cannot see those trades at all. This
+   *     callback's complete/incomplete shape cannot express it: a read can be "complete" and still
+   *     be vouching for a cache built some minutes ago. What the boundary actually wants is the
+   *     instant the read can stand behind, not a boolean. Recorded, not fixed here.
+   * What all three share is being PERMANENT and deterministic. Reporting a permanent bound as a
+   * transient failure would hold the trade boundary open for the life of the league.
+   */
+  onIncomplete?: (reason: 'grade-cache-unreadable' | 'league-scan-unanswered' | 'league-scan-partial-weeks') => void
+}
+
+/**
+ * Report a gap in what this read could see. A throwing listener must never cost the trades
+ * this loader exists to return — same rule as `onPendingOffers`, and the same reason.
+ */
+function reportIncomplete(
+  live: RecentTradesLiveOptions | undefined,
+  reason: Parameters<NonNullable<RecentTradesLiveOptions['onIncomplete']>>[0],
+): void {
+  try {
+    live?.onIncomplete?.(reason)
+  } catch {
+    // A listener's failure is not this read's failure.
+  }
 }
 
 function liveCompletedTrade(
@@ -259,9 +346,19 @@ export async function getRecentTrades(
   if (byPlatformId.size === 0) return []
 
   const keys = [...byPlatformId.keys()].map((id) => `${CACHE_PREFIX}${id}`)
+  /*
+   * ⚠ THIS FALLBACK IS THE READ'S LARGEST BLIND SPOT, NOT A CORNER CASE — it is the PRIMARY
+   * source, and the live scan below only tops it up for Sleeper. Failing to `[]` keeps the
+   * card up, which is right; letting the caller believe that `[]` meant "nothing traded" is
+   * not. A pool timeout here is exactly how /core would close the visit window over every
+   * graded trade it holds, so the failure is reported rather than swallowed.
+   */
   const rows = await prisma.sportsDataCache
     .findMany({ where: { cacheKey: { in: keys } }, select: { cacheKey: true, data: true } })
-    .catch(() => [] as { cacheKey: string; data: unknown }[])
+    .catch(() => {
+      reportIncomplete(live, 'grade-cache-unreadable')
+      return [] as { cacheKey: string; data: unknown }[]
+    })
 
   const cutoff = now.getTime() - RECENT_DAYS * 24 * 60 * 60 * 1000
   const out: RecentTrade[] = []
@@ -336,6 +433,30 @@ export async function getRecentTrades(
           weeks,
         }).catch(() => null)
       }))
+    }
+    /*
+     * What this pass could NOT see, reported before anything is returned. `scanned` alone hides
+     * all of it: a league whose scan threw is `null`, one Sleeper refused is `scanned: false`, and
+     * one that answered for a single week of three is `scanned: TRUE` with `weeksUnanswered > 0` —
+     * its own docblock says "nothing waiting" is weaker than it looks there.
+     *
+     * ⚠ `scanned: false` is NOT uniformly reportable, though; see the split below.
+     */
+    for (const scan of scans) {
+      if (!scan?.scanned) {
+        /*
+         * 🛑 ONLY A PROVIDER FAILURE IS WORTH REPORTING. `scanned: false` also covers "this
+         * account owns no roster in this league", "we do not know which Sleeper account is
+         * yours", and "the league no longer exists on Sleeper" (a 404/410 on the rosters read)
+         * — `unscannedKind: 'identity'`, and all three are permanent: same input, same answer,
+         * every render for the life of the league. Reporting one as a transient failure holds
+         * /core's trade window open forever, which is the rule this file states two hunks up and
+         * the reason the `maxLeagues` cap is not reported either.
+         *
+         * A `null` scan is the loader's own `.catch` on the provider call, so it is `provider`.
+         */
+        if (scan?.unscannedKind !== 'identity') reportIncomplete(live, 'league-scan-unanswered')
+      } else if (scan.weeksUnanswered > 0) reportIncomplete(live, 'league-scan-partial-weeks')
     }
     if (live.onPendingOffers) {
       /*

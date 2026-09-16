@@ -101,6 +101,25 @@ A read that waits for another (`trades` for the current week, `since-last-visit`
 traced from the start of its chain, so its duration is how long that card waited, not just its own
 query.
 
+🛑 **SO THESE SPANS OVERLAP, AND SUMMING THEM IS MEANINGLESS.** They are siblings under the root, not
+nested, but each one covers the whole chain it waited on: `since-last-visit` covers `trade-week` →
+`trades` → its own query, and `trades` covers `trade-week` → its own, and all three start within a
+tick of each other. Add the `core.card` durations of one render and you get several times the wall
+time that render took, because the same waits are counted once per card that waited on them.
+`sum()` and `avg()` across cards are wrong for the same reason. Rank cards with
+`p75(span.duration)` — the question this data answers is *which card is the home waiting for*, and
+the longest span is the answer. To attribute the wait itself, read the chain: a `since-last-visit`
+that is slow while `trades` is fast is slow on its own query; one that tracks `trades` is waiting,
+not working.
+
+⚠ **`urgency-badges` is CHROME, not one of the cards.** It carries an `af.card` value and lands in
+the same `span.op:core.card` grouping, but it feeds the tab counts in the shell, not the grid: no
+card waits for it, and it is outside `af.shell_ms` too. On the home it *also* waits for the trade
+scan's pending-offers write — but only for an account with a Sleeper identity, since no other
+account produces that write — so its p75 is bimodal and it is routinely the longest span in the
+group while holding nothing up. Exclude it (`!af.card:urgency-badges`) when ranking what the page is
+blocked on, and do not read a short p75 as the chaining having regressed.
+
 ⚠ The home streams each card on its own, so its `span.duration` is its SLOWEST card, not what the user
 saw first. A render failure inside a card is reported as an error tagged `af.boundary:core-card` and
 `af.card:<card>` (the card, not the read — `issues`, `career`, …).
