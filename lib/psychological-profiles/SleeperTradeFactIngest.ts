@@ -3,6 +3,9 @@ import 'server-only'
 import { prisma } from '@/lib/prisma'
 import { jitterSleep, runWithConcurrency, sleep } from '@/lib/async-utils'
 import { toPrismaJsonInput } from '@/lib/prisma-json'
+import { shouldSkipImportedSeason } from '@/lib/league-import/seasonCompletion'
+import { firstWeekToFetch } from '@/lib/league-import/sleeper/SleeperHistoricalTransactionSyncService'
+import { getNflState } from '@/lib/sleeper-client'
 import { normalizeSportForPsych } from './SportBehaviorResolver'
 
 /**
@@ -23,6 +26,28 @@ import { normalizeSportForPsych } from './SportBehaviorResolver'
  * upserts in place. Both sides of a trade become their own row — the aggregator
  * filters by managerId and then counts distinct transactions, so a single shared
  * row would make one side of every trade invisible.
+ *
+ * ── 🛑 THIS IS THE SCHEDULED WRITER, AND IT WAS THE ONE WITHOUT A CHECKPOINT ─────────────────
+ *
+ * There are two Sleeper transaction writers and it is easy to check the wrong one.
+ * `SleeperHistoricalTransactionSyncService` has the completion gate and the week window — and
+ * runs ONCE, from `SleeperHistoricalBackfillService`, at import. This one is the one on a
+ * schedule: `/api/cron/import-players` → `refreshStaleLeagueProfiles({ maxLeagues: 3 })` →
+ * here, every six hours. So the module that repeats was the module walking everything.
+ *
+ * What it cost, before this change: `resolveSeasonChain` walks up to seven seasons and each was
+ * read for all 18 weeks, every lap — up to ~126 transaction requests per league to discover the
+ * handful of trades made since the last run, against seasons that had been over for years.
+ *
+ * Both halves of the fix are borrowed, not invented, because both rules already exist and a
+ * second copy of either would be the divergence this repo keeps paying for:
+ *
+ *   `shouldSkipImportedSeason`  a season the provider calls `complete` cannot gain trades
+ *   `firstWeekToFetch`          the live season only gains them near the current week
+ *
+ * ⚠ NEITHER IS A CACHE KNOB. Skipping a FINISHED season is free correctness; narrowing the LIVE
+ * one is bounded by a deliberate week of overlap and widens to everything whenever the current
+ * week is unknown. An unknown never narrows.
  */
 
 const SLEEPER = 'https://api.sleeper.app/v1'
@@ -47,6 +72,18 @@ export type SleeperTradeIngestResult = {
   feedUnavailable: number
   /** Requests that stayed rate-limited after every retry. Non-zero ⇒ this sweep is partial. */
   rateLimited: number
+  /** Season links walked across every league in this sweep. */
+  seasonsConsidered: number
+  /** Links skipped because the provider reports the season finished and rows already exist. */
+  seasonsSkippedComplete: number
+  /**
+   * Week requests this sweep did NOT make, versus walking every week of every season.
+   *
+   * Reported rather than inferred: the whole point of the checkpoint is a number nobody can
+   * see from the outside, and a sweep that silently stopped skipping would otherwise look
+   * exactly like one that had nothing to skip.
+   */
+  providerCallsAvoided: number
   errors: string[]
 }
 
@@ -198,10 +235,23 @@ async function getWeek(leagueId: string, week: number): Promise<SleeperTransacti
  * the same thing with different numbers is worse than one, because whichever the
  * caller happens to read decides the answer.
  */
-async function resolveSeasonChain(
-  currentId: string
-): Promise<Array<{ leagueId: string; season: number | null }>> {
-  const chain: Array<{ leagueId: string; season: number | null }> = []
+type ChainLink = {
+  leagueId: string
+  season: number | null
+  /**
+   * The provider's own league status — `pre_draft | drafting | in_season | complete`.
+   *
+   * ⚠ CARRIED, NOT DERIVED, AND IT COSTS NOTHING. This chain walk already fetches the whole
+   * league object for every season; `status` was being parsed past and dropped. It is what
+   * separates a season that can never change again from the one being played, which is the
+   * only thing that makes this sweep skippable. `null` when the provider did not report one —
+   * never a fabricated default, because an unknown status must read as "not complete".
+   */
+  status: string | null
+}
+
+async function resolveSeasonChain(currentId: string): Promise<ChainLink[]> {
+  const chain: ChainLink[] = []
   let id: string | null = currentId
   for (let depth = 0; id && depth <= MAX_PRIOR_SEASONS; depth += 1) {
     try {
@@ -209,6 +259,7 @@ async function resolveSeasonChain(
       const out = await fetchSleeper<{
         league_id?: string
         season?: string
+        status?: string | null
         previous_league_id?: string | null
       }>(url)
       if (out.status === 'rate_limited') rateLimitHits += 1
@@ -216,23 +267,58 @@ async function resolveSeasonChain(
       const league = out.value as {
         league_id?: string
         season?: string
+        status?: string | null
         previous_league_id?: string | null
       } | null
       if (!league?.league_id) break
       const season = league.season ? Number(league.season) : null
-      chain.push({ leagueId: league.league_id, season: Number.isFinite(season) ? season : null })
+      chain.push({
+        leagueId: league.league_id,
+        season: Number.isFinite(season) ? season : null,
+        status: typeof league.status === 'string' ? league.status : null,
+      })
       id = league.previous_league_id || null
     } catch {
       break
     }
   }
-  return chain.length > 0 ? chain : [{ leagueId: currentId, season: null }]
+  return chain.length > 0 ? chain : [{ leagueId: currentId, season: null, status: null }]
+}
+
+/**
+ * The current NFL week, read at most ONCE per sweep.
+ *
+ * ⚠ HOISTED DELIBERATELY. The checkpoint needs the same week for every league and every season
+ * link in the run, and asking per link would add one request per season per league to a sweep
+ * whose entire purpose is to make fewer of them. Memoised on the sweep, not the module: a
+ * process that lives for days must not pin week 3 forever.
+ *
+ * 🛑 `null` IS NOT WEEK ZERO. `getNflState` failing is the absence of evidence about what
+ * changed, and `firstWeekToFetch` treats it by walking everything — the expensive direction is
+ * the safe one. Nothing here may turn that into a narrow window.
+ */
+function makeCurrentWeekReader(): () => Promise<number | null> {
+  let resolved: Promise<number | null> | null = null
+  return () => {
+    if (!resolved) {
+      resolved = getNflState()
+        .then((state) => (typeof state?.week === 'number' ? state.week : null))
+        .catch(() => null)
+    }
+    return resolved
+  }
 }
 
 export async function ingestSleeperTradeFacts(input?: {
   /** Canonical League ids. Omit to sweep every Sleeper league. */
   leagueIds?: string[]
   maxLeagues?: number
+  /**
+   * Re-read every season and every week, ignoring both the completion gate and the week
+   * checkpoint. The admin escape hatch, for a repair after a bad write — never the default,
+   * because the default is what runs twelve times a day.
+   */
+  force?: boolean
 }): Promise<SleeperTradeIngestResult> {
   const result: SleeperTradeIngestResult = {
     leaguesConsidered: 0,
@@ -241,9 +327,13 @@ export async function ingestSleeperTradeFacts(input?: {
     factsWritten: 0,
     feedUnavailable: 0,
     rateLimited: 0,
+    seasonsConsidered: 0,
+    seasonsSkippedComplete: 0,
+    providerCallsAvoided: 0,
     errors: [],
   }
   rateLimitHits = 0
+  const currentWeek = makeCurrentWeekReader()
 
   const leagues = await prisma.league.findMany({
     where: {
@@ -269,18 +359,88 @@ export async function ingestSleeperTradeFacts(input?: {
     const chain = await resolveSeasonChain(externalId)
     let leagueTrades = 0
     let anyFeed = false
+    /*
+     * 🛑 A SKIPPED SEASON IS NOT A DEAD FEED, AND CONFLATING THEM WOULD BE A WORSE BUG THAN THE
+     * ONE THIS CHANGE FIXES. `anyFeed` is set by actually reading a week, so a league whose every
+     * season is finished and already held reads zero weeks and would be reported as
+     * `feedUnavailable` — a perfectly healthy league announced as broken, by the very success of
+     * the skip. Deliberate silence has to be tracked separately from silence we did not choose.
+     */
+    let anySkipped = false
 
     for (const link of chain) {
+      result.seasonsConsidered += 1
+      const linkSeason = link.season ?? season
+
+      /*
+       * ── THE COMPLETION GATE ────────────────────────────────────────────────────────────────
+       * The same predicate the import-side siblings use, for the same reason it had to be a
+       * named predicate rather than an inlined `=== 'complete'`: a FINISHED season's trades
+       * cannot change, and re-reading them every lap is the whole cost. See
+       * lib/league-import/seasonCompletion.ts.
+       *
+       * ⚠ ROWS MUST ALREADY EXIST. "Complete" alone is not enough — a finished season we have
+       * never read is exactly the history this ingest exists to collect, and skipping it would
+       * mean never collecting it at all.
+       */
+      const hasExistingRows = Boolean(
+        await prisma.transactionFact
+          .findFirst({
+            where: { leagueId: league.id, season: linkSeason, type: 'trade' },
+            select: { transactionId: true },
+          })
+          .catch(() => null),
+      )
+
+      if (hasExistingRows && shouldSkipImportedSeason({ force: input?.force, league: link })) {
+        result.seasonsSkippedComplete += 1
+        result.providerCallsAvoided += MAX_WEEKS
+        anySkipped = true
+        continue
+      }
+
+      /*
+       * ── THE WEEK CHECKPOINT, FOR THE SEASON THAT CANNOT BE SKIPPED ─────────────────────────
+       * The live season only gains trades in recent weeks, so re-reading weeks 1-17 to discover
+       * week 18 is the same waste one level down. One week of overlap is kept on purpose:
+       * Sleeper backdates a late settlement into the week it belonged to, and a strict
+       * "current week only" window would lose those permanently rather than merely late.
+       *
+       * Shared with the import-side sibling rather than reimplemented — two implementations of
+       * one rule is the bug, and that one is already covered by its own tests.
+       */
+      /*
+       * ⚠ `force` HAS TO CLEAR BOTH NARROWINGS, AND THE FIRST DRAFT ONLY CLEARED ONE. Passing
+       * the real `hasExistingRows` here left the week window narrowed to ~8 weeks on a run whose
+       * whole purpose is a full re-read after a bad write — a repair that quietly repairs two
+       * thirds of the season. Caught by the test, not by reading: the gate above is the visible
+       * half of `force` and it is easy to believe that is all of it.
+       */
+      const incremental = hasExistingRows && !input?.force
+      const firstWeek = firstWeekToFetch({
+        hasExistingRows: incremental,
+        currentWeek: incremental ? await currentWeek() : null,
+      })
+      if (firstWeek > 1) result.providerCallsAvoided += firstWeek - 1
+
+      const weekNumbers = Array.from(
+        { length: MAX_WEEKS - firstWeek + 1 },
+        (_, i) => firstWeek + i,
+      )
       const weeks = await runWithConcurrency(
-        Array.from({ length: MAX_WEEKS }, (_, i) => i + 1),
+        weekNumbers,
         MAX_CONCURRENT_REQUESTS,
         (week) => getWeek(link.leagueId, week),
       )
       if (weeks.some((w) => w != null)) anyFeed = true
-      const linkSeason = link.season ?? season
 
       for (let i = 0; i < weeks.length; i += 1) {
-      const week = i + 1
+      /*
+       * ⚠ PAIRED WITH `weekNumbers`, NOT WITH `i + 1`. The window no longer starts at week 1,
+       * and an index-derived week would stamp every row of a checkpointed run with the wrong
+       * week — silently, since nothing downstream can tell a mislabelled week from a real one.
+       */
+      const week = weekNumbers[i]
       for (const tx of weeks[i] ?? []) {
         if (tx.type !== 'trade' || tx.status !== 'complete') continue
         const transactionId = tx.transaction_id
@@ -322,8 +482,10 @@ export async function ingestSleeperTradeFacts(input?: {
   }
 
     // Every week of every season failing is a dead feed, which is different from
-    // a league that simply has no trades.
-    if (!anyFeed) {
+    // a league that simply has no trades — and different again from a league whose
+    // seasons were all deliberately skipped, which read nothing because nothing
+    // needed reading.
+    if (!anyFeed && !anySkipped) {
       result.feedUnavailable += 1
       continue
     }
