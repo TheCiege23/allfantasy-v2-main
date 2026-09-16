@@ -47,19 +47,29 @@ export interface CanonicalMemoEnrichment {
   /** ADP per player — from the provider-neutral `AdpDataRecord` (same source the redraft harness reads). */
   adpByPlayerId?: Record<string, number | null | undefined>
   /**
-   * Projected points per player.
+   * Projected points per player — for VALUATION, and the unit is not uniform.
    *
-   * 🛑 THIS SAID "Honest-empty today: no canonical projection source yet (Phase F)" AND THAT WAS
-   * STALE. `resolveTradeEnrichment` fills it from `loadAfProjections` (`AFProjectionSnapshot` —
-   * AllFantasy's own, scored under the league's own rules including IDP) and falls back to
-   * `loadProjections` (`FantasyProjection`) only for players AF did not cover. The substrate is
-   * live: 26,453 snapshot rows measured 2026-09-16, 26,446 of them written within seven days.
+   * 🛑 NOT PER GAME, AND NOT EVEN ONE UNIT. `resolveTradeEnrichment` fills it with AF's
+   * `rosProjection` — a REST-OF-SEASON total, re-projected to the league's remaining weeks — and
+   * falls back to `loadProjections` (`FantasyProjection.projectedPoints`, a SINGLE WEEK) only for
+   * players AF did not cover. So one map can hold a 250-point season total beside a 17-point week.
+   * This comment previously called it simply "projected points per player", and roster impact read
+   * it as per-game on that basis: a live "gains N pts per game" was ~10-17x too large. Found by a
+   * peer session on 2026-09-16. The mixing itself predates that and still affects valuation; it is
+   * flagged, not fixed, here.
    *
-   * The stale sentence nearly stopped a build that depends on this field. If you need to know
-   * whether a particular call resolved anything, read `projectionResolved` or the writer — not a
-   * comment.
+   * For anything denominated per game, read `perGameProjectionByPlayerId` below.
+   *
+   * The substrate is live: 26,453 AF snapshot rows measured 2026-09-16, 26,446 of them written
+   * within seven days.
    */
   projectionByPlayerId?: Record<string, number | null | undefined>
+  /**
+   * AF's PER-GAME projection (`AFProjectionSnapshot.afProjection`), scored under the league's own
+   * rules. One unit, one source: a player AF did not project is absent, never filled from the
+   * per-WEEK provider feed (per week equals per game only in the NFL). Read by roster impact.
+   */
+  perGameProjectionByPlayerId?: Record<string, number | null | undefined>
   /** Position per player — from the D.1 `resolvePlayerMetadata` seam; falls back to the asset's own metadata. */
   positionByPlayerId?: Record<string, string | null | undefined>
   /**

@@ -199,3 +199,55 @@ describe('honest refusals — a silent join failure must be visible', () => {
     expect(zero.enrichment.projectionByPlayerId?.p1).toBe(0)
   })
 })
+
+/*
+ * ── PER GAME, KEPT APART (roster impact) ───────────────────────────────────────────────────────
+ * Roster impact reported "N pts per game" from `projectionByPlayerId`, which holds rest-of-season
+ * totals with a per-WEEK provider fallback. The per-game map is its own field, AF-only.
+ */
+describe('perGameProjectionByPlayerId', () => {
+  it('carries afProjection (per game) while projectionByPlayerId carries the ROS total', async () => {
+    const res = await resolveTradeEnrichment(
+      { sport: 'NFL', playerIds: ['p1'], season: 2026, week: 5 },
+      silentPort({ loadAfProjections: async () => [afRow()] as never }),
+    )
+    expect(res.enrichment.perGameProjectionByPlayerId?.p1).toBe(19.5)
+    expect(res.enrichment.projectionByPlayerId?.p1).toBe(253.5)
+  })
+
+  it('keeps a per-game value even when the row has no ROS total', async () => {
+    const res = await resolveTradeEnrichment(
+      { sport: 'NFL', playerIds: ['p1'], season: 2026, week: 5 },
+      silentPort({ loadAfProjections: async () => [afRow({ rosProjection: null, rosWeeksRemaining: null })] as never }),
+    )
+    expect(res.enrichment.perGameProjectionByPlayerId?.p1).toBe(19.5)
+    expect(res.enrichment.projectionByPlayerId?.p1).toBeUndefined()
+  })
+
+  it('🛑 is NEVER filled from the per-week provider feed', async () => {
+    const res = await resolveTradeEnrichment(
+      { sport: 'NBA', playerIds: ['p2'], season: 2026, week: 5 },
+      silentPort({
+        loadProjections: async () => [{
+          playerId: 'p2', sport: 'NBA', season: '2026', week: 5,
+          scoringPresetId: 'ppr', projectedPoints: 140, stats: {},
+          source: 'provider', fetchedAt: NOW, expiresAt: new Date('2027-01-01'),
+        }] as never,
+      }),
+    )
+    // The provider row still feeds valuation…
+    expect(res.enrichment.projectionByPlayerId?.p2).toBe(140)
+    // …but a week of NBA games is not one game.
+    expect(res.enrichment.perGameProjectionByPlayerId?.p2).toBeUndefined()
+  })
+
+  it('takes the FIRST row per player (week-scoped before season-long)', async () => {
+    const res = await resolveTradeEnrichment(
+      { sport: 'NFL', playerIds: ['p1'], season: 2026, week: 5 },
+      silentPort({
+        loadAfProjections: async () => [afRow({ afProjection: 21 }), afRow({ week: null, afProjection: 17 })] as never,
+      }),
+    )
+    expect(res.enrichment.perGameProjectionByPlayerId?.p1).toBe(21)
+  })
+})

@@ -154,7 +154,14 @@ export async function evaluateCanonicalTrade(
     if (!args.includeRosterImpact) return undefined
     if (!viewerRoster) return null
     const positions = enrichment.enrichment.positionByPlayerId ?? {}
-    const projections = enrichment.enrichment.projectionByPlayerId ?? {}
+    /*
+     * 🛑 THE PER-GAME MAP, NOT `projectionByPlayerId`. That map is AF's REST-OF-SEASON total with a
+     * per-WEEK provider fallback — two units, neither per game — and this block used to read it
+     * while labelling the result `projected_points_per_game`. The live "gains N pts per game" line
+     * was ~10-17x too large, and one lineup could sum season totals with single weeks. Reported by
+     * a peer session 2026-09-16; the evaluator test stubbed the enrichment, so it could not see it.
+     */
+    const projections = enrichment.enrichment.perGameProjectionByPlayerId ?? {}
     const toImpact = (id: string): ImpactPlayer => ({
       playerId: id,
       position: (positions[id] ?? '').toUpperCase(),
