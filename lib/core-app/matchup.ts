@@ -16,6 +16,7 @@ import { startingSlotTemplate } from './rosterSlots'
 import { identityGapNote } from './identityGap'
 import { resolveSourceLink, type SourceLink } from '@/lib/league-links/sourceLinkResolver'
 import { verifiedHandoff, type PlatformLink } from './platformLinks'
+import { leagueContextFor, type LeagueContext } from './leagueContext'
 
 /**
  * A crest we can actually render, or null.
@@ -241,22 +242,12 @@ export type MatchupData = {
 export async function getMatchupData(
   leagueId: string,
   userId: string,
-  weekParam?: number | null
+  weekParam?: number | null,
+  /** The render's shared league context — see `leagueContext.ts`. */
+  ctx?: LeagueContext | null,
 ): Promise<MatchupData | null> {
-  const league = await prisma.league.findUnique({
-    where: { id: leagueId },
-    select: {
-      id: true,
-      name: true,
-      platform: true,
-      platformLeagueId: true,
-      season: true,
-      sport: true,
-      logoUrl: true,
-      avatarUrl: true,
-      settings: true,
-    },
-  })
+  const lc = leagueContextFor(leagueId, userId, ctx)
+  const league = await lc.league()
   if (!league) return null
 
   const platform = String(league.platform ?? 'manual').toLowerCase()
@@ -329,13 +320,7 @@ export async function getMatchupData(
   }
 
   // Which team is the user's, in canonical space.
-  const myTeam = await prisma.leagueTeam.findFirst({
-    where: { leagueId: league.id, claimedByUserId: userId },
-    select: {
-      externalId: true, teamName: true, ownerName: true, wins: true, losses: true, ties: true,
-      platformUserId: true, avatarUrl: true,
-    },
-  })
+  const myTeam = await lc.claimedTeam()
 
   /*
    * "Set lineup in <platform>" — only once we know which team is yours. ESPN and Yahoo

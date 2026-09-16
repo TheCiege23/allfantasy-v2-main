@@ -2,6 +2,7 @@ import 'server-only'
 
 import { prisma } from '@/lib/prisma'
 import { leagueDisplayName, type SectionState } from './leagueHome'
+import { leagueContextFor, type LeagueContext } from './leagueContext'
 
 /**
  * League Sync — is THIS league fresh, and what exactly did we read (38a·10).
@@ -104,20 +105,11 @@ export async function getLeagueSync(
   leagueId: string,
   userId: string,
   now: Date = new Date(),
+  /** The render's shared league context — see `leagueContext.ts`. */
+  ctx?: LeagueContext | null,
 ): Promise<LeagueSyncResult> {
-  const league = await prisma.league.findUnique({
-    where: { id: leagueId },
-    select: {
-      id: true,
-      name: true,
-      platform: true,
-      platformLeagueId: true,
-      season: true,
-      createdAt: true,
-      lastSyncedAt: true,
-      syncStatus: true,
-    },
-  })
+  const lc = leagueContextFor(leagueId, userId, ctx)
+  const league = await lc.league()
 
   const leagueName = leagueDisplayName(league?.name)
   if (!league) {
@@ -129,9 +121,7 @@ export async function getLeagueSync(
    * text; it is not sensitive in the way the commissioner surface is, but it is
    * still a league's internals and there is no reason a non-member sees it.
    */
-  const member = await prisma.leagueTeam
-    .findFirst({ where: { leagueId, claimedByUserId: userId }, select: { id: true } })
-    .catch(() => null)
+  const member = await lc.claimedTeam().catch(() => null)
   const roster = member
     ? null
     : await prisma.roster

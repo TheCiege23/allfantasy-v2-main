@@ -18,6 +18,7 @@ import { describeScoringFit } from '@/lib/trade-value/scoringFit'
 import { allocateFaabAcrossPool, type FaabCandidate } from '@/lib/trade-intel/faabBid'
 import { readFormatRules } from '@/lib/trade-intel/leagueFormatRules'
 import { scheduleForLeague, survivorHorizon, type SurvivorHorizon } from '@/lib/trade-intel/survivorSchedule'
+import { leagueContextFor, type LeagueContext } from './leagueContext'
 import { resolveCurrentWeekForLeague } from './currentWeek'
 import { buildTeamProfile } from '@/lib/trade-value/teamProfile'
 import type { TeamStance } from '@/lib/trade-value/types'
@@ -344,23 +345,17 @@ function bidFor(args: {
 export async function getPlayerTradeVisual(
   leagueId: string,
   targetSleeperId: string,
-  userId: string | null
+  userId: string | null,
+  /**
+   * The render's shared league context — see `leagueContext.ts`. The Player Finder runs this right
+   * after `getPlayerLeagueView`, which reads the same row.
+   */
+  ctx?: LeagueContext | null,
 ): Promise<SectionState<PlayerTradeVisual>> {
   if (!userId) return { available: false, reason: 'sign in to build a trade for him' }
 
-  const league = await prisma.league
-    .findUnique({
-      where: { id: leagueId },
-      select: {
-        id: true,
-        name: true,
-        platform: true,
-        platformLeagueId: true,
-        season: true,
-        settings: true,
-        leagueType: true,
-      },
-    })
+  const league = await leagueContextFor(leagueId, userId, ctx)
+    .league()
     .catch(() => null)
   if (!league) return { available: false, reason: 'league not found' }
 

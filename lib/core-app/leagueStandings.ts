@@ -2,6 +2,7 @@ import 'server-only'
 
 import { prisma } from '@/lib/prisma'
 import { leagueDisplayName, type SectionState } from './leagueHome'
+import { leagueContextFor, type LeagueContext } from './leagueContext'
 import { isScored, resolveCurrentWeekFrom, type WeekScoreRow } from './currentWeek'
 
 /**
@@ -185,7 +186,8 @@ function rankBy(totals: Map<string, number>): Map<string, number> {
  * through `persistStandings`/dynasty seasons instead, so a Sleeper league returning
  * an empty history here is expected and not a fault to chase.
  */
-async function loadSeasonHistory(leagueId: string, userId: string): Promise<SeasonHistoryRow[]> {
+async function loadSeasonHistory(lc: LeagueContext): Promise<SeasonHistoryRow[]> {
+  const { leagueId } = lc
   const [facts, teams, mine] = await Promise.all([
     prisma.seasonStandingFact
       .findMany({
@@ -206,9 +208,7 @@ async function loadSeasonHistory(leagueId: string, userId: string): Promise<Seas
     prisma.leagueTeam
       .findMany({ where: { leagueId }, select: { externalId: true, teamName: true, ownerName: true } })
       .catch(() => []),
-    prisma.leagueTeam
-      .findMany({ where: { leagueId, claimedByUserId: userId }, select: { externalId: true } })
-      .catch(() => []),
+    lc.claimedTeams().catch(() => []),
   ])
 
   if (facts.length === 0) return []
@@ -256,11 +256,11 @@ async function loadSeasonHistory(leagueId: string, userId: string): Promise<Seas
 export async function getLeagueStandings(
   leagueId: string,
   userId: string,
+  /** The render's shared league context — see `leagueContext.ts`. */
+  ctx?: LeagueContext | null,
 ): Promise<LeagueStandingsResult> {
-  const league = await prisma.league.findUnique({
-    where: { id: leagueId },
-    select: { id: true, name: true, platform: true, platformLeagueId: true },
-  })
+  const lc = leagueContextFor(leagueId, userId, ctx)
+  const league = await lc.league()
 
   const leagueName = leagueDisplayName(league?.name)
 
@@ -269,7 +269,7 @@ export async function getLeagueStandings(
    * live board cannot be drawn and the imported seasons are exactly what the screen
    * should show instead.
    */
-  const history = league ? await loadSeasonHistory(league.id, userId) : []
+  const history = league ? await loadSeasonHistory(lc) : []
 
   if (!league?.platformLeagueId) {
     return {
@@ -303,12 +303,8 @@ export async function getLeagueStandings(
         select: { externalId: true, teamName: true, ownerName: true, avatarUrl: true },
       })
       .catch(() => []),
-    prisma.leagueTeam
-      .findMany({
-        where: { leagueId: league.id, claimedByUserId: userId },
-        select: { externalId: true },
-      })
-      .catch(() => []),
+    // The same claimed-team read the season history used above, not a second one.
+    lc.claimedTeams().catch(() => []),
   ])
 
   if (rows.length === 0) {

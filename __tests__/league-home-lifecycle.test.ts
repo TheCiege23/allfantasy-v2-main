@@ -42,11 +42,21 @@ describe('league home: the stage comes from the field that tracks reality', () =
     expect(isPreDraftOrDrafting({ status: 'in_season', lifecycleState: 'in_season' })).toBe(false)
   })
 
+  /*
+   * The row now comes from the render's shared league context (`lib/core-app/leagueContext.ts`),
+   * so the columns are asserted where they are selected — and the screen is held to reading
+   * through that context rather than growing a narrower read of its own again.
+   */
   it('selects status and lifecycleState — without them the branch reads undefined', () => {
-    const start = SRC.indexOf('prisma.league.findUnique')
-    const query = SRC.slice(start, SRC.indexOf('})', start))
-    expect(query).toContain('status: true')
-    expect(query).toContain('lifecycleState: true')
+    const CTX = readFileSync(resolve(process.cwd(), 'lib/core-app/leagueContext.ts'), 'utf8').replace(/\u000D/g, '')
+    const start = CTX.indexOf('export const LEAGUE_CONTEXT_SELECT')
+    const select = CTX.slice(start, CTX.indexOf('} satisfies', start))
+    expect(start).toBeGreaterThan(-1)
+    expect(select).toContain('status: true')
+    expect(select).toContain('lifecycleState: true')
+
+    expect(SRC).toContain('const league = await lc.league()')
+    expect(SRC).not.toContain('prisma.league.findUnique')
   })
 
   it('uses the shared rule rather than a fourth copy of it', () => {

@@ -41,6 +41,7 @@
 import 'server-only'
 
 import { getLeagueStandings, type LeagueStandingsResult } from './leagueStandings'
+import { leagueContextFor, type LeagueContext } from './leagueContext'
 import { prisma } from '@/lib/prisma'
 import { readScreenSummary, registerScreenSummary, invalidateScreenForLeague } from '@/lib/sports-os/summaries'
 import { sportsDataCacheTier } from '@/lib/sports-os/durableTier'
@@ -172,9 +173,15 @@ registerScreenSummary<LeagueStandingsResult>({
 export async function readLeagueStandingsSummary(
   leagueId: string,
   userId: string,
+  /**
+   * The render's shared league context — see `leagueContext.ts`. The page already holds this row,
+   * so on a summary hit the board now costs the cache read alone. A miss rebuilds through
+   * `getLeagueStandings` inside the summary builder, which cannot be handed this context.
+   */
+  ctx?: LeagueContext | null,
 ): Promise<Fresh<LeagueStandingsResult> | null> {
-  const league = await prisma.league
-    .findUnique({ where: { id: leagueId }, select: { platformLeagueId: true, season: true } })
+  const league = await leagueContextFor(leagueId, userId, ctx)
+    .league()
     .catch(() => null)
   if (!league?.platformLeagueId) return null
 

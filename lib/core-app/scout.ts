@@ -6,6 +6,7 @@ import type { PsychologyProfileFact } from '@/lib/decision-os/psychology-os'
 import { resolveProfileAccessForUser } from '@/lib/psychological-profiles/ProfileAccess'
 import { resolveCurrentWeekForLeague } from './currentWeek'
 import { leagueDisplayName, type SectionState } from './leagueHome'
+import { leagueContextFor, type LeagueContext } from './leagueContext'
 
 /**
  * Scout — the first room of the War Room.
@@ -173,11 +174,13 @@ function scoutOrder(a: ScoutedManager, b: ScoutedManager): number {
   return a.teamName.localeCompare(b.teamName)
 }
 
-export async function getScoutData(leagueId: string, userId: string): Promise<ScoutData | null> {
-  const league = await prisma.league.findUnique({
-    where: { id: leagueId },
-    select: { id: true, name: true, sport: true, platformLeagueId: true },
-  })
+export async function getScoutData(
+  leagueId: string,
+  userId: string,
+  /** The render's shared league context — see `leagueContext.ts`. */
+  ctx?: LeagueContext | null,
+): Promise<ScoutData | null> {
+  const league = await leagueContextFor(leagueId, userId, ctx).league()
   if (!league) return null
 
   const sport = String(league.sport ?? 'NFL')

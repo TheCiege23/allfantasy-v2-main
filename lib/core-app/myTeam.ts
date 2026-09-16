@@ -25,6 +25,7 @@ import { displayPosition, inferSlotLabel } from './positionLabels'
 import { lookupProviderIdentityNames } from './providerIdentityNames'
 import { resolveSourceLink, type SourceLink } from '@/lib/league-links/sourceLinkResolver'
 import { identityGapNote } from './identityGap'
+import { leagueContextFor, type LeagueContext } from './leagueContext'
 import {
   BENCH_SWAP_POINTS,
   isEligibleForSlot,
@@ -811,26 +812,22 @@ async function resolvePlayers(
   return out
 }
 
-export async function getMyTeamData(leagueId: string, userId: string): Promise<MyTeamData | null> {
-  const league = await prisma.league.findUnique({
-    where: { id: leagueId },
-    select: {
-      id: true, name: true, platform: true, leagueType: true, sport: true,
-      // `scoring_settings` lives in here — the basis for the league-specific number.
-      settings: true,
-      /*
-       * ⚠ A SECOND, DIFFERENT LEAGUE ID. `WeeklyMatchup.leagueId` holds THIS
-       * one, not `League.id`. Both are strings, so using the wrong one returns
-       * an empty result instead of an error.
-       */
-      platformLeagueId: true,
-      /* Only for the ESPN source link, which takes a seasonId. */
-      season: true,
-      // Superflex and dynasty both change which value market applies.
-      isDynasty: true,
-      starters: true,
-    },
-  })
+export async function getMyTeamData(
+  leagueId: string,
+  userId: string,
+  /** The render's shared league context — see `leagueContext.ts`. */
+  ctx?: LeagueContext | null,
+): Promise<MyTeamData | null> {
+  const lc = leagueContextFor(leagueId, userId, ctx)
+  /*
+   * The shared row. `settings` carries `scoring_settings`, the basis for the league-specific
+   * number; `season` is only for the ESPN source link; `isDynasty` and `starters` (superflex)
+   * change which value market applies.
+   *
+   * ⚠ A SECOND, DIFFERENT LEAGUE ID. `WeeklyMatchup.leagueId` holds `platformLeagueId`, not
+   * `League.id`. Both are strings, so using the wrong one returns an empty result, not an error.
+   */
+  const league = await lc.league()
   if (!league) return null
 
   const sport = String(league.sport ?? 'NFL')
@@ -872,16 +869,8 @@ export async function getMyTeamData(leagueId: string, userId: string): Promise<M
     liveScore: { available: false as const, reason: 'no live scoring ingested for imported leagues' },
   }
 
-  const myTeamRow = await prisma.leagueTeam.findFirst({
-    where: { leagueId, claimedByUserId: userId },
-    select: {
-      teamName: true, ownerName: true, wins: true, losses: true, ties: true,
-      pointsFor: true, pointsAgainst: true, currentRank: true,
-      platformUserId: true, externalId: true,
-      // The manager's own avatar. Already imported, never rendered until now.
-      avatarUrl: true,
-    },
-  })
+  // The shared claimed-team read; `avatarUrl` is the manager's own, imported and now rendered.
+  const myTeamRow = await lc.claimedTeam()
 
   const teamCount = await prisma.leagueTeam.count({ where: { leagueId } })
 
