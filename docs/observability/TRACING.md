@@ -89,6 +89,18 @@ trace held 9 spans, all inside its first 18ms, with zero database spans project-
 
 ## Reading budgets in Sentry
 
+🛑 **A NUMBER ATTRIBUTE MUST BE WRITTEN `tags[name,number]`.** `p75(tags[af.shell_ms,number])`
+works; `p75(af.shell_ms)` fails with **"Unknown attribute"**. With a bare name the validator
+treats the field as an unknown *string*. String dimensions (`af.screen`, `af.surface`, `af.device`,
+`af.nav`) work by their bare name.
+
+⚠ **"Unknown attribute" does not mean the data is missing.** Both numeric budget queries below failed as
+written until 2026-09-16, and that error was misread twice: first as "these attributes never reach
+Sentry", then as "they reach it but are not indexed" (a PR was built on that and closed unmerged).
+Neither was true. The values had always arrived and been indexed, and the queries were simply
+written wrong. If a numeric attribute you *know* is being set comes back unknown, try the typed form
+before concluding anything about the data.
+
 Spans dataset (Explore → Traces). Server render time by screen and device:
 
 ```
@@ -100,7 +112,7 @@ Time to the `/core` shell, and to the whole screen:
 
 ```
 is_transaction:true transaction:"GET /core/[[...screen]]" af.nav:document
-group by af.screen, af.device   →   p75(af.shell_ms), p75(span.duration)
+group by af.screen, af.device   →   p75(tags[af.shell_ms,number]), p75(span.duration)
 ```
 
 Which card the home is waiting for — each card's read is a `core.card` span, and the slow database
@@ -141,7 +153,15 @@ Database load per screen (catches N+1 growth before it is slow):
 
 ```
 is_transaction:true af.surface:core
-group by af.screen   →   p95(af.db.ms), p95(af.db.count)
+group by af.screen   →   p95(tags[af.db.ms,number]), p95(tags[af.db.count,number])
+```
+
+Database errors per screen. A read that degrades quietly still counts here, so a pool timeout shows
+up even when every card rendered:
+
+```
+is_transaction:true af.surface:core
+group by af.screen   →   sum(tags[af.db.errors,number]), count()
 ```
 
 Slowest operations behind a screen:
