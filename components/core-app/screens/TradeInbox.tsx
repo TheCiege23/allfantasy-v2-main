@@ -197,6 +197,12 @@ function statusLabel(status?: string): string {
   if (normalized === 'cancelled') return 'Cancelled'
   if (normalized === 'countered') return 'Countered'
   if (normalized === 'expired') return 'Expired'
+  /*
+   * 🛑 NOT "EXPIRED". A provider offer that stopped appearing may have been withdrawn, expired, or
+   * missed by a rate-limited sweep — we know it is gone and not why. Naming one of those causes
+   * would be stating something nobody observed, which is the distinction the ledger keeps.
+   */
+  if (normalized === 'vanished') return 'Withdrawn or expired'
   if (normalized === 'vetoed') return 'Vetoed'
   if (normalized === 'reversed') return 'Reversed'
   if (normalized === 'awaiting_votes') return 'League vote'
@@ -210,8 +216,15 @@ function isCompleteStatus(status?: string): boolean {
   return value === 'processed' || value.startsWith('completed_on_') || value === 'reversed'
 }
 
+/*
+ * ⚠ `vanished` IS LISTED HERE RATHER THAN RELABELLED UPSTREAM. Mapping it to `expired` where the
+ * rows are built would have been one character and would have made the ledger claim a cause it
+ * never observed. Widening the predicate keeps the honest status all the way to the screen.
+ */
 function isClosedStatus(status?: string): boolean {
-  return ['rejected', 'cancelled', 'countered', 'expired', 'vetoed'].includes(String(status ?? '').toLowerCase())
+  return ['rejected', 'cancelled', 'countered', 'expired', 'vetoed', 'vanished'].includes(
+    String(status ?? '').toLowerCase(),
+  )
 }
 
 function valueNet(given?: number | null, received?: number | null): number | null {

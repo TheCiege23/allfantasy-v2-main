@@ -4,6 +4,9 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { toPrismaJsonInput } from '@/lib/prisma-json'
 import type { LeagueTradeBlockPanelItem, LeagueTradeHistoryItem, LeagueTradeAsset } from '@/components/league/types'
+import { rosterIdMapKeys } from '@/lib/core-app/rosterIdMatch'
+import { getLeagueTradeLedgerForRoster } from '@/lib/provider-trades/providerTradeOfferReads'
+import { buildProviderOfferHistoryRows } from '@/lib/provider-trades/providerOfferHistoryRows'
 import { listAfLeagueTrades } from '@/lib/league-trade-engine/tradeService'
 import { isElevatedCommissioner } from '@/server/services/permissionService'
 import { resolveWriteAuthority } from '@/lib/league/write-authority'
@@ -640,6 +643,59 @@ export async function GET(req: NextRequest) {
   // Native first (the viewer can act on those); provider proposals follow.
   const activeTrades = [...nativeTrades, ...mapProviderTrades(providerPending, providerEvaluations)]
 
+  /*
+   * SETTLED PROVIDER OFFERS — the feed the "Declined & expired" filter never had.
+   *
+   * `TradeInbox` has had five timeline buckets for a while, and on an imported league the last one
+   * was permanently empty: `historyTrades` below is native + provider-COMPLETED, an imported league
+   * has no native trades, and `scanPendingSleeperTrades` keeps only `pending` and `complete` while
+   * dropping `failed` entirely. So a declined Sleeper offer was invisible everywhere in the
+   * product, and an expired one was not knowable at all. The UI was starved, not missing.
+   *
+   * ⚠ SETTLED ONLY — PENDING STAYS LIVE, one line above. `lib/core-app/trades.ts` records why: a
+   * cached pending offer goes stale the moment it is accepted, so an offer answered on Sleeper
+   * thirty seconds ago must not still sit in an inbox here. The ledger supplies what the live read
+   * cannot (what BECAME of an offer); the live read keeps what the ledger cannot (what is true
+   * now). Each owns a different question, so the two cannot disagree about one.
+   *
+   * ⚠ FAILURE-CONTAINED. The ledger is a young table fed by a rotating sweep, so a league it has
+   * not reached yet contributes nothing and the panel behaves exactly as it does today. It must
+   * never cost the panel its live offers.
+   */
+  const settledProviderOffers = await (async () => {
+    try {
+      const viewerTeam = await prisma.leagueTeam.findFirst({
+        where: { leagueId, claimedByUserId: userId },
+        select: { externalId: true },
+      })
+      if (!viewerTeam?.externalId) return []
+      /*
+       * ⚠ NORMALISED, BECAUSE A RAW COMPARISON IS DOCUMENTED AS WRONG HERE. `rosterIdMapKeys`
+       * exists because an MFL `externalId` is zero-padded ("0001") while the id written elsewhere
+       * is "1". The ledger stores the plain provider form, so the normalised key is the one that
+       * matches — see lib/core-app/rosterIdMatch.ts.
+       */
+      const viewerRosterId = rosterIdMapKeys(viewerTeam.externalId).slice(-1)[0]
+      const ledger = await getLeagueTradeLedgerForRoster({ leagueId, rosterId: viewerRosterId })
+      const teamRows = await prisma.leagueTeam.findMany({
+        where: { leagueId },
+        select: { externalId: true, name: true },
+      })
+      const teamNames = new Map<string, string>()
+      for (const t of teamRows) {
+        if (!t.name) continue
+        for (const key of rosterIdMapKeys(t.externalId)) teamNames.set(key, t.name)
+      }
+      return buildProviderOfferHistoryRows({
+        offers: [...ledger.declined, ...ledger.gone],
+        viewerRosterId,
+        teamNames,
+      })
+    } catch {
+      return []
+    }
+  })()
+
   // Slice 5 wiring: the LeagueContext envelope rides along so every trade
   // surface can label HOW its verdicts are framed (IDP scoring, pirate house
   // rules) — flags are facts from settings/declarations, never inferred.
@@ -670,7 +726,11 @@ export async function GET(req: NextRequest) {
     draft,
     tradeBlock,
     activeTrades,
-    historyTrades: [...mapProviderTrades(providerCompleted, completedEvaluations), ...nativeHistory],
+    historyTrades: [
+      ...mapProviderTrades(providerCompleted, completedEvaluations),
+      ...settledProviderOffers,
+      ...nativeHistory,
+    ],
     activeCount: activeTrades.length,
     source: 'sleeper' as const,
     leagueName: league.name ?? 'League',
