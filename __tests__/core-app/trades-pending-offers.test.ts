@@ -176,7 +176,7 @@ describe('pending offers reach the Trades screen', () => {
     const cases: unknown[] = [
       { trades: [OFFER_TO_ME], scanned: true, reason: null, unscannedKind: null, weeksUnanswered: 0 },
       { trades: [], scanned: true, reason: null, unscannedKind: null, weeksUnanswered: 0 },
-      { trades: [], scanned: false, reason: 'Sleeper could not be reached', weeksUnanswered: 0 },
+      { trades: [], scanned: false, reason: 'Sleeper could not be reached', unscannedKind: 'provider', weeksUnanswered: 0 },
     ]
     for (const c of cases) {
       vi.resetModules()

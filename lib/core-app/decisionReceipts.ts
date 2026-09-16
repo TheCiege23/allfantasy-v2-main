@@ -22,7 +22,7 @@ import { lineupSeatsFromSettings } from './slotEligibility'
  * plainly: trades, waiver adds, lineups (start/sit), AutoCoach calls, and Chimmy's advice — its
  * start/sit calls and the waiver claims its chat grounded on.
  *
- * TRADES read the grade cache the 30-minute sweep already fills (`trade-grades:v2:*`),
+ * TRADES read the grade cache the fifteen-minute grade cron already fills (`trade-grades:v2:*`),
  * the same one `recentTrades` reads — one `in` query, no provider call, nothing recomputed.
  *
  * ⚠ A RECEIPT IS NET POINTS, NEVER THE SWEEP'S LETTER. The letter's C band spans −40..40

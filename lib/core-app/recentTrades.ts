@@ -27,7 +27,7 @@ import { scanPendingSleeperTrades } from '@/lib/provider-trades/scanPendingSleep
  * (cron-schedule.json, and it is in the live fast-tier loop) and calls `detectAndNotifyAll(12, 8)`,
  * which reaches `getTradeGrades(id, { force: true })` through lib/trade-intel/tradeNotifyService
  * and force-upserts this exact row. Twelve leagues per fire by cursor — so every imported Sleeper
- * league is covered eventually — plus the eight most recently viewed, every fire. It diffs the
+ * league is reached eventually — plus the eight most recently viewed, every fire. It diffs the
  * league's OWN transaction feed, so a trade between two other managers is what triggers it.
  *
  * ⚠ THE CENSUS THAT GOT THIS WRONG IS WORTH MORE THAN THE FACT. It was
@@ -446,8 +446,9 @@ export async function getRecentTrades(
       if (!scan?.scanned) {
         /*
          * 🛑 ONLY A PROVIDER FAILURE IS WORTH REPORTING. `scanned: false` also covers "this
-         * account owns no roster in this league" and "we do not know which Sleeper account is
-         * yours" — `unscannedKind: 'identity'`, and both are permanent: same input, same answer,
+         * account owns no roster in this league", "we do not know which Sleeper account is
+         * yours", and "the league no longer exists on Sleeper" (a 404/410 on the rosters read)
+         * — `unscannedKind: 'identity'`, and all three are permanent: same input, same answer,
          * every render for the life of the league. Reporting one as a transient failure holds
          * /core's trade window open forever, which is the rule this file states two hunks up and
          * the reason the `maxLeagues` cap is not reported either.

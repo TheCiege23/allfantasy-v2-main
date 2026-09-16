@@ -230,8 +230,11 @@ export type PendingTradeScan = {
    * 🛑 WHETHER A CALLER SHOULD EVER EXPECT A DIFFERENT ANSWER. `scanned: false` covers two
    * unrelated situations, and collapsing them is a bug in the caller rather than a nuance:
    *   `provider` — Sleeper refused, or could not be reached. Try again and it may work.
-   *   `identity` — this account owns no roster in this league, or we do not know which Sleeper
-   *                account is theirs. Same input, same answer, on every render forever.
+   *   `identity` — this account owns no roster in this league, we do not know which Sleeper
+   *                account is theirs, or the league no longer exists on Sleeper (404/410).
+   *                Same input, same answer, on every render forever.
+   *                ⚠ THREE PRODUCERS, AND THE THIRD CARRIES DIFFERENT USER-FACING COPY: a
+   *                caller that renders a remedy must read `reason`, not infer one from the kind.
    *
    * /core's "since your last visit" holds its trade window open while a read is incomplete, so
    * treating an `identity` result as a transient failure holds that window open for the life of
@@ -286,7 +289,9 @@ export async function scanPendingSleeperTrades(args: {
      * treating the second as permanent, a 429 during an eight-league fan-out was silently
      * classified as permanent too, and /core closed its trade window over a league it never read.
      * That is the exact bug the `unscannedKind` split was added to prevent, reintroduced by the
-     * split itself. Letting it throw sends it to the outer catch, which reports `provider`.
+     * split itself. Letting it throw sends it to the outer catch, which reports `provider` —
+     * unless the status says the league is GONE (404/410), which is the one throw that is
+     * permanent. See the classification in that catch.
      *
      * `users` stays caught: it decorates names, and an empty list costs a label, not a verdict.
      */
@@ -476,7 +481,8 @@ export async function scanPendingSleeperTrades(args: {
      * VERBATIM to the manager (components/core-app/screens/TradeInbox.tsx), so a wrong permanent
      * verdict does not just hold a boundary — it tells someone their league is gone when it is not.
      * 404 is the one status this repo has actually measured for a deleted league
-     * (lib/import-os/collector/leagueGone.ts); 410 is the same statement by definition.
+     * (lib/import-os/collector/leagueGone.ts). 410 is included as the same statement by
+     * definition, not because it has been observed — Sleeper is not known to emit it.
      */
     const status = err instanceof SleeperHttpError ? err.status : null
     const gone = status === 404 || status === 410
