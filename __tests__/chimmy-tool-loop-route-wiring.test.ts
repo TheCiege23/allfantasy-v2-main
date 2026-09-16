@@ -131,6 +131,22 @@ describe('tool loop wiring', () => {
     expect(block).toMatch(/context:\s*\{\s*leagueId/)
     expect(block).toContain('userId')
   })
+
+  /*
+   * 🛑 THE MEMBERSHIP-PROVEN ID, NOT THE REQUEST FIELD. The assertion above passed for the bug it
+   * sits beside: `context: { leagueId: leagueId ?? null, … }` handed the client's raw form field to
+   * `get_league_standings` and `get_head_to_head`, neither of which checks membership, so any
+   * signed-in caller could read another league by sending its id (fixed in #932). The behavioural
+   * pin is `__tests__/chimmy-unproven-league-id-readers.test.ts`; this one names the line.
+   */
+  it('binds the tool context to the authorized league, never the requested one', () => {
+    const context = BLOCK.match(/context:\s*\{[^}]*\}/)?.[0] ?? ''
+    expect(context).toMatch(/leagueId:\s*leagueSnapshot\?\.id\s*\?\?\s*null/)
+    expect(context).not.toMatch(/leagueId:\s*(?:leagueId|requestedLeagueId)\b/)
+    expect(context).not.toMatch(/formData/)
+    // Exactly one tool context in the block, so the check above cannot be satisfied by a decoy.
+    expect(BLOCK.match(/context:\s*\{/g)).toHaveLength(1)
+  })
 })
 
 /*

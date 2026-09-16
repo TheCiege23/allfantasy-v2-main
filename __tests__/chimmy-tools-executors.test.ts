@@ -5,6 +5,7 @@ const h = vi.hoisted(() => ({
   h2h: vi.fn(),
   upcoming: vi.fn(),
   leaders: vi.fn(),
+  findLeague: vi.fn(),
 }))
 
 vi.mock('@/lib/chimmy/leagueStandingsGrounding', () => ({
@@ -18,6 +19,7 @@ vi.mock('@/lib/live/playerStatLeaders', async () => {
   )
   return { ...actual, readStatLeaders: h.leaders }
 })
+vi.mock('@/lib/chimmy/tools/leagueByName', () => ({ findLeagueByName: h.findLeague }))
 
 import { CHIMMY_TOOL_SPECS, executeChimmyTool } from '@/lib/chimmy/tools/chimmyTools'
 
@@ -174,5 +176,49 @@ describe('executeChimmyTool', () => {
   it('handles a tool name it does not have', async () => {
     const out = await executeChimmyTool('delete_everything', {}, CTX)
     expect(out).toMatch(/no tool called/i)
+  })
+})
+
+/*
+ * 🛑 THE ROUTE NOW STARTS THE LOOP WITH THE MEMBERSHIP-PROVEN LEAGUE, OFTEN NULL (#932). Naming a
+ * league in the question must still work from there: `find_league_by_name` is the one tool that
+ * may set the scope, and only to a league `findLeagueByName` found among the signed-in user's own.
+ */
+describe('find_league_by_name binds scope from a null start', () => {
+  const league = { id: 'verified-1', name: 'Beta 1 Zombie League', sport: 'NFL', season: 2026 }
+
+  it('binds the verified league, and the next tool reads it', async () => {
+    h.findLeague.mockResolvedValue({ kind: 'match', league })
+    const ctx = { leagueId: null as string | null, userId: 'u1' }
+    const out = await executeChimmyTool('find_league_by_name', { name: 'zombie' }, ctx)
+    expect(out).toContain('Selected "Beta 1 Zombie League"')
+    expect(h.findLeague).toHaveBeenCalledWith('u1', 'zombie', null)
+    expect(ctx.leagueId).toBe('verified-1')
+
+    await executeChimmyTool('get_league_standings', {}, ctx)
+    expect(h.standings).toHaveBeenCalledWith('verified-1', 'u1')
+  })
+
+  it('binds nothing when the name does not resolve to exactly one of their leagues', async () => {
+    for (const found of [
+      { kind: 'none', known: [league] },
+      { kind: 'ambiguous', candidates: [league, { ...league, id: 'verified-2', season: 2025 }] },
+      { kind: 'legacy', facts: { name: 'KBFL', season: 2024 } },
+    ]) {
+      h.findLeague.mockResolvedValue(found)
+      const ctx = { leagueId: null as string | null, userId: 'u1' }
+      await executeChimmyTool('find_league_by_name', { name: 'kbfl' }, ctx)
+      expect(ctx.leagueId, found.kind).toBeNull()
+    }
+    const standings = await executeChimmyTool('get_league_standings', {}, { leagueId: null, userId: 'u1' })
+    expect(standings).toMatch(/no league is selected/i)
+  })
+
+  it('never looks anything up without a signed-in user', async () => {
+    const ctx = { leagueId: null as string | null, userId: null }
+    const out = await executeChimmyTool('find_league_by_name', { name: 'zombie' }, ctx)
+    expect(out).toMatch(/cannot tell who is signed in/i)
+    expect(h.findLeague).not.toHaveBeenCalled()
+    expect(ctx.leagueId).toBeNull()
   })
 })
