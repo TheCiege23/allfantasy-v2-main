@@ -59,10 +59,32 @@ export async function getActivityLeaguesForUser(userId: string): Promise<Activit
           name: { not: null },
           AND: [
             {
+              /*
+               * ⚠ FOUR BRANCHES, NOT THREE — THE FOURTH IS THE LARGEST POPULATION.
+               * This list is the membership predicate for the whole /core shell: the rail
+               * is built from it, and `app/core/[[...screen]]/page.tsx` gates `?league=`
+               * on it ("a league query is also an authorization boundary"). So a league
+               * missing here is a league the user cannot reach ANYWHERE in /core, by a
+               * link or by hand.
+               *
+               * It listed only the three below and omitted `Roster.platformUserId`, which
+               * `lib/league-access.ts` — the canonical predicate — calls the largest
+               * membership population, because the `source_manager_id` and name-match
+               * claim paths update ONLY `Roster`. Measured read-only on `.env.test`
+               * (ep-muddy-leaf-adigvvph) 2026-09-16: of 444 roster-backed memberships,
+               * 107 (24%) across 105 users were provable by this branch ALONE and were
+               * therefore invisible. Production magnitude is unmeasured.
+               *
+               * ⚠ IT CANNOT ADMIT A STRANGER. `Roster.platformUserId` holds the PROVIDER's
+               * id for an unclaimed team and is rewritten to the AllFantasy user id on
+               * claim; `AppUser.id` is a uuid, so a Sleeper numeric id can never collide
+               * with one. Matching it admits only genuinely claimed rosters.
+               */
               OR: [
                 { userId },
                 { redraftMembers: { some: { userId } } },
                 { teams: { some: { claimedByUserId: userId } } },
+                { rosters: { some: { platformUserId: userId } } },
               ],
             },
             { OR: [{ leagueVariant: null }, { leagueVariant: { notIn: VARIANT_NOT_IN } }] },
@@ -380,10 +402,32 @@ export async function getDashboardLeagueListForUser(
           name: { not: null },
           AND: [
             {
+              /*
+               * ⚠ FOUR BRANCHES, NOT THREE — THE FOURTH IS THE LARGEST POPULATION.
+               * This list is the membership predicate for the whole /core shell: the rail
+               * is built from it, and `app/core/[[...screen]]/page.tsx` gates `?league=`
+               * on it ("a league query is also an authorization boundary"). So a league
+               * missing here is a league the user cannot reach ANYWHERE in /core, by a
+               * link or by hand.
+               *
+               * It listed only the three below and omitted `Roster.platformUserId`, which
+               * `lib/league-access.ts` — the canonical predicate — calls the largest
+               * membership population, because the `source_manager_id` and name-match
+               * claim paths update ONLY `Roster`. Measured read-only on `.env.test`
+               * (ep-muddy-leaf-adigvvph) 2026-09-16: of 444 roster-backed memberships,
+               * 107 (24%) across 105 users were provable by this branch ALONE and were
+               * therefore invisible. Production magnitude is unmeasured.
+               *
+               * ⚠ IT CANNOT ADMIT A STRANGER. `Roster.platformUserId` holds the PROVIDER's
+               * id for an unclaimed team and is rewritten to the AllFantasy user id on
+               * claim; `AppUser.id` is a uuid, so a Sleeper numeric id can never collide
+               * with one. Matching it admits only genuinely claimed rosters.
+               */
               OR: [
                 { userId },
                 { redraftMembers: { some: { userId } } },
                 { teams: { some: { claimedByUserId: userId } } },
+                { rosters: { some: { platformUserId: userId } } },
               ],
             },
             {
