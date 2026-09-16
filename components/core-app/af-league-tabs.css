@@ -81,6 +81,25 @@
   background: var(--accent);
 }
 
+/* ── Why a view is absent ─────────────────────────────────────────────────
+ *
+ * Sits under the strip, in the same row-flow as the tabs it explains. Muted and
+ * small on purpose: it is an answer to a question the reader may not have asked
+ * yet, and it must not out-shout the navigation above it.
+ */
+
+.af-lt-absent {
+  width: 100%;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 4px;
+  color: var(--faint);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
 /* Shared truth strip below the league tabs. It keeps source, freshness,
    Decision OS and Chimmy scope visible without adding four separate cards. */
 .af-lctx {
@@ -91,6 +110,52 @@
   border: 1px solid var(--line);
   border-radius: 12px;
   background: color-mix(in srgb, var(--surface) 88%, transparent);
+}
+
+/* ── The league, named once ───────────────────────────────────────────────
+ *
+ * The crest is 26px so the identity row costs one line beside the chips rather
+ * than turning this strip into a card. `min-width: 0` on the row and the name
+ * is what lets a long league name ellipsis instead of forcing the whole grid
+ * wider — without it a 60-character name pushes the status chips off-screen.
+ */
+
+.af-lctx-identity {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.af-lctx-crest {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 26px;
+  height: 26px;
+  overflow: hidden;
+  border: 1px solid var(--chip-line);
+  border-radius: 7px;
+  background: var(--chip);
+  color: var(--faint);
+  font: 800 11px/1 'Archivo', ui-sans-serif, system-ui, sans-serif;
+}
+
+.af-lctx-crest-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.af-lctx-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text);
+  font: 800 13px/1.2 'Archivo', ui-sans-serif, system-ui, sans-serif;
+  letter-spacing: -0.01em;
 }
 
 .af-lctx-statuses {
@@ -210,13 +275,15 @@
     width: 100%;
   }
 
-  .af-lt-league-name {
-    max-width: 100%;
-  }
-
   .af-lctx {
     margin-top: -10px;
     padding: 9px;
+  }
+
+  /* The name keeps the full row on a phone; the chips scroll under it. */
+  .af-lctx-name {
+    max-width: 100%;
+    font-size: 12.5px;
   }
 
   .af-lctx-statuses {

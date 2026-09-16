@@ -3,6 +3,7 @@
 import { useEffect, useId, useState, type ReactNode } from 'react'
 
 import { COMMS_OPEN_EVENT } from '@/components/core-app/comms/commsEvents'
+import { LeagueMark } from '@/components/core-app/LeagueMark'
 import { CORE_SURFACE_LABELS, type CoreSurfaceKey } from '@/lib/core-app/coreSurface'
 import {
   LEAGUE_CONCEPT_OPTIONS,
@@ -18,6 +19,18 @@ export type CoreLeagueContextBarProps = {
   leagueId: string
   leagueName: string
   platform: string
+  /**
+   * The league's artwork and its letter fallback, both resolved by the page's
+   * rail mapping.
+   *
+   * ⚠ PASSED IN, NOT DERIVED HERE. `imageOf` → `getLeagueTypeMedia` →
+   * `resolveLeagueCardTypeKey` is a three-step resolution the rail already
+   * performs for the same league, and a second copy of it in this bar is how the
+   * chip in the rail and the crest in the header start showing different
+   * artwork for one league.
+   */
+  logoUrl?: string | null
+  logoLetter?: string
   syncLabel: string
   syncStale: boolean
   gameDayActive: boolean
@@ -81,6 +94,8 @@ export default function CoreLeagueContextBar({
   leagueId,
   leagueName,
   platform,
+  logoUrl = null,
+  logoLetter,
   syncLabel,
   syncStale,
   gameDayActive,
@@ -143,6 +158,36 @@ export default function CoreLeagueContextBar({
   }
   return (
     <section className="af-lctx" aria-label={`${leagueName} system status`}>
+      {/*
+        The league, named once.
+
+        🛑 IT WAS NAMED NOWHERE. `LeagueTabs` used to carry an `af-lt-league`
+        chip — "In league / <name>" — and it was removed when this bar was
+        added, on the reasoning that the page header names the league. This IS
+        that header, and it printed the name only into `aria-label`. So on every
+        in-league screen the visible answer to "which league am I looking at"
+        was the rail's highlighted chip, which is exactly the answer the tab bar
+        was built to replace — and on an account with sixty leagues it is not an
+        answer at all. (The orphaned `.af-lt-league-name` rules left behind in
+        af-league-tabs.css are what this restores.)
+
+        ⚠ `<h1>` DELIBERATELY NOT USED. Screens below this own the page heading,
+        and two h1s on one document is worse for a screen reader than the plain
+        strong element here. The bar's own `aria-label` already scopes it.
+      */}
+      <div className="af-lctx-identity">
+        <span className="af-lctx-crest" aria-hidden>
+          <LeagueMark
+            src={logoUrl}
+            letter={logoLetter || (Array.from(leagueName.trim() || '•')[0] ?? '•').toUpperCase()}
+            className="af-lctx-crest-img"
+          />
+        </span>
+        <strong className="af-lctx-name" title={leagueName}>
+          {leagueName}
+        </strong>
+      </div>
+
       <div className="af-lctx-statuses">
         <span className="af-lctx-chip" data-tone="source">
           {platform.toUpperCase()} import
