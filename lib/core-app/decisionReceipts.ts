@@ -1084,15 +1084,33 @@ async function chimmyAddReceipts(
   const loaded = await loadSeasonAdds({ userId: args.userId, leagues: sleeper })
   if (!loaded) return { adds: [], tooEarly, unscored: 0, unknown: callable.length }
 
-  // How far each league's transactions have synced, across EVERY roster in it.
+  /*
+   * How far each league's transactions have synced, across EVERY roster in it — IN THE ADVICE'S
+   * SEASON.
+   *
+   * 🛑 THIS HAD NO SEASON, AND THE HISTORY SYNC WRITES EVERY PAST SEASON UNDER THE CURRENT
+   * `League.id`. Last season's week 17–18 rows made any league read as synced through week 18, so
+   * a week-3 add that had simply not synced yet came back as "you didn't add him" — the one claim
+   * this function exists to make only when it is checkable. Found 2026-09-16 (Chimmy item 10),
+   * the same day `chimmy_advice` went live and this card started showing to users.
+   */
+  const adviceSeasons = [...new Set(callable.map((a) => a.season))]
   const synced = await prisma.transactionFact.groupBy({
-    by: ['leagueId'],
-    where: { leagueId: { in: [...new Set([...loaded.siblingIds.values()].flat())] } },
+    by: ['leagueId', 'season'],
+    where: {
+      leagueId: { in: [...new Set([...loaded.siblingIds.values()].flat())] },
+      season: { in: adviceSeasons },
+    },
     _max: { weekOrPeriod: true },
   })
-  const syncedThrough = (league: ReceiptsLeague) => {
+  const syncedThrough = (league: ReceiptsLeague, season: number) => {
     const ids = loaded.siblingIds.get(league.id) ?? [league.id]
-    return Math.max(-1, ...synced.filter((s) => ids.includes(s.leagueId)).map((s) => s._max.weekOrPeriod ?? -1))
+    return Math.max(
+      -1,
+      ...synced
+        .filter((s) => ids.includes(s.leagueId) && s.season === season)
+        .map((s) => s._max.weekOrPeriod ?? -1),
+    )
   }
 
   let unknown = 0
@@ -1107,7 +1125,7 @@ async function chimmyAddReceipts(
       loaded.adds.find(
         (x) => x.league.id === league.id && x.playerId === a.rec.key && x.week >= a.week && x.week <= a.week + ADD_FOLLOW_WEEKS,
       ) ?? null
-    if (!add && syncedThrough(league) < a.week + ADD_FOLLOW_WEEKS) {
+    if (!add && syncedThrough(league, a.season) < a.week + ADD_FOLLOW_WEEKS) {
       unknown += 1
       continue
     }

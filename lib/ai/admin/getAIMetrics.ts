@@ -49,6 +49,47 @@ function logMatchesFeature(
   return categorizeAiFeature(feature, recType) === filter
 }
 
+/**
+ * Follow / ignore counts with EACH RECOMMENDATION COUNTED ONCE.
+ *
+ * 🛑 THE SAME DECISION WAS COUNTED TWICE. A recommendation's log row and its outcome row share an
+ * id (`outcome.recommendationId === log.id`), and a verdict can land in BOTH: war-room telemetry
+ * sets `log.accepted`, the draft resolver sets `outcome.followed`, and `war-room-persist` copies a
+ * known `accepted` into both at write time. Adding `followed` outcomes to `accepted` logs doubled
+ * every such follow. So the outcome's verdict wins, and a log's `accepted` counts only for a
+ * recommendation with no outcome verdict. Several outcome rows for one id count once.
+ */
+export function countFollowSignals(
+  outcomes: ReadonlyArray<{ recommendationId: string; followed: boolean | null }>,
+  logs: ReadonlyArray<{ id: string; accepted: boolean | null }>,
+): { followed: number; ignored: number } {
+  const verdict = new Map<string, boolean>()
+  for (const o of outcomes) {
+    if (o.followed === null || verdict.has(o.recommendationId)) continue
+    verdict.set(o.recommendationId, o.followed)
+  }
+  for (const l of logs) {
+    if (l.accepted === null || verdict.has(l.id)) continue
+    verdict.set(l.id, l.accepted)
+  }
+  let followed = 0
+  let ignored = 0
+  for (const v of verdict.values()) {
+    if (v) followed += 1
+    else ignored += 1
+  }
+  return { followed, ignored }
+}
+
+/**
+ * The fewest scored outcomes on EACH side before follow-vs-ignore says anything.
+ *
+ * ⚠ The check used to be "at least one on each side", so a single followed pick and a single
+ * ignored one produced a headline claim about users who follow AI. Thirty per side is the smallest
+ * sample this repo already trusts for a comparison (`MIN_RECALIBRATION_SAMPLE` in the trade engine).
+ */
+export const MIN_SCORED_OUTCOMES_PER_SIDE = 30
+
 async function resolveSegmentUserIds(segment: 'high' | 'medium' | 'low', sport: string | null | undefined): Promise<string[] | null> {
   const where: Prisma.AiUserTendencyWhereInput = {}
   if (sport && sport !== 'all') where.sport = sport
@@ -109,6 +150,7 @@ export async function getGlobalMetrics(filters: AIDashboardFilters): Promise<Glo
         ...(userWhere ?? {}),
       },
       select: {
+        recommendationId: true,
         followed: true,
         outcomeScore: true,
         type: true,
@@ -119,7 +161,7 @@ export async function getGlobalMetrics(filters: AIDashboardFilters): Promise<Glo
         createdAt: { gte: dateFrom, lte: dateTo },
         ...(userWhere ?? {}),
       },
-      select: { accepted: true, feature: true, recommendationType: true },
+      select: { id: true, accepted: true, feature: true, recommendationType: true },
     }),
   ])
 
@@ -127,13 +169,9 @@ export async function getGlobalMetrics(filters: AIDashboardFilters): Promise<Glo
   const logsFiltered = logRows.filter((l) => logMatchesFeature(l.feature, l.recommendationType, feature))
 
   const totalServed = Math.max(servedEvents, logsFiltered.length)
-  const followedOutcomes = outcomesFiltered.filter((o) => o.followed === true).length
-  const ignoredOutcomes = outcomesFiltered.filter((o) => o.followed === false).length
-  const followedLogs = logsFiltered.filter((l) => l.accepted === true).length
-  const declinedLogs = logsFiltered.filter((l) => l.accepted === false).length
-
-  const totalFollowSignals = followedOutcomes + followedLogs
-  const totalIgnoreSignals = ignoredOutcomes + declinedLogs
+  const signals = countFollowSignals(outcomesFiltered, logsFiltered)
+  const totalFollowSignals = signals.followed
+  const totalIgnoreSignals = signals.ignored
   const denom = totalFollowSignals + totalIgnoreSignals
   const followRatePct = denom > 0 ? (100 * totalFollowSignals) / denom : null
 
@@ -206,24 +244,21 @@ async function windowMetrics(filters: AIDashboardFilters): Promise<{
       createdAt: { gte: filters.dateFrom, lte: filters.dateTo },
       ...(userWhere ?? {}),
     },
-    select: { followed: true, outcomeScore: true, type: true },
+    select: { recommendationId: true, followed: true, outcomeScore: true, type: true },
   })
   const logs = await prisma.aiRecommendationLog.findMany({
     where: {
       createdAt: { gte: filters.dateFrom, lte: filters.dateTo },
       ...(userWhere ?? {}),
     },
-    select: { accepted: true, feature: true, recommendationType: true },
+    select: { id: true, accepted: true, feature: true, recommendationType: true },
   })
 
   const oF = outcomes.filter((o) => outcomeTypeMatchesFeature(o.type, feature))
   const lF = logs.filter((l) => logMatchesFeature(l.feature, l.recommendationType, feature))
-  const fo = oF.filter((o) => o.followed === true).length
-  const io = oF.filter((o) => o.followed === false).length
-  const fl = lF.filter((l) => l.accepted === true).length
-  const dl = lF.filter((l) => l.accepted === false).length
-  const denom = fo + io + fl + dl
-  const followRatePct = denom > 0 ? (100 * (fo + fl)) / denom : null
+  const { followed, ignored } = countFollowSignals(oF, lF)
+  const denom = followed + ignored
+  const followRatePct = denom > 0 ? (100 * followed) / denom : null
   const scores = oF.map((o) => o.outcomeScore).filter((s): s is number => typeof s === 'number' && !Number.isNaN(s))
   const avgOutcome = scores.length ? scores.reduce((a, b) => a + b, 0) / scores.length : null
   return { followRatePct, avgOutcome }
@@ -257,14 +292,14 @@ export async function getFeatureBreakdown(filters: AIDashboardFilters): Promise<
         createdAt: { gte: filters.dateFrom, lte: filters.dateTo },
         ...(userWhere ?? {}),
       },
-      select: { feature: true, recommendationType: true, accepted: true },
+      select: { id: true, feature: true, recommendationType: true, accepted: true },
     }),
     prisma.aiRecommendationOutcome.findMany({
       where: {
         createdAt: { gte: filters.dateFrom, lte: filters.dateTo },
         ...(userWhere ?? {}),
       },
-      select: { type: true, followed: true, outcomeScore: true },
+      select: { recommendationId: true, type: true, followed: true, outcomeScore: true },
     }),
   ])
 
@@ -272,12 +307,9 @@ export async function getFeatureBreakdown(filters: AIDashboardFilters): Promise<
     const lF = logs.filter((l) => categorizeAiFeature(l.feature, l.recommendationType) === c)
     const oF = outcomes.filter((o) => categorizeOutcomeType(o.type) === c)
     const usageCount = lF.length + oF.length
-    const fo = oF.filter((o) => o.followed === true).length
-    const io = oF.filter((o) => o.followed === false).length
-    const fl = lF.filter((x) => x.accepted === true).length
-    const dl = lF.filter((x) => x.accepted === false).length
-    const denom = fo + io + fl + dl
-    const followRatePct = denom > 0 ? (100 * (fo + fl)) / denom : null
+    const { followed, ignored } = countFollowSignals(oF, lF)
+    const denom = followed + ignored
+    const followRatePct = denom > 0 ? (100 * followed) / denom : null
     const scores = oF.map((o) => o.outcomeScore).filter((s): s is number => typeof s === 'number' && !Number.isNaN(s))
     const avgOutcomeScore = scores.length ? scores.reduce((a, b) => a + b, 0) / scores.length : null
     out.push({ feature: c, label: labelFor(c), usageCount, followRatePct, avgOutcomeScore })
@@ -365,8 +397,14 @@ export async function getFollowVsIgnore(filters: AIDashboardFilters): Promise<Fo
   const avgOutcomeWhenFollowed = avg(whenFollowed)
   const avgOutcomeWhenIgnored = avg(whenIgnored)
 
-  let insight = 'Not enough resolved outcomes to compare follow vs ignore yet.'
-  if (avgOutcomeWhenFollowed != null && avgOutcomeWhenIgnored != null) {
+  const scoredCount = (arr: (number | null)[]) => arr.filter((x) => typeof x === 'number' && !Number.isNaN(x)).length
+  const scoredFollowed = scoredCount(whenFollowed)
+  const scoredIgnored = scoredCount(whenIgnored)
+  const enough = scoredFollowed >= MIN_SCORED_OUTCOMES_PER_SIDE && scoredIgnored >= MIN_SCORED_OUTCOMES_PER_SIDE
+  let insight =
+    `Not enough resolved outcomes to compare follow vs ignore yet ` +
+    `(${scoredFollowed} followed and ${scoredIgnored} ignored with a score; ${MIN_SCORED_OUTCOMES_PER_SIDE} each needed).`
+  if (enough && avgOutcomeWhenFollowed != null && avgOutcomeWhenIgnored != null) {
     const diff = (avgOutcomeWhenFollowed - avgOutcomeWhenIgnored) * 100
     insight =
       diff >= 0
@@ -377,8 +415,9 @@ export async function getFollowVsIgnore(filters: AIDashboardFilters): Promise<Fo
   return {
     pctUsersFollowing,
     pctUsersIgnoring,
-    avgOutcomeWhenFollowed,
-    avgOutcomeWhenIgnored,
+    // Below the sample floor an average is one or two results wearing a headline; say nothing.
+    avgOutcomeWhenFollowed: enough ? avgOutcomeWhenFollowed : null,
+    avgOutcomeWhenIgnored: enough ? avgOutcomeWhenIgnored : null,
     insight,
   }
 }

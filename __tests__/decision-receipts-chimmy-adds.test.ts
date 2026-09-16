@@ -70,12 +70,26 @@ const fact = (week: number, over: Record<string, unknown> = {}) => ({
 const scoresFrom = (from: number, to: number) =>
   Array.from({ length: to - from + 1 }, (_, i) => ({ leagueId: 'sl-ice', week: from + i, playerId: WRIGHT, rosterId: 4, isStarter: i > 0, points: 10 }))
 
-function db({ rows = [addAdvice()] as unknown[], facts = [fact(3)] as unknown[], syncedWeek = 6 as number | null, scores = scoresFrom(3, 6) } = {}) {
+function db({
+  rows = [addAdvice()] as unknown[],
+  facts = [fact(3)] as unknown[],
+  syncedWeek = 6 as number | null,
+  scores = scoresFrom(3, 6),
+  /** Last season's rows, which the history sync writes under the SAME League.id. */
+  priorSeasonWeek = null as number | null,
+} = {}) {
   h.list.mockResolvedValue(rows)
   h.teamFind.mockResolvedValue([{ leagueId: ICE.id, externalId: '4' }])
   h.leagueFind.mockResolvedValue([{ id: ICE.id, platformLeagueId: 'sl-ice' }])
   h.factFind.mockResolvedValue(facts)
-  h.factGroup.mockResolvedValue(syncedWeek == null ? [] : [{ leagueId: ICE.id, _max: { weekOrPeriod: syncedWeek } }])
+  const groups = [
+    ...(syncedWeek == null ? [] : [{ leagueId: ICE.id, season: 2026, _max: { weekOrPeriod: syncedWeek } }]),
+    ...(priorSeasonWeek == null ? [] : [{ leagueId: ICE.id, season: 2025, _max: { weekOrPeriod: priorSeasonWeek } }]),
+  ]
+  // Filters by season the way the database would, so a query WITHOUT the filter sees last season.
+  h.factGroup.mockImplementation(async ({ where }: { where: { season?: { in: number[] } } }) =>
+    where.season ? groups.filter((g) => where.season!.in.includes(g.season)) : groups,
+  )
   h.scoreFind.mockImplementation(async ({ where }: { where: { playerId: { in: string[] } } }) => scores.filter((s) => where.playerId.in.includes(s.playerId)))
   h.playerFind.mockResolvedValue([])
 }
@@ -142,7 +156,22 @@ describe('Chimmy add receipts', () => {
     expect(await read()).toMatchObject({ adds: [], addsUnknown: 1 })
     db({ facts: [], syncedWeek: null })
     expect(await read()).toMatchObject({ adds: [], addsUnknown: 1 })
-    expect(h.factGroup.mock.calls[0][0]).toEqual({ by: ['leagueId'], where: { leagueId: { in: ['af-ice'] } }, _max: { weekOrPeriod: true } })
+    expect(h.factGroup.mock.calls[0][0]).toEqual({
+      by: ['leagueId', 'season'],
+      where: { leagueId: { in: ['af-ice'] }, season: { in: [2026] } },
+      _max: { weekOrPeriod: true },
+    })
+  })
+
+  /*
+   * 🛑 THE BUG THIS PINS. The history sync writes every past season under the current League.id,
+   * and the sync check had no season — so last season's week 18 made a week-3 add that had not
+   * synced yet read as "you didn't add him".
+   */
+  it('🛑 last season\'s transactions never make this season look synced', async () => {
+    db({ facts: [], syncedWeek: 3, priorSeasonWeek: 18 })
+    const out = await read()
+    expect(out).toMatchObject({ adds: [], addsUnknown: 1 })
   })
 
   it('🛑 too early (under three weeks, or the week unknown) is counted, and nothing is read', async () => {

@@ -2,7 +2,10 @@ import 'server-only'
 
 import { prisma } from '@/lib/prisma'
 import { normalizePlayerName } from '@/lib/player-identity/playerIdentityResolution'
-import { resolveRecommendationOutcome } from '@/lib/ai/outcomes/trackRecommendationOutcome'
+import {
+  closeRecommendationOutcomeUndecided,
+  resolveRecommendationOutcome,
+} from '@/lib/ai/outcomes/trackRecommendationOutcome'
 
 /**
  * CLOSE THE HALF OF THE OUTCOME LOOP THAT HAD NO CALLER.
@@ -41,6 +44,12 @@ const WAR_ROOM_PICK = 'war_room_pick'
  */
 const NON_DECISION_SOURCES = new Set(['auto', 'random', 'draft_completion', 'draft_reset'])
 
+/**
+ * A recommendation whose manager has still not picked after this long belongs to a draft that was
+ * abandoned or never resumed. Kept open, it would sit in the oldest-first batch forever.
+ */
+export const ABANDONED_AFTER_DAYS = 14
+
 export type DraftOutcomeResolution = {
   examined: number
   resolved: number
@@ -52,6 +61,8 @@ export type DraftOutcomeResolution = {
   skippedNonDecision: number
   /** The log row was missing, or carried no player name to compare against. */
   skippedUnusable: number
+  /** No pick after ABANDONED_AFTER_DAYS — closed as undecidable rather than re-read forever. */
+  closedAbandoned: number
 }
 
 function emptyResult(): DraftOutcomeResolution {
@@ -63,6 +74,7 @@ function emptyResult(): DraftOutcomeResolution {
     pendingNoPickYet: 0,
     skippedNonDecision: 0,
     skippedUnusable: 0,
+    closedAbandoned: 0,
   }
 }
 
@@ -91,12 +103,20 @@ function recommendedPlayerName(outputJson: unknown): string | null {
  */
 export async function resolveDraftRecommendationOutcomes(opts?: {
   limit?: number
+  now?: Date
 }): Promise<DraftOutcomeResolution> {
   const limit = Math.max(1, Math.min(500, opts?.limit ?? 100))
+  const now = opts?.now ?? new Date()
   const result = emptyResult()
 
   const pending = await prisma.aiRecommendationOutcome.findMany({
-    where: { type: WAR_ROOM_PICK, followed: null },
+    /*
+     * 🛑 `resolvedAt: null` IS WHAT KEEPS THIS FROM STALLING. Without it, rows that can never
+     * resolve (unusable, autopicks, abandoned drafts) stayed `followed: null` forever, the batch
+     * is oldest-first, and once `limit` of them piled up nothing newer was ever examined. Those
+     * rows are now CLOSED below — `resolvedAt` set, `followed` still null — and skipped here.
+     */
+    where: { type: WAR_ROOM_PICK, followed: null, resolvedAt: null },
     select: { recommendationId: true },
     orderBy: { createdAt: 'asc' },
     take: limit,
@@ -126,6 +146,7 @@ export async function resolveDraftRecommendationOutcomes(opts?: {
      */
     if (!log || !log.draftSessionId || !log.userId || !recommended) {
       result.skippedUnusable += 1
+      await closeRecommendationOutcomeUndecided(row.recommendationId)
       continue
     }
 
@@ -148,6 +169,12 @@ export async function resolveDraftRecommendationOutcomes(opts?: {
     })
 
     if (!nextPick) {
+      const ageMs = now.getTime() - log.createdAt.getTime()
+      if (ageMs > ABANDONED_AFTER_DAYS * 86_400_000) {
+        result.closedAbandoned += 1
+        await closeRecommendationOutcomeUndecided(row.recommendationId)
+        continue
+      }
       /* The draft has not reached them yet. Ask again next run. */
       result.pendingNoPickYet += 1
       continue
@@ -155,6 +182,7 @@ export async function resolveDraftRecommendationOutcomes(opts?: {
 
     if (nextPick.source && NON_DECISION_SOURCES.has(nextPick.source)) {
       result.skippedNonDecision += 1
+      await closeRecommendationOutcomeUndecided(row.recommendationId)
       continue
     }
 

@@ -1830,6 +1830,13 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
    * computed when `leagueId && userId`, so a non-null snapshot already implies an authenticated
    * caller whose membership was proved. The flag check stays exactly where it was.
    */
+  /*
+   * An object, not a `let`: it is assigned inside a callback, and TypeScript would narrow a
+   * `let … = null` to `null` at every later read.
+   */
+  const waiverClaimsSeen: { claims: Parameters<typeof recordChatWaiverAdvice>[0]['claims'] | null } = {
+    claims: null,
+  }
   const decisionOsGroundingTask: Promise<string | null> =
     process.env.DECISION_OS_GROUNDING_ENABLED === 'true' && leagueSnapshot && userId
       ? withPacketCeiling(buildDecisionOsGroundingPacket({
@@ -1862,10 +1869,21 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
             // The intent router's four low-risk mappings — see the comment above this block.
             ...earlyWant,
           },
-          // The waiver engine's top claim, kept for the home Receipts card. A side channel: never in
-          // the prompt, never awaited, and it cannot change or fail this turn.
-          onWaiverClaims: (claims, confidencePct) => {
-            void recordChatWaiverAdvice({ userId, leagueId: leagueSnapshot.id, claims, confidencePct }).catch(() => {})
+          /*
+           * The waiver engine's claims, HELD — not recorded here. A side channel: never in the
+           * prompt, and it cannot change or fail this turn.
+           *
+           * 🛑 THIS USED TO RECORD THE ADVICE IMMEDIATELY, and three things were wrong with that:
+           *   - it ran BEFORE the token-spend confirmation, so the drawer's first, unconfirmed
+           *     call recorded advice for an answer the user never paid for or saw;
+           *   - the packet ceiling abandons without cancelling, so a TIMED-OUT packet — one the
+           *     model never read — still recorded "Chimmy said add X";
+           *   - it stored the engine's confidence, not the one the user was shown.
+           * It is now recorded after the answer exists (see `waiverClaimsSeen` below), only when
+           * the packet was used and the answer actually names the player.
+           */
+          onWaiverClaims: (claims) => {
+            waiverClaimsSeen.claims = claims
           },
         })
           .then((packet) => {
@@ -3387,7 +3405,7 @@ ${describedTradeCtx}`
       if (/start|sit|accept|decline|add|drop/i.test(assistantResponse)) {
         recordDecision(sessionId, userId, assistantResponse.slice(0, 200), 0.8).catch(() => {})
       }
-      const persistTasks = [
+      const persistTasks: Promise<unknown>[] = [
         appendChatHistory({
           conversationId,
           role: 'user',
@@ -3426,6 +3444,24 @@ ${describedTradeCtx}`
           confidence: pecrOutput.responseContract.confidence ?? null,
         }),
       ]
+      /*
+       * Chimmy's waiver advice, for the home Receipts card and the outcome loop — recorded only now:
+       * after the spend (this code is unreachable on the unconfirmed 409), only when the packet was
+       * actually USED (`outcome === 'ok'`, never 'timeout'), with the confidence the user was SHOWN
+       * (`meta.confidencePct`), and the writer refuses unless the answer the user saw names the
+       * player. See the note on `onWaiverClaims`.
+       */
+      if (waiverClaimsSeen.claims && grounding.outcome === 'ok' && leagueSnapshot) {
+        persistTasks.push(
+          recordChatWaiverAdvice({
+            userId,
+            leagueId: leagueSnapshot.id,
+            claims: waiverClaimsSeen.claims,
+            confidencePct: pecrOutput.responseContract.confidence ?? null,
+            answer: assistantResponse,
+          }),
+        )
+      }
       await Promise.allSettled(persistTasks)
     }
 

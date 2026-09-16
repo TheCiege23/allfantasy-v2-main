@@ -46,7 +46,16 @@ const claim = (over: Record<string, unknown> = {}) => ({
   ...over,
 })
 
-const base = { userId: 'u1', leagueId: 'af-ice', claims: [claim()], confidencePct: 68 } as Parameters<typeof recordChatWaiverAdvice>[0]
+/** The answer the user saw. It names every fixture player, so the checks below get past the name gate. */
+const ANSWER = 'Add Jaylen Wright this week. Tank Bigsby is the fallback, and the Kansas City Chiefs defense streams well.'
+
+const base = {
+  userId: 'u1',
+  leagueId: 'af-ice',
+  claims: [claim()],
+  confidencePct: 68,
+  answer: ANSWER,
+} as Parameters<typeof recordChatWaiverAdvice>[0]
 
 function db() {
   h.leagueFind.mockResolvedValue({ id: 'af-ice', platform: 'sleeper', platformLeagueId: 'sl-ice', sport: 'NFL' })
@@ -60,6 +69,32 @@ function db() {
 
 beforeEach(() => {
   for (const f of Object.values(h)) f.mockReset()
+})
+
+/*
+ * 🛑 "CHIMMY SAID ADD X" MUST BE SOMETHING THE ANSWER SAID. The engine's top claim is what the
+ * answer was grounded on; the model can decline it or name someone else.
+ */
+describe('advice is recorded only when the answer named the player', () => {
+  it('refuses an answer that does not name the top claim, before touching the database', async () => {
+    db()
+    const result = await recordChatWaiverAdvice({ ...base, answer: 'Hold your FAAB this week; nobody is worth it.' })
+    expect(result).toBe('not_in_answer')
+    expect(h.leagueFind).not.toHaveBeenCalled()
+    expect(h.record).not.toHaveBeenCalled()
+  })
+
+  it('matches the whole name, not a fragment of it', async () => {
+    db()
+    expect(await recordChatWaiverAdvice({ ...base, answer: 'Jaylen is fine, and Wright is a common name.' })).toBe(
+      'not_in_answer',
+    )
+  })
+
+  it('refuses an empty answer', async () => {
+    db()
+    expect(await recordChatWaiverAdvice({ ...base, answer: '' })).toBe('not_in_answer')
+  })
 })
 
 describe('recordChatWaiverAdvice', () => {

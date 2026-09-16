@@ -38,6 +38,25 @@ export async function trackRecommendationOutcome(input: TrackOutcomeInput): Prom
   }
 }
 
+/**
+ * Close an outcome that can never be judged — `resolvedAt` set, `followed` left NULL.
+ *
+ * "We cannot say" is a verdict about the RECORD, not the advice, so `followed` stays null and no
+ * follow-rate counts it. What changes is that a resolver stops re-reading it: before this, rows
+ * that could never resolve stayed in the oldest-first batch forever, and once a batch's worth piled
+ * up the resolver never looked at anything newer. Only a still-open row is touched.
+ */
+export async function closeRecommendationOutcomeUndecided(recommendationId: string): Promise<void> {
+  try {
+    await prisma.aiRecommendationOutcome.updateMany({
+      where: { recommendationId, followed: null, resolvedAt: null },
+      data: { resolvedAt: new Date() },
+    })
+  } catch {
+    /* noop */
+  }
+}
+
 export async function resolveRecommendationOutcome(
   recommendationId: string,
   patch: { followed?: boolean; outcomeScore?: number | null },
