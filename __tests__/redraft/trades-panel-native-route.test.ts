@@ -86,6 +86,19 @@ vi.mock('@/server/services/permissionService', () => ({
 vi.mock('@/lib/league-trade-engine/tradeLearningCapture', () => ({
   priceTradesAtCurrentMarket: (...args: unknown[]) => priceTradesAtCurrentMarket(...args),
 }))
+/*
+ * ⚠ DEFAULT `null` WORLD REPRODUCES WHAT THESE TESTS ALREADY GOT. Unmocked, the real resolver ran
+ * against the test DB guard's sentinel, threw, and the route's `.catch(() => null)` turned that
+ * into "no world, no decision". Only the lineup-effect tests below supply a world.
+ */
+const resolveCanonicalWorld = vi.fn()
+const evaluateCanonicalTrade = vi.fn()
+vi.mock('@/lib/decision-os/world', () => ({
+  resolveCanonicalWorld: (...args: unknown[]) => resolveCanonicalWorld(...args),
+}))
+vi.mock('@/lib/decision-os/trade/canonicalEvaluator', () => ({
+  evaluateCanonicalTrade: (...args: unknown[]) => evaluateCanonicalTrade(...args),
+}))
 
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
@@ -131,6 +144,94 @@ describe('GET /api/league/trades-panel — native league real trade data', () =>
     findFirstLeagueTeam.mockResolvedValue(null)
     findManyTradeOfferEvent.mockResolvedValue([])
     priceTradesAtCurrentMarket.mockResolvedValue(new Map())
+    resolveCanonicalWorld.mockResolvedValue(null)
+    evaluateCanonicalTrade.mockResolvedValue(null)
+  })
+
+  describe('lineup effect (item #6)', () => {
+    const PENDING = {
+      id: 'trade-1',
+      status: 'pending',
+      proposerRosterId: 'roster-proposer',
+      receiverRosterId: 'roster-receiver',
+      createdAt: new Date('2026-01-01T00:00:00.000Z'),
+      items: [
+        { id: 'item-1', itemType: 'player', fromRosterId: 'roster-proposer', toRosterId: 'roster-receiver', itemReference: 'p1', metadata: { playerName: 'Player One', position: 'RB' } },
+        { id: 'item-2', itemType: 'player', fromRosterId: 'roster-receiver', toRosterId: 'roster-proposer', itemReference: 'p2', metadata: { playerName: 'Player Two', position: 'WR' } },
+      ],
+    }
+    const decision = {
+      action: 'accept',
+      recommendation: 'Accept',
+      coveragePct: 100,
+      grade: 'A',
+      valueGiven: 1,
+      valueReceived: 2,
+      evaluatedAt: '2026-09-16T00:00:00.000Z',
+      rosterImpact: {
+        unit: 'projected_points_per_game',
+        startingPointsBefore: 70,
+        startingPointsAfter: 72.5,
+        startingPointsDelta: 2.5,
+        blockedReason: null,
+        unpricedExcluded: 1,
+        depth: [{ position: 'WR', rosteredBefore: 3, rosteredAfter: 2, rosteredDelta: -1, benchBefore: 1, benchAfter: 0, delta: -1 }],
+        replacement: [],
+      },
+    }
+
+    beforeEach(() => {
+      listAfLeagueTrades.mockResolvedValue([PENDING])
+      findManyRoster.mockResolvedValue([
+        { id: 'roster-proposer', platformUserId: 'user-proposer' },
+        { id: 'roster-receiver', platformUserId: 'user-receiver' },
+      ])
+      findManyAppUser.mockResolvedValue([])
+      resolveCanonicalWorld.mockResolvedValue({ league: { season: 2026 } })
+      evaluateCanonicalTrade.mockResolvedValue(decision)
+    })
+
+    it('asks for it when the viewer is a party, and ships it summarised', async () => {
+      const res = await GET(makeRequest('league-1'))
+      const body = (await res.json()) as { activeTrades: Array<Record<string, unknown>> }
+
+      expect(evaluateCanonicalTrade.mock.calls[0]![0]).toMatchObject({
+        includeRosterImpact: true,
+        viewerRosterId: 'roster-receiver',
+      })
+      expect(body.activeTrades[0]!.rosterImpact).toEqual({
+        unit: 'projected_points_per_game',
+        startingPointsBefore: 70,
+        startingPointsAfter: 72.5,
+        startingPointsDelta: 2.5,
+        blockedReason: null,
+        unpricedExcluded: 1,
+        depthChanges: [{ position: 'WR', rosteredBefore: 3, rosteredAfter: 2 }],
+      })
+    })
+
+    it("🛑 does NOT ask for it for a commissioner viewing someone else's offer", async () => {
+      /*
+       * The route falls back to the PROPOSER's roster as "viewer" here. A lineup effect computed
+       * from that would be rendered under "your projected starting lineup" to someone else.
+       */
+      findFirstRoster.mockResolvedValue({ id: 'roster-bystander' })
+      isElevatedCommissioner.mockResolvedValue(true)
+
+      const res = await GET(makeRequest('league-1'))
+      const body = (await res.json()) as { activeTrades: Array<Record<string, unknown>> }
+
+      expect(body.activeTrades).toHaveLength(1)
+      expect(evaluateCanonicalTrade.mock.calls[0]![0]).toMatchObject({ includeRosterImpact: false })
+      expect('rosterImpact' in body.activeTrades[0]!).toBe(false)
+    })
+
+    it('reports null, not absence, when it was asked for and the evaluation failed', async () => {
+      evaluateCanonicalTrade.mockRejectedValue(new Error('world went away'))
+      const res = await GET(makeRequest('league-1'))
+      const body = (await res.json()) as { activeTrades: Array<Record<string, unknown>> }
+      expect(body.activeTrades[0]!.rosterImpact).toBeNull()
+    })
   })
 
   it('returns real pending AfLeagueTrade rows for a native league, not a hardcoded empty array', async () => {

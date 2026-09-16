@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma'
 import { resolveCanonicalWorld } from '@/lib/decision-os/world'
 import { evaluateCanonicalTrade, type CanonicalTradeEvaluation } from '@/lib/decision-os/trade/canonicalEvaluator'
 import type { TradeAssetSummary } from '@/lib/decision-os/trade/dco'
+import { summarizeRosterImpact, type LineupImpactSummary } from '@/lib/decision-os/trade/rosterImpactSummary'
 import { EVENT } from '@/lib/events/catalog'
 import { getPlatformEvents } from '@/lib/events/producers'
 import type { PendingProviderTrade, PendingTradeAsset } from './scanPendingSleeperTrades'
@@ -12,7 +13,10 @@ export type ProviderPendingEvaluation = Pick<
   CanonicalTradeEvaluation,
   'action' | 'recommendation' | 'valueGiven' | 'valueReceived' | 'valueDelta' | 'grade' |
   'fairnessScore' | 'confidenceScore' | 'coverageStatus' | 'coveragePct' | 'evaluatedAt'
->
+> & {
+  /** Absent: not requested. `null`: requested, could not be produced. See `summarizeRosterImpact`. */
+  rosterImpact?: LineupImpactSummary | null
+}
 
 function summary(
   asset: PendingTradeAsset,
@@ -42,6 +46,15 @@ function summary(
 export async function evaluatePendingProviderTrades(args: {
   leagueId: string
   trades: PendingProviderTrade[]
+  /**
+   * Ask the evaluator for the viewer's lineup effect as well.
+   *
+   * ⚠ PENDING OFFERS ONLY. On a COMPLETED trade the roster already holds what arrived and has lost
+   * what left, so "before" would be computed from the after-state and the outgoing players would
+   * read as missing from the roster. The evaluator blocks that case rather than lying, but a caller
+   * that asks for it on settled trades pays a whole-roster enrichment to learn nothing.
+   */
+  includeRosterImpact?: boolean
 }): Promise<Map<string, ProviderPendingEvaluation>> {
   const output = new Map<string, ProviderPendingEvaluation>()
   if (args.trades.length === 0) return output
@@ -70,6 +83,7 @@ export async function evaluatePendingProviderTrades(args: {
         receiverRosterId: otherRosterId,
         viewerRosterId,
         assets,
+        includeRosterImpact: args.includeRosterImpact === true,
       }, { resolveWorld: async () => world })
       const view: ProviderPendingEvaluation = {
         action: evaluation.action,
@@ -84,7 +98,14 @@ export async function evaluatePendingProviderTrades(args: {
         coveragePct: evaluation.coveragePct,
         evaluatedAt: evaluation.evaluatedAt,
       }
-      output.set(trade.transactionId, view)
+      /*
+       * ⚠ ADDED TO THE RETURNED ROW ONLY — `view` itself stays as it was, because it is also the
+       * `decision` recorded on the TRADE_PROPOSED event below. That event is written once per offer
+       * and read as the proposal-time record; whether it carries a lineup number must not depend on
+       * which surface happened to evaluate the offer first.
+       */
+      const rosterImpact = summarizeRosterImpact(evaluation.rosterImpact)
+      output.set(trade.transactionId, rosterImpact === undefined ? view : { ...view, rosterImpact })
 
       const idempotencyKey = `provider-trade:${trade.provider}:${trade.transactionId}:proposed`
       const exists = await prisma.domainEvent.findUnique({ where: { idempotencyKey }, select: { eventId: true } }).catch(() => null)

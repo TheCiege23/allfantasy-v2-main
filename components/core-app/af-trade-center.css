@@ -1913,3 +1913,28 @@
     margin-inline: 0;
   }
 }
+
+/*
+ * ── Lineup effect on an open timeline row (item #6) ───────────────────────
+ *
+ * Sits directly under `.af-tc-timeline-advice` and matches its size, because
+ * the two are read together: the advice says whether the price is fair, this
+ * says what the trade does to Sunday's lineup.
+ *
+ * ⚠ CORE `--good` / `--bad`, NOT `--tc-good` / `--tc-bad`. The `--tc-*` pair is
+ * a fixed dark-theme literal; the core tokens are redefined per theme, and the
+ * light theme's green is darkened for contrast on a white card. Same choice as
+ * `.af-tc-timeline-gap` above, which uses `--warn`.
+ *
+ * Appended at the end of the file, outside every `@media` block, on purpose.
+ */
+.af-tc-timeline-lineup {
+  margin: 4px 0 0;
+  color: var(--text2);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.4;
+}
+.af-tc-timeline-lineup[data-direction='up'] { color: var(--good); }
+.af-tc-timeline-lineup[data-direction='down'] { color: var(--bad); }
+.af-tc-timeline-lineup[data-direction='unknown'] { color: var(--muted); font-weight: 400; }
