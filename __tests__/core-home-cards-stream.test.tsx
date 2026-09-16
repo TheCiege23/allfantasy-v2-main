@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { Suspense, isValidElement, type ReactElement, type ReactNode } from 'react'
+import { Suspense, isValidElement, type ReactElement } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 /**
@@ -14,36 +14,47 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
  *      already STARTED (a read that is merely never awaited would also "not block" — so the reads
  *      that should have started are checked, and the ones that must wait for another are too).
  *   2. Each card resolves as soon as ITS reads land, while cards waiting on other reads do not.
- *   3. With the summary read failed, the honest "could not read your leagues" panel still stands
- *      in the issues card, and no card that depends on the summary claims emptiness.
- *   4. No screen waits for its tab badges.
+ *   3. With the summary read failed — null OR rejected — the honest "could not read your leagues"
+ *      panel still stands in the issues card, no summary card claims emptiness, and the shell's
+ *      signals still settle rather than taking the screen down.
+ *   4. No screen waits for its tab badges — and on the home the badges wait for the trade scan's
+ *      pending-offers write, because both rewrite the same cache row whole.
+ *   5. A failed trades read does not advance the "since your last visit" marker.
+ *   6. A league whose home could not be read gets the failure panel, not a blank screen.
  */
 
 const g = vi.hoisted(() => {
-  type Gate = { promise: Promise<unknown>; open: (value: unknown) => void }
+  type Gate = { promise: Promise<unknown>; open: (value: unknown) => void; fail: (error: unknown) => void }
   const gates = new Map<string, Gate>()
   const calls = new Map<string, number>()
+  const fns = new Map<string, ReturnType<typeof import('vitest').vi.fn>>()
   const gate = (name: string): Gate => {
     let existing = gates.get(name)
     if (!existing) {
       let open!: (value: unknown) => void
-      const promise = new Promise<unknown>((resolve) => {
+      let fail!: (error: unknown) => void
+      const promise = new Promise<unknown>((resolve, reject) => {
         open = resolve
+        fail = reject
       })
-      existing = { promise, open }
+      // A gate nobody awaits must never surface as an unhandled rejection when a test fails it.
+      promise.catch(() => undefined)
+      existing = { promise, open, fail }
       gates.set(name, existing)
     }
     return existing
   }
-  return { gates, calls, gate }
+  return { gates, calls, fns, gate }
 })
 
-/** A loader that records its call and resolves only when its gate is opened. */
+/** A loader that records its call and settles only when its gate is opened or failed. */
 function held(name: string) {
-  return vi.fn(() => {
+  const fn = vi.fn(() => {
     g.calls.set(name, (g.calls.get(name) ?? 0) + 1)
     return g.gate(name).promise
   })
+  g.fns.set(name, fn)
+  return fn
 }
 const called = (name: string) => g.calls.get(name) ?? 0
 
@@ -100,7 +111,11 @@ vi.mock('@/lib/prisma', () => ({
 // The home's reads, each held open by its own gate.
 vi.mock('@/lib/core-app/dash34', () => ({ getDash34Data: held('dash34'), imageOf: () => null }))
 vi.mock('@/lib/core-app/currentWeek', () => ({ resolveCurrentWeek: held('tradeWeek') }))
-vi.mock('@/lib/core-app/weekAll', () => ({ getWeekAll: held('week'), scoredMatchupLeagueIds: vi.fn(() => []) }))
+vi.mock('@/lib/core-app/weekAll', () => ({
+  getWeekAll: held('week'),
+  // A real scored league once there is a week to score, so win probability really prices one.
+  scoredMatchupLeagueIds: vi.fn((_live: string[], week: unknown) => (week ? ['L1'] : [])),
+}))
 vi.mock('@/lib/core-app/weekBoard', () => ({ getWeekBoard: held('schedule'), getRivalryRadar: vi.fn(async () => null) }))
 vi.mock('@/lib/core-app/career', () => ({ getCareerData: held('career') }))
 vi.mock('@/lib/core-app/dash3aPanels', () => ({ getCrossLeagueExposure: held('exposure'), getRivalRecords: held('rivals') }))
@@ -113,13 +128,24 @@ vi.mock('@/lib/core-app/weeklyRoutine', () => ({
 vi.mock('@/lib/core-app/todayStrip', () => ({ getTodayStrip: held('strip') }))
 vi.mock('@/lib/live/playFeedPresentation', () => ({ getPlayFeed: held('plays') }))
 vi.mock('@/lib/core-app/seasonPhase', () => ({ hasRegularSeasonStarted: held('regularSeason') }))
-vi.mock('@/lib/core-app/recentTrades', () => ({ getRecentTrades: held('trades') }))
+// The trade scan reports pending offers as it lands, the way the real one does.
+vi.mock('@/lib/core-app/recentTrades', () => ({
+  getRecentTrades: vi.fn((_leagues: unknown, _now: unknown, _limit: unknown, options?: { onPendingOffers?: (scanned: unknown[]) => void }) => {
+    g.calls.set('trades', (g.calls.get('trades') ?? 0) + 1)
+    return g.gate('trades').promise.then((value) => {
+      options?.onPendingOffers?.([])
+      return value
+    })
+  }),
+}))
 vi.mock('@/lib/core-app/sinceLastVisit', () => ({ getSinceLastVisit: held('brief') }))
 vi.mock('@/lib/core-app/matchup', () => ({ getMatchupData: held('matchup') }))
 vi.mock('@/lib/core-app/draftHqAll', () => ({ getDraftHqAll: held('drafts') }))
 vi.mock('@/lib/decision-os/userOs', () => ({ resolveUserOsSnapshot: held('userOs') }))
-vi.mock('@/lib/core-app/urgencyBadges', () => ({ getUrgencyBadges: held('urgency'), recordPendingOffers: vi.fn(async () => undefined) }))
+vi.mock('@/lib/core-app/urgencyBadges', () => ({ getUrgencyBadges: held('urgency'), recordPendingOffers: held('offersWrite') }))
 vi.mock('@/lib/analytics/recordDashboardActivation', () => ({ recordDashboardActivation: vi.fn(async () => undefined) }))
+// The league home — its loader failing is case 6.
+vi.mock('@/lib/core-app/leagueHome', () => ({ getLeagueHomeData: vi.fn(async () => null) }))
 // A non-home screen for the badges case.
 vi.mock('@/lib/core-app/trades', () => ({ getTradesData: vi.fn(async () => null) }))
 vi.mock('@/lib/core-app/crossLeagueValueActions', () => ({ getCrossLeagueValueActions: vi.fn(async () => []) }))
@@ -149,6 +175,7 @@ async function within<T>(promise: Promise<T>, ms = 1_500): Promise<T | 'pending'
   return Promise.race([promise, new Promise<'pending'>((resolve) => setTimeout(() => resolve('pending'), ms))])
 }
 
+const tick = () => new Promise((resolve) => setTimeout(resolve, 0))
 const render = (el: AnyElement) => (el.type as (props: unknown) => Promise<AnyElement | null>)(el.props)
 
 const pageArgs = (screen: string[], searchParams: Record<string, string>) => ({
@@ -156,18 +183,19 @@ const pageArgs = (screen: string[], searchParams: Record<string, string>) => ({
   searchParams: Promise.resolve(searchParams),
 })
 
-async function homeBody() {
+async function screenBody(screen: string[], searchParams: Record<string, string>, key: string) {
   const AfCorePage = (await import('@/app/core/[[...screen]]/page')).default
-  const tree = await AfCorePage(pageArgs([], {}))
-  const boundary = findAll(tree, (el) => el.type === Suspense && el.key === '|')[0]
-  expect(boundary, 'the home screen boundary').toBeTruthy()
+  const tree = await AfCorePage(pageArgs(screen, searchParams))
+  const boundary = findAll(tree, (el) => el.type === Suspense && el.key === key)[0]
+  expect(boundary, `the screen boundary ${key}`).toBeTruthy()
   return boundary.props.children as AnyElement
 }
 
-/** The home body rendered, then CoreHomeCards rendered: card name -> the async card element. */
+const homeBody = () => screenBody([], {}, '|')
+
+/** The rendered home body, plus CoreHomeCards rendered: card name -> the async card element. */
 async function homeCards() {
-  const body = await homeBody()
-  const bodyTree = await render(body)
+  const bodyTree = await render(await homeBody())
   const home = findAll(bodyTree, (el) => typeof el.props?.loads === 'object' && el.props?.resetKey !== undefined)[0]
   expect(home, 'CoreHomeCards in the home body').toBeTruthy()
   const cardsTree = (home.type as (props: unknown) => AnyElement)(home.props)
@@ -178,7 +206,8 @@ async function homeCards() {
     expect(suspense.type, `card ${String(boundary.props.card)} streams behind a Suspense`).toBe(Suspense)
     cards.set(String(boundary.props.card), suspense.props.children as AnyElement)
   }
-  return cards
+  const signals = findAll(bodyTree, (el) => el.props?.urgencyBadges instanceof Promise)[0]
+  return { cards, signals }
 }
 
 const SUMMARY = { leagues: [], allLeagues: [], totalLeagues: 1, weekLabel: 'Week 3', book: [], valueBasis: null, coverage: [] }
@@ -186,6 +215,8 @@ const SUMMARY = { leagues: [], allLeagues: [], totalLeagues: 1, weekLabel: 'Week
 beforeEach(() => {
   g.gates.clear()
   g.calls.clear()
+  // The loader mocks live for the whole file; their recorded arguments must not leak between tests.
+  for (const fn of g.fns.values()) fn.mockClear()
 })
 
 afterEach(() => {
@@ -209,7 +240,7 @@ describe('/core home cards stream independently', () => {
   })
 
   it('puts every card behind its own boundary', { timeout: 180_000 }, async () => {
-    const cards = await homeCards()
+    const { cards } = await homeCards()
     expect([...cards.keys()]).toEqual([
       'since-last-visit',
       'game-day',
@@ -235,7 +266,7 @@ describe('/core home cards stream independently', () => {
   })
 
   it('lets each card through as soon as its own reads land, and holds the rest', { timeout: 180_000 }, async () => {
-    const cards = await homeCards()
+    const { cards } = await homeCards()
     const career = render(cards.get('career')!)
     const issues = render(cards.get('issues')!)
     const matchups = render(cards.get('matchups')!)
@@ -253,17 +284,27 @@ describe('/core home cards stream independently', () => {
     expect(issuesCard).not.toBe('pending')
     expect(Array.isArray(issuesCard.props.issues)).toBe(true)
 
-    // Matchups also needs the week (and the win probabilities that follow it).
+    // Matchups also needs the week, and then the win probability priced for the scored league.
     expect(await within(matchups, 100)).toBe('pending')
     g.gate('week').open({ rows: [] })
+    await tick()
+    expect(called('matchup'), 'win probability prices the scored league once the week lands').toBe(1)
+    expect(await within(matchups, 100)).toBe('pending')
+    g.gate('matchup').open(null)
     const matchupsCard = (await within(matchups)) as AnyElement
     expect(matchupsCard).not.toBe('pending')
     expect(matchupsCard.props.weekLabel).toBe('Week 3')
+    // Across the client boundary goes the league list, never the whole summary.
+    expect(matchupsCard.props).not.toHaveProperty('data')
+    expect(matchupsCard.props.leagues).toEqual([])
   })
 
-  it('keeps the honest panel when the summary read fails, and no summary card claims emptiness', { timeout: 180_000 }, async () => {
-    const cards = await homeCards()
-    g.gate('dash34').open(null)
+  it.each([
+    ['comes back empty', (gate: { open: (v: unknown) => void }) => gate.open(null)],
+    ['rejects', (gate: { fail: (e: unknown) => void }) => gate.fail(new Error('summary read failed'))],
+  ])('keeps the honest panel when the summary read %s, and nothing else claims emptiness', { timeout: 180_000 }, async (_label, settle) => {
+    const { cards, signals } = await homeCards()
+    settle(g.gate('dash34'))
     g.gate('week').open(null)
     g.gate('career').open({ marker: 'career' })
 
@@ -276,18 +317,65 @@ describe('/core home cards stream independently', () => {
     // A card with its own read is not hidden by the summary's failure.
     const career = (await within(render(cards.get('career')!))) as AnyElement
     expect(career.props.career).toEqual({ marker: 'career' })
+
+    // The shell's signals still settle — a failed summary must not reach the screen's boundary.
+    g.gate('tradeWeek').open(null)
+    g.gate('trades').open([])
+    g.gate('offersWrite').open(undefined)
+    g.gate('urgency').open(null)
+    const published = (await within(render(signals))) as AnyElement
+    expect(published, 'the shell signals settled').not.toBe('pending')
+    expect(published.props.weekLabel).toBeNull()
+  })
+
+  it('makes the home badges wait for the pending-offers write, not just the summary', { timeout: 180_000 }, async () => {
+    await render(await homeBody())
+    g.gate('dash34').open(SUMMARY)
+    await tick()
+    expect(called('urgency'), 'badges ran before the trade scan').toBe(0)
+
+    g.gate('tradeWeek').open(3)
+    await tick()
+    g.gate('trades').open([])
+    await tick()
+    expect(called('offersWrite'), 'the scan reported its pending offers').toBe(1)
+    expect(called('urgency'), 'badges ran while the offers write was still in flight').toBe(0)
+
+    g.gate('offersWrite').open(undefined)
+    await tick()
+    await tick()
+    expect(called('urgency')).toBe(1)
+  })
+
+  it.each([
+    ['lands', (gate: { open: (v: unknown) => void; fail: (e: unknown) => void }) => gate.open([]), true],
+    ['fails', (gate: { open: (v: unknown) => void; fail: (e: unknown) => void }) => gate.fail(new Error('scan failed')), false],
+  ])('moves the visit marker only when the trades read %s', { timeout: 180_000 }, async (_label, settle, recordVisit) => {
+    await render(await homeBody())
+    g.gate('tradeWeek').open(3)
+    await tick()
+    settle(g.gate('trades'))
+    await tick()
+    await tick()
+    expect(called('brief')).toBe(1)
+    expect(g.fns.get('brief')!.mock.calls[0][0]).toMatchObject({ recordVisit })
   })
 
   it('never makes a screen wait for its tab badges', { timeout: 180_000 }, async () => {
-    const AfCorePage = (await import('@/app/core/[[...screen]]/page')).default
-    const tree = await AfCorePage(pageArgs(['trades'], { league: 'L1' }))
-    const boundary = findAll(tree, (el) => el.type === Suspense && el.key === 'trades|L1')[0]
-    const body = boundary.props.children as AnyElement
-
+    const body = await screenBody(['trades'], { league: 'L1' }, 'trades|L1')
     const outcome = await within(render(body).then(() => 'resolved'), 20_000)
     expect(outcome, 'the trades screen waited for its badges').toBe('resolved')
     // Positive control: the badges read did start — it just did not hold the screen.
-    await new Promise((resolve) => setTimeout(resolve, 0))
+    await tick()
     expect(called('urgency')).toBe(1)
+  })
+
+  it('shows the failure panel, not a blank screen, when a league home cannot be read', { timeout: 180_000 }, async () => {
+    const body = await screenBody([], { league: 'L1' }, '|L1')
+    const tree = await render(body)
+    expect(JSON.stringify(findAll(tree, (el) => el.type === 'div' && el.props?.className === 'af-frame').map((el) => el.props))).toContain(
+      'We could not read your leagues just now',
+    )
+    expect(findAll(tree, (el) => typeof el.props?.loads === 'object')).toHaveLength(0)
   })
 })

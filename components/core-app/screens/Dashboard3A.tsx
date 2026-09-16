@@ -19,7 +19,8 @@ import { GeoRestrictionNotice } from '@/components/core-app/GeoRestrictionNotice
 import type { CoreIssue } from '@/lib/core-app/outstandingIssues'
 import type { CareerData } from '@/lib/core-app/career'
 import type { WeekAllData } from '@/lib/core-app/weekAll'
-import type { Dash34Data } from '@/components/core-app/screens/Dashboard34'
+import type { Dash34Data, Dash34League } from '@/components/core-app/screens/Dashboard34'
+import { platformCountsOf, type PlatformCount } from '@/components/core-app/screens/dash3aPortfolio'
 import type { ExposureData, RivalsData, PanelState } from '@/lib/core-app/dash3aPanels'
 import { ExposureRowItem } from '@/components/core-app/screens/ExposureImpact'
 import { FollowingCard } from '@/components/core-app/screens/FollowingCard'
@@ -90,35 +91,46 @@ import { WorkbookBarChart } from '@/components/core-app/charts/WorkbookChart'
  * component would otherwise build from its data props; the layout around it is unchanged. Every
  * card is also exported below (`Dash3AIssues`, …) so the streamed version renders exactly this markup.
  */
-export type Dashboard3ASlots = Partial<
-  Record<
-    | 'routine'
-    | 'issues'
-    | 'matchups'
-    | 'chimmy'
-    | 'career'
-    | 'rivals'
-    | 'portfolioChart'
-    | 'exposure'
-    | 'following'
-    | 'receipts'
-    | 'leagues',
-    React.ReactNode
-  >
+export type Dashboard3ASlots = Record<
+  | 'routine'
+  | 'issues'
+  | 'matchups'
+  | 'chimmy'
+  | 'career'
+  | 'rivals'
+  | 'portfolioChart'
+  | 'exposure'
+  | 'following'
+  | 'receipts'
+  | 'leagues',
+  React.ReactNode
 >
 
-export type Dashboard3AProps = {
-  issues?: CoreIssue[]
-  data?: Dash34Data | null
-  career?: CareerData | null
-  week?: WeekAllData | null
-  slots?: Dashboard3ASlots
+type Dashboard3AChrome = {
   weekLabel?: string | null
   planName?: string | null
   tokensLeft?: number | null
   commissionerCount?: number
   /** Server-rendered clock, so the header does not hydrate to a different time. */
   nowLabel?: string | null
+}
+
+/*
+ * ⚠ EVERY SLOT, OR THE DATA — NEVER A MIX, NEVER NEITHER. A card built from props nobody passed
+ * would state falsehoods about data nobody read: "you're clean across every league" from an empty
+ * issues list, "no leagues imported" from a missing summary. So the type admits exactly two shapes.
+ */
+export type Dashboard3AProps = Dashboard3AChrome &
+  (
+    | (Dashboard3AData & { slots?: undefined })
+    | ({ slots: Dashboard3ASlots } & { [K in keyof Dashboard3AData]?: undefined })
+  )
+
+type Dashboard3AData = {
+  issues: CoreIssue[]
+  data: Dash34Data | null
+  career: CareerData | null
+  week: WeekAllData | null
   /** Cross-league roster share. Real — see lib/core-app/dash3aPanels.ts. */
   exposure?: PanelState<ExposureData> | null
   /** Head-to-head records from stored weekly results. */
@@ -398,24 +410,39 @@ function deadlineLabel(deadline: Date | null, now: Date): string | null {
   return `${Math.floor(hrs / 24)}D`
 }
 
-export function Dashboard3A({
-  issues = [],
-  data = null,
-  career = null,
-  week = null,
-  weekLabel = null,
-  planName = null,
-  tokensLeft = null,
-  commissionerCount = 0,
-  nowLabel = null,
-  exposure = null,
-  rivals = null,
-  winProb = null,
-  following = null,
-  receipts = null,
-  routine = null,
-  slots = {},
-}: Dashboard3AProps) {
+/** The cards built from data props — the markup the streamed slots render too. */
+function cardsFromData(props: Dashboard3AData & Dashboard3AChrome): Dashboard3ASlots {
+  const summary = props.data
+  return {
+    routine: <Dash3ARoutine routine={props.routine ?? null} />,
+    issues: <Dash3AIssues issues={props.issues} />,
+    matchups: (
+      <Dash3AMatchups
+        leagues={summary?.leagues ?? []}
+        week={props.week}
+        winProb={props.winProb ?? null}
+        weekLabel={props.weekLabel ?? null}
+      />
+    ),
+    chimmy: <Dash3AChimmy openCount={props.issues.length} />,
+    career: <Dash3ACareer career={props.career} />,
+    rivals: <Dash3ARivals rivals={props.rivals ?? null} />,
+    portfolioChart: (
+      <Dash3APortfolioChart platformCounts={platformCountsOf(summary?.allLeagues ?? summary?.leagues ?? [])} />
+    ),
+    exposure: <Dash3AExposure exposure={props.exposure ?? null} />,
+    following: <Dash3AFollowing following={props.following ?? null} />,
+    receipts: <Dash3AReceipts receipts={props.receipts ?? null} />,
+    leagues: <Dash3ALeagues leagues={summary?.leagues ?? []} totalLeagues={summary?.totalLeagues ?? null} />,
+  }
+}
+
+export function Dashboard3A(props: Dashboard3AProps) {
+  const { planName = null, tokensLeft = null, nowLabel = null, commissionerCount = 0 } = props
+  const slots = props.slots ?? cardsFromData(props)
+  // The hidden standalone rail below reads these; with slots it has no data, and it is hidden in the shell.
+  const data = props.slots ? null : props.data
+  const career = props.slots ? null : props.career
   const leagues = data?.leagues ?? []
   /*
    * ⚠ THE RAIL IS A SWITCHER OVER EVERY LEAGUE YOU PLAY, NOT THE "NEEDS
@@ -553,34 +580,34 @@ export function Dashboard3A({
         <div className="af3a-body">
           <div className="af3a-col-main">
             {/* ── Your week — the weekly routine, today's step first in the eye ── */}
-            {slots.routine ?? <Dash3ARoutine routine={routine} />}
+            {slots.routine}
             {/* ── Outstanding issues ───────────────────────────────────── */}
-            {slots.issues ?? <Dash3AIssues issues={issues} />}
+            {slots.issues}
 
             {/* ── This week's matchups ─────────────────────────────────── */}
-            {slots.matchups ?? <Dash3AMatchups data={data} week={week} winProb={winProb} weekLabel={weekLabel} />}
+            {slots.matchups}
           </div>
 
           {/* ── Right column ───────────────────────────────────────────── */}
           <div className="af3a-col-side">
-            {slots.chimmy ?? <Dash3AChimmy openCount={issues.length} />}
-            {slots.career ?? <Dash3ACareer career={career} />}
-            {slots.rivals ?? <Dash3ARivals rivals={rivals} />}
+            {slots.chimmy}
+            {slots.career}
+            {slots.rivals}
           </div>
         </div>
 
-        {slots.portfolioChart ?? <Dash3APortfolioChart data={data} />}
+        {slots.portfolioChart}
 
         {/* ── Bottom three-up ────────────────────────────────────────────── */}
         <div className="af3a-bottom">
           {/* Exposure and Following share a column, so the bottom row stays three-up. */}
           <div className="af3a-stack">
-            {slots.exposure ?? <Dash3AExposure exposure={exposure} />}
-            {slots.following ?? <Dash3AFollowing following={following} />}
-            {slots.receipts ?? <Dash3AReceipts receipts={receipts} />}
+            {slots.exposure}
+            {slots.following}
+            {slots.receipts}
           </div>
 
-          {slots.leagues ?? <Dash3ALeagues data={data} />}
+          {slots.leagues}
 
           <section className="af3a-card">
             <header className="af3a-cardhead">
@@ -715,17 +742,17 @@ export function Dash3AIssues({ issues }: { issues: CoreIssue[] }) {
 }
 
 export function Dash3AMatchups({
-  data,
+  leagues,
   week,
   winProb,
   weekLabel,
 }: {
-  data: Dash34Data | null
+  /** The summary's ranked league list — only its live scores are read here. */
+  leagues: Dash34League[]
   week: WeekAllData | null
   winProb: Record<string, number> | null
   weekLabel: string | null
 }) {
-  const leagues = data?.leagues ?? []
   /*
    * Two real sources, preferred in order. `Dash34League.score` is live and knows
    * the OPPONENT'S NAME, which the design shows and `WeekRow` cannot supply.
@@ -949,16 +976,11 @@ export function Dash3ARivals({ rivals }: { rivals: PanelState<RivalsData> | null
   )
 }
 
-export function Dash3APortfolioChart({ data }: { data: Dash34Data | null }) {
-  // The same inventory the rail switches over: every league you play, not the capped queue.
-  const railLeagues = data?.allLeagues ?? data?.leagues ?? []
-  const platformCounts = [...railLeagues.reduce((counts, league) => {
-    const platform = String(league.platform ?? 'AllFantasy').trim() || 'AllFantasy'
-    counts.set(platform, (counts.get(platform) ?? 0) + 1)
-    return counts
-  }, new Map<string, number>())]
-    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
-    .map(([label, value]) => ({ label, value, displayValue: value.toLocaleString() }))
+/**
+ * Counts in, not league rows: the same inventory the rail switches over (every league you play, not
+ * the capped queue), counted by `platformCountsOf` — on the server when the home streams.
+ */
+export function Dash3APortfolioChart({ platformCounts }: { platformCounts: PlatformCount[] }) {
   return (
         <WorkbookBarChart
           title="League portfolio by platform"
@@ -1053,8 +1075,7 @@ export function Dash3AReceipts({ receipts }: { receipts: DecisionReceiptsData | 
   )
 }
 
-export function Dash3ALeagues({ data }: { data: Dash34Data | null }) {
-  const leagues = data?.leagues ?? []
+export function Dash3ALeagues({ leagues, totalLeagues }: { leagues: Dash34League[]; totalLeagues: number | null }) {
   /*
    * ⚠ `data.leagues` IS NOT EVERY LEAGUE, AND THIS HEADER CLAIMED IT WAS.
    * `getDash34Data` caps that array at LIST_LIMIT = 8 because 34a's main column
@@ -1064,7 +1085,7 @@ export function Dash3ALeagues({ data }: { data: Dash34Data | null }) {
    * carries; when the list is short of it, say so rather than letting the
    * shorter number stand as the total.
    */
-  const leagueTotal = data?.totalLeagues ?? leagues.length
+  const leagueTotal = totalLeagues ?? leagues.length
   const shownLeagues = leagues.slice(0, 5)
   const leagueTotalLabel =
     leagueTotal > shownLeagues.length
