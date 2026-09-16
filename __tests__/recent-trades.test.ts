@@ -265,8 +265,14 @@ describe('getRecentTrades', () => {
       )
       const onPendingOffers = vi.fn()
       await getRecentTrades(TWO, NOW, 3, { ownerSleeperId: 'owner-1', currentWeek: 2, onPendingOffers })
-      /* af-2's scan did not answer, so it is absent — never reported as zero. */
-      expect(onPendingOffers).toHaveBeenCalledWith([{ leagueId: 'af-1', waiting: 2 }])
+      /*
+       * af-2's scan did not answer, so it is absent — never reported as zero.
+       *
+       * ⚠ AND `attempted` IS HOW THE CALLER LEARNS THAT. With only the array, one of two leagues
+       * answering is indistinguishable from both answering with nothing waiting — and /core's home
+       * decides whether to close the "since your last visit" window on exactly that difference.
+       */
+      expect(onPendingOffers).toHaveBeenCalledWith([{ leagueId: 'af-1', waiting: 2 }], { attempted: 2 })
     })
 
     it('a failing callback never costs the trades', async () => {

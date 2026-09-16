@@ -2060,10 +2060,18 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
          * 30-minute grade sweep already fills — see lib/core-app/recentTrades
          * for why the product has been telling users this data does not exist.
          */
-        // Set when the trades read fails, so the brief below does not close the visit over trades it never saw.
+        /*
+         * Set when the trades read cannot stand behind what it returned, so the brief below does not
+         * close the visit over trades it never saw: the whole read failed, or the live scan answered
+         * for fewer leagues than it tried (each league's scan catches its own failure and the read
+         * still resolves — the trades from those leagues are simply missing).
+         */
         let tradesFailed = false
+        let tradesIncomplete = false
         // The pending-offers cache write the trade scan fires — see `offersSettled` below.
         let offersRecorded: Promise<unknown> = Promise.resolve()
+        // Only a Sleeper identity makes the scan report offers at all, and only a report writes the row.
+        const scanWillRecordOffers = Boolean(leagueListPayload?.sleeperUserId)
         const trades = traceCard('trades', () =>
           tradeWeek.then((currentWeek) =>
             getRecentTrades(
@@ -2085,8 +2093,13 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
                  * Not awaited by any card: a badge that lags one render is inside the
                  * 10-minute freshness rule, and recording it must never slow the home.
                  */
-                onPendingOffers: (scanned) => {
-                  offersRecorded = recordPendingOffers(userId, scanned, now).catch(() => undefined)
+                onPendingOffers: (scanned, meta) => {
+                  if (meta && meta.attempted > scanned.length) tradesIncomplete = true
+                  // `Promise.resolve().then` so a synchronous throw lands in the catch rather than
+                  // leaving `offersRecorded` unassigned — which would quietly restore the race below.
+                  offersRecorded = Promise.resolve()
+                    .then(() => recordPendingOffers(userId, scanned, now))
+                    .catch(() => undefined)
                 },
               },
             ),
@@ -2100,9 +2113,18 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
          * `recordPendingOffers` each read the one `core-urgency` cache row and write it back WHOLE.
          * When the badges ran after every home read, the offers write had a head start; running
          * independently, either could overwrite the other — dropping the new offers, or restoring an
-         * old lineup count. The badges stream, so waiting here costs no card anything.
+         * old lineup count. The badges stream, so no card waits for this.
+         *
+         * ⚠ BUT ONLY WHEN A WRITE IS ACTUALLY COMING. Without a Sleeper identity the scan reports
+         * nothing and writes nothing, so waiting on it would put the slowest read on the page in
+         * front of the badges for no reason at all.
+         *
+         * The real fix is for the two writers to stop sharing a row they each rewrite whole — a
+         * field-scoped write, so neither can clobber the other and the badges need not wait.
          */
-        const offersSettled = trades.then(() => offersRecorded).then(() => undefined)
+        const offersSettled = scanWillRecordOffers
+          ? trades.then(() => offersRecorded).then(() => undefined)
+          : Promise.resolve()
 
         // A fresh array per reader, as each had before: neither can see what the other does to its input.
         const routineLeagues = () =>
@@ -2209,6 +2231,11 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
          * ⚠ NOR DOES A FAILED TRADES READ. Its fallback is `[]`, so the brief would say nothing traded
          * AND close the window — and the trades it never read would never appear in any brief. With
          * the home's reads now running together, a pool timeout is the likely way that happens.
+         *
+         * ⚠ AND A PARTIAL SCAN IS THE SAME HARM ONE LEVEL DOWN. `tradesFailed` only catches a total
+         * rejection; the scan itself falls back per league, so three of eight leagues answering
+         * resolves successfully with the other five silently missing. `tradesIncomplete` closes that:
+         * the window stays open unless every league the scan attempted actually answered.
          */
         const brief = traceCard('since-last-visit', () =>
           trades.then((recentTrades) =>
@@ -2226,7 +2253,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
               recentTrades,
               tradesLimit: HOME_RECENT_TRADES_LIMIT,
               now,
-              recordVisit: homeRecordVisit && !tradesFailed,
+              recordVisit: homeRecordVisit && !tradesFailed && !tradesIncomplete,
             }),
           ),
         ).catch(() => null)
@@ -2556,7 +2583,11 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
           urgencyBadges={urgencyBadges}
           weekLabel={
             homeLoads
-              ? homeLoads.dash34.then((summary) => summary?.weekLabel ?? null).catch(() => null)
+              ? // No `.catch` here, unlike `homeSignals` below: `homeLoads.dash34` already falls back
+                // to null at its own read, and reading one optional field off it cannot throw. A catch
+                // that can never fire reads as "this can fail" to the next person and hides that the
+                // one below genuinely can.
+                homeLoads.dash34.then((summary) => summary?.weekLabel ?? null)
               : (dash34?.weekLabel ?? null)
           }
           /*
@@ -3318,11 +3349,17 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
          * own reads (components/core-app/home/HomeCards.tsx, which also carries the reasons for
          * their order).
          *
-         * 🛑 `homeLoads` IS NULL HERE FOR A LEAGUE WHOSE HOME COULD NOT BE READ. `/core?league=<id>`
-         * reaches this branch whenever `leagueHome` is null — `getLeagueHomeData` threw (its error is
-         * swallowed above) or found no league row. That case used to fall into the summary's
-         * "could not read" panel; rendering nothing instead left a blank screen with no message and
-         * no report. The panel stays.
+         * 🛑 `homeLoads` IS NULL HERE FOR A LEAGUE WHOSE HOME COULD NOT BE READ. `isHome3a` is false
+         * the moment a league is selected, so this is the ONLY way to reach the fallback: `/core?league=<id>`
+         * where `leagueHome` came back null — `getLeagueHomeData` threw (its error is swallowed above)
+         * or its League row went away underneath us. Rendering nothing left a blank screen with no
+         * message and no report.
+         *
+         * ⚠ AND THE PANEL IS ABOUT ONE LEAGUE, NOT THE ACCOUNT. It first reused the summary's
+         * "we could not read your leagues" copy, which is wrong twice over here: the league list read
+         * FINE — `AfCorePage` redirects a stale, deleted or foreign `?league=` away before the shell
+         * renders, so reaching this line means the id was in that list — and the rail beside this
+         * panel is showing those leagues while the panel claims they could not be read.
          */
         homeLoads ? (
           <CoreHomeCards
@@ -3336,11 +3373,15 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
         ) : (
           <div className="af-frame" style={{ padding: 24, maxWidth: 720 }}>
             <h1 className="af-display" style={{ margin: 0, fontSize: 22, letterSpacing: '-0.03em' }}>
-              Your leagues
+              {rail.find((l) => l.id === selectedLeagueId)?.name ?? 'This league'}
             </h1>
             <p style={{ marginTop: 8, fontSize: 13, lineHeight: 1.5, color: 'var(--muted)' }}>
-              We could not read your leagues just now. This is a read failure on our side, not a sign
-              that you have none.
+              We could not read this league just now. This is a read failure on our side — your other
+              leagues are unaffected, and nothing about this one has changed. Reload, or{' '}
+              <a href="/core" style={{ color: 'var(--accent)' }}>
+                go back to all leagues
+              </a>
+              .
             </p>
           </div>
         )
