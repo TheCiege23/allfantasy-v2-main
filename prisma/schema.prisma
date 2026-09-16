@@ -1670,6 +1670,44 @@ model AiUserTendency {
 }
 
 /// Tracks AI recommendations and outcomes for evaluation loops.
+/// Lifecycle telemetry for an AI action card: shown, clicked, staged, completed.
+///
+/// Written by `lib/chimmy-actions/server-store.ts` `createActionEvent`, which has been calling
+/// `(prisma as any).aiActionEvent.create` against a model that did not exist — so every event
+/// threw, `/api/ai/actions/events` returned 500, and every follow/completion rate built on these
+/// rows was reading a table that was never there. The `as any` cast is why the typecheck could
+/// not see it.
+model AiActionEvent {
+  id         String   @id
+  /// One of the AIActionType union in lib/chimmy-actions/AIActionModel.ts. Deliberately a
+  /// String and not a Postgres enum: that union already carries dozens of values and grows with
+  /// every new action, and an enum would make each addition a migration.
+  actionType String   @map("action_type")
+  surface    String
+  userId     String   @map("user_id")
+  leagueId   String?  @map("league_id")
+  teamId     String?  @map("team_id")
+  sport      String?
+  /// shown | clicked | confirmed | staged | completed | dismissed | saved | failed.
+  /// `staged` means validated and prefilled; `completed` is reserved for a change that really
+  /// happened. See shadow-league write authority before treating completion as a platform write.
+  event      String
+  /// The client-supplied event time.
+  timestamp  DateTime
+  durationMs Int?     @map("duration_ms")
+  metadata   Json?
+  /// Server insert time, kept ALONGSIDE `timestamp` rather than instead of it: `timestamp` comes
+  /// off the caller's clock and can be skewed or wrong, and a rate computed over a window needs
+  /// one the server vouches for.
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@index([userId, timestamp])
+  @@index([leagueId])
+  @@index([actionType])
+  @@index([event])
+  @@map("ai_action_events")
+}
+
 model AiRecommendationOutcome {
   id                    String    @id @default(cuid())
   recommendationId      String    @map("recommendation_id")
