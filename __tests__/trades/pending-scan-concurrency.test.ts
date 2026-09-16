@@ -159,4 +159,39 @@ describe('⚠ a refusal is still not an empty week', () => {
     expect(out.weeksUnanswered).toBe(0)
     expect(out.trades).toEqual([])
   })
+
+  /*
+   * 🛑 `scanned: false` COVERS TWO UNRELATED SITUATIONS AND A CALLER CANNOT TELL THEM APART.
+   *
+   * Sleeper being down is transient — retry and it may work. "No roster here is yours" is
+   * permanent: same input, same answer, for the life of the league. /core's "since your last
+   * visit" holds its trade window open while a read is incomplete, so treating the permanent one
+   * as a failure holds that window open forever, re-reporting the same trades on every visit with
+   * nothing able to clear it. `unscannedKind` is what lets the caller separate them.
+   */
+  describe('unscannedKind', () => {
+    it('marks a provider outage transient', async () => {
+      getLeagueTransactions.mockImplementation(async () => {
+        throw new Error('sleeper down')
+      })
+      expect((await scanPendingSleeperTrades(args)).unscannedKind).toBe('provider')
+    })
+
+    it('marks "no roster of yours in this league" permanent', async () => {
+      const out = await scanPendingSleeperTrades({ ...args, ownerSleeperId: 'nobody' })
+      expect(out.scanned).toBe(false)
+      expect(out.unscannedKind).toBe('identity')
+    })
+
+    it('marks a missing Sleeper identity permanent', async () => {
+      expect((await scanPendingSleeperTrades({ ...args, ownerSleeperId: '' })).unscannedKind).toBe('identity')
+    })
+
+    it('leaves it null on a scan that answered', async () => {
+      getLeagueTransactions.mockImplementation(async () => [])
+      const out = await scanPendingSleeperTrades(args)
+      expect(out.scanned).toBe(true)
+      expect(out.unscannedKind).toBeNull()
+    })
+  })
 })

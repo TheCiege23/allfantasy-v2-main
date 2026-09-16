@@ -106,6 +106,22 @@ describe('resolveVisitWindow', () => {
       expect(w.tradesSinceAt.toISOString()).toBe(w.sinceAt.toISOString())
     })
 
+    /*
+     * 🛑 AND THE FALLBACK IS `lastSeenAt`, NOT `sinceAt` — the same backward-walk bug reached
+     * through the legacy path, which is EVERY existing marker on the deploy that ships this.
+     * Inside a session `sinceAt` is the session's opening point, so falling back to it and then
+     * persisting that on a blind read writes a boundary hours older than the last render.
+     */
+    it('carries the last render forward, not the session start, on a legacy marker', () => {
+      const w = resolveVisitWindow(
+        marker({ lastSeenAt: ago(10 * 60_000).toISOString(), sinceAt: ago(30 * HOUR).toISOString() }),
+        NOW,
+      )
+      expect(w.tradesSeenAt.toISOString()).toBe(ago(10 * 60_000).toISOString())
+      // What this render MEASURES from is still the session window — the brief must not shrink.
+      expect(w.tradesSinceAt.toISOString()).toBe(ago(30 * HOUR).toISOString())
+    })
+
     it('sits further back while the trades read has been blind', () => {
       const w = resolveVisitWindow(marker({ tradesSeenAt: ago(12 * HOUR).toISOString() }), NOW)
       expect(w.sinceAt.toISOString()).toBe(ago(5 * HOUR).toISOString())
@@ -121,6 +137,25 @@ describe('resolveVisitWindow', () => {
       const w = resolveVisitWindow(marker({ tradesSeenAt: ago(1 * HOUR).toISOString() }), NOW)
       expect(w.tradesSinceAt.toISOString()).toBe(w.sinceAt.toISOString())
       expect(w.tradesSeenAt.toISOString()).toBe(ago(1 * HOUR).toISOString())
+    })
+
+    /*
+     * ⚠ `isMarker` validates version/lastSeenAt/sinceAt and nothing else, so a corrupt
+     * `tradesSeenAt` reaches here.
+     *
+     * 🛑 THE DANGEROUS SHAPE IS A TRUTHY NUMBER, and the first version of this test missed it by
+     * using `0` — which is falsy, so the old truthiness check caught it and the control stayed
+     * green. An epoch number is truthy AND parses to a valid date, so it sails past
+     * `Number.isFinite`, clamps to the floor, and silently opens the trade window to the full
+     * 7 days. Only a `typeof` check rejects it.
+     */
+    it.each([
+      ['an epoch number', 1_700_000_000_000 as unknown as string],
+      ['an unparseable string', 'not-a-date'],
+    ])('falls back rather than trusting %s in tradesSeenAt', (_label, value) => {
+      const w = resolveVisitWindow(marker({ tradesSeenAt: value }), NOW)
+      expect(w.tradesSeenAt.toISOString()).toBe(ago(5 * HOUR).toISOString())
+      expect(w.tradesSinceAt.toISOString()).toBe(w.sinceAt.toISOString())
     })
 
     it('is floored at 7 days, however long the read has been blind', () => {
@@ -308,17 +343,21 @@ describe('getSinceLastVisit', () => {
    * reload at 09:10 wrote a boundary from the previous day. Bounded and self-healing, but it
    * re-reports trades the user has already been shown.
    */
-  it('does not walk the boundary backward when a blind reload lands inside a session', async () => {
+  it.each([
+    ['a boundary of its own', ago(HOUR).toISOString(), ago(HOUR).toISOString()],
+    // The legacy path: no boundary yet, so the last render is the best evidence there is.
+    ['no boundary yet (a marker from before this field)', undefined, ago(10 * 60_000).toISOString()],
+  ])('does not walk the boundary backward on a blind reload inside a session, with %s', async (_l, tradesSeenAt, expected) => {
     h.cacheFind.mockResolvedValue({
       data: marker({
         lastSeenAt: ago(10 * 60_000).toISOString(), // inside SESSION_GAP_MS: same session
         sinceAt: ago(30 * HOUR).toISOString(), // the session opened yesterday
-        tradesSeenAt: ago(HOUR).toISOString(), // a COMPLETE read an hour ago
+        tradesSeenAt, // a COMPLETE read an hour ago, or none recorded at all
       }),
     })
     await run(true, false)
     const written = h.cacheUpsert.mock.calls[0]![0].update.data as VisitMarker
-    expect(written.tradesSeenAt).toBe(ago(HOUR).toISOString())
+    expect(written.tradesSeenAt).toBe(expected)
   })
 
   it('advances the trade boundary when the trades read could stand behind itself', async () => {

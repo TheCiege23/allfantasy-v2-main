@@ -174,6 +174,8 @@ describe('notification rows get a provider handoff by kind', () => {
 describe('the brief gets handoffs on trades and single-league injuries', () => {
   const brief = (): SinceLastVisitBrief => ({
     sinceAt: '2026-09-13T00:00:00Z',
+    // Equal to `sinceAt` unless a blind trades read left the trade boundary held further back.
+    tradesSinceAt: '2026-09-13T00:00:00Z',
     firstVisit: false,
     windowCapped: false,
     trades: {

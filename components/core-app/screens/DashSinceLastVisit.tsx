@@ -41,14 +41,21 @@ function whenLabel(brief: SinceLastVisitBrief, now: Date): string {
  */
 function tradeReachLabel(brief: SinceLastVisitBrief, now: Date): string | null {
   /*
-   * ⚠ GUARDED AGAINST AN ABSENT VALUE, WHICH THE TYPE SAYS CANNOT HAPPEN. Tests are not
-   * typechecked in this repo, so a fixture built before this field existed hands over
-   * `undefined` and compiles fine — and `new Date(undefined)` is NaN, which fails every
-   * comparison and would render "(last NaNm)" rather than nothing.
+   * ⚠ GUARDED AGAINST A VALUE THE TYPE SAYS CANNOT HAPPEN — in two different ways, because they
+   * are two different inputs. Tests are not typechecked in this repo, so a fixture built before
+   * this field existed hands over `undefined`; and a stored brief could carry a string that does
+   * not parse. Either would render "(last NaNd)" rather than nothing.
    */
-  const reach = new Date(brief.tradesSinceAt ?? brief.sinceAt).getTime()
+  if (typeof brief.tradesSinceAt !== 'string') return null
+  const reach = new Date(brief.tradesSinceAt).getTime()
   if (!Number.isFinite(reach) || reach >= new Date(brief.sinceAt).getTime()) return null
-  return `last ${agoLabel(brief.tradesSinceAt, now)}`
+  /*
+   * ⚠ AND COMPARE WHAT IS RENDERED, NOT THE TIMESTAMPS. `agoLabel` rounds to one unit, so a
+   * boundary trailing the window by less than a rounding bucket — the normal case one render
+   * after a complete read — printed "since 2h ago" above "(last 2h)", which reads as a typo.
+   */
+  const label = agoLabel(brief.tradesSinceAt, now)
+  return label === agoLabel(brief.sinceAt, now) ? null : `last ${label}`
 }
 
 function statusText(status: string | null): string {
@@ -87,7 +94,7 @@ export function DashSinceLastVisit({ brief, now }: { brief: SinceLastVisitBrief 
               <span className="af-brief-what">
                 {trades.atLeast ? `${trades.items.length}+` : trades.items.length} new trade
                 {trades.items.length === 1 && !trades.atLeast ? '' : 's'}
-                {tradeReach ? <span className="af-brief-detail"> ({tradeReach})</span> : null}
+                {tradeReach ? <span className="af-brief-reach"> ({tradeReach})</span> : null}
               </span>
               <ul className="af-brief-sub">
                 {trades.items.map((t) => (

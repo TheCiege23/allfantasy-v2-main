@@ -226,6 +226,19 @@ export type PendingTradeScan = {
   /** Why the scan did not run. Null when it did. */
   reason: string | null
   /**
+   * 🛑 WHETHER A CALLER SHOULD EVER EXPECT A DIFFERENT ANSWER. `scanned: false` covers two
+   * unrelated situations, and collapsing them is a bug in the caller rather than a nuance:
+   *   `provider` — Sleeper refused, or could not be reached. Try again and it may work.
+   *   `identity` — this account owns no roster in this league, or we do not know which Sleeper
+   *                account is theirs. Same input, same answer, on every render forever.
+   *
+   * /core's "since your last visit" holds its trade window open while a read is incomplete, so
+   * treating an `identity` result as a transient failure holds that window open for the life of
+   * the league — re-reporting the same trades on every visit, with nothing able to clear it.
+   * Null when `scanned` is true.
+   */
+  unscannedKind?: 'provider' | 'identity' | null
+  /**
    * Weeks Sleeper refused while others answered. A partial scan still counts as
    * scanned — but "nothing waiting" is weaker than it looks, and the caller
    * should say so rather than round it up to a clean empty.
@@ -255,6 +268,7 @@ export async function scanPendingSleeperTrades(args: {
       trades: [],
       scanned: false,
       reason: 'we do not know which Sleeper account is yours in this league',
+      unscannedKind: 'identity',
       weeksUnanswered: 0,
     }
   }
@@ -274,6 +288,7 @@ export async function scanPendingSleeperTrades(args: {
         trades: [],
         scanned: false,
         reason: 'no roster in this Sleeper league is owned by your linked account',
+        unscannedKind: 'identity',
         weeksUnanswered: 0,
       }
     }
@@ -397,6 +412,7 @@ export async function scanPendingSleeperTrades(args: {
         trades: [],
         scanned: false,
         reason: 'Sleeper did not answer for this league',
+        unscannedKind: 'provider',
         weeksUnanswered,
         weeksRequested: weeks.length,
         weeksAnswered: 0,
@@ -409,6 +425,7 @@ export async function scanPendingSleeperTrades(args: {
       completedTrades: completed.slice(0, 50),
       scanned: true,
       reason: null,
+      unscannedKind: null,
       weeksUnanswered,
       weeksRequested: weeks.length,
       weeksAnswered: weeks.length - weeksUnanswered,
@@ -419,6 +436,7 @@ export async function scanPendingSleeperTrades(args: {
       trades: [],
       scanned: false,
       reason: 'Sleeper could not be reached',
+      unscannedKind: 'provider',
       weeksUnanswered: 0,
     }
   }

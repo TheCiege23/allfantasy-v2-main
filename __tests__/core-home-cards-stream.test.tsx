@@ -418,7 +418,7 @@ describe('/core home cards stream independently', () => {
     ['cannot read the grade cache', (gate: { open: (v: unknown) => void; fail: (e: unknown) => void }) => gate.open([]), 'grade-cache-unreadable', false],
     ['has a league that never answered', (gate: { open: (v: unknown) => void; fail: (e: unknown) => void }) => gate.open([]), 'league-scan-unanswered', false],
     ['has a scan missing weeks', (gate: { open: (v: unknown) => void; fail: (e: unknown) => void }) => gate.open([]), 'league-scan-partial-weeks', false],
-  ])('treats the trades read as complete only when it %s', { timeout: 180_000 }, async (_label, settle, incomplete, tradesComplete) => {
+  ])('reports the trades read to the brief when it %s', { timeout: 180_000 }, async (_label, settle, incomplete, tradesComplete) => {
     g.scan.incomplete = incomplete
     await render(await homeBody())
     g.gate('tradeWeek').open(3)

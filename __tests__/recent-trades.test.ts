@@ -334,10 +334,53 @@ describe('getRecentTrades', () => {
 
       /* The other half of "once per occurrence": both leagues blind means both are reported. */
       it('reports each blind league separately', async () => {
-        scanPendingSleeperTrades.mockResolvedValue({ ...answered, scanned: false, reason: 'no roster' })
+        scanPendingSleeperTrades.mockResolvedValue({
+          ...answered, scanned: false, reason: 'Sleeper could not be reached', unscannedKind: 'provider',
+        })
         const onIncomplete = vi.fn()
         await getRecentTrades(TWO, NOW, 3, { ownerSleeperId: 'owner-1', currentWeek: 2, onIncomplete })
         expect(onIncomplete.mock.calls).toEqual([['league-scan-unanswered'], ['league-scan-unanswered']])
+      })
+
+      /*
+       * 🛑 AND A SCAN THAT CANNOT EVER SUCCEED IS NOT A FAILURE TO REPORT. `scanned: false` also
+       * means "no roster in this league is owned by your linked account" — permanent, same answer
+       * on every render for the life of the league. Reporting it holds /core's trade window open
+       * FOREVER: the boundary never advances, the same trades are re-reported on every visit, and
+       * nothing can clear it, because the only thing that would is a complete scan that cannot
+       * happen. It is the rule this file already applies to the `maxLeagues` cap, reached from a
+       * direction the first version of this callback did not consider.
+       */
+      it('stays quiet about a league the account owns no roster in', async () => {
+        scanPendingSleeperTrades.mockResolvedValue({
+          ...answered,
+          scanned: false,
+          reason: 'no roster in this Sleeper league is owned by your linked account',
+          unscannedKind: 'identity',
+        })
+        const onIncomplete = vi.fn()
+        await getRecentTrades(TWO, NOW, 3, { ownerSleeperId: 'owner-1', currentWeek: 2, onIncomplete })
+        expect(onIncomplete).not.toHaveBeenCalled()
+      })
+
+      /* A mix: the permanent one is silent, the transient one is reported. */
+      it('separates a permanent identity result from a provider failure in the same pass', async () => {
+        scanPendingSleeperTrades.mockImplementation(async ({ platformLeagueId }: { platformLeagueId: string }) =>
+          platformLeagueId === '111'
+            ? { ...answered, scanned: false, reason: 'no roster', unscannedKind: 'identity' }
+            : { ...answered, scanned: false, reason: 'Sleeper could not be reached', unscannedKind: 'provider' },
+        )
+        const onIncomplete = vi.fn()
+        await getRecentTrades(TWO, NOW, 3, { ownerSleeperId: 'owner-1', currentWeek: 2, onIncomplete })
+        expect(onIncomplete.mock.calls).toEqual([['league-scan-unanswered']])
+      })
+
+      /* A scan the loader's own `.catch` turned into null knows nothing — treat it as the provider. */
+      it('reports a scan that threw, which has no kind of its own', async () => {
+        scanPendingSleeperTrades.mockRejectedValue(new Error('socket hang up'))
+        const onIncomplete = vi.fn()
+        await getRecentTrades([TWO[0]!], NOW, 3, { ownerSleeperId: 'owner-1', currentWeek: 2, onIncomplete })
+        expect(onIncomplete.mock.calls).toEqual([['league-scan-unanswered']])
       })
 
       /*

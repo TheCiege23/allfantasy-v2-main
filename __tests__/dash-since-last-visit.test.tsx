@@ -123,14 +123,41 @@ describe('DashSinceLastVisit', () => {
 
   /*
    * ⚠ Tests are not typechecked here, so a fixture written before `tradesSinceAt` existed hands
-   * over `undefined` and still compiles — and `new Date(undefined)` is NaN, which would render
-   * "(last NaNm)" rather than nothing.
+   * over `undefined` and still compiles.
+   *
+   * 🛑 AND THE ABSENT CASE ALONE DOES NOT PIN THE GUARD — measured. The first version of this
+   * test was green with the `Number.isFinite` check deleted, because a `?? brief.sinceAt`
+   * fallback made the two values equal and the comparison returned null on its own. The input
+   * the guard actually catches is a value that is PRESENT and does not parse.
    */
-  it('renders no reach note at all when the field is missing', () => {
+  it.each([
+    ['missing', undefined],
+    ['unparseable', 'not-a-date'],
+  ])('renders no reach note at all when the field is %s', (_label, value) => {
     const legacy = brief()
-    delete (legacy as Partial<SinceLastVisitBrief>).tradesSinceAt
+    if (value === undefined) delete (legacy as Partial<SinceLastVisitBrief>).tradesSinceAt
+    else legacy.tradesSinceAt = value
     render(<DashSinceLastVisit brief={legacy} now={NOW} />)
     expect(screen.queryByText(/NaN/)).toBeNull()
+    expect(screen.queryByText(/\(last /)).toBeNull()
+  })
+
+  /*
+   * ⚠ `agoLabel` rounds to one unit, so a boundary trailing the window by less than a bucket
+   * would print "since 2h ago" above "(last 2h)" — the normal case one render after a complete
+   * read, and it reads as a typo.
+   */
+  it('adds no reach note when the two round to the same label', () => {
+    render(
+      <DashSinceLastVisit
+        brief={brief({
+          sinceAt: new Date(NOW.getTime() - 125 * 60_000).toISOString(),
+          tradesSinceAt: new Date(NOW.getTime() - 140 * 60_000).toISOString(),
+        })}
+        now={NOW}
+      />,
+    )
+    expect(screen.getByText('since 2h ago')).toBeTruthy()
     expect(screen.queryByText(/\(last /)).toBeNull()
   })
 

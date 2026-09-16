@@ -147,9 +147,19 @@ function tradesOf(
   sinceAt: Date,
   floor: Date,
 ): Pick<VisitWindow, 'tradesSinceAt' | 'tradesSeenAt'> {
-  const raw = marker.tradesSeenAt ? new Date(marker.tradesSeenAt) : null
-  const tradesSeenAt =
-    raw && Number.isFinite(raw.getTime()) ? new Date(Math.max(floor.getTime(), raw.getTime())) : sinceAt
+  /*
+   * ⚠ THE FALLBACK IS `lastSeenAt`, NOT `sinceAt`, AND THAT IS THE SAME BUG AS THE ONE ABOVE.
+   * A marker written before this field existed has no boundary, and inside a session `sinceAt`
+   * is the session's OPENING point — so falling back to it and then persisting that on a blind
+   * read writes a boundary hours older than the last render, for every pre-existing marker at
+   * deploy and again after any rollback. `lastSeenAt` is the non-projected value, and it is what
+   * the old behaviour effectively used: before this field, each render closed the trade window
+   * at the render time that became the next window's start.
+   */
+  const raw = typeof marker.tradesSeenAt === 'string' ? new Date(marker.tradesSeenAt) : null
+  const legacy = new Date(marker.lastSeenAt)
+  const best = raw && Number.isFinite(raw.getTime()) ? raw : Number.isFinite(legacy.getTime()) ? legacy : sinceAt
+  const tradesSeenAt = new Date(Math.max(floor.getTime(), best.getTime()))
   return { tradesSeenAt, tradesSinceAt: new Date(Math.min(sinceAt.getTime(), tradesSeenAt.getTime())) }
 }
 

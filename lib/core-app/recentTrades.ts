@@ -121,9 +121,12 @@ export type RecentTradesLiveOptions = {
    * promise settles. `reason` is a closed vocabulary: never a league id, a provider id or an
    * error message.
    *
-   * ⚠ IT IS DELIBERATELY NOT CALLED FOR THE `maxLeagues` CAP, NOR FOR A NON-SLEEPER LEAGUE, and
-   * the two have DIFFERENT reasons — an earlier version of this note gave the cap's reason for
-   * both and was wrong about the second:
+   * ⚠ NOR IS IT CALLED FOR ANYTHING PERMANENT, and that rule has three separate applications —
+   * the `maxLeagues` cap, a non-Sleeper league, and a scan that came back `unscannedKind:
+   * 'identity'` (no roster of yours in that league). A permanent bound reported as a transient
+   * failure holds the caller's window open for the life of the league, with nothing able to
+   * clear it. The first two have DIFFERENT reasons, and an earlier version of this note gave the
+   * cap's reason for both and was wrong about the second:
    *   - The cap is not a blind spot. `byPlatformId` is built before the slice, so the grade
    *     cache is read for every league with a platform id however many are capped out of the
    *     live scan; the exposure is only a trade newer than the 30-minute grade sweep.
@@ -399,8 +402,19 @@ export async function getRecentTrades(
      * waiting" is weaker than it looks there.
      */
     for (const scan of scans) {
-      if (!scan?.scanned) reportIncomplete(live, 'league-scan-unanswered')
-      else if (scan.weeksUnanswered > 0) reportIncomplete(live, 'league-scan-partial-weeks')
+      if (!scan?.scanned) {
+        /*
+         * 🛑 ONLY A PROVIDER FAILURE IS WORTH REPORTING. `scanned: false` also covers "this
+         * account owns no roster in this league" and "we do not know which Sleeper account is
+         * yours" — `unscannedKind: 'identity'`, and both are permanent: same input, same answer,
+         * every render for the life of the league. Reporting one as a transient failure holds
+         * /core's trade window open forever, which is the rule this file states two hunks up and
+         * the reason the `maxLeagues` cap is not reported either.
+         *
+         * A `null` scan is the loader's own `.catch` on the provider call, so it is `provider`.
+         */
+        if (scan?.unscannedKind !== 'identity') reportIncomplete(live, 'league-scan-unanswered')
+      } else if (scan.weeksUnanswered > 0) reportIncomplete(live, 'league-scan-partial-weeks')
     }
     if (live.onPendingOffers) {
       /*
