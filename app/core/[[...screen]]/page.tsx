@@ -69,6 +69,7 @@ import Trades from '@/components/core-app/screens/Trades'
 import { TradeCenter } from '@/components/core-app/screens/TradeCenter'
 import { getTradesData } from '@/lib/core-app/trades'
 import { getTradesBoard } from '@/lib/core-app/tradesBoard'
+import { readTradesBoardSummary } from '@/lib/core-app/tradesBoardSummary'
 import TradesBoard from '@/components/core-app/boards/TradesBoard'
 import { resolveCurrentWeek } from '@/lib/core-app/currentWeek'
 import FormatHub from '@/components/core-app/screens/FormatHub'
@@ -1917,19 +1918,41 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
    * and null is fine: the board then prints the deadline WEEK without a
    * countdown rather than inventing one.
    */
-  const tradesBoard =
-    activeKey === 'trades' && !selectedLeagueId
-      ? await getTradesBoard(
-          userId,
-          await resolveCurrentWeek(
-            playedLeagues
-              .map((l) => (l as { platformLeagueId?: string | null }).platformLeagueId ?? '')
-              .filter((v) => v.length > 0),
-          )
-            .then((w) => w?.week ?? null)
-            .catch(() => null),
-        ).catch(() => null)
+  const wantsTradesBoard = activeKey === 'trades' && !selectedLeagueId
+
+  /*
+   * ── THE TRADE BOARD ON SUMMARIES ───────────────────────────────────
+   *
+   * `tradesBoard.ts` has no `new Date()` and no `Date.now()`, and `getTradesBoard` takes no `now` —
+   * the week arrives as a plain NUMBER the caller already resolved. That is an identifier for which
+   * slate the board is about, not a clock, so it belongs in the cache key.
+   *
+   * ⚠ THE WEEK IS RESOLVED ONCE HERE AND PASSED TO BOTH ARMS, so the summary's key and the direct
+   * call describe the same board. `SummaryScope.period` already existed for exactly this ("a week
+   * for NFL") and was unused until now — no new scope field.
+   */
+  const tradesBoardWeek = wantsTradesBoard
+    ? await resolveCurrentWeek(
+        playedLeagues
+          .map((l) => (l as { platformLeagueId?: string | null }).platformLeagueId ?? '')
+          .filter((v) => v.length > 0),
+      )
+        .then((w) => w?.week ?? null)
+        .catch(() => null)
+    : null
+
+  const tradesBoardOnSummary = isEnabled('sports-os.screen-summaries', userId, DEFAULT_ROLLOUTS)
+
+  const tradesBoardFresh =
+    wantsTradesBoard && tradesBoardOnSummary
+      ? await readTradesBoardSummary(userId, tradesBoardWeek).catch(() => null)
       : null
+
+  const tradesBoard = wantsTradesBoard
+    ? tradesBoardOnSummary
+      ? (tradesBoardFresh?.data ?? null)
+      : await getTradesBoard(userId, tradesBoardWeek).catch(() => null)
+    : null
 
   const trades =
     activeKey === 'trades' && selectedLeagueId
