@@ -139,6 +139,7 @@ import LeagueTabs from '@/components/core-app/LeagueTabs'
 import { getLeagueStandings } from '@/lib/core-app/leagueStandings'
 import { readLeagueStandingsSummary } from '@/lib/core-app/leagueStandingsSummary'
 import { isEnabled, DEFAULT_ROLLOUTS } from '@/lib/sports-os/rollout'
+import { freshnessLabel, freshnessMeta, shouldWarnAboutFreshness } from '@/lib/sports-os/freshness'
 import LeagueSync from '@/components/core-app/screens/LeagueSync'
 import { getLeagueSync } from '@/lib/core-app/leagueSync'
 import NotificationsCenter from '@/components/core-app/screens/NotificationsCenter'
@@ -1846,6 +1847,25 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
       : null
 
   /*
+   * Point 9's visible half. The envelope's age becomes a chip in the board's header.
+   *
+   * ⚠ THE LABEL IS COMPUTED HERE, ON THE SERVER, AND PASSED DOWN. `FreshnessChip` renders this
+   * exact string on first paint and only starts recomputing after mount, so SSR and hydration
+   * agree by construction rather than by luck — the same reason the board pins its number locale.
+   *
+   * ⚠ NULL FOR THE OFF-COHORT READ, DELIBERATELY. Most readers still take the direct call, which
+   * has no envelope; a chip over that board would be inventing an age for a value that was just
+   * computed. No envelope means no chip, never a chip reading "unknown".
+   */
+  const standingsFreshness = standingsFresh
+    ? {
+        meta: freshnessMeta(standingsFresh),
+        initialLabel: freshnessLabel(standingsFresh),
+        initialWarn: shouldWarnAboutFreshness(standingsFresh),
+      }
+    : null
+
+  /*
    * ── 24a / 24b / 26b / 22c / 26a ────────────────────────────────────
    *
    * Each is loaded only when it is the screen being rendered. Two of them are
@@ -3152,7 +3172,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
         )
       ) : activeKey === 'standings' ? (
         standings ? (
-          <Standings data={standings} />
+          <Standings data={standings} freshness={standingsFreshness} />
         ) : (
           /* Same split as Commissioner: a read failure is not an unpicked league. */
           selectedLeagueId ? (

@@ -43,9 +43,11 @@ export {
   freshnessLabel,
   describeFreshness,
   shouldWarnAboutFreshness,
+  freshnessMeta,
   mapFresh,
   combineFreshness,
   type Fresh,
+  type FreshnessMeta,
   type FreshnessSource,
   type FreshnessView,
 } from './freshness'

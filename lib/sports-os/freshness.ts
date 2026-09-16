@@ -103,7 +103,21 @@ export function describeFreshness<T>(entry: Fresh<T>, nowMs: number = Date.now()
  * `last-known` always warns — it means a refresh FAILED, which the user is entitled to know even if
  * the data is thirty seconds old. A merely stale `cache` entry warns too. A `live` value never does.
  */
-export function shouldWarnAboutFreshness<T>(entry: Fresh<T>, nowMs: number = Date.now()): boolean {
+/**
+ * The freshness fields without the payload — what a renderer needs to draw a label.
+ *
+ * ⚠ THE PAYLOAD IS DELIBERATELY NOT IN THIS TYPE. A freshness chip must be usable from a client
+ * component, and a `Fresh<T>` would drag `T` — for standings, the entire computed board — across the
+ * server/client boundary as a serialized prop just to render "4m ago".
+ */
+export type FreshnessMeta = Pick<Fresh<unknown>, 'fetchedAt' | 'source' | 'staleAfterMs'>
+
+/** Drop the payload, keeping every freshness field. */
+export function freshnessMeta(entry: Fresh<unknown>): FreshnessMeta {
+  return { fetchedAt: entry.fetchedAt, source: entry.source, staleAfterMs: entry.staleAfterMs }
+}
+
+export function shouldWarnAboutFreshness(entry: FreshnessMeta, nowMs: number = Date.now()): boolean {
   if (entry.source === 'none' || entry.source === 'last-known') return true
   return isStale(entry, nowMs)
 }

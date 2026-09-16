@@ -20,7 +20,7 @@ route with a budget in traces-per-hour.
 | 6 | Heavy work in jobs | `lib/jobs/`, `lib/queues/bullmq.ts` | already built — reached from `reactions.ts` |
 | 7 | One event system | `lib/events/` | already built — the **reaction table** is new |
 | 8 | End-to-end observability | `lib/observability/`, `docs/observability/TRACING.md` | already built — budget verdicts are new |
-| 9 | Last-known data | `lib/sports-os/freshness.ts` | **new** |
+| 9 | Last-known data | `lib/sports-os/freshness.ts`, `components/sports-os/FreshnessChip` | **new** — visible on `/core/standings` |
 | 10 | Gradual rollout | `lib/sports-os/rollout.ts` | **new** |
 
 **One surface is live on it: `/core/standings`**, behind a 10% rollout — see *The first wired
@@ -167,7 +167,7 @@ it costs a redeploy (writing a Railway variable *is* a deploy).
 
 ## Testing
 
-`__tests__/sports-os/` (67), `__tests__/core-app/leagueStandingsSummary` (9) and
+`__tests__/sports-os/` (74, including the chip), `__tests__/core-app/` (12) and
 `__tests__/fantasy-os/sync-invalidates-standings` (3) — no database, no queue, no network.
 
 ⚠ **ELEVEN OF THE KEY ASSERTIONS WERE MUTATION-TESTED**, because a green check that has never gone
@@ -178,11 +178,18 @@ the standings summary on the AF uuid instead of the platform id; dropping the se
 making the durable envelope check a bare cast; dropping `scopeKey`'s trailing separator; and — at the
 sync call site — passing a uuid, removing the call, and moving it into the success-only path.
 
-⚠ **TWO OF THOSE ELEVEN CONTROLS WERE WRONG ON THE FIRST ATTEMPT AND STAYED GREEN**, which is the
-part worth keeping. One let a promoted cache entry fall out of memory before the assertion ran, so
-the mutation was masked. The other left the original call in place and added a second one, so the
-test never saw the condition. **A control that stays green is a finding about the control, not a
-verdict on the code** — both were rebuilt until they bit.
+Five more for point 9: seeding the chip's clock from `Date.now()` on first render (the hydration
+bug); never ticking after mount (the frozen-label bug); collapsing `last-known` into plain stale;
+dropping the never-fetched guard; and removing the chip from the refusal branch.
+
+⚠ **THREE OF THOSE CONTROLS WERE WRONG ON THE FIRST ATTEMPT**, which is the part worth keeping. One
+let a promoted cache entry fall out of memory before the assertion ran, so the mutation was masked.
+One left the original call in place and added a second one, so the test never saw the condition. And
+the first version of the hydration test tried to read "first paint" out of testing-library's
+`render`, **which flushes effects synchronously** — so it was reading post-effect markup and could
+never have observed the thing it claimed to check; it was replaced with a real `hydrateRoot` against
+server HTML, asserting on React's own mismatch warning. **A control that stays green is a finding
+about the control, not a verdict on the code.**
 
 ⚠ **AND THE FIRST ATTEMPT AT THE `fetchedAt` CONTROL STAYED GREEN**, which is worth recording: the
 scenario let the promoted entry fall out of memory before the second read, so the mutation was
@@ -254,6 +261,39 @@ was written against the `sync-league-gone` harness, which drives the real `syncC
 rather than a helper, and it is mutation-controlled three ways: passing a UUID instead of the
 provider id, removing the call, and moving it into the success-only path.
 
+## The freshness chip
+
+`components/sports-os/FreshnessChip.tsx` — point 9's visible half. The envelope makes it
+structurally impossible for a loader to hand a screen a cached value without its age; the chip makes
+that age impossible for the *reader* to miss. Carrying `fetchedAt` all the way to a component that
+then ignores it would be the whole point thrown away one step from the finish.
+
+Rendered in the `/core/standings` header, on **both** branches. ⚠ **The refusal branch is labelled
+too, and that is not decoration**: an `available: false` board is cached exactly like an available
+one, so "we could not read this league's results" can itself be minutes old, and a reader who has
+just fixed the cause needs to see that rather than assume the refusal is live.
+
+**Three states, not two.** `fresh`, `stale` (past TTL, a refresh is expected) and `last-known` (a
+refresh already **failed**). Collapsing the last two would hide the only one a reader can act on —
+and `last-known` warns even when the value is young, because it does not mean "slightly old".
+
+🛑 **A RELATIVE TIMESTAMP RENDERED ON THE SERVER IS WRONG TWICE, AND THIS IS THE DESIGN THAT AVOIDS
+BOTH.** It freezes — the server writes "just now" into the HTML and it stays there for as long as
+the tab is open, which is a confident lie about the one thing the component exists to report. And
+recomputing it during hydration is a mismatch; `Standings.tsx` already carries a note about pinning
+a number locale for exactly this reason. So the **server** computes the first label and passes it as
+a prop, first paint renders that prop (hydration is byte-identical by construction), and only after
+mount does an effect start recomputing on a 30s tick. The machine-readable instant rides along in
+`<time dateTime>` so precision is available without printing a locale-formatted string.
+
+⚠ **NO ENVELOPE MEANS NO CHIP.** At 10% rollout most readers still take the direct call, which has
+no envelope. `freshness={null}` renders nothing — never a chip reading "unknown", which would claim
+uncertainty about a value that was just computed.
+
+⚠ `FreshnessMeta` exists so the chip takes the freshness fields **without** the payload. A `Fresh<T>`
+prop would serialize the entire computed standings board across the server/client boundary just to
+render "4m ago".
+
 ## What is not done
 
 Each of these is a separate decision with a real cost.
@@ -272,7 +312,4 @@ Each of these is a separate decision with a real cost.
    Sentry data before an `over` verdict should be treated as an incident.
 6. **`recordBudget` has no callers.** The two obvious ones are the existing `af.shell_ms` site in
    `app/core/[[...screen]]/page.tsx` and `traceCard`.
-7. **The standings screen does not render its freshness yet.** `readLeagueStandingsSummary` returns
-   the `Fresh<T>` envelope and the page currently unwraps `.data`. Point 9 is only half-delivered
-   until `Standings` shows the `last-known` label — a component prop change, deliberately not folded
-   into this one.
+7. ~~The standings screen does not render its freshness.~~ **Done** — see *The freshness chip* below.

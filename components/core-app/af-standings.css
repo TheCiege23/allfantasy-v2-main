@@ -35,6 +35,15 @@
   color: var(--muted);
 }
 
+/*
+ * The freshness chip. `align-self: flex-start` because .af-st-head is a flex COLUMN — without it
+ * the chip stretches the full header width and reads as a banner rather than a label.
+ */
+.af-st-head .af-fresh {
+  align-self: flex-start;
+  margin-top: 2px;
+}
+
 /* ── Refusal state ───────────────────────────────────────────────────── */
 
 /*
