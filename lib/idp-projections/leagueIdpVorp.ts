@@ -108,25 +108,30 @@ export async function resolveLeagueIdpScoring(
   prisma: PrismaClient,
   leagueId: string,
 ): Promise<
-  | { ok: true; scoring: NonNullable<ReturnType<typeof extractScoringSettings>> }
+  | {
+      ok: true
+      scoring: NonNullable<ReturnType<typeof extractScoringSettings>>
+      /** The `League.id` the rules came from, whichever id space the caller asked in. */
+      leagueId: string
+    }
   | { ok: false; reason: 'no_scoring_settings' | 'not_an_idp_league' }
 > {
   const league =
     (await prisma.league
-      .findUnique({ where: { id: leagueId }, select: { settings: true } })
+      .findUnique({ where: { id: leagueId }, select: { id: true, settings: true } })
       .catch(() => null)) ??
     (await prisma.league
       .findFirst({
         where: { platformLeagueId: leagueId },
         orderBy: { updatedAt: 'desc' },
-        select: { settings: true },
+        select: { id: true, settings: true },
       })
       .catch(() => null))
 
   const scoring = extractScoringSettings(league?.settings)
-  if (!scoring) return { ok: false, reason: 'no_scoring_settings' }
+  if (!league || !scoring) return { ok: false, reason: 'no_scoring_settings' }
   if (!hasIdpScoring(scoring)) return { ok: false, reason: 'not_an_idp_league' }
-  return { ok: true, scoring }
+  return { ok: true, scoring, leagueId: league.id }
 }
 
 export async function loadLeagueIdpVorp(
