@@ -5,6 +5,7 @@ import { toErrorMessage } from '@/lib/automation/errors'
 import { discoverWorkspaceRefreshLeagues } from '@/lib/automation/jobs/workspace/discoverWorkspaceRefreshLeagues'
 import { refreshWorkspaceTasksBatch } from '@/lib/automation/jobs/workspace/refreshWorkspaceTasksJob'
 import { generateScheduledReportsBatch } from '@/lib/automation/jobs/reports/generateScheduledReportsJob'
+import { runCommissionerRecipesBatch } from '@/lib/automation/jobs/commissioner/runCommissionerRecipesJob'
 import { withSyncJobRun } from '@/lib/production-health/syncJobRunTelemetry'
 
 export const runtime = 'nodejs'
@@ -110,7 +111,18 @@ export async function GET(request: Request) {
         console.error('[cron-commissioner] report generation failed:', toErrorMessage(e))
         return { enabled: true, discovered: 0, completed: 0, skipped: 0, failed: 1, generated: 0 }
       })
-      return { ...workspace, reports }
+      /*
+       * Commissioner automation recipes (Commissioner Hub item 8) ride this entry for the same
+       * budget reason, and run LAST: a lineup or inactivity reminder should describe the league as
+       * the scan has just seen it. Gated inside the batch on `commissioner_recipes_send_enabled`,
+       * so until that toggle is set this is one config read and nothing else. Like the reports, a
+       * failure here must never take the scan's heartbeat down with it.
+       */
+      const recipes = await runCommissionerRecipesBatch({ leagueId }).catch((e) => {
+        console.error('[cron-commissioner] recipes failed:', toErrorMessage(e))
+        return { enabled: true, discovered: 0, completed: 0, skipped: 0, failed: 1 }
+      })
+      return { ...workspace, reports, recipes }
     },
     (r) => ({
       rowsRead: r.discovered,
@@ -132,6 +144,9 @@ export async function GET(request: Request) {
         reportsEnabled: r.reports.enabled,
         reportsGenerated: r.reports.generated,
         reportsFailed: r.reports.failed,
+        recipesEnabled: r.recipes.enabled,
+        recipesCompleted: r.recipes.completed,
+        recipesFailed: r.recipes.failed,
       },
     }),
   )
@@ -145,6 +160,7 @@ export async function GET(request: Request) {
     skipped: outcome.skipped,
     failed: outcome.failed,
     reports: outcome.reports,
+    recipes: outcome.recipes,
     results: outcome.leagues,
   })
 }

@@ -1,10 +1,46 @@
 import 'server-only'
 
+import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { getLeagueRole, type LeagueRole } from '@/lib/league/permissions'
+import { resolveWriteAuthority } from '@/lib/league/write-authority'
+import { getCommissionerHubHealthForUser } from '@/lib/commissioner-hub/commissionerHubHealth'
+import { getLeagueManagerHealth } from '@/lib/commissioner-hub/managerHealth'
+import { getNormalizedLineupSections } from '@/lib/roster/LineupTemplateValidation'
+import { readViewerPoll } from '@/lib/chat-core/messagePolls'
+import { getBoolean } from '@/lib/feature-toggle'
+import { getBaseUrl } from '@/lib/get-base-url'
 import { leagueDisplayName, type SectionState, type UnavailableSection } from './leagueHome'
 import { getCommissionerWaiverOversight, type WaiverOversight } from './commissionerWaivers'
 import type { CoreIssue } from './outstandingIssues'
+import { isScored } from './currentWeek'
+import { platformLabel, verifiedHandoff } from './platformLinks'
+import { leagueWeekFromSettings, playoffStartWeek, regularSeasonWeeks, tradeDeadlineWeek } from './seasonTimeline'
+import {
+  abandonedTeamsFlag,
+  formatMoney,
+  missingLineupsFlag,
+  openPolls,
+  rankFlags,
+  readDuesTracker,
+  unequalSchedulesFlag,
+  unpaidDuesFlag,
+  unresolvedVotesFlag,
+  type HealthFlag,
+  type LeaguePoll,
+} from './commissioner/health'
+import { buildIcs, buildLeagueCalendar, nextDeadline, type LeagueCalendar } from './commissioner/calendar'
+import { buildTaskCards, type TaskCardsResult } from './commissioner/tasks'
+import {
+  buildCommunities,
+  buildLeagueAreas,
+  buildWorkflows,
+  type CommunityChannel,
+  type LeagueArea,
+  type Workflow,
+} from './commissioner/areas'
+import { balanceChart, engagementChart, scoringChart, type HubChart } from './commissioner/charts'
+import { RECIPES, RECIPES_SEND_TOGGLE, readRecipeSettings, type RecipeKey } from './commissioner/recipes'
 
 /**
  * Commissioner Hub — 38a screen 9.
@@ -56,19 +92,10 @@ export type CommissionerAccessDenied = {
 }
 
 export type CommissionerTile = {
-  key: 'managers' | 'at-risk' | 'pending' | 'sync'
+  key: 'health' | 'needs-you' | 'deadline' | 'managers' | 'claimed' | 'sync'
   label: string
   state: SectionState<{ value: string; sub: string | null }>
   tone: 'good' | 'warn' | 'bad' | 'neutral'
-}
-
-export type CommissionerQueueItem = {
-  id: string
-  severity: 'bad' | 'warn' | 'info'
-  glyph: string
-  title: string
-  detail: string
-  action: { label: string; href: string; external: boolean } | null
 }
 
 export type CommissionerSettingRow = {
@@ -83,15 +110,66 @@ export type CommissionerAccessRow = {
   isYou: boolean
 }
 
+/**
+ * Proof that the commissioner gate passed for one league and one viewer.
+ *
+ * ⚠ ONLY `getCommissionerHub` CAN MAKE ONE. The hub streams its heavier reports
+ * (charts, the audit timeline) in their own Suspense boundaries, and those
+ * loaders take a grant rather than a bare league id — so a report cannot be
+ * rendered for a league whose gate was never run, even by a caller that forgets
+ * to check. The brand is a compile-time guarantee; there is no runtime token.
+ */
+declare const GRANT: unique symbol
+export type CommissionerGrant = {
+  readonly [GRANT]: true
+  readonly leagueId: string
+  readonly userId: string
+  readonly platform: string
+  readonly platformLeagueId: string | null
+  readonly season: number | null
+  readonly teams: ReadonlyArray<{ name: string; platformUserId: string | null }>
+}
+
+export type MemberActivityRow = {
+  name: string
+  manager: string | null
+  status: 'active' | 'at_risk' | 'inactive' | 'unknown'
+  lastActionAt: string | null
+}
+
 export type CommissionerHubData = {
   allowed: true
-  league: { id: string; name: string; platform: string; season: number | null }
+  grant: CommissionerGrant
+  league: { id: string; name: string; platform: string; season: number | null; native: boolean }
   /** The viewer's own role — drives the co-commissioner boundary note. */
   role: 'commissioner' | 'co_commissioner'
+  /** `League.userId`. The Discord and broadcast routes accept only this person. */
+  viewerIsOwner: boolean
   tiles: CommissionerTile[]
-  queue: CommissionerQueueItem[]
-  /** Nothing needing attention is a real, good answer — not an empty list. */
-  queueEmptyReason: string | null
+  /** Urgent work, first on every width. Replaces the old single attention list. */
+  tasks: TaskCardsResult
+  /** Stated when there are no cards, because an empty list is not a quiet league. */
+  tasksEmptyReason: string | null
+  health: {
+    /** The canonical engine score — the same number `/commissioner-hub` shows. */
+    score: SectionState<{ score: number; status: string; summary: string; confidencePct: number }>
+    flags: HealthFlag[]
+  }
+  members: SectionState<{ rows: MemberActivityRow[]; total: number; inactive: number; atRisk: number }>
+  calendar: LeagueCalendar & { ics: string | null }
+  areas: LeagueArea[]
+  workflows: Workflow[]
+  communities: CommunityChannel[]
+  recipes: {
+    values: Record<RecipeKey, boolean>
+    saved: boolean
+    updatedAt: string | null
+    /** False until the platform toggle is set — saved switches do not send yet. */
+    sendEnabled: boolean
+    catalog: Array<{ key: RecipeKey; label: string; description: string; cadence: string; unavailable: string | null }>
+  }
+  /** The charts whose rows this loader already holds; the rest stream in. */
+  charts: { scoring: HubChart | null; balance: HubChart | null; engagement: HubChart | null }
   settings: CommissionerSettingRow[]
   access: CommissionerAccessRow[]
   /**
@@ -129,11 +207,11 @@ export type CommissionerHubResult = CommissionerHubData | CommissionerAccessDeni
  *
  * A tile reading "0 open disputes" off a scan that structurally cannot find one
  * is the most confident wrong number this screen could show a commissioner, so
- * the tile states the gap instead. It is replaced by "waiting on you", which is
- * a real count of real pending items.
+ * the tile states the gap instead. The "Resolve a dispute" guide is the
+ * replacement: it works the same way whether or not a scan exists.
  */
 const DISPUTES_REASON =
-  'Dispute detection only runs on leagues created in AllFantasy — it has no data to read for an imported league, so "none found" would not mean anything here.'
+  'Dispute detection only runs on leagues created in AllFantasy — it has no data to read for an imported league, so "none found" would not mean anything here. The “Resolve a dispute” guide below works for every league.'
 
 const ROLE_LABEL: Record<'commissioner' | 'co_commissioner', string> = {
   commissioner: 'Commissioner',
@@ -183,6 +261,68 @@ const WAIVER_TYPE_LABEL: Record<string, string> = {
   off: 'No waivers — free agents are instant',
 }
 
+const UNRESOLVED_TASK = new Set(['open', 'in_progress', 'waiting_on_manager', 'waiting_on_league_vote'])
+
+/**
+ * A roster's starting slots as the platform stored them.
+ *
+ * Sleeper keeps a flat `starters` array (with `"0"` in an empty slot); leagues
+ * created here keep `lineup_sections.starters` rows. Null means the shape could
+ * not be read — never "no starters".
+ */
+function starterSlots(playerData: unknown): unknown[] | null {
+  if (!playerData || typeof playerData !== 'object' || Array.isArray(playerData)) return null
+  const data = playerData as Record<string, unknown>
+  if (Array.isArray(data.starters)) return data.starters
+  const sections = getNormalizedLineupSections(playerData).starters
+  if (sections.length > 0) return sections.map((row) => (row as Record<string, unknown>)?.id ?? null)
+  return null
+}
+
+function teamLabel(t: { teamName?: string | null; ownerName?: string | null }): string {
+  return t.teamName?.trim() || t.ownerName?.trim() || 'Unnamed team'
+}
+
+/** First regular-season NFL kickoff per week. SportsGame holds up to 4 rows a fixture; min() is safe. */
+async function readWeekStarts(season: number | null, sport: string): Promise<Map<number, Date>> {
+  const out = new Map<number, Date>()
+  if (season == null || sport.toUpperCase() !== 'NFL') return out
+  const rows = await prisma.sportsGame
+    .groupBy({
+      by: ['week'],
+      where: { sport: 'NFL', season, seasonType: 'regular', week: { not: null }, startTime: { not: null } },
+      _min: { startTime: true },
+    })
+    .catch(() => [])
+  for (const r of rows) {
+    if (r.week != null && r._min.startTime) out.set(r.week, r._min.startTime)
+  }
+  return out
+}
+
+/** League-chat polls from the last 60 days. Anything unreadable is skipped, not fatal. */
+async function readRecentPolls(leagueId: string, now: Date): Promise<LeaguePoll[] | null> {
+  try {
+    const rows = await prisma.leagueChatMessage.findMany({
+      where: {
+        leagueId,
+        createdAt: { gte: new Date(now.getTime() - 60 * 24 * 60 * 60 * 1000) },
+        NOT: { metadata: { path: ['poll'], equals: Prisma.AnyNull } },
+      },
+      select: { id: true, metadata: true, createdAt: true },
+      orderBy: { createdAt: 'desc' },
+      take: 50,
+    })
+    return rows.flatMap((r) => {
+      // No viewer: only counts and deadlines are needed, never who voted.
+      const poll = readViewerPoll(r.metadata, null)
+      return poll ? [{ ...poll, id: r.id, postedAt: r.createdAt.toISOString() }] : []
+    })
+  } catch {
+    return null
+  }
+}
+
 export async function getCommissionerHub(input: {
   leagueId: string
   userId: string
@@ -198,14 +338,22 @@ export async function getCommissionerHub(input: {
     select: {
       id: true,
       name: true,
+      userId: true,
       platform: true,
+      platformLeagueId: true,
+      sport: true,
       season: true,
+      status: true,
       settings: true,
       lastSyncedAt: true,
       syncStatus: true,
       tradeDeadlineWeek: true,
       playoffStartWeek: true,
       playoffTeams: true,
+      leagueType: true,
+      leagueVariant: true,
+      guillotineMode: true,
+      isDynasty: true,
     },
   })
 
@@ -221,7 +369,7 @@ export async function getCommissionerHub(input: {
    */
   const role = league ? await getLeagueRole(leagueId, userId) : null
 
-  if (role !== 'commissioner' && role !== 'co_commissioner') {
+  if (!league || (role !== 'commissioner' && role !== 'co_commissioner')) {
     return {
       allowed: false,
       role,
@@ -231,54 +379,123 @@ export async function getCommissionerHub(input: {
     }
   }
 
+  const platform = String(league.platform ?? 'manual').toLowerCase()
+  const sport = String(league.sport ?? 'NFL')
+  const native = resolveWriteAuthority(platform) === 'NATIVE'
+  const platformName = platformLabel(platform)
+  const seasonStatus = (league.status ?? '').toLowerCase()
+
   /*
    * ⚠ LOADED ONLY AFTER THE GATE PASSES. Reading health for a league the caller
    * cannot see would leak its shape through timing and through any error that
    * escaped, and it is work nobody is going to look at.
+   *
+   * Every read settles on its own. One failing table costs its own section,
+   * which then says so — never the whole screen.
    */
-  const [teams, waiverSettings, rosterCount, waivers] = await Promise.all([
+  const [
+    teams,
+    waiverSettings,
+    rosters,
+    waivers,
+    managerHealth,
+    healthSnapshots,
+    draftSettings,
+    matchups,
+    polls,
+    workspaceTasks,
+    discordLink,
+    weekStarts,
+    sendEnabled,
+  ] = await Promise.all([
     prisma.leagueTeam
       .findMany({
         where: { leagueId },
         select: {
+          id: true,
+          externalId: true,
           teamName: true,
           ownerName: true,
+          platformUserId: true,
           claimedByUserId: true,
           isCommissioner: true,
           isCoCommissioner: true,
+          isOrphan: true,
+          wins: true,
+          losses: true,
+          ties: true,
+          pointsFor: true,
         },
       })
       .catch(() => []),
     prisma.leagueWaiverSettings
       .findUnique({
         where: { leagueId },
-        select: { waiverType: true, faabBudget: true },
+        select: { waiverType: true, faabBudget: true, processingDayOfWeek: true, processingTimeUtc: true },
       })
       .catch(() => null),
-    prisma.roster.count({ where: { leagueId } }).catch(() => 0),
-    getCommissionerWaiverOversight({
-      leagueId,
-      platform: String(league?.platform ?? 'manual'),
-      role,
-      now,
-    }).catch(
+    prisma.roster
+      .findMany({ where: { leagueId }, select: { platformUserId: true, playerData: true } })
+      .catch(() => []),
+    getCommissionerWaiverOversight({ leagueId, platform, role, now }).catch(
       (): WaiverOversight => ({
         available: false,
         reason: 'Waiver data couldn’t be read just now. This is a read failure on our side, not a league with no waivers.',
       }),
     ),
+    getLeagueManagerHealth(leagueId).catch(() => null),
+    getCommissionerHubHealthForUser(userId, [
+      {
+        id: leagueId,
+        name: leagueName,
+        isCommissioner: true,
+        platform,
+        sport,
+        season: league.season,
+        status: league.status,
+        lastSyncedAt: league.lastSyncedAt,
+      } as unknown as Parameters<typeof getCommissionerHubHealthForUser>[1][number],
+    ]).catch(() => []),
+    native
+      ? prisma.leagueSettings.findUnique({ where: { leagueId }, select: { draftDateUtc: true } }).catch(() => null)
+      : Promise.resolve(null),
+    league.platformLeagueId && league.season != null
+      ? prisma.weeklyMatchup
+          .findMany({
+            where: { leagueId: league.platformLeagueId, seasonYear: league.season },
+            select: { rosterId: true, week: true, matchupId: true, pointsFor: true, pointsAgainst: true },
+          })
+          .catch(() => null)
+      : Promise.resolve(null),
+    readRecentPolls(leagueId, now),
+    prisma.commissionerWorkspaceTask
+      .findMany({
+        where: { leagueId, status: { in: [...UNRESOLVED_TASK] } },
+        select: { id: true, sourceKey: true, title: true, description: true, priority: true, dueAt: true, relatedLinks: true },
+        take: 20,
+      })
+      .catch(() => []),
+    prisma.discordLeagueChannel
+      .findFirst({
+        where: { leagueId },
+        select: { channelName: true, guild: { select: { guildName: true } } },
+      })
+      .catch(() => null),
+    readWeekStarts(league.season, sport),
+    getBoolean(RECIPES_SEND_TOGGLE).catch(() => false),
   ])
 
-  const teamCount = teams.length || rosterCount
+  const teamCount = teams.length || rosters.length
+  const settingsJson = league.settings
 
   /*
    * "Nobody has read this league" and "this league is healthy" produce the same
    * tiles unless something says otherwise. `lastSyncedAt` is that something: a
    * league that has never synced has no basis for any of these numbers.
    */
-  const unread = league?.lastSyncedAt == null
+  const unread = league.lastSyncedAt == null && !native
 
-  const syncAgeMs = league?.lastSyncedAt ? now.getTime() - league.lastSyncedAt.getTime() : null
+  const syncAgeMs = league.lastSyncedAt ? now.getTime() - league.lastSyncedAt.getTime() : null
   const syncStale = syncAgeMs != null && syncAgeMs > 6 * 60 * 60 * 1000
 
   /*
@@ -288,9 +505,252 @@ export async function getCommissionerHub(input: {
    */
   const claimed = teams.filter((t) => t.claimedByUserId).length
 
+  const teamByPlatformUser = new Map(
+    teams.filter((t) => t.platformUserId).map((t) => [t.platformUserId as string, t]),
+  )
+  const teamByExternal = new Map(teams.map((t) => [t.externalId, t]))
+
+  const hubLeague = {
+    id: leagueId,
+    name: leagueName,
+    platform,
+    platformLeagueId: league.platformLeagueId,
+    season: league.season,
+    native,
+  }
+
+  // ── Season position ─────────────────────────────────────────────────────
+  const scoredWeeks = (matchups ?? []).filter((m) => isScored(m)).map((m) => m.week)
+  const lastPlayedWeek = scoredWeeks.length > 0 ? Math.max(...scoredWeeks) : null
+  const currentWeek = leagueWeekFromSettings(settingsJson) ?? (lastPlayedWeek != null ? lastPlayedWeek + 1 : null)
+  const inSeason = seasonStatus === 'in_season' || (native && lastPlayedWeek != null && seasonStatus !== 'complete')
+
+  /*
+   * The platform's JSON first. The columns are trusted only for a native league,
+   * where AllFantasy wrote them itself — on an import `playoffStartWeek` is the
+   * schema default (14) whenever the platform did not say.
+   */
+  const rawDeadline =
+    readSetting(settingsJson, ['trade_deadline_week', 'trade_deadline']) ??
+    (native ? (league.tradeDeadlineWeek ?? null) : null)
+  const regularWeeks = regularSeasonWeeks(settingsJson)
+  const noTradeDeadline =
+    rawDeadline != null && (rawDeadline >= 99 || (regularWeeks != null && rawDeadline > regularWeeks))
+  const tradeDeadline =
+    tradeDeadlineWeek(settingsJson) ?? (noTradeDeadline || rawDeadline == null || rawDeadline <= 0 ? null : rawDeadline)
+  const playoffStart =
+    playoffStartWeek(settingsJson) ?? (native && league.playoffStartWeek ? league.playoffStartWeek : null)
+  const eliminationFormat =
+    league.guillotineMode === true ||
+    /guillotine|survivor|zombie/i.test(`${league.leagueType ?? ''} ${league.leagueVariant ?? ''}`)
+
+  // ── Health flags ────────────────────────────────────────────────────────
+  const inAppLink = (label: string, href: string) => ({ label, href, external: false })
+  const replaceGuide = inAppLink('Replace a manager', '#workflow-replace-manager')
+  const duesTracker = readDuesTracker(settingsJson)
+
+  const memberRows: MemberActivityRow[] | null = managerHealth
+    ? managerHealth.rows.map((r) => ({
+        name: r.teamName || r.managerName || 'Unnamed team',
+        manager: r.managerName,
+        status: r.status,
+        lastActionAt: r.lastActionAt,
+      }))
+    : null
+
+  const flags = rankFlags([
+    abandonedTeamsFlag({
+      managers: memberRows,
+      orphanTeams: teams.filter((t) => t.isOrphan).map(teamLabel),
+      totalTeams: teamCount,
+      action: native
+        ? inAppLink('Open orphan teams', `/league/${encodeURIComponent(leagueId)}/orphan-teams`)
+        : replaceGuide,
+    }),
+    missingLineupsFlag({
+      platform,
+      inSeason,
+      rosters: rosters.map((r) => {
+        const team = teamByPlatformUser.get(r.platformUserId)
+        return { name: team ? teamLabel(team) : 'Unmatched roster', starters: starterSlots(r.playerData) }
+      }),
+      action: native
+        ? inAppLink('Open league', `/league/${encodeURIComponent(leagueId)}`)
+        : (() => {
+            const link = verifiedHandoff(hubLeague, 'league')
+            return link ? { label: link.label, href: link.href, external: true } : null
+          })(),
+    }),
+    unequalSchedulesFlag({
+      games: matchups ?? [],
+      rosterIds: teams.map((t) => t.externalId),
+      teamName: (id) => {
+        const t = teamByExternal.get(id)
+        return t ? teamLabel(t) : `Team ${id}`
+      },
+      throughWeek: lastPlayedWeek,
+      eliminationFormat,
+      action: inAppLink('Open schedule', `/league/${encodeURIComponent(leagueId)}?view=schedule`),
+    }),
+    unpaidDuesFlag({
+      tracker: duesTracker,
+      teams: teams.map((t) => ({ id: t.id, name: teamLabel(t) })),
+      action: inAppLink('Open dues tracker', `/league/${encodeURIComponent(leagueId)}?view=settings`),
+    }),
+    unresolvedVotesFlag({
+      polls,
+      now,
+      action: inAppLink('Open league chat', `/league/${encodeURIComponent(leagueId)}?view=league_chat`),
+    }),
+  ])
+
+  // ── Calendar ────────────────────────────────────────────────────────────
+  const unpaidFlag = flags.find((f) => f.key === 'dues')
+  const open = polls ? openPolls(polls, now) : []
+  const calendar = buildLeagueCalendar({
+    now,
+    leagueId,
+    platformLabel: platformName,
+    native,
+    status: league.status,
+    season: league.season,
+    draftAt: draftSettings?.draftDateUtc ?? null,
+    waivers: waiverSettings
+      ? {
+          type: waiverSettings.waiverType ?? null,
+          dayOfWeek: waiverSettings.processingDayOfWeek ?? null,
+          timeUtc: waiverSettings.processingTimeUtc ?? null,
+        }
+      : null,
+    tradeDeadlineWeek: noTradeDeadline ? null : tradeDeadline,
+    noTradeDeadline,
+    playoffStartWeek: playoffStart,
+    currentWeek,
+    weekStarts,
+    dues: duesTracker
+      ? {
+          enabled: duesTracker.enabled,
+          amountLabel: duesTracker.amount != null ? formatMoney(duesTracker.amount, duesTracker.currency) : null,
+          unpaid: unpaidFlag && unpaidFlag.measured ? unpaidFlag.count : 0,
+        }
+      : null,
+    polls: open.map((p) => ({ id: p.id, question: p.question, closesAt: p.closesAt })),
+  })
+  const ics = buildIcs({
+    leagueId,
+    leagueName,
+    events: calendar.events,
+    now,
+    appUrl: `${getBaseUrl()}/core/commissioner?league=${encodeURIComponent(leagueId)}`,
+  })
+  const upcoming = nextDeadline(calendar)
+
+  // ── Canonical health score ─────────────────────────────────────────────
+  const snapshot = healthSnapshots.find((s) => s.leagueId === leagueId) ?? null
+  const healthScore: CommissionerHubData['health']['score'] =
+    snapshot && snapshot.source === 'database' && snapshot.dataConfidence !== 'low'
+      ? {
+          available: true,
+          data: {
+            score: snapshot.healthScore,
+            status: snapshot.overallStatus,
+            summary: snapshot.summary,
+            confidencePct: snapshot.confidencePct,
+          },
+        }
+      : {
+          available: false,
+          reason: unread
+            ? 'This league has never synced, so there is nothing to score yet.'
+            : 'There isn’t enough roster and activity data to score this league yet.',
+        }
+
+  // ── Tasks ───────────────────────────────────────────────────────────────
+  const tasks = buildTaskCards({
+    issues,
+    flags,
+    calendar: calendar.events,
+    workspace: workspaceTasks.map((w) => {
+      const links = Array.isArray(w.relatedLinks) ? (w.relatedLinks as Array<Record<string, unknown>>) : []
+      const href = links.map((l) => (typeof l?.href === 'string' ? l.href : null)).find((h) => h && h.startsWith('/')) ?? null
+      return {
+        id: w.id,
+        sourceKey: w.sourceKey,
+        title: w.title,
+        description: w.description,
+        priority: w.priority,
+        dueAt: w.dueAt,
+        href,
+      }
+    }),
+  })
+
+  // ── Tiles ───────────────────────────────────────────────────────────────
+  const taskCount = tasks.cards.length + tasks.overflow.length
+  const worstTask = tasks.cards[0]?.severity ?? null
   const tiles: CommissionerTile[] = [
     {
+      key: 'health',
+      label: 'League health',
+      tone: !healthScore.available
+        ? 'neutral'
+        : healthScore.data.score >= 70
+          ? 'good'
+          : healthScore.data.score >= 45
+            ? 'warn'
+            : 'bad',
+      state: healthScore.available
+        ? {
+            available: true,
+            data: {
+              value: String(Math.round(healthScore.data.score)),
+              sub: `${humanStatus(healthScore.data.status)} · ${Math.round(healthScore.data.confidencePct)}% confidence`,
+            },
+          }
+        : { available: false, reason: healthScore.reason },
+    },
+    {
+      key: 'needs-you',
+      label: 'Needs you',
+      tone: worstTask === 'bad' ? 'bad' : worstTask === 'warn' ? 'warn' : taskCount > 0 ? 'neutral' : 'good',
+      state: {
+        available: true,
+        data: {
+          value: String(taskCount),
+          sub: taskCount === 0 ? 'nothing needs a ruling' : 'task cards above',
+        },
+      },
+    },
+    {
+      key: 'deadline',
+      label: 'Next deadline',
+      tone: upcoming?.status === 'soon' ? 'warn' : 'neutral',
+      state: upcoming
+        ? { available: true, data: { value: upcoming.title, sub: upcoming.whenLabel } }
+        : { available: false, reason: 'nothing dated is coming up — see the calendar for what is on file' },
+    },
+    {
       key: 'managers',
+      label: 'Active managers',
+      tone:
+        managerHealth && managerHealth.totalManagers > 0
+          ? managerHealth.inactiveCount > 0
+            ? 'warn'
+            : 'good'
+          : 'neutral',
+      state:
+        managerHealth && managerHealth.totalManagers > 0
+          ? {
+              available: true,
+              data: {
+                value: String(managerHealth.rows.filter((r) => r.status === 'active').length),
+                sub: `of ${managerHealth.totalManagers} · ${managerHealth.inactiveCount} inactive`,
+              },
+            }
+          : { available: false, reason: 'no rosters have been imported for this league yet' },
+    },
+    {
+      key: 'claimed',
       label: 'Claimed teams',
       tone: claimed === teamCount && teamCount > 0 ? 'good' : 'neutral',
       state:
@@ -299,94 +759,43 @@ export async function getCommissionerHub(input: {
               available: true,
               data: {
                 value: String(claimed),
-                sub: `of ${teamCount} · connected to an AllFantasy account`,
-              },
-            }
-          : {
-              available: false,
-              reason: 'no teams have been ingested for this league yet',
-            },
-    },
-    {
-      key: 'at-risk',
-      label: 'Unclaimed',
-      tone: teamCount > 0 && claimed < teamCount ? 'warn' : 'neutral',
-      state:
-        teamCount > 0
-          ? {
-              available: true,
-              data: {
-                value: String(Math.max(0, teamCount - claimed)),
                 sub:
-                  teamCount - claimed === 0
-                    ? 'every team is connected'
-                    : 'no AllFantasy account attached',
+                  claimed === teamCount
+                    ? `of ${teamCount} · every team is connected`
+                    : `of ${teamCount} · ${teamCount - claimed} with no AllFantasy account`,
               },
             }
           : { available: false, reason: 'no teams have been ingested for this league yet' },
     },
     {
-      key: 'pending',
-      label: 'Waiting on you',
-      tone: issues.some((i) => i.severity === 'bad')
-        ? 'bad'
-        : issues.length > 0
-          ? 'warn'
-          : 'good',
-      state: {
-        available: true,
-        data: {
-          value: String(issues.length),
-          sub: issues.length === 0 ? 'nothing needs a ruling' : 'items in the queue below',
-        },
-      },
-    },
-    {
       key: 'sync',
       label: 'Sync',
       tone: unread ? 'warn' : syncStale ? 'warn' : 'good',
-      state: unread
-        ? {
-            available: false,
-            reason: 'this league has never synced, so nothing on this screen has been measured yet',
-          }
-        : {
-            available: true,
-            data: {
-              value: syncStale ? 'Stale' : 'OK',
-              sub: describeSyncAge(syncAgeMs),
+      state: native
+        ? { available: true, data: { value: 'Live', sub: 'runs on AllFantasy' } }
+        : unread
+          ? {
+              available: false,
+              reason: 'this league has never synced, so nothing on this screen has been measured yet',
+            }
+          : {
+              available: true,
+              data: {
+                value: syncStale ? 'Stale' : 'OK',
+                sub: describeSyncAge(syncAgeMs),
+              },
             },
-          },
     },
   ]
-
-  /*
-   * The queue is the league's own outstanding issues, already derived for the
-   * shell and already sorted by severity then deadline. Re-deriving it here
-   * would be a second, subtly different definition of "needs attention" on the
-   * one screen whose job is to be the definitive list.
-   */
-  const queue: CommissionerQueueItem[] = issues.slice(0, 8).map((i) => ({
-    id: i.id,
-    severity: i.severity,
-    glyph: i.glyph,
-    title: i.title,
-    detail: i.meta,
-    action: i.action,
-  }))
 
   const settings: CommissionerSettingRow[] = [
     {
       key: 'Trade deadline',
-      state: describeTradeDeadline(league?.settings, league?.tradeDeadlineWeek ?? null),
+      state: describeTradeDeadline(settingsJson, league.tradeDeadlineWeek ?? null),
     },
     {
       key: 'Playoffs',
-      state: describePlayoffs(
-        league?.settings,
-        league?.playoffStartWeek ?? null,
-        league?.playoffTeams ?? null,
-      ),
+      state: describePlayoffs(settingsJson, league.playoffStartWeek ?? null, league.playoffTeams ?? null),
     },
     {
       key: 'Waivers',
@@ -396,9 +805,7 @@ export async function getCommissionerHub(input: {
             data: (() => {
               const kind = String(waiverSettings.waiverType).toLowerCase()
               const label = WAIVER_TYPE_LABEL[kind] ?? kind
-              return waiverSettings.faabBudget != null
-                ? `${label} · $${waiverSettings.faabBudget}`
-                : label
+              return waiverSettings.faabBudget != null ? `${label} · $${waiverSettings.faabBudget}` : label
             })(),
           }
         : {
@@ -421,23 +828,80 @@ export async function getCommissionerHub(input: {
     })
     .sort((a, b) => (a.role === b.role ? 0 : a.role === 'commissioner' ? -1 : 1))
 
+  const recipeSettings = readRecipeSettings(settingsJson, platform)
+  const viewerIsOwner = league.userId === userId
+
+  const grant = {
+    leagueId,
+    userId,
+    platform,
+    platformLeagueId: league.platformLeagueId ?? null,
+    season: league.season ?? null,
+    teams: teams.map((t) => ({ name: teamLabel(t), platformUserId: t.platformUserId ?? null })),
+  } as unknown as CommissionerGrant
+
   return {
     allowed: true,
-    league: {
-      id: leagueId,
-      name: leagueName,
-      platform: String(league?.platform ?? 'manual').toLowerCase(),
-      season: league?.season ?? null,
-    },
+    grant,
+    league: { id: leagueId, name: leagueName, platform, season: league.season ?? null, native },
     role,
+    viewerIsOwner,
     tiles,
-    queue,
-    queueEmptyReason:
-      queue.length > 0
+    tasks,
+    tasksEmptyReason:
+      taskCount > 0
         ? null
         : unread
-          ? 'This league has never synced, so nothing has been checked. An empty queue here is not the same as a quiet league.'
-          : 'Nothing in this league needs a ruling right now.',
+          ? 'This league has never synced, so nothing has been checked. An empty list here is not the same as a quiet league.'
+          : 'Nothing in this league needs you right now.',
+    health: { score: healthScore, flags },
+    members: memberRows
+      ? {
+          available: true,
+          data: {
+            rows: memberRows,
+            total: managerHealth?.totalManagers ?? memberRows.length,
+            inactive: managerHealth?.inactiveCount ?? 0,
+            atRisk: managerHealth?.atRiskCount ?? 0,
+          },
+        }
+      : { available: false, reason: 'Manager activity couldn’t be read just now.' },
+    calendar: { ...calendar, ics },
+    areas: buildLeagueAreas(hubLeague),
+    workflows: buildWorkflows(hubLeague),
+    communities: buildCommunities({
+      league: hubLeague,
+      viewerIsOwner,
+      discord: discordLink
+        ? { guildName: discordLink.guild?.guildName ?? null, channelName: discordLink.channelName ?? null }
+        : null,
+      datedEventCount: calendar.events.filter((e) => e.at && e.status !== 'past').length,
+      payment: {
+        link: duesTracker?.paymentLink ?? null,
+        provider: duesTracker?.paymentProvider ?? null,
+        tracked: Boolean(duesTracker?.enabled),
+      },
+      claimedTeams: claimed,
+      totalTeams: teamCount,
+    }),
+    recipes: {
+      ...recipeSettings,
+      sendEnabled,
+      catalog: RECIPES.map((r) => ({
+        key: r.key,
+        label: r.label,
+        description: r.description,
+        cadence: r.cadence,
+        unavailable: r.unavailableReason({ platform, sport }),
+      })),
+    },
+    charts: {
+      scoring: matchups ? scoringChart(matchups) : null,
+      balance: balanceChart(
+        teams.map((t) => ({ name: teamLabel(t), wins: t.wins, losses: t.losses, ties: t.ties, pointsFor: t.pointsFor })),
+      ),
+      engagement: memberRows ? engagementChart(memberRows) : null,
+    },
     settings,
     access,
     unread,
@@ -448,13 +912,18 @@ export async function getCommissionerHub(input: {
        * two can never disagree about whether a league is published.
        */
       enabled:
-        Boolean(league?.settings) &&
-        typeof league?.settings === 'object' &&
-        (league.settings as Record<string, unknown>).publicStandings === true,
+        Boolean(settingsJson) &&
+        typeof settingsJson === 'object' &&
+        (settingsJson as Record<string, unknown>).publicStandings === true,
       url: `/standings/${leagueId}`,
     },
     waivers,
   }
+}
+
+function humanStatus(status: string): string {
+  const s = status.replace(/_/g, ' ').toLowerCase()
+  return s.charAt(0).toUpperCase() + s.slice(1)
 }
 
 function describeSyncAge(ms: number | null): string {

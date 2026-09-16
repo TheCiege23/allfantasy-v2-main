@@ -9,6 +9,7 @@ import { renderDigestEmail } from '@/lib/notifications/designedEmail'
 import { escapeHtml } from '@/lib/trade-intel/tradeGradeEmail'
 import { getBaseUrl } from '@/lib/get-base-url'
 import { withSyncJobRun } from '@/lib/production-health/syncJobRunTelemetry'
+import { weeklyRecapAllowed } from '@/lib/core-app/commissioner/recipes'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 300
@@ -359,15 +360,27 @@ export async function GET(req: NextRequest) {
         const TIME_BUDGET_MS = 240_000
         const leagues = await prisma.league.findMany({
           where: { platform: 'sleeper', platformLeagueId: { not: '' } },
-          select: { id: true, name: true, platformLeagueId: true, userId: true },
+          select: { id: true, name: true, platformLeagueId: true, userId: true, settings: true },
           take: 100,
         })
         let posted = 0
         let emailsSent = 0
         let skippedForTime = 0
+        let optedOut = 0
         const errors: string[] = []
         for (const l of leagues) {
           if (!l.platformLeagueId || !l.userId) continue
+          /*
+           * The commissioner's opt-out from the Commissioner Hub's automations. The recap defaults ON
+           * for Sleeper leagues (it ran for all of them before the switch existed), so only an
+           * explicit `false` stops it. Skipped before any Sleeper read, so an opted-out league costs
+           * nothing, and before the per-week dedupe key is written, so a sibling AllFantasy league
+           * for the same Sleeper league still gets its own recap.
+           */
+          if (!weeklyRecapAllowed(l.settings, 'sleeper')) {
+            optedOut += 1
+            continue
+          }
           if (Date.now() - startedAt > TIME_BUDGET_MS) {
             skippedForTime += 1
             continue
@@ -382,7 +395,7 @@ export async function GET(req: NextRequest) {
             errors.push(l.id)
           }
         }
-        return { leagues: leagues.length, posted, emailsSent, skippedForTime, errors }
+        return { leagues: leagues.length, posted, emailsSent, skippedForTime, optedOut, errors }
       },
       (r) => ({
         rowsRead: r.leagues,
@@ -390,7 +403,7 @@ export async function GET(req: NextRequest) {
         rowsSkipped: r.skippedForTime,
         errors: r.errors.map((id) => `league ${id}`),
         warnings: r.skippedForTime > 0 ? [`time budget hit — ${r.skippedForTime} league(s) deferred to the next fire`] : [],
-        metadata: { emailsSent: r.emailsSent },
+        metadata: { emailsSent: r.emailsSent, optedOut: r.optedOut },
       }),
     )
     return NextResponse.json({
@@ -410,11 +423,15 @@ export async function GET(req: NextRequest) {
       id: leagueId,
       OR: [{ userId: userId }, { teams: { some: { claimedByUserId: userId } } }],
     },
-    select: { id: true, name: true, platform: true, platformLeagueId: true, userId: true },
+    select: { id: true, name: true, platform: true, platformLeagueId: true, userId: true, settings: true },
   })
   if (!league) return NextResponse.json({ error: 'League not found' }, { status: 404 })
   if (league.platform !== 'sleeper' || !league.platformLeagueId || !league.userId) {
     return NextResponse.json({ supported: false as const, platform: league.platform })
+  }
+  // A manual trigger by a member must not post a recap the commissioner switched off.
+  if (!weeklyRecapAllowed(league.settings, 'sleeper')) {
+    return NextResponse.json({ mode: 'manual' as const, posted: false, reason: 'weekly recap is turned off for this league', emailsSent: 0 })
   }
   const result = await postRecapForLeague(league.id, league.platformLeagueId, league.userId, league.name ?? 'League')
   return NextResponse.json({ mode: 'manual' as const, ...result })
