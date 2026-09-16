@@ -7,6 +7,7 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { recordDashboardActivation } from '@/lib/analytics/recordDashboardActivation'
 import { getDashboardLeagueListForUser } from '@/lib/dashboard/get-dashboard-league-list'
+import { toPlayedLeagues } from '@/lib/core-app/playedLeagues'
 import { selectResyncCandidates } from '@/lib/core-app/resyncableLeagues'
 import { getLeagueDataSignals } from '@/lib/core-app/leagueDataSignals'
 import { getLeagueTypeMedia, resolveLeagueCardTypeKey } from '@/lib/league-media/leagueTypeMedia'
@@ -138,6 +139,7 @@ import PickALeague from '@/components/core-app/PickALeague'
 import LeagueTabs from '@/components/core-app/LeagueTabs'
 import { getLeagueStandings } from '@/lib/core-app/leagueStandings'
 import { readLeagueStandingsSummary } from '@/lib/core-app/leagueStandingsSummary'
+import { readWeekAllSummary } from '@/lib/core-app/weekAllSummary'
 import { isEnabled, DEFAULT_ROLLOUTS } from '@/lib/sports-os/rollout'
 import { freshnessLabel, freshnessMeta, shouldWarnAboutFreshness } from '@/lib/sports-os/freshness'
 import { recordBudgetSince } from '@/lib/sports-os/budgetTelemetry'
@@ -592,9 +594,11 @@ export default async function AfCorePage({
    * 604-tile rail and a 604-row home. Same filter the home loader applies, for
    * the same reason.
    */
-  const playedLeagues = leagues
-    .filter((l) => (l as { hasUnifiedRecord?: boolean }).hasUnifiedRecord !== false)
-    .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base', numeric: true }))
+  /*
+   * The rule moved to `lib/core-app/playedLeagues.ts` when `weekAllSummary` became a second caller.
+   * Copying the two lines would have put two implementations of one rule in the tree.
+   */
+  const playedLeagues = toPlayedLeagues(leagues)
   const selectedLeagueRow = selectedLeagueId
     ? (playedLeagues.find((league) => league.id === selectedLeagueId) ?? null)
     : null
@@ -1875,6 +1879,12 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
    * could. Letting it reject here would replace that message with a Suspense error boundary.
    */
   const standingsOnSummary = isEnabled('sports-os.screen-summaries', userId, DEFAULT_ROLLOUTS)
+  /*
+   * ⚠ THE SAME FLAG AND THE SAME SUBJECT AS STANDINGS, SO A USER IS WHOLLY ON SUMMARIES OR WHOLLY
+   * OFF. A second flag would put one user on a cached standings board and a live week board, which
+   * is two experiments at once and neither cleanly measurable.
+   */
+  const weekOnSummary = standingsOnSummary
 
   const standingsFresh =
     activeKey === 'standings' && selectedLeagueId && standingsOnSummary
@@ -2131,7 +2141,18 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
           .then((value) => value?.week ?? null)
           .catch(() => null)
 
-        const weekAll = traceCard('week', () => getWeekAll(userId, weekLeagues)).catch(() => null)
+        /*
+         * Sports OS point 4: the cross-league week board from a precomputed summary.
+         *
+         * ⚠ STILL INSIDE `traceCard`, DELIBERATELY. The card span is what makes this read visible
+         * per-card in Sentry and what carries its budget verdict; a cache HIT should show up there
+         * as a fast card, not vanish from the trace. Measuring the cheap path is the point.
+         */
+        const weekAll = traceCard('week', () =>
+          weekOnSummary
+            ? readWeekAllSummary(userId).then((entry) => entry?.data ?? null)
+            : getWeekAll(userId, weekLeagues),
+        ).catch(() => null)
 
         /*
          * WHO you play, which getWeekAll cannot answer: it drops every 0-0 row
@@ -2598,14 +2619,22 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
           imageUrl: (l as { avatarUrl?: string | null }).avatarUrl ?? null,
         })),
       ).catch(() => null),
-      getWeekAll(
-        userId,
-        playedLeagues.map((l) => ({
-          id: l.id,
-          name: l.name,
-          platform: String(l.platform ?? ''),
-          platformLeagueId: (l as { platformLeagueId?: string | null }).platformLeagueId ?? null,
-        })),
+      /*
+       * The same board, same rollout as the home card above — so a user in the cohort gets the
+       * cached board on BOTH surfaces and one consistent answer, rather than a cached card beside
+       * a freshly-computed board disagreeing with it.
+       */
+      (weekOnSummary
+        ? readWeekAllSummary(userId).then((entry) => entry?.data ?? null)
+        : getWeekAll(
+            userId,
+            playedLeagues.map((l) => ({
+              id: l.id,
+              name: l.name,
+              platform: String(l.platform ?? ''),
+              platformLeagueId: (l as { platformLeagueId?: string | null }).platformLeagueId ?? null,
+            })),
+          )
       ).catch(() => null),
       /*
        * The three top cards. `lastSyncedAt` is passed through because it is the

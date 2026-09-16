@@ -15,7 +15,7 @@ route with a budget in traces-per-hour.
 | 1 | Performance budgets | `lib/sports-os/budgets.ts`, `budgetTelemetry.ts` | **new** — shell + every card instrumented |
 | 2 | Render the shell immediately | `app/core/[[...screen]]/page.tsx` — `af.shell_ms` | already built |
 | 3 | Stream cards independently | same page + `lib/observability/cardTelemetry.ts` | already built |
-| 4 | Screen-ready summaries | `lib/sports-os/summaries.ts` | **new** — `/core/standings` wired |
+| 4 | Screen-ready summaries | `lib/sports-os/summaries.ts` | **new** — `/core/standings` + `/core/week` wired |
 | 5 | Layered caching | `lib/sports-os/layeredCache.ts`, `durableTier.ts` | **new** — memory + `SportsDataCache` |
 | 6 | Heavy work in jobs | `lib/jobs/`, `lib/queues/bullmq.ts` | already built — reached from `reactions.ts` |
 | 7 | One event system | `lib/events/` | already built — reaction table, relay consumer, `ingest.*` emit are new |
@@ -505,6 +505,48 @@ about 21 spans, in a day. A p95 from one sample is that sample.
 ~19 card reads and `traceCard` opens a span for each whenever the parent is sampled. Roughly 970
 would be expected. Recorded as an open question rather than explained — it is the sort of gap that
 means a dimension is quietly not being captured.
+
+## The second surface: `/core/week`
+
+`lib/core-app/weekAllSummary.ts`, on the same flag and the same bucket subject as standings — so a
+user is wholly on summaries or wholly off, rather than reading a cached standings board beside a
+live week board.
+
+It pays better than standings did. `getWeekAll` reads every `WeeklyMatchup` row across **all** the
+user's played leagues, and it runs twice on a hot path: as the `week` card on the `/core` home (the
+busiest screen, ~51 renders/day) and as the `/core/week` board. Standings is one league at ~2
+renders/day.
+
+🛑 **IT IS USER-SCOPED, AND THAT CHANGES WHAT INVALIDATION CAN DO.** Standings is keyed on one
+league, so `invalidateScreenForLeague` sweeps it with a bounded prefix. This board spans every
+league the user plays, so its key carries a userId and **no league id at all** — while the sweep is
+a prefix match on `l=<leagueId>&`.
+
+So **`invalidatedBy` is deliberately empty**, and a test asserts that. Listing the score and import
+events would *look* like event-driven invalidation and be a silent no-op: `planReactions` would name
+`week`, the consumer would build a prefix from the event's league id, and it would match nothing.
+**An invalidation that cannot fire is worse than one that is absent**, because the absent one is
+visible in the file. The TTL is the whole correctness bound here.
+
+⚠ If this ever needs to be event-driven, the fix is **not** to add events to that list. It is either
+a user-keyed sweep (needing league→members, a query the reaction path does not have) or splitting
+the board per league. Both are real work.
+
+⚠ **THE CARD STAYS INSIDE `traceCard`.** A cache hit should show up in the trace as a fast card, not
+vanish from it — measuring the cheap path is the point.
+
+### `toPlayedLeagues`, and the generic that broke 40 things
+
+The played-leagues rule (drop `hasUnifiedRecord: false` AF Legacy rows, sort by name) lived inline
+in the page. A second caller needed it, so it moved to `lib/core-app/playedLeagues.ts` rather than
+being copied — two implementations of one rule is the failure this repo already paid for with the
+SQL copy of `normalizePlayerName`.
+
+🛑 **THE FIRST VERSION CONSTRAINED `T extends PlayableLeague`, WHICH LOOKED STRICTER AND WAS STRICTLY
+WORSE.** The page's league rows and `DashboardLeagueListPayload.leagues` (typed `unknown[]`) do not
+both satisfy that constraint, so inference collapsed `T` and the return type lost every field the
+callers use. **The ratchet caught it: 185 against a baseline of 143 — 40 new errors in the page.**
+`T` is now unconstrained with the same internal casts the inline version used.
 
 ## What is not done
 
