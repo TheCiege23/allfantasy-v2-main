@@ -28,7 +28,7 @@ import {
 } from '@/lib/league-import/importCoverageSummary'
 import DevyCore from '@/components/core-app/screens/DevyCore'
 import DevyLeagueTab from '@/components/core-app/screens/DevyLeagueTab'
-import { getDevyCoreData, leagueDevySlotCount } from '@/lib/core-app/devy'
+import { getDevyCoreData, leagueDevyNav, looksLikeDevyFormat, NO_DEVY_NAV } from '@/lib/core-app/devy'
 import type { TriageBookRow } from '@/components/core-app/screens/Dash3ATriage'
 import { resolveUserOsSnapshot } from '@/lib/decision-os/userOs'
 import { getCrossLeagueExposure, getRivalRecords } from '@/lib/core-app/dash3aPanels'
@@ -910,12 +910,16 @@ export default async function AfCorePage({
           .catch(() => false)
       : Promise.resolve(false),
     /*
-     * Devy slot count — computed for EVERY render, not just the devy screens, for the same
-     * reason `hasIdpDefense` is: it gates a nav item, and a nav item has to be decidable
-     * before you are on the screen it links to. One indexed read of DevyLeagueConfig, no
-     * provider call, degrading to 0 so an error hides the entry rather than showing a dead one.
+     * The selected league's devy facts — slot count (the per-league Devy tab) and whether it is a
+     * devy or C2C league at all (the Devy hub entry). Computed for EVERY render, not just the devy
+     * screens, for the same reason `hasIdpDefense` is: they gate nav items, and a nav item has to be
+     * decidable before you are on the screen it links to. Two indexed config reads plus the shared
+     * row, no provider call, degrading to "no devy" so an error hides the entries rather than
+     * showing dead ones.
      */
-    selectedLeagueId ? leagueDevySlotCount(selectedLeagueId).catch(() => 0) : Promise.resolve(0),
+    selectedLeagueId
+      ? leagueDevyNav(selectedLeagueId, selectedLeagueRead).catch(() => NO_DEVY_NAV)
+      : Promise.resolve(NO_DEVY_NAV),
     /*
      * What the selected league's import could actually deliver — same reasoning as
      * `hasIdpDefense`: it gates nav items, so it has to be decidable before you are
@@ -1045,13 +1049,20 @@ export default async function AfCorePage({
     coreActivity,
     leagueHasScoredWeek,
     hasIdpDefense,
-    devySlotCount,
+    devyNav,
     importCoverageSummary,
     [unreadNotifications, shellUser],
     chatUnread,
     railMatchups,
     access,
   ] = await shellReads
+  const devySlotCount = devyNav.devySlotCount
+  /*
+   * 🛑 THE DEVY HUB ENTRY SHOWED FOR EVERY LEAGUE. In a league it now shows only for a devy or C2C
+   * league; with no league held, only when the user plays in at least one — decided from the list
+   * rows already in hand, no query.
+   */
+  const devyInScope = selectedLeagueId ? devyNav.devyFormat : playedLeagues.some(looksLikeDevyFormat)
 
   /*
    * Free by this point: the read was started before `shellReads` and has been in flight
@@ -1332,6 +1343,7 @@ export default async function AfCorePage({
       scope={shellScope}
       hasIdpDefense={hasIdpDefense}
       devySlotCount={devySlotCount}
+      devyInScope={devyInScope}
       isAdmin={isAdmin}
       importCapabilities={importCoverageSummary.capabilities}
       /* The screen publishes the week label, the tab badges and Chimmy's home signals when it

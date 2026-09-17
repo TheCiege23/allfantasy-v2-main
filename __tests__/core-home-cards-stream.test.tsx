@@ -113,7 +113,12 @@ vi.mock('@/lib/core-app/coreActivity', () => ({
 }))
 vi.mock('@/lib/core-app/leagueDataSignals', () => ({ getLeagueDataSignals: vi.fn(async () => ({ hasScoredWeek: true })) }))
 vi.mock('@/lib/values/valueSurfaceEligibility', () => ({ resolveLeagueValueSurfaces: vi.fn(async () => ({ hasIdp: false })) }))
-vi.mock('@/lib/core-app/devy', () => ({ leagueDevySlotCount: vi.fn(async () => 0), getDevyCoreData: vi.fn(async () => null) }))
+vi.mock('@/lib/core-app/devy', () => ({
+  leagueDevyNav: vi.fn(async () => ({ devySlotCount: 0, devyFormat: false })),
+  looksLikeDevyFormat: () => false,
+  NO_DEVY_NAV: { devySlotCount: 0, devyFormat: false },
+  getDevyCoreData: vi.fn(async () => null),
+}))
 vi.mock('@/lib/adminAuth', () => ({ getAdminAccessState: vi.fn(async () => ({ status: 'denied' })) }))
 vi.mock('@/lib/chat-core/unreadCounts', () => ({ getChatUnread: vi.fn(async () => ({ total: 0, mentions: 0 })) }))
 vi.mock('@/lib/core-app/railMatchups', () => ({ getRailMatchups: vi.fn(async () => null) }))
