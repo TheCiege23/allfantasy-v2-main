@@ -11,7 +11,27 @@ vi.mock('@/lib/dashboard/get-dashboard-league-list', () => ({
 }))
 vi.mock('@/lib/sports-os/durableTier', () => ({ sportsDataCacheTier: () => null }))
 
-const { readSeasonOutlookSummary, SEASON_OUTLOOK_SCREEN } = await import(
+const db = vi.hoisted(() => ({
+  matchups: { _max: { updatedAt: new Date('2026-09-17T10:00:00Z') }, _count: { _all: 100 } } as unknown,
+  facts: { _max: { createdAt: null }, _count: { _all: 0 } } as unknown,
+  teams: { _max: { lastUpdatedAt: new Date('2026-09-01T00:00:00Z') }, _count: { _all: 12 } } as unknown,
+  rosters: { _max: { updatedAt: new Date('2026-09-17T09:00:00Z') }, _count: { _all: 12 } } as unknown,
+  sync: [{ sport: 'NFL', lastSuccessAt: new Date('2026-09-17T11:00:00Z') }] as unknown,
+  week: { season: '2026', week: 3 } as unknown,
+}))
+const reject = (v: unknown) => (v instanceof Error ? Promise.reject(v) : Promise.resolve(v))
+vi.mock('@/lib/prisma', () => ({
+  prisma: {
+    weeklyMatchup: { aggregate: () => reject(db.matchups) },
+    matchupFact: { aggregate: () => reject(db.facts) },
+    leagueTeam: { aggregate: () => reject(db.teams) },
+    roster: { aggregate: () => reject(db.rosters) },
+    providerSyncState: { findMany: () => reject(db.sync) },
+  },
+}))
+vi.mock('@/lib/core-app/playerProjections', () => ({ latestProjectionWeek: () => reject(db.week) }))
+
+const { readSeasonOutlookSummary, seasonOutlookFingerprint, SEASON_OUTLOOK_SCREEN } = await import(
   '@/lib/core-app/seasonOutlookSummary'
 )
 const { __resetLayeredCacheForTests } = await import('@/lib/sports-os/layeredCache')
@@ -88,6 +108,14 @@ describe('seasonOutlookSummary', () => {
     expect(getSeasonOutlook).toHaveBeenCalledTimes(3)
   })
 
+  it('🛑 keys on the INPUT fingerprint, so a changed input is a cold build, not a stale serve', async () => {
+    await readSeasonOutlookSummary('u1', null, 'fp-a')
+    await readSeasonOutlookSummary('u1', null, 'fp-a')
+    expect(getSeasonOutlook).toHaveBeenCalledTimes(1)
+    await readSeasonOutlookSummary('u1', null, 'fp-b')
+    expect(getSeasonOutlook).toHaveBeenCalledTimes(2)
+  })
+
   it('does not share a board between two users', async () => {
     await readSeasonOutlookSummary('u1', null)
     await readSeasonOutlookSummary('u2', null)
@@ -122,5 +150,44 @@ describe('seasonOutlookSummary', () => {
   it('is a no-op without a user', async () => {
     expect(await readSeasonOutlookSummary('', null)).toBeNull()
     expect(getSeasonOutlook).not.toHaveBeenCalled()
+  })
+})
+
+describe('seasonOutlookFingerprint', () => {
+  const LEAGUES = [{ id: 'l1', platformLeagueId: 'p1', settings: { playoff_teams: 6 } }]
+  const baseline = { ...db }
+  beforeEach(() => Object.assign(db, baseline))
+
+  it('is stable for unchanged inputs', async () => {
+    expect(await seasonOutlookFingerprint(LEAGUES, null)).toBe(await seasonOutlookFingerprint(LEAGUES, null))
+  })
+
+  it('moves when a week is scored, a team row changes, or the settings change', async () => {
+    const before = await seasonOutlookFingerprint(LEAGUES, null)
+    db.matchups = { _max: { updatedAt: new Date('2026-09-17T12:00:00Z') }, _count: { _all: 100 } }
+    const scored = await seasonOutlookFingerprint(LEAGUES, null)
+    expect(scored).not.toBe(before)
+    const resettled = await seasonOutlookFingerprint([{ ...LEAGUES[0], settings: { playoff_teams: 4 } }], null)
+    expect(resettled).not.toBe(scored)
+  })
+
+  it('reads rosters, the injury feed and the projection week only for the league on screen', async () => {
+    const board = await seasonOutlookFingerprint(LEAGUES, null)
+    db.rosters = { _max: { updatedAt: new Date('2026-09-17T13:00:00Z') }, _count: { _all: 12 } }
+    expect(await seasonOutlookFingerprint(LEAGUES, null)).toBe(board)
+
+    const focused = await seasonOutlookFingerprint(LEAGUES, 'l1')
+    db.sync = [{ sport: 'NFL', lastSuccessAt: new Date('2026-09-17T14:00:00Z') }]
+    const injured = await seasonOutlookFingerprint(LEAGUES, 'l1')
+    expect(injured).not.toBe(focused)
+    db.week = { season: '2026', week: 4 }
+    expect(await seasonOutlookFingerprint(LEAGUES, 'l1')).not.toBe(injured)
+  })
+
+  it('🛑 a failed stamp never collides with a healthy one', async () => {
+    const healthy = await seasonOutlookFingerprint(LEAGUES, null)
+    db.matchups = new Error('timeout')
+    const failed = await seasonOutlookFingerprint(LEAGUES, null)
+    expect(failed).not.toBe(healthy)
   })
 })

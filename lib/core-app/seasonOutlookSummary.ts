@@ -32,6 +32,23 @@
  * Keying on `{ userId, leagueId: focusLeagueId }` keeps them separate scopes. The cost is one extra
  * entry per focused league, which is bounded by how many leagues the user actually opens.
  *
+ * ── 2026-09-17: THE INPUTS ARE IN THE KEY, SO AN EVENT IS A COLD BUILD ──
+ *
+ * The TTL used to be the only correctness bound, which meant a scored week, a trade or a new injury
+ * waited out ten minutes of the previous board — and stale-while-revalidate would then serve that
+ * board once more. `seasonOutlookFingerprint` digests cheap stamps of everything the build reads
+ * (matchup rows, imported history, team rows, the leagues' settings; and for the league on screen,
+ * its rosters, the injury feed's last run and the projection week). Any of those moving changes
+ * the key, and the next read is a miss that rebuilds — nothing has to emit an event and no writer
+ * has to remember to invalidate anything.
+ *
+ * A rebuild is cheap now in the common case: each league's simulation is stored and reused until
+ * its own inputs change (`seasonOutlookSims.ts`), so a board rebuilt because ONE league scored
+ * re-runs one league.
+ *
+ * ⚠ THE STAMPS OVER-COVER ON PURPOSE. A fingerprint that covers more than the build reads only
+ * causes extra rebuilds; one that covers less serves stale.
+ *
  * ── ⚠ `invalidatedBy` IS DELIBERATELY EMPTY, FOR A SHARPER REASON THAN `weekAllSummary`'s ──
  *
  * The week board's key carries no league id at all, so a league-prefix sweep could not match it.
@@ -49,7 +66,10 @@
 
 import 'server-only'
 
+import { createHash } from 'node:crypto'
+import { prisma } from '@/lib/prisma'
 import { getSeasonOutlook, type SeasonOutlook } from './seasonOutlook'
+import { latestProjectionWeek } from './playerProjections'
 import { toPlayedLeagues } from './playedLeagues'
 import { getDashboardLeagueListForUser } from '@/lib/dashboard/get-dashboard-league-list'
 import { readScreenSummary, registerScreenSummary } from '@/lib/sports-os/summaries'
@@ -59,16 +79,11 @@ import type { Fresh } from '@/lib/sports-os/freshness'
 export const SEASON_OUTLOOK_SCREEN = 'season-outlook'
 
 /**
- * Ten minutes, and the bound is the DATA's refresh rate rather than a guess at user patience.
- *
- * This reads the same `WeeklyMatchup` rows the week board does, and those are themselves only
- * refetched once they are older than `ensureMatchupsCached`'s ~30-minute threshold. A TTL shorter
- * than that cannot reveal anything new most of the time — it would just re-run 49 million simulated
- * games to reproduce the previous answer exactly, which the determinism note above guarantees it
- * would. Ten minutes sits comfortably inside that window, so the summary is never the binding
- * staleness constraint; the rows are.
+ * Thirty minutes. With the inputs in the key, the TTL no longer decides whether a changed input is
+ * seen — the fingerprint does. What it still bounds is anything the stamps do not cover (a team
+ * renamed on a row whose timestamp did not move), and how long "last updated" can age.
  */
-const TTL_MS = 10 * 60_000
+const TTL_MS = 30 * 60_000
 
 /**
  * An hour, which is much longer than the other two summaries allow, and deliberately.
@@ -78,12 +93,12 @@ const TTL_MS = 10 * 60_000
  * a board that will differ only in whatever scored since; they get the previous one immediately and
  * the rebuild lands behind them.
  */
-const STALE_WHILE_REVALIDATE_MS = 60 * 60_000
+const STALE_WHILE_REVALIDATE_MS = 6 * 60 * 60_000
 
 registerScreenSummary<SeasonOutlook | null>({
   screen: SEASON_OUTLOOK_SCREEN,
   /** ⚠ Bump whenever `SeasonOutlook` changes shape — the version is part of the cache key. */
-  version: 1,
+  version: 2,
   ttlMs: TTL_MS,
   staleWhileRevalidateMs: STALE_WHILE_REVALIDATE_MS,
   // See the header: a partial league sweep would desynchronize the focused and cross-league boards.
@@ -148,11 +163,103 @@ registerScreenSummary<SeasonOutlook | null>({
 export async function readSeasonOutlookSummary(
   userId: string,
   focusLeagueId: string | null,
+  /** From `seasonOutlookFingerprint`. Null keeps the pre-fingerprint key (TTL-only freshness). */
+  fingerprint: string | null = null,
 ): Promise<Fresh<SeasonOutlook | null> | null> {
   if (!userId) return null
   return readScreenSummary<SeasonOutlook | null>(
     SEASON_OUTLOOK_SCREEN,
-    { userId, leagueId: focusLeagueId ?? null },
+    { userId, leagueId: focusLeagueId ?? null, fingerprint },
     { durable: sportsDataCacheTier() },
   )
+}
+
+type FingerprintLeague = { id: string; platformLeagueId?: string | null; settings?: unknown }
+
+const stamp = (d: Date | null | undefined) => (d ? d.getTime() : 0)
+
+function safe<T>(p: Promise<T>): Promise<T | 'err'> {
+  return p.catch(() => 'err' as const)
+}
+
+/**
+ * A digest of what the outlook build reads, from a handful of aggregate queries.
+ *
+ * ⚠ NEVER THROWS, AND A FAILED STAMP IS A DISTINCT VALUE, NOT A ZERO. A read that fails puts
+ * `err` in its slot, so the fingerprint cannot collide with a healthy one and serve a board that was
+ * built on different inputs. The cost of a failure is a cold build, not a stale board.
+ */
+export async function seasonOutlookFingerprint(
+  leagues: readonly FingerprintLeague[],
+  focusLeagueId: string | null,
+): Promise<string> {
+  const pids = leagues
+    .map((l) => l.platformLeagueId)
+    .filter((v): v is string => typeof v === 'string' && v.length > 0)
+  const ids = leagues.map((l) => l.id)
+
+  const [matchups, facts, teams, rosters, injuries, projection] = await Promise.all([
+    safe(
+      prisma.weeklyMatchup.aggregate({
+        where: { leagueId: { in: pids } },
+        _max: { updatedAt: true },
+        _count: { _all: true },
+      }),
+    ),
+    safe(
+      prisma.matchupFact.aggregate({
+        where: { leagueId: { in: ids } },
+        _max: { createdAt: true },
+        _count: { _all: true },
+      }),
+    ),
+    safe(
+      prisma.leagueTeam.aggregate({
+        where: { league: { platformLeagueId: { in: pids } } },
+        _max: { lastUpdatedAt: true },
+        _count: { _all: true },
+      }),
+    ),
+    focusLeagueId
+      ? safe(prisma.roster.aggregate({ where: { leagueId: focusLeagueId }, _max: { updatedAt: true }, _count: { _all: true } }))
+      : Promise.resolve(null),
+    focusLeagueId
+      ? safe(
+          prisma.providerSyncState.findMany({
+            where: { provider: 'injuries-cron', entityType: 'injuries' },
+            select: { sport: true, lastSuccessAt: true },
+          }),
+        )
+      : Promise.resolve(null),
+    focusLeagueId ? safe(latestProjectionWeek()) : Promise.resolve(null),
+  ])
+
+  const parts: string[] = [
+    ids.join(','),
+    pids.join(','),
+    matchups === 'err' ? 'err' : `${stamp(matchups._max.updatedAt)}/${matchups._count._all}`,
+    facts === 'err' ? 'err' : `${stamp(facts._max.createdAt)}/${facts._count._all}`,
+    teams === 'err' ? 'err' : `${stamp(teams._max.lastUpdatedAt)}/${teams._count._all}`,
+  ]
+  const settings = createHash('sha1')
+  for (const l of leagues) settings.update(`${l.id}:${JSON.stringify(l.settings ?? null)}|`)
+  parts.push(settings.digest('hex'))
+
+  if (focusLeagueId) {
+    parts.push(`f=${focusLeagueId}`)
+    parts.push(rosters === 'err' || rosters == null ? 'err' : `${stamp(rosters._max.updatedAt)}/${rosters._count._all}`)
+    parts.push(
+      injuries === 'err' || injuries == null
+        ? 'err'
+        : String(
+            Math.max(
+              0,
+              ...injuries.filter((r) => String(r.sport).toUpperCase() === 'NFL').map((r) => stamp(r.lastSuccessAt)),
+            ),
+          ),
+    )
+    parts.push(projection === 'err' ? 'err' : projection ? `${projection.season}-${projection.week}` : 'none')
+  }
+
+  return createHash('sha1').update(parts.join('#')).digest('hex').slice(0, 16)
 }

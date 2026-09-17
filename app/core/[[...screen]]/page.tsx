@@ -146,6 +146,7 @@ import YourWeekLeague from '@/components/core-app/screens/YourWeekLeague'
 import SeasonOutlook from '@/components/core-app/screens/SeasonOutlook'
 import { getSeasonOutlook } from '@/lib/core-app/seasonOutlook'
 import SeasonOutlookLeague from '@/components/core-app/screens/SeasonOutlookLeague'
+import { slimOutlookForBoard } from '@/lib/core-app/outlookCopy'
 import LiveScores from '@/components/core-app/screens/LiveScores'
 import { LiveGameView } from '@/components/core-app/screens/LiveGameView'
 /*
@@ -169,7 +170,7 @@ import { platformLabel } from '@/lib/core-app/platformLinks'
 import { getLeagueStandings } from '@/lib/core-app/leagueStandings'
 import { readLeagueStandingsSummary } from '@/lib/core-app/leagueStandingsSummary'
 import { readWeekAllSummary } from '@/lib/core-app/weekAllSummary'
-import { readSeasonOutlookSummary } from '@/lib/core-app/seasonOutlookSummary'
+import { readSeasonOutlookSummary, seasonOutlookFingerprint } from '@/lib/core-app/seasonOutlookSummary'
 import { getCareerScreen, parseCareerView } from '@/lib/core-app/careerScreen'
 import { parseCareerFilter } from '@/lib/core-app/careerModel'
 import { isEnabled, DEFAULT_ROLLOUTS } from '@/lib/sports-os/rollout'
@@ -2428,25 +2429,46 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
    * the direct read does, and the screen already renders an outlook-less state. Rejecting here
    * would replace it with a Suspense error boundary.
    */
+  const outlookLeagues = playedLeagues.map((l) => ({
+    id: l.id,
+    name: l.name,
+    platform: String(l.platform ?? ''),
+    platformLeagueId: (l as { platformLeagueId?: string | null }).platformLeagueId ?? null,
+    settings: (l as { settings?: unknown }).settings ?? null,
+  }))
+
+  /*
+   * ⚠ THE FINGERPRINT IS PART OF THE SUMMARY KEY. A scored week, an import, a roster move, an
+   * injury-feed run or a new projection week changes it, so the next read is a cold build rather
+   * than the previous board served until a TTL runs out — see `seasonOutlookSummary.ts`. The roster
+   * stamps are only read for the league on screen, which is the only board that uses rosters.
+   */
+  const outlookFingerprint =
+    wantsOutlook && outlookOnSummary
+      ? await seasonOutlookFingerprint(
+          outlookLeagues,
+          activeKey === 'season-outlook' ? selectedLeagueId : null,
+        ).catch(() => null)
+      : null
+
   const outlookFresh =
     wantsOutlook && outlookOnSummary
-      ? await readSeasonOutlookSummary(userId, selectedLeagueId).catch(() => null)
+      ? await readSeasonOutlookSummary(userId, selectedLeagueId, outlookFingerprint).catch(() => null)
       : null
 
   const outlook = wantsOutlook
     ? outlookOnSummary
       ? (outlookFresh?.data ?? null)
-      : await getSeasonOutlook(
-          userId,
-          playedLeagues.map((l) => ({
-            id: l.id,
-            name: l.name,
-            platform: String(l.platform ?? ''),
-            platformLeagueId: (l as { platformLeagueId?: string | null }).platformLeagueId ?? null,
-            settings: (l as { settings?: unknown }).settings ?? null,
-          })),
-          selectedLeagueId,
-        ).catch(() => null)
+      : await getSeasonOutlook(userId, outlookLeagues, selectedLeagueId).catch(() => null)
+    : null
+
+  /* The board's age, for the same chip Standings shows. Null off-cohort, as there. */
+  const outlookFreshness = outlookFresh
+    ? {
+        meta: freshnessMeta(outlookFresh),
+        initialLabel: freshnessLabel(outlookFresh),
+        initialWarn: shouldWarnAboutFreshness(outlookFresh),
+      }
     : null
 
   const notifications =
@@ -3873,9 +3895,10 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
               swing={outlook.swingByLeague[selectedLeagueId] ?? null}
               basis={outlook.basis}
               priorities={outlook.priorities}
+              freshness={outlookFreshness}
             />
           ) : (
-            <SeasonOutlook data={outlook} />
+            <SeasonOutlook data={slimOutlookForBoard(outlook)} freshness={outlookFreshness} />
           )
         ) : (
           <div className="af-frame" style={{ padding: 24, maxWidth: 720 }}>
