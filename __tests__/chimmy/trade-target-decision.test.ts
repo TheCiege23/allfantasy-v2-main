@@ -218,6 +218,60 @@ describe('no — each rule, on its own', () => {
   })
 })
 
+/*
+ * 🛑 ONE GAME IS NOT A SEASON. Measured on production 2026-09-17 in the owner's Draft Junkies
+ * league: "No, don't trade for Rashee Rice, because you are rebuilding at 0-1, 12th of 12" — while
+ * Rice would have started for +7.2 at a fair price. The engine's stance is win percentage alone.
+ */
+describe('early in the season, the record decides nothing', () => {
+  const draftJunkies = (over: Partial<TradeTargetFacts> = {}) =>
+    facts({
+      leagueName: 'Draft Junkies $20 Dynasty',
+      target: { name: 'Rashee Rice', position: 'WR', value: 3446, trend30Day: -411, age: 26 },
+      you: { stance: 'rebuilder', record: { wins: 0, losses: 1, ties: 0 }, rank: 12, teamCount: 12, needs: [], surpluses: ['WR'] },
+      partner: { teamName: 'Puka Troopers', stance: 'contender' },
+      lineup: priced({ week: 3, targetPoints: 16.7, addGain: 7.2, netGain: 4.3, replaces: 'Quentin Johnston' }),
+      offer: { give: [{ name: 'Kyren Williams', position: 'RB', value: 3562 }], giveTotal: 3562, receiveTotal: 3446, fairness: 'balanced' },
+      grade: { verdict: 'accept', acceptance: 0.56 },
+      ...over,
+    })
+
+  it('the production case: 0-1 is not "rebuilding", and the answer is a yes', () => {
+    const v = decideTradeTarget(draftJunkies())
+    expect(v.verdict).toBe('yes')
+    expect(v.because).toBe('he would start for you (+7.2 points in week 3), at a price your roster can pay')
+    expect(v.openWith).toBe('Kyren Williams')
+    const text = v.reasons.join('\n')
+    expect(text).toMatch(/Your team: 0-1, 12th of 12 — too early in the season to call you a contender or a rebuilder\./)
+    expect(text).toMatch(/His team: Puka Troopers — too early in the season to tell whether they are buying or selling\./)
+    expect(text).not.toMatch(/rebuilding|contending/)
+  })
+
+  it('a 1-0 start is not "contending" either', () => {
+    const v = decideTradeTarget(draftJunkies({ you: { ...draftJunkies().you, stance: 'contender', record: { wins: 1, losses: 0, ties: 0 }, rank: 1 } }))
+    expect(v.because).not.toMatch(/contending/)
+  })
+
+  it('three games still decide nothing; the fourth does', () => {
+    const at = (wins: number, losses: number) =>
+      decideTradeTarget(draftJunkies({ you: { ...draftJunkies().you, stance: 'rebuilder', record: { wins, losses, ties: 0 } } }))
+    expect(at(0, 3).verdict).toBe('yes')
+    const four = at(0, 4)
+    expect(four.verdict).toBe('no')
+    expect(four.because).toMatch(/you are rebuilding at 0-4, 12th of 12/)
+  })
+
+  it('an early-season lineup hit does not trip the contender rule', () => {
+    const v = decideTradeTarget(
+      draftJunkies({
+        you: { ...draftJunkies().you, stance: 'contender', record: { wins: 1, losses: 0, ties: 0 } },
+        lineup: priced({ week: 3, targetPoints: 16.7, addGain: 7.2, netGain: -1.5 }),
+      }),
+    )
+    expect(v.verdict).toBe('yes')
+  })
+})
+
 describe('what the answer says about what it could not see', () => {
   it('no games played: the record is not used as a reason', () => {
     const v = decideTradeTarget(facts({ you: { ...facts().you, record: { wins: 0, losses: 0, ties: 0 } } }))
