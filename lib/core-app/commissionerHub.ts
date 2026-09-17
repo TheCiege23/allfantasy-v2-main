@@ -146,8 +146,14 @@ export type CommissionerHubData = {
   league: { id: string; name: string; platform: string; season: number | null; native: boolean }
   /** The viewer's own role — drives the co-commissioner boundary note. */
   role: 'commissioner' | 'co_commissioner'
-  /** `League.userId`. The Discord and broadcast routes accept only this person. */
+  /** `League.userId`. The Discord bridge routes accept only this person. */
   viewerIsOwner: boolean
+  /**
+   * May send an @everyone announcement from this screen: any viewer who passed this screen's gate
+   * (head commissioner or co-commissioner — `canBroadcast`), in a league AllFantasy runs. The 10b
+   * composer lists imported leagues read-only, so the button is not offered on them.
+   */
+  viewerCanBroadcast: boolean
   tiles: CommissionerTile[]
   /** Urgent work, first on every width. Replaces the old single attention list. */
   tasks: TaskCardsResult
@@ -868,6 +874,8 @@ export async function getCommissionerHub(input: {
 
   const recipeSettings = readRecipeSettings(settingsJson, platform)
   const viewerIsOwner = league.userId === userId
+  // The gate above admitted only commissioner and co-commissioner, which is exactly `canBroadcast`.
+  const viewerCanBroadcast = native
 
   const grant = {
     leagueId,
@@ -884,6 +892,7 @@ export async function getCommissionerHub(input: {
     league: { id: leagueId, name: leagueName, platform, season: league.season ?? null, native },
     role,
     viewerIsOwner,
+    viewerCanBroadcast,
     tiles,
     tasks,
     tasksEmptyReason:
@@ -900,6 +909,7 @@ export async function getCommissionerHub(input: {
     communities: buildCommunities({
       league: hubLeague,
       viewerIsOwner,
+      viewerCanBroadcast,
       discord: discordLink
         ? { guildName: discordLink.guild?.guildName ?? null, channelName: discordLink.channelName ?? null }
         : null,

@@ -398,8 +398,10 @@ export type CommunityChannel = {
 
 export type CommunitiesInput = {
   league: HubLeague
-  /** The viewer is `League.userId` — the only role the Discord and broadcast routes accept. */
+  /** The viewer is `League.userId` — the only role the Discord bridge routes accept. */
   viewerIsOwner: boolean
+  /** The viewer may send an @everyone announcement here (commissioner or co-commissioner, native league). */
+  viewerCanBroadcast: boolean
   discord: { guildName: string | null; channelName: string | null } | null
   datedEventCount: number
   payment: { link: string | null; provider: string | null; tracked: boolean }
@@ -445,7 +447,7 @@ export function buildCommunities(input: CommunitiesInput): CommunityChannel[] {
     detail:
       input.claimedTeams > 0
         ? `A league-chat post reaches the ${input.claimedTeams} of ${input.totalTeams} managers with AllFantasy accounts, by in-app, email or text as each has chosen.${
-            input.viewerIsOwner && league.native ? ' An @everyone announcement notifies all of them at once.' : ''
+            input.viewerCanBroadcast ? ' An @everyone announcement notifies all of them at once.' : ''
           }`
         : 'No manager has connected an AllFantasy account yet, so there is nobody to email. Invite managers to claim their teams.',
     link: { label: 'Open league chat', href: leaguePage(league.id, 'league_chat'), external: false },

@@ -1,14 +1,15 @@
 /**
- * GET: List leagues the current user is commissioner of (League.userId = session.user.id).
+ * GET: List the leagues the current user may send an @everyone announcement to — as head
+ * commissioner or co-commissioner (`listBroadcastLeagueIds`).
  *
  * Extended for the 10b "@everyone" league picker: each row also carries the platform, whether the
- * league is AllFantasy-hosted, a human subtitle, and its member count.
+ * league is AllFantasy-hosted, a human subtitle, and its member count. The draft room's broadcast
+ * picker reads it too.
  *
- * ⚠ THE PREDICATE HERE MUST STAY `League.userId`. `assertCommissioner` (used by
- * `POST /api/commissioner/broadcast`, which is where these ids are sent) resolves commissioner as
- * exactly `League.userId === userId`. If this list ever widened — co-commissioners, claimed teams
- * — the picker would offer leagues the send call then rejects one by one, and the user would watch
- * a broadcast half-fail with no explanation. The two predicates move together or not at all.
+ * ⚠ THIS LIST AND `POST /api/commissioner/broadcast` MUST USE THE SAME RULE, or the picker offers
+ * leagues the send then rejects one by one and the user watches a broadcast half-fail with no
+ * explanation. Both answer through `lib/commissioner/broadcastAccess.ts`. Until 2026-09-17 both
+ * were `League.userId` only; co-commissioners were added to both at once, by the user's decision.
  */
 
 import { NextResponse } from 'next/server'
@@ -16,6 +17,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { isNativePlatform } from '@/lib/league/isNativeLeague'
+import { listBroadcastLeagueIds } from '@/lib/commissioner/broadcastAccess'
 
 export const dynamic = 'force-dynamic'
 
@@ -39,8 +41,9 @@ export async function GET() {
   const userId = session?.user?.id
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
+  const ids = await listBroadcastLeagueIds(userId)
   const leagues = await prisma.league.findMany({
-    where: { userId },
+    where: { id: { in: ids } },
     select: {
       id: true,
       name: true,

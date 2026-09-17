@@ -239,8 +239,8 @@ export function CommissionerHub({ data, messageHref = null }: CommissionerHubPro
           */}
           {role === 'co_commissioner' ? (
             <p className="af-ch-boundary">
-              As a co-commissioner you can act on everything above. You cannot transfer commissionership or
-              remove the primary commissioner, and connecting Discord or sending an @everyone announcement is
+              As a co-commissioner you can act on everything above, including @everyone announcements. You
+              cannot transfer commissionership or remove the primary commissioner, and connecting Discord is
               left to the league owner.
             </p>
           ) : null}
@@ -260,7 +260,7 @@ export function CommissionerHub({ data, messageHref = null }: CommissionerHubPro
       {/* ── 9 · Connections (item 9) ──────────────────────────────────── */}
       <CommunityLinks
         data={data}
-        announce={data.viewerIsOwner && league.native ? <AnnounceButton leagueId={league.id} /> : null}
+        announce={data.viewerCanBroadcast ? <AnnounceButton leagueId={league.id} /> : null}
       />
 
       {/* ── Public standings ────────────────────────────────────────── */}

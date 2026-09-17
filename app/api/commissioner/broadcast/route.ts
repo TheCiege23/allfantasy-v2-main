@@ -1,14 +1,21 @@
 /**
  * POST: Commissioner @everyone broadcast to selected league chats.
- * Body: { leagueIds: string[], message: string }. Permission: commissioner of each league.
+ * Body: { leagueIds: string[], message: string }.
+ * Permission, per league: head commissioner or co-commissioner (`canBroadcast`, the same rule
+ * `GET /api/commissioner/leagues` lists by).
  * Also sends in-app + email/SMS notification to all league members (commissioner_alerts).
+ *
+ * ⚠ RATE-LIMITED PER USER. One call can fan out email and text to every member of several leagues,
+ * and more than one person per league may now send. Five sends in ten minutes is well past any real
+ * announcement cadence; a refused send is 429 and reaches nobody.
  */
 
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { assertCommissioner } from '@/lib/commissioner/permissions'
+import { canBroadcast } from '@/lib/commissioner/broadcastAccess'
+import { rateLimit } from '@/lib/rate-limit'
 import { createLeagueChatMessage } from '@/lib/league-chat/LeagueChatMessageService'
 import { getLeagueChatThreadId } from '@/lib/commissioner-settings/CommissionerAnnouncementService'
 import { createSystemMessage } from '@/lib/platform/chat-service'
@@ -17,6 +24,10 @@ import { dispatchNotification } from '@/lib/notifications/NotificationDispatcher
 import { isLeaguePrefEnabled, parseLeagueNotificationPrefs } from '@/lib/league/league-notification-prefs'
 
 export const dynamic = 'force-dynamic'
+
+// Not exported: a route module may only export handlers and route config.
+const BROADCASTS_PER_WINDOW = 5
+const BROADCAST_WINDOW_MS = 10 * 60 * 1000
 
 export async function POST(req: NextRequest) {
   const session = (await getServerSession(authOptions as any)) as { user?: { id?: string } } | null
@@ -30,12 +41,19 @@ export async function POST(req: NextRequest) {
   if (!message) return NextResponse.json({ error: 'message required' }, { status: 400 })
   if (message.length > 500) return NextResponse.json({ error: 'Message too long' }, { status: 400 })
 
+  // Counted after validation, so a malformed request does not use up a send.
+  const limit = rateLimit(`commissioner-broadcast:${userId}`, BROADCASTS_PER_WINDOW, BROADCAST_WINDOW_MS)
+  if (!limit.success) {
+    return NextResponse.json(
+      { error: 'Too many announcements in a short time. Try again in a few minutes.' },
+      { status: 429 },
+    )
+  }
+
   const results: { leagueId: string; sent: boolean; error?: string }[] = []
   const text = `@everyone ${message}`
   for (const leagueId of leagueIds) {
-    try {
-      await assertCommissioner(leagueId, userId)
-    } catch {
+    if (!(await canBroadcast(leagueId, userId).catch(() => false))) {
       results.push({ leagueId, sent: false, error: 'Forbidden' })
       continue
     }
