@@ -1,48 +1,83 @@
 import { prisma } from '@/lib/prisma'
 import { getLeagueRole } from '@/lib/league/permissions'
+import { isNativePlatform } from '@/lib/league/isNativeLeague'
 
 /**
- * Who may send an @everyone announcement, and to which leagues: the head commissioner AND
- * co-commissioners. User's decision, 2026-09-17.
+ * Who may send an @everyone announcement, and to which leagues.
  *
- * Co-commissioners already change the league's settings (`requireCommissionerRole`) — including
- * the switch that decides whether a broadcast notifies anyone — and can switch on recipes that
- * post to the whole league. The head commissioner still decides who is a co-commissioner
- * (`requireCommissionerOnly`). Until now this was `League.userId` only (`assertCommissioner`), so a
- * co-commissioner's send came back Forbidden.
+ * - **Who:** the head commissioner AND co-commissioners (user's decision, 2026-09-17). Co-commissioners
+ *   already change the league's settings (`requireCommissionerRole`), including the switch that
+ *   decides whether a broadcast notifies anyone. The head commissioner still decides who is a
+ *   co-commissioner (`requireCommissionerOnly`).
+ * - **Where:** leagues AllFantasy runs, only.
  *
- * 🛑 THE COMPOSER'S LIST AND THE SEND MUST USE THIS SAME RULE. `GET /api/commissioner/leagues`
- * lists what the composers offer and `POST /api/commissioner/broadcast` re-checks every id; if the
- * two predicates drift, a broadcast half-fails league by league with no explanation. Both call
- * into this file, and both answer through `getLeagueRole`.
+ * 🛑 WHY NOT IMPORTED LEAGUES. On an imported league `League.userId` is whoever ran the import, who
+ * is often not the league's commissioner, and `getLeagueRole` calls that person "commissioner". A
+ * send emails and texts every member with an AllFantasy account, so an imported league let any
+ * importer blast a league they don't run. The 10b composer already showed imported leagues
+ * read-only for that reason; the format hubs and the draft room did not, and the route did not
+ * check. Measured on production 2026-09-17: 0 broadcasts ever sent, in either store, so nothing
+ * that worked stops working. Ordinary league chat is unaffected.
  *
- * ⚠ IMPORTED LEAGUES ARE NOT REFUSED HERE, deliberately. The 10b composer shows them read-only,
- * but the format hubs (`broadcastLeagueIds` in `lib/core-app/formatHubs.ts`) and the draft room
- * send to every league the user commissions, imported ones included. A server-side refusal would
- * silently change what those two send.
+ * 🛑 EVERY SURFACE THAT OFFERS A SEND USES THIS FILE, and so does the send. A list that offers a
+ * league the send refuses makes a broadcast half-fail with no explanation.
  */
 
 const SENDING_ROLES = new Set(['commissioner', 'co_commissioner'])
 
-export async function canBroadcast(leagueId: string, userId: string): Promise<boolean> {
-  return SENDING_ROLES.has((await getLeagueRole(leagueId, userId)) ?? '')
+export type BroadcastRefusal = 'forbidden' | 'imported'
+
+/** Why this user may not broadcast to this league, or null when they may. */
+export async function broadcastRefusal(leagueId: string, userId: string): Promise<BroadcastRefusal | null> {
+  const [league, role] = await Promise.all([
+    prisma.league.findFirst({ where: { id: leagueId }, select: { platform: true } }),
+    getLeagueRole(leagueId, userId),
+  ])
+  if (!league || !SENDING_ROLES.has(role ?? '')) return 'forbidden'
+  return isNativePlatform(league.platform) ? null : 'imported'
 }
 
+export type BroadcastLeague = { id: string; platform: string; native: boolean }
+
 /**
- * Every league this user may broadcast to. Candidates are the leagues they own plus the leagues
- * where their claimed team carries a commissioner flag; each candidate is then confirmed with
- * `getLeagueRole` — the call the send makes — so the list can never offer a league the send
- * would refuse.
+ * Leagues this user runs as head commissioner or co-commissioner, on every platform — what the
+ * 10b composer lists (it shows imported ones read-only and says why). Use
+ * `listSendableLeagueIds` for anything that sends.
+ *
+ * Owned leagues are commissioner by definition (`getLeagueRole` answers so from `League.userId`
+ * before anything else), so only leagues reached through a claimed team's flag are confirmed one by
+ * one — which keeps this to a handful of lookups for an owner of dozens of leagues.
  */
-export async function listBroadcastLeagueIds(userId: string): Promise<string[]> {
+export async function listBroadcastLeagues(userId: string, among?: string[]): Promise<BroadcastLeague[]> {
+  if (among && among.length === 0) return []
+  const scope = among ? { id: { in: among } } : {}
   const [owned, flagged] = await Promise.all([
-    prisma.league.findMany({ where: { userId }, select: { id: true } }),
+    prisma.league.findMany({ where: { userId, ...scope }, select: { id: true, platform: true } }),
     prisma.leagueTeam.findMany({
-      where: { claimedByUserId: userId, OR: [{ isCommissioner: true }, { isCoCommissioner: true }] },
+      where: {
+        claimedByUserId: userId,
+        OR: [{ isCommissioner: true }, { isCoCommissioner: true }],
+        ...(among ? { leagueId: { in: among } } : {}),
+      },
       select: { leagueId: true },
     }),
   ])
-  const candidates = [...new Set([...owned.map((l) => l.id), ...flagged.map((t) => t.leagueId)])]
-  const roles = await Promise.all(candidates.map((id) => getLeagueRole(id, userId)))
-  return candidates.filter((_, i) => SENDING_ROLES.has(roles[i] ?? ''))
+  const ownedIds = new Set(owned.map((l) => l.id))
+  const otherIds = [...new Set(flagged.map((t) => t.leagueId))].filter((id) => !ownedIds.has(id))
+  const others =
+    otherIds.length > 0
+      ? await prisma.league.findMany({ where: { id: { in: otherIds } }, select: { id: true, platform: true } })
+      : []
+  const roles = await Promise.all(others.map((l) => getLeagueRole(l.id, userId)))
+  const confirmed = others.filter((_, i) => SENDING_ROLES.has(roles[i] ?? ''))
+  return [...owned, ...confirmed].map((l) => ({
+    id: l.id,
+    platform: String(l.platform ?? ''),
+    native: isNativePlatform(l.platform),
+  }))
+}
+
+/** Leagues this user can actually send an announcement to, optionally within `among`. */
+export async function listSendableLeagueIds(userId: string, among?: string[]): Promise<string[]> {
+  return (await listBroadcastLeagues(userId, among)).filter((l) => l.native).map((l) => l.id)
 }

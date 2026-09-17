@@ -23,20 +23,25 @@ vi.mock('next-auth', () => ({ getServerSession: vi.fn(async () => fx.session) })
 vi.mock('@/lib/auth', () => ({ authOptions: {} }))
 
 vi.mock('@/lib/prisma', () => {
+  // A `where` value is either a literal or `{ in: [...] }`, as Prisma allows.
+  const matches = (value: unknown, cond: unknown) =>
+    cond === undefined ||
+    (cond && typeof cond === 'object' && Array.isArray((cond as { in?: unknown[] }).in)
+      ? (cond as { in: unknown[] }).in.includes(value)
+      : value === cond)
   const matchTeam = (t: Team, where: Record<string, unknown>) =>
-    (where.leagueId === undefined || t.leagueId === where.leagueId) &&
-    (where.claimedByUserId === undefined || t.claimedByUserId === where.claimedByUserId)
+    matches(t.leagueId, where.leagueId) && matches(t.claimedByUserId, where.claimedByUserId)
   const prisma = {
     league: {
       // Honours `userId` too: the old owner-only check (`getLeagueIfCommissioner`) filtered on it,
       // and a double that ignored it let that check pass for everyone.
       findFirst: vi.fn(
         async ({ where }: { where: { id: string; userId?: string } }) =>
-          fx.leagues.find((l) => l.id === where.id && (where.userId === undefined || l.userId === where.userId)) ?? null,
+          fx.leagues.find((l) => matches(l.id, where.id) && matches(l.userId, where.userId)) ?? null,
       ),
       findUnique: vi.fn(async ({ where }: { where: { id: string } }) => fx.leagues.find((l) => l.id === where.id) ?? null),
-      findMany: vi.fn(async ({ where }: { where: { userId?: string; id?: { in: string[] } } }) =>
-        fx.leagues.filter((l) => (where.userId ? l.userId === where.userId : where.id ? where.id.in.includes(l.id) : true)),
+      findMany: vi.fn(async ({ where }: { where: { userId?: string; id?: unknown } }) =>
+        fx.leagues.filter((l) => matches(l.userId, where.userId) && matches(l.id, where.id)),
       ),
     },
     leagueTeam: {
@@ -169,6 +174,36 @@ describe('POST /api/commissioner/broadcast', () => {
     expect(body.results).toEqual([{ leagueId: 'HOME', sent: false, error: 'Forbidden' }])
   })
 
+  it('refuses an imported league even to its owner, and says why', async () => {
+    // On an imported league the "owner" is whoever ran the import, who may not run the league.
+    const owner = signIn('importer')
+    setup({ owner, co: 'co-x', member: 'member-x' })
+    fx.leagues.push(league('IMPORTED', owner, 'sleeper'))
+
+    const body = await (await post(['HOME', 'IMPORTED'])).json()
+
+    expect(body.results).toEqual([
+      { leagueId: 'HOME', sent: true },
+      { leagueId: 'IMPORTED', sent: false, error: 'Announcements go only to leagues AllFantasy runs' },
+    ])
+    expect(fx.chatPosts.map((p) => p.leagueId)).toEqual(['HOME'])
+    expect(fx.notified).toEqual(['HOME'])
+  })
+
+  it('refuses an imported league to a co-commissioner too', async () => {
+    const co = signIn('co')
+    setup({ owner: 'owner-x', co, member: 'member-x' })
+    fx.leagues.push(league('IMPORTED', 'owner-x', 'sleeper'))
+    fx.teams.push(team('IMPORTED', co, { isCoCommissioner: true }))
+
+    const body = await (await post(['IMPORTED'])).json()
+
+    expect(body.results).toEqual([
+      { leagueId: 'IMPORTED', sent: false, error: 'Announcements go only to leagues AllFantasy runs' },
+    ])
+    expect(fx.chatPosts).toEqual([])
+  })
+
   it('stops a sixth send inside ten minutes, before anything goes out', async () => {
     const co = signIn('co')
     setup({ owner: 'owner-x', co, member: 'member-x' })
@@ -210,6 +245,22 @@ describe('GET /api/commissioner/leagues', () => {
     expect(body.leagues).toEqual([])
   })
 
+  it('lists an owner’s leagues without a role lookup per league', async () => {
+    const owner = signIn('owner')
+    setup({ owner, co: 'co-x', member: 'member-x' })
+    for (let i = 0; i < 20; i++) fx.leagues.push(league(`OWNED-${i}`, owner, 'manual'))
+    const { prisma } = (await import('@/lib/prisma')) as unknown as {
+      prisma: { league: { findFirst: { mock: { calls: unknown[] } } } }
+    }
+    const before = prisma.league.findFirst.mock.calls.length
+
+    const body = await (await listLeagues()).json()
+
+    expect(body.leagues).toHaveLength(21)
+    // getLeagueRole reads the league row; an owned league needs no such read.
+    expect(prisma.league.findFirst.mock.calls.length - before).toBe(0)
+  })
+
   it('still lists every league the user owns', async () => {
     const owner = signIn('owner')
     setup({ owner, co: 'co-x', member: 'member-x' })
@@ -220,5 +271,18 @@ describe('GET /api/commissioner/leagues', () => {
       ['HOME', true],
       ['IMPORTED', false],
     ])
+  })
+})
+
+describe('listSendableLeagueIds (format hubs, the intelligence console)', () => {
+  it('keeps only AllFantasy-run leagues the user may send to, within the given set', async () => {
+    const { listSendableLeagueIds } = await import('@/lib/commissioner/broadcastAccess')
+    const co = signIn('co')
+    setup({ owner: 'owner-x', co, member: 'member-x' })
+    fx.leagues.push(league('IMPORTED', 'owner-x', 'sleeper'), league('MINE', co, 'manual'), league('ELSEWHERE', co, 'manual'))
+    fx.teams.push(team('IMPORTED', co, { isCoCommissioner: true }))
+
+    expect(await listSendableLeagueIds(co, ['HOME', 'IMPORTED', 'MINE', 'OTHER'])).toEqual(['MINE', 'HOME'])
+    expect(await listSendableLeagueIds(co, [])).toEqual([])
   })
 })

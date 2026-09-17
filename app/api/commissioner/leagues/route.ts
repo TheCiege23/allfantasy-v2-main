@@ -1,6 +1,7 @@
 /**
  * GET: List the leagues the current user may send an @everyone announcement to — as head
- * commissioner or co-commissioner (`listBroadcastLeagueIds`).
+ * commissioner or co-commissioner (`listBroadcastLeagues`), on every platform. Imported leagues are
+ * returned with `isNative: false` and the composer shows them read-only: the send refuses them.
  *
  * Extended for the 10b "@everyone" league picker: each row also carries the platform, whether the
  * league is AllFantasy-hosted, a human subtitle, and its member count. The draft room's broadcast
@@ -17,7 +18,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { isNativePlatform } from '@/lib/league/isNativeLeague'
-import { listBroadcastLeagueIds } from '@/lib/commissioner/broadcastAccess'
+import { listBroadcastLeagues } from '@/lib/commissioner/broadcastAccess'
 
 export const dynamic = 'force-dynamic'
 
@@ -41,7 +42,7 @@ export async function GET() {
   const userId = session?.user?.id
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const ids = await listBroadcastLeagueIds(userId)
+  const ids = (await listBroadcastLeagues(userId)).map((l) => l.id)
   const leagues = await prisma.league.findMany({
     where: { id: { in: ids } },
     select: {

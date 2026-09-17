@@ -217,7 +217,8 @@ function Broadcast({ theme, leagueIds }: { theme: Theme; leagueIds: string[] }) 
       <div className="afh-compose">
         <div className="afh-label">{theme.broadcastLabel}</div>
         <p className="afh-compose-note">
-          Broadcasts go out from leagues you commission, and you don’t commission any of these.
+          Broadcasts go to leagues AllFantasy runs where you’re the commissioner or a co-commissioner, and
+          none of these is one.
         </p>
       </div>
     )
