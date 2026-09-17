@@ -277,6 +277,17 @@ export async function readTransactionsByWeek(leagueId: string): Promise<LeagueWa
  * ⚠ AND THE NAME MAP MUST COME FROM THE NEWEST SNAPSHOT SEASON ONLY. Rosters change hands, so a
  * map built across all seasons attributes a departed manager's activity to whoever holds their
  * roster now — measured: two different Sleeper owner ids both resolving to one team.
+ *
+ * 🛑 A KEY WITH NO PROVIDER PREFIX IS AN ALLFANTASY USER, NOT A PROVIDER OWNER. The ingest keys a
+ * move by the AllFantasy user whenever that manager has CLAIMED their team
+ * (`buildPlatformManagerMapping`), and by `sleeper:<ownerId>` otherwise. Only the second form is in
+ * the snapshot owner map, so every move by a manager who linked their account was dropped — the
+ * most engaged people in a league read as the least active. Measured on production 2026-09-17:
+ * 454 of 5,955 manager references in 28 days, 23 accounts, 118 leagues; a league owner showed as
+ * inactive in their own league. Those keys resolve through `LeagueTeam.claimedByUserId`.
+ *
+ * Rows are one per TEAM, not one per key: a claimed manager's older moves carry the provider key and
+ * newer ones the AllFantasy key, and co-owners carry two provider keys. Both are one team.
  */
 export async function readManagerActivity(
   leagueId: string,
@@ -289,7 +300,7 @@ export async function readManagerActivity(
   })
   if (!newestSnapshot?.season) return []
 
-  const [snapshots, names, identity] = await Promise.all([
+  const [snapshots, names, identity, claimed] = await Promise.all([
     prisma.rosterSnapshot.findMany({
       where: { leagueId, season: newestSnapshot.season },
       // `teamId` IS the roster id, so only the owner id has to come out of the JSON.
@@ -297,7 +308,20 @@ export async function readManagerActivity(
     }),
     teamNames(leagueId),
     providerIdentity(leagueId),
+    prisma.leagueTeam.findMany({
+      where: { leagueId, claimedByUserId: { not: null } },
+      select: { externalId: true, claimedByUserId: true },
+    }),
   ])
+
+  // One claimed team per user, or the key cannot say which team moved and is left out.
+  const userToTeam = new Map<string, string | null>()
+  for (const t of claimed) {
+    const team = names.get(t.externalId)
+    if (!t.claimedByUserId || !team) continue
+    const seen = userToTeam.get(t.claimedByUserId)
+    userToTeam.set(t.claimedByUserId, seen === undefined || seen === team ? team : null)
+  }
 
   const ownerToTeam = new Map<string, string>()
   for (const snap of snapshots) {
@@ -320,24 +344,32 @@ export async function readManagerActivity(
     select: { occurredAt: true, normalized: true },
   })
 
+  const teamForKey = (rawKey: string): string | null => {
+    if (/^[a-z]+:/.test(rawKey)) return ownerToTeam.get(rawKey.replace(/^[a-z]+:/, '')) ?? null
+    return userToTeam.get(rawKey) ?? null
+  }
+
   const counts = new Map<string, { current: number; prior: number }>()
   for (const row of rows) {
     const normalized = row.normalized as { managerKeys?: unknown } | null
     const keys = Array.isArray(normalized?.managerKeys) ? normalized.managerKeys : []
+    // A move counts once per team, however many of that team's keys it carries.
+    const teams = new Set<string>()
     for (const rawKey of keys) {
       if (typeof rawKey !== 'string') continue
-      const ownerId = rawKey.replace(/^[a-z]+:/, '')
-      const acc = counts.get(ownerId) ?? { current: 0, prior: 0 }
+      const team = teamForKey(rawKey)
+      if (team) teams.add(team)
+    }
+    for (const team of teams) {
+      const acc = counts.get(team) ?? { current: 0, prior: 0 }
       if (row.occurredAt > windowStart) acc.current += 1
       else acc.prior += 1
-      counts.set(ownerId, acc)
+      counts.set(team, acc)
     }
   }
 
   const out: LeagueWarehouseManagerActivity[] = []
-  for (const [ownerId, acc] of counts) {
-    const managerName = ownerToTeam.get(ownerId)
-    if (!managerName) continue
+  for (const [managerName, acc] of counts) {
     out.push({ managerName, currentCount: acc.current, priorCount: acc.prior })
   }
   /*
