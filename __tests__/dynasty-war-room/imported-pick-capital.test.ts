@@ -253,6 +253,18 @@ describe('🛑 an imported league\'s teams get their pick capital', () => {
     })
   })
 
+  it('an orphan roster shows no owner name, not its placeholder key', async () => {
+    db.rosters = [
+      ...(db.rosters as unknown[]),
+      { id: 'r3', platformUserId: 'orphan-sleeper-3', playerData: { players: [], source_team_id: '3' }, faabRemaining: null },
+      // [control] a manager with no team row still shows the id it has.
+      { id: 'r4', platformUserId: 'sleeper-77', playerData: { players: [], source_team_id: '4' }, faabRemaining: null },
+    ]
+    const { ctx } = await build()
+    expect(ctx.teams.find((t) => t.rosterId === 'r3')!.ownerName).toBe('')
+    expect(ctx.teams.find((t) => t.rosterId === 'r4')!.ownerName).toBe('sleeper-77')
+  })
+
   it('a failed pick read is "missing", not "no picks recorded"', async () => {
     db.futurePicks.mockRejectedValue(new Error('db down'))
     const { ctx } = await build()
