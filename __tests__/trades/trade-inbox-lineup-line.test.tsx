@@ -16,7 +16,8 @@ vi.mock('@/components/core-app/screens/tradesPanelFetch', () => ({
 import { TradeInbox } from '@/components/core-app/screens/TradeInbox'
 
 const IMPACT = {
-  unit: 'projected_points_per_game',
+  unit: 'league_points_week',
+  week: 3,
   startingPointsBefore: 70,
   startingPointsAfter: 73.1,
   startingPointsDelta: 3.1,
@@ -61,7 +62,7 @@ describe('TradeInbox — lineup effect line', () => {
     render(<TradeInbox leagueId="L" onLoad={() => {}} />)
 
     const line = await screen.findByText(
-      'Your projected starting lineup gains 3.1 pts per game · roster RB −1.',
+      "Your projected week 3 starting lineup gains 3.1 pts under your league's scoring · roster RB −1.",
     )
     expect(line.getAttribute('data-direction')).toBe('up')
     expect(line.className).toBe('af-tc-timeline-lineup')

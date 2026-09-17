@@ -2,20 +2,26 @@ import 'server-only'
 
 import { resolveNames } from '@/lib/ai-payload/resolveAiTeamContext'
 import { extractPlayerNameCandidates } from '@/lib/chimmy-trade/describedTradeEvaluator'
-import { latestProjectionWeek, lookupProjections, type PlayerProjection } from '@/lib/core-app/playerProjections'
+import {
+  defaultLeagueWeekPricingDeps,
+  isLeagueWeekRefusal,
+  leagueWeekBasis,
+  priceLeagueWeek,
+  type LeagueWeekBasis,
+  type LeagueWeekPricingDeps,
+  type LeagueWeekRefusal,
+} from '@/lib/decision-os/trade/leagueWeekPricing'
 import {
   computeRosterImpact,
   DEFAULT_SLOT_ELIGIBILITY,
   fillLineup,
   type ImpactPlayer,
 } from '@/lib/decision-os/trade/rosterImpact'
-import { scoringRulesFrom } from '@/lib/decision-os/trade/scoringContextFromWorld'
 import type { WaiverClaimRecommendation } from '@/lib/decision-os/waiver/decision'
 import { resolveCanonicalWorld } from '@/lib/decision-os/world'
 import type { CanonicalWorld, RosterFacts } from '@/lib/decision-os/world/facts'
 import { normalizePlayerName } from '@/lib/player-identity/playerIdentityResolution'
 import { prisma } from '@/lib/prisma'
-import { computeLeagueProjectedPoints, hasScoringRules, NO_LEAGUE_SCORING_REASON } from '@/lib/projections/leagueScoring'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
 import {
   activePlayerIds,
@@ -53,7 +59,9 @@ import {
  * 0.5 or 0, and 138 carry a TE premium. The user's standing decision for exactly this case is to
  * REFUSE rather than print a generic number under a "your league" label (league-view scoring audit,
  * #949). So these two re-score the week's vendor component line under the league's own rulebook —
- * the basis My Team and the matchup tabs use — and refuse when the league has no rules.
+ * the basis My Team and the matchup tabs use — and refuse when the league has no rules. The pricing
+ * itself lives in `lib/decision-os/trade/leagueWeekPricing.ts`, shared with the trade evaluator's
+ * lineup impact (which moved onto this basis 2026-09-17), so the kinds cannot drift apart.
  *
  * ⚠ ONE WEEK, AND THAT IS THE RIGHT UNIT FOR A START/SIT. For a waiver add it is only part of the
  * answer, and the prompt and card both say so.
@@ -81,18 +89,9 @@ export const PLAYOFF_ODDS_UNAVAILABLE_MOVE =
 
 export type WeekPlayer = { playerId: string; name: string; position: string | null }
 
-export interface LineupScenarioDeps {
+export interface LineupScenarioDeps extends LeagueWeekPricingDeps {
   resolveWorld: (leagueId: string) => Promise<CanonicalWorld | null>
   loadPlayerNames: (sport: string, ids: string[]) => Promise<PlayerNames>
-  /** The season/week the weekly projection feed actually holds — from the data, not a clock. */
-  latestWeek: () => Promise<ScenarioWeek | null>
-  /** That week's component lines for these ids, with defensive lines added when the league scores IDP. */
-  loadWeekLines: (args: {
-    week: ScenarioWeek
-    playerIds: string[]
-    rules: Record<string, unknown>
-    positions: ReadonlyMap<string, string | null>
-  }) => Promise<ReadonlyMap<string, Pick<PlayerProjection, 'position' | 'componentStats'>>>
   /**
    * Players in that week's feed whose name normalizes to `name` — the only way to reach a free agent.
    * `complete` is false when the feed could not be searched in full, so "no match" is not a finding.
@@ -104,11 +103,9 @@ const statsOf = (value: unknown): Record<string, unknown> =>
   value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : {}
 
 const defaultDeps: LineupScenarioDeps = {
+  ...defaultLeagueWeekPricingDeps,
   resolveWorld: resolveCanonicalWorld,
   loadPlayerNames: (sport, ids) => resolveNames(normalizeToSupportedSport(sport), ids, MAX_LEAGUE_PLAYER_IDS),
-  latestWeek: latestProjectionWeek,
-  loadWeekLines: ({ week, playerIds, rules, positions }) =>
-    lookupProjections(playerIds, week, { scoringSettings: rules, positionBySleeperId: positions }, 'NFL'),
   findWeekPlayersByName: async ({ week, name }) => {
     const target = normalizePlayerName(name)
     if (!target) return { players: [], complete: true }
@@ -194,50 +191,20 @@ async function loadLeague(
   return { world, roster, byName: indexRosterNames(world, names), names }
 }
 
-type WeekBasis = { rules: Record<string, unknown>; week: ScenarioWeek }
-type WeekRefusal = { refuse: 'sport_not_supported' | 'no_scoring_rules' | 'no_projection_week'; detail: string }
+type WeekBasis = LeagueWeekBasis
+type WeekRefusal = LeagueWeekRefusal
 
-/** The league's rulebook and the feed's week — or why neither kind can price anything here. */
+/** The league's rulebook and the feed's week — or why neither kind can price anything here, as a sentence. */
 async function weekBasis(world: CanonicalWorld, deps: LineupScenarioDeps): Promise<WeekBasis | WeekRefusal> {
-  if (String(world.league.sport ?? '').trim().toUpperCase() !== 'NFL') {
-    return {
-      refuse: 'sport_not_supported',
-      detail: 'Lineup comparisons are computed for NFL leagues only: the weekly projection feed they are priced from is the NFL’s.',
-    }
-  }
-  const rules = scoringRulesFrom(world.league.scoringSettings)
-  if (!rules || !hasScoringRules(rules)) {
-    return { refuse: 'no_scoring_rules', detail: `No lineup numbers: ${NO_LEAGUE_SCORING_REASON}.` }
-  }
-  const week = await deps.latestWeek().catch(() => null)
-  if (!week) return { refuse: 'no_projection_week', detail: 'No weekly projection feed is on file, so no lineup can be priced.' }
-  return { rules, week }
+  const basis = await leagueWeekBasis(world.league, deps)
+  if (!isLeagueWeekRefusal(basis)) return basis
+  return { refuse: basis.refuse, detail: `No lineup numbers: ${basis.detail}.` }
 }
 
 const round2 = (n: number) => Math.round(n * 100) / 100
 
-/** Each id priced for the basis week under the league's rules — null, never zero, when it cannot be. */
-async function priceWeek(
-  basis: WeekBasis,
-  ids: string[],
-  positions: ReadonlyMap<string, string | null>,
-  deps: LineupScenarioDeps,
-): Promise<Map<string, ImpactPlayer>> {
-  const lines = await deps
-    .loadWeekLines({ week: basis.week, playerIds: ids, rules: basis.rules, positions })
-    .catch(() => new Map() as ReadonlyMap<string, Pick<PlayerProjection, 'position' | 'componentStats'>>)
-  const out = new Map<string, ImpactPlayer>()
-  for (const id of ids) {
-    const line = lines.get(id)
-    const scored = line?.componentStats ? computeLeagueProjectedPoints(line.componentStats, basis.rules) : null
-    out.set(id, {
-      playerId: id,
-      position: String(positions.get(id) ?? line?.position ?? '').toUpperCase(),
-      projectedPoints: scored ? round2(scored.points) : null,
-    })
-  }
-  return out
-}
+const priceWeek = (basis: WeekBasis, ids: string[], positions: ReadonlyMap<string, string | null>, deps: LineupScenarioDeps) =>
+  priceLeagueWeek(basis, ids, positions, deps)
 
 const lineupFrom = (before: number | null, after: number | null, delta: number | null): TradeScenarioLineup | null =>
   before != null && after != null && delta != null

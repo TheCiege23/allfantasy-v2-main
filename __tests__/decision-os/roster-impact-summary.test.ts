@@ -20,7 +20,7 @@ const roster = [
 ]
 
 function impact(args: Parameters<typeof computeRosterImpact>[0]) {
-  return { ...computeRosterImpact(args), unit: 'projected_points_per_game' as const }
+  return { ...computeRosterImpact(args), unit: 'league_points_week' as const, week: 3 }
 }
 
 describe('summarizeRosterImpact', () => {
@@ -43,7 +43,8 @@ describe('summarizeRosterImpact', () => {
       { position: 'RB', rosteredBefore: 3, rosteredAfter: 2 },
       { position: 'WR', rosteredBefore: 2, rosteredAfter: 3 },
     ])
-    expect(s.unit).toBe('projected_points_per_game')
+    expect(s.unit).toBe('league_points_week')
+    expect(s.week).toBe(3)
     // Lineup before: QB20 RB15 RB11 WR14 WR9 TE7 FLEX(rb3 6) = 82
     // After: QB20 RB15 RB6 WR14 WR13 TE7 FLEX(wr2 9) = 84
     expect(s.startingPointsBefore).toBe(82)
@@ -68,7 +69,8 @@ describe('summarizeRosterImpact', () => {
 
 describe('lineupImpactLine', () => {
   const base = {
-    unit: 'projected_points_per_game' as const,
+    unit: 'league_points_week' as const,
+    week: 3 as number | null,
     startingPointsBefore: 80,
     startingPointsAfter: 83.24,
     startingPointsDelta: 3.24,
@@ -86,18 +88,29 @@ describe('lineupImpactLine', () => {
     expect(lineupImpactLine(null)).toMatch(/unavailable/)
   })
 
-  it('states a gain per game, with the unit in the sentence', () => {
-    expect(lineupImpactLine(base)).toBe('Your projected starting lineup gains 3.2 pts per game.')
+  /*
+   * 🛑 THE WEEK AND THE RULES ARE IN THE SENTENCE. The number is one week under the league's own
+   * scoring; the line used to say "per game", which was a full-PPR season rate in every league.
+   */
+  it("states a gain for the named week, under the league's scoring", () => {
+    expect(lineupImpactLine(base)).toBe("Your projected week 3 starting lineup gains 3.2 pts under your league's scoring.")
+    expect(lineupImpactLine(base)).not.toMatch(/per game/)
+  })
+
+  it('still reads sensibly if a week was never known', () => {
+    expect(lineupImpactLine({ ...base, week: null })).toBe(
+      "Your projected starting lineup gains 3.2 pts under your league's scoring.",
+    )
   })
 
   it('states a loss without a double sign', () => {
     const line = lineupImpactLine({ ...base, startingPointsAfter: 78, startingPointsDelta: -2 })
-    expect(line).toBe('Your projected starting lineup loses 2.0 pts per game.')
+    expect(line).toBe("Your projected week 3 starting lineup loses 2.0 pts under your league's scoring.")
   })
 
   it('does not render rounding noise as a signed verdict', () => {
     const line = lineupImpactLine({ ...base, startingPointsDelta: 0.01 })
-    expect(line).toMatch(/^No change to your projected starting lineup/)
+    expect(line).toMatch(/^No change to your projected week 3 starting lineup/)
     expect(line).not.toMatch(/\+0|0\.0/)
   })
 
@@ -111,7 +124,7 @@ describe('lineupImpactLine', () => {
       ],
     })
     expect(line).toBe(
-      'Your projected starting lineup gains 3.2 pts per game · roster RB −1, WR +1. 2 unprojected players not counted.',
+      "Your projected week 3 starting lineup gains 3.2 pts under your league's scoring · roster RB −1, WR +1. 2 unprojected players not counted.",
     )
   })
 
@@ -124,13 +137,14 @@ describe('lineupImpactLine', () => {
       blockedReason: '1 traded player(s) have no projection under this league\'s scoring, so the lineup effect cannot be computed',
     })
     expect(line).toMatch(/^Lineup effect not computed: 1 traded player/)
-    expect(line).not.toMatch(/pts per game/)
+    expect(line).not.toMatch(/pts under/)
   })
 })
 
 describe('lineupImpactDirection', () => {
   const s = (delta: number | null, blockedReason: string | null = null) => ({
-    unit: 'projected_points_per_game' as const,
+    unit: 'league_points_week' as const,
+    week: 3,
     startingPointsBefore: null,
     startingPointsAfter: null,
     startingPointsDelta: delta,

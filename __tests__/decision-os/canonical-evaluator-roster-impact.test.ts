@@ -1,10 +1,16 @@
 /**
- * `rosterImpact` on the canonical trade evaluation.
+ * `rosterImpact` on the canonical evaluation.
  *
  * 🛑 THE FIRST ASSERTION EXISTS BECAUSE I WROTE THAT BUG. The impact was computed into a local and
  * never added to the returned object — the same "computed and thrown away" shape this repo keeps
  * finding in other people's code. Nothing failed; the field was simply always `undefined`, which is
  * indistinguishable from "not asked for".
+ *
+ * 🛑 THE BASIS MOVED 2026-09-17 (user decision, option (a)). The lineup used to be AllFantasy's
+ * per-game figure, which is FULL PPR in every league; it is now this week's projection scored under
+ * the league's own rules (`leagueWeekPricing.ts`), and a league that cannot be priced that way is
+ * refused by name. The league-week seam is injected; `computeLeagueProjectedPoints` is the real one,
+ * so every number below is a component line run through a real rulebook.
  *
  * The rest pin the cost decision (opt-in) and the refusals, since each of those failures produces a
  * plausible NUMBER rather than an absent one.
@@ -13,9 +19,13 @@ import { describe, expect, it, vi } from 'vitest'
 
 import { evaluateCanonicalTrade } from '@/lib/decision-os/trade/canonicalEvaluator'
 import type { TradeAssetSummary } from '@/lib/decision-os/trade/dco'
+import type { LeagueWeekPricingDeps } from '@/lib/decision-os/trade/leagueWeekPricing'
 
 const ROSTER = ['qb1', 'rb1', 'rb2', 'rb3', 'wr1', 'wr2', 'te1']
 const SLOTS = ['QB', 'RB', 'RB', 'WR', 'WR', 'TE', 'FLEX', 'BN']
+const FULL_PPR = { rec: 1, rec_yd: 0.1, rush_yd: 0.1 }
+const HALF_PPR = { rec: 0.5, rec_yd: 0.1, rush_yd: 0.1 }
+const WEEK = { season: '2026', week: 3 }
 
 /*
  * ⚠ MODELLED ON `__tests__/decision-os/trade-memo.test.ts`'s `makeWorld`, NOT HAND-GROWN.
@@ -31,7 +41,8 @@ const leagueFacts = (over: Record<string, unknown> = {}) => ({
   leagueType: 'redraft',
   isDynasty: false,
   scoringPresetId: 'ppr',
-  scoringSettings: null,
+  // The canonical world carries the WRAPPER, as `narrowScoringSettings` builds it.
+  scoringSettings: { scoring_settings: FULL_PPR },
   rosterSettings: { rosterSize: null, starterSlots: SLOTS, irSlots: null, taxiSlots: null },
   waiverSettings: { type: null, budget: null, minBid: null, hours: null },
   tradeSettings: { reviewHours: null, deadlineWeek: null, pickTrading: true },
@@ -71,25 +82,26 @@ const world = (leagueOver: Record<string, unknown> = {}) =>
 const POSITIONS: Record<string, string> = {
   qb1: 'QB', rb1: 'RB', rb2: 'RB', rb3: 'RB', wr1: 'WR', wr2: 'WR', te1: 'TE', wr9: 'WR',
 }
-const PROJECTIONS: Record<string, number> = {
-  qb1: 20, rb1: 15, rb2: 12, rb3: 6, wr1: 14, wr2: 11, te1: 9, wr9: 25,
+
+/** A line worth `points` under any rulebook here: rushing yards only, at 0.1 a yard. */
+const yards = (points: number) => ({ rush_yd: points * 10 })
+
+/** This week: QB20 RB15 RB12 WR14 WR11 TE9 FLEX(rb3 6) = 87 before; wr9 (25) replaces rb3 → 106. */
+const LINES: Record<string, Record<string, unknown>> = {
+  qb1: yards(20), rb1: yards(15), rb2: yards(12), rb3: yards(6), wr1: yards(14), wr2: yards(11), te1: yards(9), wr9: yards(25),
 }
 
 /*
- * 🛑 THE TWO PROJECTION MAPS CARRY DIFFERENT NUMBERS ON PURPOSE. `projectionByPlayerId` is
- * rest-of-season (modelled here as 17 games' worth); `perGameProjectionByPlayerId` is per game.
- * This stub used to supply only `projectionByPlayerId` with per-game-looking values, so it passed
- * while production read a season total and labelled it per game — a "gains N pts per game" line
- * ~17x too large. With distinct values, reading the wrong map moves every delta below.
+ * 🛑 THE ENRICHMENT'S PER-GAME MAP CARRIES DIFFERENT, BIGGER NUMBERS ON PURPOSE. It is AllFantasy's
+ * full-PPR per-game figure — the basis this field used to read. If the evaluator ever reads it again,
+ * every total below moves.
  */
-const enrichment = (projections: Record<string, number | null> = PROJECTIONS) =>
+const enrichment = () =>
   vi.fn(async () => ({
     enrichment: {
       positionByPlayerId: POSITIONS,
-      perGameProjectionByPlayerId: projections,
-      projectionByPlayerId: Object.fromEntries(
-        Object.entries(projections).map(([id, v]) => [id, v == null ? null : v * 17]),
-      ),
+      perGameProjectionByPlayerId: Object.fromEntries(Object.keys(POSITIONS).map((id) => [id, 40])),
+      projectionByPlayerId: Object.fromEntries(Object.keys(POSITIONS).map((id) => [id, 680])),
     },
     valuationSource: null,
     adpResolved: 0,
@@ -100,6 +112,17 @@ const enrichment = (projections: Record<string, number | null> = PROJECTIONS) =>
     unresolvedIds: [],
     warnings: [],
   })) as never
+
+const leagueWeek = (lines: Record<string, Record<string, unknown>> = LINES, week: typeof WEEK | null = WEEK) => {
+  const loadWeekLines = vi.fn(async (args: { playerIds: string[]; positions: ReadonlyMap<string, string | null> }) =>
+    new Map(args.playerIds.filter((id) => lines[id]).map((id) => [id, { position: args.positions.get(id) ?? null, componentStats: lines[id]! }])),
+  )
+  const latestWeek = vi.fn(async () => week)
+  return { latestWeek, loadWeekLines } as unknown as LeagueWeekPricingDeps & {
+    latestWeek: ReturnType<typeof vi.fn>
+    loadWeekLines: ReturnType<typeof vi.fn>
+  }
+}
 
 /** rb3 out, wr9 in — an upgrade at the FLEX. */
 const ASSETS: TradeAssetSummary[] = [
@@ -118,7 +141,7 @@ const run = (over: Record<string, unknown> = {}, deps: Record<string, unknown> =
       assets: ASSETS,
       ...over,
     },
-    { resolveWorld: async () => world(), resolveEnrichment: enrichment(), ...deps } as never,
+    { resolveWorld: async () => world(), resolveEnrichment: enrichment(), leagueWeek: leagueWeek(), ...deps } as never,
   )
 
 describe('rosterImpact on the canonical evaluation', () => {
@@ -129,28 +152,65 @@ describe('rosterImpact on the canonical evaluation', () => {
     expect(r.rosterImpact?.startingPointsDelta).toBe(19)
   })
 
-  it('🛑 is denominated PER GAME — built from the per-game map, never the rest-of-season one', async () => {
+  it("🛑 is this week's projection under the league's rules — never the full-PPR per-game map", async () => {
     const r = await run({ includeRosterImpact: true })
-    expect(r.rosterImpact?.unit).toBe('projected_points_per_game')
-    // Per game: QB20 RB15 RB12 WR14 WR11 TE9 FLEX(rb3 6) = 87. The ROS map would say 1,479.
+    expect(r.rosterImpact?.unit).toBe('league_points_week')
+    expect(r.rosterImpact?.week).toBe(3)
     expect(r.rosterImpact?.startingPointsBefore).toBe(87)
-    expect(r.rosterImpact?.startingPointsDelta).not.toBe(19 * 17)
+    expect(r.rosterImpact?.startingPointsAfter).toBe(106)
+    // The per-game map says 40 for everyone: 7 starters × 40 = 280, and a delta of 0.
+    expect(r.rosterImpact?.startingPointsBefore).not.toBe(280)
   })
 
-  it('treats a player with only a rest-of-season number as NOT projected per game', async () => {
-    const onlyRos = vi.fn(async () => ({
-      enrichment: {
-        positionByPlayerId: POSITIONS,
-        // wr9 (incoming) has a season total but no per-game value.
-        perGameProjectionByPlayerId: { ...PROJECTIONS, wr9: null },
-        projectionByPlayerId: { ...PROJECTIONS, wr9: 425 },
-      },
-      valuationSource: null, adpResolved: 0, positionResolved: 0, projectionResolved: 0,
-      idpValueResolved: 0, thinlyPricedIds: [], unresolvedIds: [], warnings: [],
-    })) as never
-    const r = await run({ includeRosterImpact: true }, { resolveEnrichment: onlyRos })
-    expect(r.rosterImpact?.startingPointsDelta).toBeNull()
-    expect(r.rosterImpact?.blockedReason).toMatch(/no projection/)
+  /*
+   * 🛑 THE CASE THIS CHANGE EXISTS FOR. The same component lines, two rulebooks: a receiver-heavy
+   * incoming player is worth less in a half-PPR league, and the delta says so.
+   */
+  it('prices a half-PPR league differently from a full-PPR one on the same lines', async () => {
+    const lines = { ...LINES, wr9: { rec: 10, rec_yd: 150 } } // full PPR 25, half PPR 20
+    const full = await run({ includeRosterImpact: true }, { leagueWeek: leagueWeek(lines) })
+    const half = await run(
+      { includeRosterImpact: true },
+      { resolveWorld: async () => world({ scoringSettings: { scoring_settings: HALF_PPR } }), leagueWeek: leagueWeek(lines) },
+    )
+    expect(full.rosterImpact?.startingPointsDelta).toBe(19)
+    expect(half.rosterImpact?.startingPointsDelta).toBe(14)
+  })
+
+  it('hands the pricing the unwrapped rulebook, the whole roster plus the incoming player, and their positions', async () => {
+    const lw = leagueWeek()
+    await run({ includeRosterImpact: true }, { leagueWeek: lw })
+    const call = lw.loadWeekLines.mock.calls[0]![0] as { rules: unknown; playerIds: string[]; positions: Map<string, string | null> }
+    expect(call.rules).toEqual(FULL_PPR)
+    expect([...call.playerIds].sort()).toEqual([...ROSTER, 'wr9'].sort())
+    expect(call.positions.get('wr9')).toBe('WR')
+  })
+
+  /*
+   * 🛑 THE USER'S STANDING DECISION: REFUSE, NEVER A GENERIC NUMBER UNDER A "YOUR LEAGUE" LABEL.
+   * A refusal is a blocked impact with the reason — not `null`, which the renderers read as
+   * "unavailable right now" and would not explain.
+   */
+  it('refuses, by name, a league with no rulebook, a non-NFL league, and a missing feed week', async () => {
+    const noRules = await run({ includeRosterImpact: true }, { resolveWorld: async () => world({ scoringSettings: null }) })
+    expect(noRules.rosterImpact?.startingPointsDelta).toBeNull()
+    expect(noRules.rosterImpact?.blockedReason).toMatch(/generic projection would not be yours/)
+    expect(noRules.rosterImpact?.unit).toBe('league_points_week')
+
+    const metadataOnly = await run(
+      { includeRosterImpact: true },
+      { resolveWorld: async () => world({ scoringSettings: { scoring_settings: { rules: {}, preset: 'custom' } } }) },
+    )
+    expect(metadataOnly.rosterImpact?.blockedReason).toMatch(/generic projection would not be yours/)
+
+    const lw = leagueWeek()
+    const nba = await run({ includeRosterImpact: true }, { resolveWorld: async () => world({ sport: 'nba' }), leagueWeek: lw })
+    expect(nba.rosterImpact?.blockedReason).toMatch(/NFL leagues only/)
+    expect(lw.loadWeekLines).not.toHaveBeenCalled()
+
+    const noWeek = await run({ includeRosterImpact: true }, { leagueWeek: leagueWeek(LINES, null) })
+    expect(noWeek.rosterImpact?.blockedReason).toMatch(/no weekly projection feed/)
+    expect(noWeek.rosterImpact?.week).toBeNull()
   })
 
   /**
@@ -158,9 +218,12 @@ describe('rosterImpact on the canonical evaluation', () => {
    * traded players to a whole roster for ~60 trade routes at once, and the one that notices is
    * whichever surface gets slow first.
    */
-  it('is absent — not null — when it was not asked for', async () => {
-    const r = await run()
+  it('is absent — not null — when it was not asked for, and prices nothing', async () => {
+    const lw = leagueWeek()
+    const r = await run({}, { leagueWeek: lw })
     expect(r.rosterImpact).toBeUndefined()
+    expect(lw.latestWeek).not.toHaveBeenCalled()
+    expect(lw.loadWeekLines).not.toHaveBeenCalled()
   })
 
   it('does not enrich the roster when it was not asked for', async () => {
@@ -209,20 +272,24 @@ describe('rosterImpact on the canonical evaluation', () => {
     expect(r.rosterImpact).toBeNull()
   })
 
-  /** ⚠ An unpriced traded asset must block, not produce a delta. */
-  it('blocks when the incoming player has no projection', async () => {
-    const r = await run(
-      { includeRosterImpact: true },
-      { resolveEnrichment: enrichment({ ...PROJECTIONS, wr9: null }) },
-    )
+  /** ⚠ An unpriced traded asset must block, not produce a delta — the enrichment's number notwithstanding. */
+  it('blocks when the incoming player has no line this week', async () => {
+    const { wr9: _gone, ...noIncoming } = LINES
+    const r = await run({ includeRosterImpact: true }, { leagueWeek: leagueWeek(noIncoming) })
     expect(r.rosterImpact?.startingPointsDelta).toBeNull()
     expect(r.rosterImpact?.blockedReason).toMatch(/no projection/i)
   })
 
-  /** ⚠ The unit ships with the value — per-game and rest-of-season are not interchangeable. */
-  it('names the unit of the number it reports', async () => {
-    const r = await run({ includeRosterImpact: true })
-    expect(r.rosterImpact?.unit).toBe('projected_points_per_game')
+  it('discloses a bench player nothing prices this week, and leaves the lineup to the priced ones', async () => {
+    const { rb3: _bench, ...noBench } = LINES
+    // rb3 is traded away here, so trade a different asset set: only wr9 comes in.
+    const r = await run(
+      { includeRosterImpact: true, assets: [ASSETS[1]!] },
+      { leagueWeek: leagueWeek(noBench) },
+    )
+    expect(r.rosterImpact?.unpricedExcluded).toBe(1)
+    // 20+15+12+14+11+9 = 81 before (FLEX empty); wr9 takes a WR slot, wr2 moves to FLEX: 81 + 25 = 106.
+    expect(r.rosterImpact?.startingPointsAfter).toBe(106)
   })
 
   it('leaves the value verdict untouched', async () => {

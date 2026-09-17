@@ -63,7 +63,8 @@ function evaluation(over: Partial<CanonicalTradeEvaluation> = {}): CanonicalTrad
       unpricedExcluded: 0,
       depth: [],
       replacement: [],
-      unit: 'projected_points_per_game',
+      unit: 'league_points_week',
+      week: 3,
     },
     ...over,
   }
@@ -128,7 +129,8 @@ describe('a described trade is resolved against real rosters', () => {
     const s = await run('Should I trade Bijan Robinson for Puka Nacua?')
     if (s?.status !== 'ready') throw new Error('not ready')
     expect(s.value).toMatchObject({ given: 8450, received: 7900, delta: -550, grade: 'C+' })
-    expect(s.lineup).toEqual({ before: 118.4, after: 116.9, delta: -1.5, unit: 'projected_points_per_game' })
+    expect(s.lineup).toEqual({ before: 118.4, after: 116.9, delta: -1.5, unit: 'league_points_week' })
+    expect(s.lineupWeek).toBe(3)
     expect(s.playoffOdds.available).toBe(false)
   })
 })
@@ -216,7 +218,8 @@ describe('lineup availability is reported, not invented', () => {
           unpricedExcluded: 0,
           depth: [],
           replacement: [],
-          unit: 'projected_points_per_game',
+          unit: 'league_points_week',
+          week: null,
         },
       }),
     )
@@ -252,7 +255,10 @@ describe('the prompt block', () => {
     const block = renderTradeScenarioBlock(s!)
     expect(block).toContain('You give: Bijan Robinson (RB). You get: Puka Nacua (WR) from Rival.')
     expect(block).toContain('you send 8450, you receive 7900 (-550); grade C+.')
-    expect(block).toContain('Starting lineup (projected points per game): 118.4 before, 116.9 after (-1.5).')
+    expect(block).toContain(
+      "Starting lineup, week 3 projections scored under this league's own rules: 118.4 before, 116.9 after (-1.5). This is one week, not the rest of the season",
+    )
+    expect(block).not.toMatch(/per game/)
     expect(block).toMatch(/Playoff odds: not computed\..*Do not estimate them\./)
   })
 

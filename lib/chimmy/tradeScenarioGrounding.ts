@@ -270,6 +270,7 @@ export async function buildTradeScenario(
       coverageStatus: evaluation.coverageStatus,
     },
     lineup,
+    lineupWeek: impact?.week ?? null,
     lineupUnavailable: lineup ? null : impact?.blockedReason ?? 'The starting lineup could not be priced for this league.',
     playoffOdds: { available: false, reason: PLAYOFF_ODDS_UNAVAILABLE },
   }
@@ -292,7 +293,6 @@ function describeUnresolved(reason: TradeScenarioUnresolvedReason, notRostered: 
 
 const fmt = (n: number | null, digits = 1) => (n == null ? 'unknown' : n.toFixed(digits))
 const signed = (n: number, digits = 1) => `${n >= 0 ? '+' : ''}${n.toFixed(digits)}`
-const unitLabel = (unit: string) => unit.replace(/_/g, ' ')
 const list = (ps: ScenarioPlayer[]) => ps.map((p) => (p.position ? `${p.name} (${p.position})` : p.name)).join(', ')
 
 /** The prompt block. Deterministic, so the model repeats numbers rather than inventing them. */
@@ -313,8 +313,12 @@ export function renderTradeScenarioBlock(scenario: TradeScenario): string {
       (s.value.grade ? `; grade ${s.value.grade}` : '') +
       (s.value.coverageStatus !== 'complete' ? `; value coverage ${s.value.coverageStatus} (${Math.round(s.value.coveragePct)}%)` : '') +
       '.',
+    /*
+     * The week and the rules are named in the line itself: this is ONE week under the league's own
+     * scoring, and a model left to guess would call it a season rate.
+     */
     s.lineup
-      ? `- Starting lineup (${unitLabel(s.lineup.unit)}): ${fmt(s.lineup.before)} before, ${fmt(s.lineup.after)} after (${signed(s.lineup.delta)}).`
+      ? `- Starting lineup, week ${s.lineupWeek ?? '(unknown)'} projections scored under this league's own rules: ${fmt(s.lineup.before)} before, ${fmt(s.lineup.after)} after (${signed(s.lineup.delta)}). This is one week, not the rest of the season — say so.`
       : `- Starting lineup: not computed — ${s.lineupUnavailable}`,
     `- Playoff odds: not computed. ${s.playoffOdds.reason} Do not estimate them.`,
   ]
