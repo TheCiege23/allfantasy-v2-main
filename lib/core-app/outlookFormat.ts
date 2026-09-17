@@ -58,10 +58,18 @@ export function readPlayoffFormat(settings: unknown, teamCount: number): Playoff
   )
 
   /*
-   * Provider-stated keys first. `playoffSettings.playoffTeams` is written by the import normalizer
-   * and falls back to a FORMAT default when the provider gave no count, so it ranks last.
+   * ⚠ THE SAME ORDER AS THE STANDINGS BOARD (`standingsModel.readPlayoffTeams`, PR #998), so the
+   * "top N make it" line and these odds can never name different fields for one league:
+   * `playoffSettings.playoffTeams`, then `playoff_teams`, then `playoff_team_count`.
+   *
+   * Measured on production 2026-09-17 before settling it: on 290 Sleeper leagues the block and the
+   * flat keys never disagree. The only disagreements are two manual 8-team leagues holding flat
+   * `playoff_team_count: 6` beside `playoffSettings.playoffTeams: 4` — and 4 is what the league's
+   * own playoff runtime plays (it reads the column, which says 4 there). Block-first is right for
+   * both; the flat 6 is the import default.
    */
   const declared = firstNum(
+    asObj(s.playoffSettings)?.playoffTeams,
     s.playoff_teams,
     s.playoff_team_count,
     ...blocks.map((b) => b.playoff_team_count),
@@ -73,35 +81,36 @@ export function readPlayoffFormat(settings: unknown, teamCount: number): Playoff
   const playoffTeamsSource: FormatSource = valid ? 'league' : 'default'
 
   /*
-   * Byes. An explicit count wins; an explicit "no byes" wins; otherwise the standard bracket gap.
-   * Sleeper states nothing and runs the standard bracket (six teams → the top two sit out), which is
-   * why the fallback is `standardByes` rather than zero.
+   * Byes: the standard bracket gap (six teams → the top two sit out), which is what Sleeper runs
+   * and what the standings board prints. A stated `first_round_byes` can only LOWER it — the same
+   * rule the native playoff runtime applies (`canonicalNflRedraftPlayoffRuntime.resolveSettings`
+   * takes min(configured, gap)), because a bracket cannot give more byes than its size leaves.
+   * `topSeedByes` is not read: the runtime does not read it either, and a third interpretation is
+   * how two screens come to disagree.
    */
+  const gap = standardByes(playoffTeams)
   const explicitByes = firstNum(...blocks.map((b) => b.first_round_byes), ...blocks.map((b) => b.firstRoundByes), s.first_round_byes)
-  const topSeedByes = blocks.map((b) => b.topSeedByes).find((v) => typeof v === 'boolean') as boolean | undefined
-  const byeRule = blocks.map((b) => b.bye_rules).find((v) => typeof v === 'string') as string | undefined
 
-  let byeTeams: number
-  let byeSource: FormatSource
-  if (explicitByes != null && explicitByes >= 0 && explicitByes < playoffTeams) {
-    byeTeams = Math.floor(explicitByes)
+  let byeTeams = gap
+  let byeSource: FormatSource = 'standard'
+  if (explicitByes != null && explicitByes >= 0) {
+    byeTeams = Math.min(Math.floor(explicitByes), gap)
     byeSource = 'league'
-  } else if (topSeedByes === false || byeRule === 'none' || byeRule === 'no_byes') {
-    byeTeams = 0
-    byeSource = 'league'
-  } else {
-    byeTeams = standardByes(playoffTeams)
-    byeSource = 'standard'
   }
 
-  const end = firstNum(...blocks.map((b) => b.regularSeasonEndWeek))
-  const start = firstNum(
+  /*
+   * A week of 0 is UNSET, not week zero — 43 Sleeper leagues store `playoff_start_week: 0` — so it is
+   * skipped and the next key is tried, rather than stopping the search on it.
+   */
+  const positive = (...values: unknown[]) => firstNum(...values.map((v) => (num(v) ?? 0) > 0 ? v : null))
+  const end = positive(...blocks.map((b) => b.regularSeasonEndWeek))
+  const start = positive(
     ...blocks.map((b) => b.playoffStartWeek),
     ...blocks.map((b) => b.playoff_start_week),
     s.playoff_start_week,
     s.playoff_week_start,
   )
-  const regularSeasonEndWeek = end != null && end > 0 ? end : start != null && start > 1 ? start - 1 : null
+  const regularSeasonEndWeek = end != null ? end : start != null && start > 1 ? start - 1 : null
 
   return { playoffTeams, playoffTeamsSource, byeTeams, byeSource, regularSeasonEndWeek }
 }

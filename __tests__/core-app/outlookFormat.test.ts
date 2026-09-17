@@ -27,15 +27,23 @@ describe('readPlayoffFormat', () => {
     expect(readPlayoffFormat({ playoff_teams: 6 }, 12)).toMatchObject({ byeTeams: 2, byeSource: 'standard' })
   })
 
-  it('honours a league that says it has no byes', () => {
-    expect(readPlayoffFormat({ playoffSettings: { playoffTeams: 6, topSeedByes: false } }, 12)).toMatchObject({
+  it('a stated bye count can lower the standard gap but never exceed it, as the playoff runtime does', () => {
+    expect(readPlayoffFormat({ playoffSettings: { playoffTeams: 6, first_round_byes: 0 } }, 12)).toMatchObject({
       byeTeams: 0,
       byeSource: 'league',
     })
+    // A 4-team field has no room for byes, whatever the settings say.
+    expect(readPlayoffFormat({ playoffSettings: { playoffTeams: 4, first_round_byes: 2 } }, 8).byeTeams).toBe(0)
   })
 
-  it('prefers the provider key over the normalizer block, which can hold a format default', () => {
-    expect(readPlayoffFormat({ playoff_teams: 4, playoffSettings: { playoffTeams: 6 } }, 10).playoffTeams).toBe(4)
+  it('🛑 reads the settings block first — the same order as the standings board', () => {
+    // The two manual 8-team leagues on production: flat 6 beside a block of 4, and the league's own
+    // playoff runtime plays 4.
+    const f = readPlayoffFormat(
+      { playoff_team_count: 6, playoffSettings: { playoffTeams: 4, topSeedByes: false, first_round_byes: 2 } },
+      8,
+    )
+    expect(f).toMatchObject({ playoffTeams: 4, byeTeams: 0 })
   })
 
   it('falls back to six, and says so, when nothing is stated — never to a field larger than the league', () => {
@@ -47,5 +55,9 @@ describe('readPlayoffFormat', () => {
   it('derives the last regular week from the playoff start when only that is stated', () => {
     expect(readPlayoffFormat({ playoff_week_start: 15 }, 12).regularSeasonEndWeek).toBe(14)
     expect(readPlayoffFormat({}, 12).regularSeasonEndWeek).toBeNull()
+    // 43 Sleeper leagues store a start week of 0, which means unset.
+    expect(readPlayoffFormat({ playoff_start_week: 0, playoffSettings: { playoffStartWeek: 0 } }, 12).regularSeasonEndWeek).toBeNull()
+    // ...and a zero does not hide a real week stated under another key.
+    expect(readPlayoffFormat({ playoff_week_start: 15, playoffSettings: { playoffStartWeek: 0 } }, 12).regularSeasonEndWeek).toBe(14)
   })
 })
