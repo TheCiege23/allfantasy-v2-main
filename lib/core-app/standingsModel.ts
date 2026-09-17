@@ -342,21 +342,45 @@ const PLATFORM_LABEL: Record<string, string> = {
 /** Providers whose stored `currentRank` is the provider's own standings position. */
 const OFFICIAL_RANK_PLATFORMS = new Set(['yahoo', 'fantrax'])
 
+/** The settings blocks a playoff format can live in, in the order they are consulted. */
+function playoffBlocks(s: Record<string, unknown>): Record<string, unknown>[] {
+  return [s.playoffSettings, s.playoff_settings, s.playoff_structure, s.playoff]
+    .map(obj)
+    .filter((b): b is Record<string, unknown> => b != null)
+}
+
+function firstNum(...values: unknown[]): number | null {
+  for (const v of values) {
+    const n = num(v)
+    if (n != null) return n
+  }
+  return null
+}
+
 /**
  * How many teams make the playoffs, per the league's own settings.
  *
  * ⚠ THE KEYS ARE THE ONES THE IMPORTERS ACTUALLY WRITE. `seasonOutlook.ts` read
  * `settings.playoff.playoffTeams`, which no league in production carries (checked 2026-09-17), so every
  * league was simulated with six playoff teams — including the 53 Sleeper leagues that play four, seven or
- * eight. The Season Outlook brief fixes that in its own reader (`outlookFormat.ts`); the two should
- * agree, and if they ever disagree the standings line and the outlook odds will name different fields.
+ * eight.
+ *
+ * ⚠ KEPT IN STEP WITH `lib/core-app/outlookFormat.ts` (Season Outlook, PR #999) — same keys, same
+ * order, same "first number found, then validated" rule — so the "top N make it" line here and the odds
+ * there cannot name different fields for one league. Two copies of one rule is the thing to remove: once
+ * both are on main, one should import the other.
  */
 export function readPlayoffTeams(settings: unknown, teamCount: number): { teams: number; source: 'league' | 'assumed' } {
   const s = obj(settings) ?? {}
-  const declared = [obj(s.playoffSettings)?.playoffTeams, s.playoff_teams, s.playoff_team_count, obj(s.playoff)?.playoffTeams]
-    .map(num)
-    .find((n): n is number => n != null && n >= 2 && n <= teamCount)
-  return declared != null
+  const blocks = playoffBlocks(s)
+  const declared = firstNum(
+    obj(s.playoffSettings)?.playoffTeams,
+    s.playoff_teams,
+    s.playoff_team_count,
+    ...blocks.map((b) => b.playoff_team_count),
+    ...blocks.map((b) => b.playoffTeams),
+  )
+  return declared != null && declared >= 2 && declared <= teamCount
     ? { teams: Math.floor(declared), source: 'league' }
     : { teams: Math.min(DEFAULT_PLAYOFF_TEAMS, Math.max(2, teamCount)), source: 'assumed' }
 }
@@ -367,18 +391,43 @@ export function readStandingsRules(
   platform: string | null | undefined,
 ): StandingsRules {
   const s = obj(settings) ?? {}
+  const blocks = playoffBlocks(s)
   const field = readPlayoffTeams(settings, teamCount)
-  /* 0 means "not set" in Sleeper's settings — a playoff that starts in week 0 is not a schedule. */
-  const start = [obj(s.playoffSettings)?.playoffStartWeek, s.playoff_start_week]
-    .map(num)
-    .find((n): n is number => n != null && n > 1)
-  const length = num(s.regular_season_length)
+
+  /*
+   * Byes: the bracket gap, lowered — never raised — by a stated `first_round_byes`. That is the native
+   * playoff runtime's own min(configured, gap), and the rule Season Outlook uses.
+   */
+  const gap = byesForField(field.teams)
+  const statedByes = firstNum(
+    ...blocks.map((b) => b.first_round_byes),
+    ...blocks.map((b) => b.firstRoundByes),
+    s.first_round_byes,
+  )
+  const byes = statedByes != null && statedByes >= 0 ? Math.min(Math.floor(statedByes), gap) : gap
+
+  /*
+   * The last regular-season week. A week of 0 is UNSET — 43 Sleeper leagues store
+   * `playoff_start_week: 0` — so it is skipped and the next key is tried. `regular_season_length` is the
+   * last resort: it is the only statement ESPN imports make.
+   */
+  const positive = (...values: unknown[]) => firstNum(...values.filter((v) => (num(v) ?? 0) > 0))
+  const end = positive(...blocks.map((b) => b.regularSeasonEndWeek))
+  const start = positive(
+    ...blocks.map((b) => b.playoffStartWeek),
+    ...blocks.map((b) => b.playoff_start_week),
+    s.playoff_start_week,
+    s.playoff_week_start,
+  )
+  const length = positive(s.regular_season_length)
+  const regularSeasonEnd = end ?? (start != null && start > 1 ? start - 1 : length)
+
   const key = String(platform ?? '').toLowerCase()
   return {
     playoffTeams: field.teams,
     playoffTeamsSource: field.source,
-    byes: byesForField(field.teams),
-    regularSeasonEnd: start != null ? start - 1 : length != null && length > 0 ? length : null,
+    byes,
+    regularSeasonEnd,
     /*
      * Only Sleeper's rule is known for certain: record, then total points for. Head-to-head follows as
      * our own last resort for two teams level on both. Everything else is labelled an assumption.

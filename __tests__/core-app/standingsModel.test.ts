@@ -506,6 +506,34 @@ describe('rules', () => {
     expect(readStandingsRules({ playoff_start_week: 0 }, 12, 'sleeper').regularSeasonEnd).toBeNull()
   })
 
+  it('reads the settings blocks the same way Season Outlook does (production shapes, 2026-09-17)', () => {
+    // A manual 8-team league: the block says 4, the flat import default says 6. The runtime plays 4.
+    expect(readPlayoffTeams({ playoffSettings: { playoffTeams: 4 }, playoff_team_count: 6 }, 8)).toEqual({ teams: 4, source: 'league' })
+    // A manual league whose field lives only in `playoff_structure`.
+    expect(readPlayoffTeams({ playoff_structure: { playoff_team_count: 8 } }, 12)).toEqual({ teams: 8, source: 'league' })
+    // The ESPN 18-team league stores 0 first: the first number decides, and 0 is not a field.
+    expect(readPlayoffTeams({ playoffSettings: { playoffTeams: 0 }, playoff_team_count: 0, playoff_structure: { playoff_team_count: 6 } }, 18)).toEqual({
+      teams: 6,
+      source: 'assumed',
+    })
+  })
+
+  it('lets a stated bye count lower the bracket gap, never raise it', () => {
+    const four = readStandingsRules({ playoffSettings: { playoffTeams: 4, first_round_byes: 2 } }, 8, 'manual')
+    expect(four.byes).toBe(0)
+    const six = readStandingsRules({ playoff_teams: 6, playoff_structure: { first_round_byes: 1 } }, 12, 'sleeper')
+    expect(six.byes).toBe(1)
+    expect(readStandingsRules({ playoff_teams: 6 }, 12, 'sleeper').byes).toBe(2)
+  })
+
+  it('finds the regular-season end inside the blocks before falling back to its length', () => {
+    expect(readStandingsRules({ playoffSettings: { playoff_start_week: 15 }, regular_season_length: 18 }, 12, 'manual').regularSeasonEnd).toBe(14)
+    expect(readStandingsRules({ playoff_structure: { playoff_start_week: 15 }, regular_season_length: 24 }, 12, 'manual').regularSeasonEnd).toBe(14)
+    expect(readStandingsRules({ playoffSettings: { regularSeasonEndWeek: 13, playoffStartWeek: 15 } }, 12, 'manual').regularSeasonEnd).toBe(13)
+    // ESPN states only a length.
+    expect(readStandingsRules({ playoffSettings: { playoffTeams: 6 }, regular_season_length: 17 }, 12, 'espn').regularSeasonEnd).toBe(17)
+  })
+
   it('knows Sleeper’s tiebreaker and assumes everyone else’s', () => {
     expect(readStandingsRules({}, 12, 'sleeper')).toMatchObject({ tiebreakerSource: 'platform', rankIsOfficial: false, byes: 2 })
     expect(readStandingsRules({}, 12, 'espn')).toMatchObject({ tiebreakerSource: 'assumed', rankIsOfficial: false })
