@@ -3,6 +3,10 @@ import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { createRunBudget } from "@/lib/cron/runBudget"
 import { mergeRotation } from "@/lib/league-import/rotationPolicy"
+import {
+  addMatchupSeasonCounters,
+  emptyMatchupSeasonCounters,
+} from "@/lib/league-import/sleeper/historicalRefreshCounters"
 import { withSyncJobRun } from "@/lib/production-health/syncJobRunTelemetry"
 
 export const runtime = "nodejs"
@@ -204,6 +208,11 @@ export async function GET(request: Request) {
       let leaguesFailed = 0
       let skippedForTime = 0
       const errors: string[] = []
+      /*
+       * Summed from each league's matchup sync, so the completion gate can be watched from the
+       * cron log and the SyncJobRun row. See historicalRefreshCounters.ts.
+       */
+      const matchupSeasons = emptyMatchupSeasonCounters()
 
       for (const league of ordered) {
         if (budget.exhausted()) {
@@ -211,7 +220,7 @@ export async function GET(request: Request) {
           continue
         }
         try {
-          await syncSleeperHistoricalBackfillAfterImport({
+          const result = await syncSleeperHistoricalBackfillAfterImport({
             leagueId: league.id,
             isDynasty: Boolean(league.isDynasty),
             /*
@@ -220,6 +229,7 @@ export async function GET(request: Request) {
              * avoid. A human repairing one league passes it from the retry route.
              */
           })
+          addMatchupSeasonCounters(matchupSeasons, result?.matchups)
           leaguesRefreshed += 1
         } catch (e) {
           // Per-league isolation: one bad league must not end the rotation for the rest.
@@ -245,6 +255,7 @@ export async function GET(request: Request) {
           leagueCap: LEAGUE_CAP,
           budgetMs: REFRESH_BUDGET_MS,
           remainingMs: budget.remainingMs(),
+          matchupSeasons,
         },
       }
     },
