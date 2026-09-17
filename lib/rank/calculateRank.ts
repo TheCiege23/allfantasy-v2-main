@@ -2,6 +2,7 @@ import { prisma } from '@/lib/prisma'
 import { getLevelFromXp } from '@/lib/rank/levels'
 import { loadCareerLedger } from '@/lib/rank/careerLedger'
 import { careerXp } from '@/lib/rank/careerXp'
+import { scheduleCareerProfileRefresh } from '@/lib/core-app/careerProfileRefresh'
 
 export {
   RANK_XP_LEAGUE_SIZE_MULTIPLIER,
@@ -41,6 +42,13 @@ export type CalculateRankResult = {
  * in the legacy tables and never appears in the My Leagues dashboard.
  */
 export async function calculateAndSaveRank(userId: string): Promise<CalculateRankResult | null> {
+  /*
+   * Every import path ends here, so this is where the stored career profile is
+   * rebuilt (`/core/career`, brief item 9). Scheduled, never awaited, and it runs
+   * even when the ledger turns out empty — a user whose last league was removed
+   * needs their profile emptied too.
+   */
+  scheduleCareerProfileRefresh(userId)
   try {
     const allRows = await loadCareerLedger([userId])
 

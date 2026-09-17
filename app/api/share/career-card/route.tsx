@@ -7,6 +7,9 @@ import { getShareCardData } from '@/lib/core-app/shareCard'
 import { ShareCard, SHARE_CARD_SIZE } from '@/components/career/ShareCard'
 import { getRankCardData } from '@/lib/core-app/rankings'
 import { RankShareCard, RANK_CARD_SIZE } from '@/components/core-app/rankings/RankShareCard'
+import { getCareerAwardCards } from '@/lib/core-app/careerScreen'
+import { findAward } from '@/lib/core-app/careerAwards'
+import { AwardCabinetCard, AwardShareCard, AWARD_CARD_SIZE } from '@/components/career/AwardShareCard'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -15,10 +18,12 @@ export const runtime = 'nodejs'
  * Shareable Manager Career Card (1200×630 PNG) — the viewer's aggregated
  * Legacy identity. Auth-gated, SELF only; shared as an image, never a URL.
  *
- * ⚠ THREE CARDS BEHIND ONE ROUTE, AND THE DEFAULT IS UNCHANGED. `?design=13b`
+ * ⚠ FIVE CARDS BEHIND ONE ROUTE, AND THE DEFAULT IS UNCHANGED. `?design=13b`
  * returns handoff 13b's 620×780 card; `?design=rank` returns the Rankings card
  * (board, filters and scope from the query, every number recomputed here for
- * the signed-in viewer); anything else returns the original 1200×630 image. Folded in here rather than given its own route because this
+ * the signed-in viewer); `?design=award&award=<key>` returns one career award
+ * and `?design=awards` the whole cabinet (both 1080×1080, from the stored career
+ * profile); anything else returns the original 1200×630 image. Folded in here rather than given its own route because this
  * repo sits against Vercel's 2048-route ceiling, and because the default output
  * is referenced as an OG image — changing its dimensions or content in place
  * would silently rewrite every link preview already in the wild.
@@ -55,6 +60,31 @@ export async function GET(req: Request) {
     return new ImageResponse(<RankShareCard data={card} />, {
       width: RANK_CARD_SIZE.width,
       height: RANK_CARD_SIZE.height,
+    })
+  }
+
+  const design = params.get('design')
+  if (design === 'award' || design === 'awards') {
+    const cards = await getCareerAwardCards(userId).catch(() => null)
+    if (!cards || cards.awards.length === 0) {
+      return NextResponse.json(
+        { error: 'No career award earned yet — awards come from finished seasons.' },
+        { status: 404 },
+      )
+    }
+    if (design === 'awards') {
+      return new ImageResponse(<AwardCabinetCard data={cards} />, {
+        width: AWARD_CARD_SIZE.width,
+        height: AWARD_CARD_SIZE.height,
+      })
+    }
+    const award = findAward(cards.awards, params.get('award'))
+    if (!award) {
+      return NextResponse.json({ error: 'You have not earned that award.' }, { status: 404 })
+    }
+    return new ImageResponse(<AwardShareCard data={{ handle: cards.handle, award }} />, {
+      width: AWARD_CARD_SIZE.width,
+      height: AWARD_CARD_SIZE.height,
     })
   }
 

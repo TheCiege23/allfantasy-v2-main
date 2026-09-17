@@ -83,8 +83,12 @@ const STALE_WHILE_REVALIDATE_MS = 2 * 60 * 60_000
 
 registerScreenSummary<CareerRecordsData | null>({
   screen: CAREER_RECORDS_SCREEN,
-  /** ⚠ Bump whenever `CareerRecordsData` changes shape — the version is part of the cache key. */
-  version: 1,
+  /**
+   * ⚠ Bump whenever `CareerRecordsData` changes shape — the version is part of the cache key.
+   * v2 (2026-09-16): records carry a `section`, the book gained `rivals` and `weeklySeasons`, and the
+   * weekly games now come from `MatchupFact` as well as `WeeklyMatchup`.
+   */
+  version: 2,
   ttlMs: TTL_MS,
   staleWhileRevalidateMs: STALE_WHILE_REVALIDATE_MS,
   // See the header: a user-scoped key carries no league id, so a league sweep would match nothing.

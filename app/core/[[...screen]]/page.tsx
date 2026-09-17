@@ -107,7 +107,6 @@ import { Career } from '@/components/core-app/screens/Career'
 import { getCareerData } from '@/lib/core-app/career'
 import { leagueArtUrl } from '@/lib/core-app/leagueArt'
 import { getRailMatchups } from '@/lib/core-app/railMatchups'
-import { getCareerRecords } from '@/lib/core-app/careerRecords'
 import LeagueCareer from '@/components/core-app/screens/LeagueCareer'
 import { getLeagueCareer } from '@/lib/core-app/leagueCareer'
 import { toShareCard } from '@/lib/core-app/shareCard'
@@ -168,8 +167,8 @@ import { getLeagueStandings } from '@/lib/core-app/leagueStandings'
 import { readLeagueStandingsSummary } from '@/lib/core-app/leagueStandingsSummary'
 import { readWeekAllSummary } from '@/lib/core-app/weekAllSummary'
 import { readSeasonOutlookSummary } from '@/lib/core-app/seasonOutlookSummary'
-import { readCareerRecordsSummary } from '@/lib/core-app/careerRecordsSummary'
-import { readCareerSummary } from '@/lib/core-app/careerSummary'
+import { getCareerScreen, parseCareerView } from '@/lib/core-app/careerScreen'
+import { parseCareerFilter } from '@/lib/core-app/careerModel'
 import { isEnabled, DEFAULT_ROLLOUTS } from '@/lib/sports-os/rollout'
 import { freshnessLabel, freshnessMeta, shouldWarnAboutFreshness } from '@/lib/sports-os/freshness'
 import { recordBudgetSince } from '@/lib/sports-os/budgetTelemetry'
@@ -1729,70 +1728,36 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
       ? await getFormatHub(userId, parseHubFormat(screen?.[1])).catch(() => null)
       : null
 
-  // Career derives from imported history; ?platform= narrows it to one provider.
-  const careerPlatform = typeof sp.platform === 'string' ? sp.platform : null
-
   /*
-   * ── CAREER ON SUMMARIES ────────────────────────────────────────────
+   * ── CAREER (2026-09-16 brief) ─────────────────────────────────────
    *
-   * Completes this screen: `?view=records` already reads through `careerRecordsSummary`, and this
-   * is the default view beside it. `career.ts` has no `new Date()` and no `Date.now()`, so the
-   * board is settled history — it changes when an IMPORT runs, not when time passes.
+   * One stored profile per user (`careerProfile.ts`), rebuilt when an import or a rank
+   * recalculation finishes, and every filter — league (`lg`), platform, sport, era (`from`/`to`) —
+   * built from it in memory. `?view=` picks the tab, and only that tab's extra loaders run
+   * (`careerScreen.ts`).
    *
-   * ⚠ `?platform=` IS PART OF THE CACHE KEY, and `readCareerSummary` folds it once and hands that
-   * one value to both the key and the builder. Two filters are two different boards; the whole
-   * point of the filter is that it narrows what you are looking at.
+   * ⚠ THIS REPLACES TWO SUMMARIES. `careerSummary` cached the default view per platform behind the
+   * 10% `sports-os.screen-summaries` flag and rebuilt on a league-list fingerprint; the profile is
+   * for everyone, keyed on the history tables themselves rather than on the league list (which
+   * never covered `legacy_leagues`). `careerRecordsSummary` still serves the unfiltered weekly book
+   * under that flag, from inside `careerScreen`.
    *
-   * ⚠ ITS TTL IS FIVE MINUTES, NOT HOURS, AND THAT IS NOT A GUESS ABOUT TRAFFIC. A user-scoped key
-   * cannot be swept by league, so the TTL is the only thing that makes a newly imported league
-   * appear here — and an import is exactly when someone opens this screen. See the module header.
+   * ⚠ `lg`, NOT `league`. `?league=` is the page's authorization boundary and swaps this screen for
+   * that one league's own career below.
    */
-  const careerOnSummary = isEnabled('sports-os.screen-summaries', userId, DEFAULT_ROLLOUTS)
-
-  const careerFresh =
-    activeKey === 'career' && careerOnSummary
-      ? await readCareerSummary(userId, careerPlatform, leagues as unknown as Dash34LeagueRow[]).catch(() => null)
-      : null
-
-  const career =
+  const careerView = activeKey === 'career' ? parseCareerView(sp.view) : null
+  const careerScreen =
     activeKey === 'career'
-      ? careerOnSummary
-        ? (careerFresh?.data ?? null)
-        : await getCareerData(userId, careerPlatform).catch(() => null)
+      ? await getCareerScreen(
+          userId,
+          parseCareerFilter(sp as Record<string, string | string[] | undefined>),
+          careerView ?? 'overview',
+          sp as Record<string, string | string[] | undefined>,
+        ).catch((e: unknown) => {
+          console.error('[core/career] read failed', e)
+          return null
+        })
       : null
-
-  /*
-   * Career records — only for `?view=records`, because it reads every played
-   * week this account has and no other tab needs it.
-   */
-  const wantsCareerRecords =
-    activeKey === 'career' && sp.view === 'records' && !selectedLeagueId
-
-  /*
-   * ── CAREER RECORDS ON SUMMARIES ────────────────────────────────────
-   *
-   * The cleanest of the four to cache: `careerRecords.ts` has no `new Date()` and no `Date.now()`
-   * anywhere, so a career record can only change when a week FINALIZES, never with the clock.
-   * Staleness costs a newly-set personal best appearing late, not a number that drifts while you
-   * look at it — which is why its TTL is 30 minutes where the week board's is two.
-   *
-   * ⚠ THE FLAG IS READ SEPARATELY FROM THE OTHER THREE. `standingsOnSummary` binds standings, week
-   * and outlook together because `/core/standings` renders more than one of them on one screen and
-   * split cohorts would be two experiments at once. This screen shares a page with none of them, so
-   * there is nothing to keep consistent — it just takes the same flag and subject.
-   */
-  const careerRecordsOnSummary = isEnabled('sports-os.screen-summaries', userId, DEFAULT_ROLLOUTS)
-
-  const careerRecordsFresh =
-    wantsCareerRecords && careerRecordsOnSummary
-      ? await readCareerRecordsSummary(userId).catch(() => null)
-      : null
-
-  const careerRecords = wantsCareerRecords
-    ? careerRecordsOnSummary
-      ? (careerRecordsFresh?.data ?? null)
-      : await getCareerRecords(userId).catch(() => null)
-    : null
 
   /*
    * Rankings, its FAQ and the compare view share one screen key and one data
@@ -1847,7 +1812,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
    * and re-reading would let the two drift within a single request.
    */
   const shareCard =
-    activeKey === 'career' && sp.view === 'share' && career ? toShareCard(career) : null
+    activeKey === 'career' && careerView === 'share' && careerScreen ? toShareCard(careerScreen.data) : null
 
   const playerMatches = activeKey === 'players' ? await searchPlayers(playerQuery).catch(() => []) : []
   /*
@@ -4008,13 +3973,8 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
          */
         leagueCareer ? (
           <LeagueCareer data={leagueCareer} allLeaguesHref="/core/career" />
-        ) : career ? (
-          <Career
-            data={career}
-            view={typeof sp.view === 'string' ? sp.view : null}
-            share={shareCard}
-            records={careerRecords}
-          />
+        ) : careerScreen ? (
+          <Career screen={careerScreen} share={shareCard} />
         ) : (
           <div className="af-frame" style={{ padding: 24, maxWidth: 720 }}>
             <h1 className="af-display" style={{ margin: 0, fontSize: 22, letterSpacing: '-0.03em' }}>
