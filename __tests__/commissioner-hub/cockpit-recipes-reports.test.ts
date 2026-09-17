@@ -236,7 +236,7 @@ describe('league areas, guides and connections', () => {
   const sleeper = { id: 'L1', name: 'Dragons', platform: 'sleeper', platformLeagueId: '1180000000000000000', season: 2026, native: false }
   const native = { id: 'L2', name: 'Home', platform: 'manual', platformLeagueId: null, season: 2026, native: true }
 
-  it('lists all ten league areas, each with a working in-app link', () => {
+  it('lists every league area, each with a working in-app link', () => {
     const areas = buildLeagueAreas(sleeper)
     expect(areas.map((a) => a.key)).toEqual([
       'overview',
@@ -249,12 +249,18 @@ describe('league areas, guides and connections', () => {
       'waivers',
       'history',
       'announcements',
+      'intelligence',
     ])
     for (const a of areas) {
       expect(a.link.external).toBe(false)
       expect(a.link.href.startsWith('/')).toBe(true)
       expect(a.link.href).toContain('L1')
     }
+  })
+
+  it('keeps a way to the intelligence page the Overview card used to open', () => {
+    const area = buildLeagueAreas({ ...sleeper, id: 'a/b' }).find((a) => a.key === 'intelligence')
+    expect(area?.link.href).toBe('/league/a%2Fb/intelligence')
   })
 
   it('sends an imported league’s rule change to its platform, and a native one to settings', () => {

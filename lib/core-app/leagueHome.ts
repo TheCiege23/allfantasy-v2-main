@@ -973,7 +973,16 @@ export async function getLeagueHomeData(
                 .map((r) => r.teamName || r.managerName)
                 .filter(Boolean)
                 .slice(0, 4) as string[],
-              href: `/league/${league.id}/intelligence`,
+              /*
+               * The per-league Commissioner Hub in /core, the same page the left nav's
+               * "Commissioner" opens for this league. This used to open
+               * `/league/<id>/intelligence`, so one league had two commissioner doors
+               * leading to two different pages, and that page shows its console only to
+               * `League.userId`: the co-commissioners this card is for got the page
+               * without the console. The hub admits both roles and links to that page
+               * as one of its areas.
+               */
+              href: `/core/commissioner?league=${encodeURIComponent(league.id)}`,
             },
           }
         : {

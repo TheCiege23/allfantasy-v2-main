@@ -59,6 +59,7 @@ export type LeagueArea = {
     | 'waivers'
     | 'history'
     | 'announcements'
+    | 'intelligence'
   label: string
   description: string
   link: HubLink
@@ -154,6 +155,20 @@ export function buildLeagueAreas(league: HubLeague): LeagueArea[] {
       label: 'Announcements',
       description: 'League chat — where rulings and reminders are posted.',
       link: { label: 'Open league chat', href: leaguePage(league.id, 'league_chat'), external: false },
+      changeOn: null,
+      note: null,
+    },
+    {
+      // The league Overview's commissioner card used to open this page; it now opens this hub,
+      // so the hub has to keep a way there.
+      key: 'intelligence',
+      label: 'Commissioner intelligence',
+      description: 'League and manager health, rivalries, the audit log and the intelligence modules.',
+      link: {
+        label: 'Open intelligence',
+        href: `/league/${encodeURIComponent(league.id)}/intelligence`,
+        external: false,
+      },
       changeOn: null,
       note: null,
     },
