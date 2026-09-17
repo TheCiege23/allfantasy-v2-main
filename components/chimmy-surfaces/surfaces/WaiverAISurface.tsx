@@ -93,26 +93,6 @@ export default function WaiverAISurface({
                 confidencePct={add.confidencePct}
                 onAction={add.onAdd}
                 actionLabel="Add Player"
-                savePayload={{
-                  leagueId: resolvedActionContext.leagueId ?? null,
-                  sport: resolvedActionContext.sport,
-                  leagueType: resolvedActionContext.leagueType,
-                  title: `Add ${add.playerName} (${add.position})`,
-                  summary: add.addRationale,
-                  recommendationType: 'waiver',
-                  recommendationPayload: {
-                    playerName: add.playerName,
-                    position: add.position,
-                    addRationale: add.addRationale,
-                    urgency: add.urgency,
-                    faabBid: add.faabBid,
-                    confidencePct: add.confidencePct,
-                  },
-                  explanation: add.addRationale,
-                  confidence: typeof add.confidencePct === 'number' ? add.confidencePct / 100 : 0,
-                  riskLevel: add.urgency === 'high' ? 'high' : add.urgency,
-                  sourceSurface: 'waiver_wire',
-                }}
               />
             ))}
           </ChimmyPremiumGate>
