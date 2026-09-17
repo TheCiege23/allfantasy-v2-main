@@ -32,6 +32,7 @@ const PURGED = {
   batches: 3,
   capped: false,
   cutoff: '2026-09-05T12:00:00.000Z',
+  fallbackCutoff: '2026-08-29T12:00:00.000Z',
 }
 
 vi.mock('@/lib/prisma', () => ({
