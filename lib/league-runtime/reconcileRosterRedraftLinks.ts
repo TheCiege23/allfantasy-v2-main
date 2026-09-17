@@ -1,6 +1,7 @@
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
+import { rosterSourceTeamId } from '@/lib/league-import/importedRosterIdentity'
 
 /**
  * Keep `Roster.redraftRosterId` populated.
@@ -160,6 +161,64 @@ export async function reconcileRosterRedraftLinks(leagueId: string): Promise<Rec
         if (taken.has(target)) continue
         await prisma.roster.update({ where: { id: rosterId }, data: { redraftRosterId: target } })
         taken.add(target)
+        linkedNow.add(rosterId)
+        linked += 1
+      }
+    }
+  }
+
+  /*
+   * ── THE LAST RESORT: THE TEAM, FOR ROSTERS NO MANAGER ID CAN PLACE ──────────────────────────
+   *
+   * 🛑 AN ORPHAN TEAM CAN NEVER MATCH ON A MANAGER, BECAUSE NEITHER SIDE HAS ONE. The season
+   * materializer writes `RedraftRoster.ownerId = LeagueTeam.platformUserId || LeagueTeam.id`, so a
+   * managerless team's redraft roster is keyed by the TEAM's row id; its `Roster` counterpart is
+   * keyed `orphan-<provider>-<teamId>` (see `importedRosterIdentity.ts`). No manager id exists on
+   * either side to join them, and an unlinked roster is skipped when players are materialized, so
+   * those teams keep an empty redraft roster for good.
+   *
+   * Measured in production 2026-09-17, after the orphan rosters were restored: 280 imported rosters
+   * unlinked, of which 240 have exactly one free redraft roster for their team (183 of them orphan
+   * rosters), 0 ambiguous, and 40 whose league has no redraft season at all.
+   *
+   * Runs last, so a roster that could be placed by its manager always wins the target, and refuses
+   * on any ambiguity exactly like the stage above.
+   */
+  const stillUnplaced = unlinkedRosters.filter((r) => !linkedNow.has(r.id))
+  if (stillUnplaced.length > 0) {
+    const teamRows = await prisma.roster.findMany({
+      where: { leagueId, id: { in: stillUnplaced.map((r) => r.id) } },
+      select: { id: true, playerData: true },
+    })
+    const rostersByTeam = new Map<string, string[]>()
+    for (const row of teamRows) {
+      const teamId = rosterSourceTeamId(row.playerData)
+      if (teamId) rostersByTeam.set(teamId, [...(rostersByTeam.get(teamId) ?? []), row.id])
+    }
+
+    if (rostersByTeam.size > 0) {
+      const teams = await prisma.leagueTeam.findMany({
+        where: { leagueId, externalId: { in: [...rostersByTeam.keys()] } },
+        select: { id: true, externalId: true, platformUserId: true },
+      })
+      const ownerKeys = teams.flatMap((t) => [t.id, t.platformUserId].filter((v): v is string => Boolean(v)))
+      const candidates = ownerKeys.length
+        ? await prisma.redraftRoster.findMany({
+            where: { leagueId, ownerId: { in: ownerKeys } },
+            select: { id: true, ownerId: true },
+          })
+        : []
+
+      for (const [externalId, rosterIds] of rostersByTeam) {
+        const team = teams.find((t) => t.externalId === externalId)
+        if (!team) continue
+        const keys = [team.id, team.platformUserId].filter((v): v is string => Boolean(v))
+        const targets = candidates.filter((c) => keys.includes(c.ownerId) && !taken.has(c.id))
+        // One roster for this team, one free redraft roster for it — or leave it NULL.
+        if (rosterIds.length !== 1 || targets.length !== 1) continue
+        await prisma.roster.update({ where: { id: rosterIds[0] }, data: { redraftRosterId: targets[0].id } })
+        taken.add(targets[0].id)
+        linkedNow.add(rosterIds[0])
         linked += 1
       }
     }

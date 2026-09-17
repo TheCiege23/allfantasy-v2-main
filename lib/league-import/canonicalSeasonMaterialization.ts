@@ -120,9 +120,10 @@ export async function materializeRedraftSeasonForImportedLeague(
           leagueId,
           // Real provider manager id when known; falls back to the
           // LeagueTeam's own id for orphaned/unclaimed teams — never
-          // fabricated as a real AppUser id, matching the same fallback
-          // `bootstrapLeagueFromNormalizedImport` already uses for
-          // `Roster.platformUserId`.
+          // fabricated as a real AppUser id.
+          // ⚠ THIS KEY IS NOT THE ONE `Roster.platformUserId` CARRIES. An orphan roster is keyed
+          // `orphan-<provider>-<teamId>` (see `importedRosterIdentity.ts`), so no manager id joins
+          // the two rows for a managerless team; `reconcileRosterRedraftLinks` links them by TEAM.
           ownerId: t.platformUserId || t.id,
           ownerName: t.ownerName,
           teamName: t.teamName,
