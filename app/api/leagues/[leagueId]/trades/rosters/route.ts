@@ -14,6 +14,11 @@ import { resolvePlayerStock, type StockDirection } from '@/lib/trade-intel/playe
 import { rankTradePartners, type PartnerRanking } from '@/lib/trade-intel/partnerRanking'
 import { loadLeagueTradeHistory } from '@/lib/trade-intel/partnerHistory'
 import { resolveWriteAuthority } from '@/lib/league/write-authority'
+import {
+  pickUnpricedReason,
+  playerUnpricedReason,
+  type UnpricedReason,
+} from '@/lib/trade-value/unpricedReason'
 
 export const dynamic = 'force-dynamic'
 
@@ -67,6 +72,13 @@ export type TradeableRosterPlayer = {
    * judge, so hiding the distinction here would hide the reason downstream.
    */
   value: number | null
+  /**
+   * Why `value` is null, in words the builder prints beside "Unpriced"; null when priced.
+   *
+   * Optional for the same rollout reason as `stock`: a browser on the previous deploy's bundle
+   * reads a response without the key.
+   */
+  unpricedReason?: UnpricedReason | null
 }
 
 /**
@@ -91,6 +103,8 @@ export type TradeableRosterPick = {
    * "N unpriced" rather than quietly adding nothing to a total.
    */
   value: number | null
+  /** Why `value` is null; null when priced. Optional on the wire, as on a player. */
+  unpricedReason?: UnpricedReason | null
 }
 export type TradeableRoster = {
   rosterId: string
@@ -250,7 +264,7 @@ export async function GET(
       const playerIds = getRosterPlayerIds(r.playerData)
       let players: TradeableRosterPlayer[] = playerIds.map((id) => ({
         id, name: id, position: null, team: null, imageUrl: null, byeWeek: null,
-        injuryStatus: null, value: null,
+        injuryStatus: null, value: null, unpricedReason: null,
       }))
       /*
        * 🛑 THE SAME RULE AS THE MATERIALIZER, AND NOW THE SAME IMPLEMENTATION. This block used to
@@ -285,6 +299,7 @@ export async function GET(
         stockDelta: null,
           // Filled in one batch below — see the value pass.
           value: null,
+          unpricedReason: null,
         }
       })
       const account = accountById.get(r.platformUserId)
@@ -304,6 +319,8 @@ export async function GET(
             currentSeason != null && p.season != null && p.season > currentSeason
               ? ('future_pick' as const)
               : ('rookie_pick' as const),
+          // The one way a pick goes unpriced here; see `value` below.
+          unpricedReason: p.round != null && Number.isFinite(p.round) ? null : pickUnpricedReason(),
           /*
            * 🛑 A PICK USED TO CARRY NO VALUE AT ALL, so the builder showed an em dash and reported
            * "1 unpriced" on a side whose total then understated it by a first-round pick. The curve
@@ -429,6 +446,16 @@ export async function GET(
       : Promise.resolve(new Map()),
   ])
 
+  /*
+   * ⚠ WHETHER THE FEED LOADED IS INFERRED, BECAUSE THE LOOKUP HIDES IT. Both of its failure paths
+   * return an empty map, exactly as a read that matched nobody would. A whole league matching
+   * nobody is the tell: measured on staging 2026-09-16, 10 of 223 leagues matched no one, and not
+   * one of them rosters an identified NFL skill player — they hold only unidentified ids, team
+   * defenses or college players, and those reasons are decided before this one is consulted.
+   */
+  const marketLoaded = values.size > 0
+  const sport = String(league?.sport ?? 'NFL')
+
   for (const r of result) {
     for (const p of r.players) {
       const s = stock.get(p.id)
@@ -439,6 +466,15 @@ export async function GET(
       // Keyed lowercase by `buildPlayerValuesForNames`. A miss stays null — "not priced",
       // which the picker renders differently from a low value.
       p.value = values.get(p.name.toLowerCase())?.value ?? null
+      p.unpricedReason =
+        p.value == null
+          ? playerUnpricedReason({
+              identified: resolvedForLeague.has(p.id),
+              position: p.position,
+              sport,
+              marketLoaded,
+            })
+          : null
     }
   }
 

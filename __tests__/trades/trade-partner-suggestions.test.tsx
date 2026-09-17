@@ -134,11 +134,11 @@ describe('suggestionToPickedAssets', () => {
     )
     expect(out.dropped).toEqual([])
     expect(out.give).toEqual([
-      { kind: 'player', playerId: 'mine', name: 'Receiver', position: 'WR', team: 'KC', value: 4000, imageUrl: 'https://x/r.png', stock: 'up', stockDelta: 120 },
+      { kind: 'player', playerId: 'mine', name: 'Receiver', position: 'WR', team: 'KC', value: 4000, imageUrl: 'https://x/r.png', stock: 'up', stockDelta: 120, unpricedReason: null },
       { kind: 'pick', year: 2027, round: 1, label: '2027 1st', pickId: 'pk1', itemType: 'future_pick', value: 1800 },
     ])
     expect(out.get).toEqual([
-      { kind: 'player', playerId: 'theirs', name: 'Runner', position: 'RB', team: 'SF', value: 4600, imageUrl: null, stock: null, stockDelta: null },
+      { kind: 'player', playerId: 'theirs', name: 'Runner', position: 'RB', team: 'SF', value: 4600, imageUrl: null, stock: null, stockDelta: null, unpricedReason: null },
     ])
   })
 

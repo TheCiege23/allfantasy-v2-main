@@ -13,6 +13,11 @@ import {
   type PickedAsset,
 } from '@/components/core-app/screens/TradeAssetPicker'
 import { FIRST_ROUND_IN_MARKET_UNITS, pickValueByOverall } from '@/lib/pick-curve'
+import {
+  analysisUnpricedReason,
+  pickUnpricedReason,
+  pricedOnAnalysisReason,
+} from '@/lib/trade-value/unpricedReason'
 /*
  * ⚠ THE SAME RESOLVER THE PICKER USES, DELIBERATELY. This repo already carries FIVE
  * team-logo functions (`getTeamLogo`, three separate `getTeamLogoUrl`s, and
@@ -154,6 +159,8 @@ type Line = {
   team?: string | null
   marketValue?: number | null
   pricedSource?: string | null
+  /** Why `marketValue` is null, in the words printed under the row; absent when priced. */
+  unpricedWhy?: string | null
   /** Absent for a searched player, a pick and FAAB — the glyph covers all three. */
   imageUrl?: string | null
   /**
@@ -165,6 +172,15 @@ type Line = {
   stockDelta?: number | null
 }
 
+/**
+ * One line of the analysis echo.
+ *
+ * 🛑 `unpriced` MEANS `marketValue` IS A PLACEHOLDER 0, AND IT WAS BEING SHOWN. The engine's
+ * pricer returns 0 with this flag when it finds nothing at all; the builder took the 0 as a price,
+ * so a team defense read "0" after Analyze — and was not counted as unpriced.
+ */
+type EngineLine = Line & { unpriced?: boolean; sport?: string | null }
+
 type AnalyzeResult = {
   labels?: { fairnessLabel?: string; confidenceLabel?: string }
   fairnessScore?: number
@@ -174,7 +190,7 @@ type AnalyzeResult = {
   dataGaps?: string[]
   giveTotal?: number
   getTotal?: number
-  players?: { give: Line[]; get: Line[] }
+  players?: { give: EngineLine[]; get: EngineLine[] }
   byeNotes?: string[]
   needNotes?: string[]
   leverageNotes?: string[]
@@ -448,63 +464,113 @@ export function TradeCenter(props: {
    */
   const [partnerRosterId, setPartnerRosterId] = useState<string | null>(null)
 
-  /** Prices the engine resolved, keyed by name, merged onto what was added. */
+  /** The engine's lines, keyed by name, merged onto what was added. */
   const pricedBy = useMemo(() => {
-    const m = new Map<string, number | null>()
+    const m = new Map<string, EngineLine>()
     for (const l of [...(result?.players?.give ?? []), ...(result?.players?.get ?? [])]) {
-      m.set(l.name.toLowerCase(), l.marketValue ?? null)
+      m.set(l.name.toLowerCase(), l)
     }
     return m
   }, [result])
 
   const toLines = useCallback(
     (assets: PickedAsset[]): Line[] =>
-      assets.map((a) =>
-        a.kind === 'player'
-          ? {
-              name: a.name,
-              position: a.position,
-              team: a.team,
-              /* Engine price wins; the search value is the fallback. */
-              marketValue: pricedBy.get(a.name.toLowerCase()) ?? a.value ?? null,
-              imageUrl: a.imageUrl ?? null,
-              stock: a.stock ?? null,
-              stockDelta: a.stockDelta ?? null,
-            }
-          : a.kind === 'pick'
-            ? {
-                name: a.label,
-                position: 'PICK',
-                team: null,
-                /*
-                 * 🛑 PRICED HERE, AT RENDER, RATHER THAN TRUSTING WHAT THE ASSET HAPPENS TO CARRY.
-                 *
-                 * This field has now been fixed three times in three places — the rosters route,
-                 * the hand-typed pick, and here — because pricing at PICK time bakes a number into
-                 * stored state, so every path that creates a pick has to remember to set it. Any
-                 * path that forgets produces an em dash on the row and "1 unpriced" on a total
-                 * that then understates itself by a whole first-rounder.
-                 *
-                 * The round is all the curve needs and every pick carries one, so deriving it here
-                 * makes ONE rule serve every path — including a draft serialized into localStorage
-                 * before the rule existed, which no amount of fixing creation sites can reach.
-                 *
-                 * ⚠ A STORED PRICE STILL WINS. The route prices a roster pick against the real
-                 * slot it projects to; the curve here only knows the round, so it is the fallback
-                 * and not the override.
-                 */
-                marketValue:
-                  a.value ??
-                  (Number.isFinite(a.round) && a.round >= 1
-                    ? pickValueByOverall({
-                        round: a.round,
-                        teams: props.league?.teamCount ?? null,
-                        firstRoundValue: FIRST_ROUND_IN_MARKET_UNITS,
-                      })
-                    : null),
-              }
-            : { name: `$${a.amount} FAAB`, position: 'FAAB', team: null, marketValue: null },
-      ),
+      assets.map((a) => {
+        if (a.kind === 'player') {
+          const engine = pricedBy.get(a.name.toLowerCase())
+          /*
+           * Engine price wins; the list value is the fallback. An engine line flagged `unpriced`
+           * wins too — as "no price": its 0 is a placeholder, and the verdict was computed without
+           * a real number for him, so showing the list's number would not match it either.
+           */
+          const marketValue = engine?.unpriced
+            ? null
+            : (engine?.marketValue ?? a.value ?? null)
+          const why =
+            marketValue != null
+              ? null
+              : engine?.unpriced
+                ? // The asset's own position first: the engine calls an unmatched player 'UNKNOWN'.
+                  analysisUnpricedReason({
+                    position: a.position ?? engine.position,
+                    sport: a.sportHint ?? engine.sport,
+                  })
+                : (a.unpricedReason ?? pricedOnAnalysisReason())
+          return {
+            name: a.name,
+            position: a.position,
+            team: a.team,
+            marketValue,
+            unpricedWhy: why?.label ?? null,
+            imageUrl: a.imageUrl ?? null,
+            stock: a.stock ?? null,
+            stockDelta: a.stockDelta ?? null,
+          }
+        }
+        if (a.kind === 'faab') {
+          /*
+           * FAAB shows the value the ANALYSIS gave it, and nothing before that. User's decision,
+           * 2026-09-16 ("yes change FAAB"), replacing "FAAB is deliberately unpriced here".
+           *
+           * ⚠ ONLY THE ENGINE'S NUMBER, NEVER ONE COMPUTED HERE. The verdict converts FAAB against
+           * the league's own budget (`normalizedFaabValue`, which this screen does not know), and
+           * the row must show the number the verdict actually used — a client-side conversion would
+           * be a second opinion that can disagree with it.
+           *
+           * 🛑 THE TWO SIDES SPELL THE LINE DIFFERENTLY, which is why nothing ever matched: the
+           * analysis names it `FAAB $10`, the builder labels it `$10 FAAB`.
+           */
+          const engine = pricedBy.get(`faab $${a.amount}`)
+          const marketValue = engine && !engine.unpriced ? (engine.marketValue ?? null) : null
+          return {
+            name: `$${a.amount} FAAB`,
+            position: 'FAAB',
+            team: null,
+            marketValue,
+            unpricedWhy: marketValue == null ? pricedOnAnalysisReason().label : null,
+          }
+        }
+        /*
+         * 🛑 PRICED HERE, AT RENDER, RATHER THAN TRUSTING WHAT THE ASSET HAPPENS TO CARRY.
+         *
+         * This field has now been fixed three times in three places — the rosters route,
+         * the hand-typed pick, and here — because pricing at PICK time bakes a number into
+         * stored state, so every path that creates a pick has to remember to set it. Any
+         * path that forgets produces an em dash on the row and "1 unpriced" on a total
+         * that then understates itself by a whole first-rounder.
+         *
+         * The round is all the curve needs and every pick carries one, so deriving it here
+         * makes ONE rule serve every path — including a draft serialized into localStorage
+         * before the rule existed, which no amount of fixing creation sites can reach.
+         *
+         * ⚠ A STORED PRICE STILL WINS. The route prices a roster pick against the real
+         * slot it projects to; the curve here only knows the round, so it is the fallback
+         * and not the override.
+         *
+         * ⚠ AND A PICK THE ROUTE COULD NOT PLACE STAYS UNPRICED. The picker defaults a missing
+         * round to 1 when it builds the asset, so pricing that round here would show a pick with no
+         * round as a first-rounder. `unpricedReason` is what survives from the route to say so.
+         */
+        const pick: Line = {
+          name: a.label,
+          position: 'PICK',
+          team: null,
+          marketValue:
+            a.value ??
+            (!a.unpricedReason && Number.isFinite(a.round) && a.round >= 1
+              ? pickValueByOverall({
+                  round: a.round,
+                  teams: props.league?.teamCount ?? null,
+                  firstRoundValue: FIRST_ROUND_IN_MARKET_UNITS,
+                })
+              : null),
+        }
+        return {
+          ...pick,
+          unpricedWhy:
+            pick.marketValue == null ? (a.unpricedReason ?? pickUnpricedReason()).label : null,
+        }
+      }),
     [pricedBy, props.league?.teamCount],
   )
 
@@ -1341,19 +1407,25 @@ export function TradeCenter(props: {
                         </span>
                       ) : null}
                       {/*
-                        A player the feed could not price gets a tag, not a zero.
-                        ⚠ THIS COMMENT USED TO SAY "picks and FAAB are unpriced by nature". FAAB
-                        still is. PICKS ARE NOT, and have not been since they were put on the
-                        curve — a pick now carries a real value in the same units as the players
-                        beside it. The tag stays player-only because an unpriced PICK is now the
-                        rare case (no round, or hand-typed) rather than the norm it used to be.
+                        An asset with no price gets a tag, not a zero — a player or a pick. A pick
+                        is unpriced only when it has no round, which is rare but real.
+                        FAAB gets no tag: before Analyze it is waiting for the verdict's
+                        conversion rather than missing a price, and the reason below says so.
                       */}
-                      {l.marketValue == null && kindOf(l) === 'player' ? (
+                      {l.marketValue == null && kindOf(l) !== 'faab' ? (
                         <span className="af-tc-tag" data-tone="bad">
                           Unpriced
                         </span>
                       ) : null}
                     </span>
+                    {/*
+                      WHY, IN WORDS (item #5). The dash and the tag said "no price"; they never said
+                      whether that is a defender the feed will never cover, a feed that failed to
+                      load, or a player we could not identify — three different next steps.
+                    */}
+                    {l.marketValue == null && l.unpricedWhy ? (
+                      <span className="af-tc-unpriced-why">{l.unpricedWhy}</span>
+                    ) : null}
                   </span>
                   <StockMark stock={l.stock} delta={l.stockDelta} />
                   <span
@@ -1485,6 +1557,7 @@ export function TradeCenter(props: {
                             imageUrl: pl.imageUrl,
                             stock: pl.stock,
                             stockDelta: pl.stockDelta,
+                            unpricedReason: pl.unpricedReason ?? null,
                           })
                         }
                         added={Boolean(pl.id && inDeal.has(pl.id))}
@@ -1543,7 +1616,14 @@ export function TradeCenter(props: {
                       <span className="af-tc-pos" data-pos={positionTone(l.position)}>{l.position}</span>
                     ) : null}
                     <span className="af-tc-spacer" />
-                    <span className="af-num" data-unpriced={l.marketValue == null ? 'true' : undefined}>
+                    <span
+                      className="af-num"
+                      data-unpriced={l.marketValue == null ? 'true' : undefined}
+                      title={l.marketValue == null && l.unpricedWhy ? l.unpricedWhy : undefined}
+                      aria-label={
+                        l.marketValue == null && l.unpricedWhy ? `No value: ${l.unpricedWhy}` : undefined
+                      }
+                    >
                       {money(l.marketValue)}
                     </span>
                   </li>

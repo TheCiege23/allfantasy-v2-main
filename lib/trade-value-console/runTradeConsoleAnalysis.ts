@@ -51,6 +51,7 @@ import {
 import { attachIntelligenceToChimmyPayload, buildAiToolPayload } from '@/lib/intelligence'
 import { clamp, sportsRecordToPricedAsset } from './sports-db-valuation'
 import { normalizedFaabValue } from '@/lib/trade-value/faabValue'
+import { analysisUnpricedReason } from '@/lib/trade-value/unpricedReason'
 import {
   benchAssetsNotInGive,
   inferThinPositionsFromRoster,
@@ -176,7 +177,19 @@ async function resolveEnrichmentPlayerId(
   }
 }
 
-function lineFromPriced(pa: PricedAsset, meta: Partial<TradeConsolePlayerLine>): TradeConsolePlayerLine {
+/**
+ * One priced asset as a console line. Exported for its test only.
+ *
+ * `pa.unpriced` is the pricer's own "found nothing" flag, and its marketValue is then a placeholder
+ * 0; the line carries the flag and the reason so no surface prints that 0 as a price.
+ * `reasonPosition` is the player ROW's position when there is one — an unmatched player's
+ * `pa.position` is the literal 'UNKNOWN', which would hide that he is, say, a team defense.
+ */
+export function lineFromPriced(
+  pa: PricedAsset,
+  meta: Partial<TradeConsolePlayerLine>,
+  opts?: { reasonPosition?: string | null },
+): TradeConsolePlayerLine {
   return {
     name: pa.name,
     playerId: meta.playerId ?? null,
@@ -191,6 +204,15 @@ function lineFromPriced(pa: PricedAsset, meta: Partial<TradeConsolePlayerLine>):
     composite: compositeScore(pa.assetValue),
     marketValue: pa.assetValue.marketValue,
     pricedSource: meta.pricedSource ?? 'unknown',
+    ...(pa.unpriced
+      ? {
+          unpriced: true,
+          unpricedReason: analysisUnpricedReason({
+            position: opts?.reasonPosition ?? pa.position ?? meta.position,
+            sport: meta.sport ?? 'NFL',
+          }),
+        }
+      : {}),
   }
 }
 
@@ -287,7 +309,7 @@ async function resolveAssets(
           pricedSource: src,
           dataSource: row?.dataSource ?? 'fantasycalc+rolling',
           position: pa.position ?? row?.position ?? '—',
-        }),
+        }, { reasonPosition: row?.position ?? null }),
       )
       continue
     }

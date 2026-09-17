@@ -16,11 +16,12 @@ import { resolve } from 'node:path'
  */
 
 const fcRows = vi.hoisted(() => ({ current: [] as unknown[] }))
+const searchRows = vi.hoisted(() => ({ current: [] as unknown[] }))
 
 vi.mock('@/lib/fantasycalc-db', () => ({
   getFantasyCalcValuesDbFirst: vi.fn(async () => fcRows.current),
 }))
-vi.mock('@/lib/data/players', () => ({ searchPlayers: vi.fn(async () => []) }))
+vi.mock('@/lib/data/players', () => ({ searchPlayers: vi.fn(async () => searchRows.current) }))
 vi.mock('@/lib/rate-limit', () => ({
   rateLimit: () => ({ success: true }),
   getClientIp: () => '127.0.0.1',
@@ -53,6 +54,7 @@ function req(q: string, sport = 'NFL') {
 
 beforeEach(() => {
   fcRows.current = []
+  searchRows.current = []
 })
 
 describe('🛑 a searched player carries what a picked player carries', () => {
@@ -118,6 +120,42 @@ describe('🛑 a searched player carries what a picked player carries', () => {
     expect(body).toHaveLength(1)
     expect(body[0].playerId).toBeNull()
     expect(body[0].headshotUrl).toBeNull()
+  })
+})
+
+describe('a searched player with no value says why (item #5)', () => {
+  const record = (name: string, sport: string, dynastyValue: number | null) => ({
+    id: `${sport}:${name}`, name, sport, position: 'G', team: 'BOS', dataSource: 'db',
+    headshotUrl: null, headshotUrlLg: null, headshotUrlSm: null, dynastyValue,
+  })
+
+  it('🛑 a non-NFL row with no value carries the sport reason', async () => {
+    searchRows.current = [record('Jaylen Brown', 'NBA', null)]
+    const body = await (await (await route())(req('jaylen', 'NBA'))).json()
+    expect(body[0].value).toBeNull()
+    expect(body[0].unpricedReason?.code).toBe('no_feed_for_sport')
+  })
+
+  it('[control] a valued row carries no reason', async () => {
+    searchRows.current = [record('Jaylen Brown', 'NBA', 4200)]
+    const body = await (await (await route())(req('jaylen', 'NBA'))).json()
+    expect(body[0].value).toBe(4200)
+    expect(body[0].unpricedReason).toBeNull()
+  })
+
+  it('the ALL search attaches it too', async () => {
+    searchRows.current = [record('Jaylen Brown', 'NBA', null)]
+    const body = (await (await (await route())(req('jaylen', 'ALL'))).json()) as Array<{
+      sport: string
+      unpricedReason?: { code: string } | null
+    }>
+    const nba = body.find((r) => r.sport === 'NBA')
+    expect(nba?.unpricedReason?.code).toBe('no_feed_for_sport')
+  })
+
+  it('the client carries it into the deal', () => {
+    const PICKER = readFileSync(resolve(process.cwd(), 'components/core-app/screens/TradeAssetPicker.tsx'), 'utf8')
+    expect(PICKER).toContain('unpricedReason: r.unpricedReason ?? null')
   })
 })
 
