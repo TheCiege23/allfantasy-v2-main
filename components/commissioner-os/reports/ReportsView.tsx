@@ -14,6 +14,7 @@ import { ReportDetailDialog } from './ReportDetailDialog'
 import { REPORT_STATUS_LABELS, REPORT_FORMAT_LABELS } from './reportsLabels'
 import type { CommissionerDataMode } from '@/lib/commissioner-ui/demo-mode/constants'
 import type { GeneratedReport, ReportTemplate } from '@/lib/commissioner-ui/reports/decision-os-client'
+import { shortDate } from '@/components/commissioner-os/primitives/pinnedTime'
 
 export interface ReportsViewProps {
   templates: ReportTemplate[]
@@ -206,7 +207,7 @@ export function ReportsView({ templates, history: initialHistory, dataMode, erro
                       <TableCell>{report.templateName}</TableCell>
                       <TableCell>{REPORT_STATUS_LABELS[report.status]}</TableCell>
                       <TableCell>{REPORT_FORMAT_LABELS[report.format]}</TableCell>
-                      <TableCell>{new Date(report.generatedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</TableCell>
+                      <TableCell>{shortDate(report.generatedAt)}</TableCell>
                       <TableCell>
                         <Button size="sm" variant="outline" onClick={() => setSelectedReportId(report.id)}>
                           View

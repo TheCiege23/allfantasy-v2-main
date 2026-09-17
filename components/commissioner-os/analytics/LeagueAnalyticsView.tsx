@@ -28,6 +28,7 @@ import type {
   TransactionWeek,
 } from '@/lib/commissioner-ui/analytics/decision-os-client/types'
 import './analytics-sheet.css'
+import { mediumDate, count } from '@/components/commissioner-os/primitives/pinnedTime'
 
 /**
  * 30a — Commissioner OS analytics, as spreadsheet charts.
@@ -168,11 +169,7 @@ function FreshnessNote({ window: w }: { window: AnalyticsDataWindow | null }) {
   }
 
   const stale = w.daysSinceLastActivity !== null && w.daysSinceLastActivity > w.inactiveAfterDays
-  const asOf = new Date(w.lastActivityAt).toLocaleDateString(undefined, {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-  })
+  const asOf = mediumDate(w.lastActivityAt)
 
   if (stale) {
     return (
@@ -182,7 +179,7 @@ function FreshnessNote({ window: w }: { window: AnalyticsDataWindow | null }) {
         </strong>{' '}
         Managers count as inactive after {w.inactiveAfterDays} days without an action, so the
         participation and activity numbers below reflect how old this data is, not how quiet the
-        league is. We hold {w.allTime.eventCount.toLocaleString()} events for it all-time.
+        league is. We hold {count(w.allTime.eventCount)} events for it all-time.
       </p>
     )
   }

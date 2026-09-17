@@ -9,6 +9,7 @@ import { getSeverityStyle } from '@/components/commissioner-os/cards'
 import { AUTOMATION_RESULT_LABELS } from './automationLabels'
 import type { SeverityTier } from '@/lib/commissioner-ui/tokens/colors'
 import type { AutomationCatalogEntry, AutomationExecutionEntry, AutomationExecutionResult } from '@/lib/commissioner-ui/automations/decision-os-client'
+import { shortDate } from '@/components/commissioner-os/primitives/pinnedTime'
 
 export interface AutomationHistoryDialogProps {
   automation: AutomationCatalogEntry | null
@@ -71,7 +72,7 @@ export function AutomationHistoryDialog({ automation, history, onOpenChange }: A
                           }}
                           className="focus-ring cursor-pointer"
                         >
-                          <TableCell>{new Date(entry.startedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</TableCell>
+                          <TableCell>{shortDate(entry.startedAt)}</TableCell>
                           <TableCell>
                             <span style={{ color: style.text }}>{AUTOMATION_RESULT_LABELS[entry.result]}</span>
                           </TableCell>

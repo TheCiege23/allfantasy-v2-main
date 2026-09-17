@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import { downloadReportCsv, downloadReportPdf } from '@/lib/commissioner-ui/reports/exportUtils'
 import { REPORT_STATUS_LABELS, REPORT_FORMAT_LABELS } from './reportsLabels'
 import type { GeneratedReport } from '@/lib/commissioner-ui/reports/decision-os-client'
+import { dateTime } from '@/components/commissioner-os/primitives/pinnedTime'
 
 export interface ReportDetailDialogProps {
   report: GeneratedReport | null
@@ -61,7 +62,7 @@ export function ReportDetailDialog({ report, onOpenChange, onToggleShare }: Repo
             )}
 
             <p className="text-xs" style={{ color: 'var(--muted2)' }}>
-              Generated {new Date(report.generatedAt).toLocaleString()} by {report.generatedByLabel}
+              Generated {dateTime(report.generatedAt)} by {report.generatedByLabel}
             </p>
 
             {report.relatedLinks.length > 0 && (
