@@ -5,13 +5,19 @@
  * worst first, each with the one action that deals with it. Reports and tables
  * come after.
  *
- * Four inputs, merged rather than stacked:
+ * Five inputs, merged rather than stacked:
  *
  *   issues      the shell's outstanding issues for this league (draft soon,
  *               stale sync) — the same list the nav badge counts
  *   flags       the measured health flags that are not green
  *   calendar    anything dated in the next seven days
  *   workspace   Commissioner Workspace findings the daily scan opened
+ *   signals     review work the old all-leagues hub queued (./signals.ts)
+ *
+ * ⚠ BOTH HUB VIEWS BUILD THEIR QUEUE HERE. The one-league screen passes all five;
+ * the all-leagues screen passes what it can afford per league (issues, the
+ * abandoned-teams flag, signals, stale sync) and ranks the results across
+ * leagues. One builder is what keeps a league reading the same in both.
  *
  * ⚠ THE WORKSPACE SCAN AND THE FLAGS DETECT SOME OF THE SAME CONDITIONS, and a
  * card per detector would show one idle manager twice. Where a flag covers a
@@ -24,11 +30,12 @@
 import type { CoreIssue } from '@/lib/core-app/outstandingIssues'
 import type { CalendarEvent } from './calendar'
 import type { HealthFlag } from './health'
+import { reviewSignalCards, type LeagueReviewSignals } from './signals'
 
 export type TaskCard = {
   id: string
   severity: 'bad' | 'warn' | 'info'
-  source: 'issue' | 'health' | 'deadline' | 'workspace'
+  source: 'issue' | 'health' | 'deadline' | 'workspace' | 'review'
   title: string
   detail: string
   due: string | null
@@ -89,6 +96,8 @@ export function buildTaskCards(input: {
    * supplied a stale issue for this league.
    */
   staleSync?: { days: number; href: string; platformLabel: string } | null
+  /** Review work for this league — see ./signals.ts. Needs the league id for its links. */
+  signals?: { leagueId: string; values: LeagueReviewSignals } | null
   limit?: number
 }): TaskCardsResult {
   const limit = input.limit ?? 6
@@ -168,6 +177,12 @@ export function buildTaskCards(input: {
       action: { label: 'See calendar', href: '#ch-calendar', external: false },
       sortAt: e.at ? Date.parse(e.at) : far,
     })
+  }
+
+  if (input.signals) {
+    for (const card of reviewSignalCards(input.signals.leagueId, input.signals.values)) {
+      cards.push({ ...card, sortAt: far })
+    }
   }
 
   const issueIds = new Set(input.issues.map((i) => i.id))

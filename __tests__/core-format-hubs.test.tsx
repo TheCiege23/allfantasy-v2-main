@@ -208,6 +208,15 @@ describe('<FormatHub />', () => {
     expect(screen.getByRole('link', { name: 'Survivor · 2' }).getAttribute('href')).toBe('/core/hubs/survivor')
   })
 
+  it('shares one switcher with the Commissioner Hub and points its footer there, not at the retired page', () => {
+    render(<FormatHub data={fixture()} />)
+    const all = screen.getByRole('link', { name: 'All leagues' })
+    expect(all.getAttribute('href')).toBe('/core/commissioner')
+    expect(all.getAttribute('aria-current')).toBeNull()
+    expect(screen.getByRole('link', { name: 'Commissioner hub →' }).getAttribute('href')).toBe('/core/commissioner')
+    expect(document.querySelector('a[href="/commissioner-hub"]')).toBeNull()
+  })
+
   it('draws no meter bar for a league with nothing on file', () => {
     render(<FormatHub data={fixture()} />)
     expect(screen.queryByRole('meter')).toBeNull()
@@ -225,7 +234,9 @@ describe('<FormatHub />', () => {
     expect(screen.getByRole('img', { name: /Guillotine league comparison/i })).toBeTruthy()
     expect(screen.getByRole('link', { name: 'Standings' }).getAttribute('href')).toBe('/core/standings?league=L1')
     expect(screen.getByRole('link', { name: 'Trades' }).getAttribute('href')).toBe('/core/trades?league=L1')
-    expect(screen.getByRole('link', { name: 'Commissioner OS' }).getAttribute('href')).toBe('/core/commissioner?league=L1')
+    // Five-doors restyle: this opens the Commissioner Hub for the league, so it no longer says "Commissioner OS".
+    expect(screen.getByRole('link', { name: 'Commissioner' }).getAttribute('href')).toBe('/core/commissioner?league=L1')
+    expect(screen.queryByRole('link', { name: 'Commissioner OS' })).toBeNull()
   })
 
   it('does not offer a broadcast the route would refuse', () => {

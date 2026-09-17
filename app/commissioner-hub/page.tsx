@@ -1,99 +1,37 @@
-import type { Metadata } from 'next'
-import Link from 'next/link'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth'
-import { getDashboardLeagueListForUser } from '@/lib/dashboard/get-dashboard-league-list'
-import { getCommissionerHubHealthForUser } from '@/lib/commissioner-hub/commissionerHubHealth'
-import type { UserLeague } from '@/app/dashboard/types'
-import { resolveTenantBrand } from '@/lib/white-label'
-import { prisma } from '@/lib/prisma'
-import CommissionerHubPageClient from './CommissionerHubPageClient'
+import { redirect } from 'next/navigation'
 
-const BRAND = resolveTenantBrand()
-
-export const metadata: Metadata = {
-  title: `${BRAND.copy.commissionerHubLabel} | ${BRAND.copy.productName}`,
-  description:
-    'Run better leagues. Draft smarter. Build your fantasy legacy. Every tool a commissioner needs to create, manage, and grow their leagues — in one place.',
-}
-
+/**
+ * /commissioner-hub → /core/commissioner (five-doors restyle, 2026-09-17).
+ *
+ * This page was the all-leagues Commissioner Hub, and it did two jobs: what needs a
+ * commissioner this week, and Commissioner OS-style analytics. The user's calls
+ * (gap analysis of 2026-09-15, answered 2026-09-17): both hub views live in /core,
+ * analytics live in Commissioner OS, and this address forwards. Where each section
+ * went, so nothing reads as dropped by accident:
+ *
+ *   kept, restyled   the cross-league attention queue (all six detectors — see
+ *                    lib/core-app/commissioner/signals.ts), the @everyone
+ *                    broadcast (inline composer now), league status chips, and
+ *                    the tournament-hub entry under the same conditions
+ *   moved            League Pulse, League/Trade OS panels, Manager DNA,
+ *                    recommendations and the health map → Commissioner OS;
+ *                    "Send invites" → the one-league screen's Members area;
+ *                    "Open format hubs" → the hub switcher
+ *   removed          the landing-page hero, the sample-data preview (an honest
+ *                    empty state instead), the platform data-coverage "Command
+ *                    Center", "Ask Commissioner AI" (Chimmy is on every /core
+ *                    screen), the Draft readiness card (Draft HQ), the Migration
+ *                    Center (/import), "Leagues I play in", and the no-gambling
+ *                    banner
+ *
+ * `CommissionerHubPageClient.tsx` beside this file is no longer routed. It is left
+ * for a deliberate dead-code pass: several suites still read its source.
+ *
+ * ⚠ A PAGE, NOT A next.config REDIRECT, so the address keeps its existing route and
+ * adds none (standing rule: no new routes).
+ */
 export const dynamic = 'force-dynamic'
 
-export default async function CommissionerHubPage() {
-  const session = (await getServerSession(authOptions as never)) as {
-    user?: { id?: string }
-  } | null
-  const userId = typeof session?.user?.id === 'string' ? session.user.id.trim() : ''
-  const isAuthenticated = userId.length > 0
-
-  // getDashboardLeagueListForUser returns { leagues, sleeperUserId } — extract the array
-  const payload = isAuthenticated ? await getDashboardLeagueListForUser(userId).catch(() => null) : null
-  const leagues = (payload?.leagues ?? []) as UserLeague[]
-  const healthSnapshots =
-    isAuthenticated && leagues.length > 0
-      ? await getCommissionerHubHealthForUser(userId, leagues).catch(() => [])
-      : []
-
-  /*
-   * 🛑 THE TOURNAMENT HUB HAD NO FRONT DOOR. Its screens live at
-   * `/tournament-hub/[id]`, which needs an id nobody has memorised, so a
-   * commissioner could only reach them by typing a URL — and a built feature
-   * nobody can find is not a shipped one. This is the one place a commissioner
-   * of several leagues already lands.
-   *
-   * ⚠ SHOWN ONLY TO SOMEONE IT COULD HELP: a commissioner who runs a tournament,
-   * or one with enough leagues that grouping them is a real option. Offering it
-   * to a two-league commissioner is noise on the screen they came here for.
-   */
-  const tournamentCount =
-    isAuthenticated
-      ? await prisma.tournamentShell
-          .count({ where: { commissionerId: userId } })
-          .catch(() => 0)
-      : 0
-  const showTournamentEntry = tournamentCount > 0 || leagues.filter((l) => l.isCommissioner).length >= 3
-
-  return (
-    <>
-      {/*
-       * Front door to the six format hubs (/core/hubs). Shown to anyone with a
-       * league — the hub itself works out which formats you play and opens on the
-       * first one you have, so there is nothing to pre-filter here.
-       */}
-      {leagues.length > 0 ? (
-        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-4 pt-4">
-          <p className="text-[13px] text-muted">
-            Zombie, Tournament, Survivor, C2C, Guillotine and EFL leagues each have their own hub.
-          </p>
-          <Link
-            href="/core/hubs"
-            className="rounded-xl border border-subtle px-3 py-2 text-[13px] font-semibold transition hover:brightness-95"
-          >
-            Open format hubs →
-          </Link>
-        </div>
-      ) : null}
-      {showTournamentEntry ? (
-        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-4 pt-4">
-          <p className="text-[13px] text-muted">
-            {tournamentCount > 0
-              ? `You run ${tournamentCount} ${tournamentCount === 1 ? 'tournament' : 'tournaments'} across several leagues.`
-              : 'Run one big tournament across several of these leagues?'}
-          </p>
-          <Link
-            href="/tournament-hub"
-            className="rounded-xl border border-subtle px-3 py-2 text-[13px] font-semibold transition hover:brightness-95"
-          >
-            {tournamentCount > 0 ? 'Open tournament hub →' : 'Group leagues into a tournament →'}
-          </Link>
-        </div>
-      ) : null}
-      <CommissionerHubPageClient
-        leagues={leagues}
-        healthSnapshots={healthSnapshots}
-        demoMode={!isAuthenticated || leagues.length === 0}
-        isAuthenticated={isAuthenticated}
-      />
-    </>
-  )
+export default function CommissionerHubRedirect(): never {
+  redirect('/core/commissioner')
 }

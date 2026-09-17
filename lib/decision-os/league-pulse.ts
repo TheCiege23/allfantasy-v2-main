@@ -255,7 +255,7 @@ export function buildDashboardLeaguePulse({
       commissionerLeagues.length > 0
         ? {
             label: 'Open Commissioner Hub',
-            href: '/commissioner-hub',
+            href: '/core/commissioner',
             detail: 'Review health, activity, and recommended commissioner actions.',
           }
         : {
@@ -487,7 +487,7 @@ export function buildCommissionerLeaguePulse({
         }
       : {
           label: 'Review health dashboard',
-          href: '/commissioner-hub',
+          href: '/core/commissioner',
           detail: 'Keep an eye on league health, engagement, and fairness trends.',
         },
     lastUpdatedIso: now.toISOString(),

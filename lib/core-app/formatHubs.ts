@@ -77,7 +77,7 @@ export type FormatHubData = {
   partial: boolean
 }
 
-type MemberLeague = {
+export type MemberLeague = {
   id: string
   name: string | null
   platform: string
@@ -139,9 +139,21 @@ async function soft<T>(label: string, run: () => Promise<T>, fallback: T, flags:
   }
 }
 
-export async function getFormatHub(userId: string, requested: HubFormat | null): Promise<FormatHubData> {
-  const flags = { partial: false }
-
+/**
+ * Every league the reader is in, and which of the six formats each belongs to.
+ *
+ * Shared by the format hubs and the all-leagues Commissioner Hub, whose switcher
+ * shows the same six counts — one detection, so the pills agree on both screens.
+ */
+export async function readFormatMembership(
+  userId: string,
+  flags: { partial: boolean },
+): Promise<{
+  members: MemberLeague[]
+  formatIds: Record<HubFormat, Set<string>>
+  counts: Record<HubFormat, number>
+  eflPins: Map<string, string>
+}> {
   /*
    * Same membership rule `leagueNameForTitle` uses on the page: the importer's
    * own row, or a league where this reader has claimed a team. A hub must never
@@ -230,6 +242,13 @@ export async function getFormatHub(userId: string, requested: HubFormat | null):
   }
 
   const counts = Object.fromEntries(HUB_FORMATS.map((f) => [f, formatIds[f].size])) as Record<HubFormat, number>
+
+  return { members, formatIds, counts, eflPins }
+}
+
+export async function getFormatHub(userId: string, requested: HubFormat | null): Promise<FormatHubData> {
+  const flags = { partial: false }
+  const { members, formatIds, counts, eflPins } = await readFormatMembership(userId, flags)
 
   // With no format in the URL, open the first hub the reader actually has leagues in.
   const format: HubFormat = requested ?? HUB_FORMATS.find((f) => counts[f] > 0) ?? 'guillotine'
@@ -662,7 +681,11 @@ async function readTrades(userId: string, inFormat: MemberLeague[]) {
   return { pending, completed }
 }
 
-async function readMentions(userId: string, inFormat: MemberLeague[]): Promise<HubMention[]> {
+/** @-mentions of the reader in these leagues' chats, newest first. The all-leagues hub reads the same six. */
+export async function readMentions(
+  userId: string,
+  inFormat: Array<Pick<MemberLeague, 'id' | 'name'>>,
+): Promise<HubMention[]> {
   const nameById = new Map(inFormat.map((m) => [m.id, m.name?.trim() || 'Unnamed league']))
   const rows = await prisma.leagueChatMessage.findMany({
     where: {

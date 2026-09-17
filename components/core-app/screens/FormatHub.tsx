@@ -1,10 +1,13 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useState } from 'react'
 import Link from 'next/link'
 import type { FormatHubData, HubFormat } from '@/lib/core-app/formatHubs'
 import '@/components/core-app/af-format-hubs.css'
 import { WorkbookBarChart } from '@/components/core-app/charts/WorkbookChart'
+import { HUB_TABS, HubSwitcher } from '@/components/core-app/hubs/HubSwitcher'
+import { HubHeroMedia } from '@/components/core-app/hubs/HubHeroMedia'
+import { HubBroadcast } from '@/components/core-app/hubs/HubBroadcast'
 
 /**
  * Multi-league format hub — design_handoff_multi_league_hubs (2026-09-13).
@@ -39,7 +42,7 @@ type Theme = {
 
 const THEMES: Record<HubFormat, Theme> = {
   zombie: {
-    tab: 'Zombie',
+    tab: HUB_TABS.zombie,
     title: 'Zombie League Hub',
     glyph: '☣︎',
     desc: 'When a team dies, it doesn’t leave the league — it comes back wrong. Every outbreak and every reanimated roster you play in, from one command center.',
@@ -56,7 +59,7 @@ const THEMES: Record<HubFormat, Theme> = {
     poster: '/league-type-zombie.png',
   },
   tournament: {
-    tab: 'Tournament',
+    tab: HUB_TABS.tournament,
     title: 'Tournament Hub',
     glyph: '♜︎',
     desc: 'Every bracket you play in, one command center. Rounds, advancement and the road to the trophy across your tournament leagues.',
@@ -73,7 +76,7 @@ const THEMES: Record<HubFormat, Theme> = {
     poster: '/league-type-tournament.png',
   },
   survivor: {
-    tab: 'Survivor',
+    tab: HUB_TABS.survivor,
     title: 'Tribal Council Hub',
     glyph: '✺︎',
     desc: 'Immunity, exile and the blindside — every Survivor league you play in, from one fire. Exile Island reports straight to you.',
@@ -90,7 +93,7 @@ const THEMES: Record<HubFormat, Theme> = {
     poster: '/league-type-survivor.png',
   },
   c2c: {
-    tab: 'C2C',
+    tab: HUB_TABS.c2c,
     title: 'Campus ⇄ Canton Hub',
     glyph: '⇄',
     desc: 'College and pro rosters in one dynasty. Every C2C league you play in — campus and canton weighting, sync freshness and trades — in one place.',
@@ -107,7 +110,7 @@ const THEMES: Record<HubFormat, Theme> = {
     poster: '/league-type-c2c.png',
   },
   guillotine: {
-    tab: 'Guillotine',
+    tab: HUB_TABS.guillotine,
     title: 'Guillotine League Hub',
     glyph: '⚔︎',
     desc: 'Lowest score of the week doesn’t just lose — it’s executed. Every guillotine league you play in, and its weekly chop, from one hub.',
@@ -124,7 +127,7 @@ const THEMES: Record<HubFormat, Theme> = {
     poster: '/league-type-guillotine-hub.webp',
   },
   efl: {
-    tab: 'EFL Dynasty',
+    tab: HUB_TABS.efl,
     title: 'Empire Fantasy League Hub',
     glyph: '♛︎',
     desc: 'Every dynasty you rule, one throne room. Standings, succession and the road to empire across every league running EFL rules.',
@@ -141,8 +144,6 @@ const THEMES: Record<HubFormat, Theme> = {
     poster: '/league-type-efl-dynasty.webp',
   },
 }
-
-const ORDER: HubFormat[] = ['zombie', 'tournament', 'survivor', 'c2c', 'guillotine', 'efl']
 
 const PLATFORM_MARK: Record<string, string> = {
   sleeper: 'S',
@@ -162,129 +163,6 @@ function ago(iso: string): string {
   return `${Math.round(hours / 24)}d`
 }
 
-function HeroMedia({ theme }: { theme: Theme }) {
-  const ref = useRef<HTMLVideoElement | null>(null)
-  const [failed, setFailed] = useState(false)
-
-  // Ambient motion is decoration: honour a reduced-motion preference by holding the poster frame.
-  useEffect(() => {
-    const el = ref.current
-    if (!el || typeof window === 'undefined' || typeof window.matchMedia !== 'function') return
-    const mq = window.matchMedia('(prefers-reduced-motion: reduce)')
-    const apply = () => {
-      if (mq.matches) {
-        el.pause?.()
-        return
-      }
-      // Older engines return undefined rather than a promise; a blocked autoplay just keeps the poster.
-      const played = el.play?.() as Promise<void> | undefined
-      if (played && typeof played.catch === 'function') played.catch(() => {})
-    }
-    apply()
-    mq.addEventListener('change', apply)
-    return () => mq.removeEventListener('change', apply)
-  }, [theme.video])
-
-  if (failed) {
-    // eslint-disable-next-line @next/next/no-img-element
-    return <img className="afh-hero-media" src={theme.poster} alt="" aria-hidden />
-  }
-  return (
-    <video
-      ref={ref}
-      key={theme.video}
-      className="afh-hero-media"
-      src={theme.video}
-      poster={theme.poster}
-      autoPlay
-      loop
-      muted
-      playsInline
-      preload="metadata"
-      aria-hidden
-      onError={() => setFailed(true)}
-    />
-  )
-}
-
-function Broadcast({ theme, leagueIds }: { theme: Theme; leagueIds: string[] }) {
-  const [text, setText] = useState('')
-  const [state, setState] = useState<{ tone: 'good' | 'bad' | null; note: string }>({ tone: null, note: '' })
-  const [sending, setSending] = useState(false)
-
-  if (leagueIds.length === 0) {
-    return (
-      <div className="afh-compose">
-        <div className="afh-label">{theme.broadcastLabel}</div>
-        <p className="afh-compose-note">
-          Broadcasts go to leagues AllFantasy runs where you’re the commissioner or a co-commissioner, and
-          none of these is one.
-        </p>
-      </div>
-    )
-  }
-
-  async function send() {
-    const message = text.trim()
-    if (!message || sending) return
-    setSending(true)
-    setState({ tone: null, note: 'Sending…' })
-    try {
-      const res = await fetch('/api/commissioner/broadcast', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ leagueIds, message }),
-      })
-      const body = (await res.json().catch(() => null)) as
-        | { results?: { sent: boolean }[]; error?: string }
-        | null
-      if (!res.ok) {
-        setState({ tone: 'bad', note: body?.error ? `Not sent: ${body.error}.` : 'Not sent. Try again in a moment.' })
-        return
-      }
-      const sent = (body?.results ?? []).filter((r) => r.sent).length
-      setState({
-        tone: sent > 0 ? 'good' : 'bad',
-        note:
-          sent === leagueIds.length
-            ? `Sent to all ${sent} ${sent === 1 ? 'league' : 'leagues'}.`
-            : `Sent to ${sent} of ${leagueIds.length} leagues. The rest refused it.`,
-      })
-      if (sent > 0) setText('')
-    } catch {
-      setState({ tone: 'bad', note: 'Not sent — the connection dropped. Your message is still here.' })
-    } finally {
-      setSending(false)
-    }
-  }
-
-  return (
-    <div className="afh-compose">
-      <label className="afh-label" htmlFor="afh-broadcast">
-        {theme.broadcastLabel}
-      </label>
-      <div className="afh-compose-row">
-        <input
-          id="afh-broadcast"
-          value={text}
-          maxLength={500}
-          onChange={(e) => setText(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') void send()
-          }}
-          placeholder={`Message ${leagueIds.length === 1 ? 'your league' : `all ${leagueIds.length} leagues you commission`}…`}
-        />
-        <button type="button" className="afh-btn afh-btn--sm" onClick={() => void send()} disabled={sending || !text.trim()}>
-          {sending ? 'Sending' : 'Send'}
-        </button>
-      </div>
-      <p className="afh-compose-note" data-tone={state.tone ?? undefined} aria-live="polite">
-        {state.note || 'Posts as @everyone in each league chat and notifies its members.'}
-      </p>
-    </div>
-  )
-}
-
 export default function FormatHub({ data }: { data: FormatHubData }) {
   const theme = THEMES[data.format]
   const [connectOpen, setConnectOpen] = useState(false)
@@ -294,14 +172,7 @@ export default function FormatHub({ data }: { data: FormatHubData }) {
 
   return (
     <div className="afh" data-format={data.format}>
-      <nav className="afh-switch" aria-label="League formats">
-        {ORDER.map((f) => (
-          <Link key={f} href={`/core/hubs/${f}`} aria-current={f === data.format ? 'page' : undefined}>
-            {THEMES[f].tab}
-            {data.counts[f] > 0 && f !== data.format ? ` · ${data.counts[f]}` : ''}
-          </Link>
-        ))}
-      </nav>
+      <HubSwitcher current={data.format} counts={data.counts} />
 
       <header className="afh-head">
         <div className="afh-title">
@@ -368,7 +239,7 @@ export default function FormatHub({ data }: { data: FormatHubData }) {
       ) : null}
 
       <section className="afh-hero" aria-label={`${theme.tab} at a glance`}>
-        <HeroMedia theme={theme} />
+        <HubHeroMedia video={theme.video} poster={theme.poster} />
         <div className="afh-seal" aria-hidden>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={theme.poster} alt="" />
@@ -477,7 +348,7 @@ export default function FormatHub({ data }: { data: FormatHubData }) {
                     <Link href={`/core/draft-hq?league=${encodeURIComponent(l.leagueId)}`}>Draft</Link>
                     {l.youCommission ? (
                       <Link className="afh-card-commissioner" href={`/core/commissioner?league=${encodeURIComponent(l.leagueId)}`}>
-                        Commissioner OS
+                        Commissioner
                       </Link>
                     ) : null}
                   </nav>
@@ -553,7 +424,7 @@ export default function FormatHub({ data }: { data: FormatHubData }) {
                   </div>
                 ))
               )}
-              <Broadcast theme={theme} leagueIds={data.broadcastLeagueIds} />
+              <HubBroadcast label={theme.broadcastLabel} leagueIds={data.broadcastLeagueIds} />
             </section>
           </div>
         </>
@@ -577,7 +448,7 @@ export default function FormatHub({ data }: { data: FormatHubData }) {
           {theme.foot}
           {has && data.partial ? ' Some figures couldn’t be read just now and may be low.' : ''}
         </p>
-        <Link className="afh-link" href="/commissioner-hub">
+        <Link className="afh-link" href="/core/commissioner">
           Commissioner hub →
         </Link>
       </footer>

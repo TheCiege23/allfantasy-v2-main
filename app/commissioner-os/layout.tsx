@@ -113,7 +113,7 @@ export default async function CommissionerOSLayout({ children }: { children: Rea
         errorMessage={notificationsResponse.data ? null : notificationsResponse.error?.message}
       />
       <div className="flex min-h-screen" style={{ background: 'var(--bg)' }}>
-        <CommissionerSidebar />
+        <CommissionerSidebar activeLeagueId={activeLeagueId} />
         <div className="flex min-w-0 flex-1 flex-col">
           <CommissionerHeader
             unreadNotificationCount={notificationsSummaryResponse.data?.unreadCount ?? 0}

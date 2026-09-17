@@ -13,6 +13,7 @@ import {
   Settings as SettingsIcon,
   Activity as ActivityIcon,
   HelpCircle,
+  Flag,
   type LucideIcon,
 } from 'lucide-react'
 import {
@@ -47,7 +48,7 @@ export const MODULE_ICONS: Record<CommissionerModuleId, LucideIcon> = {
   help: HelpCircle,
 }
 
-export function CommissionerSidebar() {
+export function CommissionerSidebar({ activeLeagueId = null }: { activeLeagueId?: string | null } = {}) {
   const { activeModuleId } = useCommissionerNavigation()
   const { sidebarCollapsed, mobileSidebarOpen, closeMobileSidebar } = useCommissionerLayout()
   const { isModuleEnabled } = useCommissionerFeatureFlags()
@@ -81,6 +82,26 @@ export function CommissionerSidebar() {
           onNavigate={closeMobileSidebar}
         />
         <div className="mt-auto border-t" style={{ borderColor: 'var(--border)' }}>
+          {/*
+            The way back to the Commissioner Hub (five-doors restyle, 2026-09-17): the hub
+            says what needs you, Commissioner OS says how the league is doing, and each
+            links to the other. Opens on the league this app is showing.
+          */}
+          <div className="p-2 pb-0">
+            <Link
+              href={
+                activeLeagueId
+                  ? `/core/commissioner?league=${encodeURIComponent(activeLeagueId)}`
+                  : '/core/commissioner'
+              }
+              onClick={closeMobileSidebar}
+              className="focus-ring flex items-center gap-3 rounded-[var(--radius-standard)] px-3 py-2 text-sm font-medium transition-premium hover:opacity-90"
+              style={{ color: 'var(--accent)', borderLeft: '2px solid transparent' }}
+            >
+              <Flag size={20} aria-hidden />
+              {!sidebarCollapsed ? <span>Commissioner Hub</span> : <span className="sr-only">Commissioner Hub</span>}
+            </Link>
+          </div>
           <SidebarList
             items={COMMISSIONER_SECONDARY_NAV_ITEMS}
             activeModuleId={activeModuleId}
