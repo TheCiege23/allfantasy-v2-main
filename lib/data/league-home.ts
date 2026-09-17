@@ -16,6 +16,7 @@ import { attachPlayerMediaBatch } from '@/lib/player-media'
 import { getLeagueChatMessages } from '@/lib/league-chat/LeagueChatMessageService'
 import { getFormatIntroMetadata } from '@/lib/league/format-engine'
 import { resolveLeagueIntroFormatKey } from '@/lib/league/resolveLeagueIntroFormatKey'
+import { readTradeBlock } from '@/lib/trade-block/importedTradeBlock'
 import type {
   LeagueActivityItem,
   LeagueBracketMatchup,
@@ -1469,14 +1470,18 @@ function jsonAssetLabels(value: Prisma.JsonValue | null | undefined): string[] {
 }
 
 async function buildTradesData(context: LeagueContext): Promise<LeagueTradesData> {
-  const tradeBlockRows = await prisma.tradeBlockEntry.findMany({
-    where: {
-      sleeperLeagueId: context.league.platformLeagueId,
-      isActive: true,
-    },
-    orderBy: { updatedAt: 'desc' },
-    take: 10,
-  }).catch(() => [])
+  /*
+   * The same reader the Trades tab, the player card and Chimmy use (2026-09-17): only listings whose
+   * team still holds the player. The direct read of the active rows kept a traded player listed.
+   * `context` exists only once `resolveLeagueAccess` has passed, which `readTradeBlock` requires.
+   */
+  const tradeBlockRows = ((await readTradeBlock(context.league.id))?.listings ?? []).slice(0, 10).map((l) => ({
+    id: `${l.rosterId}:${l.sleeperId}`,
+    playerId: l.sleeperId,
+    playerName: l.playerName,
+    position: l.position,
+    team: l.nflTeam,
+  }))
 
   const histories = await prisma.leagueTradeHistory.findMany({
     where: { sleeperLeagueId: context.league.platformLeagueId },

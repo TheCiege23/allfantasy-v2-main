@@ -65,6 +65,8 @@ type LogFilter = 'all' | 'completed' | 'pending' | 'closed'
 
 type PanelResponse = {
   tradeBlock?: LeagueTradeBlockPanelItem[]
+  /** What the block can and cannot show on this platform; null for a native league. */
+  tradeBlockNote?: string | null
   activeTrades?: LeagueTradeHistoryItem[]
   /** Native completed and closed negotiation history, privacy-filtered by the server. */
   historyTrades?: LeagueTradeHistoryItem[]
@@ -910,6 +912,7 @@ export function TradesTab({ league, teams }: TradesTabProps) {
   // partner on their own platform. Drives every "Propose"→"Build a shadow trade" relabel.
   const tradeShadowNotice = useMemo(() => shadowDisclosure(league.platform), [league.platform])
   const [tradeBlock, setTradeBlock] = useState<LeagueTradeBlockPanelItem[]>([])
+  const [tradeBlockNote, setTradeBlockNote] = useState<string | null>(null)
   const [activeTrades, setActiveTrades] = useState<LeagueTradeHistoryItem[]>([])
   const [historyTrades, setHistoryTrades] = useState<LeagueTradeHistoryItem[]>([])
   const [executedTrades, setExecutedTrades] = useState<LeagueTradeHistoryItem[]>([])
@@ -967,6 +970,7 @@ export function TradesTab({ league, teams }: TradesTabProps) {
       if (!res.ok) {
         setErr('Could not load trades.')
         setTradeBlock([])
+        setTradeBlockNote(null)
         setActiveTrades([])
         setHistoryTrades([])
         setExecutedTrades([])
@@ -977,6 +981,7 @@ export function TradesTab({ league, teams }: TradesTabProps) {
         return
       }
       setTradeBlock(Array.isArray(data?.tradeBlock) ? data.tradeBlock : [])
+      setTradeBlockNote(typeof data?.tradeBlockNote === 'string' ? data.tradeBlockNote : null)
       setActiveTrades(Array.isArray(data?.activeTrades) ? (data.activeTrades as LeagueTradeHistoryItem[]) : [])
       setHistoryTrades(Array.isArray(data?.historyTrades) ? (data.historyTrades as LeagueTradeHistoryItem[]) : [])
       setExecutedTrades(Array.isArray(data?.executedTrades) ? (data.executedTrades as LeagueTradeHistoryItem[]) : [])
@@ -987,6 +992,7 @@ export function TradesTab({ league, teams }: TradesTabProps) {
     } catch {
       setErr('Could not load trades.')
       setTradeBlock([])
+      setTradeBlockNote(null)
       setActiveTrades([])
       setHistoryTrades([])
       setExecutedTrades([])
@@ -1814,7 +1820,15 @@ export function TradesTab({ league, teams }: TradesTabProps) {
           </div>
           {tradeBlock.length === 0 ? (
             <div className="rounded-2xl border border-[#1E2A42] bg-[#131929] px-4 py-8 text-center">
-              <p className="text-[13px] text-white/45">No players on the trade block yet</p>
+              {/* With a note, "empty" only means nobody marked a player here — say that, and why. */}
+              <p className="text-[13px] text-white/45">
+                {tradeBlockNote ? 'No players marked on the trade block in AllFantasy' : 'No players on the trade block yet'}
+              </p>
+              {tradeBlockNote ? (
+                <p className="mx-auto mt-1.5 max-w-md text-[11px] text-white/40" data-testid="trade-block-note">
+                  {tradeBlockNote}
+                </p>
+              ) : null}
               <p className="mt-1.5 text-[11px] text-white/30">
                 {league.name} · {teams.length} teams
               </p>
@@ -1862,6 +1876,11 @@ export function TradesTab({ league, teams }: TradesTabProps) {
               })}
             </div>
           )}
+          {tradeBlock.length > 0 && tradeBlockNote ? (
+            <p className="text-[10px] text-white/35" data-testid="trade-block-note">
+              {tradeBlockNote}
+            </p>
+          ) : null}
         </section>
       ) : null}
 

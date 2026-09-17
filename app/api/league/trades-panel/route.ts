@@ -10,6 +10,7 @@ import { buildProviderOfferHistoryRows } from '@/lib/provider-trades/providerOff
 import { listAfLeagueTrades } from '@/lib/league-trade-engine/tradeService'
 import { isElevatedCommissioner } from '@/server/services/permissionService'
 import { resolveWriteAuthority } from '@/lib/league/write-authority'
+import { readTradeBlock, tradeBlockSupport } from '@/lib/trade-block/importedTradeBlock'
 import { getLeagueContext } from '@/lib/league-context/leagueContextService'
 import { getMarketValues } from '@/lib/trade-intel/marketValueService'
 import {
@@ -524,6 +525,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({
         draft,
         tradeBlock: [] as LeagueTradeBlockPanelItem[],
+        tradeBlockNote: tradeBlockSupport('yahoo').note,
         activeTrades: [...activeTrades, ...mapProviderTrades(scan.trades, evaluations)],
         historyTrades,
         activeCount: activeTrades.length + scan.trades.length,
@@ -552,6 +554,11 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({
       draft,
       tradeBlock: [] as LeagueTradeBlockPanelItem[],
+      /*
+       * An imported league's empty block is a platform we cannot read, not a league with nothing on
+       * it, so the tab says which. A native league keeps its plain empty state.
+       */
+      tradeBlockNote: resolveWriteAuthority(league.platform) === 'NATIVE' ? null : tradeBlockSupport(platform).note,
       activeTrades,
       historyTrades,
       executedTrades,
@@ -574,25 +581,22 @@ export async function GET(req: NextRequest) {
     })
   }
 
-  const tradeBlockRows = await prisma.tradeBlockEntry
-    .findMany({
-      where: {
-        sleeperLeagueId,
-        isActive: true,
-      },
-      orderBy: { updatedAt: 'desc' },
-      take: 48,
-    })
-    .catch(() => [])
-
-  const tradeBlock: LeagueTradeBlockPanelItem[] = tradeBlockRows.map((row) => ({
-    id: row.id,
-    playerId: row.playerId,
-    name: row.playerName,
-    position: (row.position ?? 'FLEX').trim() || 'FLEX',
-    team: row.team?.trim() || null,
-    ownerName: row.createdByUsername?.trim() || 'Manager',
+  /*
+   * The block through the one reader the player card and Chimmy use (2026-09-17). A listing counts only
+   * while the roster that listed the player still holds him, and is named by that team. The direct read
+   * of the active rows this replaced kept a traded player "on the block" for a team that no longer had
+   * him — harmless while the table was empty, which it was until managers could list players.
+   */
+  const blockRead = await readTradeBlock(league.id)
+  const tradeBlock: LeagueTradeBlockPanelItem[] = (blockRead?.listings ?? []).slice(0, 48).map((l) => ({
+    id: `${l.rosterId}:${l.sleeperId}`,
+    playerId: l.sleeperId,
+    name: l.playerName,
+    position: (l.position ?? 'FLEX').trim() || 'FLEX',
+    team: l.nflTeam?.trim() || null,
+    ownerName: l.teamName?.trim() || l.ownerName?.trim() || 'Manager',
   }))
+  const tradeBlockNote = blockRead ? blockRead.support.note : 'The trade block could not be read right now.'
 
   // Two independent sources on an imported league:
   //   1. AF-native trades proposed via the AF Trade Center on imported rosters.
@@ -758,6 +762,7 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({
     draft,
     tradeBlock,
+    tradeBlockNote,
     activeTrades,
     historyTrades: [
       ...mapProviderTrades(providerCompleted, completedEvaluations),
