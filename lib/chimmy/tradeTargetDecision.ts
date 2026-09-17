@@ -1,3 +1,4 @@
+import { MIN_GAMES_FOR_STANCE } from '@/lib/trade-value/teamProfile'
 import type { TeamStance } from '@/lib/trade-value/types'
 import type { FairnessBand } from '@/lib/trade-discovery/redraftTradeDiscovery'
 
@@ -142,11 +143,10 @@ const STANCE_PHRASE: Record<TeamStance, string> = {
  * Junkies league: "No, don't trade for Rashee Rice, because you are rebuilding at 0-1, 12th of 12"
  * — the answer turned on one result, while Rice would have started for +7.2 points at a fair price.
  *
- * So the record decides nothing until this many games are played, and the answer says so. Every
- * team in a league has played about the same number of games, so the asker's count stands in for
- * the partner's too. A presentation threshold, not a model.
+ * So the record decides nothing until `MIN_GAMES_FOR_STANCE` games are played — the same threshold
+ * `buildTeamProfile` now applies itself — and the answer says so. Every team in a league has played
+ * about the same number of games, so the asker's count stands in for the partner's too.
  */
-const MIN_GAMES_FOR_STANCE = 4
 
 function gamesPlayed(you: TradeTargetFacts['you']): number {
   const r = you.record

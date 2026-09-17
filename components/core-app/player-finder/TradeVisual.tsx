@@ -119,7 +119,8 @@ export function TradeVisual({ state, playerName }: { state: SectionState<PlayerT
         </h3>
         <p className="af-pf-block-sub">
           {v.partner.teamName}
-          {v.partner.ownerName ? ` · @${v.partner.ownerName}` : ''} · {v.partner.stance}
+          {v.partner.ownerName ? ` · @${v.partner.ownerName}` : ''} ·{' '}
+          {v.partner.stanceSettled === false ? 'too early to tell if buying or selling' : v.partner.stance}
           {v.partner.needs.length > 0 ? ` · needs ${v.partner.needs.join(', ')}` : ''}
           {v.partner.surpluses.length > 0 ? ` · deep at ${v.partner.surpluses.join(', ')}` : ''}
         </p>

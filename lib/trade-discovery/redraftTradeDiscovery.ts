@@ -50,6 +50,8 @@ export interface DiscoveryRoster {
   teamName: string
   managerDisplayName?: string | null
   stance: TeamStance
+  /** False early in the season, when `stance` is `middle` because the record is too short to read. */
+  stanceSettled?: boolean
   weakPositions: string[]
   strongPositions: string[]
   players: DiscoveryPlayer[]

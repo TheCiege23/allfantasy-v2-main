@@ -164,6 +164,25 @@ describe('getPlayerTradeVisual', () => {
     expect(v.values).toMatchObject({ mode: 'redraft', ppr: 0.5, numQbs: 1 })
   })
 
+  /* One game is not a season (2026-09-17): the loader carries whether each side's stance is settled. */
+  it('a 0-1 partner is not a rebuilder yet, and the card is told so', async () => {
+    mockTeamFindMany.mockResolvedValue([
+      { ...TASHA, wins: 0, losses: 1 },
+      { ...ME, wins: 1, losses: 0 },
+    ])
+    const state = await getPlayerTradeVisual('L-gang', KINCAID, 'me')
+    if (!state.available) throw new Error('expected a visual')
+    expect(state.data.partner).toMatchObject({ stance: 'middle', stanceSettled: false })
+    expect(state.data.you).toMatchObject({ stance: 'middle', stanceSettled: false })
+  })
+
+  it('a settled record still names the stance', async () => {
+    const state = await getPlayerTradeVisual('L-gang', KINCAID, 'me')
+    if (!state.available) throw new Error('expected a visual')
+    expect(state.data.you).toMatchObject({ stance: 'contender', stanceSettled: true })
+    expect(state.data.partner.stanceSettled).toBe(true)
+  })
+
   it('keeps the package when the engine fails or runs out of time, and says so', async () => {
     mockRunTradeAnalysis.mockRejectedValue(new Error('engine down'))
     const state = await getPlayerTradeVisual('L-gang', KINCAID, 'me')
