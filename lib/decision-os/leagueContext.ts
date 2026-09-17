@@ -1,28 +1,27 @@
 /**
  * Fantasy OS Suite — Phase OS-A2: League Context Wiring.
  *
- * The Prisma-backed read/write layer over `DecisionOsLeagueContext`, sitting on top of the pure
+ * The Prisma-backed READ layer over `DecisionOsLeagueContext`, sitting on top of the pure
  * interpretation module (`leagueFinancialContext.ts`) built in Phase OS-A1. Mirrors the honest-
  * degradation pattern already established by `defaultLoadImportedActivityRows`
  * (`lib/decision-os/behavioral/api/real-data-provider.ts`): if the model isn't migrated/generated in
- * a given environment yet, reads degrade to the honest pure default rather than crashing — the OS-A1
- * migration has not been applied to any database as of this phase, so this is the expected path in
- * every real environment today, not a hypothetical.
+ * a given environment yet, reads degrade to the honest pure default rather than crashing.
  *
- * Writes are held to a stricter standard: a confirm/reset action is a real, user-initiated claim, so
- * if the store genuinely isn't available, the caller must be told honestly (a real error), not given
- * a false "confirmed" response that silently didn't persist.
+ * The write half — `persistLeagueFinancialConfirmation` and the store-unavailable error it threw, so
+ * that a confirm which did not persist could never be reported as success — was removed on
+ * 2026-09-17 together with `/api/decision-os/league-context`, its only caller. That route's own only
+ * caller was the League Context card, which went with the retired `/commissioner-hub` page. Rows
+ * already on file still read; nothing writes one today. A commissioner surface that wants
+ * confirm/reset back needs a new entry point, and the pure `applyManualFinancialConfirmation` /
+ * `resetLeagueFinancialContext` it would build on are still in `leagueFinancialContext.ts`.
  */
 import { prisma as defaultPrisma } from '@/lib/prisma'
 import {
-  applyManualFinancialConfirmation,
   defaultLeagueFinancialContext,
-  resetLeagueFinancialContext,
   type LeagueEscrowProvider,
   type LeagueFinancialConfidence,
   type LeagueFinancialContext,
   type LeagueFinancialStatus,
-  type ManualFinancialConfirmationInput,
 } from './leagueFinancialContext'
 
 interface PersistedLeagueContextRow {
@@ -39,25 +38,10 @@ interface PersistedLeagueContextRow {
 
 export interface LeagueContextStoreDeps {
   findContext(leagueId: string): Promise<PersistedLeagueContextRow | null>
-  upsertContext(leagueId: string, context: LeagueFinancialContext): Promise<void>
-}
-
-/** Thrown only by `upsertContext` — the model isn't migrated/generated in this environment. Routes
- * should catch this and return an honest 503, never silently swallow it as if the write succeeded. */
-export class LeagueContextStoreUnavailableError extends Error {
-  constructor() {
-    super('DecisionOsLeagueContext store is not available in this environment (not migrated/generated yet).')
-    this.name = 'LeagueContextStoreUnavailableError'
-  }
 }
 
 type LeagueContextDelegate = {
   findUnique(args: { where: { leagueId: string } }): Promise<PersistedLeagueContextRow | null>
-  upsert(args: {
-    where: { leagueId: string }
-    create: Record<string, unknown>
-    update: Record<string, unknown>
-  }): Promise<unknown>
 }
 
 function resolveDelegate(): LeagueContextDelegate | null {
@@ -77,31 +61,8 @@ async function defaultFindContext(leagueId: string): Promise<PersistedLeagueCont
   }
 }
 
-async function defaultUpsertContext(leagueId: string, context: LeagueFinancialContext): Promise<void> {
-  const delegate = resolveDelegate()
-  if (!delegate) {
-    throw new LeagueContextStoreUnavailableError()
-  }
-  const fields = {
-    financialStatus: context.financialStatus,
-    buyInAmount: context.buyInAmount,
-    buyInCurrency: context.buyInCurrency,
-    escrowProvider: context.escrowProvider,
-    financialConfidence: context.financialConfidence,
-    financialNotes: context.financialNotes,
-    isUserConfirmed: context.isUserConfirmed,
-    lastVerifiedAt: context.lastVerifiedAt,
-  }
-  await delegate.upsert({
-    where: { leagueId },
-    create: { leagueId, ...fields },
-    update: fields,
-  })
-}
-
 const defaultDeps: LeagueContextStoreDeps = {
   findContext: defaultFindContext,
-  upsertContext: defaultUpsertContext,
 }
 
 function rowToContext(row: PersistedLeagueContextRow): LeagueFinancialContext {
@@ -154,30 +115,4 @@ export async function resolveLeagueFinancialContextSafely(
   } catch {
     return null
   }
-}
-
-export type LeagueFinancialConfirmationAction =
-  | { type: 'confirm'; input: ManualFinancialConfirmationInput }
-  | { type: 'reset' }
-
-/**
- * Applies a real, user-initiated confirm/reset action and persists it. Reads the current context
- * first (so a confirm action layers onto whatever's already on file, matching
- * `applyManualFinancialConfirmation`'s own "current + input" contract), then writes the result.
- * Throws `LeagueContextStoreUnavailableError` if the store genuinely can't persist — callers must
- * surface that honestly, not report success.
- */
-export async function persistLeagueFinancialConfirmation(
-  leagueId: string,
-  action: LeagueFinancialConfirmationAction,
-  deps: LeagueContextStoreDeps = defaultDeps,
-  now: Date = new Date(),
-): Promise<LeagueFinancialContext> {
-  const current = await resolveLeagueFinancialContext(leagueId, deps)
-  const next =
-    action.type === 'reset'
-      ? resetLeagueFinancialContext(leagueId, 'unspecified')
-      : applyManualFinancialConfirmation(current, action.input, now)
-  await deps.upsertContext(leagueId, next)
-  return next
 }

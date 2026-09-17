@@ -3,12 +3,12 @@
  *
  * Aggregates the already-real, single-league `resolveUserOsSnapshot` (`userOs.ts`) across every
  * league one signed-in user belongs to — commissioner AND member AND imported, unlike Commissioner
- * OS's own command center (`commissionerCommandCenter.ts`), which filters to commissioned leagues
+ * OS's own command center (`commissionerCommandCenter.ts`, retired 2026-09-17), which filtered to commissioned leagues
  * only. This is Manager OS's own "Multi-League Overview": the first genuinely cross-league Decision
  * OS composition built for the person PLAYING in leagues, not running them.
  *
  * Sibling, not wrapper, matching every other Decision OS multi-league composition's own precedent
- * (`commissionerCommandCenter.ts`, `platformOs.ts`): this calls `resolveUserOsSnapshot` directly per
+ * (`platformOs.ts`): this calls `resolveUserOsSnapshot` directly per
  * league rather than wrapping a sibling composition. Zero new derivation — every field below is
  * either a direct pass-through of `UserOsSnapshot`'s own already-real output or a signal produced by
  * `deriveManagerAttentionSignals` (`attentionSignals.ts`), which itself only relabels
@@ -34,7 +34,7 @@ import type { Recommendation } from './phase6/recommendations/types'
 const MANAGER_RECOMMENDATIONS_CAP = 60
 
 /** `'low'` retention risk + active participation is the only "healthy" bucket — mirrors
- * `commissionerCommandCenter.ts`'s own `HEALTHY_STATUSES`/`AT_RISK_STATUSES` bucketing pattern, just
+ * `platformOs.ts`'s own `HEALTHY_STATUSES`/`AT_RISK_STATUSES` bucketing pattern, just
  * over `ManagerRetentionRisk` instead of the league-health engine's `overallStatus`.
  *
  * Phase OS-C3: found during live validation — this originally only included `high`/`critical`, while
@@ -102,7 +102,7 @@ function emptySnapshot(now: Date, warnings: string[]): ManagerCommandCenterSnaps
 
 /** Defense-in-depth — `resolveUserOsSnapshot` already never throws on its own (it degrades to
  * `available: false` internally), matching every other Decision OS composition's identical
- * precedent (`commissionerCommandCenter.ts`'s own `resolveLeagueSafely`). */
+ * precedent (`platformOs.ts`'s own `resolveLeagueSafely`). */
 async function resolveManagerLeagueSafely(
   leagueId: string,
   userId: string,
@@ -140,7 +140,7 @@ export async function resolveManagerCommandCenterSnapshot(
   const leagueTrends: DailyBriefLeagueTrend[] = []
 
   // Phase OS-C6: resolve every league's snapshot in parallel, matching the pattern every sibling
-  // multi-league composition already uses (`commissionerCommandCenter.ts`, `platformOs.ts`,
+  // multi-league composition already uses (`platformOs.ts`,
   // `attentionQueue.ts`) — a real, verified inconsistency found during the production-readiness
   // audit, not a premature optimization. Fetch is deliberately separated from accumulation: the
   // accumulation loop below stays synchronous and unchanged, only the I/O is parallelized.
@@ -214,7 +214,7 @@ export async function resolveManagerCommandCenterSnapshot(
   }
 
   // Highest severity first across ALL leagues together, capped only after the full comparison —
-  // matching `commissionerCommandCenter.ts`'s identical rationale (never crowd out a more urgent
+  // matching `platformOs.ts`'s identical rationale (never crowd out a more urgent
   // signal from a later league by capping incrementally).
   const attentionQueue = sortAttentionSignals(attentionSignals).slice(0, ATTENTION_QUEUE_CAP)
 

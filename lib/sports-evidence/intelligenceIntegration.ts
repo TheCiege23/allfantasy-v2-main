@@ -96,7 +96,6 @@ export class CertifiedIntelligenceIntegrationService {
 
   describeLeagueSportsContext(input: { season: string; week: string | null; now?: Date }) { return this.buildContext('league_intelligence', input) }
   describeManagerSportsContext(input: { season: string; week: string | null; now?: Date }) { return this.buildContext('manager_intelligence', input) }
-  describeCommissionerSportsContext(input: { season: string; week: string | null; now?: Date }) { return this.buildContext('commissioner_intelligence', input) }
   describeCoachSportsContext(input: { season: string; week: string | null; now?: Date }) { return this.buildContext('coach', input) }
 
   /** Platform / operator observability bundle: provider coverage + freshness + evidence availability. No credentials. */

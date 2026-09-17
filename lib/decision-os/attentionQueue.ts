@@ -8,15 +8,16 @@
  * `resolveAttentionQueueSnapshot` directly without duplicating this composition's fetch/derive/sort
  * logic.
  *
- * Explicit, documented tradeoff: `commissionerCommandCenter.ts` (Commissioner OS's OS-B1 composition)
- * deliberately does NOT call this resolver. It already fetches a `MissionControlSnapshot` per league
- * for its own league-summary/ranking output — calling this resolver too would fetch Mission Control
- * TWICE per league on the same Commissioner Hub page load, exactly the double-fetch this whole Decision
- * OS suite's "sibling, not wrapper" discipline exists to avoid (see `commissionerCommandCenter.ts`'s
- * own header comment). Instead, `commissionerCommandCenter.ts` calls the pure `deriveLeagueAttentionSignals`
- * directly, reusing the `MissionControlSnapshot` it already has in hand, and shares only the small
- * `loadUpcomingDraftDates` batched lookup below (not a duplicate of anything expensive). This module
- * exists for every OTHER consumer that doesn't already have Mission Control resident.
+ * Explicit, documented tradeoff, and `platformOs.ts` is the surviving example of it: a composition
+ * that already fetches a `MissionControlSnapshot` per league for its own output deliberately does NOT
+ * call this resolver, because that would fetch Mission Control TWICE per league on one page load —
+ * the double-fetch this whole Decision OS suite's "sibling, not wrapper" discipline exists to avoid.
+ * Such a composition calls the pure `deriveLeagueAttentionSignals` directly instead, reusing the
+ * snapshot it already has in hand, and shares only the small `loadUpcomingDraftDates` batched lookup
+ * below (not a duplicate of anything expensive). This module exists for every OTHER consumer that
+ * doesn't already have Mission Control resident. `commissionerCommandCenter.ts` was the other such
+ * composition until 2026-09-17, when it went with the callerless
+ * `/api/decision-os/commissioner-command-center`.
  */
 import { prisma as defaultPrisma } from '@/lib/prisma'
 import { resolveMissionControlSnapshot } from './missionControl'
@@ -38,7 +39,7 @@ export interface AttentionQueueSnapshot {
  * Batched lookup of real, persisted draft dates for AF-native leagues (`LeagueSettings.draftDateUtc`).
  * Deliberately unfiltered by date range — `deriveLeagueAttentionSignals` owns the "what counts as
  * approaching" window, so this stays a plain, reusable "what draft dates exist" lookup shared by both
- * this resolver and `commissionerCommandCenter.ts`. Honest degradation to an empty map on any failure
+ * this resolver and `platformOs.ts`. Honest degradation to an empty map on any failure
  * or for a league with no `LeagueSettings` row (Sleeper-imported leagues have none) — never a crash for
  * a signal that's explicitly best-effort.
  */
@@ -65,7 +66,7 @@ export async function loadUpcomingDraftDates(
 /**
  * Resolves the full, cross-league, priority-sorted Attention Queue for an EXPLICIT set of league IDs —
  * the same "explicit-list only, caller resolves authorization" contract every sibling Decision OS
- * composition already follows (`commissionerCommandCenter.ts`, `platformOs.ts`). Never throws — a
+ * composition already follows (`platformOs.ts`). Never throws — a
  * failure resolving any one league's Mission Control or League Context data simply yields no signals
  * for that league, never a broken response for the whole queue.
  */

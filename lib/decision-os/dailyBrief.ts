@@ -4,7 +4,7 @@
  * A reusable, deterministic composition layer over already-produced Decision OS outputs — NOT a new
  * intelligence layer. This module never recomputes a health score, a ranking, or an Attention Signal;
  * it only reshapes signals + a handful of already-aggregated counts (the exact same numbers
- * `commissionerCommandCenter.ts` already produces) into a "what happened, why does it matter, what
+ * `platformOs.ts` already produces) into a "what happened, why does it matter, what
  * should I do today" digest shape. Future consumers: a Notification Engine (OS-B4), an email digest, a
  * mobile home screen, an AI Coach context feed, or (as of this phase) the Commissioner Hub's own
  * "Today's Brief" card.
@@ -40,7 +40,7 @@ export interface DailyBriefOverview {
   draftsApproachingCount: number
 }
 
-/** Same shape as `CommissionerRecentChangeEntry` (`commissionerCommandCenter.ts`) — a real trend this
+/** Same shape as the recent-change entry the retired `commissionerCommandCenter.ts` produced — a real trend this
  * module consumes as-is, never re-derives. `'flat'` is excluded from the caller's `leagueTrends` input
  * being surfaced as a highlight ("meaningful activity" means the trend actually moved). */
 export interface DailyBriefLeagueHighlight {

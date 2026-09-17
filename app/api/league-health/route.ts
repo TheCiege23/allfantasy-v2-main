@@ -17,8 +17,8 @@ export async function POST(request: NextRequest) {
     //
     // Phase OS-C6.1: gated by `authorizeLeagueRead` — this branch reads real Decision OS league
     // health data (found during the production-readiness audit to have no per-league membership
-    // check, same gap as `/api/decision-os/mission-control`). The legacy explicit-metrics branch
-    // below is untouched — it computes from caller-supplied metrics only, no league-scoped read.
+    // check, the same gap the since-retired `/api/decision-os/mission-control` had). The legacy
+    // explicit-metrics branch below is untouched — it computes from caller-supplied metrics only, no league-scoped read.
     if (typeof body?.leagueId === 'string' && body?.source === 'decision_os') {
       const gate = await authorizeLeagueRead(body.leagueId, session.user.id)
       if (!gate.authorized) {

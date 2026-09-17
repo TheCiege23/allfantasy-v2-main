@@ -162,8 +162,8 @@ export async function resolvePlatformOsSnapshot(
   const trendCoverage = emptyTrendCoverage()
   const attentionSignals: DecisionOsAttentionSignal[] = []
 
-  // Batched once, up front — the same shared lookup `attentionQueue.ts`/`commissionerCommandCenter.ts`
-  // already use, not a per-league query.
+  // Batched once, up front — the same shared lookup `attentionQueue.ts` already uses, not a
+  // per-league query.
   const draftDates = await loadUpcomingDraftDates(leagueIds)
 
   for (const leagueId of leagueIds) {
@@ -178,8 +178,7 @@ export async function resolvePlatformOsSnapshot(
       unavailableLeagueCount += 1
       trendCoverage.unavailable += 1
       // League health being unavailable doesn't mean EVERY signal source is unavailable — League
-      // Context and the real draft date are independent tables (same reasoning
-      // `commissionerCommandCenter.ts` already applies).
+      // Context and the real draft date are independent tables.
       attentionSignals.push(
         ...deriveLeagueAttentionSignals({
           leagueId,

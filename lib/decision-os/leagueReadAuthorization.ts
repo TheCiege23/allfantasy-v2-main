@@ -7,8 +7,8 @@
  * function every league settings route already uses to gate WRITES via `requireCommissionerRole`/
  * `requireCommissionerOnly`. This module adds no new role concept and no new database query; it only
  * wraps `getLeagueRole`'s own output in the same `{authorized, status}` discriminated-union shape every
- * sibling Decision OS authorization module already uses (`leagueContextAuthorization.ts`,
- * `platformOsAuthorization.ts`).
+ * sibling Decision OS authorization module already uses (`platformOsAuthorization.ts`, and
+ * `leagueContextAuthorization.ts` before it was retired with its route on 2026-09-17).
  *
  * Allows: commissioner, co-commissioner, member, and viewer — any real, granted relationship to the
  * league. `viewer` is included deliberately: it is itself a real, commissioner-granted role (per
