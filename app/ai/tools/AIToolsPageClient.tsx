@@ -300,14 +300,14 @@ export default function AIToolsPageClient() {
           <AIQuickActionBar />
         </div>
 
-        {/* Saved recommendations */}
+        {/* Saved AI results — the workbench saves to /api/ai/history, listed at /ai/history */}
         <div className="mb-4">
           <Link
-            href="/ai/saved"
+            href="/ai/history"
             data-testid="ai-tools-open-history-link"
             className="inline-flex min-h-[44px] touch-manipulation items-center rounded-lg border border-white/20 bg-white/5 px-3 py-2 text-xs font-medium text-white/80 hover:bg-white/10 sm:min-h-0"
           >
-            Open saved recommendations
+            Open saved results
           </Link>
         </div>
 

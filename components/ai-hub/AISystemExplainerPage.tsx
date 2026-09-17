@@ -109,12 +109,12 @@ export default function AISystemExplainerPage() {
                 <ArrowRight className="h-4 w-4 shrink-0" />
               </Link>
               <Link
-                href="/ai/saved"
+                href="/ai/history"
                 data-testid="ai-system-open-saved-button"
                 className="inline-flex min-h-[48px] items-center justify-center gap-2 rounded-xl border border-cyan-500/35 bg-cyan-500/10 px-5 py-3 text-sm font-semibold text-cyan-100 hover:bg-cyan-500/20 transition-colors"
               >
                 <BookmarkCheck className="h-5 w-5 shrink-0" />
-                Open Saved Recommendations
+                Open Saved AI Results
               </Link>
             </div>
           </div>
@@ -251,12 +251,12 @@ export default function AISystemExplainerPage() {
                 <ArrowRight className="h-4 w-4 shrink-0" />
               </Link>
               <Link
-                href="/ai/saved"
+                href="/ai/history"
                 data-testid="ai-system-saved-recommendations-button"
                 className="inline-flex min-h-[48px] items-center justify-center gap-2 rounded-xl border border-cyan-500/35 bg-cyan-500/10 px-5 py-3 text-sm font-semibold text-cyan-100 hover:bg-cyan-500/20 transition-colors"
               >
                 <BookmarkCheck className="h-5 w-5 shrink-0" />
-                Saved Recommendations
+                Saved AI Results
               </Link>
             </div>
           </section>

@@ -16,9 +16,6 @@ import ChimmyAnalyticsSummaryPanel from '../ChimmyAnalyticsSummaryPanel'
 import ChimmyUnifiedAlertFeed from '../ChimmyUnifiedAlertFeed'
 import type { ChimmyFeedRecommendation, AIActionContext } from '@/lib/chimmy-actions'
 import { buildActionContext } from '@/lib/chimmy-actions'
-import type { UnifiedSavedRecommendation } from '@/lib/chimmy-actions/AIActionModel'
-import SavedRecommendationsPanel from '../SavedRecommendationsPanel'
-import SavedRecommendationDetailModal from '../SavedRecommendationDetailModal'
 import ChimmyPersonalizationHints from '../ChimmyPersonalizationHints'
 import ChimmyMemoryAwareCues from '../ChimmyMemoryAwareCues'
 import {
@@ -77,7 +74,6 @@ export default function DashboardAISurface({
   const { profile } = useChimmyPersonalization()
   const resolvedActionContext = actionContext ?? buildActionContext(surface)
   const [drawerOpen, setDrawerOpen] = useState(false)
-  const [selectedSavedRec, setSelectedSavedRec] = useState<UnifiedSavedRecommendation | null>(null)
 
   const orderedRecommendations = useMemo(() => {
     if (!profile) return recommendations
@@ -184,47 +180,13 @@ export default function DashboardAISurface({
                       confidencePct={rec.confidencePct}
                       onAction={rec.onAction}
                       actionLabel={rec.actionLabel}
-                      savePayload={{
-                        leagueId: resolvedActionContext.leagueId ?? null,
-                        sport: resolvedActionContext.sport,
-                        leagueType: resolvedActionContext.leagueType,
-                        title: rec.action,
-                        summary: rec.rationale,
-                        recommendationType: rec.actionType?.toLowerCase().includes('trade')
-                          ? 'trade'
-                          : rec.actionType?.toLowerCase().includes('lineup')
-                          ? 'lineup'
-                          : rec.actionType?.toLowerCase().includes('waiver')
-                          ? 'waiver'
-                          : 'general',
-                        recommendationPayload: {
-                          action: rec.action,
-                          rationale: rec.rationale,
-                          actionType: rec.actionType,
-                          confidencePct: rec.confidencePct,
-                        },
-                        explanation: rec.rationale,
-                        confidence: typeof rec.confidencePct === 'number' ? rec.confidencePct / 100 : 0,
-                        sourceSurface: 'dashboard',
-                      }}
                     />
                   ))}
                 </ChimmyPremiumGate>
               )
             }
 
-            if (section === 'saved') {
-              return (
-                <section key="dashboard-saved" className="rounded-2xl border border-white/10 bg-white/5 overflow-hidden">
-                  <SavedRecommendationsPanel
-                    compact
-                    leagueId={resolvedActionContext.leagueId ?? null}
-                    onOpenDetail={(rec) => setSelectedSavedRec(rec)}
-                  />
-                </section>
-              )
-            }
-
+            // 'saved' renders nothing: saved recommendations were retired (2026-09-16).
             return null
           })}
 
@@ -243,21 +205,6 @@ export default function DashboardAISurface({
           ] : undefined}
         />
       </ChimmyDrawer>
-
-      {selectedSavedRec && (
-        <ChimmyDrawer
-          open={Boolean(selectedSavedRec)}
-          onClose={() => setSelectedSavedRec(null)}
-          title="Saved Recommendation"
-          height="full"
-        >
-          <SavedRecommendationDetailModal
-            rec={selectedSavedRec}
-            onClose={() => setSelectedSavedRec(null)}
-            onDeleted={() => setSelectedSavedRec(null)}
-          />
-        </ChimmyDrawer>
-      )}
     </ChimmySurfaceShell>
   )
 }

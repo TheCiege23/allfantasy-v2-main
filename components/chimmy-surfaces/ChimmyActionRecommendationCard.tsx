@@ -28,13 +28,16 @@ import { ChimmyActionGroup } from '@/components/chimmy-actions'
 import ChimmyConfidenceBadge from './ChimmyConfidenceBadge'
 import ChimmyRiskBadge from './ChimmyRiskBadge'
 import type { ChimmyRiskLevel } from './ChimmyRiskBadge'
-import SaveRecommendationButton from './SaveRecommendationButton'
 
 export interface ChimmyActionRecommendationCardProps {
   rec: ChimmyFeedRecommendation
   context: AIActionContext
   /** Called after primary action completes successfully */
   onActionSuccess?: (rec: ChimmyFeedRecommendation) => void
+  /**
+   * @deprecated Never called. The save button was retired with the saved-recommendations stub
+   * (2026-09-16) — it posted to a route that always failed. Kept so existing callers still compile.
+   */
   onSave?: (rec: ChimmyFeedRecommendation) => void
   onDismiss?: (rec: ChimmyFeedRecommendation) => void
   /** Start with deep dive open */
@@ -67,7 +70,6 @@ export default function ChimmyActionRecommendationCard({
   rec,
   context,
   onActionSuccess,
-  onSave,
   onDismiss,
   defaultExpanded = false,
   compact = false,
@@ -81,50 +83,6 @@ export default function ChimmyActionRecommendationCard({
   const riskLevel = rec.riskLevel as ChimmyRiskLevel | undefined
   const borderAccent = riskLevel ? RISK_ACCENT[riskLevel] : 'border-l-indigo-500'
   const tagColor = rec.actionType ? (ACTION_TYPE_COLORS[rec.actionType] ?? 'bg-white/10 text-white/60') : null
-
-  const recommendationType =
-    rec.actionType?.toLowerCase().includes('waiver')
-      ? 'waiver'
-      : rec.actionType?.toLowerCase().includes('trade')
-      ? 'trade'
-      : rec.actionType?.toLowerCase().includes('lineup')
-      ? 'lineup'
-      : rec.actionType?.toLowerCase().includes('draft')
-      ? 'draft'
-      : rec.actionType?.toLowerCase().includes('matchup')
-      ? 'matchup_simulation'
-      : rec.actionType?.toLowerCase().includes('start') || rec.actionType?.toLowerCase().includes('sit')
-      ? 'start_sit'
-      : 'general'
-
-  const savePayload = {
-    leagueId: context.leagueId ?? null,
-    sport: context.sport,
-    leagueType: context.leagueType,
-    title: rec.headline,
-    summary: rec.reason,
-    recommendationType,
-    recommendationPayload: {
-      headline: rec.headline,
-      reason: rec.reason,
-      confidencePct: rec.confidencePct,
-      riskLevel: rec.riskLevel,
-      evidence: rec.evidence,
-      caveats: rec.caveats,
-      alternatives: rec.alternatives,
-      primaryAction: rec.primaryAction,
-      secondaryActions: rec.secondaryActions,
-      surface: context.leagueId ? context.leagueId : context.sport,
-    },
-    explanation: rec.detailedAnalysis ?? rec.reason,
-    confidence: typeof rec.confidencePct === 'number' ? rec.confidencePct / 100 : 0,
-    riskLevel: rec.riskLevel ?? null,
-    actions: [rec.primaryAction, ...(rec.secondaryActions ?? [])].filter(
-      (action): action is NonNullable<typeof action> => Boolean(action),
-    ),
-    sourceSurface: rec.primaryAction?.surface ?? 'chimmy_chat',
-    isCommissionerRec: context.role === 'commissioner' || context.role === 'admin',
-  } as const
 
   function handleDismiss() {
     setDismissed(true)
@@ -175,14 +133,6 @@ export default function ChimmyActionRecommendationCard({
 
         {/* Utility buttons */}
         <div className="flex shrink-0 items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
-          <SaveRecommendationButton
-            payload={savePayload}
-            variant="icon"
-            size="md"
-            onSaved={() => {
-              onSave?.(rec)
-            }}
-          />
           <button
             type="button"
             onClick={handleDismiss}

@@ -11,12 +11,8 @@ import ChimmyRoleGate from '../ChimmyRoleGate'
 import ChimmyLauncherButton from '../ChimmyLauncherButton'
 import ChimmySurfaceActionFeed from '../ChimmySurfaceActionFeed'
 import ChimmyUnifiedAlertFeed from '../ChimmyUnifiedAlertFeed'
-import ChimmyDrawer from '../ChimmyDrawer'
-import SavedRecommendationsPanel from '../SavedRecommendationsPanel'
-import SavedRecommendationDetailModal from '../SavedRecommendationDetailModal'
 import type { ChimmyFeedRecommendation, AIActionContext } from '@/lib/chimmy-actions'
 import { buildActionContext } from '@/lib/chimmy-actions'
-import type { UnifiedSavedRecommendation } from '@/lib/chimmy-actions/AIActionModel'
 
 export interface CommissionerAlert {
   id: string
@@ -48,7 +44,6 @@ export default function CommissionerAISurface({
 }: CommissionerAISurfaceProps) {
   const surface = useAISurface()
   const resolvedActionContext = actionContext ?? buildActionContext(surface)
-  const [selectedSavedRec, setSelectedSavedRec] = React.useState<UnifiedSavedRecommendation | null>(null)
   return (
     <ChimmyRoleGate allowedRoles={['commissioner', 'admin']}>
       <ChimmySurfaceShell className={className}>
@@ -69,14 +64,6 @@ export default function CommissionerAISurface({
         {actionFeed && actionFeed.length > 0 && (
           <ChimmySurfaceActionFeed recommendations={actionFeed} context={resolvedActionContext} className="mb-4" />
         )}
-
-        <section className="mb-4 rounded-2xl border border-white/10 bg-white/5 overflow-hidden">
-          <SavedRecommendationsPanel
-            compact
-            leagueId={resolvedActionContext.leagueId ?? null}
-            onOpenDetail={(rec) => setSelectedSavedRec(rec)}
-          />
-        </section>
 
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-sm font-semibold text-white/60 uppercase tracking-wide">Commissioner AI</h3>
@@ -108,21 +95,6 @@ export default function CommissionerAISurface({
             className="mb-2"
           />
         ))}
-
-        {selectedSavedRec && (
-          <ChimmyDrawer
-            open={Boolean(selectedSavedRec)}
-            onClose={() => setSelectedSavedRec(null)}
-            title="Commissioner Saved Recommendation"
-            height="full"
-          >
-            <SavedRecommendationDetailModal
-              rec={selectedSavedRec}
-              onClose={() => setSelectedSavedRec(null)}
-              onDeleted={() => setSelectedSavedRec(null)}
-            />
-          </ChimmyDrawer>
-        )}
       </ChimmySurfaceShell>
     </ChimmyRoleGate>
   )

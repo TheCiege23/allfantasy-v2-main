@@ -67,11 +67,11 @@ export default function AIHubPage() {
                   Open Chimmy Panel
                 </button>
                 <Link
-                  href="/ai/saved"
+                  href="/ai/history"
                   data-testid="ai-hub-open-history-primary-link"
                   className="inline-flex min-h-[42px] items-center rounded-lg border border-white/20 bg-white/5 px-4 py-2 text-sm font-medium text-white/80 hover:bg-white/10"
                 >
-                  Saved Recommendations
+                  Saved AI Results
                 </Link>
               </div>
             </header>
@@ -125,12 +125,12 @@ export default function AIHubPage() {
               <h2 className="mb-2 text-sm font-semibold text-white/80">History</h2>
               <p className="text-sm text-white/50">Open saved results from any AI tool.</p>
               <Link
-                href="/ai/saved"
+                href="/ai/history"
                 data-testid="ai-hub-history-link"
                 className="mt-3 inline-flex items-center gap-2 rounded-lg border border-white/10 px-3 py-2 text-sm text-white/70 hover:bg-white/5 hover:text-white/90"
               >
                 <LayoutGrid className="h-4 w-4" />
-                Open saved recommendations
+                Open saved results
               </Link>
             </section>
 

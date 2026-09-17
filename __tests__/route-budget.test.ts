@@ -164,6 +164,13 @@ describe('Dead routes deleted in cleanup must stay gone', () => {
     'app/api/ai/memory/quality/feedback/route.ts',
     'app/api/ai/ai-gm-analyze/route.ts',
     'app/api/ai/generate-image/route.ts',
+    /*
+     * The saved-recommendations stub (2026-09-16): GET always empty, POST always 500, every [id]
+     * call 404 — backed by a Supabase-era service with no database behind it. Retired rather than
+     * wired: nothing mounted ever saved one, and `ai_saved_recommendations` is a narrower concept.
+     */
+    'app/api/ai/saved-recommendations/route.ts',
+    'app/api/ai/saved-recommendations/[id]/route.ts',
   ]
   for (const route of DELETED) {
     it(`${route} does not exist`, () => {
