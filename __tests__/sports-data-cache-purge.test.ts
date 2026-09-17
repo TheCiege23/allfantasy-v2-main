@@ -5,9 +5,10 @@
  * runs hourly from /api/cron/reap-sync-runs, so the properties below are the ones that decide
  * whether it deletes something a reader still wants:
  *
- *   1. only families on the allow-list are touched — a reader census found families that are read
+ *   1. only families on the allow-lists are touched — a reader census found families that are read
  *      ON PURPOSE after they expire (`trade-grades:v2:`, `h2h:v2:`, `fantasycalc:values:`…);
- *   2. within those, only rows whose `expiresAt` is strictly before the cutoff go;
+ *   2. immediate families go once `expiresAt` is strictly before now; fetch-failure fallback
+ *      families only once it is strictly more than seven days before now (user decision 2026-09-17);
  *   3. a row refreshed between the batch SELECT and the DELETE survives;
  *   4. it is bounded (rows per statement, statements per call, wall clock);
  *   5. a purge that could not run says so, instead of reporting a clean zero.
@@ -99,8 +100,9 @@ const keys = (rows: Row[]) => rows.map((r) => r.cacheKey).sort()
 const p = (id: string) => `news_context:${id}`
 
 /**
- * Families a reader serves AFTER expiry, from the 2026-09-17 census. None may be purged, and no
- * allow-listed prefix may overlap one in either direction.
+ * Families a reader serves AFTER expiry with no age limit that a grace window could honour, from
+ * the 2026-09-17 census. None may be purged, and no allow-listed prefix may overlap one in either
+ * direction.
  */
 const KEEP_EXPIRED_FAMILIES = [
   'trade-grades:v2:',
@@ -113,32 +115,19 @@ const KEEP_EXPIRED_FAMILIES = [
   'college-team-directory:v1',
   'projection_accuracy:',
   'league-context:rules:v1:',
-  'league-context:v1:',
-  'league-history:v1:',
   'nfl-redraft-provider:',
   'ktc-dynasty-rankings',
   'draft-order-',
-  'nfl-state:v1',
-  'transactions:',
-  'rosters:',
-  'league_users:',
+  // The Sleeper layer's generic families, left out on purpose.
+  'league:',
+  'user:',
   'players:all',
-  'sleeper:dashboard:',
-  'career-card:v3:',
-  'command-center:v3:',
-  'assets:tsdb:v1:',
-  'projections:week:v1:',
-  'espn:summary:v1:',
-  'espn:news:',
-  'newsapi:',
-  'market-values:v1:',
-  'waiver-intel:v1:',
-  'dynastyprocess:values:v1:',
   'core-visit:v1:',
   'geocode:owm:v1:',
   'NFL:',
   'nfl:',
 ]
+const WEEK = 7 * DAY
 
 async function load() {
   return import('@/lib/enrichment-cache')
@@ -190,30 +179,69 @@ describe('purgeExpiredCache', () => {
   })
 
   it('no allow-listed prefix overlaps a family whose readers use expired rows', async () => {
-    const { PURGEABLE_KEY_PREFIXES } = await load()
-    const overlaps = PURGEABLE_KEY_PREFIXES.flatMap((allowed) =>
-      KEEP_EXPIRED_FAMILIES.filter((kept) => kept.startsWith(allowed) || allowed.startsWith(kept)).map(
-        (kept) => `${allowed} ~ ${kept}`,
-      ),
+    const { PURGEABLE_KEY_PREFIXES, FALLBACK_KEY_PREFIXES } = await load()
+    const overlap = (a: string, b: string) => a.startsWith(b) || b.startsWith(a)
+    const allowed = [...PURGEABLE_KEY_PREFIXES, ...FALLBACK_KEY_PREFIXES]
+    const withKept = allowed.flatMap((a) => KEEP_EXPIRED_FAMILIES.filter((k) => overlap(a, k)).map((k) => `${a} ~ ${k}`))
+    expect(withKept).toEqual([])
+    // An immediate prefix overlapping a fallback one would purge those fallback rows with no grace.
+    const acrossLists = PURGEABLE_KEY_PREFIXES.flatMap((a) =>
+      FALLBACK_KEY_PREFIXES.filter((f) => overlap(a, f)).map((f) => `${a} ~ ${f}`),
     )
-    expect(overlaps).toEqual([])
-    expect(PURGEABLE_KEY_PREFIXES.every((prefix) => prefix.length >= 4)).toBe(true)
+    expect(acrossLists).toEqual([])
+    expect(new Set(allowed).size).toBe(allowed.length)
+    expect(allowed.every((prefix) => prefix.length >= 4)).toBe(true)
   })
 
-  it('keeps rows inside the grace window', async () => {
+  it('keeps fallback rows for seven days past expiry, then deletes them', async () => {
     const { purgeExpiredCache } = await load()
     const t = fakeTable([
-      { cacheKey: p('expired-3d'), expiresAt: at(-3 * DAY) },
-      { cacheKey: p('expired-1d'), expiresAt: at(-DAY) },
-      { cacheKey: p('expired-1h'), expiresAt: at(-HOUR) },
-      { cacheKey: p('live'), expiresAt: at(HOUR) },
+      { cacheKey: 'transactions:1:3:past-grace', expiresAt: at(-WEEK - 1) },
+      { cacheKey: 'transactions:1:3:at-grace', expiresAt: at(-WEEK) },
+      { cacheKey: 'transactions:1:3:six-days', expiresAt: at(-6 * DAY) },
+      { cacheKey: 'transactions:1:3:just-expired', expiresAt: at(-1) },
+      // An immediate family in the same call still goes as soon as it expires.
+      { cacheKey: p('just-expired'), expiresAt: at(-1) },
     ])
 
-    const result = await purgeExpiredCache(t.client, { now: NOW, graceMs: 2 * DAY })
+    const result = await purgeExpiredCache(t.client, { now: NOW })
 
-    expect(keys(t.rows)).toEqual([p('expired-1d'), p('expired-1h'), p('live')])
-    expect(result.deleted).toBe(1)
-    expect(result.cutoff).toBe(at(-2 * DAY).toISOString())
+    expect(keys(t.rows)).toEqual([
+      'transactions:1:3:at-grace',
+      'transactions:1:3:just-expired',
+      'transactions:1:3:six-days',
+    ])
+    expect(result).toMatchObject({ deleted: 2, cutoff: NOW.toISOString(), fallbackCutoff: at(-WEEK).toISOString() })
+  })
+
+  it('applies the grace to every fallback family, and to none of the immediate ones', async () => {
+    const { purgeExpiredCache, PURGEABLE_KEY_PREFIXES, FALLBACK_KEY_PREFIXES } = await load()
+    const fresh = FALLBACK_KEY_PREFIXES.map((f) => ({ cacheKey: `${f}six-days`, expiresAt: at(-6 * DAY) }))
+    const t = fakeTable([
+      ...fresh,
+      ...FALLBACK_KEY_PREFIXES.map((f) => ({ cacheKey: `${f}eight-days`, expiresAt: at(-8 * DAY) })),
+      ...PURGEABLE_KEY_PREFIXES.map((f) => ({ cacheKey: `${f}one-hour`, expiresAt: at(-HOUR) })),
+    ])
+
+    const result = await purgeExpiredCache(t.client, { now: NOW })
+
+    expect(keys(t.rows)).toEqual(keys(fresh))
+    expect(result.deleted).toBe(FALLBACK_KEY_PREFIXES.length + PURGEABLE_KEY_PREFIXES.length)
+  })
+
+  it('a fallback row refreshed mid-purge survives', async () => {
+    const { purgeExpiredCache } = await load()
+    const rows: Row[] = [{ cacheKey: 'rosters:9', expiresAt: at(-2 * WEEK) }]
+    const t = fakeTable(rows, {
+      afterFind: () => {
+        rows[0]!.expiresAt = at(5 * 60_000)
+      },
+    })
+
+    const result = await purgeExpiredCache(t.client, { now: NOW })
+
+    expect(keys(t.rows)).toEqual(['rosters:9'])
+    expect(result.deleted).toBe(0)
   })
 
   it('never deletes a row refreshed between the batch read and the delete', async () => {
