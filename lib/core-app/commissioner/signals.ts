@@ -1,6 +1,6 @@
 /**
  * Review work a commissioner owes: the detectors the old all-leagues hub
- * (`components/commish/MissionControl.tsx`, 11a) queued, as task cards.
+ * (11a's `components/commish/MissionControl.tsx`, since deleted) queued, as task cards.
  *
  * Five-doors restyle, 2026-09-17: the hub's two views — every league you run at
  * `/core/commissioner` and one league at `?league=` — draw from ONE queue. That

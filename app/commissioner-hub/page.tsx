@@ -24,8 +24,11 @@ import { redirect } from 'next/navigation'
  *                    Center (/import), "Leagues I play in", and the no-gambling
  *                    banner
  *
- * `CommissionerHubPageClient.tsx` beside this file is no longer routed. It is left
- * for a deliberate dead-code pass: several suites still read its source.
+ * The page's client (`CommissionerHubPageClient.tsx`) and the components only it
+ * rendered — the Decision OS mission-control, analytics, context and command-center
+ * cards, the executive-viz health, momentum and trade panels, and 11a's mission
+ * control — were deleted in the dead-code pass that followed, with the tests that only
+ * read their source. They are in git history before that commit.
  *
  * ⚠ A PAGE, NOT A next.config REDIRECT, so the address keeps its existing route and
  * adds none (standing rule: no new routes).

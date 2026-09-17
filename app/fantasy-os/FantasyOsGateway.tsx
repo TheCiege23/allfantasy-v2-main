@@ -9,7 +9,7 @@
  */
 import { useMemo, useState } from 'react'
 import Link from 'next/link'
-import { LayoutGrid, Shield, ArrowRight, Compass, Eye, Radio, BarChart3 } from 'lucide-react'
+import { LayoutGrid, Shield, ArrowRight, Compass, Radio, BarChart3 } from 'lucide-react'
 import { resolveTenantBrand, tenantThemeStyle } from '@/lib/white-label'
 import DemoStateBadge from '@/components/fantasy-os/DemoStateBadge'
 
@@ -21,9 +21,9 @@ type GatewayLeague = { id: string; name: string; isCommissioner: boolean; role: 
 const GUIDED_SEQUENCE: { key: string; os: string; question: string; href: string }[] = [
   { key: 'platform', os: 'Start here', question: 'Where should I focus first?', href: '/manager-hub' },
   { key: 'manager', os: 'My team', question: 'What should I do for my team?', href: '/manager-hub' },
-  { key: 'commissioner', os: 'Commissioner OS', question: 'Is the league operating well?', href: '/commissioner-hub' },
-  { key: 'league', os: 'League OS', question: 'What is happening across the ecosystem?', href: '/commissioner-hub' },
-  { key: 'trade', os: 'Trade OS', question: 'Where are the trade opportunities?', href: '/commissioner-hub' },
+  { key: 'commissioner', os: 'Commissioner OS', question: 'Is the league operating well?', href: '/core/commissioner' },
+  { key: 'league', os: 'League OS', question: 'What is happening across the ecosystem?', href: '/core/commissioner' },
+  { key: 'trade', os: 'Trade OS', question: 'Where are the trade opportunities?', href: '/core/commissioner' },
   { key: 'waiver', os: 'Waiver OS', question: 'Which acquisition decision matters?', href: '/manager-hub' },
   { key: 'draft', os: 'Draft OS', question: 'What preparation is required?', href: '/manager-hub' },
 ]
@@ -113,7 +113,7 @@ export default function FantasyOsGateway({
           </Link>
           {hasCommissioner ? (
             <Link
-              href="/commissioner-hub"
+              href="/core/commissioner"
               className="focus-ring inline-flex items-center gap-2 rounded-xl border border-subtle bg-surface-muted px-5 py-2.5 text-[14px] font-semibold text-primary transition hover:bg-surface-hover"
             >
               <Shield className="h-4 w-4" aria-hidden />
@@ -146,26 +146,15 @@ export default function FantasyOsGateway({
         </Link>
       </section>
 
-      {/* ── Demo mode entry — honest preview vs live distinction ── */}
-      <section aria-label="Demonstration modes" className="mt-5 card-premium p-5 sm:p-6">
-        <h2 className="text-[13px] font-bold uppercase tracking-widest text-secondary">Demonstration</h2>
-        <div className="mt-4 grid gap-3 sm:grid-cols-2">
-          <div className="rounded-2xl border border-status-info/25 bg-status-info/5 p-4">
-            <div className="flex items-center gap-2">
-              <Eye className="h-4 w-4 text-status-info" aria-hidden />
-              <DemoStateBadge state="presentation-preview" />
-            </div>
-            <p className="mt-2 text-[12px] leading-relaxed text-secondary">
-              A branded tour using presentation-safe preview data — clearly labeled as preview, no account
-              required. Preview values are not your connected leagues.
-            </p>
-            <Link
-              href="/commissioner-hub"
-              className="focus-ring mt-3 inline-flex items-center gap-1.5 text-[12px] font-bold text-status-info"
-            >
-              Open preview <ArrowRight className="h-3.5 w-3.5" aria-hidden />
-            </Link>
-          </div>
+      {/*
+        ── Live data entry ──
+        This section also offered a "presentation-safe preview" card. That preview was the sample-data
+        mode of the old /commissioner-hub page, which was retired on 2026-09-17; the card was removed
+        rather than pointed at a page that needs an account (user decision, same day).
+      */}
+      <section aria-label="Live data" className="mt-5 card-premium p-5 sm:p-6">
+        <h2 className="text-[13px] font-bold uppercase tracking-widest text-secondary">Live data</h2>
+        <div className="mt-4 grid gap-3">
           <div className="rounded-2xl border border-status-success/25 bg-status-success/5 p-4">
             <div className="flex items-center gap-2">
               <Radio className="h-4 w-4 text-status-success" aria-hidden />

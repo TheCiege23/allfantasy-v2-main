@@ -4,7 +4,8 @@
  * Phase V1.0 established `decisionOsToneClasses`/`decisionOsSeverityToneClasses` but only used them in
  * new code (the Commissioner Hub flagship rebuild). Phase V1.1 migrated 4 pre-existing components
  * (`MissionControlCard`, `LeaguePulseCard`, `DecisionRecommendationsCard`, `CommissionerAttentionQueue`)
- * off their own private tone tables onto the shared primitives. Phase V1.2 finished the job — migrating
+ * off their own private tone tables onto the shared primitives (`MissionControlCard` was retired with the
+ * old /commissioner-hub page on 2026-09-17, and its section here went with it). Phase V1.2 finished the job — migrating
  * `LeagueHealthDashboard`'s remaining 3 tone systems (`HEALTH_STATUS_CLASSES`, `ACTION_TONE_CLASSES`,
  * `MetricTile`) and adding `decisionOsHealthStatusToneClasses`, a second genuinely-necessary additive
  * primitive extension for `OverallStatus`'s real 5-tier domain. This file proves each migration didn't
@@ -22,13 +23,9 @@ import {
   decisionOsSeverityToneClasses,
   decisionOsHealthStatusToneClasses,
 } from '@/components/decision-os/DecisionOsCardPrimitives'
-import MissionControlCard from '@/components/decision-os/MissionControlCard'
 import LeaguePulseCard from '@/components/decision-os/LeaguePulseCard'
 import DecisionRecommendationsCard from '@/components/decision-os/DecisionRecommendationsCard'
 import CommissionerAttentionQueue from '@/components/decision-os/CommissionerAttentionQueue'
-import type { MissionControlSnapshot } from '@/lib/decision-os/missionControl'
-import type { LeagueHealthResult } from '@/lib/league-health'
-import type { DecisionOsLeagueHealthResult } from '@/lib/decision-os/leagueHealthAlignment'
 import type { LeaguePulseViewModel } from '@/lib/decision-os/league-pulse'
 import type { DecisionRecommendationsViewModel } from '@/lib/decision-os/recommendations'
 import type { DecisionOsAttentionSignal } from '@/lib/decision-os/attentionSignals'
@@ -93,56 +90,6 @@ describe('decisionOsHealthStatusToneClasses — Phase V1.2, another genuinely-ne
     const result = decisionOsHealthStatusToneClasses('some_future_status')
     expect(result).toContain('surface-muted')
     expect(result).not.toContain('undefined')
-  })
-})
-
-function makeMissionControlSnapshot(overallStatus: string): MissionControlSnapshot {
-  const engine: LeagueHealthResult = {
-    leagueHealthScore: 70, engagementScore: 70, fairnessScore: 70, sustainabilityScore: 70,
-    confidencePct: 80, overallStatus: overallStatus as LeagueHealthResult['overallStatus'],
-    biggestStrengths: [], biggestProblems: [], urgentAlerts: [], earlyWarningSignals: [],
-    inactiveManagerNotes: [], transactionHealthNotes: [], waiverHealthNotes: [], tradeHealthNotes: [],
-    rosterBalanceNotes: [], commissionerHealthNotes: [], interventionRecommendations: [],
-    summary: `League health: 70/100 (${overallStatus}).`, generatedAt: NOW, healthTrend: 'stable',
-    churnRiskScore: 10, disputeRiskScore: 0, abandonmentRiskScore: 0, engagementDropoffFlags: [],
-  }
-  const result: DecisionOsLeagueHealthResult = {
-    engine,
-    decisionOs: {
-      activityEventCount: 20, activeManagerCount: 10, inactiveManagerCount: 0, tradeCount: 3,
-      waiverClaimCount: 12, draftPickCount: 0, commissionerActionCount: 1, rosterActivityCount: 8,
-      managersAtRetentionRisk: [], trend: { available: false, reason: 'no_snapshots' },
-    },
-    fieldProvenance: {} as DecisionOsLeagueHealthResult['fieldProvenance'],
-  }
-  return {
-    leagueId: 'league-tone-migration',
-    generatedAt: NOW,
-    leagueHealth: { available: true, result },
-    trend: { available: false, reason: 'no_snapshots' },
-    managerCounts: { activeManagers: 10, inactiveManagers: 0 },
-    activity: { tradeCount: 3, waiverClaimCount: 12, draftPickCount: 0, rosterActivityCount: 8 },
-    managersAtRetentionRisk: [],
-    recommendedActions: [],
-    fieldProvenance: result.fieldProvenance,
-  }
-}
-
-describe('MissionControlCard — tone migration (no semantic state regression)', () => {
-  it.each(['excellent', 'healthy', 'watch', 'at_risk', 'critical'])(
-    'renders the real "%s" overallStatus without throwing, still showing the real value as text',
-    (status) => {
-      render(<MissionControlCard snapshot={makeMissionControlSnapshot(status)} />)
-      expect(screen.getByTestId('mission-control-health-status')).toHaveTextContent(status)
-    },
-  )
-
-  it('degrades an unrecognized overallStatus to a safe neutral fallback instead of throwing or rendering "undefined"', () => {
-    render(<MissionControlCard snapshot={makeMissionControlSnapshot('some_future_status')} />)
-    const badge = screen.getByTestId('mission-control-health-status')
-    expect(badge).toHaveTextContent('some_future_status')
-    expect(badge.className).not.toContain('undefined')
-    expect(badge.className).toContain('surface-muted')
   })
 })
 

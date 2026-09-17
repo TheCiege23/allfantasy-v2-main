@@ -10,7 +10,6 @@
 import React from 'react'
 import { render, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
-import CommissionerLeagueSwitcher from '@/components/decision-os/CommissionerLeagueSwitcher'
 import ManagerLeagueSwitcher from '@/components/decision-os/ManagerLeagueSwitcher'
 import NotificationCenter from '@/components/decision-os/NotificationCenter'
 import LeaguePulseCard from '@/components/decision-os/LeaguePulseCard'
@@ -19,12 +18,8 @@ import type { DecisionOsNotification } from '@/lib/decision-os/notifications'
 
 const LEAGUES = [{ id: 'league-1', name: 'Test League' }]
 
+// The commissioner switcher was retired with the old /commissioner-hub page (2026-09-17).
 describe('focus-ring adoption — League Switchers', () => {
-  it('CommissionerLeagueSwitcher list items carry .focus-ring', () => {
-    render(<CommissionerLeagueSwitcher leagues={LEAGUES} onSelect={() => {}} />)
-    expect(screen.getByTestId('league-switcher-item-league-1').className).toContain('focus-ring')
-  })
-
   it('ManagerLeagueSwitcher list items carry .focus-ring', () => {
     render(<ManagerLeagueSwitcher leagues={LEAGUES} />)
     expect(screen.getByTestId('manager-league-switcher-item-league-1').className).toContain('focus-ring')

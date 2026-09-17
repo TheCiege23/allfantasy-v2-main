@@ -2,7 +2,8 @@
  * Fantasy OS Suite — Phase V7.3 (Part B): the /fantasy-os gateway entry experience.
  *
  * Covers authenticated + unauthenticated states, white-label branding, portfolio + context selection,
- * commissioner eligibility, the honest preview-vs-live-demo distinction, the guided seven-OS rail,
+ * commissioner eligibility, the live-data entry (the preview card went with the old /commissioner-hub
+ * page on 2026-09-17), the guided seven-OS rail,
  * singular/plural grammar, and provider abstraction (no provider strings on this executive surface).
  */
 import fs from 'node:fs'
@@ -58,15 +59,14 @@ describe('Fantasy OS gateway — entry + routing', () => {
     expect(screen.getByText(/2 leagues connected/i)).toBeTruthy()
   })
 
-  it('labels the two demo modes with truthful Demo Truth Model badges (preview never says live)', () => {
-    render(<FantasyOsGateway leagues={mixed} isAuthenticated />)
-    // canonical badges: a "Preview" badge and a "Live" badge (connected account)
-    expect(screen.getByLabelText(/Preview\. Presentation preview data/i)).toBeTruthy()
+  it('offers the live view only — the retired preview card and its link are gone', () => {
+    const { container } = render(<FantasyOsGateway leagues={mixed} isAuthenticated />)
     expect(screen.getByLabelText(/Live\. Your connected/i)).toBeTruthy()
-    // the preview affordance must never be labeled live
-    expect(screen.queryByLabelText(/Preview.*live/i)).toBeNull()
-    const preview = screen.getByRole('link', { name: /Open preview/i })
-    expect(preview.getAttribute('href')).toBe('/commissioner-hub')
+    expect(screen.queryByLabelText(/Preview\. Presentation preview data/i)).toBeNull()
+    expect(screen.queryByRole('link', { name: /Open preview/i })).toBeNull()
+    // Nothing on the gateway still routes through the /commissioner-hub redirect.
+    expect(container.querySelector('a[href="/commissioner-hub"]')).toBeNull()
+    expect(screen.getAllByRole('link', { name: /Commissioner Hub/i })[0].getAttribute('href')).toBe('/core/commissioner')
   })
 
   it('shows Data unavailable (not Live) for the live path when no leagues are connected', () => {
