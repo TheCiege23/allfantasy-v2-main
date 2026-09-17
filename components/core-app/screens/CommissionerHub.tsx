@@ -1,6 +1,9 @@
 import Link from 'next/link'
 import { Suspense } from 'react'
 import '@/components/core-app/af-commish-hub.css'
+import '@/components/core-app/af-format-hubs.css'
+import { HubHeroMedia } from '@/components/core-app/hubs/HubHeroMedia'
+import { CommissionerOsLink } from '@/components/core-app/hubs/CommissionerOsLink'
 import { PublishStandingsToggle } from '@/components/core-app/PublishStandingsToggle'
 import { WaiverOversight } from '@/components/core-app/WaiverOversight'
 import type { CommissionerHubResult, CommissionerTile } from '@/lib/core-app/commissionerHub'
@@ -33,12 +36,14 @@ import { AnnounceButton } from '@/components/core-app/commissioner/AnnounceButto
  *
  * ── Order is the design ────────────────────────────────────────────────
  *
- * Task cards first, on every width: what needs the commissioner, each with the
- * action that deals with it. Then the cockpit (health, deadlines, activity,
- * recent changes, who has gone quiet), then the reference material — calendar,
- * guides, every league area — and only then the large reports and tables. On a
- * phone that is a single column in exactly this order, so nothing urgent sits
- * below a chart.
+ * The key-art band first — it carries the cockpit's six counts, "Needs you"
+ * among them — then the task cards: what needs the commissioner, each with the
+ * action that deals with it. Then the rest of the cockpit (recent changes, who
+ * has gone quiet, health), the reference material — calendar, guides, every
+ * league area — and only then the large reports and tables. On a phone that is a
+ * single column in exactly this order; the band drops its sub-lines there so the
+ * task cards still start on the first screen, and nothing urgent sits below a
+ * chart.
  *
  * ── Access ─────────────────────────────────────────────────────────────
  *
@@ -51,18 +56,27 @@ import { AnnounceButton } from '@/components/core-app/commissioner/AnnounceButto
  * switches, calendar export, the publish switch, the announcement composer —
  * are client islands rendered only inside the granted branch, and every write
  * they make goes through a route that re-checks the role.
+ *
+ * ── The hub dress (five-doors restyle, 2026-09-17) ─────────────────────
+ *
+ * The header, key-art band and footer wear the format hubs' look (`.afh`), so
+ * this screen and the all-leagues one at `/core/commissioner` read as one hub.
+ * Every section below the band is unchanged — the user's call was "every
+ * section kept, restyled". The tiles moved INTO the band, which is built to
+ * carry exactly these counts; the band's art is the league's own format loop.
  */
 
 export type CommissionerHubProps = {
   data: CommissionerHubResult
-  /** Where "ask for access" points. Null when the league has no chat surface. */
-  messageHref?: string | null
 }
 
-export function CommissionerHub({ data, messageHref = null }: CommissionerHubProps) {
+export function CommissionerHub({ data }: CommissionerHubProps) {
   if (!data.allowed) {
     return (
-      <div className="af-ch">
+      <div className="af-ch afh" data-format="all">
+        <Link className="afh-back" href="/core/commissioner">
+          ← All leagues you run
+        </Link>
         <header className="af-ch-head">
           <p className="af-label af-ch-eyebrow">Core · Commissioner</p>
           <h1 className="af-display af-ch-title">Commissioner</h1>
@@ -92,30 +106,83 @@ export function CommissionerHub({ data, messageHref = null }: CommissionerHubPro
     )
   }
 
-  const { league, role, tiles, settings, access, unread, disputes, publicStandings } = data
+  const { league, role, tiles, settings, access, unread, disputes, publicStandings, art } = data
   const now = new Date()
   // Started here, awaited by the sections that show them — each inside its own boundary.
   const timeline = loadAuditTimeline(data.grant)
   const activity = loadActivityCharts(data.grant, now)
   const platformName = platformLabel(league.platform)
+  const quiet = data.quietManagers
 
   return (
-    <div className="af-ch">
-      <header className="af-ch-head">
-        <p className="af-label af-ch-eyebrow">{league.name}</p>
-        <div className="af-ch-title-row">
-          <h1 className="af-display af-ch-title">Commissioner</h1>
-          <span className="af-ch-role af-label" data-role={role}>
-            {role === 'commissioner' ? 'Commissioner' : 'Co-commissioner'}
-          </span>
+    <div className="af-ch afh" data-format="all" data-testid="commissioner-league-hub">
+      <Link className="afh-back" href="/core/commissioner">
+        ← All leagues you run
+      </Link>
+
+      <header className="afh-head">
+        <div className="afh-title">
+          <div className="afh-label">Core · Commissioner{art.label ? ` · ${art.label}` : ''}</div>
+          <div className="afh-title-row">
+            <span className="afh-badge" aria-hidden>
+              ⚑
+            </span>
+            <h1>{league.name}</h1>
+            <span className="af-ch-role af-label" data-role={role}>
+              {role === 'commissioner' ? 'Commissioner' : 'Co-commissioner'}
+            </span>
+          </div>
+          <p className="afh-desc">
+            {league.native
+              ? 'Everything it takes to run this league: what needs you, league health, the calendar, guides for the hard jobs, and a record of every change.'
+              : `Everything it takes to run this league: what needs you, league health, the calendar, guides for the hard jobs, and a record of every change. AllFantasy reads ${platformName} — rules and rulings are still applied there.`}
+          </p>
         </div>
-        <p className="af-ch-lede">
-          {league.native
-            ? 'Everything it takes to run this league: what needs you, league health, the calendar, guides for the hard jobs, and a record of every change.'
-            : `Everything it takes to run this league: what needs you, league health, the calendar, guides for the hard jobs, and a record of every change. AllFantasy reads ${platformName} — rules and rulings are still applied there.`}
-        </p>
-        <HubNav />
+        {data.viewerCanBroadcast ? (
+          <div className="afh-head-actions">
+            <AnnounceButton leagueId={league.id} label="Send @everyone" className="afh-btn" />
+          </div>
+        ) : null}
       </header>
+
+      {/* ── Cockpit (item 1) — the tiles, carried by the key-art band ─────── */}
+      <section
+        className="afh-hero"
+        data-kind="league"
+        data-art={art.video ? 'loop' : 'still'}
+        aria-label={`${league.name} right now`}
+      >
+        <HubHeroMedia video={art.video} poster={art.poster} />
+        {art.video ? (
+          <div className="afh-seal" aria-hidden>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={art.poster} alt="" />
+          </div>
+        ) : null}
+        <div className="afh-hero-body">
+          <div className="afh-label">This league right now</div>
+          <div className="afh-tiles">
+            {tiles.map((t) => (
+              <Tile key={t.key} tile={t} />
+            ))}
+          </div>
+          {/* The names are the part a commissioner acts on — the count is already a tile. */}
+          {quiet.length > 0 ? (
+            <p className="afh-hero-note">
+              Gone quiet: {quiet.slice(0, 4).join(', ')}
+              {quiet.length > 4 ? ` and ${quiet.length - 4} more` : ''}. <a href="#ch-members">Member activity</a>
+            </p>
+          ) : null}
+          {data.unclaimedTeams > 0 ? (
+            <p className="afh-hero-note">
+              {data.unclaimedTeams === 1 ? '1 team isn’t' : `${data.unclaimedTeams} teams aren’t`} connected to an
+              AllFantasy account yet. <a href="#ch-areas">Invite managers</a>
+            </p>
+          ) : null}
+        </div>
+      </section>
+
+      <HubNav />
 
       {/*
         ⚠ THE BANNER IS THE POINT, NOT DECORATION. Without it a league nobody has
@@ -135,13 +202,7 @@ export function CommissionerHub({ data, messageHref = null }: CommissionerHubPro
       {/* ── 1 · Urgent work (items 1, 10) ──────────────────────────────── */}
       <TaskCards data={data} />
 
-      {/* ── 2 · Cockpit (item 1) ──────────────────────────────────────── */}
-      <div className="af-ch-tiles">
-        {tiles.map((t) => (
-          <Tile key={t.key} tile={t} />
-        ))}
-      </div>
-
+      {/* ── 2 · Cockpit (item 1) — the tiles are in the band above ─────── */}
       <div className="af-ch-split">
         <Suspense fallback={<RecentChangesFallback />}>
           <RecentChanges timeline={timeline} />
@@ -306,36 +367,49 @@ export function CommissionerHub({ data, messageHref = null }: CommissionerHubPro
         <AuditTimeline timeline={timeline} />
       </Suspense>
 
-      <p className="af-ch-footnote">
-        {league.native
-          ? 'This league runs on AllFantasy, so settings and rulings saved here are the league’s own.'
-          : `AllFantasy reads this league. Settings and rulings are applied on ${platformName}.`}
-        {messageHref ? (
-          <>
-            {' '}
-            <Link href={messageHref}>Open league chat</Link>
-          </>
+      <footer className="afh-foot">
+        <p>
+          {league.native
+            ? 'This league runs on AllFantasy, so settings and rulings saved here are the league’s own.'
+            : `AllFantasy reads this league. Settings and rulings are applied on ${platformName}.`}
+          {data.viewerIsOwner ? ' Health trends, manager intelligence and reports are in Commissioner OS.' : ''}
+        </p>
+        <Link className="afh-link" href={data.chatHref}>
+          Open league chat →
+        </Link>
+        {/*
+          Commissioner OS admits the league owner only (`resolveActiveLeagueId`), so
+          a co-commissioner is not sent to a screen that would turn them away.
+        */}
+        {data.viewerIsOwner ? (
+          <CommissionerOsLink className="afh-link" href="/commissioner-os/league-health" leagueId={league.id}>
+            Health trends in Commissioner OS →
+          </CommissionerOsLink>
         ) : null}
-      </p>
+      </footer>
     </div>
   )
 }
 
+/**
+ * One cockpit count, drawn on the dark band. An unmeasured tile keeps its reason
+ * at every width — "—" alone would read as a zero.
+ */
 function Tile({ tile }: { tile: CommissionerTile }) {
   if (!tile.state.available) {
     return (
-      <div className="af-ch-tile" data-missing="true" data-key={tile.key}>
-        <div className="af-ch-tile-value af-num">—</div>
-        <div className="af-label">{tile.label}</div>
-        <div className="af-ch-tile-why">{tile.state.reason}</div>
+      <div className="afh-tile" data-missing="true" data-key={tile.key}>
+        <b>—</b>
+        <span>{tile.label}</span>
+        <small>{tile.state.reason}</small>
       </div>
     )
   }
   return (
-    <div className="af-ch-tile" data-tone={tile.tone} data-key={tile.key}>
-      <div className="af-ch-tile-value af-num">{tile.state.data.value}</div>
-      <div className="af-label">{tile.label}</div>
-      {tile.state.data.sub ? <div className="af-ch-tile-sub">{tile.state.data.sub}</div> : null}
+    <div className="afh-tile" data-tone={tile.tone} data-key={tile.key}>
+      <b>{tile.state.data.value}</b>
+      <span>{tile.label}</span>
+      {tile.state.data.sub ? <small>{tile.state.data.sub}</small> : null}
     </div>
   )
 }

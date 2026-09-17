@@ -161,6 +161,8 @@ import { getLivePageData } from '@/lib/live/liveScoresPage'
 import { getEspnGameSummary } from '@/lib/sports-live-scores-service'
 import CommissionerHub from '@/components/core-app/screens/CommissionerHub'
 import { getCommissionerHub } from '@/lib/core-app/commissionerHub'
+import CommissionerOverview from '@/components/core-app/screens/CommissionerOverview'
+import { getCommissionerOverview } from '@/lib/core-app/commissionerOverview'
 import Standings from '@/components/core-app/screens/Standings'
 import StandingsBoard from '@/components/core-app/boards/StandingsBoard'
 import { parseStandingsView } from '@/lib/core-app/standingsView'
@@ -624,21 +626,11 @@ export default async function AfCorePage({
   }
 
   /*
-   * 'commissioner' was the one nav key still rendering the generic "not built
-   * yet" panel — while the Commissioner Hub exists as a full page. Redirect
-   * rather than apologise. Matched on `segment`, not `navKey`: /core/discord
-   * shares the commissioner nav key and must keep rendering its own screen.
+   * /core/commissioner without a league no longer redirects (five-doors restyle,
+   * 2026-09-17). It renders the all-leagues Commissioner Hub itself, and
+   * /commissioner-hub — the page it used to bounce to — is now the redirect, the
+   * other way round. See `getCommissionerOverview`.
    */
-  /*
-   * ⚠ ONLY WITHOUT A LEAGUE. This used to redirect unconditionally, which made the
-   * per-league Commissioner screen below (tiles, attention queue, settings, access,
-   * public standings, and now Waiver Oversight) unreachable — its loader and render
-   * branch were dead code behind a redirect that fired first. The cross-league
-   * /commissioner-hub is still the answer when no league is picked.
-   */
-  if (segment === 'commissioner' && !selectedLeagueId) {
-    redirect('/commissioner-hub')
-  }
 
   // An unknown segment has already redirected above; the fallback only satisfies the index type.
   const activeKey: CoreNavKey = navKey ?? 'home'
@@ -2575,6 +2567,25 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
       : null
 
   /*
+   * The all-leagues Commissioner Hub — `/core/commissioner` with no league. Matched on
+   * `segment` because /core/discord and /core/hubs share the commissioner nav key. The
+   * candidates are the leagues the nav badge counts, so the "All leagues" pill and the
+   * badge describe the same set; the loader keeps only those the one-league gate admits.
+   */
+  const commissionerOverview =
+    activeKey === 'commissioner' && segment === 'commissioner' && !selectedLeagueId
+      ? await getCommissionerOverview({
+          userId,
+          candidateLeagueIds: playedLeagues.filter((l) => Boolean(l.isCommissioner)).map((l) => l.id),
+          issues,
+          now,
+        }).catch((e: unknown) => {
+          console.error('[core/commissioner] overview read failed', e)
+          return null
+        })
+      : null
+
+  /*
    * The 3a home panels — the same loader set app/dashboard/page.tsx ran before
    * that route retired into a redirect here. Loaded ONLY when the 3a home is
    * the screen being rendered, never for the dashboard-v2 segment. Exposure and
@@ -3804,7 +3815,10 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
               sign that you do not run it.
             </p>
           </div>
+        ) : commissionerOverview ? (
+          <CommissionerOverview data={commissionerOverview} />
         ) : (
+          /* The all-leagues read failed outright — fall back to the plain league picker. */
           <PickALeague
             tabKey="commissioner"
             title="Commissioner"

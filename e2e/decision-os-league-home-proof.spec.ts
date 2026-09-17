@@ -233,14 +233,13 @@ test.describe('G29 Decision OS authenticated theme SSR proof', () => {
     await expectSsrModeNavigation(page, '/dashboard', 'dark')
     await expect(page.getByTestId('dashboard-right-create-league')).toBeVisible({ timeout: 45_000 })
 
-    await expectSsrModeNavigation(page, '/commissioner-hub', 'dark')
-    await expectDecisionOsCards(page, 'commissioner')
-    await expect(page.getByTestId('manager-dna-card-commissioner').getByText('Commissioner use')).toBeVisible()
-    await expect(
-      page.getByTestId('decision-recommendations-card-commissioner').getByText('No grounded moves are ready yet.', {
-        exact: true,
-      }),
-    ).toBeVisible()
+    /*
+     * Five-doors restyle (2026-09-17): the all-leagues Commissioner Hub is /core/commissioner,
+     * and /commissioner-hub only forwards there. Its Decision OS commissioner cards moved to
+     * Commissioner OS with the rest of the analytics, so this checks the hub's SSR theme only.
+     */
+    await expectSsrModeNavigation(page, '/core/commissioner', 'dark')
+    await expect(page.getByTestId('commissioner-overview')).toBeVisible({ timeout: 45_000 })
     await expectNoHorizontalOverflow(page)
     expectNoRootRuntimeCrashes(browserEvents)
   })

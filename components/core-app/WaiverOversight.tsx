@@ -20,7 +20,7 @@ export function WaiverOversight({ data }: { data: WaiverOversightData }) {
 
   if (!data.available) {
     return (
-      <section className="af-card af-ch-section" aria-labelledby="af-chw-title">
+      <section id="ch-waivers" className="af-card af-ch-section" aria-labelledby="af-chw-title">
         <header className="af-ch-section-head">
           <h2 id="af-chw-title" className="af-label">
             Waiver oversight
@@ -70,7 +70,7 @@ export function WaiverOversight({ data }: { data: WaiverOversightData }) {
     : null
 
   return (
-    <section className="af-chw" aria-labelledby="af-chw-title">
+    <section id="ch-waivers" className="af-chw" aria-labelledby="af-chw-title">
       <div className="af-chw-rule">
         <h2 id="af-chw-title" className="af-label">
           Waiver oversight

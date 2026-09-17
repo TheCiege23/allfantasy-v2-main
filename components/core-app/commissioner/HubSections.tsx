@@ -95,6 +95,7 @@ const SOURCE_LABEL: Record<TaskCard['source'], string> = {
   health: 'Health',
   deadline: 'Deadline',
   workspace: 'Check-up',
+  review: 'Review',
 }
 
 function TaskCardView({ card }: { card: TaskCard }) {
@@ -197,8 +198,7 @@ export function HealthPanel({ data }: { data: CommissionerHubData }) {
             <div>
               <p className="af-ch-health-status">{score.data.summary}</p>
               <p className="af-ch-health-note">
-                AllFantasy’s league health score · {Math.round(score.data.confidencePct)}% confidence · the same
-                score the all-leagues Commissioner HQ shows.
+                AllFantasy’s league health score · {Math.round(score.data.confidencePct)}% confidence.
               </p>
             </div>
           </>

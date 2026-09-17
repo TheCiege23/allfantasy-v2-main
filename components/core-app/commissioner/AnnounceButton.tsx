@@ -11,12 +11,20 @@ import BroadcastModal from '@/components/commish/BroadcastModal'
  * composer's league list accept (`lib/commissioner/broadcastAccess.ts`). The
  * composer shows imported leagues read-only, so the button is not offered there.
  */
-export function AnnounceButton({ leagueId }: { leagueId: string }) {
+export function AnnounceButton({
+  leagueId,
+  label = 'Send an announcement',
+  className = 'af-btn af-ch-channel-action',
+}: {
+  leagueId: string
+  label?: string
+  className?: string
+}) {
   const [open, setOpen] = useState(false)
   return (
     <>
-      <button type="button" className="af-btn af-ch-channel-action" data-primary="true" onClick={() => setOpen(true)}>
-        Send an announcement
+      <button type="button" className={className} data-primary="true" onClick={() => setOpen(true)}>
+        {label}
       </button>
       <BroadcastModal open={open} onClose={() => setOpen(false)} defaultLeagueId={leagueId} />
     </>

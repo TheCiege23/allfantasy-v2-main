@@ -530,7 +530,7 @@ export function Dashboard3A(props: Dashboard3AProps) {
             </Link>
           </li>
           <li>
-            <Link className="af3a-navitem" href="/commissioner-hub">
+            <Link className="af3a-navitem" href="/core/commissioner">
               <i>⚑</i>Commissioner
               {commissionerCount > 0 ? <em className="af3a-count">{commissionerCount}</em> : null}
             </Link>

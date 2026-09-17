@@ -275,3 +275,31 @@ export function ownedTeamNames(teams: TeamIdentityRow[]): string[] {
     .filter(Boolean)
   return [...new Set(names)]
 }
+
+/**
+ * Who has gone quiet, by name — the people a commissioner can message.
+ *
+ * ⚠ ON A LEAGUE ALLFANTASY RUNS, AN UNCLAIMED TEAM IS AN EMPTY SEAT, NOT A QUIET
+ * MANAGER. Its roster clock never moves because nobody holds it, so the activity rows
+ * list "Open Team 10" as inactive (measured on a pre-draft native league: 12 of 12
+ * "quiet", 11 of them seats). Seats are the invite prompt's job. On an import a seat is
+ * a team with no owner at all (`isUnownedTeam`); a team nobody has claimed on
+ * AllFantasy still has a real platform manager. The viewer's own team is left out too:
+ * nobody needs telling to message themselves.
+ */
+export function quietManagerNames(
+  rows: Array<{ name: string; status: MemberStatus }>,
+  teams: TeamIdentityRow[],
+  native: boolean,
+  viewerId: string | null = null,
+): string[] {
+  const seats = new Set(
+    teams
+      .filter(
+        (t) => (native ? !t.claimedByUserId : isUnownedTeam(t)) || (viewerId != null && t.claimedByUserId === viewerId),
+      )
+      .flatMap((t) => [t.teamName?.trim(), t.ownerName?.trim()])
+      .filter((n): n is string => Boolean(n)),
+  )
+  return rows.filter((r) => r.status === 'inactive' && !seats.has(r.name)).map((r) => r.name)
+}

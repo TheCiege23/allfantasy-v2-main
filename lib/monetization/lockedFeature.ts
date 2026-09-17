@@ -54,11 +54,11 @@ export const LOCKED_FEATURES: Record<string, LockedFeature> = {
   commissioner: {
     // components/waivers/CommissionerWaiverInsightsPanel.tsx, lib/entitlements/afAccess.ts
     label: 'commissioner insights',
-    href: '/commissioner-hub',
+    href: '/core/commissioner',
   },
   commissioner_ai_tools: {
     label: 'commissioner tools',
-    href: '/commissioner-hub',
+    href: '/core/commissioner',
   },
   advanced_scoring: {
     // World Cup bracket settings + create

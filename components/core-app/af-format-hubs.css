@@ -442,3 +442,139 @@ html[data-mode='light'] .af-core .afh[data-format='efl'] .afh-hero { --afh: #d9b
   .af-core .afh-stat b { font-size: 20px; }
   .af-core .afh-foot { flex-direction: column; align-items: flex-start; }
 }
+
+/* ── Commissioner Hub (five-doors restyle, 2026-09-17) ─────────────────
+ * The all-leagues screen (`/core/commissioner`) and the one-league screen
+ * (`?league=`) wear this file too. `data-format='all'` keeps the core teal.
+ *
+ * ⚠ TOP-LEVEL ON PURPOSE, AFTER THE @media BLOCKS ABOVE. A rule inserted inside
+ * one of them applies only at that width and nothing reports it.
+ */
+.af-core .afh[data-format='all'] { --afh: var(--accent); --afh-ink: var(--accent-ink); --afh-soft: var(--accent-soft); --afh-line: var(--accent-line); }
+html[data-mode='light'] .af-core .afh[data-format='all'] .afh-hero { --afh: #22d3ee; }
+
+.af-core .afh-stack { display: flex; flex-direction: column; gap: 10px; }
+.af-core .afh-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.af-core .afh-chips .afh-chip { align-self: auto; }
+.af-core .afh-empty-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+
+.af-core .afh-btn--ghost { color: var(--afh); background: transparent; border: 1px solid var(--afh-line); }
+.af-core .afh-btn--ghost:hover { background: var(--afh-soft); filter: none; }
+.af-core .afh-btn--ghost:focus-visible,
+.af-core .afh-more:focus-visible,
+.af-core .afh-back:focus-visible {
+  outline: 2px solid var(--afh);
+  outline-offset: 2px;
+}
+
+/* A still is portrait art (the robot king is 682×1024): it sits on the right and
+   fades into the band, rather than being cropped to a horizontal sliver. */
+.af-core .afh-hero[data-art='still'] .afh-hero-media {
+  left: auto;
+  width: min(50%, 560px);
+  object-position: 50% 28%;
+  -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 38%);
+  mask-image: linear-gradient(90deg, transparent 0, #000 38%);
+}
+/* …and the numbers stay on the plain half. Measured at 1280 with both rails open the
+   band is ~710px wide, and full-width stats ran straight across the art. */
+.af-core .afh-hero[data-art='still'] .afh-hero-body {
+  background: linear-gradient(100deg, rgba(6, 7, 15, 0.96) 46%, rgba(6, 7, 15, 0.3) 72%, rgba(6, 7, 15, 0.55));
+}
+.af-core .afh-hero[data-art='still'] .afh-stats { max-width: 54%; gap: 18px 26px; }
+
+/* ── the queue ── */
+.af-core .afh-queue-row { align-items: flex-start; }
+.af-core .afh-queue-mark {
+  width: 28px;
+  height: 28px;
+  flex: none;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  font: 800 12px/1 var(--font-jetbrains-mono, 'JetBrains Mono'), monospace;
+  color: var(--muted);
+  background: var(--chip);
+}
+.af-core .afh-queue-row[data-severity='bad'] .afh-queue-mark { color: var(--bad); background: var(--bad-soft); }
+.af-core .afh-queue-row[data-severity='warn'] .afh-queue-mark { color: var(--warn); background: var(--warn-soft); }
+.af-core .afh-queue-row[data-severity='info'] .afh-queue-mark { color: var(--afh); background: var(--afh-soft); }
+.af-core .afh-queue-row .afh-btn { align-self: center; }
+.af-core .afh-queue-league { font-weight: 600; color: var(--muted); }
+.af-core .afh-queue-group { display: flex; flex-direction: column; }
+.af-core .afh-queue-group-name { padding: 12px 0 2px; color: var(--afh); }
+.af-core .afh-more {
+  cursor: pointer;
+  align-self: flex-start;
+  border: 0;
+  background: none;
+  padding: 8px 0;
+  min-height: 32px;
+  font: 700 11px/1 var(--font-archivo, 'Archivo'), sans-serif;
+  color: var(--afh);
+}
+.af-core .afh-more:hover { text-decoration: underline; }
+
+/* ── one league: header and band ── */
+.af-core .afh-back {
+  align-self: flex-start;
+  min-height: 28px;
+  display: inline-flex;
+  align-items: center;
+  font: 700 11px/1 var(--font-archivo, 'Archivo'), sans-serif;
+  color: var(--afh);
+  text-decoration: none;
+}
+.af-core .afh-back:hover { text-decoration: underline; }
+.af-core .afh-head-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; flex: none; }
+.af-core .afh-hero[data-kind='league'][data-art] .afh-hero-body {
+  background: linear-gradient(100deg, rgba(6, 7, 15, 0.95) 52%, rgba(6, 7, 15, 0.55) 78%, rgba(6, 7, 15, 0.78));
+}
+.af-core .afh-tiles {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px 24px;
+  max-width: 66%;
+}
+.af-core .afh-tile { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.af-core .afh-tile b {
+  font: 900 24px/1.05 var(--font-jetbrains-mono, 'JetBrains Mono'), ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+  color: #eef0fa;
+  overflow-wrap: anywhere;
+}
+.af-core .afh-tile[data-key='deadline'] b { font: 800 15px/1.25 var(--font-archivo, 'Archivo'), sans-serif; }
+.af-core .afh-tile[data-tone='good'] b { color: #34d399; }
+.af-core .afh-tile[data-tone='warn'] b { color: #fbbf24; }
+.af-core .afh-tile[data-tone='bad'] b { color: #fb5b78; }
+.af-core .afh-tile[data-missing='true'] b { color: #6b7394; }
+.af-core .afh-tile > span { font: 700 10px/1.3 var(--font-archivo, 'Archivo'), sans-serif; color: #98a0c4; }
+.af-core .afh-tile small { font-size: 10.5px; line-height: 1.35; color: #8f97bd; }
+.af-core .afh-hero-note { margin: 0; max-width: 66%; font-size: 12px; line-height: 1.45; color: #c3c9e6; }
+.af-core .afh-hero-note a { color: var(--afh); font-weight: 700; }
+
+@media (max-width: 720px) {
+  .af-core .afh-hero[data-art='still'] .afh-hero-media { width: 72%; opacity: 0.5; }
+  .af-core .afh-queue-row { flex-wrap: wrap; }
+  .af-core .afh-queue-row .afh-btn { margin-left: 38px; }
+  .af-core .afh-hero[data-kind='league'][data-art] .afh-hero-body,
+  .af-core .afh-hero[data-art='still'] .afh-hero-body { background: rgba(6, 7, 15, 0.84); }
+  .af-core .afh-hero[data-art='still'] .afh-stats { max-width: none; }
+  .af-core .afh-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); max-width: none; gap: 14px 16px; }
+  .af-core .afh-tile b { font-size: 20px; }
+  .af-core .afh-hero-note { max-width: none; }
+  .af-core .afh-head-actions { width: 100%; }
+  .af-core .afh-tile:not([data-missing='true']) small { display: none; }
+
+  /* One league on a phone: the task cards come before the band (2026-09-16 brief —
+     "what needs you" first on every width). Measured before this: shell chrome, header
+     and band put the first task card at 1072px on a 390×844 phone. Only the band and the
+     jump chips move; the band holds no controls beyond two in-page anchors. */
+  .af-core .af-ch.afh > * { order: 3; }
+  .af-core .af-ch.afh > .afh-back,
+  .af-core .af-ch.afh > .afh-head { order: 0; }
+  .af-core .af-ch.afh > .af-ch-unread,
+  .af-core .af-ch.afh > .af-ch-tasks-section { order: 1; }
+  .af-core .af-ch.afh > .afh-hero,
+  .af-core .af-ch.afh > .af-ch-nav { order: 2; }
+}

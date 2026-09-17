@@ -43,11 +43,15 @@ import { balanceChart, engagementChart, scoringChart, type HubChart } from './co
 import { RECIPES, RECIPES_SEND_TOGGLE, readRecipeSettings, type RecipeKey } from './commissioner/recipes'
 import {
   memberActivityFromReads,
+  quietManagerNames,
   staleActivityReason,
   unownedTeamNames,
   type LeagueMemberActivity,
 } from './commissioner/activity'
 import { readMemberActivityInputs } from './commissioner/memberActivityReads'
+import { readReviewSignals } from './commissioner/signalReads'
+import { NO_REVIEW_SIGNALS } from './commissioner/signals'
+import { leagueHubArt, type HubArt } from './commissioner/leagueArt'
 import { MANAGER_INACTIVE_AFTER_DAYS } from '@/lib/decision-os/behavioral/manager-intelligence'
 
 /**
@@ -160,7 +164,7 @@ export type CommissionerHubData = {
   /** Stated when there are no cards, because an empty list is not a quiet league. */
   tasksEmptyReason: string | null
   health: {
-    /** The canonical engine score — the same number `/commissioner-hub` shows. */
+    /** The canonical engine score (`getCommissionerHubHealthForUser`). */
     score: SectionState<{ score: number; status: string; summary: string; confidencePct: number }>
     flags: HealthFlag[]
   }
@@ -204,6 +208,14 @@ export type CommissionerHubData = {
   publicStandings: { enabled: boolean; url: string }
   /** FAAB left per manager and what the last waiver run did — see commissionerWaivers.ts. */
   waivers: WaiverOversight
+  /** The hero band's key art: this league's own format loop, or the robot king. */
+  art: HubArt
+  /** This league's chat, for the footer. */
+  chatHref: string
+  /** Teams nobody has connected to an AllFantasy account — the band's invite prompt. */
+  unclaimedTeams: number
+  /** Managers with no move in the window, by name — people, never empty seats. */
+  quietManagers: string[]
 }
 
 export type CommissionerHubResult = CommissionerHubData | CommissionerAccessDenied
@@ -365,7 +377,9 @@ export async function getCommissionerHub(input: {
       leagueType: true,
       leagueVariant: true,
       guillotineMode: true,
+      bestBallMode: true,
       isDynasty: true,
+      lifecycleState: true,
     },
   })
 
@@ -419,6 +433,7 @@ export async function getCommissionerHub(input: {
     weekStarts,
     sendEnabled,
     activityReads,
+    reviewSignals,
   ] = await Promise.all([
     prisma.leagueTeam
       .findMany({
@@ -496,6 +511,10 @@ export async function getCommissionerHub(input: {
     getBoolean(RECIPES_SEND_TOGGLE).catch(() => false),
     // Roster timestamps describe managers only where AllFantasy runs the league — see activity.ts.
     readMemberActivityInputs(leagueId, native),
+    // The old all-leagues hub's review work, so this league reads the same in both views.
+    readReviewSignals([{ id: leagueId, native, status: league.status, lifecycleState: league.lifecycleState }], now)
+      .then((r) => r.byLeague.get(leagueId) ?? NO_REVIEW_SIGNALS)
+      .catch(() => NO_REVIEW_SIGNALS),
   ])
 
   const teamCount = teams.length || rosters.length
@@ -586,6 +605,8 @@ export async function getCommissionerHub(input: {
     MANAGER_INACTIVE_AFTER_DAYS,
   )
   const memberRows = memberActivity.available ? memberActivity.data.rows : null
+
+  const quietManagers = memberRows && !activityStale ? quietManagerNames(memberRows, teams, native, userId) : []
 
   const flags = rankFlags([
     abandonedTeamsFlag({
@@ -711,6 +732,7 @@ export async function getCommissionerHub(input: {
       ? { days: staleDays, href: `/core/sync?league=${encodeURIComponent(leagueId)}`, platformLabel: platformName }
       : null,
     calendar: calendar.events,
+    signals: { leagueId, values: reviewSignals },
     workspace: workspaceTasks.map((w) => {
       const links = Array.isArray(w.relatedLinks) ? (w.relatedLinks as Array<Record<string, unknown>>) : []
       const href = links.map((l) => (typeof l?.href === 'string' ? l.href : null)).find((h) => h && h.startsWith('/')) ?? null
@@ -956,6 +978,11 @@ export async function getCommissionerHub(input: {
       url: `/standings/${leagueId}`,
     },
     waivers,
+    art: leagueHubArt({ ...league, settings: settingsJson }),
+    chatHref: `/league/${encodeURIComponent(leagueId)}?view=league_chat`,
+    // Ingested teams only: a league with no team rows has nothing to invite anyone to yet.
+    unclaimedTeams: teams.length > 0 ? teams.length - claimed : 0,
+    quietManagers,
   }
 }
 
