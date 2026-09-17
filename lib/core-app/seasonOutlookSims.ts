@@ -22,11 +22,13 @@ import {
  * headline stay at the full iteration count instead of falling toward the floor on a big account.
  *
  * ── 🛑 ONE ROW PER LEAGUE, WITH THE INPUT HASH INSIDE IT — NOT A KEY PER INPUT ────────────────
- * Keying on the hash is the obvious design and it leaks. Nothing in this repo purges expired
- * `SportsDataCache` rows (`purgeExpiredCache` has no caller; measured 2026-09-17, 3,448 of 4,436
- * rows already expired), and a league's inputs change every time a week is scored. A hashed key
- * would leave a dead row per league per score update, forever. One row per league is overwritten
- * in place, so the table holds exactly one entry per league anyone has opened.
+ * Keying on the hash is the obvious design and it leaks. The hourly `SportsDataCache` purge is an
+ * ALLOW-LIST of key families (`PURGEABLE_KEY_PREFIXES` in `lib/enrichment-cache.ts`, since
+ * 2026-09-17), and this family is not on it — before that purge, 3,448 of 4,436 rows sat expired —
+ * while a league's inputs change every time a week is scored. A hashed key would leave a dead row
+ * per league per score update. One row per league is overwritten in place, so the table holds
+ * exactly one entry per league anyone has opened, purge or no purge. (Reads here filter on
+ * `expiresAt`, so adding this prefix to that allow-list later would be safe.)
  *
  * ⚠ THE HASH COVERS EVERYTHING THE RUN READS, PLUS THE MODEL VERSION. Change the model and forget to
  * bump `MODEL_VERSION` and every league keeps serving numbers from the old model until its next score
