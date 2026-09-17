@@ -16,9 +16,6 @@ import ChimmySurfaceActionFeed from '../ChimmySurfaceActionFeed'
 import ChimmyUnifiedAlertFeed from '../ChimmyUnifiedAlertFeed'
 import type { ChimmyFeedRecommendation, AIActionContext } from '@/lib/chimmy-actions'
 import { buildActionContext } from '@/lib/chimmy-actions'
-import type { UnifiedSavedRecommendation } from '@/lib/chimmy-actions/AIActionModel'
-import SavedRecommendationsPanel from '../SavedRecommendationsPanel'
-import SavedRecommendationDetailModal from '../SavedRecommendationDetailModal'
 import { mapAlertPreferenceToSensitivity, shouldShowStoryContent } from '@/lib/chimmy-personalization'
 import { useChimmyPersonalization } from '@/lib/chimmy-personalization/useChimmyPersonalization'
 
@@ -56,7 +53,6 @@ export default function LeagueHomeAISurface({
   const resolvedActionContext = actionContext ?? buildActionContext(surface)
   const [deepDiveOpen, setDeepDiveOpen] = useState(false)
   const [selectedInsight, setSelectedInsight] = useState<{ title: string; summary: string } | null>(null)
-  const [selectedSavedRec, setSelectedSavedRec] = useState<UnifiedSavedRecommendation | null>(null)
 
   const allowStoryContent = useMemo(() => {
     if (!profile) return true
@@ -129,13 +125,6 @@ export default function LeagueHomeAISurface({
         <ChimmySurfaceActionFeed recommendations={actionFeed} context={resolvedActionContext} className="mb-4" />
       )}
 
-      <section className="mb-4 rounded-2xl border border-white/10 bg-white/5 overflow-hidden">
-        <SavedRecommendationsPanel
-          compact
-          leagueId={resolvedActionContext.leagueId ?? null}
-          onOpenDetail={(rec) => setSelectedSavedRec(rec)}
-        />
-      </section>
       {/* Alerts */}
       {alerts.length > 0 && (
         <div className="mb-4 space-y-2">
@@ -179,21 +168,6 @@ export default function LeagueHomeAISurface({
       >
         <p className="text-sm text-white/70 leading-relaxed">{selectedInsight?.summary}</p>
       </ChimmyModalDeepDive>
-
-      {selectedSavedRec && (
-        <ChimmyModalDeepDive
-          open={Boolean(selectedSavedRec)}
-          onClose={() => setSelectedSavedRec(null)}
-          title="Saved Recommendation"
-          subtitle={leagueName}
-        >
-          <SavedRecommendationDetailModal
-            rec={selectedSavedRec}
-            onClose={() => setSelectedSavedRec(null)}
-            onDeleted={() => setSelectedSavedRec(null)}
-          />
-        </ChimmyModalDeepDive>
-      )}
     </ChimmySurfaceShell>
   )
 }

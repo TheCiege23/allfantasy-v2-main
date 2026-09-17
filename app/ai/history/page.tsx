@@ -122,15 +122,6 @@ export default function AIHistoryPage() {
           <div>
             <h1 className="text-xl font-semibold text-white">Saved AI history</h1>
             <p className="text-sm text-white/50">Review, revisit, and remove previous AI analyses.</p>
-            <div className="mt-1">
-              <Link
-                href="/ai/saved"
-                className="text-xs text-cyan-300 hover:text-cyan-200"
-                data-testid="ai-history-open-saved-recommendations-link"
-              >
-                Open Saved Recommendations Hub
-              </Link>
-            </div>
           </div>
           <button
             type="button"

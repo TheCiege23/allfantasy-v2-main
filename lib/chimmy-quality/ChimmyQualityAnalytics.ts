@@ -1,5 +1,4 @@
 import { prisma } from '@/lib/prisma'
-import { listSavedRecommendations } from '@/lib/saved-recommendations/SavedRecommendationsService'
 
 const QUALITY_PREFIX = 'chimmy_quality_'
 
@@ -23,10 +22,15 @@ export interface ChimmyQualityMetrics {
     recommendationFollowThroughRate: number | null
     memoryCorrectionOrIgnoreRate: number | null
   }
+  /**
+   * ⚠ NOT TRACKED — ALWAYS NULL. These were read from the saved-recommendations service, a
+   * Supabase-era stub with no database behind it (retired 2026-09-16), so they reported 0 — which
+   * reads as "you saved none" rather than "nobody can save one". Null says what is true.
+   */
   lifecycle: {
-    savedRecommendationsTotal: number
-    savedRecommendationsStale: number
-    savedRecommendationsActedOn: number
+    savedRecommendationsTotal: number | null
+    savedRecommendationsStale: number | null
+    savedRecommendationsActedOn: number | null
   }
   principles: {
     scope: 'product_quality_user_benefit'
@@ -128,37 +132,14 @@ export async function getChimmyQualityMetrics(input: {
   const periodDays = Math.max(1, Math.min(365, input.periodDays ?? 30))
   const start = new Date(Date.now() - periodDays * 24 * 60 * 60 * 1000)
 
-  const [events, totalRes, staleRes, actedOnRes] = await Promise.all([
-    prisma.aIUserFeedback.findMany({
-      where: {
-        userId: input.userId,
-        actionType: { startsWith: QUALITY_PREFIX },
-        createdAt: { gte: start },
-      },
-      select: { actionType: true },
-    }),
-    listSavedRecommendations({
+  const events = await prisma.aIUserFeedback.findMany({
+    where: {
       userId: input.userId,
-      status: null,
-      isArchived: false,
-      limit: 1,
-      offset: 0,
-    }),
-    listSavedRecommendations({
-      userId: input.userId,
-      status: 'stale',
-      isArchived: false,
-      limit: 1,
-      offset: 0,
-    }),
-    listSavedRecommendations({
-      userId: input.userId,
-      status: 'acted_on',
-      isArchived: false,
-      limit: 1,
-      offset: 0,
-    }),
-  ])
+      actionType: { startsWith: QUALITY_PREFIX },
+      createdAt: { gte: start },
+    },
+    select: { actionType: true },
+  })
 
   const counts = emptyCounts()
   for (const event of events) {
@@ -166,12 +147,9 @@ export async function getChimmyQualityMetrics(input: {
     if (raw in counts) counts[raw] += 1
   }
 
-  const total = totalRes.total
-  const stale = staleRes.total
-  const actedOn = actedOnRes.total
-
-  const staleRecommendationRate = total > 0 ? stale / total : null
-  const recommendationFollowThroughRate = total > 0 ? actedOn / total : null
+  // Saved-recommendation lifecycle is not tracked anywhere — see the `lifecycle` type note.
+  const staleRecommendationRate = null
+  const recommendationFollowThroughRate = null
 
   const memoryCorrectionOrIgnoreRate =
     counts.memory_item_created > 0
@@ -187,9 +165,9 @@ export async function getChimmyQualityMetrics(input: {
       memoryCorrectionOrIgnoreRate,
     },
     lifecycle: {
-      savedRecommendationsTotal: total,
-      savedRecommendationsStale: stale,
-      savedRecommendationsActedOn: actedOn,
+      savedRecommendationsTotal: null,
+      savedRecommendationsStale: null,
+      savedRecommendationsActedOn: null,
     },
     principles: {
       scope: 'product_quality_user_benefit',

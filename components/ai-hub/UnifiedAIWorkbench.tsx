@@ -756,11 +756,11 @@ export default function UnifiedAIWorkbench() {
           Back
         </button>
         <Link
-          href="/ai/saved"
+          href="/ai/history"
           data-testid="unified-ai-open-history-link"
           className="inline-flex shrink-0 touch-manipulation items-center rounded-lg border border-white/20 bg-white/[0.03] px-4 py-2.5 text-sm text-white/75 hover:bg-white/10 sm:py-2"
         >
-          Saved recommendations
+          Saved results
         </Link>
       </div>
 
