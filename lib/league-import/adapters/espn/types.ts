@@ -36,6 +36,8 @@ export interface EspnImportTeam {
   rank: number | null
   pointsFor: number
   pointsAgainst: number | null
+  /** ESPN `team.divisionId`. Optional so fixtures that predate it still type. */
+  divisionId?: string | null
   faabRemaining: number | null
   waiverPriority: number | null
   rosterPlayerIds: string[]

@@ -107,7 +107,8 @@ registerScreenSummary<LeagueStandingsResult>({
    * key, so forgetting serves the OLD shape to a renderer expecting the new one — out of a cache
    * that has no idea anything changed. No error, no conflict, wrong screen.
    */
-  version: 1,
+  // v2 (2026-09-17): the result gained `board` — official, power, history, zones, projections.
+  version: 2,
   ttlMs: TTL_MS,
   staleWhileRevalidateMs: STALE_WHILE_REVALIDATE_MS,
   /**
