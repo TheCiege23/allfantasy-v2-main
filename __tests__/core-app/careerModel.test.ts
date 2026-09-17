@@ -53,7 +53,7 @@ describe('buildCareerData', () => {
     const d = buildCareerData(source(rows))
     expect(d.accomplishments.championships).toBe(1)
     expect(d.accomplishments.finals).toBeNull()
-    expect(d.accomplishments.finalsNote).toMatch(/runner|lost the final/i)
+    expect(d.accomplishments.finalsNote).toMatch(/who lost a final/i)
     expect(d.accomplishments.playoffAppearances).toBe(2)
     expect(d.accomplishments.playoffKnown).toBe(4)
     expect(d.accomplishments.record).toBe('35-20')

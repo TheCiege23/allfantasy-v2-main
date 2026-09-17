@@ -1,3 +1,4 @@
+import { summarizeFinals, type FinalResult } from '@/lib/core-app/careerFinals'
 import { computePrestige, winRateOf, type PrestigeComponent } from '@/lib/core-app/prestige'
 import { getLevelFromXp } from '@/lib/rank/levels'
 
@@ -89,6 +90,12 @@ export type CareerRow = {
   /** False for sources that cannot say anything about the playoffs at all. */
   playoffKnown: boolean
   isChampion: boolean
+  /**
+   * What the stored Sleeper playoff bracket says about the title game, or null when no bracket
+   * can say — every non-Sleeper source, and Sleeper seasons without a decided bracket on record.
+   * Optional because profiles and fixtures written before it carry no such field.
+   */
+  finalResult?: FinalResult | null
   /** League size, when the source recorded one. */
   teamCount: number | null
   playoffTeams: number | null
@@ -333,17 +340,24 @@ export type LegacyDimension = {
 /**
  * The first thing the screen says: what you have won.
  *
- * ⚠ `finals` IS NULL, AND WILL STAY NULL UNTIL AN IMPORT RECORDS A RUNNER-UP.
- * Measured 2026-09-16: every source stores the champion, and none stores who lost
- * the final. `legacy_rosters.finalStanding` is "champion ? 1 : Sleeper's
- * settings.rank" — a REGULAR-SEASON rank that is populated on 19 of 1,121 rows —
- * and `import_final_standing` is set mid-season. Counting `finalStanding = 2` as
- * a final would credit a second-place regular season with a title game nobody
- * played. The tile names the gap instead.
+ * ⚠ `finals` COMES FROM STORED SLEEPER PLAYOFF BRACKETS AND NOTHING ELSE (see
+ * `careerFinals.ts`). Titles + finals lost, where a lost final is the losing side of the
+ * bracket's title game. It is null when no finished season has a bracket to read.
+ *
+ * ⚠ NEVER FROM `finalStanding`. `legacy_rosters.finalStanding` is "champion ? 1 : Sleeper's
+ * settings.rank" — a REGULAR-SEASON rank — and `import_final_standing` is set mid-season.
+ * Counting `finalStanding = 2` as a final would credit a second-place regular season with a
+ * title game nobody played.
  */
 export type CareerAccomplishments = {
   championships: number
+  /** Title games played: `championships` + `finalsLost`. Null when no bracket could be read. */
   finals: number | null
+  finalsLost: number
+  /** Finished league-seasons whose final could be judged (a title, or a bracket naming the result). */
+  finalsKnown: number
+  /** Seasons whose bracket names you champion but whose source records no title — reported, not counted. */
+  finalsUncountedTitles: number
   finalsNote: string
   playoffAppearances: number
   /** League-seasons whose source can say whether you made the playoffs. */
@@ -488,9 +502,6 @@ const LEGACY_UNAVAILABLE = ['Rivalry', 'Awards']
 export const BEST_YEAR_MIN_GAMES = 10
 /** A best league-season needs a real schedule behind its win rate. */
 export const BEST_SEASON_MIN_GAMES = 6
-
-export const FINALS_NOTE =
-  'Imports record who won each title but not who lost the final, so title-game appearances cannot be counted yet.'
 
 /**
  * Consistency: how steady the season-by-season win rate is. Needs at least two
@@ -940,6 +951,8 @@ export function buildCareerData(source: CareerSource, filter: CareerFilter = NO_
     { active: 0, completed: 0, archived: 0, unknown: 0 },
   )
 
+  const finals = summarizeFinals(rows)
+
   const bestYear =
     seasons
       .filter((s) => s.winRate != null && s.games >= BEST_YEAR_MIN_GAMES)
@@ -1011,8 +1024,11 @@ export function buildCareerData(source: CareerSource, filter: CareerFilter = NO_
     legacy,
     accomplishments: {
       championships,
-      finals: null,
-      finalsNote: FINALS_NOTE,
+      finals: finals.finals,
+      finalsLost: finals.lost,
+      finalsKnown: finals.known,
+      finalsUncountedTitles: finals.uncountedTitleWins,
+      finalsNote: finals.note,
       playoffAppearances,
       playoffKnown,
       playoffRate: playoffKnown > 0 ? playoffAppearances / playoffKnown : null,
