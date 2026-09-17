@@ -30,6 +30,13 @@ function checkpointForScope(scope: SleeperSyncScope, n: NormalizedImportResult):
         isDynasty: n.league.isDynasty,
         roster_positions: (n.league as Record<string, unknown>).roster_positions ?? null,
         scoring_settings: (n.league as Record<string, unknown>).scoring_settings ?? null,
+        /*
+         * Only when present, so leagues without a bracket result keep the checkpoint
+         * they already had. A completed league whose title result is newly known — or
+         * newly CORRECTED, which is every completed league after the bracket fix — gets
+         * a new token and its LeagueSeason row is rewritten on the next run.
+         */
+        ...(n.season_placement ? { seasonPlacement: n.season_placement } : {}),
       })
     case 'teams_rosters':
       return hash(

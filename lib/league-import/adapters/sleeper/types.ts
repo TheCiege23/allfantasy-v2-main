@@ -2,6 +2,8 @@
  * Sleeper API / legacy transfer raw shapes used by the Sleeper adapter.
  */
 
+import type { SleeperBracketGame } from '../../sleeper/bracketPlacements'
+
 export interface SleeperLeagueRaw {
   league_id: string
   name: string
@@ -134,6 +136,12 @@ export interface SleeperImportPayload {
   /** Block F — future traded draft picks (Sleeper `/league/{id}/traded_picks`). */
   tradedPicks?: SleeperTradedPickRaw[]
   playerMap?: Record<string, { name: string; position: string; team: string }>
+  /**
+   * `/league/{id}/winners_bracket` — fetched only once the season is `complete`,
+   * because a bracket is the only thing that says who won the title and who lost
+   * it. Absent = not fetched (season not over, or the fetch failed).
+   */
+  winnersBracket?: SleeperBracketGame[]
   previousSeasons?: Array<{ season: string; league: SleeperLeagueRaw }>
   /**
    * Phase 2.3 — non-fatal fetch failures surfaced instead of silently swallowed

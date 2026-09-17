@@ -34,6 +34,41 @@
  */
 
 /**
+ * Which team ids a completed season's champion and runner-up are, for a writer
+ * that only has the normalized import.
+ *
+ * ⚠ A SLEEPER STANDINGS RANK IS NOT A FINISH. `SleeperHistoryMapper` builds
+ * `standings[].rank` by sorting wins then points, so "rank 1 of a completed season"
+ * was the regular-season leader and "rank 2" was second — measured as the source of
+ * every Sleeper runner-up these writers stored. For Sleeper the answer comes from the
+ * winners bracket (`normalized.season_placement`) or not at all.
+ *
+ * Other providers keep the standings fallback they had: their `rank` is the
+ * provider's own field, and whether it is a final placement is a per-provider
+ * question this fix does not answer.
+ */
+export function seasonPlacementTeamIds(normalized: {
+  source: { source_provider: string }
+  standings: ReadonlyArray<{ source_team_id: string; rank: number }>
+  season_placement?: { champion_source_team_id: string | null; runner_up_source_team_id: string | null } | null
+}): { championTeamId: string | null; runnerUpTeamId: string | null } {
+  if (normalized.season_placement) {
+    return {
+      championTeamId: normalized.season_placement.champion_source_team_id,
+      runnerUpTeamId: normalized.season_placement.runner_up_source_team_id,
+    }
+  }
+  if (String(normalized.source.source_provider).toLowerCase() === 'sleeper') {
+    return { championTeamId: null, runnerUpTeamId: null }
+  }
+  const byRank = [...normalized.standings].sort((a, b) => a.rank - b.rank)
+  return {
+    championTeamId: byRank[0]?.source_team_id ?? null,
+    runnerUpTeamId: byRank[1]?.source_team_id ?? null,
+  }
+}
+
+/**
  * Sleeper's `status` vocabulary is `pre_draft` | `drafting` | `in_season` |
  * `complete`. Only the last means the season is over. `complete` is the spelling
  * Sleeper uses; `completed` is accepted because other importers normalise to it and

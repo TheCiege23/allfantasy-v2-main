@@ -12,6 +12,7 @@ import {
   type SleeperRoster,
 } from '@/lib/sleeper-client'
 import { getSleeperHistoricalLeagueChain } from './SleeperHistoricalLeagueChain'
+import { analyzePlayoffBracket, placementLabel, resolveBracketPlacements } from './bracketPlacements'
 import { shouldSkipImportedSeason } from '../seasonCompletion'
 
 const MAX_SLEEPER_MATCHUP_WEEKS = 18
@@ -26,15 +27,6 @@ interface PersistedMatchupFactRow {
   scoreB: number
   winnerTeamId: string | null
   season: number
-}
-
-interface PlayoffFinishInfo {
-  isChampion: boolean
-  isRunnerUp: boolean
-  playoffWins: number
-  playoffLosses: number
-  bestFinish: number
-  madePlayoffs: boolean
 }
 
 export interface SleeperHistoricalMatchupSyncSummary {
@@ -62,7 +54,12 @@ function safeNumber(value: unknown): number {
   return Number.isFinite(parsed) ? parsed : 0
 }
 
-function toPlainBracket(bracket: SleeperPlayoffBracket[]): Array<Record<string, number | null>> {
+/**
+ * ⚠ `placement` AND THE `*From` LINKS ARE KEPT. The first version of this flattener
+ * dropped `p`, `t1_from` and `t2_from`, which left every stored bracket unable to say
+ * which last-round game was the final — see `bracketPlacements.ts`.
+ */
+function toPlainBracket(bracket: SleeperPlayoffBracket[]): Array<Record<string, unknown>> {
   return bracket.map((matchup) => ({
     round: matchup.r ?? null,
     matchup: matchup.m ?? null,
@@ -70,6 +67,9 @@ function toPlainBracket(bracket: SleeperPlayoffBracket[]): Array<Record<string, 
     team2: matchup.t2 ?? null,
     winner: matchup.w ?? null,
     loser: matchup.l ?? null,
+    placement: matchup.p ?? null,
+    team1From: matchup.t1_from ?? null,
+    team2From: matchup.t2_from ?? null,
   }))
 }
 
@@ -127,87 +127,6 @@ function getPlayoffSeedForRoster(
   }
 
   return computePlayoffSeedFromBracket(roster.roster_id, winnersBracket)
-}
-
-function analyzePlayoffBracket(
-  bracket: SleeperPlayoffBracket[],
-  rosterIds: number[]
-): Map<number, PlayoffFinishInfo> {
-  const results = new Map<number, PlayoffFinishInfo>()
-
-  for (const rosterId of rosterIds) {
-    results.set(rosterId, {
-      isChampion: false,
-      isRunnerUp: false,
-      playoffWins: 0,
-      playoffLosses: 0,
-      bestFinish: 999,
-      madePlayoffs: false,
-    })
-  }
-
-  if (!bracket.length) {
-    return results
-  }
-
-  const maxRound = Math.max(...bracket.map((matchup) => safeNumber(matchup.r)))
-  for (const matchup of bracket) {
-    const round = safeNumber(matchup.r)
-    const teamOne = safeNumber(matchup.t1)
-    const teamTwo = safeNumber(matchup.t2)
-    const winner = safeNumber(matchup.w)
-    const loser = safeNumber(matchup.l)
-
-    if (teamOne > 0) {
-      const info = results.get(teamOne)
-      if (info) info.madePlayoffs = true
-    }
-    if (teamTwo > 0) {
-      const info = results.get(teamTwo)
-      if (info) info.madePlayoffs = true
-    }
-
-    if (winner > 0) {
-      const winnerInfo = results.get(winner)
-      if (winnerInfo) {
-        winnerInfo.playoffWins += 1
-        if (round === maxRound) {
-          winnerInfo.isChampion = true
-          winnerInfo.bestFinish = 1
-        }
-      }
-    }
-
-    if (loser > 0) {
-      const loserInfo = results.get(loser)
-      if (loserInfo) {
-        loserInfo.playoffLosses += 1
-        if (round === maxRound) {
-          loserInfo.isRunnerUp = true
-          loserInfo.bestFinish = Math.min(loserInfo.bestFinish, 2)
-        } else {
-          const finishFromRound = Math.pow(2, maxRound - round) + 1
-          loserInfo.bestFinish = Math.min(loserInfo.bestFinish, finishFromRound)
-        }
-      }
-    }
-  }
-
-  for (const [, info] of results) {
-    if (!info.isChampion && info.madePlayoffs && info.bestFinish === 999) {
-      info.bestFinish = rosterIds.length
-    }
-  }
-
-  return results
-}
-
-function toPlayoffFinishLabel(info: PlayoffFinishInfo): string | null {
-  if (info.isChampion) return 'Champion'
-  if (info.isRunnerUp) return 'Runner-up'
-  if (info.bestFinish <= 4) return 'Semifinalist'
-  if (info.madePlayoffs) return 'Playoff Team'
-  return null
 }
 
 /**
@@ -336,6 +255,7 @@ function buildMatchupMetadata(args: {
     args.winnersBracket,
     args.rosters.map((roster) => roster.roster_id)
   )
+  const titleResult = resolveBracketPlacements(args.winnersBracket)
 
   const playoffSeedsByRosterId = Object.fromEntries(
     args.rosters.map((roster) => [
@@ -352,7 +272,7 @@ function buildMatchupMetadata(args: {
         playoffSeed: playoffSeedsByRosterId[String(rosterId)] ?? null,
         canonicalRosterId:
           args.canonicalIdByHistoricalRosterId.get(String(rosterId)) ?? String(rosterId),
-        label: toPlayoffFinishLabel(info),
+        label: placementLabel(info),
       },
     ])
   )
@@ -378,6 +298,15 @@ function buildMatchupMetadata(args: {
       ),
       playoffSeedsByRosterId,
       playoffFinishByRosterId,
+      /*
+       * The title game's result, and how it was identified (`placement` = Sleeper's
+       * `p: 1`). Written so a reader never has to re-derive "who won" from the
+       * per-roster map, and so a backfill can tell a corrected row from an old one.
+       */
+      championRosterId: titleResult.championRosterId,
+      runnerUpRosterId: titleResult.runnerUpRosterId,
+      titleGameSource: titleResult.source,
+      bracketPlacementVersion: 2,
       winnersBracket: toPlainBracket(args.winnersBracket),
       losersBracket: toPlainBracket(args.losersBracket),
     },

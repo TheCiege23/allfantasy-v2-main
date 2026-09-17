@@ -273,6 +273,14 @@ export interface NormalizedTradedPick {
   previous_owner_roster_id?: string
 }
 
+/** Title-game result for one season, in the adapter's own team id space. */
+export interface NormalizedSeasonPlacement {
+  champion_source_team_id: string | null
+  runner_up_source_team_id: string | null
+  /** How the title game was identified — see `sleeper/bracketPlacements.ts`. */
+  source: 'placement' | 'inferred' | 'none'
+}
+
 /** Normalized standings entry. */
 export interface NormalizedStandingsEntry {
   source_team_id: string
@@ -327,6 +335,13 @@ export interface NormalizedImportResult {
    * exposes them but no picks are currently in a traded state.
    */
   traded_picks?: NormalizedTradedPick[]
+  /**
+   * Who won the season's title and who lost it, from the provider's own playoff
+   * result — NOT from `standings`. Absent = the adapter has no such result (season
+   * not over, provider does not expose it, or the fetch failed); a present object
+   * with null ids = the result exists and names nobody yet.
+   */
+  season_placement?: NormalizedSeasonPlacement | null
   transactions: NormalizedTransaction[]
   standings: NormalizedStandingsEntry[]
   /**

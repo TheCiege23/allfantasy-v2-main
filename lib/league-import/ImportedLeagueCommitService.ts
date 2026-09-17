@@ -5,7 +5,7 @@ import { calculateAndSaveRank } from '@/lib/rank/calculateRank'
 import { deriveImportStatsFromNormalized } from '@/lib/rank/deriveImportStatsFromNormalized'
 import { SETTINGS_SNAPSHOT_VERSION } from '@/lib/league-contract/types'
 import { readBackfillOutcome, backfillSettingsPatch } from '@/lib/league-import/backfillOutcome'
-import { resolveSeasonPlacement } from '@/lib/league-import/seasonPlacement'
+import { resolveSeasonPlacement, seasonPlacementTeamIds } from '@/lib/league-import/seasonPlacement'
 import { IMPORT_COVERAGE_SETTINGS_KEY } from '@/lib/league-import/importCoverageSummary'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
 import { clearLeagueTombstone, tombstoneKeyFor } from '@/lib/league-delete/leagueTombstones'
@@ -1104,8 +1104,8 @@ export async function persistImportedLeagueFromNormalization(
     const seasonYearForRow = typeof normalized.league.season === 'number' && Number.isFinite(normalized.league.season)
       ? normalized.league.season
       : new Date().getFullYear()
-    const topStanding = [...normalized.standings].sort((a, b) => a.rank - b.rank)[0] ?? null
-    const runnerUpStanding = [...normalized.standings].sort((a, b) => a.rank - b.rank)[1] ?? null
+    // A Sleeper finish comes from the winners bracket, never from standings rank — see seasonPlacement.ts.
+    const placementIds = seasonPlacementTeamIds(normalized)
     const nameForTeamId = (sourceTeamId: string | undefined): string | null => {
       if (!sourceTeamId) return null
       const r = normalized.rosters.find((row) => row.source_team_id === sourceTeamId)
@@ -1119,8 +1119,8 @@ export async function persistImportedLeagueFromNormalization(
      */
     const placement = resolveSeasonPlacement({
       leagueStatus: normalized.league.status,
-      championName: nameForTeamId(topStanding?.source_team_id),
-      runnerUpName: nameForTeamId(runnerUpStanding?.source_team_id),
+      championName: nameForTeamId(placementIds.championTeamId ?? undefined),
+      runnerUpName: nameForTeamId(placementIds.runnerUpTeamId ?? undefined),
     })
     await prisma.leagueSeason.upsert({
       where: {
