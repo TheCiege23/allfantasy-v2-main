@@ -335,7 +335,13 @@ export async function fetchSleeperLeagueForImport(
     return null
   }
 
-  const [users, rosters, currentDraftPicks, tradedPicksRaw] = await Promise.all([
+  /*
+   * The winners bracket is fetched only for a FINISHED season. It is the one source of
+   * who won the title and who lost it: the standings this payload also carries are a
+   * wins/points sort, and ranking them made the regular-season leader "champion".
+   */
+  const seasonComplete = String(league.status ?? '').toLowerCase() === 'complete'
+  const [users, rosters, currentDraftPicks, tradedPicksRaw, winnersBracketRaw] = await Promise.all([
     fetchSleeperJson<SleeperImportPayload['users']>(`${SLEEPER_BASE}/league/${cleanId}/users`, ctx('league users')),
     fetchSleeperJson<SleeperImportPayload['rosters']>(`${SLEEPER_BASE}/league/${cleanId}/rosters`, ctx('league rosters')),
     fetchLeagueDraftPicks(cleanId, league.season),
@@ -346,6 +352,12 @@ export async function fetchSleeperLeagueForImport(
       `${SLEEPER_BASE}/league/${cleanId}/traded_picks`,
       ctx('traded picks'),
     ),
+    seasonComplete
+      ? fetchSleeperJson<SleeperImportPayload['winnersBracket']>(
+          `${SLEEPER_BASE}/league/${cleanId}/winners_bracket`,
+          ctx('winners bracket'),
+        )
+      : Promise.resolve(undefined),
   ])
 
   // Phase 2.3 — weekly matchup + transaction fetches run in parallel (were sequential,
@@ -474,6 +486,7 @@ export async function fetchSleeperLeagueForImport(
     // resilient fetcher returns null on unrecoverable failures; treat that as
     // "no traded picks known" so downstream code never explodes.
     tradedPicks: Array.isArray(tradedPicksRaw) ? tradedPicksRaw : undefined,
+    winnersBracket: Array.isArray(winnersBracketRaw) ? winnersBracketRaw : undefined,
     playerMap,
     previousSeasons,
     fetchWarnings: warnings.length > 0 ? warnings : undefined,

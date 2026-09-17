@@ -18,7 +18,7 @@
  * to an AF account) — the raw Sleeper manager id always remains in `Roster.playerData.source_manager_id`.
  */
 import type { Prisma } from '@prisma/client'
-import { resolveSeasonPlacement } from '@/lib/league-import/seasonPlacement'
+import { resolveSeasonPlacement, seasonPlacementTeamIds } from '@/lib/league-import/seasonPlacement'
 import { prisma } from '@/lib/prisma'
 import type { NormalizedImportResult } from '@/lib/league-import/types'
 import {
@@ -241,8 +241,12 @@ async function applyLeagueState(
   // Current-season LeagueSeason (per-[leagueId,season] — never clobbers a different season row).
   try {
     const seasonYear = seasonYearOf(normalized)
-    const topStanding = [...normalized.standings].sort((a, b) => a.rank - b.rank)[0] ?? null
-    const runnerUp = [...normalized.standings].sort((a, b) => a.rank - b.rank)[1] ?? null
+    /*
+     * A Sleeper finish comes from the winners bracket, never from standings rank — this
+     * sync used to write the regular-season #1 and #2 as champion and runner-up on every
+     * run once a season completed. See seasonPlacement.ts.
+     */
+    const placementIds = seasonPlacementTeamIds(normalized)
     const nameForTeamId = (id: string | undefined): string | null => {
       if (!id) return null
       const r = normalized.rosters.find((row) => row.source_team_id === id)
@@ -255,8 +259,8 @@ async function applyLeagueState(
      */
     const placement = resolveSeasonPlacement({
       leagueStatus: normalized.league.status,
-      championName: nameForTeamId(topStanding?.source_team_id),
-      runnerUpName: nameForTeamId(runnerUp?.source_team_id),
+      championName: nameForTeamId(placementIds.championTeamId ?? undefined),
+      runnerUpName: nameForTeamId(placementIds.runnerUpTeamId ?? undefined),
     })
     await prisma.leagueSeason.upsert({
       where: { leagueId_season: { leagueId, season: seasonYear } } as never,

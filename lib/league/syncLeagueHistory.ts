@@ -9,6 +9,7 @@ import {
   type SleeperRoster,
 } from "@/lib/sleeper-client";
 import type { LeagueSeasonTeamRecord } from "@/lib/league/history-aggregates";
+import { resolveBracketPlacements } from "@/lib/league-import/sleeper/bracketPlacements";
 
 const MAX_CHAIN = 10;
 const DELAY_MS = 500;
@@ -23,16 +24,44 @@ function scoringFormatFromSettings(rec: number | undefined): string {
   return "standard";
 }
 
-function parseChampionFromBracket(bracket: SleeperPlayoffBracket[]): {
+/**
+ * Champion and runner-up from the title game.
+ *
+ * ⚠ THIS USED TO TAKE `finals.find((b) => b.m === 1) ?? finals[0]`. `m` is a
+ * bracket-wide match id, so no last-round game is ever `m === 1`, and the fallback
+ * took whichever last-round game Sleeper listed first — the third- or fifth-place
+ * game as often as the final. The title game is the one with `p === 1`; see
+ * `bracketPlacements.ts`.
+ *
+ * The champion falls back to the league's own `winner_roster_id`, then
+ * `metadata.latest_league_winner_roster_id` (the fallback `sleeperLeagueHistoryService`
+ * uses) — but the runner-up never does: nothing but the title game says who lost it.
+ */
+export function parseChampionFromBracket(
+  bracket: SleeperPlayoffBracket[],
+  /** The league row as Sleeper returned it; only its winner fields are read. */
+  league?: { metadata?: unknown; winner_roster_id?: unknown } | null,
+): {
   winnerRosterId: number | null;
   loserRosterId: number | null;
 } {
-  if (!bracket.length) return { winnerRosterId: null, loserRosterId: null };
-  const maxR = Math.max(...bracket.map((b) => b.r));
-  const finals = bracket.filter((b) => b.r === maxR);
-  const game = finals.find((b) => b.m === 1) ?? finals[0];
-  if (!game) return { winnerRosterId: null, loserRosterId: null };
-  return { winnerRosterId: game.w, loserRosterId: game.l };
+  const placements = resolveBracketPlacements(bracket);
+  let winnerRosterId = placements.championRosterId;
+  const loserRosterId = placements.runnerUpRosterId;
+  if (winnerRosterId == null && league) {
+    const meta =
+      league.metadata && typeof league.metadata === "object"
+        ? (league.metadata as Record<string, unknown>)
+        : null;
+    for (const raw of [league.winner_roster_id, meta?.latest_league_winner_roster_id]) {
+      const n = Number(raw);
+      if (raw != null && Number.isFinite(n) && n > 0) {
+        winnerRosterId = n;
+        break;
+      }
+    }
+  }
+  return { winnerRosterId, loserRosterId };
 }
 
 function pointsAgainst(roster: SleeperRoster): number {
@@ -99,7 +128,15 @@ export async function syncLeagueHistory(
       if (u.user_id) userByOwner.set(u.user_id, u);
     }
 
-    const { winnerRosterId, loserRosterId } = parseChampionFromBracket(bracket);
+    /*
+     * Only a FINISHED season has a champion. Sleeper leaves `w`/`l` null on undecided
+     * games, but the metadata fallback is a league-level field that can outlive the
+     * season it describes — so an in-season row must not read it.
+     */
+    const seasonComplete = String(sleeperLeague.status ?? "").toLowerCase() === "complete";
+    const { winnerRosterId, loserRosterId } = seasonComplete
+      ? parseChampionFromBracket(bracket, sleeperLeague as unknown as { metadata?: unknown; winner_roster_id?: unknown })
+      : { winnerRosterId: null, loserRosterId: null };
 
     let championName: string | null = null;
     let championAvatar: string | null = null;

@@ -8,6 +8,7 @@ import { SleeperHistoryMapper } from './SleeperHistoryMapper'
 import { mapSleeperTradedPicks } from './SleeperTradedPicksMapper'
 import { emptyableHistoryCoverage } from '../../coverageCompleteness'
 import type { SleeperImportPayload } from './types'
+import { resolveBracketPlacements } from '../../sleeper/bracketPlacements'
 
 export const SleeperAdapter: ILeagueImportAdapter<SleeperImportPayload> = {
   provider: 'sleeper',
@@ -31,6 +32,7 @@ export const SleeperAdapter: ILeagueImportAdapter<SleeperImportPayload> = {
     // provider didn't include the field on this payload (fetch failure or
     // pre-Block-F caller); empty array = no picks currently in a traded state.
     const tradedPicks = raw.tradedPicks !== undefined ? mapSleeperTradedPicks(raw) : undefined
+    const placement = raw.winnersBracket !== undefined ? resolveBracketPlacements(raw.winnersBracket) : null
     const rosterCount = rosters.length
     const rostersWithPlayers = rosters.filter((roster) => (roster.player_ids?.length ?? 0) > 0).length
     const previousSeasonCount = raw.previousSeasons?.length ?? 0
@@ -58,6 +60,17 @@ export const SleeperAdapter: ILeagueImportAdapter<SleeperImportPayload> = {
       schedule,
       draft_picks: history.draft_picks,
       traded_picks: tradedPicks,
+      /*
+       * From the winners bracket only. `standings` below is a wins/points sort (see
+       * SleeperHistoryMapper) and says nothing about who won the playoffs.
+       */
+      season_placement: placement
+        ? {
+            champion_source_team_id: placement.championRosterId != null ? String(placement.championRosterId) : null,
+            runner_up_source_team_id: placement.runnerUpRosterId != null ? String(placement.runnerUpRosterId) : null,
+            source: placement.source,
+          }
+        : undefined,
       transactions: history.transactions,
       standings: history.standings,
       player_map: raw.playerMap ?? {},

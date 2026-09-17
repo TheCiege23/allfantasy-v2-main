@@ -167,6 +167,13 @@ export interface SleeperPlayoffBracket {
   t2: number;
   w: number;
   l: number;
+  /**
+   * Placement the winner takes (1 = the title game, 3 = third place, …). Present
+   * only on placement games — and several of them share the last round, which is
+   * why "a game in the max round" is not the final. See
+   * `lib/league-import/sleeper/bracketPlacements.ts`.
+   */
+  p?: number | null;
   t1_from?: { w?: number; l?: number };
   t2_from?: { w?: number; l?: number };
 }
