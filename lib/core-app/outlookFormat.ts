@@ -58,8 +58,9 @@ export function readPlayoffFormat(settings: unknown, teamCount: number): Playoff
   )
 
   /*
-   * ⚠ THE SAME ORDER AS THE STANDINGS BOARD (`standingsModel.readPlayoffTeams`, PR #998), so the
-   * "top N make it" line and these odds can never name different fields for one league:
+   * ⚠ THE STANDINGS BOARD READS THROUGH THIS FUNCTION (`standingsModel.readStandingsRules`), so the
+   * "top N make it" line and these odds can never name different fields for one league. Change the
+   * order here and both screens move together:
    * `playoffSettings.playoffTeams`, then `playoff_teams`, then `playoff_team_count`.
    *
    * Measured on production 2026-09-17 before settling it: on 290 Sleeper leagues the block and the
@@ -114,7 +115,7 @@ export function readPlayoffFormat(settings: unknown, teamCount: number): Playoff
    * Last resort: `regular_season_length`, the ONLY regular-season statement ESPN, Fantrax and
    * Fleaflicker imports carry (production 2026-09-17: 6 ESPN leagues at 13/14/17, and one each on the
    * other two). Without it every paired week of theirs counted as regular season. The standings
-   * board reads it the same way.
+   * board gets it through this function too.
    */
   const length = positive(s.regular_season_length)
   const regularSeasonEndWeek = end != null ? end : start != null && start > 1 ? start - 1 : length

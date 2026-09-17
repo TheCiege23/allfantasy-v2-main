@@ -69,9 +69,17 @@ function zoneLine(t: BoardTeam): string {
   return ZONE_WORD[t.zone]
 }
 
-function lineText(t: BoardTeam): string {
+function lineText(t: BoardTeam, field: number): string {
   if (t.gamesBack == null) return 'no head-to-head games'
-  if (t.gamesBack === 0) return 'on the playoff line'
+  /*
+   * Zero games back is three different places. "On the playoff line" was printed for all of them,
+   * including a 0-1 team sitting 14th of 14 behind seven other 0-1 teams — true by record, and read by
+   * its manager as "I'm in".
+   */
+  if (t.gamesBack === 0) {
+    if (t.seed === field) return 'holding the last playoff spot'
+    return t.seed < field ? 'level with the last playoff spot' : 'level with the last playoff spot, out on the tiebreak'
+  }
   const abs = Math.abs(t.gamesBack)
   const games = `${Number.isInteger(abs) ? abs : abs.toFixed(1)} ${abs === 1 ? 'game' : 'games'}`
   return t.gamesBack < 0 ? `${games} clear of the line` : `${games} behind the line`
@@ -204,7 +212,7 @@ export function Standings({ data, freshness, view = DEFAULT_STANDINGS_VIEW }: St
           <div className="af-st-tile">
             <span className="af-label">Record</span>
             <span className="af-st-tile-v af-num">{board.hasHeadToHead ? formatRecord(me.record) : '—'}</span>
-            <span className="af-st-tile-s">{lineText(me)}</span>
+            <span className="af-st-tile-s">{lineText(me, Math.min(board.rules.playoffTeams, n))}</span>
           </div>
 
           <div className="af-st-tile">

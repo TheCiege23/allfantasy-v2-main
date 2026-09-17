@@ -17,6 +17,7 @@ import {
   type WeekRow,
   type WeekSnapshot,
 } from '@/lib/core-app/standingsModel'
+import { readPlayoffFormat } from '@/lib/core-app/outlookFormat'
 import {
   parseStandingsDivisions,
   readEspnDivisions,
@@ -538,5 +539,35 @@ describe('rules', () => {
     expect(readStandingsRules({}, 12, 'sleeper')).toMatchObject({ tiebreakerSource: 'platform', rankIsOfficial: false, byes: 2 })
     expect(readStandingsRules({}, 12, 'espn')).toMatchObject({ tiebreakerSource: 'assumed', rankIsOfficial: false })
     expect(readStandingsRules({}, 12, 'yahoo')).toMatchObject({ tiebreakerSource: 'assumed', rankIsOfficial: true })
+  })
+})
+
+describe('one playoff-format rule for standings and Season Outlook', () => {
+  /*
+   * The standings board reads its playoff field, byes and regular-season end through Season Outlook's
+   * `readPlayoffFormat`. Two screens printing "top N make it" and the odds for N must never disagree, so
+   * this pins them together on the production shapes both files document.
+   */
+  const shapes: Array<[string, unknown, number]> = [
+    ['sleeper, 8 of 16', { playoff_teams: 8, playoffSettings: { playoffTeams: 8, playoffStartWeek: 15 } }, 16],
+    ['sleeper, start week 0', { playoff_teams: 6, playoff_start_week: 0, regular_season_length: 13 }, 12],
+    ['manual 8-team, block 4 beside flat 6', { playoffSettings: { playoffTeams: 4, first_round_byes: 2 }, playoff_team_count: 6 }, 8],
+    ['manual, playoff_structure only', { playoff_structure: { playoff_team_count: 6, first_round_byes: 1, playoff_start_week: 15 }, regular_season_length: 24 }, 12],
+    ['espn 18-team, zeros first', { playoffSettings: { playoffTeams: 0 }, playoff_team_count: 0, playoff_structure: { playoff_team_count: 6 }, regular_season_length: 17 }, 18],
+    ['espn, length only', { playoffSettings: { playoffTeams: 6 }, regular_season_length: 14 }, 10],
+    ['native, explicit end week', { playoffSettings: { playoffTeams: 7, regularSeasonEndWeek: 13, playoffStartWeek: 15 } }, 12],
+    ['nothing stated', {}, 12],
+    ['not an object', null, 4],
+  ]
+
+  it.each(shapes)('%s', (_label, settings, teams) => {
+    const format = readPlayoffFormat(settings, teams)
+    const rules = readStandingsRules(settings, teams, 'sleeper')
+    expect({ field: rules.playoffTeams, byes: rules.byes, end: rules.regularSeasonEnd }).toEqual({
+      field: format.playoffTeams,
+      byes: format.byeTeams,
+      end: format.regularSeasonEndWeek,
+    })
+    expect(rules.playoffTeamsSource).toBe(format.playoffTeamsSource === 'league' ? 'league' : 'assumed')
   })
 })
