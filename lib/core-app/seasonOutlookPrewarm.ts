@@ -5,9 +5,10 @@ import { ITERATIONS, loadOutlookInputs, type LeagueInput } from './seasonOutlook
 import {
   computeLeagueSim,
   leagueSimHash,
+  readLeagueSimStamps,
   readLeagueSims,
+  writeLeagueSimMarker,
   writeLeagueSims,
-  type LeagueSimResult,
 } from './seasonOutlookSims'
 
 /**
@@ -25,6 +26,11 @@ import {
  * wholesale. So a changed timestamp only makes a league a CANDIDATE. The input hash decides whether
  * anything is re-run, and a candidate whose hash still matches is only stamped `checkedAt` — without
  * that stamp it would look stale forever and take a slot on every fire.
+ *
+ * 🛑 THE SAME GOES FOR A LEAGUE THAT CANNOT BE RUN, AND THE FIRST RELEASE MISSED IT. A skipped or
+ * failing league wrote nothing, sorted first as "never checked", and was retried on every fire —
+ * 3 skipped then 5 in the first two production fires, with the cap already reached. Each outcome now
+ * leaves a check time (`writeLeagueSimMarker`), and a failure never overwrites a good stored run.
  *
  * Postgres and arithmetic only: no provider call, no `lib/auth`. Bounded by league count and time on
  * top of the host route's shared budget; never throws. `CORE_OUTLOOK_PREWARM_DISABLED=true` stops it.
@@ -73,13 +79,14 @@ export async function runOutlookPrewarm(
     out.candidates = changed.length
     if (changed.length === 0) return out
 
-    const stored = await readLeagueSims(changed.map((c) => c.leagueId), now)
-    const lastChecked = (r: LeagueSimResult | undefined) =>
-      r ? Date.parse(r.checkedAt ?? r.computedAt) : Number.NEGATIVE_INFINITY
+    const ids = changed.map((c) => c.leagueId)
+    const [stored, stamps] = await Promise.all([readLeagueSims(ids, now), readLeagueSimStamps(ids, now)])
+    /* Markers count here: a league we could not run was still checked, and waits its turn like any other. */
+    const lastChecked = (pid: string) => stamps.get(pid) ?? Number.NEGATIVE_INFINITY
     const due = changed
-      .filter((c) => (c._max.updatedAt?.getTime() ?? 0) > lastChecked(stored.get(c.leagueId)))
+      .filter((c) => (c._max.updatedAt?.getTime() ?? 0) > lastChecked(c.leagueId))
       /* Oldest check first, so a busy Sunday drains in order rather than starving the tail. */
-      .sort((a, b) => lastChecked(stored.get(a.leagueId)) - lastChecked(stored.get(b.leagueId)))
+      .sort((a, b) => lastChecked(a.leagueId) - lastChecked(b.leagueId))
     out.due = due.length
     if (due.length === 0) return out
 
@@ -99,6 +106,7 @@ export async function runOutlookPrewarm(
         })
         if (!row) {
           out.skipped += 1
+          await writeLeagueSimMarker(c.leagueId, 'unsimulated', now)
           continue
         }
         const league: LeagueInput = {
@@ -112,6 +120,7 @@ export async function runOutlookPrewarm(
         const p = inputs?.prepared[0]
         if (!p) {
           out.skipped += 1
+          await writeLeagueSimMarker(c.leagueId, 'unsimulated', now)
           continue
         }
         const held = stored.get(c.leagueId)
@@ -127,6 +136,10 @@ export async function runOutlookPrewarm(
       } catch (e) {
         out.failed += 1
         if (out.errors.length < 5) out.errors.push(`outlook_prewarm: ${e instanceof Error ? e.message : String(e)}`)
+        /* Stamped as checked so it does not jump the queue again; a good stored run is kept, not replaced. */
+        const held = stored.get(c.leagueId)
+        if (held) await writeLeagueSims([[c.leagueId, { ...held, checkedAt: new Date().toISOString() }]], now)
+        else await writeLeagueSimMarker(c.leagueId, 'failed', now)
       }
     }
     out.deferred = due.length - attempted

@@ -13,7 +13,9 @@ import {
   leagueSimCacheKey,
   leagueSimHash,
   MODEL_VERSION,
+  readLeagueSimStamps,
   readLeagueSims,
+  writeLeagueSimMarker,
   writeLeagueSims,
 } from '@/lib/core-app/seasonOutlookSims'
 import type { SimInput } from '@/lib/core-app/outlookSim'
@@ -58,6 +60,20 @@ describe('stored runs', () => {
     ]
     const read = await readLeagueSims(['p1', 'p2', 'p3'])
     expect([...read.keys()]).toEqual(['p1'])
+  })
+
+  it('🛑 a marker is never served as a run, but its check time is read', async () => {
+    await writeLeagueSimMarker('p9', 'unsimulated')
+    const marker = h.upsert.mock.calls[0][0].create.data
+    expect(marker).toMatchObject({ model: MODEL_VERSION, marker: 'unsimulated' })
+    h.rows = [
+      { cacheKey: leagueSimCacheKey('p9'), data: marker },
+      { cacheKey: leagueSimCacheKey('p1'), data: computeLeagueSim(SIM, 1, 100) },
+    ]
+    expect([...(await readLeagueSims(['p9', 'p1'])).keys()]).toEqual(['p1'])
+    const stamps = await readLeagueSimStamps(['p9', 'p1'])
+    expect(stamps.get('p9')).toBe(Date.parse(marker.checkedAt))
+    expect(stamps.has('p1')).toBe(true)
   })
 
   it('never throws on a failed write', async () => {

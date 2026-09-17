@@ -145,6 +145,58 @@ export async function readLeagueSims(platformLeagueIds: readonly string[], now =
   return out
 }
 
+/**
+ * When each league was last looked at by the scheduled pre-compute, whatever it found — a stored run
+ * or a marker. The page never reads markers; `readLeagueSims` rejects them.
+ */
+export async function readLeagueSimStamps(platformLeagueIds: readonly string[], now = new Date()): Promise<Map<string, number>> {
+  const out = new Map<string, number>()
+  if (platformLeagueIds.length === 0) return out
+  const rows = await prisma.sportsDataCache
+    .findMany({
+      where: { cacheKey: { in: platformLeagueIds.map(leagueSimCacheKey) }, expiresAt: { gt: now } },
+      select: { cacheKey: true, data: true },
+    })
+    .catch(() => [])
+  for (const row of rows) {
+    const d = (row.data ?? {}) as { checkedAt?: unknown; computedAt?: unknown }
+    const at = Date.parse(String(d.checkedAt ?? d.computedAt ?? ''))
+    if (Number.isFinite(at)) out.set(row.cacheKey.slice(KEY_PREFIX.length), at)
+  }
+  return out
+}
+
+/**
+ * 🛑 A LEAGUE THE PRE-COMPUTE CANNOT RUN STILL GETS A ROW, OR IT STARVES THE QUEUE.
+ *
+ * Measured on production in the first two fires after launch (2026-09-17 17:18Z / 17:30Z): leagues it
+ * could not simulate (too few scored weeks, no League row) wrote nothing, so they had no check time,
+ * sorted FIRST as "never checked", and took their slots again on every fire — 3 skipped, then 5, with
+ * `computed + skipped` already at the 12-league cap. Left alone, the skips grow until no fire computes
+ * anything. Same failure, same cure as the portfolio writer's empty daily record.
+ *
+ * A marker carries no `counts`, so `readLeagueSims` never serves it and the page treats the league as
+ * a miss. It is overwritten by the first real run.
+ */
+export async function writeLeagueSimMarker(
+  platformLeagueId: string,
+  reason: 'unsimulated' | 'failed',
+  now = new Date(),
+): Promise<boolean> {
+  const expiresAt = new Date(now.getTime() + TTL_MS)
+  const data = { model: MODEL_VERSION, marker: reason, checkedAt: new Date().toISOString() }
+  try {
+    await prisma.sportsDataCache.upsert({
+      where: { cacheKey: leagueSimCacheKey(platformLeagueId) },
+      create: { cacheKey: leagueSimCacheKey(platformLeagueId), data, expiresAt },
+      update: { data, expiresAt },
+    })
+    return true
+  } catch {
+    return false
+  }
+}
+
 /** Never throws: a failed write costs a recompute next time, nothing more. */
 export async function writeLeagueSims(entries: ReadonlyArray<[string, LeagueSimResult]>, now = new Date()): Promise<number> {
   const expiresAt = new Date(now.getTime() + TTL_MS)

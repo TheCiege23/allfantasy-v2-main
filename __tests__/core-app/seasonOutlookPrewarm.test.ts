@@ -8,7 +8,9 @@ const h = vi.hoisted(() => ({
   findFirst: vi.fn(),
   load: vi.fn(),
   read: vi.fn(),
+  stamps: vi.fn(),
   write: vi.fn(),
+  marker: vi.fn(),
   compute: vi.fn(),
 }))
 
@@ -18,6 +20,8 @@ vi.mock('@/lib/prisma', () => ({
 vi.mock('@/lib/core-app/seasonOutlook', () => ({ ITERATIONS: 10_000, loadOutlookInputs: h.load }))
 vi.mock('@/lib/core-app/seasonOutlookSims', () => ({
   readLeagueSims: h.read,
+  readLeagueSimStamps: h.stamps,
+  writeLeagueSimMarker: h.marker,
   writeLeagueSims: h.write,
   computeLeagueSim: h.compute,
   leagueSimHash: (sim: { tag: string }) => `hash-${sim.tag}`,
@@ -46,6 +50,12 @@ beforeEach(() => {
     prepared: [{ pid: leagues[0].platformLeagueId, seed: 1, sim: { tag: leagues[0].platformLeagueId === 'same' ? 'same' : 'new' } }],
   }))
   h.write.mockResolvedValue(1)
+  h.marker.mockResolvedValue(true)
+  /* Stamps follow whatever `read` returns, as the real module's do; markers are added per test. */
+  h.stamps.mockImplementation(async () => {
+    const held = (await h.read()) as Map<string, { checkedAt?: string; computedAt: string }>
+    return new Map([...held].map(([k, v]) => [k, Date.parse(v.checkedAt ?? v.computedAt)]))
+  })
   h.compute.mockReturnValue({ hash: 'hash-new', iterations: 10_000, computedAt: NOW.toISOString() })
 })
 
@@ -105,6 +115,54 @@ describe('runOutlookPrewarm', () => {
 
     h.groupBy.mockRejectedValue(new Error('db down'))
     expect((await runOutlookPrewarm(NOW)).failed).toBe(1)
+  })
+
+  it('🛑 a league it cannot run is marked checked, so it cannot hog every fire', async () => {
+    // Production, first two fires: skipped leagues wrote nothing, sorted first, and came back each time.
+    h.groupBy.mockResolvedValue([
+      { leagueId: 'nothing', _max: { updatedAt: at('2026-09-17T14:00:00Z') } },
+      { leagueId: 'orphan', _max: { updatedAt: at('2026-09-17T14:00:00Z') } },
+    ])
+    h.read.mockResolvedValue(new Map())
+    h.findFirst.mockImplementation(async ({ where }: { where: { platformLeagueId: string } }) =>
+      where.platformLeagueId === 'orphan' ? null : { id: 'x', name: 'L', platform: 'sleeper', platformLeagueId: 'nothing', settings: {} },
+    )
+    h.load.mockResolvedValue({ prepared: [] })
+    const out = await runOutlookPrewarm(NOW)
+    expect(out).toMatchObject({ skipped: 2, computed: 0 })
+    expect(h.marker.mock.calls.map((c) => [c[0], c[1]]).sort()).toEqual([
+      ['nothing', 'unsimulated'],
+      ['orphan', 'unsimulated'],
+    ])
+  })
+
+  it('🛑 a marked league waits behind unchecked ones until its rows change again', async () => {
+    h.groupBy.mockResolvedValue([
+      { leagueId: 'marked', _max: { updatedAt: at('2026-09-17T14:00:00Z') } },
+      { leagueId: 'fresh', _max: { updatedAt: at('2026-09-17T14:00:00Z') } },
+    ])
+    h.read.mockResolvedValue(new Map())
+    h.stamps.mockResolvedValue(new Map([['marked', Date.parse('2026-09-17T14:30:00Z')]]))
+    const out = await runOutlookPrewarm(NOW)
+    expect(out).toMatchObject({ candidates: 2, due: 1, computed: 1 })
+    expect(h.load.mock.calls[0][1][0].platformLeagueId).toBe('fresh')
+  })
+
+  it('a failure keeps a good stored run and only stamps it; with none, it leaves a marker', async () => {
+    h.groupBy.mockResolvedValue([
+      { leagueId: 'kept', _max: { updatedAt: at('2026-09-17T14:00:00Z') } },
+      { leagueId: 'bare', _max: { updatedAt: at('2026-09-17T14:00:00Z') } },
+    ])
+    h.read.mockResolvedValue(new Map([['kept', stored('hash-old', '2026-09-17T12:00:00Z')]]))
+    h.load.mockRejectedValue(new Error('db blip'))
+    const out = await runOutlookPrewarm(NOW)
+    expect(out.failed).toBe(2)
+    const rewritten = h.write.mock.calls.map((c) => c[0][0])
+    expect(rewritten).toHaveLength(1)
+    expect(rewritten[0][0]).toBe('kept')
+    expect(rewritten[0][1]).toMatchObject({ hash: 'hash-old' })
+    expect(rewritten[0][1].checkedAt).not.toBe('2026-09-17T12:00:00Z')
+    expect(h.marker.mock.calls.map((c) => [c[0], c[1]])).toEqual([['bare', 'failed']])
   })
 
   it('does nothing when switched off', async () => {
