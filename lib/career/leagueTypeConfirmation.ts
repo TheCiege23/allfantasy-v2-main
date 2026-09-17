@@ -4,7 +4,12 @@ import {
   type SuggestedType,
   type TypeSuggestion,
 } from '@/lib/career/leagueTypeSuggestion'
-import { isLeagueConceptType } from '@/lib/league/leagueConceptOptions'
+import {
+  isLeagueConceptType,
+  isPirateBaseFormat,
+  readConfirmedPirateBase,
+  type PirateBaseFormat,
+} from '@/lib/league/leagueConceptOptions'
 
 /**
  * Read and confirm a league's format.
@@ -30,6 +35,16 @@ export type LeagueTypeConfirmation = {
   suggestedAtConfirmation: SuggestedType | null
   /** Buy-in the user confirmed, if any. Feeds the paid-league bump. */
   buyIn: number | null
+  /**
+   * Whether rosters carry over — ONLY for a Pirate league, null for every other
+   * type. Pirate rules sit on either shell; this answer picks the value book
+   * (lib/core-app/valueBook.ts) and is what the `leagueType` column receives
+   * (`leagueTypeColumnFor`). Read it through `readConfirmedPirateBase`.
+   *
+   * ⚠ Rides inside `leagueTypeConfirmation`, which afOwnedLeagueSettings carries
+   * across a re-import as a whole key, so this field survives with it.
+   */
+  baseFormat: PirateBaseFormat | null
 }
 
 export type LeagueTypeState = {
@@ -64,7 +79,40 @@ export function readLeagueTypeConfirmation(settings: unknown): LeagueTypeConfirm
         ? (c.suggestedAtConfirmation as SuggestedType)
         : null,
     buyIn: typeof c.buyIn === 'number' ? c.buyIn : null,
+    baseFormat: readConfirmedPirateBase(settings),
   }
+}
+
+/**
+ * What to write to the `League.leagueType` COLUMN for a confirmed concept.
+ *
+ * 🛑 THE COLUMN ALWAYS HOLDS A BASE FORMAT THE REST OF THE APP UNDERSTANDS.
+ * It is read directly by ~40 call sites, many as `leagueType === 'dynasty'`
+ * (LeagueShell's dynasty tabs, keeper-policy, specialty automation). A concept
+ * that is only a label over another format therefore writes its BASE, and the
+ * specialty lives in `leagueTypeConfirmation.type` alone (user decision,
+ * 2026-09-16):
+ *
+ *   - `pirate`              → the commissioner's answer, `dynasty` or `redraft`
+ *   - `efl`                 → `dynasty`
+ *   - `survivor_guillotine` → `guillotine`, its chassis
+ *   - everything else       → its own id, as before
+ *
+ * ⚠ SO NOTHING MAY LEARN A SPECIALTY FROM THE COLUMN. `readFormatRules` reads the
+ * confirmation first (`resolveLeagueConcept`), which is how the pirate trade
+ * notes switch on — and why they now survive an importer rewriting the column.
+ *
+ * A Pirate call without an answer cannot reach here (`confirmLeagueType`
+ * refuses it); the `dynasty` fallback matches the value book's default.
+ */
+export function leagueTypeColumnFor(
+  type: SuggestedType,
+  baseFormat: PirateBaseFormat | null,
+): string {
+  if (type === 'pirate') return baseFormat ?? 'dynasty'
+  if (type === 'efl') return 'dynasty'
+  if (type === 'survivor_guillotine') return 'guillotine'
+  return type
 }
 
 /** Current state for one league — what is stored, what we suggest, what is confirmed. */
@@ -100,7 +148,10 @@ export async function leagueTypeState(leagueId: string): Promise<LeagueTypeState
 
 export type ConfirmResult =
   | { ok: true; state: LeagueTypeState }
-  | { ok: false; reason: 'not-found' | 'invalid-type' | 'write-failed' }
+  | {
+      ok: false
+      reason: 'not-found' | 'invalid-type' | 'invalid-base-format' | 'write-failed'
+    }
 
 /**
  * Record a human's decision about what this league is.
@@ -113,14 +164,26 @@ export type ConfirmResult =
  * The buy-in is accepted from the caller rather than trusted from the name.
  * A "$20" in a league title is good enough to PREFILL a prompt and not good
  * enough to award the paid-league bonus on its own.
+ *
+ * `baseFormat` is REQUIRED for `pirate` ('dynasty' | 'redraft'); anything else
+ * is `invalid-base-format` and nothing is written. For every OTHER type it is
+ * IGNORED and stored as null, rather than rejected: the type itself already is
+ * the base there, and a stale value from a client that just switched away from
+ * Pirate must not leave a contradictory record like `redraft` + `dynasty`.
  */
 export async function confirmLeagueType(input: {
   leagueId: string
   type: string
   userId: string
   buyIn?: number | null
+  baseFormat?: unknown
 }): Promise<ConfirmResult> {
   if (!isLeagueConceptType(input.type)) return { ok: false, reason: 'invalid-type' }
+  const baseFormat: PirateBaseFormat | null =
+    input.type === 'pirate' && isPirateBaseFormat(input.baseFormat) ? input.baseFormat : null
+  if (input.type === 'pirate' && baseFormat === null) {
+    return { ok: false, reason: 'invalid-base-format' }
+  }
 
   const before = await leagueTypeState(input.leagueId)
   if (!before) return { ok: false, reason: 'not-found' }
@@ -136,6 +199,7 @@ export async function confirmLeagueType(input: {
       typeof input.buyIn === 'number' && Number.isFinite(input.buyIn) && input.buyIn > 0
         ? input.buyIn
         : null,
+    baseFormat,
   }
 
   try {
@@ -151,10 +215,11 @@ export async function confirmLeagueType(input: {
      * `leagueType` is updated too, so the rest of the app sees the corrected
      * format. But the confirmation record stays the authority for ranking —
      * the column can be overwritten by any future importer that guesses again.
+     * See `leagueTypeColumnFor`: specialty labels write their base format.
      */
     await prisma.league.update({
       where: { id: input.leagueId },
-      data: { settings: merged as never, leagueType: input.type },
+      data: { settings: merged as never, leagueType: leagueTypeColumnFor(input.type, baseFormat) },
     })
   } catch {
     return { ok: false, reason: 'write-failed' }

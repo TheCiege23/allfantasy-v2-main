@@ -556,6 +556,12 @@ export async function getPlayerTradeVisual(
   const concept = readFormatRules({
     leagueType: league.leagueType,
     isDynasty: marketContext.variant.dynasty,
+    /*
+     * Carries the confirmed concept, read before the column (which holds only a
+     * base format). It also switches on the keeper-provenance fallback, which can
+     * only move keeper ↔ redraft — irrelevant to the guillotine/survivor test below.
+     */
+    settings: league.settings,
   }).concept
   const isGuillotine = concept === 'guillotine' || concept === 'survivor'
   const faabRaw = Number((settings as Record<string, unknown>).faab_budget)

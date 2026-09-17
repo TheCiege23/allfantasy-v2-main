@@ -51,6 +51,7 @@ import {
   keeperDriftNote,
   readFormatRules,
 } from './leagueFormatRules'
+import { getConceptById } from '@/lib/league-rules/conceptCatalog'
 import {
   assessConcentration,
   assessDeadline,
@@ -704,6 +705,17 @@ async function zombieNotesFor(
  * what last period's scores actually were, and what people have really paid for
  * chopped players in this league.
  */
+/**
+ * The Survivor Guillotine trading rule, read from the concept catalog's own
+ * action legality (`legalInFormat: false`) rather than restated here, so the
+ * rule has one home. Null if the catalog ever makes trades legal.
+ */
+function survivorGuillotineTradeNote(): string | null {
+  const trade = getConceptById('survivor_guillotine')?.actions.find((a) => a.id === 'trade')
+  if (!trade || trade.legalInFormat) return null
+  return `Survivor Guillotine: trades are not allowed in this league. ${trade.note ?? ''}`.trim()
+}
+
 async function guillotineNotes(leagueId: string): Promise<string[]> {
   const notes: string[] = []
 
@@ -819,6 +831,12 @@ async function buildFormatNotes(args: {
   givingValue?: number | null
   gettingValue?: number | null
 }): Promise<string[]> {
+  /*
+   * ⚠ `args.league` CARRIES `settings`, AND THAT IS LOAD-BEARING. `readFormatRules`
+   * reads the human-confirmed concept out of it before the column, which only
+   * ever holds a base format — without it a confirmed Pirate or Survivor
+   * Guillotine league reads as plain dynasty/redraft/guillotine.
+   */
   const rules = readFormatRules(args.league)
   const notes = [...rules.notes]
 
@@ -1001,15 +1019,20 @@ async function buildFormatNotes(args: {
   }
 
   if (rules.concept === 'guillotine') {
+    const survivorGuillotine = rules.variant === 'survivor_guillotine'
+    /* Leads, like the tournament trading policy: no trades is not a nuance. */
+    const noTrades = survivorGuillotine ? survivorGuillotineTradeNote() : null
+    if (noTrades) notes.unshift(noTrades)
+
     notes.push(...(await guillotineNotes(args.leagueId).catch(() => [])))
 
     /*
-     * The Survivor All-Stars variant runs on a guillotine chassis but adds a
-     * GROWING lineup and dated idol expiries. Both are week-driven, and both are
-     * silent in a plain guillotine league because the schedule simply will not
-     * match — lineupAt only reports an expansion that is genuinely ahead.
+     * Survivor All-Stars adds a GROWING lineup and dated idol expiries to the
+     * guillotine chassis. 🛑 GATED ON THE CONFIRMED VARIANT: these are pure
+     * functions of the week, so ungated they told EVERY guillotine league before
+     * week 14 that its lineup was growing and its idol expiring.
      */
-    if (week != null) {
+    if (survivorGuillotine && week != null) {
       const lineup = lineupAt(week)
       if (lineup?.nextAt != null) notes.push(lineup.basis)
 

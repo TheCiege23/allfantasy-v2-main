@@ -265,6 +265,39 @@ describe('carryAfOwnedLeagueSettings', () => {
     expect(carryAfOwnedLeagueSettings([1, 2], { a: 1 })).toEqual({ a: 1 })
   })
 
+  /*
+   * A Pirate league's dynasty/redraft answer lives INSIDE `leagueTypeConfirmation`
+   * (2026-09-16). The allowlist carries that key whole, so the nested field must
+   * survive with it — pinned through the real re-import write, not only the helper,
+   * because losing it silently moves the league to the dynasty book.
+   */
+  it('keeps a Pirate confirmation’s baseFormat through a forced re-import', async () => {
+    const pirate = {
+      type: 'pirate',
+      confirmedByUserId: 'commish',
+      confirmedAt: '2026-09-16T00:00:00.000Z',
+      suggestedAtConfirmation: null,
+      buyIn: null,
+      baseFormat: 'redraft',
+    }
+    const current = { ...EXISTING_SETTINGS, leagueTypeConfirmation: pirate }
+    leagueFindFirst.mockResolvedValue({ id: 'L1', userId: 'u1', settings: current })
+    leagueFindUnique.mockResolvedValue({ settings: current })
+
+    await expect(
+      persistImportedLeagueFromNormalization({
+        userId: 'u1',
+        provider: 'sleeper' as never,
+        normalized: normalized(),
+        allowUpdateExisting: true,
+      }),
+    ).rejects.toThrow(STOP)
+
+    const settings = writtenSettings(leagueUpdate, 'data')
+    expect(settings.leagueTypeConfirmation).toEqual(pirate)
+    expect(carryAfOwnedLeagueSettings(current, {}).leagueTypeConfirmation).toEqual(pirate)
+  })
+
   it('carries a key explicitly set to false or null — a choice, not an absence', () => {
     const out = carryAfOwnedLeagueSettings({ publicStandings: false, inviteCode: null }, {})
     expect(out).toEqual({ publicStandings: false, inviteCode: null })

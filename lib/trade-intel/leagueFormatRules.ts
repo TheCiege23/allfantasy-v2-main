@@ -15,6 +15,7 @@
  */
 
 import { keeperSettingsConfirmedFrom } from '@/lib/league-contract/keeperProvenance'
+import { resolveLeagueConcept } from '@/lib/league/leagueConceptOptions'
 
 export type LeagueConcept =
   | 'redraft'
@@ -77,8 +78,34 @@ export type FormatRules = {
    * league. It records that somebody decided, not what they decided.
    */
   keeperEvidence: KeeperEvidence
+  /**
+   * A specialty that runs on `concept`'s chassis and changes what applies there.
+   *
+   * `survivor_guillotine` is the one today: `concept` is `guillotine` (that is how
+   * it eliminates and how it prices), and this marker is what separates it from a
+   * plain guillotine league — the growing lineup, the dated idols, and no trades.
+   * Only a human confirmation in `settings.leagueTypeConfirmation` sets it — not
+   * the column, not a name — so a guillotine league is never promoted to it on a
+   * guess.
+   */
+  variant: FormatVariant | null
   notes: string[]
 }
+
+export type FormatVariant = 'survivor_guillotine'
+
+/**
+ * Confirmed concept ids that are LABELS over a format this module already knows,
+ * and the format they are read as.
+ *
+ * `leagueTypeConfirmation.type` can hold ids the column never does — the column
+ * receives the base (lib/career/leagueTypeConfirmation.ts `leagueTypeColumnFor`).
+ * `pirate` needs no entry: it is a first-class concept below.
+ */
+const CONFIRMED_CONCEPT_READS_AS: ReadonlyMap<string, string> = new Map([
+  ['efl', 'dynasty'],
+  ['survivor_guillotine', 'guillotine'],
+])
 
 /**
  * Alias tags that NAME A FORMAT, and may therefore override `leagueType`.
@@ -296,6 +323,13 @@ export function readFormatRules(league: {
    *
    * ⚠ AN EXPLICIT `keeperSettingsConfirmed` STILL WINS. This is the fallback,
    * not an override.
+   *
+   * 🛑 IT ALSO CARRIES THE HUMAN-CONFIRMED CONCEPT (`leagueTypeConfirmation`), AND
+   * THAT IS READ FIRST. The column only ever holds a base format — a Pirate
+   * league's column says `dynasty` or `redraft`, a Survivor Guillotine league's
+   * says `guillotine` — and any importer may rewrite it. Without the settings the
+   * specialty is invisible, which is how the pirate trade notes used to vanish
+   * on the next re-import.
    */
   settings?: unknown
 }): FormatRules {
@@ -310,7 +344,35 @@ export function readFormatRules(league: {
    * question that was always intended: is any of these actually a format?
    */
   const formatAlias = alias.find((t) => FORMAT_ALIASES.has(t)) ?? null
-  const raw = (formatAlias ?? league.leagueType ?? '').trim().toLowerCase()
+  /*
+   * The confirmed concept, when a human gave one. `resolveLeagueConcept` with no
+   * column returns ONLY the confirmation, so a league without one reads exactly
+   * as it did before: format alias, then column.
+   *
+   * ⚠ A CONFIRMED BARE BASE (`redraft` / `dynasty`) STILL YIELDS TO A FORMAT
+   * ALIAS. The picker has no King of the Hill option, so a KOTH commissioner who
+   * confirms the base their league was flattened onto is not saying "this is not
+   * KOTH" — and `resolveLeagueRules` already saw the alias through the column
+   * before confirmations were read here. Any other confirmed concept wins.
+   *
+   * ⚠ THE LABEL MAPPING APPLIES TO THE CONFIRMATION ONLY. A column that literally
+   * says `efl` or `survivor_guillotine` with no confirmation behind it still reads
+   * as `other`, exactly as before — nothing writes those to the column now, and a
+   * row that has one is not this function's to reinterpret.
+   */
+  const confirmedId = resolveLeagueConcept(league.settings, null)
+  const variant: FormatVariant | null =
+    confirmedId === 'survivor_guillotine' ? 'survivor_guillotine' : null
+  const confirmed =
+    confirmedId == null ? null : (CONFIRMED_CONCEPT_READS_AS.get(confirmedId) ?? confirmedId)
+  const confirmedIsBareBase = confirmedId === 'redraft' || confirmedId === 'dynasty'
+  const raw = (
+    (confirmedIsBareBase ? (formatAlias ?? confirmed) : (confirmed ?? formatAlias)) ??
+    league.leagueType ??
+    ''
+  )
+    .trim()
+    .toLowerCase()
   const keeperCount = league.keeperCount ?? 0
   /*
    * Computed off `raw` rather than `league.leagueType` so a format ALIAS of
@@ -521,6 +583,7 @@ export function readFormatRules(league: {
     keeperCostSystem: league.keeperCostSystem ?? null,
     maxKeepers: keeperCount > 0 ? keeperCount : null,
     keeperEvidence,
+    variant,
     notes,
   }
 }

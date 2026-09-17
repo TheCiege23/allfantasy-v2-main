@@ -101,6 +101,77 @@ describe('valueBookFor — the league decides its own book', () => {
   })
 })
 
+/*
+ * Book selection for every concept the picker can confirm (2026-09-16).
+ *
+ * 🛑 DEVY AND C2C USED TO LAND ON THE REDRAFT BOOK. Both are dynasty-only
+ * formats, but the predicate was a substring test for "dynasty", so a
+ * commissioner who confirmed either one moved the league onto the wrong book.
+ */
+describe('valueBookFor — confirmed concepts', () => {
+  const confirmed = (type: string, extra: Record<string, unknown> = {}) => ({
+    roster_positions: RB,
+    leagueTypeConfirmation: { type, confirmedByUserId: 'u1', ...extra },
+  })
+
+  it.each([
+    ['dynasty', 'DYNASTY'],
+    ['keeper', 'DYNASTY'],
+    ['devy', 'DYNASTY'],
+    ['c2c', 'DYNASTY'],
+    ['efl', 'DYNASTY'],
+    ['redraft', 'REDRAFT'],
+    ['guillotine', 'REDRAFT'],
+    ['survivor_guillotine', 'REDRAFT'],
+    ['zombie', 'REDRAFT'],
+  ])('a confirmed %s league prices on the %s book', (type, format) => {
+    // The column is deliberately the opposite guess, so only the confirmation can decide.
+    const column = format === 'DYNASTY' ? 'redraft' : 'dynasty'
+    expect(valueBookFor(confirmed(type), column).format).toBe(format)
+  })
+
+  it('reads devy, c2c and efl off the column too, when nothing is confirmed', () => {
+    for (const t of ['devy', 'c2c', 'efl', 'DEVY']) {
+      expect(valueBookFor({ roster_positions: RB }, t).format).toBe('DYNASTY')
+    }
+  })
+
+  it('prices a Pirate league on the book the commissioner chose', () => {
+    expect(valueBookFor(confirmed('pirate', { baseFormat: 'dynasty' }), 'pirate').format).toBe('DYNASTY')
+    expect(valueBookFor(confirmed('pirate', { baseFormat: 'redraft' }), 'pirate').format).toBe('REDRAFT')
+    // The answer outranks a column that says otherwise.
+    expect(valueBookFor(confirmed('pirate', { baseFormat: 'redraft' }), 'dynasty').format).toBe('REDRAFT')
+  })
+
+  /*
+   * ⚠ NO ANSWER MEANS DYNASTY — the catalog calls Pirate dynasty-shelled. The
+   * picker and the API both refuse to save Pirate without one, so this covers a
+   * bare `pirate` column and records written before the question existed.
+   */
+  it('prices a Pirate league with no answer on the DYNASTY book', () => {
+    expect(valueBookFor(confirmed('pirate'), 'pirate').format).toBe('DYNASTY')
+    expect(valueBookFor(confirmed('pirate', { baseFormat: 'keeper' }), 'pirate').format).toBe('DYNASTY')
+    expect(valueBookFor({ roster_positions: RB }, 'pirate').format).toBe('DYNASTY')
+  })
+
+  it('prices a confirmed Survivor Guillotine league on REDRAFT whatever its column says', () => {
+    for (const column of ['guillotine', 'dynasty', 'keeper', null]) {
+      expect(valueBookFor(confirmed('survivor_guillotine'), column).format).toBe('REDRAFT')
+    }
+  })
+
+  it('does not let a stray baseFormat on another concept move its book', () => {
+    expect(valueBookFor(confirmed('redraft', { baseFormat: 'dynasty' }), 'redraft').format).toBe('REDRAFT')
+    expect(valueBookFor(confirmed('dynasty', { baseFormat: 'redraft' }), 'dynasty').format).toBe('DYNASTY')
+  })
+
+  it('keeps the trade engine on the same book — leagueVariantFor agrees', () => {
+    expect(leagueVariantFor(confirmed('devy'), 'redraft').dynasty).toBe(true)
+    expect(leagueVariantFor(confirmed('pirate', { baseFormat: 'redraft' }), 'pirate').dynasty).toBe(false)
+    expect(leagueVariantFor(confirmed('pirate', { baseFormat: 'dynasty' }), 'pirate').dynasty).toBe(true)
+  })
+})
+
 describe('leagueVariantFor — the shared predicates marketContextFor also reads', () => {
   it('reports the three traits the trade engine keys on', () => {
     expect(leagueVariantFor({ roster_positions: SF }, 'dynasty')).toEqual({
