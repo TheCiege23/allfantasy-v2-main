@@ -132,4 +132,53 @@ describe('Standings — the per-league Rankings design', () => {
     render(<Standings data={standings()} />)
     expect(screen.getByText('+1.3 vs your avg')).toBeTruthy()
   })
+  /*
+   * Production, 2026-09-17: a 0-1 manager 14th of 14 in a top-8 league read "on the playoff line",
+   * because the 8th team was 0-1 too. Zero games back is three different places.
+   */
+  it('does not tell a team below the line that it is on it', () => {
+    const snaps: WeekSnapshot[] = []
+    const rows = [
+      { week: 1, rosterId: '1', matchupId: 1, pointsFor: 120, pointsAgainst: 100 },
+      { week: 1, rosterId: '2', matchupId: 1, pointsFor: 100, pointsAgainst: 120 },
+      { week: 1, rosterId: '3', matchupId: 2, pointsFor: 110, pointsAgainst: 90 },
+      { week: 1, rosterId: '4', matchupId: 2, pointsFor: 90, pointsAgainst: 110 },
+    ]
+    snaps.push(advanceWeek(null, 2026, 1, rows, ['1', '2', '3', '4'], 's1'))
+    const boardFor = (you: string) =>
+      buildStandingsBoard({
+        season: 2026,
+        snapshots: snaps,
+        unplayed: [{ week: 2, a: '1', b: '3' }, { week: 2, a: '2', b: '4' }],
+        teams: ['1', '2', '3', '4'].map((id) => ({
+          rosterId: id,
+          name: `Team ${id}`,
+          avatarUrl: null,
+          isYou: id === you,
+          division: null,
+          reported: null,
+        })),
+        rules: {
+          playoffTeams: 3,
+          playoffTeamsSource: 'league',
+          byes: 0,
+          regularSeasonEnd: null,
+          tiebreakers: ['points_for', 'head_to_head'],
+          tiebreakerSource: 'platform',
+          rankIsOfficial: false,
+          platformLabel: 'Sleeper',
+        },
+      })
+    // Seeds: 1 (1-0), 3 (1-0), 2 (0-1, the last spot), 4 (0-1, out on points).
+    const tile = (you: string) => {
+      const { container, unmount } = render(<Standings data={standings({ board: boardFor(you) })} />)
+      const text = [...container.querySelectorAll('.af-st-tile')][1].textContent
+      unmount()
+      return text
+    }
+    expect(tile('4')).toMatch(/level with the last playoff spot, out on the tiebreak/)
+    expect(tile('2')).toMatch(/holding the last playoff spot/)
+    expect(tile('1')).toMatch(/1 game clear of the line/)
+    expect(document.body.textContent).not.toMatch(/on the playoff line/)
+  })
 })
