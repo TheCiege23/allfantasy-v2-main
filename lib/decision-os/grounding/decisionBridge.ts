@@ -383,7 +383,7 @@ export async function loadWaiverDecisionSlice(args: WaiverDecisionBridgeArgs): P
       }
     }
 
-    const pool = await loadWaiverPool(leagueId, facts.sport)
+    const pool = await loadWaiverPool(leagueId, facts.sport, facts.rosterId)
     if (pool.availablePlayers.length === 0) {
       /*
        * Distinct from "no roster": the league resolved and the wire is empty after subtraction.
@@ -414,15 +414,31 @@ export async function loadWaiverDecisionSlice(args: WaiverDecisionBridgeArgs): P
         leagueId,
         sport: facts.sport,
         rosterId: facts.rosterId,
+        /*
+         * ⚠ THE WHOLE INPUT, NOT JUST THE NAMES. Prices let the scorer rank at all; the asker's
+         * slotted roster is what lets it name a drop; the league's rosters are the median behind
+         * "your weakest slot"; the traits are read from the same market context that priced the
+         * wire, so no predicate is derived twice. Passing only `availablePlayers` is what made
+         * every answer "Hold your FAAB".
+         */
         engineInput: {
           sport: facts.sport,
           leagueSettings: {
             faabBudget: facts.settings.faabBudget ?? null,
             faabRemaining: facts.faabRemaining,
+            numTeams: pool.leagueTraits.numTeams,
+            isSF: pool.leagueTraits.isSF,
+            isTEP: pool.leagueTraits.isTEP,
+            isDynasty: pool.leagueTraits.isDynasty,
           },
+          roster: pool.myRoster,
+          rosterPositions: pool.rosterPositions,
+          allLeagueRosters: pool.leagueRosters,
+          ...(pool.currentWeek != null ? { currentWeek: pool.currentWeek } : {}),
           availablePlayers: pool.availablePlayers,
         },
         poolIncomplete: pool.poolIncomplete,
+        pricing: pool.pricing,
       },
       { decision: buildLiveWaiverDecisionDeps(facts) },
     )

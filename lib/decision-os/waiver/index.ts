@@ -30,6 +30,8 @@ export interface RunWaiverClaimInput {
   rosterId: string | null
   engineInput: WaiverAIServiceInput
   poolIncomplete?: boolean
+  /** Pricing coverage over the available pool — see `WaiverDCO.pricing`. */
+  pricing?: { priced: number; total: number; basis: string | null }
 }
 
 export interface RunWaiverClaimDeps {
@@ -54,6 +56,7 @@ export async function runWaiverClaimDecision(input: RunWaiverClaimInput, deps: R
     rosterId: input.rosterId,
     engineInput: input.engineInput,
     poolIncomplete: input.poolIncomplete,
+    pricing: input.pricing,
   })
   const decision = await decideWaiverClaim(dco, deps.decision)
 

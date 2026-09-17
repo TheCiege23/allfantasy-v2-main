@@ -28,6 +28,14 @@ export interface WaiverDCO {
   }
   confidence_inputs: { topCompositeScore: number | null; lowConfidencePool: boolean }
   provenance: DecisionProvenance
+  /**
+   * How much of the wire carried a price.
+   *
+   * ⚠ THE DIFFERENCE BETWEEN "NOBODY QUALIFIES" AND "WE COULD NOT PRICE ANYBODY". The scorer drops
+   * every candidate under 200 value, so an unpriced wire produces the same empty result as a wire
+   * full of waiver junk. Only this tells the decision which one happened.
+   */
+  pricing: { priced: number; total: number; basis: string | null }
   /** 0–100. */
   data_completeness: number
   uncertainty: string[]
@@ -43,6 +51,8 @@ export interface WaiverDCOInput {
   engineInput: WaiverAIServiceInput
   /** When the available-pool / provider data was incomplete. */
   poolIncomplete?: boolean
+  /** Pricing coverage over the available pool. Absent means the caller did not price it. */
+  pricing?: { priced: number; total: number; basis: string | null }
 }
 
 /** Pure, read-only DCO assembly with honest provenance + completeness. */
@@ -59,6 +69,25 @@ export function buildWaiverDCO(input: WaiverDCOInput): WaiverDCO {
   }
   if (lowConfidencePool) uncertainty.push('Some available players have low-confidence provider data.')
   if (available.length === 0) uncertainty.push('No available players were supplied to evaluate.')
+  /*
+   * A caller that priced the wire says so; one that did not is read from the candidates it supplied,
+   * because a value on the candidate IS the price. Defaulting to zero instead would tell a caller
+   * with its own prices (the legacy route's client-posted pool) that the wire was unpriced.
+   */
+  const pricing = input.pricing ?? {
+    priced: available.filter((p) => Number((p as { value?: number }).value ?? 0) > 0).length,
+    total: available.length,
+    basis: null,
+  }
+  if (available.length > 0 && pricing.priced === 0) {
+    uncertainty.push(
+      pricing.basis
+        ? 'No available player carried a market value in this league, so none could be ranked.'
+        : 'This league has no market value set, so the wire could not be priced.',
+    )
+  } else if (pricing.total > 0 && pricing.priced < pricing.total / 2) {
+    uncertainty.push(`Only ${pricing.priced} of ${pricing.total} available players carried a value.`)
+  }
 
   // Weakest required input drives completeness/provenance (honesty contract).
   const weakest: DecisionProvenance =
@@ -72,6 +101,9 @@ export function buildWaiverDCO(input: WaiverDCOInput): WaiverDCO {
   if (input.poolIncomplete) data_completeness = Math.min(data_completeness, 60)
   if (lowConfidencePool) data_completeness = Math.min(data_completeness, 85)
   if (available.length === 0) data_completeness = Math.min(data_completeness, 40)
+  /* An unpriced wire is the weakest input there is: nothing can be ranked at all. */
+  if (available.length > 0 && pricing.priced === 0) data_completeness = Math.min(data_completeness, 30)
+  else if (pricing.total > 0 && pricing.priced < pricing.total / 2) data_completeness = Math.min(data_completeness, 75)
 
   return {
     decision_type: 'manager.waiver.claim',
@@ -87,6 +119,7 @@ export function buildWaiverDCO(input: WaiverDCOInput): WaiverDCO {
       rosterSize: roster.length,
     },
     confidence_inputs: { topCompositeScore: null, lowConfidencePool },
+    pricing,
     provenance: weakest,
     data_completeness,
     uncertainty,

@@ -97,16 +97,31 @@ export async function decideWaiverClaim(dco: WaiverDCO, deps: WaiverDecisionDeps
   const uncertainty = [...dco.uncertainty]
   const how_confident = howConfident(confidence, data_completeness, uncertainty)
 
-  const what_happened = !top
-    ? 'No waiver claim is recommended right now — no qualifying targets.'
-    : `${recommendations.length} waiver target(s) ranked; top add is ${top.addPlayerName} (${top.position}).`
-  const why_it_matters = !top
-    ? 'Your available pool produced no add that improves your roster enough to recommend.'
-    : illegal.length
+  /*
+   * 🛑 TWO DIFFERENT EMPTY ANSWERS, AND THEY MUST NOT SHARE A SENTENCE. The scorer drops every
+   * candidate under 200 value, so a wire nobody could price produces exactly the same empty list as
+   * a wire of genuine waiver junk. Saying "no qualifying targets" for the first claims we looked and
+   * found nobody worth adding, which is a fact we do not have.
+   */
+  const pricing = dco.pricing ?? { priced: 0, total: 0, basis: null }
+  const unpriced = pricing.total > 0 && pricing.priced === 0
+
+  const what_happened = top
+    ? `${recommendations.length} waiver target(s) ranked; top add is ${top.addPlayerName} (${top.position}).`
+    : unpriced
+      ? `The wire could not be priced for this league, so its ${pricing.total} available player(s) could not be ranked.`
+      : 'No waiver claim is recommended right now — no qualifying targets.'
+  const why_it_matters = top
+    ? illegal.length
       ? illegal[0].message
       : `${top.recommendation} — ${top.reason}`
+    : unpriced
+      ? 'Without values there is nothing to rank, so this is not a judgement that nobody is worth adding.'
+      : 'Your available pool produced no add that improves your roster enough to recommend.'
   const what_to_do = !top
-    ? 'Hold your FAAB/priority; re-check when the pool refreshes.'
+    ? unpriced
+      ? 'Treat the wire as unread; re-check once this league has market values.'
+      : 'Hold your FAAB/priority; re-check when the pool refreshes.'
     : illegal.length
       ? illegal[0].message
       : blocked.length
