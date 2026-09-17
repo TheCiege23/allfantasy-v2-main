@@ -759,7 +759,16 @@ async function loadRailProjections(args: {
       }),
     )
     const type = (l.confirmedType ?? l.leagueType ?? '').toLowerCase()
-    eliminationByLeague.set(l.id, Boolean(l.guillotineMode) || type === 'guillotine')
+    /*
+     * ⚠ `survivor_guillotine` IS AN ELIMINATION FORMAT TOO. The confirmation is read
+     * first, and a confirmed Survivor Guillotine league's confirmation says
+     * `survivor_guillotine` (only its column says `guillotine`), so matching the
+     * one word alone would drop its elimination flag.
+     */
+    eliminationByLeague.set(
+      l.id,
+      Boolean(l.guillotineMode) || type === 'guillotine' || type === 'survivor_guillotine',
+    )
   }
 
   const byLeague = new Map<string, SidesForLeague>()

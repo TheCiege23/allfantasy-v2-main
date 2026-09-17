@@ -1,6 +1,8 @@
 /**
  * GET:   what format we think this league is, and whether anyone has confirmed.
- * PATCH: record a human's decision.
+ *        `confirmation.baseFormat` carries a Pirate league's dynasty/redraft answer.
+ * PATCH: record a human's decision. Body `{ type, buyIn?, baseFormat? }` —
+ *        `baseFormat` is required when `type` is 'pirate' (400 otherwise).
  *
  * ⚠ A HANDLER, NOT A ROUTE. This repo sits at Vercel's hard 2048-route ceiling,
  * and the `[section]` dispatcher exists so a new league endpoint costs zero
@@ -72,7 +74,7 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ leagueId:
     )
   }
 
-  let body: { type?: unknown; buyIn?: unknown }
+  let body: { type?: unknown; buyIn?: unknown; baseFormat?: unknown }
   try {
     body = await req.json()
   } catch {
@@ -88,16 +90,25 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ leagueId:
     type: body.type,
     userId: gate.userId,
     buyIn: typeof body.buyIn === 'number' ? body.buyIn : null,
+    // Validated there, not here: required for 'pirate', ignored for every other type.
+    baseFormat: body.baseFormat,
   })
 
   if (!result.ok) {
-    const status = result.reason === 'not-found' ? 404 : result.reason === 'invalid-type' ? 400 : 500
+    const status =
+      result.reason === 'not-found'
+        ? 404
+        : result.reason === 'invalid-type' || result.reason === 'invalid-base-format'
+          ? 400
+          : 500
     const message =
       result.reason === 'invalid-type'
         ? 'That is not a league format we recognise'
-        : result.reason === 'not-found'
-          ? 'League not found'
-          : 'Could not save the league format'
+        : result.reason === 'invalid-base-format'
+          ? 'A Pirate league needs to say whether rosters carry over: send baseFormat "dynasty" or "redraft"'
+          : result.reason === 'not-found'
+            ? 'League not found'
+            : 'Could not save the league format'
     return NextResponse.json({ error: message }, { status })
   }
 

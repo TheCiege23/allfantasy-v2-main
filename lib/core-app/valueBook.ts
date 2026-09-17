@@ -41,7 +41,7 @@
  * right by accident.
  */
 
-import { resolveLeagueConcept } from '@/lib/league/leagueConceptOptions'
+import { readConfirmedPirateBase, resolveLeagueConcept } from '@/lib/league/leagueConceptOptions'
 
 /** The three columns that identify a book in `PlayerValueSnapshot`. */
 export type ValueBook = {
@@ -63,6 +63,36 @@ export type ValueBook = {
 const SUPERFLEX_SLOTS = new Set(['SUPER_FLEX', 'SUPERFLEX', 'QB/RB/WR/TE'])
 
 /**
+ * Concepts whose rosters carry over, so future value is priced in — the ones
+ * whose id does not literally contain "dynasty".
+ *
+ * 🛑 DEVY AND C2C WERE PRICED ON THE REDRAFT BOOK until 2026-09-16. Both are
+ * dynasty-only formats (lib/league/keeper-policy.ts treats them as dynasty),
+ * but the predicate below was a substring test for "dynasty", so confirming
+ * either one in the picker moved the league OFF the dynasty book.
+ *
+ * `efl` is a label that prices on the dynasty book and nothing else (user
+ * decision, 2026-09-16). Exact ids, not substrings: `c2c` must not match an
+ * unrelated string that happens to contain it.
+ */
+const DYNASTY_SHELL_CONCEPTS = new Set(['devy', 'c2c', 'efl'])
+
+/**
+ * Whether a Pirate league carries rosters over.
+ *
+ * ⚠ A PIRATE CONFIRMATION WITHOUT A BASE PRICES AS DYNASTY. The picker cannot
+ * save Pirate without the answer and the API rejects it — and the column now
+ * receives the base, never `pirate` — so this only covers a legacy row whose
+ * column says `pirate`, or a record written before the question existed. The
+ * concept catalog calls Pirate dynasty-shelled (`pirate_vampire` is flattened
+ * onto dynasty by normalizeConcept.ts), so that is the default — and a
+ * commissioner who says "redraft" is always obeyed.
+ */
+function pirateCarriesOver(settings: unknown): boolean {
+  return readConfirmedPirateBase(settings) !== 'redraft'
+}
+
+/**
  * The league traits the value book and the trade engine both key on.
  *
  * Exported so `marketContextFor` can build its `variant` from the same
@@ -79,7 +109,10 @@ export function leagueVariantFor(
   const type = (resolveLeagueConcept(settings, leagueType) ?? '').toLowerCase()
   return {
     superflex: positions.some((p) => SUPERFLEX_SLOTS.has(p)),
-    dynasty: type.includes('dynasty'),
+    dynasty:
+      type.includes('dynasty') ||
+      DYNASTY_SHELL_CONCEPTS.has(type) ||
+      (type === 'pirate' && pirateCarriesOver(settings)),
     keeper: type.includes('keeper'),
   }
 }
@@ -92,6 +125,12 @@ export function leagueVariantFor(
  * players across seasons, so future value is priced in; splitting it away from
  * dynasty here would make the card and the trade engine disagree on the same
  * league, which is the whole failure this module exists to prevent.
+ *
+ * DEVY, C2C AND EFL price on DYNASTY; PIRATE follows the commissioner's
+ * `baseFormat` answer and defaults to DYNASTY without one — see
+ * `leagueVariantFor` above. SURVIVOR GUILLOTINE prices on REDRAFT: rosters are
+ * drafted fresh and dissolve as teams are eliminated, so it takes the default
+ * branch on purpose (its id contains neither "dynasty" nor "keeper").
  *
  * ⚠ AND AN UNKNOWN `leagueType` FALLS TO REDRAFT, deliberately. `leagueType` is
  * nullable and defaults to `"redraft"` in the schema, so treating a missing

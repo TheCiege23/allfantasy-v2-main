@@ -102,6 +102,109 @@ describe('confirming', () => {
   })
 })
 
+describe('confirming a Pirate league (user decision 2026-09-16)', () => {
+  it('refuses Pirate without a dynasty/redraft answer, and writes nothing', async () => {
+    for (const baseFormat of [undefined, null, '', 'keeper', 'DYNASTY', 1]) {
+      const r = await confirmLeagueType({ leagueId: 'L1', type: 'pirate', userId: 'u1', baseFormat })
+      expect(r).toEqual({ ok: false, reason: 'invalid-base-format' })
+    }
+    expect(h.update).not.toHaveBeenCalled()
+  })
+
+  it.each(['dynasty', 'redraft'] as const)('stores the %s answer and writes it — not "pirate" — to the column', async (base) => {
+    const r = await confirmLeagueType({ leagueId: 'L1', type: 'pirate', userId: 'u1', baseFormat: base })
+    const data = h.update.mock.calls[0][0].data
+    expect(data.settings.leagueTypeConfirmation.type).toBe('pirate')
+    expect(data.settings.leagueTypeConfirmation.baseFormat).toBe(base)
+    // The column holds the base the ~40 column readers understand; the
+    // specialty lives in the confirmation, which readFormatRules reads first.
+    expect(data.leagueType).toBe(base)
+    expect(r.ok).toBe(true)
+  })
+
+  it('reads the stored answer back on the state', async () => {
+    h.findUnique.mockResolvedValue(league({
+      leagueType: 'redraft',
+      settings: {
+        leagueTypeConfirmation: {
+          type: 'pirate', confirmedByUserId: 'u1', confirmedAt: '2026-09-16T00:00:00Z',
+          suggestedAtConfirmation: null, buyIn: null, baseFormat: 'redraft',
+        },
+      },
+    }))
+    const s = await leagueTypeState('L1')
+    expect(s?.confirmation?.type).toBe('pirate')
+    expect(s?.confirmation?.baseFormat).toBe('redraft')
+  })
+
+  it('ignores a baseFormat sent with any other type and stores null', async () => {
+    await confirmLeagueType({ leagueId: 'L1', type: 'redraft', userId: 'u1', baseFormat: 'dynasty' })
+    const w = h.update.mock.calls[0][0].data.settings.leagueTypeConfirmation
+    expect(w.type).toBe('redraft')
+    expect(w.baseFormat).toBeNull()
+  })
+
+  it('reports no base for an older confirmation that never had the field', async () => {
+    h.findUnique.mockResolvedValue(league({
+      settings: { leagueTypeConfirmation: { type: 'zombie', confirmedByUserId: 'u1' } },
+    }))
+    expect((await leagueTypeState('L1'))?.confirmation?.baseFormat).toBeNull()
+  })
+})
+
+describe('confirming an EFL league (user decision 2026-09-16)', () => {
+  it('accepts EFL, records it as EFL, and writes the dynasty column', async () => {
+    const r = await confirmLeagueType({ leagueId: 'L1', type: 'efl', userId: 'u1' })
+    expect(r.ok).toBe(true)
+    const data = h.update.mock.calls[0][0].data
+    expect(data.settings.leagueTypeConfirmation.type).toBe('efl')
+    expect(data.settings.leagueTypeConfirmation.baseFormat).toBeNull()
+    // A label over dynasty: every `leagueType === 'dynasty'` reader keeps working.
+    expect(data.leagueType).toBe('dynasty')
+  })
+
+  it('does NOT attach the EFL Commissioner OS template pin', async () => {
+    h.findUnique.mockResolvedValue(league({ settings: { conceptRules: { concept: 'dynasty' } } }))
+    await confirmLeagueType({ leagueId: 'L1', type: 'efl', userId: 'u1' })
+    const s = h.update.mock.calls[0][0].data.settings
+    expect(s.conceptRules).toEqual({ concept: 'dynasty' })
+    expect(JSON.stringify(s)).not.toContain('commissionerTemplate')
+  })
+
+  it('writes every other concept to the column unchanged', async () => {
+    for (const type of ['devy', 'c2c', 'zombie', 'dynasty', 'redraft', 'guillotine', 'survivor', 'keeper']) {
+      h.update.mockClear()
+      await confirmLeagueType({ leagueId: 'L1', type, userId: 'u1' })
+      expect(h.update.mock.calls[0][0].data.leagueType).toBe(type)
+    }
+  })
+})
+
+describe('confirming a Survivor Guillotine league (user decision 2026-09-16)', () => {
+  it('records it as one format and writes its guillotine chassis to the column', async () => {
+    const r = await confirmLeagueType({ leagueId: 'L1', type: 'survivor_guillotine', userId: 'u1' })
+    expect(r.ok).toBe(true)
+    const data = h.update.mock.calls[0][0].data
+    expect(data.settings.leagueTypeConfirmation.type).toBe('survivor_guillotine')
+    expect(data.settings.leagueTypeConfirmation.baseFormat).toBeNull()
+    expect(data.leagueType).toBe('guillotine')
+  })
+
+  it('never writes a specialty id to the column', async () => {
+    const cases = [
+      { type: 'pirate', baseFormat: 'dynasty' },
+      { type: 'pirate', baseFormat: 'redraft' },
+      { type: 'efl' },
+      { type: 'survivor_guillotine' },
+    ]
+    for (const c of cases) {
+      h.update.mockClear()
+      await confirmLeagueType({ leagueId: 'L1', userId: 'u1', ...c })
+      expect(['dynasty', 'redraft', 'guillotine']).toContain(h.update.mock.calls[0][0].data.leagueType)
+    }
+  })
+})
+
 describe('what to actually ask about', () => {
   it('asks about a suspected specialty league', async () => {
     h.findUnique.mockResolvedValue(league())

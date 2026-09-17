@@ -1,6 +1,15 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
+import {
+  LEAGUE_CONCEPT_OPTIONS,
+  PIRATE_BASE_FORMAT_OPTIONS,
+  isPirateBaseFormat,
+  leagueConceptLabel,
+  pirateBaseFormatLabel,
+  type LeagueConceptType,
+  type PirateBaseFormat,
+} from '@/lib/league/leagueConceptOptions'
 import { cn } from '@/lib/utils'
 
 /**
@@ -35,19 +44,40 @@ type State = {
   leagueName: string | null
   storedType: string | null
   suggestion: Suggestion
-  confirmation: { type: string; confirmedAt: string; buyIn: number | null } | null
+  confirmation: {
+    type: string
+    confirmedAt: string
+    buyIn: number | null
+    baseFormat?: string | null
+  } | null
   rankableType: string | null
   canConfirm: boolean
 }
 
-const TYPES = [
-  { id: 'redraft', label: 'Redraft', hint: 'Fresh draft each year' },
-  { id: 'dynasty', label: 'Dynasty', hint: 'Rosters carry over' },
-  { id: 'guillotine', label: 'Guillotine', hint: 'Lowest score eliminated weekly' },
-  { id: 'zombie', label: 'Zombie', hint: 'Teams beaten by the horde join it' },
-  { id: 'tournament', label: 'Tournament', hint: 'Many leagues, one bracket' },
-  { id: 'survivor', label: 'Survivor', hint: 'Last manager standing' },
-]
+/*
+ * ⚠ THE OPTIONS ARE THE SHARED LIST, NOT A LOCAL SIX. This card used to carry its
+ * own hard-coded subset, so a league confirmed as Devy, Keeper or Pirate in the
+ * /core header showed here with no option selected — and re-saving a Pirate
+ * league from a list with no follow-up would send it without the base the API
+ * requires. One list, one follow-up, in both pickers.
+ */
+const HINTS: Partial<Record<LeagueConceptType, string>> = {
+  redraft: 'Fresh draft each year',
+  dynasty: 'Rosters carry over',
+  keeper: 'Keep a few players each year',
+  best_ball: 'Lineups set themselves',
+  guillotine: 'Lowest score eliminated weekly',
+  survivor: 'Last manager standing',
+  survivor_guillotine: 'Tribes, weekly chops, no trades',
+  tournament: 'Many leagues, one bracket',
+  devy: 'Dynasty with college players',
+  c2c: 'College and pro rosters both score',
+  efl: 'Priced as a dynasty league',
+  zombie: 'Teams beaten by the horde join it',
+  pirate: 'Winners steal from losers',
+  salary_cap: 'Contracts and a cap',
+  big_brother: 'Weekly evictions and votes',
+}
 
 export function LeagueTypeConfirm({
   leagueId,
@@ -61,6 +91,8 @@ export function LeagueTypeConfirm({
 }) {
   const [state, setState] = useState<State | null>(null)
   const [choice, setChoice] = useState<string | null>(null)
+  /** Only meaningful when `choice` is Pirate — the save waits for it. */
+  const [pirateBase, setPirateBase] = useState<PirateBaseFormat | null>(null)
   const [buyIn, setBuyIn] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -77,6 +109,8 @@ export function LeagueTypeConfirm({
        * hint, and awarding money credit on a hint is how a rank gets inflated.
        */
       setChoice(data.confirmation?.type ?? data.suggestion.suggested ?? null)
+      const base = data.confirmation?.baseFormat
+      setPirateBase(isPirateBaseFormat(base) ? base : null)
       setBuyIn(
         data.confirmation?.buyIn != null
           ? String(data.confirmation.buyIn)
@@ -93,15 +127,21 @@ export function LeagueTypeConfirm({
     void load()
   }, [load])
 
+  const needsPirateBase = choice === 'pirate' && pirateBase === null
+
   const save = async () => {
-    if (!choice) return
+    if (!choice || needsPirateBase) return
     setSaving(true)
     setError(null)
     try {
       const res = await fetch(`/api/leagues/${leagueId}/league-type`, {
         method: 'PATCH',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ type: choice, buyIn: buyIn.trim() === '' ? null : Number(buyIn) }),
+        body: JSON.stringify({
+          type: choice,
+          buyIn: buyIn.trim() === '' ? null : Number(buyIn),
+          ...(choice === 'pirate' ? { baseFormat: pirateBase } : {}),
+        }),
       })
       const data = await res.json()
       if (!res.ok) {
@@ -127,6 +167,8 @@ export function LeagueTypeConfirm({
   if (!state.confirmation && !worthAsking && !alwaysShow) return null
 
   const confirmed = state.confirmation != null
+  const confirmedBaseLabel =
+    state.confirmation?.type === 'pirate' ? pirateBaseFormatLabel(state.confirmation?.baseFormat) : null
 
   return (
     <section
@@ -153,7 +195,11 @@ export function LeagueTypeConfirm({
 
       {confirmed ? (
         <p className="mt-3 text-sm text-[#a3b2c2]">
-          Set to <strong className="text-[#e6edf3]">{state.confirmation?.type}</strong>
+          Set to{' '}
+          <strong className="text-[#e6edf3]">
+            {leagueConceptLabel(state.confirmation?.type)}
+            {confirmedBaseLabel ? ` · ${confirmedBaseLabel}` : ''}
+          </strong>
           {state.confirmation?.buyIn != null ? ` · $${state.confirmation.buyIn} buy-in` : ''}. Change
           it below if that&rsquo;s wrong.
         </p>
@@ -176,11 +222,11 @@ export function LeagueTypeConfirm({
       {state.canConfirm ? (
         <>
           <div
-            className="mt-4 grid gap-2 sm:grid-cols-3"
+            className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3"
             role="radiogroup"
             aria-label="League format"
           >
-            {TYPES.map((t) => (
+            {LEAGUE_CONCEPT_OPTIONS.map((t) => (
               <button
                 key={t.id}
                 type="button"
@@ -196,10 +242,40 @@ export function LeagueTypeConfirm({
                 )}
               >
                 <span className="block text-sm font-bold text-[#e6edf3]">{t.label}</span>
-                <span className="block text-[11px] text-[#74869a]">{t.hint}</span>
+                {HINTS[t.id] ? (
+                  <span className="block text-[11px] text-[#74869a]">{HINTS[t.id]}</span>
+                ) : null}
               </button>
             ))}
           </div>
+
+          {choice === 'pirate' ? (
+            <div
+              className="mt-3 flex flex-wrap items-center gap-2"
+              role="radiogroup"
+              aria-label="Do rosters carry over?"
+            >
+              <span className="text-xs text-[#a3b2c2]">Rosters carry over?</span>
+              {PIRATE_BASE_FORMAT_OPTIONS.map((b) => (
+                <button
+                  key={b.id}
+                  type="button"
+                  role="radio"
+                  aria-checked={pirateBase === b.id}
+                  onClick={() => setPirateBase(b.id)}
+                  className={cn(
+                    'rounded-lg border px-3 py-1 text-xs font-bold text-[#e6edf3] transition-colors',
+                    'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#3fd0e8]',
+                    pirateBase === b.id
+                      ? 'border-[#3fd0e8] bg-[#3fd0e8]/10'
+                      : 'border-[#2a3746] hover:border-[#3d5064]',
+                  )}
+                >
+                  {b.label}
+                </button>
+              ))}
+            </div>
+          ) : null}
 
           <label className="mt-3 flex items-center gap-2 text-xs text-[#a3b2c2]">
             <span>Buy-in (optional)</span>
@@ -219,7 +295,7 @@ export function LeagueTypeConfirm({
           <button
             type="button"
             onClick={save}
-            disabled={saving || !choice}
+            disabled={saving || !choice || needsPirateBase}
             className="mt-3 rounded-xl bg-[#3fd0e8] px-4 py-2 text-sm font-black text-[#0c121b] disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#3fd0e8]"
           >
             {saving ? 'Saving…' : confirmed ? 'Update format' : 'Confirm format'}

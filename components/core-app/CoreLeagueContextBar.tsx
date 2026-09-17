@@ -8,9 +8,13 @@ import { LeagueMark } from '@/components/core-app/LeagueMark'
 import { CORE_SURFACE_LABELS, type CoreSurfaceKey } from '@/lib/core-app/coreSurface'
 import {
   LEAGUE_CONCEPT_OPTIONS,
+  PIRATE_BASE_FORMAT_OPTIONS,
   isLeagueConceptType,
+  isPirateBaseFormat,
   leagueConceptLabel,
+  pirateBaseFormatLabel,
   type LeagueConceptType,
+  type PirateBaseFormat,
 } from '@/lib/league/leagueConceptOptions'
 import '@/components/core-app/af-league-tabs.css'
 
@@ -113,7 +117,16 @@ export default function CoreLeagueContextBar({
   recommendationSlot,
 }: CoreLeagueContextBarProps) {
   const selectId = useId()
+  const baseSelectId = useId()
   const [leagueType, setLeagueType] = useState<LeagueConceptType | null>(null)
+  /** The saved Pirate answer — dynasty or redraft. Null for every other type. */
+  const [pirateBase, setPirateBase] = useState<PirateBaseFormat | null>(null)
+  /*
+   * ⚠ PIRATE IS NOT SAVED UNTIL IT IS ANSWERED. Choosing it opens the follow-up
+   * and holds the save: the API rejects a Pirate confirmation without a base,
+   * and the base is what decides the league's value book.
+   */
+  const [pirateDraft, setPirateDraft] = useState(false)
   const [canConfirm, setCanConfirm] = useState(false)
   const [typeStatus, setTypeStatus] = useState<'loading' | 'ready' | 'saving' | 'saved' | 'error'>('loading')
 
@@ -127,7 +140,7 @@ export default function CoreLeagueContextBar({
       .then(async (response) => {
         if (!response.ok) throw new Error('league type unavailable')
         return response.json() as Promise<{
-          confirmation?: { type?: unknown } | null
+          confirmation?: { type?: unknown; baseFormat?: unknown } | null
           suggestion?: { suggested?: unknown }
           storedType?: unknown
           canConfirm?: boolean
@@ -135,7 +148,10 @@ export default function CoreLeagueContextBar({
       })
       .then((payload) => {
         const raw = payload.confirmation?.type ?? payload.storedType ?? payload.suggestion?.suggested
+        const base = payload.confirmation?.baseFormat
         setLeagueType(isLeagueConceptType(raw) ? raw : null)
+        setPirateBase(raw === 'pirate' && isPirateBaseFormat(base) ? base : null)
+        setPirateDraft(false)
         setCanConfirm(Boolean(payload.canConfirm))
         setTypeStatus('ready')
       })
@@ -145,24 +161,42 @@ export default function CoreLeagueContextBar({
     return () => controller.abort()
   }, [leagueId])
 
-  const updateLeagueType = async (next: LeagueConceptType) => {
-    const previous = leagueType
+  const saveLeagueType = async (next: LeagueConceptType, base: PirateBaseFormat | null) => {
+    const previous = { leagueType, pirateBase }
     setLeagueType(next)
+    setPirateBase(base)
+    setPirateDraft(false)
     setTypeStatus('saving')
     try {
       const response = await fetch(`/api/leagues/${encodeURIComponent(leagueId)}/league-type`, {
         method: 'PATCH',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ type: next }),
+        // `baseFormat` travels only with Pirate — no other type has the question.
+        body: JSON.stringify(next === 'pirate' ? { type: next, baseFormat: base } : { type: next }),
       })
       if (!response.ok) throw new Error('save failed')
       setTypeStatus('saved')
       window.setTimeout(() => setTypeStatus('ready'), 1600)
     } catch {
-      setLeagueType(previous)
+      setLeagueType(previous.leagueType)
+      setPirateBase(previous.pirateBase)
       setTypeStatus('error')
     }
   }
+
+  const chooseLeagueType = (next: LeagueConceptType) => {
+    if (next === 'pirate') {
+      setPirateDraft(true)
+      setTypeStatus('ready')
+      return
+    }
+    void saveLeagueType(next, null)
+  }
+
+  const shownType = pirateDraft ? 'pirate' : leagueType
+  const askPirateBase = canConfirm && shownType === 'pirate'
+  const busy = typeStatus === 'loading' || typeStatus === 'saving'
+  const pirateBaseLabel = leagueType === 'pirate' ? pirateBaseFormatLabel(pirateBase) : null
   return (
     <section className="af-lctx" aria-label={`${leagueName} system status`}>
       {/*
@@ -230,10 +264,10 @@ export default function CoreLeagueContextBar({
           {canConfirm ? (
             <select
               id={selectId}
-              value={leagueType ?? ''}
-              disabled={typeStatus === 'loading' || typeStatus === 'saving'}
+              value={shownType ?? ''}
+              disabled={busy}
               onChange={(event) => {
-                if (isLeagueConceptType(event.target.value)) void updateLeagueType(event.target.value)
+                if (isLeagueConceptType(event.target.value)) chooseLeagueType(event.target.value)
               }}
             >
               <option value="" disabled>Choose league type</option>
@@ -242,10 +276,47 @@ export default function CoreLeagueContextBar({
               ))}
             </select>
           ) : (
-            <span>{typeStatus === 'loading' ? 'Loading…' : leagueConceptLabel(leagueType)}</span>
+            <span>
+              {typeStatus === 'loading'
+                ? 'Loading…'
+                : pirateBaseLabel
+                  ? `${leagueConceptLabel(leagueType)} · ${pirateBaseLabel}`
+                  : leagueConceptLabel(leagueType)}
+            </span>
           )}
+          {askPirateBase ? (
+            /*
+             * The Pirate follow-up. Sits inside the same `.af-lctx-type` group, so on
+             * a phone it scrolls with the status row rather than wrapping under it,
+             * and it picks up the same select styling.
+             */
+            <>
+              <label htmlFor={baseSelectId}>Rosters carry over?</label>
+              <select
+                id={baseSelectId}
+                value={pirateDraft ? '' : (pirateBase ?? '')}
+                disabled={busy}
+                onChange={(event) => {
+                  if (isPirateBaseFormat(event.target.value)) void saveLeagueType('pirate', event.target.value)
+                }}
+              >
+                <option value="" disabled>Choose</option>
+                {PIRATE_BASE_FORMAT_OPTIONS.map((option) => (
+                  <option key={option.id} value={option.id}>{option.label}</option>
+                ))}
+              </select>
+            </>
+          ) : null}
           <small role="status" aria-live="polite">
-            {typeStatus === 'saving' ? 'Saving…' : typeStatus === 'saved' ? 'Saved to Sports OS' : typeStatus === 'error' ? 'Could not load or save' : ''}
+            {typeStatus === 'saving'
+              ? 'Saving…'
+              : typeStatus === 'saved'
+                ? 'Saved to Sports OS'
+                : typeStatus === 'error'
+                  ? 'Could not load or save'
+                  : pirateDraft
+                    ? 'Pick dynasty or redraft to save'
+                    : ''}
           </small>
         </div>
       </div>

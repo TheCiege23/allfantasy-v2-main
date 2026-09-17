@@ -25,6 +25,7 @@ import {
 } from '@/lib/trade-intel/leagueFormatRules'
 import { readConceptAliasTags } from '@/lib/league-contract/conceptAliasTags'
 import { keeperSettingsConfirmedFrom } from '@/lib/league-contract/keeperProvenance'
+import { resolveLeagueConcept } from '@/lib/league/leagueConceptOptions'
 import {
   CATALOG_VERSION,
   getConceptById,
@@ -182,6 +183,13 @@ export function resolveLeagueRules(league: LeagueRuleInput): ResolvedLeagueRules
      */
     keeperSettingsConfirmed:
       league.keeperSettingsConfirmed ?? keeperSettingsConfirmedFrom(league.settings),
+    /*
+     * Carries the human-confirmed concept, which `readFormatRules` reads before
+     * the column. The column holds only a base format (a confirmed Survivor
+     * Guillotine league's says `guillotine`), so without this a confirmed
+     * specialty resolves as its chassis.
+     */
+    settings: league.settings,
   })
 
   /*
@@ -233,7 +241,14 @@ export function resolveLeagueRules(league: LeagueRuleInput): ResolvedLeagueRules
    * primary concept of any league whose `leagueType` read `idp` — the
    * modifier-as-format error, one more time.
    */
-  const byLeagueType = getConceptById(String(league.leagueType ?? '').trim().toLowerCase())
+  /*
+   * ⚠ KEYED ON THE CONFIRMED CONCEPT FIRST (`resolveLeagueConcept`), because the
+   * column never holds `survivor_guillotine` — it holds the `guillotine` chassis.
+   * With no confirmation this is exactly the column, trimmed and lower-cased.
+   */
+  const byLeagueType = getConceptById(
+    String(resolveLeagueConcept(league.settings, league.leagueType) ?? '').trim().toLowerCase(),
+  )
   const primaryFromLeagueType =
     byLeagueType &&
     byLeagueType.formatRulesConcept === null &&
