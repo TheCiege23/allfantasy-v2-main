@@ -1,6 +1,7 @@
 import type { IExternalLeagueMapper } from '../../mappers/ExternalLeagueMapper'
 import type { NormalizedLeagueSettings } from '../../types'
 import type { SleeperImportPayload } from './types'
+import { readSleeperDivisions, STANDINGS_DIVISIONS_KEY } from '../../standingsDivisions'
 
 /**
  * Tier 0 helpers — Sleeper stores most settings as numbers (0/1 flags, week ints,
@@ -146,6 +147,8 @@ export const SleeperLeagueMapper: IExternalLeagueMapper<SleeperImportPayload> = 
       reserve_allow_na: reserveAllowNa,
       reserve_allow_dnr: reserveAllowDnr,
       reserve_allow_doubtful: reserveAllowDoubtful,
+      // Divisions — dropped by every Sleeper path until 2026-09-17. `null` clears a stale key.
+      [STANDINGS_DIVISIONS_KEY]: readSleeperDivisions(league, source.rosters),
     }
   },
 }

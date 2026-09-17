@@ -1,27 +1,27 @@
 import Link from 'next/link'
-import type {
-  LeagueStandingsResult,
-  RankTrendPoint,
-  SeasonHistoryRow,
-  StandingRow,
-} from '@/lib/core-app/leagueStandings'
+import type { LeagueStandingsResult, RankTrendPoint, SeasonHistoryRow } from '@/lib/core-app/leagueStandings'
+import { formatRecord, type BoardTeam, type Zone } from '@/lib/core-app/standingsModel'
+import { DEFAULT_STANDINGS_VIEW, type StandingsViewState } from '@/lib/core-app/standingsView'
+import { StandingsBoardView, Move } from '@/components/core-app/standings/StandingsBoardView'
 import '@/components/core-app/af-standings.css'
 import { FreshnessChip } from '@/components/sports-os/FreshnessChip'
 import type { FreshnessMeta } from '@/lib/sports-os/freshness'
 
 /**
- * Screen 38a·7 — Standings, this league's points-for board.
+ * Screen 38a·7 — Standings: the league table and AllFantasy's power ranking, side by side.
  *
- * ⚠ NOT THE AF RANK LADDER. `/core/rankings` is the cross-app XP ladder and
- * measures something else entirely; two tabs called "Rankings" would have meant
- * one of them was lying about what it showed. Same league, different metric,
- * different name.
+ * 2026-09-17 brief (ten items): official and power views, the playoff line, tiebreak explanations,
+ * weekly movement and a history chart, the points picture (PF, PA, expected wins, all-play), sticky
+ * columns, divisions, labelled projections, stored weekly snapshots, and a card layout. The maths is in
+ * `lib/core-app/standingsModel.ts`; the interactive half is `StandingsBoardView`.
  *
- * ⚠ THE UNAVAILABLE BRANCH IS THE POINT OF THIS SCREEN, NOT ITS EDGE CASE. The
- * Sleeper sync writes a whole season of 0-0 rows before anybody plays, so the
- * default state of a freshly synced league is twelve teams on zero. Ranking
- * them would produce an arbitrary order presented as a result, which is why the
- * loader refuses and this renders the reason instead of a table.
+ * ⚠ NOT THE AF RANK LADDER. `/core/rankings` is the cross-app XP ladder and measures something else
+ * entirely; "AF Power" here is a per-league analysis of THIS league's results and is labelled as such.
+ *
+ * ⚠ THE UNAVAILABLE BRANCH IS THE POINT OF THIS SCREEN, NOT ITS EDGE CASE. The Sleeper sync writes a
+ * whole season of 0-0 rows before anybody plays, so the default state of a freshly synced league is
+ * twelve teams on zero. Ranking them would produce an arbitrary order presented as a result, which is
+ * why the loader refuses and this renders the reason instead of a table.
  */
 
 /**
@@ -42,6 +42,8 @@ export type StandingsFreshness = {
 export type StandingsProps = {
   data: LeagueStandingsResult
   freshness?: StandingsFreshness | null
+  /** View, division and layout from the URL. */
+  view?: StandingsViewState
 }
 
 function n1(v: number): string {
@@ -53,17 +55,34 @@ function pts1(v: number): string {
   return v.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 })
 }
 
+const ZONE_WORD: Record<Zone, string> = {
+  bye: 'in a bye spot',
+  playoff: 'in a playoff spot',
+  bubble: 'on the bubble',
+  out: 'outside the playoffs',
+  eliminated: 'eliminated',
+}
+
+function zoneLine(t: BoardTeam): string {
+  if (t.clinched === 'bye') return 'bye clinched'
+  if (t.clinched === 'playoff') return 'playoff spot clinched'
+  return ZONE_WORD[t.zone]
+}
+
+function lineText(t: BoardTeam): string {
+  if (t.gamesBack == null) return 'no head-to-head games'
+  if (t.gamesBack === 0) return 'on the playoff line'
+  const abs = Math.abs(t.gamesBack)
+  const games = `${Number.isInteger(abs) ? abs : abs.toFixed(1)} ${abs === 1 ? 'game' : 'games'}`
+  return t.gamesBack < 0 ? `${games} clear of the line` : `${games} behind the line`
+}
 
 /**
  * Completed seasons, as the import recorded them.
  *
- * ⚠ SEPARATE FROM THE BOARD ABOVE, NOT AN EXTENSION OF IT. The live board is computed
- * week by week — averages, movement, a projection. These rows are season totals a
- * provider reported at the time; there are no weeks behind them to recompute, and
- * presenting them in the same table would imply a precision they do not carry.
- *
- * Grouped by season, newest first, because "how did we finish" is asked one season at
- * a time.
+ * ⚠ SEPARATE FROM THE BOARD ABOVE, NOT AN EXTENSION OF IT. The live board is computed week by week —
+ * these rows are season totals a provider reported at the time; there are no weeks behind them to
+ * recompute, and presenting them in the same table would imply a precision they do not carry.
  */
 function SeasonHistory({ rows }: { rows: SeasonHistoryRow[] }) {
   if (rows.length === 0) return null
@@ -80,8 +99,7 @@ function SeasonHistory({ rows }: { rows: SeasonHistoryRow[] }) {
     <section className="af-st-history">
       <h2 className="af-label af-st-history-title">Past seasons</h2>
       <p className="af-st-history-note">
-        Imported final standings. {seasons.length}{' '}
-        {seasons.length === 1 ? 'season' : 'seasons'} on file.
+        Imported final standings. {seasons.length} {seasons.length === 1 ? 'season' : 'seasons'} on file.
       </p>
       {seasons.map(([season, teams]) => (
         <div key={season} className="af-st-history-season">
@@ -101,8 +119,7 @@ function SeasonHistory({ rows }: { rows: SeasonHistoryRow[] }) {
               <tbody>
                 {teams.map((t) => (
                   <tr key={`${season}:${t.teamKey}`} data-you={t.isYou ? 'true' : undefined}>
-                    {/* A provider that did not report a finish gets an em dash, not a
-                        fabricated position. */}
+                    {/* A provider that did not report a finish gets an em dash, not a fabricated position. */}
                     <td className="af-num">{t.rank ?? '—'}</td>
                     <th scope="row">{t.name ?? t.teamKey}</th>
                     <td className="af-num">
@@ -122,12 +139,11 @@ function SeasonHistory({ rows }: { rows: SeasonHistoryRow[] }) {
   )
 }
 
-export function Standings({ data, freshness }: StandingsProps) {
+export function Standings({ data, freshness, view = DEFAULT_STANDINGS_VIEW }: StandingsProps) {
   /*
    * ⚠ THE REFUSAL BRANCH IS LABELLED TOO, AND THAT IS NOT DECORATION. An `available: false` board is
    * cached exactly like an available one, so "we could not read this league's results" can itself be
-   * four minutes old. A reader who has just fixed the cause deserves to see that the refusal is
-   * stale rather than assuming it is live and giving up.
+   * four minutes old. A reader who has just fixed the cause deserves to see that the refusal is stale.
    */
   const chip = freshness ? (
     <FreshnessChip meta={freshness.meta} initialLabel={freshness.initialLabel} initialWarn={freshness.initialWarn} />
@@ -153,7 +169,10 @@ export function Standings({ data, freshness }: StandingsProps) {
     )
   }
 
-  const { league, season, week, seasonComplete, teams, you, trend, recent, projection, history } = data
+  const { league, season, week, seasonComplete, trend, recent, projection, history, board } = data
+  const me = board.teams.find((t) => t.isYou) ?? null
+  const n = board.teams.length
+  const P = board.rules.platformLabel
 
   return (
     <div className="af-st">
@@ -161,302 +180,159 @@ export function Standings({ data, freshness }: StandingsProps) {
         <p className="af-label af-st-eyebrow">{league.name}</p>
         <h1 className="af-display af-st-title">Standings</h1>
         <p className="af-st-sub">
-          Ranked by points scored, not by record — the measure of how you have actually played
-          rather than who you drew. {season} ·{' '}
-          {seasonComplete ? `season complete after week ${week}` : `through week ${week}`}.
+          {P === 'the platform' ? 'The league table' : `${P}’s table`}, and AllFantasy’s own power ranking beside it — record decides the
+          seeding, all-play says who is actually good. {season} ·{' '}
+          {seasonComplete ? `season complete after week ${week}` : `results through week ${board.throughWeek}`}.
         </p>
         {chip}
       </header>
 
-      {/*
-        2026-09-13 handoff (the per-league Rankings design, landed here by the
-        user's call — one per-league points-for screen, not two): label over
-        value, and the fourth tile is the projected final PF whenever there is
-        enough scored to project. Record moves to the foot line in that case; it
-        is never dropped.
-      */}
-      {you ? (
+      {me ? (
         <div className="af-st-tiles">
           <div className="af-st-tile">
-            <span className="af-label">Current rank</span>
+            <span className="af-label">Table position</span>
             <span className="af-st-tile-row">
-              <span className="af-st-tile-v af-num">{ordinal(you.rank)}</span>
-              {/*
-                Null movement is the first scored week — there is no prior rank
-                to compare against, which is a different fact from "no change".
-              */}
-              {you.movement != null && you.movement !== 0 ? (
-                <span className="af-st-move" data-dir={you.movement > 0 ? 'up' : 'down'}>
-                  {you.movement > 0 ? '▲' : '▼'}
-                  {Math.abs(you.movement)}
-                </span>
-              ) : null}
+              <span className="af-st-tile-v af-num">{ordinal(me.seed)}</span>
+              {/* Null movement is the first final week — no prior position, which is not "no change". */}
+              {me.seedMove != null && me.seedMove !== 0 ? <Move value={me.seedMove} /> : null}
             </span>
-            <span className="af-st-tile-s">of {teams.length} by points for · this week</span>
-          </div>
-
-          <div className="af-st-tile">
-            <span className="af-label">Points for · season</span>
-            <span className="af-st-tile-v af-num">{pts1(you.pointsFor)}</span>
             <span className="af-st-tile-s">
-              over {you.weeksPlayed} scored {you.weeksPlayed === 1 ? 'week' : 'weeks'}
+              of {n} · {zoneLine(me)}
             </span>
           </div>
 
           <div className="af-st-tile">
-            <span className="af-label">Avg per week</span>
-            <span className="af-st-tile-v af-num" data-tone={paceTone(you, teams)}>
-              {you.average != null ? n1(you.average) : '—'}
-            </span>
-            <span className="af-st-tile-s">{describeVsLeague(you, teams)}</span>
+            <span className="af-label">Record</span>
+            <span className="af-st-tile-v af-num">{board.hasHeadToHead ? formatRecord(me.record) : '—'}</span>
+            <span className="af-st-tile-s">{lineText(me)}</span>
           </div>
 
-          {projection.available ? (
-            <div className="af-st-tile">
-              <span className="af-label">Projected final PF</span>
+          <div className="af-st-tile">
+            <span className="af-label">AF Power</span>
+            <span className="af-st-tile-row">
               <span className="af-st-tile-v af-num" data-tone="accent">
-                ~{Math.round(projection.data.mid).toLocaleString('en-US')}
+                {ordinal(me.powerRank)}
               </span>
-              <span className="af-st-tile-s af-num">
-                {Math.round(projection.data.low).toLocaleString('en-US')} –{' '}
-                {Math.round(projection.data.high).toLocaleString('en-US')} pts
-              </span>
-            </div>
-          ) : (
-            <div className="af-st-tile">
-              <span className="af-label">Record</span>
-              <span className="af-st-tile-v af-num">
-                {you.wins}—{you.losses}
-              </span>
-              <span className="af-st-tile-s">{describeLuck(you, teams)}</span>
-            </div>
-          )}
+              {me.powerMove != null && me.powerMove !== 0 ? <Move value={me.powerMove} /> : null}
+            </span>
+            <span className="af-st-tile-s af-num">
+              score {me.powerScore.toFixed(1)} · all-play {formatRecord(me.allPlay)}
+            </span>
+          </div>
+
+          <div className="af-st-tile">
+            <span className="af-label">Points for</span>
+            <span className="af-st-tile-v af-num">{pts1(me.pointsFor)}</span>
+            <span className="af-st-tile-s">
+              {me.average != null ? `${n1(me.average)} a week · ` : ''}
+              {ordinal(me.pfRank)} in the league
+            </span>
+          </div>
         </div>
       ) : (
         <div className="af-st-noteam">
-          We cannot tell which team in this league is yours, so the tiles above it would be about
-          nobody. The full board is still below.
+          We cannot tell which team in this league is yours, so there are no tiles about you. The full table is still below.
         </div>
       )}
 
-      <StandingsRace teams={teams} you={you} />
+      <StandingsBoardView board={board} initial={view} />
 
-      {/* ── Your rank this season ───────────────────────────────────── */}
-      <section className="af-st-section">
-        <h2 className="af-label af-st-seclabel">Your rank this season</h2>
-        <div className="af-st-panel">
-          {trend.length > 1 ? (
-            <RankBars trend={trend} teamCount={teams.length} />
-          ) : (
-            <p className="af-st-panel-why">
-              A trend needs at least two scored weeks. There{' '}
-              {trend.length === 1 ? 'is one' : 'are none'} on file so far.
-            </p>
-          )}
-        </div>
-      </section>
+      {/* ── Your season ─────────────────────────────────────────────── */}
+      {me ? (
+        <>
+          <section className="af-st-section">
+            <h2 className="af-label af-st-seclabel">Your place in the table, by week</h2>
+            <div className="af-st-panel">
+              {trend.length > 1 ? (
+                <RankBars trend={trend} teamCount={n} />
+              ) : (
+                <p className="af-st-panel-why">
+                  A trend needs at least two final weeks. There {trend.length === 1 ? 'is one' : 'are none'} so far.
+                </p>
+              )}
+            </div>
+          </section>
 
-      <div className="af-st-split">
-        {/* ── Recent weeks ──────────────────────────────────────────── */}
-        <section className="af-st-panel">
-          <h2 className="af-label">Recent weeks</h2>
-          {recent.length > 0 ? (
-            <ul className="af-st-recent">
-              {recent.map((r) => (
-                <li key={r.week}>
-                  <span className="af-st-recent-w af-label">Wk {r.week}</span>
-                  <span className="af-st-recent-p af-num">{n1(r.pointsFor)}</span>
+          <div className="af-st-split">
+            <section className="af-st-panel">
+              <h2 className="af-label">Recent weeks</h2>
+              {recent.length > 0 ? (
+                <ul className="af-st-recent">
+                  {recent.map((r) => (
+                    <li key={r.week}>
+                      <span className="af-st-recent-w af-label">Wk {r.week}</span>
+                      <span className="af-st-recent-p af-num">{n1(r.pointsFor)}</span>
+                      {/*
+                        Against your OWN average to that point, so the sign means "better than your
+                        normal" rather than "better than last week".
+                      */}
+                      <span className="af-st-recent-d af-num" data-dir={r.delta == null ? 'none' : r.delta >= 0 ? 'up' : 'down'}>
+                        {r.delta == null ? '—' : `${r.delta >= 0 ? '+' : '−'}${n1(Math.abs(r.delta))} vs your avg`}
+                      </span>
+                      <span className="af-st-recent-r af-num">{ordinal(r.rank)} in points</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="af-st-panel-why">None of your weeks are final yet in this league.</p>
+              )}
+            </section>
+
+            <section className="af-st-projection" data-missing={!projection.available}>
+              <h2 className="af-label">
+                <span className="af-stb-projtag">Model</span> Projected final points
+              </h2>
+              {projection.available ? (
+                <>
+                  <p className="af-st-proj-v">
+                    <span className="af-num">~{Math.round(projection.data.mid).toLocaleString('en-US')}</span>
+                    <span className="af-st-proj-range af-num">
+                      {projection.data.weeksRemaining} {projection.data.weeksRemaining === 1 ? 'game' : 'games'} left
+                    </span>
+                  </p>
+                  <p className="af-st-proj-basis">{projection.data.basis}</p>
                   {/*
-                    Against your OWN average to that point, so the sign means
-                    "better than your normal" rather than "better than last
-                    week". The label says whose average: the league's is a
-                    different number, on the tile above.
+                    ⚠ THE LOADER'S OWN RANGE, NOT WIN-OUT / LOSE-OUT. Points for does not depend on wins
+                    and nothing here models a team's scoring off its record, so these rows are the top and
+                    bottom of the projected range, labelled as exactly that.
                   */}
-                  <span
-                    className="af-st-recent-d af-num"
-                    data-dir={r.delta == null ? 'none' : r.delta >= 0 ? 'up' : 'down'}
-                  >
-                    {r.delta == null
-                      ? '—'
-                      : `${r.delta >= 0 ? '+' : '−'}${n1(Math.abs(r.delta))} vs your avg`}
-                  </span>
-                  <span className="af-st-recent-r af-num">rank {ordinal(r.rank)}</span>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="af-st-panel-why">
-              None of your weeks have been scored yet in this league.
-            </p>
-          )}
-        </section>
-
-        {/* ── Projection ──────────────────────────────────────────────── */}
-        <section className="af-st-projection" data-missing={!projection.available}>
-          <h2 className="af-label">Projected final points</h2>
-          {projection.available ? (
-            <>
-              <p className="af-st-proj-v">
-                <span className="af-num">{Math.round(projection.data.mid).toLocaleString('en-US')}</span>
-                <span className="af-st-proj-range af-num">
-                  {projection.data.weeksRemaining} {projection.data.weeksRemaining === 1 ? 'week' : 'weeks'} left
-                </span>
-              </p>
-              <p className="af-st-proj-basis">{projection.data.basis}</p>
-              {/*
-                ⚠ THE LOADER'S OWN RANGE, NOT WIN-OUT / LOSE-OUT. The handoff drew
-                two record scenarios, but points for does not depend on wins and
-                nothing here models a team's scoring off its record. These rows are
-                the top and bottom of the projected range, labelled as exactly that;
-                the basis above says how it was made.
-              */}
-              <div className="af-st-projrows">
-                <div className="af-st-projrow" data-tone="good">
-                  <span className="af-label">High</span>
-                  <span className="af-st-projrow-note">Top of the projected range</span>
-                  <span className="af-num">{Math.round(projection.data.high).toLocaleString('en-US')}</span>
-                </div>
-                <div className="af-st-projrow" data-tone="bad">
-                  <span className="af-label">Low</span>
-                  <span className="af-st-projrow-note">Bottom of the projected range</span>
-                  <span className="af-num">{Math.round(projection.data.low).toLocaleString('en-US')}</span>
-                </div>
-              </div>
-            </>
-          ) : (
-            <p className="af-st-proj-why">{projection.reason}</p>
-          )}
-        </section>
-      </div>
-
-      {/* ── Board ───────────────────────────────────────────────────── */}
-      <h2 className="af-label af-st-seclabel">{league.name} · points-for ranking</h2>
-      <p className="af-st-scroll-cue">Scroll sideways to compare every column.</p>
-      <section className="af-st-tablewrap" aria-label="Current league standings" tabIndex={0}>
-        <table className="af-st-table">
-          <caption className="af-st-caption">
-            Every team in {league.name}, by points scored. Record is shown alongside so a team
-            scoring well and losing anyway is visible rather than buried.
-          </caption>
-          <thead>
-            <tr>
-              <th scope="col">Team</th>
-              <th scope="col" className="af-st-n">
-                Points for
-              </th>
-              <th scope="col" className="af-st-n">
-                Per week
-              </th>
-              <th scope="col" className="af-st-n">
-                Record
-              </th>
-              <th scope="col" className="af-st-n">
-                Move
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {teams.map((t) => (
-              <tr key={t.rosterId} data-you={t.isYou}>
-                <th scope="row">
-                  <span className="af-st-rank af-num">{t.rank}</span>
-                  <span className="af-st-name">{t.name ?? 'Unnamed team'}</span>
-                  {t.isYou ? <span className="af-st-you af-label">You</span> : null}
-                </th>
-                <td className="af-st-n af-num">{n1(t.pointsFor)}</td>
-                <td className="af-st-n af-num">{t.average != null ? n1(t.average) : '—'}</td>
-                <td className="af-st-n af-num">
-                  {t.wins}—{t.losses}
-                </td>
-                <td className="af-st-n">
-                  <span
-                    className="af-st-move"
-                    data-dir={t.movement == null ? 'none' : t.movement > 0 ? 'up' : t.movement < 0 ? 'down' : 'flat'}
-                  >
-                    {t.movement == null
-                      ? '—'
-                      : t.movement === 0
-                        ? '–'
-                        : `${t.movement > 0 ? '▲' : '▼'}${Math.abs(t.movement)}`}
-                  </span>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </section>
+                  <div className="af-st-projrows">
+                    <div className="af-st-projrow" data-tone="good">
+                      <span className="af-label">High</span>
+                      <span className="af-st-projrow-note">Top of the projected range</span>
+                      <span className="af-num">{Math.round(projection.data.high).toLocaleString('en-US')}</span>
+                    </div>
+                    <div className="af-st-projrow" data-tone="bad">
+                      <span className="af-label">Low</span>
+                      <span className="af-st-projrow-note">Bottom of the projected range</span>
+                      <span className="af-num">{Math.round(projection.data.low).toLocaleString('en-US')}</span>
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <p className="af-st-proj-why">{projection.reason}</p>
+              )}
+            </section>
+          </div>
+        </>
+      ) : null}
 
       <p className="af-st-foot">
-        {/* When the Record tile gave way to the projection, the record lives here instead. */}
-        {you && projection.available
-          ? `Record ${you.wins}—${you.losses}: ${describeLuck(you, teams)}. `
-          : null}
-        Points-for rank is not the playoff picture — seeding runs on record first.{' '}
-        <Link href={`/core/season-outlook?league=${encodeURIComponent(league.id)}`}>
-          Season Outlook
-        </Link>{' '}
-        has the odds.
+        Projected records on this page are a model’s expectation.{' '}
+        <Link href={`/core/season-outlook?league=${encodeURIComponent(league.id)}`}>Season Outlook</Link> simulates the rest of the
+        season for playoff and title odds.
       </p>
       <SeasonHistory rows={history} />
     </div>
   )
 }
 
-function StandingsRace({ teams, you }: { teams: StandingRow[]; you: StandingRow | null }) {
-  if (!teams.length) return null
-  const leaders = teams.slice(0, 5)
-  const visible = you && !leaders.some((team) => team.rosterId === you.rosterId)
-    ? [...leaders, you]
-    : leaders
-  const high = Math.max(...teams.map((team) => team.pointsFor))
-  const low = Math.min(...teams.map((team) => team.pointsFor))
-  const spread = Math.max(1, high - low)
-  const leader = teams[0]
-  return (
-    <section className="af-st-race" aria-labelledby="standings-race-title">
-      <header className="af-st-race-head">
-        <div>
-          <p className="af-label">Live league race</p>
-          <h2 id="standings-race-title">The points chase</h2>
-        </div>
-        {you ? (
-          <p><strong className="af-num">{ordinal(you.rank)}</strong><span>{you.rank === 1 ? 'setting the pace' : `${n1(leader.pointsFor - you.pointsFor)} points from first`}</span></p>
-        ) : null}
-      </header>
-      <div className="af-st-race-list">
-        {visible.map((team, index) => {
-          const width = 28 + ((team.pointsFor - low) / spread) * 72
-          const gap = leader.pointsFor - team.pointsFor
-          return (
-            <div className="af-st-race-row" key={team.rosterId} data-you={team.isYou ? 'true' : undefined} data-separated={index === 5 ? 'true' : undefined}>
-              <span className="af-st-race-rank af-num">{team.rank}</span>
-              {team.avatarUrl ? (
-                // Imported provider avatars can use arbitrary CDNs; a plain image preserves them.
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={team.avatarUrl} alt="" />
-              ) : <span className="af-st-race-avatar" aria-hidden>{(team.name ?? '?').slice(0, 1).toUpperCase()}</span>}
-              <span className="af-st-race-name"><strong>{team.name ?? 'Unnamed team'}</strong><small>{team.wins}–{team.losses}{team.isYou ? ' · You' : ''}</small></span>
-              <span className="af-st-race-track"><i style={{ width: `${width.toFixed(1)}%` }} /></span>
-              <span className="af-st-race-score af-num"><strong>{n1(team.pointsFor)}</strong><small>{gap === 0 ? 'leader' : `−${n1(gap)}`}</small></span>
-            </div>
-          )
-        })}
-      </div>
-      <p className="af-st-race-note">Bars show the points gap across this league. Scores move only when imported results are stored.</p>
-    </section>
-  )
-}
-
 /**
- * Rank by week, as bars (2026-09-13 handoff).
+ * Your place in the table by week, as bars (2026-09-13 handoff).
  *
- * ⚠ TALLER IS BETTER. 1st draws the tallest bar and last the shortest. The
- * handoff's caption read "lower bar = better rank", which contradicts its own
- * drawing (its rank-2 weeks are the tallest bars); the drawing is what a reader
- * believes, so the caption here says what the bars actually do.
- *
- * The current week is marked, and so is every week at your season-best rank —
- * where you are now and where you have been at your best are the two readings.
+ * ⚠ TALLER IS BETTER. 1st draws the tallest bar and last the shortest. The handoff's caption read
+ * "lower bar = better rank", which contradicts its own drawing; the drawing is what a reader believes,
+ * so the caption here says what the bars actually do.
  */
 function RankBars({ trend, teamCount }: { trend: RankTrendPoint[]; teamCount: number }) {
   const worst = Math.max(teamCount, ...trend.map((p) => p.rank))
@@ -468,7 +344,7 @@ function RankBars({ trend, teamCount }: { trend: RankTrendPoint[]; teamCount: nu
       <div
         className="af-st-bars-chart"
         role="img"
-        aria-label={`Rank by week: ${trend.map((p) => `week ${p.week} ${ordinal(p.rank)}`).join(', ')}`}
+        aria-label={`Place in the table by week: ${trend.map((p) => `week ${p.week} ${ordinal(p.rank)}`).join(', ')}`}
       >
         <div className="af-st-bars-plot">
           {trend.map((p, i) => {
@@ -492,49 +368,11 @@ function RankBars({ trend, teamCount }: { trend: RankTrendPoint[]; teamCount: nu
         </div>
       </div>
       <figcaption className="af-st-bars-cap">
-        Taller bar = better rank. Best {ordinal(best)} · now {ordinal(last.rank)}. Rank only moves on
-        synced results, never estimated between weeks.
+        Taller bar = better rank. Best {ordinal(best)} · now {ordinal(last.rank)}. Positions only move on final results, never estimated
+        between weeks.
       </figcaption>
     </figure>
   )
-}
-
-/** Tone for the per-week tile: above or below the league average, or nothing when level or unknown. */
-function paceTone(you: StandingRow, teams: StandingRow[]): 'good' | 'bad' | undefined {
-  const withAvg = teams.filter((t) => t.average != null)
-  if (you.average == null || withAvg.length === 0) return undefined
-  const leagueAvg = withAvg.reduce((a, t) => a + (t.average ?? 0), 0) / withAvg.length
-  const diff = you.average - leagueAvg
-  if (Math.abs(diff) < 0.05) return undefined
-  return diff > 0 ? 'good' : 'bad'
-}
-
-function describeVsLeague(you: StandingRow, teams: StandingRow[]): string {
-  const withAvg = teams.filter((t) => t.average != null)
-  if (you.average == null || withAvg.length === 0) return 'no scored weeks yet'
-  const leagueAvg = withAvg.reduce((a, t) => a + (t.average ?? 0), 0) / withAvg.length
-  const diff = you.average - leagueAvg
-  if (Math.abs(diff) < 0.05) return 'level with the league average'
-  return `${diff > 0 ? '+' : '−'}${Math.abs(diff).toFixed(1)} vs league average`
-}
-
-/**
- * Points rank against record rank — the "have you been unlucky" line.
- *
- * Only stated when the two genuinely disagree. A team ranked 3rd on points and
- * 3rd on record has no story here, and inventing one for every row would make
- * the real cases invisible.
- */
-function describeLuck(you: StandingRow, teams: StandingRow[]): string {
-  const byRecord = [...teams].sort(
-    (a, b) => b.wins - a.wins || b.pointsFor - a.pointsFor,
-  )
-  const recordRank = byRecord.findIndex((t) => t.rosterId === you.rosterId) + 1
-  if (recordRank === 0) return `${ordinal(you.rank)} on points`
-  const gap = recordRank - you.rank
-  if (gap >= 2) return `${ordinal(recordRank)} on record — scoring better than it shows`
-  if (gap <= -2) return `${ordinal(recordRank)} on record — winning more than you score`
-  return `${ordinal(recordRank)} on record`
 }
 
 function ordinal(n: number): string {

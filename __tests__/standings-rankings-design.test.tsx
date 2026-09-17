@@ -4,6 +4,7 @@ import { render, screen } from '@testing-library/react'
 
 import { Standings } from '@/components/core-app/screens/Standings'
 import type { LeagueStandingsResult, StandingRow } from '@/lib/core-app/leagueStandings'
+import { advanceWeek, buildStandingsBoard, type WeekSnapshot } from '@/lib/core-app/standingsModel'
 
 /*
  * The per-league Rankings design (2026-09-13), landed on the Standings screen.
@@ -29,6 +30,43 @@ function team(i: number, over: Partial<StandingRow> = {}): StandingRow {
   }
 }
 
+/** A real board: four teams, three final weeks, team 2 is you. */
+function board() {
+  const snaps: WeekSnapshot[] = []
+  for (let w = 1; w <= 3; w += 1) {
+    const rows = [
+      { week: w, rosterId: '1', matchupId: 1, pointsFor: 150, pointsAgainst: 140 + w },
+      { week: w, rosterId: '2', matchupId: 1, pointsFor: 140 + w, pointsAgainst: 150 },
+      { week: w, rosterId: '3', matchupId: 2, pointsFor: 120, pointsAgainst: 100 },
+      { week: w, rosterId: '4', matchupId: 2, pointsFor: 100, pointsAgainst: 120 },
+    ]
+    snaps.push(advanceWeek(snaps[w - 2] ?? null, 2026, w, rows, ['1', '2', '3', '4'], `s${w}`))
+  }
+  return buildStandingsBoard({
+    season: 2026,
+    snapshots: snaps,
+    unplayed: [{ week: 4, a: '1', b: '3' }, { week: 4, a: '2', b: '4' }],
+    teams: ['1', '2', '3', '4'].map((id) => ({
+      rosterId: id,
+      name: `Team ${id}`,
+      avatarUrl: null,
+      isYou: id === '2',
+      division: null,
+      reported: null,
+    })),
+    rules: {
+      playoffTeams: 2,
+      playoffTeamsSource: 'league',
+      byes: 0,
+      regularSeasonEnd: null,
+      tiebreakers: ['points_for', 'head_to_head'],
+      tiebreakerSource: 'platform',
+      rankIsOfficial: false,
+      platformLabel: 'Sleeper',
+    },
+  })
+}
+
 function standings(over: Record<string, unknown> = {}): LeagueStandingsResult {
   const teams = [1, 2, 3, 4].map((i) => team(i))
   return {
@@ -51,6 +89,7 @@ function standings(over: Record<string, unknown> = {}): LeagueStandingsResult {
     },
     scoredWeeks: 10,
     history: [],
+    board: board(),
     ...over,
   } as unknown as LeagueStandingsResult
 }
@@ -63,16 +102,18 @@ describe('Standings — the per-league Rankings design', () => {
     expect(document.body.textContent).not.toMatch(/win out|lose out/i)
   })
 
-  it('keeps the record on screen when the projection takes its tile', () => {
-    render(<Standings data={standings()} />)
-    expect(screen.queryByText('Record', { selector: '.af-st-tile .af-label' })).toBeNull()
-    expect(screen.getByText(/Record 8—2:/)).toBeTruthy()
-  })
-
-  it('falls back to the Record tile when there is too little to project', () => {
+  it('gives the record its own tile whether or not there is a projection', () => {
+    const { unmount } = render(<Standings data={standings()} />)
+    expect(screen.getByText('Record', { selector: '.af-st-tile .af-label' })).toBeTruthy()
+    unmount()
     render(<Standings data={standings({ projection: { available: false, reason: 'Too few weeks scored.' } })} />)
     expect(screen.getByText('Record', { selector: '.af-st-tile .af-label' })).toBeTruthy()
-    expect(document.body.textContent).not.toMatch(/Record 8—2:/)
+    expect(screen.getByText('Too few weeks scored.')).toBeTruthy()
+  })
+
+  it('tags the projected points as a model', () => {
+    const { container } = render(<Standings data={standings()} />)
+    expect(container.querySelector('.af-st-projection .af-stb-projtag')?.textContent).toBe('Model')
   })
 
   /* The handoff's caption said "lower bar = better"; its drawing said the opposite. */

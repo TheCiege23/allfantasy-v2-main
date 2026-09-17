@@ -58,7 +58,20 @@ export type RosterPick = {
   value: number | null
   /** Why `value` is null; set only when the route could not place the pick on the curve. */
   unpricedReason?: UnpricedReason | null
+  /**
+   * False for an imported league's pick (read from `future_draft_picks`): listed and valued, but
+   * `pickId` is not an id a proposal can reference. Absent means proposable.
+   */
+  proposable?: boolean
+  /** The team the pick originally belonged to, when that is not this roster. */
+  fromTeam?: string | null
 }
+
+/**
+ * How complete an imported league's pick lists are. `traded_only`: the league's rookie-draft size is
+ * unknown, so only picks that changed hands are listed — a short list is not "no picks".
+ */
+export type PickCoverage = 'complete' | 'traded_only' | 'none'
 
 export type LeagueRoster = {
   rosterId: string
@@ -102,6 +115,8 @@ export type LeagueRostersData = {
    * team, or the ranking could not be produced. Either way the chips fall back to roster order.
    */
   partnerRanking?: PartnerRanking | null
+  /** Optional: absent from a server that predates imported picks. */
+  pickCoverage?: PickCoverage
 }
 
 export type LeagueRostersState = 'idle' | 'loading' | 'failed'
@@ -128,6 +143,8 @@ export function useLeagueRosters(
         viewerRosterId: j.viewerRosterId ?? null,
         viewerTeamRosterId: j.viewerTeamRosterId ?? null,
         partnerRanking: j.partnerRanking ?? null,
+        // ⚠ Copied field by field, so a new server field is dropped here unless it is named.
+        pickCoverage: j.pickCoverage ?? 'none',
       })
       setState('idle')
     } catch {

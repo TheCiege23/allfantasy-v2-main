@@ -12,7 +12,12 @@ import {
   type SleeperRoster,
 } from '@/lib/sleeper-client'
 import { getSleeperHistoricalLeagueChain } from './SleeperHistoricalLeagueChain'
-import { analyzePlayoffBracket, placementLabel, resolveBracketPlacements } from './bracketPlacements'
+import {
+  analyzePlayoffBracket,
+  placementLabel,
+  readStoredTitleGame,
+  resolveBracketPlacements,
+} from './bracketPlacements'
 import { shouldSkipImportedSeason } from '../seasonCompletion'
 
 const MAX_SLEEPER_MATCHUP_WEEKS = 18
@@ -35,6 +40,10 @@ export interface SleeperHistoricalMatchupSyncSummary {
   skipped: boolean
   reason?: string
   seasonsProcessed?: number
+  /** Completed seasons left alone: stored, and settled (see `isStoredSeasonSettled`). */
+  seasonsSkippedComplete?: number
+  /** Completed seasons fetched once more because their stored row was written before they settled. */
+  completedSeasonsRefreshed?: number
   matchupFactsPersisted?: number
   playoffSeasonsWithBracket?: number
   weeksWithMatchups?: number
@@ -237,6 +246,37 @@ function mergeSeasonMetadata(
   }
 }
 
+/**
+ * Has a COMPLETED season's stored row already captured everything Sleeper will ever say?
+ *
+ * 🛑 "COMPLETE AND STORED" WAS NOT ENOUGH. The four-hourly refresh re-runs the season being
+ * played, so a season is first stored mid-season with an UNDECIDED winners bracket. Once Sleeper
+ * flips it to `complete`, matchup facts already exist — and the old gate skipped it on every
+ * later run, so the title game and the final playoff weeks were never written. A run landing
+ * between the championship and the status flip was the only way out.
+ *
+ * Settled means either:
+ *   - the stored bracket names a decided title game (`readStoredTitleGame`, which also reads
+ *     rows written before `bracketPlacementVersion: 2`), or
+ *   - the row was written while Sleeper already reported the season `complete`
+ *     (`seasonStatusAtSync`). That write saw everything there is to see.
+ *
+ * ⚠ THE SECOND CONDITION IS WHAT KEEPS THIS TO ONE EXTRA REFRESH. Elimination formats
+ * (Guillotine, Chopped, …) never have a winners bracket, and Sleeper answers `null` for them. A
+ * gate on the title game alone would re-fetch every such season on every run, forever — the
+ * vendor load the completion gate exists to prevent.
+ *
+ * ⚠ A BRACKET FETCH THAT FAILS DURING THAT ONE REFRESH IS NOT RETRIED. `getPlayoffBracket`
+ * returns `[]` for a failed request and for a league with no bracket alike, so the two cannot be
+ * told apart here.
+ */
+export function isStoredSeasonSettled(metadata: unknown): boolean {
+  if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) return false
+  const stored = metadata as Record<string, unknown>
+  if (readStoredTitleGame(stored.playoffStructure) != null) return true
+  return stored.seasonStatusAtSync === 'complete'
+}
+
 function buildMatchupMetadata(args: {
   league: SleeperLeague
   rosters: SleeperRoster[]
@@ -278,6 +318,8 @@ function buildMatchupMetadata(args: {
   )
 
   return {
+    /** Sleeper's status for the season when this row was written — read by `isStoredSeasonSettled`. */
+    seasonStatusAtSync: args.league.status ?? null,
     matchupHistory: {
       weeksWithMatchups: args.weekMatchups
         .filter((week) => week.matchups.length > 0)
@@ -396,6 +438,7 @@ export async function syncSleeperHistoricalMatchupsAfterImport(args: {
 
     let seasonsProcessed = 0
     let seasonsSkippedComplete = 0
+    let completedSeasonsRefreshed = 0
     let matchupFactsPersisted = 0
     let playoffSeasonsWithBracket = 0
     let weeksWithMatchups = 0
@@ -413,26 +456,12 @@ export async function syncSleeperHistoricalMatchupsAfterImport(args: {
        * Three siblings, three different answers to one question nobody had named. That is why the
        * predicate is shared and provider-agnostic rather than inlined here.
        *
-       * ⚠ BOTH conditions, as everywhere else: complete AND already persisted. Completion alone
-       * would skip a finished season that was never imported, which is exactly the history this
-       * exists to fetch.
+       * ⚠ THREE conditions now: complete, already persisted, AND settled. Completion alone would
+       * skip a finished season that was never imported, which is exactly the history this exists
+       * to fetch. "Persisted" alone froze a season stored mid-season with its final undecided —
+       * see `isStoredSeasonSettled`.
        */
-      if (shouldSkipImportedSeason({ force: undefined, league: seasonState.league })) {
-        const alreadyPersisted = await prisma.matchupFact.findFirst({
-          where: { leagueId: league.id, season: seasonState.season },
-          select: { matchupId: true },
-        })
-        if (alreadyPersisted) {
-          seasonsSkippedComplete += 1
-          continue
-        }
-      }
-
-      const [rosters, winnersBracket, losersBracket, weekMatchups, existingSeason] = await Promise.all([
-        getLeagueRosters(seasonState.externalLeagueId),
-        getPlayoffBracket(seasonState.externalLeagueId),
-        getLosersBracket(seasonState.externalLeagueId),
-        fetchWeekMatchups(seasonState.externalLeagueId),
+      const storedSeasonRead = () =>
         prisma.leagueDynastySeason.findUnique({
           where: {
             uniq_league_dynasty_season_league_season: {
@@ -443,7 +472,30 @@ export async function syncSleeperHistoricalMatchupsAfterImport(args: {
           select: {
             metadata: true,
           },
-        }),
+        })
+      let storedSeason: Awaited<ReturnType<typeof storedSeasonRead>> | undefined
+      if (shouldSkipImportedSeason({ force: undefined, league: seasonState.league })) {
+        const [alreadyPersisted, stored] = await Promise.all([
+          prisma.matchupFact.findFirst({
+            where: { leagueId: league.id, season: seasonState.season },
+            select: { matchupId: true },
+          }),
+          storedSeasonRead(),
+        ])
+        storedSeason = stored
+        if (alreadyPersisted && isStoredSeasonSettled(stored?.metadata)) {
+          seasonsSkippedComplete += 1
+          continue
+        }
+        if (alreadyPersisted) completedSeasonsRefreshed += 1
+      }
+
+      const [rosters, winnersBracket, losersBracket, weekMatchups, existingSeason] = await Promise.all([
+        getLeagueRosters(seasonState.externalLeagueId),
+        getPlayoffBracket(seasonState.externalLeagueId),
+        getLosersBracket(seasonState.externalLeagueId),
+        fetchWeekMatchups(seasonState.externalLeagueId),
+        storedSeason !== undefined ? Promise.resolve(storedSeason) : storedSeasonRead(),
       ])
 
       const canonicalIdByHistoricalRosterId = new Map<string, string>()
@@ -514,6 +566,8 @@ export async function syncSleeperHistoricalMatchupsAfterImport(args: {
       refreshed: true,
       skipped: false,
       seasonsProcessed,
+      seasonsSkippedComplete,
+      completedSeasonsRefreshed,
       matchupFactsPersisted,
       playoffSeasonsWithBracket,
       weeksWithMatchups,

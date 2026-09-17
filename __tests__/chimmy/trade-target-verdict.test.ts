@@ -2,11 +2,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
   buildTradeTargetVerdict,
-  loadLeaguePlayerNames,
   locateTarget,
   type TradeTargetDeps,
 } from '@/lib/chimmy/tradeTargetVerdict'
-import type { RawPlayerMetadataRow } from '@/lib/decision-os/world/facts'
 import { indexRosterNames } from '@/lib/chimmy/leagueRosterIndex'
 import type { PlayerTradeVisual } from '@/lib/core-app/playerTradeVisual'
 import type { CanonicalWorld } from '@/lib/decision-os/world/facts'
@@ -313,44 +311,18 @@ describe('locateTarget', () => {
   })
 })
 
+
 /*
- * 🛑 THE NAMES MUST COME FROM THE RIGHT ID SPACE, AND ALL OF THEM. Measured on staging 2026-09-17:
- * `resolveNames` capped its fallback at 120 rows and ORed `externalId` with `sleeperId`, so a
- * rostered Adam Thielen was "not on any roster". These pin the replacement's two rules.
+ * The verdict names a league through `resolveNames` — the one lookup every Chimmy scenario uses —
+ * and asks for the whole league. The tests above inject their own loader, so the default is pinned
+ * here against the source.
  */
-describe('loadLeaguePlayerNames', () => {
-  const row = (over: Partial<RawPlayerMetadataRow>): RawPlayerMetadataRow =>
-    ({ externalId: 'x', sleeperId: null, name: null, position: null, team: null, status: null, source: null, ...over }) as RawPlayerMetadataRow
-
-  it('a Sleeper id beats a provider id that happens to be the same number', async () => {
-    const loadRows = vi.fn(async () => [
-      // A provider row whose externalId is numerically the same as Thielen's Sleeper id — a different person.
-      row({ externalId: '4981', sleeperId: null, name: 'Somebody Else', position: 'LB' }),
-      row({ externalId: 'rolling:77', sleeperId: '4981', name: 'Adam Thielen', position: 'WR' }),
-    ])
-    const names = await loadLeaguePlayerNames('NFL', ['4981'], loadRows)
-    expect(names.get('4981')).toEqual({ name: 'Adam Thielen', position: 'WR' })
-  })
-
-  it('a Sleeper-space row cannot claim another player\'s Sleeper id through its own externalId', async () => {
-    const loadRows = vi.fn(async () => [
-      row({ externalId: '200', sleeperId: '100', name: 'Player A', position: 'RB' }),
-      row({ externalId: 'espn:9', sleeperId: '200', name: 'Player B', position: 'WR' }),
-    ])
-    const names = await loadLeaguePlayerNames('NFL', ['100', '200'], loadRows)
-    expect(names.get('100')?.name).toBe('Player A')
-    expect(names.get('200')?.name).toBe('Player B')
-  })
-
-  it('reads a whole league, in batches the loader accepts — no cap below the league', async () => {
-    const ids = Array.from({ length: 450 }, (_, i) => String(1000 + i))
-    const loadRows = vi.fn(async (_sport: string, batch: string[]) =>
-      batch.map((id) => row({ externalId: `sleeper:${id}`, sleeperId: null, name: `P${id}`, position: 'WR' })),
-    )
-    const names = await loadLeaguePlayerNames('NFL', ids, loadRows)
-    expect(loadRows).toHaveBeenCalledTimes(3)
-    for (const call of loadRows.mock.calls) expect(call[1].length).toBeLessThanOrEqual(200)
-    expect(names.size).toBe(450)
-    expect(names.get('1449')?.name).toBe('P1449')
+describe('the default name loader', () => {
+  it('is resolveNames, over the whole league', async () => {
+    const fs = await import('node:fs')
+    const path = await import('node:path')
+    const src = fs.readFileSync(path.join(process.cwd(), 'lib', 'chimmy', 'tradeTargetVerdict.ts'), 'utf8')
+    expect(src).toMatch(/loadPlayerNames:\s*\(sport, ids\)\s*=>\s*resolveNames\(normalizeToSupportedSport\(sport\), ids, MAX_LEAGUE_PLAYER_IDS\)/)
+    expect(src).toMatch(/const MAX_LEAGUE_PLAYER_IDS = 800/)
   })
 })

@@ -100,8 +100,10 @@ describe('standings refuse to rank an unplayed season', () => {
    * public page that is what a search engine would index.
    */
   it('the private board gates on scoredWeeks === 0', () => {
+    // The behaviour itself is pinned in __tests__/core-app/leagueStandings-snapshots.test.ts
+    // ("still refuses a season with nothing scored"); this keeps the gate greppable.
     const src = read('lib/core-app/leagueStandings.ts')
-    expect(src).toContain('resolved.scoredWeeks === 0')
+    expect(src).toContain('scoredWeekCount === 0')
   })
 
   it('the public page gates on it too', () => {

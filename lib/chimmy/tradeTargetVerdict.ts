@@ -1,5 +1,6 @@
 import 'server-only'
 
+import { resolveNames } from '@/lib/ai-payload/resolveAiTeamContext'
 import { getPlayerTradeVisual, type PlayerTradeVisual } from '@/lib/core-app/playerTradeVisual'
 import type { SectionState } from '@/lib/core-app/leagueHome'
 import {
@@ -12,7 +13,6 @@ import {
 import { computeRosterImpact, fillLineup, type ImpactPlayer } from '@/lib/decision-os/trade/rosterImpact'
 import { resolveCanonicalWorld } from '@/lib/decision-os/world'
 import type { CanonicalWorld } from '@/lib/decision-os/world/facts'
-import { loadPlayerMetadataRows } from '@/lib/decision-os/world/port'
 import { normalizePlayerName } from '@/lib/player-identity/playerIdentityResolution'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
 import {
@@ -69,53 +69,15 @@ export interface TradeTargetDeps {
   leagueWeek: LeagueWeekPricingDeps
 }
 
-/** `loadPlayerMetadataRows` reads at most this many ids per call. */
-const METADATA_BATCH = 200
-
-/**
- * Names for every rostered player in the league.
- *
- * 🛑 NOT `resolveNames`. Measured on staging 2026-09-17 against a real 12-team Sleeper league, the
- * verdict could not find Adam Thielen — rostered in that league — because `resolveNames` caps its
- * fallback read at 120 rows, and that read ORs `externalId` with `sleeperId`: two id spaces that
- * collide (42,031 of 42,032 numeric `externalId`s that are also a Sleeper id are a different person;
- * see `loadPlayerMetadataRows`). A league's worth of ids overflows the cap, and a collision can name
- * the wrong man.
- *
- * `loadPlayerMetadataRows` asks the Sleeper space first and the provider space only for what that left
- * unclaimed. Its rows are indexed here in the same order — every Sleeper id before any provider id — so
- * a provider id that happens to equal somebody's Sleeper id cannot take his name.
+/*
+ * Names come from `resolveNames`, the lookup every Chimmy scenario uses. This module carried a private
+ * loader for one commit because `resolveNames` capped its fallback at 120 rows and matched Sleeper ids
+ * against provider ids — a rostered Adam Thielen was "not on any roster" on staging. That is fixed at
+ * the source now, so there is one lookup again.
  */
-export async function loadLeaguePlayerNames(
-  sport: string,
-  ids: string[],
-  loadRows: typeof loadPlayerMetadataRows = loadPlayerMetadataRows,
-): Promise<PlayerNames> {
-  const unique = [...new Set(ids.filter(Boolean))].slice(0, MAX_LEAGUE_PLAYER_IDS)
-  const batches: string[][] = []
-  for (let i = 0; i < unique.length; i += METADATA_BATCH) batches.push(unique.slice(i, i + METADATA_BATCH))
-  const rows = (await Promise.all(batches.map((b) => loadRows(normalizeToSupportedSport(sport), b)))).flat()
-
-  const out: PlayerNames = new Map()
-  const entry = (r: (typeof rows)[number]) => ({ name: r.name, position: r.position })
-  for (const r of rows) {
-    if (r.sleeperId && !out.has(r.sleeperId)) out.set(r.sleeperId, entry(r))
-    if (r.externalId.startsWith('sleeper:')) {
-      const id = r.externalId.slice('sleeper:'.length)
-      if (!out.has(id)) out.set(id, entry(r))
-    }
-  }
-  for (const r of rows) {
-    if (r.externalId && !r.externalId.startsWith('sleeper:') && !out.has(r.externalId)) {
-      out.set(r.externalId, entry(r))
-    }
-  }
-  return out
-}
-
 const defaultDeps: TradeTargetDeps = {
   resolveWorld: resolveCanonicalWorld,
-  loadPlayerNames: (sport, ids) => loadLeaguePlayerNames(sport, ids),
+  loadPlayerNames: (sport, ids) => resolveNames(normalizeToSupportedSport(sport), ids, MAX_LEAGUE_PLAYER_IDS),
   tradeVisual: (leagueId, sleeperId, userId) => getPlayerTradeVisual(leagueId, sleeperId, userId),
   leagueWeek: defaultLeagueWeekPricingDeps,
 }

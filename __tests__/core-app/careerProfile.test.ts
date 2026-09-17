@@ -127,6 +127,82 @@ describe('careerProfile', () => {
     expect((await readCareerProfile('u1')).origin).toBe('built')
   })
 
+  /*
+   * Finals: the loader reads stored Sleeper title games, and the stamp digests them. The raw
+   * queries are told apart by their SQL, since `$queryRaw` is a tagged template.
+   */
+  function routeRawQueries(state: { digest: string; titleRows: unknown[] }) {
+    db.$queryRaw.mockImplementation(async (strings: TemplateStringsArray) => {
+      const sql = Array.isArray(strings) ? strings.join('?') : String(strings)
+      if (sql.includes('xp_total')) return [{ xp_total: 1200 }]
+      if (sql.includes('md5(')) return [{ n: state.titleRows.length, digest: state.digest }]
+      if (sql.includes('jsonb_build_object')) return state.titleRows
+      return []
+    })
+  }
+
+  const LOST_FINAL = {
+    leagueId: 'L-S1',
+    season: 2023,
+    platformLeagueId: 'S1',
+    ps: { bracketPlacementVersion: 2, championRosterId: 7, runnerUpRosterId: 3 },
+  }
+
+  it('carries a lost final from the stored bracket into the rows and the tile', async () => {
+    stubSources()
+    db.legacyLeague.findMany.mockResolvedValue([
+      {
+        id: 'LL1',
+        sleeperLeagueId: 'S1',
+        name: 'Dynasty Dragons',
+        season: 2023,
+        sport: 'nfl',
+        leagueType: 'dynasty',
+        scoringType: 'ppr',
+        teamCount: 12,
+        playoffTeams: 6,
+        status: 'complete',
+        rosters: [{ rosterId: 3, wins: 10, losses: 4, ties: 0, pointsFor: 1600, pointsAgainst: 1400, isChampion: false, finalStanding: 2, playoffSeed: 1 }],
+      },
+    ])
+    routeRawQueries({ digest: 'aaa', titleRows: [LOST_FINAL] })
+    db.sportsDataCache.findUnique.mockResolvedValue(null)
+
+    const p = await readCareerProfile('u1')
+    expect(p.source.rows[0]).toMatchObject({ finalResult: 'lost', isChampion: false })
+    const { buildCareerData, NO_CAREER_FILTER } = await import('@/lib/core-app/careerModel')
+    expect(buildCareerData(p.source, NO_CAREER_FILTER).accomplishments).toMatchObject({ finals: 1, finalsLost: 1, championships: 0 })
+  })
+
+  it('rebuilds when a stored title game changes, and not otherwise', async () => {
+    stubSources()
+    const state = { digest: 'aaa', titleRows: [LOST_FINAL] as unknown[] }
+    routeRawQueries(state)
+    db.sportsDataCache.findUnique.mockResolvedValue(null)
+    await readCareerProfile('u1')
+    await vi.waitFor(() => expect(db.sportsDataCache.upsert).toHaveBeenCalled())
+    const stored = db.sportsDataCache.upsert.mock.calls[0][0].create.data
+    expect(stored.stamp).toMatch(/\|d1#aaa/)
+    db.sportsDataCache.findUnique.mockResolvedValue({ data: stored, expiresAt: new Date(Date.now() + 60_000) })
+
+    expect((await readCareerProfile('u1')).origin).toBe('stored')
+    state.digest = 'bbb'
+    expect((await readCareerProfile('u1')).origin).toBe('built')
+  })
+
+  it('treats a version-1 document — rows without finals — as a miss', async () => {
+    stubSources()
+    routeRawQueries({ digest: '', titleRows: [] })
+    db.sportsDataCache.findUnique.mockResolvedValue(null)
+    await readCareerProfile('u1')
+    await vi.waitFor(() => expect(db.sportsDataCache.upsert).toHaveBeenCalled())
+    const current = db.sportsDataCache.upsert.mock.calls[0][0].create.data
+    expect(CAREER_PROFILE_VERSION).toBeGreaterThanOrEqual(2)
+
+    db.sportsDataCache.findUnique.mockResolvedValue({ data: { ...current, version: 1 }, expiresAt: new Date(Date.now() + 60_000) })
+    expect((await readCareerProfile('u1')).origin).toBe('built')
+  })
+
   it('refresh never throws and honours the kill switch', async () => {
     process.env.CORE_CAREER_PROFILE_DISABLED = '1'
     expect(await refreshCareerProfile('u1')).toEqual({ ok: false, rows: 0 })

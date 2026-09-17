@@ -23,7 +23,17 @@ const mocks = vi.hoisted(() => ({
   updateMany: vi.fn(),
   reapAllAbandonedRuns: vi.fn(),
   recordSyncJobRun: vi.fn(),
+  purgeExpiredCache: vi.fn(),
 }))
+
+const PURGED = {
+  available: true,
+  deleted: 1200,
+  batches: 3,
+  capped: false,
+  cutoff: '2026-09-05T12:00:00.000Z',
+  fallbackCutoff: '2026-08-29T12:00:00.000Z',
+}
 
 vi.mock('@/lib/prisma', () => ({
   prisma: { syncJobRun: { updateMany: mocks.updateMany } },
@@ -99,6 +109,8 @@ describe('GET /api/cron/reap-sync-runs', () => {
       reapAllAbandonedRuns: mocks.reapAllAbandonedRuns,
       recordSyncJobRun: mocks.recordSyncJobRun,
     }))
+    vi.doMock('@/lib/enrichment-cache', () => ({ purgeExpiredCache: mocks.purgeExpiredCache }))
+    mocks.purgeExpiredCache.mockResolvedValue(PURGED)
   })
 
   it('rejects an unauthenticated call without touching the database', async () => {
@@ -108,6 +120,7 @@ describe('GET /api/cron/reap-sync-runs', () => {
 
     expect(res.status).toBe(401)
     expect(mocks.reapAllAbandonedRuns).not.toHaveBeenCalled()
+    expect(mocks.purgeExpiredCache).not.toHaveBeenCalled()
   })
 
   it('rejects a wrong secret', async () => {
@@ -138,6 +151,68 @@ describe('GET /api/cron/reap-sync-runs', () => {
     expect(mocks.recordSyncJobRun).toHaveBeenCalledTimes(1)
   })
 
+  it('purges expired cache rows after the reap, and records what it did', async () => {
+    mocks.reapAllAbandonedRuns.mockResolvedValueOnce({
+      available: true,
+      reaped: 2,
+      cutoff: '2026-09-05T11:30:00.000Z',
+    })
+    const { GET } = await import('@/app/api/cron/reap-sync-runs/route')
+
+    const res = await GET(request(CRON_SECRET))
+
+    expect(res.status).toBe(200)
+    expect(await res.json()).toMatchObject({ ok: true, reaped: 2, cachePurge: PURGED })
+    expect(mocks.purgeExpiredCache).toHaveBeenCalledTimes(1)
+    expect(mocks.reapAllAbandonedRuns.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.purgeExpiredCache.mock.invocationCallOrder[0]!,
+    )
+    // The heartbeat row is where anyone reading sync_job_runs will look for the purge.
+    const outcome = mocks.recordSyncJobRun.mock.calls[0]![1] as {
+      rowsUpdated: number
+      warnings: string[]
+      metadata: Record<string, unknown>
+    }
+    expect(outcome.rowsUpdated).toBe(2)
+    expect(outcome.warnings).toEqual([])
+    expect(outcome.metadata.cachePurge).toEqual(PURGED)
+  })
+
+  it('reports a purge that could not run as a warning, without failing the reap', async () => {
+    mocks.reapAllAbandonedRuns.mockResolvedValueOnce({
+      available: true,
+      reaped: 3,
+      cutoff: '2026-09-05T11:30:00.000Z',
+    })
+    const blind = { ...PURGED, available: false, deleted: 0, batches: 0, error: 'connection lost' }
+    mocks.purgeExpiredCache.mockResolvedValueOnce(blind)
+    const { GET } = await import('@/app/api/cron/reap-sync-runs/route')
+
+    const res = await GET(request(CRON_SECRET))
+
+    expect(res.status).toBe(200)
+    expect(await res.json()).toMatchObject({ ok: true, reaped: 3, cachePurge: { available: false } })
+    const outcome = mocks.recordSyncJobRun.mock.calls[0]![1] as { warnings: string[]; metadata: Record<string, unknown> }
+    // A warning makes the run `partial`, so a blind purge cannot read as a clean zero.
+    expect(outcome.warnings).toEqual(['cache purge: connection lost'])
+    expect(outcome.metadata.cachePurge).toEqual(blind)
+  })
+
+  it('does not warn when the purge is switched off on purpose', async () => {
+    mocks.reapAllAbandonedRuns.mockResolvedValueOnce({
+      available: true,
+      reaped: 0,
+      cutoff: '2026-09-05T11:30:00.000Z',
+    })
+    mocks.purgeExpiredCache.mockResolvedValueOnce({ ...PURGED, available: false, deleted: 0, batches: 0, error: 'disabled' })
+    const { GET } = await import('@/app/api/cron/reap-sync-runs/route')
+
+    await GET(request(CRON_SECRET))
+
+    const outcome = mocks.recordSyncJobRun.mock.calls[0]![1] as { warnings: string[] }
+    expect(outcome.warnings).toEqual([])
+  })
+
   it('does NOT return a green zero when the sweep could not run', async () => {
     mocks.reapAllAbandonedRuns.mockResolvedValueOnce({
       available: false,
@@ -155,6 +230,8 @@ describe('GET /api/cron/reap-sync-runs', () => {
     // And the 503 path records NOTHING, which the route states as deliberate: a heartbeat written
     // for a sweep that could not look is precisely the false-clean signal this route removes.
     expect(mocks.recordSyncJobRun).not.toHaveBeenCalled()
+    // An unreachable telemetry model means an unreachable database: the purge is not attempted.
+    expect(mocks.purgeExpiredCache).not.toHaveBeenCalled()
   })
 })
 

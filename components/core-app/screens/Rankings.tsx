@@ -787,6 +787,7 @@ function LeagueBody({ league }: { league: LeagueView }) {
             subtitle="Top ten, same data as the table"
             valueLabel="Points"
             data={board.rows.slice(0, 10).map((row) => ({
+              key: row.rosterId,
               label: row.name,
               value: row.pointsFor,
               displayValue: Math.round(row.pointsFor).toLocaleString(),

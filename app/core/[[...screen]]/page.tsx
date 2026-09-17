@@ -163,6 +163,7 @@ import CommissionerHub from '@/components/core-app/screens/CommissionerHub'
 import { getCommissionerHub } from '@/lib/core-app/commissionerHub'
 import Standings from '@/components/core-app/screens/Standings'
 import StandingsBoard from '@/components/core-app/boards/StandingsBoard'
+import { parseStandingsView } from '@/lib/core-app/standingsView'
 import PickALeague from '@/components/core-app/PickALeague'
 import LeagueTabs from '@/components/core-app/LeagueTabs'
 import { platformLabel } from '@/lib/core-app/platformLinks'
@@ -2329,6 +2330,9 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
    * has no envelope; a chip over that board would be inventing an age for a value that was just
    * computed. No envelope means no chip, never a chip reading "unknown".
    */
+  /* View, division and layout — URL state, written back by the board with replaceState. */
+  const standingsView = parseStandingsView((param) => sp[param])
+
   const standingsFreshness = standingsFresh
     ? {
         meta: freshnessMeta(standingsFresh),
@@ -3823,7 +3827,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
         )
       ) : activeKey === 'standings' ? (
         standings ? (
-          <Standings data={standings} freshness={standingsFreshness} />
+          <Standings data={standings} freshness={standingsFreshness} view={standingsView} />
         ) : (
           /* Same split as Commissioner: a read failure is not an unpicked league. */
           selectedLeagueId ? (

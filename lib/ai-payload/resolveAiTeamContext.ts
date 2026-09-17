@@ -2,6 +2,7 @@ import { findRosterForTeam } from '@/lib/leagues/rosterForTeam'
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
+import { sleeperIdWhere } from '@/lib/player-identity/externalIdNamespace'
 import { normalizeToSupportedSport, type SupportedSport } from '@/lib/sport-scope'
 import { getRosterPlayerIds } from '@/lib/waiver-wire/roster-utils'
 import type { AiRosterPlayerRef, AiTeamContextPayload } from '@/lib/ai-payload/types'
@@ -43,10 +44,11 @@ function benchIds(allIds: string[], starters: string[], reserve: string[], taxi:
 }
 
 /**
- * Roster player id → name/position/team/injury, from `sportsPlayerRecord`.
+ * Roster player id → name/position/team/injury, from `sportsPlayerRecord`, then `sportsPlayer`.
  *
- * Exported so the Chimmy trade scenario names a whole league's rosters through the SAME lookup
- * that names the viewer's own — `limit` is the only thing that differs (one roster vs. all of them).
+ * Exported so the Chimmy trade and lineup scenarios name a whole league's rosters through the SAME
+ * lookup that names the viewer's own — `limit` is the only thing that differs (one roster vs. all of
+ * them). Every id up to `limit` is looked up; none is dropped by a row cap.
  */
 export async function resolveNames(
   sport: SupportedSport,
@@ -83,28 +85,61 @@ export async function resolveNames(
   const missing = uniq.filter((id) => !out.has(id))
   if (missing.length === 0) return out
 
-  const alt = await prisma.sportsPlayer.findMany({
-    where: {
-      sport,
-      OR: [{ externalId: { in: missing } }, { sleeperId: { in: missing } }],
-    },
-    select: { externalId: true, sleeperId: true, name: true, position: true, team: true, status: true },
-    take: 120,
-  })
+  /*
+   * ── 🛑 THE FALLBACK USED TO LOSE A LEAGUE AND NAME STRANGERS ─────────────────────────────────
+   *
+   * It was one read — `externalId IN missing OR sleeperId IN missing`, `take: 120` — and it wrote
+   * every row under BOTH keys. Two defects, measured on staging 2026-09-17 in a real 12-team Sleeper
+   * league (192 rostered ids), where a rostered Adam Thielen came back "not on any roster":
+   *
+   *   1. THE CAP. The Chimmy trade and lineup scenarios name a whole league here (`limit` 800). The
+   *      first pass rarely matches a roster id — `SportsPlayerRecord.id` is written `${sport}:${raw}` —
+   *      so nearly every id lands here, and 120 rows cannot hold a league.
+   *   2. THE ID SPACES. A bare Sleeper id matched against `externalId` reaches a Rolling Insights row
+   *      for somebody else: 42,031 of the 42,032 bare numbers that are also a Sleeper id are a
+   *      different person (`lib/player-identity/externalIdNamespace.ts`). Writing that row under its
+   *      own `externalId` as well also filled keys nobody asked for.
+   *
+   * So, in order, and only ever under a key that was asked for:
+   *   - the SLEEPER space, through `sleeperIdWhere` (the `sleeperId` column and the `sleeper:`
+   *     spelling), freshest row first;
+   *   - the PROVIDER space, only for ids whose format names their namespace (`tsdb_…`, slugs). A bare
+   *     number the Sleeper space did not claim stays UNNAMED: across the provider spaces it is not
+   *     weak evidence, it is none, and an unnamed player is honest where a stranger's name is not.
+   */
+  const asked = new Set(missing)
+  const put = (key: string | null | undefined, r: { name: string; position: string | null; team: string | null; status: string | null }) => {
+    if (!key || !asked.has(key) || out.has(key)) return
+    out.set(key, { name: r.name, position: r.position, team: r.team, injury: r.status })
+  }
+  const playerSelect = { externalId: true, sleeperId: true, name: true, position: true, team: true, status: true } as const
 
-  for (const r of alt) {
-    const entry = {
-      name: r.name,
-      position: r.position,
-      team: r.team,
-      injury: r.status,
-    }
-    out.set(r.externalId, entry)
-    if (r.sleeperId) out.set(r.sleeperId, entry)
+  const bySleeper = await prisma.sportsPlayer.findMany({
+    where: sleeperIdWhere(missing, sport),
+    orderBy: { fetchedAt: 'desc' },
+    select: playerSelect,
+  })
+  for (const r of bySleeper) {
+    put(r.sleeperId, r)
+    if (r.externalId.startsWith(SLEEPER_EXTERNAL_PREFIX)) put(r.externalId.slice(SLEEPER_EXTERNAL_PREFIX.length), r)
+  }
+
+  const namespaced = missing.filter((id) => !out.has(id) && !BARE_NUMBER.test(id))
+  if (namespaced.length > 0) {
+    const byProvider = await prisma.sportsPlayer.findMany({
+      where: { sport, externalId: { in: namespaced } },
+      orderBy: { fetchedAt: 'desc' },
+      select: playerSelect,
+    })
+    for (const r of byProvider) put(r.externalId, r)
   }
 
   return out
 }
+
+const SLEEPER_EXTERNAL_PREFIX = 'sleeper:'
+/** A bare number is written by three provider sources and by Sleeper; its shape names no namespace. */
+const BARE_NUMBER = /^\d+$/
 
 function toRefs(ids: string[], nameMap: Map<string, { name: string | null; position: string | null; team: string | null; injury: string | null }>): AiRosterPlayerRef[] {
   return ids.map((playerId) => {

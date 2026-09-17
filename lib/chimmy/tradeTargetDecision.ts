@@ -128,9 +128,29 @@ const STANCE_PHRASE: Record<TeamStance, string> = {
   rebuilder: 'rebuilding',
 }
 
-function teamLine(you: TradeTargetFacts['you']): string {
+/*
+ * ── 🛑 ONE GAME IS NOT A SEASON ───────────────────────────────────────────────────────────────
+ *
+ * The stance arrives from `buildTeamProfile`, which is win percentage and nothing else: 0-1 is a
+ * .000 team and reads as "rebuilding". Measured on production 2026-09-17 in the owner's Draft
+ * Junkies league: "No, don't trade for Rashee Rice, because you are rebuilding at 0-1, 12th of 12"
+ * — the answer turned on one result, while Rice would have started for +7.2 points at a fair price.
+ *
+ * So the record decides nothing until this many games are played, and the answer says so. Every
+ * team in a league has played about the same number of games, so the asker's count stands in for
+ * the partner's too. A presentation threshold, not a model.
+ */
+const MIN_GAMES_FOR_STANCE = 4
+
+function gamesPlayed(you: TradeTargetFacts['you']): number {
+  const r = you.record
+  return r ? r.wins + r.losses + r.ties : 0
+}
+
+function teamLine(you: TradeTargetFacts['you'], settled: boolean): string {
   const rec = recordText(you)
   if (!rec) return 'Your team: no games played yet, so your record does not tilt this either way.'
+  if (!settled) return `Your team: ${rec} — too early in the season to call you a contender or a rebuilder.`
   return `Your team: ${rec} — ${STANCE_PHRASE[you.stance]}.`
 }
 
@@ -208,8 +228,9 @@ function marketLine(facts: TradeTargetFacts): string | null {
   return `Market: ${parts.join(', ')}.`
 }
 
-function partnerLine(facts: TradeTargetFacts): string {
+function partnerLine(facts: TradeTargetFacts, settled: boolean): string {
   const p = facts.partner
+  if (!settled) return `His team: ${p.teamName} — too early in the season to tell whether they are buying or selling.`
   const tail =
     p.stance === 'rebuilder'
       ? 'a team likely to sell a veteran'
@@ -226,14 +247,17 @@ export function decideTradeTarget(facts: TradeTargetFacts): TradeTargetVerdict {
   const lineup = facts.lineup
   const priced = lineup.status === 'priced' ? lineup : null
   const rec = recordText(facts.you)
+  const settled = gamesPlayed(facts.you) >= MIN_GAMES_FOR_STANCE
+  /* Before the record means anything, nobody is contending or rebuilding. */
+  const stance: TeamStance = settled ? facts.you.stance : 'middle'
 
   const reasons = [
     lineupLine(facts),
-    teamLine(facts.you),
+    teamLine(facts.you, settled),
     needLine(facts),
     priceLine(facts),
     marketLine(facts),
-    partnerLine(facts),
+    partnerLine(facts, settled),
   ].filter((r): r is string => Boolean(r))
 
   const basis: string[] = []
@@ -282,7 +306,7 @@ export function decideTradeTarget(facts: TradeTargetFacts): TradeTargetVerdict {
   }
 
   // 3. Where your team stands.
-  if (facts.you.stance === 'rebuilder' && !dynastyFuture) {
+  if (stance === 'rebuilder' && !dynastyFuture) {
     return no(
       `you are rebuilding${rec ? ` at ${rec}` : ''}, and ${facts.mode === 'dynasty' ? 'he is not young or rising enough to be part of the next contending team' : 'a redraft season spent buying help is a season already gone'}`,
     )
@@ -297,16 +321,16 @@ export function decideTradeTarget(facts: TradeTargetFacts): TradeTargetVerdict {
   }
 
   // 5. Paying the price must still leave your lineup better, when this season is what you are playing for.
-  if (priced && priced.netGain != null && priced.netGain < 0 && (facts.mode === 'redraft' || facts.you.stance === 'contender')) {
+  if (priced && priced.netGain != null && priced.netGain < 0 && (facts.mode === 'redraft' || stance === 'contender')) {
     return no(`paying for him leaves your lineup ${fmtPts(priced.netGain)} worse this week — you would be trading starters for a starter`)
   }
 
   // The case for yes.
   if (priced && priced.addGain > 0) {
     const standing =
-      facts.you.stance === 'contender'
+      stance === 'contender'
         ? ` and you are contending${rec ? ` at ${rec}` : ''}`
-        : facts.you.stance === 'rebuilder'
+        : stance === 'rebuilder'
           ? ` and, at his age and trend, he fits your rebuild`
           : ''
     return yes(`he would start for you (${fmtPts(priced.addGain)} points in week ${priced.week})${standing}, at a price your roster can pay`)

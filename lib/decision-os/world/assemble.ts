@@ -102,7 +102,7 @@ export function narrowScoringSettings(settings: unknown): unknown {
   return Object.keys(out).length > 0 ? out : null
 }
 
-function readSourceTeamId(roster: RawRosterRow): string | null {
+function readSourceTeamId(roster: Pick<RawRosterRow, 'playerData'>): string | null {
   const blob = (roster.playerData ?? {}) as Record<string, unknown>
   const direct = blob.source_team_id
   if (typeof direct === 'string' && direct.trim()) return direct.trim()
@@ -129,7 +129,12 @@ function readSourceManagerId(roster: RawRosterRow): string | null {
  *  3. `roster.platformUserId` → `LeagueTeam.claimedByUserId` (AF-claimed orphan)
  * Returns null when no team matches (surfaced as a completeness warning, never repaired here).
  */
-export function matchTeamIdForRoster(roster: RawRosterRow, teams: RawTeamRow[]): string | null {
+export function matchTeamIdForRoster(
+  // Only the fields the match reads, so a caller with a narrower select (the trade rosters route)
+  // shares this rule instead of writing a second copy of it.
+  roster: Pick<RawRosterRow, 'playerData' | 'platformUserId'>,
+  teams: ReadonlyArray<Pick<RawTeamRow, 'id' | 'externalId' | 'platformUserId' | 'claimedByUserId'>>,
+): string | null {
   const sourceTeamId = readSourceTeamId(roster)
   if (sourceTeamId) {
     const byExternal = teams.find((t) => t.externalId === sourceTeamId)

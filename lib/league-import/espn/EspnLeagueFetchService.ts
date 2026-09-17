@@ -745,6 +745,8 @@ function parseEspnTeams(raw: any, settings: EspnImportSettings | null): EspnImpo
         rank: getEspnTeamRank(team),
         pointsFor: parseNumber(record.pointsFor, 0) ?? 0,
         pointsAgainst: parseNumber(record.pointsAgainst, null),
+        // ESPN's division id; names live in settings.scheduleSettings.divisions.
+        divisionId: team.divisionId != null && String(team.divisionId).trim() !== '' ? String(team.divisionId) : null,
         faabRemaining,
         waiverPriority: parseNumber(team.waiverRank, null),
         rosterPlayerIds: roster.playerIds,
