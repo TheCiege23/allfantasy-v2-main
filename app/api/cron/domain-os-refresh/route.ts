@@ -34,6 +34,11 @@ import {
   emptyPortfolioTotalsCounts,
   type PortfolioTotalsCounts,
 } from '@/lib/core-app/portfolioInsightsSummary'
+import {
+  runOutlookPrewarm,
+  emptyOutlookPrewarmCounts,
+  type OutlookPrewarmCounts,
+} from '@/lib/core-app/seasonOutlookPrewarm'
 
 /**
  * GET /api/cron/domain-os-refresh
@@ -220,6 +225,12 @@ type RefreshCounts = {
    * are built ten per fire — and `written: 0 && alreadyWritten === considered` is a finished day.
    */
   portfolio: PortfolioTotalsCounts
+  /**
+   * The Season Outlook pre-compute (`sportsDataCache` key `core-outlook:league:v1:<platformLeagueId>`),
+   * a seventh writer. `computed` counts leagues re-run because their inputs changed; `unchanged`
+   * counts leagues whose rows were rewritten by a sync with the same content — the common case.
+   */
+  outlook: OutlookPrewarmCounts
 }
 
 export async function GET(req: NextRequest) {
@@ -253,14 +264,15 @@ export async function GET(req: NextRequest) {
        * because a total nobody can attribute is exactly how three empty tables went unnoticed.
        */
       // ⚠ One line each, on purpose: three wiring tests pin these sums as written.
-      rowsWritten: r.written + r.rankings.written + r.forecast.written + r.odds.written + r.snapshot.written + r.portfolio.written,
+      rowsWritten: r.written + r.rankings.written + r.forecast.written + r.odds.written + r.snapshot.written + r.portfolio.written + r.outlook.computed,
       rowsSkipped:
         r.skippedForTime + r.unavailable +
         r.rankings.skippedForTime + r.rankings.skipped +
         r.forecast.skippedForTime + r.forecast.pastSeasonEnd +
         r.portfolio.deferred +
+        r.outlook.deferred +
         r.odds.skippedForTime,
-      errors: [...r.errors, ...r.rankings.errors, ...r.forecast.errors, ...r.odds.errors, ...r.snapshot.errors, ...r.portfolio.errors],
+      errors: [...r.errors, ...r.rankings.errors, ...r.forecast.errors, ...r.odds.errors, ...r.snapshot.errors, ...r.portfolio.errors, ...r.outlook.errors],
       /*
        * A rankings `failed` is a genuine fault and downgrades the run, the same as a feed failure.
        * `skipped` does NOT: a league whose settings Sleeper will not serve is a normal single-league
@@ -268,7 +280,7 @@ export async function GET(req: NextRequest) {
        */
       status:
         r.failed > 0 || r.writeFailed > 0 || r.rankings.failed > 0 || r.forecast.failed > 0 || r.odds.failed > 0 ||
-        r.snapshot.failed > 0 || r.portfolio.failed > 0
+        r.snapshot.failed > 0 || r.portfolio.failed > 0 || r.outlook.failed > 0
           ? 'partial'
           : 'success',
       metadata: {
@@ -320,6 +332,19 @@ export async function GET(req: NextRequest) {
          * as "recorded" and falls back to a reconstruction where none exists, so a user stuck in
          * `deferred` shows estimated history rather than a gap.
          */
+        /*
+         * The Season Outlook pre-compute, unsummed. `due > 0 && computed === 0 && unchanged === 0` is
+         * the silent no-op; `candidates` far above `due` is normal (syncs rewrite unchanged rows).
+         */
+        outlook: {
+          candidates: r.outlook.candidates,
+          due: r.outlook.due,
+          computed: r.outlook.computed,
+          unchanged: r.outlook.unchanged,
+          skipped: r.outlook.skipped,
+          deferred: r.outlook.deferred,
+          failed: r.outlook.failed,
+        },
         portfolio: {
           date: r.portfolio.date,
           considered: r.portfolio.considered,
@@ -471,6 +496,7 @@ async function run(): Promise<RefreshCounts> {
     odds: emptyMatchupOddsSweepCounts(),
     snapshot: emptyRankingsSnapshotCounts(),
     portfolio: emptyPortfolioTotalsCounts(),
+    outlook: emptyOutlookPrewarmCounts(),
   }
 
   // R3.2 — app-level sources first; see the note on refreshAppSources for why the order matters.
@@ -666,6 +692,23 @@ async function run(): Promise<RefreshCounts> {
     const out = emptyPortfolioTotalsCounts()
     out.failed = 1
     out.errors.push(`portfolio_totals: ${e instanceof Error ? e.message : String(e)}`)
+    return out
+  })
+
+  /*
+   * ── THE SEASON OUTLOOK PRE-COMPUTE, AFTER EVERYTHING ELSE ───────────────────────────────────
+   *
+   * The newest writer, so it yields to all of the above. Re-runs the leagues whose matchup rows a
+   * sync rewrote AND whose inputs actually changed, so the first visit after games are scored reads
+   * a stored run. Postgres and arithmetic only — its import graph has no provider call and no
+   * lib/auth (checked with a bundler graph, with `lib/core-app/rankings.ts` as the positive control).
+   * Twelve leagues / 30s per fire on top of the shared budget; never throws.
+   * `CORE_OUTLOOK_PREWARM_DISABLED=true` turns it off.
+   */
+  counts.outlook = await runOutlookPrewarm(new Date(), { budget }).catch((e: unknown) => {
+    const out = emptyOutlookPrewarmCounts()
+    out.failed = 1
+    out.errors.push(`outlook_prewarm: ${e instanceof Error ? e.message : String(e)}`)
     return out
   })
 

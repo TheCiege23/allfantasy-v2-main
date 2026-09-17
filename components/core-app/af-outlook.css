@@ -1,0 +1,1027 @@
+/*
+ * AF Core — Season Outlook forecast, drivers, moves, what-ifs, milestones, schedule, roster risk
+ * and assumptions. Shared by the cross-league board (.af-so) and the league view (.af-sol); both
+ * roots also carry `.af-olk`.
+ *
+ * 🛑 LAYOUT BY THE BOARD'S OWN WIDTH, NOT THE VIEWPORT. The /core shell's two rails take ~530px, so
+ * a 1100px viewport leaves a 532px board — measured on the portfolio screen, where a viewport query
+ * laid four tiles across 532px. Container queries on `.af-olk` decide columns; touch sizing stays on
+ * `@media (max-width: 720px)`, because that is about the device, not the box.
+ *
+ * ⚠ LINK AND BUTTON CLASSES CARRY `.af-core`. af-core.css scopes its primitives as `.af-core a`
+ * (0,2,0); a bare class is (0,1,0) and loses regardless of import order.
+ *
+ * Colours are the app's tokens only, so light and dark come from af-core. Polarity (helps / hurts)
+ * uses --good / --bad and always ships with a sign character; a spread (a game that can go either
+ * way) uses --accent, because it has no direction yet.
+ */
+
+.af-olk {
+  container: af-olk / inline-size;
+  min-width: 0;
+}
+
+.af-olk-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.af-olk-titlerow {
+  display: flex;
+  align-items: center;
+  gap: 10px 14px;
+  flex-wrap: wrap;
+}
+
+.af-olk-g {
+  font-size: 11.5px;
+  color: var(--faint);
+}
+
+.af-olk-note {
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.af-olk-empty {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.af-olk-warn {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--warn);
+}
+
+.af-olk-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  border: 1px solid var(--line);
+  color: var(--text2);
+  background: var(--surface2);
+}
+.af-olk-pill[data-status='clinched'] {
+  color: var(--good);
+  background: var(--good-soft);
+  border-color: transparent;
+}
+.af-olk-pill[data-status='eliminated'] {
+  color: var(--bad);
+  background: var(--bad-soft);
+  border-color: transparent;
+}
+.af-olk-pill[data-status='risk'] {
+  color: var(--warn);
+  background: var(--warn-soft);
+  border-color: transparent;
+}
+
+/* ── The forecast ────────────────────────────────────────────────────── */
+
+.af-olk-hero {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 18px;
+  border-radius: 16px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+}
+
+.af-olk-hero-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+}
+.af-olk-hero-head .af-olk-g {
+  margin-left: auto;
+}
+
+.af-olk-odds-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px;
+}
+
+.af-olk-odds {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+  padding: 13px 14px;
+  border-radius: 12px;
+  background: var(--surface2);
+  border: 1px solid var(--line);
+}
+.af-olk-odds-l {
+  color: var(--faint);
+}
+.af-olk-odds-v {
+  font-size: 30px;
+  font-weight: 900;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+.af-olk-odds[data-band='high'] .af-olk-odds-v {
+  color: var(--good);
+}
+.af-olk-odds[data-band='mid'] .af-olk-odds-v {
+  color: var(--warn);
+}
+.af-olk-odds[data-band='low'] .af-olk-odds-v {
+  color: var(--bad);
+}
+.af-olk-odds-s {
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--muted);
+}
+
+/* The range: a hairline track, the likely band on it, and the headline as a dot. */
+.af-olk-range {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.af-olk-range-track {
+  position: relative;
+  height: 8px;
+  border-radius: 4px;
+  background: var(--line);
+}
+.af-olk-range-band {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-radius: 4px;
+  background: var(--accent-soft);
+  box-shadow: inset 0 0 0 1px var(--accent-line);
+}
+.af-olk-range-dot {
+  position: absolute;
+  top: 50%;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 2px var(--surface2);
+  transform: translate(-50%, -50%);
+}
+.af-olk-range-t {
+  font-size: 10.5px;
+  color: var(--muted);
+}
+
+.af-olk-decides {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.45;
+  color: var(--text);
+}
+
+.af-olk-hero-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
+  gap: 12px;
+}
+.af-so-lead {
+  margin-bottom: 12px;
+}
+
+.af-olk-next,
+.af-olk-drivebox {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  padding: 14px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--bg);
+}
+.af-olk-next {
+  background: var(--chimmy);
+  border-color: var(--accent-line);
+}
+.af-olk-next .af-label {
+  color: var(--accent);
+}
+.af-olk-next-t {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 800;
+  line-height: 1.3;
+  color: var(--text);
+}
+.af-olk-next-d {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text2);
+}
+.af-core .af-olk-next-cta {
+  align-self: flex-start;
+  margin-top: 2px;
+}
+
+/* ── Drivers ─────────────────────────────────────────────────────────── */
+
+.af-olk-drivers {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.af-olk-driver {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+.af-olk-driver-top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+.af-olk-driver-l,
+.af-core .af-olk-driver-l {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.af-olk-driver-v {
+  font-size: 13px;
+  font-weight: 800;
+  white-space: nowrap;
+  color: var(--text);
+}
+.af-olk-driver-d {
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--muted);
+}
+
+/* A centre line, bars growing left (hurts) or right (helps). Thin, rounded at the data end. */
+.af-olk-diverge {
+  position: relative;
+  display: block;
+  height: 8px;
+}
+.af-olk-diverge-mid {
+  position: absolute;
+  left: 50%;
+  top: -2px;
+  bottom: -2px;
+  width: 1px;
+  background: var(--line2);
+}
+.af-olk-diverge-bar {
+  position: absolute;
+  top: 1px;
+  height: 6px;
+  min-width: 2px;
+}
+.af-olk-diverge-bar[data-side='right'] {
+  left: calc(50% + 1px);
+  border-radius: 0 4px 4px 0;
+}
+.af-olk-diverge-bar[data-side='left'] {
+  right: calc(50% + 1px);
+  border-radius: 4px 0 0 4px;
+}
+.af-olk-driver[data-dir='up'] .af-olk-diverge-bar {
+  background: var(--good);
+}
+.af-olk-driver[data-dir='down'] .af-olk-diverge-bar {
+  background: var(--bad);
+}
+.af-olk-driver[data-dir='both'] .af-olk-diverge-bar {
+  background: var(--accent);
+}
+
+/* ── Tabs ────────────────────────────────────────────────────────────── */
+
+.af-olk-tabs {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  padding-bottom: 2px;
+  border-bottom: 1px solid var(--line);
+}
+.af-olk-tabs::-webkit-scrollbar {
+  display: none;
+}
+.af-olk-tab {
+  flex: 0 0 auto;
+  min-height: 40px;
+  padding: 0 12px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: none;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--muted);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.af-olk-tab:hover {
+  color: var(--text);
+}
+.af-olk-tab[aria-selected='true'] {
+  color: var(--text);
+  border-bottom-color: var(--accent);
+}
+.af-olk-tab:focus-visible,
+.af-olk-panel:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.af-olk-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+
+/* ── Moves ───────────────────────────────────────────────────────────── */
+
+.af-olk-moves {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.af-olk-move {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  padding: 13px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+}
+.af-olk-move-main {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.af-olk-move-kind {
+  color: var(--faint);
+}
+.af-olk-move-t {
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--text);
+}
+.af-olk-move-d {
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--muted);
+}
+.af-olk-move-fx {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  text-align: right;
+}
+.af-olk-move-delta {
+  font-size: 20px;
+  font-weight: 900;
+  color: var(--text2);
+}
+.af-olk-move-delta[data-dir='up'] {
+  color: var(--good);
+}
+.af-olk-move-delta[data-dir='down'] {
+  color: var(--bad);
+}
+.af-olk-move-unit,
+.af-olk-move-sub {
+  font-size: 10.5px;
+  color: var(--muted);
+}
+.af-core .af-olk-move-cta {
+  margin-top: 4px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+/* ── Milestones ──────────────────────────────────────────────────────── */
+
+.af-olk-miles {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.af-olk-miles-tiles {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+.af-olk-mini {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 13px;
+  border-radius: 11px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+}
+.af-olk-mini-v {
+  font-size: 22px;
+  font-weight: 900;
+  line-height: 1.05;
+  color: var(--text);
+}
+.af-olk-mini-l {
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--muted);
+}
+
+.af-olk-wins {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px;
+  border-radius: 12px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+}
+.af-olk-wins-bars {
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+  height: 120px;
+}
+.af-olk-wins-col {
+  position: relative;
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 4px;
+}
+/* Thin marks: a bar never wider than 22px, however few win totals there are. */
+.af-olk-wins-bar {
+  display: block;
+  width: 100%;
+  max-width: 22px;
+  border-radius: 4px 4px 0 0;
+  background: var(--accent);
+}
+/* The hover layer: the record and its odds above the column, in text ink. */
+.af-olk-wins-col::after {
+  content: attr(data-v);
+  position: absolute;
+  bottom: calc(100% + 4px);
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 3px 7px;
+  border-radius: 6px;
+  background: var(--surface2);
+  border: 1px solid var(--line2);
+  color: var(--text);
+  font-size: 11px;
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 2;
+  /* display, not opacity: an invisible label still widens the page by its overhang at 375px. */
+  display: none;
+}
+.af-olk-wins-col:hover::after {
+  display: block;
+}
+/* Edge columns anchor their label inward so it never hangs off the chart. */
+.af-olk-wins-col:nth-child(-n + 3)::after {
+  left: 0;
+  transform: none;
+}
+.af-olk-wins-col:nth-last-child(-n + 3)::after {
+  left: auto;
+  right: 0;
+  transform: none;
+}
+.af-olk-wins-bar[data-known='false'] {
+  background: var(--line);
+}
+.af-olk-wins-x {
+  flex: 0 0 auto;
+  font-size: 10px;
+  text-align: center;
+  color: var(--faint);
+}
+.af-olk-wins-col:hover .af-olk-wins-bar[data-known='true'] {
+  background: var(--text2);
+}
+
+/* ── Tables (schedule) ───────────────────────────────────────────────── */
+
+.af-olk-tablewrap {
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  background: var(--surface);
+}
+.af-olk-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+}
+.af-olk-caption {
+  caption-side: top;
+  text-align: left;
+  padding: 12px 13px 4px;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+.af-olk-table th,
+.af-olk-table td {
+  padding: 9px 12px;
+  text-align: left;
+  border-bottom: 1px solid var(--line);
+  vertical-align: baseline;
+}
+.af-olk-table thead th {
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+  color: var(--faint);
+  white-space: nowrap;
+}
+.af-olk-table tbody tr:last-child th,
+.af-olk-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+.af-olk-table th[scope='row'] {
+  font-weight: 600;
+  color: var(--text);
+}
+.af-olk-table tr[data-you='true'] {
+  background: var(--chip);
+}
+.af-olk-n {
+  text-align: right;
+  white-space: nowrap;
+}
+.af-olk-table .af-olk-n {
+  text-align: right;
+}
+.af-olk-vs {
+  font-size: 11px;
+}
+.af-olk-vs[data-dir='hard'] {
+  color: var(--bad);
+}
+.af-olk-vs[data-dir='easy'] {
+  color: var(--good);
+}
+
+/* ── Roster risk ─────────────────────────────────────────────────────── */
+
+.af-olk-dur {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.af-olk-flags {
+  list-style: none;
+  margin: 0;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  border-radius: 12px;
+  background: var(--warn-soft);
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--text);
+}
+.af-olk-flags span {
+  color: var(--warn);
+}
+.af-olk-dur-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 10px;
+}
+.af-olk-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  padding: 13px 14px;
+  border-radius: 12px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+}
+.af-olk-card-v {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 900;
+  line-height: 1;
+  color: var(--text);
+}
+.af-olk-mini-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text2);
+}
+
+/* ── Assumptions ─────────────────────────────────────────────────────── */
+
+.af-olk-assume {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.af-olk-dl {
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+.af-olk-dl > div {
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+}
+.af-olk-dl dt {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+.af-olk-dl dd {
+  margin: 3px 0 0;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--text2);
+}
+
+/* ── What-if ─────────────────────────────────────────────────────────── */
+
+.af-olk-scn {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.af-olk-scn-result {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--surface);
+  border: 1px solid var(--accent-line);
+  position: sticky;
+  top: 8px;
+  z-index: 1;
+}
+.af-olk-scn-result > .af-olk-g {
+  align-self: center;
+}
+.af-olk-scn-odds {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 120px;
+}
+.af-olk-scn-v {
+  font-size: 16px;
+  color: var(--text2);
+}
+.af-olk-scn-v b {
+  color: var(--text);
+}
+.af-olk-scn-delta {
+  font-size: 14px;
+}
+.af-olk-chips {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+.af-olk-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 4px 2px 10px;
+  border-radius: 999px;
+  background: var(--chip);
+  border: 1px solid var(--chip-line);
+  font-size: 12px;
+  color: var(--text);
+}
+.af-olk-chip-x {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  color: var(--muted);
+  font-size: 16px;
+  cursor: pointer;
+}
+.af-olk-chip-x:hover {
+  color: var(--text);
+  background: var(--surface2);
+}
+.af-olk-link {
+  border: 0;
+  background: none;
+  padding: 4px 6px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--accent);
+  cursor: pointer;
+}
+.af-olk-scn-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 10px;
+}
+.af-olk-ctl {
+  margin: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+}
+.af-olk-ctl[disabled] {
+  opacity: 0.55;
+}
+.af-olk-ctl legend {
+  padding: 0 4px;
+  color: var(--faint);
+}
+.af-olk-field {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 11px;
+  color: var(--muted);
+}
+.af-olk-field select {
+  width: 100%;
+  min-height: 36px;
+  padding: 0 8px;
+  border-radius: 9px;
+  border: 1px solid var(--line2);
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  font-size: 12.5px;
+}
+.af-olk-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.af-olk-btn {
+  min-height: 36px;
+  padding: 0 12px;
+  border-radius: 9px;
+  border: 1px solid var(--accent-line);
+  background: var(--accent-soft);
+  color: var(--text);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.af-olk-btn:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+.af-olk-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.af-olk-field select:focus-visible,
+.af-olk-btn:focus-visible,
+.af-olk-chip-x:focus-visible,
+.af-olk-link:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* ── Cross-league board additions ────────────────────────────────────── */
+
+.af-so-range {
+  display: block;
+  margin-top: 2px;
+  font-size: 10px;
+  color: var(--faint);
+}
+.af-so-table th[scope='row'] .af-olk-pill {
+  margin-top: 4px;
+}
+
+/* ── By the board's width ────────────────────────────────────────────── */
+
+@container af-olk (max-width: 760px) {
+  .af-olk-hero-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .af-olk-miles-tiles {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@container af-olk (max-width: 560px) {
+  .af-olk-hero {
+    padding: 14px;
+  }
+  .af-olk-odds-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+  .af-olk-odds {
+    padding: 11px 12px;
+  }
+  .af-olk-odds-v {
+    font-size: 24px;
+  }
+  .af-olk-hero-head .af-olk-g {
+    margin-left: 0;
+    flex-basis: 100%;
+  }
+  .af-olk-move {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .af-olk-move-fx {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: baseline;
+    justify-content: flex-start;
+    gap: 4px 8px;
+    text-align: left;
+  }
+  .af-olk-dl {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  /*
+   * The cross-league table becomes one card per league: the league cell on top, the numbers in a
+   * wrapped row under it, labelled, and "what decides it" last. No sideways scroll to read a row.
+   */
+  .af-olk .af-so-tablewrap {
+    overflow-x: visible;
+    border: 0;
+    background: none;
+  }
+  .af-olk .af-so-table {
+    min-width: 0;
+  }
+  .af-olk .af-so-table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+  }
+  .af-olk .af-so-table,
+  .af-olk .af-so-table tbody {
+    display: block;
+  }
+  .af-olk .af-so-table tbody tr {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 14px;
+    margin-bottom: 8px;
+    padding: 12px 13px;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: var(--surface);
+  }
+  .af-olk .af-so-table tbody tr:last-child {
+    border-bottom: 1px solid var(--line);
+  }
+  .af-olk .af-so-table th[scope='row'] {
+    flex: 1 1 100%;
+    min-width: 0;
+    padding: 0;
+  }
+  .af-olk .af-so-table td {
+    padding: 0;
+  }
+  .af-olk .af-so-table td.af-so-num {
+    text-align: left;
+  }
+  .af-olk .af-so-table td[data-label]::before {
+    content: attr(data-label);
+    display: block;
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--faint);
+  }
+  .af-olk .af-so-table td.af-so-decides,
+  .af-olk .af-so-table td.af-so-noteam {
+    flex: 1 1 100%;
+  }
+}
+
+@container af-olk (max-width: 380px) {
+  .af-olk-miles-tiles {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .af-olk-wins-x {
+    font-size: 9px;
+  }
+}
+
+/* ── Touch ───────────────────────────────────────────────────────────── */
+
+@media (max-width: 720px) {
+  .af-olk-tab {
+    min-height: 44px;
+  }
+  .af-olk-field select,
+  .af-olk-btn {
+    min-height: 44px;
+    font-size: 16px; /* below 16px, iOS zooms the page when a select opens */
+  }
+  .af-olk-chip-x {
+    width: 36px;
+    height: 36px;
+  }
+  .af-core .af-olk-next-cta {
+    align-self: stretch;
+    min-height: 44px;
+  }
+  .af-core .af-olk-move-cta {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+  }
+  .af-olk-link {
+    min-height: 44px;
+  }
+}
