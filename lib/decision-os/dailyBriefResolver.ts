@@ -10,7 +10,7 @@
  * `resolveAttentionQueueSnapshot` for signals (reuse, never re-derives them), then does its OWN
  * separate per-league `resolveMissionControlSnapshot` fetch for `healthyLeagueCount` and league
  * trends — meaning Mission Control gets fetched TWICE per league within this resolver's own execution.
- * This is accepted here (unlike inside `commissionerCommandCenter.ts`, which deliberately avoids it)
+ * This is accepted here (unlike inside `platformOs.ts`, which deliberately avoids it)
  * because `resolveDailyBrief` is meant for callers with NO existing page-load context to reuse data
  * from (a background job, not a page render) — the double-fetch cost is real but isolated to this
  * resolver's own standalone invocation, not stacked on top of an already-fetched page. The Commissioner

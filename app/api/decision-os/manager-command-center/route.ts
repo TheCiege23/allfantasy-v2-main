@@ -1,10 +1,10 @@
 /**
  * Fantasy OS Suite — Phase OS-C1: Manager Operating System Foundation.
  *
- * Session-scoped, exactly like Commissioner OS's own command-center route
- * (`/api/decision-os/commissioner-command-center`) — this route never accepts a client-supplied
+ * Session-scoped, exactly like Commissioner OS's own command-center route was
+ * (`/api/decision-os/commissioner-command-center`, retired 2026-09-17) — this route never accepts a client-supplied
  * league list; it always resolves the caller's OWN league membership server-side via the same
- * `getDashboardLeagueListForUser` the rest of the dashboard/commissioner-hub already uses. Unlike
+ * `getDashboardLeagueListForUser` the rest of the dashboard already uses. Unlike
  * that route, this one does NOT filter to `isCommissioner === true` — every league the session user
  * belongs to (commissioner, member, or imported) is in scope, since Manager OS answers "what should
  * I do as a PLAYER in this league," not "what should I do as its commissioner."

@@ -220,8 +220,8 @@ describe('resolveManagerCommandCenterSnapshot', () => {
   })
 
   // Phase OS-C6: production-readiness audit found this resolution loop was sequential (one league
-  // at a time) while every sibling multi-league composition (commissionerCommandCenter.ts,
-  // platformOs.ts, attentionQueue.ts) already resolves in parallel via Promise.all — a real,
+  // at a time) while every sibling multi-league composition (platformOs.ts,
+  // attentionQueue.ts) already resolves in parallel via Promise.all — a real,
   // verified inconsistency, not a premature optimization. This test proves the fix: resolving N
   // leagues takes roughly as long as the SLOWEST single league, not the SUM of all of them.
   it('resolves all leagues in parallel, not sequentially', async () => {

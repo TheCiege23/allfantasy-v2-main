@@ -19,7 +19,6 @@ const SERVICE = 'lib/sports-evidence/intelligenceIntegration.ts'
 const COACH = 'app/api/coach/advice/route.ts'
 const CHIMMY = 'app/api/ai/chimmy/route.ts'
 const MANAGER = 'app/api/decision-os/manager-command-center/route.ts'
-const COMMISSIONER = 'app/api/decision-os/mission-control/route.ts'
 const OBSERVABILITY = 'app/api/admin/fantasy-os/sports-data/observability/route.ts'
 const noProvider = (src: string) => /(from ['"]@\/lib\/sleeper|from ['"]@\/lib\/espn|sleeper-client|espn-client|api\.sleeper\.app|site\.api\.espn\.com|fetch\()/.test(src)
 
@@ -97,13 +96,6 @@ describe('5E-h Intelligence — surface wiring (informational; reasoning authori
     expect(src).toMatch(/describeManagerSportsContext/)
     expect(src).toMatch(/isSportsDataEnabled\('intelligence'\)/)
     expect(src).toMatch(/resolveManagerCommandCenterSnapshot/)
-    expect(noProvider(src)).toBe(false)
-  })
-  it('Commissioner Intelligence consumes certified context, gated, snapshot unchanged', () => {
-    const src = read(COMMISSIONER)
-    expect(src).toMatch(/describeCommissionerSportsContext/)
-    expect(src).toMatch(/isSportsDataEnabled\('intelligence'\)/)
-    expect(src).toMatch(/resolveMissionControlSnapshot/)
     expect(noProvider(src)).toBe(false)
   })
   it('Operator observability route is admin-gated + observability-gated, exposes no credentials', () => {
