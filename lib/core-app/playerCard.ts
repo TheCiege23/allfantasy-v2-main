@@ -1,6 +1,7 @@
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
+import { memberLeaguePlatformIdsFor } from '@/lib/league-access'
 import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
 import { isWatched } from '@/lib/waiver-wire/watchlist-service'
 import { followKeyFor, isFollowingPlayer } from '@/lib/follows/playerFollows'
@@ -520,7 +521,8 @@ async function loadSchedule(
 /* ── trades ──────────────────────────────────────────────────────────────── */
 
 /**
- * Trades that moved this player, across the leagues AllFantasy has imported.
+ * Trades that moved this player, in leagues the viewer belongs to (or in one league the route has
+ * already checked).
  *
  * ⚠ NOT A GLOBAL MARKET FEED, AND THE CARD SAYS SO. These are our own imported
  * leagues' transactions. That is a real and useful signal — it is what people
@@ -532,9 +534,34 @@ async function loadSchedule(
  * un-deduped list shows each trade as two contradictory events. Measured on
  * production: the newest pair is literally `["12484"]→["2133"]` and
  * `["2133"]→["12484"]`.
+ *
+ * 🛑 EVERY CALL IS SCOPED, AND THERE IS NO UNSCOPED BRANCH. The universal card used to call this
+ * with no league, which queried every trade involving the player across every league we hold and
+ * then looked up those leagues' names. `/api/core/player-card` does not require a session, so a
+ * signed-out request received trades and names from private leagues. Now the scope is exactly one
+ * of:
+ *
+ *   { leagueId }         a league the route has already membership-checked
+ *   { viewerLeagueIds }  the viewer's own leagues (`memberLeaguePlatformIdsFor`); `null` = signed out
+ *
+ * ⚠ AN EMPTY OR ABSENT VIEWER SET RETURNS BEFORE QUERYING. `{ in: [] }` would also match nothing,
+ * but a guard that holds only by that semantic is one refactor away from an unscoped read.
  */
-async function loadTrades(sleeperId: string | null, leagueId?: string): Promise<SectionState<PlayerCardTrade[]>> {
+export type TradeScope = { leagueId: string } | { viewerLeagueIds: string[] | null }
+
+export async function loadTrades(sleeperId: string | null, scope: TradeScope): Promise<SectionState<PlayerCardTrade[]>> {
   if (!sleeperId) return unavailable('No Sleeper id on file, so trades cannot be matched to this player.')
+
+  let leagueFilter: { sleeperLeagueId: string | { in: string[] } }
+  if ('leagueId' in scope) {
+    leagueFilter = { sleeperLeagueId: scope.leagueId }
+  } else if (!scope.viewerLeagueIds) {
+    return unavailable('Sign in to see trades involving this player from your own leagues.')
+  } else if (scope.viewerLeagueIds.length === 0) {
+    return unavailable('No trade involving this player in your leagues.')
+  } else {
+    leagueFilter = { sleeperLeagueId: { in: scope.viewerLeagueIds } }
+  }
 
   const rows = await prisma.leagueTrade
     .findMany({
@@ -543,7 +570,7 @@ async function loadTrades(sleeperId: string | null, leagueId?: string): Promise<
           { playersGiven: { array_contains: sleeperId } },
           { playersReceived: { array_contains: sleeperId } },
         ],
-        ...(leagueId ? { history: { sleeperLeagueId: leagueId } } : {}),
+        history: leagueFilter,
       },
       orderBy: { tradeDate: 'desc' },
       take: TRADE_COUNT * 4, // headroom for the two-rows-per-trade fold
@@ -560,7 +587,13 @@ async function loadTrades(sleeperId: string | null, leagueId?: string): Promise<
     })
     .catch(() => [])
 
-  if (rows.length === 0) return unavailable('No trade involving this player in the leagues we hold.')
+  if (rows.length === 0) {
+    return unavailable(
+      'leagueId' in scope
+        ? 'No trade involving this player in the leagues we hold.'
+        : 'No trade involving this player in your leagues.',
+    )
+  }
 
   const seen = new Set<string>()
   const folded = rows.filter((r) => {
@@ -1139,7 +1172,7 @@ async function loadLeague(
     }
   }
 
-  const leagueTrades = league.platformLeagueId ? await loadTrades(sleeperId, league.platformLeagueId) : null
+  const leagueTrades = league.platformLeagueId ? await loadTrades(sleeperId, { leagueId: league.platformLeagueId }) : null
 
   /*
    * The playoff window, from THIS league's settings rather than the design's
@@ -1320,7 +1353,10 @@ export async function getPlayerCard(req: PlayerCardRequest): Promise<PlayerCardD
     loadNews(player.name, player.sport),
     loadPlayerBlurbs(player.sleeperId, player.name, player.sport),
     loadInjury(player.sleeperId, player.name, player.sport),
-    loadTrades(player.sleeperId),
+    // The viewer's own leagues only — the route does not require a session.
+    memberLeaguePlatformIdsFor(req.userId ?? null)
+      .catch(() => [] as string[])
+      .then((viewerLeagueIds) => loadTrades(player.sleeperId, { viewerLeagueIds })),
     req.leagueId
       ? loadLeague(
           req.leagueId,

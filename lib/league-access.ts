@@ -120,6 +120,39 @@ export async function resolveLeagueMembership(
 }
 
 /**
+ * The provider-side ids (`League.platformLeagueId`) of every league this viewer belongs to, or
+ * `null` for a signed-out viewer.
+ *
+ * For reads that SPAN leagues and so have no single id to pass to `resolveLeagueMembership` —
+ * the player card's trade history is the first. Without the viewer's own set, such a read returns
+ * every league's rows.
+ *
+ * ⚠ THE FOUR PATHS ARE `resolveLeagueMembership`'s, AND MUST STAY SO. If that predicate gains or
+ * loses a path, change this one in the same commit; a narrower copy silently hides the
+ * roster-backed population, which is the largest.
+ *
+ * ⚠ RETURNS `platformLeagueId`, NOT `League.id`. `LeagueTradeHistory` stores the provider's id
+ * (as `sleeperLeagueId`), so joining on our uuid would match nothing and read as "no trades".
+ */
+export async function memberLeaguePlatformIdsFor(userId: string | undefined | null): Promise<string[] | null> {
+  if (!userId) return null
+
+  const rows = await prisma.league.findMany({
+    where: {
+      OR: [
+        { userId },
+        { redraftMembers: { some: { userId } } },
+        { rosters: { some: { platformUserId: userId } } },
+        { teams: { some: { claimedByUserId: userId } } },
+      ],
+    },
+    select: { platformLeagueId: true },
+  })
+
+  return [...new Set(rows.map((r) => r.platformLeagueId).filter((id): id is string => Boolean(id)))]
+}
+
+/**
  * Back-compatible shape for existing callers: null means "no access", collapsing
  * anonymous / not-found / not-member. Prefer `resolveLeagueMembership` in new code.
  */
