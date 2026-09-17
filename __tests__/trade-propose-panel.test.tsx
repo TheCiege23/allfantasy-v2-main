@@ -164,6 +164,17 @@ describe('⚠ the board and the proposable deal are different sets', () => {
     expect(blocked[0]).toContain('typed by hand')
   })
 
+  it('🛑 blocks an imported league\'s pick with the true reason, not "typed by hand"', () => {
+    // Listed from `future_draft_picks`: real, but the league trades picks on its own platform.
+    const { assets, blocked } = run(
+      [{ kind: 'pick', year: 2027, round: 1, label: '2027 1st', pickId: null, proposable: false }],
+      [],
+    )
+    expect(assets).toEqual([])
+    expect(blocked[0]).toContain('trades its picks on its own platform')
+    expect(blocked[0]).not.toContain('typed by hand')
+  })
+
   it('⚠ the picker and the engine read pick ids through ONE function', () => {
     // Two copies of this parsing would drift apart the first time a platform
     // spelled a key differently, and the UI would offer a pick the engine then

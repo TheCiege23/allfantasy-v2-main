@@ -1038,6 +1038,7 @@ export function TradeCenter(props: {
         rosterLabel={side === 'give' ? 'Your' : partnerRoster?.ownerName ?? null}
         teamCount={props.league?.teamCount ?? null}
         rosterKnown={Boolean(r)}
+        pickCoverage={rosterData?.pickCoverage}
         /*
           Same rule as the picks directly above, for the same reason: each column sends
           from its OWN roster. Offering a player from the wrong side builds an asset the

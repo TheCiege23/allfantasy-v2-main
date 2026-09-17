@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { RosterPick, RosterPlayer } from '@/components/core-app/screens/useLeagueRosters'
+import type { PickCoverage, RosterPick, RosterPlayer } from '@/components/core-app/screens/useLeagueRosters'
 import { FIRST_ROUND_IN_MARKET_UNITS, pickValueByOverall } from '@/lib/pick-curve'
 import { resolveTeamLogoUrlSync } from '@/lib/draft-sports-models/player-asset-resolver'
 import type { UnpricedReason } from '@/lib/trade-value/unpricedReason'
@@ -66,6 +66,11 @@ export type PickedAsset =
        * would show a pick with no round as a first-rounder.
        */
       unpricedReason?: UnpricedReason | null
+      /**
+       * False for an imported league's pick: it is on the roster and valued, but the league trades
+       * its picks on its own platform, so an offer cannot carry it. `pickId` is null for those.
+       */
+      proposable?: boolean
     }
   | { kind: 'faab'; amount: number }
 
@@ -249,6 +254,11 @@ export function TradeAssetPicker(props: {
   rosterLabel?: string | null
   /** True once a counterparty is chosen, so "we do not know" can be said precisely. */
   rosterKnown?: boolean
+  /**
+   * `traded_only` when the league's rookie-draft size is unknown, so the list above holds only
+   * picks that changed hands. Said on screen: a short list must not read as "they hold no picks".
+   */
+  pickCoverage?: PickCoverage
   /**
    * League size, used only to price a hand-typed pick.
    *
@@ -540,7 +550,12 @@ export function TradeAssetPicker(props: {
           {(props.rosterPicks ?? []).length > 0 ? (
             <>
               <span className="af-label">
-                {props.rosterLabel ? `${props.rosterLabel}'s picks` : 'Picks on this roster'}
+                {/* The builder passes 'Your' for the viewer's own side: "Your's picks" is not English. */}
+                {props.rosterLabel === 'Your'
+                  ? 'Your picks'
+                  : props.rosterLabel
+                    ? `${props.rosterLabel}'s picks`
+                    : 'Picks on this roster'}
               </span>
               {(props.rosterPicks ?? []).map((p) => (
                 <button
@@ -553,16 +568,20 @@ export function TradeAssetPicker(props: {
                       year: p.season ?? new Date().getFullYear(),
                       round: p.round ?? 1,
                       label: p.label,
-                      pickId: p.pickId,
+                      // An imported pick's id is for display only; an offer must never reference it.
+                      pickId: p.proposable === false ? null : p.pickId,
                       itemType: p.itemType,
                       value: p.value,
                       unpricedReason: p.unpricedReason ?? null,
+                      proposable: p.proposable !== false,
                     })
                   }
                 >
                   <span className="af-tc-row-body">
                     <span className="af-tc-row-name">{p.label}</span>
-                    <span className="af-tc-row-sub">On the roster — can be proposed</span>
+                    <span className="af-tc-row-sub">
+                      {p.proposable === false ? 'On the roster' : 'On the roster — can be proposed'}
+                    </span>
                   </span>
                   {/*
                     A pick is priced in the SAME cell and the same units as a player, because the
@@ -579,8 +598,17 @@ export function TradeAssetPicker(props: {
             </>
           ) : props.rosterKnown ? (
             <p className="af-tc-row-sub">
-              No picks with an id on this roster. A pick can still be added below for the verdict,
-              but it cannot be sent as part of an offer.
+              {props.pickCoverage === 'complete'
+                ? 'This team holds no picks in the next three drafts.'
+                : props.pickCoverage === 'traded_only'
+                  ? 'No traded picks are on file for this team.'
+                  : 'No picks with an id on this roster. A pick can still be added below for the verdict, but it cannot be sent as part of an offer.'}
+            </p>
+          ) : null}
+          {props.rosterKnown && props.pickCoverage === 'traded_only' ? (
+            <p className="af-tc-row-sub">
+              Only picks that have changed hands are listed: we could not tell how many rounds this
+              league&rsquo;s rookie draft has, so a team&rsquo;s own picks are not shown.
             </p>
           ) : null}
 

@@ -135,10 +135,32 @@ describe('suggestionToPickedAssets', () => {
     expect(out.dropped).toEqual([])
     expect(out.give).toEqual([
       { kind: 'player', playerId: 'mine', name: 'Receiver', position: 'WR', team: 'KC', value: 4000, imageUrl: 'https://x/r.png', stock: 'up', stockDelta: 120, unpricedReason: null },
-      { kind: 'pick', year: 2027, round: 1, label: '2027 1st', pickId: 'pk1', itemType: 'future_pick', value: 1800 },
+      { kind: 'pick', year: 2027, round: 1, label: '2027 1st', pickId: 'pk1', itemType: 'future_pick', value: 1800, proposable: true },
     ])
     expect(out.get).toEqual([
       { kind: 'player', playerId: 'theirs', name: 'Runner', position: 'RB', team: 'SF', value: 4600, imageUrl: null, stock: null, stockDelta: null, unpricedReason: null },
+    ])
+  })
+
+  it('🛑 an imported league\'s pick joins the deal without its display id', () => {
+    // `fdp:` ids name a row for display; a proposal must never carry one.
+    const importedRoster = roster('I', {
+      picks: [
+        { pickId: 'fdp:2028:2:7', season: 2028, round: 2, label: '2028 2nd', itemType: 'future_pick', value: 700, proposable: false },
+      ],
+    })
+    const out = suggestionToPickedAssets(
+      {
+        give: [{ id: 'fdp:2028:2:7', name: '2028 2nd', position: 'PICK', value: 700, kind: 'pick' }],
+        get: [{ id: 'theirs', name: 'Runner', position: 'RB', value: 4600, kind: 'player' }],
+        percentApart: 5,
+      },
+      importedRoster,
+      theirs,
+    )
+    expect(out.dropped).toEqual([])
+    expect(out.give).toEqual([
+      { kind: 'pick', year: 2028, round: 2, label: '2028 2nd', pickId: null, itemType: 'future_pick', value: 700, proposable: false },
     ])
   })
 

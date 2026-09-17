@@ -20,6 +20,8 @@ const findManySportsPlayer = vi.fn()
 const getPlayerValues = vi.fn()
 const resolveTeamByeWeeks = vi.fn()
 const resolveProviderPlayers = vi.fn()
+const findManyFuturePick = vi.fn()
+const groupByDraftFact = vi.fn()
 
 vi.mock('next-auth', () => ({ getServerSession: (...args: unknown[]) => getServerSession(...args) }))
 vi.mock('@/lib/auth', () => ({ authOptions: {} }))
@@ -47,6 +49,9 @@ vi.mock('@/lib/prisma', () => ({
      * happens before any promise exists.
      */
     sportsPlayer: { findMany: (...args: unknown[]) => findManySportsPlayer(...args) },
+    // The imported-league pick inventory: stored traded picks and the league's draft history.
+    futureDraftPick: { findMany: (...args: unknown[]) => findManyFuturePick(...args) },
+    draftFact: { groupBy: (...args: unknown[]) => groupByDraftFact(...args) },
   },
 }))
 /*
@@ -718,3 +723,146 @@ describe('partnerRanking (item #8)', () => {
     expect(loadLeagueTradeHistory).not.toHaveBeenCalled()
   })
 })
+
+describe('🛑 an imported league lists its real draft picks', () => {
+  /*
+   * The picker listed picks only from `Roster.playerData`, which held none in any staging league;
+   * an imported league's picks live in `future_draft_picks`, and only the TRADED ones do. The route
+   * now rebuilds the upcoming drafts: every team's own picks, moved where a stored trade says so.
+   */
+  const team = (id: string, externalId: string, platformUserId: string, teamName: string) => ({
+    id, externalId, platformUserId, claimedByUserId: null, teamName,
+    avatarUrl: null, wins: 0, losses: 0, ties: 0,
+  })
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    getServerSession.mockResolvedValue({ user: { id: 'u1' } })
+    assertLeagueMember.mockResolvedValue({ ok: true, league: {} })
+    findUniqueLeague.mockResolvedValue({
+      season: 2026, sport: 'NFL', platform: 'sleeper', isDynasty: true, starters: null,
+      settings: { status: 'in_season' },
+    })
+    findManyAppUser.mockResolvedValue([])
+    findManyLeagueTeam.mockResolvedValue([team('t1', '1', 'sleeper-1', 'Alpha'), team('t2', '2', 'sleeper-2', 'Bravo')])
+    findFirstLeagueTeam.mockResolvedValue(null)
+    findUniqueUserProfile.mockResolvedValue(null)
+    findManyRoster.mockResolvedValue([
+      // Joined by the import's source team id: this manager linked an AllFantasy account.
+      { id: 'r1', platformUserId: 'af-user', playerData: { players: [], source_team_id: '1' }, faabRemaining: null },
+      // Joined by the provider user id.
+      { id: 'r2', platformUserId: 'sleeper-2', playerData: { players: [] }, faabRemaining: null },
+    ])
+    findManySportsPlayer.mockResolvedValue([])
+    getPlayerValues.mockResolvedValue(new Map())
+    resolveTeamByeWeeks.mockResolvedValue(new Map())
+    // A 20-round startup in 2021, then 2-round rookie drafts.
+    groupByDraftFact.mockResolvedValue([
+      { season: 2021, _max: { round: 20 }, _count: { _all: 40 } },
+      { season: 2026, _max: { round: 2 }, _count: { _all: 4 } },
+    ])
+    findManyFuturePick.mockResolvedValue([
+      // Bravo's 2027 1st now belongs to Alpha.
+      { pickSeason: 2027, round: 1, originalRosterId: '2', currentOwnerId: '1' },
+      // A 2026 pick: that draft is over, so the pick is spent.
+      { pickSeason: 2026, round: 1, originalRosterId: '1', currentOwnerId: '2' },
+    ])
+  })
+
+  type Pick = { pickId: string; season: number; round: number; label: string; itemType: string; value: number | null; proposable?: boolean; fromTeam?: string | null }
+  async function load() {
+    const res = await GET(new Request('http://localhost/api/leagues/league-1/trades/rosters') as never, ctx('league-1'))
+    const body = (await res.json()) as { rosters: Array<{ rosterId: string; picks: Pick[] }>; pickCoverage?: string }
+    const picksOf = (id: string) => body.rosters.find((r) => r.rosterId === id)!.picks
+    return { res, body, picksOf }
+  }
+
+  it('lists every upcoming pick on the roster that holds it, own and acquired', async () => {
+    const { picksOf } = await load()
+    // Alpha: its own 2 rounds × 3 drafts, plus Bravo's 2027 1st.
+    expect(picksOf('r1')).toHaveLength(7)
+    // Bravo: its own 6, less the 2027 1st it traded away.
+    expect(picksOf('r2')).toHaveLength(5)
+    const acquired = picksOf('r1').find((p) => p.pickId === 'fdp:2027:1:2')!
+    expect(acquired).toMatchObject({ season: 2027, round: 1, label: '2027 1st (Bravo)', fromTeam: 'Bravo', itemType: 'future_pick' })
+    expect(picksOf('r2').some((p) => p.pickId === 'fdp:2027:1:2')).toBe(false)
+  })
+
+  it('values them on the pick curve, and marks them not proposable', async () => {
+    const { picksOf } = await load()
+    for (const p of [...picksOf('r1'), ...picksOf('r2')]) {
+      expect(p.value).toBeGreaterThan(0)
+      expect(p.proposable).toBe(false)
+    }
+    const own1st = picksOf('r1').find((p) => p.pickId === 'fdp:2027:1:1')!
+    const own2nd = picksOf('r1').find((p) => p.pickId === 'fdp:2027:2:1')!
+    expect(own1st.value!).toBeGreaterThan(own2nd.value!)
+    expect(own1st.fromTeam).toBeNull()
+  })
+
+  it('🛑 never lists a pick from a draft that has already happened', async () => {
+    const { picksOf } = await load()
+    expect([...picksOf('r1'), ...picksOf('r2')].some((p) => p.season <= 2026)).toBe(false)
+  })
+
+  it('asks only for the upcoming drafts\' active picks', async () => {
+    await load()
+    const where = findManyFuturePick.mock.calls[0][0].where
+    expect(where).toMatchObject({ leagueId: 'league-1', status: 'active', pickSeason: { in: [2027, 2028, 2029] } })
+  })
+
+  it('reports complete coverage', async () => {
+    const { body } = await load()
+    expect(body.pickCoverage).toBe('complete')
+  })
+
+  it('⚠ with no readable draft size, lists only the traded picks, and says so', async () => {
+    groupByDraftFact.mockResolvedValue([])
+    const { body, picksOf } = await load()
+    expect(body.pickCoverage).toBe('traded_only')
+    expect(picksOf('r1').map((p) => p.pickId)).toEqual(['fdp:2027:1:2'])
+    expect(picksOf('r2')).toEqual([])
+  })
+
+  it('a keeper or redraft league does not rebuild own picks', async () => {
+    findUniqueLeague.mockResolvedValue({ season: 2026, sport: 'NFL', platform: 'sleeper', isDynasty: false, settings: { status: 'in_season' } })
+    const { body } = await load()
+    expect(groupByDraftFact).not.toHaveBeenCalled()
+    expect(body.pickCoverage).toBe('traded_only')
+  })
+
+  it('🛑 a native league never reads the table — its proposable picks are the playerData ones', async () => {
+    findUniqueLeague.mockResolvedValue({ season: 2026, sport: 'NFL', platform: 'allfantasy', isDynasty: true, settings: {} })
+    const { body } = await load()
+    expect(findManyFuturePick).not.toHaveBeenCalled()
+    expect(body.pickCoverage).toBe('none')
+  })
+
+  it('an ESPN league is not rebuilt: its pick trades are never synced', async () => {
+    findUniqueLeague.mockResolvedValue({ season: 2026, sport: 'NFL', platform: 'espn', isDynasty: true, settings: {} })
+    const { body, picksOf } = await load()
+    expect(findManyFuturePick).not.toHaveBeenCalled()
+    expect(body.pickCoverage).toBe('none')
+    expect(picksOf('r1')).toEqual([])
+  })
+
+  it('a failing pick read costs the picks and nothing else', async () => {
+    findManyFuturePick.mockRejectedValue(new Error('db down'))
+    const { res, body, picksOf } = await load()
+    expect(res.status).toBe(200)
+    expect(picksOf('r1')).toEqual([])
+    expect(body.pickCoverage).toBe('none')
+  })
+
+  it('[control] a league whose draft is still ahead includes this season', async () => {
+    findUniqueLeague.mockResolvedValue({
+      season: 2026, sport: 'NFL', platform: 'sleeper', isDynasty: true, settings: { status: 'pre_draft' },
+    })
+    const { picksOf } = await load()
+    expect(findManyFuturePick.mock.calls[0][0].where.pickSeason.in).toEqual([2026, 2027, 2028])
+    // The 2026 row is live now: Alpha's 2026 1st belongs to Bravo.
+    expect(picksOf('r2').some((p) => p.pickId === 'fdp:2026:1:1')).toBe(true)
+    expect(picksOf('r1').some((p) => p.pickId === 'fdp:2026:1:1')).toBe(false)
+  })
+})
+
