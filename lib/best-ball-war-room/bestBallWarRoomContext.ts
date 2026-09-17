@@ -15,6 +15,7 @@
  */
 
 import { prisma } from '@/lib/prisma'
+import { isOrphanPlatformUserId } from '@/lib/orphan-ai-manager/orphan-platform-ids'
 import { resolveLeagueAccess } from '@/lib/league-access'
 import { getNormalizedLineupSections } from '@/lib/roster/LineupTemplateValidation'
 import { buildPlayerKey } from '@/lib/adp/computeAllFantasyAdp'
@@ -289,7 +290,8 @@ export async function buildBestBallWarRoomContext(
     return {
       rosterId: r.id,
       ownerId: r.platformUserId ?? r.id,
-      ownerName: meta?.ownerName ?? r.platformUserId ?? 'Team',
+      // An orphan's key is a placeholder, not a name.
+      ownerName: meta?.ownerName ?? (isOrphanPlatformUserId(r.platformUserId ?? '') ? null : r.platformUserId) ?? 'Team',
       teamName: meta?.teamName ?? null,
       wins: standing?.wins ?? 0,
       losses: standing?.losses ?? 0,

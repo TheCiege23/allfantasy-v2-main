@@ -5,6 +5,7 @@
 
 import { prisma } from '@/lib/prisma'
 import type { NormalizedImportResult } from '../types'
+import { importedRosterOwnerKey, planImportedRosterWrites } from '../importedRosterIdentity'
 
 export interface SleeperLeagueBootstrapResult {
   leagueTeamsCreated: number
@@ -16,6 +17,12 @@ export interface SleeperLeagueBootstrapResult {
    */
   rostersPreserved?: number
   teamPerformancesCreated: number
+  /** Rows moved to their team's current owner key (an owner change, or an orphan's own key). */
+  rostersRekeyed?: number
+  /** Extra rows bound to a team this import wrote — left in place; removing them is a data decision. */
+  rosterDuplicateRows?: number
+  /** Teams whose owner key is held by a row this import does not move (see `importedRosterIdentity`). */
+  rosterKeyConflicts?: number
 }
 
 async function resolveImportedManagerUserIds(
@@ -121,6 +128,63 @@ export async function bootstrapLeagueFromNormalizedImport(
   let rostersCreated = 0
   /** Teams whose roster fetch failed and whose stored roster was therefore left alone (IMP-04). */
   let rostersPreserved = 0
+
+  /*
+   * 🛑 A TEAM'S ROW IS FOUND BY ITS TEAM ID, NOT ITS OWNER. Matching by owner key made every orphan
+   * in a league share one row (key '') and gave a team a second row whenever its manager changed.
+   * See `importedRosterIdentity.ts`. The claim read happens BEFORE the team upserts below, which only
+   * ever add a claim, so a claim made through an invite keeps its roster key.
+   */
+  const provider = normalized.source.source_provider
+  const [storedRosters, storedTeams] = await Promise.all([
+    prisma.roster.findMany({
+      where: { leagueId },
+      select: { id: true, platformUserId: true, playerData: true },
+    }),
+    prisma.leagueTeam.findMany({
+      where: { leagueId },
+      select: { externalId: true, claimedByUserId: true },
+    }),
+  ])
+  const claimByTeam = new Map(storedTeams.map((t) => [t.externalId, t.claimedByUserId]))
+  const rosterPlan = planImportedRosterWrites({
+    provider,
+    stored: storedRosters,
+    incoming: normalized.rosters.map((r) => {
+      const linkedUserId = managerUserIds.get(r.source_manager_id) ?? null
+      const claimedByUserId = claimByTeam.get(r.source_team_id) ?? null
+      return {
+        teamId: r.source_team_id,
+        ownerKey: importedRosterOwnerKey({
+          provider,
+          teamId: r.source_team_id,
+          linkedUserId,
+          claimedByUserId,
+          sourceManagerId: r.source_manager_id,
+        }),
+        ownerAliases: [linkedUserId, claimedByUserId, r.source_manager_id].filter(
+          (v): v is string => typeof v === 'string' && v.trim().length > 0,
+        ),
+        keepKey: r.fetch_status === 'failed',
+      }
+    }),
+  })
+  const planByTeam = new Map(rosterPlan.plans.map((p) => [p.teamId, p]))
+  const rekeys = rosterPlan.plans.filter(
+    (p): p is typeof p & { rosterId: string } => p.rekey && p.rosterId != null,
+  )
+  if (rekeys.length > 0) {
+    // Two steps, so keys can pass between rows (a chain, or two managers who swapped teams) without
+    // tripping the unique (leagueId, platformUserId) half-way.
+    await prisma.$transaction([
+      ...rekeys.map((p) =>
+        prisma.roster.update({ where: { id: p.rosterId }, data: { platformUserId: `rekey-pending:${p.rosterId}` } }),
+      ),
+      ...rekeys.map((p) =>
+        prisma.roster.update({ where: { id: p.rosterId }, data: { platformUserId: p.ownerKey } }),
+      ),
+    ])
+  }
 
   for (const r of normalized.rosters) {
     const standing = standingsByTeam.get(r.source_team_id)
@@ -241,21 +305,9 @@ export async function bootstrapLeagueFromNormalizedImport(
       },
     }
 
-    const resolvedPlatformUserId =
-      managerUserIds.get(r.source_manager_id) ?? r.source_manager_id
-
-    const existingRoster = await prisma.roster.findFirst({
-      where: {
-        leagueId,
-        OR: [
-          { platformUserId: resolvedPlatformUserId },
-          { platformUserId: r.source_manager_id },
-        ],
-      },
-      select: {
-        id: true,
-      },
-    })
+    const plan = planByTeam.get(r.source_team_id)
+    const existingRoster = plan?.rosterId ? { id: plan.rosterId } : null
+    const ownerKey = plan?.ownerKey ?? importedRosterOwnerKey({ provider, teamId: r.source_team_id })
 
     /*
      * 🛑 IMP-04 — A FAILED FETCH MUST NOT CLEAR A GOOD ROSTER.
@@ -276,10 +328,11 @@ export async function bootstrapLeagueFromNormalizedImport(
     }
 
     if (existingRoster) {
+      // The key was already moved above when it changed; the row's current key is written back as-is.
       await prisma.roster.update({
         where: { id: existingRoster.id },
         data: {
-          platformUserId: resolvedPlatformUserId,
+          platformUserId: ownerKey,
           playerData: playerData as any,
           faabRemaining: r.faab_remaining ?? null,
           waiverPriority: r.waiver_priority ?? null,
@@ -289,7 +342,7 @@ export async function bootstrapLeagueFromNormalizedImport(
       await prisma.roster.create({
         data: {
           leagueId,
-          platformUserId: resolvedPlatformUserId,
+          platformUserId: ownerKey,
           playerData: playerData as any,
           faabRemaining: r.faab_remaining ?? null,
           waiverPriority: r.waiver_priority ?? null,
@@ -372,7 +425,15 @@ export async function bootstrapLeagueFromNormalizedImport(
     }
   }
 
-  return { leagueTeamsCreated, rostersCreated, teamPerformancesCreated, rostersPreserved }
+  return {
+    leagueTeamsCreated,
+    rostersCreated,
+    teamPerformancesCreated,
+    rostersPreserved,
+    rostersRekeyed: rekeys.length,
+    rosterDuplicateRows: rosterPlan.duplicateRows,
+    rosterKeyConflicts: rosterPlan.plans.filter((p) => p.keyConflict).length,
+  }
 }
 
 /**
