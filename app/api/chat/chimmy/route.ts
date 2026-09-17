@@ -2421,6 +2421,12 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   if (chimmyToolLoopEnabled) {
     const { runChimmyToolLoop } = await import('@/lib/chimmy/tools/chimmyToolLoop')
+    /*
+     * Held in a variable because the loop MUTATES it: `find_league_by_name` rebinds `leagueId` to a
+     * league the user is a member of (it is the only writer — `lib/chimmy/tools/chimmyTools.ts`).
+     * Read back below so the drawer learns which league the answer was about.
+     */
+    const toolContext = { leagueId: leagueSnapshot?.id ?? null, userId: userId ?? null }
     const loop = await runChimmyToolLoop({
       question: message,
       systemPrompt: CHIMMY_TOOL_LOOP_SYSTEM_PROMPT,
@@ -2438,7 +2444,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
        * on by default, that was any league's standings and rivalry records for anyone signed
        * in. Pinned in `__tests__/chimmy-unproven-league-id-readers.test.ts`.
        */
-      context: { leagueId: leagueSnapshot?.id ?? null, userId: userId ?? null },
+      context: toolContext,
       enabled: true,
     }).catch(() => null)
 
@@ -2454,6 +2460,27 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       const loopText = loopModeRequested
         ? buildChimmyResponseForAssistantMode({ mode: selectedAssistantMode, fullResponse: loop.text })
         : loop.text
+      /*
+       * 🛑 THE LOOP'S ANSWERS NEVER SAID WHICH LEAGUE THEY WERE ABOUT. The PECR path reports
+       * `meta.leagueGrounding`; this return did not, so a league the route resolved — or one the model
+       * found by name — was invisible to the drawer, and the next message went out unscoped again
+       * (user report, 2026-09-16: "even after opening the league, Chimmy was lost").
+       *
+       * The same shape as the PECR path. A tool-bound id is a membership-proven one
+       * (`findLeagueByName` returns only the caller's leagues), and its row is read only for the label.
+       */
+      const boundLeagueId = toolContext.leagueId
+      const boundLeague =
+        boundLeagueId == null
+          ? null
+          : boundLeagueId === leagueSnapshot?.id
+            ? leagueSnapshot
+            : await prisma.league
+                .findUnique({
+                  where: { id: boundLeagueId },
+                  select: { id: true, name: true, platform: true, season: true, lastSyncedAt: true },
+                })
+                .catch(() => null)
       return NextResponse.json({
         response: loopText,
         result: loopText,
@@ -2473,6 +2500,16 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
                 }
               : undefined,
           providerStatus: { openai: 'skipped', deepseek: 'skipped', grok: 'ok' },
+          leagueGrounding: boundLeague
+            ? {
+                grounded: true as const,
+                leagueId: boundLeague.id,
+                leagueName: boundLeague.name,
+                platform: boundLeague.platform,
+                season: boundLeague.season,
+                lastSyncedAt: boundLeague.lastSyncedAt?.toISOString() ?? null,
+              }
+            : { grounded: false as const, leagueId: null, reason: 'no_league_selected' as const },
           /* Which lookups the model chose, so the answer's sourcing is visible. */
           toolsUsed: loop.toolsUsed,
           turns: loop.turns,

@@ -128,7 +128,8 @@ describe('tool loop wiring', () => {
   /* The league must come from the session, never from the model. */
   it('passes session identifiers as the tool context', () => {
     const block = BLOCK
-    expect(block).toMatch(/context:\s*\{\s*leagueId/)
+    expect(block).toMatch(/const toolContext = \{\s*leagueId/)
+    expect(block).toMatch(/context:\s*toolContext\b/)
     expect(block).toContain('userId')
   })
 
@@ -140,12 +141,32 @@ describe('tool loop wiring', () => {
    * pin is `__tests__/chimmy-unproven-league-id-readers.test.ts`; this one names the line.
    */
   it('binds the tool context to the authorized league, never the requested one', () => {
-    const context = BLOCK.match(/context:\s*\{[^}]*\}/)?.[0] ?? ''
+    /*
+     * The context is built in a variable now (the loop mutates it and the route reads it back), so
+     * the invariant is asserted on that initialiser — and the loop must be handed exactly that object.
+     */
+    const context = BLOCK.match(/const toolContext = \{[^}]*\}/)?.[0] ?? ''
     expect(context).toMatch(/leagueId:\s*leagueSnapshot\?\.id\s*\?\?\s*null/)
     expect(context).not.toMatch(/leagueId:\s*(?:leagueId|requestedLeagueId)\b/)
     expect(context).not.toMatch(/formData/)
-    // Exactly one tool context in the block, so the check above cannot be satisfied by a decoy.
-    expect(BLOCK.match(/context:\s*\{/g)).toHaveLength(1)
+    // Exactly one tool context in the block, so the checks above cannot be satisfied by a decoy.
+    expect(BLOCK.match(/const toolContext = \{/g)).toHaveLength(1)
+    expect(BLOCK.match(/context:\s*/g)).toHaveLength(1)
+    expect(BLOCK).toMatch(/context:\s*toolContext\b/)
+  })
+
+  /*
+   * 🛑 THE LOOP'S ANSWER SAYS WHICH LEAGUE IT WAS ABOUT (user report, 2026-09-16). Without this the
+   * drawer never learned the league the route resolved or the model found by name, and the next
+   * question went out unscoped. Read from the SAME object the loop mutated, after the loop.
+   */
+  it('reports the bound league in meta.leagueGrounding, read back from the tool context', () => {
+    const afterLoop = BLOCK.slice(BLOCK.indexOf('if (loop?.text)'))
+    expect(afterLoop).toContain('const boundLeagueId = toolContext.leagueId')
+    expect(afterLoop).toMatch(/leagueGrounding:\s*boundLeague/)
+    expect(afterLoop).toContain("reason: 'no_league_selected'")
+    // Never the raw request field.
+    expect(afterLoop).not.toMatch(/boundLeagueId\s*=\s*(?:leagueId|requestedLeagueId)\b/)
   })
 })
 

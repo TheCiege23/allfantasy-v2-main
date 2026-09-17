@@ -159,13 +159,24 @@ function extractAliasMap(raw: unknown): LeagueAliasMap {
 async function listAccessibleLeagues(userId: string): Promise<AccessibleLeagueRow[]> {
   const rows = await prisma.league.findMany({
     where: {
+      /*
+       * 🛑 ALL FOUR MEMBERSHIP ROUTES, NOT TWO. This listed only owned leagues and claimed teams, so a
+       * roster-only or redraft member — roster-only is the LARGEST membership population, see
+       * `resolveLeagueMembership` — asked a trade question from "All leagues", got "Which league do
+       * you want me to use?", and the list it offered did not contain the league they meant (user
+       * report, 2026-09-16: "Draft Junkies"). The same four branches as `resolveLeagueMembership`
+       * and `getDashboardLeagueListForUser`, so Chimmy's lookup, the league picker and the access
+       * check agree on which leagues are yours.
+       */
       OR: [
         { userId },
+        { redraftMembers: { some: { userId } } },
         {
           teams: {
             some: { claimedByUserId: userId },
           },
         },
+        { rosters: { some: { platformUserId: userId } } },
       ],
     },
     select: {
