@@ -272,6 +272,33 @@ describe('/core renders the shell first', () => {
     expect(shell.leagueCoverage).not.toHaveBeenCalled()
   })
 
+  /*
+   * 🛑 CHIMMY'S LEAGUE PICKER GETS EVERY LEAGUE (user report, 2026-09-16). It was capped at the first
+   * twelve of a name-sorted list, so a league further down could not be picked at all.
+   */
+  it('hands the Chimmy drawer every played league, the selected one first', { timeout: 180_000 }, async () => {
+    h.gated = false
+    h.osGate.resolve()
+    const { getDashboardLeagueListForUser } = await import('@/lib/dashboard/get-dashboard-league-list')
+    const many = Array.from({ length: 15 }, (_, i) => ({ ...LEAGUE, id: `M${String(i).padStart(2, '0')}`, name: `League ${String(i).padStart(2, '0')}` }))
+    vi.mocked(getDashboardLeagueListForUser).mockResolvedValue({ leagues: many, sleeperUserId: 's1' } as never)
+    try {
+      const AfCorePage = await loadPage()
+      const commsOf = async (sp: Record<string, string>) => {
+        const tree = await AfCorePage(pageArgs(['trades'], sp))
+        const shellEl = findElement(tree, (el) => Array.isArray((el.props?.comms as { leagues?: unknown })?.leagues))
+        return ((shellEl?.props.comms as { leagues: Array<{ id: string }> }).leagues ?? []).map((l) => l.id)
+      }
+
+      expect(await commsOf({})).toHaveLength(15)
+      const scoped = await commsOf({ league: 'M13' })
+      expect(scoped).toHaveLength(15)
+      expect(scoped[0]).toBe('M13')
+    } finally {
+      vi.mocked(getDashboardLeagueListForUser).mockImplementation(async () => ({ leagues: [LEAGUE], sleeperUserId: 's1' }) as never)
+    }
+  })
+
   it('resolves without running a screen loader, and puts the screen in a keyed Suspense', { timeout: 180_000 }, async () => {
     h.gated = false
     const AfCorePage = await loadPage()

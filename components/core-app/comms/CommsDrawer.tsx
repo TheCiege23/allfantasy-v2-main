@@ -252,10 +252,34 @@ type ChatTurn = {
   advice?: ChimmyAdviceRef | null
   /** The answer mode the SERVER says shaped this answer; absent when it did not say. */
   mode?: CoreAnswerMode | null
+  /** On a "which league?" refusal: the leagues offered, as buttons that re-ask the question there. */
+  choices?: Array<{ leagueId: string; leagueName: string }> | null
+  /** The question that refusal answered, so a picked league can re-ask it. */
+  retryQuestion?: string | null
+  /** Brought in from another scope's conversation when the scope changed. */
+  carried?: boolean
+}
+
+/** How many earlier turns follow the user into another scope. */
+const CARRIED_TURNS = 6
+
+/**
+ * Turns as they travel into another scope's thread: the words only. Hand-offs, scenarios, advice
+ * buttons and refusal choices belong to the scope they were answered in, and a "set lineup on
+ * Sleeper" link carried into a different league would point at the wrong roster.
+ */
+function carryable(turns: ChatTurn[], fromThread: string): ChatTurn[] {
+  return turns.slice(-CARRIED_TURNS).map((t) => ({
+    // Tagged with the thread it came from: two scopes both have a `you-2`.
+    id: t.id.startsWith('carried:') ? t.id : `carried:${fromThread}:${t.id}`,
+    role: t.role,
+    text: t.text,
+    carried: true,
+  }))
 }
 
 type ChimmyGrounding =
-  | { grounded: true; leagueName?: string | null; lastSyncedAt?: string | null }
+  | { grounded: true; leagueId?: string | null; leagueName?: string | null; lastSyncedAt?: string | null }
   | { grounded: false; reason?: string; message?: string }
 
 /**
@@ -378,7 +402,8 @@ type ChimmyEnvelope = {
   /** Machine-readable reason. `error` is a sentence; this is the map key. */
   code?: string
   preview?: { ruleCode?: string }
-  details?: { message?: string }
+  /** `choices` rides a 412 "which league?" — the caller's own leagues, from the route's lookup. */
+  details?: { message?: string; choices?: Array<{ leagueId?: unknown; leagueName?: unknown }> }
   contract?: {
     confidence?: {
       level?: 'high' | 'medium' | 'low'
@@ -492,10 +517,46 @@ function ChimmyPanel({
    * would reappear under the league tab's public mode — rendered as though
    * the whole league could see it. The `public:` prefix keeps them apart.
    */
-  const { turns, draft, setTurns, setDraft } = useScopedConversation<ChatTurn>(
-    userId,
-    `${publicMode ? 'public:' : ''}${scopeId ?? 'global'}`,
+  const threadKey = useCallback(
+    (id: string | null) => `${publicMode ? 'public:' : ''}${id ?? 'global'}`,
+    [publicMode],
   )
+  const { turns, draft, setTurns, setDraft, carryInto } = useScopedConversation<ChatTurn>(
+    userId,
+    threadKey(scopeId),
+  )
+
+  /*
+   * 🛑 SWITCHING SCOPE STARTED A CONVERSATION FROM NOTHING. Threads are kept per scope, so moving to a
+   * league and asking "is he worth trading for there?" sent none of the earlier turns, and "he" meant
+   * nothing (user report, 2026-09-16: "even after opening the league, Chimmy was lost"). The last few
+   * turns now come along — into an empty thread only, unless `appendLast` asks for more.
+   */
+  const moveToScope = useCallback(
+    (nextId: string | null, from: ChatTurn[] = turns, appendLast = 0) => {
+      if (nextId === scopeId) return
+      carryInto(threadKey(nextId), carryable(from, threadKey(scopeId)), appendLast)
+      onScope(nextId)
+    },
+    [carryInto, onScope, scopeId, threadKey, turns],
+  )
+
+  /*
+   * A question asked from "All leagues" that Chimmy answered about ONE of the user's leagues moves the
+   * conversation there, so the follow-up is scoped too. Applied in an effect, after the answer is in
+   * `turns`: the question and its answer join that league's thread, then the scope follows.
+   */
+  const [pendingAdopt, setPendingAdopt] = useState<string | null>(null)
+  useEffect(() => {
+    if (!pendingAdopt) return
+    setPendingAdopt(null)
+    if (scopeId !== null || !leagues.some((l) => l.id === pendingAdopt)) return
+    moveToScope(pendingAdopt, turns, 2)
+  }, [pendingAdopt, scopeId, leagues, moveToScope, turns])
+
+  /* A "which league?" choice re-asks the question once its league is in scope. */
+  const pendingResend = useRef<{ scope: string; question: string } | null>(null)
+
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   /* Fast or Deep, per user. Sent with every question; see ChimmyAnswerMode.tsx. */
@@ -626,6 +687,16 @@ function ChimmyPanel({
            */
           const refusal = payload.details?.message
           if (refusal) {
+            /*
+             * 🛑 THE LEAGUES A "WHICH LEAGUE?" REFUSAL OFFERED WERE THROWN AWAY, leaving the user to
+             * find the picker and ask again. They are buttons now — only leagues this drawer can
+             * scope to, so a button always lands somewhere real.
+             */
+            const offered = (payload.details?.choices ?? [])
+              .map((c) => (typeof c?.leagueId === 'string' ? leagues.find((l) => l.id === c.leagueId) : undefined))
+              .filter((l): l is CommsLeague => Boolean(l))
+              .slice(0, 8)
+              .map((l) => ({ leagueId: l.id, leagueName: l.name }))
             setTurns((t) => [
               ...t,
               {
@@ -636,6 +707,8 @@ function ChimmyPanel({
                 handoff: null,
                 cost: null,
                 grounding: { grounded: false, reason: 'refused' },
+                choices: offered.length ? offered : null,
+                retryQuestion: offered.length && question ? question : null,
               },
             ])
             return
@@ -714,6 +787,10 @@ function ChimmyPanel({
             mode: answeredMode(payload.meta),
           },
         ])
+        // Asked from "All leagues", answered about one of yours: the conversation moves there.
+        if (!scopeId && grounding?.grounded === true && typeof grounding.leagueId === 'string') {
+          setPendingAdopt(grounding.leagueId)
+        }
       } catch (e) {
         /* A failed send hands the question back rather than losing what was typed. */
         setDraft(question)
@@ -722,7 +799,31 @@ function ChimmyPanel({
         setBusy(false)
       }
     },
-    [answerMode, busy, homeSignals, pageSurface, publicMode, scope, scopeId, turns, screenshot, setDraft, setTurns],
+    [answerMode, busy, homeSignals, leagues, pageSurface, publicMode, scope, scopeId, turns, screenshot, setDraft, setTurns],
+  )
+
+  useEffect(() => {
+    const pending = pendingResend.current
+    if (!pending || pending.scope !== scopeId || busy) return
+    pendingResend.current = null
+    void send(pending.question)
+  }, [scopeId, busy, send])
+
+  /** Re-ask a refused question in the league the user picked, carrying what came before it. */
+  const askIn = useCallback(
+    (leagueId: string, question: string, refusalId: string) => {
+      const at = turns.findIndex((t) => t.id === refusalId)
+      // Everything before the refused question: the question itself is sent again, not carried.
+      const before = at > 0 ? turns.slice(0, at - 1) : []
+      pendingResend.current = { scope: leagueId, question }
+      if (leagueId === scopeId) {
+        pendingResend.current = null
+        void send(question)
+        return
+      }
+      moveToScope(leagueId, before)
+    },
+    [turns, scopeId, send, moveToScope],
   )
 
   const quickPrompts = scope
@@ -739,7 +840,7 @@ function ChimmyPanel({
           and silently dropped the rest — on a 60-league account, most leagues
           could not be scoped to from here at all.
         */}
-        <LeagueScopePicker leagues={leagues} value={scopeId} onChange={onScope} allowGlobal />
+        <LeagueScopePicker leagues={leagues} value={scopeId} onChange={(id) => moveToScope(id)} allowGlobal />
         {/*
           * ⚠ "ONLY" WAS A PROMISE THE SYSTEM DELIBERATELY DOES NOT KEEP. Scoped
           * to KBFL and asked "who can I pick up in the zombie league?", Chimmy
@@ -781,9 +882,29 @@ function ChimmyPanel({
           </div>
         ) : (
           turns.map((t) => (
-            <div key={t.id} className="af-cm-turn" data-role={t.role}>
-              <span className="af-cm-turn-author">{t.role === 'chimmy' ? 'Chimmy' : 'You'}</span>
+            <div key={t.id} className="af-cm-turn" data-role={t.role} data-carried={t.carried ? 'true' : undefined}>
+              <span className="af-cm-turn-author">
+                {t.role === 'chimmy' ? 'Chimmy' : 'You'}
+                {t.carried ? ' · earlier' : ''}
+              </span>
               <p className="af-cm-turn-text">{t.text}</p>
+
+              {t.role === 'chimmy' && t.choices?.length && t.retryQuestion ? (
+                <div className="af-cm-quick af-cm-choices" role="group" aria-label="Ask in one of these leagues">
+                  {t.choices.map((c) => (
+                    <button
+                      key={c.leagueId}
+                      type="button"
+                      className="af-cm-quickbtn"
+                      disabled={busy}
+                      onClick={() => askIn(c.leagueId, t.retryQuestion as string, t.id)}
+                    >
+                      <span>Ask in {c.leagueName}</span>
+                      <ArrowUpRight size={13} aria-hidden />
+                    </button>
+                  ))}
+                </div>
+              ) : null}
 
               {/* Contract 1: a public answer says so. */}
               {t.role === 'chimmy' && t.isPublic ? (
@@ -1836,14 +1957,22 @@ export function CommsDrawer({
   /*
    * ⚠ 23b's CORE VALUE PROP, AND IT IS REAL. A docked drawer follows the page:
    * open it on a league's roster and Chimmy is already scoped to that league
-   * rather than to "Global". This effect is that behaviour. It runs on open and
-   * on page-league change, and it deliberately does NOT run on every render —
-   * once the user picks a different scope by hand, their choice stands until the
-   * page itself changes.
+   * rather than to "Global". This effect is that behaviour. Once the user picks a
+   * different scope by hand, their choice stands until the page itself changes.
+   *
+   * 🛑 IT USED TO RUN ON EVERY OPEN, WHICH BROKE THE SENTENCE ABOVE. Closing the
+   * bubble and opening it again threw a hand-picked league away and put the
+   * page's scope (often "All leagues") back (user report, 2026-09-16). It now
+   * follows only an actual change of the page's league, compared against the
+   * last one it followed — the drawer stays mounted across navigations, so a
+   * change made while it is closed is still picked up.
    */
+  const followedPageLeague = useRef(pageLeagueId)
   useEffect(() => {
-    if (open) setScopeId(pageLeagueId)
-  }, [open, pageLeagueId])
+    if (followedPageLeague.current === pageLeagueId) return
+    followedPageLeague.current = pageLeagueId
+    setScopeId(pageLeagueId)
+  }, [pageLeagueId])
 
   /*
    * CommsDock keeps this instance mounted and changes `initialTab` when an open

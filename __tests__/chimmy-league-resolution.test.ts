@@ -356,3 +356,45 @@ describe('one real league imported twice is one league', () => {
     expect(result.choices.length).toBe(2)
   })
 })
+
+/*
+ * 🛑 EVERY WAY A USER CAN BELONG TO A LEAGUE (user report, 2026-09-16). The lookup listed only owned
+ * leagues and claimed teams, so a roster-only or redraft member asking about their league by name got
+ * "Which league do you want me to use?" with that league missing from the list.
+ */
+describe('chimmy league resolution: which leagues count as yours', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    prismaLeagueFindManyMock.mockResolvedValue([])
+    getAiMemoryMock.mockResolvedValue(null)
+  })
+
+  it('asks for all four membership routes, each bound to the caller', async () => {
+    const { resolveChimmyLeagueSelection } = await import('@/lib/chimmy/chimmy-league-resolution')
+    await resolveChimmyLeagueSelection({ userId: 'user-9', message: 'is Rashee Rice worth it in Draft Junkies?' })
+    const where = prismaLeagueFindManyMock.mock.calls[0]?.[0]?.where
+    expect(where?.OR).toEqual(
+      expect.arrayContaining([
+        { userId: 'user-9' },
+        { redraftMembers: { some: { userId: 'user-9' } } },
+        { teams: { some: { claimedByUserId: 'user-9' } } },
+        { rosters: { some: { platformUserId: 'user-9' } } },
+      ]),
+    )
+    expect(where?.OR).toHaveLength(4)
+  })
+
+  it('selects a league the user reaches only through a roster, by name', async () => {
+    prismaLeagueFindManyMock.mockResolvedValueOnce([
+      makeLeague({ id: 'dj', name: 'Draft Junkies', teams: [] }),
+      makeLeague({ id: 'other', name: 'Sunday Squad' }),
+    ])
+    const { resolveChimmyLeagueSelection } = await import('@/lib/chimmy/chimmy-league-resolution')
+    const result = await resolveChimmyLeagueSelection({
+      userId: 'user-9',
+      message: 'is Rashee Rice worth trading for in Draft Junkies?',
+    })
+    expect(result.kind).toBe('selected')
+    if (result.kind === 'selected') expect(result.leagueId).toBe('dj')
+  })
+})

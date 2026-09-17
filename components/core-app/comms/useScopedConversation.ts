@@ -33,5 +33,24 @@ export function useScopedConversation<T extends { id: string; role: string; text
     const state = previous[scope] ?? { turns: [], draft: '' }
     return { ...previous, [scope]: { ...state, draft: typeof action === 'function' ? action(state.draft) : action } }
   }), [scope])
-  return { turns: all[scope]?.turns ?? [], draft: all[scope]?.draft ?? '', setTurns, setDraft }
+  /*
+   * Bring turns from this conversation into ANOTHER scope's thread.
+   *
+   * An empty target is seeded with all of `carried`. A target that already holds a conversation is
+   * never overwritten: it only gains the last `appendLast` turns (none by default), so moving to a
+   * league keeps what was said there and, when asked, adds the question and answer that led there.
+   */
+  const carryInto = useCallback((target: string, carried: T[], appendLast = 0) => setAll(previous => {
+    const state = previous[target] ?? { turns: [], draft: '' }
+    if (target === scope || carried.length === 0) return previous
+    if (state.turns.length === 0) {
+      return { ...previous, [target]: { ...state, turns: carried.slice(-80) } }
+    }
+    if (appendLast <= 0) return previous
+    const held = new Set(state.turns.map(t => t.id))
+    const added = carried.slice(-appendLast).filter(t => !held.has(t.id))
+    if (added.length === 0) return previous
+    return { ...previous, [target]: { ...state, turns: [...state.turns, ...added].slice(-80) } }
+  }), [scope])
+  return { turns: all[scope]?.turns ?? [], draft: all[scope]?.draft ?? '', setTurns, setDraft, carryInto }
 }

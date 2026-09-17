@@ -789,9 +789,14 @@ export default async function AfCorePage({
     selectedLeagueRow?.lastSyncedAt ? new Date(selectedLeagueRow.lastSyncedAt) : null,
     new Date(),
   )
+  /*
+   * 🛑 EVERY LEAGUE, NOT THE FIRST TWELVE. This was capped at 12 of a name-sorted list, so from the
+   * cross-league home a league past the twelfth could not be picked in Chimmy's scope selector at
+   * all (user report, 2026-09-16). The picker has its own search box; the selected league stays first.
+   */
   const commsLeagueRows = selectedLeagueRow
-    ? [selectedLeagueRow, ...playedLeagues.filter((league) => league.id !== selectedLeagueRow.id).slice(0, 11)]
-    : playedLeagues.slice(0, 12)
+    ? [selectedLeagueRow, ...playedLeagues.filter((league) => league.id !== selectedLeagueRow.id)]
+    : playedLeagues
 
   /*
    * ⚠ `playedLeagues`, AND THE REAL SYNC TIMESTAMPS.
