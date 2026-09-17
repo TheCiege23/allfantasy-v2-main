@@ -91,7 +91,8 @@ function MatchRow({ row, ahead }: { row: Row; ahead: boolean }) {
   return (
     <li>
       <Link className="af-bd-row" href={m.href}>
-        <LeagueCrest name={m.leagueName} platform={m.platform} size="sm" />
+        {/* Already a loadable URL (the loader ran it through `leagueArtUrl`); null draws the monogram. */}
+        <LeagueCrest imageUrl={m.leagueImageUrl} name={m.leagueName} platform={m.platform} size="sm" />
         <span className="af-bd-league">
           <span className="af-bd-name">{m.leagueName}</span>
           <span className="af-bd-sub">

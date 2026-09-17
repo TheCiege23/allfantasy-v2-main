@@ -3,6 +3,7 @@ import 'server-only'
 import { prisma } from '@/lib/prisma'
 import { getFirstStatedKickoff } from './seasonPhase'
 import { isScored, resolveCurrentWeekFrom } from './currentWeek'
+import { leagueArtUrl, managerArtUrl } from './leagueArt'
 
 /**
  * 24a "Your Week" and 24b "Rivalry Radar" — one read, two views.
@@ -79,12 +80,20 @@ export type WeekOpponent = {
   rosterId: string
   /** Null when no LeagueTeam row names this roster — never a made-up name. */
   name: string | null
+  /**
+   * The team's avatar as a loadable URL, via `managerArtUrl` — a bare Sleeper
+   * avatar id is expanded to the CDN, anything unresolvable is null. Null means
+   * "render initials", not "still loading".
+   */
+  avatarUrl: string | null
 }
 
 export type WeekMatchup = {
   leagueId: string
   leagueName: string
   platform: string
+  /** League artwork via `leagueArtUrl`. Null renders the monogram crest. */
+  leagueImageUrl: string | null
   season: number
   week: number
   opponent: WeekOpponent
@@ -110,8 +119,8 @@ export type WeekMatchup = {
 
 /** One matchup in the focused league that the user is NOT playing in. */
 export type LeagueSideline = {
-  a: { rosterId: string; name: string | null; projected: number | null }
-  b: { rosterId: string; name: string | null; projected: number | null }
+  a: { rosterId: string; name: string | null; avatarUrl: string | null; projected: number | null }
+  b: { rosterId: string; name: string | null; avatarUrl: string | null; projected: number | null }
   /** Probability side A wins. Null when either side is unprojectable. */
   aWinProbability: number | null
 }
@@ -160,6 +169,8 @@ export type LeagueWeekBoard = {
   yourRosterId: string | null
   /** The team name the platform published, when it published one. */
   yourTeamName: string | null
+  /** Your team's avatar, resolved the same way as `WeekOpponent.avatarUrl`. */
+  yourAvatarUrl: string | null
 }
 
 export type WeekBoard = {
@@ -286,6 +297,9 @@ type LeagueInput = {
   platformLeagueId?: string | null
   /** `League.leagueType`. Carried through only to flag elimination formats. */
   leagueType?: string | null
+  /** `League.logoUrl` / `League.avatarUrl`. Carried through only for the crest. */
+  logoUrl?: string | null
+  avatarUrl?: string | null
 }
 
 export type MatchupRow = {
@@ -303,12 +317,22 @@ type History = {
   /** Every row, all seasons, for leagues the user is in. */
   rows: MatchupRow[]
   /** platformLeagueId → league metadata. */
-  leagueByPlatformId: Map<string, { id: string; name: string; platform: string; elimination: boolean }>
+  leagueByPlatformId: Map<string, LeagueMeta>
   /** "platformLeagueId:rosterId" → the user owns this roster. */
   myRosters: Map<string, string>
   /** "platformLeagueId:rosterId" → team name, when one is on file. */
   rosterNames: Map<string, string>
+  /** "platformLeagueId:rosterId" → loadable avatar URL, when one resolves. */
+  rosterAvatars: Map<string, string>
   latest: { season: number; week: number } | null
+}
+
+type LeagueMeta = {
+  id: string
+  name: string
+  platform: string
+  elimination: boolean
+  imageUrl: string | null
 }
 
 async function readHistory(userId: string, leagues: LeagueInput[]): Promise<History | null> {
@@ -342,7 +366,13 @@ async function readHistory(userId: string, leagues: LeagueInput[]): Promise<Hist
         externalId: true,
         teamName: true,
         ownerName: true,
-        league: { select: { platformLeagueId: true } },
+        /*
+         * The avatar column holds a bare id on Sleeper and a URL elsewhere, so
+         * it is only ever read through `managerArtUrl` — which needs the
+         * platform, hence `league.platform` beside it.
+         */
+        avatarUrl: true,
+        league: { select: { platformLeagueId: true, platform: true } },
       },
     }),
     prisma.leagueTeam.findMany({
@@ -350,16 +380,17 @@ async function readHistory(userId: string, leagues: LeagueInput[]): Promise<Hist
         league: { platformLeagueId: { in: platformIds } },
         claimedByUserId: userId,
       },
-      select: { externalId: true, league: { select: { platformLeagueId: true } } },
+      select: {
+        externalId: true,
+        avatarUrl: true,
+        league: { select: { platformLeagueId: true, platform: true } },
+      },
     }),
   ])
 
   if (rows.length === 0) return null
 
-  const leagueByPlatformId = new Map<
-    string,
-    { id: string; name: string; platform: string; elimination: boolean }
-  >()
+  const leagueByPlatformId = new Map<string, LeagueMeta>()
   for (const l of leagues) {
     if (!l.platformLeagueId) continue
     leagueByPlatformId.set(l.platformLeagueId, {
@@ -367,10 +398,16 @@ async function readHistory(userId: string, leagues: LeagueInput[]): Promise<Hist
       name: l.name?.trim() || 'League',
       platform: String(l.platform ?? 'manual').toLowerCase(),
       elimination: isEliminationFormat(l.leagueType),
+      imageUrl: leagueArtUrl({ logoUrl: l.logoUrl, avatarUrl: l.avatarUrl, platform: l.platform }),
     })
   }
 
+  /* The team row's own league platform first; the caller's copy if the row lacks one. */
+  const platformOf = (t: { league?: { platform?: string | null } | null }, pid: string) =>
+    t.league?.platform ?? leagueByPlatformId.get(pid)?.platform ?? null
+
   const rosterNames = new Map<string, string>()
+  const rosterAvatars = new Map<string, string>()
   for (const t of teams) {
     const pid = t.league?.platformLeagueId
     if (!pid || !t.externalId) continue
@@ -378,6 +415,8 @@ async function readHistory(userId: string, leagues: LeagueInput[]): Promise<Hist
     // Prefer the team, fall back to the person, never to a placeholder.
     const label = t.teamName?.trim() || t.ownerName?.trim()
     if (label) rosterNames.set(`${pid}:${t.externalId}`, label)
+    const avatar = managerArtUrl({ avatarUrl: t.avatarUrl, platform: platformOf(t, pid) })
+    if (avatar) rosterAvatars.set(`${pid}:${t.externalId}`, avatar)
   }
 
   const myRosters = new Map<string, string>()
@@ -385,6 +424,13 @@ async function readHistory(userId: string, leagues: LeagueInput[]): Promise<Hist
     const pid = t.league?.platformLeagueId
     if (!pid || !t.externalId) continue
     myRosters.set(`${pid}:${t.externalId}`, t.externalId)
+    /*
+     * The row the user actually claimed wins for their own avatar. Several
+     * League copies can share one platformLeagueId, and the claimed one is the
+     * copy whose team is unambiguously theirs.
+     */
+    const avatar = managerArtUrl({ avatarUrl: t.avatarUrl, platform: platformOf(t, pid) })
+    if (avatar) rosterAvatars.set(`${pid}:${t.externalId}`, avatar)
   }
 
   /*
@@ -419,7 +465,7 @@ async function readHistory(userId: string, leagues: LeagueInput[]): Promise<Hist
     ? { season: resolved.season, week: resolved.week }
     : null
 
-  return { rows, leagueByPlatformId, myRosters, rosterNames, latest }
+  return { rows, leagueByPlatformId, myRosters, rosterNames, rosterAvatars, latest }
 }
 
 /** Per-roster scoring history, keyed "platformLeagueId:rosterId". */
@@ -516,7 +562,7 @@ export async function getWeekBoard(
 
   if (!history?.latest) return empty
 
-  const { latest, leagueByPlatformId, myRosters, rosterNames } = history
+  const { latest, leagueByPlatformId, myRosters, rosterNames, rosterAvatars } = history
   const profiles = buildProfiles(history.rows)
   const sampleSize = [...profiles.values()].reduce((acc, p) => acc + p.n, 0)
 
@@ -546,6 +592,7 @@ export async function getWeekBoard(
     const opponent: WeekOpponent = {
       rosterId: them.rosterId,
       name: rosterNames.get(oppKey) ?? null,
+      avatarUrl: rosterAvatars.get(oppKey) ?? null,
     }
 
     const mineProfile = profiles.get(`${pair.leagueId}:${you.rosterId}`)
@@ -555,6 +602,7 @@ export async function getWeekBoard(
       leagueId: meta.id,
       leagueName: meta.name,
       platform: meta.platform,
+      leagueImageUrl: meta.imageUrl,
       season: pair.season,
       week: pair.week,
       opponent,
@@ -620,11 +668,13 @@ export async function getWeekBoard(
             a: {
               rosterId: p.a.rosterId,
               name: rosterNames.get(`${pid}:${p.a.rosterId}`) ?? null,
+              avatarUrl: rosterAvatars.get(`${pid}:${p.a.rosterId}`) ?? null,
               projected: projectedOf(p.a.rosterId),
             },
             b: {
               rosterId: p.b.rosterId,
               name: rosterNames.get(`${pid}:${p.b.rosterId}`) ?? null,
+              avatarUrl: rosterAvatars.get(`${pid}:${p.b.rosterId}`) ?? null,
               projected: projectedOf(p.b.rosterId),
             },
             aWinProbability,
@@ -727,6 +777,8 @@ export async function getWeekBoard(
         yourRosterId,
         yourTeamName:
           yourRosterId != null ? (rosterNames.get(`${pid}:${yourRosterId}`) ?? null) : null,
+        yourAvatarUrl:
+          yourRosterId != null ? (rosterAvatars.get(`${pid}:${yourRosterId}`) ?? null) : null,
       }
     }
   }
@@ -774,7 +826,7 @@ export async function getRivalryRadar(userId: string, leagues: LeagueInput[]): P
 
   if (!history?.latest) return empty
 
-  const { latest, leagueByPlatformId, myRosters, rosterNames } = history
+  const { latest, leagueByPlatformId, myRosters, rosterNames, rosterAvatars } = history
   const profiles = buildProfiles(history.rows)
   const pairs = pairRows(history.rows)
 
@@ -813,7 +865,11 @@ export async function getRivalryRadar(userId: string, leagues: LeagueInput[]): P
         leagueId: meta.id,
         leagueName: meta.name,
         platform: meta.platform,
-        opponent: { rosterId: them.rosterId, name: rosterNames.get(key) ?? null },
+        opponent: {
+          rosterId: them.rosterId,
+          name: rosterNames.get(key) ?? null,
+          avatarUrl: rosterAvatars.get(key) ?? null,
+        },
         wins: 0,
         losses: 0,
         marginSum: 0,

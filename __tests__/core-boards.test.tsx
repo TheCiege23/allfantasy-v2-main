@@ -209,9 +209,10 @@ function weekMatchup(over: Partial<WeekMatchup> = {}): WeekMatchup {
     leagueId: 'l1',
     leagueName: 'Turf Wars',
     platform: 'espn',
+    leagueImageUrl: null,
     season: 2026,
     week: 3,
-    opponent: { rosterId: '2', name: 'Gridiron Ghosts' },
+    opponent: { rosterId: '2', name: 'Gridiron Ghosts', avatarUrl: null },
     elimination: false,
     projection: { you: 120, them: 82, margin: 38.2, winProbability: 0.91 },
     yourSampleWeeks: 5,
@@ -315,6 +316,46 @@ describe('WeekBoard', () => {
       />,
     )
     expect(container.textContent ?? '').toContain('412 roster-weeks')
+  })
+
+  /*
+   * The crest used to be drawn from the name alone, so every row showed a
+   * letter even for a league with real artwork. The loader resolves the art
+   * (`leagueImageUrl`); the board must hand it to the crest.
+   */
+  it('draws the league image in the crest when the loader resolved one, and the monogram when not', () => {
+    const withArt = weekMatchup({
+      leagueId: 'art',
+      leagueName: 'Sleeper Art League',
+      platform: 'sleeper',
+      leagueImageUrl: 'https://sleepercdn.com/avatars/thumbs/leagueart',
+    })
+    const noArt = weekMatchup({
+      leagueId: 'plain',
+      leagueName: 'Plain Wars',
+      projection: { you: 110, them: 100, margin: 10, winProbability: 0.7 },
+    })
+    const { container } = render(
+      <WeekBoard
+        board={weekData({ leaning: [withArt, noArt] })}
+        outlook={null}
+        rivalriesHref="/core/week?view=rivalries"
+        allHref="/core/week?all=1"
+        totalLeagues={9}
+      />,
+    )
+    const rows = [...container.querySelectorAll('a.af-bd-row')]
+    const artRow = rows.find((r) => r.textContent?.includes('Sleeper Art League'))!
+    const plainRow = rows.find((r) => r.textContent?.includes('Plain Wars'))!
+
+    const img = artRow.querySelector('img.af-bd-crest')
+    expect(img).not.toBeNull()
+    expect(img!.getAttribute('src')).toBe('https://sleepercdn.com/avatars/thumbs/leagueart')
+    expect(img!.getAttribute('alt')).toBe('')
+    expect(artRow.querySelector('.af-bd-crest--none')).toBeNull()
+
+    expect(plainRow.querySelector('img')).toBeNull()
+    expect(plainRow.querySelector('.af-bd-crest--none')?.textContent).toBe('PW')
   })
 })
 

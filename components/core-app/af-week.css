@@ -193,6 +193,18 @@
   text-overflow: ellipsis;
 }
 
+/* The opponent's avatar beside their name, when the platform published one.
+   The line is baseline-aligned, so the image centres itself instead. */
+.af-wk-opp-img {
+  flex: none;
+  align-self: center;
+  display: block;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
 .af-wk-flip-score {
   display: flex;
   align-items: baseline;
