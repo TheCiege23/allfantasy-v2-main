@@ -357,3 +357,52 @@ describe('getPlayerTradeVisual', () => {
     expect(state.data.values.scoringAdjustment).toBeNull()
   })
 })
+
+/*
+ * 🛑 A NO-TRADE LEAGUE GETS NO PACKAGE WHETHER OR NOT A BID COULD BE WORKED OUT. The packages were
+ * gated on the bid, so a guillotine league whose bid came back empty offered a trade the manager can
+ * never send — and Chimmy's trade-target verdict would have said "yes, trade for him".
+ */
+describe('a league that does not allow trades', () => {
+  it('🛑 gets no package even when no bid can be worked out', async () => {
+    mockLeagueFindUnique.mockResolvedValue({ ...LEAGUE, leagueType: 'guillotine' })
+    // A negative remaining budget is unusable, so the allocator returns nothing and there is no bid.
+    mockRosterFindMany.mockResolvedValue([{ ...MY_ROSTER, faabRemaining: -5 }, THEIR_ROSTER])
+    const state = await getPlayerTradeVisual('L-gang', KINCAID, 'me')
+    if (!state.available) throw new Error('expected available')
+    expect(state.data.bidInstead).toBeNull()
+    expect(state.data.tradesAllowed).toBe(false)
+    expect(state.data.packages).toEqual([])
+    expect(state.data.recommended).toBeNull()
+    expect(state.data.grade.available).toBe(false)
+  })
+
+  it('[control] an ordinary league says trades are allowed', async () => {
+    const state = await getPlayerTradeVisual('L-gang', KINCAID, 'me')
+    if (!state.available) throw new Error('expected available')
+    expect(state.data.tradesAllowed).toBe(true)
+    expect(state.data.recommended).not.toBeNull()
+  })
+})
+
+describe('the target carries what a dynasty call needs', () => {
+  it('his 30-day trend comes from the feed and his age from the player row', async () => {
+    const kincaid = (VALUES.bySleeperId as Record<string, Record<string, unknown>>)[KINCAID]
+    mockGetMarketValues.mockResolvedValue({
+      ...VALUES,
+      bySleeperId: { ...VALUES.bySleeperId, [KINCAID]: { ...kincaid, trend30Day: 212 } },
+    })
+    mockSportsPlayerFindMany.mockResolvedValue(PLAYERS.map((p) => ({ ...p, age: p.sleeperId === KINCAID ? 25 : null })))
+    const state = await getPlayerTradeVisual('L-gang', KINCAID, 'me')
+    if (!state.available) throw new Error('expected available')
+    expect(state.data.target.trend30Day).toBe(212)
+    expect(state.data.target.age).toBe(25)
+  })
+
+  it('without them, both are null — never zero', async () => {
+    const state = await getPlayerTradeVisual('L-gang', KINCAID, 'me')
+    if (!state.available) throw new Error('expected available')
+    expect(state.data.target.trend30Day).toBeNull()
+    expect(state.data.target.age).toBeNull()
+  })
+})

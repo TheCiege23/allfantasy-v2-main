@@ -23,6 +23,7 @@ import { findPlayerByName, getValueTier } from '@/lib/fantasycalc'
 import { createLeagueOsLoaders } from '@/lib/decision-os/league-os'
 import { deriveValueFormat, deriveLeagueSizeAndPpr } from '@/lib/decision-os/grounding/leagueValueFormat'
 import { getFantasyCalcValuesDbFirst } from '@/lib/fantasycalc-db'
+import { looksLikeTradeTargetQuestion, namesBothSidesOfTrade } from '@/lib/chimmy/tradeTargetQuestion'
 import { getEnrichedNewsFeed } from '@/lib/fantasy-news-aggregator/FantasyNewsAggregatorService'
 import { getCachedGameWeather } from '@/lib/weather/weatherService'
 import { resolveLanguage } from '@/lib/i18n/constants'
@@ -704,6 +705,16 @@ export async function buildFantasyCalcValueAnswer(
   leagueRequested: boolean = leagueId != null,
 ): Promise<string | null> {
   if (!/\b(trade value|fantasycalc|value|worth)\b/i.test(message)) return null
+  /*
+   * 🛑 A DECISION IS NOT A PRICE LOOKUP. "Is it worth me trading for Rashee Rice in this league?"
+   * matched the word "worth" and was answered with Rice's chart value — free, confident, and not
+   * what was asked (user report, 2026-09-16). So was "Should I trade Bijan Robinson for Rashee Rice,
+   * is it worth it?", which never reached the trade scenario that compares the two sides.
+   *
+   * Both step aside here: the first goes to the trade-target verdict, the second to the described-
+   * trade scenario. A plain price question ("What is Ja'Marr Chase worth?") names neither shape.
+   */
+  if (looksLikeTradeTargetQuestion(message) || namesBothSidesOfTrade(message)) return null
   const playerName = extractLikelyPlayerName(message)
   if (!playerName) return null
 
