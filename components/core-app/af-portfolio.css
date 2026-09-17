@@ -394,7 +394,14 @@ html[data-mode='light'] .af-core {
   --pf-heat-ink-3: #ffffff;
 }
 
-.af-pfb { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+/*
+ * ⚠ A QUERY CONTAINER, BECAUSE THE VIEWPORT LIES INSIDE THE SHELL. /core's two rails take ~530px,
+ * so a viewport breakpoint fires for the wrong width: measured 2026-09-17, a 1100px window gave
+ * this board 532px and still laid four KPI tiles across it; 1024px gave 688px (the rail collapses
+ * there). Layout (columns, row shapes) follows the BOARD's width below; only touch sizing stays on
+ * the viewport, because a finger's size does not depend on the rails.
+ */
+.af-pfb { display: flex; flex-direction: column; gap: 16px; min-width: 0; container: af-pfb / inline-size; }
 .af-pfb-muted { color: var(--faint); font-size: 11px; }
 .af-pfb-note { margin: 6px 0 0; color: var(--faint); font-size: 11.5px; line-height: 1.45; }
 .af-pfb-copy { margin: 4px 0 12px; max-width: 78ch; color: var(--muted); font-size: 12px; line-height: 1.5; }
@@ -818,16 +825,37 @@ button.af-pfc-cell:not(:disabled):hover { filter: brightness(1.12); }
 .af-pfc-cell[aria-pressed='true'] { box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--accent); }
 .af-pfc-cell[data-unknown='true'] { background: transparent; border: 1px dashed var(--line2); }
 
-/* Tablet: the grids narrow. */
-@media (max-width: 900px) {
+/*
+ * Layout by the board's own width — see the container note on `.af-pfb`.
+ * ⚠ Each block is closed before the next opens (CLAUDE.md, the af-matchup.css incident).
+ */
+@container af-pfb (max-width: 640px) {
   .af-pfb-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .af-pfb-dist-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
+@container af-pfb (max-width: 560px) {
+  .af-pfb-card { padding: 14px 12px 16px; }
+  .af-pfb-action { grid-template-columns: minmax(0, 1fr); gap: 6px; }
+  .af-pfb-action-cta { justify-self: start; }
+  .af-pfb-exp-row { grid-template-columns: minmax(0, 1fr) auto; }
+  .af-pfb-exp-meter { grid-column: 1 / -1; order: 3; }
+  .af-pfb-exp-value { text-align: left; }
+  .af-pfb-change { grid-template-columns: minmax(0, 1fr) 64px 58px; }
+  .af-pfb-change .af-pfc-spark,
+  .af-pfb-change .af-pfc-spark-empty { display: none; }
+  .af-pfc-heat .af-pfc-heat-corner { width: 132px; }
+}
+
+@container af-pfb (max-width: 420px) {
+  .af-pfb-dist-grid { grid-template-columns: minmax(0, 1fr); }
+  .af-pfb-kpi-value { font-size: 22px; }
+}
+
 /*
- * Phone. ⚠ Its own block, closed before the next rule — never inserted inside another query
- * (CLAUDE.md, the af-matchup.css incident). The filter chips become ONE sideways-scrolling row so
- * they do not push the board below the fold, and every tappable thing reaches 44px.
+ * Phone touch sizing — by the VIEWPORT, on purpose: a finger is the same size whatever the rails
+ * do. The filter chips become ONE sideways-scrolling row so they do not push the board below the
+ * fold, and every tappable thing reaches 44px.
  */
 @media (max-width: 720px) {
   .af-pfb-chiprow {
@@ -839,23 +867,11 @@ button.af-pfc-cell:not(:disabled):hover { filter: brightness(1.12); }
   }
   .af-pfb-group { flex: none; }
   .af-pfb-chip { flex: none; min-height: 44px; }
-  .af-pfb-card { padding: 14px 12px 16px; }
-  .af-pfb-action { grid-template-columns: minmax(0, 1fr); gap: 6px; }
-  .af-pfb-action-cta { justify-self: start; min-height: 44px; display: inline-flex; align-items: center; }
-  .af-pfb-exp-row { grid-template-columns: minmax(0, 1fr) auto; min-height: 44px; }
-  .af-pfb-exp-meter { grid-column: 1 / -1; order: 3; }
-  .af-pfb-exp-value { text-align: left; }
-  .af-pfb-change { grid-template-columns: minmax(0, 1fr) 64px 58px; min-height: 44px; }
-  .af-pfb-change .af-pfc-spark,
-  .af-pfb-change .af-pfc-spark-empty { display: none; }
+  .af-pfb-action-cta { min-height: 44px; display: inline-flex; align-items: center; }
+  .af-pfb-exp-row { min-height: 44px; }
+  .af-pfb-change { min-height: 44px; }
   .af-pfc-bar { min-height: 44px; }
   .af-pfb-clear { min-height: 44px; display: inline-flex; align-items: center; }
   .af-pfb-league-chip { min-height: 36px; }
   .af-pfc-cell { height: 44px; }
-  .af-pfc-heat .af-pfc-heat-corner { width: 132px; }
-}
-
-@media (max-width: 560px) {
-  .af-pfb-dist-grid { grid-template-columns: minmax(0, 1fr); }
-  .af-pfb-kpi-value { font-size: 22px; }
 }
