@@ -596,6 +596,13 @@ export async function GET(req: NextRequest) {
     team: l.nflTeam?.trim() || null,
     ownerName: l.teamName?.trim() || l.ownerName?.trim() || 'Manager',
   }))
+  /*
+   * ⚠ "COULD NOT READ" IS NOT "NOBODY LISTED ANYONE", and the tab can only tell them apart if the
+   * envelope does. With the note alone the empty state read "No players marked on the trade block in
+   * AllFantasy" above "The trade block could not be read right now" — the headline claiming knowledge
+   * the sentence under it withdrew.
+   */
+  const tradeBlockReadable = blockRead != null
   const tradeBlockNote = blockRead ? blockRead.support.note : 'The trade block could not be read right now.'
 
   // Two independent sources on an imported league:
@@ -763,6 +770,7 @@ export async function GET(req: NextRequest) {
     draft,
     tradeBlock,
     tradeBlockNote,
+    tradeBlockReadable,
     activeTrades,
     historyTrades: [
       ...mapProviderTrades(providerCompleted, completedEvaluations),

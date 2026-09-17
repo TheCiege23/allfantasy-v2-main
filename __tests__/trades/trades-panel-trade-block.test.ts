@@ -103,6 +103,7 @@ describe('trades-panel trade block, Sleeper league', () => {
       { id: '7:10229', playerId: '10229', name: 'Rashee Rice', position: 'FLEX', team: null, ownerName: 'Jordan' },
     ])
     expect(body.tradeBlockNote).toBe(tradeBlockSupport('sleeper').note)
+    expect(body.tradeBlockReadable).toBe(true)
   })
 
   it('🛑 never reads the table directly — a traded player would stay "on the block"', async () => {
@@ -115,6 +116,8 @@ describe('trades-panel trade block, Sleeper league', () => {
     const { body } = await panel(SLEEPER)
     expect(body.tradeBlock).toEqual([])
     expect(body.tradeBlockNote).toBe('The trade block could not be read right now.')
+    // 🛑 Its own state: an empty list plus a note reads as "nobody listed anyone".
+    expect(body.tradeBlockReadable).toBe(false)
   })
 
   it('caps the list at 48', async () => {
@@ -144,5 +147,10 @@ describe('trades-panel trade block, other leagues', () => {
     const { body } = await panel({ platform: 'native' })
     expect(body.tradeBlock).toEqual([])
     expect(body.tradeBlockNote).toBeNull()
+  })
+
+  it('a league whose block was never read is not reported unreadable', async () => {
+    const { body } = await panel({ platform: 'espn' })
+    expect(body.tradeBlockReadable).toBeUndefined()
   })
 })

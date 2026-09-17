@@ -167,11 +167,21 @@ export type TradeBlockListing = {
  * Pure, so the player card can apply it to rosters it has already loaded.
  */
 export function currentListings(entries: TradeBlockEntryRow[], rosters: RosterRow[], teams: TeamRow[]): TradeBlockListing[] {
-  const byRosterId = new Map<number, { roster: RosterRow; team: TeamRow | null }>()
+  /*
+   * ⚠ TWO ROWS CAN CARRY ONE SLEEPER ROSTER ID, so arrival order must not decide which one answers.
+   * Production holds 33 ghost roster rows across 29 leagues (staging 14) — an owner change leaves the
+   * old row behind with stale or empty `playerData`. If a ghost answered for its roster id, every
+   * listing from that team would test against the wrong roster and silently disappear. The row holding
+   * the most players wins; a ghost holds fewer, or none.
+   */
+  const byRosterId = new Map<number, { roster: RosterRow; team: TeamRow | null; held: number }>()
   for (const roster of rosters) {
     const team = teamForRoster(roster, teams)
     const id = sleeperRosterIdOf(roster, team)
-    if (id != null && !byRosterId.has(id)) byRosterId.set(id, { roster, team })
+    if (id == null) continue
+    const held = playerIdsOf(roster.playerData).size
+    const seen = byRosterId.get(id)
+    if (!seen || held > seen.held) byRosterId.set(id, { roster, team, held })
   }
   const out: TradeBlockListing[] = []
   for (const e of entries) {
@@ -240,16 +250,27 @@ export async function readTradeBlock(leagueId: string): Promise<TradeBlockRead |
     if (!loaded) return null
     const support = tradeBlockSupport(loaded.league.platform)
     if (!support.supported || !loaded.league.platformLeagueId) return { support, listings: [] }
-    const entries = await prisma.tradeBlockEntry.findMany({
-      where: { sleeperLeagueId: loaded.league.platformLeagueId, isActive: true },
-      orderBy: { updatedAt: 'desc' },
-      take: MAX_LISTINGS,
-      select: TRADE_BLOCK_ENTRY_SELECT,
-    })
+    const entries = await activeTradeBlockEntries(loaded.league.platformLeagueId)
     return { support, listings: currentListings(entries, loaded.rosters, loaded.teams) }
   } catch {
     return null
   }
+}
+
+/**
+ * This league's active listing ROWS, unfiltered, newest first.
+ *
+ * For a caller that has already loaded the league's rosters and teams: pass these to
+ * `currentListings` with those rows rather than making `readTradeBlock` read them again. Throws if
+ * the read fails — an empty list must not stand in for "we could not look".
+ */
+export async function activeTradeBlockEntries(sleeperLeagueId: string): Promise<TradeBlockEntryRow[]> {
+  return prisma.tradeBlockEntry.findMany({
+    where: { sleeperLeagueId, isActive: true },
+    orderBy: { updatedAt: 'desc' },
+    take: MAX_LISTINGS,
+    select: TRADE_BLOCK_ENTRY_SELECT,
+  })
 }
 
 /**

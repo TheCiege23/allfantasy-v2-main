@@ -16,7 +16,7 @@ import { attachPlayerMediaBatch } from '@/lib/player-media'
 import { getLeagueChatMessages } from '@/lib/league-chat/LeagueChatMessageService'
 import { getFormatIntroMetadata } from '@/lib/league/format-engine'
 import { resolveLeagueIntroFormatKey } from '@/lib/league/resolveLeagueIntroFormatKey'
-import { readTradeBlock } from '@/lib/trade-block/importedTradeBlock'
+import { activeTradeBlockEntries, currentListings } from '@/lib/trade-block/importedTradeBlock'
 import type {
   LeagueActivityItem,
   LeagueBracketMatchup,
@@ -88,6 +88,8 @@ type LeagueContext = {
   leagueTeams: Array<{
     id: string
     externalId: string
+    platformUserId: string | null
+    claimedByUserId: string | null
     ownerName: string
     teamName: string
     avatarUrl: string | null
@@ -372,6 +374,9 @@ async function loadLeagueContext(leagueId: string, userId: string): Promise<Leag
       select: {
         id: true,
         externalId: true,
+        /* Both are read by the shared roster→team match `currentListings` applies. */
+        platformUserId: true,
+        claimedByUserId: true,
         ownerName: true,
         teamName: true,
         avatarUrl: true,
@@ -1471,17 +1476,29 @@ function jsonAssetLabels(value: Prisma.JsonValue | null | undefined): string[] {
 
 async function buildTradesData(context: LeagueContext): Promise<LeagueTradesData> {
   /*
-   * The same reader the Trades tab, the player card and Chimmy use (2026-09-17): only listings whose
-   * team still holds the player. The direct read of the active rows kept a traded player listed.
-   * `context` exists only once `resolveLeagueAccess` has passed, which `readTradeBlock` requires.
+   * The same staleness rule the Trades tab, the player card and Chimmy apply (2026-09-17): a listing
+   * counts only while the roster that listed the player still holds him. The direct read of the active
+   * rows this replaced kept a traded player listed.
+   *
+   * `currentListings` is pure and takes the rosters and teams `loadLeagueContext` has already loaded,
+   * so this adds ONE query rather than re-reading the league, every roster and every team.
+   *
+   * ⚠ A FAILED READ IS AN EMPTY LIST HERE, which is the conflation the reader itself refuses. This
+   * page's `LeagueTradesData` has nowhere to say "could not read" — the Trades tab carries
+   * `tradeBlockReadable` for exactly that — so the old behaviour stands rather than inventing a field
+   * no renderer reads. Nothing claims the block is empty; the section simply shows no rows.
    */
-  const tradeBlockRows = ((await readTradeBlock(context.league.id))?.listings ?? []).slice(0, 10).map((l) => ({
-    id: `${l.rosterId}:${l.sleeperId}`,
-    playerId: l.sleeperId,
-    playerName: l.playerName,
-    position: l.position,
-    team: l.nflTeam,
-  }))
+  const sleeperLeagueId = context.league.platformLeagueId
+  const blockEntries = sleeperLeagueId ? await activeTradeBlockEntries(sleeperLeagueId).catch(() => []) : []
+  const tradeBlockRows = currentListings(blockEntries, context.allRosters, context.leagueTeams)
+    .slice(0, 10)
+    .map((l) => ({
+      id: `${l.rosterId}:${l.sleeperId}`,
+      playerId: l.sleeperId,
+      playerName: l.playerName,
+      position: l.position,
+      team: l.nflTeam,
+    }))
 
   const histories = await prisma.leagueTradeHistory.findMany({
     where: { sleeperLeagueId: context.league.platformLeagueId },

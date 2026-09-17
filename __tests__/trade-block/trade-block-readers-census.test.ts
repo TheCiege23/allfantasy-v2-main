@@ -44,11 +44,13 @@ describe('trade_block_entries readers', () => {
     expect(readers()).toEqual(Object.keys(ALLOWED).sort())
   })
 
-  it('the Trades panel and the old league home go through readTradeBlock', () => {
+  it('the Trades panel and the old league home apply the staleness rule', () => {
     const route = fs.readFileSync(path.join(process.cwd(), 'app/api/league/trades-panel/route.ts'), 'utf8')
     const home = fs.readFileSync(path.join(process.cwd(), 'lib/data/league-home.ts'), 'utf8')
     expect(route).toMatch(/await readTradeBlock\(league\.id\)/)
-    expect(home).toMatch(/await readTradeBlock\(context\.league\.id\)/)
+    // The league home already holds the rosters and teams, so it filters the rows itself.
+    expect(home).toMatch(/await activeTradeBlockEntries\(sleeperLeagueId\)/)
+    expect(home).toMatch(/currentListings\(blockEntries, context\.allRosters, context\.leagueTeams\)/)
   })
 
   it('the scan sees a known reader (control)', () => {
