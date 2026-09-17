@@ -221,6 +221,21 @@ describe('currentListings', () => {
     expect(out.map((l) => l.teamName)).toEqual(['Gridiron Vultures'])
   })
 
+  /*
+   * 🛑 GHOST ROSTER ROWS SHARE A ROSTER ID — 33 in production across 29 leagues, left behind by owner
+   * changes. If the empty one answered for the id, every listing from that team would vanish.
+   */
+  it('keeps the listing when a ghost roster row shares the roster id and sorts first', () => {
+    const ghost = { platformUserId: 'ghost', playerData: { players: [], source_team_id: '7' } }
+    const out = currentListings([entry()], [ghost, THEIR_ROSTER], [MY_TEAM, THEIR_TEAM])
+    expect(out.map((l) => l.playerName)).toEqual(['Rashee Rice'])
+  })
+
+  it('and when the ghost sorts last', () => {
+    const ghost = { platformUserId: 'ghost', playerData: { players: [], source_team_id: '7' } }
+    expect(currentListings([entry()], [THEIR_ROSTER, ghost], [MY_TEAM, THEIR_TEAM])).toHaveLength(1)
+  })
+
   it('drops a listing whose roster id matches no roster', () => {
     expect(currentListings([entry({ rosterId: 11 })], [MY_ROSTER, THEIR_ROSTER], [MY_TEAM, THEIR_TEAM])).toEqual([])
   })

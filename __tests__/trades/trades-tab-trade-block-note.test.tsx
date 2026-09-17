@@ -50,6 +50,16 @@ describe('TradesTab — trade block note', () => {
     expect(screen.queryByText('No players on the trade block yet')).not.toBeInTheDocument()
   })
 
+  /* 🛑 A failed read must not headline "nobody marked anyone" — that claims what the server withdrew. */
+  it('a failed read says so, instead of claiming nobody listed anyone', async () => {
+    panel({ tradeBlock: [], tradeBlockNote: 'The trade block could not be read right now.', tradeBlockReadable: false })
+    render(<TradesTab league={league} teams={[]} />)
+    await waitFor(() => expect(screen.getByText('We could not read the trade block')).toBeInTheDocument())
+    expect(screen.getByTestId('trade-block-note')).toHaveTextContent('could not be read right now')
+    expect(screen.queryByText('No players marked on the trade block in AllFantasy')).not.toBeInTheDocument()
+    expect(screen.queryByText('No players on the trade block yet')).not.toBeInTheDocument()
+  })
+
   it('a native league (no note) keeps the plain empty state', async () => {
     panel({ tradeBlock: [], tradeBlockNote: null, source: 'native' })
     render(<TradesTab league={league} teams={[]} />)
