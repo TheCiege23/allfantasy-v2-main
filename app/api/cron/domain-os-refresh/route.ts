@@ -29,6 +29,11 @@ import {
   emptyForecastSweepCounts,
   type ForecastSweepCounts,
 } from '@/lib/season-forecast/forecastSweep'
+import {
+  runPortfolioDailyTotals,
+  emptyPortfolioTotalsCounts,
+  type PortfolioTotalsCounts,
+} from '@/lib/core-app/portfolioInsightsSummary'
 
 /**
  * GET /api/cron/domain-os-refresh
@@ -209,6 +214,12 @@ type RefreshCounts = {
    * the first of the Eastern day; `written: 0 && alreadyWritten: 0 && failed: 0` means it is disabled.
    */
   snapshot: RankingsSnapshotCounts
+  /**
+   * The daily portfolio value record (`sportsDataCache` key `core-portfolio:totals:v1:<date>:u=<id>`),
+   * a sixth writer with its own counts. `deferred > 0` is normal early in the Eastern day — users
+   * are built ten per fire — and `written: 0 && alreadyWritten === considered` is a finished day.
+   */
+  portfolio: PortfolioTotalsCounts
 }
 
 export async function GET(req: NextRequest) {
@@ -241,13 +252,22 @@ export async function GET(req: NextRequest) {
        * `rankings_snapshots`. The per-writer numbers stay separate in `metadata.rankings` below,
        * because a total nobody can attribute is exactly how three empty tables went unnoticed.
        */
-      rowsWritten: r.written + r.rankings.written + r.forecast.written + r.odds.written + r.snapshot.written,
+      rowsWritten:
+        r.written + r.rankings.written + r.forecast.written + r.odds.written + r.snapshot.written + r.portfolio.written,
       rowsSkipped:
         r.skippedForTime + r.unavailable +
         r.rankings.skippedForTime + r.rankings.skipped +
         r.forecast.skippedForTime + r.forecast.pastSeasonEnd +
-        r.odds.skippedForTime,
-      errors: [...r.errors, ...r.rankings.errors, ...r.forecast.errors, ...r.odds.errors, ...r.snapshot.errors],
+        r.odds.skippedForTime +
+        r.portfolio.deferred,
+      errors: [
+        ...r.errors,
+        ...r.rankings.errors,
+        ...r.forecast.errors,
+        ...r.odds.errors,
+        ...r.snapshot.errors,
+        ...r.portfolio.errors,
+      ],
       /*
        * A rankings `failed` is a genuine fault and downgrades the run, the same as a feed failure.
        * `skipped` does NOT: a league whose settings Sleeper will not serve is a normal single-league
@@ -255,7 +275,7 @@ export async function GET(req: NextRequest) {
        */
       status:
         r.failed > 0 || r.writeFailed > 0 || r.rankings.failed > 0 || r.forecast.failed > 0 || r.odds.failed > 0 ||
-        r.snapshot.failed > 0
+        r.snapshot.failed > 0 || r.portfolio.failed > 0
           ? 'partial'
           : 'success',
       metadata: {
@@ -301,6 +321,20 @@ export async function GET(req: NextRequest) {
           alreadyWritten: r.snapshot.alreadyWritten,
           ranked: r.snapshot.population,
           failed: r.snapshot.failed,
+        },
+        /*
+         * The daily portfolio value record, unsummed. The /core/portfolio chart draws a stored day
+         * as "recorded" and falls back to a reconstruction where none exists, so a user stuck in
+         * `deferred` shows estimated history rather than a gap.
+         */
+        portfolio: {
+          date: r.portfolio.date,
+          considered: r.portfolio.considered,
+          written: r.portfolio.written,
+          alreadyWritten: r.portfolio.alreadyWritten,
+          empty: r.portfolio.empty,
+          deferred: r.portfolio.deferred,
+          failed: r.portfolio.failed,
         },
         /*
          * The pre-game odds snapshot, unsummed. `unavailable: 1` is the parked migration, not a
@@ -443,6 +477,7 @@ async function run(): Promise<RefreshCounts> {
     forecast: emptyForecastSweepCounts(),
     odds: emptyMatchupOddsSweepCounts(),
     snapshot: emptyRankingsSnapshotCounts(),
+    portfolio: emptyPortfolioTotalsCounts(),
   }
 
   // R3.2 — app-level sources first; see the note on refreshAppSources for why the order matters.
@@ -623,6 +658,21 @@ async function run(): Promise<RefreshCounts> {
     const out = emptyMatchupOddsSweepCounts()
     out.failed = 1
     out.errors.push(`odds_sweep: ${e instanceof Error ? e.message : String(e)}`)
+    return out
+  })
+
+  /*
+   * ── THE DAILY PORTFOLIO VALUE RECORD, LAST OF ALL ───────────────────────────────────────────
+   *
+   * The newest writer here, so it yields to every proven one — the same rule the rankings sweep
+   * follows. Postgres only (lib/core-app/portfolioInsights.ts has no provider call and no lib/auth
+   * in its import graph), bounded to ten users and 45s per fire on top of the shared budget, and
+   * it never throws. `CORE_PORTFOLIO_TOTALS_DISABLED=true` turns it off.
+   */
+  counts.portfolio = await runPortfolioDailyTotals(new Date(), { budget }).catch((e: unknown) => {
+    const out = emptyPortfolioTotalsCounts()
+    out.failed = 1
+    out.errors.push(`portfolio_totals: ${e instanceof Error ? e.message : String(e)}`)
     return out
   })
 

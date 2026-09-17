@@ -24,8 +24,9 @@ describe('domain-os-refresh → rankings daily snapshot wiring', () => {
   })
 
   it('🛑 its writes, errors and failures reach the run telemetry', () => {
-    expect(src).toMatch(/\+ r\.odds\.written \+ r\.snapshot\.written,/)
-    expect(src).toMatch(/\.\.\.r\.odds\.errors, \.\.\.r\.snapshot\.errors\]/)
+    // Whitespace-tolerant since the sixth writer (portfolio totals) reflowed these sums across lines.
+    expect(src).toMatch(/\+ r\.odds\.written \+ r\.snapshot\.written\b/)
+    expect(src).toMatch(/\.\.\.r\.odds\.errors,\s*\.\.\.r\.snapshot\.errors,/)
     expect(src).toMatch(/r\.snapshot\.failed > 0/)
     expect(src).toMatch(/snapshot: \{\s*date: r\.snapshot\.date,\s*written: r\.snapshot\.written,\s*alreadyWritten: r\.snapshot\.alreadyWritten,/)
   })

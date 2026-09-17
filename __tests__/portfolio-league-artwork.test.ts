@@ -152,24 +152,37 @@ describe('the roster count says whose roster it is', () => {
   })
 })
 
-describe('portfolio retention risk map', () => {
-  it('loads concentration and value movement only for the portfolio screen', () => {
-    expect(CORE_PAGE).toMatch(/activeKey === 'portfolio'[\s\S]{0,500}getCrossLeagueExposure/)
-    expect(CORE_PAGE).toMatch(/activeKey === 'portfolio'[\s\S]{0,900}getCrossLeagueValueActions/)
-    expect(CORE_PAGE).toContain('exposure={portfolioExposure}')
-    expect(CORE_PAGE).toContain('valueActions={portfolioValueActions}')
+/*
+ * The 12-card "portfolio risk map" (#882) was replaced on 2026-09-16 by the cross-league board
+ * (components/core-app/portfolio/PortfolioBoard.tsx). These pin what that block guaranteed, in the
+ * form it now takes; the numbers themselves are covered in __tests__/core-app/portfolioView.test.ts.
+ */
+const BOARD = fs.readFileSync(
+  path.join(process.cwd(), 'components', 'core-app', 'portfolio', 'PortfolioBoard.tsx'),
+  'utf8',
+)
+
+describe('portfolio cross-league board', () => {
+  it('loads the stored insights only for the portfolio screen', () => {
+    expect(CORE_PAGE).toMatch(/activeKey === 'portfolio'\s*\?\s*await Promise\.all\(\[\s*readPortfolioInsights\(/)
+    expect(CORE_PAGE).toContain('insights={portfolioInsights?.data ?? null}')
+    expect(CORE_PAGE).not.toContain('exposure={portfolioExposure}')
   })
 
-  it('turns concentration into visible risk levels and concrete advice', () => {
-    expect(COMPONENT).toContain('Portfolio risk map')
-    expect(COMPONENT).toContain("share >= 70 ? 'high' : share >= 40 ? 'medium' : 'low'")
-    expect(COMPONENT).toContain('starts everywhere')
-    expect(COMPONENT).toContain('move.advice')
-    expect(COMPONENT).toContain('High concentration — set an injury contingency.')
+  it('keeps the inventory list when the board cannot be built', () => {
+    expect(COMPONENT).toContain('The cross-league board could not be built just now.')
+    expect(COMPONENT).toMatch(/<LeagueList leagues=\{leagues\} total=\{leagues\.length\} filtered=\{false\}/)
   })
 
-  it('is a one-column touch-friendly board on a phone', () => {
-    expect(CSS).toMatch(/@media \(max-width: 520px\)[\s\S]*?\.af-pf-risk-grid\s*\{\s*grid-template-columns:\s*1fr/)
-    expect(CSS).toMatch(/\.af-pf-risk-cell\s*\{[\s\S]*?min-height:\s*132px/)
+  it('turns risk into visible levels with a count in every cell and a legend', () => {
+    expect(BOARD).toContain('Risk heatmap')
+    expect(BOARD).toMatch(/label: 'High', swatch: <LevelSwatch level=\{3\} \/>/)
+    expect(CSS).toMatch(/\.af-pfc-cell\[data-level='3'\]\s*\{\s*background: var\(--pf-heat-3\)/)
+  })
+
+  it('is touch-friendly on a phone: one scrolling chip row and 44px targets', () => {
+    expect(CSS).toMatch(/@media \(max-width: 720px\) \{[\s\S]*?\.af-pfb-chiprow \{\s*flex-wrap: nowrap;\s*overflow-x: auto;/)
+    expect(CSS).toMatch(/@media \(max-width: 720px\) \{[\s\S]*?\.af-pfc-cell \{ height: 44px; \}/)
+    expect(CSS).toMatch(/\.af-pfc-scroll \{ overflow-x: auto;/)
   })
 })

@@ -124,6 +124,8 @@ import {
 } from '@/lib/core-app/rankings'
 import { filterParams, parseRankingFilters } from '@/lib/core-app/rankingsEngine'
 import { getPortfolio } from '@/lib/core-app/portfolio'
+import { readPortfolioInsights, readRecordedValueDays } from '@/lib/core-app/portfolioInsightsSummary'
+import { parseFilter, parseView, type LineupSignal } from '@/lib/core-app/portfolioView'
 import { getTodayStrip } from '@/lib/core-app/todayStrip'
 import { getPlayFeed } from '@/lib/live/playFeedPresentation'
 import { getRecentTrades } from '@/lib/core-app/recentTrades'
@@ -1706,21 +1708,55 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
         ? (portfolioScreenFresh?.data ?? null)
         : await getPortfolio(userId).catch(() => null)
       : null
-  const [portfolioExposure, portfolioValueActions] = activeKey === 'portfolio'
+  /*
+   * ── THE CROSS-LEAGUE BOARD ─────────────────────────────────────────────
+   *
+   * Exposure, risk, league mix, value movement and the action ranking all come from ONE stored
+   * build (lib/core-app/portfolioInsights.ts, read through portfolioInsightsSummary.ts), which
+   * replaced the two panels loaded here before — `getCrossLeagueExposure` and
+   * `getCrossLeagueValueActions` read rosters two different ways, so an ESPN player never matched
+   * his own value move. The build reads every roster once; this reads the stored result.
+   *
+   * ⚠ THE LIST PASSED FOR THE KEY IS `leagues`, UNFILTERED — the same reason as
+   * `readPortfolioSummary` above: the build resolves its own leagues from claimed teams.
+   *
+   * ⚠ LINEUP COUNTS COME FROM THE HOME'S LOADER, not from the stored build. They are "now" facts —
+   * a starter ruled out ten minutes ago — and the home and the tab badges already show them; the
+   * action ranking must agree with both. Same summary-or-live choice as `loadLineupLeagues` below.
+   */
+  const [portfolioInsights, portfolioRecorded, portfolioLineup] = activeKey === 'portfolio'
     ? await Promise.all([
-        getCrossLeagueExposure(userId, playedLeagues.map((league) => league.id), 12).catch(() => null),
-        getCrossLeagueValueActions(
-          userId,
-          playedLeagues.map((league) => ({
-            id: league.id,
-            name: league.name,
-            platform: String(league.platform ?? ''),
-            sport: (league as { sport?: string | null }).sport ?? null,
-          })),
-          12,
-        ).catch(() => []),
+        readPortfolioInsights(userId, leagues as unknown as Array<{ id: string; season?: number | string | null }>).catch(
+          () => null,
+        ),
+        readRecordedValueDays(userId, now).catch(() => []),
+        (portfolioScreenOnSummary
+          ? readHomePortfolio(userId, leagues as unknown as Dash34LeagueRow[], now).then((d) =>
+              d.summary.source === 'last-known' ? getDash34Data(userId, leagues as unknown as Dash34LeagueRow[], now) : d,
+            )
+          : getDash34Data(userId, leagues as unknown as Dash34LeagueRow[], now)
+        )
+          .then((d) => {
+            const out: Record<string, LineupSignal> = {}
+            for (const l of d?.allLeagues ?? []) {
+              out[l.id] = {
+                empty: l.emptyStarters ?? 0,
+                hurt: l.hurtStarters ?? 0,
+                drafting: l.priority === 'draft' || (l.chips ?? []).some((c) => c.label === 'DRAFTING'),
+              }
+            }
+            return out
+          })
+          .catch(() => null),
       ])
-    : [null, []]
+    : [null, [], null]
+  const portfolioFilter = activeKey === 'portfolio'
+    ? parseFilter((param) => (typeof sp[param] === 'string' ? (sp[param] as string) : null))
+    : null
+  const portfolioView = activeKey === 'portfolio' ? parseView(sp.pf_view) : 'overview'
+  const portfolioPaidIds = activeKey === 'portfolio'
+    ? leagues.filter((l) => (l as { isPaid?: boolean | null }).isPaid === true).map((l) => l.id)
+    : []
 
   // /core/hubs/<format>. An unknown or missing format opens the first hub the reader has leagues in.
   const formatHub =
@@ -3988,7 +4024,18 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
         )
       ) : activeKey === 'portfolio' ? (
         portfolio ? (
-          <Portfolio data={portfolio} exposure={portfolioExposure} valueActions={portfolioValueActions} />
+          <Portfolio
+            data={portfolio}
+            insights={portfolioInsights?.data ?? null}
+            insightsBuiltAt={portfolioInsights?.data?.builtAt ?? null}
+            insightsStale={portfolioInsights?.source === 'last-known'}
+            recorded={portfolioRecorded}
+            lineup={portfolioLineup}
+            favoriteIds={[...favoriteIds]}
+            paidIds={portfolioPaidIds}
+            initialFilter={portfolioFilter ?? undefined}
+            initialView={portfolioView}
+          />
         ) : (
           <div className="af-frame" style={{ padding: 24, maxWidth: 720 }}>
             <h1 className="af-display" style={{ margin: 0, fontSize: 22, letterSpacing: '-0.03em' }}>
