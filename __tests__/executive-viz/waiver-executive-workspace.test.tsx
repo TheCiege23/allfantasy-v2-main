@@ -210,7 +210,9 @@ describe('Waiver OS hierarchy + engine reuse (Phase V2.5)', () => {
 
   it('ExecutiveDecisionSequence is a shared primitive with three real consumers', () => {
     expect(readSource('components', 'executive-viz', 'ExecutiveCharts.tsx')).toContain('export function ExecutiveDecisionSequence')
-    for (const file of ['ManagerSupportingViz.tsx', 'TradeSupportingViz.tsx', 'WaiverImpactSequence.tsx']) {
+    // TradeSupportingViz was retired with the old /commissioner-hub page (2026-09-17); the draft ladder
+    // is the third consumer now.
+    for (const file of ['ManagerSupportingViz.tsx', 'DraftDecisionLadder.tsx', 'WaiverImpactSequence.tsx']) {
       expect(readSource('components', 'executive-viz', file)).toContain('ExecutiveDecisionSequence')
     }
   })

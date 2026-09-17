@@ -7,6 +7,9 @@
  * (caught only by the page-level error boundary, with no record of which signal caused it). Both
  * sections now wrap composition in try/catch, degrading to an honest empty notification feed instead
  * of taking down the entire Multi-League Overview.
+ *
+ * The commissioner section was retired with the old /commissioner-hub page (2026-09-17), so only the
+ * manager section is covered here now.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
@@ -84,42 +87,6 @@ describe('Notification composition error handling (Phase OS-C6)', () => {
     // The section itself rendered fully (proving no crash), AND the real Attention Queue signal
     // still renders correctly (proving the failure was scoped to notification composition only) —
     // the Notification Center degrades to its own honest empty state since composition threw.
-    expect(screen.getByTestId('attention-queue-item-signal-1')).toBeInTheDocument()
-    expect(screen.getByTestId('notification-center-empty')).toBeInTheDocument()
-    expect(console.error).toHaveBeenCalled()
-  })
-
-  it('CommissionerCommandCenterSection: a composition failure degrades to an honest empty notification feed, never crashes the section', async () => {
-    const { default: CommissionerCommandCenterSection } = await import(
-      '@/components/decision-os/CommissionerCommandCenterSection'
-    )
-    fetchMock.mockResolvedValueOnce(
-      okResponse({
-        generatedAt: '2026-07-09T00:00:00.000Z',
-        totalLeagues: 1,
-        healthyLeagueCount: 0,
-        atRiskLeagueCount: 1,
-        unavailableLeagueCount: 0,
-        totalActiveManagers: 0,
-        totalInactiveManagers: 0,
-        totalRetentionRiskManagers: 0,
-        leagueSummaries: [],
-        attentionQueue: LEAGUE_ATTENTION_QUEUE,
-        recentChanges: [],
-        warnings: [],
-        draftsApproachingCount: 0,
-      }),
-    )
-    render(
-      <CommissionerCommandCenterSection
-        commissionerLeagues={[{ id: 'league-1', name: 'Dynasty Warriors' }]}
-        onSelectLeague={vi.fn()}
-      />,
-    )
-
-    await waitFor(() => {
-      expect(screen.getByTestId('command-center-overview')).toBeInTheDocument()
-    })
     expect(screen.getByTestId('attention-queue-item-signal-1')).toBeInTheDocument()
     expect(screen.getByTestId('notification-center-empty')).toBeInTheDocument()
     expect(console.error).toHaveBeenCalled()

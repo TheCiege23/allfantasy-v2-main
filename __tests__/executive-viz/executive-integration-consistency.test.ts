@@ -4,6 +4,10 @@
  * Durable, source-level invariants that keep the seven Executive Analytics Workspaces feeling like ONE
  * product rather than seven independent ones. These are deliberately semantic/structural (not visual
  * snapshots) so they stay meaningful as the workspaces evolve.
+ *
+ * The commissioner-facing flagships (League Health Map, League Momentum, Trade Opportunity Matrix) and
+ * their supporting cards and view models were retired with the old /commissioner-hub page on
+ * 2026-09-17, so they are no longer listed here.
  */
 import fs from 'node:fs'
 import path from 'node:path'
@@ -11,7 +15,6 @@ import { describe, expect, it } from 'vitest'
 import { WAIVER_RESOURCE_STRATEGY_DEFERRED } from '@/lib/executive-viz/waiverDecisionViewModel'
 import { DRAFT_VALUE_ANALYTICS_DEFERRED } from '@/lib/executive-viz/draftDecisionViewModel'
 import { PLATFORM_TREND_ANALYTICS_DEFERRED } from '@/lib/executive-viz/platformFocusViewModel'
-import { TRADE_POSITION_ANALYTICS_DEFERRED } from '@/lib/executive-viz/tradeMarketViewModel'
 import {
   PRIORITY_RANK,
   statusFromPriority,
@@ -28,10 +31,7 @@ function readLib(...segments: string[]): string {
 }
 
 const FLAGSHIPS = [
-  'LeagueHealthMap.tsx',
   'ChampionshipTrajectory.tsx',
-  'LeagueMomentum.tsx',
-  'TradeOpportunityMatrix.tsx',
   'WaiverImpactSequence.tsx',
   'DraftDecisionLadder.tsx',
   'PlatformFocus.tsx',
@@ -39,10 +39,7 @@ const FLAGSHIPS = [
 
 const ALL_VIZ = [
   ...FLAGSHIPS,
-  'SupportingExecutiveViz.tsx',
   'ManagerSupportingViz.tsx',
-  'LeagueSupportingViz.tsx',
-  'TradeSupportingViz.tsx',
   'WaiverSupportingViz.tsx',
   'DraftSupportingViz.tsx',
   'PlatformSupportingViz.tsx',
@@ -79,12 +76,11 @@ describe('Step 4 — terminology consistency: one word for "urgent"', () => {
 })
 
 describe('Step 6 — truthfulness: every deferral is an explicit marker, not a fabrication', () => {
-  it('all four workspaces with unavailable contracts expose a consistent *_DEFERRED marker', () => {
+  it('every workspace with an unavailable contract exposes a consistent *_DEFERRED marker', () => {
     for (const marker of [
       WAIVER_RESOURCE_STRATEGY_DEFERRED,
       DRAFT_VALUE_ANALYTICS_DEFERRED,
       PLATFORM_TREND_ANALYTICS_DEFERRED,
-      TRADE_POSITION_ANALYTICS_DEFERRED,
     ]) {
       expect(marker.deferred).toBe(true)
       expect(typeof marker.reason).toBe('string')
@@ -141,8 +137,8 @@ describe('Step 1 (V4.0) — recommendation-presentation helpers are shared, not 
 
     // No view model may re-declare the shared helpers (single source of truth).
     for (const vm of [
-      'commissionerLeagueHealthViewModel.ts', 'managerSeasonViewModel.ts', 'leagueMomentumViewModel.ts',
-      'tradeMarketViewModel.ts', 'waiverDecisionViewModel.ts', 'draftDecisionViewModel.ts', 'platformFocusViewModel.ts',
+      'commissionerLeagueHealthViewModel.ts', 'managerSeasonViewModel.ts',
+      'waiverDecisionViewModel.ts', 'draftDecisionViewModel.ts', 'platformFocusViewModel.ts',
     ]) {
       const src = fs.readFileSync(path.join(process.cwd(), 'lib', 'executive-viz', vm), 'utf8')
       expect(src, vm).not.toMatch(/function statusFromPriority\(|function statusFromScore\(|function statusFromSeverity\(|function titleCase\(/)

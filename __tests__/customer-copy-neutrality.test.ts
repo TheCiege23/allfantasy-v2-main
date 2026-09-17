@@ -15,15 +15,11 @@ import { describe, expect, it } from 'vitest'
 const CUSTOMER_SURFACES = [
   'app/fantasy-os/FantasyOsGateway.tsx',
   'app/league/[leagueId]/tabs/LeagueTab.tsx',
-  'components/decision-os/LeagueAnalyticsCard.tsx',
   'components/decision-os/UserOsCard.tsx',
-  'components/decision-os/CommissionerLeagueHealthRanking.tsx',
-  'components/decision-os/MissionControlCard.tsx',
-  'components/decision-os/LeagueContextCard.tsx',
   'components/decision-os/ManagerCommandCenterSection.tsx',
-  // Commissioner Hub empty-state + League Pulse copy — added after the RC1 hotfix, where a
-  // customer-visible "Decision OS" string reached production /commissioner-hub via these surfaces.
-  'components/redraft/CommissionerShowcasePanel.tsx',
+  // League Pulse copy — added after the RC1 hotfix, where a customer-visible "Decision OS" string
+  // reached production /commissioner-hub. That page and its Decision OS cards were retired on
+  // 2026-09-17; League Pulse still renders on the league tab.
   'lib/decision-os/league-pulse.ts',
   // Fantasy OS Phase 4 executive intelligence workspace — customer-facing executive surfaces.
   'components/fantasy-os/executive/ExecutiveWorkspace.tsx',
