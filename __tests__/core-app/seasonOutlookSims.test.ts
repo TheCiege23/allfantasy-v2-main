@@ -72,8 +72,9 @@ describe('stored runs', () => {
     ]
     expect([...(await readLeagueSims(['p9', 'p1'])).keys()]).toEqual(['p1'])
     const stamps = await readLeagueSimStamps(['p9', 'p1'])
-    expect(stamps.get('p9')).toBe(Date.parse(marker.checkedAt))
-    expect(stamps.has('p1')).toBe(true)
+    /* The caller has to be able to tell a marker from a run, or it cannot hold one back. */
+    expect(stamps.get('p9')).toEqual({ at: Date.parse(marker.checkedAt), marker: true })
+    expect(stamps.get('p1')).toMatchObject({ marker: false })
   })
 
   it('never throws on a failed write', async () => {

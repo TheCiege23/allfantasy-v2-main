@@ -339,6 +339,7 @@ export async function GET(req: NextRequest) {
         outlook: {
           candidates: r.outlook.candidates,
           due: r.outlook.due,
+          cooling: r.outlook.cooling,
           computed: r.outlook.computed,
           unchanged: r.outlook.unchanged,
           skipped: r.outlook.skipped,

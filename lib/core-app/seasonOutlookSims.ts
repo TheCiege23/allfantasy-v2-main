@@ -145,12 +145,26 @@ export async function readLeagueSims(platformLeagueIds: readonly string[], now =
   return out
 }
 
+/** When the pre-compute last looked at a league, and whether all it left behind was a marker. */
+export type LeagueSimStamp = {
+  at: number
+  /**
+   * True when the row is a marker — the league could not be run. The caller holds these back for a
+   * cooldown, because a routine sync rewriting the league's matchup rows would otherwise make an
+   * unrunnable league due again within the hour, every hour.
+   */
+  marker: boolean
+}
+
 /**
  * When each league was last looked at by the scheduled pre-compute, whatever it found — a stored run
  * or a marker. The page never reads markers; `readLeagueSims` rejects them.
  */
-export async function readLeagueSimStamps(platformLeagueIds: readonly string[], now = new Date()): Promise<Map<string, number>> {
-  const out = new Map<string, number>()
+export async function readLeagueSimStamps(
+  platformLeagueIds: readonly string[],
+  now = new Date(),
+): Promise<Map<string, LeagueSimStamp>> {
+  const out = new Map<string, LeagueSimStamp>()
   if (platformLeagueIds.length === 0) return out
   const rows = await prisma.sportsDataCache
     .findMany({
@@ -159,9 +173,11 @@ export async function readLeagueSimStamps(platformLeagueIds: readonly string[], 
     })
     .catch(() => [])
   for (const row of rows) {
-    const d = (row.data ?? {}) as { checkedAt?: unknown; computedAt?: unknown }
+    const d = (row.data ?? {}) as { checkedAt?: unknown; computedAt?: unknown; marker?: unknown }
     const at = Date.parse(String(d.checkedAt ?? d.computedAt ?? ''))
-    if (Number.isFinite(at)) out.set(row.cacheKey.slice(KEY_PREFIX.length), at)
+    if (Number.isFinite(at)) {
+      out.set(row.cacheKey.slice(KEY_PREFIX.length), { at, marker: typeof d.marker === 'string' && d.marker.length > 0 })
+    }
   }
   return out
 }
