@@ -107,3 +107,38 @@ describe('BUG-1 — the deterministic value path must read the league, not the q
     expect(await buildFantasyCalcValueAnswer('Who won last night?', 'L1')).toBeNull()
   })
 })
+
+/**
+ * ── 🛑 A DECISION WAS ANSWERED WITH A PRICE ─────────────────────────────────────────────────
+ *
+ * User report, 2026-09-16, with Draft Junkies selected:
+ *
+ *   Q  "is it worth me trading for Rashee Rice in this league?"
+ *   A  "Rashee Rice's FantasyCalc dynasty value is 3421 (mid tier) … Source: FantasyCalc current values."
+ *
+ * The word "worth" was enough. The shortcut must step aside for a decision so the question reaches
+ * the league-aware paths; a plain price question still gets its price.
+ */
+describe('the price shortcut steps aside for a trade decision', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    loadRules.mockResolvedValue({ general: { format: 'dynasty' }, roster: { starters: ['QB'] }, scoring: { activeRules: [] } })
+    getFantasyCalcValuesDbFirst.mockResolvedValue([
+      { player: { name: 'Rashee Rice' }, value: 3421, overallRank: 60, positionRank: 20, trend30Day: -436 },
+    ])
+  })
+
+  it.each([
+    'is it worth me trading for Rashee Rice in this league?',
+    'Is Rashee Rice worth trading for?',
+    'Should I trade Bijan Robinson for Rashee Rice, is it worth it?',
+  ])('%s → no price answer, and no price fetched', async (message) => {
+    expect(await buildFantasyCalcValueAnswer(message, 'L1')).toBeNull()
+    expect(getFantasyCalcValuesDbFirst).not.toHaveBeenCalled()
+  })
+
+  it('a price question is still answered with the price', async () => {
+    const out = await buildFantasyCalcValueAnswer('What is Rashee Rice worth in my league?', 'L1')
+    expect(out).toMatch(/Rashee Rice's FantasyCalc dynasty value is 3421/)
+  })
+})

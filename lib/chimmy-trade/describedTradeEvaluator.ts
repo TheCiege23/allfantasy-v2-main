@@ -6,6 +6,7 @@ import { explainPlayerValue, type ScoringContext, type ValueBasis } from '@/lib/
 import { newestProjectionSeason } from '@/lib/af-projections/readAfProjections'
 import { AF_SNAPSHOT_SCORING_FORMAT } from '@/lib/af-projections/types'
 import { normalizePlayerName } from '@/lib/player-identity/playerIdentityResolution'
+import { MAX_NAME_CANDIDATES, extractPlayerNameCandidates, splitSides } from './tradeSentence'
 import type { AssetValueSnapshot, SideTotals } from '@/lib/trade-value/types'
 import {
   scoringContextFromWorld,
@@ -54,62 +55,19 @@ const AF_PROJECTION_FORMAT = scoringFormatFromPresetId(AF_SNAPSHOT_SCORING_FORMA
  */
 
 /** A trade nobody would type: guards the name-candidate scan and the IN clause. */
-const MAX_CANDIDATES = 24
+const MAX_CANDIDATES = MAX_NAME_CANDIDATES
 /** Deepest slice in `adp_data`; used when the league's own settings find nothing. */
 const FALLBACK_FORMAT = 'redraft'
 const FALLBACK_SCORING = 'standard'
 
-/**
- * The word that separates what you get from what you give. Ordered longest-first
- * so "in exchange for" wins over the "for" inside it.
- */
-const SEPARATORS = [
-  ' in exchange for ',
-  ' straight up for ',
-  ' traded for ',
-  ' swap for ',
-  ' for ',
-  ' vs ',
-  ' <-> ',
-]
-
 type AdpRow = { playerName: string; position: string; team: string; adp: number }
 
-/**
- * Capitalised runs of 2–3 words — the shape a player's name takes in prose.
- *
- * Deliberately over-generates: every candidate is then checked against
- * `adp_data`, so a false candidate costs one row in an `IN` clause and nothing
- * else. Under-generating would silently drop a real player instead.
+/*
+ * The sentence splitter and name scan moved to `tradeSentence.ts`, a module with no imports, so the
+ * price shortcut that runs on every chat message can use them without loading this one. Re-exported
+ * so `tradeScenarioGrounding.ts`, `lineupScenarioGrounding.ts` and the tests keep their import path.
  */
-export function extractPlayerNameCandidates(message: string): string[] {
-  const out = new Set<string>()
-  // Allow the internal punctuation real names carry: O'Dell, Amon-Ra, Jr., St.
-  const tokens = message.match(/[A-Z][A-Za-z'’.-]+(?:\s+[A-Z][A-Za-z'’.-]+){1,2}/g) ?? []
-  for (const t of tokens) {
-    const cleaned = t.replace(/[.,!?]+$/, '').trim()
-    if (cleaned.split(/\s+/).length >= 2) out.add(cleaned)
-    if (out.size >= MAX_CANDIDATES) break
-  }
-  return [...out]
-}
-
-/**
- * Which half of the sentence a name appears in decides which side it is on.
- *
- * Exported for `lib/chimmy/tradeScenarioGrounding.ts`, which must read the same two halves this
- * module grades — two splitters would disagree about the same sentence.
- */
-export function splitSides(message: string): { left: string; right: string } | null {
-  const lower = message.toLowerCase()
-  for (const sep of SEPARATORS) {
-    const at = lower.indexOf(sep)
-    if (at > 0) {
-      return { left: message.slice(0, at), right: message.slice(at + sep.length) }
-    }
-  }
-  return null
-}
+export { extractPlayerNameCandidates, splitSides }
 
 export interface DescribedTradeLeague {
   scoring: string | null

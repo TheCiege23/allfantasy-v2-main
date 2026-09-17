@@ -108,7 +108,19 @@ export type PlayerTradeVisual = {
   platform: string
   platformLeagueId: string | null
   season: number | null
-  target: { sleeperId: string; name: string; position: string | null; value: number | null }
+  target: {
+    sleeperId: string
+    name: string
+    position: string | null
+    value: number | null
+    /**
+     * The market's 30-day move in the same units as `value`, and his age — read by Chimmy's
+     * trade-target verdict, where a dynasty call turns on both. Null when the feed or the player
+     * row does not carry them; optional so a payload built before they existed still reads.
+     */
+    trend30Day?: number | null
+    age?: number | null
+  }
   you: TradeVisualSide
   partner: TradeVisualSide
   values: {
@@ -139,6 +151,15 @@ export type PlayerTradeVisual = {
    * the man reaches waivers if his owner is chopped, and what to bid when he does.
    */
   bidInstead: PlayerBidInstead | null
+  /**
+   * False when the league's format forbids trades (guillotine, survivor). `packages` is then empty
+   * and `recommended` null whether or not a bid could be worked out.
+   *
+   * ⚠ THE BID IS NOT THE GATE. A no-trade league whose bid cannot be computed (no roster values, no
+   * allocation) used to fall through with its packages intact — a plan the manager can never send.
+   * Optional so a payload built before it existed still reads; absent means allowed.
+   */
+  tradesAllowed?: boolean
 }
 
 export type PlayerBidInstead = {
@@ -414,10 +435,10 @@ export async function getPlayerTradeVisual(
   const rows = await prisma.sportsPlayer
     .findMany({
       where: { sleeperId: { in: ids } },
-      select: { sleeperId: true, name: true, position: true },
+      select: { sleeperId: true, name: true, position: true, age: true },
       distinct: ['sleeperId'],
     })
-    .catch(() => [] as Array<{ sleeperId: string | null; name: string; position: string | null }>)
+    .catch(() => [] as Array<{ sleeperId: string | null; name: string; position: string | null; age: number | null }>)
   const byId = new Map(rows.filter((r) => r.sleeperId).map((r) => [r.sleeperId as string, r]))
 
   /*
@@ -616,6 +637,8 @@ export async function getPlayerTradeVisual(
         value:
           playerValueForLeague(values, targetSleeperId, leagueScoring)?.adjusted ??
           playerValue(values, targetSleeperId),
+        trend30Day: values.bySleeperId[targetSleeperId]?.trend30Day ?? null,
+        age: typeof targetRow?.age === 'number' ? targetRow.age : null,
       },
       you: stanceOf(me, yours?.externalId ?? null),
       partner: stanceOf(partner, partnerTeam?.externalId ?? null),
@@ -631,12 +654,13 @@ export async function getPlayerTradeVisual(
        * 🛑 A NO-TRADE LEAGUE GETS NO PACKAGES. Leaving them in would offer a manager a plan they
        * cannot execute, which is worse than offering nothing — it looks actionable.
        */
-      packages: bidInstead ? [] : packages,
-      recommended: bidInstead ? null : recommended,
-      grade: bidInstead
+      packages: isGuillotine ? [] : packages,
+      recommended: isGuillotine ? null : recommended,
+      grade: isGuillotine
         ? { available: false, reason: 'this league does not allow trades, so there is no package to grade' }
         : grade,
       bidInstead,
+      tradesAllowed: !isGuillotine,
     },
   }
 }

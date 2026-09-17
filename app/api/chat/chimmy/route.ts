@@ -97,6 +97,9 @@ import {
   renderWaiverScenarioBlock,
 } from '@/lib/chimmy/lineupScenarioGrounding'
 import type { ReadyChimmyScenario, StartSitScenario, WaiverScenario } from '@/lib/chimmy/tradeScenarioTypes'
+import { parseTradeTargetQuestion } from '@/lib/chimmy/tradeTargetQuestion'
+import { buildTradeTargetVerdict, type TradeTargetResult } from '@/lib/chimmy/tradeTargetVerdict'
+import { renderTradeTargetVerdict } from '@/lib/chimmy/tradeTargetDecision'
 import { buildDraftContext } from '@/lib/chimmy/draftGrounding'
 import { buildWaiverContext } from '@/lib/chimmy/waiverGrounding'
 import { buildPlayerNewsContext } from '@/lib/chimmy/playerNewsGrounding'
@@ -2345,6 +2348,79 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     )
   }
 
+  /*
+   * ── 🛑 "SHOULD I TRADE FOR X?" IS DECIDED BY CODE, NOT BY A MODEL ─────────────────────────────
+   *
+   * User report, 2026-09-16: "is it worth me trading for Rashee Rice in this league?" came back as
+   * Rice's FantasyCalc price and nothing else. Asked again, still no answer. What was wanted: "yes
+   * because…" or "no because…", from their roster, the league's scoring and their record.
+   *
+   * A trade has roster consequences, so the verdict is explanation-only for AI (product rule,
+   * 2026-08-20). `buildTradeTargetVerdict` computes it from the league — the same trade read the
+   * /core player card shows, plus this week's lineup under the league's own scoring — and the
+   * route returns its sentences as written. No model runs on this path.
+   *
+   * ⚠ COMPUTED AFTER THE CONFIRMATION CHECK, BEFORE THE CHARGE, AND CHARGED ONLY WHEN IT DECIDES.
+   *   - After the 409: the /core drawer sends every paid question unconfirmed first and retries with
+   *     consent, so a verdict computed above the check would be computed twice per question.
+   *   - Before the charge: a name that is not on a roster, or on two, is an honest "I could not
+   *     tell" and costs nothing — the same deal the live-search fallback makes: you pay for an
+   *     answer, never for us saying we have none. A decided verdict is charged below like any other.
+   *
+   * 🛑 `leagueSnapshot.id` ONLY. The verdict reads every roster in the league.
+   */
+  const tradeTargetQuestion = leagueSnapshot ? parseTradeTargetQuestion(message) : null
+  const tradeTargetRead: TradeTargetResult | null =
+    tradeTargetQuestion && leagueSnapshot
+      ? await buildTradeTargetVerdict({
+          playerName: tradeTargetQuestion.playerName,
+          leagueId: leagueSnapshot.id,
+          userId,
+        }).catch(() => null)
+      : null
+  /*
+   * One word that matches nobody ("should I trade for depth?" slipped past the parser's word list)
+   * was probably not a name at all — that question goes on to the ordinary path rather than being
+   * told "I could not find Depth".
+   */
+  const tradeTargetResult =
+    tradeTargetRead?.status === 'unresolved' &&
+    tradeTargetRead.reason === 'not_rostered' &&
+    !/\s/.test(tradeTargetQuestion?.playerName ?? '')
+      ? null
+      : tradeTargetRead
+  const tradeTargetGrounding = leagueSnapshot
+    ? {
+        grounded: true as const,
+        leagueId: leagueSnapshot.id,
+        leagueName: leagueSnapshot.name,
+        platform: leagueSnapshot.platform,
+        season: leagueSnapshot.season,
+        lastSyncedAt: leagueSnapshot.lastSyncedAt?.toISOString() ?? null,
+      }
+    : null
+  if (tradeTargetResult?.status === 'unresolved') {
+    return NextResponse.json({
+      response: tradeTargetResult.detail,
+      result: tradeTargetResult.detail,
+      source: 'chimmy_trade_target_verdict',
+      sessionId,
+      meta: {
+        /* Nothing was decided, so nothing is charged. */
+        free: true,
+        confidencePct: 0,
+        providerStatus: { openai: 'skipped', deepseek: 'skipped', grok: 'skipped' },
+        leagueGrounding: tradeTargetGrounding,
+        tradeTarget: { status: 'unresolved', reason: tradeTargetResult.reason },
+        dataSources: ['league_rosters'],
+        responseStructure: {
+          shortAnswer: tradeTargetResult.detail,
+          caveats: ['No verdict was reached, so nothing was charged.'],
+        },
+      },
+    })
+  }
+
   let spendLedger: { id: string; balanceAfter: number } | null = null
   if (!tokenPreviewFailed) {
     try {
@@ -2401,6 +2477,42 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       }
       return NextResponse.json({ error: 'Unable to process token spend.' }, { status: 500 })
     }
+  }
+
+  /*
+   * The trade-target verdict, now that it has been paid for. Returned before the tool loop and PECR
+   * so no model writes a second opinion over it — see the note above the spend.
+   */
+  if (tradeTargetResult?.status === 'decided') {
+    const v = tradeTargetResult.verdict
+    const text = renderTradeTargetVerdict(v)
+    return NextResponse.json({
+      response: text,
+      result: text,
+      source: 'chimmy_trade_target_verdict',
+      sessionId,
+      meta: {
+        tokenSpend:
+          spendLedger && tokenPreview
+            ? {
+                ruleCode: tokenPreview.ruleCode,
+                tokenCost: tokenPreview.tokenCost,
+                balanceAfter: spendLedger.balanceAfter,
+                ledgerId: spendLedger.id,
+              }
+            : undefined,
+        providerStatus: { openai: 'skipped', deepseek: 'skipped', grok: 'skipped' },
+        leagueGrounding: tradeTargetGrounding,
+        tradeTarget: { status: 'decided', verdict: v.verdict, player: tradeTargetResult.targetName },
+        dataSources: ['league_rosters', 'league_scoring', 'weekly_projections', 'market_values', 'trade_engine'],
+        responseStructure: {
+          shortAnswer: `${v.headline}, because ${v.because}.`,
+          whatDataSays: v.reasons.join(' '),
+          recommendedAction: v.openWith ? `Open with ${v.openWith}.` : v.headline,
+          caveats: v.basis,
+        },
+      },
+    })
   }
 
   /*
