@@ -19,8 +19,10 @@ export { ADVICE_LEARNING_CACHE_KEY, readAdviceLearningSnapshot }
  * RECOMPUTE_AFTER_MS, so most ticks cost one indexed read.
  *
  * ⚠ THE ROW OUTLIVES ITS REBUILD INTERVAL ON PURPOSE. `purgeExpiredCache` deletes expired
- * SportsDataCache rows, so `expiresAt` is set well past the next rebuild — a cron outage leaves
- * Chimmy reading an older snapshot, not none.
+ * SportsDataCache rows every hour from `/api/cron/reap-sync-runs` (since 2026-09-17; before that
+ * nothing called it, so this comment described a purge that never ran). `expiresAt` is therefore set
+ * eight days out, well past the six-hour rebuild: a cron outage leaves Chimmy reading an older
+ * snapshot, not none.
  *
  * ⚠ A MISSING ADVICE TABLE IS "UNAVAILABLE", and nothing is written: an empty snapshot would read
  * as "nothing to learn from", which is a different claim.
