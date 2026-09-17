@@ -213,6 +213,8 @@ describe('GET /api/leagues/[leagueId]/trades/rosters', () => {
         stock: null,
         stockDelta: null,
         value: null,
+        /* Nothing resolved, so the honest reason is that we could not tell who this is. */
+        unpricedReason: expect.objectContaining({ code: 'unidentified' }),
       },
     ])
   })
@@ -526,6 +528,120 @@ describe('🛑 market value on the roster rows', () => {
     const players = ((await res.json()) as { rosters: Array<{ players: Array<Record<string, unknown>> }> }).rosters[0]!.players
     expect(players[0]!.name).toBe('Perry Vance')
     expect(players[0]!.value).toBeNull()
+  })
+})
+
+describe('🛑 an unpriced row says WHY (item #5)', () => {
+  /*
+   * The picker and the builder showed an em dash and "Unpriced" and nothing else. Measured on
+   * staging 2026-09-16, 17.6% of rostered players showed that dash, for six different reasons.
+   */
+  beforeEach(() => {
+    vi.clearAllMocks()
+    getServerSession.mockResolvedValue({ user: { id: 'u1' } })
+    assertLeagueMember.mockResolvedValue({ ok: true, league: {} })
+    findUniqueLeague.mockResolvedValue({ season: 2026, sport: 'NFL', platform: 'sleeper' })
+    findManyAppUser.mockResolvedValue([])
+    findManyLeagueTeam.mockResolvedValue([])
+    findFirstLeagueTeam.mockResolvedValue(null)
+    findUniqueUserProfile.mockResolvedValue(null)
+    resolveTeamByeWeeks.mockResolvedValue(new Map())
+    findManyRoster.mockResolvedValue([
+      {
+        id: 'roster-a',
+        platformUserId: 'u1',
+        faabRemaining: null,
+        playerData: {
+          players: ['wr', 'rb', 'lb', 'k', 'PHI', 'ghost'],
+          draftPicks: [
+            { id: 'pk-r1', season: 2027, round: 1 },
+            { id: 'pk-none', season: 2027, round: null },
+          ],
+        },
+      },
+    ])
+    const row = (sleeperId: string, name: string, position: string) => ({
+      sleeperId, name, position, team: null, imageUrl: null, sport: 'NFL', source: 'sleeper',
+    })
+    // 'ghost' is deliberately absent: an id no player table knows.
+    findManySportsPlayer.mockResolvedValue([
+      row('wr', 'Perry Vance', 'WR'),
+      row('rb', 'Deep Bench', 'RB'),
+      row('lb', 'Fred Warner', 'LB'),
+      row('k', 'Jake Bates', 'K'),
+      row('PHI', 'Philadelphia Eagles', 'DEF'),
+    ])
+    getPlayerValues.mockResolvedValue(new Map([['perry vance', { value: 6552 }]]))
+  })
+
+  async function load() {
+    const res = await GET(new Request('http://localhost/api/leagues/league-1/trades/rosters') as never, ctx('league-1'))
+    const r = ((await res.json()) as {
+      rosters: Array<{
+        players: Array<{ id: string; name: string; value: number | null; unpricedReason?: { code: string; label: string } | null }>
+        picks: Array<{ pickId: string; value: number | null; unpricedReason?: { code: string } | null }>
+      }>
+    }).rosters[0]!
+    const code = (id: string) => r.players.find((p) => p.id === id)?.unpricedReason?.code ?? null
+    const pickCode = (id: string) => r.picks.find((p) => p.pickId === id)?.unpricedReason?.code ?? null
+    return { r, code, pickCode }
+  }
+
+  it('[control] the priced player is priced and carries no reason', async () => {
+    const { r, code } = await load()
+    expect(r.players.find((p) => p.id === 'wr')?.value).toBe(6552)
+    expect(code('wr')).toBeNull()
+  })
+
+  it('names the reason for each unpriced player', async () => {
+    const { code } = await load()
+    expect(code('rb')).toBe('not_on_feed')
+    expect(code('lb')).toBe('defender')
+    expect(code('k')).toBe('kicker')
+    expect(code('PHI')).toBe('team_defense')
+    expect(code('ghost')).toBe('unidentified')
+  })
+
+  it('carries a sentence, not only a code', async () => {
+    const { r } = await load()
+    const lb = r.players.find((p) => p.id === 'lb')
+    expect(lb?.unpricedReason?.label).toMatch(/defenders/)
+  })
+
+  it('🛑 a feed that did not load is reported as that, not as "not on the feed"', async () => {
+    /*
+     * Both of the lookup's failure paths return an empty map. A skill player then must not be
+     * told he has no market; a defender's reason does not change.
+     */
+    getPlayerValues.mockResolvedValue(new Map())
+    const { code } = await load()
+    expect(code('wr')).toBe('feed_unavailable')
+    expect(code('rb')).toBe('feed_unavailable')
+    expect(code('lb')).toBe('defender')
+  })
+
+  it('a thrown lookup reads the same as an empty one', async () => {
+    getPlayerValues.mockRejectedValue(new Error('cache miss'))
+    const { code } = await load()
+    expect(code('wr')).toBe('feed_unavailable')
+  })
+
+  it('a college league says the feed has no college values', async () => {
+    findUniqueLeague.mockResolvedValue({ season: 2026, sport: 'NCAAF', platform: 'sleeper' })
+    findManySportsPlayer.mockResolvedValue([
+      { sleeperId: 'rb', name: 'Deep Bench', position: 'RB', team: null, imageUrl: null, sport: 'NCAAF', source: 'sleeper' },
+    ])
+    getPlayerValues.mockResolvedValue(new Map())
+    const { r, code } = await load()
+    // [control] he resolved, so this is not the "unidentified" reason under another name.
+    expect(r.players.find((p) => p.id === 'rb')?.name).toBe('Deep Bench')
+    expect(code('rb')).toBe('no_feed_for_sport')
+  })
+
+  it('a pick with no round says so; a pick with one carries no reason', async () => {
+    const { pickCode } = await load()
+    expect(pickCode('pk-none')).toBe('pick_without_round')
+    expect(pickCode('pk-r1')).toBeNull()
   })
 })
 

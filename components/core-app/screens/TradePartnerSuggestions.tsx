@@ -47,6 +47,7 @@ export function suggestionToPickedAssets(
         imageUrl: p.imageUrl,
         stock: p.stock ?? null,
         stockDelta: p.stockDelta ?? null,
+        unpricedReason: p.unpricedReason ?? null,
       }
     }
     const pick = roster?.picks.find((x) => x.pickId === a.id)

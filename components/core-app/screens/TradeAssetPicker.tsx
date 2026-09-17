@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { RosterPick, RosterPlayer } from '@/components/core-app/screens/useLeagueRosters'
 import { FIRST_ROUND_IN_MARKET_UNITS, pickValueByOverall } from '@/lib/pick-curve'
 import { resolveTeamLogoUrlSync } from '@/lib/draft-sports-models/player-asset-resolver'
+import type { UnpricedReason } from '@/lib/trade-value/unpricedReason'
 
 /**
  * The asset picker behind "+ Add asset" on the Trade Center.
@@ -38,6 +39,8 @@ export type PickedAsset =
       stock?: 'up' | 'down' | 'flat' | null
       stockDelta?: number | null
       sportHint?: string
+      /** Why `value` is null, as the list that offered him explained it. */
+      unpricedReason?: UnpricedReason | null
     }
   /**
    * `pickId` is present only when the pick came off a real roster. A hand-typed
@@ -57,8 +60,28 @@ export type PickedAsset =
        * `lib/pick-curve.ts` on the route.
        */
       value?: number | null
+      /**
+       * Set when the roster route could not place this pick on the curve. The builder reads it to
+       * leave the pick unpriced: `round` is defaulted to 1 when picked, and pricing that default
+       * would show a pick with no round as a first-rounder.
+       */
+      unpricedReason?: UnpricedReason | null
     }
   | { kind: 'faab'; amount: number }
+
+/**
+ * The em dash an unpriced asset shows in a list, carrying its reason as a tooltip and as the
+ * accessible name. Visible text is kept for the deal itself: a league that rosters defenders would
+ * otherwise print the same sentence on a third of every roster.
+ */
+export function UnpricedValue(props: { reason?: UnpricedReason | null }) {
+  const label = props.reason ? `No value: ${props.reason.label}` : 'No value'
+  return (
+    <span className="af-tc-row-value" data-unpriced="true" title={label} aria-label={label}>
+      {'—'}
+    </span>
+  )
+}
 
 type SearchRow = {
   kind: 'player'
@@ -77,6 +100,7 @@ type SearchRow = {
   headshotUrl?: string | null
   stock?: 'up' | 'down' | 'flat' | null
   stockDelta?: number | null
+  unpricedReason?: UnpricedReason | null
 }
 
 /** Long enough that a fast typist does not fire a request per keystroke. */
@@ -186,10 +210,12 @@ export function RosterPlayerRow(props: {
       </span>
 
       <StockMark stock={p.stock} delta={p.stockDelta} />
-      {/* Unpriced shows an em dash. The picker must never imply zero. */}
-      <span className="af-tc-row-value" data-unpriced={p.value == null ? 'true' : undefined}>
-        {p.value == null ? '\u2014' : p.value.toLocaleString()}
-      </span>
+      {/* Unpriced shows an em dash, and says why. The picker must never imply zero. */}
+      {p.value == null ? (
+        <UnpricedValue reason={p.unpricedReason} />
+      ) : (
+        <span className="af-tc-row-value">{p.value.toLocaleString()}</span>
+      )}
     </button>
   )
 }
@@ -432,6 +458,7 @@ export function TradeAssetPicker(props: {
                       stock: p.stock,
                       stockDelta: p.stockDelta,
                       sportHint: props.sport ?? undefined,
+                      unpricedReason: p.unpricedReason ?? null,
                     })
                   }
                 />
@@ -475,6 +502,7 @@ export function TradeAssetPicker(props: {
                   stock: r.stock ?? null,
                   stockDelta: r.stockDelta ?? null,
                   sportHint: r.sport,
+                  unpricedReason: r.unpricedReason ?? null,
                 })
               }
             >
@@ -492,9 +520,11 @@ export function TradeAssetPicker(props: {
               </span>
               <StockMark stock={r.stock} delta={r.stockDelta} />
               {/* Unpriced shows an em dash here too — the picker must not imply zero. */}
-              <span className="af-tc-row-value" data-unpriced={r.value == null ? 'true' : undefined}>
-                {r.value == null ? '—' : r.value.toLocaleString()}
-              </span>
+              {r.value == null ? (
+                <UnpricedValue reason={r.unpricedReason} />
+              ) : (
+                <span className="af-tc-row-value">{r.value.toLocaleString()}</span>
+              )}
             </button>
           ))}
         </>
@@ -526,6 +556,7 @@ export function TradeAssetPicker(props: {
                       pickId: p.pickId,
                       itemType: p.itemType,
                       value: p.value,
+                      unpricedReason: p.unpricedReason ?? null,
                     })
                   }
                 >
@@ -538,9 +569,11 @@ export function TradeAssetPicker(props: {
                     two are summed into one total. Rendering it anywhere else would invite the
                     reading that picks are a separate currency.
                   */}
-                  <span className="af-tc-row-value" data-unpriced={p.value == null ? 'true' : undefined}>
-                    {p.value == null ? '—' : p.value.toLocaleString()}
-                  </span>
+                  {p.value == null ? (
+                    <UnpricedValue reason={p.unpricedReason} />
+                  ) : (
+                    <span className="af-tc-row-value">{p.value.toLocaleString()}</span>
+                  )}
                 </button>
               ))}
             </>

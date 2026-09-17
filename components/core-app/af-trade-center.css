@@ -2335,3 +2335,18 @@
   font-size: 11px;
   line-height: 1.45;
 }
+
+/*
+ * Why an asset in the deal carries no value (item #5). Its own line under the row's chips, so a
+ * long reason wraps instead of widening the row on a phone.
+ *
+ * Appended after every @media block, like the late additions above it.
+ */
+.af-tc-unpriced-why {
+  display: block;
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}

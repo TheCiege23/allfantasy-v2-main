@@ -5,6 +5,7 @@ import { SUPPORTED_SPORTS, normalizeToSupportedSport, type SupportedSport } from
 import { rateLimit, getClientIp } from '@/lib/rate-limit'
 import { resolveHeadshotUrl } from '@/lib/draft-sports-models/player-asset-resolver'
 import { directionFor } from '@/lib/trade-intel/playerStock'
+import { playerUnpricedReason } from '@/lib/trade-value/unpricedReason'
 
 let fcCache: { players: Awaited<ReturnType<typeof getFantasyCalcValuesDbFirst>>; at: number } | null = null
 const FC_TTL = 5 * 60 * 1000
@@ -49,6 +50,15 @@ async function searchNflFantasyCalc(q: string) {
     }))
 }
 
+/**
+ * Why a non-NFL search row carries no value. The row came back from the player table, so the player
+ * is identified; the NFL branch never needs this, because every row there comes FROM the value feed.
+ */
+function unpricedReasonForRow(row: { dynastyValue?: number | null; position?: string | null; sport?: string | null }) {
+  if (row.dynastyValue != null) return null
+  return playerUnpricedReason({ identified: true, position: row.position, sport: row.sport, marketLoaded: true })
+}
+
 export async function GET(req: NextRequest) {
   const ip = getClientIp(req as any) || 'unknown'
   const rl = rateLimit(`trade-value-search:${ip}`, 80, 60_000)
@@ -83,6 +93,7 @@ export async function GET(req: NextRequest) {
             team: row.team,
             headshotUrl: row.headshotUrl ?? row.headshotUrlLg ?? row.headshotUrlSm,
             value: row.dynastyValue ?? null,
+            unpricedReason: unpricedReasonForRow(row),
             rank: null as number | null,
             source: row.dataSource,
           }))
@@ -103,6 +114,7 @@ export async function GET(req: NextRequest) {
         team: row.team,
         headshotUrl: row.headshotUrl ?? row.headshotUrlLg ?? row.headshotUrlSm,
         value: row.dynastyValue ?? null,
+        unpricedReason: unpricedReasonForRow(row),
         rank: null as number | null,
         source: row.dataSource,
       })),

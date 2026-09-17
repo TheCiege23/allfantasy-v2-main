@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import type { PartnerRanking } from '@/lib/trade-intel/partnerRanking'
+import type { UnpricedReason } from '@/lib/trade-value/unpricedReason'
 
 /**
  * The league's rosters, read once and shared by everything on the Trade Center
@@ -43,6 +44,8 @@ export type RosterPlayer = {
    */
   stock?: 'up' | 'down' | 'flat' | null
   stockDelta?: number | null
+  /** Why `value` is null, in the words the builder prints. Optional for the same rollout reason. */
+  unpricedReason?: UnpricedReason | null
 }
 
 export type RosterPick = {
@@ -53,6 +56,8 @@ export type RosterPick = {
   itemType: 'rookie_pick' | 'future_pick'
   /** ⚠ NULL IS "NOT PRICED", never 0 — the same contract `RosterPlayer.value` carries. */
   value: number | null
+  /** Why `value` is null; set only when the route could not place the pick on the curve. */
+  unpricedReason?: UnpricedReason | null
 }
 
 export type LeagueRoster = {

@@ -299,14 +299,17 @@ export const POST = withApiUsage({ endpoint: '/api/trade-value/analyze', tool: '
               bestPlayerGoesTo: bestPlayerSide,
               /* The console's own prices, so unpriced exposure is measured
                  against what it actually managed to value rather than a guess
-                 about which positions the feed covers. */
+                 about which positions the feed covers.
+                 ⚠ An `unpriced` line's 0 is a placeholder, not a price: passed
+                 through, the unpriced note never counted him and the
+                 concentration check weighed him as a worthless asset. */
               pricedGive: out.players.give.map((l) => ({
                 name: l.name,
-                marketValue: l.marketValue,
+                marketValue: l.unpriced ? null : l.marketValue,
               })),
               pricedGet: out.players.get.map((l) => ({
                 name: l.name,
-                marketValue: l.marketValue,
+                marketValue: l.unpriced ? null : l.marketValue,
               })),
               /* Only used for the Zombie veto warning: a lopsided deal there
                  goes to an 8-hour poll and two thirds can reverse it. */

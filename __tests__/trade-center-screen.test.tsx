@@ -153,7 +153,9 @@ describe('the asset picker', () => {
 
   it('⚠ shows an em dash for an unpriced search result here too', () => {
     // The picker must not imply zero any more than the deal rows do.
-    expect(PICKER).toContain("r.value == null ? '—'")
+    // Since item #5 the dash is one component, which also carries the reason.
+    expect(PICKER).toMatch(/r\.value == null \? \(\s*<UnpricedValue reason=\{r\.unpricedReason\} \/>/)
+    expect(PICKER).toMatch(/export function UnpricedValue[\s\S]{0,600}?\{'(?:—|\\u2014)'\}/)
   })
 
   it('debounces rather than firing a request per keystroke', () => {
@@ -647,11 +649,18 @@ describe('🛑 a draft pick reaches the TOTAL, not just the row', () => {
     expect(pickBranch![1]).toContain('a.value')
   })
 
-  it('FAAB is still deliberately unpriced', () => {
-    // Only picks changed. FAAB has no market value and must not acquire a fake one.
-    const faabBranch = /position: 'FAAB'[\s\S]{0,160}?marketValue:\s*([^,}]+)/.exec(code)
+  it('FAAB is priced by the ANALYSIS only — never a number invented on this screen', () => {
+    /*
+     * This test used to pin "FAAB is still deliberately unpriced". The user changed that on
+     * 2026-09-16 ("yes change FAAB"): FAAB now shows the value the verdict gave it. What must
+     * still never happen is the screen inventing its own FAAB number — the verdict converts
+     * against the league's budget, which this screen does not know.
+     */
+    const faabBranch = /if \(a\.kind === 'faab'\) \{([\s\S]{0,900}?)\r?\n\s*\}\r?\n/.exec(code)
     expect(faabBranch).not.toBeNull()
-    expect(faabBranch![1].trim()).toBe('null')
+    const body = faabBranch![1]
+    expect(body).toContain('pricedBy.get(`faab $${a.amount}`)')
+    expect(body).not.toMatch(/normalizedFaabValue|pickValueByOverall|marketValue:\s*\d/)
   })
 
   it('🛑 DERIVES the price from the round rather than trusting what the asset carries', () => {

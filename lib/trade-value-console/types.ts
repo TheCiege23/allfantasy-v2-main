@@ -2,6 +2,7 @@ import type { LeagueSport } from '@prisma/client'
 import type { SupportedSport } from '@/lib/sport-scope'
 import type { LeagueToolAccessErrorCode } from '@/lib/ai-tools/league-tool-context-types'
 import type { AiTimeContextPayload } from '@/lib/time-engine/types'
+import type { UnpricedReason } from '@/lib/trade-value/unpricedReason'
 
 export type TradeSportFilter = 'ALL' | SupportedSport
 
@@ -116,6 +117,18 @@ export type TradeConsolePlayerLine = {
    * into 'unknown' would report a value we can fully explain as one we cannot.
    */
   pricedSource: 'fantasycalc' | 'idp_league' | 'sports_db' | 'faab' | 'pick' | 'unknown'
+  /**
+   * True when the engine found NO value, and `marketValue` is only its placeholder 0.
+   *
+   * 🛑 THE ZERO REACHED THE SCREEN. `pricePlayer` marks this case `unpriced` and warns that every
+   * surface must check it first; this line type dropped the flag, so the Trade Center printed "0"
+   * for a team defense after Analyze — the one rendering this app forbids for an unpriced asset.
+   * `marketValue` keeps its number so the engine's own maths is unchanged; the flag is what a
+   * surface reads.
+   */
+  unpriced?: boolean
+  /** Why, when `unpriced`; see `lib/trade-value/unpricedReason.ts`. */
+  unpricedReason?: UnpricedReason | null
   /** From `resolveNormalizedPlayerSportsProfiles` + league scoring stack. */
   effectiveProjection?: number | null
   projectionNotes?: string[]
