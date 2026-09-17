@@ -201,6 +201,18 @@ bracket, so a gate on the title game alone would re-fetch them on every run.
 returns `[]` both for a failed request and for a league with no bracket, so the two cannot
 be told apart.
 
+**Watching it.** Each run of the cron reports the gate under `metadata.matchupSeasons`, both
+in its response (which the slow-tier Actions log prints) and in its `SyncJobRun` row:
+
+| Field | Meaning |
+|---|---|
+| `processed` | Seasons fetched and written |
+| `skippedComplete` | Settled seasons left alone |
+| `completedRefreshed` | Finished seasons fetched once more |
+| `leaguesWithError` | Leagues whose matchup sync reported an error but still count as refreshed |
+
+After deploy, `completedRefreshed` should be non-zero for a few runs, then drop to zero.
+
 Measured on the test copy, read-only, 2026-09-17:
 
 | Sleeper dynasty rows without a decided title game | Count |
