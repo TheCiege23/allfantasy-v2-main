@@ -20,7 +20,18 @@ describe('waiver decision bridge — onClaims side channel', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     h.loadFacts.mockResolvedValue({ sport: 'NFL', rosterId: 'r1', settings: { faabBudget: 100 }, faabRemaining: 80 })
-    h.loadPool.mockResolvedValue({ availablePlayers: [{ id: 'sp-row-1', name: 'Jaylen Wright', position: 'RB' }], poolIncomplete: false, leagueRosterCount: 12 })
+    /* The pool's whole contract: the bridge reads the roster, the slots and the traits too (2026-09-17). */
+    h.loadPool.mockResolvedValue({
+      availablePlayers: [{ id: 'sp-row-1', name: 'Jaylen Wright', position: 'RB', team: 'MIA', age: 23, value: 1400 }],
+      myRoster: [{ id: 'r-1', name: 'My RB', position: 'RB', team: 'BUF', slot: 'bench', age: 26, value: 900 }],
+      leagueRosters: [{ players: [] }],
+      rosterPositions: ['QB', 'RB', 'WR', 'BN'],
+      leagueTraits: { numTeams: 12, isSF: false, isTEP: false, isDynasty: false },
+      currentWeek: 3,
+      poolIncomplete: false,
+      leagueRosterCount: 12,
+      pricing: { priced: 1, total: 1, basis: 'redraft, 1QB, 12 teams, 0.5 PPR' },
+    })
   })
 
   const claim = { addPlayerId: 'sp-row-1', addPlayerName: 'Jaylen Wright', position: 'RB', team: 'MIA', dropPlayerId: null, dropPlayerName: null, faabBid: 12, priorityRank: 1, compositeScore: 71, recommendation: 'strong_add', reason: 'Starter out' }
@@ -41,6 +52,46 @@ describe('waiver decision bridge — onClaims side channel', () => {
     telemetry: { dco_consumed: true, rule_gated: true, decision_object_emitted: true, explainable: true, world_resolution_read_only: true },
   }
 
+  /*
+   * 🛑 THE INPUT IS THE FIX. The engine could never recommend anything because this bridge passed
+   * `availablePlayers` alone: prices are what let the scorer rank, the asker's slotted roster is what
+   * lets it name a drop, and the league's rosters are the median behind "your weakest slot".
+   */
+  it('🛑 hands the engine the priced wire, the asker’s roster and the league’s rosters', async () => {
+    h.runDecision.mockResolvedValue({ decision })
+    await loadWaiverDecisionSlice({ userId: 'u1', leagueId: 'L1' })
+
+    expect(h.loadPool).toHaveBeenCalledWith('L1', 'NFL', 'r1')
+    const input = h.runDecision.mock.calls[0][0]
+    expect(input.engineInput.availablePlayers[0]).toMatchObject({ name: 'Jaylen Wright', value: 1400 })
+    expect(input.engineInput.roster).toEqual([
+      { id: 'r-1', name: 'My RB', position: 'RB', team: 'BUF', slot: 'bench', age: 26, value: 900 },
+    ])
+    expect(input.engineInput.allLeagueRosters).toEqual([{ players: [] }])
+    expect(input.engineInput.rosterPositions).toEqual(['QB', 'RB', 'WR', 'BN'])
+    expect(input.engineInput.leagueSettings).toMatchObject({ numTeams: 12, isSF: false, isTEP: false, isDynasty: false, faabRemaining: 80 })
+    expect(input.engineInput.currentWeek).toBe(3)
+    expect(input.pricing).toEqual({ priced: 1, total: 1, basis: 'redraft, 1QB, 12 teams, 0.5 PPR' })
+  })
+
+  it('leaves the week out rather than sending week 1 when no projection week is on file', async () => {
+    /* Week 1 would put every bye two weeks away and boost the wrong players. */
+    h.runDecision.mockResolvedValue({ decision })
+    h.loadPool.mockResolvedValue({
+      availablePlayers: [{ id: 'a', name: 'A', position: 'RB', team: null, age: null, value: 900 }],
+      myRoster: [],
+      leagueRosters: [{ players: [] }],
+      rosterPositions: [],
+      leagueTraits: { numTeams: 12, isSF: false, isTEP: false, isDynasty: false },
+      currentWeek: null,
+      poolIncomplete: false,
+      leagueRosterCount: 12,
+      pricing: { priced: 1, total: 1, basis: 'redraft, 1QB, 12 teams, 0.5 PPR' },
+    })
+    await loadWaiverDecisionSlice({ userId: 'u1', leagueId: 'L1' })
+    expect('currentWeek' in h.runDecision.mock.calls[0][0].engineInput).toBe(false)
+  })
+
   it('🛑 hands the engine’s claims and confidence to the sink; the slice stays text with no ids', async () => {
     h.runDecision.mockResolvedValue({ decision })
     const sink = vi.fn()
@@ -60,7 +111,17 @@ describe('waiver decision bridge — onClaims side channel', () => {
   it('no sink: unchanged; no decision run (empty pool): the sink is never called', async () => {
     h.runDecision.mockResolvedValue({ decision })
     expect((await loadWaiverDecisionSlice({ userId: 'u1', leagueId: 'L1' })).present).toBe(true)
-    h.loadPool.mockResolvedValue({ availablePlayers: [], poolIncomplete: false, leagueRosterCount: 12 })
+    h.loadPool.mockResolvedValue({
+      availablePlayers: [],
+      myRoster: [],
+      leagueRosters: [{ players: [] }],
+      rosterPositions: [],
+      leagueTraits: { numTeams: 12, isSF: false, isTEP: false, isDynasty: false },
+      currentWeek: null,
+      poolIncomplete: false,
+      leagueRosterCount: 12,
+      pricing: { priced: 0, total: 0, basis: null },
+    })
     const sink = vi.fn()
     await loadWaiverDecisionSlice({ userId: 'u1', leagueId: 'L1', onClaims: sink })
     expect(sink).not.toHaveBeenCalled()
