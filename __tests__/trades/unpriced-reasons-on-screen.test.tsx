@@ -211,3 +211,64 @@ describe('🛑 after Analyze', () => {
     expect(totals).toContain((180).toLocaleString())
   })
 })
+
+describe('🛑 a pick with no round is left out of the VERDICT, not only the row', () => {
+  /*
+   * The picker builds every pick with a round (`round: p.round ?? 1`), and the analysis request used
+   * to carry that default — so the verdict valued a pick with no round as a first-rounder while
+   * its row said "Unpriced".
+   */
+  type Body = { sideGive: Array<{ kind: string; round?: number }>; sideGet: Array<{ kind: string; round?: number }> }
+  const analyzeBodies = (): Body[] =>
+    (globalThis.fetch as unknown as { mock: { calls: Array<[string, RequestInit | undefined]> } }).mock.calls
+      .filter(([u]) => String(u) === '/api/trade-value/analyze')
+      .map(([, init]) => JSON.parse(String(init?.body)) as Body)
+  const draft = DRAFT as unknown as { get: unknown[] }
+
+  it('does not send it to the analysis', async () => {
+    render(<TradeCenter league={LEAGUE} />)
+    await restore()
+    fireEvent.click(screen.getByText('Analyze this trade'))
+    await waitFor(() => expect(analyzeBodies()).toHaveLength(1))
+    const body = analyzeBodies()[0]!
+    expect(body.sideGet).toEqual([{ kind: 'player', playerId: 'p1', name: 'DK Metcalf' }])
+    // [control] the rest of the deal goes through untouched.
+    expect(body.sideGive.map((a) => a.kind)).toEqual(['player', 'faab'])
+  })
+
+  it('[control] a pick whose round is known IS sent', async () => {
+    const saved = draft.get
+    draft.get = [saved[0], { kind: 'pick', year: 2027, round: 2, label: '2027 2nd', pickId: 'pk-2', value: 900 }]
+    try {
+      render(<TradeCenter league={LEAGUE} />)
+      await restore()
+      fireEvent.click(screen.getByText('Analyze this trade'))
+      await waitFor(() => expect(analyzeBodies()).toHaveLength(1))
+      expect(analyzeBodies()[0]!.sideGet.some((a) => a.kind === 'pick' && a.round === 2)).toBe(true)
+    } finally {
+      draft.get = saved
+    }
+  })
+
+  it('says on the row that the verdict leaves it out', async () => {
+    render(<TradeCenter league={LEAGUE} />)
+    await restore()
+    expect(dealRow('2027 pick').textContent).toContain('left out of the verdict')
+  })
+
+  it('a side holding only such a pick is explained, and nothing is sent', async () => {
+    const saved = draft.get
+    draft.get = [saved[1]]
+    try {
+      render(<TradeCenter league={LEAGUE} />)
+      await restore()
+      fireEvent.click(screen.getByText('Analyze this trade'))
+      await waitFor(() =>
+        expect(document.body.textContent).toContain('Nothing on one side can be valued'),
+      )
+      expect(analyzeBodies()).toHaveLength(0)
+    } finally {
+      draft.get = saved
+    }
+  })
+})
