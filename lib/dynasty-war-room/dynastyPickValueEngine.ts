@@ -10,6 +10,7 @@
  *   - 'missing'         → table not migrated for this env → needsProviderIntegration.
  *   - 'available_empty' → tracking enabled, no picks recorded yet → trackingEnabledEmpty.
  *   - 'available'       → real picks summarized.
+ *   - 'partial'         → real picks listed, but only the traded ones → no total (`partial`).
  */
 
 import type { DynastyFuturePick, DynastyTeamSummary, DynastyWarRoomContext } from './types'
@@ -27,8 +28,13 @@ export interface DynastyPickLine {
 export interface DynastyPickValueResult {
   rosterId: string
   picks: DynastyPickLine[]
-  /** Sum of structural pick tiers (null when no priced picks). */
+  /** Sum of structural pick tiers (null when no priced picks, or when the list is partial). */
   totalEstValue: number | null
+  /**
+   * The list is known to be incomplete (only traded picks), so it is not the team's capital:
+   * `totalEstValue` is withheld and `earlyPickCount` counts only the listed picks.
+   */
+  partial: boolean
   earlyPickCount: number
   missingDataFlags: string[]
   /** True only when the backing table is absent (provider integration pending). */
@@ -73,12 +79,14 @@ export function evaluateDynastyPickValue(
       rosterId,
       picks: [],
       totalEstValue: null,
+      partial: false,
       earlyPickCount: 0,
       missingDataFlags,
       needsProviderIntegration: true,
       trackingEnabledEmpty: false,
     }
   }
+  const partial = state === 'partial'
 
   const picks = team?.picks ?? []
   if (picks.length === 0) {
@@ -86,6 +94,7 @@ export function evaluateDynastyPickValue(
       rosterId,
       picks: [],
       totalEstValue: null,
+      partial,
       earlyPickCount: 0,
       missingDataFlags,
       needsProviderIntegration: false,
@@ -94,8 +103,17 @@ export function evaluateDynastyPickValue(
   }
 
   const lines: DynastyPickLine[] = picks.map((pk) => {
+    /*
+     * ⚠ BOTH IDS ARE IN `Roster.id` SPACE, AND THIS COMPARISON DEPENDS ON IT. Imported leagues store
+     * provider team ids on the pick table; `dynastyPickCapital.ts` translates them before a pick
+     * reaches the context. Compared raw, a provider id never equals a roster id.
+     */
     const fromOriginalOwner = pk.originalRosterId == null || pk.originalRosterId === rosterId
-    const origin = fromOriginalOwner ? 'own' : 'acquired via trade'
+    const origin = fromOriginalOwner
+      ? 'own'
+      : pk.originalTeamName
+        ? `acquired from ${pk.originalTeamName}`
+        : 'acquired via trade'
     return {
       id: pk.id,
       season: pk.season,
@@ -114,7 +132,9 @@ export function evaluateDynastyPickValue(
   return {
     rosterId,
     picks: lines,
-    totalEstValue: summary.totalEstValue,
+    // A partial list's sum would read as the team's whole capital.
+    totalEstValue: partial ? null : summary.totalEstValue,
+    partial,
     earlyPickCount: summary.earlyPickCount,
     missingDataFlags,
     needsProviderIntegration: false,

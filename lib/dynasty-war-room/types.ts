@@ -15,8 +15,13 @@
  * `available_empty` = the backing table EXISTS but holds no rows for this league
  * (a truthful "tracking enabled, nothing recorded yet" state). Distinct from
  * `missing` (table/provider not available at all). Used by futurePicks.
+ *
+ * `partial` = what is listed is real but KNOWN to be incomplete, so it must not be totalled or
+ * counted as the whole. futurePicks: an imported league whose draft size is unknown lists only the
+ * picks that changed hands, never each team's own. Engines that need the whole set check for
+ * `available`, so they skip it.
  */
-export type DataState = 'available' | 'stale' | 'missing' | 'available_empty'
+export type DataState = 'available' | 'stale' | 'missing' | 'available_empty' | 'partial'
 
 export interface DynastyDataAvailability {
   scoringRules: DataState
@@ -74,12 +79,20 @@ export interface DynastyPlayerFact {
 }
 
 export interface DynastyFuturePick {
-  /** Stable DB id (future_draft_picks.id) — used to reference a pick in a trade. */
+  /**
+   * Stable id — used to reference a pick in the War Room's trade tools. `future_draft_picks.id` for a
+   * native league; `fdp:<season>:<round>:<team>` for an imported one, whose own picks have no row.
+   */
   id: string
   season: number
   round: number
-  /** Original owner team/roster id (immutable "home" of the pick). */
+  /**
+   * Original owner, in `Roster.id` space (immutable "home" of the pick). For an imported pick whose
+   * original team has no roster here, the provider team id — which never equals a roster id.
+   */
   originalRosterId: string | null
+  /** The original team's name when the pick was acquired and the name is known. */
+  originalTeamName?: string | null
   /** Roster currently holding the pick (differs from original when traded). */
   currentOwnerId: string | null
   /** True when this pick has changed hands at least once. */

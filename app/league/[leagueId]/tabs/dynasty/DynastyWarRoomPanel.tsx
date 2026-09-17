@@ -213,7 +213,11 @@ export function DynastyWarRoomPanel({ leagueId }: { leagueId: string }) {
             {context.freeAgents?.length ?? 0} FAs · val{' '}
             {context.availability?.playerValues === 'available' ? '✓' : '—'} · age{' '}
             {context.availability?.playerAges === 'available' ? '✓' : '—'} · picks{' '}
-            {context.availability?.futurePicks === 'available' ? '✓' : '—'}
+            {context.availability?.futurePicks === 'available'
+              ? '✓'
+              : context.availability?.futurePicks === 'partial'
+                ? 'partial'
+                : '—'}
           </p>
         </div>
       </div>
@@ -292,16 +296,24 @@ export function DynastyWarRoomPanel({ leagueId }: { leagueId: string }) {
             Future pick tracking is not enabled for this league yet.
           </p>
         ) : myPicks.length === 0 ? (
-          <p className="mt-2 text-[11px] text-white/50" data-testid="dynasty-war-room-pick-capital-empty">
-            Pick tracking is enabled, but you have no future picks recorded yet.
-          </p>
+          picksState === 'partial' ? null : (
+            <p className="mt-2 text-[11px] text-white/50" data-testid="dynasty-war-room-pick-capital-empty">
+              Pick tracking is enabled, but you have no future picks recorded yet.
+            </p>
+          )
         ) : (
           <div className="mt-2 flex flex-wrap gap-2" data-testid="dynasty-war-room-pick-capital-list">
             {myPicks.map((pk) => (
               <span
                 key={pk.id}
                 className="rounded-md bg-white/[0.04] px-2 py-1 text-[11px] text-white/70"
-                title={pk.traded ? 'Acquired via trade' : 'Original pick'}
+                title={
+                  pk.traded
+                    ? pk.originalTeamName
+                      ? `Acquired from ${pk.originalTeamName}`
+                      : 'Acquired via trade'
+                    : 'Original pick'
+                }
               >
                 {pk.season} R{pk.round}
                 {pk.traded ? <span className="text-amber-300/80"> ↔</span> : null}
@@ -310,6 +322,14 @@ export function DynastyWarRoomPanel({ leagueId }: { leagueId: string }) {
             ))}
           </div>
         )}
+        {picksState === 'partial' ? (
+          <p className="mt-2 text-[11px] text-amber-200/80" data-testid="dynasty-war-room-pick-capital-partial">
+            {myPicks.length > 0
+              ? 'Only picks that changed hands are listed'
+              : 'You hold none of the picks that changed hands'}{' '}
+            — this league&apos;s rookie-draft size isn&apos;t known, so your own picks aren&apos;t shown.
+          </p>
+        ) : null}
         <p className="mt-1.5 text-[10px] text-white/30">
           Tiers are structural (round + years out), not market values.
         </p>

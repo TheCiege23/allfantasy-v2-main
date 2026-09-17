@@ -114,7 +114,9 @@ export function analyzeDynastyTrade(
   }
 
   // Picks priced by deterministic structural tier (round + seasons-out) — not market.
-  const picksAvailable = context.availability.futurePicks === 'available'
+  // A partial list still prices the picks it names; an own pick it cannot name stays unresolved below.
+  const picksAvailable =
+    context.availability.futurePicks === 'available' || context.availability.futurePicks === 'partial'
   const requestedPickIds = (input.outgoingPickIds?.length ?? 0) + (input.incomingPickIds?.length ?? 0)
   if (requestedPickIds > 0 && !picksAvailable) {
     riskFlags.push('Pick capital is not tracked for this league — picks in this trade are excluded from the value delta.')
