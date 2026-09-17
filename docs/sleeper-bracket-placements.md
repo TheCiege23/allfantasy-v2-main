@@ -155,22 +155,34 @@ must switch to `rank`, which is what `legacy-import.ts:529` already uses. (The P
 `platformLeagueId` and `LegacyRoster.rosterId` to the bracket roster id. It reaches only
 191 of 986 completed owner rosters (19%) on the test copy, so re-import is the main path.
 
-## Wiring the career page's "Finals" (after this lands)
+## The career page's "Finals" (wired 2026-09-17)
 
-`CareerAccomplishments.finals` in `lib/core-app/careerModel.ts` (on `main` since #981) is
-`null` today, and the page shows "Not recorded".
+`CareerAccomplishments.finals` in `lib/core-app/careerModel.ts` is now titles plus finals
+lost. A lost final is the losing side of a stored Sleeper title game. The work is split
+across three files:
 
-`finalStanding = 2` cannot be trusted on its own: old rows hold a regular-season rank
-there, and nothing marks which rows were written under the new rule. There are two
-trustworthy sources, both needing only a read:
+- **`lib/league-import/sleeper/bracketPlacements.ts`**, `readStoredTitleGame`:
+  - A `bracketPlacementVersion: 2` row is read as stored.
+  - An older row is resolved from its flattened `winnersBracket` with the same rule.
+  - ⚠ The fallback is what makes this work before any backfill. The sync never rewrites
+    a completed season, so on the test copy no row carried version 2 yet.
+- **`lib/core-app/careerFinalsResolve.ts`** matches each career row to its stored season
+  and finds the manager's roster:
+  - Legacy and import rows match by Sleeper league id and season.
+  - Imported season history matches by `League.id` and season.
+  - The roster is the legacy roster, or else the claimed team traced back through the
+    stored `canonicalRosterIdByHistoricalRosterId` map (unique matches only).
+- **`lib/core-app/careerFinals.ts`** sums the results for the tile. A season whose bracket
+  names the manager champion but whose row records no title is reported, not counted.
 
-1. **`league_dynasty_seasons`** where `bracketPlacementVersion = 2`: `championRosterId` or
-   `runnerUpRosterId` matched to the manager's roster. This is exact, but only where a
-   dynasty season exists.
-2. **`legacy_rosters.finalStanding ∈ {1, 2}`**, but only after follow-up 2 ships **with a
-   marker**. Without a marker, old and new values cannot be told apart. No existing
-   column can serve: `LegacyLeague` and `LegacyRoster` carry only `createdAt` and
-   `updatedAt`, and `updatedAt` moves on every write. The marker therefore needs a new
-   column, which means a migration and is the user's call.
+`finalStanding` is still not read, for the reason below: old rows hold a regular-season
+rank there, and nothing marks which rows were written under any new rule. If follow-up 2
+ships, it needs **a marker** before the career page can use it. No existing column can
+serve: `LegacyLeague` and `LegacyRoster` carry only `createdAt` and `updatedAt`, and
+`updatedAt` moves on every write. The marker therefore needs a new column, which means a
+migration and is the user's call.
 
-Until one of those exists, the career page should keep saying "Not recorded".
+⚠ **Coverage for the 2026 season depends on a separate fix.** The four-hourly
+`sleeper-historical-refresh` skips a season that is `complete` and already has matchup
+facts. A season first stored while still being played can therefore keep an undecided
+bracket after it finishes, and its final would never be readable.

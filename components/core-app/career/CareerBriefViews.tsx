@@ -28,8 +28,8 @@ export function AccomplishmentStrip({ data }: { data: CareerData }) {
       label: 'Finals',
       value: a.finals == null ? 'Not recorded' : nf(a.finals),
       muted: a.finals == null,
-      note: a.finals == null ? 'Imports store the champion, not the runner-up' : undefined,
-      title: a.finals == null ? a.finalsNote : undefined,
+      note: a.finals == null ? 'No stored playoff bracket to check' : `${nf(a.championships)} won · ${nf(a.finalsLost)} lost`,
+      title: a.finalsNote,
     },
     {
       k: 'playoffs',
@@ -719,6 +719,14 @@ export function CoverageView({ data, extras }: { data: CareerData; extras: Caree
             <li>{nf(extras.ungradedLeagues)} Sleeper leagues have not had their trades graded.</li>
           ) : null}
           <li>{data.accomplishments.finalsNote}</li>
+          {data.accomplishments.finalsUncountedTitles > 0 ? (
+            <li>
+              {nf(data.accomplishments.finalsUncountedTitles)} Sleeper playoff{' '}
+              {data.accomplishments.finalsUncountedTitles === 1 ? 'bracket names' : 'brackets name'} you champion in a
+              season whose source does not record the title, so {data.accomplishments.finalsUncountedTitles === 1 ? 'it counts' : 'they count'}{' '}
+              as neither a title nor a final.
+            </li>
+          ) : null}
         </ul>
       </section>
 

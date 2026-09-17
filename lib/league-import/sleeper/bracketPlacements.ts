@@ -275,6 +275,99 @@ export function analyzePlayoffBracket(
   return results
 }
 
+/* ── Reading what the historical sync stored ─────────────────────────────────── */
+
+/** A title game as read back from `league_dynasty_seasons.metadata.playoffStructure`. */
+export type StoredTitleGame = {
+  championRosterId: number
+  runnerUpRosterId: number | null
+  /** `stored` — the row's own `championRosterId` (bracketPlacementVersion 2); otherwise how the stored bracket resolved. */
+  source: 'stored' | 'placement' | 'inferred'
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : null
+}
+
+function nullableNum(value: unknown): number | null {
+  if (value == null || value === '') return null
+  const n = Number(value)
+  return Number.isFinite(n) ? n : null
+}
+
+function storedFrom(value: unknown): SleeperBracketGame['t1_from'] {
+  const r = asRecord(value)
+  return r ? { w: nullableNum(r.w), l: nullableNum(r.l) } : null
+}
+
+/**
+ * The bracket as `SleeperHistoricalMatchupSyncService.toPlainBracket` stored it
+ * (`round`, `matchup`, `team1`, …), back in Sleeper's own field names.
+ */
+export function storedBracketGames(playoffStructure: unknown): SleeperBracketGame[] {
+  const raw = asRecord(playoffStructure)?.winnersBracket
+  if (!Array.isArray(raw)) return []
+  return raw
+    .map(asRecord)
+    .filter((g): g is Record<string, unknown> => g != null)
+    .map((g) => ({
+      r: nullableNum(g.round),
+      m: nullableNum(g.matchup),
+      t1: nullableNum(g.team1),
+      t2: nullableNum(g.team2),
+      w: nullableNum(g.winner),
+      l: nullableNum(g.loser),
+      p: nullableNum(g.placement),
+      t1_from: storedFrom(g.team1From),
+      t2_from: storedFrom(g.team2From),
+    }))
+}
+
+/**
+ * The decided title game of a stored season, or null when there is none to read.
+ *
+ * ⚠ OLD ROWS ARE RESOLVED HERE, NOT LEFT FOR A BACKFILL. The sync skips a season that is
+ * complete and already stored, so a row written before `bracketPlacementVersion: 2` keeps
+ * its old metadata indefinitely. Its flattened bracket is still there, and this resolves it
+ * with the same rule the writer now uses. A version-2 row is read as stored.
+ */
+export function readStoredTitleGame(playoffStructure: unknown): StoredTitleGame | null {
+  const ps = asRecord(playoffStructure)
+  if (!ps) return null
+  if (ps.bracketPlacementVersion === 2) {
+    const championRosterId = rosterIdOf(ps.championRosterId)
+    if (championRosterId == null) return null
+    return { championRosterId, runnerUpRosterId: rosterIdOf(ps.runnerUpRosterId), source: 'stored' }
+  }
+  const resolved = resolveBracketPlacements(storedBracketGames(ps))
+  if (resolved.championRosterId == null || resolved.source === 'none') return null
+  return {
+    championRosterId: resolved.championRosterId,
+    runnerUpRosterId: resolved.runnerUpRosterId,
+    source: resolved.source,
+  }
+}
+
+/**
+ * The historical roster id that became `canonicalId` (the current season's team id),
+ * from the stored `canonicalRosterIdByHistoricalRosterId`.
+ *
+ * ⚠ ONLY AN UNAMBIGUOUS MATCH. The sync maps a roster whose manager has left to its own
+ * historical id, so two historical rosters can share a canonical id. When they do, this
+ * returns null rather than picking one — attributing another manager's final to you is
+ * the failure this whole module exists to prevent.
+ */
+export function storedHistoricalRosterId(playoffStructure: unknown, canonicalId: string | null | undefined): number | null {
+  if (!canonicalId) return null
+  const map = asRecord(asRecord(playoffStructure)?.canonicalRosterIdByHistoricalRosterId)
+  if (!map) return null
+  const matches = Object.entries(map)
+    .filter(([, canonical]) => String(canonical) === String(canonicalId))
+    .map(([historical]) => rosterIdOf(historical))
+    .filter((id): id is number => id != null)
+  return matches.length === 1 ? matches[0] : null
+}
+
 /** The label the historical sync stores beside each finish. */
 export function placementLabel(info: PlayoffFinishInfo): string | null {
   if (info.isChampion) return 'Champion'

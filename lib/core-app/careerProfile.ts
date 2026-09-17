@@ -50,7 +50,11 @@ import { tradeAssetCount } from '@/lib/core-app/careerTrades'
  * (`loadCareerIdentity`); a rename must not wait for an import.
  */
 
-export const CAREER_PROFILE_VERSION = 1
+/*
+ * v2 — rows carry `finalResult` (career Finals, from stored Sleeper brackets). A v1 document
+ * has no such field, so it fails `isStoredProfile` and is rebuilt on its next read.
+ */
+export const CAREER_PROFILE_VERSION = 2
 export const CAREER_PROFILE_PREFIX = `core-career:profile:v${CAREER_PROFILE_VERSION}:`
 /** A profile is rebuilt whenever its sources move; this only bounds an abandoned account's row. */
 const PROFILE_RETENTION_DAYS = 400
@@ -135,7 +139,7 @@ export async function computeCareerStamp(userId: string, legacyUserId: string | 
     .join(',')
   const claimsNewest = claimed.reduce<number>((m, c) => Math.max(m, c.lastUpdatedAt?.getTime() ?? 0), 0)
 
-  const [imports, facts, legacyLeagues, legacyRosters, trades] = await Promise.all([
+  const [imports, facts, legacyLeagues, legacyRosters, trades, titleGames] = await Promise.all([
     prisma.league.aggregate({
       where: { userId, importWins: { not: null } },
       _count: { _all: true },
@@ -169,6 +173,7 @@ export async function computeCareerStamp(userId: string, legacyUserId: string | 
           _max: { createdAt: true },
         })
       : null,
+    storedTitleGameStamp(userId, legacyUserId, claimedLeagueIds),
   ])
 
   const t = (d: Date | null | undefined) => (d ? d.getTime() : 0)
@@ -181,9 +186,52 @@ export async function computeCareerStamp(userId: string, legacyUserId: string | 
     legacyLeagues ? `l${legacyLeagues._count._all}@${t(legacyLeagues._max.updatedAt)}` : 'l0',
     legacyRosters ? `r${legacyRosters._count._all}@${t(legacyRosters._max.updatedAt)}` : 'r0',
     trades ? `t${trades._count._all}@${t(trades._max.createdAt)}` : 't0',
+    titleGames,
     `u${legacyUserId ?? '-'}`,
   ]
   return { stamp: parts.join('|'), tradeKeys }
+}
+
+/**
+ * The stored Sleeper title games (`league_dynasty_seasons`) the Finals tile can read.
+ *
+ * ⚠ A DIGEST OF THE TITLE-GAME FIELDS, NOT `importedAt`. Every re-sync rewrites
+ * `importedAt`, including the four-hourly refresh of seasons still being played, so a date
+ * would rebuild settled careers for nothing. The digest moves when a row is added or removed,
+ * when a backfill stamps `bracketPlacementVersion`, or when a stored final is decided.
+ *
+ * ⚠ THE SAME MATCH AS THE LOADER: Sleeper league ids from legacy history and from this
+ * account's leagues, and `League.id`s owned or claimed. Never throws — a failed read stamps
+ * `d?`, which rebuilds once rather than taking the page down.
+ */
+async function storedTitleGameStamp(userId: string, legacyUserId: string | null, claimedLeagueIds: string[]): Promise<string> {
+  try {
+    const rows = await prisma.$queryRaw<Array<{ n: number; digest: string | null }>>`
+      SELECT count(*)::int AS n,
+             md5(string_agg(
+               coalesce(metadata->'playoffStructure'->>'bracketPlacementVersion', '') || ':' ||
+               coalesce(metadata->'playoffStructure'->>'championRosterId', '') || ':' ||
+               coalesce(metadata->'playoffStructure'->>'runnerUpRosterId', ''),
+               ',' ORDER BY id
+             )) AS digest
+      FROM league_dynasty_seasons
+      WHERE provider = 'sleeper'
+        AND (
+          "platformLeagueId" IN (SELECT "sleeperLeagueId" FROM "LegacyLeague" WHERE "userId" = ${legacyUserId ?? ''})
+          OR "platformLeagueId" IN (SELECT "platformLeagueId" FROM leagues WHERE "userId" = ${userId} AND "platformLeagueId" IS NOT NULL)
+          OR "leagueId" IN (SELECT id FROM leagues WHERE "userId" = ${userId})
+          OR "leagueId" = ANY(${claimedLeagueIds}::text[])
+          OR "platformLeagueId" IN (
+            SELECT "platformLeagueId" FROM leagues WHERE id = ANY(${claimedLeagueIds}::text[]) AND "platformLeagueId" IS NOT NULL
+          )
+        )
+    `
+    const row = rows[0]
+    return `d${row?.n ?? 0}#${(row?.digest ?? '').slice(0, 12)}`
+  } catch (err) {
+    console.error('[core-app/careerProfile] title-game stamp read failed', err)
+    return 'd?'
+  }
 }
 
 /** FNV-1a — a short, stable digest for the claim list; not a security boundary. */

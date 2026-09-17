@@ -257,7 +257,10 @@ function CareerMobile({ screen }: { screen: CareerScreenData }) {
                 <span className="af-crm-tile-v">{data.seasonsPlayed}</span>
               </div>
             </div>
-            <p className="af-crx-muted af-crx-mnote">Finals: {acc.finals == null ? 'not recorded yet' : acc.finals}</p>
+            <p className="af-crx-muted af-crx-mnote" title={acc.finalsNote}>
+              Finals:{' '}
+              {acc.finals == null ? 'not recorded yet' : `${acc.finals} (${acc.championships} won · ${acc.finalsLost} lost)`}
+            </p>
 
             <SeasonStoryRail data={data} />
 
