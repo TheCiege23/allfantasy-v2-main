@@ -97,6 +97,15 @@ describe('tool specs', () => {
        */
       'get_trade_block',
       'get_upcoming_games',
+      /*
+       * The ONLY tool here that spans every league at once, and the only one
+       * that needs no league in scope — see myStartersPlayingTool.ts for the
+       * production question ("how many leagues do I have players playing
+       * tonight?") that no tool could answer. Still read-only, and still scoped
+       * by the SESSION's userId: it reaches leagues only through
+       * `listMemberLeagues`, never from anything the model supplied.
+       */
+      'get_my_starters_playing',
       'get_stat_leaders',
     ])
     for (const n of names) expect(n).not.toMatch(/create|update|delete|send|post|set/i)
