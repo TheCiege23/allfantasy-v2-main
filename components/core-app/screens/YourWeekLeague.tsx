@@ -63,6 +63,45 @@ function initials(name: string | null): string {
   return (first + second).toUpperCase()
 }
 
+/**
+ * A team's avatar, or its initials when there is none.
+ *
+ * ⚠ THE URL IS ALREADY RESOLVED. The loader runs every avatar through
+ * `managerArtUrl`, so a Sleeper avatar id has been expanded and anything it
+ * could not interpret is null. Null is the common case for non-Sleeper
+ * leagues, and initials are its correct rendering — not a broken `<img>`.
+ */
+function TeamAvatar({
+  url,
+  fallback,
+  className,
+  px,
+}: {
+  url: string | null | undefined
+  fallback: string
+  className: string
+  px: number
+}) {
+  if (url) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        className={`${className} ${className}--img`}
+        src={url}
+        alt=""
+        width={px}
+        height={px}
+        loading="lazy"
+      />
+    )
+  }
+  return (
+    <span className={className} aria-hidden>
+      {fallback}
+    </span>
+  )
+}
+
 function recordOf(board: LeagueWeekBoard, rosterId: string | null | undefined): string | null {
   if (rosterId == null) return null
   const r = board.records[rosterId]
@@ -109,9 +148,7 @@ export function YourWeekLeague({ board, allWeeksHref }: YourWeekLeagueProps) {
 
           <div className="af-wl-sides">
             <div className="af-wl-side" data-you="true">
-              <span className="af-wl-avatar" aria-hidden>
-                YOU
-              </span>
+              <TeamAvatar url={board.yourAvatarUrl} fallback="YOU" className="af-wl-avatar" px={44} />
               <span className="af-wl-side-id">
                 <span className="af-wl-side-name">{yourName}</span>
                 {yourRecord ? <span className="af-wl-side-rec af-num">{yourRecord}</span> : null}
@@ -124,9 +161,12 @@ export function YourWeekLeague({ board, allWeeksHref }: YourWeekLeagueProps) {
             </span>
 
             <div className="af-wl-side">
-              <span className="af-wl-avatar" aria-hidden>
-                {initials(yours.opponent.name)}
-              </span>
+              <TeamAvatar
+                url={yours.opponent.avatarUrl}
+                fallback={initials(yours.opponent.name)}
+                className="af-wl-avatar"
+                px={44}
+              />
               <span className="af-wl-side-id">
                 <span className="af-wl-side-name">{yours.opponent.name ?? 'Unnamed team'}</span>
                 {oppRecord ? <span className="af-wl-side-rec af-num">{oppRecord}</span> : null}
@@ -256,6 +296,12 @@ function Sideline({ m, board }: { m: LeagueSideline; board: LeagueWeekBoard }) {
   return (
     <article className="af-wl-card">
       <div className="af-wl-card-row" data-lead={aLeads}>
+        <TeamAvatar
+          url={m.a.avatarUrl}
+          fallback={initials(m.a.name)}
+          className="af-wl-card-avatar"
+          px={22}
+        />
         <span className="af-wl-card-name">{m.a.name ?? 'Unnamed team'}</span>
         {aRec ? <span className="af-wl-card-rec af-num">{aRec}</span> : null}
         <span className="af-wl-card-proj af-num">
@@ -270,6 +316,12 @@ function Sideline({ m, board }: { m: LeagueSideline; board: LeagueWeekBoard }) {
       ) : null}
 
       <div className="af-wl-card-row" data-lead={m.aWinProbability != null && !aLeads}>
+        <TeamAvatar
+          url={m.b.avatarUrl}
+          fallback={initials(m.b.name)}
+          className="af-wl-card-avatar"
+          px={22}
+        />
         <span className="af-wl-card-name">{m.b.name ?? 'Unnamed team'}</span>
         {bRec ? <span className="af-wl-card-rec af-num">{bRec}</span> : null}
         <span className="af-wl-card-proj af-num">

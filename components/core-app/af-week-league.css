@@ -173,6 +173,15 @@
   color: var(--accent);
 }
 
+/* The platform's own team avatar, when one resolved. The border stays, so
+   your side keeps its accent ring around the image. */
+.af-wl-avatar--img {
+  display: block;
+  object-fit: cover;
+  border-radius: 50%;
+  padding: 0;
+}
+
 .af-wl-side-id {
   display: flex;
   flex-direction: column;
@@ -356,9 +365,38 @@
 
 .af-wl-card-row {
   display: grid;
-  grid-template-columns: 1fr auto auto;
+  /* avatar · name · record · projection. The record is optional; when it is
+     absent the projection takes its track and the last one stays empty. */
+  grid-template-columns: auto 1fr auto auto;
   align-items: baseline;
   gap: 10px;
+}
+
+/*
+ * A small team avatar per sideline row. 22px keeps the row within its text
+ * height, so the card does not grow, and it stays visible on a phone — the
+ * grid is one column there, so the row has more width, not less.
+ */
+.af-wl-card-avatar {
+  display: grid;
+  place-items: center;
+  align-self: center;
+  flex: none;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--chip);
+  border: 1px solid var(--chip-line);
+  font: 800 8px/1 'JetBrains Mono', ui-monospace, monospace;
+  color: var(--muted);
+  letter-spacing: 0.02em;
+}
+
+.af-wl-card-avatar--img {
+  display: block;
+  object-fit: cover;
+  border-radius: 50%;
+  padding: 0;
 }
 
 .af-wl-card-name {
@@ -443,22 +481,32 @@
   }
 
   /*
-   * The avatar goes, as it does in the 38a mobile design.
+   * The avatar SHRINKS on a phone rather than disappearing.
    *
-   * ⚠ THIS BUYS HEIGHT, NOT WIDTH — measured, and it is the opposite of how it
-   * looks. Removing a 44px circle and its 12px gap gains the team name exactly
-   * ZERO horizontal pixels: the name was never truncated, 160px is simply how
-   * wide that text is. What it buys is 32px off the hero (403 -> 371), which
-   * on a phone decides whether the rivalry line sits above or below the fold.
+   * It used to be hidden here, as in the 38a mobile design, and the reason was
+   * height, not width — measured at the time, and the opposite of how it
+   * looks. Removing a 44px circle and its 12px gap gained the team name ZERO
+   * horizontal pixels (the name was never truncated); what it bought was 32px
+   * off the hero (403 -> 371), which decides whether the rivalry line sits
+   * above or below the fold.
+   *
+   * That was 16px per stacked side row, i.e. rows of 44px with the avatar and
+   * 28px without. So 28px is the size that keeps the team's own logo — which
+   * is how people recognise a team on a phone — without giving that height
+   * back. Arithmetic from the recorded measurement, not a fresh one: a row
+   * whose name block is taller than 28px was already that tall.
    */
   .af-wl-avatar {
-    display: none;
+    width: 28px;
+    height: 28px;
+    font-size: 9px;
+    letter-spacing: 0.02em;
   }
 
-  /* Nothing left to clear now that the avatar is gone. */
+  /* Under the names, clear of the 28px avatar and the side's 12px gap. */
   .af-wl-vs {
     justify-self: start;
-    padding-left: 0;
+    padding-left: 40px;
   }
 
   /* The rivalry reads as one sentence rather than a tag beside a block. */

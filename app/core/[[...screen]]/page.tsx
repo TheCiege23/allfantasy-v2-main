@@ -2338,6 +2338,13 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
     platformLeagueId: (l as { platformLeagueId?: string | null }).platformLeagueId ?? null,
     /* Only to flag elimination formats — the list already carries it. */
     leagueType: (l as { leagueType?: string | null }).leagueType ?? null,
+    /*
+     * The league's crest on the week board. Raw columns on purpose: the loader
+     * resolves them through `leagueArtUrl`, because a Sleeper `avatarUrl` is an
+     * avatar id, not a link.
+     */
+    logoUrl: (l as { logoUrl?: string | null }).logoUrl ?? null,
+    avatarUrl: (l as { avatarUrl?: string | null }).avatarUrl ?? null,
   }))
 
   /*

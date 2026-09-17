@@ -70,6 +70,18 @@ function CoinFlipCard({ matchup }: { matchup: WeekMatchup }) {
 
       <div className="af-wk-flip-line">
         <span className="af-wk-vs">vs</span>
+        {/* Resolved by the loader via `managerArtUrl`; no avatar means no image, the name carries it. */}
+        {matchup.opponent.avatarUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            className="af-wk-opp-img"
+            src={matchup.opponent.avatarUrl}
+            alt=""
+            width={18}
+            height={18}
+            loading="lazy"
+          />
+        ) : null}
         <span className="af-wk-opp">
           <OpponentName matchup={matchup} />
         </span>
