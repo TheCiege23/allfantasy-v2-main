@@ -24,9 +24,9 @@ describe('domain-os-refresh → matchup odds sweep wiring', () => {
   })
 
   it('🛑 its rows, skips, errors and failures reach the run telemetry', () => {
-    expect(src).toMatch(/rowsWritten: r\.written \+ r\.rankings\.written \+ r\.forecast\.written \+ r\.odds\.written,/)
+    expect(src).toMatch(/rowsWritten: r\.written \+ r\.rankings\.written \+ r\.forecast\.written \+ r\.odds\.written[ ,]/)
     expect(src).toMatch(/r\.odds\.skippedForTime,/)
-    expect(src).toMatch(/\.\.\.r\.forecast\.errors, \.\.\.r\.odds\.errors\]/)
+    expect(src).toMatch(/\.\.\.r\.forecast\.errors, \.\.\.r\.odds\.errors[\],]/)
     expect(src).toMatch(/r\.forecast\.failed > 0 \|\| r\.odds\.failed > 0/)
     expect(src).toMatch(/odds: \{\s*outsideWindow: r\.odds\.outsideWindow,\s*unavailable: r\.odds\.unavailable,/)
   })

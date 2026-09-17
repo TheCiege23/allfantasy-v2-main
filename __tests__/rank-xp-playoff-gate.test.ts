@@ -1,34 +1,20 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
+
+vi.mock('@/lib/prisma', () => ({ prisma: {} }))
 
 import { isEliminationFormat } from '@/lib/core-app/weekBoard'
+import { legacyMadePlayoffs as madePlayoffs } from '@/lib/rank/careerLedger'
 
 /**
- * The two corrections in the XP engine are inside a long DB-bound function, so
- * these tests pin the *rules* rather than mocking the whole engine: the gate
- * career.ts already applies, and the counting that was persisted backwards.
- * The engine's own arithmetic is asserted by the repo's rank suites.
+ * The two corrections in the XP engine: the played-games gate on a berth, and
+ * the counting that was persisted backwards.
+ *
+ * ⚠ THIS FILE USED TO TEST ITS OWN COPY OF THE GATE. The rule lived inline in a
+ * long DB-bound function, so the suite re-typed it here — which meant deleting
+ * the gate from `calculateRank.ts` left every assertion green. The rule now lives
+ * in `lib/rank/careerLedger.ts` (`legacyMadePlayoffs`), shared by the XP writer
+ * and `/core/rankings`, and this suite imports the real one.
  */
-
-/** The gate as it now reads in calculateRank.ts and career.ts alike. */
-function madePlayoffs(roster: {
-  wins?: number
-  losses?: number
-  ties?: number
-  isChampion?: boolean
-  playoffSeed?: number | null
-  finalStanding?: number | null
-}, playoffTeams: number | null): boolean {
-  const playedGames = (roster.wins ?? 0) + (roster.losses ?? 0) + (roster.ties ?? 0) > 0
-  return (
-    playedGames &&
-    (roster.isChampion === true ||
-      (playoffTeams != null && roster.playoffSeed != null
-        ? roster.playoffSeed <= playoffTeams
-        : playoffTeams != null && roster.finalStanding != null
-          ? roster.finalStanding <= playoffTeams
-          : false))
-  )
-}
 
 describe('playoff berth requires games played', () => {
   it('refuses a berth for a season that has not played a snap', () => {

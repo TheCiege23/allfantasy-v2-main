@@ -114,7 +114,16 @@ import { toShareCard } from '@/lib/core-app/shareCard'
 import { Rankings } from '@/components/core-app/screens/Rankings'
 import { RankingsFaq } from '@/components/core-app/screens/RankingsFaq'
 import { RankingsCompare } from '@/components/core-app/screens/RankingsCompare'
-import { getRankingsData, getCompareData, type CompareResult } from '@/lib/core-app/rankings'
+import {
+  getRankingsData,
+  getCompareData,
+  getLeagueCompareData,
+  getTeamCompareData,
+  getPlayerPickData,
+  parseCompareKind,
+  type CompareResult,
+} from '@/lib/core-app/rankings'
+import { filterParams, parseRankingFilters } from '@/lib/core-app/rankingsEngine'
 import { getPortfolio } from '@/lib/core-app/portfolio'
 import { getTodayStrip } from '@/lib/core-app/todayStrip'
 import { getPlayFeed } from '@/lib/live/playFeedPresentation'
@@ -354,7 +363,7 @@ const TAB_META: Record<string, { title: string; description: string }> = {
   portfolio: { title: 'Portfolio', description: 'Every league you hold, in one table.' },
   career: { title: 'Your career', description: 'Seasons, titles and records across every league you have played.' },
   // (league-scoped career shares this key; the title is accurate either way)
-  rankings: { title: 'Rankings', description: 'Your AF level, XP and where you sit on the ladder.' },
+  rankings: { title: 'Rankings', description: 'Community, portfolio and league rankings — normalised, filterable and explained.' },
   commissioner: { title: 'Commissioner', description: 'League health, disputes and settings.' },
   tools: { title: 'Tools', description: 'Everything you can decide or understand about a league.' },
   week: { title: 'Your week', description: 'Every matchup this week, ordered by what needs a decision.' },
@@ -1775,18 +1784,44 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
    * ceiling, and the ladder is the same on all three.
    */
   const rankingsView = activeKey === 'rankings' ? (typeof sp.view === 'string' ? sp.view : null) : null
+  /*
+   * The compare view does not need the rankings payload at all — it reads its own
+   * two sides — so it is skipped there rather than computed and discarded.
+   * `?scope=`, the filters, `?board=`, `?sort=` and `?explain=` are all parsed
+   * inside the loader from `sp`, against whitelists.
+   */
   const rankings =
-    activeKey === 'rankings'
-      ? await getRankingsData(userId, selectedLeagueId).catch(() => null)
+    activeKey === 'rankings' && rankingsView !== 'compare'
+      ? await getRankingsData(userId, selectedLeagueId, sp as Record<string, string | string[] | undefined>).catch(
+          (e: unknown) => {
+            console.error('[core/rankings] read failed', e)
+            return null
+          },
+        )
       : null
 
+  const compareKind = rankingsView === 'compare' ? parseCompareKind(typeof sp.kind === 'string' ? sp.kind : null) : null
+  const rankingFilterPairs =
+    rankingsView === 'compare' ? filterParams(parseRankingFilters(sp as Record<string, string | string[] | undefined>)) : []
   // Only run the comparison when a handle was actually submitted — an empty box
   // is the initial state, not a failed lookup.
   const compareQuery =
-    rankingsView === 'compare' && typeof sp.user === 'string' ? sp.user.trim() : ''
+    compareKind === 'managers' && typeof sp.user === 'string' ? sp.user.trim() : ''
   const compare: CompareResult | null =
-    rankingsView === 'compare' && compareQuery
-      ? await getCompareData(userId, compareQuery).catch(() => null)
+    compareKind === 'managers' && compareQuery
+      ? await getCompareData(userId, compareQuery, sp as Record<string, string | string[] | undefined>).catch(() => null)
+      : null
+  const leagueCompare =
+    compareKind === 'leagues'
+      ? await getLeagueCompareData(userId, sp as Record<string, string | string[] | undefined>).catch(() => null)
+      : null
+  const teamCompare =
+    compareKind === 'teams'
+      ? await getTeamCompareData(userId, selectedLeagueId, sp as Record<string, string | string[] | undefined>).catch(() => null)
+      : null
+  const playerPick =
+    compareKind === 'players'
+      ? await getPlayerPickData(sp as Record<string, string | string[] | undefined>).catch(() => null)
       : null
 
   /*
@@ -3914,13 +3949,21 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
           })}
         />
       ) : activeKey === 'rankings' ? (
-        rankingsView === 'compare' ? (
-          <RankingsCompare result={compare} query={compareQuery} />
+        rankingsView === 'compare' && compareKind ? (
+          <RankingsCompare
+            kind={compareKind}
+            result={compare}
+            query={compareQuery}
+            leagues={leagueCompare}
+            teams={teamCompare}
+            players={playerPick}
+            filterPairs={rankingFilterPairs}
+          />
         ) : rankings ? (
           rankingsView === 'faq' ? (
             <RankingsFaq data={rankings} />
           ) : (
-            <Rankings data={rankings} board={typeof sp.board === 'string' ? sp.board : null} />
+            <Rankings data={rankings} leagueId={selectedLeagueId} />
           )
         ) : (
           <div className="af-frame" style={{ padding: 24, maxWidth: 720 }}>

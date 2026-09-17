@@ -20,6 +20,11 @@ import {
   type MatchupOddsSweepCounts,
 } from '@/lib/core-app/matchupOddsSweep'
 import {
+  runRankingsDailySnapshot,
+  emptyRankingsSnapshotCounts,
+  type RankingsSnapshotCounts,
+} from '@/lib/core-app/rankingsCommunity'
+import {
   runForecastSweep,
   emptyForecastSweepCounts,
   type ForecastSweepCounts,
@@ -198,6 +203,12 @@ type RefreshCounts = {
    * still parked; `outsideWindow: 1` means the fire fell while last week may still be in play.
    */
   odds: MatchupOddsSweepCounts
+  /**
+   * The daily community-rankings snapshot (`sportsDataCache` key `core-rankings:daily:v1:<date>`),
+   * a fifth writer with its own counts. `alreadyWritten: 1` is the normal state for every fire after
+   * the first of the Eastern day; `written: 0 && alreadyWritten: 0 && failed: 0` means it is disabled.
+   */
+  snapshot: RankingsSnapshotCounts
 }
 
 export async function GET(req: NextRequest) {
@@ -230,20 +241,21 @@ export async function GET(req: NextRequest) {
        * `rankings_snapshots`. The per-writer numbers stay separate in `metadata.rankings` below,
        * because a total nobody can attribute is exactly how three empty tables went unnoticed.
        */
-      rowsWritten: r.written + r.rankings.written + r.forecast.written + r.odds.written,
+      rowsWritten: r.written + r.rankings.written + r.forecast.written + r.odds.written + r.snapshot.written,
       rowsSkipped:
         r.skippedForTime + r.unavailable +
         r.rankings.skippedForTime + r.rankings.skipped +
         r.forecast.skippedForTime + r.forecast.pastSeasonEnd +
         r.odds.skippedForTime,
-      errors: [...r.errors, ...r.rankings.errors, ...r.forecast.errors, ...r.odds.errors],
+      errors: [...r.errors, ...r.rankings.errors, ...r.forecast.errors, ...r.odds.errors, ...r.snapshot.errors],
       /*
        * A rankings `failed` is a genuine fault and downgrades the run, the same as a feed failure.
        * `skipped` does NOT: a league whose settings Sleeper will not serve is a normal single-league
        * outcome, and reporting it as partial would make every fire partial forever.
        */
       status:
-        r.failed > 0 || r.writeFailed > 0 || r.rankings.failed > 0 || r.forecast.failed > 0 || r.odds.failed > 0
+        r.failed > 0 || r.writeFailed > 0 || r.rankings.failed > 0 || r.forecast.failed > 0 || r.odds.failed > 0 ||
+        r.snapshot.failed > 0
           ? 'partial'
           : 'success',
       metadata: {
@@ -278,6 +290,17 @@ export async function GET(req: NextRequest) {
           declined: r.forecast.declined,
           failed: r.forecast.failed,
           skippedForTime: r.forecast.skippedForTime,
+        },
+        /*
+         * The community-rankings snapshot, unsummed. Movement on /core/rankings is only ever read
+         * from these, so a day with `failed: 1` is a day with no 7-day comparison a week later.
+         */
+        snapshot: {
+          date: r.snapshot.date,
+          written: r.snapshot.written,
+          alreadyWritten: r.snapshot.alreadyWritten,
+          ranked: r.snapshot.population,
+          failed: r.snapshot.failed,
         },
         /*
          * The pre-game odds snapshot, unsummed. `unavailable: 1` is the parked migration, not a
@@ -419,10 +442,26 @@ async function run(): Promise<RefreshCounts> {
     rankings: emptyRankingsSweepCounts(),
     forecast: emptyForecastSweepCounts(),
     odds: emptyMatchupOddsSweepCounts(),
+    snapshot: emptyRankingsSnapshotCounts(),
   }
 
   // R3.2 — app-level sources first; see the note on refreshAppSources for why the order matters.
   await refreshAppSources(counts, budget)
+
+  /*
+   * ── THE DAILY RANKINGS SNAPSHOT, BEFORE THE LEAGUE WALK ─────────────────────────────────────
+   *
+   * ⚠ BEFORE, NOT AFTER, because the walk below returns early when no NFL league qualifies, and a
+   * snapshot has nothing to do with NFL leagues. It is one existence read per fire and, on the
+   * first fire of each Eastern day, one ledger read and one upsert — so it does not need the budget
+   * the sweeps below compete for. It never throws; a failure is counted and the run continues.
+   */
+  counts.snapshot = await runRankingsDailySnapshot().catch((e: unknown) => {
+    const out = emptyRankingsSnapshotCounts()
+    out.failed = 1
+    out.errors.push(`rankings_snapshot: ${e instanceof Error ? e.message : String(e)}`)
+    return out
+  })
 
   const leagues = await prisma.league
     .findMany({
