@@ -32,20 +32,23 @@ Stamped on the root span (queryable in the spans dataset) and as tags:
 | `af.db.count` / `af.db.ms` / `af.db.max_ms` / `af.db.slowest` / `af.db.errors` | per-request database totals | server, from `lib/prisma.ts` |
 | `af.sync_job` | the `withSyncJobRun` job name | server |
 | `af.shell_ms` | ms from the session read until the `/core` shell had everything it renders | server, `/core` only |
-| `core.shell` span | the SAME duration as a span, because `af.shell_ms` **cannot be aggregated** — see below | server, `/core` only |
+| `core.shell` span | the SAME duration as a span, carrying `af.screen` and `af.device` — see below | server, `/core` only |
 | `af.card` | on `core.card` spans: the read feeding a `/core` card (`dash34`, `career`, `trades`, `urgency-badges`, …) — see `CoreCardRead` in `lib/observability/cardTelemetry.ts` | server, `/core` home + tab badges |
 
-🛑 **A NUMERIC `af.*` ATTRIBUTE IS NOT QUERYABLE IN SENTRY, AND THAT IS WHY `core.shell` EXISTS.**
-Measured 2026-09-16 against the `all-fantasy` org: `af.shell_ms` and `af.db.ms` both come back as
-`INVALID — Unknown attribute`, typed as strings, while the string attributes on the very same spans
-(`af.surface`, `af.screen`, `af.card`) query fine. So those durations are readable on an individual
-trace and **cannot be aggregated** — no p75, no percentile, no budget calibration. `span.duration`
-is a native field with none of that problem, so the shell phase is now ALSO emitted as a
-`core.shell` span carrying `af.screen` and `af.device`.
+✅ **Numeric `af.*` attributes ARE aggregatable. Write them `tags[name,number]`.**
+`core.shell` was added on the belief that they were not: a bare `p75(af.shell_ms)` fails with
+`INVALID — Unknown attribute` (the validator types a bare name as a string), and that error was read
+as "numeric attributes cannot be aggregated". It was the query, not the data. Measured 2026-09-17
+over 24h, grouped by `af.screen`:
+- `p75(tags[af.shell_ms,number])` returns 679 ms on the home, across 37 renders;
+- `p95(tags[af.db.ms,number])` and `sum(tags[af.db.errors,number])` return values too;
+- the bare `p75(af.shell_ms)` still fails, as a control.
 
-⚠ The attribute is kept alongside it: it is what an individual trace shows and what this document
-has always named. The span is the one an aggregate query can use. ⚠ **The same limit applies to
-`af.db.ms`** — it has no span equivalent yet, so the `db` budget still cannot be calibrated.
+So the `db` budget CAN be calibrated today; see "Reading budgets in Sentry" below.
+
+⚠ **`core.shell` is kept anyway.** `span.duration` is a native field and needs no typed form, and the
+span is what shows the shell phase on a trace's waterfall. The attribute and the span carry the same
+duration; use whichever the query needs.
 
 ⚠ **On `/core`, `span.duration` is no longer what the user waited for before the app appeared.** The
 shell renders first and the screen streams in behind it, so the request lasts as long as the slowest

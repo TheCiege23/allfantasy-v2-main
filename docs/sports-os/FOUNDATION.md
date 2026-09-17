@@ -456,17 +456,22 @@ Until then, **calibrate at the phase level with screens pooled**; the per-name o
 ⚠ `af.screen` is `other` for 98 of ~220 core spans — the largest single bucket. Whatever is
 collapsing there is worth finding before anyone trusts a per-screen split.
 
-### 🛑 Two phases could not be calibrated at all — one is now fixed
+### ✅ Both phases CAN be calibrated — the "not queryable" finding below was the query
 
-`af.shell_ms` and `af.db.ms` are **not queryable in Sentry**. Both come back as
-`INVALID — Unknown attribute`, typed as strings, while the string attributes on the very same spans
-(`af.surface`, `af.screen`, `af.card`) query fine.
+**Corrected 2026-09-17.** The finding was that `af.shell_ms` and `af.db.ms` were not queryable in
+Sentry, because both came back as `INVALID — Unknown attribute`, typed as strings. The mechanism was
+the query itself:
+- Sentry types a bare attribute name as a string, so a numeric one must be written
+  `tags[name,number]`.
+- Measured over 24h grouped by `af.screen`: `p75(tags[af.shell_ms,number])` returns 679 ms on the
+  home (37 renders), and `p95(tags[af.db.ms,number])` returns values too.
+- The bare `p75(af.shell_ms)` still fails, as a control.
 
-So every numeric attribute this layer adds — `af.budget.*_ms`, `af.budget.*_ratio` — lands in the
-same hole. The **verdict** is a string and will be queryable; the raw milliseconds will not.
+The numeric `af.budget.*_ms` / `af.budget.*_ratio` attributes are queryable the same way. See
+`docs/observability/TRACING.md`.
 
-⚠ **THE MECHANISM IS NOT ESTABLISHED.** It could be a volume threshold before Sentry registers a
-numeric attribute, a type-registration issue, or something else; this was observed, not diagnosed.
+The rest of this section is the original record, kept because the `core.shell` span it describes
+still exists and is still useful.
 
 ✅ **SIDESTEPPED FOR THE SHELL**: it now also emits a `core.shell` span (`recordCompletedSpan` in
 `lib/observability/rootTiming.ts`), carrying `af.screen` and `af.device`. `span.duration` is a
@@ -476,12 +481,11 @@ would leak on every early return between `/core`'s auth gate and its shell; a sp
 ended on one line cannot leak. It is **inactive**, so it never re-parents the `core.card` spans that
 stream behind it.
 
-⚠ **`af.db.ms` IS STILL UNCALIBRATABLE.** It has no span equivalent, and unlike the shell it is not
-one phase with two clean boundaries — it is a per-request sum accumulated in `lib/prisma.ts`. Left
-alone rather than guessed at.
+~~`af.db.ms` IS STILL UNCALIBRATABLE.~~ It is calibratable as `tags[af.db.ms,number]` (see the
+correction above). It still has no span equivalent, which it no longer needs.
 
-⚠ And the fix does not prove the diagnosis. It routes around an unexplained Sentry behaviour; if the
-numeric attributes start aggregating later, that is worth knowing rather than assuming this was why.
+The original note said the span did not prove the diagnosis and was worth re-checking. It was re-checked
+on 2026-09-17: the numeric attributes had aggregated all along with the typed form.
 
 ### The queries, so this is repeatable
 

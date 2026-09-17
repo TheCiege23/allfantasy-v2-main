@@ -27,13 +27,14 @@ export function recordRootDuration(attribute: string, startedAtMs: number, nowMs
 /**
  * Record a phase that has ALREADY FINISHED as its own span, back-dated to when it started.
  *
- * 🛑 THIS EXISTS BECAUSE A NUMERIC ATTRIBUTE IS NOT QUERYABLE AND A SPAN'S DURATION IS.
- * Measured 2026-09-16 against the `all-fantasy` Sentry org: `af.shell_ms` and `af.db.ms` both come
- * back as `INVALID — Unknown attribute`, typed as strings, while the string attributes on the very
- * same spans (`af.surface`, `af.screen`, `af.card`) query fine. So a duration stamped with
- * `recordRootDuration` can be read on an individual trace and cannot be aggregated — no p75, no
- * percentile, no calibration. `span.duration` is a native field and has none of that problem, which
- * is how the per-card numbers were obtained.
+ * A span gives a phase a place on the trace's waterfall, and its `span.duration` is a native field
+ * that aggregates with no typed form.
+ *
+ * ⚠ IT WAS ADDED ON A WRONG PREMISE, CORRECTED 2026-09-17. The belief was that a duration stamped with
+ * `recordRootDuration` could not be aggregated, because a bare `p75(af.shell_ms)` fails with
+ * `INVALID — Unknown attribute`. That was the query: Sentry types a bare name as a string.
+ * `p75(tags[af.shell_ms,number])` and `p95(tags[af.db.ms,number])` aggregate fine (see
+ * `docs/observability/TRACING.md`). Both forms stay useful; neither is the only way to a percentile.
  *
  * ⚠ CREATED RETROACTIVELY, AND THAT IS THE WHOLE POINT OF THE SHAPE. The obvious alternative —
  * opening a span where the phase begins and ending it where it finishes — leaks on every early
