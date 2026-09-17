@@ -6,8 +6,14 @@ import { evaluateCanonicalTrade, type CanonicalTradeEvaluation, type EvaluateCan
 import type { TradeAssetSummary } from '@/lib/decision-os/trade/dco'
 import { resolveCanonicalWorld } from '@/lib/decision-os/world'
 import type { CanonicalWorld } from '@/lib/decision-os/world/facts'
-import { normalizePlayerName } from '@/lib/player-identity/playerIdentityResolution'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
+import {
+  allRosteredIds,
+  findRosteredByName,
+  indexRosterNames,
+  viewerRosterOf,
+  type LocatedPlayer,
+} from './leagueRosterIndex'
 import type {
   ScenarioPlayer,
   TradeScenario,
@@ -88,19 +94,7 @@ const PICK_MENTION = new RegExp(
   'i',
 )
 
-/**
- * The spellings of one extracted name worth trying. `extractPlayerNameCandidates` takes capitalised
- * runs of up to three words, so a sentence that OPENS with a capital verb — "Trade Bijan Robinson
- * for…" — yields "Trade Bijan Robinson" and no "Bijan Robinson". Its two-word halves are tried
- * after the whole run, never instead of it (three-word names exist).
- */
-function nameVariants(candidate: string): string[] {
-  const words = candidate.split(/\s+/)
-  if (words.length !== 3) return [candidate]
-  return [candidate, words.slice(1).join(' '), words.slice(0, 2).join(' ')]
-}
-
-type Located = { playerId: string; rosterId: string; name: string; position: string | null }
+type Located = LocatedPlayer
 
 /** True when the message has the shape of a trade between named players. */
 export function looksLikeDescribedTrade(message: string): boolean {
@@ -134,8 +128,7 @@ export async function buildTradeScenario(
     return { status: 'unresolved', reason: 'no_league_world', detail: 'The league could not be loaded to compare rosters.' }
   }
 
-  const viewerTeamIds = new Set(world.teams.filter((t) => t.managerUserId === args.userId).map((t) => t.teamId))
-  const viewerRoster = world.rosters.find((r) => r.teamId != null && viewerTeamIds.has(r.teamId)) ?? null
+  const viewerRoster = viewerRosterOf(world, args.userId)
   if (!viewerRoster) {
     return {
       status: 'unresolved',
@@ -144,42 +137,14 @@ export async function buildTradeScenario(
     }
   }
 
-  const allIds = [...new Set(world.rosters.flatMap((r) => r.playerIds))]
-  const names = await deps.loadPlayerNames(world.league.sport, allIds).catch(() => new Map())
-
-  /*
-   * ⚠ NAMES GO THROUGH `normalizePlayerName`, the one the described-trade grader uses — never a
-   * local lowercase. A second normalizer disagreed with the real one on 7% of rows the last time
-   * someone wrote one (suffixes and apostrophes), and a name that normalizes differently simply
-   * never matches.
-   */
-  const byName = new Map<string, Located[]>()
-  for (const roster of world.rosters) {
-    for (const playerId of roster.playerIds) {
-      const meta = names.get(playerId)
-      if (!meta?.name) continue
-      const key = normalizePlayerName(meta.name)
-      if (!key) continue
-      const list = byName.get(key) ?? []
-      list.push({ playerId, rosterId: roster.rosterId, name: meta.name, position: meta.position ?? null })
-      byName.set(key, list)
-    }
-  }
+  const names = await deps.loadPlayerNames(world.league.sport, allRosteredIds(world)).catch(() => new Map())
+  const byName = indexRosterNames(world, names)
 
   const left: Located[][] = []
   const right: Located[][] = []
   const notRostered: string[] = []
   for (const raw of candidates) {
-    let candidate = raw
-    let hits: Located[] = []
-    for (const variant of nameVariants(raw)) {
-      const found = byName.get(normalizePlayerName(variant)) ?? []
-      if (found.length > 0) {
-        candidate = variant
-        hits = found
-        break
-      }
-    }
+    const { candidate, hits } = findRosteredByName(byName, raw)
     const inLeft = sides.left.includes(candidate)
     const inRight = sides.right.includes(candidate)
     if (hits.length === 0) {
@@ -291,6 +256,7 @@ export async function buildTradeScenario(
 
   const strip = (p: Located): ScenarioPlayer => ({ playerId: p.playerId, name: p.name, position: p.position })
   return {
+    kind: 'trade',
     status: 'ready',
     give: chosen.give.map(strip),
     get: chosen.get.map(strip),

@@ -73,6 +73,8 @@ const SOURCE_LABELS: Record<string, string> = {
   core_surface_context: 'The screen you asked from',
   sports_digest_db: 'Stored sports data (scores, injuries, news)',
   trade_scenario: "This trade, run against your league's rosters",
+  waiver_scenario: 'This add/drop, run against your roster',
+  start_sit_scenario: 'This start/sit choice, run against your roster',
   chimmy_personalization: 'Your saved preferences',
   chimmy_orchestration: 'Answer routing',
   stale_data_warning: 'A staleness warning',
