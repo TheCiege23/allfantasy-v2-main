@@ -182,7 +182,38 @@ serve: `LegacyLeague` and `LegacyRoster` carry only `createdAt` and `updatedAt`,
 `updatedAt` moves on every write. The marker therefore needs a new column, which means a
 migration and is the user's call.
 
-⚠ **Coverage for the 2026 season depends on a separate fix.** The four-hourly
-`sleeper-historical-refresh` skips a season that is `complete` and already has matchup
-facts. A season first stored while still being played can therefore keep an undecided
-bracket after it finishes, and its final would never be readable.
+## A season stored before it finished (fixed 2026-09-17)
+
+**The bug.** The four-hourly `sleeper-historical-refresh` used to skip any season that was
+`complete` and already had matchup facts. A season first stored while it was still being
+played kept its undecided bracket after it finished, so its final was never readable.
+
+**The fix.** `isStoredSeasonSettled` in `SleeperHistoricalMatchupSyncService.ts` now also
+requires the stored row to be settled, meaning either:
+- its bracket names a decided title game, or
+- it was written while Sleeper already reported the season `complete`. Each write now
+  stamps `metadata.seasonStatusAtSync` with Sleeper's status at that moment.
+
+**The stamp limits this to one extra refresh.** Elimination formats never get a winners
+bracket, so a gate on the title game alone would re-fetch them on every run.
+
+⚠ **A failed bracket fetch during that one refresh is not retried.** `getPlayoffBracket`
+returns `[]` both for a failed request and for a league with no bracket, so the two cannot
+be told apart.
+
+Measured on the test copy, read-only, 2026-09-17:
+
+| Sleeper dynasty rows without a decided title game | Count |
+|---|---|
+| All | 285 of 801 |
+| 2026 (in progress, not gated) | 229 |
+| Older, empty bracket | 42 |
+| Older, bracket games present but none decided | 14 |
+
+- **The 14 older rows are not this bug.** They were written on 2026-09-01/02, long after those
+  seasons ended, and 12 of them have no matchup facts at all, so the old gate never skipped
+  them either.
+- **29 older rows get one extra refresh after deploy.** They have matchup facts but no
+  settled row: 27 with empty brackets and 2 undecided. At 21 Sleeper calls each, that is a
+  one-time cost.
+- **The 516 rows with a decided title game stay skipped.**
