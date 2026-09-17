@@ -348,7 +348,8 @@ const OFFICIAL_RANK_PLATFORMS = new Set(['yahoo', 'fantrax'])
  * ⚠ THE KEYS ARE THE ONES THE IMPORTERS ACTUALLY WRITE. `seasonOutlook.ts` read
  * `settings.playoff.playoffTeams`, which no league in production carries (checked 2026-09-17), so every
  * league was simulated with six playoff teams — including the 53 Sleeper leagues that play four, seven or
- * eight. It now reads through here.
+ * eight. The Season Outlook brief fixes that in its own reader (`outlookFormat.ts`); the two should
+ * agree, and if they ever disagree the standings line and the outlook odds will name different fields.
  */
 export function readPlayoffTeams(settings: unknown, teamCount: number): { teams: number; source: 'league' | 'assumed' } {
   const s = obj(settings) ?? {}
