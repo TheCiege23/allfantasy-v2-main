@@ -24,6 +24,11 @@ import {
 
 const PROVIDERS_WITH_SYNCED_PICKS = new Set(['sleeper', 'mfl'])
 
+/** True when this league's picks are read from the provider-id-keyed table rather than `Roster.id`. */
+export function hasSyncedProviderPicks(platform: string | null | undefined): boolean {
+  return PROVIDERS_WITH_SYNCED_PICKS.has(String(platform ?? '').trim().toLowerCase())
+}
+
 export type RosterFuturePick = InventoryPick & {
   /** The original team's name when the pick came from another team; null for the roster's own. */
   fromTeamName: string | null
@@ -35,6 +40,15 @@ export type RosterFuturePick = InventoryPick & {
  * `none`: this league's picks are not read here at all (not a synced provider, or no evidence).
  */
 export type FuturePickCoverage = 'complete' | 'traded_only' | 'none'
+
+export type ImportedFuturePicks = {
+  picksByRosterId: Map<string, RosterFuturePick[]>
+  coverage: FuturePickCoverage
+  /** Provider team id → `Roster.id`, for callers that keep picks in roster-id space. */
+  rosterIdByTeamId: Map<string, string>
+  /** True when the pick table could not be read — not the same as a league with no picks. */
+  readFailed: boolean
+}
 
 export async function loadImportedFuturePicks(args: {
   leagueId: string
@@ -51,10 +65,14 @@ export async function loadImportedFuturePicks(args: {
     teamName: string | null
   }>
   rosters: ReadonlyArray<{ id: string; platformUserId: string; playerData: unknown }>
-}): Promise<{ picksByRosterId: Map<string, RosterFuturePick[]>; coverage: FuturePickCoverage }> {
-  const empty = { picksByRosterId: new Map<string, RosterFuturePick[]>(), coverage: 'none' as const }
-  const platform = String(args.platform ?? '').trim().toLowerCase()
-  if (!PROVIDERS_WITH_SYNCED_PICKS.has(platform) || !args.leagueSeason || args.teams.length === 0) return empty
+}): Promise<ImportedFuturePicks> {
+  const empty: ImportedFuturePicks = {
+    picksByRosterId: new Map(),
+    coverage: 'none',
+    rosterIdByTeamId: new Map(),
+    readFailed: false,
+  }
+  if (!hasSyncedProviderPicks(args.platform) || !args.leagueSeason || args.teams.length === 0) return empty
 
   const seasons = upcomingDraftSeasons({ leagueSeason: args.leagueSeason, status: args.status })
   const teamIds = [...new Set(args.teams.map((t) => t.externalId).filter((x) => x.length > 0))]
@@ -78,7 +96,7 @@ export async function loadImportedFuturePicks(args: {
           .catch(() => null)
       : Promise.resolve(null),
   ])
-  if (stored == null) return empty
+  if (stored == null) return { ...empty, readFailed: true }
 
   const rounds = history
     ? rookieRoundsFromDraftHistory(
@@ -90,12 +108,18 @@ export async function loadImportedFuturePicks(args: {
 
   const inventory = futurePickInventory({ teamIds, seasons, rounds, stored })
   const teamNameByExternal = new Map(args.teams.map((t) => [t.externalId, t.teamName]))
-  const externalByTeamId = new Map(args.teams.map((t) => [t.id, t.externalId]))
+  const teamById = new Map(args.teams.map((t) => [t.id, t]))
   const rosterIdByExternal = new Map<string, string>()
+  const heldBy = new Map<string, { rank: number[]; id: string }>()
   for (const r of args.rosters) {
     const teamId = matchTeamIdForRoster(r, args.teams)
-    const external = teamId ? externalByTeamId.get(teamId) : undefined
-    if (external) rosterIdByExternal.set(external, r.id)
+    const team = teamId ? teamById.get(teamId) : undefined
+    if (!team?.externalId) continue
+    const rank = rosterRank(r, team)
+    const held = heldBy.get(team.externalId)
+    if (held && !outranks(rank, r.id, held)) continue
+    heldBy.set(team.externalId, { rank, id: r.id })
+    rosterIdByExternal.set(team.externalId, r.id)
   }
 
   const picksByRosterId = new Map<string, RosterFuturePick[]>()
@@ -109,5 +133,36 @@ export async function loadImportedFuturePicks(args: {
     })
     picksByRosterId.set(rosterId, list)
   }
-  return { picksByRosterId, coverage: rounds != null ? 'complete' : 'traded_only' }
+  return {
+    picksByRosterId,
+    coverage: rounds != null ? 'complete' : 'traded_only',
+    rosterIdByTeamId: rosterIdByExternal,
+    readFailed: false,
+  }
+}
+
+/*
+ * 🛑 ONE PROVIDER TEAM CAN HAVE TWO ROSTER ROWS, AND "LAST ROW WINS" GAVE A REAL TEAM'S PICKS TO THE
+ * COPY. Measured on staging 2026-09-17: 14 teams in 12 of 225 Sleeper/MFL leagues, 11 of them with a
+ * copy carrying no owner id (a re-import). Which row won depended on the order the rows came back in:
+ * in "The Last IDP Dynasty!!" the owner's roster showed no picks and the ownerless copy held all of them.
+ *
+ * So the roster that holds a team's picks is chosen, not inherited from row order: the one whose owner
+ * IS the team's owner (or claimant), then one with any owner, then the fuller roster, then the lower id.
+ */
+function rosterRank(
+  r: { platformUserId: string; playerData: unknown },
+  team: { platformUserId: string | null; claimedByUserId: string | null },
+): number[] {
+  const owner = String(r.platformUserId ?? '').trim()
+  const ownsTeam = owner.length > 0 && (owner === team.platformUserId || owner === team.claimedByUserId)
+  const players = (r.playerData as { players?: unknown } | null)?.players
+  return [ownsTeam ? 1 : 0, owner.length > 0 ? 1 : 0, Array.isArray(players) ? players.length : 0]
+}
+
+function outranks(rank: number[], id: string, held: { rank: number[]; id: string }): boolean {
+  for (let i = 0; i < rank.length; i++) {
+    if (rank[i] !== held.rank[i]) return rank[i] > held.rank[i]
+  }
+  return id < held.id
 }

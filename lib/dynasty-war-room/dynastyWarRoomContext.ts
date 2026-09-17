@@ -10,8 +10,8 @@
  * ages, picks, injuries, or news.
  *
  * Dynasty horizon ≠ redraft: value is long-term asset value + AGE trajectory + (when
- * available) future pick capital — not weekly projections. `FutureDraftPick` tables are
- * not migrated in this environment, so pick capital is flagged 'missing', never invented.
+ * available) future pick capital — not weekly projections. Pick capital comes from
+ * `dynastyPickCapital.ts`; when it cannot be read it is flagged 'missing', never invented.
  *
  * When a data source is empty it sets the matching `availability` flag and records a
  * human-readable `missingDataFlags` entry so engines and the AI layer degrade safely.
@@ -25,7 +25,8 @@ import { getEffectiveLeagueRosterTemplate } from '@/lib/league/getEffectiveLeagu
 import { getNormalizedLineupSections } from '@/lib/roster/LineupTemplateValidation'
 import { buildPlayerKey } from '@/lib/adp/computeAllFantasyAdp'
 import { fetchRedraftInjuryNews, injuryNameKey } from '@/lib/redraft-war-room/redraftInjuryNews'
-import { ageTrajectory, dynastyValue, pickHeuristicValue } from './dynastyPlayerValue'
+import { ageTrajectory, dynastyValue } from './dynastyPlayerValue'
+import { loadDynastyPickCapital, type DynastyPickCapital } from './dynastyPickCapital'
 import {
   fetchDynastyFreeAgentPool,
   fetchDynastyValueByKey,
@@ -34,7 +35,6 @@ import {
 import type {
   DataState,
   DynastyDataAvailability,
-  DynastyFuturePick,
   DynastyPlayerFact,
   DynastyRookieDraftWindow,
   DynastyRosterSettings,
@@ -112,7 +112,8 @@ export async function buildDynastyWarRoomContext(
 
   const league = await prisma.league.findUnique({
     where: { id: leagueId },
-    select: { sport: true, season: true, settings: true, isDynasty: true, leagueVariant: true },
+    // `platform` decides where pick capital is read from (see `dynastyPickCapital.ts`).
+    select: { sport: true, season: true, settings: true, isDynasty: true, leagueVariant: true, platform: true },
   })
   if (!league) return { ok: false, status: 404, error: 'League not found' }
 
@@ -203,6 +204,8 @@ export async function buildDynastyWarRoomContext(
     .catch(() => [])) as RosterRow[]
 
   type TeamRow = {
+    id: string
+    externalId: string
     platformUserId: string | null
     claimedByUserId: string | null
     ownerName: string
@@ -217,6 +220,9 @@ export async function buildDynastyWarRoomContext(
     .findMany({
       where: { leagueId },
       select: {
+        // The roster↔team join that imported pick capital needs.
+        id: true,
+        externalId: true,
         platformUserId: true,
         claimedByUserId: true,
         ownerName: true,
@@ -322,55 +328,23 @@ export async function buildDynastyWarRoomContext(
     byRoster.set(p.rosterId, arr)
   }
 
-  // --- future draft pick capital (real, from future_draft_picks) ---
-  // The table may be absent in some environments (no migration applied) — in that
-  // case the query throws P2021 and we degrade to 'missing' without crashing.
-  type PickRow = {
-    id: string
-    pickSeason: number
-    round: number
-    originalRosterId: string
-    currentOwnerId: string
-    status: string
-    traded: boolean
-  }
-  let pickTableMissing = false
-  const pickRows = (await prisma.futureDraftPick
-    .findMany({
-      where: { leagueId, status: { in: ['active', 'traded'] } },
-      select: {
-        id: true,
-        pickSeason: true,
-        round: true,
-        originalRosterId: true,
-        currentOwnerId: true,
-        status: true,
-        traded: true,
-      },
-      orderBy: [{ pickSeason: 'asc' }, { round: 'asc' }],
-    })
-    .catch((e: unknown) => {
-      if ((e as { code?: string } | null)?.code === 'P2021') pickTableMissing = true
-      return [] as PickRow[]
-    })) as PickRow[]
-
-  const picksByOwner = new Map<string, DynastyFuturePick[]>()
-  for (const pk of pickRows) {
-    const seasonsOut = pk.pickSeason - season
-    const fact: DynastyFuturePick = {
-      id: pk.id,
-      season: pk.pickSeason,
-      round: pk.round,
-      originalRosterId: pk.originalRosterId,
-      currentOwnerId: pk.currentOwnerId,
-      traded: pk.traded,
-      status: pk.status,
-      estValue: pickHeuristicValue(pk.round, seasonsOut),
-    }
-    const arr = picksByOwner.get(pk.currentOwnerId) ?? []
-    arr.push(fact)
-    picksByOwner.set(pk.currentOwnerId, arr)
-  }
+  // --- future draft pick capital, keyed by Roster.id (see dynastyPickCapital.ts) ---
+  const rawStatus = settings?.status
+  const providerStatus = typeof rawStatus === 'string' ? rawStatus : null
+  const pickCapital = await loadDynastyPickCapital({
+    leagueId,
+    platform: league.platform,
+    leagueSeason: season,
+    providerStatus,
+    rosters: rosterRows,
+    teams: teamRows.map((t) => ({
+      id: t.id,
+      externalId: String(t.externalId ?? ''),
+      platformUserId: t.platformUserId,
+      claimedByUserId: t.claimedByUserId,
+      teamName: t.teamName ?? null,
+    })),
+  }).catch((): DynastyPickCapital => ({ picksByRosterId: new Map(), state: 'missing', note: null }))
 
   // --- rookie draft windows (real, from rookie_draft_windows) ---
   type WindowRow = {
@@ -407,8 +381,8 @@ export async function buildDynastyWarRoomContext(
       playoffSeed: team?.currentRank ?? null,
       isUserTeam: r.platformUserId === userId,
       players: (byRoster.get(r.id) ?? []).map(toPlayerFact),
-      // Picks are keyed by currentOwnerId (the roster that holds them after trades).
-      picks: picksByOwner.get(r.id) ?? [],
+      // Keyed by the roster that holds each pick now, in Roster.id space for every platform.
+      picks: pickCapital.picksByRosterId.get(r.id) ?? [],
     }
   })
 
@@ -450,13 +424,15 @@ export async function buildDynastyWarRoomContext(
   const standingsAvailable = teamRows.some(
     (t) => (t.wins ?? 0) + (t.losses ?? 0) + (t.ties ?? 0) > 0 || (t.pointsFor ?? 0) > 0,
   )
-  // futurePicks: 'missing' when the table is absent; 'available' when rows exist for
-  // this league; 'available_empty' when tracking is enabled but no picks recorded yet.
-  const futurePicksState: DataState = pickTableMissing
-    ? 'missing'
-    : pickRows.length > 0
-      ? 'available'
-      : 'available_empty'
+  /*
+   * futurePicks: 'missing' when the table cannot be read; 'available' only when at least one pick
+   * reached a team; 'partial' when an imported league's list can hold only its traded picks;
+   * otherwise 'available_empty'.
+   *
+   * 🛑 THIS USED TO BE `pickRows.length > 0`, which said 'available' for all 103 imported dynasty
+   * leagues on staging while every team's pick list was empty — rows existed, none were attached.
+   */
+  const futurePicksState: DataState = pickCapital.state
   const availability: DynastyDataAvailability = {
     scoringRules: 'available',
     rosterRules: rosterRulesState,
@@ -487,6 +463,7 @@ export async function buildDynastyWarRoomContext(
     missingDataFlags.push('Future pick tracking is not enabled for this league yet — pick capital is not modeled.')
   else if (availability.futurePicks === 'available_empty')
     missingDataFlags.push('Future pick tracking is enabled, but no picks are recorded for this league yet.')
+  if (pickCapital.note) missingDataFlags.push(pickCapital.note)
   if (availability.standings === 'missing')
     missingDataFlags.push('No standings/records yet — contention-window read relies on roster value only.')
   if (availability.injuries === 'missing') missingDataFlags.push('No injury data available.')
@@ -522,7 +499,8 @@ export async function buildDynastyWarRoomContext(
       buySellHold: hasValueSignal && availability.rosters === 'available',
       waivers: availability.freeAgentPool === 'available',
       lineup: availability.rosterRules === 'available' && availability.rosters === 'available',
-      pickValue: availability.futurePicks === 'available',
+      // A partial list still names real picks; the pick engine withholds its total.
+      pickValue: availability.futurePicks === 'available' || availability.futurePicks === 'partial',
     },
   }
 
