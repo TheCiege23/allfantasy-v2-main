@@ -93,6 +93,16 @@ describe('nothing still reaches the retired pieces', () => {
     expect(hits).toEqual([])
   })
 
+  /*
+   * 🛑 A PROP IS NOT AN IMPORT. Three surfaces still passed `savePayload={{…}}` to a card whose prop
+   * was removed; the import census above read clean and only the CI typecheck caught it — and tests
+   * are never typechecked here, so nothing in this suite could have.
+   */
+  it('no component still passes the retired save payload', () => {
+    const hits = files.filter((f) => /\bsavePayload=\{/.test(readFileSync(f, 'utf8'))).map(rel)
+    expect(hits).toEqual([])
+  })
+
   it('no code calls the retired API or links to the retired page', () => {
     const hits = files
       .filter((f) => rel(f) !== 'app/ai/saved/page.tsx')
