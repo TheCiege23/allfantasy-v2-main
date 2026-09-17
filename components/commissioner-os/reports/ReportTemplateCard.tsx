@@ -3,6 +3,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { REPORT_CATEGORY_LABELS, REPORT_FREQUENCY_LABELS } from './reportsLabels'
 import type { ReportTemplate } from '@/lib/commissioner-ui/reports/decision-os-client'
+import { shortDate } from '@/components/commissioner-os/primitives/pinnedTime'
 
 export interface ReportTemplateCardProps {
   template: ReportTemplate
@@ -27,7 +28,7 @@ export function ReportTemplateCard({ template, onGenerate, disabled }: ReportTem
         <p className="text-xs" style={{ color: 'var(--muted2)' }}>
           {REPORT_FREQUENCY_LABELS[template.schedule.frequency]}
           {template.schedule.nextRunAt &&
-            ` · Next: ${new Date(template.schedule.nextRunAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`}
+            ` · Next: ${shortDate(template.schedule.nextRunAt)}`}
         </p>
       </CardContent>
       <CardFooter>

@@ -7,6 +7,7 @@ import { Switch } from '@/components/ui/switch'
 import { getSeverityStyle, SEVERITY_LABELS } from '@/components/commissioner-os/cards'
 import { AUTOMATION_STATUS_LABELS, AUTOMATION_CATEGORY_LABELS } from './automationLabels'
 import type { AutomationCatalogEntry } from '@/lib/commissioner-ui/automations/decision-os-client'
+import { shortDate } from '@/components/commissioner-os/primitives/pinnedTime'
 
 export interface AutomationCatalogCardProps {
   automation: AutomationCatalogEntry
@@ -63,7 +64,7 @@ export function AutomationCatalogCard({ automation, enabled, onToggle, onViewHis
         </p>
         {automation.lastRunAt && (
           <p className="text-xs" style={{ color: 'var(--muted2)' }}>
-            Last ran {new Date(automation.lastRunAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} · {automation.successRatePercent}%
+            Last ran {shortDate(automation.lastRunAt)} · {automation.successRatePercent}%
             success over {automation.totalRunsCount} runs
           </p>
         )}

@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge'
 import { getSeverityStyle, SEVERITY_LABELS } from '@/components/commissioner-os/cards'
 import { TASK_STATUS_LABELS, TASK_NEXT_ACTION_LABEL } from './taskStatusLabels'
 import type { CommissionerTask } from '@/lib/commissioner-ui/workspace/decision-os-client'
+import { longDate } from '@/components/commissioner-os/primitives/pinnedTime'
 
 export interface TaskDetailDrawerProps {
   task: CommissionerTask | null
@@ -53,7 +54,7 @@ export function TaskDetailDrawer({ task, onOpenChange }: TaskDetailDrawerProps) 
 
             {displayedTask.dueAt && (
               <p className="text-sm" style={{ color: 'var(--text)' }}>
-                Due {new Date(displayedTask.dueAt).toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' })}
+                Due {longDate(displayedTask.dueAt)}
               </p>
             )}
 

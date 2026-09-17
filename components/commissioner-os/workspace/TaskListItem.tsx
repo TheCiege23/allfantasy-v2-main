@@ -3,6 +3,7 @@ import { Badge } from '@/components/ui/badge'
 import { getSeverityStyle, SEVERITY_LABELS } from '@/components/commissioner-os/cards'
 import { TASK_STATUS_LABELS } from './taskStatusLabels'
 import type { CommissionerTask } from '@/lib/commissioner-ui/workspace/decision-os-client'
+import { shortDate } from '@/components/commissioner-os/primitives/pinnedTime'
 
 export interface TaskListItemProps {
   task: CommissionerTask
@@ -37,7 +38,7 @@ export function TaskListItem({ task, onOpen }: TaskListItemProps) {
         </p>
         {task.dueAt && (
           <p className="mt-1 text-xs" style={{ color: 'var(--muted2)' }}>
-            Due {new Date(task.dueAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+            Due {shortDate(task.dueAt)}
           </p>
         )}
       </CardContent>
