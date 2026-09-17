@@ -168,6 +168,10 @@ export default function PlayerCardSheet({
   /* The ☆'s optimistic value; null means "defer to the payload". Declared here,
      beside its sibling, because the reset effect below closes over it. */
   const [watchOverride, setWatchOverride] = useState<boolean | null>(null)
+  /* The trade-block toggle's optimistic value, the same way; plus a refusal to show. */
+  const [blockOverride, setBlockOverride] = useState<boolean | null>(null)
+  const [blockBusy, setBlockBusy] = useState(false)
+  const [blockError, setBlockError] = useState<string | null>(null)
   const panelRef = useRef<HTMLDivElement | null>(null)
   const closeRef = useRef<HTMLButtonElement | null>(null)
 
@@ -195,6 +199,8 @@ export default function PlayerCardSheet({
   useEffect(() => {
     setInsightOpen(false)
     setWatchOverride(null)
+    setBlockOverride(null)
+    setBlockError(null)
   }, [subject.externalId, subject.sleeperId])
 
   const p = data?.player
@@ -261,6 +267,46 @@ export default function PlayerCardSheet({
       if (!res?.ok) setWatchOverride(!next)
     } catch {
       setWatchOverride(!next)
+    }
+  }
+
+  /*
+   * The trade block. Only YOUR players can be put on it, and only where AllFantasy can hold the
+   * listing (Sleeper leagues today) — the server proves both; this only decides what to offer.
+   * Someone else's listed player shows a tag instead.
+   */
+  const block = league?.tradeBlock ?? null
+  const onBlock = blockOverride ?? Boolean(block?.listed && block?.byYou)
+  const canMarkBlock = Boolean(league?.isYours && block?.supported && watchId)
+
+  const toggleBlock = async () => {
+    if (!canMarkBlock || !league || blockBusy) return
+    const next = !onBlock
+    setBlockOverride(next)
+    setBlockError(null)
+    setBlockBusy(true)
+    try {
+      const res = await fetch('/api/core/player-card/watch', {
+        method: next ? 'POST' : 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          leagueId: league.leagueId,
+          sleeperId: watchId,
+          sport: p?.sport ?? subject.sport,
+          list: 'trade-block',
+        }),
+      })
+      if (!res?.ok) {
+        setBlockOverride(!next)
+        const body = (await res?.json?.().catch(() => null)) as { error?: unknown } | null
+        setBlockError(typeof body?.error === 'string' ? body.error : 'That did not save. Try again.')
+      }
+    } catch {
+      setBlockOverride(!next)
+      setBlockError('That did not save. Try again.')
+    } finally {
+      setBlockBusy(false)
     }
   }
 
@@ -404,6 +450,34 @@ export default function PlayerCardSheet({
                 >
                   Propose Trade
                 </a>
+              ) : null}
+
+              {league && block && (canMarkBlock || (!league.isYours && block.listed)) ? (
+                <div className="af-pc-block">
+                  {canMarkBlock ? (
+                    <button
+                      type="button"
+                      className="af-pc-block-btn"
+                      aria-pressed={onBlock}
+                      disabled={blockBusy}
+                      onClick={toggleBlock}
+                    >
+                      {onBlock ? 'On your trade block ✓ · Take off' : 'Put on trade block'}
+                    </button>
+                  ) : (
+                    <span className="af-pc-block-tag">
+                      ON THE TRADE BLOCK
+                      {block.teamName ? ` · ${block.teamName}` : ''}
+                      {ago(block.since) ? ` · listed ${ago(block.since)} ago` : ''}
+                    </span>
+                  )}
+                  {blockError ? (
+                    <span className="af-pc-block-note" role="alert">
+                      {blockError}
+                    </span>
+                  ) : null}
+                  <span className="af-pc-block-note">{block.note}</span>
+                </div>
               ) : null}
 
               {bio ? (

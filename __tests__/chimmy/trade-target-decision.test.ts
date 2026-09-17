@@ -308,3 +308,67 @@ describe('renderTradeTargetVerdict', () => {
     expect(text).not.toMatch(/Open with:/)
   })
 })
+
+/*
+ * The trade block (2026-09-17). Only what managers marked in AllFantasy is visible — Sleeper does
+ * not share its own — so "not listed" is said as "may still be available", never as "not available".
+ */
+describe('the trade block', () => {
+  const SLEEPER_NOTE = "Sleeper doesn't share its trade block with outside apps, so this only includes players managers put on the block in AllFantasy."
+  const block = (over: Partial<NonNullable<TradeTargetFacts['block']>> = {}): TradeTargetFacts['block'] => ({
+    supported: true,
+    listed: false,
+    teamName: null,
+    since: null,
+    note: SLEEPER_NOTE,
+    ...over,
+  })
+
+  it('a listed player: the reason names the team and the date, and the yes says so', () => {
+    const v = decideTradeTarget(facts({ block: block({ listed: true, teamName: 'Rival', since: '2026-09-15T12:00:00.000Z' }) }))
+    expect(v.reasons).toContain('Trade block: Rival has him on the block in AllFantasy (listed 2026-09-15).')
+    expect(v.verdict).toBe('yes')
+    expect(v.because).toMatch(/at a price your roster can pay, and his team has him on the trade block$/)
+  })
+
+  it('🛑 not listed is "may still be available", never "not available"', () => {
+    const v = decideTradeTarget(facts({ block: block() }))
+    const line = v.reasons.find((r) => r.startsWith('Trade block:'))
+    expect(line).toBe(
+      "Trade block: he isn't marked on the block in AllFantasy, and Sleeper doesn't share its own block, so he may still be available.",
+    )
+    expect(v.because).not.toMatch(/trade block/)
+  })
+
+  it('an unsupported platform gives its own note as the reason', () => {
+    const note = "ESPN doesn't share its trade block with AllFantasy, and marking players here is only available for Sleeper leagues so far."
+    const v = decideTradeTarget(facts({ block: block({ supported: false, note }) }))
+    expect(v.reasons).toContain(`Trade block: ${note}`)
+  })
+
+  it('a listing with no team or date still reads', () => {
+    const v = decideTradeTarget(facts({ block: block({ listed: true }) }))
+    expect(v.reasons).toContain('Trade block: his team has him on the block in AllFantasy.')
+  })
+
+  it('a listing does not turn a no into a yes', () => {
+    const v = decideTradeTarget(
+      facts({ block: block({ listed: true, teamName: 'Rival' }), grade: { verdict: 'reject', acceptance: 0.2 } }),
+    )
+    expect(v.verdict).toBe('no')
+    expect(v.reasons).toContain('Trade block: Rival has him on the block in AllFantasy.')
+  })
+
+  it('no block facts: no block line, as before', () => {
+    expect(decideTradeTarget(facts()).reasons.some((r) => r.startsWith('Trade block:'))).toBe(false)
+    expect(decideTradeTarget(facts({ block: null })).reasons.some((r) => r.startsWith('Trade block:'))).toBe(false)
+  })
+
+  it('the block line comes after his team, and renders with the rest', () => {
+    const v = decideTradeTarget(facts({ block: block({ listed: true, teamName: 'Rival' }) }))
+    const his = v.reasons.findIndex((r) => r.startsWith('His team:'))
+    const tb = v.reasons.findIndex((r) => r.startsWith('Trade block:'))
+    expect(tb).toBe(his + 1)
+    expect(renderTradeTargetVerdict(v)).toContain('Trade block: Rival has him on the block in AllFantasy.')
+  })
+})

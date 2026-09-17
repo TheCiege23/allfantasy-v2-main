@@ -74,6 +74,12 @@ export type TradeTargetFacts = {
   grade: { verdict: 'accept' | 'reject' | 'counter'; acceptance: number | null } | null
   /** Set when the league does not allow trades at all, with the waiver advice when there is any. */
   noTrades: { waiverNote: string | null } | null
+  /**
+   * Whether his team has him on the trade block — ONLY as marked in AllFantasy. Sleeper does not
+   * share its own block, so "not listed" never means "not available"; `supported: false` means this
+   * platform's block cannot be read or marked here at all. Absent when it was not read.
+   */
+  block?: { supported: boolean; listed: boolean; teamName: string | null; since: string | null; note: string } | null
 }
 
 export type TradeTargetVerdict = {
@@ -228,6 +234,17 @@ function marketLine(facts: TradeTargetFacts): string | null {
   return `Market: ${parts.join(', ')}.`
 }
 
+function blockLine(facts: TradeTargetFacts): string | null {
+  const b = facts.block
+  if (!b) return null
+  if (!b.supported) return `Trade block: ${b.note}`
+  if (b.listed) {
+    const when = b.since ? ` (listed ${b.since.slice(0, 10)})` : ''
+    return `Trade block: ${b.teamName ?? 'his team'} has him on the block in AllFantasy${when}.`
+  }
+  return "Trade block: he isn't marked on the block in AllFantasy, and Sleeper doesn't share its own block, so he may still be available."
+}
+
 function partnerLine(facts: TradeTargetFacts, settled: boolean): string {
   const p = facts.partner
   if (!settled) return `His team: ${p.teamName} — too early in the season to tell whether they are buying or selling.`
@@ -258,6 +275,7 @@ export function decideTradeTarget(facts: TradeTargetFacts): TradeTargetVerdict {
     priceLine(facts),
     marketLine(facts),
     partnerLine(facts, settled),
+    blockLine(facts),
   ].filter((r): r is string => Boolean(r))
 
   const basis: string[] = []
@@ -333,7 +351,8 @@ export function decideTradeTarget(facts: TradeTargetFacts): TradeTargetVerdict {
         : stance === 'rebuilder'
           ? ` and, at his age and trend, he fits your rebuild`
           : ''
-    return yes(`he would start for you (${fmtPts(priced.addGain)} points in week ${priced.week})${standing}, at a price your roster can pay`)
+    const shopping = facts.block?.listed ? ', and his team has him on the trade block' : ''
+    return yes(`he would start for you (${fmtPts(priced.addGain)} points in week ${priced.week})${standing}, at a price your roster can pay${shopping}`)
   }
   if (pos && facts.you.needs.includes(pos)) {
     return yes(`${pos} is a hole on your roster and he fills it at a price your roster can pay`)

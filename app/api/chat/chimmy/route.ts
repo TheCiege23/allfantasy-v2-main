@@ -72,6 +72,7 @@ import { buildKeeperContextForChimmy } from '@/lib/keeper-war-room/keeperChimmyG
 import { buildBestBallContextForChimmy } from '@/lib/best-ball-war-room/bestBallChimmyGrounding'
 import { buildGuillotineWarRoomContextForChimmy } from '@/lib/guillotine-war-room/guillotineChimmyGrounding'
 import { buildTradeContextForChimmy } from '@/lib/chimmy-trade/tradeChimmyGrounding'
+import { buildTradeBlockContext } from '@/lib/chimmy/tradeBlockGrounding'
 import { buildPendingTradeDecisionContext } from '@/lib/chimmy-trade/pendingTradeDecisionGrounding'
 import { buildLeagueTradeHistoryContext } from '@/lib/chimmy-trade/leagueTradeHistoryGrounding'
 import { buildLeagueStandingsContext } from '@/lib/chimmy/leagueStandingsGrounding'
@@ -372,6 +373,9 @@ const ChimmyFormSchema = z.object({
   conversation: z.array(ConversationTurnSchema).max(MAX_CONVERSATION_TURNS),
   hasImage: z.boolean(),
 })
+
+/** A question about the trade block itself, whatever its intent classifies as. */
+const TRADE_BLOCK_WORDS = /\b(?:trade|trading)\s+block\b|\bon\s+the\s+block\b|\btrade\s+bait\b/i
 
 /**
  * The tool loop's system prompt.
@@ -2921,6 +2925,20 @@ ${legacyEnrichmentContext}`
                 legacyEnrichmentContext = legacyEnrichmentContext
                   ? `${legacyEnrichmentContext}\n\n${tradeCtx}`
                   : tradeCtx
+              }
+            } catch { /* non-fatal */ }
+            try {
+              /*
+               * The league's trade block — only what managers marked in AllFantasy, because Sleeper does
+               * not share its own (measured 2026-09-17). Read for trade questions and anything naming the
+               * block, and always said with that caveat, so an empty list is never read as "nobody is
+               * available". The builder above covers native leagues only and gives a count, not names.
+               */
+              if (intent === 'trade' || TRADE_BLOCK_WORDS.test(planInput.message)) {
+                const blockCtx = await buildTradeBlockContext(leagueSnapshot.id)
+                legacyEnrichmentContext = legacyEnrichmentContext
+                  ? `${legacyEnrichmentContext}\n\n${blockCtx}`
+                  : blockCtx
               }
             } catch { /* non-fatal */ }
             try {
