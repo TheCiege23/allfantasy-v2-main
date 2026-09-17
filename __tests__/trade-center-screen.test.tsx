@@ -174,8 +174,11 @@ describe('the builder holds the deal, not the engine echo', () => {
   })
 
   it('sends the real deal to the analyzer', () => {
-    expect(SRC).toContain('sideGive: giveAssets.map(toInput)')
-    expect(SRC).toContain('sideGet: getAssets.map(toInput)')
+    // The builder's own assets, less only what the verdict cannot value (a pick with no round).
+    expect(SRC).toContain('const sendGive = giveAssets.filter(valuedByVerdict)')
+    expect(SRC).toContain('const sendGet = getAssets.filter(valuedByVerdict)')
+    expect(SRC).toContain('sideGive: sendGive.map(toInput)')
+    expect(SRC).toContain('sideGet: sendGet.map(toInput)')
   })
 
   it('⚠ allows a player with no id, by name', () => {

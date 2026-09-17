@@ -366,6 +366,24 @@ const MOBILE_STEPS: Array<{ key: MobileStep; label: string }> = [
   { key: 'review', label: 'Review' },
 ]
 
+/**
+ * Can the verdict value this asset?
+ *
+ * 🛑 A PICK WITH NO ROUND CANNOT, AND IT USED TO BE VALUED AS A FIRST-ROUNDER. The picker has to
+ * give every pick a round to build the asset (`round: p.round ?? 1`), and `toInput` sent that
+ * default to the analysis — so the verdict priced the pick as a 1st while its own row, since
+ * item #5, said "Unpriced". The pick stays in the deal, and in a proposal (which names it by id,
+ * not by round); only the valuation leaves it out.
+ *
+ * ⚠ MEASURED 2026-09-17: NO REAL TRADE HITS THIS TODAY. 0 of 290 staging leagues list a roster
+ * pick at all — `Roster.playerData.draftPicks` holds drafted PLAYERS in manual leagues, and real
+ * picks live in `future_draft_picks`, whose `round` is NOT NULL. This keeps the verdict and the row
+ * agreeing for the first pick that does arrive without a round.
+ */
+export function valuedByVerdict(a: PickedAsset): boolean {
+  return !(a.kind === 'pick' && a.unpricedReason?.code === 'pick_without_round')
+}
+
 function toInput(a: PickedAsset) {
   if (a.kind === 'player') {
     return {
@@ -565,10 +583,11 @@ export function TradeCenter(props: {
                 })
               : null),
         }
+        const why = pick.marketValue == null ? (a.unpricedReason ?? pickUnpricedReason()).label : null
         return {
           ...pick,
-          unpricedWhy:
-            pick.marketValue == null ? (a.unpricedReason ?? pickUnpricedReason()).label : null,
+          // Said on the row because the verdict below it silently has one asset fewer.
+          unpricedWhy: why && !valuedByVerdict(a) ? `${why} — left out of the verdict` : why,
         }
       }),
     [pricedBy, props.league?.teamCount],
@@ -751,6 +770,19 @@ export function TradeCenter(props: {
   }, [result, give, get])
 
   const analyze = useCallback(async () => {
+    const sendGive = giveAssets.filter(valuedByVerdict)
+    const sendGet = getAssets.filter(valuedByVerdict)
+    /*
+     * A side that holds only unvaluable assets would reach the route empty and come back as "add at
+     * least one asset on each side" — false, the manager did. Say what actually happened instead.
+     */
+    if ((giveAssets.length > 0 && sendGive.length === 0) || (getAssets.length > 0 && sendGet.length === 0)) {
+      setError(
+        'Nothing on one side can be valued: a pick with no round is left out of the verdict. Add a player, or a pick whose round is known.',
+      )
+      setResult(null)
+      return
+    }
     setBusy(true)
     setError(null)
     try {
@@ -782,8 +814,8 @@ export function TradeCenter(props: {
            * why.
            */
           opponentTeamExternalId: partnerRoster?.teamExternalId ?? null,
-          sideGive: giveAssets.map(toInput),
-          sideGet: getAssets.map(toInput),
+          sideGive: sendGive.map(toInput),
+          sideGet: sendGet.map(toInput),
         }),
       })
       const j = (await r.json().catch(() => ({}))) as AnalyzeResult & { error?: string }
