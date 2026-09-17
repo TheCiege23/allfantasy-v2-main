@@ -1,6 +1,9 @@
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
+import { DEVY_DYNASTY_VARIANT } from '@/lib/devy/types'
+import { MERGED_DEVY_C2C_VARIANT } from '@/lib/merged-devy-c2c/types'
+import { resolveLeagueConcept } from '@/lib/league/leagueConceptOptions'
 import { getCrossLeagueExposure } from '@/lib/core-app/dash3aPanels'
 import type {
   DevyCollegeTile,
@@ -265,21 +268,65 @@ export async function getDevyCoreData(userId: string, leagueIds: string[], now =
   }
 }
 
+const DEVY_FORMAT_VARIANTS = new Set<string>([DEVY_DYNASTY_VARIANT, MERGED_DEVY_C2C_VARIANT])
+const DEVY_FORMAT_CONCEPTS = new Set<string>(['devy', 'c2c'])
+
 /**
- * How many devy roster slots this league has, or 0.
- *
- * Drives both the nav item and the league tab's empty state, so a league with no devy
- * slots never shows a tab promising college prospects it cannot hold.
- *
- * ⚠ `DevyLeagueConfig.devySlotCount` IS THE SIGNAL, NOT AN `isDevy` FLAG ON `League`.
- * A first pass read `league.isDevy` by analogy with `FantraxLeague.isDevy` — that column
- * does not exist on `League`, and the flag that does exist elsewhere says a league was
- * IMPORTED as devy rather than that it currently rosters prospects. The commissioner can
- * set the slot count to zero, and the count is what the tab actually needs.
+ * Whether a league is a devy or campus-to-canton league, from the fields a league LIST row
+ * already carries — no query. The same variant ids `isDevyLeague` / `isC2CLeague` compare against,
+ * plus the league type (which a commissioner's confirmation writes into `leagueType`).
  */
-export async function leagueDevySlotCount(leagueId: string): Promise<number> {
-  const row = await prisma.devyLeagueConfig
-    .findUnique({ where: { leagueId }, select: { devySlotCount: true } })
-    .catch(() => null)
-  return row?.devySlotCount ?? 0
+export function looksLikeDevyFormat(league: {
+  leagueVariant?: string | null
+  leagueType?: string | null
+}): boolean {
+  const variant = league.leagueVariant?.trim().toLowerCase()
+  const type = league.leagueType?.trim().toLowerCase()
+  return Boolean((variant && DEVY_FORMAT_VARIANTS.has(variant)) || (type && DEVY_FORMAT_CONCEPTS.has(type)))
+}
+
+export type LeagueDevyNav = { devySlotCount: number; devyFormat: boolean }
+export const NO_DEVY_NAV: LeagueDevyNav = { devySlotCount: 0, devyFormat: false }
+
+/**
+ * The selected league's two devy nav facts.
+ *
+ * - `devySlotCount`: how many devy roster slots this league has, or 0. Drives both the per-league
+ *   Devy tab and its empty state, so a league with no devy slots never shows a tab promising
+ *   college prospects it cannot hold.
+ *
+ *   ⚠ `DevyLeagueConfig.devySlotCount` IS THE SIGNAL, NOT AN `isDevy` FLAG ON `League`. A first
+ *   pass read `league.isDevy` by analogy with `FantraxLeague.isDevy` — that column does not exist
+ *   on `League`, and the flag that does exist elsewhere says a league was IMPORTED as devy rather
+ *   than that it currently rosters prospects. The commissioner can set the slot count to zero, and
+ *   the count is what the tab actually needs.
+ * - `devyFormat` gates the Devy hub entry: true for a devy or C2C league by ANY of the signals the
+ *   codebase uses — a `DevyLeagueConfig` or `C2CLeagueConfig` row, the league variant, or a devy/c2c
+ *   league type (confirmed or stored).
+ *
+ * 🛑 THE HUB ENTRY USED TO SHOW FOR EVERY LEAGUE. It was deliberately ungated as a cross-league hub,
+ * so a redraft league's menu offered "Devy" (user report, 2026-09-16).
+ *
+ * ⚠ TAKES THE SHELL'S LEAGUE ROW AS A PROMISE, like `resolveLeagueValueSurfaces`, so the call starts
+ * with the other shell reads instead of waiting for the row to land.
+ */
+export async function leagueDevyNav(
+  leagueId: string,
+  leagueRow: PromiseLike<{ leagueVariant?: string | null; leagueType?: string | null; settings?: unknown } | null> | null,
+): Promise<LeagueDevyNav> {
+  const [devy, c2c, row] = await Promise.all([
+    prisma.devyLeagueConfig
+      .findUnique({ where: { leagueId }, select: { devySlotCount: true } })
+      .catch(() => null),
+    prisma.c2CLeagueConfig.findUnique({ where: { leagueId }, select: { id: true } }).catch(() => null),
+    Promise.resolve(leagueRow).catch(() => null),
+  ])
+  const devyFormat =
+    devy != null ||
+    c2c != null ||
+    looksLikeDevyFormat({
+      leagueVariant: row?.leagueVariant ?? null,
+      leagueType: row ? resolveLeagueConcept(row.settings, row.leagueType) : null,
+    })
+  return { devySlotCount: devy?.devySlotCount ?? 0, devyFormat }
 }

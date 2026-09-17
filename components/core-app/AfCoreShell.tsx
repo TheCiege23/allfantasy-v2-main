@@ -15,6 +15,7 @@ import { isCoreSurfaceKey } from '@/lib/core-app/coreSurface'
 import { coreRefreshIntervalMs } from '@/lib/core-app/coreRefreshPolicy'
 import MiniPlayerImg from '@/components/MiniPlayerImg'
 import { useLiveRailScores } from './useLiveRailScores'
+import { saveRailScroll, useRailScrollMemory, type RailLayout } from './useRailScrollMemory'
 import { useOverlayContainment } from '@/components/core-app/useOverlayContainment'
 import { CoreWelcomeTour } from '@/components/core-app/CoreWelcomeTour'
 import { matchLeagueSearchHits, type LeagueSearchHit } from '@/lib/core-app/topSearch'
@@ -132,9 +133,13 @@ export type CoreNavKey =
   | 'commissioner'
   | 'tools'
   /*
-   * Devy splits in two because the handoff does: `devy` is the CROSS-LEAGUE hub and
-   * always available, `devy-league` is the per-league tab and appears only for a league
-   * whose commissioner has set devy slots. Same conditional shape as `defense-hub`.
+   * Devy splits in two because the handoff does: `devy` is the CROSS-LEAGUE hub,
+   * `devy-league` is the per-league tab and appears only for a league whose
+   * commissioner has set devy slots. Same conditional shape as `defense-hub`.
+   *
+   * ⚠ THE HUB WAS "ALWAYS AVAILABLE", SO EVERY LEAGUE'S MENU OFFERED DEVY. It is now
+   * gated on `devyInScope` (a devy/C2C league, or with no league held, a user who
+   * plays in one) — user report, 2026-09-16.
    */
   | 'devy'
   | 'devy-league'
@@ -311,6 +316,11 @@ export type AfCoreShellProps = {
    * a tab promising prospects it cannot hold.
    */
   devySlotCount?: number
+  /*
+   * Whether the Devy hub belongs in this scope: the selected league is a devy or C2C
+   * league, or — with no league held — the user plays in at least one. Absent means no.
+   */
+  devyInScope?: boolean
   /**
    * Whether this league has any scored week.
    *
@@ -583,14 +593,18 @@ function navItems(props: AfCoreShellProps): NavItem[] {
       badge: props.draftLive ? { text: 'LIVE', tone: 'live' } : urgencyBadge(props.urgencyBadges?.draftHq),
     },
 
-    {
-      key: 'devy',
-      label: 'Devy',
-      glyph: '◇',
-      /* Cross-league, but still carries the league so the rail keeps its selection —
-         the same rule the comment at the top of navItems sets out. */
-      href: inLeague('/core/devy'),
-    },
+    ...(props.devyInScope
+      ? [
+          {
+            key: 'devy' as const,
+            label: 'Devy',
+            glyph: '◇',
+            /* Cross-league, but still carries the league so the rail keeps its selection —
+               the same rule the comment at the top of navItems sets out. */
+            href: inLeague('/core/devy'),
+          },
+        ]
+      : []),
     ...(props.devySlotCount && props.devySlotCount > 0 && props.selectedLeagueId
       ? [
           {
@@ -763,7 +777,7 @@ const NAV_SECTIONS: Array<{ id: string; heading: string | null; keys: CoreNavKey
   {
     id: 'league',
     heading: 'This league',
-    keys: ['my-team', 'defense-hub', 'matchup', 'war-room', 'waivers', 'trades', 'players', 'draft-hq'],
+    keys: ['my-team', 'defense-hub', 'matchup', 'war-room', 'waivers', 'trades', 'players', 'draft-hq', 'devy', 'devy-league'],
   },
   { id: 'now', heading: 'This week', keys: ['week', 'live', 'standings', 'season-outlook'] },
   { id: 'history', heading: 'Your record', keys: ['career', 'rankings', 'portfolio'] },
@@ -1271,7 +1285,13 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
    */
   const railToggleRef = useRef<HTMLButtonElement>(null)
   const [phoneLayout, setPhoneLayout] = useState(false)
+  /* False until the matchMedia effect below has decided which layout this is. */
+  const [layoutKnown, setLayoutKnown] = useState(false)
   const mobileRailOpen = phoneLayout && railOpen
+  /* Where the league list was scrolled to survives the remount a screen change causes. */
+  const railScrollRef = useRef<HTMLDivElement>(null)
+  const railLayout: RailLayout | null = !layoutKnown ? null : phoneLayout ? 'tray' : railOpen ? 'open' : 'collapsed'
+  useRailScrollMemory(railScrollRef, railLayout, props.selectedLeagueId ?? null)
   /** The tray's close control lives outside the tray — see the hook call below. */
   const railKeepRefs = useMemo(() => [railHandleRef], [])
 
@@ -1312,6 +1332,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
     const desktop = window.matchMedia('(min-width: 721px)')
     const update = () => {
       setPhoneLayout(!desktop.matches)
+      setLayoutKnown(true)
       if (!desktop.matches) {
         setRailChoice(null)
         return
@@ -1470,7 +1491,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
           scroll, but nothing is out of reach and no count is hidden behind a
           second screen.
         */}
-        <div className="af-rail-scroll" id="af-rail-scroll">
+        <div className="af-rail-scroll" id="af-rail-scroll" ref={railScrollRef}>
           {leagues.map((l) => {
             const saved = props.railMatchups?.[l.id]
             const live = liveRail.scores[l.id]
@@ -1522,6 +1543,8 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
                   preference the user set, not a transient overlay.
                 */
                 onClick={(event) => {
+                  // Before anything navigates: the next screen may rebuild this rail from the top.
+                  saveRailScroll(railScrollRef.current, railLayout)
                   if (railOpen && typeof window !== 'undefined' && window.innerWidth <= 720) {
                     /* On iOS, closing the full-screen tray can remove the tapped
                        anchor before Next's delegated navigation finishes. Own

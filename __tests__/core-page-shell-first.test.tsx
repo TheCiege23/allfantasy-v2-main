@@ -89,7 +89,9 @@ vi.mock('@/lib/core-app/coreActivity', () => ({
 vi.mock('@/lib/core-app/leagueDataSignals', () => ({ getLeagueDataSignals: (shell.dataSignals = gatedValue({ hasScoredWeek: true })) }))
 vi.mock('@/lib/values/valueSurfaceEligibility', () => ({ resolveLeagueValueSurfaces: (shell.valueSurfaces = gatedValue({ hasIdp: false })) }))
 vi.mock('@/lib/core-app/devy', () => ({
-  leagueDevySlotCount: (shell.devySlots = gatedValue(0)),
+  leagueDevyNav: (shell.devyNav = gatedValue({ devySlotCount: 0, devyFormat: false })),
+  looksLikeDevyFormat: () => false,
+  NO_DEVY_NAV: { devySlotCount: 0, devyFormat: false },
   getDevyCoreData: vi.fn(async () => null),
 }))
 vi.mock('@/lib/adminAuth', () => ({ getAdminAccessState: (shell.admin = gatedValue({ status: 'denied' })) }))
@@ -302,6 +304,30 @@ describe('/core renders the shell first', () => {
     await (body.type as (props: unknown) => Promise<unknown>)(body.props)
     expect(screens.trades).toHaveBeenCalledWith('L1', 'u1', expect.objectContaining({ leagueId: 'L1', userId: 'u1' }))
     expect(screens.urgency).toHaveBeenCalled()
+  })
+
+  /*
+   * 🛑 THE DEVY ENTRY FOLLOWS THE LEAGUE (user report, 2026-09-16: it showed for every league).
+   * The page decides; the shell only renders what it is told — see devy-nav-gating.test.tsx.
+   */
+  it('tells the shell whether the selected league is a devy league, from the devy read', { timeout: 180_000 }, async () => {
+    h.gated = false
+    h.osGate.resolve()
+    const AfCorePage = await loadPage()
+    const shellOf = async () => {
+      const tree = await AfCorePage(pageArgs(['trades'], { league: 'L1' }))
+      return findElement(tree, (el) => typeof el.props?.devyInScope === 'boolean')
+    }
+
+    const plain = await shellOf()
+    expect(plain, 'the shell element carries devyInScope').not.toBeNull()
+    expect(plain!.props.devyInScope).toBe(false)
+    expect(shell.devyNav).toHaveBeenCalledWith('L1', expect.anything())
+
+    shell.devyNav.mockImplementationOnce(async () => ({ devySlotCount: 2, devyFormat: true }))
+    const devy = await shellOf()
+    expect(devy!.props.devyInScope).toBe(true)
+    expect(devy!.props.devySlotCount).toBe(2)
   })
 
   it('resets the error boundary on any URL change, but keeps the screen boundary across a same-screen query', { timeout: 180_000 }, async () => {
