@@ -10,6 +10,9 @@
  * a kind IS a trade.
  */
 
+// Client-safe: this module imports types and one string constant, nothing else.
+import { LEAGUE_WEEK_UNIT } from '@/lib/decision-os/trade/rosterImpactSummary'
+
 export type ScenarioPlayer = { playerId: string; name: string; position: string | null }
 
 export type TradeScenarioUnresolvedReason =
@@ -33,11 +36,11 @@ export type TradeScenarioLineup = {
 export type PlayoffOddsNotComputed = { available: false; reason: string }
 
 /**
- * The unit of every waiver and start/sit number: this week's projection, re-scored under the
- * league's OWN rules. Not the trade card's AllFantasy per-game figure, which is full PPR in every
- * league — see `lineupScenarioGrounding.ts` for why the two kinds use different bases.
+ * The unit of every lineup number on every card — trade, waiver and start/sit: that week's
+ * projection, re-scored under the league's OWN rules. Defined once, in the client-safe wire module
+ * of the trade evaluator, and re-exported here (the trade lineup moved onto this basis 2026-09-17).
  */
-export const LEAGUE_WEEK_UNIT = 'league_points_week'
+export { LEAGUE_WEEK_UNIT }
 
 /** Why the waiver and start/sit kinds refuse before touching any player. */
 type LeagueWeekRefusal = 'sport_not_supported' | 'no_scoring_rules' | 'no_projection_week' | 'no_league_projections'
@@ -60,6 +63,8 @@ export type ReadyTradeScenario = {
     coverageStatus: 'complete' | 'partial' | 'blocked'
   }
   lineup: TradeScenarioLineup | null
+  /** The week `lineup` is for (`LEAGUE_WEEK_UNIT`); absent on scenarios sent before 2026-09-17. */
+  lineupWeek?: number | null
   /** Why `lineup` is null — the evaluator's own blocked reason, verbatim when it gave one. */
   lineupUnavailable: string | null
   playoffOdds: PlayoffOddsNotComputed

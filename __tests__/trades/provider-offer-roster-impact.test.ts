@@ -69,7 +69,7 @@ function evaluation(rosterImpact: unknown) {
 }
 
 const IMPACT = {
-  unit: 'projected_points_per_game',
+  unit: 'league_points_week', week: 3,
   startingPointsBefore: 80,
   startingPointsAfter: 83,
   startingPointsDelta: 3,
@@ -109,7 +109,7 @@ describe('evaluatePendingProviderTrades — lineup effect', () => {
       viewerRosterId: 'roster-me',
     })
     expect(out.get('tx-1')!.rosterImpact).toEqual({
-      unit: 'projected_points_per_game',
+      unit: 'league_points_week', week: 3,
       startingPointsBefore: 80,
       startingPointsAfter: 83,
       startingPointsDelta: 3,

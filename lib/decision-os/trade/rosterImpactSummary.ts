@@ -14,12 +14,28 @@
  */
 import type { RosterImpact } from './rosterImpact'
 
+/**
+ * The unit of every lineup number: that week's projection, scored under the league's OWN rules
+ * (`leagueWeekPricing.ts`). Defined here, in the one client-safe module every renderer already
+ * imports, so a browser bundle can name it without pulling the pricing code in.
+ */
+export const LEAGUE_WEEK_UNIT = 'league_points_week'
+
+/** A lineup impact as the evaluator returns it: the numbers, their unit, and the week they are for. */
+export type LeagueWeekRosterImpact = RosterImpact & {
+  unit: typeof LEAGUE_WEEK_UNIT
+  /** Null only when the refusal came before a week was known. */
+  week: number | null
+}
+
 export type LineupImpactSummary = {
   /**
-   * ⚠ CARRIED ON THE WIRE, NOT ASSUMED BY THE RENDERER. `AFProjectionSnapshot` has a per-game and
-   * a rest-of-season number, and confusing them understates a player by roughly the weeks left.
+   * ⚠ CARRIED ON THE WIRE, NOT ASSUMED BY THE RENDERER. This used to be AllFantasy points per game,
+   * which is full PPR in every league; it is now one week under the league's rules, and a renderer
+   * that assumed the old unit would print the wrong label on a right number.
    */
-  unit: 'projected_points_per_game'
+  unit: typeof LEAGUE_WEEK_UNIT
+  week: number | null
   startingPointsBefore: number | null
   startingPointsAfter: number | null
   startingPointsDelta: number | null
@@ -37,12 +53,13 @@ export type LineupImpactSummary = {
  * make the renderer unable to tell a surface that never requested impact from one that failed.
  */
 export function summarizeRosterImpact(
-  impact: (RosterImpact & { unit: 'projected_points_per_game' }) | null | undefined,
+  impact: LeagueWeekRosterImpact | null | undefined,
 ): LineupImpactSummary | null | undefined {
   if (impact === undefined) return undefined
   if (impact === null) return null
   return {
     unit: impact.unit,
+    week: impact.week,
     startingPointsBefore: impact.startingPointsBefore,
     startingPointsAfter: impact.startingPointsAfter,
     startingPointsDelta: impact.startingPointsDelta,
@@ -95,10 +112,12 @@ export function lineupImpactLine(summary: LineupImpactSummary | null | undefined
   }
 
   const delta = summary.startingPointsDelta
+  // The week is named every time: this is one week under the league's scoring, not a season rate.
+  const lineup = summary.week != null ? `projected week ${summary.week} starting lineup` : 'projected starting lineup'
   const head =
     lineupImpactDirection(summary) === 'flat'
-      ? 'No change to your projected starting lineup'
-      : `Your projected starting lineup ${delta > 0 ? 'gains' : 'loses'} ${formatPoints(Math.abs(delta))} pts per game`
+      ? `No change to your ${lineup}`
+      : `Your ${lineup} ${delta > 0 ? 'gains' : 'loses'} ${formatPoints(Math.abs(delta))} pts under your league's scoring`
 
   const depth = summary.depthChanges
     .map((row) => {

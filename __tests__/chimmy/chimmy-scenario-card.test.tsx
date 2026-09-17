@@ -22,7 +22,8 @@ function scenario(over: Partial<ReadyTradeScenario> = {}): ReadyTradeScenario {
     get: [{ playerId: 'p2', name: 'Puka Nacua', position: 'WR' }],
     partnerTeamName: 'Rival',
     value: { given: 8450, received: 7900, delta: -550, grade: 'C+', coveragePct: 100, coverageStatus: 'complete' },
-    lineup: { before: 118.4, after: 120.1, delta: 1.7, unit: 'projected_points_per_game' },
+    lineup: { before: 118.4, after: 120.1, delta: 1.7, unit: 'league_points_week' },
+    lineupWeek: 3,
     lineupUnavailable: null,
     playoffOdds: { available: false, reason: 'not computed' },
     ...over,
@@ -47,7 +48,8 @@ describe('the scenario card', () => {
     expect(within(value).getByText('-550').getAttribute('data-direction')).toBe('down')
 
     const lineup = row('starting lineup')
-    expect(lineup.textContent).toContain('pts / game')
+    expect(lineup.textContent).toContain('league pts, wk 3')
+    expect(lineup.textContent).not.toContain('pts / game')
     expect(lineup.textContent).toContain('118.4')
     expect(lineup.textContent).toContain('120.1')
     expect(within(lineup).getByText('+1.7').getAttribute('data-direction')).toBe('up')

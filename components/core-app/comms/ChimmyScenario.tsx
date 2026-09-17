@@ -17,9 +17,9 @@ import {
  * prose answer is the model's reading of it. Showing the numbers themselves means a reader can
  * check the answer against what it was built from, instead of trusting a paraphrase.
  *
- * ⚠ TWO UNITS, EACH LABELLED. A trade's lineup row is AllFantasy points per game; waiver and
- * start/sit rows are THIS WEEK's projection under the league's own rules. Every lineup label names
- * which one it is, so the cards cannot be read as one scale.
+ * ⚠ EVERY LINEUP ROW IS ONE WEEK UNDER THE LEAGUE'S OWN RULES, AND SAYS SO. The trade row was
+ * AllFantasy points per game (full PPR in every league) until 2026-09-17; the old unit is still
+ * labelled if an older scenario arrives, so a number is never shown under the wrong name.
  *
  * ⚠ THE LAST ROW SAYS "NOT COMPUTED" ON PURPOSE. Playoff odds are the number people most want and
  * the one nothing here can produce honestly for a hypothetical move. Leaving the row out would read
@@ -44,7 +44,9 @@ const unitLabel = (unit: string | undefined, week?: number) =>
     : unit === 'projected_points_per_game'
       ? 'pts / game'
       : unit === LEAGUE_WEEK_UNIT
-        ? `league pts, wk ${week}`
+        ? week != null
+          ? `league pts, wk ${week}`
+          : 'league pts, this week'
         : unit.replace(/_/g, ' ')
 
 function Delta({ value, digits }: { value: number | null; digits: number }) {
@@ -86,7 +88,7 @@ export function ChimmyScenarioCard({ scenario }: { scenario: ReadyChimmyScenario
 }
 
 function TradeScenarioCard({ scenario }: { scenario: ReadyTradeScenario }) {
-  const unit = unitLabel(scenario.lineup?.unit)
+  const unit = unitLabel(scenario.lineup?.unit, scenario.lineupWeek ?? undefined)
   return (
     <div className="af-cm-scn" data-testid="chimmy-scenario" data-kind="trade">
       <div className="af-cm-scn-title">Trade scenario · with {scenario.partnerTeamName}</div>

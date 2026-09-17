@@ -6,7 +6,15 @@ import { buildMovements, playerIdsFromMovements } from './canonicalShadow'
 import { resolveTradeEnrichment, type TradeEnrichmentResult } from './enrichmentPort'
 import { resolveTradeWorld } from './tradeWorld'
 import { buildTradeMemo, type CanonicalTradeMemo } from './canonicalMemo'
-import { computeRosterImpact, type ImpactPlayer, type RosterImpact } from './rosterImpact'
+import { computeRosterImpact, type ImpactPlayer } from './rosterImpact'
+import { LEAGUE_WEEK_UNIT, type LeagueWeekRosterImpact } from './rosterImpactSummary'
+import {
+  defaultLeagueWeekPricingDeps,
+  isLeagueWeekRefusal,
+  leagueWeekBasis,
+  priceLeagueWeek,
+  type LeagueWeekPricingDeps,
+} from './leagueWeekPricing'
 
 export type CanonicalTradeAction = 'accept' | 'counter' | 'decline' | 'review'
 
@@ -34,12 +42,12 @@ export interface CanonicalTradeEvaluation {
    * every call. A surface that renders only the value verdict must not be charged for one it does
    * not show.
    *
-   * ⚠ `unit` IS NOT DECORATION. `AFProjectionSnapshot` carries a PER-GAME number and a
-   * REST-OF-SEASON one, and its own schema comment warns that confusing them understates a player
-   * by roughly the number of weeks remaining, silently. A consumer that renders this without
-   * reading the unit is one refactor from that mistake.
+   * ⚠ `unit` AND `week` ARE NOT DECORATION. The numbers are ONE WEEK's projection scored under the
+   * league's own rules (`leagueWeekPricing.ts`) — not AllFantasy's per-game figure, which is full
+   * PPR in every league and was this field's basis until 2026-09-17. A consumer that renders this
+   * without reading the unit prints the wrong label on a right number.
    */
-  rosterImpact?: (RosterImpact & { unit: 'projected_points_per_game' }) | null
+  rosterImpact?: LeagueWeekRosterImpact | null
 }
 
 export interface EvaluateCanonicalTradeArgs {
@@ -64,6 +72,8 @@ export interface EvaluateCanonicalTradeArgs {
 export interface CanonicalTradeEvaluatorDeps {
   resolveWorld: (leagueId: string) => Promise<CanonicalWorld | null>
   resolveEnrichment: typeof resolveTradeEnrichment
+  /** This week's league-scored lineup points — only read when `includeRosterImpact` is set. */
+  leagueWeek: LeagueWeekPricingDeps
 }
 
 function recommendationFor(valueGiven: number, valueReceived: number, complete: boolean): {
@@ -84,6 +94,7 @@ export async function evaluateCanonicalTrade(
 ): Promise<CanonicalTradeEvaluation> {
   const resolveWorld = deps.resolveWorld ?? resolveCanonicalWorld
   const resolveEnrichment = deps.resolveEnrichment ?? resolveTradeEnrichment
+  const leagueWeekDeps = deps.leagueWeek ?? defaultLeagueWeekPricingDeps
   const world = await resolveWorld(args.leagueId)
   if (!world) throw new Error('Canonical trade world unavailable')
   if (!world.rosters.some((r) => r.rosterId === args.proposerRosterId) || !world.rosters.some((r) => r.rosterId === args.receiverRosterId)) {
@@ -150,28 +161,10 @@ export async function evaluateCanonicalTrade(
    * for, could not be produced", which a surface can render as such; leaving the key off says "not
    * asked for". Those are different facts and a renderer needs to tell them apart.
    */
-  const rosterImpact = ((): CanonicalTradeEvaluation['rosterImpact'] => {
+  const rosterImpact = await (async (): Promise<CanonicalTradeEvaluation['rosterImpact']> => {
     if (!args.includeRosterImpact) return undefined
     if (!viewerRoster) return null
     const positions = enrichment.enrichment.positionByPlayerId ?? {}
-    /*
-     * 🛑 THE PER-GAME MAP, NOT `projectionByPlayerId`. That map is AF's REST-OF-SEASON total with a
-     * per-WEEK provider fallback — two units, neither per game — and this block used to read it
-     * while labelling the result `projected_points_per_game`. The live "gains N pts per game" line
-     * was ~10-17x too large, and one lineup could sum season totals with single weeks. Reported by
-     * a peer session 2026-09-16; the evaluator test stubbed the enrichment, so it could not see it.
-     */
-    const projections = enrichment.enrichment.perGameProjectionByPlayerId ?? {}
-    const toImpact = (id: string): ImpactPlayer => ({
-      playerId: id,
-      position: (positions[id] ?? '').toUpperCase(),
-      /*
-       * ⚠ `?? null`, NOT `?? 0`. An absent projection is "not priced", and the repo-wide rule —
-       * restated on `AFProjectionSnapshot.rosProjection` — is that 0 is a real claim the value
-       * engine acts on. `computeRosterImpact` blocks on an unpriced TRADED asset for this reason.
-       */
-      projectedPoints: projections[id] ?? null,
-    })
 
     /*
      * ⚠ THE PLAYER ID IS NESTED AND THERE ARE THREE SLOTS FOR IT. `TradeMovement` carries no
@@ -186,12 +179,12 @@ export async function evaluateCanonicalTrade(
       return meta.player?.playerId ?? meta.keeper?.playerId ?? meta.devy?.playerId ?? null
     }
 
-    const incoming: ImpactPlayer[] = []
+    const incomingIds: string[] = []
     const outgoingPlayerIds: string[] = []
     for (const m of movements) {
       const pid = movementPlayerId(m)
       if (!pid) continue
-      if (m.toRosterId === viewerRosterId) incoming.push(toImpact(pid))
+      if (m.toRosterId === viewerRosterId) incomingIds.push(pid)
       else if (m.fromRosterId === viewerRosterId) outgoingPlayerIds.push(pid)
     }
 
@@ -204,13 +197,54 @@ export async function evaluateCanonicalTrade(
     if (!slots || slots.length === 0) return null
 
     try {
+      /*
+       * 🛑 THIS WEEK, UNDER THIS LEAGUE'S RULES — NOT `perGameProjectionByPlayerId`. That map is
+       * AllFantasy's per-game figure, written in full PPR for every league, so a half-PPR or
+       * TE-premium league had its lineup delta priced under rules it does not use. A league this
+       * cannot price is refused by name (user decision 2026-09-17).
+       */
+      const basis = await leagueWeekBasis(world.league, leagueWeekDeps)
+      if (isLeagueWeekRefusal(basis)) {
+        return {
+          startingPointsBefore: null,
+          startingPointsAfter: null,
+          startingPointsDelta: null,
+          blockedReason: basis.detail,
+          unpricedExcluded: 0,
+          depth: [],
+          replacement: [],
+          unit: LEAGUE_WEEK_UNIT,
+          week: null,
+        }
+      }
+      const ids = [...viewerRoster.playerIds, ...incomingIds]
+      const priced = await priceLeagueWeek(
+        basis,
+        ids,
+        new Map(ids.map((id) => [id, positions[id] ?? null])),
+        leagueWeekDeps,
+      )
+      /*
+       * ⚠ `?? null`, NOT `?? 0`, AT EVERY STEP. An absent projection is "not priced";
+       * `computeRosterImpact` blocks on an unpriced TRADED asset for exactly this reason.
+       */
+      const toImpact = (id: string): ImpactPlayer =>
+        priced.get(id) ?? { playerId: id, position: (positions[id] ?? '').toUpperCase(), projectedPoints: null }
       const impact = computeRosterImpact({
         roster: viewerRoster.playerIds.map(toImpact),
         slots,
-        incoming,
+        incoming: incomingIds.map(toImpact),
         outgoingPlayerIds,
       })
-      return { ...impact, unit: 'projected_points_per_game' }
+      const round2 = (n: number | null) => (n == null ? null : Math.round(n * 100) / 100)
+      return {
+        ...impact,
+        startingPointsBefore: round2(impact.startingPointsBefore),
+        startingPointsAfter: round2(impact.startingPointsAfter),
+        startingPointsDelta: round2(impact.startingPointsDelta),
+        unit: LEAGUE_WEEK_UNIT,
+        week: basis.week.week,
+      }
     } catch {
       return null
     }

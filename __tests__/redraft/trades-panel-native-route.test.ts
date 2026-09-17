@@ -169,7 +169,8 @@ describe('GET /api/league/trades-panel — native league real trade data', () =>
       valueReceived: 2,
       evaluatedAt: '2026-09-16T00:00:00.000Z',
       rosterImpact: {
-        unit: 'projected_points_per_game',
+        unit: 'league_points_week',
+        week: 3,
         startingPointsBefore: 70,
         startingPointsAfter: 72.5,
         startingPointsDelta: 2.5,
@@ -200,7 +201,8 @@ describe('GET /api/league/trades-panel — native league real trade data', () =>
         viewerRosterId: 'roster-receiver',
       })
       expect(body.activeTrades[0]!.rosterImpact).toEqual({
-        unit: 'projected_points_per_game',
+        unit: 'league_points_week',
+        week: 3,
         startingPointsBefore: 70,
         startingPointsAfter: 72.5,
         startingPointsDelta: 2.5,
