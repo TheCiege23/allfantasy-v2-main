@@ -19,6 +19,8 @@ import {
   playerUnpricedReason,
   type UnpricedReason,
 } from '@/lib/trade-value/unpricedReason'
+import { loadImportedFuturePicks, type RosterFuturePick } from '@/lib/league-trade-engine/importedFuturePicks'
+import { inventoryPickId, roundOrdinal } from '@/lib/league-trade-engine/futurePickInventory'
 
 export const dynamic = 'force-dynamic'
 
@@ -105,6 +107,14 @@ export type TradeableRosterPick = {
   value: number | null
   /** Why `value` is null; null when priced. Optional on the wire, as on a player. */
   unpricedReason?: UnpricedReason | null
+  /**
+   * False for a pick read from `future_draft_picks` (an imported league): it is shown and valued,
+   * but `pickId` is a display id, not one a proposal can reference. Absent means proposable — the
+   * `playerData` picks this route has always returned.
+   */
+  proposable?: boolean
+  /** The team the pick originally belonged to, when that is not this roster. */
+  fromTeam?: string | null
 }
 export type TradeableRoster = {
   rosterId: string
@@ -187,7 +197,11 @@ export async function GET(
    */
   const league = await prisma.league
     // `starters` is the league's own lineup, read by the partner ranking below.
-    .findUnique({ where: { id: leagueId }, select: { season: true, sport: true, platform: true, starters: true } })
+    // `isDynasty` and `settings` (the provider's status) size and date the imported pick inventory.
+    .findUnique({
+      where: { id: leagueId },
+      select: { season: true, sport: true, platform: true, starters: true, isDynasty: true, settings: true },
+    })
     .catch(() => null)
   const currentSeason = Number(league?.season) || null
 
@@ -212,6 +226,8 @@ export async function GET(
           platformUserId: true, teamName: true, externalId: true,
           // Already one query; these ride along rather than costing another.
           avatarUrl: true, wins: true, losses: true, ties: true,
+          // The roster↔team join the imported pick inventory needs.
+          id: true, claimedByUserId: true,
         },
       })
       .catch(() => []),
@@ -239,6 +255,54 @@ export async function GET(
    * it for every player on every roster; doing it per player would be the same query 241 times.
    */
   const byeByTeam = await resolveTeamByeWeeks(String(league?.sport ?? 'NFL'), league?.season)
+
+  /*
+   * 🛑 AN IMPORTED LEAGUE'S PICKS WERE NEVER LISTED. They live in `future_draft_picks`, not in
+   * `Roster.playerData`, and on staging 2026-09-17 no league yielded a single pick from the JSON.
+   * The loader reads them only for the providers whose pick trades are synced (Sleeper, MFL) — so
+   * never for a native league, whose picks are the proposable `playerData` ones below.
+   */
+  const settingsStatus = (() => {
+    const s = league?.settings
+    const v = s && typeof s === 'object' && !Array.isArray(s) ? (s as Record<string, unknown>).status : null
+    return typeof v === 'string' ? v : null
+  })()
+  const importedPicks = await loadImportedFuturePicks({
+    leagueId,
+    platform: league?.platform,
+    isDynasty: Boolean(league?.isDynasty),
+    leagueSeason: currentSeason,
+    status: settingsStatus,
+    teams: teams.map((t) => ({
+      id: t.id,
+      externalId: String(t.externalId ?? ''),
+      platformUserId: t.platformUserId ?? null,
+      claimedByUserId: t.claimedByUserId ?? null,
+      teamName: t.teamName ?? null,
+    })),
+    rosters,
+  }).catch(() => ({ picksByRosterId: new Map<string, RosterFuturePick[]>(), coverage: 'none' as const }))
+
+  /*
+   * ⚠ THE UNITS MATCH THE PLAYERS BESIDE IT, WHICH IS THE ONLY REASON THE TOTAL MEANS ANYTHING.
+   * Player values on this route come from `getPlayerValuesForNamesDbFirst`, i.e. FantasyCalc
+   * dynasty units, and `FIRST_ROUND_IN_MARKET_UNITS` is the first-round anchor SOLVED in those same
+   * units across 771 real trades. Anchoring to any other number would put picks and players on two
+   * scales inside one sum.
+   *
+   * ⚠ AND THE SLOT IS DELIBERATELY OMITTED. A future pick has no draft position yet, so
+   * `pickValueByOverall` defaults it to the middle of the round rather than assuming a favourable
+   * one. A 2027 1st prices as a MID first, not an early one — the honest read when the order is
+   * unknown.
+   */
+  const pickValue = (round: number | null): number | null =>
+    round != null && Number.isFinite(round)
+      ? pickValueByOverall({ round, teams: rosters.length || null, firstRoundValue: FIRST_ROUND_IN_MARKET_UNITS })
+      : null
+  const itemTypeFor = (season: number | null) =>
+    currentSeason != null && season != null && season > currentSeason
+      ? ('future_pick' as const)
+      : ('rookie_pick' as const)
 
   /*
    * 🛑 ONE RESOLVE FOR THE WHOLE LEAGUE, NOT ONE PER ROSTER. This call used to sit INSIDE the
@@ -313,40 +377,34 @@ export async function GET(
         ties: meta?.ties ?? 0,
         faabRemaining: r.faabRemaining ?? null,
         players,
-        picks: listProposablePicks(r.playerData).map((p) => ({
-          ...p,
-          itemType:
-            currentSeason != null && p.season != null && p.season > currentSeason
-              ? ('future_pick' as const)
-              : ('rookie_pick' as const),
-          // The one way a pick goes unpriced here; see `value` below.
-          unpricedReason: p.round != null && Number.isFinite(p.round) ? null : pickUnpricedReason(),
-          /*
-           * 🛑 A PICK USED TO CARRY NO VALUE AT ALL, so the builder showed an em dash and reported
-           * "1 unpriced" on a side whose total then understated it by a first-round pick. The curve
-           * to price it has existed in `lib/pick-curve.ts` the whole time — it was simply never
-           * called from here.
-           *
-           * ⚠ THE UNITS MATCH THE PLAYERS BESIDE IT, WHICH IS THE ONLY REASON THE TOTAL MEANS
-           * ANYTHING. Player values on this route come from `getPlayerValuesForNamesDbFirst`, i.e.
-           * FantasyCalc dynasty units, and `FIRST_ROUND_IN_MARKET_UNITS` is the first-round anchor
-           * SOLVED in those same units across 771 real trades. Anchoring to any other number would
-           * put picks and players on two scales inside one sum.
-           *
-           * ⚠ AND THE SLOT IS DELIBERATELY OMITTED. A future pick has no draft position yet, so
-           * `pickValueByOverall` defaults it to the middle of the round rather than assuming a
-           * favourable one. A 2027 1st prices as a MID first, not an early one — the honest read
-           * when the order is unknown.
-           */
-          value:
-            p.round != null && Number.isFinite(p.round)
-              ? pickValueByOverall({
-                  round: p.round,
-                  teams: rosters.length || null,
-                  firstRoundValue: FIRST_ROUND_IN_MARKET_UNITS,
-                })
-              : null,
-        })),
+        picks: [
+          ...listProposablePicks(r.playerData).map((p): TradeableRosterPick => ({
+            ...p,
+            itemType: itemTypeFor(p.season),
+            // The one way a pick goes unpriced here; see `pickValue` above.
+            unpricedReason: p.round != null && Number.isFinite(p.round) ? null : pickUnpricedReason(),
+            /*
+             * 🛑 A PICK USED TO CARRY NO VALUE AT ALL, so the builder showed an em dash and reported
+             * "1 unpriced" on a side whose total then understated it by a first-round pick. The
+             * curve to price it has existed in `lib/pick-curve.ts` the whole time — it was simply
+             * never called from here.
+             */
+            value: pickValue(p.round),
+          })),
+          ...(importedPicks.picksByRosterId.get(r.id) ?? []).map(
+            (p: RosterFuturePick): TradeableRosterPick => ({
+              pickId: inventoryPickId(p),
+              season: p.season,
+              round: p.round,
+              label: `${p.season} ${roundOrdinal(p.round)}${p.fromTeamName ? ` (${p.fromTeamName})` : ''}`,
+              itemType: itemTypeFor(p.season),
+              value: pickValue(p.round),
+              unpricedReason: null,
+              proposable: false,
+              fromTeam: p.fromTeamName,
+            }),
+          ),
+        ],
         teamExternalId: externalIdByPlatformId.get(r.platformUserId) ?? null,
         ownerName:
           teamNameByPlatformId.get(r.platformUserId) ||
@@ -524,5 +582,11 @@ export async function GET(
     viewerRosterId: viewerRosterId?.id ?? null,
     viewerTeamRosterId,
     partnerRanking,
+    /*
+     * How complete the imported pick lists are: `complete`, `traded_only` (the league's rookie-draft
+     * size is unknown, so only picks that changed hands are listed) or `none`. The picker says so
+     * rather than letting a short list read as a team with no picks.
+     */
+    pickCoverage: importedPicks.coverage,
   })
 }

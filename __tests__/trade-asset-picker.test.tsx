@@ -210,6 +210,74 @@ describe('🛑 FAAB — null and zero are different claims', () => {
   })
 })
 
+describe('🛑 an imported league\'s picks are listed, valued, and never offered by id', () => {
+  const imported = (over: Partial<RosterPick> = {}): RosterPick => ({
+    pickId: 'fdp:2027:1:2',
+    season: 2027,
+    round: 1,
+    label: '2027 1st (Bravo)',
+    itemType: 'future_pick',
+    value: 950,
+    proposable: false,
+    fromTeam: 'Bravo',
+    ...over,
+  })
+  const pickTab = (ui: ReturnType<typeof open>) => {
+    fireEvent.click(within(ui.container).getByText('Pick'))
+    return ui.container
+  }
+  const text = (c: HTMLElement) => (c.textContent ?? '').replace(/\s+/g, ' ')
+
+  it('does not claim it can be proposed', () => {
+    const container = pickTab(open({ rosterPicks: [imported()] }))
+    expect(text(container)).toContain('2027 1st (Bravo)')
+    expect(text(container)).not.toContain('can be proposed')
+  })
+
+  it('🛑 hands it back with NO pick id, so an offer can never reference the display id', () => {
+    const onPick = vi.fn()
+    const container = pickTab(open({ rosterPicks: [imported()], onPick }))
+    fireEvent.click(within(container).getByText('2027 1st (Bravo)').closest('button')!)
+    expect(onPick).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: 'pick', year: 2027, round: 1, value: 950, pickId: null, proposable: false }),
+    )
+  })
+
+  it('[control] a proposable pick keeps its id', () => {
+    const onPick = vi.fn()
+    const container = pickTab(
+      open({ rosterPicks: [imported({ proposable: undefined, pickId: 'k9', label: '2027 round 1' })], onPick }),
+    )
+    fireEvent.click(within(container).getByText('2027 round 1').closest('button')!)
+    expect(onPick).toHaveBeenCalledWith(expect.objectContaining({ pickId: 'k9', proposable: true }))
+  })
+
+  it('says when only traded picks could be listed', () => {
+    const container = pickTab(open({ rosterPicks: [imported()], pickCoverage: 'traded_only' }))
+    expect(text(container)).toContain('Only picks that have changed hands are listed')
+  })
+
+  it('names the viewer\'s own list "Your picks", not "Your\'s picks"', () => {
+    const container = pickTab(open({ rosterPicks: [imported()], rosterLabel: 'Your' }))
+    expect(text(container)).toContain('Your picks')
+    expect(text(container)).not.toContain("Your's")
+    const theirs = pickTab(open({ rosterPicks: [imported()], rosterLabel: 'Matt Jones' }))
+    expect(text(theirs)).toContain("Matt Jones's picks")
+  })
+
+  it('an empty traded-only list says no traded picks are on file, not "no picks with an id"', () => {
+    const container = pickTab(open({ rosterPicks: [], pickCoverage: 'traded_only' }))
+    expect(text(container)).toContain('No traded picks are on file for this team')
+    expect(text(container)).not.toContain('No picks with an id')
+  })
+
+  it('a complete list with nothing on it says the team holds no picks', () => {
+    const container = pickTab(open({ rosterPicks: [], pickCoverage: 'complete' }))
+    expect(text(container)).toContain('This team holds no picks in the next three drafts')
+    expect(text(container)).not.toContain('No picks with an id')
+  })
+})
+
 describe('🛑 a draft pick shows a value like everything else', () => {
   const pick = (over: Partial<RosterPick> = {}): RosterPick => ({
     pickId: 'k1',

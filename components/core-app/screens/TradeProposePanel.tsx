@@ -107,6 +107,9 @@ export function reconcileProposal(args: {
             fromRosterId,
             toRosterId,
           })
+        } else if (a.proposable === false) {
+          // Listed from an imported league's pick table: real, but traded on the league's own platform.
+          blocked.push(`${a.label} — this league trades its picks on its own platform, not here`)
         } else {
           blocked.push(`${a.label} — typed by hand, so the league has no pick to match it to`)
         }

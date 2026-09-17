@@ -60,9 +60,11 @@ export function suggestionToPickedAssets(
       year: pick.season,
       round: pick.round,
       label: pick.label,
-      pickId: pick.pickId,
+      // An imported pick's id is for display only; an offer must never reference it.
+      pickId: pick.proposable === false ? null : pick.pickId,
       itemType: pick.itemType,
       value: pick.value,
+      proposable: pick.proposable !== false,
     }
   }
   const give = suggestion.give.flatMap((a) => {
