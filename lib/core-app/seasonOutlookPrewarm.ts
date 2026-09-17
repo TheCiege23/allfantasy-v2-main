@@ -32,6 +32,13 @@ import {
  * 3 skipped then 5 in the first two production fires, with the cap already reached. Each outcome now
  * leaves a check time (`writeLeagueSimMarker`), and a failure never overwrites a good stored run.
  *
+ * 🛑 AND A CHECK TIME ALONE IS NOT ENOUGH FOR A LEAGUE THAT CANNOT BE RUN, BECAUSE THE CANDIDATE
+ * SIGNAL IS NOISE. A sync rewrites the league's matchup rows within the hour, the marker's stamp is
+ * then older than the newest row, and the league is due all over again — so the 19:00Z run still
+ * spent 5 of its 12 slots on leagues it had already marked. A marker therefore holds for
+ * `MARKER_COOLDOWN_MS` whatever `updatedAt` says. Nothing is lost by waiting: the page computes a
+ * league on demand, and a league that becomes runnable is picked up on the next fire after that.
+ *
  * Postgres and arithmetic only: no provider call, no `lib/auth`. Bounded by league count and time on
  * top of the host route's shared budget; never throws. `CORE_OUTLOOK_PREWARM_DISABLED=true` stops it.
  */
@@ -40,12 +47,16 @@ const LEAGUES_PER_FIRE = 12
 const BUDGET_MS = 30_000
 /** How far back a changed matchup row makes its league a candidate. Several fires' worth. */
 const LOOKBACK_MS = 6 * 60 * 60 * 1000
+/** How long a league it could not run is left alone, however often its rows are rewritten. */
+const MARKER_COOLDOWN_MS = 24 * 60 * 60 * 1000
 
 export type OutlookPrewarmCounts = {
   /** Leagues with a matchup row written inside the lookback. */
   candidates: number
   /** Of those, the ones whose last check is older than their newest row. */
   due: number
+  /** Would have been due, but were marked unrunnable inside the cooldown — slots kept for real runs. */
+  cooling: number
   computed: number
   /** Due, but the inputs hashed the same — stamped as checked, nothing re-run. */
   unchanged: number
@@ -57,7 +68,7 @@ export type OutlookPrewarmCounts = {
 }
 
 export function emptyOutlookPrewarmCounts(): OutlookPrewarmCounts {
-  return { candidates: 0, due: 0, computed: 0, unchanged: 0, skipped: 0, deferred: 0, failed: 0, errors: [] }
+  return { candidates: 0, due: 0, cooling: 0, computed: 0, unchanged: 0, skipped: 0, deferred: 0, failed: 0, errors: [] }
 }
 
 export async function runOutlookPrewarm(
@@ -82,9 +93,17 @@ export async function runOutlookPrewarm(
     const ids = changed.map((c) => c.leagueId)
     const [stored, stamps] = await Promise.all([readLeagueSims(ids, now), readLeagueSimStamps(ids, now)])
     /* Markers count here: a league we could not run was still checked, and waits its turn like any other. */
-    const lastChecked = (pid: string) => stamps.get(pid) ?? Number.NEGATIVE_INFINITY
+    const lastChecked = (pid: string) => stamps.get(pid)?.at ?? Number.NEGATIVE_INFINITY
     const due = changed
-      .filter((c) => (c._max.updatedAt?.getTime() ?? 0) > lastChecked(c.leagueId))
+      .filter((c) => {
+        const stamp = stamps.get(c.leagueId)
+        if ((c._max.updatedAt?.getTime() ?? 0) <= (stamp?.at ?? Number.NEGATIVE_INFINITY)) return false
+        if (stamp?.marker && now.getTime() - stamp.at < MARKER_COOLDOWN_MS) {
+          out.cooling += 1
+          return false
+        }
+        return true
+      })
       /* Oldest check first, so a busy Sunday drains in order rather than starving the tail. */
       .sort((a, b) => lastChecked(a.leagueId) - lastChecked(b.leagueId))
     out.due = due.length

@@ -54,7 +54,7 @@ beforeEach(() => {
   /* Stamps follow whatever `read` returns, as the real module's do; markers are added per test. */
   h.stamps.mockImplementation(async () => {
     const held = (await h.read()) as Map<string, { checkedAt?: string; computedAt: string }>
-    return new Map([...held].map(([k, v]) => [k, Date.parse(v.checkedAt ?? v.computedAt)]))
+    return new Map([...held].map(([k, v]) => [k, { at: Date.parse(v.checkedAt ?? v.computedAt), marker: false }]))
   })
   h.compute.mockReturnValue({ hash: 'hash-new', iterations: 10_000, computedAt: NOW.toISOString() })
 })
@@ -142,10 +142,34 @@ describe('runOutlookPrewarm', () => {
       { leagueId: 'fresh', _max: { updatedAt: at('2026-09-17T14:00:00Z') } },
     ])
     h.read.mockResolvedValue(new Map())
-    h.stamps.mockResolvedValue(new Map([['marked', Date.parse('2026-09-17T14:30:00Z')]]))
+    h.stamps.mockResolvedValue(new Map([['marked', { at: Date.parse('2026-09-17T14:30:00Z'), marker: true }]]))
     const out = await runOutlookPrewarm(NOW)
     expect(out).toMatchObject({ candidates: 2, due: 1, computed: 1 })
     expect(h.load.mock.calls[0][1][0].platformLeagueId).toBe('fresh')
+  })
+
+  it('🛑 a marked league is left alone for the cooldown, however often its rows are rewritten', async () => {
+    /*
+     * Production 19:00Z: 5 of 12 slots went to leagues already marked, because a sync had rewritten
+     * their matchup rows since the marker was written. A check time alone cannot survive that.
+     */
+    h.groupBy.mockResolvedValue([{ leagueId: 'marked', _max: { updatedAt: at('2026-09-17T14:59:00Z') } }])
+    h.read.mockResolvedValue(new Map())
+    h.stamps.mockResolvedValue(new Map([['marked', { at: Date.parse('2026-09-17T09:00:00Z'), marker: true }]]))
+    const out = await runOutlookPrewarm(NOW)
+    expect(out).toMatchObject({ candidates: 1, due: 0, cooling: 1, computed: 0 })
+    expect(h.load).not.toHaveBeenCalled()
+  })
+
+  it('takes a marked league back once the cooldown has passed, and never holds back a real run', async () => {
+    h.groupBy.mockResolvedValue([{ leagueId: 'marked', _max: { updatedAt: at('2026-09-17T14:59:00Z') } }])
+    h.read.mockResolvedValue(new Map())
+    h.stamps.mockResolvedValue(new Map([['marked', { at: Date.parse('2026-09-16T10:00:00Z'), marker: true }]]))
+    expect(await runOutlookPrewarm(NOW)).toMatchObject({ due: 1, cooling: 0, computed: 1 })
+
+    /* Same age, but a stored run rather than a marker: the cooldown must not touch it. */
+    h.stamps.mockResolvedValue(new Map([['marked', { at: Date.parse('2026-09-17T09:00:00Z'), marker: false }]]))
+    expect(await runOutlookPrewarm(NOW)).toMatchObject({ due: 1, cooling: 0, computed: 1 })
   })
 
   it('a failure keeps a good stored run and only stamps it; with none, it leaves a marker', async () => {

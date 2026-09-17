@@ -28,7 +28,10 @@ describe('domain-os-refresh → Season Outlook pre-compute wiring', () => {
     expect(src).toMatch(/\.\.\.r\.portfolio\.errors, \.\.\.r\.outlook\.errors\]/)
     expect(src).toMatch(/r\.outlook\.failed > 0/)
     expect(src).toMatch(/r\.outlook\.deferred \+/)
-    expect(src).toMatch(/outlook: \{\s*candidates: r\.outlook\.candidates,\s*due: r\.outlook\.due,\s*computed: r\.outlook\.computed,\s*unchanged: r\.outlook\.unchanged,/)
+    /* `cooling` is how you tell "the queue is quiet" from "the cooldown is holding leagues back". */
+    expect(src).toMatch(
+      /outlook: \{\s*candidates: r\.outlook\.candidates,\s*due: r\.outlook\.due,\s*cooling: r\.outlook\.cooling,\s*computed: r\.outlook\.computed,\s*unchanged: r\.outlook\.unchanged,/,
+    )
   })
 
   it('imports the pre-compute module, never the screen summary or the focus loader', () => {
