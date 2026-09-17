@@ -99,6 +99,7 @@ const SOURCE_LABELS: Record<string, string> = {
   explain_value: 'Why a player is valued that way',
   get_league_standings: 'League standings',
   get_head_to_head: 'Head-to-head record',
+  get_trade_block: 'Trade block (marked in AllFantasy)',
   get_upcoming_games: 'Upcoming games',
   get_stat_leaders: 'Stat leaders',
 }

@@ -8,6 +8,7 @@ import { resolveLeagueMembership } from '@/lib/league-access'
 import { addToWatchlist, removeFromWatchlist } from '@/lib/waiver-wire/watchlist-service'
 import { prisma } from '@/lib/prisma'
 import { followKeyFor, followPlayer, unfollowPlayer } from '@/lib/follows/playerFollows'
+import { setTradeBlock } from '@/lib/trade-block/importedTradeBlock'
 
 /**
  * The player card's ☆ — the one WRITE the card makes.
@@ -49,13 +50,42 @@ import { followKeyFor, followPlayer, unfollowPlayer } from '@/lib/follows/player
  *
  * 409 at the follow limit, 503 when follows are unavailable (the migration is not applied).
  */
+/*
+ * ── TRADE BLOCK (user decision, 2026-09-17) ──────────────────────────────────────────────
+ * The card's second write: a league body with `list: 'trade-block'`. Membership is checked
+ * here exactly as for the watchlist; that the player is YOURS is proved by
+ * lib/trade-block/importedTradeBlock, and its refusals come back with their own status.
+ */
 export const dynamic = 'force-dynamic'
 
 const bodySchema = z.object({
   leagueId: z.string().min(1).max(64),
   sleeperId: z.string().min(1).max(64),
   sport: z.string().min(2).max(16).optional(),
+  /*
+   * Which of the card's two league lists this writes. Absent means the watchlist, so every client
+   * built before the trade block keeps its meaning. `trade-block` puts one of YOUR players on this
+   * league's trade block (POST) or takes him off (DELETE) — `lib/trade-block/importedTradeBlock`
+   * proves he is yours; membership alone is not enough.
+   */
+  list: z.enum(['watchlist', 'trade-block']).optional(),
 })
+
+const TRADE_BLOCK_STATUS = {
+  league_not_found: 404,
+  unsupported_platform: 400,
+  no_team: 403,
+  not_your_player: 403,
+  no_roster_id: 409,
+} as const
+
+async function handleTradeBlock(leagueId: string, userId: string, sleeperId: string, onBlock: boolean) {
+  const out = await setTradeBlock({ leagueId, userId, sleeperId, onBlock })
+  if (!out.ok) {
+    return NextResponse.json({ error: out.message, code: out.reason }, { status: TRADE_BLOCK_STATUS[out.reason] })
+  }
+  return NextResponse.json({ ok: true, onTradeBlock: out.onBlock })
+}
 
 const followSchema = z
   .object({
@@ -179,6 +209,7 @@ export async function POST(req: Request) {
   if (follow) return follow
   const a = await authorize(req)
   if ('error' in a) return a.error
+  if (a.body.list === 'trade-block') return handleTradeBlock(a.body.leagueId, a.userId, a.body.sleeperId, true)
   await addToWatchlist(a.body.leagueId, a.userId, a.body.sleeperId, a.body.sport ?? null)
   return NextResponse.json({ ok: true, watched: true })
 }
@@ -188,6 +219,7 @@ export async function DELETE(req: Request) {
   if (follow) return follow
   const a = await authorize(req)
   if ('error' in a) return a.error
+  if (a.body.list === 'trade-block') return handleTradeBlock(a.body.leagueId, a.userId, a.body.sleeperId, false)
   await removeFromWatchlist(a.body.leagueId, a.userId, a.body.sleeperId)
   return NextResponse.json({ ok: true, watched: false })
 }

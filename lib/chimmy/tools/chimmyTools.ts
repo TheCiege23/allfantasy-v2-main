@@ -9,6 +9,7 @@ import { buildMyRosterContext } from '@/lib/chimmy/tools/myRosterTool'
 import { buildPlayerValueContext } from '@/lib/chimmy/tools/playerValueTool'
 import { buildPlayerProjectionContext } from '@/lib/chimmy/tools/playerProjectionTool'
 import { buildExplainValueContext } from '@/lib/chimmy/tools/explainValueTool'
+import { buildTradeBlockContext } from '@/lib/chimmy/tradeBlockGrounding'
 
 /**
  * READ-ONLY TOOLS THE MODEL MAY CALL FOR ITSELF.
@@ -164,6 +165,15 @@ export const CHIMMY_TOOL_SPECS = [
       name: 'get_head_to_head',
       description:
         "Every manager's all-time record against the others in this league. Use for rivalry questions — 'am I any good against him', 'who owns who'. Returns a sentence saying so if no matchup history is stored.",
+      parameters: { type: 'object', properties: {}, required: [] },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'get_trade_block',
+      description:
+        "Players on this league's trade block — who is available and which team listed them. Use for 'who is on the block', 'is X available', 'who is shopping players'. Only players managers marked in AllFantasy are visible (Sleeper does not share its own block); the result says so, and your answer must too.",
       parameters: { type: 'object', properties: {}, required: [] },
     },
   },
@@ -351,6 +361,11 @@ export async function executeChimmyTool(
         if (!ctx.leagueId || !ctx.userId) return NO_LEAGUE
         const text = await buildLeagueStandingsContext(ctx.leagueId, ctx.userId)
         return text || 'No standings are stored for this league. Say so; do not estimate them.'
+      }
+
+      case 'get_trade_block': {
+        if (!ctx.leagueId || !ctx.userId) return NO_LEAGUE
+        return buildTradeBlockContext(ctx.leagueId)
       }
 
       case 'get_head_to_head': {

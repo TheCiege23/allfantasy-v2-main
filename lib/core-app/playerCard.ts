@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma'
 import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
 import { isWatched } from '@/lib/waiver-wire/watchlist-service'
 import { followKeyFor, isFollowingPlayer } from '@/lib/follows/playerFollows'
+import { currentListings, TRADE_BLOCK_ENTRY_SELECT, tradeBlockSupport } from '@/lib/trade-block/importedTradeBlock'
 import { buildNextGameMap, type FixtureRow } from './nextGameMap'
 import { getRosteredMarket } from './rosteredMarket'
 import { latestProjectionWeek, lookupProjections } from './playerProjections'
@@ -209,6 +210,22 @@ export type PlayerCardLeague = {
    * lives on the league section rather than beside `bio`.
    */
   watched: boolean
+  /**
+   * This player on this league's trade block.
+   *
+   * ⚠ ONLY WHAT MANAGERS MARKED IN ALLFANTASY. Sleeper does not share its own trade block with
+   * outside apps (measured 2026-09-17), so `note` says that on every card, and on other platforms
+   * says the block is not available here at all. `byYou` means the reader's own team listed him,
+   * which is what lets the card offer "take him off".
+   */
+  tradeBlock: {
+    supported: boolean
+    note: string
+    listed: boolean
+    byYou: boolean
+    teamName: string | null
+    since: string | null
+  }
 }
 
 export type PlayerCardData = {
@@ -953,6 +970,14 @@ function slotOf(pd: Record<string, unknown>, id: string): string | null {
 
 export { SLOT_KEYS }
 
+/** One player's trade-block row in one Sleeper league — the table's own unique key. */
+function readListingRow(sleeperLeagueId: string, playerId: string) {
+  return prisma.tradeBlockEntry.findUnique({
+    where: { sleeperLeagueId_playerId: { sleeperLeagueId, playerId } },
+    select: { ...TRADE_BLOCK_ENTRY_SELECT, isActive: true },
+  })
+}
+
 /**
  * The league half of the card: who holds him here, what he costs under THIS
  * league's settings, what you already have at the position, and this league's
@@ -1152,6 +1177,33 @@ async function loadLeague(
   const watched =
     userId && sleeperId ? await isWatched(leagueId, userId, sleeperId).catch(() => false) : false
 
+  /*
+   * The trade block, from the rosters already loaded above — `currentListings` keeps a listing only
+   * while the team that listed him still has him. One indexed read, and only on a Sleeper card for a
+   * rostered player.
+   */
+  const support = tradeBlockSupport(league.platform)
+  let tradeBlock: PlayerCardLeague['tradeBlock'] = {
+    supported: support.supported,
+    note: support.note,
+    listed: false,
+    byYou: false,
+    teamName: null,
+    since: null,
+  }
+  if (support.supported && sleeperId && league.platformLeagueId && holderKey) {
+    let entry: Awaited<ReturnType<typeof readListingRow>> = null
+    try {
+      entry = await readListingRow(league.platformLeagueId, sleeperId)
+    } catch {
+      entry = null
+    }
+    const listing = entry?.isActive ? currentListings([entry], rosters, teams)[0] : undefined
+    if (listing) {
+      tradeBlock = { ...tradeBlock, listed: true, byYou: isYours, teamName: listing.teamName, since: listing.since }
+    }
+  }
+
   return {
     leagueId: league.id,
     leagueName: league.name ?? 'This league',
@@ -1164,6 +1216,7 @@ async function loadLeague(
     trades: leagueTrades?.available ? leagueTrades.data : [],
     playoffSchedule,
     watched,
+    tradeBlock,
   }
 }
 

@@ -345,6 +345,45 @@
   outline-offset: 2px;
 }
 
+/* ── trade block ─────────────────────────────────────────────────────────── */
+
+.af-pc-block {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+.af-pc-block-btn {
+  padding: 8px 14px;
+  border-radius: 9px;
+  border: 1px solid var(--accent);
+  background: transparent;
+  color: var(--accent);
+  font: 800 12px/1 'Archivo', system-ui, sans-serif;
+  cursor: pointer;
+}
+.af-pc-block-btn[aria-pressed='true'] {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+.af-pc-block-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+.af-pc-block-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.af-pc-block-tag {
+  font: 800 11px/1.3 'Archivo', system-ui, sans-serif;
+  color: var(--warn, var(--accent));
+}
+.af-pc-block-note {
+  font: 500 11px/1.4 'Archivo', system-ui, sans-serif;
+  color: var(--faint);
+  max-width: 44ch;
+}
+
 /* ── labels + absent reasons ─────────────────────────────────────────────── */
 
 .af-pc-label {

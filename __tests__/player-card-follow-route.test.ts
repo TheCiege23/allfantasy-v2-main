@@ -12,6 +12,7 @@ const removeFromWatchlist = vi.fn()
 const findFirst = vi.fn()
 const followPlayer = vi.fn()
 const unfollowPlayer = vi.fn()
+const setTradeBlock = vi.fn()
 
 vi.mock('server-only', () => ({}))
 vi.mock('next-auth', () => ({ getServerSession: (...a: unknown[]) => getServerSession(...a) }))
@@ -33,6 +34,10 @@ vi.mock('@/lib/follows/playerFollows', () => ({
   unfollowPlayer: (...a: unknown[]) => unfollowPlayer(...a),
 }))
 
+vi.mock('@/lib/trade-block/importedTradeBlock', () => ({
+  setTradeBlock: (...a: unknown[]) => setTradeBlock(...a),
+}))
+
 import { DELETE, POST } from '@/app/api/core/player-card/watch/route'
 
 const req = (method: string, body: unknown) =>
@@ -45,7 +50,7 @@ const req = (method: string, body: unknown) =>
 const ROW = { externalId: 'ri:771', sleeperId: '9221', sport: 'NFL', name: 'Jahmyr Gibbs', position: 'RB', team: 'DET' }
 
 beforeEach(() => {
-  for (const f of [getServerSession, resolveLeagueMembership, addToWatchlist, removeFromWatchlist, findFirst, followPlayer, unfollowPlayer]) {
+  for (const f of [getServerSession, resolveLeagueMembership, addToWatchlist, removeFromWatchlist, findFirst, followPlayer, unfollowPlayer, setTradeBlock]) {
     f.mockReset()
   }
   getServerSession.mockResolvedValue({ user: { id: 'u1' } })
@@ -120,5 +125,76 @@ describe('league watchlist (leagueId present) — unchanged', () => {
     const res = await DELETE(req('DELETE', { leagueId: 'lg-42', sleeperId: '9221' }))
     expect(res.status).toBe(404)
     expect(removeFromWatchlist).not.toHaveBeenCalled()
+  })
+})
+
+/*
+ * The trade block rides the same route (no new route): `list: 'trade-block'` on a league body.
+ * Membership is checked here; that the player is YOURS is proved by the service, and its refusals
+ * come back with their own status and wording.
+ */
+describe('trade block (leagueId + list: trade-block)', () => {
+  beforeEach(() => {
+    resolveLeagueMembership.mockResolvedValue({ ok: true })
+    setTradeBlock.mockResolvedValue({ ok: true, onBlock: true })
+  })
+
+  it('POST puts him on the block and touches neither the watchlist nor follows', async () => {
+    const res = await POST(req('POST', { leagueId: 'lg-42', sleeperId: '9221', sport: 'NFL', list: 'trade-block' }))
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ ok: true, onTradeBlock: true })
+    expect(resolveLeagueMembership).toHaveBeenCalledWith('lg-42', 'u1')
+    expect(setTradeBlock).toHaveBeenCalledWith({ leagueId: 'lg-42', userId: 'u1', sleeperId: '9221', onBlock: true })
+    expect(addToWatchlist).not.toHaveBeenCalled()
+    expect(followPlayer).not.toHaveBeenCalled()
+  })
+
+  it('DELETE takes him off', async () => {
+    setTradeBlock.mockResolvedValue({ ok: true, onBlock: false })
+    const res = await DELETE(req('DELETE', { leagueId: 'lg-42', sleeperId: '9221', list: 'trade-block' }))
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ ok: true, onTradeBlock: false })
+    expect(setTradeBlock).toHaveBeenCalledWith({ leagueId: 'lg-42', userId: 'u1', sleeperId: '9221', onBlock: false })
+    expect(removeFromWatchlist).not.toHaveBeenCalled()
+  })
+
+  it('🛑 a non-member is refused before the service is asked', async () => {
+    resolveLeagueMembership.mockResolvedValue({ ok: false, status: 404 })
+    const res = await POST(req('POST', { leagueId: 'lg-42', sleeperId: '9221', list: 'trade-block' }))
+    expect(res.status).toBe(404)
+    expect(setTradeBlock).not.toHaveBeenCalled()
+  })
+
+  it('🛑 signed out is 401 and writes nothing', async () => {
+    getServerSession.mockResolvedValue(null)
+    const res = await POST(req('POST', { leagueId: 'lg-42', sleeperId: '9221', list: 'trade-block' }))
+    expect(res.status).toBe(401)
+    expect(setTradeBlock).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ['not_your_player', 403],
+    ['no_team', 403],
+    ['unsupported_platform', 400],
+    ['league_not_found', 404],
+    ['no_roster_id', 409],
+  ] as const)('a %s refusal is %i with the service message', async (reason, status) => {
+    setTradeBlock.mockResolvedValue({ ok: false, reason, message: `because ${reason}` })
+    const res = await POST(req('POST', { leagueId: 'lg-42', sleeperId: '9221', list: 'trade-block' }))
+    expect(res.status).toBe(status)
+    expect(await res.json()).toEqual({ error: `because ${reason}`, code: reason })
+  })
+
+  it('an unknown list is a bad request, not a watchlist write', async () => {
+    const res = await POST(req('POST', { leagueId: 'lg-42', sleeperId: '9221', list: 'favourites' }))
+    expect(res.status).toBe(400)
+    expect(addToWatchlist).not.toHaveBeenCalled()
+    expect(setTradeBlock).not.toHaveBeenCalled()
+  })
+
+  it('an explicit watchlist list is the watchlist', async () => {
+    const res = await POST(req('POST', { leagueId: 'lg-42', sleeperId: '9221', list: 'watchlist' }))
+    expect(await res.json()).toEqual({ ok: true, watched: true })
+    expect(setTradeBlock).not.toHaveBeenCalled()
   })
 })

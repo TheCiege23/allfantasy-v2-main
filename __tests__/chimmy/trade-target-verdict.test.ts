@@ -249,6 +249,71 @@ describe('the verdict is built from this league', () => {
   })
 })
 
+/*
+ * The trade block (2026-09-17): read only where AllFantasy can hold listings, and a failed read is
+ * left out rather than said as "not listed".
+ */
+describe('the trade block', () => {
+  const tradeBlockListing = vi.fn()
+  const LISTING = {
+    sleeperId: 'p-rice',
+    playerName: 'Rashee Rice',
+    position: 'WR',
+    nflTeam: 'KC',
+    rosterId: 2,
+    teamName: 'Rival',
+    ownerName: 'Rival owner',
+    since: '2026-09-15T12:00:00.000Z',
+  }
+  const blockLine = (reasons: string[]) => reasons.find((r) => r.startsWith('Trade block:'))
+
+  beforeEach(() => {
+    tradeBlockListing.mockReset()
+    deps = { ...deps, tradeBlockListing }
+  })
+
+  it('asks for HIS listing in THIS league, and says his team has him on the block', async () => {
+    tradeBlockListing.mockResolvedValue(LISTING)
+    const r = await run('Rashee Rice')
+    if (r.status !== 'decided') throw new Error('expected a verdict')
+    expect(tradeBlockListing).toHaveBeenCalledWith('league-1', 'p-rice')
+    expect(blockLine(r.verdict.reasons)).toBe('Trade block: Rival has him on the block in AllFantasy (listed 2026-09-15).')
+    expect(r.verdict.because).toMatch(/his team has him on the trade block/)
+  })
+
+  it('not listed: "may still be available", because Sleeper does not share its own block', async () => {
+    tradeBlockListing.mockResolvedValue(null)
+    const r = await run('Rashee Rice')
+    if (r.status !== 'decided') throw new Error('expected a verdict')
+    expect(blockLine(r.verdict.reasons)).toMatch(/isn't marked on the block in AllFantasy.*may still be available/)
+  })
+
+  it('🛑 a failed read says nothing about the block, rather than "not listed"', async () => {
+    tradeBlockListing.mockRejectedValue(new Error('The trade block could not be read.'))
+    const r = await run('Rashee Rice')
+    if (r.status !== 'decided') throw new Error('expected a verdict')
+    expect(r.verdict.verdict).toBe('yes')
+    expect(blockLine(r.verdict.reasons)).toBeUndefined()
+  })
+
+  it('a platform AllFantasy cannot hold listings for is said, and never read', async () => {
+    tradeVisual.mockResolvedValue({ available: true, data: visual({ platform: 'espn' }) })
+    const r = await run('Rashee Rice')
+    if (r.status !== 'decided') throw new Error('expected a verdict')
+    expect(tradeBlockListing).not.toHaveBeenCalled()
+    expect(blockLine(r.verdict.reasons)).toBe(
+      "Trade block: ESPN doesn't share its trade block with AllFantasy, and marking players here is only available for Sleeper leagues so far.",
+    )
+  })
+
+  it('the default reader is the league-scoped listing read', async () => {
+    const fs = await import('node:fs')
+    const path = await import('node:path')
+    const src = fs.readFileSync(path.join(process.cwd(), 'lib', 'chimmy', 'tradeTargetVerdict.ts'), 'utf8')
+    expect(src).toMatch(/tradeBlockListing: tradeBlockListingFor,/)
+  })
+})
+
 describe('it refuses rather than guessing who was meant', () => {
   it('a name on no roster', async () => {
     const r = await run('Puka Nacua')

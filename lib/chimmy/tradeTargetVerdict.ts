@@ -2,6 +2,7 @@ import 'server-only'
 
 import { resolveNames } from '@/lib/ai-payload/resolveAiTeamContext'
 import { getPlayerTradeVisual, type PlayerTradeVisual } from '@/lib/core-app/playerTradeVisual'
+import { tradeBlockListingFor, tradeBlockSupport, type TradeBlockListing } from '@/lib/trade-block/importedTradeBlock'
 import type { SectionState } from '@/lib/core-app/leagueHome'
 import {
   defaultLeagueWeekPricingDeps,
@@ -67,6 +68,8 @@ export interface TradeTargetDeps {
   loadPlayerNames: (sport: string, ids: string[]) => Promise<PlayerNames>
   tradeVisual: (leagueId: string, sleeperId: string, userId: string) => Promise<SectionState<PlayerTradeVisual>>
   leagueWeek: LeagueWeekPricingDeps
+  /** His current listing on this league's trade block, as marked in AllFantasy. */
+  tradeBlockListing?: (leagueId: string, sleeperId: string) => Promise<TradeBlockListing | null>
 }
 
 /*
@@ -80,6 +83,7 @@ const defaultDeps: TradeTargetDeps = {
   loadPlayerNames: (sport, ids) => resolveNames(normalizeToSupportedSport(sport), ids, MAX_LEAGUE_PLAYER_IDS),
   tradeVisual: (leagueId, sleeperId, userId) => getPlayerTradeVisual(leagueId, sleeperId, userId),
   leagueWeek: defaultLeagueWeekPricingDeps,
+  tradeBlockListing: tradeBlockListingFor,
 }
 
 /**
@@ -250,6 +254,29 @@ export async function buildTradeTargetVerdict(
 
   const myTeam = world.teams.find((t) => t.teamId === viewer.teamId) ?? null
 
+  /*
+   * The trade block. A platform AllFantasy cannot hold listings for is said, not read. A read that
+   * fails leaves the block out, rather than telling the asker he is "not listed".
+   */
+  const blockSupport = tradeBlockSupport(tv.platform)
+  let block: TradeTargetFacts['block'] = null
+  if (!blockSupport.supported) {
+    block = { supported: false, listed: false, teamName: null, since: null, note: blockSupport.note }
+  } else if (deps.tradeBlockListing) {
+    try {
+      const listing = await deps.tradeBlockListing(args.leagueId, target.playerId)
+      block = {
+        supported: true,
+        listed: listing != null,
+        teamName: listing?.teamName ?? null,
+        since: listing?.since ?? null,
+        note: blockSupport.note,
+      }
+    } catch {
+      block = null
+    }
+  }
+
   const facts: TradeTargetFacts = {
     leagueName: tv.leagueName,
     target: {
@@ -283,6 +310,7 @@ export async function buildTradeTargetVerdict(
       tv.tradesAllowed === false || tv.bidInstead
         ? { waiverNote: tv.bidInstead?.reason ?? null }
         : null,
+    block,
   }
 
   return { status: 'decided', verdict: decideTradeTarget(facts), leagueName: tv.leagueName, targetName: target.name }

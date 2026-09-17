@@ -6,7 +6,10 @@ const h = vi.hoisted(() => ({
   upcoming: vi.fn(),
   leaders: vi.fn(),
   findLeague: vi.fn(),
+  tradeBlock: vi.fn(),
 }))
+
+vi.mock('@/lib/chimmy/tradeBlockGrounding', () => ({ buildTradeBlockContext: h.tradeBlock }))
 
 vi.mock('@/lib/chimmy/leagueStandingsGrounding', () => ({
   buildLeagueStandingsContext: h.standings,
@@ -87,6 +90,12 @@ describe('tool specs', () => {
       'explain_value',
       'get_league_standings',
       'get_head_to_head',
+      /*
+       * The league's trade block — only what managers marked in AllFantasy, because Sleeper does
+       * not share its own. Reads `trade_block_entries` for the session's league and writes
+       * nothing; the marking itself is the player card's, never the model's.
+       */
+      'get_trade_block',
       'get_upcoming_games',
       'get_stat_leaders',
     ])
@@ -120,6 +129,18 @@ describe('executeChimmyTool', () => {
     const out = await executeChimmyTool('get_league_standings', {}, { leagueId: null, userId: null })
     expect(out).toMatch(/no league is selected/i)
     expect(h.standings).not.toHaveBeenCalled()
+  })
+
+  it('reads the trade block of the SESSION league only', async () => {
+    h.tradeBlock.mockResolvedValue('Trade block (marked in AllFantasy), 1 player: Rashee Rice')
+    expect(await executeChimmyTool('get_trade_block', { leagueId: 'somebody-elses' }, CTX)).toContain('Rashee Rice')
+    expect(h.tradeBlock).toHaveBeenCalledWith('l1')
+  })
+
+  it('refuses the trade block with no league in scope', async () => {
+    const out = await executeChimmyTool('get_trade_block', {}, { leagueId: null, userId: null })
+    expect(out).toMatch(/no league is selected/i)
+    expect(h.tradeBlock).not.toHaveBeenCalled()
   })
 
   /*
