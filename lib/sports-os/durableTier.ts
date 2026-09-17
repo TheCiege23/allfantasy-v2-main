@@ -65,8 +65,8 @@ export function createSportsDataCacheTier(): DurableCacheTier {
         select: { data: true, expiresAt: true },
       })
       if (!row) return null
-      // Expired rows are swept by whatever reaps this table; do not trust `expiresAt` to have been
-      // enforced for us, and do not delete from a read path.
+      // Expired rows are swept by `purgeExpiredCache` (lib/enrichment-cache.ts, hourly; `sos:sum:`
+      // is on its allow-list). Do not trust that to have run, and do not delete from a read path.
       if (row.expiresAt.getTime() <= Date.now()) return null
       return asEnvelope(row.data)
     },

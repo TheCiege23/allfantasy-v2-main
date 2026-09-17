@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 
 import { requireCronAuth } from '../_auth'
+import { purgeExpiredCache } from '@/lib/enrichment-cache'
+import { prisma } from '@/lib/prisma'
 import { reapAllAbandonedRuns, recordSyncJobRun } from '@/lib/production-health/syncJobRunTelemetry'
 
 /**
@@ -27,7 +29,8 @@ export const maxDuration = 30
 /**
  * GET /api/cron/reap-sync-runs
  *
- * Marks `SyncJobRun` rows stuck in `running` as `failed`, across every job name.
+ * Marks `SyncJobRun` rows stuck in `running` as `failed`, across every job name, then deletes a
+ * bounded batch of expired `SportsDataCache` rows (see the note at the purge below).
  *
  * WHY THIS EXISTS. `withSyncJobRun` already reaps abandoned rows, but only for the job that is
  * firing, at the moment it fires. So a job self-heals exactly as long as it keeps running — and
@@ -69,14 +72,27 @@ export async function GET(request: NextRequest) {
     )
   }
 
+  /*
+   * The second sweep: expired `SportsDataCache` rows, which nothing deleted before 2026-09-17.
+   * It rides here because this is the hourly housekeeping job, and it runs only past the guard
+   * above — an unreachable telemetry model means an unreachable database.
+   *
+   * Its outcome never changes the reaper's: a purge that could not run is reported as a warning
+   * (status `partial`, which the freshness check surfaces as a caveat) and in `cachePurge`, never
+   * as a failed reap. Bounded inside `purgeExpiredCache` to 10s of this route's 30s.
+   */
+  const cachePurge = await purgeExpiredCache(prisma)
+  const purgeWarnings =
+    cachePurge.available || cachePurge.error === 'disabled' ? [] : [`cache purge: ${cachePurge.error ?? 'unavailable'}`]
+
   // Recorded AFTER the `available` guard above, so an unreachable telemetry model cannot write a
   // clean-looking heartbeat for a sweep that never swept. The 503 path deliberately records
   // nothing: if the model is unreachable, this insert would fail anyway.
   await recordSyncJobRun(
     { jobName: JOB, trigger: 'cron' },
-    { rowsUpdated: reaped, metadata: { cutoff } },
+    { rowsUpdated: reaped, warnings: purgeWarnings, metadata: { cutoff, cachePurge } },
     Date.now() - startedAt,
   )
 
-  return NextResponse.json({ ok: true, reaped, cutoff })
+  return NextResponse.json({ ok: true, reaped, cutoff, cachePurge })
 }
