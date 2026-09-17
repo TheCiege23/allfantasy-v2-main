@@ -1217,13 +1217,13 @@ export default async function AfCorePage({
     const shellDevice = classifyDevice(shellHeaders.get('user-agent'), shellHeaders.get('sec-ch-ua-mobile'))
 
     /*
-     * The shell as its own span, so its duration can be AGGREGATED.
+     * The shell as its own span, so the phase shows on a trace's waterfall.
      *
-     * 🛑 `af.shell_ms` ABOVE IS NOT QUERYABLE IN SENTRY — it reports as an unknown, string-typed
-     * attribute, so there is no p75 to calibrate the shell budget against. `span.duration` is a
-     * native field and has none of that problem. Both are kept: the attribute is what
-     * `docs/observability/TRACING.md` documents and what an individual trace shows, and this span
-     * is the one an aggregate query can actually use.
+     * ⚠ `af.shell_ms` ABOVE IS AGGREGATABLE TOO — query it as `p75(tags[af.shell_ms,number])`.
+     * This span was added believing it was not: a bare `p75(af.shell_ms)` fails with "Unknown
+     * attribute", and that was read as a limit of the data (corrected 2026-09-17; see
+     * `docs/observability/TRACING.md`). Both are kept and carry the same duration. This span's
+     * `span.duration` needs no typed form.
      *
      * Created retroactively — see `recordCompletedSpan`. It cannot leak on the early returns
      * between the auth gate and here, because it only exists if control reaches this line.

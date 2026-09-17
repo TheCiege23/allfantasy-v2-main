@@ -40,10 +40,10 @@ describe('recordCompletedSpan', () => {
 
   it('back-dates the span so its duration is the real phase duration', () => {
     /*
-     * 🛑 THE DURATION IS THE ENTIRE POINT. `af.shell_ms` is not queryable in Sentry — it reports as
-     * an unknown, string-typed attribute — so there is no p75 to calibrate against. `span.duration`
-     * is native. A span created at the END without back-dating would read as ~0ms and be worse than
-     * no span at all, because it would look like a measurement.
+     * 🛑 THE DURATION IS THE ENTIRE POINT. The span is the shell phase on the trace's waterfall, and
+     * its native `span.duration` aggregates with no typed form (`af.shell_ms` aggregates too, as
+     * `tags[af.shell_ms,number]`). A span created at the END without back-dating would read as ~0ms
+     * and be worse than no span at all, because it would look like a measurement.
      */
     recordCompletedSpan({ name: 'shell', op: 'core.shell', startedAtMs: START, endedAtMs: START + 1_250 })
 
