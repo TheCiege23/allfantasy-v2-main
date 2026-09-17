@@ -17,7 +17,10 @@ import { resolvePairedHalf, type PairedHalf } from './leaguePairing'
 import { getLeagueActivity } from './leagueActivity'
 import { getAllPlayBoard, type AllPlayBoard } from './allPlay'
 import type { ActivityPlayer } from './leagueActivity'
-import { getLeagueManagerHealth } from '@/lib/commissioner-hub/managerHealth'
+import { resolveWriteAuthority } from '@/lib/league/write-authority'
+import { MANAGER_INACTIVE_AFTER_DAYS } from '@/lib/decision-os/behavioral/manager-intelligence'
+import { memberActivityFromReads, staleActivityReason } from './commissioner/activity'
+import { readMemberActivityInputs } from './commissioner/memberActivityReads'
 import { getLeagueScoreboard, type LeagueScoreboard } from './leagueScoreboard'
 import { extractScoringSettings } from '@/lib/projections/leagueScoring'
 import { latestProjectionWeek } from './playerProjections'
@@ -218,16 +221,25 @@ export type LeagueHomeData = {
    * are not ingested. League health and manager activity are both real and both
    * work on imported leagues; nothing was reading them.
    */
-  commissioner: SectionState<{
-    /** Managers who have not touched their team inside the idle window. */
-    inactiveCount: number
-    atRiskCount: number
-    totalManagers: number
-    /** Named, because "3 inactive" is a statistic and a name is an action. */
-    inactiveNames: string[]
-    /** Deep link into the full commissioner surface. */
-    href: string
-  }>
+  commissioner:
+    | SectionState<{
+        /** Managers the Commissioner Hub calls inactive — the same judgement, see `memberActivityFromReads`. */
+        inactiveCount: number
+        /**
+         * Null where "at risk" is not a measured state: an imported league is judged by moves, which
+         * have no at-risk band. A zero there would be a number nobody took.
+         */
+        atRiskCount: number | null
+        totalManagers: number
+        /** Named, because "3 inactive" is a statistic and a name is an action. */
+        inactiveNames: string[]
+        /** What "inactive" was judged from, said on the card. */
+        basis: string
+        /** Deep link into the full commissioner surface. */
+        href: string
+      }>
+    /** Activity can't be judged right now, but a commissioner still gets the way into the hub. */
+    | { available: false; reason: string; href: string }
   buzz: SectionState<
     Array<{
       id: string
@@ -535,6 +547,8 @@ export async function getLeagueHomeData(
       // Both flags: a co-commissioner is exactly who the hub preview is for.
       isCommissioner: true,
       isCoCommissioner: true,
+      // With claimedByUserId and platformUserId, tells an empty seat from a manager (isUnownedTeam).
+      isOrphan: true,
       // The owner id, which is how Roster rows (and their FAAB) are found.
       platformUserId: true,
     },
@@ -552,9 +566,31 @@ export async function getLeagueHomeData(
    */
   const viewerIsCommissioner = Boolean(yours?.isCommissioner || yours?.isCoCommissioner)
 
-  const managerHealth = viewerIsCommissioner
-    ? await getLeagueManagerHealth(league.id).catch(() => null)
+  /*
+   * Who is inactive — THE SAME JUDGEMENT THE COMMISSIONER HUB SHOWS (`memberActivityFromReads`),
+   * so this card and the hub it opens cannot disagree.
+   *
+   * 🛑 THIS USED `getLeagueManagerHealth`, WHICH JUDGES BY `Roster.updatedAt`. On an imported
+   * league the sync rewrites every roster row on each pass (production 2026-09-16: 12 rows within
+   * 130ms), so every manager read active and the only "inactive" rows were leftover roster rows
+   * with no team behind them. An imported league is now judged by its moves, and a league whose
+   * sync has stopped is not judged at all.
+   */
+  const hubHref = `/core/commissioner?league=${encodeURIComponent(league.id)}`
+  const activityNow = new Date()
+  const nativeLeague = resolveWriteAuthority(league.platform) === 'NATIVE'
+  const activityStale = viewerIsCommissioner
+    ? staleActivityReason({ native: nativeLeague, lastSyncedAt: league.lastSyncedAt, now: activityNow })
     : null
+  const memberActivity =
+    viewerIsCommissioner && !activityStale
+      ? memberActivityFromReads(
+          await readMemberActivityInputs(league.id, nativeLeague),
+          teams,
+          activityNow,
+          MANAGER_INACTIVE_AFTER_DAYS,
+        )
+      : null
 
   /*
    * Did this league draft, whatever we captured of the board? Populated rosters
@@ -957,22 +993,24 @@ export async function getLeagueHomeData(
           available: false,
           reason: 'the commissioner hub is visible to this league\u2019s commissioner and co-commissioners',
         }
-      : managerHealth && managerHealth.totalManagers > 0
+      : memberActivity && memberActivity.available
         ? {
             available: true,
             data: {
-              inactiveCount: managerHealth.inactiveCount,
-              atRiskCount: managerHealth.atRiskCount,
-              totalManagers: managerHealth.totalManagers,
+              inactiveCount: memberActivity.data.inactive,
+              atRiskCount: nativeLeague
+                ? memberActivity.data.rows.filter((r) => r.status === 'at_risk').length
+                : null,
+              totalManagers: memberActivity.data.total,
               /*
                * Named, not counted. "3 inactive" is a statistic; three names is
                * something a commissioner can act on this afternoon.
                */
-              inactiveNames: managerHealth.rows
+              inactiveNames: memberActivity.data.rows
                 .filter((r) => r.status === 'inactive')
-                .map((r) => r.teamName || r.managerName)
-                .filter(Boolean)
-                .slice(0, 4) as string[],
+                .map((r) => r.name)
+                .slice(0, 4),
+              basis: memberActivity.data.basis,
               /*
                * The per-league Commissioner Hub in /core, the same page the left nav's
                * "Commissioner" opens for this league. This used to open
@@ -982,12 +1020,18 @@ export async function getLeagueHomeData(
                * without the console. The hub admits both roles and links to that page
                * as one of its areas.
                */
-              href: `/core/commissioner?league=${encodeURIComponent(league.id)}`,
+              href: hubHref,
             },
           }
         : {
+            // Never zeroes for a league nobody could judge: the reason, and the way to the hub.
             available: false,
-            reason: 'no managers read for this league yet, so there is nothing to report on',
+            reason:
+              activityStale ??
+              (memberActivity && !memberActivity.available
+                ? memberActivity.reason
+                : 'League activity couldn’t be read just now.'),
+            href: hubHref,
           },
     rivalry: resolvedRivalry,
     /*

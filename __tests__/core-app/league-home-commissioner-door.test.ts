@@ -42,15 +42,15 @@ vi.mock('@/lib/prisma', () => {
   return { prisma, default: prisma }
 })
 
-vi.mock('@/lib/commissioner-hub/managerHealth', () => ({
-  getLeagueManagerHealth: vi.fn(async () => ({
-    totalManagers: 2,
-    inactiveCount: 1,
-    atRiskCount: 0,
-    rows: [
-      { teamName: 'Mine', managerName: 'me', status: 'active' },
-      { teamName: 'Theirs', managerName: 'them', status: 'inactive' },
-    ],
+// An imported (Sleeper) league is judged by its moves — see league-home-commissioner-activity.test.ts.
+vi.mock('@/lib/league-history/leagueWarehouseReads', async (importOriginal) => ({
+  ...(await importOriginal<object>()),
+  readManagerActivity: vi.fn(async () => [{ managerName: 'Mine', currentCount: 2, priorCount: 0 }]),
+  readActivityWindow: vi.fn(async () => ({
+    lastActivityAt: new Date(Date.now() - 86_400_000),
+    tradeCount: 0,
+    waiverCount: 2,
+    eventCount: 2,
   })),
 }))
 

@@ -166,6 +166,65 @@ export function resolveMemberActivity(
   )
 }
 
+// ── One judgement for every surface ─────────────────────────────────────────
+
+/**
+ * What `readMemberActivityInputs` (./memberActivityReads.ts) read for one league. Each read may
+ * have failed (null); the judgement then says activity couldn't be read, never "nobody".
+ */
+export type MemberActivityReads =
+  | { native: true; rows: NativeActivityInput['rows'] }
+  | {
+      native: false
+      managers: ImportedActivityInput['managers'] | null
+      window: { lastActivityAt: Date | null; eventCount: number } | null
+    }
+
+/**
+ * Who is active, from the reads above — the answer the Commissioner Hub and the league
+ * Overview's commissioner card BOTH show, so the card and the hub it links to cannot disagree.
+ */
+export function memberActivityFromReads(
+  reads: MemberActivityReads,
+  teams: TeamIdentityRow[],
+  now: Date,
+  windowDays: number,
+): LeagueMemberActivity {
+  if (reads.native) return resolveMemberActivity({ kind: 'native', rows: reads.rows }, now, windowDays)
+  if (!reads.managers || !reads.window) {
+    return { available: false, reason: 'League activity couldn’t be read just now.' }
+  }
+  return resolveMemberActivity(
+    {
+      kind: 'imported',
+      managers: reads.managers,
+      teams: ownedTeamNames(teams),
+      lastActivityAt: reads.window.lastActivityAt,
+      eventCount: reads.window.eventCount,
+    },
+    now,
+    windowDays,
+  )
+}
+
+/** Past this, an imported league's rows are the sync's picture, not the managers'. */
+export const ACTIVITY_STALE_AFTER_MS = 2 * DAY_MS
+
+/**
+ * Why activity is not judged on an imported league whose sync has stopped, or null when it may be.
+ *
+ * ⚠ TWO DAYS WITHOUT A SYNC AND EVERY MANAGER LOOKS IDLE. Measured on a test league 14 days
+ * unsynced: "12 teams with nobody running them". A league never synced (`lastSyncedAt` null) is
+ * not called stale here; the hub reports that state on its own.
+ */
+export function staleActivityReason(input: { native: boolean; lastSyncedAt: Date | null; now: Date }): string | null {
+  if (input.native || !input.lastSyncedAt) return null
+  const ageMs = input.now.getTime() - input.lastSyncedAt.getTime()
+  if (ageMs <= ACTIVITY_STALE_AFTER_MS) return null
+  const days = Math.floor(ageMs / DAY_MS)
+  return `AllFantasy last read this league ${days} days ago, so every manager would look idle. Re-sync it to see who is really active.`
+}
+
 // ── Team identity helpers ────────────────────────────────────────────────────
 
 export type TeamIdentityRow = {

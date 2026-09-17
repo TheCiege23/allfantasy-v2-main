@@ -183,10 +183,16 @@ describe('league home: the Commissioner Hub is gated on the flags that include c
     expect(query).toContain('isCoCommissioner: true')
   })
 
-  it('does not read manager health for non-commissioners', () => {
+  it('does not read manager activity for non-commissioners', () => {
     // Gating the render but not the READ would leak who is inactive to anyone
     // who opened devtools, and pay for the query on every page load.
-    expect(SRC).toContain('viewerIsCommissioner\n    ? await getLeagueManagerHealth')
+    const gate = SRC.indexOf('viewerIsCommissioner && !activityStale')
+    const read = SRC.indexOf('await readMemberActivityInputs(')
+    expect(gate).toBeGreaterThan(-1)
+    expect(read).toBeGreaterThan(gate)
+    expect(read - gate).toBeLessThan(200)
+    // The roster-clock read is gone from this screen: on an imported league it describes the sync.
+    expect(SRC).not.toContain('await getLeagueManagerHealth')
   })
 
   it('names inactive managers rather than only counting them', () => {
@@ -197,8 +203,9 @@ describe('league home: the Commissioner Hub is gated on the flags that include c
   it('withholds the panel when no managers were read, instead of reporting zero inactive', () => {
     // Zero inactive out of zero managers is a clean bill of health for a league
     // we know nothing about — the exact shape of the "C grade means no data" bug.
-    expect(SRC).toContain('managerHealth && managerHealth.totalManagers > 0')
-    expect(SRC).toContain('there is nothing to report on')
+    // The judgement itself refuses (resolveMemberActivity); the card only renders an available one.
+    expect(SRC).toContain('memberActivity && memberActivity.available')
+    expect(SRC).toContain('Never zeroes for a league nobody could judge')
   })
 })
 
