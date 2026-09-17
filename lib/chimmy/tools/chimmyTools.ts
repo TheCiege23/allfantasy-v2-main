@@ -6,6 +6,7 @@ import { findUpcomingGames } from '@/lib/ai/upcomingGames'
 import { findLeagueByName } from '@/lib/chimmy/tools/leagueByName'
 import { buildAvailablePlayersContext } from '@/lib/chimmy/tools/availablePlayersTool'
 import { buildMyRosterContext } from '@/lib/chimmy/tools/myRosterTool'
+import { buildMyStartersPlayingContext } from '@/lib/chimmy/tools/myStartersPlayingTool'
 import { buildPlayerValueContext } from '@/lib/chimmy/tools/playerValueTool'
 import { buildPlayerProjectionContext } from '@/lib/chimmy/tools/playerProjectionTool'
 import { buildExplainValueContext } from '@/lib/chimmy/tools/explainValueTool'
@@ -196,6 +197,32 @@ export const CHIMMY_TOOL_SPECS = [
             description: 'Narrow to preseason or regular season. Omit for either.',
           },
           limit: { type: 'number', description: 'How many games to return, 1-10. Default 5.' },
+        },
+        required: [],
+      },
+    },
+  },
+  /*
+   * ⚠ THE ONLY CROSS-LEAGUE TOOL, AND THAT IS THE POINT. Every other roster tool
+   * reads the ONE league in scope, so a question spanning all of someone's teams
+   * had nothing to call and the honest best reply was "pick a league". See
+   * myStartersPlayingTool.ts for the production question that exposed it.
+   */
+  {
+    type: 'function' as const,
+    function: {
+      name: 'get_my_starters_playing',
+      description:
+        "How many of the user's OWN NFL leagues have a STARTER in today's or tonight's games, and which players they are. Use for 'do I have anyone playing tonight', 'how many leagues do I have players in tonight', 'am I starting anyone in this game'. This is the ONLY tool that spans every league at once — get_my_roster reads one league and cannot answer a 'how many leagues' question. It needs NO league in scope and ignores one if set. Starters only; bench, IR and taxi are excluded. NFL only. It reports the leagues it could not read, and those gaps mean the true count can only be higher — never round up to cover them.",
+      parameters: {
+        type: 'object',
+        properties: {
+          window: {
+            type: 'string',
+            enum: ['today', 'tonight'],
+            description:
+              "'tonight' for games kicking off from 5pm Eastern, 'today' for the whole Eastern day. Use the word the user used; default to 'today' if they named neither.",
+          },
         },
         required: [],
       },
@@ -408,6 +435,22 @@ export async function executeChimmyTool(
         const asked = typeof args.player === 'string' ? args.player : ''
         const sport = typeof args.sport === 'string' ? args.sport : null
         return await buildExplainValueContext({ playerName: asked, sport })
+      }
+
+      /*
+       * ⚠ NO LEAGUE GATE, AND IT IS NOT AN OVERSIGHT. Every other tool reading the
+       * user's own data bails on NO_LEAGUE because it needs a league in scope.
+       * This one spans ALL of them, so requiring a selected league would refuse
+       * the only question it exists to answer. It still needs a USER — that is
+       * what scopes it — and it reads leagues only through the membership routes
+       * in `listMemberLeagues`, never from anything the model supplied.
+       */
+      case 'get_my_starters_playing': {
+        if (!ctx.userId) {
+          return 'I cannot tell who is signed in, so I cannot read their leagues. Say that; do not name a league or a count.'
+        }
+        const window = args.window === 'tonight' ? 'tonight' : 'today'
+        return await buildMyStartersPlayingContext({ userId: ctx.userId, window })
       }
 
       case 'get_upcoming_games': {

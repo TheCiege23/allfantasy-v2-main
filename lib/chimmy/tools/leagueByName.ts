@@ -165,12 +165,21 @@ function normalise(value: string): string {
  * confident, precise answer about a league they did not ask about, which is
  * indistinguishable from a correct one. Two matches means we ask.
  */
-export async function findLeagueByName(
-  userId: string,
-  query: string,
-  season?: number | null,
-): Promise<LeagueNameLookup> {
-  const wanted = normalise(query ?? '')
+/**
+ * EVERY LEAGUE THIS USER IS IN, newest season first, one row per real league.
+ *
+ * ⚠ EXTRACTED FROM `findLeagueByName` RATHER THAN REWRITTEN. A cross-league
+ * answer needs the same list the name lookup walks, and both halves of it are
+ * load-bearing in ways a fresh query would get wrong: membership arrives by FOUR
+ * separate routes (see `memberLeagueIds`), and `collapseSameRealLeague` folds the
+ * duplicate rows one Sleeper league produces when several managers import it.
+ *
+ * ⚠ THE COLLAPSE IS WHAT MAKES A COUNT TRUE. Production holds KBFL twice on
+ * platform id 1338541390891606016, both rows carrying an identical 32 teams.
+ * Counting raw rows would tell a user they have starters in two leagues when they
+ * have one — and the number is the entire answer to "how many leagues".
+ */
+export async function listMemberLeagues(userId: string): Promise<NamedLeague[]> {
   const ids = await memberLeagueIds(userId)
 
   const leagues = ids.length
@@ -191,7 +200,7 @@ export async function findLeagueByName(
         .catch(() => [])
     : []
 
-  const named: NamedLeague[] = collapseSameRealLeague(
+  return collapseSameRealLeague(
     leagues
       .filter((l) => l.name)
       .map((l) => ({
@@ -204,6 +213,15 @@ export async function findLeagueByName(
       })),
     userId,
   )
+}
+
+export async function findLeagueByName(
+  userId: string,
+  query: string,
+  season?: number | null,
+): Promise<LeagueNameLookup> {
+  const wanted = normalise(query ?? '')
+  const named: NamedLeague[] = await listMemberLeagues(userId)
 
   if (!wanted) return { kind: 'none', known: named.slice(0, MAX_SUGGESTIONS) }
 

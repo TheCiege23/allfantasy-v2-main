@@ -58,6 +58,64 @@ export function detectScheduleQuestion(message: string): boolean {
   return SCHEDULE_PATTERNS.some((p) => p.test(message))
 }
 
+// ── Personal / cross-league scope detection ───────────────────────────────────
+
+/*
+ * 🛑 A BARE "TONIGHT" HIJACKED A QUESTION ABOUT THE USER'S OWN LEAGUES.
+ *
+ * Measured in production 2026-09-17:
+ *
+ *   Q  "seeing as there is a game tonight, how many leagues do I have fantasy
+ *       players playing tonight? as a starter? for NFL"
+ *   A  "Here are the cached NFL games I can verify for that window:
+ *       - Detroit Lions @ Buffalo Bills: score TBD (scheduled) — Sep 17, 8:15 PM EDT"
+ *
+ * TWO patterns caught it independently. `buildCachedGamesAnswer` falls back to a
+ * bare `\btonight\b` anywhere in the message, and SCHEDULE_PATTERNS' `games?\s+
+ * (today|tonight)` matches the incidental "a game tonight," clause the user only
+ * wrote as context. So a cross-league roster question came back as a fixture list
+ * — returned as `kind: 'answer'`, which short-circuits the whole pipeline before
+ * the tool loop that could have answered it ever runs.
+ *
+ * ⚠ A SCHEDULE DUMP IS NEVER THE ANSWER TO A FIRST-PERSON ROSTER QUESTION. The
+ * fixtures are part of the answer, but only joined to the asker's own starters —
+ * which is `get_my_starters_playing`'s job, not this module's. These builders
+ * yield so the pipeline can do it properly.
+ *
+ * ⚠ SCOPED TO THE SCHEDULE BUILDERS, deliberately NOT hoisted into the top-level
+ * bail-out in `tryDeterministicAnswerDetailed`. Returning null for the whole
+ * module would also discard the cached weather, injury, news and value answers,
+ * several of which are naturally asked in exactly this first person ("what is my
+ * guy worth") and are answered correctly today.
+ */
+const PERSONAL_SCOPE_PATTERNS: RegExp[] = [
+  /\bdo\s+i\s+have\b/i,
+  /\bam\s+i\s+(?:starting|playing|start)\b/i,
+  /\b(?:how\s+many|which|any)\s+of\s+(?:my|our)\b/i,
+  /*
+   * ⚠ THE FIRST PERSON IS NOT OPTIONAL HERE. This was written as
+   * `how many (?:of )?(?:my )?leagues?` and the control caught it: with `my`
+   * optional it also matched "how many leagues does the NFL have", a pure world
+   * question, which would have suppressed the cached fixture answer for it.
+   * Requiring an explicit "I" is what separates the two.
+   */
+  /\bhow\s+many\s+leagues?\b[^?]*\b(?:i\s+(?:have|am|play|start)|(?:do|did|am|have)\s+i)\b/i,
+  /\b(?:my|our)\s+(?:\w+\s+){0,2}(?:leagues?|rosters?|lineups?|starters?|bench)\b/i,
+  /\bas\s+a\s+starter\b/i,
+  /\bin\s+(?:my|our)\s+lineups?\b/i,
+]
+
+/**
+ * Is this a question about the ASKER'S OWN teams rather than about the world?
+ *
+ * Deliberately narrow: it needs a first-person reference to a league, a lineup or
+ * a starter. "Who is playing tonight" stays a world question and still gets the
+ * cached fixture list; "do I have anyone playing tonight" does not.
+ */
+export function isPersonalRosterScoped(message: string): boolean {
+  return PERSONAL_SCOPE_PATTERNS.some((p) => p.test(message))
+}
+
 /*
  * 🛑 "WHAT GAMES ARE ON RIGHT NOW" IS NOT A SCHEDULE QUESTION, AND TREATING IT AS ONE
  * REPORTS A LIVE SLATE AS EMPTY.
@@ -557,6 +615,8 @@ async function buildTeamResultAnswer(message: string, locale?: string): Promise<
  * used to fall through to a model holding no schedule at all.
  */
 async function buildUpcomingGamesAnswer(message: string, locale?: string): Promise<string | null> {
+  /* See isPersonalRosterScoped: their starters are not on this schedule. */
+  if (isPersonalRosterScoped(message)) return null
   const intent = detectUpcomingIntent(message, resolveSportFromMessage)
   if (!intent) return null
 
@@ -611,6 +671,8 @@ Source: cached SportsGame rows.`
 }
 
 async function buildCachedGamesAnswer(message: string): Promise<string | null> {
+  /* See isPersonalRosterScoped: a fixture list is not an answer about their roster. */
+  if (isPersonalRosterScoped(message)) return null
   if (!detectScheduleQuestion(message) && !/\b(live scores?|scores?|games? today|tonight|playing now)\b/i.test(message)) {
     return null
   }
@@ -1127,7 +1189,13 @@ export async function tryDeterministicAnswerDetailed(
   if (intentRoute.category === 'unsupported_live_data') {
     return refusal(buildUnsupportedLiveWorldCupAnswer(safeLocale))
   }
-  if (detectScheduleQuestion(message)) {
+  /*
+   * ⚠ AND THE REFUSAL NEEDS THE SAME GATE AS THE ANSWER. Without it, silencing
+   * the fixture list above would only swap one wrong answer for another: "I need
+   * live schedule data connected" to somebody who asked about their own roster,
+   * which reads as a data outage rather than as the wrong question being answered.
+   */
+  if (detectScheduleQuestion(message) && !isPersonalRosterScoped(message)) {
     const hasContext = await checkScheduleContextAvailable()
     if (!hasContext) {
       return refusal(SCHEDULE_REFUSAL_BY_LOCALE[safeLocale] ?? SCHEDULE_REFUSAL_BY_LOCALE.en)
