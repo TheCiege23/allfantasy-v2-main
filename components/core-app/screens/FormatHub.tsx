@@ -408,6 +408,8 @@ export default function FormatHub({ data }: { data: FormatHubData }) {
             data={data.leagues
               .filter((league) => league.meter)
               .map((league) => ({
+                // By id: an account can hold several leagues under one name.
+                key: league.leagueId,
                 label: league.name,
                 value: league.meter?.pct ?? 0,
                 displayValue: league.meter?.value,

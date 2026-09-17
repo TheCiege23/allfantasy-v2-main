@@ -816,6 +816,7 @@ export function LeagueHome({
                   subtitle="Current standings leaders"
                   valueLabel="Points"
                   data={rows.slice(0, 8).map((team) => ({
+                    key: team.teamId,
                     label: team.teamName,
                     value: team.pointsFor,
                     displayValue: Math.round(team.pointsFor).toLocaleString(),

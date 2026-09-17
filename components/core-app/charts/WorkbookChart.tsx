@@ -2,6 +2,12 @@ import type { ReactNode } from 'react'
 import '@/components/core-app/charts/workbook-chart.css'
 
 export type WorkbookDatum = {
+  /**
+   * What identifies this bar — a league or roster id. Labels are display names and
+   * repeat: one account had 11 guillotine leagues under 7 names, and bars keyed by
+   * name collided. Without a key the bar's position tells same-named bars apart.
+   */
+  key?: string
   label: string
   value: number
   displayValue?: string
@@ -52,12 +58,12 @@ export function WorkbookBarChart({
           <i /><i /><i /><i /><i />
         </div>
         <div className="af-workbook-bars">
-          {clean.map((row) => {
+          {clean.map((row, index) => {
             const height = Math.max(row.value > 0 ? 5 : 0, (Math.max(0, row.value) / maximum) * 100)
             return (
             <div
               className="af-workbook-column"
-              key={row.label}
+              key={row.key ?? `${index}:${row.label}`}
               style={{ ['--bar-height' as string]: `${height}%` }}
             >
               <span className="af-workbook-value">{row.displayValue ?? compact(row.value)}</span>
