@@ -23,6 +23,13 @@ import { QuotedMessage } from './QuotedMessage'
 import { ChimmyEvidenceBlock, type ChimmyEvidence } from './ChimmyEvidence'
 import { ChimmyScenarioCard } from './ChimmyScenario'
 import { ChimmyAdviceFollow, type ChimmyAdviceRef } from './ChimmyAdviceFollow'
+import {
+  ChimmyAnswerModeToggle,
+  answeredMode,
+  answeredModeLabel,
+  useChimmyAnswerMode,
+  type CoreAnswerMode,
+} from './ChimmyAnswerMode'
 import { MAX_ADVICE_KEY_LENGTH } from '@/lib/chimmy-advice/adviceKeys'
 import type { ReadyTradeScenario } from '@/lib/chimmy/tradeScenarioTypes'
 import { censorProfanity } from '@/lib/chat-core/censorProfanity'
@@ -243,6 +250,8 @@ type ChatTurn = {
   scenario?: ReadyTradeScenario | null
   /** Advice this answer put on file — renders "Did it / Not doing it", and keeps the vote. */
   advice?: ChimmyAdviceRef | null
+  /** The answer mode the SERVER says shaped this answer; absent when it did not say. */
+  mode?: CoreAnswerMode | null
 }
 
 type ChimmyGrounding =
@@ -386,6 +395,8 @@ type ChimmyEnvelope = {
     scenario?: ReadyTradeScenario
     /** Set only when the route recorded this answer's advice. */
     advice?: { key?: unknown; type?: unknown; playerName?: unknown }
+    /** The assistant mode that shaped the answer, when the route says so. */
+    mode?: unknown
     /** Answered without spending anything — do not print a price on it. */
     free?: boolean
     /**
@@ -487,6 +498,8 @@ function ChimmyPanel({
   )
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  /* Fast or Deep, per user. Sent with every question; see ChimmyAnswerMode.tsx. */
+  const [answerMode, setAnswerMode] = useChimmyAnswerMode(userId)
   const endRef = useRef<HTMLDivElement | null>(null)
   const [screenshot, setScreenshot] = useState<File | null>(null)
   const screenshotRef = useRef<HTMLInputElement | null>(null)
@@ -555,6 +568,7 @@ function ChimmyPanel({
            */
           if (homeSignals) form.append('homeSignals', homeSignals)
           if (pageSurface) form.append('coreSurface', pageSurface)
+          form.append('assistantMode', answerMode)
           form.append(
             'conversation',
             JSON.stringify(
@@ -697,6 +711,7 @@ function ChimmyPanel({
               ? payload.meta.scenario
               : null,
             advice: readAdvice(payload),
+            mode: answeredMode(payload.meta),
           },
         ])
       } catch (e) {
@@ -707,7 +722,7 @@ function ChimmyPanel({
         setBusy(false)
       }
     },
-    [busy, homeSignals, pageSurface, publicMode, scope, scopeId, turns, screenshot, setDraft, setTurns],
+    [answerMode, busy, homeSignals, pageSurface, publicMode, scope, scopeId, turns, screenshot, setDraft, setTurns],
   )
 
   const quickPrompts = scope
@@ -740,6 +755,7 @@ function ChimmyPanel({
             ? `Answers default to ${scope.name} — its scoring, its roster rules, its schedule. Name another of your leagues in the question to ask about that one instead.`
             : 'Answers cover every league you play. Ask about one by name, or pick it above.'}
         </p>
+        <ChimmyAnswerModeToggle value={answerMode} onChange={setAnswerMode} disabled={busy} />
       </div>
 
       <div className="af-cm-thread">
@@ -833,6 +849,13 @@ function ChimmyPanel({
                 >
                   {t.handoff.label} ↗
                 </a>
+              ) : null}
+
+              {/* Which answer mode shaped this reply — only when the server said so. */}
+              {t.role === 'chimmy' && answeredModeLabel(t.mode) ? (
+                <span className="af-cm-mode-tag" data-mode={t.mode ?? undefined}>
+                  {answeredModeLabel(t.mode)}
+                </span>
               ) : null}
 
               {/* Cost sits alongside the answer — never hidden until checkout. */}

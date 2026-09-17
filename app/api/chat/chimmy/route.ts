@@ -2437,12 +2437,25 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     }).catch(() => null)
 
     if (loop?.text) {
+      /*
+       * ⚠ THE ANSWER MODE, HONOURED HERE ONLY WHEN A CLIENT ASKED FOR ONE. This path used to ignore
+       * the mode entirely, so the /core drawer's Fast/Deep toggle would have done nothing whenever the
+       * tool loop answered — which, with the loop on by default, is often. A caller that sends no mode
+       * keeps the full answer it has always had here: the main path's "absent means fast" default was
+       * never applied to this path, and changing that for every surface is a separate decision.
+       */
+      const loopModeRequested = [mode, assistantMode].some((v) => typeof v === 'string' && v.trim().length > 0)
+      const loopText = loopModeRequested
+        ? buildChimmyResponseForAssistantMode({ mode: selectedAssistantMode, fullResponse: loop.text })
+        : loop.text
       return NextResponse.json({
-        response: loop.text,
-        result: loop.text,
+        response: loopText,
+        result: loopText,
         source: 'chimmy_tool_loop',
         sessionId,
         meta: {
+          /* The mode that shaped this answer — only when one was asked for and applied. */
+          ...(loopModeRequested ? { mode: selectedAssistantMode } : {}),
           /* The spend already happened above; report what it actually cost. */
           tokenSpend:
             spendLedger && tokenPreview
