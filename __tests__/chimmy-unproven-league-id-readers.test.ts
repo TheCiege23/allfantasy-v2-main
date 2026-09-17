@@ -484,3 +484,42 @@ describe('a caller who named no league at all', () => {
     expect(describedTradeLeagueArg()).toBeNull()
   })
 })
+
+/*
+ * The /core drawer's Fast/Deep toggle (Chimmy item 5). The tool loop, on by default, used to ignore
+ * the mode, so the toggle did nothing whenever it answered. It now honours a mode a client ASKED for,
+ * and leaves callers that send none exactly as they were.
+ */
+describe('the tool loop honours an answer mode only when one is asked for', () => {
+  const LOOP_TEXT = ['Chase is a top-3 dynasty WR.', 'Here is the long version: target share, age curve and schedule.'].join('\n\n')
+
+  beforeEach(() => {
+    runChimmyToolLoopMock.mockResolvedValue({ text: LOOP_TEXT, toolsUsed: ['get_player_value'], turns: 2 })
+  })
+
+  const answer = async (fields: Record<string, string>) => {
+    const { res, body } = await post({ message: VALUE_MESSAGE, confirmTokenSpend: 'true', ...fields })
+    expect(res.status).toBe(200)
+    const json = JSON.parse(body)
+    expect(json.source).toBe('chimmy_tool_loop')
+    return json
+  }
+
+  it('Fast returns the short verdict and says so', async () => {
+    const json = await answer({ assistantMode: 'fast_take' })
+    expect(json.response).toBe('Chase is a top-3 dynasty WR.')
+    expect(json.meta.mode).toBe('fast_take')
+  })
+
+  it('Deep returns the whole answer and says so', async () => {
+    const json = await answer({ assistantMode: 'deep_analysis' })
+    expect(json.response).toBe(LOOP_TEXT)
+    expect(json.meta.mode).toBe('deep_analysis')
+  })
+
+  it('no mode keeps the full answer and claims no mode', async () => {
+    const json = await answer({})
+    expect(json.response).toBe(LOOP_TEXT)
+    expect(json.meta).not.toHaveProperty('mode')
+  })
+})

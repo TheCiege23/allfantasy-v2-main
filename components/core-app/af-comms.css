@@ -250,6 +250,30 @@
   color: var(--faint);
 }
 
+/* Fast / Deep — a second row in the scope block, reusing its label and chip styles. */
+.af-cm-answer-mode {
+  margin-top: 10px;
+  padding-top: 9px;
+  border-top: 1px solid var(--line);
+}
+
+.af-cm-answer-mode .af-cm-chip[aria-pressed='true'] { font-weight: 700; }
+.af-cm-answer-mode .af-cm-chip:disabled { cursor: default; opacity: 0.6; }
+
+/* Which mode shaped an answer — quiet, next to the cost. */
+.af-cm-mode-tag {
+  display: inline-block;
+  margin: 6px 8px 0 0;
+  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+
+.af-cm-mode-tag[data-mode='deep_analysis'] { color: var(--accent); }
+
 .af-cm-summon {
   width: 100%;
   margin-top: 9px;
