@@ -110,7 +110,14 @@ export function readPlayoffFormat(settings: unknown, teamCount: number): Playoff
     s.playoff_start_week,
     s.playoff_week_start,
   )
-  const regularSeasonEndWeek = end != null ? end : start != null && start > 1 ? start - 1 : null
+  /*
+   * Last resort: `regular_season_length`, the ONLY regular-season statement ESPN, Fantrax and
+   * Fleaflicker imports carry (production 2026-09-17: 6 ESPN leagues at 13/14/17, and one each on the
+   * other two). Without it every paired week of theirs counted as regular season. The standings
+   * board reads it the same way.
+   */
+  const length = positive(s.regular_season_length)
+  const regularSeasonEndWeek = end != null ? end : start != null && start > 1 ? start - 1 : length
 
   return { playoffTeams, playoffTeamsSource, byeTeams, byeSource, regularSeasonEndWeek }
 }

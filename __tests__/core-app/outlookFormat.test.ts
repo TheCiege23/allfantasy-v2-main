@@ -57,6 +57,10 @@ describe('readPlayoffFormat', () => {
     expect(readPlayoffFormat({}, 12).regularSeasonEndWeek).toBeNull()
     // 43 Sleeper leagues store a start week of 0, which means unset.
     expect(readPlayoffFormat({ playoff_start_week: 0, playoffSettings: { playoffStartWeek: 0 } }, 12).regularSeasonEndWeek).toBeNull()
+    // ESPN states only its regular-season length; it is the last resort, never ahead of a start week.
+    expect(readPlayoffFormat({ regular_season_length: 13 }, 10).regularSeasonEndWeek).toBe(13)
+    expect(readPlayoffFormat({ regular_season_length: 14, playoff_week_start: 14 }, 10).regularSeasonEndWeek).toBe(13)
+    expect(readPlayoffFormat({ regular_season_length: 0 }, 10).regularSeasonEndWeek).toBeNull()
     // ...and a zero does not hide a real week stated under another key.
     expect(readPlayoffFormat({ playoff_week_start: 15, playoffSettings: { playoffStartWeek: 0 } }, 12).regularSeasonEndWeek).toBe(14)
   })
