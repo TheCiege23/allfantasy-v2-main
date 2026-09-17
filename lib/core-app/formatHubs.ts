@@ -40,6 +40,29 @@ const EFL_TEMPLATE_ID = 'efl_promotion_relegation_dynasty'
 /** Cards drawn per hub. The stat strip still counts every league. */
 const CARD_CAP = 12
 
+/*
+ * The service runs against a database in another region, so a read that stalls
+ * has no natural end — and a hub read had none. `getFormatHub` was awaited with
+ * `.catch(() => null)` on the page and every read here went through `soft`, which
+ * caught rejections but never a read that simply never returns. A single hung
+ * query therefore held the whole /core render open with nothing painted (measured
+ * at /core/hubs/efl, still on the skeleton 27 minutes after the click).
+ *
+ * Every read now has a deadline. A guarded read that passes it degrades to its
+ * fallback and marks the hub partial; the membership read that everything else
+ * depends on rejects, which the page's own `.catch` turns into the honest "could
+ * not read your leagues" panel. A bounded failure is what makes the screen paint.
+ */
+const HUB_READ_TIMEOUT_MS = 8_000
+
+function withTimeout<T>(label: string, run: Promise<T>, ms: number): Promise<T> {
+  let timer: ReturnType<typeof setTimeout>
+  const deadline = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`${label} exceeded ${ms}ms`)), ms)
+  })
+  return Promise.race([run, deadline]).finally(() => clearTimeout(timer))
+}
+
 export type HubTone = 'good' | 'warn' | 'bad' | 'accent' | 'muted'
 export type HubMeter = { pct: number; value: string; tone: HubTone }
 export type HubLeagueCard = {
@@ -127,7 +150,7 @@ function titleCase(slug: string): string {
 /** A read that may hit a table production has not migrated yet. Logged, never thrown. */
 async function soft<T>(label: string, run: () => Promise<T>, fallback: T, flags: { partial: boolean }): Promise<T> {
   try {
-    return await run()
+    return await withTimeout(label, run(), HUB_READ_TIMEOUT_MS)
   } catch (err) {
     flags.partial = true
     console.warn(`[formatHubs] ${label} read failed`, err instanceof Error ? err.message : err)
@@ -143,21 +166,25 @@ export async function getFormatHub(userId: string, requested: HubFormat | null):
    * own row, or a league where this reader has claimed a team. A hub must never
    * list a league the reader could not open.
    */
-  const members: MemberLeague[] = await prisma.league.findMany({
-    where: { OR: [{ userId }, { teams: { some: { claimedByUserId: userId } } }] },
-    select: {
-      id: true,
-      name: true,
-      platform: true,
-      platformLeagueId: true,
-      leagueSize: true,
-      userId: true,
-      leagueType: true,
-      guillotineMode: true,
-      lastSyncedAt: true,
-      syncStatus: true,
-    },
-  })
+  const members: MemberLeague[] = await withTimeout(
+    'members',
+    prisma.league.findMany({
+      where: { OR: [{ userId }, { teams: { some: { claimedByUserId: userId } } }] },
+      select: {
+        id: true,
+        name: true,
+        platform: true,
+        platformLeagueId: true,
+        leagueSize: true,
+        userId: true,
+        leagueType: true,
+        guillotineMode: true,
+        lastSyncedAt: true,
+        syncStatus: true,
+      },
+    }),
+    HUB_READ_TIMEOUT_MS,
+  )
   const ids = members.map((m) => m.id)
 
   const [guillotineRows, c2cRows, zombieRows, survivorRows, tournamentRows, eflRows] =
