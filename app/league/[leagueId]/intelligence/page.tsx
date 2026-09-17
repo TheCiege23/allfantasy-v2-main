@@ -27,6 +27,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { isCommissioner } from '@/lib/commissioner/permissions'
+import { listSendableLeagueIds } from '@/lib/commissioner/broadcastAccess'
 import { buildCommissionerHealthSnapshot } from '@/lib/commissioner-hub/commissionerHubHealth'
 import { getLeagueManagerHealth } from '@/lib/commissioner-hub/managerHealth'
 import { getRivalryBoard } from '@/lib/rivalry-engine/rivalryBoard'
@@ -114,13 +115,15 @@ export default async function LeagueIntelligencePage({ params }: PageProps) {
           })
           .catch(() => [] as Array<{ id: string; actionType: string; entityType: string; createdAt: Date }>),
         /*
-         * The broadcast blast radius. `League.userId` is the ownership column
-         * `/api/chat/global-broadcast` itself filters on, so this count is the
-         * same set that endpoint would accept — the label cannot promise a
-         * league the send would reject.
+         * The broadcast blast radius. UniversalMessaging posts to
+         * `/api/commissioner/broadcast`, and this is the set that route accepts
+         * (`listSendableLeagueIds`: commissioner or co-commissioner, leagues
+         * AllFantasy runs), so the label cannot promise a league the send would
+         * reject. It used to be every league the user owned, imported ones
+         * included, which the route now refuses.
          */
-        prisma.league
-          .findMany({ where: { userId }, select: { id: true } })
+        listSendableLeagueIds(userId)
+          .then((ids) => ids.map((id) => ({ id })))
           .catch(() => [] as Array<{ id: string }>),
       ])
 

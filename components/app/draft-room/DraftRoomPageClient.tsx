@@ -1685,9 +1685,23 @@ export function DraftRoomPageClient({
     try {
       const res = await fetch('/api/commissioner/leagues', { cache: 'no-store' })
       const data = await res.json().catch(() => ({}))
-      if (res.ok && Array.isArray(data.leagues)) setCommissionerLeagues(data.leagues)
+      /*
+       * Only leagues the broadcast route accepts: it refuses imported leagues
+       * (`isNative: false`), so offering one here would be a send that
+       * silently reaches nobody there. The league this room opened with is
+       * pre-ticked before the list arrives, so it is dropped again if the list
+       * does not carry it.
+       */
+      const sendable: Array<{ id: string; name: string | null }> =
+        res.ok && Array.isArray(data.leagues)
+          ? data.leagues.filter((l: { isNative?: boolean }) => l.isNative !== false)
+          : []
+      setCommissionerLeagues(sendable)
+      const ids = new Set(sendable.map((l) => l.id))
+      setBroadcastSelectedIds((prev) => new Set([...prev].filter((id) => ids.has(id))))
     } catch {
       setCommissionerLeagues([])
+      setBroadcastSelectedIds(new Set())
     }
   }, [])
 

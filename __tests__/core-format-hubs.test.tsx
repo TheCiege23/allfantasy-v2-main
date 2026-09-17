@@ -28,6 +28,10 @@ const m = vi.hoisted(() => ({
 
 vi.mock('@/lib/prisma', () => ({ prisma: m }))
 vi.mock('@/lib/core-app/currentWeek', () => ({ resolveCurrentWeek: vi.fn(async () => null) }))
+// The send rule itself is tested in commissioner-broadcast-cocommissioner.test.ts; here, only that
+// the hub offers exactly what that rule answers for the leagues in this format.
+const sendable = vi.hoisted(() => ({ listSendableLeagueIds: vi.fn() }))
+vi.mock('@/lib/commissioner/broadcastAccess', () => sendable)
 vi.mock('@/lib/core-app/tradesBoard', () => ({
   getTradesBoard: vi.fn(async () => ({
     pending: [
@@ -91,6 +95,9 @@ beforeEach(() => {
   m.guillotinePeriodScore.groupBy.mockResolvedValue([{ leagueId: 'L1', _max: { weekOrPeriod: 4 } }])
   m.zombieLeagueTeam.groupBy.mockResolvedValue([])
   m.leagueTeam.findMany.mockResolvedValue([{ leagueId: 'L4', currentRank: 3 }])
+  sendable.listSendableLeagueIds.mockImplementation(async (_user: string, among: string[]) =>
+    among.filter((id) => id === 'L1'),
+  )
   m.leagueChatMessage.findMany.mockResolvedValue([
     { id: 'c1', leagueId: 'L1', message: 'you are on the block', createdAt: new Date(), user: { displayName: null, username: 'dre' } },
   ])
@@ -132,9 +139,17 @@ describe('getFormatHub', () => {
     expect(hub.stats.map((s) => s.value)).toEqual(['2', '3', 'Wk 4'])
   })
 
-  it('offers broadcast only for leagues the reader owns — the check the route applies', async () => {
+  it('offers broadcast only where the route will accept it, asked about this format’s leagues', async () => {
     const hub = await getFormatHub(USER, 'guillotine')
+    expect(sendable.listSendableLeagueIds).toHaveBeenCalledWith(USER, ['L1', 'L2'])
     expect(hub.broadcastLeagueIds).toEqual(['L1'])
+  })
+
+  it('offers no broadcast, and says the hub is partial, when that check fails', async () => {
+    sendable.listSendableLeagueIds.mockRejectedValue(new Error('db down'))
+    const hub = await getFormatHub(USER, 'guillotine')
+    expect(hub.broadcastLeagueIds).toEqual([])
+    expect(hub.partial).toBe(true)
   })
 
   it('keeps trades from other leagues out of the hub', async () => {
@@ -216,7 +231,7 @@ describe('<FormatHub />', () => {
   it('does not offer a broadcast the route would refuse', () => {
     render(<FormatHub data={fixture()} />)
     expect(screen.queryByRole('textbox')).toBeNull()
-    expect(screen.getByText(/don’t commission any of these/)).toBeTruthy()
+    expect(screen.getByText(/co-commissioner, and none of these is one/)).toBeTruthy()
   })
 
   it('tells a failed trade read apart from an empty trade log', () => {

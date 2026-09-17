@@ -1,6 +1,7 @@
 import 'server-only'
 import { prisma } from '@/lib/prisma'
 import { readCommissionerTemplatePin } from '@/lib/commissioner-os/profile/templatePin'
+import { listSendableLeagueIds } from '@/lib/commissioner/broadcastAccess'
 import { getTradesBoard } from './tradesBoard'
 import { resolveCurrentWeek } from './currentWeek'
 
@@ -67,7 +68,10 @@ export type FormatHubData = {
   stats: HubStat[]
   trades: { pending: HubTradeRow[]; completed: HubTradeRow[] } | null
   mentions: HubMention[] | null
-  /** Leagues where a broadcast will be accepted — the owner check the route applies. */
+  /**
+   * Leagues where a broadcast will be accepted: head commissioner or co-commissioner, in a league
+   * AllFantasy runs — `listSendableLeagueIds`, the rule the broadcast route applies.
+   */
   broadcastLeagueIds: string[]
   /** True when one of the per-format reads failed and a count may be low. */
   partial: boolean
@@ -258,12 +262,13 @@ export async function getFormatHub(userId: string, requested: HubFormat | null):
     stats = built.stats
   }
 
-  const [trades, mentions] =
+  const [trades, mentions, broadcastLeagueIds] =
     inFormat.length === 0
-      ? [null, null]
+      ? [null, null, [] as string[]]
       : await Promise.all([
           soft<FormatHubData['trades']>('trades', () => readTrades(userId, inFormat), null, flags),
           soft<FormatHubData['mentions']>('mentions', () => readMentions(userId, inFormat), null, flags),
+          soft<string[]>('broadcast', () => listSendableLeagueIds(userId, allIds), [], flags),
         ])
 
   return {
@@ -274,7 +279,7 @@ export async function getFormatHub(userId: string, requested: HubFormat | null):
     stats,
     trades,
     mentions,
-    broadcastLeagueIds: inFormat.filter((m) => m.userId === userId).map((m) => m.id),
+    broadcastLeagueIds,
     partial: flags.partial,
   }
 }

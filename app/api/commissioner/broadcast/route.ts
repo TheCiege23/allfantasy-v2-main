@@ -1,8 +1,10 @@
 /**
  * POST: Commissioner @everyone broadcast to selected league chats.
  * Body: { leagueIds: string[], message: string }.
- * Permission, per league: head commissioner or co-commissioner (`canBroadcast`, the same rule
- * `GET /api/commissioner/leagues` lists by).
+ * Permission, per league: head commissioner or co-commissioner, in a league AllFantasy runs
+ * (`broadcastRefusal` in lib/commissioner/broadcastAccess.ts — the rule every surface that offers a
+ * send also uses, `GET /api/commissioner/leagues` included; that file says why imported leagues are
+ * refused).
  * Also sends in-app + email/SMS notification to all league members (commissioner_alerts).
  *
  * ⚠ RATE-LIMITED PER USER. One call can fan out email and text to every member of several leagues,
@@ -14,7 +16,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { canBroadcast } from '@/lib/commissioner/broadcastAccess'
+import { broadcastRefusal } from '@/lib/commissioner/broadcastAccess'
 import { rateLimit } from '@/lib/rate-limit'
 import { createLeagueChatMessage } from '@/lib/league-chat/LeagueChatMessageService'
 import { getLeagueChatThreadId } from '@/lib/commissioner-settings/CommissionerAnnouncementService'
@@ -53,8 +55,13 @@ export async function POST(req: NextRequest) {
   const results: { leagueId: string; sent: boolean; error?: string }[] = []
   const text = `@everyone ${message}`
   for (const leagueId of leagueIds) {
-    if (!(await canBroadcast(leagueId, userId).catch(() => false))) {
-      results.push({ leagueId, sent: false, error: 'Forbidden' })
+    const refusal = await broadcastRefusal(leagueId, userId).catch((): 'forbidden' => 'forbidden')
+    if (refusal) {
+      results.push({
+        leagueId,
+        sent: false,
+        error: refusal === 'imported' ? 'Announcements go only to leagues AllFantasy runs' : 'Forbidden',
+      })
       continue
     }
     const threadId = await getLeagueChatThreadId(leagueId)
