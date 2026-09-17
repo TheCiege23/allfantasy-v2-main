@@ -274,7 +274,7 @@ async function handle(req: NextRequest) {
      * `IMPORT_BUDGET_MS` defaults to 240s and `CRON_RUN_BUDGET_MS` is also 240s, so before this
      * the importer was entitled to spend the entire window and routinely did — measured in
      * production 2026-09-10 at 240,580 / 240,884 / 240,413 ms on three consecutive runs. Every
-     * one of the ten phases then below saw `budget.exhausted()` and deferred, on roughly half
+     * one of the ten phases below then saw `budget.exhausted()` and deferred, on roughly half
      * of all runs. The other half completed in 12-22s, which is why the tail ran at all.
      *
      * ⚠ THIS PRESENTED AS A PHASE-ORDERING BUG AND IS NOT ONE. `psychProfiles` is last and so
@@ -299,7 +299,8 @@ async function handle(req: NextRequest) {
     // Durable run record: admin production-health (?view=warehouse) reads teamCodeCounts from
     // here to flag truncated_fallback growth, and the NEXT run reads seedCursors from here to
     // resume the paged college source read where this one stopped (no rescanning).
-    await prisma.syncJobRun.create({
+    const telemetryRunId = await prisma.syncJobRun.create({
+      select: { id: true },
       data: {
         jobName: "import-players",
         jobScope: result.sports.join(","),
@@ -319,9 +320,12 @@ async function handle(req: NextRequest) {
           seedCursors: result.seedCursors,
         }),
       },
-    }).catch((telemetryError) => {
-      console.error("[cron/import-players] telemetry write failed:", telemetryError)
     })
+      .then((row) => row.id)
+      .catch((telemetryError) => {
+        console.error("[cron/import-players] telemetry write failed:", telemetryError)
+        return null
+      })
 
     // --- identity maintenance -------------------------------------------------------
     // Folded in here rather than left as one-shot scripts, because both degrade silently.
@@ -714,6 +718,44 @@ async function handle(req: NextRequest) {
      * because `ingestSleeperTradeFacts` defaults to a 25-league take; staying under it keeps the
      * enrichment set aligned with the profiling set if the explicit pass-through is ever lost.
      */
+
+    /*
+     * 🛑 WHICH PHASES WERE DROPPED, RECORDED WHERE SOMEONE CAN READ IT LATER.
+     *
+     * The row above is written as soon as the IMPORT finishes — deliberately, so a run killed at
+     * the 300s edge still leaves telemetry — which is also why it cannot carry a decision nothing
+     * has made yet. So `deferredPhases` lived only in this response body, and the slow-tier
+     * dispatcher echoes 1,500 characters of that body before cutting it off.
+     *
+     * Measured 2026-09-17, chasing exactly this: over 8 days of runs, `sync_job_runs` could not
+     * say why 20 of 36 fires profiled nothing, because the phase outcome was persisted nowhere.
+     * The rotation has its own heartbeat now; this is the same gap for the phases that remain.
+     *
+     * ⚠ AN UPDATE, NOT A SECOND ROW, and never fatal: a telemetry write that fails must not fail
+     * an import that already succeeded.
+     */
+    if (telemetryRunId) {
+      await prisma.syncJobRun
+        .update({
+          where: { id: telemetryRunId },
+          data: {
+            metadata: toPrismaJsonInput({
+              teamCodeCounts: result.teamCodeCounts,
+              skippedSports: result.skippedSports,
+              staleFallbackApplied: result.staleFallbackApplied,
+              pagedSeeds: result.pagedSeeds,
+              seedCursors: result.seedCursors,
+              // [] means "every phase ran", which is a different fact from a missing field.
+              deferredPhases,
+              budgetExhausted: budget.exhausted(),
+              budgetElapsedMs: budget.elapsedMs(),
+            }),
+          },
+        })
+        .catch((telemetryError) => {
+          console.error("[cron/import-players] phase telemetry update failed:", telemetryError)
+        })
+    }
 
     return NextResponse.json({
       ok: true,
