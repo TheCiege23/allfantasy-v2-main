@@ -2,6 +2,7 @@ import 'server-only'
 
 import { prisma } from '@/lib/prisma'
 import { getFirstStatedKickoff } from './seasonPhase'
+import { readPlayoffTeams as readSharedPlayoffTeams } from './standingsModel'
 
 /**
  * 26b — Season Outlook. Playoff and championship odds for every active league,
@@ -74,8 +75,6 @@ const SIGMA_FLOOR = 12
 /** Below this many completed weeks a team is not modelled. */
 const MIN_WEEKS = 3
 
-/** Used when a league's settings do not declare a playoff field. */
-const DEFAULT_PLAYOFF_TEAMS = 6
 
 export type OutlookTeam = {
   rosterId: string
@@ -444,12 +443,13 @@ function mergeImportedMatchupHistory(
   return added.length > 0 ? [...live, ...added] : [...live]
 }
 
+/**
+ * ⚠ THIS READ `settings.playoff.playoffTeams`, WHICH NO LEAGUE CARRIES. Every league was simulated with
+ * six playoff teams — including the 53 Sleeper leagues (2026-09-17) that play four, seven or eight. The
+ * standings screen and this one now share one reader, so the odds and the playoff line agree.
+ */
 function readPlayoffTeams(settings: unknown, teamCount: number): number {
-  const slice = (settings as { playoff?: { playoffTeams?: unknown } } | null)?.playoff
-  const raw = slice?.playoffTeams
-  const n = typeof raw === 'number' ? raw : Number.NaN
-  if (Number.isFinite(n) && n >= 2 && n <= teamCount) return Math.floor(n)
-  return Math.min(DEFAULT_PLAYOFF_TEAMS, Math.max(2, teamCount))
+  return readSharedPlayoffTeams(settings, teamCount).teams
 }
 
 /**

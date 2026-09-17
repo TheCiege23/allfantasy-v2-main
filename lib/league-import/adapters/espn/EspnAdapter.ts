@@ -2,6 +2,7 @@ import type { ILeagueImportAdapter } from '../ILeagueImportAdapter'
 import type { NormalizedImportResult, SourceTracking } from '../../types'
 import type { EspnImportPayload } from './types'
 import { coverageAgainstExpected, emptyableHistoryCoverage } from '@/lib/league-import/coverageCompleteness'
+import { readEspnDivisions, STANDINGS_DIVISIONS_KEY } from '@/lib/league-import/standingsDivisions'
 
 function detectEspnScoringFormat(raw: EspnImportPayload): string | null {
   const receptionRule = raw.settings?.scoringItems.find((rule) => rule.statId === 53)
@@ -183,6 +184,8 @@ export const EspnAdapter: ILeagueImportAdapter<EspnImportPayload> = {
         roster_positions: rosterPositions.map((slot) => `${slot.slot}:${slot.count}`),
         scoring_settings: receptionRule ? { rec: receptionRule.points } : undefined,
         espn_settings: raw.settings?.raw ?? null,
+        // Divisions — ESPN's team divisionId was dropped until 2026-09-17. `null` clears a stale key.
+        [STANDINGS_DIVISIONS_KEY]: readEspnDivisions(raw.settings?.raw ?? null, raw.teams),
       },
       rosters,
       scoring,

@@ -15,11 +15,15 @@ export interface SleeperLeagueRaw {
   status?: string
   metadata?: {
     co_commissioners?: string[] | null
+    /** `division_1`, `division_2` … — the division names, when the league has divisions. */
+    [divisionName: `division_${number}`]: string | undefined
   }
   settings?: {
     type?: number
     playoff_teams?: number
     num_teams?: number
+    /** Number of divisions; 0 or absent when the league has none. */
+    divisions?: number
   }
   scoring_settings?: Record<string, number>
   roster_positions?: string[]
@@ -55,6 +59,8 @@ export interface SleeperRosterRaw {
     fpts_decimal?: number
     waiver_budget_used?: number
     waiver_position?: number
+    /** 1-based division, when the league has divisions. */
+    division?: number
   }
 }
 
