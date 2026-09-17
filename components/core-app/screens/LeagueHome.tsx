@@ -409,6 +409,7 @@ function StatePanel<T>({
   className,
   state,
   children,
+  unavailableFooter,
 }: {
   title: string
   help?: React.ReactNode
@@ -416,10 +417,19 @@ function StatePanel<T>({
   className?: string
   state: SectionState<T> | { available: false; reason: string }
   children: (data: T) => React.ReactNode
+  /** Rendered under the reason when the section is unavailable — a way onward, not a substitute figure. */
+  unavailableFooter?: React.ReactNode
 }) {
   return (
     <Panel title={title} help={help} tone={tone} className={className}>
-      {state.available ? children((state as { available: true; data: T }).data) : <Unavailable reason={state.reason} />}
+      {state.available ? (
+        children((state as { available: true; data: T }).data)
+      ) : (
+        <>
+          <Unavailable reason={state.reason} />
+          {unavailableFooter}
+        </>
+      )}
     </Panel>
   )
 }
@@ -734,6 +744,15 @@ export function LeagueHome({
             title="Commissioner Hub"
             help={<span className="af-lh-scope">Commissioners only</span>}
             state={data.commissioner}
+            unavailableFooter={
+              // A commissioner whose league can't be judged right now still gets the hub, which
+              // carries the re-sync card; a non-commissioner's unavailable state has no href.
+              !data.commissioner.available && 'href' in data.commissioner ? (
+                <Link href={data.commissioner.href} className="af-btn af-ch-open">
+                  Open the commissioner hub
+                </Link>
+              ) : null
+            }
           >
             {(hub) => (
               <div className="af-ch">
@@ -747,10 +766,13 @@ export function LeagueHome({
                     <span className="af-ch-n af-num">{hub.inactiveCount}</span>
                     <span className="af-label">Inactive</span>
                   </div>
-                  <div className="af-ch-tile" data-tone={hub.atRiskCount > 0 ? 'warn' : 'ok'}>
-                    <span className="af-ch-n af-num">{hub.atRiskCount}</span>
-                    <span className="af-label">At risk</span>
-                  </div>
+                  {/* Absent, not zero, where at-risk is not measured (imported leagues). */}
+                  {hub.atRiskCount != null ? (
+                    <div className="af-ch-tile" data-tone={hub.atRiskCount > 0 ? 'warn' : 'ok'}>
+                      <span className="af-ch-n af-num">{hub.atRiskCount}</span>
+                      <span className="af-label">At risk</span>
+                    </div>
+                  ) : null}
                   <div className="af-ch-tile">
                     <span className="af-ch-n af-num">{hub.totalManagers}</span>
                     <span className="af-label">Managers</span>
@@ -759,17 +781,23 @@ export function LeagueHome({
 
                 {/*
                   Named rather than counted. "3 inactive" is a statistic; three
-                  names is something to act on this afternoon.
+                  names is something to act on this afternoon. A league where
+                  EVERYONE is quiet is a lull, and naming the whole league would
+                  read as an accusation — the hub's abandoned check says the same.
                 */}
-                {hub.inactiveNames.length > 0 ? (
+                {hub.totalManagers > 0 && hub.inactiveCount === hub.totalManagers ? (
+                  <p className="af-ch-names">Nobody in this league has been active lately — a quiet stretch.</p>
+                ) : hub.inactiveNames.length > 0 ? (
                   <p className="af-ch-names">
-                    Not touched their team lately: {hub.inactiveNames.join(', ')}
+                    Inactive: {hub.inactiveNames.join(', ')}
+                    {hub.inactiveCount > hub.inactiveNames.length
+                      ? ` and ${hub.inactiveCount - hub.inactiveNames.length} more`
+                      : ''}
                   </p>
                 ) : (
-                  <p className="af-ch-names af-ch-names--ok">
-                    Every manager has touched their team inside the window.
-                  </p>
+                  <p className="af-ch-names af-ch-names--ok">Nobody is inactive.</p>
                 )}
+                <p className="af-ch-names">Judged by {hub.basis}.</p>
 
                 <Link href={hub.href} className="af-btn af-ch-open">
                   Open the commissioner hub

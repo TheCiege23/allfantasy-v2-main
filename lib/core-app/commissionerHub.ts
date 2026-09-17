@@ -6,7 +6,6 @@ import { getLeagueRole, type LeagueRole } from '@/lib/league/permissions'
 import { resolveWriteAuthority } from '@/lib/league/write-authority'
 import { getCommissionerHubHealthForUser } from '@/lib/commissioner-hub/commissionerHubHealth'
 import { readRequiredStarterCount } from '@/lib/commissioner-hub/requiredStarters'
-import { getLeagueManagerHealth } from '@/lib/commissioner-hub/managerHealth'
 import { getNormalizedLineupSections } from '@/lib/roster/LineupTemplateValidation'
 import { readViewerPoll } from '@/lib/chat-core/messagePolls'
 import { getBoolean } from '@/lib/feature-toggle'
@@ -43,12 +42,12 @@ import {
 import { balanceChart, engagementChart, scoringChart, type HubChart } from './commissioner/charts'
 import { RECIPES, RECIPES_SEND_TOGGLE, readRecipeSettings, type RecipeKey } from './commissioner/recipes'
 import {
-  ownedTeamNames,
-  resolveMemberActivity,
+  memberActivityFromReads,
+  staleActivityReason,
   unownedTeamNames,
   type LeagueMemberActivity,
 } from './commissioner/activity'
-import { readActivityWindow, readManagerActivity } from '@/lib/league-history/leagueWarehouseReads'
+import { readMemberActivityInputs } from './commissioner/memberActivityReads'
 import { MANAGER_INACTIVE_AFTER_DAYS } from '@/lib/decision-os/behavioral/manager-intelligence'
 
 /**
@@ -405,7 +404,6 @@ export async function getCommissionerHub(input: {
     waiverSettings,
     rosters,
     waivers,
-    managerHealth,
     healthSnapshots,
     draftSettings,
     matchups,
@@ -414,8 +412,7 @@ export async function getCommissionerHub(input: {
     discordLink,
     weekStarts,
     sendEnabled,
-    importedManagers,
-    importedWindow,
+    activityReads,
   ] = await Promise.all([
     prisma.leagueTeam
       .findMany({
@@ -452,8 +449,6 @@ export async function getCommissionerHub(input: {
         reason: 'Waiver data couldn’t be read just now. This is a read failure on our side, not a league with no waivers.',
       }),
     ),
-    // Roster timestamps describe managers only where AllFantasy runs the league — see activity.ts.
-    native ? getLeagueManagerHealth(leagueId).catch(() => null) : Promise.resolve(null),
     getCommissionerHubHealthForUser(userId, [
       {
         id: leagueId,
@@ -493,8 +488,8 @@ export async function getCommissionerHub(input: {
       .catch(() => null),
     readWeekStarts(league.season, sport),
     getBoolean(RECIPES_SEND_TOGGLE).catch(() => false),
-    native ? Promise.resolve(null) : readManagerActivity(leagueId, MANAGER_INACTIVE_AFTER_DAYS).catch(() => null),
-    native ? Promise.resolve(null) : readActivityWindow(leagueId).catch(() => null),
+    // Roster timestamps describe managers only where AllFantasy runs the league — see activity.ts.
+    readMemberActivityInputs(leagueId, native),
   ])
 
   const teamCount = teams.length || rosters.length
@@ -565,32 +560,25 @@ export async function getCommissionerHub(input: {
    * abandoned-team and lineup checks and the active-manager count say so and
    * point at the re-sync — the stale-sync task card is then the real work.
    */
-  const activityStale = !native && syncAgeMs != null && syncAgeMs > 2 * 24 * 60 * 60 * 1000
+  const staleReason = staleActivityReason({ native, lastSyncedAt: league.lastSyncedAt, now })
+  const activityStale = staleReason != null
   const staleDays = syncAgeMs != null ? Math.floor(syncAgeMs / (24 * 60 * 60 * 1000)) : 0
-  const stale = activityStale
+  const stale = staleReason
     ? {
-        reason: `AllFantasy last read this league ${staleDays} days ago, so every manager would look idle. Re-sync it to see who is really active.`,
+        reason: staleReason,
         action: inAppLink('Re-sync this league', `/core/sync?league=${encodeURIComponent(leagueId)}`),
       }
     : null
   const replaceGuide = inAppLink('Replace a manager', '#workflow-replace-manager')
   const duesTracker = readDuesTracker(settingsJson)
 
-  const memberActivity: LeagueMemberActivity = native
-    ? resolveMemberActivity({ kind: 'native', rows: managerHealth?.rows ?? null }, now, MANAGER_INACTIVE_AFTER_DAYS)
-    : importedManagers && importedWindow
-      ? resolveMemberActivity(
-          {
-            kind: 'imported',
-            managers: importedManagers,
-            teams: ownedTeamNames(teams),
-            lastActivityAt: importedWindow.lastActivityAt,
-            eventCount: importedWindow.eventCount,
-          },
-          now,
-          MANAGER_INACTIVE_AFTER_DAYS,
-        )
-      : { available: false, reason: 'League activity couldn’t be read just now.' }
+  // The same judgement the league Overview's commissioner card shows.
+  const memberActivity: LeagueMemberActivity = memberActivityFromReads(
+    activityReads,
+    teams,
+    now,
+    MANAGER_INACTIVE_AFTER_DAYS,
+  )
   const memberRows = memberActivity.available ? memberActivity.data.rows : null
 
   const flags = rankFlags([
