@@ -1,10 +1,11 @@
 /**
  * T2 Team Context Engine V1 — deterministic team profile. No AI.
  *
- * Stance:
+ * Stance, once at least MIN_GAMES_FOR_STANCE games are played:
  *   winPct ≥ 0.58  AND (no seed OR seed ≤ leagueSize/2)  → contender
  *   winPct ≤ 0.40                                         → rebuilder
  *   otherwise                                             → middle
+ * Before that, always `middle`, with `stanceSettled: false`.
  *
  * Positional depth: count active players per position against STARTER_NEEDS. A position with fewer
  * than its need is "weak"; with ≥ need+2 startable bodies is "strong". `depthIssues` is true when any
@@ -43,6 +44,18 @@ export interface TeamProfileInput {
   rosterSlots?: readonly string[] | null
 }
 
+/*
+ * ── 🛑 ONE GAME IS NOT A SEASON ───────────────────────────────────────────────────────────────
+ *
+ * Win percentage over one game is 0 or 1, so a 0-1 team read as a "rebuilder" and a 1-0 team as a
+ * "contender". Measured on production 2026-09-17: the /core player card labelled a week-2 team
+ * "rebuilder", and Chimmy said "No, don't trade for Rashee Rice, because you are rebuilding at 0-1"
+ * until #993 gated its own copy of this rule. Every caller inherited the same noise — trade
+ * discovery scored "complementary directions" and the commissioner review flagged contenders from
+ * one result — so the gate lives here now. A presentation threshold, not a model.
+ */
+export const MIN_GAMES_FOR_STANCE = 4
+
 export function buildTeamProfile(input: TeamProfileInput): TeamProfile {
   const games = input.wins + input.losses + (input.ties ?? 0)
   const winPct = games > 0 ? (input.wins + 0.5 * (input.ties ?? 0)) / games : 0.5
@@ -50,9 +63,10 @@ export function buildTeamProfile(input: TeamProfileInput): TeamProfile {
   const leagueSize = input.leagueSize ?? 12
   const seedTopHalf = input.playoffSeed == null || input.playoffSeed <= Math.ceil(leagueSize / 2)
 
+  const stanceSettled = games >= MIN_GAMES_FOR_STANCE
   let stance: TeamStance = 'middle'
-  if (winPct >= 0.58 && seedTopHalf) stance = 'contender'
-  else if (winPct <= 0.4) stance = 'rebuilder'
+  if (stanceSettled && winPct >= 0.58 && seedTopHalf) stance = 'contender'
+  else if (stanceSettled && winPct <= 0.4) stance = 'rebuilder'
 
   const counts: Record<string, number> = {}
   for (const raw of input.positions) {
@@ -98,6 +112,7 @@ export function buildTeamProfile(input: TeamProfileInput): TeamProfile {
   return {
     rosterId: input.rosterId,
     stance,
+    stanceSettled,
     winPct: Math.round(winPct * 1000) / 1000,
     pointsFor: input.pointsFor,
     weakPositions,

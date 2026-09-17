@@ -98,6 +98,8 @@ export type TradeVisualSide = {
   /** The team's id on the platform, for the trade deep link. Null when we hold no team row. */
   externalId: string | null
   stance: TeamStance
+  /** False until the record is long enough to read a direction from; the card then says so. */
+  stanceSettled: boolean
   needs: string[]
   surpluses: string[]
 }
@@ -491,6 +493,7 @@ export async function getPlayerTradeVisual(
       teamName: team?.teamName ?? fallbackName,
       managerDisplayName: team?.ownerName ?? null,
       stance: profile.stance,
+      stanceSettled: profile.stanceSettled,
       weakPositions: profile.weakPositions,
       strongPositions: profile.strongPositions,
       players,
@@ -618,6 +621,7 @@ export async function getPlayerTradeVisual(
     ownerName: r.managerDisplayName ?? null,
     externalId,
     stance: r.stance,
+    stanceSettled: r.stanceSettled ?? true,
     needs: r.weakPositions,
     surpluses: r.strongPositions,
   })

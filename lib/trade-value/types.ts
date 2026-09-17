@@ -208,6 +208,8 @@ export type TeamStance = 'contender' | 'rebuilder' | 'middle'
 export interface TeamProfile {
   rosterId: string
   stance: TeamStance
+  /** False until enough games are played for the record to mean anything; `stance` is then `middle`. */
+  stanceSettled: boolean
   winPct: number
   pointsFor: number
   weakPositions: string[]

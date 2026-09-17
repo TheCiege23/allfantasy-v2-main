@@ -67,6 +67,20 @@ describe('TradeVisual', () => {
     expect(screen.getByText(/AllFantasy never sends a trade/)).toBeInTheDocument()
   })
 
+  /* One game is not a season: the partner's direction waits for the record (2026-09-17). */
+  it('says it is too early to tell when the partner stance is not settled', () => {
+    const early = { ...VISUAL, partner: { ...VISUAL.partner, stance: 'middle' as const, stanceSettled: false } }
+    render(<TradeVisual state={{ available: true, data: early }} playerName="Dalton Kincaid" />)
+    expect(screen.getByText(/too early to tell if buying or selling/)).toBeInTheDocument()
+  })
+
+  it('names the settled stance as before', () => {
+    const settled = { ...VISUAL, partner: { ...VISUAL.partner, stance: 'rebuilder' as const, stanceSettled: true } }
+    render(<TradeVisual state={{ available: true, data: settled }} playerName="Dalton Kincaid" />)
+    expect(screen.getByText(/· rebuilder/)).toBeInTheDocument()
+    expect(screen.queryByText(/too early to tell/)).not.toBeInTheDocument()
+  })
+
   it('says why when the engine could not grade, and keeps the package', () => {
     render(
       <TradeVisual
