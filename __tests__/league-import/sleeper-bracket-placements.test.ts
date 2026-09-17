@@ -155,6 +155,39 @@ describe('analyzePlayoffBracket', () => {
     expect(map.get(5)).toMatchObject({ playoffWins: 0, playoffLosses: 1 })
   })
 
+  /*
+   * The real shape behind a wrong finish, measured on the test copy 2026-09-17: a 16-roster
+   * league with an EIGHT-team bracket. Roster 7 wins in round 1, then meets roster 10, which
+   * had already lost — so that game is off the title path and settles nothing. Its place is
+   * not determinable, and "last" for it is 8th, never 16th.
+   */
+  const EIGHT_OF_SIXTEEN = flatten([
+    { r: 1, m: 1, t1: 6, t2: 10, w: 6, l: 10 },
+    { r: 1, m: 2, t1: 8, t2: 5, w: 8, l: 5 },
+    { r: 1, m: 3, t1: 9, t2: 4, w: 9, l: 4 },
+    { r: 1, m: 4, t1: 14, t2: 7, w: 7, l: 14 },
+    { r: 2, m: 5, t1: 6, t2: 8, w: 6, l: 8 },
+    { r: 2, m: 6, t1: 9, t2: 14, w: 9, l: 14 },
+    { r: 2, m: 7, t1: 7, t2: 10, w: 10, l: 7 },
+    { r: 2, m: 8, t1: 5, t2: 4, w: 4, l: 5 },
+    { r: 3, m: 9, t1: 6, t2: 9, w: 6, l: 9 },
+    { r: 3, m: 10, t1: 8, t2: 14, w: 14, l: 8 },
+    { r: 3, m: 11, t1: 10, t2: 4, w: 10, l: 4 },
+    { r: 3, m: 12, t1: 7, t2: 5, w: 7, l: 5 },
+  ])
+
+  it('an undeterminable place is last in the FIELD, not last in the league', () => {
+    const map = analyzePlayoffBracket(EIGHT_OF_SIXTEEN, ids(16))
+    expect([...map].filter(([, i]) => i.isChampion).map(([id]) => id)).toEqual([6])
+    expect([...map].filter(([, i]) => i.isRunnerUp).map(([id]) => id)).toEqual([9])
+    // Eight rosters are in the bracket, so the deepest place it can produce is 8th.
+    expect(map.get(7)).toMatchObject({ bestFinish: 8, madePlayoffs: true, playoffWins: 1 })
+    expect(placementLabel(map.get(7)!)).toBe('Playoff Team')
+    // A roster the bracket never held keeps "no playoff appearance".
+    expect(map.get(1)).toMatchObject({ bestFinish: 999, madePlayoffs: false })
+    expect(map.get(16)).toMatchObject({ bestFinish: 999, madePlayoffs: false })
+  })
+
   it('an empty bracket marks nobody', () => {
     const map = analyzePlayoffBracket([], ids(4))
     expect([...map.values()].every((i) => !i.isChampion && !i.madePlayoffs && i.bestFinish === 999)).toBe(true)

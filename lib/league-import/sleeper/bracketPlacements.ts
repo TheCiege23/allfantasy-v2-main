@@ -230,6 +230,9 @@ export function analyzePlayoffBracket(
   const games = Array.isArray(bracket) ? bracket : []
   if (games.length === 0) return results
 
+  /** Every roster the bracket holds — the size of the FIELD, which is not the league's size. */
+  const bracketTeams = new Set<number>()
+
   const placements = resolveBracketPlacements(games)
   const lostIn = firstLossRound(games)
   const titleRound = placements.titleGame
@@ -238,6 +241,7 @@ export function analyzePlayoffBracket(
 
   for (const g of games) {
     for (const t of [rosterIdOf(g.t1), rosterIdOf(g.t2)]) {
+      if (t != null) bracketTeams.add(t)
       const info = t != null ? results.get(t) : undefined
       if (info) info.madePlayoffs = true
     }
@@ -268,7 +272,16 @@ export function analyzePlayoffBracket(
       info.bestFinish = 2
     }
     if (!info.isChampion && info.madePlayoffs && info.bestFinish === 999) {
-      info.bestFinish = rosterIds.length
+      /*
+       * ⚠ THE FIELD'S SIZE, NOT THE LEAGUE'S. This is the "played in the bracket, place not
+       * determinable" case: no placement game settled it and it was never eliminated on the
+       * title path. It reads as last IN THE BRACKET, which is the honest bound.
+       *
+       * It used to read `rosterIds.length`. Measured on the test copy 2026-09-17: a 2024
+       * 16-roster league with an 8-team bracket reported 16th for a roster whose only loss
+       * came in a game fed by an already-beaten team — a place that bracket cannot produce.
+       */
+      info.bestFinish = Math.max(1, bracketTeams.size)
     }
   }
 
