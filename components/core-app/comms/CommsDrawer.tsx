@@ -24,7 +24,7 @@ import { ChimmyEvidenceBlock, type ChimmyEvidence } from './ChimmyEvidence'
 import { ChimmyScenarioCard } from './ChimmyScenario'
 import { ChimmyAdviceFollow, type ChimmyAdviceRef } from './ChimmyAdviceFollow'
 import { MAX_ADVICE_KEY_LENGTH } from '@/lib/chimmy-advice/adviceKeys'
-import type { ReadyTradeScenario } from '@/lib/chimmy/tradeScenarioTypes'
+import { readReadyScenario, type ReadyChimmyScenario } from '@/lib/chimmy/tradeScenarioTypes'
 import { censorProfanity } from '@/lib/chat-core/censorProfanity'
 import { PinnedBoard } from './PinnedBoard'
 import { readPinnedRefs, type PinnedRef } from '@/lib/chat-core/pinnedMessages'
@@ -239,8 +239,8 @@ type ChatTurn = {
    * arrives with every answer and used to be discarded.
    */
   evidence?: ChimmyEvidence | null
-  /** A trade's before/after, computed from the league's rosters. Only a resolved one arrives. */
-  scenario?: ReadyTradeScenario | null
+  /** A trade, add/drop or start/sit before/after, computed from the league's rosters. Only a resolved one arrives. */
+  scenario?: ReadyChimmyScenario | null
   /** Advice this answer put on file — renders "Did it / Not doing it", and keeps the vote. */
   advice?: ChimmyAdviceRef | null
 }
@@ -383,7 +383,8 @@ type ChimmyEnvelope = {
   meta?: {
     leagueGrounding?: ChimmyGrounding
     players?: ChimmyPlayerCard[]
-    scenario?: ReadyTradeScenario
+    /** Validated by `readReadyScenario` before anything renders it. */
+    scenario?: unknown
     /** Set only when the route recorded this answer's advice. */
     advice?: { key?: unknown; type?: unknown; playerName?: unknown }
     /** Answered without spending anything — do not print a price on it. */
@@ -693,9 +694,7 @@ function ChimmyPanel({
              * but a card that renders a half-shaped object would print "undefined" into a number
              * cell — a wrong number is worse than no card.
              */
-            scenario: payload.meta?.scenario?.status === 'ready' && Array.isArray(payload.meta.scenario.give)
-              ? payload.meta.scenario
-              : null,
+            scenario: readReadyScenario(payload.meta?.scenario),
             advice: readAdvice(payload),
           },
         ])

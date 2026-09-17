@@ -88,9 +88,15 @@ import {
   buildTradeScenario,
   looksLikeDescribedTrade,
   renderTradeScenarioBlock,
-  type ReadyTradeScenario,
   type TradeScenario,
 } from '@/lib/chimmy/tradeScenarioGrounding'
+import {
+  buildStartSitScenario,
+  buildWaiverScenario,
+  renderStartSitScenarioBlock,
+  renderWaiverScenarioBlock,
+} from '@/lib/chimmy/lineupScenarioGrounding'
+import type { ReadyChimmyScenario, StartSitScenario, WaiverScenario } from '@/lib/chimmy/tradeScenarioTypes'
 import { buildDraftContext } from '@/lib/chimmy/draftGrounding'
 import { buildWaiverContext } from '@/lib/chimmy/waiverGrounding'
 import { buildPlayerNewsContext } from '@/lib/chimmy/playerNewsGrounding'
@@ -2471,7 +2477,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   let pecrIntent = 'general'
   /** Set inside `plan` when a described trade resolves against this league's rosters. */
-  let tradeScenarioForMeta: ReadyTradeScenario | null = null
+  let scenarioForMeta: ReadyChimmyScenario | null = null
   try {
     const pecrResult = await runPECR(
       {
@@ -2952,7 +2958,15 @@ ${newsCtx}`
              * SUPERSEDES the described-trade grade below — two grades for one sentence from two
              * pricing paths is a contradiction the model would have to choose between.
              */
-            let tradeScenario: TradeScenario | null = null
+            /*
+             * ⚠ START/SIT AND WAIVER FIRST, THEN TRADE (Chimmy item 8, 2026-09-16). "Start Bijan
+             * Robinson vs Jahmyr Gibbs" also has the shape of a described trade (`vs` is a trade
+             * separator), and before these existed it produced "TRADE SCENARIO: NOT COMPUTED" for a
+             * lineup question. The more specific reading is tried first; each returns null when the
+             * message is not its kind, and the waiver engine's claims are used only when its packet
+             * actually grounded this turn.
+             */
+            let scenario: TradeScenario | WaiverScenario | StartSitScenario | null = null
             /*
              * ⚠ ITS OWN TRY, SEPARATE FROM THE READER BELOW. The scenario is an addition; a fault in
              * it — including the synchronous shape check — must fall back to the described-trade
@@ -2960,28 +2974,48 @@ ${newsCtx}`
              * is how the first version of this failed `chimmy-unproven-league-id-readers`.
              */
             try {
-              if (leagueSnapshot && userId && looksLikeDescribedTrade(planInput.message)) {
-                tradeScenario = await buildTradeScenario({
-                  message: planInput.message,
-                  leagueId: leagueSnapshot.id,
-                  userId,
-                })
+              if (leagueSnapshot && userId) {
+                const scenarioArgs = { message: planInput.message, leagueId: leagueSnapshot.id, userId }
+                scenario = await buildStartSitScenario(scenarioArgs)
+                if (!scenario) {
+                  scenario = await buildWaiverScenario({
+                    ...scenarioArgs,
+                    engineClaims: grounding.outcome === 'ok' ? waiverClaimsSeen.claims : null,
+                  })
+                }
+                if (!scenario && looksLikeDescribedTrade(planInput.message)) {
+                  scenario = await buildTradeScenario({
+                    message: planInput.message,
+                    leagueId: leagueSnapshot.id,
+                    userId,
+                  })
+                }
               }
             } catch {
-              tradeScenario = null
+              scenario = null
             }
-            if (tradeScenario) {
-              const scenarioBlock = renderTradeScenarioBlock(tradeScenario)
+            if (scenario) {
+              const kind = 'kind' in scenario && scenario.kind ? scenario.kind : 'trade'
+              const scenarioBlock =
+                kind === 'start_sit'
+                  ? renderStartSitScenarioBlock(scenario as StartSitScenario)
+                  : kind === 'waiver'
+                    ? renderWaiverScenarioBlock(scenario as WaiverScenario)
+                    : renderTradeScenarioBlock(scenario as TradeScenario)
               legacyEnrichmentContext = legacyEnrichmentContext
                 ? `${scenarioBlock}\n\n${legacyEnrichmentContext}`
                 : scenarioBlock
-              if (tradeScenario.status === 'ready') {
-                tradeScenarioForMeta = tradeScenario
-                dataSources.push('trade_scenario')
+              if (scenario.status === 'ready') {
+                scenarioForMeta = scenario as ReadyChimmyScenario
+                dataSources.push(`${kind}_scenario`)
               }
             }
 
-            const describedTradeCtx = tradeScenario?.status === 'ready'
+            /*
+             * A resolved scenario of ANY kind means this message was understood as that question, so
+             * the described-trade grade (which would read "A vs B" as a trade) is not added beside it.
+             */
+            const describedTradeCtx = scenario?.status === 'ready'
               ? null
               : await buildDescribedTradeContext({
                   message: planInput.message,
@@ -3349,7 +3383,7 @@ ${describedTradeCtx}`
       conversationId,
       players: playerCards.length > 0 ? playerCards : undefined,
       /** The before/after the drawer renders; present only when the scenario resolved. */
-      scenario: tradeScenarioForMeta ?? undefined,
+      scenario: scenarioForMeta ?? undefined,
       /**
        * The advice this answer put on file, set below once it is recorded — the drawer's
        * "Did it / Not doing it" buttons send its key back. Absent when nothing was recorded.

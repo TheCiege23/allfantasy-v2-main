@@ -115,7 +115,8 @@ describe('the drawer reads the scenario off the envelope', () => {
   )
 
   it('keeps only a resolved scenario and attaches it to the turn', () => {
-    expect(DRAWER).toMatch(/scenario: payload\.meta\?\.scenario\?\.status === 'ready'/)
+    // `readReadyScenario` passes only well-formed READY shapes of each kind (tested with the types).
+    expect(DRAWER).toContain('scenario: readReadyScenario(payload.meta?.scenario),')
     expect(DRAWER).toContain('<ChimmyScenarioCard scenario={t.scenario} />')
   })
 
@@ -130,8 +131,30 @@ describe('the route sends it', () => {
   const ROUTE = fs.readFileSync(path.join(process.cwd(), 'app', 'api', 'chat', 'chimmy', 'route.ts'), 'utf8')
 
   it('only for the membership-proven league', () => {
-    expect(ROUTE).toMatch(/buildTradeScenario\(\{\s*message: planInput\.message,\s*leagueId: leagueSnapshot\.id,/)
-    expect(ROUTE).toMatch(/if \(leagueSnapshot && userId && looksLikeDescribedTrade\(planInput\.message\)\)/)
+    const guardAt = ROUTE.indexOf('if (leagueSnapshot && userId) {')
+    expect(guardAt).toBeGreaterThan(-1)
+    const block = ROUTE.slice(guardAt, ROUTE.indexOf('} catch {', guardAt))
+    expect(block).toContain('const scenarioArgs = { message: planInput.message, leagueId: leagueSnapshot.id, userId }')
+    expect(block).toMatch(/buildTradeScenario\(\{\s*message: planInput\.message,\s*leagueId: leagueSnapshot\.id,/)
+    expect(block).not.toMatch(/leagueId:\s*leagueId\b/)
+  })
+
+  /*
+   * 🛑 START/SIT, THEN WAIVER, THEN TRADE. "Start A vs B" is also trade-shaped; the more specific
+   * reading must win, or a lineup question gets "TRADE SCENARIO: NOT COMPUTED".
+   */
+  it('tries start/sit, then waiver, then trade — each only if the one before found nothing', () => {
+    const guardAt = ROUTE.indexOf('if (leagueSnapshot && userId) {')
+    const block = ROUTE.slice(guardAt, ROUTE.indexOf('} catch {', guardAt))
+    const startSit = block.indexOf('scenario = await buildStartSitScenario(scenarioArgs)')
+    const waiver = block.indexOf('scenario = await buildWaiverScenario({')
+    const trade = block.indexOf('if (!scenario && looksLikeDescribedTrade(planInput.message))')
+    expect(startSit).toBeGreaterThan(-1)
+    expect(waiver).toBeGreaterThan(startSit)
+    expect(trade).toBeGreaterThan(waiver)
+    expect(block.slice(startSit, waiver)).toContain('if (!scenario) {')
+    // The engine's claims only when its packet grounded this turn.
+    expect(block).toContain("engineClaims: grounding.outcome === 'ok' ? waiverClaimsSeen.claims : null")
   })
 
   /*
@@ -139,17 +162,18 @@ describe('the route sends it', () => {
    * `try` with that reader removed both on any scenario throw.
    */
   it('in its own try, ahead of the described-trade reader', () => {
-    const scenarioAt = ROUTE.indexOf('if (leagueSnapshot && userId && looksLikeDescribedTrade(planInput.message))')
+    const scenarioAt = ROUTE.indexOf('if (leagueSnapshot && userId) {')
     const readerAt = ROUTE.indexOf('await buildDescribedTradeContext({')
     const between = ROUTE.slice(scenarioAt, readerAt)
     expect(scenarioAt).toBeGreaterThan(-1)
     expect(readerAt).toBeGreaterThan(scenarioAt)
-    expect(between).toMatch(/\}\s*catch\s*\{\s*tradeScenario = null\s*\}/)
+    expect(between).toMatch(/\}\s*catch\s*\{\s*scenario = null\s*\}/)
     expect(ROUTE.slice(scenarioAt - 200, scenarioAt)).toMatch(/try \{\s*$/)
   })
 
-  it('in meta, and supersedes the described-trade grade when it resolves', () => {
-    expect(ROUTE).toContain('scenario: tradeScenarioForMeta ?? undefined')
-    expect(ROUTE).toMatch(/const describedTradeCtx = tradeScenario\?\.status === 'ready'\s*\? null/)
+  it('in meta, and supersedes the described-trade grade when any kind resolves', () => {
+    expect(ROUTE).toContain('scenario: scenarioForMeta ?? undefined')
+    expect(ROUTE).toMatch(/const describedTradeCtx = scenario\?\.status === 'ready'\s*\? null/)
+    expect(ROUTE).toContain('dataSources.push(`${kind}_scenario`)')
   })
 })
