@@ -7,6 +7,7 @@ import { toCommissionerHealthCard, type CommissionerHealthCard } from '@/lib/dec
 import { emitLiveTelemetry } from '@/lib/decision-os/core/parity'
 import { attachSavedAnalysis, leaguesWithSavedAnalysis } from '@/lib/decision-os/three-brain/phase4/attachSavedAnalysis'
 import { getNormalizedLineupSections } from '@/lib/roster/LineupTemplateValidation'
+import { readRequiredStarterCount } from '@/lib/commissioner-hub/requiredStarters'
 import { getCanonicalNflDataCoverage } from '@/lib/nfl-data-foundation/nflDataCoverage'
 // From the module rather than the behavioral barrel: the barrel re-exports the whole
 // subsystem and this file needs exactly one provider from it.
@@ -230,20 +231,6 @@ const WEEK_MS = 7 * 24 * 60 * 60 * 1000
  * that says two, and neither number can be trusted again.
  */
 export const INACTIVE_AFTER_MS = 14 * 24 * 60 * 60 * 1000
-const RESERVE_SLOT_KEYS = new Set([
-  'BN',
-  'BE',
-  'BENCH',
-  'IR',
-  'IR+',
-  'IL',
-  'IL+',
-  'TAXI',
-  'DEVY',
-  'NA',
-  'RESERVE',
-  'MINORS',
-])
 
 function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value)
@@ -267,50 +254,6 @@ function positiveInt(value: unknown, fallback = 0): number {
 function readCurrentWeek(settings: unknown): number {
   const s = asRecord(settings)
   return Math.max(1, positiveInt(s.currentWeek ?? s.current_week ?? s.week, 1))
-}
-
-function normalizeSlotKey(key: string): string {
-  return key.trim().replace(/\s+/g, '_').replace(/-/g, '_').toUpperCase()
-}
-
-function sumStarterSlots(raw: unknown): number {
-  if (Array.isArray(raw)) {
-    return raw.filter((slot) => {
-      const key = normalizeSlotKey(String(slot))
-      return key && !RESERVE_SLOT_KEYS.has(key)
-    }).length
-  }
-
-  const obj = asRecord(raw)
-  let total = 0
-  for (const [key, value] of Object.entries(obj)) {
-    const normalized = normalizeSlotKey(key)
-    if (!normalized || RESERVE_SLOT_KEYS.has(normalized)) continue
-    total += positiveInt(value, 0)
-  }
-  return total
-}
-
-function readRequiredStarterCount(league: LeagueHealthRow): number {
-  const settings = asRecord(league.settings)
-  const rosterTemplate = asRecord(settings.rosterTemplate)
-
-  const candidates = [
-    league.starters,
-    settings.starters,
-    settings.rosterPositions,
-    settings.roster_positions,
-    rosterTemplate.starters,
-    rosterTemplate.positions,
-    rosterTemplate.slots,
-  ]
-
-  for (const candidate of candidates) {
-    const count = sumStarterSlots(candidate)
-    if (count > 0) return count
-  }
-
-  return 0
 }
 
 function countIds(raw: unknown): number {

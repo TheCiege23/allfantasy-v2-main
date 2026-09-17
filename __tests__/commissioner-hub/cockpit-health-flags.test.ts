@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   abandonedTeamsFlag,
+  emptyStarterSlots,
   missingLineupsFlag,
   openPolls,
   rankFlags,
@@ -128,6 +129,38 @@ describe('abandoned teams', () => {
 })
 
 describe('missing lineups', () => {
+  /*
+   * 🛑 THE SHAPE PRODUCTION ACTUALLY STORES. Importers drop Sleeper's "0" marker, so an empty slot
+   * is a starters list shorter than the rules. Measured 2026-09-17: 0 of 4,027 stored rosters hold a
+   * "0"; 241 in-season Sleeper rosters are short. Counting markers alone called every one of them full.
+   */
+  it('counts a stored lineup that is shorter than the league requires', () => {
+    const flag = missingLineupsFlag({
+      platform: 'sleeper',
+      inSeason: true,
+      requiredStarters: 4,
+      rosters: [
+        { name: 'Short', starters: ['4046', '6794'] },
+        { name: 'Full', starters: ['1', '2', '3', '4'] },
+      ],
+      action: null,
+    })
+    expect(flag.measured).toBe(true)
+    if (!flag.measured) return
+    expect(flag.count).toBe(1)
+    expect(flag.names).toEqual(['Short'])
+    expect(flag.detail).toContain('Short (2 empty slots)')
+  })
+
+  it('counts markers and missing slots together, never twice', () => {
+    expect(emptyStarterSlots(['1', '0', '3'], 4)).toBe(2)
+    expect(emptyStarterSlots(['1', '2', '3', '4'], 4)).toBe(0)
+    expect(emptyStarterSlots(['1', '2', '3', '4', '5'], 4)).toBe(0)
+    // Rules unreadable: only what the lineup itself marks as empty.
+    expect(emptyStarterSlots(['1', '0'], 0)).toBe(1)
+    expect(emptyStarterSlots(['1'], 0)).toBe(0)
+  })
+
   it('treats Sleeper\'s "0" as an empty slot, which filter(Boolean) does not', () => {
     const flag = missingLineupsFlag({
       platform: 'sleeper',

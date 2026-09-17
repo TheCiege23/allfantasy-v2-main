@@ -5,6 +5,7 @@ import { prisma } from '@/lib/prisma'
 import { getLeagueRole, type LeagueRole } from '@/lib/league/permissions'
 import { resolveWriteAuthority } from '@/lib/league/write-authority'
 import { getCommissionerHubHealthForUser } from '@/lib/commissioner-hub/commissionerHubHealth'
+import { readRequiredStarterCount } from '@/lib/commissioner-hub/requiredStarters'
 import { getLeagueManagerHealth } from '@/lib/commissioner-hub/managerHealth'
 import { getNormalizedLineupSections } from '@/lib/roster/LineupTemplateValidation'
 import { readViewerPoll } from '@/lib/chat-core/messagePolls'
@@ -270,9 +271,10 @@ const UNRESOLVED_TASK = new Set(['open', 'in_progress', 'waiting_on_manager', 'w
 /**
  * A roster's starting slots as the platform stored them.
  *
- * Sleeper keeps a flat `starters` array (with `"0"` in an empty slot); leagues
- * created here keep `lineup_sections.starters` rows. Null means the shape could
- * not be read — never "no starters".
+ * Sleeper keeps a flat `starters` array; leagues created here keep
+ * `lineup_sections.starters` rows. Sleeper's `"0"` empty-slot marker is dropped at
+ * import, so an empty slot is a SHORTER list — `emptyStarterSlots` counts it against
+ * the league's rules. Null means the shape could not be read — never "no starters".
  */
 function starterSlots(playerData: unknown): unknown[] | null {
   if (!playerData || typeof playerData !== 'object' || Array.isArray(playerData)) return null
@@ -349,6 +351,7 @@ export async function getCommissionerHub(input: {
       season: true,
       status: true,
       settings: true,
+      starters: true,
       lastSyncedAt: true,
       syncStatus: true,
       tradeDeadlineWeek: true,
@@ -613,6 +616,8 @@ export async function getCommissionerHub(input: {
         const team = teamByPlatformUser.get(r.platformUserId)
         return team ? [{ name: teamLabel(team), starters: starterSlots(r.playerData) }] : []
       }),
+      // A stored lineup has no empty-slot marker, so holes are counted against the rules.
+      requiredStarters: readRequiredStarterCount(league),
       action: native
         ? inAppLink('Open league', `/league/${encodeURIComponent(leagueId)}`)
         : (() => {

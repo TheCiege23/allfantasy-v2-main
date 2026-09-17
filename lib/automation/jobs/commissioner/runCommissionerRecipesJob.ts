@@ -42,6 +42,8 @@ import { getLeagueManagerHealth } from '@/lib/commissioner-hub/managerHealth'
 import { readActivityWindow, readManagerActivity } from '@/lib/league-history/leagueWarehouseReads'
 import { MANAGER_INACTIVE_AFTER_DAYS } from '@/lib/decision-os/behavioral/manager-intelligence'
 import { ownedTeamNames, resolveMemberActivity } from '@/lib/core-app/commissioner/activity'
+import { emptyStarterSlots } from '@/lib/core-app/commissioner/health'
+import { readRequiredStarterCount } from '@/lib/commissioner-hub/requiredStarters'
 import { readViewerPoll, isPollClosed } from '@/lib/chat-core/messagePolls'
 import { createLeagueChatMessage } from '@/lib/league-chat/LeagueChatMessageService'
 import { getNormalizedLineupSections } from '@/lib/roster/LineupTemplateValidation'
@@ -75,10 +77,6 @@ function starterSlots(playerData: unknown): unknown[] | null {
   return rows.length > 0 ? rows.map((r) => (r as Record<string, unknown>)?.id ?? null) : null
 }
 
-function emptyCount(slots: unknown[]): number {
-  return slots.filter((s) => s == null || String(s).trim() === '' || String(s).trim() === '0').length
-}
-
 /** Everything `dueRecipeMessages` needs about one league, read in one pass. */
 export async function readRecipeFacts(leagueId: string, now: Date): Promise<{
   facts: RecipeFacts
@@ -97,10 +95,13 @@ export async function readRecipeFacts(leagueId: string, now: Date): Promise<{
       status: true,
       season: true,
       settings: true,
+      starters: true,
       lastSyncedAt: true,
     },
   })
   if (!league?.userId) return null
+  // A stored lineup has no empty-slot marker; holes are counted against the league's rules.
+  const requiredStarters = readRequiredStarterCount(league)
 
   const sport = String(league.sport ?? 'NFL')
   const native = resolveWriteAuthority(league.platform) === 'NATIVE'
@@ -165,7 +166,7 @@ export async function readRecipeFacts(leagueId: string, now: Date): Promise<{
     const slots = starterSlots(r.playerData)
     const team = byOwner.get(r.platformUserId)
     if (!slots || slots.length === 0 || !team) return []
-    const empty = emptyCount(slots)
+    const empty = emptyStarterSlots(slots, requiredStarters)
     return empty > 0 ? [{ name: label(team), empty }] : []
   })
 

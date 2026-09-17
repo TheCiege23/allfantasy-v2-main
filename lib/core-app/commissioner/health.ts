@@ -47,17 +47,31 @@ export type HealthFlag =
       action: HealthFlagAction | null
     }
 
-/**
- * Sleeper writes `"0"` into a starting slot nobody filled. It is a truthy
- * string, so `filter(Boolean)` counts it as a player — which is exactly how the
- * shared health snapshot under-reports missed lineups. Treated as empty here.
- */
+/** Sleeper's marker for a starting slot nobody filled, in a lineup read straight off its API. */
 const EMPTY_SLOT = '0'
 
 function isEmptySlot(value: unknown): boolean {
   if (value == null) return true
   const s = String(value).trim()
   return s === '' || s === EMPTY_SLOT
+}
+
+/**
+ * How many of a lineup's starting slots are empty.
+ *
+ * 🛑 A STORED LINEUP DOES NOT CONTAIN THE `"0"` MARKER. Every importer drops it before storing
+ * (`SleeperRosterMapper` `starter_ids`), so on production an empty slot shows up only as a starters
+ * list shorter than the league requires. Measured 2026-09-17: 0 of 4,027 stored rosters hold a
+ * `"0"`; 241 in-season Sleeper rosters are short. Counting markers alone reported "Every lineup is
+ * full" for all of them, and the lineup-reminder recipe could never fire.
+ *
+ * So, when the league's required starter count is known, empty = required − filled. When it is
+ * not (0), only explicit markers count, which is all that can honestly be said.
+ */
+export function emptyStarterSlots(starters: unknown[], requiredStarters: number): number {
+  const markers = starters.filter(isEmptySlot).length
+  if (!(requiredStarters > 0)) return markers
+  return Math.max(0, requiredStarters - (starters.length - markers))
 }
 
 function plural(n: number, one: string, many = `${one}s`): string {
@@ -201,6 +215,8 @@ export type LineupsInput = {
      */
     starters: unknown[] | null
   }>
+  /** Starting slots the league's rules require (`readRequiredStarterCount`); 0 when unknown. */
+  requiredStarters?: number
   action: HealthFlagAction | null
   /** Rosters from a sync that has stopped are last week's lineups — see `AbandonedInput.stale`. */
   stale?: { reason: string; action: HealthFlagAction } | null
@@ -253,7 +269,7 @@ export function missingLineupsFlag(input: LineupsInput): HealthFlag {
   }
 
   const holes = readable
-    .map((r) => ({ name: r.name, empty: r.starters.filter(isEmptySlot).length }))
+    .map((r) => ({ name: r.name, empty: emptyStarterSlots(r.starters, input.requiredStarters ?? 0) }))
     .filter((r) => r.empty > 0)
     .sort((a, b) => b.empty - a.empty || a.name.localeCompare(b.name))
 
