@@ -100,6 +100,30 @@ Champion and runner-up are exact. To get the lower placements too, refetch
 **Urgency is low.** Nothing in the codebase reads `playoffFinishByRosterId` today (checked
 2026-09-17), so these rows are wrong but unread.
 
+### Dry run on the test copy, 2026-09-17 (read-only, nothing written)
+
+| | Rows |
+|---|---|
+| Sleeper rows | 801 |
+| Candidates (bracket stored, decided final, not already version 2) | 516 |
+| Would change | 516 |
+| Skipped — empty bracket | 76 |
+| Skipped — no decided final | 209 |
+
+- **Champions per row:** 2 (423 rows), 3 (16), 4 (77) → exactly 1. Runners-up likewise.
+- **The corrected champion was already flagged as a champion in all 516 rows**, and no
+  runner-up comes from outside the stored set. The recompute narrows a set; it never names a
+  new winner. Assert this in the real run too.
+- **2,225 of 6,796 roster entries change:** bestFinish and label 1,806 each, playoff losses
+  1,198, playoff wins 1,191, champion and runner-up flags 686 each.
+- **Seasons:** 2019 (3) through 2025 (155).
+
+⚠ **The dry run found a wrong finish, now fixed.** `analyzePlayoffBracket` fell back to the
+LEAGUE's roster count for a bracket team whose place cannot be determined — no placement game
+settled it and it was never eliminated on the title path. A 2024 16-roster league with an
+8-team bracket therefore read 16th, a place that bracket cannot produce. The fallback is now
+the size of the FIELD, so that roster reads 8th. Everything else in the dry run is unchanged.
+
 ⚠ **The 801 rows cover only 674 distinct Sleeper league ids**, because two `League` rows
 can point at one Sleeper league. Correct each row on its own. Do not dedupe as part of
 this backfill.
