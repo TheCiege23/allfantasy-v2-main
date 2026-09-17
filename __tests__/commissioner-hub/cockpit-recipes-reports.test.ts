@@ -296,6 +296,22 @@ describe('league areas, guides and connections', () => {
     expect(co?.status).toBe('unavailable')
   })
 
+  it('offers @everyone to whoever may send it, owner or not — Discord stays owner-only', () => {
+    const base = {
+      league: native,
+      discord: null,
+      datedEventCount: 0,
+      payment: { link: null, provider: null, tracked: false },
+      claimedTeams: 3,
+      totalTeams: 10,
+    }
+    const coCommish = buildCommunities({ ...base, viewerIsOwner: false, viewerCanBroadcast: true })
+    expect(coCommish.find((c) => c.key === 'announcements')?.detail).toContain('An @everyone announcement')
+    expect(coCommish.find((c) => c.key === 'discord')?.link).toBeNull()
+    const cannot = buildCommunities({ ...base, viewerIsOwner: true, viewerCanBroadcast: false })
+    expect(cannot.find((c) => c.key === 'announcements')?.detail).not.toContain('@everyone')
+  })
+
   it('links a payment page only when one is set', () => {
     const channels = buildCommunities({
       league: native,

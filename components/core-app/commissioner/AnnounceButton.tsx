@@ -6,9 +6,10 @@ import BroadcastModal from '@/components/commish/BroadcastModal'
 /**
  * Opens the existing @everyone composer, pre-set to this league.
  *
- * Rendered only for the league owner of a league created in AllFantasy: the
- * broadcast route accepts only `League.userId` and refuses imported leagues, so
- * showing it to anyone else would be a button that always fails.
+ * Rendered for the head commissioner and co-commissioners of a league created in
+ * AllFantasy (`viewerCanBroadcast`) — the same people the broadcast route and the
+ * composer's league list accept (`lib/commissioner/broadcastAccess.ts`). The
+ * composer shows imported leagues read-only, so the button is not offered there.
  */
 export function AnnounceButton({ leagueId }: { leagueId: string }) {
   const [open, setOpen] = useState(false)
