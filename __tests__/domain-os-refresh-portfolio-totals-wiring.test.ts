@@ -24,7 +24,7 @@ describe('domain-os-refresh → portfolio daily totals wiring', () => {
 
   it('🛑 its writes, errors, failures and deferrals reach the run telemetry', () => {
     expect(src).toMatch(/\+ r\.snapshot\.written \+ r\.portfolio\.written/)
-    expect(src).toMatch(/\.\.\.r\.portfolio\.errors,/)
+    expect(src).toMatch(/\.\.\.r\.portfolio\.errors[\],]/)
     expect(src).toMatch(/r\.portfolio\.failed > 0/)
     expect(src).toMatch(/r\.portfolio\.deferred/)
     expect(src).toMatch(/portfolio: \{\s*date: r\.portfolio\.date,\s*considered: r\.portfolio\.considered,\s*written: r\.portfolio\.written,/)

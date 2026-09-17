@@ -252,22 +252,15 @@ export async function GET(req: NextRequest) {
        * `rankings_snapshots`. The per-writer numbers stay separate in `metadata.rankings` below,
        * because a total nobody can attribute is exactly how three empty tables went unnoticed.
        */
-      rowsWritten:
-        r.written + r.rankings.written + r.forecast.written + r.odds.written + r.snapshot.written + r.portfolio.written,
+      // ⚠ One line each, on purpose: three wiring tests pin these sums as written.
+      rowsWritten: r.written + r.rankings.written + r.forecast.written + r.odds.written + r.snapshot.written + r.portfolio.written,
       rowsSkipped:
         r.skippedForTime + r.unavailable +
         r.rankings.skippedForTime + r.rankings.skipped +
         r.forecast.skippedForTime + r.forecast.pastSeasonEnd +
-        r.odds.skippedForTime +
-        r.portfolio.deferred,
-      errors: [
-        ...r.errors,
-        ...r.rankings.errors,
-        ...r.forecast.errors,
-        ...r.odds.errors,
-        ...r.snapshot.errors,
-        ...r.portfolio.errors,
-      ],
+        r.portfolio.deferred +
+        r.odds.skippedForTime,
+      errors: [...r.errors, ...r.rankings.errors, ...r.forecast.errors, ...r.odds.errors, ...r.snapshot.errors, ...r.portfolio.errors],
       /*
        * A rankings `failed` is a genuine fault and downgrades the run, the same as a feed failure.
        * `skipped` does NOT: a league whose settings Sleeper will not serve is a normal single-league

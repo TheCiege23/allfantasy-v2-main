@@ -18,7 +18,7 @@ import { normalizeMatchName } from '@/lib/player-match/verifiedNameMatch'
 import { isAtRisk, isRuledOut } from './injuryStatus'
 import { resolveSportsWeek, isPreseason } from './sportsWeek'
 import { getByeWeeks } from './byeWeeks'
-import { startingSlots } from './slotEligibility'
+import { canFillSlot, startingSlots } from './slotEligibility'
 import { classifyLeagueFormat, competitiveStatus } from './portfolioClassify'
 import type {
   InjuryKind,
@@ -74,21 +74,16 @@ export const MAX_MOVERS = 12
 export const BYE_COLUMNS = 4
 const LAST_REGULAR_WEEK = 18
 
-/** Dedicated positions whose lack of a backup is worth flagging. K and DEF are routinely rostered alone. */
-const FRAGILE_POSITIONS = ['QB', 'RB', 'WR', 'TE', 'DL', 'LB', 'DB'] as const
-const POSITION_FOLD: Record<string, string> = {
-  FB: 'RB',
-  DE: 'DL',
-  DT: 'DL',
-  NT: 'DL',
-  ILB: 'LB',
-  OLB: 'LB',
-  MLB: 'LB',
-  CB: 'DB',
-  S: 'DB',
-  FS: 'DB',
-  SS: 'DB',
-}
+/**
+ * Dedicated starting slots whose lack of a backup is worth flagging. K and DEF are routinely
+ * rostered alone; flex slots are shared by several positions, so a hole there is a lineup problem.
+ *
+ * ⚠ ELIGIBILITY COMES FROM `canFillSlot`, NOT A LOCAL POSITION MAP. The first version carried its
+ * own `DE → DL, CB → DB` fold, which the canonical-position governance test rejects: detailed IDP
+ * positions stay detailed, and "who can play this slot" is the slot rule's job. It also counts a
+ * fullback as running-back depth, which the local map had to special-case.
+ */
+const FRAGILE_SLOTS = ['QB', 'RB', 'WR', 'TE', 'DL', 'LB', 'DB'] as const
 
 /** Same rule as `coaching_profile` in lib/chimmy-personalization/remembered.ts (pinned by a test). */
 export const COACHING_PROFILE_KEY = 'coaching_profile'
@@ -140,13 +135,6 @@ function bookKey(book: ValueBook): string {
   return `${book.format}:${book.qbFormat}`
 }
 
-/** Which position a player's listed position counts as for the fragile check. */
-export function foldPosition(position: string | null | undefined): string | null {
-  if (!position) return null
-  const p = position.toUpperCase()
-  return POSITION_FOLD[p] ?? p
-}
-
 /**
  * Dedicated starting slots with no healthy backup behind them.
  *
@@ -162,16 +150,16 @@ export function fragilePositions(
 ): LeagueRisk['fragile'] {
   if (!slots) return null
   const required = new Map<string, number>()
-  for (const s of slots) {
-    const p = foldPosition(s === 'DST' ? 'DEF' : s)
-    if (p && (FRAGILE_POSITIONS as readonly string[]).includes(p)) required.set(p, (required.get(p) ?? 0) + 1)
+  for (const raw of slots) {
+    const s = raw.toUpperCase()
+    if ((FRAGILE_SLOTS as readonly string[]).includes(s)) required.set(s, (required.get(s) ?? 0) + 1)
   }
   const out: NonNullable<LeagueRisk['fragile']> = []
   for (const [position, starters] of required) {
     const players: string[] = []
     let healthy = 0
     for (const [id, slot] of roster) {
-      if (foldPosition(positionOf(id)) !== position) continue
+      if (!canFillSlot(position, positionOf(id))) continue
       players.push(id)
       if (slot !== 'I' && !ruledOut(id)) healthy += 1
     }
