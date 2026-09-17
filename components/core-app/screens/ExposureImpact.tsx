@@ -24,11 +24,11 @@ type Load =
   | { state: 'error' }
   | { state: 'ready'; data: PlayerLeagueImpact }
 
-const SLOT_LABEL: Record<ImpactSlot, string> = { starter: 'starting', bench: 'bench', ir: 'IR', taxi: 'taxi' }
+export const SLOT_LABEL: Record<ImpactSlot, string> = { starter: 'starting', bench: 'bench', ir: 'IR', taxi: 'taxi' }
 
 const pct = (p: number) => `${Math.round(p * 100)}%`
 
-function impactText(row: LeagueImpactRow): { text: string; title?: string; drop?: number } {
+export function impactText(row: LeagueImpactRow): { text: string; title?: string; drop?: number } {
   const i = row.impact
   if (i.kind === 'priced') {
     const drop = Math.round((i.now - i.without) * 100)

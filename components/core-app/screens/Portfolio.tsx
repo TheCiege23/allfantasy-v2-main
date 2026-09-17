@@ -1,12 +1,12 @@
 'use client'
 
 import { useState } from 'react'
-import type { CSSProperties } from 'react'
 import Link from 'next/link'
 import { LeagueInvitePanel } from '@/components/core-app/LeagueInvitePanel'
-import type { PortfolioData } from '@/lib/core-app/portfolio'
-import type { ExposureData, PanelState } from '@/lib/core-app/dash3aPanels'
-import type { CrossLeagueValueAction } from '@/lib/core-app/crossLeagueValueActions'
+import type { PortfolioData, PortfolioLeague } from '@/lib/core-app/portfolio'
+import type { PortfolioInsights, RecordedValueDay } from '@/lib/core-app/portfolioInsightsTypes'
+import { EMPTY_FILTER, type LineupSignal, type PortfolioFilter } from '@/lib/core-app/portfolioView'
+import { PortfolioBoard, type PortfolioViewKey } from '@/components/core-app/portfolio/PortfolioBoard'
 import '@/components/core-app/af-portfolio.css'
 import '@/components/core-app/af-core-boards.css'
 
@@ -61,33 +61,39 @@ const PLATFORM_LABEL: Record<string, string> = {
 
 export type PortfolioProps = {
   data: PortfolioData
-  exposure?: PanelState<ExposureData> | null
-  valueActions?: CrossLeagueValueAction[] | null
+  /**
+   * The cross-league board's data (lib/core-app/portfolioInsights.ts), read through its summary.
+   * Null when the build failed — the inventory list still renders, and says the board is missing.
+   */
+  insights?: PortfolioInsights | null
+  /** When `insights` was built, and whether this is a stored copy served while it refreshes. */
+  insightsBuiltAt?: string | null
+  insightsStale?: boolean
+  recorded?: RecordedValueDay[]
+  /** The home loader's lineup counts per league id; null when that read failed. */
+  lineup?: Record<string, LineupSignal> | null
+  /** Request-scoped: favourites live in a per-device cookie, paid leagues on the league list. */
+  favoriteIds?: string[]
+  paidIds?: string[]
+  initialFilter?: PortfolioFilter
+  initialView?: PortfolioViewKey
   /** Where "import a league" should go — carries the return path. */
   importHref?: string
 }
 
 export function Portfolio({
   data,
-  exposure,
-  valueActions = [],
+  insights = null,
+  insightsBuiltAt = null,
+  insightsStale = false,
+  recorded = [],
+  lineup = null,
+  favoriteIds = [],
+  paidIds = [],
+  initialFilter = EMPTY_FILTER,
+  initialView = 'overview',
   importHref = '/import?returnTo=%2Fcore%2Fportfolio',
 }: PortfolioProps) {
-  /*
-   * ⚠ ONE OPEN AT A TIME, AND FETCHED ONLY WHEN OPENED. One production account
-   * commissions 40 leagues. Rendering an invite panel per row would fire forty
-   * simultaneous requests to /api/leagues/join on page load, for links nobody
-   * asked to see. The panel fetches on mount, so not mounting it IS the guard.
-   */
-  const [openInvite, setOpenInvite] = useState<string | null>(null)
-  /*
-   * ⚠ CLIENT STATE, NOT A SEARCH PARAM, AND ONLY BECAUSE THIS SCREEN IS ALREADY
-   * A CLIENT ISLAND. Every other filter in /core is a link so it survives a
-   * refresh and can be shared; here the invite panel already forces `use client`
-   * and the whole list is in memory, so a round-trip to re-render the same rows
-   * would be a page load to change a heading. `null` is "every platform".
-   */
-  const [platformTab, setPlatformTab] = useState<string | null>(null)
   if (!data.leagues.available) {
     return (
       <div className="af-pf">
@@ -110,36 +116,6 @@ export function Portfolio({
   }
 
   const leagues = data.leagues.data
-  const moveByPlayer = new Map((valueActions ?? []).map((move) => [move.playerId, move]))
-
-  /*
-   * ⚠ GROUPED BECAUSE SIXTY OF ONE PLATFORM BURIES ONE OF ANOTHER. A single
-   * alphabetical list put the first Fantrax league ever imported between "Bla bla
-   * bla" and "Fathers Day-Dads Dynasty", where it was reported as missing while it
-   * was on screen. Rows keep the order the service sorted them into (commissioner
-   * first, then alphabetical) INSIDE each group.
-   *
-   * Plain code rather than useMemo on purpose: there is an early return above this
-   * line, and a hook added here would change hook order between renders.
-   *
-   * Biggest group first so the platform someone actually lives in leads, with an
-   * alphabetical tiebreak so equal-sized groups do not reshuffle between visits.
-   */
-  const groups = (() => {
-    const by = new Map<string, typeof leagues>()
-    for (const l of leagues) {
-      const key = (l.platform || 'manual').toLowerCase()
-      const bucket = by.get(key)
-      if (bucket) bucket.push(l)
-      else by.set(key, [l])
-    }
-    return [...by.entries()].sort(
-      (a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0]),
-    )
-  })()
-
-  const shown =
-    platformTab == null ? groups : groups.filter(([platform]) => platform === platformTab)
 
   return (
     <div className="af-pf">
@@ -165,109 +141,88 @@ export function Portfolio({
         </Link>
       </header>
 
-      <section className="af-pf-risk" aria-labelledby="af-pf-risk-title">
-        <header className="af-pf-risk-head">
-          <div>
-            <p className="af-pf-kicker">Cross-league intelligence</p>
-            <h2 id="af-pf-risk-title" className="af-pf-risk-title">Portfolio risk map</h2>
-          </div>
-          {exposure?.available ? (
-            <span className="af-pf-risk-read af-num">{exposure.data.rostersRead} rosters read</span>
-          ) : null}
-        </header>
-
-        {exposure?.available ? (
-          <>
-            <p className="af-pf-risk-copy">
-              {exposure.data.note ?? 'Your roster exposure is spread out. Tap a player to inspect every affected league.'}
-            </p>
-            <div className="af-pf-risk-grid">
-              {exposure.data.rows.map((row) => {
-                const share = Math.round((row.count / Math.max(1, row.of)) * 100)
-                const move = moveByPlayer.get(row.playerId)
-                const level = share >= 70 ? 'high' : share >= 40 ? 'medium' : 'low'
-                return (
-                  <Link
-                    key={row.playerId}
-                    href={`/core/players?q=${encodeURIComponent(row.name)}&player=${encodeURIComponent(row.playerId)}`}
-                    className="af-pf-risk-cell"
-                    data-level={level}
-                    style={{ '--af-risk-share': `${share}%` } as CSSProperties}
-                  >
-                    <span className="af-pf-risk-topline">
-                      <strong>{row.name}</strong>
-                      <span className="af-num">{row.count}/{row.of}</span>
-                    </span>
-                    <span className="af-pf-risk-meta">
-                      {[row.position, row.team].filter(Boolean).join(' · ') || 'Player'}
-                      {row.everyStart ? ' · starts everywhere' : ''}
-                    </span>
-                    <span className="af-pf-risk-meter" aria-label={`${share}% portfolio exposure`}><span /></span>
-                    <span className="af-pf-risk-action">
-                      {move ? (
-                        <>
-                          <b data-stock={move.stock}>{move.stock === 'up' ? '▲' : '▼'} {Math.abs(Math.round(move.stockDelta))}</b>
-                          <span>{move.advice}</span>
-                        </>
-                      ) : (
-                        <span>{share >= 70 ? 'High concentration — set an injury contingency.' : 'Review every league holding this player.'}</span>
-                      )}
-                    </span>
-                  </Link>
-                )
-              })}
-            </div>
-            {(valueActions ?? []).some((move) => !exposure.data.rows.some((row) => row.playerId === move.playerId)) ? (
-              <p className="af-pf-risk-foot">More player-value moves are available in <Link href="/core/trades">Trades</Link>.</p>
-            ) : null}
-          </>
-        ) : (
+      {insights && insights.leagues.length > 0 ? (
+        <PortfolioBoard
+          insights={insights}
+          recorded={recorded}
+          lineup={lineup}
+          extras={{ favoriteIds, paidIds }}
+          initialFilter={initialFilter}
+          initialView={initialView}
+          builtAt={insightsBuiltAt}
+          servedStale={insightsStale}
+          renderLeagues={(ids, filtered) => (
+            <LeagueList
+              leagues={filtered ? leagues.filter((l) => ids.has(l.leagueId)) : leagues}
+              total={leagues.length}
+              filtered={filtered}
+              importHref={importHref}
+            />
+          )}
+        />
+      ) : (
+        <>
           <div className="af-pf-risk-empty">
-            <strong>Risk map is waiting for roster data.</strong>
-            <span>{exposure?.reason ?? 'We could not read cross-league exposure just now.'}</span>
+            <strong>The cross-league board could not be built just now.</strong>
+            <span>Your leagues are listed below. Exposure, risk and value movement will return on the next load.</span>
           </div>
-        )}
-      </section>
+          <LeagueList leagues={leagues} total={leagues.length} filtered={false} importHref={importHref} />
+        </>
+      )}
+    </div>
+  )
+}
 
-      {/*
-        Platform tabs with counts — 2026-09-07 handoff.
+/**
+ * The inventory — every claimed team, grouped by platform.
+ *
+ * ⚠ GROUPED BECAUSE SIXTY OF ONE PLATFORM BURIES ONE OF ANOTHER. A single
+ * alphabetical list put the first Fantrax league ever imported between "Bla bla
+ * bla" and "Fathers Day-Dads Dynasty", where it was reported as missing while it
+ * was on screen. Rows keep the order the service sorted them into (commissioner
+ * first, then alphabetical) INSIDE each group.
+ *
+ * ⚠ THE PLATFORM TABS THAT USED TO SIT HERE MOVED INTO THE BOARD'S FILTERS, which
+ * scope every view at once. Two platform controls on one screen that disagreed
+ * about what was selected would be worse than either.
+ */
+function LeagueList({
+  leagues,
+  total,
+  filtered,
+  importHref,
+}: {
+  leagues: PortfolioLeague[]
+  total: number
+  filtered: boolean
+  importHref: string
+}) {
+  /*
+   * ⚠ ONE OPEN AT A TIME, AND FETCHED ONLY WHEN OPENED. One production account
+   * commissions 40 leagues. Rendering an invite panel per row would fire forty
+   * simultaneous requests to /api/leagues/join on page load, for links nobody
+   * asked to see. The panel fetches on mount, so not mounting it IS the guard.
+   */
+  const [openInvite, setOpenInvite] = useState<string | null>(null)
 
-        ⚠ THE GROUPED LAYOUT UNDERNEATH IS KEPT, NOT REPLACED. The grouping
-        exists for a measured reason: a single alphabetical list put the first
-        Fantrax league ever imported between two Sleeper leagues, where it was
-        reported as missing while it was on screen. The tabs narrow to one
-        platform; "All" still shows every group, so nothing that worked stops.
-      */}
-      {groups.length > 1 ? (
-        <div className="af-bd-tabs" role="tablist" aria-label="Filter by platform">
-          <button
-            type="button"
-            role="tab"
-            className="af-bd-tab"
-            aria-current={platformTab == null ? 'page' : undefined}
-            aria-selected={platformTab == null}
-            onClick={() => setPlatformTab(null)}
-          >
-            All <span className="af-bd-tab-n">{leagues.length}</span>
-          </button>
-          {groups.map(([platform, rows]) => (
-            <button
-              key={platform}
-              type="button"
-              role="tab"
-              className="af-bd-tab"
-              aria-current={platformTab === platform ? 'page' : undefined}
-              aria-selected={platformTab === platform}
-              onClick={() => setPlatformTab(platform)}
-            >
-              {PLATFORM_LABEL[platform] ?? platform}{' '}
-              <span className="af-bd-tab-n">{rows.length}</span>
-            </button>
-          ))}
-        </div>
-      ) : null}
+  /*
+   * Biggest group first so the platform someone actually lives in leads, with an
+   * alphabetical tiebreak so equal-sized groups do not reshuffle between visits.
+   */
+  const groups = (() => {
+    const by = new Map<string, PortfolioLeague[]>()
+    for (const l of leagues) {
+      const key = (l.platform || 'manual').toLowerCase()
+      const bucket = by.get(key)
+      if (bucket) bucket.push(l)
+      else by.set(key, [l])
+    }
+    return [...by.entries()].sort((a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0]))
+  })()
 
-      {shown.map(([platform, rows]) => (
+  return (
+    <>
+      {groups.map(([platform, rows]) => (
         <section key={platform} className="af-pf-group">
           <header className="af-pf-group-head">
             <span className="af-pf-group-name" data-platform={platform}>
@@ -412,26 +367,19 @@ export function Portfolio({
 
       {/*
         The footer summary every board in this batch carries. On this screen it
-        is the way back to a full list after a tab has narrowed it, and the way
-        to add what is not here at all.
+        says what the list is scoped to, and is the way to add what is not here.
       */}
       <div className="af-bd-foot">
         <p className="af-bd-foot-text">
-          {platformTab
-            ? `Showing ${shown[0]?.[1].length ?? 0} of ${leagues.length} claimed teams.`
+          {filtered
+            ? `Showing ${leagues.length} of ${total} claimed teams — the filters above apply here too.`
             : `A league with no team claimed to you does not appear here — connect or re-import it and it will.`}
         </p>
-        {platformTab ? (
-          <button type="button" className="af-bd-foot-cta" onClick={() => setPlatformTab(null)}>
-            View all {leagues.length} &rarr;
-          </button>
-        ) : (
-          <Link className="af-bd-foot-cta" href={importHref}>
-            Import a league &rarr;
-          </Link>
-        )}
+        <Link className="af-bd-foot-cta" href={importHref}>
+          Import a league &rarr;
+        </Link>
       </div>
-    </div>
+    </>
   )
 }
 
