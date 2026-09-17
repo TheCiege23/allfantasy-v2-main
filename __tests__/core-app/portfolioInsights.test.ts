@@ -361,7 +361,13 @@ describe('pure helpers', () => {
     expect(fragilePositions(null, new Map(), () => null, () => false)).toBeNull()
     const roster = new Map([['k', 'S' as const]])
     expect(fragilePositions(['K', 'DEF', 'FLEX'], roster, () => 'K', () => false)).toEqual([])
-    expect(fragilePositions(['DE', 'CB'], new Map([['d', 'S' as const]]), () => 'DT', () => false)!.map((f) => f.position)).toEqual(['DB', 'DL'])
+    // A detailed IDP position fills its slot through the slot rule; an empty slot type is thin.
+    expect(fragilePositions(['DL', 'DB'], new Map([['d', 'S' as const]]), () => 'DT', () => false)).toEqual([
+      { position: 'DB', starters: 1, healthy: 0, players: [] },
+      { position: 'DL', starters: 1, healthy: 1, players: ['d'] },
+    ])
+    // A fullback is running-back depth.
+    expect(fragilePositions(['RB'], new Map([['a', 'S' as const], ['b', 'B' as const]]), (id) => (id === 'a' ? 'RB' : 'FB'), () => false)).toEqual([])
   })
 
   it('topStack needs two from one club and breaks ties alphabetically', () => {
