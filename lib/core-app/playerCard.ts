@@ -4,7 +4,7 @@ import { prisma } from '@/lib/prisma'
 import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
 import { isWatched } from '@/lib/waiver-wire/watchlist-service'
 import { followKeyFor, isFollowingPlayer } from '@/lib/follows/playerFollows'
-import { currentListings, TRADE_BLOCK_ENTRY_SELECT, tradeBlockSupport } from '@/lib/trade-block/importedTradeBlock'
+import { currentListings, teamForRoster, TRADE_BLOCK_ENTRY_SELECT, tradeBlockSupport } from '@/lib/trade-block/importedTradeBlock'
 import { buildNextGameMap, type FixtureRow } from './nextGameMap'
 import { getRosteredMarket } from './rosteredMarket'
 import { latestProjectionWeek, lookupProjections } from './playerProjections'
@@ -1013,7 +1013,7 @@ async function loadLeague(
     prisma.leagueTeam
       .findMany({
         where: { leagueId },
-        select: { externalId: true, platformUserId: true, claimedByUserId: true, ownerName: true, teamName: true },
+        select: { id: true, externalId: true, platformUserId: true, claimedByUserId: true, ownerName: true, teamName: true },
       })
       .catch(() => []),
   ])
@@ -1025,17 +1025,18 @@ async function loadLeague(
    * is who actually holds whom.
    */
   let slot = 'NOT ROSTERED'
-  let holderKey: string | null = null
+  let holder: (typeof rosters)[number] | null = null
   if (sleeperId) {
     for (const r of rosters) {
       const found = slotOf((r.playerData ?? {}) as Record<string, unknown>, sleeperId)
       if (found) {
         slot = found
-        holderKey = r.platformUserId
+        holder = r
         break
       }
     }
   }
+  const holderKey = holder?.platformUserId ?? null
 
   /*
    * ⚠ THE SAME THREE-CANDIDATE PREDICATE EVERY OTHER OWNERSHIP READ HERE USES.
@@ -1049,9 +1050,12 @@ async function loadLeague(
   const yourIds = new Set(
     [yours?.platformUserId, yours?.externalId, userId].filter((x): x is string => Boolean(x))
   )
-  const team = holderKey
-    ? (teams.find((t) => t.platformUserId === holderKey || t.externalId === holderKey) ?? null)
-    : null
+  /*
+   * The holder's team, by the shared roster→team rule. Matching on the owner id alone named no team
+   * for a CLAIMED team's roster, which is keyed by the claimant's AllFantasy id (5 of 12 rosters in one
+   * production league, 2026-09-17).
+   */
+  const team = holder ? teamForRoster(holder, teams) : null
   const isYours = holderKey != null && yourIds.has(holderKey)
 
   // League-context price. `marketContextFor` lives in playerTradeVisual, which

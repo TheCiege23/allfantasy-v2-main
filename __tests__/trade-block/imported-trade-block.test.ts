@@ -37,6 +37,7 @@ import {
   readTradeBlock,
   setTradeBlock,
   sleeperRosterIdOf,
+  teamForRoster,
   tradeBlockListingFor,
   tradeBlockSupport,
   yourRoster,
@@ -54,6 +55,7 @@ const THEIR_ROSTER = {
   playerData: { players: ['10229', '6794'], starters: ['10229'], source_team_id: '7' },
 }
 const MY_TEAM = {
+  id: 'team-3',
   externalId: '3',
   platformUserId: '700000000000000001',
   claimedByUserId: 'u-me',
@@ -61,6 +63,7 @@ const MY_TEAM = {
   teamName: 'Ice Kings',
 }
 const THEIR_TEAM = {
+  id: 'team-7',
   externalId: '7',
   platformUserId: '700000000000000002',
   claimedByUserId: null,
@@ -136,6 +139,42 @@ describe('sleeperRosterIdOf', () => {
   })
 })
 
+/*
+ * 🛑 A CLAIMED team's roster is keyed by the claimant's AllFantasy id, not the Sleeper owner id —
+ * measured on production 2026-09-17, where owner-id matching named no team for 5 of 12 rosters.
+ */
+describe('teamForRoster', () => {
+  const claimedRoster = { platformUserId: 'u-me', playerData: { players: ['9221'] } }
+
+  it('names a claimed team whose roster is keyed by the claimant', () => {
+    const t = teamForRoster(claimedRoster, [THEIR_TEAM, { ...MY_TEAM, platformUserId: '700000000000000001' }])
+    expect(t?.teamName).toBe('Ice Kings')
+  })
+
+  it('matches the Sleeper roster id first, as a number or a string', () => {
+    const numeric = { platformUserId: 'someone-else', playerData: { source_team_id: 7 } }
+    const text = { platformUserId: 'someone-else', playerData: { source_team_id: '7' } }
+    expect(teamForRoster(numeric, [MY_TEAM, THEIR_TEAM])?.teamName).toBe('Gridiron Vultures')
+    expect(teamForRoster(text, [MY_TEAM, THEIR_TEAM])?.teamName).toBe('Gridiron Vultures')
+    // The roster id wins over an owner id that points at another team.
+    const conflicting = { platformUserId: MY_TEAM.platformUserId, playerData: { source_team_id: '7' } }
+    expect(teamForRoster(conflicting, [MY_TEAM, THEIR_TEAM])?.teamName).toBe('Gridiron Vultures')
+  })
+
+  it('falls back to the owner id, then to a roster keyed by the team external id', () => {
+    expect(teamForRoster({ platformUserId: '700000000000000002', playerData: {} }, [MY_TEAM, THEIR_TEAM])?.teamName).toBe(
+      'Gridiron Vultures',
+    )
+    expect(teamForRoster({ platformUserId: '7', playerData: {} }, [MY_TEAM, { ...THEIR_TEAM, platformUserId: null }])?.teamName).toBe(
+      'Gridiron Vultures',
+    )
+  })
+
+  it('is null when nothing matches', () => {
+    expect(teamForRoster({ platformUserId: 'nobody', playerData: {} }, [MY_TEAM, THEIR_TEAM])).toBeNull()
+  })
+})
+
 describe('yourRoster', () => {
   it('is the roster of the team you claimed', () => {
     expect(yourRoster('u-me', [THEIR_ROSTER, MY_ROSTER], [THEIR_TEAM, MY_TEAM])?.roster).toBe(MY_ROSTER)
@@ -174,6 +213,12 @@ describe('currentListings', () => {
     const traded = { ...THEIR_ROSTER, playerData: { players: ['6794'], source_team_id: 7 } }
     const mine = { ...MY_ROSTER, playerData: { ...MY_ROSTER.playerData, players: ['4046', '9221', '10229'] } }
     expect(currentListings([entry()], [mine, traded], [MY_TEAM, THEIR_TEAM])).toEqual([])
+  })
+
+  it('names the listing team for a claimed roster keyed by the claimant', () => {
+    const claimed = { platformUserId: 'u-them', playerData: { players: ['10229'], source_team_id: '7' } }
+    const out = currentListings([entry()], [MY_ROSTER, claimed], [MY_TEAM, { ...THEIR_TEAM, claimedByUserId: 'u-them' }])
+    expect(out.map((l) => l.teamName)).toEqual(['Gridiron Vultures'])
   })
 
   it('drops a listing whose roster id matches no roster', () => {
@@ -326,6 +371,19 @@ describe('setTradeBlock', () => {
       'timeout',
     )
     expect(entryUpsert).not.toHaveBeenCalled()
+  })
+
+  /* 🛑 Production holds full club names for some rows; the column is 8 characters. */
+  it('stores the club CODE, never a truncated club name', async () => {
+    playerFindFirst.mockResolvedValue({ name: 'Tre Tucker', position: 'WR', team: 'Las Vegas Raiders' })
+    await setTradeBlock({ leagueId: 'lg-1', userId: 'u-me', sleeperId: '9221', onBlock: true })
+    expect(entryUpsert.mock.calls[0][0].create).toMatchObject({ playerName: 'Tre Tucker', team: 'LV' })
+  })
+
+  it('leaves the club out when it still does not fit', async () => {
+    playerFindFirst.mockResolvedValue({ name: 'Someone', position: 'WR', team: 'Some Long Unknown Club' })
+    await setTradeBlock({ leagueId: 'lg-1', userId: 'u-me', sleeperId: '9221', onBlock: true })
+    expect(entryUpsert.mock.calls[0][0].create).toMatchObject({ team: null })
   })
 
   it('an unknown player still lists under a placeholder name, never a client-supplied one', async () => {

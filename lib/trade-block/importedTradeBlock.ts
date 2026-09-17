@@ -1,6 +1,8 @@
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
+import { matchTeamIdForRoster } from '@/lib/decision-os/world/assemble'
+import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
 
 /**
  * The trade block for an IMPORTED Sleeper league — the players its managers have marked, in
@@ -9,9 +11,9 @@ import { prisma } from '@/lib/prisma'
  * ── 🛑 SLEEPER DOES NOT SHARE ITS OWN TRADE BLOCK ─────────────────────────────────────────────
  * Measured 2026-09-17 (user-approved capture of one league's public rosters): no field in Sleeper's
  * public roster payload carries the block, and the only other route — its GraphQL API — needs a
- * user's login token, which this app must not hold. So Chimmy could not see that Rashee Rice was on
- * the block in Draft Junkies, and nothing here can. User decision, same day: say so plainly, and let
- * managers mark their OWN players here instead.
+ * user's login token, which this app must not hold. So Chimmy cannot see a Sleeper league's own
+ * block, and nothing here can. User decision, same day: say so plainly, and let managers mark their
+ * OWN players here instead.
  *
  * Stored in the existing `TradeBlockEntry` table (`trade_block_entries`), which is keyed exactly the
  * way a Sleeper league is: the Sleeper league id, the Sleeper integer roster id, the Sleeper player
@@ -60,6 +62,7 @@ export function tradeBlockSupport(platform: string | null | undefined): TradeBlo
 
 type RosterRow = { platformUserId: string; playerData: unknown }
 type TeamRow = {
+  id: string
   externalId: string
   platformUserId: string | null
   claimedByUserId: string | null
@@ -111,12 +114,26 @@ export function sleeperRosterIdOf(roster: RosterRow, team: TeamRow | null): numb
   return fromRoster ?? asRosterId(team?.externalId)
 }
 
-function teamForRoster(roster: RosterRow, teams: TeamRow[]): TeamRow | null {
-  return (
-    teams.find((t) => t.platformUserId === roster.platformUserId) ??
-    teams.find((t) => t.externalId === roster.platformUserId) ??
-    null
-  )
+/*
+ * The team row for a roster, by the shared rule (`matchTeamIdForRoster`): the Sleeper roster id, then
+ * the owner id, then the claimant. Exported because the player card names a holder's team the same way.
+ *
+ * ⚠ A CLAIMED TEAM'S ROSTER IS KEYED BY THE CLAIMANT'S ALLFANTASY ID, not the Sleeper owner id.
+ * Measured 2026-09-17 on production: matching by owner id alone found no team for 5 of Draft Junkies'
+ * 12 rosters, the league owner's among them, so a listing from that team read "listed by <username>"
+ * with no team name.
+ *
+ * The roster id is compared as a NUMBER first: the shared rule reads `source_team_id` only when it is
+ * a string.
+ */
+export function teamForRoster<T extends TeamRow>(roster: RosterRow, teams: T[]): T | null {
+  const rosterId = sleeperRosterIdOf(roster, null)
+  const bySource = rosterId == null ? undefined : teams.find((t) => asRosterId(t.externalId) === rosterId)
+  if (bySource) return bySource
+  const id = matchTeamIdForRoster(roster, teams)
+  const byRule = id ? teams.find((t) => t.id === id) : undefined
+  // The earlier fallback, kept: an import that keyed a roster by its team's external id.
+  return byRule ?? teams.find((t) => t.externalId === roster.platformUserId) ?? null
 }
 
 /** The roster you manage in this league — the claimed-team rule every /core ownership read uses. */
@@ -198,7 +215,7 @@ async function loadLeague(leagueId: string) {
     prisma.roster.findMany({ where: { leagueId }, select: { platformUserId: true, playerData: true } }),
     prisma.leagueTeam.findMany({
       where: { leagueId },
-      select: { externalId: true, platformUserId: true, claimedByUserId: true, ownerName: true, teamName: true },
+      select: { id: true, externalId: true, platformUserId: true, claimedByUserId: true, ownerName: true, teamName: true },
     }),
   ])
   return { league, rosters: rosters as RosterRow[], teams: teams as TeamRow[] }
@@ -303,11 +320,17 @@ export async function setTradeBlock(args: {
     })
     .catch(() => null)
 
+  /*
+   * ⚠ `SportsPlayer.team` IS NOT ALWAYS AN ABBREVIATION — production holds "Las Vegas Raiders" for some
+   * rows (2026-09-17), and the column is 8 characters, so a plain slice stored "Las Vega". Folded to the
+   * club code; anything that still does not fit is left out rather than cut.
+   */
+  const club = normalizeTeamAbbrev(player?.team)
   const snapshot = {
     rosterId,
     playerName: (player?.name ?? `Player ${args.sleeperId}`).slice(0, 128),
     position: player?.position?.slice(0, 16) ?? null,
-    team: player?.team?.slice(0, 8) ?? null,
+    team: club && club.length <= 8 ? club : null,
     createdByUsername: (mine.team.ownerName ?? mine.team.teamName ?? 'manager').slice(0, 64),
     isActive: true,
   }
