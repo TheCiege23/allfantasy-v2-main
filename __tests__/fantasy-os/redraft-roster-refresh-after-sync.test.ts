@@ -89,7 +89,13 @@ const counts = { playersDropped: 2, playersCreated: 1, playersRepaired: 0 }
 
 /** Discovery double: the leagues whose redraft rows disagree with their rosters. */
 const needs = (...entries: Array<[string, number, number?]>) => async () =>
-  entries.map(([leagueId, stale, missing = 0]) => ({ leagueId, stale, missing }))
+  entries.map(([leagueId, stale, missing = 0]) => ({ leagueId, stale, missing, unlinked: 0 }))
+
+/** Discovery double including the third reason a league is listed: a roster with no redraft link. */
+const needsWithUnlinked =
+  (...entries: Array<{ leagueId: string; stale?: number; missing?: number; unlinked?: number }>) =>
+  async () =>
+    entries.map((e) => ({ stale: 0, missing: 0, unlinked: 0, ...e }))
 
 describe('the post-sync refresh works on leagues that need it', () => {
   /*
@@ -226,5 +232,88 @@ describe('the post-sync refresh works on leagues that need it', () => {
     })
     expect(materialize).not.toHaveBeenCalled()
     expect(out).toMatchObject({ changedLeagues: 1, needingWork: 0, skippedClean: 1, refreshed: 0, deferred: 0 })
+  })
+})
+
+/*
+ * 🛑 THE DISCOVERY GAP, MEASURED IN PRODUCTION 2026-09-18. Both counts above read rosters that are
+ * ALREADY linked to a redraft roster, so a roster with no link cannot put its league on the list —
+ * and the linking (#1018) only happens inside the materializer, which only runs on a listed league.
+ * 256 unlinked imported rosters across 35 leagues sat in that circle, 183 of them the orphan
+ * rosters #1005 restored; in the hour after #1018 deployed only the 24 that happened to have stale
+ * rows as well were reached.
+ */
+describe('a roster with no redraft link puts its league on the list', () => {
+  it('materializes a league listed ONLY because a roster there has no link', async () => {
+    const materialize = vi.fn(async (_leagueId: string) => counts)
+    const out = await refreshRedraftRosterPlayersAfterSync({
+      results: [{ rosterChangedLeagueIds: [] }],
+      maxLeagues: 10,
+      budgetMs: 60_000,
+      materialize,
+      findLeaguesNeedingWork: needsWithUnlinked({ leagueId: 'orphans', unlinked: 5 }),
+    })
+    expect(materialize.mock.calls.map(([id]) => id)).toEqual(['orphans'])
+    expect(out).toMatchObject({ needingWork: 1, carriedOver: 1, unlinkedOnly: 1, refreshed: 1 })
+  })
+
+  it('🛑 rows to repair go first, and a link-only league still gets the next slot', async () => {
+    // Not a tie-break for its own sake: until a link-only league is materialized ONCE, nothing
+    // else will ever list it, so it must not sit behind every league that merely drifts.
+    const materialize = vi.fn(async (_leagueId: string) => counts)
+    const out = await refreshRedraftRosterPlayersAfterSync({
+      results: [{ rosterChangedLeagueIds: [] }],
+      maxLeagues: 10,
+      budgetMs: 60_000,
+      materialize,
+      findLeaguesNeedingWork: needsWithUnlinked(
+        { leagueId: 'linkOnly', unlinked: 9 },
+        { leagueId: 'rows', stale: 2, missing: 1 },
+      ),
+    })
+    expect(materialize.mock.calls.map(([id]) => id)).toEqual(['rows', 'linkOnly'])
+    expect(out.unlinkedOnly).toBe(1)
+  })
+
+  it('🛑 among leagues with no rows to repair, the most unlinked rosters goes first', async () => {
+    const materialize = vi.fn(async (_leagueId: string) => counts)
+    await refreshRedraftRosterPlayersAfterSync({
+      results: [{ rosterChangedLeagueIds: [] }],
+      maxLeagues: 10,
+      budgetMs: 60_000,
+      materialize,
+      findLeaguesNeedingWork: needsWithUnlinked(
+        { leagueId: 'few', unlinked: 1 },
+        { leagueId: 'many', unlinked: 12 },
+      ),
+    })
+    expect(materialize.mock.calls.map(([id]) => id)).toEqual(['many', 'few'])
+  })
+
+  it('🛑 a league with rows to repair AND unlinked rosters is not counted as link-only', async () => {
+    // The count answers "what would this pass have missed before?", so a league the old selector
+    // already found must not inflate it.
+    const materialize = vi.fn(async (_leagueId: string) => counts)
+    const out = await refreshRedraftRosterPlayersAfterSync({
+      results: [{ rosterChangedLeagueIds: [] }],
+      maxLeagues: 10,
+      budgetMs: 60_000,
+      materialize,
+      findLeaguesNeedingWork: needsWithUnlinked({ leagueId: 'both', stale: 4, unlinked: 3 }),
+    })
+    expect(out).toMatchObject({ needingWork: 1, unlinkedOnly: 0, refreshed: 1 })
+  })
+
+  it('🛑 a league that changed this run and is listed only for a link is NOT skipped as clean', async () => {
+    const materialize = vi.fn(async (_leagueId: string) => counts)
+    const out = await refreshRedraftRosterPlayersAfterSync({
+      results: [{ rosterChangedLeagueIds: ['changed'] }],
+      maxLeagues: 10,
+      budgetMs: 60_000,
+      materialize,
+      findLeaguesNeedingWork: needsWithUnlinked({ leagueId: 'changed', unlinked: 2 }),
+    })
+    expect(materialize.mock.calls.map(([id]) => id)).toEqual(['changed'])
+    expect(out).toMatchObject({ skippedClean: 0, carriedOver: 0, unlinkedOnly: 1, refreshed: 1 })
   })
 })
