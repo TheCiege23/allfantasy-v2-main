@@ -289,10 +289,25 @@ export function deriveOutstandingIssues(input: {
   return {
     issues,
     detectorsAvailable: ['stale_sync', 'draft_upcoming'],
+    /*
+     * ⚠ "UNAVAILABLE" MEANS THIS FUNCTION CANNOT FIRE IT — NOT THAT THE FACT IS UNKNOWN.
+     * Two of these reasons were written when that was the same thing and are no longer true of
+     * the product, only of this function, so they now say which module does hold the fact:
+     *   - empty slots reach the home through `mergeDash34Issues` from `getDash34Data`'s
+     *     `emptyStarters`, which reads the stored lineup;
+     *   - pending provider offers are read by `lib/provider-trades/scanPendingSleeperTrades.ts`
+     *     (and its Yahoo sibling), which `lib/core-app/recentTrades.ts` already runs on the home.
+     * Correcting the words rather than the classification on purpose: a reader who believes
+     * "pending offers are not ingested" goes and builds the ingestion a second time.
+     *
+     * ⚠ AND NOTHING READS EITHER LIST. `detectorsAvailable` / `detectorsUnavailable` have no
+     * consumer in `app/`, `components/` or `lib/` — they are documentation that happens to be
+     * typed. Worth knowing before trusting them as a coverage report anywhere.
+     */
     detectorsUnavailable: [
-      { detector: 'empty_lineup_slot', reason: 'no lineup reader for imported leagues yet' },
+      { detector: 'empty_lineup_slot', reason: 'not here — merged in from getDash34Data emptyStarters' },
       { detector: 'ir_blocked_player', reason: 'roster slot state is not ingested' },
-      { detector: 'trade_offer', reason: 'pending offers are not ingested' },
+      { detector: 'trade_offer', reason: 'not here — scanned by lib/provider-trades, surfaced on the Trades screen' },
       { detector: 'waiver_claim', reason: 'claim state is not ingested' },
       { detector: 'bye_week_hole', reason: 'requires per-slot projections' },
       { detector: 'commissioner_vote', reason: 'votes are not ingested for imported leagues' },
