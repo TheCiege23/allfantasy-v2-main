@@ -1,6 +1,7 @@
 import type { PrismaClient } from '@prisma/client'
 
 import { findMyRoster, rosterPlayerIds } from '@/lib/core-app/myRoster'
+import { resolveRostersForTeams } from '@/lib/leagues/rosterTeamIdentity'
 import { hasIdpScoring, isIdpPosition } from '@/lib/core-app/scoringNotes'
 
 import { loadActualWeeklyPoints, type ActualWeekOutcome } from './actualWeeklyPoints'
@@ -178,29 +179,33 @@ export async function loadIdpMatchup(args: LoadIdpMatchupArgs): Promise<IdpMatch
   const teams = await args.prisma.leagueTeam
     .findMany({
       where: { leagueId: league.id, externalId: { in: [myTeam.externalId, oppRosterId] } },
-      select: { externalId: true, teamName: true, platformUserId: true },
+      select: { externalId: true, teamName: true, platformUserId: true, claimedByUserId: true },
     })
     .catch(() => [])
   const teamByExternal = new Map(teams.map((t) => [t.externalId ?? '', t]))
 
   const rosters = await args.prisma.roster
-    .findMany({ where: { leagueId: league.id }, select: { platformUserId: true, playerData: true } })
-    .catch(() => [] as Array<{ platformUserId: string | null; playerData: unknown }>)
-  const rosterByOwner = new Map(rosters.map((r) => [r.platformUserId ?? '', r.playerData]))
+    .findMany({ where: { leagueId: league.id }, select: { id: true, platformUserId: true, playerData: true } })
+    .catch(() => [] as Array<{ id: string; platformUserId: string | null; playerData: unknown }>)
 
   /*
    * Roster lookup for the OPPONENT cannot use the claimed-user candidate — that id belongs to
    * the caller. Their roster joins on the platform user id or the roster id, both of which the
    * team row carries.
+   *
+   * 🛑 AND SINCE #1005 NEITHER KEY MAY EXIST. A managerless team's roster is stored under
+   * `orphan-<provider>-<teamId>`, which is nobody's manager id, so both keys above miss and the
+   * scoreboard printed the official score with ZERO players beneath it — "priced 0 of 0 rostered
+   * players", as though nothing had been ingested. Production 2026-09-17: 15 such teams across 6
+   * IDP leagues, every one of them a league somebody has claimed a team in.
+   *
+   * `resolveRostersForTeams` owns the rule (provider team id, then manager id, then these keys),
+   * and the read above already fetches the whole league, so this costs no extra query.
    */
+  const rosterByTeam = resolveRostersForTeams(teams, rosters, (t) => [t.platformUserId, t.externalId])
   const idsFor = (rosterId: string): string[] => {
-    const t = teamByExternal.get(rosterId)
-    for (const key of [t?.platformUserId, rosterId]) {
-      if (!key) continue
-      const data = rosterByOwner.get(key)
-      if (data) return rosterPlayerIds(data)
-    }
-    return []
+    const row = rosterByTeam.get(rosterId)
+    return row ? rosterPlayerIds(row.playerData) : []
   }
 
   /*
