@@ -2,6 +2,7 @@ import 'server-only'
 
 import { prisma } from '@/lib/prisma'
 import { rosterSourceTeamId } from '@/lib/league-import/importedRosterIdentity'
+import { isStrandedRedraftOwnerId, liveTeamOwnerKeys } from '@/lib/redraft/redraftRosterIdentity'
 
 /**
  * Keep `Roster.redraftRosterId` populated.
@@ -58,6 +59,12 @@ export interface ReconcileResult {
   unlinked: number
   /** Rosters already linked before this run — reported so a no-op is distinguishable from a miss. */
   alreadyLinked: number
+  /**
+   * Of those linked, the ones whose redraft roster had to be re-keyed first because it answered to
+   * a manager the league no longer has. Counted separately because it is the only write this
+   * function makes to `RedraftRoster`.
+   */
+  strandedRekeyed: number
 }
 
 /**
@@ -73,12 +80,12 @@ export async function reconcileRosterRedraftLinks(leagueId: string): Promise<Rec
     where: { leagueId },
     select: { id: true, platformUserId: true, redraftRosterId: true },
   })
-  if (rosters.length === 0) return { linked: 0, unlinked: 0, alreadyLinked: 0 }
+  if (rosters.length === 0) return { linked: 0, unlinked: 0, alreadyLinked: 0, strandedRekeyed: 0 }
 
   const alreadyLinked = rosters.filter((r) => r.redraftRosterId != null).length
   const unlinkedRosters = rosters.filter((r) => r.redraftRosterId == null)
   if (unlinkedRosters.length === 0) {
-    return { linked: 0, unlinked: 0, alreadyLinked }
+    return { linked: 0, unlinked: 0, alreadyLinked, strandedRekeyed: 0 }
   }
 
   const needing = unlinkedRosters.filter((r) => r.platformUserId)
@@ -108,6 +115,7 @@ export async function reconcileRosterRedraftLinks(leagueId: string): Promise<Rec
   )
 
   let linked = 0
+  let strandedRekeyed = 0
   const linkedNow = new Set<string>()
   for (const r of needing) {
     const target = byOwner.get(r.platformUserId)
@@ -224,7 +232,115 @@ export async function reconcileRosterRedraftLinks(leagueId: string): Promise<Rec
     }
   }
 
-  return { linked, unlinked: rosters.length - alreadyLinked - linked, alreadyLinked }
+  /*
+   * ── THE STRANDED CANDIDATE: A REDRAFT ROSTER KEYED TO SOMEBODY THE LEAGUE NO LONGER HAS ─────
+   *
+   * 🛑 EVERY STAGE ABOVE MATCHES A KEY. This one exists because the key on the redraft side can be
+   * WRONG rather than missing: `RedraftRoster.ownerId` is written once, when the season is
+   * materialized, and nothing re-keys it when a team changes manager. The row then answers to a
+   * manager who is gone, no stage above can name it, and the team keeps an empty redraft roster —
+   * the same dead end orphan teams had before the stage above, reached from the other direction.
+   *
+   * Measured in production 2026-09-18, after the refresh pass began reaching these leagues (#1030):
+   * 3,995 redraft rosters in imported leagues, 12 free, and 6 of those 12 keyed to nobody the league
+   * has. All 6 sit in leagues with exactly ONE unlinked roster and exactly ONE free candidate, and
+   * NONE of those candidates is owned by a key some other team in the league currently carries.
+   *
+   * ⚠ IT RE-KEYS THE ROW RATHER THAN LINKING AROUND IT. Linking alone would leave `ownerId` naming
+   * somebody who is not there, and roughly forty readers resolve a viewer's roster by that key — so
+   * the team would be linked and still unreachable by its own manager. The two writes go together
+   * or not at all.
+   *
+   * 🛑 AND IT REFUSES FAR MORE THAN IT ACTS. Strandedness is evidence of ABSENCE — it says the key
+   * belongs to nobody here, never that this particular team is who it used to belong to. So the
+   * league must leave no room for doubt: ONE roster still unplaced, ONE stranded free candidate.
+   * Two of either is a question this function cannot answer, and it leaves both NULL.
+   */
+  const afterTeamStage = unlinkedRosters.filter((r) => !linkedNow.has(r.id))
+  if (afterTeamStage.length === 1) {
+    const rekeyed = await linkStrandedCandidate({ leagueId, roster: afterTeamStage[0], taken })
+    if (rekeyed) {
+      linkedNow.add(afterTeamStage[0].id)
+      linked += 1
+      strandedRekeyed += 1
+    }
+  }
+
+  return {
+    linked,
+    unlinked: rosters.length - alreadyLinked - linked,
+    alreadyLinked,
+    strandedRekeyed,
+  }
+}
+
+/**
+ * The one case above, kept out of the main flow because it is the only stage that WRITES to
+ * `RedraftRoster`. Returns true when a link was made; every refusal returns false and writes
+ * nothing.
+ */
+async function linkStrandedCandidate(args: {
+  leagueId: string
+  roster: { id: string }
+  taken: Set<string>
+}): Promise<boolean> {
+  const { leagueId, taken } = args
+
+  const row = await prisma.roster.findUnique({
+    where: { id: args.roster.id },
+    select: { playerData: true },
+  })
+  const externalId = rosterSourceTeamId(row?.playerData)
+  if (!externalId) return false
+
+  /*
+   * EVERY team in the league, not just this one: the live-key set is what decides whether a
+   * candidate is stranded, and a partial set would report a present manager as absent.
+   */
+  const teams = await prisma.leagueTeam.findMany({
+    where: { leagueId },
+    select: { id: true, externalId: true, platformUserId: true, claimedByUserId: true },
+  })
+  const team = teams.find((t) => t.externalId === externalId)
+  if (!team) return false
+
+  const newOwnerId = String(team.platformUserId ?? team.id).trim()
+  if (!newOwnerId) return false
+
+  const liveKeys = liveTeamOwnerKeys(teams)
+  const free = (
+    await prisma.redraftRoster.findMany({
+      where: { leagueId },
+      select: { id: true, seasonId: true, ownerId: true },
+    })
+  ).filter((c) => !taken.has(c.id) && isStrandedRedraftOwnerId(c.ownerId, liveKeys))
+  if (free.length !== 1) return false
+
+  const [candidate] = free
+
+  /*
+   * ⚠ `taken` only knows about rosters in THIS league. A claim from anywhere would still break the
+   * UNIQUE on `Roster.redraftRosterId`, so ask the table rather than the set before writing.
+   */
+  const claimedElsewhere = await prisma.roster.findFirst({
+    where: { redraftRosterId: candidate.id },
+    select: { id: true },
+  })
+  if (claimedElsewhere) return false
+
+  // UNIQUE (seasonId, ownerId): a season that already answers to this key is not ours to overwrite.
+  const keyInUse = await prisma.redraftRoster.findFirst({
+    where: { seasonId: candidate.seasonId, ownerId: newOwnerId, NOT: { id: candidate.id } },
+    select: { id: true },
+  })
+  if (keyInUse) return false
+
+  await prisma.$transaction([
+    prisma.redraftRoster.update({ where: { id: candidate.id }, data: { ownerId: newOwnerId } }),
+    prisma.roster.update({ where: { id: args.roster.id }, data: { redraftRosterId: candidate.id } }),
+  ])
+  taken.add(candidate.id)
+  return true
 }
 
 /** The platform manager id an import recorded for this roster, or null when there is none to trust. */
