@@ -10,6 +10,20 @@ import { matchesLiveGameQuery } from '@/lib/live/liveGameSearch'
 import { groupStartersByPlayer, pointsSummary, type StarterGroup } from '@/lib/live/liveTieInGroups'
 import { buildLockAlerts, type LiveLockAlert } from '@/lib/live/lockAlerts'
 import {
+  connectionDetail,
+  connectionLabel,
+  isConnectionFault,
+  resolveConnectionState,
+} from '@/lib/live/connectionState'
+import { useOnlineStatus } from '@/lib/live/useOnlineStatus'
+import { LOW_DATA_POLL_MULTIPLIER } from '@/lib/live/lowDataMode'
+import {
+  LowDataProvider,
+  LowDataToggle,
+  useLowData,
+  useLowDataController,
+} from '@/components/live/LowDataProvider'
+import {
   basketballPeriodLabel,
   isBasketballSport,
   type BaseballPlayer,
@@ -97,6 +111,21 @@ export function LiveScores({ data: initial, selectedLeagueId = null }: LiveScore
   const [sport, setSport] = useState(initial.sport)
   const [now, setNow] = useState<number | null>(null)
   const [refreshing, setRefreshing] = useState(false)
+  /*
+   * ⚠ A FAILED POLL WAS SWALLOWED ENTIRELY BEFORE THIS. Leaving the last good
+   * data on screen was right; saying nothing about it was not, because a browser
+   * that had lost the network kept displaying "Live" over numbers that had
+   * stopped moving.
+   */
+  const [consecutiveFailures, setConsecutiveFailures] = useState(0)
+  const online = useOnlineStatus()
+  const { decision: lowData, setOverride: setLowData } = useLowDataController()
+  /*
+   * ⚠ THIS COMPONENT RENDERS THE PROVIDER, SO IT IS ABOVE ITS OWN CONTEXT AND
+   * `useLowData()` here would read the default, not the decision. Every DESCENDANT
+   * reads the context; only this one aliases the controller's own answer.
+   */
+  const lowDataOn = lowData.lowData
   const [query, setQuery] = useState('')
   // Guards against a slow response for an old sport landing after a new one.
   const seqRef = useRef(0)
@@ -132,8 +161,17 @@ export function LiveScores({ data: initial, selectedLeagueId = null }: LiveScore
        * 304 would fall into the failure path and be indistinguishable from an
        * outage.
        */
-      if (res.status === 304) return
-      if (!res.ok) return
+      if (res.status === 304) {
+        // ⚠ A 304 IS A LANDING, NOT A MISS -- the server answered, it just had
+        // nothing new. Counting it as a failure would show "Reconnecting" on the
+        // quietest and healthiest slate of the week.
+        setConsecutiveFailures(0)
+        return
+      }
+      if (!res.ok) {
+        setConsecutiveFailures((n) => n + 1)
+        return
+      }
       const json = (await res.json()) as LivePageData
       // A stale response must never overwrite a newer one.
       if (seq !== seqRef.current) return
@@ -150,13 +188,15 @@ export function LiveScores({ data: initial, selectedLeagueId = null }: LiveScore
       etagRef.current = tag
       setData(json)
       setNow(Date.now())
+      setConsecutiveFailures(0)
     } catch {
       /*
        * A failed poll leaves the last good data on screen and the age label
        * keeps climbing. That is the honest signal — the numbers are getting
        * older and you can see it — where a silent retry would let them rot
-       * behind a "just now".
+       * behind a "just now". The badge now names it as well as showing it.
        */
+      setConsecutiveFailures((n) => n + 1)
     } finally {
       if (seq === seqRef.current) setRefreshing(false)
     }
@@ -167,6 +207,15 @@ export function LiveScores({ data: initial, selectedLeagueId = null }: LiveScore
     [data.games, selectedLeagueId],
   )
   const anyLive = scopedGames.some((g) => g.isLive)
+  /*
+   * ⚠ THE CADENCE IS THE LARGEST SAVING HERE AND THE ONLY ONE THAT COMPOUNDS.
+   * Images are paid once per player; the poll is paid every 20 seconds for as
+   * long as the tab is open. `resolveConnectionState` derives its staleness bar
+   * from this same number, so a slower cadence widens that bar rather than
+   * reporting the feed as delayed for doing exactly what it was told.
+   */
+  const pollIntervalMs =
+    (anyLive ? LIVE_POLL_MS : IDLE_POLL_MS) * (lowData.lowData ? LOW_DATA_POLL_MULTIPLIER : 1)
   const visibleGames = useMemo(
     () => scopedGames.filter((game) => matchesLiveGameQuery(game, query)),
     [scopedGames, query],
@@ -193,9 +242,16 @@ export function LiveScores({ data: initial, selectedLeagueId = null }: LiveScore
   )
 
   useEffect(() => {
-    const id = window.setInterval(() => void load(sport, scope), anyLive ? LIVE_POLL_MS : IDLE_POLL_MS)
+    const id = window.setInterval(() => void load(sport, scope), pollIntervalMs)
     return () => window.clearInterval(id)
-  }, [load, sport, scope, anyLive])
+    /*
+     * ⚠ `pollIntervalMs` REPLACES `anyLive` IN THE DEPS, AND IT HAS TO. It is
+     * derived from `anyLive`, so nothing is lost -- but it also moves when
+     * low-data mode is toggled, and depending on `anyLive` alone would leave the
+     * old interval armed. The reader would turn the mode on and keep polling
+     * every 20 seconds, which is the one thing they asked not to happen.
+     */
+  }, [load, sport, scope, pollIntervalMs])
 
   useEffect(() => {
     setNow(Date.now())
@@ -228,6 +284,20 @@ export function LiveScores({ data: initial, selectedLeagueId = null }: LiveScore
     return Math.max(0, Math.round((now - at) / 1000))
   }, [data.fetchedAt, now])
 
+  /*
+   * ⚠ RESOLVED ONCE SO THE BADGE AND THE NOTICE CANNOT DISAGREE. Deriving
+   * "are we connected" separately in two places is two chances to drift, and the
+   * visible failure would be a badge reading Reconnecting above a page with no
+   * notice, or the reverse.
+   */
+  const connection = resolveConnectionState({
+    online,
+    consecutiveFailures,
+    anyLive,
+    ageSeconds,
+    pollIntervalMs,
+  })
+
   const activeSportLabel =
     data.counts.find((c) => c.sport === data.sport)?.label ?? data.sport
 
@@ -255,7 +325,19 @@ export function LiveScores({ data: initial, selectedLeagueId = null }: LiveScore
   }, [data.impact.plays])
 
   return (
-    <div className="af-live" data-league-scoped={selectedLeagueId ? 'true' : undefined}>
+    <LowDataProvider decision={lowData}>
+    {/*
+      ⚠ `data-low-data` IS THE ANIMATION HALF ONLY. Suppressing an image has to
+      happen in JSX -- a `display:none` rule still downloads the file, which saves
+      the reader nothing and is the easy way to ship a low-data mode that is not
+      one. CSS can only turn off motion, which costs no bytes but does cost battery
+      and makes a struggling connection feel worse.
+    */}
+    <div
+      className="af-live"
+      data-league-scoped={selectedLeagueId ? 'true' : undefined}
+      data-low-data={lowData.lowData ? 'true' : undefined}
+    >
       <header className="af-live-head">
         <p className="af-label af-live-eyebrow">Core · Live</p>
         <h1 className="af-display af-live-title">Live Scores</h1>
@@ -303,9 +385,27 @@ export function LiveScores({ data: initial, selectedLeagueId = null }: LiveScore
             />
           </label>
 
-          <span className="af-live-freshness" data-live={anyLive} aria-live="polite">
-            {anyLive ? <span className="af-live-pulse" aria-hidden /> : null}
-            {anyLive ? 'Live' : 'Idle'}
+          {/*
+            ⚠ `data-state` CARRIES THE TONE, `data-live` STAYS FOR THE PULSE.
+            Amber for a fault, red only for a genuinely live slate: red is this
+            screen's live-broadcast convention, so painting "Reconnecting" red
+            would read as a game kicking off.
+          */}
+          <LowDataToggle
+            decision={lowData}
+            onChange={setLowData}
+            className="af-live-lowdata-toggle"
+          />
+
+          <span
+            className="af-live-freshness"
+            data-live={connection === 'live'}
+            data-state={connection}
+            aria-live={isConnectionFault(connection) ? 'assertive' : 'polite'}
+            title={connectionDetail(connection) ?? undefined}
+          >
+            {connection === 'live' ? <span className="af-live-pulse" aria-hidden /> : null}
+            {connectionLabel(connection)}
             {ageSeconds != null ? <span> · updated {formatAge(ageSeconds)} ago</span> : null}
             {refreshing ? <span className="af-live-refreshing" aria-hidden> ·</span> : null}
           </span>
@@ -367,6 +467,12 @@ export function LiveScores({ data: initial, selectedLeagueId = null }: LiveScore
              tab points at; -1 keeps it out of the sequential tab order. */
           tabIndex={-1}
         >
+          {connectionDetail(connection) ? (
+            <p className="af-live-connection" role="status">
+              {connectionDetail(connection)}
+            </p>
+          ) : null}
+
           <LockWarning alerts={lockAlerts} now={now} />
 
           <h2 className="af-label af-live-slate-head">
@@ -467,8 +573,7 @@ export function LiveScores({ data: initial, selectedLeagueId = null }: LiveScore
                   sleeperId={null}
                   name={data.impact.biggestMover.playerName}
                   avatarUrl={data.impact.biggestMover.imageUrl}
-                  size={34}
-                />
+                  size={34} suppress={lowDataOn} />
                 <div className="af-live-mover-text">
                   <span className="af-live-mover-name">{data.impact.biggestMover.playerName}</span>
                   <span className="af-live-mover-line">{data.impact.biggestMover.headline}</span>
@@ -502,8 +607,7 @@ export function LiveScores({ data: initial, selectedLeagueId = null }: LiveScore
                       sleeperId={p.sleeperId}
                       name={p.playerName}
                       avatarUrl={p.imageUrl}
-                      size={28}
-                    />
+                      size={28} suppress={lowDataOn} />
                     <span className="af-live-play-text">
                       <span className="af-live-play-head">
                         <span className="af-live-play-type af-num" data-tone={playTone(p.type)}>
@@ -516,7 +620,7 @@ export function LiveScores({ data: initial, selectedLeagueId = null }: LiveScore
                           null unless a team was actually resolved, so this
                           never renders a badge for a guessed abbreviation.
                         */}
-                        {p.teamLogoUrl ? (
+                        {!lowDataOn && p.teamLogoUrl ? (
                           // eslint-disable-next-line @next/next/no-img-element
                           <img
                             className="af-live-play-logo"
@@ -579,6 +683,7 @@ export function LiveScores({ data: initial, selectedLeagueId = null }: LiveScore
         </aside>
       </div>
     </div>
+    </LowDataProvider>
   )
 }
 
@@ -623,6 +728,7 @@ export function GameCard({
    */
   lastPlay: LivePageData['impact']['plays'][number] | null
 }) {
+  const lowDataOn = useLowData().lowData
   const wp = game.winProbability
   const weekLabel = game.week != null ? `${game.sport} · Week ${game.week}` : game.sport
   const isFootball = game.sport === 'NFL' || game.sport === 'NCAAF'
@@ -721,8 +827,7 @@ export function GameCard({
               sleeperId={lastPlay.sleeperId}
               name={lastPlay.playerName}
               avatarUrl={lastPlay.imageUrl}
-              size={20}
-            />
+              size={20} suppress={lowDataOn} />
             <PlayerName
               sport="NFL"
               sleeperId={lastPlay.sleeperId}
@@ -982,9 +1087,10 @@ function CountRow({ label, n, max, tone }: { label: string; n: number | null; ma
 }
 
 function AtBatRow({ role, player }: { role: string; player: BaseballPlayer }) {
+  const lowDataOn = useLowData().lowData
   return (
     <li className="af-live-atbat-row">
-      <MiniPlayerImg sleeperId={null} name={player.name} avatarUrl={player.headshot} size={30} />
+      <MiniPlayerImg sleeperId={null} name={player.name} avatarUrl={player.headshot} size={30} suppress={lowDataOn} />
       <span className="af-live-atbat-text">
         <span className="af-label">{role}</span>
         <span className="af-live-atbat-name">
@@ -998,9 +1104,10 @@ function AtBatRow({ role, player }: { role: string; player: BaseballPlayer }) {
 }
 
 function EndZone({ side }: { side: LiveGameCard['home'] }) {
+  const lowDataOn = useLowData().lowData
   return (
     <span className="af-live-endzone">
-      {side.logo ? (
+      {!lowDataOn && side.logo ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img src={side.logo} alt="" width={20} height={20} loading="lazy" />
       ) : (
@@ -1028,6 +1135,7 @@ function Timeouts({ abbrev, left }: { abbrev: string; left: number | null }) {
  * nothing at all before kickoff.
  */
 function Leaders({ game }: { game: LiveGameCard }) {
+  const lowDataOn = useLowData().lowData
   const leaders = game.leaders ?? []
   if (leaders.length > 0) {
     return (
@@ -1040,8 +1148,7 @@ function Leaders({ game }: { game: LiveGameCard }) {
               name={l.name}
               avatarUrl={l.headshot}
               size={34}
-              className="af-live-leader-face"
-            />
+              className="af-live-leader-face" suppress={lowDataOn} />
             <span className="af-live-leader-text">
               <span className="af-live-leader-name">
                 {l.name}
@@ -1079,6 +1186,7 @@ function Leaders({ game }: { game: LiveGameCard }) {
  * the left and home on the right, the same order as the score row above.
  */
 function TeamBox({ game }: { game: LiveGameCard }) {
+  const lowDataOn = useLowData().lowData
   const sides = [game.away, game.home]
   if (!sides.some((s) => (s.leaders ?? []).length > 0 || s.shooting)) return null
   return (
@@ -1096,8 +1204,7 @@ function TeamBox({ game }: { game: LiveGameCard }) {
                     name={l.name}
                     avatarUrl={l.headshot}
                     size={22}
-                    className="af-live-teambox-face"
-                  />
+                    className="af-live-teambox-face" suppress={lowDataOn} />
                   <span className="af-live-teambox-name" title={l.name}>
                     {l.shortName ?? l.name}
                   </span>
@@ -1202,6 +1309,7 @@ function StarterRow({
   group: StarterGroup
   selectedLeagueId: string | null
 }) {
+  const lowDataOn = useLowData().lowData
   const [open, setOpen] = useState(false)
   const summary = pointsSummary(group)
   const panelId = `af-live-mine-${gameId}-${group.playerId}`
@@ -1226,7 +1334,7 @@ function StarterRow({
   return (
     <li className="af-live-mine-row" data-open={open} data-selected={selected != null}>
       <div className="af-live-mine-head">
-        <MiniPlayerImg sleeperId={group.playerId} name={group.playerName} avatarUrl={group.imageUrl} size={30} />
+        <MiniPlayerImg sleeperId={group.playerId} name={group.playerName} avatarUrl={group.imageUrl} size={30} suppress={lowDataOn} />
         {/*
           The name opens the player card; the rest of the row opens the leagues.
           Two separate buttons — a button inside a button is invalid HTML, and a
@@ -1287,6 +1395,7 @@ function Side({
   leading: boolean
   hasBall: boolean
 }) {
+  const lowDataOn = useLowData().lowData
   return (
     <div className="af-live-side-team" data-align={align}>
       {/*
@@ -1296,7 +1405,7 @@ function Side({
         Falling back to the abbreviation keeps the row readable rather than
         leaving a hole where an image failed.
       */}
-      {side.logo ? (
+      {!lowDataOn && side.logo ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img className="af-live-team-crest" src={side.logo} alt="" width={38} height={38} loading="lazy" />
       ) : (

@@ -10,12 +10,23 @@ interface MiniPlayerImgProps {
   className?: string
   media?: PlayerMedia | null
   avatarUrl?: string | null
+  /**
+   * Render the initials and fetch nothing.
+   *
+   * MARK NEEDED AS ITS OWN PROP BECAUSE `avatarUrl={null}` DOES NOT SUPPRESS
+   * ANYTHING -- the component falls through to `resolveHeadshot(media, sleeperId)`
+   * and fetches a headshot anyway. A caller trying to save bytes that way would
+   * get the identical network traffic and no indication it had failed.
+   *
+   * Optional and defaulted off, so every existing caller is unaffected.
+   */
+  suppress?: boolean
 }
 
-export default function MiniPlayerImg({ sleeperId, name, size = 20, className = '', media, avatarUrl }: MiniPlayerImgProps) {
+export default function MiniPlayerImg({ sleeperId, name, size = 20, className = '', media, avatarUrl, suppress = false }: MiniPlayerImgProps) {
   const [error, setError] = useState(false)
 
-  const src = avatarUrl || resolveHeadshot(media, sleeperId || undefined)
+  const src = suppress ? null : avatarUrl || resolveHeadshot(media, sleeperId || undefined)
 
   if (!src || error) {
     return (

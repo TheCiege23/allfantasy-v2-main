@@ -2,6 +2,16 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { LiveLockAlert, LivePageData } from '@/lib/live/liveScoresPage'
+import {
+  connectionDetail,
+  connectionLabel,
+  isConnectionFault,
+  resolveConnectionState,
+  type LiveConnectionState,
+} from '@/lib/live/connectionState'
+import { useOnlineStatus } from '@/lib/live/useOnlineStatus'
+import { LOW_DATA_POLL_MULTIPLIER } from '@/lib/live/lowDataMode'
+import { LowDataToggle, useLowDataController } from './LowDataProvider'
 import { ScopeToggle } from './ScopeToggle'
 import { SportTabs } from './SportTabs'
 import { MatchupCard } from './MatchupCard'
@@ -38,6 +48,15 @@ export function LiveScoresClient({ initial }: { initial: LivePageData }) {
    */
   const [now, setNow] = useState<number | null>(null)
   const [isRefreshing, setIsRefreshing] = useState(false)
+  /*
+   * ⚠ A FAILED POLL USED TO BE SWALLOWED ENTIRELY. The catch below still leaves
+   * the last good data on screen -- that part was right -- but it said nothing, so
+   * a browser that had lost the network kept displaying "Live" over numbers that
+   * had stopped moving. This is what lets the badge say so.
+   */
+  const [consecutiveFailures, setConsecutiveFailures] = useState(0)
+  const online = useOnlineStatus()
+  const { decision: lowData, setOverride: setLowData } = useLowDataController()
   // Guards against a slow response for an old sport landing after a new one.
   const requestSeq = useRef(0)
   /*
@@ -71,8 +90,17 @@ export function LiveScoresClient({ initial }: { initial: LivePageData }) {
          * Checked before `res.ok`, which is false for 304 -- without this branch a
          * 304 falls into the failure path, indistinguishable from an outage.
          */
-        if (res.status === 304) return
-        if (!res.ok) return
+        if (res.status === 304) {
+          // ⚠ A 304 IS A LANDING, NOT A MISS. The server answered; it simply had
+          // nothing new. Counting it as a failure would put the badge into
+          // "Reconnecting" on the quietest, healthiest slate of the week.
+          setConsecutiveFailures(0)
+          return
+        }
+        if (!res.ok) {
+          setConsecutiveFailures((n) => n + 1)
+          return
+        }
         const json = (await res.json()) as LivePageData
         // A stale response must never overwrite a newer one.
         if (seq !== requestSeq.current) return
@@ -87,7 +115,9 @@ export function LiveScoresClient({ initial }: { initial: LivePageData }) {
         etagRef.current = tag
         setData(json)
         setNow(Date.now())
+        setConsecutiveFailures(0)
       } catch {
+        setConsecutiveFailures((n) => n + 1)
         // A failed poll leaves the last good data on screen. The freshness label
         // keeps counting up, which is exactly the honest signal: the numbers are
         // getting older and the user can see it.
@@ -99,6 +129,30 @@ export function LiveScoresClient({ initial }: { initial: LivePageData }) {
   )
 
   const anyLive = data.games.some((g) => g.isLive)
+  /*
+   * ⚠ THE CADENCE IS THE SAVING THAT COMPOUNDS. An image is paid once; the
+   * poll is paid every 20 seconds for as long as the tab is open. The staleness
+   * bar in `resolveConnectionState` reads this same number, so a slower cadence
+   * widens it rather than reporting the feed as delayed for obeying us.
+   */
+  const pollIntervalMs =
+    (anyLive ? LIVE_POLL_MS : IDLE_POLL_MS) * (lowData.lowData ? LOW_DATA_POLL_MULTIPLIER : 1)
+  /*
+   * ⚠ RESOLVED ONCE, HERE, SO THE BADGE AND THE NOTICE CANNOT DISAGREE. Two
+   * components each deriving "are we connected" from the same raw inputs is two
+   * chances to drift, and the failure would be a badge saying Reconnecting above
+   * a page with no notice, or the reverse.
+   */
+  const connection = resolveConnectionState({
+    online,
+    consecutiveFailures,
+    anyLive,
+    ageSeconds:
+      data.fetchedAt == null || now == null
+        ? null
+        : Math.max(0, Math.round((now - new Date(data.fetchedAt).getTime()) / 1000)),
+    pollIntervalMs,
+  })
 
   /*
    * Newest play per game, for the card's last-play fallback. `impact.plays` is
@@ -117,9 +171,16 @@ export function LiveScoresClient({ initial }: { initial: LivePageData }) {
   useEffect(() => {
     const interval = window.setInterval(() => {
       void load(sport, scope)
-    }, anyLive ? LIVE_POLL_MS : IDLE_POLL_MS)
+    }, pollIntervalMs)
     return () => window.clearInterval(interval)
-  }, [load, sport, scope, anyLive])
+    /*
+     * ⚠ `pollIntervalMs` REPLACES `anyLive` HERE, AND IT HAS TO. It is derived
+     * from `anyLive` so nothing is lost, but it ALSO moves when low-data mode is
+     * toggled -- and depending on `anyLive` alone would leave the old interval
+     * armed, so a reader who asked for fewer requests would keep making them at
+     * the old rate.
+     */
+  }, [load, sport, scope, pollIntervalMs])
 
   // The freshness clock ticks independently of the poll so the label stays true
   // between refreshes — and keeps climbing when a refresh fails.
@@ -146,8 +207,21 @@ export function LiveScoresClient({ initial }: { initial: LivePageData }) {
       >
         <h1 className="live-display text-[20px] font-black">Live Scores</h1>
         <ScopeToggle scope={scope} onChange={onScope} />
-        <div className="ml-auto">
-          <FreshnessBadge fetchedAt={data.fetchedAt} now={now} anyLive={anyLive} isRefreshing={isRefreshing} />
+        <div className="ml-auto flex items-center gap-2">
+          <LowDataToggle
+            decision={lowData}
+            onChange={setLowData}
+            className="live-mono rounded-lg px-2.5 py-1.5 text-[11px] font-bold uppercase tracking-wider"
+          />
+          <FreshnessBadge
+            fetchedAt={data.fetchedAt}
+            now={now}
+            anyLive={anyLive}
+            isRefreshing={isRefreshing}
+            online={online}
+            consecutiveFailures={consecutiveFailures}
+            pollIntervalMs={pollIntervalMs}
+          />
         </div>
       </header>
 
@@ -157,6 +231,7 @@ export function LiveScoresClient({ initial }: { initial: LivePageData }) {
 
       <div className="live-grid px-4 py-5 sm:px-6">
         <main className="flex min-w-0 flex-col gap-4">
+          <ConnectionNotice state={connection} />
           <LockAlertBanner alerts={data.lockAlerts} now={now} />
           <p
             className="live-mono text-[10px] font-bold uppercase tracking-widest"
@@ -213,11 +288,23 @@ export function FreshnessBadge({
   now,
   anyLive,
   isRefreshing,
+  online = null,
+  consecutiveFailures = 0,
+  pollIntervalMs = LIVE_POLL_MS,
 }: {
   fetchedAt: string | null
   now: number | null
   anyLive: boolean
   isRefreshing: boolean
+  /*
+   * ⚠ THE THREE CONNECTION INPUTS ARE OPTIONAL SO THIS STAYS THE SAME COMPONENT
+   * IT WAS. Their defaults resolve to exactly the old two-state behaviour, which
+   * is what lets the existing suite keep asserting the freshness rules it was
+   * written for without being rewritten around a concern it is not about.
+   */
+  online?: boolean | null
+  consecutiveFailures?: number
+  pollIntervalMs?: number
 }) {
   // No age when the loader could not date the feed, none before mount, and none
   // for an unparseable timestamp. All three render the badge without a claim
@@ -228,21 +315,71 @@ export function FreshnessBadge({
       ? null
       : Math.max(0, Math.round((now - at) / 1000))
 
+  const state = resolveConnectionState({
+    online,
+    consecutiveFailures,
+    anyLive,
+    ageSeconds,
+    pollIntervalMs,
+  })
+  const fault = isConnectionFault(state)
+  const detail = connectionDetail(state)
+
+  /*
+   * ⚠ A FAULT IS AMBER, A LIVE SLATE IS RED, AND THEY MUST NOT SHARE A COLOUR.
+   * Red is this page's live-broadcast convention -- the one sanctioned non-alert
+   * use of --bad in the system -- so painting "Reconnecting" red would read as a
+   * game going live. Amber is the warning vocabulary the lock banner already uses.
+   */
+  const tone = fault ? 'var(--warn)' : anyLive ? 'var(--bad)' : null
+
   return (
     <span
       className="live-mono flex items-center gap-2 rounded-lg px-3 py-1.5 text-[11px] font-bold uppercase tracking-wider"
       style={{
-        background: anyLive ? 'color-mix(in srgb, var(--bad) 12%, transparent)' : 'var(--live-chip)',
-        color: anyLive ? 'var(--bad)' : 'var(--muted)',
-        border: `1px solid ${anyLive ? 'color-mix(in srgb, var(--bad) 30%, transparent)' : 'var(--live-line2)'}`,
+        background: tone ? `color-mix(in srgb, ${tone} 12%, transparent)` : 'var(--live-chip)',
+        color: tone ?? 'var(--muted)',
+        border: `1px solid ${tone ? `color-mix(in srgb, ${tone} 30%, transparent)` : 'var(--live-line2)'}`,
       }}
-      aria-live="polite"
+      /*
+       * ⚠ `assertive` WHEN IT IS A FAULT. A screen-reader user who has lost the
+       * feed is the one person who cannot see the numbers stop moving, so this is
+       * the one case worth interrupting for; everything else stays polite.
+       */
+      aria-live={fault ? 'assertive' : 'polite'}
+      title={detail ?? undefined}
     >
-      {anyLive ? <span className="live-dot" aria-hidden="true" /> : null}
-      {anyLive ? 'Live' : 'Idle'}
+      {state === 'live' ? <span className="live-dot" aria-hidden="true" /> : null}
+      {connectionLabel(state)}
       {ageSeconds != null ? <span>· updated {formatAge(ageSeconds)} ago</span> : null}
       {isRefreshing ? <span style={{ opacity: 0.7 }}>·</span> : null}
     </span>
+  )
+}
+
+/**
+ * The sentence under the header, shown only when the connection is at fault.
+ *
+ * ⚠ IT SAYS WHAT IS STILL TRUE, NOT JUST WHAT BROKE. The scores on screen are
+ * real -- they are simply the last ones we received -- and a notice that omitted
+ * that would leave the reader unsure whether to believe any of it.
+ */
+export function ConnectionNotice({ state }: { state: LiveConnectionState }) {
+  const detail = connectionDetail(state)
+  if (detail == null) return null
+
+  return (
+    <p
+      className="live-display rounded-xl px-3 py-2 text-[12px]"
+      style={{
+        background: 'color-mix(in srgb, var(--warn) 10%, transparent)',
+        border: '1px solid color-mix(in srgb, var(--warn) 28%, transparent)',
+        color: 'var(--muted)',
+      }}
+      role="status"
+    >
+      {detail}
+    </p>
   )
 }
 
