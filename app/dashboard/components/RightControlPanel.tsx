@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { signOut } from 'next-auth/react'
+import { signOutAndPurge } from '@/lib/pwa/signOutAndPurge'
 import Link from 'next/link'
 import { ChevronRight, LogOut, Plus, PlusCircle, Settings, User } from 'lucide-react'
 import { useLanguage } from '@/components/i18n/LanguageProviderClient'
@@ -250,7 +250,7 @@ export function RightControlPanel({
                 data-testid="dashboard-right-user-menu-signout"
                 onClick={() => {
                   setUserMenuOpen(false)
-                  void signOut({ callbackUrl: '/login' })
+                  void signOutAndPurge({ callbackUrl: '/login' })
                 }}
                 className="flex w-full items-center gap-2 border-t border-white/[0.06] px-3 py-2 text-left text-[13px] text-rose-300 transition hover:bg-rose-500/10 hover:text-rose-200"
               >

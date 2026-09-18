@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { useRef, useState, useEffect } from "react"
-import { signOut } from "next-auth/react"
+import { signOutAndPurge } from "@/lib/pwa/signOutAndPurge"
 import { ChevronDown, User, Settings as SettingsIcon, LogOut } from "lucide-react"
 import { IdentityImageRenderer } from "@/components/identity/IdentityImageRenderer"
 import { useSettingsProfile } from "@/hooks/useSettingsProfile"
@@ -100,7 +100,7 @@ export function UserMenuDropdown({ userLabel, className = "", compact = false }:
             role="menuitem"
             onClick={() => {
               setOpen(false)
-              signOut({ callbackUrl: "/" })
+              void signOutAndPurge({ callbackUrl: "/" })
             }}
             className="flex w-full items-center gap-2 px-3 py-2 text-sm transition"
             style={{ color: "var(--text)" }}

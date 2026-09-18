@@ -1,7 +1,8 @@
 "use client"
 
 import { useState, useEffect, useCallback, useRef } from "react"
-import { useSession, signOut } from "next-auth/react"
+import { useSession } from "next-auth/react"
+import { signOutAndPurge } from "@/lib/pwa/signOutAndPurge"
 import { useRouter } from "next/navigation"
 import { validateUsername } from "@/lib/auth/username-validation"
 
@@ -227,7 +228,7 @@ export default function ChooseUsernameForm({ prefill, callbackUrl }: Props) {
       <div className="mt-6 text-center">
         <button
           type="button"
-          onClick={() => signOut({ callbackUrl: "/login" })}
+          onClick={() => void signOutAndPurge({ callbackUrl: "/login" })}
           className="text-xs text-slate-500 hover:text-slate-300 underline"
         >
           Sign out
