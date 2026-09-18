@@ -1,5 +1,6 @@
 import type { AssetValue } from '@/lib/hybrid-valuation'
 import type { TeamNeedsMap, UserGoal, SlotNeed, PositionalDepth } from '@/lib/waiver-engine/team-needs'
+import { IDP_POSITIONS, TEAM_UNIT_POSITIONS } from '@/lib/waiver-engine/team-needs'
 import type { PlayerAnalytics } from '@/lib/player-analytics'
 import { computeAthleticGrade, computeCollegeProductionGrade } from '@/lib/player-analytics'
 
@@ -119,6 +120,13 @@ export type WaiverIntelSignal = {
   explanation: string
   data: Record<string, unknown>
 }
+/**
+ * ⚠ DEFENSIVE POSITIONS ARE DELIBERATELY ABSENT and fall to the neutral 0.5 default below.
+ * Inventing an IDP scarcity constant here would be fabrication: nothing in this repo has measured
+ * how scarce a startable linebacker is relative to a startable running back, and a made-up number
+ * would silently rank every IDP recommendation. Neutral is honest; calibrating it is its own job
+ * with its own measurement, alongside the `getRecommendation` thresholds.
+ */
 const POSITION_SCARCITY: Record<string, number> = {
   QB: 0.7,
   RB: 1.0,
@@ -708,6 +716,40 @@ export function buildWaiverIntelSignals(
     }
   })
 }
+/**
+ * Is this position worth scoring in THIS league?
+ *
+ * 🛑 THE TEST USED TO BE AN UNCONDITIONAL LIST — `['K','DEF','LB','DL','DB','EDGE','IDP']`
+ * skipped in every league — and it was wrong in BOTH directions at once.
+ *
+ * Too aggressive: an IDP league starts linebackers every week, and `LB` was on the list, so that
+ * league got no waiver advice at all for the defensive half of its lineup.
+ *
+ * Too narrow, and this is the half that ships wrong advice rather than none: the wire is normalised
+ * by `SportPlayerPoolResolver` (EDGE->DE, OLB/ILB/MLB->LB, SS/FS->S, NT->DT), so the positions that
+ * actually arrive here are QB, RB, WR, TE, K, DST, DE, DT, LB, CB and S. Of those, only `K` and
+ * `LB` were ever on the list. `DE`, `DT`, `CB` and `S` sailed straight through and were scored,
+ * ranked and given a FAAB bid — in redraft leagues that start no defenders at all.
+ *
+ * The rule now: a position only some leagues start is scored only on POSITIVE EVIDENCE that this
+ * league starts it, read from the league's own slots via `mapSlotToPositions`. No evidence means no
+ * recommendation, so a caller that never computed the needs keeps exactly the old behaviour.
+ *
+ * ⚠ A KICKER AND A TEAM DEFENCE STAY OUT even when the league starts them, and that is a measured
+ * limit rather than a preference: every dimension below is built from `value`/`assetValue`, the
+ * market trade-value scale, and whole units are not priced on it. A composite built from a price
+ * that does not exist cannot rank them against a skill player. Individual defenders ARE priced on
+ * that scale, which is precisely what makes IDP scorable here and a kicker not.
+ */
+function scorablePosition(position: string, ctx: WaiverScoringContext): boolean {
+  const pos = String(position ?? '').toUpperCase()
+  if (TEAM_UNIT_POSITIONS.has(pos)) return false
+  if (!IDP_POSITIONS.has(pos)) return true
+  const startable = ctx.teamNeeds?.startablePositions
+  if (!startable?.length) return false
+  return startable.some((slotPos) => slotPos.toUpperCase() === pos)
+}
+
 export function scoreWaiverCandidates(
   candidates: WaiverCandidate[],
   ctx: WaiverScoringContext,
@@ -717,7 +759,7 @@ export function scoreWaiverCandidates(
   const scored: ScoredWaiverTarget[] = []
 
   for (const candidate of candidates) {
-    if (['K', 'DEF', 'LB', 'DL', 'DB', 'EDGE', 'IDP'].includes(candidate.position)) continue
+    if (!scorablePosition(candidate.position, ctx)) continue
     if (candidate.value < 200) continue
 
     const dimensions: WaiverDimensions = {
