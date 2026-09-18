@@ -1,5 +1,6 @@
 import { loadSideProjections, type LivePoints, type SideProjections } from './matchupProjections'
 import { myRosterCandidates } from './myRoster'
+import { resolveRostersForTeams } from '@/lib/leagues/rosterTeamIdentity'
 import { prisma } from '@/lib/prisma'
 
 /**
@@ -39,27 +40,66 @@ export async function loadMatchupSides(args: {
    * keyed on `platformUserId` alone it resolved every OPPONENT's roster and not
    * one of the user's own.
    */
-  const yourCandidates = myRosterCandidates(args.you, args.userId)
-  const theirCandidates = [args.opponent?.platformUserId, args.opponent?.rosterId]
-    .filter((v): v is string => typeof v === 'string' && v.length > 0)
-
-  const rosterCandidates = [...new Set([...yourCandidates, ...theirCandidates])]
-
-  const rosterRows = rosterCandidates.length
-    ? await prisma.roster.findMany({
-        where: { leagueId: args.leagueId, platformUserId: { in: rosterCandidates } },
-        select: { platformUserId: true },
-      })
-    : []
-  const rosterIds = new Set(rosterRows.map((r) => r.platformUserId))
-  const yourRosterKey = yourCandidates.find((c) => rosterIds.has(c)) ?? null
   /*
-   * ⚠ THE OPPONENT MUST NOT RESOLVE TO THE KEY THE USER JUST TOOK. `externalId`
-   * and a roster id are both small integers, so without this the two sides of a
-   * matchup can land on the same roster and the screen renders a team playing
-   * itself.
+   * 🛑 AND SINCE #1005 THE KEY MAY BE ONE WE CANNOT NAME. A managerless team's roster is stored
+   * under `orphan-<provider>-<teamId>` and a team whose manager changed keeps its old row — so no
+   * list of manager ids can reach either, and a candidate-filtered query cannot even fetch the row.
+   * Measured on production 2026-09-17: 60 matchups of a claimed team, in 16 leagues, over all 18
+   * weeks, have such a team on one side. This returned null for every one of them, so the screen
+   * showed no win probability at all — indistinguishable from a week the feed has not projected.
+   *
+   * `resolveRostersForTeams` owns the rule (provider team id, then manager id, then the owner keys
+   * above). The read is scoped to the league rather than to keys, because the key is the unknown.
    */
-  const oppRosterKey = theirCandidates.find((c) => c !== yourRosterKey && rosterIds.has(c)) ?? null
+  const yourCandidates = myRosterCandidates(args.you, args.userId)
+  const sides = [
+    { externalId: args.you.externalId, platformUserId: args.you.platformUserId, keys: yourCandidates },
+    ...(args.opponent
+      ? [
+          {
+            externalId: args.opponent.rosterId,
+            platformUserId: args.opponent.platformUserId,
+            /* Never `userId` here: that key is the CALLER's, and would match them to both sides. */
+            keys: [args.opponent.platformUserId, args.opponent.rosterId],
+          },
+        ]
+      : []),
+  ]
+
+  const rosterRows = await prisma.roster
+    .findMany({
+      where: { leagueId: args.leagueId },
+      select: { id: true, platformUserId: true, playerData: true },
+    })
+    .catch(() => [])
+
+  /*
+   * ⚠ THE OPPONENT MUST NOT RESOLVE TO THE ROW THE USER JUST TOOK. `externalId` and a roster id are
+   * both small integers, so without that the two sides can land on one roster and the screen renders
+   * a team playing itself. The resolver gives one row to one team, and the caller is listed first.
+   */
+  const byTeam = resolveRostersForTeams(sides, rosterRows, (side) => side.keys)
+  const yourRow = args.you.externalId ? byTeam.get(args.you.externalId) ?? null : null
+  const oppRow = args.opponent ? byTeam.get(args.opponent.rosterId) ?? null : null
+
+  /*
+   * ⚠ A TEAM WITH NO PROVIDER ID CANNOT BE KEYED BY THE RESOLVER, so the owner keys still answer for
+   * the caller's side. Production 2026-09-17: 0 of 392 claimed teams lack one — a guard against the
+   * type, not a case anyone is in; without it such a team would lose a join it has today.
+   */
+  const yourRosterKey =
+    yourRow?.platformUserId ??
+    (args.you.externalId
+      ? null
+      : yourCandidates.find((c) => rosterRows.some((r) => r.platformUserId === c)) ?? null)
+
+  /*
+   * ⚠ THE SAME ROW ON BOTH SIDES IS A TEAM PLAYING ITSELF. `externalId` and a roster id are both
+   * small integers, so a matchup can name one team twice. The resolver already gives one row to one
+   * team; this refuses the degenerate case where BOTH sides carry the same team id, which no
+   * one-row-per-team rule can separate.
+   */
+  const oppRosterKey = oppRow && oppRow !== yourRow ? oppRow.platformUserId : null
 
   /*
    * ⚠ SEASON AND WEEK COME FROM THE MATCHUP ROW, NOT FROM THE PROJECTION FEED, and

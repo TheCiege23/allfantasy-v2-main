@@ -41,8 +41,14 @@ vi.mock('@/lib/prisma', () => ({
         const clauses = (where.OR as Array<{ leagueId: string; platformUserId: { in: string[] } }> | undefined) ?? [
           where as { leagueId: string; platformUserId: { in: string[] } },
         ]
+        /*
+         * ⚠ AN ABSENT `platformUserId` FILTER MEANS EVERY ROSTER IN THE LEAGUE, as it does in Prisma.
+         * The matchup join no longer filters by owner key — it cannot name the key of an orphan team's
+         * row — and a double that INSISTS on the filter turns that into an empty read, which this
+         * suite then reported as "unpriced" rather than as a broken double.
+         */
         return db.rosters.filter((r) =>
-          clauses.some((c) => c.leagueId === r.leagueId && c.platformUserId.in.includes(r.platformUserId)),
+          clauses.some((c) => c.leagueId === r.leagueId && (!c.platformUserId || c.platformUserId.in.includes(r.platformUserId))),
         )
       }),
     },
@@ -297,6 +303,36 @@ describe('loadMatchupSides', () => {
       week: 2,
       yourPlatformUserId: USER,
       opponentPlatformUserId: 'opp-A',
+    })
+  })
+
+  /*
+   * 🛑 THE OPPONENT'S ROSTER IS OFTEN UNDER A KEY NOBODY CAN NAME. Since #1005 a managerless
+   * team's row is keyed `orphan-<provider>-<teamId>`. Production 2026-09-17: 60 matchups of a claimed
+   * team, in 16 leagues, across all 18 weeks, have such a team on one side — and this returned null
+   * for every one, so the screen showed no win probability rather than a wrong one.
+   */
+  it('🛑 prices an opponent whose roster is under the orphan key', async () => {
+    db.rosters.push({ leagueId: 'A', platformUserId: USER, playerData: {} })
+    db.rosters.push({
+      leagueId: 'A',
+      platformUserId: 'orphan-sleeper-2',
+      playerData: { source_team_id: '2', starters: ['X'] },
+    })
+    await loadMatchupSides({
+      leagueId: 'A',
+      season: 2026,
+      week: 2,
+      userId: USER,
+      you: { platformUserId: null, externalId: '1' },
+      opponent: { platformUserId: null, rosterId: '2' },
+    })
+    expect(loadSideProjections).toHaveBeenCalledWith({
+      leagueId: 'A',
+      season: 2026,
+      week: 2,
+      yourPlatformUserId: USER,
+      opponentPlatformUserId: 'orphan-sleeper-2',
     })
   })
 
