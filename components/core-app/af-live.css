@@ -2481,3 +2481,67 @@
   line-height: 1.5;
   color: var(--muted);
 }
+
+
+/* -- Connection state -------------------------------------------------
+ * The badge used to say Live or Idle, and both described the SLATE. These
+ * describe the CONNECTION, and are amber rather than red on purpose: red is
+ * this screen's live-broadcast convention (the one sanctioned non-alert use of
+ * --bad), so a red "Reconnecting" would read as a game kicking off.
+ *
+ * Specificity note, learned the hard way one commit ago: these are attribute
+ * selectors on the same single class as the rule above, which makes them
+ * (0,2,0) against its (0,1,0). They win on specificity, not on source order.
+ */
+.af-live-freshness[data-state='offline'],
+.af-live-freshness[data-state='reconnecting'],
+.af-live-freshness[data-state='delayed'] {
+  background: var(--warn-soft);
+  border-color: color-mix(in srgb, var(--warn) 45%, transparent);
+  color: var(--warn);
+}
+
+.af-live-connection {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--warn-soft);
+  border: 1px solid color-mix(in srgb, var(--warn) 28%, transparent);
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+
+/* -- Low-data mode ----------------------------------------------------
+ * The CSS half is MOTION ONLY. Suppressing an image has to happen in JSX --
+ * `display:none` still downloads the file, so a CSS-only low-data mode saves
+ * the reader nothing while looking like it works. Motion costs no bytes but it
+ * does cost battery, and it makes a struggling connection feel worse.
+ */
+.af-live[data-low-data='true'] .af-live-pulse {
+  animation: none;
+}
+
+.af-live-lowdata-toggle {
+  margin-left: auto;
+  padding: 7px 11px;
+  border-radius: 9px;
+  background: var(--chip);
+  border: 1px solid var(--chip-line);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+}
+.af-live-lowdata-toggle[aria-pressed='true'] {
+  background: var(--warn-soft);
+  border-color: color-mix(in srgb, var(--warn) 45%, transparent);
+  color: var(--warn);
+}
+/* The freshness badge keeps its own right-alignment; the toggle takes the auto
+   margin now, so the badge must not also claim it or they fight. */
+.af-live-lowdata-toggle + .af-live-freshness {
+  margin-left: 8px;
+}
