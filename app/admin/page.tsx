@@ -1661,7 +1661,13 @@ export default async function AdminPage({
                 Email
               </a>
             </nav>
-            <a href="/dashboard" data-testid="admin-exit-button" className="af-cc-tab">
+            {/*
+              `/core`, not `/dashboard`. The latter was retired on 2026-08-24 (`99e408317`);
+              `middleware.ts` 307s it to `/core` and `app/dashboard/page.tsx` is a stub that
+              redirects too, so the old link worked — at the cost of a round trip on the way
+              out of the console.
+            */}
+            <a href="/core" data-testid="admin-exit-button" className="af-cc-tab">
               Exit Admin
             </a>
             <div className="af-cc-stamp">
