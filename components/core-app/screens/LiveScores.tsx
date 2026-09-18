@@ -100,6 +100,16 @@ export function LiveScores({ data: initial, selectedLeagueId = null }: LiveScore
   const [query, setQuery] = useState('')
   // Guards against a slow response for an old sport landing after a new one.
   const seqRef = useRef(0)
+  /*
+   * The validator for the payload currently on screen, so an unchanged slate comes
+   * back as a bodiless 304 rather than the whole scoreboard again.
+   *
+   * ⚠  A REF, NOT STATE, DELIBERATELY. Storing it in state would re-run the
+   * `load` callback's identity on every poll and restart the polling effect that
+   * depends on it -- a self-retriggering refresh loop, to cache a value no render
+   * reads.
+   */
+  const etagRef = useRef<string | null>(null)
 
   const load = useCallback(async (nextSport: string, nextScope: 'my' | 'all') => {
     const seq = ++seqRef.current
@@ -107,12 +117,37 @@ export function LiveScores({ data: initial, selectedLeagueId = null }: LiveScore
     try {
       const res = await fetch(
         `/api/dashboard/live-scores?view=live&sport=${encodeURIComponent(nextSport)}&scope=${nextScope}`,
-        { cache: 'no-store' },
+        {
+          cache: 'no-store',
+          headers: etagRef.current ? { 'If-None-Match': etagRef.current } : undefined,
+        },
       )
+      /*
+       * ⚠  NOTHING CHANGED, SO NOTHING IS TOUCHED -- INCLUDING THE AGE LABEL.
+       * A 304 means the payload is identical down to its `fetchedAt`, so the feed
+       * was not re-read and "updated Ns ago" SHOULD keep climbing. Calling
+       * `setNow` here would reset that clock and claim a freshness we did not get.
+       *
+       * Checked before `res.ok`, which is false for 304 -- without this branch a
+       * 304 would fall into the failure path and be indistinguishable from an
+       * outage.
+       */
+      if (res.status === 304) return
       if (!res.ok) return
       const json = (await res.json()) as LivePageData
       // A stale response must never overwrite a newer one.
       if (seq !== seqRef.current) return
+      /*
+       * ⚠ RECORDED ONLY ONCE THE DATA IS ACTUALLY APPLIED, AND AFTER THE
+       * STALENESS GUARD FOR THAT REASON. Stamping the validator before this check
+       * lets a slow response for an older view record a tag for a payload that
+       * never reached the screen -- after which the server answers 304 ("you
+       * already have this") about data the reader has never seen, and the slate
+       * freezes with nothing to show why. The tag and the data on screen have to
+       * move together or not at all.
+       */
+      const tag = res.headers.get('ETag')
+      etagRef.current = tag
       setData(json)
       setNow(Date.now())
     } catch {
