@@ -86,6 +86,18 @@ async function run(scoringSettings: Record<string, unknown> | null = RULES) {
   })
 }
 
+/*
+ * 🛑 THIS DOUBLE HONOURS THE `where`, AND THAT IS THE POINT. With `mockResolvedValue` the rows come
+ * back whatever the query asked for, so a test can prove the in-memory MATCH and still pass with a
+ * query that could never have fetched the row. The orphan cases below use this instead.
+ */
+function setRosters(rows: Array<Record<string, unknown>>) {
+  mocks.rosterFindMany.mockImplementation(async (args: { where?: { platformUserId?: { in?: string[] } } }) => {
+    const keys = args?.where?.platformUserId?.in
+    return keys ? rows.filter((r) => keys.includes(String(r.platformUserId))) : rows
+  })
+}
+
 describe('getNextMatchup roster join', () => {
   beforeEach(() => {
     vi.resetModules()
@@ -150,15 +162,82 @@ describe('getNextMatchup roster join', () => {
     expect(m?.opponent?.starterCount).toBe(0)
   })
 
-  it('queries only the keys the two teams can be reached by', async () => {
+  /*
+   * 🛑 THE READ IS SCOPED TO THE LEAGUE AND NOT TO OWNER KEYS — THAT IS THE FIX, NOT A LOOSE QUERY.
+   * It used to filter on the keys the two teams could be named by, which cannot express the key an
+   * orphan team's roster is actually under (`orphan-<provider>-<teamId>`, since #1005). One league's
+   * rosters is a dozen rows; the match happens in `resolveRostersForTeams`.
+   */
+  it('reads this league\'s rosters, and never another league\'s', async () => {
     mocks.rosterFindMany.mockResolvedValue([])
     await run()
 
     const where = mocks.rosterFindMany.mock.calls[0][0].where
     expect(where.leagueId).toBe(LEAGUE_ID)
-    expect(new Set(where.platformUserId.in)).toEqual(
-      new Set(['sleeper-user-3', '3', USER_ID, 'sleeper-user-7', '7']),
-    )
+    expect(where.platformUserId).toBeUndefined()
+    expect(Object.keys(where)).toEqual(['leagueId'])
+  })
+
+  /*
+   * 🛑 THE OPPONENT'S SIDE, WHICH IS WHERE THIS COMES BACK FROM.
+   *
+   * Since #1005 a managerless team's roster is keyed `orphan-<provider>-<teamId>` — no manager id
+   * reaches it. Measured read-only on production 2026-09-17: 60 matchups of a claimed team, in 16
+   * leagues, across all 18 weeks, are against such a team. The user saw their own total beside an em
+   * dash and read it as a gap in the projections feed.
+   */
+  it('\u{1F6D1} prices an opponent whose roster is under the orphan key', async () => {
+    setRosters([
+      { id: 'r-mine', platformUserId: 'sleeper-user-3', playerData: { starters: ['a', 'b'] } },
+      {
+        id: 'r-opp',
+        platformUserId: 'orphan-sleeper-7',
+        playerData: { source_team_id: '7', starters: ['d', 'e'] },
+      },
+    ])
+
+    const m = await run()
+    expect(m?.you.projected).toBe(20)
+    expect(m?.opponent?.projected).toBe(20)
+    expect(m?.opponent?.starterCount).toBe(2)
+  })
+
+  /* The same break from the other direction: the team's manager changed, so its row keeps the old id. */
+  it('prices a team whose stored owner key is nobody\'s current manager id', async () => {
+    setRosters([
+      { id: 'r-mine', platformUserId: 'sleeper-user-3', playerData: { starters: ['a', 'b'] } },
+      {
+        id: 'r-opp',
+        platformUserId: 'sleeper-user-SOMEONE-ELSE',
+        playerData: { source_team_id: '7', starters: ['d', 'e'] },
+      },
+    ])
+
+    expect((await run())?.opponent?.projected).toBe(20)
+  })
+
+  /*
+   * ⚠ THE TEAM ID MUST NOT OUTRANK ITSELF INTO THE WRONG ROW. A row carrying another team's id is
+   * not this team's roster, however it is keyed.
+   */
+  it('never hands a team a row stamped with a different team id', async () => {
+    setRosters([
+      { id: 'r-mine', platformUserId: 'sleeper-user-3', playerData: { starters: ['a', 'b'] } },
+      {
+        id: 'r-other',
+        platformUserId: 'sleeper-user-7',
+        playerData: { source_team_id: '99', starters: ['d', 'e'] },
+      },
+    ])
+
+    /* Rule 3 still finds it by the owner key — but only because that key names team 7. */
+    expect((await run())?.opponent?.projected).toBe(20)
+
+    setRosters([
+      { id: 'r-mine', platformUserId: 'sleeper-user-3', playerData: { starters: ['a', 'b'] } },
+      { id: 'r-other', platformUserId: 'orphan-sleeper-99', playerData: { source_team_id: '99', starters: ['d', 'e'] } },
+    ])
+    expect((await run())?.opponent?.projected).toBeNull()
   })
 
   /* An unfilled Sleeper slot is written as "0" and must not be priced. */

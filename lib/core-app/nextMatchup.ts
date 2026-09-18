@@ -1,6 +1,7 @@
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
+import { resolveRostersForTeams } from '@/lib/leagues/rosterTeamIdentity'
 import { hasScoringRules } from '@/lib/projections/leagueScoring'
 import { leagueProjectionGap, leagueScoredLineupTotal, lookupProjections } from './playerProjections'
 
@@ -118,6 +119,7 @@ export async function getNextMatchup(args: {
         ownerName: true,
         avatarUrl: true,
         platformUserId: true,
+        claimedByUserId: true,
       },
     })
     .catch(() => [])
@@ -125,54 +127,43 @@ export async function getNextMatchup(args: {
   const teamBy = new Map(teams.map((t) => [t.externalId, t]))
 
   /*
-   * ⚠ THE HOP FROM A TEAM TO ITS ROSTER HAS NO SINGLE KEY, AND THIS FUNCTION
-   * ONLY TRIED ONE OF THEM.
+   * ⚠ THE HOP FROM A TEAM TO ITS ROSTER HAS NO SINGLE KEY, AND THIS FUNCTION TRIED ONLY OWNER KEYS.
    *
-   * `Roster.platformUserId` is always set but does not always hold the
-   * PLATFORM's id — sometimes it holds `LeagueTeam.externalId`, and sometimes
-   * our own `User` uuid. `lib/core-app/myRoster.ts` exists because of that and
-   * spells out the measurement: with `platformUserId` alone, two thirds of
-   * claimed teams failed to join a roster that was sitting right there.
+   * `Roster.platformUserId` is always set but does not always hold the PLATFORM's id — sometimes
+   * it holds `LeagueTeam.externalId`, sometimes our own `User` uuid, and since #1005 sometimes
+   * `orphan-<provider>-<teamId>`, which is nobody's manager id at all. Joining on owner keys alone
+   * read an EMPTY starting lineup and returned `projected: null`: the "— v 161.7" a user sees under
+   * a header tile reading 224.5, built from the same starters.
    *
-   * This file joined on `platformUserId` alone, so on any league where the
-   * user's own roster is keyed the other way it read an EMPTY starting lineup
-   * and returned `projected: null` — while the opponent, keyed normally,
-   * priced fine. The visible symptom was a projected matchup reading
-   * "— v 161.7" directly under a header tile saying 224.5, on the same screen,
-   * built from the same starters. Observed on 33 1/3% Active.
+   * First measured for the CALLER's own roster (33 1/3% Active). It then came back from the other
+   * side: production 2026-09-17, 60 matchups of a claimed team in 16 leagues, across all 18 weeks,
+   * are against a team whose roster no owner key can reach. `resolveRostersForTeams` owns the rule
+   * for every reader — the provider team id first, then the manager id, then the owner keys below.
    *
-   * Candidate order matches `myRosterCandidates`: the platform id first, so a
-   * normally-keyed roster still wins, and the user uuid is offered ONLY for the
-   * caller's own team — an opponent's roster is never ours to find that way.
+   * ⚠ THE READ IS NO LONGER FILTERED BY OWNER KEY, because the key we need may be one we cannot
+   * name. It is one league's rosters — a dozen rows — and the match happens here.
    */
-  const candidatesFor = (rosterId: string): string[] => {
-    const team = teamBy.get(String(rosterId))
-    const keys = [
-      team?.platformUserId,
-      team?.externalId,
-      rosterId === myRosterId ? args.userId : null,
-    ]
-    return [...new Set(keys.filter((v): v is string => typeof v === 'string' && v.length > 0))]
-  }
-
   const rosters = await prisma.roster
     .findMany({
-      where: {
-        leagueId,
-        platformUserId: { in: [...new Set(rosterIds.flatMap(candidatesFor))] },
-      },
-      select: { platformUserId: true, playerData: true },
+      where: { leagueId },
+      select: { id: true, platformUserId: true, playerData: true },
     })
     .catch(() => [])
 
-  const rosterBy = new Map(rosters.map((r) => [r.platformUserId, r]))
+  /*
+   * The user uuid is offered ONLY for the caller's own team: an opponent's roster is never ours to
+   * find that way. Order otherwise matches `myRosterCandidates`.
+   */
+  const rosterByTeam = resolveRostersForTeams(teams, rosters, (team) => [
+    team.platformUserId,
+    team.externalId,
+    team.externalId === myRosterId ? args.userId : null,
+  ])
 
   // One projection lookup for both lineups.
   const allStarters = new Map<string, string[]>()
   for (const id of rosterIds) {
-    const roster = candidatesFor(id)
-      .map((key) => rosterBy.get(key))
-      .find(Boolean)
+    const roster = rosterByTeam.get(String(id))
     const pd = (roster?.playerData ?? {}) as Record<string, unknown>
     allStarters.set(
       id,

@@ -18,6 +18,7 @@ import {
   projectRosterSlots,
   readWaiverBudgetUsed,
 } from './derive'
+import { matchTeamIdForRoster, readSourceManagerId, readSourceTeamId } from '@/lib/leagues/rosterTeamIdentity'
 import type {
   CanonicalWorld,
   CanonicalWorldRawInput,
@@ -102,52 +103,13 @@ export function narrowScoringSettings(settings: unknown): unknown {
   return Object.keys(out).length > 0 ? out : null
 }
 
-function readSourceTeamId(roster: Pick<RawRosterRow, 'playerData'>): string | null {
-  const blob = (roster.playerData ?? {}) as Record<string, unknown>
-  const direct = blob.source_team_id
-  if (typeof direct === 'string' && direct.trim()) return direct.trim()
-  const importMeta = (blob.import ?? {}) as Record<string, unknown>
-  const nested = importMeta.sourceTeamId
-  if (typeof nested === 'string' && nested.trim()) return nested.trim()
-  return null
-}
-
-function readSourceManagerId(roster: RawRosterRow): string | null {
-  const blob = (roster.playerData ?? {}) as Record<string, unknown>
-  const direct = blob.source_manager_id
-  if (typeof direct === 'string' && direct.trim()) return direct.trim()
-  const importMeta = (blob.import ?? {}) as Record<string, unknown>
-  const nested = importMeta.sourceManagerId
-  if (typeof nested === 'string' && nested.trim()) return nested.trim()
-  return null
-}
-
-/**
- * Pure, write-free resolution of which canonical team a roster belongs to. Tries, in order:
- *  1. `playerData.source_team_id` → `LeagueTeam.externalId` (provider import join — primary)
- *  2. `roster.platformUserId` → `LeagueTeam.platformUserId` (native / claimed manager)
- *  3. `roster.platformUserId` → `LeagueTeam.claimedByUserId` (AF-claimed orphan)
- * Returns null when no team matches (surfaced as a completeness warning, never repaired here).
+/*
+ * 🛑 THE ROSTER↔TEAM RULE LIVES IN ONE PLACE NOW: `lib/leagues/rosterTeamIdentity.ts`.
+ * It was defined here and the app surfaces could not reach it without importing this assembler, so
+ * they grew their own manager-id-only copies and silently lost every orphan and manager-changed
+ * team (measured: 210 of 4,125). It is re-exported so this module's consumers are unchanged.
  */
-export function matchTeamIdForRoster(
-  // Only the fields the match reads, so a caller with a narrower select (the trade rosters route)
-  // shares this rule instead of writing a second copy of it.
-  roster: Pick<RawRosterRow, 'playerData' | 'platformUserId'>,
-  teams: ReadonlyArray<Pick<RawTeamRow, 'id' | 'externalId' | 'platformUserId' | 'claimedByUserId'>>,
-): string | null {
-  const sourceTeamId = readSourceTeamId(roster)
-  if (sourceTeamId) {
-    const byExternal = teams.find((t) => t.externalId === sourceTeamId)
-    if (byExternal) return byExternal.id
-  }
-  if (roster.platformUserId) {
-    const byPlatformUser = teams.find((t) => t.platformUserId === roster.platformUserId)
-    if (byPlatformUser) return byPlatformUser.id
-    const byClaim = teams.find((t) => t.claimedByUserId === roster.platformUserId)
-    if (byClaim) return byClaim.id
-  }
-  return null
-}
+export { matchTeamIdForRoster } from '@/lib/leagues/rosterTeamIdentity'
 
 function assembleLeagueFacts(input: CanonicalWorldRawInput): LeagueFacts {
   const { league, performances } = input
