@@ -97,6 +97,51 @@ export function buildRedraftOwnerIdCandidates(args: {
   ])
 }
 
+/**
+ * Every owner key a team in one league currently answers to.
+ *
+ * 🛑 THE SET IS THE EVIDENCE, AND IT ONLY MEANS ANYTHING WHEN IT IS COMPLETE. Callers must pass
+ * EVERY team in the league, not the teams they happen to be working on — a key missing from the set
+ * reads as forgotten, which is the one reading that authorises a write.
+ */
+export function liveTeamOwnerKeys(
+  teams: ReadonlyArray<{ id: string; platformUserId?: string | null; claimedByUserId?: string | null }>,
+): Set<string> {
+  const keys = new Set<string>()
+  for (const team of teams) {
+    for (const key of [team.id, team.platformUserId, team.claimedByUserId]) {
+      const value = trimmed(key)
+      if (value) keys.add(value)
+    }
+  }
+  return keys
+}
+
+/**
+ * Is this redraft roster keyed to somebody the league no longer has?
+ *
+ * `RedraftRoster.ownerId` is written once, when the season is materialized, and nothing re-keys it
+ * when a team changes manager — so a team's redraft roster can stay keyed to the manager who held
+ * it that day. `maybeRepairRedraftRosterOwner` refuses those on purpose: a real manager id is not
+ * something to overwrite on a guess.
+ *
+ * This is the missing evidence. A key carried by NO team in the league cannot be the id of anyone
+ * currently in it, so re-pointing it at the team that demonstrably owns the row takes nothing from
+ * anybody. It is evidence of ABSENCE, not proof the id is a former manager — so a caller must still
+ * refuse on any ambiguity about WHICH team the row belongs to.
+ *
+ * ⚠ An empty key is NOT stranded. It identifies nothing, so nothing here can reason about it, and
+ * the safe answer to a value we cannot reason about is to leave it alone.
+ */
+export function isStrandedRedraftOwnerId(
+  ownerId: string | null | undefined,
+  liveKeys: ReadonlySet<string>,
+): boolean {
+  const id = trimmed(ownerId)
+  if (!id) return false
+  return !liveKeys.has(id)
+}
+
 async function findSeasonByLeagueId(leagueId: string | null): Promise<MinimalSeason | null> {
   if (!leagueId) return null
   return prisma.redraftSeason.findFirst({

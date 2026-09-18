@@ -19,17 +19,27 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const h = vi.hoisted(() => ({
   rosterFindMany: vi.fn(),
   rosterFindUnique: vi.fn(),
+  rosterFindFirst: vi.fn(),
   rosterUpdate: vi.fn(),
   redraftFindMany: vi.fn(),
+  redraftFindFirst: vi.fn(),
+  redraftUpdate: vi.fn(),
   leagueTeamFindMany: vi.fn(),
+  transaction: vi.fn(),
 }))
 
 vi.mock('server-only', () => ({}))
 vi.mock('@/lib/prisma', () => ({
   prisma: {
-    roster: { findMany: h.rosterFindMany, findUnique: h.rosterFindUnique, update: h.rosterUpdate },
-    redraftRoster: { findMany: h.redraftFindMany },
+    roster: {
+      findMany: h.rosterFindMany,
+      findUnique: h.rosterFindUnique,
+      findFirst: h.rosterFindFirst,
+      update: h.rosterUpdate,
+    },
+    redraftRoster: { findMany: h.redraftFindMany, findFirst: h.redraftFindFirst, update: h.redraftUpdate },
     leagueTeam: { findMany: h.leagueTeamFindMany },
+    $transaction: h.transaction,
   },
 }))
 
@@ -44,6 +54,12 @@ beforeEach(() => {
   h.rosterFindMany.mockResolvedValue([])
   h.redraftFindMany.mockResolvedValue([])
   h.leagueTeamFindMany.mockResolvedValue([])
+  // Nothing in the way by default: no competing claim, no key already in use.
+  h.rosterFindFirst.mockResolvedValue(null)
+  h.redraftFindFirst.mockResolvedValue(null)
+  h.redraftUpdate.mockResolvedValue({})
+  // The real `$transaction` takes already-issued promises, so the spies above still record.
+  h.transaction.mockImplementation(async (ops: unknown[]) => Promise.all(ops as Array<Promise<unknown>>))
 })
 
 describe('reconcileRosterRedraftLinks', () => {
@@ -55,7 +71,7 @@ describe('reconcileRosterRedraftLinks', () => {
 
     const out = await reconcileRosterRedraftLinks('L1')
 
-    expect(out).toEqual({ linked: 1, unlinked: 0, alreadyLinked: 0 })
+    expect(out).toEqual({ linked: 1, unlinked: 0, alreadyLinked: 0, strandedRekeyed: 0 })
     expect(h.rosterUpdate).toHaveBeenCalledWith({
       where: { id: 'r1' },
       data: { redraftRosterId: 'rr1' },
@@ -70,7 +86,7 @@ describe('reconcileRosterRedraftLinks', () => {
 
     const out = await reconcileRosterRedraftLinks('L1')
 
-    expect(out).toEqual({ linked: 0, unlinked: 1, alreadyLinked: 0 })
+    expect(out).toEqual({ linked: 0, unlinked: 1, alreadyLinked: 0, strandedRekeyed: 0 })
     expect(h.rosterUpdate).not.toHaveBeenCalled()
   })
 
@@ -81,7 +97,7 @@ describe('reconcileRosterRedraftLinks', () => {
 
     const out = await reconcileRosterRedraftLinks('L1')
 
-    expect(out).toEqual({ linked: 0, unlinked: 0, alreadyLinked: 1 })
+    expect(out).toEqual({ linked: 0, unlinked: 0, alreadyLinked: 1, strandedRekeyed: 0 })
     expect(h.rosterUpdate).not.toHaveBeenCalled()
     // Nothing to resolve, so it must not even ask.
     expect(h.redraftFindMany).not.toHaveBeenCalled()
@@ -134,7 +150,7 @@ describe('reconcileRosterRedraftLinks', () => {
   it('does nothing on a league with no rosters', async () => {
     h.rosterFindMany.mockResolvedValue([])
     const out = await reconcileRosterRedraftLinks('L1')
-    expect(out).toEqual({ linked: 0, unlinked: 0, alreadyLinked: 0 })
+    expect(out).toEqual({ linked: 0, unlinked: 0, alreadyLinked: 0, strandedRekeyed: 0 })
   })
 })
 
@@ -195,8 +211,14 @@ type RosterRow = {
   redraftRosterId: string | null
   playerData?: unknown
 }
-type RedraftRow = { id: string; leagueId: string; ownerId: string }
-type TeamRow = { id: string; leagueId: string; externalId: string; platformUserId: string | null }
+type RedraftRow = { id: string; leagueId: string; ownerId: string; seasonId?: string }
+type TeamRow = {
+  id: string
+  leagueId: string
+  externalId: string
+  platformUserId: string | null
+  claimedByUserId?: string | null
+}
 
 function world(rosters: RosterRow[], redraft: RedraftRow[], teams: TeamRow[] = []) {
   h.rosterFindMany.mockImplementation(
@@ -211,19 +233,46 @@ function world(rosters: RosterRow[], redraft: RedraftRow[], teams: TeamRow[] = [
       )
     },
   )
+  h.rosterFindUnique.mockImplementation(
+    async (args: { where: { id: string }; select: Record<string, boolean> }) => {
+      const row = rosters.find((r) => r.id === args.where.id)
+      if (!row) return null
+      return Object.fromEntries(Object.keys(args.select).map((k) => [k, (row as any)[k]]))
+    },
+  )
+  // A claim from anywhere — the reconciler asks the table rather than its own league-scoped set.
+  h.rosterFindFirst.mockImplementation(async (args: { where: Record<string, any> }) => {
+    const target = args.where?.redraftRosterId
+    if (typeof target !== 'string') return null
+    const row = rosters.find((r) => r.redraftRosterId === target)
+    return row ? { id: row.id } : null
+  })
   h.leagueTeamFindMany.mockImplementation(async (args: { where: Record<string, any> }) => {
     const w = args.where
     let rows = teams
     if (w.leagueId !== undefined) rows = rows.filter((t) => t.leagueId === w.leagueId)
     if (w.externalId?.in) rows = rows.filter((t) => w.externalId.in.includes(t.externalId))
-    return rows.map(({ id, externalId, platformUserId }) => ({ id, externalId, platformUserId }))
+    return rows.map(({ id, externalId, platformUserId, claimedByUserId }) => ({
+      id,
+      externalId,
+      platformUserId,
+      claimedByUserId: claimedByUserId ?? null,
+    }))
   })
   h.redraftFindMany.mockImplementation(async (args: { where: Record<string, any> }) => {
     const w = args.where
     let rows = redraft
     if (w.leagueId !== undefined) rows = rows.filter((r) => r.leagueId === w.leagueId)
     if (w.ownerId?.in) rows = rows.filter((r) => w.ownerId.in.includes(r.ownerId))
-    return rows.map(({ id, ownerId }) => ({ id, ownerId }))
+    return rows.map(({ id, ownerId, seasonId }) => ({ id, ownerId, seasonId: seasonId ?? 'S1' }))
+  })
+  // UNIQUE (seasonId, ownerId): answer from the same rows, so the guard is tested against the world.
+  h.redraftFindFirst.mockImplementation(async (args: { where: Record<string, any> }) => {
+    const w = args.where
+    const hit = redraft.find(
+      (r) => (r.seasonId ?? 'S1') === w.seasonId && r.ownerId === w.ownerId && r.id !== w.NOT?.id,
+    )
+    return hit ? { id: hit.id } : null
   })
 }
 
@@ -258,7 +307,7 @@ describe('reconcileRosterRedraftLinks — a claimed roster links through playerD
     )
     const out = await reconcileRosterRedraftLinks('L1')
     expect(linkedTo()).toEqual([['r-claimed', 'rr-claimed']])
-    expect(out).toEqual({ linked: 1, unlinked: 0, alreadyLinked: 0 })
+    expect(out).toEqual({ linked: 1, unlinked: 0, alreadyLinked: 0, strandedRekeyed: 0 })
   })
 
   it('🛑 the platform id still wins: a direct owner takes its redraft roster before any import record', async () => {
@@ -282,7 +331,7 @@ describe('reconcileRosterRedraftLinks — a claimed roster links through playerD
     )
     const out = await reconcileRosterRedraftLinks('L1')
     expect(linkedTo()).toEqual([['r-direct', 'rr1']])
-    expect(out).toEqual({ linked: 1, unlinked: 1, alreadyLinked: 0 })
+    expect(out).toEqual({ linked: 1, unlinked: 1, alreadyLinked: 0, strandedRekeyed: 0 })
   })
 
   it('🛑 excludes a target another roster already holds, rather than overwriting it', async () => {
@@ -301,7 +350,7 @@ describe('reconcileRosterRedraftLinks — a claimed roster links through playerD
     )
     const out = await reconcileRosterRedraftLinks('L1')
     expect(h.rosterUpdate).not.toHaveBeenCalled()
-    expect(out).toEqual({ linked: 0, unlinked: 1, alreadyLinked: 1 })
+    expect(out).toEqual({ linked: 0, unlinked: 1, alreadyLinked: 1, strandedRekeyed: 0 })
   })
 
   it('🛑 refuses when two rosters carry the same import record: neither links, no winner is picked', async () => {
@@ -364,7 +413,7 @@ describe('reconcileRosterRedraftLinks — a claimed roster links through playerD
     )
     const out = await reconcileRosterRedraftLinks('L1')
     expect(h.rosterUpdate).not.toHaveBeenCalled()
-    expect(out).toEqual({ linked: 0, unlinked: 1, alreadyLinked: 0 })
+    expect(out).toEqual({ linked: 0, unlinked: 1, alreadyLinked: 0, strandedRekeyed: 0 })
   })
 
   it.each([
@@ -431,7 +480,7 @@ describe('reconcileRosterRedraftLinks — an orphan team links through its team'
     world([orphanRoster()], [{ id: 'rr-7', leagueId: 'L1', ownerId: 'team-row-7' }], [team()])
     const out = await reconcileRosterRedraftLinks('L1')
     expect(linkedTo()).toEqual([['r-orphan', 'rr-7']])
-    expect(out).toEqual({ linked: 1, unlinked: 0, alreadyLinked: 0 })
+    expect(out).toEqual({ linked: 1, unlinked: 0, alreadyLinked: 0, strandedRekeyed: 0 })
   })
 
   it('reads the team id from the import record too', async () => {
@@ -452,7 +501,7 @@ describe('reconcileRosterRedraftLinks — an orphan team links through its team'
     )
     const out = await reconcileRosterRedraftLinks('L1')
     expect(linkedTo()).toEqual([['r-direct', 'rr-111']])
-    expect(out).toEqual({ linked: 1, unlinked: 1, alreadyLinked: 0 })
+    expect(out).toEqual({ linked: 1, unlinked: 1, alreadyLinked: 0, strandedRekeyed: 0 })
   })
 
   it('🛑 refuses when two rosters name one team', async () => {
@@ -463,7 +512,7 @@ describe('reconcileRosterRedraftLinks — an orphan team links through its team'
     )
     const out = await reconcileRosterRedraftLinks('L1')
     expect(linkedTo()).toEqual([])
-    expect(out).toEqual({ linked: 0, unlinked: 2, alreadyLinked: 0 })
+    expect(out).toEqual({ linked: 0, unlinked: 2, alreadyLinked: 0, strandedRekeyed: 0 })
   })
 
   it('🛑 refuses when the team has two free redraft rosters', async () => {
@@ -475,7 +524,7 @@ describe('reconcileRosterRedraftLinks — an orphan team links through its team'
       ],
       [team({ platformUserId: '111' })],
     )
-    expect(await reconcileRosterRedraftLinks('L1')).toEqual({ linked: 0, unlinked: 1, alreadyLinked: 0 })
+    expect(await reconcileRosterRedraftLinks('L1')).toEqual({ linked: 0, unlinked: 1, alreadyLinked: 0, strandedRekeyed: 0 })
     expect(linkedTo()).toEqual([])
   })
 
@@ -487,7 +536,7 @@ describe('reconcileRosterRedraftLinks — an orphan team links through its team'
     )
     const out = await reconcileRosterRedraftLinks('L1')
     expect(linkedTo()).toEqual([])
-    expect(out).toEqual({ linked: 0, unlinked: 1, alreadyLinked: 1 })
+    expect(out).toEqual({ linked: 0, unlinked: 1, alreadyLinked: 1, strandedRekeyed: 0 })
   })
 
   it('leaves a roster with no team id alone', async () => {
@@ -496,7 +545,7 @@ describe('reconcileRosterRedraftLinks — an orphan team links through its team'
       [{ id: 'rr-7', leagueId: 'L1', ownerId: 'team-row-7' }],
       [team()],
     )
-    expect(await reconcileRosterRedraftLinks('L1')).toEqual({ linked: 0, unlinked: 1, alreadyLinked: 0 })
+    expect(await reconcileRosterRedraftLinks('L1')).toEqual({ linked: 0, unlinked: 1, alreadyLinked: 0, strandedRekeyed: 0 })
   })
 
   it('🛑 asks for the team in THIS league only', async () => {
@@ -537,5 +586,172 @@ it('🛑 a roster placed by its import record is not placed again by its team', 
   )
   const out = await reconcileRosterRedraftLinks('L1')
   expect(linkedTo()).toEqual([['r-claimed', 'rr-by-manager']])
-  expect(out).toEqual({ linked: 1, unlinked: 0, alreadyLinked: 0 })
+  expect(out).toEqual({ linked: 1, unlinked: 0, alreadyLinked: 0, strandedRekeyed: 0 })
+})
+
+// ── A REDRAFT ROSTER KEYED TO A MANAGER THE LEAGUE NO LONGER HAS ───────────────────────────────
+
+/*
+ * 🛑 THE LAST SHAPE, AND THE ONLY ONE WHERE THE REDRAFT SIDE'S KEY IS WRONG RATHER THAN MISSING.
+ * `RedraftRoster.ownerId` is written once, at season materialization, and nothing re-keys it when a
+ * team changes manager — so the row answers to somebody who has gone, no stage above can name it,
+ * and the team keeps an empty redraft roster.
+ *
+ * Measured in production 2026-09-18: of 3,995 redraft rosters in imported leagues, 12 were free and
+ * 6 of those were keyed to nobody the league has — each in a league with exactly one unlinked roster
+ * and one free candidate, and none of those candidates owned by a key another team still carries.
+ */
+const GONE = '1263077392813924352' // the manager who held the team when the season was materialized
+const HERE = '719211694169108480' // who holds it now
+
+const strandedWorld = (
+  over: { rosters?: RosterRow[]; redraft?: RedraftRow[]; teams?: TeamRow[] } = {},
+) =>
+  world(
+    over.rosters ?? [
+      {
+        id: 'r1',
+        leagueId: 'L1',
+        platformUserId: HERE,
+        redraftRosterId: null,
+        playerData: { players: ['9225'], source_team_id: '6' },
+      },
+    ],
+    over.redraft ?? [{ id: 'rr-old', leagueId: 'L1', ownerId: GONE, seasonId: 'S1' }],
+    over.teams ?? [{ id: 'team-6', leagueId: 'L1', externalId: '6', platformUserId: HERE }],
+  )
+
+const rekeyedTo = () => h.redraftUpdate.mock.calls.map(([a]) => [a.where.id, a.data.ownerId])
+
+describe('reconcileRosterRedraftLinks — a redraft roster stranded on a former manager', () => {
+  it('re-keys the row to the team that owns it, and links in the same breath', async () => {
+    strandedWorld()
+    const out = await reconcileRosterRedraftLinks('L1')
+    expect(rekeyedTo()).toEqual([['rr-old', HERE]])
+    expect(linkedTo()).toEqual([['r1', 'rr-old']])
+    expect(out).toEqual({ linked: 1, unlinked: 0, alreadyLinked: 0, strandedRekeyed: 1 })
+  })
+
+  it('🛑 both writes go together, in one transaction', async () => {
+    // Linking without re-keying would leave the row naming somebody who is not in the league, and
+    // roughly forty readers resolve a viewer's roster by that key — linked and still unreachable.
+    strandedWorld()
+    await reconcileRosterRedraftLinks('L1')
+    expect(h.transaction).toHaveBeenCalledTimes(1)
+    expect(h.transaction.mock.calls[0][0]).toHaveLength(2)
+  })
+
+  it('falls back to the team row id when the team has no manager either', async () => {
+    strandedWorld({ teams: [{ id: 'team-6', leagueId: 'L1', externalId: '6', platformUserId: null }] })
+    await reconcileRosterRedraftLinks('L1')
+    expect(rekeyedTo()).toEqual([['rr-old', 'team-6']])
+  })
+
+  it('🛑 refuses when two rosters are still unplaced — it cannot say which is which', async () => {
+    strandedWorld({
+      rosters: [
+        { id: 'r1', leagueId: 'L1', platformUserId: HERE, redraftRosterId: null, playerData: { source_team_id: '6' } },
+        { id: 'r2', leagueId: 'L1', platformUserId: 'other', redraftRosterId: null, playerData: { source_team_id: '7' } },
+      ],
+    })
+    const out = await reconcileRosterRedraftLinks('L1')
+    expect(rekeyedTo()).toEqual([])
+    expect(linkedTo()).toEqual([])
+    expect(out).toMatchObject({ linked: 0, strandedRekeyed: 0 })
+  })
+
+  it('🛑 refuses when two candidates are stranded', async () => {
+    strandedWorld({
+      redraft: [
+        { id: 'rr-old', leagueId: 'L1', ownerId: GONE, seasonId: 'S1' },
+        { id: 'rr-older', leagueId: 'L1', ownerId: '999999999999999999', seasonId: 'S1' },
+      ],
+    })
+    const out = await reconcileRosterRedraftLinks('L1')
+    expect(rekeyedTo()).toEqual([])
+    expect(out).toMatchObject({ linked: 0, strandedRekeyed: 0 })
+  })
+
+  it('🛑 a key another team still carries is NOT stranded, even as a claim', async () => {
+    // The evidence is "nobody here answers to this key". A claimed team answers to its claimant.
+    strandedWorld({
+      teams: [
+        { id: 'team-6', leagueId: 'L1', externalId: '6', platformUserId: HERE },
+        { id: 'team-9', leagueId: 'L1', externalId: '9', platformUserId: null, claimedByUserId: GONE },
+      ],
+    })
+    const out = await reconcileRosterRedraftLinks('L1')
+    expect(rekeyedTo()).toEqual([])
+    expect(linkedTo()).toEqual([])
+    expect(out).toMatchObject({ linked: 0, strandedRekeyed: 0 })
+  })
+
+  it('🛑 refuses when the season already answers to the key, and writes nothing', async () => {
+    /*
+     * UNIQUE (seasonId, ownerId) — the other row is not ours to overwrite.
+     *
+     * ⚠ THE SETUP IS THE WHOLE TEST, AND THE OBVIOUS ONE IS VACUOUS. Simply adding a row keyed to
+     * the team's current manager lets STAGE ONE link it, so this stage never runs and the
+     * assertion passes with the guard deleted. The key has to be held by a row that is already
+     * CLAIMED — which is exactly how it happens: the team stage skips a taken candidate, and only
+     * then does a stranded row look free.
+     */
+    strandedWorld({
+      rosters: [
+        { id: 'r-other', leagueId: 'L1', platformUserId: 'zzz', redraftRosterId: 'rr-mine', playerData: {} },
+        {
+          id: 'r1',
+          leagueId: 'L1',
+          platformUserId: 'orphan-sleeper-6',
+          redraftRosterId: null,
+          playerData: { source_team_id: '6' },
+        },
+      ],
+      redraft: [
+        { id: 'rr-old', leagueId: 'L1', ownerId: GONE, seasonId: 'S1' },
+        { id: 'rr-mine', leagueId: 'L1', ownerId: HERE, seasonId: 'S1' },
+      ],
+    })
+    const out = await reconcileRosterRedraftLinks('L1')
+    expect(rekeyedTo()).toEqual([])
+    expect(h.transaction).not.toHaveBeenCalled()
+    expect(out).toMatchObject({ linked: 0, strandedRekeyed: 0 })
+  })
+
+  it('🛑 refuses a candidate some other league already claims', async () => {
+    strandedWorld({
+      rosters: [
+        { id: 'r1', leagueId: 'L1', platformUserId: HERE, redraftRosterId: null, playerData: { source_team_id: '6' } },
+        { id: 'elsewhere', leagueId: 'L2', platformUserId: 'x', redraftRosterId: 'rr-old', playerData: {} },
+      ],
+    })
+    const out = await reconcileRosterRedraftLinks('L1')
+    expect(rekeyedTo()).toEqual([])
+    expect(linkedTo()).toEqual([])
+    expect(out).toMatchObject({ linked: 0, strandedRekeyed: 0 })
+  })
+
+  it('🛑 leaves a roster with no team id alone', async () => {
+    strandedWorld({
+      rosters: [
+        { id: 'r1', leagueId: 'L1', platformUserId: HERE, redraftRosterId: null, playerData: { players: [] } },
+      ],
+    })
+    const out = await reconcileRosterRedraftLinks('L1')
+    expect(rekeyedTo()).toEqual([])
+    expect(out).toMatchObject({ linked: 0, strandedRekeyed: 0 })
+  })
+
+  it('🛑 a roster that matches on its own manager never reaches this stage', async () => {
+    strandedWorld({
+      redraft: [
+        { id: 'rr-mine', leagueId: 'L1', ownerId: HERE, seasonId: 'S1' },
+        { id: 'rr-old', leagueId: 'L1', ownerId: GONE, seasonId: 'S1' },
+      ],
+    })
+    const out = await reconcileRosterRedraftLinks('L1')
+    expect(linkedTo()).toEqual([['r1', 'rr-mine']])
+    expect(rekeyedTo()).toEqual([])
+    expect(out).toEqual({ linked: 1, unlinked: 0, alreadyLinked: 0, strandedRekeyed: 0 })
+  })
 })
