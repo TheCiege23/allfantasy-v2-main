@@ -486,9 +486,37 @@ describe('6b — the phone notices a connection made on another device', () => {
 
     // Coming back to the tab is the trigger.
     setVisibility('hidden')
-    setVisibility('visible')
 
-    await waitFor(() => expect(onConnectedChange).toHaveBeenLastCalledWith(true))
+    /*
+     * ⚠ THE RETURN IS RE-FIRED UNTIL IT LANDS, AND THAT IS NOT BELT-AND-BRACES — IT IS THE BUG
+     * THIS TEST HAD.
+     *
+     * `EspnConnectPanel` registers its `visibilitychange` listener inside an effect gated on
+     * `status === 'disconnected'`, so the listener exists only once that state has COMMITTED.
+     * The assertion above proves `onConnectedChange(false)` ran — and that happens in the same
+     * tick as `setStatus`, one commit EARLIER than the effect that subscribes. A single dispatch
+     * into that window is delivered to nobody, and `visibilitychange` has no replay: the panel
+     * never learns it should re-check, and the wait below then burns its whole budget on a
+     * request that was never made.
+     *
+     * Which made this test fail under load, on changes that cannot touch it — CI "Unit tests
+     * (1/4)" red on PR #1029 (a two-line admin href), passing 3/3 locally at that same commit.
+     * `scripts/vitest-ratchet.mjs` reports a newly-failing file as a REGRESSION, so the flake
+     * blocked an unrelated PR.
+     *
+     * Re-firing inside `waitFor` removes the race without weakening the assertion: if the panel
+     * stops re-checking on return, every retry is delivered to a listener that does not exist,
+     * and this still fails. The explicit timeout is for the machine, not the feature — the
+     * default 1s is a bet on an idle runner, and this suite's neighbours have been measured at
+     * 55s-232s when the box is contended.
+     */
+    await waitFor(
+      () => {
+        setVisibility('visible')
+        expect(onConnectedChange).toHaveBeenLastCalledWith(true)
+      },
+      { timeout: 10_000 },
+    )
   })
 
   it('🛑 does NOT poll while the tab is hidden', async () => {
