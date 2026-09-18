@@ -263,6 +263,66 @@ function announceSmokeStart(common, sha) {
   return null
 }
 
+/**
+ * Another session's smoke, already running.
+ *
+ * 🛑 THE ISOLATED WORKTREE IS ONE FIXED PATH SHARED BY EVERY SESSION, AND NOTHING USED TO STOP
+ * TWO RUNS ENTERING IT AT ONCE. `chooseWorktreeDir` returns the same directory for everybody, and
+ * `ensureWorktree` checks out the sha being pushed into it. Two pushes overlapping therefore swap
+ * files under each other's `tsc`, and the verdict describes a tree that is neither commit.
+ *
+ * Measured 2026-09-17: a push of `613dd5c37` was BLOCKED on three files, two of which
+ * (`app/api/decision-os/league-context/route.ts`, `.../mission-control/route.ts`) do not exist in
+ * that commit at all — `git ls-tree 613dd5c37 -- <path>` is empty for both. They belong to
+ * `1a0759208`, another session's unlanded commit, which was what the shared worktree's HEAD read
+ * afterwards. The reuse mechanism itself is sound: re-running `ensureWorktree`'s own
+ * `git checkout --detach --force <sha>` against that worktree uncontended moved HEAD to the right
+ * commit, left zero dirty paths, and removed both phantom files. Contention was the whole defect.
+ *
+ * ⚠ WHY THIS READS THE QUEUE'S MARKER RATHER THAN TAKING A LOCK OF ITS OWN. `announceSmokeStart`
+ * already writes one file per in-flight run and already removes it on every exit path; a second
+ * lock would be a second thing to leak, and the two could disagree about whether a run is live.
+ * A marker for a DIFFERENT sha is exactly "somebody else is in the worktree".
+ *
+ * ⚠ AND IT FAILS OPEN, like every other uncertainty in this file. Skipping costs one unchecked
+ * push. Proceeding costs a verdict about an artifact nobody is shipping — which is worse in both
+ * directions: it blocks a clean commit on a stranger's errors, and it would clear a broken one on
+ * a stranger's clean files. Both runs skipping is an acceptable worst case and a rare one; pushes
+ * are serialised by the queue, so this only fires when something has bypassed it or a previous
+ * smoke is still finishing.
+ *
+ * ⚠ AGE-BOUNDED ON THE SAME CEILING THE QUEUE USES. A marker whose process died without its
+ * `exit` handler running would otherwise disable the guard permanently — the check-that-cannot-
+ * fail failure mode, arriving as a permanent skip rather than a permanent block.
+ */
+function otherSmokeInFlight(common, sha) {
+  const dir = join(queueDir(common), 'smoke-active')
+  let names
+  try {
+    names = readdirSync(dir)
+  } catch {
+    // No directory means no run but our own has ever announced itself here.
+    return null
+  }
+  for (const name of names) {
+    if (!name.endsWith('.json')) continue
+    const otherSha = name.slice(0, -'.json'.length)
+    if (otherSha === sha) continue
+    let marker
+    try {
+      marker = JSON.parse(readFileSync(join(dir, name), 'utf8'))
+    } catch {
+      continue // unreadable or half-written: not a positive confirmation of anything
+    }
+    const startedAt = Number(marker?.startedAt)
+    if (!Number.isFinite(startedAt)) continue
+    const ageMs = Date.now() - startedAt
+    if (ageMs < 0 || ageMs > TIMEOUT_MS) continue // stale or clock-skewed — not a live run
+    return { sha: otherSha, ageMs }
+  }
+  return null
+}
+
 /** Find an existing node_modules to link against: this worktree's own, else
  *  the primary checkout's. Neither existing is not fatal — the ratchet's own
  *  anti-vacuity check (baseline says N errors, run found 0) catches a broken
@@ -633,6 +693,21 @@ function main() {
   // would be reaped for work it was legitimately doing.
   const markerErr = announceSmokeStart(common, sha)
   if (markerErr) allow(`${markerErr} — skipping rather than running unannounced`)
+
+  /*
+   * Checked AFTER our own marker exists, so the window in which two runs can both believe they
+   * are alone is the few milliseconds between the two writes — and both losing that race skip,
+   * which is safe. Checked BEFORE the worktree, for the same reason the load check is: a run that
+   * is going to skip should not pay for a checkout first.
+   */
+  const other = otherSmokeInFlight(common, sha)
+  if (other) {
+    allow(
+      `another session's smoke is already in the shared worktree (${other.sha.slice(0, 9)}, ` +
+        `started ${Math.round(other.ageMs / 1000)}s ago) — skipping rather than typechecking a tree ` +
+        `that is neither commit`,
+    )
+  }
 
   const { dir: worktreeDir, why: worktreeWhy } = chooseWorktreeDir(common)
   if (worktreeWhy !== 'git common dir') {
