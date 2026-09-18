@@ -2664,8 +2664,6 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
             ? readHomePortfolio(userId, homeLeagueRows as unknown as Dash34LeagueRow[], now)
             : getDash34Data(userId, homeLeagueRows as unknown as Dash34LeagueRow[], now),
         ).catch(() => null)
-        const mergedIssues = summary.then((data) => mergeDash34Issues(homeDerivedIssues, data))
-
         const tradeWeek = traceCard('trade-week', () =>
           resolveCurrentWeek(
             homePlayed
@@ -2705,6 +2703,21 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
          * mutually exclusive and nothing is fetched twice.
          */
         const schedule = traceCard('schedule', () => getWeekBoard(userId, homeWeekLeagues)).catch(() => null)
+
+        /*
+         * The decision queue, which now also states the week's coin flips (the brief's
+         * "close matchups", user decisions 2026-09-17).
+         *
+         * ⚠ IT WAITS ON BOTH READS, AND THAT IS WHY THIS MOVED BELOW `schedule`. The cost is
+         * max(summary, schedule), not the sum — both are already in flight for other cards, and
+         * `getWeekBoard` is three set-based queries plus one shared cached kickoff read whatever
+         * the league count, not a per-league fan-out. Neither can reject the queue: both carry
+         * `.catch(() => null)`, and `mergeDash34Issues` treats a null of either as "not read"
+         * rather than as "nothing to report".
+         */
+        const mergedIssues = Promise.all([summary, schedule]).then(([data, board]) =>
+          mergeDash34Issues(homeDerivedIssues, data, board),
+        )
 
         /*
          * Trades that landed in the last fortnight. Reads the cache the
