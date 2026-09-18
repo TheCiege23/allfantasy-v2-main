@@ -2414,3 +2414,57 @@
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+
+/* ── Lineup lock warning ──────────────────────────────────────────────
+ * "Kicks off in 12m". Amber rather than red: a closing window is not a
+ * failure, and --bad is spoken for on this screen by the live-broadcast dot.
+ * --warn / --warn-soft are both defined per theme in af-core.css.
+ */
+.af-live-lock {
+  padding: 14px 16px;
+  border-radius: 16px;
+  background: var(--warn-soft);
+  border: 1px solid color-mix(in srgb, var(--warn) 32%, transparent);
+}
+.af-live-lock-head {
+  margin: 0 0 8px;
+  color: var(--warn);
+}
+.af-live-lock-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+/* Wraps rather than truncates: every part of this row is load-bearing, so on a
+   narrow screen it takes a second line instead of hiding the league or the time. */
+.af-live-lock-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 8px;
+}
+.af-live-lock-match {
+  font-weight: 800;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+.af-live-lock-time {
+  font-weight: 700;
+  font-size: 13px;
+  color: var(--warn);
+  font-variant-numeric: tabular-nums;
+}
+.af-live-lock-who {
+  font-size: 12px;
+  color: var(--muted);
+}
+.af-live-lock-foot {
+  margin: 10px 0 0;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--muted);
+}
