@@ -226,8 +226,15 @@ describe('🛑 a league is offered only the positions it starts', () => {
     for (const pos of [...TEAM_UNIT_POSITIONS]) expect(got).not.toContain(pos)
   })
 
-  it('🛑 no needs map means no defenders — the honest degrade, and the old behaviour exactly', () => {
-    /* A caller that never computed the needs has supplied no evidence about this league. */
+  it('🛑 no needs map falls back to the OLD filter, deliberately and imperfectly', () => {
+    /*
+     * ⚠ THE FALLBACK KEEPS THE OLD BUG, AND THAT IS THE LESSER HARM. A caller with no needs has said
+     * nothing about its league — and that includes every NON-NFL league, whose slot names this NFL
+     * slot table cannot read. `decisionBridge` passes `facts.sport` straight through, so a
+     * basketball league reaches this scorer; refusing everything it cannot prove startable would
+     * silence its waiver advice entirely. Every real NFL league takes the evidence path, because the
+     * pool precomputes the needs.
+     */
     const blind = engineInput(true, {
       teamNeeds: {
         weakestSlots: [],
@@ -238,7 +245,9 @@ describe('🛑 a league is offered only the positions it starts', () => {
       },
     })
     const got = positionsOf(blind)
-    for (const pos of ['DE', 'DT', 'LB', 'CB', 'S']) expect(got).not.toContain(pos)
+    /* The old list named LB, so it still goes; it never named DE or CB, so those still come back. */
+    expect(got).not.toContain('LB')
+    expect(got).toEqual(expect.arrayContaining(['DE', 'CB']))
   })
 })
 
@@ -309,21 +318,30 @@ describe('🛑 the spelling a provider happens to use cannot smuggle a player in
     { id: 'w-ol', name: 'Wordy Tackle', position: 'Offensive Lineman', team: 'DAL', age: 29, value: 2500 },
     { id: 'w-mgr', name: 'Wordy Manager', position: 'Manager', team: 'NYJ', age: null, value: 2500 },
     { id: 'w-rb', name: 'Wordy Back', position: 'Running Back', team: 'SEA', age: 24, value: 2600 },
+    /* The same man under the spelling the canonical service knows, so this is not blanket silence. */
+    { id: 'c-rb', name: 'Canonical Back', position: 'RB', team: 'SEA', age: 24, value: 2600 },
   ]
 
-  it('folds every spelling the table actually stores', () => {
-    expect(foldPosition('Linebacker')).toBe('LB')
-    expect(foldPosition('OUTSIDE LINEBACKER')).toBe('LB')
-    expect(foldPosition('olb')).toBe('LB')
-    expect(foldPosition('Defensive End')).toBe('DE')
-    expect(foldPosition('Nose Tackle')).toBe('DT')
-    expect(foldPosition('Safety')).toBe('S')
-    expect(foldPosition('SS')).toBe('S')
-    expect(foldPosition('Quarterback')).toBe('QB')
-    expect(foldPosition('  Wide   Receiver ')).toBe('WR')
+  it('resolves a known spelling through the governed canonical service', () => {
+    expect(foldPosition('olb')).toBe('OLB')
+    expect(foldPosition('pk')).toBe('K')
+    expect(foldPosition('D/ST')).toBe('DEF')
+    expect(foldPosition('hb')).toBe('RB')
+  })
+
+  it('⚠ PRESERVES DETAIL — it does not collapse OLB onto LB', () => {
+    /*
+     * Collapsing is a league-governed decision, and a competing collapse map in this file is what
+     * CI's "canonical position governance" guard refuses. The slot table expands the league's LB
+     * slot to the spellings that fill it instead.
+     */
+    expect(foldPosition('OLB')).not.toBe('LB')
+    expect(mapSlotToPositions('LB')).toContain('OLB')
   })
 
   it('⚠ an unrecognised label folds to itself, never to a guess', () => {
+    expect(foldPosition('Linebacker')).toBe('LINEBACKER')
+    expect(foldPosition('  Outside   Linebacker ')).toBe('OUTSIDE LINEBACKER')
     expect(foldPosition('CO-DRIVER')).toBe('CO-DRIVER')
     expect(foldPosition(null)).toBe('')
   })
@@ -333,13 +351,22 @@ describe('🛑 the spelling a provider happens to use cannot smuggle a player in
     for (const pos of ['Linebacker', 'Outside Linebacker', 'Cornerback', 'Safety', 'Defensive End']) {
       expect(got).not.toContain(pos)
     }
-    /* Still not silence: the back it CAN start is recommended, under its own spelling. */
-    expect(got).toContain('Running Back')
+    /* Not silence: the same back IS recommended, under the spelling the canonical service knows. */
+    expect(got).not.toContain('Running Back')
+    expect(got).toContain('RB')
   })
 
-  it('🛑 an IDP league IS offered the full-word defender it can start', () => {
+  it('🛑 nor is an IDP league — an unknown spelling matches no slot, in either league', () => {
+    /*
+     * ⚠ THIS IS NOT A LOST RECOMMENDATION. Measured on the real table: of 582 priceable full-word
+     * rows, ZERO lack a canonical-spelling row for the same sleeperId — so the same player reaches
+     * the league under `LB`, which the IDP league's slots do accept (asserted above). Declining the
+     * unrecognised duplicate costs nothing and cannot mis-advise.
+     */
     const got = positionsOf(engineInput(true, { availablePlayers: WORDY_WIRE }))
-    expect(got).toEqual(expect.arrayContaining(['Linebacker', 'Cornerback', 'Safety']))
+    for (const pos of ['Linebacker', 'Outside Linebacker', 'Cornerback', 'Safety']) {
+      expect(got).not.toContain(pos)
+    }
   })
 
   it('🛑 a punter, a kicker, a lineman and a coach row are never recommended', () => {
@@ -357,9 +384,9 @@ describe('🛑 the spelling a provider happens to use cannot smuggle a player in
     expect(mapSlotToPositions('FLEX')).toContain('FB')
     const got = positionsOf(
       engineInput(false, {
-        availablePlayers: [{ id: 'fb', name: 'Lead Back', position: 'Fullback', team: 'SF', age: 27, value: 2600 }],
+        availablePlayers: [{ id: 'fb', name: 'Lead Back', position: 'FB', team: 'SF', age: 27, value: 2600 }],
       }),
     )
-    expect(got).toContain('Fullback')
+    expect(got).toContain('FB')
   })
 })

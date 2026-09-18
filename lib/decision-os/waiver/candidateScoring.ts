@@ -2,7 +2,7 @@ import type { AssetValue } from '@/lib/hybrid-valuation'
 import type { TeamNeedsMap, UserGoal, SlotNeed, PositionalDepth } from '@/lib/waiver-engine/team-needs'
 import {
   foldPosition,
-  SCORABLE_WITHOUT_LEAGUE_EVIDENCE,
+  scorableWithoutLeagueEvidence,
   TEAM_UNIT_POSITIONS,
 } from '@/lib/waiver-engine/team-needs'
 import type { PlayerAnalytics } from '@/lib/player-analytics'
@@ -760,7 +760,7 @@ function scorablePosition(position: string, ctx: WaiverScoringContext): boolean 
   const pos = foldPosition(position)
   if (TEAM_UNIT_POSITIONS.has(pos)) return false
   const startable = ctx.teamNeeds?.startablePositions
-  if (!startable?.length) return SCORABLE_WITHOUT_LEAGUE_EVIDENCE.has(pos)
+  if (!startable?.length) return scorableWithoutLeagueEvidence(pos)
   return startable.some((slotPos) => foldPosition(slotPos) === pos)
 }
 

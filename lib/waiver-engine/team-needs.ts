@@ -1,3 +1,4 @@
+import { normalizeProviderPosition } from '@/lib/sports-data-gateway/canonical/canonicalPosition'
 import type { WaiverRosterPlayer } from '@/lib/decision-os/waiver/candidateScoring'
 
 export interface SlotNeed {
@@ -94,58 +95,46 @@ export const IDP_POSITIONS: ReadonlySet<string> = new Set([
 export const TEAM_UNIT_POSITIONS: ReadonlySet<string> = new Set(['K', 'P', 'DEF', 'DST', 'D/ST'])
 
 /**
- * Every position spelling this table stores, folded to one canonical label.
+ * One position spelling, resolved to the repo's canonical label.
  *
- * 🛑 MEASURED, NOT GUESSED. `SportsPlayer` holds 24,179 NFL rows in at least three
- * vocabularies: canonical abbreviations (`LB`, `CB`), provider aliases (`OLB` 271, `SS` 187,
- * `FS` 163, `ILB` 151, `NT` 104, `MLB` 8) and FULL WORDS from thesportsdb (`Linebacker`,
- * `Cornerback`, `Safety`, `Defensive End`, 2,076 rows, 582 of them carrying a sleeperId).
+ * 🛑 THIS DELEGATES; IT DOES NOT DECIDE. A first draft carried its own alias table here and CI
+ * was right to refuse it: `__tests__/fantasy-os/unified-plane-provider-boundary.test.ts` ("5H-b2 —
+ * canonical position governance") fails any NEW file that maps a detailed position onto a broad
+ * bucket, because competing normalisation truth is exactly what the governed service replaces.
+ * `lib/sports-data-gateway/canonical/canonicalPosition.ts` is that authority.
  *
- * 🛑 AND THE FULL-WORD ROW IS A SEPARATE POOL ENTRY, NOT A LOSING DUPLICATE.
- * `SportPlayerPoolResolver` dedupes on `name|position|team`, so `Smith|LB|KC` and
- * `Smith|Linebacker|KC` are different keys and BOTH survive. They share a sleeperId, so both get
- * priced. That is how a filter naming `LB` still recommended the same linebacker: it turned away
- * one spelling of him and scored the other.
+ * ⚠ IT PRESERVES DETAIL. `OLB` stays `OLB`; it is NOT collapsed to `LB`. Collapsing is a
+ * LEAGUE-GOVERNED decision, which is why the slot table below expands a league's `LB` slot to the
+ * spellings that fill it rather than folding the players.
  *
- * ⚠ AN UNKNOWN SPELLING FOLDS TO ITSELF, uppercased and space-collapsed — never to a guess. The
- * caller then finds it absent from the league's startable set and declines to recommend it, which
- * is the safe direction for a label nobody here recognises.
+ * ⚠ AN UNRECOGNISED LABEL FALLS BACK TO ITSELF, uppercased and space-collapsed — never to a guess.
+ * The full words thesportsdb writes (`Linebacker`, `Cornerback`) are unknown to the canonical map,
+ * so they stay unknown, match no slot, and are declined. That is the safe direction: the same player
+ * reaches the league under his canonical row.
  */
-const POSITION_FOLD: Readonly<Record<string, string>> = {
-  QUARTERBACK: 'QB',
-  'RUNNING BACK': 'RB', HALFBACK: 'RB', TAILBACK: 'RB',
-  FULLBACK: 'FB', 'FULL-BACK': 'FB',
-  'WIDE RECEIVER': 'WR', RECEIVER: 'WR',
-  'TIGHT END': 'TE',
-  LINEBACKER: 'LB', OLB: 'LB', ILB: 'LB', MLB: 'LB',
-  'OUTSIDE LINEBACKER': 'LB', 'INSIDE LINEBACKER': 'LB', 'MIDDLE LINEBACKER': 'LB',
-  CORNERBACK: 'CB',
-  SAFETY: 'S', SAF: 'S', SS: 'S', FS: 'S', 'STRONG SAFETY': 'S', 'FREE SAFETY': 'S',
-  'DEFENSIVE BACK': 'DB',
-  'DEFENSIVE END': 'DE', EDGE: 'DE',
-  'DEFENSIVE TACKLE': 'DT', 'NOSE TACKLE': 'DT', NT: 'DT',
-  'DEFENSIVE LINEMAN': 'DL',
-  KICKER: 'K', 'PLACE KICKER': 'K', PLACEKICKER: 'K', PK: 'K',
-  PUNTER: 'P',
-  DEFENSE: 'DEF', DEFENCE: 'DEF', DST: 'DEF', 'D/ST': 'DEF',
-}
-
 export function foldPosition(position: string | null | undefined): string {
   const raw = String(position ?? '').trim().replace(/\s+/g, ' ').toUpperCase()
-  return POSITION_FOLD[raw] ?? raw
+  if (!raw) return ''
+  const canonical = normalizeProviderPosition(raw, 'NFL')
+  return canonical.isUnknown ? raw : canonical.canonicalPrimaryPosition
 }
 
 /**
- * What may be recommended when the league's own slots are unknown.
+ * The filter used when the league's own slots are unknown.
  *
- * ⚠ THE NO-EVIDENCE PATH IS STRICTER THAN THE FILTER IT REPLACES, deliberately. The old list
- * skipped seven named positions and scored everything else, which let `DE`, `CB`, `S`, `DST` and
- * every full-word and offensive-line row through. Recommending only the positions every fantasy
- * league starts cannot produce advice about a player nobody can start.
+ * 🛑 THIS IS THE OLD BEHAVIOUR, KEPT DELIBERATELY, AND IT IS THE WRONG ONE. It is retained for
+ * the callers that supply no evidence — which includes every NON-NFL league, whose slot names this
+ * NFL slot table cannot read. `decisionBridge` passes `facts.sport` through, so a basketball league
+ * reaches this scorer; applying the strict rule with no evidence would silence its waiver advice
+ * completely. Every real NFL league takes the evidence path, because the pool precomputes the needs.
  */
-export const SCORABLE_WITHOUT_LEAGUE_EVIDENCE: ReadonlySet<string> = new Set([
-  'QB', 'RB', 'WR', 'TE', 'FB',
+const LEGACY_UNCONDITIONAL_SKIP: ReadonlySet<string> = new Set([
+  'K', 'DEF', 'LB', 'DL', 'DB', 'EDGE', 'IDP',
 ])
+
+export function scorableWithoutLeagueEvidence(position: string): boolean {
+  return !LEGACY_UNCONDITIONAL_SKIP.has(position.toUpperCase())
+}
 
 function clamp(v: number, lo: number, hi: number): number {
   return Math.max(lo, Math.min(hi, v))
