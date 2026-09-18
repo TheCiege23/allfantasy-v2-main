@@ -1,82 +1,67 @@
 import { expect, test } from "@playwright/test"
 import {
+  ADMIN_RENDER_TIMEZONE,
   TARGET_TIMEZONE,
   bootstrapAdminTimezoneSession,
-  formatExpected,
+  hourLabelOf,
+  hourLabelsAroundNow,
 } from "./helpers/admin-timezone-smoke"
 
-/*
- * ⚠ SKIPPED BECAUSE EVERY SURFACE IT DRIVES IS GONE — AND THE 240s TIMEOUT IT USED TO
- * REPORT WAS HIDING THAT. Until 2026-09-17 this failed with nothing but "Test timeout of
- * 240000ms exceeded", because `registerAndLogin()` landed on `/dashboard` (retired
- * 2026-08-24, 307'd to `/core`) and the helper's `waitForURL` had no timeout, so it hung on
- * a path that can never match. That landing bug is FIXED in `helpers/auth-flow.ts`, and the
- * fix moved this spec past sign-in for the first time in weeks — straight onto a second
- * layer of rot underneath:
+/**
+ * The admin console renders ONE canonical timezone — Eastern — for every viewer, and this
+ * proves it stays that way.
  *
- *   GET /api/admin/audit          → route does not exist
- *   GET /api/admin/signups/stats  → route does not exist
- *   heading "Audit log"           → not on app/admin/page.tsx
- *   heading "Recent Signups"      → not on app/admin/page.tsx
+ * The signed-in user's profile is set to `America/Los_Angeles` first, so a page that started
+ * following the viewer (by picking up `hooks/useUserTimezone`, as 53 other components do)
+ * would fail here rather than change behaviour unnoticed. Three hours separate the two zones,
+ * so the rendered HOUR is the discriminator.
  *
- * The admin page was rebuilt and these hooks did not come with it. Rewriting the spec
- * against the current page is real work with its own product questions (which tabs are the
- * "core admin pages" now?), so it is recorded here rather than guessed at.
- *
- * ⚠ WHAT COVERAGE THIS COSTS: nothing now checks that admin surfaces render dates in the
- * signed-in user's timezone. That was a real bug class — it is why this spec exists.
+ * ⚠ WHAT THIS REPLACED. Until 2026-09-17 this spec asserted the opposite — that admin pages
+ * follow the user's timezone — by driving `/admin?tab=audit` and `/admin?tab=signups` and
+ * calling `/api/admin/audit` and `/api/admin/signups/stats`. The page has had no tabs since
+ * its rebuild, both endpoints were removed, and the user-timezone rendering was never
+ * reinstated. It reported none of that: `registerAndLogin()` landed on the retired
+ * `/dashboard` and the helper's unbounded `waitForURL` hung until the 240s budget expired,
+ * so the only symptom for months was a timeout. See PR #1024 for that repair.
  */
-test.skip("core admin pages render dates in user timezone", async ({ page }) => {
+test("the admin console stamps its refresh time in Eastern, not the viewer's timezone", async ({
+  page,
+}) => {
   test.setTimeout(240_000)
   await bootstrapAdminTimezoneSession(page)
 
-  await page.goto("/admin?tab=audit")
-  await expect(page.getByRole("heading", { name: "Audit log" }).first()).toBeVisible()
+  // A cold `next dev` compile of this page can outrun the default navigation budget; that is
+  // a build cost, not a product latency.
+  await page.goto("/admin", { waitUntil: "domcontentloaded", timeout: 120_000 })
 
-  const auditResponse = await page.request.get("/api/admin/audit?limit=100")
-  expect(auditResponse.ok()).toBeTruthy()
+  /*
+   * The header's "refreshed <time>" stamp is rendered server-side from `data.generatedAt` on
+   * every load (app/admin/page.tsx), which makes it the one date on this page that is always
+   * present — no search, no seeded rows, nothing to arrange.
+   */
+  const stamp = page.locator(".af-cc-stamp")
+  await expect(stamp).toBeVisible({ timeout: 60_000 })
+  const stampText = (await stamp.innerText()).trim()
 
-  const auditJson = await auditResponse.json()
-  const firstAudit = Array.isArray(auditJson?.data) ? auditJson.data[0] : null
+  const renderedHour = hourLabelOf(stampText)
+  expect(renderedHour, `no time found in the refresh stamp: ${JSON.stringify(stampText)}`).not.toBeNull()
 
-  if (firstAudit?.createdAt) {
-    const expectedAuditTime = await formatExpected(page, firstAudit.createdAt, TARGET_TIMEZONE, {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    })
-    await expect(page.getByText(expectedAuditTime).first()).toBeVisible()
-  } else {
-    await expect(page.getByText(/No audit entries yet/i)).toBeVisible()
-  }
+  const easternHours = await hourLabelsAroundNow(page, ADMIN_RENDER_TIMEZONE)
+  const viewerHours = await hourLabelsAroundNow(page, TARGET_TIMEZONE)
 
-  await page.goto("/admin?tab=signups")
-  await expect(page.getByRole("heading", { name: "Recent Signups" }).first()).toBeVisible()
+  expect(
+    easternHours,
+    `admin stamped ${renderedHour} (${stampText}); expected Eastern, one of ${easternHours.join(" / ")}`,
+  ).toContain(renderedHour)
 
-  const signupsStatsResponse = await page.request.get("/api/admin/signups/stats")
-  expect(signupsStatsResponse.ok()).toBeTruthy()
-  const signupsStatsJson = await signupsStatsResponse.json()
-  const firstSignup = Array.isArray(signupsStatsJson?.recentSignups)
-    ? signupsStatsJson.recentSignups[0]
-    : null
-
-  if (firstSignup?.createdAt) {
-    const expectedSignupDateTime = await formatExpected(
-      page,
-      firstSignup.createdAt,
-      TARGET_TIMEZONE,
-      {
-        month: "short",
-        day: "numeric",
-        year: "numeric",
-        hour: "numeric",
-        minute: "2-digit",
-      }
-    )
-    await expect(page.getByText(expectedSignupDateTime).first()).toBeVisible()
-  } else {
-    await expect(page.getByText(/No signups in the last 48 hours/i)).toBeVisible()
-  }
+  /*
+   * The half that would catch a silent switch to the viewer's timezone. Without it, a page
+   * that rendered Los Angeles would still satisfy the assertion above on any run where the
+   * two happened to agree — they never do at three hours apart, but asserting it explicitly
+   * is what makes this test about the CONTRACT rather than about today's clock.
+   */
+  expect(
+    viewerHours,
+    `admin stamped ${renderedHour}, the viewer's own Los Angeles hour — the console is meant to speak Eastern to everyone`,
+  ).not.toContain(renderedHour)
 })
