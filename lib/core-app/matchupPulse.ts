@@ -7,6 +7,7 @@ import { getTeamInfo } from '@/lib/team-abbrev'
 import { computeLeagueProjectedPoints, extractScoringSettings } from '@/lib/projections/leagueScoring'
 import { resolveCurrentWeekFrom, isScored, type WeekScoreRow } from './currentWeek'
 import { leagueDisplayName } from './leagueHome'
+import { importedOrphanOwnerKey } from '@/lib/league-import/importedRosterIdentity'
 import { myRosterCandidates } from './myRoster'
 import { latestProjectionWeek, lookupProjections } from './playerProjections'
 
@@ -460,10 +461,25 @@ export async function getMatchupPulse(
        * The opponent's own candidates, minus `userId` — that key is the CALLER's,
        * and offering it here could match the caller's roster to the other side of
        * their own matchup.
+       *
+       * 🛑 AND THE ORPHAN KEY, BECAUSE A MANAGERLESS TEAM HAS NO MANAGER ID TO OFFER. Since #1005 its
+       * roster is stored under `orphan-<provider>-<teamId>` (`importedOrphanOwnerKey`, the write
+       * side's own function). Production 2026-09-17: 207 of the 210 teams no manager id could reach
+       * are orphans, and 60 matchups of a claimed team in 16 leagues face one — every one of those
+       * pairings fell into `notRanked.unpriceable`, so the league vanished from this board.
+       *
+       * ⚠ DERIVED RATHER THAN RESOLVED, AND THAT IS A COST DECISION. The full rule
+       * (`resolveRostersForTeams`) needs every roster of every league, because the key may be one we
+       * cannot name — a dozen rows on a single-league screen, but ~1.5 MB on the 96-league account
+       * this board serves, against ~250 KB today. This key IS nameable, so it costs nothing. What it
+       * does not cover is a team whose MANAGER CHANGED (3 of the 210); that one still needs the
+       * resolver, and the screens that can afford it use it.
        */
-      theirRosterKeys: [oppTeam?.platformUserId, String(oppRow.rosterId)].filter(
-        (v): v is string => typeof v === 'string' && v.length > 0,
-      ),
+      theirRosterKeys: [
+        oppTeam?.platformUserId,
+        String(oppRow.rosterId),
+        importedOrphanOwnerKey(platform, String(oppRow.rosterId)),
+      ].filter((v): v is string => typeof v === 'string' && v.length > 0),
       opponentName,
       opponentAvatarUrl: asImageUrl(oppTeam?.avatarUrl, platform),
       opponentInitials: initialsOf(opponentName ?? `Roster ${oppRow.rosterId}`),
