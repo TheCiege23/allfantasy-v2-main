@@ -40,6 +40,15 @@ export function LiveScoresClient({ initial }: { initial: LivePageData }) {
   const [isRefreshing, setIsRefreshing] = useState(false)
   // Guards against a slow response for an old sport landing after a new one.
   const requestSeq = useRef(0)
+  /*
+   * The validator for the payload on screen, so an unchanged slate comes back as a
+   * bodiless 304 instead of the whole scoreboard again.
+   *
+   * ⚠ A REF, NOT STATE. In state it would change `load`'s identity on every
+   * poll and restart the polling effect that depends on it -- a self-retriggering
+   * refresh loop, to cache a value no render reads.
+   */
+  const etagRef = useRef<string | null>(null)
 
   const load = useCallback(
     async (nextSport: string, nextScope: 'my' | 'all') => {
@@ -48,12 +57,34 @@ export function LiveScoresClient({ initial }: { initial: LivePageData }) {
       try {
         const res = await fetch(
           `/api/dashboard/live-scores?view=live&sport=${encodeURIComponent(nextSport)}&scope=${nextScope}`,
-          { cache: 'no-store' },
+          {
+            cache: 'no-store',
+            headers: etagRef.current ? { 'If-None-Match': etagRef.current } : undefined,
+          },
         )
+        /*
+         * ⚠ NOTHING CHANGED, SO NOTHING IS TOUCHED -- INCLUDING THE AGE LABEL.
+         * A 304 means the payload is identical down to its `fetchedAt`, so the feed
+         * was not re-read and "updated Ns ago" SHOULD keep climbing. `setNow` here
+         * would reset that clock and claim a freshness we were not given.
+         *
+         * Checked before `res.ok`, which is false for 304 -- without this branch a
+         * 304 falls into the failure path, indistinguishable from an outage.
+         */
+        if (res.status === 304) return
         if (!res.ok) return
         const json = (await res.json()) as LivePageData
         // A stale response must never overwrite a newer one.
         if (seq !== requestSeq.current) return
+        /*
+         * ⚠ RECORDED ONLY ONCE THE DATA IS APPLIED, AND AFTER THE STALENESS
+         * GUARD FOR THAT REASON. Stamping it earlier lets a slow response for an
+         * older view record a tag for a payload that never reached the screen --
+         * after which the server answers 304 about data the reader has never seen
+         * and the slate freezes with nothing to show why.
+         */
+        const tag = res.headers.get('ETag')
+        etagRef.current = tag
         setData(json)
         setNow(Date.now())
       } catch {
