@@ -1,4 +1,5 @@
-import type { WaiverRosterPlayer } from './waiver-scoring'
+import { normalizeProviderPosition } from '@/lib/sports-data-gateway/canonical/canonicalPosition'
+import type { WaiverRosterPlayer } from '@/lib/decision-os/waiver/candidateScoring'
 
 export interface SlotNeed {
   slot: string
@@ -42,6 +43,15 @@ export interface TeamNeedsMap {
   byeWeekClusters: ByeWeekCluster[]
   positionalDepth: PositionalDepth[]
   dropCandidates: DropRiskOfRegret[]
+  /**
+   * Every position this league actually starts, expanded from its own slots.
+   *
+   * 🛑 THIS IS THE WAIVER ENGINE'S ONLY EVIDENCE THAT A DEFENSIVE POSITION IS WORTH
+   * RECOMMENDING, and it is OPTIONAL on purpose. Absent means "nobody computed the needs", not
+   * "this league starts nothing" — the engine then falls back to recommending no defenders at all,
+   * which is the honest degrade and is exactly what every caller did before this field existed.
+   */
+  startablePositions?: string[]
 }
 
 export type UserGoal = 'win-now' | 'balanced' | 'rebuild'
@@ -60,22 +70,117 @@ export type ByeWeekByClub = Record<string, number>
 
 const VALUE_TO_PPG_FACTOR = 0.0012
 
+/**
+ * Individual defensive positions, in every spelling that reaches this code.
+ *
+ * ⚠ TWO VOCABULARIES ARRIVE AND ONLY ONE IS FOLDED. `SportPlayerPoolResolver` normalises the WIRE
+ * through `normalizeNflIdpPosition` (EDGE->DE, OLB/ILB/MLB->LB, SS/FS->S, NT->DT), but the ROSTER
+ * side is read straight off `SportsPlayer.position` and keeps whatever the provider wrote — so a
+ * manager can be starting an `OLB` against an `LB` slot. Holding both spellings is deliberate: a
+ * superset is harmless in a membership test, while a missing spelling silently drops a real starter.
+ */
+export const IDP_POSITIONS: ReadonlySet<string> = new Set([
+  'DL', 'DE', 'DT', 'NT', 'EDGE',
+  'LB', 'ILB', 'OLB', 'MLB',
+  'DB', 'CB', 'S', 'SS', 'FS',
+  'IDP',
+])
+
+/**
+ * Whole-unit positions: a kicker and a team defence.
+ *
+ * These are never waiver-scored, even in a league that starts them — a measured limitation rather
+ * than an oversight. See `scorablePosition` in the waiver engine for why.
+ */
+export const TEAM_UNIT_POSITIONS: ReadonlySet<string> = new Set(['K', 'P', 'DEF', 'DST', 'D/ST'])
+
+/**
+ * One position spelling, resolved to the repo's canonical label.
+ *
+ * 🛑 THIS DELEGATES; IT DOES NOT DECIDE. A first draft carried its own alias table here and CI
+ * was right to refuse it: `__tests__/fantasy-os/unified-plane-provider-boundary.test.ts` ("5H-b2 —
+ * canonical position governance") fails any NEW file that maps a detailed position onto a broad
+ * bucket, because competing normalisation truth is exactly what the governed service replaces.
+ * `lib/sports-data-gateway/canonical/canonicalPosition.ts` is that authority.
+ *
+ * ⚠ IT PRESERVES DETAIL. `OLB` stays `OLB`; it is NOT collapsed to `LB`. Collapsing is a
+ * LEAGUE-GOVERNED decision, which is why the slot table below expands a league's `LB` slot to the
+ * spellings that fill it rather than folding the players.
+ *
+ * ⚠ AN UNRECOGNISED LABEL FALLS BACK TO ITSELF, uppercased and space-collapsed — never to a guess.
+ * The full words thesportsdb writes (`Linebacker`, `Cornerback`) are unknown to the canonical map,
+ * so they stay unknown, match no slot, and are declined. That is the safe direction: the same player
+ * reaches the league under his canonical row.
+ */
+export function foldPosition(position: string | null | undefined): string {
+  const raw = String(position ?? '').trim().replace(/\s+/g, ' ').toUpperCase()
+  if (!raw) return ''
+  const canonical = normalizeProviderPosition(raw, 'NFL')
+  return canonical.isUnknown ? raw : canonical.canonicalPrimaryPosition
+}
+
+/**
+ * The filter used when the league's own slots are unknown.
+ *
+ * 🛑 THIS IS THE OLD BEHAVIOUR, KEPT DELIBERATELY, AND IT IS THE WRONG ONE. It is retained for
+ * the callers that supply no evidence — which includes every NON-NFL league, whose slot names this
+ * NFL slot table cannot read. `decisionBridge` passes `facts.sport` through, so a basketball league
+ * reaches this scorer; applying the strict rule with no evidence would silence its waiver advice
+ * completely. Every real NFL league takes the evidence path, because the pool precomputes the needs.
+ */
+const LEGACY_UNCONDITIONAL_SKIP: ReadonlySet<string> = new Set([
+  'K', 'DEF', 'LB', 'DL', 'DB', 'EDGE', 'IDP',
+])
+
+export function scorableWithoutLeagueEvidence(position: string): boolean {
+  return !LEGACY_UNCONDITIONAL_SKIP.has(position.toUpperCase())
+}
+
 function clamp(v: number, lo: number, hi: number): number {
   return Math.max(lo, Math.min(hi, v))
 }
 
-function mapSlotToPositions(slot: string): string[] {
+/**
+ * The positions a starting slot accepts.
+ *
+ * 🛑 THIS IS THE ONE PLACE THAT KNOWS WHAT A LEAGUE STARTS, and it is exported so the waiver
+ * engine can ask instead of carrying a second copy. Two implementations of one rule is the bug.
+ *
+ * ⚠ AN UNKNOWN SLOT RETURNS [], AND EVERY CALLER MUST READ THAT AS "no evidence" rather than "no
+ * positions". An unrecognised slot must never widen what gets recommended.
+ */
+export function mapSlotToPositions(slot: string): string[] {
   const s = slot.toUpperCase()
   if (s === 'QB') return ['QB']
-  if (s === 'RB') return ['RB']
+  if (s === 'RB') return ['RB', 'FB']
   if (s === 'WR') return ['WR']
   if (s === 'TE') return ['TE']
   if (s === 'K') return ['K']
-  if (s === 'DEF') return ['DEF']
-  if (s === 'FLEX' || s === 'RB/WR/TE') return ['RB', 'WR', 'TE']
-  if (s === 'SUPER_FLEX' || s === 'SF' || s === 'QB/RB/WR/TE') return ['QB', 'RB', 'WR', 'TE']
+  /*
+   * A team defence is written `DEF`, `DST` or `D/ST` depending on the platform. A slot spelled one
+   * way never matched a roster spelled another, which read as an empty slot — and so as a need
+   * worth the whole league median.
+   */
+  if (s === 'DEF' || s === 'DST' || s === 'D/ST') return ['DEF', 'DST', 'D/ST']
+  if (s === 'FLEX' || s === 'RB/WR/TE') return ['RB', 'FB', 'WR', 'TE']
+  if (s === 'SUPER_FLEX' || s === 'SF' || s === 'QB/RB/WR/TE') return ['QB', 'RB', 'FB', 'WR', 'TE']
   if (s === 'REC_FLEX' || s === 'WR/TE') return ['WR', 'TE']
-  if (s === 'IDP_FLEX') return ['LB', 'DL', 'DB']
+  /*
+   * 🛑 THE DISCRETE DEFENSIVE SLOTS WERE ABSENT, so an IDP league's `LB`, `DL` and `DB` slots
+   * each mapped to [] and dropped out of the slot maths entirely: no weakest slot, no need, no gap.
+   * The only defensive slot this knew was `IDP_FLEX`, and it answered ['LB','DL','DB'] — which a
+   * real Sleeper roster never matches, because that roster holds a `CB` or a `DE`.
+   */
+  if (s === 'LB') return ['LB', 'ILB', 'OLB', 'MLB']
+  if (s === 'ILB' || s === 'MLB') return ['ILB', 'MLB', 'LB']
+  if (s === 'OLB') return ['OLB', 'LB']
+  if (s === 'DL') return ['DL', 'DE', 'DT', 'NT', 'EDGE']
+  if (s === 'DE' || s === 'EDGE') return ['DE', 'EDGE', 'DL']
+  if (s === 'DT' || s === 'NT') return ['DT', 'NT', 'DL']
+  if (s === 'DB') return ['DB', 'CB', 'S', 'SS', 'FS']
+  if (s === 'CB') return ['CB', 'DB']
+  if (s === 'S' || s === 'SS' || s === 'FS') return ['S', 'SS', 'FS', 'DB']
+  if (s === 'IDP_FLEX' || s === 'IDP') return [...IDP_POSITIONS]
   return []
 }
 
@@ -94,7 +199,13 @@ export function computeTeamNeeds(
   const weakestSlots = computeWeakestSlots(starters, starterSlots, allLeagueRosters)
   const biggestNeed = weakestSlots.length > 0 ? weakestSlots[0] : null
   const byeWeekClusters = computeByeWeekClusters(starters, currentWeek, byeWeekByClub)
-  const positionalDepth = computePositionalDepth(rosterPlayers, allLeagueRosters)
+  /*
+   * ⚠ `flatMap` HANDS ITS CALLBACK (value, index, array). Passing `mapSlotToPositions` bare would
+   * still work today because it reads one parameter, but it is one signature change away from
+   * silently taking an index as a slot name.
+   */
+  const startablePositions = [...new Set(starterSlots.flatMap((slot) => mapSlotToPositions(slot)))]
+  const positionalDepth = computePositionalDepth(rosterPlayers, allLeagueRosters, startablePositions)
   const dropCandidates = computeDropCandidates(rosterPlayers)
 
   return {
@@ -103,6 +214,7 @@ export function computeTeamNeeds(
     byeWeekClusters,
     positionalDepth,
     dropCandidates,
+    startablePositions,
   }
 }
 
@@ -210,11 +322,35 @@ function computeByeWeekClusters(
   return clusters
 }
 
+const DEPTH_BASE_POSITIONS = ['QB', 'RB', 'WR', 'TE']
+
 function computePositionalDepth(
   rosterPlayers: WaiverRosterPlayer[],
   allLeagueRosters: { players: WaiverRosterPlayer[] }[],
+  startablePositions: string[] = [],
 ): PositionalDepth[] {
-  const positions = ['QB', 'RB', 'WR', 'TE']
+  /*
+   * 🛑 THIS WAS FOUR HARDCODED POSITIONS, so an IDP league got no depth reading for the half
+   * of its lineup that is defensive — the `wa_depth_gap` driver could never fire for a linebacker.
+   *
+   * ⚠ IT ADDS ONLY POSITIONS SOMEBODY IN THE LEAGUE ACTUALLY ROSTERS, and it adds them under the
+   * spelling the rosters use. Enumerating every spelling a slot accepts would emit zero-count rows
+   * for aliases nobody writes (an `ILB` row in a league whose provider says `LB`), and a zero count
+   * reads as a depth hole rather than as an absent label. K and team defences stay out: they are
+   * not priced on the scale these ratings are built from.
+   */
+  const startable = new Set(startablePositions.map((p) => p.toUpperCase()))
+  const rostered = new Set<string>()
+  for (const roster of allLeagueRosters) {
+    for (const p of roster.players) rostered.add(p.position)
+  }
+  const extra = [...rostered].filter(
+    (p) =>
+      !DEPTH_BASE_POSITIONS.includes(p) &&
+      startable.has(p.toUpperCase()) &&
+      !TEAM_UNIT_POSITIONS.has(p.toUpperCase()),
+  )
+  const positions = [...DEPTH_BASE_POSITIONS, ...extra]
   const result: PositionalDepth[] = []
 
   for (const pos of positions) {
