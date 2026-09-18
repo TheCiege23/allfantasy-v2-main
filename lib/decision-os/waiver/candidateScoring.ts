@@ -1,6 +1,10 @@
 import type { AssetValue } from '@/lib/hybrid-valuation'
 import type { TeamNeedsMap, UserGoal, SlotNeed, PositionalDepth } from '@/lib/waiver-engine/team-needs'
-import { IDP_POSITIONS, TEAM_UNIT_POSITIONS } from '@/lib/waiver-engine/team-needs'
+import {
+  foldPosition,
+  SCORABLE_WITHOUT_LEAGUE_EVIDENCE,
+  TEAM_UNIT_POSITIONS,
+} from '@/lib/waiver-engine/team-needs'
 import type { PlayerAnalytics } from '@/lib/player-analytics'
 import { computeAthleticGrade, computeCollegeProductionGrade } from '@/lib/player-analytics'
 
@@ -719,35 +723,45 @@ export function buildWaiverIntelSignals(
 /**
  * Is this position worth scoring in THIS league?
  *
- * 🛑 THE TEST USED TO BE AN UNCONDITIONAL LIST — `['K','DEF','LB','DL','DB','EDGE','IDP']`
+ * 🛑 THE TEST USED TO BE AN UNCONDITIONAL BLOCKLIST — `['K','DEF','LB','DL','DB','EDGE','IDP']`
  * skipped in every league — and it was wrong in BOTH directions at once.
  *
  * Too aggressive: an IDP league starts linebackers every week, and `LB` was on the list, so that
  * league got no waiver advice at all for the defensive half of its lineup.
  *
- * Too narrow, and this is the half that ships wrong advice rather than none: the wire is normalised
- * by `SportPlayerPoolResolver` (EDGE->DE, OLB/ILB/MLB->LB, SS/FS->S, NT->DT), so the positions that
- * actually arrive here are QB, RB, WR, TE, K, DST, DE, DT, LB, CB and S. Of those, only `K` and
- * `LB` were ever on the list. `DE`, `DT`, `CB` and `S` sailed straight through and were scored,
- * ranked and given a FAAB bid — in redraft leagues that start no defenders at all.
+ * Too narrow, and this is the half that ships wrong advice rather than none. Measured against the
+ * real table rather than reasoned about: a 12-team REDRAFT fixture starting no defenders is
+ * recommended `['RB','DE','CB','DST','S']` — four of five unstartable, each with a FAAB bid,
+ * because only `K` and `LB` of the arriving spellings were ever on that list.
  *
- * The rule now: a position only some leagues start is scored only on POSITIVE EVIDENCE that this
- * league starts it, read from the league's own slots via `mapSlotToPositions`. No evidence means no
- * recommendation, so a caller that never computed the needs keeps exactly the old behaviour.
+ * 🛑 AND A BLOCKLIST CANNOT BE REPAIRED BY LENGTHENING IT. `SportsPlayer` stores at least three
+ * vocabularies, and `SportPlayerPoolResolver` dedupes on `name|position|team` — so a player's
+ * `Linebacker` row (thesportsdb) and `LB` row are DIFFERENT KEYS and both reach the wire, both
+ * priced off the same sleeperId. Naming `LB` turns away one spelling of a man and scores the other.
+ * 2,076 full-word rows exist, 582 of them priceable.
  *
- * ⚠ A KICKER AND A TEAM DEFENCE STAY OUT even when the league starts them, and that is a measured
- * limit rather than a preference: every dimension below is built from `value`/`assetValue`, the
- * market trade-value scale, and whole units are not priced on it. A composite built from a price
+ * So the rule is inverted. Nothing is blocked by name; a candidate is scored only when the league's
+ * OWN SLOTS accept its position — `mapSlotToPositions` expanded over `roster_positions`, compared
+ * after folding both sides through `foldPosition`. An offensive lineman, a coach row, a punter and
+ * an unrecognised label are all excluded for the same reason rather than by enumeration: no slot
+ * takes them.
+ *
+ * ⚠ NO EVIDENCE MEANS THE STANDARD OFFENSIVE POSITIONS, WHICH IS STRICTER THAN THE OLD LIST. A
+ * caller that never computed the needs has told us nothing about its league, and the old answer
+ * there was to recommend defenders to it.
+ *
+ * ⚠ A KICKER, A PUNTER AND A TEAM DEFENCE STAY OUT even when the league starts them, and that is a
+ * measured limit rather than a preference: every dimension below is built from `value`/`assetValue`,
+ * the market trade-value scale, and whole units are not priced on it. A composite built from a price
  * that does not exist cannot rank them against a skill player. Individual defenders ARE priced on
  * that scale, which is precisely what makes IDP scorable here and a kicker not.
  */
 function scorablePosition(position: string, ctx: WaiverScoringContext): boolean {
-  const pos = String(position ?? '').toUpperCase()
+  const pos = foldPosition(position)
   if (TEAM_UNIT_POSITIONS.has(pos)) return false
-  if (!IDP_POSITIONS.has(pos)) return true
   const startable = ctx.teamNeeds?.startablePositions
-  if (!startable?.length) return false
-  return startable.some((slotPos) => slotPos.toUpperCase() === pos)
+  if (!startable?.length) return SCORABLE_WITHOUT_LEAGUE_EVIDENCE.has(pos)
+  return startable.some((slotPos) => foldPosition(slotPos) === pos)
 }
 
 export function scoreWaiverCandidates(

@@ -91,7 +91,61 @@ export const IDP_POSITIONS: ReadonlySet<string> = new Set([
  * These are never waiver-scored, even in a league that starts them — a measured limitation rather
  * than an oversight. See `scorablePosition` in the waiver engine for why.
  */
-export const TEAM_UNIT_POSITIONS: ReadonlySet<string> = new Set(['K', 'DEF', 'DST', 'D/ST'])
+export const TEAM_UNIT_POSITIONS: ReadonlySet<string> = new Set(['K', 'P', 'DEF', 'DST', 'D/ST'])
+
+/**
+ * Every position spelling this table stores, folded to one canonical label.
+ *
+ * 🛑 MEASURED, NOT GUESSED. `SportsPlayer` holds 24,179 NFL rows in at least three
+ * vocabularies: canonical abbreviations (`LB`, `CB`), provider aliases (`OLB` 271, `SS` 187,
+ * `FS` 163, `ILB` 151, `NT` 104, `MLB` 8) and FULL WORDS from thesportsdb (`Linebacker`,
+ * `Cornerback`, `Safety`, `Defensive End`, 2,076 rows, 582 of them carrying a sleeperId).
+ *
+ * 🛑 AND THE FULL-WORD ROW IS A SEPARATE POOL ENTRY, NOT A LOSING DUPLICATE.
+ * `SportPlayerPoolResolver` dedupes on `name|position|team`, so `Smith|LB|KC` and
+ * `Smith|Linebacker|KC` are different keys and BOTH survive. They share a sleeperId, so both get
+ * priced. That is how a filter naming `LB` still recommended the same linebacker: it turned away
+ * one spelling of him and scored the other.
+ *
+ * ⚠ AN UNKNOWN SPELLING FOLDS TO ITSELF, uppercased and space-collapsed — never to a guess. The
+ * caller then finds it absent from the league's startable set and declines to recommend it, which
+ * is the safe direction for a label nobody here recognises.
+ */
+const POSITION_FOLD: Readonly<Record<string, string>> = {
+  QUARTERBACK: 'QB',
+  'RUNNING BACK': 'RB', HALFBACK: 'RB', TAILBACK: 'RB',
+  FULLBACK: 'FB', 'FULL-BACK': 'FB',
+  'WIDE RECEIVER': 'WR', RECEIVER: 'WR',
+  'TIGHT END': 'TE',
+  LINEBACKER: 'LB', OLB: 'LB', ILB: 'LB', MLB: 'LB',
+  'OUTSIDE LINEBACKER': 'LB', 'INSIDE LINEBACKER': 'LB', 'MIDDLE LINEBACKER': 'LB',
+  CORNERBACK: 'CB',
+  SAFETY: 'S', SAF: 'S', SS: 'S', FS: 'S', 'STRONG SAFETY': 'S', 'FREE SAFETY': 'S',
+  'DEFENSIVE BACK': 'DB',
+  'DEFENSIVE END': 'DE', EDGE: 'DE',
+  'DEFENSIVE TACKLE': 'DT', 'NOSE TACKLE': 'DT', NT: 'DT',
+  'DEFENSIVE LINEMAN': 'DL',
+  KICKER: 'K', 'PLACE KICKER': 'K', PLACEKICKER: 'K', PK: 'K',
+  PUNTER: 'P',
+  DEFENSE: 'DEF', DEFENCE: 'DEF', DST: 'DEF', 'D/ST': 'DEF',
+}
+
+export function foldPosition(position: string | null | undefined): string {
+  const raw = String(position ?? '').trim().replace(/\s+/g, ' ').toUpperCase()
+  return POSITION_FOLD[raw] ?? raw
+}
+
+/**
+ * What may be recommended when the league's own slots are unknown.
+ *
+ * ⚠ THE NO-EVIDENCE PATH IS STRICTER THAN THE FILTER IT REPLACES, deliberately. The old list
+ * skipped seven named positions and scored everything else, which let `DE`, `CB`, `S`, `DST` and
+ * every full-word and offensive-line row through. Recommending only the positions every fantasy
+ * league starts cannot produce advice about a player nobody can start.
+ */
+export const SCORABLE_WITHOUT_LEAGUE_EVIDENCE: ReadonlySet<string> = new Set([
+  'QB', 'RB', 'WR', 'TE', 'FB',
+])
 
 function clamp(v: number, lo: number, hi: number): number {
   return Math.max(lo, Math.min(hi, v))
@@ -109,7 +163,7 @@ function clamp(v: number, lo: number, hi: number): number {
 export function mapSlotToPositions(slot: string): string[] {
   const s = slot.toUpperCase()
   if (s === 'QB') return ['QB']
-  if (s === 'RB') return ['RB']
+  if (s === 'RB') return ['RB', 'FB']
   if (s === 'WR') return ['WR']
   if (s === 'TE') return ['TE']
   if (s === 'K') return ['K']
@@ -119,8 +173,8 @@ export function mapSlotToPositions(slot: string): string[] {
    * worth the whole league median.
    */
   if (s === 'DEF' || s === 'DST' || s === 'D/ST') return ['DEF', 'DST', 'D/ST']
-  if (s === 'FLEX' || s === 'RB/WR/TE') return ['RB', 'WR', 'TE']
-  if (s === 'SUPER_FLEX' || s === 'SF' || s === 'QB/RB/WR/TE') return ['QB', 'RB', 'WR', 'TE']
+  if (s === 'FLEX' || s === 'RB/WR/TE') return ['RB', 'FB', 'WR', 'TE']
+  if (s === 'SUPER_FLEX' || s === 'SF' || s === 'QB/RB/WR/TE') return ['QB', 'RB', 'FB', 'WR', 'TE']
   if (s === 'REC_FLEX' || s === 'WR/TE') return ['WR', 'TE']
   /*
    * 🛑 THE DISCRETE DEFENSIVE SLOTS WERE ABSENT, so an IDP league's `LB`, `DL` and `DB` slots

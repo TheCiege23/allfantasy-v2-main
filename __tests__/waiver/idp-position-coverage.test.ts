@@ -23,6 +23,7 @@ import { suggestWaiverPickups } from '@/lib/waiver-ai-engine/suggest'
 import {
   computeTeamNeeds,
   mapSlotToPositions,
+  foldPosition,
   IDP_POSITIONS,
   TEAM_UNIT_POSITIONS,
 } from '@/lib/waiver-engine/team-needs'
@@ -281,5 +282,84 @@ describe('the defensive slots now reach the slot and depth maths', () => {
     const needs = computeTeamNeeds(IDP_ROSTER, IDP_SLOTS, rosters(IDP_ROSTER, true), 3)
     const seen = needs.positionalDepth.map((d) => d.position)
     for (const alias of ['ILB', 'OLB', 'MLB', 'DT', 'S', 'DL', 'DB']) expect(seen).not.toContain(alias)
+  })
+})
+/**
+ * 🛑 A BLOCKLIST COULD NOT HAVE CLOSED THIS, WHICH IS WHY THE RULE IS INVERTED.
+ *
+ * Measured against the real `SportsPlayer` table (24,179 NFL rows, on the test database):
+ * positions are stored in at least three vocabularies — canonical (`LB`), provider aliases
+ * (`OLB` 271, `SS` 187, `FS` 163, `ILB` 151, `NT` 104, `MLB` 8) and FULL WORDS from thesportsdb
+ * (`Linebacker`, `Cornerback`, `Safety`, `Defensive End`; 2,076 rows, 582 carrying a sleeperId).
+ *
+ * And the full-word row is not a losing duplicate: `SportPlayerPoolResolver` dedupes on
+ * `name|position|team`, so `Smith|LB|KC` and `Smith|Linebacker|KC` are different keys and BOTH
+ * reach the wire, both priced off the same sleeperId. A filter naming `LB` turns away one spelling
+ * of a man and recommends the other.
+ */
+describe('🛑 the spelling a provider happens to use cannot smuggle a player in', () => {
+  const WORDY_WIRE = [
+    { id: 'w-lb', name: 'Wordy Linebacker', position: 'Linebacker', team: 'TEN', age: 25, value: 3000 },
+    { id: 'w-olb', name: 'Wordy Edge', position: 'Outside Linebacker', team: 'HOU', age: 26, value: 2900 },
+    { id: 'w-cb', name: 'Wordy Corner', position: 'Cornerback', team: 'GB', age: 24, value: 2800 },
+    { id: 'w-s', name: 'Wordy Safety', position: 'Safety', team: 'PHI', age: 27, value: 2700 },
+    { id: 'w-de', name: 'Wordy End', position: 'Defensive End', team: 'SF', age: 28, value: 2600 },
+    { id: 'w-k', name: 'Wordy Kicker', position: 'Kicker', team: 'BAL', age: 30, value: 2500 },
+    { id: 'w-p', name: 'Wordy Punter', position: 'Punter', team: 'LV', age: 31, value: 2500 },
+    { id: 'w-ol', name: 'Wordy Tackle', position: 'Offensive Lineman', team: 'DAL', age: 29, value: 2500 },
+    { id: 'w-mgr', name: 'Wordy Manager', position: 'Manager', team: 'NYJ', age: null, value: 2500 },
+    { id: 'w-rb', name: 'Wordy Back', position: 'Running Back', team: 'SEA', age: 24, value: 2600 },
+  ]
+
+  it('folds every spelling the table actually stores', () => {
+    expect(foldPosition('Linebacker')).toBe('LB')
+    expect(foldPosition('OUTSIDE LINEBACKER')).toBe('LB')
+    expect(foldPosition('olb')).toBe('LB')
+    expect(foldPosition('Defensive End')).toBe('DE')
+    expect(foldPosition('Nose Tackle')).toBe('DT')
+    expect(foldPosition('Safety')).toBe('S')
+    expect(foldPosition('SS')).toBe('S')
+    expect(foldPosition('Quarterback')).toBe('QB')
+    expect(foldPosition('  Wide   Receiver ')).toBe('WR')
+  })
+
+  it('⚠ an unrecognised label folds to itself, never to a guess', () => {
+    expect(foldPosition('CO-DRIVER')).toBe('CO-DRIVER')
+    expect(foldPosition(null)).toBe('')
+  })
+
+  it('🛑 a redraft league is not offered the full-word copy of a defender', () => {
+    const got = positionsOf(engineInput(false, { availablePlayers: WORDY_WIRE }))
+    for (const pos of ['Linebacker', 'Outside Linebacker', 'Cornerback', 'Safety', 'Defensive End']) {
+      expect(got).not.toContain(pos)
+    }
+    /* Still not silence: the back it CAN start is recommended, under its own spelling. */
+    expect(got).toContain('Running Back')
+  })
+
+  it('🛑 an IDP league IS offered the full-word defender it can start', () => {
+    const got = positionsOf(engineInput(true, { availablePlayers: WORDY_WIRE }))
+    expect(got).toEqual(expect.arrayContaining(['Linebacker', 'Cornerback', 'Safety']))
+  })
+
+  it('🛑 a punter, a kicker, a lineman and a coach row are never recommended', () => {
+    /* None is turned away by name — no slot in either league accepts any of them. */
+    for (const idp of [false, true]) {
+      const got = positionsOf(engineInput(idp, { availablePlayers: WORDY_WIRE }))
+      for (const pos of ['Kicker', 'Punter', 'Offensive Lineman', 'Manager']) {
+        expect(got).not.toContain(pos)
+      }
+    }
+  })
+
+  it('a fullback still fills a back or flex slot, so the rule does not turn one away', () => {
+    expect(mapSlotToPositions('RB')).toContain('FB')
+    expect(mapSlotToPositions('FLEX')).toContain('FB')
+    const got = positionsOf(
+      engineInput(false, {
+        availablePlayers: [{ id: 'fb', name: 'Lead Back', position: 'Fullback', team: 'SF', age: 27, value: 2600 }],
+      }),
+    )
+    expect(got).toContain('Fullback')
   })
 })
