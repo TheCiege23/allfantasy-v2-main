@@ -130,6 +130,30 @@ export async function recordPendingOffers(
   await writeCache(userId, cache, now)
 }
 
+/**
+ * The leagues holding a provider trade offer that is waiting on THIS user.
+ *
+ * ⚠ THE SAME ROW THE TRADES BADGE COUNTS, READ RATHER THAN RE-SCANNED. `recordPendingOffers` above
+ * is filled by the home's trade scan — the single most expensive read on that page — and the badge
+ * already consumes it instead of scanning again per tab. The decision queue wants the same fact
+ * with the league attached, so it reads the same row: one `findUnique` by primary key, no provider
+ * call, no new fan-out.
+ *
+ * ⚠ FRESHNESS IS A FILTER, NOT A DEFAULT, AND ABSENCE IS NOT ZERO. `recordPendingOffers` records
+ * only leagues whose scan ANSWERED, so a missing or stale entry means "we do not know" — reporting
+ * it as zero would clear a row for an offer still sitting there. Both are simply absent from the
+ * result, which is what the caller must treat as unknown.
+ */
+export async function readPendingOfferLeagues(
+  userId: string,
+  now: Date,
+): Promise<Array<{ leagueId: string; waiting: number }>> {
+  const cache = await readCache(userId)
+  return Object.entries(cache.offers)
+    .filter(([, entry]) => entry.waiting > 0 && isFresh(entry.at, now))
+    .map(([leagueId, entry]) => ({ leagueId, waiting: entry.waiting }))
+}
+
 export async function getUrgencyBadges(input: {
   userId: string
   /** The leagues the user plays — every count is scoped to these. */

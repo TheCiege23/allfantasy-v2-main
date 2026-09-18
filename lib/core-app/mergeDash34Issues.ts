@@ -95,6 +95,14 @@ export function mergeDash34Issues(
   dash34: Dash34Data | null,
   /** The week board, where the caller holds one. Absent means "not read", never "no close games". */
   schedule?: CoinFlipSchedule | null,
+  /**
+   * Leagues holding a provider trade offer that is waiting on the viewer, from the urgency cache.
+   * Absent means "not read", never "no offers" — see `readPendingOfferLeagues`.
+   *
+   * ⚠ IF A FIFTH INPUT EVER ARRIVES, MAKE THESE AN OPTIONS BAG. Two optional positionals is as far
+   * as this should go before the call sites stop being readable.
+   */
+  pendingOffers?: ReadonlyArray<{ leagueId: string; waiting: number }> | null,
 ): CoreIssue[] {
   /*
    * ⚠ NO EARLY RETURN ON A MISSING `dash34`, WHICH THERE USED TO BE. The two inputs fail
@@ -194,14 +202,92 @@ export function mergeDash34Issues(
     }
   }
 
+  /*
+   * ⚠ OFFERS BEFORE COIN FLIPS, AND BOTH AFTER THE LOOP. An offer is somebody waiting on a reply;
+   * a coin flip is a game that happens to be close. Same severity, so `rankDecisions` keeps their
+   * arrival order — which makes this line the tie-break, and worth being deliberate about.
+   */
+  synthesized.push(...pendingOfferRows(pendingOffers, ranked, synthesized))
   synthesized.push(...coinFlipRows(schedule, synthesized))
 
   if (synthesized.length === 0) return derived
   return [...synthesized, ...derived]
 }
 
-/** Above this many coin flips the rows collapse into one — see `coinFlipRows`. */
+/** Above this many rows of one kind they collapse into one — see `coinFlipRows`. */
 const COIN_FLIP_ROW_LIMIT = 3
+
+/**
+ * "Pending trades" — the brief's third kind of action (2026-09-17 decisions).
+ *
+ * ⚠ THIS COSTS NO PROVIDER CALL. `deriveOutstandingIssues` used to declare `trade_offer`
+ * unavailable because "pending offers are not ingested", which stopped being true:
+ * `lib/provider-trades/scanPendingSleeperTrades.ts` reads them, `lib/core-app/recentTrades.ts`
+ * already runs that scan on the home, and its `onPendingOffers` hook writes the per-league counts
+ * into the urgency cache row the Trades badge reads. This restates that stored fact with the league
+ * attached; the caller passes what it read, and nothing here fetches.
+ *
+ * ⚠ READ-ONLY, LIKE EVERY OTHER ROW. Sleeper's public API offers no write endpoint, so the action
+ * opens OUR trades screen for that league rather than pretending to accept or decline. The scanner's
+ * own header carries the same rule for the same reason.
+ *
+ * ⚠ `warn`, FOR THE SAME REASON AS A COIN FLIP: somebody is waiting on a reply, but nothing is
+ * broken, so it must not outrank an empty slot. And no deadline — an offer can expire, and we hold
+ * no expiry for one, so claiming an instant would invent it.
+ *
+ * ⚠ ONLY LEAGUES THE SUMMARY CAN NAME. A row reading "Trade offer waiting — a1b2c3" is worse than
+ * no row; an id the dash34 list does not carry is skipped rather than printed raw.
+ */
+function pendingOfferRows(
+  offers: ReadonlyArray<{ leagueId: string; waiting: number }> | null | undefined,
+  ranked: readonly Dash34League[],
+  already: readonly CoreIssue[],
+): CoreIssue[] {
+  if (!offers || offers.length === 0) return []
+
+  const nameById = new Map(ranked.map((l) => [l.id, l]))
+  const spokenFor = new Set(already.map((i) => i.leagueId).filter((id): id is string => id != null))
+  const fresh = offers
+    .filter((o) => o.waiting > 0 && !spokenFor.has(o.leagueId) && nameById.has(o.leagueId))
+    .map((o) => ({ ...o, league: nameById.get(o.leagueId)! }))
+  if (fresh.length === 0) return []
+
+  const total = fresh.reduce((sum, o) => sum + o.waiting, 0)
+
+  if (fresh.length > COIN_FLIP_ROW_LIMIT) {
+    return [
+      {
+        id: 'trade-offer:aggregate',
+        severity: 'warn',
+        glyph: '⇄',
+        title: `${total} trade ${total === 1 ? 'offer is' : 'offers are'} waiting on you`,
+        meta: `Across ${fresh.length} leagues › Trades · proposed to you and not answered`,
+        leagueId: null,
+        leagueName: null,
+        platform: null,
+        deadline: null,
+        action: { label: 'Open Trades', href: '/core/trades', external: false },
+      },
+    ]
+  }
+
+  return fresh.map((o) => ({
+    id: `${o.leagueId}:trade-offer`,
+    severity: 'warn' as const,
+    glyph: '⇄',
+    title: `${o.waiting} trade ${o.waiting === 1 ? 'offer' : 'offers'} waiting — ${o.league.name}`,
+    meta: `${titleCasePlatform(o.league.platform)} › Trades · proposed to you and not answered`,
+    leagueId: o.leagueId,
+    leagueName: o.league.name,
+    platform: o.league.platform,
+    deadline: null,
+    action: {
+      label: 'See the offer',
+      href: `/core/trades?league=${encodeURIComponent(o.leagueId)}`,
+      external: false,
+    },
+  }))
+}
 
 /**
  * "Close matchups" — the brief's fifth kind of action (2026-09-17 decisions).

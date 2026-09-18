@@ -122,3 +122,79 @@ describe('mergeDash34Issues — close matchups', () => {
     expect(merged).toEqual([])
   })
 })
+
+/**
+ * "Pending trades" — the brief's third kind of action.
+ *
+ * ⚠ THE POINT IS THAT IT COSTS NO PROVIDER CALL. The home's trade scan already writes per-league
+ * counts into the urgency cache; these rows restate that stored fact with the league attached. The
+ * tests below therefore feed counts directly, exactly as the caller does.
+ */
+describe('mergeDash34Issues — pending trade offers', () => {
+  const offers = (...pairs: Array<[string, number]>) => pairs.map(([leagueId, waiting]) => ({ leagueId, waiting }))
+
+  it('names the league and links to its trades screen', () => {
+    const [row] = mergeDash34Issues([], data([league({ id: 'alpha', name: 'Dynasty Warriors' })]), null, offers(['alpha', 2]))
+    expect(row!.id).toBe('alpha:trade-offer')
+    expect(row!.title).toBe('2 trade offers waiting — Dynasty Warriors')
+    expect(row!.action?.href).toBe('/core/trades?league=alpha')
+    expect(row!.deadline).toBeNull()
+  })
+
+  /*
+   * 🛑 A ROW READING "Trade offer waiting — a1b2c3" IS WORSE THAN NO ROW. An id the summary cannot
+   * name is skipped, never printed raw.
+   */
+  it('skips a league the summary cannot name', () => {
+    const merged = mergeDash34Issues([], data([league({ id: 'known' })]), null, offers(['unknown-id', 1]))
+    expect(merged).toEqual([])
+  })
+
+  it('does not speak twice about a league that already has a row', () => {
+    const merged = mergeDash34Issues(
+      [],
+      data([league({ id: 'alpha', priority: 'urgent', emptyStarters: 1 })]),
+      null,
+      offers(['alpha', 1]),
+    )
+    expect(ids(merged)).toEqual(['alpha:empty-slot'])
+  })
+
+  it('collapses past three leagues, counting the offers rather than the leagues', () => {
+    const leagues = ['a', 'b', 'c', 'd'].map((id) => league({ id }))
+    const merged = mergeDash34Issues([], data(leagues), null, offers(['a', 2], ['b', 1], ['c', 1], ['d', 3]))
+    expect(ids(merged)).toEqual(['trade-offer:aggregate'])
+    expect(merged[0]!.title).toBe('7 trade offers are waiting on you')
+    expect(merged[0]!.leagueId).toBeNull()
+  })
+
+  it('ranks under a real problem and above a distant timed draft', () => {
+    const draft = {
+      id: 'x:draft', severity: 'info' as const, glyph: '▤', title: 'Draft coming up', meta: '',
+      leagueId: 'x', leagueName: 'x', platform: 'sleeper',
+      deadline: new Date(Date.now() + 30 * 24 * 3_600_000), action: null,
+    }
+    const merged = mergeDash34Issues(
+      [draft],
+      data([league({ id: 'broken', priority: 'urgent', emptyStarters: 1 }), league({ id: 'alpha' })]),
+      null,
+      offers(['alpha', 1]),
+    )
+    expect(ids(rankDecisions(merged))).toEqual(['broken:empty-slot', 'alpha:trade-offer', 'x:draft'])
+  })
+
+  it('adds nothing when the cache was not read, rather than claiming no offers', () => {
+    expect(mergeDash34Issues([], data([league({ id: 'alpha' })]), null, null)).toEqual([])
+  })
+
+  /* An offer is somebody waiting on a reply; a coin flip is a game that happens to be close. */
+  it('puts an offer ahead of a coin flip at equal severity', () => {
+    const merged = mergeDash34Issues(
+      [],
+      data([league({ id: 'alpha' }), league({ id: 'beta' })]),
+      schedule('beta'),
+      offers(['alpha', 1]),
+    )
+    expect(ids(rankDecisions(merged))).toEqual(['alpha:trade-offer', 'beta:coin-flip'])
+  })
+})

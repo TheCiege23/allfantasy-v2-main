@@ -131,7 +131,7 @@ import { getPlayFeed } from '@/lib/live/playFeedPresentation'
 import { getRecentTrades } from '@/lib/core-app/recentTrades'
 import { getCrossLeagueValueActions } from '@/lib/core-app/crossLeagueValueActions'
 import { getSinceLastVisit } from '@/lib/core-app/sinceLastVisit'
-import { getUrgencyBadges, recordPendingOffers } from '@/lib/core-app/urgencyBadges'
+import { getUrgencyBadges, readPendingOfferLeagues, recordPendingOffers } from '@/lib/core-app/urgencyBadges'
 import { isSpeculativeRequestHeaders } from '@/lib/http/speculativeRequest'
 import { hasRegularSeasonStarted } from '@/lib/core-app/seasonPhase'
 import { readPlayByPlayFeed } from '@/lib/live/playByPlayFeed'
@@ -2715,8 +2715,20 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
          * `.catch(() => null)`, and `mergeDash34Issues` treats a null of either as "not read"
          * rather than as "nothing to report".
          */
-        const mergedIssues = Promise.all([summary, schedule]).then(([data, board]) =>
-          mergeDash34Issues(homeDerivedIssues, data, board),
+        /*
+         * Offers waiting on you, for the queue's "pending trades" rows.
+         *
+         * ⚠ READ FROM THE URGENCY CACHE, NOT FROM THE TRADE SCAN. The scan below is the slowest
+         * read on this page and the queue must not wait for it; its `onPendingOffers` hook already
+         * writes the per-league counts into the same row the Trades tab badge reads, so this is one
+         * `findUnique` by primary key. The cost of that is a queue one render behind on a brand-new
+         * offer, which is inside the badge's own freshness rule — and the alternative is holding the
+         * leading card behind a provider fan-out.
+         */
+        const pendingOffers = readPendingOfferLeagues(userId, now).catch(() => null)
+
+        const mergedIssues = Promise.all([summary, schedule, pendingOffers]).then(
+          ([data, board, offers]) => mergeDash34Issues(homeDerivedIssues, data, board, offers),
         )
 
         /*
