@@ -7,7 +7,7 @@ import {
   priceLeagueWeek,
 } from '@/lib/decision-os/trade/leagueWeekPricing'
 import { injuryCoverageFor, resolveInjuryFacts } from '@/lib/injuries/injuryReadPort'
-import { rosterSourceTeamId } from '@/lib/league-import/importedRosterIdentity'
+import { resolveRostersForTeams } from '@/lib/leagues/rosterTeamIdentity'
 import { normalizeMatchName } from '@/lib/player-match/verifiedNameMatch'
 import { myRosterCandidates } from './myRoster'
 import { translateRostersByLeague } from './rosterIdSpace'
@@ -119,11 +119,6 @@ export type OutlookFocus = {
 
 type Obj = Record<string, unknown>
 
-function sourceManagerId(playerData: unknown): string | null {
-  const v = (playerData as Obj | null)?.source_manager_id
-  return typeof v === 'string' && v.length > 0 ? v : typeof v === 'number' ? String(v) : null
-}
-
 const round1 = (n: number) => Math.round(n * 10) / 10
 
 // ── Roster model ───────────────────────────────────────────────────────
@@ -182,56 +177,30 @@ export async function loadScenarioModel(args: {
   ).catch(() => [...rawRosters])
 
   /*
-   * One roster per team: the team's own provider id first, then the source manager id, then the
-   * claimed-team candidates.
+   * One roster per team, by the shared rule (`resolveRostersForTeams`): the provider team id, then
+   * the source manager id, then the claimed-team owner keys.
    *
    * 🛑 THE OWNER KEY IS NOT AN IDENTITY, AND SINCE #1005 IT OFTEN IS NOT THE TEAM'S AT ALL. A
-   * managerless team's roster is now stored under `orphan-<provider>-<teamId>`, and a team whose
-   * manager changed keeps its old row — neither is reachable from a manager id. Measured read-only
-   * on production 2026-09-17: of 4,125 teams in leagues that hold rosters, 210 matched NOTHING here,
-   * so their players were absent from every priced roster in the league — the bye and schedule
-   * drivers under-counted, and no move involving them could be modelled. `source_team_id`, which
-   * every import writes and #1005 made the write side key on, recovers 201 of the 210 across 32
-   * leagues, and the orphan key recovers a strict subset (198, none the team id misses).
+   * managerless team's roster is stored under `orphan-<provider>-<teamId>` and a team whose manager
+   * changed keeps its old row — neither is reachable from a manager id. Measured read-only on
+   * production 2026-09-17: of 4,125 teams in leagues that hold rosters, 210 matched NOTHING here, so
+   * their players were absent from every priced roster in the league — the bye and schedule drivers
+   * under-counted, and no move involving them could be modelled.
    *
-   * ⚠ IT IS ADDED IN FRONT, NOT SUBSTITUTED. On the same measurement the two rules never disagree
-   * (0 of 3,822 teams matched by both resolve to different rows), but 93 teams match ONLY on the
-   * owner rules — rows written before the import recorded a team id — so those stay.
+   * ⚠ THIS FILE HELD THE SECOND COPY OF THAT RULE AND NOW HOLDS NONE. The rule moved to
+   * `lib/leagues/rosterTeamIdentity.ts`, which the Decision OS canonical world also reads through,
+   * because two implementations of one identity rule is the bug — not a better regex in either.
    */
   const simIds = new Set(args.sim.teams.map((t) => t.rosterId))
-  const used = new Set<number>()
-  const slotsOf = rosters.map((r) => rosterSlots(r.playerData))
-  const matched: Array<{ rosterId: string; slots: Map<string, 'S' | 'B' | 'I' | 'T'> }> = []
-  for (const team of teams) {
-    if (!team.externalId || !simIds.has(team.externalId)) continue
-    /*
-     * Six teams in production carry two rows under one team id (the duplicates #1005 deliberately
-     * left in place), so the choice is pinned rather than left to the order rows come back in:
-     * the fuller roster, then the lower id — the write side's own tie-break.
-     */
-    let idx = rosters.reduce<number>((best, r, i) => {
-      if (used.has(i) || rosterSourceTeamId(r.playerData) !== team.externalId) return best
-      if (best < 0) return i
-      const diff = slotsOf[i].size - slotsOf[best].size
-      if (diff !== 0) return diff > 0 ? i : best
-      return String(r.id) < String(rosters[best].id) ? i : best
-    }, -1)
-    if (idx < 0) {
-      idx = rosters.findIndex(
-        (r, i) => !used.has(i) && team.platformUserId != null && sourceManagerId(r.playerData) === team.platformUserId,
-      )
-    }
-    if (idx < 0) {
-      const candidates = myRosterCandidates(team, team.claimedByUserId ?? '')
-      for (const c of candidates) {
-        idx = rosters.findIndex((r, i) => !used.has(i) && r.platformUserId === c)
-        if (idx >= 0) break
-      }
-    }
-    if (idx < 0) continue
-    used.add(idx)
-    matched.push({ rosterId: team.externalId, slots: slotsOf[idx] })
-  }
+  const rosterByTeam = resolveRostersForTeams(
+    teams.filter((t) => t.externalId && simIds.has(t.externalId)),
+    rosters,
+    (team) => myRosterCandidates(team, team.claimedByUserId ?? ''),
+  )
+  const matched = [...rosterByTeam.entries()].map(([rosterId, row]) => ({
+    rosterId,
+    slots: rosterSlots(row.playerData),
+  }))
 
   const rosteredIds = [...new Set(matched.flatMap((m) => [...m.slots.keys()]))]
   if (rosteredIds.length === 0) {
