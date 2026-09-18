@@ -5,6 +5,7 @@ import { prisma } from '@/lib/prisma'
 import { getLeagueRosters, getLeagueUsers, type SleeperLeague, type SleeperRoster } from '@/lib/sleeper-client'
 import { getSleeperHistoricalLeagueChain } from './SleeperHistoricalLeagueChain'
 import { shouldSkipImportedSeason } from '../seasonCompletion'
+import { mergeSeasonMetadata, storedSeasonStatusIsComplete } from './seasonMetadata'
 
 const SEASON_END_ROSTER_SNAPSHOT_PERIOD = 0
 
@@ -29,6 +30,8 @@ export interface SleeperHistoricalSeasonStateSyncSummary {
   seasonsConsidered?: number
   seasonsSkippedAlreadyComplete?: number
   providerCallsAvoided?: number
+  /** Completed seasons fetched once more because the stored row was written before they finished. */
+  completedSeasonsRefreshed?: number
 }
 
 function getErrorMessage(error: unknown): string {
@@ -177,6 +180,7 @@ export async function syncSleeperHistoricalSeasonStateAfterImport(args: {
     let rosterSnapshotsPersisted = 0
     let seasonsSkippedAlreadyComplete = 0
     let providerCallsAvoided = 0
+    let completedSeasonsRefreshed = 0
 
     for (const seasonState of historyChain) {
       /*
@@ -188,20 +192,41 @@ export async function syncSleeperHistoricalSeasonStateAfterImport(args: {
        * snapshot for a season that has not ended — and this gate then froze the user's CURRENT
        * roster forever. See `seasonCompletion.ts`.
        */
-      if (shouldSkipImportedSeason({ force: args.force, league: seasonState.league })) {
-        const existingSnapshot = await prisma.rosterSnapshot.findFirst({
+      const storedSeasonRead = () =>
+        prisma.leagueDynastySeason.findUnique({
           where: {
-            leagueId: league.id,
-            season: seasonState.season,
-            weekOrPeriod: SEASON_END_ROSTER_SNAPSHOT_PERIOD,
+            uniq_league_dynasty_season_league_season: { leagueId: league.id, season: seasonState.season },
           },
-          select: { snapshotId: true },
+          select: { metadata: true },
         })
-        if (existingSnapshot) {
+      let storedSeason: Awaited<ReturnType<typeof storedSeasonRead>> | undefined
+
+      if (shouldSkipImportedSeason({ force: args.force, league: seasonState.league })) {
+        const [existingSnapshot, stored] = await Promise.all([
+          prisma.rosterSnapshot.findFirst({
+            where: {
+              leagueId: league.id,
+              season: seasonState.season,
+              weekOrPeriod: SEASON_END_ROSTER_SNAPSHOT_PERIOD,
+            },
+            select: { snapshotId: true },
+          }),
+          storedSeasonRead(),
+        ])
+        storedSeason = stored
+        /*
+         * ⚠ THE SNAPSHOT ALONE IS NOT ENOUGH, for the same reason the matchup sync needed
+         * `isStoredSeasonSettled` (#995): a season first stored mid-season already HAS a
+         * "season end" snapshot, and it holds a mid-season roster. Skipping on its mere
+         * existence freezes that roster as the season's final one, forever. The stored
+         * `status` says whether the last write saw a season Sleeper called complete.
+         */
+        if (existingSnapshot && storedSeasonStatusIsComplete(stored?.metadata)) {
           seasonsSkippedAlreadyComplete += 1
           providerCallsAvoided += 1
           continue
         }
+        if (existingSnapshot) completedSeasonsRefreshed += 1
       }
 
       const [users, rosters] = await Promise.all([
@@ -253,12 +278,18 @@ export async function syncSleeperHistoricalSeasonStateAfterImport(args: {
         console.warn('[SleeperHistoricalSeasonStateSync] avatar backfill failed', avatarErr)
       }
 
+      /*
+       * 🛑 MERGE, NEVER REPLACE. `persistDynastySeason` writes the whole `metadata` column, and
+       * the matchup sync owns `playoffStructure` and `matchupHistory` in the same row. Replacing
+       * dropped them; see seasonMetadata.ts for why nothing puts them back any more.
+       */
+      const storedForMerge = storedSeason !== undefined ? storedSeason : await storedSeasonRead()
       await persistDynastySeason(
         league.id,
         seasonState.season,
         seasonState.externalLeagueId,
         'sleeper',
-        buildSeasonMetadata(seasonState.league)
+        mergeSeasonMetadata(storedForMerge?.metadata, buildSeasonMetadata(seasonState.league))
       )
       settingsSnapshotsPersisted += 1
 
@@ -310,6 +341,7 @@ export async function syncSleeperHistoricalSeasonStateAfterImport(args: {
       seasonsConsidered: historyChain.length,
       seasonsSkippedAlreadyComplete,
       providerCallsAvoided,
+      completedSeasonsRefreshed,
     }
   } catch (error) {
     return {
