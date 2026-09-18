@@ -150,6 +150,39 @@ function clamp(v: number, lo: number, hi: number): number {
   return Math.max(lo, Math.min(hi, v))
 }
 
+/*
+ * 🛑 THE WIRE IS SCORED AGAINST THE WIRE, NOT AGAINST THE WHOLE MARKET.
+ *
+ * These dimensions used to normalise against the dynasty trade-value band (500..8000 for impact,
+ * 500..10000 for market value). A waiver player is a non-asset on that scale BY CONSTRUCTION, so
+ * every realistic candidate landed in the bottom few points of the range and the composite was
+ * compressed into "Monitor" whatever the thresholds said.
+ *
+ * Measured read-only on production 2026-09-18 — the value of the BEST player actually available on
+ * each league's wire, across 286 leagues (FantasyCalc values, the same source the pool prices with):
+ *
+ *     p25 16  |  median 251  |  p75 674  |  p90 1,936
+ *
+ * Only 6% of leagues had a best-available worth the ~4,000 the old scale needed to say "Add". The
+ * compression was visible as well as theoretical: on the end-to-end engine, candidates worth 251
+ * and 674 both scored 21 — a 2.7x difference in value producing no difference in advice.
+ *
+ * ⚠ THE CEILING IS THE WIRE'S p90, NOT ITS MAXIMUM. A genuinely valuable player who hits waivers
+ * saturates the dimension, which is correct: that IS a must-add. Raising the ceiling to cover him
+ * would re-flatten everyone below him, which is the bug this replaces.
+ *
+ * ⚠ THE `value < 200` ENTRY GATE IS DELIBERATELY UNCHANGED. It is not what compressed the score,
+ * and half the leagues here have no priced wire player above it at all — in those, "no qualifying
+ * targets" is the true answer, and lowering the gate would manufacture advice out of players the
+ * market prices at 16.
+ */
+/** The wire's p90 by value. */
+const WIRE_VALUE_CEILING = 2000
+/** `impactValue` runs ~0.4x value, so the impact band is the value band scaled the same way. */
+const WIRE_IMPACT_CEILING = 800
+/** How much better than your weakest starter an add can realistically be. */
+const WIRE_UPGRADE_CEILING = 2000
+
 function normalize(v: number, lo: number, hi: number): number {
   if (hi <= lo) return 50
   return clamp(((v - lo) / (hi - lo)) * 100, 0, 100)
@@ -168,8 +201,8 @@ function computeStartNow(
 
   const scarcity = POSITION_SCARCITY[position] ?? 0.5
 
-  let score = normalize(impactBase, 500, 8000) * 0.45 +
-    normalize(starterDelta, 0, 5000) * 0.35 +
+  let score = normalize(impactBase, 0, WIRE_IMPACT_CEILING) * 0.45 +
+    normalize(starterDelta, 0, WIRE_UPGRADE_CEILING) * 0.35 +
     scarcity * 20
 
   if (ctx.goal === 'win-now') score *= 1.15
@@ -204,7 +237,7 @@ function computeStash(
 
   const posBonus = position === 'RB' ? -5 : position === 'WR' ? 5 : position === 'QB' ? 8 : 0
 
-  let score = normalize(marketBase, 500, 10000) * 0.45 +
+  let score = normalize(marketBase, 0, WIRE_VALUE_CEILING) * 0.45 +
     ageCurve * 0.45 +
     posBonus
 
