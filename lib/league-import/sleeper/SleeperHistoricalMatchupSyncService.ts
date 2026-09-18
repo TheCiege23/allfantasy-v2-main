@@ -19,6 +19,7 @@ import {
   resolveBracketPlacements,
 } from './bracketPlacements'
 import { shouldSkipImportedSeason } from '../seasonCompletion'
+import { mergeSeasonMetadata } from './seasonMetadata'
 
 const MAX_SLEEPER_MATCHUP_WEEKS = 18
 
@@ -230,20 +231,6 @@ function buildSeasonMatchupFacts(args: {
   }
 
   return rows
-}
-
-function mergeSeasonMetadata(
-  existing: unknown,
-  next: Record<string, unknown>
-): Record<string, unknown> {
-  if (!existing || typeof existing !== 'object' || Array.isArray(existing)) {
-    return next
-  }
-
-  return {
-    ...(existing as Record<string, unknown>),
-    ...next,
-  }
 }
 
 /**
