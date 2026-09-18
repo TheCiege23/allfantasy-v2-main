@@ -49,11 +49,11 @@ const ROSTER = [
 const otherRosters = () =>
   Array.from({ length: 11 }, (_, i) => ({ players: ROSTER.map((p) => ({ ...p, id: p.id + '-o' + i })) }))
 
-function scoreAt(value: number, goal: 'balanced' | 'win-now' = 'balanced') {
+function scoreAt(value: number, goal: 'balanced' | 'win-now' = 'balanced', isDynasty = false) {
   const input = {
     sport: 'NFL',
     leagueId: 'L1',
-    leagueSettings: { numTeams: 12, isSF: false, isTEP: false, isDynasty: false, faabBudget: 100, faabRemaining: 60 },
+    leagueSettings: { numTeams: 12, isSF: false, isTEP: false, isDynasty, faabBudget: 100, faabRemaining: 60 },
     roster: ROSTER,
     rosterPositions: SLOTS,
     allLeagueRosters: otherRosters(),
@@ -88,14 +88,21 @@ describe('a waiver candidate is scored against the waiver population', () => {
     expect(['Add', 'Strong Add', 'Must Add']).toContain(scoreAt(1936, 'win-now')!.recommendation)
   })
 
-  it('🛑 does NOT promote the median or p75 wire player, on EITHER goal', () => {
+  it('🛑 does NOT promote the median or p75 wire player, on EITHER goal OR league type', () => {
     /*
      * This is the property the cut points exist to hold. With #1036's needFit fix and these scales
      * but the OLD 45/60/75 rungs, a win-now manager was told to Add the MEDIAN player on the wire.
+     *
+     * ⚠ BOTH `isDynasty` VALUES, BECAUSE A REDRAFT FIXTURE HIDES THIS. `computeStash` carries
+     * `if (!ctx.isDynasty) score *= 0.3`, so a redraft-only test sees barely a third of what the
+     * stash band does — and the stash band is one of the two scales this change moves. Dynasty runs
+     * 5-6 points hotter at every value; the median and p75 still have to stay Monitor there.
      */
-    for (const goal of ['balanced', 'win-now'] as const) {
-      expect(scoreAt(251, goal)!.recommendation).toBe('Monitor')
-      expect(scoreAt(674, goal)!.recommendation).toBe('Monitor')
+    for (const isDynasty of [false, true]) {
+      for (const goal of ['balanced', 'win-now'] as const) {
+        expect(scoreAt(251, goal, isDynasty)!.recommendation).toBe('Monitor')
+        expect(scoreAt(674, goal, isDynasty)!.recommendation).toBe('Monitor')
+      }
     }
   })
 
