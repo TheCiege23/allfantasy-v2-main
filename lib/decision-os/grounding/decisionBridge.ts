@@ -434,6 +434,7 @@ export async function loadWaiverDecisionSlice(args: WaiverDecisionBridgeArgs): P
           roster: pool.myRoster,
           rosterPositions: pool.rosterPositions,
           allLeagueRosters: pool.leagueRosters,
+          byeWeekByClub: pool.byeWeekByClub,
           ...(pool.currentWeek != null ? { currentWeek: pool.currentWeek } : {}),
           availablePlayers: pool.availablePlayers,
         },

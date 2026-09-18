@@ -121,6 +121,38 @@ describe('a priced wire produces a real waiver recommendation', () => {
     expect(suggestions.map((s) => s.playerName)).toEqual(['Waiver Back', 'Waiver Wideout'])
   })
 
+  /*
+   * 🛑 THE BYE SLATE REACHES THE SCORER, AND IT IS THIS SEASON'S. `team-needs.ts` used to read a
+   * hardcoded 2025 table, so the "covers your bye" driver named last year's weeks. The slate is now
+   * passed in, and this asserts it survives the whole engine path rather than only the unit that
+   * consumes it.
+   */
+  it('🛑 names the bye it covers, from the slate it was given', async () => {
+    const withBye = engineInput({
+      /* Both my starting backs are out in week 8, and the wire back is not. */
+      roster: [
+        ...MY_ROSTER.filter((p) => p.id !== 'bench-mid'),
+        { id: 'rb2', name: 'Second RB', position: 'RB', team: 'NYG', slot: 'starter' as const, age: 27, value: 900 },
+      ],
+      byeWeekByClub: { NYG: 8, SEA: 12 },
+    })
+    const { suggestions } = await decide(withBye)
+    const driver = suggestions[0].drivers?.find((d) => d.id === 'wa_bye_week_fill')
+    expect(driver?.detail).toMatch(/Covers Wk 8 bye/)
+  })
+
+  it('🛑 and says nothing about byes when the schedule could not answer', async () => {
+    const noSlate = engineInput({
+      roster: [
+        ...MY_ROSTER.filter((p) => p.id !== 'bench-mid'),
+        { id: 'rb2', name: 'Second RB', position: 'RB', team: 'NYG', slot: 'starter' as const, age: 27, value: 900 },
+      ],
+      byeWeekByClub: {},
+    })
+    const { suggestions } = await decide(noSlate)
+    expect(suggestions[0].drivers?.some((d) => d.id === 'wa_bye_week_fill')).toBe(false)
+  })
+
   /* The regression itself: the old input shape, name-only, through the same real scorer. */
   it('🛑 the OLD input shape still produces nothing — which is why every answer was "Hold your FAAB"', async () => {
     const nameOnly = engineInput({

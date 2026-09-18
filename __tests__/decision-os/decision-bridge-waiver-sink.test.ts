@@ -28,6 +28,7 @@ describe('waiver decision bridge — onClaims side channel', () => {
       rosterPositions: ['QB', 'RB', 'WR', 'BN'],
       leagueTraits: { numTeams: 12, isSF: false, isTEP: false, isDynasty: false },
       currentWeek: 3,
+      byeWeekByClub: { MIA: 6 },
       poolIncomplete: false,
       leagueRosterCount: 12,
       pricing: { priced: 1, total: 1, basis: 'redraft, 1QB, 12 teams, 0.5 PPR' },
@@ -72,6 +73,8 @@ describe('waiver decision bridge — onClaims side channel', () => {
     expect(input.engineInput.leagueSettings).toMatchObject({ numTeams: 12, isSF: false, isTEP: false, isDynasty: false, faabRemaining: 80 })
     expect(input.engineInput.currentWeek).toBe(3)
     expect(input.pricing).toEqual({ priced: 1, total: 1, basis: 'redraft, 1QB, 12 teams, 0.5 PPR' })
+    /* This season's byes, so the advice warns about the right weeks (the table it replaced was 2025). */
+    expect(input.engineInput.byeWeekByClub).toEqual({ MIA: 6 })
   })
 
   it('leaves the week out rather than sending week 1 when no projection week is on file', async () => {

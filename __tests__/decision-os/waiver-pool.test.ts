@@ -19,6 +19,7 @@ const getPool = vi.fn()
 const getMarketValues = vi.fn()
 const marketContextFor = vi.fn()
 const latestProjectionWeek = vi.fn()
+const resolveByeWeekMap = vi.fn()
 
 vi.mock('@/lib/prisma', () => ({
   prisma: {
@@ -50,6 +51,7 @@ vi.mock('@/lib/trade-intel/marketValueService', () => ({
 vi.mock('@/lib/core-app/playerProjections', () => ({
   latestProjectionWeek: () => latestProjectionWeek(),
 }))
+vi.mock('@/lib/core-app/byeWeekMap', () => ({ resolveByeWeekMap: (...a: unknown[]) => resolveByeWeekMap(...a) }))
 
 const { loadWaiverPool } = await import('@/lib/decision-os/waiver/pool')
 
@@ -64,7 +66,7 @@ const player = (id: string, over: Record<string, unknown> = {}) => ({
 const VALUES = { mode: 'redraft', numQbs: 1, ppr: 0.5, bySleeperId: { '4046': { value: 2200 }, '9221': { value: 900 } } }
 
 beforeEach(() => {
-  for (const f of [rosterFindMany, leagueFindUnique, playerFindMany, getPool, getMarketValues, marketContextFor, latestProjectionWeek]) {
+  for (const f of [rosterFindMany, leagueFindUnique, playerFindMany, getPool, getMarketValues, marketContextFor, latestProjectionWeek, resolveByeWeekMap]) {
     f.mockReset()
   }
   rosterFindMany.mockResolvedValue([])
@@ -72,6 +74,7 @@ beforeEach(() => {
     settings: { roster_positions: ['QB', 'RB', 'WR', 'FLEX', 'BN'] },
     leagueType: 'Redraft',
     leagueSize: 12,
+    season: 2026,
   })
   playerFindMany.mockResolvedValue([])
   getPool.mockResolvedValue([])
@@ -82,6 +85,7 @@ beforeEach(() => {
   })
   getMarketValues.mockResolvedValue(VALUES)
   latestProjectionWeek.mockResolvedValue({ season: '2026', week: 3 })
+  resolveByeWeekMap.mockResolvedValue({ KC: 6, SEA: 9 })
 })
 
 describe('loadWaiverPool — the subtraction', () => {
@@ -166,8 +170,8 @@ describe('loadWaiverPool — the price', () => {
     ])
     const out = await loadWaiverPool('L1', 'NFL')
     expect(out.availablePlayers).toEqual([
-      { id: 'p1', name: 'Priced Add', position: 'RB', team: 'DET', age: 23, value: 2200 },
-      { id: 'p2', name: 'Unpriced Add', position: 'WR', team: null, age: null, value: 0 },
+      { id: 'p1', name: 'Priced Add', position: 'RB', team: 'DET', age: 23, value: 2200, byeWeek: null },
+      { id: 'p2', name: 'Unpriced Add', position: 'WR', team: null, age: null, value: 0, byeWeek: null },
     ])
     expect(out.pricing).toEqual({ priced: 1, total: 2, basis: 'redraft, 1QB, 12 teams, 0.5 PPR' })
     expect(marketContextFor).toHaveBeenCalledWith({ roster_positions: ['QB', 'RB', 'WR', 'FLEX', 'BN'] }, 'Redraft', 12)
@@ -302,6 +306,36 @@ describe('loadWaiverPool — the league', () => {
     rosterFindMany.mockResolvedValue([])
     leagueFindUnique.mockResolvedValue({ settings: null, leagueType: null, leagueSize: null })
     expect((await loadWaiverPool('L1', 'NFL')).leagueTraits.numTeams).toBe(12)
+  })
+
+  it('🛑 carries THIS season’s byes, read from the schedule rather than a table', async () => {
+    leagueFindUnique.mockResolvedValue({ settings: null, leagueType: null, leagueSize: 12, season: 2026 })
+    getPool.mockResolvedValue([
+      player('p1', { external_source_id: '4046', team_abbreviation: 'SEA' }),
+      player('p2', { external_source_id: '9221', team_abbreviation: 'DET' }),
+    ])
+    const out = await loadWaiverPool('L1', 'NFL')
+    expect(resolveByeWeekMap).toHaveBeenCalledWith(2026, 'NFL')
+    expect(out.byeWeekByClub).toEqual({ KC: 6, SEA: 9 })
+    /* A candidate's own bye travels with him, so the scorer does not offer cover for the week he is out. */
+    expect(out.availablePlayers.map((p) => p.byeWeek)).toEqual([9, null])
+  })
+
+  it('falls back to the projection feed’s season, and asks for none without either', async () => {
+    leagueFindUnique.mockResolvedValue({ settings: null, leagueType: null, leagueSize: 12, season: null })
+    await loadWaiverPool('L1', 'NFL')
+    expect(resolveByeWeekMap).toHaveBeenCalledWith(2026, 'NFL')
+
+    resolveByeWeekMap.mockClear()
+    latestProjectionWeek.mockResolvedValue(null)
+    const out = await loadWaiverPool('L1', 'NFL')
+    expect(resolveByeWeekMap).not.toHaveBeenCalled()
+    expect(out.byeWeekByClub).toEqual({})
+  })
+
+  it('a schedule that cannot answer is an empty slate, not a crash', async () => {
+    resolveByeWeekMap.mockRejectedValue(new Error('down'))
+    expect((await loadWaiverPool('L1', 'NFL')).byeWeekByClub).toEqual({})
   })
 
   it('no projection week on file is null, never week 1', async () => {
