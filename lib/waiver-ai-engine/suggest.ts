@@ -15,8 +15,7 @@ function buildScoringContext(input: WaiverAIEngineInput): WaiverScoringContext {
       input.roster,
       input.rosterPositions,
       input.allLeagueRosters,
-      input.currentWeek ?? 1,
-      input.byeWeekByClub ?? {}
+      input.currentWeek ?? 1
     )
   }
   const needs = teamNeeds?.weakestSlots?.map((s) => s.position) ?? []

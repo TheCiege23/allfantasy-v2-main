@@ -17,6 +17,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { suggestWaiverPickups } from '@/lib/waiver-ai-engine/suggest'
+import { computeTeamNeeds } from '@/lib/waiver-engine/team-needs'
 import { buildWaiverDCO } from '@/lib/decision-os/waiver/dco'
 import { decideWaiverClaim } from '@/lib/decision-os/waiver/decision'
 import type { WaiverAIServiceInput } from '@/lib/waiver-ai-engine'
@@ -134,8 +135,15 @@ describe('a priced wire produces a real waiver recommendation', () => {
         ...MY_ROSTER.filter((p) => p.id !== 'bench-mid'),
         { id: 'rb2', name: 'Second RB', position: 'RB', team: 'NYG', slot: 'starter' as const, age: 27, value: 900 },
       ],
-      byeWeekByClub: { NYG: 8, SEA: 12 },
     })
+    /* Precomputed the way the pool does it, with this season's slate. */
+    withBye.teamNeeds = computeTeamNeeds(
+      withBye.roster!,
+      withBye.rosterPositions!,
+      withBye.allLeagueRosters!,
+      3,
+      { NYG: 8, SEA: 12 },
+    )
     const { suggestions } = await decide(withBye)
     const driver = suggestions[0].drivers?.find((d) => d.id === 'wa_bye_week_fill')
     expect(driver?.detail).toMatch(/Covers Wk 8 bye/)
@@ -147,8 +155,8 @@ describe('a priced wire produces a real waiver recommendation', () => {
         ...MY_ROSTER.filter((p) => p.id !== 'bench-mid'),
         { id: 'rb2', name: 'Second RB', position: 'RB', team: 'NYG', slot: 'starter' as const, age: 27, value: 900 },
       ],
-      byeWeekByClub: {},
     })
+    noSlate.teamNeeds = computeTeamNeeds(noSlate.roster!, noSlate.rosterPositions!, noSlate.allLeagueRosters!, 3, {})
     const { suggestions } = await decide(noSlate)
     expect(suggestions[0].drivers?.some((d) => d.id === 'wa_bye_week_fill')).toBe(false)
   })

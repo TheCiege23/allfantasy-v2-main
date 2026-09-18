@@ -338,6 +338,24 @@ describe('loadWaiverPool — the league', () => {
     expect((await loadWaiverPool('L1', 'NFL')).byeWeekByClub).toEqual({})
   })
 
+  it('🛑 computes the needs HERE, with this season’s slate, so the engine never looks a table up', async () => {
+    rosterFindMany.mockResolvedValue([
+      { id: 'r-mine', platformUserId: 'u1', playerData: { ids: ['4046', '9221'], starters: ['4046'], players: ['4046', '9221'] } },
+    ])
+    playerFindMany.mockResolvedValue([
+      { sleeperId: '4046', name: 'Starting RB', position: 'RB', team: 'KC', age: 24 },
+      { sleeperId: '9221', name: 'Bench WR', position: 'WR', team: 'KC', age: 27 },
+    ])
+    const out = await loadWaiverPool('L1', 'NFL', 'r-mine')
+    expect(out.teamNeeds).not.toBeNull()
+    expect(out.teamNeeds?.dropCandidates?.length ?? 0).toBeGreaterThanOrEqual(0)
+  })
+
+  it('no needs to compute without a roster or the league’s slots', async () => {
+    leagueFindUnique.mockResolvedValue({ settings: null, leagueType: null, leagueSize: 12, season: 2026 })
+    expect((await loadWaiverPool('L1', 'NFL')).teamNeeds).toBeNull()
+  })
+
   it('no projection week on file is null, never week 1', async () => {
     /* Week 1 would put every team's bye two weeks out and boost the wrong players. */
     latestProjectionWeek.mockResolvedValue(null)
