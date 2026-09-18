@@ -26,7 +26,7 @@ export function MatchupSimulatorClient({
     <div className="min-h-screen bg-gradient-to-b from-[#0a0a0f] to-[#0f0f1a] py-12">
       <div className="container mx-auto max-w-2xl px-4">
         <div className="mb-6 flex items-center gap-3">
-          <Link href="/dashboard" className="text-white/40 hover:text-white/60">
+          <Link href="/core" className="text-white/40 hover:text-white/60">
             <ArrowLeft className="h-5 w-5" />
           </Link>
           <h1 className="text-2xl font-black text-white">Matchup Simulator</h1>

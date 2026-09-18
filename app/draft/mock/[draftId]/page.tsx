@@ -25,7 +25,7 @@ export default async function MockDraftByDraftIdPage({ params }: { params: { dra
     select: { id: true, inviteCode: true, createdById: true },
   })
   if (!room) {
-    redirect('/dashboard')
+    redirect('/core')
   }
 
   return (

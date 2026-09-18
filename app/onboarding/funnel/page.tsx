@@ -21,7 +21,7 @@ export default async function OnboardingFunnelPage() {
 
   const state = await getOnboardingState(session.user.id)
   if (state?.isComplete) {
-    redirect("/dashboard")
+    redirect("/core")
   }
 
   const currentStep = state?.currentStep ?? "welcome"

@@ -31,7 +31,7 @@ export default function AfRankingsError({
             Try again
           </button>
           <Link
-            href="/dashboard"
+            href="/core"
             className="rounded-xl border border-white/15 bg-white/[0.04] px-5 py-2.5 text-center text-sm font-semibold text-white/80 hover:border-white/25 hover:text-white"
           >
             Back to dashboard

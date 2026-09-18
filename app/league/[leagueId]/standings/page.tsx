@@ -31,7 +31,7 @@ export default async function LeagueStandingsPage({
     where: { id: leagueId },
     select: { season: true },
   })
-  if (!league) redirect('/dashboard')
+  if (!league) redirect('/core')
 
   const fallbackSeason = league.season ?? new Date().getFullYear()
   const seasonParam = typeof sp.season === 'string' ? sp.season : Array.isArray(sp.season) ? sp.season[0] : undefined

@@ -3,7 +3,7 @@ import { Gamepad2, ChevronRight } from "lucide-react"
 
 export default function WebAppCard() {
   return (
-    <Link href="/dashboard" className="rounded-2xl border border-purple-500/20 bg-purple-500/5 p-5 hover:bg-purple-500/10 transition">
+    <Link href="/core" className="rounded-2xl border border-purple-500/20 bg-purple-500/5 p-5 hover:bg-purple-500/10 transition">
       <div className="flex items-center justify-between">
         <h2 className="text-sm font-semibold text-purple-200">AllFantasy WebApp</h2>
         <Gamepad2 className="h-4 w-4 text-purple-300" />

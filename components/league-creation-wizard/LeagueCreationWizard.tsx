@@ -591,7 +591,7 @@ export function LeagueCreationWizard({
       devyLeagueSetup: defaultDevyLeagueSetup('NFL'),
       step: 'sport',
     })
-    router.push('/dashboard')
+    router.push('/core')
   }, [state.step, go, router])
 
   const handleSportChange = useCallback((sport: string) => {

@@ -16,7 +16,7 @@ export default async function LeagueMatchupsPage({ params }: { params: Promise<{
     where: { id: leagueId },
     select: { season: true },
   })
-  if (!league) redirect('/dashboard')
+  if (!league) redirect('/core')
 
   return (
     <AppShell leftPanel={null} rightPanel={null}>

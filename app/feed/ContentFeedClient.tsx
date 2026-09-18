@@ -102,7 +102,7 @@ export default function ContentFeedClient() {
       {items.length === 0 && !error && (
         <div className="rounded-2xl border border-white/10 bg-white/5 p-8 text-center text-white/60">
           <p>No feed items yet. Check back later or join a league to see personalized updates.</p>
-          <Link href="/dashboard" className="mt-3 inline-block text-cyan-400 hover:text-cyan-300 text-sm">
+          <Link href="/core" className="mt-3 inline-block text-cyan-400 hover:text-cyan-300 text-sm">
             Back to dashboard
           </Link>
         </div>

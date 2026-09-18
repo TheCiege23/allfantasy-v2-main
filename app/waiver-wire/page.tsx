@@ -45,7 +45,7 @@ export default function WaiverWirePage() {
       <div className="flex min-h-screen flex-col items-center justify-center bg-[#0a0a0a]">
         <div className="text-white/60">No league selected</div>
         <button
-          onClick={() => router.push("/dashboard")}
+          onClick={() => router.push("/core")}
           className="mt-4 text-cyan-400 hover:text-cyan-300"
         >
           Go to Dashboard

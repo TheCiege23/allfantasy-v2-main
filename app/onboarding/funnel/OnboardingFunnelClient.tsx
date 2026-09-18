@@ -105,7 +105,7 @@ export default function OnboardingFunnelClient({
 
   useEffect(() => {
     if (step === "completed" && redirectOnComplete) {
-      router.replace("/dashboard")
+      router.replace("/core")
       return
     }
   }, [step, router, redirectOnComplete])

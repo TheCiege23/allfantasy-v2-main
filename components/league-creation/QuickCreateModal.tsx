@@ -141,7 +141,7 @@ export function QuickCreateModal({
       if (leagueId) {
         router.push(`/league/${leagueId}`)
       } else {
-        router.push('/dashboard')
+        router.push('/core')
       }
     } catch {
       setError('Network error')

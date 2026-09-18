@@ -39,7 +39,7 @@ export default async function OnboardingPage() {
     existing?.ageConfirmedAt &&
     existing?.profileComplete
   ) {
-    redirect("/dashboard")
+    redirect("/core")
   }
 
   const pending = await (prisma as any).pendingSignup

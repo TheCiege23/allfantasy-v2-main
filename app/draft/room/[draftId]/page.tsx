@@ -24,7 +24,7 @@ export default async function DraftRoomPage({
   }
 
   const context = await resolveDraftRouteContext(draftId, userId)
-  if (!context) redirect('/dashboard')
+  if (!context) redirect('/core')
 
   if (context.kind === 'live') {
     redirect(`/drafts/${encodeURIComponent(context.draftId)}`)

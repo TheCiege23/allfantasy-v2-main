@@ -45,7 +45,7 @@ export default async function FantasyOsPage() {
       email: session?.user?.email ?? null,
       role: session?.user?.role ?? null,
     })
-    if (!allowed) redirect('/dashboard')
+    if (!allowed) redirect('/core')
   }
 
   const payload = isAuthenticated ? await getDashboardLeagueListForUser(userId).catch(() => null) : null

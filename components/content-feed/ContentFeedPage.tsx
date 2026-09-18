@@ -49,7 +49,7 @@ export default function ContentFeedPage() {
     <div className="space-y-6" data-testid="content-feed-page">
       <div className="flex items-center gap-3">
         <Link
-          href="/dashboard"
+          href="/core"
           className="text-sm text-white/60 hover:text-white/80 transition"
         >
           ← Dashboard

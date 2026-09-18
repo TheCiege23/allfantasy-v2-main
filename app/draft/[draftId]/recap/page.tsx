@@ -20,7 +20,7 @@ export default async function DraftRecapPage({
   }
 
   const context = await resolveDraftRouteContext(draftId, userId)
-  if (!context) redirect('/dashboard')
+  if (!context) redirect('/core')
   if (context.kind === 'mock') {
     redirect(`/mock-draft/${encodeURIComponent(context.draftId)}/replay`)
   }

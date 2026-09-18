@@ -124,7 +124,7 @@ export default async function HomePage({
    * ⚠ `/` NO LONGER REDIRECTS ANYONE AWAY. THE LANDING PAGE IS THE FIRST THING
    * EVERY VISITOR SEES, SIGNED IN OR NOT.
    *
-   * This used to be `if (initialSession?.user) redirect('/dashboard')`, and that
+   * This used to be `if (initialSession?.user) redirect('/core')`, and that
    * one line made allfantasy.ai land people on the LOGIN page. The reason is a
    * disagreement between two gates that each looked correct on its own:
    *

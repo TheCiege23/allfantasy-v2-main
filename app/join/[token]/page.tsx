@@ -196,7 +196,7 @@ export default function JoinLeagueInvitePage() {
               <h1 className="mt-5 text-3xl font-black text-white">This invite is no longer valid</h1>
               <p className="mt-3 max-w-md text-sm text-slate-300">{loadError ?? 'Invite not found or expired.'}</p>
               <Link
-                href="/dashboard"
+                href="/core"
                 className="mt-6 inline-flex items-center justify-center rounded-full border border-white/10 bg-white/10 px-5 py-3 text-sm font-semibold text-white transition hover:border-white/20 hover:bg-white/15"
               >
                 Return to dashboard
@@ -240,7 +240,7 @@ export default function JoinLeagueInvitePage() {
                   : `${invite.leagueName ?? 'This league'} is already fully assigned. Head back to your dashboard to explore your leagues.`}
               </p>
               <Link
-                href="/dashboard"
+                href="/core"
                 className="mt-6 inline-flex items-center justify-center rounded-full border border-white/10 bg-white/10 px-5 py-3 text-sm font-semibold text-white transition hover:border-white/20 hover:bg-white/15"
               >
                 Go to dashboard

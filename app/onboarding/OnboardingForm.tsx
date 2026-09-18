@@ -524,7 +524,7 @@ export default function OnboardingForm({
           )}
         </button>
         <a
-          href="/dashboard"
+          href="/core"
           style={{ textAlign: "center", fontSize: 13, color: "var(--color-neutral-500)" }}
         >
           Skip for now

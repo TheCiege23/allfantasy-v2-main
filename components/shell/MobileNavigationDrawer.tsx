@@ -167,7 +167,7 @@ export function MobileNavigationDrawer({
                       return
                     }
                     onClose()
-                    router.push("/dashboard")
+                    router.push("/core")
                   }}
                   className="flex min-h-11 w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-sm font-medium transition"
                   style={{ color: "var(--text)" }}

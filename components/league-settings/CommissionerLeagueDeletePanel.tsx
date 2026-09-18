@@ -58,7 +58,7 @@ export function CommissionerLeagueDeletePanel({
       toast.success('League archived')
       dispatchStateRefreshEvent({ domain: 'leagues', leagueId, reason: 'league_archived' })
       setArchiveOpen(false)
-      router.push('/dashboard')
+      router.push('/core')
       router.refresh()
     } catch {
       toast.error('Network error')
@@ -87,7 +87,7 @@ export function CommissionerLeagueDeletePanel({
       toast.success('League removed from AllFantasy')
       dispatchStateRefreshEvent({ leagueId, domain: 'leagues' })
       setRemoveOpen(false)
-      router.push('/dashboard')
+      router.push('/core')
       router.refresh()
     } catch {
       toast.error('Network error')

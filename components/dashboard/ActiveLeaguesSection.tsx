@@ -53,7 +53,7 @@ export function ActiveLeaguesSection() {
           <Link href="/leagues" className="text-xs text-white/50 hover:text-white/70">{t("dashboard.viewAll")}</Link>
         </div>
         <p className="text-sm text-white/40 py-4">{t("dashboard.activeLeagues.empty")}</p>
-        <Link href="/dashboard" className="inline-flex items-center gap-1 text-xs text-cyan-400 hover:text-cyan-300">{t("dashboard.action.openWebApp")} <ChevronRight className="h-3.5 w-3.5" /></Link>
+        <Link href="/core" className="inline-flex items-center gap-1 text-xs text-cyan-400 hover:text-cyan-300">{t("dashboard.action.openWebApp")} <ChevronRight className="h-3.5 w-3.5" /></Link>
       </section>
     )
   }

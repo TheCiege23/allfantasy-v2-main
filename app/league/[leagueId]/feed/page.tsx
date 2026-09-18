@@ -22,7 +22,7 @@ export default async function LeagueFeedPage({
   params: Promise<{ leagueId: string }>
 }) {
   const { leagueId } = await params
-  if (!leagueId) redirect('/dashboard')
+  if (!leagueId) redirect('/core')
 
   const session = (await getServerSession(authOptions as never)) as { user?: { id?: string } } | null
   const userId = session?.user?.id
@@ -31,13 +31,13 @@ export default async function LeagueFeedPage({
   }
 
   const access = await resolveLeagueAccess(leagueId, userId)
-  if (!access?.isMember) redirect('/dashboard')
+  if (!access?.isMember) redirect('/core')
 
   const league = await prisma.league.findFirst({
     where: { id: leagueId },
     select: { name: true },
   })
-  if (!league) redirect('/dashboard')
+  if (!league) redirect('/core')
 
   return (
     <div className="min-h-screen bg-[#040915] text-white">
