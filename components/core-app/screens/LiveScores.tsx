@@ -1424,7 +1424,7 @@ export default LiveScores
  * Renders nothing before mount: `now` is null until then and every figure here is
  * relative to it, so there is no honest thing to show.
  */
-function LockWarning({ alerts, now }: { alerts: LiveLockAlert[]; now: number | null }) {
+export function LockWarning({ alerts, now }: { alerts: LiveLockAlert[]; now: number | null }) {
   if (now == null) return null
 
   const closing = alerts
