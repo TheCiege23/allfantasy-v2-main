@@ -350,7 +350,7 @@ export default function WarRoomPage() {
               Open NFL AF Legacy
             </Link>
             <Link
-              href="/dashboard"
+              href="/core"
               className="inline-flex min-h-[48px] w-full items-center justify-center gap-2 rounded-2xl border border-white/15 px-6 py-3 text-[14px] font-semibold text-white/60 transition hover:text-white/80 sm:w-auto"
             >
               Go to Dashboard

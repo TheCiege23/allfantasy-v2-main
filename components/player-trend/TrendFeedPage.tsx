@@ -386,7 +386,7 @@ export default function TrendFeedPage() {
     <main className="min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(251,191,36,0.18),_transparent_32%),radial-gradient(circle_at_top_right,_rgba(34,197,94,0.12),_transparent_28%),linear-gradient(180deg,_#f8fafc_0%,_#eef2ff_45%,_#f8fafc_100%)] px-4 py-6 text-slate-950 dark:bg-[radial-gradient(circle_at_top_left,_rgba(245,158,11,0.08),_transparent_28%),radial-gradient(circle_at_top_right,_rgba(16,185,129,0.08),_transparent_24%),linear-gradient(180deg,_#020617_0%,_#0f172a_45%,_#111827_100%)] dark:text-slate-50 sm:px-6">
       <div className="mx-auto w-full max-w-7xl">
         <nav className="mb-6 flex flex-wrap items-center gap-3 text-sm">
-          <Link href="/dashboard" className="text-slate-600 transition hover:text-slate-900 dark:text-slate-300 dark:hover:text-white">
+          <Link href="/core" className="text-slate-600 transition hover:text-slate-900 dark:text-slate-300 dark:hover:text-white">
             Back to app home
           </Link>
         </nav>

@@ -7,7 +7,7 @@ export default function MetaInsightsPage() {
   return (
     <main className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6">
       <nav className="mb-4 flex flex-wrap items-center gap-3 text-sm">
-        <Link href="/dashboard" className="text-slate-400 hover:text-slate-200">
+        <Link href="/core" className="text-slate-400 hover:text-slate-200">
           ← App home
         </Link>
         <Link href="/leagues" className="text-slate-400 hover:text-slate-200">

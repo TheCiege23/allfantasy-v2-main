@@ -193,7 +193,7 @@ export default async function BracketsHomePage() {
         <div className="flex items-center gap-2">
           <LanguageToggle variant="compact" refreshOnChange />
           <Link
-            href="/dashboard"
+            href="/core"
             className="hidden items-center gap-1.5 rounded-full border border-white/15 bg-white/[0.04] px-3 py-1.5 text-[11px] font-bold uppercase tracking-wide text-white/65 transition-colors hover:border-white/30 hover:bg-white/[0.08] hover:text-white sm:inline-flex"
           >
             {t("brk.hub.heroDashboard")}

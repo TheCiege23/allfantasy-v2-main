@@ -31,7 +31,7 @@ export default function NotFound() {
           Back to home
         </Link>
         <Link
-          href="/dashboard"
+          href="/core"
           className="rounded-xl border px-5 py-3 text-sm font-semibold"
           style={{ borderColor: 'var(--border, #2a3441)', color: 'var(--text, #eef0fa)' }}
         >

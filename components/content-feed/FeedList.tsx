@@ -110,7 +110,7 @@ export function FeedList({
               : "No feed items yet. Check back later or adjust filters."}
           </p>
           <Link
-            href="/dashboard"
+            href="/core"
             className="mt-3 inline-block text-cyan-400 hover:text-cyan-300 text-sm"
           >
             Back to dashboard

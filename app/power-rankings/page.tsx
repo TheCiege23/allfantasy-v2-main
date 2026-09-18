@@ -2077,7 +2077,7 @@ export default function PowerRankingsPage() {
                 </Link>
               ) : (
                 <Link
-                  href="/dashboard"
+                  href="/core"
                   className="mt-4 inline-flex items-center rounded-full border border-white/20 px-5 py-2 text-sm font-semibold text-white transition hover:bg-white/10"
                 >
                   Back to your leagues

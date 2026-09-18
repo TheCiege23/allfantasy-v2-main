@@ -42,7 +42,7 @@ export default async function DraftHQPage({
   params: Promise<{ leagueId: string }>
 }) {
   const { leagueId } = await params
-  if (!leagueId) redirect('/dashboard')
+  if (!leagueId) redirect('/core')
 
   const session = (await getServerSession(authOptions as never)) as { user?: { id?: string } } | null
   const userId = session?.user?.id
@@ -50,13 +50,13 @@ export default async function DraftHQPage({
     redirect(`/login?callbackUrl=${encodeURIComponent(`/league/${leagueId}/draft-hq`)}`)
   }
 
-  if (!(await canAccessLeague(leagueId, userId))) redirect('/dashboard')
+  if (!(await canAccessLeague(leagueId, userId))) redirect('/core')
 
   const league = await prisma.league.findFirst({
     where: { id: leagueId },
     select: { id: true, name: true, sport: true, leagueSize: true, leagueType: true, platform: true },
   })
-  if (!league) redirect('/dashboard')
+  if (!league) redirect('/core')
 
   /*
    * The viewer's own roster. Keyed on `Roster.platformUserId`, the column

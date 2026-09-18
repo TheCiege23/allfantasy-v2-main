@@ -18,7 +18,7 @@ export default async function LeagueDraftResolverPage({
   params: Promise<{ leagueId: string }>
 }) {
   const { leagueId } = await params
-  if (!leagueId) redirect('/dashboard')
+  if (!leagueId) redirect('/core')
 
   const session = (await getServerSession(authOptions as never)) as { user?: { id?: string } } | null
   const userId = session?.user?.id
@@ -28,7 +28,7 @@ export default async function LeagueDraftResolverPage({
   }
 
   const canAccess = await canAccessLeague(leagueId, userId)
-  if (!canAccess) redirect('/dashboard')
+  if (!canAccess) redirect('/core')
 
   const league = await prisma.league.findFirst({
     where: { id: leagueId },
@@ -45,7 +45,7 @@ export default async function LeagueDraftResolverPage({
     },
   })
 
-  if (!league) redirect('/dashboard')
+  if (!league) redirect('/core')
 
   /*
    * THE IMPORT NEVER STORED draft_id, SO SETTINGS ALONE CANNOT ANSWER THIS.

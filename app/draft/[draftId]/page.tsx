@@ -20,7 +20,7 @@ export default async function DraftRouterPage({
 
   const context = await resolveDraftRouteContext(draftId, userId)
   if (!context) {
-    redirect('/dashboard')
+    redirect('/core')
   }
 
   if (context.kind === 'mock') {

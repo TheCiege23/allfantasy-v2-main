@@ -46,7 +46,7 @@ export function PlayerProfileClient({ player }: { player: PlayerIdentity }) {
       {/* Top bar */}
       <div className="border-b border-white/[0.06] bg-[#080c18]/80 backdrop-blur-md">
         <div className="mx-auto flex max-w-4xl items-center gap-3 px-4 py-3">
-          <Link href="/dashboard" className="text-white/40 hover:text-white/60">
+          <Link href="/core" className="text-white/40 hover:text-white/60">
             <ArrowLeft className="h-5 w-5" />
           </Link>
           <h1 className="truncate text-sm font-semibold text-white/70">Player Profile</h1>

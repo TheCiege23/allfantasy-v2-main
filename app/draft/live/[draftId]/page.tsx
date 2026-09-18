@@ -38,7 +38,7 @@ export default async function LiveDraftByDraftIdPage({ params }: { params: { dra
   })
 
   if (!byLeague) {
-    redirect('/dashboard')
+    redirect('/core')
   }
 
   // Resolve the canonical DraftSession for this league.
@@ -48,7 +48,7 @@ export default async function LiveDraftByDraftIdPage({ params }: { params: { dra
   })
 
   if (!ds) {
-    redirect('/dashboard')
+    redirect('/core')
   }
 
   redirect(`/drafts/${ds.id}`)

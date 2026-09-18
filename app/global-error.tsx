@@ -118,7 +118,7 @@ export default function GlobalError({
                 Retry
               </button>
               <a
-                href="/dashboard"
+                href="/core"
                 style={{
                   padding: "10px 16px",
                   borderRadius: "10px",

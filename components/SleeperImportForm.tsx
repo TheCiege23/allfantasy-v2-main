@@ -173,7 +173,7 @@ export default function SleeperImportForm() {
               </p>
             ) : null}
             <Link
-              href="/dashboard"
+              href="/core"
               className="inline-flex items-center gap-1.5 rounded-xl bg-cyan-500 px-4 py-2 text-[13px] font-bold text-black hover:bg-cyan-400"
             >
               View My Leagues →

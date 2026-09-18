@@ -203,7 +203,7 @@ export default function DynastyInsightsPage() {
   return (
     <main className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6">
       <nav className="mb-5 flex flex-wrap items-center gap-3 text-sm text-slate-500">
-        <Link href="/dashboard" className="hover:text-slate-900 dark:hover:text-white">
+        <Link href="/core" className="hover:text-slate-900 dark:hover:text-white">
           <span aria-hidden="true">&larr;</span> App home
         </Link>
       </nav>

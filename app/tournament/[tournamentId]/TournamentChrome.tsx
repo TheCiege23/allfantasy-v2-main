@@ -246,7 +246,7 @@ export function TournamentChrome({ children }: { children: React.ReactNode }) {
         <div className="flex min-w-0 flex-1 flex-col pb-16 md:pb-0">
           <header className="sticky top-0 z-30 flex items-center gap-2 border-b border-[var(--tournament-border)] bg-[#060a10]/78 px-3 py-2 backdrop-blur-xl md:px-5">
             <Link
-              href="/dashboard"
+              href="/core"
               className="mr-1 hidden rounded-lg px-2 py-1 text-[11px] text-[var(--tournament-text-dim)] hover:text-white md:inline"
             >
               ← Dashboard

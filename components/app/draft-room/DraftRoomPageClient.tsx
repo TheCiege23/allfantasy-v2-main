@@ -4113,7 +4113,7 @@ export function DraftRoomPageClient({
           <Link href={`/league/${leagueId}`} className="mt-4 inline-block text-cyan-400 hover:underline">
             Back to league
           </Link>
-          <Link href="/dashboard" className="mt-2 block text-sm text-white/40 hover:text-white/60">
+          <Link href="/core" className="mt-2 block text-sm text-white/40 hover:text-white/60">
             Dashboard
           </Link>
         </div>

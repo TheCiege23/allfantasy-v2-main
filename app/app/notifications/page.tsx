@@ -72,7 +72,7 @@ export default function NotificationsPage() {
       <header className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-3">
           <Link
-            href="/dashboard"
+            href="/core"
             className="inline-flex items-center gap-1 rounded-lg border px-2 py-1.5 text-xs font-medium transition-colors hover:bg-black/5"
             style={{ borderColor: "var(--border)", color: "var(--muted)" }}
           >

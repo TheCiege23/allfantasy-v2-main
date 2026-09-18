@@ -494,7 +494,7 @@ export function SettingsChrome({
         <button
           type="button"
           className="ns-home"
-          onClick={() => router.push('/dashboard')}
+          onClick={() => router.push('/core')}
           data-testid="settings-home"
         >
           <Home strokeWidth={2} />

@@ -54,7 +54,7 @@ export default function BracketsError({
               Join Pool
             </Link>
             <Link
-              href="/dashboard"
+              href="/core"
               className="rounded-lg border border-white/20 px-3 py-2 text-sm font-semibold text-white/85"
             >
               Back to Dashboard

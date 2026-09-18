@@ -37,7 +37,7 @@ export function DeleteLeagueFromAfPanel({
         return
       }
       toast.success('League removed from AllFantasy')
-      router.push('/dashboard')
+      router.push('/core')
       router.refresh()
     } catch {
       toast.error('Network error')

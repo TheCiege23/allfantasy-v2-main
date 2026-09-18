@@ -70,7 +70,7 @@ export default function RootError({
             Retry
           </button>
           <Link
-            href="/dashboard"
+            href="/core"
             style={{
               borderRadius: 8,
               padding: "8px 14px",

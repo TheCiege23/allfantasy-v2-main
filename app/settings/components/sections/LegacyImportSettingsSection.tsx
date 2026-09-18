@@ -168,7 +168,7 @@ export function LegacyImportSettingsSection() {
                     )}
                     {showReconnect && (
                       <Link
-                        href="/dashboard"
+                        href="/core"
                         className="rounded-lg border px-3 py-2 text-sm font-medium"
                         style={{ borderColor: "var(--border)", color: "var(--text)" }}
                       >
@@ -214,7 +214,7 @@ export function LegacyImportSettingsSection() {
           {t("settings.legacy.openApp")}
         </Link>
         <Link
-          href="/dashboard"
+          href="/core"
           className="rounded-lg border px-3 py-2 text-sm font-medium"
           style={{ borderColor: "var(--border)", color: "var(--text)" }}
         >

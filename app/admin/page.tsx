@@ -369,7 +369,7 @@ function AdminPageLoadFailure({
               Admin recovery
             </a>
             <a
-              href="/dashboard"
+              href="/core"
               className="inline-flex min-h-11 items-center justify-center rounded-2xl border border-white/12 bg-black/25 px-4 py-2 text-sm font-black text-white/80"
             >
               Back to app
@@ -1521,7 +1521,7 @@ function AdminAccessDenied() {
         </p>
         <div className="mt-6 flex flex-wrap gap-3">
           <a
-            href="/dashboard"
+            href="/core"
             className="rounded-2xl border border-white/10 bg-white/[0.06] px-4 py-3 text-sm font-black text-white hover:border-cyan-300/45"
           >
             Back to dashboard

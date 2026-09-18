@@ -139,7 +139,7 @@ export function CreateLeagueV2Client({ userId: _userId }: CreateLeagueV2ClientPr
       submitError={submitError}
       submitting={submitting}
       onSubmit={handleSubmit}
-      onCancel={() => router.push('/dashboard')}
+      onCancel={() => router.push('/core')}
     />
   )
 }

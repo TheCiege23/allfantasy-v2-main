@@ -370,7 +370,7 @@ export default function ProfilePageClient({
           </h2>
           <div className="grid gap-3 sm:grid-cols-2">
             <Link
-              href="/dashboard"
+              href="/core"
               className="flex items-center justify-between rounded-xl border p-4 transition"
               style={{ borderColor: "rgba(6,182,212,0.25)", background: "rgba(6,182,212,0.06)" }}
             >

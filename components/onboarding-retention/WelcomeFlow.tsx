@@ -97,7 +97,7 @@ export function WelcomeFlow({
     return (
       <div className={`text-center py-6 text-white/80 ${className}`}>
         <p>You’re all set. Head to your dashboard to explore.</p>
-        <Link href="/dashboard" className="mt-3 inline-block text-cyan-400 hover:text-cyan-300 text-sm">
+        <Link href="/core" className="mt-3 inline-block text-cyan-400 hover:text-cyan-300 text-sm">
           Go to dashboard
         </Link>
       </div>

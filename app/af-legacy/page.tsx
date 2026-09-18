@@ -18398,7 +18398,7 @@ export default function AFLegacyPage() {
           <p className="text-sm mb-4" style={{ color: "var(--muted)" }}>
             This experience has been turned off by platform configuration.
           </p>
-          <Link href="/dashboard" className="text-sm font-medium" style={{ color: "var(--accent)" }}>
+          <Link href="/core" className="text-sm font-medium" style={{ color: "var(--accent)" }}>
             Back to dashboard
           </Link>
         </div>

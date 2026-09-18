@@ -975,7 +975,7 @@ export function LeagueShell({
   /** Sidebar rows navigate via `<Link>` (`getLeagueListDestinationHref`); avoid `router.push(/league/${id})` so tournament hub links work. */
   const handleLeagueSelect = (l: UserLeague | null) => {
     if (!l) {
-      router.push('/dashboard')
+      router.push('/core')
     }
   }
 
@@ -1395,7 +1395,7 @@ export function LeagueShell({
                       onLeaveLeague: () => setLeaveLeagueHintOpen(true),
                     }
               }
-              onGoHome={() => router.push('/dashboard')}
+              onGoHome={() => router.push('/core')}
               idpLeagueActive={idpLeagueActive}
               idpViewMode={idpViewMode}
               onIdpViewModeChange={setIdpViewMode}

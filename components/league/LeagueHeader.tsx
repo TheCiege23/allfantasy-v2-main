@@ -12,7 +12,7 @@ export default function LeagueHeader({
       <div className="flex h-14 items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-3">
           <Link
-            href="/dashboard"
+            href="/core"
             className="inline-flex h-10 w-10 items-center justify-center rounded-full text-white/90 transition hover:bg-white/5"
           >
             <ChevronLeft className="h-5 w-5" />

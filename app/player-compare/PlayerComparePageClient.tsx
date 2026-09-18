@@ -83,7 +83,7 @@ export function PlayerComparePageClient(props: {
     <main className="min-h-screen bg-[#040915] px-4 py-6 text-white sm:px-6">
       <div className="mx-auto max-w-3xl">
         <Link
-          href="/dashboard"
+          href="/core"
           className="mb-6 inline-flex items-center gap-2 text-sm text-white/55 hover:text-white/85"
         >
           <ChevronLeft className="h-4 w-4" />

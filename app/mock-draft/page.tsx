@@ -44,7 +44,7 @@ export default async function MockDraftPage({ searchParams }: MockDraftPageProps
           <p className="text-sm mb-4" style={{ color: "var(--muted)" }}>
             This tool has been turned off by the platform configuration.
           </p>
-          <a href="/dashboard" className="text-sm font-medium" style={{ color: "var(--accent)" }}>
+          <a href="/core" className="text-sm font-medium" style={{ color: "var(--accent)" }}>
             Back to dashboard
           </a>
         </div>
