@@ -73,12 +73,46 @@ function kickoffInstant(iso: string | null | undefined): Date | null {
   return Number.isNaN(at.getTime()) ? null : at
 }
 
-export function mergeDash34Issues(derived: CoreIssue[], dash34: Dash34Data | null): CoreIssue[] {
-  if (!dash34) return derived
+/**
+ * Just the part of `WeekBoard` this needs.
+ *
+ * ⚠ STRUCTURAL RATHER THAN `Pick<WeekBoard, 'coinFlips'>` SO THE SCHEDULE STAYS OPTIONAL AT EVERY
+ * OTHER CALL SITE. `mergeDash34Issues` runs on LeagueHome too, which loads no week board; a
+ * required parameter would have made a screen that cannot answer the question pass `null` anyway.
+ */
+export type CoinFlipSchedule = {
+  coinFlips: ReadonlyArray<{
+    leagueId: string
+    leagueName: string
+    platform: string
+    href: string
+    projection: { margin: number } | null
+  }>
+}
+
+export function mergeDash34Issues(
+  derived: CoreIssue[],
+  dash34: Dash34Data | null,
+  /** The week board, where the caller holds one. Absent means "not read", never "no close games". */
+  schedule?: CoinFlipSchedule | null,
+  /**
+   * Leagues holding a provider trade offer that is waiting on the viewer, from the urgency cache.
+   * Absent means "not read", never "no offers" — see `readPendingOfferLeagues`.
+   *
+   * ⚠ IF A FIFTH INPUT EVER ARRIVES, MAKE THESE AN OPTIONS BAG. Two optional positionals is as far
+   * as this should go before the call sites stop being readable.
+   */
+  pendingOffers?: ReadonlyArray<{ leagueId: string; waiting: number }> | null,
+): CoreIssue[] {
+  /*
+   * ⚠ NO EARLY RETURN ON A MISSING `dash34`, WHICH THERE USED TO BE. The two inputs fail
+   * independently: the summary read can reject while the week board resolves perfectly well, and
+   * bailing on the first would have thrown away close-matchup rows the caller had already paid for.
+   * An empty `ranked` simply means the loop below contributes nothing.
+   */
   // allLeagues is the uncapped ranked list (needs + quiet); `leagues` is capped
   // at 8. An urgent league pushed past the cap still deserves a row.
-  const ranked: Dash34League[] = dash34.allLeagues ?? dash34.leagues ?? []
-  if (ranked.length === 0) return derived
+  const ranked: Dash34League[] = dash34?.allLeagues ?? dash34?.leagues ?? []
 
   const seenIds = new Set(derived.map((i) => i.id))
   const synthesized: CoreIssue[] = []
@@ -168,6 +202,162 @@ export function mergeDash34Issues(derived: CoreIssue[], dash34: Dash34Data | nul
     }
   }
 
+  /*
+   * ⚠ OFFERS BEFORE COIN FLIPS, AND BOTH AFTER THE LOOP. An offer is somebody waiting on a reply;
+   * a coin flip is a game that happens to be close. Same severity, so `rankDecisions` keeps their
+   * arrival order — which makes this line the tie-break, and worth being deliberate about.
+   */
+  synthesized.push(...pendingOfferRows(pendingOffers, ranked, synthesized))
+  synthesized.push(...coinFlipRows(schedule, synthesized))
+
   if (synthesized.length === 0) return derived
   return [...synthesized, ...derived]
+}
+
+/** Above this many rows of one kind they collapse into one — see `coinFlipRows`. */
+const COIN_FLIP_ROW_LIMIT = 3
+
+/**
+ * "Pending trades" — the brief's third kind of action (2026-09-17 decisions).
+ *
+ * ⚠ THIS COSTS NO PROVIDER CALL. `deriveOutstandingIssues` used to declare `trade_offer`
+ * unavailable because "pending offers are not ingested", which stopped being true:
+ * `lib/provider-trades/scanPendingSleeperTrades.ts` reads them, `lib/core-app/recentTrades.ts`
+ * already runs that scan on the home, and its `onPendingOffers` hook writes the per-league counts
+ * into the urgency cache row the Trades badge reads. This restates that stored fact with the league
+ * attached; the caller passes what it read, and nothing here fetches.
+ *
+ * ⚠ READ-ONLY, LIKE EVERY OTHER ROW. Sleeper's public API offers no write endpoint, so the action
+ * opens OUR trades screen for that league rather than pretending to accept or decline. The scanner's
+ * own header carries the same rule for the same reason.
+ *
+ * ⚠ `warn`, FOR THE SAME REASON AS A COIN FLIP: somebody is waiting on a reply, but nothing is
+ * broken, so it must not outrank an empty slot. And no deadline — an offer can expire, and we hold
+ * no expiry for one, so claiming an instant would invent it.
+ *
+ * ⚠ ONLY LEAGUES THE SUMMARY CAN NAME. A row reading "Trade offer waiting — a1b2c3" is worse than
+ * no row; an id the dash34 list does not carry is skipped rather than printed raw.
+ */
+function pendingOfferRows(
+  offers: ReadonlyArray<{ leagueId: string; waiting: number }> | null | undefined,
+  ranked: readonly Dash34League[],
+  already: readonly CoreIssue[],
+): CoreIssue[] {
+  if (!offers || offers.length === 0) return []
+
+  const nameById = new Map(ranked.map((l) => [l.id, l]))
+  const spokenFor = new Set(already.map((i) => i.leagueId).filter((id): id is string => id != null))
+  const fresh = offers
+    .filter((o) => o.waiting > 0 && !spokenFor.has(o.leagueId) && nameById.has(o.leagueId))
+    .map((o) => ({ ...o, league: nameById.get(o.leagueId)! }))
+  if (fresh.length === 0) return []
+
+  const total = fresh.reduce((sum, o) => sum + o.waiting, 0)
+
+  if (fresh.length > COIN_FLIP_ROW_LIMIT) {
+    return [
+      {
+        id: 'trade-offer:aggregate',
+        severity: 'warn',
+        glyph: '⇄',
+        title: `${total} trade ${total === 1 ? 'offer is' : 'offers are'} waiting on you`,
+        meta: `Across ${fresh.length} leagues › Trades · proposed to you and not answered`,
+        leagueId: null,
+        leagueName: null,
+        platform: null,
+        deadline: null,
+        action: { label: 'Open Trades', href: '/core/trades', external: false },
+      },
+    ]
+  }
+
+  return fresh.map((o) => ({
+    id: `${o.leagueId}:trade-offer`,
+    severity: 'warn' as const,
+    glyph: '⇄',
+    title: `${o.waiting} trade ${o.waiting === 1 ? 'offer' : 'offers'} waiting — ${o.league.name}`,
+    meta: `${titleCasePlatform(o.league.platform)} › Trades · proposed to you and not answered`,
+    leagueId: o.leagueId,
+    leagueName: o.league.name,
+    platform: o.league.platform,
+    deadline: null,
+    action: {
+      label: 'See the offer',
+      href: `/core/trades?league=${encodeURIComponent(o.leagueId)}`,
+      external: false,
+    },
+  }))
+}
+
+/**
+ * "Close matchups" — the brief's fifth kind of action (2026-09-17 decisions).
+ *
+ * A coin flip is the one matchup where a lineup decision actually changes the result, which is why
+ * `/core/week` leads with them. The queue could not say so: it is built from dash34 and the derived
+ * detectors, and neither reads the schedule.
+ *
+ * ⚠ `warn`, NOT `bad`, AND THAT IS THE WHOLE PLACEMENT. Nothing is broken — no slot is empty, no
+ * starter is out — so a coin flip must never outrank something that has already gone wrong.
+ * `rankDecisions` puts every `bad` row above every `warn`, so these land under the real problems.
+ * `info` would be too low: an untimed `info` sinks below TIMED info, which would file "your week is
+ * on a knife edge" beneath "a draft in thirty days".
+ *
+ * ⚠ AND NO DEADLINE, BECAUSE THE BOARD HOLDS NONE. `WeekMatchup` carries the projection and the
+ * opponent; the only kickoff on `WeekBoard` is `firstKickoffAt`, which is the week's first game
+ * across every league — not this matchup's. Using it would put a confident instant on a row it does
+ * not describe, which is the lie the starter-out note above exists to avoid.
+ *
+ * ⚠ SUPPRESSED FOR A LEAGUE THAT ALREADY HAS A ROW. A league with an empty slot is already being
+ * sent to its lineup; telling the reader twice about the same league is how a five-row queue stops
+ * being five decisions.
+ *
+ * ⚠ COLLAPSED ABOVE A HANDFUL, the same rule and for the same reason as the stale-sync rows in
+ * `deriveOutstandingIssues`: one account there produced 604 identical rows and buried the queue.
+ * A 61-league manager can easily hold ten coin flips, and ten rows saying the same sentence is one
+ * fact about the week, not ten facts about ten leagues.
+ */
+function coinFlipRows(
+  schedule: CoinFlipSchedule | null | undefined,
+  already: readonly CoreIssue[],
+): CoreIssue[] {
+  const flips = schedule?.coinFlips ?? []
+  if (flips.length === 0) return []
+
+  const spokenFor = new Set(already.map((i) => i.leagueId).filter((id): id is string => id != null))
+  const fresh = flips.filter((m) => !spokenFor.has(m.leagueId))
+  if (fresh.length === 0) return []
+
+  if (fresh.length > COIN_FLIP_ROW_LIMIT) {
+    return [
+      {
+        id: 'coin-flip:aggregate',
+        severity: 'warn',
+        glyph: '⚖',
+        title: `${fresh.length} matchups are coin flips this week`,
+        meta: 'Across your leagues › Matchup · close enough that a lineup decision swings them',
+        // Deliberately not pinned to one league: it is about all of them, and naming an arbitrary
+        // member would make the row lie about what it stands for.
+        leagueId: null,
+        leagueName: null,
+        platform: null,
+        deadline: null,
+        action: { label: 'See your week', href: '/core/week', external: false },
+      },
+    ]
+  }
+
+  return fresh.map((m) => ({
+    id: `${m.leagueId}:coin-flip`,
+    severity: 'warn' as const,
+    glyph: '⚖',
+    title: `Coin flip this week — ${m.leagueName}`,
+    meta: `${titleCasePlatform(m.platform)} › Matchup · ${
+      m.projection ? `${Math.abs(m.projection.margin).toFixed(1)} projected points apart` : 'projected close'
+    }`,
+    leagueId: m.leagueId,
+    leagueName: m.leagueName,
+    platform: m.platform,
+    deadline: null,
+    action: { label: 'See the matchup', href: m.href, external: false },
+  }))
 }
