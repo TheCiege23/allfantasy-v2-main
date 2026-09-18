@@ -213,53 +213,6 @@ test.describe("@relationship integration click audit", () => {
       });
     });
 
-    await page.route("**/api/leagues/league_rel_1/psychological-profiles/profile_1/evidence**", async (route) => {
-      await route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: JSON.stringify({
-          evidence: [
-            {
-              id: "ev_1",
-              evidenceType: "trade_activity",
-              value: 88,
-              sourceReference: "trade_history",
-              createdAt: "2026-03-20T00:00:00.000Z",
-            },
-          ],
-        }),
-      });
-    });
-
-    await page.route("**/api/leagues/league_rel_1/psychological-profiles/profile_1?**", async (route) => {
-      await route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: JSON.stringify({
-          id: "profile_1",
-          leagueId: "league_rel_1",
-          managerId: "team_alpha",
-          sport: "NBA",
-          sportLabel: "NBA",
-          profileLabels: ["aggressive trader"],
-          aggressionScore: 84,
-          activityScore: 78,
-          tradeFrequencyScore: 90,
-          waiverFocusScore: 42,
-          riskToleranceScore: 76,
-          evidence: [
-            {
-              id: "ev_1",
-              evidenceType: "trade_activity",
-              value: 88,
-              sourceReference: "trade_history",
-              createdAt: "2026-03-20T00:00:00.000Z",
-            },
-          ],
-        }),
-      });
-    });
-
     /*
      * `/app/league/*` is session-gated (lib/auth/session-auth-paths.ts). The gate only
      * fires when NEXTAUTH_SECRET is set — unset locally, SET in CI — so anonymously this
@@ -289,11 +242,12 @@ test.describe("@relationship integration click audit", () => {
     await page.getByRole("button", { name: "Open linked rivalry" }).click();
     await page.waitForURL("**/app/league/league_rel_1/rivalries/riv_1**");
 
-    await page.goto("/app/league/league_rel_1/psychological-profiles/profile_1?tab=evidence");
-    await expect(page.getByRole("heading", { name: "Manager Psychological Profile" })).toBeVisible();
-    await page.getByRole("link", { name: "Open trade context" }).click();
-    await page.waitForURL("**/app/league/league_rel_1?tab=Trades");
-
+    /*
+     * The manager psychological profile page this audit finished on was retired by
+     * dcaaa6946 (2026-09-10, "ownerless Competitive Edge privacy pass"), together with the
+     * profile and evidence routes this test used to mock. The call-record assertions below had not run
+     * since, because the test died on that page's heading before reaching them.
+     */
     expect(insightGets.some((c) => c.sport === "NBA" && c.season === "2026")).toBe(true);
     expect(insightPosts.length).toBeGreaterThan(0);
     expect(explainPosts.length).toBeGreaterThan(0);

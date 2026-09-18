@@ -76,8 +76,21 @@ on:
 # each other for runners: the jobs themselves were fine, but the required lanes listed at the top
 # of this file sat queued behind the core shards, which nothing required and which do not gate them.
 #
-# cancel-in-progress is scoped to pull_request on purpose. Pushes to main must always run to
-# completion — cancelling those would leave main's status ambiguous, which is worse than the cost.
+# cancel-in-progress is scoped to pull_request on purpose. The INTENT is that pushes to main
+# always run to completion — cancelling those would leave main's status ambiguous.
+#
+# 🛑 THE INTENT IS NOT WHAT HAPPENS, AND THIS COMMENT ASSERTED OTHERWISE UNTIL 2026-09-17.
+# `cancel-in-progress: false` does not mean "never cancelled": GitHub allows ONE pending run
+# per concurrency group, and a newer arrival EVICTS the pending one. On a main that takes a
+# push every few minutes, the queued run is cancelled before it ever starts. Measured on
+# 2026-09-17 over the last twelve runs on main: SEVEN read `cancelled`, and only three
+# completed — 18:18Z, 19:31Z and 21:33Z. So main's status is ambiguous most of the day, which
+# is the outcome this comment says the scoping prevents.
+#
+# Fixing it means either a per-sha group (`github.sha` rather than `github.ref`, so pushes do
+# not share a queue at all) or accepting that the core lane is a nightly signal on main. Both
+# are deliberate changes with a runner-cost argument attached, so they are named here rather
+# than made in passing.
 concurrency:
   group: playwright-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}

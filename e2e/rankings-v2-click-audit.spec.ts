@@ -3,7 +3,7 @@ import { expect, test } from "@playwright/test"
 test.describe.configure({ timeout: 180_000 })
 
 test.describe("@rankings-v2 click audit", () => {
-  test("audits rankings ai, psychology explanation, regenerate, and mobile toggles", async ({ page }) => {
+  test("audits rankings ai, coach insight, year plan, and mobile toggles", async ({ page }) => {
     const clickTestIdWithRetry = async (testId: string) => {
       for (let attempt = 0; attempt < 4; attempt += 1) {
         const target = page.getByTestId(testId).first()
@@ -20,9 +20,6 @@ test.describe("@rankings-v2 click audit", () => {
 
     let coachCalls = 0
     let yearPlanCalls = 0
-    let managerPsychologyCalls = 0
-    let psychologyExplainCalls = 0
-
     const teams = [
       {
         rosterId: 1,
@@ -266,58 +263,6 @@ test.describe("@rankings-v2 click audit", () => {
       })
     })
 
-    await page.route("**/api/rankings/manager-psychology", async (route) => {
-      managerPsychologyCalls += 1
-      await route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: JSON.stringify({
-          archetype: "Aggressive Optimizer",
-          emoji: "🧠",
-          summary: "High activity manager with strong trade appetite and win-now bias.",
-          traits: [
-            { trait: "Aggression", score: 74, description: "Frequently targets upside moves." },
-            { trait: "Activity", score: 69, description: "Consistent weekly roster actions." },
-          ],
-          tendencies: ["Pushes leverage deals before deadlines.", "Prioritizes weekly starters."],
-          blindSpot: "Can overpay to close short-term gaps.",
-          negotiationStyle: "Fast, pressure-driven counter offers.",
-          riskProfile: "HIGH",
-          decisionSpeed: "IMPULSIVE",
-        }),
-      })
-    })
-
-    await page.route("**/api/leagues/league_rankings_v2_1/psychological-profiles?*", async (route) => {
-      await route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: JSON.stringify({
-          profile: {
-            id: "profile-alpha",
-            profileLabels: ["aggressive", "trade-heavy", "win-now"],
-            aggressionScore: 74,
-            activityScore: 69,
-            tradeFrequencyScore: 72,
-            waiverFocusScore: 58,
-            riskToleranceScore: 66,
-            evidenceCount: 5,
-          },
-        }),
-      })
-    })
-
-    await page.route("**/api/leagues/league_rankings_v2_1/psychological-profiles/explain", async (route) => {
-      psychologyExplainCalls += 1
-      await route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: JSON.stringify({
-          narrative: "This manager profile reflects a win-now approach driven by aggressive trade timing.",
-        }),
-      })
-    })
-
     await page.goto("/e2e/rankings-v2", { waitUntil: "domcontentloaded" })
     await expect(page.getByRole("heading", { name: "Rankings V2 Harness" })).toBeVisible()
     await expect(page.getByTestId("rankings-v2-panel")).toBeVisible()
@@ -330,20 +275,12 @@ test.describe("@rankings-v2 click audit", () => {
     const expanded = page.getByTestId("rankings-v2-team-expanded-1")
     await expect(expanded).toBeVisible()
 
-    const psychologyPanel = expanded.getByTestId("manager-psychology-panel")
-    await expect(psychologyPanel).toBeVisible()
-    await psychologyPanel.getByTestId("manager-psychology-toggle-button").click()
-    await expect(psychologyPanel.getByTestId("manager-psychology-reanalyze-button")).toBeVisible({
-      timeout: 15_000,
-    })
-
-    await psychologyPanel.getByTestId("manager-psychology-explain-button").click()
-    await expect(psychologyPanel.getByTestId("manager-psychology-explanation-text")).toContainText(/win-now/i)
-    await expect.poll(() => psychologyExplainCalls).toBe(1)
-
-    await psychologyPanel.getByTestId("manager-psychology-reanalyze-button").click()
-    await expect.poll(() => managerPsychologyCalls).toBeGreaterThan(1)
-
+    /*
+     * The manager-psychology panel this audit used to drive between the expand and the
+     * coach insight was retired by dcaaa6946 (2026-09-10, "ownerless Competitive Edge
+     * privacy pass") along with its API routes. The assertions below had not run since,
+     * because the test died on `manager-psychology-panel` before reaching them.
+     */
     await page.getByTestId("rankings-v2-coach-insight-button").click()
     await expect.poll(() => coachCalls).toBe(1)
     await expect(page.getByText(/What you're doing well/i)).toBeVisible()
