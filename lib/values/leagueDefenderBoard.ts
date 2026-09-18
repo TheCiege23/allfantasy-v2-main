@@ -1,6 +1,7 @@
 import type { PrismaClient } from '@prisma/client'
 
 import { findMyRoster, rosterPlayerIds } from '@/lib/core-app/myRoster'
+import { resolveRostersForTeams } from '@/lib/leagues/rosterTeamIdentity'
 import { isIdpPosition, shortIdpPosition } from '@/lib/core-app/scoringNotes'
 import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
 import { loadLeagueIdpVorp } from '@/lib/idp-projections/leagueIdpVorp'
@@ -180,9 +181,9 @@ export async function loadLeagueDefenderBoard(
   const rosters = await args.prisma.roster
     .findMany({
       where: { leagueId: league.id },
-      select: { platformUserId: true, playerData: true },
+      select: { id: true, platformUserId: true, playerData: true },
     })
-    .catch(() => [] as Array<{ platformUserId: string; playerData: unknown }>)
+    .catch(() => [] as Array<{ id: string; platformUserId: string; playerData: unknown }>)
 
   if (rosters.length === 0) return EMPTY('no_rostered_defenders')
 
@@ -194,14 +195,33 @@ export async function loadLeagueDefenderBoard(
   const teams = await args.prisma.leagueTeam
     .findMany({
       where: { leagueId: league.id },
-      select: { platformUserId: true, teamName: true, ownerName: true },
+      select: { externalId: true, platformUserId: true, claimedByUserId: true, teamName: true, ownerName: true },
     })
-    .catch(() => [] as Array<{ platformUserId: string | null; teamName: string; ownerName: string }>)
+    .catch(
+      () =>
+        [] as Array<{
+          externalId: string | null
+          platformUserId: string | null
+          claimedByUserId: string | null
+          teamName: string
+          ownerName: string
+        }>,
+    )
 
+  /*
+   * 🛑 A TEAM'S ROSTER IS NOT ALWAYS FILED UNDER A MANAGER ID. Since #1005 a managerless team's row
+   * is keyed `orphan-<provider>-<teamId>`, and a team whose manager changed keeps its old row — so
+   * keying this map on `LeagueTeam.platformUserId` left those rows with no owner at all. The board
+   * still listed the defender, with a blank team and owner: a manager was shown a player worth
+   * trading for and nothing saying who to ask. Production 2026-09-17: 15 such teams across 6 IDP
+   * leagues. `resolveRostersForTeams` owns the rule; the roster read above is already league-wide.
+   */
+  const rosterByTeam = resolveRostersForTeams(teams, rosters, (t) => [t.platformUserId, t.externalId])
   const teamByPlatformUser = new Map<string, { teamName: string | null; ownerName: string | null }>()
   for (const t of teams) {
-    if (!t.platformUserId) continue
-    teamByPlatformUser.set(t.platformUserId, { teamName: t.teamName, ownerName: t.ownerName })
+    const key = (t.externalId ? rosterByTeam.get(t.externalId)?.platformUserId : null) ?? t.platformUserId
+    if (!key) continue
+    teamByPlatformUser.set(key, { teamName: t.teamName, ownerName: t.ownerName })
   }
 
   /*

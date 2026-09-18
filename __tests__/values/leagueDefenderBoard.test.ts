@@ -28,7 +28,17 @@ vi.mock('@/lib/kicker-values/leagueKickerValue', () => ({
 
 vi.mock('@/lib/core-app/myRoster', () => ({
   findMyRoster: (...a: unknown[]) => findMyRoster(...a),
-  rosterPlayerIds: (pd: unknown) => (Array.isArray(pd) ? (pd as string[]) : []),
+  /*
+   * ⚠ A REAL `playerData` IS AN OBJECT CARRYING `source_team_id`, NOT A BARE ARRAY — 4,029 of the
+   * 4,157 production rosters have one, and it is the only key that reaches a managerless team's row.
+   * The array shape is this suite's shorthand; the double now understands both.
+   */
+  rosterPlayerIds: (pd: unknown) =>
+    Array.isArray(pd)
+      ? (pd as string[])
+      : Array.isArray((pd as { players?: unknown } | null)?.players)
+        ? ((pd as { players: string[] }).players)
+        : [],
 }))
 
 const { loadLeagueDefenderBoard } = await import('@/lib/values/leagueDefenderBoard')
@@ -101,6 +111,11 @@ beforeEach(() => {
     basis: 'flat by design',
   })
   findMyRoster.mockResolvedValue({ found: true, playerData: ['lb_mine', 'k_mine'] })
+  /* The fixtures are shared arrays and one case below rewrites a row; restore them per test. */
+  ROSTERS[0] = { platformUserId: 'u-me', playerData: ['lb_mine', 'k_mine'] }
+  ROSTERS[1] = { platformUserId: 'u-them', playerData: ['lb_target', 'dl_unpriced', 'wr_offense'] }
+  TEAMS[0] = { platformUserId: 'u-me', teamName: 'My Team', ownerName: 'Me' }
+  TEAMS[1] = { platformUserId: 'u-them', teamName: 'Their Team', ownerName: 'Them' }
 })
 
 describe('the board a manager reads before making an offer', () => {
@@ -113,6 +128,26 @@ describe('the board a manager reads before making an offer', () => {
     expect(target?.ownedBy.isMine).toBe(false)
     expect(target?.ownedBy.teamName).toBe('Their Team')
     expect(target?.ownedBy.ownerName).toBe('Them')
+  })
+
+  /*
+   * 🛑 A MANAGERLESS TEAM HAS NO MANAGER ID TO NAME IT BY. Since #1005 its roster is keyed
+   * `orphan-<provider>-<teamId>`, so keying the owner map on `LeagueTeam.platformUserId` left those
+   * rows with a blank team and owner: the board showed a defender worth trading for and nothing
+   * saying who to ask. Production 2026-09-17: 15 such teams across 6 IDP leagues.
+   */
+  it("🛑 names the owner when their roster is under the orphan key", async () => {
+    ROSTERS[1] = {
+      platformUserId: 'orphan-sleeper-t2',
+      playerData: { source_team_id: 't2', players: ['lb_target', 'dl_unpriced', 'wr_offense'] },
+    }
+    TEAMS[1] = { externalId: 't2', platformUserId: null, teamName: 'Their Team', ownerName: 'Them' }
+
+    const board = await loadLeagueDefenderBoard({ prisma, leagueId: 'L1', userId: 'me' })
+    const target = board.rows.find((r) => r.sleeperId === 'lb_target')
+    expect(target?.ownedBy.teamName).toBe('Their Team')
+    expect(target?.ownedBy.ownerName).toBe('Them')
+    expect(target?.ownedBy.isMine).toBe(false)
   })
 
   it("still marks his own players, so he can tell the two apart", async () => {
