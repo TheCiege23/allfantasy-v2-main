@@ -23,6 +23,7 @@ takes `p + 1`.
 | `syncLeagueHistory.parseChampionFromBracket` → `league_seasons` | `finals.find(m === 1) ?? finals[0]`; `m` is bracket-wide, so this is always `finals[0]` | Latent. All 189 comparable rows agree with the corrected result, because Sleeper happened to list the title game first |
 | `ImportedLeagueCommitService` and `applySleeperLeagueSync` → `league_seasons` for the current season | once the season is `complete`, standings rank 1 is champion and rank 2 is runner-up | Latent. For Sleeper, `standings[].rank` is a wins-then-points sort (`SleeperHistoryMapper`), so this would have named the regular-season #1 and #2. The daily sync would have rewritten it on every run. No current row carries it, because no current-season league has completed since `seasonPlacement.ts` gated the write. The 2026 seasons complete in January 2027. |
 | `lib/legacy-import.ts` → `legacy_rosters.finalStanding` | `isChampion ? 1 : settings.rank` | A regular-season rank, set on 19 of 1,121 owner rosters. Two rows have `finalStanding = 1` without `isChampion`. **Not changed** — see "Follow-up 2". |
+| `lib/legacy-import.ts` `findChampionFromLeagueOrBracket` → `LegacyLeague.winnerRosterId`, and so `legacy_rosters.isChampion` | `winner_roster_id`, else the first last-round game that carries a winner — the same `finals[0]` shape | Latent, and now measured: 0 of 257 comparable production leagues disagree with the corrected rule. **Not changed** — see "The legacy import's champion". |
 
 `lib/league-history/sleeperLeagueHistoryService.ts` already read `p === 1` correctly, and
 the new module is that rule, shared.
@@ -253,3 +254,44 @@ Measured on the test copy, read-only, 2026-09-17:
   settled row: 27 with empty brackets and 2 undecided. At 21 Sleeper calls each, that is a
   one-time cost.
 - **The 516 rows with a decided title game stay skipped.**
+
+## The legacy import's champion (measured 2026-09-18, not changed)
+
+`legacy_rosters.isChampion` — which the whole career and rank stack treats as a title — comes
+from `LegacyLeague.winnerRosterId`, written by `findChampionFromLeagueOrBracket`. That function
+prefers Sleeper's `winner_roster_id` and otherwise falls back to **the first last-round game
+carrying a winner**, which is the same mistake this note is about: the last round also holds the
+third- and fifth-place games.
+
+It was left alone deliberately, because changing it changes what counts as a title. This is what
+it is worth, measured read-only on **production** (`ep-curly-block`) and on the `.env.test` copy:
+
+| | production | test |
+|---|---|---|
+| `LegacyLeague` rows joined to a stored bracket | 380 (241 leagues) | 375 (240) |
+| Bracket undecided, so nothing to compare | 123 | 121 |
+| Legacy champion **agrees** with the corrected rule | **257** | 254 |
+| Legacy champion **disagrees** | **0** | **0** |
+| Bracket names a champion the legacy row is missing | 0 | 0 |
+
+The comparison reads the stored bracket through the same `readStoredTitleGame` the product uses.
+
+⚠ **The zero is a measurement, not a branch that never fires.** Perturbing the first five legacy
+winners made the same run report exactly five disagreements, with the differing roster ids printed.
+
+**Why it is latent.** Sleeper sends `winner_roster_id` whenever the season is decided, so the
+fallback almost never runs. Note also that `Number(null)` is `0` and passes `Number.isFinite`, so a
+`null` winner would be stored as roster `0` — but **no production row carries `winnerRosterId = 0`**
+and no `LegacyRoster` has `rosterId = 0`, because Sleeper omits the key rather than sending null.
+
+### The real gap is coverage, and it is the same fetch as "Finals"
+
+**106 of 1,024 completed `LegacyLeague` rows (10.4%) carry no champion at all** on production,
+spread across 2019 (1), 2020 (2), 2021 (16), 2022 (16), 2023 (23), 2024 (21), 2025 (27) — 103
+distinct Sleeper leagues.
+
+Matched against `league_dynasty_seasons` they produce 116 join rows — some leagues hold duplicate
+rows for one season — of which only **37 find a row at all** and only **35 a stored bracket**, every
+one of those brackets undecided. **None of the 106 can be resolved from stored data.** Each
+needs one `winners_bracket` fetch — which is exactly what the career page's "Finals" coverage needs
+for the 792 Sleeper leagues with no stored season at all. They are one piece of work, not two.
