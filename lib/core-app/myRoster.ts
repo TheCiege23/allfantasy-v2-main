@@ -1,5 +1,7 @@
 import type { PrismaClient } from '@prisma/client'
 
+import { resolveRostersForTeams } from '@/lib/leagues/rosterTeamIdentity'
+
 /**
  * Which roster in a league is YOURS.
  *
@@ -63,16 +65,44 @@ export async function findMyRoster(
   if (!team) return { found: false, reason: 'no_team_claimed' }
 
   const candidates = myRosterCandidates(team, userId)
-  if (candidates.length === 0) return { found: false, reason: 'no_roster' }
 
-  const roster = await prisma.roster
-    .findFirst({
-      where: { leagueId, platformUserId: { in: candidates } },
-      select: { playerData: true },
-    })
-    .catch(() => null)
+  const roster = candidates.length
+    ? await prisma.roster
+        .findFirst({
+          where: { leagueId, platformUserId: { in: candidates } },
+          select: { playerData: true },
+        })
+        .catch(() => null)
+    : null
+  if (roster) return { found: true, playerData: roster.playerData }
 
-  return roster ? { found: true, playerData: roster.playerData } : { found: false, reason: 'no_roster' }
+  /*
+   * 🛑 A SECOND CHANCE BY THE TEAM'S OWN ID, BECAUSE AN OWNER KEY IS NOT AN IDENTITY.
+   *
+   * Every key above is a MANAGER id. PR #1005 made the write side key a managerless team's roster
+   * `orphan-<provider>-<teamId>` and keep the old row when a manager changes, so a roster can sit
+   * under a key nobody here can name. `playerData.source_team_id` -> `LeagueTeam.externalId` is the
+   * rule that survives that, and `resolveRostersForTeams` owns it for every reader (#1022).
+   *
+   * ⚠ THIS IS ROBUSTNESS, NOT A LIVE FIX, AND THE MEASUREMENT SAYS SO. Read-only on production
+   * 2026-09-18: of 392 claimed teams, ZERO are stranded this way — #1005 deliberately keeps a CLAIMED
+   * roster under the claimant key, which is exactly why the eleven "my team" surfaces downstream of
+   * this helper were never the victims. The two claimed teams that do resolve to nothing are in one
+   * manual league with no `source_team_id` at all, so this route cannot reach them either and is not
+   * claimed to.
+   *
+   * It is still worth having: the failure is SILENT (an empty screen that reads as "never imported"),
+   * `portfolioSummary` caches it for 30 minutes and serves it stale for two hours, and the write side
+   * has already moved this key once. The cost is one extra query for ONE league, and only on the path
+   * that was about to answer "no roster" anyway — the common case is untouched.
+   */
+  const rosters = await prisma.roster
+    .findMany({ where: { leagueId }, select: { id: true, platformUserId: true, playerData: true } })
+    .catch(() => [])
+  const byTeam = resolveRostersForTeams([team], rosters, (t) => myRosterCandidates(t, userId))
+  const mine = team.externalId ? byTeam.get(team.externalId) : undefined
+
+  return mine ? { found: true, playerData: mine.playerData } : { found: false, reason: 'no_roster' }
 }
 
 /** Sections of a roster object that hold player ids. `players` is the full set; the rest are subsets. */
