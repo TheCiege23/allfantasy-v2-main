@@ -254,21 +254,51 @@ function computeNeedFit(
   const { position } = candidate
   const { teamNeeds } = ctx
 
+  /*
+   * The categorical rungs this function has always used, named so the measured branch below can be
+   * anchored to them instead of to a scale of its own.
+   */
+  const SURPLUS_FIT = 5
+  const NO_SIGNAL_FIT = 20
+  const CATEGORICAL_NEED_FIT = 35
+
   let slotFitScore = 0
   const matchingSlot = teamNeeds.weakestSlots.find(s => s.position === position)
   if (matchingSlot) {
-    const gapNorm = normalize(matchingSlot.gap, 500, 8000)
-    slotFitScore = gapNorm * 0.6
+    /*
+     * 🛑 A MEASURED NEED USED TO SCORE BELOW NO NEED AT ALL. This read
+     * `normalize(gap, 500, 8000) * 0.6`, but a slot gap cannot exceed one full replacement starter,
+     * and a league median sits near 3,000 — so every real gap landed in the bottom fifth of a scale
+     * built for 8,000 and came out near zero, while the `else` branch below handed 20 to a position
+     * with no identified need whatsoever.
+     *
+     * Measured on a 12-team fixture with a 3,000 median: a genuine 1,000-point hole scored 5 and a
+     * 1,500-point hole scored 10, against 20 for a position that was perfectly fine. Identifying a
+     * need made the candidate who fills it look WORSE, and the whole usable range was 5..34 on a
+     * dimension weighted a quarter of the composite — so the signal moved the answer by ~3 points,
+     * in the wrong direction.
+     *
+     * ⚠ THE SCALE IS NOW THE LEAGUE'S OWN MEDIAN, not a constant. The gap is measured against a
+     * full replacement at that position, which is what the gap is a shortfall OF, so nothing here
+     * has to guess how large a big hole is — the league says. An empty slot is one whole
+     * replacement missing and reads 100; half a replacement missing reads 50.
+     *
+     * ⚠ AND A MEASURED NEED STARTS AT THE CATEGORICAL ONE. `ctx.needs` membership is weaker
+     * evidence than a computed slot gap, so a measured need can never score below it.
+     */
+    const fullReplacement = Math.max(matchingSlot.leagueMedianValue, 1)
+    const gapShare = normalize(matchingSlot.gap, 0, fullReplacement)
+    slotFitScore = CATEGORICAL_NEED_FIT + gapShare * 0.45
 
     const rank = teamNeeds.weakestSlots.indexOf(matchingSlot)
     if (rank === 0) slotFitScore *= 1.3
     else if (rank === 1) slotFitScore *= 1.1
   } else if (ctx.needs.includes(position)) {
-    slotFitScore = 35
+    slotFitScore = CATEGORICAL_NEED_FIT
   } else if (ctx.surplus.includes(position)) {
-    slotFitScore = 5
+    slotFitScore = SURPLUS_FIT
   } else {
-    slotFitScore = 20
+    slotFitScore = NO_SIGNAL_FIT
   }
 
   let byeWeekBonus = 0
