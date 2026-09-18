@@ -71,7 +71,13 @@ function scenario(rb2: number, candidatePosition: string, candidateValue = 2500,
     teamNeeds: computeTeamNeeds(roster, SLOTS, allLeagueRosters, 5),
   } as unknown as WaiverAIServiceInput
   const top = suggestWaiverPickups(input).suggestions[0]
-  return { needFit: top?.dimensions.needFit ?? -1, composite: top?.compositeScore ?? -1, recommendation: top?.recommendation }
+  return {
+    needFit: top?.dimensions.needFit ?? -1,
+    composite: top?.compositeScore ?? -1,
+    recommendation: top?.recommendation,
+    needDriver: top?.drivers?.find((d) => d.id === 'wa_need_slot'),
+    topDriverIds: (top?.topDrivers ?? []).map((d) => d.id),
+  }
 }
 
 /** A position with no weak slot — the `else` branch, and the bar the measured branch must clear. */
@@ -128,5 +134,41 @@ describe('🛑 and so the answer can finally be “Add”', () => {
     /* The label has to discriminate, or making it reachable would just make it meaningless. */
     const r = scenario(3000, 'TE', 2600)
     expect(r.recommendation).toBe('Monitor')
+  })
+})
+/**
+ * 🛑 AND THE SENTENCE THE MANAGER READS CARRIED THE SAME INVERSION.
+ *
+ * The `wa_need_slot` driver — labelled "Fills Weakest Slot" — scored `normalize(gap, 500, 8000)`
+ * independently of the dimension, so a real 1,000-point hole rated 7 while the neutral "your
+ * position is adequate" branch rated 20. `topDrivers` keeps only the three highest, so the driver
+ * explaining WHY a player was recommended was sorted out of its own recommendation.
+ *
+ * Fixing the score without this would have left the visible half wrong — which is why both now read
+ * one `slotGapShare` helper rather than two copies of a scale.
+ */
+describe('🛑 the driver that explains the pick agrees with the score', () => {
+  it('🛑 a measured need outranks “your position is adequate” in the explanation too', () => {
+    const real = scenario(1500, 'RB').needDriver?.score ?? -1
+    const adequate = scenario(3000, 'TE').needDriver?.score ?? -1
+    expect(adequate).toBe(20)
+    expect(real).toBeGreaterThan(adequate)
+  })
+
+  it('🛑 and it actually surfaces — it is one of the three drivers shown', () => {
+    /* Scored 7 before, so it sorted below the neutral drivers and never reached the manager. */
+    expect(scenario(1500, 'RB').topDriverIds).toContain('wa_need_slot')
+  })
+
+  it('the driver rises with the hole, like the dimension it explains', () => {
+    const small = scenario(2000, 'RB').needDriver?.score ?? -1
+    const big = scenario(500, 'RB').needDriver?.score ?? -1
+    expect(small).toBeLessThan(big)
+  })
+
+  it('⚠ a position with no need keeps its neutral wording and score', () => {
+    const none = scenario(3000, 'TE')
+    expect(none.needDriver?.detail).toBe('TE is adequate')
+    expect(none.needDriver?.direction).toBe('neutral')
   })
 })
