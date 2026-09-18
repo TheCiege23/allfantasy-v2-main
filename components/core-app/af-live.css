@@ -2427,7 +2427,20 @@
   background: var(--warn-soft);
   border: 1px solid color-mix(in srgb, var(--warn) 32%, transparent);
 }
-.af-live-lock-head {
+/*
+ * ⚠ `.af-core h2.af-label` SETS `color: var(--faint)` AT (0,2,0), SO A BARE
+ * `.af-live-lock-head` AT (0,1,0) LOSES AND THE AMBER NEVER LANDS. Measured, not
+ * reasoned about: the rule was written bare, the stylesheet parsed, nothing
+ * errored, and the heading rendered in the same muted grey as the ordinary
+ * slate heading above it -- an alert heading styled exactly like a non-alert
+ * one, with a declaration in the file insisting otherwise.
+ *
+ * `h2` + two classes is (0,2,1), which beats it outright. Matching the (0,2,0)
+ * of `.af-live-lock-head` would merely TIE and hand the decision to stylesheet
+ * load order, which is import-graph dependent and not something this rule should
+ * depend on.
+ */
+.af-core h2.af-live-lock-head {
   margin: 0 0 8px;
   color: var(--warn);
 }
