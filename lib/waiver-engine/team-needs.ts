@@ -1,4 +1,4 @@
-import type { WaiverRosterPlayer } from './waiver-scoring'
+import type { WaiverRosterPlayer } from '@/lib/decision-os/waiver/candidateScoring'
 
 export interface SlotNeed {
   slot: string
