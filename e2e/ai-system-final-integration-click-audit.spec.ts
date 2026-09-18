@@ -328,7 +328,26 @@ test.describe('@ai ai system final integration click audit', () => {
     await expect(page.getByTestId('waiver-ai-engine-explanation-toggle')).toBeDisabled()
   })
 
-  test('trade evaluator AI discussion link falls back to deterministic route', async ({ page }) => {
+  /*
+   * ⚠ SKIPPED FOR THE REASON `trade-analyzer-click-audit.spec.ts` IS ALREADY SKIPPED, AND
+   * THAT FILE CARRIES THE FULL ANALYSIS — read its note above `test.skip("runs deterministic
+   * analyze flow…")` before touching this. In short: `3f7bba5c0` (2026-04-01, "modernize
+   * trade analyzer experience") removed `data-testid="trade-ai-explanation-link"` from the
+   * app, and the `sender player 1 name` / `receiver player 1 name` aria-labels this test
+   * fills went in the same rebuild — the page now renders `placeholder="Player name"` inside
+   * `data-testid="trade-side-<side>"`, and the only aria-labels left are "Remove player" and
+   * "Remove pick".
+   *
+   * Repairing the selectors would not be enough: there is no AI-vs-deterministic explanation
+   * link on the page to point a new one AT, so every assertion here is about UI that has not
+   * existed for five months. Whether it returns is a product call. The sibling file was
+   * skipped for this on 2026-08-20 (#553); this copy was missed, and it has failed every
+   * completed core run on main since.
+   *
+   * ⚠ WHAT COVERAGE THIS COSTS: nothing now checks the trade evaluator's AI-disabled
+   * fallback. If that link returns, this is the test to restore first.
+   */
+  test.skip('trade evaluator AI discussion link falls back to deterministic route', async ({ page }) => {
     const ai = { enabled: true }
     mockAiAssistantFeature(page, ai)
     await mockTradeEvaluatorApi(page)

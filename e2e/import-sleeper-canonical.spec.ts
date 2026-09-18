@@ -5,26 +5,30 @@ import { signInAs } from './helpers/session-cookie'
  * Batch 1 — Canonical Sleeper import via the REAL `/import` route.
  *
  * This certifies the launch import journey end-to-end through the actual routed
- * page + component chain (`app/import/page.tsx` → `ImportPageClient` →
- * `components/unified-import-ui/LeagueImportFlow.tsx`), NOT the `/create-league`
- * UI. (There used to be an e2e/league-creation-sleeper-import.spec.ts driving
- * that flow; it has since been deleted, because the flow it described no longer
- * exists — the create wizard only links out to this route now.)
+ * page + component chain (`app/import/page.tsx` → `components/core-app/screens/
+ * ImportV4.tsx` → `components/core-app/import/ImportDone.tsx`), NOT the
+ * `/create-league` UI. (There used to be an e2e/league-creation-sleeper-import.spec.ts
+ * driving that flow; it has since been deleted, because the flow it described no
+ * longer exists — the create wizard only links out to this route now.)
+ *
+ * ⚠ THAT CHAIN IS NOT THE ONE THIS HEADER NAMED UNTIL 2026-09-17. It said
+ * `ImportPageClient` → `components/unified-import-ui/LeagueImportFlow.tsx`, which now
+ * backs `/legacy-import` only. The route moved and the header did not, which is worth
+ * knowing because the same move is what took this spec's test ids with it.
  *
  * The Sleeper provider's server calls are mocked at the canonical API boundary
  * (`/api/leagues/import/discover|preview|commit`) with controlled fixtures — the
  * route/component chain under test is real. This proves:
  *   - the /import Sleeper tab drives the CANONICAL discover → preview → commit
  *     pipeline (not the legacy `/api/legacy/import` career import), and
- *   - a successful commit surfaces the canonical `League.id` and links the user
- *     to `/league/[League.id]` (never `/af-legacy`).
+ *   - a successful commit surfaces the canonical `League.id` and hands the user a
+ *     completion link carrying it (never `/af-legacy`).
  */
 
 /**
- * This spec's own waits total up to 70s (15 + 15 + 15 + 25), which does not fit
- * inside Playwright's DEFAULT 30s per-test budget — it only ever passed while the
- * dev server happened to be warm. The final hop to /dashboard is the one that
- * tips it over: that route is large and compiles on demand under `next dev`.
+ * This spec's own waits do not fit inside Playwright's DEFAULT 30s per-test budget —
+ * it only ever passed while the dev server happened to be warm. The final hop is the
+ * one that tips it over: `/core` is large and compiles on demand under `next dev`.
  * Matches the 180s its sibling specs already declare.
  */
 test.describe.configure({ timeout: 180_000 })
@@ -44,7 +48,7 @@ async function gotoWithRetry(page: import('@playwright/test').Page, url: string)
 }
 
 test.describe('Canonical Sleeper import — real /import route', () => {
-  test('discover → select → preview → commit lands on the canonical /league/[id]', async ({
+  test('discover → select → preview → commit lands on the canonical league id', async ({
     page,
   }) => {
     // --- Canonical import API mocks (provider fixtures; route chain is real) ---
@@ -149,20 +153,18 @@ test.describe('Canonical Sleeper import — real /import route', () => {
     await page.getByTestId('import-discovery-find').click()
 
     /*
-     * ⚠ KNOWN GAP FROM HERE DOWN — THE SIGN-IN FIX ABOVE DOES NOT MAKE THIS PASS, AND
-     * PRETENDING OTHERWISE WOULD BE WORSE THAN LEAVING IT RED.
+     * ⚠ THE GAP RECORDED HERE IS CLOSED, AND THIS IS HOW IT WAS CLOSED. The note used to
+     * read: `/import` renders ImportV4, which carried three of this spec's ids, while
+     * import-league-select-*, import-commit and import-go-dashboard lived in
+     * `LeagueImportFlow` — the component that used to own `/import` and now only backs
+     * `/legacy-import`. It ended by saying which route should own the journey was a
+     * product decision, not something to settle inside a test file.
      *
-     * `/import` renders ImportV4 (app/import/page.tsx), which carries exactly three of
-     * this spec's ids: `import-tab-<provider>`, `import-discovery-account` and
-     * `import-discovery-find`. The three below — import-league-select-*, import-commit
-     * and import-go-dashboard — live in components/unified-import-ui/LeagueImportFlow
-     * and LegacyImportResults, which `/import` does not render.
+     * Settled 2026-09-17, by the user: ImportV4 gets the contract. `import-league-select-<id>`
+     * and `import-commit` are now on ImportV4's own row button and commit button, with a
+     * comment there saying why they are load-bearing.
      *
-     * That flow is NOT deleted: app/legacy-import/page.tsx still renders it. So the
-     * select → preview → commit journey moved routes rather than disappearing, and
-     * which route should own it is a product decision — retarget this spec at
-     * /legacy-import, or give ImportV4 the same contract — not something to settle
-     * inside a test file.
+     * `import-go-dashboard` deliberately did NOT come back — see step 5 below.
      */
     // 2) The discovered league appears; select it to preview.
     await expect(page.getByText('Dynasty Warlords')).toBeVisible({ timeout: 15_000 })
@@ -172,23 +174,38 @@ test.describe('Canonical Sleeper import — real /import route', () => {
     await expect(page.getByTestId('import-commit')).toBeVisible({ timeout: 15_000 })
     await page.getByTestId('import-commit').click()
 
-    // 4) Completion: the connected league is available as a read-only view…
-    const openCanonical = page.locator(`a[href="/league/${CANONICAL_LEAGUE_ID}"]`)
+    /*
+     * 4) COMPLETION — AND THE DESTINATION IS `/core?league=<id>`, NOT `/league/<id>`.
+     * This step used to look for `a[href="/league/<canonical>"]` and then click
+     * `import-go-dashboard` and wait for `/dashboard`. Both destinations are gone:
+     *
+     *   - `/dashboard` was retired on 2026-08-24; middleware 307s it to `/core`, so that
+     *     wait was on a URL that can no longer be the final one.
+     *   - `ImportDone` now leads with a single "Open your league", and ImportV4 builds its
+     *     href as `/core?league=${leagueId}` (see its `leagueHref` prop) — `/core` is the
+     *     one signed-in home, scoped to the league you just connected. There is no separate
+     *     go-to-dashboard action left to give a testid to.
+     *
+     * What matters is unchanged and is still asserted: the CANONICAL league id — the one
+     * the commit route returned — is what the completion action carries.
+     */
+    const openCanonical = page.locator(`a[href="/core?league=${CANONICAL_LEAGUE_ID}"]`)
     await expect(openCanonical).toBeVisible({ timeout: 15_000 })
 
-    // …and the PRIMARY completion action sends the user to the FREE dashboard
-    // (not /af-legacy, not a "newly created AF league").
+    // …and nothing offers the legacy career-history path as the way on.
     await expect(page.locator('a[href="/af-legacy"]')).toHaveCount(0)
-    await page.getByTestId('import-go-dashboard').click()
-    // Assert the DESTINATION (client nav commit) — not full dashboard render,
-    // which can exceed the timeout on a cold dev compile.
-    // `commit` still needs the server to answer with headers, and /dashboard is
-    // large enough that a cold `next dev` compile blows past 25s whenever anything
-    // else is competing for the machine. Raising the per-test budget alone was not
-    // enough — this inner wait was the binding constraint, and it is a dev-server
-    // build cost, not a product latency the user would ever see.
-    await page.waitForURL('**/dashboard**', { timeout: 120_000, waitUntil: 'commit' })
-    expect(new URL(page.url()).pathname).toBe('/dashboard')
+
+    // 5) Follow it. Assert the DESTINATION (client nav commit) rather than a full render,
+    // which can exceed the budget on a cold `next dev` compile — a dev-server build cost,
+    // never a latency a user would see.
+    await openCanonical.click()
+    await page.waitForURL(`**/core?league=${CANONICAL_LEAGUE_ID}**`, {
+      timeout: 120_000,
+      waitUntil: 'commit',
+    })
+    const landed = new URL(page.url())
+    expect(landed.pathname).toBe('/core')
+    expect(landed.searchParams.get('league')).toBe(CANONICAL_LEAGUE_ID)
 
     // The flagship import must never have used the legacy career-history pipeline.
     expect(legacyImportHit).toBe(false)

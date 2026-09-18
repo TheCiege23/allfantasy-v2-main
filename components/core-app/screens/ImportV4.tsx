@@ -2512,6 +2512,15 @@ export function ImportV4({
                       type="button"
                       className="af-btn af-btn--ghost af-im-league-btn"
                       disabled={bulkRunning}
+                      /*
+                       * A TEST HOOK, AND IT IS LOAD-BEARING. `import-league-select-<sourceId>`
+                       * is the contract `e2e/import-sleeper-canonical.spec.ts` drives the
+                       * canonical import with; it came from `LeagueImportFlow`, which used to
+                       * own `/import`, and moving the route to this screen left it behind. The
+                       * spec has been dying on this exact click on every core run since — it
+                       * said so in its own comment and left the call to a human. Keep it.
+                       */
+                      data-testid={`import-league-select-${l.sourceId}`}
                       onClick={() => void runPreview(l.sourceId)}
                     >
                       {rowsAreTeams ? 'This is my team' : 'Import'}
@@ -2610,6 +2619,9 @@ export function ImportV4({
               type="button"
               className="af-btn af-im-submit"
               disabled={phase.importBlockedReason !== null}
+              // The second half of the contract described on the row button above:
+              // `import-commit` is the step the canonical import spec proves.
+              data-testid="import-commit"
               onClick={() => void runCommit(phase.sourceId, phase.attested)}
             >
               Import this league

@@ -74,7 +74,16 @@ async function openLeagueHome(
   mode: 'light' | 'dark',
 ): Promise<void> {
   await expectSsrModeNavigation(page, `/league/${leagueId}?view=league`, mode)
-  const leagueTab = page.getByTestId('league-tab-league')
+  /*
+   * ⚠ `league-tab-league` IS NOT A THING, AND HAS NOT BEEN FOR AS LONG AS THIS FAILURE
+   * HAS BEEN ON MAIN. `LeagueShell` renders GROUPS (`league-tab-group-<id>`) with tabs
+   * (`league-tab-<id>`) inside them, and `league` is a group name, not a tab: `?view=league`
+   * selects the group whose tabs are home / matchups / schedule / players / waivers / trades /
+   * standings / league_chat. The diagnostic below proved it — it printed the 14 testids that
+   * ARE in the DOM, `league-tab-group-league` among them, while the body dump showed the page
+   * rendering in full. So anchor on the group this view actually selects.
+   */
+  const leagueTab = page.getByTestId('league-tab-group-league')
   const visible = await leagueTab.isVisible({ timeout: 45_000 }).catch(() => false)
   if (!visible) {
     const bodyText = await page.locator('body').innerText({ timeout: 5_000 }).catch(() => '')

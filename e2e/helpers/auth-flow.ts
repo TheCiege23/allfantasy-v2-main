@@ -252,8 +252,28 @@ async function loginWithRetryTo(
       }
 
       await page.goto(landingPath, { waitUntil: "domcontentloaded" })
-      await page.waitForURL((url) => url.pathname === new URL(landingPath, url.origin).pathname)
-      
+      /*
+       * ⚠ A LANDING PATH THAT REDIRECTS USED TO HANG FOR THE WHOLE TEST BUDGET, AND THE
+       * TIMEOUT WAS THE ONLY THING IT EVER REPORTED. `waitForURL` takes no timeout of its
+       * own here, so once `/dashboard` was retired (2026-08-24; middleware 307s it to
+       * `/core`) this predicate could never match: both admin-timezone specs burned their
+       * full 240s and failed with "Test timeout of 240000ms exceeded" and nothing else —
+       * a symptom that reads like a slow runner rather than a dead path.
+       *
+       * So bound the wait, and accept a redirect: the destination is fine as long as it is
+       * not the sign-in page, which means the session did not take and the retry loop above
+       * still has work to do.
+       */
+      const landingPathname = new URL(landingPath, page.url()).pathname
+      await page
+        .waitForURL((url) => url.pathname === landingPathname, { timeout: 30_000 })
+        .catch(() => {
+          const settled = new URL(page.url()).pathname
+          if (settled === "/login" || settled.startsWith("/login/")) {
+            throw new Error(`Landing ${landingPath} bounced to ${settled}`)
+          }
+        })
+
             // Wait for main content to be visible before returning
             // This ensures the page is not just loaded but also rendered
             try {
@@ -274,7 +294,9 @@ async function loginWithRetryTo(
 }
 
 export async function registerAndLogin(page: Page): Promise<void> {
-  return registerAndLoginTo(page, "/dashboard")
+  // `/core` is the signed-in home. `/dashboard` was retired on 2026-08-24 and middleware
+  // 307s it to `/core`, so landing there waited for a URL that can no longer appear.
+  return registerAndLoginTo(page, "/core")
 }
 
 export async function registerAndLoginTo(
