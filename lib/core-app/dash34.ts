@@ -1020,7 +1020,28 @@ export async function getDash34Data(
    */
   const hurtByLeague = new Map<
     string,
-    { total: number; starting: number; unavailable: number; startingUnavailable: number }
+    {
+      total: number
+      starting: number
+      unavailable: number
+      startingUnavailable: number
+      /**
+       * The SOONEST kickoff among the starters counted in `startingUnavailable` — the instant
+       * this league's flagged starter stops being fixable.
+       *
+       * ⚠ COUNTED HERE, IN THE SAME BRANCH AS THE COUNT IT BELONGS TO, AND NOT DERIVED LATER
+       * FROM `book`. A book row carries the leagues that ROSTER the player and one kickoff for
+       * all of them; which of those leagues START him lives in `slotByLeague`, which the
+       * rendered row drops. Reading a kickoff off the book would therefore hand a league the
+       * lock time of a player sitting on its BENCH — an earlier instant than the real one, on a
+       * row whose whole claim is about a starter. Deriving it here means the count and the
+       * instant can never describe different players.
+       *
+       * ⚠ NFL ONLY, because `kickoffFor` is (club codes collide across sports). Null everywhere
+       * else, and null means "we hold no lock time", never "there is no deadline".
+       */
+      startingUnavailableKickoff: Date | null
+    }
   >()
 
   for (const [leagueId, roster] of rosterByLeague) {
@@ -1028,6 +1049,7 @@ export async function getDash34Data(
     let starting = 0
     let unavailable = 0
     let startingUnavailable = 0
+    let startingUnavailableKickoff: Date | null = null
     for (const pid of roster.all) {
       const d = designationOf(pid)
       if (!d) continue
@@ -1036,7 +1058,13 @@ export async function getDash34Data(
       if (isStarter) starting++
       if (isUnavailable(d.status)) {
         unavailable++
-        if (isStarter) startingUnavailable++
+        if (isStarter) {
+          startingUnavailable++
+          const kickoff = kickoffFor(d.sport, d.team)
+          if (kickoff && (!startingUnavailableKickoff || kickoff < startingUnavailableKickoff)) {
+            startingUnavailableKickoff = kickoff
+          }
+        }
       }
 
       /*
@@ -1082,10 +1110,22 @@ export async function getDash34Data(
         })
       }
     }
-    hurtByLeague.set(leagueId, { total, starting, unavailable, startingUnavailable })
+    hurtByLeague.set(leagueId, {
+      total,
+      starting,
+      unavailable,
+      startingUnavailable,
+      startingUnavailableKickoff,
+    })
   }
 
-  const NO_HURT = { total: 0, starting: 0, unavailable: 0, startingUnavailable: 0 }
+  const NO_HURT = {
+    total: 0,
+    starting: 0,
+    unavailable: 0,
+    startingUnavailable: 0,
+    startingUnavailableKickoff: null,
+  }
 
   /* ── The league list ───────────────────────────────────────────────────── */
 
@@ -1158,6 +1198,11 @@ export async function getDash34Data(
         const d = designationOf(pid)
         return d && isUnavailable(d.status) ? [{ playerId: pid, name: d.name, status: d.status, slot: rosterByLeague.get(row.id)?.verification?.slots[index] ?? 'Starter', index }] : []
       }),
+      /* The lock behind that count — see `startingUnavailableKickoff` above for why it is not
+         read off `book`. Serialised because every other instant on this row is. */
+      hurtStarterKickoffAt: hurt.startingUnavailableKickoff
+        ? hurt.startingUnavailableKickoff.toISOString()
+        : null,
       sport: row.sport ?? null,
       /*
        * ⚠ `ownerName` IS THE HANDLE; `teamName` IS THE TEAM. The handoff asks for
