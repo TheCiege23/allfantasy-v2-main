@@ -69,6 +69,7 @@ const page = (scope: 'my' | 'all'): LivePageData => ({
   counts: [{ sport: 'NFL', label: 'NFL', slateCount: 1 }],
   games: [game],
   impact: { totalPoints: 0, livePlayers: 0, liveGames: 1, biggestMover: null, plays: [], upNext: [] },
+  lockAlerts: [],
   fetchedAt: new Date().toISOString(),
   hasRosterData: true,
   loadFailed: false,

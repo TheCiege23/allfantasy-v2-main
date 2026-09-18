@@ -58,6 +58,7 @@ function pageData(over: Partial<LivePageData> = {}): LivePageData {
     counts: [{ sport: 'NFL', label: 'NFL', slateCount: 0 }],
     games: [],
     impact: EMPTY_IMPACT,
+    lockAlerts: [],
     fetchedAt: new Date().toISOString(),
     hasRosterData: false,
     loadFailed: false,
