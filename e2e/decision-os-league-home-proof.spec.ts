@@ -118,7 +118,22 @@ async function openLeagueHome(
         `browser=${browserEvents.slice(-12).join(' | ')} body=${bodyText.slice(0, 1200)}`,
     )
   }
-  await page.getByTestId('league-tab-league').click()
+  /*
+   * ⚠ NO CLICK HERE, AND THE MISSING HALF OF THE 2026-09-18 FIX WAS EXACTLY THIS LINE.
+   *
+   * That fix repointed the GUARD above from `league-tab-league` to `league-tab-group-league`
+   * — correctly, since `league` is a GROUP in `LeagueShell`, not a tab — but left this click
+   * on the old id. So the guard passed on the group that does exist, and the test then spent
+   * its whole 480s budget waiting to click a tab that does not, reporting only a timeout.
+   * It was the one change in that batch that could not be verified locally (the league route
+   * would not finish compiling inside the budget), and it is the one that was wrong.
+   *
+   * The click is not needed at all: `openLeagueHome` navigates to `?view=league`, and
+   * `LeagueShell`'s view map sends `league -> 'league'`, which is the case that renders
+   * `LeagueTab` — the component holding this pulse card. Clicking a tab to reach a view the
+   * URL already selected is what created the dependency on a button that has since folded
+   * into a group.
+   */
   await expect(page.getByTestId('league-pulse-card-league')).toBeVisible({ timeout: 45_000 })
 }
 
