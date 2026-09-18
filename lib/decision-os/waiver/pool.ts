@@ -38,6 +38,7 @@ import { prisma } from '@/lib/prisma'
 import { getRosterPlayerIds } from '@/lib/waiver-wire/roster-utils'
 import { getPlayerPoolForSport } from '@/lib/sport-teams/SportPlayerPoolResolver'
 import { sleeperIdWhere } from '@/lib/player-identity/externalIdNamespace'
+import { computeTeamNeeds, type TeamNeedsMap } from '@/lib/waiver-engine/team-needs'
 import type { WaiverRosterPlayer } from '@/lib/waiver-engine/waiver-scoring'
 
 /** One player on the wire, as the scorer consumes him. */
@@ -84,9 +85,18 @@ export interface WaiverPool {
    *
    * 🛑 THE TABLE THIS REPLACES WAS THE 2025 SLATE, hardcoded in `team-needs.ts` and used in 2026, so
    * every bye warning named last year's weeks. Empty here means the schedule could not answer, and
-   * the engine then produces no bye cluster at all — a missing warning, never a wrong one.
+   * no bye cluster is produced at all — a missing warning, never a wrong one.
    */
   byeWeekByClub: Record<string, number>
+  /**
+   * The asker's needs, depth and bye clusters, computed HERE rather than inside the engine.
+   *
+   * ⚠ PRECOMPUTED FOR THE REASON `WaiverContextAssembler` ALREADY DOES IT: the engine recomputes this
+   * itself only when it is not supplied, so handing it over guarantees the assistant and the scorer
+   * see the same needs — and it keeps the season's bye slate a server read, which is where the
+   * schedule lives.
+   */
+  teamNeeds: TeamNeedsMap | null
   /**
    * True when the pool is a bounded slice rather than the whole wire.
    *
@@ -265,6 +275,16 @@ export async function loadWaiverPool(leagueId: string, sport: string, rosterId?:
   const rawPositions = (settings as { roster_positions?: unknown } | null)?.roster_positions
   const rosterPositions = Array.isArray(rawPositions) ? rawPositions.map((p) => String(p).toUpperCase()) : []
 
+  /*
+   * ⚠ WITH NO WEEK THERE IS NO BYE SLATE, because "which byes are still ahead" is measured against
+   * the current week. Passing a week the feed did not give us would warn about byes already played.
+   */
+  const week = projectionWeek?.week ?? null
+  const teamNeeds =
+    myRoster.length && rosterPositions.length
+      ? computeTeamNeeds(myRoster, rosterPositions, allRosters, week ?? 1, week == null ? {} : byeWeekByClub)
+      : null
+
   const leagueTraits = {
     numTeams: teams,
     isSF: priced.variant?.superflex ?? false,
@@ -280,6 +300,7 @@ export async function loadWaiverPool(leagueId: string, sport: string, rosterId?:
     leagueTraits,
     currentWeek: projectionWeek?.week ?? null,
     byeWeekByClub,
+    teamNeeds,
     /*
      * The pool was capped, so a fuller wire may hold a better target. This is true whenever the
      * resolver returned a full page — the honest reading of a bounded read, not a guess about

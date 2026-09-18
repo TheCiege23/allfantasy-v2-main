@@ -16,8 +16,6 @@ export type WaiverAIEngineInput = {
   teamNeeds?: TeamNeedsMap | null
   rosterPositions?: string[]
   allLeagueRosters?: { players: WaiverRosterPlayer[] }[]
-  /** This season's byes by club, read from the schedule. Absent means no bye warnings. */
-  byeWeekByClub?: Record<string, number>
   currentWeek?: number
   goal?: 'win-now' | 'balanced' | 'rebuild'
   leagueSettings: {
