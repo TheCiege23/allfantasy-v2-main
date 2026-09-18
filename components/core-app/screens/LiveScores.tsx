@@ -17,6 +17,8 @@ import {
 } from '@/lib/live/connectionState'
 import { useOnlineStatus } from '@/lib/live/useOnlineStatus'
 import { LOW_DATA_POLL_MULTIPLIER } from '@/lib/live/lowDataMode'
+import { activeFlashes, diffScores, mergeFlashes } from '@/lib/live/scoreChanges'
+import { applyStableOrder, orderOf } from '@/lib/live/stableOrder'
 import {
   LowDataProvider,
   LowDataToggle,
@@ -118,6 +120,20 @@ export function LiveScores({ data: initial, selectedLeagueId = null }: LiveScore
    * stopped moving.
    */
   const [consecutiveFailures, setConsecutiveFailures] = useState(0)
+  /*
+   * ⚠ THE PREVIOUS PAYLOAD'S SCORES, HELD IN A REF. A ref rather than state
+   * because nothing renders from it directly -- it exists only to be compared
+   * against -- and putting it in state would re-run `load` on every poll and
+   * restart the polling effect that depends on it.
+   */
+  const prevScoresRef = useRef<{ gameId: string; home: { score: number | null }; away: { score: number | null } }[] | null>(null)
+  const [flashes, setFlashes] = useState<Map<string, number>>(() => new Map())
+  /*
+   * ⚠ THE ORDER THE READER IS CURRENTLY LOOKING AT. Reset when the VIEW
+   * changes -- a new sport or scope is a new question and deserves the server's
+   * fresh answer -- but never merely because the clock advanced.
+   */
+  const orderRef = useRef<string[] | null>(null)
   const online = useOnlineStatus()
   const { decision: lowData, setOverride: setLowData } = useLowDataController()
   /*
@@ -186,8 +202,23 @@ export function LiveScores({ data: initial, selectedLeagueId = null }: LiveScore
        */
       const tag = res.headers.get('ETag')
       etagRef.current = tag
+      /*
+       * ⚠ DIFFED BEFORE `setData`, AGAINST THE PAYLOAD THAT WAS ON SCREEN. The
+       * comparison has to happen here rather than in a render effect: by the time
+       * React re-renders, the old scores are gone and there is nothing left to
+       * compare against.
+       */
+      const at = Date.now()
+      const changes = diffScores(prevScoresRef.current, json.games)
+      prevScoresRef.current = json.games.map((g) => ({
+        gameId: g.gameId,
+        home: { score: g.home.score },
+        away: { score: g.away.score },
+      }))
+      if (changes.length > 0) setFlashes((current) => mergeFlashes(current, changes, at))
+
       setData(json)
-      setNow(Date.now())
+      setNow(at)
       setConsecutiveFailures(0)
     } catch {
       /*
@@ -216,10 +247,45 @@ export function LiveScores({ data: initial, selectedLeagueId = null }: LiveScore
    */
   const pollIntervalMs =
     (anyLive ? LIVE_POLL_MS : IDLE_POLL_MS) * (lowData.lowData ? LOW_DATA_POLL_MULTIPLIER : 1)
-  const visibleGames = useMemo(
-    () => scopedGames.filter((game) => matchesLiveGameQuery(game, query)),
-    [scopedGames, query],
+  /*
+   * ⚠ THE SLATE HOLDS ITS ORDER WHILE YOU READ IT. The server's tiebreaker is
+   * closeness, closeness comes from win probability, and win probability reads the
+   * game CLOCK -- so two evenly matched games swap places every poll while nobody
+   * scores, and the card under your thumb moves for a reason you cannot perceive.
+   * `applyStableOrder` re-applies the order you are already looking at; the reset
+   * below drops it when the view genuinely changes.
+   */
+  const orderedGames = useMemo(
+    () => applyStableOrder(orderRef.current, scopedGames, (g) => g.gameId),
+    [scopedGames],
   )
+
+  const visibleGames = useMemo(
+    () => orderedGames.filter((game) => matchesLiveGameQuery(game, query)),
+    [orderedGames, query],
+  )
+
+  /*
+   * ⚠ REMEMBERED IN AN EFFECT, NOT DURING RENDER. Writing a ref while rendering
+   * makes the memo above read the order it just produced, which pins the FIRST
+   * render's order forever and would keep a finished game in place all afternoon.
+   */
+  useEffect(() => {
+    orderRef.current = orderOf(orderedGames, (g) => g.gameId)
+  }, [orderedGames])
+
+  /*
+   * ⚠ A NEW SPORT OR SCOPE IS A NEW QUESTION. Dropping the remembered order
+   * here is what stops "hold it still" from meaning "hold it stale": the server's
+   * ranking is right for deciding what you see when you ARRIVE at a view, and
+   * wrong only as a thing to re-apply underneath you.
+   */
+  useEffect(() => {
+    orderRef.current = null
+  }, [sport, scope, selectedLeagueId])
+
+  /* Highlights expire on the clock that is already ticking for the age label. */
+  const litGames = useMemo(() => (now == null ? new Set<string>() : activeFlashes(flashes, now)), [flashes, now])
 
   /*
    * ⚠ BUILT FROM `scopedGames`, NOT `visibleGames`, AND NOT FROM
@@ -504,6 +570,7 @@ export function LiveScores({ data: initial, selectedLeagueId = null }: LiveScore
                 selectedLeagueId={selectedLeagueId}
                 lastPlay={latestPlayByGame.get(game.gameId) ?? null}
                 detailHref={gameDetailHref(game, '/core/live')}
+                scoreChanged={litGames.has(game.gameId)}
               />
             ))
           )}
@@ -707,6 +774,7 @@ export function GameCard({
   selectedLeagueId,
   lastPlay,
   detailHref = null,
+  scoreChanged = false,
 }: {
   game: LiveGameCard
   /** "My games" adds your starters under the game; "All games" is the game alone. */
@@ -727,6 +795,14 @@ export function GameCard({
    * the MLB and NCAAF tabs rather than captioning real plays with wrong games.
    */
   lastPlay: LivePageData['impact']['plays'][number] | null
+  /**
+   * A score in THIS game moved since the last payload.
+   *
+   * MARK OPTIONAL AND DEFAULTED OFF SO EVERY OTHER CALLER IS UNCHANGED. `GameCard`
+   * is exported and rendered by the clicked-game view too, which has no diff to
+   * offer and must not start claiming scores changed.
+   */
+  scoreChanged?: boolean
 }) {
   const lowDataOn = useLowData().lowData
   const wp = game.winProbability
@@ -744,8 +820,18 @@ export function GameCard({
     game.sport === 'MLB' || situation?.baseball != null || game.home.hits != null || game.away.hits != null
   const starters = scope === 'my' ? groupStartersByPlayer(game.tieIns) : []
 
+  /*
+   * ⚠ `data-changed` IS THE ONLY THING THAT MOVES. The card is not re-mounted
+   * and nothing re-sorts; one attribute flips and CSS does the rest, so a
+   * highlight cannot cost a layout pass on a phone mid-game. It is suppressed
+   * under low-data mode, and by prefers-reduced-motion in the stylesheet.
+   */
   return (
-    <article className="af-live-game" data-live={game.isLive}>
+    <article
+      className="af-live-game"
+      data-live={game.isLive}
+      data-changed={scoreChanged && !lowDataOn ? 'true' : undefined}
+    >
       <div className="af-live-game-head">
         <span className="af-live-tag af-label">{weekLabel}</span>
         {game.isLive ? (
