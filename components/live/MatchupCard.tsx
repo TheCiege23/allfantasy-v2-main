@@ -27,11 +27,14 @@ export function MatchupCard({
   game,
   scope,
   lastPlay,
+  scoreChanged = false,
 }: {
   game: LiveGameCard
   scope: 'my' | 'all'
   /** The newest play-feed item for this game, the fallback when ESPN sends no last-play text. */
   lastPlay: LivePageData['impact']['plays'][number] | null
+  /** A score in this game moved since the last payload. Optional: default off. */
+  scoreChanged?: boolean
 }) {
   return (
     <div className="af-core live-card-scope">
@@ -40,6 +43,7 @@ export function MatchupCard({
         scope={scope}
         selectedLeagueId={null}
         lastPlay={lastPlay}
+        scoreChanged={scoreChanged}
         detailHref={gameDetailHref(game, '/live')}
       />
     </div>

@@ -2545,3 +2545,38 @@
 .af-live-lowdata-toggle + .af-live-freshness {
   margin-left: 8px;
 }
+
+
+/* -- A score that just moved ------------------------------------------
+ * Only the changed card lights, and only the score numbers inside it. Every
+ * poll already replaces the whole payload, so without this the reader is left
+ * to spot the change themselves on the one screen whose premise is that a
+ * number just changed.
+ *
+ * Specificity: `.af-live-game[data-changed='true']` is (0,2,0) against the base
+ * `.af-live-game` at (0,1,0), so it wins on specificity rather than on source
+ * order -- the lesson from the heading rule that silently never applied.
+ */
+.af-live-game[data-changed='true'] {
+  border-color: color-mix(in srgb, var(--good) 45%, transparent);
+}
+.af-live-game[data-changed='true'] .af-live-team-score {
+  color: var(--good);
+  animation: af-live-score-flash 900ms ease-out 2;
+}
+
+@keyframes af-live-score-flash {
+  0% {
+    background: color-mix(in srgb, var(--good) 26%, transparent);
+  }
+  100% {
+    background: transparent;
+  }
+}
+
+/* The colour carries the meaning on its own; the pulse is decoration. */
+@media (prefers-reduced-motion: reduce) {
+  .af-live-game[data-changed='true'] .af-live-team-score {
+    animation: none;
+  }
+}

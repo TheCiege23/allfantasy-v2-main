@@ -12,6 +12,8 @@ import {
 import { useOnlineStatus } from '@/lib/live/useOnlineStatus'
 import { LOW_DATA_POLL_MULTIPLIER } from '@/lib/live/lowDataMode'
 import { LowDataToggle, useLowDataController } from './LowDataProvider'
+import { activeFlashes, diffScores, mergeFlashes } from '@/lib/live/scoreChanges'
+import { applyStableOrder, orderOf } from '@/lib/live/stableOrder'
 import { ScopeToggle } from './ScopeToggle'
 import { SportTabs } from './SportTabs'
 import { MatchupCard } from './MatchupCard'
@@ -68,6 +70,13 @@ export function LiveScoresClient({ initial }: { initial: LivePageData }) {
    * refresh loop, to cache a value no render reads.
    */
   const etagRef = useRef<string | null>(null)
+  /* The previous payload's scores, held only to be compared against. */
+  const prevScoresRef = useRef<
+    { gameId: string; home: { score: number | null }; away: { score: number | null } }[] | null
+  >(null)
+  const [flashes, setFlashes] = useState<Map<string, number>>(() => new Map())
+  /* The order the reader is currently looking at; dropped when the view changes. */
+  const orderRef = useRef<string[] | null>(null)
 
   const load = useCallback(
     async (nextSport: string, nextScope: 'my' | 'all') => {
@@ -113,8 +122,21 @@ export function LiveScoresClient({ initial }: { initial: LivePageData }) {
          */
         const tag = res.headers.get('ETag')
         etagRef.current = tag
+        /*
+         * ⚠ DIFFED BEFORE `setData`, AGAINST WHAT IS STILL ON SCREEN. Once
+         * React has re-rendered the old scores are gone and there is nothing left
+         * to compare against.
+         */
+        const at = Date.now()
+        const changes = diffScores(prevScoresRef.current, json.games)
+        prevScoresRef.current = json.games.map((g) => ({
+          gameId: g.gameId,
+          home: { score: g.home.score },
+          away: { score: g.away.score },
+        }))
+        if (changes.length > 0) setFlashes((current) => mergeFlashes(current, changes, at))
         setData(json)
-        setNow(Date.now())
+        setNow(at)
         setConsecutiveFailures(0)
       } catch {
         setConsecutiveFailures((n) => n + 1)
@@ -128,7 +150,31 @@ export function LiveScoresClient({ initial }: { initial: LivePageData }) {
     [],
   )
 
-  const anyLive = data.games.some((g) => g.isLive)
+  /*
+   * ⚠ THE SLATE HOLDS ITS ORDER WHILE YOU READ IT. The server breaks ties on
+   * closeness, closeness comes from win probability, and win probability reads the
+   * game CLOCK -- so two evenly matched games swap places every poll while nobody
+   * scores. The effects below drop the remembered order when the VIEW changes.
+   */
+  const orderedGames = useMemo(
+    () => applyStableOrder(orderRef.current, data.games, (g) => g.gameId),
+    [data.games],
+  )
+  useEffect(() => {
+    // In an effect, not during render: writing the ref while rendering makes the
+    // memo read what it just produced and pins the first render's order forever.
+    orderRef.current = orderOf(orderedGames, (g) => g.gameId)
+  }, [orderedGames])
+  useEffect(() => {
+    orderRef.current = null
+  }, [sport, scope])
+
+  const litGames = useMemo(
+    () => (now == null ? new Set<string>() : activeFlashes(flashes, now)),
+    [flashes, now],
+  )
+
+  const anyLive = orderedGames.some((g) => g.isLive)
   /*
    * ⚠ THE CADENCE IS THE SAVING THAT COMPOUNDS. An image is paid once; the
    * poll is paid every 20 seconds for as long as the tab is open. The staleness
@@ -247,12 +293,13 @@ export function LiveScoresClient({ initial }: { initial: LivePageData }) {
               rosterFailed={data.rosterFailed}
             />
           ) : (
-            data.games.map((game) => (
+            orderedGames.map((game) => (
               <MatchupCard
                 key={game.gameId}
                 game={game}
                 scope={scope}
                 lastPlay={latestPlayByGame.get(game.gameId) ?? null}
+                scoreChanged={litGames.has(game.gameId) && !lowData.lowData}
               />
             ))
           )}
