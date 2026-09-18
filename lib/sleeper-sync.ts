@@ -4,6 +4,7 @@ import type {
   SleeperUserRaw,
 } from '@/lib/league-import/adapters/sleeper/types';
 import { normalizeToSupportedSport } from '@/lib/sport-scope';
+import { rosterSourceTeamId } from '@/lib/league-import/importedRosterIdentity';
 import {
   isLeagueTombstoned,
   LeagueDeletedByUserError,
@@ -414,6 +415,13 @@ export async function syncSleeperLeague(
       .map((roster, index) => [roster.rosterId, index + 1] as const)
   );
 
+  // The league's rows, read ONCE: matching below is pure, so this costs one query rather than one
+  // full-league read per team.
+  const unifiedRosterRows = await prisma.roster.findMany({
+    where: { leagueId: unifiedLeague.id },
+    select: { id: true, playerData: true },
+  });
+
   let rosterCount = 0;
   for (const roster of rostersData) {
     const rId = String(roster.roster_id);
@@ -432,18 +440,33 @@ export async function syncSleeperLeague(
     const existingLeagueTeam = existingLeagueTeamsByExternalId.get(rId);
     const currentRank = rankByRosterId.get(rId) ?? existingLeagueTeam?.currentRank ?? null;
     const platformUserId = managerUserIds.get(ownerId) ?? ownerId;
-    const existingUnifiedRoster = await prisma.roster.findFirst({
-      where: {
-        leagueId: unifiedLeague.id,
-        OR: [
-          { platformUserId },
-          { platformUserId: ownerId },
-        ],
-      },
-      select: {
-        id: true,
-      },
-    });
+    /*
+     * 🛑 THE TEAM FIRST, THEN THE MANAGER. Looking only for a row keyed by this team's CURRENT
+     * manager finds nothing once the team changes hands, and the create below then writes a SECOND
+     * row while the first keeps the old manager's key — the ghost shape `importedRosterIdentity.ts`
+     * exists to prevent, and 33 such rows were deleted from production on 2026-09-17.
+     *
+     * This path already stamps `source_team_id` into `playerData` (below), so the team's own row is
+     * findable by the same reader the import bootstrap and the redraft reconciler use. Two rows
+     * carrying one team id means the damage is already done: refuse to choose a vintage and fall
+     * back to the manager lookup, which is exactly the old behaviour.
+     */
+    const byTeam = unifiedRosterRows.filter((r) => rosterSourceTeamId(r.playerData) === rId);
+    const existingUnifiedRoster =
+      byTeam.length === 1
+        ? { id: byTeam[0].id }
+        : await prisma.roster.findFirst({
+            where: {
+              leagueId: unifiedLeague.id,
+              OR: [
+                { platformUserId },
+                { platformUserId: ownerId },
+              ],
+            },
+            select: {
+              id: true,
+            },
+          });
 
     await (prisma as any).sleeperRoster.upsert({
       where: {
