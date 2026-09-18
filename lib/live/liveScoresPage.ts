@@ -12,6 +12,7 @@ import { estimateWinProbability, type WinProbability } from '@/lib/live/winProba
 import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
 import { composePlayerIdentities } from '@/lib/core-app/playerIdentityCompose'
 import { isRosteredPlayer, rosterNameKeys } from '@/lib/live/rosterPlayMatch'
+import { buildLockAlerts, type LiveLockAlert } from '@/lib/live/lockAlerts'
 import { isLiveOnlySport, isLiveSport, type LiveSport } from '@/lib/sport-scope'
 import {
   basketballPeriodLabel,
@@ -194,6 +195,8 @@ export type LiveImpact = {
   upNext: Array<{ playerName: string; matchup: string; startTime: string }>
 }
 
+export type { LiveLockAlert } from '@/lib/live/lockAlerts'
+
 export type LivePageData = {
   sport: string
   scope: 'my' | 'all'
@@ -201,6 +204,15 @@ export type LivePageData = {
   counts: Array<{ sport: string; label: string; slateCount: number }>
   games: LiveGameCard[]
   impact: LiveImpact
+  /**
+   * Games of yours kicking off inside the warning window, soonest first.
+   *
+   * ⚠ THE CLIENT STILL FILTERS THESE. The server window was evaluated when
+   * the payload was built, so a kickoff inside it can be in the PAST by the time
+   * anyone reads it -- and "kicks off in 0m" for a game that started twelve
+   * minutes ago is exactly the confident lie this page refuses to tell.
+   */
+  lockAlerts: LiveLockAlert[]
   /**
    * When the underlying feed was last refreshed — drives "updated Ns ago".
    *
@@ -924,6 +936,7 @@ export async function getLivePageData(opts: {
     counts,
     games: visible,
     impact: await buildImpact(visible, players, sport),
+    lockAlerts: buildLockAlerts(visible, Date.now()),
     // Never invented — see the field's note. Null means "we cannot date this".
     fetchedAt: active?.fetchedAt ?? null,
     hasRosterData,

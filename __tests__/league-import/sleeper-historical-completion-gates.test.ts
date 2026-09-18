@@ -8,6 +8,7 @@ const rosterSnapshotCreate = vi.fn()
 const rosterSnapshotDeleteMany = vi.fn()
 const leagueFindUnique = vi.fn()
 const leagueSeasonFindFirst = vi.fn()
+const dynastySeasonFindUnique = vi.fn()
 const transactionMock = vi.fn(async (ops: unknown[]) => Promise.all(ops as Promise<unknown>[]))
 
 vi.mock('@/lib/prisma', () => ({
@@ -29,6 +30,13 @@ vi.mock('@/lib/prisma', () => ({
       deleteMany: (...args: unknown[]) => draftFactDeleteMany(...args),
       createMany: (...args: unknown[]) => draftFactCreateMany(...args),
     },
+    /*
+     * ⚠ ADDED WHEN THE SEASON-STATE SYNC STARTED READING THE STORED ROW — it needs the stored
+     * `status` to tell a row written after completion from one written mid-season, and it merges
+     * onto the stored metadata instead of replacing it. Without this stub the service catches its
+     * own TypeError and every counter reads `undefined`, which looks like a gate regression.
+     */
+    leagueDynastySeason: { findUnique: (...args: unknown[]) => dynastySeasonFindUnique(...args) },
     rosterSnapshot: {
       findFirst: (...args: unknown[]) => rosterSnapshotFindFirst(...args),
       create: (...args: unknown[]) => rosterSnapshotCreate(...args),
@@ -57,6 +65,7 @@ import { getSleeperHistoricalLeagueChain } from '@/lib/league-import/sleeper/Sle
 import { getLeagueDrafts, getLeagueUsers, getLeagueRosters } from '@/lib/sleeper-client'
 import { syncSleeperHistoricalDraftFactsAfterImport } from '@/lib/league-import/sleeper/SleeperHistoricalDraftSyncService'
 import { syncSleeperHistoricalSeasonStateAfterImport } from '@/lib/league-import/sleeper/SleeperHistoricalSeasonStateSyncService'
+import { persistDynastySeason } from '@/lib/dynasty-import/normalize-historical'
 
 const rosterFindMany = vi.fn(async () => [] as unknown[])
 const chainMock = vi.mocked(getSleeperHistoricalLeagueChain)
@@ -176,6 +185,8 @@ describe('Sleeper historical roster/season-state sync — completion gate', () =
     })
     chainMock.mockResolvedValue(threeSeasonChain())
     leagueSeasonFindFirst.mockResolvedValue(null)
+    // The stored row was written after the season ended — the settled case.
+    dynastySeasonFindUnique.mockResolvedValue({ metadata: { status: 'complete' } })
   })
 
   it('skips a FINISHED season with a roster snapshot, and refetches the one in progress', async () => {
@@ -212,5 +223,52 @@ describe('Sleeper historical roster/season-state sync — completion gate', () =
 
     expect(rosterSnapshotFindFirst).not.toHaveBeenCalled()
     expect(getLeagueUsers).toHaveBeenCalledTimes(3)
+  })
+
+  /*
+   * 🛑 A SNAPSHOT ALONE IS NOT "SETTLED". A season first stored mid-season already has a
+   * "season end" snapshot holding a mid-season roster. Skipping on its existence freezes that
+   * roster as the season's final one — the same shape as the matchup sync's bug (#995).
+   */
+  it('refreshes a completed season whose stored row was written before it finished', async () => {
+    rosterSnapshotFindFirst.mockResolvedValue({ id: 'existing' })
+    dynastySeasonFindUnique.mockResolvedValue({ metadata: { status: 'in_season' } })
+
+    const result = await syncSleeperHistoricalSeasonStateAfterImport({ leagueId: 'league-1' })
+
+    expect(result.seasonsSkippedAlreadyComplete).toBe(0)
+    expect(result.completedSeasonsRefreshed).toBe(2)
+    // All three seasons are fetched: the two finished ones are re-read, the live one always is.
+    expect(getLeagueRosters).toHaveBeenCalledTimes(3)
+  })
+
+  /*
+   * 🛑 MERGE, NEVER REPLACE. `persistDynastySeason` writes the whole metadata column, and the
+   * matchup sync owns `playoffStructure` / `matchupHistory` in the same row. Replacing destroyed
+   * them, and since #995 the matchup sync no longer rewrites a settled season, so nothing would
+   * put them back.
+   */
+  it('keeps the matchup sync playoff structure when it writes settings', async () => {
+    rosterSnapshotFindFirst.mockResolvedValue(null)
+    dynastySeasonFindUnique.mockResolvedValue({
+      metadata: {
+        status: 'complete',
+        playoffStructure: { championRosterId: 7, runnerUpRosterId: 8, bracketPlacementVersion: 2 },
+        matchupHistory: { weeksWithMatchups: [1, 2, 3] },
+      },
+    })
+
+    await syncSleeperHistoricalSeasonStateAfterImport({ leagueId: 'league-1' })
+
+    const calls = vi.mocked(persistDynastySeason).mock.calls
+    expect(calls.length).toBeGreaterThan(0)
+    for (const call of calls) {
+      const metadata = call[4] as Record<string, unknown>
+      expect(metadata.playoffStructure).toEqual({ championRosterId: 7, runnerUpRosterId: 8, bracketPlacementVersion: 2 })
+      expect(metadata.matchupHistory).toEqual({ weeksWithMatchups: [1, 2, 3] })
+      // and it still writes its own half
+      expect(metadata.sourceProvider).toBe('sleeper')
+      expect(metadata.rawSettings).toBeDefined()
+    }
   })
 })

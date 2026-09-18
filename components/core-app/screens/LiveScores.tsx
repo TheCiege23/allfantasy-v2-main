@@ -8,6 +8,7 @@ import { gameDetailHref } from '@/lib/live/gameDetailLink'
 import type { LiveGameCard, LivePageData } from '@/lib/live/liveScoresPage'
 import { matchesLiveGameQuery } from '@/lib/live/liveGameSearch'
 import { groupStartersByPlayer, pointsSummary, type StarterGroup } from '@/lib/live/liveTieInGroups'
+import { buildLockAlerts, type LiveLockAlert } from '@/lib/live/lockAlerts'
 import {
   basketballPeriodLabel,
   isBasketballSport,
@@ -99,6 +100,16 @@ export function LiveScores({ data: initial, selectedLeagueId = null }: LiveScore
   const [query, setQuery] = useState('')
   // Guards against a slow response for an old sport landing after a new one.
   const seqRef = useRef(0)
+  /*
+   * The validator for the payload currently on screen, so an unchanged slate comes
+   * back as a bodiless 304 rather than the whole scoreboard again.
+   *
+   * ⚠  A REF, NOT STATE, DELIBERATELY. Storing it in state would re-run the
+   * `load` callback's identity on every poll and restart the polling effect that
+   * depends on it -- a self-retriggering refresh loop, to cache a value no render
+   * reads.
+   */
+  const etagRef = useRef<string | null>(null)
 
   const load = useCallback(async (nextSport: string, nextScope: 'my' | 'all') => {
     const seq = ++seqRef.current
@@ -106,12 +117,37 @@ export function LiveScores({ data: initial, selectedLeagueId = null }: LiveScore
     try {
       const res = await fetch(
         `/api/dashboard/live-scores?view=live&sport=${encodeURIComponent(nextSport)}&scope=${nextScope}`,
-        { cache: 'no-store' },
+        {
+          cache: 'no-store',
+          headers: etagRef.current ? { 'If-None-Match': etagRef.current } : undefined,
+        },
       )
+      /*
+       * ⚠  NOTHING CHANGED, SO NOTHING IS TOUCHED -- INCLUDING THE AGE LABEL.
+       * A 304 means the payload is identical down to its `fetchedAt`, so the feed
+       * was not re-read and "updated Ns ago" SHOULD keep climbing. Calling
+       * `setNow` here would reset that clock and claim a freshness we did not get.
+       *
+       * Checked before `res.ok`, which is false for 304 -- without this branch a
+       * 304 would fall into the failure path and be indistinguishable from an
+       * outage.
+       */
+      if (res.status === 304) return
       if (!res.ok) return
       const json = (await res.json()) as LivePageData
       // A stale response must never overwrite a newer one.
       if (seq !== seqRef.current) return
+      /*
+       * ⚠ RECORDED ONLY ONCE THE DATA IS ACTUALLY APPLIED, AND AFTER THE
+       * STALENESS GUARD FOR THAT REASON. Stamping the validator before this check
+       * lets a slow response for an older view record a tag for a payload that
+       * never reached the screen -- after which the server answers 304 ("you
+       * already have this") about data the reader has never seen, and the slate
+       * freezes with nothing to show why. The tag and the data on screen have to
+       * move together or not at all.
+       */
+      const tag = res.headers.get('ETag')
+      etagRef.current = tag
       setData(json)
       setNow(Date.now())
     } catch {
@@ -134,6 +170,26 @@ export function LiveScores({ data: initial, selectedLeagueId = null }: LiveScore
   const visibleGames = useMemo(
     () => scopedGames.filter((game) => matchesLiveGameQuery(game, query)),
     [scopedGames, query],
+  )
+
+  /*
+   * ⚠ BUILT FROM `scopedGames`, NOT `visibleGames`, AND NOT FROM
+   * `data.lockAlerts`. Two separate reasons, both about not hiding a warning:
+   *
+   * - not `visibleGames`, because that applies the search box. Typing "mahomes"
+   *   must not suppress the notice that a different game locks in four minutes.
+   * - not `data.lockAlerts`, because when the rail scopes this screen to one
+   *   league the server's cross-league list would warn about leagues this screen
+   *   is not showing. `scopedGames` already has its tie-ins narrowed to that
+   *   league, so recomputing here keeps the banner and the slate telling the same
+   *   story. `buildLockAlerts` is pure and lives outside the server-only loader
+   *   precisely so this is possible.
+   *
+   * Recomputed as `now` ticks, which is what lets an alert expire on screen.
+   */
+  const lockAlerts = useMemo(
+    () => (now == null ? [] : buildLockAlerts(scopedGames, now)),
+    [scopedGames, now],
   )
 
   useEffect(() => {
@@ -311,6 +367,8 @@ export function LiveScores({ data: initial, selectedLeagueId = null }: LiveScore
              tab points at; -1 keeps it out of the sequential tab order. */
           tabIndex={-1}
         >
+          <LockWarning alerts={lockAlerts} now={now} />
+
           <h2 className="af-label af-live-slate-head">
             {activeSportLabel} · {selectedLeagueId ? 'this league' : scope === 'my' ? 'your starters, sorted by leagues affected' : 'all games'}
           </h2>
@@ -1345,3 +1403,101 @@ function EmptySlate({
 }
 
 export default LiveScores
+
+
+/**
+ * "Kicks off in 12m" -- the warning that a lineup decision is closing.
+ *
+ * ⚠ THE COUNTDOWN IS DERIVED FROM THIS BROWSER'S CLOCK, WHICH IS WHY THE
+ * ALERT CARRIES AN ABSOLUTE INSTANT. A server-rendered "12m" is minted once and
+ * then handed to every later reader and every 20-second poll, so it is wrong by
+ * however long it sat there. On the one element of this screen where a stale
+ * number changes what someone does, that is the worst failure available. Same
+ * rule the freshness label already follows, higher stakes.
+ *
+ * ⚠ IT RE-FILTERS ON EVERY TICK RATHER THAN TRUSTING ITS INPUT. A tab left
+ * open holds kickoffs that have since passed, and counting one of those down to
+ * "0m" tells the reader they still have time to change a lineup that is already
+ * locked. `buildLockAlerts` applies the same rule when it builds the list; this is
+ * the second belt, because the list outlives the instant it was built for.
+ *
+ * Renders nothing before mount: `now` is null until then and every figure here is
+ * relative to it, so there is no honest thing to show.
+ */
+export function LockWarning({ alerts, now }: { alerts: LiveLockAlert[]; now: number | null }) {
+  if (now == null) return null
+
+  const closing = alerts
+    .map((alert) => ({ alert, msLeft: new Date(alert.kickoffAt).getTime() - now }))
+    // NaN fails this, so an unparseable kickoff drops out rather than rendering a
+    // blank countdown.
+    .filter(({ msLeft }) => msLeft > 0)
+
+  if (closing.length === 0) return null
+
+  return (
+    <section
+      className="af-live-lock"
+      /* Announced, never interrupting -- it appears while the page is open and the
+         reader may be mid-sentence on a score. */
+      aria-live="polite"
+    >
+      <h2 className="af-label af-live-lock-head">
+        {closing.length === 1
+          ? 'Lineup decision closing'
+          : `${closing.length} lineup decisions closing`}
+      </h2>
+
+      <ul className="af-live-lock-list">
+        {closing.map(({ alert, msLeft }) => (
+          <li key={alert.gameId} className="af-live-lock-row">
+            <span className="af-live-lock-match">{alert.matchup}</span>
+            <span className="af-live-lock-time">kicks off in {formatLockCountdown(msLeft)}</span>
+            <span className="af-live-lock-who">{describeLockExposure(alert)}</span>
+          </li>
+        ))}
+      </ul>
+
+      {/*
+        ⚠ THIS LINE IS THE ACTION, NOT A DISCLAIMER. AllFantasy cannot write
+        a lineup back to any platform we import -- Sleeper's API is read-only -- so
+        a warning without it tells someone to hurry and not where to go. It also
+        says "kicks off", never "locks": a league on a weekly lock rule closed
+        earlier than this and we cannot tell which leagues those are.
+      */}
+      <p className="af-live-lock-foot">
+        Change it on your platform &mdash; AllFantasy cannot set your lineup for you. Leagues that
+        lock weekly may already be closed.
+      </p>
+    </section>
+  )
+}
+
+/**
+ * Coarse on purpose: "43m", not "43m 12s". A ticking second counter on a warning
+ * invites staring at it, and the figure is only actionable to the minute.
+ */
+function formatLockCountdown(msLeft: number): string {
+  const totalMinutes = Math.floor(msLeft / 60_000)
+  if (totalMinutes < 1) return 'under a minute'
+  if (totalMinutes < 60) return `${totalMinutes}m`
+  const hours = Math.floor(totalMinutes / 60)
+  const minutes = totalMinutes % 60
+  return minutes === 0 ? `${hours}h` : `${hours}h ${minutes}m`
+}
+
+/**
+ * "2 benched, 1 starting · 2 leagues".
+ *
+ * ⚠ BENCH IS NAMED FIRST AND IS NEVER FOLDED INTO A TOTAL. It is the half
+ * that is still a decision, where a starter is the choice already made. A bare
+ * headcount would hide exactly the players the reader might still act on.
+ */
+function describeLockExposure(alert: LiveLockAlert): string {
+  const parts: string[] = []
+  if (alert.bench > 0) parts.push(`${alert.bench} benched`)
+  if (alert.starters > 0) parts.push(`${alert.starters} starting`)
+  const leagues =
+    alert.leagues.length === 1 ? alert.leagues[0]!.leagueName : `${alert.leagues.length} leagues`
+  return `${parts.join(', ')} · ${leagues}`
+}

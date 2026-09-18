@@ -4,6 +4,7 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { getPlayFeed } from '@/lib/live/playFeedPresentation'
 import { getLivePageData } from '@/lib/live/liveScoresPage'
+import { etagMatches, livePayloadEtag } from '@/lib/live/livePayloadEtag'
 import { getEspnGameSummary } from '@/lib/sports-live-scores-service'
 import type { DashboardLiveScore } from '@/lib/types/liveScoring'
 
@@ -170,7 +171,38 @@ export async function GET(request: NextRequest) {
       sport: request.nextUrl.searchParams.get('sport'),
       scope: request.nextUrl.searchParams.get('scope') === 'all' ? 'all' : 'my',
     })
-    return NextResponse.json(data)
+
+    /*
+     * An unchanged slate costs no body. These screens poll every 20s while a game
+     * is on, and before this each poll re-sent every team name, logo URL, record
+     * and tie-in headshot whether or not one number had moved.
+     *
+     * ⚠ THE WORK IS ALREADY DONE BY THIS POINT AND THAT IS NOT AN OVERSIGHT.
+     * The payload must exist before it can be hashed, so the DB reads and the
+     * provider refresh above happen on a 304 exactly as on a 200. This saves
+     * bandwidth and a client re-render, never server time.
+     *
+     * ⚠ THE RESPONSE IS PRIVATE AND MUST SAY SO. The payload is user-specific --
+     * it names the leagues you roster in -- so a shared cache holding one user's
+     * slate and serving it to another under a matching validator would be a data
+     * leak, not a stale page. `private` is what forbids that; `no-store` alone
+     * would also forbid the conditional request we want the browser to make.
+     */
+    const etag = livePayloadEtag(data)
+    if (etagMatches(request.headers.get('if-none-match'), etag)) {
+      /*
+       * 304 carries no body by definition. The validator is repeated so the
+       * client can keep revalidating against it rather than dropping back to
+       * unconditional polling after the first match.
+       */
+      return new NextResponse(null, {
+        status: 304,
+        headers: { ETag: etag, 'Cache-Control': 'private, max-age=0, must-revalidate' },
+      })
+    }
+    return NextResponse.json(data, {
+      headers: { ETag: etag, 'Cache-Control': 'private, max-age=0, must-revalidate' },
+    })
   }
 
   if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
