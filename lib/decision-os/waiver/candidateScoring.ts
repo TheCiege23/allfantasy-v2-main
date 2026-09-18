@@ -247,6 +247,18 @@ function computeStash(
   return clamp(Math.round(score), 0, 100)
 }
 
+/**
+ * How much of a full replacement starter is missing at this slot, 0-100.
+ *
+ * 🛑 THE SCALE IS THE LEAGUE'S OWN MEDIAN, and it lives here because TWO callers need it — the
+ * `needFit` dimension and the `wa_need_slot` driver that explains it. They were written separately,
+ * both against a constant 8,000, and both understated a real hole to near zero; fixing only the one
+ * that moves the score would have left the sentence the manager actually reads still wrong.
+ */
+function slotGapShare(slot: SlotNeed): number {
+  return normalize(slot.gap, 0, Math.max(slot.leagueMedianValue, 1))
+}
+
 function computeNeedFit(
   candidate: WaiverCandidate,
   ctx: WaiverScoringContext,
@@ -286,9 +298,7 @@ function computeNeedFit(
      * ⚠ AND A MEASURED NEED STARTS AT THE CATEGORICAL ONE. `ctx.needs` membership is weaker
      * evidence than a computed slot gap, so a measured need can never score below it.
      */
-    const fullReplacement = Math.max(matchingSlot.leagueMedianValue, 1)
-    const gapShare = normalize(matchingSlot.gap, 0, fullReplacement)
-    slotFitScore = CATEGORICAL_NEED_FIT + gapShare * 0.45
+    slotFitScore = CATEGORICAL_NEED_FIT + slotGapShare(matchingSlot) * 0.45
 
     const rank = teamNeeds.weakestSlots.indexOf(matchingSlot)
     if (rank === 0) slotFitScore *= 1.3
@@ -401,11 +411,28 @@ function computeDrivers(
       : `No current starter at ${candidate.position}`,
   })
 
+  /* The driver's own categorical rung, the bar a MEASURED need must also clear. */
+  const CATEGORICAL_NEED_DRIVER = 60
   const matchingSlot = ctx.teamNeeds.weakestSlots.find(s => s.position === candidate.position)
   drivers.push({
     id: 'wa_need_slot',
     label: 'Fills Weakest Slot',
-    score: matchingSlot ? Math.round(normalize(matchingSlot.gap, 500, 8000)) : ctx.needs.includes(candidate.position) ? 60 : 20,
+    /*
+     * 🛑 THIS DRIVER CARRIED THE SAME INVERSION AS THE DIMENSION, and it is the half the manager
+     * READS. It scored `normalize(gap, 500, 8000)`, so a real 1,000-point hole rated 7 while the
+     * neutral "your position is adequate" branch below rated 20 — and `topDrivers` keeps only the
+     * three highest, so "Fills Weakest Slot" was sorted out of the explanation of the very
+     * recommendation it justified.
+     *
+     * ⚠ IT STARTS AT ITS OWN CATEGORICAL RUNG (60), not the dimension's 35. The two scales are
+     * separate on purpose — this one is a 0-100 display score shown beside the other drivers — so
+     * the shared part is the measured share, not the rung it is added to.
+     */
+    score: matchingSlot
+      ? Math.round(clamp(CATEGORICAL_NEED_DRIVER + slotGapShare(matchingSlot) * 0.4, 0, 100))
+      : ctx.needs.includes(candidate.position)
+      ? CATEGORICAL_NEED_DRIVER
+      : 20,
     direction: matchingSlot ? 'positive' : ctx.needs.includes(candidate.position) ? 'positive' : 'neutral',
     detail: matchingSlot
       ? `Upgrades your ${matchingSlot.slot} (+${matchingSlot.gapPpg} PPG gap)`
