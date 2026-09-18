@@ -46,12 +46,17 @@ export interface TeamNeedsMap {
 
 export type UserGoal = 'win-now' | 'balanced' | 'rebuild'
 
-const NFL_BYE_WEEKS_2025: Record<string, number> = {
-  ARI: 14, ATL: 11, BAL: 14, BUF: 12, CAR: 7, CHI: 10, CIN: 10, CLE: 9,
-  DAL: 7, DEN: 14, DET: 5, GB: 10, HOU: 7, IND: 14, JAX: 12, KC: 6,
-  LAC: 5, LAR: 6, LV: 10, MIA: 6, MIN: 9, NE: 14, NO: 12, NYG: 11,
-  NYJ: 12, PHI: 5, PIT: 9, SEA: 11, SF: 9, TB: 11, TEN: 5, WAS: 14,
-}
+/**
+ * 🛑 THIS WAS A HARDCODED 2025 SLATE, USED IN THE 2026 SEASON. Every bye-week cluster it produced
+ * was last year's: the advice warned about weeks that were not byes and stayed silent on the ones
+ * that were. A table keyed to a year is wrong every year but one, and nothing tells you which year
+ * you are in — so the slate is now passed in, read from the schedule by
+ * `lib/core-app/byeWeekMap.ts` (which asks the repo's one bye rule, `byeStatus`).
+ *
+ * ⚠ ABSENT MEANS UNKNOWN, NOT "NO BYE". A club missing from the map produces no cluster for its
+ * players, which is the honest degrade: a missing bye warning, never a wrong one.
+ */
+export type ByeWeekByClub = Record<string, number>
 
 const VALUE_TO_PPG_FACTOR = 0.0012
 
@@ -79,6 +84,8 @@ export function computeTeamNeeds(
   rosterPositions: string[],
   allLeagueRosters: { players: WaiverRosterPlayer[] }[],
   currentWeek: number,
+  /** This season's byes, by club. Omit it and no bye cluster is produced — see `ByeWeekByClub`. */
+  byeWeekByClub: ByeWeekByClub = {},
 ): TeamNeedsMap {
   const starterSlots = rosterPositions.filter(s => s !== 'BN' && s !== 'IR' && s !== 'TAXI')
   const starters = rosterPlayers.filter(p => p.slot === 'starter')
@@ -86,7 +93,7 @@ export function computeTeamNeeds(
 
   const weakestSlots = computeWeakestSlots(starters, starterSlots, allLeagueRosters)
   const biggestNeed = weakestSlots.length > 0 ? weakestSlots[0] : null
-  const byeWeekClusters = computeByeWeekClusters(starters, currentWeek)
+  const byeWeekClusters = computeByeWeekClusters(starters, currentWeek, byeWeekByClub)
   const positionalDepth = computePositionalDepth(rosterPlayers, allLeagueRosters)
   const dropCandidates = computeDropCandidates(rosterPlayers)
 
@@ -162,12 +169,13 @@ function computeWeakestSlots(
 function computeByeWeekClusters(
   starters: WaiverRosterPlayer[],
   currentWeek: number,
+  byeWeekByClub: ByeWeekByClub,
 ): ByeWeekCluster[] {
   const byeMap: Record<number, WaiverRosterPlayer[]> = {}
 
   for (const p of starters) {
     if (!p.team) continue
-    const byeWeek = NFL_BYE_WEEKS_2025[p.team]
+    const byeWeek = byeWeekByClub[p.team.toUpperCase()]
     if (!byeWeek || byeWeek <= currentWeek) continue
 
     if (!byeMap[byeWeek]) byeMap[byeWeek] = []

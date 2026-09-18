@@ -49,6 +49,8 @@ export interface WaiverPoolCandidate {
   age: number | null
   /** League-adjusted market value. 0 when this league's chart does not carry him. */
   value: number
+  /** The week his club is on bye, when the schedule answers. */
+  byeWeek: number | null
 }
 
 export interface WaiverPoolPricing {
@@ -77,6 +79,14 @@ export interface WaiverPool {
   leagueTraits: { numTeams: number; isSF: boolean; isTEP: boolean; isDynasty: boolean }
   /** The week the bye-cluster maths is relative to. Null when no projection week is on file. */
   currentWeek: number | null
+  /**
+   * This season's byes, by club, read from the schedule.
+   *
+   * 🛑 THE TABLE THIS REPLACES WAS THE 2025 SLATE, hardcoded in `team-needs.ts` and used in 2026, so
+   * every bye warning named last year's weeks. Empty here means the schedule could not answer, and
+   * the engine then produces no bye cluster at all — a missing warning, never a wrong one.
+   */
+  byeWeekByClub: Record<string, number>
   /**
    * True when the pool is a bounded slice rather than the whole wire.
    *
@@ -124,7 +134,7 @@ function slotsOf(playerData: unknown): Map<string, WaiverRosterPlayer['slot']> {
 export async function loadWaiverPool(leagueId: string, sport: string, rosterId?: string | null): Promise<WaiverPool> {
   const [league, rosterRows, pool, projectionWeek] = await Promise.all([
     prisma.league
-      .findUnique({ where: { id: leagueId }, select: { settings: true, leagueType: true, leagueSize: true } })
+      .findUnique({ where: { id: leagueId }, select: { settings: true, leagueType: true, leagueSize: true, season: true } })
       .catch(() => null),
     prisma.roster
       .findMany({ where: { leagueId }, select: { id: true, platformUserId: true, playerData: true } })
@@ -135,6 +145,18 @@ export async function loadWaiverPool(leagueId: string, sport: string, rosterId?:
       .catch(() => null),
   ])
   const leagueRosters = rosterRows as RosterRow[]
+
+  /*
+   * The season's byes. The league's own season decides, falling back to the projection feed's — the
+   * schedule is keyed on the season, and asking for the wrong one returns nothing rather than
+   * somebody else's slate.
+   */
+  const season = league?.season ?? Number(projectionWeek?.season ?? NaN)
+  const byeWeekByClub = Number.isFinite(season)
+    ? await import('@/lib/core-app/byeWeekMap')
+        .then((m) => m.resolveByeWeekMap(season, sport))
+        .catch(() => ({} as Record<string, number>))
+    : {}
 
   /*
    * ⚠ EVERY ROSTER IN THE LEAGUE, NOT JUST THE ASKER'S. A pool that subtracts only your own players
@@ -201,6 +223,8 @@ export async function loadWaiverPool(leagueId: string, sport: string, rosterId?:
     team: p.team_abbreviation ?? p.team ?? null,
     age: p.age ?? null,
     value: valueOf(sleeperIdOf(p.external_source_id)),
+    /* His own bye, so the scorer does not offer cover for a week he is also out. */
+    byeWeek: byeWeekByClub[String(p.team_abbreviation ?? p.team ?? '').toUpperCase()] ?? null,
   }))
 
   /* Names, positions and ages for the rostered ids, so both sides of the comparison are priced. */
@@ -255,6 +279,7 @@ export async function loadWaiverPool(leagueId: string, sport: string, rosterId?:
     rosterPositions,
     leagueTraits,
     currentWeek: projectionWeek?.week ?? null,
+    byeWeekByClub,
     /*
      * The pool was capped, so a fuller wire may hold a better target. This is true whenever the
      * resolver returned a full page — the honest reading of a bounded read, not a guess about
