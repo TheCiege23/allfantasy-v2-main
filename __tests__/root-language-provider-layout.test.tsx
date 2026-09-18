@@ -681,7 +681,7 @@ describe("root language provider layout", () => {
     expect(railwayStartCode).toContain("spawn")
   })
 
-  it("cleans stale Railway build artifacts before Next builds", () => {
+  it("keeps the build ordering on the path Railway actually runs", () => {
     /*
      * ⚠ THESE PINNED WHOLE SCRIPT STRINGS AND BROKE ON EVERY LEGITIMATE
      * ADDITION. What they guard is that the clean step runs BEFORE the tailwind
@@ -697,12 +697,55 @@ describe("root language provider layout", () => {
      * reordered step.
      */
     const scripts = (JSON.parse(packageJsonSource) as { scripts: Record<string, string> }).scripts
-    for (const key of ["prebuild", "build:railway"] as const) {
-      const cleanAt = scripts[key].indexOf("railway-clean-next-build.cjs")
-      const tailwindAt = scripts[key].indexOf("railway-tailwind-prebuild.cjs")
-      expect(cleanAt, `${key} must run the Railway clean step`).toBeGreaterThan(-1)
-      expect(tailwindAt, `${key} must run the tailwind prebuild`).toBeGreaterThan(cleanAt)
-    }
+
+    /*
+     * 🛑 THE DEPLOY PATH IS `prebuild` → `build`, NOT `build:railway`, AND THIS TEST USED TO
+     * ASSERT ABOUT BOTH AS THOUGH THEY WERE EQUALS. Measured from the production build log
+     * (Railpack 0.39.0, 2026-09-18) on a service that carries no buildCommand:
+     *
+     *     ▸ build
+     *       $ npm run build          ← so npm fires `prebuild`
+     *     Deploy
+     *       $ npm run start:railway
+     *
+     * `build:railway` is invoked only by `.github/workflows/build-env-check.yml` and by this file.
+     * An assertion about it guards CI; it does not guard a deploy. Both are checked below, but the
+     * distinction is now stated rather than implied.
+     */
+    expect(scripts.prebuild, 'the deploy path must run the tailwind prebuild').toContain(
+      'railway-tailwind-prebuild.cjs',
+    )
+
+    /*
+     * ⚠ THE CLEAN STEP IS DELIBERATELY ABSENT FROM `prebuild`, AND DEMANDING IT HERE IS WHAT LEFT
+     * THIS TEST RED ON MAIN FROM 2026-09-10 UNTIL THIS CHANGE. `65aea9a3d` — "temp: disable
+     * railway-clean-next-build to unblock prod deployments (#700)", authored by railway-app[bot]
+     * — removed it, naming PR #671 as the proper fix. #671 was then closed on 2026-09-17 as
+     * SUPERSEDED, its commits already on main.
+     *
+     * Kept out on the evidence rather than on the "temp" label (user decision 2026-09-18):
+     *   - Railway builds in a fresh container writing to `.next-railway-<commit-sha>`, so there is
+     *     no stale output to clean by construction;
+     *   - production deployed successfully throughout the eight days it was absent;
+     *   - the hazard it was disabled for is guarded inside the script anyway — `1f52f3107`,
+     *     2026-09-02, "Skip the legacy .next cleanup on Railway as it causes permission issues" —
+     *     and `AF_NEXT_DIST_DIR`, set on the production service, short-circuits the same path a
+     *     second way.
+     *
+     * Asserted as an ABSENCE on purpose: restoring the step should be a deliberate, visible edit
+     * that updates this expectation with it, not a silent drift back into the deploy path.
+     */
+    expect(
+      scripts.prebuild,
+      'the Railway clean step is deliberately not in the deploy path — see the note above',
+    ).not.toContain('railway-clean-next-build.cjs')
+
+    // CI-only, and still ordered: clean, then tailwind, then the build.
+    const cleanAt = scripts['build:railway'].indexOf('railway-clean-next-build.cjs')
+    const tailwindAt = scripts['build:railway'].indexOf('railway-tailwind-prebuild.cjs')
+    expect(cleanAt, 'build:railway must run the Railway clean step').toBeGreaterThan(-1)
+    expect(tailwindAt, 'build:railway must run the tailwind prebuild').toBeGreaterThan(cleanAt)
+
     // The build must end at `next build`, however it is wrapped to get there.
     expect(scripts.build).toMatch(/(^|[/\s])next(\/dist\/bin\/next)?\s+build\b/)
     expect(scripts["build:railway"]).toMatch(/(^|[/\s])next(\/dist\/bin\/next)?\s+build\b/)
