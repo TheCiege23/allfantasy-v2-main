@@ -467,7 +467,9 @@ describe("/admin page render states", () => {
     render(await AdminPage({ searchParams: { q: "ciege" } }))
 
     expect(screen.getByRole("heading", { name: /command center/i })).toBeInTheDocument()
-    expect(screen.getByTestId("admin-exit-button")).toHaveAttribute("href", "/dashboard")
+    // `/core` since 2026-09-18: `/dashboard` was retired on 2026-08-24 and only reached the
+    // home screen through the middleware 307, which cost a round trip on the way out.
+    expect(screen.getByTestId("admin-exit-button")).toHaveAttribute("href", "/core")
     // Plural since the 29a overview strip: buildPeerGroups repeats the users,
     // traffic, subscriptions, tokens, morning, health and integrity metrics
     // above the sections that also render them, so a users label is on the
