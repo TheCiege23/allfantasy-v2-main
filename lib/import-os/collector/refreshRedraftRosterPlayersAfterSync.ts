@@ -20,8 +20,8 @@
  * pass did touch left no trace. A league past the cap was also simply lost until its rosters
  * changed again. So:
  *   - ONE query finds every imported league whose redraft rows disagree with its rosters —
- *     active imported rows the roster no longer lists, or listed players with no active row.
- *     Measured 152ms on production over 3,161 rosters.
+ *     active imported rows the roster no longer lists, listed players with no active row, or a
+ *     roster with no redraft link at all. Measured 152ms on production over 3,161 rosters.
  *   - leagues this sync changed AND that disagree go first, largest gap first;
  *   - leagues that disagree but did NOT change this run come next. That is the carry-over: a
  *     league deferred by the cap still disagrees on the next run, so it is found again, with no
@@ -41,6 +41,8 @@ export interface LeagueNeedingWork {
   stale: number
   /** Players the roster lists with no active redraft row. */
   missing: number
+  /** Imported rosters here with no redraft link, in a league where one is free to claim. */
+  unlinked: number
 }
 
 export interface RefreshAfterSyncResult {
@@ -52,6 +54,8 @@ export interface RefreshAfterSyncResult {
   skippedClean: number
   /** Needed work without changing this run: picked up from an earlier run's deferral or drift. */
   carriedOver: number
+  /** Of those, leagues listed only because a roster there has no redraft link yet. */
+  unlinkedOnly: number
   refreshed: number
   /** Needed work, but past the league cap or the time budget. Found again next run. */
   deferred: number
@@ -84,7 +88,13 @@ async function defaultMaterialize(leagueId: string) {
 }
 
 /**
- * Every imported league whose redraft rows disagree with its rosters, largest gap first.
+ * Every imported league whose redraft rows disagree with its rosters — or that holds a roster with
+ * no redraft link at all — largest gap first.
+ *
+ * ⚠ THE `LIMIT` IS REACHABLE NOW, AND THE ORDER IS WHAT KEEPS IT SAFE. Link-only leagues are far
+ * more numerous than drifting ones (226 eligible against a limit of 200 on staging), so they are
+ * ordered strictly BEHIND every league with a row to repair: a league that needs rows fixed can
+ * never be pushed off the list by one that merely needs a link.
  *
  * ⚠ A SUPERSET OF WHAT THE MATERIALIZER WILL CHANGE, NEVER A SUBSET. "Listed" here is the flat
  * list, starters, reserve and taxi; the materializer also honours every lineup section, so a
@@ -94,7 +104,9 @@ async function defaultMaterialize(leagueId: string) {
  */
 export async function findLeaguesNeedingWork(limit = 200): Promise<LeagueNeedingWork[]> {
   const native = [...NATIVE_PLATFORM_VALUES]
-  const rows = await prisma.$queryRaw<Array<{ leagueId: string; stale: number; missing: number }>>`
+  const rows = await prisma.$queryRaw<
+    Array<{ leagueId: string; stale: number; missing: number; unlinked: number }>
+  >`
     WITH scope AS (
       SELECT g."leagueId", g."redraftRosterId", g."playerData" AS pd
       FROM rosters g JOIN leagues l ON l.id = g."leagueId"
@@ -117,15 +129,49 @@ export async function findLeaguesNeedingWork(limit = 200): Promise<LeagueNeeding
       WHERE NOT EXISTS (
         SELECT 1 FROM redraft_roster_players p
         WHERE p."rosterId" = s."redraftRosterId" AND p."playerId" = pid AND p."droppedAt" IS NULL)
+      GROUP BY 1),
+    /*
+     * 🛑 A ROSTER WITH NO LINK IS INVISIBLE TO "scope", WHICH READS LINKED ROWS ONLY — so neither
+     * count above can name its league, the materializer never runs there, and the link is never
+     * made. The circle: reconcileRosterRedraftLinks runs INSIDE the materializer.
+     *
+     * Measured in production 2026-09-18, after #1018 taught the reconciler to place an orphan
+     * team's roster by its team: 256 unlinked imported rosters across 35 leagues, 183 of them the
+     * orphan rosters #1005 restored. In the hour after that deploy the linked count moved by 24 —
+     * only leagues that happened to have stale rows as well — and orphan links moved by 2.
+     *
+     * ⚠ LISTED ONLY WHERE THE LEAGUE CAN PROGRESS: some redraft roster there must still be free
+     * for a roster to claim. 3 production leagues (34 rosters) have no redraft season at all, and
+     * listing those would put work in the queue that can never finish, taking a slot from a league
+     * that can — on every run, forever. That is the starvation the Season Outlook pre-compute hit
+     * (#1006).
+     */
+    unlinked AS (
+      SELECT g."leagueId", count(*)::int AS n
+      FROM rosters g JOIN leagues l ON l.id = g."leagueId"
+      WHERE g."redraftRosterId" IS NULL
+        AND lower(coalesce(l.platform, 'allfantasy')) <> ALL(${native}::text[])
+        AND EXISTS (
+          SELECT 1 FROM redraft_rosters rr
+          WHERE rr."leagueId" = g."leagueId"
+            AND NOT EXISTS (SELECT 1 FROM rosters x WHERE x."redraftRosterId" = rr.id))
       GROUP BY 1)
-    SELECT coalesce(stale."leagueId", missing."leagueId") AS "leagueId",
+    SELECT coalesce(stale."leagueId", missing."leagueId", unlinked."leagueId") AS "leagueId",
            coalesce(stale.n, 0) AS stale,
-           coalesce(missing.n, 0) AS missing
-    FROM stale FULL JOIN missing ON missing."leagueId" = stale."leagueId"
-    ORDER BY coalesce(stale.n, 0) + coalesce(missing.n, 0) DESC
+           coalesce(missing.n, 0) AS missing,
+           coalesce(unlinked.n, 0) AS unlinked
+    FROM stale
+    FULL JOIN missing ON missing."leagueId" = stale."leagueId"
+    FULL JOIN unlinked ON unlinked."leagueId" = coalesce(stale."leagueId", missing."leagueId")
+    ORDER BY coalesce(stale.n, 0) + coalesce(missing.n, 0) DESC, coalesce(unlinked.n, 0) DESC
     LIMIT ${limit}
   `
-  return rows.map((r) => ({ leagueId: r.leagueId, stale: Number(r.stale), missing: Number(r.missing) }))
+  return rows.map((r) => ({
+    leagueId: r.leagueId,
+    stale: Number(r.stale),
+    missing: Number(r.missing),
+    unlinked: Number(r.unlinked),
+  }))
 }
 
 export async function refreshRedraftRosterPlayersAfterSync(
@@ -140,6 +186,7 @@ export async function refreshRedraftRosterPlayersAfterSync(
     needingWork: null,
     skippedClean: 0,
     carriedOver: 0,
+    unlinkedOnly: 0,
     refreshed: 0,
     deferred: 0,
     playersDropped: 0,
@@ -159,10 +206,14 @@ export async function refreshRedraftRosterPlayersAfterSync(
     out.discoveryMs = now() - discoveryStarted
     out.needingWork = needing.length
     const gap = (n: LeagueNeedingWork) => n.stale + n.missing
+    // Rows to repair come first; a league listed only for a missing link is still worth a slot,
+    // because until it is materialized once, nothing else will ever give it one.
+    const rank = (a: LeagueNeedingWork, b: LeagueNeedingWork) => gap(b) - gap(a) || b.unlinked - a.unlinked
     const changedSet = new Set(changed)
     const needingIds = new Set(needing.map((n) => n.leagueId))
-    const changedFirst = needing.filter((n) => changedSet.has(n.leagueId)).sort((a, b) => gap(b) - gap(a))
-    const carryOver = needing.filter((n) => !changedSet.has(n.leagueId)).sort((a, b) => gap(b) - gap(a))
+    const changedFirst = needing.filter((n) => changedSet.has(n.leagueId)).sort(rank)
+    const carryOver = needing.filter((n) => !changedSet.has(n.leagueId)).sort(rank)
+    out.unlinkedOnly = needing.filter((n) => gap(n) === 0 && n.unlinked > 0).length
     out.skippedClean = changed.filter((id) => !needingIds.has(id)).length
     out.carriedOver = carryOver.length
     queue = [...changedFirst, ...carryOver].map((n) => n.leagueId)
