@@ -78,14 +78,25 @@ describe('a waiver candidate is scored against the waiver population', () => {
   })
 
   it('🛑 calls a p90 wire player who beats your weakest starter an Add', () => {
-    /* 1,936 against a 700 starter. On the old scale this read 26 — "Monitor". */
+    /*
+     * 1,936 against a 700 starter. On the old scale this read 26 — "Monitor".
+     * Win-now is deliberately louder than balanced, so accept Add OR stronger there rather than
+     * pinning the exact rung: pinning it would make this test fail for a change that made the
+     * advice MORE confident, which is not the property being guarded.
+     */
     expect(scoreAt(1936)!.recommendation).toBe('Add')
-    expect(scoreAt(1936, 'win-now')!.recommendation).toBe('Add')
+    expect(['Add', 'Strong Add', 'Must Add']).toContain(scoreAt(1936, 'win-now')!.recommendation)
   })
 
-  it('does NOT promote the median wire player, so the advice stays worth reading', () => {
-    expect(scoreAt(251)!.recommendation).toBe('Monitor')
-    expect(scoreAt(674)!.recommendation).toBe('Monitor')
+  it('🛑 does NOT promote the median or p75 wire player, on EITHER goal', () => {
+    /*
+     * This is the property the cut points exist to hold. With #1036's needFit fix and these scales
+     * but the OLD 45/60/75 rungs, a win-now manager was told to Add the MEDIAN player on the wire.
+     */
+    for (const goal of ['balanced', 'win-now'] as const) {
+      expect(scoreAt(251, goal)!.recommendation).toBe('Monitor')
+      expect(scoreAt(674, goal)!.recommendation).toBe('Monitor')
+    }
   })
 
   it('still drops a player the market prices at nothing', () => {

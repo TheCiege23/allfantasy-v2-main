@@ -719,9 +719,34 @@ function computeComposite(dims: WaiverDimensions, goal: UserGoal): number {
 }
 
 function getRecommendation(composite: number, dims: WaiverDimensions): ScoredWaiverTarget['recommendation'] {
-  if (composite >= 75) return 'Must Add'
-  if (composite >= 60) return 'Strong Add'
-  if (composite >= 45) return 'Add'
+  /*
+   * 🛑 THE CUT POINTS MOVED WITH THE SCALES, AND HAD TO. They were set against a composite that
+   * two separate bugs held down: `needFit` scored a measured hole BELOW no signal at all (fixed in
+   * #1036), and `startNow`/`stash` normalised the wire against the dynasty trade band (fixed here).
+   * Correcting both without moving these lines makes the MEDIAN wire player an "Add" for a win-now
+   * manager — the opposite failure, and a worse one, because advice that fires for the typical case
+   * carries no information.
+   *
+   * Measured end to end on the same fixture (weakest starter worth 700), at the real wire
+   * percentiles — balanced / win-now, with BOTH fixes applied:
+   *
+   *     value    45/60/75 (old)        60/75/85 (here)
+   *       251    Monitor / **Add**     Monitor / Monitor
+   *       674    **Add** / Add         Monitor / Monitor
+   *     1,936    Strong / **Must**     Add / Strong Add
+   *     6,000    Strong / Must         Add / Strong Add
+   *
+   * The wire's median best-available is 251 and its p75 is 674, so those two staying "Monitor" is
+   * the property that matters: an Add now means a genuine upgrade, not "something exists".
+   *
+   * ⚠ "Must Add" is deliberately hard to reach on a waiver wire — nothing in the realistic value
+   * range hits 85 without the multipliers (superflex QB, a bye cluster). That is the label meaning
+   * what it says; it is NOT the unreachable-label problem #1036 fixed, where a real need scored
+   * below no need and the middle of the ladder could never be earned at all.
+   */
+  if (composite >= 85) return 'Must Add'
+  if (composite >= 75) return 'Strong Add'
+  if (composite >= 60) return 'Add'
   if (dims.stash >= 70) return 'Stash'
   if (composite >= 30) return 'Monitor'
   return 'Monitor'
