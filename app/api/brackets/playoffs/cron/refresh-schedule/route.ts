@@ -6,6 +6,7 @@ import {
   refreshPlayoffScheduleMetadataForChallenge,
   syncPlayoffChallengeSeries,
 } from "@/lib/playoffs/playoffSeriesSyncService"
+import { applyPlayoffSeedsToChallenges } from "@/lib/playoffs/playoffSeeding"
 import { withSyncJobRun } from "@/lib/production-health/syncJobRunTelemetry"
 import { redactSecrets } from "@/lib/security/redactSecrets"
 
@@ -52,7 +53,7 @@ const querySchema = z.object({
    * good enough for a live World Series. Moving it to an evenly spread cadence
    * is a one-line registry change once a cron slot is free.
    */
-  job: z.enum(["all", "schedule", "results"]).optional().default("all"),
+  job: z.enum(["all", "schedule", "results", "seed"]).optional().default("all"),
 })
 
 /**
@@ -180,7 +181,28 @@ async function refreshActiveChallenges(input: RefreshInput) {
   let broadcastFieldsFound = 0
   let venueFieldsFound = 0
 
-  if (input.job !== "results") {
+  /*
+   * ── SEED ─────────────────────────────────────────────────────────────────
+   *
+   * Runs FIRST, because the two phases below match provider GAMES onto series
+   * and a bracket whose slots still read "AL1" has nothing for them to match.
+   * Seeding reads standings instead, so it can fill a field before a single
+   * postseason game exists — which is the whole point: pools form before game
+   * one, not after it.
+   *
+   * Idempotent and cheap (one memoised cache read per sport+season, then
+   * conditional writes), so it costs nothing on the fires where the field is
+   * already filled.
+   */
+  const runSeeding = input.job !== "schedule" && input.job !== "results" && !input.dryRun
+  const seeding = runSeeding
+    ? await applyPlayoffSeedsToChallenges(challengeIds)
+    : null
+  if (seeding) {
+    warnings.push(...seeding.warnings.map((warning) => `seed: ${warning}`))
+  }
+
+  if (input.job !== "results" && input.job !== "seed") {
     for (const challengeId of challengeIds) {
       const result = await refreshPlayoffScheduleMetadataForChallenge({
         challengeId,
@@ -217,7 +239,7 @@ async function refreshActiveChallenges(input: RefreshInput) {
    * ⚠ A DRY RUN MUST NOT REACH IT. `syncPlayoffChallengeSeries` has no dryRun
    * parameter and always writes, so the guard is the caller's job.
    */
-  const runResults = input.job !== "schedule" && !input.dryRun
+  const runResults = input.job !== "schedule" && input.job !== "seed" && !input.dryRun
   const resultsStartedAt = Date.now()
   const resultsErrors: string[] = []
   const resultsSkippedForBudget: string[] = []
@@ -267,6 +289,7 @@ async function refreshActiveChallenges(input: RefreshInput) {
     winnersUpdated,
     resultsSkippedForBudget,
     resultsErrors,
+    seeding,
   }
 }
 
@@ -309,6 +332,7 @@ export async function GET(request: NextRequest) {
       winnersUpdated,
       resultsSkippedForBudget,
       resultsErrors,
+      seeding,
     } = input.dryRun
       ? await sweep()
       : await withSyncJobRun(
@@ -324,8 +348,11 @@ export async function GET(request: NextRequest) {
              * failure, for the same reason: the other challenges were still served, and
              * a hard failure here would red the whole job over one bad provider match.
              */
-            status: r.warnings.length > 0 || r.resultsErrors.length > 0 ? "partial" : "success",
-            warnings: [...r.warnings, ...r.resultsErrors].slice(0, 25),
+            status:
+              r.warnings.length > 0 || r.resultsErrors.length > 0 || (r.seeding?.errors.length ?? 0) > 0
+                ? "partial"
+                : "success",
+            warnings: [...r.warnings, ...r.resultsErrors, ...(r.seeding?.errors ?? [])].slice(0, 25),
             metadata: {
               challengeCount: r.challengeIds.length,
               updatedSeries: r.updatedSeries,
@@ -339,6 +366,10 @@ export async function GET(request: NextRequest) {
               // Non-zero means the 60s budget is too tight for the live field
               // and this needs a real drain cursor, not a bigger number.
               resultsSkippedForBudget: r.resultsSkippedForBudget.length,
+              // The number that says a FIELD arrived: real clubs written into
+              // seed slots that previously read "AL1".
+              seedSlotsFilled: r.seeding?.slotsFilled ?? 0,
+              seedPicksMigrated: r.seeding?.picksMigrated ?? 0,
             },
           }),
         )
@@ -366,6 +397,7 @@ export async function GET(request: NextRequest) {
       winnersUpdated,
       resultsSkippedForBudget,
       resultsErrors,
+      seeding,
       syncedAt,
     })
   } catch (error) {

@@ -6,6 +6,7 @@ import { NextRequest } from "next/server"
 const serviceMocks = vi.hoisted(() => ({
   refreshPlayoffScheduleMetadataForChallenge: vi.fn(),
   syncPlayoffChallengeSeries: vi.fn(),
+  applyPlayoffSeedsToChallenges: vi.fn(),
   prisma: {
     playoffBracketChallenge: {
       findMany: vi.fn(),
@@ -15,6 +16,9 @@ const serviceMocks = vi.hoisted(() => ({
 
 vi.mock("server-only", () => ({}))
 vi.mock("@/lib/prisma", () => ({ prisma: serviceMocks.prisma }))
+vi.mock("@/lib/playoffs/playoffSeeding", () => ({
+  applyPlayoffSeedsToChallenges: serviceMocks.applyPlayoffSeedsToChallenges,
+}))
 vi.mock("@/lib/playoffs/playoffSeriesSyncService", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/playoffs/playoffSeriesSyncService")>()
   return {
@@ -64,6 +68,9 @@ describe("playoff schedule refresh cron route", () => {
     serviceMocks.refreshPlayoffScheduleMetadataForChallenge.mockImplementation(({ challengeId }) =>
       Promise.resolve(mockRefreshResult(challengeId, challengeId.startsWith("nhl") ? "nhl" : "nba"))
     )
+    serviceMocks.applyPlayoffSeedsToChallenges.mockResolvedValue({
+      challengesSeeded: 0, slotsFilled: 0, picksMigrated: 0, slotsUnresolved: 0, warnings: [], errors: [],
+    })
   })
 
   it("rejects missing or invalid auth", async () => {
@@ -208,6 +215,57 @@ describe("playoff schedule refresh cron route", () => {
     expect(body.winnersUpdated).toBe(1)
     expect(body.resultsErrors).toHaveLength(1)
     expect(body.resultsErrors[0]).toContain("nba-1")
+  })
+
+  /*
+   * Seeding must run BEFORE the two phases that match provider games, because
+   * a bracket whose slots still read "AL1" has nothing for them to match. It is
+   * also the only phase that can fill a field before a postseason game exists.
+   */
+  it("seeds the field first, and reports what it filled", async () => {
+    serviceMocks.applyPlayoffSeedsToChallenges.mockResolvedValue({
+      challengesSeeded: 1, slotsFilled: 4, picksMigrated: 7, slotsUnresolved: 0, warnings: [], errors: [],
+    })
+    const order: string[] = []
+    serviceMocks.applyPlayoffSeedsToChallenges.mockImplementation(async () => {
+      order.push("seed")
+      return { challengesSeeded: 1, slotsFilled: 4, picksMigrated: 7, slotsUnresolved: 0, warnings: [], errors: [] }
+    })
+    serviceMocks.refreshPlayoffScheduleMetadataForChallenge.mockImplementation(async ({ challengeId }) => {
+      order.push("schedule")
+      return mockRefreshResult(challengeId, "nba")
+    })
+    serviceMocks.syncPlayoffChallengeSeries.mockImplementation(async () => {
+      order.push("results")
+      return { seriesUpdated: 0, winnersUpdated: 0, warnings: [] }
+    })
+
+    const { GET } = await import("@/app/api/brackets/playoffs/cron/refresh-schedule/route")
+    const response = await GET(req("https://www.allfantasy.ai/api/brackets/playoffs/cron/refresh-schedule?sport=all", "cron-secret"))
+    const body = await response.json()
+
+    expect(order[0]).toBe("seed")
+    expect(order.indexOf("seed")).toBeLessThan(order.indexOf("schedule"))
+    expect(serviceMocks.applyPlayoffSeedsToChallenges).toHaveBeenCalledWith(["nba-1", "nhl-1"])
+    expect(body.seeding).toMatchObject({ slotsFilled: 4, picksMigrated: 7 })
+  })
+
+  it("never seeds on a dry run", async () => {
+    const { GET } = await import("@/app/api/brackets/playoffs/cron/refresh-schedule/route")
+
+    await GET(req("https://www.allfantasy.ai/api/brackets/playoffs/cron/refresh-schedule?dryRun=true", "cron-secret"))
+
+    expect(serviceMocks.applyPlayoffSeedsToChallenges).not.toHaveBeenCalled()
+  })
+
+  it("runs the seed phase alone when asked", async () => {
+    const { GET } = await import("@/app/api/brackets/playoffs/cron/refresh-schedule/route")
+
+    await GET(req("https://www.allfantasy.ai/api/brackets/playoffs/cron/refresh-schedule?job=seed", "cron-secret"))
+
+    expect(serviceMocks.applyPlayoffSeedsToChallenges).toHaveBeenCalledTimes(1)
+    expect(serviceMocks.refreshPlayoffScheduleMetadataForChallenge).not.toHaveBeenCalled()
+    expect(serviceMocks.syncPlayoffChallengeSeries).not.toHaveBeenCalled()
   })
 
   /*
