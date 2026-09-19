@@ -134,14 +134,14 @@ describe('persistence stores the ids in metadata and does not resolve internalId
   const code = stripComments(read('lib/league-import/importPersistenceService.ts'))
 
   it('self-control: the stripper keeps code and drops prose', () => {
-    expect(code).toContain('externalEntityMapping.upsert')
+    expect(code).toContain('INSERT INTO "external_entity_mappings"')
     expect(stripComments('/* external_ids: m.external_ids */\nconst a = 1')).not.toContain('external_ids')
     expect(stripComments("const u = 'https://x.test/a'")).toContain('https://x.test/a')
   })
 
-  it('external_ids is written on create AND update, in BOTH persistence paths (4 sites)', () => {
-    const hits = code.match(/metadata: \{ stable_key: m\.stable_key, \.\.\.\(m\.external_ids \? \{ external_ids: m\.external_ids \} : \{\}\) \}/g) ?? []
-    expect(hits).toHaveLength(4)
+  it('external_ids is carried into the metadata used by the shared bulk upsert', () => {
+    expect(code).toMatch(/mapping\.external_ids \? \{ external_ids: mapping\.external_ids \} : \{\}/)
+    expect(code).toMatch(/JSON\.stringify\(metadata\).*::jsonb/)
   })
 
   it('and no metadata write was left on the old shape', () => {
@@ -149,9 +149,9 @@ describe('persistence stores the ids in metadata and does not resolve internalId
   })
 
   it('internalId is still sourced ONLY from af_id — the id is carried, not resolved', () => {
-    const internal = code.match(/internalId: [^,\n]+/g) ?? []
-    expect(internal.length).toBeGreaterThan(0)
-    for (const line of internal) expect(line).toBe('internalId: m.af_id ?? undefined')
+    expect(code).toContain('${mapping.af_id ?? null}')
+    expect(code).toContain('COALESCE(EXCLUDED."internalId", "external_entity_mappings"."internalId")')
+    expect(code).not.toMatch(/mapping\.external_ids[^\n]*internalId/)
   })
 })
 

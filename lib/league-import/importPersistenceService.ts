@@ -2,11 +2,16 @@
  * Persists import audit rows + entity mappings after `persistImportedLeagueFromNormalization`.
  */
 
-import { createHash } from 'crypto'
+import { createHash, randomUUID } from 'crypto'
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { startImportAttempt, finishImportAttempt } from '@/lib/league-import/importRunAttempts'
-import type { ImportProvider, ImportWarningRecord, NormalizedImportResult } from '@/lib/league-import/types'
+import type {
+  ExternalIdentityMapping,
+  ImportProvider,
+  ImportWarningRecord,
+  NormalizedImportResult,
+} from '@/lib/league-import/types'
 import type { CanonicalImportBundle } from '@/lib/league-import/types'
 import {
   persistImportedLeagueFromNormalization,
@@ -22,6 +27,76 @@ import {
  * nothing to adopt or return as success — surface it as a conflict the client can retry.
  */
 export class ImportRunInFlightError extends Error {}
+
+const ENTITY_MAPPING_WRITE_BATCH_SIZE = 250
+
+async function replaceImportWarnings(input: {
+  runId: string
+  leagueId: string
+  warnings: ImportWarningRecord[]
+}): Promise<void> {
+  await prisma.$transaction(async (tx) => {
+    await tx.importWarning.deleteMany({ where: { runId: input.runId } })
+    if (input.warnings.length === 0) return
+
+    await tx.importWarning.createMany({
+      data: input.warnings.map((warning) => ({
+        runId: input.runId,
+        leagueId: input.leagueId,
+        code: warning.code,
+        message: warning.message,
+        severity: warning.severity,
+        metadata: (warning.metadata ?? {}) as Prisma.InputJsonValue,
+      })),
+    })
+  })
+}
+
+/**
+ * Prisma does not expose a bulk upsert. A parameterized INSERT ... ON CONFLICT keeps refreshes
+ * idempotent while reducing hundreds of identity writes to one database call per bounded batch.
+ */
+async function upsertExternalEntityMappings(input: {
+  leagueId: string
+  runId: string
+  mappings: ExternalIdentityMapping[]
+}): Promise<void> {
+  const deduplicated = new Map<string, ExternalIdentityMapping>()
+  for (const mapping of input.mappings) {
+    const key = `${mapping.source_provider}\u0000${mapping.entity_type}\u0000${mapping.source_id}`
+    deduplicated.set(key, mapping)
+  }
+  const mappings = [...deduplicated.values()]
+
+  for (let offset = 0; offset < mappings.length; offset += ENTITY_MAPPING_WRITE_BATCH_SIZE) {
+    const batch = mappings.slice(offset, offset + ENTITY_MAPPING_WRITE_BATCH_SIZE)
+    const values = batch.map((mapping) => {
+      const metadata = {
+        stable_key: mapping.stable_key,
+        ...(mapping.external_ids ? { external_ids: mapping.external_ids } : {}),
+      }
+      return Prisma.sql`(
+        ${randomUUID()}, ${input.leagueId}, ${input.runId}, ${mapping.source_provider},
+        ${mapping.entity_type}, ${mapping.source_id}, ${mapping.af_id ?? null},
+        ${mapping.af_id ? 1 : 0.5}, ${JSON.stringify(metadata)}::jsonb
+      )`
+    })
+
+    await prisma.$executeRaw`
+      INSERT INTO "external_entity_mappings" (
+        "id", "leagueId", "runId", "provider", "entityType", "sourceId",
+        "internalId", "confidence", "metadata"
+      )
+      VALUES ${Prisma.join(values)}
+      ON CONFLICT ("leagueId", "provider", "entityType", "sourceId")
+      DO UPDATE SET
+        "runId" = EXCLUDED."runId",
+        "internalId" = COALESCE(EXCLUDED."internalId", "external_entity_mappings"."internalId"),
+        "confidence" = EXCLUDED."confidence",
+        "metadata" = EXCLUDED."metadata"
+    `
+  }
+}
 
 function hashPayload(normalized: NormalizedImportResult): string {
   return createHash('sha256').update(JSON.stringify(normalized.source)).digest('hex').slice(0, 32)
@@ -260,53 +335,22 @@ export async function persistImportWithCanonicalAudit(input: {
      * This converges with no schema change. If a constraint is added later, this becomes
      * redundant rather than wrong.
      */
-    await prisma.importWarning.deleteMany({ where: { runId: run.id } })
-
-    for (const w of [
-      ...input.canonical.warnings,
-      ...(input.additionalWarnings ?? []),
-      ...persisted.incompleteSteps,
-    ]) {
-      await prisma.importWarning.create({
-        data: {
-          runId: run.id,
-          leagueId: persisted.league.id,
-          code: w.code,
-          message: w.message,
-          severity: w.severity,
-          metadata: (w.metadata ?? {}) as object,
-        },
-      })
-    }
-
-    for (const m of input.normalized.identity_mappings ?? []) {
-      await prisma.externalEntityMapping.upsert({
-        where: {
-          leagueId_provider_entityType_sourceId: {
-            leagueId: persisted.league.id,
-            provider: m.source_provider,
-            entityType: m.entity_type,
-            sourceId: m.source_id,
-          },
-        },
-        create: {
-          leagueId: persisted.league.id,
-          runId: run.id,
-          provider: m.source_provider,
-          entityType: m.entity_type,
-          sourceId: m.source_id,
-          internalId: m.af_id ?? undefined,
-          confidence: m.af_id ? 1 : 0.5,
-          metadata: { stable_key: m.stable_key, ...(m.external_ids ? { external_ids: m.external_ids } : {}) },
-        },
-        update: {
-          runId: run.id,
-          internalId: m.af_id ?? undefined,
-          confidence: m.af_id ? 1 : 0.5,
-          metadata: { stable_key: m.stable_key, ...(m.external_ids ? { external_ids: m.external_ids } : {}) },
-        },
-      })
-    }
+    await Promise.all([
+      replaceImportWarnings({
+        runId: run.id,
+        leagueId: persisted.league.id,
+        warnings: [
+          ...input.canonical.warnings,
+          ...(input.additionalWarnings ?? []),
+          ...persisted.incompleteSteps,
+        ],
+      }),
+      upsertExternalEntityMappings({
+        leagueId: persisted.league.id,
+        runId: run.id,
+        mappings: input.normalized.identity_mappings ?? [],
+      }),
+    ])
 
     /*
      * Same accumulation, same fix — but scoped far more narrowly, and the narrowing matters.
@@ -495,49 +539,18 @@ export async function recordCanonicalImportAuditForExistingLeague(input: {
      * so it is re-run by construction rather than by exception. See the fuller note on the
      * other path above.
      */
-    await prisma.importWarning.deleteMany({ where: { runId: run.id } })
-
-    for (const w of input.canonical.warnings) {
-      await prisma.importWarning.create({
-        data: {
-          runId: run.id,
-          leagueId: input.leagueId,
-          code: w.code,
-          message: w.message,
-          severity: w.severity,
-          metadata: (w.metadata ?? {}) as object,
-        },
-      })
-    }
-
-    for (const m of input.normalized.identity_mappings ?? []) {
-      await prisma.externalEntityMapping.upsert({
-        where: {
-          leagueId_provider_entityType_sourceId: {
-            leagueId: input.leagueId,
-            provider: m.source_provider,
-            entityType: m.entity_type,
-            sourceId: m.source_id,
-          },
-        },
-        create: {
-          leagueId: input.leagueId,
-          runId: run.id,
-          provider: m.source_provider,
-          entityType: m.entity_type,
-          sourceId: m.source_id,
-          internalId: m.af_id ?? undefined,
-          confidence: m.af_id ? 1 : 0.5,
-          metadata: { stable_key: m.stable_key, ...(m.external_ids ? { external_ids: m.external_ids } : {}) },
-        },
-        update: {
-          runId: run.id,
-          internalId: m.af_id ?? undefined,
-          confidence: m.af_id ? 1 : 0.5,
-          metadata: { stable_key: m.stable_key, ...(m.external_ids ? { external_ids: m.external_ids } : {}) },
-        },
-      })
-    }
+    await Promise.all([
+      replaceImportWarnings({
+        runId: run.id,
+        leagueId: input.leagueId,
+        warnings: input.canonical.warnings,
+      }),
+      upsertExternalEntityMappings({
+        leagueId: input.leagueId,
+        runId: run.id,
+        mappings: input.normalized.identity_mappings ?? [],
+      }),
+    ])
 
     /* Same narrow scope as the other path: open import_review tasks for this run only. */
     await prisma.importReviewTask.deleteMany({

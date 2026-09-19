@@ -272,9 +272,11 @@ describe('import replay — the service still performs the clears', () => {
     expect(codeOnly("const u = 'https://x.test/a'")).toContain('https://x.test/a')
   })
 
-  it('clears importWarning by runId on BOTH write paths', () => {
-    const hits = source.match(/importWarning\.deleteMany\(\{\s*where:\s*\{\s*runId:/g) ?? []
-    expect(hits.length).toBe(2)
+  it('replaces import warnings through the shared batched writer on both paths', () => {
+    const calls = source.match(/replaceImportWarnings\(\{/g) ?? []
+    expect(calls.length).toBe(2)
+    expect(source).toMatch(/importWarning\.deleteMany\(\{\s*where:\s*\{\s*runId:/)
+    expect(source).toContain('importWarning.createMany')
   })
 
   it('clears importReviewTask scoped to open import_review tasks, on both paths', () => {
