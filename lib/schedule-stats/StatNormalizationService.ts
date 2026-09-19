@@ -36,6 +36,20 @@ const NFL_ALIASES: Record<string, string> = {
   fgm_0_39: 'fg_0_39',
   fgm_40_49: 'fg_40_49',
   fgm_50: 'fg_50_plus',
+  /*
+   * 🛑 THE FEED SAYS `fgm_50p`, THIS MAP SAID `fgm_50`, AND A 50-YARD FIELD GOAL SCORED ZERO.
+   *
+   * `ScoringKeyAliasResolver` turns Sleeper stat id 74 into `fgm_50p` — never `fgm_50`, which no
+   * feed emits. Unknown keys pass through untouched (see `normalizeStatPayload`), so the template
+   * rule `fg_50_plus`, worth FIVE POINTS, never received a value. Measured on the test database:
+   * `fg_50_plus` appears in 0 of 313,883 NFL rows, while `fgm_50p` appears in 843.
+   *
+   * ⚠ `fgm_50_59` IS DELIBERATELY NOT MAPPED HERE. It is a SUBSET of `fgm_50p`, not a sibling —
+   * all 300 rows carrying it also carry `fgm_50p` — and since this function SUMS into the
+   * canonical key, aliasing both would double-count every one of them. It is picked up in
+   * `deriveKickingBuckets` below, and only when the wider bucket is absent.
+   */
+  fgm_50p: 'fg_50_plus',
   xpm: 'pat_made',
   xpmiss: 'pat_missed',
   sack: 'dst_sack',
@@ -179,6 +193,52 @@ const SPORT_ALIASES: Record<string, Record<string, string>> = {
  */
 const THROWN_PICK_SPORTS = new Set(['NFL', 'NCAAF'])
 
+/** Sports whose kicking lines arrive as a total plus partial distance buckets. */
+const KICKING_BUCKET_SPORTS = new Set(['NFL', 'NCAAF'])
+
+/**
+ * Fill the field-goal distance buckets the scoring template charges for, from the ones the feed
+ * actually sends.
+ *
+ * 🛑 THE TEMPLATE PRICES THREE BUCKETS AND THE FEED SUPPLIES ONE OF THEM. `fg_0_39` (3 pts),
+ * `fg_40_49` (4) and `fg_50_plus` (5) are all priced, but the feed reports `fgm` (the TOTAL made),
+ * `fgm_40_49`, `fgm_50p` and `fgm_50_59`. Only the 40–49 bucket had a mapping, so every kick
+ * under forty yards — the most common kick there is — and every kick of fifty or more scored
+ * nothing at all.
+ *
+ * Measured on the test database across 3,098 kicker-game rows: 3,496 field goals under 40 and
+ * 1,000 of 50+ scored zero, and the template produced 13,313 points where the same lines are
+ * worth 28,801 — **53.8% of all kicking value discarded**. The feed's own `kick_pts` total across
+ * the same rows is 14,810, which is scored under nothing at all.
+ *
+ * ⚠ THE SHORT BUCKET IS DERIVED BY SUBTRACTION AND CLAMPED AT ZERO. `fgm` is the total, so
+ * `fgm - fg_40_49 - fg_50_plus` is what remains under forty. One row in 3,098 makes that negative
+ * — a feed line whose parts exceed its own total — and a negative field-goal count would hand the
+ * kicker a penalty he did not earn.
+ *
+ * ⚠ AND IT MUST STAY IDEMPOTENT, for the same reason the thrown-pick copy above must:
+ * `projectionAccuracy` feeds STORED normalized maps back through this function. A stored map
+ * already states `fg_0_39`, so the derivation is skipped rather than applied to its own output.
+ * A stored map also states `fg_40_49` rather than `fgm_40_49`, which is why this reads the
+ * CANONICAL keys — after the alias pass — and not the feed's spellings.
+ */
+function deriveKickingBuckets(out: Record<string, number>): void {
+  /*
+   * The 50+ fallback. `fgm_50p` is aliased straight to `fg_50_plus` above; `fgm_50_59` is its
+   * subset and is used only when the wider bucket is absent, so nothing is ever counted twice.
+   */
+  if (out.fg_50_plus == null && typeof out.fgm_50_59 === 'number') {
+    out.fg_50_plus = out.fgm_50_59
+  }
+
+  if ('fg_0_39' in out) return
+  if (typeof out.fgm !== 'number') return
+
+  const long = typeof out.fg_50_plus === 'number' ? out.fg_50_plus : 0
+  const mid = typeof out.fg_40_49 === 'number' ? out.fg_40_49 : 0
+  out.fg_0_39 = Math.max(0, out.fgm - mid - long)
+}
+
 /**
  * Normalize a raw stat payload to canonical stat keys for a sport.
  * Unknown keys are passed through as-is so canonical keys need no mapping.
@@ -198,5 +258,6 @@ export function normalizeStatPayload(
   if (THROWN_PICK_SPORTS.has(sport) && out.pass_int != null && !('interception' in rawPayload)) {
     out.interception = out.pass_int
   }
+  if (KICKING_BUCKET_SPORTS.has(sport)) deriveKickingBuckets(out)
   return out
 }
