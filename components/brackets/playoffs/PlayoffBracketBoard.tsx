@@ -35,6 +35,27 @@ const ROUND_LABELS: Record<PlayoffRoundKey, string> = {
   conference_semifinals: "Conference Semis",
   conference_finals: "Conference Finals",
   finals: "Finals",
+  wild_card: "Wild Card",
+  division_series: "Division Series",
+  league_championship: "Championship Series",
+  world_series: "World Series",
+}
+
+/**
+ * ⚠ RESOLVED FROM THE ROUND, NOT FROM A `sport` PROP. A series only knows which
+ * half of the draw it sits in; `finals` is the half both halves feed, and what
+ * that final is CALLED differs by sport. Reading it off the round keeps this a
+ * pure function of the row and means no caller has to remember to thread a
+ * sport down — the case that would otherwise silently render "Cup Finals" over
+ * a World Series.
+ */
+function conferenceLabel(series: PlayoffSeriesView): string {
+  if (series.conference === "al") return "American League"
+  if (series.conference === "nl") return "National League"
+  if (series.conference === "finals") {
+    return series.round === "world_series" ? "World Series" : "Cup Finals"
+  }
+  return `${series.conference.toUpperCase()} Conference`
 }
 
 function getPickForSeries(picks: PlayoffPickView[], seriesId: string): PlayoffPickView | null {
@@ -317,7 +338,7 @@ export default function PlayoffBracketBoard({
                         </div>
                       ) : null}
                       <div className="mt-2 text-xs text-slate-500">
-                        {item.conference === "finals" ? "Cup Finals" : `${item.conference.toUpperCase()} Conference`}
+                        {conferenceLabel(item)}
                       </div>
                     </article>
                   )

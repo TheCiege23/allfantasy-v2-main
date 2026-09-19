@@ -405,7 +405,10 @@ export async function getPlayoffBracketView(input: {
       createdAt: toIso(pick.createdAt) ?? new Date().toISOString(),
       updatedAt: toIso(pick.updatedAt) ?? new Date().toISOString(),
     })),
-    rounds: getPlayoffRoundOrder(),
+    // Sport-scoped: the board renders one column per round key, so a baseball
+    // pool handed the conference order would render four empty columns and
+    // hide every series it holds.
+    rounds: getPlayoffRoundOrder(challenge.sport as PlayoffSport),
     lockDiagnostics: {
       lockRule,
       allowTestLatePicks: allowsPlayoffLatePicks(lockRule),

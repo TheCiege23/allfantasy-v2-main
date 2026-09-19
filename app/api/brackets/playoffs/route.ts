@@ -6,6 +6,23 @@ import { requireWorldCupApiUser } from "./_utils"
 
 export const runtime = "nodejs"
 
+/**
+ * 🛑 THE SPORT ENUM IS NARROWER THAN `PlayoffSport`, AND THAT IS DELIBERATE.
+ *
+ * The engine below this route understands baseball in full — template, round
+ * keys, series lengths, byes, labels — but two things an MLB pool needs to be
+ * TRUE rather than decorative do not exist yet:
+ *
+ *   1. a seeding source (nothing ingests MLB standings; `/api/cron/import-standings`
+ *      is NFL/NCAAF only), so `AL1`…`NL6` can never be filled with real clubs; and
+ *   2. a scheduled writer — `syncPlayoffChallengeSeries` has no cron caller for
+ *      ANY sport, so no bracket advances on its own today.
+ *
+ * Accepting "mlb" here before those land would let someone enter a pool that can
+ * never resolve: it would look correct and fail silently, which is worse than
+ * the "coming soon" it replaces. Add "mlb" in the SAME change that lands both,
+ * and update `SYNCABLE_PLAYOFF_SPORTS` in playoffSeriesSyncService.ts with it.
+ */
 const createPlayoffChallengeSchema = z.object({
   name: z.string().trim().min(2).max(80).optional(),
   sport: z.enum(["nba", "nhl"]),
