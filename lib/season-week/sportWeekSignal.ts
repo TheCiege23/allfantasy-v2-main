@@ -177,6 +177,47 @@ function stateFor(slate: SportWeekSlate, now: Date): SportWeekState {
  *     week as `upcoming` rather than declining, because "not started" is a real
  *     answer and a roller needs to distinguish it from "cannot tell".
  */
+/**
+ * Re-label a daily sport's schedule rows with a week DERIVED FROM THE CALENDAR,
+ * so they can go through `resolveSportWeekFromSchedule` unchanged.
+ *
+ * 🛑 THIS IS THE "OPEN HALF OF THE WORK" THE HEADER ABOVE DESCRIBES, NOW
+ * CLOSEABLE. That header rejects NBA/NHL because their feed's `week` is not a
+ * week (NBA writes 0, NHL writes 500) and says answering them "needs a
+ * season-start anchor", which did not exist — `season_calendars` is empty and
+ * models months, not days. `lib/season-week/dailySportSeasonStarts.ts` now
+ * holds a real day-level anchor per sport and season.
+ *
+ * Deliberately a RE-LABEL rather than a second resolver: every slate, state and
+ * plausibility rule below is reused exactly as the week-signal sports get it.
+ * Two implementations of one rule is the bug this repo keeps paying for.
+ *
+ * Two properties fall out of anchoring on the REGULAR-SEASON opener:
+ *   - preseason disappears, because a kickoff before the anchor belongs to no
+ *     week. That matters because `SportsGame.seasonType` is NULL on every
+ *     NBA/NHL row, so nothing else can separate them.
+ *   - `seasonType` is asserted as `regular` for what survives, which is more
+ *     truthful than the feed's null.
+ */
+export function relabelDailySportWeeks(
+  rows: readonly ScheduleRow[],
+  seasonStartUtc: Date,
+): ScheduleRow[] {
+  const DAY_MS = 86_400_000
+  const anchor = seasonStartUtc.getTime()
+
+  const out: ScheduleRow[] = []
+  for (const row of rows) {
+    const kickoff = row.startTime instanceof Date ? row.startTime : new Date(row.startTime as unknown as string)
+    if (Number.isNaN(kickoff.getTime())) continue
+    // Before the opener == preseason. Dropped, never scored.
+    if (kickoff.getTime() < anchor) continue
+    const week = Math.floor((kickoff.getTime() - anchor) / (7 * DAY_MS)) + 1
+    out.push({ ...row, week, seasonType: 'regular' })
+  }
+  return out
+}
+
 export function resolveSportWeekFromSchedule(
   rows: readonly ScheduleRow[],
   now: Date,
