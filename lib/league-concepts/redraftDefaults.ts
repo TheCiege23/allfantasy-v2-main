@@ -650,12 +650,26 @@ function buildTradeSettings(sport: FootballRedraftSport): Record<string, unknown
   }
 }
 
+/**
+ * A bracket can never seat more teams than the league has. The persisted
+ * `League.playoffTeams` column is clamped in
+ * `createCanonicalLeagueInTransaction`; this keeps the advertised settings JSON
+ * agreeing with it, so the two records cannot tell a commissioner different
+ * things about the same league.
+ */
+function derivePlayoffTeams(teamCount: number): number {
+  const seats = Math.max(2, Math.floor(teamCount) || 2)
+  const target = seats >= 10 ? 6 : 4
+  const fitted = Math.min(target, seats)
+  return fitted % 2 === 0 ? fitted : fitted - 1
+}
+
 function buildPlayoffSettings(sport: FootballRedraftSport, teamCount: number): Record<string, unknown> {
   return {
     enabled: true,
     regularSeasonStartWeek: 1,
     regularSeasonEndWeek: sport === 'NCAAF' ? 12 : 14,
-    playoffTeams: teamCount >= 10 ? 6 : 4,
+    playoffTeams: derivePlayoffTeams(teamCount),
     playoffStartWeek: sport === 'NCAAF' ? 13 : 15,
     championshipWeek: sport === 'NCAAF' ? 14 : 17,
     playoffWeeksPerRound: 1,

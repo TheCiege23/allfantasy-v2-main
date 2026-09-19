@@ -18,6 +18,7 @@ import type { ValidatedCreateLeagueBody } from '@/lib/league-creation/canonical/
 import { mapCanonicalDraftTypeToEngineCore } from '@/lib/draft-types/draftTypeRegistry'
 import { mapKeeperCreationFromWizard } from '@/lib/keeper/mapKeeperCreationFromWizard'
 import { supportsIdpLeagueSport } from '@/lib/sport-scope'
+import { isValidIanaTimeZone, toUtc } from '@/lib/timezone'
 import { normalizeBestBallSettings } from '@/lib/bestball/rules'
 import { getLeagueDefaults as getFoundationLeagueDefaults } from '@/lib/league-defaults/getLeagueDefaults'
 
@@ -285,6 +286,32 @@ export async function createCanonicalLeagueInTransaction(
   )
   const scoringMode = String(scoringSettings.scoringMode ?? 'points')
   const playoffTeamsDefault = readNumber(playoffSettings, 'playoffTeams', isGuillotine ? 1 : 6)
+
+  /**
+   * 🛑 A bracket cannot seat more teams than the league has managers.
+   *
+   * `validateCreateLeague` already states this rule in words ("Playoff teams
+   * cannot exceed the number of teams in the league") but enforces it ONLY on
+   * the best-ball path, so every other concept could commit an impossible
+   * bracket — a two-manager redraft was persisted with four playoff places.
+   *
+   * Clamped HERE, at the one point the value is actually persisted, rather than
+   * in each `*Defaults` module: those are five separate derivations and fixing
+   * them one at a time is how this rule ended up with two implementations in
+   * the first place.
+   */
+  const clampPlayoffTeams = (value: number | null | undefined): number | null => {
+    if (value == null) return null
+    const requested = Number(value)
+    if (!Number.isFinite(requested)) return null
+    // Concepts that deliberately opt out of a bracket (guillotine 1, survivor 0)
+    // are not bracket sizes — leave them exactly as the concept set them.
+    if (requested < 2) return Math.floor(requested)
+    const seats = Math.max(2, Math.floor(managerCount) || 2)
+    const fitted = Math.min(Math.floor(requested), seats)
+    // An odd bracket leaves a seed with no opponent the generator can pair.
+    return fitted % 2 === 0 ? fitted : fitted - 1
+  }
   const playoffStartWeekRaw = playoffSettings.playoffStartWeek
   const playoffStartWeekDefault =
     playoffStartWeekRaw == null ? null : Number.isFinite(Number(playoffStartWeekRaw)) ? Number(playoffStartWeekRaw) : null
@@ -343,7 +370,7 @@ export async function createCanonicalLeagueInTransaction(
       bbMatchupFormat: bestBallSettings?.matchupFormat,
       bbTiebreaker: bestBallSettings?.tieRule,
       bbOptimizerTiming: 'period_end',
-      playoffTeams: bestBallSettings?.playoffTeams ?? playoffTeamsDefault,
+      playoffTeams: clampPlayoffTeams(bestBallSettings?.playoffTeams ?? playoffTeamsDefault),
       playoffSeedingRule:
         bestBallSettings?.matchupFormat === 'cumulative'
           ? 'points_only'
@@ -596,6 +623,30 @@ export async function createCanonicalLeagueInTransaction(
     })
   }
 
+  /**
+   * The wizard collects the draft slot as a LOCAL date, a local time and an
+   * IANA zone, and stashes all three in `conceptSetup`. Nothing downstream
+   * converted them, so `LeagueSettings.draftDateUtc` stayed null and the league
+   * had no scheduled draft — the review screen showed a time that existed only
+   * on that screen. `draftDateUtc` is the column the draft surfaces and the
+   * Decision-OS "drafts approaching" counters actually read.
+   *
+   * Converted with the shared `toUtc` (date-fns `fromZonedTime`), NOT by hand:
+   * a hand-rolled offset is wrong across a DST boundary, and both NHL and NBA
+   * drafts sit near the November transition.
+   */
+  const draftScheduleSetup = (body.conceptSetup ?? {}) as Record<string, unknown>
+  const draftLocalDate = readString(draftScheduleSetup, 'draftDate', '').trim()
+  const draftLocalTime = readString(draftScheduleSetup, 'draftTime', '').trim()
+  const draftZone = readString(draftScheduleSetup, 'draftTimezone', '').trim() || (body.timezone ?? 'America/New_York')
+  let draftDateUtc: Date | null = null
+  if (draftLocalDate && draftLocalTime && isValidIanaTimeZone(draftZone)) {
+    const converted = toUtc(draftLocalDate, draftLocalTime, draftZone)
+    // An unparseable date yields Invalid Date; persist null rather than a
+    // column that throws on read.
+    if (!Number.isNaN(converted.getTime())) draftDateUtc = converted
+  }
+
   await tx.leagueSettings.create({
     data: {
       leagueId: league.id,
@@ -607,6 +658,7 @@ export async function createCanonicalLeagueInTransaction(
       cpuAutoPick: true,
       aiAutoPick: isAuto,
       draftOrderMethod: bestBallSettings?.orderMethod === 'randomize' ? 'random' : 'manual',
+      draftDateUtc,
     },
   })
 
