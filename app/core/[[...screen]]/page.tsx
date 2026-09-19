@@ -17,6 +17,8 @@ import { buildHomeSignals, serializeHomeSignals } from '@/lib/core-app/homeSigna
 import { describeAge } from '@/lib/sports-data/freshnessPolicy'
 import { resolveDashboardAvatarUrl } from '@/lib/dashboard/resolve-dashboard-avatar'
 import { aiAccessResolver } from '@/lib/ai-access/AIAccessResolver'
+import { attachLeagueHubs } from '@/lib/core-app/attachLeagueHubs'
+import { ConnectedLeagueContext } from '@/components/core-app/ConnectedLeagueNavigation'
 import AfCoreShell, { type CoreNavKey, type RailLeague } from '@/components/core-app/AfCoreShell'
 import type { UserLeague } from '@/app/dashboard/types'
 import { DefenseHubClient } from '@/app/idp/defense-hub/[leagueId]/DefenseHubClient'
@@ -741,6 +743,8 @@ export default async function AfCorePage({
    * for the cross-league offers strip. Resolved through the same
    * resolveLeagueCardTypeKey the rail uses, so the two never disagree.
    */
+  await attachLeagueHubs(userId, rail)
+
   const tradeLeagueRow = selectedLeagueRow
   const tradeLeagueTypeKey = tradeLeagueRow
     ? resolveLeagueCardTypeKey({
@@ -1405,6 +1409,7 @@ export default async function AfCorePage({
        * one, which is exactly the kind of confident-but-empty chrome the rest of
        * this suite refuses to draw.
        */}
+      {selectedRailLeague?.hub && selectedLeagueId ? <ConnectedLeagueContext hub={selectedRailLeague.hub} selectedLeagueId={selectedLeagueId} /> : null}
       {selectedLeagueId && selectedLeagueName ? (
         <LeagueTabs
           leagueId={selectedLeagueId}

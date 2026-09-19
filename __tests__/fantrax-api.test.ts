@@ -717,3 +717,8 @@ describe('fetching fixtures and results together', () => {
     expect(out.rows.every((r) => r.awayScore === null && r.played === false)).toBe(true)
   })
 })
+
+it('keeps athlete position separate from a flex lineup slot', () => {
+  const [roster] = resolveRosters({ team: { teamName: 'Mine', rosterItems: [{ id: 'one', position: 'RWT', status: 'ACTIVE' }] } }, { one: { fantraxId: 'one', name: 'Player', team: 'TxSt', position: 'WR' } })
+  expect(roster.players[0]).toMatchObject({ position: 'RWT', primaryPosition: 'WR' })
+})

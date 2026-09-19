@@ -1,6 +1,8 @@
 'use client'
 
 import Link from 'next/link'
+import { groupLeagueHubs, type LeagueHub } from '@/lib/core-app/leagueHubGroups'
+import { ConnectedLeagueRailGroup } from './ConnectedLeagueNavigation'
 import { useRouter } from 'next/navigation'
 import { GeoRestrictionNotice } from '@/components/core-app/GeoRestrictionNotice'
 import { GameDayAlertsBanner } from '@/components/notifications/GameDayAlertsBanner'
@@ -44,6 +46,7 @@ import '@/components/core-app/af-core-shell.css'
 export type PlatformId = 'sleeper' | 'espn' | 'yahoo'
 
 export type RailLeague = {
+  hub?: LeagueHub
   id: string
   name: string
   platform: PlatformId | string
@@ -1492,7 +1495,8 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
           second screen.
         */}
         <div className="af-rail-scroll" id="af-rail-scroll" ref={railScrollRef}>
-          {leagues.map((l) => {
+          {groupLeagueHubs(leagues).map((l) => {
+            if (l.hub) return <ConnectedLeagueRailGroup key={l.hub.id} hub={l.hub} selectedLeagueId={props.selectedLeagueId} expanded={railOpen} onNavigate={(href, event) => { saveRailScroll(railScrollRef.current, railLayout); if (railOpen && typeof window !== 'undefined' && window.innerWidth <= 720 && !event.metaKey && !event.ctrlKey) { event.preventDefault(); setRailChoice('closed'); router.push(href) } }} />
             const saved = props.railMatchups?.[l.id]
             const live = liveRail.scores[l.id]
             const sameWeek = live && saved?.season === live.season && saved?.week === live.week

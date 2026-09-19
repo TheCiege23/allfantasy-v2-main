@@ -4,7 +4,7 @@ import { resolveSleeperRosterPlayers } from '@/lib/player-identity/resolveSleepe
 import { asHeadshotUrl } from './playerIdentityCompose'
 import { teamLogoUrl } from './teamLogo'
 import { loadCollegeTeamIndex } from '@/lib/sport-teams/collegeTeamIndexStore'
-import { resolveCollegeTeamLogo } from '@/lib/sport-teams/collegeTeamIdentity'
+import { resolveFantraxCollegeTeam } from '@/lib/sport-teams/fantraxCollegeTeam'
 import { crosswalkToSleeperIds } from './rosterIdCrosswalk'
 import { lookupProviderIdentityNames } from './providerIdentityNames'
 
@@ -49,11 +49,14 @@ export async function connectedRosterPlayers(platform: string, sport: string, ra
     const matches = identities.filter((p) => p.fantraxId === ids[i])
     const p = matches.length === 1 ? matches[0] : null
     const team = field(r.school) ?? field(r.nflTeam) ?? field(r.team) ?? p?.currentTeam ?? null
+    const school = college && directory ? resolveFantraxCollegeTeam(team ?? '', directory) : null
+    const rosterPosition = field(r.position)
+    const position = field(r.primaryPosition) ?? p?.position ?? (rosterPosition && !['RWT', 'SFX', 'FLEX', 'SUPER_FLEX', 'BN', 'IR'].includes(rosterPosition.toUpperCase()) ? rosterPosition : null)
     return { id: ids[i], name: field(r.name) ?? p?.canonicalName ?? `Player ${ids[i]}`,
-      position: field(r.position) ?? field(r.primaryPosition) ?? p?.position ?? null, team,
+      position, team: school?.school ?? team,
       imageUrl: asHeadshotUrl(field(r.imageUrl))
         ?? asHeadshotUrl(images.find((img) => img.source === 'cfbd' && img.externalId === p?.cfbdId)?.imageUrl)
         ?? asHeadshotUrl(images.find((img) => img.source === 'rolling_insights' && img.externalId === p?.rollingInsightsId)?.imageUrl),
-      logoUrl: college && directory ? resolveCollegeTeamLogo(team ?? '', directory) : teamLogoUrl(normalizedSport, team) }
+      logoUrl: college ? school?.logo ?? null : teamLogoUrl(normalizedSport, team) }
   })
 }

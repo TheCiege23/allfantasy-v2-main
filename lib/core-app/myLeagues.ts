@@ -1,5 +1,5 @@
 import 'server-only'
-import { prisma } from '@/lib/prisma'
+import { attachLeagueHubs } from './attachLeagueHubs'
 import type { LeagueHub } from './leagueHubGroups'
 
 import { getDashboardLeagueListForUser } from '@/lib/dashboard/get-dashboard-league-list'
@@ -205,23 +205,7 @@ export async function getMyLeaguesData(userId: string, now: Date = new Date()): 
     season: seasonOf(r),
   }))
 
-  // One relationship supplies both league entries, without changing either league.
-  const links = await prisma.franchiseLink.findMany({
-    where: { ownerUserId: userId }, include: { members: true },
-  }).catch(() => [])
-  if (links.length) {
-    const mirrors = await prisma.league.findMany({
-      where: { userId }, select: { id: true, platformLeagueId: true },
-    })
-    for (const link of links) {
-      const ids = new Set(link.members.map((m) => m.leagueId))
-      for (const mirror of mirrors) if (mirror.platformLeagueId && ids.has(mirror.platformLeagueId)) ids.add(mirror.id)
-      const members = leagues.filter((l) => ids.has(l.id) || ids.has(new URL(l.href, 'https://allfantasy.ai').searchParams.get('league') ?? ''))
-      if (members.length < 2) continue
-      const hub: LeagueHub = { id: link.id, name: link.name, members: members.map((l) => ({ id: l.id, name: l.name, href: l.href, platform: String(l.platform) })) }
-      for (const member of members) member.hub = hub
-    }
-  }
+  await attachLeagueHubs(userId, leagues)
 
   const platforms = Array.from(new Set(leagues.map((l) => String(l.platform).toLowerCase()))).sort()
 

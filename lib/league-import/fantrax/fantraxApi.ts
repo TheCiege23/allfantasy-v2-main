@@ -527,6 +527,8 @@ export type ResolvedRoster = {
     /** Null when the id is absent from the sport's player map. */
     name: string | null
     team: string | null
+    /** The athlete position from the provider directory, distinct from the occupied slot. */
+    primaryPosition?: string | null
     /** The slot Fantrax reports, e.g. 'RWT', 'SFX', 'QB'. */
     position: string
     status: string
@@ -556,6 +558,7 @@ export function resolveRosters(
         name: hit?.name ?? null,
         team: hit?.team ?? null,
         position: item.position,
+        primaryPosition: hit?.position ?? null,
         status: item.status,
       }
     })

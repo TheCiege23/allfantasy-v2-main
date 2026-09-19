@@ -75,7 +75,7 @@ describe('buildSeasonTimeline', () => {
      * A guillotine league eliminates a team a week and ends with one survivor.
      * "Playoffs" and "Championship" describe rounds that will never be played.
      */
-    const t = buildSeasonTimeline({ settings: { trade_deadline_week: 0 }, currentWeek: 3 })
+    const t = buildSeasonTimeline({ settings: { trade_deadline_week: 0 }, currentWeek: 3, variant: 'guillotine' })
     expect(t.eliminationFormat).toBe(true)
     expect(keys(t)).not.toContain('playoffs')
     expect(keys(t)).not.toContain('championship')
@@ -93,12 +93,21 @@ describe('buildSeasonTimeline', () => {
     expect(t.notes.join(' ')).not.toContain('If that is wrong')
   })
 
-  it('hedges when it INFERS elimination rather than being told', () => {
-    // Absence of a playoff week is strong evidence, not proof. The note gives
-    // a commissioner the way to correct it.
-    const t = buildSeasonTimeline({ settings: {}, currentWeek: 3 })
+  it('does not turn missing playoff data into elimination rules', () => {
+    for (const variant of [undefined, 'dynasty', 'c2c', 'devy']) {
+      const t = buildSeasonTimeline({ settings: {}, currentWeek: 3, variant })
+      expect(t.eliminationFormat).toBe(false)
+      expect(find(t, 'regular')!.label).toBe('Regular season')
+      expect(keys(t)).not.toContain('last-standing')
+      expect(keys(t)).not.toContain('playoffs')
+      expect(t.notes.join(' ')).toContain('Playoff dates are not on file')
+    }
+  })
+
+  it('uses survivor language without calling it guillotine', () => {
+    const t = buildSeasonTimeline({ settings: {}, currentWeek: 3, variant: 'survivor' })
+    expect(t.eliminationFormat).toBe(true)
     expect(find(t, 'last-standing')!.label).toBe('Last team standing')
-    expect(t.notes.join(' ')).toContain('If that is wrong')
   })
 
   it('relabels the regular season for an elimination league', () => {

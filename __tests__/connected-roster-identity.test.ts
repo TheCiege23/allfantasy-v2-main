@@ -40,3 +40,18 @@ describe('Fantrax roster imagery', () => {
     expect(player.imageUrl).toBeNull()
   })
 })
+
+describe('Fantrax school and position identity', () => {
+  it('resolves provider school abbreviations and retains the current school after a transfer', async () => {
+    mocks.directory.mockResolvedValue(buildCollegeTeamIndex([{ id: 201, school: 'Oklahoma', logo: 'https://example.com/oklahoma.png' }]))
+    const [player] = await connectedRosterPlayers('fantrax', 'NCAAF', [{ fantraxId: 'fx1', name: 'Player', team: 'Okla', position: 'RWT', primaryPosition: 'TE' }])
+    expect(player).toMatchObject({ team: 'Oklahoma', logoUrl: 'https://example.com/oklahoma.png', position: 'TE' })
+  })
+  it('does not label an unresolved athlete with a flex slot or invent a school logo', async () => {
+    mocks.identities.mockResolvedValue([])
+    const [player] = await connectedRosterPlayers('fantrax', 'NCAAF', [{ fantraxId: 'missing', team: 'Unknown', position: 'SFX' }])
+    expect(player.position).toBeNull()
+    expect(player.logoUrl).toBeNull()
+    expect(player.name).toBe('Player missing')
+  })
+})
