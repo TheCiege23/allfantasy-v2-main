@@ -30,6 +30,7 @@ function TradeCenterCard({ trade, active, onAsk }: { trade: LeagueTradeHistoryIt
 export function ChimmyTrades({ leagueId, onAsk }: { leagueId: string; onAsk: (question: string) => void }) {
   const [expanded, setExpanded] = useState(false)
   const [proposals, setProposals] = useState<Proposal[]>([])
+  const [draftProposals, setDraftProposals] = useState<Proposal[]>([])
   const [history, setHistory] = useState<History | null>(null)
   const [tradeCenter, setTradeCenter] = useState<TradeCenter | null>(null)
   const [error, setError] = useState('')
@@ -58,12 +59,23 @@ export function ChimmyTrades({ leagueId, onAsk }: { leagueId: string; onAsk: (qu
       } while (cursor)
       return rows
     }
-    Promise.allSettled([readProposals(), read(base), read(`/api/league/trades-panel?leagueId=${encodeURIComponent(leagueId)}`)]).then(([offers, completed, center]) => {
+    const readDraftProposals = async () => {
+      const rows: Proposal[] = []
+      let cursor: string | null = null
+      do {
+        const page = await read(`${base}&view=draft-proposals${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`)
+        rows.push(...page.proposals)
+        cursor = page.nextCursor
+      } while (cursor)
+      return rows
+    }
+    Promise.allSettled([readProposals(), readDraftProposals(), read(base), read(`/api/league/trades-panel?leagueId=${encodeURIComponent(leagueId)}`)]).then(([offers, draftOffers, completed, center]) => {
       if (controller.signal.aborted) return
       setProposals(offers.status === 'fulfilled' ? offers.value : [])
+      setDraftProposals(draftOffers.status === 'fulfilled' ? draftOffers.value : [])
       setHistory(completed.status === 'fulfilled' ? completed.value : null)
       setTradeCenter(center.status === 'fulfilled' ? center.value : null)
-      if (offers.status === 'rejected' || completed.status === 'rejected' || center.status === 'rejected') setError('Some trade activity could not be loaded. Retry to refresh it.')
+      if (offers.status === 'rejected' || draftOffers.status === 'rejected' || completed.status === 'rejected' || center.status === 'rejected') setError('Some trade activity could not be loaded. Retry to refresh it.')
       setBusy(false)
     })
     return () => controller.abort()
@@ -91,6 +103,14 @@ export function ChimmyTrades({ leagueId, onAsk }: { leagueId: string; onAsk: (qu
           <p>{p.assets.join(' · ')}</p><p>{p.explanation}</p>
           <button type="button" className="af-cm-quickbtn" onClick={() => onAsk(`Explain proposal ${p.id}: ${p.title}, involving ${p.assets.join(', ')}. Does it fit my roster and this league's rules? Distinguish the historical fairness snapshot from a current recommendation.`)}>Ask Chimmy</button>
         </article>)}
+        <h3>Draft-pick proposals</h3>
+        {draftProposals.length === 0 && <p>No accessible draft-pick proposals loaded.</p>}
+        {draftProposals.slice(0, visible).map(p => <article key={p.id}>
+          <strong>{p.title}</strong>
+          <p>{p.status}{p.involvesYou ? ' · Your trade' : ''} · Draft-capital verdict {p.grade}</p>
+          <p>{p.assets.join(' · ')}</p><p>{p.explanation}</p>
+          <button type="button" className="af-cm-quickbtn" onClick={() => onAsk(`Explain draft-pick proposal ${p.id}: ${p.title}, involving ${p.assets.join(', ')}. The stored deterministic receiver-side verdict is ${p.grade}. Does it fit my draft board, roster and this league's exact draft rules?`)}>Ask Chimmy</button>
+        </article>)}
         {!!tradeCenter?.historyTrades?.length && <>
           <h3>Recent league trade decisions</h3>
           <p>Includes approved, processed and other recorded decisions available from the Trade Center. Current market grades differ from the realized results below.</p>
@@ -117,7 +137,7 @@ export function ChimmyTrades({ leagueId, onAsk }: { leagueId: string; onAsk: (qu
         {history?.ledger?.notes.map(note => <p key={note}>{note}</p>)}
         {history?.ledger?.trades.slice(0, visible).map(t => <article key={t.id}><strong>{t.season} · Grade unavailable</strong>{t.sides.map(s => <p key={s.teamId}>{s.managerName} received {s.received.map(p => p.name || p.playerId).join(', ')}</p>)}</article>)}
         {history && !trades.length && !history.ledger?.trades.length && <p>No completed trade history available for this league.</p>}
-        {Math.max(proposals.length, trades.length, history?.ledger?.trades.length ?? 0, tradeCenter?.activeTrades?.length ?? 0, tradeCenter?.historyTrades?.length ?? 0) > visible && <button type="button" className="af-cm-linkbtn" onClick={() => setVisible(v => v + 10)}>Show more trades</button>}
+        {Math.max(proposals.length, draftProposals.length, trades.length, history?.ledger?.trades.length ?? 0, tradeCenter?.activeTrades?.length ?? 0, tradeCenter?.historyTrades?.length ?? 0) > visible && <button type="button" className="af-cm-linkbtn" onClick={() => setVisible(v => v + 10)}>Show more trades</button>}
       </>}
     </div>}
   </section>
