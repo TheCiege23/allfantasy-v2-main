@@ -1213,6 +1213,9 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
    */
   const [railChoice, setRailChoice] = useState<'open' | 'closed' | null>(null)
   const [mobileMoreOpen, setMobileMoreOpen] = useState(false)
+  const mobileMoreRef = useRef<HTMLElement | null>(null)
+  const mobileMoreButtonRef = useRef<HTMLButtonElement | null>(null)
+  const mobileMoreScrimRef = useRef<HTMLButtonElement | null>(null)
   const [railClock, setRailClock] = useState<number | null>(null)
   const [railSwings, setRailSwings] = useState<Record<string, number>>({})
   const previousMargins = useRef<Record<string, number>>({})
@@ -1369,19 +1372,41 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
   const activeInBar = mobileItems.some((i) => i.key === active)
   const selectedLeagueName = leagues.find((league) => league.id === props.selectedLeagueId)?.name ?? null
 
-  useEffect(() => {
-    if (!mobileMoreOpen) return
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setMobileMoreOpen(false)
-    }
-    const previousOverflow = document.body.style.overflow
-    document.addEventListener('keydown', onKeyDown)
-    document.body.style.overflow = 'hidden'
-    return () => {
-      document.removeEventListener('keydown', onKeyDown)
-      document.body.style.overflow = previousOverflow
-    }
-  }, [mobileMoreOpen])
+  /*
+   * 🛑 "MORE" WAS THE ONE /core OVERLAY THAT NEVER ADOPTED THE SHARED HOOK, AND IT HAND-ROLLED
+   * EXACTLY THE TWO THINGS `useOverlayContainment`'s docblock SAYS NO OVERLAY MAY OWN ALONE —
+   * its own `document.body.style.overflow` value and its own `document` Escape listener. Both
+   * failures that docblock numbers are reachable here in ONE GESTURE, because the league tray is
+   * a tap away on the same bar:
+   *
+   *   1. THE SCROLL LOCK INVERTS. Open More (captures `''`, sets `hidden`), open the tray (the
+   *      shared reference-counted lock captures `hidden` as the "real" previous value), close
+   *      More first (its cleanup writes back `''`, unlocking the page while the tray is still
+   *      open and modal), then close the tray (the last release restores `hidden`). The page is
+   *      left LOCKED with no overlay on it at all, and nothing but a reload clears it.
+   *   2. ONE ESCAPE CLOSED BOTH, because two independent `document` listeners each fired. The
+   *      module-level stack makes only the topmost overlay answer, so Escape peels one layer at
+   *      a time, which is what a reader expects.
+   *
+   * And `role="dialog" aria-modal="true"` below was claiming a background inertness that nothing
+   * implemented — worse than not declaring it at all, because assistive tech is told the page
+   * behind is inert while a screen-reader user can still walk straight into it. There was no
+   * focus containment and no focus restoration either: Tab left the sheet, and closing dropped
+   * focus on `<body>`. This is the PRIMARY phone navigation surface — it is how every screen
+   * outside the five pinned ones is reached.
+   *
+   * ⚠ THE SCRIM IS `keepClickableRefs`, NOT `keepInteractiveRefs`, and the hook separates those
+   * two questions for exactly this shape. It is a sibling of the sheet, so the inert sweep would
+   * otherwise kill its click handler — but it is an invisible full-viewport button, and putting
+   * it in the Tab cycle lands focus on nothing a reader can see.
+   */
+  useOverlayContainment({
+    active: mobileMoreOpen,
+    containerRef: mobileMoreRef,
+    onClose: () => setMobileMoreOpen(false),
+    keepClickableRefs: [mobileMoreScrimRef],
+    restoreFallbackRef: mobileMoreButtonRef,
+  })
 
   return (
     <div
@@ -1907,6 +1932,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
         ))}
         <button
           type="button"
+          ref={mobileMoreButtonRef}
           className="af-tabbar-item"
           data-active={!activeInBar || mobileMoreOpen}
           aria-expanded={mobileMoreOpen}
@@ -1924,11 +1950,25 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
         <>
           <button
             type="button"
+            ref={mobileMoreScrimRef}
             className="af-mobile-more-scrim"
             aria-label="Close more menu"
             onClick={() => setMobileMoreOpen(false)}
           />
-          <section className="af-mobile-more" id="af-mobile-more" role="dialog" aria-modal="true" aria-label="More screens">
+          {/*
+            `tabIndex={-1}` so the hook's default initial focus — the container itself — lands
+            here and a screen reader announces the dialog's own label on open. Without it the
+            focus call is a no-op and focus stays wherever the tap left it, behind the sheet.
+          */}
+          <section
+            ref={mobileMoreRef}
+            tabIndex={-1}
+            className="af-mobile-more"
+            id="af-mobile-more"
+            role="dialog"
+            aria-modal="true"
+            aria-label="More screens"
+          >
             <header className="af-mobile-more-head">
               <span>
                 <span className="af-label">More</span>
