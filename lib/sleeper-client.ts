@@ -39,7 +39,10 @@ function sleeperFetch(url: string, timeoutMs: number = SLEEPER_FETCH_TIMEOUT_MS)
 export type SleeperReadOptions = { strict?: boolean };
 
 function readRetryAfterMs(response: Response): number | null {
-  const raw = response.headers.get('retry-after')?.trim();
+  // Retry metadata is optional. Some fetch-compatible runtimes and minimal
+  // response doubles omit the Headers container entirely, so do not let that
+  // mask the provider's actual HTTP status with a secondary TypeError.
+  const raw = response.headers?.get?.('retry-after')?.trim();
   if (!raw) return null;
   const seconds = Number(raw);
   if (Number.isFinite(seconds) && seconds >= 0) return seconds * 1000;
