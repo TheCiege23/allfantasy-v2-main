@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, fireEvent } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
@@ -112,4 +112,13 @@ describe('the rail marks the league you are in', () => {
     const active = railTiles(container).filter((t) => t.getAttribute('data-active') === 'true')
     expect(active).toHaveLength(0)
   })
+})
+
+it('groups connected leagues without losing either member route', () => {
+  const hub = { id: 'h', name: 'Shared Bowl', members: LEAGUES.slice(0,2).map(l => ({ ...l, href: '/core?league=' + l.id })) }
+  const { container } = render(shell({ leagues: LEAGUES.map((l,i) => i < 2 ? {...l, hub} : l), selectedLeagueId: 'l2' }))
+  if (!container.querySelector('.af-connected-rail-group')) fireEvent.click(container.querySelector('.af-rail-toggle')!)
+  expect(container.querySelectorAll('.af-connected-rail-group')).toHaveLength(1)
+  expect(container.querySelector('.af-connected-rail-group a[href="/core?league=l1"]')).toBeTruthy()
+  expect(container.querySelector('.af-connected-rail-group a[aria-current="true"]')?.getAttribute('href')).toBe('/core?league=l2')
 })

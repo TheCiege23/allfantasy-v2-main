@@ -439,3 +439,5 @@ describe('/core with an unknown segment', () => {
     expect(getServerSession).toHaveBeenCalled()
   })
 })
+
+vi.mock('@/lib/core-app/attachLeagueHubs', () => ({ attachLeagueHubs: vi.fn(async () => {}) }))

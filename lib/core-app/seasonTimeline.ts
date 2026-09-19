@@ -41,7 +41,7 @@ export type SeasonTimeline = {
    * assume the data is broken.
    */
   notes: string[]
-  /** True when the league has no playoff bracket configured. */
+  /** True only when the league is explicitly an elimination format. */
   eliminationFormat: boolean
   /** The week the timeline believes we are in, or null. */
   currentWeek: number | null
@@ -217,13 +217,11 @@ export function buildSeasonTimeline(args: {
 
   const variant = (args.variant ?? '').toLowerCase()
   const knownGuillotine =
-    args.guillotineMode === true || variant.includes('guillotine') || variant.includes('survivor')
+    args.guillotineMode === true || variant.includes('guillotine')
+  const knownSurvivor = variant.includes('survivor')
 
-  /*
-   * No playoff week configured means no bracket. That is the real signal —
-   * stronger than a league's name, which is not evidence of anything.
-   */
-  const eliminationFormat = knownGuillotine || playoffStart == null || playoffStart <= 0
+  // Missing imported settings do not establish elimination rules.
+  const eliminationFormat = knownGuillotine || knownSurvivor
 
   const phases: TimelinePhase[] = []
   const cw = args.currentWeek
@@ -327,11 +325,6 @@ export function buildSeasonTimeline(args: {
       state: cw != null && regularEnd != null && cw > regularEnd ? 'now' : 'future',
       detail: 'No bracket — the league runs until one team is left',
     })
-    if (!knownGuillotine) {
-      notes.push(
-        'No playoff bracket is configured, so this reads as an elimination league. If that is wrong, the league needs a playoff start week.',
-      )
-    }
   } else if (playoffStart != null && playoffStart > 0) {
     const rounds = playoffTeams != null && playoffTeams > 0 ? Math.ceil(Math.log2(playoffTeams)) : null
     const playoffEnd = rounds != null ? playoffStart + rounds - 1 : playoffStart
@@ -355,6 +348,10 @@ export function buildSeasonTimeline(args: {
         'The number of playoff teams is not on file, so the playoff length is the start week only.',
       )
     }
+  }
+
+  if (!eliminationFormat && (playoffStart == null || playoffStart <= 0)) {
+    notes.push('Playoff dates are not on file. This does not imply elimination rules.')
   }
 
   // ── After it all ───────────────────────────────────────────────────────
