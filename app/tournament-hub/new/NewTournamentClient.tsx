@@ -39,6 +39,7 @@ export function NewTournamentClient({ leagues }: { leagues: PickableLeague[] }) 
   const [conferences, setConferences] = useState<ConferenceDraft[]>([
     { name: 'Conference 1', leagueIds: [] },
   ])
+  const [reviewing, setReviewing] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -69,6 +70,7 @@ export function NewTournamentClient({ leagues }: { leagues: PickableLeague[] }) 
     !saving
 
   async function submit() {
+    if (!ready || !reviewing) return
     setSaving(true)
     setError(null)
     try {
@@ -136,6 +138,7 @@ export function NewTournamentClient({ leagues }: { leagues: PickableLeague[] }) 
         </p>
       ) : null}
 
+      {!reviewing && <>
       <section className="af-th-league">
         <h2 className="af-th-league-name">The basics</h2>
         <div className="af-th-fields">
@@ -290,8 +293,8 @@ export function NewTournamentClient({ leagues }: { leagues: PickableLeague[] }) 
         >
           + Add a conference
         </button>
-        <button type="button" className="af-th-copy" disabled={!ready} onClick={submit}>
-          {saving ? 'Connecting…' : `Connect ${assigned.size} leagues`}
+        <button type="button" className="af-th-copy" disabled={!ready} onClick={() => { setError(null); setReviewing(true) }}>
+          {`Review ${assigned.size} ${assigned.size === 1 ? 'league' : 'leagues'}`}
         </button>
       </div>
 
@@ -305,6 +308,26 @@ export function NewTournamentClient({ leagues }: { leagues: PickableLeague[] }) 
         If the same league name appears in two conferences, the second is prefixed with its
         conference so both can exist. You will be told which were changed.
       </p>
+      </>}
+      {reviewing && <section className="af-th-league" aria-label="Review tournament connection">
+        <h2 className="af-th-league-name">Review and connect · {name.trim()}</h2>
+        <p className="af-th-note">{assigned.size} leagues across {conferences.filter((c) => c.leagueIds.length > 0).length} conferences. This groups your imported leagues in AllFantasy; it does not change their settings on Sleeper or another host.</p>
+        {conferences.filter((c) => c.leagueIds.length > 0).map((conf, i) => {
+          const selected = leagues.filter((l) => conf.leagueIds.includes(l.id))
+          const teams = selected.reduce((sum, l) => sum + l.teamCount, 0)
+          return <section key={i} aria-label={conf.name.trim()}>
+            <h3>{conf.name.trim()} · {selected.length} leagues · {teams} teams</h3>
+            <ul>{selected.map((l) => <li key={l.id}>{l.name} · {l.platform}{l.season ? ` · ${l.season}` : ''} · {l.teamCount} teams</li>)}</ul>
+            {Number(advancePerConference) >= teams && teams > 0 && <p className="af-th-warn">The advance count ({advancePerConference}) is at least this conference’s team count ({teams}). Review it if you intend to eliminate teams.</p>}
+          </section>
+        })}
+        <p>Regular season: weeks {weekStart}–{weekEnd}. Advance {advancePerConference} per conference; {bubbleSize} bubble spots.</p>
+        <p>Redraft: {redraftWeek || 'not scheduled'} · Elite redraft: {eliteWeek || 'not scheduled'} · Championship: {championshipWeek || 'not scheduled'}.</p>
+        <div className="af-th-actions">
+          <button type="button" className="af-th-linkbtn" disabled={saving} onClick={() => setReviewing(false)}>Edit selections and schedule</button>
+          <button type="button" className="af-th-copy" disabled={!ready} onClick={submit}>{saving ? 'Connecting…' : `Connect ${assigned.size} ${assigned.size === 1 ? 'league' : 'leagues'}`}</button>
+        </div>
+      </section>}
     </main>
   )
 }
