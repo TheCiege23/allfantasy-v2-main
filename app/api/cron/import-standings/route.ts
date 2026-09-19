@@ -40,14 +40,39 @@ export const maxDuration = 120
  */
 const JOB = "cron-import-standings"
 
-function resolveSport(param: string | null): "NFL" | "NCAAF" {
-  if (param?.toUpperCase() === "NCAAF") return "NCAAF"
-  return "NFL"
+type StandingsSport = "NFL" | "NCAAF" | "MLB"
+
+/**
+ * Which sports one fire covers.
+ *
+ * 🛑 THE DEFAULT SWEEPS TWO SPORTS BECAUSE IT CANNOT HAVE A SECOND CRON SLOT.
+ * MLB standings are the seeding source for the MLB postseason bracket — without
+ * them a bracket's seed slots can never be filled with real clubs. The obvious
+ * wiring would be a second registry entry with `?sport=MLB`, and that is not
+ * available: `cron-budget-check` caps the registry at 60 and `origin/main`
+ * declares exactly 60. So the scheduled entry — which carries no `sport`
+ * parameter and therefore lands here on the default — has to cover both.
+ *
+ * ⚠ AN EXPLICIT `?sport=` STILL PINS TO ONE, so the NCAAF and backfill paths
+ * behave exactly as they did.
+ */
+function resolveSports(param: string | null): StandingsSport[] {
+  const raw = param?.toUpperCase()
+  if (raw === "NCAAF") return ["NCAAF"]
+  if (raw === "MLB") return ["MLB"]
+  if (raw === "NFL") return ["NFL"]
+  return ["NFL", "MLB"]
 }
 
 async function handle(req: NextRequest) {
   const url = new URL(req.url)
-  const sport = resolveSport(url.searchParams.get("sport"))
+  const sports = resolveSports(url.searchParams.get("sport"))
+  /*
+   * The first sport keeps the top-level response fields it has always had, so
+   * anything reading `sport` / `synced` / `espn` keeps working. Per-sport detail
+   * is additive, in `bySport`.
+   */
+  const sport = sports[0]
   const season = url.searchParams.get("season") ?? undefined
 
   const startedAt = Date.now()
@@ -71,19 +96,51 @@ async function handle(req: NextRequest) {
      * it is the only source here for a historical `?season=` backfill, which is the one request
      * the Free plan can still serve.
      */
-    const espn = await syncEspnStandingsToDb({ sport, season })
+    const perSport: Array<{
+      sport: StandingsSport
+      espn: Awaited<ReturnType<typeof syncEspnStandingsToDb>>
+      count: number
+      provider: string | null
+    }> = []
 
-    let count = espn.written
-    let provider = "espn"
-    if (count === 0) {
-      const apiSports = await syncAPISportsStandingsToDb({ season, sport })
-      if (apiSports > 0) {
-        count = apiSports
-        provider = "api_sports"
+    for (const current of sports) {
+      const espn = await syncEspnStandingsToDb({ sport: current, season })
+
+      let count = espn.written
+      let provider: string | null = "espn"
+      if (count === 0) {
+        /*
+         * ⚠ API-SPORTS IS THE FOOTBALL-ONLY FALLBACK. `syncAPISportsStandingsToDb`
+         * takes the same sport string, but the account's Free plan cannot answer
+         * for a current season at all (see the note above), and baseball was never
+         * wired into it. Attempting it for MLB would spend a request to learn
+         * nothing, so the fallback stays where it already works.
+         */
+        const canFallBack = current === "NFL" || current === "NCAAF"
+        const apiSports = canFallBack ? await syncAPISportsStandingsToDb({ season, sport: current }) : 0
+        if (apiSports > 0) {
+          count = apiSports
+          provider = "api_sports"
+        } else {
+          provider = null
+        }
       }
+
+      perSport.push({ sport: current, espn, count, provider })
     }
 
-    return { espn, count, provider, diagnostics: getAPISportsDiagnostics() }
+    const primary = perSport[0]
+    return {
+      perSport,
+      espn: primary.espn,
+      count: primary.count,
+      provider: primary.provider ?? "espn",
+      // Zero for ANY requested sport is a failure — see the rule below. Reported
+      // as a list so the response names which one, not just that one failed.
+      emptySports: perSport.filter((entry) => entry.count === 0).map((entry) => entry.sport),
+      totalWritten: perSport.reduce((sum, entry) => sum + entry.count, 0),
+      diagnostics: getAPISportsDiagnostics(),
+    }
   }
 
   try {
@@ -99,15 +156,23 @@ async function handle(req: NextRequest) {
      * of them and report this one healthy while it wrote nothing. That is the same shared-probe
      * false green recorded against ?rosters=1 and the sync-player-images variants.
      */
-    const { espn, count, provider, diagnostics } = await withSyncJobRun(
-      { jobName: JOB, jobScope: sport, sport, trigger: "cron" },
+    const { espn, count, provider, diagnostics, perSport, emptySports, totalWritten } = await withSyncJobRun(
+      /*
+       * jobScope carries every sport in the fire; `jobName` is untouched because
+       * scripts/cron-freshness-check.mjs matches this probe on the job name alone
+       * and renaming it would orphan the alarm.
+       */
+      { jobName: JOB, jobScope: sports.join("+"), sport, trigger: "cron" },
       runSync,
       (r) => ({
-        rowsRead: r.espn.fetched,
-        rowsWritten: r.count,
-        rowsSkipped: r.espn.skipped,
+        rowsRead: r.perSport.reduce((sum, entry) => sum + entry.espn.fetched, 0),
+        rowsWritten: r.totalWritten,
+        rowsSkipped: r.perSport.reduce((sum, entry) => sum + entry.espn.skipped, 0),
         // Zero rows is the documented failure below; the telemetry must agree with the response.
-        status: r.count === 0 ? ("failed" as const) : ("success" as const),
+        status: r.emptySports.length > 0 ? ("failed" as const) : ("success" as const),
+        metadata: {
+          sports: r.perSport.map((entry) => ({ sport: entry.sport, written: entry.count, provider: entry.provider })),
+        },
       }),
     )
 
@@ -117,7 +182,7 @@ async function handle(req: NextRequest) {
      * Non-2xx too: the cron dashboard keys off HTTP status, so a 200 carrying `ok:false` still
      * reads as healthy.
      */
-    const failed = count === 0
+    const failed = emptySports.length > 0
 
     return NextResponse.json(
       {
@@ -127,6 +192,18 @@ async function handle(req: NextRequest) {
         synced: count,
         provider: failed ? null : provider,
         espn: { fetched: espn.fetched, written: espn.written, skipped: espn.skipped, errors: espn.errors.slice(0, 3) },
+        // Additive: which sports this fire covered, and which (if any) wrote nothing.
+        sports,
+        totalWritten,
+        emptySports,
+        bySport: perSport.map((entry) => ({
+          sport: entry.sport,
+          written: entry.count,
+          fetched: entry.espn.fetched,
+          skipped: entry.espn.skipped,
+          provider: entry.provider,
+          errors: entry.espn.errors.slice(0, 3),
+        })),
         diagnostics,
         durationMs: Date.now() - startedAt,
         timestamp: new Date().toISOString(),

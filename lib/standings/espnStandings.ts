@@ -54,6 +54,38 @@ const ESPN_V2_API_BASE = 'https://site.web.api.espn.com/apis/v2/sports'
 const ESPN_STANDINGS_PATH: Record<string, string> = {
   NFL: 'football/nfl',
   NCAAF: 'football/college-football',
+  MLB: 'baseball/mlb',
+}
+
+/**
+ * How to decide which season a payload belongs to. This is NOT cosmetic — it is
+ * the cache key, so getting it wrong files this season's standings where
+ * nothing will look for them.
+ *
+ * `payload` — trust `payload.season.year`. Correct for the football codes,
+ * whose season is named for the year it kicks off in and spans into the next
+ * calendar year; deriving it locally in January would write next season's key
+ * over this season's data.
+ *
+ * 🛑 `current-with-fallback` — DO NOT trust the payload. Measured 2026-09-19:
+ * the un-parameterised MLB endpoint returns `season.year = 2027` while serving
+ * the **2026** standings that are still being played (Tampa Bay 93-60, 2,310
+ * wins across 30 clubs — a 162-game season in its final week). Trusting it
+ * would have filed live 2026 standings under `MLB:standings:2027:*`.
+ *
+ * The fallback half exists because the obvious repair — "baseball seasons sit
+ * inside one calendar year, so use the clock" — is also wrong, just later in
+ * the year. `?season=2027` returns **zero rows**, so from November to February
+ * a clock-derived season would write nothing and trip this job's
+ * zero-rows-is-a-failure rule on every fire. An alarm that is red for a third
+ * of the year is one nobody reads. So: ask for this calendar year, and if it
+ * is empty fall back to the previous one, which is the most recent real
+ * standings and exactly what a postseason seeding source wants anyway.
+ */
+const SEASON_SOURCE: Record<string, 'payload' | 'current-with-fallback'> = {
+  NFL: 'payload',
+  NCAAF: 'payload',
+  MLB: 'current-with-fallback',
 }
 
 export function espnHasStandings(sport: string): boolean {
@@ -132,34 +164,75 @@ export async function syncEspnStandingsToDb(opts: {
   const now = opts.now ?? new Date()
   const expiresAt = new Date(now.getTime() + STANDINGS_TTL_MS)
 
-  let payload: Record<string, any> | null = null
-  try {
-    /* This module IS the ingestion boundary: provider fetch -> SportsDataCache upsert. */
-    const url = `${ESPN_V2_API_BASE}/${path}/standings` // db-first-exception: standings ingestion writer, not a read path
-    const res = await fetch(url, {
-      headers: { accept: 'application/json' },
-      cache: 'no-store',
-      signal: AbortSignal.timeout(20_000),
-    })
-    if (!res.ok) {
-      result.errors.push(`espn responded ${res.status}`)
-      return result
+  /* This module IS the ingestion boundary: provider fetch -> SportsDataCache upsert. */
+  async function fetchStandings(season?: string | number): Promise<Record<string, any> | null> {
+    // db-first-exception: standings ingestion writer, not a read path
+    const url = new URL(`${ESPN_V2_API_BASE}/${path}/standings`)
+    /*
+     * ⚠ THE PARAMETER IS ONLY EVER ADDED WHEN A SEASON IS ASKED FOR, so the
+     * football request stays byte-identical to the one verified live.
+     */
+    if (season != null) url.searchParams.set('season', String(season))
+    try {
+      const res = await fetch(url.toString(), {
+        headers: { accept: 'application/json' },
+        cache: 'no-store',
+        signal: AbortSignal.timeout(20_000),
+      })
+      if (!res.ok) {
+        result.errors.push(`espn responded ${res.status}${season != null ? ` for season ${season}` : ''}`)
+        return null
+      }
+      return (await res.json()) as Record<string, any>
+    } catch (e) {
+      result.errors.push(`fetch failed: ${e instanceof Error ? e.message : String(e)}`)
+      return null
     }
-    payload = (await res.json()) as Record<string, any>
-  } catch (e) {
-    result.errors.push(`fetch failed: ${e instanceof Error ? e.message : String(e)}`)
-    return result
   }
 
-  /*
-   * Season comes from the PAYLOAD, not from a clock. ESPN's football season is named for the year
-   * it kicks off in and spans into the next calendar year, so deriving it locally in January
-   * would write next season's key over this season's data.
-   */
-  const season = String(opts.season ?? payload?.season?.year ?? new Date(now).getUTCFullYear())
+  function entriesOf(payload: Record<string, any> | null) {
+    const out: Array<{ team: any; stats: EspnStatEntry[]; group: string | null }> = []
+    if (payload) collectEntries(payload, out, null)
+    return out
+  }
 
-  const rows: Array<{ team: any; stats: EspnStatEntry[]; group: string | null }> = []
-  collectEntries(payload, rows, null)
+  const seasonSource = SEASON_SOURCE[sport] ?? 'payload'
+  let payload: Record<string, any> | null
+  let rows: Array<{ team: any; stats: EspnStatEntry[]; group: string | null }>
+  let season: string
+
+  if (opts.season != null) {
+    // An explicit season always wins, for every sport — this is the backfill path.
+    payload = await fetchStandings(opts.season)
+    rows = entriesOf(payload)
+    season = String(opts.season)
+  } else if (seasonSource === 'current-with-fallback') {
+    const currentYear = now.getUTCFullYear()
+    payload = await fetchStandings(currentYear)
+    rows = entriesOf(payload)
+    season = String(currentYear)
+    if (rows.length === 0) {
+      /*
+       * Empty is the OFFSEASON signal, not an error — see SEASON_SOURCE. The
+       * previous season is the most recent real standings, and the one a
+       * postseason seeding source wants.
+       */
+      const previousYear = currentYear - 1
+      const fallback = await fetchStandings(previousYear)
+      const fallbackRows = entriesOf(fallback)
+      if (fallbackRows.length > 0) {
+        payload = fallback
+        rows = fallbackRows
+        season = String(previousYear)
+      }
+    }
+  } else {
+    payload = await fetchStandings()
+    rows = entriesOf(payload)
+    season = String(payload?.season?.year ?? now.getUTCFullYear())
+  }
+
+  if (!payload) return result
   result.fetched = rows.length
 
   for (const row of rows) {
