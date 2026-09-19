@@ -72,6 +72,8 @@ export type UnclaimedTeam = {
 
 export type BoardLeague = {
   tournamentLeagueId: string
+  /** Commissioner-controlled display order inside the conference. */
+  leagueNumber: number
   /** The underlying `League.id`, null while a round's leagues are still forming. */
   leagueId: string | null
   name: string
@@ -105,6 +107,10 @@ export type StandingsBoard = {
   name: string
   roundNumber: number
   conferences: BoardConference[]
+  /** Empty inactive conferences remain available to restore without polluting standings. */
+  archivedConferences: Array<{ id: string; name: string; colorHex: string | null }>
+  /** Membership freezes once this round has recorded advancement results. */
+  conferenceMembershipLocked: boolean
   advancersPerLeague: number
   wildcardCount: number
   bubbleEnabled: boolean
@@ -152,8 +158,18 @@ export async function getTournamentStandingsBoard(
   const conferences = await prisma.tournamentConference.findMany({
     where: { tournamentId },
     orderBy: { conferenceNumber: 'asc' },
-    select: { id: true, name: true, colorHex: true },
+    select: { id: true, name: true, colorHex: true, isActive: true },
   })
+
+  const currentRound = await prisma.tournamentRound.findFirst({
+    where: { tournamentId, roundNumber: shell.currentRoundNumber || 1 },
+    select: { id: true },
+  })
+  const conferenceMembershipLocked = currentRound
+    ? (await prisma.tournamentAdvancementGroup.count({
+        where: { tournamentId, fromRoundId: currentRound.id },
+      })) > 0
+    : false
 
   /*
    * 🛑 SCOPED TO THE CURRENT ROUND, AND IT WAS NOT UNTIL THE REDRAFT EXISTED.
@@ -164,7 +180,8 @@ export async function getTournamentStandingsBoard(
    */
   const tournamentLeagues = await prisma.tournamentLeague.findMany({
     where: { tournamentId, round: { roundNumber: shell.currentRoundNumber || 1 } },
-    select: { id: true, leagueId: true, name: true, conferenceId: true },
+    orderBy: { leagueNumber: 'asc' },
+    select: { id: true, leagueId: true, name: true, conferenceId: true, leagueNumber: true },
   })
 
   const participants = await prisma.tournamentLeagueParticipant.findMany({
@@ -189,7 +206,7 @@ export async function getTournamentStandingsBoard(
   let unmatchedTotal = 0
   let oldestUpdatedAt: Date | null = null
 
-  for (const conf of conferences) {
+  for (const conf of conferences.filter((conference) => conference.isActive)) {
     const confLeagues = tournamentLeagues.filter((t) => t.conferenceId === conf.id)
     const leagues: BoardLeague[] = []
     /* Collected across the whole conference, because the cut is conference-wide
@@ -271,6 +288,7 @@ export async function getTournamentStandingsBoard(
 
       leagues.push({
         tournamentLeagueId: tl.id,
+        leagueNumber: tl.leagueNumber,
         leagueId: tl.leagueId ?? null,
         name: tl.name?.trim() || 'League',
         rows,
@@ -339,6 +357,14 @@ export async function getTournamentStandingsBoard(
     name: shell.name,
     roundNumber: shell.currentRoundNumber,
     conferences: outConferences,
+    archivedConferences: conferences
+      .filter((conference) => !conference.isActive)
+      .map((conference) => ({
+        id: conference.id,
+        name: conference.name,
+        colorHex: conference.colorHex ?? null,
+      })),
+    conferenceMembershipLocked,
     advancersPerLeague: shell.advancersPerLeague,
     wildcardCount: shell.wildcardCount,
     bubbleEnabled: shell.bubbleEnabled,

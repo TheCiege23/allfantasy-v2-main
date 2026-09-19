@@ -102,6 +102,8 @@ function buildBoard(): StandingsBoard {
     tiebreakerMode: 'points_for',
     unmatchedTotal: 1,
     oldestUpdatedAt: new Date(Date.now() - 1000 * 60 * 60 * 30),
+    archivedConferences: [],
+    conferenceMembershipLocked: false,
     conferences: [
       {
         id: 'c-black',
@@ -112,6 +114,7 @@ function buildBoard(): StandingsBoard {
         leagues: [
           {
             tournamentLeagueId: 'tl-beast',
+            leagueNumber: 1,
             leagueId: 'lg-beast',
             name: 'BEAST',
             unmatchedCount: 0,
@@ -121,6 +124,7 @@ function buildBoard(): StandingsBoard {
           },
           {
             tournamentLeagueId: 'tl-goat',
+            leagueNumber: 2,
             leagueId: 'lg-goat',
             name: 'GOAT',
             unmatchedCount: 1,

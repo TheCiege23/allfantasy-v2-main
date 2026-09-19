@@ -15,6 +15,8 @@ const conferenceFindMany = vi.fn()
 const tournamentLeagueFindMany = vi.fn()
 const participantFindMany = vi.fn()
 const leagueTeamFindMany = vi.fn()
+const roundFindFirst = vi.fn()
+const advancementCount = vi.fn()
 
 vi.mock('@/lib/prisma', () => ({
   prisma: {
@@ -22,6 +24,8 @@ vi.mock('@/lib/prisma', () => ({
     tournamentConference: { findMany: (...a: unknown[]) => conferenceFindMany(...a) },
     tournamentLeague: { findMany: (...a: unknown[]) => tournamentLeagueFindMany(...a) },
     tournamentLeagueParticipant: { findMany: (...a: unknown[]) => participantFindMany(...a) },
+    tournamentRound: { findFirst: (...a: unknown[]) => roundFindFirst(...a) },
+    tournamentAdvancementGroup: { count: (...a: unknown[]) => advancementCount(...a) },
     leagueTeam: { findMany: (...a: unknown[]) => leagueTeamFindMany(...a) },
   },
 }))
@@ -58,9 +62,11 @@ function leagueTeam(over: Record<string, unknown>) {
 beforeEach(() => {
   vi.clearAllMocks()
   shellFindFirst.mockResolvedValue(SHELL)
-  conferenceFindMany.mockResolvedValue([{ id: 'c1', name: 'BLACK', colorHex: null }])
+  conferenceFindMany.mockResolvedValue([{ id: 'c1', name: 'BLACK', colorHex: null, isActive: true }])
+  roundFindFirst.mockResolvedValue({ id: 'r1' })
+  advancementCount.mockResolvedValue(0)
   tournamentLeagueFindMany.mockResolvedValue([
-    { id: 'tl1', leagueId: 'lg1', name: 'BEAST', conferenceId: 'c1' },
+    { id: 'tl1', leagueId: 'lg1', name: 'BEAST', conferenceId: 'c1', leagueNumber: 1 },
   ])
   participantFindMany.mockResolvedValue([])
   leagueTeamFindMany.mockResolvedValue([])
@@ -191,8 +197,8 @@ describe('a manager whose team row could not be matched', () => {
  */
 it('reports the OLDEST team row as the board’s freshness', async () => {
   tournamentLeagueFindMany.mockResolvedValue([
-    { id: 'tl1', leagueId: 'lg1', name: 'BEAST', conferenceId: 'c1' },
-    { id: 'tl2', leagueId: 'lg2', name: 'GOAT', conferenceId: 'c1' },
+    { id: 'tl1', leagueId: 'lg1', name: 'BEAST', conferenceId: 'c1', leagueNumber: 1 },
+    { id: 'tl2', leagueId: 'lg2', name: 'GOAT', conferenceId: 'c1', leagueNumber: 2 },
   ])
   participantFindMany.mockResolvedValue([
     { id: 'p1', tournamentLeagueId: 'tl1', participantId: 'P1', userId: 's-1', participant: { displayName: 'a' } },
