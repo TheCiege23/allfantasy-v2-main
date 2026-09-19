@@ -266,6 +266,33 @@ reconcile `NBA_STAT_ALIASES` / `NHL_STAT_ALIASES` against it and widen the gate.
 early October and NBA late October, so both become probeable shortly — the "out of session" reason
 that blocked the 2026-08-26 attempt expires then.
 
+#### 📏 MEASURED 2026-09-19 on prod (`icy-field-51189449`) — three more blockers, none about field names
+
+The alias question above is NOT the only thing between these sports and a scored week. Measured
+directly, because the first version of the consumer above assumed otherwise and was wrong:
+
+- 🛑 **`weekOrRound` IS 0 ON EVERY DAILY-SPORT ROW.** All 66,525 MLB rows (April–September) and all
+  3,322 SOCCER rows. NFL by contrast has a clean 1–18. The ingest says so itself: *"Football carries
+  a real week; the daily sports do not, and 0 is this column's documented 'no week' value."*
+  `lib/season-week/sportWeekSignal.ts` measured the same on the schedule feed — NBA writes 0, NHL
+  writes 500 — and excludes both from `WEEK_SIGNAL_SPORTS` for it.
+  **Selecting a daily sport by `weekOrRound` matches nothing, forever, and reports no error.**
+  The consumer now selects on `gameDate` instead.
+- 🛑 **`season` IS NOT DEPENDABLE EITHER.** One real NBA/NHL season is split across two values:
+  `SportsGame` has NHL season 2026 holding 1,415 games spanning 2026-04-24 → 2027-04-11, while
+  season 2027 holds the 7 games of 2026-09-19. Dropped from the filter for the same reason.
+- 🛑 **`seasonType` IS NULL FOR EVERY NBA AND NHL GAME, SO PRESEASON CANNOT BE EXCLUDED BY IT.**
+  The multi-sport ingest never reads `season_type` at all. Preseason exclusion therefore has to come
+  from the date window: a window anchored on the regular-season opener cannot contain a September
+  preseason game. That is a property, not a filter, and it is covered by a test.
+
+⚠ **And the anchor that window needs does not exist yet.** `season_calendars` holds **0 rows** in
+production (still true on 2026-09-19), and the `SeasonCalendar` model stores only MONTH granularity
+(`{ monthStart, monthEnd }`) — it cannot express "the season opens on 7 October". So
+`syncPlayerWeeklyScoresForRedraftSeason` takes `seasonStartUtc` from its caller and **declines with a
+named warning when it is absent**, rather than inventing a start date and silently mis-assigning
+every game to the wrong week. Giving these sports a real day-level season anchor is the open work.
+
 ---
 
 ## 📏 MEASURED 2026-08-28 — `/live/{date}` is keyed on the **US EASTERN** date

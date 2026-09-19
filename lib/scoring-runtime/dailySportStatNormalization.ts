@@ -246,6 +246,43 @@ export function isDailyStatSport(sport: string | null | undefined): boolean {
   return Object.hasOwn(DAILY_SPORT_NORMALIZERS, String(sport ?? '').trim().toUpperCase())
 }
 
+export interface WeekWindow {
+  start: Date
+  end: Date
+}
+
+/**
+ * 🛑 A DAILY SPORT'S WEEK IS A DATE RANGE. IT IS NOT `weekOrRound`.
+ *
+ * Measured on production 2026-09-19: every MLB row (all 66,525, April through
+ * September) and every SOCCER row carries `weekOrRound = 0`. The ingest says so
+ * itself — "Football carries a real week; the daily sports do not, and 0 is this
+ * column's documented 'no week' value". `lib/season-week/sportWeekSignal.ts`
+ * measured the same thing on the schedule feed: NBA writes 0, NHL writes 500.
+ *
+ * So selecting these sports by `weekOrRound` matches NOTHING, forever, in the
+ * quietest possible way — which is exactly what an earlier version of this
+ * pipeline did. `gameDate` IS populated correctly, so the window is the selector.
+ *
+ * The anchor must be a real day. `SeasonCalendar` holds only MONTH granularity
+ * (`{ monthStart, monthEnd }`) and is empty in production anyway, so there is no
+ * anchor to read yet — callers that cannot supply one must decline rather than
+ * invent a start date.
+ */
+export function weekWindowFromSeasonStart(
+  seasonStartUtc: Date | string | null | undefined,
+  week: number,
+): WeekWindow | null {
+  if (seasonStartUtc == null) return null
+  const start = seasonStartUtc instanceof Date ? new Date(seasonStartUtc.getTime()) : new Date(seasonStartUtc)
+  if (Number.isNaN(start.getTime())) return null
+  if (!Number.isFinite(week) || week < 1) return null
+
+  const DAY_MS = 86_400_000
+  const windowStart = new Date(start.getTime() + (week - 1) * 7 * DAY_MS)
+  return { start: windowStart, end: new Date(windowStart.getTime() + 7 * DAY_MS) }
+}
+
 /**
  * The per-game normalizer for a sport, for callers that already hold the week's
  * rows and do not need them found in a payload — notably the `playerGameStat`

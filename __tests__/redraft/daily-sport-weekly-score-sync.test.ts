@@ -1,14 +1,16 @@
 /**
  * NBA/NHL weekly score sync, end to end through the service.
  *
- * Guards the two things that were actually broken, both of which fail silently:
+ * Guards the three things that were actually broken, all of which fail silently:
  *
  *  1. The daily sports must read `playerGameStat` — the table the SCHEDULED
  *     multi-sport ingest writes — and not `playerGameLogCache`, which has no
- *     scheduled writer. Sourcing them from the cache produces a league that
- *     never scores and never says why.
- *  2. A week is several games and must be summed. Taking one row scores a
- *     fraction of the week and looks entirely correct.
+ *     scheduled writer and holds 15 NFL-only rows in production.
+ *  2. They must be selected by DATE WINDOW. `weekOrRound` is 0 on every
+ *     daily-sport row in production, so filtering on it matches nothing at all.
+ *     An earlier version of this test asserted that broken filter as correct,
+ *     because the mock returns rows regardless of the `where` clause.
+ *  3. A week is several games and must be summed, not sampled.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -28,13 +30,25 @@ const prismaMock = vi.hoisted(() => ({
 
 vi.mock('@/lib/prisma', () => ({ prisma: prismaMock }))
 
+/** A plausible NHL 2026-27 opener. Week 3 is therefore 21 Oct – 28 Oct. */
+const SEASON_START = '2026-10-07T00:00:00.000Z'
+
 function seasonFor(sport: string) {
   return { id: 'season-1', leagueId: 'league-1', sport, season: 2026, currentWeek: 3 }
 }
 
-async function runSync() {
+async function runSync(opts: { seasonStartUtc?: string | null } = {}) {
   const { syncPlayerWeeklyScoresForRedraftSeason } = await import('@/lib/redraft/playerWeeklyScoreService')
-  return syncPlayerWeeklyScoresForRedraftSeason({ seasonId: 'season-1', week: 3, actorId: 'admin-1' })
+  return syncPlayerWeeklyScoresForRedraftSeason({
+    seasonId: 'season-1',
+    week: 3,
+    actorId: 'admin-1',
+    ...opts,
+  })
+}
+
+function rosterOf(sport: string) {
+  return [{ playerId: 'p1', sport, position: sport === 'NBA' ? 'PG' : 'C', team: 'BOS' }]
 }
 
 describe('daily-sport weekly score sync', () => {
@@ -47,55 +61,72 @@ describe('daily-sport weekly score sync', () => {
     prismaMock.sportsGame.findMany.mockResolvedValue([])
     prismaMock.playerGameLogCache.findMany.mockResolvedValue([])
     prismaMock.redraftRoster.findMany.mockResolvedValue([{ id: 'roster-1' }])
+    prismaMock.playerGameStat.findMany.mockResolvedValue([])
   })
 
   it('no longer refuses NBA outright', async () => {
     prismaMock.league.findFirst.mockResolvedValue({ sport: 'NBA', settings: {} })
     prismaMock.redraftSeason.findFirst.mockResolvedValue(seasonFor('NBA'))
     prismaMock.redraftRosterPlayer.findMany.mockResolvedValue([])
-    prismaMock.playerGameStat.findMany.mockResolvedValue([])
 
     // Previously: threw "Weekly stat sync is currently wired for NFL only".
-    await expect(runSync()).resolves.toBeTruthy()
+    await expect(runSync({ seasonStartUtc: SEASON_START })).resolves.toBeTruthy()
   })
 
   it('still refuses a sport with no normalizer', async () => {
     prismaMock.league.findFirst.mockResolvedValue({ sport: 'SOCCER', settings: {} })
     prismaMock.redraftSeason.findFirst.mockResolvedValue(seasonFor('SOCCER'))
-    await expect(runSync()).rejects.toThrow(/NFL, NBA and NHL/)
+    await expect(runSync({ seasonStartUtc: SEASON_START })).rejects.toThrow(/NFL, NBA and NHL/)
   })
 
-  it('reads the scheduled game-stat table, not the unscheduled cache', async () => {
-    prismaMock.league.findFirst.mockResolvedValue({ sport: 'NBA', settings: {} })
-    prismaMock.redraftSeason.findFirst.mockResolvedValue(seasonFor('NBA'))
-    prismaMock.redraftRosterPlayer.findMany.mockResolvedValue([
-      { playerId: 'p1', sport: 'NBA', position: 'PG', team: 'BOS' },
-    ])
-    prismaMock.playerGameStat.findMany.mockResolvedValue([])
+  describe('week selection', () => {
+    beforeEach(() => {
+      prismaMock.league.findFirst.mockResolvedValue({ sport: 'NBA', settings: {} })
+      prismaMock.redraftSeason.findFirst.mockResolvedValue(seasonFor('NBA'))
+      prismaMock.redraftRosterPlayer.findMany.mockResolvedValue(rosterOf('NBA'))
+    })
 
-    await runSync()
+    it('reads the scheduled game-stat table, not the unscheduled cache', async () => {
+      await runSync({ seasonStartUtc: SEASON_START })
 
-    expect(prismaMock.playerGameStat.findMany).toHaveBeenCalledTimes(1)
-    expect(prismaMock.playerGameLogCache.findMany).not.toHaveBeenCalled()
-    // The query must narrow to the week being scored, or it would sum a season.
-    expect(prismaMock.playerGameStat.findMany).toHaveBeenCalledWith(
-      expect.objectContaining({ where: expect.objectContaining({ season: 2026, weekOrRound: 3 }) }),
-    )
+      expect(prismaMock.playerGameStat.findMany).toHaveBeenCalledTimes(1)
+      expect(prismaMock.playerGameLogCache.findMany).not.toHaveBeenCalled()
+    })
+
+    // The regression this whole file exists for: `weekOrRound` is 0 on every
+    // daily-sport row in production, so selecting by it returns nothing.
+    it('selects by date window and never by weekOrRound', async () => {
+      await runSync({ seasonStartUtc: SEASON_START })
+
+      const where = prismaMock.playerGameStat.findMany.mock.calls[0][0].where
+      expect(where).not.toHaveProperty('weekOrRound')
+      expect(where).not.toHaveProperty('season')
+      expect(where.gameDate).toEqual({
+        gte: new Date('2026-10-21T00:00:00.000Z'), // week 3 = start + 14d
+        lt: new Date('2026-10-28T00:00:00.000Z'),
+      })
+    })
+
+    it('declines loudly when there is no season-start anchor', async () => {
+      const summary = await runSync({ seasonStartUtc: null })
+
+      expect(prismaMock.playerGameStat.findMany).not.toHaveBeenCalled()
+      expect(prismaMock.playerWeeklyScore.upsert).not.toHaveBeenCalled()
+      expect(summary.warnings.join(' ')).toMatch(/season-start date/i)
+    })
   })
 
   it('sums every game in the week into one score', async () => {
     prismaMock.league.findFirst.mockResolvedValue({ sport: 'NBA', settings: {} })
     prismaMock.redraftSeason.findFirst.mockResolvedValue(seasonFor('NBA'))
-    prismaMock.redraftRosterPlayer.findMany.mockResolvedValue([
-      { playerId: 'p1', sport: 'NBA', position: 'PG', team: 'BOS' },
-    ])
+    prismaMock.redraftRosterPlayer.findMany.mockResolvedValue(rosterOf('NBA'))
     prismaMock.playerGameStat.findMany.mockResolvedValue([
       { playerId: 'p1', normalizedStatMap: { stats: { points: 20, rebounds: 5, assists: 4 } } },
       { playerId: 'p1', normalizedStatMap: { stats: { points: 18, rebounds: 7, assists: 6 } } },
       { playerId: 'p1', normalizedStatMap: { stats: { points: 25, rebounds: 4, assists: 9 } } },
     ])
 
-    const summary = await runSync()
+    const summary = await runSync({ seasonStartUtc: SEASON_START })
 
     expect(summary.scoresUpserted).toBe(1)
     const written = prismaMock.playerWeeklyScore.upsert.mock.calls[0][0]
@@ -108,14 +139,12 @@ describe('daily-sport weekly score sync', () => {
   it('reports unrecognized provider keys instead of scoring a silent zero', async () => {
     prismaMock.league.findFirst.mockResolvedValue({ sport: 'NHL', settings: {} })
     prismaMock.redraftSeason.findFirst.mockResolvedValue(seasonFor('NHL'))
-    prismaMock.redraftRosterPlayer.findMany.mockResolvedValue([
-      { playerId: 'p1', sport: 'NHL', position: 'C', team: 'BOS' },
-    ])
+    prismaMock.redraftRosterPlayer.findMany.mockResolvedValue(rosterOf('NHL'))
     prismaMock.playerGameStat.findMany.mockResolvedValue([
       { playerId: 'p1', normalizedStatMap: { stats: { vendor_specific_tally: 4 } } },
     ])
 
-    const summary = await runSync()
+    const summary = await runSync({ seasonStartUtc: SEASON_START })
 
     // Nothing mapped, so nothing is written — a wrong alias table cannot
     // persist a zero that looks like a real bad week.
@@ -127,12 +156,9 @@ describe('daily-sport weekly score sync', () => {
   it('records a player with no games this week as missing, not as zero', async () => {
     prismaMock.league.findFirst.mockResolvedValue({ sport: 'NHL', settings: {} })
     prismaMock.redraftSeason.findFirst.mockResolvedValue(seasonFor('NHL'))
-    prismaMock.redraftRosterPlayer.findMany.mockResolvedValue([
-      { playerId: 'p1', sport: 'NHL', position: 'C', team: 'BOS' },
-    ])
-    prismaMock.playerGameStat.findMany.mockResolvedValue([])
+    prismaMock.redraftRosterPlayer.findMany.mockResolvedValue(rosterOf('NHL'))
 
-    const summary = await runSync()
+    const summary = await runSync({ seasonStartUtc: SEASON_START })
 
     expect(summary.scoresUpserted).toBe(0)
     expect(summary.missingCachePlayerIds).toContain('p1')
