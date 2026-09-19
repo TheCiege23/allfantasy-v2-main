@@ -1,4 +1,5 @@
-import type { Prisma } from '@prisma/client'
+import { randomUUID } from 'crypto'
+import { Prisma } from '@prisma/client'
 import { waitUntil } from '@vercel/functions'
 import { prisma } from '@/lib/prisma'
 import { calculateAndSaveRank } from '@/lib/rank/calculateRank'
@@ -166,11 +167,10 @@ export function buildTier0LeagueColumnPatch(
 /**
  * Block F — persist normalized future traded draft picks into `future_draft_picks`.
  *
- * Uses Prisma `upsert` keyed on the composite unique
- * `(leagueId, pickSeason, round, originalRosterId)` — that unique already exists
- * in `prisma/schema.prisma`, so a re-import updates `currentOwnerId` for an
- * existing pick instead of creating a duplicate row (satisfies Block F scope
- * requirement #5: "Ensure re-import/update does not duplicate picks").
+ * Uses a parameterized bulk INSERT keyed on the composite unique
+ * `(leagueId, pickSeason, round, originalRosterId)`. The conflict update keeps
+ * re-imports idempotent while reducing a full league's pick inventory to one
+ * database round trip per bounded batch.
  *
  * Schema limitation acknowledged: Sleeper's `previous_owner_id` has no dedicated
  * column on `future_draft_picks`. It's dropped here with an inline comment; a
@@ -186,8 +186,8 @@ export async function persistTradedPicks(
   if (!Array.isArray(picks) || picks.length === 0) {
     return { written: 0, skipped: 0 }
   }
-  let written = 0
   let skipped = 0
+  const deduplicated = new Map<string, { pick: NormalizedTradedPick; inputCount: number }>()
   for (const pick of picks) {
     // Defensive: mapper already filters these, but guard the persistence layer
     // too so a malformed row can never crash the whole loop.
@@ -201,43 +201,62 @@ export async function persistTradedPicks(
       skipped++
       continue
     }
+    const key = `${pick.season}\u0000${pick.round}\u0000${pick.original_roster_id}`
+    const previous = deduplicated.get(key)
+    // Last ownership wins, matching the old sequential upsert behavior. Keep the
+    // input count so the public result remains compatible when a provider repeats a row.
+    deduplicated.set(key, { pick, inputCount: (previous?.inputCount ?? 0) + 1 })
+  }
+
+  const rows = [...deduplicated.values()]
+  const writeBatch = async (
+    batch: typeof rows,
+  ): Promise<{ written: number; skipped: number }> => {
+    if (batch.length === 0) return { written: 0, skipped: 0 }
     try {
-      await (prisma as any).futureDraftPick.upsert({
-        where: {
-          leagueId_pickSeason_round_originalRosterId: {
-            leagueId,
-            pickSeason: pick.season,
-            round: pick.round,
-            originalRosterId: pick.original_roster_id,
-          },
-        },
-        create: {
-          leagueId,
-          pickSeason: pick.season,
-          round: pick.round,
-          originalRosterId: pick.original_roster_id,
-          currentOwnerId: pick.current_owner_roster_id,
-          // A pick appears in `/traded_picks` iff it has been moved off its
-          // original roster at least once — always `traded: true` from Sleeper.
-          traded: true,
-          // NOTE: Sleeper `previous_owner_id` (pick.previous_owner_roster_id) is
-          // dropped here — no dedicated column on `future_draft_picks`. This is
-          // a documented schema limitation, not a mapper bug.
-        },
-        update: {
-          // Only ownership can change between imports; original identity + season
-          // + round are the primary-key composite and never change.
-          currentOwnerId: pick.current_owner_roster_id,
-          traded: true,
-        },
-      })
-      written++
+      const values = batch.map(({ pick }) => Prisma.sql`(
+        ${randomUUID()}, ${leagueId}, ${pick.season}, ${pick.round},
+        ${pick.original_roster_id}, ${pick.current_owner_roster_id}, TRUE, NOW(), NOW()
+      )`)
+      await prisma.$executeRaw`
+        INSERT INTO "future_draft_picks" (
+          "id", "leagueId", "pickSeason", "round", "originalRosterId",
+          "currentOwnerId", "traded", "createdAt", "updatedAt"
+        )
+        VALUES ${Prisma.join(values)}
+        ON CONFLICT ("leagueId", "pickSeason", "round", "originalRosterId")
+        DO UPDATE SET
+          "currentOwnerId" = EXCLUDED."currentOwnerId",
+          "traded" = TRUE,
+          "updatedAt" = NOW()
+      `
+      return {
+        written: batch.reduce((sum, row) => sum + row.inputCount, 0),
+        skipped: 0,
+      }
     } catch {
-      // Prisma constraint violation or transient DB error: skip this row so
-      // one bad pick can't lose the other 32. Outer catch in the caller logs
-      // the surrounding context.
-      skipped++
+      // Keep the old partial-success contract: isolate a bad record instead of
+      // discarding the whole provider response. Healthy imports take one call;
+      // only a failed batch pays the recursive split cost.
+      if (batch.length === 1) {
+        return { written: 0, skipped: batch[0].inputCount }
+      }
+      const midpoint = Math.ceil(batch.length / 2)
+      const left = await writeBatch(batch.slice(0, midpoint))
+      const right = await writeBatch(batch.slice(midpoint))
+      return {
+        written: left.written + right.written,
+        skipped: left.skipped + right.skipped,
+      }
     }
+  }
+
+  const FUTURE_PICK_BATCH_SIZE = 250
+  let written = 0
+  for (let offset = 0; offset < rows.length; offset += FUTURE_PICK_BATCH_SIZE) {
+    const result = await writeBatch(rows.slice(offset, offset + FUTURE_PICK_BATCH_SIZE))
+    written += result.written
+    skipped += result.skipped
   }
   return { written, skipped }
 }
