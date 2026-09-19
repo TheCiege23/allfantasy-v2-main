@@ -246,9 +246,9 @@ async function syncDraftPicksFromNormalized(
 
   await prisma.$transaction(async (tx) => {
     await (tx as any).draftPick.deleteMany({ where: { sessionId: sessionRecord.id } })
-    for (const p of importedPicks) {
-      await (tx as any).draftPick.create({
-        data: {
+    if (importedPicks.length > 0) {
+      await (tx as any).draftPick.createMany({
+        data: importedPicks.map((p) => ({
           sessionId: sessionRecord.id,
           sportType: sessionRecord.sportType ?? null,
           overall: p.overall,
@@ -261,7 +261,7 @@ async function syncDraftPicksFromNormalized(
           team: p.team,
           playerId: p.playerId,
           source: 'import',
-        },
+        })),
       })
     }
     await (tx as any).draftSession.update({
