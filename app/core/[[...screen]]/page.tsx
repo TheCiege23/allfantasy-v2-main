@@ -20,6 +20,7 @@ import { aiAccessResolver } from '@/lib/ai-access/AIAccessResolver'
 import { attachLeagueHubs } from '@/lib/core-app/attachLeagueHubs'
 import { ConnectedLeagueContext } from '@/components/core-app/ConnectedLeagueNavigation'
 import ConnectedFranchiseWarRoom from '@/components/core-app/screens/ConnectedFranchiseWarRoom'
+import ConnectedDecisionScopeBar from '@/components/core-app/ConnectedDecisionScopeBar'
 import { resolvePairedHalf } from '@/lib/core-app/leaguePairing'
 import AfCoreShell, { type CoreNavKey, type RailLeague } from '@/components/core-app/AfCoreShell'
 import type { UserLeague } from '@/app/dashboard/types'
@@ -1384,6 +1385,17 @@ export default async function AfCorePage({
            */
           platformLeagueId:
             (l as { platformLeagueId?: string | null }).platformLeagueId ?? null,
+          hub: rail.find((item) => item.id === l.id)?.hub
+            ? {
+                id: rail.find((item) => item.id === l.id)!.hub!.id,
+                name: rail.find((item) => item.id === l.id)!.hub!.name,
+                members: rail.find((item) => item.id === l.id)!.hub!.members.map((member) => ({
+                  id: member.id,
+                  name: member.name,
+                  platform: member.platform,
+                })),
+              }
+            : undefined,
         })),
         chimmyTokenCost,
         dockable,
@@ -2176,13 +2188,18 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
   const gamePlanView = activeKey === 'war-room' && sp.view === 'plan'
 
   /* The War Room's first room: every manager in the league, profiled. */
-  const [scout, connectedFranchise] =
+  const connectedToolScreen = ['war-room', 'trades', 'waivers', 'my-team', 'draft-hq', 'players'].includes(activeKey)
+  const [scout, connectedFranchise] = await Promise.all([
     activeKey === 'war-room' && !gamePlanView && selectedLeagueId
-      ? await Promise.all([
-          getScoutData(selectedLeagueId, userId, leagueCtx).catch(() => null),
-          resolvePairedHalf(selectedLeagueId, userId).catch(() => null),
-        ])
-      : [null, null]
+      ? getScoutData(selectedLeagueId, userId, leagueCtx).catch(() => null)
+      : Promise.resolve(null),
+    connectedToolScreen && selectedLeagueId
+      ? resolvePairedHalf(selectedLeagueId, userId, {
+          includeOperationalSummary: activeKey === 'war-room',
+          leagueContext: leagueCtx,
+        }).catch(() => null)
+      : Promise.resolve(null),
+  ])
 
   /*
    * The War Room's second room: every flagged starter across every league,
@@ -3347,6 +3364,22 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
         />
       </Suspense>
 
+      {connectedFranchise && selectedLeagueId && activeKey !== 'war-room' ? (
+        <ConnectedDecisionScopeBar
+          linkId={connectedFranchise.linkId}
+          franchiseName={connectedFranchise.franchiseName}
+          screen={activeKey}
+          selectedLeagueId={selectedLeagueId}
+          sides={connectedFranchise.sides.map((side) => ({
+            memberId: side.memberId,
+            leagueId: side.leagueId,
+            name: side.name,
+            platform: side.platform,
+            sport: side.sport ?? null,
+          }))}
+        />
+      ) : null}
+
       {segment === 'bracket' ? (
         bracket ? (
           <BracketChallenge data={bracket} />
@@ -3715,8 +3748,10 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
               <ConnectedFranchiseWarRoom
                 linkId={connectedFranchise.linkId}
                 franchiseName={connectedFranchise.franchiseName}
+                primaryMemberId={connectedFranchise.primaryMemberId}
                 selectedLeagueId={selectedLeagueId}
                 sides={connectedFranchise.sides.map((side) => ({
+                  memberId: side.memberId,
                   role: side.role,
                   leagueId: side.leagueId,
                   memberLeagueId: side.memberLeagueId,
@@ -3731,6 +3766,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
                   unavailableReason: side.unavailableReason,
                   draft: side.draft,
                   activity: side.activity,
+                  sync: side.sync,
                   players: (side.players ?? []).map((player) => ({
                     id: player.id,
                     name: player.name,

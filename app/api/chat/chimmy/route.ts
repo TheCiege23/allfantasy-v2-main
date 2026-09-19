@@ -362,6 +362,7 @@ const ChimmyFormSchema = z.object({
     return value.trim().toLowerCase() === 'all' ? 'all' : undefined
   }, z.enum(['all']).optional()),
   leagueName: optionalTrimmedStringField(120),
+  connectedLeagueIds: optionalTrimmedStringField(2000),
   /**
    * The /core home's own signals — a validated id/count payload, never prose.
    * See lib/core-app/homeSignals.ts for why nothing free-text crosses this
@@ -1121,6 +1122,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     insightType: formData.get('insightType'),
     sportScope: formData.get('sportScope'),
     leagueName: formData.get('leagueName'),
+    connectedLeagueIds: formData.get('connectedLeagueIds'),
     homeSignals: formData.get('homeSignals'),
     coreSurface: formData.get('coreSurface'),
     conversation: conversationPayload,
@@ -1162,11 +1164,22 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     insightType,
     sportScope,
     leagueName: requestedLeagueNameHint,
+    connectedLeagueIds: rawConnectedLeagueIds,
     homeSignals: rawHomeSignals,
     coreSurface,
     conversation: parsedConversation,
     hasImage,
   } = parseResult.data
+  const requestedConnectedLeagueIds = (() => {
+    if (!rawConnectedLeagueIds) return null
+    try {
+      const parsed = JSON.parse(rawConnectedLeagueIds)
+      if (!Array.isArray(parsed)) return new Set<string>()
+      return new Set(parsed.filter((value): value is string => typeof value === 'string' && value.length <= MAX_GENERIC_FIELD_CHARS).slice(0, 20))
+    } catch {
+      return new Set<string>()
+    }
+  })()
   const homeSignals = parseHomeSignals(rawHomeSignals)
   const coreSurfaceBlock = coreSurface ? renderCoreSurfacePrompt(coreSurface) : null
   const selectedAssistantMode = normalizeChimmyAssistantMode(
@@ -1249,10 +1262,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
    * the signed-in manager's roster on each side is returned; other managers'
    * rosters never enter this payload.
    */
-  const connectedFranchiseGrounding =
-    leagueSnapshot && userId && leagueGroundingRequired
+  const connectedFranchise =
+    leagueSnapshot && userId && leagueGroundingRequired && rawConnectedLeagueIds
       ? await resolvePairedHalf(leagueSnapshot.id, userId, { includeOperationalSummary: false })
-          .then(renderConnectedFranchiseGrounding)
           .catch((err) => {
             console.warn('[chimmy] connected franchise grounding failed', {
               kind: err instanceof Error ? err.constructor.name : 'unknown',
@@ -1260,6 +1272,14 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
             return null
           })
       : null
+  const allowedConnectedLeagueIds = connectedFranchise
+    ? new Set(
+        connectedFranchise.sides
+          .map((side) => side.leagueId)
+          .filter((id): id is string => typeof id === 'string' && (!requestedConnectedLeagueIds || requestedConnectedLeagueIds.has(id))),
+      )
+    : null
+  const connectedFranchiseGrounding = renderConnectedFranchiseGrounding(connectedFranchise, allowedConnectedLeagueIds)
 
   /*
    * The user named a league and we cannot see it. If the question needs league
@@ -3626,6 +3646,16 @@ ${describedTradeCtx}`
               message: describeLeagueGroundingFailure(leagueGrounding.reason),
             }
         : { grounded: false as const, leagueId: null, reason: 'no_league_selected' as const },
+      connectedFranchise: connectedFranchise
+        ? connectedFranchise.sides
+            .filter((side) => side.leagueId && (!allowedConnectedLeagueIds || allowedConnectedLeagueIds.has(side.leagueId)))
+            .map((side) => ({
+              leagueId: side.leagueId as string,
+              leagueName: side.name,
+              rosterStatus: side.unavailableReason ? 'unavailable' as const : 'available' as const,
+              playerCount: side.unavailableReason ? 0 : side.players?.length ?? 0,
+            }))
+        : undefined,
       mode: selectedAssistantMode,
       agent: specialistAgent,
       answerContract,

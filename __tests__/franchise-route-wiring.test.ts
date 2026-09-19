@@ -198,6 +198,21 @@ describe('the connect-a-league flow', () => {
   })
 })
 
+describe('connected franchise management', () => {
+  it('supports rename, primary league, repair, and removal behind the owned-link gate', () => {
+    for (const action of ['rename-franchise', 'set-primary-league', 'repair-team-mapping', 'remove-league']) {
+      const block = ROUTE.split(`body.action === '${action}'`)[1]?.split("body.action === '")[0] ?? ''
+      expect(block).toContain('ownedLink')
+    }
+  })
+
+  it('dissolves a two-league hub instead of leaving a one-league shell', () => {
+    const remove = ROUTE.split("body.action === 'remove-league'")[1]?.split("body.action === '")[0] ?? ''
+    expect(remove).toContain('members.length <= 2')
+    expect(remove).toContain('franchiseLink.delete')
+  })
+})
+
 /**
  * ⚠ THE JOIN THAT LOOKS RIGHT AND IS WRONG BY DESIGN. The Sleeper sync documents
  * its identity contract in applySleeperLeagueSync.ts:

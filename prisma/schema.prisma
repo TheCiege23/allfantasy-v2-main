@@ -17875,6 +17875,9 @@ model FranchiseLink {
   /// between Sleeper and Fantrax and matching them is guesswork.
   ownerUserId String
   name        String
+  /// Optional member chosen as the hub's default entry point. Kept as a loose
+  /// id because a member can be removed; management actions clear it first.
+  primaryMemberId String?
   createdAt   DateTime                @default(now())
   updatedAt   DateTime                @updatedAt
   members     FranchiseLeagueMember[]

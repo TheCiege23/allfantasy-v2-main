@@ -14,9 +14,11 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 const sides: FranchiseSide[] = ['Peach Bowl', 'Cream Bowl'].map((name, i) => ({
+  memberId: `member-${i}`,
   name, role: i ? 'college' : 'pro', platform: i ? 'fantrax' : 'sleeper', sport: i ? 'NCAAF' : 'NFL',
   leagueId: `league-${i}`, memberLeagueId: `league-${i}`, season: 2026, teamLabel: 'My team', teamCandidates: [], avatarUrl: null, playerCount: 1,
   unavailableReason: null, draft: null, activity: null,
+  sync: { lastSyncedAt: new Date('2026-09-19T12:00:00Z'), stale: false, refreshHref: '/import', detail: 'Fresh' },
   players: [{ id: `${i}`, name: i ? 'College Player' : 'Pro Player', position: i ? 'WR' : 'QB', team: i ? 'Texas' : 'KC', imageUrl: null, logoUrl: null }],
 }))
 
@@ -57,6 +59,7 @@ describe('connected league hub', () => {
       ...sides,
       {
         ...sides[0],
+        memberId: 'member-2',
         role: 'tournament' as const,
         leagueId: 'league-2',
         name: 'Playoff Tournament',
@@ -72,9 +75,11 @@ describe('connected league hub', () => {
       <ConnectedFranchiseWarRoom
         linkId="hub-1"
         franchiseName="One franchise"
+        primaryMemberId="member-0"
         selectedLeagueId="league-0"
         sides={expanded.map((side) => ({
           role: side.role,
+          memberId: side.memberId,
           leagueId: side.leagueId,
           memberLeagueId: side.memberLeagueId,
           name: side.name,
@@ -88,12 +93,13 @@ describe('connected league hub', () => {
           unavailableReason: side.unavailableReason,
           draft: side.draft,
           activity: side.activity,
+          sync: side.sync,
           players: side.players ?? [],
         }))}
       />,
     )
     expect(screen.getByText('3', { selector: '.af-cwr-scoreboard strong' })).toBeTruthy()
-    expect(screen.getByText('Playoff Tournament')).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'Playoff Tournament' })).toBeTruthy()
     expect(screen.getAllByRole('link', { name: 'Roster' })).toHaveLength(3)
     expect(screen.getByRole('link', { name: 'Open combined roster →' })).toHaveAttribute('href', '/core?league=league-0')
   })
@@ -105,6 +111,7 @@ describe('connected league hub', () => {
       <ConnectedFranchiseWarRoom
         linkId="hub-1"
         franchiseName="One franchise"
+        primaryMemberId="member-0"
         selectedLeagueId="league-0"
         sides={[{
           ...sides[0],
@@ -120,6 +127,29 @@ describe('connected league hub', () => {
       action: 'update-team-mapping',
       linkId: 'hub-1',
       member: { platform: 'sleeper', leagueId: 'provider-league-0', teamExternalId: '2' },
+    })
+  })
+
+  it('renames the shared hub through the owned franchise endpoint', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ ok: true }) })
+    vi.stubGlobal('fetch', fetchMock)
+    render(
+      <ConnectedFranchiseWarRoom
+        linkId="hub-1"
+        franchiseName="Old name"
+        primaryMemberId="member-0"
+        selectedLeagueId="league-0"
+        sides={sides}
+      />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Manage hub' }))
+    fireEvent.change(screen.getByLabelText('Franchise name'), { target: { value: 'Peach and Cream' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save name' }))
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1))
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({
+      action: 'rename-franchise',
+      linkId: 'hub-1',
+      franchiseName: 'Peach and Cream',
     })
   })
 })

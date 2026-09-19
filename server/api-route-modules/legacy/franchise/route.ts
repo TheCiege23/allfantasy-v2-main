@@ -148,6 +148,7 @@ export const POST = withApiUsage({ endpoint: '/api/legacy/franchise', tool: 'Fra
       leagueId?: string
       teamName?: string
       franchiseName?: string
+      memberId?: string
       /** The league the user clicked "connect" on, so its half arrives chosen. */
       from?: string
       pro?: { platform?: string; leagueId?: string; teamExternalId?: string }
@@ -218,6 +219,87 @@ export const POST = withApiUsage({ endpoint: '/api/legacy/franchise', tool: 'Fra
         from,
         note: 'Pairing is a label, not a sync. Neither league is modified.',
       })
+    }
+
+    /** Hub settings shared by every connected league. */
+    if (body.action === 'rename-franchise') {
+      const linkId = body.linkId?.trim()
+      const name = body.franchiseName?.trim()
+      if (!linkId || !name || name.length > 80) {
+        return NextResponse.json({ error: 'Choose a franchise name between 1 and 80 characters.' }, { status: 400 })
+      }
+      if (!(await ownedLink(linkId, auth.userId))) {
+        return NextResponse.json({ error: 'Franchise not found' }, { status: 404 })
+      }
+      await prisma.franchiseLink.update({ where: { id: linkId }, data: { name } })
+      return NextResponse.json({ ok: true, name })
+    }
+
+    if (body.action === 'set-primary-league') {
+      const linkId = body.linkId?.trim()
+      const memberId = body.memberId?.trim()
+      if (!linkId || !memberId) {
+        return NextResponse.json({ error: 'linkId and memberId are required.' }, { status: 400 })
+      }
+      if (!(await ownedLink(linkId, auth.userId))) {
+        return NextResponse.json({ error: 'Franchise not found' }, { status: 404 })
+      }
+      const member = await prisma.franchiseLeagueMember.findFirst({ where: { id: memberId, linkId }, select: { id: true } })
+      if (!member) return NextResponse.json({ error: 'League not found in this franchise.' }, { status: 404 })
+      await prisma.franchiseLink.update({ where: { id: linkId }, data: { primaryMemberId: member.id } })
+      return NextResponse.json({ ok: true, primaryMemberId: member.id })
+    }
+
+    if (body.action === 'remove-league') {
+      const linkId = body.linkId?.trim()
+      const memberId = body.memberId?.trim()
+      if (!linkId || !memberId) {
+        return NextResponse.json({ error: 'linkId and memberId are required.' }, { status: 400 })
+      }
+      if (!(await ownedLink(linkId, auth.userId))) {
+        return NextResponse.json({ error: 'Franchise not found' }, { status: 404 })
+      }
+      const members = await prisma.franchiseLeagueMember.findMany({
+        where: { linkId },
+        select: { id: true },
+      })
+      if (!members.some((member) => member.id === memberId)) {
+        return NextResponse.json({ error: 'League not found in this franchise.' }, { status: 404 })
+      }
+      if (members.length <= 2) {
+        await prisma.franchiseLink.delete({ where: { id: linkId } })
+        return NextResponse.json({ ok: true, dissolved: true })
+      }
+      await prisma.$transaction([
+        prisma.franchiseLink.updateMany({
+          where: { id: linkId, primaryMemberId: memberId },
+          data: { primaryMemberId: null },
+        }),
+        prisma.franchiseLeagueMember.delete({ where: { id: memberId } }),
+      ])
+      return NextResponse.json({ ok: true, dissolved: false })
+    }
+
+    if (body.action === 'repair-team-mapping') {
+      const linkId = body.linkId?.trim()
+      const memberId = body.memberId?.trim()
+      if (!linkId || !memberId) {
+        return NextResponse.json({ error: 'linkId and memberId are required.' }, { status: 400 })
+      }
+      if (!(await ownedLink(linkId, auth.userId))) {
+        return NextResponse.json({ error: 'Franchise not found' }, { status: 404 })
+      }
+      const member = await prisma.franchiseLeagueMember.findFirst({
+        where: { id: memberId, linkId },
+        select: { id: true, platform: true, leagueId: true },
+      })
+      if (!member) return NextResponse.json({ error: 'League not found in this franchise.' }, { status: 404 })
+      const teamExternalId = await defaultTeamExternalId(member.platform, member.leagueId, auth.userId)
+      if (!teamExternalId) {
+        return NextResponse.json({ error: 'We could not detect your team. Choose it from the team menu instead.' }, { status: 409 })
+      }
+      await prisma.franchiseLeagueMember.update({ where: { id: member.id }, data: { teamExternalId } })
+      return NextResponse.json({ ok: true, teamExternalId })
     }
 
     /** Add another imported league to an existing hub. Repeatable without a role limit. */
