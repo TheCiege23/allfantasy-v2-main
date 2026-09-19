@@ -23,6 +23,7 @@ import {
   getFantraxStandings,
   getFantraxTeamRosters,
   resolveRosters,
+  type FantraxFailure,
   type FantraxStandingRow,
   type ResolvedRoster,
 } from './fantraxApi'
@@ -79,7 +80,22 @@ export type FantraxImportOutcome =
       scoredPeriodsRead: number
       scoredPeriodsFailed: number
     }
-  | { ok: false; error: string; teams?: string[] }
+  | {
+      ok: false
+      error: string
+      teams?: string[]
+      /**
+       * The provider-level classification behind this failure, when one exists.
+       *
+       * ⚠ IT USED TO BE DROPPED HERE, AND THAT IS WHERE A FANTRAX OUTAGE BECAME A MISSING
+       * LEAGUE. `FantraxResult` has carried a `kind` all along; this type flattened every
+       * one of them to a bare string, so `FantraxLeagueFetchService` had nothing left to
+       * decide with and raised `FantraxImportLeagueNotFoundError` for all of them —
+       * including a 503. Absent for the failures this module raises itself (an unknown
+       * team name, a sport we do not handle), which are genuinely about the league.
+       */
+      kind?: FantraxFailure['kind']
+    }
 
 /**
  * Fetch, resolve and store one Fantrax league.
@@ -101,7 +117,7 @@ export async function importFantraxLeague(args: {
   ownershipVerified?: boolean
 }): Promise<FantraxImportOutcome> {
   const info = await getFantraxLeagueInfo(args.leagueId)
-  if (!info.ok) return { ok: false, error: info.failure.message }
+  if (!info.ok) return { ok: false, error: info.failure.message, kind: info.failure.kind }
 
   /*
    * ⚠ THE SCHEDULE READ IS NOW TWO ENDPOINTS, NOT ONE. `getLeagueInfo` carries
@@ -132,10 +148,10 @@ export async function importFantraxLeague(args: {
     fetchFantraxScheduleWithScores(args.leagueId, info.data),
     getFantraxDraftResults(args.leagueId).catch(() => null),
   ])
-  if (!rosters.ok) return { ok: false, error: rosters.failure.message }
+  if (!rosters.ok) return { ok: false, error: rosters.failure.message, kind: rosters.failure.kind }
   /* Only one map has to load. A league is one sport, so failing the whole
      import because the OTHER sport's map was unavailable would be wrong. */
-  if (!cfb.ok && !nfl.ok) return { ok: false, error: cfb.failure.message }
+  if (!cfb.ok && !nfl.ok) return { ok: false, error: cfb.failure.message, kind: cfb.failure.kind }
 
   /*
    * ⚠ THE SPORT IS NOT IN THE LEAGUE INFO, SO IT IS MEASURED RATHER THAN

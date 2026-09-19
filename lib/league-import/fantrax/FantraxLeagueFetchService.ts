@@ -79,6 +79,24 @@ type LegacyTransaction = {
 export class FantraxImportConnectionError extends Error {}
 export class FantraxImportLeagueNotFoundError extends Error {}
 
+/**
+ * Fantrax was reachable in principle but did not answer with data — a throttle, a 5xx, a
+ * request timeout, or a network failure.
+ *
+ * 🛑 `importFantraxLeague`'s FAILURE RESULT USED TO BE A BARE STRING, so every provider
+ * condition arrived here indistinguishable and was raised as
+ * `FantraxImportLeagueNotFoundError` — which the pipeline maps to `LEAGUE_NOT_FOUND` and
+ * the collector reads as "this league is gone: stop, skip, note it". The result carries
+ * the `kind` now, and only the answers that are genuinely about the league keep that
+ * error. Mirrors `FleaflickerImportUnavailableError` and `MflImportUnavailableError`.
+ */
+export class FantraxImportUnavailableError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'FantraxImportUnavailableError'
+  }
+}
+
 interface FantraxSourceLookup {
   leagueRecordId?: string
   username?: string
@@ -500,6 +518,15 @@ export async function fetchFantraxLeagueForImport(
       ownershipVerified,
     })
     if (!outcome.ok) {
+      /*
+       * ⚠ ONLY A SETTLED ANSWER ABOUT THE LEAGUE IS "NOT FOUND". A throttle, a 5xx or a
+       * dropped connection says nothing about whether the league exists, and raising it as
+       * not-found tells the importing user to check their league id and tells the scheduled
+       * collector to stop refreshing a live league.
+       */
+      if (outcome.kind === 'unavailable' || outcome.kind === 'network') {
+        throw new FantraxImportUnavailableError(outcome.error)
+      }
       throw new FantraxImportLeagueNotFoundError(outcome.error)
     }
     lookup.leagueRecordId = outcome.fantraxLeagueId
