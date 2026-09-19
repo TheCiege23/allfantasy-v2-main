@@ -30,6 +30,8 @@ import {
 import { composeBubble } from '@/lib/tournament/bubbleComposition'
 
 export type BoardRow = {
+  /** Exact provider roster identity used for weekly scoring. */
+  externalRosterId?: string | null
   /** `TournamentLeagueParticipant.id` — what a link is written against. */
   leagueParticipantId: string
   participantId: string
@@ -214,6 +216,7 @@ export async function getTournamentStandingsBoard(
           participantId: p.participantId,
           userId: p.userId,
           displayName: p.participant?.displayName?.trim() || rec?.ownerName || rec?.teamName || p.userId,
+          externalRosterId: rec?.externalId ?? null,
           wins: rec?.wins ?? 0,
           losses: rec?.losses ?? 0,
           ties: rec?.ties ?? 0,

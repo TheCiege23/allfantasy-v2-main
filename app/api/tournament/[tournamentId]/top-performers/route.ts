@@ -22,15 +22,15 @@ export async function GET(
   if (!userId) return NextResponse.json({ error: 'Sign in required' }, { status: 401 })
 
   const url = new URL(request.url)
-  const seasonRaw = Number(url.searchParams.get('season'))
-  const weekRaw = Number(url.searchParams.get('week'))
-  const season = Number.isFinite(seasonRaw) ? Math.trunc(seasonRaw) : new Date().getFullYear()
+  const seasonRaw = Number(url.searchParams.get('season') ?? new Date().getFullYear())
+  const weekRaw = url.searchParams.has('week') ? Number(url.searchParams.get('week')) : NaN
+  const season = Number.isInteger(seasonRaw) && seasonRaw > 1900 ? seasonRaw : new Date().getFullYear()
 
   const result = await getTournamentTopPerformers({
     tournamentId,
     commissionerUserId: userId,
     season,
-    week: Number.isFinite(weekRaw) ? Math.trunc(weekRaw) : undefined,
+    week: Number.isInteger(weekRaw) && weekRaw > 0 ? weekRaw : undefined,
   })
 
   if (!result) {

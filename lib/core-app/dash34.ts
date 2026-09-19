@@ -1,4 +1,5 @@
 import 'server-only'
+import { currentSleeperRoster } from './currentSleeperRoster'
 
 import { unstable_cache } from 'next/cache'
 
@@ -673,7 +674,7 @@ export async function getDash34Data(
     },
   }))
 
-  const rosters = rosterOr.length
+  const storedRosters = rosterOr.length
     ? await prisma.roster
         .findMany({
           where: { OR: rosterOr },
@@ -681,6 +682,22 @@ export async function getDash34Data(
         })
         .catch(fellBack(options, 'rosters', []))
     : []
+
+  const liveRosters: Array<{ leagueId: string; playerData: unknown }> = []
+  const sleeperLeagues = active.filter((l) => String(l.platform).toLowerCase() === 'sleeper')
+  // Bound concurrent requests; old import snapshots must not generate current alerts.
+  for (let i = 0; i < sleeperLeagues.length; i += 8) {
+    const batch = await Promise.all(sleeperLeagues.slice(i, i + 8).map(async (l) => {
+      const team = teamByLeague.get(l.id)
+      const sourceId = l.platformLeagueId ?? l.sleeperLeagueId
+      if (!team || !sourceId) return null
+      const playerData = await currentSleeperRoster(sourceId, team)
+      return playerData ? { leagueId: l.id, playerData } : null
+    }))
+    for (const row of batch) if (row) liveRosters.push(row)
+  }
+  const sleeperIds = new Set(sleeperLeagues.map((l) => l.id))
+  const rosters = [...storedRosters.filter((r) => !sleeperIds.has(r.leagueId)), ...liveRosters]
 
   /**
    * leagueId → the roster, split by slot.

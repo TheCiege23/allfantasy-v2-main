@@ -16,6 +16,7 @@ import { AdvancementPanel } from './AdvancementPanel'
 import { RedraftPanel } from './RedraftPanel'
 import { CompliancePanel } from './CompliancePanel'
 import { TopPerformersPanel } from './TopPerformersPanel'
+import { WeeklyReportPanel } from './WeeklyReportPanel'
 import './tournament-hub.css'
 
 /**
@@ -203,6 +204,7 @@ export function TournamentStandingsBoard({ board }: { board: StandingsBoard }) {
         sync of the STALEST league, and a commissioner about to cut 176 managers
         on them is entitled to know that rather than assume "now".
       */}
+      <WeeklyReportPanel tournamentId={board.tournamentId} />
       {board.oldestUpdatedAt ? (
         <p className="af-th-note">
           Records as last synced. Oldest league last updated{' '}

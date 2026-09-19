@@ -1,4 +1,5 @@
 import 'server-only'
+import { currentSleeperRoster } from './currentSleeperRoster'
 
 import { prisma } from '@/lib/prisma'
 import { leagueDisplayName, type SectionState, type UnavailableSection } from './leagueHome'
@@ -921,8 +922,13 @@ export async function getMyTeamData(
    * over rosters that are sitting right there. See that file for what each candidate buys.
    */
   const candidates = myRosterCandidates(myTeamRow, userId)
-  const roster =
-    candidates.length > 0
+  const isSleeper = String(league.platform).toLowerCase() === 'sleeper'
+  const liveRoster = isSleeper && league.platformLeagueId
+    ? await currentSleeperRoster(league.platformLeagueId, myTeamRow)
+    : null
+  const roster = isSleeper
+    ? (liveRoster ? { playerData: liveRoster } : null)
+    : candidates.length > 0
       ? await prisma.roster.findFirst({
           where: { leagueId, platformUserId: { in: candidates } },
           select: { playerData: true },
@@ -932,7 +938,7 @@ export async function getMyTeamData(
   if (!roster) {
     const noRoster = {
       available: false as const,
-      reason: 'no roster rows imported for your team in this league',
+      reason: isSleeper ? 'Your current Sleeper lineup could not be verified. Refresh to try again.' : 'no roster rows imported for your team in this league',
     }
     return {
       ...base,
