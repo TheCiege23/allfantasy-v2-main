@@ -85,14 +85,23 @@ export function buildFranchiseView(args: {
   const { members } = args
   const gaps: string[] = []
 
-  for (const role of (members.some((m) => m.role === 'primary' || m.role === 'linked') ? ['primary', 'linked'] : ['pro', 'college']) as FranchiseRole[]) {
-    const member = members.find((m) => m.role === role)
-    if (!member) {
-      gaps.push(FRANCHISE_GAPS.missingRole(role))
-      continue
+  const isFlexibleHub = members.some((m) => m.role === 'primary' || m.role === 'linked') || members.length > 2
+  if (isFlexibleHub) {
+    if (members.length < 2) gaps.push(FRANCHISE_GAPS.missingRole('linked'))
+    for (const member of members) {
+      if (!member.leaguePresent) gaps.push(FRANCHISE_GAPS.missingLeague(member.role, member.platform))
+      else if (!member.teamExternalId) gaps.push(FRANCHISE_GAPS.unmatchedTeam(member.role))
     }
-    if (!member.leaguePresent) gaps.push(FRANCHISE_GAPS.missingLeague(role, member.platform))
-    else if (!member.teamExternalId) gaps.push(FRANCHISE_GAPS.unmatchedTeam(role))
+  } else {
+    for (const role of ['pro', 'college'] as FranchiseRole[]) {
+      const member = members.find((m) => m.role === role)
+      if (!member) {
+        gaps.push(FRANCHISE_GAPS.missingRole(role))
+        continue
+      }
+      if (!member.leaguePresent) gaps.push(FRANCHISE_GAPS.missingLeague(role, member.platform))
+      else if (!member.teamExternalId) gaps.push(FRANCHISE_GAPS.unmatchedTeam(role))
+    }
   }
 
   const complete = gaps.length === 0
@@ -108,7 +117,7 @@ export function buildFranchiseView(args: {
     complete,
     gaps,
     basis: complete
-      ? `${args.name} is one franchise across ${sides}. Trades spanning both are tracked here, and carried out on each platform by hand.`
+      ? `${args.name} is one franchise across ${sides}. Cross-league moves are tracked here and carried out on each platform by hand.`
       : `${args.name} is not yet a complete franchise view — ${gaps.length} thing${gaps.length === 1 ? '' : 's'} still missing, listed below.`,
   }
 }

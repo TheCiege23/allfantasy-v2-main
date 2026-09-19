@@ -19,6 +19,7 @@ const fantraxFindUnique = vi.fn()
 const memberFindMany = vi.fn()
 const memberFindFirst = vi.fn()
 const teamFindFirst = vi.fn()
+const teamFindMany = vi.fn()
 const rosterFindFirst = vi.fn()
 
 const draftHqAll = vi.fn()
@@ -52,7 +53,10 @@ vi.mock('@/lib/prisma', () => ({
       findMany: (...a: unknown[]) => memberFindMany(...a),
       findFirst: (...a: unknown[]) => memberFindFirst(...a),
     },
-    leagueTeam: { findFirst: (...a: unknown[]) => teamFindFirst(...a) },
+    leagueTeam: {
+      findFirst: (...a: unknown[]) => teamFindFirst(...a),
+      findMany: (...a: unknown[]) => teamFindMany(...a),
+    },
     roster: { findFirst: (...a: unknown[]) => rosterFindFirst(...a) },
   },
 }))
@@ -71,6 +75,7 @@ beforeEach(() => {
   leagueActivity.mockResolvedValue({ items: [], counts: { trade: 0, waiver: 0, rosterMove: 0 }, newest: null, unattributed: 0 })
   memberFindFirst.mockResolvedValue(null)
   teamFindFirst.mockResolvedValue(null)
+  teamFindMany.mockResolvedValue([])
   rosterFindFirst.mockResolvedValue(null)
 })
 
@@ -395,12 +400,12 @@ describe('resolving the other half from a league', () => {
     })
     leagueFindUnique.mockResolvedValueOnce({ id: 'fx-lg', platform: 'fantrax', platformLeagueId: 'fx-1' })
     leagueFindUnique.mockResolvedValue({ id: 'lg-1', name: 'Peach Bowl', season: 2026 })
-    teamFindFirst.mockResolvedValue({ teamName: 'Ciege82', ownerName: null, externalId: '4', platformUserId: 'sleeper-user-77' })
+    teamFindMany.mockResolvedValue([{ teamName: 'Ciege82', ownerName: null, externalId: '4', platformUserId: 'sleeper-user-77', claimedByUserId: USER }])
     rosterFindFirst.mockResolvedValue({ playerData: { players: ['a', 'b', 'c'] } })
 
     const out = await resolvePairedHalf('fx-lg', USER)
 
-    expect(teamFindFirst.mock.calls[0][0].where.claimedByUserId).toBe(USER)
+    expect(teamFindMany.mock.calls[0][0].where).toEqual({ leagueId: 'lg-1' })
     /*
      * ⚠ BOTH ID SPACES, VIEWER FIRST. `Roster.platformUserId` holds the PLATFORM
      * id for managers we imported but the AllFantasy `AppUser.id` for the team
@@ -410,11 +415,11 @@ describe('resolving the other half from a league', () => {
      * the panel reported "no roster on file" for a roster that existed.
      */
     expect(rosterFindFirst.mock.calls[0][0].where.platformUserId).toEqual({
-      in: [USER, 'sleeper-user-77'],
+      in: [USER, 'sleeper-user-77', '4'],
     })
     /* Still scoped to a team the viewer actually claimed — this is what stops
        the fallback picking up a stranger's squad. */
-    expect(teamFindFirst.mock.calls[0][0].where.claimedByUserId).toBe(USER)
+    expect(teamFindMany.mock.calls[0][0].select).toMatchObject({ claimedByUserId: true })
     expect(out?.other?.playerCount).toBe(3)
     expect(out?.viewingRole).toBe('college')
   })
@@ -438,12 +443,37 @@ describe('resolving the other half from a league', () => {
         ],
       },
     })
-    teamFindFirst.mockResolvedValue(null)
+    teamFindMany.mockResolvedValue([])
 
     const out = await resolvePairedHalf('fx-lg', USER)
 
     expect(rosterFindFirst).not.toHaveBeenCalled()
     expect(out?.other?.playerCount).toBeNull()
+  })
+
+  it('uses an explicit hub team mapping instead of the previously claimed team', async () => {
+    leagueFindUnique.mockResolvedValue({ id: 'lg-1', name: 'Peach Bowl', platform: 'sleeper', platformLeagueId: null, season: 2026 })
+    memberFindFirst.mockResolvedValue({
+      role: 'primary',
+      link: {
+        id: 'hub-1',
+        name: 'F',
+        members: [
+          { platform: 'sleeper', leagueId: 'lg-1', role: 'primary', teamExternalId: '9' },
+        ],
+      },
+    })
+    teamFindMany.mockResolvedValue([
+      { teamName: 'Old team', ownerName: null, externalId: '4', platformUserId: 'owner-provider', claimedByUserId: USER },
+      { teamName: 'Mapped team', ownerName: null, externalId: '9', platformUserId: 'mapped-provider', claimedByUserId: null },
+    ])
+    rosterFindFirst.mockResolvedValue({ playerData: { players: ['mapped-player'] } })
+
+    const out = await resolvePairedHalf('lg-1', USER, { includeOperationalSummary: false })
+
+    expect(out?.self?.teamLabel).toBe('Mapped team')
+    expect(out?.self?.teamCandidates).toHaveLength(2)
+    expect(rosterFindFirst.mock.calls[0][0].where.platformUserId).toEqual({ in: ['mapped-provider', '9'] })
   })
 
   /**
@@ -469,7 +499,7 @@ describe('resolving the other half from a league', () => {
     })
     fantraxFindUnique.mockResolvedValue({ id: 'fx-1', leagueName: 'C', season: 2026, userTeam: 'Ciege82', roster: [{ name: 'A' }] })
     leagueFindFirst.mockResolvedValue({ id: 'lg-fx' })
-    teamFindFirst.mockResolvedValue({ teamName: 'T', ownerName: null, externalId: '4', platformUserId: 'sleeper-77' })
+    teamFindMany.mockResolvedValue([{ teamName: 'T', ownerName: null, externalId: '4', platformUserId: 'sleeper-77', claimedByUserId: USER }])
     rosterFindFirst.mockResolvedValue({ playerData: { players: [1, 2, 3] } })
     draftHqAll.mockResolvedValue({ rows: [], counts: {}, withoutDraft: 2 })
 
@@ -501,7 +531,7 @@ describe('resolving the other half from a league', () => {
     })
     fantraxFindUnique.mockResolvedValue({ id: 'fx-1', leagueName: 'C', season: 2026, userTeam: 'Ciege82', roster: null })
     leagueFindFirst.mockResolvedValue(null)
-    teamFindFirst.mockResolvedValue(null)
+    teamFindMany.mockResolvedValue([])
     rosterFindFirst.mockResolvedValue(null)
     draftHqAll.mockResolvedValue({ rows: [], counts: {}, withoutDraft: 2 })
 
@@ -534,7 +564,7 @@ describe('resolving the other half from a league', () => {
     })
     fantraxFindUnique.mockResolvedValue({ id: 'fx-1', leagueName: 'C', season: 2026, userTeam: 'Ciege82', roster: [{ name: 'A' }] })
     leagueFindFirst.mockResolvedValue({ id: 'lg-fx' })
-    teamFindFirst.mockResolvedValue({ teamName: 'T', ownerName: null, externalId: '4', platformUserId: 'sleeper-77' })
+    teamFindMany.mockResolvedValue([{ teamName: 'T', ownerName: null, externalId: '4', platformUserId: 'sleeper-77', claimedByUserId: USER }])
     rosterFindFirst.mockResolvedValue({ playerData: { players: [1, 2, 3] } })
     leagueActivity.mockResolvedValue({ items: [], counts: { trade: 2, waiver: 44, rosterMove: 14 }, newest: new Date('2026-08-19'), unattributed: 0 })
 
@@ -578,13 +608,15 @@ describe('resolving the other half from a league', () => {
     })
     fantraxFindUnique.mockResolvedValue({ id: 'fx-1', leagueName: 'C', season: 2026, userTeam: 'Ciege82', roster: [{ name: 'A' }] })
     leagueFindFirst.mockResolvedValue({ id: 'lg-fx' })
-    teamFindFirst.mockResolvedValueOnce({
+    teamFindMany.mockResolvedValue([{
       teamName: 'T',
       ownerName: null,
       externalId: '4',
       platformUserId: 'sleeper-77',
       avatarUrl: 'https://sleepercdn.com/avatars/thumbs/abc123',
-    }).mockResolvedValueOnce({ avatarUrl: 'https://example.com/cream.png' })
+      claimedByUserId: USER,
+    }])
+    teamFindFirst.mockResolvedValue({ avatarUrl: 'https://example.com/cream.png' })
     rosterFindFirst.mockResolvedValue({ playerData: { players: [1, 2, 3] } })
     leagueActivity.mockResolvedValue({ items: [], counts: { trade: 0, waiver: 0, rosterMove: 0 }, newest: null, unattributed: 0 })
 
@@ -592,11 +624,11 @@ describe('resolving the other half from a league', () => {
 
     expect(out?.self?.avatarUrl).toBe('https://sleepercdn.com/avatars/thumbs/abc123')
     expect(out?.other?.avatarUrl).toBe('https://example.com/cream.png')
-    expect(teamFindFirst.mock.calls[1][0].where).toEqual({ leagueId: 'lg-fx', claimedByUserId: USER })
+    expect(teamFindFirst.mock.calls[0][0].where).toEqual({ leagueId: 'lg-fx', claimedByUserId: USER })
     /* 🛑 THE COLUMN MUST BE ASKED FOR. The bug was a missing `select` key, not a
        missing render — so asserting the output alone would pass against a query
        that never reads it once a default-select regression puts it back. */
-    expect(teamFindFirst.mock.calls[0][0].select).toMatchObject({ avatarUrl: true })
+    expect(teamFindMany.mock.calls[0][0].select).toMatchObject({ avatarUrl: true })
   })
 
   /**
@@ -619,7 +651,7 @@ describe('resolving the other half from a league', () => {
     })
     fantraxFindUnique.mockResolvedValue({ id: 'fx-1', leagueName: 'C', season: 2026, userTeam: 'Ciege82', roster: [{ name: 'A' }] })
     leagueFindFirst.mockResolvedValue({ id: 'lg-fx' })
-    teamFindFirst.mockResolvedValue(null)
+    teamFindMany.mockResolvedValue([])
     leagueActivity.mockResolvedValue({ items: [], counts: { trade: 0, waiver: 0, rosterMove: 0 }, newest: null, unattributed: 0 })
 
     const out = await resolvePairedHalf('lg-1', USER)

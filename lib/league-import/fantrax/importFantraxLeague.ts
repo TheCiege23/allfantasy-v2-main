@@ -416,15 +416,15 @@ export async function attachToFranchise(args: {
 
   if (!link) return { ok: false, error: 'Franchise not found' }
 
-  const roleTaken = await prisma.franchiseLeagueMember.findFirst({
-    where: { linkId: link.id, role: args.role },
-    select: { id: true },
+  const existingMember = await prisma.franchiseLeagueMember.findFirst({
+    where: { platform: args.platform, leagueId: args.leagueId },
+    select: { id: true, linkId: true },
   })
 
-  if (roleTaken) {
+  if (existingMember?.linkId === link.id) {
     await prisma.franchiseLeagueMember.update({
-      where: { id: roleTaken.id },
-      data: { platform: args.platform, leagueId: args.leagueId, teamExternalId: args.teamExternalId },
+      where: { id: existingMember.id },
+      data: { role: args.role, teamExternalId: args.teamExternalId },
     })
   } else {
     await prisma.franchiseLeagueMember.create({

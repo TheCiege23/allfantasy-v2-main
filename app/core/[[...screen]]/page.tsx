@@ -3711,16 +3711,24 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
           <>
             {connectedFranchise && selectedLeagueId ? (
               <ConnectedFranchiseWarRoom
+                linkId={connectedFranchise.linkId}
                 franchiseName={connectedFranchise.franchiseName}
                 selectedLeagueId={selectedLeagueId}
                 sides={connectedFranchise.sides.map((side) => ({
                   role: side.role,
                   leagueId: side.leagueId,
+                  memberLeagueId: side.memberLeagueId,
                   name: side.name,
                   platform: side.platform,
                   sport: side.sport ?? null,
+                  season: side.season,
+                  teamLabel: side.teamLabel,
+                  teamCandidates: side.teamCandidates,
+                  avatarUrl: side.avatarUrl,
                   playerCount: side.playerCount,
                   unavailableReason: side.unavailableReason,
+                  draft: side.draft,
+                  activity: side.activity,
                   players: (side.players ?? []).map((player) => ({
                     id: player.id,
                     name: player.name,

@@ -44,9 +44,13 @@ export type FranchiseSide = {
   platform: string
   /** Route target, when it is a League we can link to. */
   leagueId: string | null
+  /** ID stored on FranchiseLeagueMember; Fantrax uses its snapshot ID here. */
+  memberLeagueId: string
   name: string
   season: number | null
   teamLabel: string | null
+  /** Provider teams the owner can explicitly map to this franchise member. */
+  teamCandidates: Array<{ id: string; label: string }>
   /**
    * That half's team crest.
    *
@@ -250,7 +254,19 @@ export async function resolvePairedHalf(
        * rather than "0 players", which would claim the viewer rosters nobody.
        */
       const allRows = Array.isArray(snap?.roster) ? (snap?.roster as unknown[]) : null
-      const userTeam = String(snap?.userTeam ?? '').trim().toLowerCase()
+      const teamNames = Array.from(
+        new Set(
+          (allRows ?? [])
+            .map((row) => {
+              const value = (row as { teamName?: unknown })?.teamName
+              return typeof value === 'string' ? value.trim() : ''
+            })
+            .filter(Boolean),
+        ),
+      ).sort((a, b) => a.localeCompare(b))
+      const requestedTeam = String(member.teamExternalId ?? snap?.userTeam ?? '').trim()
+      const selectedTeam = teamNames.find((name) => name.toLowerCase() === requestedTeam.toLowerCase()) ?? requestedTeam
+      const userTeam = selectedTeam.toLowerCase()
       const teamOf = (r: unknown): string => {
         const t = (r as { teamName?: unknown })?.teamName
         return typeof t === 'string' ? t.trim().toLowerCase() : ''
@@ -281,11 +297,13 @@ export async function resolvePairedHalf(
         role,
         platform,
         leagueId: mirror?.id ?? null,
+        memberLeagueId: member.leagueId,
         sport: snap?.sport ?? 'NCAAF',
         players: mine ? await connectedRosterPlayers(platform, snap?.sport ?? 'NCAAF', mine).catch(() => []) : [],
         name: snap?.leagueName ?? 'Fantrax league',
         season: snap?.season ?? null,
-        teamLabel: snap?.userTeam ?? member.teamExternalId,
+        teamLabel: selectedTeam || null,
+        teamCandidates: teamNames.map((name) => ({ id: name, label: name })),
         /* Not a gap to be filled later: Fantrax publishes no image field at all,
            so this half renders initials. See the type for the measurement. */
         avatarUrl: claimedTeam?.avatarUrl ?? null,
@@ -311,7 +329,7 @@ export async function resolvePairedHalf(
                 ? 'this Fantrax snapshot does not record which team is yours — re-run the import'
                 : mine && mine.length > 0
                   ? null
-                  : `no players are filed under “${snap?.userTeam}” in this snapshot — re-run the import`,
+                : `no players are filed under “${selectedTeam || 'your selected team'}” in this snapshot — choose the correct team or re-run the import`,
       }
     }
 
@@ -325,20 +343,26 @@ export async function resolvePairedHalf(
      * ⚠ THE ROSTER COUNT IS READ FROM THE CLAIMED TEAM, NOT FROM THE LEAGUE. A
      * league-wide count would report every manager's players as yours.
      */
-    const team = lg
-      ? await prisma.leagueTeam.findFirst({
-          where: { leagueId: lg.id, claimedByUserId: ownerUserId },
-          /* `avatarUrl` rides the query that was already being made — the crest
-             costs no extra round trip. 995 of 1140 LeagueTeam rows carry one. */
+    const teams = lg
+      ? await prisma.leagueTeam.findMany({
+          where: { leagueId: lg.id },
           select: {
             teamName: true,
             ownerName: true,
             externalId: true,
             platformUserId: true,
             avatarUrl: true,
+            claimedByUserId: true,
           },
+          orderBy: { teamName: 'asc' },
         })
-      : null
+      : []
+    /* An explicit hub mapping wins. The claimed team remains the automatic
+       default, so existing connections need no setup step. */
+    const team =
+      teams.find((candidate) => candidate.externalId === member.teamExternalId) ??
+      teams.find((candidate) => candidate.claimedByUserId === ownerUserId) ??
+      null
     /*
      * ⚠ `Roster.platformUserId` CARRIES TWO ID SPACES, AND THE VIEWER'S OWN TEAM
      * IS THE ONE THAT USES THE OTHER ONE.
@@ -356,10 +380,16 @@ export async function resolvePairedHalf(
      * renders as "no roster on file", which reads as broken ingestion rather than
      * a missed join.
      *
-     * Both keys are tried, viewer id first. Still gated on a team they actually
-     * claimed, so this cannot fall back to a stranger's squad.
+     * The viewer key is tried only when this is still their claimed team. An
+     * explicit franchise mapping may point at another provider team, in which
+     * case its provider/external keys must win or the old roster can leak back
+     * into the newly selected identity.
      */
-    const rosterKeys = [ownerUserId, team?.platformUserId].filter(
+    const rosterKeys = [
+      team?.claimedByUserId === ownerUserId ? ownerUserId : null,
+      team?.platformUserId,
+      team?.externalId,
+    ].filter(
       (k): k is string => typeof k === 'string' && k.length > 0,
     )
     const roster =
@@ -380,13 +410,18 @@ export async function resolvePairedHalf(
       role,
       platform,
       leagueId: lg?.id ?? null,
+      memberLeagueId: member.leagueId,
       sport: lg?.sport ?? 'NFL',
       players: roster ? await connectedRosterPlayers(platform, lg?.sport ?? 'NFL', (roster.playerData as { players?: unknown[] })?.players ?? []).catch(() => []) : [],
       name: lg?.name?.trim() || 'League',
       season: lg?.season ?? null,
       teamLabel: team?.teamName?.trim() || team?.ownerName?.trim() || member.teamExternalId,
-      /* Only the team the viewer CLAIMED — `team` is already gated on that, so
-         this cannot show a stranger's crest on your half of the franchise. */
+      teamCandidates: teams.map((candidate) => ({
+        id: candidate.externalId,
+        label: candidate.teamName?.trim() || candidate.ownerName?.trim() || candidate.externalId,
+      })),
+      /* The claimed team by default, or the team explicitly selected for this
+         franchise member in the command center. */
       avatarUrl: team?.avatarUrl?.trim() || null,
       playerCount: players,
       draft: null,
