@@ -229,8 +229,13 @@ form and an array form until each has its own fixture; do not narrow it to the M
 
 #### 📌 2026-09-19 — `G-01` now BLOCKS fantasy scoring, not just `/live` display
 
-A consumer arrived. `lib/scoring-runtime/dailySportStatNormalization.ts` converts cached NBA/NHL
-game logs into weekly fantasy stats, and `syncPlayerWeeklyScoresForRedraftSeason` dispatches to it.
+A consumer arrived. `lib/scoring-runtime/dailySportStatNormalization.ts` converts NBA/NHL game rows
+into weekly fantasy stats, and `syncPlayerWeeklyScoresForRedraftSeason` dispatches to it.
+
+It reads `player_game_stats.normalized_stat_map` — the table THIS module's own ingest writes on the
+`?multiSport=1` schedule — not `playerGameLogCache`, which has no scheduled writer at all. That
+choice is the difference between a pipeline that can work and one that reads an empty table while
+reporting itself healthy.
 Everything in that module that could be derived from committed sources was: the canonical output
 keys are taken from `lib/sportConfig/configs/{nba,nhl}.ts` and a test asserts they match, so the
 scoring engine can score whatever is produced.

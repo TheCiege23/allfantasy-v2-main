@@ -247,6 +247,17 @@ export function isDailyStatSport(sport: string | null | undefined): boolean {
 }
 
 /**
+ * The per-game normalizer for a sport, for callers that already hold the week's
+ * rows and do not need them found in a payload — notably the `playerGameStat`
+ * path, where the query has already filtered to one week.
+ */
+export function getDailySportNormalizer(
+  sport: string | null | undefined,
+): ((raw: unknown) => NormalizedGameStats) | null {
+  return DAILY_SPORT_NORMALIZERS[String(sport ?? '').trim().toUpperCase()] ?? null
+}
+
+/**
  * The entry point the weekly score service uses for a daily sport: find every
  * game in the week, normalize each, and sum.
  */

@@ -18,8 +18,9 @@ export {
   teamAbbrevFromDefPlayerId,
 } from '@/lib/scoring-runtime/nflStatNormalization'
 import {
+  aggregateWeeklyStats,
+  getDailySportNormalizer,
   isDailyStatSport,
-  normalizeDailySportWeeklyStats,
 } from '@/lib/scoring-runtime/dailySportStatNormalization'
 
 export type WeeklyScoreSyncSummary = {
@@ -151,15 +152,48 @@ export async function syncPlayerWeeklyScoresForRedraftSeason(params: {
     return summary
   }
 
-  const cachedRows = await prisma.playerGameLogCache.findMany({
-    where: {
-      playerId: { in: playerIds },
-      season: String(seasonYear),
-      seasonType: 'regular',
-      sport: { in: candidateSportKeys(sport) },
-    },
-  })
+  const cachedRows = isDailySport
+    ? []
+    : await prisma.playerGameLogCache.findMany({
+        where: {
+          playerId: { in: playerIds },
+          season: String(seasonYear),
+          seasonType: 'regular',
+          sport: { in: candidateSportKeys(sport) },
+        },
+      })
   summary.cacheRowsRead = cachedRows.length
+
+  /**
+   * One row per GAME, from the scheduled multi-sport ingest
+   * (`lib/sports-data/rollingInsightsGameLogs.ts` →
+   * `/api/cron/import-player-game-stats?multiSport=1`). A daily sport's week is
+   * several of these, which is why they are grouped rather than keyed 1:1.
+   *
+   * `normalizedStatMap` carries `{ stats: { <provider key>: number } }` — every
+   * numeric field under its ORIGINAL vendor name, because that ingest
+   * deliberately guesses nothing. That is exactly the input the alias tables
+   * expect, and it is also how the unmapped-key report names real vendor fields
+   * rather than invented ones.
+   */
+  const dailyRowsByPlayer = new Map<string, unknown[]>()
+  if (isDailySport) {
+    const gameRows = await prisma.playerGameStat.findMany({
+      where: {
+        playerId: { in: playerIds },
+        sportType: { in: candidateSportKeys(sport) },
+        season: seasonYear,
+        weekOrRound: week,
+      },
+      select: { playerId: true, normalizedStatMap: true },
+    })
+    for (const row of gameRows) {
+      const rows = dailyRowsByPlayer.get(row.playerId) ?? []
+      rows.push(row.normalizedStatMap)
+      dailyRowsByPlayer.set(row.playerId, rows)
+    }
+    summary.cacheRowsRead = gameRows.length
+  }
 
   const cacheByPlayer = new Map<string, { payload: unknown }>(
     cachedRows.map((row: { playerId: string; payload: unknown }) => [row.playerId, row]),
@@ -240,16 +274,31 @@ export async function syncPlayerWeeklyScoresForRedraftSeason(params: {
       continue
     }
 
-    const cached = cacheByPlayer.get(playerId)
-    if (!cached) {
-      summary.missingCachePlayerIds.push(playerId)
-      continue
-    }
-
+    /**
+     * 🛑 THE DAILY BRANCH READS A DIFFERENT TABLE, AND MUST RUN BEFORE THE
+     * `playerGameLogCache` GUARD BELOW.
+     *
+     * `playerGameLogCache` is written only by `PlayerGameLogImportService`,
+     * which has no scheduled caller — admin routes only. What IS scheduled for
+     * NBA/NHL is `/api/cron/import-player-game-stats?multiSport=1`, and that
+     * writes `playerGameStat` instead. Sourcing the daily sports from the cache
+     * would point them at a table nothing refreshes: it would fail silently and
+     * look correct, which is the worse of the two failures.
+     *
+     * The query has already narrowed to this week, so the rows are aggregated
+     * directly rather than searched for in a payload.
+     */
     if (isDailySport) {
-      // A week here is several games. Summing them is the whole difference from
-      // the NFL path below, which takes one row per week.
-      const aggregate = normalizeDailySportWeeklyStats(sport, cached.payload, week)
+      const dailyRows = dailyRowsByPlayer.get(playerId) ?? []
+      if (dailyRows.length === 0) {
+        summary.missingCachePlayerIds.push(playerId)
+        continue
+      }
+
+      const normalizer = getDailySportNormalizer(sport)
+      const aggregate = normalizer
+        ? aggregateWeeklyStats(dailyRows, normalizer)
+        : { stats: {}, gamesCounted: 0, unmappedKeys: [] }
       for (const key of aggregate.unmappedKeys) unmappedStatKeys.add(key)
 
       if (aggregate.gamesCounted === 0) {
@@ -282,6 +331,12 @@ export async function syncPlayerWeeklyScoresForRedraftSeason(params: {
         },
       })
       summary.scoresUpserted += 1
+      continue
+    }
+
+    const cached = cacheByPlayer.get(playerId)
+    if (!cached) {
+      summary.missingCachePlayerIds.push(playerId)
       continue
     }
 
