@@ -286,12 +286,22 @@ directly, because the first version of the consumer above assumed otherwise and 
   from the date window: a window anchored on the regular-season opener cannot contain a September
   preseason game. That is a property, not a filter, and it is covered by a test.
 
-⚠ **And the anchor that window needs does not exist yet.** `season_calendars` holds **0 rows** in
-production (still true on 2026-09-19), and the `SeasonCalendar` model stores only MONTH granularity
-(`{ monthStart, monthEnd }`) — it cannot express "the season opens on 7 October". So
-`syncPlayerWeeklyScoresForRedraftSeason` takes `seasonStartUtc` from its caller and **declines with a
-named warning when it is absent**, rather than inventing a start date and silently mis-assigning
-every game to the wrong week. Giving these sports a real day-level season anchor is the open work.
+✅ **The anchor that window needs is now recorded in code** —
+`lib/season-week/dailySportSeasonStarts.ts`, NHL 2026-09-29 and NBA 2026-10-20. It is NOT in
+`season_calendars`: that table holds **0 rows** in production (still true 2026-09-19) and the
+`SeasonCalendar` model stores only MONTH granularity (`{ monthStart, monthEnd }`), so it cannot
+express "opens on the 20th". Moving these there later needs a day-level column first.
+
+Each date carries TWO independent sources, which is the bar for anything that silently mis-assigns a
+whole season: the league's published schedule, and game density measured in production `SportsGame`
+(NHL — no games on 28 Sep, resuming the 29th; NBA — none 18-19 Oct, then 2 on the 20th and a full
+slate the 21st). An unrecorded season still returns null and the sync **declines naming the file to
+edit**, rather than falling back to a nearby year.
+
+⚠ Residual, pre-existing: `gameDate` is a UTC DATE derived from game time, so a late-evening Eastern
+game lands on the following UTC date — the US-Eastern-vs-UTC trap this file already records for
+`/live/{date}`. That shifts boundary games by a day at week edges. It belongs to the ingest, not to
+the anchor.
 
 ---
 
