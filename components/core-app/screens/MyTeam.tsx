@@ -682,6 +682,29 @@ function TaxiYears({ tenure }: { tenure: TaxiTenure | null }) {
 }
 
 export function MyTeam({ data }: MyTeamProps) {
+  // A streamed roster can arrive after the browser's native fragment lookup.
+  // Re-check on mount/hash changes, never on routine lineup refreshes.
+  useEffect(() => {
+    let highlighted: HTMLElement | null = null
+    const reveal = () => {
+      highlighted?.removeAttribute('data-lineup-target')
+      highlighted = null
+      const id = window.location.hash.slice(1)
+      if (!/^lineup-(player|slot)-[a-zA-Z0-9_-]+$/.test(id)) return
+      const row = document.getElementById(id)
+      if (!row?.classList.contains('af-mt-row')) return
+      highlighted = row
+      row.setAttribute('data-lineup-target', 'true')
+      row.scrollIntoView({ block: 'center' })
+    }
+    reveal()
+    window.addEventListener('hashchange', reveal)
+    return () => {
+      window.removeEventListener('hashchange', reveal)
+      highlighted?.removeAttribute('data-lineup-target')
+    }
+  }, [data.league.id])
+
   const platform = data.league.platform === 'manual' ? 'your platform' : data.league.platform
 
   const proj = data.projections.available ? data.projections.data : null

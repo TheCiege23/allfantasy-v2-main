@@ -729,3 +729,25 @@ it('keeps a player alert anchor when the player moves from starter to bench', ()
   expect(view.container.querySelector('#lineup-player-p1')).toHaveTextContent('BN')
   view.unmount()
 })
+
+it('reveals a player after the roster mounts and does not jump on routine refresh', () => {
+  const scroll = vi.fn()
+  const previous = HTMLElement.prototype.scrollIntoView
+  HTMLElement.prototype.scrollIntoView = scroll
+  window.history.replaceState(null, '', '#lineup-player-p1')
+  const view = render(<MyTeam data={data()} />)
+  try {
+    expect(view.container.querySelector('#lineup-player-p1')).toHaveAttribute('data-lineup-target', 'true')
+    expect(scroll).toHaveBeenCalledTimes(1)
+    view.rerender(<MyTeam data={data()} />)
+    expect(scroll).toHaveBeenCalledTimes(1)
+    window.history.replaceState(null, '', '#unrelated')
+    window.dispatchEvent(new Event('hashchange'))
+    expect(view.container.querySelector('[data-lineup-target]')).toBeNull()
+    expect(scroll).toHaveBeenCalledTimes(1)
+  } finally {
+    view.unmount()
+    window.history.replaceState(null, '', '/')
+    HTMLElement.prototype.scrollIntoView = previous
+  }
+})
