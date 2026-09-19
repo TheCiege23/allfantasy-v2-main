@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { getTradeGrades } from '@/lib/trade-intel/sleeperTradeGradeService'
 import { getImportedTradeLedger } from '@/lib/trade-intel/importedTradeLedgerService'
+import { getReconciledTradeGrades } from '@/lib/core-app/sleeperTradeHistory'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60 // first build walks every season's transactions
@@ -52,11 +52,17 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ supported: false as const, platform: league.platform })
   }
 
-  const profile = await prisma.userProfile
-    .findUnique({ where: { userId }, select: { sleeperUserId: true } })
-    .catch(() => null)
+  const [claimed, profile] = await Promise.all([
+    prisma.leagueTeam
+      .findFirst({ where: { leagueId: league.id, claimedByUserId: userId }, select: { platformUserId: true } })
+      .catch(() => null),
+    prisma.userProfile
+      .findUnique({ where: { userId }, select: { sleeperUserId: true } })
+      .catch(() => null),
+  ])
 
-  const grades = await getTradeGrades(league.platformLeagueId)
+  const reconciled = await getReconciledTradeGrades(league.platformLeagueId)
+  const grades = reconciled.grades
   if (!grades) {
     return NextResponse.json(
       { supported: true as const, grades: null, error: 'Trade grading temporarily unavailable' },
@@ -66,7 +72,12 @@ export async function GET(req: NextRequest) {
 
   return NextResponse.json({
     supported: true as const,
-    viewerSleeperUserId: profile?.sleeperUserId ?? null,
+    viewerSleeperUserId: claimed?.platformUserId ?? profile?.sleeperUserId ?? null,
     grades,
+    sync: {
+      liveFeedAvailable: reconciled.feedAvailable,
+      incomplete: reconciled.incomplete,
+      refreshed: reconciled.refreshed,
+    },
   })
 }

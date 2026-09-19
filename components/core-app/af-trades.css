@@ -190,6 +190,24 @@
   gap: 4px 8px;
   min-width: 0;
 }
+.af-tr-manager-identity,
+.af-tr-player-asset {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.af-tr-manager-avatar {
+  width: 28px;
+  height: 28px;
+  flex: 0 0 28px;
+  border-radius: 999px;
+  object-fit: cover;
+  border: 1px solid var(--line);
+}
+.af-tr-player-asset {
+  margin: 2px 10px 2px 0;
+  vertical-align: middle;
+}
 
 .af-tr-players-who {
   flex: none;

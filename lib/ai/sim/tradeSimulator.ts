@@ -37,6 +37,9 @@ export function simulateTrade(args: {
   iterations?: number
   weeksRemaining?: number
   leagueSize?: number
+  playoffTeams?: number
+  /** Counterparty/third-team rosters after the same transaction. */
+  afterRosterByTeamId?: Record<string, SimPlayerInput[]>
 }): TradeSimResult {
   const iterations = Math.max(40, Math.min(800, args.iterations ?? 180))
   const weeks = args.weeksRemaining ?? 12
@@ -47,20 +50,24 @@ export function simulateTrade(args: {
   const teamsBefore = baseTeams.map((t, i) =>
     i === idx ? teamFromRoster(t.id, t.name, args.beforePlayers) : t,
   )
-  const teamsAfter = baseTeams.map((t, i) =>
-    i === idx ? teamFromRoster(t.id, t.name, args.afterPlayers) : t,
-  )
+  const teamsAfter = baseTeams.map((t, i) => {
+    if (i === idx) return teamFromRoster(t.id, t.name, args.afterPlayers)
+    const changed = args.afterRosterByTeamId?.[t.id]
+    return changed ? teamFromRoster(t.id, t.name, changed) : t
+  })
 
   const mc: MonteCarloOptions = {
     iterations,
     seed: 99,
     weeksRemaining: weeks,
-    playoffTeams: Math.min(6, leagueSize),
+    playoffTeams: Math.max(2, Math.min(leagueSize, args.playoffTeams ?? Math.min(6, leagueSize))),
     regularSeasonWeeks: weeks,
   }
 
   const before = simulateSeason(teamsBefore, mc)
-  const after = simulateSeason(teamsAfter, { ...mc, seed: 101 })
+  // Common random numbers isolate the roster change; different seeds would add
+  // Monte Carlo noise to the reported trade delta.
+  const after = simulateSeason(teamsAfter, mc)
 
   const ids = baseTeams.map((t) => t.id)
   const winDelta: Record<string, number> = {}

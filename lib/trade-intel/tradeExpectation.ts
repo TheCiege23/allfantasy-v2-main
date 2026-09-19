@@ -3,6 +3,11 @@ import type { MarketValuesPayload } from '@/lib/trade-intel/marketValueService'
 import type { AfValue } from '@/lib/trade-intel/afValue'
 import type { GradeLetter } from '@/lib/trade-intel/gradeScale'
 import type { GradedTrade, TradeSideGrade } from '@/lib/trade-intel/sleeperTradeGradeService'
+import {
+  TRADE_GRADE_DIMENSION_FRAMEWORK,
+  resolveTradeGradingPolicy,
+  type SupportedTradeFormat,
+} from '@/lib/trade-intel/tradeGradingPolicy'
 
 /**
  * tradeExpectation — what we can honestly say about a trade BEFORE it has
@@ -155,6 +160,27 @@ export type TradeExpectation = {
   sides: SideExpectation[]
   /** Anything upstream refused to give us, named rather than papered over. */
   missing: string[]
+  /** Auditable statement of what the displayed letter does and does not prove. */
+  evaluation: {
+    concept: string
+    format: SupportedTradeFormat
+    policyVersion: string
+    objective: string
+    historicalMode: 'live' | 'as-of-trade-required'
+    scope: 'market-only' | 'withheld-specialty' | 'withheld-historical'
+    complete: false
+    dimensionFramework: {
+      version: string
+      primary: Array<{ id: string; label: string; description: string }>
+      secondary: Array<{ id: string; label: string; description: string }>
+    }
+    factors: Array<{
+      id: 'user-strategy' | 'league-settings' | 'roster-settings' | 'team-needs' | 'playoff-impact' | 'format-objective' | 'historical-context'
+      status: 'used' | 'reported-only' | 'not-applicable' | 'missing'
+      detail: string
+    }>
+    withheldReason: string | null
+  }
 }
 
 const FLEX_SLOTS = new Set(['FLEX', 'SUPER_FLEX', 'REC_FLEX', 'WRRB_FLEX', 'IDP_FLEX'])
@@ -272,6 +298,14 @@ export type BuildParams = {
   pickValueLookup?: (season: string, round: number) => number | null
   /** Blended multi-source AF Values keyed by Sleeper id. Absent = single source only. */
   afValues?: Map<string, AfValue> | null
+  /** Canonical AllFantasy concept. Specialty formats cannot use H2H market math as their verdict. */
+  leagueConcept?: string | null
+  survivorMode?: boolean
+  guillotineMode?: boolean
+  /** League- and participant-specific legality at the trade time. */
+  tradesEnabled?: boolean | null
+  /** True when current values/rosters would be future information relative to this trade. */
+  historical?: boolean
 }
 
 function assetFromPlayer(
@@ -445,7 +479,22 @@ export function buildTradeExpectation(params: BuildParams): TradeExpectation {
   if (!params.priorSeason) missing.push('prior-season stats unavailable')
   if (!params.rosteredByPosition) missing.push('rosters unavailable — roster needs not assessed')
 
-  const sides = params.trade.sides.map((s) => sideFrom(s, params))
+  const concept = String(params.leagueConcept ?? (params.context.variant.dynasty ? 'dynasty' : params.context.variant.keeper ? 'keeper' : 'redraft')).toLowerCase()
+  const policy = resolveTradeGradingPolicy({
+    concept,
+    bestBall: params.context.variant.bestBall,
+    // Pure/unit callers that construct a known completed trade keep the legacy
+    // assumption. The I/O loader always supplies the league-derived answer.
+    tradesEnabled: params.tradesEnabled === undefined ? true : params.tradesEnabled,
+    survivorMode: params.survivorMode,
+    guillotineMode: params.guillotineMode,
+  })
+  const specialty = policy.format !== 'redraft' && policy.format !== 'dynasty'
+  const historical = params.historical === true
+  const sides = params.trade.sides.map((s) => {
+    const built = sideFrom(s, params)
+    return specialty || historical ? { ...built, projected: null } : built
+  })
 
   // Scoring mode reflects the assets in THIS trade, not the whole stat board.
   // Claim league-scored only when every traded player we priced genuinely was.
@@ -474,6 +523,9 @@ export function buildTradeExpectation(params: BuildParams): TradeExpectation {
   if (params.marketValues && !anyCorroborated) {
     missing.push('second value source unavailable — values are single-source')
   }
+  if (historical) {
+    missing.push('decision-time value and roster snapshots unavailable — historical market grade withheld')
+  }
 
   const measuredSomething = sides.some(
     (s) => s.marketNet != null || s.priorNet != null || s.starterGaps != null,
@@ -486,5 +538,48 @@ export function buildTradeExpectation(params: BuildParams): TradeExpectation {
     scoringMode,
     sides,
     missing,
+    evaluation: {
+      concept,
+      format: policy.format,
+      policyVersion: policy.version,
+      objective: policy.objective,
+      historicalMode: historical ? 'as-of-trade-required' : 'live',
+      scope: historical ? 'withheld-historical' : specialty ? 'withheld-specialty' : 'market-only',
+      complete: false,
+      dimensionFramework: {
+        version: TRADE_GRADE_DIMENSION_FRAMEWORK.version,
+        primary: [...TRADE_GRADE_DIMENSION_FRAMEWORK.primary],
+        secondary: [...TRADE_GRADE_DIMENSION_FRAMEWORK.secondary],
+      },
+      withheldReason: historical
+        ? 'Historical decision grade withheld until values, league rules, rosters, projections, and outcome inputs captured at or before the trade are available. The realized outcome grade remains separate.'
+        : policy.eligibility === 'disabled'
+          ? `This ${policy.format.replaceAll('_', ' ')} league or one of the participating teams was not eligible to trade, so no trade grade is valid.`
+        : policy.eligibility === 'unknown'
+          ? `Trade eligibility was not captured for this ${policy.format.replaceAll('_', ' ')} transaction, so a contextual letter is withheld.`
+        : specialty
+          ? ({
+              survivor: 'Survivor has no standard playoff objective; it requires the transaction window, tribe relationship, merge phase, voting position, immunity, and advantages before a letter can be calculated.',
+              survivor_guillotine: 'The supplied Survivor Guillotine rules prohibit trades. A configurable trade-enabled version would still require the exact elimination phase, expanding lineup, tribe, idols, swap tokens, and FAAB market.',
+              guillotine: 'Guillotine has no standard playoff objective; a letter is withheld until survival probability, weekly floor, field size, chop-line distance, and FAAB purchasing power are scored.',
+              best_ball: 'Best ball uses the automatically optimized whole roster; a letter is withheld until weekly score distributions, depth, bye overlap, and correlation are scored under this league’s trade settings.',
+              salary_cap: 'Salary-cap dynasty requires post-trade cap legality, every contract term, dead money, rollover, and replacement spending power before a letter can be calculated.',
+              zombie: 'Zombie requires both teams’ infection state at execution, the current matchup, trade window, items, weekly money, and infection-adjusted outcome simulation.',
+              tournament: 'The supplied tournament prohibits trades. A trade-enabled variant would still require the current advancement stage, next roster reset, remaining matchups, byes, and FAAB reset.',
+              king_of_the_hill: 'King of the Hill requires the current King, playoff cutoff, weekly matchup distributions, three-player loss exposure, and the league’s waiver market before a letter can be calculated.',
+              pirate: 'Pirate requires proof the trade occurred outside the Thursday–Monday lock, both protection lists, the best unprotected player on each roster, and win/steal simulations before a letter can be calculated.',
+            } as Partial<Record<SupportedTradeFormat, string>>)[policy.format] ??
+            `This ${policy.format.replaceAll('_', ' ')} grade requires format-specific evidence that is not attached.`
+          : null,
+      factors: [
+        { id: 'user-strategy', status: 'missing', detail: 'The manager’s confirmed objective is not attached. Team identity and competitive state must drive the contextual grade; manager psychology must not change the math.' },
+        { id: 'league-settings', status: 'used', detail: describeLeague(params.context) },
+        { id: 'roster-settings', status: 'used', detail: `${params.context.roster.starterCount} starting slots and ${params.context.roster.bench} bench slots; method: ${policy.rosterMethod.replaceAll('_', ' ')}.` },
+        { id: 'team-needs', status: historical ? 'missing' : params.rosteredByPosition ? 'reported-only' : 'missing', detail: historical ? 'The before/after roster at the trade time was not loaded.' : params.rosteredByPosition ? 'Lineup holes are reported, but do not yet alter the market letter.' : 'Current roster positions were unavailable.' },
+        { id: 'playoff-impact', status: ['survival_probability', 'jury_win_probability', 'infection_adjusted_survival', 'advancement_probability'].includes(policy.primaryOutcome) ? 'not-applicable' : 'missing', detail: ['survival_probability', 'jury_win_probability', 'infection_adjusted_survival', 'advancement_probability'].includes(policy.primaryOutcome) ? `Standard playoff probability does not apply; paired before/after ${policy.primaryOutcome.replaceAll('_', ' ')} is required.` : `No paired before/after ${policy.primaryOutcome.replaceAll('_', ' ')} result is attached, so it does not alter the market letter.` },
+        { id: 'format-objective', status: specialty ? 'missing' : 'reported-only', detail: `${policy.objective} Required evidence: ${policy.requiredEvidence.join(', ').replaceAll('_', ' ')}.` },
+        { id: 'historical-context', status: historical ? 'missing' : 'not-applicable', detail: historical ? 'Current values and rosters are future information and are excluded from the decision grade.' : 'This trade belongs to the league’s current season.' },
+      ],
+    },
   }
 }

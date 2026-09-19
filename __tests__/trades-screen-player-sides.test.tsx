@@ -66,6 +66,17 @@ function data(trades: TradeRecord[]): TradesData {
 }
 
 describe('trades screen — directional player sides', () => {
+  it('shows picks and projected grades inside the completed trade, without a contradictory n/a badge', () => {
+    const t = record()
+    t.players[0] = { ...t.players[0], picks: ['2027 round 2'], grade: 'A', gradeBasis: 'Market', gradeNote: 'Market value edge 41%' }
+    const { container } = render(<Trades data={{ ...data([t]), canonicalHistory: true }} />)
+    expect(screen.getByText(/2027 round 2/)).toBeTruthy()
+    expect(screen.getByText('A')).toBeTruthy()
+    expect(screen.getByText(/Market · Market value edge 41%/)).toBeTruthy()
+    expect(container.textContent).not.toContain('n/a')
+    expect(container.textContent).not.toContain('Counts only')
+    expect(container.textContent).not.toContain('Trade grades')
+  })
   it('names BOTH sides by the manager who received', () => {
     render(<Trades data={data([record()])} />)
     expect(screen.getByText('You got')).toBeTruthy()

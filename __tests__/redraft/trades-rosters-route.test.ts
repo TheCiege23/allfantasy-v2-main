@@ -218,6 +218,7 @@ describe('GET /api/leagues/[leagueId]/trades/rosters', () => {
         stock: null,
         stockDelta: null,
         value: null,
+        weeklyProjection: null,
         /* Nothing resolved, so the honest reason is that we could not tell who this is. */
         unpricedReason: expect.objectContaining({ code: 'unidentified' }),
       },
@@ -521,6 +522,12 @@ describe('🛑 market value on the roster rows', () => {
   it('🛑 uses the same settings as player-search, so one player cannot show two values', async () => {
     // The picker renders search results beside roster rows. Different settings would give the same
     // player two numbers on one screen with nothing saying which the engine used.
+    findUniqueLeague.mockResolvedValue({
+      season: 2026,
+      isDynasty: true,
+      leagueSize: 12,
+      settings: { roster_positions: ['QB', 'RB', 'WR', 'FLEX'] },
+    })
     getPlayerValues.mockResolvedValue(new Map())
     await GET(new Request('http://localhost/api/leagues/league-1/trades/rosters') as never, ctx('league-1'))
     expect(getPlayerValues.mock.calls[0][1]).toEqual({ isDynasty: true, numQbs: 1, numTeams: 12, ppr: 1 })

@@ -2736,12 +2736,15 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
                 name: l.name,
                 platformLeagueId: (l as { platformLeagueId?: string | null }).platformLeagueId ?? null,
                 platform: String(l.platform ?? ''),
+                avatarUrl: (l as { avatarUrl?: string | null }).avatarUrl ?? null,
               })),
               now,
               HOME_RECENT_TRADES_LIMIT,
               {
                 ownerSleeperId: leagueListPayload?.sleeperUserId ?? null,
                 currentWeek,
+                reconcileLive: true,
+                enrichLeagueContext: true,
                 maxLeagues: 8,
                 /*
                  * The same scan sees offers waiting on you; the Trades urgency badge

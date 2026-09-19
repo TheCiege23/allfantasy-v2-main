@@ -24,6 +24,8 @@
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+vi.mock('@/lib/core-app/sleeperTradeHistory', () => ({ getSleeperTradeHistory: vi.fn(async () => null) }))
+
 const LEAGUE_ID = 'lg-1'
 const USER_ID = 'user-1'
 const SLEEPER_ID = '591462610482806784'

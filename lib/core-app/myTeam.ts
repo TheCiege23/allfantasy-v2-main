@@ -938,7 +938,9 @@ export async function getMyTeamData(
   if (!roster) {
     const noRoster = {
       available: false as const,
-      reason: isSleeper ? 'Your current Sleeper lineup could not be verified. Refresh to try again.' : 'no roster rows imported for your team in this league',
+      reason: isSleeper
+        ? 'Your current Sleeper lineup could not be verified. Open Sleeper to check your starters, then refresh.'
+        : 'no roster rows imported for your team in this league',
     }
     return {
       ...base,

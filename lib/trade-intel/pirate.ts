@@ -7,25 +7,8 @@
  *   1. You may PROTECT 3 players. Anyone unprotected — starter, bench or IR —
  *      can be stolen.
  *   2. You may only take from an opponent you BEAT head-to-head that week.
- *   3. Protections cannot be changed after the first TNF game until the
- *      following Wednesday at midnight.
- *   4. Once the games start, the ONLY players who can be traded are PROTECTED
- *      ones. Unprotected players are frozen until Wednesday midnight.
- *
- * ⚠ RULE 4 EXISTS TO PROTECT THE WINNER'S PICK, AND THAT IS WHAT MAKES IT READ
- * BACKWARDS AT FIRST. Unprotected players are the steal pool. If a manager who
- * is losing could ship them out mid-week, the winner would arrive to find
- * nothing worth taking — the whole mechanic would be dodgeable. So the takeable
- * players are exactly the ones frozen in place, and the safe ones are the only
- * currency that still moves.
- *
- * ⚠ THE COMMISSIONER'S PINNED TEXT SAYS THIS THE OTHER WAY ROUND — "you cannot
- * trade a protected player between TNF and the following Wednesday at midnight
- * but all other players can be traded at any time". Implemented per the
- * commissioner's stated INTENT rather than that wording, because the wording
- * describes a rule with no purpose: freezing players who cannot be stolen while
- * letting the stealable ones move is exactly the loophole rule 4 exists to
- * close. Worth correcting the pinned message for the league's own members.
+ *   3. ALL trading is locked from the start of the Thursday game until the
+ *      Monday games have ended.
  *
  * ⚠ THE CONCENTRATION ADVICE IN `lib/league-context/leagueContextService.ts` IS
  * BACKWARDS FOR THIS RULE SET, and this module exists partly to say so. That file
@@ -143,33 +126,16 @@ export function acquisitionSafety(args: {
 }
 
 /**
- * The trade window, which is not the same for every player on your roster.
- *
- * ⚠ DURING THE LOCK YOU CANNOT TRADE THE PLAYERS YOU ARE ABOUT TO LOSE. That is
- * the point of the rule: unprotected players are the steal pool, so freezing
- * them stops a losing manager shipping them out before the winner picks. Only
- * protected players move mid-week.
- *
- * ⚠ AND THAT CREATES A TRAP ON THE RECEIVING END. Protections are frozen in the
- * same window, so a player who arrives mid-week lands on your roster
- * UNPROTECTED and cannot be covered until Wednesday. Trade for a star on Friday,
- * lose on Sunday, and he is the first thing the winner takes — you will have
- * paid a protected price for a player you held for two days.
+ * The weekly trade window. This is a league-wide lock, not a player-level lock.
+ * Protection status changes steal exposure but does not create an exception.
  */
 export function tradeLockNote(args: {
   inLockWindow: boolean
-  /** Whether the player in question is currently protected. */
+  /** Kept for call-site compatibility; protection does not bypass the lock. */
   playerProtected: boolean | null
 }): string | null {
   if (!args.inLockWindow) return null
-
-  if (args.playerProtected === true) {
-    return 'He is protected, so he is one of the few players who CAN move right now — protected players are the only ones tradeable once the games start. ⚠ But protections are frozen too, so he arrives on the other roster unprotected and stays that way until Wednesday midnight: whoever takes him can lose him this week.'
-  }
-  if (args.playerProtected === false) {
-    return 'He is unprotected, so he cannot be traded until Wednesday midnight. Unprotected players are the steal pool and freezing them is what stops a losing manager shipping them out before the winner picks — you cannot trade your way out of this week’s exposure.'
-  }
-  return 'We cannot tell whether this player is protected. Once the games start only PROTECTED players can be traded — the unprotected ones are frozen so the winner still has something to take. Check his status before agreeing.'
+  return 'Trading is locked for the entire league from the start of the Thursday game until the Monday games end. Protection status does not create an exception, so this deal cannot execute during the current window.'
 }
 
 /**

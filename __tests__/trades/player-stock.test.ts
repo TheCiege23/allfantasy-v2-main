@@ -202,8 +202,10 @@ describe('🛑 one mark, one rule, in both places it is drawn', () => {
     expect(pickVariant).not.toContain('stock')
   })
 
-  it('⚠ the route resolves stock in the same pinned format as the value pass', () => {
-    expect(ROUTE).toContain("resolvePlayerStock(stockIds, { format: 'DYNASTY', qbFormat: 'ONE_QB' })")
+  it('⚠ the route resolves stock with the same league-specific value book as the value pass', () => {
+    expect(ROUTE).toContain('resolvePlayerStock(stockIds, { format: valueBook.format, qbFormat: valueBook.qbFormat })')
+    expect(ROUTE).toContain("isDynasty: valueBook.format === 'DYNASTY'")
+    expect(ROUTE).toContain("numQbs: valueBook.qbFormat === 'SUPERFLEX' ? 2 : 1")
   })
 
   /*
