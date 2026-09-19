@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react"
 import { usePathname } from "next/navigation"
-import { signOut } from "next-auth/react"
+import { signOutAndPurge } from "@/lib/pwa/signOutAndPurge"
 import { useOptionalSession } from "@/components/auth/useOptionalSession"
 import { resolveSessionIdleMs } from "@/lib/auth/session-idle-constants"
 
@@ -88,7 +88,7 @@ export default function SessionIdleMonitor() {
         return
       }
       if (Date.now() - last >= idleMs) {
-        void signOut({ callbackUrl: "/" })
+        void signOutAndPurge({ callbackUrl: "/" })
       }
     }, 15000)
 

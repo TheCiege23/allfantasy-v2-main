@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { signOut } from "next-auth/react"
+import { signOutAndPurge } from "@/lib/pwa/signOutAndPurge"
 import { useLanguage } from "@/components/i18n/LanguageProviderClient"
 import { useEntitlements } from "@/hooks/useEntitlements"
 
@@ -64,7 +64,7 @@ export function AccountSettingsSection({
         return
       }
       // PII is erased and auth is revoked — sign the user out and leave.
-      await signOut({ callbackUrl: "/" })
+      await signOutAndPurge({ callbackUrl: "/" })
     } catch {
       setDeleteError("Account deletion failed. Please try again.")
     } finally {
@@ -109,7 +109,7 @@ export function AccountSettingsSection({
       <div className="flex flex-wrap gap-2">
         <button
           type="button"
-          onClick={() => signOut({ callbackUrl: "/" })}
+          onClick={() => void signOutAndPurge({ callbackUrl: "/" })}
           className="rounded-xl border px-4 py-2 text-sm font-semibold"
           style={{ borderColor: "var(--border)", color: "var(--text)" }}
           data-testid="settings-account-sign-out"

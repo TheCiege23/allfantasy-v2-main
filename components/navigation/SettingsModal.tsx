@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import Link from "next/link"
-import { signOut } from "next-auth/react"
+import { signOutAndPurge } from "@/lib/pwa/signOutAndPurge"
 import { X, User, Settings, Users, Shield, Bell, Bot, Slash } from "lucide-react"
 import { useSettingsProfile } from "@/hooks/useSettingsProfile"
 import { IdentityImageRenderer } from "@/components/identity/IdentityImageRenderer"
@@ -275,7 +275,7 @@ function AccountSettings({
         </Link>
         <button
           type="button"
-          onClick={() => signOut({ callbackUrl: "/" })}
+          onClick={() => void signOutAndPurge({ callbackUrl: "/" })}
           className="text-[11px] font-medium rounded-xl px-4 py-2 border"
           style={{
             borderColor: "color-mix(in srgb, var(--accent-red) 60%, var(--border))",

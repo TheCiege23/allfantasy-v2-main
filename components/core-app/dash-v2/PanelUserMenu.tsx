@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { signOut } from 'next-auth/react'
+import { signOutAndPurge } from '@/lib/pwa/signOutAndPurge'
 import { useEffect, useId, useRef, useState } from 'react'
 import { useSettingsProfile } from '@/hooks/useSettingsProfile'
 import { useOptionalThemeMode } from '@/components/theme/ThemeProvider'
@@ -168,7 +168,7 @@ export function PanelUserMenu({ levelLabel = null }: { levelLabel?: string | nul
               type="button"
               className="af-d2-usermenu-item af-d2-usermenu-item--danger"
               role="menuitem"
-              onClick={() => signOut({ callbackUrl: '/' })}
+              onClick={() => void signOutAndPurge({ callbackUrl: '/' })}
             >
               Log out
             </button>
