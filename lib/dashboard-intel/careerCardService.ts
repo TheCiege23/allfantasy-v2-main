@@ -19,6 +19,7 @@ import { getSleeperLeagueHistory } from '@/lib/league-history/sleeperLeagueHisto
 import { getLeagueH2H } from '@/lib/league-history/sleeperH2HService'
 import { getImportedLeagueH2H } from '@/lib/league-history/importedFactsH2HService'
 import { getTradeGrades, type GradeLetter } from '@/lib/trade-intel/sleeperTradeGradeService'
+import { hasNoSignal } from '@/lib/trade-intel/tradeGradeEmail'
 import { getDraftReport } from '@/lib/draft-intel/draftReportService'
 
 const CACHE_PREFIX = 'career-card:v3:'
@@ -53,6 +54,12 @@ export type CareerCardPayload = {
     grades: GradeCounts
     totalNet: number
     ties: number
+    /**
+     * Trades in the ledger where nothing has been credited to anybody yet, so no letter is
+     * claimed for them. Reported rather than dropped: a résumé that silently shrank would be a
+     * second, quieter dishonesty than the one this separates out.
+     */
+    notYetGraded: number
   }
   drafts: {
     graded: number
@@ -134,6 +141,7 @@ async function buildCareerCard(userId: string): Promise<CareerCardPayload | null
   let tradeNet = 0
   let tradesGraded = 0
   let tradeTies = 0
+  let tradesNotYetGraded = 0
   const draftGrades = emptyGrades()
   let draftsGraded = 0
   let draftValueOver = 0
@@ -207,6 +215,23 @@ async function buildCareerCard(userId: string): Promise<CareerCardPayload | null
         const side = t.sides.find((s) => s.ownerId === me)
         if (side) {
           touched = true
+          /*
+           * 🛑 A TRADE WITH NOTHING CREDITED IS NOT A C, AND IT IS NOT A TIE.
+           *
+           * `letterFor` bands C as -40..40 and an ungraded trade nets exactly 0, so every
+           * preseason trade, every trade in a league still drafting, and every swap of picks
+           * that have not been used lands dead in the middle of C — and `tie` fires on it too.
+           * Tallied straight, a manager's career résumé fills with Cs and ties the engine never
+           * measured, and the more recently they joined the worse it reads.
+           *
+           * ⚠ COUNTED SEPARATELY RATHER THAN SKIPPED. Dropping them would shrink `graded` with
+           * no explanation, which is the same dishonesty pointed the other way — the card would
+           * quietly disagree with the league's own trade list.
+           */
+          if (hasNoSignal(t)) {
+            tradesNotYetGraded += 1
+            continue
+          }
           tradesGraded += 1
           tradeGrades[side.currentGrade] += 1
           tradeNet += side.cumulativeNet
@@ -349,6 +374,7 @@ async function buildCareerCard(userId: string): Promise<CareerCardPayload | null
       grades: tradeGrades,
       totalNet: Math.round(tradeNet * 10) / 10,
       ties: tradeTies,
+      notYetGraded: tradesNotYetGraded,
     },
     drafts: {
       graded: draftsGraded,

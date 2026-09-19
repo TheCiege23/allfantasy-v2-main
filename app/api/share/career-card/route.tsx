@@ -173,7 +173,15 @@ export async function GET(req: Request) {
 
           <div style={{ display: 'flex', gap: 18, marginTop: 18 }}>
             <div style={{ display: 'flex', flexDirection: 'column', flex: 1, background: '#12163e', border: '1px solid #262c6a', borderRadius: 16, padding: '16px 22px' }}>
-              <div style={{ display: 'flex', fontSize: 13, fontWeight: 700, color: '#5d64a3', letterSpacing: 1 }}>TRADE RÉSUMÉ · {card.trades.graded} graded</div>
+              {/*
+                * The count excludes trades where nothing has been credited yet, so a manager whose
+                * deals are all preseason reads "0 graded" — true, and otherwise inexplicable. Say
+                * how many are waiting rather than leaving an empty résumé to look like no trades.
+                */}
+              <div style={{ display: 'flex', fontSize: 13, fontWeight: 700, color: '#5d64a3', letterSpacing: 1 }}>
+                TRADE RÉSUMÉ · {card.trades.graded} graded
+                {card.trades.notYetGraded > 0 ? ` · ${card.trades.notYetGraded} too early` : ''}
+              </div>
               <div style={{ display: 'flex', fontSize: 24, fontWeight: 800, color: '#c6cbf5', marginTop: 6 }}>
                 {gradeLine(card.trades.grades) || '—'}
               </div>

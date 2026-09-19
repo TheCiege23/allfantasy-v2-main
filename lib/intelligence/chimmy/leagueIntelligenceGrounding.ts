@@ -22,6 +22,7 @@ import { prisma } from '@/lib/prisma'
 import { getLeagueContext } from '@/lib/league-context/leagueContextService'
 import { getMarketValues } from '@/lib/trade-intel/marketValueService'
 import { getTradeGrades } from '@/lib/trade-intel/sleeperTradeGradeService'
+import { hasNoSignal } from '@/lib/trade-intel/tradeGradeEmail'
 import { getLeagueH2H } from '@/lib/league-history/sleeperH2HService'
 import { isLeagueConceptType, leagueConceptLabel, resolveLeagueConcept } from '@/lib/league/leagueConceptOptions'
 
@@ -91,11 +92,29 @@ export async function resolveLeagueIntelligenceGrounding(args: {
     }
     if (grades && grades.trades.length > 0) {
       const t = grades.trades[0]
-      const sideSummary = t.sides
-        .map((s) => `${s.managerName}: ${s.currentGrade} (net ${s.cumulativeNet > 0 ? '+' : ''}${s.cumulativeNet.toFixed(0)} pts)`)
-        .join('; ')
+      /*
+       * 🛑 A LETTER WITH NO POINTS BEHIND IT MUST NOT BE GROUNDED AS A FACT.
+       *
+       * The grade bands put net 0 in the middle of C (`letterFor`: C is -40..40) and the engine
+       * reports `tie` for it, so a trade where NOTHING has been credited yet — preseason, a
+       * league still drafting, picks that have not been used — produces "Manager: C (net +0 pts)
+       * — currently a tie" for every side. That is the repo's known trap, and `hasNoSignal` is
+       * the predicate written for it.
+       *
+       * ⚠ IT IS WORSE HERE THAN ON A SCREEN. The closing line of this packet tells the model
+       * these are "the ONLY league-specific truths" and to cite them, so a placeholder letter is
+       * not merely displayed — it is handed over as something to reason from and repeat.
+       */
+      const sideSummary = hasNoSignal(t)
+        ? t.sides.map((s) => s.managerName).join(' / ')
+        : t.sides
+            .map((s) => `${s.managerName}: ${s.currentGrade} (net ${s.cumulativeNet > 0 ? '+' : ''}${s.cumulativeNet.toFixed(0)} pts)`)
+            .join('; ')
+      const latest = hasNoSignal(t)
+        ? `Latest (${t.season} wk ${t.week}): ${sideSummary} — too early to grade, no points credited to either side yet. Do not call it even or close; nothing has been scored.`
+        : `Latest (${t.season} wk ${t.week}): ${sideSummary}${t.tie ? ' — currently a tie' : ''}.`
       lines.push(
-        `Graded trade ledger: ${grades.trades.length} completed trades since ${grades.seasonsScanned[0]}. Latest (${t.season} wk ${t.week}): ${sideSummary}${t.tie ? ' — currently a tie' : ''}. Grades = net points while assets were held.`,
+        `Graded trade ledger: ${grades.trades.length} completed trades since ${grades.seasonsScanned[0]}. ${latest} Grades = net points while assets were held.`,
       )
     }
     if (h2h) {

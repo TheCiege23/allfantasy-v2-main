@@ -147,7 +147,12 @@ export async function resolvePortfolioGrounding(args: {
     const career = await withTimeout(getCareerCard(userId), CAREER_CARD_BUDGET_MS)
     if (career && career !== TIMED_OUT) {
       lines.push(
-        `Career (Legacy engines): all-time ${career.allTime.wins}-${career.allTime.losses}, ${career.allTime.titles} title${career.allTime.titles === 1 ? '' : 's'} across ${career.leaguesIncluded} leagues; trade résumé net ${career.trades.totalNet > 0 ? '+' : ''}${career.trades.totalNet.toFixed(0)} pts over ${career.trades.graded} graded trades; ${career.recordsHeld.length} league record${career.recordsHeld.length === 1 ? '' : 's'} held.`,
+        /*
+         * ⚠ `graded` EXCLUDES TRADES WITH NOTHING CREDITED YET, so "0 graded trades" is not
+         * "this manager does not trade" — naming the waiting ones is what stops the model
+         * drawing that conclusion from a preseason portfolio.
+         */
+        `Career (Legacy engines): all-time ${career.allTime.wins}-${career.allTime.losses}, ${career.allTime.titles} title${career.allTime.titles === 1 ? '' : 's'} across ${career.leaguesIncluded} leagues; trade résumé net ${career.trades.totalNet > 0 ? '+' : ''}${career.trades.totalNet.toFixed(0)} pts over ${career.trades.graded} graded trades${career.trades.notYetGraded > 0 ? ` (plus ${career.trades.notYetGraded} too early to grade — no points credited yet)` : ''}; ${career.recordsHeld.length} league record${career.recordsHeld.length === 1 ? '' : 's'} held.`,
       )
     }
     lines.push(
