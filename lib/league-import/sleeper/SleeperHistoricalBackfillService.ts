@@ -1,6 +1,5 @@
 import { runDynastyBackfill } from '@/lib/dynasty-import'
-import { buildLeagueGraph } from '@/lib/league-intelligence-graph'
-import { rebuildHallOfFame } from '@/lib/rankings-engine/hall-of-fame'
+import { refreshHistoricalDerivedData } from '@/lib/league-import/refreshHistoricalDerivedData'
 import {
   syncSleeperHistoricalDraftFactsAfterImport,
   type SleeperHistoricalDraftSyncSummary,
@@ -152,43 +151,9 @@ export async function syncSleeperHistoricalBackfillAfterImport(args: {
      * These derived rebuilds only read the now-complete history and write independent outputs.
      * Run them together so a slow graph rebuild does not hold the Hall of Fame refresh behind it.
      */
-    const [graphResult, hallOfFameResult] = await Promise.allSettled([
-      buildLeagueGraph({
-        leagueId: args.leagueId,
-        season: null,
-        includeTrades: true,
-        includeRivalries: true,
-      }),
-      rebuildHallOfFame({ leagueId: args.leagueId }),
-    ])
-
-    if (graphResult.status === 'fulfilled') {
-      const graph = graphResult.value
-      summary.graph = {
-        refreshed: true,
-        nodeCount: graph.nodeCount,
-        edgeCount: graph.edgeCount,
-        snapshotId: graph.snapshotId,
-      }
-    } else {
-      summary.graph = {
-        refreshed: false,
-        error: getErrorMessage(graphResult.reason),
-      }
-    }
-
-    if (hallOfFameResult.status === 'fulfilled') {
-      const hallOfFame = hallOfFameResult.value
-      summary.hallOfFame = {
-        refreshed: true,
-        count: hallOfFame.count,
-      }
-    } else {
-      summary.hallOfFame = {
-        refreshed: false,
-        error: getErrorMessage(hallOfFameResult.reason),
-      }
-    }
+    const derived = await refreshHistoricalDerivedData({ leagueId: args.leagueId })
+    summary.graph = derived.graph
+    summary.hallOfFame = derived.hallOfFame
 
     return summary
   } catch (error) {

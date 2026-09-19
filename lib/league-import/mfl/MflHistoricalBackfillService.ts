@@ -1,8 +1,7 @@
 import type { Prisma } from '@prisma/client'
 
 import { prisma } from '@/lib/prisma'
-import { buildLeagueGraph } from '@/lib/league-intelligence-graph'
-import { rebuildHallOfFame } from '@/lib/rankings-engine/hall-of-fame'
+import { refreshHistoricalDerivedData } from '@/lib/league-import/refreshHistoricalDerivedData'
 import { normalizeSportForWarehouse } from '@/lib/data-warehouse/types'
 import { persistDynastySeason, persistStandings } from '@/lib/dynasty-import/normalize-historical'
 import { fetchMflLeagueForImport } from './MflLeagueFetchService'
@@ -438,38 +437,9 @@ export async function syncMflHistoricalBackfillAfterImport(args: {
       draftFactsPersisted,
     }
 
-    try {
-      const graph = await buildLeagueGraph({
-        leagueId: args.leagueId,
-        season: null,
-        includeTrades: true,
-        includeRivalries: true,
-      })
-      summary.graph = {
-        refreshed: true,
-        nodeCount: graph.nodeCount,
-        edgeCount: graph.edgeCount,
-        snapshotId: graph.snapshotId,
-      }
-    } catch (error) {
-      summary.graph = {
-        refreshed: false,
-        error: getErrorMessage(error),
-      }
-    }
-
-    try {
-      const hallOfFame = await rebuildHallOfFame({ leagueId: args.leagueId })
-      summary.hallOfFame = {
-        refreshed: true,
-        count: hallOfFame.count,
-      }
-    } catch (error) {
-      summary.hallOfFame = {
-        refreshed: false,
-        error: getErrorMessage(error),
-      }
-    }
+    const derived = await refreshHistoricalDerivedData({ leagueId: args.leagueId })
+    summary.graph = derived.graph
+    summary.hallOfFame = derived.hallOfFame
 
     return summary
   } catch (error) {
