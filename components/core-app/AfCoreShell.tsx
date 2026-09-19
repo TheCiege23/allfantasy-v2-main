@@ -24,6 +24,7 @@ import { matchLeagueSearchHits, type LeagueSearchHit } from '@/lib/core-app/topS
 import { ShellSignalsContext, withPublishedSignals, type ShellSignals } from '@/components/core-app/shellSignals'
 import { ScopeSwitcher, type ScopeSwitcherLeague } from '@/components/core-app/ScopeSwitcher'
 import { isLeagueScreen } from '@/lib/core-app/leagueScreens'
+import { railAutoPrefetchEnabled, shouldWarmRailLeague } from '@/components/core-app/railPrefetch'
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import '@/components/core-app/af-core.css'
 import '@/components/core-app/af-core-shell.css'
@@ -1194,6 +1195,30 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
   const { leagues, syncAge, syncEligibleCount, plan, weekLabel, active, children, comms } = props
 
   /*
+   * Rail speculation. See `railPrefetch.ts` for why Next's automatic prefetch warms the wrong
+   * thing here and why a long rail turns it off — the decisions are pure and live there; this
+   * holds only the per-mount state they need.
+   */
+  const railWarmedRef = useRef<Set<string>>(new Set())
+  const railAutoPrefetch = railAutoPrefetchEnabled(leagues.length)
+  const warmRailLeague = (leagueId: string) => {
+    const connection = (navigator as Navigator & { connection?: { saveData?: boolean } }).connection
+    if (
+      !shouldWarmRailLeague({
+        leagueId,
+        selectedLeagueId: props.selectedLeagueId ?? null,
+        warmed: railWarmedRef.current,
+        saveData: connection?.saveData === true,
+      })
+    ) {
+      return
+    }
+    railWarmedRef.current.add(leagueId)
+    /* FULL by default — `router.prefetch` is the only path that warms the data. */
+    router.prefetch(`/core?league=${encodeURIComponent(leagueId)}`)
+  }
+
+  /*
    * The expanded league rail — 2026-09-07 handoff (`AF League List.dc.html`).
    *
    * ⚠ THREE STATES, NOT TWO, AND THE THIRD IS THE WHOLE POINT. `null` means the
@@ -1520,6 +1545,18 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
               <Link
                 key={l.id}
                 href={`/core?league=${encodeURIComponent(l.id)}`}
+                /*
+                 * ⚠ OFF ON A LONG RAIL, LEFT ALONE ON A SHORT ONE — the asymmetry is the
+                 * point. Next's automatic prefetch stops at this route's `loading.tsx`, so it
+                 * warms the skeleton the page is already showing and never the league data. On
+                 * a sixty-tile rail that is sixty requests that cannot help; on a short one it
+                 * is cheap, bounded, and the only warming a touch device gets at all.
+                 * See `railPrefetch.ts`.
+                 */
+                prefetch={railAutoPrefetch ? undefined : false}
+                /* Pointing at a league IS intent, unlike scrolling past it. FULL prefetch. */
+                onMouseEnter={() => warmRailLeague(l.id)}
+                onFocus={() => warmRailLeague(l.id)}
                 className="af-rail-tile af-platform"
                 data-platform={l.platform}
                 /*
