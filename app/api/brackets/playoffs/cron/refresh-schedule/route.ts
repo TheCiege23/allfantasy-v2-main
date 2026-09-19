@@ -108,7 +108,15 @@ function isPlayoffCronAuthorized(request: NextRequest) {
   return requireCronAuth(request, "CRON_SECRET")
 }
 
-async function getActivePlayoffChallengeIds(sport: "all" | "nba" | "nhl") {
+/*
+ * ⚠ THE RETURN TYPE IS EXPLICIT BECAUSE `prisma as any` ERASES IT. Without the
+ * annotation this returns `any`, which every caller silently inherited — and
+ * `any` flowing into a generic does NOT stay `any`: `rotateForFairness<T>`
+ * infers `T = unknown` from it, so the loop variable became `unknown` and two
+ * call sites stopped type-checking. An `any` that nothing consumes generically
+ * hides; the moment something does, it surfaces somewhere else entirely.
+ */
+async function getActivePlayoffChallengeIds(sport: "all" | "nba" | "nhl"): Promise<string[]> {
   const sports = sport === "all" ? ["nba", "nhl"] : [sport]
   const activeSince = new Date(Date.now() - ACTIVE_WINDOW_DAYS * 24 * 60 * 60 * 1000)
   const rows = await (prisma as any).playoffBracketChallenge.findMany({
