@@ -7,12 +7,19 @@ vi.mock('@aws-sdk/client-s3', () => ({
   GetObjectCommand: class { constructor(public input: unknown) {} },
 }))
 vi.mock('@vercel/blob', () => ({ get: vi.fn(), put: vi.fn() }))
-import { getPrivateChatFile, putPrivateChatFile } from '@/lib/chat-core/privateStorage'
+import { getPrivateChatFile, putPrivateChatFile, privateChatStorageConfigured } from '@/lib/chat-core/privateStorage'
 beforeEach(() => {
   vi.clearAllMocks()
   vi.stubEnv('CHAT_PRIVATE_S3_CONFIG', JSON.stringify({ endpoint: 'https://storage.example.test', bucketName: 'private', region: 'auto', accessKeyId: 'test', secretAccessKey: 'test', urlStyle: 'virtual-host' }))
 })
 afterEach(() => vi.unstubAllEnvs())
+it('never treats public Blob credentials as private chat storage', () => {
+  vi.stubEnv('CHAT_PRIVATE_S3_CONFIG', '')
+  vi.stubEnv('CHAT_PRIVATE_BLOB_READ_WRITE_TOKEN', '')
+  vi.stubEnv('BLOB_READ_WRITE_TOKEN', 'public-test-token')
+  vi.stubEnv('BLOB1_READ_WRITE_TOKEN', 'public-fallback-token')
+  expect(privateChatStorageConfigured()).toBe(false)
+})
 it('writes a private object with its content type and releases the client', async () => {
   mocks.send.mockResolvedValue({})
   await expect(putPrivateChatFile('chat/league/image/a.png', new Blob(['test']), 'image/png')).resolves.toBe('chat/league/image/a.png')
