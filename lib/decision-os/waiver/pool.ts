@@ -221,7 +221,68 @@ export async function loadWaiverPool(leagueId: string, sport: string, rosterId?:
   }
   const valueOf = (sleeperId: string | null) => (priced.get ? priced.get(sleeperId) : 0)
 
-  const availablePlayers: WaiverPoolCandidate[] = available.map((p) => ({
+  /**
+   * One row per player, before anything is priced or scored.
+   *
+   * 🛑 MEASURED ON A REAL LEAGUE: 217 wire rows carried only 141 distinct names. 69 names
+   * appeared more than once across 145 of those rows, 26 of the duplicate groups were priced — and
+   * THREE OF SIX suggestions handed to the manager were repeats of another suggestion.
+   *
+   * 🛑 THE CLUB IS IN THE UPSTREAM DEDUP KEY. `SportPlayerPoolResolver` keys on
+   * `name|position|team`, and the same man is stored as `Los Angeles Rams` AND as `LAR`, so he
+   * survives as two rows carrying one sleeper id and one price.
+   *
+   * ⚠ FOLDING THE CLUB SPELLING UPSTREAM WOULD NOT HAVE FIXED IT, which is why this collapses
+   * here instead. The same player also appears with the club as `FA` and as NULL — "free agent" and
+   * "unknown" are not spellings of a club, so no normalisation turns that column into a key. The
+   * sleeper id already resolved here to price him IS an identity, so it is the key.
+   *
+   * ⚠ IT WILL NOT MERGE TWO IDS, AND THAT IS THE POINT. Two rows with different ids are a claim
+   * about player IDENTITY, not about spelling; this repo keeps 178 known NFL duplicate groups
+   * unmerged on purpose, because a wrong merge hides a real player. A name that survives twice here
+   * is that separate, older problem showing through — not something this is entitled to paper over.
+   */
+  const nameKeyOf = (p: (typeof available)[number]) => {
+    const n = String(p.full_name ?? '').trim().toLowerCase()
+    return n ? `${n}|${(p.position ?? 'FLEX').toUpperCase()}` : ''
+  }
+
+  /*
+   * Pass one: the rows that carry an id. One row per id, first wins — they share a price, so which
+   * spelling of the club survives does not matter.
+   */
+  const keptById = new Map<string, (typeof available)[number]>()
+  const namesThatHaveAnId = new Set<string>()
+  for (const p of available) {
+    const sid = sleeperIdOf(p.external_source_id)
+    if (!sid) continue
+    if (!keptById.has(sid)) keptById.set(sid, p)
+    const nk = nameKeyOf(p)
+    if (nk) namesThatHaveAnId.add(nk)
+  }
+
+  /*
+   * Pass two: the rows with no id.
+   *
+   * ⚠ AN ID-LESS ROW IS DROPPED WHEN AN ID-BEARING TWIN EXISTS, and that costs nothing rather than
+   * being a judgement about identity: the value lookup is keyed on the id, so a row without one is
+   * priced at zero, and the scorer skips anything under 200. It could never have been recommended.
+   * What it could do is occupy one of the six lines the manager reads.
+   */
+  const keptByName = new Map<string, (typeof available)[number]>()
+  for (const p of available) {
+    if (sleeperIdOf(p.external_source_id)) continue
+    const nk = nameKeyOf(p)
+    if (!nk) continue
+    if (namesThatHaveAnId.has(nk)) continue
+    if (!keptByName.has(nk)) keptByName.set(nk, p)
+  }
+
+  /* Emit in the pool's own order, which carries its ADP-relevance ranking. */
+  const keep = new Set<(typeof available)[number]>([...keptById.values(), ...keptByName.values()])
+  const deduped = available.filter((p) => keep.has(p) || (!sleeperIdOf(p.external_source_id) && !nameKeyOf(p)))
+
+  const availablePlayers: WaiverPoolCandidate[] = deduped.map((p) => ({
     id: p.player_id,
     /*
      * ⚠ THE SAME MAPPING THE ASSISTANT USES, character for character — including the 'FLEX'
