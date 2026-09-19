@@ -23,7 +23,10 @@ describe('guest trial session token (create/read)', () => {
   it('rejects a tampered / garbage token', async () => {
     const token = await signGuestSessionToken({ legacyUserId: 'legacy-123', sleeperUsername: 'theghost' })
     expect(token).toBeTruthy()
-    const tampered = `${token!.slice(0, -2)}xy`
+    const [header, payload, signature] = token!.split('.')
+    // Change significant signature bits; trailing base64url padding bits can decode identically.
+    const changedSignature = (signature[0] === 'A' ? 'B' : 'A') + signature.slice(1)
+    const tampered = [header, payload, changedSignature].join('.')
     expect(await verifyGuestSessionToken(tampered)).toBeNull()
     expect(await verifyGuestSessionToken('not-a-jwt')).toBeNull()
   })
