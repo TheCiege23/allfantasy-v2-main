@@ -1,4 +1,6 @@
 import 'server-only'
+import { prisma } from '@/lib/prisma'
+import { readFormatRules } from '@/lib/trade-intel/leagueFormatRules'
 
 import { getLeagueContext } from '@/lib/league-context/leagueContextService'
 import { getSeasonStatsBoard, scoreStatLine } from '@/lib/sports-data/sleeperMarketService'
@@ -30,18 +32,82 @@ export async function loadTradeExpectation(
   sleeperLeagueId: string,
   trade: GradedTrade,
 ): Promise<TradeExpectation | null> {
-  const context = await getLeagueContext(sleeperLeagueId).catch(() => null)
+  const [context, leagueRow] = await Promise.all([
+    getLeagueContext(sleeperLeagueId).catch(() => null),
+    prisma.league.findFirst({
+      where: { platformLeagueId: sleeperLeagueId },
+      select: {
+        leagueType: true,
+        leagueVariant: true,
+        isDynasty: true,
+        keeperCount: true,
+        keeperCostSystem: true,
+        keeperRoundPenalty: true,
+        settings: true,
+        survivorMode: true,
+        guillotineMode: true,
+        bbTradesEnabled: true,
+        zombieConfig: { select: { zombieTradeBlocked: true } },
+        zombieLeague: {
+          select: { teams: { select: { rosterId: true, status: true } } },
+        },
+        tournamentShellLeague: {
+          select: {
+            tournament: { select: { tradeEnabled: true } },
+            round: { select: { tradeEnabledOverride: true } },
+          },
+        },
+        legacyTournamentLeague: { select: { id: true } },
+      },
+    }).catch(() => null),
+  ])
   if (!context) return null
 
   const priorSeason = priorSeasonOf(trade)
+  const historical = trade.season !== context.season
+  const formatRules = leagueRow ? readFormatRules(leagueRow) : null
+
+  let tradesEnabled: boolean | null = true
+  if (!leagueRow || historical) {
+    tradesEnabled = null
+  } else if (leagueRow.survivorMode && leagueRow.guillotineMode) {
+    // The supplied Survivor All-Stars rules say "NO TRADES".
+    tradesEnabled = false
+  } else if (formatRules?.concept === 'tournament') {
+    const shell = leagueRow.tournamentShellLeague
+    tradesEnabled = shell
+      ? shell.round.tradeEnabledOverride ?? shell.tournament.tradeEnabled
+      : null
+  } else if (formatRules?.concept === 'zombie') {
+    if (leagueRow.zombieConfig?.zombieTradeBlocked !== true) {
+      tradesEnabled = true
+    } else {
+      const statusByRoster = new Map(
+        (leagueRow.zombieLeague?.teams ?? []).map((team) => [team.rosterId, team.status]),
+      )
+      const participantStates = trade.sides.map((side) => statusByRoster.get(String(side.rosterId)))
+      tradesEnabled = participantStates.some((status) => status == null)
+        ? null
+        : participantStates.every((status) => status !== 'Zombie')
+    }
+  } else if (formatRules?.concept === 'survivor' || formatRules?.concept === 'salary_cap') {
+    // Provider acceptance does not prove the house timing rule or cap ledger was legal.
+    tradesEnabled = null
+  } else if (formatRules?.concept === 'pirate') {
+    // Provider acceptance does not prove compliance with the house-wide
+    // Thursday kickoff through Monday-final trade lock.
+    tradesEnabled = null
+  } else if (context.variant.bestBall) {
+    tradesEnabled = leagueRow.bbTradesEnabled ?? null
+  }
 
   const numQbs: 1 | 2 = context.variant.superflex ? 2 : 1
 
   const [marketValues, dynastyProcess, statsBoard, rosters] = await Promise.all([
-    getMarketValues(context).catch(() => null),
-    getDynastyProcessValues(numQbs).catch(() => null),
+    historical ? Promise.resolve(null) : getMarketValues(context).catch(() => null),
+    historical ? Promise.resolve(null) : getDynastyProcessValues(numQbs).catch(() => null),
     getSeasonStatsBoard(priorSeason, true).catch(() => null),
-    fetchLeagueRosters(sleeperLeagueId),
+    historical ? Promise.resolve(null) : fetchLeagueRosters(sleeperLeagueId),
   ])
 
   // AF Value: blend the two independently-derived sources in rank space.
@@ -139,6 +205,11 @@ export async function loadTradeExpectation(
     priorSeason: prior,
     rosteredByPosition,
     afValues,
+    leagueConcept: formatRules?.concept ?? null,
+    survivorMode: leagueRow?.survivorMode === true,
+    guillotineMode: leagueRow?.guillotineMode === true,
+    tradesEnabled,
+    historical,
     // Blended pick value when both sources priced the round; the single-source
     // value otherwise, so a DynastyProcess outage narrows confidence rather
     // than un-pricing every traded pick.

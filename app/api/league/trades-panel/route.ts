@@ -56,10 +56,15 @@ async function buildNativeActiveTrades(leagueId: string, userId: string): Promis
   // `platformUserId`; imported Sleeper leagues store the SLEEPER user id there,
   // so also try the viewer's linked sleeperUserId — otherwise the viewer-role
   // flags (accept/reject controls) never light up on imported leagues.
-  const profile = await prisma.userProfile
-    .findUnique({ where: { userId }, select: { sleeperUserId: true } })
-    .catch(() => null)
-  const candidateIds = [userId, profile?.sleeperUserId].filter(
+  const [profile, claimedTeam] = await Promise.all([
+    prisma.userProfile
+      .findUnique({ where: { userId }, select: { sleeperUserId: true } })
+      .catch(() => null),
+    prisma.leagueTeam
+      .findFirst({ where: { leagueId, claimedByUserId: userId }, select: { platformUserId: true } })
+      .catch(() => null),
+  ])
+  const candidateIds = [userId, profile?.sleeperUserId, claimedTeam?.platformUserId].filter(
     (v): v is string => typeof v === 'string' && v.length > 0,
   )
   const myRoster = await prisma.roster.findFirst({
@@ -72,7 +77,11 @@ async function buildNativeActiveTrades(leagueId: string, userId: string): Promis
   const active = trades.filter((t) => ACTIVE_STATUSES.has(t.status))
   if (active.length === 0) return []
 
-  const rosterIds = [...new Set(active.flatMap((t) => [t.proposerRosterId, t.receiverRosterId]))]
+  const rosterIds = [...new Set(active.flatMap((t) => [
+    t.proposerRosterId,
+    t.receiverRosterId,
+    ...t.items.flatMap((i) => [i.fromRosterId, i.toRosterId]),
+  ]))]
   const rosters = await prisma.roster.findMany({
     where: { id: { in: rosterIds } },
     select: { id: true, platformUserId: true },
@@ -87,21 +96,38 @@ async function buildNativeActiveTrades(leagueId: string, userId: string): Promis
   const world = await resolveCanonicalWorld(leagueId).catch(() => null)
 
   return Promise.all(active
-    .filter((t) => isCommissioner || t.proposerRosterId === myRosterId || t.receiverRosterId === myRosterId)
+    .filter((t) => {
+      const participants = new Set([
+        t.proposerRosterId,
+        t.receiverRosterId,
+        ...t.items.flatMap((i) => [i.fromRosterId, i.toRosterId]),
+      ])
+      return isCommissioner || (myRosterId != null && participants.has(myRosterId))
+    })
     .map(async (t) => {
+      const participantIds = [...new Set([
+        t.proposerRosterId,
+        t.receiverRosterId,
+        ...t.items.flatMap((i) => [i.fromRosterId, i.toRosterId]),
+      ])]
+      const meta = t.metadata && typeof t.metadata === 'object' && !Array.isArray(t.metadata)
+        ? t.metadata as Record<string, unknown>
+        : {}
+      const accepted = new Set(Array.isArray(meta.acceptedRosterIds) ? meta.acceptedRosterIds.map(String) : [])
       const viewerIsProposer = myRosterId != null && t.proposerRosterId === myRosterId
-      const viewerIsReceiver = myRosterId != null && t.receiverRosterId === myRosterId
+      const viewerIsReceiver = myRosterId != null && participantIds.includes(myRosterId) && !viewerIsProposer && !accepted.has(myRosterId)
       const direction: LeagueTradeHistoryItem['direction'] = viewerIsProposer
         ? 'outgoing'
         : viewerIsReceiver
           ? 'incoming'
           : 'complete'
-      const partnerRosterId = viewerIsProposer ? t.receiverRosterId : t.proposerRosterId
+      const viewRosterId = myRosterId && participantIds.includes(myRosterId) ? myRosterId : t.proposerRosterId
+      const partnerName = participantIds.filter((id) => id !== viewRosterId).map((id) => nameByRosterId.get(id) ?? 'Manager').join(' + ')
       const sent: LeagueTradeAsset[] = t.items
-        .filter((i) => i.fromRosterId === (viewerIsReceiver ? t.receiverRosterId : t.proposerRosterId))
+        .filter((i) => i.fromRosterId === viewRosterId)
         .map((i) => ({ id: i.id, ...assetLabel(i), headshotUrl: null, accent: 'blue' as const }))
       const received: LeagueTradeAsset[] = t.items
-        .filter((i) => i.toRosterId === (viewerIsReceiver ? t.receiverRosterId : t.proposerRosterId))
+        .filter((i) => i.toRosterId === viewRosterId)
         .map((i) => ({ id: i.id, ...assetLabel(i), headshotUrl: null, accent: 'teal' as const }))
       /*
        * ⚠ ONLY WHEN THE VIEWER IS A PARTY. A commissioner looking at someone else's offer falls back
@@ -144,7 +170,7 @@ async function buildNativeActiveTrades(leagueId: string, userId: string): Promis
       return {
         id: t.id,
         direction,
-        partnerName: nameByRosterId.get(partnerRosterId) ?? 'Manager',
+        partnerName,
         timestamp: t.createdAt.toISOString(),
         sent,
         received,

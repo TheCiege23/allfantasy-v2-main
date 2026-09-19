@@ -2,6 +2,10 @@ import { BRIDGE_SURFACES, type DiscordBridgeData } from '@/lib/core-app/discordB
 import type { QueueTrack } from '@/components/core-app/draft-music/DraftMusicWidget'
 import type { GradedTrade } from '@/lib/trade-intel/sleeperTradeGradeService'
 import type { TradeExpectation } from '@/lib/trade-intel/tradeExpectation'
+import {
+  TRADE_GRADE_DIMENSION_FRAMEWORK,
+  TRADE_GRADING_POLICY_VERSION,
+} from '@/lib/trade-intel/tradeGradingPolicy'
 import type { CoreIssue } from '@/lib/core-app/outstandingIssues'
 import type { LeagueTileModel } from '@/components/core-app/league-tile/leagueTileModel'
 
@@ -292,6 +296,30 @@ export const PREVIEW_EXPECTATION: TradeExpectation = {
   priorSeason: '2025',
   scoringMode: 'league-scored',
   missing: ['2027 first-round pick landing spot'],
+  evaluation: {
+    concept: 'dynasty',
+    format: 'dynasty',
+    policyVersion: TRADE_GRADING_POLICY_VERSION,
+    objective: 'Balance multi-season roster value, competitive window, lineup improvement, and future optionality.',
+    historicalMode: 'live',
+    scope: 'market-only',
+    complete: false,
+    dimensionFramework: {
+      version: TRADE_GRADE_DIMENSION_FRAMEWORK.version,
+      primary: [...TRADE_GRADE_DIMENSION_FRAMEWORK.primary],
+      secondary: [...TRADE_GRADE_DIMENSION_FRAMEWORK.secondary],
+    },
+    factors: [
+      { id: 'user-strategy', status: 'missing', detail: 'Preview fixture has no confirmed manager strategy.' },
+      { id: 'league-settings', status: 'used', detail: 'Dynasty, superflex, PPR, and tight-end premium settings are included.' },
+      { id: 'roster-settings', status: 'used', detail: 'Starter requirements and roster gaps are included.' },
+      { id: 'team-needs', status: 'used', detail: 'Position changes and starter gaps are included.' },
+      { id: 'playoff-impact', status: 'missing', detail: 'Preview fixture has no playoff simulation.' },
+      { id: 'format-objective', status: 'used', detail: 'Dynasty multi-season value is applied.' },
+      { id: 'historical-context', status: 'not-applicable', detail: 'This preview represents a current trade.' },
+    ],
+    withheldReason: 'Preview fixture shows market context only; a complete contextual grade requires manager strategy and playoff simulation.',
+  },
   sides: [
     {
       rosterId: 1,

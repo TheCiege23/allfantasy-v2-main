@@ -260,9 +260,9 @@ describe('projected grades are labelled as projections everywhere', () => {
     expect(subject).not.toContain('initial grades')
   })
 
-  it('marks every chip PROJECTED in the body', () => {
+  it('marks every chip as a MARKET GRADE in the body', () => {
     const { html } = withExp()
-    expect(html).toContain('PROJECTED')
+    expect(html).toContain('MARKET GRADE')
     expect(html).toContain('>D<')
     expect(html).toContain('Projected on 2025 production')
   })
@@ -271,6 +271,26 @@ describe('projected grades are labelled as projections everywhere', () => {
     const body = explainGrade(PRESEASON, true, EXPECTATION as never)
     expect(body).toContain('projections rather than results')
     expect(body).toContain('prices a star correctly against two useful pieces')
+  })
+
+  it('puts a withheld contextual-grade reason in the explanation', () => {
+    const expectation = {
+      ...EXPECTATION,
+      evaluation: {
+        concept: 'guillotine',
+        format: 'guillotine',
+        policyVersion: 'trade-policy-1.0',
+        objective: 'survive',
+        historicalMode: 'live',
+        scope: 'withheld-specialty',
+        complete: false,
+        factors: [],
+        withheldReason: 'Guillotine survival inputs are missing.',
+      },
+    }
+    expect(explainGrade(PRESEASON, true, expectation as never)).toContain(
+      'Guillotine survival inputs are missing.',
+    )
   })
 
   it('falls back to "too early" when there is no projection to show', () => {

@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { Heart } from 'lucide-react'
 import type { LeagueTeamSlot, UserLeague } from '@/app/dashboard/types'
 import { PlayerImage } from '@/app/components/PlayerImage'
+import { TeamLogo } from '@/app/components/TeamLogo'
 import type { LeagueTradeHistoryItem } from '@/components/league/types'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
 import type { LeagueTradeBlockPanelItem } from '@/components/league/types'
@@ -49,10 +50,9 @@ import {
  * with picks still pending is provisional. Each renders an em dash with its
  * reason, never a C that reads as "even".
  *
- * ⚠ ACTION BUTTONS STAY GATED ON THE NFL REDRAFT SHELL, as before. That is the
- * league type whose accept / reject / commissioner path is verified end to end
- * (see lib/redraft/tradeSettlement.ts); showing the buttons elsewhere would
- * promise a settlement the engine has not been proven to make.
+ * Settlement controls stay gated on the verified native shell. The proposal
+ * builder itself is league-wide: native leagues can send an offer and imported
+ * leagues can build an explicitly labelled shadow plan for their source app.
  */
 
 export type TradesTabProps = {
@@ -342,7 +342,9 @@ function rowFromGraded(g: GradedTrade, viewerId: string | null): LogRow {
       initialGrade: g.hasPendingPicks ? null : s.initialGrade,
       initialLabel: 'First',
       grade: g.hasPendingPicks ? null : s.currentGrade,
-      gradeWhy: g.hasPendingPicks ? 'picks pending' : null,
+      gradeWhy: g.hasPendingPicks
+        ? 'Picks are unresolved, so the result grade is withheld.'
+        : `Realized result: net ${s.cumulativeNet.toFixed(1)} fantasy points under this league's scoring while the assets were held. Roster need and playoff probability are not part of this result letter.`,
     }
   }
   const a = side(s0)
@@ -475,7 +477,7 @@ function GradeTile({ letter, why, size = 'md' }: { letter: GradeLetter | null; w
   }
   const tone = GRADE_TONE[letter] ?? GRADE_TONE.C!
   return (
-    <span className={`inline-flex items-center justify-center border font-black ${dim} ${tone.text} ${tone.box}`}>
+    <span title={why ?? undefined} className={`inline-flex items-center justify-center border font-black ${dim} ${tone.text} ${tone.box}`}>
       {letter}
     </span>
   )
@@ -615,6 +617,7 @@ type CardAsset = {
   meta: string | null
   kind: 'player' | 'pick' | 'faab'
   sleeperId: string | null
+  team: string | null
 }
 
 function cardAssetsFromPanel(assets: LeagueTradeHistoryItem['sent']): CardAsset[] {
@@ -625,7 +628,8 @@ function cardAssetsFromPanel(assets: LeagueTradeHistoryItem['sent']): CardAsset[
     /* Provider rows carry the Sleeper id in front of the index; native rows carry a row id. */
     const idHead = a.id.split(':')[0] ?? ''
     const sleeperId = /^\d{2,}$/.test(idHead) ? idHead : null
-    return { key: a.id, name: a.label, meta: sub && sub.toLowerCase() !== 'draft pick' ? sub : null, kind, sleeperId }
+    const team = kind === 'player' ? (sub.split(/[·-]/).map((x) => x.trim()).find((x) => /^[A-Z]{2,4}$/.test(x)) ?? null) : null
+    return { key: a.id, name: a.label, meta: sub && sub.toLowerCase() !== 'draft pick' ? sub : null, kind, sleeperId, team }
   })
 }
 
@@ -636,6 +640,7 @@ function cardAssetsFromOffer(assets: BuilderOfferAsset[], prefix: string): CardA
     meta: a.faabAmount != null ? 'FAAB' : a.isPick ? null : [a.position, a.team].filter(Boolean).join(' - ') || null,
     kind: a.faabAmount != null ? 'faab' : a.isPick ? 'pick' : 'player',
     sleeperId: a.playerId,
+    team: a.team,
   }))
 }
 
@@ -717,6 +722,7 @@ function ManagerBlock({
                 <p className="truncate text-[12.5px] font-bold leading-tight text-white">{a.name}</p>
                 {a.meta ? <p className="font-mono text-[10px] text-white/45">{a.meta}</p> : null}
               </div>
+              {a.kind === 'player' && a.team ? <TeamLogo teamAbbr={a.team} sport={sport} size={21} /> : null}
               {values ? (
                 <span className={`font-mono text-[11.5px] font-bold ${v == null ? 'text-white/30' : 'text-[#CBD5E1]'}`}>
                   {a.kind === 'player' ? money(v) : '—'}
@@ -968,6 +974,7 @@ export function TradesTab({ league, teams }: TradesTabProps) {
     try {
       const res = await fetch(`/api/league/trades-panel?leagueId=${encodeURIComponent(league.id)}`, {
         credentials: 'include',
+        cache: 'no-store',
       })
       const data = (await res.json().catch(() => null)) as PanelResponse | null
       if (!res.ok) {
@@ -1021,6 +1028,7 @@ export function TradesTab({ league, teams }: TradesTabProps) {
     try {
       const res = await fetch(`/api/league/trade-grades?leagueId=${encodeURIComponent(league.id)}`, {
         credentials: 'include',
+        cache: 'no-store',
       })
       const data = (await res.json().catch(() => null)) as GradesResponse | null
       if (!data || typeof data !== 'object' || !('supported' in data)) {
@@ -1050,15 +1058,29 @@ export function TradesTab({ league, teams }: TradesTabProps) {
     void loadLedger()
   }, [load, loadLedger])
 
+  /*
+   * A trade email or push often arrives while the app is already open in the
+   * background. Mobile webviews do not remount this tab when the user returns,
+   * so the original load would remain on screen indefinitely. Reconcile both
+   * pending requests and completed approvals whenever the window regains focus
+   * or the document becomes visible again.
+   */
+  useEffect(() => {
+    const refresh = () => void Promise.all([load(), loadLedger()])
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') refresh()
+    }
+    window.addEventListener('focus', refresh)
+    document.addEventListener('visibilitychange', onVisibility)
+    return () => {
+      window.removeEventListener('focus', refresh)
+      document.removeEventListener('visibilitychange', onVisibility)
+    }
+  }, [load, loadLedger])
+
   const isZombie = String(league.leagueVariant ?? '').toLowerCase() === 'zombie'
   const nflRedraftTradesShell = isNflRedraftCoreDashboardFromUserLeague(league)
 
-  // Phase 4: carry the active league context so the trade flow opens directly for THIS league
-  // instead of showing the global league picker.
-  const tradeFinderHref = useMemo(
-    () => (league?.id ? `/trade-finder?leagueId=${encodeURIComponent(league.id)}` : '/trade-finder'),
-    [league?.id],
-  )
   const tradeCenterHref = `/core/trades?league=${encodeURIComponent(league.id)}`
 
   const runTradeAction = useCallback(
@@ -1074,14 +1096,14 @@ export function TradesTab({ league, teams }: TradesTabProps) {
           setActionErr(`We could not ${path} this trade. Nothing was changed. Try again.`)
           return
         }
-        await load()
+        await Promise.all([load(), loadLedger()])
       } catch {
         setActionErr(`Failed to ${path} trade.`)
       } finally {
         setActionBusyId(null)
       }
     },
-    [league.id, load],
+    [league.id, load, loadLedger],
   )
 
   const runCommissionerDecision = useCallback(
@@ -1099,14 +1121,14 @@ export function TradesTab({ league, teams }: TradesTabProps) {
           setActionErr('We could not save that commissioner decision. Nothing was changed. Try again.')
           return
         }
-        await load()
+        await Promise.all([load(), loadLedger()])
       } catch {
         setActionErr('Failed to record commissioner decision.')
       } finally {
         setActionBusyId(null)
       }
     },
-    [league.id, load],
+    [league.id, load, loadLedger],
   )
 
   /* ── Derived views ─────────────────────────────────────────────────── */
@@ -1312,7 +1334,7 @@ export function TradesTab({ league, teams }: TradesTabProps) {
 
   const nothingAtAll = !loading && !err && activeTrades.length === 0 && completedRows.length === 0 && ledger.kind !== 'loading'
 
-  const proposeAffordance = nflRedraftTradesShell ? (
+  const proposeAffordance = (
     <button
       type="button"
       onClick={() => setProposeOpen(true)}
@@ -1321,14 +1343,6 @@ export function TradesTab({ league, teams }: TradesTabProps) {
     >
       Build a trade
     </button>
-  ) : (
-    <Link
-      href={tradeFinderHref}
-      className="rounded-lg bg-[#ff3d81]/85 px-3.5 py-2 text-[12px] font-bold text-black hover:bg-[#ff3d81]"
-      data-testid="trades-tab-propose-trade"
-    >
-      Build a trade
-    </Link>
   )
 
   return (
@@ -1345,8 +1359,8 @@ export function TradesTab({ league, teams }: TradesTabProps) {
             this league&rsquo;s own rules, so the same trade grades differently next door.
           </p>
         </div>
-        {nflRedraftTradesShell ? (
-          <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {nflRedraftTradesShell ? (
             <button
               type="button"
               onClick={() =>
@@ -1361,6 +1375,7 @@ export function TradesTab({ league, teams }: TradesTabProps) {
             >
               AI trade analysis
             </button>
+          ) : null}
             <button
               type="button"
               onClick={() => setProposeOpen(true)}
@@ -1369,8 +1384,7 @@ export function TradesTab({ league, teams }: TradesTabProps) {
             >
               {tradeShadowNotice ? 'Build a Shadow Trade' : 'Propose a Trade'}
             </button>
-          </div>
-        ) : null}
+        </div>
       </div>
 
       {/* ── League context bar ───────────────────────────────────────── */}
@@ -1914,19 +1928,18 @@ export function TradesTab({ league, teams }: TradesTabProps) {
         </div>
       ) : null}
 
-      {nflRedraftTradesShell ? (
-        <ProposeTradeModal
-          open={proposeOpen}
-          onClose={() => setProposeOpen(false)}
-          leagueId={league.id}
-          teams={teams}
-          platform={league.platform}
-          onSubmitted={() => {
-            setProposeOpen(false)
-            void load()
-          }}
-        />
-      ) : null}
+      <ProposeTradeModal
+        open={proposeOpen}
+        onClose={() => setProposeOpen(false)}
+        leagueId={league.id}
+        teams={teams}
+        platform={league.platform}
+        sport={league.sport}
+        onSubmitted={() => {
+          setProposeOpen(false)
+          void load()
+        }}
+      />
     </div>
   )
 }

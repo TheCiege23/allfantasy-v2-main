@@ -21,6 +21,17 @@ import {
 } from '@/lib/trade-value/unpricedReason'
 import { loadImportedFuturePicks, type RosterFuturePick } from '@/lib/league-trade-engine/importedFuturePicks'
 import { inventoryPickId, roundOrdinal } from '@/lib/league-trade-engine/futurePickInventory'
+import { valueBookFor, describeValueBook } from '@/lib/core-app/valueBook'
+import { latestProjectionWeek, lookupProjections } from '@/lib/core-app/playerProjections'
+import { computeLeagueProjectedPoints } from '@/lib/projections/leagueScoring'
+import {
+  generateMultiTeamTradeSuggestions,
+  generateTradePartnerSuggestions,
+  type ProposalLeagueMode,
+  type ProposalManagerStrategy,
+} from '@/lib/league-trade-engine/proposalSuggestions'
+import { derivePartnerBehaviorProfiles } from '@/lib/league-trade-engine/proposalLearning'
+import { enrichMultiTeamProposalSimulations, enrichProposalSimulations } from '@/lib/league-trade-engine/proposalSimulation'
 
 export const dynamic = 'force-dynamic'
 
@@ -74,6 +85,8 @@ export type TradeableRosterPlayer = {
    * judge, so hiding the distinction here would hide the reason downstream.
    */
   value: number | null
+  /** Current provider weekly projection used only for before/after simulation. */
+  weeklyProjection: number | null
   /**
    * Why `value` is null, in words the builder prints beside "Unpriced"; null when priced.
    *
@@ -148,6 +161,8 @@ export type TradeableRoster = {
   wins: number
   losses: number
   ties: number
+  /** Latest stored season simulation, expressed as 0–100; null when unavailable or inapplicable. */
+  playoffProbability: number | null
   /**
    * FAAB left to spend, when the league tracks it. Null means this league has no FAAB budget on
    * file — which the picker must render as "not available" rather than as $0 to offer.
@@ -200,10 +215,60 @@ export async function GET(
     // `isDynasty` and `settings` (the provider's status) size and date the imported pick inventory.
     .findUnique({
       where: { id: leagueId },
-      select: { season: true, sport: true, platform: true, starters: true, isDynasty: true, settings: true },
+      select: {
+        season: true,
+        sport: true,
+        platform: true,
+        starters: true,
+        isDynasty: true,
+        leagueSize: true,
+        settings: true,
+        leagueType: true,
+        leagueVariant: true,
+        bestBallMode: true,
+        guillotineMode: true,
+        waiverBudget: true,
+        playoffTeams: true,
+        playoffStartWeek: true,
+      },
     })
     .catch(() => null)
   const currentSeason = Number(league?.season) || null
+  const valueBook = valueBookFor(
+    league?.settings,
+    league?.leagueType ?? (league?.isDynasty ? 'dynasty' : null),
+  )
+  // Strategy persistence has not shipped on the production Prisma client yet.
+  // Keep the proposal engine honest about that missing signal and use its
+  // balanced default until the canonical strategy store is available here.
+  const savedStrategy: { active: string } | null = null
+  const managerStrategy: ProposalManagerStrategy = 'balanced'
+  const proposalMode: ProposalLeagueMode = (() => {
+    const type = `${league?.leagueType ?? ''} ${league?.leagueVariant ?? ''}`.toLowerCase()
+    if (league?.guillotineMode || type.includes('guillotine')) return 'guillotine'
+    if (type.includes('survivor')) return 'survivor'
+    if (league?.bestBallMode || type.includes('best ball') || type.includes('best_ball')) return 'best_ball'
+    if (type.includes('dynasty')) return 'dynasty'
+    if (type.includes('keeper')) return 'keeper'
+    if (type.includes('redraft') || !type.trim()) return 'redraft'
+    return 'specialty'
+  })()
+  const settingsBag = (league?.settings && typeof league.settings === 'object' && !Array.isArray(league.settings))
+    ? league.settings as Record<string, unknown>
+    : {}
+  const nestedSettings = settingsBag.settings && typeof settingsBag.settings === 'object' && !Array.isArray(settingsBag.settings)
+    ? settingsBag.settings as Record<string, unknown>
+    : settingsBag
+  const rosterPositions = (Array.isArray(settingsBag.roster_positions)
+    ? settingsBag.roster_positions
+    : Array.isArray(nestedSettings.roster_positions)
+      ? nestedSettings.roster_positions
+      : []).map(String)
+  const scoring = settingsBag.scoring_settings && typeof settingsBag.scoring_settings === 'object'
+    ? settingsBag.scoring_settings as Record<string, unknown>
+    : {}
+  const rawPpr = Number(scoring.rec ?? nestedSettings.rec ?? 1)
+  const ppr: 0 | 0.5 | 1 = rawPpr >= 0.75 ? 1 : rawPpr >= 0.25 ? 0.5 : 0
 
   /*
    * Who among these rosters is an actual AllFantasy account, and what to call
@@ -328,7 +393,7 @@ export async function GET(
       const playerIds = getRosterPlayerIds(r.playerData)
       let players: TradeableRosterPlayer[] = playerIds.map((id) => ({
         id, name: id, position: null, team: null, imageUrl: null, byeWeek: null,
-        injuryStatus: null, value: null, unpricedReason: null,
+        injuryStatus: null, value: null, weeklyProjection: null, unpricedReason: null,
       }))
       /*
        * 🛑 THE SAME RULE AS THE MATERIALIZER, AND NOW THE SAME IMPLEMENTATION. This block used to
@@ -359,6 +424,7 @@ export async function GET(
            */
           byeWeek: byeForTeam(byeByTeam, hit?.team),
           injuryStatus: null,
+          weeklyProjection: null,
         stock: null,
         stockDelta: null,
           // Filled in one batch below — see the value pass.
@@ -375,6 +441,7 @@ export async function GET(
         wins: meta?.wins ?? 0,
         losses: meta?.losses ?? 0,
         ties: meta?.ties ?? 0,
+        playoffProbability: null,
         faabRemaining: r.faabRemaining ?? null,
         players,
         picks: [
@@ -475,9 +542,9 @@ export async function GET(
   /*
    * ── THIRTY-DAY STOCK, ONE QUERY FOR THE WHOLE LEAGUE ───────────────────────────────────────
    *
-   * ⚠ THE FORMAT MATCHES THE VALUE PASS BELOW ON PURPOSE. Values here are pinned to dynasty
-   * one-QB so a player cannot carry two different numbers on one screen; an arrow drawn from the
-   * superflex series would contradict the number it sits beside, which is worse than no arrow.
+   * ⚠ THE FORMAT MATCHES THE VALUE PASS BELOW ON PURPOSE. Both reads use the league-specific
+   * value book so a player cannot carry two different numbers on one screen; an arrow drawn from
+   * a different format series would contradict the number it sits beside, which is worse than no arrow.
    */
   const stockIds = result.flatMap((r) => r.players.map((p) => p.id)).filter(Boolean)
   const allNames = result.flatMap((r) => r.players.map((p) => p.name)).filter(Boolean)
@@ -488,18 +555,23 @@ export async function GET(
    * request was simply waiting twice. Both still degrade to an empty map on their own, which is
    * what keeps a missing snapshot table from costing the rosters.
    */
-  const [stock, values] = await Promise.all([
+  const projectionWeek = await latestProjectionWeek().catch(() => null)
+  const positionBySleeperId = new Map(result.flatMap((roster) => roster.players.map((player) => [player.id, player.position] as const)))
+  const [stock, projections, values] = await Promise.all([
     stockIds.length > 0
-      ? resolvePlayerStock(stockIds, { format: 'DYNASTY', qbFormat: 'ONE_QB' }).catch(
+      ? resolvePlayerStock(stockIds, { format: valueBook.format, qbFormat: valueBook.qbFormat }).catch(
           () => new Map(),
         )
       : Promise.resolve(new Map()),
+    stockIds.length > 0
+      ? lookupProjections(stockIds, projectionWeek, { scoringSettings: scoring, positionBySleeperId }, String(league?.sport ?? 'NFL')).catch(() => new Map())
+      : Promise.resolve(new Map()),
     allNames.length > 0
       ? getPlayerValuesForNamesDbFirst(allNames, {
-          isDynasty: true,
-          numQbs: 1,
-          numTeams: 12,
-          ppr: 1,
+          isDynasty: valueBook.format === 'DYNASTY',
+          numQbs: valueBook.qbFormat === 'SUPERFLEX' ? 2 : 1,
+          numTeams: Number(league?.leagueSize) || rosters.length || 12,
+          ppr,
         }).catch(() => new Map())
       : Promise.resolve(new Map()),
   ])
@@ -524,6 +596,11 @@ export async function GET(
       // Keyed lowercase by `buildPlayerValuesForNames`. A miss stays null — "not priced",
       // which the picker renders differently from a low value.
       p.value = values.get(p.name.toLowerCase())?.value ?? null
+      const projection = projections.get(p.id)
+      const leagueProjection = projection?.componentStats
+        ? computeLeagueProjectedPoints(projection.componentStats, scoring)?.points ?? null
+        : null
+      p.weeklyProjection = leagueProjection ?? projection?.projectedPoints ?? null
       p.unpricedReason =
         p.value == null
           ? playerUnpricedReason({
@@ -534,6 +611,44 @@ export async function GET(
             })
           : null
     }
+  }
+
+  let hasPlayoffProbabilities = proposalMode === 'guillotine' || proposalMode === 'survivor'
+  if (proposalMode !== 'guillotine' && proposalMode !== 'survivor' && currentSeason) {
+    // Some deployments and isolated route tests run with a reduced Prisma
+    // surface. Missing simulation storage must reduce proposal confidence,
+    // never take down the roster and partner picker.
+    const simulationStore = (prisma as typeof prisma & {
+      seasonSimulationResult?: typeof prisma.seasonSimulationResult
+    }).seasonSimulationResult
+    const latestSimulation = simulationStore
+      ? await simulationStore.findFirst({
+        where: { leagueId, season: currentSeason },
+        orderBy: [{ weekOrPeriod: 'desc' }, { createdAt: 'desc' }],
+        select: { weekOrPeriod: true, createdAt: true },
+      })
+        .catch(() => null)
+      : null
+    const simulationIsFresh = latestSimulation
+      ? Date.now() - latestSimulation.createdAt.getTime() <= 10 * 24 * 60 * 60 * 1000
+      : false
+    const simulations = latestSimulation && simulationIsFresh && simulationStore
+      ? await simulationStore.findMany({
+            where: { leagueId, season: currentSeason, weekOrPeriod: latestSimulation.weekOrPeriod },
+            select: { teamId: true, playoffProbability: true },
+          })
+          .catch(() => [])
+      : []
+    const probabilityByTeam = new Map(simulations.map((row) => {
+      const raw = Number(row.playoffProbability)
+      return [String(row.teamId), raw <= 1 ? raw * 100 : raw] as const
+    }))
+    for (const roster of result) {
+      const probability = probabilityByTeam.get(String(roster.teamExternalId ?? ''))
+        ?? probabilityByTeam.get(roster.rosterId)
+      roster.playoffProbability = probability != null && Number.isFinite(probability) ? probability : null
+    }
+    hasPlayoffProbabilities = result.some((roster) => roster.playoffProbability != null)
   }
 
   /*
@@ -577,11 +692,75 @@ export async function GET(
     }
   }
 
+  const tradeStore = (prisma as typeof prisma & {
+    afLeagueTrade?: typeof prisma.afLeagueTrade
+  }).afLeagueTrade
+  const historicalTrades = tradeStore
+    ? await tradeStore.findMany({
+      where: { leagueId },
+      orderBy: { createdAt: 'desc' },
+      take: 250,
+      select: {
+        proposerRosterId: true,
+        receiverRosterId: true,
+        status: true,
+        metadata: true,
+        items: { select: { itemType: true, fromRosterId: true, toRosterId: true } },
+      },
+      })
+        .catch(() => [])
+    : []
+  const partnerBehavior = derivePartnerBehaviorProfiles(historicalTrades, result.map((roster) => roster.rosterId))
+  const rawSuggestions = generateTradePartnerSuggestions({
+    viewerRosterId: viewerTeamRosterId,
+    rosters: result,
+    rosterPositions,
+    faabBudget: league?.waiverBudget ?? null,
+    leagueMode: proposalMode,
+    managerStrategy,
+    partnerBehavior,
+  })
+  const suggestions = enrichProposalSimulations({
+    suggestions: rawSuggestions,
+    rosters: result,
+    viewerRosterId: viewerTeamRosterId,
+    leagueMode: proposalMode,
+    weeksRemaining: Math.max(1, Number(league?.playoffStartWeek ?? 14) - Number(projectionWeek?.week ?? 1)),
+    playoffTeams: Math.max(2, Number(league?.playoffTeams ?? Math.min(6, rosters.length))),
+  })
+  const rawMultiTeamSuggestions = generateMultiTeamTradeSuggestions({
+    viewerRosterId: viewerTeamRosterId,
+    rosters: result,
+    rosterPositions,
+  })
+  const multiTeamSuggestions = enrichMultiTeamProposalSimulations({
+    suggestions: rawMultiTeamSuggestions,
+    rosters: result,
+    viewerRosterId: viewerTeamRosterId,
+    leagueMode: proposalMode,
+    weeksRemaining: Math.max(1, Number(league?.playoffStartWeek ?? 14) - Number(projectionWeek?.week ?? 1)),
+    playoffTeams: Math.max(2, Number(league?.playoffTeams ?? Math.min(6, rosters.length))),
+  })
+
   return NextResponse.json({
     rosters: result,
     viewerRosterId: viewerRosterId?.id ?? null,
     viewerTeamRosterId,
     partnerRanking,
+    suggestions,
+    multiTeamSuggestions,
+    tradeContext: {
+      valueBook: describeValueBook(valueBook),
+      proposalModel: proposalMode.replace(/_/g, ' '),
+      managerStrategy,
+      rosterPositions,
+      faabBudget: league?.waiverBudget ?? null,
+      contextualGradeComplete: false,
+      missing: [
+        ...(!hasPlayoffProbabilities ? ['playoff probability simulation'] : []),
+        ...(!savedStrategy ? ['manager strategy confirmation'] : []),
+      ],
+    },
     /*
      * How complete the imported pick lists are: `complete`, `traded_only` (the league's rookie-draft
      * size is unknown, so only picks that changed hands are listed) or `none`. The picker says so

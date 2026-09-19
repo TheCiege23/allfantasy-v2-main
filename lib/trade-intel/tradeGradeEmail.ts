@@ -229,8 +229,8 @@ function positionDeltaLine(delta: Record<string, number>): string | null {
 
 function sideCard(side: TradeSideGrade, provisional: boolean, sideExp?: SideExpectation): string {
   const m = sideMath(side)
-  // A projected letter keeps its grade colour so it reads at a glance, but never
-  // without the word PROJECTED under it — the colour carries the signal, the
+  // A market letter keeps its grade colour so it reads at a glance, but never
+  // without the words MARKET GRADE under it — the colour carries the signal, the
   // label carries the caveat. With no projection, a neutral dash beats a fake C.
   const projected = provisional ? (sideExp?.projected ?? null) : null
   const colors = projected
@@ -278,7 +278,7 @@ function sideCard(side: TradeSideGrade, provisional: boolean, sideExp?: SideExpe
             <div style="display:inline-block;min-width:26px;padding:4px 9px;background:${colors.bg};color:${colors.fg};border-radius:8px;font-size:15px;font-weight:800;text-align:center">${escapeHtml(chipLabel)}</div>
             ${
               projected
-                ? `<div style="font-size:8px;letter-spacing:0.09em;color:${FAINT};font-weight:700;margin-top:3px;text-align:center">PROJECTED</div>`
+                ? `<div style="font-size:8px;letter-spacing:0.09em;color:${FAINT};font-weight:700;margin-top:3px;text-align:center">MARKET GRADE</div>`
                 : ''
             }
           </td>
@@ -314,6 +314,14 @@ export function explainGrade(
   provisional: boolean,
   expectation?: TradeExpectation | null,
 ): string {
+  if (provisional && expectation?.evaluation?.withheldReason) {
+    return (
+      `${expectation.evaluation.withheldReason} ` +
+      `League context: ${expectation.leagueNote}. ` +
+      'AllFantasy will show the separately labelled realized outcome once the traded assets produce points.'
+    )
+  }
+
   if (provisional && expectation?.available) {
     const pending = unresolvedPickLabels(trade)
     const scoringNote =

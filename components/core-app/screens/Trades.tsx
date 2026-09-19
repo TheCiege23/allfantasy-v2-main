@@ -3,6 +3,8 @@
 import '@/components/core-app/af-trades.css'
 import PlayerName from '@/components/core-app/player-card/PlayerName'
 import { PlayerCardLeagueScope } from '@/components/core-app/player-card/PlayerCardProvider'
+import { PlayerImage } from '@/app/components/PlayerImage'
+import { TeamLogo } from '@/app/components/TeamLogo'
 import type { TradesData, TradeRecord, PendingOffer } from '@/lib/core-app/trades'
 
 /**
@@ -10,15 +12,9 @@ import type { TradesData, TradeRecord, PendingOffer } from '@/lib/core-app/trade
  *
  * "Offer, grade, counter — all scored against this league's own rules."
  *
- * The handoff centres a letter grade (B+) with a fairness score and a rationale.
- * That grade is NOT rendered here, and the empty slot says why rather than
- * standing empty: trades are stored as asset counts, not the players involved,
- * so there is nothing to value. A grade from that data lands every trade in the
- * C band and reads "dead even" when it actually means no data — the exact trap
- * lib/trade-intel's own hasNoSignal() was written to catch.
- *
- * What IS shown is real: completed trades, when they happened, who with, and how
- * many players and picks moved.
+ * Sleeper trades include the same assets and grading inputs used by trade
+ * emails. Each manager's projected or realized grade stays with their side.
+ * Imported counts-only records retain their separate fallback presentation.
  */
 
 export type TradesProps = {
@@ -141,9 +137,9 @@ function TradeCard({ trade }: { trade: TradeRecord }) {
         </span>
       </header>
 
-      <div className="af-tr-sides">
+      <div className="af-tr-sides" aria-label={trade.yourSide === 'unknown' ? `Trade from ${trade.players[0]?.manager ?? 'the first manager'}'s perspective` : 'Your trade'}>
         <div className="af-tr-side">
-          <div className="af-label">In</div>
+          <div className="af-label">{trade.yourSide === 'unknown' ? 'Received' : 'In'}</div>
           <div className="af-tr-count af-num">{trade.playersIn}</div>
           <div className="af-tr-count-label">
             {trade.playersIn === 1 ? 'player' : 'players'}
@@ -155,7 +151,7 @@ function TradeCard({ trade }: { trade: TradeRecord }) {
         </div>
 
         <div className="af-tr-side">
-          <div className="af-label">Out</div>
+          <div className="af-label">{trade.yourSide === 'unknown' ? 'Sent' : 'Out'}</div>
           <div className="af-tr-count af-num">{trade.playersOut}</div>
           <div className="af-tr-count-label">
             {trade.playersOut === 1 ? 'player' : 'players'}
@@ -180,13 +176,16 @@ function TradeCard({ trade }: { trade: TradeRecord }) {
         <div className="af-tr-players">
           {trade.players.map((side, i) => (
             <div className="af-tr-players-side" key={`${side.manager ?? 'unknown'}-${i}`}>
-              <span className="af-label af-tr-players-who" data-you={side.isYou}>
-                {side.isYou ? 'You got' : `${side.manager ?? 'Another manager'} got`}
+              <span className="af-tr-manager-identity">
+                {side.avatarUrl ? <img className="af-tr-manager-avatar" src={side.avatarUrl} alt="" /> : null}
+                <span className="af-label af-tr-players-who" data-you={side.isYou}>
+                  {side.isYou ? 'You got' : `${side.manager ?? 'Another manager'} got`}
+                </span>
               </span>
               <span className="af-tr-players-list">
-                {side.received.map((p, j) => (
-                  <span key={p.sleeperId}>
-                    {j > 0 ? ', ' : ''}
+                {side.received.map((p) => (
+                  <span className="af-tr-player-asset" key={p.sleeperId}>
+                    <PlayerImage sleeperId={p.sleeperId} sport="NFL" name={p.name} position={p.position ?? undefined} headshotUrl={p.headshotUrl} size={28} />
                     <PlayerName
                       sport="NFL"
                       sleeperId={p.sleeperId}
@@ -194,9 +193,19 @@ function TradeCard({ trade }: { trade: TradeRecord }) {
                       position={p.position}
                       team={p.team}
                     />
+                    {p.team ? <TeamLogo teamAbbr={p.team} sport="NFL" logoUrl={p.teamLogoUrl} size={20} /> : null}
                   </span>
                 ))}
+                {side.picks?.map((pick, j) => (
+                  <span key={`${pick}-${j}`}>{side.received.length > 0 || j > 0 ? ', ' : ''}{pick}</span>
+                ))}
               </span>
+              {side.gradeBasis ? (
+                <div className="af-tr-grade" data-ungradable={!side.grade}>
+                  <span className="af-tr-grade-badge af-num">{side.grade ?? '—'}</span>
+                  <span className="af-tr-grade-why">{side.gradeBasis} · {side.gradeNote}</span>
+                </div>
+              ) : null}
             </div>
           ))}
         </div>
@@ -207,14 +216,14 @@ function TradeCard({ trade }: { trade: TradeRecord }) {
         right, but filled with the reason no letter can be issued — an empty
         badge would read as a pending grade, and a "C" would read as average.
       */}
-      <div className="af-tr-grade" data-ungradable="true">
+      {!trade.players.some((side) => side.gradeBasis) ? <div className="af-tr-grade" data-ungradable="true">
         <span className="af-tr-grade-badge af-num">n/a</span>
         <span className="af-tr-grade-why">
           {assets > 0
             ? 'Counts only in this view — see Trade grades below for the priced version.'
             : 'Not gradable — nothing was recorded as moving in this trade.'}
         </span>
-      </div>
+      </div> : null}
     </li>
   )
 }
@@ -280,6 +289,7 @@ export function Trades({ data }: TradesProps) {
 
       {/* ── Completed trades ────────────────────────────────────────── */}
       <section className="af-tr-history">
+        {data.historyNotice ? <p className="af-tr-grade-why" role="status">{data.historyNotice}</p> : null}
         <header className="af-tr-history-head">
           <h2 className="af-display af-tr-history-title">Completed trades</h2>
           {data.history.available ? (
@@ -303,7 +313,7 @@ export function Trades({ data }: TradesProps) {
       </section>
 
       {/* ── Grades ──────────────────────────────────────────────────── */}
-      <section className="af-card af-tr-section">
+      {!data.canonicalHistory ? <section className="af-card af-tr-section">
         <h2 className="af-label">Trade grades</h2>
         {data.grades.available ? (
           <ul className="af-tr-graderows">
@@ -342,7 +352,7 @@ export function Trades({ data }: TradesProps) {
         ) : (
           <Unavailable reason={data.grades.reason} />
         )}
-      </section>
+      </section> : null}
     </div>
     </PlayerCardLeagueScope>
   )

@@ -176,7 +176,7 @@ export async function detectAndNotifyLeague(sleeperLeagueId: string): Promise<Le
     if (recipients.length === 0) return base
 
     const leagueName = afLeagues[0].name ?? 'your league'
-    const ledgerUrl = `${getBaseUrl()}/league/${afLeagues[0].id}?view=legacy`
+    const ledgerUrl = `${getBaseUrl()}/core/trades?league=${encodeURIComponent(afLeagues[0].id)}`
     for (const trade of newTrades) {
       /*
        * The graded ledger keys a trade as `<something>:<transactionId>`, which is how `newTrades`
@@ -268,7 +268,7 @@ export async function detectAndNotifyLeague(sleeperLeagueId: string): Promise<Le
           await sendPushToUser(recipient.id, {
             title: isOffer ? `Trade offer in ${leagueName}` : `Trade accepted in ${leagueName}`,
             body: subject,
-            href: `/league/${afLeagues[0].id}?view=legacy`,
+            href: `/core/trades?league=${encodeURIComponent(afLeagues[0].id)}`,
             tag: `trade:${afLeagues[0].id}:${trade.id}`,
             type: 'trade',
             leagueId: afLeagues[0].id,

@@ -53,6 +53,29 @@ function mapReviewToTradeReviewType(mode: string): string {
   return 'commissioner'
 }
 
+async function managedPlatformIds(leagueId: string, userId: string): Promise<Set<string>> {
+  const ids = new Set<string>([userId])
+  const client = prisma as typeof prisma & {
+    leagueTeam?: typeof prisma.leagueTeam
+    userProfile?: typeof prisma.userProfile
+  }
+  const [claimed, profile] = await Promise.all([
+    client.leagueTeam
+      ? client.leagueTeam
+      .findFirst({ where: { leagueId, claimedByUserId: userId }, select: { platformUserId: true } })
+      .catch(() => null)
+      : Promise.resolve(null),
+    client.userProfile
+      ? client.userProfile
+      .findUnique({ where: { userId }, select: { sleeperUserId: true } })
+      .catch(() => null)
+      : Promise.resolve(null),
+  ])
+  if (claimed?.platformUserId) ids.add(claimed.platformUserId)
+  if (profile?.sleeperUserId) ids.add(profile.sleeperUserId)
+  return ids
+}
+
 /**
  * Direct notice to the PROPOSER when their offer is accepted or rejected — the
  * `trade_accept_reject` settings category. The league-wide `fanout` above goes
@@ -126,7 +149,7 @@ async function notifyOnTradeCreated(input: {
   leagueId: string
   newTradeId: string
   actorUserId: string
-  receiverUserId: string | null
+  receiverUserIds: string[]
   counteredProposerUserId: string | null
 }) {
   const planned: PlannedTradeNotice[] = []
@@ -139,9 +162,9 @@ async function notifyOnTradeCreated(input: {
       body: 'They sent one back — open it to accept, counter again, or decline.',
     })
   }
-  if (input.receiverUserId) {
+  for (const receiverUserId of input.receiverUserIds) {
     planned.push({
-      userId: input.receiverUserId,
+      userId: receiverUserId,
       type: 'trade_proposed',
       title: 'New trade offer',
       body: 'Someone in your league sent you a trade offer.',
@@ -191,19 +214,31 @@ export async function createAfLeagueTrade(input: CreateLeagueTradeInput & { curr
   })
   if (!life.ok) throw new Error(life.err.error)
 
-  const [proposer, receiver] = await Promise.all([
-    prisma.roster.findFirst({ where: { id: input.proposerRosterId, leagueId: input.leagueId } }),
-    prisma.roster.findFirst({ where: { id: input.receiverRosterId, leagueId: input.leagueId } }),
-  ])
+  const participantRosterIds = [...new Set([
+    input.proposerRosterId,
+    input.receiverRosterId,
+    ...input.assets.flatMap((a) => [a.fromRosterId, a.toRosterId]),
+  ])]
+  const participants = participantRosterIds.length === 2
+    ? (await Promise.all([
+        prisma.roster.findFirst({ where: { id: input.proposerRosterId, leagueId: input.leagueId } }),
+        prisma.roster.findFirst({ where: { id: input.receiverRosterId, leagueId: input.leagueId } }),
+      ])).filter((r): r is NonNullable<typeof r> => Boolean(r))
+    : await prisma.roster.findMany({ where: { id: { in: participantRosterIds }, leagueId: input.leagueId } })
+  const proposer = participants.find((r) => r.id === input.proposerRosterId) ?? null
+  const receiver = participants.find((r) => r.id === input.receiverRosterId) ?? null
   if (!proposer || !receiver) throw new Error('Roster not found')
-  if (proposer.platformUserId !== input.proposedByUserId) {
+  if (participants.length !== participantRosterIds.length) throw new Error('Every trade participant must belong to this league')
+  const proposerOwnsRoster = proposer.platformUserId === input.proposedByUserId
+    || (await managedPlatformIds(input.leagueId, input.proposedByUserId)).has(proposer.platformUserId)
+  if (!proposerOwnsRoster) {
     throw new Error('Proposer must own the proposing roster')
   }
 
   const rosterTxGate = await assertRosterTransactionsAllowed({
     leagueId: input.leagueId,
     league,
-    rosterIds: [proposer.id, receiver.id],
+    rosterIds: participantRosterIds,
     userId: input.proposedByUserId,
     kind: 'trade',
   })
@@ -215,6 +250,7 @@ export async function createAfLeagueTrade(input: CreateLeagueTradeInput & { curr
     settings,
     proposer,
     receiver,
+    participants,
     assets: input.assets,
     currentWeek: input.currentWeek ?? null,
   })
@@ -246,7 +282,12 @@ export async function createAfLeagueTrade(input: CreateLeagueTradeInput & { curr
       processingDelayHours: settings.processingDelayHours,
       vetoThresholdPercent: settings.vetoThresholdPercent,
       expiresAt,
-      metadata: (input.metadata ?? {}) as Prisma.InputJsonValue,
+      metadata: {
+        ...(input.metadata ?? {}),
+        participantRosterIds,
+        acceptedRosterIds: [],
+        multiTeam: participantRosterIds.length > 2,
+      } as Prisma.InputJsonValue,
       items: {
         create: input.assets.map((a) => ({
           itemType: a.itemType,
@@ -324,7 +365,10 @@ export async function createAfLeagueTrade(input: CreateLeagueTradeInput & { curr
     leagueId: input.leagueId,
     newTradeId: trade.id,
     actorUserId: input.proposedByUserId,
-    receiverUserId: receiver.platformUserId ?? null,
+    receiverUserIds: participants
+      .filter((r) => r.id !== proposer.id)
+      .map((r) => r.platformUserId)
+      .filter((id): id is string => Boolean(id)),
     counteredProposerUserId: parent?.proposedByUserId ?? null,
   })
 
@@ -344,10 +388,44 @@ export async function acceptAfLeagueTrade(input: {
   if (trade.status !== 'pending') throw new Error('Trade is not pending')
   if (trade.expiresAt && trade.expiresAt < new Date()) throw new Error('Trade expired')
 
-  const receiver = await prisma.roster.findUnique({ where: { id: trade.receiverRosterId } })
-  if (!receiver || receiver.platformUserId !== input.userId) {
-    throw new Error('Only the receiving manager can accept')
+  const participantRosterIds = [...new Set([
+    trade.proposerRosterId,
+    trade.receiverRosterId,
+    ...trade.items.flatMap((i) => [i.fromRosterId, i.toRosterId]),
+  ])]
+  const participants = await prisma.roster.findMany({ where: { id: { in: participantRosterIds }, leagueId: input.leagueId } })
+  let acceptingRoster = participants.find((r) => r.id !== trade.proposerRosterId && r.platformUserId === input.userId)
+  if (!acceptingRoster) {
+    const acceptingIdentityIds = await managedPlatformIds(input.leagueId, input.userId)
+    acceptingRoster = participants.find((r) => r.id !== trade.proposerRosterId && acceptingIdentityIds.has(r.platformUserId))
   }
+  if (!acceptingRoster) throw new Error('Only a participating manager can accept')
+
+  const metadata = trade.metadata && typeof trade.metadata === 'object' && !Array.isArray(trade.metadata)
+    ? trade.metadata as Record<string, unknown>
+    : {}
+  const accepted = new Set(Array.isArray(metadata.acceptedRosterIds) ? metadata.acceptedRosterIds.map(String) : [])
+  accepted.add(acceptingRoster.id)
+  const requiredAcceptances = participantRosterIds.filter((id) => id !== trade.proposerRosterId)
+  if (!requiredAcceptances.every((id) => accepted.has(id))) {
+    await prisma.afLeagueTrade.update({
+      where: { id: trade.id },
+      data: { metadata: { ...metadata, participantRosterIds, acceptedRosterIds: [...accepted], multiTeam: participantRosterIds.length > 2 } as Prisma.InputJsonValue },
+    })
+    await appendAfTradeStatusHistory({
+      tradeId: trade.id,
+      fromStatus: 'pending',
+      toStatus: 'pending',
+      actorUserId: input.userId,
+      reason: 'participant_accepted',
+      metadata: { acceptingRosterId: acceptingRoster.id, accepted: accepted.size, required: requiredAcceptances.length },
+    })
+    return { status: 'pending' }
+  }
+  await prisma.afLeagueTrade.update({
+    where: { id: trade.id },
+    data: { metadata: { ...metadata, participantRosterIds, acceptedRosterIds: [...accepted], multiTeam: participantRosterIds.length > 2 } as Prisma.InputJsonValue },
+  })
 
   const league = await prisma.league.findUnique({ where: { id: input.leagueId } })
   if (!league) throw new Error('League not found')
@@ -355,7 +433,7 @@ export async function acceptAfLeagueTrade(input: {
   const rosterTxGateAccept = await assertRosterTransactionsAllowed({
     leagueId: input.leagueId,
     league,
-    rosterIds: [trade.proposerRosterId, trade.receiverRosterId],
+    rosterIds: participantRosterIds,
     userId: input.userId,
     kind: 'trade',
   })
@@ -459,6 +537,12 @@ export async function finalizeAfLeagueTradeProcessing(input: { tradeId: string; 
   })
   if (trade.status === 'processed') return
 
+  const participantRosterIds = [...new Set([
+    trade.proposerRosterId,
+    trade.receiverRosterId,
+    ...trade.items.flatMap((item) => [item.fromRosterId, item.toRosterId]),
+  ])]
+
   const processable = new Set(['pending', 'awaiting_commissioner', 'awaiting_votes', 'scheduled'])
   if (!processable.has(trade.status)) {
     throw new Error('Trade cannot be processed in this state')
@@ -472,7 +556,7 @@ export async function finalizeAfLeagueTradeProcessing(input: { tradeId: string; 
   const rosterTxGateFinalize = await assertRosterTransactionsAllowed({
     leagueId: trade.leagueId,
     league,
-    rosterIds: [trade.proposerRosterId, trade.receiverRosterId],
+    rosterIds: participantRosterIds,
     userId: input.actorUserId,
     kind: 'trade',
   })
@@ -537,14 +621,12 @@ export async function finalizeAfLeagueTradeProcessing(input: { tradeId: string; 
     // ⚠ BEFORE-STATE IS READ HERE AND NOWHERE LATER. `applyTradeAssetsInTransaction` overwrites
     // `playerData` and `faabRemaining` on both rosters, so inside this transaction these rows stop
     // being "before" the moment it runs. After the claim, so only the race winner captures.
-    const beforeState = await captureGenericRosterState(tx, [
-      trade.proposerRosterId,
-      trade.receiverRosterId,
-    ])
+    const beforeState = await captureGenericRosterState(tx, participantRosterIds)
     await applyTradeAssetsInTransaction(tx, {
       leagueId: trade.leagueId,
       proposerRosterId: trade.proposerRosterId,
       receiverRosterId: trade.receiverRosterId,
+      participantRosterIds,
       assets,
     })
 
@@ -569,10 +651,7 @@ export async function finalizeAfLeagueTradeProcessing(input: { tradeId: string; 
       validations: { rosterTransactionGate: 'ok' },
       assetSummary: { items: assets.length, assets },
       beforeState,
-      afterState: await captureGenericRosterState(tx, [
-        trade.proposerRosterId,
-        trade.receiverRosterId,
-      ]),
+      afterState: await captureGenericRosterState(tx, participantRosterIds),
       executedAt: new Date(),
     })
     await appendAfTradeStatusHistory({
@@ -661,9 +740,24 @@ export async function rejectAfLeagueTrade(input: { tradeId: string; leagueId: st
   if (!trade) throw new Error('Trade not found')
   if (trade.status !== 'pending') throw new Error('Trade is not pending')
 
-  const isRecv = await prisma.roster.findFirst({
-    where: { id: trade.receiverRosterId, platformUserId: input.userId },
+  const tradeWithItems = await prisma.afLeagueTrade.findFirst({
+    where: { id: input.tradeId, leagueId: input.leagueId }, include: { items: true },
   })
+  const participantIds = [...new Set([
+    trade.proposerRosterId,
+    trade.receiverRosterId,
+    ...(tradeWithItems?.items ?? []).flatMap((i) => [i.fromRosterId, i.toRosterId]),
+  ])]
+  let isRecv = Boolean(await prisma.roster.findFirst({
+    where: { id: { in: participantIds.filter((id) => id !== trade.proposerRosterId) }, platformUserId: input.userId },
+  }))
+  if (!isRecv) {
+    const rejectingIdentityIds = await managedPlatformIds(input.leagueId, input.userId)
+    const receivingRosters = await prisma.roster.findMany({
+      where: { id: { in: participantIds.filter((id) => id !== trade.proposerRosterId) }, leagueId: input.leagueId },
+    })
+    isRecv = receivingRosters.some((roster) => rejectingIdentityIds.has(roster.platformUserId))
+  }
   const league = await prisma.league.findUnique({ where: { id: input.leagueId } })
   const isComm = league?.userId === input.userId
   if (!isRecv && !isComm) throw new Error('Only the receiving manager or commissioner can reject')
@@ -743,6 +837,7 @@ export async function castAfTradeVetoVote(input: {
 }): Promise<void> {
   const trade = await prisma.afLeagueTrade.findFirst({
     where: { id: input.tradeId, leagueId: input.leagueId },
+    include: { items: true },
   })
   if (!trade) throw new Error('Trade not found')
   if (trade.status !== 'awaiting_votes') throw new Error('Trade is not in veto window')
@@ -751,7 +846,14 @@ export async function castAfTradeVetoVote(input: {
     where: { id: input.voterRosterId, leagueId: input.leagueId, platformUserId: input.userId },
   })
   if (!vr) throw new Error('Invalid voter roster')
-  if (vr.id === trade.proposerRosterId || vr.id === trade.receiverRosterId) {
+  const tradeMetadata = trade.metadata && typeof trade.metadata === 'object' && !Array.isArray(trade.metadata)
+    ? trade.metadata as Record<string, unknown>
+    : {}
+  const recordedParticipants = Array.isArray(tradeMetadata.participantRosterIds)
+    ? tradeMetadata.participantRosterIds.map(String)
+    : []
+  const tradingParties = new Set([trade.proposerRosterId, trade.receiverRosterId, ...recordedParticipants])
+  if (tradingParties.has(vr.id)) {
     throw new Error('Trading parties cannot veto their own trade')
   }
 

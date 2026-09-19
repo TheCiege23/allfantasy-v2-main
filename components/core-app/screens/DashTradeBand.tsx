@@ -2,6 +2,8 @@ import Link from 'next/link'
 import '@/components/core-app/af-core.css'
 import '@/components/core-app/af-dash-trade.css'
 import type { RecentTrade } from '@/lib/core-app/recentTrades'
+import { PlayerImage } from '@/app/components/PlayerImage'
+import { TeamLogo } from '@/app/components/TeamLogo'
 
 /**
  * Trades that just landed in your leagues.
@@ -12,12 +14,10 @@ import type { RecentTrade } from '@/lib/core-app/recentTrades'
  * trade-grade sweep was resolving both sides of every trade, down to the
  * individual draft picks, every thirty minutes. See lib/core-app/recentTrades.
  *
- * ⚠ TWO DIFFERENT QUESTIONS, AND ONLY ONE OF THEM CAN BE ANSWERED TODAY. The
- * sweep's letter grade is retrospective — scored on points already realised —
- * so days after a trade it measures nearly nothing and a 2027 pick contributes
- * zero. That letter is NOT shown here; publishing it would be the "C means no
- * data" failure this repo has already been bitten by, and the ledger where it
- * has had a season to mean something is one click away.
+ * The sweep's result letter is retrospective — scored on points already
+ * realised — while a new trade needs the expectation loader's market view.
+ * Each side therefore labels its basis and explains which contextual inputs
+ * were available. A zero-signal result never appears as an earned C.
  *
  * The verdict that IS shown asks whether the deal was balanced ON THE DAY, by
  * market value of what each side received — the question a manager actually
@@ -82,6 +82,7 @@ export function DashTradeBand({ trades, now }: { trades: RecentTrade[]; now: Dat
           return (
             <article key={`${t.platformLeagueId}:${t.id}`} className="af-trade-card">
               <div className="af-trade-meta">
+                {t.leagueAvatarUrl ? <img className="af-trade-league-avatar" src={t.leagueAvatarUrl} alt="" /> : null}
                 <Link className="af-trade-league" href={`/league/${t.leagueId}?view=legacy`}>
                   {t.leagueName}
                 </Link>
@@ -91,15 +92,19 @@ export function DashTradeBand({ trades, now }: { trades: RecentTrade[]; now: Dat
               <div className="af-trade-sides">
                 {t.sides.map((s) => (
                   <div key={s.rosterId} className="af-trade-side">
-                    <span className="af-trade-mgr">{s.teamName || s.managerName}</span>
+                    <span className="af-trade-manager">
+                      {s.avatarUrl ? <img className="af-trade-avatar" src={s.avatarUrl} alt="" /> : null}
+                      <span className="af-trade-mgr">{s.teamName || s.managerName}</span>
+                    </span>
                     <span className="af-trade-got af-num">RECEIVED</span>
                     <ul className="af-trade-assets">
                       {s.received.slice(0, VISIBLE_ASSETS).map((a, i) => (
                         <li key={`${a.kind}:${a.name}:${i}`} data-kind={a.kind}>
-                          {a.name}
-                          {a.position ? (
-                            <span className="af-trade-pos af-num"> {a.position}</span>
+                          {a.kind === 'player' && a.playerId ? (
+                            <PlayerImage sleeperId={a.playerId} sport="NFL" name={a.name} position={a.position ?? undefined} headshotUrl={a.headshotUrl} size={26} />
                           ) : null}
+                          <span>{a.name}{a.position ? <span className="af-trade-pos af-num"> {a.position}</span> : null}</span>
+                          {a.kind === 'player' && a.team ? <TeamLogo teamAbbr={a.team} sport="NFL" logoUrl={a.teamLogoUrl} size={18} /> : null}
                         </li>
                       ))}
                       {s.received.length > VISIBLE_ASSETS ? (
@@ -112,6 +117,12 @@ export function DashTradeBand({ trades, now }: { trades: RecentTrade[]; now: Dat
                         <li className="af-trade-more">nothing we can name</li>
                       ) : null}
                     </ul>
+                    {s.gradeBasis || s.gradeReason ? (
+                      <div className="af-trade-side-grade" data-ungraded={!s.grade}>
+                        <span className="af-trade-side-letter">{s.grade ?? '—'}</span>
+                        <span><strong>{s.gradeBasis ?? 'Contextual grade withheld'}</strong> · {s.gradeReason}</span>
+                      </div>
+                    ) : null}
                   </div>
                 ))}
               </div>

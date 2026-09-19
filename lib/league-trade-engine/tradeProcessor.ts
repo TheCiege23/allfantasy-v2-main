@@ -62,19 +62,20 @@ export async function applyTradeAssetsInTransaction(
     leagueId: string
     proposerRosterId: string
     receiverRosterId: string
+    participantRosterIds?: string[]
     assets: TradeAssetInput[]
   },
 ): Promise<void> {
-  const proposer = await tx.roster.findUniqueOrThrow({ where: { id: input.proposerRosterId } })
-  const receiver = await tx.roster.findUniqueOrThrow({ where: { id: input.receiverRosterId } })
-  if (proposer.leagueId !== input.leagueId || receiver.leagueId !== input.leagueId) {
-    throw new Error('Roster league mismatch')
-  }
-
-  let pData: unknown = proposer.playerData
-  let rData: unknown = receiver.playerData
-  let pFaab = proposer.faabRemaining ?? 0
-  let rFaab = receiver.faabRemaining ?? 0
+  const participantIds = [...new Set([
+    input.proposerRosterId,
+    input.receiverRosterId,
+    ...(input.participantRosterIds ?? []),
+    ...input.assets.flatMap((a) => [a.fromRosterId, a.toRosterId]),
+  ])]
+  const rosters = await tx.roster.findMany({ where: { id: { in: participantIds }, leagueId: input.leagueId } })
+  if (rosters.length !== participantIds.length) throw new Error('Roster league mismatch')
+  const dataByRoster = new Map<string, unknown>(rosters.map((r) => [r.id, r.playerData]))
+  const faabByRoster = new Map<string, number>(rosters.map((r) => [r.id, r.faabRemaining ?? 0]))
 
   for (const a of input.assets) {
     const fromId = a.fromRosterId
@@ -82,52 +83,38 @@ export async function applyTradeAssetsInTransaction(
 
     if (a.itemType === 'player' && a.itemReference) {
       const pid = a.itemReference
-      if (fromId === proposer.id) {
-        if (!getRosterPlayerIds(pData).includes(pid)) throw new Error(`Player ${pid} not on proposer`)
-        pData = removePlayerFromRosterData(pData, pid)
-        rData = addPlayerToRosterData(rData, pid)
-      } else {
-        if (!getRosterPlayerIds(rData).includes(pid)) throw new Error(`Player ${pid} not on receiver`)
-        rData = removePlayerFromRosterData(rData, pid)
-        pData = addPlayerToRosterData(pData, pid)
-      }
+      const fromData = dataByRoster.get(fromId)
+      const toData = dataByRoster.get(toId)
+      if (!getRosterPlayerIds(fromData).includes(pid)) throw new Error(`Player ${pid} not on sending roster`)
+      dataByRoster.set(fromId, removePlayerFromRosterData(fromData, pid))
+      dataByRoster.set(toId, addPlayerToRosterData(toData, pid))
     }
 
     if (a.itemType === 'faab') {
       const amt = Math.floor(Number(a.faabAmount ?? 0))
       if (amt <= 0) throw new Error('Invalid FAAB')
-      if (fromId === proposer.id) {
-        if (pFaab < amt) throw new Error('Insufficient FAAB (proposer)')
-        pFaab -= amt
-        rFaab += amt
-      } else {
-        if (rFaab < amt) throw new Error('Insufficient FAAB (receiver)')
-        rFaab -= amt
-        pFaab += amt
-      }
+      const fromFaab = faabByRoster.get(fromId) ?? 0
+      if (fromFaab < amt) throw new Error('Insufficient FAAB (sending roster)')
+      faabByRoster.set(fromId, fromFaab - amt)
+      faabByRoster.set(toId, (faabByRoster.get(toId) ?? 0) + amt)
     }
 
     if (a.itemType === 'rookie_pick' || a.itemType === 'future_pick' || a.itemType === 'devy_pick') {
       const ref = String(a.itemReference ?? '')
       if (!ref) throw new Error('Pick ref required')
-      const fromData = fromId === proposer.id ? pData : rData
-      const toData = toId === proposer.id ? pData : rData
+      const fromData = dataByRoster.get(fromId)
+      const toData = dataByRoster.get(toId)
       const pickObj = extractPickObject(fromData, ref)
       if (!pickObj) throw new Error('Pick not found on roster')
       const nextFrom = removePickFromPlayerData(fromData, ref)
       const nextTo = addPickToPlayerData(toData, pickObj)
-      if (fromId === proposer.id) {
-        pData = nextFrom
-        rData = nextTo
-      } else {
-        rData = nextFrom
-        pData = nextTo
-      }
+      dataByRoster.set(fromId, nextFrom)
+      dataByRoster.set(toId, nextTo)
     }
 
     if (a.itemType === 'specialty_asset') {
-      const fromData = fromId === proposer.id ? pData : rData
-      const toData = toId === proposer.id ? pData : rData
+      const fromData = dataByRoster.get(fromId)
+      const toData = dataByRoster.get(toId)
       const fromRoot = asRecord(fromData) ?? {}
       const spec = Array.isArray(fromRoot.specialtyAssets) ? [...fromRoot.specialtyAssets] : []
       const key = String(a.itemReference ?? '')
@@ -139,22 +126,18 @@ export async function applyTradeAssetsInTransaction(
       toSpec.push(row)
       const nextFrom = { ...fromRoot, specialtyAssets: spec }
       const nextTo = { ...toRoot, specialtyAssets: toSpec }
-      if (fromId === proposer.id) {
-        pData = nextFrom
-        rData = nextTo
-      } else {
-        rData = nextFrom
-        pData = nextTo
-      }
+      dataByRoster.set(fromId, nextFrom)
+      dataByRoster.set(toId, nextTo)
     }
   }
 
-  await tx.roster.update({
-    where: { id: proposer.id },
-    data: { playerData: pData as import('@prisma/client').Prisma.InputJsonValue, faabRemaining: pFaab },
-  })
-  await tx.roster.update({
-    where: { id: receiver.id },
-    data: { playerData: rData as import('@prisma/client').Prisma.InputJsonValue, faabRemaining: rFaab },
-  })
+  for (const roster of rosters) {
+    await tx.roster.update({
+      where: { id: roster.id },
+      data: {
+        playerData: dataByRoster.get(roster.id) as import('@prisma/client').Prisma.InputJsonValue,
+        faabRemaining: faabByRoster.get(roster.id) ?? 0,
+      },
+    })
+  }
 }

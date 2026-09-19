@@ -4,8 +4,8 @@
  * Sleeper-deep-link / client-side-simulation only and never calls the real trade engine. This test
  * proves the tab now opens the native `ProposeTradeModal` (backed by the real
  * `POST /api/leagues/[leagueId]/trades`) instead, for both the persistent header button and the
- * empty-state affordance — while leaving non-`nflRedraftCore` (e.g. Sleeper) leagues on the
- * original `/trade-finder` link untouched.
+ * empty-state affordance. The same league-aware builder is available in every
+ * format; imported leagues label the result as a shadow plan.
  */
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 import { render, screen, waitFor, fireEvent } from '@testing-library/react'
@@ -66,11 +66,12 @@ describe('TradesTab — native trade builder wiring for nflRedraftCore leagues',
     await waitFor(() => expect(screen.getByTestId('propose-trade-partner-select')).toBeInTheDocument())
   })
 
-  it('leaves non-nflRedraftCore leagues on the original /trade-finder link', async () => {
+  it('opens the league-aware builder for non-redraft formats too', async () => {
     render(<TradesTab league={sleeperLeague} teams={[]} />)
-    const link = await screen.findByTestId('trades-tab-propose-trade')
-    expect(link.tagName).toBe('A')
-    expect(link.getAttribute('href')).toBe('/trade-finder?leagueId=league-2')
-    expect(screen.queryByTestId('trades-tab-propose-trade-header')).not.toBeInTheDocument()
+    const trigger = await screen.findByTestId('trades-tab-propose-trade')
+    expect(trigger.tagName).toBe('BUTTON')
+    expect(screen.getByTestId('trades-tab-propose-trade-header')).toBeInTheDocument()
+    fireEvent.click(trigger)
+    await waitFor(() => expect(screen.getByTestId('propose-trade-partner-select')).toBeInTheDocument())
   })
 })

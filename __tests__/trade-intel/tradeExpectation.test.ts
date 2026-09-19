@@ -339,3 +339,63 @@ describe('scoring mode reflects the traded players, not the whole board', () => 
     expect(built.scoringMode).toBeNull()
   })
 })
+
+describe('grade scope is explicit', () => {
+  test('withholds present-day values from a historical decision grade', () => {
+    const built = buildTradeExpectation({
+      trade: TRADE,
+      context: CONTEXT,
+      marketValues: MARKET,
+      priorSeason: PRIOR,
+      rosteredByPosition: { 1: { QB: 2, RB: 1, WR: 5, TE: 2 }, 8: { QB: 2, RB: 3, WR: 4, TE: 1 } },
+      historical: true,
+      leagueConcept: 'redraft',
+      pickValueLookup: (season, round) => MARKET.pickByRound[`${season}:${round}`] ?? null,
+    })
+    expect(built.sides.every((side) => side.projected == null)).toBe(true)
+    expect(built.evaluation.scope).toBe('withheld-historical')
+    expect(built.evaluation.historicalMode).toBe('as-of-trade-required')
+    expect(built.evaluation.withheldReason).toContain('at or before the trade')
+  })
+
+  it.each(['guillotine', 'survivor'])('withholds a generic letter in %s', (leagueConcept) => {
+    const built = buildTradeExpectation({
+      trade: TRADE, context: CONTEXT, marketValues: MARKET, priorSeason: PRIOR,
+      rosteredByPosition: { 1: { QB: 2, RB: 1, WR: 5, TE: 2 }, 8: { QB: 2, RB: 3, WR: 4, TE: 1 } },
+      leagueConcept,
+      pickValueLookup: (season, round) => MARKET.pickByRound[`${season}:${round}`] ?? null,
+    })
+    expect(built.sides.every((side) => side.projected == null)).toBe(true)
+    expect(built.evaluation?.scope).toBe('withheld-specialty')
+    expect(built.evaluation?.withheldReason).toContain('no standard playoff objective')
+  })
+
+  it('withholds starter-based letters in best ball', () => {
+    const bestBallContext = {
+      ...CONTEXT,
+      variant: { ...CONTEXT.variant, dynasty: false, bestBall: true },
+    }
+    const built = buildTradeExpectation({
+      trade: TRADE,
+      context: bestBallContext,
+      marketValues: MARKET,
+      priorSeason: PRIOR,
+      rosteredByPosition: { 1: { QB: 2, RB: 1, WR: 5, TE: 2 }, 8: { QB: 2, RB: 3, WR: 4, TE: 1 } },
+      leagueConcept: 'redraft',
+    })
+    expect(built.sides.every((side) => side.projected == null)).toBe(true)
+    expect(built.evaluation.format).toBe('best_ball')
+    expect(built.evaluation.withheldReason).toContain('automatically optimized whole roster')
+  })
+
+  it('labels a normal league letter as market-only and names missing outcome inputs', () => {
+    const built = buildTradeExpectation({
+      trade: TRADE, context: CONTEXT, marketValues: MARKET, priorSeason: PRIOR,
+      rosteredByPosition: { 1: { QB: 2, RB: 1, WR: 5, TE: 2 }, 8: { QB: 2, RB: 3, WR: 4, TE: 1 } },
+      leagueConcept: 'dynasty',
+    })
+    expect(built.evaluation?.scope).toBe('market-only')
+    expect(built.evaluation?.factors.find((f) => f.id === 'team-needs')?.status).toBe('reported-only')
+    expect(built.evaluation?.factors.find((f) => f.id === 'playoff-impact')?.status).toBe('missing')
+  })
+})

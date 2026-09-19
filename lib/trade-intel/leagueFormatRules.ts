@@ -16,11 +16,13 @@
 
 import { keeperSettingsConfirmedFrom } from '@/lib/league-contract/keeperProvenance'
 import { resolveLeagueConcept } from '@/lib/league/leagueConceptOptions'
+import { readConceptAliasTags } from '@/lib/league-contract/conceptAliasTags'
 
 export type LeagueConcept =
   | 'redraft'
   | 'keeper'
   | 'dynasty'
+  | 'salary_cap'
   | 'guillotine'
   | 'zombie'
   | 'survivor'
@@ -286,6 +288,8 @@ export function keeperEvidenceFor(league: {
  */
 export function readFormatRules(league: {
   leagueType?: string | null
+  /** Specialty variant can be more specific than the base lifecycle. */
+  leagueVariant?: string | null
   isDynasty?: boolean | null
   keeperCount?: number | null
   keeperCostSystem?: string | null
@@ -333,7 +337,10 @@ export function readFormatRules(league: {
    */
   settings?: unknown
 }): FormatRules {
-  const alias = (league.aliasTags ?? []).map((t) => String(t).trim().toLowerCase())
+  const alias = [
+    ...readConceptAliasTags(league.settings),
+    ...(league.aliasTags ?? []),
+  ].map((t) => String(t).trim().toLowerCase())
   /*
    * A FORMAT alias wins when present: it is the more specific statement, and the base format is
    * what the normaliser fell back to rather than what the league is.
@@ -366,10 +373,13 @@ export function readFormatRules(league: {
   const confirmed =
     confirmedId == null ? null : (CONFIRMED_CONCEPT_READS_AS.get(confirmedId) ?? confirmedId)
   const confirmedIsBareBase = confirmedId === 'redraft' || confirmedId === 'dynasty'
+  const leagueVariant = String(league.leagueVariant ?? '').trim().toLowerCase()
   const raw = (
-    (confirmedIsBareBase ? (formatAlias ?? confirmed) : (confirmed ?? formatAlias)) ??
-    league.leagueType ??
-    ''
+    leagueVariant === 'salary_cap' || leagueVariant === 'contract_dynasty'
+      ? 'salary_cap'
+      : (confirmedIsBareBase ? (formatAlias ?? confirmed) : (confirmed ?? formatAlias)) ??
+        league.leagueType ??
+        ''
   )
     .trim()
     .toLowerCase()
@@ -392,7 +402,7 @@ export function readFormatRules(league: {
       ? 'king_of_the_hill'
       : raw === 'pirate' || raw === 'pirate_vampire'
         ? 'pirate'
-        : raw === 'tournament'
+      : raw === 'tournament'
           ? 'tournament'
           : raw === 'survivor'
             ? 'survivor'
@@ -400,6 +410,8 @@ export function readFormatRules(league: {
               ? 'zombie'
               : raw === 'guillotine'
                 ? 'guillotine'
+                : raw === 'salary_cap' || raw === 'contract_dynasty'
+                  ? 'salary_cap'
                 : raw === 'dynasty' || raw === 'royal' || (raw === '' && league.isDynasty)
                   ? 'dynasty'
                   : /*
@@ -445,6 +457,11 @@ export function readFormatRules(league: {
 
   if (concept === 'dynasty') {
     futurePicksTradeable = true
+  } else if (concept === 'salary_cap') {
+    futurePicksTradeable = true
+    notes.push(
+      'Salary-cap contract dynasty: a trade moves the player and his contract. Cap legality, salary, years remaining, dead money, rollover, tags, extensions, and replacement spending power must be priced before raw player value.',
+    )
   } else if (concept === 'redraft') {
     futurePicksTradeable = false
     notes.push(
@@ -480,16 +497,13 @@ export function readFormatRules(league: {
      * takeable. So a player's value here depends on whether you can actually
      * keep him, which is a question no value chart asks.
      *
-     * The trade window differs per player, and not the way it first reads: once
-     * the games start only PROTECTED players can be traded. Unprotected players
-     * are the steal pool, so freezing them is what stops a losing manager
-     * shipping them out before the winner picks. See lib/trade-intel/pirate.ts,
-     * which also documents where the existing house-rule advice inverts under a
-     * protection cap.
+     * Trading is locked league-wide from Thursday kickoff through the end of
+     * Monday games. Protection status changes steal exposure but does not create
+     * a trade exception. See lib/trade-intel/pirate.ts.
      */
     futurePicksTradeable = null
     notes.push(
-      'Pirate: winning a matchup takes a player off the loser, and only your 3 protected players are safe. Anything you acquire beyond those 3 can be stolen the first week you lose. Once the games start only protected players can be traded — the unprotected ones are frozen so the winner still has something to take — and the tradeable pool shrinks all season, because every result moves a player and none come back.',
+      'Pirate: winning a matchup takes a player off the loser, and only your 3 protected players are safe. Anything unprotected — starter, bench, or IR — can be stolen. All trading is locked from Thursday kickoff through the end of Monday games, and the tradeable pool shrinks all season because every result moves a player and none come back.',
     )
   } else if (concept === 'tournament') {
     /*

@@ -685,7 +685,8 @@ export async function getDash34Data(
 
   const liveRosters: Array<{ leagueId: string; playerData: unknown }> = []
   const sleeperLeagues = active.filter((l) => String(l.platform).toLowerCase() === 'sleeper')
-  // Bound concurrent requests; old import snapshots must not generate current alerts.
+  // Bound concurrent requests. A failed provider read cannot promote a stale
+  // imported starter assignment into an urgent current alert.
   for (let i = 0; i < sleeperLeagues.length; i += 8) {
     const batch = await Promise.all(sleeperLeagues.slice(i, i + 8).map(async (l) => {
       const team = teamByLeague.get(l.id)
@@ -1091,6 +1092,9 @@ export async function getDash34Data(
     const commish = Boolean(row.isCommissioner || team?.isCommissioner || team?.isCoCommissioner)
 
     const chips: Dash34StateChip[] = []
+    if (sleeperIds.has(row.id) && !rosterByLeague.has(row.id)) {
+      chips.push({ label: 'LINEUP NOT VERIFIED', tone: 'warn' })
+    }
     if (stage === 'drafting') chips.push({ label: 'DRAFTING', tone: 'live' })
     else if (stage === 'pre_draft' || stage === 'setup') chips.push({ label: 'PRE DRAFT', tone: 'warn' })
     else if (stage === 'complete' || stage === 'completed') chips.push({ label: 'SEASON OVER' })
@@ -1158,7 +1162,8 @@ export async function getDash34Data(
       // No `LeagueTeam` row on production carries a result, so there is no score
       // to show and no projection to show it against.
       score: null,
-      matchupNote: rosterByLeague.has(row.id) ? 'No scores read yet' : 'No roster imported yet',
+      matchupNote: rosterByLeague.has(row.id) ? 'No scores read yet'
+        : sleeperIds.has(row.id) ? 'Current Sleeper lineup could not be verified' : 'No roster imported yet',
       projection: null,
       priority,
       href: action.href,

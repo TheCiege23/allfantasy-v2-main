@@ -384,9 +384,15 @@ export async function getLeagueHomeData(
    * would rewrite the deal they made.
    */
   let recentTrades = await getRecentTrades(
-    [{ id: league.id, name: league.name ?? 'League', platformLeagueId: league.platformLeagueId }],
+    [{
+      id: league.id,
+      name: league.name ?? 'League',
+      platformLeagueId: league.platformLeagueId,
+      avatarUrl: (league as { avatarUrl?: string | null }).avatarUrl ?? null,
+    }],
     new Date(),
     6,
+    { reconcileLive: true, enrichLeagueContext: true },
   ).catch(() => [])
   if (String(league.platform).toLowerCase() === 'sleeper') {
     const owner = await prisma.userProfile.findUnique({
@@ -417,18 +423,23 @@ export async function getLeagueHomeData(
       const fresh = (live?.completedTrades ?? []).map((trade) => {
         const assets = (items: typeof trade.assetsReceived) => items.map((asset) => ({
           kind: asset.isPick ? 'pick' as const : 'player' as const,
+          playerId: asset.isPick ? null : asset.playerId ?? null,
           name: asset.isPick ? (asset.pickRound ?? asset.playerName) : asset.playerName,
           position: asset.isPick ? null : asset.position,
+          team: null,
+          headshotUrl: null,
+          teamLogoUrl: null,
         }))
         return {
           id: trade.transactionId,
           leagueId: league.id,
           leagueName: league.name ?? 'League',
+          leagueAvatarUrl: (league as { avatarUrl?: string | null }).avatarUrl ?? null,
           platformLeagueId: league.platformLeagueId,
           acceptedAt: trade.proposedAt ?? new Date().toISOString(),
           sides: [
-            { rosterId: Number(trade.viewerRosterExternalId) || 0, managerName: 'You', teamName: null, received: assets(trade.assetsReceived) },
-            { rosterId: Number(trade.counterpartyRosterExternalId) || 0, managerName: trade.proposedBy, teamName: null, received: assets(trade.assetsGiven) },
+            { rosterId: Number(trade.viewerRosterExternalId) || 0, managerName: 'You', teamName: null, avatarUrl: null, received: assets(trade.assetsReceived), grade: null, gradeBasis: null, gradeReason: 'League-specific grade is still being prepared.' },
+            { rosterId: Number(trade.counterpartyRosterExternalId) || 0, managerName: trade.proposedBy, teamName: null, avatarUrl: null, received: assets(trade.assetsGiven), grade: null, gradeBasis: null, gradeReason: 'League-specific grade is still being prepared.' },
           ],
           partial: trade.assetsReceived.length === 0 || trade.assetsGiven.length === 0,
           verdict: null,

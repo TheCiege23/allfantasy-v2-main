@@ -93,6 +93,8 @@ export function validateTradeAssets(params: {
   settings: ResolvedLeagueTradeSettings
   proposer: Roster
   receiver: Roster
+  /** Every roster named by a multi-team asset graph. Defaults to proposer + receiver. */
+  participants?: Roster[]
   assets: TradeAssetInput[]
   /** Current fantasy week for deadline checks */
   currentWeek: number | null
@@ -111,12 +113,16 @@ export function validateTradeAssets(params: {
     return { ok: false, code: 'NO_ASSETS', message: 'At least one asset is required.' }
   }
 
-  const rosterIds = new Set([proposer.id, receiver.id])
+  const participants = params.participants?.length ? params.participants : [proposer, receiver]
+  const rosterById = new Map(participants.map((r) => [r.id, r]))
+  const rosterIds = new Set(rosterById.keys())
+  if (rosterIds.size < 2) return { ok: false, code: 'PARTICIPANTS_REQUIRED', message: 'A trade requires at least two rosters.' }
   const seen = new Set<string>()
+  const faabOut = new Map<string, number>()
 
   for (const a of assets) {
     if (!rosterIds.has(a.fromRosterId) || !rosterIds.has(a.toRosterId)) {
-      return { ok: false, code: 'INVALID_ROSTER', message: 'Each asset must move between the two trading rosters.' }
+      return { ok: false, code: 'INVALID_ROSTER', message: 'Each asset must move between participating rosters.' }
     }
     if (a.fromRosterId === a.toRosterId) {
       return { ok: false, code: 'INVALID_DIRECTION', message: 'fromRosterId and toRosterId must differ.' }
@@ -135,9 +141,11 @@ export function validateTradeAssets(params: {
       if (!Number.isFinite(amt) || amt <= 0) {
         return { ok: false, code: 'INVALID_FAAB', message: 'FAAB amount must be positive.' }
       }
-      const from = a.fromRosterId === proposer.id ? proposer : receiver
+      const from = rosterById.get(a.fromRosterId)!
+      const nextOut = (faabOut.get(from.id) ?? 0) + amt
+      faabOut.set(from.id, nextOut)
       const cur = from.faabRemaining ?? 0
-      if (amt > cur) {
+      if (nextOut > cur) {
         return { ok: false, code: 'FAAB_INSUFFICIENT', message: 'Insufficient FAAB for this trade.' }
       }
     }
@@ -147,7 +155,7 @@ export function validateTradeAssets(params: {
       if (!pid) {
         return { ok: false, code: 'PLAYER_ID_REQUIRED', message: 'Player trades require itemReference (player id).' }
       }
-      const from = a.fromRosterId === proposer.id ? proposer : receiver
+      const from = rosterById.get(a.fromRosterId)!
       if (!getRosterPlayerIds(from.playerData).includes(pid)) {
         return { ok: false, code: 'PLAYER_NOT_ON_ROSTER', message: `Player ${pid} is not on the sending roster.` }
       }
@@ -196,7 +204,7 @@ export function validateTradeAssets(params: {
       if (!ref) {
         return { ok: false, code: 'PICK_REF_REQUIRED', message: 'Pick trades require itemReference (pick id).' }
       }
-      const from = a.fromRosterId === proposer.id ? proposer : receiver
+      const from = rosterById.get(a.fromRosterId)!
       const picks = extractDraftPicksFromPlayerData(from.playerData, from.id)
       /*
        * Two ways a reference can be legitimate. `extractDraftPicksFromPlayerData`
@@ -224,20 +232,14 @@ export function validateTradeAssets(params: {
   }
 
   const max = league.rosterSize ?? 999
-  let pCount = getRosterSize(proposer.playerData)
-  let rCount = getRosterSize(receiver.playerData)
+  const counts = new Map(participants.map((r) => [r.id, getRosterSize(r.playerData)]))
   for (const a of assets) {
     if (a.itemType === 'player' && a.itemReference) {
-      if (a.fromRosterId === proposer.id && a.toRosterId === receiver.id) {
-        pCount -= 1
-        rCount += 1
-      } else if (a.fromRosterId === receiver.id && a.toRosterId === proposer.id) {
-        rCount -= 1
-        pCount += 1
-      }
+      counts.set(a.fromRosterId, (counts.get(a.fromRosterId) ?? 0) - 1)
+      counts.set(a.toRosterId, (counts.get(a.toRosterId) ?? 0) + 1)
     }
   }
-  if (pCount > max || rCount > max) {
+  if ([...counts.values()].some((count) => count > max)) {
     return { ok: false, code: 'ROSTER_ILLEGAL', message: `Roster would exceed league limit (${max}).` }
   }
 

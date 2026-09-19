@@ -61,7 +61,7 @@ export type FeedTrade = { id: string; status: 'complete' | 'pending' }
 
 const NOTIFIABLE_STATUSES = new Set(['complete', 'pending'])
 
-export async function currentTradeIds(sleeperLeagueId: string): Promise<FeedTrade[] | null> {
+export async function currentTradeIds(sleeperLeagueId: string, options?: { requireComplete?: boolean }): Promise<FeedTrade[] | null> {
   const weeks = await Promise.all(
     Array.from({ length: MAX_WEEKS }, (_, i) =>
       j<{ transaction_id: string; type: string; status: string }[]>(
@@ -70,6 +70,7 @@ export async function currentTradeIds(sleeperLeagueId: string): Promise<FeedTrad
     ),
   )
   if (weeks.every((w) => w == null)) return null
+  if (options?.requireComplete && weeks.some((w) => w == null)) return null
   const out: FeedTrade[] = []
   for (const w of weeks) {
     for (const t of w ?? []) {

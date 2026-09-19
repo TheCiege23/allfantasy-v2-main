@@ -1,4 +1,5 @@
 import 'server-only'
+import { getSleeperTradeHistory } from './sleeperTradeHistory'
 import { valueBookFor, type ValueBook } from './valueBook'
 import { resolveSourceScreenLink, type SourceScreenLink } from '@/lib/league-links/sourceLinkResolver'
 
@@ -16,6 +17,10 @@ import { leagueContextFor, type LeagueContext } from './leagueContext'
 
 /**
  * Trades — "offer, grade, counter, all scored against this league's own rules".
+ *
+ * Sleeper now returns early through sleeperTradeHistory, sharing the email's
+ * ledger and projections. The warehouse/import notes below describe the
+ * remaining fallback path, not the current Sleeper screen.
  *
  * WHAT IS REAL: completed trade history, from dw_transaction_facts. 7,124 trade
  * rows across the imported leagues, each carrying the transaction id, the two
@@ -63,6 +68,8 @@ export type TradePlayerRef = {
   name: string
   position: string | null
   team: string | null
+  headshotUrl?: string | null
+  teamLogoUrl?: string | null
 }
 
 export type TradeRecord = {
@@ -105,8 +112,13 @@ export type TradeRecord = {
   players: Array<{
     /** Team name, else owner name, else null. */
     manager: string | null
+    avatarUrl?: string | null
     isYou: boolean
     received: TradePlayerRef[]
+    picks?: string[]
+    grade?: 'A' | 'B' | 'C' | 'D' | 'F' | null
+    gradeBasis?: 'Market' | 'Realized'
+    gradeNote?: string
   }>
 }
 
@@ -253,6 +265,8 @@ async function resolveGrades(
 }
 
 export type TradesData = {
+  canonicalHistory?: boolean
+  historyNotice?: string
   league: {
     id: string
     name: string
@@ -543,6 +557,21 @@ export async function getTradesData(
     ...(await resolvePendingOffers(league, userId, book, teamCount, lc)),
     grades,
     deadline: resolveDeadline(league.settings),
+  }
+
+  if (String(league.platform ?? '').toLowerCase() === 'sleeper' && league.platformLeagueId) {
+    const current = await getSleeperTradeHistory(
+      league.platformLeagueId,
+      myTeam?.platformUserId?.trim() || null,
+    ).catch(() => null)
+    return {
+      ...base,
+      canonicalHistory: true,
+      historyNotice: current?.notice,
+      history: current
+        ? { available: true, data: current.history }
+        : { available: false, reason: 'Trade history could not be refreshed from Sleeper. Please try again.' },
+    }
   }
 
   const facts = await prisma.transactionFact.findMany({
