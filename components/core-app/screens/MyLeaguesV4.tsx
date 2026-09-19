@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { useMemo, useState } from 'react'
 import type { MyLeaguesData, MyLeaguesLeague, MyLeaguesTier } from '@/lib/core-app/myLeagues'
+import { LeagueHistoryVirtualList } from './LeagueHistoryVirtualList'
 // af-core.css carries the .af-core token layer (--surface, --line, --chip, --accent,
 // the --p-* platform pairs …) that every rule in af-my-leagues.css reads. This screen
 // renders at /leagues inside ProductShellLayout rather than inside AfCoreShell, so
@@ -419,22 +420,7 @@ export function MyLeaguesV4({
               they live in Career &amp; Legacy.
             </p>
           </div>
-          <div className="af-ml-hist">
-            {filteredHistory.slice(0, 60).map((h) => (
-              <Link key={h.id} href="/core/career" className="af-ml-hist-row">
-                <span className="af-ml-hist-name">{h.name}</span>
-                <span className="af-ml-hist-meta af-num">
-                  {h.season ?? '—'} · {platformLabel(h.platform)}
-                </span>
-              </Link>
-            ))}
-          </div>
-          {filteredHistory.length > 60 ? (
-            <p className="af-ml-hist-note">
-              Showing 60 of {filteredHistory.length} matching seasons. Career &amp; Legacy holds the
-              full board.
-            </p>
-          ) : null}
+          <LeagueHistoryVirtualList rows={filteredHistory} />
         </section>
       ) : null}
 
