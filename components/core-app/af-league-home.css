@@ -1417,3 +1417,37 @@
   white-space: nowrap;
   border: 0;
 }
+
+/* Shared franchise hub. Full-width panels keep both rosters in the same context. */
+.af-lh-paired:not(.af-lh-paired--offer) { display: block; padding: clamp(16px, 3vw, 28px); background: radial-gradient(ellipse at top left, rgba(34,211,238,.09), transparent 60%), var(--surface); }
+.af-lh-paired-head { flex-wrap: wrap; justify-content: space-between; margin-bottom: 20px; }
+.af-lh-paired-kicker { font-size: 16px; color: var(--text); }
+.af-lh-paired-sides { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); width: 100%; gap: 16px; }
+.af-lh-paired-side { padding: 18px; border-radius: 16px; }
+.af-hub-roster { margin-top: 28px; min-width: 0; }
+.af-hub-heading { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; }
+.af-hub-heading h3 { font-size:22px; margin:6px 0 18px; }
+.af-hub-badge { padding:7px 11px; border-radius:999px; background:rgba(34,211,238,.1); color:var(--accent); font-size:12px; }
+.af-hub-controls { display:flex; gap:12px; flex-wrap:wrap; margin:0 0 20px; }
+.af-hub-controls input,.af-hub-controls select { min-height:44px; color:var(--text); background:var(--surface); border:1px solid var(--line); border-radius:10px; padding:10px 14px; max-width:100%; }
+.af-hub-controls input { flex:1 1 230px; min-width:0; }
+.af-hub-tabs { display:flex; flex-wrap:wrap; gap:8px; width:100%; }
+.af-hub-tabs button { min-height:44px; padding:9px 14px; border-radius:10px; background:var(--chip); color:var(--muted); border:1px solid var(--line); cursor:pointer; }
+.af-hub-tabs button[aria-pressed=true] { background:rgba(34,211,238,.12); border-color:var(--accent); color:var(--accent); }
+.af-hub-controls :focus-visible,.af-hub-team-link:focus-visible { outline:2px solid var(--accent); outline-offset:3px; }
+.af-hub-columns { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1fr)); gap:20px; align-items:start; }
+.af-hub-squad { border:1px solid var(--line); border-radius:16px; overflow:hidden; min-width:0; background:var(--surface); }
+.af-hub-squad header { display:flex; gap:12px; justify-content:space-between; align-items:center; padding:18px 18px 8px; }
+.af-hub-squad h4 { font-size:17px; margin:6px 0; }
+.af-hub-count { font-size:28px; font-variant-numeric:tabular-nums; color:var(--accent); }
+.af-hub-team-link { display:inline-flex; align-items:center; min-height:44px; margin:0 18px 8px; color:var(--accent); font-size:13px; }
+.af-hub-squad ul { list-style:none; padding:0 14px; margin:0; max-height:520px; overflow:auto; scrollbar-width:thin; }
+.af-hub-squad li { display:flex; align-items:center; gap:12px; padding:12px 0; border-top:1px solid var(--line); }
+.af-hub-portrait { display:grid; place-items:center; flex:0 0 44px; height:44px; border-radius:12px; overflow:hidden; background:linear-gradient(140deg,rgba(34,211,238,.18),rgba(139,92,246,.16)); color:var(--accent); font-weight:700; }
+.af-hub-portrait img { width:100%; height:100%; object-fit:cover; }
+.af-hub-logo { display:grid; place-items:center; flex:0 0 28px; height:28px; color:var(--muted); font-size:10px; }
+.af-hub-logo img { width:100%; height:100%; object-fit:contain; }
+.af-hub-player { flex:1; min-width:0; }
+.af-hub-player strong { display:block; font-size:14px; overflow-wrap:anywhere; }
+.af-hub-player span { display:block; margin-top:4px; font-size:12px; color:var(--muted); }
+.af-hub-empty { padding:18px; color:var(--muted); font-size:14px; line-height:1.6; }

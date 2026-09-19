@@ -30,6 +30,7 @@
  * league report itself unpaired.
  */
 import 'server-only'
+import { connectedRosterPlayers, type ConnectedRosterPlayer } from './connectedRoster'
 import { prisma } from '@/lib/prisma'
 import { getDraftHqAll } from './draftHqAll'
 import { getLeagueActivity } from './leagueActivity'
@@ -38,6 +39,8 @@ import type { FranchiseRole } from '@/lib/franchise/franchiseLink'
 /** One half of a franchise, described identically whichever half it is. */
 export type FranchiseSide = {
   role: FranchiseRole
+  players?: ConnectedRosterPlayer[]
+  sport?: string
   platform: string
   /** Route target, when it is a League we can link to. */
   leagueId: string | null
@@ -147,10 +150,23 @@ export async function resolvePairedHalf(
   const key = await membershipKeyFor(leagueId)
   if (!key) return null
 
+  // Legacy imports may retain the snapshot ID, mirror ID, or provider ID.
+  const aliases = new Set([leagueId, key.memberLeagueId])
+  if (key.platform === 'fantrax') {
+    const snapshots = await prisma.fantraxLeague.findMany({
+      where: { appUserId: ownerUserId, OR: [{ id: key.memberLeagueId }, { sourceLeagueId: key.memberLeagueId }] },
+      select: { id: true, sourceLeagueId: true },
+    })
+    for (const snapshot of snapshots) {
+      aliases.add(snapshot.id)
+      if (snapshot.sourceLeagueId) aliases.add(snapshot.sourceLeagueId)
+    }
+  }
+
   const membership = await prisma.franchiseLeagueMember.findFirst({
     where: {
       platform: key.platform,
-      leagueId: key.memberLeagueId,
+      leagueId: { in: [...aliases] },
       /* Gated on ownership like every other franchise read — a franchise says
          which teams belong to someone. */
       link: { ownerUserId },
@@ -164,10 +180,10 @@ export async function resolvePairedHalf(
 
   const viewingRole = membership.role as FranchiseRole
   const selfMember = membership.link.members.find(
-    (m) => m.platform === key.platform && m.leagueId === key.memberLeagueId,
+    (m) => m.platform === key.platform && aliases.has(m.leagueId),
   )
   const otherMember = membership.link.members.find(
-    (m) => !(m.platform === key.platform && m.leagueId === key.memberLeagueId),
+    (m) => !(m.platform === key.platform && aliases.has(m.leagueId)),
   )
 
   const base = {
@@ -198,7 +214,7 @@ export async function resolvePairedHalf(
     if (platform === 'fantrax') {
       const snap = await prisma.fantraxLeague.findUnique({
         where: { id: member.leagueId },
-        select: { id: true, leagueName: true, season: true, userTeam: true, roster: true },
+        select: { id: true, leagueName: true, season: true, userTeam: true, roster: true, sport: true, sourceLeagueId: true },
       })
       /*
        * The League row that mirrors this snapshot, so the side is clickable.
@@ -206,7 +222,7 @@ export async function resolvePairedHalf(
        */
       const mirror = snap
         ? await prisma.league.findFirst({
-            where: { platform: 'fantrax', platformLeagueId: snap.id, userId: ownerUserId },
+            where: { platform: 'fantrax', userId: ownerUserId, OR: [{ id: member.leagueId }, { platformLeagueId: snap.id }, ...(snap.sourceLeagueId ? [{ platformLeagueId: snap.sourceLeagueId }] : [])] },
             select: { id: true },
           })
         : null
@@ -248,16 +264,22 @@ export async function resolvePairedHalf(
             : userTeam
               ? allRows.filter((r) => teamOf(r) === userTeam)
               : null
+      const claimedTeam = mirror ? await prisma.leagueTeam.findFirst({
+        where: { leagueId: mirror.id, claimedByUserId: ownerUserId },
+        select: { avatarUrl: true },
+      }) : null
       return {
         role,
         platform,
         leagueId: mirror?.id ?? null,
+        sport: snap?.sport ?? 'NCAAF',
+        players: mine ? await connectedRosterPlayers(platform, snap?.sport ?? 'NCAAF', mine).catch(() => []) : [],
         name: snap?.leagueName ?? 'Fantrax league',
         season: snap?.season ?? null,
         teamLabel: snap?.userTeam ?? member.teamExternalId,
         /* Not a gap to be filled later: Fantrax publishes no image field at all,
            so this half renders initials. See the type for the measurement. */
-        avatarUrl: null,
+        avatarUrl: claimedTeam?.avatarUrl ?? null,
         playerCount: mine && mine.length > 0 ? mine.length : null,
         draft: null,
         /*
@@ -286,7 +308,7 @@ export async function resolvePairedHalf(
       where: { id: member.leagueId },
       /* platformLeagueId is required by getLeagueActivity — imported rows are
          keyed on the PROVIDER league id, not ours. */
-      select: { id: true, name: true, season: true, platformLeagueId: true },
+      select: { id: true, name: true, season: true, platformLeagueId: true, sport: true },
     })
     /*
      * ⚠ THE ROSTER COUNT IS READ FROM THE CLAIMED TEAM, NOT FROM THE LEAGUE. A
@@ -347,6 +369,8 @@ export async function resolvePairedHalf(
       role,
       platform,
       leagueId: lg?.id ?? null,
+      sport: lg?.sport ?? 'NFL',
+      players: roster ? await connectedRosterPlayers(platform, lg?.sport ?? 'NFL', (roster.playerData as { players?: unknown[] })?.players ?? []).catch(() => []) : [],
       name: lg?.name?.trim() || 'League',
       season: lg?.season ?? null,
       teamLabel: team?.teamName?.trim() || team?.ownerName?.trim() || member.teamExternalId,

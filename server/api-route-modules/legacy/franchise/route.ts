@@ -112,6 +112,7 @@ export const POST = withApiUsage({ endpoint: '/api/legacy/franchise', tool: 'Fra
     if (!auth.ok) return auth.response
 
     let body: {
+      connectionType?: 'c2c' | 'group'
       action?: string
       linkId?: string
       /**
@@ -385,7 +386,7 @@ export const POST = withApiUsage({ endpoint: '/api/legacy/franchise', tool: 'Fra
         ownerUserId: auth.userId,
         franchiseName: body.franchiseName?.trim() || 'My franchise',
         linkId: targetLinkId,
-        role: 'pro',
+        role: body.connectionType === 'group' ? 'primary' : 'pro',
         platform: proPlatform,
         leagueId: pro.leagueId,
         teamExternalId: pro.teamExternalId ?? '',
@@ -398,7 +399,7 @@ export const POST = withApiUsage({ endpoint: '/api/legacy/franchise', tool: 'Fra
         ownerUserId: auth.userId,
         franchiseName: body.franchiseName?.trim() || 'My franchise',
         linkId: attachedPro.linkId,
-        role: 'college',
+        role: body.connectionType === 'group' ? 'linked' : 'college',
         platform: collegePlatform,
         leagueId: college.leagueId,
         teamExternalId: college.teamExternalId ?? '',
@@ -414,7 +415,7 @@ export const POST = withApiUsage({ endpoint: '/api/legacy/franchise', tool: 'Fra
          */
         if (!proWasMember) {
           await prisma.franchiseLeagueMember
-            .deleteMany({ where: { linkId: attachedPro.linkId, role: 'pro', platform: proPlatform, leagueId: pro.leagueId } })
+            .deleteMany({ where: { linkId: attachedPro.linkId, role: body.connectionType === 'group' ? 'primary' : 'pro', platform: proPlatform, leagueId: pro.leagueId } })
             .catch(() => {})
         }
         if (!targetLinkId) {

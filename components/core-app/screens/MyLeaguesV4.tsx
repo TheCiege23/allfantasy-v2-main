@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import { useMemo, useState } from 'react'
+import { groupLeagueHubs } from '@/lib/core-app/leagueHubGroups'
 import type { MyLeaguesData, MyLeaguesLeague, MyLeaguesTier } from '@/lib/core-app/myLeagues'
 import { LeagueHistoryVirtualList } from './LeagueHistoryVirtualList'
 // af-core.css carries the .af-core token layer (--surface, --line, --chip, --accent,
@@ -125,7 +126,7 @@ export function MyLeaguesV4({
   const filtered = useMemo(() => {
     return leagues.filter((l) => {
       if (platform !== 'all' && String(l.platform).toLowerCase() !== platform) return false
-      if (q && !l.name.toLowerCase().includes(q)) return false
+      if (q && ![l.name, l.hub?.name, ...(l.hub?.members.map((m) => m.name) ?? [])].filter(Boolean).join(' ').toLowerCase().includes(q)) return false
       if (chip === 'needs' && l.tier !== 'needs') return false
       if (chip === 'playing' && l.tier !== 'playing') return false
       if (chip === 'quiet' && l.tier !== 'quiet') return false
@@ -155,7 +156,7 @@ export function MyLeaguesV4({
   const tiers: MyLeaguesTier[] = ['needs', 'playing', 'quiet']
   const byTier = useMemo(() => {
     const map: Record<MyLeaguesTier, MyLeaguesLeague[]> = { needs: [], playing: [], quiet: [] }
-    for (const l of filtered) map[l.tier].push(l)
+    for (const l of groupLeagueHubs(filtered)) map[l.tier].push(l)
     return map
   }, [filtered])
 
@@ -493,16 +494,17 @@ function LeagueCard({
         </span>
         <div className="af-ml-card-id">
           <h3 className="af-ml-card-name" title={league.name}>
-            {league.name}
+            {league.hub?.name ?? league.name}
           </h3>
           <p className="af-ml-card-meta">
-            {platformLabel(String(league.platform))}
+            {league.hub ? `${league.hub.members.length} connected leagues · shared hub` : platformLabel(String(league.platform))}
             {league.formatLabel ? ` · ${league.formatLabel}` : null}
           </p>
         </div>
         {league.isCommissioner ? <span className="af-ml-role">COMMISH</span> : null}
       </div>
 
+      {league.hub ? <div className="af-ml-hub-members">{league.hub.members.map((member) => <Link key={member.id} href={member.href}><span>{member.name}</span><small>{platformLabel(member.platform)} ↗</small></Link>)}</div> : null}
       {/*
         The specific blocking cause, never a generic label. Quiet tiles carry
         nothing here on purpose — the handoff's third copy-contract line asks that
@@ -534,7 +536,7 @@ function LeagueCard({
       ) : null}
 
       <Link href={league.href} className="af-ml-open">
-        {league.actionLabel ?? 'Open league'}
+        {league.hub ? 'Open shared hub →' : league.actionLabel ?? 'Open league'}
       </Link>
     </article>
   )

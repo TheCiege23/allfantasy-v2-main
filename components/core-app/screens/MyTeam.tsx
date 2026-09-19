@@ -309,11 +309,11 @@ function PlayerCell({ player }: { player: LineupPlayer }) {
             {player.name.charAt(0)}
           </span>
         )}
-        {player.team && teamLogoUrl(player.team, player.sport ?? 'NFL') ? (
+        {player.logoUrl || (player.team && teamLogoUrl(player.team, player.sport ?? 'NFL')) ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
             className="af-mt-teamlogo"
-            src={teamLogoUrl(player.team, player.sport ?? 'NFL')}
+            src={player.logoUrl ?? teamLogoUrl(player.team ?? '', player.sport ?? 'NFL')}
             alt=""
             width={16}
             height={16}
