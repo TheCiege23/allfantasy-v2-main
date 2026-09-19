@@ -1,0 +1,73 @@
+-- SportsPlayer name search: a trigram index, so player search stops sequentially
+-- scanning the whole table.
+--
+-- 🛑 NOT A PRISMA MIGRATION, AND NOT APPLIED BY A DEPLOY. Same convention as the other
+-- `supabase_ensure_*.sql` files at this root: the SQL is reviewed and run deliberately.
+-- Applying a schema change is the repo owner's decision, never a push's side effect.
+--
+-- ── WHY ──────────────────────────────────────────────────────────────────────────────
+--
+-- Every player-name lookup in the product matches case-insensitively:
+--
+--   lib/core-app/playerFinder.ts  searchPlayers()          name contains q, insensitive
+--   lib/core-app/playerFinder.ts  searchPlayersCatalog()   up to FOUR passes, all insensitive
+--   lib/core-app/rankings.ts      the compare screen       two searchPlayers() in parallel
+--
+-- `SportsPlayer_name_idx` is a plain `btree(name)`. It can serve none of them: a btree on
+-- the raw column cannot answer `ILIKE`, anchored or not. So each pass is a sequential scan
+-- of the whole table, and one catalog search issues up to four of them.
+--
+-- ── MEASURED, 2026-09-19, on the test endpoint (ep-muddy-leaf) ───────────────────────
+--
+-- `SportsPlayer`: 138,048 rows. `pg_trgm`: not installed.
+--
+-- The predicate the code actually issues — OR(startsWith q, contains ' q'), team NOT NULL,
+-- the widest of the four passes:
+--
+--     q = "aj"    (2 chars)   Seq Scan  71.1 ms   ->   Bitmap Index Scan   1.0 ms
+--     q = "all"   (3 chars)   Seq Scan  75.8 ms   ->   Bitmap Index Scan   4.3 ms
+--     q = "alle"  (4 chars)   Seq Scan  77.2 ms   ->   Bitmap Index Scan   1.9 ms
+--
+-- Per pass, block reads fall from 4,369 to ~461. A four-pass search goes from roughly
+-- 17,500 block reads to 1,900.
+--
+-- The before/after was taken inside one transaction that was then ROLLED BACK, and the
+-- absence of the probe index was asserted afterwards — the numbers are real and the
+-- database was left unchanged.
+--
+-- ⚠ ONE PASS IS NOT HELPED AT TWO CHARACTERS. The last-resort pass is an UNANCHORED
+-- `name ILIKE '%q%'`, and pg_trgm needs three characters to extract a trigram from an
+-- unanchored pattern, so `%aj%` still scans (measured: 55.6 ms with the index present).
+-- The three prefix passes are served at every length, including two, because an anchored
+-- pattern gives the index a usable bound. This is worth knowing before concluding the
+-- index "did not work" for a short query.
+--
+-- ── HOW TO APPLY ─────────────────────────────────────────────────────────────────────
+--
+-- 🛑 RUN THESE STATEMENTS OUTSIDE A TRANSACTION. `CREATE INDEX CONCURRENTLY` is rejected
+-- inside a transaction block, and every GUI client that wraps a script in BEGIN/COMMIT
+-- will fail it. Run them one at a time in psql, or with autocommit on.
+--
+-- CONCURRENTLY is the point: a plain CREATE INDEX takes an ACCESS EXCLUSIVE lock and
+-- blocks every write to SportsPlayer for the duration, and the ingestion crons write to
+-- this table continuously.
+--
+-- ⚠ CONCURRENTLY can leave an INVALID index behind if it fails midway. It is not an error
+-- you will see later on its own — check for it, and drop and retry if so:
+--
+--     SELECT indexrelid::regclass FROM pg_index WHERE NOT indisvalid;
+--
+-- Rollback, if it is ever wanted:
+--
+--     DROP INDEX CONCURRENTLY IF EXISTS "SportsPlayer_name_trgm_idx";
+--
+-- The extension is left in place by a rollback on purpose: dropping it would break any
+-- other trigram index added later, and it costs nothing idle.
+
+CREATE EXTENSION IF NOT EXISTS pg_trgm;
+
+CREATE INDEX CONCURRENTLY IF NOT EXISTS "SportsPlayer_name_trgm_idx"
+  ON "SportsPlayer" USING gin ("name" gin_trgm_ops);
+
+-- The planner will not choose the new index until the table has been analyzed.
+ANALYZE "SportsPlayer";

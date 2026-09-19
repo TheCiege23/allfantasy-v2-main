@@ -259,6 +259,23 @@ function slotLabel(key: (typeof SLOT_ORDER)[number]): string {
   return 'BENCH'
 }
 
+/**
+ * 🛑 THE `name` PREDICATE BELOW IS AN INDEX CONTRACT. DO NOT WRAP THE COLUMN.
+ *
+ * `SportsPlayer_name_idx` is a plain `btree(name)` and can serve NONE of the searches in
+ * this file — a btree on the raw column cannot answer `ILIKE`, anchored or not. Measured
+ * 2026-09-19 against the test endpoint: 138,048 rows, and this query is a Seq Scan reading
+ * 4,369 blocks in ~55 ms. `searchPlayersCatalog` below issues up to FOUR of them.
+ *
+ * `supabase_ensure_sportsplayer_name_trgm.sql` at the repo root proposes the gin/trgm index
+ * that fixes it (measured 71 ms → 1 ms on the widest pass). It is NOT applied — applying a
+ * schema change is the repo owner's decision.
+ *
+ * What matters for anyone editing these queries: a trigram index is usable only while the
+ * pattern is matched against the BARE column. Wrapping it (`lower(name)`, an expression in
+ * `$queryRaw`, a `::text` cast) silently returns the plan to a sequential scan, and nothing
+ * fails — the search just quietly costs a table scan again.
+ */
 export async function searchPlayers(query: string, limit = 12): Promise<PlayerMatch[]> {
   const q = query.trim()
   if (q.length < 2) return []
@@ -455,6 +472,18 @@ export async function suggestCatalog(
    * The prefix windows are wide on purpose. A case-insensitive prefix scan
    * costs the same whatever `take` says, and the caller ranks the result by
    * who is rostered, so handing it 200 rows instead of 24 is free relevance.
+   *
+   * ⚠ "COSTS THE SAME WHATEVER `take` SAYS" IS TRUE FOR A REASON WORTH NAMING: every pass
+   * here is a SEQUENTIAL SCAN of all 138,048 rows, because no index can serve a
+   * case-insensitive match on this column (see the note on `searchPlayers` above). The
+   * take is free precisely because the scan is not.
+   *
+   * ⚠ AND THE ORDER OF THESE PASSES IS A COST DECISION, NOT ONLY A RELEVANCE ONE. With the
+   * proposed trigram index in place the three ANCHORED prefix passes are served at every
+   * query length, including two characters; the last pass is UNANCHORED (`%q%`) and pg_trgm
+   * needs three characters to extract a trigram from one, so at two characters that pass
+   * alone still scans (measured: 55.6 ms with the index present). Keeping it last is what
+   * makes it the rare case rather than the common one.
    */
   const preferIds = opts.preferIds ?? []
   const passes: Array<{ where: Record<string, unknown>; take: number }> = [
