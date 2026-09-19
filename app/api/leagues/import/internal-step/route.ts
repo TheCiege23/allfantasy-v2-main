@@ -4,6 +4,7 @@ import { requireCronAuth } from "@/app/api/cron/_auth"
 import { prisma } from "@/lib/prisma"
 import { finalizeLegacyImportJob, importLegacySeasonAtIndex } from "@/lib/import/processImportJob"
 import { scheduleImportSeasonStep } from "@/lib/import/triggerImportChain"
+import { isRetryableSleeperImportError } from "@/lib/import/sleeperImportRetry"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -21,6 +22,7 @@ export async function POST(req: NextRequest) {
     sleeperUserId?: string
     seasons?: number[]
     seasonIndex?: number
+    retryAttempt?: number
   }
   try {
     body = (await req.json()) as typeof body
@@ -29,6 +31,9 @@ export async function POST(req: NextRequest) {
   }
 
   const { jobId, userId, sleeperUserId, seasons, seasonIndex } = body
+  const retryAttempt = Number.isInteger(body.retryAttempt) && Number(body.retryAttempt) >= 0
+    ? Number(body.retryAttempt)
+    : 0
   if (
     !jobId ||
     !userId ||
@@ -45,6 +50,26 @@ export async function POST(req: NextRequest) {
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e)
     console.error("[import/internal-step] season failed:", e)
+    if (isRetryableSleeperImportError(e) && retryAttempt < 2) {
+      await prisma.importJobSeason
+        .update({
+          where: { jobId_season: { jobId, season: seasons[seasonIndex]! } },
+          data: { status: "pending", completedAt: null },
+        })
+        .catch(() => null)
+      scheduleImportSeasonStep({
+        jobId,
+        userId,
+        sleeperUserId,
+        seasons,
+        seasonIndex,
+        retryAttempt: retryAttempt + 1,
+      })
+      return NextResponse.json(
+        { ok: false, retrying: true, seasonIndex, retryAttempt: retryAttempt + 1 },
+        { status: 202 },
+      )
+    }
     await prisma.legacyImportJob
       .update({
         where: { id: jobId },

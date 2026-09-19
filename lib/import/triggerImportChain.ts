@@ -31,6 +31,7 @@ export function scheduleImportSeasonStep(args: {
   sleeperUserId: string
   seasons: number[]
   seasonIndex: number
+  retryAttempt?: number
 }): void {
   const base = getImportWorkerBaseUrl()
   const secret = getImportWorkerSecret()
