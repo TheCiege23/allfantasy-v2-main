@@ -2,6 +2,7 @@ import React from 'react'
 import { describe, it, expect, afterEach } from 'vitest'
 import { render, screen, fireEvent, cleanup } from '@testing-library/react'
 import { ConnectedRoster } from '@/components/core-app/screens/ConnectedRoster'
+import { ConnectedFranchiseWarRoom } from '@/components/core-app/screens/ConnectedFranchiseWarRoom'
 import { groupLeagueHubs } from '@/lib/core-app/leagueHubGroups'
 import { buildFranchiseView } from '@/lib/franchise/franchiseLink'
 import type { FranchiseSide } from '@/lib/core-app/leaguePairing'
@@ -44,5 +45,43 @@ describe('connected league hub', () => {
     const view = buildFranchiseView({ linkId: 'h', name: 'Tournament hub', members: ['primary', 'linked'].map((role) => ({ role: role as 'primary' | 'linked', platform: 'allfantasy', leagueId: role, teamExternalId: role, leaguePresent: true })) })
     expect(view.complete).toBe(true)
     expect(view.gaps).toEqual([])
+  })
+
+  it('renders every resolved league in the franchise command center', () => {
+    const expanded = [
+      ...sides,
+      {
+        ...sides[0],
+        role: 'tournament' as const,
+        leagueId: 'league-2',
+        name: 'Playoff Tournament',
+        platform: 'allfantasy',
+        playerCount: 2,
+        players: [
+          { ...sides[0].players![0], id: '2', name: 'Tournament Player' },
+          { ...sides[0].players![0], id: '3', name: 'Second Tournament Player' },
+        ],
+      },
+    ]
+    render(
+      <ConnectedFranchiseWarRoom
+        franchiseName="One franchise"
+        selectedLeagueId="league-0"
+        sides={expanded.map((side) => ({
+          role: side.role,
+          leagueId: side.leagueId,
+          name: side.name,
+          platform: side.platform,
+          sport: side.sport ?? null,
+          playerCount: side.playerCount,
+          unavailableReason: side.unavailableReason,
+          players: side.players ?? [],
+        }))}
+      />,
+    )
+    expect(screen.getByText('3', { selector: '.af-cwr-scoreboard strong' })).toBeTruthy()
+    expect(screen.getByText('Playoff Tournament')).toBeTruthy()
+    expect(screen.getAllByRole('link', { name: 'Open roster →' })).toHaveLength(3)
+    expect(screen.getByRole('link', { name: 'Open the combined roster →' })).toHaveAttribute('href', '/core?league=league-0')
   })
 })

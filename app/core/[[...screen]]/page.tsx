@@ -19,6 +19,8 @@ import { resolveDashboardAvatarUrl } from '@/lib/dashboard/resolve-dashboard-ava
 import { aiAccessResolver } from '@/lib/ai-access/AIAccessResolver'
 import { attachLeagueHubs } from '@/lib/core-app/attachLeagueHubs'
 import { ConnectedLeagueContext } from '@/components/core-app/ConnectedLeagueNavigation'
+import ConnectedFranchiseWarRoom from '@/components/core-app/screens/ConnectedFranchiseWarRoom'
+import { resolvePairedHalf } from '@/lib/core-app/leaguePairing'
 import AfCoreShell, { type CoreNavKey, type RailLeague } from '@/components/core-app/AfCoreShell'
 import type { UserLeague } from '@/app/dashboard/types'
 import { DefenseHubClient } from '@/app/idp/defense-hub/[leagueId]/DefenseHubClient'
@@ -2174,10 +2176,13 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
   const gamePlanView = activeKey === 'war-room' && sp.view === 'plan'
 
   /* The War Room's first room: every manager in the league, profiled. */
-  const scout =
+  const [scout, connectedFranchise] =
     activeKey === 'war-room' && !gamePlanView && selectedLeagueId
-      ? await getScoutData(selectedLeagueId, userId, leagueCtx).catch(() => null)
-      : null
+      ? await Promise.all([
+          getScoutData(selectedLeagueId, userId, leagueCtx).catch(() => null),
+          resolvePairedHalf(selectedLeagueId, userId).catch(() => null),
+        ])
+      : [null, null]
 
   /*
    * The War Room's second room: every flagged starter across every league,
@@ -3702,15 +3707,40 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
               leagues={rail}
             />
           )
-        ) : scout ? (
-          <Scout
-            data={scout}
-            gamePlanHref={
-              selectedLeagueId
-                ? `/core/war-room?view=plan&league=${encodeURIComponent(selectedLeagueId)}`
-                : '/core/war-room?view=plan'
-            }
-          />
+        ) : scout || connectedFranchise ? (
+          <>
+            {connectedFranchise && selectedLeagueId ? (
+              <ConnectedFranchiseWarRoom
+                franchiseName={connectedFranchise.franchiseName}
+                selectedLeagueId={selectedLeagueId}
+                sides={connectedFranchise.sides.map((side) => ({
+                  role: side.role,
+                  leagueId: side.leagueId,
+                  name: side.name,
+                  platform: side.platform,
+                  sport: side.sport ?? null,
+                  playerCount: side.playerCount,
+                  unavailableReason: side.unavailableReason,
+                  players: (side.players ?? []).map((player) => ({
+                    id: player.id,
+                    name: player.name,
+                    position: player.position,
+                    team: player.team,
+                  })),
+                }))}
+              />
+            ) : null}
+            {scout ? (
+              <Scout
+                data={scout}
+                gamePlanHref={
+                  selectedLeagueId
+                    ? `/core/war-room?view=plan&league=${encodeURIComponent(selectedLeagueId)}`
+                    : '/core/war-room?view=plan'
+                }
+              />
+            ) : null}
+          </>
         ) : (
           <PickALeague
             tabKey="war-room"
