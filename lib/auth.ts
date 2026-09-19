@@ -784,26 +784,27 @@ export const authOptions: NextAuthOptions = {
           session.user.id = userId;
         }
 
-        let spotifyLinked = false;
-        if (userId && process.env.NEXT_PHASE !== PHASE_PRODUCTION_BUILD) {
-          try {
-            const spotify = await prisma.authAccount.findFirst({
-              where: { userId, provider: "spotify" },
-              select: { id: true },
-            });
-            spotifyLinked = Boolean(spotify?.id);
-            if (!spotifyLinked) {
-              const profileSpotify = await prisma.userProfile.findUnique({
-                where: { userId },
-                select: { spotifyConnectedAt: true },
-              });
-              spotifyLinked = Boolean(profileSpotify?.spotifyConnectedAt);
-            }
-          } catch {
-            spotifyLinked = false;
-          }
-        }
-        session.user.spotifyAccount = spotifyLinked;
+        /*
+         * 🛑 THE SPOTIFY LOOKUP USED TO LIVE HERE, AND IT WAS A QUERY ON EVERY AUTHENTICATED
+         * REQUEST IN THE PRODUCT.
+         *
+         * `session.user.spotifyAccount` was a boolean, so it had to be computed EAGERLY — two
+         * prisma reads (`authAccount.findFirst`, then `userProfile.findUnique` when that missed)
+         * every time this callback ran. For the overwhelming majority, who have no Spotify, both
+         * ran. There are ~2,259 `getServerSession` call sites across ~1,017 API routes, and
+         * `/core?league=` alone resolves the session TWICE per render — `generateMetadata` and the
+         * page — so up to four queries per page view.
+         *
+         * Its only consumer in the entire repo was `hooks/useMusicWidget.ts`, which already
+         * fetches `/api/music/favorites` on mount. The flag rides along with that response now, so
+         * the widget learns the same fact with NO additional request and every other request in
+         * the product stops paying for it.
+         *
+         * ⚠ NOT MOVED INTO THE JWT, DELIBERATELY. The token would carry a stale answer until it
+         * refreshed — a manager who connects Spotify would keep being told they had not — and the
+         * jwt callback above carries a documented privilege-escalation history that a change for a
+         * music widget has no business touching.
+         */
       }
 
       return session;
