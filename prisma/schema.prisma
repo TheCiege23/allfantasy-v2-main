@@ -17856,11 +17856,12 @@ model FranchiseLeagueMember {
   createdAt      DateTime      @default(now())
   link           FranchiseLink @relation(fields: [linkId], references: [id], onDelete: Cascade)
 
-  /// A league belongs to at most one franchise, and a franchise holds each role
-  /// once — two "college" halves would make the combined view ambiguous.
+  /// A league belongs to at most one franchise. Roles are descriptive labels,
+  /// so a hub may contain several linked, college, tournament or survivor
+  /// leagues without replacing an existing member.
   @@unique([platform, leagueId])
-  @@unique([linkId, role])
   @@index([linkId])
+  @@index([linkId, role])
   @@map("franchise_league_members")
 }
 

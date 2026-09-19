@@ -13,6 +13,7 @@ describe('shared league membership resolution', () => {
     await attachLeagueHubs('owner', rows)
     expect(rows[0].hub).toBe(rows[1].hub)
     expect(rows[0].hub?.members).toHaveLength(2)
+    expect(rows[0].hub?.href).toBe('/core/war-room?league=cream')
     expect(rows[2].hub).toBeUndefined()
     expect(mocks.links).toHaveBeenCalledWith(expect.objectContaining({ where: { ownerUserId: 'owner' } }))
     expect(mocks.snapshots).toHaveBeenCalledWith(expect.objectContaining({ where: { appUserId: 'owner' } }))

@@ -535,7 +535,7 @@ function LeagueCard({
         </div>
       ) : null}
 
-      <Link href={league.href} className="af-ml-open">
+      <Link href={league.hub?.href ?? league.href} className="af-ml-open">
         {league.hub ? 'Open shared hub →' : league.actionLabel ?? 'Open league'}
       </Link>
     </article>

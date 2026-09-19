@@ -46,7 +46,7 @@ type Discovery = {
   college: Pairable[]
   alreadyLinked: Pairable[]
   /** The half the user arrived from, resolved server-side across both id spaces. */
-  from: { id: string; role: 'pro' | 'college' } | null
+  from: { id: string; role: 'pro' | 'college'; linkId: string | null } | null
 }
 
 /**
@@ -125,12 +125,15 @@ export function ConnectLeaguesClient() {
   const [college, setCollege] = useState<string | null>(null)
   const [name, setName] = useState('')
   const [connectionType, setConnectionType] = useState<'c2c' | 'group'>('c2c')
+  const [addLeague, setAddLeague] = useState<string | null>(null)
   const candidates = [...(data?.pro ?? []), ...(data?.college ?? [])]
   const firstChoices = connectionType === 'group' ? candidates.filter((l) => l.id !== college && !l.linkId) : data?.pro ?? []
   const secondChoices = connectionType === 'group' ? candidates.filter((l) => l.id !== pro && !l.linkId) : data?.college ?? []
   const [saving, setSaving] = useState(false)
   /* Set only by a 409; drives the confirm below and nothing else. */
   const [pendingClaims, setPendingClaims] = useState<Claim[] | null>(null)
+  const addingToHub = data?.from?.linkId ?? null
+  const addChoices = candidates.filter((league) => !league.linkId && league.id !== data?.from?.id)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -221,15 +224,44 @@ export function ConnectLeaguesClient() {
     }
   }
 
+  async function submitAddLeague() {
+    if (!addingToHub || !addLeague) return
+    const league = addChoices.find((candidate) => candidate.id === addLeague)
+    if (!league) return
+    setSaving(true)
+    setError(null)
+    try {
+      const res = await fetch('/api/legacy/franchise', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'add-league',
+          linkId: addingToHub,
+          member: { platform: league.platform, leagueId: league.id },
+        }),
+      })
+      const body = (await res.json()) as { error?: string }
+      if (!res.ok) throw new Error(body.error ?? 'Could not add that league')
+      const back = fromLeague
+        ? `/core/war-room?league=${encodeURIComponent(fromLeague)}`
+        : '/leagues'
+      router.push(back)
+      router.refresh()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not add that league')
+      setSaving(false)
+    }
+  }
+
   const canSubmit = pro != null && college != null && pro !== college && !saving
 
   return (
     <main className="af-core af-cl">
       <header className="af-cl-head">
-        <h1 className="af-display">Connect two leagues</h1>
+        <h1 className="af-display">{addingToHub ? 'Add to this franchise' : 'Connect leagues'}</h1>
         <p className="af-cl-lede">
-          Bring two related leagues into one home: college and pro, tournament, zombie,
-          survivor, or another format. Connect once to see both rosters from either league.
+          Bring related leagues into one home: college and pro, tournament, zombie,
+          survivor, or another format. A franchise hub can hold as many leagues as you need.
         </p>
         <Link href={fromLeague ? `/core?league=${encodeURIComponent(fromLeague)}` : '/core'} className="af-btn af-btn--ghost">
           ← Back
@@ -290,6 +322,29 @@ export function ConnectLeaguesClient() {
 
       {data && !loading ? (
         <>
+          {addingToHub ? (
+            <>
+              <section className="af-card af-cl-side">
+                <h2 className="af-label">Choose another league</h2>
+                {addChoices.length > 0 ? addChoices.map((league) => (
+                  <LeagueOption
+                    key={`${league.platform}:${league.id}`}
+                    league={league}
+                    group="additional-league"
+                    selected={addLeague === league.id}
+                    fromHere={false}
+                    onSelect={() => setAddLeague(league.id)}
+                  />
+                )) : <p className="af-cl-option-meta">Every imported league is already connected to a franchise.</p>}
+              </section>
+              {addChoices.length > 0 ? (
+                <button type="button" className="af-btn af-cl-submit" disabled={!addLeague || saving} onClick={() => void submitAddLeague()}>
+                  {saving ? 'Adding…' : 'Add league to franchise'}
+                </button>
+              ) : null}
+            </>
+          ) : (
+          <>
           {/*
             ⚠ THE EMPTY CASE IS NOT AN ERROR AND MUST NOT LOOK LIKE ONE. Pairing
             needs one league on each side; a user with only pro leagues is not
@@ -369,6 +424,8 @@ export function ConnectLeaguesClient() {
               ))}
             </section>
           ) : null}
+          </>
+          )}
         </>
       ) : null}
     </main>

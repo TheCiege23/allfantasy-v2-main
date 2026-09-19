@@ -70,6 +70,23 @@ async function ownsLeague(platform: string, leagueId: string, userId: string): P
   return row != null
 }
 
+/** Use the team already claimed during import, while still letting the owner
+ * correct it from the shared War Room later. */
+async function defaultTeamExternalId(platform: string, leagueId: string, userId: string): Promise<string> {
+  if (platform === 'fantrax') {
+    const league = await prisma.fantraxLeague.findFirst({
+      where: { id: leagueId, appUserId: userId },
+      select: { userTeam: true },
+    })
+    return league?.userTeam?.trim() ?? ''
+  }
+  const team = await prisma.leagueTeam.findFirst({
+    where: { leagueId, claimedByUserId: userId },
+    select: { externalId: true },
+  })
+  return team?.externalId?.trim() ?? ''
+}
+
 export const GET = withApiUsage({ endpoint: '/api/legacy/franchise', tool: 'Franchise' })(
   async (request: NextRequest) => {
     const auth = await requireVerifiedUser()
@@ -135,6 +152,7 @@ export const POST = withApiUsage({ endpoint: '/api/legacy/franchise', tool: 'Fra
       from?: string
       pro?: { platform?: string; leagueId?: string; teamExternalId?: string }
       college?: { platform?: string; leagueId?: string; teamExternalId?: string }
+      member?: { platform?: string; leagueId?: string; teamExternalId?: string }
     }
     try {
       body = await request.json()
@@ -175,21 +193,21 @@ export const POST = withApiUsage({ endpoint: '/api/legacy/franchise', tool: 'Fra
        * nothing for exactly the leagues this feature is for.
        */
       const fromRaw = typeof body.from === 'string' ? body.from.trim() : ''
-      let from: { id: string; role: 'pro' | 'college' } | null = null
+      let from: { id: string; role: 'pro' | 'college'; linkId: string | null } | null = null
       if (fromRaw) {
         const mirror = leagueRows.find((l) => l.id === fromRaw)
         const candidates = [fromRaw, mirror?.platformLeagueId ?? null].filter(
           (v): v is string => typeof v === 'string' && v.length > 0,
         )
         for (const id of candidates) {
-          const pro = collapsed.pro.find((l) => l.id === id)
+          const pro = [...collapsed.pro, ...collapsed.alreadyLinked].find((l) => l.id === id && l.role === 'pro')
           if (pro) {
-            from = { id: pro.id, role: 'pro' }
+            from = { id: pro.id, role: 'pro', linkId: pro.linkId }
             break
           }
-          const college = collapsed.college.find((l) => l.id === id)
+          const college = [...collapsed.college, ...collapsed.alreadyLinked].find((l) => l.id === id && l.role === 'college')
           if (college) {
-            from = { id: college.id, role: 'college' }
+            from = { id: college.id, role: 'college', linkId: college.linkId }
             break
           }
         }
@@ -200,6 +218,87 @@ export const POST = withApiUsage({ endpoint: '/api/legacy/franchise', tool: 'Fra
         from,
         note: 'Pairing is a label, not a sync. Neither league is modified.',
       })
+    }
+
+    /** Add another imported league to an existing hub. Repeatable without a role limit. */
+    if (body.action === 'add-league') {
+      const linkId = body.linkId?.trim()
+      const member = body.member
+      if (!linkId || !member?.platform || !member.leagueId) {
+        return NextResponse.json({ error: 'linkId and member platform/leagueId are required.' }, { status: 400 })
+      }
+      if (!(await ownedLink(linkId, auth.userId))) {
+        return NextResponse.json({ error: 'Franchise not found' }, { status: 404 })
+      }
+      const platform = member.platform.toLowerCase()
+      if (!(await ownsLeague(platform, member.leagueId, auth.userId))) {
+        return NextResponse.json({ error: 'League not found' }, { status: 404 })
+      }
+      const existing = await prisma.franchiseLeagueMember.findFirst({
+        where: { platform, leagueId: member.leagueId },
+        select: { linkId: true, link: { select: { ownerUserId: true, name: true } } },
+      })
+      if (existing && existing.linkId !== linkId) {
+        return NextResponse.json(
+          { error: `That league is already part of ${existing.link?.name ?? 'another franchise'}.` },
+          { status: 409 },
+        )
+      }
+      const attached = await attachToFranchise({
+        ownerUserId: auth.userId,
+        franchiseName: 'My franchise',
+        linkId,
+        role: 'linked',
+        platform,
+        leagueId: member.leagueId,
+        teamExternalId: member.teamExternalId?.trim() || await defaultTeamExternalId(platform, member.leagueId, auth.userId),
+      })
+      if (!attached.ok) return NextResponse.json({ error: attached.error }, { status: 400 })
+      return NextResponse.json({ linkId: attached.linkId, note: 'League added to the shared franchise hub.' })
+    }
+
+    /** Correct which provider team belongs to the signed-in franchise owner. */
+    if (body.action === 'update-team-mapping') {
+      const linkId = body.linkId?.trim()
+      const platform = body.member?.platform?.toLowerCase()
+      const leagueId = body.member?.leagueId
+      const requestedTeam = body.member?.teamExternalId?.trim()
+      if (!linkId || !platform || !leagueId || !requestedTeam) {
+        return NextResponse.json({ error: 'linkId, platform, leagueId and teamExternalId are required.' }, { status: 400 })
+      }
+      if (!(await ownedLink(linkId, auth.userId))) {
+        return NextResponse.json({ error: 'Franchise not found' }, { status: 404 })
+      }
+      const membership = await prisma.franchiseLeagueMember.findFirst({
+        where: { linkId, platform, leagueId },
+        select: { id: true },
+      })
+      if (!membership) return NextResponse.json({ error: 'League not found in this franchise.' }, { status: 404 })
+
+      let canonicalTeamId: string | null = null
+      if (platform === 'fantrax') {
+        const league = await prisma.fantraxLeague.findFirst({
+          where: { id: leagueId, appUserId: auth.userId },
+          select: { roster: true },
+        })
+        const names = Array.isArray(league?.roster)
+          ? [...new Set((league.roster as Array<{ teamName?: unknown }>).map((row) => typeof row.teamName === 'string' ? row.teamName.trim() : '').filter(Boolean))]
+          : []
+        canonicalTeamId = names.find((name) => name.toLowerCase() === requestedTeam.toLowerCase()) ?? null
+      } else {
+        const team = await prisma.leagueTeam.findFirst({
+          where: { leagueId, externalId: requestedTeam },
+          select: { externalId: true },
+        })
+        canonicalTeamId = team?.externalId ?? null
+      }
+      if (!canonicalTeamId) return NextResponse.json({ error: 'That team is not part of this league.' }, { status: 400 })
+
+      await prisma.franchiseLeagueMember.update({
+        where: { id: membership.id },
+        data: { teamExternalId: canonicalTeamId },
+      })
+      return NextResponse.json({ ok: true, teamExternalId: canonicalTeamId })
     }
 
     /*
@@ -389,7 +488,7 @@ export const POST = withApiUsage({ endpoint: '/api/legacy/franchise', tool: 'Fra
         role: body.connectionType === 'group' ? 'primary' : 'pro',
         platform: proPlatform,
         leagueId: pro.leagueId,
-        teamExternalId: pro.teamExternalId ?? '',
+        teamExternalId: pro.teamExternalId?.trim() || await defaultTeamExternalId(proPlatform, pro.leagueId, auth.userId),
       })
       if (!attachedPro.ok) {
         return NextResponse.json({ error: attachedPro.error }, { status: 400 })
@@ -402,7 +501,7 @@ export const POST = withApiUsage({ endpoint: '/api/legacy/franchise', tool: 'Fra
         role: body.connectionType === 'group' ? 'linked' : 'college',
         platform: collegePlatform,
         leagueId: college.leagueId,
-        teamExternalId: college.teamExternalId ?? '',
+        teamExternalId: college.teamExternalId?.trim() || await defaultTeamExternalId(collegePlatform, college.leagueId, auth.userId),
       })
       if (!attachedCollege.ok) {
         /*
