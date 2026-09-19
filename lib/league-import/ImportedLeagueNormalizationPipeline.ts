@@ -23,6 +23,7 @@ import {
   fetchMflLeagueForImport,
   MflImportConnectionError,
   MflImportLeagueNotFoundError,
+  MflImportUnavailableError,
 } from './mfl/MflLeagueFetchService'
 import {
   fetchFantraxLeagueForImport,
@@ -273,6 +274,10 @@ export async function runImportedLeagueNormalizationPipeline(
     }
     if (e instanceof MflImportConnectionError) {
       return { success: false, error: e.message, code: 'CONNECTION_REQUIRED' }
+    }
+    /* A throttle or 5xx is retryable; it must not be reported as a missing league. */
+    if (e instanceof MflImportUnavailableError) {
+      return { success: false, error: e.message, code: 'PROVIDER_UNAVAILABLE' }
     }
     if (e instanceof MflImportLeagueNotFoundError) {
       return { success: false, error: e.message, code: 'LEAGUE_NOT_FOUND' }
