@@ -23,6 +23,10 @@ import {
   isDailyStatSport,
   weekWindowFromSeasonStart,
 } from '@/lib/scoring-runtime/dailySportStatNormalization'
+import {
+  knownDailySportSeasons,
+  resolveDailySportSeasonStart,
+} from '@/lib/season-week/dailySportSeasonStarts'
 
 export type WeeklyScoreSyncSummary = {
   leagueId: string
@@ -204,15 +208,22 @@ export async function syncPlayerWeeklyScoresForRedraftSeason(params: {
      * both jobs at once — it also excludes preseason, because a window anchored
      * on the regular-season start cannot contain a game played before it.
      */
-    const window = weekWindowFromSeasonStart(params.seasonStartUtc, week)
+    // An explicit anchor from the caller wins; otherwise fall back to the
+    // recorded regular-season openers. Anchoring on the OPENER rather than the
+    // first game is what keeps preseason out: NHL preseason ran 19-27 Sep 2026
+    // and those games are ingested like any other.
+    const seasonStartUtc = params.seasonStartUtc ?? resolveDailySportSeasonStart(sport, seasonYear)
+    const window = weekWindowFromSeasonStart(seasonStartUtc, week)
     if (!window) {
       // Decline rather than run a query that cannot be right. Inventing a start
       // date would silently mis-assign every game to the wrong week, which is
       // worse than scoring nothing and saying so.
+      const known = knownDailySportSeasons(sport)
       summary.warnings.push(
-        `${sport} is a daily sport: a week is a date range, and scoring one needs a real season-start date. ` +
-          'None was supplied and none can be read yet — `season_calendars` is empty in production and holds ' +
-          'only month granularity. No scores were written.',
+        `${sport} is a daily sport: a week is a date range, and scoring one needs the regular-season ` +
+          `start date. None was supplied and none is recorded for season ${seasonYear}` +
+          `${known.length ? ` (recorded: ${known.join(', ')})` : ''}. ` +
+          'Add it to `lib/season-week/dailySportSeasonStarts.ts`. No scores were written.',
       )
       await recordScoreSyncAudit(summary, params.actorId ?? 'system')
       return summary
