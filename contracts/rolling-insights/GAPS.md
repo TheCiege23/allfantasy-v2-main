@@ -227,7 +227,7 @@ have captured an empty slate and taught nothing — which is the re-probing trap
 prevent. **Probe each on a game day for that sport.** The parser accepts both the id-keyed object
 form and an array form until each has its own fixture; do not narrow it to the MLB shape.
 
-#### 📌 2026-09-19 — `G-01` now BLOCKS fantasy scoring, not just `/live` display
+#### 📌 2026-09-19 — `G-01` has a fantasy-scoring consumer, not just `/live` display
 
 A consumer arrived. `lib/scoring-runtime/dailySportStatNormalization.ts` converts NBA/NHL game rows
 into weekly fantasy stats, and `syncPlayerWeeklyScoresForRedraftSeason` dispatches to it.
@@ -240,13 +240,26 @@ Everything in that module that could be derived from committed sources was: the 
 keys are taken from `lib/sportConfig/configs/{nba,nhl}.ts` and a test asserts they match, so the
 scoring engine can score whatever is produced.
 
-**What is still missing is only the PROVIDER SPELLINGS** — which vendor field carries points,
-rebounds, goals, saves. `ENDPOINTS.yaml` has NBA `confidence: low` (game-level hints only, no
-player stat fields) and NHL `confidence: none`, so the alias tables in that module are a starting
-set that is *assumed to be partly wrong*.
+✅ **THE PROVIDER SPELLINGS ARE NOW VERIFIED against the fixtures `36fcfe71f` committed.** This
+section originally said they were unknowable and the alias tables were "assumed to be partly
+wrong" — written from a branch that predated that commit. They were partly wrong, and the fixtures
+said exactly how. Six corrections:
 
-Note this is the **player game-log / `/player-stats`** shape, not only `/live`. A fixture that
-resolves one may not resolve the other.
+| canonical | guessed | measured |
+|---|---|---|
+| NBA `threes` | `three_pointERS_made` | `three_pointS_made` |
+| NBA `reb` | `rebounds` | `total_rebounds` |
+| NHL `ppp` | `power_play_points` | `power_play_goals` + `power_play_assists` |
+| NHL `shp` | `short_handed_points` | `short_handed_goals` + `short_handed_assists` |
+| NHL `g_win` | `wins` | `win` |
+| NHL `g_ga` | `goals_against` | `goals_allowed` |
+
+🛑 The special-teams pair is not a spelling fix: the feed carries **no `*_points` total at all**,
+only the goal and assist halves, so a single-key alias could never have matched. They are summed.
+
+⚠ `player_game_stats` is fed from the `/live` player box, so these fixtures DO cover the shape that
+pipeline consumes — the earlier worry that a `/live` fixture might not resolve the
+`/player-stats` shape does not apply on this path.
 
 Two deliberate safety properties, so the guess cannot ship silently — this is the same failure the
 MLB note above records, where a parser written from a sibling sport's hint returned zero rows
@@ -259,12 +272,15 @@ across fifteen games and said nothing:
 - A player whose stats do not map is skipped, never written as zero, so a wrong table cannot
   persist wrong scores.
 - `SEASON_CAPABLE_SPORTS` in `lib/sport-scope.ts` is **deliberately still NFL-only.** Widening it
-  claims a season can run to completion. That claim is not earned until this gap closes.
+  claims a season can run to completion, and the mapping being right is necessary but not
+  sufficient for that claim.
 
-**To resolve:** one probe per sport on a game day via `scripts/probe.sh`, commit the fixture, then
-reconcile `NBA_STAT_ALIASES` / `NHL_STAT_ALIASES` against it and widen the gate. NHL 2026-27 opens
-early October and NBA late October, so both become probeable shortly — the "out of session" reason
-that blocked the 2026-08-26 attempt expires then.
+**What is left before the gate can move**, now that the spellings are verified: no NBA or NHL row
+has ever reached `player_game_stats` (measured 2026-09-19 — NFL 253,054 / MLB 66,525 / SOCCER 3,322
+/ **NBA 0 / NHL 0**), because neither season had started. NHL 2026-27 opens **2026-09-29** and NBA
+**2026-10-20**, both recorded in `lib/season-week/dailySportSeasonStarts.ts`. So the remaining step
+is observational, not a probe: after the opener, confirm rows land, confirm the sync reports no
+unmapped keys, and then widen the gate.
 
 #### 📏 MEASURED 2026-09-19 on prod (`icy-field-51189449`) — three more blockers, none about field names
 
