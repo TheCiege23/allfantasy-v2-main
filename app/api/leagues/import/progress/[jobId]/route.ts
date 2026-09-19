@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { buildImportProgressView } from '@/lib/import/importProgressView'
 
 export const dynamic = 'force-dynamic'
 
@@ -57,9 +58,19 @@ export async function GET(
       },
     })
 
+    const progressView = buildImportProgressView({
+      status: job.status,
+      progress: job.progress,
+      currentSeason: job.currentSeason,
+      totalSeasons: job.totalSeasons,
+      seasonsCompleted: job.seasonsCompleted,
+      seasonStatuses: seasons.map((season) => season.status),
+    })
+
     return NextResponse.json({
       status: job.status,
       progress: job.progress ?? 0,
+      ...progressView,
       currentSeason: job.currentSeason,
       seasonsCompleted: job.seasonsCompleted ?? 0,
       totalSeasons: job.totalSeasons ?? 0,

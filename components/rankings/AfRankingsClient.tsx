@@ -183,6 +183,10 @@ function playerRankFromApiResponse(data: RankResponse): PlayerRank | null {
 type ImportJobProgressResponse = {
   status: string
   progress: number
+  stage?: 'queued' | 'discovering' | 'importing' | 'finalizing' | 'complete' | 'failed'
+  message?: string
+  retryable?: boolean
+  pollAfterMs?: number | null
   currentSeason: number | null
   seasonsCompleted: number | null
   totalSeasons: number | null
@@ -289,6 +293,21 @@ function ImportProgressPanel({
               </span>
               <span>{pct}%</span>
             </div>
+
+            {job.message ? (
+              <p
+                aria-live="polite"
+                style={{
+                  margin: '-8px 0 16px',
+                  fontSize: 13,
+                  lineHeight: 1.5,
+                  color: job.stage === 'failed' ? '#fca5a5' : 'rgba(248,250,252,0.72)',
+                }}
+              >
+                {job.message}
+                {job.retryable ? ' Start the import again when the provider is available.' : ''}
+              </p>
+            ) : null}
 
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 20 }}>
               {seasonsSorted.map((s) => {
