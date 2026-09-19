@@ -763,13 +763,28 @@ html[data-mode='af'] .af-core {
  * unmeasured and the same defect survives there untouched. Swept 2026-09-19 with
  * postcss over `components/core-app/*.css`: 18 further focusable controls inside
  * the shell declare a base font under 16px and carry no phone override —
- * `.af3a-search-input` (13px, the HOME search), `.af-d2-chat-input` (13),
+ * `.af3a-search-input` (13), `.af-d2-chat-input` (13),
  * `.af-d2-topbar-search-input` (12), `.af-cm-league-search input` (12),
  * `.af-live-search input` (12), `.af-tc-input` (13), `.af-rk-input input` (13),
  * `.af-rk-field select` (13), `.af-stb-select select` (12.5), `.af-lctx-type select`
  * (10), `.af-cwr-team select` (12), `.af-bk-select` (12.5), `.af-weekpick-select`
  * (12), `.af-crx-select select` (13), `.af-cs-textarea` (13), `.afh-compose input`
  * (12), `.af-sp-input/-select/-textarea` (12.5), `.af-cm-numinput` (15).
+ *
+ * ⚠ THAT LIST IS DECLARED SIZES IN STYLESHEETS, NOT A CLAIM THAT ALL EIGHTEEN ARE
+ * REACHABLE ON A PHONE — AND THE FIRST ENTRY IS THE WORKED EXAMPLE OF THE
+ * DIFFERENCE. This comment first called `.af3a-search-input` "the HOME search",
+ * which is wrong: `Dashboard3A.tsx:553` renders it inside `.af3a-topbar`, and
+ * `af-core-shell.css:822` sets `.af-content .af3a-topbar { display: none }` so the
+ * embedded copy does not double the shell's chrome. `CoreHomeCards` is only ever
+ * rendered inside `.af-content`, so that input is not visible anywhere in the
+ * product today. Measured, not reasoned: stripping this floor and re-running the
+ * `/core` phone gate still PASSED, because there was nothing visible to report.
+ *
+ * The floor is still right — it can only raise, it costs nothing on a hidden
+ * element, and it covers each of these the moment one becomes reachable. But a
+ * sweep over stylesheets tells you what a RULE says, never what a USER can touch;
+ * only rendering the route tells you that.
  *
  * A floor is the right shape rather than eighteen overrides: the next field
  * anyone adds is covered without remembering this, which is the property the
