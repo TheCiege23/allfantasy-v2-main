@@ -1302,7 +1302,16 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
    * then reconciles this flag to it, so the two never disagree once mounted.
    */
   const railOpen = railChoice === 'open'
-  const liveRail = useLiveRailScores(leagues, railOpen)
+  /*
+   * ⚠ THE SAME POLICY THE SHELL'S OWN REFRESH EFFECT USES, not a second constant. The gate here
+   * is `railOpen` — whether the list is expanded — which says nothing about whether a game is
+   * on, so the CADENCE is what has to answer that. See the note on `useLiveRailScores`.
+   */
+  const liveRail = useLiveRailScores(
+    leagues,
+    railOpen,
+    coreRefreshIntervalMs(Boolean(props.gameDayActive), props.liveGameCount ?? 0),
+  )
   const liveWeek = Object.values(liveRail.scores)[0]?.week
   const railWeekLabel = liveWeek ? `Week ${liveWeek}` : props.railWeekLabel
   const railRef = useRef<HTMLElement>(null)
