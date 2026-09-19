@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useCallback } from "react"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
-import { signOut } from "next-auth/react"
 import { useLanguage } from "@/components/i18n/LanguageProviderClient"
 import { ReferralSection } from "@/components/settings/ReferralSection"
 import { useSettingsProfile } from "@/hooks/useSettingsProfile"

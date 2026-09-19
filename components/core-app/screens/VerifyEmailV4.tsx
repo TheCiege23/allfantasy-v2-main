@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { signOut } from 'next-auth/react'
+import { signOutAndPurge } from '@/lib/pwa/signOutAndPurge'
 import { useEffect, useState } from 'react'
 import { useResendCooldown } from '@/hooks/useResendCooldown'
 import { safeInternalPathOr } from '@/lib/auth/auth-intent-resolver'
@@ -153,7 +153,7 @@ export function VerifyEmailV4({ email, alreadyVerified, signedIn }: VerifyEmailV
    */
   async function switchAccount(afterSignIn: string) {
     try {
-      await signOut({ redirect: false })
+      await signOutAndPurge({ redirect: false })
     } catch {
       // Still go to sign-in: signing in as the other account replaces this session anyway.
     }
