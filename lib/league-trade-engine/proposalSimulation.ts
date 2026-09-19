@@ -9,6 +9,15 @@ import type {
   TradePartnerSuggestion,
 } from '@/lib/league-trade-engine/proposalSuggestions'
 
+export function hasPairedProposalSimulation(input: {
+  suggestions: TradePartnerSuggestion[]
+  multiTeamSuggestions: MultiTeamTradeSuggestion[]
+}): boolean {
+  return input.suggestions.some((suggestion) =>
+    suggestion.packages.some((proposal) => proposal.simulation?.available),
+  ) || input.multiTeamSuggestions.some((suggestion) => suggestion.simulation?.available)
+}
+
 function simPlayers(roster: SuggestionRoster): SimPlayerInput[] {
   return roster.players
     .filter((player) => player.weeklyProjection != null && Number.isFinite(player.weeklyProjection))

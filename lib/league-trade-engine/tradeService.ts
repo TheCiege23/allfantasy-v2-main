@@ -24,6 +24,11 @@ import { assertRosterTransactionsAllowed } from '@/lib/roster-legality/rosterTra
 import { ENGAGEMENT } from '@/lib/analytics/eventNames'
 import { recordProductEvent } from '@/lib/analytics/recordAnalyticsEvent'
 import { captureLiveTradeOffer, captureLiveTradeOutcome } from '@/lib/league-trade-engine/tradeLearningCapture'
+import { getTradeManagerStrategy } from '@/lib/league-trade-engine/managerStrategy'
+import {
+  buildTradeDecisionSnapshot,
+  writeTradeDecisionSnapshot,
+} from '@/lib/league-trade-engine/tradeDecisionSnapshot'
 
 async function fanout(leagueId: string, input: {
   eventType: string
@@ -269,8 +274,7 @@ export async function createAfLeagueTrade(input: CreateLeagueTradeInput & { curr
 
   const rootId = parent?.rootTradeId ?? parent?.id ?? null
 
-  const trade = await prisma.afLeagueTrade.create({
-    data: {
+  const createData = {
       leagueId: input.leagueId,
       proposedByUserId: input.proposedByUserId,
       proposerRosterId: input.proposerRosterId,
@@ -298,8 +302,45 @@ export async function createAfLeagueTrade(input: CreateLeagueTradeInput & { curr
           metadata: (a.metadata ?? {}) as Prisma.InputJsonValue,
         })),
       },
-    },
-  })
+    } satisfies Prisma.AfLeagueTradeUncheckedCreateInput
+
+  const decisionStore = (prisma as typeof prisma & {
+    tradeDecisionSnapshot?: typeof prisma.tradeDecisionSnapshot
+    tradeManagerStrategy?: typeof prisma.tradeManagerStrategy
+  }).tradeDecisionSnapshot
+  const managerStore = (prisma as typeof prisma & {
+    tradeManagerStrategy?: typeof prisma.tradeManagerStrategy
+  }).tradeManagerStrategy
+
+  // Production uses one transaction so a trade can never exist without its
+  // proposal-time receipt. Reduced test clients without the new delegate keep
+  // exercising the legacy creation path until their generated client updates.
+  const trade = decisionStore
+    ? await prisma.$transaction(async (tx) => {
+        const created = await tx.afLeagueTrade.create({ data: createData })
+        const managerStrategy = managerStore
+          ? await getTradeManagerStrategy(input.leagueId, input.proposedByUserId, {
+              tradeManagerStrategy: tx.tradeManagerStrategy,
+            })
+          : null
+        const snapshot = buildTradeDecisionSnapshot({
+          league,
+          rosters: participants,
+          assets: input.assets,
+          proposedByUserId: input.proposedByUserId,
+          managerStrategy,
+          tradeSettings: settings as unknown as Record<string, unknown>,
+          metadata: input.metadata,
+        })
+        await writeTradeDecisionSnapshot(tx, {
+          tradeId: created.id,
+          leagueId: input.leagueId,
+          proposedByUserId: input.proposedByUserId,
+          snapshot,
+        })
+        return created
+      })
+    : await prisma.afLeagueTrade.create({ data: createData })
 
   await appendAfTradeStatusHistory({
     tradeId: trade.id,

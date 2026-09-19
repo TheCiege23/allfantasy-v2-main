@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { enrichProposalSimulations } from '@/lib/league-trade-engine/proposalSimulation'
+import { enrichProposalSimulations, hasPairedProposalSimulation } from '@/lib/league-trade-engine/proposalSimulation'
 import type { SuggestionRoster, TradePartnerSuggestion } from '@/lib/league-trade-engine/proposalSuggestions'
 
 describe('trade proposal counterfactual simulation', () => {
@@ -20,5 +20,17 @@ describe('trade proposal counterfactual simulation', () => {
     expect(result?.packages[0]?.simulation?.available).toBe(true)
     expect(result?.packages[0]?.simulation?.metric).toBe('playoff')
     expect(result?.packages[0]?.simulation?.deltaPct).not.toBeNull()
+    expect(hasPairedProposalSimulation({ suggestions: [result!], multiTeamSuggestions: [] })).toBe(true)
+  })
+
+  it('keeps contextual readiness false when a paired simulation is unavailable', () => {
+    const suggestion = {
+      rosterId: 'partner', fitScore: 50, reasons: [], packages: [{
+        id: 'p', send: [], receive: [], sendValue: 0, receiveValue: 0, fairness: 0,
+        acceptanceLikelihood: null, reason: 'insufficient evidence',
+        simulation: { available: false, metric: 'playoff' as const, beforePct: null, afterPct: null, deltaPct: null, iterations: 0, reason: 'missing projections' },
+      }],
+    }
+    expect(hasPairedProposalSimulation({ suggestions: [suggestion], multiTeamSuggestions: [] })).toBe(false)
   })
 })

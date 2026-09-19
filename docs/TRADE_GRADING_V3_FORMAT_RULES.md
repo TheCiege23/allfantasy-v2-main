@@ -126,6 +126,12 @@ Today’s value, today’s roster, and later injury news are future information 
 
 Every persisted grade receipt must include the policy/model version, transaction time, evidence timestamps and sources, league settings fingerprint, before/after roster hashes, each component result, missing inputs, confidence, and whether the grade is a market comparison, decision grade, or realized outcome grade.
 
+## Implementation status
+
+The first evidence batch now persists a manager-confirmed `win-now`, `balanced`, or `rebuild` objective per user and league. Proposal readiness requires that confirmation plus an available paired before/after outcome simulation, readable league/roster settings, and priced suggested assets.
+
+New `AfLeagueTrade` proposals also create an append-only `TradeDecisionSnapshot` in the same database transaction. It freezes the league settings, participating rosters, proposed assets, policy version, manager context, evidence states, and readiness result. A simulation returned through the browser is retained as unverified audit data and cannot unlock a contextual grade. Server-verifiable asset-value, projection, and paired-simulation capture remains a rollout gate, so these initial receipts correctly remain partial rather than assigning an unsupported historical letter.
+
 ## Rollout gates
 
 1. Keep the current display explicitly labeled **Market grade** for current redraft/dynasty trades while the full contextual inputs are incomplete.
