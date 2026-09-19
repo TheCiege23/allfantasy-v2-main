@@ -17,6 +17,10 @@ export {
   pointsAllowedFromGame,
   teamAbbrevFromDefPlayerId,
 } from '@/lib/scoring-runtime/nflStatNormalization'
+import {
+  isDailyStatSport,
+  normalizeDailySportWeeklyStats,
+} from '@/lib/scoring-runtime/dailySportStatNormalization'
 
 export type WeeklyScoreSyncSummary = {
   leagueId: string
@@ -93,8 +97,24 @@ export async function syncPlayerWeeklyScoresForRedraftSeason(params: {
   const sport = String(season.sport || 'NFL').toUpperCase()
   const seasonYear = Number(season.season)
 
-  if (sport !== 'NFL') {
-    throw new Error(`Weekly stat sync is currently wired for NFL only; ${sport} is not available yet.`)
+  /**
+   * NBA and NHL play several times a week, so their stats are aggregated across
+   * every cached game in the week rather than read from a single row. See
+   * `lib/scoring-runtime/dailySportStatNormalization.ts`.
+   *
+   * ⚠ This opening the door is NOT the same as declaring the sport
+   * season-capable. `SEASON_CAPABLE_SPORTS` stays NFL-only until the provider
+   * stat keys are verified against a captured payload (GAPS.md G-01) — it is
+   * the claim that a season can run to completion, and it is not earned yet.
+   *
+   * Running this for a daily sport is safe in the meantime: if the alias tables
+   * are wrong, every player falls through to `missingStatPlayerIds` and the
+   * unmapped keys are reported. No row is written, so a bad mapping cannot
+   * quietly persist zero scores.
+   */
+  const isDailySport = isDailyStatSport(sport)
+  if (sport !== 'NFL' && !isDailySport) {
+    throw new Error(`Weekly stat sync is wired for NFL, NBA and NHL; ${sport} is not available yet.`)
   }
 
   const rosters = await prisma.redraftRoster.findMany({
@@ -178,6 +198,11 @@ export async function syncPlayerWeeklyScoresForRedraftSeason(params: {
     }
   }
 
+  // Provider stat keys no alias claimed. Collected across the whole run so a
+  // wrong alias table for a daily sport is reported once, loudly, instead of
+  // looking like a quiet week in which nobody scored.
+  const unmappedStatKeys = new Set<string>()
+
   for (const playerId of playerIds) {
     const position = positionByPlayer.get(playerId) ?? null
     const playerSport = sportByPlayer.get(playerId) ?? sport
@@ -218,6 +243,45 @@ export async function syncPlayerWeeklyScoresForRedraftSeason(params: {
     const cached = cacheByPlayer.get(playerId)
     if (!cached) {
       summary.missingCachePlayerIds.push(playerId)
+      continue
+    }
+
+    if (isDailySport) {
+      // A week here is several games. Summing them is the whole difference from
+      // the NFL path below, which takes one row per week.
+      const aggregate = normalizeDailySportWeeklyStats(sport, cached.payload, week)
+      for (const key of aggregate.unmappedKeys) unmappedStatKeys.add(key)
+
+      if (aggregate.gamesCounted === 0) {
+        summary.missingWeekPlayerIds.push(playerId)
+        continue
+      }
+      if (!Object.keys(aggregate.stats).length) {
+        summary.missingStatPlayerIds.push(playerId)
+        continue
+      }
+
+      const dailyPts = await calculateScoreFromSportConfig(
+        season.leagueId,
+        playerId,
+        week,
+        aggregate.stats,
+        position,
+      )
+      await prisma.playerWeeklyScore.upsert({
+        where: { playerId_week_season_sport: { playerId, week, season: seasonYear, sport: playerSport } },
+        update: { stats: aggregate.stats, fantasyPts: dailyPts, isFinalized: false },
+        create: {
+          playerId,
+          week,
+          season: seasonYear,
+          sport: playerSport,
+          stats: aggregate.stats,
+          fantasyPts: dailyPts,
+          isFinalized: false,
+        },
+      })
+      summary.scoresUpserted += 1
       continue
     }
 
@@ -268,7 +332,17 @@ export async function syncPlayerWeeklyScoresForRedraftSeason(params: {
     summary.warnings.push(`Some cached players do not have week ${week} rows yet.`)
   }
   if (summary.missingStatPlayerIds.length) {
-    summary.warnings.push('Some cached week rows did not contain recognized NFL stat keys.')
+    summary.warnings.push(`Some cached week rows did not contain recognized ${sport} stat keys.`)
+  }
+  // 🛑 The loud half of the unverified-alias design. NBA/NHL provider field
+  // names are not yet confirmed against a captured payload (GAPS.md G-01), so
+  // the run reports exactly which keys it could not place. A run that scores
+  // nobody AND lists unmapped keys is an alias problem, not an empty week —
+  // without this they are indistinguishable.
+  if (unmappedStatKeys.size) {
+    summary.warnings.push(
+      `Unrecognized ${sport} provider stat keys (alias table may be wrong): ${[...unmappedStatKeys].sort().join(', ')}`,
+    )
   }
 
   await recordScoreSyncAudit(summary, params.actorId ?? 'system')

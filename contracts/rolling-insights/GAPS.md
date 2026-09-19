@@ -227,6 +227,40 @@ have captured an empty slate and taught nothing — which is the re-probing trap
 prevent. **Probe each on a game day for that sport.** The parser accepts both the id-keyed object
 form and an array form until each has its own fixture; do not narrow it to the MLB shape.
 
+#### 📌 2026-09-19 — `G-01` now BLOCKS fantasy scoring, not just `/live` display
+
+A consumer arrived. `lib/scoring-runtime/dailySportStatNormalization.ts` converts cached NBA/NHL
+game logs into weekly fantasy stats, and `syncPlayerWeeklyScoresForRedraftSeason` dispatches to it.
+Everything in that module that could be derived from committed sources was: the canonical output
+keys are taken from `lib/sportConfig/configs/{nba,nhl}.ts` and a test asserts they match, so the
+scoring engine can score whatever is produced.
+
+**What is still missing is only the PROVIDER SPELLINGS** — which vendor field carries points,
+rebounds, goals, saves. `ENDPOINTS.yaml` has NBA `confidence: low` (game-level hints only, no
+player stat fields) and NHL `confidence: none`, so the alias tables in that module are a starting
+set that is *assumed to be partly wrong*.
+
+Note this is the **player game-log / `/player-stats`** shape, not only `/live`. A fixture that
+resolves one may not resolve the other.
+
+Two deliberate safety properties, so the guess cannot ship silently — this is the same failure the
+MLB note above records, where a parser written from a sibling sport's hint returned zero rows
+across fifteen games and said nothing:
+
+- Unrecognized numeric keys are collected and reported on the sync summary
+  (`Unrecognized NBA provider stat keys (alias table may be wrong): …`). A run that scores nobody
+  **and** lists unmapped keys is an alias problem; a run that scores nobody and lists none is a
+  genuinely empty week. Without the report those are identical.
+- A player whose stats do not map is skipped, never written as zero, so a wrong table cannot
+  persist wrong scores.
+- `SEASON_CAPABLE_SPORTS` in `lib/sport-scope.ts` is **deliberately still NFL-only.** Widening it
+  claims a season can run to completion. That claim is not earned until this gap closes.
+
+**To resolve:** one probe per sport on a game day via `scripts/probe.sh`, commit the fixture, then
+reconcile `NBA_STAT_ALIASES` / `NHL_STAT_ALIASES` against it and widen the gate. NHL 2026-27 opens
+early October and NBA late October, so both become probeable shortly — the "out of session" reason
+that blocked the 2026-08-26 attempt expires then.
+
 ---
 
 ## 📏 MEASURED 2026-08-28 — `/live/{date}` is keyed on the **US EASTERN** date
