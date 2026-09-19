@@ -69,6 +69,19 @@ export type Dash34League = {
    * are different problems with different fixes.
    */
   hurtStarters?: number
+  /**
+   * The soonest kickoff among the starters `hurtStarters` counts — ISO, NFL only.
+   *
+   * ⚠ A KICKOFF, NOT A LEAGUE LOCK RULE. We hold no lock rule for any league (the same caveat
+   * `nextKickoffAt` carries below, and `lib/core-app/lineupLock.ts` states in full): every launch
+   * platform locks a player at his own kickoff by default, but a league configured to lock the
+   * whole lineup at the week's first game locks EARLIER than this. So this is the last instant we
+   * can defend, not a promise that the slot is editable until then.
+   *
+   * Null means we hold no kickoff for him — a non-NFL league, or a club the table could not
+   * resolve — never that there is no deadline.
+   */
+  hurtStarterKickoffAt?: string | null
   href: string
   actionLabel?: string
 }
