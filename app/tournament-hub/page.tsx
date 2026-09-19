@@ -74,7 +74,7 @@ export default async function TournamentHubIndex() {
         </div>
         <div className="af-th-actions">
           <Link href="/tournament-hub/new" className="af-th-copy">
-            Group leagues into a tournament
+            Connect imported leagues
           </Link>
         </div>
       </header>

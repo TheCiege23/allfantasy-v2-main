@@ -28,6 +28,7 @@ type ConferenceDraft = { name: string; leagueIds: string[] }
 export function NewTournamentClient({ leagues }: { leagues: PickableLeague[] }) {
   const router = useRouter()
   const [name, setName] = useState('')
+  const [search, setSearch] = useState('')
   const [weekStart, setWeekStart] = useState('1')
   const [weekEnd, setWeekEnd] = useState('9')
   const [advancePerConference, setAdvancePerConference] = useState('64')
@@ -36,8 +37,7 @@ export function NewTournamentClient({ leagues }: { leagues: PickableLeague[] }) 
   const [eliteWeek, setEliteWeek] = useState('15')
   const [championshipWeek, setChampionshipWeek] = useState('17')
   const [conferences, setConferences] = useState<ConferenceDraft[]>([
-    { name: '', leagueIds: [] },
-    { name: '', leagueIds: [] },
+    { name: 'Conference 1', leagueIds: [] },
   ])
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -64,7 +64,7 @@ export function NewTournamentClient({ leagues }: { leagues: PickableLeague[] }) 
 
   const ready =
     name.trim().length > 0 &&
-    conferences.every((c) => c.name.trim().length > 0) &&
+    conferences.filter((c) => c.leagueIds.length > 0).every((c) => c.name.trim().length > 0) &&
     conferences.some((c) => c.leagueIds.length > 0) &&
     !saving
 
@@ -115,11 +115,10 @@ export function NewTournamentClient({ leagues }: { leagues: PickableLeague[] }) 
     <main className="af-th">
       <header className="af-th-head">
         <div>
-          <h1 className="af-th-title">Group leagues into a tournament</h1>
+          <h1 className="af-th-title">Connect your imported leagues</h1>
           <p className="af-th-sub">
-            Pick the leagues you already run and say which conference each belongs to. Nothing is
-            created on any platform and no league is changed — this records that they are one
-            tournament so the standings can be worked out across all of them.
+            Select leagues already in AllFantasy to create one tournament hub. Add conferences
+            if you need separate groups. Your leagues do not need to be imported again.
           </p>
         </div>
       </header>
@@ -132,8 +131,8 @@ export function NewTournamentClient({ leagues }: { leagues: PickableLeague[] }) 
 
       {available.length === 0 ? (
         <p className="af-th-note">
-          Every league on your account is already part of a tournament, so there is nothing to
-          group. A league can only belong to one.
+          {leagues.length === 0 ? 'No imported leagues found on this account.' : 'All your leagues are already connected to a tournament.'}
+          {' '}<a href="/tournament-hub">View your tournaments</a>
         </p>
       ) : null}
 
@@ -167,6 +166,11 @@ export function NewTournamentClient({ leagues }: { leagues: PickableLeague[] }) 
               />
             </span>
           </label>
+        </div>
+        <details style={{ marginTop: 16 }}>
+          <summary>Advancement and schedule · {advancePerConference} advance per conference · {bubbleSize} bubble spots</summary>
+          <p className="af-th-note">Redraft week {redraftWeek || 'not set'} · Elite redraft week {eliteWeek || 'not set'} · Championship week {championshipWeek || 'not set'}. Adjust these to match your tournament.</p>
+          <div className="af-th-fields">
           <label className="af-th-field">
             <span>Advance per conference</span>
             <input
@@ -213,11 +217,16 @@ export function NewTournamentClient({ leagues }: { leagues: PickableLeague[] }) 
             />
           </label>
         </div>
+        </details>
         <p className="af-th-linknote">
           The cut is made across the whole conference on record, then points for — not per league.
         </p>
       </section>
 
+      <label className="af-th-field">
+        <span>Find imported leagues · {assigned.size} selected</span>
+        <input className="af-th-input" type="search" placeholder="Search league name or season" value={search} onChange={(e) => setSearch(e.target.value)} />
+      </label>
       {conferences.map((conf, i) => (
         <section key={i} className="af-th-league">
           <h2 className="af-th-league-name">
@@ -237,8 +246,12 @@ export function NewTournamentClient({ leagues }: { leagues: PickableLeague[] }) 
               }
             />
           </label>
+          <div className="af-th-actions">
+            <button type="button" className="af-th-linkbtn" onClick={() => setConferences((prev) => prev.map((c, j) => j === i ? { ...c, leagueIds: [...new Set([...c.leagueIds, ...available.filter((l) => !assigned.has(l.id) && `${l.name} ${l.season ?? ''}`.toLowerCase().includes(search.toLowerCase())).map((l) => l.id)])] } : c))}>Select all matching unassigned leagues</button>
+            <button type="button" className="af-th-linkbtn" onClick={() => setConferences((prev) => prev.map((c, j) => j === i ? { ...c, leagueIds: [] } : c))}>Clear selection</button>
+          </div>
           <div className="af-th-picks">
-            {leagues.map((l) => {
+            {leagues.filter((l) => `${l.name} ${l.season ?? ''}`.toLowerCase().includes(search.toLowerCase())).map((l) => {
               const mine = conf.leagueIds.includes(l.id)
               const elsewhere = !mine && assigned.has(l.id)
               return (
@@ -273,12 +286,12 @@ export function NewTournamentClient({ leagues }: { leagues: PickableLeague[] }) 
         <button
           type="button"
           className="af-th-linkbtn"
-          onClick={() => setConferences((prev) => [...prev, { name: '', leagueIds: [] }])}
+          onClick={() => setConferences((prev) => [...prev, { name: `Conference ${prev.length + 1}`, leagueIds: [] }])}
         >
           + Add a conference
         </button>
         <button type="button" className="af-th-copy" disabled={!ready} onClick={submit}>
-          {saving ? 'Creating…' : 'Create tournament'}
+          {saving ? 'Connecting…' : `Connect ${assigned.size} leagues`}
         </button>
       </div>
 

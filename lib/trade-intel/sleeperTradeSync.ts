@@ -29,7 +29,7 @@ const MAX_WEEKS = 18
  */
 export async function sleeperGet<T>(path: string): Promise<T | null> {
   try {
-    const res = await fetch(`${SLEEPER}${path}`, { cache: 'no-store' })
+    const res = await fetch(`${SLEEPER}${path}`, { cache: 'no-store', signal: AbortSignal.timeout(8000) })
     if (!res.ok) return null
     return (await res.json()) as T
   } catch {

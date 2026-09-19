@@ -145,6 +145,8 @@ export function CommissionerHub({ data }: CommissionerHubProps) {
         ) : null}
       </header>
 
+      <Link className="afh-btn" href="/tournament-hub">Multi-league tournaments and weekly reports →</Link>
+
       {/* ── Cockpit (item 1) — the tiles, carried by the key-art band ─────── */}
       <section
         className="afh-hero"

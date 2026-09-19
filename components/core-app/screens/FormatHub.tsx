@@ -63,7 +63,7 @@ const THEMES: Record<HubFormat, Theme> = {
     title: 'Tournament Hub',
     glyph: '♜︎',
     desc: 'Every bracket you play in, one command center. Rounds, advancement and the road to the trophy across your tournament leagues.',
-    connect: '+ Connect a bracket',
+    connect: '+ Connect imported leagues',
     leaguesLabel: 'Connected brackets',
     meterLabel: 'Round',
     tradesLabel: 'Trades before the deadline',
@@ -196,6 +196,15 @@ export default function FormatHub({ data }: { data: FormatHubData }) {
         </button>
       </header>
 
+      {data.format === 'tournament' ? (
+        <section className="afh-connect" aria-label="Tournament management">
+          <p>Connect leagues already imported into AllFantasy. Get manager standings and weekly top scorers across all conferences, then copy or download the Excel report.</p>
+          <div className="afh-connect-row">
+            <Link className="afh-btn" href="/tournament-hub/new">Connect imported leagues</Link>
+            <Link className="afh-btn" href="/tournament-hub">Your tournaments and weekly reports</Link>
+          </div>
+        </section>
+      ) : null}
       {connectOpen ? (
         <section id="afh-connect" className="afh-connect" aria-label="Connect a league">
           <div className="afh-connect-head">
@@ -204,6 +213,10 @@ export default function FormatHub({ data }: { data: FormatHubData }) {
               ✕
             </button>
           </div>
+          {data.format === 'tournament' ? <div className="afh-connect-row">
+            <div className="afh-row-main"><span className="afh-row-title">Already imported?</span><span className="afh-row-detail">Select your leagues and group them into a tournament.</span></div>
+            <Link className="afh-btn afh-btn--sm" href="/tournament-hub/new">Connect leagues</Link>
+          </div> : null}
           <p>
             This hub gathers every {theme.tab} league you’re already in. To add one, import it from the platform it
             lives on{theme.canCreate ? ', or start a new one on AllFantasy' : ''}. Nothing changes on the original
