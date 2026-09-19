@@ -38,11 +38,25 @@ function sleeperFetch(url: string, timeoutMs: number = SLEEPER_FETCH_TIMEOUT_MS)
  */
 export type SleeperReadOptions = { strict?: boolean };
 
-class SleeperUnavailableError extends Error {
-  constructor(label: string, cause: unknown) {
+function readRetryAfterMs(response: Response): number | null {
+  const raw = response.headers.get('retry-after')?.trim();
+  if (!raw) return null;
+  const seconds = Number(raw);
+  if (Number.isFinite(seconds) && seconds >= 0) return seconds * 1000;
+  const at = Date.parse(raw);
+  return Number.isFinite(at) ? Math.max(0, at - Date.now()) : null;
+}
+
+export class SleeperUnavailableError extends Error {
+  readonly status: number | null
+  readonly retryAfterMs: number | null
+
+  constructor(label: string, cause: unknown, options: { status?: number | null; retryAfterMs?: number | null } = {}) {
     const detail = cause instanceof Error ? cause.message : String(cause);
     super(`sleeper_unavailable:${label}: ${detail}`);
     this.name = 'SleeperUnavailableError';
+    this.status = options.status ?? null;
+    this.retryAfterMs = options.retryAfterMs ?? null;
   }
 }
 
@@ -178,12 +192,21 @@ export interface SleeperPlayoffBracket {
   t2_from?: { w?: number; l?: number };
 }
 
-export async function getSleeperUser(username: string): Promise<SleeperUser | null> {
+export async function getSleeperUser(username: string, opts?: SleeperReadOptions): Promise<SleeperUser | null> {
   try {
     const response = await sleeperFetch(`${SLEEPER_API_BASE}/user/${username}`);
-    if (!response.ok) return null;
+    if (!response.ok) {
+      if (opts?.strict && response.status !== 404) {
+        throw new SleeperUnavailableError('user', new Error(`HTTP ${response.status}`), {
+          status: response.status,
+          retryAfterMs: readRetryAfterMs(response),
+        });
+      }
+      return null;
+    }
     return await response.json();
-  } catch {
+  } catch (error) {
+    if (opts?.strict) throw error instanceof SleeperUnavailableError ? error : new SleeperUnavailableError('user', error);
     return null;
   }
 }
@@ -215,7 +238,14 @@ export async function getUserLeagues(
   const response = await sleeperFetch(url);
 
   if (!response.ok) {
-    throw new Error(`Sleeper getUserLeagues failed (${response.status}) for ${sport} ${season}`);
+    throw new SleeperUnavailableError(
+      'user_leagues',
+      new Error(`Sleeper getUserLeagues failed (${response.status}) for ${sport} ${season}`),
+      {
+        status: response.status,
+        retryAfterMs: readRetryAfterMs(response),
+      },
+    );
   }
 
   const data = await response.json();
@@ -231,7 +261,10 @@ export async function getLeagueRosters(leagueId: string, opts?: SleeperReadOptio
     const response = await sleeperFetch(`${SLEEPER_API_BASE}/league/${leagueId}/rosters`);
     if (!response.ok) {
       if (opts?.strict && response.status !== 404) {
-        throw new SleeperUnavailableError('rosters', new Error(`HTTP ${response.status}`));
+        throw new SleeperUnavailableError('rosters', new Error(`HTTP ${response.status}`), {
+          status: response.status,
+          retryAfterMs: readRetryAfterMs(response),
+        });
       }
       return [];
     }

@@ -8,6 +8,7 @@ import { sendImportCompleteNotification } from '@/lib/import/sendImportNotificat
 import { sleeperApiSportToLeagueSport } from '@/lib/import/sleeperApiSportToLeagueSport'
 import { SLEEPER_IMPORT_SPORTS } from '@/lib/league-import/sleeper/import-sports'
 import { getLeagueRosters, getUserLeagues } from '@/lib/sleeper-client'
+import { runSleeperImportRequest } from '@/lib/import/sleeperImportRetry'
 
 function sleep(ms: number) {
   return new Promise((r) => setTimeout(r, ms))
@@ -46,6 +47,12 @@ export async function importLegacySeasonAtIndex(
   const i = seasonIndex
   if (i < 0 || i >= seasons.length) return
 
+  const existingSeason = await prisma.importJobSeason.findUnique({
+    where: { jobId_season: { jobId, season: seasons[i]! } },
+    select: { status: true },
+  })
+  if (existingSeason?.status === 'complete' || existingSeason?.status === 'empty') return
+
   const jobRow = await prisma.legacyImportJob.findUnique({ where: { id: jobId } })
   if (!jobRow) throw new Error('LegacyImportJob not found')
 
@@ -78,11 +85,13 @@ export async function importLegacySeasonAtIndex(
     let sc = 0
     let sp = 0
     let saved = 0
+    let failedLeagues = 0
+    let lastLeagueFailure: unknown = null
 
     for (const sleeperSport of SLEEPER_IMPORT_SPORTS) {
       const leagueSportEnum = sleeperApiSportToLeagueSport(sleeperSport)
-      const sleeperLeagues: unknown = await getUserLeagues(sleeperUserId, sleeperSport, String(season)).catch(
-        () => [] as unknown,
+      const sleeperLeagues: unknown = await runSleeperImportRequest(() =>
+        getUserLeagues(sleeperUserId, sleeperSport, String(season)),
       )
       if (!Array.isArray(sleeperLeagues) || sleeperLeagues.length === 0) {
         await sleep(SLEEP_BETWEEN_SPORTS_MS)
@@ -96,7 +105,9 @@ export async function importLegacySeasonAtIndex(
         settings?: { playoff_teams?: number; num_teams?: number }
       }>) {
         try {
-          const rosters: unknown = await getLeagueRosters(String(league.league_id)).catch(() => [] as unknown)
+          const rosters: unknown = await runSleeperImportRequest(() =>
+            getLeagueRosters(String(league.league_id), { strict: true }),
+          )
           const mine = Array.isArray(rosters)
             ? rosters.find((r: { owner_id?: string; co_owners?: string[]; settings?: Record<string, unknown> }) => {
                 const oid = r?.owner_id != null ? String(r.owner_id) : ''
@@ -202,11 +213,20 @@ export async function importLegacySeasonAtIndex(
           saved++
           totalLeaguesSaved++
         } catch (e: unknown) {
+          failedLeagues++
+          lastLeagueFailure = e
           console.error(`[import] league ${String(league.league_id)}:`, e)
         }
       }
 
       await sleep(SLEEP_BETWEEN_SPORTS_MS)
+    }
+
+    if (failedLeagues > 0) {
+      throw new Error(
+        `Sleeper import could not finish ${failedLeagues} league${failedLeagues === 1 ? '' : 's'} for ${season}`,
+        { cause: lastLeagueFailure },
+      )
     }
 
     if (saved === 0) {

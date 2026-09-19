@@ -11,6 +11,11 @@ import { isMissingDatabaseObjectError } from "@/lib/prisma/schema-drift";
 import { consumeDailyLimit } from "@/lib/rate-limit-daily";
 import { waitUntil } from "@vercel/functions";
 import { getSleeperUser, getUserLeagues } from "@/lib/sleeper-client";
+import { buildIncrementalSeasonPlan } from "@/lib/import/incrementalSeasonPlan";
+import {
+  getSleeperImportFailureResponse,
+  runSleeperImportRequest,
+} from "@/lib/import/sleeperImportRetry";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -61,7 +66,19 @@ export async function POST(req: Request) {
     }
     const userId = session.user.id;
 
-    const sleeperUser = await getSleeperUser(sleeperUsername).catch(() => null);
+    let sleeperUser: Awaited<ReturnType<typeof getSleeperUser>>;
+    try {
+      sleeperUser = await runSleeperImportRequest(() => getSleeperUser(sleeperUsername, { strict: true }));
+    } catch (error: unknown) {
+      const failure = getSleeperImportFailureResponse(error);
+      return NextResponse.json(
+        { error: failure.message, code: failure.code, retryAfterSec: failure.retryAfterSec },
+        {
+          status: failure.status,
+          headers: { "Retry-After": String(failure.retryAfterSec) },
+        },
+      );
+    }
     if (!sleeperUser?.user_id) {
       return NextResponse.json({ error: "Sleeper user not found" }, { status: 404 });
     }
@@ -122,18 +139,54 @@ export async function POST(req: Request) {
     }
 
     const currentYear = new Date().getFullYear();
+    const terminalSeasonRows = await prisma.importJobSeason
+      .findMany({
+        where: {
+          status: { in: ["complete", "empty"] },
+          job: { userId: resolvedLegacy.id },
+        },
+        distinct: ["season"],
+        select: { season: true },
+      })
+      .catch((error: unknown) => {
+        console.warn("[import] incremental season lookup failed; falling back to full discovery:", error);
+        return [] as Array<{ season: number }>;
+      });
+    const incrementalPlan = buildIncrementalSeasonPlan({
+      launchYear: LAUNCH_YEAR,
+      currentYear,
+      terminalYears: terminalSeasonRows.map((row) => row.season),
+    });
     const seasons: number[] = [];
-    for (let year = LAUNCH_YEAR; year <= currentYear; year++) {
+    for (const year of incrementalPlan.yearsToDiscover) {
       let hasLeagues = false;
       for (const sport of SLEEPER_IMPORT_SPORTS) {
         if (hasLeagues) break;
         try {
-          const data = await getUserLeagues(sleeperUserId, sport, String(year));
+          const data = await runSleeperImportRequest(() =>
+            getUserLeagues(sleeperUserId, sport, String(year)),
+          );
           if (Array.isArray(data) && data.length > 0) {
             hasLeagues = true;
           }
-        } catch {
-          /* skip sport/year */
+        } catch (error: unknown) {
+          const failure = getSleeperImportFailureResponse(error);
+          console.error(`[import] discovery failed for ${sport} ${year}:`, error);
+          return NextResponse.json(
+            {
+              error: failure.message,
+              code: failure.code,
+              retryAfterSec: failure.retryAfterSec,
+              incremental: {
+                reusedSeasons: incrementalPlan.reusedYears.length,
+                seasonsChecked: seasons.length,
+              },
+            },
+            {
+              status: failure.status,
+              headers: { "Retry-After": String(failure.retryAfterSec) },
+            },
+          );
         }
       }
       if (hasLeagues) seasons.push(year);
@@ -227,7 +280,14 @@ export async function POST(req: Request) {
       jobId: job.id,
       totalSeasons: seasons.length,
       seasons,
-      message: `Found ${seasons.length} seasons to import`,
+      incremental: {
+        reusedSeasons: incrementalPlan.reusedYears.length,
+        checkedSeasons: incrementalPlan.yearsToDiscover.length,
+      },
+      message:
+        incrementalPlan.reusedYears.length > 0
+          ? `Refreshing ${seasons.length} changed or recent seasons; reusing ${incrementalPlan.reusedYears.length} completed seasons`
+          : `Found ${seasons.length} seasons to import`,
     });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "Import failed";
