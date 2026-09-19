@@ -10,6 +10,7 @@ import {
   getDeliveryMethodAvailability,
   updateNotificationPreferences,
   sendTestNotification,
+  describeTestNotificationResult,
   NOTIFICATION_CATEGORY_IDS,
   NOTIFICATION_CATEGORY_LABELS,
   type NotificationPreferences,
@@ -210,16 +211,19 @@ export function NotificationsSettingsSection({
       return
     }
 
-    const sentChannels = Object.entries(result.sent ?? {})
-      .filter(([, sent]) => sent)
-      .map(([name]) => name)
-    if (sentChannels.length > 0) {
-      setTestResultTone("success")
-      setTestResultMessage(`Test sent via ${sentChannels.join(", ")}.`)
-    } else {
-      setTestResultTone("info")
-      setTestResultMessage("No test sent. Check your current category and delivery settings.")
-    }
+    /*
+     * 🛑 A PARTIAL SEND USED TO READ AS A CLEAN SUCCESS. `ok` is true when ANY channel went, and
+     * this branch rendered only the channels that did — so email + SMS with an unverified phone
+     * said "Test sent via email." and never mentioned SMS. The route had already reported it in
+     * `blockedReasons`; nothing on the success path read them. See `describeTestNotificationResult`,
+     * which owns the wording and is tested directly — this component has no render harness.
+     */
+    const outcome = describeTestNotificationResult({
+      sent: result.sent,
+      blockedReasons: result.blockedReasons,
+    })
+    setTestResultTone(outcome.tone)
+    setTestResultMessage(outcome.message)
   }
 
   const handleChimmyShortcutToggle = (enabled: boolean) => {

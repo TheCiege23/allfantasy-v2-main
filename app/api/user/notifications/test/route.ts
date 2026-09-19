@@ -99,6 +99,17 @@ export async function POST(req: Request) {
         actionLabel: "Open settings",
       },
     })
+    /*
+     * 🛑 THE ONE CHANNEL WHOSE FAILURE HAD NO REASON, ON THE ONE SCREEN WHOSE JOB IS REASONS.
+     *
+     * `createPlatformNotification` catches everything and returns false — a dead connection, a
+     * missing table and a P2022 column mismatch all look identical from here. Email and SMS
+     * below each push their own `*_send_failed`; in-app pushed nothing, so the response came
+     * back `ok: false` with an EMPTY `blockedReasons`, and the settings screen fell through to
+     * its generic "Failed to send test notification." A diagnostic that cannot name the channel
+     * it failed on tells the reader less than they already knew.
+     */
+    if (!inAppSent) blockedReasons.push("inapp_send_failed")
   } else if (requested.inApp && !availability.inApp) {
     blockedReasons.push("inapp_unavailable")
   } else if (requested.inApp && !catPrefs.inApp) {
