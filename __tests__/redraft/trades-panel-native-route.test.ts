@@ -245,8 +245,8 @@ describe('GET /api/league/trades-panel — native league real trade data', () =>
         receiverRosterId: 'roster-receiver',
         createdAt: new Date('2026-01-01T00:00:00.000Z'),
         items: [
-          { id: 'item-1', fromRosterId: 'roster-proposer', toRosterId: 'roster-receiver', itemReference: 'p1', metadata: { playerName: 'Player One', position: 'RB' } },
-          { id: 'item-2', fromRosterId: 'roster-receiver', toRosterId: 'roster-proposer', itemReference: 'p2', metadata: { playerName: 'Player Two', position: 'WR' } },
+          { id: 'item-1', itemType: 'player', fromRosterId: 'roster-proposer', toRosterId: 'roster-receiver', itemReference: 'p1', metadata: { playerName: 'Player One', position: 'RB', team: 'BUF' } },
+          { id: 'item-2', itemType: 'player', fromRosterId: 'roster-receiver', toRosterId: 'roster-proposer', itemReference: 'p2', metadata: { playerName: 'Player Two', position: 'WR', team: 'MIA' } },
         ],
       },
     ])
@@ -255,8 +255,8 @@ describe('GET /api/league/trades-panel — native league real trade data', () =>
       { id: 'roster-receiver', platformUserId: 'user-receiver' },
     ])
     findManyAppUser.mockResolvedValue([
-      { id: 'user-proposer', displayName: 'Proposer FC', username: 'proposer' },
-      { id: 'user-receiver', displayName: 'Receiver FC', username: 'receiver' },
+      { id: 'user-proposer', displayName: 'Proposer FC', username: 'proposer', avatarUrl: 'https://cdn.test/proposer.png' },
+      { id: 'user-receiver', displayName: 'Receiver FC', username: 'receiver', avatarUrl: 'https://cdn.test/receiver.png' },
     ])
 
     const res = await GET(makeRequest('league-1'))
@@ -272,7 +272,12 @@ describe('GET /api/league/trades-panel — native league real trade data', () =>
     expect(trade.viewerIsReceiver).toBe(true)
     expect(trade.viewerIsProposer).toBe(false)
     expect(trade.partnerName).toBe('Proposer FC')
-    expect((trade.received as Array<{ label: string }>)[0].label).toBe('Player One')
+    expect(trade.partnerAvatarUrl).toBe('https://cdn.test/proposer.png')
+    expect((trade.received as Array<{ label: string; playerId: string; team: string; headshotUrl: string; teamLogoUrl: string }>)[0]).toMatchObject({
+      label: 'Player One', playerId: 'p1', team: 'BUF',
+      headshotUrl: 'https://sleepercdn.com/content/nfl/players/p1.jpg',
+    })
+    expect((trade.received as Array<{ teamLogoUrl: string | null }>)[0].teamLogoUrl).toBeTruthy()
     expect((trade.sent as Array<{ label: string }>)[0].label).toBe('Player Two')
   })
 

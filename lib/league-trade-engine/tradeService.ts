@@ -24,6 +24,13 @@ import { assertRosterTransactionsAllowed } from '@/lib/roster-legality/rosterTra
 import { ENGAGEMENT } from '@/lib/analytics/eventNames'
 import { recordProductEvent } from '@/lib/analytics/recordAnalyticsEvent'
 import { captureLiveTradeOffer, captureLiveTradeOutcome } from '@/lib/league-trade-engine/tradeLearningCapture'
+import { getTradeManagerStrategy } from '@/lib/league-trade-engine/managerStrategy'
+import {
+  buildTradeDecisionSnapshot,
+  writeTradeDecisionSnapshot,
+} from '@/lib/league-trade-engine/tradeDecisionSnapshot'
+import type { VerifiedProposalEvidence } from '@/lib/league-trade-engine/proposalEvidenceToken'
+import { evaluateServerTradeDecision } from '@/lib/league-trade-engine/serverTradeDecision'
 
 async function fanout(leagueId: string, input: {
   eventType: string
@@ -205,7 +212,10 @@ async function notifyOnTradeCreated(input: {
   }
 }
 
-export async function createAfLeagueTrade(input: CreateLeagueTradeInput & { currentWeek?: number | null }): Promise<{ id: string }> {
+export async function createAfLeagueTrade(input: CreateLeagueTradeInput & {
+  currentWeek?: number | null
+  verifiedProposalEvidence?: VerifiedProposalEvidence | null
+}): Promise<{ id: string }> {
   const league = await prisma.league.findUnique({ where: { id: input.leagueId } })
   if (!league) throw new Error('League not found')
 
@@ -269,8 +279,19 @@ export async function createAfLeagueTrade(input: CreateLeagueTradeInput & { curr
 
   const rootId = parent?.rootTradeId ?? parent?.id ?? null
 
-  const trade = await prisma.afLeagueTrade.create({
-    data: {
+  // Runs for suggested and fully custom packages. The result is frozen in the
+  // same transaction as the trade; failures degrade the receipt instead of
+  // blocking a legal offer.
+  const serverDecisionResult = await evaluateServerTradeDecision({
+    leagueId: input.leagueId,
+    proposerRosterId: input.proposerRosterId,
+    receiverRosterId: input.receiverRosterId,
+    participantRosterIds,
+    assets: input.assets,
+    season: league.season,
+  })
+
+  const createData = {
       leagueId: input.leagueId,
       proposedByUserId: input.proposedByUserId,
       proposerRosterId: input.proposerRosterId,
@@ -298,8 +319,54 @@ export async function createAfLeagueTrade(input: CreateLeagueTradeInput & { curr
           metadata: (a.metadata ?? {}) as Prisma.InputJsonValue,
         })),
       },
-    },
-  })
+    } satisfies Prisma.AfLeagueTradeUncheckedCreateInput
+
+  const decisionStore = (prisma as typeof prisma & {
+    tradeDecisionSnapshot?: typeof prisma.tradeDecisionSnapshot
+    tradeManagerStrategy?: typeof prisma.tradeManagerStrategy
+  }).tradeDecisionSnapshot
+  const managerStore = (prisma as typeof prisma & {
+    tradeManagerStrategy?: typeof prisma.tradeManagerStrategy
+  }).tradeManagerStrategy
+
+  // Production uses one transaction so a trade can never exist without its
+  // proposal-time receipt. Reduced test clients without the new delegate keep
+  // exercising the legacy creation path until their generated client updates.
+  const trade = decisionStore
+    ? await prisma.$transaction(async (tx) => {
+        const created = await tx.afLeagueTrade.create({ data: createData })
+        const managerStrategy = managerStore
+          ? await getTradeManagerStrategy(input.leagueId, input.proposedByUserId, {
+              tradeManagerStrategy: tx.tradeManagerStrategy,
+            })
+          : null
+        // A manager can change strategy after opening the builder. In that case
+        // the old signed package remains authentic but no longer represents the
+        // user's current plan, so preserve the trade with a partial receipt.
+        const verifiedProposalEvidence = input.verifiedProposalEvidence
+          && managerStrategy?.active === input.verifiedProposalEvidence.managerStrategy
+          ? input.verifiedProposalEvidence
+          : null
+        const snapshot = buildTradeDecisionSnapshot({
+          league,
+          rosters: participants,
+          assets: input.assets,
+          proposedByUserId: input.proposedByUserId,
+          managerStrategy,
+          tradeSettings: settings as unknown as Record<string, unknown>,
+          metadata: input.metadata,
+          verifiedProposalEvidence,
+          serverDecisionResult,
+        })
+        await writeTradeDecisionSnapshot(tx, {
+          tradeId: created.id,
+          leagueId: input.leagueId,
+          proposedByUserId: input.proposedByUserId,
+          snapshot,
+        })
+        return created
+      })
+    : await prisma.afLeagueTrade.create({ data: createData })
 
   await appendAfTradeStatusHistory({
     tradeId: trade.id,

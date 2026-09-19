@@ -30,19 +30,43 @@ import { resolveCanonicalWorld } from '@/lib/decision-os/world'
 import type { TradeAssetSummary } from '@/lib/decision-os/trade/dco'
 import { summarizeRosterImpact } from '@/lib/decision-os/trade/rosterImpactSummary'
 import type { League } from '@prisma/client'
+import { publicTradeDecisionReceipt } from '@/lib/league-trade-engine/tradeDecisionReceipt'
+import { sleeperPlayerHeadshot } from '@/lib/sports-data/headshots'
+import { teamLogoUrl } from '@/lib/core-app/teamLogo'
 
 export const dynamic = 'force-dynamic'
 
 const ACTIVE_STATUSES = new Set(['pending', 'awaiting_votes', 'awaiting_commissioner', 'accepted', 'scheduled'])
 const TERMINAL_STATUSES = new Set(['processed', 'rejected', 'cancelled', 'countered', 'expired', 'vetoed', 'reversed'])
 
-function assetLabel(item: { itemReference: string | null; metadata: unknown }): { label: string; sublabel: string | null } {
+async function loadDecisionReceipts(tradeIds: string[]): Promise<Map<string, NonNullable<LeagueTradeHistoryItem['decisionReceipt']>>> {
+  if (!tradeIds.length) return new Map()
+  const store = (prisma as typeof prisma & { tradeDecisionSnapshot?: typeof prisma.tradeDecisionSnapshot }).tradeDecisionSnapshot
+  if (!store) return new Map()
+  const rows = await store.findMany({ where: { tradeId: { in: tradeIds } } }).catch(() => [])
+  return new Map(rows.map((row) => [row.tradeId, publicTradeDecisionReceipt(row)]))
+}
+
+function assetLabel(item: { itemType: string; itemReference: string | null; metadata: unknown }, sport = 'NFL'): {
+  label: string; sublabel: string | null; playerId: string | null; team: string | null; headshotUrl: string | null; teamLogoUrl: string | null
+} {
   const meta = item.metadata && typeof item.metadata === 'object' && !Array.isArray(item.metadata)
     ? (item.metadata as Record<string, unknown>)
     : {}
   const name = typeof meta.playerName === 'string' && meta.playerName.trim() ? meta.playerName : null
   const position = typeof meta.position === 'string' && meta.position.trim() ? meta.position : null
-  return { label: name ?? item.itemReference ?? 'Asset', sublabel: position }
+  const team = typeof meta.team === 'string' && meta.team.trim() ? meta.team.trim().toUpperCase() : null
+  const itemType = String(item.itemType ?? 'player').toLowerCase()
+  const playerId = itemType.includes('player') ? item.itemReference : null
+  const explicitHeadshot = typeof meta.headshotUrl === 'string' && meta.headshotUrl.trim() ? meta.headshotUrl.trim() : null
+  return {
+    label: name ?? item.itemReference ?? 'Asset',
+    sublabel: [position, team].filter(Boolean).join(' · ') || null,
+    playerId,
+    team,
+    headshotUrl: explicitHeadshot ?? sleeperPlayerHeadshot(playerId),
+    teamLogoUrl: teamLogoUrl(sport, team),
+  }
 }
 
 /**
@@ -51,7 +75,7 @@ function assetLabel(item: { itemReference: string | null; metadata: unknown }): 
  * renders. Direction/role flags let the tab show accept/reject/cancel/commissioner controls
  * without a second round-trip.
  */
-async function buildNativeActiveTrades(leagueId: string, userId: string): Promise<LeagueTradeHistoryItem[]> {
+async function buildNativeActiveTrades(leagueId: string, userId: string, sport = 'NFL'): Promise<LeagueTradeHistoryItem[]> {
   // Resolve the viewer's roster. Native AF leagues store the AF user id in
   // `platformUserId`; imported Sleeper leagues store the SLEEPER user id there,
   // so also try the viewer's linked sleeperUserId — otherwise the viewer-role
@@ -76,6 +100,7 @@ async function buildNativeActiveTrades(leagueId: string, userId: string): Promis
   const trades = await listAfLeagueTrades(leagueId, { take: 50 })
   const active = trades.filter((t) => ACTIVE_STATUSES.has(t.status))
   if (active.length === 0) return []
+  const decisionReceipts = await loadDecisionReceipts(active.map((trade) => trade.id))
 
   const rosterIds = [...new Set(active.flatMap((t) => [
     t.proposerRosterId,
@@ -87,10 +112,38 @@ async function buildNativeActiveTrades(leagueId: string, userId: string): Promis
     select: { id: true, platformUserId: true },
   })
   const userIds = [...new Set(rosters.map((r) => r.platformUserId))]
-  const users = await prisma.appUser.findMany({ where: { id: { in: userIds } }, select: { id: true, displayName: true, username: true } })
+  const users = await prisma.appUser.findMany({ where: { id: { in: userIds } }, select: { id: true, displayName: true, username: true, avatarUrl: true } })
+  const leagueTeamStore = (prisma as typeof prisma & { leagueTeam?: typeof prisma.leagueTeam }).leagueTeam
+  const leagueTeams = leagueTeamStore && typeof leagueTeamStore.findMany === 'function'
+    ? await leagueTeamStore.findMany({
+        where: {
+          leagueId,
+          OR: [
+            { externalId: { in: [...rosterIds, ...userIds] } },
+            { platformUserId: { in: userIds } },
+            { claimedByUserId: { in: userIds } },
+          ],
+        },
+        select: { externalId: true, platformUserId: true, claimedByUserId: true, ownerName: true, teamName: true, avatarUrl: true },
+      }).catch(() => [])
+    : []
   const nameByUserId = new Map(users.map((u) => [u.id, u.displayName?.trim() || u.username]))
+  const avatarByUserId = new Map(users.map((u) => [u.id, u.avatarUrl]))
+  const teamByRosterIdentity = new Map(leagueTeams.flatMap((team) => [
+    [team.externalId, team] as const,
+    ...(team.platformUserId ? [[team.platformUserId, team] as const] : []),
+    ...(team.claimedByUserId ? [[team.claimedByUserId, team] as const] : []),
+  ]))
   const userIdByRosterId = new Map(rosters.map((r) => [r.id, r.platformUserId]))
-  const nameByRosterId = new Map(rosterIds.map((id) => [id, nameByUserId.get(userIdByRosterId.get(id) ?? '') ?? 'Manager']))
+  const nameByRosterId = new Map(rosterIds.map((id) => {
+    const externalId = userIdByRosterId.get(id) ?? ''
+    const team = teamByRosterIdentity.get(id) ?? teamByRosterIdentity.get(externalId)
+    return [id, nameByUserId.get(externalId) ?? team?.ownerName ?? team?.teamName ?? 'Manager']
+  }))
+  const avatarByRosterId = new Map(rosterIds.map((id) => {
+    const externalId = userIdByRosterId.get(id) ?? ''
+    return [id, teamByRosterIdentity.get(id)?.avatarUrl ?? teamByRosterIdentity.get(externalId)?.avatarUrl ?? avatarByUserId.get(externalId) ?? null]
+  }))
 
   const isCommissioner = await isElevatedCommissioner(leagueId, userId)
   const world = await resolveCanonicalWorld(leagueId).catch(() => null)
@@ -125,16 +178,18 @@ async function buildNativeActiveTrades(leagueId: string, userId: string): Promis
       const partnerName = participantIds.filter((id) => id !== viewRosterId).map((id) => nameByRosterId.get(id) ?? 'Manager').join(' + ')
       const sent: LeagueTradeAsset[] = t.items
         .filter((i) => i.fromRosterId === viewRosterId)
-        .map((i) => ({ id: i.id, ...assetLabel(i), headshotUrl: null, accent: 'blue' as const }))
+        .map((i) => ({ id: i.id, ...assetLabel(i, sport), accent: 'blue' as const }))
       const received: LeagueTradeAsset[] = t.items
         .filter((i) => i.toRosterId === viewRosterId)
-        .map((i) => ({ id: i.id, ...assetLabel(i), headshotUrl: null, accent: 'teal' as const }))
+        .map((i) => ({ id: i.id, ...assetLabel(i, sport), accent: 'teal' as const }))
       /*
        * ⚠ ONLY WHEN THE VIEWER IS A PARTY. A commissioner looking at someone else's offer falls back
        * to `viewerRosterId: t.proposerRosterId` below, and a lineup effect computed there would be
        * the PROPOSER's lineup rendered under "your projected starting lineup".
        */
       const wantImpact = viewerIsProposer || viewerIsReceiver
+      const receipt = decisionReceipts.get(t.id) ?? null
+      const frozenDecision = receipt?.participantDecisions.find((row) => row.rosterId === viewRosterId) ?? null
       const decision = world ? await evaluateCanonicalTrade({
         leagueId,
         proposalId: t.id,
@@ -171,6 +226,12 @@ async function buildNativeActiveTrades(leagueId: string, userId: string): Promis
         id: t.id,
         direction,
         partnerName,
+        proposerName: nameByRosterId.get(t.proposerRosterId) ?? 'Manager',
+        receiverName: nameByRosterId.get(t.receiverRosterId) ?? 'Manager',
+        partnerAvatarUrl: avatarByRosterId.get(participantIds.find((id) => id !== viewRosterId) ?? '') ?? null,
+        viewerAvatarUrl: avatarByRosterId.get(viewRosterId) ?? null,
+        proposerAvatarUrl: avatarByRosterId.get(t.proposerRosterId) ?? null,
+        receiverAvatarUrl: avatarByRosterId.get(t.receiverRosterId) ?? null,
         timestamp: t.createdAt.toISOString(),
         sent,
         received,
@@ -178,13 +239,14 @@ async function buildNativeActiveTrades(leagueId: string, userId: string): Promis
         viewerIsCommissioner: isCommissioner,
         viewerIsReceiver,
         viewerIsProposer,
-        decisionAction: decision?.action,
-        decisionRecommendation: decision?.recommendation ?? null,
-        decisionCoveragePct: decision?.coveragePct ?? null,
-        proposalGrade: decision?.grade ?? null,
-        proposalValueGiven: decision?.valueGiven ?? null,
-        proposalValueReceived: decision?.valueReceived ?? null,
-        proposalCapturedAt: decision?.evaluatedAt ?? null,
+        decisionAction: (frozenDecision?.action ?? decision?.action) as LeagueTradeHistoryItem['decisionAction'],
+        decisionRecommendation: frozenDecision?.recommendation || decision?.recommendation || null,
+        decisionCoveragePct: frozenDecision?.coveragePct ?? decision?.coveragePct ?? null,
+        proposalGrade: frozenDecision?.grade ?? decision?.grade ?? null,
+        proposalValueGiven: frozenDecision?.valueGiven ?? decision?.valueGiven ?? null,
+        proposalValueReceived: frozenDecision?.valueReceived ?? decision?.valueReceived ?? null,
+        proposalCapturedAt: receipt?.capturedAt ?? decision?.evaluatedAt ?? null,
+        decisionReceipt: receipt,
         // Asked for and the evaluation itself failed is still "asked for, not produced" — `null`.
         rosterImpact: wantImpact ? (decision ? summarizeRosterImpact(decision.rosterImpact) ?? null : null) : undefined,
       }
@@ -201,7 +263,7 @@ async function buildNativeActiveTrades(leagueId: string, userId: string): Promis
  */
 type NativeHistoryLeague = Pick<
   League,
-  'id' | 'leagueType' | 'leagueVariant' | 'isDynasty' | 'scoring' | 'settings'
+  'id' | 'sport' | 'leagueType' | 'leagueVariant' | 'isDynasty' | 'scoring' | 'settings'
 >
 
 async function buildNativeTradeHistory(league: NativeHistoryLeague, userId: string): Promise<LeagueTradeHistoryItem[]> {
@@ -213,6 +275,7 @@ async function buildNativeTradeHistory(league: NativeHistoryLeague, userId: stri
   ])
   const terminal = trades.filter((trade) => TERMINAL_STATUSES.has(trade.status))
   if (terminal.length === 0) return []
+  const decisionReceipts = await loadDecisionReceipts(terminal.map((trade) => trade.id))
 
   const rosterIds = [...new Set(terminal.flatMap((trade) => [trade.proposerRosterId, trade.receiverRosterId]))]
   const rosters = await prisma.roster.findMany({
@@ -226,11 +289,39 @@ async function buildNativeTradeHistory(league: NativeHistoryLeague, userId: stri
   const userIds = [...new Set(rosters.map((roster) => roster.platformUserId))]
   const users = await prisma.appUser.findMany({
     where: { id: { in: userIds } },
-    select: { id: true, displayName: true, username: true },
+    select: { id: true, displayName: true, username: true, avatarUrl: true },
   })
+  const historyLeagueTeamStore = (prisma as typeof prisma & { leagueTeam?: typeof prisma.leagueTeam }).leagueTeam
+  const historyLeagueTeams = historyLeagueTeamStore && typeof historyLeagueTeamStore.findMany === 'function'
+    ? await historyLeagueTeamStore.findMany({
+        where: {
+          leagueId,
+          OR: [
+            { externalId: { in: [...rosterIds, ...userIds] } },
+            { platformUserId: { in: userIds } },
+            { claimedByUserId: { in: userIds } },
+          ],
+        },
+        select: { externalId: true, platformUserId: true, claimedByUserId: true, ownerName: true, teamName: true, avatarUrl: true },
+      }).catch(() => [])
+    : []
   const nameByUserId = new Map(users.map((user) => [user.id, user.displayName?.trim() || user.username]))
+  const avatarByUserId = new Map(users.map((user) => [user.id, user.avatarUrl]))
+  const historyTeamByIdentity = new Map(historyLeagueTeams.flatMap((team) => [
+    [team.externalId, team] as const,
+    ...(team.platformUserId ? [[team.platformUserId, team] as const] : []),
+    ...(team.claimedByUserId ? [[team.claimedByUserId, team] as const] : []),
+  ]))
   const userIdByRosterId = new Map(rosters.map((roster) => [roster.id, roster.platformUserId]))
-  const nameOf = (rosterId: string) => nameByUserId.get(userIdByRosterId.get(rosterId) ?? '') ?? 'Manager'
+  const nameOf = (rosterId: string) => {
+    const externalId = userIdByRosterId.get(rosterId) ?? ''
+    const team = historyTeamByIdentity.get(rosterId) ?? historyTeamByIdentity.get(externalId)
+    return nameByUserId.get(externalId) ?? team?.ownerName ?? team?.teamName ?? 'Manager'
+  }
+  const avatarOf = (rosterId: string) => {
+    const externalId = userIdByRosterId.get(rosterId) ?? ''
+    return historyTeamByIdentity.get(rosterId)?.avatarUrl ?? historyTeamByIdentity.get(externalId)?.avatarUrl ?? avatarByUserId.get(externalId) ?? null
+  }
   const offerEvents = await prisma.tradeOfferEvent.findMany({
     where: { afLeagueTradeId: { in: terminal.map((trade) => trade.id) } },
     select: {
@@ -272,6 +363,8 @@ async function buildNativeTradeHistory(league: NativeHistoryLeague, userId: stri
     .map((trade) => {
       const offer = offerByTradeId.get(trade.id)
       const now = currentMarket.get(trade.id)
+      const receipt = decisionReceipts.get(trade.id) ?? null
+      const frozenProposer = receipt?.participantDecisions.find((row) => row.rosterId === trade.proposerRosterId) ?? null
       const viewerIsProposer = myRosterIds.has(trade.proposerRosterId)
       const viewerIsReceiver = myRosterIds.has(trade.receiverRosterId)
       return {
@@ -280,20 +373,25 @@ async function buildNativeTradeHistory(league: NativeHistoryLeague, userId: stri
         partnerName: nameOf(viewerIsProposer ? trade.receiverRosterId : trade.proposerRosterId),
         proposerName: nameOf(trade.proposerRosterId),
         receiverName: nameOf(trade.receiverRosterId),
+        partnerAvatarUrl: avatarOf(viewerIsProposer ? trade.receiverRosterId : trade.proposerRosterId),
+        viewerAvatarUrl: viewerIsProposer ? avatarOf(trade.proposerRosterId) : viewerIsReceiver ? avatarOf(trade.receiverRosterId) : null,
+        proposerAvatarUrl: avatarOf(trade.proposerRosterId),
+        receiverAvatarUrl: avatarOf(trade.receiverRosterId),
         timestamp: trade.createdAt.toISOString(),
         executedAt: (trade.processedAt ?? trade.rejectedAt ?? trade.cancelledAt ?? trade.updatedAt ?? trade.createdAt).toISOString(),
         sent: trade.items
           .filter((item) => item.fromRosterId === trade.proposerRosterId)
-          .map((item) => ({ id: item.id, ...assetLabel(item), headshotUrl: null, accent: 'blue' as const })),
+          .map((item) => ({ id: item.id, ...assetLabel(item, String(league.sport)), accent: 'blue' as const })),
         received: trade.items
           .filter((item) => item.fromRosterId === trade.receiverRosterId)
-          .map((item) => ({ id: item.id, ...assetLabel(item), headshotUrl: null, accent: 'teal' as const })),
+          .map((item) => ({ id: item.id, ...assetLabel(item, String(league.sport)), accent: 'teal' as const })),
         status: trade.status,
-        proposalGrade: offer?.grade ?? null,
-        proposalValueGiven: valueTotal(offer?.assetsGiven),
-        proposalValueReceived: valueTotal(offer?.assetsReceived),
-        proposalCapturedAt: offer?.createdAt.toISOString() ?? null,
-        proposalModelVersion: offer?.modelVersion ?? null,
+        proposalGrade: frozenProposer?.grade ?? offer?.grade ?? null,
+        proposalValueGiven: frozenProposer?.valueGiven ?? valueTotal(offer?.assetsGiven),
+        proposalValueReceived: frozenProposer?.valueReceived ?? valueTotal(offer?.assetsReceived),
+        proposalCapturedAt: receipt?.capturedAt ?? offer?.createdAt.toISOString() ?? null,
+        proposalModelVersion: receipt?.policyVersion ?? offer?.modelVersion ?? null,
+        decisionReceipt: receipt,
         currentGrade: now?.grade ?? null,
         currentValueGiven: now?.valueGiven ?? null,
         currentValueReceived: now?.valueReceived ?? null,
@@ -353,10 +451,10 @@ async function buildNativeExecutedTrades(leagueId: string, userId: string): Prom
     // What each side SENT: `sent` is the proposer's outgoing assets, `received` the receiver's.
     sent: t.items
       .filter((i) => i.fromRosterId === t.proposerRosterId)
-      .map((i) => ({ id: i.id, ...assetLabel(i), headshotUrl: null, accent: 'blue' as const })),
+      .map((i) => ({ id: i.id, ...assetLabel(i), accent: 'blue' as const })),
     received: t.items
       .filter((i) => i.fromRosterId === t.receiverRosterId)
-      .map((i) => ({ id: i.id, ...assetLabel(i), headshotUrl: null, accent: 'teal' as const })),
+      .map((i) => ({ id: i.id, ...assetLabel(i), accent: 'teal' as const })),
     status: t.status,
     viewerIsCommissioner: true,
     viewerIsReceiver: false,
@@ -519,7 +617,7 @@ export async function GET(req: NextRequest) {
 
   if (!sleeperLeagueId) {
     const [activeTrades, historyTrades] = await Promise.all([
-      buildNativeActiveTrades(leagueId, userId),
+      buildNativeActiveTrades(leagueId, userId, league.sport),
       buildNativeTradeHistory(league, userId),
     ])
     const platform = String(league.platform ?? 'manual').toLowerCase()
@@ -659,7 +757,7 @@ export async function GET(req: NextRequest) {
   })()
 
   const [nativeTrades, nativeHistory, pendingScan] = await Promise.all([
-    buildNativeActiveTrades(leagueId, userId).catch((err) => {
+    buildNativeActiveTrades(leagueId, userId, league.sport).catch((err) => {
       console.error('[trades-panel] native trades for imported league failed', { leagueId, err })
       return [] as LeagueTradeHistoryItem[]
     }),

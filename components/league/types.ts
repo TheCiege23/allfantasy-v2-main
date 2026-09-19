@@ -1,4 +1,5 @@
 import type { LineupImpactSummary } from '@/lib/decision-os/trade/rosterImpactSummary'
+import type { PublicTradeDecisionReceipt } from '@/lib/league-trade-engine/tradeDecisionReceipt'
 
 export type LeagueTopTab = 'DRAFT' | 'TEAM' | 'PLAYERS' | 'LEAGUE'
 
@@ -163,6 +164,9 @@ export type LeagueTradeAsset = {
   label: string
   sublabel: string | null
   headshotUrl: string | null
+  playerId?: string | null
+  team?: string | null
+  teamLogoUrl?: string | null
   accent: 'teal' | 'blue' | 'orange' | 'slate'
 }
 
@@ -170,6 +174,10 @@ export type LeagueTradeHistoryItem = {
   id: string
   direction: 'incoming' | 'outgoing' | 'complete'
   partnerName: string
+  partnerAvatarUrl?: string | null
+  viewerAvatarUrl?: string | null
+  proposerAvatarUrl?: string | null
+  receiverAvatarUrl?: string | null
   timestamp: string
   sent: LeagueTradeAsset[]
   received: LeagueTradeAsset[]
@@ -196,6 +204,8 @@ export type LeagueTradeHistoryItem = {
     proposalValueReceived?: number | null
     proposalCapturedAt?: string | null
     proposalModelVersion?: string | null
+    /** Immutable proposal-time evidence receipt. The same payload feeds desktop and mobile. */
+    decisionReceipt?: PublicTradeDecisionReceipt | null
     /** Current-market regrade; null when a historical asset cannot be resolved honestly. */
     currentGrade?: string | null
     currentValueGiven?: number | null

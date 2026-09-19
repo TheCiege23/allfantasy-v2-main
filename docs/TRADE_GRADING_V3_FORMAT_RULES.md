@@ -126,10 +126,20 @@ Today’s value, today’s roster, and later injury news are future information 
 
 Every persisted grade receipt must include the policy/model version, transaction time, evidence timestamps and sources, league settings fingerprint, before/after roster hashes, each component result, missing inputs, confidence, and whether the grade is a market comparison, decision grade, or realized outcome grade.
 
+## Implementation status
+
+The first evidence batch now persists a manager-confirmed `win-now`, `balanced`, or `rebuild` objective per user and league. Proposal readiness requires that confirmation plus an available paired before/after outcome simulation, readable league/roster settings, and priced suggested assets.
+
+New `AfLeagueTrade` proposals also create an append-only `TradeDecisionSnapshot` in the same database transaction. It freezes the league settings, participating rosters, proposed assets, policy version, manager context, evidence states, and readiness result. A simulation returned through the browser is retained as unverified audit data and cannot unlock a contextual grade.
+
+Suggested packages now carry a short-lived server signature over the exact league, proposer, asset legs, as-of values, player projections, manager strategy, and paired outcome simulation. The trade endpoint verifies the signature and exact asset fingerprint before allowing those inputs to satisfy the evidence contract. Editing the package or using an expired or mismatched strategy safely removes the signed simulation evidence. Custom and suggested two-team offers are also repriced on the server when they are submitted, and the per-team market grade, recommendation, values, lineup change, and explanation are frozen in the receipt. A custom offer remains a partial contextual receipt until it has a verified paired outcome simulation. Multi-team market letters remain withheld until the canonical evaluator supports every side, while signed per-team outcome evidence is retained when available. Public trade APIs expose only the safe receipt summary, without private roster or manager snapshots, so desktop and mobile render the same frozen evidence state.
+
+Trade cards now resolve manager names and avatars across AllFantasy accounts and imported league-team identities. Player assets preserve their provider player ID, team, headshot, and team logo metadata at proposal time, with provider image fallbacks for older records. The active-trade and history views consume the same fields so desktop and mobile show the same people, assets, frozen grades, and reasons.
+
 ## Rollout gates
 
 1. Keep the current display explicitly labeled **Market grade** for current redraft/dynasty trades while the full contextual inputs are incomplete.
 2. Withhold a letter for every specialty format until its format objective and hard legality checks are calculated; respect league-, phase-, and team-specific eligibility.
 3. Withhold historical market letters unless an immutable as-of-trade snapshot exists. Continue displaying the separate realized result.
-4. Connect paired simulations and optimal-lineup deltas to the policy evidence contract.
+4. Expand paired simulations from the currently signed package outcome to full schedule, replacement-pool, optimal-lineup, and specialty-state models.
 5. Backtest against historical decisions without leaking post-trade data, then calibrate thresholds by format. No uncalibrated coefficient may silently change a production letter.

@@ -12171,6 +12171,51 @@ model AfLeagueTradeProcessingEvent {
   @@map("af_league_trade_processing_events")
 }
 
+/// A manager-confirmed competitive objective for one league. This is an input to
+/// contextual trade advice; it never changes market value or another manager's strategy.
+model TradeManagerStrategy {
+  id          String   @id @default(cuid())
+  leagueId    String
+  userId      String
+  rosterId    String?
+  active      String   @default("balanced") @db.VarChar(24)
+  source      String   @default("manager_confirmed") @db.VarChar(32)
+  confirmedAt DateTime @default(now())
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([leagueId, userId])
+  @@index([leagueId, rosterId])
+  @@index([userId])
+  @@map("trade_manager_strategies")
+}
+
+/// Append-only evidence captured when an AllFantasy trade proposal is created.
+/// Historical decision grades may use this row; current data must never overwrite it.
+model TradeDecisionSnapshot {
+  id                 String   @id @default(cuid())
+  tradeId            String   @unique
+  leagueId           String
+  proposedByUserId   String
+  policyVersion      String   @db.VarChar(48)
+  format             String   @db.VarChar(32)
+  leagueContext      Json
+  rosterContext      Json
+  assetContext       Json
+  managerContext     Json
+  outcomeSimulation  Json?
+  evidence           Json
+  readiness          Json
+  /// Frozen server-computed market grade, recommendation, lineup effect, and per-team explanation.
+  decisionResult     Json?
+  completeness       String   @default("partial") @db.VarChar(16)
+  capturedAt         DateTime @default(now())
+
+  @@index([leagueId, capturedAt])
+  @@index([proposedByUserId, capturedAt])
+  @@map("trade_decision_snapshots")
+}
+
 /// One processing batch (scheduled, manual, FCFS immediate, etc.).
 model WaiverRun {
   id                String              @id @default(uuid())
