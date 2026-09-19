@@ -52,7 +52,7 @@
 
 import { normalizeSportForWarehouse } from '@/lib/data-warehouse/types'
 import { prisma } from '@/lib/prisma'
-import { toPrismaJsonInput } from '@/lib/prisma-json'
+import { persistMutableTransactionFacts } from '@/lib/league-import/bulkWarehouseFactPersistence'
 import { getLeagueTransactions, getNflState, type SleeperTransaction } from '@/lib/sleeper-client'
 import { getSleeperHistoricalLeagueChain } from './SleeperHistoricalLeagueChain'
 import { shouldSkipImportedSeason } from '../seasonCompletion'
@@ -388,28 +388,7 @@ export async function syncSleeperHistoricalTransactionsAfterImport(args: {
      * it on its own schedule, and a season-scoped delete here would silently drop that writer's
      * rows every time this ran. Same id, converging writes, nothing destroyed.
      */
-    let written = 0
-    for (const row of rows) {
-      const { transactionId, payload, ...rest } = row
-      /*
-       * ⚠ `Record<string, unknown>` is NOT assignable to Prisma's `InputJsonValue`, and this
-       * repo carries ~30 pre-existing errors of exactly that shape — which is precisely why the
-       * two this file added were easy to wave through as "more of the known baseline". They were
-       * not: they were new, they were mine, and the fix already existed in the writer this
-       * service was modelled on. `SleeperTradeFactIngest` wraps the same way.
-       */
-      const data = { ...rest, payload: toPrismaJsonInput(payload) }
-      try {
-        await prisma.transactionFact.upsert({
-          where: { transactionId },
-          create: { transactionId, ...data },
-          update: data,
-        })
-        written += 1
-      } catch {
-        // One bad row must not lose the rest of a season's history.
-      }
-    }
+    const written = await persistMutableTransactionFacts(rows)
 
     return {
       attempted: true,

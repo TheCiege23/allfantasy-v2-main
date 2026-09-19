@@ -6,6 +6,7 @@ import { persistDynastySeason, persistStandings } from '@/lib/dynasty-import/nor
 import { fetchYahooLeagueForImport } from './YahooLeagueFetchService'
 import type { YahooImportPayload, YahooImportTeam } from '@/lib/league-import/adapters/yahoo/types'
 import { persistProviderTransactionFacts } from '@/lib/league-import/persistProviderTransactionFacts'
+import { persistSeasonStandingFacts } from '@/lib/league-import/bulkWarehouseFactPersistence'
 
 const SEASON_END_ROSTER_SNAPSHOT_PERIOD = 0
 
@@ -375,16 +376,7 @@ export async function syncYahooHistoricalBackfillAfterImport(args: {
         standingsPersisted += finishedSeasonRows.length
       }
 
-      for (const team of payload.teams) {
-        await prisma.seasonStandingFact.upsert({
-          where: {
-            uniq_dw_standing_league_season_team: {
-              leagueId: args.leagueId,
-              season,
-              teamId: team.teamKey,
-            },
-          },
-          create: {
+      await persistSeasonStandingFacts(payload.teams.map((team) => ({
             leagueId: args.leagueId,
             sport: payload.league.sport,
             season,
@@ -395,17 +387,7 @@ export async function syncYahooHistoricalBackfillAfterImport(args: {
             pointsFor: team.pointsFor,
             pointsAgainst: team.pointsAgainst ?? 0,
             rank: team.rank ?? null,
-          },
-          update: {
-            wins: team.wins,
-            losses: team.losses,
-            ties: team.ties,
-            pointsFor: team.pointsFor,
-            pointsAgainst: team.pointsAgainst ?? 0,
-            rank: team.rank ?? null,
-          },
-        })
-      }
+      })))
 
       const warehouse = await persistYahooSeasonWarehouseFacts({
         leagueId: args.leagueId,
