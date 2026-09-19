@@ -1,4 +1,11 @@
-export type PlayoffSport = "nba" | "nhl"
+/**
+ * ⚠ `mlb` IS MODELLED HERE BUT NOT YET CREATABLE. The create API
+ * (`app/api/brackets/playoffs/route.ts`) still accepts only `nba` and `nhl`,
+ * deliberately: an MLB pool has no seeding source and no scheduled writer to
+ * advance it, so opening creation first would ship a bracket that can never
+ * resolve. Widen the API in the same change that lands those two, not before.
+ */
+export type PlayoffSport = "nba" | "nhl" | "mlb"
 
 export type PlayoffChallengeConfig = {
   visibility: "private" | "public"
@@ -65,13 +72,37 @@ export type PlayoffChallengeConfig = {
   }
 }
 
-export type PlayoffRoundKey = "round_1" | "conference_semifinals" | "conference_finals" | "finals"
+/**
+ * Round keys are ADDITIVE per sport, never shared or renamed.
+ *
+ * ⚠ THE VALUE IS PERSISTED. `playoff_bracket_series.round` holds these strings
+ * for 390 live rows across 26 pools, so renaming `round_1` to something generic
+ * would need a data migration. A new sport therefore brings its own keys rather
+ * than reusing the basketball/hockey ones — which also keeps the round LABEL a
+ * lookup instead of a per-sport branch at every render site.
+ */
+export type PlayoffRoundKey =
+  | "round_1"
+  | "conference_semifinals"
+  | "conference_finals"
+  | "finals"
+  | "wild_card"
+  | "division_series"
+  | "league_championship"
+  | "world_series"
 
 export type PlayoffSeriesStatus = "scheduled" | "in_progress" | "final"
 
 export type PlayoffSeriesSlot = "home" | "away"
 
-export type PlayoffConference = "east" | "west" | "finals"
+/**
+ * The two halves of a draw, plus the cross-half final.
+ *
+ * ⚠ `finals` IS THE FINAL'S HALF, NOT A SPORT'S NAME FOR IT. It marks the one
+ * series both halves feed into; what it is CALLED is resolved from the round
+ * ("Cup Finals" vs "World Series"), so nothing here needs a sport.
+ */
+export type PlayoffConference = "east" | "west" | "al" | "nl" | "finals"
 
 export type PlayoffChallengeView = {
   challenge: {

@@ -55,11 +55,21 @@ type PlayoffSeriesAggregate = {
   completedWithoutWinnerSource: boolean
 }
 
+/**
+ * Which half of the draw a provider's event name places a series in.
+ *
+ * ⚠ ONE NAME FOR IT, because this was two copies of the same union — the
+ * function's return type and the field it is assigned to — and widening only
+ * the function is what the compiler caught. A named alias makes the next sport
+ * a one-line change instead of a hunt.
+ */
+type ProviderConference = "east" | "west" | "al" | "nl" | null
+
 type ProviderSeriesGroup = {
   key: string
   order: number
   roundIndex: number
-  conference: "east" | "west" | null
+  conference: ProviderConference
   eventName: string | null
   homeTeamName: string
   awayTeamName: string
@@ -272,6 +282,40 @@ export type RefreshPlayoffScheduleMetadataResult = {
 const SPORT_TO_LEAGUE_SPORT: Record<PlayoffSport, LeagueSport> = {
   nba: "NBA",
   nhl: "NHL",
+  mlb: "MLB",
+}
+
+/**
+ * Sports this service will actually sync. ONE list, because there were two
+ * copies of the same `sport !== "nba" && sport !== "nhl"` test and a third
+ * spelling of the rule in the cron's zod enum.
+ *
+ * 🛑 MLB IS MODELLED EVERYWHERE ELSE AND DELIBERATELY REFUSED HERE. The
+ * template, round keys, labels and conference vocabulary all understand
+ * baseball; what is missing is the two things that make a synced bracket
+ * true rather than decorative:
+ *
+ *   1. a SEEDING SOURCE — nothing ingests MLB standings
+ *      (`/api/cron/import-standings` is NFL/NCAAF only), so there is no way
+ *      to fill `AL1`…`NL6` with real clubs; and
+ *   2. a SCHEDULED WRITER — `syncPlayoffChallengeSeries` has no cron caller
+ *      at all, for any sport.
+ *
+ * Adding "mlb" here without both would point a bracket at results nothing
+ * refreshes, which fails silently and looks correct. Add it in the SAME
+ * change that lands them, and verify the round-name patterns above against a
+ * captured ESPN postseason payload at the same time.
+ */
+const SYNCABLE_PLAYOFF_SPORTS = new Set<PlayoffSport>(["nba", "nhl"])
+
+function assertSyncableSport(raw: unknown, operation: string): PlayoffSport {
+  const sport = String(raw ?? "").toLowerCase() as PlayoffSport
+  if (!SYNCABLE_PLAYOFF_SPORTS.has(sport)) {
+    throw new Error(
+      `Playoff ${operation} is not supported for "${sport || "unknown"}". Supported: ${[...SYNCABLE_PLAYOFF_SPORTS].join(", ")}.`,
+    )
+  }
+  return sport
 }
 
 function normalizeName(value: string | null | undefined): string {
@@ -702,10 +746,36 @@ function isPlayInGame(game: PlayoffSeriesSyncGame): boolean {
   return /\bplay\s*in\b/.test(normalizedEventName(game))
 }
 
-function conferenceFromEventName(game: PlayoffSeriesSyncGame): "east" | "west" | null {
+/**
+ * ⚠ THE MLB BRANCH IS UNVERIFIED AGAINST A REAL POSTSEASON PAYLOAD. No MLB
+ * postseason event name has been captured from ESPN yet — every MLB row in
+ * `SportsGame` today is regular season, and `seasonType` is NULL on all of
+ * them. These patterns are written from the published series names, and the
+ * MLB sync is still refused upstream (see `assertSyncableSport`), so nothing
+ * depends on them being right. Confirm them against a captured payload in the
+ * same change that lifts that refusal — do not assume they work because they
+ * compile.
+ */
+function conferenceFromEventName(
+  game: PlayoffSeriesSyncGame,
+  sport?: PlayoffSport,
+): ProviderConference {
   const eventName = normalizedEventName(game)
+  /*
+   * ⚠ SPORT-SCOPED ON PURPOSE, AND THIS FUNCTION USED NOT TO BE. `\bal\b` is a
+   * two-letter token that can appear in an event name for any sport, so running
+   * the baseball branch unconditionally would let a basketball or hockey game
+   * that happens to contain it get bucketed into the American League — turning a
+   * previously honest `null` into a confident wrong answer. The east/west
+   * branches are left unscoped because they are the pre-existing behaviour and
+   * carry no such collision.
+   */
   if (/\beast\b|\beastern\b/.test(eventName)) return "east"
   if (/\bwest\b|\bwestern\b/.test(eventName)) return "west"
+  if (sport === "mlb") {
+    if (/\bamerican league\b|\bal\b/.test(eventName)) return "al"
+    if (/\bnational league\b|\bnl\b/.test(eventName)) return "nl"
+  }
   return null
 }
 
@@ -722,6 +792,25 @@ function roundIndexFromGame(game: PlayoffSeriesSyncGame, sport?: PlayoffSport): 
     if (/\bconference finals?\b|\beast finals?\b|\bwest finals?\b|\beastern conference finals?\b|\bwestern conference finals?\b/.test(eventName)) return 3
     if (/\b2nd round\b|\bsecond round\b|\bround 2\b/.test(eventName)) return 2
     if (/\b1st round\b|\bfirst round\b|\bround 1\b/.test(eventName)) return 1
+  } else if (sport === "mlb") {
+    /*
+     * ⚠ UNVERIFIED — see the note on `conferenceFromEventName`. Ordered most
+     * specific first: "World Series" must be tested before the generic
+     * "final" fallthrough below, and "Championship Series" before "Division
+     * Series", because "AL Championship Series" contains neither the word
+     * "conference" nor "final" and would otherwise reach no branch at all.
+     */
+    if (/\bworld series\b/.test(eventName)) return 4
+    if (/\bchampionship series\b|\balcs\b|\bnlcs\b/.test(eventName)) return 3
+    if (/\bdivision series\b|\balds\b|\bnlds\b/.test(eventName)) return 2
+    if (/\bwild card\b|\bwildcard\b/.test(eventName)) return 1
+    /*
+     * Baseball has no "conference"/"semifinal" vocabulary, so the generic
+     * fallthrough below would mis-bucket an unrecognised MLB event rather
+     * than decline it. Declining is the safer answer: an unmatched group is
+     * skipped, a mis-bucketed one advances the wrong series.
+     */
+    return null
   }
   if (eventName.includes("final") && !eventName.includes("conference")) return 4
   if (eventName.includes("conference")) return 3
@@ -754,7 +843,7 @@ function buildProviderSeriesGroups(games: PlayoffSeriesSyncGame[], sport?: Playo
       key,
       order: index,
       roundIndex,
-      conference: conferenceFromEventName(game),
+      conference: conferenceFromEventName(game, sport),
       eventName: game.eventName ?? null,
       homeTeamName,
       awayTeamName,
@@ -1332,10 +1421,7 @@ export async function refreshPlayoffScheduleMetadataForChallenge(input: {
     throw new Error("Challenge not found")
   }
 
-  const sport = String(challenge.sport ?? "").toLowerCase()
-  if (sport !== "nba" && sport !== "nhl") {
-    throw new Error("Only NBA and NHL playoff schedule refresh is supported")
-  }
+  const sport = assertSyncableSport(challenge.sport, "schedule refresh")
 
   const warnings: string[] = []
   const scheduleProvider = input.scheduleSupplementProvider ?? ((providerInput) =>
@@ -1502,10 +1588,7 @@ export async function syncPlayoffChallengeSeries(input: {
     throw new Error("Challenge not found")
   }
 
-  const sport = String(challenge.sport ?? "").toLowerCase()
-  if (sport !== "nba" && sport !== "nhl") {
-    throw new Error("Only NBA and NHL playoff sync is supported")
-  }
+  const sport = assertSyncableSport(challenge.sport, "sync")
 
   if (mode === "autofill_results" && !challenge.isTestMode) {
     throw new Error("Auto-fill official results is only available for commissioner test pools")
