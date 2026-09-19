@@ -1,43 +1,55 @@
 import 'server-only'
 import { prisma } from '@/lib/prisma'
-import { resolveSleeperRosterPlayers } from '@/lib/player-identity/resolveSleeperRosterPlayers'
 import { asHeadshotUrl } from './playerIdentityCompose'
 import { teamLogoUrl } from './teamLogo'
 import { loadCollegeTeamIndex } from '@/lib/sport-teams/collegeTeamIndexStore'
 import { resolveFantraxCollegeTeam } from '@/lib/sport-teams/fantraxCollegeTeam'
-import { crosswalkToSleeperIds } from './rosterIdCrosswalk'
-import { lookupProviderIdentityNames } from './providerIdentityNames'
+import {
+  normalizeIdentitySport,
+  resolveRosterPlayerIdentities,
+} from '@/lib/player-identity/resolveRosterPlayerIdentities'
 
 export type ConnectedRosterPlayer = {
   id: string; name: string; position: string | null; team: string | null
   imageUrl: string | null; logoUrl: string | null
 }
 
-/** Provider IDs stay in their own namespace. Never match a college player by name. */
+/**
+ * Provider IDs stay in their own namespace. Never match a college player by name.
+ *
+ * ⚠ THE PLATFORM → ID-SPACE RULE NO LONGER LIVES HERE. It moved to
+ * `lib/player-identity/resolveRosterPlayerIdentities.ts`, because Chimmy's grounding needed the
+ * same answer and had been getting a Sleeper-only one — the Fantrax roster this screen renders with
+ * names read to the assistant as 39 anonymous ids. Two readers of one roster must not disagree
+ * about who is on it.
+ *
+ * What stays here is what is genuinely this caller's: A LIST HAS TO RENDER SOMETHING, so an
+ * unresolved id becomes `Player 06k5m`. The resolver returns `null` instead, because its other
+ * caller must be able to SEE the gap rather than trust a label.
+ */
 export async function connectedRosterPlayers(platform: string, sport: string, raw: unknown[]): Promise<ConnectedRosterPlayer[]> {
   const records = raw.map((value) => typeof value === 'object' && value ? value as Record<string, unknown> : { id: String(value) })
   const ids = records.map((r) => String(r.fantraxId ?? r.id ?? ''))
   const field = (v: unknown) => typeof v === 'string' && v.trim() ? v.trim() : null
-  const normalizedSport = ['cfb', 'ncaafb'].includes(sport.toLowerCase()) ? 'NCAAF' : sport.toUpperCase()
+  const normalizedSport = normalizeIdentitySport(sport)
   const college = normalizedSport === 'NCAAF'
   const directory = college ? await loadCollegeTeamIndex().catch(() => null) : null
+  const identities = await resolveRosterPlayerIdentities(platform, normalizedSport, ids)
+
   if (platform !== 'fantrax') {
-    const direct = ['sleeper', 'allfantasy'].includes(platform.toLowerCase())
-    const crosswalk = direct ? new Map<string, string>() : await crosswalkToSleeperIds(platform, normalizedSport, ids)
-    const players = await resolveSleeperRosterPlayers(direct ? ids : [...crosswalk.values()], normalizedSport)
-    const names = direct ? new Map<string, { name: string }>() : await lookupProviderIdentityNames(platform, normalizedSport, ids)
     return ids.map((id) => {
-      const p = players.get(direct ? id : crosswalk.get(id) ?? '')
-      return { id, name: p?.name ?? names.get(id)?.name ?? `Player ${id}`, position: p?.position ?? null, team: p?.team ?? null,
+      const p = identities.get(id)
+      return { id, name: p?.name ?? `Player ${id}`, position: p?.position ?? null, team: p?.team ?? null,
         imageUrl: asHeadshotUrl(p?.imageUrl), logoUrl: teamLogoUrl(normalizedSport, p?.team) }
     })
   }
-  const identities = platform === 'fantrax' && ids.length ? await prisma.playerIdentityMap.findMany({
-    where: { sport: normalizedSport, fantraxId: { in: ids } },
-    select: { fantraxId: true, canonicalName: true, position: true, currentTeam: true, rollingInsightsId: true, cfbdId: true },
-  }).catch(() => []) : []
-  const providerIds = identities.map((p) => p.rollingInsightsId).filter((id): id is string => !!id)
-  const cfbdIds = identities.map((p) => p.cfbdId).filter((id): id is string => !!id)
+
+  /*
+   * The headshot lives under a DIFFERENT provider's id than the roster holds, so it needs the
+   * crosswalk ids the resolver carried through rather than a second read of the same table.
+   */
+  const providerIds = [...identities.values()].map((p) => p.rollingInsightsId).filter((id): id is string => !!id)
+  const cfbdIds = [...identities.values()].map((p) => p.cfbdId).filter((id): id is string => !!id)
   const images = providerIds.length || cfbdIds.length ? await prisma.sportsPlayer.findMany({
     where: { sport: normalizedSport, OR: [
       { source: 'cfbd', externalId: { in: cfbdIds } },
@@ -46,13 +58,12 @@ export async function connectedRosterPlayers(platform: string, sport: string, ra
     select: { externalId: true, source: true, imageUrl: true },
   }).catch(() => []) : []
   return records.map((r, i) => {
-    const matches = identities.filter((p) => p.fantraxId === ids[i])
-    const p = matches.length === 1 ? matches[0] : null
-    const team = field(r.school) ?? field(r.nflTeam) ?? field(r.team) ?? p?.currentTeam ?? null
+    const p = identities.get(ids[i]) ?? null
+    const team = field(r.school) ?? field(r.nflTeam) ?? field(r.team) ?? p?.team ?? null
     const school = college && directory ? resolveFantraxCollegeTeam(team ?? '', directory) : null
     const rosterPosition = field(r.position)
     const position = field(r.primaryPosition) ?? p?.position ?? (rosterPosition && !['RWT', 'SFX', 'FLEX', 'SUPER_FLEX', 'BN', 'IR'].includes(rosterPosition.toUpperCase()) ? rosterPosition : null)
-    return { id: ids[i], name: field(r.name) ?? p?.canonicalName ?? `Player ${ids[i]}`,
+    return { id: ids[i], name: field(r.name) ?? p?.name ?? `Player ${ids[i]}`,
       position, team: school?.school ?? team,
       imageUrl: asHeadshotUrl(field(r.imageUrl))
         ?? asHeadshotUrl(images.find((img) => img.source === 'cfbd' && img.externalId === p?.cfbdId)?.imageUrl)

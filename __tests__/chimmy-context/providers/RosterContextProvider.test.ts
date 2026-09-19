@@ -8,22 +8,38 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 const {
   appUserFindUniqueMock,
   leagueTeamFindFirstMock,
+  leagueFindUniqueMock,
   rosterFindFirstMock,
   weeklyScoreFindManyMock,
+  resolveIdentitiesMock,
 } = vi.hoisted(() => ({
   appUserFindUniqueMock: vi.fn(),
   leagueTeamFindFirstMock: vi.fn(),
+  leagueFindUniqueMock: vi.fn(),
   rosterFindFirstMock: vi.fn(),
   weeklyScoreFindManyMock: vi.fn(),
+  resolveIdentitiesMock: vi.fn(),
 }))
 
 vi.mock("@/lib/prisma", () => ({
   prisma: {
     appUser: { findUnique: appUserFindUniqueMock },
     leagueTeam: { findFirst: leagueTeamFindFirstMock },
+    league: { findUnique: leagueFindUniqueMock },
     roster: { findFirst: rosterFindFirstMock },
     weeklyScore: { findMany: weeklyScoreFindManyMock },
   },
+}))
+
+/*
+ * ⚠ MOCKED BECAUSE THE PROVIDER NOW DEPENDS ON IT. The identity resolver reaches three more tables
+ * of its own; the job here is the provider's projection and enrichment, not the resolver's id
+ * spaces — those are `resolveRosterPlayerIdentities`'s own to prove. The two assertions that matter
+ * across the seam are that the provider passes the ROSTER'S id space (not a hardcoded "sleeper"),
+ * and that it applies what comes back. Both are asserted below.
+ */
+vi.mock("@/lib/player-identity/resolveRosterPlayerIdentities", () => ({
+  resolveRosterPlayerIdentities: resolveIdentitiesMock,
 }))
 
 import { RosterContextProvider } from "@/lib/chimmy-context/providers/RosterContextProvider"
@@ -47,7 +63,9 @@ describe("RosterContextProvider", () => {
       teamName: "Self",
       platformUserId: "platform-self",
     })
+    leagueFindUniqueMock.mockResolvedValue({ platform: "sleeper", sport: "NFL" })
     weeklyScoreFindManyMock.mockResolvedValue([])
+    resolveIdentitiesMock.mockResolvedValue(new Map())
   })
 
   it("returns null data when leagueId cannot be resolved", async () => {
@@ -158,6 +176,113 @@ describe("RosterContextProvider", () => {
     // ⚠ The control: the row must still be THERE. A fix that dropped unresolvable players would
     // trade a false name for a missing team-mate, which is the worse of the two.
     expect(res.data?.starters[0].playerId).toBe("p-nameless")
+  })
+
+  /*
+   * ── 🛑 THE CREAM BOWL REGRESSION ────────────────────────────────────────────────────────────
+   *
+   * This provider resolved every league through `getCanonicalPlayersBySleeperIds`, which queries
+   * `PlayerProviderIdentity where provider = 'sleeper'`. A Fantrax roster holds Fantrax ids, so
+   * that matched ZERO rows — not most, all — and the grounding packet turned an all-null roster
+   * into `unresolved_identity`. Measured on the user's own league 2026-09-18: 39 spots, 0 names,
+   * and Chimmy told them their roster could be counted but not read.
+   *
+   * ⚠ THE ASSERTION THAT ACTUALLY CATCHES IT IS THE FIRST ARGUMENT, NOT THE NAME. Asserting only
+   * that a name came back would pass with the platform hardcoded again, because the mock answers
+   * whatever it is asked. The id space passed across the seam is the thing that was wrong.
+   */
+  it("🛑 resolves a Fantrax roster in the FANTRAX id space, not Sleeper's", async () => {
+    leagueFindUniqueMock.mockResolvedValueOnce({ platform: "fantrax", sport: "NCAAF" })
+    rosterFindFirstMock.mockResolvedValueOnce({
+      id: "roster-self",
+      playerData: {
+        source_provider: "fantrax",
+        lineup_sections: {
+          starters: [{ id: "06k5m" }],
+          bench: [{ id: "05jxr" }],
+          ir: [],
+          taxi: [],
+          devy: [],
+        },
+      },
+    })
+    resolveIdentitiesMock.mockResolvedValueOnce(
+      new Map([
+        ["06k5m", { name: "Arch Manning", position: "qb", team: "Texas" }],
+        ["05jxr", { name: "Jeremiah Smith", position: "wr", team: "Ohio State" }],
+      ]),
+    )
+
+    const provider = new RosterContextProvider()
+    const res = await provider.load(baseRequest())
+
+    expect(resolveIdentitiesMock).toHaveBeenCalledTimes(1)
+    const [platform, sport, ids] = resolveIdentitiesMock.mock.calls[0]
+    expect(platform).toBe("fantrax")
+    expect(sport).toBe("NCAAF")
+    expect(ids).toEqual(["06k5m", "05jxr"])
+    expect(res.data?.starters[0]).toMatchObject({
+      playerId: "06k5m",
+      name: "Arch Manning",
+      position: "QB",
+      team: "TEXAS",
+    })
+    expect(res.data?.bench[0]).toMatchObject({ playerId: "05jxr", name: "Jeremiah Smith" })
+  })
+
+  /*
+   * `playerData.source_provider` is stamped by the import bootstrap and is the most local answer.
+   * `League.platform` is the fallback for rows written before that field existed. Asserting the
+   * PRECEDENCE, not just that one of them works — a reader that consulted only the league row
+   * would pass a "both agree" test while being wrong for a roster imported from elsewhere.
+   */
+  it("prefers the roster's own source_provider over League.platform", async () => {
+    leagueFindUniqueMock.mockResolvedValueOnce({ platform: "sleeper", sport: "NFL" })
+    rosterFindFirstMock.mockResolvedValueOnce({
+      id: "roster-self",
+      playerData: {
+        source_provider: "espn",
+        lineup_sections: { starters: [{ id: "3139477" }], bench: [], ir: [], taxi: [], devy: [] },
+      },
+    })
+    const provider = new RosterContextProvider()
+    await provider.load(baseRequest())
+    expect(resolveIdentitiesMock.mock.calls[0][0]).toBe("espn")
+  })
+
+  it("falls back to League.platform when the roster carries no source_provider", async () => {
+    leagueFindUniqueMock.mockResolvedValueOnce({ platform: "mfl", sport: "NFL" })
+    rosterFindFirstMock.mockResolvedValueOnce({
+      id: "roster-self",
+      playerData: {
+        lineup_sections: { starters: [{ id: "13593" }], bench: [], ir: [], taxi: [], devy: [] },
+      },
+    })
+    const provider = new RosterContextProvider()
+    await provider.load(baseRequest())
+    expect(resolveIdentitiesMock.mock.calls[0][0]).toBe("mfl")
+  })
+
+  /*
+   * ⚠ THE CONTROL FOR THE `try` AROUND THE ENRICHMENT. A resolver outage must leave the roster
+   * counted and split but unnamed — which the grounding packet reports as `unresolved_identity` —
+   * never fail the slice. An enrichment that can take the whole roster down with it is worse than
+   * no enrichment.
+   */
+  it("keeps the roster when identity resolution fails, with names left null", async () => {
+    rosterFindFirstMock.mockResolvedValueOnce({
+      id: "roster-self",
+      playerData: {
+        lineup_sections: { starters: [{ id: "p-1" }], bench: [{ id: "p-2" }], ir: [], taxi: [], devy: [] },
+      },
+    })
+    resolveIdentitiesMock.mockRejectedValueOnce(new Error("registry down"))
+    const provider = new RosterContextProvider()
+    const res = await provider.load(baseRequest())
+    expect(res.ok).toBe(true)
+    expect(res.data?.starters.map((p) => p.playerId)).toEqual(["p-1"])
+    expect(res.data?.starters[0].name).toBeNull()
+    expect(res.data?.bench.map((p) => p.playerId)).toEqual(["p-2"])
   })
 
   it("returns ok:false with null data when Roster.findFirst throws synchronously", async () => {
