@@ -64,6 +64,8 @@ export interface TradeReplayRosterAsset {
   pos?: string
   vorpValue?: number
   providerAssetId?: string
+  /** When this value/roster fact was observed. Must be <= the decision time for a valid replay. */
+  observedAt?: string
 }
 
 /**
@@ -83,8 +85,8 @@ export interface TradeReplayRosterAsset {
  * increase, regardless of corpus composition.
  */
 export interface TradeReplayPayload {
-  assetsGiven: Array<{ name: string; value: number; type: string; pos?: string; vorpValue?: number; providerAssetId?: string }>
-  assetsReceived: Array<{ name: string; value: number; type: string; pos?: string; vorpValue?: number; providerAssetId?: string }>
+  assetsGiven: Array<{ name: string; value: number; type: string; pos?: string; vorpValue?: number; providerAssetId?: string; observedAt?: string }>
+  assetsReceived: Array<{ name: string; value: number; type: string; pos?: string; vorpValue?: number; providerAssetId?: string; observedAt?: string }>
   proposerRoster?: TradeReplayRosterAsset[]
   counterpartyRoster?: TradeReplayRosterAsset[]
 }

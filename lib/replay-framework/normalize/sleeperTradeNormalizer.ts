@@ -34,6 +34,7 @@ interface ResolvedAsset {
   pos?: string
   vorpValue?: number
   providerAssetId: string
+  observedAt: string
 }
 
 function resolveDropOrAddAsset(
@@ -41,6 +42,7 @@ function resolveDropOrAddAsset(
   players: PlayerDirectory,
   fcPlayers: FantasyCalcPlayer[],
   rosterConfig: LeagueRosterConfig,
+  observedAt: string,
 ): ResolvedAsset {
   const fc = findPlayerBySleeperId(fcPlayers, playerId)
   return {
@@ -61,6 +63,7 @@ function resolveDropOrAddAsset(
     // docstring in ../types.ts for why this must be threaded through
     // consistently rather than assigned a fresh synthetic ID downstream.
     providerAssetId: playerId,
+    observedAt,
   }
 }
 
@@ -77,15 +80,16 @@ function resolveFullRoster(
   players: PlayerDirectory,
   fcPlayers: FantasyCalcPlayer[],
   rosterConfig: LeagueRosterConfig,
+  observedAt: string,
 ): TradeReplayRosterAsset[] {
   if (!roster) return []
   return (roster.players ?? []).map((playerId) => {
-    const asset = resolveDropOrAddAsset(playerId, players, fcPlayers, rosterConfig)
-    return { name: asset.name, value: asset.value, type: asset.type, pos: asset.pos, vorpValue: asset.vorpValue, providerAssetId: asset.providerAssetId }
+    const asset = resolveDropOrAddAsset(playerId, players, fcPlayers, rosterConfig, observedAt)
+    return { name: asset.name, value: asset.value, type: asset.type, pos: asset.pos, vorpValue: asset.vorpValue, providerAssetId: asset.providerAssetId, observedAt }
   })
 }
 
-function resolvePickAsset(pick: SleeperTransaction['draft_picks'][number], isDynasty: boolean): ResolvedAsset {
+function resolvePickAsset(pick: SleeperTransaction['draft_picks'][number], isDynasty: boolean, observedAt: string): ResolvedAsset {
   const season = Number(pick.season)
   const round = pick.round
   const value = Number.isFinite(season) && Number.isFinite(round) ? getPickValue(season, round, isDynasty) : REPLAY_FALLBACK_VALUE
@@ -94,7 +98,7 @@ function resolvePickAsset(pick: SleeperTransaction['draft_picks'][number], isDyn
   // never appear in `proposerRoster`/`counterpartyRoster` (those are built
   // from Sleeper's own `roster.players`, which lists players only).
   const providerAssetId = `pick-${pick.season}-r${pick.round}-${pick.roster_id}`
-  return { name: `${pick.season} Round ${pick.round} pick`, value, type: 'pick', providerAssetId }
+  return { name: `${pick.season} Round ${pick.round} pick`, value, type: 'pick', providerAssetId, observedAt }
 }
 
 /** Normalizes Sleeper's `complete`|`pending`|`failed` into our own trade-outcome vocabulary, per docs/TRADE_LEARNING_CAPTURE_ARCHITECTURE_ADR.md Decision 2's mapping convention (reused, not reinvented). */
@@ -113,8 +117,11 @@ export function normalizeSleeperTrade(input: {
   fcPlayers: FantasyCalcPlayer[]
   ingestSourceUserId: string
   providerWeek: number | null
+  /** Timestamp of the value and roster snapshot supplied to this normalizer. */
+  evidenceObservedAt?: Date
 }): ReplayImportInput {
   const { transaction: tx, league, rosters, users, players, fcPlayers, ingestSourceUserId, providerWeek } = input
+  const observedAt = (input.evidenceObservedAt ?? new Date()).toISOString()
 
   const rosterById = new Map(rosters.map((r) => [r.roster_id, r]))
   const rosterToOwner = new Map(rosters.map((r) => [r.roster_id, r.owner_id]))
@@ -146,7 +153,7 @@ export function normalizeSleeperTrade(input: {
   const drops = tx.drops ?? {}
 
   for (const [playerId, toRosterId] of Object.entries(adds)) {
-    const asset = resolveDropOrAddAsset(playerId, players, fcPlayers, rosterConfig)
+    const asset = resolveDropOrAddAsset(playerId, players, fcPlayers, rosterConfig, observedAt)
     if (toRosterId === proposerRosterId) received.push(asset)
     else given.push(asset)
   }
@@ -154,13 +161,13 @@ export function normalizeSleeperTrade(input: {
     // A player appearing in `drops` for the proposer means the proposer gave
     // it up; guard against double-counting if it also appeared in `adds`
     // (shouldn't happen for the same player, but stay defensive).
-    if (fromRosterId === proposerRosterId && !given.some((g) => g.name === resolveDropOrAddAsset(playerId, players, fcPlayers, rosterConfig).name)) {
-      given.push(resolveDropOrAddAsset(playerId, players, fcPlayers, rosterConfig))
+    if (fromRosterId === proposerRosterId && !given.some((g) => g.name === resolveDropOrAddAsset(playerId, players, fcPlayers, rosterConfig, observedAt).name)) {
+      given.push(resolveDropOrAddAsset(playerId, players, fcPlayers, rosterConfig, observedAt))
     }
   }
 
   for (const pick of tx.draft_picks ?? []) {
-    const asset = resolvePickAsset(pick, isDynasty)
+    const asset = resolvePickAsset(pick, isDynasty, observedAt)
     if (pick.owner_id === proposerRosterId) received.push(asset)
     else if (pick.previous_owner_id === proposerRosterId) given.push(asset)
   }
@@ -170,14 +177,14 @@ export function normalizeSleeperTrade(input: {
   // `computeTradeDrivers()`'s `rosterCtx.theirRoster` is already used
   // elsewhere in the codebase (a single counterparty roster, not N-way).
   const counterpartyRosterId = tx.roster_ids.find((id) => id !== proposerRosterId)
-  const proposerRoster = resolveFullRoster(rosterById.get(proposerRosterId), players, fcPlayers, rosterConfig)
+  const proposerRoster = resolveFullRoster(rosterById.get(proposerRosterId), players, fcPlayers, rosterConfig, observedAt)
   const counterpartyRoster = counterpartyRosterId !== undefined
-    ? resolveFullRoster(rosterById.get(counterpartyRosterId), players, fcPlayers, rosterConfig)
+    ? resolveFullRoster(rosterById.get(counterpartyRosterId), players, fcPlayers, rosterConfig, observedAt)
     : []
 
   const payload: TradeReplayPayload = {
-    assetsGiven: given.map((a) => ({ name: a.name, value: a.value, type: a.type, pos: a.pos, vorpValue: a.vorpValue, providerAssetId: a.providerAssetId })),
-    assetsReceived: received.map((a) => ({ name: a.name, value: a.value, type: a.type, pos: a.pos, vorpValue: a.vorpValue, providerAssetId: a.providerAssetId })),
+    assetsGiven: given.map((a) => ({ name: a.name, value: a.value, type: a.type, pos: a.pos, vorpValue: a.vorpValue, providerAssetId: a.providerAssetId, observedAt: a.observedAt })),
+    assetsReceived: received.map((a) => ({ name: a.name, value: a.value, type: a.type, pos: a.pos, vorpValue: a.vorpValue, providerAssetId: a.providerAssetId, observedAt: a.observedAt })),
     proposerRoster: proposerRoster.length > 0 ? proposerRoster : undefined,
     counterpartyRoster: counterpartyRoster.length > 0 ? counterpartyRoster : undefined,
   }

@@ -70,6 +70,7 @@ export async function ingestSleeperTradesForLeague(
         fcPlayers,
         ingestSourceUserId,
         providerWeek: null, // caller-agnostic — the same trade can appear in multiple week buckets during backfill; real week is derivable from `proposedAt` if ever needed
+        evidenceObservedAt: new Date(),
       })
 
       const replayId = await upsertReplayImport(normalized)
@@ -83,6 +84,7 @@ export async function ingestSleeperTradesForLeague(
         providerStatus: normalized.providerStatus,
         resolvedAt: normalized.resolvedAt,
         rosterPositions: league.roster_positions,
+        proposedAt: normalized.proposedAt,
       })
       await upsertBacktestResult(backtestInput)
       backtestsWritten++

@@ -70,6 +70,7 @@ export interface ApplyFormatFitInput {
   shape: LeagueShape | null | undefined
   currentWeek?: number | null
   teamState?: unknown
+  acquiringTeamState?: unknown
   /**
    * Per-ASSET format state — a keeper's cost round, a zombie weapon's points.
    *
@@ -108,6 +109,7 @@ export function applyFormatFit(input: ApplyFormatFitInput): FormatFit | null {
     shape: input.shape,
     currentWeek: input.currentWeek ?? null,
     teamState: input.teamState,
+    acquiringTeamState: input.acquiringTeamState,
     assetState: input.assetState,
   }
 

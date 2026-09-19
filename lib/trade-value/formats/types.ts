@@ -46,6 +46,8 @@ export interface FormatValueInput {
    * format's state, which is the coupling the registry exists to avoid.
    */
   teamState?: unknown
+  /** Live state of the roster ACQUIRING this asset. Needed by protection, cap and idol rules. */
+  acquiringTeamState?: unknown
   /**
    * Format-specific state about THIS ASSET, as opposed to the roster holding it.
    *

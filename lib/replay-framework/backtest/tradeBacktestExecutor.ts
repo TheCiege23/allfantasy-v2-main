@@ -18,6 +18,7 @@ import type { Asset } from '@/lib/trade-engine/types'
 import { computeDeterministicConfigVersion, resolveEngineVersionHash, TRADE_MODEL_VERSION } from '../versioning'
 import type { BacktestResultInput, TradeBacktestOutput, TradeRealOutcome, TradeReplayPayload } from '../types'
 import { mapSleeperStatusToOutcome } from '../normalize/sleeperTradeNormalizer'
+import { checkTradeReplayPointInTimeEvidence } from '../pointInTimeEvidence'
 
 function toAssets(items: TradeReplayPayload['assetsGiven']): Asset[] {
   return items.map((item, idx) => ({
@@ -68,9 +69,15 @@ export interface TradeBacktestInput {
   resolvedAt: Date | null
   /** League roster-slot definitions (e.g. `['QB','RB','RB','WR','WR','FLEX','BN',...]`), from `ReplayImport.contextSnapshot.roster_positions`. Required for roster context to have any effect — without it, `computeTradeDrivers()`'s lineup-delta math short-circuits exactly as it does when `rosterCtx` is omitted entirely. */
   rosterPositions?: string[]
+  /** Supplying the decision time activates the no-lookahead evidence gate. */
+  proposedAt?: Date
 }
 
 export async function runTradeBacktest(input: TradeBacktestInput): Promise<BacktestResultInput> {
+  if (input.proposedAt) {
+    const evidence = checkTradeReplayPointInTimeEvidence(input.payload, input.proposedAt)
+    if (!evidence.eligible) throw new Error(`Point-in-time replay refused: ${evidence.reason}`)
+  }
   const give = toAssets(input.payload.assetsGiven)
   const receive = toAssets(input.payload.assetsReceived)
 

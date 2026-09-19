@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client'
 import { invalidateCalibrationCache } from './accept-calibration'
 import { computeAndStoreIsotonicMap, type IsotonicMap } from './isotonic-calibrator'
 import { resolveCurrentTradeLearningSeason } from './season-resolver'
+import { TRADE_MODEL_VERSION } from '@/lib/replay-framework/versioning'
 
 // Exported (values unchanged) so diagnostics tooling can reference the real
 // thresholds instead of duplicating magic numbers. See lib/trade-engine/diagnostics.ts.
@@ -16,6 +17,11 @@ export const MAX_SHADOW_DIVERGENCE = 0.40
 // (daysSinceRecal < 6.5) — exported so diagnostics can report the same
 // "would it run right now" answer without re-implementing the check.
 export const RECALIBRATION_CADENCE_DAYS = 6.5
+
+/** A shadow result may change production only when an operator approves this exact model version. */
+export function calibrationPromotionAllowed(env: NodeJS.ProcessEnv = process.env): boolean {
+  return env.TRADE_ENGINE_CALIBRATION_PROMOTION_VERSION === TRADE_MODEL_VERSION
+}
 
 export interface ShadowB0Metrics {
   computedB0: number
@@ -443,7 +449,7 @@ export async function runWeeklyRecalibration(
   let promoted = false
   let promotedB0: number | null = null
 
-  if (stats?.shadowB0 != null && stats.shadowB0ComputedAt) {
+  if (stats?.shadowB0 != null && stats.shadowB0ComputedAt && calibrationPromotionAllowed()) {
     const promoResult = await promoteShadowB0(resolvedSeason)
     promoted = promoResult.promoted
     promotedB0 = promoResult.newB0

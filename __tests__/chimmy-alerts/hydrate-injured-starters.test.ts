@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { buildInjuredStarterSignals } from '@/lib/chimmy-alerts/hydrateInjuredStarters'
+import { buildInjuredStarterSignals, withoutUnverifiedSleeperAppearances } from '@/lib/chimmy-alerts/hydrateInjuredStarters'
 
 function item(over: Partial<Record<string, unknown>> = {}) {
   return {
@@ -9,7 +9,7 @@ function item(over: Partial<Record<string, unknown>> = {}) {
     injury: { status: 'out', freshness: { stale: false } },
     projection: { projectedPoints: 12 },
     leagueAppearances: [
-      { canonicalLeagueId: 'lg-1', leagueName: 'IDP Dynasty', provider: 'sleeper', rosterStatus: 'starter' },
+      { canonicalLeagueId: 'lg-1', leagueName: 'IDP Dynasty', provider: 'sleeper', playerId: 'p1', rosterStatus: 'starter' },
     ],
     ...over,
   }
@@ -142,5 +142,21 @@ describe('buildInjuredStarterSignals', () => {
       injuryPort: { feedStale: false },
     } as never)
     expect(r.injuredStarters[0]!.stale).toBe(true)
+  })
+})
+
+describe('live Sleeper lineup verification', () => {
+  it('changes a cached starter to bench from the current scoring-week lineup', () => {
+    const portfolio = { items: [item()], connectedLeagueCount: 1 } as never
+    const verified = withoutUnverifiedSleeperAppearances(portfolio, new Map([
+      ['lg-1', { starters: new Set(['someone-else']), players: new Set(['p1', 'someone-else']) }],
+    ]))
+    expect(buildInjuredStarterSignals(verified).injuredStarters).toEqual([])
+  })
+
+  it('fails closed when the current provider lineup cannot be verified', () => {
+    const portfolio = { items: [item()], connectedLeagueCount: 1 } as never
+    const verified = withoutUnverifiedSleeperAppearances(portfolio, new Map())
+    expect(buildInjuredStarterSignals(verified).injuredStarters).toEqual([])
   })
 })

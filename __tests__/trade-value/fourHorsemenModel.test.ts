@@ -57,7 +57,7 @@ describe('registry', () => {
      * red, which is the behaviour wanted. Every id here must be one with genuinely no model, or
      * this stops testing the fallback and starts testing a stale inventory.
      */
-    for (const id of ['pirate', 'big_brother', 'redraft', 'survivor']) {
+    for (const id of ['pirate', 'big_brother', 'redraft']) {
       expect(formatModelFor(id)).toBeNull()
     }
     expect(formatModelFor(null)).toBeNull()
@@ -65,7 +65,10 @@ describe('registry', () => {
   })
 
   it('reports its own coverage honestly', () => {
-    expect(modelledFormatIds()).toEqual(['four_horsemen', 'guillotine', 'keeper', 'tournament', 'zombie'])
+    expect(modelledFormatIds()).toEqual([
+      'four_horsemen', 'guillotine', 'keeper', 'king_of_the_hill', 'pirate_vampire',
+      'salary_cap', 'survivor', 'survivor_guillotine', 'tournament', 'zombie',
+    ])
     /*
      * ⚠ MINUS FOUR, AND THE ARITHMETIC IS DELIBERATELY EXPLICIT. Five models exist, but only the
      * four that are CANONICAL formats leave the gap list — guillotine, tournament, keeper and
@@ -73,14 +76,14 @@ describe('registry', () => {
      * stops the next model being scored against a number nobody can reconstruct.
      */
     expect(formatIdsWithoutValueModel().length).toBe(
-      CANONICAL_FORMAT_IDS.length + ALIAS_ONLY_FORMAT_IDS.length - 4,
+      CANONICAL_FORMAT_IDS.length + ALIAS_ONLY_FORMAT_IDS.length - 9,
     )
     expect(formatIdsWithoutValueModel()).not.toContain('four_horsemen')
-    for (const modelled of ['guillotine', 'tournament', 'keeper', 'zombie']) {
+    for (const modelled of ['guillotine', 'tournament', 'keeper', 'zombie', 'salary_cap', 'survivor', 'pirate_vampire', 'king_of_the_hill', 'survivor_guillotine']) {
       expect(formatIdsWithoutValueModel(), modelled).not.toContain(modelled)
     }
     // Still genuinely unmodelled, so the list is not vacuously passing.
-    expect(formatIdsWithoutValueModel()).toContain('survivor')
+    expect(formatIdsWithoutValueModel()).not.toContain('survivor')
     expect(formatIdsWithoutValueModel()).toContain('big_brother')
   })
 
@@ -138,8 +141,8 @@ describe('🛑 alias resolution — the four formats leagueType cannot express',
   })
 
   it('still returns null for a league with no model by either route', () => {
-    expect(formatModelForLeague({ leagueType: 'dynasty', aliasTags: ['pirate_vampire'] })).toBeNull()
-    expect(formatModelForLeague({ leagueType: 'redraft', aliasTags: ['king_of_the_hill'] })).toBeNull()
+    expect(formatModelForLeague({ leagueType: 'dynasty', aliasTags: ['pirate_vampire'] })).toBeTruthy()
+    expect(formatModelForLeague({ leagueType: 'redraft', aliasTags: ['king_of_the_hill'] })).toBeTruthy()
     expect(formatModelForLeague(null)).toBeNull()
     expect(formatModelForLeague({})).toBeNull()
   })
