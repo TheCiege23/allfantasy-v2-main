@@ -153,7 +153,9 @@ async function membershipKeyFor(
 export async function resolvePairedHalf(
   leagueId: string,
   ownerUserId: string,
+  options?: { includeOperationalSummary?: boolean },
 ): Promise<PairedHalf | null> {
+  const includeOperationalSummary = options?.includeOperationalSummary ?? true
   const key = await membershipKeyFor(leagueId)
   if (!key) return null
 
@@ -294,10 +296,12 @@ export async function resolvePairedHalf(
          * production: this half has 0 activity rows while its paired Sleeper
          * half has 181 — the gap is the vendor's API, not the manager.
          */
-        activity: {
-          available: false,
-          reason: 'Fantrax publishes no transactions endpoint, so trades and waivers cannot be read',
-        },
+        activity: includeOperationalSummary
+          ? {
+              available: false,
+              reason: 'Fantrax publishes no transactions endpoint, so trades and waivers cannot be read',
+            }
+          : null,
         unavailableReason:
           snap == null
             ? 'the linked Fantrax league no longer exists'
@@ -386,7 +390,7 @@ export async function resolvePairedHalf(
       avatarUrl: team?.avatarUrl?.trim() || null,
       playerCount: players,
       draft: null,
-      activity: lg
+      activity: includeOperationalSummary && lg
         ? await getLeagueActivity({
             leagueId: lg.id,
             platformLeagueId: lg.platformLeagueId ?? null,
@@ -439,7 +443,7 @@ export async function resolvePairedHalf(
   const draftIds = Array.from(
     new Set(sides.map((side) => side.leagueId).filter((id): id is string => typeof id === 'string')),
   )
-  if (draftIds.length > 0) {
+  if (includeOperationalSummary && draftIds.length > 0) {
     const draftAll = await getDraftHqAll(
       ownerUserId,
       draftIds.map((id) => ({ id })),
@@ -494,7 +498,7 @@ export async function resolvePairedHalf(
    * roster could not be read, and inferring a draft from a roster we never saw
    * would be a guess dressed as a finding.
    */
-  for (const side of sides) {
+  for (const side of includeOperationalSummary ? sides : []) {
     if (!side || side.draft || side.unavailableReason) continue
     if ((side.playerCount ?? 0) <= 0) continue
     side.draft = {
