@@ -107,12 +107,27 @@ describe('daily-sport weekly score sync', () => {
       })
     })
 
-    it('declines loudly when there is no season-start anchor', async () => {
-      const summary = await runSync({ seasonStartUtc: null })
+    // With no explicit anchor it falls back to the recorded NBA 2026 opener
+    // (20 Oct), so week 3 is 3-10 Nov rather than a decline.
+    it('falls back to the recorded regular-season opener', async () => {
+      await runSync()
+
+      const where = prismaMock.playerGameStat.findMany.mock.calls[0][0].where
+      expect(where.gameDate).toEqual({
+        gte: new Date('2026-11-03T00:00:00.000Z'),
+        lt: new Date('2026-11-10T00:00:00.000Z'),
+      })
+    })
+
+    it('declines loudly when no anchor is recorded for that season', async () => {
+      prismaMock.redraftSeason.findFirst.mockResolvedValue({ ...seasonFor('NBA'), season: 2031 })
+
+      const summary = await runSync()
 
       expect(prismaMock.playerGameStat.findMany).not.toHaveBeenCalled()
       expect(prismaMock.playerWeeklyScore.upsert).not.toHaveBeenCalled()
-      expect(summary.warnings.join(' ')).toMatch(/season-start date/i)
+      expect(summary.warnings.join(' ')).toMatch(/regular-season start date/i)
+      expect(summary.warnings.join(' ')).toContain('dailySportSeasonStarts')
     })
   })
 
