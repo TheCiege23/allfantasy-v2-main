@@ -17,6 +17,7 @@ import { RedraftPanel } from './RedraftPanel'
 import { CompliancePanel } from './CompliancePanel'
 import { TopPerformersPanel } from './TopPerformersPanel'
 import { WeeklyReportPanel } from './WeeklyReportPanel'
+import { ManageConferencesPanel } from './ManageConferencesPanel'
 import './tournament-hub.css'
 
 /**
@@ -360,6 +361,19 @@ export function TournamentStandingsBoard({ board }: { board: StandingsBoard }) {
       <TopPerformersPanel tournamentId={board.tournamentId} />
 
       <SettingsPanel board={board} />
+
+      <ManageConferencesPanel
+        key={JSON.stringify({
+          conferences: board.conferences.map((conference) => ({
+            id: conference.id,
+            name: conference.name,
+            leagues: conference.leagues.map((league) => league.tournamentLeagueId),
+          })),
+          archived: board.archivedConferences,
+          locked: board.conferenceMembershipLocked,
+        })}
+        board={board}
+      />
     </main>
   )
 }

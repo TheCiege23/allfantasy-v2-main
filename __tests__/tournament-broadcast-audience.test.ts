@@ -48,6 +48,8 @@ const BOARD: StandingsBoard = {
   tiebreakerMode: 'points_for',
   unmatchedTotal: 1,
   oldestUpdatedAt: null,
+  archivedConferences: [],
+  conferenceMembershipLocked: false,
   conferences: [
     {
       id: 'cBlack',
@@ -58,6 +60,7 @@ const BOARD: StandingsBoard = {
       leagues: [
         {
           tournamentLeagueId: 'tlBeast',
+          leagueNumber: 1,
           leagueId: 'lgA',
           name: 'BEAST',
           unmatchedCount: 1,
@@ -71,6 +74,7 @@ const BOARD: StandingsBoard = {
         },
         {
           tournamentLeagueId: 'tlGoat',
+          leagueNumber: 2,
           leagueId: 'lgB',
           name: 'GOAT',
           unmatchedCount: 0,
@@ -89,6 +93,7 @@ const BOARD: StandingsBoard = {
       leagues: [
         {
           tournamentLeagueId: 'tlGoldBeast',
+          leagueNumber: 3,
           leagueId: 'lgC',
           name: 'GOLD BEAST',
           unmatchedCount: 0,
