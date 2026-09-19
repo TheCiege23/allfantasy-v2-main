@@ -1,6 +1,5 @@
 import { createHash } from 'node:crypto'
-import type { Prisma } from '@prisma/client'
-import { prisma } from '@/lib/prisma'
+import { persistImmutableTransactionFacts } from '@/lib/league-import/bulkWarehouseFactPersistence'
 
 export interface ProviderTransactionFactInput {
   provider: string
@@ -30,26 +29,20 @@ export function deterministicTransactionFactId(input: ProviderTransactionFactInp
 
 /** Incremental and idempotent: repeats are no-ops and never delete or rewrite unrelated history. */
 export async function persistProviderTransactionFacts(rows: ProviderTransactionFactInput[]): Promise<number> {
-  await Promise.all(rows.map((row) => {
+  return persistImmutableTransactionFacts(rows.map((row) => {
     const transactionId = deterministicTransactionFactId(row)
-    const data = {
+    return {
+      transactionId,
       leagueId: row.leagueId,
       sport: row.sport,
       type: row.type,
       playerId: row.playerId ?? null,
       managerId: row.managerId ?? null,
       rosterId: row.rosterId ?? null,
-      payload: row.payload as Prisma.InputJsonValue,
+      payload: row.payload,
       season: row.season ?? null,
       weekOrPeriod: row.weekOrPeriod ?? null,
+      createdAt: row.occurredAt,
     }
-    return prisma.transactionFact.upsert({
-      where: { transactionId },
-      create: { transactionId, ...data, createdAt: row.occurredAt ?? undefined },
-      // A fact is an immutable observation. Replaying the same provider page is
-      // a no-op; a changed lifecycle stage has a different deterministic key.
-      update: {},
-    })
   }))
-  return rows.length
 }
