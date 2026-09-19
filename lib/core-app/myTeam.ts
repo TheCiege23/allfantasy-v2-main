@@ -1,4 +1,5 @@
 import 'server-only'
+import { connectedRosterPlayers } from './connectedRoster'
 import { currentSleeperRoster } from './currentSleeperRoster'
 
 import { prisma } from '@/lib/prisma'
@@ -64,6 +65,7 @@ export type LineupPlayer = {
    * roster is anything else.
    */
   sport: string | null
+  logoUrl?: string | null
   imageUrl: string | null
   /** "DEN vs LV · Sun 4:05p" — from the ingested schedule, null when unknown. */
   gameContext: string | null
@@ -745,6 +747,20 @@ async function resolvePlayers(
   for (const [rosterId, sleeperId] of sleeperIdByRosterId) {
     const resolved = out.get(sleeperId)
     if (resolved && !out.has(rosterId)) out.set(rosterId, resolved)
+  }
+
+  if (platform.toLowerCase() === 'fantrax') {
+    const players = await connectedRosterPlayers('fantrax', sport, ids).catch(() => [])
+    for (const player of players) {
+      if (player.name === `Player ${player.id}`) continue
+      const existing = out.get(player.id)
+      out.set(player.id, existing ? { ...existing, imageUrl: player.imageUrl ?? existing.imageUrl, logoUrl: player.logoUrl } : {
+        sleeperId: player.id, name: player.name, position: player.position, team: player.team,
+        sport, imageUrl: player.imageUrl, logoUrl: player.logoUrl, gameContext: null, kickoff: null,
+        preseason: false, venue: null, injuryStatus: null, ruledOut: false, projectedPoints: null,
+        afProjectedPoints: null, indoors: null, weather: null, market: null, onBye: false,
+      })
+    }
   }
 
   const unresolvedIds = ids.filter((id) => !out.has(id))

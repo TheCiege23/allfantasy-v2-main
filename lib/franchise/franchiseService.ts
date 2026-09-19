@@ -78,16 +78,20 @@ export async function loadFranchiseDetail(linkId: string): Promise<FranchiseDeta
         role,
         platform: m.platform,
         leagueId: m.leagueId,
-        teamExternalId: m.teamExternalId,
+        teamExternalId: m.teamExternalId || league?.userTeam || '',
         leaguePresent: league != null,
       })
       const raw = Array.isArray(league?.roster) ? (league?.roster as unknown[]) : null
+      const teamOf = (p: unknown) => String((p as { teamName?: unknown })?.teamName ?? '').trim().toLowerCase()
+      const carriesTeams = raw?.some((p) => teamOf(p)) ?? false
+      const viewerTeam = league?.userTeam?.trim().toLowerCase()
+      const mine = carriesTeams ? (viewerTeam ? raw?.filter((p) => teamOf(p) === viewerTeam) : null) : raw
       sides.push({
         role,
         platform: m.platform,
         leagueName: league?.leagueName ?? null,
         teamLabel: league?.userTeam ?? m.teamExternalId,
-        players: (raw ?? []).map((p) => {
+        players: (mine ?? []).map((p) => {
           const r = p as Record<string, unknown>
           return {
             id: String(r.fantraxId ?? ''),
@@ -101,6 +105,8 @@ export async function loadFranchiseDetail(linkId: string): Promise<FranchiseDeta
             ? 'the linked Fantrax league no longer exists'
             : raw == null
               ? 'this Fantrax snapshot holds no roster — re-run the import'
+              : carriesTeams && (!viewerTeam || !mine?.length)
+                ? 'we have not matched your roster in this Fantrax snapshot — re-run the import'
               : null,
       })
       continue
@@ -111,20 +117,21 @@ export async function loadFranchiseDetail(linkId: string): Promise<FranchiseDeta
       where: { id: m.leagueId },
       select: { name: true },
     })
-    members.push({
-      role,
-      platform: m.platform,
-      leagueId: m.leagueId,
-      teamExternalId: m.teamExternalId,
-      leaguePresent: league != null,
+    const claimedTeam = await prisma.leagueTeam.findFirst({
+      where: { leagueId: m.leagueId, claimedByUserId: link.ownerUserId },
+      select: { teamName: true, ownerName: true, platformUserId: true, externalId: true },
     })
-
-    const team = m.teamExternalId
+    const team = claimedTeam ?? (m.teamExternalId
       ? await prisma.leagueTeam.findFirst({
           where: { leagueId: m.leagueId, externalId: m.teamExternalId },
-          select: { teamName: true, ownerName: true, platformUserId: true },
+          select: { teamName: true, ownerName: true, platformUserId: true, externalId: true },
         })
-      : null
+      : null)
+    members.push({
+      role, platform: m.platform, leagueId: m.leagueId,
+      teamExternalId: team?.externalId || m.teamExternalId,
+      leaguePresent: league != null,
+    })
 
     /* Contract-aware lookup: Roster.platformUserId holds the AF user id for a
        LINKED manager, so joining it to LeagueTeam.platformUserId misses exactly

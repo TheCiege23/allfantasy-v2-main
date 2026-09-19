@@ -843,3 +843,8 @@
 .af-core .af-ml-open {
   min-height: 44px;
 }
+
+.af-ml-hub-members { display:grid; gap:8px; margin:12px 0; }
+.af-ml-hub-members a { display:flex; min-height:44px; align-items:center; justify-content:space-between; gap:12px; padding:10px 12px; border:1px solid var(--line); border-radius:10px; color:var(--text); background:var(--chip); text-decoration:none; }
+.af-ml-hub-members small { color:var(--accent); }
+.af-ml-hub-members a:focus-visible { outline:2px solid var(--accent); outline-offset:3px; }
