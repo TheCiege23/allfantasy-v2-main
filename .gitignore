@@ -86,6 +86,8 @@ scripts/.fixture-data-snapshot-*.json
 scripts/.normalized-name-snapshot-*.json
 # Prior player_game_stats maps and points, for reverting backfill-interception-split.
 scripts/.interception-split-snapshot-*.json
+# The same, for reverting backfill-kicker-stat-buckets.
+scripts/.kicker-stat-buckets-snapshot-*.json
 
 # Player value reference docs (local updates; folder tracked via .gitkeep)
 app/player-values/*.md
