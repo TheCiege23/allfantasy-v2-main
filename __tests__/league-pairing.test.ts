@@ -190,6 +190,34 @@ describe('the same Fantrax league appearing twice', () => {
 })
 
 describe('resolving the other half from a league', () => {
+  it('keeps every member in a larger connected franchise, with the viewed league first', async () => {
+    const rows = {
+      'lg-1': { id: 'lg-1', name: 'Peach Bowl', platform: 'sleeper', platformLeagueId: null, season: 2026, sport: 'NFL' },
+      'lg-2': { id: 'lg-2', name: 'Zombie Bowl', platform: 'allfantasy', platformLeagueId: null, season: 2026, sport: 'NFL' },
+      'lg-3': { id: 'lg-3', name: 'Survivor Bowl', platform: 'allfantasy', platformLeagueId: null, season: 2026, sport: 'NFL' },
+    }
+    leagueFindUnique.mockImplementation(async ({ where }) => rows[where.id as keyof typeof rows] ?? null)
+    memberFindFirst.mockResolvedValue({
+      role: 'primary',
+      link: {
+        id: 'hub-1',
+        name: 'All formats',
+        members: [
+          { platform: 'sleeper', leagueId: 'lg-1', role: 'primary', teamExternalId: null },
+          { platform: 'allfantasy', leagueId: 'lg-2', role: 'zombie', teamExternalId: null },
+          { platform: 'allfantasy', leagueId: 'lg-3', role: 'survivor', teamExternalId: null },
+        ],
+      },
+    })
+
+    const out = await resolvePairedHalf('lg-1', USER)
+
+    expect(out?.sides.map((side) => side.name)).toEqual(['Peach Bowl', 'Zombie Bowl', 'Survivor Bowl'])
+    expect(out?.self?.name).toBe('Peach Bowl')
+    expect(out?.other?.name).toBe('Zombie Bowl')
+    expect(draftHqAll.mock.calls[0][1].map((league: { id: string }) => league.id)).toEqual(['lg-1', 'lg-2', 'lg-3'])
+  })
+
   it('resolves the same relationship from a Fantrax provider ID without a second connection', async () => {
     leagueFindUnique.mockResolvedValue({ id: 'mirror', platform: 'fantrax', platformLeagueId: 'provider-id' })
     fantraxFindMany.mockResolvedValue([{ id: 'snapshot', sourceLeagueId: 'provider-id' }])

@@ -240,7 +240,9 @@ function PairedBand({
    * membership row vanished between reads, in which case we show what we have
    * rather than nothing.
    */
-  const sides = [self, other].filter((sd): sd is NonNullable<typeof sd> => sd != null)
+  const sides = pairing.sides.length > 0
+    ? pairing.sides
+    : [self, other].filter((sd): sd is NonNullable<typeof sd> => sd != null)
   const totalPlayers = sides.reduce((n, sd) => n + (sd.playerCount ?? 0), 0)
   const anyUnavailable = sides.some((sd) => sd.unavailableReason != null)
 

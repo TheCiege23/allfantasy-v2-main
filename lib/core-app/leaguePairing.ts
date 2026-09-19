@@ -110,6 +110,13 @@ export type PairedHalf = {
   self: FranchiseSide | null
   /** The other half. Null when the franchise only has one side attached. */
   other: FranchiseSide | null
+  /**
+   * Every readable league in the connected franchise, with the league being
+   * viewed first. `self` and `other` remain for older consumers, while new
+   * surfaces use this collection so tournament and specialty hubs are not
+   * silently reduced to two leagues.
+   */
+  sides: FranchiseSide[]
 }
 
 /**
@@ -182,7 +189,7 @@ export async function resolvePairedHalf(
   const selfMember = membership.link.members.find(
     (m) => m.platform === key.platform && aliases.has(m.leagueId),
   )
-  const otherMember = membership.link.members.find(
+  const otherMembers = membership.link.members.filter(
     (m) => !(m.platform === key.platform && aliases.has(m.leagueId)),
   )
 
@@ -414,11 +421,10 @@ export async function resolvePairedHalf(
    * That ordering is only possible if both sides carry the same summary — the
    * viewed league's own roster count included.
    */
-  const self = selfMember
-    ? await describeSide(selfMember)
-    : null
-
-  const other = otherMember ? await describeSide(otherMember) : null
+  const self = selfMember ? await describeSide(selfMember) : null
+  const describedOthers = await Promise.all(otherMembers.map((member) => describeSide(member)))
+  const other = describedOthers[0] ?? null
+  const sides = [self, ...describedOthers].filter((side): side is FranchiseSide => side != null)
 
   /*
    * ⚠ ONE LOOKUP FOR BOTH HALVES, AFTER THEY ARE RESOLVED. `getDraftHqAll` takes
@@ -431,7 +437,7 @@ export async function resolvePairedHalf(
    * nothing rather than claiming the league never drafted.
    */
   const draftIds = Array.from(
-    new Set([self?.leagueId, other?.leagueId].filter((id): id is string => typeof id === 'string')),
+    new Set(sides.map((side) => side.leagueId).filter((id): id is string => typeof id === 'string')),
   )
   if (draftIds.length > 0) {
     const draftAll = await getDraftHqAll(
@@ -439,7 +445,7 @@ export async function resolvePairedHalf(
       draftIds.map((id) => ({ id })),
     ).catch(() => null)
     const byLeague = new Map((draftAll?.rows ?? []).map((r) => [r.leagueId, r]))
-    for (const side of [self, other]) {
+    for (const side of sides) {
       if (!side?.leagueId) continue
       const row = byLeague.get(side.leagueId)
       if (!row) continue
@@ -488,7 +494,7 @@ export async function resolvePairedHalf(
    * roster could not be read, and inferring a draft from a roster we never saw
    * would be a guess dressed as a finding.
    */
-  for (const side of [self, other]) {
+  for (const side of sides) {
     if (!side || side.draft || side.unavailableReason) continue
     if ((side.playerCount ?? 0) <= 0) continue
     side.draft = {
@@ -499,5 +505,5 @@ export async function resolvePairedHalf(
     }
   }
 
-  return { ...base, self, other }
+  return { ...base, self, other, sides }
 }
