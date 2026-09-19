@@ -286,6 +286,8 @@
 .af-ml-tier {
   margin-bottom: 30px;
   scroll-margin-top: 16px;
+  content-visibility: auto;
+  contain-intrinsic-size: auto 320px;
 }
 
 .af-ml-tier-head {
@@ -347,6 +349,7 @@
 
 /* ── Card ───────────────────────────────────────────────────────────────── */
 .af-ml-card {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -360,6 +363,11 @@
 
 .af-ml-card:hover {
   border-color: var(--line2);
+}
+
+.af-ml-card:focus-within {
+  border-color: var(--accent-line);
+  box-shadow: 0 0 0 2px var(--accent-soft);
 }
 
 /* Severity on the left border — the handoff's red/amber rule. */
@@ -591,6 +599,46 @@
   gap: 6px;
 }
 
+/* The visible action remains in normal flow, while its pseudo-element turns
+   the whole card into one link. This removes the phone-only two-tap feeling
+   without adding a click handler or a second navigation path. */
+.af-ml-open::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 14px;
+}
+
+.af-ml-hist--virtual {
+  display: block;
+  position: relative;
+  max-height: 520px;
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  border-radius: 12px;
+}
+
+.af-ml-hist--virtual:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
+.af-ml-hist-canvas {
+  position: relative;
+  width: 100%;
+}
+
+.af-ml-hist-item {
+  position: absolute;
+  inset: 0 0 auto;
+  padding-bottom: 6px;
+}
+
+.af-ml-hist-item .af-ml-hist-row {
+  height: 44px;
+}
+
 .af-ml-hist-row {
   display: flex;
   align-items: center;
@@ -630,6 +678,12 @@
   margin: 10px 0 0;
   font-size: 12px;
   color: var(--faint);
+}
+
+@media (max-width: 640px) {
+  .af-ml-hist--virtual {
+    max-height: min(56dvh, 520px);
+  }
 }
 
 /* ── Empty ──────────────────────────────────────────────────────────────── */
