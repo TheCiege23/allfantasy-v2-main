@@ -26,3 +26,20 @@ it('aborts the old league request when its panel unmounts', async () => {
   unmount()
   expect(signal!.aborted).toBe(true)
 })
+it('includes general league offers and processed trade grades with explanations', async () => {
+  const offer = { id: 'native', partnerName: 'Rivals', status: 'pending', sent: [{ label: 'Player A' }], received: [{ label: 'Player B' }], viewerIsReceiver: true, decisionCoveragePct: 95, proposalGrade: 'A', decisionRecommendation: 'Improves your starting lineup.' }
+  vi.stubGlobal('fetch', vi.fn(async (url: string) => ({ ok: true, json: async () => url.includes('trades-panel') ? { activeTrades: [offer], historyTrades: [{ ...offer, id: 'done', status: 'processed', currentPricingComplete: true, currentGrade: 'B' }] } : url.includes('view=proposals') ? { proposals: [], nextCursor: null } : { supported: false } })))
+  render(<ChimmyTrades leagueId="league" onAsk={() => {}} />)
+  fireEvent.click(screen.getByRole('button', { name: /Trade intelligence/ }))
+  await screen.findByText(/Current proposal grade A/)
+  expect(screen.getByText('Improves your starting lineup.')).toBeTruthy()
+  expect(screen.getByText(/Current market grade B/)).toBeTruthy()
+})
+it('withholds letters when trade coverage is incomplete and reports a failed provider scan', async () => {
+  vi.stubGlobal('fetch', vi.fn(async (url: string) => ({ ok: true, json: async () => url.includes('trades-panel') ? { activeTrades: [{ id: 'thin', partnerName: 'Rivals', sent: [], received: [], proposalGrade: 'A', decisionCoveragePct: 20 }], pending: { scanned: false, reason: 'Provider unavailable' } } : url.includes('view=proposals') ? { proposals: [], nextCursor: null } : { supported: false } })))
+  render(<ChimmyTrades leagueId="league" onAsk={() => {}} />)
+  fireEvent.click(screen.getByRole('button', { name: /Trade intelligence/ }))
+  await screen.findByText('Provider unavailable')
+  expect(screen.queryByText(/Current proposal grade A/)).toBeNull()
+  expect(screen.getByText(/Verified valuation coverage is incomplete/)).toBeTruthy()
+})

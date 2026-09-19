@@ -3,14 +3,35 @@
 import { useEffect, useState } from 'react'
 import type { TradeGradesPayload } from '@/lib/trade-intel/sleeperTradeGradeService'
 import type { ImportedTradeLedgerPayload } from '@/lib/trade-intel/importedTradeLedgerService'
+import type { LeagueTradeHistoryItem } from '@/components/league/types'
 
 type Proposal = { id: string; title: string; status: string; involvesYou: boolean; assets: string[]; grade: string | null; explanation: string }
 type History = { supported: boolean; grades?: TradeGradesPayload; ledger?: ImportedTradeLedgerPayload; viewerSleeperUserId?: string | null; sync?: { incomplete: boolean } }
+type TradeCenter = { activeTrades?: LeagueTradeHistoryItem[]; historyTrades?: LeagueTradeHistoryItem[]; pending?: { scanned: boolean; reason?: string | null } }
+
+function TradeCenterCard({ trade, active, onAsk }: { trade: LeagueTradeHistoryItem; active: boolean; onAsk: (question: string) => void }) {
+  const hasGrade = active ? (trade.decisionCoveragePct ?? 0) >= 60 : trade.currentPricingComplete === true
+  const grade = hasGrade ? (active ? trade.proposalGrade : trade.currentGrade) : null
+  const title = trade.proposerName && trade.receiverName ? `${trade.proposerName} → ${trade.receiverName}` : `Trade with ${trade.partnerName}`
+  const sent = trade.sent.map(asset => asset.label).join(', ') || 'No recorded assets'
+  const received = trade.received.map(asset => asset.label).join(', ') || 'No recorded assets'
+  const viewerIsParty = trade.viewerIsProposer || trade.viewerIsReceiver
+  return <article>
+    <strong>{title}</strong>
+    <p>{trade.status || (active ? 'Open offer' : 'Recorded trade')} · {grade ? `Current ${active ? 'proposal' : 'market'} grade ${grade}` : 'Grade unavailable'}</p>
+    <p>{active && viewerIsParty ? 'You send' : 'Sent'}: {sent}</p>
+    <p>{active && viewerIsParty ? 'You receive' : 'Received'}: {received}</p>
+    <p>{active && trade.decisionRecommendation ? trade.decisionRecommendation : grade ? `Repriced using this league's current player values. This is not a realized-points grade.` : 'Verified valuation coverage is incomplete; no letter grade is shown.'}</p>
+    {!active && trade.currentUnresolvedAssets?.length ? <p>Unpriced: {trade.currentUnresolvedAssets.join(', ')}</p> : null}
+    <button type="button" className="af-cm-quickbtn" onClick={() => onAsk(`Explain ${trade.status || 'recorded'} trade ${trade.id}: ${title}. Recorded sent assets: ${sent}. Recorded received assets: ${received}. Verify which side is mine, then explain the grade and whether it fits my roster and this league's rules.`)}>Ask Chimmy</button>
+  </article>
+}
 
 export function ChimmyTrades({ leagueId, onAsk }: { leagueId: string; onAsk: (question: string) => void }) {
   const [expanded, setExpanded] = useState(false)
   const [proposals, setProposals] = useState<Proposal[]>([])
   const [history, setHistory] = useState<History | null>(null)
+  const [tradeCenter, setTradeCenter] = useState<TradeCenter | null>(null)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const [revision, setRevision] = useState(0)
@@ -37,11 +58,12 @@ export function ChimmyTrades({ leagueId, onAsk }: { leagueId: string; onAsk: (qu
       } while (cursor)
       return rows
     }
-    Promise.allSettled([readProposals(), read(base)]).then(([offers, completed]) => {
+    Promise.allSettled([readProposals(), read(base), read(`/api/league/trades-panel?leagueId=${encodeURIComponent(leagueId)}`)]).then(([offers, completed, center]) => {
       if (controller.signal.aborted) return
       setProposals(offers.status === 'fulfilled' ? offers.value : [])
       setHistory(completed.status === 'fulfilled' ? completed.value : null)
-      if (offers.status === 'rejected' || completed.status === 'rejected') setError('Some trade activity could not be loaded. Retry to refresh it.')
+      setTradeCenter(center.status === 'fulfilled' ? center.value : null)
+      if (offers.status === 'rejected' || completed.status === 'rejected' || center.status === 'rejected') setError('Some trade activity could not be loaded. Retry to refresh it.')
       setBusy(false)
     })
     return () => controller.abort()
@@ -58,14 +80,23 @@ export function ChimmyTrades({ leagueId, onAsk }: { leagueId: string; onAsk: (qu
       {busy && <p role="status">Loading league trades…</p>}
       {error && <p role="alert">{error}</p>}
       {!busy && <>
-        <h3>Proposals and approvals</h3>
+        <h3>Open league offers</h3>
+        {tradeCenter?.pending?.scanned === false && tradeCenter.pending.reason && <p>{tradeCenter.pending.reason}</p>}
+        {(tradeCenter?.activeTrades ?? []).slice(0, visible).map(trade => <TradeCenterCard key={trade.id} trade={trade} active onAsk={onAsk} />)}
+        {tradeCenter && !tradeCenter.activeTrades?.length && <p>No accessible open offers returned by the Trade Center.</p>}
+        <h3>Redraft proposals and approvals</h3>
         {proposals.length === 0 && <p>No accessible AllFantasy proposals loaded.</p>}
         {proposals.slice(0, visible).map(p => <article key={p.id}>
           <strong>{p.title}</strong><p>{p.status}{p.involvesYou ? ' · Your trade' : ''} · {p.grade ? `Fairness snapshot ${p.grade}` : 'Grade unavailable'}</p>
           <p>{p.assets.join(' · ')}</p><p>{p.explanation}</p>
           <button type="button" className="af-cm-quickbtn" onClick={() => onAsk(`Explain proposal ${p.id}: ${p.title}, involving ${p.assets.join(', ')}. Does it fit my roster and this league's rules? Distinguish the historical fairness snapshot from a current recommendation.`)}>Ask Chimmy</button>
         </article>)}
-        <h3>Completed trades</h3>
+        {!!tradeCenter?.historyTrades?.length && <>
+          <h3>Recent league trade decisions</h3>
+          <p>Includes approved, processed and other recorded decisions available from the Trade Center. Current market grades differ from the realized results below.</p>
+          {tradeCenter.historyTrades.slice(0, visible).map(trade => <TradeCenterCard key={trade.id} trade={trade} active={false} onAsk={onAsk} />)}
+        </>}
+        <h3>Completed trade results</h3>
         {history?.grades?.fetchedAt && <p>Updated {new Date(history.grades.fetchedAt).toLocaleString()}. Grades measure realized fantasy points under league scoring.</p>}
         {history?.grades?.staleAsOf && <p>Cached history; some results may be out of date.</p>}
         {history?.sync?.incomplete && <p>Some provider trades have not finished syncing.</p>}
@@ -86,7 +117,7 @@ export function ChimmyTrades({ leagueId, onAsk }: { leagueId: string; onAsk: (qu
         {history?.ledger?.notes.map(note => <p key={note}>{note}</p>)}
         {history?.ledger?.trades.slice(0, visible).map(t => <article key={t.id}><strong>{t.season} · Grade unavailable</strong>{t.sides.map(s => <p key={s.teamId}>{s.managerName} received {s.received.map(p => p.name || p.playerId).join(', ')}</p>)}</article>)}
         {history && !trades.length && !history.ledger?.trades.length && <p>No completed trade history available for this league.</p>}
-        {Math.max(proposals.length, trades.length, history?.ledger?.trades.length ?? 0) > visible && <button type="button" className="af-cm-linkbtn" onClick={() => setVisible(v => v + 10)}>Show more trades</button>}
+        {Math.max(proposals.length, trades.length, history?.ledger?.trades.length ?? 0, tradeCenter?.activeTrades?.length ?? 0, tradeCenter?.historyTrades?.length ?? 0) > visible && <button type="button" className="af-cm-linkbtn" onClick={() => setVisible(v => v + 10)}>Show more trades</button>}
       </>}
     </div>}
   </section>
