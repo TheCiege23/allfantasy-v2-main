@@ -19,6 +19,7 @@ const detectManagerAmbiguityMock = vi.fn()
 const buildChimmyStalenessWarningMock = vi.fn()
 const buildChimmySourceReferencesMock = vi.fn()
 const buildChimmySportDataDigestMock = vi.fn()
+const resolvePairedHalfMock = vi.fn()
 const prismaUserProfileFindUniqueMock = vi.fn()
 const prismaUserProfileUpsertMock = vi.fn()
 const prismaAppUserFindUniqueMock = vi.fn()
@@ -124,6 +125,10 @@ vi.mock("@/lib/chimmy/chimmy-sport-data-digest", () => ({
   buildChimmySportDataDigest: buildChimmySportDataDigestMock,
 }))
 
+vi.mock("@/lib/core-app/leaguePairing", () => ({
+  resolvePairedHalf: resolvePairedHalfMock,
+}))
+
 vi.mock("@/lib/prisma", () => ({
   prisma: {
     appUser: { findUnique: prismaAppUserFindUniqueMock },
@@ -194,6 +199,7 @@ describe("POST /api/chat/chimmy contract", () => {
     })
     buildChimmySourceReferencesMock.mockReturnValue([])
     buildChimmySportDataDigestMock.mockResolvedValue({ text: "", sources: [] })
+    resolvePairedHalfMock.mockResolvedValue(null)
     prismaAppUserFindUniqueMock.mockResolvedValue({ emailVerified: new Date("2025-01-01") })
     prismaUserProfileUpsertMock.mockResolvedValue({
       userId: "user-1",
@@ -504,6 +510,50 @@ describe("POST /api/chat/chimmy contract", () => {
       leagueId: "league-1",
       leagueName: "Kings League",
     })
+  })
+
+  it("sends every connected roster to Chimmy after league authorization", async () => {
+    resolvePairedHalfMock.mockResolvedValueOnce({
+      linkId: "hub-1",
+      franchiseName: "Peach + Cream",
+      viewingRole: "pro",
+      self: null,
+      other: null,
+      sides: [
+        {
+          role: "pro", platform: "sleeper", leagueId: "league-1", name: "Peach Bowl",
+          sport: "NFL", season: 2026, teamLabel: "Free SF TEP", avatarUrl: null,
+          playerCount: 1, unavailableReason: null, draft: null, activity: null,
+          players: [{ id: "100", name: "Lamar Jackson", position: "QB", team: "BAL", imageUrl: null, logoUrl: null }],
+        },
+        {
+          role: "college", platform: "fantrax", leagueId: "college-1", name: "Cream Bowl",
+          sport: "NCAAF", season: 2026, teamLabel: "Ciege82", avatarUrl: null,
+          playerCount: 1, unavailableReason: null, draft: null, activity: null,
+          players: [{ id: "200", name: "Jeremiah Smith", position: "WR", team: "Ohio State", imageUrl: null, logoUrl: null }],
+        },
+      ],
+    })
+
+    const formData = new FormData()
+    formData.append("message", "How should I manage my connected rosters?")
+    formData.append("leagueId", "league-1")
+    formData.append("confirmTokenSpend", "true")
+
+    const { POST } = await import("@/app/api/chat/chimmy/route")
+    const res = await POST(buildMultipartRequest(formData) as any)
+
+    expect(res.status).toBe(200)
+    expect(resolvePairedHalfMock).toHaveBeenCalledWith("league-1", "user-1", {
+      includeOperationalSummary: false,
+    })
+    const request = requestContractToUnifiedMock.mock.calls.at(-1)?.[0]
+    expect(request?.userMessage).toContain("CONNECTED FRANCHISE ROSTERS")
+    expect(request?.userMessage).toContain("Lamar Jackson")
+    expect(request?.userMessage).toContain("Jeremiah Smith")
+    expect(request?.userMessage).not.toContain('"id":"100"')
+    const body = await res.json()
+    expect(body.meta?.dataSources).toContain("connected_franchise_rosters")
   })
 
   it("skips token confirmation when preview does not require confirmation", async () => {

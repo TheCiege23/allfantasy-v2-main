@@ -167,6 +167,8 @@ import {
   parseOrchestrationResponseSections,
 } from '@/lib/chimmy-orchestration'
 import { deriveWantFromIntent } from '@/lib/decision-os/grounding/intentToWant'
+import { resolvePairedHalf } from '@/lib/core-app/leaguePairing'
+import { renderConnectedFranchiseGrounding } from '@/lib/chimmy/connectedFranchiseGrounding'
 
 type ConversationTurn = {
   role: 'user' | 'assistant'
@@ -1241,6 +1243,25 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const leagueSnapshot = leagueGrounding.ok ? leagueGrounding.snapshot : null
 
   /*
+   * Connected-roster grounding is intentionally enabled for league-specific
+   * questions. The selected league has already passed membership verification above, and
+   * `resolvePairedHalf` independently scopes the franchise to this owner. Only
+   * the signed-in manager's roster on each side is returned; other managers'
+   * rosters never enter this payload.
+   */
+  const connectedFranchiseGrounding =
+    leagueSnapshot && userId && leagueGroundingRequired
+      ? await resolvePairedHalf(leagueSnapshot.id, userId, { includeOperationalSummary: false })
+          .then(renderConnectedFranchiseGrounding)
+          .catch((err) => {
+            console.warn('[chimmy] connected franchise grounding failed', {
+              kind: err instanceof Error ? err.constructor.name : 'unknown',
+            })
+            return null
+          })
+      : null
+
+  /*
    * The user named a league and we cannot see it. If the question needs league
    * facts, refusing is the answer — a wrong lineup call on someone's real roster
    * costs more trust than an empty one. Deliberately BEFORE the token spend
@@ -2101,6 +2122,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   if (homeSignalsBlock) dataSources.push('core_home_signals')
   if (coreSurfaceBlock) dataSources.push('core_surface_context')
   if (leagueSportsGrounding) dataSources.push('league_sports_grounding_packet')
+  if (connectedFranchiseGrounding) dataSources.push('connected_franchise_rosters')
   // Declared so a response can be attributed. A grounding source the answer used but does not
   // name is untraceable afterwards, which is the whole reason dataSources exists.
   if (decisionOsGrounding) dataSources.push('decision_os_grounding_packet')
@@ -2143,6 +2165,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         groundingFailure: leagueId && !leagueGrounding.ok ? leagueGrounding.reason : null,
         season: effectiveSeasonResult,
       }),
+      connectedFranchiseGrounding,
       ...(psychologyGroundingLines.length > 0
         ? [psychologyGroundingLines.join(NEWLINE)]
         : []),

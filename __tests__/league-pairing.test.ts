@@ -190,6 +190,32 @@ describe('the same Fantrax league appearing twice', () => {
 })
 
 describe('resolving the other half from a league', () => {
+  it('can load roster-only context without draft or activity work', async () => {
+    const rows = {
+      'lg-1': { id: 'lg-1', name: 'Peach Bowl', platform: 'sleeper', platformLeagueId: null, season: 2026, sport: 'NFL' },
+      'lg-2': { id: 'lg-2', name: 'Cream Bowl', platform: 'allfantasy', platformLeagueId: null, season: 2026, sport: 'NCAAF' },
+    }
+    leagueFindUnique.mockImplementation(async ({ where }) => rows[where.id as keyof typeof rows] ?? null)
+    memberFindFirst.mockResolvedValue({
+      role: 'pro',
+      link: {
+        id: 'hub-1',
+        name: 'Peach + Cream',
+        members: [
+          { platform: 'sleeper', leagueId: 'lg-1', role: 'pro', teamExternalId: null },
+          { platform: 'allfantasy', leagueId: 'lg-2', role: 'college', teamExternalId: null },
+        ],
+      },
+    })
+
+    const out = await resolvePairedHalf('lg-1', USER, { includeOperationalSummary: false })
+
+    expect(out?.sides).toHaveLength(2)
+    expect(draftHqAll).not.toHaveBeenCalled()
+    expect(leagueActivity).not.toHaveBeenCalled()
+    expect(out?.sides.every((side) => side.draft === null && side.activity === null)).toBe(true)
+  })
+
   it('keeps every member in a larger connected franchise, with the viewed league first', async () => {
     const rows = {
       'lg-1': { id: 'lg-1', name: 'Peach Bowl', platform: 'sleeper', platformLeagueId: null, season: 2026, sport: 'NFL' },
