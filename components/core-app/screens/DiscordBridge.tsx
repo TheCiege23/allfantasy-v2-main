@@ -375,6 +375,9 @@ export function DiscordBridge({ data }: DiscordBridgeProps) {
             </ul>
 
             <div className="af-dc-actions">
+              <a className="af-btn af-dc-btn af-dc-btn--ghost" href="https://discord.com/channels/@me" target="_blank" rel="noreferrer">
+                Open Discord to create a server ↗
+              </a>
               {data.connected ? (
                 <>
                   {data.installUrl ? (
@@ -392,6 +395,11 @@ export function DiscordBridge({ data }: DiscordBridgeProps) {
                 </a>
               )}
             </div>
+            <p className="af-dc-note">
+              Use an existing server you can manage, or open Discord, choose Add a Server (+), then Create My Own.
+              Return here to add the bot and link your league channel. If you only belong to a server,
+              ask a server administrator to install the bot.
+            </p>
           </section>
 
           <section className="af-dc-card" aria-labelledby="dc-wrong-h">

@@ -467,10 +467,19 @@ export function ChatComposer({
               setCursorPos(e.target.selectionStart ?? 0)
             }}
             onKeyUp={(e) => setCursorPos(e.currentTarget.selectionStart ?? 0)}
+            onPaste={async e => {
+              const file = Array.from(e.clipboardData.files).find(f => /^image\/(png|jpeg|gif|webp)$/.test(f.type))
+              if (!file) return
+              e.preventDefault()
+              try {
+                const uploaded = await uploadFile(file, 'image')
+                if (uploaded) setAttachments(a => [...a, { type: 'image', url: uploaded.url, mimeType: uploaded.mimeType, name: file.name }])
+              } catch { toast.error('Screenshot upload failed. Please try again.') }
+            }}
             onClick={(e) => setCursorPos(e.currentTarget.selectionStart ?? 0)}
             onSelect={(e) => setCursorPos(e.currentTarget.selectionStart ?? 0)}
             onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey) {
+              if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
                 e.preventDefault()
                 void handleSend()
               }

@@ -11,6 +11,8 @@ import { buildPlayerValueContext } from '@/lib/chimmy/tools/playerValueTool'
 import { buildPlayerProjectionContext } from '@/lib/chimmy/tools/playerProjectionTool'
 import { buildExplainValueContext } from '@/lib/chimmy/tools/explainValueTool'
 import { buildTradeBlockContext } from '@/lib/chimmy/tradeBlockGrounding'
+import { resolveNormalizedLeagueContext } from '@/lib/league-context-engine'
+import { buildWaiverContext } from '@/lib/chimmy/waiverGrounding'
 
 /**
  * READ-ONLY TOOLS THE MODEL MAY CALL FOR ITSELF.
@@ -48,6 +50,14 @@ export type ChimmyToolContext = {
 
 /** OpenAI-shaped function tools; Grok accepts these through the OpenAI SDK. */
 export const CHIMMY_TOOL_SPECS = [
+  {
+    type: 'function' as const,
+    function: {
+      name: 'get_league_trade_activity',
+      description: 'Read trade-block listings, your pending incoming proposals and completed trade history in the selected league. Use for trade offers, trade-block targets and whether a trade makes sense for this user. Also call get_my_roster for their team and scoring before recommending a trade. Respect missing data and historical snapshot labels. External private offers may not be available; never interpret missing offers as none existing.',
+      parameters: { type: 'object', properties: {}, required: [] },
+    },
+  },
   {
     type: 'function' as const,
     function: {
@@ -287,6 +297,23 @@ export async function executeChimmyTool(
 
   try {
     switch (name) {
+      case 'get_league_trade_activity': {
+        if (!ctx.leagueId || !ctx.userId) return NO_LEAGUE
+        const [{ buildTradeContextForChimmy }, { buildPendingTradeDecisionContext }, { buildLeagueTradeHistoryContext }] = await Promise.all([
+          import('@/lib/chimmy-trade/tradeChimmyGrounding'),
+          import('@/lib/chimmy-trade/pendingTradeDecisionGrounding'),
+          import('@/lib/chimmy-trade/leagueTradeHistoryGrounding'),
+        ])
+        const results = await Promise.allSettled([
+          buildTradeContextForChimmy(ctx.leagueId, ctx.userId),
+          buildPendingTradeDecisionContext(ctx.leagueId, ctx.userId),
+          buildLeagueTradeHistoryContext(ctx.leagueId, ctx.userId),
+          executeChimmyTool('get_my_roster', {}, ctx),
+        ])
+        const labels = ['Trade block and league trade context', 'Incoming proposals', 'Completed trades', 'Your team and league rules']
+        return results.map((r, i) => `${labels[i]}: ${r.status === 'fulfilled' && r.value ? r.value : 'No verified data available. Do not infer that no trades exist.'}`).join('\n\n')
+      }
+
       /*
        * ⚠ THIS TOOL BINDS `ctx.leagueId` FOR THE REST OF THE TURN. That is the
        * point: every other league tool reads the league from the context, so
@@ -381,7 +408,19 @@ export async function executeChimmyTool(
 
       case 'get_my_roster': {
         if (!ctx.leagueId || !ctx.userId) return NO_LEAGUE
-        return buildMyRosterContext(ctx.leagueId, ctx.userId)
+        const [roster, rules, waiver] = await Promise.all([
+          buildMyRosterContext(ctx.leagueId, ctx.userId),
+          resolveNormalizedLeagueContext({ leagueId: ctx.leagueId, userId: ctx.userId }).catch(() => null),
+          buildWaiverContext(ctx.leagueId, ctx.userId).catch(() => null),
+        ])
+        const settings = rules?.ok ? JSON.stringify({
+          league: rules.context.leagueName, season: rules.context.season,
+          scoring: rules.context.scoring, slots: rules.context.roster,
+          period: rules.context.matchupPeriod, lineup: rules.context.lineupBehavior,
+          format: rules.context.flags, waiver: rules.context.waiver,
+          lastSyncedAt: rules.context.importHealth.lastSyncedAt,
+        }) : 'League rules could not be retrieved; do not substitute generic PPR or invented FAAB.'
+        return [roster, `VERIFIED LEAGUE RULES: ${settings}`, waiver ?? 'Personal FAAB balance is unavailable. Do not substitute starting budget.'].join('\n\n')
       }
 
       case 'get_league_standings': {

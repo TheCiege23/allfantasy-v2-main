@@ -5,10 +5,11 @@ const mocks = vi.hoisted(() => ({
   leagueFindFirst: vi.fn(),
   threadMemberFindFirst: vi.fn(),
   put: vi.fn(),
+  get: vi.fn(),
 }))
 
 vi.mock('@/lib/auth-guard', () => ({ requireAuth: mocks.requireAuth }))
-vi.mock('@vercel/blob', () => ({ put: mocks.put }))
+vi.mock('@vercel/blob', () => ({ put: mocks.put, get: mocks.get }))
 vi.mock('@/lib/prisma', () => ({
   prisma: {
     league: { findFirst: mocks.leagueFindFirst },
@@ -26,10 +27,10 @@ describe('POST /api/chat/upload — DM and huddle attachments', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     // The route 503s without it; uploads need this set in production too.
-    vi.stubEnv('BLOB_READ_WRITE_TOKEN', 'test-token')
+    vi.stubEnv('CHAT_PRIVATE_BLOB_READ_WRITE_TOKEN', 'test-token')
     mocks.requireAuth.mockResolvedValue({ ok: true, userId: 'me' })
     mocks.threadMemberFindFirst.mockResolvedValue({ id: 'm1' })
-    mocks.put.mockResolvedValue({ url: 'https://blob/a.png' })
+    mocks.put.mockResolvedValue({ url: 'https://blob/a.png', pathname: 'chat/thread/t1/image/a.png' })
   })
 
   /*
@@ -42,8 +43,10 @@ describe('POST /api/chat/upload — DM and huddle attachments', () => {
     const res = await POST(upload({ type: 'image', threadId: 't1' }))
 
     expect(res.status).toBe(200)
+    expect(mocks.put).toHaveBeenCalledWith(expect.any(String), expect.anything(), expect.objectContaining({ access: 'private' }))
+    expect((await res.json()).url).toMatch(/^\/api\/chat\/upload\?path=/)
     expect(mocks.threadMemberFindFirst).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { threadId: 't1', userId: 'me' } }),
+      expect.objectContaining({ where: { threadId: 't1', userId: 'me', isBlocked: false } }),
     )
   })
 
@@ -73,5 +76,29 @@ describe('POST /api/chat/upload — DM and huddle attachments', () => {
 
     expect(res.status).toBe(403)
     expect(mocks.threadMemberFindFirst).not.toHaveBeenCalled()
+  })
+
+  it('rechecks membership when an attachment is opened', async () => {
+    mocks.threadMemberFindFirst.mockResolvedValue(null)
+    const { GET } = await import('@/app/api/chat/upload/route')
+    const res = await GET({ nextUrl: new URL('https://example.test/api/chat/upload?path=chat/thread/t1/image/a.png') } as never)
+    expect(res.status).toBe(403)
+    expect(mocks.get).not.toHaveBeenCalled()
+  })
+
+  it('does not publicly cache an authorized download', async () => {
+    mocks.get.mockResolvedValue({ statusCode: 200, stream: new ReadableStream({ start(c) { c.close() } }), blob: { contentType: 'image/png' } })
+    const { GET } = await import('@/app/api/chat/upload/route')
+    const res = await GET({ nextUrl: new URL('https://example.test/api/chat/upload?path=chat/thread/t1/image/a.png') } as never)
+    expect(res.status).toBe(200)
+    expect(res.headers.get('Cache-Control')).toBe('private, no-store')
+    expect(res.headers.get('X-Content-Type-Options')).toBe('nosniff')
+  })
+
+  it('rejects traversal before accessing storage', async () => {
+    const { GET } = await import('@/app/api/chat/upload/route')
+    const res = await GET({ nextUrl: new URL('https://example.test/api/chat/upload?path=chat/thread/t1/image/../secret') } as never)
+    expect(res.status).toBe(400)
+    expect(mocks.get).not.toHaveBeenCalled()
   })
 })

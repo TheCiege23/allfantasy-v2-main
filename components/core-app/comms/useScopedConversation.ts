@@ -5,7 +5,7 @@ import { useCallback, useEffect, useState, type SetStateAction } from 'react'
 export function useScopedConversation<T extends { id: string; role: string; text: string }>(owner: string | undefined, scope: string) {
   type State = { turns: T[]; draft: string }
   const [all, setAll] = useState<Record<string, State>>({})
-  const [ready, setReady] = useState(false)
+  const [loadedKey, setLoadedKey] = useState<string | null>(null)
   const storageKey = owner ? `af:comms:conversations:${owner}` : null
   useEffect(() => {
     try {
@@ -20,11 +20,11 @@ export function useScopedConversation<T extends { id: string; role: string; text
       }
       setAll(valid)
     } catch { setAll({}) }
-    setReady(true)
+    setLoadedKey(storageKey)
   }, [storageKey])
   useEffect(() => {
-    if (ready && storageKey) { try { sessionStorage.setItem(storageKey, JSON.stringify(all)) } catch { /* Private mode or storage quota: keep the in-memory conversation. */ } }
-  }, [all, ready, storageKey])
+    if (loadedKey === storageKey && storageKey) { try { sessionStorage.setItem(storageKey, JSON.stringify(all)) } catch { /* Private mode or storage quota: keep the in-memory conversation. */ } }
+  }, [all, loadedKey, storageKey])
   const setTurns = useCallback((action: SetStateAction<T[]>) => setAll(previous => {
     const state = previous[scope] ?? { turns: [], draft: '' }
     return { ...previous, [scope]: { ...state, turns: (typeof action === 'function' ? action(state.turns) : action).slice(-80) } }
@@ -52,5 +52,5 @@ export function useScopedConversation<T extends { id: string; role: string; text
     if (added.length === 0) return previous
     return { ...previous, [target]: { ...state, turns: [...state.turns, ...added].slice(-80) } }
   }), [scope])
-  return { turns: all[scope]?.turns ?? [], draft: all[scope]?.draft ?? '', setTurns, setDraft, carryInto }
+  return { turns: loadedKey === storageKey ? all[scope]?.turns ?? [] : [], draft: loadedKey === storageKey ? all[scope]?.draft ?? '' : '', setTurns, setDraft, carryInto }
 }

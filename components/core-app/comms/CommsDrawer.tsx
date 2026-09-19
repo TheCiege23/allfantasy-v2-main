@@ -1,6 +1,7 @@
 'use client'
 
 import ThreadPanel from './ThreadPanel'
+import { ChimmyTrades } from './ChimmyTrades'
 import { LeagueScopePicker } from './LeagueScopePicker'
 import { useScopedConversation } from './useScopedConversation'
 import {
@@ -565,6 +566,8 @@ function ChimmyPanel({
   const endRef = useRef<HTMLDivElement | null>(null)
   const [screenshot, setScreenshot] = useState<File | null>(null)
   const screenshotRef = useRef<HTMLInputElement | null>(null)
+  const activeScope = useRef(scopeId)
+  activeScope.current = scopeId
 
   /* An attachment belongs to the scope it was picked in; switching scope drops it. */
   useEffect(() => {
@@ -793,7 +796,7 @@ function ChimmyPanel({
       } catch (e) {
         /* A failed send hands the question back rather than losing what was typed. */
         setDraft(question)
-        setError(e instanceof Error ? e.message : 'Chimmy could not answer that.')
+        if (activeScope.current === scopeId) { setScreenshot(attached); setError(e instanceof Error ? e.message : 'Chimmy could not answer that.') }
       } finally {
         setBusy(false)
       }
@@ -859,6 +862,7 @@ function ChimmyPanel({
       </div>
 
       <div className="af-cm-thread">
+        {scopeId && <ChimmyTrades key={scopeId} leagueId={scopeId} onAsk={setDraft} />}
         {turns.length === 0 ? (
           <div className="af-cm-empty">
             <Sparkles className="af-cm-welcome-icon" size={28} aria-hidden />
@@ -1052,10 +1056,21 @@ function ChimmyPanel({
         >
           <ImagePlus size={18} aria-hidden />
         </button>
-        <input
+        <textarea
+          rows={2}
           className="af-cm-input"
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
+          onPaste={e => {
+            const file = Array.from(e.clipboardData.files).find(f => /^image\/(png|jpeg|webp|gif)$/.test(f.type))
+            if (!file) return
+            e.preventDefault()
+            if (file.size > 5 * 1024 * 1024) setError('Screenshot must be 5 MB or smaller.')
+            else { setScreenshot(file); setError(null) }
+          }}
+          onKeyDown={e => {
+            if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); send(draft) }
+          }}
           placeholder={publicMode ? 'Ask the league, or @chimmy…' : 'Ask Chimmy…'}
           aria-label="Message"
           disabled={busy}
@@ -1877,6 +1892,9 @@ function DiscordPanel({
               <Link href="/core/discord" className="af-cm-linkbtn">
                 Set up Discord →
               </Link>
+              <a className="af-cm-linkbtn" href="https://discord.com/channels/@me" target="_blank" rel="noreferrer">
+                Open Discord to create a server ↗
+              </a>
             </>
           ) : (
             <>
@@ -2101,6 +2119,7 @@ export function CommsDrawer({
           />
         ) : tab === 'chimmy' ? (
           <ChimmyPanel
+            key={userId ?? 'anonymous'}
             leagues={leagues}
             scopeId={scopeId}
             onScope={setScopeId}

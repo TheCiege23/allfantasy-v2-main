@@ -210,31 +210,20 @@ function normalizeGiphyResults(payload: unknown): GifSearchResult[] {
 export async function searchGifs(query: string, limit = 12): Promise<GifSearchResult[]> {
   const trimmed = query.trim()
   if (!trimmed) return []
-  const provider = getGifProviderName()
-  if (!provider) return []
-
-  if (provider === "klipy") {
-    const key = getKlipyKey()
-    const url = `https://api.klipy.com/api/v1/${key}/gifs/search?q=${encodeURIComponent(trimmed)}&per_page=${limit}&rating=g`
+  const boundedLimit = Number.isFinite(limit) ? Math.max(1, Math.min(48, Math.floor(limit))) : 12
+  const providers = [
+    { url: getKlipyKey() ? `https://api.klipy.com/api/v1/${getKlipyKey()}/gifs/search?q=${encodeURIComponent(trimmed)}&per_page=${boundedLimit}&rating=g` : '', normalize: normalizeKlipyResults },
+    { url: getTenorSearchUrl(trimmed, boundedLimit), normalize: normalizeTenorResults },
+    { url: getGiphySearchUrl(trimmed, boundedLimit), normalize: normalizeGiphyResults },
+  ]
+  for (const provider of providers) {
+    if (!provider.url) continue
     try {
-      const res = await fetch(url)
-      if (!res.ok) return []
-      const data = await res.json().catch(() => ({}))
-      return normalizeKlipyResults(data)
-    } catch {
-      return []
-    }
+      const res = await fetch(provider.url, { signal: AbortSignal.timeout(4000) })
+      if (!res.ok) continue
+      const results = provider.normalize(await res.json())
+      if (results.length) return results.slice(0, boundedLimit)
+    } catch { /* Try the next configured provider; never log URLs containing keys. */ }
   }
-
-  const url = provider === "tenor" ? getTenorSearchUrl(trimmed, limit) : getGiphySearchUrl(trimmed, limit)
-  if (!url) return []
-
-  try {
-    const res = await fetch(url)
-    if (!res.ok) return []
-    const data = await res.json().catch(() => ({}))
-    return provider === "tenor" ? normalizeTenorResults(data) : normalizeGiphyResults(data)
-  } catch {
-    return []
-  }
+  return []
 }

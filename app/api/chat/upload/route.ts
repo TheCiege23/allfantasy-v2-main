@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { put } from '@vercel/blob'
+import { randomUUID } from 'node:crypto'
+import { getPrivateChatFile, putPrivateChatFile, privateChatStorageConfigured } from '@/lib/chat-core/privateStorage'
 import { prisma } from '@/lib/prisma'
 import { requireAuth } from '@/lib/auth-guard'
-import { getBlobReadWriteToken } from '@/lib/blob/readWriteToken'
 
 export const dynamic = 'force-dynamic'
 
@@ -30,7 +30,7 @@ function toStringValue(value: unknown, fallback = '') {
  */
 async function canAccessThread(threadId: string, userId: string) {
   const member = await prisma.platformChatThreadMember.findFirst({
-    where: { threadId, userId },
+    where: { threadId, userId, isBlocked: false },
     select: { id: true },
   })
   return Boolean(member)
@@ -74,8 +74,8 @@ export async function POST(req: NextRequest) {
   if (!auth.ok) return auth.response
   const userId = auth.userId
 
-  if (!getBlobReadWriteToken()) {
-    return NextResponse.json({ url: null, error: 'Storage not configured' }, { status: 503 })
+  if (!privateChatStorageConfigured()) {
+    return NextResponse.json({ url: null, error: 'Private chat storage is not configured. Contact support.' }, { status: 503 })
   }
 
   const formData = await req.formData().catch(() => null)
@@ -107,7 +107,7 @@ export async function POST(req: NextRequest) {
   if (leagueId && !(await canAccessLeague(leagueId, userId))) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
-  if (!leagueId && threadId && !(await canAccessThread(threadId, userId))) {
+  if (threadId && !(await canAccessThread(threadId, userId))) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
@@ -126,7 +126,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Invalid image type' }, { status: 400 })
     }
     if (size > MAX_IMAGE) {
-      return NextResponse.json({ error: 'Image too large (max 10MB)' }, { status: 400 })
+      return NextResponse.json({ error: 'Image too large (max 25MB)' }, { status: 400 })
     }
   } else if (type === 'video') {
     if (!VIDEO_TYPES.has(mimeType)) {
@@ -152,26 +152,43 @@ export async function POST(req: NextRequest) {
   // Every upload is now league- or thread-scoped; the `profile/` prefix went with the
   // bypass above, since avatars are written by /api/user/profile/avatar under `avatars/`.
   const key = leagueId
-    ? `chat/${leagueId}/${type}/${Date.now()}-${filename}`
-    : `chat/thread/${threadId}/${type}/${Date.now()}-${filename}`
+    ? `chat/${leagueId}/${type}/${randomUUID()}-${filename}`
+    : `chat/thread/${threadId}/${type}/${randomUUID()}-${filename}`
 
   try {
-    // Public access so chat UI can render images / audio / video inline via direct HTTPS URLs.
-    // Persist `blob.url` in LeagueChatMessage.metadata (or imageUrl) as returned — do not replace with signed or proxied URLs.
-    const blob = await put(key, file, {
-      access: 'public',
-      contentType: mimeType,
-      token: getBlobReadWriteToken(),
-    })
+    // Persist the authenticated retrieval URL, never the underlying private blob URL.
+    const pathname = await putPrivateChatFile(key, file, mimeType)
 
     return NextResponse.json({
-      url: blob.url,
+      url: `/api/chat/upload?path=${encodeURIComponent(pathname)}`,
       type,
       mimeType,
       size,
     })
   } catch (e) {
-    console.error('[api/chat/upload]', e)
+    console.error('[api/chat/upload] Private storage write failed')
     return NextResponse.json({ error: 'Upload failed' }, { status: 500 })
   }
+}
+
+export async function GET(req: NextRequest) {
+  const auth = await requireAuth()
+  if (!auth.ok) return auth.response
+  const path = req.nextUrl.searchParams.get('path') ?? ''
+  const match = /^chat\/(thread\/)?([a-zA-Z0-9_-]+)\/(image|video|voice)\/([a-zA-Z0-9_.-]+)$/.exec(path)
+  if (!match || path.includes('..')) return NextResponse.json({ error: 'Invalid attachment path' }, { status: 400 })
+  const allowed = match[1] ? await canAccessThread(match[2], auth.userId) : await canAccessLeague(match[2], auth.userId)
+  if (!allowed) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (!privateChatStorageConfigured()) return NextResponse.json({ error: 'Private chat storage is not configured' }, { status: 503 })
+  try {
+    const blob = await getPrivateChatFile(path)
+    if (!blob) return NextResponse.json({ error: 'Attachment not found' }, { status: 404 })
+    return new Response(blob.stream, { headers: {
+      'Content-Type': blob.contentType,
+      'Cache-Control': 'private, no-store',
+      'X-Content-Type-Options': 'nosniff',
+      'Content-Disposition': 'inline',
+      'Vary': 'Cookie',
+    } })
+  } catch { return NextResponse.json({ error: 'Attachment unavailable' }, { status: 502 }) }
 }

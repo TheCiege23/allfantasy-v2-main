@@ -47,6 +47,7 @@ describe('tool specs', () => {
   it('exposes only read-only lookups', () => {
     const names = CHIMMY_TOOL_SPECS.map((t) => t.function.name)
     expect(names).toEqual([
+      'get_league_trade_activity',
       /*
        * ⚠ ADDED WHEN THE TOOL WAS. This list is hardcoded and ordered, so
        * shipping `find_league_by_name` turned it red — the assertion's job is to
