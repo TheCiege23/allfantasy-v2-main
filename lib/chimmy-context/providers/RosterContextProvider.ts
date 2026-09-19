@@ -166,6 +166,18 @@ export class RosterContextProvider
         })
         .catch(() => null)
 
+      /*
+       * WHICH ID SPACE THIS ROSTER IS WRITTEN IN. `Roster.playerData.source_provider` is stamped by
+       * the import bootstrap and is the most local answer; `League.platform` covers rows written
+       * before that field existed, or by a path that does not stamp it.
+       */
+      const league = await prisma.league
+        .findUnique({
+          where: { id: identity.leagueId },
+          select: { platform: true, sport: true },
+        })
+        .catch(() => null)
+
       if (!roster) {
         return {
           ok: true,
@@ -207,16 +219,43 @@ export class RosterContextProvider
        * ⚠ PARTIAL RESOLUTION IS EXPECTED AND IS LEFT VISIBLE. `SportsPlayer.sleeperId` covers
        * roughly 87% of NFL players. Anyone the registry cannot bridge keeps `name: null` — not
        * a label, not the id back again. A gap the model can see beats a name it will trust.
+       *
+       * ── 🛑 AND THE RESOLVER IT USED ONLY SPOKE SLEEPER, WHICH IS NOT A COVERAGE GAP ────────
+       *
+       * This read `getCanonicalPlayersBySleeperIds(rosterIds)` for EVERY league. That query is
+       * `PlayerProviderIdentity where provider = 'sleeper'`, so a Fantrax, ESPN, MFL, Yahoo or
+       * Fleaflicker roster matched ZERO rows — not most of them, all of them — because those
+       * rosters hold that platform's own ids and were never in the Sleeper id space to begin with.
+       *
+       * Measured on Cream Bowl (Fantrax NCAAF dynasty) 2026-09-18: 39 spots, 0 names, and the
+       * grounding packet correctly refused the whole question with `unresolved_identity`. The user
+       * asked how their team was doing and was told the roster could be counted but not read —
+       * while `/core` rendered the same roster with names, because `connectedRoster.ts` already
+       * knew about Fantrax. `resolveRosterPlayerIdentities` is that knowledge, in one place.
        */
       const rosterIds = [...starters, ...bench].map((p) => p.playerId)
       if (rosterIds.length > 0) {
         try {
-          const { getCanonicalPlayersBySleeperIds } = await import(
-            "@/lib/canonical/getCanonicalPlayer"
+          const { resolveRosterPlayerIdentities } = await import(
+            "@/lib/player-identity/resolveRosterPlayerIdentities"
           )
-          const canonical = await getCanonicalPlayersBySleeperIds(rosterIds)
+          const sourceProvider =
+            roster.playerData &&
+            typeof roster.playerData === "object" &&
+            !Array.isArray(roster.playerData)
+              ? (roster.playerData as Record<string, unknown>).source_provider
+              : null
+          const platform =
+            (typeof sourceProvider === "string" && sourceProvider.trim()
+              ? sourceProvider
+              : league?.platform) ?? "sleeper"
+          const identities = await resolveRosterPlayerIdentities(
+            platform,
+            league?.sport ?? "NFL",
+            rosterIds,
+          )
           for (const player of [...starters, ...bench]) {
-            const match = canonical.get(player.playerId)
+            const match = identities.get(player.playerId)
             if (!match) continue
             player.name = match.name || player.name
             player.position = match.position?.toUpperCase() || player.position
