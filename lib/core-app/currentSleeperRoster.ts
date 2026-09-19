@@ -1,4 +1,5 @@
 import 'server-only'
+import type { LineupVerification } from './lineupVerification'
 
 import { sleeperGet } from '@/lib/trade-intel/sleeperTradeSync'
 
@@ -18,10 +19,10 @@ const readRosters = (leagueId: string) =>
 export async function currentSleeperRoster(
   leagueId: string,
   team: { platformUserId?: string | null; externalId?: string | null },
-): Promise<Record<string, unknown> | null> {
+): Promise<(Record<string, unknown> & { verification: LineupVerification }) | null> {
   const [rows, league] = await Promise.all([
     readRosters(leagueId).catch(() => null),
-    sleeperGet<{ status: string; settings?: { leg?: number } }>(
+    sleeperGet<{ status: string; roster_positions?: string[]; settings?: { leg?: number } }>(
       `/league/${encodeURIComponent(leagueId)}`,
     ).catch(() => null),
   ])
@@ -55,5 +56,9 @@ export async function currentSleeperRoster(
   // Preserve empty positions: downstream filters must not move the next player
   // into the wrong starting slot when the provider returns null or an empty id.
   const starters = currentStarters.map((id) => id == null || id === '' ? '0' : id)
-  return { players: row.players ?? [], starters, reserve: row.reserve ?? [], taxi: row.taxi ?? [] }
+  return { players: row.players ?? [], starters, reserve: row.reserve ?? [], taxi: row.taxi ?? [], verification: {
+    checkedAt: new Date().toISOString(), source: 'Sleeper',
+    week: league.status === 'in_season' ? league.settings!.leg! : null,
+    slots: (league.roster_positions ?? []).filter((s) => !['BN', 'IR', 'TAXI'].includes(s)),
+  } }
 }

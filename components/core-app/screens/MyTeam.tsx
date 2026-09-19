@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import { LineupVerification } from '@/components/core-app/LineupVerification'
 import PlayerName from '@/components/core-app/player-card/PlayerName'
 import { PlayerCardLeagueScope } from '@/components/core-app/player-card/PlayerCardProvider'
 import { useEffect, useState } from 'react'
@@ -567,8 +568,10 @@ function BenchCheckStrip({ check }: { check: BenchCheck }) {
 function SlotRow({
   slot,
   platform,
+  anchor,
 }: {
   slot: LineupSlot
+  anchor?: string
   platform: string
 }) {
   return (
@@ -578,7 +581,7 @@ function SlotRow({
       state was already the loudest thing on the row; this is the same problem
       wearing a name.
     */
-    <li className="af-mt-row" data-empty={slot.empty} data-bye={slot.player?.onBye === true}>
+    <li id={anchor} className="af-mt-row" data-empty={slot.empty} data-bye={slot.player?.onBye === true}>
       <span className="af-mt-slot af-num" data-pos={posGroup(slot.slotLabel)}>
         {slot.slotLabel}
       </span>
@@ -635,7 +638,7 @@ function BenchRow({
   trailing?: React.ReactNode
 }) {
   return (
-    <li className="af-mt-row">
+    <li id={`lineup-player-${player.sleeperId}`} className="af-mt-row">
       <span
         className="af-mt-slot af-num"
         data-pos={posGroup(player.position ?? slotLabel)}
@@ -713,6 +716,7 @@ export function MyTeam({ data }: MyTeamProps) {
     */
     <PlayerCardLeagueScope leagueId={data.league.id}>
     <div className="af-mt">
+      {platform.toLowerCase() === 'sleeper' && <LineupVerification verification={data.lineupVerification} />}
       {/* ── Lock banner ─────────────────────────────────────────────── */}
       {data.lock.available ? (
         data.lock.data.daysAway >= DISTANT_LOCK_DAYS ? (
@@ -997,7 +1001,7 @@ export function MyTeam({ data }: MyTeamProps) {
         <header className="af-mt-section-head">
           <h2 className="af-label">Starters</h2>
           <span className="af-mt-section-note">
-            Read live from {platform}. To change it, open {platform} — AllFantasy only reads.
+            Lineup from {platform}. To change it, open {platform} — AllFantasy only reads.
           </span>
           <ProjHeader />
         </header>
@@ -1007,6 +1011,7 @@ export function MyTeam({ data }: MyTeamProps) {
             {data.starters.data.map((slot, i) => (
               <SlotRow
                 key={`${slot.slotLabel}-${i}`}
+                anchor={slot.player ? `lineup-player-${slot.player.sleeperId}` : `lineup-slot-${i}`}
                 slot={slot}
                 platform={platform}
               />

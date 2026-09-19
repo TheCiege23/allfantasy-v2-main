@@ -31,3 +31,20 @@ it('copies and downloads the same report with numeric points and literal manager
   expect(book.Sheets['Manager status'].B2).toMatchObject({ t: 'n', v: 123.45 })
   expect(writeFile.mock.calls[0][1]).toBe('tournament-2026-week-2.xlsx')
 })
+
+it('copies a shareable recap and offers its readable fallback', async () => {
+  const report = { season: 2026, week: 2, sheets: [
+    { name: 'Manager status', rows: [['Conference', 'League', 'Manager', 'Status'], ['Black', 'A', 'Sam', 'Above cut']] },
+    { name: 'Weekly top scorers', rows: [['Rank', 'Manager', 'League', 'Conference', 'Points'], [1, 'Sam', 'A', 'Black', 123.45]] },
+    { name: 'Coverage', rows: [['Conference', 'League', 'Managers', 'Available', 'Missing'], ['Black', 'A', 1, 1, 0]] },
+  ] }
+  const copy = vi.fn().mockResolvedValue(undefined)
+  Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: copy } })
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => report }))
+  render(<WeeklyReportPanel tournamentId="cup" />)
+  fireEvent.click(screen.getByRole('button', { name: 'Build weekly report' }))
+  fireEvent.click(await screen.findByRole('button', { name: 'Copy weekly recap' }))
+  expect(copy).toHaveBeenCalledWith(expect.stringContaining('Sam — 123.45 points'))
+  expect((screen.getByLabelText('Weekly recap text') as HTMLTextAreaElement).value).toContain('1 manager across 1 league.')
+  await screen.findByText('Weekly recap copied. Ready to share with your managers.')
+})

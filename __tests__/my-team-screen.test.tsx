@@ -719,3 +719,13 @@ describe('My Team — the reported problems', () => {
     expect(text(<MyTeam data={raw} />)).toContain('not adjusted for your scoring')
   })
 })
+
+vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: vi.fn() }) }))
+
+it('keeps a player alert anchor when the player moves from starter to bench', () => {
+  const view = render(<MyTeam data={data()} />)
+  expect(view.container.querySelector('#lineup-player-p1')).toBeTruthy()
+  view.rerender(<MyTeam data={data({ starters: { available: true, data: [] }, bench: { available: true, data: [player()] } })} />)
+  expect(view.container.querySelector('#lineup-player-p1')).toHaveTextContent('BN')
+  view.unmount()
+})

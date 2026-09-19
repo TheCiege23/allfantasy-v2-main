@@ -62,3 +62,33 @@ export function reportTsv(report: WeeklyReport): string {
   }
   return report.sheets.map((s) => [s.name, ...s.rows.map((r) => r.map(safe).join('\t'))].join('\n')).join('\n\n')
 }
+
+export function weeklyOverview(report: WeeklyReport) {
+  const managers = report.sheets[0].rows.slice(1)
+  const coverage = report.sheets[2].rows.slice(1)
+  return {
+    managers: managers.length, leagues: coverage.length,
+    aboveCut: managers.filter((r) => r[3] === 'Above cut').length,
+    bubble: managers.filter((r) => r[3] === 'Bubble').length,
+    belowCut: managers.filter((r) => r[3] === 'Below cut').length,
+    needsLink: managers.filter((r) => r[3] === 'Needs team link').length,
+    missingLeagues: coverage.filter((r) => Number(r[4]) > 0).length,
+    missingScores: coverage.reduce((n, r) => n + Number(r[4] || 0), 0),
+  }
+}
+
+export function weeklyRecap(report: WeeklyReport): string {
+  const s = weeklyOverview(report)
+  const clean = (v: string | number) => String(v).replace(/[\r\n\t]/g, ' ')
+  const title = report.sheets.find((sheet) => sheet.name === 'Report notes')?.rows.find((r) => r[0] === 'Tournament')?.[1] ?? 'Tournament'
+  return [
+    `${clean(title)} · ${report.season} Week ${report.week}`,
+    `${s.managers} ${s.managers === 1 ? 'manager' : 'managers'} across ${s.leagues} ${s.leagues === 1 ? 'league' : 'leagues'}.`,
+    `Current standings: ${s.aboveCut} above cut · ${s.bubble} bubble · ${s.belowCut} below cut · ${s.needsLink} need team links.`,
+    'Weekly top scorers:',
+    ...report.sheets[1].rows.slice(1, 6).map((r) => `${r[0]}. ${clean(r[1])} — ${Number(r[4]).toFixed(2)} points (${clean(r[2])}, ${clean(r[3])})`),
+    report.sheets[1].rows.length === 1 ? 'No weekly scores collected.' : '',
+    s.missingScores ? `Partial results: ${s.missingScores} manager scores missing across ${s.missingLeagues} leagues.` : 'Scores collected for all listed managers.',
+    'Scores may be in progress and use each league’s scoring rules. Cut status reflects current standings, not historical standings for this week.',
+  ].filter(Boolean).join('\n')
+}

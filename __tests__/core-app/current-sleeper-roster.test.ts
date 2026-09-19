@@ -11,7 +11,7 @@ describe('current Sleeper lineup', () => {
   beforeEach(() => { get.mockReset() })
   it('keeps a benched injured player out of starters and preserves empty slot order', async () => {
     mockRosters([{ roster_id: 3, owner_id: 'owner', players: ['sampson', 'hill'], starters: ['hill', '0'], reserve: [], taxi: [] }])
-    expect(await currentSleeperRoster('league', { platformUserId: 'owner', externalId: '3' })).toEqual({
+    expect(await currentSleeperRoster('league', { platformUserId: 'owner', externalId: '3' })).toMatchObject({
       players: ['sampson', 'hill'], starters: ['hill', '0'], reserve: [], taxi: [],
     })
   })
@@ -44,12 +44,12 @@ describe('current Sleeper lineup', () => {
   })
   it('resolves a claimed roster number when no owner id is available', async () => {
     mockRosters([{ roster_id: 3, owner_id: 'owner', players: null, starters: [] }])
-    expect(await currentSleeperRoster('league', { externalId: '3' })).toEqual({ players: [], starters: [], reserve: [], taxi: [] })
+    expect(await currentSleeperRoster('league', { externalId: '3' })).toMatchObject({ players: [], starters: [], reserve: [], taxi: [] })
   })
   it('preserves separate bench, reserve and taxi assignments', async () => {
     const row = { roster_id: 3, owner_id: 'owner', players: ['starter', 'bench', 'ir', 'taxi'], starters: ['starter', '0'], reserve: ['ir'], taxi: ['taxi'] }
     mockRosters([row])
-    expect(await currentSleeperRoster('league', { platformUserId: 'owner' })).toEqual({ players: row.players, starters: row.starters, reserve: row.reserve, taxi: row.taxi })
+    expect(await currentSleeperRoster('league', { platformUserId: 'owner' })).toMatchObject({ players: row.players, starters: row.starters, reserve: row.reserve, taxi: row.taxi })
   })
   it('preserves null empty-slot positions instead of shifting a FLEX player into QB', async () => {
     mockRosters([{ roster_id: 3, owner_id: 'owner', players: ['hill'], starters: [null, '', 'hill'] }])
@@ -61,4 +61,16 @@ describe('current Sleeper lineup', () => {
     get.mockRejectedValue(new Error('timeout'))
     expect(await currentSleeperRoster('league', { platformUserId: 'owner' })).toBeNull()
   })
+})
+
+it('records verification only after weekly starters succeed, using the host week and slots', async () => {
+  const before = Date.now()
+  get.mockImplementation(async (path: string) => {
+    if (path.endsWith('/rosters')) return [{ roster_id: 3, owner_id: 'owner', players: ['hill'], starters: ['hill'] }]
+    if (path.endsWith('/matchups/2')) return [{ roster_id: 3, starters: ['hill'] }]
+    return { status: 'in_season', settings: { leg: 2 }, roster_positions: ['FLEX', 'BN', 'IR'] }
+  })
+  const result = await currentSleeperRoster('league', { platformUserId: 'owner' })
+  expect(result?.verification).toMatchObject({ source: 'Sleeper', week: 2, slots: ['FLEX'] })
+  expect(Date.parse(result!.verification.checkedAt)).toBeGreaterThanOrEqual(before)
 })

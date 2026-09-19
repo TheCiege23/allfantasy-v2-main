@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { reportTsv, type WeeklyReport } from '@/lib/tournament/weeklyReport'
+import { reportTsv, weeklyOverview, weeklyRecap, type WeeklyReport } from '@/lib/tournament/weeklyReport'
 
 export function WeeklyReportPanel({ tournamentId }: { tournamentId: string }) {
   const [season, setSeason] = useState(String(new Date().getFullYear()))
@@ -28,6 +28,12 @@ export function WeeklyReportPanel({ tournamentId }: { tournamentId: string }) {
     try { await navigator.clipboard.writeText(reportTsv(report)); setMessage('Copied. Paste into Excel or Google Sheets.') }
     catch { setMessage('Copy unavailable. Select and copy the report text below.') }
   }
+  async function copyRecap() {
+    if (!report) return
+    try { await navigator.clipboard.writeText(weeklyRecap(report)); setMessage('Weekly recap copied. Ready to share with your managers.') }
+    catch { setMessage('Copy unavailable. Select the weekly recap text below.') }
+  }
+  const overview = report ? weeklyOverview(report) : null
   async function download() {
     if (!report) return
     try {
@@ -50,17 +56,22 @@ export function WeeklyReportPanel({ tournamentId }: { tournamentId: string }) {
       <label className="af-th-field">Week<input className="af-th-input af-th-input--num" type="number" disabled={busy} placeholder="Latest" min="1" max="53" value={week} onChange={(e) => { setWeek(e.target.value); setReport(null) }} /></label>
       <button className="af-th-copy" disabled={busy} onClick={load}>{busy ? 'Loading…' : 'Build weekly report'}</button>
       {report && <>
-<button className="af-th-copy" onClick={copy}>Copy report for Excel</button><button className="af-th-copy" onClick={download}>Download Excel (.xlsx)</button></>}
+<button className="af-th-copy" onClick={copyRecap}>Copy weekly recap</button><button className="af-th-copy" onClick={copy}>Copy report for Excel</button><button className="af-th-copy" onClick={download}>Download Excel (.xlsx)</button></>}
     </div>
     {message && <p role="status" className="af-th-note">{message}</p>}
     {report && <>
       <p className="af-th-note"><strong>{report.season} · Week {report.week}</strong> · {report.sheets[0].rows.length - 1} managers across all conferences</p>
+      {overview && <div className="af-th-actions" aria-label="Weekly overview">
+        <button type="button" className="af-th-linkbtn" onClick={() => setActiveSheet(0)}>{overview.aboveCut} above cut · {overview.bubble} bubble · {overview.belowCut} below cut · {overview.needsLink} need team links</button>
+        <button type="button" className="af-th-linkbtn" onClick={() => setActiveSheet(2)}>{overview.missingLeagues} leagues missing scores</button>
+      </div>}
       <div className="af-th-actions" role="group" aria-label="Report views">
         {report.sheets.slice(0, 3).map((sheet, index) => <button key={sheet.name} type="button" className="af-th-linkbtn" aria-pressed={activeSheet === index} onClick={() => setActiveSheet(index)}>{sheet.name}</button>)}
       </div>
       {report.sheets[2].rows.slice(1).some((r) => Number(r[4]) > 0) && <p className="af-th-warn" role="status">Some managers have no collected score for this week. The leaderboard is partial; see data coverage below.</p>}
       <div className="af-th-scroll"><table className="af-th-table" aria-label={report.sheets[activeSheet].name}><thead><tr>{report.sheets[activeSheet].rows[0].map((v, i) => <th scope="col" key={i}>{v}</th>)}</tr></thead><tbody>{report.sheets[activeSheet].rows.slice(1).map((row, i) => <tr key={i}>{row.map((v, j) => <td key={j}>{v}</td>)}</tr>)}</tbody></table></div>
       {report.sheets[1].rows.length === 1 && <p className="af-th-warn">No weekly scores collected for the selected week.</p>}
+      <details><summary>Weekly recap preview</summary><textarea aria-label="Weekly recap text" readOnly value={weeklyRecap(report)} rows={10} style={{ width: '100%', color: 'inherit', background: 'transparent' }} /></details>
       <details><summary>Plain text for copying</summary><textarea aria-label="Weekly report text" readOnly value={reportTsv(report)} rows={14} style={{ width: '100%', color: 'inherit', background: 'transparent' }} /></details>
     </>}
   </section>
