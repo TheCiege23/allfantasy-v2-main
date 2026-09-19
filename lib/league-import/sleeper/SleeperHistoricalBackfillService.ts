@@ -69,16 +69,20 @@ export async function syncSleeperHistoricalBackfillAfterImport(args: {
   /** Admin/internal-only escape hatch to force a full refetch of already-imported seasons. */
   force?: boolean
 }): Promise<SleeperHistoricalBackfillSummary> {
-  const drafts = await syncSleeperHistoricalDraftFactsAfterImport({
+  /*
+   * Drafts, season snapshots and transactions own separate warehouse tables, so making each
+   * one wait for the previous service only stretches the import's critical path. Start them
+   * together. Matchups deliberately wait for seasonState: both services merge fields into the
+   * same LeagueDynastySeason.metadata row, and overlapping those read/merge/write cycles can
+   * lose one service's metadata.
+   */
+  const draftsPromise = syncSleeperHistoricalDraftFactsAfterImport({
     leagueId: args.leagueId,
     force: args.force,
   })
-  const seasonState = await syncSleeperHistoricalSeasonStateAfterImport({
+  const seasonStatePromise = syncSleeperHistoricalSeasonStateAfterImport({
     leagueId: args.leagueId,
     force: args.force,
-  })
-  const matchups = await syncSleeperHistoricalMatchupsAfterImport({
-    leagueId: args.leagueId,
   })
   /*
    * The fourth sibling, added 2026-09-01. Draft, season state and matchups were built and this
@@ -89,10 +93,20 @@ export async function syncSleeperHistoricalBackfillAfterImport(args: {
    * Carries `force` like the draft and season-state siblings so the completion gate can be
    * overridden deliberately rather than by accident.
    */
-  const transactions = await syncSleeperHistoricalTransactionsAfterImport({
+  const transactionsPromise = syncSleeperHistoricalTransactionsAfterImport({
     leagueId: args.leagueId,
     force: args.force,
   })
+
+  const seasonState = await seasonStatePromise
+  const matchupsPromise = syncSleeperHistoricalMatchupsAfterImport({
+    leagueId: args.leagueId,
+  })
+  const [drafts, matchups, transactions] = await Promise.all([
+    draftsPromise,
+    matchupsPromise,
+    transactionsPromise,
+  ])
 
   try {
     const backfill = await runDynastyBackfill({
@@ -134,36 +148,45 @@ export async function syncSleeperHistoricalBackfillAfterImport(args: {
       return summary
     }
 
-    try {
-      const graph = await buildLeagueGraph({
+    /*
+     * These derived rebuilds only read the now-complete history and write independent outputs.
+     * Run them together so a slow graph rebuild does not hold the Hall of Fame refresh behind it.
+     */
+    const [graphResult, hallOfFameResult] = await Promise.allSettled([
+      buildLeagueGraph({
         leagueId: args.leagueId,
         season: null,
         includeTrades: true,
         includeRivalries: true,
-      })
+      }),
+      rebuildHallOfFame({ leagueId: args.leagueId }),
+    ])
+
+    if (graphResult.status === 'fulfilled') {
+      const graph = graphResult.value
       summary.graph = {
         refreshed: true,
         nodeCount: graph.nodeCount,
         edgeCount: graph.edgeCount,
         snapshotId: graph.snapshotId,
       }
-    } catch (error) {
+    } else {
       summary.graph = {
         refreshed: false,
-        error: getErrorMessage(error),
+        error: getErrorMessage(graphResult.reason),
       }
     }
 
-    try {
-      const hallOfFame = await rebuildHallOfFame({ leagueId: args.leagueId })
+    if (hallOfFameResult.status === 'fulfilled') {
+      const hallOfFame = hallOfFameResult.value
       summary.hallOfFame = {
         refreshed: true,
         count: hallOfFame.count,
       }
-    } catch (error) {
+    } else {
       summary.hallOfFame = {
         refreshed: false,
-        error: getErrorMessage(error),
+        error: getErrorMessage(hallOfFameResult.reason),
       }
     }
 
