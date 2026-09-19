@@ -27,13 +27,16 @@ export function ConnectedRoster({ sides }: { sides: FranchiseSide[] }) {
       <select aria-label="Filter roster by position" value={position} onChange={(e) => setPosition(e.target.value)}><option value="all">All positions</option>{positions.map((p) => <option key={p}>{p}</option>)}</select>
       <div className="af-hub-tabs" role="group" aria-label="Roster leagues">
         <button type="button" aria-pressed={scope === 'all'} onClick={() => setScope('all')}>All leagues</button>
-        {sides.map((side) => <button type="button" key={side.role} aria-pressed={scope === side.role} onClick={() => setScope(side.role)}>{side.name}</button>)}
+        {sides.map((side) => {
+          const key = `${side.platform}:${side.memberLeagueId}`
+          return <button type="button" key={key} aria-pressed={scope === key} onClick={() => setScope(key)}>{side.name}</button>
+        })}
       </div>
     </div>
     <div className="af-hub-columns">
-      {sides.filter((side) => scope === 'all' || scope === side.role).map((side) => {
+      {sides.filter((side) => scope === 'all' || scope === `${side.platform}:${side.memberLeagueId}`).map((side) => {
         const players = (side.players ?? []).filter((p) => (position === 'all' || p.position === position) && (!needle || `${p.name} ${p.team ?? ''}`.toLowerCase().includes(needle)))
-        return <section key={side.role} className="af-hub-squad" aria-label={`${side.name} roster`}>
+        return <section key={`${side.platform}:${side.memberLeagueId}`} className="af-hub-squad" aria-label={`${side.name} roster`}>
           <header><div><span className="af-label">{side.platform} · {side.sport?.toUpperCase()}</span><h4>{side.name}</h4></div><span className="af-hub-count">{side.playerCount ?? '—'}</span></header>
           {side.leagueId ? <Link className="af-hub-team-link" href={`/core/my-team?league=${encodeURIComponent(side.leagueId)}`}>Open team & lineup →</Link> : null}
           {side.unavailableReason ? <p className="af-hub-empty">{side.unavailableReason}</p> : players.length ? <ul>

@@ -34,8 +34,12 @@ export async function attachLeagueHubs(userId: string, leagues: HubLeague[]): Pr
       if (match && !members.includes(match)) members.push(match)
     }
     if (members.length < 2) continue
-    members.sort((a, b) => a.id.localeCompare(b.id))
-    const hub: LeagueHub = { id: link.id, name: link.name, members: members.map((m) => ({ id: m.id, name: m.name, platform: m.platform, href: m.href ?? '/core?league=' + encodeURIComponent(m.id) })) }
+    const hub: LeagueHub = {
+      id: link.id,
+      name: link.name,
+      href: '/core/war-room?league=' + encodeURIComponent(members[0].id),
+      members: members.map((m) => ({ id: m.id, name: m.name, platform: m.platform, href: m.href ?? '/core?league=' + encodeURIComponent(m.id) })),
+    }
     for (const member of members) member.hub = hub
   }
 }

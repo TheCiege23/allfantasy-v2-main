@@ -1,16 +1,21 @@
 import React from 'react'
-import { describe, it, expect, afterEach } from 'vitest'
-import { render, screen, fireEvent, cleanup } from '@testing-library/react'
+import { describe, it, expect, afterEach, vi } from 'vitest'
+import { render, screen, fireEvent, cleanup, waitFor } from '@testing-library/react'
 import { ConnectedRoster } from '@/components/core-app/screens/ConnectedRoster'
 import { ConnectedFranchiseWarRoom } from '@/components/core-app/screens/ConnectedFranchiseWarRoom'
 import { groupLeagueHubs } from '@/lib/core-app/leagueHubGroups'
 import { buildFranchiseView } from '@/lib/franchise/franchiseLink'
 import type { FranchiseSide } from '@/lib/core-app/leaguePairing'
 
-afterEach(cleanup)
+vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: vi.fn() }) }))
+
+afterEach(() => {
+  cleanup()
+  vi.unstubAllGlobals()
+})
 const sides: FranchiseSide[] = ['Peach Bowl', 'Cream Bowl'].map((name, i) => ({
   name, role: i ? 'college' : 'pro', platform: i ? 'fantrax' : 'sleeper', sport: i ? 'NCAAF' : 'NFL',
-  leagueId: `league-${i}`, season: 2026, teamLabel: 'My team', avatarUrl: null, playerCount: 1,
+  leagueId: `league-${i}`, memberLeagueId: `league-${i}`, season: 2026, teamLabel: 'My team', teamCandidates: [], avatarUrl: null, playerCount: 1,
   unavailableReason: null, draft: null, activity: null,
   players: [{ id: `${i}`, name: i ? 'College Player' : 'Pro Player', position: i ? 'WR' : 'QB', team: i ? 'Texas' : 'KC', imageUrl: null, logoUrl: null }],
 }))
@@ -65,23 +70,56 @@ describe('connected league hub', () => {
     ]
     render(
       <ConnectedFranchiseWarRoom
+        linkId="hub-1"
         franchiseName="One franchise"
         selectedLeagueId="league-0"
         sides={expanded.map((side) => ({
           role: side.role,
           leagueId: side.leagueId,
+          memberLeagueId: side.memberLeagueId,
           name: side.name,
           platform: side.platform,
           sport: side.sport ?? null,
+          season: side.season,
+          teamLabel: side.teamLabel,
+          teamCandidates: side.teamCandidates,
+          avatarUrl: side.avatarUrl,
           playerCount: side.playerCount,
           unavailableReason: side.unavailableReason,
+          draft: side.draft,
+          activity: side.activity,
           players: side.players ?? [],
         }))}
       />,
     )
     expect(screen.getByText('3', { selector: '.af-cwr-scoreboard strong' })).toBeTruthy()
     expect(screen.getByText('Playoff Tournament')).toBeTruthy()
-    expect(screen.getAllByRole('link', { name: 'Open roster →' })).toHaveLength(3)
-    expect(screen.getByRole('link', { name: 'Open the combined roster →' })).toHaveAttribute('href', '/core?league=league-0')
+    expect(screen.getAllByRole('link', { name: 'Roster' })).toHaveLength(3)
+    expect(screen.getByRole('link', { name: 'Open combined roster →' })).toHaveAttribute('href', '/core?league=league-0')
+  })
+
+  it('saves a corrected team identity for one league without reconnecting the hub', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ ok: true }) })
+    vi.stubGlobal('fetch', fetchMock)
+    render(
+      <ConnectedFranchiseWarRoom
+        linkId="hub-1"
+        franchiseName="One franchise"
+        selectedLeagueId="league-0"
+        sides={[{
+          ...sides[0],
+          memberLeagueId: 'provider-league-0',
+          teamLabel: 'Team One',
+          teamCandidates: [{ id: '1', label: 'Team One' }, { id: '2', label: 'Team Two' }],
+        }]}
+      />,
+    )
+    fireEvent.change(screen.getByLabelText('Your team in Peach Bowl'), { target: { value: '2' } })
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1))
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({
+      action: 'update-team-mapping',
+      linkId: 'hub-1',
+      member: { platform: 'sleeper', leagueId: 'provider-league-0', teamExternalId: '2' },
+    })
   })
 })
