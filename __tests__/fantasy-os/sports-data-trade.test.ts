@@ -122,8 +122,10 @@ describe('5E-f Trade — analysis path is informational and deterministic', () =
   it('attaches informational sportsContext without altering the trade payload (valuation/reconstruction untouched)', () => {
     expect(src).toMatch(/describeTradeSportsContext/)
     expect(src).toMatch(/isSportsDataEnabled\('trade'\)/)
-    // the trade object returned by getAfLeagueTrade is passed through unchanged; sportsContext is a sibling field
-    expect(src).toMatch(/return NextResponse\.json\(\{ trade, \.\.\.\(sportsContext/)
+    // The immutable decision receipt may enrich the trade object; certified sports context stays
+    // a sibling and therefore cannot mutate valuation or roster reconstruction.
+    expect(src).toMatch(/trade:\s*\{\s*\.\.\.trade,\s*decisionReceipt:/)
+    expect(src).toMatch(/\.\.\.\(sportsContext\s*\?\s*\{ sportsContext \}/)
     expect(noProvider(src)).toBe(false)
   })
 })
