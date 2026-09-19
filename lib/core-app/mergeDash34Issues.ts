@@ -1,4 +1,5 @@
 import 'server-only'
+import { verificationStamp } from './lineupVerification'
 
 import type { CoreIssue } from '@/lib/core-app/outstandingIssues'
 import type { Dash34Data, Dash34League } from '@/components/core-app/screens/Dashboard34'
@@ -64,7 +65,7 @@ export function mergeDash34Issues(derived: CoreIssue[], dash34: Dash34Data | nul
           severity: 'bad',
           glyph: '□',
           title: `${n} empty starting ${n === 1 ? 'slot' : 'slots'} — ${l.name}`,
-          meta: `${titleCasePlatform(l.platform)} › Lineup · a slot with nobody in it scores zero`,
+          meta: `${titleCasePlatform(l.platform)} › Lineup · a slot with nobody in it scores zero${l.lineupVerification ? ` · ${verificationStamp(l.lineupVerification.checkedAt)}` : ''}`,
           leagueId: l.id,
           leagueName: l.name,
           platform: l.platform,
@@ -87,19 +88,21 @@ export function mergeDash34Issues(derived: CoreIssue[], dash34: Dash34Data | nul
        * cannot play, which is a different and untrue thing.
        */
       if (seenIds.has(id) || (l.hurtStarters ?? 0) === 0) continue
+      const flagged = l.flaggedStarters?.[0]
+      const checked = l.lineupVerification
       synthesized.push({
         id,
         severity: 'bad',
         glyph: '⚑',
-        title: `Starter who cannot play — ${l.name}`,
-        meta: `${titleCasePlatform(l.platform)} › Lineup · a starter is ruled out`,
+        title: flagged ? `${flagged.name} · ${flagged.slot} · ${flagged.status} — ${l.name}` : `Starter who cannot play — ${l.name}`,
+        meta: `${titleCasePlatform(l.platform)} › Lineup${checked?.week != null ? ` · Week ${checked.week}` : ''} · ${flagged ? `Listed ${flagged.status} in your starting lineup${(l.flaggedStarters?.length ?? 0) > 1 ? `; ${l.flaggedStarters!.length - 1} more flagged` : ''}` : 'a starter is ruled out'}${checked ? ` · ${verificationStamp(checked.checkedAt)}` : ''}`,
         leagueId: l.id,
         leagueName: l.name,
         platform: l.platform,
         deadline: null,
         action: {
-          label: 'See who is flagged',
-          href: `/core/my-team?league=${encodeURIComponent(l.id)}`,
+          label: flagged ? `Review ${flagged.name}` : 'See who is flagged',
+          href: `/core/my-team?league=${encodeURIComponent(l.id)}${flagged ? `#lineup-player-${encodeURIComponent(flagged.playerId)}` : ''}`,
           external: false,
         },
       })

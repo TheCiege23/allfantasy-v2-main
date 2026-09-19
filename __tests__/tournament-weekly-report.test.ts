@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildWeeklyReport, reportTsv } from '@/lib/tournament/weeklyReport'
+import { buildWeeklyReport, reportTsv, weeklyOverview, weeklyRecap } from '@/lib/tournament/weeklyReport'
 import type { StandingsBoard } from '@/lib/tournament/standingsBoard'
 
 describe('weekly tournament report', () => {
@@ -27,5 +27,13 @@ describe('weekly tournament report', () => {
     expect(text).toContain("'=formula name")
     expect(text).not.toContain('=formula\tname')
     expect(text).toContain('not historical standings')
+  })
+  it('summarizes all leagues and discloses incomplete weekly results in the recap', () => {
+    expect(weeklyOverview(report)).toMatchObject({ managers: 4, leagues: 2, aboveCut: 3, needsLink: 1, missingScores: 2, missingLeagues: 2 })
+    const recap = weeklyRecap(report)
+    expect(recap).toContain('Cup · 2026 Week 2')
+    expect(recap).toContain('170.25 points')
+    expect(recap).toContain('Partial results: 2 manager scores missing')
+    expect(recap).toContain('not historical standings')
   })
 })

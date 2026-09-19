@@ -1,4 +1,5 @@
 import 'server-only'
+import type { LineupVerification } from './lineupVerification'
 import { currentSleeperRoster } from './currentSleeperRoster'
 
 import { unstable_cache } from 'next/cache'
@@ -717,6 +718,8 @@ export async function getDash34Data(
       taxi: Set<string>
       /** Starting slots Sleeper holds no player for — a guaranteed zero. */
       emptyStarters: number
+      orderedStarters: string[]
+      verification: LineupVerification | null
     }
   >()
   const everyPlayerId = new Set<string>()
@@ -735,6 +738,8 @@ export async function getDash34Data(
         reserve: new Set(reserve),
         taxi: new Set(taxi),
         emptyStarters: countEmptySlots(pd.starters),
+        orderedStarters: Array.isArray(pd.starters) ? pd.starters.map(String) : [],
+        verification: (pd.verification as LineupVerification | undefined) ?? null,
       })
     }
     for (const id of all) everyPlayerId.add(id)
@@ -1144,6 +1149,11 @@ export async function getDash34Data(
       formatLabel: formatLabelOf(row),
       emptyStarters,
       hurtStarters: hurt.startingUnavailable,
+      lineupVerification: rosterByLeague.get(row.id)?.verification ?? null,
+      flaggedStarters: (rosterByLeague.get(row.id)?.orderedStarters ?? []).flatMap((pid, index) => {
+        const d = designationOf(pid)
+        return d && isUnavailable(d.status) ? [{ playerId: pid, name: d.name, status: d.status, slot: rosterByLeague.get(row.id)?.verification?.slots[index] ?? 'Starter', index }] : []
+      }),
       sport: row.sport ?? null,
       /*
        * ⚠ `ownerName` IS THE HANDLE; `teamName` IS THE TEAM. The handoff asks for

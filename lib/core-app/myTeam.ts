@@ -1,4 +1,5 @@
 import 'server-only'
+import type { LineupVerification } from './lineupVerification'
 import { connectedRosterPlayers } from './connectedRoster'
 import { currentSleeperRoster } from './currentSleeperRoster'
 
@@ -241,6 +242,7 @@ export type MyTeamData = {
     pointsAgainst: number
     teamCount: number
   }>
+  lineupVerification?: LineupVerification | null
   starters: SectionState<LineupSlot[]>
   /**
    * Why the roster carries unnamed rows, said ONCE.
@@ -1350,6 +1352,7 @@ export async function getMyTeamData(
   return {
     ...base,
     team,
+    lineupVerification: liveRoster?.verification ?? null,
     projectionBasis: { notes: scoringNotes, scoringKnown: scoringSettings != null },
     upcomingByes,
     rosterGrade: grade

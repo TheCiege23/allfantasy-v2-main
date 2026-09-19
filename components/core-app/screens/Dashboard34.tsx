@@ -69,6 +69,8 @@ export type Dash34League = {
    * are different problems with different fixes.
    */
   hurtStarters?: number
+  lineupVerification?: import('@/lib/core-app/lineupVerification').LineupVerification | null
+  flaggedStarters?: Array<{ playerId: string; name: string; status: string; slot: string; index: number }>
   href: string
   actionLabel?: string
 }
