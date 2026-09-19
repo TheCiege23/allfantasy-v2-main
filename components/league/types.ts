@@ -164,6 +164,9 @@ export type LeagueTradeAsset = {
   label: string
   sublabel: string | null
   headshotUrl: string | null
+  playerId?: string | null
+  team?: string | null
+  teamLogoUrl?: string | null
   accent: 'teal' | 'blue' | 'orange' | 'slate'
 }
 
@@ -171,6 +174,10 @@ export type LeagueTradeHistoryItem = {
   id: string
   direction: 'incoming' | 'outgoing' | 'complete'
   partnerName: string
+  partnerAvatarUrl?: string | null
+  viewerAvatarUrl?: string | null
+  proposerAvatarUrl?: string | null
+  receiverAvatarUrl?: string | null
   timestamp: string
   sent: LeagueTradeAsset[]
   received: LeagueTradeAsset[]

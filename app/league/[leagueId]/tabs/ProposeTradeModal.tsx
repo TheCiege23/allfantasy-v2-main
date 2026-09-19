@@ -256,7 +256,7 @@ export function ProposeTradeModal({
             itemReference: id,
             fromRosterId: myRoster.rosterId,
             toRosterId: partner.rosterId,
-            metadata: { playerName: player?.name ?? id, position: player?.position ?? null },
+            metadata: { playerName: player?.name ?? id, position: player?.position ?? null, team: player?.team ?? null, headshotUrl: player?.imageUrl ?? null },
           }
         }),
         ...[...state.getPlayers].map((id) => {
@@ -266,7 +266,7 @@ export function ProposeTradeModal({
             itemReference: id,
             fromRosterId: partner.rosterId,
             toRosterId: myRoster.rosterId,
-            metadata: { playerName: player?.name ?? id, position: player?.position ?? null },
+            metadata: { playerName: player?.name ?? id, position: player?.position ?? null, team: player?.team ?? null, headshotUrl: player?.imageUrl ?? null },
           }
         }),
         ...[...state.givePicks].map((id) => {
@@ -285,14 +285,18 @@ export function ProposeTradeModal({
         ...(multiTeam && secondPartnerRoster ? legAssets(secondPartnerRoster, {
           givePlayers: secondGivePlayerIds, getPlayers: secondGetPlayerIds, givePicks: secondGivePickIds, getPicks: secondGetPickIds, giveFaab: secondGiveFaab, getFaab: secondGetFaab,
         }) : []),
-        ...directPartnerLegs.map((leg) => ({
-          itemType: leg.asset.itemType,
-          itemReference: leg.asset.kind === 'faab' ? undefined : leg.asset.id,
-          fromRosterId: leg.fromRosterId,
-          toRosterId: leg.toRosterId,
-          ...(leg.asset.kind === 'faab' ? { faabAmount: leg.asset.amount ?? 0 } : {}),
-          metadata: { playerName: leg.asset.name, position: leg.asset.position, amount: leg.asset.amount },
-        })),
+        ...directPartnerLegs.map((leg) => {
+          const sourceRoster = [myRoster, partnerRoster, secondPartnerRoster].find((roster) => roster?.rosterId === leg.fromRosterId)
+          const player = leg.asset.kind === 'player' ? sourceRoster?.players.find((row) => row.id === leg.asset.id) : null
+          return {
+            itemType: leg.asset.itemType,
+            itemReference: leg.asset.kind === 'faab' ? undefined : leg.asset.id,
+            fromRosterId: leg.fromRosterId,
+            toRosterId: leg.toRosterId,
+            ...(leg.asset.kind === 'faab' ? { faabAmount: leg.asset.amount ?? 0 } : {}),
+            metadata: { playerName: leg.asset.name, position: leg.asset.position, team: player?.team ?? null, headshotUrl: player?.imageUrl ?? null, amount: leg.asset.amount },
+          }
+        }),
       ]
       const selectedPackage = suggestions.flatMap((suggestion) => suggestion.packages).find((proposal) => proposal.id === selectedSuggestionId)
       const selectedMultiPackage = multiTeamSuggestions.find((proposal) => proposal.id === selectedSuggestionId)

@@ -4,6 +4,7 @@ import { assessTradeGradeReadiness } from '@/lib/decision-os/trade/tradeGradeRea
 import type { TradeAssetInput } from '@/lib/league-trade-engine/types'
 import type { ProposalManagerStrategy } from '@/lib/league-trade-engine/proposalSuggestions'
 import type { VerifiedProposalEvidence } from '@/lib/league-trade-engine/proposalEvidenceToken'
+import type { ServerTradeDecisionResult } from '@/lib/league-trade-engine/serverTradeDecision'
 import {
   resolveTradeGradingPolicy,
   type TradeEvidence,
@@ -41,6 +42,7 @@ export type TradeDecisionSnapshotPayload = {
   assetContext: Record<string, unknown>
   managerContext: Record<string, unknown>
   outcomeSimulation: Record<string, unknown> | null
+  decisionResult: Record<string, unknown> | null
   evidence: TradeEvidence
   readiness: ReturnType<typeof assessTradeGradeReadiness>
   completeness: 'complete' | 'partial'
@@ -86,6 +88,7 @@ export function buildTradeDecisionSnapshot(input: {
   tradeSettings: Record<string, unknown>
   metadata?: Record<string, unknown>
   verifiedProposalEvidence?: VerifiedProposalEvidence | null
+  serverDecisionResult?: ServerTradeDecisionResult | null
 }): TradeDecisionSnapshotPayload {
   const concept = conceptFor(input.league)
   const policy = resolveTradeGradingPolicy({
@@ -101,9 +104,19 @@ export function buildTradeDecisionSnapshot(input: {
   const simulation = verified
     ? { ...cloneJson(verified.simulation), verified: true, source: 'signed_server_proposal_evidence', modelVersion: verified.modelVersion, capturedAt: verified.capturedAt }
     : verifiedSimulation(input.metadata)
-  const valuesAvailable = Boolean(verified?.assets.length && verified.assets.every((asset) => asset.value != null))
+  const serverParticipants = input.serverDecisionResult?.participants ?? []
+  const serverValuesAvailable = Boolean(serverParticipants.length && serverParticipants.every((participant) =>
+    participant.coverageStatus === 'complete' && participant.valueGiven != null && participant.valueReceived != null,
+  ))
+  const valuesAvailable = Boolean(
+    (verified?.assets.length && verified.assets.every((asset) => asset.value != null)) || serverValuesAvailable,
+  )
   const playerEvidence = verified?.assets.filter((asset) => asset.itemType === 'player') ?? []
-  const projectionsAvailable = Boolean(verified && playerEvidence.length > 0 && playerEvidence.every((asset) => asset.weeklyProjection != null))
+  const serverProjectionsAvailable = Boolean(serverParticipants.length && serverParticipants.every((participant) => participant.lineupPointsDelta != null))
+  const projectionsAvailable = Boolean(
+    (verified && playerEvidence.length > 0 && playerEvidence.every((asset) => asset.weeklyProjection != null))
+    || serverProjectionsAvailable,
+  )
   const evidence: TradeEvidence = {
     team_identity: input.rosters.length >= 2 ? 'available' : 'missing',
     user_strategy: input.managerStrategy ? 'available' : 'missing',
@@ -112,13 +125,44 @@ export function buildTradeDecisionSnapshot(input: {
     roster_before: input.rosters.every((roster) => roster.playerData != null) ? 'available' : 'missing',
     roster_after: input.rosters.length >= 2 && input.assets.length > 0 ? 'available' : 'missing',
     as_of_asset_values: valuesAvailable ? 'available' : 'missing',
-    as_of_projections: verified && playerEvidence.length === 0
+    as_of_projections: verified && playerEvidence.length === 0 && !serverProjectionsAvailable
       ? 'not_applicable'
       : projectionsAvailable ? 'available' : 'missing',
     paired_outcome_simulation: verified?.simulation.available === true ? 'available' : 'missing',
     historical_timestamp: 'available',
   }
   const readiness = assessTradeGradeReadiness(policy, evidence)
+  const outcomeByRosterId = new Map((verified?.simulation.participants ?? []).map((row) => [row.rosterId, row]))
+  const frozenDecision = input.serverDecisionResult
+    ? {
+        modelVersion: input.serverDecisionResult.modelVersion,
+        capturedAt: input.serverDecisionResult.capturedAt,
+        scope: input.serverDecisionResult.scope,
+        evaluatorSupported: input.serverDecisionResult.evaluatorSupported,
+        reason: input.serverDecisionResult.reason,
+        participants: input.serverDecisionResult.participants.map((participant) => {
+          const outcome = outcomeByRosterId.get(participant.rosterId) ?? null
+          const marketLine = participant.grade && participant.valueGiven != null && participant.valueReceived != null
+            ? `Market grade ${participant.grade}: receives ${Math.round(participant.valueReceived)} in value and sends ${Math.round(participant.valueGiven)}.`
+            : `Market grade withheld at ${participant.coveragePct}% asset coverage.`
+          const outcomeLine = outcome
+            ? `${verified?.simulation.metric === 'survival' ? 'Survival' : 'Playoff'} probability changes from ${outcome.beforePct.toFixed(1)}% to ${outcome.afterPct.toFixed(1)}% (${outcome.deltaPct >= 0 ? '+' : ''}${outcome.deltaPct.toFixed(1)}%).`
+            : 'A verified paired outcome simulation was not available for this team.'
+          const lineupLine = participant.lineupPointsDelta != null
+            ? `Projected starting lineup changes ${participant.lineupPointsDelta >= 0 ? '+' : ''}${participant.lineupPointsDelta.toFixed(2)} points for the captured week.`
+            : 'Starting-lineup change could not be verified.'
+          const contextLine = `League context: ${policy.format.replaceAll('_', ' ')} with the saved scoring and roster rules.`
+          return {
+            ...participant,
+            outcomeMetric: outcome ? verified?.simulation.metric ?? null : null,
+            outcomeBeforePct: outcome?.beforePct ?? null,
+            outcomeAfterPct: outcome?.afterPct ?? null,
+            outcomeDeltaPct: outcome?.deltaPct ?? null,
+            reason: `${marketLine} ${outcomeLine} ${lineupLine} ${contextLine}`,
+          }
+        }),
+      }
+    : null
   return {
     policyVersion: policy.version,
     format: policy.format,
@@ -155,6 +199,7 @@ export function buildTradeDecisionSnapshot(input: {
       ? { proposedByUserId: input.proposedByUserId, active: input.managerStrategy.active, confirmedAt: input.managerStrategy.confirmedAt.toISOString() }
       : { proposedByUserId: input.proposedByUserId, active: null, confirmedAt: null },
     outcomeSimulation: simulation,
+    decisionResult: frozenDecision,
     evidence,
     readiness,
     completeness: readiness.contextualGradeAllowed ? 'complete' : 'partial',
@@ -179,6 +224,7 @@ export async function writeTradeDecisionSnapshot(
       outcomeSimulation: input.snapshot.outcomeSimulation as Prisma.InputJsonValue | undefined,
       evidence: input.snapshot.evidence as Prisma.InputJsonValue,
       readiness: input.snapshot.readiness as unknown as Prisma.InputJsonValue,
+      decisionResult: input.snapshot.decisionResult as Prisma.InputJsonValue | undefined,
       completeness: input.snapshot.completeness,
     },
   })

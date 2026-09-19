@@ -6,6 +6,7 @@ import { Heart } from 'lucide-react'
 import type { LeagueTeamSlot, UserLeague } from '@/app/dashboard/types'
 import { PlayerImage } from '@/app/components/PlayerImage'
 import { TeamLogo } from '@/app/components/TeamLogo'
+import PlayerHeadshot from '@/components/league/PlayerHeadshot'
 import type { LeagueTradeHistoryItem } from '@/components/league/types'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
 import type { LeagueTradeBlockPanelItem } from '@/components/league/types'
@@ -132,11 +133,13 @@ type LedgerState =
 /** One side of a row in the league log. */
 type LogSide = {
   name: string
+  avatarUrl?: string | null
   you: boolean
   sends: string
   /** Realized result in the trade's first scored season. */
   initialGrade: GradeLetter | null
   initialLabel: 'Then' | 'First'
+  initialWhy?: string | null
   /** Realized result through the latest scored season. */
   grade: GradeLetter | null
   /** Shown INSTEAD of a letter — why there is none. */
@@ -411,10 +414,14 @@ function rowFromNativeHistory(t: LeagueTradeHistoryItem): LogRow {
     t.proposalValueReceived > 0
       ? ((t.proposalValueGiven - t.proposalValueReceived) / t.proposalValueReceived) * 100
       : null
-  const receiverProposalGrade = projectedLetterFor({
+  const frozenProposer = t.decisionReceipt?.participantDecisions[0] ?? null
+  const frozenReceiver = t.decisionReceipt?.participantDecisions[1] ?? null
+  const receiverProposalGrade = frozenReceiver?.grade && ['A', 'B', 'C', 'D', 'F'].includes(frozenReceiver.grade)
+    ? frozenReceiver.grade as GradeLetter
+    : projectedLetterFor({
     percentDiff: reversePercent,
     hasSignal: proposalGrade != null,
-  })
+      })
   const currentGrade = ['A', 'B', 'C', 'D', 'F'].includes(String(t.currentGrade))
     ? t.currentGrade as GradeLetter
     : null
@@ -442,19 +449,23 @@ function rowFromNativeHistory(t: LeagueTradeHistoryItem): LogRow {
     sortKey: Date.parse(t.executedAt ?? t.timestamp) || 0,
     a: {
       name: t.proposerName ?? (viewerIsA ? 'You' : t.partnerName),
+      avatarUrl: t.proposerAvatarUrl ?? (viewerIsA ? t.viewerAvatarUrl : t.partnerAvatarUrl) ?? null,
       you: viewerIsA,
       sends: joinNames(t.sent),
-      initialGrade: proposalGrade,
+      initialGrade: (frozenProposer?.grade as GradeLetter | null | undefined) ?? proposalGrade,
       initialLabel: 'Then',
+      initialWhy: frozenProposer?.reason ?? null,
       grade: currentGrade,
       gradeWhy: currentWhy,
     },
     b: {
       name: t.receiverName ?? (viewerIsB ? 'You' : t.partnerName),
+      avatarUrl: t.receiverAvatarUrl ?? (viewerIsB ? t.viewerAvatarUrl : t.partnerAvatarUrl) ?? null,
       you: viewerIsB,
       sends: joinNames(t.received),
       initialGrade: receiverProposalGrade,
       initialLabel: 'Then',
+      initialWhy: frozenReceiver?.reason ?? null,
       grade: receiverCurrentGrade,
       gradeWhy: currentWhy,
     },
@@ -623,6 +634,8 @@ type CardAsset = {
   kind: 'player' | 'pick' | 'faab'
   sleeperId: string | null
   team: string | null
+  headshotUrl: string | null
+  teamLogoUrl: string | null
 }
 
 function cardAssetsFromPanel(assets: LeagueTradeHistoryItem['sent']): CardAsset[] {
@@ -632,9 +645,9 @@ function cardAssetsFromPanel(assets: LeagueTradeHistoryItem['sent']): CardAsset[
     const kind = parsed[0]?.kind ?? 'player'
     /* Provider rows carry the Sleeper id in front of the index; native rows carry a row id. */
     const idHead = a.id.split(':')[0] ?? ''
-    const sleeperId = /^\d{2,}$/.test(idHead) ? idHead : null
-    const team = kind === 'player' ? (sub.split(/[·-]/).map((x) => x.trim()).find((x) => /^[A-Z]{2,4}$/.test(x)) ?? null) : null
-    return { key: a.id, name: a.label, meta: sub && sub.toLowerCase() !== 'draft pick' ? sub : null, kind, sleeperId, team }
+    const sleeperId = a.playerId ?? (/^\d{2,}$/.test(idHead) ? idHead : null)
+    const team = a.team ?? (kind === 'player' ? (sub.split(/[·-]/).map((x) => x.trim()).find((x) => /^[A-Z]{2,4}$/.test(x)) ?? null) : null)
+    return { key: a.id, name: a.label, meta: sub && sub.toLowerCase() !== 'draft pick' ? sub : null, kind, sleeperId, team, headshotUrl: a.headshotUrl, teamLogoUrl: a.teamLogoUrl ?? null }
   })
 }
 
@@ -646,6 +659,8 @@ function cardAssetsFromOffer(assets: BuilderOfferAsset[], prefix: string): CardA
     kind: a.faabAmount != null ? 'faab' : a.isPick ? 'pick' : 'player',
     sleeperId: a.playerId,
     team: a.team,
+    headshotUrl: null,
+    teamLogoUrl: null,
   }))
 }
 
@@ -671,6 +686,9 @@ function AssetAvatar({ a, sport }: { a: CardAsset; sport: string }) {
       </span>
     )
   }
+  if (a.headshotUrl) {
+    return <PlayerHeadshot src={a.headshotUrl} alt={a.name} size={32} />
+  }
   if (a.sleeperId) {
     return <PlayerImage sleeperId={a.sleeperId} sport={sport} name={a.name} size={32} variant="round" />
   }
@@ -693,6 +711,7 @@ function ManagerBlock({
   total,
   grade,
   sport,
+  avatarUrl,
 }: {
   name: string
   isYou: boolean
@@ -701,13 +720,14 @@ function ManagerBlock({
   total: number | null | undefined
   grade: GradeLetter | null | undefined
   sport: string
+  avatarUrl?: string | null
 }) {
   return (
     <div className="flex flex-col gap-1.5">
       <div className="flex items-center gap-2">
-        <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-[#ff3d81]/15 text-[9px] font-black text-[#ffb8d1]">
-          {initialsOf(name)}
-        </span>
+        {avatarUrl ? <PlayerHeadshot src={avatarUrl} alt={name} size={24} /> : (
+          <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-[#ff3d81]/15 text-[9px] font-black text-[#ffb8d1]">{initialsOf(name)}</span>
+        )}
         <span className="text-[13px] font-extrabold text-white">{name}</span>
         {isYou ? <YouPill /> : null}
         <span className={`${EYEBROW} text-[8.5px] text-white/35`}>sends</span>
@@ -771,17 +791,22 @@ export function PendingTradeCard(props: {
   const youAssets = offer ? cardAssetsFromOffer(offer.give, 'g') : cardAssetsFromPanel(t.sent)
   const themAssets = offer ? cardAssetsFromOffer(offer.get, 'k') : cardAssetsFromPanel(t.received)
 
-  const you = { name: commissionerView ? 'Receiving team' : 'You', isYou: !commissionerView, assets: youAssets }
-  const them = { name: t.partnerName, isYou: false, assets: themAssets }
-  const proposerFirst = t.direction === 'outgoing' ? [you, them] : [them, you]
+  const you = { name: commissionerView ? (t.proposerName ?? 'Proposer') : 'You', isYou: !commissionerView, assets: youAssets, avatarUrl: t.viewerAvatarUrl ?? t.proposerAvatarUrl ?? null, viewerSide: true }
+  const them = { name: t.partnerName, isYou: false, assets: themAssets, avatarUrl: t.partnerAvatarUrl ?? null, viewerSide: false }
+  const proposerFirst = commissionerView
+    ? [
+        { ...you, name: t.proposerName ?? 'Proposer', avatarUrl: t.proposerAvatarUrl ?? null },
+        { ...them, name: t.receiverName ?? 'Receiving team', avatarUrl: t.receiverAvatarUrl ?? null },
+      ]
+    : t.direction === 'outgoing' ? [you, them] : [them, you]
 
   const ok = verdict?.kind === 'ok' ? verdict : null
   const values = ok ? ok.values : null
-  const gradeFor = (side: typeof you) => (ok ? (side === you ? ok.giveGrade : ok.getGrade) : null)
-  const totalFor = (side: typeof you) => (ok ? (side === you ? ok.giveTotal : ok.getTotal) : null)
+  const gradeFor = (side: typeof you) => (ok ? (side.viewerSide ? ok.giveGrade : ok.getGrade) : null)
+  const totalFor = (side: typeof you) => (ok ? (side.viewerSide ? ok.giveTotal : ok.getTotal) : null)
 
   const headline = commissionerView
-    ? `${t.partnerName} has proposed a trade`
+    ? `${t.proposerName ?? 'A manager'} has proposed a trade`
     : t.direction === 'outgoing'
       ? `You proposed a trade to ${t.partnerName}`
       : `${t.partnerName} has proposed a trade`
@@ -816,18 +841,22 @@ export function PendingTradeCard(props: {
       </div>
 
       <div className="flex flex-col gap-3">
-        {proposerFirst.map((side) => (
+        {proposerFirst.map((side, index) => {
+          const frozen = t.decisionReceipt?.participantDecisions[index] ?? null
+          return (
           <ManagerBlock
             key={side.name}
             name={side.name}
             isYou={side.isYou}
             assets={side.assets}
             values={values}
-            total={totalFor(side)}
-            grade={gradeFor(side)}
+            total={frozen?.valueGiven ?? totalFor(side)}
+            grade={(frozen?.grade as GradeLetter | null | undefined) ?? gradeFor(side)}
             sport={props.sport}
+            avatarUrl={side.avatarUrl}
           />
-        ))}
+          )
+        })}
       </div>
 
       {/* ── The AllFantasy read ──────────────────────────────────────── */}
@@ -850,6 +879,15 @@ export function PendingTradeCard(props: {
               <span key={outcome.rosterId} className="normal-case tracking-normal text-white/60">
                 {receiptParticipantLabel(index)}: {outcome.deltaPct >= 0 ? '+' : ''}{outcome.deltaPct.toFixed(1)}%
               </span>
+            ))}
+          </div>
+        ) : null}
+        {t.decisionReceipt?.participantDecisions.length ? (
+          <div className="mb-2 space-y-1.5">
+            {t.decisionReceipt.participantDecisions.map((participant, index) => (
+              <p key={participant.rosterId} className="text-[10.5px] leading-snug text-white/55">
+                <strong className="text-white/75">{receiptParticipantLabel(index)}{participant.grade ? ` · ${participant.grade}` : ''}:</strong>{' '}{participant.reason}
+              </p>
             ))}
           </div>
         ) : null}
@@ -1823,6 +1861,7 @@ export function TradesTab({ league, teams }: TradesTabProps) {
                   {[r.a, r.b].map((s, i) => (
                     <div key={i} className="min-w-0">
                       <div className="flex items-center gap-1.5">
+                        {s.avatarUrl ? <PlayerHeadshot src={s.avatarUrl} alt={s.name} size={24} /> : null}
                         <span className="truncate text-[12.5px] font-extrabold text-white">{s.name}</span>
                         {s.you ? <YouPill /> : null}
                         {i === 1 && r.extraSides > 0 ? (
@@ -1835,13 +1874,13 @@ export function TradesTab({ league, teams }: TradesTabProps) {
                   <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                     <span className="flex items-center gap-1" title="Side A: first scored season, then current realized result">
                       <span className={`${EYEBROW} text-[7.5px] text-white/30`}>A {r.a.initialLabel}</span>
-                      <GradeTile letter={r.a.initialGrade} why={null} size="sm" />
+                      <GradeTile letter={r.a.initialGrade} why={r.a.initialWhy ?? null} size="sm" />
                       <span className="text-[8px] text-white/25">→</span>
                       <GradeTile letter={r.a.grade} why={null} size="sm" />
                     </span>
                     <span className="flex items-center gap-1" title="Side B: first scored season, then current realized result">
                       <span className={`${EYEBROW} text-[7.5px] text-white/30`}>B {r.b.initialLabel}</span>
-                      <GradeTile letter={r.b.initialGrade} why={null} size="sm" />
+                      <GradeTile letter={r.b.initialGrade} why={r.b.initialWhy ?? null} size="sm" />
                       <span className="text-[8px] text-white/25">→</span>
                       <GradeTile letter={r.b.grade} why={null} size="sm" />
                     </span>

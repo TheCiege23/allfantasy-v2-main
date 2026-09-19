@@ -816,7 +816,7 @@ export async function GET(
     return { ...proposal, decisionEvidenceToken }
   }))
   const hasPairedOutcomeSimulation = hasPairedProposalSimulation({ suggestions, multiTeamSuggestions })
-  const hasLeagueRosterContext = Boolean(league && (rosterPositions.length > 0 || (league.starters?.length ?? 0) > 0))
+  const hasLeagueRosterContext = Boolean(league && (rosterPositions.length > 0 || (Array.isArray(league.starters) && league.starters.length > 0)))
   const hasPricedSuggestion = suggestions.some((suggestion) => suggestion.packages.some((proposal) => {
     const assets = [...proposal.send, ...proposal.receive]
     return assets.length > 0 && assets.every((asset) => asset.kind === 'faab' || (asset.value != null && asset.value > 0))

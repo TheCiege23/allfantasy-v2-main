@@ -30,6 +30,7 @@ import {
   writeTradeDecisionSnapshot,
 } from '@/lib/league-trade-engine/tradeDecisionSnapshot'
 import type { VerifiedProposalEvidence } from '@/lib/league-trade-engine/proposalEvidenceToken'
+import { evaluateServerTradeDecision } from '@/lib/league-trade-engine/serverTradeDecision'
 
 async function fanout(leagueId: string, input: {
   eventType: string
@@ -278,6 +279,18 @@ export async function createAfLeagueTrade(input: CreateLeagueTradeInput & {
 
   const rootId = parent?.rootTradeId ?? parent?.id ?? null
 
+  // Runs for suggested and fully custom packages. The result is frozen in the
+  // same transaction as the trade; failures degrade the receipt instead of
+  // blocking a legal offer.
+  const serverDecisionResult = await evaluateServerTradeDecision({
+    leagueId: input.leagueId,
+    proposerRosterId: input.proposerRosterId,
+    receiverRosterId: input.receiverRosterId,
+    participantRosterIds,
+    assets: input.assets,
+    season: league.season,
+  })
+
   const createData = {
       leagueId: input.leagueId,
       proposedByUserId: input.proposedByUserId,
@@ -343,6 +356,7 @@ export async function createAfLeagueTrade(input: CreateLeagueTradeInput & {
           tradeSettings: settings as unknown as Record<string, unknown>,
           metadata: input.metadata,
           verifiedProposalEvidence,
+          serverDecisionResult,
         })
         await writeTradeDecisionSnapshot(tx, {
           tradeId: created.id,

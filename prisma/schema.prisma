@@ -12206,6 +12206,8 @@ model TradeDecisionSnapshot {
   outcomeSimulation  Json?
   evidence           Json
   readiness          Json
+  /// Frozen server-computed market grade, recommendation, lineup effect, and per-team explanation.
+  decisionResult     Json?
   completeness       String   @default("partial") @db.VarChar(16)
   capturedAt         DateTime @default(now())
 

@@ -25,10 +25,12 @@ CREATE TABLE IF NOT EXISTS "trade_decision_snapshots" (
   "outcomeSimulation" JSONB,
   "evidence" JSONB NOT NULL,
   "readiness" JSONB NOT NULL,
+  "decisionResult" JSONB,
   "completeness" VARCHAR(16) NOT NULL DEFAULT 'partial',
   "capturedAt" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
   CONSTRAINT "trade_decision_snapshots_pkey" PRIMARY KEY ("id")
 );
+ALTER TABLE "trade_decision_snapshots" ADD COLUMN IF NOT EXISTS "decisionResult" JSONB;
 CREATE UNIQUE INDEX IF NOT EXISTS "trade_manager_strategies_leagueId_userId_key" ON "trade_manager_strategies"("leagueId", "userId");
 CREATE INDEX IF NOT EXISTS "trade_manager_strategies_leagueId_rosterId_idx" ON "trade_manager_strategies"("leagueId", "rosterId");
 CREATE INDEX IF NOT EXISTS "trade_manager_strategies_userId_idx" ON "trade_manager_strategies"("userId");
