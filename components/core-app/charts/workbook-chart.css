@@ -44,3 +44,13 @@
   .af-workbook-plot { height: 170px; padding-left: 22px; }
   .af-workbook-grid { left: 22px; }
 }
+
+/*
+ * The truncation note is a finding, not decoration, so it does not wear the same faint grey as
+ * the subtitle it sits beside.
+ *
+ * Appended AFTER the media block above, deliberately: a rule inserted inside it would apply only
+ * below 720px, and nothing would fail — the brace balance stays zero and the file stays valid CSS.
+ * That is the exact shape CLAUDE.md records from af-matchup.css.
+ */
+.af-workbook-chart figcaption small[data-truncated="true"] { color: var(--warn, var(--faint)); }
