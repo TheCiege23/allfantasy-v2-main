@@ -128,7 +128,7 @@ describe("playoff schedule refresh cron route", () => {
     }))
   })
 
-  it("calls schedule refresh only, not series discovery", async () => {
+  it("calls schedule refresh with the requested window", async () => {
     const { GET } = await import("@/app/api/brackets/playoffs/cron/refresh-schedule/route")
 
     await GET(req("https://www.allfantasy.ai/api/brackets/playoffs/cron/refresh-schedule?sport=all&windowDays=3", "cron-secret"))
@@ -139,7 +139,137 @@ describe("playoff schedule refresh cron route", () => {
       windowDays: 3,
       dryRun: false,
     })
+  })
+
+  /*
+   * This replaces an assertion that `syncPlayoffChallengeSeries` was never
+   * called at all. Its INTENT — "this cron must not do bracket discovery" — is
+   * kept and sharpened: the danger was never calling the service, it was
+   * calling it in a mode that rewrites team names on a bracket people have
+   * already picked. So assert the mode, which is the thing that matters.
+   */
+  it("advances results, and only ever in results_only mode", async () => {
+    const { GET } = await import("@/app/api/brackets/playoffs/cron/refresh-schedule/route")
+
+    await GET(req("https://www.allfantasy.ai/api/brackets/playoffs/cron/refresh-schedule?sport=all", "cron-secret"))
+
+    expect(serviceMocks.syncPlayoffChallengeSeries).toHaveBeenCalledTimes(2)
+    for (const call of serviceMocks.syncPlayoffChallengeSeries.mock.calls) {
+      expect(call[0]).toMatchObject({ mode: "results_only" })
+      expect(call[0].mode).not.toBe("official_bracket")
+    }
+  })
+
+  it("never writes results on a dry run", async () => {
+    const { GET } = await import("@/app/api/brackets/playoffs/cron/refresh-schedule/route")
+
+    const response = await GET(
+      req("https://www.allfantasy.ai/api/brackets/playoffs/cron/refresh-schedule?sport=all&dryRun=true", "cron-secret"),
+    )
+    const body = await response.json()
+
+    // syncPlayoffChallengeSeries has no dryRun parameter and always writes, so
+    // the caller is the only thing standing between a dry run and a real one.
     expect(serviceMocks.syncPlayoffChallengeSeries).not.toHaveBeenCalled()
+    expect(body.resultsRan).toBe(false)
+  })
+
+  it("runs one phase only when asked", async () => {
+    const { GET } = await import("@/app/api/brackets/playoffs/cron/refresh-schedule/route")
+
+    await GET(req("https://www.allfantasy.ai/api/brackets/playoffs/cron/refresh-schedule?job=schedule", "cron-secret"))
+    expect(serviceMocks.refreshPlayoffScheduleMetadataForChallenge).toHaveBeenCalled()
+    expect(serviceMocks.syncPlayoffChallengeSeries).not.toHaveBeenCalled()
+
+    vi.clearAllMocks()
+    serviceMocks.prisma.playoffBracketChallenge.findMany.mockResolvedValue([{ id: "nba-1" }])
+
+    await GET(req("https://www.allfantasy.ai/api/brackets/playoffs/cron/refresh-schedule?job=results", "cron-secret"))
+    expect(serviceMocks.refreshPlayoffScheduleMetadataForChallenge).not.toHaveBeenCalled()
+    expect(serviceMocks.syncPlayoffChallengeSeries).toHaveBeenCalledTimes(1)
+  })
+
+  it("isolates a failing challenge instead of losing the rest of the sweep", async () => {
+    const { GET } = await import("@/app/api/brackets/playoffs/cron/refresh-schedule/route")
+
+    serviceMocks.syncPlayoffChallengeSeries.mockImplementation(({ challengeId }: { challengeId: string }) =>
+      challengeId === "nba-1"
+        ? Promise.reject(new Error("provider exploded"))
+        : Promise.resolve({ seriesUpdated: 2, winnersUpdated: 1, warnings: [] }),
+    )
+
+    const response = await GET(req("https://www.allfantasy.ai/api/brackets/playoffs/cron/refresh-schedule?sport=all", "cron-secret"))
+    const body = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(body.ok).toBe(true)
+    // The healthy challenge still advanced.
+    expect(body.resultsChallengesSynced).toBe(1)
+    expect(body.winnersUpdated).toBe(1)
+    expect(body.resultsErrors).toHaveLength(1)
+    expect(body.resultsErrors[0]).toContain("nba-1")
+  })
+
+  /*
+   * A stable order plus a time budget starves the tail forever, and silently:
+   * the job reports success while the same pools never advance. The rotation
+   * is what prevents that, so assert it actually moves.
+   */
+  it("rotates which challenge the results phase starts on", async () => {
+    const { GET } = await import("@/app/api/brackets/playoffs/cron/refresh-schedule/route")
+    serviceMocks.prisma.playoffBracketChallenge.findMany.mockResolvedValue([
+      { id: "a" }, { id: "b" }, { id: "c" },
+    ])
+    serviceMocks.syncPlayoffChallengeSeries.mockResolvedValue({ seriesUpdated: 0, winnersUpdated: 0, warnings: [] })
+
+    const firstIdAtHour = async (hour: number) => {
+      vi.setSystemTime(new Date(Date.UTC(2026, 9, 5, hour, 0, 0)))
+      serviceMocks.syncPlayoffChallengeSeries.mockClear()
+      await GET(req("https://www.allfantasy.ai/api/brackets/playoffs/cron/refresh-schedule?job=results", "cron-secret"))
+      return serviceMocks.syncPlayoffChallengeSeries.mock.calls[0][0].challengeId
+    }
+
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    try {
+      // Three challenges, so the start walks a→b→c across consecutive fires.
+      expect(await firstIdAtHour(16)).toBe("b")
+      expect(await firstIdAtHour(17)).toBe("c")
+      expect(await firstIdAtHour(18)).toBe("a")
+    } finally {
+      vi.useRealTimers()
+    }
+
+    // Every challenge is still served on every fire when the budget allows.
+    expect(serviceMocks.syncPlayoffChallengeSeries).toHaveBeenCalledTimes(3)
+  })
+
+  /*
+   * The selector bug this sweep shipped with: `status` is never advanced past
+   * "open", so matching on it alone kept 26 finished 2026 pools in the sweep
+   * and wrote September preseason games onto April playoff series. The window
+   * arms are what stop that, so assert they are present.
+   */
+  it("bounds the sweep to brackets that are actually current", async () => {
+    const { GET } = await import("@/app/api/brackets/playoffs/cron/refresh-schedule/route")
+
+    await GET(req("https://www.allfantasy.ai/api/brackets/playoffs/cron/refresh-schedule?sport=all", "cron-secret"))
+
+    const where = serviceMocks.prisma.playoffBracketChallenge.findMany.mock.calls[0][0].where
+    expect(where.OR).toHaveLength(2)
+
+    const [recentStart, neverScheduled] = where.OR
+    const cutoff = recentStart.series.some.startsAt.gte as Date
+    expect(cutoff).toBeInstanceOf(Date)
+
+    // 60 days back, give or take the clock ticking during the test.
+    const daysBack = (Date.now() - cutoff.getTime()) / 86_400_000
+    expect(daysBack).toBeGreaterThan(59)
+    expect(daysBack).toBeLessThan(61)
+
+    // The "created but never scheduled" arm must be freshness-bounded too, or
+    // a pool whose series never got dates is swept forever.
+    expect(neverScheduled.AND[0]).toEqual({ series: { every: { startsAt: null } } })
+    expect(neverScheduled.AND[1].updatedAt.gte).toBeInstanceOf(Date)
   })
 })
 
