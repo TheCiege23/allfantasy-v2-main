@@ -360,7 +360,9 @@ export function tradeEvent(opts: {
     body: opts.body,
     userIds: opts.userIds,
     leagueId: opts.leagueId,
-    actionHref: `/league/${opts.leagueId}?tab=trades`,
+    // Email, push, and in-app notifications all carry the exact saved trade id.
+    // The Trades tab can use it to focus the same record shown on Core and in league history.
+    actionHref: `/league/${opts.leagueId}?view=trades&tradeId=${encodeURIComponent(opts.tradeId)}`,
     actionLabel: 'View Trade',
     meta: { tradeId: opts.tradeId },
     source: 'trade-engine',

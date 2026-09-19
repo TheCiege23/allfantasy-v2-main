@@ -190,6 +190,20 @@ async function buildNativeActiveTrades(leagueId: string, userId: string, sport =
       const wantImpact = viewerIsProposer || viewerIsReceiver
       const receipt = decisionReceipts.get(t.id) ?? null
       const frozenDecision = receipt?.participantDecisions.find((row) => row.rosterId === viewRosterId) ?? null
+      const participantSides: NonNullable<LeagueTradeHistoryItem['participantSides']> = participantIds.map((rosterId) => {
+        const frozen = receipt?.participantDecisions.find((row) => row.rosterId === rosterId) ?? null
+        return {
+          rosterId,
+          name: nameByRosterId.get(rosterId) ?? 'Manager',
+          avatarUrl: avatarByRosterId.get(rosterId) ?? null,
+          isViewer: rosterId === myRosterId,
+          assets: t.items
+            .filter((item) => item.fromRosterId === rosterId)
+            .map((item) => ({ id: item.id, ...assetLabel(item, sport), accent: rosterId === viewRosterId ? 'blue' as const : 'teal' as const })),
+          grade: frozen?.grade ?? null,
+          reason: frozen?.reason ?? null,
+        }
+      })
       const decision = world ? await evaluateCanonicalTrade({
         leagueId,
         proposalId: t.id,
@@ -235,10 +249,12 @@ async function buildNativeActiveTrades(leagueId: string, userId: string, sport =
         timestamp: t.createdAt.toISOString(),
         sent,
         received,
+        participantSides,
         status: t.status,
         viewerIsCommissioner: isCommissioner,
         viewerIsReceiver,
         viewerIsProposer,
+        viewerIsParticipant: myRosterId != null && participantIds.includes(myRosterId),
         decisionAction: (frozenDecision?.action ?? decision?.action) as LeagueTradeHistoryItem['decisionAction'],
         decisionRecommendation: frozenDecision?.recommendation || decision?.recommendation || null,
         decisionCoveragePct: frozenDecision?.coveragePct ?? decision?.coveragePct ?? null,
@@ -277,7 +293,11 @@ async function buildNativeTradeHistory(league: NativeHistoryLeague, userId: stri
   if (terminal.length === 0) return []
   const decisionReceipts = await loadDecisionReceipts(terminal.map((trade) => trade.id))
 
-  const rosterIds = [...new Set(terminal.flatMap((trade) => [trade.proposerRosterId, trade.receiverRosterId]))]
+  const rosterIds = [...new Set(terminal.flatMap((trade) => [
+    trade.proposerRosterId,
+    trade.receiverRosterId,
+    ...trade.items.flatMap((item) => [item.fromRosterId, item.toRosterId]),
+  ]))]
   const rosters = await prisma.roster.findMany({
     where: { id: { in: rosterIds } },
     select: { id: true, platformUserId: true },
@@ -358,7 +378,12 @@ async function buildNativeTradeHistory(league: NativeHistoryLeague, userId: stri
   return terminal
     .filter((trade) => {
       if (trade.status === 'processed' || trade.status === 'reversed') return true
-      return isCommissioner || myRosterIds.has(trade.proposerRosterId) || myRosterIds.has(trade.receiverRosterId)
+      const participants = new Set([
+        trade.proposerRosterId,
+        trade.receiverRosterId,
+        ...trade.items.flatMap((item) => [item.fromRosterId, item.toRosterId]),
+      ])
+      return isCommissioner || [...myRosterIds].some((rosterId) => participants.has(rosterId))
     })
     .map((trade) => {
       const offer = offerByTradeId.get(trade.id)
@@ -367,6 +392,25 @@ async function buildNativeTradeHistory(league: NativeHistoryLeague, userId: stri
       const frozenProposer = receipt?.participantDecisions.find((row) => row.rosterId === trade.proposerRosterId) ?? null
       const viewerIsProposer = myRosterIds.has(trade.proposerRosterId)
       const viewerIsReceiver = myRosterIds.has(trade.receiverRosterId)
+      const participantIds = [...new Set([
+        trade.proposerRosterId,
+        trade.receiverRosterId,
+        ...trade.items.flatMap((item) => [item.fromRosterId, item.toRosterId]),
+      ])]
+      const participantSides: NonNullable<LeagueTradeHistoryItem['participantSides']> = participantIds.map((rosterId) => {
+        const frozen = receipt?.participantDecisions.find((row) => row.rosterId === rosterId) ?? null
+        return {
+          rosterId,
+          name: nameOf(rosterId),
+          avatarUrl: avatarOf(rosterId),
+          isViewer: myRosterIds.has(rosterId),
+          assets: trade.items
+            .filter((item) => item.fromRosterId === rosterId)
+            .map((item) => ({ id: item.id, ...assetLabel(item, String(league.sport)), accent: rosterId === trade.proposerRosterId ? 'blue' as const : 'teal' as const })),
+          grade: frozen?.grade ?? null,
+          reason: frozen?.reason ?? null,
+        }
+      })
       return {
         id: trade.id,
         direction: viewerIsProposer ? 'outgoing' as const : viewerIsReceiver ? 'incoming' as const : 'complete' as const,
@@ -385,8 +429,12 @@ async function buildNativeTradeHistory(league: NativeHistoryLeague, userId: stri
         received: trade.items
           .filter((item) => item.fromRosterId === trade.receiverRosterId)
           .map((item) => ({ id: item.id, ...assetLabel(item, String(league.sport)), accent: 'teal' as const })),
+        participantSides,
         status: trade.status,
         proposalGrade: frozenProposer?.grade ?? offer?.grade ?? null,
+        proposalGradeReason: frozenProposer?.reason ?? (offer?.grade
+          ? 'Recovered from the proposal-time market values stored with this trade. Complete league-context evidence was not archived.'
+          : 'Original grade unavailable — this trade predates immutable decision receipts.'),
         proposalValueGiven: frozenProposer?.valueGiven ?? valueTotal(offer?.assetsGiven),
         proposalValueReceived: frozenProposer?.valueReceived ?? valueTotal(offer?.assetsReceived),
         proposalCapturedAt: receipt?.capturedAt ?? offer?.createdAt.toISOString() ?? null,
@@ -401,6 +449,7 @@ async function buildNativeTradeHistory(league: NativeHistoryLeague, userId: stri
         viewerIsCommissioner: isCommissioner,
         viewerIsReceiver,
         viewerIsProposer,
+        viewerIsParticipant: participantIds.some((rosterId) => myRosterIds.has(rosterId)),
       }
     })
 }
@@ -426,7 +475,11 @@ async function buildNativeExecutedTrades(leagueId: string, userId: string): Prom
   const trades = await listAfLeagueTrades(leagueId, { status: 'processed', take: 20 })
   if (trades.length === 0) return []
 
-  const rosterIds = [...new Set(trades.flatMap((t) => [t.proposerRosterId, t.receiverRosterId]))]
+  const rosterIds = [...new Set(trades.flatMap((t) => [
+    t.proposerRosterId,
+    t.receiverRosterId,
+    ...t.items.flatMap((item) => [item.fromRosterId, item.toRosterId]),
+  ]))]
   const rosters = await prisma.roster.findMany({
     where: { id: { in: rosterIds } },
     select: { id: true, platformUserId: true },
@@ -434,32 +487,52 @@ async function buildNativeExecutedTrades(leagueId: string, userId: string): Prom
   const userIds = [...new Set(rosters.map((r) => r.platformUserId))]
   const users = await prisma.appUser.findMany({
     where: { id: { in: userIds } },
-    select: { id: true, displayName: true, username: true },
+    select: { id: true, displayName: true, username: true, avatarUrl: true },
   })
   const nameByUserId = new Map(users.map((u) => [u.id, u.displayName?.trim() || u.username]))
+  const avatarByUserId = new Map(users.map((u) => [u.id, u.avatarUrl]))
   const userIdByRosterId = new Map(rosters.map((r) => [r.id, r.platformUserId]))
   const nameOf = (rosterId: string) => nameByUserId.get(userIdByRosterId.get(rosterId) ?? '') ?? 'Manager'
+  const avatarOf = (rosterId: string) => avatarByUserId.get(userIdByRosterId.get(rosterId) ?? '') ?? null
 
-  return trades.map((t) => ({
-    id: t.id,
-    direction: 'complete' as const,
-    partnerName: nameOf(t.receiverRosterId),
-    proposerName: nameOf(t.proposerRosterId),
-    receiverName: nameOf(t.receiverRosterId),
-    timestamp: t.createdAt.toISOString(),
-    executedAt: (t.processedAt ?? t.createdAt).toISOString(),
-    // What each side SENT: `sent` is the proposer's outgoing assets, `received` the receiver's.
-    sent: t.items
-      .filter((i) => i.fromRosterId === t.proposerRosterId)
-      .map((i) => ({ id: i.id, ...assetLabel(i), accent: 'blue' as const })),
-    received: t.items
-      .filter((i) => i.fromRosterId === t.receiverRosterId)
-      .map((i) => ({ id: i.id, ...assetLabel(i), accent: 'teal' as const })),
-    status: t.status,
-    viewerIsCommissioner: true,
-    viewerIsReceiver: false,
-    viewerIsProposer: false,
-  }))
+  return trades.map((t) => {
+    const participantIds = [...new Set([
+      t.proposerRosterId,
+      t.receiverRosterId,
+      ...t.items.flatMap((item) => [item.fromRosterId, item.toRosterId]),
+    ])]
+    return {
+      id: t.id,
+      direction: 'complete' as const,
+      partnerName: nameOf(t.receiverRosterId),
+      proposerName: nameOf(t.proposerRosterId),
+      receiverName: nameOf(t.receiverRosterId),
+      timestamp: t.createdAt.toISOString(),
+      executedAt: (t.processedAt ?? t.createdAt).toISOString(),
+      // What each side SENT: `sent` is the proposer's outgoing assets, `received` the receiver's.
+      sent: t.items
+        .filter((i) => i.fromRosterId === t.proposerRosterId)
+        .map((i) => ({ id: i.id, ...assetLabel(i), accent: 'blue' as const })),
+      received: t.items
+        .filter((i) => i.fromRosterId === t.receiverRosterId)
+        .map((i) => ({ id: i.id, ...assetLabel(i), accent: 'teal' as const })),
+      participantSides: participantIds.map((rosterId) => ({
+        rosterId,
+        name: nameOf(rosterId),
+        avatarUrl: avatarOf(rosterId),
+        isViewer: false,
+        assets: t.items
+          .filter((item) => item.fromRosterId === rosterId)
+          .map((item) => ({ id: item.id, ...assetLabel(item), accent: rosterId === t.proposerRosterId ? 'blue' as const : 'teal' as const })),
+        grade: null,
+        reason: null,
+      })),
+      status: t.status,
+      viewerIsCommissioner: true,
+      viewerIsReceiver: false,
+      viewerIsProposer: false,
+    }
+  })
 }
 
 /** Map a provider asset onto the panel's asset shape. */

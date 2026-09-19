@@ -403,7 +403,9 @@ function rowFromNativeHistory(t: LeagueTradeHistoryItem): LogRow {
   const completed = t.status === 'processed' || t.status === 'reversed'
   const viewerIsA = Boolean(t.viewerIsProposer)
   const viewerIsB = Boolean(t.viewerIsReceiver)
+  const viewerIsParticipant = Boolean(t.viewerIsParticipant || viewerIsA || viewerIsB)
   const noGradeWhy = t.decisionReceipt?.reason
+    ?? t.proposalGradeReason
     ?? (completed ? 'event-time value not captured' : 'closed before completion')
   const proposalGrade = ['A', 'B', 'C', 'D', 'F'].includes(String(t.proposalGrade))
     ? t.proposalGrade as GradeLetter
@@ -454,7 +456,7 @@ function rowFromNativeHistory(t: LeagueTradeHistoryItem): LogRow {
       sends: joinNames(t.sent),
       initialGrade: (frozenProposer?.grade as GradeLetter | null | undefined) ?? proposalGrade,
       initialLabel: 'Then',
-      initialWhy: frozenProposer?.reason ?? null,
+      initialWhy: frozenProposer?.reason ?? t.proposalGradeReason ?? null,
       grade: currentGrade,
       gradeWhy: currentWhy,
     },
@@ -465,14 +467,14 @@ function rowFromNativeHistory(t: LeagueTradeHistoryItem): LogRow {
       sends: joinNames(t.received),
       initialGrade: receiverProposalGrade,
       initialLabel: 'Then',
-      initialWhy: frozenReceiver?.reason ?? null,
+      initialWhy: frozenReceiver?.reason ?? t.proposalGradeReason ?? null,
       grade: receiverCurrentGrade,
       gradeWhy: currentWhy,
     },
-    extraSides: 0,
+    extraSides: Math.max(0, (t.participantSides?.length ?? 2) - 2),
     status: statusOf(t),
-    mine: viewerIsA || viewerIsB,
-    direction: viewerIsA || viewerIsB ? 'done' : null,
+    mine: viewerIsParticipant,
+    direction: viewerIsParticipant ? 'done' : null,
     receiptNote: t.decisionReceipt
       ? `${t.decisionReceipt.completeness === 'complete' ? 'Verified' : 'Partial'} ${t.decisionReceipt.format.replaceAll('_', ' ')} receipt${t.decisionReceipt.participantOutcomes.length ? ` · ${t.decisionReceipt.participantOutcomes.map((outcome, index) => `T${index + 1} ${outcome.deltaPct >= 0 ? '+' : ''}${outcome.deltaPct.toFixed(1)}%`).join(' · ')}` : ''}`
       : null,
@@ -712,6 +714,7 @@ function ManagerBlock({
   grade,
   sport,
   avatarUrl,
+  gradeReason,
 }: {
   name: string
   isYou: boolean
@@ -721,6 +724,7 @@ function ManagerBlock({
   grade: GradeLetter | null | undefined
   sport: string
   avatarUrl?: string | null
+  gradeReason?: string | null
 }) {
   return (
     <div className="flex flex-col gap-1.5">
@@ -757,6 +761,7 @@ function ManagerBlock({
           )
         })
       )}
+      {gradeReason ? <p className="pl-8 text-[10.5px] leading-snug text-white/45">{gradeReason}</p> : null}
     </div>
   )
 }
@@ -793,7 +798,18 @@ export function PendingTradeCard(props: {
 
   const you = { name: commissionerView ? (t.proposerName ?? 'Proposer') : 'You', isYou: !commissionerView, assets: youAssets, avatarUrl: t.viewerAvatarUrl ?? t.proposerAvatarUrl ?? null, viewerSide: true }
   const them = { name: t.partnerName, isYou: false, assets: themAssets, avatarUrl: t.partnerAvatarUrl ?? null, viewerSide: false }
-  const proposerFirst = commissionerView
+  const proposerFirst = t.participantSides?.length
+    ? t.participantSides.map((side) => ({
+        name: side.name,
+        isYou: side.isViewer,
+        assets: cardAssetsFromPanel(side.assets),
+        avatarUrl: side.avatarUrl,
+        viewerSide: side.isViewer,
+        rosterId: side.rosterId,
+        frozenGrade: side.grade,
+        gradeReason: side.reason,
+      }))
+    : commissionerView
     ? [
         { ...you, name: t.proposerName ?? 'Proposer', avatarUrl: t.proposerAvatarUrl ?? null },
         { ...them, name: t.receiverName ?? 'Receiving team', avatarUrl: t.receiverAvatarUrl ?? null },
@@ -842,7 +858,10 @@ export function PendingTradeCard(props: {
 
       <div className="flex flex-col gap-3">
         {proposerFirst.map((side, index) => {
-          const frozen = t.decisionReceipt?.participantDecisions[index] ?? null
+          const rosterId = 'rosterId' in side ? side.rosterId : null
+          const frozen = rosterId
+            ? t.decisionReceipt?.participantDecisions.find((participant) => participant.rosterId === rosterId) ?? null
+            : t.decisionReceipt?.participantDecisions[index] ?? null
           return (
           <ManagerBlock
             key={side.name}
@@ -851,9 +870,10 @@ export function PendingTradeCard(props: {
             assets={side.assets}
             values={values}
             total={frozen?.valueGiven ?? totalFor(side)}
-            grade={(frozen?.grade as GradeLetter | null | undefined) ?? gradeFor(side)}
+            grade={(('frozenGrade' in side ? side.frozenGrade : null) as GradeLetter | null | undefined) ?? (frozen?.grade as GradeLetter | null | undefined) ?? gradeFor(side)}
             sport={props.sport}
             avatarUrl={side.avatarUrl}
+            gradeReason={('gradeReason' in side ? side.gradeReason : null) ?? frozen?.reason ?? null}
           />
           )
         })}
@@ -1574,6 +1594,7 @@ export function TradesTab({ league, teams }: TradesTabProps) {
             {executedTrades.map((t) => {
               const proposer = t.proposerName ?? 'Team A'
               const receiver = t.receiverName ?? 'Team B'
+              const participants = t.participantSides?.length ? t.participantSides : null
               return (
                 <li
                   key={t.id}
@@ -1581,14 +1602,19 @@ export function TradesTab({ league, teams }: TradesTabProps) {
                   data-testid="executed-trade-row"
                 >
                   <p className="font-semibold text-white">
-                    {proposer} ⇄ {receiver}
+                    {participants ? participants.map((side) => side.name).join(' ⇄ ') : `${proposer} ⇄ ${receiver}`}
                   </p>
-                  <p className="mt-1 text-white/55">
-                    {proposer} sent {t.sent.map((a) => a.label).join(', ') || '—'}
-                  </p>
-                  <p className="text-white/55">
-                    {receiver} sent {t.received.map((a) => a.label).join(', ') || '—'}
-                  </p>
+                  {participants ? participants.map((side) => (
+                    <p key={side.rosterId} className="mt-1 flex items-center gap-1.5 text-white/55">
+                      {side.avatarUrl ? <PlayerHeadshot src={side.avatarUrl} alt={side.name} size={20} /> : null}
+                      <span>{side.name} sent {side.assets.map((asset) => asset.label).join(', ') || '—'}</span>
+                    </p>
+                  )) : (
+                    <>
+                      <p className="mt-1 text-white/55">{proposer} sent {t.sent.map((a) => a.label).join(', ') || '—'}</p>
+                      <p className="text-white/55">{receiver} sent {t.received.map((a) => a.label).join(', ') || '—'}</p>
+                    </>
+                  )}
                   {t.viewerIsCommissioner ? (
                     <button
                       type="button"

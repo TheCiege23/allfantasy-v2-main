@@ -6,9 +6,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
  * were declining to look, and one said so in words that were false.
  */
 
-const { cacheFindMany, valueFindMany } = vi.hoisted(() => ({
+const { cacheFindMany, valueFindMany, nativeFindMany, rosterFindMany, userFindMany, teamFindMany, snapshotFindMany } = vi.hoisted(() => ({
   cacheFindMany: vi.fn(),
   valueFindMany: vi.fn(),
+  nativeFindMany: vi.fn(),
+  rosterFindMany: vi.fn(),
+  userFindMany: vi.fn(),
+  teamFindMany: vi.fn(),
+  snapshotFindMany: vi.fn(),
 }))
 
 const { scanPendingSleeperTrades } = vi.hoisted(() => ({
@@ -19,6 +24,11 @@ vi.mock('@/lib/prisma', () => ({
   prisma: {
     sportsDataCache: { findMany: cacheFindMany },
     playerValueSnapshot: { findMany: valueFindMany },
+    afLeagueTrade: { findMany: nativeFindMany },
+    roster: { findMany: rosterFindMany },
+    appUser: { findMany: userFindMany },
+    leagueTeam: { findMany: teamFindMany },
+    tradeDecisionSnapshot: { findMany: snapshotFindMany },
   },
 }))
 
@@ -64,9 +74,19 @@ function payload(over: Record<string, unknown> = {}) {
 beforeEach(() => {
   cacheFindMany.mockReset()
   valueFindMany.mockReset()
+  nativeFindMany.mockReset()
+  rosterFindMany.mockReset()
+  userFindMany.mockReset()
+  teamFindMany.mockReset()
+  snapshotFindMany.mockReset()
   cacheFindMany.mockResolvedValue([payload()])
   // By default nothing is priced, so no verdict is published.
   valueFindMany.mockResolvedValue([])
+  nativeFindMany.mockResolvedValue([])
+  rosterFindMany.mockResolvedValue([])
+  userFindMany.mockResolvedValue([])
+  teamFindMany.mockResolvedValue([])
+  snapshotFindMany.mockResolvedValue([])
   scanPendingSleeperTrades.mockResolvedValue({
     trades: [], completedTrades: [], scanned: true, reason: null, unscannedKind: null, weeksUnanswered: 0,
   })
@@ -201,9 +221,60 @@ describe('getRecentTrades', () => {
     expect(out[0].partial).toBe(true)
   })
 
-  it('never queries when the account has no platform league ids', async () => {
+  it('does not query the provider cache when the account has no platform league ids', async () => {
     expect(await getRecentTrades([{ id: 'a', name: 'n', platformLeagueId: null }], NOW)).toEqual([])
     expect(cacheFindMany).not.toHaveBeenCalled()
+  })
+
+  it('shows one native trade record on Core with its exact id, all managers, and frozen grades', async () => {
+    const createdAt = new Date(NOW.getTime() - 60_000)
+    nativeFindMany.mockResolvedValue([{
+      id: 'af-trade-exact-1', leagueId: 'a', status: 'pending', proposerRosterId: 'r1', receiverRosterId: 'r2',
+      createdAt, updatedAt: createdAt, acceptedAt: null, processedAt: null, rejectedAt: null, cancelledAt: null,
+      items: [
+        { id: 'i1', itemType: 'player', itemReference: '101', fromRosterId: 'r1', toRosterId: 'r2', faabAmount: null, metadata: { playerName: 'Player One', position: 'WR', team: 'BUF' } },
+        { id: 'i2', itemType: 'faab', itemReference: null, fromRosterId: 'r2', toRosterId: 'r3', faabAmount: 20, metadata: {} },
+        { id: 'i3', itemType: 'pick', itemReference: '2027-1', fromRosterId: 'r3', toRosterId: 'r1', faabAmount: null, metadata: { pickLabel: '2027 1st' } },
+      ],
+    }])
+    rosterFindMany.mockResolvedValue([
+      { id: 'r1', platformUserId: 'u1' }, { id: 'r2', platformUserId: 'u2' }, { id: 'r3', platformUserId: 'u3' },
+    ])
+    userFindMany.mockResolvedValue([
+      { id: 'u1', displayName: 'Alpha', username: 'a', avatarUrl: '/a.png' },
+      { id: 'u2', displayName: 'Beta', username: 'b', avatarUrl: '/b.png' },
+      { id: 'u3', displayName: 'Gamma', username: 'c', avatarUrl: '/c.png' },
+    ])
+    snapshotFindMany.mockResolvedValue([{
+      tradeId: 'af-trade-exact-1', policyVersion: 'v1', format: 'guillotine', completeness: 'complete', capturedAt: createdAt,
+      evidence: {}, readiness: {}, outcomeSimulation: {}, decisionResult: { participants: [
+        { rosterId: 'r1', grade: 'A', reason: 'Improves weekly survival odds.', action: 'accept', recommendation: 'Accept', coveragePct: 100 },
+      ] },
+    }])
+    const out = await getRecentTrades(
+      [{ id: 'a', name: 'Native League', platformLeagueId: null, avatarUrl: '/league.png' }],
+      NOW,
+      3,
+      { viewerUserId: 'u1' },
+    )
+    expect(out[0]).toMatchObject({ id: 'af-trade-exact-1', leagueId: 'a', status: 'pending', leagueAvatarUrl: '/league.png' })
+    expect(out[0].sides).toHaveLength(3)
+    expect(out[0].sides.find((side) => side.rosterId === 'r1')).toMatchObject({ managerName: 'Alpha', grade: 'A', gradeReason: 'Improves weekly survival odds.' })
+    expect(out[0].sides.find((side) => side.rosterId === 'r2')?.received[0]).toMatchObject({ name: 'Player One', kind: 'player', team: 'BUF' })
+    expect(cacheFindMany).not.toHaveBeenCalled()
+  })
+
+  it('does not expose another manager’s private native negotiation on Core', async () => {
+    const createdAt = new Date(NOW.getTime() - 60_000)
+    nativeFindMany.mockResolvedValue([{
+      id: 'private-cancelled', leagueId: 'a', status: 'cancelled', proposerRosterId: 'r1', receiverRosterId: 'r2',
+      createdAt, updatedAt: createdAt, acceptedAt: null, processedAt: null, rejectedAt: null, cancelledAt: createdAt,
+      items: [],
+    }])
+    rosterFindMany.mockResolvedValue([{ id: 'r1', platformUserId: 'u1' }, { id: 'r2', platformUserId: 'u2' }])
+    expect(await getRecentTrades(
+      [{ id: 'a', name: 'Native League', platformLeagueId: null }], NOW, 3, { viewerUserId: 'unrelated-user' },
+    )).toEqual([])
   })
 
   it('ignores a cache row of the wrong version rather than trusting its shape', async () => {

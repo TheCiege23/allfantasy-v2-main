@@ -2747,10 +2747,12 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
                 platformLeagueId: (l as { platformLeagueId?: string | null }).platformLeagueId ?? null,
                 platform: String(l.platform ?? ''),
                 avatarUrl: (l as { avatarUrl?: string | null }).avatarUrl ?? null,
+                sport: String(l.sport ?? 'NFL'),
               })),
               now,
               HOME_RECENT_TRADES_LIMIT,
               {
+                viewerUserId: userId,
                 ownerSleeperId: leagueListPayload?.sleeperUserId ?? null,
                 currentWeek,
                 reconcileLive: true,

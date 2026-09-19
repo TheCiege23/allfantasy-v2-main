@@ -181,6 +181,16 @@ export type LeagueTradeHistoryItem = {
   timestamp: string
   sent: LeagueTradeAsset[]
   received: LeagueTradeAsset[]
+  /** Every manager in the deal, in proposal order. Used for accurate multi-team cards. */
+  participantSides?: Array<{
+    rosterId: string
+    name: string
+    avatarUrl: string | null
+    isViewer: boolean
+    assets: LeagueTradeAsset[]
+    grade: string | null
+    reason: string | null
+  }>
   /** Real `AfLeagueTrade.status` (e.g. 'pending', 'awaiting_commissioner', 'accepted').
    *  Optional so pre-existing Sleeper-sourced rows (which never set this) keep working. */
   status?: string
@@ -190,6 +200,8 @@ export type LeagueTradeHistoryItem = {
   viewerIsReceiver?: boolean
   /** True when the viewer is the proposing roster on this trade (can cancel). */
   viewerIsProposer?: boolean
+  /** Viewer belongs to any side of a multi-team trade. Display-only; it grants no action. */
+  viewerIsParticipant?: boolean
   decisionAction?: 'accept' | 'counter' | 'decline' | 'review'
   decisionRecommendation?: string | null
   decisionCoveragePct?: number | null
@@ -200,6 +212,7 @@ export type LeagueTradeHistoryItem = {
     executedAt?: string
     /** Proposal-time model snapshot, when live capture existed for this native offer. */
     proposalGrade?: string | null
+    proposalGradeReason?: string | null
     proposalValueGiven?: number | null
     proposalValueReceived?: number | null
     proposalCapturedAt?: string | null

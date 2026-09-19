@@ -27,4 +27,21 @@ describe('trade visibility contract', () => {
       expect(source).toContain('enrichLeagueContext: true')
     }
   })
+
+  it('uses the saved AfLeagueTrade id across notifications, league cards, and Core cards', () => {
+    const service = read('lib/league-trade-engine/tradeService.ts')
+    const notifications = read('lib/notification-engine.ts')
+    const panel = read('app/api/league/trades-panel/route.ts')
+    const core = read('lib/core-app/recentTrades.ts')
+    const mobileAndDesktop = read('app/league/[leagueId]/tabs/TradesTab.tsx')
+
+    expect(service).toContain('tradeId: trade.id')
+    expect(service).toContain('newTradeId: trade.id')
+    expect(notifications).toContain('tradeId=${encodeURIComponent(opts.tradeId)}')
+    expect(panel).toContain('id: t.id')
+    expect(core).toContain('id: row.id')
+    // One responsive card component serves both mobile and desktop, so neither can drift to a second id.
+    expect(mobileAndDesktop).toContain('key={t.id}')
+    expect(mobileAndDesktop).toContain("runTradeAction(t.id, 'accept')")
+  })
 })
