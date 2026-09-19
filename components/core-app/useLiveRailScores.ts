@@ -1,11 +1,39 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { CORE_IDLE_REFRESH_MS } from '@/lib/core-app/coreRefreshPolicy'
 import type { RailLeague, RailMatchupSummary } from './AfCoreShell'
 
 type LiveScore = RailMatchupSummary & { season: number; week: number; updatedAt: string; fieldStanding?: RailMatchupSummary['standing'] }
 
-export function useLiveRailScores(leagues: RailLeague[], enabled: boolean) {
+/**
+ * 🛑 NOT LESS THAN THIS, WHATEVER A CALLER PASSES. A missing argument arrives as `undefined`,
+ * and `setInterval(fn, undefined)` is `setInterval(fn, 0)` — a tight polling loop against a
+ * batched network route. This repo does not typecheck its tests (`tsconfig.json` excludes every
+ * spec pattern), so a stale two-argument call in a suite would compile, run, and hammer.
+ */
+const MIN_RAIL_REFRESH_MS = 10_000
+
+/**
+ * Live rail scores, polled on the SHELL'S OWN REFRESH POLICY rather than a constant of its own.
+ *
+ * 🛑 THE POLICY EXISTED AND THIS POLL IGNORED IT. `coreRefreshIntervalMs` answers 20s while a
+ * followed sport is live and 120s otherwise, and the shell's effect beside this one already
+ * says what it is for: "The rail is a live surface. Refresh the server snapshot while games are
+ * on, then back off between slates." This hook — the one that actually FETCHES the scores —
+ * polled at a flat 30s.
+ *
+ * ⚠ AND ITS GATE IS `railOpen`, NOT "a game is on". On desktop the rail is expanded by default
+ * (see `core-rail-default-open.test.tsx`), so in the offseason, on a Wednesday, an idle open tab
+ * fetched every 30 seconds forever. The leagues are sent eight per request, so a sixty-league
+ * account issued eight requests a poll — around 960 an hour, none of which could return a
+ * changed score.
+ *
+ * Following the policy makes it FASTER when it matters (20s rather than 30s during a slate) and
+ * four times quieter when it does not. The caller owns the decision, so there is one authority
+ * for "is anything live" rather than a second copy here.
+ */
+export function useLiveRailScores(leagues: RailLeague[], enabled: boolean, refreshMs: number) {
   const [scores, setScores] = useState<Record<string, LiveScore>>({})
   const [delayed, setDelayed] = useState<string[]>([])
   const idsKey = JSON.stringify(leagues.filter(league => league.platform.toLowerCase() === 'sleeper').map(league => league.id))
@@ -35,9 +63,13 @@ export function useLiveRailScores(leagues: RailLeague[], enabled: boolean) {
       } finally { busy = false }
     }
     void refresh()
-    const interval = window.setInterval(() => void refresh(), 30_000)
+    const everyMs = Math.max(
+      MIN_RAIL_REFRESH_MS,
+      Number.isFinite(refreshMs) && refreshMs > 0 ? refreshMs : CORE_IDLE_REFRESH_MS,
+    )
+    const interval = window.setInterval(() => void refresh(), everyMs)
     document.addEventListener('visibilitychange', refresh)
     return () => { controller.abort(); window.clearInterval(interval); document.removeEventListener('visibilitychange', refresh) }
-  }, [idsKey, enabled])
+  }, [idsKey, enabled, refreshMs])
   return { scores, delayed }
 }
