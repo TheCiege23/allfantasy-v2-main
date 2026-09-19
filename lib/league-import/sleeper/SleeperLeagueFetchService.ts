@@ -5,8 +5,10 @@
 
 import pLimit from 'p-limit'
 
+import { runWithConcurrency } from '@/lib/async-utils'
 import { getAllPlayers } from '@/lib/sleeper-client'
 import type { SleeperImportPayload } from '../adapters/sleeper/types'
+import { SLEEPER_DRAFT_FETCH_CONCURRENCY } from './SleeperFetchConcurrency'
 
 const FETCH_RETRIES = 3
 const FETCH_TIMEOUT_MS = 12000
@@ -44,6 +46,29 @@ import {
 } from '@/lib/providers/provider-circuit'
 
 const sleeperRequestLimit = pLimit(10)
+
+export async function fetchSleeperDraftPickGroups(args: {
+  draftIds: string[]
+  season?: string
+  fetchDraftPicks: (
+    draftId: string,
+  ) => Promise<NonNullable<SleeperImportPayload['draftPicks']>>
+}): Promise<NonNullable<SleeperImportPayload['draftPicks']>> {
+  const pickGroups = await runWithConcurrency(
+    Array.from(new Set(args.draftIds.map((id) => id.trim()).filter(Boolean))),
+    SLEEPER_DRAFT_FETCH_CONCURRENCY,
+    async (draftId) => {
+      const draftPicks = await args.fetchDraftPicks(draftId)
+      return draftPicks.map((pick) => ({
+        ...pick,
+        season: args.season ?? pick.season,
+        draft_id: draftId,
+      }))
+    },
+  )
+
+  return pickGroups.flat()
+}
 
 const delay = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))
 
@@ -261,35 +286,26 @@ const DEFAULTS: SleeperFetchOptions = {
   maxPreviousSeasons: 10,
 }
 
-async function fetchLeagueDraftPicks(
+export async function fetchLeagueDraftPicks(
   leagueId: string,
-  season?: string
+  season?: string,
+  fetchDraftPicks: (
+    draftId: string,
+  ) => Promise<NonNullable<SleeperImportPayload['draftPicks']>> = (draftId) =>
+    fetchSleeperJson<NonNullable<SleeperImportPayload['draftPicks']>>(
+      `${SLEEPER_BASE}/draft/${draftId}/picks`,
+    ).then((rows) => rows ?? []),
 ): Promise<NonNullable<SleeperImportPayload['draftPicks']>> {
   const drafts =
     (await fetchSleeperJson<SleeperDraftSummaryRaw[]>(`${SLEEPER_BASE}/league/${leagueId}/drafts`)) ?? []
 
-  let picks: NonNullable<SleeperImportPayload['draftPicks']> = []
-  for (const draft of drafts) {
-    const draftId = draft?.draft_id?.trim()
-    if (!draftId) continue
-
-    const draftPicks =
-      (await fetchSleeperJson<NonNullable<SleeperImportPayload['draftPicks']>>(
-        `${SLEEPER_BASE}/draft/${draftId}/picks`
-      )) ?? []
-
-    if (!draftPicks.length) continue
-
-    picks = picks.concat(
-      draftPicks.map((pick) => ({
-        ...pick,
-        season: season ?? pick.season,
-        draft_id: draftId,
-      }))
-    )
-  }
-
-  return picks
+  return fetchSleeperDraftPickGroups({
+    draftIds: drafts
+      .map((draft) => draft?.draft_id?.trim())
+      .filter((id): id is string => Boolean(id)),
+    season,
+    fetchDraftPicks,
+  })
 }
 
 /**

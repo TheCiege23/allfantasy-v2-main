@@ -51,14 +51,42 @@
  */
 
 import { normalizeSportForWarehouse } from '@/lib/data-warehouse/types'
+import { runWithConcurrency } from '@/lib/async-utils'
 import { prisma } from '@/lib/prisma'
 import { persistMutableTransactionFacts } from '@/lib/league-import/bulkWarehouseFactPersistence'
 import { getLeagueTransactions, getNflState, type SleeperTransaction } from '@/lib/sleeper-client'
 import { getSleeperHistoricalLeagueChain } from './SleeperHistoricalLeagueChain'
+import {
+  SLEEPER_HISTORY_FETCH_CONCURRENCY,
+  withSleeperHistoricalRequestLimit,
+} from './SleeperFetchConcurrency'
 import { shouldSkipImportedSeason } from '../seasonCompletion'
 
 /** Sleeper reports a regular season plus playoffs inside 18 legs. */
 const MAX_WEEK = 18
+
+export async function fetchSleeperTransactionWeeks(args: {
+  externalLeagueId: string
+  firstWeek: number
+  fetchWeek?: (leagueId: string, week: number) => Promise<SleeperTransaction[]>
+}): Promise<Array<{ week: number; transactions: SleeperTransaction[] }>> {
+  const weeks = Array.from(
+    { length: Math.max(0, MAX_WEEK - args.firstWeek + 1) },
+    (_, index) => args.firstWeek + index,
+  )
+  const fetchWeek = args.fetchWeek ?? getLeagueTransactions
+
+  return runWithConcurrency(
+    weeks,
+    SLEEPER_HISTORY_FETCH_CONCURRENCY,
+    async (week) => ({
+      week,
+      transactions: await withSleeperHistoricalRequestLimit(() =>
+        fetchWeek(args.externalLeagueId, week),
+      ),
+    }),
+  )
+}
 
 /**
  * The first week worth re-reading for a season we already hold rows for.
@@ -333,9 +361,12 @@ export async function syncSleeperHistoricalTransactionsAfterImport(args: {
       })
       if (firstWeek > 1) providerCallsAvoided += firstWeek - 1
 
+      const weeklyFeeds = await fetchSleeperTransactionWeeks({
+        externalLeagueId: seasonLeague.externalLeagueId,
+        firstWeek,
+      })
       let sawAnyFeed = false
-      for (let week = firstWeek; week <= MAX_WEEK; week++) {
-        const weekly = await getLeagueTransactions(seasonLeague.externalLeagueId, week)
+      for (const { transactions: weekly } of weeklyFeeds) {
         if (!Array.isArray(weekly)) continue
         sawAnyFeed = true
         for (const tx of weekly) {

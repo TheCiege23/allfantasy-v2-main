@@ -1,6 +1,11 @@
 import { normalizeSportForWarehouse } from '@/lib/data-warehouse/types'
+import { runWithConcurrency } from '@/lib/async-utils'
 import { prisma } from '@/lib/prisma'
 import { getDraftPicks, getLeagueDrafts, getLeagueRosters } from '@/lib/sleeper-client'
+import {
+  SLEEPER_DRAFT_FETCH_CONCURRENCY,
+  withSleeperHistoricalRequestLimit,
+} from './SleeperFetchConcurrency'
 import { getSourceTeamIdFromPlayerData } from './SleeperHistoricalMatchupSyncService'
 import { getSleeperHistoricalLeagueChain } from './SleeperHistoricalLeagueChain'
 import { shouldSkipImportedSeason } from '../seasonCompletion'
@@ -178,16 +183,38 @@ async function collectSleeperDraftFacts(args: {
     }
 
     const drafts = await getLeagueDrafts(seasonLeague.externalLeagueId)
-    const seenDraftIds = new Set<string>()
+    const sourceDraftIds = Array.from(
+      new Set(
+        (drafts ?? [])
+          .map((draft) =>
+            typeof draft?.draft_id === 'string' ? draft.draft_id.trim() : '',
+          )
+          .filter(Boolean),
+      ),
+    )
+    const loadedDrafts = await runWithConcurrency(
+      sourceDraftIds,
+      SLEEPER_DRAFT_FETCH_CONCURRENCY,
+      async (sourceDraftId) => {
+        const picks = await withSleeperHistoricalRequestLimit(() => getDraftPicks(sourceDraftId))
+        const tradedPickCount = Array.isArray(picks) && picks.length > 0
+          ? await withSleeperHistoricalRequestLimit(() =>
+              fetch(`https://api.sleeper.app/v1/draft/${sourceDraftId}/traded_picks`, {
+                signal: AbortSignal.timeout(12_000),
+              })
+                .then(async (response) => {
+                  if (!response.ok) return 0
+                  const tradedPicks = (await response.json()) as unknown
+                  return Array.isArray(tradedPicks) ? tradedPicks.length : 0
+                })
+                .catch(() => 0),
+            )
+          : 0
+        return { sourceDraftId, picks, tradedPickCount }
+      },
+    )
 
-    for (const draft of drafts ?? []) {
-      const sourceDraftId = typeof draft?.draft_id === 'string' ? draft.draft_id.trim() : ''
-      if (!sourceDraftId || seenDraftIds.has(sourceDraftId)) {
-        continue
-      }
-      seenDraftIds.add(sourceDraftId)
-
-      const picks = await getDraftPicks(sourceDraftId)
+    for (const { sourceDraftId, picks, tradedPickCount } of loadedDrafts) {
       if (!Array.isArray(picks) || picks.length === 0) {
         continue
       }
@@ -196,18 +223,10 @@ async function collectSleeperDraftFacts(args: {
       // /v1/draft/{draft_id}/traded_picks. 404 and network errors are
       // swallowed so draft-pick ingestion keeps going. DraftFact schema has
       // no metadata column today, so results are logged for future use.
-      try {
-        const tpRes = await fetch(`https://api.sleeper.app/v1/draft/${sourceDraftId}/traded_picks`)
-        if (tpRes.ok) {
-          const tradedPicks = (await tpRes.json()) as unknown
-          if (Array.isArray(tradedPicks) && tradedPicks.length > 0) {
-            console.info(
-              `[SleeperHistoricalDraftSync] draft ${sourceDraftId} traded_picks count=${tradedPicks.length}`,
-            )
-          }
-        }
-      } catch {
-        /* non-fatal */
+      if (tradedPickCount > 0) {
+        console.info(
+          `[SleeperHistoricalDraftSync] draft ${sourceDraftId} traded_picks count=${tradedPickCount}`,
+        )
       }
 
       let draftProducedRows = false
