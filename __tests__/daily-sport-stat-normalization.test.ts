@@ -19,6 +19,7 @@ import {
   normalizeDailySportWeeklyStats,
   normalizeNbaGameStats,
   normalizeNhlGameStats,
+  weekWindowFromSeasonStart,
 } from '@/lib/scoring-runtime/dailySportStatNormalization'
 
 /** Bonus categories are derived here, not sent by the provider. */
@@ -164,5 +165,50 @@ describe('split rebounds are reconstructed', () => {
   it('prefers an explicit total over the halves', () => {
     const { stats } = normalizeNbaGameStats({ stats: { rebounds: 10, oreb: 3, dreb: 6 } })
     expect(stats.reb).toBe(10)
+  })
+})
+
+describe('a daily-sport week is a date window', () => {
+  // `weekOrRound` is 0 on every daily-sport row in production, so the window is
+  // the only selector that can work. NHL 2026-27 opener used as the anchor.
+  const start = '2026-10-07T00:00:00.000Z'
+
+  it('week 1 starts on the season start', () => {
+    const w = weekWindowFromSeasonStart(start, 1)!
+    expect(w.start.toISOString()).toBe('2026-10-07T00:00:00.000Z')
+    expect(w.end.toISOString()).toBe('2026-10-14T00:00:00.000Z')
+  })
+
+  it('each later week is exactly seven days on', () => {
+    const w3 = weekWindowFromSeasonStart(start, 3)!
+    expect(w3.start.toISOString()).toBe('2026-10-21T00:00:00.000Z')
+    expect(w3.end.toISOString()).toBe('2026-10-28T00:00:00.000Z')
+  })
+
+  it('windows are contiguous and non-overlapping', () => {
+    for (let week = 1; week < 12; week += 1) {
+      const a = weekWindowFromSeasonStart(start, week)!
+      const b = weekWindowFromSeasonStart(start, week + 1)!
+      expect(a.end.getTime()).toBe(b.start.getTime())
+    }
+  })
+
+  // Preseason exclusion falls out of the anchor for free: NHL preseason games
+  // are played in September, before a window anchored on the October opener.
+  it('cannot contain a preseason game played before the season start', () => {
+    const preseasonGame = new Date('2026-09-19T23:00:00.000Z')
+    for (let week = 1; week <= 26; week += 1) {
+      const w = weekWindowFromSeasonStart(start, week)!
+      const inside = preseasonGame >= w.start && preseasonGame < w.end
+      expect(inside).toBe(false)
+    }
+  })
+
+  it('declines rather than inventing a start date', () => {
+    expect(weekWindowFromSeasonStart(null, 1)).toBeNull()
+    expect(weekWindowFromSeasonStart(undefined, 1)).toBeNull()
+    expect(weekWindowFromSeasonStart('not a date', 1)).toBeNull()
+    expect(weekWindowFromSeasonStart(start, 0)).toBeNull()
+    expect(weekWindowFromSeasonStart(start, -3)).toBeNull()
   })
 })

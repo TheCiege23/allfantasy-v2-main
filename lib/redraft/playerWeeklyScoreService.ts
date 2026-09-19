@@ -21,6 +21,7 @@ import {
   aggregateWeeklyStats,
   getDailySportNormalizer,
   isDailyStatSport,
+  weekWindowFromSeasonStart,
 } from '@/lib/scoring-runtime/dailySportStatNormalization'
 
 export type WeeklyScoreSyncSummary = {
@@ -84,6 +85,16 @@ export async function syncPlayerWeeklyScoresForRedraftSeason(params: {
   leagueId?: string
   week?: number
   actorId?: string
+  /**
+   * The UTC day week 1 of the regular season begins on. Required for the DAILY
+   * sports (NBA/NHL), whose week is a date range rather than a feed-reported
+   * number; ignored for NFL, which carries a real week.
+   *
+   * There is no table to read this from yet — `season_calendars` is empty in
+   * production and models months, not days — so it is supplied by the caller
+   * and the sync declines without it.
+   */
+  seasonStartUtc?: Date | string | null
 }): Promise<WeeklyScoreSyncSummary> {
   const season = await prisma.redraftSeason.findFirst({
     where: params.seasonId ? { id: params.seasonId } : { leagueId: params.leagueId },
@@ -178,12 +189,40 @@ export async function syncPlayerWeeklyScoresForRedraftSeason(params: {
    */
   const dailyRowsByPlayer = new Map<string, unknown[]>()
   if (isDailySport) {
+    /**
+     * 🛑 SELECTED BY DATE WINDOW, NOT BY `weekOrRound` — AND AN EARLIER VERSION
+     * OF THIS CODE GOT THAT WRONG.
+     *
+     * `weekOrRound` is 0 for every daily-sport row (measured on production:
+     * all 66,525 MLB rows and all 3,322 SOCCER rows), so filtering on it
+     * matched nothing and would have left every NBA/NHL league permanently at
+     * "no stats yet" with no error anywhere.
+     *
+     * `season` is dropped from the filter for the same reason: NBA/NHL games
+     * are split across `season` 2026 and 2027 for one real-world season, so it
+     * is not a dependable narrowing either. The date window is exact and does
+     * both jobs at once — it also excludes preseason, because a window anchored
+     * on the regular-season start cannot contain a game played before it.
+     */
+    const window = weekWindowFromSeasonStart(params.seasonStartUtc, week)
+    if (!window) {
+      // Decline rather than run a query that cannot be right. Inventing a start
+      // date would silently mis-assign every game to the wrong week, which is
+      // worse than scoring nothing and saying so.
+      summary.warnings.push(
+        `${sport} is a daily sport: a week is a date range, and scoring one needs a real season-start date. ` +
+          'None was supplied and none can be read yet — `season_calendars` is empty in production and holds ' +
+          'only month granularity. No scores were written.',
+      )
+      await recordScoreSyncAudit(summary, params.actorId ?? 'system')
+      return summary
+    }
+
     const gameRows = await prisma.playerGameStat.findMany({
       where: {
         playerId: { in: playerIds },
         sportType: { in: candidateSportKeys(sport) },
-        season: seasonYear,
-        weekOrRound: week,
+        gameDate: { gte: window.start, lt: window.end },
       },
       select: { playerId: true, normalizedStatMap: true },
     })
