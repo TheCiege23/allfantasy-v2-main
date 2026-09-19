@@ -46,6 +46,7 @@ import { CommissionerLeagueSettingsShell } from './CommissionerLeagueSettingsShe
 import { SubscriptionGateProvider } from '@/hooks/useSubscriptionGate'
 import LanguageToggle from '@/components/i18n/LanguageToggle'
 import { ThemeModeSelect } from '@/components/theme/ThemeModeSelect'
+import { isNativePlatform } from '@/lib/dashboard/platform-label'
 import {
   initialsFromName,
   leagueAvatarSrc,
@@ -234,9 +235,18 @@ export function LeagueSettingsModal(props: LeagueSettingsModalProps) {
   const [activePanel, setActivePanel] = useState<string | null>(null)
   // Imported (non-native) leagues get the read-only summary in GENERAL —
   // there is nothing to edit here, the host platform owns the rules.
+  //
+  // 🛑 `isNativePlatform` is the ONE rule for what counts as native. This was a
+  // hand-copied list that omitted `manual` — which is exactly what
+  // `createCanonicalLeagueInTransaction` persists for every natively created
+  // league — so native leagues were classified as imported and shown the
+  // read-only panel, telling the commissioner to go edit the league "on
+  // Manual". `platform-label.ts` warns against this second copy by name.
   const importedPlatform = useMemo(() => {
-    const p = String(league.platform ?? '').toLowerCase()
-    return p && !['allfantasy', 'native', 'af', ''].includes(p) ? p : null
+    const p = String(league.platform ?? '').trim().toLowerCase()
+    // Blank stays native, matching the prior behaviour of the `p &&` guard.
+    if (!p) return null
+    return isNativePlatform(p) ? null : p
   }, [league.platform])
   const [isMd, setIsMd] = useState(false)
   const [idpLeague, setIdpLeague] = useState(false)

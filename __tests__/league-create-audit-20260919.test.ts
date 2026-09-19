@@ -1,0 +1,144 @@
+/** Audit characterization: passing assertions reproduce gaps, not release acceptance. No database writes. */
+import { describe, expect, it, vi } from 'vitest'
+import { DEFAULT_V2_STATE, getDefaultDynastySetup } from '@/lib/create-league-v2/state'
+import { analyzeCreateLeagueCompletion } from '@/lib/create-league-v2/form-completion'
+import { getDraftTypeOptions, getTeamCountOptions } from '@/lib/create-league-v2/rules-engine'
+import { runPresetEngine } from '@/lib/league-creation/preset-engine/runPresetEngine'
+import { createCanonicalLeagueInTransaction } from '@/lib/league-creation/canonical/createCanonicalLeagueInTransaction'
+import { validateCreatePayload } from '@/lib/league-creation/canonical/validateCreateLeague'
+import { LEAGUE_CREATE_OPTIONS_CATALOG_V1 } from '@/lib/league-creation/options-catalog-seed-data'
+import { calculateScoreFromSportConfig } from '@/lib/redraft/scoringEngine'
+import { buildFullNflScoringConfig } from '@/lib/nfl-scoring/NflScoringPresets'
+import { getDefaultScoringPresetId, listScoringPresetOptions } from '@/lib/league-creation-preset/scoring-presets'
+
+const db = vi.hoisted(() => ({ league: { findFirst: vi.fn() } }))
+vi.mock('@/lib/prisma', () => ({ prisma: db }))
+
+const body = {
+  concept: 'redraft', sport: 'NFL', teamCount: 12, draftType: 'snake',
+  scoringPreset: 'fb_half_ppr', leagueName: 'Audit League', timezone: 'America/New_York',
+  conceptSetup: { draftDate: '2026-10-01', draftTime: '20:00', draftTimezone: 'America/New_York', visibility: 'public' },
+} as const
+
+function txMock() {
+  const models: Record<string, any> = {}
+  let counter = 0
+  return new Proxy(models, { get(target, model: string) {
+    return target[model] ??= {
+      findFirst: vi.fn().mockResolvedValue(null),
+      findUnique: vi.fn().mockResolvedValue(null),
+      create: vi.fn(async (args: any) => ({ ...args.data, id: `${model}-${++counter}`, token: 'audit-token' })),
+      createMany: vi.fn().mockResolvedValue({ count: 12 }),
+      upsert: vi.fn().mockResolvedValue({ id: 'audit' }),
+    }
+  } })
+}
+
+describe('2026-09-19 league audit reproductions', () => {
+  it('reproduces dynasty hidden-date blocker after visible fields are complete', () => {
+    const issues = analyzeCreateLeagueCompletion({
+      ...DEFAULT_V2_STATE, leagueType: 'dynasty', name: body.leagueName,
+      sport: 'NFL', draftType: 'snake', scoringPresetId: 'fb_half_ppr',
+      draftDate: body.conceptSetup.draftDate, draftTime: body.conceptSetup.draftTime,
+      timezone: body.timezone, dynasty: getDefaultDynastySetup('NFL', 'snake'),
+    })
+    expect(issues.map(x => x.code)).toContain('dynasty_draft_date')
+    expect(issues.map(x => x.code)).not.toContain('draft_date_required')
+  })
+
+  // PARTIALLY FIXED 2026-09-19. The missing scheduled timestamp is resolved:
+  // the transaction now converts the wizard's local date/time/zone through
+  // `toUtc` and persists `LeagueSettings.draftDateUtc` (DST-correct coverage in
+  // `league-create-audit-fixes-20260919.test.ts`).
+  //
+  // 🛑 The public-visibility disagreement is STILL OPEN and is deliberately
+  // left reproducing here: the listing is activated while
+  // `RedraftLeagueExtendedSettings.isPublic` stays false, because that flag
+  // only consults best-ball visibility.
+  it('schedules the draft, but public visibility records still disagree', async () => {
+    const tx = txMock()
+    const engine = runPresetEngine({ ...body, commissionerId: 'audit-user' })
+    await createCanonicalLeagueInTransaction(tx as any, 'audit-user', body as any, engine)
+    // 2026-10-01 20:00 in America/New_York is EDT (UTC-4).
+    expect(tx.leagueSettings.create.mock.calls[0][0].data.draftDateUtc?.toISOString())
+      .toBe('2026-10-02T00:00:00.000Z')
+    expect(tx.redraftLeagueExtendedSettings.create.mock.calls[0][0].data.isPublic).toBe(false)
+    expect(tx.findLeagueListing.upsert.mock.calls[0][0].create.isActive).toBe(true)
+    expect(tx.draftSession.create.mock.calls[0][0].data.teamCount).toBe(12)
+    expect(tx.roster.create).toHaveBeenCalledTimes(12)
+  })
+
+  it('reproduces advanced superflex/IDP flags not changing the resolved roster', () => {
+    const ordinary = runPresetEngine({ ...body, commissionerId: 'audit-user' })
+    const advanced = runPresetEngine({ ...body, commissionerId: 'audit-user',
+      conceptSetup: { ...body.conceptSetup, advancedSetup: { superflex: true, idp: true, tePremium: true } },
+    })
+    expect(advanced.settingsSnapshot.rosterSettings).toEqual(ordinary.settingsSnapshot.rosterSettings)
+    expect(advanced.settingsSnapshot.scoringSettings).toEqual(ordinary.settingsSnapshot.scoringSettings)
+    expect(advanced.formatResolution.modifiers).toEqual(ordinary.formatResolution.modifiers)
+  })
+
+  it('reproduces accepting an invalid IANA timezone at create validation', () => {
+    expect(validateCreatePayload({ ...body, timezone: 'Not/AZone' }).ok).toBe(true)
+  })
+
+  it('reproduces explicit no-review choice becoming commissioner review', async () => {
+    const tx = txMock()
+    const engine = runPresetEngine({ ...body, commissionerId: 'audit-user' })
+    await createCanonicalLeagueInTransaction(tx as any, 'audit-user', { ...body, tradeReviewMode: 'none' } as any, engine)
+    expect(tx.redraftLeagueExtendedSettings.create.mock.calls[0][0].data.commissionerTradeReviewType).toBe('commissioner')
+  })
+
+  it('records effective NFL draft and manager menus for every concept', () => {
+    const matrix = LEAGUE_CREATE_OPTIONS_CATALOG_V1.concepts.map(c => ({
+      concept: c.id,
+      drafts: getDraftTypeOptions(c.id as any, 'NFL').map(x => x.id),
+      counts: getTeamCountOptions('NFL', c.id as any),
+      serverCounts: LEAGUE_CREATE_OPTIONS_CATALOG_V1.teamCountOptionsByConceptSport[c.id]?.NFL,
+    }))
+    console.log('AUDIT_NFL_MATRIX', JSON.stringify(matrix))
+    expect(matrix).toHaveLength(12)
+  })
+
+  it('reproduces full-PPR creation being scored with the bootstrap half-PPR default', async () => {
+    const engine = runPresetEngine({ ...body, scoringPreset: 'fb_ppr', commissionerId: 'audit-user' })
+    db.league.findFirst.mockResolvedValue({ sport: 'NFL', settings: {
+      ...engine.settingsSnapshot,
+      nfl_scoring_config: { presetKey: 'af_default', rules: buildFullNflScoringConfig('af_default') },
+    } })
+    const score = await calculateScoreFromSportConfig('audit', 'receiver', 1, { rec: 2 }, 'WR')
+    console.log('AUDIT_FULL_PPR_TWO_RECEPTIONS_EXPECTED_2_ACTUAL', score)
+    expect(score).toBe(1)
+  })
+
+  // FIXED 2026-09-19: this reproduced a two-manager league receiving four
+  // playoff places. `createCanonicalLeagueInTransaction` now clamps the bracket
+  // to the manager count at the point of persistence. Kept as a regression
+  // guard rather than deleted, so the defect cannot return silently.
+  // Full coverage lives in `league-create-audit-fixes-20260919.test.ts`.
+  it('no longer gives a two-manager league four playoff places', async () => {
+    const tx = txMock()
+    const small = { ...body, teamCount: 2 }
+    expect(validateCreatePayload(small).ok).toBe(true)
+    await createCanonicalLeagueInTransaction(tx as any, 'audit-user', small as any,
+      runPresetEngine({ ...small, commissionerId: 'audit-user' }))
+    expect(tx.league.create.mock.calls[0][0].data.playoffTeams).toBe(2)
+  })
+
+  it('reproduces soccer needing a pipeline absent from the simple wizard', () => {
+    expect(DEFAULT_V2_STATE.soccerPipeline).toBeNull()
+    const result = validateCreatePayload({ ...body, sport: 'SOCCER',
+      scoringPreset: getDefaultScoringPresetId({ leagueType: 'redraft', sport: 'SOCCER', idpSelected: false }),
+    })
+    expect(result.ok).toBe(false)
+    if (!result.ok) expect(result.errors.some(e => e.path === 'soccerPipeline')).toBe(true)
+  })
+
+  it('reproduces scoring menu choices outside the server allowlist', () => {
+    const options = listScoringPresetOptions({ leagueType: 'redraft', sport: 'NFL', idpSelected: false })
+    const allowed = LEAGUE_CREATE_OPTIONS_CATALOG_V1.allowedScoringPresetsByConceptSport.redraft.NFL!
+    const invalid = options.filter(x => !allowed.includes(x.id)).map(x => x.id)
+    console.log('AUDIT_SCORING_MENU_OUTSIDE_ALLOWLIST', invalid)
+    expect(invalid.length).toBeGreaterThan(0)
+  })
+})
