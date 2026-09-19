@@ -364,7 +364,7 @@ export async function attachToFranchise(args: {
   ownerUserId: string
   franchiseName: string
   linkId?: string | null
-  role: 'pro' | 'college'
+  role: 'pro' | 'college' | 'primary' | 'linked'
   platform: string
   leagueId: string
   teamExternalId: string

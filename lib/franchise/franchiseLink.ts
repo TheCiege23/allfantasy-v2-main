@@ -28,7 +28,7 @@
  */
 
 /** Which half of the franchise a league is. */
-export type FranchiseRole = 'pro' | 'college'
+export type FranchiseRole = 'pro' | 'college' | 'primary' | 'linked'
 
 export type FranchiseMember = {
   role: FranchiseRole
@@ -85,7 +85,7 @@ export function buildFranchiseView(args: {
   const { members } = args
   const gaps: string[] = []
 
-  for (const role of ['pro', 'college'] as const) {
+  for (const role of (members.some((m) => m.role === 'primary' || m.role === 'linked') ? ['primary', 'linked'] : ['pro', 'college']) as FranchiseRole[]) {
     const member = members.find((m) => m.role === role)
     if (!member) {
       gaps.push(FRANCHISE_GAPS.missingRole(role))

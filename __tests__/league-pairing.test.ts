@@ -190,6 +190,23 @@ describe('the same Fantrax league appearing twice', () => {
 })
 
 describe('resolving the other half from a league', () => {
+  it('resolves the same relationship from a Fantrax provider ID without a second connection', async () => {
+    leagueFindUnique.mockResolvedValue({ id: 'mirror', platform: 'fantrax', platformLeagueId: 'provider-id' })
+    fantraxFindMany.mockResolvedValue([{ id: 'snapshot', sourceLeagueId: 'provider-id' }])
+    fantraxFindUnique.mockResolvedValue({ id: 'snapshot', userTeam: 'Mine', leagueName: 'Cream Bowl', roster: [] })
+    leagueFindFirst.mockResolvedValue({ id: 'mirror' })
+    memberFindFirst.mockImplementation(async ({ where }) => where.leagueId.in.includes('snapshot') ? {
+      role: 'college', link: { id: 'shared', name: 'Peach + Cream', members: [
+        { platform: 'fantrax', leagueId: 'snapshot', role: 'college', teamExternalId: 'Mine' },
+        { platform: 'sleeper', leagueId: 'peach', role: 'pro', teamExternalId: 'Mine' },
+      ] },
+    } : null)
+    const result = await resolvePairedHalf('mirror', USER)
+    expect(result?.linkId).toBe('shared')
+    expect(result?.self?.name).toBe('Cream Bowl')
+    expect(result?.other?.role).toBe('pro')
+    expect(fantraxFindMany.mock.calls[0][0].where.appUserId).toBe(USER)
+  })
   /**
    * 🛑 FANTRAX IS STORED UNDER THE SNAPSHOT ID, NOT THE LEAGUE ID.
    * `FranchiseLeagueMember.leagueId` holds `League.id` for the pro side and
@@ -204,8 +221,8 @@ describe('resolving the other half from a league', () => {
     await resolvePairedHalf('lg-fx', USER)
 
     const where = memberFindFirst.mock.calls[0][0].where
-    expect(where.leagueId).toBe('fx-1')
-    expect(where.leagueId).not.toBe('lg-fx')
+    expect(where.leagueId.in).toContain('fx-1')
+    expect(where.leagueId.in).toContain('lg-fx')
   })
 
   it('uses the League id for a non-Fantrax league', async () => {
@@ -214,7 +231,7 @@ describe('resolving the other half from a league', () => {
 
     await resolvePairedHalf('lg-1', USER)
 
-    expect(memberFindFirst.mock.calls[0][0].where.leagueId).toBe('lg-1')
+    expect(memberFindFirst.mock.calls[0][0].where.leagueId.in).toEqual(['lg-1'])
   })
 
   /** ⚠ A franchise read says which teams belong to someone — always owner-gated. */
@@ -492,7 +509,7 @@ describe('resolving the other half from a league', () => {
    * `getTeamRosters` either. That was probed rather than assumed, and it is why
    * the half renders initials as its FINISHED state.
    */
-  it('carries the claimed team’s crest on the pro half and none on the Fantrax half', async () => {
+  it('reads each claimed team crest instead of forcing Fantrax to initials', async () => {
     leagueFindUnique.mockResolvedValue({ id: 'lg-1', platform: 'sleeper', platformLeagueId: null })
     memberFindFirst.mockResolvedValue({
       role: 'pro',
@@ -507,20 +524,21 @@ describe('resolving the other half from a league', () => {
     })
     fantraxFindUnique.mockResolvedValue({ id: 'fx-1', leagueName: 'C', season: 2026, userTeam: 'Ciege82', roster: [{ name: 'A' }] })
     leagueFindFirst.mockResolvedValue({ id: 'lg-fx' })
-    teamFindFirst.mockResolvedValue({
+    teamFindFirst.mockResolvedValueOnce({
       teamName: 'T',
       ownerName: null,
       externalId: '4',
       platformUserId: 'sleeper-77',
       avatarUrl: 'https://sleepercdn.com/avatars/thumbs/abc123',
-    })
+    }).mockResolvedValueOnce({ avatarUrl: 'https://example.com/cream.png' })
     rosterFindFirst.mockResolvedValue({ playerData: { players: [1, 2, 3] } })
     leagueActivity.mockResolvedValue({ items: [], counts: { trade: 0, waiver: 0, rosterMove: 0 }, newest: null, unattributed: 0 })
 
     const out = await resolvePairedHalf('lg-1', USER)
 
     expect(out?.self?.avatarUrl).toBe('https://sleepercdn.com/avatars/thumbs/abc123')
-    expect(out?.other?.avatarUrl).toBeNull()
+    expect(out?.other?.avatarUrl).toBe('https://example.com/cream.png')
+    expect(teamFindFirst.mock.calls[1][0].where).toEqual({ leagueId: 'lg-fx', claimedByUserId: USER })
     /* 🛑 THE COLUMN MUST BE ASKED FOR. The bug was a missing `select` key, not a
        missing render — so asserting the output alone would pass against a query
        that never reads it once a default-select regression puts it back. */

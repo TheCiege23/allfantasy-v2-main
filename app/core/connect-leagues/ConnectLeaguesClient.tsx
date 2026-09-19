@@ -63,10 +63,12 @@ function LeagueOption({
   selected,
   fromHere,
   onSelect,
+  group,
 }: {
   league: Pairable
   selected: boolean
   fromHere: boolean
+  group?: string
   onSelect: () => void
 }) {
   return (
@@ -76,7 +78,7 @@ function LeagueOption({
         checked={selected}
         onChange={onSelect}
         className="af-cl-radio"
-        name={`side-${league.role}`}
+        name={group ?? `side-${league.role}`}
       />
       <span className="af-cl-box" aria-hidden="true">
         <svg viewBox="0 0 16 16" className="af-cl-check" focusable="false">
@@ -122,6 +124,10 @@ export function ConnectLeaguesClient() {
   const [pro, setPro] = useState<string | null>(null)
   const [college, setCollege] = useState<string | null>(null)
   const [name, setName] = useState('')
+  const [connectionType, setConnectionType] = useState<'c2c' | 'group'>('c2c')
+  const candidates = [...(data?.pro ?? []), ...(data?.college ?? [])]
+  const firstChoices = connectionType === 'group' ? candidates.filter((l) => l.id !== college && !l.linkId) : data?.pro ?? []
+  const secondChoices = connectionType === 'group' ? candidates.filter((l) => l.id !== pro && !l.linkId) : data?.college ?? []
   const [saving, setSaving] = useState(false)
   /* Set only by a 409; drives the confirm below and nothing else. */
   const [pendingClaims, setPendingClaims] = useState<Claim[] | null>(null)
@@ -162,13 +168,14 @@ export function ConnectLeaguesClient() {
     setError(null)
     if (!reclaim) setPendingClaims(null)
     try {
-      const proLeague = data.pro.find((l) => l.id === pro)
-      const collegeLeague = data.college.find((l) => l.id === college)
+      const proLeague = candidates.find((l) => l.id === pro)
+      const collegeLeague = candidates.find((l) => l.id === college)
       const res = await fetch('/api/legacy/franchise', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: 'pair-leagues',
+          connectionType,
           franchiseName: name.trim() || undefined,
           /* Merge into the half-built franchise either side is already in. */
           linkId: proLeague?.linkId ?? collegeLeague?.linkId ?? undefined,
@@ -214,15 +221,15 @@ export function ConnectLeaguesClient() {
     }
   }
 
-  const canSubmit = pro != null && college != null && !saving
+  const canSubmit = pro != null && college != null && pro !== college && !saving
 
   return (
     <main className="af-core af-cl">
       <header className="af-cl-head">
         <h1 className="af-display">Connect two leagues</h1>
         <p className="af-cl-lede">
-          Run a college league alongside a pro one? Name them as one franchise and AllFantasy
-          will show both rosters together. Neither league is changed, and nothing is imported.
+          Bring two related leagues into one home: college and pro, tournament, zombie,
+          survivor, or another format. Connect once to see both rosters from either league.
         </p>
         <Link href={fromLeague ? `/core?league=${encodeURIComponent(fromLeague)}` : '/core'} className="af-btn af-btn--ghost">
           ← Back
@@ -290,14 +297,15 @@ export function ConnectLeaguesClient() {
             missing is the difference between "do this next" and "this is
             broken".
           */}
-          {data.pro.length === 0 || data.college.length === 0 ? (
+          <section className="af-card af-cl-side"><label className="af-cl-namelabel"><span className="af-label">Connection style</span><select className="af-cl-name" value={connectionType} onChange={(e) => { setConnectionType(e.target.value as 'c2c' | 'group'); setPro(null); setCollege(null) }}><option value="c2c">Campus to Canton / Devy · pro + college</option><option value="group">Shared hub · any two leagues or formats</option></select></label><p className="af-cl-option-meta">Connect once. Both leagues share the same hub. Each keeps its own scoring, rules and lineup.</p></section>
+          {candidates.length < 2 || (connectionType === 'c2c' && (data.pro.length === 0 || data.college.length === 0)) ? (
             <section className="af-card af-cl-empty">
               <h2>Nothing to pair yet</h2>
               <p>
                 {data.pro.length === 0
                   ? 'No pro league is connected yet.'
                   : 'No college league is connected yet.'}{' '}
-                A franchise needs one of each.
+                Choose a shared hub to connect other formats, or import another league.
               </p>
               <Link href="/import" className="af-btn">
                 Import a league →
@@ -306,11 +314,12 @@ export function ConnectLeaguesClient() {
           ) : (
             <>
               <section className="af-card af-cl-side">
-                <h2 className="af-label">Pro half</h2>
-                {data.pro.map((l) => (
+                <h2 className="af-label">{connectionType === 'group' ? 'First league' : 'Pro league'}</h2>
+                {firstChoices.map((l) => (
                   <LeagueOption
                     key={l.id}
                     league={l}
+                    group="first-league"
                     selected={pro === l.id}
                     fromHere={data.from?.role === 'pro' && data.from.id === l.id}
                     onSelect={() => setPro(l.id)}
@@ -319,11 +328,12 @@ export function ConnectLeaguesClient() {
               </section>
 
               <section className="af-card af-cl-side">
-                <h2 className="af-label">College half</h2>
-                {data.college.map((l) => (
+                <h2 className="af-label">{connectionType === 'group' ? 'Connected league' : 'College league'}</h2>
+                {secondChoices.map((l) => (
                   <LeagueOption
                     key={l.id}
                     league={l}
+                    group="second-league"
                     selected={college === l.id}
                     fromHere={data.from?.role === 'college' && data.from.id === l.id}
                     onSelect={() => setCollege(l.id)}

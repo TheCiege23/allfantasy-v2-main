@@ -18,6 +18,8 @@ import { LeagueScoreboardPanel } from '@/components/core-app/screens/LeagueScore
 import { COMMS_OPEN_EVENT } from '@/components/core-app/comms/commsEvents'
 import { WorkbookBarChart } from '@/components/core-app/charts/WorkbookChart'
 
+import { ConnectedRoster } from './ConnectedRoster'
+
 /**
  * Jump to another week.
  *
@@ -194,8 +196,8 @@ function PairedBand({
         <div className="af-lh-paired-body">
           <h2 className="af-lh-paired-title">Is {leagueName} half of a bigger team?</h2>
           <p className="af-lh-paired-text">
-            If you run a college league alongside this one, connect them and AllFantasy will
-            show both rosters as one franchise.
+            Connect a related league to see both rosters in one shared hub, with each
+            league’s rules, scoring and lineup close at hand.
           </p>
         </div>
         <Link href={connectHref} className="af-btn af-lh-paired-cta">
@@ -264,7 +266,7 @@ function PairedBand({
             data-current={i === 0 ? 'true' : 'false'}
           >
             <span className="af-label af-lh-paired-sidelabel">
-              {sd.role === 'pro' ? 'Pro half' : 'College half'}
+              {sd.sport?.toUpperCase() || (sd.role === 'pro' ? 'Pro' : 'College')} league
               {i === 0 ? ' · you are here' : ''}
             </span>
             {/*
@@ -371,6 +373,7 @@ function PairedBand({
           </div>
         ))}
       </div>
+      <ConnectedRoster sides={sides} />
     </section>
   )
 }
