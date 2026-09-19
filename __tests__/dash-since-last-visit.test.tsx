@@ -72,7 +72,7 @@ describe('DashSinceLastVisit', () => {
 
     expect(screen.getByText(/1 new trade/)).toBeTruthy()
     expect(screen.getAllByRole('link', { name: 'Dynasty Gridiron' }).map((a) => a.getAttribute('href'))).toEqual([
-      '/league/league-1?view=legacy',
+      '/league/league-1?view=trades',
       '/core/standings?league=league-1',
     ])
 
