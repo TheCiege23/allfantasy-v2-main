@@ -20,6 +20,8 @@ describe('trade proposal counterfactual simulation', () => {
     expect(result?.packages[0]?.simulation?.available).toBe(true)
     expect(result?.packages[0]?.simulation?.metric).toBe('playoff')
     expect(result?.packages[0]?.simulation?.deltaPct).not.toBeNull()
+    expect(result?.packages[0]?.simulation?.participants?.map((row) => row.rosterId)).toEqual(['mine', 'partner'])
+    expect(result?.packages[0]?.simulation?.participants?.every((row) => Number.isFinite(row.deltaPct))).toBe(true)
     expect(hasPairedProposalSimulation({ suggestions: [result!], multiTeamSuggestions: [] })).toBe(true)
   })
 

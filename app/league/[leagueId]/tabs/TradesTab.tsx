@@ -463,7 +463,7 @@ function rowFromNativeHistory(t: LeagueTradeHistoryItem): LogRow {
     mine: viewerIsA || viewerIsB,
     direction: viewerIsA || viewerIsB ? 'done' : null,
     receiptNote: t.decisionReceipt
-      ? `${t.decisionReceipt.completeness === 'complete' ? 'Verified' : 'Partial'} ${t.decisionReceipt.format.replaceAll('_', ' ')} receipt${t.decisionReceipt.outcomeVerified && typeof t.decisionReceipt.deltaPct === 'number' ? ` · ${t.decisionReceipt.outcomeMetric === 'survival' ? 'survival' : 'playoff'} ${t.decisionReceipt.deltaPct >= 0 ? '+' : ''}${t.decisionReceipt.deltaPct.toFixed(1)}%` : ''}`
+      ? `${t.decisionReceipt.completeness === 'complete' ? 'Verified' : 'Partial'} ${t.decisionReceipt.format.replaceAll('_', ' ')} receipt${t.decisionReceipt.participantOutcomes.length ? ` · ${t.decisionReceipt.participantOutcomes.map((outcome, index) => `T${index + 1} ${outcome.deltaPct >= 0 ? '+' : ''}${outcome.deltaPct.toFixed(1)}%`).join(' · ')}` : ''}`
       : null,
   }
 }
@@ -761,6 +761,11 @@ export function PendingTradeCard(props: {
   const providerName = t.status === 'pending_on_yahoo' ? 'Yahoo' : 'Sleeper'
   const review = t.status === 'awaiting_commissioner'
   const commissionerView = t.direction === 'complete'
+  const receiptParticipantLabel = (index: number) => {
+    if (commissionerView) return index === 0 ? 'Proposer' : `Team ${index + 1}`
+    if (t.direction === 'outgoing') return index === 0 ? 'You' : index === 1 ? t.partnerName : `Team ${index + 1}`
+    return index === 0 ? t.partnerName : index === 1 ? 'You' : `Team ${index + 1}`
+  }
 
   /* The viewer's side is `sent`; the partner's is `received`. Proposer goes first, like the provider's card. */
   const youAssets = offer ? cardAssetsFromOffer(offer.give, 'g') : cardAssetsFromPanel(t.sent)
@@ -841,6 +846,11 @@ export function PendingTradeCard(props: {
               </span>
             ) : null}
             {t.decisionReceipt.valueSource ? <span className="normal-case tracking-normal text-white/35">Values: {t.decisionReceipt.valueSource}</span> : null}
+            {t.decisionReceipt.participantOutcomes.map((outcome, index) => (
+              <span key={outcome.rosterId} className="normal-case tracking-normal text-white/60">
+                {receiptParticipantLabel(index)}: {outcome.deltaPct >= 0 ? '+' : ''}{outcome.deltaPct.toFixed(1)}%
+              </span>
+            ))}
           </div>
         ) : null}
         {t.decisionRecommendation ? (

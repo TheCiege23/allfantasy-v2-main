@@ -15,6 +15,7 @@ export type PublicTradeDecisionReceipt = {
   deltaPct: number | null
   valueSource: string | null
   projectionSource: string | null
+  participantOutcomes: Array<{ rosterId: string; beforePct: number; afterPct: number; deltaPct: number }>
 }
 
 type DecisionSnapshotRow = {
@@ -56,5 +57,17 @@ export function publicTradeDecisionReceipt(row: DecisionSnapshotRow): PublicTrad
     deltaPct: numberOrNull(simulation.deltaPct),
     valueSource: typeof assetContext.valueSource === 'string' ? assetContext.valueSource : null,
     projectionSource: typeof assetContext.projectionSource === 'string' ? assetContext.projectionSource : null,
+    participantOutcomes: Array.isArray(simulation.participants)
+      ? simulation.participants.flatMap((row) => {
+          if (!row || typeof row !== 'object' || Array.isArray(row)) return []
+          const item = row as Record<string, unknown>
+          const beforePct = numberOrNull(item.beforePct)
+          const afterPct = numberOrNull(item.afterPct)
+          const deltaPct = numberOrNull(item.deltaPct)
+          return typeof item.rosterId === 'string' && beforePct != null && afterPct != null && deltaPct != null
+            ? [{ rosterId: item.rosterId, beforePct, afterPct, deltaPct }]
+            : []
+        })
+      : [],
   }
 }

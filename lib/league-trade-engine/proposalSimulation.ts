@@ -45,6 +45,17 @@ function survivalOdds(teams: SimTeamInput[], focusedId: string, iterations: numb
   return survives / iterations
 }
 
+function playoffOutcome(input: {
+  roster: SuggestionRoster
+  before: number
+  after: number
+}) {
+  const deltaPct = (input.after - input.before) * 100
+  const beforePct = input.roster.playoffProbability ?? input.before * 100
+  const afterPct = Math.max(0, Math.min(100, beforePct + deltaPct))
+  return { rosterId: input.roster.rosterId, beforePct, afterPct, deltaPct: afterPct - beforePct }
+}
+
 export function enrichProposalSimulations(input: {
   suggestions: TradePartnerSuggestion[]
   rosters: SuggestionRoster[]
@@ -95,9 +106,14 @@ export function enrichProposalSimulations(input: {
             : team.id === partner.rosterId ? { ...team, roster: partnerAfter } : team)
           const before = survivalOdds(beforeTeams, viewer.rosterId, iterations, 241)
           const after = survivalOdds(afterTeams, viewer.rosterId, iterations, 241)
+          const participants = [viewer, partner].map((roster) => {
+            const participantBefore = survivalOdds(beforeTeams, roster.rosterId, iterations, 241)
+            const participantAfter = survivalOdds(afterTeams, roster.rosterId, iterations, 241)
+            return { rosterId: roster.rosterId, beforePct: participantBefore * 100, afterPct: participantAfter * 100, deltaPct: (participantAfter - participantBefore) * 100 }
+          })
           return { ...proposal, simulation: {
             available: true, metric, beforePct: before * 100, afterPct: after * 100,
-            deltaPct: (after - before) * 100, iterations, reason: null,
+            deltaPct: (after - before) * 100, iterations, reason: null, participants,
           } satisfies ProposalOutcomeSimulation }
         }
         const result = simulateTrade({
@@ -105,14 +121,15 @@ export function enrichProposalSimulations(input: {
           weeksRemaining: input.weeksRemaining, leagueSize: teams.length, playoffTeams: input.playoffTeams,
           afterRosterByTeamId: { [partner.rosterId]: partnerAfter },
         })
-        const before = result.before.playoffOdds[viewer.rosterId] ?? 0
-        const after = result.after.playoffOdds[viewer.rosterId] ?? 0
-        const deltaPct = (after - before) * 100
-        const beforePct = viewer.playoffProbability ?? before * 100
-        const afterPct = Math.max(0, Math.min(100, beforePct + deltaPct))
+        const participants = [viewer, partner].map((roster) => playoffOutcome({
+          roster,
+          before: result.before.playoffOdds[roster.rosterId] ?? 0,
+          after: result.after.playoffOdds[roster.rosterId] ?? 0,
+        }))
+        const focused = participants[0]!
         return { ...proposal, simulation: {
-          available: true, metric, beforePct, afterPct,
-          deltaPct: afterPct - beforePct, iterations: result.iterations, reason: null,
+          available: true, metric, beforePct: focused.beforePct, afterPct: focused.afterPct,
+          deltaPct: focused.deltaPct, iterations: result.iterations, reason: null, participants,
         } satisfies ProposalOutcomeSimulation }
       }),
     }
@@ -149,15 +166,20 @@ export function enrichMultiTeamProposalSimulations(input: {
       const afterTeams = teams.map((team) => ({ ...team, roster: afterById.get(team.id) ?? team.roster }))
       const before = survivalOdds(teams, viewer.rosterId, iterations, 811)
       const after = survivalOdds(afterTeams, viewer.rosterId, iterations, 811)
-      return { ...suggestion, simulation: { available: true, metric, beforePct: before * 100, afterPct: after * 100, deltaPct: (after - before) * 100, iterations, reason: null } }
+      const participants = suggestion.rosterIds.map((rosterId) => {
+        const participantBefore = survivalOdds(teams, rosterId, iterations, 811)
+        const participantAfter = survivalOdds(afterTeams, rosterId, iterations, 811)
+        return { rosterId, beforePct: participantBefore * 100, afterPct: participantAfter * 100, deltaPct: (participantAfter - participantBefore) * 100 }
+      })
+      return { ...suggestion, simulation: { available: true, metric, beforePct: before * 100, afterPct: after * 100, deltaPct: (after - before) * 100, iterations, reason: null, participants } }
     }
     const changed = Object.fromEntries([...afterById.entries()].filter(([id]) => id !== viewer.rosterId))
     const result = simulateTrade({ teams, beforePlayers: simPlayers(viewer), afterPlayers, focusedTeamId: viewer.rosterId, iterations, weeksRemaining: input.weeksRemaining, leagueSize: teams.length, playoffTeams: input.playoffTeams, afterRosterByTeamId: changed })
-    const before = result.before.playoffOdds[viewer.rosterId] ?? 0
-    const after = result.after.playoffOdds[viewer.rosterId] ?? 0
-    const deltaPct = (after - before) * 100
-    const beforePct = viewer.playoffProbability ?? before * 100
-    const afterPct = Math.max(0, Math.min(100, beforePct + deltaPct))
-    return { ...suggestion, simulation: { available: true, metric, beforePct, afterPct, deltaPct: afterPct - beforePct, iterations: result.iterations, reason: null } }
+    const participants = suggestion.rosterIds.map((rosterId) => {
+      const roster = input.rosters.find((row) => row.rosterId === rosterId)!
+      return playoffOutcome({ roster, before: result.before.playoffOdds[rosterId] ?? 0, after: result.after.playoffOdds[rosterId] ?? 0 })
+    })
+    const focused = participants[0]!
+    return { ...suggestion, simulation: { available: true, metric, beforePct: focused.beforePct, afterPct: focused.afterPct, deltaPct: focused.deltaPct, iterations: result.iterations, reason: null, participants } }
   })
 }

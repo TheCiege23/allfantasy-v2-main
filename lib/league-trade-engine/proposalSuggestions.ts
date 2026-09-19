@@ -56,6 +56,13 @@ export type ProposalOutcomeSimulation = {
   deltaPct: number | null
   iterations: number
   reason: string | null
+  /** Same paired scenarios for every team in the deal, ordered proposer first. */
+  participants?: Array<{
+    rosterId: string
+    beforePct: number
+    afterPct: number
+    deltaPct: number
+  }>
 }
 
 export type PartnerBehaviorProfile = {
