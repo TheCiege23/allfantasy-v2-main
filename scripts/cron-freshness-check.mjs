@@ -191,7 +191,7 @@ export const PROBES = {
    * earlier. The NFL probe is scoped with seasonal.sport; this pass covers MLB/NBA/NHL/NCAAB/SOCCER
    * and needs its own identity rather than a differently-scoped table probe.
    */
-  '/api/cron/import-player-game-stats?multiSport=1&days=3': { heartbeat: 'cron-import-player-game-stats-multisport' },
+  '/api/cron/import-player-game-stats?multiSport=1&days=2': { heartbeat: 'cron-import-player-game-stats-multisport' },
   '/api/cron/import-stat-lines': { table: 'fantasy_stat_lines', column: 'fetched_at' },
   '/api/cron/import-depth-charts': { table: 'depth_charts', column: 'fetchedAt' },
   /* ⚠ KEY MATCHES THE FULL PATH INCLUDING QUERY, so adding `&limit=500` to the cron orphaned
