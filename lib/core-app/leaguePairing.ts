@@ -38,6 +38,7 @@ import type { FranchiseRole } from '@/lib/franchise/franchiseLink'
 
 /** One half of a franchise, described identically whichever half it is. */
 export type FranchiseSide = {
+  memberId: string
   role: FranchiseRole
   players?: ConnectedRosterPlayer[]
   sport?: string
@@ -95,11 +96,18 @@ export type FranchiseSide = {
     | { available: true; trades: number; waivers: number; rosterMoves: number; newest: Date | null }
     | { available: false; reason: string }
     | null
+  sync: {
+    lastSyncedAt: Date | null
+    stale: boolean
+    refreshHref: string | null
+    detail: string
+  }
 }
 
 export type PairedHalf = {
   linkId: string
   franchiseName: string
+  primaryMemberId: string | null
   /** Which half the league being viewed is. */
   viewingRole: FranchiseRole
   /**
@@ -186,7 +194,7 @@ export async function resolvePairedHalf(
     },
     select: {
       role: true,
-      link: { select: { id: true, name: true, members: true } },
+      link: { select: { id: true, name: true, primaryMemberId: true, members: true } },
     },
   })
   if (!membership?.link) return null
@@ -202,6 +210,7 @@ export async function resolvePairedHalf(
   const base = {
     linkId: membership.link.id,
     franchiseName: membership.link.name,
+    primaryMemberId: membership.link.primaryMemberId,
     viewingRole,
   }
 
@@ -216,6 +225,7 @@ export async function resolvePairedHalf(
    * array vs a `Roster` row), not because the halves do.
    */
   const describeSide = async (member: {
+    id: string
     role: string
     platform: string
     leagueId: string
@@ -227,7 +237,7 @@ export async function resolvePairedHalf(
     if (platform === 'fantrax') {
       const snap = await prisma.fantraxLeague.findUnique({
         where: { id: member.leagueId },
-        select: { id: true, leagueName: true, season: true, userTeam: true, roster: true, sport: true, sourceLeagueId: true },
+        select: { id: true, leagueName: true, season: true, userTeam: true, roster: true, sport: true, sourceLeagueId: true, updatedAt: true },
       })
       /*
        * The League row that mirrors this snapshot, so the side is clickable.
@@ -294,6 +304,7 @@ export async function resolvePairedHalf(
         select: { avatarUrl: true },
       }) : null
       return {
+        memberId: member.id,
         role,
         platform,
         leagueId: mirror?.id ?? null,
@@ -330,6 +341,16 @@ export async function resolvePairedHalf(
                 : mine && mine.length > 0
                   ? null
                 : `no players are filed under “${selectedTeam || 'your selected team'}” in this snapshot — choose the correct team or re-run the import`,
+        sync: {
+          lastSyncedAt: snap?.updatedAt ?? null,
+          stale: !snap?.updatedAt || Date.now() - snap.updatedAt.getTime() > 24 * 60 * 60 * 1000,
+          refreshHref: snap?.sourceLeagueId
+            ? `/import?provider=fantrax&leagueId=${encodeURIComponent(snap.sourceLeagueId)}&returnTo=${encodeURIComponent(`/core/war-room?league=${mirror?.id ?? leagueId}`)}`
+            : '/import?provider=fantrax',
+          detail: snap?.sourceLeagueId
+            ? 'Fantrax is a stored snapshot. Re-import to pull the newest roster and standings.'
+            : 'This CSV-era snapshot has no saved Fantrax league ID. Upload a new export to refresh it.',
+        },
       }
     }
 
@@ -337,7 +358,7 @@ export async function resolvePairedHalf(
       where: { id: member.leagueId },
       /* platformLeagueId is required by getLeagueActivity — imported rows are
          keyed on the PROVIDER league id, not ours. */
-      select: { id: true, name: true, season: true, platformLeagueId: true, sport: true },
+      select: { id: true, name: true, season: true, platformLeagueId: true, sport: true, lastSyncedAt: true },
     })
     /*
      * ⚠ THE ROSTER COUNT IS READ FROM THE CLAIMED TEAM, NOT FROM THE LEAGUE. A
@@ -407,6 +428,7 @@ export async function resolvePairedHalf(
     })()
 
     return {
+      memberId: member.id,
       role,
       platform,
       leagueId: lg?.id ?? null,
@@ -450,6 +472,12 @@ export async function resolvePairedHalf(
           : players == null
             ? 'no roster is on file for your team'
             : null,
+      sync: {
+        lastSyncedAt: lg?.lastSyncedAt ?? null,
+        stale: !lg?.lastSyncedAt || Date.now() - lg.lastSyncedAt.getTime() > 24 * 60 * 60 * 1000,
+        refreshHref: lg?.id ? `/core/sync?league=${encodeURIComponent(lg.id)}` : null,
+        detail: 'League data refreshes through its connected provider.',
+      },
     }
   }
 

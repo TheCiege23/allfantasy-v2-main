@@ -113,6 +113,11 @@ export type CommsLeague = {
   isCommissioner?: boolean
   /** Shown in the `@global` league picker so a broadcast names its audience size. */
   teamCount?: number
+  hub?: {
+    id: string
+    name: string
+    members: Array<{ id: string; name: string; platform: string }>
+  }
 }
 
 export type CommsDrawerProps = {
@@ -239,6 +244,7 @@ type ChatTurn = {
    * the answer is wrong.
    */
   grounding?: ChimmyGrounding | null
+  connectedScope?: Array<{ leagueId: string; leagueName: string; rosterStatus: 'available' | 'unavailable'; playerCount: number }> | null
   /** Players the answer named, with headshots. */
   players?: ChimmyPlayerCard[] | null
   /**
@@ -417,6 +423,7 @@ type ChimmyEnvelope = {
   }
   meta?: {
     leagueGrounding?: ChimmyGrounding
+    connectedFranchise?: Array<{ leagueId: string; leagueName: string; rosterStatus: 'available' | 'unavailable'; playerCount: number }>
     players?: ChimmyPlayerCard[]
     /** Validated by `readReadyScenario` before anything renders it. */
     scenario?: unknown
@@ -580,6 +587,11 @@ function ChimmyPanel({
     () => leagues.find((l) => l.id === scopeId) ?? null,
     [leagues, scopeId],
   )
+  const connectedMembers = scope?.hub?.members ?? []
+  const [includedLeagueIds, setIncludedLeagueIds] = useState<string[]>([])
+  useEffect(() => {
+    setIncludedLeagueIds(connectedMembers.map((member) => member.id))
+  }, [scope?.hub?.id])
 
   useEffect(() => {
     /* Nothing to scroll to on an empty thread — scrolling there jumped the empty state. */
@@ -625,6 +637,9 @@ function ChimmyPanel({
           /* The route validates it (validateScreenshotFile); the 5 MB cap is also checked at pick time. */
           if (attached) form.append('image', attached)
           if (scopeId) form.append('leagueId', scopeId)
+          if (!publicMode && connectedMembers.length > 1) {
+            form.append('connectedLeagueIds', JSON.stringify(includedLeagueIds))
+          }
           /*
            * What the home is telling this user right now, so the assistant they
            * opened from the brief holds the brief's own facts instead of
@@ -777,6 +792,7 @@ function ChimmyPanel({
              */
             cost: payload.meta?.tokenSpend?.tokenCost ?? null,
             grounding,
+            connectedScope: payload.meta?.connectedFranchise ?? null,
             players: payload.meta?.players ?? null,
             evidence: readEvidence(payload),
             /*
@@ -801,7 +817,7 @@ function ChimmyPanel({
         setBusy(false)
       }
     },
-    [answerMode, busy, homeSignals, leagues, pageSurface, publicMode, scope, scopeId, turns, screenshot, setDraft, setTurns],
+    [answerMode, busy, connectedMembers.length, homeSignals, includedLeagueIds, leagues, pageSurface, publicMode, scope, scopeId, turns, screenshot, setDraft, setTurns],
   )
 
   useEffect(() => {
@@ -858,6 +874,29 @@ function ChimmyPanel({
             ? `Answers default to ${scope.name} — its scoring, its roster rules, its schedule. Name another of your leagues in the question to ask about that one instead.`
             : 'Answers cover every league you play. Ask about one by name, or pick it above.'}
         </p>
+        {!publicMode && connectedMembers.length > 1 ? (
+          <fieldset className="af-cm-franchise-scope">
+            <legend>{scope?.hub?.name ?? 'Connected franchise'} rosters</legend>
+            <p>Choose which connected rosters Chimmy may use for this answer.</p>
+            <div>
+              {connectedMembers.map((member) => {
+                const checked = includedLeagueIds.includes(member.id)
+                return (
+                  <label key={member.id}>
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      disabled={busy || (checked && includedLeagueIds.length === 1)}
+                      onChange={() => setIncludedLeagueIds((ids) => checked ? ids.filter((id) => id !== member.id) : [...ids, member.id])}
+                    />
+                    <span>{member.name}</span>
+                    <small>{member.platform}</small>
+                  </label>
+                )
+              })}
+            </div>
+          </fieldset>
+        ) : null}
         <ChimmyAnswerModeToggle value={answerMode} onChange={setAnswerMode} disabled={busy} />
       </div>
 
@@ -933,6 +972,16 @@ function ChimmyPanel({
                     Chimmy could not read your league for this answer.
                   </p>
                 )
+              ) : null}
+              {t.role === 'chimmy' && t.connectedScope?.length ? (
+                <div className="af-cm-connected-used">
+                  <strong>Connected rosters used</strong>
+                  <div>{t.connectedScope.map((league) => (
+                    <span key={league.leagueId} data-available={league.rosterStatus === 'available' || undefined}>
+                      {league.leagueName} · {league.rosterStatus === 'available' ? `${league.playerCount} players` : 'unavailable'}
+                    </span>
+                  ))}</div>
+                </div>
               ) : null}
 
               {/*

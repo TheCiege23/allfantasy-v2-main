@@ -512,7 +512,7 @@ describe("POST /api/chat/chimmy contract", () => {
     })
   })
 
-  it("sends every connected roster to Chimmy after league authorization", async () => {
+  it("sends the connected rosters the user selected after league authorization", async () => {
     resolvePairedHalfMock.mockResolvedValueOnce({
       linkId: "hub-1",
       franchiseName: "Peach + Cream",
@@ -538,6 +538,7 @@ describe("POST /api/chat/chimmy contract", () => {
     const formData = new FormData()
     formData.append("message", "How should I manage my connected rosters?")
     formData.append("leagueId", "league-1")
+    formData.append("connectedLeagueIds", JSON.stringify(["league-1", "college-1"]))
     formData.append("confirmTokenSpend", "true")
 
     const { POST } = await import("@/app/api/chat/chimmy/route")
@@ -554,6 +555,10 @@ describe("POST /api/chat/chimmy contract", () => {
     expect(request?.userMessage).not.toContain('"id":"100"')
     const body = await res.json()
     expect(body.meta?.dataSources).toContain("connected_franchise_rosters")
+    expect(body.meta?.connectedFranchise).toEqual([
+      expect.objectContaining({ leagueId: "league-1", leagueName: "Peach Bowl", playerCount: 1 }),
+      expect.objectContaining({ leagueId: "college-1", leagueName: "Cream Bowl", playerCount: 1 }),
+    ])
   })
 
   it("skips token confirmation when preview does not require confirmation", async () => {

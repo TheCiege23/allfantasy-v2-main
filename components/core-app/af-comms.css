@@ -249,6 +249,7 @@
   line-height: 1.5;
   color: var(--faint);
 }
+.af-cm-franchise-scope{margin:10px 0 0;padding:9px;border:1px solid var(--accent-line);border-radius:10px;background:var(--accent-soft)}.af-cm-franchise-scope legend{padding:0 5px;color:var(--accent);font-size:10px;font-weight:800}.af-cm-franchise-scope>p{margin:0 0 7px;color:var(--faint);font-size:9px;line-height:1.4}.af-cm-franchise-scope>div{display:grid;gap:5px}.af-cm-franchise-scope label{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:7px;padding:6px 7px;border:1px solid var(--line2);border-radius:8px;background:var(--surface)}.af-cm-franchise-scope label span{overflow:hidden;font-size:10px;font-weight:700;text-overflow:ellipsis;white-space:nowrap}.af-cm-franchise-scope label small{color:var(--faint);font-size:8px;text-transform:uppercase}.af-cm-connected-used{margin-top:8px;padding:8px;border:1px solid var(--accent-line);border-radius:9px;background:var(--accent-soft)}.af-cm-connected-used>strong{display:block;margin-bottom:5px;color:var(--accent);font-size:9px;text-transform:uppercase;letter-spacing:.08em}.af-cm-connected-used>div{display:flex;flex-wrap:wrap;gap:4px}.af-cm-connected-used span{padding:4px 6px;border:1px solid var(--line2);border-radius:999px;color:var(--faint);font-size:8px}.af-cm-connected-used span[data-available=true]{color:var(--text2)}
 
 /* Fast / Deep — a second row in the scope block, reusing its label and chip styles. */
 .af-cm-answer-mode {

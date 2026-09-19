@@ -16,39 +16,48 @@ describe('connected franchise Chimmy grounding', () => {
     const pairing = {
       linkId: 'hub-1',
       franchiseName: 'Peach + Cream',
+      primaryMemberId: null,
       viewingRole: 'pro',
       self: null,
       other: null,
       sides: [
         {
+          memberId: 'm1',
           role: 'pro',
           platform: 'sleeper',
           leagueId: 'nfl-1',
+          memberLeagueId: 'nfl-1',
           name: 'Peach Bowl',
           sport: 'NFL',
           season: 2026,
           teamLabel: 'Free SF TEP',
+          teamCandidates: [],
           avatarUrl: 'https://avatars.example/team.png',
           playerCount: 1,
           unavailableReason: null,
           players: [player('sleeper-100', 'Lamar Jackson', 'QB', 'BAL')],
           draft: null,
           activity: null,
+          sync: { lastSyncedAt: null, stale: true, refreshHref: null, detail: '' },
         },
         {
+          memberId: 'm2',
           role: 'college',
           platform: 'fantrax',
           leagueId: 'c2c-1',
+          memberLeagueId: 'c2c-1',
           name: 'Cream Bowl',
           sport: 'NCAAF',
           season: 2026,
           teamLabel: 'Ciege82',
+          teamCandidates: [],
           avatarUrl: null,
           playerCount: 1,
           unavailableReason: null,
           players: [player('fantrax-200', 'Jeremiah Smith', 'WR', 'Ohio State')],
           draft: null,
           activity: null,
+          sync: { lastSyncedAt: null, stale: true, refreshHref: null, detail: '' },
         },
       ],
     } satisfies PairedHalf
@@ -74,19 +83,24 @@ describe('connected franchise Chimmy grounding', () => {
     const pairing = {
       linkId: 'hub-1',
       franchiseName: 'Connected team',
+      primaryMemberId: null,
       viewingRole: 'primary',
       self: null,
       other: null,
       sides: [
         {
-          role: 'primary', platform: 'sleeper', leagueId: 'one', name: 'One', sport: 'NFL', season: 2026,
-          teamLabel: 'Mine', avatarUrl: null, playerCount: 1, unavailableReason: null,
+          memberId: 'm1',
+          role: 'primary', platform: 'sleeper', leagueId: 'one', memberLeagueId: 'one', name: 'One', sport: 'NFL', season: 2026,
+          teamLabel: 'Mine', teamCandidates: [], avatarUrl: null, playerCount: 1, unavailableReason: null,
           players: [player('1', 'Available Player', 'RB', 'ATL')], draft: null, activity: null,
+          sync: { lastSyncedAt: null, stale: true, refreshHref: null, detail: '' },
         },
         {
-          role: 'linked', platform: 'fantrax', leagueId: 'two', name: 'Two', sport: 'NCAAF', season: 2026,
-          teamLabel: null, avatarUrl: null, playerCount: null, unavailableReason: 're-run the import',
+          memberId: 'm2',
+          role: 'linked', platform: 'fantrax', leagueId: 'two', memberLeagueId: 'two', name: 'Two', sport: 'NCAAF', season: 2026,
+          teamLabel: null, teamCandidates: [], avatarUrl: null, playerCount: null, unavailableReason: 're-run the import',
           players: [player('2', 'Must Not Leak', 'WR', 'Texas')], draft: null, activity: null,
+          sync: { lastSyncedAt: null, stale: true, refreshHref: null, detail: '' },
         },
       ],
     } satisfies PairedHalf
@@ -96,5 +110,19 @@ describe('connected franchise Chimmy grounding', () => {
     expect(prompt).toContain('"rosterStatus":"unavailable"')
     expect(prompt).toContain('re-run the import')
     expect(prompt).not.toContain('Must Not Leak')
+  })
+
+  it('honors the roster switches selected in the Chimmy interface', () => {
+    const pairing = {
+      linkId: 'hub-1', franchiseName: 'Connected team', primaryMemberId: null, viewingRole: 'primary',
+      self: null, other: null,
+      sides: [
+        { memberId: 'm1', role: 'primary', platform: 'sleeper', leagueId: 'one', memberLeagueId: 'one', name: 'One', sport: 'NFL', season: 2026, teamLabel: 'Mine', teamCandidates: [], avatarUrl: null, playerCount: 1, unavailableReason: null, players: [player('1', 'Included Player', 'RB', 'ATL')], draft: null, activity: null, sync: { lastSyncedAt: null, stale: true, refreshHref: null, detail: '' } },
+        { memberId: 'm2', role: 'linked', platform: 'fantrax', leagueId: 'two', memberLeagueId: 'two', name: 'Two', sport: 'NCAAF', season: 2026, teamLabel: 'Mine', teamCandidates: [], avatarUrl: null, playerCount: 1, unavailableReason: null, players: [player('2', 'Excluded Player', 'WR', 'Texas')], draft: null, activity: null, sync: { lastSyncedAt: null, stale: true, refreshHref: null, detail: '' } },
+      ],
+    } satisfies PairedHalf
+    const prompt = renderConnectedFranchiseGrounding(pairing, new Set(['one']))
+    expect(prompt).toContain('Included Player')
+    expect(prompt).not.toContain('Excluded Player')
   })
 })

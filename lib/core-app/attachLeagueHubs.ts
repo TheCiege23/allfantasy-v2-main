@@ -15,7 +15,7 @@ export async function attachLeagueHubs(userId: string, leagues: HubLeague[]): Pr
   if (!resolved) return
   const [mirrors, snapshots] = resolved
   for (const link of links) {
-    const members: HubLeague[] = []
+    const members: Array<{ league: HubLeague; memberId: string }> = []
     for (const member of link.members) {
       const platform = member.platform.toLowerCase()
       const ids = new Set([member.leagueId])
@@ -31,15 +31,22 @@ export async function attachLeagueHubs(userId: string, leagues: HubLeague[]): Pr
         }
       }
       const match = leagues.find((league) => league.platform.toLowerCase() === platform && (ids.has(league.id) || (league.href && ids.has(new URL(league.href, 'https://allfantasy.ai').searchParams.get('league') ?? ''))))
-      if (match && !members.includes(match)) members.push(match)
+      if (match && !members.some((entry) => entry.league === match)) members.push({ league: match, memberId: member.id })
     }
     if (members.length < 2) continue
+    members.sort((a, b) => Number(b.memberId === link.primaryMemberId) - Number(a.memberId === link.primaryMemberId))
     const hub: LeagueHub = {
       id: link.id,
       name: link.name,
-      href: '/core/war-room?league=' + encodeURIComponent(members[0].id),
-      members: members.map((m) => ({ id: m.id, name: m.name, platform: m.platform, href: m.href ?? '/core?league=' + encodeURIComponent(m.id) })),
+      href: '/core/war-room?league=' + encodeURIComponent(members[0].league.id),
+      members: members.map(({ league: m, memberId }) => ({
+        id: m.id,
+        name: m.name,
+        platform: m.platform,
+        href: m.href ?? '/core?league=' + encodeURIComponent(m.id),
+        primary: memberId === link.primaryMemberId,
+      })),
     }
-    for (const member of members) member.hub = hub
+    for (const member of members) member.league.hub = hub
   }
 }
