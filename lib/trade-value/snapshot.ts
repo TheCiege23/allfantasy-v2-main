@@ -194,6 +194,8 @@ export function buildTradeValueSnapshot(input: {
             currentWeek: input.currentWeek ?? null,
             // The state of the roster GIVING the asset up.
             teamState: input.teamStateByRosterId?.[a.fromRosterId],
+            // Protection slots, cap space and other destination rules belong to the receiver.
+            acquiringTeamState: input.teamStateByRosterId?.[a.toRosterId],
             // Per-asset, so it is keyed on the player rather than either roster.
             assetState: a.playerId ? input.assetStateByPlayerId?.[a.playerId] : undefined,
           })

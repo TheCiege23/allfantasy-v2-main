@@ -6,7 +6,7 @@ import { PlayerImage } from '@/app/components/PlayerImage'
 import { TeamLogo } from '@/app/components/TeamLogo'
 
 /**
- * Trades that just landed in your leagues.
+ * Latest trade activity in your leagues.
  *
  * ⚠ THIS ANSWERS A QUESTION THE PRODUCT WAS TELLING USERS IT COULD NOT. The
  * home's coverage note said trades are not ingested and the league home
@@ -64,13 +64,31 @@ function agoLabel(iso: string, now: Date): string | null {
   return `${Math.round(hours / 24)}d ago`
 }
 
+function statusLabel(status?: string): string | null {
+  if (!status) return null
+  return ({
+    pending: 'Proposed',
+    awaiting_votes: 'Awaiting votes',
+    awaiting_commissioner: 'Commissioner review',
+    accepted: 'Accepted',
+    scheduled: 'Scheduled',
+    processed: 'Completed',
+    rejected: 'Rejected',
+    cancelled: 'Cancelled',
+    countered: 'Countered',
+    expired: 'Expired',
+    vetoed: 'Vetoed',
+    reversed: 'Reversed',
+  } as Record<string, string>)[status] ?? status.replaceAll('_', ' ')
+}
+
 export function DashTradeBand({ trades, now }: { trades: RecentTrade[]; now: Date }) {
   if (!trades || trades.length === 0) return null
 
   return (
-    <section className="af-core af-trade" aria-label="Trades that just landed">
+    <section className="af-core af-trade" aria-label="Latest league trades">
       <div className="af-trade-head">
-        <span className="af-label af-trade-kicker">Trades that just landed</span>
+        <span className="af-label af-trade-kicker">Latest league trades</span>
         <span className="af-trade-count af-num">
           {trades.length === 1 ? '1 in the last 2 weeks' : `${trades.length} in the last 2 weeks`}
         </span>
@@ -83,10 +101,11 @@ export function DashTradeBand({ trades, now }: { trades: RecentTrade[]; now: Dat
             <article key={`${t.platformLeagueId}:${t.id}`} className="af-trade-card">
               <div className="af-trade-meta">
                 {t.leagueAvatarUrl ? <img className="af-trade-league-avatar" src={t.leagueAvatarUrl} alt="" /> : null}
-                <Link className="af-trade-league" href={`/league/${t.leagueId}?view=legacy`}>
+                <Link className="af-trade-league" href={`/league/${t.leagueId}?view=trades`}>
                   {t.leagueName}
                 </Link>
                 {ago ? <span className="af-trade-ago af-num">{ago}</span> : null}
+                {statusLabel(t.status) ? <span className="af-trade-ago af-num">{statusLabel(t.status)}</span> : null}
               </div>
 
               <div className="af-trade-sides">
@@ -96,15 +115,15 @@ export function DashTradeBand({ trades, now }: { trades: RecentTrade[]; now: Dat
                       {s.avatarUrl ? <img className="af-trade-avatar" src={s.avatarUrl} alt="" /> : null}
                       <span className="af-trade-mgr">{s.teamName || s.managerName}</span>
                     </span>
-                    <span className="af-trade-got af-num">RECEIVED</span>
+                    <span className="af-trade-got af-num">{t.status === 'processed' ? 'RECEIVED' : 'IN THIS TRADE'}</span>
                     <ul className="af-trade-assets">
                       {s.received.slice(0, VISIBLE_ASSETS).map((a, i) => (
                         <li key={`${a.kind}:${a.name}:${i}`} data-kind={a.kind}>
                           {a.kind === 'player' && a.playerId ? (
-                            <PlayerImage sleeperId={a.playerId} sport="NFL" name={a.name} position={a.position ?? undefined} headshotUrl={a.headshotUrl} size={26} />
+                            <PlayerImage sleeperId={a.playerId} sport={t.sport ?? 'NFL'} name={a.name} position={a.position ?? undefined} headshotUrl={a.headshotUrl} size={26} />
                           ) : null}
                           <span>{a.name}{a.position ? <span className="af-trade-pos af-num"> {a.position}</span> : null}</span>
-                          {a.kind === 'player' && a.team ? <TeamLogo teamAbbr={a.team} sport="NFL" logoUrl={a.teamLogoUrl} size={18} /> : null}
+                          {a.kind === 'player' && a.team ? <TeamLogo teamAbbr={a.team} sport={t.sport ?? 'NFL'} logoUrl={a.teamLogoUrl} size={18} /> : null}
                         </li>
                       ))}
                       {s.received.length > VISIBLE_ASSETS ? (
@@ -151,8 +170,8 @@ export function DashTradeBand({ trades, now }: { trades: RecentTrade[]; now: Dat
                 </p>
               ) : null}
 
-              <Link className="af-trade-open" href={`/league/${t.leagueId}?view=legacy`}>
-                See the full trade history
+              <Link className="af-trade-open" href={`/league/${t.leagueId}?view=trades`}>
+                Open this league&rsquo;s trades
               </Link>
             </article>
           )

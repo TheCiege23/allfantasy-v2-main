@@ -120,7 +120,7 @@ export function DashSinceLastVisit({ brief, now }: { brief: SinceLastVisitBrief 
               <ul className="af-brief-sub">
                 {trades.items.map((t) => (
                   <li key={`${t.leagueId}:${t.acceptedAt}:${t.summary}`}>
-                    <Link href={`/league/${t.leagueId}?view=legacy`} className="af-brief-link">
+                    <Link href={`/league/${t.leagueId}?view=trades`} className="af-brief-link">
                       {t.leagueName}
                     </Link>
                     <span className="af-brief-detail"> — {t.summary}</span>

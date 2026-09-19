@@ -34,10 +34,8 @@ describe('⚠ no core screen opens the legacy league page', () => {
           if (!line.includes(LEGACY_HREF)) return
           /*
            * ⚠ AN EXPLICIT ?view= IS A DELIBERATE DEEP LINK, NOT THIS DEFECT.
-           * DashTradeBand asks for `?view=legacy` and DashUserOs for
-           * `?view=decide` — both name a legacy view that /core does not carry
-           * yet. Failing those would force someone to delete a working link to
-           * get the suite green.
+           * Trade activity asks for `?view=trades` and DashUserOs for
+           * `?view=decide`; those are deliberate league-surface deep links.
            */
           if (line.includes('?view=')) return
           offenders.push(`${file}:${i + 1}`)
@@ -55,6 +53,13 @@ describe('⚠ no core screen opens the legacy league page', () => {
   it('says why the import button matters more than the others', () => {
     // It is the first thing a manager sees of a league they just imported.
     expect(read('ImportV4.tsx')).toContain('THE LAST STEP OF AN IMPORT MUST NOT LAND ON THE OLD SURFACE')
+  })
+
+  it('opens Core trade activity in the league Trades tab', () => {
+    expect(read('DashTradeBand.tsx')).toContain('/league/${t.leagueId}?view=trades')
+    expect(read('DashSinceLastVisit.tsx')).toContain('/league/${t.leagueId}?view=trades')
+    expect(read('DashTradeBand.tsx')).not.toContain('?view=legacy')
+    expect(read('DashSinceLastVisit.tsx')).not.toContain('?view=legacy')
   })
 })
 

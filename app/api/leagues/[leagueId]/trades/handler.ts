@@ -9,6 +9,8 @@ import { prisma } from '@/lib/prisma'
 import { isSportsDataEnabled } from '@/lib/sports-evidence/gates'
 import { CertifiedTradeIntegrationService, extractTradePlayerRefs, type TradeSafety } from '@/lib/sports-evidence/tradeIntegration'
 import { weekFromLeagueSettingsForLineup } from '@/lib/roster/buildPersistedRosterDataFromRosterState'
+import { verifyProposalEvidenceToken } from '@/lib/league-trade-engine/proposalEvidenceToken'
+import { publicTradeDecisionReceipt } from '@/lib/league-trade-engine/tradeDecisionReceipt'
 
 export const dynamic = 'force-dynamic'
 
@@ -35,9 +37,15 @@ export async function GET(
     listAfLeagueTrades(leagueId, { take: 100 }),
     resolveWriteAuthorityEnvelope(leagueId, 'trade'),
   ])
+  const snapshotStore = (prisma as typeof prisma & { tradeDecisionSnapshot?: typeof prisma.tradeDecisionSnapshot }).tradeDecisionSnapshot
+  const snapshots = snapshotStore
+    ? await snapshotStore.findMany({ where: { tradeId: { in: trades.map((trade) => trade.id) } } }).catch(() => [])
+    : []
+  const receiptByTradeId = new Map(snapshots.map((snapshot) => [snapshot.tradeId, publicTradeDecisionReceipt(snapshot)]))
+  const tradesWithReceipts = trades.map((trade) => ({ ...trade, decisionReceipt: receiptByTradeId.get(trade.id) ?? null }))
   // Emitted on the list read too, so the Trades tab can label the whole surface as shadow
   // before the user opens the builder — not only after they submit.
-  return NextResponse.json({ trades, writeAuthority })
+  return NextResponse.json({ trades: tradesWithReceipts, writeAuthority })
 }
 
 export async function POST(
@@ -59,6 +67,7 @@ export async function POST(
     parentTradeId?: string | null
     expiresInHours?: number
     metadata?: Record<string, unknown>
+    decisionEvidenceToken?: string | null
     currentWeek?: number | null
     vetoMode?: unknown
     vetoThreshold?: unknown
@@ -108,6 +117,12 @@ export async function POST(
   }
 
   try {
+    const verifiedProposalEvidence = await verifyProposalEvidenceToken({
+      token: body.decisionEvidenceToken,
+      leagueId,
+      proposerRosterId: body.proposerRosterId,
+      assets: body.assets,
+    })
     /**
      * `governance` was destructured here but `createAfLeagueTrade` returns
      * `Promise<{ id: string }>` and never computes it — the word does not appear
@@ -128,6 +143,7 @@ export async function POST(
       parentTradeId: body.parentTradeId ?? null,
       expiresInHours: body.expiresInHours,
       metadata: body.metadata,
+      verifiedProposalEvidence,
     })
     // An imported league's trade lives only in AllFantasy — the counterparty on ESPN/Yahoo/Sleeper
     // will never see it. The envelope carries the copy that says so.

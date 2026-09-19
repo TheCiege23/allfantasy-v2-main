@@ -1,4 +1,5 @@
 import type { LineupImpactSummary } from '@/lib/decision-os/trade/rosterImpactSummary'
+import type { PublicTradeDecisionReceipt } from '@/lib/league-trade-engine/tradeDecisionReceipt'
 
 export type LeagueTopTab = 'DRAFT' | 'TEAM' | 'PLAYERS' | 'LEAGUE'
 
@@ -163,6 +164,9 @@ export type LeagueTradeAsset = {
   label: string
   sublabel: string | null
   headshotUrl: string | null
+  playerId?: string | null
+  team?: string | null
+  teamLogoUrl?: string | null
   accent: 'teal' | 'blue' | 'orange' | 'slate'
 }
 
@@ -170,9 +174,23 @@ export type LeagueTradeHistoryItem = {
   id: string
   direction: 'incoming' | 'outgoing' | 'complete'
   partnerName: string
+  partnerAvatarUrl?: string | null
+  viewerAvatarUrl?: string | null
+  proposerAvatarUrl?: string | null
+  receiverAvatarUrl?: string | null
   timestamp: string
   sent: LeagueTradeAsset[]
   received: LeagueTradeAsset[]
+  /** Every manager in the deal, in proposal order. Used for accurate multi-team cards. */
+  participantSides?: Array<{
+    rosterId: string
+    name: string
+    avatarUrl: string | null
+    isViewer: boolean
+    assets: LeagueTradeAsset[]
+    grade: string | null
+    reason: string | null
+  }>
   /** Real `AfLeagueTrade.status` (e.g. 'pending', 'awaiting_commissioner', 'accepted').
    *  Optional so pre-existing Sleeper-sourced rows (which never set this) keep working. */
   status?: string
@@ -182,6 +200,8 @@ export type LeagueTradeHistoryItem = {
   viewerIsReceiver?: boolean
   /** True when the viewer is the proposing roster on this trade (can cancel). */
   viewerIsProposer?: boolean
+  /** Viewer belongs to any side of a multi-team trade. Display-only; it grants no action. */
+  viewerIsParticipant?: boolean
   decisionAction?: 'accept' | 'counter' | 'decline' | 'review'
   decisionRecommendation?: string | null
   decisionCoveragePct?: number | null
@@ -192,10 +212,13 @@ export type LeagueTradeHistoryItem = {
     executedAt?: string
     /** Proposal-time model snapshot, when live capture existed for this native offer. */
     proposalGrade?: string | null
+    proposalGradeReason?: string | null
     proposalValueGiven?: number | null
     proposalValueReceived?: number | null
     proposalCapturedAt?: string | null
     proposalModelVersion?: string | null
+    /** Immutable proposal-time evidence receipt. The same payload feeds desktop and mobile. */
+    decisionReceipt?: PublicTradeDecisionReceipt | null
     /** Current-market regrade; null when a historical asset cannot be resolved honestly. */
     currentGrade?: string | null
     currentValueGiven?: number | null

@@ -389,10 +389,11 @@ export async function getLeagueHomeData(
       name: league.name ?? 'League',
       platformLeagueId: league.platformLeagueId,
       avatarUrl: (league as { avatarUrl?: string | null }).avatarUrl ?? null,
+      sport: String(league.sport ?? 'NFL'),
     }],
     new Date(),
     6,
-    { reconcileLive: true, enrichLeagueContext: true },
+    { viewerUserId: userId, reconcileLive: true, enrichLeagueContext: true },
   ).catch(() => [])
   if (String(league.platform).toLowerCase() === 'sleeper') {
     const owner = await prisma.userProfile.findUnique({

@@ -5,13 +5,14 @@ import type { TradeGradesPayload, GradedTrade } from '@/lib/trade-intel/sleeperT
 import { getReconciledTradeGrades } from '@/lib/core-app/sleeperTradeHistory'
 import { loadTradeExpectation } from '@/lib/trade-intel/tradeExpectationLoader'
 import { hasNoSignal } from '@/lib/trade-intel/tradeGradeEmail'
-import { attachPlayerMediaBatch, type ResolvedPlayerMedia } from '@/lib/player-media'
+import { attachPlayerMediaBatch, buildPlayerMedia, type ResolvedPlayerMedia } from '@/lib/player-media'
 import { sleeperAvatarUrl } from '@/lib/sleeper-avatar'
 import {
   buildLegacyCanonicalGrade,
   type LegacyTradeAssetInput,
 } from '@/lib/decision-os/trade/legacyCanonicalGrade'
 import { scanPendingSleeperTrades } from '@/lib/provider-trades/scanPendingSleeperTrades'
+import { publicTradeDecisionReceipt } from '@/lib/league-trade-engine/tradeDecisionReceipt'
 
 /**
  * Trades that landed in your leagues recently.
@@ -75,7 +76,7 @@ const RECENT_DAYS = 14
 const CACHE_PREFIX = 'trade-grades:v2:'
 
 export type RecentTradeAsset = {
-  kind: 'player' | 'pick'
+  kind: 'player' | 'pick' | 'faab'
   playerId: string | null
   name: string
   position: string | null
@@ -85,7 +86,7 @@ export type RecentTradeAsset = {
 }
 
 export type RecentTradeSide = {
-  rosterId: number
+  rosterId: number | string
   managerName: string
   teamName: string | null
   avatarUrl: string | null
@@ -116,6 +117,7 @@ export type RecentTrade = {
   leagueId: string
   leagueName: string
   leagueAvatarUrl: string | null
+  sport?: string
   platformLeagueId: string
   acceptedAt: string
   sides: RecentTradeSide[]
@@ -126,6 +128,8 @@ export type RecentTrade = {
    * exactly that — never a neutral grade standing in for missing data.
    */
   verdict: RecentTradeVerdict | null
+  /** Native lifecycle state. Provider history omits it because those rows are completed. */
+  status?: string
 }
 
 export type RecentTradesLeague = {
@@ -134,9 +138,12 @@ export type RecentTradesLeague = {
   platformLeagueId: string | null
   platform?: string | null
   avatarUrl?: string | null
+  sport?: string | null
 }
 
 export type RecentTradesLiveOptions = {
+  /** App user viewing Core; required to keep private negotiations participant-only. */
+  viewerUserId?: string | null
   ownerSleeperId?: string | null
   currentWeek?: number | null
   /** Reconcile the cache with the provider before presenting the latest trades. */
@@ -200,6 +207,122 @@ export type RecentTradesLiveOptions = {
    * transient failure would hold the trade boundary open for the life of the league.
    */
   onIncomplete?: (reason: 'grade-cache-unreadable' | 'league-scan-unanswered' | 'league-scan-partial-weeks') => void
+}
+
+/** Native proposals use the same AfLeagueTrade id carried by notifications and league cards. */
+async function loadNativeRecentTrades(leagues: RecentTradesLeague[], cutoff: Date, viewerUserId?: string | null): Promise<RecentTrade[]> {
+  const client = prisma as typeof prisma & {
+    afLeagueTrade?: typeof prisma.afLeagueTrade
+    tradeDecisionSnapshot?: typeof prisma.tradeDecisionSnapshot
+    roster?: typeof prisma.roster
+    appUser?: typeof prisma.appUser
+    leagueTeam?: typeof prisma.leagueTeam
+  }
+  if (!client.afLeagueTrade || !client.roster || !client.appUser) return []
+  const leagueById = new Map(leagues.map((league) => [league.id, league]))
+  const rows = await client.afLeagueTrade.findMany({
+    where: { leagueId: { in: [...leagueById.keys()] }, updatedAt: { gte: cutoff } },
+    orderBy: { updatedAt: 'desc' },
+    take: 100,
+    select: {
+      id: true, leagueId: true, status: true, proposerRosterId: true, receiverRosterId: true,
+      createdAt: true, updatedAt: true, acceptedAt: true, processedAt: true, rejectedAt: true, cancelledAt: true,
+      items: { select: { id: true, itemType: true, itemReference: true, fromRosterId: true, toRosterId: true, faabAmount: true, metadata: true } },
+    },
+  }).catch(() => [])
+  if (!rows.length) return []
+
+  const rosterIds = [...new Set(rows.flatMap((row) => [
+    row.proposerRosterId, row.receiverRosterId, ...row.items.flatMap((item) => [item.fromRosterId, item.toRosterId]),
+  ]))]
+  const rosters = await client.roster.findMany({ where: { id: { in: rosterIds } }, select: { id: true, platformUserId: true } }).catch(() => [])
+  const identityIds = [...new Set(rosters.map((row) => row.platformUserId))]
+  const [users, teams, snapshots] = await Promise.all([
+    client.appUser.findMany({ where: { id: { in: identityIds } }, select: { id: true, displayName: true, username: true, avatarUrl: true } }).catch(() => []),
+    client.leagueTeam
+      ? client.leagueTeam.findMany({
+          where: { leagueId: { in: [...leagueById.keys()] }, OR: [
+            { externalId: { in: rosterIds } }, { platformUserId: { in: identityIds } }, { claimedByUserId: { in: identityIds } },
+          ] },
+          select: { leagueId: true, externalId: true, platformUserId: true, claimedByUserId: true, ownerName: true, teamName: true, avatarUrl: true },
+        }).catch(() => [])
+      : Promise.resolve([]),
+    client.tradeDecisionSnapshot
+      ? client.tradeDecisionSnapshot.findMany({ where: { tradeId: { in: rows.map((row) => row.id) } } }).catch(() => [])
+      : Promise.resolve([]),
+  ])
+  const rosterById = new Map(rosters.map((row) => [row.id, row]))
+  const userById = new Map(users.map((row) => [row.id, row]))
+  const teamByIdentity = new Map<string, (typeof teams)[number]>()
+  for (const team of teams) {
+    teamByIdentity.set(`${team.leagueId}:${team.externalId}`, team)
+    if (team.platformUserId) teamByIdentity.set(`${team.leagueId}:${team.platformUserId}`, team)
+    if (team.claimedByUserId) teamByIdentity.set(`${team.leagueId}:${team.claimedByUserId}`, team)
+  }
+  const receiptByTradeId = new Map(snapshots.map((row) => [row.tradeId, publicTradeDecisionReceipt(row)]))
+
+  const asset = (item: (typeof rows)[number]['items'][number], sport: string): RecentTradeAsset => {
+    const meta = item.metadata && typeof item.metadata === 'object' && !Array.isArray(item.metadata)
+      ? item.metadata as Record<string, unknown> : {}
+    const type = item.itemType.toLowerCase()
+    const player = type.includes('player') || type === 'keeper' || type === 'devy'
+    const faab = type === 'faab'
+    const playerId = player ? item.itemReference : null
+    const team = typeof meta.team === 'string' && meta.team.trim() ? meta.team.trim().toUpperCase() : null
+    const media = player ? buildPlayerMedia(playerId, team, sport) : { headshotUrl: null, teamLogoUrl: null }
+    return {
+      kind: faab ? 'faab' : player ? 'player' : 'pick',
+      playerId,
+      name: faab ? `${item.faabAmount ?? 0} FAAB` : String(meta.playerName ?? meta.pickLabel ?? meta.label ?? item.itemReference ?? 'Asset'),
+      position: typeof meta.position === 'string' ? meta.position : null,
+      team,
+      headshotUrl: typeof meta.headshotUrl === 'string' && meta.headshotUrl.trim() ? meta.headshotUrl : media.headshotUrl,
+      teamLogoUrl: media.teamLogoUrl,
+    }
+  }
+
+  return rows.flatMap((row) => {
+    const league = leagueById.get(row.leagueId)
+    if (!league) return []
+    const participants = [...new Set([row.proposerRosterId, row.receiverRosterId, ...row.items.flatMap((item) => [item.fromRosterId, item.toRosterId])])]
+    const publicLeagueFact = row.status === 'processed' || row.status === 'reversed'
+    const viewerParticipates = viewerUserId != null && participants.some((rosterId) => {
+      const identity = rosterById.get(rosterId)?.platformUserId ?? ''
+      const team = teamByIdentity.get(`${row.leagueId}:${rosterId}`) ?? teamByIdentity.get(`${row.leagueId}:${identity}`)
+      return identity === viewerUserId || team?.claimedByUserId === viewerUserId
+    })
+    if (!publicLeagueFact && !viewerParticipates) return []
+    const receipt = receiptByTradeId.get(row.id) ?? null
+    const sides = participants.map((rosterId): RecentTradeSide => {
+      const identity = rosterById.get(rosterId)?.platformUserId ?? ''
+      const user = userById.get(identity)
+      const team = teamByIdentity.get(`${row.leagueId}:${rosterId}`) ?? teamByIdentity.get(`${row.leagueId}:${identity}`)
+      const decision = receipt?.participantDecisions.find((entry) => entry.rosterId === rosterId) ?? null
+      return {
+        rosterId,
+        managerName: user?.displayName?.trim() || user?.username || team?.ownerName || 'Manager',
+        teamName: team?.teamName || null,
+        avatarUrl: team?.avatarUrl ?? user?.avatarUrl ?? null,
+        received: row.items.filter((item) => item.toRosterId === rosterId).map((item) => asset(item, league.sport ?? 'nfl')),
+        grade: decision?.grade && ['A', 'B', 'C', 'D', 'F'].includes(decision.grade) ? decision.grade as RecentTradeSide['grade'] : null,
+        gradeBasis: decision?.grade ? 'Market' : null,
+        gradeReason: decision?.reason ?? 'Original grade unavailable — this trade predates complete decision evidence.',
+      }
+    })
+    return [{
+      id: row.id,
+      leagueId: row.leagueId,
+      leagueName: league.name,
+      leagueAvatarUrl: league.avatarUrl ?? null,
+      sport: league.sport ?? 'nfl',
+      platformLeagueId: `native:${row.leagueId}`,
+      acceptedAt: (row.processedAt ?? row.acceptedAt ?? row.rejectedAt ?? row.cancelledAt ?? row.updatedAt ?? row.createdAt).toISOString(),
+      sides,
+      partial: sides.some((side) => side.received.length === 0),
+      verdict: null,
+      status: row.status,
+    }]
+  })
 }
 
 /**
@@ -385,7 +508,8 @@ export async function getRecentTrades(
   for (const l of leagues) {
     if (l.platformLeagueId) byPlatformId.set(l.platformLeagueId, l)
   }
-  if (byPlatformId.size === 0) return []
+  const cutoff = now.getTime() - RECENT_DAYS * 24 * 60 * 60 * 1000
+  const nativeRecent = await loadNativeRecentTrades(leagues, new Date(cutoff), live?.viewerUserId)
 
   const keys = [...byPlatformId.keys()].map((id) => `${CACHE_PREFIX}${id}`)
   /*
@@ -395,12 +519,14 @@ export async function getRecentTrades(
    * not. A pool timeout here is exactly how /core would close the visit window over every
    * graded trade it holds, so the failure is reported rather than swallowed.
    */
-  let rows = await prisma.sportsDataCache
-    .findMany({ where: { cacheKey: { in: keys } }, select: { cacheKey: true, data: true } })
-    .catch(() => {
-      reportIncomplete(live, 'grade-cache-unreadable')
-      return [] as { cacheKey: string; data: unknown }[]
-    })
+  let rows = keys.length > 0
+    ? await prisma.sportsDataCache
+      .findMany({ where: { cacheKey: { in: keys } }, select: { cacheKey: true, data: true } })
+      .catch(() => {
+        reportIncomplete(live, 'grade-cache-unreadable')
+        return [] as { cacheKey: string; data: unknown }[]
+      })
+    : []
 
   if (live?.reconcileLive) {
     const liveRows: { cacheKey: string; data: unknown }[] = []
@@ -421,8 +547,7 @@ export async function getRecentTrades(
     }
   }
 
-  const cutoff = now.getTime() - RECENT_DAYS * 24 * 60 * 60 * 1000
-  const out: RecentTrade[] = []
+  const out: RecentTrade[] = [...nativeRecent]
   /** The raw graded rows, kept so only the visible ones get priced. */
   const graded = new Map<string, GradedTrade>()
 
@@ -633,9 +758,9 @@ export async function getRecentTrades(
             : `${edge >= 0 ? '+' : ''}${edge}% market-value edge in ${expectation?.leagueNote}. ${needs} Full context remains withheld until playoff probability and every required league input are available.`)
       }
     } else {
-      const srcByRoster = new Map(src.sides.map((s) => [s.rosterId, s]))
+      const srcByRoster = new Map(src.sides.map((s) => [String(s.rosterId), s]))
       for (const side of t.sides) {
-        const realized = srcByRoster.get(side.rosterId)
+        const realized = srcByRoster.get(String(side.rosterId))
         const hasRealizedGrade = Boolean(realized?.currentGrade && typeof realized.cumulativeNet === 'number')
         side.grade = hasRealizedGrade ? realized!.currentGrade : null
         side.gradeBasis = hasRealizedGrade ? 'Realized' : null

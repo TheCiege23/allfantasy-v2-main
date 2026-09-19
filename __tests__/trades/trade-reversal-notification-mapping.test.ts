@@ -60,7 +60,7 @@ describe('trade_reversed is wired into the notification engine', () => {
     await ingest(reversedEvent())
     expect(mockDispatch).toHaveBeenCalledWith(
       expect.objectContaining({
-        actionHref: '/league/league-1?tab=trades',
+        actionHref: '/league/league-1?view=trades&tradeId=trade-1',
         meta: expect.objectContaining({ tradeId: 'trade-1' }),
       }),
     )

@@ -47,6 +47,10 @@ import { guillotineModel } from './guillotine'
 import { tournamentModel } from './tournament'
 import { keeperModel } from './keeper'
 import { zombieModel } from './zombie'
+import { salaryCapModel } from './salaryCap'
+import { survivorGuillotineModel, survivorModel } from './survivor'
+import { kingOfTheHillModel } from './kingOfTheHill'
+import { pirateModel } from './pirate'
 
 /**
  * The canonical format ids, copied from the `LeagueFormatId` union in
@@ -73,7 +77,7 @@ export const CANONICAL_FORMAT_IDS = [
  * league, not a product concept, and it reaches us as a `leagueType` unchanged.
  */
 export const ALIAS_ONLY_FORMAT_IDS = [
-  'pirate_vampire', 'royal', 'king_of_the_hill', 'idp',
+  'pirate_vampire', 'royal', 'king_of_the_hill', 'idp', 'survivor_guillotine',
 ] as const
 
 /** Every id a league can present, by either route. */
@@ -88,6 +92,11 @@ const MODELS: readonly FormatValueModel[] = [
   tournamentModel,
   keeperModel,
   zombieModel,
+  salaryCapModel,
+  survivorModel,
+  survivorGuillotineModel,
+  kingOfTheHillModel,
+  pirateModel,
 ]
 
 const BY_ID = new Map<string, FormatValueModel>(MODELS.map((m) => [m.formatId, m]))

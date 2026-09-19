@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useSession } from 'next-auth/react'
 import { toast } from 'sonner'
 import {
@@ -36,6 +36,15 @@ export type ProposeTradeModalProps = {
   sport?: string | null
 }
 
+type TradeContext = {
+  valueBook: string
+  proposalModel?: string
+  managerStrategy?: string
+  strategyConfirmed?: boolean
+  contextualGradeComplete?: boolean
+  missing: string[]
+}
+
 /**
  * Native AllFantasy trade builder for NFL redraft leagues: partner picker, real roster asset
  * checkboxes on both sides, submits to the real `AfLeagueTrade` engine
@@ -62,7 +71,8 @@ export function ProposeTradeModal({
   const [viewerTeamRosterId, setViewerTeamRosterId] = useState<string | null>(null)
   const [suggestions, setSuggestions] = useState<TradePartnerSuggestion[]>([])
   const [multiTeamSuggestions, setMultiTeamSuggestions] = useState<MultiTeamTradeSuggestion[]>([])
-  const [tradeContext, setTradeContext] = useState<{ valueBook: string; proposalModel?: string; managerStrategy?: string; missing: string[] } | null>(null)
+  const [tradeContext, setTradeContext] = useState<TradeContext | null>(null)
+  const [savingStrategy, setSavingStrategy] = useState(false)
   const [loading, setLoading] = useState(false)
   const [partnerRosterId, setPartnerRosterId] = useState<string | null>(null)
   const [secondPartnerRosterId, setSecondPartnerRosterId] = useState<string | null>(null)
@@ -84,23 +94,50 @@ export function ProposeTradeModal({
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  useEffect(() => {
-    if (!open) return
+  const loadTradeData = useCallback(async () => {
     setError(null)
     setLoading(true)
-    fetch(`/api/leagues/${encodeURIComponent(leagueId)}/trades/rosters`)
-      .then((r) => (r.ok ? r.json() : Promise.reject(new Error('Failed to load rosters'))))
-      .then((data: { rosters?: TradeableRoster[]; viewerRosterId?: string | null; viewerTeamRosterId?: string | null; suggestions?: TradePartnerSuggestion[]; multiTeamSuggestions?: MultiTeamTradeSuggestion[]; tradeContext?: { valueBook: string; proposalModel?: string; managerStrategy?: string; missing: string[] } }) => {
-        setRosters(Array.isArray(data.rosters) ? data.rosters : [])
-        setViewerRosterId(data.viewerRosterId ?? null)
-        setViewerTeamRosterId(data.viewerTeamRosterId ?? data.viewerRosterId ?? null)
-        setSuggestions(Array.isArray(data.suggestions) ? data.suggestions : [])
-        setMultiTeamSuggestions(Array.isArray(data.multiTeamSuggestions) ? data.multiTeamSuggestions : [])
-        setTradeContext(data.tradeContext ?? null)
+    try {
+      const response = await fetch(`/api/leagues/${encodeURIComponent(leagueId)}/trades/rosters`)
+      if (!response.ok) throw new Error('Failed to load rosters')
+      const data = (await response.json()) as { rosters?: TradeableRoster[]; viewerRosterId?: string | null; viewerTeamRosterId?: string | null; suggestions?: TradePartnerSuggestion[]; multiTeamSuggestions?: MultiTeamTradeSuggestion[]; tradeContext?: TradeContext }
+      setRosters(Array.isArray(data.rosters) ? data.rosters : [])
+      setViewerRosterId(data.viewerRosterId ?? null)
+      setViewerTeamRosterId(data.viewerTeamRosterId ?? data.viewerRosterId ?? null)
+      setSuggestions(Array.isArray(data.suggestions) ? data.suggestions : [])
+      setMultiTeamSuggestions(Array.isArray(data.multiTeamSuggestions) ? data.multiTeamSuggestions : [])
+      setTradeContext(data.tradeContext ?? null)
+    } catch {
+      setError('Could not load rosters for this league.')
+    } finally {
+      setLoading(false)
+    }
+  }, [leagueId])
+
+  useEffect(() => {
+    if (!open) return
+    void loadTradeData()
+  }, [open, loadTradeData])
+
+  async function updateManagerStrategy(active: 'win-now' | 'balanced' | 'rebuild') {
+    setSavingStrategy(true)
+    setError(null)
+    try {
+      const response = await fetch(`/api/leagues/${encodeURIComponent(leagueId)}/trades/strategy`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ active }),
       })
-      .catch(() => setError('Could not load rosters for this league.'))
-      .finally(() => setLoading(false))
-  }, [open, leagueId])
+      const body = (await response.json().catch(() => ({}))) as { error?: string }
+      if (!response.ok) throw new Error(body.error ?? 'Could not save trade strategy.')
+      await loadTradeData()
+      toast.success('Trade strategy saved')
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Could not save trade strategy.')
+    } finally {
+      setSavingStrategy(false)
+    }
+  }
 
   useEffect(() => {
     if (!open) {
@@ -219,7 +256,7 @@ export function ProposeTradeModal({
             itemReference: id,
             fromRosterId: myRoster.rosterId,
             toRosterId: partner.rosterId,
-            metadata: { playerName: player?.name ?? id, position: player?.position ?? null },
+            metadata: { playerName: player?.name ?? id, position: player?.position ?? null, team: player?.team ?? null, headshotUrl: player?.imageUrl ?? null },
           }
         }),
         ...[...state.getPlayers].map((id) => {
@@ -229,7 +266,7 @@ export function ProposeTradeModal({
             itemReference: id,
             fromRosterId: partner.rosterId,
             toRosterId: myRoster.rosterId,
-            metadata: { playerName: player?.name ?? id, position: player?.position ?? null },
+            metadata: { playerName: player?.name ?? id, position: player?.position ?? null, team: player?.team ?? null, headshotUrl: player?.imageUrl ?? null },
           }
         }),
         ...[...state.givePicks].map((id) => {
@@ -248,14 +285,18 @@ export function ProposeTradeModal({
         ...(multiTeam && secondPartnerRoster ? legAssets(secondPartnerRoster, {
           givePlayers: secondGivePlayerIds, getPlayers: secondGetPlayerIds, givePicks: secondGivePickIds, getPicks: secondGetPickIds, giveFaab: secondGiveFaab, getFaab: secondGetFaab,
         }) : []),
-        ...directPartnerLegs.map((leg) => ({
-          itemType: leg.asset.itemType,
-          itemReference: leg.asset.kind === 'faab' ? undefined : leg.asset.id,
-          fromRosterId: leg.fromRosterId,
-          toRosterId: leg.toRosterId,
-          ...(leg.asset.kind === 'faab' ? { faabAmount: leg.asset.amount ?? 0 } : {}),
-          metadata: { playerName: leg.asset.name, position: leg.asset.position, amount: leg.asset.amount },
-        })),
+        ...directPartnerLegs.map((leg) => {
+          const sourceRoster = [myRoster, partnerRoster, secondPartnerRoster].find((roster) => roster?.rosterId === leg.fromRosterId)
+          const player = leg.asset.kind === 'player' ? sourceRoster?.players.find((row) => row.id === leg.asset.id) : null
+          return {
+            itemType: leg.asset.itemType,
+            itemReference: leg.asset.kind === 'faab' ? undefined : leg.asset.id,
+            fromRosterId: leg.fromRosterId,
+            toRosterId: leg.toRosterId,
+            ...(leg.asset.kind === 'faab' ? { faabAmount: leg.asset.amount ?? 0 } : {}),
+            metadata: { playerName: leg.asset.name, position: leg.asset.position, team: player?.team ?? null, headshotUrl: player?.imageUrl ?? null, amount: leg.asset.amount },
+          }
+        }),
       ]
       const selectedPackage = suggestions.flatMap((suggestion) => suggestion.packages).find((proposal) => proposal.id === selectedSuggestionId)
       const selectedMultiPackage = multiTeamSuggestions.find((proposal) => proposal.id === selectedSuggestionId)
@@ -267,6 +308,7 @@ export function ProposeTradeModal({
           proposerRosterId: myRoster.rosterId,
           receiverRosterId: partnerRoster.rosterId,
           assets,
+          decisionEvidenceToken: selectedPackage?.decisionEvidenceToken ?? selectedMultiPackage?.decisionEvidenceToken ?? null,
           metadata: {
             multiTeam: Boolean(multiTeam && secondPartnerRoster),
             participantRosterIds: [myRoster.rosterId, partnerRoster.rosterId, ...(secondPartnerRoster ? [secondPartnerRoster.rosterId] : [])],
@@ -274,7 +316,7 @@ export function ProposeTradeModal({
             proposalSource: 'league_partner_suggestions',
             gradeScope: 'league-specific-context-pending',
             suggestionId: selectedSuggestionId,
-            suggestionModelVersion: 'league-proposal-v2',
+            suggestionModelVersion: 'league-proposal-v3',
             predictedAcceptance: selectedPackage?.acceptanceLikelihood ?? null,
             projectedOutcomeDelta: selectedPackage?.simulation?.deltaPct ?? selectedMultiPackage?.simulation?.deltaPct ?? null,
           },
@@ -329,8 +371,26 @@ export function ProposeTradeModal({
         ) : (
           <>
             {tradeContext ? (
-              <div className="rounded-xl border border-cyan-400/20 bg-cyan-400/[0.06] px-3 py-2 text-[11px] text-cyan-100/80">
-                Suggestions use this league&apos;s {tradeContext.valueBook} values, {tradeContext.proposalModel ?? 'league'} rules and your {tradeContext.managerStrategy ?? 'balanced'} strategy, plus roster construction, records, picks and FAAB.{tradeContext.missing.length ? ` Full contextual grading remains pending for ${tradeContext.missing.join(' and ')}.` : ''}
+              <div className="space-y-2 rounded-xl border border-cyan-400/20 bg-cyan-400/[0.06] px-3 py-2 text-[11px] text-cyan-100/80">
+                <p>
+                  Suggestions use this league&apos;s {tradeContext.valueBook} values, {tradeContext.proposalModel ?? 'league'} rules and your {tradeContext.managerStrategy ?? 'balanced'} strategy, plus roster construction, records, picks and FAAB.{tradeContext.missing.length ? ` Full contextual grading remains pending for ${tradeContext.missing.join(' and ')}.` : ' The required strategy and paired outcome simulation are available.'}
+                </p>
+                <label className="flex flex-wrap items-center gap-2 text-cyan-50">
+                  <span className="font-semibold">My goal in this league</span>
+                  <select
+                    aria-label="My trade strategy"
+                    value={tradeContext.strategyConfirmed ? (tradeContext.managerStrategy ?? 'balanced') : ''}
+                    disabled={savingStrategy}
+                    onChange={(event) => void updateManagerStrategy(event.target.value as 'win-now' | 'balanced' | 'rebuild')}
+                    className="rounded-md border border-cyan-300/25 bg-[#111728] px-2 py-1 text-white"
+                  >
+                    <option value="" disabled>Confirm your goal</option>
+                    <option value="win-now">Win now</option>
+                    <option value="balanced">Balanced</option>
+                    <option value="rebuild">Rebuild</option>
+                  </select>
+                  {savingStrategy ? <span className="text-cyan-200/60">Saving…</span> : null}
+                </label>
               </div>
             ) : null}
             {visibleSuggestions.length > 0 ? (

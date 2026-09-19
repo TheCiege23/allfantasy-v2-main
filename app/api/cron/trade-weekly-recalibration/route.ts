@@ -12,6 +12,7 @@ import { NextResponse } from "next/server"
 import { requireCronAuth } from "@/app/api/cron/_auth"
 import { runScheduledWeeklyRecalibration } from "@/lib/trade-engine/auto-recalibration"
 import { withSyncJobRun } from "@/lib/production-health/syncJobRunTelemetry"
+import { backfillHistoricalTradeDecisionSnapshots } from "@/lib/league-trade-engine/historicalDecisionBackfill"
 
 /**
  * NOTE: `requireCronAuth` resolves `preferredSecretEnv ?? LEAGUE_CRON_SECRET ?? CRON_SECRET`.
@@ -65,10 +66,14 @@ async function handle() {
         warnings: r.reason ? [r.reason] : undefined,
       }),
     )
+    // Recover only evidence that was actually archived with older trades. This is bounded and
+    // idempotent, and deliberately does not grade an old deal with today's market or roster data.
+    const historicalBackfill = await backfillHistoricalTradeDecisionSnapshots(50)
     return NextResponse.json({
       ok: true,
       ran: outcome.ran,
       reason: outcome.reason,
+      historicalBackfill,
       durationMs: Date.now() - startedAt,
     })
   } catch (err) {

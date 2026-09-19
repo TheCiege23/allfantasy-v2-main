@@ -177,4 +177,25 @@ describe('PendingTradeCard — the provider card shape with the AF read on top',
     expect(queryByTestId('trade-action-accept')).not.toBeInTheDocument()
     expect(getByText('Act on it in Sleeper')).toBeInTheDocument()
   })
+
+  it('renders every manager and that manager’s assets in a multi-team proposal', () => {
+    const t = card({
+      ...INCOMING,
+      direction: 'complete',
+      proposerName: 'Alpha',
+      participantSides: [
+        { rosterId: 'r1', name: 'Alpha', avatarUrl: '/alpha.png', isViewer: false, assets: [{ id: 'a1', label: 'Josh Allen', sublabel: 'QB · BUF', headshotUrl: null, accent: 'blue' }], grade: 'A', reason: 'Improves survival odds.' },
+        { rosterId: 'r2', name: 'Beta', avatarUrl: '/beta.png', isViewer: true, assets: [{ id: 'b1', label: '2027 1st', sublabel: 'Draft pick', headshotUrl: null, accent: 'teal' }], grade: 'B', reason: 'Adds future value.' },
+        { rosterId: 'r3', name: 'Gamma', avatarUrl: '/gamma.png', isViewer: false, assets: [{ id: 'c1', label: '$25 FAAB', sublabel: 'FAAB', headshotUrl: null, accent: 'teal' }], grade: 'C', reason: 'Adds waiver flexibility.' },
+      ],
+    }).container.textContent ?? ''
+    expect(t).toContain('Alpha')
+    expect(t).toContain('Beta')
+    expect(t).toContain('Gamma')
+    expect(t).toContain('Josh Allen')
+    expect(t).toContain('2027 1st')
+    expect(t).toContain('$25 FAAB')
+    expect(t).toContain('Improves survival odds.')
+    expect(t).toContain('Adds waiver flexibility.')
+  })
 })

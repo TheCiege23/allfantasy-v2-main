@@ -31,7 +31,11 @@ import {
   type ProposalManagerStrategy,
 } from '@/lib/league-trade-engine/proposalSuggestions'
 import { derivePartnerBehaviorProfiles } from '@/lib/league-trade-engine/proposalLearning'
-import { enrichMultiTeamProposalSimulations, enrichProposalSimulations } from '@/lib/league-trade-engine/proposalSimulation'
+import { enrichMultiTeamProposalSimulations, enrichProposalSimulations, hasPairedProposalSimulation } from '@/lib/league-trade-engine/proposalSimulation'
+import { getTradeManagerStrategy } from '@/lib/league-trade-engine/managerStrategy'
+import { signProposalEvidenceToken, type VerifiedProposalAssetEvidence } from '@/lib/league-trade-engine/proposalEvidenceToken'
+import type { TradeAssetInput } from '@/lib/league-trade-engine/types'
+import type { SuggestedTradeAsset } from '@/lib/league-trade-engine/proposalSuggestions'
 
 export const dynamic = 'force-dynamic'
 
@@ -238,11 +242,15 @@ export async function GET(
     league?.settings,
     league?.leagueType ?? (league?.isDynasty ? 'dynasty' : null),
   )
-  // Strategy persistence has not shipped on the production Prisma client yet.
-  // Keep the proposal engine honest about that missing signal and use its
-  // balanced default until the canonical strategy store is available here.
-  const savedStrategy: { active: string } | null = null
-  const managerStrategy: ProposalManagerStrategy = 'balanced'
+  // Reduced Prisma doubles used by isolated route tests may not expose this new
+  // delegate yet. That means "not confirmed", never a request failure.
+  const strategyStore = (prisma as typeof prisma & {
+    tradeManagerStrategy?: typeof prisma.tradeManagerStrategy
+  }).tradeManagerStrategy
+  const savedStrategy = strategyStore
+    ? await getTradeManagerStrategy(leagueId, userId, { tradeManagerStrategy: strategyStore }).catch(() => null)
+    : null
+  const managerStrategy: ProposalManagerStrategy = savedStrategy?.active ?? 'balanced'
   const proposalMode: ProposalLeagueMode = (() => {
     const type = `${league?.leagueType ?? ''} ${league?.leagueVariant ?? ''}`.toLowerCase()
     if (league?.guillotineMode || type.includes('guillotine')) return 'guillotine'
@@ -613,7 +621,6 @@ export async function GET(
     }
   }
 
-  let hasPlayoffProbabilities = proposalMode === 'guillotine' || proposalMode === 'survivor'
   if (proposalMode !== 'guillotine' && proposalMode !== 'survivor' && currentSeason) {
     // Some deployments and isolated route tests run with a reduced Prisma
     // surface. Missing simulation storage must reduce proposal confidence,
@@ -648,7 +655,6 @@ export async function GET(
         ?? probabilityByTeam.get(roster.rosterId)
       roster.playoffProbability = probability != null && Number.isFinite(probability) ? probability : null
     }
-    hasPlayoffProbabilities = result.some((roster) => roster.playoffProbability != null)
   }
 
   /*
@@ -720,7 +726,7 @@ export async function GET(
     managerStrategy,
     partnerBehavior,
   })
-  const suggestions = enrichProposalSimulations({
+  const simulatedSuggestions = enrichProposalSimulations({
     suggestions: rawSuggestions,
     rosters: result,
     viewerRosterId: viewerTeamRosterId,
@@ -733,7 +739,7 @@ export async function GET(
     rosters: result,
     rosterPositions,
   })
-  const multiTeamSuggestions = enrichMultiTeamProposalSimulations({
+  const simulatedMultiTeamSuggestions = enrichMultiTeamProposalSimulations({
     suggestions: rawMultiTeamSuggestions,
     rosters: result,
     viewerRosterId: viewerTeamRosterId,
@@ -741,6 +747,89 @@ export async function GET(
     weeksRemaining: Math.max(1, Number(league?.playoffStartWeek ?? 14) - Number(projectionWeek?.week ?? 1)),
     playoffTeams: Math.max(2, Number(league?.playoffTeams ?? Math.min(6, rosters.length))),
   })
+  const rosterById = new Map(result.map((roster) => [roster.rosterId, roster]))
+  const toTradeAsset = (asset: SuggestedTradeAsset, fromRosterId: string, toRosterId: string): TradeAssetInput => ({
+    itemType: asset.itemType,
+    itemReference: asset.kind === 'faab' ? null : asset.id,
+    fromRosterId,
+    toRosterId,
+    faabAmount: asset.kind === 'faab' ? asset.amount : null,
+  })
+  const toEvidence = (asset: SuggestedTradeAsset, fromRosterId: string, toRosterId: string): VerifiedProposalAssetEvidence => ({
+    itemType: asset.itemType,
+    itemReference: asset.kind === 'faab' ? null : asset.id,
+    fromRosterId,
+    toRosterId,
+    faabAmount: asset.kind === 'faab' ? asset.amount : null,
+    name: asset.name,
+    value: asset.value,
+    weeklyProjection: asset.kind === 'player'
+      ? rosterById.get(fromRosterId)?.players.find((player) => player.id === asset.id)?.weeklyProjection ?? null
+      : null,
+  })
+  const evidenceCapturedAt = new Date().toISOString()
+  const suggestions = await Promise.all(simulatedSuggestions.map(async (suggestion) => ({
+    ...suggestion,
+    packages: await Promise.all(suggestion.packages.map(async (proposal) => {
+      const tradeAssets = [
+        ...proposal.send.map((asset) => toTradeAsset(asset, viewerTeamRosterId ?? '', suggestion.rosterId)),
+        ...proposal.receive.map((asset) => toTradeAsset(asset, suggestion.rosterId, viewerTeamRosterId ?? '')),
+      ]
+      const evidenceAssets = [
+        ...proposal.send.map((asset) => toEvidence(asset, viewerTeamRosterId ?? '', suggestion.rosterId)),
+        ...proposal.receive.map((asset) => toEvidence(asset, suggestion.rosterId, viewerTeamRosterId ?? '')),
+      ]
+      const decisionEvidenceToken = viewerTeamRosterId && proposal.simulation?.available
+        ? await signProposalEvidenceToken({
+            leagueId,
+            proposerRosterId: viewerTeamRosterId,
+            tradeAssets,
+            assets: evidenceAssets,
+            managerStrategy,
+            simulation: proposal.simulation,
+            modelVersion: 'league-proposal-v3',
+            valueSource: `FantasyCalc · ${describeValueBook(valueBook)}`,
+            projectionSource: projectionWeek ? `league-scored projection feed · ${projectionWeek.season} week ${projectionWeek.week}` : 'projection feed unavailable',
+            capturedAt: evidenceCapturedAt,
+          })
+        : null
+      return { ...proposal, decisionEvidenceToken }
+    })),
+  })))
+  const multiTeamSuggestions = await Promise.all(simulatedMultiTeamSuggestions.map(async (proposal) => {
+    const tradeAssets = proposal.legs.map((leg) => toTradeAsset(leg.asset, leg.fromRosterId, leg.toRosterId))
+    const evidenceAssets = proposal.legs.map((leg) => toEvidence(leg.asset, leg.fromRosterId, leg.toRosterId))
+    const decisionEvidenceToken = viewerTeamRosterId && proposal.simulation?.available
+      ? await signProposalEvidenceToken({
+          leagueId,
+          proposerRosterId: viewerTeamRosterId,
+          tradeAssets,
+          assets: evidenceAssets,
+          managerStrategy,
+          simulation: proposal.simulation,
+          modelVersion: 'league-proposal-v3',
+          valueSource: `FantasyCalc · ${describeValueBook(valueBook)}`,
+          projectionSource: projectionWeek ? `league-scored projection feed · ${projectionWeek.season} week ${projectionWeek.week}` : 'projection feed unavailable',
+          capturedAt: evidenceCapturedAt,
+        })
+      : null
+    return { ...proposal, decisionEvidenceToken }
+  }))
+  const hasPairedOutcomeSimulation = hasPairedProposalSimulation({ suggestions, multiTeamSuggestions })
+  const hasLeagueRosterContext = Boolean(league && (rosterPositions.length > 0 || (Array.isArray(league.starters) && league.starters.length > 0)))
+  const hasPricedSuggestion = suggestions.some((suggestion) => suggestion.packages.some((proposal) => {
+    const assets = [...proposal.send, ...proposal.receive]
+    return assets.length > 0 && assets.every((asset) => asset.kind === 'faab' || (asset.value != null && asset.value > 0))
+  }))
+  const hasProjectedSuggestion = suggestions.some((suggestion) => suggestion.packages.some((proposal) => {
+    const playerAssets = [...proposal.send, ...proposal.receive].filter((asset) => asset.kind === 'player')
+    return playerAssets.every((asset) => rosterById.get(
+      proposal.send.includes(asset) ? viewerTeamRosterId ?? '' : suggestion.rosterId,
+    )?.players.find((player) => player.id === asset.id)?.weeklyProjection != null)
+  }))
+  const contextualGradeComplete = Boolean(
+    savedStrategy && hasPairedOutcomeSimulation && hasLeagueRosterContext && hasPricedSuggestion && hasProjectedSuggestion,
+  )
 
   return NextResponse.json({
     rosters: result,
@@ -753,11 +842,15 @@ export async function GET(
       valueBook: describeValueBook(valueBook),
       proposalModel: proposalMode.replace(/_/g, ' '),
       managerStrategy,
+      strategyConfirmed: Boolean(savedStrategy),
       rosterPositions,
       faabBudget: league?.waiverBudget ?? null,
-      contextualGradeComplete: false,
+      contextualGradeComplete,
       missing: [
-        ...(!hasPlayoffProbabilities ? ['playoff probability simulation'] : []),
+        ...(!hasLeagueRosterContext ? ['league roster settings'] : []),
+        ...(!hasPricedSuggestion ? ['as-of asset values'] : []),
+        ...(!hasProjectedSuggestion ? ['as-of player projections'] : []),
+        ...(!hasPairedOutcomeSimulation ? ['paired before/after outcome simulation'] : []),
         ...(!savedStrategy ? ['manager strategy confirmation'] : []),
       ],
     },

@@ -43,6 +43,8 @@ export type SuggestedTradePackage = {
   fairness: number
   acceptanceLikelihood: number | null
   simulation?: ProposalOutcomeSimulation
+  /** Signed server receipt for this exact package. Omitted when evidence is incomplete. */
+  decisionEvidenceToken?: string | null
   reason: string
 }
 
@@ -54,6 +56,13 @@ export type ProposalOutcomeSimulation = {
   deltaPct: number | null
   iterations: number
   reason: string | null
+  /** Same paired scenarios for every team in the deal, ordered proposer first. */
+  participants?: Array<{
+    rosterId: string
+    beforePct: number
+    afterPct: number
+    deltaPct: number
+  }>
 }
 
 export type PartnerBehaviorProfile = {
@@ -77,6 +86,8 @@ export type MultiTeamTradeSuggestion = {
   reason: string
   legs: SuggestedMultiTeamLeg[]
   simulation?: ProposalOutcomeSimulation
+  /** Signed server receipt for this exact package. Omitted when evidence is incomplete. */
+  decisionEvidenceToken?: string | null
 }
 
 export type TradePartnerSuggestion = {

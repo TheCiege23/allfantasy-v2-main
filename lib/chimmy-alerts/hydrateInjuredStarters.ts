@@ -15,6 +15,8 @@
 
 import type { InjuredStarterSignal } from './types'
 
+type AlertPortfolio = Parameters<typeof buildInjuredStarterSignals>[0]
+
 /** Designations that put availability genuinely in doubt. Mirrors the detector's tier. */
 const URGENT_STATUSES = new Set(['out', 'doubtful', 'ir', 'suspended'])
 
@@ -57,6 +59,7 @@ export function buildInjuredStarterSignals(portfolio: {
       canonicalLeagueId: string
       leagueName: string
       provider: string
+      playerId: string
       rosterStatus: string
     }>
   }>
@@ -144,5 +147,72 @@ export async function hydrateInjuredStarters(args: {
     sport: args.sport ?? 'NFL',
     requestTime: args.requestTime,
   })
-  return buildInjuredStarterSignals(portfolio as never)
+  const verified = await verifySleeperLineupAssignments(portfolio as never, args.appUserId)
+  return buildInjuredStarterSignals(verified)
+}
+
+/**
+ * Re-check Sleeper against the provider's lineup for the league's current scoring week.
+ * The portfolio is a useful cross-league cache, but it can lag a lineup move. An alert that
+ * says a benched player is "still starting" is worse than no alert, so Sleeper appearances
+ * fail closed when the live roster/week cannot be verified.
+ */
+async function verifySleeperLineupAssignments(
+  portfolio: AlertPortfolio,
+  appUserId: string,
+): Promise<AlertPortfolio> {
+  const sleeperLeagueIds = new Set(
+    portfolio.items.flatMap((item) => item.leagueAppearances)
+      .filter((appearance) => appearance.provider === 'sleeper')
+      .map((appearance) => appearance.canonicalLeagueId),
+  )
+  if (sleeperLeagueIds.size === 0) return portfolio
+
+  const [{ prisma }, { resolveLinkedPlatformUserIds }, { currentSleeperRoster }] = await Promise.all([
+    import('@/lib/prisma'),
+    import('@/lib/shared-services/game-day/UserPlayerExposureService'),
+    import('@/lib/core-app/currentSleeperRoster'),
+  ])
+  const linkedIds = await resolveLinkedPlatformUserIds(appUserId)
+  if (linkedIds.length === 0) return withoutUnverifiedSleeperAppearances(portfolio, new Map())
+
+  const rosters = await prisma.roster.findMany({
+    where: { leagueId: { in: [...sleeperLeagueIds] }, platformUserId: { in: linkedIds } },
+    select: {
+      leagueId: true,
+      platformUserId: true,
+      league: { select: { platform: true, platformLeagueId: true } },
+    },
+  })
+  const liveByLeague = new Map<string, { starters: Set<string>; players: Set<string> }>()
+  await Promise.all(rosters.map(async (roster) => {
+    if (String(roster.league.platform).toLowerCase() !== 'sleeper') return
+    const live = await currentSleeperRoster(roster.league.platformLeagueId, {
+      platformUserId: roster.platformUserId,
+    }).catch(() => null)
+    if (!live || !Array.isArray(live.starters) || !Array.isArray(live.players)) return
+    liveByLeague.set(roster.leagueId, {
+      starters: new Set(live.starters.filter((id): id is string => typeof id === 'string' && id !== '0')),
+      players: new Set(live.players.filter((id): id is string => typeof id === 'string')),
+    })
+  }))
+  return withoutUnverifiedSleeperAppearances(portfolio, liveByLeague)
+}
+
+export function withoutUnverifiedSleeperAppearances(
+  portfolio: AlertPortfolio,
+  liveByLeague: Map<string, { starters: Set<string>; players: Set<string> }>,
+): AlertPortfolio {
+  return {
+    ...portfolio,
+    items: portfolio.items.map((item) => ({
+      ...item,
+      leagueAppearances: item.leagueAppearances.flatMap((appearance) => {
+        if (appearance.provider !== 'sleeper') return [appearance]
+        const live = liveByLeague.get(appearance.canonicalLeagueId)
+        if (!live || !live.players.has(appearance.playerId)) return []
+        return [{ ...appearance, rosterStatus: live.starters.has(appearance.playerId) ? 'starter' : 'bench' }]
+      }),
+    })),
+  }
 }
