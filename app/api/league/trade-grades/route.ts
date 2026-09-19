@@ -3,6 +3,9 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { getImportedTradeLedger } from '@/lib/trade-intel/importedTradeLedgerService'
+import { getCurrentUserRosterIdForLeague } from '@/lib/live-draft-engine/auth'
+import { isCommissioner } from '@/lib/commissioner/permissions'
+import { buildDraftTradeAiReview } from '@/lib/live-draft-engine/DraftTradeAiReviewService'
 import { getReconciledTradeGrades } from '@/lib/core-app/sleeperTradeHistory'
 
 export const dynamic = 'force-dynamic'
@@ -69,6 +72,61 @@ export async function GET(req: NextRequest) {
           assets: p.assets.map(a => a.playerName || (a.assetType === 'draft_pick' ? `${a.pickSeason ?? '?'} round ${a.pickRound ?? '?'} pick` : a.assetType)),
           grade: graded ? p.valueSnapshot!.grade : null,
           explanation: graded ? (payload?.grade?.bullets ?? []).join(' ') || 'Snapshot of trade fairness when proposed.' : 'Not enough verified valuation data to grade this proposal.',
+        }
+      }),
+      nextCursor: proposals.length > 50 ? proposals[49].id : null,
+    }, { headers: { 'Cache-Control': 'private, no-store' } })
+  }
+  if (req.nextUrl.searchParams.get('view') === 'draft-proposals') {
+    const cursor = req.nextUrl.searchParams.get('cursor')
+    const [viewerRosterId, commissioner] = await Promise.all([
+      getCurrentUserRosterIdForLeague(league.id, userId),
+      isCommissioner(league.id, userId),
+    ])
+    const participantVisibility = viewerRosterId
+      ? [{ proposerRosterId: viewerRosterId }, { receiverRosterId: viewerRosterId }]
+      : []
+    const proposals = await (prisma as any).draftPickTradeProposal.findMany({
+      where: {
+        session: { leagueId: league.id },
+        ...(commissioner ? {} : { OR: [...participantVisibility, { status: 'accepted' }] }),
+      },
+      orderBy: { id: 'desc' },
+      ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+      take: 51,
+      select: {
+        id: true, status: true, createdAt: true,
+        proposerRosterId: true, receiverRosterId: true,
+        proposerName: true, receiverName: true,
+        giveRound: true, giveSlot: true,
+        receiveRound: true, receiveSlot: true,
+        session: { select: { teamCount: true, draftType: true, thirdRoundReversal: true } },
+      },
+    }) as Array<any>
+    return NextResponse.json({
+      proposals: proposals.slice(0, 50).map(p => {
+        // Receiver point of view: they give receive* and get give*.
+        const review = buildDraftTradeAiReview({
+          giveRound: p.receiveRound,
+          giveSlot: p.receiveSlot,
+          receiveRound: p.giveRound,
+          receiveSlot: p.giveSlot,
+          teamCount: p.session.teamCount,
+          draftType: p.session.draftType,
+          thirdRoundReversal: p.session.thirdRoundReversal,
+        })
+        return {
+          id: p.id,
+          status: p.status,
+          createdAt: p.createdAt,
+          title: `${p.proposerName || 'Proposer'} → ${p.receiverName || 'Receiver'}`,
+          involvesYou: p.proposerRosterId === viewerRosterId || p.receiverRosterId === viewerRosterId,
+          assets: [
+            `${p.proposerName || 'Proposer'} offers pick ${p.giveRound}.${String(p.giveSlot).padStart(2, '0')}`,
+            `${p.receiverName || 'Receiver'} offers pick ${p.receiveRound}.${String(p.receiveSlot).padStart(2, '0')}`,
+          ],
+          grade: review.verdict.toUpperCase(),
+          explanation: `Receiver-side draft-capital verdict: ${review.summary}`,
         }
       }),
       nextCursor: proposals.length > 50 ? proposals[49].id : null,
