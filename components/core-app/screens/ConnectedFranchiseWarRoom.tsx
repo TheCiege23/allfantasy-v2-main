@@ -126,7 +126,7 @@ export function ConnectedFranchiseWarRoom({
       const body = (await response.json()) as { error?: string; dissolved?: boolean }
       if (!response.ok) throw new Error(body.error ?? 'Could not update this franchise')
       setNotice(body.dissolved ? 'The shared hub was dissolved. Each league is separate again.' : 'Franchise updated.')
-      if (body.dissolved) router.push('/core/my-leagues')
+      if (body.dissolved) router.push('/leagues')
       else router.refresh()
     } catch (error) {
       setMappingError(error instanceof Error ? error.message : 'Could not update this franchise')
