@@ -2,6 +2,10 @@ import { getServerSession } from 'next-auth'
 import { NextRequest, NextResponse } from 'next/server'
 import { authOptions } from '@/lib/auth'
 import { updateTournamentSettings } from '@/lib/tournament/updateTournamentSettings'
+import {
+  applyConferencePlan,
+  type ConferencePlanItem,
+} from '@/lib/tournament/manageConferences'
 
 /**
  * Change a tournament's rules after creation.
@@ -24,6 +28,39 @@ export async function PATCH(
     body = await request.json()
   } catch {
     return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
+  }
+
+  if (Array.isArray(body.conferencePlan)) {
+    const parseConferencePlan = (items: Array<Record<string, unknown>>): ConferencePlanItem[] =>
+      items.map((conference) => ({
+        ...(conference.id === undefined ? {} : { id: String(conference.id) }),
+        clientId: String(conference.clientId ?? ''),
+        name: String(conference.name ?? ''),
+        colorHex: conference.colorHex == null ? null : String(conference.colorHex),
+        active: Boolean(conference.active),
+        leagueIds: Array.isArray(conference.leagueIds)
+          ? conference.leagueIds.map((id) => String(id))
+          : [],
+      }))
+    const result = await applyConferencePlan({
+      tournamentId,
+      commissionerUserId: userId,
+      conferences: parseConferencePlan(body.conferencePlan as Array<Record<string, unknown>>),
+      ...(Array.isArray(body.expectedConferencePlan)
+        ? {
+            expectedConferences: parseConferencePlan(
+              body.expectedConferencePlan as Array<Record<string, unknown>>,
+            ),
+          }
+        : {}),
+    })
+    if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status })
+    return NextResponse.json({
+      ...result,
+      note: result.movedLeagues > 0
+        ? `Saved. ${result.movedLeagues} ${result.movedLeagues === 1 ? 'league is' : 'leagues are'} now tracked in the corrected conference.`
+        : 'Conference setup saved.',
+    })
   }
 
   /* Only forward keys the caller actually sent, so the PATCH semantics above

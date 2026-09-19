@@ -247,6 +247,84 @@
   border: 0;
 }
 
+/* Commissioner conference editor */
+.af-th-manage-head,
+.af-th-manage-toolbar,
+.af-th-manage-archive-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.af-th-manage-search { flex: 1; max-width: 420px; }
+
+.af-th-manage-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 360px), 1fr));
+  gap: 16px;
+  margin: 16px 0;
+}
+
+.af-th-manage-conf,
+.af-th-manage-review-conf {
+  border: 1px solid var(--af-line, rgba(255,255,255,.12));
+  border-radius: 12px;
+  padding: 14px;
+  background: rgba(255,255,255,.025);
+}
+
+.af-th-manage-list {
+  display: grid;
+  gap: 8px;
+  padding: 0;
+  margin: 12px 0;
+  list-style: none;
+}
+
+.af-th-manage-league {
+  display: grid;
+  grid-template-columns: auto minmax(120px, 1fr) auto minmax(130px, auto);
+  gap: 8px;
+  align-items: center;
+  padding: 9px;
+  border: 1px solid var(--af-line, rgba(255,255,255,.1));
+  border-radius: 9px;
+  background: var(--af-panel, rgba(5,8,18,.72));
+}
+
+.af-th-manage-league[draggable="true"] { cursor: grab; }
+.af-th-manage-league[draggable="true"]:active { cursor: grabbing; }
+.af-th-manage-grip { color: var(--af-muted, #8b93a7); letter-spacing: -3px; }
+.af-th-manage-league-name { display: grid; gap: 2px; min-width: 0; }
+.af-th-manage-league-name strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.af-th-manage-league-name small { color: var(--af-muted, #8b93a7); }
+.af-th-manage-order { display: flex; gap: 3px; }
+.af-th-linkbtn--danger { color: #fb7185; }
+
+.af-th-manage-archived,
+.af-th-manage-review {
+  margin: 16px 0;
+  border-top: 1px solid var(--af-line, rgba(255,255,255,.1));
+  padding-top: 14px;
+}
+
+.af-th-manage-archived summary { cursor: pointer; font-weight: 700; }
+.af-th-manage-archive-row { padding: 8px 0; }
+.af-th-manage-summary { display: flex; flex-wrap: wrap; gap: 8px 24px; padding-left: 20px; }
+.af-th-manage-review-conf { margin: 10px 0; }
+.af-th-manage-review-conf h4 { margin: 0 0 8px; }
+.af-th-manage-review-conf li { margin: 5px 0; }
+.af-th-manage-review-conf .af-th-chip { margin-left: 8px; }
+
+@media (max-width: 700px) {
+  .af-th-manage-head,
+  .af-th-manage-toolbar { align-items: stretch; flex-direction: column; }
+  .af-th-manage-search { max-width: none; }
+  .af-th-manage-league { grid-template-columns: auto minmax(0, 1fr) auto; }
+  .af-th-manage-league .af-th-select { grid-column: 2 / -1; width: 100%; }
+}
+
 /* ── Tournament setup ────────────────────────────────────────────────────
  * Appended at top level; this file still has no `@media` blocks.
  */
