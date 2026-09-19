@@ -39,10 +39,51 @@
     "13px (iOS Safari zooms on focus and never back out) and .af-nav-support at 36px",
     "tall, 8px short of a floor the rest of /core already holds. Only the help dots",
     "are deferred, and only because reaching 44px there changes the design rather",
-    "than the stylesheet. Baseline what you cannot fix mechanically; fix the rest."
+    "than the stylesheet. Baseline what you cannot fix mechanically; fix the rest.",
+    "",
+    "WHAT /core FOUND WHEN IT WAS ADDED (2026-09-19), AND WHY IT ADDED NO NEW DEBT.",
+    "The home screen measured at 390px reported exactly two undersized controls, and",
+    "both are the help dots already deferred above -- they live in AfCoreShell's",
+    "topbar, so they are on every /core screen and a second route was always going to",
+    "re-report them. Nothing else: the premise guard held, there was no sideways",
+    "overflow, and ZERO sub-16px fields.",
+    "",
+    "⚠ AND THE POSITIVE CONTROL FOR THIS ROUTE DID NOT REPRODUCE, WHICH IS WHY THIS",
+    "PARAGRAPH REPLACED THE ONE THAT CLAIMED IT WOULD. The first draft asserted that",
+    "removing af-core.css's shell-wide iOS zoom floor would make /core report",
+    ".af3a-search-input at 13px. Measured by doing exactly that -- floor stripped,",
+    "mutation asserted applied, database reset, route re-run -- and /core PASSED.",
+    "",
+    "The field is in the DOM and is not visible on this route: Dashboard3A ships its",
+    "own topbar for a standalone render, and af-core-shell.css:822 sets",
+    "`.af-content .af3a-topbar { display: none }` so the embedded copy does not",
+    "double the shell's chrome. CoreHomeCards is rendered only from",
+    "app/core/[[...screen]]/page.tsx, always inside .af-content, so that input is not",
+    "reachable anywhere in the product today. The probe is right to skip it.",
+    "",
+    "WHAT TO TAKE FROM THAT: this route certifies a screen rather than rescuing one,",
+    "and a claim about what a gate CATCHES is worth nothing until the gate has been",
+    "seen to catch it. The control cost one run and stopped a false sentence from",
+    "becoming the permanent record here."
   ],
   "routes": {
     "/commissioner-os": [],
+    "/core": [
+      {
+        "cls": "af-help-dot",
+        "label": "Read-only by design",
+        "w": 15,
+        "h": 15,
+        "why": "THE SAME TWO SHELL CONTROLS ALREADY DEFERRED ON /core/trades, not new debt. They live in AfCoreShell's topbar, so they are on EVERY /core screen; measuring a second route was always going to re-report them. Deferred for the reason recorded below: a 15x15 info dot cannot reach 44x44 by min-height, it needs an expanded hit area that shifts layout around a deliberately small affordance. Retire both routes' entries together when the shell's help affordances are next touched."
+      },
+      {
+        "cls": "af-help-dot",
+        "label": "Plan tokens",
+        "w": 15,
+        "h": 15,
+        "why": "Same control, second instance. See above."
+      }
+    ],
     "/core/trades": [
       {
         "cls": "af-help-dot",
