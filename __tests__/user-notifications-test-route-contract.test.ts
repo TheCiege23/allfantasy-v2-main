@@ -140,6 +140,97 @@ describe("User notifications test route contracts", () => {
     expect(sendSmsMock).toHaveBeenCalledTimes(1)
   })
 
+  /*
+   * 🛑 THE ONE CHANNEL WHOSE FAILURE HAD NO REASON, ON THE ONE SCREEN WHOSE JOB IS REASONS.
+   *
+   * `createPlatformNotification` catches everything and returns false — a dead connection, a
+   * missing table and a P2022 column mismatch are indistinguishable from here. Email and SMS
+   * each push their own `*_send_failed`; in-app pushed nothing, so the response was `ok:false`
+   * with an EMPTY `blockedReasons`, and the settings screen fell through to a generic "Failed to
+   * send test notification." for the most-used channel in the product.
+   */
+  it("names the channel when the in-app write fails, like email and SMS already do", async () => {
+    createPlatformNotificationMock.mockResolvedValueOnce(false)
+    const { POST } = await import("@/app/api/user/notifications/test/route")
+    const res = await POST(
+      createMockNextRequest("http://localhost/api/user/notifications/test", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          category: "ai_alerts",
+          channels: { inApp: true, email: false, sms: false },
+        }),
+      }) as any
+    )
+
+    expect(res.status).toBe(200)
+    const payload = await res.json()
+    expect(payload.ok).toBe(false)
+    expect(payload.sent.inApp).toBe(false)
+    expect(payload.blockedReasons).toContain("inapp_send_failed")
+  })
+
+  /*
+   * ⚠ THE CONTROL AGAINST OVER-ROTATING. The reason must appear only when the write actually
+   * failed — a "fix" that pushed it unconditionally would satisfy the test above and report
+   * every healthy send as broken.
+   */
+  it("says nothing about in-app when the write succeeds", async () => {
+    const { POST } = await import("@/app/api/user/notifications/test/route")
+    const res = await POST(
+      createMockNextRequest("http://localhost/api/user/notifications/test", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          category: "ai_alerts",
+          channels: { inApp: true, email: false, sms: false },
+        }),
+      }) as any
+    )
+
+    const payload = await res.json()
+    expect(payload.ok).toBe(true)
+    expect(payload.sent.inApp).toBe(true)
+    expect(payload.blockedReasons).not.toContain("inapp_send_failed")
+  })
+
+  /*
+   * ⚠ AND THE PARTIAL CASE THE SETTINGS SCREEN USED TO SWALLOW: one channel sends, another is
+   * blocked. The ROUTE has always reported both — it was the screen that rendered only the half
+   * that worked. Pinning the payload here keeps it honest for whatever renders it next.
+   */
+  it("reports the blocked channel even when another one sent", async () => {
+    getSettingsProfileMock.mockResolvedValueOnce({
+      email: "user@example.com",
+      phone: "+15551234567",
+      /* Unverified: SMS is unavailable while email is fine. */
+      phoneVerifiedAt: null,
+      notificationPreferences: {
+        globalEnabled: true,
+        categories: {
+          ai_alerts: { enabled: true, inApp: false, email: true, sms: true },
+        },
+      },
+    })
+    const { POST } = await import("@/app/api/user/notifications/test/route")
+    const res = await POST(
+      createMockNextRequest("http://localhost/api/user/notifications/test", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          category: "ai_alerts",
+          channels: { inApp: false, email: true, sms: true },
+        }),
+      }) as any
+    )
+
+    const payload = await res.json()
+    expect(payload.ok).toBe(true)
+    expect(payload.sent.email).toBe(true)
+    expect(payload.sent.sms).toBe(false)
+    expect((payload.blockedReasons ?? []).length).toBeGreaterThan(0)
+  })
+
   it("reports blocked reasons when category is disabled", async () => {
     getSettingsProfileMock.mockResolvedValueOnce({
       email: "user@example.com",
