@@ -34,6 +34,7 @@ import { connectedRosterPlayers, type ConnectedRosterPlayer } from './connectedR
 import { prisma } from '@/lib/prisma'
 import { getDraftHqAll } from './draftHqAll'
 import { getLeagueActivity } from './leagueActivity'
+import { leagueContextFor, type LeagueContext } from './leagueContext'
 import type { FranchiseRole } from '@/lib/franchise/franchiseLink'
 
 /** One half of a franchise, described identically whichever half it is. */
@@ -137,11 +138,9 @@ export type PairedHalf = {
  */
 async function membershipKeyFor(
   leagueId: string,
+  leagueContext: LeagueContext,
 ): Promise<{ platform: string; memberLeagueId: string } | null> {
-  const league = await prisma.league.findUnique({
-    where: { id: leagueId },
-    select: { id: true, platform: true, platformLeagueId: true },
-  })
+  const league = await leagueContext.league()
   if (!league) return null
   const platform = String(league.platform ?? '').toLowerCase()
   /*
@@ -165,10 +164,11 @@ async function membershipKeyFor(
 export async function resolvePairedHalf(
   leagueId: string,
   ownerUserId: string,
-  options?: { includeOperationalSummary?: boolean },
+  options?: { includeOperationalSummary?: boolean; leagueContext?: LeagueContext | null },
 ): Promise<PairedHalf | null> {
   const includeOperationalSummary = options?.includeOperationalSummary ?? true
-  const key = await membershipKeyFor(leagueId)
+  const leagueContext = leagueContextFor(leagueId, ownerUserId, options?.leagueContext)
+  const key = await membershipKeyFor(leagueId, leagueContext)
   if (!key) return null
 
   // Legacy imports may retain the snapshot ID, mirror ID, or provider ID.
@@ -354,12 +354,14 @@ export async function resolvePairedHalf(
       }
     }
 
-    const lg = await prisma.league.findUnique({
-      where: { id: member.leagueId },
-      /* platformLeagueId is required by getLeagueActivity — imported rows are
-         keyed on the PROVIDER league id, not ours. */
-      select: { id: true, name: true, season: true, platformLeagueId: true, sport: true, lastSyncedAt: true },
-    })
+    const lg = member.leagueId === leagueContext.leagueId
+      ? await leagueContext.league()
+      : await prisma.league.findUnique({
+          where: { id: member.leagueId },
+          /* platformLeagueId is required by getLeagueActivity — imported rows are
+             keyed on the PROVIDER league id, not ours. */
+          select: { id: true, name: true, season: true, platformLeagueId: true, sport: true, lastSyncedAt: true },
+        })
     /*
      * ⚠ THE ROSTER COUNT IS READ FROM THE CLAIMED TEAM, NOT FROM THE LEAGUE. A
      * league-wide count would report every manager's players as yours.

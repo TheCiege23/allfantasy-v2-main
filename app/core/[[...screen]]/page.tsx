@@ -2194,7 +2194,10 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
       ? getScoutData(selectedLeagueId, userId, leagueCtx).catch(() => null)
       : Promise.resolve(null),
     connectedToolScreen && selectedLeagueId
-      ? resolvePairedHalf(selectedLeagueId, userId, { includeOperationalSummary: activeKey === 'war-room' }).catch(() => null)
+      ? resolvePairedHalf(selectedLeagueId, userId, {
+          includeOperationalSummary: activeKey === 'war-room',
+          leagueContext: leagueCtx,
+        }).catch(() => null)
       : Promise.resolve(null),
   ])
 
