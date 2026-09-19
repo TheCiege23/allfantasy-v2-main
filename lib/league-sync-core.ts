@@ -11,6 +11,7 @@ import {
   LeagueDeletedByUserError,
 } from '@/lib/league-delete/leagueTombstones';
 import { carryAfOwnedLeagueSettings } from '@/lib/league/afOwnedLeagueSettings';
+import { rosterSourceTeamId } from '@/lib/league-import/importedRosterIdentity';
 import { XMLParser } from 'fast-xml-parser';
 
 export interface LeaguePayload {
@@ -25,6 +26,17 @@ export interface LeaguePayload {
     platformUserId: string;
     playerData: string[];
     faabRemaining: number | null;
+    /**
+     * The PROVIDER'S TEAM ID, where the provider distinguishes it from the manager.
+     *
+     * 🛑 ONLY SLEEPER NEEDS THIS, AND THAT IS THE WHOLE POINT. Every other branch below already
+     * puts a team id in `platformUserId` — MFL sends the franchise id, ESPN `team.id`, Yahoo the
+     * `team_key` — so their rows survive a manager change untouched. Sleeper sends `owner_id`, a
+     * MANAGER, so when a team changes hands this path stops finding the old row and writes a second
+     * one for the same team. `lib/trade-intel/tradeContextNotes.ts` records that happening and
+     * works around it with "newest write wins".
+     */
+    sourceTeamId?: string | null;
   }[];
 }
 
@@ -78,6 +90,9 @@ export async function fetchSleeperLeague(platformLeagueId: string): Promise<Leag
       .filter((r: any) => !!r.owner_id)
       .map((r: any) => ({
         platformUserId: r.owner_id,
+        // The team, carried alongside the manager so the write below can find the row this team
+        // already has rather than the row its CURRENT manager happens to key.
+        sourceTeamId: r.roster_id != null ? String(r.roster_id) : null,
         playerData: r.players || [],
         faabRemaining: r.settings?.waiver_budget_used != null
           ? Math.max(0, 100 - r.settings.waiver_budget_used)
@@ -433,6 +448,46 @@ export async function fetchLeaguePayload(
   }
 }
 
+/**
+ * The row this team already has in the unified league, found the way the modern stack finds it.
+ *
+ * Team id first (`importedRosterIdentity.rosterSourceTeamId`, the same reader the import bootstrap
+ * and the redraft reconciler use), so a team that changed manager keeps ONE row. Falls back to the
+ * manager key, which is what every branch except Sleeper effectively passes anyway.
+ *
+ * ⚠ RETURNS NULL RATHER THAN GUESSING when several rows carry the same team id. Two rows for one
+ * team is the damage this is meant to stop, and picking one would silently pick a vintage; the
+ * caller then upserts on the key, which is exactly the old behaviour and no worse.
+ */
+export function findRosterRowForLegacySync<
+  T extends { id: string; platformUserId: string; playerData: unknown },
+>(storedRows: readonly T[], roster: { platformUserId: string; sourceTeamId?: string | null }): T | null {
+  const teamId = String(roster.sourceTeamId ?? '').trim();
+  if (teamId) {
+    const matches = storedRows.filter((r) => rosterSourceTeamId(r.playerData) === teamId);
+    if (matches.length === 1) return matches[0];
+    if (matches.length > 1) return null;
+  }
+  return storedRows.find((r) => r.platformUserId === roster.platformUserId) ?? null;
+}
+
+/**
+ * 🛑 A BARE ARRAY MUST NEVER REPLACE THE OBJECT THE REST OF THE APP READS.
+ *
+ * This path writes `playerData` as a plain list of player ids. Every modern writer stores an OBJECT
+ * — `players`, `starters`, `reserve`, `taxi`, `source_team_id`, the import record — and the war
+ * rooms, the lineup surfaces and `rosterSourceTeamId` all read those keys. Overwriting the object
+ * with the list strips a roster of its lineup and of the only id that ties it to its team, until
+ * the collector happens to rewrite it.
+ *
+ * So the list updates the `players` key IN PLACE and leaves every other key alone. A row that is
+ * already a bare array, or that has nothing stored, just takes the list.
+ */
+export function mergeLegacyPlayerData(stored: unknown, incoming: string[]): unknown {
+  if (!stored || typeof stored !== 'object' || Array.isArray(stored)) return incoming;
+  return { ...(stored as Record<string, unknown>), players: incoming };
+}
+
 export async function syncLeague(
   userId: string,
   platform: string,
@@ -507,24 +562,46 @@ export async function syncLeague(
     },
   });
 
+  /*
+   * The league's rows, read ONCE. Matching is pure from here, so a twelve-team league costs one
+   * query rather than twelve full-league reads.
+   */
+  const storedRows = await (prisma as any).roster.findMany({
+    where: { leagueId: league.id },
+    select: { id: true, platformUserId: true, playerData: true },
+  });
+
   let rosterCount = 0;
   for (const roster of leaguePayload.rosters) {
-    await (prisma as any).roster.upsert({
-      where: {
-        leagueId_platformUserId: { leagueId: league.id, platformUserId: roster.platformUserId },
-      },
-      update: {
-        playerData: roster.playerData,
-        faabRemaining: roster.faabRemaining,
-        updatedAt: new Date(),
-      },
-      create: {
-        leagueId: league.id,
-        platformUserId: roster.platformUserId,
-        playerData: roster.playerData,
-        faabRemaining: roster.faabRemaining,
-      },
-    });
+    /*
+     * 🛑 FIND THE TEAM'S ROW, NOT THE MANAGER'S KEY. Upserting on
+     * `leagueId_platformUserId` writes a SECOND row the moment a Sleeper team changes hands: the
+     * old row keeps the old manager's key and nothing here ever looks at it again. That is the
+     * ghost-row shape `importedRosterIdentity.ts` exists to prevent, and 33 of them were deleted
+     * from production on 2026-09-17.
+     */
+    const stored = findRosterRowForLegacySync(storedRows, roster);
+    const playerData = mergeLegacyPlayerData(stored?.playerData, roster.playerData);
+
+    if (stored) {
+      await (prisma as any).roster.update({
+        where: { id: stored.id },
+        data: { playerData, faabRemaining: roster.faabRemaining, updatedAt: new Date() },
+      });
+    } else {
+      await (prisma as any).roster.upsert({
+        where: {
+          leagueId_platformUserId: { leagueId: league.id, platformUserId: roster.platformUserId },
+        },
+        update: { playerData, faabRemaining: roster.faabRemaining, updatedAt: new Date() },
+        create: {
+          leagueId: league.id,
+          platformUserId: roster.platformUserId,
+          playerData,
+          faabRemaining: roster.faabRemaining,
+        },
+      });
+    }
     rosterCount++;
   }
 
