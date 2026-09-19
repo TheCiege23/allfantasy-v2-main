@@ -59,7 +59,15 @@ export const FANTRAX_ENDPOINTS = [
 export type FantraxSport = 'CFB' | 'NCAAF' | 'NFL'
 
 export type FantraxFailure = {
-  kind: 'not_found' | 'api_error' | 'not_json' | 'network'
+  /**
+   * ⚠ `unavailable` IS NOT A FLAVOUR OF `api_error`, AND THE SPLIT IS LOAD-BEARING.
+   * `api_error` means Fantrax answered and said no — a settled response worded into a 200
+   * body, or an endpoint that returned no rows. `unavailable` means it did not answer at
+   * all: a throttle, a 5xx, or a timeout. Callers turn the first into "that league is not
+   * there" and the second into "try again shortly", and `lib/import-os/collector/
+   * normalizedLoader.ts` turns them into a SKIP and a RETRY respectively.
+   */
+  kind: 'not_found' | 'api_error' | 'not_json' | 'network' | 'unavailable'
   /** Safe to log — no credential is involved; this API is unauthenticated. */
   message: string
 }
@@ -249,24 +257,86 @@ export function humanizeVendorMessage(raw: string | null | undefined): string {
     .trim()
 }
 
+/** Bounded: enough to ride out a blip without prolonging an outage. */
+const FXEA_RETRIES = 3
+const FXEA_TIMEOUT_MS = 15_000
+
 /**
- * One GET, with Fantrax's 200-for-errors behaviour handled.
+ * 408/429/5xx are "ask again shortly". A 400 is NOT one of them, deliberately: a
+ * wrong-case league id returns HTTP 400 with a web page, which is a settled answer about
+ * that id and is what the case-sensitivity message below exists to explain.
+ */
+function isTransientFantraxStatus(status: number): boolean {
+  return status === 408 || status === 429 || status >= 500
+}
+
+function describeTransientFantraxStatus(status: number): string {
+  if (status === 429) {
+    return 'Fantrax is rate-limiting us right now — your league is fine. Wait about a minute and try again.'
+  }
+  return `Fantrax is having trouble answering (HTTP ${status}). That is on their side — try again shortly.`
+}
+
+function fxeaRetryDelay(attempt: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, 300 * 2 ** attempt))
+}
+
+/**
+ * One GET, with Fantrax's 200-for-errors behaviour handled, a per-attempt timeout, and
+ * bounded retry on transient conditions.
+ *
+ * 🛑 THE STATUS IS READ BEFORE THE BODY IS SNIFFED, AND THAT ORDER IS THE FIX. This
+ * function never looked at `res.status` at all, so a Fantrax 503 or 429 fell through to
+ * the HTML-page heuristic below and was reported as
+ * `Fantrax returned a web page rather than JSON (HTTP 503). League ids are case-sensitive
+ * — check the id exactly as it appears in the league URL.` An outage was presented to the
+ * user as a typo in their league id, and to the collector as a league that is not there.
  */
 async function fxeaGet<T>(path: string): Promise<FantraxResult<T>> {
   let res: Response
-  try {
-    res = await fetch(`${FANTRAX_FXEA_BASE}${path}`, { headers: { Accept: 'application/json' } })
-  } catch (err) {
-    return {
-      ok: false,
-      failure: {
-        kind: 'network',
-        message: `Fantrax request failed: ${err instanceof Error ? err.message : String(err)}`,
-      },
-    }
-  }
+  let text: string
 
-  const text = await res.text().catch(() => '')
+  for (let attempt = 0; ; attempt++) {
+    const isLastAttempt = attempt === FXEA_RETRIES - 1
+    try {
+      const controller = new AbortController()
+      const timer = setTimeout(() => controller.abort(), FXEA_TIMEOUT_MS)
+      try {
+        res = await fetch(`${FANTRAX_FXEA_BASE}${path}`, {
+          headers: { Accept: 'application/json' },
+          signal: controller.signal,
+        })
+      } finally {
+        clearTimeout(timer)
+      }
+    } catch (err) {
+      if (!isLastAttempt) {
+        await fxeaRetryDelay(attempt)
+        continue
+      }
+      return {
+        ok: false,
+        failure: {
+          kind: 'network',
+          message: `Fantrax request failed: ${err instanceof Error ? err.message : String(err)}`,
+        },
+      }
+    }
+
+    if (isTransientFantraxStatus(res.status)) {
+      if (!isLastAttempt) {
+        await fxeaRetryDelay(attempt)
+        continue
+      }
+      return {
+        ok: false,
+        failure: { kind: 'unavailable', message: describeTransientFantraxStatus(res.status) },
+      }
+    }
+
+    text = await res.text().catch(() => '')
+    break
+  }
 
   /*
    * A bad id can return an HTML page rather than JSON. Detecting that before

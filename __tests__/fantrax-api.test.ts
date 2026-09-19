@@ -37,6 +37,100 @@ async function loadIsolated() {
 }
 
 
+/**
+ * 🛑 AN OUTAGE IS NOT A TYPO IN THE LEAGUE ID.
+ *
+ * `fxeaGet` never inspected `res.status`. A Fantrax 503 or 429 answers with a web page, so
+ * it fell straight through to the HTML heuristic and came back as
+ * `Fantrax returned a web page rather than JSON (HTTP 503). League ids are case-sensitive —
+ * check the id exactly as it appears in the league URL.` `importFantraxLeague` then dropped
+ * the failure `kind` entirely, so `FantraxLeagueFetchService` raised
+ * `FantraxImportLeagueNotFoundError` — which the pipeline maps to `LEAGUE_NOT_FOUND` and
+ * `lib/import-os/collector/normalizedLoader.ts` reads as "this league is gone: stop, skip".
+ *
+ * ⚠ 400 IS DELIBERATELY NOT TRANSIENT, and the case-sensitivity test below is why: a
+ * wrong-case league id really does answer 400 with a web page, and that message is the
+ * correct explanation for it. Only 408/429/5xx moved.
+ */
+describe('a provider outage is not a missing league', () => {
+  it('reports a 503 as unavailable rather than as a case-sensitivity problem', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(resp(503, '<!DOCTYPE html><html>Service Unavailable</html>')))
+    const res = await getFantraxLeagueInfo('v2kzedypmm8jp61b')
+
+    expect(res.ok).toBe(false)
+    if (res.ok) return
+    expect(res.failure.message).not.toMatch(/case-sensitive/i)
+    expect(res.failure.kind).toBe('unavailable')
+    expect(res.failure.message).toMatch(/try again shortly/i)
+  })
+
+  it('names a 429 as rate limiting', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(resp(429, 'slow down')))
+    const res = await getFantraxLeagueInfo('v2kzedypmm8jp61b')
+
+    expect(res.ok).toBe(false)
+    if (res.ok) return
+    expect(res.failure.kind).toBe('unavailable')
+    expect(res.failure.message).toMatch(/rate-limiting/i)
+  })
+
+  it('retries a transient status and succeeds when Fantrax recovers', async () => {
+    const body = JSON.stringify({
+      leagueName: 'My C2C League',
+      seasonYear: 2026,
+      teamInfo: { a: { id: 'a', name: 'T' } },
+    })
+    let attempts = 0
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => {
+        attempts++
+        return attempts < 3 ? resp(502, 'bad gateway') : resp(200, body)
+      }),
+    )
+    const res = await getFantraxLeagueInfo('v2kzedypmm8jp61b')
+
+    expect(res.ok).toBe(true)
+    expect(attempts).toBe(3)
+  })
+
+  it('retries a dropped connection, bounded, then reports it as a network failure', async () => {
+    let attempts = 0
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => {
+        attempts++
+        throw new Error('ECONNRESET')
+      }),
+    )
+    const res = await getFantraxLeagueInfo('v2kzedypmm8jp61b')
+
+    expect(res.ok).toBe(false)
+    if (res.ok) return
+    expect(res.failure.kind).toBe('network')
+    expect(attempts).toBe(3)
+  })
+
+  /*
+   * ⚠ THE CONTROL FOR THE RETRY ITSELF. A settled answer must cost one request — retrying
+   * a bad league id three times is exactly the load a 429 asks us to shed.
+   */
+  it('does NOT retry a settled 200-with-error answer', async () => {
+    let attempts = 0
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => {
+        attempts++
+        return resp(200, NOT_FOUND_BODY)
+      }),
+    )
+    const res = await getFantraxLeagueInfo('nope')
+
+    expect(res.ok).toBe(false)
+    expect(attempts).toBe(1)
+  })
+})
+
 describe('a 200 carrying an error is not a league', () => {
   it('treats the 200-with-error body as not_found, not as success', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(resp(200, NOT_FOUND_BODY)))

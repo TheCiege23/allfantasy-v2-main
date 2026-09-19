@@ -64,6 +64,56 @@ export class MflImportConnectionError extends Error {}
 
 export class MflImportLeagueNotFoundError extends Error {}
 
+/**
+ * MFL was reachable in principle but did not answer with data — a throttle, a 5xx, a
+ * request timeout, or a network failure.
+ *
+ * 🛑 DISTINCT FROM "NOT FOUND", AND THE DIFFERENCE IS LOAD-BEARING. Every MFL failure that
+ * was not worded as an auth or missing-league error reached `fetchMflLeagueForImport`'s
+ * catch as an `MflApiResponseError` and was re-thrown as `MflImportLeagueNotFoundError`.
+ * So a 429 or a five-minute MFL outage told the importing user their league id was wrong,
+ * and told the scheduled collector the league was GONE rather than that the provider was
+ * busy — `lib/import-os/collector/normalizedLoader.ts` acts on exactly that distinction
+ * (`LEAGUE_NOT_FOUND` → stop and skip; `PROVIDER_UNAVAILABLE` → retry later).
+ *
+ * Sleeper (`SleeperImportUnavailableError`) and Fleaflicker
+ * (`FleaflickerImportUnavailableError`) both carry this already, each added after the same
+ * misdiagnosis. MFL was the last provider without it.
+ */
+export class MflImportUnavailableError extends Error {
+  /** HTTP status when MFL answered; `null` for a timeout or network error. */
+  readonly status: number | null
+
+  constructor(message: string, status: number | null = null) {
+    super(message)
+    this.name = 'MflImportUnavailableError'
+    this.status = status
+  }
+}
+
+/** Bounded: three attempts is enough to ride out a blip without prolonging an outage. */
+const MFL_FETCH_RETRIES = 3
+const MFL_FETCH_TIMEOUT_MS = 15_000
+
+/**
+ * 408/429/5xx are "ask again shortly". Everything else is a settled answer from MFL and
+ * retrying it only spends the request budget the 429 is asking us to conserve.
+ */
+function isTransientMflStatus(status: number): boolean {
+  return status === 408 || status === 429 || status >= 500
+}
+
+function describeTransientMflStatus(status: number): string {
+  if (status === 429) {
+    return 'MyFantasyLeague is rate-limiting us right now — your league is fine. Wait about a minute and try again.'
+  }
+  return `MyFantasyLeague's API is having trouble (HTTP ${status}). That is on their side — try again shortly.`
+}
+
+function mflRetryDelay(attempt: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, 300 * 2 ** attempt))
+}
+
 const DEFAULT_FETCH_OPTIONS: Required<MflFetchOptions> = {
   includePreviousSeasons: true,
   maxPreviousSeasons: 8,
@@ -245,6 +295,16 @@ function resolveMflErrorMessage(parsed: any, rawBody: string): string | null {
 }
 
 function throwMflApiFailure(status: number, message: string): never {
+  /*
+   * ⚠ STATUS BEFORE WORDING, DELIBERATELY. A throttle or an outage can answer with an HTML
+   * error page whose prose happens to contain "not found", and classifying that by wording
+   * retires a live league on a transient failure. A league that genuinely is not there
+   * answers 200-with-error or 404 — neither is transient — so every case the wording tests
+   * below exist for still reaches them.
+   */
+  if (isTransientMflStatus(status)) {
+    throw new MflImportUnavailableError(describeTransientMflStatus(status), status)
+  }
   const normalized = message.toLowerCase()
   if (
     normalized.includes('league not found') ||
@@ -266,33 +326,89 @@ function throwMflApiFailure(status: number, message: string): never {
   throw new MflApiResponseError(status, message)
 }
 
+/**
+ * One MFL export request, with a per-request timeout and bounded retry on transient
+ * conditions (network error, timeout, 408/429/5xx).
+ *
+ * 🛑 NEVER LOG `url`, AND NEVER PUT IT IN A THROWN MESSAGE. `buildMflEndpointUrl` carries
+ * `APIKEY` in the query string, so a logged MFL request URL publishes a long-lived
+ * credential — the same defect CLAUDE.md records for Rolling Insights' `RSC_token`.
+ *
+ * ⚠ THE TIMEOUT IS PER ATTEMPT, NOT PER CALL. Each attempt gets its own controller, so a
+ * request that hangs is abandoned and retried rather than holding the whole import open
+ * until the serverless function is killed — which is what happened before, because there
+ * was no timeout at all.
+ */
+async function requestMflJson(url: string): Promise<any> {
+  for (let attempt = 0; attempt < MFL_FETCH_RETRIES; attempt++) {
+    const isLastAttempt = attempt === MFL_FETCH_RETRIES - 1
+    let response: Response
+    let body: string
+
+    try {
+      const controller = new AbortController()
+      const timer = setTimeout(() => controller.abort(), MFL_FETCH_TIMEOUT_MS)
+      try {
+        response = await fetch(url, {
+          cache: 'no-store',
+          signal: controller.signal,
+          headers: {
+            Accept: 'application/json, text/xml;q=0.9, */*;q=0.8',
+            'User-Agent': 'Mozilla/5.0 (compatible; AllFantasy/1.0)',
+          },
+        })
+        body = await response.text()
+      } finally {
+        clearTimeout(timer)
+      }
+    } catch (error) {
+      /* A network error or an abort — transient by nature, and never carries a status. */
+      if (!isLastAttempt) {
+        await mflRetryDelay(attempt)
+        continue
+      }
+      const detail = error instanceof Error ? error.message : 'network error'
+      throw new MflImportUnavailableError(
+        `Could not reach MyFantasyLeague after ${MFL_FETCH_RETRIES} attempts (${detail}). Try again shortly.`,
+        null,
+      )
+    }
+
+    if (!response.ok && isTransientMflStatus(response.status) && !isLastAttempt) {
+      await mflRetryDelay(attempt)
+      continue
+    }
+
+    const parsed = parseMflApiBody(body)
+    const message = resolveMflErrorMessage(parsed, body)
+
+    if (!response.ok) {
+      throwMflApiFailure(response.status, message || body || response.statusText)
+    }
+
+    /*
+     * An error worded into a 200 body is MFL's settled answer, not a transient one — it is
+     * how it reports a bad key or a missing league. Retrying it would be three requests for
+     * the same "no".
+     */
+    if (message) {
+      throwMflApiFailure(response.status, message)
+    }
+
+    return parsed
+  }
+
+  /* Unreachable: the loop either returns or throws on its last attempt. */
+  throw new MflImportUnavailableError('MyFantasyLeague request did not complete.', null)
+}
+
 async function fetchMflEndpoint(args: {
   season: number
   leagueId: string
   type: string
   apiKey: string
 }): Promise<any> {
-  const response = await fetch(buildMflEndpointUrl(args), {
-    cache: 'no-store',
-    headers: {
-      Accept: 'application/json, text/xml;q=0.9, */*;q=0.8',
-      'User-Agent': 'Mozilla/5.0 (compatible; AllFantasy/1.0)',
-    },
-  })
-
-  const body = await response.text()
-  const parsed = parseMflApiBody(body)
-  const message = resolveMflErrorMessage(parsed, body)
-
-  if (!response.ok) {
-    throwMflApiFailure(response.status, message || body || response.statusText)
-  }
-
-  if (message) {
-    throwMflApiFailure(response.status, message)
-  }
-
-  return parsed
+  return requestMflJson(buildMflEndpointUrl(args))
 }
 
 /**
@@ -313,19 +429,12 @@ export async function fetchMflUserLeagues(
 ): Promise<Array<{ leagueId: string; franchiseId: string | null }>> {
   const params = new URLSearchParams({ TYPE: 'myleagues', APIKEY: apiKey, JSON: '1' })
   const url = `https://api.myfantasyleague.com/${season}/export?${params.toString()}`
-  const response = await fetch(url, {
-    cache: 'no-store',
-    headers: {
-      Accept: 'application/json, text/xml;q=0.9, */*;q=0.8',
-      'User-Agent': 'Mozilla/5.0 (compatible; AllFantasy/1.0)',
-    },
-  })
-  const body = await response.text()
-  const parsed = parseMflApiBody(body)
-  const message = resolveMflErrorMessage(parsed, body)
-  if (!response.ok || message) {
-    throwMflApiFailure(response.status, message || body || response.statusText)
-  }
+  /*
+   * Same resilient path as every other MFL export — it had its own hand-rolled copy of the
+   * fetch, so it retried nothing and timed out never. This one backs `commissionerGate`'s
+   * membership check, where a single throttled request failed the gate outright.
+   */
+  const parsed = await requestMflJson(url)
   const entries = toArray(parsed?.leagues?.league)
   return entries
     .map((entry) => ({
@@ -1177,7 +1286,16 @@ export async function fetchMflLeagueForImport(
       fetchMflEndpoint({ ...source, type: 'rosters', apiKey: auth.apiKey }),
     ])
   } catch (error) {
-    if (error instanceof MflImportConnectionError || error instanceof MflImportLeagueNotFoundError) {
+    if (
+      error instanceof MflImportConnectionError ||
+      error instanceof MflImportLeagueNotFoundError ||
+      /*
+       * ⚠ MUST NOT BECOME "NOT FOUND". A throttle, a 5xx or a timeout says nothing about
+       * whether this league exists, and the branch below would tell the user their id was
+       * wrong and tell the collector to stop refreshing a live league.
+       */
+      error instanceof MflImportUnavailableError
+    ) {
       throw error
     }
     if (error instanceof MflApiResponseError) {
