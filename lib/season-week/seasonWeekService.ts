@@ -11,7 +11,13 @@ import type { PrismaClient } from '@prisma/client'
 import { prisma as defaultPrisma } from '@/lib/prisma'
 import { normalizeSeasonType } from '@/lib/scores/gameScoreProviders'
 import { mapSportWeekToLeagueWeek } from './leagueSeasonWeek'
-import { resolveSportWeekFromSchedule, sportHasWeekSignal, toScheduleSportKey } from './sportWeekSignal'
+import {
+  relabelDailySportWeeks,
+  resolveSportWeekFromSchedule,
+  sportHasWeekSignal,
+  toScheduleSportKey,
+} from './sportWeekSignal'
+import { resolveDailySportSeasonStart } from './dailySportSeasonStarts'
 import type {
   LeagueSeasonWeekResolution,
   ScheduleRow,
@@ -64,7 +70,22 @@ export async function resolveSportWeek(
   const now = deps.now ?? new Date()
   const scheduleSport = toScheduleSportKey(sport)
 
-  if (!sportHasWeekSignal(scheduleSport)) {
+  /**
+   * A daily sport has no usable week in its feed, but it does have a calendar.
+   * Anchored on the recorded regular-season opener, the week is arithmetic —
+   * and the rows go through the SAME slate/state machinery as everyone else.
+   *
+   * Without this the scheduled reconciliation in `/api/redraft/score-sync`
+   * skips every NBA and NHL season at `skippedUnresolvedWeek`, so their stats
+   * are never summed into `PlayerWeeklyScore`, matchups never recalculate and
+   * standings never update — the league sits at week 1 with nothing red.
+   */
+  const dailyAnchor = sportHasWeekSignal(scheduleSport)
+    ? null
+    : resolveDailySportSeasonStart(scheduleSport, seasonYear)
+
+  if (!sportHasWeekSignal(scheduleSport) && !dailyAnchor) {
+    // Neither a feed week nor a recorded anchor: still genuinely unknown.
     return { ok: false, reason: 'NO_WEEK_SIGNAL' }
   }
 
@@ -86,6 +107,14 @@ export async function resolveSportWeek(
       fetchedAt: true,
     },
   })) as ScheduleRow[]
+
+  // The daily path derives its own weeks and its own season type from the
+  // anchor, so it bypasses the feed's `week` and `seasonType` entirely — both
+  // of which are unusable for these sports (week 0 / 500, seasonType NULL).
+  if (dailyAnchor) {
+    const relabelled = relabelDailySportWeeks(rows, new Date(dailyAnchor))
+    return resolveSportWeekFromSchedule(relabelled, now)
+  }
 
   const strict = requiresExplicitSeasonType(scheduleSport)
   const regularOnly = rows.filter((row) => {
