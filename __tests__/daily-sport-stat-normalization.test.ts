@@ -1,13 +1,14 @@
 /**
  * NBA/NHL weekly stat normalization.
  *
- * These cover the half of the problem that IS knowable from committed sources.
- * The provider key spellings are unverified (ENDPOINTS.yaml: NBA `confidence:
- * low`, NHL `confidence: none`; GAPS.md G-01), so nothing here asserts that a
- * particular vendor field exists. What it does assert is that whatever we
- * extract lands on keys the scoring engine can actually score, that a week of
- * several games is summed rather than sampled, and that an unrecognised payload
- * is loud instead of silently zero.
+ * Asserts that what we extract lands on keys the scoring engine can actually
+ * score, that a week of several games is summed rather than sampled, and that
+ * an unrecognised payload is loud instead of silently zero.
+ *
+ * ✅ The provider spellings are VERIFIED as of 36fcfe71f, which committed
+ * `contracts/rolling-insights/fixtures/live.{NBA,NHL}.json` and resolved
+ * GAPS.md `G-01`. The final describe block pins the real vendor keys; six of
+ * them were wrong in the first version of the alias tables.
  */
 import { describe, expect, it } from 'vitest'
 import { getSportConfig } from '@/lib/sportConfig'
@@ -210,5 +211,86 @@ describe('a daily-sport week is a date window', () => {
     expect(weekWindowFromSeasonStart('not a date', 1)).toBeNull()
     expect(weekWindowFromSeasonStart(start, 0)).toBeNull()
     expect(weekWindowFromSeasonStart(start, -3)).toBeNull()
+  })
+})
+
+/**
+ * Vendor spellings captured verbatim from the committed fixtures
+ * `contracts/rolling-insights/fixtures/live.{NBA,NHL}.json` (landed in
+ * 36fcfe71f, probed 2026-03-15, GAPS.md `G-01` RESOLVED).
+ *
+ * Six of these were WRONG in the first version of the alias tables, which is
+ * why they are pinned individually rather than asserted in bulk: a bulk
+ * "something mapped" assertion passes with half the categories missing.
+ */
+describe('real vendor keys from the committed /live fixtures', () => {
+  const NBA_BOX = {
+    assists: 11, blocks: 1, defensive_rebounds: 8, field_goals_attempted: 20,
+    field_goals_made: 10, fouls: 2, free_throws_attempted: 7, free_throws_made: 6,
+    minutes: 34, offensive_rebounds: 4, points: 30, steals: 2,
+    three_points_attempted: 9, three_points_made: 4, total_rebounds: 12,
+    turnovers: 3, two_points_attempted: 11, two_points_made: 6,
+  }
+
+  const NHL_SKATER = {
+    assists: 1, blocks: 2, faceoffs_lost: 4, faceoffs_won: 6, giveaways: 1,
+    goals: 2, hits: 4, penalty_minutes: 2, plus_minus: 3,
+    power_play_assists: 1, power_play_goals: 1, shootout_goals: 0,
+    short_handed_assists: 0, short_handed_goals: 1, shots_on_goal: 7, takeaways: 2,
+  }
+
+  const NHL_GOALIE = {
+    goals_allowed: 2, loss: 0, overtime_loss: 0, saves: 30,
+    shots_against: 32, shutouts: 0, win: 1,
+  }
+
+  it('maps every NBA category the config can score', () => {
+    const { stats } = normalizeNbaGameStats(NBA_BOX)
+    expect(stats).toMatchObject({
+      pts: 30,
+      reb: 12, // total_rebounds, NOT the oreb+dreb fallback
+      ast: 11,
+      stl: 2,
+      blk: 1,
+      to: 3,
+      threes: 4, // three_points_made — the one-letter miss
+      fgm: 10,
+      ftm: 6,
+    })
+  })
+
+  it('maps every NHL skater category, summing the special-teams halves', () => {
+    const { stats } = normalizeNhlGameStats(NHL_SKATER)
+    expect(stats).toMatchObject({
+      g: 2,
+      a: 1,
+      plusminus: 3,
+      sog: 7,
+      blks: 2,
+      hits: 4,
+      pim: 2,
+      ppp: 2, // power_play_goals 1 + power_play_assists 1
+      shp: 1, // short_handed_goals 1 + short_handed_assists 0
+    })
+  })
+
+  it('maps every NHL goalie category', () => {
+    const { stats } = normalizeNhlGameStats(NHL_GOALIE)
+    expect(stats).toMatchObject({
+      g_win: 1, // "win", singular
+      g_sv: 30,
+      g_so: 0,
+      g_ga: 2, // "goals_allowed", not goals_against
+    })
+  })
+
+  // A category the feed genuinely does not carry must stay absent rather than
+  // being invented as 0 — the scoring engine treats absent and zero alike, but
+  // a fabricated 0 would hide a future mapping regression.
+  it('leaves unmapped vendor extras out of stats but names them', () => {
+    const { stats, unmappedKeys } = normalizeNbaGameStats(NBA_BOX)
+    expect(stats).not.toHaveProperty('minutes')
+    expect(unmappedKeys).toContain('minutes')
+    expect(unmappedKeys).toContain('fouls')
   })
 })

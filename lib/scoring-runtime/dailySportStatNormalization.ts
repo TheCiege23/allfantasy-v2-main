@@ -62,38 +62,60 @@ function asNumber(value: unknown): number | undefined {
  * zero no matter how good the provider mapping is, so they are kept in lockstep
  * and covered by a test.
  *
- * The spellings on the RIGHT are the unverified half. `points`/`rebounds`/
- * `assists`/`steals`/`blocks`/`turnovers` are corroborated by
- * `lib/workers/devy-data-worker.ts`, which already parses basketball rows with
- * those names (and with the same 1.2 / 3 / 3 weights this sport config uses).
+ * ✅ The spellings on the RIGHT are now VERIFIED against the committed fixtures
+ * `contracts/rolling-insights/fixtures/live.{NBA,NHL}.json` (probed 2026-03-15,
+ * `G-01` RESOLVED). The vendor key actually observed is marked `measured`.
+ * Other spellings are kept as tolerated fallbacks — they cost nothing and guard
+ * a feed variant — but the measured one is what fires.
  */
 const NBA_STAT_ALIASES: Readonly<Record<string, readonly string[]>> = {
-  pts: ['pts', 'points', 'PTS'],
-  reb: ['reb', 'rebounds', 'totReb', 'totalRebounds', 'rebounds_total', 'REB'],
-  ast: ['ast', 'assists', 'AST'],
-  stl: ['stl', 'steals', 'STL'],
-  blk: ['blk', 'blocks', 'blocked_shots', 'BLK'],
-  to: ['to', 'tov', 'turnovers', 'turnover', 'TO'],
-  threes: ['threes', 'tpm', 'fg3m', 'three_pointers_made', 'threePointersMade', '3pm'],
-  fgm: ['fgm', 'field_goals_made', 'fieldGoalsMade', 'FGM'],
-  ftm: ['ftm', 'free_throws_made', 'freeThrowsMade', 'FTM'],
+  pts: ['points', 'pts', 'PTS'], //                              measured: points
+  reb: ['total_rebounds', 'reb', 'rebounds', 'totReb', 'REB'], // measured: total_rebounds
+  ast: ['assists', 'ast', 'AST'], //                             measured: assists
+  stl: ['steals', 'stl', 'STL'], //                              measured: steals
+  blk: ['blocks', 'blk', 'blocked_shots', 'BLK'], //             measured: blocks
+  to: ['turnovers', 'to', 'tov', 'turnover', 'TO'], //           measured: turnovers
+  // ⚠ `three_pointS_made`, not `three_pointERS_made`. The guessed spelling was
+  // one letter out, which scores every made three as nothing.
+  threes: ['three_points_made', 'threes', 'tpm', 'fg3m', '3pm'],
+  fgm: ['field_goals_made', 'fgm', 'FGM'], //                    measured: field_goals_made
+  ftm: ['free_throws_made', 'ftm', 'FTM'], //                    measured: free_throws_made
 }
 
-/** Canonical keys from `lib/sportConfig/configs/nhl.ts`. Same split as above. */
+/**
+ * Canonical keys from `lib/sportConfig/configs/nhl.ts`.
+ *
+ * ⚠ NHL splits its box into `skaters` and `goalies`, so one player entry
+ * carries only one group's keys. That split is handled upstream in the ingest
+ * (`rollingInsightsGameLogs.ts`); stats arrive here already flattened.
+ */
 const NHL_STAT_ALIASES: Readonly<Record<string, readonly string[]>> = {
-  g: ['g', 'goals', 'G'],
-  a: ['a', 'assists', 'A'],
-  plusminus: ['plusminus', 'plus_minus', 'plusMinus', '+/-'],
-  sog: ['sog', 'shots', 'shots_on_goal', 'shotsOnGoal', 'SOG'],
-  ppp: ['ppp', 'power_play_points', 'powerPlayPoints', 'PPP'],
-  shp: ['shp', 'short_handed_points', 'shortHandedPoints', 'SHP'],
-  blks: ['blks', 'blocked', 'blocks', 'blocked_shots', 'blockedShots'],
-  hits: ['hits', 'HIT', 'hits_total'],
-  pim: ['pim', 'penalty_minutes', 'penaltyMinutes', 'PIM'],
-  g_win: ['g_win', 'wins', 'goalie_wins', 'goalieWins', 'W'],
-  g_sv: ['g_sv', 'saves', 'goalie_saves', 'goalieSaves', 'SV'],
-  g_so: ['g_so', 'shutouts', 'goalie_shutouts', 'goalieShutouts', 'SO'],
-  g_ga: ['g_ga', 'goals_against', 'goalsAgainst', 'GA'],
+  g: ['goals', 'g', 'G'], //                                     measured: goals
+  a: ['assists', 'a', 'A'], //                                   measured: assists
+  plusminus: ['plus_minus', 'plusminus', 'plusMinus', '+/-'], //  measured: plus_minus
+  sog: ['shots_on_goal', 'sog', 'shots', 'SOG'], //               measured: shots_on_goal
+  // ⚠ The feed carries NO *_points total for either special-teams stat, only
+  // the goal and assist halves — summed below. The guessed single key matched
+  // nothing at all.
+  ppp: ['power_play_points', 'ppp', 'PPP'],
+  shp: ['short_handed_points', 'shp', 'SHP'],
+  blks: ['blocks', 'blks', 'blocked', 'blocked_shots'], //        measured: blocks
+  hits: ['hits', 'HIT'], //                                      measured: hits
+  pim: ['penalty_minutes', 'pim', 'PIM'], //                     measured: penalty_minutes
+  // ⚠ Goalie keys are SINGULAR, and it is "allowed", not "against".
+  g_win: ['win', 'g_win', 'wins', 'goalie_wins', 'W'], //         measured: win
+  g_sv: ['saves', 'g_sv', 'goalie_saves', 'SV'], //               measured: saves
+  g_so: ['shutouts', 'g_so', 'goalie_shutouts', 'SO'], //         measured: shutouts
+  g_ga: ['goals_allowed', 'g_ga', 'goals_against', 'GA'], //      measured: goals_allowed
+}
+
+/**
+ * Stats the feed reports only as component halves. Summed when no single total
+ * key is present, the same way split rebounds are reconstructed for NBA.
+ */
+const NHL_COMPONENT_SUMS: Readonly<Record<string, readonly string[]>> = {
+  ppp: ['power_play_goals', 'power_play_assists'],
+  shp: ['short_handed_goals', 'short_handed_assists'],
 }
 
 /**
@@ -120,6 +142,7 @@ export interface NormalizedGameStats {
 function normalizeWithAliases(
   raw: unknown,
   aliases: Readonly<Record<string, readonly string[]>>,
+  componentSums: Readonly<Record<string, readonly string[]>> = {},
 ): NormalizedGameStats {
   const source = isRecord(raw) && isRecord(raw.stats) ? raw.stats : raw
   if (!isRecord(source)) return { stats: {}, unmappedKeys: [] }
@@ -151,6 +174,24 @@ function normalizeWithAliases(
     }
   }
 
+  // Stats the feed only reports as halves (NHL power-play and short-handed
+  // points). Only fires when no single total key was found, so a feed that
+  // grows one later wins over the reconstruction.
+  for (const [canonical, parts] of Object.entries(componentSums)) {
+    if (stats[canonical] !== undefined) continue
+    let total = 0
+    let found = false
+    for (const part of parts) {
+      const value = asNumber(source[part])
+      if (value !== undefined) {
+        total += value
+        claimed.add(part)
+        found = true
+      }
+    }
+    if (found) stats[canonical] = total
+  }
+
   const unmappedKeys = Object.keys(source).filter(
     (key) => !claimed.has(key) && asNumber(source[key]) !== undefined,
   )
@@ -171,7 +212,7 @@ export function normalizeNbaGameStats(raw: unknown): NormalizedGameStats {
 }
 
 export function normalizeNhlGameStats(raw: unknown): NormalizedGameStats {
-  return normalizeWithAliases(raw, NHL_STAT_ALIASES)
+  return normalizeWithAliases(raw, NHL_STAT_ALIASES, NHL_COMPONENT_SUMS)
 }
 
 /**
