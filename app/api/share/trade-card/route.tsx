@@ -4,6 +4,8 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { getTradeGrades, type TradeSideGrade } from '@/lib/trade-intel/sleeperTradeGradeService'
+import { hasNoSignal } from '@/lib/trade-intel/tradeGradeEmail'
+import { realizedGradeDisplay } from '@/lib/trade-intel/gradeScale'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -29,7 +31,7 @@ function initials(name: string): string {
   return name.trim().slice(0, 2).toUpperCase() || '??'
 }
 
-function SideCol({ side }: { side: TradeSideGrade }) {
+function SideCol({ side, provisional }: { side: TradeSideGrade; provisional: boolean }) {
   const topIn = [
     ...side.playersIn.map((a) => ({
       name: a.name,
@@ -48,6 +50,12 @@ function SideCol({ side }: { side: TradeSideGrade }) {
     .map((s) => `'${s.season.slice(2)} ${s.net > 0 ? '+' : ''}${s.net.toFixed(0)}`)
     .join(' > ')
   const avatarUrl = side.avatar ? `https://sleepercdn.com/avatars/${side.avatar}` : null
+  const display = realizedGradeDisplay({
+    scored: !provisional,
+    currentGrade: side.currentGrade,
+    initialGrade: side.initialGrade,
+    trend: side.trend === 'improving' || side.trend === 'worsening' ? side.trend : 'steady',
+  })
 
   return (
     <div
@@ -101,30 +109,29 @@ function SideCol({ side }: { side: TradeSideGrade }) {
           fontSize: 110,
           fontWeight: 900,
           fontStyle: 'italic',
-          color: GRADE_COLOR[side.currentGrade] ?? '#7fb3ff',
+          color: provisional ? '#5d64a3' : GRADE_COLOR[side.currentGrade] ?? '#7fb3ff',
           marginTop: 4,
           lineHeight: 1,
         }}
       >
-        {side.currentGrade}
+        {display.mark}
       </div>
-      <div style={{ display: 'flex', fontSize: 17, color: '#8b93cf', marginTop: 6 }}>
-        initial {side.initialGrade} · now {side.currentGrade} ·{' '}
-        {side.trend === 'improving' ? 'improving' : side.trend === 'worsening' ? 'worsening' : 'steady'}
-      </div>
-      <div
-        style={{
-          display: 'flex',
-          fontSize: 24,
-          fontWeight: 700,
-          color: side.cumulativeNet >= 0 ? '#3ddc97' : '#ff6b8b',
-          marginTop: 4,
-        }}
-      >
-        net {side.cumulativeNet > 0 ? '+' : ''}
-        {side.cumulativeNet.toFixed(1)} pts
-      </div>
-      {trail ? (
+      <div style={{ display: 'flex', fontSize: 17, color: '#8b93cf', marginTop: 6 }}>{display.caption}</div>
+      {provisional ? null : (
+        <div
+          style={{
+            display: 'flex',
+            fontSize: 24,
+            fontWeight: 700,
+            color: side.cumulativeNet >= 0 ? '#3ddc97' : '#ff6b8b',
+            marginTop: 4,
+          }}
+        >
+          net {side.cumulativeNet > 0 ? '+' : ''}
+          {side.cumulativeNet.toFixed(1)} pts
+        </div>
+      )}
+      {trail && !provisional ? (
         <div style={{ display: 'flex', fontSize: 15, color: '#5d64a3', marginTop: 4 }}>{trail}</div>
       ) : null}
       <div style={{ display: 'flex', flexDirection: 'column', marginTop: 14, alignItems: 'center' }}>
@@ -164,6 +171,21 @@ export async function GET(req: NextRequest) {
   const grades = await getTradeGrades(league.platformLeagueId)
   const trade = grades?.trades.find((t) => t.id === tradeId)
   if (!trade) return NextResponse.json({ error: 'Trade not found in the graded ledger' }, { status: 404 })
+
+  /*
+   * 🛑 THE CARD MUST NOT ANSWER ITS OWN HEADLINE WHEN NOTHING HAS BEEN SCORED.
+   *
+   * Net 0 sits in the middle of the C band (`letterFor`: C is -40..40) and the engine reports a
+   * tie, so a trade with no credited points renders a 110px "C" for every manager under the words
+   * "WHO WON THIS TRADE?" — on an image built to be shared. That is the repo's known trap, and
+   * `hasNoSignal` is the predicate written for it; the grade email has rendered a neutral chip and
+   * a "too early to grade" subject for this case since it was found.
+   *
+   * ⚠ A SHARED IMAGE OUTLIVES ITS DATA. A screen can be reloaded once week 1 is played; a
+   * screenshot in a league chat cannot, so asserting a verdict here is the most durable version of
+   * the mistake.
+   */
+  const provisional = hasNoSignal(trade)
 
   return new ImageResponse(
     (
@@ -206,13 +228,14 @@ export async function GET(req: NextRequest) {
               </div>
               <div style={{ display: 'flex', fontSize: 17, color: '#8b93cf' }}>
                 {trade.season} · week {trade.week}
-                {trade.tie ? ' · DEAD EVEN (so far)' : ''}
+                {/* "Dead even" is a result. With nothing credited there is no result yet. */}
+                {provisional ? ' · not scored yet' : trade.tie ? ' · DEAD EVEN (so far)' : ''}
               </div>
             </div>
           </div>
           <div style={{ display: 'flex', gap: 22, marginTop: 24, flex: 1 }}>
             {trade.sides.slice(0, 3).map((side) => (
-              <SideCol key={side.rosterId} side={side} />
+              <SideCol key={side.rosterId} side={side} provisional={provisional} />
             ))}
           </div>
           <div

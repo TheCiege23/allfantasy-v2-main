@@ -33,6 +33,43 @@ export function letterFor(avgNetPerSeason: number): GradeLetter {
   return 'F'
 }
 
+/* ── Showing a realized grade ──────────────────────────────────────────────
+ *
+ * 🛑 THE BAND PROBLEM AT THE LAST STEP. The header above says why a letter is not safe to read
+ * on its own; this is the other half — what a surface should PUT ON SCREEN once `hasNoSignal()`
+ * has answered. It lives here, beside the bands that create the trap, so a new surface meets the
+ * rule while it is choosing what to render rather than when someone reviews it.
+ *
+ * ⚠ A MARK, NOT A LETTER, AND NOT AN EMPTY STRING. A blank reads as a loading state or a bug; an
+ * em-dash reads as "no verdict", which is what is true. The grade email settled on the same
+ * treatment when this was first found.
+ */
+
+/** Shown in place of a letter when nothing has been credited to either side. */
+export const NO_SIGNAL_MARK = '–'
+export const NO_SIGNAL_CAPTION = 'too early to grade'
+
+/**
+ * The mark and caption for one side of a completed trade.
+ *
+ * ⚠ `scored` IS NAMED FOR WHAT IS TRUE, NOT FOR THE ABSENCE. It is the caller's
+ * `!hasNoSignal(trade)`. A parameter called `noSignal` is one negation away from being passed
+ * backwards, and passed backwards this helper hides every real grade and prints a letter for
+ * every empty one — failing silently in both directions at once.
+ */
+export function realizedGradeDisplay(args: {
+  scored: boolean
+  currentGrade: GradeLetter
+  initialGrade: GradeLetter
+  trend: 'improving' | 'worsening' | 'steady'
+}): { mark: string; caption: string } {
+  if (!args.scored) return { mark: NO_SIGNAL_MARK, caption: NO_SIGNAL_CAPTION }
+  return {
+    mark: args.currentGrade,
+    caption: `initial ${args.initialGrade} · now ${args.currentGrade} · ${args.trend}`,
+  }
+}
+
 /* ── Projected grades ──────────────────────────────────────────────────────
  *
  * ⚠ A PROJECTED GRADE IS NOT A REALIZED ONE AND MUST NOT USE THE BANDS ABOVE.
