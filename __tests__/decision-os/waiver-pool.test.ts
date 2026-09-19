@@ -370,3 +370,87 @@ describe('loadWaiverPool — the league', () => {
     expect(out.rosterPositions).toEqual([])
   })
 })
+/**
+ * 🛑 THE SAME PLAYER CAME BACK TWO AND THREE TIMES, AND THE MANAGER SAW IT.
+ *
+ * Measured against a real 32-team league on the test database: 217 wire rows carried only 141
+ * distinct names. 69 names appeared more than once across 145 of those rows, 26 of the duplicate
+ * groups were priced, and THREE OF SIX suggestions handed to the manager were repeats —
+ * "Blake Corum" twice, "TreVeyon Henderson" and "Treveyon Henderson" as separate picks.
+ *
+ * The cause is upstream: `SportPlayerPoolResolver` dedupes on `name|position|team`, and the club is
+ * stored both as `Los Angeles Rams` and as `LAR`, so one man survives as two rows sharing one
+ * sleeper id and one price.
+ *
+ * ⚠ FOLDING THE CLUB SPELLING WOULD NOT HAVE FIXED IT. The same player also appears with the club
+ * as `FA` and as NULL; "free agent" and "unknown" are not spellings of a club. The sleeper id this
+ * pool already resolves in order to PRICE him is the only reliable identity available here.
+ *
+ * After the fix, on that same league: 174 rows, 33 repeated names, and one repeat reaching the
+ * manager — a name carried by two DIFFERENT sleeper ids, which is the separate identity-duplicate
+ * problem this repo keeps unmerged on purpose.
+ */
+describe('loadWaiverPool — one row per player', () => {
+  it('🛑 collapses the same sleeper id arriving under two club spellings', async () => {
+    getPool.mockResolvedValue([
+      player('a', { external_source_id: '4046', full_name: 'Blake Corum', position: 'RB', team: 'Los Angeles Rams' }),
+      player('b', { external_source_id: '4046', full_name: 'Blake Corum', position: 'RB', team: 'LAR' }),
+    ])
+    const out = await loadWaiverPool('L1', 'NFL')
+    expect(out.availablePlayers).toHaveLength(1)
+    expect(out.availablePlayers[0].value).toBe(2200)
+  })
+
+  it('🛑 and under `FA` or no club at all, which no normaliser could fold together', async () => {
+    getPool.mockResolvedValue([
+      player('a', { external_source_id: '4046', full_name: 'Austin Ekeler', position: 'RB', team: 'Washington Commanders' }),
+      player('b', { external_source_id: '4046', full_name: 'Austin Ekeler', position: 'RB', team: 'FA' }),
+      player('c', { external_source_id: '4046', full_name: 'Austin Ekeler', position: 'RB', team: null }),
+    ])
+    const out = await loadWaiverPool('L1', 'NFL')
+    expect(out.availablePlayers).toHaveLength(1)
+  })
+
+  it('⚠ keeps the row that can be PRICED when only one of them carries an id', async () => {
+    /* Without an id the value lookup returns nothing, so surviving as the unpriced row loses him. */
+    getPool.mockResolvedValue([
+      player('a', { external_source_id: null, full_name: 'Josh Jacobs', position: 'RB', team: 'LV' }),
+      player('b', { external_source_id: '4046', full_name: 'Josh Jacobs', position: 'RB', team: 'Las Vegas Raiders' }),
+    ])
+    const out = await loadWaiverPool('L1', 'NFL')
+    expect(out.availablePlayers).toHaveLength(1)
+    expect(out.availablePlayers[0].value).toBe(2200)
+  })
+
+  it('🛑 does NOT merge two different ids — that is an identity claim, not a spelling', async () => {
+    /*
+     * Two men can share a name, and this repo holds 178 known NFL duplicate groups unmerged on
+     * purpose: a wrong merge hides a real player. Collapsing these here would be that mistake made
+     * quietly, in a surface that only displays.
+     */
+    getPool.mockResolvedValue([
+      player('a', { external_source_id: '4046', full_name: 'Fernando Mendoza', position: 'QB', team: 'IND' }),
+      player('b', { external_source_id: '9221', full_name: 'Fernando Mendoza', position: 'QB', team: 'IND' }),
+    ])
+    const out = await loadWaiverPool('L1', 'NFL')
+    expect(out.availablePlayers).toHaveLength(2)
+  })
+
+  it('⚠ two different players who share neither id nor position both survive', async () => {
+    getPool.mockResolvedValue([
+      player('a', { external_source_id: null, full_name: 'Josh Allen', position: 'QB', team: 'BUF' }),
+      player('b', { external_source_id: null, full_name: 'Josh Allen', position: 'LB', team: 'JAX' }),
+    ])
+    const out = await loadWaiverPool('L1', 'NFL')
+    expect(out.availablePlayers).toHaveLength(2)
+  })
+
+  it('leaves a wire with no duplicates exactly as it was', async () => {
+    getPool.mockResolvedValue([
+      player('a', { external_source_id: '4046', full_name: 'One', position: 'RB', team: 'KC' }),
+      player('b', { external_source_id: '9221', full_name: 'Two', position: 'WR', team: 'SEA' }),
+    ])
+    const out = await loadWaiverPool('L1', 'NFL')
+    expect(out.availablePlayers.map((p) => p.name)).toEqual(['One', 'Two'])
+  })
+})
