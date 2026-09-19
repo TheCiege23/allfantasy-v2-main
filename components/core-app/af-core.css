@@ -754,3 +754,56 @@ html[data-mode='af'] .af-core {
     font-size: 16px;
   }
 }
+
+/* ── iOS zoom floor, generalised to the whole shell ───────────────────
+ *
+ * 🛑 THE RULE ABOVE FIXES ONE FIELD, AND THE TRAP IS PER-FIELD. `.af-search-input`
+ * was found because `mobile-auth` visits `/core/trades`; `e2e/mobile/authedRoutes.ts`
+ * visits exactly two authenticated routes, so every other `/core` screen is
+ * unmeasured and the same defect survives there untouched. Swept 2026-09-19 with
+ * postcss over `components/core-app/*.css`: 18 further focusable controls inside
+ * the shell declare a base font under 16px and carry no phone override —
+ * `.af3a-search-input` (13px, the HOME search), `.af-d2-chat-input` (13),
+ * `.af-d2-topbar-search-input` (12), `.af-cm-league-search input` (12),
+ * `.af-live-search input` (12), `.af-tc-input` (13), `.af-rk-input input` (13),
+ * `.af-rk-field select` (13), `.af-stb-select select` (12.5), `.af-lctx-type select`
+ * (10), `.af-cwr-team select` (12), `.af-bk-select` (12.5), `.af-weekpick-select`
+ * (12), `.af-crx-select select` (13), `.af-cs-textarea` (13), `.afh-compose input`
+ * (12), `.af-sp-input/-select/-textarea` (12.5), `.af-cm-numinput` (15).
+ *
+ * A floor is the right shape rather than eighteen overrides: the next field
+ * anyone adds is covered without remembering this, which is the property the
+ * per-field fix does not have.
+ *
+ * ⚠ SPECIFICITY IS (0,5,1) ON PURPOSE, AND THE `:not()` CHAIN IS WHAT BUYS IT —
+ * NOT DEFENSIVENESS ABOUT TYPES. The plain forms `.af-core textarea` and
+ * `.af-core select` are (0,1,1), which TIES `.af-crx-select select`,
+ * `.af-rk-field select`, `.af-lctx-type select` and `.af-stb-select select`. A tie
+ * across two stylesheets is decided by concatenation order in the built page.css,
+ * which is the coin toss that already made four Trade Center buttons a lottery —
+ * see the baseline note in `e2e/mobile/undersized-target-baseline.authed.json`.
+ * `:is()` takes its most specific argument, so all three arms carry the same
+ * (0,5,1) and beat every competitor found in the sweep (highest was (0,2,1)).
+ *
+ * ⚠ IT CAN ONLY RAISE, WHICH WAS CHECKED RATHER THAN ASSUMED. The same sweep run
+ * for declarations >= 16px returned exactly two field selectors, both at exactly
+ * 16px (`.af-ml-search-icon`, `.af-scope-search input`), so nothing in the shell
+ * is shrunk by this. Re-run that check before widening the scope.
+ *
+ * ⚠ SCOPED TO `.af-core`, SO IT IS THE SHELL ONLY. The landing, auth, recovery,
+ * import, business, espn and my-leagues surfaces render outside it and still carry
+ * sub-16px fields; they are a separate pass and are NOT claimed here. The rule
+ * above stays unscoped for the reason its own note gives — `.af-search-input` has
+ * a second renderer outside the shell.
+ *
+ * Checkbox, radio, range and color are excluded because they have no text to zoom
+ * toward and a 16px floor only changes their box metrics.
+ */
+@media (max-width: 720px) {
+  .af-core
+    :is(input, textarea, select):not([type='checkbox']):not([type='radio']):not(
+      [type='range']
+    ):not([type='color']) {
+    font-size: 16px;
+  }
+}
