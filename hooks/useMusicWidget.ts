@@ -78,10 +78,12 @@ export const useMusicWidget = (): UseMusicWidgetReturn => {
   const [playlists, setPlaylists] = useState<Playlist[]>([]);
   const [isSpotifyConnected, setIsSpotifyConnected] = useState(false);
 
-  // Check Spotify connection
-  useEffect(() => {
-    setIsSpotifyConnected(!!session?.user?.spotifyAccount);
-  }, [session]);
+  /*
+   * ⚠ SPOTIFY CONNECTION IS SET BY THE FAVOURITES LOAD BELOW, NOT BY THE SESSION.
+   * It used to read `session.user.spotifyAccount`, which cost one or two prisma reads in the
+   * NextAuth session callback on EVERY authenticated request in the product — for a fact this
+   * hook was the only consumer of. The favourites request this hook already makes now carries it.
+   */
 
   // Fetch artists from TheAudioDB
   useEffect(() => {
@@ -160,7 +162,7 @@ export const useMusicWidget = (): UseMusicWidgetReturn => {
     }
   }, [playlists]);
 
-  // Load user favorites from database
+  // Load user favorites — and the Spotify connection flag riding with them — from the database
   useEffect(() => {
     const loadFavorites = async () => {
       try {
@@ -168,13 +170,21 @@ export const useMusicWidget = (): UseMusicWidgetReturn => {
         if (!response.ok) throw new Error('Failed to load favorites');
         const data = await response.json();
         setFavorites(data.favorites || []);
+        setIsSpotifyConnected(Boolean(data.spotifyConnected));
       } catch (error) {
+        /* Unknown reads as NOT connected, matching the route: a Connect button, not a dead end. */
+        setIsSpotifyConnected(false);
         console.error('Error loading favorites:', error);
       }
     };
 
     if (session?.user?.id) {
       loadFavorites();
+    } else {
+      /* ⚠ SIGN-OUT MUST CLEAR IT. The session effect this replaced re-ran on every session change
+       * and reset the flag for free; a fetch that only runs when signed in does not. Without this,
+       * the next user on a shared device inherits the previous one's "connected". */
+      setIsSpotifyConnected(false);
     }
   }, [session]);
 
@@ -202,7 +212,7 @@ export const useMusicWidget = (): UseMusicWidgetReturn => {
     const artistName = artist?.name || artist?.strArtist || 'Unknown Artist';
     try {
       // Fetch track details from Spotify or TheAudioDB
-      if (isSpotifyConnected && session?.user?.spotifyAccount) {
+      if (isSpotifyConnected) {
         // Use Spotify API
         const response = await fetch('/api/music/search-spotify', {
           method: 'POST',
@@ -251,7 +261,7 @@ export const useMusicWidget = (): UseMusicWidgetReturn => {
       setCurrentTrack((prev) => prev || toTrack({ ...track, ...artist, artist: artistName }));
       console.error('Error playing track:', error);
     }
-  }, [isSpotifyConnected, session, toTrack]);
+  }, [isSpotifyConnected, toTrack]);
 
   const toggleFavorite = useCallback(
     async (track: any) => {
