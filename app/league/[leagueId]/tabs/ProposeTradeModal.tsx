@@ -304,6 +304,7 @@ export function ProposeTradeModal({
           proposerRosterId: myRoster.rosterId,
           receiverRosterId: partnerRoster.rosterId,
           assets,
+          decisionEvidenceToken: selectedPackage?.decisionEvidenceToken ?? selectedMultiPackage?.decisionEvidenceToken ?? null,
           metadata: {
             multiTeam: Boolean(multiTeam && secondPartnerRoster),
             participantRosterIds: [myRoster.rosterId, partnerRoster.rosterId, ...(secondPartnerRoster ? [secondPartnerRoster.rosterId] : [])],
@@ -311,7 +312,7 @@ export function ProposeTradeModal({
             proposalSource: 'league_partner_suggestions',
             gradeScope: 'league-specific-context-pending',
             suggestionId: selectedSuggestionId,
-            suggestionModelVersion: 'league-proposal-v2',
+            suggestionModelVersion: 'league-proposal-v3',
             predictedAcceptance: selectedPackage?.acceptanceLikelihood ?? null,
             projectedOutcomeDelta: selectedPackage?.simulation?.deltaPct ?? selectedMultiPackage?.simulation?.deltaPct ?? null,
           },

@@ -30,11 +30,20 @@ import { resolveCanonicalWorld } from '@/lib/decision-os/world'
 import type { TradeAssetSummary } from '@/lib/decision-os/trade/dco'
 import { summarizeRosterImpact } from '@/lib/decision-os/trade/rosterImpactSummary'
 import type { League } from '@prisma/client'
+import { publicTradeDecisionReceipt } from '@/lib/league-trade-engine/tradeDecisionReceipt'
 
 export const dynamic = 'force-dynamic'
 
 const ACTIVE_STATUSES = new Set(['pending', 'awaiting_votes', 'awaiting_commissioner', 'accepted', 'scheduled'])
 const TERMINAL_STATUSES = new Set(['processed', 'rejected', 'cancelled', 'countered', 'expired', 'vetoed', 'reversed'])
+
+async function loadDecisionReceipts(tradeIds: string[]): Promise<Map<string, NonNullable<LeagueTradeHistoryItem['decisionReceipt']>>> {
+  if (!tradeIds.length) return new Map()
+  const store = (prisma as typeof prisma & { tradeDecisionSnapshot?: typeof prisma.tradeDecisionSnapshot }).tradeDecisionSnapshot
+  if (!store) return new Map()
+  const rows = await store.findMany({ where: { tradeId: { in: tradeIds } } }).catch(() => [])
+  return new Map(rows.map((row) => [row.tradeId, publicTradeDecisionReceipt(row)]))
+}
 
 function assetLabel(item: { itemReference: string | null; metadata: unknown }): { label: string; sublabel: string | null } {
   const meta = item.metadata && typeof item.metadata === 'object' && !Array.isArray(item.metadata)
@@ -76,6 +85,7 @@ async function buildNativeActiveTrades(leagueId: string, userId: string): Promis
   const trades = await listAfLeagueTrades(leagueId, { take: 50 })
   const active = trades.filter((t) => ACTIVE_STATUSES.has(t.status))
   if (active.length === 0) return []
+  const decisionReceipts = await loadDecisionReceipts(active.map((trade) => trade.id))
 
   const rosterIds = [...new Set(active.flatMap((t) => [
     t.proposerRosterId,
@@ -185,6 +195,7 @@ async function buildNativeActiveTrades(leagueId: string, userId: string): Promis
         proposalValueGiven: decision?.valueGiven ?? null,
         proposalValueReceived: decision?.valueReceived ?? null,
         proposalCapturedAt: decision?.evaluatedAt ?? null,
+        decisionReceipt: decisionReceipts.get(t.id) ?? null,
         // Asked for and the evaluation itself failed is still "asked for, not produced" — `null`.
         rosterImpact: wantImpact ? (decision ? summarizeRosterImpact(decision.rosterImpact) ?? null : null) : undefined,
       }
@@ -213,6 +224,7 @@ async function buildNativeTradeHistory(league: NativeHistoryLeague, userId: stri
   ])
   const terminal = trades.filter((trade) => TERMINAL_STATUSES.has(trade.status))
   if (terminal.length === 0) return []
+  const decisionReceipts = await loadDecisionReceipts(terminal.map((trade) => trade.id))
 
   const rosterIds = [...new Set(terminal.flatMap((trade) => [trade.proposerRosterId, trade.receiverRosterId]))]
   const rosters = await prisma.roster.findMany({
@@ -294,6 +306,7 @@ async function buildNativeTradeHistory(league: NativeHistoryLeague, userId: stri
         proposalValueReceived: valueTotal(offer?.assetsReceived),
         proposalCapturedAt: offer?.createdAt.toISOString() ?? null,
         proposalModelVersion: offer?.modelVersion ?? null,
+        decisionReceipt: decisionReceipts.get(trade.id) ?? null,
         currentGrade: now?.grade ?? null,
         currentValueGiven: now?.valueGiven ?? null,
         currentValueReceived: now?.valueReceived ?? null,

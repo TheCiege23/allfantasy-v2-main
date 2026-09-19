@@ -33,6 +33,9 @@ import {
 import { derivePartnerBehaviorProfiles } from '@/lib/league-trade-engine/proposalLearning'
 import { enrichMultiTeamProposalSimulations, enrichProposalSimulations, hasPairedProposalSimulation } from '@/lib/league-trade-engine/proposalSimulation'
 import { getTradeManagerStrategy } from '@/lib/league-trade-engine/managerStrategy'
+import { signProposalEvidenceToken, type VerifiedProposalAssetEvidence } from '@/lib/league-trade-engine/proposalEvidenceToken'
+import type { TradeAssetInput } from '@/lib/league-trade-engine/types'
+import type { SuggestedTradeAsset } from '@/lib/league-trade-engine/proposalSuggestions'
 
 export const dynamic = 'force-dynamic'
 
@@ -723,7 +726,7 @@ export async function GET(
     managerStrategy,
     partnerBehavior,
   })
-  const suggestions = enrichProposalSimulations({
+  const simulatedSuggestions = enrichProposalSimulations({
     suggestions: rawSuggestions,
     rosters: result,
     viewerRosterId: viewerTeamRosterId,
@@ -736,7 +739,7 @@ export async function GET(
     rosters: result,
     rosterPositions,
   })
-  const multiTeamSuggestions = enrichMultiTeamProposalSimulations({
+  const simulatedMultiTeamSuggestions = enrichMultiTeamProposalSimulations({
     suggestions: rawMultiTeamSuggestions,
     rosters: result,
     viewerRosterId: viewerTeamRosterId,
@@ -744,14 +747,88 @@ export async function GET(
     weeksRemaining: Math.max(1, Number(league?.playoffStartWeek ?? 14) - Number(projectionWeek?.week ?? 1)),
     playoffTeams: Math.max(2, Number(league?.playoffTeams ?? Math.min(6, rosters.length))),
   })
+  const rosterById = new Map(result.map((roster) => [roster.rosterId, roster]))
+  const toTradeAsset = (asset: SuggestedTradeAsset, fromRosterId: string, toRosterId: string): TradeAssetInput => ({
+    itemType: asset.itemType,
+    itemReference: asset.kind === 'faab' ? null : asset.id,
+    fromRosterId,
+    toRosterId,
+    faabAmount: asset.kind === 'faab' ? asset.amount : null,
+  })
+  const toEvidence = (asset: SuggestedTradeAsset, fromRosterId: string, toRosterId: string): VerifiedProposalAssetEvidence => ({
+    itemType: asset.itemType,
+    itemReference: asset.kind === 'faab' ? null : asset.id,
+    fromRosterId,
+    toRosterId,
+    faabAmount: asset.kind === 'faab' ? asset.amount : null,
+    name: asset.name,
+    value: asset.value,
+    weeklyProjection: asset.kind === 'player'
+      ? rosterById.get(fromRosterId)?.players.find((player) => player.id === asset.id)?.weeklyProjection ?? null
+      : null,
+  })
+  const evidenceCapturedAt = new Date().toISOString()
+  const suggestions = await Promise.all(simulatedSuggestions.map(async (suggestion) => ({
+    ...suggestion,
+    packages: await Promise.all(suggestion.packages.map(async (proposal) => {
+      const tradeAssets = [
+        ...proposal.send.map((asset) => toTradeAsset(asset, viewerTeamRosterId ?? '', suggestion.rosterId)),
+        ...proposal.receive.map((asset) => toTradeAsset(asset, suggestion.rosterId, viewerTeamRosterId ?? '')),
+      ]
+      const evidenceAssets = [
+        ...proposal.send.map((asset) => toEvidence(asset, viewerTeamRosterId ?? '', suggestion.rosterId)),
+        ...proposal.receive.map((asset) => toEvidence(asset, suggestion.rosterId, viewerTeamRosterId ?? '')),
+      ]
+      const decisionEvidenceToken = viewerTeamRosterId && proposal.simulation?.available
+        ? await signProposalEvidenceToken({
+            leagueId,
+            proposerRosterId: viewerTeamRosterId,
+            tradeAssets,
+            assets: evidenceAssets,
+            managerStrategy,
+            simulation: proposal.simulation,
+            modelVersion: 'league-proposal-v3',
+            valueSource: `FantasyCalc · ${describeValueBook(valueBook)}`,
+            projectionSource: projectionWeek ? `league-scored projection feed · ${projectionWeek.season} week ${projectionWeek.week}` : 'projection feed unavailable',
+            capturedAt: evidenceCapturedAt,
+          })
+        : null
+      return { ...proposal, decisionEvidenceToken }
+    })),
+  })))
+  const multiTeamSuggestions = await Promise.all(simulatedMultiTeamSuggestions.map(async (proposal) => {
+    const tradeAssets = proposal.legs.map((leg) => toTradeAsset(leg.asset, leg.fromRosterId, leg.toRosterId))
+    const evidenceAssets = proposal.legs.map((leg) => toEvidence(leg.asset, leg.fromRosterId, leg.toRosterId))
+    const decisionEvidenceToken = viewerTeamRosterId && proposal.simulation?.available
+      ? await signProposalEvidenceToken({
+          leagueId,
+          proposerRosterId: viewerTeamRosterId,
+          tradeAssets,
+          assets: evidenceAssets,
+          managerStrategy,
+          simulation: proposal.simulation,
+          modelVersion: 'league-proposal-v3',
+          valueSource: `FantasyCalc · ${describeValueBook(valueBook)}`,
+          projectionSource: projectionWeek ? `league-scored projection feed · ${projectionWeek.season} week ${projectionWeek.week}` : 'projection feed unavailable',
+          capturedAt: evidenceCapturedAt,
+        })
+      : null
+    return { ...proposal, decisionEvidenceToken }
+  }))
   const hasPairedOutcomeSimulation = hasPairedProposalSimulation({ suggestions, multiTeamSuggestions })
   const hasLeagueRosterContext = Boolean(league && (rosterPositions.length > 0 || (league.starters?.length ?? 0) > 0))
   const hasPricedSuggestion = suggestions.some((suggestion) => suggestion.packages.some((proposal) => {
     const assets = [...proposal.send, ...proposal.receive]
     return assets.length > 0 && assets.every((asset) => asset.kind === 'faab' || (asset.value != null && asset.value > 0))
   }))
+  const hasProjectedSuggestion = suggestions.some((suggestion) => suggestion.packages.some((proposal) => {
+    const playerAssets = [...proposal.send, ...proposal.receive].filter((asset) => asset.kind === 'player')
+    return playerAssets.every((asset) => rosterById.get(
+      proposal.send.includes(asset) ? viewerTeamRosterId ?? '' : suggestion.rosterId,
+    )?.players.find((player) => player.id === asset.id)?.weeklyProjection != null)
+  }))
   const contextualGradeComplete = Boolean(
-    savedStrategy && hasPairedOutcomeSimulation && hasLeagueRosterContext && hasPricedSuggestion,
+    savedStrategy && hasPairedOutcomeSimulation && hasLeagueRosterContext && hasPricedSuggestion && hasProjectedSuggestion,
   )
 
   return NextResponse.json({
@@ -772,6 +849,7 @@ export async function GET(
       missing: [
         ...(!hasLeagueRosterContext ? ['league roster settings'] : []),
         ...(!hasPricedSuggestion ? ['as-of asset values'] : []),
+        ...(!hasProjectedSuggestion ? ['as-of player projections'] : []),
         ...(!hasPairedOutcomeSimulation ? ['paired before/after outcome simulation'] : []),
         ...(!savedStrategy ? ['manager strategy confirmation'] : []),
       ],

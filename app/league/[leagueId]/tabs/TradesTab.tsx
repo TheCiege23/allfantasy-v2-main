@@ -156,6 +156,7 @@ type LogRow = {
   mine: boolean
   /** Viewer-relative direction, only for the viewer's own rows. */
   direction: 'incoming' | 'outgoing' | 'done' | null
+  receiptNote?: string | null
 }
 
 function watchStorageKey(leagueId: string): string {
@@ -399,7 +400,8 @@ function rowFromNativeHistory(t: LeagueTradeHistoryItem): LogRow {
   const completed = t.status === 'processed' || t.status === 'reversed'
   const viewerIsA = Boolean(t.viewerIsProposer)
   const viewerIsB = Boolean(t.viewerIsReceiver)
-  const noGradeWhy = completed ? 'event-time value not captured' : 'closed before completion'
+  const noGradeWhy = t.decisionReceipt?.reason
+    ?? (completed ? 'event-time value not captured' : 'closed before completion')
   const proposalGrade = ['A', 'B', 'C', 'D', 'F'].includes(String(t.proposalGrade))
     ? t.proposalGrade as GradeLetter
     : null
@@ -460,6 +462,9 @@ function rowFromNativeHistory(t: LeagueTradeHistoryItem): LogRow {
     status: statusOf(t),
     mine: viewerIsA || viewerIsB,
     direction: viewerIsA || viewerIsB ? 'done' : null,
+    receiptNote: t.decisionReceipt
+      ? `${t.decisionReceipt.completeness === 'complete' ? 'Verified' : 'Partial'} ${t.decisionReceipt.format.replaceAll('_', ' ')} receipt${t.decisionReceipt.outcomeVerified && typeof t.decisionReceipt.deltaPct === 'number' ? ` · ${t.decisionReceipt.outcomeMetric === 'survival' ? 'survival' : 'playoff'} ${t.decisionReceipt.deltaPct >= 0 ? '+' : ''}${t.decisionReceipt.deltaPct.toFixed(1)}%` : ''}`
+      : null,
   }
 }
 
@@ -822,6 +827,22 @@ export function PendingTradeCard(props: {
 
       {/* ── The AllFantasy read ──────────────────────────────────────── */}
       <div className="rounded-xl border border-[#22d3ee]/25 bg-[#22d3ee]/[0.06] px-3 py-2.5">
+        {t.decisionReceipt ? (
+          <div className="mb-2 flex flex-wrap items-center gap-1.5 font-mono text-[9px] uppercase tracking-[0.06em]">
+            <span className={t.decisionReceipt.completeness === 'complete'
+              ? 'rounded bg-emerald-400/15 px-1.5 py-1 text-emerald-200'
+              : 'rounded bg-amber-400/15 px-1.5 py-1 text-amber-200'}>
+              {t.decisionReceipt.completeness === 'complete' ? 'Verified league receipt' : 'Partial league receipt'}
+            </span>
+            <span className="text-white/40">{t.decisionReceipt.format.replaceAll('_', ' ')}</span>
+            {t.decisionReceipt.outcomeVerified && typeof t.decisionReceipt.deltaPct === 'number' ? (
+              <span className="text-[#67e4f7]">
+                {t.decisionReceipt.outcomeMetric === 'survival' ? 'Survival' : 'Playoff'} {t.decisionReceipt.deltaPct >= 0 ? '+' : ''}{t.decisionReceipt.deltaPct.toFixed(1)}%
+              </span>
+            ) : null}
+            {t.decisionReceipt.valueSource ? <span className="normal-case tracking-normal text-white/35">Values: {t.decisionReceipt.valueSource}</span> : null}
+          </div>
+        ) : null}
         {t.decisionRecommendation ? (
           <div className="mb-2 flex items-start gap-2 rounded-lg border border-[#22d3ee]/20 bg-black/10 px-2.5 py-2">
             <span className="rounded bg-[#22d3ee]/15 px-1.5 py-0.5 font-mono text-[9px] font-bold uppercase text-[#67e4f7]">
@@ -1818,8 +1839,9 @@ export function TradesTab({ league, teams }: TradesTabProps) {
                       <span className="max-w-[70px] text-[9.5px] leading-tight text-white/35">{r.a.gradeWhy}</span>
                     ) : null}
                   </div>
-                  <div className="md:justify-self-end">
+                  <div className="flex flex-col items-start gap-1 md:items-end md:justify-self-end">
                     <StatusChip status={r.status} />
+                    {r.receiptNote ? <span className="max-w-[120px] text-[9px] leading-tight text-[#67e4f7]/70">{r.receiptNote}</span> : null}
                   </div>
                 </div>
                   ))}

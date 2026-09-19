@@ -130,12 +130,14 @@ Every persisted grade receipt must include the policy/model version, transaction
 
 The first evidence batch now persists a manager-confirmed `win-now`, `balanced`, or `rebuild` objective per user and league. Proposal readiness requires that confirmation plus an available paired before/after outcome simulation, readable league/roster settings, and priced suggested assets.
 
-New `AfLeagueTrade` proposals also create an append-only `TradeDecisionSnapshot` in the same database transaction. It freezes the league settings, participating rosters, proposed assets, policy version, manager context, evidence states, and readiness result. A simulation returned through the browser is retained as unverified audit data and cannot unlock a contextual grade. Server-verifiable asset-value, projection, and paired-simulation capture remains a rollout gate, so these initial receipts correctly remain partial rather than assigning an unsupported historical letter.
+New `AfLeagueTrade` proposals also create an append-only `TradeDecisionSnapshot` in the same database transaction. It freezes the league settings, participating rosters, proposed assets, policy version, manager context, evidence states, and readiness result. A simulation returned through the browser is retained as unverified audit data and cannot unlock a contextual grade.
+
+Suggested packages now carry a short-lived server signature over the exact league, proposer, asset legs, as-of values, player projections, manager strategy, and paired outcome simulation. The trade endpoint verifies the signature and exact asset fingerprint before allowing those inputs to satisfy the evidence contract. Editing the package, changing strategy, using an expired receipt, or building a custom offer safely produces a partial receipt. Public trade APIs expose only a receipt summary, without private roster or manager snapshots, so desktop and mobile render the same frozen evidence state.
 
 ## Rollout gates
 
 1. Keep the current display explicitly labeled **Market grade** for current redraft/dynasty trades while the full contextual inputs are incomplete.
 2. Withhold a letter for every specialty format until its format objective and hard legality checks are calculated; respect league-, phase-, and team-specific eligibility.
 3. Withhold historical market letters unless an immutable as-of-trade snapshot exists. Continue displaying the separate realized result.
-4. Connect paired simulations and optimal-lineup deltas to the policy evidence contract.
+4. Expand paired simulations from the currently signed package outcome to full schedule, replacement-pool, optimal-lineup, and specialty-state models.
 5. Backtest against historical decisions without leaking post-trade data, then calibrate thresholds by format. No uncalibrated coefficient may silently change a production letter.

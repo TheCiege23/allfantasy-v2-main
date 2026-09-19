@@ -29,6 +29,7 @@ import {
   buildTradeDecisionSnapshot,
   writeTradeDecisionSnapshot,
 } from '@/lib/league-trade-engine/tradeDecisionSnapshot'
+import type { VerifiedProposalEvidence } from '@/lib/league-trade-engine/proposalEvidenceToken'
 
 async function fanout(leagueId: string, input: {
   eventType: string
@@ -210,7 +211,10 @@ async function notifyOnTradeCreated(input: {
   }
 }
 
-export async function createAfLeagueTrade(input: CreateLeagueTradeInput & { currentWeek?: number | null }): Promise<{ id: string }> {
+export async function createAfLeagueTrade(input: CreateLeagueTradeInput & {
+  currentWeek?: number | null
+  verifiedProposalEvidence?: VerifiedProposalEvidence | null
+}): Promise<{ id: string }> {
   const league = await prisma.league.findUnique({ where: { id: input.leagueId } })
   if (!league) throw new Error('League not found')
 
@@ -323,6 +327,13 @@ export async function createAfLeagueTrade(input: CreateLeagueTradeInput & { curr
               tradeManagerStrategy: tx.tradeManagerStrategy,
             })
           : null
+        // A manager can change strategy after opening the builder. In that case
+        // the old signed package remains authentic but no longer represents the
+        // user's current plan, so preserve the trade with a partial receipt.
+        const verifiedProposalEvidence = input.verifiedProposalEvidence
+          && managerStrategy?.active === input.verifiedProposalEvidence.managerStrategy
+          ? input.verifiedProposalEvidence
+          : null
         const snapshot = buildTradeDecisionSnapshot({
           league,
           rosters: participants,
@@ -331,6 +342,7 @@ export async function createAfLeagueTrade(input: CreateLeagueTradeInput & { curr
           managerStrategy,
           tradeSettings: settings as unknown as Record<string, unknown>,
           metadata: input.metadata,
+          verifiedProposalEvidence,
         })
         await writeTradeDecisionSnapshot(tx, {
           tradeId: created.id,

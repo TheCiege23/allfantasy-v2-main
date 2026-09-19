@@ -1,4 +1,5 @@
 import type { LineupImpactSummary } from '@/lib/decision-os/trade/rosterImpactSummary'
+import type { PublicTradeDecisionReceipt } from '@/lib/league-trade-engine/tradeDecisionReceipt'
 
 export type LeagueTopTab = 'DRAFT' | 'TEAM' | 'PLAYERS' | 'LEAGUE'
 
@@ -196,6 +197,8 @@ export type LeagueTradeHistoryItem = {
     proposalValueReceived?: number | null
     proposalCapturedAt?: string | null
     proposalModelVersion?: string | null
+    /** Immutable proposal-time evidence receipt. The same payload feeds desktop and mobile. */
+    decisionReceipt?: PublicTradeDecisionReceipt | null
     /** Current-market regrade; null when a historical asset cannot be resolved honestly. */
     currentGrade?: string | null
     currentValueGiven?: number | null

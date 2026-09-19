@@ -43,6 +43,8 @@ export type SuggestedTradePackage = {
   fairness: number
   acceptanceLikelihood: number | null
   simulation?: ProposalOutcomeSimulation
+  /** Signed server receipt for this exact package. Omitted when evidence is incomplete. */
+  decisionEvidenceToken?: string | null
   reason: string
 }
 
@@ -77,6 +79,8 @@ export type MultiTeamTradeSuggestion = {
   reason: string
   legs: SuggestedMultiTeamLeg[]
   simulation?: ProposalOutcomeSimulation
+  /** Signed server receipt for this exact package. Omitted when evidence is incomplete. */
+  decisionEvidenceToken?: string | null
 }
 
 export type TradePartnerSuggestion = {

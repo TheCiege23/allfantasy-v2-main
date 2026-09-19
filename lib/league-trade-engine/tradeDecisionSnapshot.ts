@@ -3,6 +3,7 @@ import type { Prisma } from '@prisma/client'
 import { assessTradeGradeReadiness } from '@/lib/decision-os/trade/tradeGradeReadiness'
 import type { TradeAssetInput } from '@/lib/league-trade-engine/types'
 import type { ProposalManagerStrategy } from '@/lib/league-trade-engine/proposalSuggestions'
+import type { VerifiedProposalEvidence } from '@/lib/league-trade-engine/proposalEvidenceToken'
 import {
   resolveTradeGradingPolicy,
   type TradeEvidence,
@@ -84,6 +85,7 @@ export function buildTradeDecisionSnapshot(input: {
   managerStrategy: { active: ProposalManagerStrategy; confirmedAt: Date } | null
   tradeSettings: Record<string, unknown>
   metadata?: Record<string, unknown>
+  verifiedProposalEvidence?: VerifiedProposalEvidence | null
 }): TradeDecisionSnapshotPayload {
   const concept = conceptFor(input.league)
   const policy = resolveTradeGradingPolicy({
@@ -95,7 +97,13 @@ export function buildTradeDecisionSnapshot(input: {
     survivorMode: concept === 'survivor' || concept === 'survivor_guillotine',
     guillotineMode: concept === 'guillotine' || concept === 'survivor_guillotine',
   })
-  const simulation = verifiedSimulation(input.metadata)
+  const verified = input.verifiedProposalEvidence ?? null
+  const simulation = verified
+    ? { ...cloneJson(verified.simulation), verified: true, source: 'signed_server_proposal_evidence', modelVersion: verified.modelVersion, capturedAt: verified.capturedAt }
+    : verifiedSimulation(input.metadata)
+  const valuesAvailable = Boolean(verified?.assets.length && verified.assets.every((asset) => asset.value != null))
+  const playerEvidence = verified?.assets.filter((asset) => asset.itemType === 'player') ?? []
+  const projectionsAvailable = Boolean(verified && playerEvidence.length > 0 && playerEvidence.every((asset) => asset.weeklyProjection != null))
   const evidence: TradeEvidence = {
     team_identity: input.rosters.length >= 2 ? 'available' : 'missing',
     user_strategy: input.managerStrategy ? 'available' : 'missing',
@@ -103,9 +111,11 @@ export function buildTradeDecisionSnapshot(input: {
     trade_rules: Object.keys(input.tradeSettings).length ? 'available' : 'missing',
     roster_before: input.rosters.every((roster) => roster.playerData != null) ? 'available' : 'missing',
     roster_after: input.rosters.length >= 2 && input.assets.length > 0 ? 'available' : 'missing',
-    as_of_asset_values: 'missing',
-    as_of_projections: 'missing',
-    paired_outcome_simulation: 'missing',
+    as_of_asset_values: valuesAvailable ? 'available' : 'missing',
+    as_of_projections: verified && playerEvidence.length === 0
+      ? 'not_applicable'
+      : projectionsAvailable ? 'available' : 'missing',
+    paired_outcome_simulation: verified?.simulation.available === true ? 'available' : 'missing',
     historical_timestamp: 'available',
   }
   const readiness = assessTradeGradeReadiness(policy, evidence)
@@ -133,7 +143,14 @@ export function buildTradeDecisionSnapshot(input: {
         faabRemaining: roster.faabRemaining ?? null,
       })),
     },
-    assetContext: { assets: cloneJson(input.assets) },
+    assetContext: {
+      assets: cloneJson(input.assets),
+      verifiedEvidence: verified ? cloneJson(verified.assets) : null,
+      evidenceModelVersion: verified?.modelVersion ?? null,
+      valueSource: verified?.valueSource ?? null,
+      projectionSource: verified?.projectionSource ?? null,
+      evidenceCapturedAt: verified?.capturedAt ?? null,
+    },
     managerContext: input.managerStrategy
       ? { proposedByUserId: input.proposedByUserId, active: input.managerStrategy.active, confirmedAt: input.managerStrategy.confirmedAt.toISOString() }
       : { proposedByUserId: input.proposedByUserId, active: null, confirmedAt: null },

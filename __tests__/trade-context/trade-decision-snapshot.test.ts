@@ -44,6 +44,31 @@ describe('immutable trade-time decision snapshot', () => {
     expect(snapshot.readiness.contextualGradeAllowed).toBe(false)
   })
 
+  it('unlocks the contextual receipt only from server-verified values, projections, and simulation', () => {
+    const snapshot = buildTradeDecisionSnapshot({
+      ...base(),
+      verifiedProposalEvidence: {
+        version: 1,
+        leagueId: 'l1',
+        proposerRosterId: 'r1',
+        assetFingerprint: 'signed',
+        assets: [{ itemType: 'player', itemReference: 'p1', fromRosterId: 'r1', toRosterId: 'r2', faabAmount: null, name: 'Player One', value: 5100, weeklyProjection: 15.8 }],
+        managerStrategy: 'win-now',
+        simulation: { available: true, metric: 'playoff', beforePct: 40, afterPct: 46, deltaPct: 6, iterations: 5000, reason: null },
+        modelVersion: 'league-proposal-v3',
+        valueSource: 'FantasyCalc · redraft · 1QB',
+        projectionSource: 'league-scored projection feed · 2026 week 2',
+        capturedAt: '2026-09-19T16:00:00.000Z',
+      },
+    })
+    expect(snapshot.evidence).toMatchObject({
+      as_of_asset_values: 'available', as_of_projections: 'available', paired_outcome_simulation: 'available',
+    })
+    expect(snapshot.outcomeSimulation).toMatchObject({ verified: true, deltaPct: 6 })
+    expect(snapshot.readiness.contextualGradeAllowed).toBe(true)
+    expect(snapshot.completeness).toBe('complete')
+  })
+
   it('writes one append-only row keyed to the trade instead of updating a prior receipt', async () => {
     const snapshot = buildTradeDecisionSnapshot(base())
     const create = vi.fn().mockResolvedValue({ id: 'receipt-1' })
