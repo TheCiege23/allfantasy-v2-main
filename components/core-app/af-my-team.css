@@ -1410,4 +1410,4 @@ html[data-mode='light'] .af-core .af-mt-temp { color: var(--muted); }
   }
 }
 
-.af-mt-row:target { outline: 2px solid var(--af-accent, #22d3ee); outline-offset: 3px; scroll-margin-top: 110px; }
+.af-mt-row:target, .af-mt-row[data-lineup-target="true"] { outline: 2px solid var(--af-accent, #22d3ee); outline-offset: 3px; scroll-margin-top: 110px; }
