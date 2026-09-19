@@ -1,0 +1,14 @@
+# League chat and private attachment release
+
+This release brings the softer communications layout, multiline composer, screenshot paste, league trade panel, GIF provider fallback and account-isolated conversation persistence onto the current production code. It preserves production's automatic league resolution, screenshot analysis, scenario cards and token consent.
+
+Chimmy can retrieve selected-league trade activity together with the caller's roster, normalized scoring, lineup rules and waiver context. The drawer shows accessible native redraft proposals and approvals, general league/provider offers and recent decisions from the existing Trade Center, plus completed-trade results. Current proposal/market grades and their explanations appear only with sufficient coverage. Private proposals remain participant-only. Snapshot fairness and realized scoring grades are explicitly distinguished from current roster-fit advice; missing valuation data does not produce a guessed grade.
+
+Chat attachments use the existing Railway private bucket through an authenticated download route. Both upload and download check current league/thread membership. UUID filenames avoid collisions. Existing public attachment URLs remain unchanged. Configure CHAT_PRIVATE_S3_CONFIG with the bucket credential JSON; the private Vercel Blob configuration remains a fallback. Never commit credential values.
+
+Validation: 157 distinct tests across 22 suites passed, covering conversations, trade tools/feed/panel, uploads, storage streaming, mentions, polls, Discord authorization/callbacks, live questions and existing drawer behavior. A synthetic object roundtrip against the private production bucket passed, anonymous access returned 403, and the synthetic object was removed. Browser fixture inspection confirmed the updated drawer and expanded trade panel render. Full local TypeScript checking reports 149 errors in the broader production checkout, none in the changed application files; it is not a clean full-project typecheck.
+
+Remaining coverage: external platforms may not expose private proposals; imported history without scoring data remains ungraded. Redraft proposals are paginated; the existing Trade Center returns bounded recent native/provider activity. Draft-pick-only negotiations are not included in this feed. Real authenticated multi-user messaging and Discord relay were not exercised by sending messages to users.
+
+Discord setup now offers a clear path to create a server in Discord, return, install the bot and map a league channel. Existing servers require permission to install the bot. References: [Discord server creation](https://support.discord.com/hc/en-us/articles/204849977-How-do-I-create-a-server), [Railway private buckets](https://docs.railway.com/storage-buckets).
+

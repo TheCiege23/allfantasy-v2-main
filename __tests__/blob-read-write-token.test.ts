@@ -127,7 +127,7 @@ describe('blob token resolution', () => {
   })
 })
 
-describe('every upload path uses the resolver', () => {
+describe('public Blob upload paths use the resolver', () => {
   /*
    * The resolver is worthless if a call site still reads process.env directly — that site
    * would keep failing while the others worked, which is the hardest kind of bug to see.
@@ -135,7 +135,6 @@ describe('every upload path uses the resolver', () => {
   it.each([
     'lib/avatar/ProfileImageUploadStorageService.ts',
     'app/api/user/profile/avatar/route.ts',
-    'app/api/chat/upload/route.ts',
     'app/api/shared/chat/upload/route.ts',
     'app/api/bracket/chat-upload/route.ts',
   ])('%s reads the token through getBlobReadWriteToken', async (file) => {

@@ -93,6 +93,7 @@ const SOURCE_LABELS: Record<string, string> = {
    */
   find_league_by_name: 'Found the league you named',
   get_my_roster: 'Your roster, scoring and waiver budget',
+  get_league_trade_activity: 'Trade block, proposals and league trade history',
   get_available_players: 'Who is actually available',
   get_player_value: 'Player trade values',
   get_player_projection: 'Player projections',
