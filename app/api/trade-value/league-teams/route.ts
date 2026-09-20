@@ -4,6 +4,7 @@ import { authOptions } from '@/lib/auth'
 import { assertLeagueMember } from '@/lib/league/league-access'
 import { prisma } from '@/lib/prisma'
 import { rateLimit, getClientIp } from '@/lib/rate-limit'
+import { CURRENT_TEAMS } from '@/lib/leagues/leagueTeamLifecycle'
 
 /**
  * Lists league teams for trade opponent selection (requires membership).
@@ -31,8 +32,9 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Forbidden' }, { status: access.status })
   }
 
+  // A franchise that left the provider cannot be a trade counterparty, so it is not offered as one.
   const teams = await prisma.leagueTeam.findMany({
-    where: { leagueId },
+    where: { leagueId, ...CURRENT_TEAMS },
     select: {
       externalId: true,
       teamName: true,

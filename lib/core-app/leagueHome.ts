@@ -33,6 +33,7 @@ import { getDraftHqAll } from './draftHqAll'
 import { describeAge } from '@/lib/sports-data/freshnessPolicy'
 import { resolveLeagueStage, isPreDraftOrDrafting } from '@/lib/league-stage/leagueStage'
 import { rosterIdsMatch } from './rosterIdMatch'
+import { CURRENT_TEAMS } from '@/lib/leagues/leagueTeamLifecycle'
 
 /**
  * Everything the league-selected dashboard (screen 2) renders, read from the
@@ -542,8 +543,14 @@ export async function getLeagueHomeData(
   const rosterCountForDraft = rosterRows.length
   const faabBy = new Map(rosterRows.map((r) => [r.platformUserId, r.faabRemaining]))
 
+  /*
+   * ⚠ `CURRENT_TEAMS` EXCLUDES A FRANCHISE THAT LEFT THE PROVIDER. Reconciliation now archives one
+   * that carries history rather than deleting it, so without this the standings list would keep
+   * showing a team nobody manages, ranked among the live ones. `isOrphan` below does NOT do this
+   * job — it is selected to LABEL an empty seat, not to exclude a departed one.
+   */
   const teams = await prisma.leagueTeam.findMany({
-    where: { leagueId },
+    where: { leagueId, ...CURRENT_TEAMS },
     select: {
       id: true,
       teamName: true,
