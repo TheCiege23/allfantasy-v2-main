@@ -9,6 +9,7 @@ import { getRandomStrategy } from '@/lib/draft-strategies/strategyDefinitions'
 import { createStrategyLog, initializeDraftStrategyTracking } from '@/lib/draft-strategies/strategyTracker'
 import { getOrCreateDraftSession, buildSessionSnapshot } from '@/lib/live-draft-engine/DraftSessionService'
 import { transitionLeagueState } from '@/server/services/leagueLifecycleService'
+import { CURRENT_TEAMS } from '@/lib/leagues/leagueTeamLifecycle'
 
 export const dynamic = 'force-dynamic'
 
@@ -38,8 +39,14 @@ export async function POST(
         where: { id: leagueId },
         select: { leagueSize: true },
       }),
+      /*
+       * ⚠ AN ARCHIVED FRANCHISE NO LONGER OCCUPIES A SEAT, AND COUNTING IT HERE WOULD KEEP THE
+       * SEAT LOCKED. `emptySlotCount` is `leagueSize - existingTeams.length`, so a departed team
+       * left in this count hides a slot that is genuinely vacant and the commissioner cannot fill
+       * it. Freeing the seat while keeping the history is the entire point of archiving.
+       */
       prisma.leagueTeam.findMany({
-        where: { leagueId },
+        where: { leagueId, ...CURRENT_TEAMS },
         select: { id: true },
       }),
     ])
@@ -128,8 +135,9 @@ export async function POST(
     }
 
     // Get all teams for randomization
+    // A departed franchise is not dealt a draft slot.
     const allTeams = await prisma.leagueTeam.findMany({
-      where: { leagueId },
+      where: { leagueId, ...CURRENT_TEAMS },
       select: { externalId: true, teamName: true, ownerName: true, id: true, avatarUrl: true },
     })
 
