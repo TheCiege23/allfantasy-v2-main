@@ -4,6 +4,7 @@ import { CROSS_LEAGUE_BOOK, valueBookFor, type ValueBook } from './valueBook'
 import { prisma } from '@/lib/prisma'
 import { loadLatestPlayerValueSnapshots } from '@/lib/player-values/latestPlayerValueSnapshots'
 import { gradeTrade } from '@/lib/projections/tradeGrading'
+import { collapseClaimedLeagues } from './claimedLeagues'
 import {
   LATEST_TRADE_ORDER,
   gradeableSide,
@@ -306,13 +307,31 @@ export async function getTradesBoard(
             platformLeagueId: true,
             logoUrl: true,
             avatarUrl: true,
+            /*
+             * ⚠ THE IMPORTER AND THE FRESHNESS, READ ONLY TO COLLAPSE DUPLICATES.
+             * `leagues` is per-user, so one Sleeper league is one row PER IMPORTER, and a
+             * claim is written into every copy — see `collapseClaimedLeagues`.
+             */
+            userId: true,
+            updatedAt: true,
           },
         },
       },
     })
     .catch(() => [])
 
-  const mine = claimed.filter((c) => c.league != null)
+  /*
+   * 🛑 ONE ROW PER REAL LEAGUE, NOT ONE PER COPY. This was `claimed.filter(c => c.league != null)`,
+   * which iterated every copy of every league the reader has claimed a team in — 95 rows for 65
+   * leagues on a measured production account. The 30 extras rendered as cards saying "No trade has
+   * been made in this league", because trades attach to a single copy below.
+   *
+   * ⚠ IT WAS INVISIBLE HERE FOR A STRUCTURAL REASON, so do not take this screen's calm as evidence
+   * the other 28 cross-league loaders are fine: the phantoms carry no trades, `byTradeUrgency`
+   * sorts them below everything that does, and `ROW_CAP` cuts at ten. They were out of frame, not
+   * absent.
+   */
+  const mine = collapseClaimedLeagues(claimed, userId)
   if (mine.length === 0) return { ...EMPTY, currentWeek }
 
   const leagueIds = [...new Set(mine.map((c) => c.leagueId))]
