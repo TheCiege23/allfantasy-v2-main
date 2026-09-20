@@ -1,6 +1,12 @@
-#!/usr/bin/env node
 /**
  * Delete Neon `preview/pr-<n>-*` branches whose pull request is closed.
+ *
+ * ⚠ NO SHEBANG, DELIBERATELY — PUTTING ONE BACK STOPS THE TESTS PARSING THIS FILE. Vitest's SSR
+ * transform hoists the `node:url` import to offset 0, landing it on top of a `#!` line:
+ *   const pathToFileURL = __vite__cjsImport0_node_url["pathToFileURL"];#!/usr/bin/env node
+ * `scripts/schema-drift-summary.mjs` — the other .mjs a test imports — carries no shebang for
+ * the same reason, while the CLI-only ones (ts-error-ratchet, check-db-first-api-boundary) do.
+ * This is always invoked as `node scripts/…`, so the shebang bought nothing.
  *
  * ── WHY A RECONCILER AND NOT ANOTHER FIX TO THE DELETE JOB ─────────────────────────────────────
  * `.github/workflows/neon-pr-branches.yml` already deletes a branch when its PR closes, and it

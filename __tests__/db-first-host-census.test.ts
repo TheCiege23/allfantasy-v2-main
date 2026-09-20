@@ -155,6 +155,18 @@ const CATEGORIES: Array<{ name: string; why: string; test: RegExp }> = [
    * events and the OAuth /me lookup.
    */
   { name: 'platform-infra', why: 'social publishing, analytics and OAuth — we write to these, not read feeds', test: /^(api\.twitter\.com|graph\.facebook\.com)$/i },
+  /*
+   * INFRASTRUCTURE CONTROL PLANE, not a data read. console.neon.tech is Neon's own management
+   * API: scripts/neon-prune-preview-branches.mjs lists database branches and deletes the ones
+   * whose pull request is closed. It asks "which branches exist", never "what is in them", so
+   * there is no Postgres answer it could have read instead — the DB-first rule has nothing to
+   * say about it, which is exactly why it belongs in a category rather than in
+   * DATA_API_HOST_PATTERNS.
+   *
+   * ⚠ It is also the one host here that can DELETE a database, so if it ever appears in a file
+   * outside scripts/, that is a finding regardless of what this ledger says.
+   */
+  { name: 'platform-infra', why: 'Neon control plane — database branch lifecycle, not a data feed', test: /^console\.neon\.tech$/i },
   { name: 'gif-picker', why: 'user-facing media search, not a sports data feed', test: /^(giphy\.com|api\.giphy\.com|tenor\.googleapis\.com|api\.klipy\.(com|ai))$/i },
   { name: 'chat-integration', why: 'Discord OAuth, bot API and deep links — a chat platform, not a data feed', test: /^discord\.com$/i },
   { name: 'namespace', why: 'an XML/JSON-LD namespace, never fetched', test: /^(schema\.org|www\.w3\.org|www\.sitemaps\.org)$/i },

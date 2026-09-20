@@ -360,7 +360,20 @@ const ALLOWED_PATH_PATTERNS = [
    * hand-run — absent from package.json and from CI — and a script is never a
    * request path.
    */
-  /^scripts\/.*(audit|compare|ingest|ingestion|sync|backfill|import|migrate|worker|seed|hydrate|refresh)/i,
+  /*
+   * `prune` joins on the same footing as `audit` and `compare`, and the host it calls is the
+   * reason it needs saying out loud. scripts/neon-prune-preview-branches.mjs deletes Neon
+   * database branches whose pull request is closed, so it must ask GitHub whether each PR is
+   * closed — `api.github.com`, which `(^|\.)github\.com$` monitors. There is no Postgres answer
+   * to "is PR 1142 still open", so the DB-first rule has nothing to offer here; it is CI
+   * maintenance, runs on a schedule, and a script is never a request path.
+   *
+   * ⚠ NOT SOLVED BY HOISTING THE URL. Moving the literal into a shared constant would silence
+   * the guard while changing nothing, which is the mistake CFBD_BASE_URL had to be added to
+   * DATA_API_IDENTIFIERS to undo. The verb is the honest fix: it says which KIND of script may
+   * call out, in a list a human reads.
+   */
+  /^scripts\/.*(audit|compare|prune|ingest|ingestion|sync|backfill|import|migrate|worker|seed|hydrate|refresh)/i,
   /^lib\/.*(ingest|ingestion|sync)/i,
   /^app\/api\/sports\/news\/sync-helper\.(ts|tsx|js|jsx|mjs|cjs)$/i,
   /^app\/api\/cron\//i,
