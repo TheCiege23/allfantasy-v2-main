@@ -26,3 +26,19 @@
  * which is why the screen needs the number and not just the grouping.
  */
 export const COIN_FLIP_POINTS = 12
+
+/**
+ * Below this many completed weeks a roster gets no projection, and its matchup
+ * lands in `WeekBoard.unprojected`.
+ *
+ * ⚠ MOVED HERE FROM `weekBoard.ts`, NOT COPIED. `WeekBoard.tsx` now lists those
+ * matchups and tells the reader how close each one is to being projectable
+ * ("2 of 3 weeks"), so the screen needs the number. A second literal in the
+ * component is the "two implementations of one rule" shape this repo has been
+ * bitten by: the loader's threshold and the screen's sentence would then be free
+ * to disagree, and the sentence is the one people read.
+ *
+ * The loader imports it from here. That direction is safe — this module has no
+ * imports at all, which is the whole reason it exists (see the header).
+ */
+export const MIN_WEEKS_FOR_PROJECTION = 3

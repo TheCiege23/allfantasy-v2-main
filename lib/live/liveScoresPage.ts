@@ -157,6 +157,28 @@ export type LiveGameCard = {
   topPerformer: LiveScoreRow['topPerformer']
   /** Game leaders, football ordered PASS, RUSH, REC. Empty when the feed names none. */
   leaders: LiveGameLeader[]
+  /**
+   * True when `leaders` were named BEFORE this game kicked off, so every stat
+   * line in them is from an EARLIER game.
+   *
+   * 🛑 THE INCONSISTENCY THIS EXISTS TO CLOSE. Every other started-only field on
+   * this card is gated on `played` — `score`, `linescores`, `hits`, `errors`,
+   * each side's `leaders`, `shooting`. The GAME-level `leaders` array was not,
+   * and nobody noticed because it looks like data either way. The result,
+   * screenshotted on a phone at week 2: a card headed "NFL · WEEK 2 · 9/20 —
+   * 1:00 PM EDT" with both scores rendered as "—" and, directly underneath,
+   * Caleb Williams for 269 yards and 2 TD, D'Andre Swift 124 and 3 TD, Justin
+   * Jefferson 8 for 92 and 2 TD. Those are week 1 lines. The same player showed
+   * "0.0 pts" in the starters list forty pixels below.
+   *
+   * ⚠ THE FIX IS A LABEL, NOT A DELETION, AND THAT IS THE USER'S CALL. Pre-game
+   * leaders are genuinely useful — ESPN shows them too — and gating them on
+   * `played` like the rest would have thrown away the one piece of form the card
+   * carries before kickoff. What was wrong was presenting them unlabelled next
+   * to a blank scoreline, where they read as live. The view captions them; see
+   * `Leaders` in LiveScores.tsx.
+   */
+  leadersArePregame: boolean
   situation: LiveGameSituation | null
   venue: { name: string; location: string | null } | null
   broadcast: string | null
@@ -902,6 +924,13 @@ export async function getLivePageData(opts: {
         : null,
       venue: row.venue ? { name: row.venue, location: row.venueLocation ?? null } : null,
       broadcast: row.broadcast ?? null,
+      /*
+       * ⚠ DERIVED FROM `played`, THE SAME FLAG EVERY OTHER STARTED-ONLY FIELD ON
+       * THIS CARD USES. Not from `startTime` vs the clock: a postponed game has
+       * a start time in the past and has still not kicked off, and `played`
+       * already answers exactly this question for six other fields above.
+       */
+      leadersArePregame: !played && (row.leaders ?? []).length > 0,
       espnDetail: row.leaders !== undefined,
       winProbability: estimateWinProbability({
         homeScore: row.homeScore,

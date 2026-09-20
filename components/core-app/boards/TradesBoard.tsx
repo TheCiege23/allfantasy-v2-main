@@ -1,5 +1,3 @@
-import Link from 'next/link'
-
 import type {
   BoardTrade,
   TradeAsset,
@@ -8,6 +6,7 @@ import type {
 } from '@/lib/core-app/tradesBoard'
 import { teamLogoUrl } from '@/lib/core-app/teamLogo'
 import PlayerName from '@/components/core-app/player-card/PlayerName'
+import BoardActionLink from '@/components/core-app/boards/BoardActionLink'
 import {
   BoardHead,
   FooterSummary,
@@ -219,9 +218,17 @@ function WindowCard({ row }: { row: TradeWindowRow }) {
           >
             {deadlineLabel}
           </span>
-          <Link className="af-bd-btn" href={row.href}>
+          {/*
+            ⚠ NOT A PLAIN `<Link>`. This navigates `/core/trades` →
+            `/core/trades?league=…`, which changes a SEARCH PARAM and not the
+            segment key — so the route's `loading.tsx` never re-suspends, the
+            skeleton never paints, and the tap produced no feedback at all while
+            `getTradesData` made a live Sleeper call. Reported from a phone as
+            the button "not working when clicked". See BoardActionLink's header.
+          */}
+          <BoardActionLink className="af-bd-btn" href={row.href}>
             Open trades →
-          </Link>
+          </BoardActionLink>
         </header>
 
         {t ? (
@@ -324,12 +331,12 @@ export function TradesBoard({ data, allHref }: TradesBoardProps) {
                     <span className="af-bd-tag" data-sev="bad">
                       {p.status.toUpperCase()}
                     </span>
-                    <Link
+                    <BoardActionLink
                       className="af-bd-btn"
                       href={`/core/trades?league=${encodeURIComponent(p.leagueId)}`}
                     >
                       Review it →
-                    </Link>
+                    </BoardActionLink>
                   </header>
                   <div className="af-bd-side">
                     <span className="af-bd-side-label">On the table</span>

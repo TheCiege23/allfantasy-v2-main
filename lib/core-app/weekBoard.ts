@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma'
 import { getFirstStatedKickoff } from './seasonPhase'
 import { isScored, resolveCurrentWeekFrom } from './currentWeek'
 import { leagueArtUrl, managerArtUrl } from './leagueArt'
+import { MIN_WEEKS_FOR_PROJECTION } from './weekBoardRules'
 
 /**
  * 24a "Your Week" and 24b "Rivalry Radar" — one read, two views.
@@ -40,8 +41,13 @@ import { leagueArtUrl, managerArtUrl } from './leagueArt'
  * are different claims.
  */
 
-/** Below this many completed weeks a roster gets no projection. */
-const MIN_WEEKS_FOR_PROJECTION = 3
+/*
+ * ⚠ `MIN_WEEKS_FOR_PROJECTION` NOW LIVES IN `weekBoardRules.ts`, WITH
+ * `COIN_FLIP_POINTS`, because the SCREEN needs it too — `WeekBoard.tsx` lists
+ * the unprojectable matchups and says how far short of the threshold each one
+ * is. It is imported above rather than restated here; see that file's header
+ * for why a shared threshold cannot live in this `server-only` module.
+ */
 
 /**
  * Floor on σ. A roster with two near-identical weeks produces a σ near zero,
@@ -632,6 +638,25 @@ export async function getWeekBoard(
   // from anything that matters.
   coinFlips.sort((a, b) => Math.abs(a.projection!.margin) - Math.abs(b.projection!.margin))
   leaning.sort((a, b) => Math.abs(b.projection!.margin) - Math.abs(a.projection!.margin))
+  /*
+   * ⚠ `unprojected` IS ORDERED TOO NOW, AND IT WAS NOT BEFORE — it left here in
+   * whatever order the schedule pairs happened to iterate in. That was harmless
+   * while both surfaces only COUNTED it. `WeekBoard` now lists the first ten of
+   * it, and "the first ten of an arbitrary order" is a ranking claim nobody
+   * made: on the account that prompted this there are 47 of them, so 37 are
+   * dropped by an accident of iteration.
+   *
+   * Most completed weeks first, so the matchups nearest the threshold — the ones
+   * that will be projectable soonest — lead. `yourSampleWeeks` is already on the
+   * card for exactly this reason.
+   *
+   * ⚠ SORTED HERE, NOT IN THE VIEW. `YourWeek.tsx` states the rule in its own
+   * header: the loader hands the tiers over ordered and the screen contains no
+   * `.sort()`, so the two cannot silently disagree about what matters.
+   */
+  unprojected.sort(
+    (a, b) => b.yourSampleWeeks - a.yourSampleWeeks || a.leagueName.localeCompare(b.leagueName),
+  )
 
   /*
    * ── The focused league's own board ──────────────────────────────────

@@ -303,15 +303,10 @@
   color: var(--text);
 }
 
+/* Shape from `.af-platform-mark`; a 30px circle, so only the size is local. */
 .af-core .af-lp-mark {
-  display: grid;
-  place-items: center;
-  flex: 0 0 auto;
-  width: 30px;
-  height: 30px;
-  border-radius: 50%;
+  --af-platform-mark-size: 30px;
   font-size: 11px;
-  font-weight: 900;
   background: var(--chip);
   color: var(--text2);
 }

@@ -91,6 +91,7 @@ function card(): LiveGameCard {
     venue: null,
     broadcast: null,
     espnDetail: false,
+    leadersArePregame: false,
     tieIns: [],
     leaguesAffected: 0,
   }

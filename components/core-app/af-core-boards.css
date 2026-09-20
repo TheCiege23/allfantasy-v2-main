@@ -1171,3 +1171,48 @@
     min-height: 44px;
   }
 }
+
+/* ---------------------------------------------------------------------------
+ * Draft picks in a trade card, and the action's pending state — 2026-09-20.
+ *
+ * ⚠ TOP-LEVEL AT END OF FILE, NOT INSIDE THE 720px BLOCK ABOVE. Both rules
+ * belong to every width. Dropping them into the phone query would close it
+ * early and silently re-home everything below into it — see the same note in
+ * af-core-shell.css and CLAUDE.md.
+ * ------------------------------------------------------------------------- */
+
+/*
+ * A pick's stand-in for a headshot. `PlayerFace` reserves a fixed square in the
+ * asset row, so without a mark of the same footprint the pick rows' names would
+ * hang left of every player row in the same column.
+ */
+.af-core .af-bd-pickmark {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  flex: none;
+  border: 1px dashed var(--line2);
+  border-radius: 7px;
+  color: var(--faint);
+  font-size: 10px;
+  line-height: 1;
+}
+
+/*
+ * ⚠ AN UNPRICED PICK IS NOT DIMMED. The em dash in `.af-bd-asset-val` already
+ * says we hold no price, and greying the row as well would read as "this pick
+ * did not really count" on a card whose whole subject is what was traded.
+ */
+
+/*
+ * The action mid-navigation. `BoardActionLink` sets `data-pending` from React's
+ * own transition state, so this cannot be left stuck on — see its header for why
+ * `loading.tsx` never fires on these navigations.
+ */
+.af-core .af-bd-btn[data-pending] {
+  /* Not `opacity`: the label swaps to "Opening…", and fading it at the same
+     time makes the one piece of feedback this adds the hardest thing to read. */
+  filter: saturate(0.7);
+  cursor: progress;
+}

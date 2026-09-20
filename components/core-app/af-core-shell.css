@@ -1063,11 +1063,17 @@
    * against the bare `.af-content` earlier in this file; a bottom padding set
    * there is dead code, which is exactly what a first attempt at this fix shipped
    * and what measuring the COMPUTED value caught.
+   *
+   * ⚠ THE `env(safe-area-inset-bottom)` TERM IS GONE BECAUSE IT MOVED INSIDE THE
+   * TOKEN, NOT BECAUSE THE INDICATOR STOPPED MATTERING. `--af-fab-inset-phone`
+   * is now `calc(56px + env(safe-area-inset-bottom) + 12px)` — it reserves the
+   * indicator itself — so keeping the term here would reserve it twice and open
+   * a 34px dead band under every screen. See af-core.css.
+   *
+   * The `56px + 16px` stays: the launcher's own height, plus breathing room.
    */
   .af-core .af-content {
-    padding-bottom: calc(
-      var(--af-fab-inset-phone, 76px) + 56px + 16px + env(safe-area-inset-bottom, 0px)
-    );
+    padding-bottom: calc(var(--af-fab-inset-phone, 102px) + 56px + 16px);
   }
 
   /* Headings would be five more rows in a horizontal strip. The strip is
@@ -2505,5 +2511,104 @@ html[data-mode='light'] .af-core {
   }
   .af-core .af-nav-scroll > .af-nav-group:first-child .af-nav-item[data-active='true'] {
     color: var(--accent);
+  }
+}
+
+/* ---------------------------------------------------------------------------
+ * Phone chrome repairs — 2026-09-20, from a real device.
+ *
+ * ⚠ ITS OWN TOP-LEVEL @media AT END OF FILE, per the convention this stylesheet
+ * already states four times above: a block dropped INSIDE an existing @media
+ * closes the outer query early and silently re-homes every rule below it into
+ * the narrower one. Braces stay balanced and nothing throws. Later-wins makes a
+ * sibling block equivalent and impossible to get wrong.
+ * ------------------------------------------------------------------------- */
+
+/*
+ * The crest is phone chrome only. Above 720px the rail is on screen and carries
+ * `.af-rail-logo`, so showing it here as well would put the mark on the page
+ * twice — which is why this is `display: none` by default and switched ON in
+ * the phone block, rather than the other way round.
+ */
+.af-core .af-topbar-crest {
+  display: none;
+}
+
+@media (max-width: 720px) {
+  .af-core .af-topbar-crest {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    /* A tap target as well as a mark: it is a link to /core. */
+    min-width: 44px;
+    min-height: 44px;
+    margin-left: -6px;
+    border-radius: 12px;
+  }
+  .af-core .af-topbar-crest:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: -2px;
+  }
+
+  /*
+   * 🛑 THE SUPPORT BUTTON LEAVES THE NAV STRIP.
+   *
+   * `.af-nav-foot` is a flex SIBLING of `.af-nav-scroll`, and only the scroller
+   * carries `overflow-x: auto`. So on a phone the foot took its content width
+   * out of the same row the nav items were scrolling inside, and the strip's
+   * last destinations ran underneath it — reported from a phone as the support
+   * button "covering a list of options", with "Matchup" truncated to "Ma".
+   *
+   * ⚠ HIDING IT WITHOUT REHOMING IT WOULD REMOVE THE ONLY WAY TO REPORT A
+   * PROBLEM FROM A PHONE. It is rendered in the More sheet instead, dispatching
+   * the same `SUPPORT_OPEN_EVENT` — see AfCoreShell. `.af-import-cta`, the
+   * foot's other child, is already hidden here for the same reason (a block of
+   * prose does not belong in a horizontal scroller), which left the foot
+   * carrying exactly one control.
+   */
+  .af-core .af-nav-foot {
+    display: none;
+  }
+
+  /* With the foot gone the scroller is the whole strip and may use the width. */
+  .af-core .af-nav-scroll {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  /*
+   * The More sheet's icon column. `.af-mobile-more-link` is a three-track grid
+   * whose first track is 22px; before this the cell held a bare unicode glyph
+   * at the row's inherited 14px, so the marks sat at different optical sizes and
+   * off the text baseline. Centring the 18px drawing in the track fixes both.
+   */
+  .af-core .af-mobile-more-icon {
+    display: grid;
+    place-items: center;
+    width: 22px;
+    height: 22px;
+    /* Quieter than the label until the row is active, where `currentColor`
+       carries it into the accent with the rest of the row. */
+    opacity: 0.75;
+  }
+  .af-core .af-mobile-more-link[data-active='true'] .af-mobile-more-icon {
+    opacity: 1;
+  }
+
+  /*
+   * ⚠ THE SHEET NOW CONTAINS A <button> AS WELL AS <a>s, AND A BUTTON BRINGS THE
+   * USER AGENT'S OWN BOX WITH IT. Without this reset "Contact support" renders
+   * centred, in the UA's font, on a grey chip — next to fifteen rows that do
+   * none of those things. `width: 100%` because a grid button shrink-wraps where
+   * a block-level anchor fills.
+   */
+  .af-core button.af-mobile-more-link {
+    width: 100%;
+    border: 0;
+    background: transparent;
+    font-family: inherit;
+    text-align: left;
+    cursor: pointer;
   }
 }
