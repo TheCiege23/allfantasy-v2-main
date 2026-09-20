@@ -16,6 +16,9 @@ const DRAFT_PACKAGED_THUMB_LABEL: Record<string, string> = {
   snake: 'Snake Draft',
   linear: 'Linear Draft',
   auction: 'Auction Draft',
+  auto: 'Auto Draft',
+  offline: 'Offline Draft',
+  weighted_lottery: 'Weighted Lottery',
 }
 
 /** Legacy row art when no packaged thumbnail applies */
@@ -33,6 +36,24 @@ const DRAFT_TYPE_MEDIA_MAP: Record<string, Omit<DraftTypeMedia, 'selectionVideo'
   auction: {
     thumbnail: '/league-type-salary-cap.png',
     defaultDraftImageUrl: '/league-type-salary-cap.png',
+    thumbnailFallback: FALLBACK,
+  },
+  // `auto` and `offline` are offered on the create surface for nearly every league type
+  // (rules-engine EXECUTION_DRAFT_IDS). Without their own rows they fell through to the
+  // `snake` default below, so both tiles rendered the Snake Draft artwork.
+  auto: {
+    thumbnail: '/media/create-league/drafts/thumbnails/Auto Draft.png',
+    defaultDraftImageUrl: '/media/create-league/drafts/thumbnails/Auto Draft.png',
+    thumbnailFallback: FALLBACK,
+  },
+  offline: {
+    thumbnail: '/media/create-league/drafts/thumbnails/Offline Draft.png',
+    defaultDraftImageUrl: '/media/create-league/drafts/thumbnails/Offline Draft.png',
+    thumbnailFallback: FALLBACK,
+  },
+  weighted_lottery: {
+    thumbnail: '/media/create-league/drafts/thumbnails/Weighted Lottery.png',
+    defaultDraftImageUrl: '/media/create-league/drafts/thumbnails/Weighted Lottery.png',
     thumbnailFallback: FALLBACK,
   },
   slow_draft: {
@@ -90,9 +111,9 @@ export function getDraftThumbnailCandidates(id: DraftTypeId): readonly string[] 
   }
 
   if (stem) {
-    // Only `snake`/`linear`/`auction` have packaged thumbnails under
+    // Only the stems in DRAFT_PACKAGED_THUMB_LABEL have packaged thumbnails under
     // /public/media/create-league/drafts/thumbnails/ (Title Case, verified on disk).
-    // Other draft types (auto, offline, mock_draft, ...) have no packaged file at
+    // The rest (slow_draft, mock_draft, team, ...) have no packaged file at
     // any name, so guessing bare-stem filenames here only produced guaranteed 404s
     // before falling through to `row.thumbnail` below.
     const label = DRAFT_PACKAGED_THUMB_LABEL[stem]

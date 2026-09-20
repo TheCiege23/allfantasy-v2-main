@@ -4,8 +4,10 @@ import { LEAGUE_TYPE_MEDIA, SPORT_MEDIA } from '@/lib/create-league-v2/theme'
 import {
   resolveDraftIntroStemFromWizardId,
   resolveDraftIntroVideoUrl,
+  resolveDraftSelectionVideoUrl,
 } from '@/lib/draft/draft-intro-video'
 import { getDraftTypeMedia } from '@/lib/league-media/draftTypeMedia'
+import type { DraftTypeId } from '@/lib/league-creation-wizard/types'
 import { setClientLeagueCreateOptionsCatalog } from '@/lib/create-league-v2/options-catalog-client'
 import { LEAGUE_CREATE_OPTIONS_CATALOG_V1 } from '@/lib/league-creation/options-catalog-seed-data'
 import {
@@ -60,19 +62,45 @@ describe('resolveCreateLeagueHeroMedia (focus)', () => {
 })
 
 describe('draft intro resolver (fail closed)', () => {
-  it('returns packaged snake draft clip first', () => {
-    expect(resolveDraftIntroVideoUrl('snake')).toBe('/media/create-league/drafts/videos/Snake Draft.mp4')
-    expect(resolveDraftIntroVideoUrl('devy_snake')).toBe('/media/create-league/drafts/videos/Snake Draft.mp4')
+  it('prefers the long intro cut over the short selection loop, where one ships', () => {
+    // Snake and auction are the only two stems with a dedicated intro cut. Asserting the two
+    // resolvers DIFFER is the point: they were the same call before, so the draft-start
+    // overlay played the tile loop.
+    expect(resolveDraftIntroVideoUrl('snake')).toBe(
+      '/media/create-league/drafts/videos/Snake Draft Intro.mp4',
+    )
+    expect(resolveDraftSelectionVideoUrl('snake')).toBe(
+      '/media/create-league/drafts/videos/Snake Draft.mp4',
+    )
+    expect(resolveDraftIntroVideoUrl('snake')).not.toBe(resolveDraftSelectionVideoUrl('snake'))
+
+    expect(resolveDraftIntroVideoUrl('auction')).toBe('/media/draft-intros/Auction Draft Intro.mp4')
+    expect(resolveDraftSelectionVideoUrl('auction')).toBe(
+      '/media/create-league/drafts/videos/Auction Draft.mp4',
+    )
+
+    // Wizard variants resolve through the same stem.
+    expect(resolveDraftIntroVideoUrl('devy_snake')).toBe(
+      '/media/create-league/drafts/videos/Snake Draft Intro.mp4',
+    )
   })
 
-  it('returns shipped linear + auction clips', () => {
+  it('falls back to the selection loop for stems with no intro cut', () => {
     expect(resolveDraftIntroVideoUrl('linear')).toBe('/media/create-league/drafts/videos/Linear Draft.mp4')
-    expect(resolveDraftIntroVideoUrl('auction')).toBe('/media/create-league/drafts/videos/Auction Draft.mp4')
+    expect(resolveDraftIntroVideoUrl('auto')).toBe('/media/create-league/drafts/videos/Auto Draft.mp4')
+    expect(resolveDraftIntroVideoUrl('offline')).toBe(
+      '/media/create-league/drafts/videos/Offline Draft.mp4',
+    )
+    expect(resolveDraftIntroVideoUrl('weighted_lottery')).toBe(
+      '/media/create-league/drafts/videos/Weighted Lottery.mp4',
+    )
   })
 
   it('returns null for stems without shipped assets (no crash)', () => {
     expect(resolveDraftIntroVideoUrl('slow_draft')).toBeNull()
     expect(resolveDraftIntroVideoUrl('mock_draft')).toBeNull()
+    expect(resolveDraftIntroVideoUrl('team')).toBeNull()
+    expect(resolveDraftIntroVideoUrl('')).toBeNull()
   })
 
   it('getDraftTypeMedia wires selectionVideo from resolver', () => {
@@ -80,6 +108,30 @@ describe('draft intro resolver (fail closed)', () => {
     expect(linear.selectionVideo).toBe('/media/create-league/drafts/videos/Linear Draft.mp4')
     const snake = getDraftTypeMedia('snake')
     expect(snake.selectionVideo).toBe('/media/create-league/drafts/videos/Snake Draft.mp4')
+  })
+
+  it('auto + offline tiles no longer borrow the Snake Draft artwork', () => {
+    const snake = getDraftTypeMedia('snake' as DraftTypeId)
+    for (const id of ['auto', 'offline'] as const) {
+      const media = getDraftTypeMedia(id as unknown as DraftTypeId)
+      expect(media.thumbnail).not.toBe(snake.thumbnail)
+      expect(media.thumbnail).not.toContain('snake')
+      expect(media.selectionVideo).not.toBe('')
+    }
+    expect(getDraftTypeMedia('auto' as unknown as DraftTypeId).thumbnail).toBe(
+      '/media/create-league/drafts/thumbnails/Auto Draft.png',
+    )
+    expect(getDraftTypeMedia('offline' as unknown as DraftTypeId).thumbnail).toBe(
+      '/media/create-league/drafts/thumbnails/Offline Draft.png',
+    )
+  })
+
+  it('every draft type the create surface offers has real art and a clip', () => {
+    // rules-engine exposes `auto` / `offline` for nearly every league type; both were
+    // rendering snake's poster with no video before these assets shipped.
+    const offered = getDraftTypeOptions('redraft', 'NFL').map((o) => o.id)
+    expect(offered).toContain('auto')
+    expect(offered).toContain('offline')
   })
 
   it('maps wizard ids to intro stems', () => {
