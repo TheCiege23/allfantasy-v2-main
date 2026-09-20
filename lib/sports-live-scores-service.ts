@@ -232,6 +232,18 @@ export interface LiveScoreRow {
   startTime: string
   venue: string | null
   broadcast: string | null
+  /**
+   * What the provider CALLS this game, when it says anything at all.
+   *
+   * ⚠ OPTIONAL BECAUSE MOST ROWS HAVE NO SUCH LABEL. A regular-season game has
+   * no round to name, and the database-backed and Rolling Insights builders do
+   * not set it. Treat absent as "the provider did not say", never as "".
+   *
+   * 🛑 THE POSTSEASON SYNC CANNOT INFER A ROUND WITHOUT IT. `roundIndexFromGame`
+   * reads only this; an ESPN-sourced game arriving with it undefined was
+   * silently dropped from every provider series group, for every sport.
+   */
+  eventName?: string | null
   odds: string | null
   overUnder: number | null
   week: number | null
@@ -431,12 +443,20 @@ interface ESPNCompetition {
   situation?: EspnSituation
   odds?: Array<{ details: string; overUnder: number }>
   broadcasts?: Array<{ names: string[] }>
+  /**
+   * ESPN's own label for what this game IS — "ALWC - Game 2", "NLDS - Game 5",
+   * "World Series - Game 7". It is the ONLY field in the payload that says
+   * which round a postseason game belongs to.
+   */
+  notes?: Array<{ type?: string; headline?: string }>
   startDate: string
 }
 
 interface ESPNEvent {
   id: string
   date: string
+  name?: string
+  shortName?: string
   season: { year: number }
   week?: { number: number }
   competitions: ESPNCompetition[]
@@ -567,6 +587,13 @@ export async function fetchEspnScoreboard(
         startTime: comp.startDate || event.date,
         venue: comp.venue?.fullName ?? null,
         broadcast: comp.broadcasts?.[0]?.names?.join(', ') ?? null,
+        /*
+         * The competition NOTE is the round label ("ALDS - Game 3"); the event
+         * name is the matchup ("Yankees at Blue Jays") and says nothing about
+         * the round. Prefer the note, fall back to the event name so a provider
+         * that only fills one of them still says something.
+         */
+        eventName: comp.notes?.[0]?.headline ?? event.name ?? null,
         odds: comp.odds?.[0]?.details ?? null,
         overUnder: comp.odds?.[0]?.overUnder ?? null,
         week: event.week?.number ?? null,
