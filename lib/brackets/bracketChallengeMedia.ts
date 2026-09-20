@@ -18,6 +18,18 @@ export type BracketChallengeHero = {
 }
 
 const HERO_BY_SPORT: Record<string, BracketChallengeHero> = {
+  /*
+   * Not a sport — the World Cup bracket lives on its own route with its own create modal, so it
+   * is keyed by challenge instead. Same lookup, same fail-closed behaviour.
+   *
+   * ⚠ Distinct from `af-world-cup-hero.mp4`, which is the WC HUB's hero. This is the shorter
+   * challenge promo and only appears on the create modal.
+   */
+  WORLD_CUP: {
+    video: '/videos/brackets/world-cup/af-world-cup-challenge-hero.mp4',
+    poster: '/images/brackets/world-cup/af-world-cup-challenge-hero-poster.png',
+    label: 'FIFA World Cup Bracket Challenge',
+  },
   NBA: {
     video: '/videos/brackets/nba-playoffs/af-nba-playoffs-hero.mp4',
     poster: '/images/brackets/nba-playoffs/af-nba-playoffs-hero-poster.png',

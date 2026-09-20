@@ -8,6 +8,11 @@ import { useOptionalLanguage } from "@/components/i18n/LanguageProviderClient"
 import { ThemeModeSelect } from "@/components/theme/ThemeModeSelect"
 import { makeWcT } from "@/lib/world-cup/worldCupI18n"
 import { trackMetaEventsFromResponse } from "@/lib/meta-client"
+import {
+  isWorldCupCreationOpen,
+  worldCupEntriesClosedMessage,
+} from "@/lib/world-cup/worldCupSeasonWindow"
+import { BracketChallengeHeroMedia } from "@/components/brackets/BracketChallengeHeroMedia"
 
 const WC_LOGO_SRC = "/images/brackets/world-cup/af-world-cup-logo.png"
 
@@ -24,6 +29,11 @@ export default function WorldCupBracketCreateModal() {
   // so this never throws.
   const { language } = useOptionalLanguage()
   const t = useMemo(() => makeWcT(language), [language])
+  /*
+   * Read once, so SSR and the first client render agree. The API enforces this independently —
+   * this only stops the form being offered for a tournament that has finished.
+   */
+  const [creationOpen] = useState(() => isWorldCupCreationOpen())
 
   const [name, setName] = useState(() => t("wc.create.poolName.default"))
   const [visibility, setVisibility] = useState<"private" | "public">("private")
@@ -147,6 +157,35 @@ export default function WorldCupBracketCreateModal() {
 
       <main className="overflow-y-auto">
         <div className="mx-auto w-full max-w-xl px-3 py-4 pb-28 sm:px-4 sm:py-8 sm:pb-8">
+          {!creationOpen ? (
+            /*
+             * The form is REPLACED, not hidden — a hidden form still ships focusable inputs a
+             * keyboard or screen reader can reach, which is the same trap as a closed <details>
+             * passing a visibility check.
+             */
+            <div
+              className="overflow-hidden rounded-xl border border-white/10 bg-white/[0.04] p-6 text-center shadow-2xl shadow-black/40"
+              data-testid="wc-create-closed"
+            >
+              <Trophy className="mx-auto h-8 w-8 text-white/35" />
+              <h2 className="mt-3 text-base font-black">Entries are closed</h2>
+              <p className="mt-2 text-sm text-white/60">{worldCupEntriesClosedMessage()}</p>
+              <Link
+                href="/brackets/world-cup"
+                className="mt-5 inline-flex items-center justify-center rounded-xl bg-cyan-300 px-4 py-3 text-sm font-black text-black"
+                data-testid="wc-create-closed-back"
+              >
+                Back to my pools
+              </Link>
+            </div>
+          ) : (
+          <>
+          {/*
+            * Sits inside the open branch on purpose: a promo for entering a bracket has no
+            * audience on a screen that says entries are closed. It returns when a season
+            * reopens — see worldCupSeasonWindow.
+            */}
+          <BracketChallengeHeroMedia sport="WORLD_CUP" />
           <form onSubmit={submit} className="overflow-hidden rounded-xl border border-white/10 bg-white/[0.04] shadow-2xl shadow-black/40">
             {/* Title block */}
             <div className="flex items-center gap-3 border-b border-white/[0.08] bg-white/[0.02] px-4 py-4 sm:px-6">
@@ -428,6 +467,8 @@ export default function WorldCupBracketCreateModal() {
 
             </div>{/* end inner padding div */}
           </form>
+          </>
+          )}
         </div>
       </main>
     </div>
