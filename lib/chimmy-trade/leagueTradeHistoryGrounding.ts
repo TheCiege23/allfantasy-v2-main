@@ -98,15 +98,47 @@ function describeSide(
 }
 
 /**
- * What has actually been traded in this league. Returns null when the league is
- * not Sleeper-backed or has no ingested history, so the prompt gains no empty
- * section.
+ * Why this block is or is not in the prompt.
+ *
+ * 🛑 `null` WAS SEVEN DIFFERENT ANSWERS WEARING ONE FACE. On 2026-09-20 Chimmy
+ * told a manager it could not see their league's trade history while 27 ingested
+ * trades sat in the database, whose players resolve 13 of 13 to correct names —
+ * and nothing recorded whether this function declined to build the block, or
+ * built it and had it dropped downstream by `applyGroundingBudget`. Those have
+ * opposite fixes, so the reason is now carried rather than collapsed.
  */
-export async function buildLeagueTradeHistoryContext(
+/**
+ * The opening words of the block, used both to write the heading and to check
+ * downstream whether it survived into the final prompt.
+ *
+ * ⚠ ONE CONSTANT, BECAUSE A COPY WOULD DRIFT. A survival check that hardcodes
+ * this string keeps passing after the heading is reworded, which would report a
+ * dropped block as present — the failure it exists to detect.
+ */
+export const TRADE_HISTORY_BLOCK_MARKER = 'COMPLETED TRADE HISTORY for this league'
+
+export type TradeHistoryOutcome =
+  | { kind: 'ok'; text: string; uniqueTrades: number; shown: number; unresolvedPlayers: number }
+  | { kind: 'missing-args' }
+  | { kind: 'league-lookup-failed' }
+  /** The id handed in is not a `leagues.id`. This repo has more than one league-id space. */
+  | { kind: 'league-not-found' }
+  | { kind: 'no-platform-league-id' }
+  | { kind: 'not-sleeper'; platform: string }
+  | { kind: 'history-lookup-failed' }
+  | { kind: 'no-history-rows' }
+  | { kind: 'trade-lookup-failed' }
+  | { kind: 'no-trade-rows'; historyCount: number }
+
+/**
+ * What has actually been traded in this league, with the reason attached when
+ * there is no block to add.
+ */
+export async function buildLeagueTradeHistoryOutcome(
   leagueId: string,
   userId: string,
-): Promise<string | null> {
-  if (!leagueId || !userId) return null
+): Promise<TradeHistoryOutcome> {
+  if (!leagueId || !userId) return { kind: 'missing-args' }
 
   let league: { platform: string; platformLeagueId: string; sport: string; season: number } | null
   try {
@@ -115,12 +147,13 @@ export async function buildLeagueTradeHistoryContext(
       select: { platform: true, platformLeagueId: true, sport: true, season: true },
     })
   } catch {
-    return null
+    return { kind: 'league-lookup-failed' }
   }
-  if (!league?.platformLeagueId) return null
+  if (!league) return { kind: 'league-not-found' }
+  if (!league.platformLeagueId) return { kind: 'no-platform-league-id' }
   // Ingestion is Sleeper-only; another platform's league has no rows here and a
   // silent empty block would read as "this league has never traded".
-  if (league.platform.toLowerCase() !== 'sleeper') return null
+  if (league.platform.toLowerCase() !== 'sleeper') return { kind: 'not-sleeper', platform: league.platform }
 
   let histories: Array<{ id: string }>
   try {
@@ -129,9 +162,9 @@ export async function buildLeagueTradeHistoryContext(
       select: { id: true },
     })
   } catch {
-    return null
+    return { kind: 'history-lookup-failed' }
   }
-  if (histories.length === 0) return null
+  if (histories.length === 0) return { kind: 'no-history-rows' }
 
   let rows: TradeRow[]
   try {
@@ -151,9 +184,9 @@ export async function buildLeagueTradeHistoryContext(
       },
     })) as unknown as TradeRow[]
   } catch {
-    return null
+    return { kind: 'trade-lookup-failed' }
   }
-  if (rows.length === 0) return null
+  if (rows.length === 0) return { kind: 'no-trade-rows', historyCount: histories.length }
 
   /*
    * One history row exists per MANAGER per league, so a single trade is stored
@@ -179,7 +212,7 @@ export async function buildLeagueTradeHistoryContext(
     .join(', ')
 
   const lines: string[] = [
-    `COMPLETED TRADE HISTORY for this league (Sleeper league ${league.platformLeagueId}).`,
+    `${TRADE_HISTORY_BLOCK_MARKER} (Sleeper league ${league.platformLeagueId}).`,
     `These trades ALREADY HAPPENED. None of them is a pending offer, and nothing here is awaiting the user's response.`,
     `Trades on file in the window read: ${unique.length} (${seasonSummary}).`,
     `Most recent ${shown.length}:`,
@@ -203,5 +236,27 @@ export async function buildLeagueTradeHistoryContext(
     )
   }
 
-  return lines.join('\n')
+  return {
+    kind: 'ok',
+    text: lines.join('\n'),
+    uniqueTrades: unique.length,
+    shown: shown.length,
+    unresolvedPlayers: totalUnresolved,
+  }
+}
+
+/**
+ * The original string-or-null contract, kept so existing callers are untouched.
+ *
+ * ⚠ A caller that needs to know WHY there is no block must use
+ * `buildLeagueTradeHistoryOutcome`. Collapsing back to `null` here is exactly
+ * the loss of information this module now exists to avoid — it is fine for a
+ * caller that only wants to append a block, and useless for diagnosis.
+ */
+export async function buildLeagueTradeHistoryContext(
+  leagueId: string,
+  userId: string,
+): Promise<string | null> {
+  const outcome = await buildLeagueTradeHistoryOutcome(leagueId, userId)
+  return outcome.kind === 'ok' ? outcome.text : null
 }

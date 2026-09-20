@@ -78,7 +78,10 @@ import { buildGuillotineWarRoomContextForChimmy } from '@/lib/guillotine-war-roo
 import { buildTradeContextForChimmy } from '@/lib/chimmy-trade/tradeChimmyGrounding'
 import { buildTradeBlockContext } from '@/lib/chimmy/tradeBlockGrounding'
 import { buildPendingTradeDecisionContext } from '@/lib/chimmy-trade/pendingTradeDecisionGrounding'
-import { buildLeagueTradeHistoryContext } from '@/lib/chimmy-trade/leagueTradeHistoryGrounding'
+import {
+  buildLeagueTradeHistoryOutcome,
+  TRADE_HISTORY_BLOCK_MARKER,
+} from '@/lib/chimmy-trade/leagueTradeHistoryGrounding'
 import { buildLeagueStandingsContext } from '@/lib/chimmy/leagueStandingsGrounding'
 import { buildRuleGroundingGap } from '@/lib/chimmy/leagueRulesGrounding'
 import { buildDecisionEnvelopeGrounding } from '@/lib/chimmy/decisionEnvelopeGrounding'
@@ -2887,6 +2890,20 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
           let legacyEnrichmentContext =
             legacyEnrichment.status === 'fulfilled' ? legacyEnrichment.value.context : ''
 
+          /*
+           * Why the league trade-history block is or is not in this prompt.
+           *
+           * 🛑 TWO FAILURES LOOK IDENTICAL FROM THE ANSWER. Chimmy saying "I
+           * cannot see this league's trade history" is produced BOTH by the
+           * block never being built (wrong league id, non-Sleeper league, no
+           * ingested rows) and by it being built and then dropped by
+           * `applyGroundingBudget`, which drops from the END and is where this
+           * block sits. They need opposite fixes, and until now nothing
+           * recorded which had happened. Logged once per planned turn, beside
+           * the labels of whatever the budget actually dropped.
+           */
+          let tradeHistoryDiag = 'not-attempted'
+
           try {
             const digest = await buildChimmySportDataDigest({
               sport: digestSport,
@@ -3159,18 +3176,26 @@ ${pendingTradeCtx}`
                * because imported leagues trade on Sleeper — this reads what came
                * back from there.
                */
-              const tradeHistoryCtx = await buildLeagueTradeHistoryContext(
+              const tradeHistory = await buildLeagueTradeHistoryOutcome(
                 leagueSnapshot.id,
                 planInput.userId,
               )
-              if (tradeHistoryCtx) {
+              tradeHistoryDiag =
+                tradeHistory.kind === 'ok'
+                  ? `built(trades=${tradeHistory.uniqueTrades},shown=${tradeHistory.shown},unnamed=${tradeHistory.unresolvedPlayers},chars=${tradeHistory.text.length})`
+                  : tradeHistory.kind
+              if (tradeHistory.kind === 'ok') {
                 legacyEnrichmentContext = legacyEnrichmentContext
                   ? `${legacyEnrichmentContext}
 
-${tradeHistoryCtx}`
-                  : tradeHistoryCtx
+${tradeHistory.text}`
+                  : tradeHistory.text
               }
-            } catch { /* non-fatal */ }
+            } catch {
+              // The surrounding catch is deliberately non-fatal, but a swallowed
+              // throw used to be indistinguishable from "no trades on file".
+              tradeHistoryDiag = 'threw'
+            }
             try {
               /*
                * Who is actually winning this league, and which team is the
@@ -3423,10 +3448,29 @@ ${describedTradeCtx}`
           const budgeted = applyGroundingBudget(legacyEnrichmentContext)
           if (budgeted.droppedBlocks > 0) {
             console.warn(
-              `[chimmy] grounding truncated: dropped ${budgeted.droppedBlocks} of ${budgeted.droppedBlocks + budgeted.keptBlocks} blocks (${budgeted.originalLength} chars)`,
+              `[chimmy] grounding truncated: dropped ${budgeted.droppedBlocks} of ${budgeted.droppedBlocks + budgeted.keptBlocks} blocks (${budgeted.originalLength} chars): ${budgeted.droppedLabels.join(' | ')}`,
             )
           }
           legacyEnrichmentContext = budgeted.text
+
+          /*
+           * The one line that separates the two failures.
+           *
+           * `built(...)` plus `survivedBudget=false` means the block existed and
+           * the budget dropped it — raise the budget, or move this block earlier
+           * in the chain. Any other `tradeHistoryDiag` names the reason it was
+           * never built, and `league-not-found` in particular means the id handed
+           * to the builder is not a `leagues.id`.
+           *
+           * ⚠ READ AGAINST THE SAME TURN'S `grounding truncated` LINE. The labels
+           * there say what else went, which is how you tell "this block is too far
+           * down the chain" from "the whole prompt is oversized".
+           */
+          if (tradeHistoryDiag !== 'not-attempted') {
+            console.info(
+              `[chimmy] trade-history grounding: ${tradeHistoryDiag}; survivedBudget=${legacyEnrichmentContext.includes(TRADE_HISTORY_BLOCK_MARKER)}`,
+            )
+          }
 
           const enrichmentLoaded =
             legacyEnrichment.status === 'fulfilled' &&
