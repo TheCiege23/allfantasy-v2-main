@@ -183,6 +183,38 @@ describe('getPlayerLeagueImpact', () => {
     expect(db.weekQueries).toHaveLength(MAX_PRICED_LEAGUES)
   })
 
+  /*
+   * 🛑 ONE ROW PER REAL LEAGUE. `leagues.userId` is the IMPORTER, so one Sleeper league imported by
+   * four people is four `leagues` rows, and a claim is written into every copy. The loader's own
+   * `seen` set dedupes on the AF ROW id, so every copy survived it and this list told a manager the
+   * player starts in four leagues when it is one. Measured on production 2026-09-20: one account's
+   * claims span 95 rows for 65 real leagues.
+   */
+  it('counts one real league once, however many importers synced it', async () => {
+    addLeague('copyA', 'starters', { platformLeagueId: 'shared' })
+    addLeague('copyB', 'starters', { platformLeagueId: 'shared' })
+    const out = await getPlayerLeagueImpact({ userId: USER, rosterPlayerId: HIM })
+    expect(out.rows).toHaveLength(1)
+    expect(out.notPriced).toBe(0)
+  })
+
+  /*
+   * 🛑 AND THE COUNT IS NOT THE WORST OF IT. `priced` is `starting.slice(0, MAX_PRICED_LEAGUES)`,
+   * so duplicates consume the pricing budget and push REAL leagues into `notPriced` — the surface
+   * under-reports what it did not reach, with no sign that copies of one league displaced them.
+   */
+  it(`does not let duplicate copies eat the ${MAX_PRICED_LEAGUES}-league pricing budget`, async () => {
+    for (let i = 0; i < MAX_PRICED_LEAGUES; i++) addLeague(`R${String(i).padStart(2, '0')}`, 'starters')
+    /* Three more copies of the FIRST league — same provider id, different AF rows. */
+    for (const suffix of ['b', 'c', 'd']) addLeague(`R00${suffix}`, 'starters', { platformLeagueId: 'p-R00' })
+
+    const out = await getPlayerLeagueImpact({ userId: USER, rosterPlayerId: HIM })
+    expect(out.rows).toHaveLength(MAX_PRICED_LEAGUES)
+    expect(out.notPriced).toBe(0)
+    /* Every priced league is a DIFFERENT real league. */
+    expect(new Set(out.rows.map((r) => r.leagueId)).size).toBe(MAX_PRICED_LEAGUES)
+  })
+
   it('sorts starters by the size of the drop', async () => {
     addLeague('A', 'starters', { name: 'Aardvark' })
     addLeague('Z', 'starters', { name: 'Zebra' })

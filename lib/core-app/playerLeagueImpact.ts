@@ -1,5 +1,6 @@
 import { prisma } from '@/lib/prisma'
 import { resolveCurrentWeekForLeague } from './currentWeek'
+import { claimedRowIdentity, keepBestPerRealLeague, preferImportedCopy } from './realLeague'
 import { asIds, rosterCandidates } from './dash3aPanels'
 import { leagueDisplayName } from './leagueHome'
 import { winProbabilityFor, type LivePoints, type SideProjections } from './matchupProjections'
@@ -199,13 +200,32 @@ export async function getPlayerLeagueImpact(args: {
 
   const leagues = await prisma.league.findMany({
     where: { id: { in: [...slotByLeague.keys()] } },
-    select: { id: true, name: true, platform: true, platformLeagueId: true },
+    /* `season` and `userId` are for the real-league collapse below — see `realLeague.ts`. */
+    select: { id: true, name: true, platform: true, platformLeagueId: true, season: true, userId: true },
   })
   const teamByLeague = new Map(teams.map((t) => [t.leagueId, t]))
 
-  const holding = leagues
-    .map((league) => ({ league, slot: slotByLeague.get(league.id)!, team: teamByLeague.get(league.id)! }))
-    .sort((a, b) => leagueDisplayName(a.league.name).localeCompare(leagueDisplayName(b.league.name)))
+  /*
+   * 🛑 ONE ROW PER REAL LEAGUE, AND HERE THE DUPLICATE ATE THE CAP.
+   * `leagues.userId` is the IMPORTER, so one Sleeper league imported by four people is four rows
+   * and a claim is written into every copy. The `seen` set above dedupes on `r.leagueId` — the AF
+   * ROW id — so all four copies survive it, and this list told a manager the player starts in four
+   * leagues when it is one.
+   *
+   * ⚠ THE COUNT IS NOT THE WORST OF IT. `priced` is `starting.slice(0, MAX_PRICED_LEAGUES)`, so
+   * the duplicates consume the pricing budget and push REAL leagues into `notPriced` — the surface
+   * then under-reports the leagues it did not get to, with no sign that copies of one league are
+   * what displaced them.
+   *
+   * ⚠ COLLAPSED HERE RATHER THAN AT THE CLAIM QUERY, because this is the first point where the
+   * platform, provider id and season exist to key on — `rosters` carries a league id and nothing
+   * else. The extra roster reads are redundant, not wrong; the output is what had to be fixed.
+   */
+  const holding = keepBestPerRealLeague(
+    leagues.map((league) => ({ league, slot: slotByLeague.get(league.id)!, team: teamByLeague.get(league.id)! })),
+    claimedRowIdentity,
+    preferImportedCopy(userId),
+  ).sort((a, b) => leagueDisplayName(a.league.name).localeCompare(leagueDisplayName(b.league.name)))
   const starting = holding.filter((h) => h.slot === 'starter')
   const priced = starting.slice(0, MAX_PRICED_LEAGUES)
   const notPriced = starting.length - priced.length
