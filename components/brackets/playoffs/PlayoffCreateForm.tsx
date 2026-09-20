@@ -7,7 +7,7 @@ import { createPlayoffBracketChallengeClient } from "@/lib/playoffs/playoffClien
 export default function PlayoffCreateForm() {
   const router = useRouter()
   const [name, setName] = useState("Championship Chase")
-  const [sport, setSport] = useState<"nba" | "nhl">("nba")
+  const [sport, setSport] = useState<"nba" | "nhl" | "mlb">("nba")
   const [isTestMode, setIsTestMode] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
@@ -32,7 +32,7 @@ export default function PlayoffCreateForm() {
   return (
     <div className="mx-auto max-w-xl rounded-3xl border border-slate-300 bg-[linear-gradient(160deg,#fff7ed_0%,#ecfeff_50%,#eef2ff_100%)] p-6 shadow-[0_18px_48px_rgba(15,23,42,0.16)]">
       <h1 className="text-2xl font-black tracking-tight text-slate-900">Create a Playoff Bracket</h1>
-      <p className="mt-1 text-sm text-slate-700">Launch an NBA or NHL bracket pool using the shared playoff engine.</p>
+      <p className="mt-1 text-sm text-slate-700">Launch an NBA, NHL or MLB bracket pool using the shared playoff engine.</p>
 
       <label className="mt-4 block text-sm font-semibold text-slate-800">Pool name</label>
       <input
@@ -44,11 +44,12 @@ export default function PlayoffCreateForm() {
       <label className="mt-4 block text-sm font-semibold text-slate-800">Sport</label>
       <select
         value={sport}
-        onChange={(event) => setSport(event.target.value as "nba" | "nhl")}
+        onChange={(event) => setSport(event.target.value as "nba" | "nhl" | "mlb")}
         className="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-sky-500"
       >
         <option value="nba">NBA</option>
         <option value="nhl">NHL</option>
+        <option value="mlb">MLB</option>
       </select>
 
       <label className="mt-4 flex items-center gap-2 text-sm font-medium text-slate-700">

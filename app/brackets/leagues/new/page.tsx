@@ -64,7 +64,21 @@ export default function NewBracketLeaguePage() {
   const [showAgeConfirm, setShowAgeConfirm] = useState(false)
   const [ageConfirming, setAgeConfirming] = useState(false)
   const router = useRouter()
-  const isPlayoffPool = challengeType === "playoff_challenge" && (sport === "NBA" || sport === "NHL")
+  /*
+   * 🛑 THE SPORTS LISTED HERE ARE THE ONLY ONES A POOL CAN BE CREATED FOR
+   * SAFELY, and falling off this list is not a graceful degradation — it is a
+   * dead end. Anything else drops through to `POST /api/bracket/leagues`, the
+   * legacy BracketLeague stack, whose own league page renders "This pool has
+   * been migrated" and offers no way into the pool. That is exactly what
+   * picking MLB did before this line learned about it: the create succeeded,
+   * the redirect landed, and the user got a wall.
+   *
+   * Keep this in step with the create API's `sport` enum in
+   * app/api/brackets/playoffs/route.ts — they are the same decision written
+   * twice, and only the API one is enforced.
+   */
+  const PLAYOFF_POOL_SPORTS = ["NBA", "NHL", "MLB"]
+  const isPlayoffPool = challengeType === "playoff_challenge" && PLAYOFF_POOL_SPORTS.includes(sport)
   const isAfCommissioner = isAfCommissionerSubscriber(session?.user)
 
   useEffect(() => {
@@ -128,7 +142,7 @@ export default function NewBracketLeaguePage() {
 
     try {
       if (isPlayoffPool) {
-        const playoffSport = sport.toLowerCase() as "nba" | "nhl"
+        const playoffSport = sport.toLowerCase() as "nba" | "nhl" | "mlb"
         const config = sanitizePlayoffChallengeConfig(
           defaultPlayoffChallengeConfig({
             visibility: isPublic ? "public" : "private",

@@ -109,7 +109,8 @@ describe("playoff schedule refresh cron route", () => {
     expect(body.syncedAt).toEqual(expect.any(String))
     expect(serviceMocks.prisma.playoffBracketChallenge.findMany).toHaveBeenCalledWith(expect.objectContaining({
       where: expect.objectContaining({
-        sport: { in: ["nba", "nhl"] },
+        // sport=all now includes baseball, matching the create API's enum.
+        sport: { in: ["nba", "nhl", "mlb"] },
         status: { in: ["open", "locked", "live"] },
       }),
     }))

@@ -76,12 +76,30 @@ type SportCard = {
   Icon: typeof Trophy
 }
 
+/**
+ * ⚠ THIS GRID WENT STALE IN THE DIRECTION THAT COSTS USERS. NBA and NHL were
+ * marked "coming soon" with a dead link while the playoff engine had been
+ * serving them for months — 26 pools exist in production. A card that says
+ * "soon" about a shipped product is not a cautious default; it is the reason
+ * nobody found the feature.
+ *
+ * The create form is the door for all three. There is no per-sport landing
+ * page and inventing one would be another surface to keep true, so the sport
+ * is preselected and the card lands where it promises.
+ *
+ * `status: "live"` here must mean the create API's `sport` enum accepts it —
+ * see app/api/brackets/playoffs/route.ts. Anything else drops through to the
+ * legacy stack, whose league page is a dead end.
+ */
+const playoffPoolHref = (sport: "NBA" | "NHL" | "MLB") =>
+  `/brackets/leagues/new?sport=${sport}&challengeType=playoff_challenge`
+
 const SPORT_CARDS: SportCard[] = [
   { key: "worldCup", href: "/brackets/world-cup", status: "live", Icon: Globe2 },
-  { key: "nbaPlayoffs", href: null, status: "soon", Icon: Trophy },
-  { key: "nhlPlayoffs", href: null, status: "soon", Icon: Trophy },
+  { key: "nbaPlayoffs", href: playoffPoolHref("NBA"), status: "live", Icon: Trophy },
+  { key: "nhlPlayoffs", href: playoffPoolHref("NHL"), status: "live", Icon: Trophy },
   { key: "nflPlayoffs", href: null, status: "soon", Icon: Trophy },
-  { key: "mlbPostseason", href: null, status: "soon", Icon: Trophy },
+  { key: "mlbPostseason", href: playoffPoolHref("MLB"), status: "live", Icon: Trophy },
   { key: "marchMadness", href: null, status: "soon", Icon: Trophy },
   { key: "collegeFootball", href: null, status: "soon", Icon: Trophy },
   { key: "soccer", href: null, status: "soon", Icon: Globe2 },

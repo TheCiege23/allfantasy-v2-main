@@ -37,7 +37,7 @@ const booleanLike = z.preprocess((value) => {
 }, z.boolean())
 
 const querySchema = z.object({
-  sport: z.enum(["all", "nba", "nhl"]).optional().default("all"),
+  sport: z.enum(["all", "nba", "nhl", "mlb"]).optional().default("all"),
   provider: z.enum(["espn"]).optional().default("espn"),
   windowDays: z.coerce.number().int().min(1).max(14).optional().default(7),
   dryRun: booleanLike.optional().default(false),
@@ -117,8 +117,8 @@ function isPlayoffCronAuthorized(request: NextRequest) {
  * call sites stopped type-checking. An `any` that nothing consumes generically
  * hides; the moment something does, it surfaces somewhere else entirely.
  */
-async function getActivePlayoffChallengeIds(sport: "all" | "nba" | "nhl"): Promise<string[]> {
-  const sports = sport === "all" ? ["nba", "nhl"] : [sport]
+async function getActivePlayoffChallengeIds(sport: "all" | "nba" | "nhl" | "mlb"): Promise<string[]> {
+  const sports = sport === "all" ? ["nba", "nhl", "mlb"] : [sport]
   const activeSince = new Date(Date.now() - ACTIVE_WINDOW_DAYS * 24 * 60 * 60 * 1000)
   const rows = await (prisma as any).playoffBracketChallenge.findMany({
     where: {

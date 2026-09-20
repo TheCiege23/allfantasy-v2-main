@@ -290,23 +290,16 @@ const SPORT_TO_LEAGUE_SPORT: Record<PlayoffSport, LeagueSport> = {
  * copies of the same `sport !== "nba" && sport !== "nhl"` test and a third
  * spelling of the rule in the cron's zod enum.
  *
- * 🛑 MLB IS MODELLED EVERYWHERE ELSE AND DELIBERATELY REFUSED HERE. The
- * template, round keys, labels and conference vocabulary all understand
- * baseball; what is missing is the two things that make a synced bracket
- * true rather than decorative:
+ * MLB joins once its seeding source, scheduled writer and — critically — its
+ * round-name patterns exist and are VERIFIED. The patterns were guessed first
+ * and were wrong twice (`wild card` for `ALWC`, `\bal\b` against `ALCS`), so
+ * "it compiles" was never the bar; the bar was reading a real payload.
  *
- *   1. a SEEDING SOURCE — nothing ingests MLB standings
- *      (`/api/cron/import-standings` is NFL/NCAAF only), so there is no way
- *      to fill `AL1`…`NL6` with real clubs; and
- *   2. a SCHEDULED WRITER — `syncPlayoffChallengeSeries` has no cron caller
- *      at all, for any sport.
- *
- * Adding "mlb" here without both would point a bracket at results nothing
- * refreshes, which fails silently and looks correct. Add it in the SAME
- * change that lands them, and verify the round-name patterns above against a
- * captured ESPN postseason payload at the same time.
+ * ⚠ A SPORT ADDED HERE MUST HAVE ITS LABELS CHECKED AGAINST A REAL POSTSEASON,
+ * not against the names the league prints in a press release. Every failure in
+ * this file has been a provider string that did not read the way it sounds.
  */
-const SYNCABLE_PLAYOFF_SPORTS = new Set<PlayoffSport>(["nba", "nhl"])
+const SYNCABLE_PLAYOFF_SPORTS = new Set<PlayoffSport>(["nba", "nhl", "mlb"])
 
 function assertSyncableSport(raw: unknown, operation: string): PlayoffSport {
   const sport = String(raw ?? "").toLowerCase() as PlayoffSport
@@ -805,11 +798,30 @@ function roundIndexFromGame(game: PlayoffSeriesSyncGame, sport?: PlayoffSport): 
     if (/\bconference finals?\b|\beast finals?\b|\bwest finals?\b|\beastern conference finals?\b|\bwestern conference finals?\b/.test(eventName)) return 3
     if (/\bsemifinals?\b|\bsemi finals?\b|\bconference semifinals?\b|\beast semifinals?\b|\bwest semifinals?\b/.test(eventName)) return 2
     if (/\b1st round\b|\bfirst round\b/.test(eventName)) return 1
+    /*
+     * ⚠ DECLINE RATHER THAN FALL THROUGH, and this became load-bearing only
+     * recently. Until the ESPN adapter started carrying `eventName`, an
+     * ESPN-sourced game reached the generic heuristics below with an EMPTY
+     * string and matched none of them — they were effectively dead for this
+     * provider. Now that real labels arrive, those heuristics would read an
+     * in-season NBA Cup game ("NBA Cup Semifinals") as a conference semifinal.
+     *
+     * Verified against ESPN's real 2025 postseason: every round is already
+     * matched above — "West 1st Round", "East Semifinals", "East Finals",
+     * "NBA Finals" — so the fallthrough adds no coverage, only risk.
+     */
+    return null
   } else if (sport === "nhl") {
     if (/\bstanley cup final\b|\bstanley cup finals\b/.test(eventName)) return 4
     if (/\bconference finals?\b|\beast finals?\b|\bwest finals?\b|\beastern conference finals?\b|\bwestern conference finals?\b/.test(eventName)) return 3
     if (/\b2nd round\b|\bsecond round\b|\bround 2\b/.test(eventName)) return 2
     if (/\b1st round\b|\bfirst round\b|\bround 1\b/.test(eventName)) return 1
+    /*
+     * Same reasoning as the NBA branch above. Verified against the real 2025
+     * postseason: "East 1st Round", "West 2nd Round", "West Final" and
+     * "Stanley Cup Final" are all matched here, so nothing is lost.
+     */
+    return null
   } else if (sport === "mlb") {
     /*
      * ✅ Verified against ESPN's real 2025 postseason — see the note on
