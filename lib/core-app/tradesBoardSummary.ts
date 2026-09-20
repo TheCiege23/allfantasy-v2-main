@@ -76,8 +76,15 @@ const STALE_WHILE_REVALIDATE_MS = 2 * 60 * 60_000
 
 registerScreenSummary<TradesBoardData | null>({
   screen: TRADES_BOARD_SCREEN,
-  /** ⚠ Bump whenever `TradesBoardData` changes shape — the version is part of the cache key. */
-  version: 1,
+  /**
+   * ⚠ Bump whenever `TradesBoardData` changes shape — the version is part of the cache key.
+   *
+   * 2 — `TradeAsset` gained `kind` and picks now appear in `sent`/`received`. A v1 entry is
+   * a board with no picks in it and a "latest" trade chosen by the old (season, week) order,
+   * and it would be served for up to two hours after the fix ships. The bump is what makes
+   * the correction visible on the next render instead of after the stale window.
+   */
+  version: 2,
   ttlMs: TTL_MS,
   staleWhileRevalidateMs: STALE_WHILE_REVALIDATE_MS,
   // See the header: a user-scoped key carries no league id, so a league sweep would match nothing.

@@ -364,9 +364,14 @@ export function describeNoSignal(grade: Extract<TradeGrade, { graded: false }>):
   switch (grade.reason) {
     case 'NO_ASSETS':
       return 'Not graded — one side has no assets on record.'
+    /*
+     * ⚠ "ASSETS", NOT "PLAYERS". A side's assets include draft picks — the trades board
+     * counts them since it started reading `picksGiven` — and a count of six that calls
+     * itself six PLAYERS is a wrong number attached to a right one.
+     */
     case 'NO_COVERAGE':
-      return 'Not graded — no player values on file for this trade.'
+      return 'Not graded — no values on file for anything in this trade.'
     case 'PARTIAL_COVERAGE':
-      return `Not graded — only ${grade.covered} of ${grade.total} players have values on file.`
+      return `Not graded — only ${grade.covered} of ${grade.total} assets have values on file.`
   }
 }

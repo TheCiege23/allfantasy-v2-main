@@ -339,6 +339,16 @@ export function Trades({ data }: TradesProps) {
                     {[g.season, g.week ? `WK ${g.week}` : null].filter(Boolean).join(' · ')}
                     {' · '}
                     {g.playersOut} out / {g.playersIn} in
+                    {/*
+                      ⚠ PICKS GET THEIR OWN CLAUSE RATHER THAN BEING FOLDED INTO THE
+                      out/in COUNTS. Adding them there would silently change what those
+                      two numbers mean on a row people already read; a "2 for 1" that was
+                      really "2 for 1 plus a first" is a different trade, and this says so
+                      without restating the old figures.
+                    */}
+                    {g.picksOut + g.picksIn > 0
+                      ? ` · ${g.picksOut + g.picksIn} ${g.picksOut + g.picksIn === 1 ? 'pick' : 'picks'}`
+                      : ''}
                   </span>
                   <span className="af-tr-graderow-why">
                     {g.letter
