@@ -368,7 +368,19 @@ async function readHistory(userId: string, leagues: LeagueInput[]): Promise<Hist
     .filter((v): v is string => typeof v === 'string' && v.length > 0)
   if (platformIds.length === 0) return null
 
-  const [rows, teams, mine] = await Promise.all([
+  /*
+   * Internal `League.id` → that league's CURRENT platform id. `MatchupFact` is keyed on the
+   * internal id (one id for every season); `WeeklyMatchup` and `buildProfiles` are keyed on the
+   * platform id. See `priorSeasonRowsFromFacts` — this map is the bridge between the two.
+   */
+  const platformIdByLeagueId = new Map<string, string>()
+  for (const l of leagues) {
+    if (typeof l.platformLeagueId === 'string' && l.platformLeagueId.length > 0) {
+      platformIdByLeagueId.set(l.id, l.platformLeagueId)
+    }
+  }
+
+  const [rows, teams, mine, priorFacts] = await Promise.all([
     prisma.weeklyMatchup.findMany({
       where: { leagueId: { in: platformIds } },
       select: {
@@ -413,9 +425,56 @@ async function readHistory(userId: string, leagues: LeagueInput[]): Promise<Hist
         league: { select: { platformLeagueId: true, platform: true } },
       },
     }),
+    /*
+     * Prior seasons. See `priorSeasonRowsFromFacts` for why this table and not `WeeklyMatchup`:
+     * every platform's historical backfill writes per-week rows here, keyed on the INTERNAL
+     * league id, and nothing folded them into a projection until now.
+     *
+     * ⚠ `.catch(() => [])` — a league with no imported history is the NORMAL case, and a
+     * failure to read history must never blank out a board the current season can already
+     * fill. The fold below is additive by construction.
+     */
+    prisma.matchupFact
+      .findMany({
+        where: { leagueId: { in: [...platformIdByLeagueId.keys()] } },
+        select: {
+          leagueId: true,
+          season: true,
+          weekOrPeriod: true,
+          teamA: true,
+          teamB: true,
+          scoreA: true,
+          scoreB: true,
+        },
+      })
+      .catch(() => [] as Array<{
+        leagueId: string
+        season: number | null
+        weekOrPeriod: number
+        teamA: string
+        teamB: string
+        scoreA: number
+        scoreB: number
+      }>),
   ])
 
-  if (rows.length === 0) return null
+  /*
+   * Which (league, season) pairs `WeeklyMatchup` already covers. A fact for one of these is
+   * DROPPED rather than added — see `priorSeasonRowsFromFacts`: double-counting a week would
+   * tighten sigma and inflate n at the same time, making a projection look better-evidenced
+   * than it is.
+   */
+  const seasonsAlreadyHeld = new Set<string>()
+  for (const r of rows) seasonsAlreadyHeld.add(`${r.leagueId}:${r.seasonYear}`)
+
+  const priorRows = priorSeasonRowsFromFacts(priorFacts, platformIdByLeagueId, seasonsAlreadyHeld)
+
+  /*
+   * ⚠ THE GUARD IS ON THE COMBINED SET, NOT ON `rows`. It used to return null when
+   * `WeeklyMatchup` was empty, which would now discard a league whose entire history is in
+   * `MatchupFact` — exactly the league this change exists to serve.
+   */
+  if (rows.length === 0 && priorRows.length === 0) return null
 
   const leagueByPlatformId = new Map<string, LeagueMeta>()
   for (const l of leagues) {
@@ -487,12 +546,39 @@ async function readHistory(userId: string, leagues: LeagueInput[]): Promise<Hist
    * todayStrip.ts each kept their own `max(week)` version — the correct
    * derivation was one function call away and not importable.
    */
-  const resolved = resolveCurrentWeekFrom(rows)
+  /*
+   * 🛑 RESOLVED FROM THE CURRENT-SEASON ROWS ONLY, NOT THE COMBINED SET.
+   *
+   * `latest` is the SLATE — which week the board is about — and it is global across every
+   * league the reader has. Prior seasons must inform the MODEL and never the slate: a single
+   * league carrying a stale or mislabelled `MatchupFact` season would otherwise move the week
+   * for all of them, and this screen has already shipped a bug of exactly that shape (see
+   * `resolveCurrentWeekFrom`'s header, which exists because a max(week) reading rendered a
+   * finished season as "your week" in August).
+   *
+   * The fallback is deliberate and narrow: with no `WeeklyMatchup` rows at all there is no
+   * slate to protect, and resolving from history is what keeps a league whose only scoring is
+   * imported from vanishing entirely.
+   */
+  const resolved = resolveCurrentWeekFrom(rows.length > 0 ? rows : priorRows)
   const latest: { season: number; week: number } | null = resolved
     ? { season: resolved.season, week: resolved.week }
     : null
 
-  return { rows, leagueByPlatformId, myRosters, rosterNames, rosterAvatars, latest }
+  /*
+   * ⚠ THE COMBINED SET IS WHAT LEAVES, AND THE TWO CONSUMERS WANT DIFFERENT HALVES OF IT.
+   * `thisWeek` filters to `latest.season`/`latest.week`, so prior seasons fall out of the
+   * pairing on their own and no card can be built from them. `buildProfiles` takes every
+   * scored row regardless of season, which is precisely the point of this change.
+   */
+  return {
+    rows: priorRows.length > 0 ? [...rows, ...priorRows] : rows,
+    leagueByPlatformId,
+    myRosters,
+    rosterNames,
+    rosterAvatars,
+    latest,
+  }
 }
 
 /** Per-roster scoring history, keyed "platformLeagueId:rosterId". */
@@ -527,6 +613,94 @@ export function buildProfiles(rows: MatchupRow[]): Map<string, { mu: number; sig
  * here would eventually feed it to `winProbabilityOf`. Withholding it is what
  * keeps "form" and "projection" from quietly becoming the same thing.
  */
+/**
+ * Prior-season weekly scoring, read from `MatchupFact` and returned in `MatchupRow` shape.
+ *
+ * 🛑 THE PRIOR SEASONS WERE ALREADY INGESTED. THEY WERE JUST IN A TABLE THIS FILE NEVER READ.
+ * Every platform's `HistoricalBackfillService` (Sleeper, Yahoo, ESPN, MFL, Fantrax) walks that
+ * platform's season chain and writes per-week rows into `MatchupFact`. `buildProfiles` read only
+ * `WeeklyMatchup`, which the parity collectors populate ONE SEASON AT A TIME — they enumerate the
+ * latest imported season and treat older ones as frozen history that is never refetched. So a
+ * league imported this year could not reach `MIN_WEEKS_FOR_PROJECTION` until week 4, while two
+ * prior seasons of its scoring sat on disk unread.
+ *
+ * ⚠ TWO KEY SPACES, AND CONVERTING BETWEEN THEM IS THE WHOLE JOB.
+ *   `MatchupFact.leagueId` is our INTERNAL `League.id` — one id spanning every season.
+ *   `WeeklyMatchup.leagueId` is the PLATFORM league id, which on Sleeper is a DIFFERENT id per
+ *   season. `buildProfiles` keys on the platform id, so a fact row must be filed under the
+ *   league's CURRENT platform id or it forms its own bucket and counts toward nothing.
+ *   `lib/core-app/railMatchups.ts` already does exactly this conversion; this follows it.
+ *
+ * ⚠ `teamA`/`teamB` ARE ALREADY CANONICAL ROSTER IDS, NOT THAT SEASON'S RAW ONES.
+ * `SleeperHistoricalMatchupSyncService` maps each historical `roster_id` through `owner_id` to the
+ * CURRENT season's roster id before writing (`canonicalIdByHistoricalRosterId`). That is what makes
+ * a 2024 week joinable to a 2026 roster at all — the raw ids are per-league-instance and a manager's
+ * number moves between seasons. Do not "normalise" these; they are already normalised.
+ *
+ * 🛑 IT SUPPLIES ONLY SEASONS `WeeklyMatchup` DOES NOT HAVE, AND THAT RULE IS NOT COSMETIC.
+ * The two tables overlap for any season both were populated for, and the same week counted twice
+ * would narrow the sample's spread while inflating `n` — a tighter sigma and a more confident
+ * projection built on one game pretending to be two. Keyed on (league, season) rather than on a
+ * date, because which seasons each table holds is a property of how they were populated, not of
+ * when this runs.
+ */
+export function priorSeasonRowsFromFacts(
+  facts: readonly {
+    leagueId: string
+    season: number | null
+    weekOrPeriod: number
+    teamA: string
+    teamB: string
+    scoreA: number
+    scoreB: number
+  }[],
+  /** Internal `League.id` → that league's CURRENT platform league id. */
+  platformIdByLeagueId: ReadonlyMap<string, string>,
+  /** "platformLeagueId:season" already present in `WeeklyMatchup` — these facts are dropped. */
+  seasonsAlreadyHeld: ReadonlySet<string>,
+): MatchupRow[] {
+  const out: MatchupRow[] = []
+  /* Synthesised per (league, season, week), exactly as the parity collectors synthesise theirs. */
+  const pairIndex = new Map<string, number>()
+
+  for (const fact of facts) {
+    if (fact.season == null) continue
+    const platformLeagueId = platformIdByLeagueId.get(fact.leagueId)
+    if (!platformLeagueId) continue
+    if (seasonsAlreadyHeld.has(`${platformLeagueId}:${fact.season}`)) continue
+
+    const groupKey = `${platformLeagueId}|${fact.season}|${fact.weekOrPeriod}`
+    const matchupId = (pairIndex.get(groupKey) ?? 0) + 1
+    pairIndex.set(groupKey, matchupId)
+
+    const common = {
+      leagueId: platformLeagueId,
+      seasonYear: fact.season,
+      week: fact.weekOrPeriod,
+      matchupId,
+    }
+    /*
+     * `win` is not read by `buildProfiles` and a fact carries no tie flag, so it is derived
+     * plainly rather than guessed at: a higher score is a win, equal scores are not.
+     */
+    out.push({
+      ...common,
+      rosterId: fact.teamA,
+      pointsFor: fact.scoreA,
+      pointsAgainst: fact.scoreB,
+      win: fact.scoreA > fact.scoreB ? 1 : 0,
+    })
+    out.push({
+      ...common,
+      rosterId: fact.teamB,
+      pointsFor: fact.scoreB,
+      pointsAgainst: fact.scoreA,
+      win: fact.scoreB > fact.scoreA ? 1 : 0,
+    })
+  }
+  return out
+}
+
 export function buildFormProfiles(rows: MatchupRow[]): Map<string, { mu: number; n: number }> {
   const buckets = new Map<string, number[]>()
   for (const r of rows) {
