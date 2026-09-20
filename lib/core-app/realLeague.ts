@@ -104,6 +104,69 @@ export function keepBestPerRealLeague<T>(
   return kept
 }
 
+/**
+ * The identity of a claimed-team row's league.
+ *
+ * ⚠ FOR THE COMMON SHAPE: a `leagueTeam` row with its `league` selected. Surfaces that find "my
+ * leagues" through `claimedByUserId` all build the same key from the same four fields, and writing
+ * it out per caller is how `season` gets forgotten — which does not fail, it silently merges two
+ * seasons into one row, because an absent season stringifies to '' for every row.
+ */
+export function claimedRowIdentity<
+  T extends {
+    league: {
+      id: string
+      platform?: string | null
+      platformLeagueId?: string | null
+      season?: number | string | null
+    }
+  },
+>(row: T): RealLeagueIdentity {
+  return {
+    platform: row.league.platform,
+    platformLeagueId: row.league.platformLeagueId,
+    season: row.league.season,
+    leagueId: row.league.id,
+  }
+}
+
+/**
+ * Prefer the copy the reader imported; failing that the freshest; failing that the lowest id.
+ *
+ * 🛑 THIS NEVER DROPS A LEAGUE, AND THAT IS THE POINT. `keepBestPerRealLeague` always keeps one row
+ * per key, so a comparator can only ever choose BETWEEN copies. "Keep only the row the reader owns"
+ * — the obvious rule, written as a filter — is wrong for the 17 reader/league pairs measured on
+ * production 2026-09-20 that own ZERO copies, having claimed a team in a league somebody else
+ * imported; it removes those leagues outright. A claimed team grants membership by itself
+ * (`resolveLeagueMembership`, `via: 'claim'`), so an unowned copy is reachable and safe to keep.
+ *
+ * Freshness is the tiebreak because copies disagree on SETTINGS — four production copies of one
+ * league carried blobs of 142,678 to 143,000 bytes, and a trade deadline comes out of that blob.
+ * The id is last so two renders of one portfolio cannot disagree about which copy they showed:
+ * `keepBestPerRealLeague` warns that an indifferent comparator lets the first row win, which reads
+ * as flicker and cannot be reproduced from a bug report.
+ *
+ * ⚠ NOT EVERY SURFACE WANTS THIS ONE. The portfolio prefers the imported copy and then whichever
+ * has a roster behind it; a ranked board prefers the stronger recommendation. This is the default
+ * for surfaces with no such opinion, not a rule for all of them.
+ */
+export function preferImportedCopy(userId: string) {
+  return <T extends { league: { id: string; userId?: string | null; updatedAt?: Date | null } }>(
+    incoming: T,
+    held: T,
+  ): boolean => {
+    const incomingOwned = incoming.league.userId != null && incoming.league.userId === userId
+    const heldOwned = held.league.userId != null && held.league.userId === userId
+    if (incomingOwned !== heldOwned) return incomingOwned
+
+    const incomingAt = incoming.league.updatedAt?.getTime() ?? 0
+    const heldAt = held.league.updatedAt?.getTime() ?? 0
+    if (incomingAt !== heldAt) return incomingAt > heldAt
+
+    return incoming.league.id < held.league.id
+  }
+}
+
 /** How many distinct real leagues a set of rows covers. */
 export function countRealLeagues(rows: readonly RealLeagueIdentity[]): number {
   return new Set(rows.map(realLeagueKey)).size

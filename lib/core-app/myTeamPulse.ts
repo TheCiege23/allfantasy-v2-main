@@ -3,6 +3,7 @@ import 'server-only'
 import { prisma } from '@/lib/prisma'
 import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
 import { getByeWeeks } from './byeWeeks'
+import { claimedRowIdentity, keepBestPerRealLeague, preferImportedCopy } from './realLeague'
 import { isAtRisk, isRuledOut } from './injuryStatus'
 import { leagueDisplayName } from './leagueHome'
 import { myRosterCandidates } from './myRoster'
@@ -279,13 +280,30 @@ export async function getMyTeamPulse(
             avatarUrl: true,
             platformLeagueId: true,
             season: true,
+            /* Read only to collapse duplicate copies — see `realLeague.ts`. */
+            userId: true,
+            updatedAt: true,
           },
         },
       },
     })
     .catch(() => [])
 
-  const mine = claimed.filter((c) => c.league != null)
+  /*
+   * 🛑 ONE ROW PER REAL LEAGUE, NOT ONE PER IMPORTER. `leagues.userId` is the importer, so one
+   * Sleeper league imported by four people is four rows, and a claim is written into every copy —
+   * a reader who belongs to several copies was counted as being in the league several times.
+   * Measured on production 2026-09-20: one account's claims span 95 rows for 65 real leagues.
+   *
+   * This is a pulse over "my teams", so a duplicate did not merely repeat a card — it repeated a
+   * TEAM, and every count and average below was weighted by how many of a league's managers
+   * happen to have imported it.
+   */
+  const mine = keepBestPerRealLeague(
+    claimed.flatMap((c) => (c.league ? [{ ...c, league: c.league }] : [])),
+    claimedRowIdentity,
+    preferImportedCopy(userId),
+  )
   if (mine.length === 0) return EMPTY_PULSE
 
   const leagueIds = [...new Set(mine.map((c) => c.leagueId))]

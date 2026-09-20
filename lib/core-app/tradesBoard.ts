@@ -4,7 +4,7 @@ import { CROSS_LEAGUE_BOOK, valueBookFor, type ValueBook } from './valueBook'
 import { prisma } from '@/lib/prisma'
 import { loadLatestPlayerValueSnapshots } from '@/lib/player-values/latestPlayerValueSnapshots'
 import { gradeTrade } from '@/lib/projections/tradeGrading'
-import { collapseClaimedLeagues } from './claimedLeagues'
+import { claimedRowIdentity, keepBestPerRealLeague, preferImportedCopy } from './realLeague'
 import {
   LATEST_TRADE_ORDER,
   gradeableSide,
@@ -308,12 +308,17 @@ export async function getTradesBoard(
             logoUrl: true,
             avatarUrl: true,
             /*
-             * ⚠ THE IMPORTER AND THE FRESHNESS, READ ONLY TO COLLAPSE DUPLICATES.
-             * `leagues` is per-user, so one Sleeper league is one row PER IMPORTER, and a
-             * claim is written into every copy — see `collapseClaimedLeagues`.
+             * ⚠ READ ONLY TO COLLAPSE DUPLICATE COPIES — see `realLeague.ts`. `leagues` is
+             * per-user, so one Sleeper league is one row PER IMPORTER and a claim is written
+             * into every copy.
+             *
+             * 🛑 `season` IS PART OF THE KEY AND OMITTING IT MERGES TWO SEASONS INTO ONE CARD.
+             * `realLeagueKey` reads it, and an absent value stringifies to '' for every row —
+             * so forgetting it here does not fail loudly, it silently hides a season.
              */
             userId: true,
             updatedAt: true,
+            season: true,
           },
         },
       },
@@ -327,11 +332,22 @@ export async function getTradesBoard(
    * been made in this league", because trades attach to a single copy below.
    *
    * ⚠ IT WAS INVISIBLE HERE FOR A STRUCTURAL REASON, so do not take this screen's calm as evidence
-   * the other 28 cross-league loaders are fine: the phantoms carry no trades, `byTradeUrgency`
+   * that the other cross-league loaders are fine: the phantoms carry no trades, `byTradeUrgency`
    * sorts them below everything that does, and `ROW_CAP` cuts at ten. They were out of frame, not
    * absent.
+   *
+   * ⚠ `realLeague.ts` IS THE ONE IMPLEMENTATION OF THIS RULE AND THIS FILE BRIEFLY SHIPPED A
+   * SECOND. The replaced helper keyed on `platformLeagueId` alone, which merges a Sleeper and an
+   * ESPN league sharing a numeric id, and merges two SEASONS of one league — the exact traps
+   * `realLeagueKey` exists to close, and which its docblock already recorded a previous private
+   * copy falling into. Only the comparator is this board's.
    */
-  const mine = collapseClaimedLeagues(claimed, userId)
+  const claimedWithLeague = claimed.flatMap((c) => (c.league ? [{ ...c, league: c.league }] : []))
+  const mine = keepBestPerRealLeague(
+    claimedWithLeague,
+    claimedRowIdentity,
+    preferImportedCopy(userId),
+  )
   if (mine.length === 0) return { ...EMPTY, currentWeek }
 
   const leagueIds = [...new Set(mine.map((c) => c.leagueId))]
