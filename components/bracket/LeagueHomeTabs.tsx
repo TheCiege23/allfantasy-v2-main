@@ -12,7 +12,6 @@ import { PoolChat } from "./PoolChat"
 // Deferred: only rendered on the "live" tab, pulls in framer-motion.
 const LiveModeView = dynamic(() => import("./LiveModeView").then((m) => m.LiveModeView), { ssr: false })
 import { useBracketLive } from "@/lib/hooks/useBracketLive"
-import CopyJoinCode from "@/app/brackets/leagues/[leagueId]/CopyJoinCode"
 import CreateEntryButton from "@/app/brackets/leagues/[leagueId]/CreateEntryButton"
 import { LeagueInviteShareButtons } from "./LeagueInviteShareButtons"
 import { PaidLeagueNotice } from "@/components/legal/PaidLeagueNotice"
