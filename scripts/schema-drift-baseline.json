@@ -234,6 +234,7 @@
     "CREATE UNIQUE INDEX \"sports_core_provider_health_provider_sport_key_league_key_e_key\" ON \"sports_core_provider_health\"(\"provider\", \"sport_key\", \"league_key\", \"entity_type\")",
     "CREATE UNIQUE INDEX \"sports_core_seasons_sport_key_league_key_season_key_key\" ON \"sports_core_seasons\"(\"sport_key\", \"league_key\", \"season_key\")",
     "CREATE UNIQUE INDEX \"sports_core_sports_key_key\" ON \"sports_core_sports\"(\"key\")",
+    "DROP INDEX \"SportsPlayer_name_trgm_idx\"",
     "DROP INDEX \"TenantWebhook_events_gin_idx\"",
     "DROP INDEX \"draft_sessions_leagueId_seasonYear_key\"",
     "DROP INDEX \"dw_transaction_facts_league_tx_key\"",
