@@ -21,7 +21,24 @@ function jsonResponse(status: number, body: unknown) {
   return { ok: status >= 200 && status < 300, status, json: async () => body }
 }
 
+/**
+ * 🛑 THE DRAWER NOW LOADS ITS HISTORY ON OPEN, AND `mockResolvedValueOnce` IS ORDER-BASED.
+ * `useScopedConversation` GETs `/api/chat/chimmy?leagueId=…` at mount to restore the transcript
+ * the server has always stored. Queued onto ONE shared mock, that request consumes the FIRST
+ * queued response — so the first question got the answer meant for the second, and the assertion
+ * failed on a message that had never been rendered.
+ *
+ * Splitting the mocks routes by URL instead of by call order, which is what makes this file immune
+ * rather than merely corrected: a later test can queue as many POST answers as it likes without
+ * having to count the drawer's own requests. Same trap this file's CI note already records for the
+ * 429 case — an in-flight call eating a `mockResolvedValueOnce` — reached from another direction.
+ */
+let postMock: ReturnType<typeof vi.fn>
 let fetchMock: ReturnType<typeof vi.fn>
+
+/** The drawer's own history read, which must never consume a queued POST answer. */
+const isHistoryRead = (url: unknown, init?: { method?: string }) =>
+  String(url).startsWith('/api/chat/chimmy?') && (init?.method ?? 'GET').toUpperCase() === 'GET'
 
 const chimmyPosts = () => fetchMock.mock.calls.filter(([url]) => String(url) === '/api/chat/chimmy')
 const sentMode = (i: number) => (chimmyPosts()[i]![1].body as FormData).get('assistantMode')
@@ -51,7 +68,12 @@ beforeEach(() => {
   vi.clearAllMocks()
   sessionStorage.clear()
   Element.prototype.scrollIntoView = vi.fn()
-  fetchMock = vi.fn().mockResolvedValue(jsonResponse(200, { response: 'Start him.', meta: {} }))
+  postMock = vi.fn().mockResolvedValue(jsonResponse(200, { response: 'Start him.', meta: {} }))
+  fetchMock = vi.fn((url: unknown, init?: { method?: string }) =>
+    isHistoryRead(url, init)
+      ? Promise.resolve(jsonResponse(200, { turns: [] }))
+      : postMock(url, init),
+  )
   vi.stubGlobal('fetch', fetchMock)
 })
 afterEach(() => {
@@ -117,7 +139,7 @@ describe('the Answer toggle', () => {
 
 describe('which mode answered', () => {
   it('tags an answer with the mode the server says shaped it', async () => {
-    fetchMock.mockResolvedValue(jsonResponse(200, { response: 'The long version.', meta: { mode: 'deep_analysis' } }))
+    postMock.mockResolvedValue(jsonResponse(200, { response: 'The long version.', meta: { mode: 'deep_analysis' } }))
     openDrawer()
     ask('Break it down')
     await waitFor(() => expect(screen.getByText('The long version.')).toBeTruthy())
@@ -125,7 +147,7 @@ describe('which mode answered', () => {
   })
 
   it('claims nothing when the server did not say, or said something else', async () => {
-    fetchMock
+    postMock
       .mockResolvedValueOnce(jsonResponse(200, { response: 'First.', meta: {} }))
       .mockResolvedValueOnce(jsonResponse(200, { response: 'Second.', meta: { mode: 'dynasty_lens' } }))
     openDrawer()
