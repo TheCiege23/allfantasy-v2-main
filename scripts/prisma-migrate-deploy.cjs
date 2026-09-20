@@ -617,6 +617,80 @@ if (result.status === 0) {
   }
 }
 
+// ── Post-apply schema drift check ────────────────────────────────────────────
+// Applying a migration to production is the moment drift is CREATED, and it is not a git event:
+// nothing in .github/workflows/schema-drift.yml triggers on it, because no file changes. Before
+// this, the only coverage was that workflow's two daily slots, so a migration whose SQL disagrees
+// with schema.prisma could sit unreported for up to ~12h. On 2026-09-20 five such items were born
+// exactly that way — hand-written TIMESTAMPTZ columns against `DateTime` in the schema — and were
+// found by a human reading the guard's output for an unrelated reason.
+//
+// 🛑 ADVISORY ONLY. THIS MUST NEVER CHANGE THIS PROCESS'S EXIT CODE, and the reason is not
+// squeamishness: by the time it runs the migration is ALREADY APPLIED. A non-zero exit here would
+// be read as "the migration failed" by every caller and every log, which is the opposite of what
+// happened — and would tempt a re-run of a deploy that already succeeded.
+//
+// ⚠ --prod ONLY, and that is a correctness requirement rather than caution. The baseline in
+// scripts/schema-drift-baseline.json belongs to ONE database and records its own endpoint, so
+// pointing the guard at the dev branch is a target mismatch — exit 2, "could not measure" — on
+// every single dev deploy. A guard that cries wolf on the common path is one people learn to skip.
+function runPostApplyDriftCheck() {
+  const tsxCli = path.join(process.cwd(), "node_modules", "tsx", "dist", "cli.mjs");
+  const guard = path.join(process.cwd(), "scripts", "check-schema-drift.ts");
+
+  if (!fs.existsSync(tsxCli) || !fs.existsSync(guard)) {
+    console.warn(
+      "[db:migrate:deploy] Skipping the post-apply drift check: tsx or the guard is not installed."
+    );
+    return;
+  }
+
+  console.log("[db:migrate:deploy] Checking schema drift against the database just migrated.");
+
+  // `node <tsx cli>` rather than `npx tsx`. npx exits 0 on failure in this environment — that is
+  // defect #1 in check-schema-drift.ts's own header, the bug that made its first version unable to
+  // fail. Reading a status through npx would reproduce it here.
+  const driftResult = spawnSync(process.execPath, [tsxCli, guard, "--ci"], {
+    stdio: "pipe",
+    encoding: "utf8",
+    env: process.env,
+    windowsHide: true,
+  });
+  writeOutput(driftResult);
+
+  // 0 nothing new · 1 new drift · anything else is NOT a verdict (the guard's own convention).
+  if (driftResult.status === 0) {
+    console.log("[db:migrate:deploy] Schema drift: nothing new since the baseline.");
+    return;
+  }
+
+  if (driftResult.status === 1) {
+    console.warn(
+      "\n[db:migrate:deploy] ⚠ NEW SCHEMA DRIFT after this apply.\n" +
+        "The deploy SUCCEEDED - this is a report, not a failure. schema.prisma and the database now\n" +
+        "disagree in a way the baseline does not cover. The usual cause is a hand-written migration\n" +
+        "whose SQL is not what Prisma would have generated for the same model.\n" +
+        "Either correct schema.prisma, or accept it as known drift via `npm run db:drift:baseline`\n" +
+        "in a reviewed PR - never as an automated step, or the ratchet ratchets itself open.\n"
+    );
+    return;
+  }
+
+  console.warn(
+    `\n[db:migrate:deploy] ⚠ The drift guard could not measure (exit ${driftResult.status ?? "missing"}).\n` +
+      "That is not a verdict in either direction: the drift is UNMEASURED, not absent.\n" +
+      "Re-run it on its own with `npm run db:drift`.\n"
+  );
+}
+
+if (
+  result.status === 0 &&
+  targetsProd &&
+  process.env.AF_SKIP_POST_MIGRATE_DRIFT !== "1"
+) {
+  runPostApplyDriftCheck();
+}
+
 if (typeof result.status === "number") {
   process.exit(result.status);
 }
