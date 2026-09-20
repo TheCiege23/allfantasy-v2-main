@@ -37,6 +37,36 @@ export type GroundingBudgetResult = {
   keptBlocks: number
   droppedBlocks: number
   originalLength: number
+  /**
+   * First-line labels of the blocks that were dropped, in the order they were
+   * dropped.
+   *
+   * ⚠ A COUNT CANNOT TELL YOU WHAT THE MODEL LOST. The caller already logged
+   * "dropped 3 of 21 blocks", which is true and unactionable: the blocks are
+   * appended by ~20 different sources and drops come from the END, so the count
+   * alone cannot distinguish "the live slate went" from "the trade history
+   * went". On 2026-09-20 Chimmy said it could not see a league's trade history
+   * while 27 ingested trades sat in the database, and the count was the only
+   * evidence available — it could not settle whether the block was never built
+   * or was built and dropped here.
+   */
+  droppedLabels: string[]
+}
+
+/**
+ * A short, log-safe name for a block, taken from its first line.
+ *
+ * Cut at the first `(` so the label is the heading rather than its parenthetical
+ * — "COMPLETED TRADE HISTORY for this league (Sleeper league 1338…)" becomes
+ * "COMPLETED TRADE HISTORY for this league". That keeps ids out of the log and
+ * keeps the label stable when an id changes.
+ */
+function labelOf(block: string): string {
+  const firstLine = (block.split('\n', 1)[0] ?? '').trim()
+  const paren = firstLine.indexOf('(')
+  const head = (paren > 0 ? firstLine.slice(0, paren) : firstLine).trim()
+  if (!head) return '(unlabelled block)'
+  return head.length > 80 ? `${head.slice(0, 77)}...` : head
 }
 
 /**
@@ -57,6 +87,7 @@ export function applyGroundingBudget(
       keptBlocks: original.trim() ? original.split(BLOCK_SEPARATOR).length : 0,
       droppedBlocks: 0,
       originalLength: original.length,
+      droppedLabels: [],
     }
   }
 
@@ -86,6 +117,9 @@ export function applyGroundingBudget(
       keptBlocks: 0,
       droppedBlocks: blocks.length,
       originalLength: original.length,
+      // Every block is dropped here, including the one whose head is kept —
+      // `droppedBlocks` already counts it, so the labels must agree with it.
+      droppedLabels: blocks.map(labelOf),
     }
   }
 
@@ -96,5 +130,6 @@ export function applyGroundingBudget(
     keptBlocks: kept.length,
     droppedBlocks: dropped,
     originalLength: original.length,
+    droppedLabels: blocks.slice(kept.length).map(labelOf),
   }
 }

@@ -16,7 +16,11 @@ vi.mock('@/lib/prisma', () => ({
   },
 }))
 
-import { buildLeagueTradeHistoryContext } from '@/lib/chimmy-trade/leagueTradeHistoryGrounding'
+import {
+  buildLeagueTradeHistoryContext,
+  buildLeagueTradeHistoryOutcome,
+  TRADE_HISTORY_BLOCK_MARKER,
+} from '@/lib/chimmy-trade/leagueTradeHistoryGrounding'
 
 function trade(overrides: Record<string, unknown> = {}) {
   return {
@@ -147,6 +151,130 @@ describe('buildLeagueTradeHistoryContext', () => {
   })
 
   it('returns null when the league has no ingested history', async () => {
+    mocks.historyFindMany.mockResolvedValue([])
+    expect(await buildLeagueTradeHistoryContext('lg1', 'user-1')).toBeNull()
+  })
+})
+
+/*
+ * 🛑 THE POINT OF THIS SUITE IS THAT `null` USED TO BE SEVEN ANSWERS AT ONCE.
+ *
+ * On 2026-09-20 Chimmy told a manager it could not see their league's trade
+ * history while 27 ingested trades sat in the database, whose players resolve 13
+ * of 13 to correct names. Nothing recorded whether the block was never built or
+ * was built and dropped downstream by `applyGroundingBudget` — and those have
+ * opposite fixes. Each case below is a reason that used to be indistinguishable.
+ */
+describe('buildLeagueTradeHistoryOutcome — why there is no block', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mocks.leagueFindUnique.mockResolvedValue({
+      platform: 'sleeper',
+      platformLeagueId: '1234567890',
+      sport: 'nfl',
+      season: 2026,
+    })
+    mocks.historyFindMany.mockResolvedValue([{ id: 'h1' }, { id: 'h2' }])
+    mocks.tradeFindMany.mockResolvedValue([trade()])
+    mocks.sportsPlayerFindMany.mockResolvedValue([
+      { externalId: 'sleeper:5859', sleeperId: '5859', name: 'Brian Thomas Jr.' },
+      { externalId: 'sleeper:2216', sleeperId: '2216', name: 'Old Reliable' },
+    ])
+  })
+
+  it('reports ok with the counts needed to judge the block at a glance', async () => {
+    const out = await buildLeagueTradeHistoryOutcome('lg1', 'user-1')
+
+    expect(out.kind).toBe('ok')
+    if (out.kind !== 'ok') return
+    expect(out.uniqueTrades).toBe(1)
+    expect(out.shown).toBe(1)
+    expect(out.unresolvedPlayers).toBe(0)
+    expect(out.text).toContain(TRADE_HISTORY_BLOCK_MARKER)
+  })
+
+  /*
+   * ⚠ THE ONE THAT MATTERS MOST OPERATIONALLY. This repo has more than one
+   * league-id space, and the league handed to the builder is not always a
+   * `leagues.id`. Before this, that was indistinguishable from "this league has
+   * never traded" — the same silence, a completely different fix.
+   */
+  it('distinguishes a league id that does not resolve from a league with no trades', async () => {
+    mocks.leagueFindUnique.mockResolvedValue(null)
+    expect((await buildLeagueTradeHistoryOutcome('not-a-league-id', 'user-1')).kind).toBe(
+      'league-not-found',
+    )
+
+    mocks.leagueFindUnique.mockResolvedValue({
+      platform: 'sleeper',
+      platformLeagueId: '1234567890',
+      sport: 'nfl',
+      season: 2026,
+    })
+    mocks.historyFindMany.mockResolvedValue([])
+    expect((await buildLeagueTradeHistoryOutcome('lg1', 'user-1')).kind).toBe('no-history-rows')
+  })
+
+  it('names a non-Sleeper platform rather than going quiet', async () => {
+    mocks.leagueFindUnique.mockResolvedValue({
+      platform: 'espn',
+      platformLeagueId: '99',
+      sport: 'nfl',
+      season: 2026,
+    })
+    const out = await buildLeagueTradeHistoryOutcome('lg1', 'user-1')
+    expect(out.kind).toBe('not-sleeper')
+    if (out.kind === 'not-sleeper') expect(out.platform).toBe('espn')
+  })
+
+  it('separates history rows existing from trade rows existing', async () => {
+    mocks.tradeFindMany.mockResolvedValue([])
+    const out = await buildLeagueTradeHistoryOutcome('lg1', 'user-1')
+    expect(out.kind).toBe('no-trade-rows')
+    if (out.kind === 'no-trade-rows') expect(out.historyCount).toBe(2)
+  })
+
+  /* A thrown lookup is not the same fact as an empty one, and used to look identical. */
+  it('separates a failed lookup from an empty one', async () => {
+    mocks.leagueFindUnique.mockRejectedValue(new Error('db down'))
+    expect((await buildLeagueTradeHistoryOutcome('lg1', 'user-1')).kind).toBe('league-lookup-failed')
+
+    mocks.leagueFindUnique.mockResolvedValue({
+      platform: 'sleeper',
+      platformLeagueId: '1234567890',
+      sport: 'nfl',
+      season: 2026,
+    })
+    mocks.historyFindMany.mockRejectedValue(new Error('db down'))
+    expect((await buildLeagueTradeHistoryOutcome('lg1', 'user-1')).kind).toBe(
+      'history-lookup-failed',
+    )
+  })
+
+  it('reports missing arguments without touching the database', async () => {
+    expect((await buildLeagueTradeHistoryOutcome('', 'user-1')).kind).toBe('missing-args')
+    expect((await buildLeagueTradeHistoryOutcome('lg1', '')).kind).toBe('missing-args')
+    expect(mocks.leagueFindUnique).not.toHaveBeenCalled()
+  })
+
+  /*
+   * ⚠ THE MARKER MUST BE THE HEADING, NOT A COPY OF IT. The route checks whether
+   * this exact string survived the grounding budget. A second spelling would keep
+   * that check passing after the heading was reworded — reporting a dropped block
+   * as present, which is the precise failure the check exists to catch.
+   */
+  it('writes the exported marker into the block it builds', async () => {
+    const out = await buildLeagueTradeHistoryOutcome('lg1', 'user-1')
+    if (out.kind !== 'ok') throw new Error('expected ok')
+    expect(out.text.startsWith(TRADE_HISTORY_BLOCK_MARKER)).toBe(true)
+  })
+
+  /* The old contract still holds for every caller that only wants a block. */
+  it('keeps the string-or-null wrapper in agreement with the outcome', async () => {
+    expect(await buildLeagueTradeHistoryContext('lg1', 'user-1')).toContain(
+      TRADE_HISTORY_BLOCK_MARKER,
+    )
+
     mocks.historyFindMany.mockResolvedValue([])
     expect(await buildLeagueTradeHistoryContext('lg1', 'user-1')).toBeNull()
   })

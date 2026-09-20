@@ -84,4 +84,81 @@ describe('applyGroundingBudget', () => {
     const out = applyGroundingBudget(text, 900)
     expect(out.originalLength).toBe(text.length)
   })
+
+  /*
+   * 🛑 A COUNT CANNOT TELL YOU WHAT THE MODEL LOST. "dropped 3 of 21" is true and
+   * unactionable — ~20 sources append here and drops come from the END, so the
+   * count cannot distinguish the live slate going from the trade history going.
+   * That is the gap that left a real incident unexplainable on 2026-09-20.
+   */
+  describe('droppedLabels', () => {
+    it('names the blocks it dropped, in order', () => {
+      const text = [
+        `ROSTER\n${'x'.repeat(200)}`,
+        `STANDINGS\n${'x'.repeat(200)}`,
+        `COMPLETED TRADE HISTORY for this league (Sleeper league 123)\n${'x'.repeat(200)}`,
+      ].join(SEP)
+
+      const out = applyGroundingBudget(text, 250)
+
+      expect(out.droppedLabels).toEqual([
+        'STANDINGS',
+        'COMPLETED TRADE HISTORY for this league',
+      ])
+    })
+
+    /*
+     * The parenthetical is cut so the label is stable across leagues and carries
+     * no ids into a log line.
+     */
+    it('strips the parenthetical so the label is an id-free heading', () => {
+      const text = [
+        `KEEP\n${'x'.repeat(200)}`,
+        `COMPLETED TRADE HISTORY for this league (Sleeper league 1338541390891606016)\n${'x'.repeat(200)}`,
+      ].join(SEP)
+
+      const out = applyGroundingBudget(text, 210)
+
+      expect(out.droppedLabels).toEqual(['COMPLETED TRADE HISTORY for this league'])
+      expect(out.droppedLabels.join()).not.toContain('1338541390891606016')
+    })
+
+    it('is empty when nothing was dropped', () => {
+      const text = [block('A', 100), block('B', 100)].join(SEP)
+      expect(applyGroundingBudget(text, DEFAULT_GROUNDING_BUDGET).droppedLabels).toEqual([])
+      expect(applyGroundingBudget('', 100).droppedLabels).toEqual([])
+    })
+
+    /*
+     * The invariant that makes the log line trustworthy: if these two ever
+     * disagree, the labels are describing a different set of blocks than the
+     * count, and reading either one misleads.
+     */
+    it('always has exactly droppedBlocks entries, including the oversized-block path', () => {
+      const many = Array.from({ length: 12 }, (_, i) => `H${i}\n${'x'.repeat(400)}`).join(SEP)
+      const truncated = applyGroundingBudget(many, 1000)
+      expect(truncated.droppedLabels).toHaveLength(truncated.droppedBlocks)
+
+      const oversized = applyGroundingBudget(`STANDINGS\n${'x'.repeat(5000)}`, 600)
+      expect(oversized.droppedLabels).toHaveLength(oversized.droppedBlocks)
+      expect(oversized.droppedLabels).toEqual(['STANDINGS'])
+    })
+
+    it('caps a long heading so one block cannot flood the log line', () => {
+      const long = 'H'.repeat(300)
+      const text = [`KEEP\n${'x'.repeat(200)}`, `${long}\n${'x'.repeat(200)}`].join(SEP)
+
+      const out = applyGroundingBudget(text, 210)
+
+      expect(out.droppedLabels).toHaveLength(1)
+      expect(out.droppedLabels[0].length).toBeLessThanOrEqual(80)
+      expect(out.droppedLabels[0].endsWith('...')).toBe(true)
+    })
+
+    it('labels a block with no heading rather than emitting an empty string', () => {
+      const text = [`KEEP\n${'x'.repeat(200)}`, `\n${'x'.repeat(200)}`].join(SEP)
+      const out = applyGroundingBudget(text, 210)
+      expect(out.droppedLabels).toEqual(['(unlabelled block)'])
+    })
+  })
 })
