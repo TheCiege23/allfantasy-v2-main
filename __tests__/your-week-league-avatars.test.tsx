@@ -198,6 +198,7 @@ describe('YourWeek (?all=1) — coin-flip opponent avatar', () => {
       coinFlips: [m],
       leaning: [],
       unprojected: [],
+      eliminationWeeks: [],
       model: { basis: 'per-team scoring distributions', sampleSize: 40 },
       withoutSchedule: 0,
       firstKickoffAt: null,

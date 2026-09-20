@@ -42,6 +42,20 @@ function pct(p: number): string {
   return `${Math.round(p * 100)}%`
 }
 
+/**
+ * 1st, 2nd, 3rd, 4th — for a rank within an elimination league's field.
+ *
+ * ⚠ THE TEENS ARE THE WHOLE REASON THIS IS NOT `n + ['th','st','nd','rd'][n % 10]`.
+ * 11, 12 and 13 take "th" despite ending 1, 2, 3, and an 18-roster guillotine league
+ * reaches all three every week.
+ */
+function ordinal(n: number): string {
+  const rem100 = n % 100
+  if (rem100 >= 11 && rem100 <= 13) return `${n}th`
+  const suffix = { 1: 'st', 2: 'nd', 3: 'rd' }[n % 10] ?? 'th'
+  return `${n}${suffix}`
+}
+
 function OpponentName({ matchup }: { matchup: WeekMatchup }) {
   // Never invent a name. An unnamed roster says which roster it is.
   return <>{matchup.opponent.name ?? `Roster ${matchup.opponent.rosterId}`}</>
@@ -117,7 +131,16 @@ function LeaningCard({ matchup }: { matchup: WeekMatchup }) {
 }
 
 export function YourWeek({ data, rivalriesHref }: YourWeekProps) {
-  const total = data.coinFlips.length + data.leaning.length + data.unprojected.length
+  /*
+   * ⚠ ELIMINATION WEEKS COUNT TOWARD THE TOTAL. They are matchups in every sense the
+   * header means — leaving them out would render the section and then announce "No
+   * matchups are on file for this week" directly above it.
+   */
+  const total =
+    data.coinFlips.length +
+    data.leaning.length +
+    data.unprojected.length +
+    data.eliminationWeeks.length
   /*
    * Phase-aware empty state — before the first stated regular-season kickoff,
    * "import or re-sync" is the wrong advice. Null when no source states a
@@ -153,7 +176,14 @@ export function YourWeek({ data, rivalriesHref }: YourWeekProps) {
             hardcoding a number from the designer's own account.
           */}
           {total > 0 ? (
-            <OpenAll matchups={[...data.coinFlips, ...data.leaning, ...data.unprojected]} />
+            <OpenAll
+              matchups={[
+                ...data.coinFlips,
+                ...data.leaning,
+                ...data.unprojected,
+                ...data.eliminationWeeks,
+              ]}
+            />
           ) : null}
         </div>
       </header>
@@ -258,6 +288,86 @@ export function YourWeek({ data, rivalriesHref }: YourWeekProps) {
         </section>
       ) : null}
 
+      {/*
+        ── Leagues with no opponent ─────────────────────────────────────
+
+        🛑 THESE RENDERED NOTHING AT ALL BEFORE, WHICH IS WHY THIS IS A SECTION
+        AND NOT A VARIANT OF THE ONE ABOVE. A guillotine week has no opponent,
+        so `pairRows` produced no pair, so no card existed to put in any tier —
+        the league was absent from the board while carrying a full set of rows.
+        Seven of the sixty-five leagues on the account this was measured against.
+
+        The stake is categorically different too: there is no win probability to
+        show, because you are not playing anyone. You are above the cut or you
+        are out.
+      */}
+      {data.eliminationWeeks.length > 0 ? (
+        <section className="af-wk-section">
+          <div className="af-wk-sectionhead">
+            <h2 className="af-wk-sectiontitle">No opponent — lowest score is out</h2>
+            <p className="af-wk-sectionnote">
+              Guillotine and survivor leagues eliminate the week&apos;s lowest score instead of
+              pairing teams off, so these show your points clear of the cut line rather than a win
+              probability. The field is the rosters that have scored this week.
+            </p>
+          </div>
+          <div className="af-wk-leans">
+            {data.eliminationWeeks.map((e) => (
+              <Link
+                key={e.leagueId}
+                href={e.href}
+                className="af-wk-lean"
+                data-elimination="true"
+                data-on-the-block={e.onTheBlock ? 'true' : undefined}
+              >
+                <span className="af-wk-lean-league" data-platform={e.platform}>
+                  {e.leagueName}
+                </span>
+
+                {/*
+                  ⚠ THREE STATES, NOT TWO. "On the block" and "clear by N" are
+                  both claims about a scored field; a week with nothing scored
+                  yet is neither, and must not render as "clear by 0.0" — that
+                  would read as safe-by-a-hair when in fact nobody has played.
+                */}
+                {e.margin == null ? (
+                  <span className="af-wk-lean-prob af-wk-lean-prob--none">—</span>
+                ) : e.onTheBlock ? (
+                  <span
+                    className="af-wk-lean-prob af-wk-lean-prob--form"
+                    data-tone="down"
+                    title={`Your ${e.yourScore?.toFixed(1)} is the lowest score in a field of ${e.fieldSize}`}
+                  >
+                    OUT
+                    <span className="af-wk-lean-prob-sub">on the block</span>
+                  </span>
+                ) : (
+                  <span
+                    className="af-wk-lean-prob af-wk-lean-prob--form"
+                    data-tone="up"
+                    title={`Your ${e.yourScore?.toFixed(1)} against a cut line of ${e.cutLine?.toFixed(1)}`}
+                  >
+                    +{e.margin.toFixed(1)}
+                    <span className="af-wk-lean-prob-sub">clear</span>
+                  </span>
+                )}
+
+                <span className="af-wk-lean-score">
+                  {e.fieldSize > 0 ? (
+                    <>
+                      {e.rank != null ? `${ordinal(e.rank)} of ${e.fieldSize}` : `${e.fieldSize} scored`}
+                      {e.cutLine != null ? ` · cut line ${e.cutLine.toFixed(1)}` : ''}
+                    </>
+                  ) : (
+                    'No scores in yet this week'
+                  )}
+                </span>
+              </Link>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
       {total === 0 ? (
         preseasonKickoffLabel ? (
           <div className="af-wk-empty">
@@ -311,7 +421,7 @@ export function YourWeek({ data, rivalriesHref }: YourWeekProps) {
  * A plain button rather than N anchors because the point is the bulk action. It
  * opens real, existing matchup routes; nothing here is a placeholder.
  */
-function OpenAll({ matchups }: { matchups: WeekMatchup[] }) {
+function OpenAll({ matchups }: { matchups: Array<{ href: string }> }) {
   return (
     <button
       type="button"

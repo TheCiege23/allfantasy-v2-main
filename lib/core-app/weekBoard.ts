@@ -209,6 +209,12 @@ export type WeekBoard = {
   leaning: WeekMatchup[]
   /** Scheduled, but neither side has enough history to project. */
   unprojected: WeekMatchup[]
+  /**
+   * Guillotine/survivor weeks, which have no opponent and so cannot be a `WeekMatchup`.
+   * Kept a separate bucket rather than forced into `unprojected` with an invented
+   * opponent — see `buildEliminationWeeks`.
+   */
+  eliminationWeeks: EliminationWeek[]
   /** Stated on the screen, never implied. */
   model: {
     basis: string
@@ -805,6 +811,154 @@ export function pairRows(rows: MatchupRow[]): Pairing[] {
   return out
 }
 
+/**
+ * A week in a league that has no opponents — guillotine, survivor, "chopped".
+ *
+ * 🛑 THESE LEAGUES RENDERED NOTHING AT ALL, AND THE CAUSE IS ONE LINE IN `pairRows`:
+ * `if (list.length !== 2) continue`. Sleeper sends `matchup_id: null` for a format where
+ * everyone plays the field, so the parity collector stores each roster as its own group of
+ * ONE. Measured on production 2026-09-20 across this account's seven such leagues: every
+ * one carries `distinct_matchup_ids` equal to its ROSTER count (18, 18, 20) and
+ * `avg(pointsAgainst) = 0.0`. A group of one never pairs, so no card was ever built and the
+ * league was silently absent from the board — not "unprojected", missing.
+ *
+ * ⚠ AND BACKFILLING HISTORY WOULD NOT HAVE FIXED IT, which is what makes this the fix
+ * rather than an ingest change. `buildSeasonMatchupFacts` drops the same rows at the same
+ * two gates, and `MatchupFact` is pairwise (`teamA`/`teamB`/`scoreA`/`scoreB`) — there is no
+ * row shape for a week with no opponent. The six such leagues that DO have a prior season
+ * on file report `historicalBackfillStatus: 'complete'` truthfully.
+ *
+ * The weekly stake here is the cut line, not a head-to-head: the lowest score is out.
+ */
+export type EliminationWeek = {
+  leagueId: string
+  leagueName: string
+  platform: string
+  leagueImageUrl: string | null
+  season: number
+  week: number
+  /** Your score this week. Null when your roster has not scored yet. */
+  yourScore: number | null
+  /** The lowest score in the scored field — whoever is currently out. */
+  cutLine: number | null
+  /** 1 = top of the field. Null while you are unscored. */
+  rank: number | null
+  /** Rosters carrying a score this week. The field you are measured against. */
+  fieldSize: number
+  /** Your points clear of the cut line. 0 means you ARE the cut line. */
+  margin: number | null
+  /** True only when your score is the lowest of a field of at least two. */
+  onTheBlock: boolean
+  /**
+   * Whether `League.leagueType` actually says guillotine/survivor.
+   *
+   * ⚠ IT IS NOT THE TRIGGER, AND MUST NOT BECOME ONE. This account's
+   * "🪓 Elimination Station 2" is stored as `redraft` while behaving exactly like the
+   * others — 18 groups of one, zero points against. Gating on the label would drop the
+   * league the label is wrong about, which is the one case a label check exists to catch.
+   * The SHAPE of the week decides; the label only informs the wording.
+   */
+  labelled: boolean
+  href: string
+}
+
+/**
+ * Build the elimination cards for a week's rows.
+ *
+ * 🛑 THE TRIGGER IS "THIS LEAGUE PRODUCED NO PAIRS AT ALL", NEVER "your row did not pair".
+ * A bye in an ordinary head-to-head league also leaves one roster unpaired, and reading
+ * that as an elimination week would put a cut line on a league that has none. Requiring the
+ * WHOLE league to be pairless separates the two, and it is also what makes double-emission
+ * impossible: a league falls into exactly one of the two loops.
+ */
+export function buildEliminationWeeks(args: {
+  /** Already filtered to the latest season and week. */
+  rows: MatchupRow[]
+  /** Platform ids that produced at least one pair this week. */
+  pairedLeagueIds: Set<string>
+  leagueByPlatformId: Map<string, LeagueMeta>
+  /**
+   * "platformLeagueId:rosterId" for every roster the user owns.
+   *
+   * ⚠ A MEMBERSHIP TEST, NOT A `Set` — `readHistory` builds this as a
+   * `Map<string, string>` (key → externalId) and the pairing loop only ever calls `.has`
+   * on it. Typing the parameter `Set<string>` compiled against the tests, which pass a
+   * real Set, and failed only at the CALL SITE inside `getWeekBoard`. Asking for the one
+   * operation actually used lets both through without a cast.
+   */
+  myRosters: { has(key: string): boolean }
+}): EliminationWeek[] {
+  const byLeague = new Map<string, MatchupRow[]>()
+  for (const r of args.rows) {
+    if (args.pairedLeagueIds.has(r.leagueId)) continue
+    const list = byLeague.get(r.leagueId)
+    if (list) list.push(r)
+    else byLeague.set(r.leagueId, [r])
+  }
+
+  const out: EliminationWeek[] = []
+
+  for (const [pid, rows] of byLeague) {
+    const meta = args.leagueByPlatformId.get(pid)
+    if (!meta) continue
+
+    const yours = rows.find((r) => args.myRosters.has(`${pid}:${r.rosterId}`))
+    if (!yours) continue
+
+    /*
+     * ⚠ THE FIELD IS THE SCORED ROSTERS, NOT EVERY ROW. A roster knocked out in week 1
+     * still carries a 0-0 row for every later week, so counting all rows would hold a
+     * permanent cut line of 0 under a league where nobody is near it — and would report a
+     * field of 18 in a league with four teams left.
+     */
+    const field = rows.filter((r) => isScored(r))
+    const fieldSize = field.length
+
+    const cutLine = fieldSize > 0 ? Math.min(...field.map((r) => r.pointsFor)) : null
+    const yourScore = isScored(yours) ? yours.pointsFor : null
+    const rank = yourScore == null ? null : 1 + field.filter((r) => r.pointsFor > yourScore).length
+
+    /*
+     * ⚠ A FIELD OF ONE IS NOT A CUT LINE. The only scored roster is simultaneously the
+     * highest and the lowest, so "on the block" would fire on the first roster to post a
+     * point every single week. Two is the smallest field where "lowest" means anything.
+     */
+    const onTheBlock =
+      yourScore != null && cutLine != null && fieldSize >= 2 && yourScore === cutLine
+
+    out.push({
+      leagueId: meta.id,
+      leagueName: meta.name,
+      platform: meta.platform,
+      leagueImageUrl: meta.imageUrl,
+      season: rows[0].seasonYear,
+      week: rows[0].week,
+      yourScore,
+      cutLine,
+      rank,
+      fieldSize,
+      margin: yourScore != null && cutLine != null ? yourScore - cutLine : null,
+      onTheBlock,
+      labelled: meta.elimination,
+      href: `/core/matchup?league=${encodeURIComponent(meta.id)}`,
+    })
+  }
+
+  /*
+   * Most urgent first: on the block, then closest to it. A league with no scores yet sorts
+   * last — it has nothing to say this week, but it is still ON the board, which is the whole
+   * point of this change.
+   */
+  out.sort(
+    (a, b) =>
+      Number(b.onTheBlock) - Number(a.onTheBlock) ||
+      (a.margin ?? Number.POSITIVE_INFINITY) - (b.margin ?? Number.POSITIVE_INFINITY) ||
+      a.leagueName.localeCompare(b.leagueName),
+  )
+
+  return out
+}
+
 // ── 24a — Your Week ────────────────────────────────────────────────────
 
 export async function getWeekBoard(
@@ -833,6 +987,7 @@ export async function getWeekBoard(
     coinFlips: [],
     leaning: [],
     unprojected: [],
+    eliminationWeeks: [],
     model: { basis: 'No completed weeks are on file yet, so nothing here is projected.', sampleSize: 0 },
     withoutSchedule: leagues.length,
     firstKickoffAt,
@@ -942,6 +1097,29 @@ export async function getWeekBoard(
     else if (Math.abs(card.projection.margin) <= COIN_FLIP_POINTS) coinFlips.push(card)
     else leaning.push(card)
   }
+
+  /*
+   * ── Leagues with no opponent ───────────────────────────────────────
+   *
+   * `pairedLeagueIds` is read off `thisWeek` rather than recomputed, so the two loops
+   * cannot disagree about which leagues pair — a league is in exactly one of them.
+   */
+  const pairedLeagueIds = new Set(thisWeek.map((p) => p.leagueId))
+  const eliminationWeeks = buildEliminationWeeks({
+    rows: history.rows.filter((r) => r.seasonYear === latest.season && r.week === latest.week),
+    pairedLeagueIds,
+    leagueByPlatformId,
+    myRosters,
+  })
+
+  /*
+   * 🛑 COUNT THESE AS SEEN, OR THE FIX REPORTS ITSELF AS THE BUG IT REMOVED.
+   * `withoutSchedule` is `leagues.length - leaguesSeen.size`, and these leagues were
+   * landing in it — a guillotine league was being counted as having no schedule for the
+   * week while carrying a full set of rows. Adding the card without this would put the
+   * league on the board AND go on reporting it as absent, in the same render.
+   */
+  for (const e of eliminationWeeks) leaguesSeen.add(e.leagueId)
 
   // Coin flips: closest first — the tightest game is the one that most needs a
   // decision. The rest: most lopsided first, so scanning down is scanning away
@@ -1135,6 +1313,7 @@ export async function getWeekBoard(
     coinFlips,
     leaning,
     unprojected,
+    eliminationWeeks,
     model: {
       basis:
         `Projected from each roster's own completed weeks in its own league's scoring — ` +
