@@ -247,33 +247,62 @@ export function gradeableSide(
   ]
 }
 
+/** One asset the book could not price, for `withheldTradeReason` to name. */
+export type UnpricedAsset = {
+  kind: 'player' | 'pick'
+  /** Display name where the caller has one. Absent is fine — the kind still carries the truth. */
+  name?: string | null
+}
+
 /**
  * Why a trade carries no letter.
  *
- * `describeNoSignal` answers in terms of values on file, which is right for a player
- * nobody has priced yet and vague when the unpriced half is DRAFT PICKS. Naming the cause
- * separates the two claims.
+ * 🛑 THIS USED TO INFER THE CAUSE FROM A COUNT, AND IT TOLD A MANAGER A FLAT LIE.
+ * The old condition was `unpriced === pickCount` — if the number of unpriced assets happened
+ * to equal the number of picks, it announced that the picks were the gap. It never checked
+ * WHICH assets were unpriced, so one unpriced PLAYER beside one perfectly priced pick
+ * satisfied it exactly.
  *
- * ⚠ THE WORDING CHANGED WITH THE FACTS ON 2026-09-20. It used to say picks were something
- * "we do not price yet", which was true while `ingestPlayerValues` discarded every pick row
- * FantasyCalc sends. We store them now, so an unpriced pick is a GAP IN THE BOOK — a season
- * or round the market has no row for — not a category we refuse to price. Telling a manager
- * to stop waiting for something that has already arrived is its own kind of wrong.
+ * Measured on production 2026-09-20, on the trade that exposed it: "Last League Left" is a
+ * dynasty superflex league, its 2027 4th is in the book at value 870 / rank 221, and the
+ * asset with no price is DeMarvion Overshown — a linebacker, and FantasyCalc publishes no
+ * defenders at any tier (344 of 344 traded IDP players carry zero rows). The card blamed the
+ * pick. The pick was the one thing in that trade we could price.
  *
- * ⚠ ONLY WHEN THE PICKS ARE THE WHOLE GAP. A trade that is also missing a player's value
- * falls back to the generic reason, because blaming the picks there would be a confident
- * half-truth — and `NO_ASSETS` keeps its own wording, since an empty side is a different
- * fact from an unpriced one.
+ * ⚠ IT WAS HARMLESS UNTIL PICKS BECAME PRICEABLE, WHICH IS WHY IT SHIPPED. While every pick
+ * was unpriced by definition, "the unpriced count equals the pick count" was almost always
+ * true BECAUSE of the picks, so the sentence was accidentally right. Storing pick prices made
+ * the coincidence and the cause come apart, and a guess that had been right by luck started
+ * being wrong with the same confidence.
+ *
+ * So the caller now passes WHAT it could not price. A name when it has one, the kind when it
+ * does not — either beats a count, and neither can attribute the gap to the wrong asset.
  */
 export function withheldTradeReason(
   grade: Extract<TradeGrade, { graded: false }>,
-  pickCount: number,
+  unpriced: readonly UnpricedAsset[] = [],
 ): string {
-  const unpriced = grade.total - grade.covered
-  if (grade.reason !== 'NO_ASSETS' && pickCount > 0 && unpriced === pickCount) {
-    return `Not graded — no market price on file for ${
-      pickCount === 1 ? 'the draft pick' : `the ${pickCount} draft picks`
-    } in this trade.`
+  /* An empty side is a different fact from an unpriced one, and keeps its own wording. */
+  if (grade.reason === 'NO_ASSETS') return describeNoSignal(grade)
+
+  if (unpriced.length > 0) {
+    const names = unpriced.map((u) => u.name).filter((n): n is string => typeof n === 'string' && n.length > 0)
+
+    /*
+     * Naming them is the whole point, so do it whenever every unpriced asset has a name and
+     * the list is short enough to read. Past that, fall to counts by kind rather than a
+     * sentence nobody finishes.
+     */
+    if (names.length === unpriced.length && names.length <= 2) {
+      return `Not graded — no market price on file for ${names.join(' or ')}.`
+    }
+
+    const players = unpriced.filter((u) => u.kind === 'player').length
+    const picks = unpriced.length - players
+    const parts: string[] = []
+    if (players > 0) parts.push(`${players} player${players === 1 ? '' : 's'}`)
+    if (picks > 0) parts.push(`${picks} draft pick${picks === 1 ? '' : 's'}`)
+    return `Not graded — no market price on file for ${parts.join(' and ')} in this trade.`
   }
 
   /*
@@ -289,8 +318,6 @@ export function withheldTradeReason(
    * file, including a three-word copy fix 180 lines away from either of them, fails CI.
    * Clearing them means moving both functions into `lib/decision-os/trade/` and
    * repointing their callers; that is a real piece of work and it is not this one.
-   * `describeNoSignal` keeps `NO_ASSETS`, which is an empty side rather than a coverage
-   * count and is right in both vocabularies.
    */
   if (grade.reason === 'PARTIAL_COVERAGE') {
     return `Not graded — only ${grade.covered} of ${grade.total} assets have values on file.`

@@ -118,58 +118,75 @@ describe('gradeableSide', () => {
 describe('withheldTradeReason', () => {
   const grade = (reason: 'NO_ASSETS' | 'PARTIAL_COVERAGE' | 'NO_COVERAGE', covered: number, total: number) =>
     ({ graded: false as const, reason, covered, total, detail: '' })
+  const player = (name?: string) => ({ kind: 'player' as const, name })
+  const pick = (name: string) => ({ kind: 'pick' as const, name })
 
   /*
-   * ⚠ THE WORDING TRACKS A FACT THAT CHANGED. It used to say picks were something "we do
-   * not price yet", which was true while `ingestPlayerValues` discarded every pick row. We
-   * store them now, so an unpriced pick is a gap in the BOOK, not a category we refuse.
+   * 🛑 THE REGRESSION THIS FUNCTION EXISTS TO STOP, AND IT SHIPPED ONCE.
+   * The old signature took a COUNT and fired the pick wording when `unpriced === pickCount`.
+   * One unpriced player beside one perfectly priced pick satisfies that exactly, which is
+   * the real production trade that exposed it: "Last League Left", a dynasty superflex
+   * league whose 2027 4th sits in the book at rank 221, whose unpriced asset is a linebacker
+   * FantasyCalc does not publish, and whose card blamed the pick.
    */
-  it('names the picks when the picks are the whole gap', () => {
-    expect(withheldTradeReason(grade('PARTIAL_COVERAGE', 2, 6), 4)).toMatch(
-      /no market price on file for the 4 draft picks/,
-    )
-    expect(withheldTradeReason(grade('NO_COVERAGE', 0, 1), 1)).toMatch(
-      /no market price on file for the draft pick/,
-    )
+  it('does not blame the pick when the unpriced asset is a player', () => {
+    const text = withheldTradeReason(grade('PARTIAL_COVERAGE', 1, 2), [player('DeMarvion Overshown')])
+    expect(text).toMatch(/DeMarvion Overshown/)
+    expect(text).not.toMatch(/draft pick/)
   })
 
-  it('no longer tells a reader we do not price picks', () => {
-    for (const n of [1, 3]) {
-      expect(withheldTradeReason(grade('PARTIAL_COVERAGE', 2, 2 + n), n)).not.toMatch(/do not price/)
-    }
+  it('names the picks when the picks really are the gap', () => {
+    expect(withheldTradeReason(grade('NO_COVERAGE', 0, 1), [pick('2027 4th')])).toMatch(/2027 4th/)
+    expect(
+      withheldTradeReason(grade('PARTIAL_COVERAGE', 2, 6), [
+        pick('2027 1st'), pick('2027 2nd'), pick('2027 3rd'), pick('2028 1st'),
+      ]),
+    ).toMatch(/4 draft picks/)
+  })
+
+  /* Mixed gaps say so, rather than picking whichever kind reads better. */
+  it('reports both kinds when both are unpriced', () => {
+    const text = withheldTradeReason(grade('PARTIAL_COVERAGE', 2, 6), [
+      player(), player(), pick('2027 1st'),
+    ])
+    expect(text).toMatch(/2 players and 1 draft pick/)
   })
 
   /*
-   * ⚠ A HALF-TRUTH IS STILL WRONG. One pick and one unpriced player is not "the picks";
-   * blaming them would tell the reader a sync cannot help when it can.
+   * ⚠ A KIND WITHOUT A NAME IS STILL THE TRUTH. The per-league screen never loads player
+   * names on its grading path, so it passes kinds alone — which must still be enough to
+   * avoid attributing the gap to the wrong asset.
    */
-  it('falls back to the generic reason when a player is unpriced too', () => {
-    expect(withheldTradeReason(grade('PARTIAL_COVERAGE', 2, 6), 3)).not.toMatch(/draft pick/)
+  it('works from kinds alone when the caller has no names', () => {
+    const text = withheldTradeReason(grade('PARTIAL_COVERAGE', 1, 2), [player()])
+    expect(text).toMatch(/1 player/)
+    expect(text).not.toMatch(/draft pick/)
   })
 
   it('leaves an empty side its own wording', () => {
-    expect(withheldTradeReason(grade('NO_ASSETS', 0, 2), 2)).toMatch(/no assets on record/)
+    expect(withheldTradeReason(grade('NO_ASSETS', 0, 2), [player('x')])).toMatch(/no assets on record/)
   })
 
   /*
    * ⚠ "ASSETS", NOT "PLAYERS". `grade.total` counts picks now, so a coverage sentence
-   * calling them players is a wrong noun bolted to a right number. It is asserted here
-   * because this function owns the wording — see its docblock for why the fix does not
-   * live in `describeNoSignal`.
+   * calling them players is a wrong noun bolted to a right number. Reached when the caller
+   * identifies nothing — the honest fallback rather than a guess.
    */
-  it('counts assets rather than players in a coverage reason', () => {
-    expect(withheldTradeReason(grade('PARTIAL_COVERAGE', 2, 6), 0)).toBe(
+  it('counts assets rather than players when nothing was identified', () => {
+    expect(withheldTradeReason(grade('PARTIAL_COVERAGE', 2, 6), [])).toBe(
       'Not graded — only 2 of 6 assets have values on file.',
     )
-    expect(withheldTradeReason(grade('NO_COVERAGE', 0, 6), 0)).not.toMatch(/player/i)
+    expect(withheldTradeReason(grade('NO_COVERAGE', 0, 6), [])).not.toMatch(/player/i)
   })
 
   /* Never a letter, and never the word "even" — the rule `describeNoSignal` carries. */
   it('never reads as a grade', () => {
     for (const r of ['NO_ASSETS', 'PARTIAL_COVERAGE', 'NO_COVERAGE'] as const) {
-      const text = withheldTradeReason(grade(r, 1, 4), 2)
-      expect(text).toMatch(/^Not graded/)
-      expect(text).not.toMatch(/\beven\b/i)
+      for (const u of [[], [player('A')], [pick('2027 1st'), player()]]) {
+        const text = withheldTradeReason(grade(r, 1, 4), u)
+        expect(text).toMatch(/^Not graded/)
+        expect(text).not.toMatch(/\beven\b/i)
+      }
     }
   })
 })

@@ -12,6 +12,7 @@ import {
   pickAssets,
   pickPricerFrom,
   withheldTradeReason,
+  type UnpricedAsset,
   type PickPricer,
   type TradeAsset,
 } from './tradePicks'
@@ -634,6 +635,33 @@ export async function getTradesBoard(
 
   const { counts: countByLeague, firstByLeague } = collapseMirroredTrades(resolved)
 
+  /*
+   * The assets this league's book could not price, named where we can name them.
+   *
+   * ⚠ `rankOf` IS THE PREDICATE, NOT `value`. Grading counts an asset as covered only when
+   * it carries a RANK — `PlayerValueSnapshot.overallRank` is nullable, so a row can hold a
+   * value and still be ungradeable. Testing the value here would report an asset as priced
+   * that the grader just refused.
+   */
+  function unpricedIn(
+    t: { playersGiven: unknown; playersReceived: unknown },
+    book: ValueBook,
+    picks: readonly TradeAsset[] = [],
+    price?: PickPricer,
+  ): UnpricedAsset[] {
+    const rankFor = (id: string) =>
+      valueByBookAndId.get(`${book.format}:${book.qbFormat}:${id}`)?.rank ?? null
+    const out: UnpricedAsset[] = []
+    for (const id of [...idsOf(t.playersGiven), ...idsOf(t.playersReceived)]) {
+      if (rankFor(id) == null) out.push({ kind: 'player', name: playerById.get(id)?.name ?? null })
+    }
+    for (const p of picks) {
+      const priced = price && p.pickSeason && p.pickRound != null ? price(p.pickSeason, p.pickRound) : null
+      if (!priced) out.push({ kind: 'pick', name: p.name })
+    }
+    return out
+  }
+
   /* Latest graded trade per league, built from the surviving copy. */
   const latestByLeague = new Map<string, BoardTrade>()
 
@@ -693,9 +721,14 @@ export async function getTradesBoard(
       received: [...recvIds.map((id) => toAsset(id, leagueBook)), ...recvPicks],
       letter: g.graded ? g.letter : null,
       sharePct: g.graded ? g.sharePct : null,
-      withheldReason: g.graded
-        ? null
-        : withheldTradeReason(g, sentPicks.length + recvPicks.length),
+      /*
+       * What we could not price, by identity — never a count. The old call passed
+       * `sentPicks.length + recvPicks.length` and `withheldTradeReason` inferred the cause
+       * from whether that number matched the unpriced total, which blamed the picks for an
+       * unpriced PLAYER whenever the two happened to be equal. This board is the one caller
+       * that holds display names, so it names them.
+       */
+      withheldReason: g.graded ? null : withheldTradeReason(g, unpricedIn(t, leagueBook, [...sentPicks, ...recvPicks], pickPrice)),
     })
   }
 
