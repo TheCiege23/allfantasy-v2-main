@@ -16,6 +16,11 @@ import {
   type PickPricer,
   type TradeAsset,
 } from './tradePicks'
+import { defenderPricerFrom, type DefenderPricer } from './tradeDefenders'
+import { hasIdpScoring } from './scoringNotes'
+import { extractScoringSettings } from '@/lib/projections/leagueScoring'
+import { readCanonicalDefenderBoard } from '@/lib/values/canonicalDefenderBoardCache'
+import { currentSeasonOf } from './todayStrip'
 import { leagueArtUrl } from './leagueArt'
 import { leagueDisplayName } from './leagueHome'
 
@@ -502,13 +507,37 @@ export async function getTradesBoard(
   // building an empty `OR`, which Prisma treats as "match nothing".
   if (booksInPlay.length === 0) booksInPlay.push(CROSS_LEAGUE_BOOK)
 
+  /*
+   * 🛑 WHICH LEAGUES MAY PRICE A DEFENDER AT ALL. Replacement level is defined by starting
+   * requirements, so the canonical board answers "what is a defender worth in a 12-team league
+   * starting three of them". In a league that starts none, that number is a claim about a slot
+   * the league does not have — so those leagues keep seeing defenders as unpriced, which is
+   * the truth for them.
+   *
+   * ⚠ FREE, BECAUSE THE SETTINGS ARE ALREADY HERE. `resolveLeagueIdpScoring` is the named
+   * authority but costs a query per league; it reaches the same `hasIdpScoring` verdict off
+   * the same settings this loader already selected for the value book and the deadline.
+   */
+  const idpLeagueIds = new Set<string>()
+  for (const c of mine) {
+    if (!c.league) continue
+    const scoring = extractScoringSettings(c.league.settings)
+    if (scoring && hasIdpScoring(scoring)) idpLeagueIds.add(c.league.id)
+  }
+  /* Only the formats an IDP league in this set actually needs — at most two, usually one. */
+  const defenderFormats = [
+    ...new Set(
+      [...idpLeagueIds].map((id) => (bookByLeagueId.get(id) ?? CROSS_LEAGUE_BOOK).format === 'DYNASTY'),
+    ),
+  ]
+
   /* Names, faces and values for every asset we are about to print. */
   const assetIds = new Set<string>()
   for (const t of trades) {
     for (const id of [...idsOf(t.playersGiven), ...idsOf(t.playersReceived)]) assetIds.add(id)
   }
 
-  const [players, snaps, pickRowsPerBook] = await Promise.all([
+  const [players, snaps, pickRowsPerBook, defenderPricers] = await Promise.all([
     assetIds.size > 0
       ? prisma.sportsPlayer
           .findMany({
@@ -575,6 +604,20 @@ export async function getTradesBoard(
           .catch(() => [`${b.format}:${b.qbFormat}`, []] as const),
       ),
     ).catch(() => []),
+    /*
+     * The canonical defender board, per format. One `sportsDataCache` read each, and none at
+     * all when no league in view scores IDP.
+     *
+     * ⚠ AN EXPIRED BOARD READS AS ABSENT, by `readCanonicalDefenderBoard`'s own contract —
+     * defenders then go back to unpriced rather than being served a silently ancient price.
+     */
+    Promise.all(
+      defenderFormats.map((isDynasty) =>
+        readCanonicalDefenderBoard({ prisma, isDynasty })
+          .then((board) => [isDynasty, defenderPricerFrom(board)] as const)
+          .catch(() => [isDynasty, defenderPricerFrom(null)] as const),
+      ),
+    ).catch(() => []),
   ])
 
   const playerById = new Map(players.map((p) => [p.sleeperId, p]))
@@ -591,14 +634,52 @@ export async function getTradesBoard(
     }
   }
 
+  /*
+   * 🛑 ONE RANK PREDICATE, USED BY ALL THREE CONSUMERS. The grade, the value printed on the
+   * asset row, and the withheld reason must agree about whether an asset is priced. They were
+   * three separate expressions over the same map, which is how the reason could name an asset
+   * the grader had just counted — so they are one function now and diverging means editing it.
+   */
+  const defenderPricerByFormat = new Map<boolean, DefenderPricer>(defenderPricers)
+  const NO_DEFENDERS: DefenderPricer = () => null
+  const defendersFor = (leagueId: string, book: ValueBook): DefenderPricer =>
+    idpLeagueIds.has(leagueId)
+      ? defenderPricerByFormat.get(book.format === 'DYNASTY') ?? NO_DEFENDERS
+      : NO_DEFENDERS
+  const rankWith = (book: ValueBook, defenders: DefenderPricer) => (id: string) =>
+    valueByBookAndId.get(`${book.format}:${book.qbFormat}:${id}`)?.rank ?? defenders(id)?.rank ?? null
+
+  /*
+   * The season the prices we are about to quote belong to.
+   *
+   * ⚠ FROM THE SNAPSHOT'S OWN `capturedAt`, AND THERE IS NO CLOCK FALLBACK — BY CONTRACT.
+   * `tradesBoardSummary` caches this board's payload and asserts against this file's SOURCE
+   * that it contains no `new Date()` and no `Date.now()`: a cached payload with a clock
+   * rendered into it is wrong for every reader after the one who computed it. That test
+   * caught the first version of this line.
+   *
+   * It is also the better claim. "Today's market no longer covers him" is a statement about
+   * the BOARD, so it should be dated by the board — and where no snapshot was loaded there is
+   * no market to date, so we say nothing about age rather than reaching for the wall clock.
+   * `currentSeasonOf` carries the autumn boundary, so a September trade is not mislabelled as
+   * last season's.
+   */
+  const newestCapture = snaps.reduce<Date | null>(
+    (acc, s) => (acc == null || s.capturedAt > acc ? s.capturedAt : acc),
+    null,
+  )
+  const marketSeason = newestCapture ? currentSeasonOf(newestCapture) : null
+
   /* One pricer per book, built once — the loop below runs per trade. */
   const pricerByBook = new Map<string, PickPricer>(
     pickRowsPerBook.map(([key, rows]) => [key, pickPricerFrom(rows)] as const),
   )
 
-  function toAsset(id: string, book: ValueBook): TradeAsset {
+  function toAsset(id: string, book: ValueBook, defenders: DefenderPricer = NO_DEFENDERS): TradeAsset {
     const p = playerById.get(id)
     const v = valueByBookAndId.get(`${book.format}:${book.qbFormat}:${id}`)
+    /* FantasyCalc first; the defender board only where the book holds nothing for him. */
+    const defence = v ? null : defenders(id)
     return {
       id,
       kind: 'player',
@@ -611,7 +692,7 @@ export async function getTradesBoard(
       position: p?.position ?? null,
       team: p?.team ?? null,
       imageUrl: p?.imageUrl ?? null,
-      value: v?.value ?? null,
+      value: v?.value ?? defence?.value ?? null,
     }
   }
 
@@ -648,9 +729,9 @@ export async function getTradesBoard(
     book: ValueBook,
     picks: readonly TradeAsset[] = [],
     price?: PickPricer,
+    defenders: DefenderPricer = NO_DEFENDERS,
   ): UnpricedAsset[] {
-    const rankFor = (id: string) =>
-      valueByBookAndId.get(`${book.format}:${book.qbFormat}:${id}`)?.rank ?? null
+    const rankFor = rankWith(book, defenders)
     const out: UnpricedAsset[] = []
     for (const id of [...idsOf(t.playersGiven), ...idsOf(t.playersReceived)]) {
       if (rankFor(id) == null) out.push({ kind: 'player', name: playerById.get(id)?.name ?? null })
@@ -682,8 +763,8 @@ export async function getTradesBoard(
     const sentPicks = pickAssets(t.picksGiven, pickPrice)
     const recvPicks = pickAssets(t.picksReceived, pickPrice)
 
-    const rankOf = (id: string) =>
-      valueByBookAndId.get(`${leagueBook.format}:${leagueBook.qbFormat}:${id}`)?.rank ?? null
+    const defenders = defendersFor(t.leagueId, leagueBook)
+    const rankOf = rankWith(leagueBook, defenders)
 
     /*
      * Picks are priced from this league's OWN book, like the players beside them. A pick the
@@ -717,8 +798,8 @@ export async function getTradesBoard(
        *
        * Players first, then the picks that moved with them — Sleeper's own order.
        */
-      sent: [...sentIds.map((id) => toAsset(id, leagueBook)), ...sentPicks],
-      received: [...recvIds.map((id) => toAsset(id, leagueBook)), ...recvPicks],
+      sent: [...sentIds.map((id) => toAsset(id, leagueBook, defenders)), ...sentPicks],
+      received: [...recvIds.map((id) => toAsset(id, leagueBook, defenders)), ...recvPicks],
       letter: g.graded ? g.letter : null,
       sharePct: g.graded ? g.sharePct : null,
       /*
@@ -728,7 +809,10 @@ export async function getTradesBoard(
        * unpriced PLAYER whenever the two happened to be equal. This board is the one caller
        * that holds display names, so it names them.
        */
-      withheldReason: g.graded ? null : withheldTradeReason(g, unpricedIn(t, leagueBook, [...sentPicks, ...recvPicks], pickPrice)),
+      withheldReason: g.graded ? null : withheldTradeReason(g, unpricedIn(t, leagueBook, [...sentPicks, ...recvPicks], pickPrice, defenders), {
+              tradeSeason: t.season ?? null,
+              currentSeason: marketSeason,
+            }),
     })
   }
 

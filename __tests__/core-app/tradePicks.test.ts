@@ -179,6 +179,65 @@ describe('withheldTradeReason', () => {
     expect(withheldTradeReason(grade('NO_COVERAGE', 0, 6), [])).not.toMatch(/player/i)
   })
 
+  /*
+   * 🛑 AN OLD TRADE IS NOT A COVERAGE GAP. We hold one market — today's — and
+   * `PlayerValueSnapshot` only began accumulating on 2026-08-17, so there is no 2019 board and
+   * never will be. Coverage by season on production 2026-09-20 runs 96.2% (2026) down to 9.4%
+   * (2019), which is players retiring rather than a board-depth curve: Andrew Luck, Drew Brees,
+   * Ben Roethlisberger, Cam Newton. Telling a manager a price is "not on file" points him at a
+   * sync that will never fill it.
+   */
+  it('blames the calendar, not the book, for a past-season trade', () => {
+    const text = withheldTradeReason(grade('PARTIAL_COVERAGE', 1, 2), [player('Drew Brees')], {
+      tradeSeason: 2019,
+      currentSeason: 2026,
+    })
+    expect(text).toMatch(/this trade is from 2019/)
+    expect(text).toMatch(/Drew Brees/)
+    expect(text).not.toMatch(/on file/)
+  })
+
+  /*
+   * THE CONTROL, AND IT IS THE SAME UNPRICED PLAYER. Only the season moves — so this pins the
+   * age branch rather than merely the presence of a name.
+   */
+  it('keeps the coverage wording for a current-season trade', () => {
+    const text = withheldTradeReason(grade('PARTIAL_COVERAGE', 1, 2), [player('Drew Brees')], {
+      tradeSeason: 2026,
+      currentSeason: 2026,
+    })
+    expect(text).not.toMatch(/this trade is from/)
+    expect(text).toMatch(/no market price on file/)
+  })
+
+  it('says nothing about age when the seasons are unknown', () => {
+    expect(withheldTradeReason(grade('PARTIAL_COVERAGE', 1, 2), [player('Drew Brees')])).not.toMatch(
+      /this trade is from/,
+    )
+  })
+
+  /*
+   * ⚠ PLAYERS ONLY. A pick price is not a snapshot of who was good in 2019 — "2028 2nd" means
+   * the same thing whenever it was traded — so an unpriced pick in an old trade is a real gap
+   * in the book. Blaming the calendar there would be this same error pointed the other way.
+   */
+  it('does not blame the calendar for an unpriced pick in an old trade', () => {
+    const text = withheldTradeReason(grade('NO_COVERAGE', 0, 1), [pick('2027 9th')], {
+      tradeSeason: 2019,
+      currentSeason: 2026,
+    })
+    expect(text).not.toMatch(/this trade is from/)
+    expect(text).toMatch(/2027 9th/)
+  })
+
+  it('counts the players when an old trade has too many to name', () => {
+    const text = withheldTradeReason(grade('PARTIAL_COVERAGE', 1, 4), [player('A'), player('B'), player('C')], {
+      tradeSeason: 2021,
+      currentSeason: 2026,
+    })
+    expect(text).toMatch(/3 of its players/)
+  })
+
   /* Never a letter, and never the word "even" — the rule `describeNoSignal` carries. */
   it('never reads as a grade', () => {
     for (const r of ['NO_ASSETS', 'PARTIAL_COVERAGE', 'NO_COVERAGE'] as const) {

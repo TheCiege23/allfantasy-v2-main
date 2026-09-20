@@ -43,9 +43,22 @@ describe('tradesBoardSummary', () => {
   it('🛑 is cacheable at all ONLY because tradesBoard.ts has no clock in it', () => {
     // The entry criterion: cache a payload derived from rows, never one with a clock rendered in.
     // getTradesBoard(userId, currentWeek) takes a NUMBER, not a `now`.
-    const src = readFileSync(resolve(process.cwd(), 'lib/core-app/tradesBoard.ts'), 'utf8')
-    expect(src).not.toMatch(/\bnew Date\(\)/)
-    expect(src).not.toMatch(/\bDate\.now\(\)/)
+    //
+    // 🛑 COMMENTS ARE STRIPPED FIRST, AND THAT IS NOT A LOOSENING. This asserts on SOURCE, so
+    // it cannot tell a clock call from prose ABOUT one — and the moment that file explains why
+    // it has no clock, it names the very tokens matched here and the guard fails the fix for
+    // documenting itself. CLAUDE.md records the same trap in `push-queue.mjs`, where a test
+    // for a removed statement matched the comment that explained the removal.
+    const raw = readFileSync(resolve(process.cwd(), 'lib/core-app/tradesBoard.ts'), 'utf8')
+    const code = raw.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '')
+
+    // The stripper must not have eaten the file: a guard over an empty string cannot fail.
+    expect(code).toMatch(/export async function getTradesBoard/)
+    // ...and it must still catch a real clock, or it is only asserting that stripping worked.
+    expect(`${code}\nconst injected = new Date()`).toMatch(/\bnew Date\(\)/)
+
+    expect(code).not.toMatch(/\bnew Date\(\)/)
+    expect(code).not.toMatch(/\bDate\.now\(\)/)
   })
 
   it('builds on a miss and serves the second read from cache', async () => {

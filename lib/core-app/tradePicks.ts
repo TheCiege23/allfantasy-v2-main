@@ -278,12 +278,56 @@ export type UnpricedAsset = {
  * So the caller now passes WHAT it could not price. A name when it has one, the kind when it
  * does not — either beats a count, and neither can attribute the gap to the wrong asset.
  */
+/** When the trade happened, against the season the prices describe. */
+export type WithheldContext = {
+  /** The trade's own season, as stored. */
+  tradeSeason?: number | null
+  /** The season the market snapshot being priced against belongs to. */
+  currentSeason?: number | null
+}
+
 export function withheldTradeReason(
   grade: Extract<TradeGrade, { graded: false }>,
   unpriced: readonly UnpricedAsset[] = [],
+  context: WithheldContext = {},
 ): string {
   /* An empty side is a different fact from an unpriced one, and keeps its own wording. */
   if (grade.reason === 'NO_ASSETS') return describeNoSignal(grade)
+
+  /*
+   * 🛑 AN OLD TRADE IS NOT A COVERAGE GAP, AND CALLING IT ONE PROMISES A FIX THAT IS NOT COMING.
+   * We hold ONE market — today's. `PlayerValueSnapshot` began accumulating on 2026-08-17, so
+   * there is no 2019 board to price a 2019 trade against and there never will be.
+   *
+   * Measured on production 2026-09-20 — share of trades with every player priced, by season:
+   * 2026 96.2% · 2025 93.6% · 2024 75.3% · 2023 62.1% · 2022 35.2% · 2021 20.1% ·
+   * 2020 14.9% · 2019 9.4%. That is not a board-depth curve, it is players retiring, and the
+   * names behind it are Andrew Luck, Drew Brees, Ben Roethlisberger, Cam Newton.
+   *
+   * ⚠ THE OLD WORDING WAS TRUE AND MISLEADING AT ONCE. "No market price on file for Drew Brees"
+   * reads as patchy data a sync will fill, so a manager could wait for it forever. The cause is
+   * that he is not in today's market, which is the only market there is.
+   *
+   * ⚠ PLAYERS ONLY, AND THE ASYMMETRY IS THE POINT. A pick keeps its own wording: a pick price
+   * is not a snapshot of who was good in 2019 — "2028 2nd" means the same thing whenever it was
+   * traded — so an unpriced pick in an old trade is a real gap in the book, not an artefact of
+   * age, and blaming the calendar for it would be the same error in a new direction.
+   */
+  const { tradeSeason, currentSeason } = context
+  const isPastSeason =
+    typeof tradeSeason === 'number' &&
+    typeof currentSeason === 'number' &&
+    tradeSeason < currentSeason
+  if (isPastSeason && unpriced.length > 0 && unpriced.every((u) => u.kind === 'player')) {
+    const named = unpriced
+      .map((u) => u.name)
+      .filter((n): n is string => typeof n === 'string' && n.length > 0)
+    const who =
+      named.length === unpriced.length && named.length <= 2
+        ? named.join(' or ')
+        : `${unpriced.length} of its players`
+    return `Not graded — this trade is from ${tradeSeason}, and we price against today's market, which no longer covers ${who}.`
+  }
 
   if (unpriced.length > 0) {
     const names = unpriced.map((u) => u.name).filter((n): n is string => typeof n === 'string' && n.length > 0)
