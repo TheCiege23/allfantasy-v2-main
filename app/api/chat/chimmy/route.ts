@@ -47,7 +47,11 @@ import {
 } from '@/lib/ai/behavior-rules'
 import { buildMemoryPromptSection, getFullAIContext } from '@/lib/ai-memory'
 import { getChimmyMemoryContext } from '@/lib/ai-memory/chimmy-memory-context'
-import { appendChatHistory, buildChimmyConversationId } from '@/lib/ai-memory/chat-history-store'
+import {
+  appendChatHistory,
+  buildChimmyConversationId,
+  getRecentChatHistory,
+} from '@/lib/ai-memory/chat-history-store'
 import { rememberChimmyAssistantMemory, rememberChimmyUserMessageMemory } from '@/lib/ai-memory/ai-memory-store'
 import {
   prepareWorkingMemory,
@@ -1037,6 +1041,95 @@ function buildLeagueGroundingLine(args: {
     ].join(' ')
   }
   return undefined
+}
+
+/**
+ * The transcript this conversation already wrote down.
+ *
+ * ── 🛑 EVERY TURN WAS ALREADY BEING PERSISTED, AND NOTHING EVER READ IT BACK ────────────────
+ *
+ * `POST` has stamped both halves of every exchange into `chat_history` since PROMPT 234, under a
+ * deterministic `chimmy:<userId>:<leagueId>` key, and `chimmy-memory-context.ts` already feeds the
+ * last 12 into the prompt — so Chimmy has always REMEMBERED across tabs. The drawer just could not
+ * SHOW it: `useScopedConversation` kept the transcript in `sessionStorage`, which dies with the
+ * tab. A user closing the tab lost a conversation the database still held in full.
+ *
+ * ⚠ A `GET` ON THIS FILE, NOT A NEW ROUTE. The repo sits at Vercel's hard 2048-route ceiling and
+ * `/api/chat/chimmy` already exists — adding a method to it costs nothing, adding a path costs one
+ * of the last slots. The drawer's own comment says the same about the POST it calls.
+ *
+ * ⚠ NO AGE GATE HERE, DELIBERATELY, AND IT IS NOT AN OVERSIGHT. `POST` enforces
+ * `requireAgeConfirmedUser` because it GENERATES and SPENDS. This reads back words the user has
+ * already been shown, spends nothing, and `getRecentChatHistory` filters on `userId` as well as
+ * the conversation key — so the worst a forged `leagueId` can do is return your own turns under a
+ * different heading. Gating it would lock a user out of their own transcript for a reason that
+ * does not apply to reading.
+ */
+const MAX_HISTORY_TURNS = 80
+
+export async function GET(req: NextRequest): Promise<NextResponse> {
+  const session = (await getServerSession(authOptions as any)) as {
+    user?: { id?: string }
+  } | null
+  const userId = session?.user?.id ?? null
+  if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const url = new URL(req.url)
+  const rawLeagueId = url.searchParams.get('leagueId')?.trim()
+  const leagueId = rawLeagueId && rawLeagueId !== 'global' ? rawLeagueId : null
+  const requested = Number.parseInt(url.searchParams.get('limit') ?? '', 10)
+  const limit = Number.isFinite(requested)
+    ? Math.min(Math.max(requested, 1), MAX_HISTORY_TURNS)
+    : MAX_HISTORY_TURNS
+
+  const conversationId = buildChimmyConversationId({ userId, leagueId })
+  const rows = await getRecentChatHistory(conversationId, limit, userId).catch(() => [])
+
+  return NextResponse.json({
+    conversationId,
+    turns: rows.map((row, index) => {
+      const display = readStoredDisplay(row.meta)
+      return {
+        id: `hist-${index}`,
+        role: row.role === 'assistant' ? 'chimmy' : 'you',
+        text: row.content,
+        at: row.createdAt instanceof Date ? row.createdAt.toISOString() : null,
+        ...display,
+      }
+    }),
+  })
+}
+
+/**
+ * The display fields a stored turn can carry back.
+ *
+ * 🛑 `grounding` IS THE ONE THAT MUST SURVIVE, and it is the reason this is not just text.
+ * An answer Chimmy gave WITHOUT being able to read your league renders a "could not read your
+ * league" badge. Rehydrate that answer as bare prose and the badge is gone — so an ungrounded
+ * answer comes back looking exactly like a grounded one, which is the precise failure the drawer's
+ * own comment warns about ("a grounding bug is invisible from the UI if the UI never looks").
+ *
+ * ⚠ AND WHAT IS DELIBERATELY *NOT* RESTORED MATTERS AS MUCH. `advice` carries a live vote and
+ * `scenario` a before/after built from rosters as they were; replaying either would put a stale
+ * interactive control in front of someone, inviting them to act on a board that has since moved.
+ * Player cards are dropped for the same reason in miniature — a headshot row implies the answer
+ * still stands. `isPublic` is a property of the TAB the question was asked from, not of the
+ * answer, so the server never knew it and does not pretend to. Text, grounding, cost and mode are
+ * the parts that are still true later.
+ *
+ * `evidence` is accepted here but is not written today — see the note at the `display` write.
+ */
+function readStoredDisplay(meta: unknown): Record<string, unknown> {
+  if (!meta || typeof meta !== 'object' || Array.isArray(meta)) return {}
+  const display = (meta as Record<string, unknown>).display
+  if (!display || typeof display !== 'object' || Array.isArray(display)) return {}
+  const source = display as Record<string, unknown>
+  const out: Record<string, unknown> = {}
+  if (source.grounding && typeof source.grounding === 'object') out.grounding = source.grounding
+  if (source.evidence && typeof source.evidence === 'object') out.evidence = source.evidence
+  if (typeof source.cost === 'number' && Number.isFinite(source.cost)) out.cost = source.cost
+  if (typeof source.mode === 'string' && source.mode) out.mode = source.mode
+  return out
 }
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
@@ -3717,6 +3810,26 @@ ${describedTradeCtx}`
             recommendedTool: pecrOutput.recommendedTool,
             confidence: pecrOutput.responseContract.confidence ?? null,
             orchestration: chimmyOrchestrationMeta,
+            /*
+             * What the drawer needs to render this turn again after the tab is gone — read back
+             * by `readStoredDisplay` in the GET above.
+             *
+             * 🛑 `grounding` IS THE LOAD-BEARING ONE. An answer given without being able to read
+             * the user's league renders a "could not read your league" badge; restore the prose
+             * without it and an ungrounded answer comes back indistinguishable from a grounded
+             * one. Storing the text alone would have made the transcript quietly dishonest.
+             *
+             * ⚠ `evidence` IS NOT STORED, ON PURPOSE. The drawer derives it from the live
+             * `meta` + `contract` pair via `readEvidence`; computing an equivalent here would be
+             * a second implementation of one rule, and persisting the whole envelope per turn to
+             * avoid that would bloat `chat_history` for a decoration. A rehydrated turn shows no
+             * evidence block rather than a divergent one.
+             */
+            display: {
+              grounding: meta.leagueGrounding ?? null,
+              cost: meta.tokenSpend?.tokenCost ?? null,
+              mode: meta.mode ?? null,
+            },
           },
         }),
         rememberChimmyUserMessageMemory({

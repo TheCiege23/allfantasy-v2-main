@@ -9,6 +9,15 @@ export interface ChatHistoryMessage {
   role: string
   content: string
   createdAt?: Date
+  /**
+   * Whatever the writer stamped on the turn. The prompt-context caller ignores it; the drawer
+   * reads `display` out of it so a rehydrated answer can still say what it was grounded on.
+   *
+   * ⚠ WIDENED RATHER THAN GIVEN ITS OWN READER. Two functions selecting near-identical columns
+   * from one table is the shape that drifts — one gets a fix and the other does not. The extra
+   * column costs the existing caller nothing.
+   */
+  meta?: unknown
 }
 
 export interface AppendChatHistoryInput {
@@ -113,18 +122,21 @@ export async function getRecentChatHistory(
 ): Promise<ChatHistoryMessage[]> {
   if (!conversationId || limit <= 0 || !userId) return []
   try {
-    const rows = await prisma.$queryRaw<Array<{ role: string; content: string; createdAt: Date }>>`
-      SELECT "role", "content", "createdAt"
+    const rows = await prisma.$queryRaw<
+      Array<{ role: string; content: string; createdAt: Date; meta: unknown }>
+    >`
+      SELECT "role", "content", "createdAt", "meta"
       FROM "chat_history"
       WHERE "conversationId" = ${conversationId} AND "userId" = ${userId}
       ORDER BY "createdAt" DESC
       LIMIT ${limit}
     `
     return rows
-      .map((row: { role: string; content: string; createdAt?: Date }) => ({
+      .map((row: { role: string; content: string; createdAt?: Date; meta?: unknown }) => ({
         role: row.role,
         content: row.content,
         createdAt: row.createdAt,
+        meta: row.meta ?? null,
       }))
       .reverse()
   } catch (error) {
