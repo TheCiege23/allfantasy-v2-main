@@ -430,32 +430,43 @@ async function readHistory(userId: string, leagues: LeagueInput[]): Promise<Hist
      * every platform's historical backfill writes per-week rows here, keyed on the INTERNAL
      * league id, and nothing folded them into a projection until now.
      *
-     * ⚠ `.catch(() => [])` — a league with no imported history is the NORMAL case, and a
-     * failure to read history must never blank out a board the current season can already
-     * fill. The fold below is additive by construction.
+     * 🛑 THE try/catch IS NOT A `.catch()`, AND THAT DISTINCTION IS THE BUG THIS SHIPPED WITH.
+     * `prisma.matchupFact.findMany(...).catch(...)` reads a PROPERTY before it builds a promise.
+     * Where the delegate is absent, the throw is SYNCHRONOUS — no promise exists yet, so
+     * `.catch` never runs, `Promise.all` rejects, and `readHistory` returns null. A board that
+     * the current season could fill perfectly well goes blank, which is the exact opposite of
+     * what the fail-open was written to guarantee. It was caught by seven red tests in a suite
+     * whose prisma mock lists the two delegates this module used to read.
+     *
+     * A league with no imported history is the NORMAL case; the fold is additive by
+     * construction, and neither an empty result nor a failed read may cost the reader a board.
      */
-    prisma.matchupFact
-      .findMany({
-        where: { leagueId: { in: [...platformIdByLeagueId.keys()] } },
-        select: {
-          leagueId: true,
-          season: true,
-          weekOrPeriod: true,
-          teamA: true,
-          teamB: true,
-          scoreA: true,
-          scoreB: true,
-        },
-      })
-      .catch(() => [] as Array<{
-        leagueId: string
-        season: number | null
-        weekOrPeriod: number
-        teamA: string
-        teamB: string
-        scoreA: number
-        scoreB: number
-      }>),
+    (async () => {
+      try {
+        return await prisma.matchupFact.findMany({
+          where: { leagueId: { in: [...platformIdByLeagueId.keys()] } },
+          select: {
+            leagueId: true,
+            season: true,
+            weekOrPeriod: true,
+            teamA: true,
+            teamB: true,
+            scoreA: true,
+            scoreB: true,
+          },
+        })
+      } catch {
+        return [] as Array<{
+          leagueId: string
+          season: number | null
+          weekOrPeriod: number
+          teamA: string
+          teamB: string
+          scoreA: number
+          scoreB: number
+        }>
+      }
+    })(),
   ])
 
   /*

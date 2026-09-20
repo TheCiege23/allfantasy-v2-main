@@ -37,6 +37,14 @@ const teamRows: Row[] = []
 const mocks = vi.hoisted(() => ({
   weeklyFindMany: vi.fn(),
   teamFindMany: vi.fn(),
+  /*
+   * ⚠ ADDED WHEN `readHistory` STARTED FOLDING PRIOR SEASONS IN FROM `MatchupFact`.
+   * A mock that lists fewer delegates than its module reads does not "mock less" — it throws
+   * on the property access and takes the whole suite down, which is what happened here.
+   * Defaulted to [] so these avatar tests keep describing the current season only; the fold
+   * itself is covered in `week-board-win-probability.test.ts`.
+   */
+  factFindMany: vi.fn(async () => []),
 }))
 
 vi.mock('server-only', () => ({}))
@@ -44,6 +52,7 @@ vi.mock('@/lib/prisma', () => ({
   prisma: {
     weeklyMatchup: { findMany: mocks.weeklyFindMany },
     leagueTeam: { findMany: mocks.teamFindMany },
+    matchupFact: { findMany: mocks.factFindMany },
   },
 }))
 vi.mock('@/lib/core-app/seasonPhase', () => ({
