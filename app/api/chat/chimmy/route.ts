@@ -141,6 +141,7 @@ import {
   buildLeagueSportsGroundingPacket,
   serializeLeagueGroundingForPrompt,
 } from '@/lib/ai/leagueSportsGroundingPacket'
+import { buildPortfolioPlayerGrounding } from '@/lib/chimmy/chimmyPortfolioPlayerGrounding'
 import { buildDecisionOsGroundingPacket } from '@/lib/decision-os/grounding/packet'
 import { recordChatWaiverAdvice } from '@/lib/chimmy-advice/chatWaiverAdvice'
 import { resolveCallerTeamId } from '@/lib/chimmy/callerTeam'
@@ -2083,13 +2084,50 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
           .catch(() => null)
       : Promise.resolve(null)
 
-  const [screenshotResult, insightResult, memoryResult, leagueSportsGroundingResult, decisionOsGroundingResult] =
+  /*
+   * ── CROSS-LEAGUE PLAYER LOOKUP — the inverse gate of `leagueSportsGroundingTask` ──────────
+   *
+   * 🛑 IT RUNS ONLY WHEN NO LEAGUE IS SELECTED, BECAUSE THAT IS THE CASE WITH NO PLAYER FACTS.
+   * With a league in scope the packet above already carries full rosters. Without one, the only
+   * player data in the whole packet is `resolvePortfolioGrounding`'s
+   * `exposure.rows.filter((r) => r.count > 1).slice(0, 4)` — four players, and only ones rostered
+   * more than once. A question naming anybody else grounded on nothing, and Chimmy correctly said
+   * so: "this session returned no player-level data, so I can't evaluate a Rashee Rice trade in
+   * any league right now."
+   *
+   * ⚠ BOUNDED WITH ITS OWN RACE RATHER THAN `withPacketCeiling`, which writes
+   * `grounding.outcome = 'timeout'` — an observable that belongs to the Decision OS packet. Sharing
+   * it would report THAT packet as timed out whenever this one was slow, corrupting the one signal
+   * used to tell those three outcomes apart.
+   *
+   * ⚠ A TIMEOUT YIELDS null AND THE TURN CONTINUES. This section is additive: losing it costs the
+   * lookup, never the answer, which is how every other contributor here degrades.
+   */
+  const portfolioPlayerGroundingTask: Promise<string | null> =
+    !leagueSnapshot && userId
+      ? Promise.race([
+          buildPortfolioPlayerGrounding({ message, userId })
+            .then((r) => (r ? r.serialized : null))
+            .catch(() => null),
+          new Promise<null>((resolve) => setTimeout(() => resolve(null), 2500)),
+        ])
+      : Promise.resolve(null)
+
+  const [
+    screenshotResult,
+    insightResult,
+    memoryResult,
+    leagueSportsGroundingResult,
+    decisionOsGroundingResult,
+    portfolioPlayerGroundingResult,
+  ] =
     await Promise.allSettled([
       screenshotTask,
       insightTask,
       memoryTask,
       leagueSportsGroundingTask,
       decisionOsGroundingTask,
+      portfolioPlayerGroundingTask,
     ])
   const [personalizationResult, profileClock] = await Promise.all([
     resolveChimmyPersonalizationProfile(userId).catch(() => null),
@@ -2128,6 +2166,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     leagueSportsGroundingResult.status === 'fulfilled' ? leagueSportsGroundingResult.value : null
   const decisionOsGrounding =
     decisionOsGroundingResult.status === 'fulfilled' ? decisionOsGroundingResult.value : null
+  const portfolioPlayerGrounding =
+    portfolioPlayerGroundingResult.status === 'fulfilled' ? portfolioPlayerGroundingResult.value : null
 
   const recentUserSnippet = conversation
     .filter((t) => t.role === 'user')
@@ -2200,6 +2240,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     homeSignalsBlock ?? undefined,
     coreSurfaceBlock ?? undefined,
     memorySection,
+    portfolioPlayerGrounding
+      ? `## CROSS-LEAGUE PLAYER LOOKUP\n${portfolioPlayerGrounding}`
+      : undefined,
     leagueSportsGrounding
       ? `## NFL/NCAAF LEAGUE SPORTS GROUNDING\n${leagueSportsGrounding.serialized}`
       : undefined,
@@ -2235,6 +2278,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   if (homeSignalsBlock) dataSources.push('core_home_signals')
   if (coreSurfaceBlock) dataSources.push('core_surface_context')
   if (leagueSportsGrounding) dataSources.push('league_sports_grounding_packet')
+  if (portfolioPlayerGrounding) dataSources.push('cross_league_player_lookup')
   if (connectedFranchiseGrounding) dataSources.push('connected_franchise_rosters')
   // Declared so a response can be attributed. A grounding source the answer used but does not
   // name is untraceable afterwards, which is the whole reason dataSources exists.
