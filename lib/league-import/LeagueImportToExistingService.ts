@@ -1,5 +1,6 @@
 /**
  * Apply normalized external league import data to an existing league.
+import { leagueTypeForUpdate } from '@/lib/league-import/leagueTypeWrite'
  * Deterministic only: no AI usage.
  */
 
@@ -329,8 +330,18 @@ export async function applyImportedLeagueToExistingLeague(args: {
     updateData.presetKey = c.presetKey ?? undefined
     updateData.scoringPresetId = c.scoringPresetId ?? undefined
     updateData.settingsSnapshotVersion = SETTINGS_SNAPSHOT_VERSION
-    if (c.leagueTypeColumn) {
-      updateData.leagueType = c.leagueTypeColumn
+    /*
+     * ⚠ THE EASIER SITE TO MISS: this service is named "to existing", so EVERY write here
+     * lands on a league that already carries a classification — `existing: true` always.
+     * A truthy check on the column cannot tell a real answer from the `redraft` fallback.
+     */
+    const nextLeagueType = leagueTypeForUpdate({
+      existing: true,
+      leagueTypeColumn: c.leagueTypeColumn,
+      leagueTypeConfident: c.leagueTypeConfident,
+    })
+    if (nextLeagueType) {
+      updateData.leagueType = nextLeagueType
     }
   }
   await (prisma as any).league.update({

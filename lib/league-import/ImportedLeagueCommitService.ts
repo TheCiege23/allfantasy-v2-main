@@ -6,6 +6,7 @@ import { calculateAndSaveRank } from '@/lib/rank/calculateRank'
 import { deriveImportStatsFromNormalized } from '@/lib/rank/deriveImportStatsFromNormalized'
 import { SETTINGS_SNAPSHOT_VERSION } from '@/lib/league-contract/types'
 import { readBackfillOutcome, backfillSettingsPatch } from '@/lib/league-import/backfillOutcome'
+import { leagueTypeForUpdate } from '@/lib/league-import/leagueTypeWrite'
 import { resolveSeasonPlacement, seasonPlacementTeamIds } from '@/lib/league-import/seasonPlacement'
 import { IMPORT_COVERAGE_SETTINGS_KEY } from '@/lib/league-import/importCoverageSummary'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
@@ -828,7 +829,17 @@ export async function persistImportedLeagueFromNormalization(
     settings: settingsJson,
     syncStatus: 'pending',
     leagueVariant: resolvedVariant,
-    leagueType: canonicalBundle?.leagueTypeColumn ?? undefined,
+    /*
+     * 🛑 A RE-IMPORT MUST NOT DOWNGRADE A CLASSIFICATION TO A SHRUG — and `?? undefined`
+     * alone does NOT achieve that, which is what made this silent. The normalizer always
+     * returns a string, so the key is always present and always overwrites. The rule lives
+     * in `leagueTypeForUpdate` because the OTHER update path had the same bug.
+     */
+    leagueType: leagueTypeForUpdate({
+      existing: Boolean(existing),
+      leagueTypeColumn: canonicalBundle?.leagueTypeColumn,
+      leagueTypeConfident: canonicalBundle?.leagueTypeConfident,
+    }),
     presetKey: canonicalBundle?.presetKey ?? undefined,
     scoringPresetId: canonicalBundle?.scoringPresetId ?? undefined,
     settingsSnapshotVersion: canonicalBundle ? SETTINGS_SNAPSHOT_VERSION : undefined,
