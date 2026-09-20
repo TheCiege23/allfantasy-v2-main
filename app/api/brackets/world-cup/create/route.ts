@@ -9,6 +9,12 @@ import {
   buildWorldCupPoolLeadMetaEvent,
 } from "@/lib/world-cup/worldCupMetaEvents"
 import { trackMetaServerEvent } from "@/lib/meta-capi"
+import {
+  WORLD_CUP_ENTRIES_CLOSED_CODE,
+  isWorldCupCreationOpen,
+  worldCupEntriesCloseAt,
+  worldCupEntriesClosedMessage,
+} from "@/lib/world-cup/worldCupSeasonWindow"
 
 export const runtime = "nodejs"
 
@@ -146,6 +152,29 @@ export async function POST(request: Request) {
         { status: 403 }
       )
     }
+  }
+
+  /*
+   * The tournament is over, so this is the last gate before a pool is actually written.
+   *
+   * ⚠ IT SITS HERE, AFTER EVERY AUTHORIZATION CHECK, ON PURPOSE. Placed earlier it preempted the
+   * AF Commissioner 403 with a 409 and quietly rewrote an existing contract — caught by
+   * `world-cup-api-routes.test.ts`. Last means the only requests whose answer changes are the
+   * ones that would otherwise have succeeded.
+   *
+   * Admins keep creating: test, demo and simulation pools are how this stack gets exercised out
+   * of season. Reading, joining and scoring existing challenges are untouched — there are pools
+   * in production and a date must never retroactively hide them.
+   */
+  if (!isWorldCupCreationOpen() && !modeAccess.isAdmin) {
+    return NextResponse.json(
+      {
+        error: worldCupEntriesClosedMessage(),
+        code: WORLD_CUP_ENTRIES_CLOSED_CODE,
+        closedAt: worldCupEntriesCloseAt()?.toISOString() ?? null,
+      },
+      { status: 409 }
+    )
   }
 
   console.info("[world-cup/create] normalized create data", {

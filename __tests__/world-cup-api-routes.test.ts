@@ -218,6 +218,59 @@ describe("World Cup API catch-all route", () => {
     )
   })
 
+  /*
+   * The 2026 tournament is over. These pin the season gate, which sits LAST in the route — after
+   * every authorization check — so the only answers it changes belong to requests that would
+   * otherwise have created a pool.
+   *
+   * ⚠ This suite's `beforeEach` makes the default user an ADMIN, and admins bypass the gate. A
+   * closed-path test MUST clear that first; without it the request takes the bypass and the test
+   * proves nothing while looking like coverage.
+   */
+  it("refuses a new pool for a finished tournament, for a non-admin", async () => {
+    isAuthorizedRequestMock.mockReturnValue(false)
+    isAdminEmailAllowedMock.mockReturnValue(false)
+    // This suite does not reset mocks between tests, so "was never called" would otherwise be
+    // measuring calls from earlier cases in the file rather than this request.
+    createChallengeMock.mockClear()
+
+    const { POST } = await import("@/app/api/brackets/world-cup/create/route")
+    const res = await POST(
+      new Request("http://localhost/api/brackets/world-cup/create", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ name: "Too Late", seasonYear: 2026 }),
+      })
+    )
+
+    expect(res.status).toBe(409)
+    const body = await res.json()
+    expect(body.code).toBe("world_cup_entries_closed")
+    expect(body.closedAt).toBe("2026-07-20T06:00:00.000Z")
+    // The decisive assertion: nothing was written.
+    expect(createChallengeMock).not.toHaveBeenCalled()
+  })
+
+  it("still lets an admin create out of season, so the stack stays testable", async () => {
+    // beforeEach already grants admin; restated so the contrast with the test above is visible
+    // rather than inherited.
+    isAdminEmailAllowedMock.mockReturnValue(true)
+    isAuthorizedRequestMock.mockReturnValue(true)
+    createChallengeMock.mockClear()
+
+    const { POST } = await import("@/app/api/brackets/world-cup/create/route")
+    const res = await POST(
+      new Request("http://localhost/api/brackets/world-cup/create", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ name: "Admin Test Pool", seasonYear: 2026 }),
+      })
+    )
+
+    expect(res.status).toBe(200)
+    expect(createChallengeMock).toHaveBeenCalledTimes(1)
+  })
+
   it("normalizes knockout-only create mode and disables third-place picks", async () => {
     const { POST } = await import("@/app/api/brackets/world-cup/create/route")
     const res = await POST(

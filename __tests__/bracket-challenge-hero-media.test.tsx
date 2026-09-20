@@ -33,11 +33,21 @@ describe('bracket challenge hero media', () => {
     expect(missing).toEqual([])
   })
 
-  it('resolves NBA and NHL, and nothing else', () => {
+  it('resolves the registered keys', () => {
     expect(resolveBracketChallengeHero('NBA')?.video).toContain('nba-playoffs')
     expect(resolveBracketChallengeHero('NHL')?.video).toContain('nhl-playoffs')
     expect(resolveBracketChallengeHero('nba')?.video).toContain('nba-playoffs') // case-insensitive
     expect(resolveBracketChallengeHero(' nhl ')?.video).toContain('nhl-playoffs')
+    // WORLD_CUP is keyed by challenge, not sport — the WC bracket has its own create modal.
+    expect(resolveBracketChallengeHero('WORLD_CUP')?.video).toContain('af-world-cup-challenge-hero')
+  })
+
+  it('the WC challenge hero is NOT the WC hub hero', () => {
+    // Two different clips live under the same directory; reusing the hub's would be a silent
+    // downgrade rather than a visible bug.
+    const wc = resolveBracketChallengeHero('WORLD_CUP')!
+    expect(wc.video).not.toBe('/videos/brackets/world-cup/af-world-cup-hero.mp4')
+    expect(existsSync(path.join(PUBLIC_DIR, 'videos/brackets/world-cup/af-world-cup-hero.mp4'))).toBe(true)
   })
 
   it('fails closed for a live sport with no art, rather than guessing a path', () => {
