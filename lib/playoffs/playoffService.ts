@@ -198,12 +198,17 @@ export async function getPlayoffBracketView(input: {
   const challenge = await (prisma as any).playoffBracketChallenge.findUnique({
     where: { id: input.challengeId },
     include: {
+      /*
+       * 🛑 `email` IS DELIBERATELY NOT SELECTED. This view feeds an unauthenticated page, and the
+       * address was previously the third rung of the public display-name fallback. Not loading it
+       * means a future rung cannot reintroduce the leak by reflex — there is nothing to fall back
+       * to. Add it back only with a reader that is gated, and a test that proves the gate.
+       */
       owner: {
         select: {
           id: true,
           displayName: true,
           username: true,
-          email: true,
         },
       },
       entries: {
@@ -213,7 +218,6 @@ export async function getPlayoffBracketView(input: {
               id: true,
               displayName: true,
               username: true,
-              email: true,
             },
           },
         },
@@ -240,19 +244,32 @@ export async function getPlayoffBracketView(input: {
     isTestMode: challenge.isTestMode === true,
     hasPoolAdminAccess: viewerHasPoolAdminAccess,
   })
-  const requestedEntry = input.requestedEntryId
-    ? challenge.entries.find((entry: { id: string; userId: string }) => {
-        if (entry.id !== input.requestedEntryId) return false
-        if (!userId) return true
-        return entry.userId === userId
-      })
-    : null
+  /*
+   * 🛑 AN ENTRY IS ONLY EVER RESOLVED FOR ITS OWN OWNER.
+   *
+   * `/brackets/leagues/[id]` renders server-side with `session?.user ?? null` and has no auth
+   * gate, so whatever this returns for a null user is readable by anyone holding a pool id.
+   * This used to honour ANY `requestedEntryId` when there was no user (`if (!userId) return true`)
+   * and to fall back to `challenge.entries[0]`, which handed an anonymous visitor the first
+   * entrant's bracket and loaded their picks.
+   *
+   * `activeEntry: null` is not a new state — a signed-in NON-MEMBER already lands there, so every
+   * caller handles it. Anonymous now lands in the same place. The pool, its series, the
+   * leaderboard and the participant list are still public; one person's picks are not.
+   */
+  const requestedEntry =
+    input.requestedEntryId && userId
+      ? challenge.entries.find(
+          (entry: { id: string; userId: string }) =>
+            entry.id === input.requestedEntryId && entry.userId === userId,
+        )
+      : null
 
   const activeEntry =
     requestedEntry ??
     (userId
       ? challenge.entries.find((entry: { userId: string }) => entry.userId === userId)
-      : challenge.entries[0]) ??
+      : null) ??
     null
 
   const challengeEntries = Array.isArray(challenge.entries) ? challenge.entries : []
@@ -306,11 +323,13 @@ export async function getPlayoffBracketView(input: {
   const participantMap = new Map<string, { userId: string; displayName: string; entryCount: number }>()
   for (const entry of challengeEntries) {
     const existing = participantMap.get(entry.userId)
+    /*
+     * 🛑 NO EMAIL RUNG. `participants` is public on an unauthenticated page, so falling back to
+     * the address published every entrant who had set neither a display name nor a username.
+     * The neutral label below was always there — the email simply sat above it.
+     */
     const displayName =
-      entry.user?.displayName?.trim() ||
-      entry.user?.username?.trim() ||
-      entry.user?.email?.trim() ||
-      "Participant"
+      entry.user?.displayName?.trim() || entry.user?.username?.trim() || "Participant"
     if (!existing) {
       participantMap.set(entry.userId, { userId: entry.userId, displayName, entryCount: 1 })
       continue
@@ -320,10 +339,7 @@ export async function getPlayoffBracketView(input: {
 
   if (!participantMap.has(challenge.ownerUserId)) {
     const ownerDisplayName =
-      challenge.owner?.displayName?.trim() ||
-      challenge.owner?.username?.trim() ||
-      challenge.owner?.email?.trim() ||
-      "Commissioner"
+      challenge.owner?.displayName?.trim() || challenge.owner?.username?.trim() || "Commissioner"
     participantMap.set(challenge.ownerUserId, {
       userId: challenge.ownerUserId,
       displayName: ownerDisplayName,
