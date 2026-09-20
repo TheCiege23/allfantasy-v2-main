@@ -325,6 +325,19 @@
   white-space: nowrap;
 }
 .af-core .af-bd-val--seed { font-size: 13px; }
+/*
+ * Form, in the "not enough history to call" section.
+ *
+ * ⚠ DELIBERATELY QUIETER THAN A PROJECTED MARGIN, AND THAT IS THE POINT OF THE
+ * RULE. It is a signed scoring gap over one or two games, so it must not read
+ * with the weight of the ranked sections above it — `--muted`, not `--good` /
+ * `--bad`, keeps the tone honest while still pointing the right way. Do not
+ * "fix" this by reaching for the severity colours: the `data-tone` attribute
+ * carries the direction, and the section heading already says it is not a call.
+ */
+.af-core .af-bd-val--form { font-size: 14px; color: var(--muted); }
+.af-core .af-bd-val--form[data-tone='up'] { color: color-mix(in srgb, var(--good) 62%, var(--muted)); }
+.af-core .af-bd-val--form[data-tone='down'] { color: color-mix(in srgb, var(--bad) 62%, var(--muted)); }
 .af-core .af-bd-val[data-sev='good'] { color: var(--good); }
 .af-core .af-bd-val[data-sev='warn'] { color: var(--warn); }
 .af-core .af-bd-val[data-sev='bad'] { color: var(--bad); }
