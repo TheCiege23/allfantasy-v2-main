@@ -130,6 +130,46 @@ describe('priorSeasonRowsFromFacts', () => {
     ).toHaveLength(0)
   })
 
+  /*
+   * 🛑 THE DUPLICATE-LEAGUE-COPY GUARD, found against production rather than by reading.
+   * `leagues.userId` is the IMPORTER, so one real league exists once per member who connected it
+   * (see `realLeague.ts`). Every copy maps to the SAME platform id, so the same game arrives once
+   * per copy — measured at 1.55x on a real account.
+   */
+  it('counts one real game once, however many league copies deliver it', () => {
+    const threeCopies = new Map([
+      ['COPY_A', 'PLATFORM'],
+      ['COPY_B', 'PLATFORM'],
+      ['COPY_C', 'PLATFORM'],
+    ])
+    const oneGame = [
+      fact(2025, 1, 'x', 'y', 100, 90, 'COPY_A'),
+      fact(2025, 1, 'x', 'y', 100, 90, 'COPY_B'),
+      fact(2025, 1, 'x', 'y', 100, 90, 'COPY_C'),
+    ]
+    const rows = priorSeasonRowsFromFacts(oneGame, threeCopies, new Set())
+
+    /* One game is two rows — not six. */
+    expect(rows).toHaveLength(2)
+
+    /*
+     * And the threshold holds. Three copies of ONE week must not reach
+     * MIN_WEEKS_FOR_PROJECTION: that is a confident projection off a single game, which is
+     * exactly what the threshold exists to refuse.
+     */
+    expect(buildProfiles(rows).has('PLATFORM:x')).toBe(false)
+  })
+
+  it('normalises the pair order, so a mirrored copy is still one game', () => {
+    const twoCopies = new Map([['COPY_A', 'PLATFORM'], ['COPY_B', 'PLATFORM']])
+    const mirrored = [
+      fact(2025, 1, 'x', 'y', 100, 90, 'COPY_A'),
+      /* The other copy wrote the same game with the sides swapped. */
+      fact(2025, 1, 'y', 'x', 90, 100, 'COPY_B'),
+    ]
+    expect(priorSeasonRowsFromFacts(mirrored, twoCopies, new Set())).toHaveLength(2)
+  })
+
   it('feeds buildProfiles so a roster with no current weeks becomes projectable', () => {
     /* Three prior-season weeks is exactly MIN_WEEKS_FOR_PROJECTION — the whole point of the change. */
     const rows = priorSeasonRowsFromFacts(

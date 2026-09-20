@@ -674,11 +674,47 @@ export function priorSeasonRowsFromFacts(
   /* Synthesised per (league, season, week), exactly as the parity collectors synthesise theirs. */
   const pairIndex = new Map<string, number>()
 
+  /*
+   * 🛑 ONE REAL LEAGUE EXISTS UNDER SEVERAL INTERNAL IDS, SO THE SAME GAME ARRIVES SEVERAL TIMES.
+   *
+   * `leagues.userId` is the IMPORTER, so a league every member connected exists once PER MEMBER —
+   * see `lib/core-app/realLeague.ts`, which measured 23 real leagues held under more than one row,
+   * and 21 of them on the account this was found on. `platformIdByLeagueId` maps EACH of those
+   * internal ids onto the ONE platform id, so facts fetched for all of them land in a single
+   * bucket and every historical game is counted once per copy.
+   *
+   * Measured against production 2026-09-20 for that account: 30,446 scored prior-season rows
+   * folded in where only 19,625 are distinct — 1.55x, with the duplication concentrated in the
+   * 21 multi-copy leagues rather than spread evenly.
+   *
+   * ⚠ THE HARM IS THE THRESHOLD, NOT THE MEAN. Exact duplicates leave mu unchanged and sigma
+   * nearly so, which is what makes this invisible on inspection. What moves is `n`: a roster with
+   * ONE real scored week in a triple-imported league reaches `MIN_WEEKS_FOR_PROJECTION` and gets a
+   * confident-looking projection off a single game — precisely what that threshold exists to
+   * prevent, and what the `seasonsAlreadyHeld` guard below prevents on the OTHER route. The same
+   * inflated `n` is then printed to the reader as the model's sample size.
+   *
+   * ⚠ DEDUPED ON THE GAME, NOT ON THE LEAGUE COPY. Picking one internal id and dropping the rest
+   * would be cheaper and would silently lose seasons: the copies are independently backfilled, so
+   * one may carry history another lacks. Taking the UNION and then collapsing identical games
+   * keeps the widest coverage and cannot lose a season.
+   *
+   * ⚠ THE PAIR IS ORDER-NORMALISED because nothing guarantees two copies wrote the same side as
+   * `teamA`. Keying on the raw order would leave a mirrored duplicate in place, which is the
+   * shape of bug that looks fixed and is not.
+   */
+  const seenGames = new Set<string>()
+
   for (const fact of facts) {
     if (fact.season == null) continue
     const platformLeagueId = platformIdByLeagueId.get(fact.leagueId)
     if (!platformLeagueId) continue
     if (seasonsAlreadyHeld.has(`${platformLeagueId}:${fact.season}`)) continue
+
+    const [lo, hi] = fact.teamA <= fact.teamB ? [fact.teamA, fact.teamB] : [fact.teamB, fact.teamA]
+    const gameKey = `${platformLeagueId}|${fact.season}|${fact.weekOrPeriod}|${lo}|${hi}`
+    if (seenGames.has(gameKey)) continue
+    seenGames.add(gameKey)
 
     const groupKey = `${platformLeagueId}|${fact.season}|${fact.weekOrPeriod}`
     const matchupId = (pairIndex.get(groupKey) ?? 0) + 1
