@@ -1,6 +1,5 @@
 /**
  * Apply normalized external league import data to an existing league.
-import { leagueTypeForUpdate } from '@/lib/league-import/leagueTypeWrite'
  * Deterministic only: no AI usage.
  */
 
@@ -9,6 +8,7 @@ import { prisma } from '@/lib/prisma'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
 import { getOrCreateDraftSession } from '@/lib/live-draft-engine/DraftSessionService'
 import type { CanonicalImportBundle, ImportProvider, NormalizedImportResult } from './types'
+import { leagueTypeForUpdate } from './leagueTypeWrite'
 import { bootstrapLeagueFromImport } from './LeagueCreationBootstrapService'
 import { mergeCanonicalBundleIntoLeagueSettingsJson } from '@/lib/league-import/ImportedLeagueCommitService'
 import { SETTINGS_SNAPSHOT_VERSION } from '@/lib/league-contract/types'
