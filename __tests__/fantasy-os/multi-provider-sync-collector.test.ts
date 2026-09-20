@@ -78,11 +78,16 @@ const ok = () => ({ success: true as const, normalized: NORMALIZED })
  * Pinned clock, because the loader now derives a transaction-week window from the CALENDAR.
  *
  * ⚠ WITHOUT THIS THESE ASSERTIONS WOULD PASS TODAY AND FAIL IN JANUARY, which is the worst kind
- * of test: it dates rather than fails. 2026-10-15 is 41 days after the Sep 4 opener, so week 6,
- * so the window is the week either side of it.
+ * of test: it dates rather than fails. 2026-10-15 is 41 days after the Sep 4 opener, so week 6.
+ *
+ * ⚠ THE WINDOW IS TWO WEEKS BACK AND ONE FORWARD, NOT ±1 — it stopped being symmetric on
+ * 2026-09-20 after a real trade was lost to it. A leg keeps receiving trades right up to Sleeper's
+ * turnover and then stops, while a future leg holds nothing until it opens, so the two directions
+ * do not deserve equal budget. `TRANSACTION_WEEK_LOOKBACK` in `lib/import-os/season.ts` carries
+ * the measurement; this constant just has to agree with it.
  */
 const NOW = new Date('2026-10-15T12:00:00.000Z')
-const WEEK_WINDOW = [5, 6, 7]
+const WEEK_WINDOW = [4, 5, 6, 7]
 /* 2026-10-15 is week 6, so the matchup CAP is week 6 + 1. */
 const MATCHUP_CAP = 7
 const fail = (code: string, error = 'nope') => ({ success: false as const, code, error })
