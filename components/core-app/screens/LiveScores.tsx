@@ -233,9 +233,22 @@ export function LiveScores({ data: initial, selectedLeagueId = null }: LiveScore
     }
   }, [])
 
+  /*
+   * 🛑 "ALL GAMES" HAS TO BEAT THE LEAGUE FILTER, OR IT IS NOT ALL GAMES.
+   * `selectedLeagueId` used to narrow this list unconditionally, while the
+   * My/All control rendered only when NO league was selected — and the nav's
+   * own href always carries `?league=`. So every route into this screen arrived
+   * league-scoped with the one control that could widen it hidden, and the only
+   * way to see real fixtures was to hand-edit the URL.
+   *
+   * Reported from a phone as "the live scores tab doesn't show the live sports,
+   * only my team". It was not a data problem: the games were fetched and then
+   * filtered away on the client.
+   */
+  const leagueFilterId = scope === 'all' ? null : selectedLeagueId
   const scopedGames = useMemo(
-    () => scopeLiveGamesToLeague(data.games, selectedLeagueId),
-    [data.games, selectedLeagueId],
+    () => scopeLiveGamesToLeague(data.games, leagueFilterId),
+    [data.games, leagueFilterId],
   )
   const anyLive = scopedGames.some((g) => g.isLive)
   /*
@@ -401,14 +414,17 @@ export function LiveScores({ data: initial, selectedLeagueId = null }: LiveScore
     */}
     <div
       className="af-live"
-      data-league-scoped={selectedLeagueId ? 'true' : undefined}
+      data-league-scoped={leagueFilterId ? 'true' : undefined}
       data-low-data={lowData.lowData ? 'true' : undefined}
     >
       <header className="af-live-head">
         <p className="af-label af-live-eyebrow">Core · Live</p>
         <h1 className="af-display af-live-title">Live Scores</h1>
         <p className="af-live-lede">
-          {selectedLeagueId
+          {/* The lede follows the EFFECTIVE scope, not the URL. Saying "only games
+              affecting starters in this league" while showing every fixture is the
+              same defect as the hidden toggle, wearing different clothes. */}
+          {leagueFilterId
             ? 'Only games affecting starters in this league, scored with this league’s rules.'
             : `Every live matchup across your ${data.counts.length} sports, scored against your rosters in real time.`}
         </p>
@@ -419,7 +435,12 @@ export function LiveScores({ data: initial, selectedLeagueId = null }: LiveScore
         <div className="af-live-bar-top">
           <span className="af-live-bar-name">Live Scores</span>
 
-          {!selectedLeagueId ? <div className="af-live-scope" role="group" aria-label="Which games to show">
+          {/*
+            ⚠ ALWAYS RENDERED, INCLUDING WITH A LEAGUE SELECTED. It used to be
+            `{!selectedLeagueId ? … : null}`, which hid the widening control in
+            exactly the state that needed it — see the note on `leagueFilterId`.
+          */}
+          <div className="af-live-scope" role="group" aria-label="Which games to show">
             <button
               type="button"
               className="af-live-scope-btn"
@@ -438,7 +459,7 @@ export function LiveScores({ data: initial, selectedLeagueId = null }: LiveScore
             >
               All games
             </button>
-          </div> : null}
+          </div>
 
           <label className="af-live-search">
             <span aria-hidden>⌕</span>
@@ -542,7 +563,7 @@ export function LiveScores({ data: initial, selectedLeagueId = null }: LiveScore
           <LockWarning alerts={lockAlerts} now={now} />
 
           <h2 className="af-label af-live-slate-head">
-            {activeSportLabel} · {selectedLeagueId ? 'this league' : scope === 'my' ? 'your starters, sorted by leagues affected' : 'all games'}
+            {activeSportLabel} · {leagueFilterId ? 'this league' : scope === 'my' ? 'your starters, sorted by leagues affected' : 'all games'}
           </h2>
 
           {visibleGames.length === 0 ? (
