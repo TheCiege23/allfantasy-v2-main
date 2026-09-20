@@ -468,11 +468,26 @@ export async function createPlayoffBracketEntry(input: {
 
   const challenge = await (prisma as any).playoffBracketChallenge.findUnique({
     where: { id: input.challengeId },
-    select: { id: true },
+    select: { id: true, ownerUserId: true, config: true },
   })
   if (!challenge) {
     throw new Error("Challenge not found")
   }
+
+  /*
+   * 🛑 THE CAPS WERE STORED, REPORTED TO THE CLIENT, AND NEVER ENFORCED.
+   *
+   * `getPlayoffBracketView` already returns `maxParticipants` and `maxEntriesPerParticipant`
+   * to the UI, so a pool has been DISPLAYING its limits while this function ignored the config
+   * entirely and allowed a hard-coded 5 entries per user. The displayed number was the honest
+   * one; the server was the liar. These now read the same config the view renders.
+   *
+   * `isAfCommissionerSubscriber` is intentionally NOT passed: the caps are plain numbers on the
+   * base config, not gated features, so a lapsed subscription must not silently uncap a pool.
+   */
+  const config = sanitizePlayoffChallengeConfig(challenge.config ?? null)
+  const maxEntriesPerParticipant = config.maxEntriesPerParticipant
+  const maxParticipants = config.maxParticipants
 
   const existingEntries = await (prisma as any).playoffBracketEntry.findMany({
     where: {
@@ -482,8 +497,30 @@ export async function createPlayoffBracketEntry(input: {
     orderBy: { createdAt: "asc" },
   })
 
-  if (existingEntries.length >= 5) {
-    throw new Error("Entry limit reached (max 5 per user)")
+  if (existingEntries.length >= maxEntriesPerParticipant) {
+    throw new Error(
+      maxEntriesPerParticipant === 1
+        ? "This pool allows one bracket per person."
+        : `Entry limit reached (max ${maxEntriesPerParticipant} per person).`,
+    )
+  }
+
+  /*
+   * The participant cap counts PEOPLE, not entries, and only bites a NEW participant —
+   * someone who already has an entry is inside the pool and is bounded by the per-person cap
+   * above. Counting entries here instead would refuse a second bracket in a pool with room.
+   */
+  if (existingEntries.length === 0) {
+    const distinctParticipants: Array<{ userId: string }> = await (
+      prisma as any
+    ).playoffBracketEntry.findMany({
+      where: { challengeId: input.challengeId },
+      select: { userId: true },
+      distinct: ["userId"],
+    })
+    if (distinctParticipants.length >= maxParticipants) {
+      throw new Error(`This pool is full (${maxParticipants} participants).`)
+    }
   }
 
   const ownerLabel = defaultEntryName(input.user)
