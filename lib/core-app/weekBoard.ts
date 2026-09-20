@@ -118,6 +118,27 @@ export type WeekMatchup = {
     /** 0–1. */
     winProbability: number
   } | null
+  /**
+   * The fallback signal when `projection` is null: what each side has actually
+   * averaged over the weeks on file.
+   *
+   * 🛑 IT IS NOT A PROJECTION AND CARRIES NO WIN PROBABILITY, deliberately.
+   * `MIN_WEEKS_FOR_PROJECTION` exists because a one- or two-week sample has no
+   * usable sigma, and `winProbabilityOf` needs one — a probability computed off
+   * two games would be a confident number with nothing behind it. A MEAN is
+   * still honest at n=1: it is a statement about what happened, not a forecast.
+   *
+   * Null when EITHER side has no scored week at all, which is the genuine
+   * "nothing to say" case rather than the thin one.
+   */
+  form: {
+    you: number
+    them: number
+    /** Signed: positive means you have outscored them so far. */
+    margin: number
+    /** The THINNER of the two sides' week counts — what the comparison rests on. */
+    weeks: number
+  } | null
   /** Completed weeks behind YOUR side of the projection. */
   yourSampleWeeks: number
   href: string
@@ -493,6 +514,37 @@ export function buildProfiles(rows: MatchupRow[]): Map<string, { mu: number; sig
 }
 
 /**
+ * Per-roster scoring MEANS for rosters that fall short of the projection
+ * threshold — keyed "platformLeagueId:rosterId", same as `buildProfiles`.
+ *
+ * ⚠ IT RETURNS THE ROSTERS `buildProfiles` DROPS, AND ONLY THOSE. The two maps
+ * are disjoint by construction, so a caller that checks `profiles` first and
+ * falls back here can never get both for one roster and never has to decide
+ * which wins.
+ *
+ * ⚠ NO SIGMA, ON PURPOSE. A standard deviation over one or two games is not a
+ * spread, it is an artifact, and anything downstream that saw a `sigma` field
+ * here would eventually feed it to `winProbabilityOf`. Withholding it is what
+ * keeps "form" and "projection" from quietly becoming the same thing.
+ */
+export function buildFormProfiles(rows: MatchupRow[]): Map<string, { mu: number; n: number }> {
+  const buckets = new Map<string, number[]>()
+  for (const r of rows) {
+    if (!isScored(r)) continue
+    const key = `${r.leagueId}:${r.rosterId}`
+    const list = buckets.get(key)
+    if (list) list.push(r.pointsFor)
+    else buckets.set(key, [r.pointsFor])
+  }
+  const out = new Map<string, { mu: number; n: number }>()
+  for (const [key, values] of buckets) {
+    if (values.length === 0 || values.length >= MIN_WEEKS_FOR_PROJECTION) continue
+    out.set(key, { mu: mean(values), n: values.length })
+  }
+  return out
+}
+
+/**
  * Pair rows into head-to-heads on (league, season, week, matchupId).
  *
  * ⚠ `matchupId` IS NULLABLE AND A NULL DOES NOT PAIR. Rows without one are
@@ -570,6 +622,12 @@ export async function getWeekBoard(
 
   const { latest, leagueByPlatformId, myRosters, rosterNames, rosterAvatars } = history
   const profiles = buildProfiles(history.rows)
+  /*
+   * The rosters `buildProfiles` dropped for being under the threshold. See
+   * `buildFormProfiles`: the two maps are disjoint, so the fallback below can
+   * never contradict a projection.
+   */
+  const formProfiles = buildFormProfiles(history.rows)
   const sampleSize = [...profiles.values()].reduce((acc, p) => acc + p.n, 0)
 
   const thisWeek = pairRows(
@@ -614,6 +672,7 @@ export async function getWeekBoard(
       opponent,
       elimination: meta.elimination,
       projection: null,
+      form: null,
       yourSampleWeeks: mineProfile?.n ?? 0,
       href: `/core/matchup?league=${encodeURIComponent(meta.id)}`,
     }
@@ -625,6 +684,36 @@ export async function getWeekBoard(
         them: theirProfile.mu,
         margin,
         winProbability: winProbabilityOf(mineProfile, theirProfile),
+      }
+    } else {
+      /*
+       * ── Form, for the matchups a projection cannot reach ──────────────
+       *
+       * 🛑 THIS IS THE COMMON CASE EARLY IN A SEASON, NOT AN EDGE CASE, AND THE
+       * REASON IS STRUCTURAL RATHER THAN A SYNC PROBLEM. `WeeklyMatchup` is
+       * populated one season at a time — every parity collector enumerates the
+       * LATEST imported season and treats older ones as "frozen history, never
+       * refetched" (`enumerateExternalMatchupConnections`), and the Sleeper path
+       * takes a single required `seasonYear`. So a league imported this year has
+       * only this year's weeks on file, and until week 4 that is fewer than
+       * `MIN_WEEKS_FOR_PROJECTION`. On the account this was measured against, 47
+       * of 65 matchups landed here at week 2.
+       *
+       * Leaving them blank is what made "All leagues" show nothing in the weeks
+       * people care most about. A mean over one or two games is a weak signal,
+       * but it is a TRUE one, and the view labels it as form rather than as a
+       * call. Both sides are required: an average against an opponent we have
+       * never seen score is not a comparison.
+       */
+      const mineForm = mineProfile ?? formProfiles.get(`${pair.leagueId}:${you.rosterId}`)
+      const theirForm = theirProfile ?? formProfiles.get(oppKey)
+      if (mineForm && theirForm) {
+        card.form = {
+          you: mineForm.mu,
+          them: theirForm.mu,
+          margin: mineForm.mu - theirForm.mu,
+          weeks: Math.min(mineForm.n, theirForm.n),
+        }
       }
     }
 
@@ -654,8 +743,18 @@ export async function getWeekBoard(
    * header: the loader hands the tiers over ordered and the screen contains no
    * `.sort()`, so the two cannot silently disagree about what matters.
    */
+  /*
+   * ⚠ FORM FIRST, THEN THE OLD ORDER. A row carrying a form line says something
+   * about this week; a row without one says only how far short it is. Ordering
+   * on `yourSampleWeeks` alone does NOT achieve this — that counts YOUR side,
+   * and a matchup where you have two weeks and the opponent has none has a high
+   * `yourSampleWeeks` and nothing to show. The tiebreakers below are unchanged.
+   */
   unprojected.sort(
-    (a, b) => b.yourSampleWeeks - a.yourSampleWeeks || a.leagueName.localeCompare(b.leagueName),
+    (a, b) =>
+      Number(Boolean(b.form)) - Number(Boolean(a.form)) ||
+      b.yourSampleWeeks - a.yourSampleWeeks ||
+      a.leagueName.localeCompare(b.leagueName),
   )
 
   /*

@@ -332,26 +332,61 @@ export function WeekBoard({
                       {/* Same rule as MatchRow: an unnamed roster stays unnamed. */}
                       {m.opponent.name ? `vs ${m.opponent.name}` : 'opponent not named'}
                       {m.elimination ? ' · lowest score is eliminated' : ''}
+                      {/*
+                        The averages behind the value column, so the number is
+                        readable rather than asserted. Only when form exists —
+                        see the value column below for why the two cases differ.
+                      */}
+                      {m.form
+                        ? ` · ${m.form.you.toFixed(1)} to ${m.form.them.toFixed(1)} per week`
+                        : ''}
                     </span>
                   </span>
                   {/*
-                    ⚠ A COUNT OF WEEKS, NOT A DASH. The dash the full-screen
-                    version uses is right there — it says "no probability" on a
-                    row that also carries an opponent and a score line. Here the
-                    row has neither, so a dash would be the only thing in the
-                    column and would say nothing at all.
+                    ⚠ TWO DIFFERENT VALUE COLUMNS, BECAUSE THE TWO ROWS KNOW
+                    DIFFERENT THINGS — and this section holds both.
+
+                    With form: the signed scoring gap so far. It is NOT a margin
+                    and NOT a probability, and the sub-label says "so far" rather
+                    than "projected" for that reason — see `WeekMatchup.form`,
+                    which withholds sigma precisely so this cannot drift into
+                    being presented as a call.
+
+                    Without form: a count of weeks, not a dash. The dash the
+                    full-screen version uses is right there — it says "no
+                    probability" on a row that also carries an opponent and a
+                    score line. Here such a row has neither, so a dash would be
+                    the only thing in the column and would say nothing at all.
                   */}
-                  <span
-                    className="af-bd-val af-bd-val--seed"
-                    aria-label={`${m.yourSampleWeeks} of ${MIN_WEEKS_FOR_PROJECTION} completed weeks needed to project this matchup`}
-                  >
-                    <span aria-hidden>
-                      {m.yourSampleWeeks}/{MIN_WEEKS_FOR_PROJECTION}
+                  {m.form ? (
+                    <span
+                      className="af-bd-val af-bd-val--form"
+                      data-tone={m.form.margin >= 0 ? 'up' : 'down'}
+                      aria-label={`You have averaged ${m.form.you.toFixed(1)} points a week to their ${m.form.them.toFixed(1)}, over ${m.form.weeks} scored ${
+                        m.form.weeks === 1 ? 'week' : 'weeks'
+                      } — form so far, not a projection`}
+                    >
+                      <span className="af-num" aria-hidden>
+                        {m.form.margin >= 0 ? '+' : '−'}
+                        {Math.abs(m.form.margin).toFixed(1)}
+                      </span>
+                      <span className="af-bd-val-sub" aria-hidden>
+                        so far · {m.form.weeks}wk
+                      </span>
                     </span>
-                    <span className="af-bd-val-sub" aria-hidden>
-                      weeks on file
+                  ) : (
+                    <span
+                      className="af-bd-val af-bd-val--seed"
+                      aria-label={`${m.yourSampleWeeks} of ${MIN_WEEKS_FOR_PROJECTION} completed weeks needed to project this matchup`}
+                    >
+                      <span aria-hidden>
+                        {m.yourSampleWeeks}/{MIN_WEEKS_FOR_PROJECTION}
+                      </span>
+                      <span className="af-bd-val-sub" aria-hidden>
+                        weeks on file
+                      </span>
                     </span>
-                  </span>
+                  )}
                 </Link>
               </li>
             ))}

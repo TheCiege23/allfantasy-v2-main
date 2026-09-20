@@ -236,6 +236,7 @@ function weekMatchup(over: Partial<WeekMatchup> = {}): WeekMatchup {
     opponent: { rosterId: '2', name: 'Gridiron Ghosts', avatarUrl: null },
     elimination: false,
     projection: { you: 120, them: 82, margin: 38.2, winProbability: 0.91 },
+    form: null,
     yourSampleWeeks: 5,
     href: '/core/week?league=l1',
     ...over,
@@ -367,6 +368,62 @@ describe('WeekBoard', () => {
     expect(rowText).not.toMatch(/% to win/)
     /* It says what it is short of instead: 0 of the 3 weeks the model needs. */
     expect(rowText).toMatch(/0\/3/)
+  })
+
+  /*
+   * ── Form, the fallback for a matchup a projection cannot reach ──────────
+   *
+   * The test above is now also the NEGATIVE control for this one: it asserts a
+   * formless unprojected row prints no signed number, so if `form` were ever
+   * rendered unconditionally that test goes red.
+   */
+  it('shows the scoring gap so far on an unprojected matchup that has one', () => {
+    const { container } = render(
+      <WeekBoard
+        board={weekData({
+          leaning: [],
+          unprojected: [
+            weekMatchup({
+              leagueId: 'f',
+              leagueName: 'Thin But Scored',
+              projection: null,
+              form: { you: 118.4, them: 102.1, margin: 16.3, weeks: 2 },
+              yourSampleWeeks: 2,
+            }),
+          ],
+        })}
+        outlook={outlook()}
+        rivalriesHref="/core/week?view=rivalries"
+        allHref="/core/week?all=1"
+        totalLeagues={9}
+      />,
+    )
+
+    const row = [...container.querySelectorAll('.af-bd-row')].find((r) =>
+      (r.textContent ?? '').includes('Thin But Scored'),
+    )
+    expect(row).toBeTruthy()
+    const rowText = row!.textContent ?? ''
+
+    /* The gap, and the averages behind it, so the number is readable not asserted. */
+    expect(rowText).toContain('+16.3')
+    expect(rowText).toContain('118.4 to 102.1 per week')
+    /* Labelled as form. "so far", never "projected". */
+    expect(rowText).toContain('so far')
+    expect(rowText).not.toMatch(/projected/i)
+
+    /*
+     * 🛑 AND STILL NOT A PROBABILITY. This is the assertion that stops form
+     * drifting into being presented as a call — the whole reason the loader
+     * withholds sigma from a form profile.
+     */
+    expect(rowText).not.toMatch(/% to win/)
+    expect(row!.querySelector('.af-bd-val--form')).toBeTruthy()
+
+    /* And it stays out of the ranked columns, exactly as a formless one does. */
+    const split = container.querySelector('.af-bd-split')
+    expect(split).toBeTruthy()
+    expect(split!.textContent ?? '').not.toContain('Thin But Scored')
   })
 
   /*
