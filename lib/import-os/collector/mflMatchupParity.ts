@@ -283,6 +283,10 @@ export async function runMflMatchupParity(input?: {
       const schedule: ScheduleWeekInput[] = []
       for (const week of fetched.schedule) {
         const matchups = week.matchups.filter((m) => {
+          /* MFL always pairs; `teamId2` is nullable only because the shared input type
+             now carries ESPN's no-opponent formats. A null here is the one-sided pairing
+             the comment above already says to drop whole. */
+          if (m.teamId2 == null) return false
           if (!knownIds.has(m.teamId1) || !knownIds.has(m.teamId2)) return false
           return scoreOf(m.points1) != null && scoreOf(m.points2) != null
         })

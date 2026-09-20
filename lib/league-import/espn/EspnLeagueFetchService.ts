@@ -854,13 +854,47 @@ function upsertEspnMatchup(
   points1?: number,
   points2?: number
 ) {
-  if (!teamId1 || !teamId2) return
+  /*
+   * 🛑 THIS LINE USED TO READ `if (!teamId1 || !teamId2) return`, AND IT DISCARDED THE
+   * POINTS WITH THE ENTRY. ESPN serves a side with no opponent for a total-points or
+   * knockout league — `detectEspnMatchupFrequency` already recognises the format and the
+   * adapter already says so in its coverage note ("no paired head-to-head schedule to
+   * import") — but the parser dropped those entries silently, so the collector saw an
+   * empty schedule and wrote nothing at all.
+   *
+   * Measured on production 2026-09-20: "Washington Pro Knockout PPR League" is in season
+   * with 18 teams and recorded `weeksWritten: 0, weeksUnchanged: 0` while its five ESPN
+   * siblings recorded 13–17 weeks unchanged. It renders nothing on any WeeklyMatchup
+   * surface.
+   */
+  if (!teamId1 && !teamId2) return
+
   if (!weeks.has(week)) {
     weeks.set(week, [])
   }
   const matchups = weeks.get(week)!
+
+  /*
+   * One side only. Normalised onto `teamId1` so everything downstream reads one shape,
+   * and keyed apart from pairs so a solo entry can never dedupe against one.
+   */
+  if (!teamId1 || !teamId2) {
+    const soloId = teamId1 || teamId2
+    const soloPoints = teamId1 ? points1 : points2
+    const existingSolo = matchups.find((m) => m.teamId2 == null && m.teamId1 === soloId)
+    if (existingSolo) {
+      if (typeof soloPoints === 'number') existingSolo.points1 = soloPoints
+      return
+    }
+    matchups.push({ teamId1: soloId, teamId2: null, points1: soloPoints, points2: undefined })
+    return
+  }
+
   const matchupKey = [teamId1, teamId2].sort().join('::')
-  const existing = matchups.find((matchup) => [matchup.teamId1, matchup.teamId2].sort().join('::') === matchupKey)
+  const existing = matchups.find(
+    (matchup) =>
+      matchup.teamId2 != null && [matchup.teamId1, matchup.teamId2].sort().join('::') === matchupKey,
+  )
   if (existing) {
     if (typeof points1 === 'number') existing.points1 = points1
     if (typeof points2 === 'number') existing.points2 = points2
@@ -1236,7 +1270,12 @@ function fillEspnPointsAgainst(teams: EspnImportTeam[], schedule: EspnImportSche
           (pointsAgainstByTeam.get(matchup.teamId1) ?? 0) + matchup.points2
         )
       }
-      if (typeof matchup.points1 === 'number') {
+      /*
+       * ⚠ A SOLO ENTRY CONTRIBUTES TO NOBODY'S POINTS-AGAINST. There is no opponent, so
+       * these points were not scored against anyone — crediting them to a null key would
+       * be inventing an opponent to blame.
+       */
+      if (typeof matchup.points1 === 'number' && matchup.teamId2 != null) {
         pointsAgainstByTeam.set(
           matchup.teamId2,
           (pointsAgainstByTeam.get(matchup.teamId2) ?? 0) + matchup.points1
@@ -1373,6 +1412,13 @@ export async function fetchEspnScheduleForSync(
  * regression test that does not require a live ESPN league.
  */
 export { parseEspnRosterEntries as parseEspnRosterEntriesForTest }
+
+/**
+ * Test seam for the schedule parse, exported for the same reason as the roster one: the
+ * unpaired branch is where a whole league's scoring was being discarded, and it needs a
+ * regression test that does not require a live ESPN league or its cookies.
+ */
+export { parseEspnSchedule as parseEspnScheduleForTest }
 
 /**
  * The activity the trade windows read, for the Decision OS activity ingest
