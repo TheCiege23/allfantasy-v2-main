@@ -46,8 +46,35 @@ describe("/brackets/leagues/new create page", () => {
     render(<NewBracketLeaguePage />)
 
     expect(screen.getByTestId("bracket-create-sport-NBA")).toHaveTextContent("NBA")
-    expect(screen.getByText("Build a NBA Playoff Challenge pool.")).toBeInTheDocument()
+    // "an NBA", not "a NBA" — the article follows the SOUND of the letter N.
+    // This line pinned the wrong copy for the life of the file, which is how
+    // the sentence survived: a test can hold a bug in place as firmly as it
+    // holds a behaviour.
+    expect(screen.getByText("Build an NBA Playoff Challenge pool.")).toBeInTheDocument()
     expect(createPlayoffMock).not.toHaveBeenCalled()
+  })
+
+  /*
+   * The sentence as reported, on the sport it was reported for.
+   *
+   * ⚠ These cases cannot prove the article is CHOSEN rather than hard-coded
+   * to "an": every sport this form can display takes "an", and the one that
+   * does not — Soccer — redirects to the World Cup create page before this
+   * line renders. `indefinite-article.test.ts` carries that half ("a Soccer",
+   * "a UFC"); these carry the rendered sentence.
+   */
+  it.each([
+    ["mlb", "Build an MLB Playoff Challenge pool."],
+    ["nhl", "Build an NHL Playoff Challenge pool."],
+    ["ncaab", "Build an NCAA Basketball Playoff Challenge pool."],
+  ])("writes the right article for %s", (sport, sentence) => {
+    searchParamsMock.mockReturnValue(
+      new URLSearchParams(`sport=${sport}&challengeType=playoff_challenge`),
+    )
+
+    render(<NewBracketLeaguePage />)
+
+    expect(screen.getByText(sentence)).toBeInTheDocument()
   })
 
   it("submits NBA playoff pools through the playoff challenge API and redirects", async () => {
