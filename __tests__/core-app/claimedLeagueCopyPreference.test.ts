@@ -15,8 +15,11 @@
  */
 import { describe, expect, it } from 'vitest'
 
-import { preferTradesBoardCopy, tradesBoardLeagueIdentity } from '@/lib/core-app/tradesBoard'
-import { keepBestPerRealLeague } from '@/lib/core-app/realLeague'
+import {
+  claimedRowIdentity,
+  keepBestPerRealLeague,
+  preferImportedCopy,
+} from '@/lib/core-app/realLeague'
 
 const ME = 'user-me'
 
@@ -42,9 +45,9 @@ function copy(over: { id: string; owner?: string | null; updatedAt?: string; sea
  * worth anything because this function is the one production calls.
  */
 const collapse = (rows: ReturnType<typeof copy>[]) =>
-  keepBestPerRealLeague(rows, tradesBoardLeagueIdentity, preferTradesBoardCopy(ME))
+  keepBestPerRealLeague(rows, claimedRowIdentity, preferImportedCopy(ME))
 
-describe('preferTradesBoardCopy', () => {
+describe('preferImportedCopy + claimedRowIdentity', () => {
   it('keeps the copy the reader imported, wherever it sits in the list', () => {
     expect(collapse([copy({ id: 'theirs' }), copy({ id: 'mine', owner: ME })])[0]!.league.id).toBe('mine')
     expect(collapse([copy({ id: 'mine', owner: ME }), copy({ id: 'theirs' })])[0]!.league.id).toBe('mine')

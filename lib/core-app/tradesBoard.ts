@@ -4,7 +4,7 @@ import { CROSS_LEAGUE_BOOK, valueBookFor, type ValueBook } from './valueBook'
 import { prisma } from '@/lib/prisma'
 import { loadLatestPlayerValueSnapshots } from '@/lib/player-values/latestPlayerValueSnapshots'
 import { gradeTrade } from '@/lib/projections/tradeGrading'
-import { keepBestPerRealLeague } from './realLeague'
+import { claimedRowIdentity, keepBestPerRealLeague, preferImportedCopy } from './realLeague'
 import {
   LATEST_TRADE_ORDER,
   gradeableSide,
@@ -279,55 +279,6 @@ export function byTradeUrgency(
   return b.tradesOnFile - a.tradesOnFile
 }
 
-/**
- * Which copy of a real league this board keeps.
- *
- * 🛑 "KEEP ONLY THE COPY THE READER OWNS" IS WRONG AND DELETES REAL LEAGUES. Measured on
- * production 2026-09-20: 17 reader/league pairs own ZERO copies, having claimed a team in a league
- * somebody else imported. `keepBestPerRealLeague` always keeps one row per key, which is what
- * makes this safe — the comparator only ever chooses BETWEEN copies, it can never drop a league.
- * A claimed team grants membership on its own (`resolveLeagueMembership`, `via: 'claim'`), so a
- * copy the reader does not own is still reachable.
- *
- * Freshness is the tiebreak because the copies disagree on SETTINGS — the four production copies
- * of one league carried blobs of 142,678 to 143,000 bytes — and the trade deadline this board
- * prints comes out of that blob. The id is last so two renders of one portfolio cannot disagree
- * about which copy they showed.
- */
-export function tradesBoardLeagueIdentity<
-  T extends { league: { id: string; platform: string | null; platformLeagueId: string | null; season?: number | null } },
->(c: T) {
-  return {
-    platform: c.league.platform,
-    platformLeagueId: c.league.platformLeagueId,
-    /*
-     * 🛑 OMITTING THIS MERGES TWO SEASONS INTO ONE CARD, SILENTLY. `realLeagueKey` stringifies an
-     * absent season to '' for every row, so the mistake does not fail — it hides a season. Exported
-     * with the comparator so a test covers the key this loader really builds, rather than a copy of
-     * it written in the test.
-     */
-    season: c.league.season,
-    leagueId: c.league.id,
-  }
-}
-
-export function preferTradesBoardCopy(userId: string) {
-  return <T extends { league: { id: string; userId?: string | null; updatedAt?: Date | null } }>(
-    incoming: T,
-    held: T,
-  ): boolean => {
-    const incomingOwned = incoming.league.userId != null && incoming.league.userId === userId
-    const heldOwned = held.league.userId != null && held.league.userId === userId
-    if (incomingOwned !== heldOwned) return incomingOwned
-
-    const incomingAt = incoming.league.updatedAt?.getTime() ?? 0
-    const heldAt = held.league.updatedAt?.getTime() ?? 0
-    if (incomingAt !== heldAt) return incomingAt > heldAt
-
-    return incoming.league.id < held.league.id
-  }
-}
-
 export async function getTradesBoard(
   userId: string,
   currentWeek: number | null,
@@ -394,8 +345,8 @@ export async function getTradesBoard(
   const claimedWithLeague = claimed.flatMap((c) => (c.league ? [{ ...c, league: c.league }] : []))
   const mine = keepBestPerRealLeague(
     claimedWithLeague,
-    tradesBoardLeagueIdentity,
-    preferTradesBoardCopy(userId),
+    claimedRowIdentity,
+    preferImportedCopy(userId),
   )
   if (mine.length === 0) return { ...EMPTY, currentWeek }
 
