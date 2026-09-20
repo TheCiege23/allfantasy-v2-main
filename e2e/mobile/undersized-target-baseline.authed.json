@@ -80,7 +80,26 @@
     "them apart and the picker passes every measurement. authedRoutes marks it",
     "leagueScoped, and the spec asserts .af-mt present AND .af-pl absent -- both",
     "directions, because asserting only the roster would still pass if a layout",
-    "ever rendered both."
+    "ever rendered both.",
+    "",
+    "WHAT SCOPING matchup AND trades FOUND (2026-09-20), AND THE SURPRISE IN IT.",
+    "Both now render their real screens: matchup .af-mu at 200 af elements, Trade",
+    "Center .af-tc at 316. matchup reported only the two shell help dots -- no new",
+    "debt.",
+    "",
+    "🛑 AND /core/trades HAD NEVER MEASURED TRADE CENTER UNTIL NOW. It carried no",
+    "root selector, so with no league in context it rendered the no-league screen:",
+    "205 af elements in every CI run to date, against 316 for the real thing. The",
+    "description of this route as Trade Center coverage was wrong for its whole",
+    "life. Its baseline did NOT move when the real screen was finally measured --",
+    "the same two help dots -- which is luck rather than vindication.",
+    "",
+    "⚠ BOTH ROUTES WERE DROPPED ONCE BEFORE AS NONDETERMINISTIC, AND THE CAUSE WAS",
+    "REAL. They fell back to the picker whenever their loader threw, silently. That",
+    "is fixed at the source: a failed read now renders ScreenLoadError and logs",
+    "`[core/<screen>] read failed`. If one of these routes goes red with NEITHER the",
+    "screen nor the picker present, read that line -- it names the cause instead of",
+    "leaving a shrug."
   ],
   "routes": {
     "/commissioner-os": [],
@@ -91,6 +110,22 @@
         "w": 15,
         "h": 15,
         "why": "THE SAME TWO SHELL CONTROLS ALREADY DEFERRED ON /core/trades, not new debt. They live in AfCoreShell's topbar, so they are on EVERY /core screen; measuring a second route was always going to re-report them. Deferred for the reason recorded below: a 15x15 info dot cannot reach 44x44 by min-height, it needs an expanded hit area that shifts layout around a deliberately small affordance. Retire both routes' entries together when the shell's help affordances are next touched."
+      },
+      {
+        "cls": "af-help-dot",
+        "label": "Plan tokens",
+        "w": 15,
+        "h": 15,
+        "why": "Same control, second instance. See above."
+      }
+    ],
+    "/core/matchup": [
+      {
+        "cls": "af-help-dot",
+        "label": "Read-only by design",
+        "w": 15,
+        "h": 15,
+        "why": "Shell topbar control, already deferred on /core, /core/my-team and /core/trades. Retire all four routes' entries together."
       },
       {
         "cls": "af-help-dot",

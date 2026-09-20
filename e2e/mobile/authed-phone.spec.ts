@@ -39,6 +39,9 @@ import { TC_TRADE_SEED } from "../../scripts/seed-redraft-trade-walkthrough.cons
  */
 const BASELINE = rawBaseline as unknown as { routes: Record<string, BaselineTarget[]> }
 
+/** Every league-scoped route falls back to the same picker (`PickALeague`). */
+const PICKER_ROOT = ".af-pl"
+
 const MIN_TARGET = 44
 const MIN_FIELD_FONT = 16
 
@@ -151,7 +154,7 @@ test.describe("@db @mobile authenticated phone contract", () => {
     }
   })
 
-  for (const { route, login, leagueScoped } of AUTHED_ROUTES) {
+  for (const { route, login, leagueScopedRoot } of AUTHED_ROUTES) {
     test(`${route} holds the phone contract when signed in`, async ({ page }) => {
       const cssFailures: CssRequestFailure[] = []
       const isStylesheet = (req: { resourceType(): string; url(): string }) =>
@@ -178,7 +181,7 @@ test.describe("@db @mobile authenticated phone contract", () => {
        * The league id comes from the seed rather than a literal, so a reseed that
        * renames it fails loudly here instead of silently measuring the picker.
        */
-      const target = leagueScoped
+      const target = leagueScopedRoot
         ? `${route}?league=${encodeURIComponent(TC_TRADE_SEED.leagues.nfl.leagueId)}`
         : route
       const response = await page.goto(target, { waitUntil: "domcontentloaded" })
@@ -199,6 +202,35 @@ test.describe("@db @mobile authenticated phone contract", () => {
       await page.waitForLoadState("load", { timeout: 30_000 }).catch(() => {})
 
       /*
+       * 🛑 `load` IS NOT READY, AND THIS LANE HAD NO GATE AT ALL. `/core/*` streams:
+       * `loading.tsx` covers the SHELL phase and `CoreScreenSkeleton` (`.af-sk-*`)
+       * covers the screen body behind it, so `load` can fire over a fallback that
+       * has no topbar and therefore no `.af-help-dot`. The ratchet then reports the
+       * baselined dots as "no longer undersized — delete them", which is an
+       * instruction to delete correct entries because a run measured nothing.
+       *
+       * Measured across runs of the same commit: `/core` at 212 af elements passes,
+       * the same route at 47 fails that way. 47 is the fallback.
+       *
+       * ⚠ `phone-smoke.spec.ts` HAS GUARDED THIS SINCE IT WAS WRITTEN, and
+       * `login-field-probe.spec.ts` documents the exact trap ("probing at `load`
+       * measures the loading shell"). This lane simply never adopted it — and
+       * `ROUTE_READY_SELECTOR` covers only `/login`, so calling the shared helper
+       * would have been a no-op here. Hence a gate expressed in this lane's own
+       * terms: the shell's topbar is real, and no skeleton block is left on screen.
+       */
+      if (route.startsWith("/core")) {
+        await expect(
+          page.locator(".af-topbar"),
+          `${route} never rendered the shell topbar — the phone checks would be measuring a streaming fallback`,
+        ).toBeVisible({ timeout: 30_000 })
+        await expect(
+          page.locator(".af-sk-block"),
+          `${route} still showed CoreScreenSkeleton — the screen body had not streamed in`,
+        ).toHaveCount(0, { timeout: 30_000 })
+      }
+
+      /*
        * 🛑 THE SECOND HALF OF THE PREMISE, FOR LEAGUE-SCOPED ROUTES. The pathname
        * check above cannot distinguish `/core/my-team` WITH a league (the roster,
        * `.af-mt`) from the same path WITHOUT one (the "pick a league" board,
@@ -210,15 +242,17 @@ test.describe("@db @mobile authenticated phone contract", () => {
        * pass if a future layout rendered both, which is exactly the ambiguity this
        * guard exists to remove.
        */
-      if (leagueScoped) {
-        const roster = await page.locator(".af-mt").count()
-        const picker = await page.locator(".af-pl").count()
+      if (leagueScopedRoot) {
+        const screen = await page.locator(leagueScopedRoot).count()
+        const picker = await page.locator(PICKER_ROOT).count()
         expect(
-          { roster, picker },
+          { screen, picker },
           `${route} did not render the league-scoped screen — ` +
-            `expected the roster (.af-mt) and not the league picker (.af-pl). ` +
-            `The seeded league id may have changed, or the ?league= parameter stopped being honoured.`,
-        ).toEqual({ roster: 1, picker: 0 })
+            `expected ${leagueScopedRoot} and not the league picker (${PICKER_ROOT}). ` +
+            `Since the read-failure fix, a screen that is NEITHER means the load threw: ` +
+            `look for "[core/<screen>] read failed" in the server output above, which now ` +
+            `names the cause instead of silently falling through to the picker.`,
+        ).toEqual({ screen: 1, picker: 0 })
       }
 
       const stylesheet = await page.evaluate(probeStylesheets)
