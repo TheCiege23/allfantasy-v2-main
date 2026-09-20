@@ -12,6 +12,7 @@ import {
   buildFormProfiles,
   buildProfiles,
   pairRows,
+  priorSeasonRowsFromFacts,
   winProbabilityOf,
 } from '@/lib/core-app/weekBoard'
 
@@ -77,5 +78,69 @@ describe('buildProfiles / pairRows (exported unchanged)', () => {
     const pairs = pairRows([r('a', 1, 0, 7), r('b', 1, 0, 7), r('c', 1, 0, null), r('d', 1, 0, null), r('e', 1, 0, 9)])
     expect(pairs).toHaveLength(1)
     expect([pairs[0]!.a.rosterId, pairs[0]!.b.rosterId].sort()).toEqual(['a', 'b'])
+  })
+})
+
+
+describe('priorSeasonRowsFromFacts', () => {
+  const fact = (season: number | null, week: number, a: string, b: string, sa: number, sb: number, leagueId = 'INTERNAL') =>
+    ({ leagueId, season, weekOrPeriod: week, teamA: a, teamB: b, scoreA: sa, scoreB: sb })
+
+  const platformIds = new Map([['INTERNAL', 'PLATFORM']])
+
+  it('files facts under the league CURRENT platform id, not the internal one', () => {
+    const rows = priorSeasonRowsFromFacts([fact(2025, 1, '1', '2', 110, 95)], platformIds, new Set())
+    expect(rows).toHaveLength(2)
+    /*
+     * The whole point: buildProfiles keys "<platformLeagueId>:<rosterId>". Filed under the
+     * internal id these rows form their own bucket and count toward nothing.
+     */
+    expect(rows.every((r) => r.leagueId === 'PLATFORM')).toBe(true)
+    expect(rows.map((r) => r.rosterId).sort()).toEqual(['1', '2'])
+  })
+
+  it('splits each fact into both sides, mirroring pointsFor/pointsAgainst', () => {
+    const rows = priorSeasonRowsFromFacts([fact(2025, 3, 'a', 'b', 120, 88)], platformIds, new Set())
+    const a = rows.find((r) => r.rosterId === 'a')!
+    const b = rows.find((r) => r.rosterId === 'b')!
+    expect(a).toMatchObject({ pointsFor: 120, pointsAgainst: 88, win: 1, seasonYear: 2025, week: 3 })
+    expect(b).toMatchObject({ pointsFor: 88, pointsAgainst: 120, win: 0 })
+    /* Both sides of one game share a matchupId, or pairRows cannot pair them. */
+    expect(a.matchupId).toBe(b.matchupId)
+  })
+
+  it('drops a season WeeklyMatchup already holds, and keeps the ones it does not', () => {
+    const rows = priorSeasonRowsFromFacts(
+      [fact(2025, 1, '1', '2', 100, 90), fact(2026, 1, '1', '2', 105, 99)],
+      platformIds,
+      new Set(['PLATFORM:2026']),
+    )
+    /*
+     * 🛑 THE DOUBLE-COUNT GUARD. Counting one week twice inflates n while narrowing the
+     * spread — a more confident projection off the same single game.
+     */
+    expect(rows.every((r) => r.seasonYear === 2025)).toBe(true)
+    expect(rows).toHaveLength(2)
+  })
+
+  it('drops a fact with no season and a league with no platform id', () => {
+    expect(priorSeasonRowsFromFacts([fact(null, 1, '1', '2', 100, 90)], platformIds, new Set())).toHaveLength(0)
+    expect(
+      priorSeasonRowsFromFacts([fact(2025, 1, '1', '2', 100, 90, 'UNKNOWN')], platformIds, new Set()),
+    ).toHaveLength(0)
+  })
+
+  it('feeds buildProfiles so a roster with no current weeks becomes projectable', () => {
+    /* Three prior-season weeks is exactly MIN_WEEKS_FOR_PROJECTION — the whole point of the change. */
+    const rows = priorSeasonRowsFromFacts(
+      [fact(2025, 1, 'x', 'y', 100, 90), fact(2025, 2, 'x', 'y', 110, 95), fact(2025, 3, 'x', 'y', 120, 85)],
+      platformIds,
+      new Set(),
+    )
+    const profiles = buildProfiles(rows)
+    expect(profiles.get('PLATFORM:x')).toMatchObject({ n: 3 })
+    expect(profiles.get('PLATFORM:x')!.mu).toBeCloseTo(110, 6)
+    /* And with the prior seasons withheld, the same roster is NOT projectable — the control. */
+    expect(buildProfiles(priorSeasonRowsFromFacts([], platformIds, new Set())).has('PLATFORM:x')).toBe(false)
   })
 })
