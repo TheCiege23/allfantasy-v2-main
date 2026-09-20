@@ -81,6 +81,41 @@ describe('🛑 schema-drift workflow never writes to a database or the baseline'
   })
 })
 
+/**
+ * 🛑 A STEP THAT READS `$?` MUST CLEAR errexit FIRST, AND NOT SETTING `-e` IS NOT CLEARING IT.
+ *
+ * GitHub invokes every `run:` as `bash -e {0}`. `set -uo pipefail` leaves errexit ON, so the
+ * step dies on the guard's non-zero exit before `RC=$?` — `rc` is never written, and the alert
+ * reports "could not measure (exit missing)" for what was really "new drift beyond the
+ * baseline". Measured 2026-09-20: four consecutive red runs, every one of them mislabelled, over
+ * four migrations that were genuinely missing from production.
+ */
+describe('🛑 a step that captures an exit code disables errexit', () => {
+  const capturing = runs.filter((s) => /\$\?/.test(s.run))
+
+  it('at least one step captures $? — otherwise this suite asserts nothing', () => {
+    expect(capturing.length).toBeGreaterThan(0)
+  })
+
+  it.each(capturing.map((s) => [s.name ?? '(unnamed)', s.run]))(
+    'step "%s" clears errexit before the command whose status it reads',
+    (_name, run: string) => {
+      const clear = run.indexOf('set +e')
+      expect(clear, 'the runner supplies `bash -e`; `set -uo pipefail` does not clear it').toBeGreaterThan(-1)
+      expect(clear).toBeLessThan(run.indexOf('$?'))
+    },
+  )
+
+  it('the guard exit still reaches the later steps through an output', () => {
+    const check = stepNamed('Measure drift')
+    expect(check.run).toMatch(/RC=\$\?/)
+    expect(check.run).toMatch(/echo "rc=\$RC" >> "\$GITHUB_OUTPUT"/)
+    for (const name of ['Summarise', 'Open, update or close the alert issue']) {
+      expect(stepNamed(name).env.RC).toBe('${{ steps.check.outputs.rc }}')
+    }
+  })
+})
+
 describe('schema-drift workflow installs the lockfile versions', () => {
   const lock = JSON.parse(readFileSync(join(ROOT, 'package-lock.json'), 'utf8'))
   it.each(['prisma', 'tsx'])('%s matches package-lock.json', (pkg) => {
