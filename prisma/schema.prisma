@@ -354,6 +354,24 @@ model SportsPlayer {
   @@index([sport, team])
   @@index([sleeperId])
   @@index([name])
+  /// Trigram index behind player search. `@@index([name])` above is a btree and can
+  /// serve none of the product's name lookups — every one of them is `ILIKE`, which a
+  /// btree on the raw column cannot answer, so each pass sequentially scanned all
+  /// 138k rows (measured 71-77ms -> 1-4ms; see supabase_ensure_sportsplayer_name_trgm.sql).
+  ///
+  /// 🛑 DECLARED HERE ONLY SO THE DRIFT GUARD STOPS PROPOSING TO DROP IT. It is applied
+  /// deliberately and out-of-band by `scripts/apply-sportsplayer-name-trgm.cjs`, per the
+  /// `supabase_ensure_*.sql` convention — NOT by a deploy. Before this line, prod held an
+  /// index schema.prisma knew nothing about, so `migrate diff` emitted
+  /// `DROP INDEX "SportsPlayer_name_trgm_idx"` and anyone reconciling drift would have
+  /// destroyed a 38x lookup win.
+  ///
+  /// ⚠ IF PRISMA EVER GENERATES A MIGRATION FOR THIS, DO NOT APPLY IT AS WRITTEN. Prisma
+  /// emits a plain `CREATE INDEX`, which takes an ACCESS EXCLUSIVE lock; the ingestion
+  /// crons write to this table continuously, so it must be `CONCURRENTLY` (and outside a
+  /// transaction) on any live database. It also needs `CREATE EXTENSION pg_trgm` first,
+  /// which this schema does not manage — `postgresqlExtensions` is not enabled.
+  @@index([name(ops: raw("gin_trgm_ops"))], type: Gin, map: "SportsPlayer_name_trgm_idx")
 }
 
 model PlayerIdentityMap {
