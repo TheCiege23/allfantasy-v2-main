@@ -250,6 +250,7 @@ function weekData(over: Partial<WeekBoardData> = {}): WeekBoardData {
     coinFlips: [],
     leaning: [weekMatchup()],
     unprojected: [],
+    eliminationWeeks: [],
     model: { basis: 'per-team scoring distributions', sampleSize: 412 },
     withoutSchedule: 0,
     firstKickoffAt: null,

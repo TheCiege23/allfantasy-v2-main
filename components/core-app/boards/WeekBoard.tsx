@@ -235,12 +235,22 @@ export function WeekBoard({
    * are on screen, immediately above the sentence saying so.
    */
   const shown =
-    leading.length + trailing.length + Math.min(board.unprojected.length, UNPROJECTED_SHOWN)
+    leading.length +
+    trailing.length +
+    Math.min(board.unprojected.length, UNPROJECTED_SHOWN) +
+    /*
+     * ⚠ THE FOURTH SECTION TOO, FOR THE REASON DIRECTLY ABOVE — and it is listed in
+     * full rather than capped, so the whole length counts. These leagues used to be
+     * invisible here AND absent from every term of this sum, so the footer's
+     * "N more sit between these two columns" quietly absorbed them.
+     */
+    board.eliminationWeeks.length
   const considered = Math.max(
     totalLeagues,
     board.coinFlips.length +
       board.leaning.length +
       board.unprojected.length +
+      board.eliminationWeeks.length +
       board.withoutSchedule,
   )
 
@@ -384,6 +394,86 @@ export function WeekBoard({
                       </span>
                       <span className="af-bd-val-sub" aria-hidden>
                         weeks on file
+                      </span>
+                    </span>
+                  )}
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+
+      {/*
+        ── Leagues with no opponent ─────────────────────────────────────────
+
+        🛑 NOT A TIER OF THE TWO COLUMNS ABOVE, AND IT CANNOT BE. "Leading" and
+        "trailing" are head-to-head readings; a guillotine league has no opponent
+        to lead, so these leagues reached neither column and — because
+        `pairRows` never built a card for them at all — reached no section
+        either. They were absent from this board while carrying a full set of
+        scored rows. See `buildEliminationWeeks`.
+
+        The value column is points clear of the cut line, which is the same
+        question "margin" asks in a head-to-head: how much room do you have.
+      */}
+      {board.eliminationWeeks.length > 0 ? (
+        <section className="af-bd-sec">
+          <SectionHead
+            label="No opponent · lowest score is out"
+            count={`${board.eliminationWeeks.length}`}
+          />
+          <ul className="af-bd-rows af-bd-rows--compact">
+            {board.eliminationWeeks.map((e) => (
+              <li key={e.leagueId}>
+                <Link className="af-bd-row" href={e.href}>
+                  <LeagueCrest
+                    imageUrl={e.leagueImageUrl}
+                    name={e.leagueName}
+                    platform={e.platform}
+                    size="sm"
+                  />
+                  <span className="af-bd-league">
+                    <span className="af-bd-name">{e.leagueName}</span>
+                    <span className="af-bd-sub">
+                      {e.fieldSize === 0
+                        ? 'no scores in yet this week'
+                        : `${e.rank != null ? `${e.rank} of ${e.fieldSize}` : `${e.fieldSize} scored`}${
+                            e.cutLine != null ? ` · cut line ${e.cutLine.toFixed(1)}` : ''
+                          }`}
+                    </span>
+                  </span>
+                  {/*
+                    ⚠ THREE STATES. A week with nothing scored is neither "clear"
+                    nor "out", and rendering it as +0.0 would read as safe by a
+                    hair when in fact nobody has played — the same refusal the
+                    form column above makes for a matchup with no scored week.
+                  */}
+                  {e.margin == null ? (
+                    <span
+                      className="af-bd-val af-bd-val--seed"
+                      aria-label="No scores are in for this week yet, so there is no cut line"
+                    >
+                      <span aria-hidden>—</span>
+                      <span className="af-bd-val-sub" aria-hidden>
+                        not started
+                      </span>
+                    </span>
+                  ) : (
+                    <span
+                      className="af-bd-val af-bd-val--form"
+                      data-tone={e.onTheBlock ? 'down' : 'up'}
+                      aria-label={
+                        e.onTheBlock
+                          ? `Your ${e.yourScore?.toFixed(1)} is the lowest score in a field of ${e.fieldSize} — you are the one eliminated as it stands`
+                          : `Your ${e.yourScore?.toFixed(1)} is ${e.margin.toFixed(1)} points clear of the cut line of ${e.cutLine?.toFixed(1)}`
+                      }
+                    >
+                      <span className="af-num" aria-hidden>
+                        {e.onTheBlock ? 'OUT' : `+${e.margin.toFixed(1)}`}
+                      </span>
+                      <span className="af-bd-val-sub" aria-hidden>
+                        {e.onTheBlock ? 'on the block' : 'clear'}
                       </span>
                     </span>
                   )}
