@@ -14,6 +14,7 @@ import {
   pickAssets,
   pickPricerFrom,
   withheldTradeReason,
+  type UnpricedAsset,
 } from './tradePicks'
 import {
   scanPendingSleeperTrades,
@@ -283,6 +284,29 @@ async function resolveGrades(
   }).catch(() => [])
   const pickPrice = pickPricerFrom(pickRows)
 
+  /*
+   * What this league's book could not price, by kind.
+   *
+   * ⚠ `rankById` IS THE PREDICATE, because grading counts an asset as covered only when it
+   * carries a RANK. `overallRank` is nullable, so a stored value is not the same claim.
+   */
+  const unpricedOf = (
+    recv: readonly string[],
+    gave: readonly string[],
+    picksIn: readonly { pickSeason?: string; pickRound?: number; name: string }[],
+    picksOut: readonly { pickSeason?: string; pickRound?: number; name: string }[],
+  ): UnpricedAsset[] => {
+    const out: UnpricedAsset[] = []
+    for (const id of [...recv, ...gave]) {
+      if (rankById.get(id) == null) out.push({ kind: 'player' })
+    }
+    for (const p of [...picksIn, ...picksOut]) {
+      const priced = p.pickSeason && p.pickRound != null ? pickPrice(p.pickSeason, p.pickRound) : null
+      if (!priced) out.push({ kind: 'pick', name: p.name })
+    }
+    return out
+  }
+
   const graded: GradedTrade[] = distinctTrades.map((t) => {
     const recv = (Array.isArray(t.playersReceived) ? t.playersReceived : []).map(String)
     const gave = (Array.isArray(t.playersGiven) ? t.playersGiven : []).map(String)
@@ -300,9 +324,13 @@ async function resolveGrades(
       week: t.week ?? null,
       letter: g.graded ? g.letter : null,
       sharePct: g.graded ? g.sharePct : null,
-      withheldReason: g.graded
-        ? null
-        : withheldTradeReason(g, picksIn.length + picksOut.length),
+      /*
+       * ⚠ KINDS, NOT NAMES, AND NOT A COUNT. This path never loads player names — it
+       * produces counts for a summary list — so it cannot say "DeMarvion Overshown" the way
+       * the cross-league board can. It can still say whether the gap is a PLAYER or a PICK,
+       * which is the part the old count-matching guess got wrong.
+       */
+      withheldReason: g.graded ? null : withheldTradeReason(g, unpricedOf(recv, gave, picksIn, picksOut)),
       playersIn: recv.length,
       playersOut: gave.length,
       picksIn: picksIn.length,
