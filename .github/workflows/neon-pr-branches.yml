@@ -1,7 +1,23 @@
-# Neon: create a database branch per pull request; delete when the PR closes.
+# Neon: create a database branch per pull request; delete when the PR closes; and sweep daily
+# for any that outlived their PR anyway.
+#
 # Requires repository secrets/variables from Neon GitHub integration:
 #   - secrets.NEON_API_KEY
 #   - vars.NEON_PROJECT_ID
+#
+# 🛑 WHY THE DAILY SWEEP EXISTS, GIVEN THE DELETE JOB ALREADY WORKS. On 2026-09-20 this project
+# held 71 preview branches, 67 for PRs long closed — 124 GB, the oldest from 2026-05-01. The
+# delete job below was present the whole time (added 2026-04-16, never edited) and is healthy:
+# 295 of the last 300 runs succeeded, none cancelled.
+#
+# ⚠ AND THE PER-EVENT CAUSE IS UNKNOWN. Two explanations were checked and BOTH DISPROVEN. The
+# computed name `preview/pr-<n>-<head with / → ->` matches the stored Neon name exactly for all
+# nine leaked branches, so it was not a name mismatch; and no run has ever been cancelled, so
+# concurrency eviction did not eat them. The runs from the days that leaked are past retention.
+#
+# An event handler is best-effort: a missed webhook, an API blip, or a re-run of an old create
+# job leaves a branch with nothing to notice. The sweep asserts the invariant instead — no
+# preview branch outlives its PR — so a miss self-heals whatever caused it.
 #
 # Docs: https://neon.tech/docs/guides/neon-github-integration
 
@@ -14,6 +30,16 @@ on:
       - reopened
       - synchronize
       - closed
+  schedule:
+    # Daily. A sweep that runs after the leak has grown is still a sweep.
+    - cron: "23 7 * * *"
+  workflow_dispatch:
+    inputs:
+      apply:
+        description: 'Delete the branches it finds (off = report only)'
+        required: false
+        default: false
+        type: boolean
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -22,6 +48,7 @@ concurrency:
 jobs:
   setup:
     name: Branch name
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     outputs:
       head_branch: ${{ steps.names.outputs.current_branch }}
@@ -80,3 +107,43 @@ jobs:
           project_id: ${{ vars.NEON_PROJECT_ID }}
           api_key: ${{ secrets.NEON_API_KEY }}
           branch: preview/pr-${{ github.event.number }}-${{ needs.setup.outputs.head_branch }}
+
+  # The reconciler. Reads every branch, asks GitHub for each PR's state, and deletes only the
+  # `preview/pr-*` ones whose PR is closed or merged. Every other case — open, unknown, a named
+  # branch, anything primary/default/protected — is kept; see the refusal rules and their tests
+  # in scripts/neon-prune-preview-branches.mjs and __tests__/neon-prune-preview-branches.test.ts.
+  sweep_orphans:
+    name: Sweep orphaned preview branches
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      # ⚠ A SCHEDULED RUN APPLIES; A HAND-RUN REPORTS UNLESS ASKED. Turning the destructive mode
+      # on by default for `workflow_dispatch` would make "let me see what it would do" the
+      # dangerous button.
+      - name: Sweep
+        env:
+          NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
+          NEON_PROJECT_ID: ${{ vars.NEON_PROJECT_ID }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          set -uo pipefail
+          set +e
+          if [ "${{ github.event_name }}" = "schedule" ] || [ "${{ inputs.apply }}" = "true" ]; then
+            node scripts/neon-prune-preview-branches.mjs --apply | tee sweep.log
+          else
+            node scripts/neon-prune-preview-branches.mjs | tee sweep.log
+          fi
+          RC=${PIPESTATUS[0]}
+          { echo '```'; cat sweep.log; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          exit "$RC"
