@@ -644,6 +644,7 @@ export async function getTradesBoard(
     const recvIds = idsOf(t.playersReceived)
     const sentPicks = picksOf(t.picksGiven)
     const recvPicks = picksOf(t.picksReceived)
+    const pickCount = sentPicks.length + recvPicks.length
 
     /*
      * ⚠ PICKS ARE IN THE GRADE'S DENOMINATOR, NOT ONLY IN THE PICTURE. Leaving
@@ -711,18 +712,33 @@ export async function getTradesBoard(
       sharePct: g.graded ? g.sharePct : null,
       /*
        * ⚠ A PICK IS A PERMANENT GAP, NOT A MISSING SNAPSHOT, AND THE READER HAS
-       * TO BE TOLD WHICH ONE THEY ARE LOOKING AT. `describeNoSignal` only sees
-       * counts, so on a trade containing picks it says "only 2 of 3 assets have
-       * values on file" — which reads as a sync problem that a re-import would
-       * fix. It is not: the grader prices assets through a RANK curve and a
-       * future draft pick has no rank in it, so this trade will never grade,
-       * however fresh the values get. One clause says so; inventing a rank to
-       * produce a letter is the failure `tradeGrading.ts` exists to prevent.
+       * TO BE TOLD WHICH ONE THEY ARE LOOKING AT. The grader prices assets
+       * through a RANK curve and a future draft pick has no rank in it, so a
+       * trade containing one will never grade, however fresh the values get.
+       * `describeNoSignal` cannot say that — it sees only counts.
+       *
+       * 🛑 AND IT REPLACES THAT SENTENCE RATHER THAN PREFIXING IT, WHICH IS THE
+       * SECOND ATTEMPT HERE. Prefixing produced "only 2 of 3 players have values
+       * on file" above a card showing two players and a pick: the reader counts
+       * two players and is told there are three. The first fix for that was to
+       * reword `describeNoSignal` itself from "players" to "assets" — and that
+       * was wrong twice over. It tripped the decision-engine boundary guard,
+       * which flags every verdict-shaped export in any file a PR touches and so
+       * reported `gradeTrade` and `evaluateTrade`, both untouched and both
+       * pre-existing on main. More importantly it was inaccurate: the per-league
+       * screen (`lib/core-app/trades.ts`) builds its sides from
+       * `playersReceived`/`playersGiven` alone, so every asset it grades IS a
+       * player and "players" is the right word there. Only this board has picks,
+       * so only this board says so.
+       *
+       * ⚠ THE BRANCH IS TOTAL: a pick carries `rank: null`, so coverage can
+       * never be full while one is present and `g.graded` is always false here.
+       * There is no case where picks are in play and a letter was produced.
        */
       withheldReason: g.graded
         ? null
-        : sentPicks.length + recvPicks.length > 0
-          ? `${describeNoSignal(g)} Draft picks are not priced against the player market, so a trade including them is not graded.`
+        : pickCount > 0
+          ? `Not graded — this trade includes ${pickCount} draft ${pickCount === 1 ? 'pick' : 'picks'}, and picks are not priced against the player market.`
           : describeNoSignal(g),
     })
   }
