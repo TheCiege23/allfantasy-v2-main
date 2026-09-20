@@ -11,6 +11,7 @@ import { buildIdpContextForChimmy } from '@/lib/idp/ai/idpContextForChimmy'
 import { buildC2CContextForChimmy } from '@/lib/merged-devy-c2c/ai/c2cContextForChimmy'
 import { prisma } from '@/lib/prisma'
 import { resolvePlayerStats } from '@/lib/player-comparison-lab/PlayerStatsResolver'
+import { resolveRosterPlayerIdentities } from '@/lib/player-identity/resolveRosterPlayerIdentities'
 import { DEFAULT_SPORT, normalizeToSupportedSport, type SupportedSport } from '@/lib/sport-scope'
 import { getRosterPlayerIds } from '@/lib/waiver-wire/roster-utils'
 import { getLatestSystemHealth } from '@/lib/agents/workers/api-health-monitor'
@@ -840,48 +841,74 @@ function normalizeRosterSections(playerData: unknown): {
   return { players, starters, bench, ir, taxi }
 }
 
-async function resolvePlayerNamesById(
+/**
+ * Roster ids → who they are, for the ids this app can resolve.
+ *
+ * ── 🛑 THIS FUNCTION USED TO NAME A PLAYER AFTER HIS OWN ID ────────────────────────────────
+ *
+ * It ended with `map.set(playerId, { name: playerId, position: null })`, so every id the lookup
+ * missed was handed to the model as a PERSON. Chimmy was told a roster contained someone called
+ * "6804" and then asked whether to start him. An id is not a name; the absence of one is.
+ * `lib/chimmy-context/providers/RosterContextProvider.ts` had exactly this removed for the
+ * `/api/chat/chimmy` path — see the inverted test in its suite for why a label is worse than a
+ * gap — and this copy, on `/api/chimmy`, survived.
+ *
+ * ⚠ AND IT CANNOT HAVE MISSED RARELY. The lookup was `PlayerIdentityMap where sport, sleeperId
+ * in ids`. Roster ids are the PROVIDER's ids, so for a Fantrax, ESPN, MFL, Yahoo or Fleaflicker
+ * league it matched ZERO rows — not most of them, all of them — and the entire roster was
+ * renamed after itself. `resolveRosterPlayerIdentities` is the one place that knows which id
+ * space each platform writes.
+ *
+ * Unresolved ids are simply ABSENT from this map. Callers must not invent a label for them;
+ * `summarizeRosterNames` drops them and `countUnidentified` reports how many, so the model can
+ * see that part of the roster is unreadable instead of trusting a fabricated team-mate.
+ */
+export async function resolvePlayerNamesById(
   playerIds: string[],
+  platform: string | null | undefined,
   sport: SupportedSport
 ): Promise<Map<string, { name: string; position: string | null }>> {
   const uniqueIds = [...new Set(playerIds.filter(Boolean))]
   const map = new Map<string, { name: string; position: string | null }>()
   if (uniqueIds.length === 0) return map
 
-  const identityRows = await prisma.playerIdentityMap.findMany({
-    where: {
-      sport,
-      sleeperId: { in: uniqueIds },
-    },
-    select: {
-      sleeperId: true,
-      canonicalName: true,
-      position: true,
-    },
-  })
-
-  for (const row of identityRows) {
-    if (!row.sleeperId) continue
-    map.set(row.sleeperId, {
-      name: row.canonicalName,
-      position: row.position ?? null,
-    })
-  }
-
-  for (const playerId of uniqueIds) {
-    if (!map.has(playerId)) {
-      map.set(playerId, { name: playerId, position: null })
-    }
+  const identities = await resolveRosterPlayerIdentities(platform, sport, uniqueIds)
+  for (const [playerId, identity] of identities) {
+    if (!identity.name) continue
+    map.set(playerId, { name: identity.name, position: identity.position })
   }
 
   return map
 }
 
-function summarizeRosterNames(
+/**
+ * Exported for test: this pair is where the id-as-name fabrication lived, and the regression
+ * has to be reachable by an assertion or it will come back the next time someone wants the
+ * arrays to "line up" with the roster size.
+ */
+export function summarizeRosterNames(
   ids: string[],
   nameMap: Map<string, { name: string; position: string | null }>
 ): string[] {
-  return ids.map((playerId) => nameMap.get(playerId)?.name ?? playerId)
+  return ids
+    .map((playerId) => nameMap.get(playerId)?.name ?? null)
+    .filter((name): name is string => Boolean(name))
+}
+
+/**
+ * How many of these ids this app could not put a name to.
+ *
+ * 🛑 THE COUNT IS NOT OPTIONAL, AND THAT IS THE WHOLE REASON THIS FUNCTION EXISTS. Dropping
+ * unresolvable players from the roster arrays and saying nothing swaps a fabricated team-mate
+ * for a MISSING one, which is the worse of the two: a model asked "who should I start?" would
+ * answer confidently from a partial squad with no idea it was partial. Reported, the gap is
+ * something it can say out loud.
+ */
+export function countUnidentified(
+  ids: string[],
+  nameMap: Map<string, { name: string; position: string | null }>
+): number {
+  return ids.reduce((total, playerId) => (nameMap.has(playerId) ? total : total + 1), 0)
 }
 
 function countStarterSlots(starters: unknown): Record<string, number> {
@@ -1351,6 +1378,8 @@ async function buildStructuredFantasyContext(
         id: true,
         name: true,
         sport: true,
+        // Which id space this league's rosters are written in — see resolvePlayerNamesById.
+        platform: true,
         leagueVariant: true,
         season: true,
         leagueSize: true,
@@ -1465,10 +1494,31 @@ async function buildStructuredFantasyContext(
       ? teamByExternalId.get(userRoster.id) ?? teamByExternalId.get(userRoster.platformUserId)
       : null) ?? null
 
+  /*
+   * ── WHICH ID SPACE, AND WHOSE SPORT ────────────────────────────────────────────────────────
+   *
+   * `playerData.source_provider` is stamped by the import bootstrap and is the most local
+   * answer; `League.platform` covers rows written before that field existed.
+   *
+   * ⚠ AND THE SPORT HERE IS THE LEAGUE'S, NOT `sport`. The module-level `sport` is
+   * `getSportLabel(ctx.sport)` — the VIEWER's context, which defaults to NFL. Resolving a
+   * college league's roster under NFL is the same class of miss as resolving a Fantrax roster
+   * under Sleeper: the query is fine and the input was never in that space. `league.sport` is
+   * authoritative for the rosters of that league. Left narrow on purpose — the module-level
+   * `sport` feeds player lookups and prompt labelling elsewhere and is not this change's to move.
+   */
+  const rosterIdSpace = (playerData: unknown): string => {
+    const stamped = asRecord(playerData).source_provider
+    return typeof stamped === 'string' && stamped.trim() ? stamped.trim() : league.platform
+  }
+  const rosterSport = league.sport ?? sport
+
   const userRosterSections = normalizeRosterSections(userRoster?.playerData ?? null)
-  const userPlayerNameMap = await resolvePlayerNamesById(userRosterSections.players, sport).catch(
-    () => new Map<string, { name: string; position: string | null }>()
-  )
+  const userPlayerNameMap = await resolvePlayerNamesById(
+    userRosterSections.players,
+    rosterIdSpace(userRoster?.playerData ?? null),
+    rosterSport
+  ).catch(() => new Map<string, { name: string; position: string | null }>())
   const players = await withTimeout(
     buildPlayerContextMap(playerNames, sport, leagueScoringSettings),
     STRUCTURED_CONTEXT_TIMEOUT_MS,
@@ -1568,7 +1618,8 @@ async function buildStructuredFantasyContext(
   const opponentRosterSections = normalizeRosterSections(opponentRoster?.playerData ?? null)
   const opponentNameMap = await resolvePlayerNamesById(
     opponentRosterSections.players.slice(0, 30),
-    sport
+    rosterIdSpace(opponentRoster?.playerData ?? null),
+    rosterSport
   ).catch(() => new Map<string, { name: string; position: string | null }>())
   const matchupHistory =
     userTeam && opponentTeam
@@ -1692,6 +1743,14 @@ async function buildStructuredFantasyContext(
       bench: summarizeRosterNames(userRosterSections.bench, userPlayerNameMap),
       ir: summarizeRosterNames(userRosterSections.ir, userPlayerNameMap),
       taxi: summarizeRosterNames(userRosterSections.taxi, userPlayerNameMap),
+      /*
+       * Players on this roster that could not be resolved to a name. `undefined` when none, so
+       * `compactRecord` drops the key entirely and a fully-readable roster carries no noise.
+       * When it IS present the model must treat the lists above as incomplete — that is the
+       * whole point of reporting it rather than padding the lists with ids.
+       */
+      unidentifiedPlayers:
+        countUnidentified(userRosterSections.players, userPlayerNameMap) || undefined,
       strengths:
         userTeam?.strengthNotes
           ?.split(/[.;]/)
@@ -1723,6 +1782,11 @@ async function buildStructuredFantasyContext(
           roster: compactRecord({
             starters: summarizeRosterNames(opponentRosterSections.starters, opponentNameMap),
             bench: summarizeRosterNames(opponentRosterSections.bench, opponentNameMap),
+            unidentifiedPlayers:
+              countUnidentified(
+                opponentRosterSections.players.slice(0, 30),
+                opponentNameMap
+              ) || undefined,
           }),
           matchupHistory: matchupHistory.map((row) => ({
             weekOrPeriod: row.weekOrPeriod,
