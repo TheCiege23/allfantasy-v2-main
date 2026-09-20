@@ -112,6 +112,22 @@ function heuristicConceptFromSignals(signals: string): string | null {
 function inferLeagueConceptFromNormalized(normalized: NormalizedImportResult): {
   concept: string
   leagueType: string
+  /**
+   * Whether the concept rests on any evidence at all.
+   *
+   * 🛑 FALSE MEANS "WE COULD NOT TELL", NOT "THIS IS A REDRAFT LEAGUE", AND THE
+   * DIFFERENCE IS INVISIBLE IN THE COLUMN. `leagueType` is `@default("redraft")`, so the
+   * fallback value and a genuine redraft classification are the same seven characters.
+   * A re-import of an already-classified league must not replace what is stored with a
+   * shrug — see the write sites in `ImportedLeagueCommitService` and
+   * `LeagueImportToExistingService`.
+   *
+   * Measured on production 2026-09-20: "🪓 Elimination Station 2" is a guillotine league
+   * whose name contains neither "guillotine" nor "survivor", so `heuristicConceptFromSignals`
+   * returns null and it lands here. Correcting the column by hand held only until the next
+   * sync overwrote it again.
+   */
+  conceptConfident: boolean
   reviewRequired: boolean
   reviewReasons: string[]
   warnings: ImportWarningRecord[]
@@ -130,12 +146,19 @@ function inferLeagueConceptFromNormalized(normalized: NormalizedImportResult): {
 
   const signals = collectConceptSignals(normalized)
   let concept = String(explicit ?? '').trim().toLowerCase()
+  let conceptConfident = true
 
   if (!concept) {
     if (normalized.league.isDynasty) concept = 'dynasty'
     else if (String(normalized.league.scoring ?? '').toLowerCase().includes('best')) concept = 'best_ball'
     else {
       const h = heuristicConceptFromSignals(signals)
+      /*
+       * ⚠ THE ONE PLACE THE COLUMN GETS A VALUE NOBODY OBSERVED. Every other branch
+       * rests on something: the source said so, the league is dynasty, the scoring says
+       * best ball, or a name signal matched. This branch is the absence of all four.
+       */
+      if (h == null) conceptConfident = false
       concept = h ?? 'redraft'
     }
   }
@@ -150,6 +173,12 @@ function inferLeagueConceptFromNormalized(normalized: NormalizedImportResult): {
       metadata: { rawConcept: concept },
     })
     reviewReasons.push('concept_inferred')
+    /*
+     * ⚠ ALSO NOT CONFIDENT, AND EASY TO MISS BECAUSE THE SOURCE DID SPEAK. It reported a
+     * concept we do not model, so `redraft` here is our shrug rather than its answer — the
+     * warning above says as much ("mapped to redraft for import; confirm in League Settings").
+     */
+    conceptConfident = false
     concept = 'redraft'
     conceptFormat = normalizeConceptToFormat('redraft') ?? { formatId: 'redraft' as const, aliasTags: [] }
   }
@@ -185,6 +214,7 @@ function inferLeagueConceptFromNormalized(normalized: NormalizedImportResult): {
   return {
     concept: conceptFormat.formatId,
     leagueType,
+    conceptConfident,
     reviewRequired: reviewReasons.length > 0,
     reviewReasons,
     warnings,
@@ -599,6 +629,7 @@ export function buildCanonicalImportBundle(normalized: NormalizedImportResult): 
     draftType,
     presetKey,
     leagueTypeColumn: inferred.concept,
+    leagueTypeConfident: inferred.conceptConfident,
     derivedFlags,
     importMetadata,
     warnings,

@@ -433,6 +433,12 @@ export interface CanonicalImportBundle {
   draftType: string
   presetKey: string | null
   leagueTypeColumn: string | null
+  /**
+   * False when `leagueTypeColumn` is the "we could not tell" fallback rather than a
+   * classification. Both update paths refuse to overwrite a stored `leagueType` with an
+   * unconfident value — see `inferLeagueConceptFromNormalized`.
+   */
+  leagueTypeConfident: boolean
   derivedFlags: DerivedImportFlags
   importMetadata: ImportMetadataBundle
   warnings: ImportWarningRecord[]
