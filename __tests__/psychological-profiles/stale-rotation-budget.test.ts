@@ -27,6 +27,7 @@ const h = vi.hoisted(() => ({
   draftGroupBy: vi.fn(),
   profileGroupBy: vi.fn(),
   leagueFindUnique: vi.fn(),
+  leagueFindMany: vi.fn(),
   runEngine: vi.fn(),
   backfill: vi.fn(),
   ingest: vi.fn(),
@@ -36,7 +37,7 @@ vi.mock('@/lib/prisma', () => ({
   prisma: {
     draftFact: { groupBy: h.draftGroupBy },
     managerPsychProfile: { groupBy: h.profileGroupBy },
-    league: { findUnique: h.leagueFindUnique },
+    league: { findUnique: h.leagueFindUnique, findMany: h.leagueFindMany },
   },
 }))
 
@@ -61,6 +62,10 @@ beforeEach(() => {
   vi.resetAllMocks()
   h.draftGroupBy.mockResolvedValue(CANDIDATES)
   h.profileGroupBy.mockResolvedValue([])
+  // Every candidate still has a League row unless a test says otherwise.
+  h.leagueFindMany.mockImplementation(async ({ where }: { where: { id: { in: string[] } } }) =>
+    where.id.in.map((id) => ({ id })),
+  )
   h.backfill.mockResolvedValue({})
   h.ingest.mockResolvedValue({})
   h.runEngine.mockResolvedValue({})
@@ -145,6 +150,58 @@ describe('a league that throws cannot wedge the head of the rotation', () => {
     expect(r.leagueIds).toContain('lg0')
     expect(r.leagueIds).toHaveLength(3)
     expect(r.deferred).toBe(0)
+  })
+})
+
+describe('a candidate whose league is GONE cannot wedge the head of the rotation', () => {
+  /*
+   * 🛑 THE FAILURE THIS PINS, MEASURED IN PRODUCTION 2026-09-20. `dw_draft_facts` has no FK to
+   * `leagues`, so a deleted league leaves draft rows behind. Such a candidate sorts stalest-first,
+   * `refreshLeagueProfiles` returns `league not found` having profiled nobody, no `updatedAt`
+   * moves — and it is re-picked on EVERY fire. Three of them held 3 of 24 slots indefinitely.
+   *
+   * ⚠ The existing "a league that THROWS is counted as reached" test cannot catch this: that
+   * league raises, this one returns normally having done nothing.
+   */
+  beforeEach(() => {
+    // lg0 and lg1 are orphans: draft facts exist, the League row does not.
+    h.leagueFindMany.mockImplementation(async ({ where }: { where: { id: { in: string[] } } }) =>
+      where.id.in.filter((id) => id !== 'lg0' && id !== 'lg1').map((id) => ({ id })),
+    )
+  })
+
+  it('never picks a league that no longer exists', async () => {
+    const r = await refreshStaleLeagueProfiles({ maxLeagues: 3 })
+
+    expect(r.leagueIds).not.toContain('lg0')
+    expect(r.leagueIds).not.toContain('lg1')
+    // The slots go to real leagues instead of being spent on orphans.
+    expect(r.leagueIds).toEqual(['lg2', 'lg3', 'lg4'])
+    expect(r.leaguesProfiled).toBe(3)
+  })
+
+  it('reports how many it dropped, so accumulating orphans are visible', async () => {
+    const r = await refreshStaleLeagueProfiles({ maxLeagues: 3 })
+
+    expect(r.orphanCandidates).toBe(2)
+  })
+
+  it('does not enrich an orphan either — the helpers get the live set', async () => {
+    await refreshStaleLeagueProfiles({ maxLeagues: 3 })
+
+    expect(h.ingest).toHaveBeenCalledWith(expect.objectContaining({ leagueIds: ['lg2', 'lg3', 'lg4'] }))
+    expect(h.backfill).toHaveBeenCalledWith(expect.objectContaining({ leagueIds: ['lg2', 'lg3', 'lg4'] }))
+  })
+
+  it('reports zero orphans on a healthy fleet, so the field is not noise', async () => {
+    h.leagueFindMany.mockImplementation(async ({ where }: { where: { id: { in: string[] } } }) =>
+      where.id.in.map((id) => ({ id })),
+    )
+
+    const r = await refreshStaleLeagueProfiles({ maxLeagues: 3 })
+
+    expect(r.orphanCandidates).toBe(0)
+    expect(r.leagueIds).toEqual(['lg0', 'lg1', 'lg2'])
   })
 })
 

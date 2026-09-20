@@ -111,13 +111,18 @@ describe('the intel tick runs the psych rotation', () => {
   })
 
   it('records its OWN heartbeat row with what it did', async () => {
-    h.refresh.mockResolvedValue({ leaguesProfiled: 3, managersProfiled: 36, leagueIds: ['a', 'b', 'c'], stoppedEarly: false, deferred: 0 })
+    h.refresh.mockResolvedValue({ leaguesProfiled: 3, managersProfiled: 36, leagueIds: ['a', 'b', 'c'], stoppedEarly: false, deferred: 0, orphanCandidates: 2 })
 
     await intelTick()
 
     const row = h.heartbeats.find((b) => b.jobName === PSYCH_JOB)
     expect(row).toBeDefined()
-    expect(row!.outcome).toMatchObject({ rowsWritten: 36, metadata: { leaguesProfiled: 3, deferred: 0 } })
+    /*
+     * `orphanCandidates` is here because the row is the ONLY place it surfaces: candidates whose
+     * league row is gone are dropped at selection, and without this field their accumulation is
+     * invisible again — which is how three of them held 3 of 24 slots for weeks.
+     */
+    expect(row!.outcome).toMatchObject({ rowsWritten: 36, metadata: { leaguesProfiled: 3, deferred: 0, orphanCandidates: 2 } })
     // Separate from the intel heartbeat, so one job's freshness cannot vouch for the other's.
     expect(h.heartbeats.some((b) => b.jobName === 'cron-devy-intel-sources')).toBe(true)
   })

@@ -208,6 +208,11 @@ export async function refreshStaleLeagueProfiles(input?: {
   stoppedEarly: boolean
   /** How many of `picked` were never reached. */
   deferred: number
+  /**
+   * Candidates dropped because the warehouse holds draft facts for a league that no longer
+   * exists. Reported rather than silent: a rising count means orphan rows are accumulating.
+   */
+  orphanCandidates: number
 }> {
   const maxLeagues = input?.maxLeagues ?? 3
 
@@ -216,9 +221,56 @@ export async function refreshStaleLeagueProfiles(input?: {
     by: ['leagueId'],
     _count: { _all: true },
   })
-  const candidateIds = withDrafts.map((r) => r.leagueId)
+  const draftLeagueIds = withDrafts.map((r) => r.leagueId)
+  if (draftLeagueIds.length === 0) {
+    return {
+      leaguesProfiled: 0,
+      managersProfiled: 0,
+      leagueIds: [],
+      stoppedEarly: false,
+      deferred: 0,
+      orphanCandidates: 0,
+    }
+  }
+
+  /*
+   * 🛑 A DRAFT FACT OUTLIVES ITS LEAGUE, AND THE ORPHAN WEDGES THE HEAD OF THE ROTATION FOREVER.
+   *
+   * `dw_draft_facts` is a warehouse table with no FK back to `leagues`, so a deleted or
+   * re-imported league leaves its draft rows behind. `refreshLeagueProfiles` opens with
+   * `league.findUnique` and returns `league not found` — it profiles nobody, so no profile's
+   * `updatedAt` moves, so the league stays the stalest candidate and is re-picked on EVERY fire.
+   * Nothing throws and nothing is logged; the slots are simply spent on leagues that cannot be
+   * profiled.
+   *
+   * Measured in production 2026-09-20, three fires per day apart: of 333 candidates exactly 3 had
+   * no `leagues` row — `02225ffc…` (last profile write 2026-08-14), `aeccae42…` and `6bbda04f…`
+   * (both 08-24) — and those same three led the picked list of every fire since the rotation
+   * moved to its own tick. 3 of 24 slots, every run, permanently.
+   *
+   * ⚠ THE EXISTING "a league that THROWS is counted as reached" GUARD CANNOT COVER THIS. That one
+   * protects against an exception; this league returns normally, having done nothing. Filtering at
+   * selection is the fix, because a candidate whose league is gone has no work to be done at all.
+   *
+   * One indexed `IN` query. Orphan warehouse rows are NOT deleted here — that is a destructive
+   * data decision, and a league row can also be legitimately absent for a moment mid-reimport.
+   */
+  const live = await prisma.league.findMany({
+    where: { id: { in: draftLeagueIds } },
+    select: { id: true },
+  })
+  const liveIds = new Set(live.map((l) => l.id))
+  const candidateIds = draftLeagueIds.filter((id) => liveIds.has(id))
+  const orphanCandidates = draftLeagueIds.length - candidateIds.length
   if (candidateIds.length === 0) {
-    return { leaguesProfiled: 0, managersProfiled: 0, leagueIds: [], stoppedEarly: false, deferred: 0 }
+    return {
+      leaguesProfiled: 0,
+      managersProfiled: 0,
+      leagueIds: [],
+      stoppedEarly: false,
+      deferred: 0,
+      orphanCandidates,
+    }
   }
 
   // Staleness by the most recent profile write per league.
@@ -319,5 +371,6 @@ export async function refreshStaleLeagueProfiles(input?: {
     leagueIds: done,
     stoppedEarly,
     deferred: picked.length - done.length,
+    orphanCandidates,
   }
 }
