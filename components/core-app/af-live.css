@@ -67,11 +67,28 @@
   border: 1px solid var(--chip-line);
   border-radius: 11px;
 }
+/*
+ * 🛑 44px, BECAUSE THIS IS THE CONTROL THAT DECIDES WHETHER YOU SEE REAL GAMES.
+ * It was 34px — ten short of the floor — found by the authenticated phone gate
+ * on the day /core/live joined it, which is the same day this control stopped
+ * being hidden whenever a league was selected. Making it reachable and leaving
+ * it hard to hit would have been half a fix.
+ *
+ * Sized at every width rather than behind a phone query: it was already a
+ * deliberate touch target, and ten pixels on a segmented control inside a
+ * control bar costs nothing that a 34px hit area was buying.
+ *
+ * ⚠ IT ALSO RAISES THE GAME-VIEW TABS, AND THAT IS INTENDED. `LiveGameView`
+ * reuses this class for its play/shot filters (`.af-gv-tabs .af-live-scope-btn`,
+ * which only sets `flex`), so they were 34px too. Those are not on the phone
+ * gate's route list — `/core/live?game=` is a different screen — so nothing
+ * would have reported them. Checked rather than discovered later.
+ */
 .af-live-scope-btn {
   appearance: none;
   border: 0;
   cursor: pointer;
-  min-height: 34px;
+  min-height: 44px;
   padding: 0 13px;
   border-radius: 8px;
   background: transparent;
