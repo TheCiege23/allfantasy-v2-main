@@ -35,6 +35,16 @@ export type AuthedRoute = {
    * Visit this route with `?league=<the seeded NFL league>` appended, and assert
    * the screen rendered by looking for THIS selector.
    *
+   * ⚠ TWO JOBS, AND ONLY THE SECOND APPLIES TO EVERY ROUTE THAT USES IT. Sending
+   * the league matters for my-team, matchup and Trade Center, which render the
+   * cross-league picker without one. `/core/live` renders with or without a
+   * league — but it falls back to a bare "we could not read the slate" notice
+   * when `getLivePageData` returns null, and that notice is NOT `.af-live`. The
+   * root assertion earns its place there on its own: without it, a failed slate
+   * read gets measured and passes, which is the same wrong-screen class the
+   * picker represents. Sending the league alongside is harmless, and is what the
+   * nav's own href does anyway.
+   *
    * ⚠ IT CARRIES THE SELECTOR RATHER THAN BEING A BOOLEAN, AND THE SECOND ROUTE
    * IS WHY. This began as a boolean with `.af-mt` hardcoded in the spec, which
    * worked for exactly one route: matchup renders `.af-mu` and Trade Center
@@ -86,6 +96,7 @@ export const AUTHED_ROUTES: readonly AuthedRoute[] = [
   { route: "/core", login: "manager" },
   { route: "/core/my-team", login: "manager", leagueScopedRoot: ".af-mt" },
   { route: "/core/matchup", login: "manager", leagueScopedRoot: ".af-mu" },
+  { route: "/core/live", login: "manager", leagueScopedRoot: ".af-live" },
   { route: "/core/trades", login: "manager", leagueScopedRoot: ".af-tc" },
   { route: "/commissioner-os", login: "commissioner" },
 ] as const

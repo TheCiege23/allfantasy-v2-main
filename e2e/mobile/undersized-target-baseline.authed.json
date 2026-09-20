@@ -99,7 +99,24 @@
     "is fixed at the source: a failed read now renders ScreenLoadError and logs",
     "`[core/<screen>] read failed`. If one of these routes goes red with NEITHER the",
     "screen nor the picker present, read that line -- it names the cause instead of",
-    "leaving a shrug."
+    "leaving a shrug.",
+    "",
+    "WHAT /core/live FOUND (2026-09-20). Four controls: the two shell help dots,",
+    "and BOTH scope buttons -- 'My games' 84x34 and 'All games' 80x34, ten short of",
+    "the floor. The buttons were FIXED in af-live.css, not baselined.",
+    "",
+    "🛑 AND THE TIMING IS THE POINT. That toggle had just stopped being hidden",
+    "whenever a league was selected -- the fix for 'the live scores tab doesn't show",
+    "the live sports, only my team'. The gate caught, on the same day, that the",
+    "newly reachable control was not properly tappable. Making a control reachable",
+    "and leaving it hard to hit is half a fix; adding the route is what turned the",
+    "second half from an opinion into a measurement.",
+    "",
+    "⚠ THE ROOT SELECTOR EARNS ITS PLACE HERE FOR A DIFFERENT REASON THAN THE",
+    "PICKER ROUTES. /core/live renders with or without a league, so it cannot show",
+    "the cross-league picker -- but it falls back to a bare 'we could not read the",
+    "slate' notice when getLivePageData returns null, and that notice is NOT",
+    ".af-live. Without the assertion a failed slate read is measured and passes."
   ],
   "routes": {
     "/commissioner-os": [],
@@ -110,6 +127,22 @@
         "w": 15,
         "h": 15,
         "why": "THE SAME TWO SHELL CONTROLS ALREADY DEFERRED ON /core/trades, not new debt. They live in AfCoreShell's topbar, so they are on EVERY /core screen; measuring a second route was always going to re-report them. Deferred for the reason recorded below: a 15x15 info dot cannot reach 44x44 by min-height, it needs an expanded hit area that shifts layout around a deliberately small affordance. Retire both routes' entries together when the shell's help affordances are next touched."
+      },
+      {
+        "cls": "af-help-dot",
+        "label": "Plan tokens",
+        "w": 15,
+        "h": 15,
+        "why": "Same control, second instance. See above."
+      }
+    ],
+    "/core/live": [
+      {
+        "cls": "af-help-dot",
+        "label": "Read-only by design",
+        "w": 15,
+        "h": 15,
+        "why": "Shell topbar control, already deferred on every other /core route. Retire them together."
       },
       {
         "cls": "af-help-dot",
