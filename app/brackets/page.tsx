@@ -43,8 +43,14 @@ export const dynamic = "force-dynamic"
  *     /brackets/world-cup routes.
  *   - Only static i18n preference read via the same
  *     `resolveServerRenderPreferences()` helper that ships on
- *     /brackets/world-cup/page.tsx today — wrapped in try/catch, never
- *     throws.
+ *     /brackets/world-cup/page.tsx today.
+ *     ⚠ CORRECTED: this used to say "wrapped in try/catch, never throws",
+ *     and the wrapping is NOT here — the call below is bare. The safety is
+ *     real but it lives one level down, inside the resolver, which catches
+ *     its own failures and returns defaults. Worth stating accurately
+ *     because this is a public signed-out page: it stays up only while the
+ *     resolver keeps swallowing. `__tests__/brackets-hub.test.tsx` pins that
+ *     dependency so removing the resolver's catch fails loudly here.
  *   - No DB writes, no API calls at render time.
  *   - Mode-aware: `mode-readable` wrapper lets the globals.css light-
  *     mode rescue remap hardcoded dark colors to the light theme
