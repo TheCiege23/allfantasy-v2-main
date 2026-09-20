@@ -3,7 +3,28 @@
 import { useState } from 'react'
 import { reportTsv, weeklyOverview, weeklyRecap, type WeeklyReport } from '@/lib/tournament/weeklyReport'
 
-export function WeeklyReportPanel({ tournamentId }: { tournamentId: string }) {
+/**
+ * ⚠ BLANK IS "LATEST", AND THE CONTROL HAS TO SAY SO. The route resolves an
+ * absent week to the newest one carrying actual scoring activity — a number
+ * input with a `placeholder` only whispers that, because a placeholder reads as
+ * a hint about what to type rather than as the value in force. A select makes
+ * "Latest" a real, selected option, which is what it has always been.
+ *
+ * ⚠ 18 WEEKS, NOT THE ROUTE'S 53. The API accepts 1–53 because it also serves
+ * sports whose seasons run long; offering a commissioner 53 fantasy weeks is a
+ * menu nobody can use. A week beyond this list is still reachable by the API,
+ * and `week` is a string here precisely so it stays free-form for that.
+ */
+const WEEK_OPTIONS = Array.from({ length: 18 }, (_, i) => String(i + 1))
+
+export function WeeklyReportPanel({
+  tournamentId,
+  oldestUpdatedAt,
+}: {
+  tournamentId: string
+  /** The stalest league's timestamp — the real age of every number on the page. */
+  oldestUpdatedAt?: Date | string | null
+}) {
   const [season, setSeason] = useState(String(new Date().getFullYear()))
   const [week, setWeek] = useState('')
   const [activeSheet, setActiveSheet] = useState(0)
@@ -50,14 +71,32 @@ export function WeeklyReportPanel({ tournamentId }: { tournamentId: string }) {
   }
   return <section className="af-th-league">
     <h2 className="af-th-league-name">Weekly report · all conferences</h2>
-    <p className="af-th-note">Manager status, weekly scores and the top 25 scoring teams across every connected league. Leave week blank for the latest week with scoring activity. Standings show the latest sync; weekly points use the reported week.</p>
-    <div className="af-th-actions">
-      <label className="af-th-field">Season<input className="af-th-input af-th-input--num" type="number" disabled={busy} value={season} onChange={(e) => { setSeason(e.target.value); setReport(null) }} /></label>
-      <label className="af-th-field">Week<input className="af-th-input af-th-input--num" type="number" disabled={busy} placeholder="Latest" min="1" max="53" value={week} onChange={(e) => { setWeek(e.target.value); setReport(null) }} /></label>
+    <p className="af-th-note">Manager status, weekly scores and the top 25 scoring teams across every connected league. Leave week on Latest for the most recent scoring activity — standings always show the latest sync, weekly points use the reported week.</p>
+    <div className="af-th-fields">
+      <label className="af-th-field"><span>Season</span><input className="af-th-input af-th-input--num" type="number" disabled={busy} value={season} onChange={(e) => { setSeason(e.target.value); setReport(null) }} /></label>
+      <label className="af-th-field"><span>Week</span>
+        <span className="af-th-selectwrap">
+          <select className="af-th-select" disabled={busy} value={week} onChange={(e) => { setWeek(e.target.value); setReport(null) }}>
+            <option value="">Latest</option>
+            {WEEK_OPTIONS.map((w) => <option key={w} value={w}>Week {w}</option>)}
+          </select>
+          <span className="af-th-selectwrap-chevron" aria-hidden="true">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9l6 6 6-6" /></svg>
+          </span>
+        </span>
+      </label>
       <button className="af-th-copy" disabled={busy} onClick={load}>{busy ? 'Loading…' : 'Build weekly report'}</button>
-      {report && <>
-<button className="af-th-copy" onClick={copyRecap}>Copy weekly recap</button><button className="af-th-copy" onClick={copy}>Copy report for Excel</button><button className="af-th-copy" onClick={download}>Download Excel (.xlsx)</button></>}
+      {/*
+        ⚠ STALENESS SITS BESIDE THE WEEK IT QUALIFIES. These records are only as
+        fresh as the STALEST league's last sync, and a commissioner about to cut
+        176 managers on them is entitled to read that here rather than assume
+        "now" from a week number they just chose.
+      */}
+      {oldestUpdatedAt ? <span className="af-th-freshness">Records as last synced. Oldest league last updated {new Date(oldestUpdatedAt).toLocaleString()}.</span> : null}
     </div>
+    {report && <div className="af-th-actions">
+      <button className="af-th-copy af-th-copy--ghost" onClick={copyRecap}>Copy weekly recap</button><button className="af-th-copy af-th-copy--ghost" onClick={copy}>Copy report for Excel</button><button className="af-th-copy af-th-copy--ghost" onClick={download}>Download Excel (.xlsx)</button>
+    </div>}
     {message && <p role="status" className="af-th-note">{message}</p>}
     {report && <>
       <p className="af-th-note"><strong>{report.season} · Week {report.week}</strong> · {report.sheets[0].rows.length - 1} managers across all conferences</p>
@@ -71,8 +110,8 @@ export function WeeklyReportPanel({ tournamentId }: { tournamentId: string }) {
       {report.sheets[2].rows.slice(1).some((r) => Number(r[4]) > 0) && <p className="af-th-warn" role="status">Some managers have no collected score for this week. The leaderboard is partial; see data coverage below.</p>}
       <div className="af-th-scroll"><table className="af-th-table" aria-label={report.sheets[activeSheet].name}><thead><tr>{report.sheets[activeSheet].rows[0].map((v, i) => <th scope="col" key={i}>{v}</th>)}</tr></thead><tbody>{report.sheets[activeSheet].rows.slice(1).map((row, i) => <tr key={i}>{row.map((v, j) => <td key={j}>{v}</td>)}</tr>)}</tbody></table></div>
       {report.sheets[1].rows.length === 1 && <p className="af-th-warn">No weekly scores collected for the selected week.</p>}
-      <details><summary>Weekly recap preview</summary><textarea aria-label="Weekly recap text" readOnly value={weeklyRecap(report)} rows={10} style={{ width: '100%', color: 'inherit', background: 'transparent' }} /></details>
-      <details><summary>Plain text for copying</summary><textarea aria-label="Weekly report text" readOnly value={reportTsv(report)} rows={14} style={{ width: '100%', color: 'inherit', background: 'transparent' }} /></details>
+      <details><summary>Weekly recap preview</summary><textarea aria-label="Weekly recap text" className="af-th-pastebox" readOnly value={weeklyRecap(report)} rows={10} /></details>
+      <details><summary>Plain text for copying</summary><textarea aria-label="Weekly report text" className="af-th-pastebox" readOnly value={reportTsv(report)} rows={14} /></details>
     </>}
   </section>
 }
