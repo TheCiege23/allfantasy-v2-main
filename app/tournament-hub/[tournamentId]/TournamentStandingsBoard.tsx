@@ -332,7 +332,16 @@ export function TournamentStandingsBoard({ board }: { board: StandingsBoard }) {
     out: ranked.filter((r) => r.standing === 'out').length,
   }
 
+  /*
+   * ⚠ THE LEAGUE COUNT FOLLOWS THE TAB, BECAUSE THE REST OF THE LINE DOES.
+   * It read the tournament TOTAL while the clause beside it said "advance from
+   * Gold" — so on KBI the header announced "27 leagues · 64 advance from Gold"
+   * when Gold has 13. Two scopes in one sentence, and the reader has no way to
+   * tell which half is which. Combined is the one view where the total IS the
+   * subject, so that is where it belongs.
+   */
   const totalLeagues = board.conferences.reduce((sum, c) => sum + c.leagues.length, 0)
+  const shownLeagues = isCombined ? totalLeagues : conference?.leagues.length ?? 0
 
   if (!conference) {
     /* No conferences is a setup state, not a failure — say which step is missing. */
@@ -347,8 +356,6 @@ export function TournamentStandingsBoard({ board }: { board: StandingsBoard }) {
       </main>
     )
   }
-
-  const crest = badgeColorForName(board.name)
 
   return (
     <main className="af-th">
@@ -367,8 +374,8 @@ export function TournamentStandingsBoard({ board }: { board: StandingsBoard }) {
           <div>
             <h1 className="af-th-title">{board.name}</h1>
             <p className="af-th-sub">
-              Round {board.roundNumber || 1} · {totalLeagues}{' '}
-              {totalLeagues === 1 ? 'league' : 'leagues'} ·{' '}
+              Round {board.roundNumber || 1} · {shownLeagues}{' '}
+              {shownLeagues === 1 ? 'league' : 'leagues'} ·{' '}
               {isCombined
                 ? `${board.conferences.length} conferences`
                 : `${conference.qualifyingCount} advance from ${conference.name}`}
