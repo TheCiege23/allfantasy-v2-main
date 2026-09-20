@@ -1,6 +1,27 @@
 import React from 'react'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { render } from '@testing-library/react'
+
+/*
+ * ⚠ THE BOARDS NOW CONTAIN AN APP-ROUTER COMPONENT, SO THEY NEED A ROUTER.
+ *
+ * `TradesBoard`'s card action is `BoardActionLink`, which calls `useRouter()` so
+ * it can drive the navigation inside a `useTransition` and show a pending state
+ * — `/core/trades` → `/core/trades?league=…` changes only a search param, so the
+ * route's `loading.tsx` boundary never re-suspends and the tap had no feedback
+ * at all. See that component's header.
+ *
+ * `useRouter` throws `invariant expected app router to be mounted` outside a
+ * Next tree, which took down EVERY TradesBoard case here at once rather than
+ * failing an assertion — a render crash reads as sixteen unrelated failures.
+ * This is the same mock `core-home-cards-stream.test.tsx` and ~60 other suites
+ * in this tree already use for the same reason.
+ */
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ push() {}, replace() {}, prefetch() {}, refresh() {}, back() {}, forward() {} }),
+  usePathname: () => '/core/trades',
+  useSearchParams: () => new URLSearchParams(),
+}))
 
 import TradesBoard from '@/components/core-app/boards/TradesBoard'
 import WaiversBoard from '@/components/core-app/boards/WaiversBoard'
@@ -59,6 +80,7 @@ function tradesData(over: Partial<TradesBoardData> = {}): TradesBoardData {
           toName: 'Jordan',
           sent: [
             {
+              kind: 'player',
               id: 'a',
               name: 'Perry Vance',
               position: 'WR',
@@ -68,7 +90,7 @@ function tradesData(over: Partial<TradesBoardData> = {}): TradesBoardData {
             },
           ],
           received: [
-            { id: 'b', name: 'Dana Okoye', position: 'WR', team: 'BUF', imageUrl: null, value: null },
+            { kind: 'player', id: 'b', name: 'Dana Okoye', position: 'WR', team: 'BUF', imageUrl: null, value: null },
           ],
           letter: null,
           sharePct: null,

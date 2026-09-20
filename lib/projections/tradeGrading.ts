@@ -367,6 +367,14 @@ export function describeNoSignal(grade: Extract<TradeGrade, { graded: false }>):
     case 'NO_COVERAGE':
       return 'Not graded — no player values on file for this trade.'
     case 'PARTIAL_COVERAGE':
-      return `Not graded — only ${grade.covered} of ${grade.total} players have values on file.`
+      /*
+       * ⚠ "ASSETS", NOT "PLAYERS". `total` counts `ValuedAsset`s, and since
+       * 2026-09-20 the cross-league trades board feeds DRAFT PICKS through here
+       * too (see `picksOf` in lib/core-app/tradesBoard.ts). "only 2 of 3 players
+       * have values on file" over a two-players-and-a-pick trade is a sentence
+       * whose arithmetic cannot be reconciled with the card above it — the
+       * reader counts two players and is told there are three.
+       */
+      return `Not graded — only ${grade.covered} of ${grade.total} assets have values on file.`
   }
 }

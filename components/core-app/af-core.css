@@ -644,20 +644,72 @@ html[data-mode='af'] .af-core {
  * without discovering the collision in a screenshot.
  */
 :root {
+  /* The HORIZONTAL inset. Never a bottom — see `--af-fab-bottom`. */
   --af-fab-inset: 18px;
+
   /*
-   * ⚠ THE PHONE LIFTS THE LAUNCHER OVER THE TAB BAR, AND THAT OFFSET WAS A BARE
-   * LITERAL IN TWO FILES. `.af-cm-launch` becomes `bottom: 76px` below 720px so
-   * it clears `.af-tabbar`, which is ~57px tall. Anything that needs to reserve
-   * room beneath the launcher — `.af-content`'s bottom padding does — has to
-   * know that number, and a second copy of it drifts the moment either moves.
+   * 🛑 THE TAB BAR IS NOT 57px TALL ON A PHONE WITH A HOME INDICATOR, AND THAT
+   * OMISSION IS WHAT PUT THE CHAT BUBBLE ON TOP OF THE "MORE" BUTTON.
+   *
+   * `.af-tabbar` (af-core-shell.css) is
+   * `padding: 6px 6px calc(6px + env(safe-area-inset-bottom))` around a 44px
+   * row, so its real height is `56px + env(safe-area-inset-bottom)` — not the
+   * flat "~57px" this comment used to assert. `--af-fab-inset-phone` was a bare
+   * `76px`, which clears 56 and nothing else: on an iPhone with a 34px home
+   * indicator the bar's top edge sits at 90px and the launcher's bottom edge at
+   * 76px, so the bubble overlapped the bar by 14px. It lands on the LAST tab,
+   * which is "More" — reported from a phone as the More button being "partially
+   * covered making it hard to click it".
+   *
+   * Derived from the bar now, so the two cannot drift again. The `12px` is the
+   * gap between the bubble and the bar, matching `--af-fab-gap`.
+   *
+   * ⚠ THE `env()` IS INSIDE THE TOKEN. Any consumer that used to write
+   * `calc(var(--af-fab-inset-phone) + … + env(safe-area-inset-bottom))` must
+   * drop its own term or it now reserves the indicator twice.
    */
-  --af-fab-inset-phone: 76px;
+  --af-tabbar-height: calc(56px + env(safe-area-inset-bottom, 0px));
+  --af-fab-inset-phone: calc(var(--af-tabbar-height) + 12px);
+
+  /*
+   * The bottom of slot 0, at whatever width this is read at.
+   *
+   * ⚠ THIS IS THE TOKEN A FIXED CORNER CONTROL SHOULD ANCHOR TO, and it exists
+   * because `--af-fab-inset` was doing two jobs. Custom properties substitute at
+   * computed-value time, so the phone override further down this file reaches
+   * the slot calcs below even though they are written here.
+   */
+  --af-fab-bottom: var(--af-fab-inset);
+
   --af-fab-size: 48px;
   --af-fab-gap: 12px;
-  /* Slot 0 is the comms launcher. Each slot above it clears the last. */
-  --af-fab-slot-1: calc(var(--af-fab-inset) + var(--af-fab-size) + var(--af-fab-gap));
+
+  /*
+   * Slot 0 is the comms launcher. Each slot above it clears the last.
+   *
+   * ⚠ SLOT 1 CLEARS 56px, NOT `--af-fab-size` (48). The launcher is 56x56
+   * (`.af-cm-launch`), so the old calc left a 4px gap above it rather than the
+   * 12 it reads as — close enough to look deliberate and not close enough to be.
+   */
+  --af-fab-slot-1: calc(var(--af-fab-bottom) + 56px + var(--af-fab-gap));
   --af-fab-slot-2: calc(var(--af-fab-slot-1) + 60px + var(--af-fab-gap));
+}
+
+/*
+ * ⚠ ITS OWN TOP-LEVEL @media, NOT AN EDIT INSIDE ONE — see the same note in
+ * af-core-shell.css. 720px matches `.af-tabbar`'s own breakpoint exactly: above
+ * it there is no bar to clear, below it there always is.
+ *
+ * 🛑 AND IT IS 720px, NOT THE 520px THE LAUNCHER USED. `.af-cm-launch`'s lift
+ * lived in af-comms.css's `max-width: 520px` block while the bar it exists to
+ * clear appears at 720px, so between 521px and 720px — a small tablet, a phone
+ * in landscape — the launcher sat at `bottom: 18px`, underneath the tab bar
+ * entirely. Setting it here covers every control anchored to the corner at once.
+ */
+@media (max-width: 720px) {
+  :root {
+    --af-fab-bottom: var(--af-fab-inset-phone);
+  }
 }
 /*
  * 38a — section titles that are headings, not styled paragraphs.

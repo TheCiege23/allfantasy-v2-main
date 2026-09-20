@@ -2597,3 +2597,93 @@
     animation: none;
   }
 }
+
+/* ---------------------------------------------------------------------------
+ * Pre-kickoff leaders — 2026-09-20.
+ *
+ * ⚠ TOP-LEVEL AT END OF FILE, NOT INSIDE ONE OF THE 620px BLOCKS ABOVE. A new
+ * @media dropped inside an existing one closes it early and silently re-homes
+ * every rule below into the narrower query, with balanced braces and no error.
+ * This repo has shipped that bug once, in af-matchup.css. See CLAUDE.md.
+ * ------------------------------------------------------------------------- */
+
+/*
+ * The wrapper exists only to hang the caption above the grid; with no caption
+ * it must be invisible to layout, or every LIVE card gains a stray box in a
+ * flex/grid parent that was measuring the <ul> directly.
+ */
+.af-live-leaders-wrap {
+  display: contents;
+}
+.af-live-leaders-wrap[data-pregame] {
+  display: grid;
+  gap: 8px;
+}
+
+/*
+ * 🛑 THE CAPTION IS THE WHOLE FIX, SO IT IS NOT ALLOWED TO BE QUIET. These stat
+ * lines are from an earlier game and were being read as this one's — a reader
+ * who skims past this line is back where they started. It carries the warn
+ * colour and a rule, rather than the `--faint` a footnote would take.
+ */
+.af-live-leaders-note {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+  margin: 0;
+  padding: 6px 10px;
+  border-left: 2px solid var(--warn);
+  border-radius: 0 8px 8px 0;
+  background: color-mix(in srgb, var(--warn) 9%, transparent);
+  color: var(--text2);
+  font-size: 11.5px;
+  line-height: 1.4;
+}
+.af-live-leaders-note .af-label {
+  color: var(--warn);
+}
+
+/*
+ * ⚠ THE STAT LINES THEMSELVES ARE NOT DIMMED. Greying them would say "these do
+ * not count", which is not the claim — they are real numbers from a real game,
+ * just not from this one. The caption makes that distinction; opacity cannot.
+ */
+
+/* ---------------------------------------------------------------------------
+ * "Your live impact" on a phone — 2026-09-20.
+ *
+ * ⚠ TOP-LEVEL AT END OF FILE, NOT INSIDE A 620px BLOCK. Same reason as the
+ * block above it.
+ * ------------------------------------------------------------------------- */
+
+/*
+ * 🛑 ON A PHONE THIS PANEL WAS BELOW EVERY GAME CARD, WHICH IS NOT WHERE IT IS
+ * ON A DESKTOP.
+ *
+ * `.af-live-grid` is `1fr 320px` with `.af-live-side` sticky, so on a desktop
+ * the impact total, the biggest mover and the live play feed are beside the
+ * scoreboard and visible the moment the screen opens. At 1080px the grid goes
+ * single-column and `position: static`, and the aside falls to its DOM
+ * position — after the slate. With a full NFL Sunday that is fourteen game
+ * cards of scrolling before a manager sees their own points, on the screen
+ * whose entire subject is their own points. Reported as the live tab not
+ * working "like it does on PC".
+ *
+ * ⚠ VISUAL ORDER ONLY — `order` DOES NOT MOVE THE DOM, so a screen reader still
+ * meets the slate first. That is tolerable here and would not be everywhere:
+ * both halves are landmark regions with their own `aria-label`
+ * ("Your live impact", and the slate's labelled tabpanel), so either is reached
+ * directly by region navigation and neither is a run of interactive controls
+ * whose focus order would now disagree with the page. Do not copy this to a
+ * region holding buttons or links without revisiting that.
+ *
+ * ⚠ AND IT IS 1080px, MATCHING THE BREAKPOINT THAT CREATED THE PROBLEM, not the
+ * 620px the rest of this file's phone rules use. The burial starts the moment
+ * the grid collapses to one column, which is here — a 900px tablet has it too.
+ */
+@media (max-width: 1080px) {
+  .af-live-side {
+    order: -1;
+  }
+}

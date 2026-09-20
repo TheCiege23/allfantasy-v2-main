@@ -52,6 +52,22 @@ export type GamePlanProps = {
   nowIso: string
   weekHref: string
   waiversHref: string
+  /**
+   * False when this is EMBEDDED under another screen's heading.
+   *
+   * ⚠ IT EXISTS TO STOP A SECOND `<h1>`, NOT TO SAVE VERTICAL SPACE. The War
+   * Room's no-league state renders `PickALeague`, which already emits
+   * `<h1>War Room</h1>`; dropping this screen in underneath it with its own
+   * `<h1>Game plan</h1>` gives the document two top-level headings, and a
+   * screen-reader user navigating by heading lands on a page that claims to be
+   * two pages. The blurb moves up into the host's own blurb instead.
+   *
+   * ⚠ THE COVERAGE LINE IS NOT PART OF THE HEAD AND NEVER HIDES. "Nothing needs
+   * you" and "we read nothing" render almost identically and mean opposite
+   * things — that count is the only thing separating them, and an embedded copy
+   * needs it more than a standalone one, not less.
+   */
+  showHead?: boolean
 }
 
 /** Live countdown to a kickoff, re-derived each minute. */
@@ -157,21 +173,39 @@ function Row({ row, nowIso }: { row: TriageRow; nowIso: string }) {
   )
 }
 
-export function GamePlan({ data, nowIso, weekHref, waiversHref }: GamePlanProps) {
+export function GamePlan({
+  data,
+  nowIso,
+  weekHref,
+  waiversHref,
+  showHead = true,
+}: GamePlanProps) {
   const rows = data.rows
   const actionable = rows.filter((r) => !r.kickoff || lockState(r.kickoff, nowIso).state !== 'locked')
   const locked = rows.length - actionable.length
 
   return (
-    <div className="af-gp">
-      <header className="af-frame af-gp-head">
-        <h1 className="af-display af-gp-title">Game plan</h1>
-        <p className="af-gp-blurb">
-          Every starter across your leagues who is hurt or has no game this week, soonest deadline
-          first.
-          {data.week ? ` Week ${data.week.week} of ${data.week.season}.` : ''}
-        </p>
-      </header>
+    <div className="af-gp" data-embedded={showHead ? undefined : 'true'}>
+      {showHead ? (
+        <header className="af-frame af-gp-head">
+          <h1 className="af-display af-gp-title">Game plan</h1>
+          <p className="af-gp-blurb">
+            Every starter across your leagues who is hurt or has no game this week, soonest deadline
+            first.
+            {data.week ? ` Week ${data.week.week} of ${data.week.season}.` : ''}
+          </p>
+        </header>
+      ) : (
+        /*
+         * Embedded: an `<h2>`, so the host's `<h1>` stays the page's only top
+         * heading and this section is still reachable by heading navigation —
+         * which an unlabelled `<div>` would not be.
+         */
+        <h2 className="af-label af-gp-embedhead">
+          Every flagged starter, across every league · soonest deadline first
+          {data.week ? ` · week ${data.week.week}` : ''}
+        </h2>
+      )}
 
       {/*
         ⚠ THE DENOMINATOR BEFORE THE LIST, as on Scout. "Nothing needs you" and

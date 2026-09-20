@@ -72,6 +72,7 @@ function game(over: Partial<LiveGameCard> = {}): LiveGameCard {
     venue: null,
     broadcast: null,
     espnDetail: false,
+    leadersArePregame: false,
     tieIns: [],
     leaguesAffected: 0,
     ...over,

@@ -54,6 +54,7 @@ function game(id: string, leagueIds: string[]): LiveGameCard {
     venue: null,
     broadcast: null,
     espnDetail: true,
+    leadersArePregame: false,
     tieIns: leagueIds.map((leagueId) => ({
       leagueId,
       leagueName: leagueId,

@@ -2236,9 +2236,21 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
    * ⚠ THE SAME LOADER THE PLAYER FINDER USES, UNCHANGED — bounded joins over
    * starters, the injury feed and the week's kickoffs. 🛑 NEVER
    * `computeLineupActionsForUser`, which is far too expensive for a page render.
+   *
+   * 🛑 IT IS ALSO THE WAR ROOM'S NO-LEAGUE STATE NOW, WHICH THE COMMENT ON
+   * `gamePlanView` ABOVE HAS CLAIMED SINCE THE SCREEN WAS BUILT: "Game Plan is
+   * CROSS-league and needs no selection, which is also what gives the War Room
+   * something to show before a league is picked." It was never wired that way.
+   * Without a league in scope `/core/war-room` fell straight through to
+   * `PickALeague` — reported from a phone as "War room only shows the league
+   * list, but none of the important information", which is an exact description
+   * of what `PickALeague` renders.
+   *
+   * ⚠ NO NEW LOADER AND NO NEW QUERY — the condition widened, nothing else.
    */
+  const wantsWarRoomPlan = activeKey === 'war-room' && !selectedLeagueId
   const gamePlan =
-    gamePlanView && userId
+    (gamePlanView || wantsWarRoomPlan) && userId
       ? await loadGameDayTriage(userId, playedLeagues.map((l) => l.id)).catch(() => null)
       : null
 
@@ -3846,9 +3858,49 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
           <PickALeague
             tabKey="war-room"
             title="War Room"
-            blurb="Scouting a room means scouting one room — pick the league whose managers you want read."
+            /*
+              ⚠ THE BLURB HAD TO CHANGE WITH THE CONTENT. "Pick the league whose
+              managers you want read" was the whole screen; with Game Plan above
+              the picker it would be a caption on the wrong thing, telling a
+              reader the page is a chooser while the page is showing them their
+              week.
+            */
+            blurb={
+              gamePlan?.available
+                ? 'Every decision still open across all your leagues, soonest deadline first. Scouting a room is per-league — pick one below for that.'
+                : 'Scouting a room means scouting one room — pick the league whose managers you want read.'
+            }
             issues={issues}
             leagues={rail}
+            /*
+              The slot `PickALeague` has carried unused since it was written:
+              "rendered between the header and 'Needs you first'". This is what
+              it was for — the cross-league half of the screen, above the
+              per-league chooser, with the queue and the tiles unchanged below.
+            */
+            above={
+              /*
+                ⚠ `gamePlan.data`, AND `available` IS NOT A NULL CHECK. The loader
+                returns a `SectionState<GameDayTriage>` — `{ available: false,
+                reason }` is a perfectly non-null object, so `gamePlan ? …` passes
+                for a triage that could not be read and hands the component a
+                wrapper where it expects rows. The typecheck caught it; nothing at
+                runtime would have, beyond an empty section.
+
+                A failed read renders no section at all rather than an empty one:
+                the picker below is a complete screen on its own, which is what it
+                was before this change.
+              */
+              gamePlan?.available ? (
+                <GamePlan
+                  data={gamePlan.data}
+                  nowIso={new Date().toISOString()}
+                  weekHref="/core/week"
+                  waiversHref="/core/waivers"
+                  showHead={false}
+                />
+              ) : null
+            }
           />
         )
       ) : activeKey === 'players' ? (

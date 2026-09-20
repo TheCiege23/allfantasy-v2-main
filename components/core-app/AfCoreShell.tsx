@@ -9,6 +9,7 @@ import { GameDayAlertsBanner } from '@/components/notifications/GameDayAlertsBan
 import CommsDock from '@/components/core-app/comms/CommsDock'
 import type { CommsLeague } from '@/components/core-app/comms/CommsDrawer'
 import { AfCrest } from '@/components/core-app/AfCrest'
+import { CoreNavIcon } from '@/components/core-app/CoreNavIcon'
 import { LeagueMark } from '@/components/core-app/LeagueMark'
 import SyncNowButton from '@/components/core-app/SyncNowButton'
 import PlayerCardProvider from '@/components/core-app/player-card/PlayerCardProvider'
@@ -1839,6 +1840,24 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
       <div className="af-main">
         <header className="af-topbar">
           {/*
+            ⚠ THE CREST, PHONE ONLY — `display: none` above 720px.
+
+            Reported from a real phone as "the AF crest is not shown anywhere".
+            It was drawn in exactly two places, and below 720px neither is on
+            screen: `.af-rail-logo` lives inside the rail, which becomes a
+            full-screen tray you have to OPEN to see, and `.af-rail-handle`
+            carries a 20px mark that reads as part of a "LEAGUES" pill rather
+            than as the product's mark. So a phone user never saw the brand on
+            any screen without opening a tray first.
+
+            It heads the topbar rather than the nav strip because the strip is a
+            horizontal scroller — a logo inside one scrolls away, which is the
+            opposite of what a wordmark is for.
+          */}
+          <Link href="/core" className="af-topbar-crest" aria-label="AllFantasy home">
+            <AfCrest size={26} />
+          </Link>
+          {/*
             The scope, stated on every screen and changeable from it — ahead of the search, because
             it qualifies everything below it. See ScopeSwitcher's header.
           */}
@@ -2034,13 +2053,65 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
                       data-active={item.key === active}
                       onClick={() => setMobileMoreOpen(false)}
                     >
-                      <span aria-hidden>{item.glyph}</span>
+                      {/*
+                        A drawn icon rather than `item.glyph` — see CoreNavIcon's
+                        header for the six destinations the unicode marks could
+                        not tell apart, three of them sharing `◈`.
+                      */}
+                      <span className="af-mobile-more-icon" aria-hidden>
+                        <CoreNavIcon navKey={item.key} />
+                      </span>
                       <span>{item.label}</span>
                       {item.badge ? <b>{item.badge.text}</b> : null}
                     </Link>
                   ))}
                 </div>
               ))}
+
+              {/*
+                ⚠ SUPPORT LIVES HERE NOW, AND IT HAD TO MOVE RATHER THAN BE
+                DROPPED. On a phone `.af-nav-foot` sat in the nav's horizontal
+                scroller, so this button rendered as a fixed-width box at the end
+                of a row the nav items were still scrolling under — reported as
+                "the contact support button at the top covering a list of
+                options". It is hidden there now (af-core-shell.css), which would
+                otherwise leave a phone with no way to report a problem at all.
+
+                It keeps the SAME event the rail's button dispatches, so there is
+                one support modal and one code path, not a phone copy.
+              */}
+              <div className="af-mobile-more-group">
+                <span className="af-label">Help</span>
+                <button
+                  type="button"
+                  className="af-mobile-more-link"
+                  onClick={() => {
+                    setMobileMoreOpen(false)
+                    window.dispatchEvent(new CustomEvent(SUPPORT_OPEN_EVENT))
+                  }}
+                >
+                  <span className="af-mobile-more-icon" aria-hidden>
+                    <svg
+                      width={18}
+                      height={18}
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth={1.75}
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      aria-hidden
+                      focusable="false"
+                      style={{ display: 'block' }}
+                    >
+                      <circle cx="12" cy="12" r="8.5" />
+                      <path d="M9.6 9.3a2.5 2.5 0 1 1 3.3 2.4c-.6.2-.9.7-.9 1.3v.6" />
+                      <path d="M12 16.6h.01" />
+                    </svg>
+                  </span>
+                  <span>Contact support</span>
+                </button>
+              </div>
             </div>
           </section>
         </>

@@ -294,3 +294,40 @@
     font-size: 18px;
   }
 }
+
+/* ---------------------------------------------------------------------------
+ * Embedded under another screen's heading — the War Room's no-league state.
+ *
+ * ⚠ TOP-LEVEL AT END OF FILE. The last block in this stylesheet is a media
+ * query; appending inside it would scope these to that width and nothing would
+ * say so. See CLAUDE.md.
+ * ------------------------------------------------------------------------- */
+
+/*
+ * `PickALeague` supplies the page heading and the surrounding frame, so the
+ * embedded copy sheds its own title card and sits closer to what follows it.
+ */
+.af-core .af-gp[data-embedded='true'] {
+  gap: 10px;
+}
+
+.af-core .af-gp-embedhead {
+  margin: 0;
+}
+
+/*
+ * ⚠ THE LIST IS CAPPED IN HEIGHT HERE AND NOWHERE ELSE. Standalone, Game Plan
+ * IS the page and a long list is the point. Embedded, it sits above a league
+ * queue and a picker that the reader may well have come for — an unbounded list
+ * would push both below the fold on a phone and reproduce, in a new shape, the
+ * "only shows one thing" complaint this change is answering.
+ *
+ * `60vh` rather than a row count: the rows are not a fixed height (a player on
+ * bye with four league chips is much taller than a clean one), so counting rows
+ * caps a different amount of screen on every account.
+ */
+.af-core .af-gp[data-embedded='true'] .af-gp-list {
+  max-height: 60vh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}

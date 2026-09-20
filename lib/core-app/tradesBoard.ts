@@ -4,6 +4,7 @@ import { CROSS_LEAGUE_BOOK, valueBookFor, type ValueBook } from './valueBook'
 import { prisma } from '@/lib/prisma'
 import { loadLatestPlayerValueSnapshots } from '@/lib/player-values/latestPlayerValueSnapshots'
 import { describeNoSignal, gradeTrade } from '@/lib/projections/tradeGrading'
+import { pickLabel } from './careerTrades'
 import { leagueArtUrl } from './leagueArt'
 import { leagueDisplayName } from './leagueHome'
 
@@ -51,6 +52,15 @@ import { leagueDisplayName } from './leagueHome'
  */
 
 export type TradeAsset = {
+  /**
+   * ⚠ THE DISCRIMINATOR THE BOARD ASKED FOR BEFORE PICKS COULD BE ADDED, and
+   * the reason it had to come first. `TradesBoard` renders every asset name
+   * through `PlayerName`, which opens the player card for a non-empty
+   * `sleeperId`. A synthetic pick key IS a non-empty string, so adding picks
+   * without this field would not have degraded to plain text — it would have
+   * opened the WRONG CARD. The component switches on `kind`, never on the id.
+   */
+  kind: 'player' | 'pick'
   /** Sleeper id, or a synthetic key for a pick. */
   id: string
   name: string
@@ -173,6 +183,56 @@ function readDeadline(settings: unknown): DeadlineInfo {
 
 function idsOf(v: unknown): string[] {
   return Array.isArray(v) ? v.map((x) => String(x)).filter(Boolean) : []
+}
+
+/**
+ * The picks on one side of a trade, as assets.
+ *
+ * 🛑 THIS COLUMN WAS NEVER READ, AND THE CARD SAID SO IN WORDS NOBODY BELIEVED.
+ * The board built both sides from `playersGiven` / `playersReceived` only, so a
+ * side that was picks or FAAB rendered as "Picks or FAAB only — no players on
+ * this side" and the grade was withheld with reason `NO_ASSETS`: *"one side of
+ * this trade has no assets recorded"*. On a pick-for-player trade that sentence
+ * is FALSE — the assets are recorded, in a column two lines from the one the
+ * query selected. Reported from a phone as the Trades screen "not showing the
+ * full trade" and "not showing an explanation", which are one defect.
+ *
+ * ⚠ `pickLabel` IS REUSED, NOT REWRITTEN. `careerTrades.ts` already parses this
+ * exact stored shape — `{ season, round }`, written by the Sleeper ingest in
+ * `normalize-historical.ts` — for the career timeline. A second parser here is
+ * two implementations of one rule, which is the bug, not the fix.
+ *
+ * ⚠ AND `rank: null` IS THE POINT, NOT A SHORTCUT. `tradeGrading` works in RANK
+ * space and refuses to grade on partial coverage, deliberately: pricing three of
+ * four assets and grading the rest as zero favours whichever side received the
+ * unpriced one. There is no rank for a draft pick, so adding picks does NOT
+ * unlock a letter — it corrects the REASON from "one side has no assets" to
+ * "only N of M assets have a value on file", which is true. Giving picks an
+ * invented rank to force a letter is the exact failure that file exists to
+ * prevent; the honest refusal is the deliverable here.
+ */
+function picksOf(v: unknown): TradeAsset[] {
+  if (!Array.isArray(v)) return []
+  const out: TradeAsset[] = []
+  for (const raw of v) {
+    const label = pickLabel(raw)
+    /* An entry we cannot even label is not rendered as a mystery row. */
+    if (!label) continue
+    out.push({
+      kind: 'pick',
+      /*
+       * Synthetic, and prefixed so it can never collide with a Sleeper player
+       * id. Deduped by index because one side can hold two 2027 2nds.
+       */
+      id: `pick:${label.replace(/\s+/g, '-')}:${out.length}`,
+      name: label,
+      position: null,
+      team: null,
+      imageUrl: null,
+      value: null,
+    })
+  }
+  return out
 }
 
 /**
@@ -429,6 +489,9 @@ export async function getTradesBoard(
               tradeDate: true,
               playersGiven: true,
               playersReceived: true,
+              /* Selected since 2026-09-20 — see `picksOf`. */
+              picksGiven: true,
+              picksReceived: true,
               partnerName: true,
               /* Resolves the OTHER side's manager via LeagueTeam.externalId. */
               partnerRosterId: true,
@@ -528,6 +591,7 @@ export async function getTradesBoard(
     const p = playerById.get(id)
     const v = valueByBookAndId.get(`${book.format}:${book.qbFormat}:${id}`)
     return {
+      kind: 'player',
       id,
       /*
        * ⚠ AN UNRESOLVED ID IS NAMED AS UNRESOLVED, NOT DROPPED. Dropping it
@@ -578,23 +642,44 @@ export async function getTradesBoard(
 
     const sentIds = idsOf(t.playersGiven)
     const recvIds = idsOf(t.playersReceived)
+    const sentPicks = picksOf(t.picksGiven)
+    const recvPicks = picksOf(t.picksReceived)
 
+    /*
+     * ⚠ PICKS ARE IN THE GRADE'S DENOMINATOR, NOT ONLY IN THE PICTURE. Leaving
+     * them out of `gradeTrade` while showing them would be worse than the bug
+     * this replaces: the card would print four assets and grade two of them,
+     * silently treating the picks as worth nothing — which is precisely the
+     * "favours whichever side received the unpriced asset" failure the grader
+     * refuses partial coverage over. They carry `rank: null`, so coverage is
+     * honestly partial and the letter is honestly withheld.
+     *
+     * 🛑 SO SOME TRADES THAT USED TO SHOW A LETTER NO LONGER DO, AND THAT IS THE
+     * CORRECTION RATHER THAN THE COST. DO NOT "RESTORE" THEM. The set that loses
+     * its letter is exactly "trades containing a pick" — and for those, the old
+     * letter was computed by pricing the players and NOT COUNTING THE PICK AT
+     * ALL, which is arithmetically identical to valuing it at zero. That reads as
+     * a fair-trade verdict and is in fact a systematic bias towards whichever
+     * side received the pick, at its worst on the deals where it matters most: a
+     * 2027 1st for a WR3 graded as a fleecing of the side that gave the pick.
+     * No SOUND letter is lost here; only unsound ones.
+     */
+    const rankOf = (id: string) =>
+      valueByBookAndId.get(`${leagueBook.format}:${leagueBook.qbFormat}:${id}`)?.rank ?? null
     const g = gradeTrade(
       {
         label: 'received',
-        assets: recvIds.map((id) => ({
-          id,
-          rank: valueByBookAndId.get(`${leagueBook.format}:${leagueBook.qbFormat}:${id}`)?.rank ?? null,
-          rawValue: null,
-        })),
+        assets: [
+          ...recvIds.map((id) => ({ id, rank: rankOf(id), rawValue: null })),
+          ...recvPicks.map((a) => ({ id: a.id, rank: null, rawValue: null })),
+        ],
       },
       {
         label: 'gave',
-        assets: sentIds.map((id) => ({
-          id,
-          rank: valueByBookAndId.get(`${leagueBook.format}:${leagueBook.qbFormat}:${id}`)?.rank ?? null,
-          rawValue: null,
-        })),
+        assets: [
+          ...sentIds.map((id) => ({ id, rank: rankOf(id), rawValue: null })),
+          ...sentPicks.map((a) => ({ id: a.id, rank: null, rawValue: null })),
+        ],
       },
     )
 
@@ -619,11 +704,26 @@ export async function getTradesBoard(
        * array INDEX as the book — the classic `map` arity trap, and here it
        * would have priced asset 0 against one book and asset 1 against another.
        */
-      sent: sentIds.map((id) => toAsset(id, leagueBook)),
-      received: recvIds.map((id) => toAsset(id, leagueBook)),
+      /* Players first, then picks — the order a manager reads a deal in. */
+      sent: [...sentIds.map((id) => toAsset(id, leagueBook)), ...sentPicks],
+      received: [...recvIds.map((id) => toAsset(id, leagueBook)), ...recvPicks],
       letter: g.graded ? g.letter : null,
       sharePct: g.graded ? g.sharePct : null,
-      withheldReason: g.graded ? null : describeNoSignal(g),
+      /*
+       * ⚠ A PICK IS A PERMANENT GAP, NOT A MISSING SNAPSHOT, AND THE READER HAS
+       * TO BE TOLD WHICH ONE THEY ARE LOOKING AT. `describeNoSignal` only sees
+       * counts, so on a trade containing picks it says "only 2 of 3 assets have
+       * values on file" — which reads as a sync problem that a re-import would
+       * fix. It is not: the grader prices assets through a RANK curve and a
+       * future draft pick has no rank in it, so this trade will never grade,
+       * however fresh the values get. One clause says so; inventing a rank to
+       * produce a letter is the failure `tradeGrading.ts` exists to prevent.
+       */
+      withheldReason: g.graded
+        ? null
+        : sentPicks.length + recvPicks.length > 0
+          ? `${describeNoSignal(g)} Draft picks are not priced against the player market, so a trade including them is not graded.`
+          : describeNoSignal(g),
     })
   }
 

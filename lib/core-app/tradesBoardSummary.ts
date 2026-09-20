@@ -76,8 +76,17 @@ const STALE_WHILE_REVALIDATE_MS = 2 * 60 * 60_000
 
 registerScreenSummary<TradesBoardData | null>({
   screen: TRADES_BOARD_SCREEN,
-  /** ⚠ Bump whenever `TradesBoardData` changes shape — the version is part of the cache key. */
-  version: 1,
+  /**
+   * ⚠ Bump whenever `TradesBoardData` changes shape — the version is part of the cache key.
+   *
+   * 2 (2026-09-20): `TradeAsset` gained `kind`, and both sides of a trade now carry draft
+   * picks (`picksOf` in tradesBoard.ts). Without the bump a cached v1 board keeps being
+   * served for up to the 2h stale-while-revalidate window, so the screen would still show
+   * one-sided trades and the false "one side has no assets on record" — the exact bug —
+   * for two hours after the fix shipped, on precisely the accounts that have boards warm
+   * enough to be reading from cache.
+   */
+  version: 2,
   ttlMs: TTL_MS,
   staleWhileRevalidateMs: STALE_WHILE_REVALIDATE_MS,
   // See the header: a user-scoped key carries no league id, so a league sweep would match nothing.
