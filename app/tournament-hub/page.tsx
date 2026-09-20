@@ -64,13 +64,44 @@ export default async function TournamentHubIndex() {
 
   return (
     <main className="af-th">
+      {/* This route renders outside the app shell's nav, so it carries its own
+          mark — and the two screens below it both link back here. No back link:
+          this IS the place those links point at. */}
+      <div className="af-th-topbar">
+        <span className="af-th-brand-word">TOURNAMENT HUB</span>
+        <div className="af-th-brand">
+          <span className="af-th-brand-mark" aria-hidden="true">
+            AF
+          </span>
+          <span className="af-th-brand-word">ALLFANTASY</span>
+        </div>
+      </div>
+
       <header className="af-th-head">
-        <div>
-          <h1 className="af-th-title">Tournaments you run</h1>
-          <p className="af-th-sub">
-            Standings across every league at once, and one message to whichever managers you
-            choose.
-          </p>
+        <div className="af-th-identity">
+          <span className="af-th-icon">
+            <svg
+              width="19"
+              height="19"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 01-10 0V4z" />
+              <path d="M7 5H4a2 2 0 002 4M17 5h3a2 2 0 01-2 4" />
+            </svg>
+          </span>
+          <div>
+            <h1 className="af-th-title">Tournaments you run</h1>
+            <p className="af-th-sub">
+              Standings across every league at once, and one message to whichever managers you
+              choose.
+            </p>
+          </div>
         </div>
         <div className="af-th-actions">
           <Link href="/tournament-hub/new" className="af-th-copy">

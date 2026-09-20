@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { badgeColorForIndex, initialsForName } from '@/lib/tournament/badgeColors'
 import '../[tournamentId]/tournament-hub.css'
 
 /**
@@ -25,6 +26,25 @@ export type PickableLeague = {
 
 type ConferenceDraft = { name: string; leagueIds: string[] }
 
+function TrophyIcon() {
+  return (
+    <svg
+      width="19"
+      height="19"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 01-10 0V4z" />
+      <path d="M7 5H4a2 2 0 002 4M17 5h3a2 2 0 01-2 4" />
+    </svg>
+  )
+}
+
 export function NewTournamentClient({ leagues }: { leagues: PickableLeague[] }) {
   const router = useRouter()
   const [name, setName] = useState('')
@@ -39,12 +59,32 @@ export function NewTournamentClient({ leagues }: { leagues: PickableLeague[] }) 
   const [conferences, setConferences] = useState<ConferenceDraft[]>([
     { name: 'Conference 1', leagueIds: [] },
   ])
+  /*
+   * ⚠ ONE PANEL OPEN AT A TIME, BY INDEX. Two open add-panels put the same
+   * league in front of the commissioner twice with different buttons, and the
+   * second click then silently moves it rather than adding it.
+   */
+  const [openPanel, setOpenPanel] = useState<number | null>(0)
   const [reviewing, setReviewing] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const available = leagues.filter((l) => !l.takenBy)
   const assigned = new Set(conferences.flatMap((c) => c.leagueIds))
+  const byId = new Map(leagues.map((l) => [l.id, l]))
+
+  /*
+   * The season is DERIVED, never typed. It is a fact about the leagues that were
+   * picked, and a field the commissioner can contradict is a field that will be
+   * wrong — the create API takes no season, so a typed one would be decoration.
+   */
+  const seasons = [
+    ...new Set(
+      [...assigned].map((id) => byId.get(id)?.season).filter((s): s is number => s != null),
+    ),
+  ].sort((a, b) => a - b)
+  const seasonLabel =
+    seasons.length === 0 ? '—' : seasons.length === 1 ? String(seasons[0]) : `${seasons[0]}–${seasons[seasons.length - 1]}`
 
   function toggle(confIndex: number, leagueId: string) {
     setConferences((prev) =>
@@ -113,15 +153,34 @@ export function NewTournamentClient({ leagues }: { leagues: PickableLeague[] }) 
     }
   }
 
+  const matchesSearch = (l: PickableLeague) =>
+    `${l.name} ${l.season ?? ''}`.toLowerCase().includes(search.toLowerCase())
+
   return (
-    <main className="af-th">
+    <main className="af-th af-th--setup">
+      <div className="af-th-topbar">
+        <a className="af-th-back" href="/tournament-hub">
+          ← Tournament Hub
+        </a>
+        <div className="af-th-brand">
+          <span className="af-th-brand-mark" aria-hidden="true">
+            AF
+          </span>
+          <span className="af-th-brand-word">ALLFANTASY</span>
+        </div>
+      </div>
+
       <header className="af-th-head">
-        <div>
-          <h1 className="af-th-title">Connect your imported leagues</h1>
-          <p className="af-th-sub">
-            Select leagues already in AllFantasy to create one tournament hub. Add conferences
-            if you need separate groups. Your leagues do not need to be imported again.
-          </p>
+        <div className="af-th-identity">
+          <span className="af-th-icon">
+            <TrophyIcon />
+          </span>
+          <div>
+            <h1 className="af-th-title">Create a tournament</h1>
+            <p className="af-th-sub">
+              Split your connected leagues into conferences and set the road to the trophy.
+            </p>
+          </div>
         </div>
       </header>
 
@@ -140,10 +199,10 @@ export function NewTournamentClient({ leagues }: { leagues: PickableLeague[] }) 
 
       {!reviewing && <>
       <section className="af-th-league">
-        <h2 className="af-th-league-name">The basics</h2>
-        <div className="af-th-fields">
+        <p className="af-th-eyebrow">Tournament basics</p>
+        <div className="af-th-basics">
           <label className="af-th-field">
-            <span>Tournament name</span>
+            <span>Name</span>
             <input
               className="af-th-input"
               value={name}
@@ -151,12 +210,215 @@ export function NewTournamentClient({ leagues }: { leagues: PickableLeague[] }) 
               onChange={(e) => setName(e.target.value)}
             />
           </label>
-          <label className="af-th-field">
-            <span>Regular season weeks</span>
+          <div className="af-th-field">
+            <span>Season</span>
+            <div className="af-th-readonly">{seasonLabel}</div>
+          </div>
+        </div>
+        <p className="af-th-foot">
+          Conferences, round-robin scoring, then the cut for whoever advances. The season is taken
+          from the leagues you pick. You can rename anything later from tournament settings.
+        </p>
+      </section>
+
+      <div className="af-th-confgrid">
+        {conferences.map((conf, i) => {
+          const rows = conf.leagueIds.map((id) => byId.get(id)).filter(Boolean) as PickableLeague[]
+          const panelOpen = openPanel === i
+          const connectable = leagues.filter((l) => !conf.leagueIds.includes(l.id) && matchesSearch(l))
+          return (
+            <section
+              key={i}
+              className={`af-th-confcard${i === 0 ? ' af-th-confcard--accent' : ''}`}
+              aria-label={conf.name.trim() || `Conference ${i + 1}`}
+            >
+              <div className="af-th-conf-head">
+                <span className="af-th-conf-label">{conf.name.trim() || `Conference ${i + 1}`}</span>
+                <span className="af-th-conf-count">
+                  {rows.length} {rows.length === 1 ? 'league' : 'leagues'} connected
+                </span>
+                <button
+                  type="button"
+                  className="af-th-linkbtn"
+                  aria-expanded={panelOpen}
+                  onClick={() => setOpenPanel(panelOpen ? null : i)}
+                >
+                  {panelOpen ? 'Done adding' : '+ Add league'}
+                </button>
+              </div>
+
+              <label className="af-th-field">
+                <span>Conference name</span>
+                <input
+                  className="af-th-input"
+                  value={conf.name}
+                  placeholder={i === 0 ? 'BLACK' : 'GOLD'}
+                  onChange={(e) =>
+                    setConferences((prev) =>
+                      prev.map((c, j) => (j === i ? { ...c, name: e.target.value } : c)),
+                    )
+                  }
+                />
+              </label>
+
+              {rows.length === 0 ? (
+                <p className="af-th-empty">No leagues yet — add one to fill this conference.</p>
+              ) : null}
+
+              {rows.map((l, rowIndex) => {
+                const colour = badgeColorForIndex(rowIndex)
+                return (
+                  <div key={l.id} className="af-th-leaguerow">
+                    <span
+                      className="af-th-tile"
+                      aria-hidden="true"
+                      style={{
+                        width: 32,
+                        height: 32,
+                        background: colour.bg,
+                        color: colour.fg,
+                        fontSize: 11,
+                        lineHeight: '32px',
+                        display: 'inline-block',
+                        borderRadius: 8,
+                      }}
+                    >
+                      {initialsForName(l.name)}
+                    </span>
+                    <span className="af-th-leaguerow-id">
+                      <span className="af-th-leaguerow-name">{l.name}</span>
+                      <span className="af-th-leaguerow-meta">
+                        {l.platform}
+                        {l.season != null ? ` · ${l.season}` : ''} · {l.teamCount} teams
+                      </span>
+                    </span>
+                    {/*
+                      ⚠ SEED IS POSITION IN THIS LIST, so removing a league
+                      renumbers the rest. Nothing is stored against it — the cut
+                      is made on record then points for — so it reads as order,
+                      which is exactly what it is.
+                    */}
+                    <span className="af-th-seed">SEED {rowIndex + 1}</span>
+                    <button
+                      type="button"
+                      className="af-th-remove"
+                      aria-label={`Remove ${l.name} from ${conf.name.trim() || `Conference ${i + 1}`}`}
+                      onClick={() => toggle(i, l.id)}
+                    >
+                      ✕
+                    </button>
+                  </div>
+                )
+              })}
+
+              {panelOpen ? (
+                <div className="af-th-addpanel">
+                  <p className="af-th-eyebrow">Connectable leagues</p>
+                  <label className="af-th-field">
+                    <span>Search · {assigned.size} selected in total</span>
+                    <input
+                      className="af-th-input"
+                      type="search"
+                      placeholder="Search league name or season"
+                      value={search}
+                      onChange={(e) => setSearch(e.target.value)}
+                    />
+                  </label>
+                  <div className="af-th-actions">
+                    <button
+                      type="button"
+                      className="af-th-linkbtn"
+                      onClick={() => setConferences((prev) => prev.map((c, j) => j === i ? { ...c, leagueIds: [...new Set([...c.leagueIds, ...available.filter((l) => !assigned.has(l.id) && matchesSearch(l)).map((l) => l.id)])] } : c))}
+                    >
+                      Select all matching unassigned leagues
+                    </button>
+                    <button
+                      type="button"
+                      className="af-th-linkbtn"
+                      onClick={() => setConferences((prev) => prev.map((c, j) => j === i ? { ...c, leagueIds: [] } : c))}
+                    >
+                      Clear selection
+                    </button>
+                  </div>
+                  {connectable.length === 0 ? (
+                    <p className="af-th-empty">No leagues match that search.</p>
+                  ) : null}
+                  {connectable.map((l) => {
+                    const elsewhere = assigned.has(l.id)
+                    const blocked = Boolean(l.takenBy)
+                    return (
+                      <label
+                        key={l.id}
+                        className={`af-th-pick${blocked || elsewhere ? ' af-th-pick--off' : ''}`}
+                      >
+                        <input
+                          type="checkbox"
+                          className="af-th-sr"
+                          checked={false}
+                          disabled={blocked}
+                          onChange={() => toggle(i, l.id)}
+                        />
+                        <span className="af-th-pick-id">
+                          <span className="af-th-pick-name">{l.name}</span>
+                          <span className="af-th-pick-meta">
+                            {l.platform}
+                            {l.season != null ? ` · ${l.season}` : ''} · {l.teamCount} teams
+                            {l.takenBy ? ` · already in ${l.takenBy}` : ''}
+                            {elsewhere ? ' · in another conference' : ''}
+                          </span>
+                        </span>
+                        {!blocked ? <span className="af-th-pick-add">{elsewhere ? 'Move' : 'Add'}</span> : null}
+                      </label>
+                    )
+                  })}
+                </div>
+              ) : null}
+            </section>
+          )
+        })}
+      </div>
+
+      <div className="af-th-grid2">
+        <section className="af-th-league">
+          <p className="af-th-eyebrow">Advancement rules</p>
+          <div className="af-th-rule">
+            <span className="af-th-rule-label">Advance per conference</span>
+            <input
+              className="af-th-input af-th-input--num"
+              inputMode="numeric"
+              aria-label="Advance per conference"
+              value={advancePerConference}
+              onChange={(e) => setAdvancePerConference(e.target.value)}
+            />
+          </div>
+          <div className="af-th-rule">
+            <span className="af-th-rule-label">Bubble spots (0 for none)</span>
+            <input
+              className="af-th-input af-th-input--num"
+              inputMode="numeric"
+              aria-label="Bubble spots"
+              value={bubbleSize}
+              onChange={(e) => setBubbleSize(e.target.value)}
+            />
+          </div>
+          <div className="af-th-rule">
+            <span className="af-th-rule-label">Tie-break rule</span>
+            <span className="af-th-rule-value">Total points</span>
+          </div>
+          <p className="af-th-foot">
+            The cut is made across the whole conference on record, then points for — not per league.
+          </p>
+        </section>
+
+        <section className="af-th-league">
+          <p className="af-th-eyebrow">Schedule</p>
+          <div className="af-th-rule">
+            <span className="af-th-rule-label">Regular season weeks</span>
             <span className="af-th-weeks">
               <input
                 className="af-th-input af-th-input--num"
                 inputMode="numeric"
+                aria-label="Regular season first week"
                 value={weekStart}
                 onChange={(e) => setWeekStart(e.target.value)}
               />
@@ -164,132 +426,62 @@ export function NewTournamentClient({ leagues }: { leagues: PickableLeague[] }) 
               <input
                 className="af-th-input af-th-input--num"
                 inputMode="numeric"
+                aria-label="Regular season last week"
                 value={weekEnd}
                 onChange={(e) => setWeekEnd(e.target.value)}
               />
             </span>
-          </label>
-        </div>
-        <details style={{ marginTop: 16 }}>
-          <summary>Advancement and schedule · {advancePerConference} advance per conference · {bubbleSize} bubble spots</summary>
-          <p className="af-th-note">Redraft week {redraftWeek || 'not set'} · Elite redraft week {eliteWeek || 'not set'} · Championship week {championshipWeek || 'not set'}. Adjust these to match your tournament.</p>
-          <div className="af-th-fields">
-          <label className="af-th-field">
-            <span>Advance per conference</span>
+          </div>
+          <div className="af-th-rule">
+            <span className="af-th-rule-label">Redraft week</span>
             <input
               className="af-th-input af-th-input--num"
               inputMode="numeric"
-              value={advancePerConference}
-              onChange={(e) => setAdvancePerConference(e.target.value)}
-            />
-          </label>
-          <label className="af-th-field">
-            <span>Redraft week</span>
-            <input
-              className="af-th-input af-th-input--num"
-              inputMode="numeric"
+              aria-label="Redraft week"
               value={redraftWeek}
               onChange={(e) => setRedraftWeek(e.target.value)}
             />
-          </label>
-          <label className="af-th-field">
-            <span>Elite redraft week</span>
+          </div>
+          <div className="af-th-rule">
+            <span className="af-th-rule-label">Elite redraft week</span>
             <input
               className="af-th-input af-th-input--num"
               inputMode="numeric"
+              aria-label="Elite redraft week"
               value={eliteWeek}
               onChange={(e) => setEliteWeek(e.target.value)}
             />
-          </label>
-          <label className="af-th-field">
-            <span>Championship week</span>
+          </div>
+          <div className="af-th-rule">
+            <span className="af-th-rule-label">Championship week</span>
             <input
               className="af-th-input af-th-input--num"
               inputMode="numeric"
+              aria-label="Championship week"
               value={championshipWeek}
               onChange={(e) => setChampionshipWeek(e.target.value)}
             />
-          </label>
-          <label className="af-th-field">
-            <span>Bubble spots (0 for none)</span>
-            <input
-              className="af-th-input af-th-input--num"
-              inputMode="numeric"
-              value={bubbleSize}
-              onChange={(e) => setBubbleSize(e.target.value)}
-            />
-          </label>
-        </div>
-        </details>
-        <p className="af-th-linknote">
-          The cut is made across the whole conference on record, then points for — not per league.
-        </p>
-      </section>
-
-      <label className="af-th-field">
-        <span>Find imported leagues · {assigned.size} selected</span>
-        <input className="af-th-input" type="search" placeholder="Search league name or season" value={search} onChange={(e) => setSearch(e.target.value)} />
-      </label>
-      {conferences.map((conf, i) => (
-        <section key={i} className="af-th-league">
-          <h2 className="af-th-league-name">
-            Conference {i + 1}
-            <span className="af-th-linknote">{conf.leagueIds.length} leagues</span>
-          </h2>
-          <label className="af-th-field">
-            <span>Name</span>
-            <input
-              className="af-th-input"
-              value={conf.name}
-              placeholder={i === 0 ? 'BLACK' : 'GOLD'}
-              onChange={(e) =>
-                setConferences((prev) =>
-                  prev.map((c, j) => (j === i ? { ...c, name: e.target.value } : c)),
-                )
-              }
-            />
-          </label>
-          <div className="af-th-actions">
-            <button type="button" className="af-th-linkbtn" onClick={() => setConferences((prev) => prev.map((c, j) => j === i ? { ...c, leagueIds: [...new Set([...c.leagueIds, ...available.filter((l) => !assigned.has(l.id) && `${l.name} ${l.season ?? ''}`.toLowerCase().includes(search.toLowerCase())).map((l) => l.id)])] } : c))}>Select all matching unassigned leagues</button>
-            <button type="button" className="af-th-linkbtn" onClick={() => setConferences((prev) => prev.map((c, j) => j === i ? { ...c, leagueIds: [] } : c))}>Clear selection</button>
           </div>
-          <div className="af-th-picks">
-            {leagues.filter((l) => `${l.name} ${l.season ?? ''}`.toLowerCase().includes(search.toLowerCase())).map((l) => {
-              const mine = conf.leagueIds.includes(l.id)
-              const elsewhere = !mine && assigned.has(l.id)
-              return (
-                <label
-                  key={l.id}
-                  className={`af-th-pick${mine ? ' af-th-pick--on' : ''}${
-                    l.takenBy || elsewhere ? ' af-th-pick--off' : ''
-                  }`}
-                >
-                  <input
-                    type="checkbox"
-                    className="af-th-sr"
-                    checked={mine}
-                    disabled={Boolean(l.takenBy)}
-                    onChange={() => toggle(i, l.id)}
-                  />
-                  <span className="af-th-pick-name">{l.name}</span>
-                  <span className="af-th-pick-meta">
-                    {l.platform}
-                    {l.season != null ? ` · ${l.season}` : ''} · {l.teamCount} teams
-                    {l.takenBy ? ` · already in ${l.takenBy}` : ''}
-                    {elsewhere ? ' · in another conference' : ''}
-                  </span>
-                </label>
-              )
-            })}
-          </div>
+          {/*
+            ⚠ THE REST OF THE CALENDAR, OR THE TOURNAMENT ENDS AT WEEK 9 — said
+            here rather than only in the request builder, because this is where
+            a commissioner can still act on it.
+          */}
+          <p className="af-th-foot">
+            Standings sync automatically each week — nobody has to enter scores by hand. Leave the
+            later weeks set, or the tournament finishes the first time the cut runs.
+          </p>
         </section>
-      ))}
+      </div>
 
-      <div className="af-th-actions">
+      <div className="af-th-footer">
         <button
           type="button"
-          className="af-th-linkbtn"
-          onClick={() => setConferences((prev) => [...prev, { name: `Conference ${prev.length + 1}`, leagueIds: [] }])}
+          className="af-th-copy af-th-copy--ghost"
+          onClick={() => {
+            setConferences((prev) => [...prev, { name: `Conference ${prev.length + 1}`, leagueIds: [] }])
+            setOpenPanel(conferences.length)
+          }}
         >
           + Add a conference
         </button>
@@ -309,22 +501,34 @@ export function NewTournamentClient({ leagues }: { leagues: PickableLeague[] }) 
         conference so both can exist. You will be told which were changed.
       </p>
       </>}
+
       {reviewing && <section className="af-th-league" aria-label="Review tournament connection">
-        <h2 className="af-th-league-name">Review and connect · {name.trim()}</h2>
-        <p className="af-th-note">{assigned.size} leagues across {conferences.filter((c) => c.leagueIds.length > 0).length} conferences. This groups your imported leagues in AllFantasy; it does not change their settings on Sleeper or another host.</p>
+        <p className="af-th-eyebrow">Review and connect</p>
+        <h2 className="af-th-league-name">{name.trim()}</h2>
+        <p className="af-th-note">{assigned.size} leagues across {conferences.filter((c) => c.leagueIds.length > 0).length} conferences, season {seasonLabel}. This groups your imported leagues in AllFantasy; it does not change their settings on Sleeper or another host.</p>
         {conferences.filter((c) => c.leagueIds.length > 0).map((conf, i) => {
           const selected = leagues.filter((l) => conf.leagueIds.includes(l.id))
           const teams = selected.reduce((sum, l) => sum + l.teamCount, 0)
-          return <section key={i} aria-label={conf.name.trim()}>
-            <h3>{conf.name.trim()} · {selected.length} leagues · {teams} teams</h3>
+          return <section key={i} className="af-th-manage-review-conf" aria-label={conf.name.trim()}>
+            <h4>{conf.name.trim()} · {selected.length} leagues · {teams} teams</h4>
             <ul>{selected.map((l) => <li key={l.id}>{l.name} · {l.platform}{l.season ? ` · ${l.season}` : ''} · {l.teamCount} teams</li>)}</ul>
             {Number(advancePerConference) >= teams && teams > 0 && <p className="af-th-warn">The advance count ({advancePerConference}) is at least this conference’s team count ({teams}). Review it if you intend to eliminate teams.</p>}
           </section>
         })}
-        <p>Regular season: weeks {weekStart}–{weekEnd}. Advance {advancePerConference} per conference; {bubbleSize} bubble spots.</p>
-        <p>Redraft: {redraftWeek || 'not scheduled'} · Elite redraft: {eliteWeek || 'not scheduled'} · Championship: {championshipWeek || 'not scheduled'}.</p>
-        <div className="af-th-actions">
-          <button type="button" className="af-th-linkbtn" disabled={saving} onClick={() => setReviewing(false)}>Edit selections and schedule</button>
+        <div className="af-th-rule">
+          <span className="af-th-rule-label">Regular season</span>
+          <span className="af-th-rule-value">Weeks {weekStart}–{weekEnd}</span>
+        </div>
+        <div className="af-th-rule">
+          <span className="af-th-rule-label">Advance per conference · bubble spots</span>
+          <span className="af-th-rule-value af-th-rule-value--accent">{advancePerConference} · {bubbleSize}</span>
+        </div>
+        <div className="af-th-rule">
+          <span className="af-th-rule-label">Redraft · elite redraft · championship</span>
+          <span className="af-th-rule-value">{redraftWeek || '—'} · {eliteWeek || '—'} · {championshipWeek || '—'}</span>
+        </div>
+        <div className="af-th-footer">
+          <button type="button" className="af-th-copy af-th-copy--ghost" disabled={saving} onClick={() => setReviewing(false)}>Edit selections and schedule</button>
           <button type="button" className="af-th-copy" disabled={!ready} onClick={submit}>{saving ? 'Connecting…' : `Connect ${assigned.size} ${assigned.size === 1 ? 'league' : 'leagues'}`}</button>
         </div>
       </section>}

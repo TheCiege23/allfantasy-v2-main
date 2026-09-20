@@ -4,184 +4,737 @@
  * ⚠ A NEW FILE, APPENDED TO NOTHING. Inserting rules into an existing stylesheet
  * risks landing inside one of its `@media` blocks, which is silent: the file
  * stays valid CSS, brace balance stays 0, no lint sees it, and every rule below
- * the insertion point quietly narrows to that breakpoint.
+ * the insertion point quietly narrows to that breakpoint. Every media query in
+ * this file is therefore parked in ONE block at the very bottom — append above
+ * it, never below, and never into it.
  *
- * ⚠ Every colour is a token with a literal fallback. This route renders outside
- * the core shell, and a missed import should degrade to a readable table rather
- * than transparent rows on a transparent page.
+ * 🛑 THE PALETTE IS SELF-CONTAINED AND THAT IS THE WHOLE POINT. These tokens
+ * used to be `var(--fg)` / `var(--muted)` / `var(--line)` — app-shell tokens
+ * that FLIP with `data-mode`. This hub is dark in both modes, so inheriting
+ * them paints dark text on a dark surface in light mode: the exact failure
+ * measured on the legal pages, where 24 clause headings computed near-black on
+ * `#06070f`. Literal values on `.af-th` cannot flip, and namespacing them
+ * `--afth-*` leaves a nested app component that reads the global `--text`
+ * still reading the global one.
+ *
+ * ⚠ The global light-mode clamp matches TAILWIND UTILITY substrings
+ * (`text-white*`, `bg-slate-*`, …). Nothing here uses one, so the clamp cannot
+ * reach these rules — keep it that way and this page stays readable in both
+ * modes without a single `!important`.
  */
 
 .af-th {
-  max-width: 1100px;
-  margin: 0 auto;
-  padding: 24px 16px 64px;
+  /* Surfaces */
+  --afth-bg: #06070f;
+  --afth-surface: #0d1020;
+  --afth-surface2: #0a0c1a;
+  --afth-line: rgba(255, 255, 255, 0.07);
+  --afth-line2: rgba(255, 255, 255, 0.14);
+
+  /* Type */
+  --afth-text: #eef0fa;
+  --afth-text2: #c3c9e6;
+  --afth-muted: #8f97bd;
+  /*
+   * ⚠ THE ONE DELIBERATE DEVIATION FROM THE DESIGN FILE, AND IT IS MEASURED.
+   * The design specifies `#5d648a`, which computes **3.50:1** on this page's
+   * `#06070f` — below the 4.5:1 AA floor for normal text. This token is not
+   * decoration: it carries the table column headers, the "SEED n" chips, each
+   * league's platform line, and the staleness note — the one that tells a
+   * commissioner how old the records are before they cut 176 managers. That
+   * note arguing for its own importance while being the least legible thing on
+   * the page is a contradiction worth one hex value.
+   *
+   * `#717aa8` is the SMALLEST lightening along the same hue that clears AA on
+   * EVERY surface this token lands on — 4.83:1 on the page, 4.54:1 on a card,
+   * 4.68:1 on an inset row. ⚠ The card is the binding constraint, not the
+   * page: `#6d75a1` cleared 4.51:1 against `#06070f` and still measured 4.23:1
+   * against `#0d1020`, so checking only the darkest surface passes a value that
+   * fails where most of this text actually sits.
+   *
+   * It stays well below `--afth-muted` (6.59:1 on a card), so the intended
+   * three-step hierarchy — text > muted > faint — is unchanged to the eye.
+   */
+  --afth-faint: #717aa8;
+
+  /* Accent */
+  --afth-gold: #f5c451;
+  --afth-gold-ink: #221503;
+  --afth-gold-soft: rgba(245, 196, 81, 0.1);
+  --afth-gold-line: rgba(245, 196, 81, 0.32);
+
+  /* Status */
+  --afth-good: #34d399;
+  --afth-good-soft: rgba(52, 211, 153, 0.12);
+  --afth-good-line: rgba(52, 211, 153, 0.3);
+  --afth-warn: #fbbf24;
+  --afth-warn-soft: rgba(251, 191, 36, 0.12);
+  --afth-warn-line: rgba(251, 191, 36, 0.3);
+  --afth-bad: #fb5b78;
+  --afth-bad-soft: rgba(251, 91, 120, 0.12);
+  --afth-bad-line: rgba(251, 91, 120, 0.3);
+
+  /* Chips */
+  --afth-chip: rgba(255, 255, 255, 0.05);
+  --afth-chip-line: rgba(255, 255, 255, 0.1);
+
+  /*
+   * Families. Both are loaded globally by the root layout's Google Fonts link.
+   * ⚠ JetBrains Mono ships 400/500/700/800 there — NOT 900. Asking for 900
+   * renders 800 anyway, so the mono weights below say 800 and describe what
+   * actually paints rather than what the design file asked for.
+   */
+  --afth-ui: 'Archivo', ui-sans-serif, system-ui, sans-serif;
+  --afth-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  /*
+   * The page IS the route — no app nav wraps it — so it paints its own ground.
+   * Without this the dark cards sit on the shell's light body in light mode.
+   */
+  min-height: 100vh;
+  margin: 0;
+  background: var(--afth-bg);
+  color: var(--afth-text);
+  font-family: var(--afth-ui);
   display: flex;
   flex-direction: column;
-  gap: 14px;
-  color: var(--fg, #e6e8ef);
+  gap: 18px;
+  /*
+   * 🛑 THE SIDE GUTTER LIVES HERE, ON THE CONTAINER, AND NOT ON THE CHILDREN.
+   * It was `padding-inline` on `.af-th > *` — which every card then erased,
+   * because `.af-th-league`'s own `padding: 18px 20px` shorthand has equal
+   * specificity and comes later, so it replaced all four sides. Measured: cards
+   * sat at x=0, flush to the viewport edge, while the rule that was supposed to
+   * inset them was still there and still "declared". A declared rule that loses
+   * is invisible — the page looked deliberate.
+   *
+   * On the container nothing can override it, because no child's padding
+   * participates.
+   */
+  padding: 28px 32px 96px;
+  box-sizing: border-box;
 }
+
+/*
+ * The centred column. Width only — the gutter is the container's job above, so
+ * these carry no padding of their own to be clobbered.
+ * 1176 = the design's 1240px wrapper minus its 2 × 32px page padding.
+ */
+.af-th > * {
+  width: 100%;
+  max-width: 1176px;
+  margin-inline: auto;
+  box-sizing: border-box;
+}
+
+/* The setup screen runs a touch narrower, per the design (1160 − 64). */
+.af-th--setup > * {
+  max-width: 1096px;
+}
+
+/* ── Top bar ─────────────────────────────────────────────────────────────── */
+
+.af-th-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.af-th-back {
+  font: 700 11px/1 var(--afth-ui);
+  color: var(--afth-faint);
+  text-decoration: none;
+}
+
+.af-th-back:hover,
+.af-th-back:focus-visible {
+  color: var(--afth-gold);
+}
+
+.af-th-brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.af-th-brand-mark {
+  width: 30px;
+  height: 30px;
+  flex: none;
+  border-radius: 9px;
+  background: linear-gradient(135deg, var(--afth-gold), #d99a2b);
+  color: var(--afth-gold-ink);
+  font: 800 12px/30px var(--afth-ui);
+  text-align: center;
+}
+
+.af-th-brand-word {
+  font: 700 9px/1 var(--afth-mono);
+  letter-spacing: 0.1em;
+  color: var(--afth-faint);
+}
+
+/* ── Identity header ─────────────────────────────────────────────────────── */
 
 .af-th-head {
   display: flex;
   flex-wrap: wrap;
-  gap: 12px;
+  gap: 18px;
   align-items: flex-start;
   justify-content: space-between;
 }
 
-.af-th-title {
-  margin: 0;
-  font-size: 24px;
-  letter-spacing: -0.02em;
+.af-th-identity {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-width: 0;
 }
 
-.af-th-sub,
+.af-th-crest {
+  position: relative;
+  width: 72px;
+  height: 72px;
+  flex: none;
+}
+
+.af-th-crest-face {
+  width: 72px;
+  height: 72px;
+  box-sizing: border-box;
+  border-radius: 50%;
+  background: linear-gradient(160deg, #3a2a08, #1a1204);
+  border: 2px solid var(--afth-gold);
+  box-shadow: 0 0 22px var(--afth-gold-line);
+  color: var(--afth-gold);
+  font: 800 20px/68px var(--afth-ui);
+  text-align: center;
+}
+
+.af-th-crest-badge {
+  position: absolute;
+  right: -4px;
+  bottom: -4px;
+  width: 26px;
+  height: 26px;
+  box-sizing: border-box;
+  border-radius: 50%;
+  background: var(--afth-gold);
+  border: 2px solid var(--afth-bg);
+  color: var(--afth-gold-ink);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* A square trophy tile, used where the round crest would be overkill. */
+.af-th-icon {
+  width: 40px;
+  height: 40px;
+  flex: none;
+  box-sizing: border-box;
+  border-radius: 11px;
+  background: var(--afth-gold-soft);
+  border: 1px solid var(--afth-gold-line);
+  color: var(--afth-gold);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.af-th-title {
+  margin: 0;
+  font: 800 27px/1.15 var(--afth-ui);
+  letter-spacing: -0.03em;
+  color: var(--afth-text);
+}
+
+.af-th-sub {
+  margin: 0;
+  font: 600 12px/1.45 var(--afth-ui);
+  color: var(--afth-muted);
+}
+
 .af-th-note,
 .af-th-foot {
   margin: 0;
-  font-size: 13px;
-  color: var(--muted, rgba(230, 232, 239, 0.62));
+  font: 400 12px/1.55 var(--afth-ui);
+  color: var(--afth-muted);
 }
+
+.af-th-foot {
+  color: var(--afth-faint);
+}
+
+.af-th-note a,
+.af-th-foot a {
+  color: var(--afth-gold);
+}
+
+/* Mono eyebrow above a card's contents. */
+.af-th-eyebrow {
+  margin: 0;
+  font: 700 9px/1 var(--afth-mono);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--afth-faint);
+}
+
+/* ── Buttons ─────────────────────────────────────────────────────────────── */
 
 .af-th-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+  align-items: center;
 }
 
+/* The primary control. 44px min so it is a real tap target on a phone. */
 .af-th-copy {
-  min-height: 44px;
-  padding: 0 14px;
-  border-radius: 8px;
-  border: 1px solid var(--af-blue, #3b82f6);
-  background: var(--af-blue, #3b82f6);
-  color: #fff;
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.af-th-warn {
-  margin: 0;
-  padding: 10px 12px;
-  border-radius: 8px;
-  border: 1px solid var(--warn, #f59e0b);
-  color: var(--warn, #f59e0b);
-  font-size: 13px;
-  line-height: 1.5;
-}
-
-.af-th-tabs {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.af-th-tab {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
   min-height: 44px;
   padding: 0 16px;
-  border-radius: 999px;
-  border: 1px solid var(--line, rgba(230, 232, 239, 0.18));
-  background: transparent;
-  color: inherit;
-  font-size: 13px;
-  font-weight: 600;
+  border-radius: 9px;
+  border: 1px solid var(--afth-gold);
+  background: var(--afth-gold);
+  color: var(--afth-gold-ink);
+  font: 800 12px/1 var(--afth-ui);
+  text-decoration: none;
   cursor: pointer;
 }
 
-.af-th-tab--on {
-  border-color: var(--af-blue, #3b82f6);
-  background: rgba(59, 130, 246, 0.12);
+.af-th-copy:hover:not(:disabled) {
+  filter: brightness(1.07);
 }
+
+.af-th-copy:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* Secondary: the same shape, reading as chrome rather than as the next step. */
+.af-th-copy--ghost {
+  background: var(--afth-chip);
+  border-color: var(--afth-chip-line);
+  color: var(--afth-text2);
+  font-weight: 700;
+}
+
+.af-th-copy--ghost:hover:not(:disabled) {
+  border-color: var(--afth-gold-line);
+  color: var(--afth-gold);
+  filter: none;
+}
+
+.af-th-linkbtn {
+  min-height: 36px;
+  padding: 0 12px;
+  border-radius: 7px;
+  border: 1px solid var(--afth-chip-line);
+  background: var(--afth-chip);
+  color: var(--afth-text2);
+  font: 700 12px/1 var(--afth-ui);
+  cursor: pointer;
+}
+
+.af-th-linkbtn:hover:not(:disabled) {
+  border-color: var(--afth-gold-line);
+  color: var(--afth-gold);
+}
+
+.af-th-linkbtn[aria-pressed='true'] {
+  border-color: var(--afth-gold-line);
+  background: var(--afth-gold-soft);
+  color: var(--afth-gold);
+}
+
+.af-th-linkbtn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.af-th-linkbtn--danger {
+  color: var(--afth-bad);
+}
+
+.af-th-linkbtn--danger:hover:not(:disabled) {
+  border-color: var(--afth-bad-line);
+  color: var(--afth-bad);
+}
+
+/* ── Cards ───────────────────────────────────────────────────────────────── */
 
 .af-th-league {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 14px 16px;
-  border: 1px solid var(--line, rgba(230, 232, 239, 0.12));
-  border-radius: 10px;
+  gap: 12px;
+  padding: 18px 20px;
+  border: 1px solid var(--afth-line2);
+  border-radius: 16px;
+  background: var(--afth-surface);
+}
+
+.af-th-league--accent {
+  border-color: var(--afth-gold-line);
 }
 
 .af-th-league-name {
   margin: 0;
-  font-size: 15px;
+  font: 800 14px/1.25 var(--afth-ui);
+  letter-spacing: -0.02em;
   display: flex;
   align-items: center;
   gap: 10px;
+  flex-wrap: wrap;
+  color: var(--afth-text);
 }
 
 .af-th-league-warn {
-  font-size: 11px;
-  font-weight: 600;
-  padding: 2px 8px;
+  font: 800 10px/1 var(--afth-ui);
+  padding: 4px 9px;
   border-radius: 999px;
-  color: var(--warn, #f59e0b);
-  border: 1px solid var(--warn, #f59e0b);
+  color: var(--afth-warn);
+  background: var(--afth-warn-soft);
+  border: 1px solid var(--afth-warn-line);
 }
 
-/* ⚠ A wide table scrolls INSIDE its own box; the page body must never scroll
-   sideways, which is what a 6-column table does on a phone otherwise. */
+/*
+ * A league card's own header strip, with its initials tile. The negative
+ * margins pull it out to the card's edges, so they must match
+ * `.af-th-league`'s padding exactly — the phone override below keeps the two
+ * in step.
+ */
+.af-th-league-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: -18px -20px 0;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--afth-line);
+  background: var(--afth-surface2);
+  border-radius: 16px 16px 0 0;
+}
+
+/*
+ * Initials tile. Size and colour come from the element's own style attribute —
+ * they are per-league data, not design constants — so this fixes only the
+ * shape every caller agrees on.
+ */
+.af-th-tile {
+  flex: none;
+  border-radius: 10px;
+  font-family: var(--afth-ui);
+  font-weight: 800;
+  text-align: center;
+  overflow: hidden;
+}
+
+.af-th-tile--round {
+  border-radius: 50%;
+}
+
+.af-th-warn {
+  margin: 0;
+  padding: 11px 13px;
+  border-radius: 10px;
+  border: 1px solid var(--afth-warn-line);
+  background: var(--afth-warn-soft);
+  color: var(--afth-warn);
+  font: 600 12px/1.55 var(--afth-ui);
+}
+
+/* ── Tabs ────────────────────────────────────────────────────────────────── */
+
+.af-th-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 4px;
+  background: var(--afth-chip);
+  border: 1px solid var(--afth-chip-line);
+  border-radius: 11px;
+  align-self: flex-start;
+  /*
+   * The gutter rule gives every direct child of `.af-th` full width; a
+   * segmented control has to shrink-wrap instead, so it opts out here.
+   */
+  width: auto;
+  max-width: 100%;
+  margin-inline: 0;
+}
+
+.af-th-tab {
+  min-height: 40px;
+  padding: 0 16px;
+  border-radius: 8px;
+  border: 0;
+  background: transparent;
+  color: var(--afth-muted);
+  font: 700 11px/1 var(--afth-ui);
+  cursor: pointer;
+}
+
+.af-th-tab:hover {
+  color: var(--afth-text2);
+}
+
+.af-th-tab--on,
+.af-th-tab--on:hover {
+  background: var(--afth-gold);
+  color: var(--afth-gold-ink);
+  font-weight: 800;
+}
+
+/* ── Tables ──────────────────────────────────────────────────────────────── */
+
+/*
+ * ⚠ A wide table scrolls INSIDE its own box; the page body must never scroll
+ * sideways, which is what a 7-column table does on a phone otherwise. The
+ * negative margin lets the scroll region reach the card's edges so a row is
+ * not clipped mid-cell by the card's padding.
+ */
 .af-th-scroll {
   overflow-x: auto;
+  margin: 0 -20px -18px;
+  padding: 0 20px 18px;
 }
 
 .af-th-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 13px;
+  font-size: 12px;
   white-space: nowrap;
 }
 
-.af-th-table th,
-.af-th-table td {
+.af-th-table th {
   text-align: left;
-  padding: 7px 10px;
-  border-bottom: 1px solid var(--line, rgba(230, 232, 239, 0.08));
+  padding: 9px 10px;
+  font: 700 9px/1 var(--afth-mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--afth-faint);
+  border-bottom: 1px solid var(--afth-line);
 }
 
-.af-th-table th {
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--muted, rgba(230, 232, 239, 0.62));
+.af-th-table td {
+  text-align: left;
+  padding: 11px 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  font: 700 12px/1.2 var(--afth-mono);
+  color: var(--afth-text2);
+}
+
+/* Zebra striping — faint enough to read as texture, not as a highlight. */
+.af-th-table tbody tr:nth-child(even) td {
+  background: rgba(255, 255, 255, 0.015);
+}
+
+/* Name cells are prose, not figures, so they leave the mono stack. */
+.af-th-table td.af-th-cell--name {
+  font-family: var(--afth-ui);
+  color: var(--afth-gold);
+}
+
+.af-th-table td.af-th-cell--plain {
+  font-family: var(--afth-ui);
+  font-weight: 400;
+  color: var(--afth-muted);
+  white-space: normal;
+}
+
+.af-th-teamcell {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.af-th-teamcell-name {
+  font: 700 12px/1.2 var(--afth-ui);
+  color: var(--afth-gold);
 }
 
 .af-th-row--unmatched td {
-  color: var(--muted, rgba(230, 232, 239, 0.55));
+  color: var(--afth-faint);
 }
 
+/* ── Status pills ────────────────────────────────────────────────────────── */
+
 .af-th-chip {
-  display: inline-block;
-  padding: 2px 8px;
-  border-radius: 999px;
-  font-size: 11px;
-  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  padding: 5px 10px;
+  border-radius: 20px;
+  font: 800 10px/1 var(--afth-ui);
   border: 1px solid currentColor;
+  white-space: nowrap;
 }
 
 .af-th-chip--in {
-  color: var(--ok, #34d399);
+  color: var(--afth-good);
+  background: var(--afth-good-soft);
+  border-color: var(--afth-good-line);
 }
 
 .af-th-chip--bubble {
-  color: var(--warn, #f59e0b);
+  color: var(--afth-warn);
+  background: var(--afth-warn-soft);
+  border-color: var(--afth-warn-line);
 }
 
 .af-th-chip--out {
-  color: var(--muted, rgba(230, 232, 239, 0.5));
+  color: var(--afth-faint);
+  background: var(--afth-chip);
+  border-color: var(--afth-chip-line);
 }
 
 .af-th-chip--unmatched {
-  color: var(--danger, #f87171);
+  color: var(--afth-bad);
+  background: var(--afth-bad-soft);
+  border-color: var(--afth-bad-line);
 }
 
-/* ── Manager linking ─────────────────────────────────────────────────────
- *
- * ⚠ APPENDED AT TOP LEVEL. This file has no `@media` blocks today, and adding
- * these at the end keeps it that way — a rule dropped inside a query is silent:
- * valid CSS, brace balance unchanged, and every rule after it narrows.
+/* Conference tag, for the combined views where a row must name its side. */
+.af-th-conftag {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 8px;
+  border-radius: 5px;
+  font: 800 9px/1 var(--afth-mono);
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  color: var(--afth-text2);
+  background: var(--afth-chip);
+  border: 1px solid var(--afth-chip-line);
+}
+
+/*
+ * The first conference carries the tournament's accent and the rest stay
+ * neutral, so gold keeps meaning "this one" instead of becoming decoration.
  */
+.af-th-conftag--accent {
+  color: var(--afth-gold-ink);
+  background: var(--afth-gold);
+  border-color: var(--afth-gold);
+}
+
+/* ── Combined view ───────────────────────────────────────────────────────── */
+
+.af-th-stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+
+.af-th-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 14px;
+  border-radius: 12px;
+  background: var(--afth-chip);
+  border: 1px solid var(--afth-chip-line);
+}
+
+.af-th-stat--in {
+  background: var(--afth-good-soft);
+  border-color: var(--afth-good-line);
+}
+
+.af-th-stat--bubble {
+  background: var(--afth-warn-soft);
+  border-color: var(--afth-warn-line);
+}
+
+.af-th-stat-label {
+  font: 700 9px/1 var(--afth-mono);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--afth-faint);
+}
+
+.af-th-stat--in .af-th-stat-label {
+  color: var(--afth-good);
+}
+
+.af-th-stat--bubble .af-th-stat-label {
+  color: var(--afth-warn);
+}
+
+.af-th-stat-value {
+  font: 800 22px/1 var(--afth-mono);
+  color: var(--afth-text);
+}
+
+.af-th-stat-note {
+  font: 400 10px/1.35 var(--afth-ui);
+  color: var(--afth-muted);
+}
+
+.af-th-top {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.af-th-top-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  background: var(--afth-surface2);
+  border: 1px solid var(--afth-line);
+  border-radius: 10px;
+}
+
+.af-th-top-rank {
+  width: 22px;
+  flex: none;
+  font: 800 13px/1 var(--afth-mono);
+  color: var(--afth-gold);
+}
+
+.af-th-top-id {
+  flex: 1;
+  min-width: 0;
+}
+
+/*
+ * ⚠ `display: block` IS LOAD-BEARING ON BOTH. These are <span>s, so they stack
+ * only because this says so — as inline elements the manager's handle and their
+ * league ran together on one line ("kingbuffaloKBI Beast Black"), which reads
+ * as one corrupted string rather than as two facts.
+ */
+.af-th-top-name {
+  display: block;
+  font: 700 12px/1.35 var(--afth-ui);
+  color: var(--afth-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.af-th-top-league {
+  display: block;
+  font: 400 10px/1.35 var(--afth-ui);
+  color: var(--afth-faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.af-th-top-pts {
+  width: 74px;
+  flex: none;
+  text-align: right;
+  font: 800 13px/1 var(--afth-mono);
+  color: var(--afth-text2);
+}
+
+/* ── Manager linking ─────────────────────────────────────────────────────── */
 
 .af-th-link {
   display: inline-flex;
@@ -191,47 +744,31 @@
 }
 
 .af-th-select {
-  min-height: 36px;
-  max-width: 220px;
-  padding: 4px 8px;
-  border-radius: 6px;
-  border: 1px solid var(--line, rgba(230, 232, 239, 0.24));
-  background: var(--surface, #12141c);
-  color: inherit;
-  font-size: 12px;
-}
-
-.af-th-linkbtn {
-  min-height: 36px;
-  padding: 0 12px;
-  border-radius: 6px;
-  border: 1px solid var(--af-blue, #3b82f6);
-  background: transparent;
-  color: var(--af-blue, #3b82f6);
-  font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.af-th-linkbtn:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
+  min-height: 40px;
+  max-width: 230px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--afth-line2);
+  background: var(--afth-surface2);
+  color: var(--afth-text2);
+  font: 700 12px/1 var(--afth-ui);
 }
 
 .af-th-linkerr {
-  font-size: 11px;
-  color: var(--danger, #f87171);
+  font: 600 11px/1.4 var(--afth-ui);
+  color: var(--afth-bad);
   white-space: normal;
   max-width: 260px;
 }
 
 .af-th-linknote {
-  font-size: 11px;
-  color: var(--muted, rgba(230, 232, 239, 0.6));
+  font: 400 11px/1.4 var(--afth-ui);
+  color: var(--afth-faint);
+  white-space: normal;
 }
 
 .af-th-linknote--soft {
-  color: var(--warn, #f59e0b);
+  color: var(--afth-warn);
 }
 
 /* Label kept for screen readers; the row's name column carries it visually. */
@@ -247,7 +784,442 @@
   border: 0;
 }
 
-/* Commissioner conference editor */
+/* ── Form fields ─────────────────────────────────────────────────────────── */
+
+.af-th-fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: flex-end;
+}
+
+.af-th-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font: 700 10px/1 var(--afth-ui);
+  color: var(--afth-muted);
+}
+
+.af-th-input {
+  min-height: 42px;
+  min-width: 200px;
+  padding: 10px 14px;
+  border-radius: 9px;
+  border: 1px solid var(--afth-line);
+  background: var(--afth-surface2);
+  color: var(--afth-text);
+  font: 700 13px/1 var(--afth-ui);
+}
+
+.af-th-input::placeholder {
+  color: var(--afth-faint);
+  font-weight: 400;
+}
+
+.af-th-input:focus-visible,
+.af-th-select:focus-visible {
+  outline: 2px solid var(--afth-gold);
+  outline-offset: 1px;
+  border-color: var(--afth-gold-line);
+}
+
+.af-th-input--num {
+  min-width: 90px;
+  max-width: 120px;
+}
+
+/*
+ * A value the commissioner cannot type — derived, but shaped like its
+ * neighbours so the row still reads as one set of fields.
+ */
+.af-th-readonly {
+  min-height: 42px;
+  box-sizing: border-box;
+  padding: 10px 14px;
+  border-radius: 9px;
+  border: 1px solid var(--afth-line);
+  background: var(--afth-surface2);
+  color: var(--afth-text);
+  font: 700 13px/1.4 var(--afth-ui);
+}
+
+.af-th-weeks {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--afth-muted);
+}
+
+/* Native select with its arrow suppressed and our own chevron laid over it. */
+.af-th-selectwrap {
+  position: relative;
+  display: inline-flex;
+}
+
+.af-th-selectwrap .af-th-select {
+  appearance: none;
+  -webkit-appearance: none;
+  padding-right: 34px;
+  min-width: 140px;
+  cursor: pointer;
+}
+
+.af-th-selectwrap-chevron {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  pointer-events: none;
+  color: var(--afth-faint);
+  display: flex;
+}
+
+/* Right-aligned freshness note that drops below the controls when cramped. */
+.af-th-freshness {
+  flex: 1;
+  min-width: 200px;
+  text-align: right;
+  font: 400 10px/1.45 var(--afth-ui);
+  color: var(--afth-faint);
+}
+
+/* ── Setup: basics, conferences, rules ───────────────────────────────────── */
+
+.af-th-basics {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 12px;
+}
+
+.af-th-grid2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+/*
+ * The design draws two conference cards side by side; the app allows any
+ * number, so this fills the row rather than hard-coding `1fr 1fr` — which
+ * would leave a single conference sitting in half a page and strand a third
+ * one alone on the next row.
+ */
+.af-th-confgrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr));
+  gap: 16px;
+}
+
+.af-th-confcard {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 20px;
+  border: 1px solid var(--afth-line2);
+  border-radius: 16px;
+  background: var(--afth-surface);
+}
+
+.af-th-confcard--accent {
+  border-color: var(--afth-gold-line);
+}
+
+.af-th-conf-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.af-th-conf-label {
+  font: 800 11px/1 var(--afth-ui);
+  padding: 7px 12px;
+  border-radius: 8px;
+  color: var(--afth-text);
+  background: var(--afth-chip);
+  border: 1px solid var(--afth-chip-line);
+}
+
+.af-th-confcard--accent .af-th-conf-label {
+  color: var(--afth-gold-ink);
+  background: var(--afth-gold);
+  border-color: var(--afth-gold);
+}
+
+.af-th-conf-count {
+  flex: 1;
+  min-width: 90px;
+  font: 700 11px/1.3 var(--afth-ui);
+  color: var(--afth-muted);
+}
+
+/* An assigned league inside a conference card. */
+.af-th-leaguerow {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 11px;
+  background: var(--afth-surface2);
+  border: 1px solid var(--afth-line);
+  border-radius: 11px;
+}
+
+.af-th-leaguerow-id {
+  flex: 1;
+  min-width: 0;
+}
+
+/* `display: block` for the same reason as `.af-th-top-name` above: these are
+   <span>s, and inline they run the league name into its platform line. */
+.af-th-leaguerow-name {
+  display: block;
+  font: 700 12px/1.3 var(--afth-ui);
+  color: var(--afth-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.af-th-leaguerow-meta {
+  display: block;
+  font: 400 10px/1.35 var(--afth-ui);
+  color: var(--afth-faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.af-th-seed {
+  flex: none;
+  padding: 5px 8px;
+  border-radius: 6px;
+  font: 800 10px/1 var(--afth-mono);
+  letter-spacing: 0.04em;
+  color: var(--afth-faint);
+  background: var(--afth-chip);
+}
+
+/*
+ * 32px, not 44 — it sits inside a 44px row that is itself the tap target, and a
+ * full-size button here would crowd the league name off every phone.
+ */
+.af-th-remove {
+  flex: none;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--afth-faint);
+  font: 700 13px/1 var(--afth-mono);
+  cursor: pointer;
+}
+
+.af-th-remove:hover {
+  background: var(--afth-bad-soft);
+  color: var(--afth-bad);
+}
+
+.af-th-empty {
+  border: 1px dashed var(--afth-line2);
+  border-radius: 12px;
+  padding: 22px;
+  text-align: center;
+  font: 400 12px/1.55 var(--afth-ui);
+  color: var(--afth-faint);
+}
+
+.af-th-addpanel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 1px solid var(--afth-line);
+}
+
+/* A selectable league in the add panel. The whole row is the label. */
+.af-th-pick {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  min-height: 44px;
+  padding: 10px;
+  background: var(--afth-surface2);
+  border: 1px dashed var(--afth-line2);
+  border-radius: 11px;
+  cursor: pointer;
+}
+
+.af-th-pick:hover {
+  border-color: var(--afth-gold-line);
+}
+
+.af-th-pick--on {
+  border-style: solid;
+  border-color: var(--afth-gold-line);
+  background: var(--afth-gold-soft);
+}
+
+/*
+ * Taken or claimed elsewhere: visibly not available, but still readable — a
+ * league that vanishes from the list gives a commissioner nothing to act on.
+ */
+.af-th-pick--off {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.af-th-pick-id {
+  flex: 1;
+  min-width: 0;
+}
+
+.af-th-pick-name {
+  display: block;
+  font: 700 12px/1.3 var(--afth-ui);
+  color: var(--afth-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.af-th-pick-meta {
+  display: block;
+  font: 400 10px/1.35 var(--afth-ui);
+  color: var(--afth-faint);
+}
+
+.af-th-pick-add {
+  flex: none;
+  padding: 7px 11px;
+  border-radius: 7px;
+  font: 700 10px/1 var(--afth-ui);
+  color: var(--afth-gold-ink);
+  background: var(--afth-gold);
+  border: 1px solid var(--afth-gold);
+}
+
+/* A label:value row in the rules and schedule cards. */
+.af-th-rule {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 11px 12px;
+  background: var(--afth-surface2);
+  border: 1px solid var(--afth-line);
+  border-radius: 10px;
+}
+
+.af-th-rule-label {
+  flex: 1;
+  font: 700 11px/1.3 var(--afth-ui);
+  color: var(--afth-muted);
+}
+
+.af-th-rule-value {
+  font: 800 13px/1 var(--afth-mono);
+  color: var(--afth-text2);
+}
+
+.af-th-rule-value--accent {
+  color: var(--afth-gold);
+}
+
+.af-th-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+/* ── Broadcast ───────────────────────────────────────────────────────────── */
+
+.af-th-templates {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.af-th-pastebox {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--afth-line2);
+  background: var(--afth-surface2);
+  color: var(--afth-text);
+  font: 400 13px/1.55 var(--afth-ui);
+  resize: vertical;
+}
+
+.af-th-result {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 4px;
+}
+
+.af-th-paste {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px;
+  border: 1px solid var(--afth-line);
+  border-radius: 10px;
+  background: var(--afth-surface2);
+}
+
+.af-th-paste-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  font: 700 12px/1.3 var(--afth-ui);
+  color: var(--afth-text2);
+}
+
+/* Tournament cards on the index — a whole-card link needs its own reset. */
+.af-th-card {
+  text-decoration: none;
+  color: inherit;
+  transition: border-color 120ms ease;
+}
+
+.af-th-card:hover,
+.af-th-card:focus-visible {
+  border-color: var(--afth-gold-line);
+}
+
+/* Blocker acknowledgement — a real tap target, never mistakable for prose. */
+.af-th-ack {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  min-height: 44px;
+  padding: 10px 12px;
+  border: 1px solid var(--afth-warn-line);
+  background: var(--afth-warn-soft);
+  border-radius: 10px;
+  font: 600 12px/1.55 var(--afth-ui);
+  color: var(--afth-warn);
+  cursor: pointer;
+}
+
+.af-th details > summary {
+  cursor: pointer;
+  font: 700 12px/1.5 var(--afth-ui);
+  color: var(--afth-text2);
+}
+
+.af-th details > summary:hover {
+  color: var(--afth-gold);
+}
+
+/* ── Commissioner conference editor ──────────────────────────────────────── */
+
 .af-th-manage-head,
 .af-th-manage-toolbar,
 .af-th-manage-archive-row {
@@ -257,7 +1229,10 @@
   gap: 16px;
 }
 
-.af-th-manage-search { flex: 1; max-width: 420px; }
+.af-th-manage-search {
+  flex: 1;
+  max-width: 420px;
+}
 
 .af-th-manage-grid {
   display: grid;
@@ -268,10 +1243,10 @@
 
 .af-th-manage-conf,
 .af-th-manage-review-conf {
-  border: 1px solid var(--af-line, rgba(255,255,255,.12));
+  border: 1px solid var(--afth-line2);
   border-radius: 12px;
   padding: 14px;
-  background: rgba(255,255,255,.025);
+  background: var(--afth-surface2);
 }
 
 .af-th-manage-list {
@@ -288,189 +1263,193 @@
   gap: 8px;
   align-items: center;
   padding: 9px;
-  border: 1px solid var(--af-line, rgba(255,255,255,.1));
+  border: 1px solid var(--afth-line);
   border-radius: 9px;
-  background: var(--af-panel, rgba(5,8,18,.72));
+  background: var(--afth-surface);
 }
 
-.af-th-manage-league[draggable="true"] { cursor: grab; }
-.af-th-manage-league[draggable="true"]:active { cursor: grabbing; }
-.af-th-manage-grip { color: var(--af-muted, #8b93a7); letter-spacing: -3px; }
-.af-th-manage-league-name { display: grid; gap: 2px; min-width: 0; }
-.af-th-manage-league-name strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.af-th-manage-league-name small { color: var(--af-muted, #8b93a7); }
-.af-th-manage-order { display: flex; gap: 3px; }
-.af-th-linkbtn--danger { color: #fb7185; }
+.af-th-manage-league[draggable='true'] {
+  cursor: grab;
+}
+
+.af-th-manage-league[draggable='true']:active {
+  cursor: grabbing;
+}
+
+.af-th-manage-grip {
+  color: var(--afth-faint);
+  letter-spacing: -3px;
+}
+
+.af-th-manage-league-name {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.af-th-manage-league-name strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: 700 12px/1.3 var(--afth-ui);
+  color: var(--afth-text);
+}
+
+.af-th-manage-league-name small {
+  font: 400 10px/1.35 var(--afth-ui);
+  color: var(--afth-faint);
+}
+
+.af-th-manage-order {
+  display: flex;
+  gap: 3px;
+}
 
 .af-th-manage-archived,
 .af-th-manage-review {
   margin: 16px 0;
-  border-top: 1px solid var(--af-line, rgba(255,255,255,.1));
+  border-top: 1px solid var(--afth-line);
   padding-top: 14px;
 }
 
-.af-th-manage-archived summary { cursor: pointer; font-weight: 700; }
-.af-th-manage-archive-row { padding: 8px 0; }
-.af-th-manage-summary { display: flex; flex-wrap: wrap; gap: 8px 24px; padding-left: 20px; }
-.af-th-manage-review-conf { margin: 10px 0; }
-.af-th-manage-review-conf h4 { margin: 0 0 8px; }
-.af-th-manage-review-conf li { margin: 5px 0; }
-.af-th-manage-review-conf .af-th-chip { margin-left: 8px; }
+.af-th-manage-archived summary {
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.af-th-manage-archive-row {
+  padding: 8px 0;
+}
+
+.af-th-manage-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 24px;
+  padding-left: 20px;
+  font: 400 12px/1.5 var(--afth-ui);
+  color: var(--afth-muted);
+}
+
+.af-th-manage-review-conf {
+  margin: 10px 0;
+}
+
+.af-th-manage-review-conf h4 {
+  margin: 0 0 8px;
+  font: 800 12px/1.3 var(--afth-ui);
+  color: var(--afth-text);
+}
+
+.af-th-manage-review-conf li {
+  margin: 5px 0;
+  font: 400 12px/1.5 var(--afth-ui);
+  color: var(--afth-text2);
+}
+
+.af-th-manage-review-conf .af-th-chip {
+  margin-left: 8px;
+}
+
+/*
+ * ── Narrow viewports ────────────────────────────────────────────────────────
+ *
+ * 🛑 EVERY MEDIA QUERY IN THIS FILE LIVES IN THIS ONE BLOCK, AT THE BOTTOM, AND
+ * NOTHING MAY BE APPENDED BELOW IT. A rule added after a `@media` block is
+ * fine; a rule added INSIDE one silently narrows to that breakpoint while brace
+ * balance stays 0 and no lint sees it. Keeping the queries last — and only here
+ * — means a future append lands at top level by default.
+ */
+
+@media (max-width: 900px) {
+  .af-th-basics,
+  .af-th-grid2,
+  .af-th-stats {
+    grid-template-columns: 1fr;
+  }
+}
 
 @media (max-width: 700px) {
+  /* The gutter narrows on the container, for the same reason it lives there. */
+  .af-th {
+    padding-inline: 16px;
+  }
+
+  .af-th-title {
+    font-size: 22px;
+  }
+
+  .af-th-crest,
+  .af-th-crest-face {
+    width: 56px;
+    height: 56px;
+  }
+
+  .af-th-crest-face {
+    font-size: 16px;
+    line-height: 52px;
+  }
+
+  .af-th-head,
   .af-th-manage-head,
-  .af-th-manage-toolbar { align-items: stretch; flex-direction: column; }
-  .af-th-manage-search { max-width: none; }
-  .af-th-manage-league { grid-template-columns: auto minmax(0, 1fr) auto; }
-  .af-th-manage-league .af-th-select { grid-column: 2 / -1; width: 100%; }
-}
+  .af-th-manage-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
 
-/* ── Tournament setup ────────────────────────────────────────────────────
- * Appended at top level; this file still has no `@media` blocks.
- */
+  .af-th-manage-search {
+    max-width: none;
+  }
 
-.af-th-fields {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-}
+  .af-th-manage-league {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+  }
 
-.af-th-field {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  font-size: 12px;
-  color: var(--muted, rgba(230, 232, 239, 0.62));
-}
+  .af-th-manage-league .af-th-select {
+    grid-column: 2 / -1;
+    width: 100%;
+  }
 
-.af-th-input {
-  min-height: 40px;
-  min-width: 200px;
-  padding: 6px 10px;
-  border-radius: 6px;
-  border: 1px solid var(--line, rgba(230, 232, 239, 0.2));
-  background: transparent;
-  color: var(--fg, #e6e8ef);
-  font-size: 14px;
-}
+  .af-th-input,
+  .af-th-pastebox {
+    min-width: 0;
+    width: 100%;
+  }
 
-.af-th-input--num {
-  min-width: 84px;
-  max-width: 110px;
-}
+  .af-th-field {
+    min-width: 0;
+    width: 100%;
+  }
 
-.af-th-weeks {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-}
+  /*
+   * ⚠ THE WRAP AND THE SELECT HAVE TO GROW TOGETHER. The field goes full-width
+   * here, and the chevron is positioned against the WRAP — so without this the
+   * select stayed at its 140px min-width while the arrow slid to the far edge
+   * of the row, pointing at nothing.
+   */
+  .af-th-selectwrap,
+  .af-th-selectwrap .af-th-select {
+    width: 100%;
+    /* `max-width: 230px` on the base .af-th-select is for the LINK PICKER's
+       dropdown; left standing it caps this one at 230px while the wrap goes
+       full-width, which is the detached-chevron bug in a second costume. */
+    max-width: none;
+  }
 
-.af-th-picks {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-  gap: 8px;
-}
+  .af-th-freshness {
+    text-align: left;
+  }
 
-/* 44px min so each row is a real tap target. */
-.af-th-pick {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-height: 44px;
-  padding: 8px 10px;
-  border: 1px solid var(--line, rgba(230, 232, 239, 0.14));
-  border-radius: 8px;
-  cursor: pointer;
-}
+  .af-th-scroll {
+    margin: 0 -16px -18px;
+    padding: 0 16px 18px;
+  }
 
-.af-th-pick--on {
-  border-color: var(--af-blue, #3b82f6);
-  background: rgba(59, 130, 246, 0.1);
-}
+  .af-th-league {
+    padding: 16px;
+  }
 
-/* Taken or claimed elsewhere: visibly not available, but still readable — a
-   league that vanishes from the list gives a commissioner nothing to act on. */
-.af-th-pick--off {
-  opacity: 0.55;
-}
-
-.af-th-pick-name {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--fg, #e6e8ef);
-}
-
-.af-th-pick-meta {
-  font-size: 11px;
-  color: var(--muted, rgba(230, 232, 239, 0.58));
-}
-
-/* ── Broadcast ───────────────────────────────────────────────────────────
- * Appended at top level; this file still has no real media queries.
- */
-
-.af-th-templates {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.af-th-pastebox {
-  width: 100%;
-  padding: 8px 10px;
-  border-radius: 8px;
-  border: 1px solid var(--line, rgba(230, 232, 239, 0.18));
-  background: transparent;
-  color: var(--fg, #e6e8ef);
-  font-size: 13px;
-  line-height: 1.5;
-  resize: vertical;
-}
-
-.af-th-result {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding-top: 4px;
-}
-
-.af-th-paste {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 10px;
-  border: 1px solid var(--line, rgba(230, 232, 239, 0.12));
-  border-radius: 8px;
-}
-
-.af-th-paste-head {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  font-size: 13px;
-}
-
-/* Tournament cards on the index — a whole-card link needs its own reset. */
-.af-th-card {
-  text-decoration: none;
-  color: inherit;
-  transition: border-color 120ms ease;
-}
-
-.af-th-card:hover {
-  border-color: var(--af-blue, #3b82f6);
-}
-
-/* Blocker acknowledgement — a real tap target, and never mistakable for prose. */
-.af-th-ack {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  min-height: 44px;
-  padding: 8px 10px;
-  border: 1px solid var(--warn, #f59e0b);
-  border-radius: 8px;
-  font-size: 13px;
-  line-height: 1.5;
-  cursor: pointer;
+  .af-th-league-head {
+    margin: -16px -16px 0;
+    padding: 14px 16px;
+  }
 }
