@@ -1,4 +1,5 @@
 import type { SupportedSport } from '@/lib/create-league-v2/state'
+import { SURVIVOR_CAST_SIZE_OPTIONS } from '@/lib/league-creation-wizard/sport-team-limits'
 
 export type CreateMode = 'quick' | 'advanced'
 
@@ -320,9 +321,12 @@ export const LEAGUE_CREATE_OPTIONS_CATALOG_V1: LeagueCreateOptionsCatalog = {
       MLB: [8, 10, 12, 14],
       NHL: [8, 10, 12, 14],
     },
+    // `SURVIVOR_CAST_SIZE_OPTIONS` is what `POST /api/league/create` clamps a submitted cast
+    // size to, so anything this catalog offers that is not in that list gets silently rewritten
+    // on save. Read it rather than restating it.
     survivor: {
-      NFL: [16, 17, 18, 19, 20],
-      NCAAF: [16, 17, 18, 19, 20],
+      NFL: [...SURVIVOR_CAST_SIZE_OPTIONS],
+      NCAAF: [...SURVIVOR_CAST_SIZE_OPTIONS],
     },
     tournament: {
       NFL: [32, 64, 96, 128, 160, 192, 224],

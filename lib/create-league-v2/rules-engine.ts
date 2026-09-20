@@ -9,7 +9,10 @@
 import type { LeagueTypeId, DraftTypeId } from '@/lib/league-creation-wizard/types'
 import type { SupportedSport } from '@/lib/create-league-v2/state'
 import { getAllowedSportsForLeagueType } from '@/lib/league-creation-wizard/league-type-registry'
-import { getTeamCountOptionsForSport } from '@/lib/league-creation-wizard/sport-team-limits'
+import {
+  SURVIVOR_CAST_SIZE_OPTIONS,
+  getTeamCountOptionsForSport,
+} from '@/lib/league-creation-wizard/sport-team-limits'
 import { SUPPORTED_SPORTS, supportsIdpLeagueSport } from '@/lib/sport-scope'
 import {
   getDraftTypeUiHint,
@@ -132,7 +135,12 @@ export function getTeamCountOptions(
     return options
   }
   if (leagueType === 'survivor') {
-    return [16, 20, 24]
+    // This branch is only reached before `/api/leagues/create-options` resolves, or when it
+    // fails — so a list that diverges from the catalog means Survivor offers different sizes
+    // depending on whether one fetch succeeded. It held [16, 20, 24] for three months after
+    // 29566580a moved the cast to 16-20, and `POST /api/league/create` clamps to
+    // SURVIVOR_CAST_SIZE_OPTIONS, so a 24 picked from this list was silently saved as 20.
+    return [...SURVIVOR_CAST_SIZE_OPTIONS]
   }
   const max = getMaxTeamsForSport(sport, soccerPipeline)
   return evenTeamCountsUpTo(max)
@@ -270,9 +278,26 @@ export function resolveEffectiveDraftType(leagueType: LeagueTypeId, baseDraftTyp
 
 // ── Survivor tribe helpers ──────────────────────────────────────────
 
-/** Valid tribe counts for a given team count (must divide evenly). */
+/**
+ * Tribe counts offered for a Survivor cast size.
+ *
+ * Prefers counts that divide the cast evenly. But 17 and 19 are valid cast sizes (see
+ * {@link SURVIVOR_CAST_SIZE_OPTIONS}) and are prime, so the even-divisor rule alone returned an
+ * EMPTY list — the create flow then rendered a "Starting Tribes" card with no selectable option.
+ *
+ * Uneven tribes are supported by the engine, not a workaround: `SurvivorTribeService` assigns
+ * round-robin (`tribeIndex: i % tribeCount`) and `SurvivorSitOutEngine` models imbalance
+ * explicitly via `tribeShuffleImbalanceThreshold`.
+ *
+ * Additive by construction: for any cast size with at least one even divisor the result is
+ * byte-identical to the old rule, so only the previously-empty sizes change.
+ */
 export function getSurvivorTribeOptions(teamCount: number): number[] {
-  return [2, 3, 4].filter((t) => teamCount % t === 0)
+  const evenlyDivides = [2, 3, 4].filter((t) => teamCount % t === 0)
+  if (evenlyDivides.length > 0) return evenlyDivides
+
+  // Fall back to any split leaving at least two teams in the smallest tribe.
+  return [2, 3, 4].filter((t) => Math.floor(teamCount / t) >= 2)
 }
 
 // ── 3RR availability ────────────────────────────────────────────────
