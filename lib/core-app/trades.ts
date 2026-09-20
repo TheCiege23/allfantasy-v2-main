@@ -20,7 +20,9 @@ import {
   pickPricerFrom,
   withheldTradeReason,
   type UnpricedAsset,
+  type TradeAsset,
 } from './tradePicks'
+import { buildTradeBreakdown, type BreakdownAsset } from './tradeBreakdown'
 import {
   scanPendingSleeperTrades,
   type PendingTradeAsset,
@@ -154,6 +156,16 @@ export type GradedTrade = {
    */
   picksIn: number
   picksOut: number
+  /**
+   * Why it graded that way, in sentences.
+   *
+   * ⚠ EMPTY UNLESS THIS ROW IS THE VIEWER'S OWN. `collapseMirroredTradeRows` keeps the
+   * viewer's copy of a mirrored trade where one exists, and only then do we hold a name for
+   * both sides — "You" plus `partnerName`. For a trade between two OTHER managers this path
+   * holds a platform user id for one side and no display name at all, and captioning a real
+   * manager's trade with an invented label is worse than saying nothing.
+   */
+  breakdown: string[]
 }
 
 /**
@@ -208,6 +220,8 @@ async function resolveGrades(
        * pick at zero and favours whichever side gave it. See `gradeableSide`.
        */
       picksGiven: true, picksReceived: true,
+      /* The other manager's display name, for the breakdown's labels. */
+      partnerName: true,
       history: { select: { sleeperUsername: true } },
     },
     /*
@@ -263,6 +277,25 @@ async function resolveGrades(
   /* Free: the settings are already loaded for the value book. See `resolveLeagueIdpScoring`. */
   const idpScoring = hasIdpScoring(extractScoringSettings(leagueSettings) ?? {})
 
+  /*
+   * Names and positions, for the breakdown only.
+   *
+   * ⚠ THIS PATH DELIBERATELY HELD NO NAMES UNTIL NOW — the comment on `withheldReason`
+   * below says so, and it was right: a counts-only summary list needs none. The breakdown
+   * does, so it is one bounded query over the ids already collected above, issued in
+   * parallel with the snapshot read rather than after it. A failure degrades to
+   * `Player <id>` in a sentence, never to a wrong name or a missing asset.
+   */
+  const playersPromise =
+    ids.size > 0
+      ? prisma.sportsPlayer
+          .findMany({
+            where: { sleeperId: { in: [...ids] } },
+            select: { sleeperId: true, name: true, position: true },
+          })
+          .catch(() => [] as Array<{ sleeperId: string; name: string; position: string | null }>)
+      : Promise.resolve([] as Array<{ sleeperId: string; name: string; position: string | null }>)
+
   const snaps = await loadLatestPlayerValueSnapshots({
     sleeperIds: ids,
     /*
@@ -278,6 +311,8 @@ async function resolveGrades(
     format: book.format,
     qbFormat: book.qbFormat,
   })
+  const playerById = new Map((await playersPromise).map((p) => [p.sleeperId, p] as const))
+
   const rankById = new Map<string, number>()
   for (const s of snaps) {
     if (!rankById.has(s.sleeperId) && s.overallRank != null) rankById.set(s.sleeperId, s.overallRank)
@@ -360,6 +395,54 @@ async function resolveGrades(
       { label: 'gave', assets: gradeableSide(gave, rankOf, picksOut, pickPrice) },
     )
 
+    /*
+     * 🛑 ONLY THE VIEWER'S OWN ROW, because only there do we hold a name for both sides.
+     * `collapseMirroredTradeRows` keeps the viewer's copy when one exists; where it did not,
+     * `history.sleeperUsername` is a PLATFORM USER ID rather than a display name, and
+     * captioning another manager's trade with an id — or with an invented label — is worse
+     * than the silence it would replace.
+     */
+    const mine = viewerPlatformUserId != null && t.history.sleeperUsername === viewerPlatformUserId
+
+    /*
+     * ⚠ THE RANKS ARE THE GRADER'S OWN, VIA `rankOf` — the same function `gradeableSide`
+     * was just handed, not a second predicate over the same maps. `buildTradeBreakdown`
+     * takes a rank rather than a value precisely so the display price cannot be passed here
+     * by mistake; see its header.
+     */
+    const breakdownAssets = (
+      playerIds: readonly string[],
+      picks: readonly TradeAsset[],
+    ): BreakdownAsset[] => [
+      ...playerIds.flatMap((id) => {
+        const rank = rankOf(id)
+        if (rank == null) return []
+        const p = playerById.get(id)
+        return [{
+          name: p?.name ?? `Player ${id}`,
+          kind: 'player' as const,
+          position: p?.position ?? null,
+          rank,
+        }]
+      }),
+      ...picks.flatMap((p) => {
+        const rank = p.pickSeason && p.pickRound != null ? pickPrice(p.pickSeason, p.pickRound)?.rank ?? null : null
+        return rank == null ? [] : [{ name: p.name, kind: 'pick' as const, position: null, rank }]
+      }),
+    ]
+
+    const breakdown =
+      g.graded && mine
+        ? buildTradeBreakdown({
+            received: breakdownAssets(recv, picksIn),
+            gave: breakdownAssets(gave, picksOut),
+            letter: g.letter,
+            sharePct: g.sharePct,
+            receiverLabel: 'You',
+            partnerLabel: t.partnerName?.trim() || 'the other side',
+          })
+        : []
+
     return {
       transactionId: t.transactionId,
       season: t.season ?? null,
@@ -380,6 +463,7 @@ async function resolveGrades(
       playersOut: gave.length,
       picksIn: picksIn.length,
       picksOut: picksOut.length,
+      breakdown,
     }
   })
 

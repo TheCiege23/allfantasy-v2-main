@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { render, screen } from '@testing-library/react'
 
 import Trades from '@/components/core-app/screens/Trades'
-import type { TradesData, TradeRecord } from '@/lib/core-app/trades'
+import type { TradesData, TradeRecord, GradedTrade } from '@/lib/core-app/trades'
 
 /*
  * The trade card's player sides — who received what, and who is named for it.
@@ -145,5 +145,77 @@ describe('trades screen — directional player sides', () => {
     expect(container.querySelector('.af-tr-players')).toBeNull()
     // ...but the trade itself is still listed, from its counts.
     expect(screen.getByText('with Gridiron Vultures')).toBeTruthy()
+  })
+})
+
+
+/*
+ * The "Trade grades" list, which had NO render coverage at all — every fixture in this file
+ * sets `grades.available: false`, so adding a required `breakdown` field to `GradedTrade`
+ * broke nothing and proved nothing. That silence is the reason this block exists.
+ */
+function graded(over: Partial<GradedTrade> = {}): GradedTrade {
+  return {
+    transactionId: 'tx-g1',
+    season: 2026,
+    week: 3,
+    letter: 'B',
+    sharePct: 58,
+    withheldReason: null,
+    playersIn: 1,
+    playersOut: 2,
+    picksIn: 0,
+    picksOut: 1,
+    breakdown: [],
+    ...over,
+  }
+}
+
+function withGrades(rows: GradedTrade[]): TradesData {
+  return { ...data([record()]), grades: { available: true, data: rows } }
+}
+
+describe('trades screen — grade row breakdown', () => {
+  it('renders every sentence under the grade row', () => {
+    const { container } = render(
+      <Trades
+        data={withGrades([
+          graded({
+            breakdown: [
+              'You got the better end of it, with 58% of the value.',
+              'The most valuable asset was Bijan Robinson, and You got him.',
+            ],
+          }),
+        ])}
+      />,
+    )
+    const items = [...container.querySelectorAll('.af-tr-graderow-breakdown li')].map((el) => el.textContent)
+    expect(items).toEqual([
+      'You got the better end of it, with 58% of the value.',
+      'The most valuable asset was Bijan Robinson, and You got him.',
+    ])
+  })
+
+  /*
+   * 🛑 THE CASE THE LOADER DELIBERATELY LEAVES EMPTY: a trade between two OTHER managers,
+   * where this path holds a platform user id for one side and no display name. The row keeps
+   * its share line and gains no strip.
+   */
+  it('renders no strip when the loader supplied no breakdown', () => {
+    const { container } = render(<Trades data={withGrades([graded({ breakdown: [] })])} />)
+    expect(container.querySelector('.af-tr-graderow-breakdown')).toBeNull()
+    expect(container.textContent).toContain('received 58% of the traded value')
+  })
+
+  it('keeps the withheld reason and shows no breakdown on an ungraded trade', () => {
+    const { container } = render(
+      <Trades
+        data={withGrades([
+          graded({ letter: null, sharePct: null, withheldReason: 'one side could not be priced', breakdown: [] }),
+        ])}
+      />,
+    )
+    expect(container.querySelector('.af-tr-graderow-breakdown')).toBeNull()
+    expect(container.textContent).toContain('one side could not be priced')
   })
 })
