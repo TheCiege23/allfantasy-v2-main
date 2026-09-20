@@ -7,25 +7,26 @@ import { requireWorldCupApiUser } from "./_utils"
 export const runtime = "nodejs"
 
 /**
- * 🛑 THE SPORT ENUM IS NARROWER THAN `PlayoffSport`, AND THAT IS DELIBERATE.
+ * MLB is accepted here because the four things it needed now exist and are
+ * each verified, which is the bar this gate was holding:
  *
- * The engine below this route understands baseball in full — template, round
- * keys, series lengths, byes, labels — but two things an MLB pool needs to be
- * TRUE rather than decorative do not exist yet:
+ *   1. a seeding source — `/api/cron/import-standings` ingests MLB, and ESPN
+ *      supplies `playoffSeed`, which applies the real division-winner rule;
+ *   2. a scheduled writer — the results phase on the playoff cron;
+ *   3. round and league inference checked against ESPN's REAL 2025 postseason
+ *      rather than guessed (the guessed patterns were wrong twice); and
+ *   4. a finality guard, so seeding cannot write a provisional field.
  *
- *   1. a seeding source (nothing ingests MLB standings; `/api/cron/import-standings`
- *      is NFL/NCAAF only), so `AL1`…`NL6` can never be filled with real clubs; and
- *   2. a scheduled writer — `syncPlayoffChallengeSeries` has no cron caller for
- *      ANY sport, so no bracket advances on its own today.
- *
- * Accepting "mlb" here before those land would let someone enter a pool that can
- * never resolve: it would look correct and fail silently, which is worse than
- * the "coming soon" it replaces. Add "mlb" in the SAME change that lands both,
- * and update `SYNCABLE_PLAYOFF_SPORTS` in playoffSeriesSyncService.ts with it.
+ * ⚠ A POOL CREATED BEFORE THE FIELD IS SET IS FINE, AND THAT IS BY DESIGN.
+ * Its slots read `AL1`…`NL6` and are pickable as seeds; when the regular
+ * season ends, seeding fills them with real clubs and rewrites every pick that
+ * named a seed, in one transaction. So an entrant who called "AL3 over AL6" in
+ * September still holds that call in October, against the clubs that turned
+ * out to be AL3 and AL6.
  */
 const createPlayoffChallengeSchema = z.object({
   name: z.string().trim().min(2).max(80).optional(),
-  sport: z.enum(["nba", "nhl"]),
+  sport: z.enum(["nba", "nhl", "mlb"]),
   seasonYear: z.coerce.number().int().min(2024).max(2100).optional(),
   isTestMode: z.boolean().optional(),
   visibility: z.enum(["private", "public"]).optional(),
@@ -71,7 +72,8 @@ export async function GET(request: Request) {
 
   const { searchParams } = new URL(request.url)
   const sportParam = searchParams.get("sport")
-  const sport = sportParam === "nba" || sportParam === "nhl" ? sportParam : null
+  const sport =
+    sportParam === "nba" || sportParam === "nhl" || sportParam === "mlb" ? sportParam : null
 
   try {
     const challenges = await listUserPlayoffChallenges(auth.user.id)
