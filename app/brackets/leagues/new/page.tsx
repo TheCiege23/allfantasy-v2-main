@@ -8,6 +8,7 @@ import { SUPPORTED_SPORTS, normalizeToSupportedSport } from "@/lib/sport-scope"
 import { getRoundPointsSummary } from "@/lib/bracket-challenge"
 import { CommissionerFanCredSetupNotice } from "@/components/legal/CommissionerFanCredSetupNotice"
 import { createPlayoffBracketChallengeClient } from "@/lib/playoffs/playoffClientApi"
+import { indefiniteArticleFor } from "@/lib/text/indefiniteArticle"
 import { defaultPlayoffChallengeConfig, isAfCommissionerSubscriber, sanitizePlayoffChallengeConfig } from "@/lib/playoffs/playoffChallengeConfig"
 
 const SCORING_OPTIONS = [
@@ -232,7 +233,8 @@ export default function NewBracketLeaguePage() {
 
         <h1 className="text-xl font-bold text-center mb-2">Create Bracket Pool</h1>
         <p className="text-center text-xs mb-8 mode-muted">
-          Build a {sportLabel} {challengeType === "playoff_challenge" ? "Playoff Challenge" : "Classic NCAA"} pool.
+          Build {indefiniteArticleFor(sportLabel)} {sportLabel}{" "}
+          {challengeType === "playoff_challenge" ? "Playoff Challenge" : "Classic NCAA"} pool.
         </p>
 
         <form onSubmit={createPool} className="space-y-6 pb-24 sm:pb-0" data-testid="bracket-create-form">
