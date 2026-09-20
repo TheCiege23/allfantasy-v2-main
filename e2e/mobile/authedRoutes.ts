@@ -32,7 +32,16 @@ export type AuthedRoute = {
   route: string
   login: AuthedRole
   /**
-   * Visit this route with `?league=<the seeded NFL league>` appended.
+   * Visit this route with `?league=<the seeded NFL league>` appended, and assert
+   * the screen rendered by looking for THIS selector.
+   *
+   * ⚠ IT CARRIES THE SELECTOR RATHER THAN BEING A BOOLEAN, AND THE SECOND ROUTE
+   * IS WHY. This began as a boolean with `.af-mt` hardcoded in the spec, which
+   * worked for exactly one route: matchup renders `.af-mu` and Trade Center
+   * `.af-tc`, so adding either would have failed the premise guard for the wrong
+   * reason. The tempting shortcut — asserting something all three screens share —
+   * buys exactly the looseness the picker slips through. A flag says THAT a route
+   * is scoped; only the selector says what proves the right screen rendered.
    *
    * 🛑 WITHOUT IT, `/core/my-team` CERTIFIES THE WRONG SCREEN AND STILL PASSES.
    * `app/core/[[...screen]]/page.tsx:2037` only loads `getMyTeamData` when a
@@ -44,7 +53,7 @@ export type AuthedRoute = {
    * ⚠ THE GUARD STILL COMPARES `pathname`, NOT THE FULL URL, so a query string
    * does not weaken it. `route` stays the bare path and remains the baseline key.
    */
-  leagueScoped?: boolean
+  leagueScopedRoot?: string
 }
 
 /*
@@ -75,7 +84,8 @@ export type AuthedRoute = {
  */
 export const AUTHED_ROUTES: readonly AuthedRoute[] = [
   { route: "/core", login: "manager" },
-  { route: "/core/my-team", login: "manager", leagueScoped: true },
-  { route: "/core/trades", login: "manager" },
+  { route: "/core/my-team", login: "manager", leagueScopedRoot: ".af-mt" },
+  { route: "/core/matchup", login: "manager", leagueScopedRoot: ".af-mu" },
+  { route: "/core/trades", login: "manager", leagueScopedRoot: ".af-tc" },
   { route: "/commissioner-os", login: "commissioner" },
 ] as const
