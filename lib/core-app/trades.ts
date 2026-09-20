@@ -4,6 +4,7 @@ import { valueBookFor, type ValueBook } from './valueBook'
 import { resolveSourceScreenLink, type SourceScreenLink } from '@/lib/league-links/sourceLinkResolver'
 
 import { prisma } from '@/lib/prisma'
+import { loadLatestPickValueSnapshots } from '@/lib/player-values/latestPickValueSnapshots'
 import { loadLatestPlayerValueSnapshots } from '@/lib/player-values/latestPlayerValueSnapshots'
 import { leagueDisplayName, type SectionState } from './leagueHome'
 import { gradeTrade } from '@/lib/projections/tradeGrading'
@@ -11,6 +12,7 @@ import {
   LATEST_TRADE_ORDER,
   gradeableSide,
   pickAssets,
+  pickPricerFrom,
   withheldTradeReason,
 } from './tradePicks'
 import {
@@ -264,15 +266,32 @@ async function resolveGrades(
     if (!rankById.has(s.sleeperId) && s.overallRank != null) rankById.set(s.sleeperId, s.overallRank)
   }
 
+  /*
+   * 🛑 PICK PRICES FOR THIS BOOK — A SEPARATE READ, BECAUSE THERE IS NO ID TO ASK FOR.
+   * A trade stores a pick as `{ season, round }` and FantasyCalc keys it by a synthetic token
+   * (`FP_2027_early_0`), so the NAME is the whole join and `loadLatestPlayerValueSnapshots`,
+   * which takes the ids it returns, structurally cannot serve it.
+   *
+   * ⚠ FAILURE HERE LEAVES PICKS UNPRICED, WHICH WITHHOLDS LETTERS RATHER THAN INVENTING THEM.
+   * That is the same outcome this screen had before picks were stored at all, so a read error
+   * costs grades and never correctness.
+   */
+  const pickRows = await loadLatestPickValueSnapshots({
+    source: book.source,
+    format: book.format,
+    qbFormat: book.qbFormat,
+  }).catch(() => [])
+  const pickPrice = pickPricerFrom(pickRows)
+
   const graded: GradedTrade[] = distinctTrades.map((t) => {
     const recv = (Array.isArray(t.playersReceived) ? t.playersReceived : []).map(String)
     const gave = (Array.isArray(t.playersGiven) ? t.playersGiven : []).map(String)
-    const picksIn = pickAssets(t.picksReceived)
-    const picksOut = pickAssets(t.picksGiven)
+    const picksIn = pickAssets(t.picksReceived, pickPrice)
+    const picksOut = pickAssets(t.picksGiven, pickPrice)
     const rankOf = (id: string) => rankById.get(id) ?? null
     const g = gradeTrade(
-      { label: 'received', assets: gradeableSide(recv, rankOf, picksIn) },
-      { label: 'gave', assets: gradeableSide(gave, rankOf, picksOut) },
+      { label: 'received', assets: gradeableSide(recv, rankOf, picksIn, pickPrice) },
+      { label: 'gave', assets: gradeableSide(gave, rankOf, picksOut, pickPrice) },
     )
 
     return {

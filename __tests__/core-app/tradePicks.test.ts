@@ -3,7 +3,9 @@ import { describe, expect, it } from 'vitest'
 import {
   LATEST_TRADE_ORDER,
   gradeableSide,
+  parsePickRowName,
   pickAssets,
+  pickPricerFrom,
   withheldTradeReason,
 } from '@/lib/core-app/tradePicks'
 import { gradeTrade } from '@/lib/projections/tradeGrading'
@@ -117,11 +119,24 @@ describe('withheldTradeReason', () => {
   const grade = (reason: 'NO_ASSETS' | 'PARTIAL_COVERAGE' | 'NO_COVERAGE', covered: number, total: number) =>
     ({ graded: false as const, reason, covered, total, detail: '' })
 
+  /*
+   * ⚠ THE WORDING TRACKS A FACT THAT CHANGED. It used to say picks were something "we do
+   * not price yet", which was true while `ingestPlayerValues` discarded every pick row. We
+   * store them now, so an unpriced pick is a gap in the BOOK, not a category we refuse.
+   */
   it('names the picks when the picks are the whole gap', () => {
     expect(withheldTradeReason(grade('PARTIAL_COVERAGE', 2, 6), 4)).toMatch(
-      /includes 4 draft picks, which we do not price yet/,
+      /no market price on file for the 4 draft picks/,
     )
-    expect(withheldTradeReason(grade('NO_COVERAGE', 0, 1), 1)).toMatch(/includes a draft pick/)
+    expect(withheldTradeReason(grade('NO_COVERAGE', 0, 1), 1)).toMatch(
+      /no market price on file for the draft pick/,
+    )
+  })
+
+  it('no longer tells a reader we do not price picks', () => {
+    for (const n of [1, 3]) {
+      expect(withheldTradeReason(grade('PARTIAL_COVERAGE', 2, 2 + n), n)).not.toMatch(/do not price/)
+    }
   })
 
   /*
@@ -177,5 +192,135 @@ describe('LATEST_TRADE_ORDER', () => {
   /* The mirrored copies tie on the timestamp; this is what stops the card flipping. */
   it('ends on historyId so the surviving mirror is deterministic', () => {
     expect(Object.keys(LATEST_TRADE_ORDER[LATEST_TRADE_ORDER.length - 1]!)).toEqual(['historyId'])
+  })
+})
+
+/*
+ * Stored pick rows, in the two shapes FantasyCalc really sends — per SLOT for near picks
+ * ("2026 Pick 1.01") and per BUCKET for far ones ("2027 1st (Early)"). Both forms appear in
+ * one response; the measured examples are recorded in `availablePlayersTool.ts`.
+ *
+ * 🛑 THE NUMBERS ARE SHAPED, NOT SAMPLED. They are ordered and spaced like a real dynasty
+ * superflex board so the arithmetic below is meaningful, but no assertion here should ever be
+ * read as a claim about what a 2027 1st is really worth. What is being tested is the MATH —
+ * that buckets average, that an unknown round stays unpriced, that a missing rank is not a
+ * missing price — none of which depends on the magnitudes being right.
+ */
+const PICK_ROWS = [
+  { name: '2027 1st (Early)', value: 7000, overallRank: 10 },
+  { name: '2027 1st (Mid)', value: 5800, overallRank: 20 },
+  { name: '2027 1st (Late)', value: 4600, overallRank: 30 },
+  { name: '2027 2nd (Early)', value: 3800, overallRank: 48 },
+  { name: '2027 2nd (Mid)', value: 3200, overallRank: 62 },
+  { name: '2027 3rd (Mid)', value: 2000, overallRank: 110 },
+  { name: '2026 Pick 1.01', value: 9000, overallRank: 4 },
+  { name: '2026 Pick 1.02', value: 8600, overallRank: 6 },
+]
+
+describe('parsePickRowName', () => {
+  it('reads both of the shapes FantasyCalc sends', () => {
+    expect(parsePickRowName('2027 1st (Early)')).toEqual({ season: '2027', round: 1 })
+    expect(parsePickRowName('2027 3rd')).toEqual({ season: '2027', round: 3 })
+    expect(parsePickRowName('2026 Pick 1.01')).toEqual({ season: '2026', round: 1 })
+    expect(parsePickRowName('2026 Pick 12.11')).toEqual({ season: '2026', round: 12 })
+  })
+
+  /*
+   * ⚠ A PARSER THAT KNOWS ONE FORM PRICES HALF THE BOARD AT NOTHING, and silently — an
+   * unmatched row is indistinguishable from a round the market does not cover.
+   */
+  it('refuses anything that is not a pick name', () => {
+    for (const n of ['A.J. Brown', '', '2027', 'Pick 1.01', '27 1st']) {
+      expect(parsePickRowName(n)).toBeNull()
+    }
+  })
+})
+
+describe('pickPricerFrom', () => {
+  const price = pickPricerFrom(PICK_ROWS)
+
+  /* The user's decision, 2026-09-20: an unknown slot is unknown, so average the buckets. */
+  it('averages the buckets, because we never store which slot a pick is', () => {
+    expect(price('2027', 1)?.rank).toBe(20) // mean of 10, 20, 30
+    expect(price('2027', 1)?.value).toBe(5800) // mean of 7000, 5800, 4600
+    expect(price('2026', 1)?.rank).toBe(5) // mean of 4, 6 — slot form averages too
+  })
+
+  it('prices a round the book does not cover as unpriced, never as zero', () => {
+    expect(price('2027', 9)).toBeNull()
+    expect(price('2031', 1)).toBeNull()
+    expect(price('', 1)).toBeNull()
+  })
+
+  /*
+   * ⚠ A MISSING RANK IS NOT A MISSING PRICE, and they are different questions. The row still
+   * carries a value worth displaying; it just cannot be graded on.
+   */
+  it('keeps a rankless row out of the rank mean without dropping its value', () => {
+    const p = pickPricerFrom([
+      { name: '2027 1st (Early)', value: 7000, overallRank: 10 },
+      { name: '2027 1st (Mid)', value: 5000, overallRank: null },
+    ])
+    expect(p('2027', 1)?.rank).toBe(10)
+    expect(p('2027', 1)?.value).toBe(6000)
+  })
+
+  it('returns nothing at all when the book holds no picks', () => {
+    expect(pickPricerFrom([])('2027', 1)).toBeNull()
+  })
+})
+
+describe('pricing the KBFL trade', () => {
+  const priced = (id: string) => (id === 'brown' ? 12 : id === 'monty' ? 60 : null)
+  const price = pickPricerFrom(PICK_ROWS)
+
+  const kbfl = (p?: ReturnType<typeof pickPricerFrom>) =>
+    gradeTrade(
+      { label: 'received', assets: gradeableSide([], priced, pickAssets(TITANUP_GOT, p), p) },
+      {
+        label: 'gave',
+        assets: gradeableSide(['brown', 'monty'], priced, pickAssets(TITANUP_GAVE, p), p),
+      },
+    )
+
+  /*
+   * 🛑 THE HEADLINE. This is the real trade the board showed as "ungraded: one side has no
+   * assets on record" — three 2027 picks against two players and a 2027 3rd.
+   */
+  it('grades a trade whose whole side is draft picks', () => {
+    const g = kbfl(price)
+    expect(g.graded).toBe(true)
+    if (g.graded) expect(['A', 'B', 'C', 'D', 'F']).toContain(g.letter)
+  })
+
+  /*
+   * THE POSITIVE CONTROL, and it is the same trade. Take the pricer away and the letter goes
+   * away with it — so the test above is reporting the pricing and not merely the fact that
+   * `gradeTrade` returns something.
+   */
+  it('withholds the same trade when the book prices no picks', () => {
+    expect(kbfl(undefined).graded).toBe(false)
+    expect(kbfl(pickPricerFrom([])).graded).toBe(false)
+  })
+
+  /*
+   * ⚠ AND A PICK THE BOOK DOES NOT COVER STILL WITHHOLDS. A partial fallback would be worse
+   * than no grade: it would price the covered picks and treat the uncovered one as worthless.
+   */
+  it('withholds when only some of the picks are covered', () => {
+    const g = gradeTrade(
+      { label: 'received', assets: gradeableSide([], priced, pickAssets([{ season: '2029', round: 1 }], price), price) },
+      { label: 'gave', assets: gradeableSide(['brown'], priced, [], price) },
+    )
+    expect(g.graded).toBe(false)
+  })
+
+  it('puts a market value on the pick it prices, for the card to show', () => {
+    const [first] = pickAssets([{ season: '2027', round: 1 }], price)
+    expect(first.value).toBe(5800)
+    expect(first.pickSeason).toBe('2027')
+    expect(first.pickRound).toBe(1)
+    /* Unpriced stays null — never 0, which would read as "worthless" on the card. */
+    expect(pickAssets([{ season: '2027', round: 9 }], price)[0]!.value).toBeNull()
   })
 })

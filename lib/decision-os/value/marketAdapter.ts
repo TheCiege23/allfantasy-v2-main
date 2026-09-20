@@ -101,7 +101,15 @@ export async function loadMarketValues(args: MarketAdapterArgs): Promise<ValueLo
   // unique key is (sleeperId, source, format, qbFormat, capturedAt) — there is no "current" flag.
   const rows = await prisma.playerValueSnapshot
     .findMany({
-      where: { format: args.format, qbFormat: args.qbFormat },
+      /*
+       * ⚠ `position: { not: 'PICK' }` IS LOAD-BEARING SINCE PICKS ENTERED THIS TABLE.
+       * `ingestPlayerValues` stored FantasyCalc's draft-pick rows from 2026-09-20 so trades
+       * carrying a pick could be graded. They are priced assets but they are not PLAYERS, and
+       * this adapter answers player market questions — without the guard they would both
+       * appear as players and eat the `take` cap below, since FantasyCalc ranks picks near the
+       * TOP of the list and this read is ordered by recency across the whole book.
+       */
+      where: { format: args.format, qbFormat: args.qbFormat, position: { not: 'PICK' } },
       orderBy: { capturedAt: 'desc' },
       take: args.limit ?? 2000,
       select: {
