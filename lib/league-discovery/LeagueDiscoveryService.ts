@@ -2,6 +2,7 @@
  * LeagueDiscoveryService — discover bracket leagues with filters, search, and pagination.
  */
 
+import { Prisma } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
 import { openaiChatJson, parseJsonContentFromChatCompletion } from "@/lib/openai-client"
 import {
@@ -48,6 +49,38 @@ export interface DiscoverLeaguesResult {
   page: number
   limit: number
   totalPages: number
+}
+
+/**
+ * What the discovery query joins.
+ *
+ * 🛑 ONLY RELATIONS BELONG IN AN `include`, AND A SCALAR HERE IS A 500, NOT A
+ * TYPE ERROR — because the call used to go through `(prisma as any)`. From
+ * `be9816c52` (2026-03-17) until this was fixed, this block also listed
+ * `scoringRules: true`, which is a `Json?` COLUMN on BracketLeague, and every
+ * request to /api/bracket/discover died with
+ * "Invalid `prisma.bracketLeague.findMany()` invocation". Six months of a
+ * public endpoint returning 500, and /brackets/discover showing nothing.
+ *
+ * ⚠ THE SCALAR WAS NEVER NEEDED. `include` returns every scalar column by
+ * default, so `lg.scoringRules` below has always been populated — the line
+ * bought nothing and cost the whole endpoint.
+ *
+ * Exported so `__tests__/league-discovery-include-shape.test.ts` can check it
+ * against the generated client's own field list.
+ *
+ * 🛑 THE `Prisma.BracketLeagueInclude` ANNOTATION IS LOAD-BEARING AND IS NOT
+ * DECORATION. Excess-property checking fires on an object LITERAL, not on a
+ * variable passed by reference — so once this moved out of the call into a
+ * named const, `include: DISCOVERY_INCLUDE` type-checked happily with the
+ * scalar still in it. Measured: with the cast removed but no annotation,
+ * reinstating `scoringRules: true` produced ZERO compiler errors. Annotating
+ * the declaration is what moves the check to where the literal is written.
+ */
+export const DISCOVERY_INCLUDE: Prisma.BracketLeagueInclude = {
+  owner: { select: { displayName: true, avatarUrl: true } },
+  tournament: { select: { id: true, name: true, season: true, sport: true } },
+  _count: { select: { members: true, entries: true } },
 }
 
 const SKILL_BY_TEAMS: Record<SkillLevel, number> = {
@@ -289,14 +322,9 @@ export async function discoverLeagues(input: DiscoverLeaguesInput): Promise<Disc
   const searchWhere = buildSearchWhere(input.query)
   const where = buildDiscoveryWhere(resolved, searchWhere)
 
-  const allMatching = await (prisma as any).bracketLeague.findMany({
+  const allMatching = await prisma.bracketLeague.findMany({
     where,
-    include: {
-      owner: { select: { displayName: true, avatarUrl: true } },
-      tournament: { select: { id: true, name: true, season: true, sport: true } },
-      _count: { select: { members: true, entries: true } },
-      scoringRules: true,
-    },
+    include: DISCOVERY_INCLUDE,
     orderBy: { createdAt: "desc" },
     take: 2000,
   })
