@@ -8,6 +8,9 @@ import {
   getTeamCountOptions,
 } from '@/lib/create-league-v2/rules-engine'
 import { normalizeLegacyManualCreateBody, finalizeCanonicalCreatePayload } from '@/lib/league-creation/normalizeCreateLeaguePayload'
+import { setClientLeagueCreateOptionsCatalog } from '@/lib/create-league-v2/options-catalog-client'
+import { LEAGUE_CREATE_OPTIONS_CATALOG_V1 } from '@/lib/league-creation/options-catalog-seed-data'
+import { SURVIVOR_CAST_SIZE_OPTIONS } from '@/lib/league-creation-wizard/sport-team-limits'
 
 function baseValidRedraft() {
   return {
@@ -117,5 +120,53 @@ describe('payload normalization unchanged after form layer', () => {
   it('finalizeCanonicalCreatePayload still defaults timezone', () => {
     const out = finalizeCanonicalCreatePayload({ concept: 'redraft', timezone: '' })
     expect(out.timezone).toBe('America/New_York')
+  })
+
+  /*
+   * This is the LIVE gate on Survivor cast size. The shipped wizard's team-count control is a
+   * free `<input type="number" min={2} max={32}>`, so nothing stops a manager typing 17; what
+   * decides whether they can submit is analyzeCreateLeagueCompletion, which checks
+   * getTeamCountOptions.
+   *
+   * That resolver reads the fetched options catalog when it has loaded and a hardcoded list
+   * otherwise. The two disagreed, so before the fix a Survivor league at 17/18/19 teams was
+   * rejected as "not a supported size" whenever /api/leagues/create-options had not resolved —
+   * and 24 was ACCEPTED there, only for the server to clamp it to 20 on save.
+   */
+  it('Survivor: every offered cast size passes the live gate on BOTH catalog paths', () => {
+    for (const withCatalog of [true, false]) {
+      setClientLeagueCreateOptionsCatalog(withCatalog ? LEAGUE_CREATE_OPTIONS_CATALOG_V1 : null)
+      const label = withCatalog ? 'catalog loaded' : 'pre-fetch fallback'
+
+      for (const teamCount of SURVIVOR_CAST_SIZE_OPTIONS) {
+        const issues = analyzeCreateLeagueCompletion({
+          ...baseValidRedraft(),
+          leagueType: 'survivor' as const,
+          sport: 'NFL' as const,
+          teamCount,
+        })
+        expect(
+          issues.map((i) => i.code),
+          `${label}: ${teamCount} teams`,
+        ).not.toContain('team_count_invalid')
+      }
+    }
+    setClientLeagueCreateOptionsCatalog(null)
+  })
+
+  it('Survivor: a size the server would clamp is still rejected by the gate', () => {
+    // Control — the gate is doing something, so the loop above is not vacuous. 24 sits outside
+    // SURVIVOR_CAST_SIZE_OPTIONS, so it must not pass on either path.
+    for (const withCatalog of [true, false]) {
+      setClientLeagueCreateOptionsCatalog(withCatalog ? LEAGUE_CREATE_OPTIONS_CATALOG_V1 : null)
+      const issues = analyzeCreateLeagueCompletion({
+        ...baseValidRedraft(),
+        leagueType: 'survivor' as const,
+        sport: 'NFL' as const,
+        teamCount: 24,
+      })
+      expect(issues.map((i) => i.code)).toContain('team_count_invalid')
+    }
+    setClientLeagueCreateOptionsCatalog(null)
   })
 })
