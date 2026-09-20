@@ -112,9 +112,24 @@
   font-weight: 500;
 }
 
+/*
+ * ⚠ `font-size` IS DECLARED HERE NOW BECAUSE IT USED TO ARRIVE BY ACCIDENT.
+ * af-player-finder.css defined a SECOND `.af-pf-platform` — the two files share
+ * the `af-pf-` prefix for "portfolio" and "player finder" respectively, and of
+ * their 34 and 263 classes exactly two names collide. This rule never set a font
+ * size, so the portfolio row's platform chip was rendering at the PLAYER
+ * FINDER's 9.5px. That rule has been renamed `.af-pfind-platform`, so the value
+ * is stated here rather than silently falling back to the inherited size.
+ *
+ * Caught by a before/after cascade diff that carried this surface as a control
+ * precisely because it was not supposed to move; it moved.
+ *
+ * ⚠ `.af-pf-link` STILL COLLIDES between the same two files and is untouched.
+ */
 .af-pf-platform {
   padding: 2px 6px;
   border-radius: 4px;
+  font-size: 9.5px;
   background: var(--chip);
   border: 1px solid var(--chip-line);
 }

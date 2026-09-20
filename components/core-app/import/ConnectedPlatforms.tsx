@@ -315,7 +315,7 @@ function PlatformRow({
 }) {
   return (
     <li className="af-ca-row" data-status={status}>
-      <span className="af-platform af-ca-mark" data-platform={platform} aria-hidden>
+      <span className="af-platform af-platform-mark af-ca-mark" data-platform={platform} aria-hidden>
         {platform === 'fleaflicker' ? 'FL' : label.charAt(0)}
       </span>
       <span className="af-ca-body">

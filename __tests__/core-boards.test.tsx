@@ -1,6 +1,27 @@
 import React from 'react'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { render } from '@testing-library/react'
+
+/*
+ * ⚠ THE BOARDS NOW CONTAIN AN APP-ROUTER COMPONENT, SO THEY NEED A ROUTER.
+ *
+ * `TradesBoard`'s card action is `BoardActionLink`, which calls `useRouter()` so
+ * it can drive the navigation inside a `useTransition` and show a pending state
+ * — `/core/trades` → `/core/trades?league=…` changes only a search param, so the
+ * route's `loading.tsx` boundary never re-suspends and the tap had no feedback
+ * at all. See that component's header.
+ *
+ * `useRouter` throws `invariant expected app router to be mounted` outside a
+ * Next tree, which took down EVERY TradesBoard case here at once rather than
+ * failing an assertion — a render crash reads as sixteen unrelated failures.
+ * This is the same mock `core-home-cards-stream.test.tsx` and ~60 other suites
+ * in this tree already use for the same reason.
+ */
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ push() {}, replace() {}, prefetch() {}, refresh() {}, back() {}, forward() {} }),
+  usePathname: () => '/core/trades',
+  useSearchParams: () => new URLSearchParams(),
+}))
 
 import { leagueArtUrl, managerArtUrl } from '@/lib/core-app/leagueArt'
 import {
@@ -287,12 +308,42 @@ describe('WeekBoard', () => {
     expect(text).toMatch(/playoff filter did not run/i)
   })
 
+  /*
+   * ⚠ THIS ASSERTED "not.toContain('Unknowable')" — THAT THE ROW WAS NOWHERE ON
+   * THE BOARD — AND THAT WAS TOO STRONG FOR THE RULE IT WAS PROTECTING.
+   *
+   * The rule is that a matchup with no margin must not be RANKED, because the
+   * two columns are ordered by margin and it does not have one. Absence from
+   * the page was how that was achieved, not what it required — and measured on
+   * a real account it cost 47 of 65 leagues their place on the screen, leaving
+   * the board with a single row and the reader with a count. `WeekBoard` now
+   * lists them in their own section, so the assertion is scoped to the columns
+   * the rule is actually about.
+   *
+   * ⚠ AND IT ASSERTS THE ABSENCE OF A MARGIN ON THE ROW ITSELF, not merely its
+   * placement. Placement alone would stay green if someone later gave these
+   * rows a `+0.0` — which is exactly the invented projection the loader refuses.
+   */
   it('never ranks an unprojected matchup by a margin it does not have', () => {
     const { container } = render(
       <WeekBoard
         board={weekData({
           leaning: [],
-          unprojected: [weekMatchup({ leagueId: 'u', leagueName: 'Unknowable', projection: null })],
+          /*
+            ⚠ `yourSampleWeeks: 0` OVERRIDES THE FIXTURE'S DEFAULT OF 5, WHICH IS
+            A STATE THAT CANNOT EXIST. The loader gives a roster a projection the
+            moment it has 3 completed weeks, so "5 weeks on file and no
+            projection" is not a matchup the loader can produce — and the row now
+            PRINTS that number, so an impossible fixture would render "5/3".
+          */
+          unprojected: [
+            weekMatchup({
+              leagueId: 'u',
+              leagueName: 'Unknowable',
+              projection: null,
+              yourSampleWeeks: 0,
+            }),
+          ],
         })}
         outlook={outlook()}
         rivalriesHref="/core/week?view=rivalries"
@@ -300,9 +351,68 @@ describe('WeekBoard', () => {
         totalLeagues={9}
       />,
     )
+
+    /* Not in either ranked column — that is the rule. */
+    const split = container.querySelector('.af-bd-split')
+    expect(split).toBeTruthy()
+    expect(split!.textContent ?? '').not.toContain('Unknowable')
+
+    /* But on the board, with no margin and no win probability against its name. */
+    const row = [...container.querySelectorAll('.af-bd-row')].find((r) =>
+      (r.textContent ?? '').includes('Unknowable'),
+    )
+    expect(row).toBeTruthy()
+    const rowText = row!.textContent ?? ''
+    expect(rowText).not.toMatch(/[+−]\d/)
+    expect(rowText).not.toMatch(/% to win/)
+    /* It says what it is short of instead: 0 of the 3 weeks the model needs. */
+    expect(rowText).toMatch(/0\/3/)
+  })
+
+  /*
+   * The positive control for the scoping above. If `.af-bd-split` ever stopped
+   * matching — renamed, restructured — the "not in the columns" assertion would
+   * pass against an empty string on a board that ranks everything, which is the
+   * check-that-cannot-fail this repo keeps paying for.
+   */
+  it('does put a PROJECTED matchup in a ranked column', () => {
+    const { container } = render(
+      <WeekBoard
+        board={weekData({
+          leaning: [weekMatchup({ leagueId: 'p', leagueName: 'Knowable' })],
+          unprojected: [],
+        })}
+        outlook={outlook()}
+        rivalriesHref="/core/week?view=rivalries"
+        allHref="/core/week?all=1"
+        totalLeagues={9}
+      />,
+    )
+    const split = container.querySelector('.af-bd-split')
+    expect(split).toBeTruthy()
+    expect(split!.textContent ?? '').toContain('Knowable')
+  })
+
+  /*
+   * Above the cap the note must account for the REMAINDER, not restate the whole
+   * population over a list of ten of them.
+   */
+  it('counts only the unprojected matchups it did not list', () => {
+    const many = Array.from({ length: 12 }, (_, i) =>
+      weekMatchup({ leagueId: `u${i}`, leagueName: `Unknowable ${i}`, projection: null }),
+    )
+    const { container } = render(
+      <WeekBoard
+        board={weekData({ leaning: [], unprojected: many })}
+        outlook={outlook()}
+        rivalriesHref="/core/week?view=rivalries"
+        allHref="/core/week?all=1"
+        totalLeagues={20}
+      />,
+    )
     const text = container.textContent ?? ''
-    expect(text).not.toContain('Unknowable')
-    expect(text).toMatch(/1 could not be projected/i)
+    expect(container.querySelectorAll('.af-bd-row')).toHaveLength(10)
+    expect(text).toMatch(/2 more could not be projected/i)
   })
 
   it('states the model basis and its sample size', () => {
@@ -480,6 +590,7 @@ function tradesData(over: Partial<TradesBoardData> = {}): TradesBoardData {
           toName: 'Jordan',
           sent: [
             {
+              kind: 'player',
               id: 'a',
               kind: 'player',
               name: 'Perry Vance',

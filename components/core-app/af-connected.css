@@ -69,14 +69,14 @@
   opacity: 0.72;
 }
 
+/*
+ * Shape from `.af-platform-mark` (af-core.css). The radius is local and stays:
+ * this is the one mark that is a rounded SQUARE rather than a circle, and at
+ * (0,2,0) it beats the base's `:where()` 50% without needing `!important`.
+ */
 .af-core .af-ca-mark {
-  display: grid;
-  place-items: center;
-  flex: 0 0 auto;
-  width: 38px;
-  height: 38px;
+  --af-platform-mark-size: 38px;
   border-radius: 11px;
-  font-weight: 900;
   font-size: 13px;
   background: var(--chip);
   color: var(--text2);

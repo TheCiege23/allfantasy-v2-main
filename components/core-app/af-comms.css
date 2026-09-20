@@ -1615,7 +1615,13 @@
 .af-cm-launch {
   position: fixed;
   right: var(--af-fab-inset, 18px);
-  bottom: var(--af-fab-inset, 18px);
+  /*
+   * ⚠ `--af-fab-bottom`, NOT `--af-fab-inset`. The two used to be the same
+   * token doing two jobs; the phone lift now lives on the bottom one, at
+   * `.af-tabbar`'s own 720px breakpoint, and includes the home-indicator inset
+   * the old 76px literal left out. See the block in af-core.css.
+   */
+  bottom: var(--af-fab-bottom, 18px);
   z-index: 59;
   display: grid;
   place-items: center;
@@ -2106,5 +2112,12 @@
   .af-cm-empty .af-cm-empty-t { font-size: 23px; }
   .af-cm-quick { margin-top: 18px; }
   .af-cm-turn { max-width: 96%; }
-  .af-cm-launch { bottom: max(26px, var(--af-fab-inset-phone, 26px), env(safe-area-inset-bottom)); }
+  /*
+   * 🛑 THE LAUNCHER'S PHONE LIFT IS GONE FROM HERE ON PURPOSE — DO NOT PUT IT
+   * BACK. It read `max(26px, var(--af-fab-inset-phone), env(safe-area-inset-bottom))`
+   * inside a 520px query, so it never fired between 521px and 720px where
+   * `.af-tabbar` is already on screen, and where it did fire the `max()` picked
+   * a token that did not account for the home indicator. `--af-fab-bottom` now
+   * carries both, at the bar's own breakpoint. See af-core.css.
+   */
 }

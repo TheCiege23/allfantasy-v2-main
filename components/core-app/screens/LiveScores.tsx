@@ -1237,40 +1237,93 @@ function Timeouts({ abbrev, left }: { abbrev: string; left: number | null }) {
 }
 
 /**
+ * What a pre-kickoff leaders strip is called.
+ *
+ * ⚠ THE WORDING IS WEEK-DEPENDENT BECAUSE THE TRUTH IS. The feed names these
+ * from the teams' season to date. In week 2 that IS last week, so "last week's
+ * highlight players" is exact — which is the week the report came from and the
+ * phrase it asked for. By week 9 the same caption would be a confident
+ * falsehood about a seven-game aggregate, so past week 2 it says what it is.
+ *
+ * ⚠ AND WEEK 1 IS ITS OWN CASE. There is no season to date, so anything the
+ * feed names is from LAST SEASON. Calling that "last week" would be wrong by
+ * about eight months.
+ */
+function pregameLeadersLabel(week: number | null): string {
+  if (week == null) return 'Before kickoff · form so far'
+  if (week <= 1) return "Last season's highlight players"
+  if (week === 2) return "Last week's highlight players"
+  return 'Season highlight players so far'
+}
+
+/**
  * PASS / RUSH / REC with headshots, the way ESPN's game strip lays them out.
- * Falls back to the single top performer when only that is known, and to
- * nothing at all before kickoff.
+ * Falls back to the single top performer when only that is known.
+ *
+ * ── 🛑 BEFORE KICKOFF THESE ARE AN EARLIER GAME'S NUMBERS ────────────────────
+ *
+ * The docstring here used to end "and to nothing at all before kickoff", which
+ * described an intention rather than the code: the loader gated every OTHER
+ * started-only field on `played` and left the game-level `leaders` array
+ * ungated, so a card that had not kicked off rendered "—" for both scores and a
+ * full stat strip underneath it. Screenshotted on a phone at week 2: Vikings at
+ * Bears, 1:00 PM EDT, no score, and Caleb Williams for 269 yards and 2 TD from
+ * the week before. Reported as "the scores from last week should be labelled so
+ * users know it's not from this week".
+ *
+ * ⚠ THEY ARE CAPTIONED, NOT DROPPED, WHICH IS WHAT WAS ASKED FOR AND ALSO THE
+ * BETTER CALL. Form before a game is worth showing — the defect was that it sat
+ * unlabelled beside a blank scoreline where it read as live. See
+ * `leadersArePregame` in lib/live/liveScoresPage.ts for the loader half.
  */
 function Leaders({ game }: { game: LiveGameCard }) {
   const lowDataOn = useLowData().lowData
   const leaders = game.leaders ?? []
   if (leaders.length > 0) {
     return (
-      <ul className="af-live-leaders" aria-label="Game leaders">
-        {leaders.map((l) => (
-          <li key={`${l.label ?? ''}-${l.name}`} className="af-live-leader">
-            <span className="af-label af-live-leader-cat">{l.label ?? ''}</span>
-            <MiniPlayerImg
-              sleeperId={null}
-              name={l.name}
-              avatarUrl={l.headshot}
-              size={34}
-              className="af-live-leader-face" suppress={lowDataOn} />
-            <span className="af-live-leader-text">
-              <span className="af-live-leader-name">
-                {l.name}
-                {l.position || l.teamAbbrev ? (
-                  <span className="af-live-leader-meta">
-                    {' '}
-                    {[l.position, l.teamAbbrev].filter(Boolean).join(' · ')}
-                  </span>
-                ) : null}
+      <div className="af-live-leaders-wrap" data-pregame={game.leadersArePregame || undefined}>
+        {game.leadersArePregame ? (
+          /*
+           * ⚠ A REAL CAPTION ABOVE THE LIST, NOT A TOOLTIP OR A DIMMED STYLE.
+           * The thing being corrected is a reader's belief that these numbers
+           * are from the game in front of them, and only words can correct it.
+           */
+          <p className="af-live-leaders-note">
+            <span className="af-label">{pregameLeadersLabel(game.week)}</span>
+            <span>Not from this game — it has not kicked off.</span>
+          </p>
+        ) : null}
+        <ul
+          className="af-live-leaders"
+          aria-label={
+            game.leadersArePregame ? pregameLeadersLabel(game.week) : 'Game leaders'
+          }
+        >
+          {leaders.map((l) => (
+            <li key={`${l.label ?? ''}-${l.name}`} className="af-live-leader">
+              <span className="af-label af-live-leader-cat">{l.label ?? ''}</span>
+              <MiniPlayerImg
+                sleeperId={null}
+                name={l.name}
+                avatarUrl={l.headshot}
+                size={34}
+                className="af-live-leader-face" suppress={lowDataOn} />
+              <span className="af-live-leader-text">
+                <span className="af-live-leader-name">
+                  {l.name}
+                  {l.position || l.teamAbbrev ? (
+                    <span className="af-live-leader-meta">
+                      {' '}
+                      {[l.position, l.teamAbbrev].filter(Boolean).join(' · ')}
+                    </span>
+                  ) : null}
+                </span>
+                <span className="af-live-leader-line af-num">{l.statLine}</span>
               </span>
-              <span className="af-live-leader-line af-num">{l.statLine}</span>
-            </span>
-          </li>
-        ))}
-      </ul>
+            </li>
+          ))}
+        </ul>
+      </div>
     )
   }
   if (game.topPerformer) {

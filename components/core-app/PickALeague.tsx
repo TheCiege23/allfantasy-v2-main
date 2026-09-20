@@ -174,7 +174,7 @@ export function PickALeague({
                 )}
                 <span className="af-pl-league-name">{l.name}</span>
                 {l.platform ? (
-                  <span className="af-platform af-pl-league-plat" data-platform={l.platform}>
+                  <span className="af-platform af-platform-chip af-pl-league-plat" data-platform={l.platform}>
                     {l.platform.toUpperCase()}
                   </span>
                 ) : null}

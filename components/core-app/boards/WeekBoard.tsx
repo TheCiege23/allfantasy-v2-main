@@ -2,6 +2,14 @@ import Link from 'next/link'
 
 import type { SeasonOutlook } from '@/lib/core-app/seasonOutlook'
 import type { WeekBoard as WeekBoardData, WeekMatchup } from '@/lib/core-app/weekBoard'
+/*
+ * ⚠ THE THRESHOLD, FROM THE SHARED RULES MODULE — NOT FROM `weekBoard.ts`.
+ * That loader is `server-only`; importing a VALUE from it pulls prisma into the
+ * bundle and takes the whole /core catch-all down at build time. The type import
+ * above is fine because types are erased. See weekBoardRules.ts's header, which
+ * exists for precisely this trap.
+ */
+import { MIN_WEEKS_FOR_PROJECTION } from '@/lib/core-app/weekBoardRules'
 import {
   BoardHead,
   FooterSummary,
@@ -61,6 +69,17 @@ export type WeekBoardProps = {
 
 /** Below this the season is, for practical purposes, decided against you. */
 const DEAD_PATH_PCT = 5
+
+/**
+ * How many unprojectable matchups the third section lists before it stops and
+ * counts the rest.
+ *
+ * ⚠ TEN, TO MATCH THE TWO COLUMNS' OWN SCALE. The board's promise is "the five
+ * you are furthest ahead in, against the five you are behind in"; a third
+ * section that printed all forty-seven would be the tile grid this board exists
+ * to replace, reached from the other direction.
+ */
+const UNPROJECTED_SHOWN = 10
 
 type Row = {
   m: WeekMatchup
@@ -169,8 +188,12 @@ export function WeekBoard({
   /*
    * ⚠ `unprojected` IS DELIBERATELY NOT IN EITHER COLUMN. A matchup neither
    * side has enough history to project has no margin, so putting it in a list
-   * ordered BY margin would rank it against a number it does not have. It is
-   * counted in the note instead.
+   * ordered BY margin would rank it against a number it does not have.
+   *
+   * ⚠ IT IS NO LONGER *ONLY* COUNTED, WHICH IS WHAT THIS COMMENT USED TO SAY.
+   * Being out of the two columns was right; being out of the board entirely was
+   * not — on an account where 47 of 65 leagues land here that left one row on
+   * screen. They get their own section below, with no margin and no probability.
    */
   const projected: Row[] = [...board.coinFlips, ...board.leaning]
     .filter((m): m is WeekMatchup & { projection: NonNullable<WeekMatchup['projection']> } =>
@@ -205,7 +228,14 @@ export function WeekBoard({
     /* Closest-to-level last, so the column reads from worst to most winnable. */
     .reverse()
 
-  const shown = leading.length + trailing.length
+  /*
+   * ⚠ THE THIRD SECTION COUNTS TOWARDS `shown`, OR THE FOOTER LIES. `FooterSummary`
+   * prints `considered − shown` as "N more sit between these two columns"; leaving
+   * the listed unprojectable rows out would count ten leagues as hidden while they
+   * are on screen, immediately above the sentence saying so.
+   */
+  const shown =
+    leading.length + trailing.length + Math.min(board.unprojected.length, UNPROJECTED_SHOWN)
   const considered = Math.max(
     totalLeagues,
     board.coinFlips.length +
@@ -246,6 +276,89 @@ export function WeekBoard({
         />
       </div>
 
+      {/*
+        ── 🛑 THE THIRD SECTION, AND WHY THE BOARD WAS EMPTY WITHOUT IT ────────
+
+        Reported from a phone: "Your week should show the top leagues and bottom
+        leagues because it is set to all leagues but gives no information."
+        Measured from that screenshot — 65 leagues in scope, and the board
+        rendered ONE row. 47 were unprojectable and 17 carried no schedule, so
+        `projected` held a single matchup: it went to LEADING, `behind` was
+        empty, and the trailing column printed "You are not projected behind in
+        any league this week."
+
+        Nothing was broken and every number on screen was true. The note already
+        said "47 could not be projected" — accurately, and as a number the
+        reader can do nothing with. Forty-seven real matchups, each with a named
+        opponent and a working link, were reduced to a count.
+
+        ⚠ AND THEY STILL DO NOT ENTER THE TWO COLUMNS, WHICH IS THE CONSTRAINT
+        THAT SHAPES THIS. Those columns are ordered BY MARGIN and an
+        unprojectable matchup has none; dropping one in would rank it against a
+        number it does not have, and defaulting it to 50% would invent the
+        projection the loader deliberately refused. So it gets its own section,
+        with no margin column and no probability — the same treatment the
+        full-screen `YourWeek` already gives this exact list under "Not enough
+        history to call". This board was the surface that had the data and threw
+        it away; the two now agree.
+
+        The value column says how far short of the threshold each one is, which
+        is the one genuinely useful thing about an unprojectable matchup: it
+        tells a reader whether this is next week's problem or this season's.
+      */}
+      {board.unprojected.length > 0 ? (
+        <section className="af-bd-sec">
+          <SectionHead
+            label="On the schedule · not enough history to call"
+            count={
+              board.unprojected.length > UNPROJECTED_SHOWN
+                ? `${UNPROJECTED_SHOWN} of ${board.unprojected.length}`
+                : `${board.unprojected.length}`
+            }
+          />
+          <ul className="af-bd-rows af-bd-rows--compact">
+            {board.unprojected.slice(0, UNPROJECTED_SHOWN).map((m) => (
+              <li key={m.leagueId}>
+                <Link className="af-bd-row" href={m.href}>
+                  <LeagueCrest
+                    imageUrl={m.leagueImageUrl}
+                    name={m.leagueName}
+                    platform={m.platform}
+                    size="sm"
+                  />
+                  <span className="af-bd-league">
+                    <span className="af-bd-name">{m.leagueName}</span>
+                    <span className="af-bd-sub">
+                      {/* Same rule as MatchRow: an unnamed roster stays unnamed. */}
+                      {m.opponent.name ? `vs ${m.opponent.name}` : 'opponent not named'}
+                      {m.elimination ? ' · lowest score is eliminated' : ''}
+                    </span>
+                  </span>
+                  {/*
+                    ⚠ A COUNT OF WEEKS, NOT A DASH. The dash the full-screen
+                    version uses is right there — it says "no probability" on a
+                    row that also carries an opponent and a score line. Here the
+                    row has neither, so a dash would be the only thing in the
+                    column and would say nothing at all.
+                  */}
+                  <span
+                    className="af-bd-val af-bd-val--seed"
+                    aria-label={`${m.yourSampleWeeks} of ${MIN_WEEKS_FOR_PROJECTION} completed weeks needed to project this matchup`}
+                  >
+                    <span aria-hidden>
+                      {m.yourSampleWeeks}/{MIN_WEEKS_FOR_PROJECTION}
+                    </span>
+                    <span className="af-bd-val-sub" aria-hidden>
+                      weeks on file
+                    </span>
+                  </span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+
       <p className="af-bd-note af-bd-note--plain">
         {/*
           ⚠ `model.basis` IS A WHOLE SENTENCE WHEN THERE IS NOTHING TO FIT, and
@@ -267,7 +380,7 @@ export function WeekBoard({
         below the cut — and collapsing them into one number is how a board stops
         being trustworthy at sixty leagues.
       */}
-      {dead > 0 || board.unprojected.length > 0 || board.withoutSchedule > 0 ? (
+      {dead > 0 || board.unprojected.length > UNPROJECTED_SHOWN || board.withoutSchedule > 0 ? (
         <p className="af-bd-note af-bd-note--plain">
           {dead > 0 ? (
             <>
@@ -278,8 +391,15 @@ export function WeekBoard({
               and are left out of the trailing column.{' '}
             </>
           ) : null}
-          {board.unprojected.length > 0
-            ? `${board.unprojected.length} could not be projected — too few completed weeks on one side or the other. `
+          {/*
+            ⚠ THE SENTENCE HAD TO CHANGE WHEN THE SECTION ABOVE STARTED LISTING
+            THEM. "47 could not be projected" over a list of ten of those very
+            matchups reads as a second, larger population the board is still
+            hiding. The count is now explicitly the REMAINDER, and disappears
+            when the section showed all of them.
+          */}
+          {board.unprojected.length > UNPROJECTED_SHOWN
+            ? `${board.unprojected.length - UNPROJECTED_SHOWN} more could not be projected either — too few completed weeks on one side or the other. `
             : ''}
           {board.withoutSchedule > 0
             ? `${board.withoutSchedule} carry no schedule for this week at all.`

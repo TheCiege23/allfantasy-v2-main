@@ -540,9 +540,87 @@ html[data-mode='af'] .af-core {
   background: var(--p-fleaflicker-bg);
   color: var(--p-fleaflicker-fg);
 }
-.af-core .af-platform[data-platform='manual'] {
+/*
+ * ⚠ `native` RIDES WITH `manual`, AND IT USED TO BE COVERED BY ACCIDENT.
+ * af-portfolio.css pairs the two (`[data-platform='manual'], [data-platform='native']`)
+ * and its `.af-pf-platform` rule collided by NAME with af-player-finder.css's,
+ * so Player Finder's chips were picking up portfolio's `native` colour through a
+ * class the two files happen to share. That collision is being removed below, so
+ * the value it was covering is named here instead of quietly losing its colour.
+ */
+.af-core .af-platform[data-platform='manual'],
+.af-core .af-platform[data-platform='native'] {
   background: var(--p-manual-bg);
   color: var(--p-manual-fg);
+}
+
+/* ── The two shapes `.af-platform` has always had, made explicit ──────────
+ *
+ * 🛑 `.af-platform` SETS COLOUR AND NOTHING ELSE, AND THAT SHIPPED A VISIBLE BUG.
+ * There is no base `.af-platform` rule — only the seven `[data-platform]` ones
+ * above — so every consumer has had to remember its own geometry, and two did
+ * not. `.af-pl-league-plat` was `flex: none` alone, which rendered the league
+ * picker's SLEEPER badge as a 74x25 square-cornered slab (measured off a phone
+ * screenshot at 3.38x) inside a 44px tile. `.af-lh-paired-platform` sets a font
+ * size and a letter-spacing and still has no padding or radius today.
+ *
+ * The class was doing two incompatible jobs: a text CHIP (a platform word beside
+ * a league name) and a fixed-box MARK (one letter in a circle or rounded
+ * square). That is why the geometry could never be hoisted onto `.af-platform`
+ * itself — chip padding on the shared class turns a 26px circle into something
+ * that is not 26px and stops centring the letter inside it.
+ *
+ * ⚠ BOTH ARE IN `:where()`, AND THAT IS THE WHOLE DESIGN — the same argument this
+ * file already makes for the `:focus-visible` baseline further down. `:where()`
+ * contributes ZERO specificity, so these weigh (0,0,0) and EVERY existing local
+ * rule beats them. They are a FLOOR: a consumer that declares its own size,
+ * radius or font keeps it exactly, and a consumer that declares nothing gets a
+ * shape instead of a slab. Written as `.af-core .af-platform-chip` (0,2,0) they
+ * would instead overrule `.af-lp-card-mark`'s 30px with the 26px default and
+ * silently resize four marks — a takeover, not a floor.
+ *
+ * ⚠ AND THAT IS ALSO WHAT MAKES DELETING THE DUPLICATED LOCAL DECLARATIONS SAFE.
+ * Where a local value equals the base, removing it changes nothing because the
+ * base supplies the identical value; where it differs, it is kept and still
+ * wins. Every mark below is byte-identical after the migration.
+ */
+
+/*
+ * The pill. Values are `.af-lh-platform`'s, which was the most complete chip in
+ * the repo and is now deleted in favour of this.
+ *
+ * ⚠ `white-space: nowrap` IS NEW AND IS A NO-OP FOR EVERY CURRENT CALLER. All
+ * five chips render a platform KEY — sleeper, espn, yahoo, fantrax, mfl,
+ * fleaflicker, manual — and a single token has no space to break at. It is here
+ * so a future multi-word label cannot wrap inside a pill.
+ */
+:where(.af-platform-chip) {
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+/*
+ * The fixed box. `--af-platform-mark-size` is the one knob a consumer needs:
+ * setting it drives width and height together, so the two cannot drift into a
+ * rectangle the way two separate declarations can.
+ *
+ * The default is 26px because that is `.af-im-mark`'s size, the most common of
+ * the five. A consumer wanting another size sets the property rather than
+ * redeclaring both dimensions.
+ */
+:where(.af-platform-mark) {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: var(--af-platform-mark-size, 26px);
+  height: var(--af-platform-mark-size, 26px);
+  border-radius: 50%;
+  font-weight: 900;
 }
 
 /*
@@ -644,20 +722,72 @@ html[data-mode='af'] .af-core {
  * without discovering the collision in a screenshot.
  */
 :root {
+  /* The HORIZONTAL inset. Never a bottom — see `--af-fab-bottom`. */
   --af-fab-inset: 18px;
+
   /*
-   * ⚠ THE PHONE LIFTS THE LAUNCHER OVER THE TAB BAR, AND THAT OFFSET WAS A BARE
-   * LITERAL IN TWO FILES. `.af-cm-launch` becomes `bottom: 76px` below 720px so
-   * it clears `.af-tabbar`, which is ~57px tall. Anything that needs to reserve
-   * room beneath the launcher — `.af-content`'s bottom padding does — has to
-   * know that number, and a second copy of it drifts the moment either moves.
+   * 🛑 THE TAB BAR IS NOT 57px TALL ON A PHONE WITH A HOME INDICATOR, AND THAT
+   * OMISSION IS WHAT PUT THE CHAT BUBBLE ON TOP OF THE "MORE" BUTTON.
+   *
+   * `.af-tabbar` (af-core-shell.css) is
+   * `padding: 6px 6px calc(6px + env(safe-area-inset-bottom))` around a 44px
+   * row, so its real height is `56px + env(safe-area-inset-bottom)` — not the
+   * flat "~57px" this comment used to assert. `--af-fab-inset-phone` was a bare
+   * `76px`, which clears 56 and nothing else: on an iPhone with a 34px home
+   * indicator the bar's top edge sits at 90px and the launcher's bottom edge at
+   * 76px, so the bubble overlapped the bar by 14px. It lands on the LAST tab,
+   * which is "More" — reported from a phone as the More button being "partially
+   * covered making it hard to click it".
+   *
+   * Derived from the bar now, so the two cannot drift again. The `12px` is the
+   * gap between the bubble and the bar, matching `--af-fab-gap`.
+   *
+   * ⚠ THE `env()` IS INSIDE THE TOKEN. Any consumer that used to write
+   * `calc(var(--af-fab-inset-phone) + … + env(safe-area-inset-bottom))` must
+   * drop its own term or it now reserves the indicator twice.
    */
-  --af-fab-inset-phone: 76px;
+  --af-tabbar-height: calc(56px + env(safe-area-inset-bottom, 0px));
+  --af-fab-inset-phone: calc(var(--af-tabbar-height) + 12px);
+
+  /*
+   * The bottom of slot 0, at whatever width this is read at.
+   *
+   * ⚠ THIS IS THE TOKEN A FIXED CORNER CONTROL SHOULD ANCHOR TO, and it exists
+   * because `--af-fab-inset` was doing two jobs. Custom properties substitute at
+   * computed-value time, so the phone override further down this file reaches
+   * the slot calcs below even though they are written here.
+   */
+  --af-fab-bottom: var(--af-fab-inset);
+
   --af-fab-size: 48px;
   --af-fab-gap: 12px;
-  /* Slot 0 is the comms launcher. Each slot above it clears the last. */
-  --af-fab-slot-1: calc(var(--af-fab-inset) + var(--af-fab-size) + var(--af-fab-gap));
+
+  /*
+   * Slot 0 is the comms launcher. Each slot above it clears the last.
+   *
+   * ⚠ SLOT 1 CLEARS 56px, NOT `--af-fab-size` (48). The launcher is 56x56
+   * (`.af-cm-launch`), so the old calc left a 4px gap above it rather than the
+   * 12 it reads as — close enough to look deliberate and not close enough to be.
+   */
+  --af-fab-slot-1: calc(var(--af-fab-bottom) + 56px + var(--af-fab-gap));
   --af-fab-slot-2: calc(var(--af-fab-slot-1) + 60px + var(--af-fab-gap));
+}
+
+/*
+ * ⚠ ITS OWN TOP-LEVEL @media, NOT AN EDIT INSIDE ONE — see the same note in
+ * af-core-shell.css. 720px matches `.af-tabbar`'s own breakpoint exactly: above
+ * it there is no bar to clear, below it there always is.
+ *
+ * 🛑 AND IT IS 720px, NOT THE 520px THE LAUNCHER USED. `.af-cm-launch`'s lift
+ * lived in af-comms.css's `max-width: 520px` block while the bar it exists to
+ * clear appears at 720px, so between 521px and 720px — a small tablet, a phone
+ * in landscape — the launcher sat at `bottom: 18px`, underneath the tab bar
+ * entirely. Setting it here covers every control anchored to the corner at once.
+ */
+@media (max-width: 720px) {
+  :root {
+    --af-fab-bottom: var(--af-fab-inset-phone);
+  }
 }
 /*
  * 38a — section titles that are headings, not styled paragraphs.

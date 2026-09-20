@@ -42,8 +42,33 @@ export function GlobalModeToggle() {
    * `/world-cup`, `/brackets/*` and the IDP draft filters — so inverting the
    * default would tuck the toggle underneath each of them. `/core` keeps it too:
    * that is `.af-core .af-tabbar`, the one this value was chosen for.
+   *
+   * ⚠ THAT CLEARANCE SURVIVES THE MOVE TO `--af-fab-slot-1` BELOW, WHICH IS THE
+   * THING TO CHECK BEFORE TOUCHING EITHER. Those routes do not load af-core.css,
+   * so they take the literal fallback — 86px, six more than the 80 they were
+   * tuned against, never fewer. No bar this clearance was carrying gets closer.
    */
   const marketingLanding = pathname === '/'
+
+  /*
+   * 🛑 SLOT 1, NOT `bottom-20`. `bottom-20` is 80px, and so was BackToTop's, and
+   * the comms launcher's 56px bubble occupies 76–132px from the bottom on a
+   * phone — so all three controls were stacked in one corner and this pill, at
+   * z-40, was the one underneath both. Reported as the chat bubble and back-to-
+   * top sitting on top of each other; this one was not even visible to report.
+   *
+   * `--af-fab-slot-1` is the first step above the comms launcher and already
+   * tracks the phone tab bar's real height, home indicator included, so this
+   * file does not have to know any of that. The fallback matters: /pricing and
+   * the other routes this renders on do not load af-core.css, and an unresolved
+   * `var()` in a `bottom` would drop the pill to the top of the page.
+   *
+   * ⚠ `lg:bottom-4` IS GONE AND NOTHING REPLACES IT. It existed to undo the
+   * phone clearance on desktop; the token does that by itself now — it is
+   * `--af-fab-inset` (18px) above 720px — so a Tailwind override would only
+   * reintroduce a second opinion about the same number.
+   */
+  const stacked = !createLeagueRoute && !marketingLanding
 
   return (
     <div
@@ -52,7 +77,12 @@ export function GlobalModeToggle() {
           ? 'fixed right-4 top-4 z-40 sm:top-5'
           : marketingLanding
             ? 'fixed right-4 bottom-4 z-40'
-            : 'fixed right-4 z-40 bottom-20 lg:bottom-4'
+            : 'fixed z-40'
+      }
+      style={
+        stacked
+          ? { right: 'var(--af-fab-inset, 18px)', bottom: 'var(--af-fab-slot-1, 86px)' }
+          : undefined
       }
     >
       {/*

@@ -236,16 +236,15 @@
  * hardcoded hex, because this repo tunes each one per theme for contrast — a
  * literal #143a2e is unreadable on the light surface behind it.
  */
+/*
+ * Shape comes from `.af-platform-mark` (af-core.css): grid, centred, 0 0 auto,
+ * 26px square, 50% radius, weight 900 — all identical to what stood here, so
+ * removing them changes nothing. 26px IS the shared default, so this does not
+ * even need to set the size property.
+ */
 .af-im-mark {
-  display: grid;
-  place-items: center;
-  width: 26px;
-  height: 26px;
-  border-radius: 50%;
-  font-weight: 900;
   font-size: 12px;
   letter-spacing: 0.01em;
-  flex: 0 0 auto;
   background: var(--chip);
   color: var(--text2);
 }
@@ -317,14 +316,9 @@
 
 /* Half the size of the pill's mark: this one identifies, it does not invite a
    press, and at 34px it competed with the row it is describing. */
+/* Shape from `.af-platform-mark`; only the smaller box and type are local. */
 .af-core .af-im-context-mark {
-  display: grid;
-  place-items: center;
-  width: 22px;
-  height: 22px;
-  border-radius: 50%;
-  flex: 0 0 auto;
-  font-weight: 900;
+  --af-platform-mark-size: 22px;
   font-size: 9px;
   letter-spacing: 0.01em;
 }

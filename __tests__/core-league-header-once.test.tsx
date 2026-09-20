@@ -79,7 +79,18 @@ describe('the league Overview inside the shell', () => {
     expect(heading).toHaveClass('af-lh-name--hidden')
     expect(heading).not.toHaveClass('af-lh-name')
 
-    expect(container.querySelector('.af-lh-platform')).toBeNull()
+    /*
+     * ⚠ SCOPED TO `.af-lh-sub`, NOT A BARE CLASS. This queried `.af-lh-platform`,
+     * a class that existed only to give the chip the pill geometry every other
+     * chip also declared; it is gone now that `.af-platform-chip` supplies that
+     * shape. `.af-platform-chip` on its own would be the wrong handle here —
+     * LeagueHome renders a SECOND one in its paired-league row, so a bare
+     * `querySelector` would start matching whichever came first in the DOM.
+     *
+     * The next assertion proves `.af-lh-sub` itself is present, so this null is
+     * "the chip is absent", not "the container is".
+     */
+    expect(container.querySelector('.af-lh-sub .af-platform-chip')).toBeNull()
     expect(container.querySelector('.af-sync')).toBeNull()
     expect(container.querySelector('.af-readonly')).toBeNull()
     /* What the bar does NOT carry stays. */
@@ -90,7 +101,7 @@ describe('the league Overview inside the shell', () => {
     const { container } = render(<LeagueHome data={overview()} otherLeagueIssueCount={0} />)
 
     expect(screen.getByRole('heading', { level: 1, name: 'Kings of Buffalo' })).toHaveClass('af-lh-name')
-    expect(container.querySelector('.af-lh-platform')).toHaveTextContent('sleeper')
+    expect(container.querySelector('.af-lh-sub .af-platform-chip')).toHaveTextContent('sleeper')
     expect(container.querySelector('.af-sync')).toHaveTextContent('3m ago')
     expect(container.querySelector('.af-readonly')).not.toBeNull()
   })

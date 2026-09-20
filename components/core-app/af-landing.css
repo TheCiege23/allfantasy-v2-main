@@ -220,15 +220,11 @@
   border-bottom: 0;
 }
 
+/* Shape from `.af-platform-mark`; the 30px box and 9px radius are local. */
 .af-lp-card-mark {
-  display: grid;
-  place-items: center;
-  width: 30px;
-  height: 30px;
+  --af-platform-mark-size: 30px;
   border-radius: 9px;
-  font-weight: 900;
   font-size: 13px;
-  flex: 0 0 auto;
 }
 
 .af-lp-card-text {

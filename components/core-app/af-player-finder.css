@@ -266,13 +266,31 @@
   font-size: 11px;
   color: var(--muted);
 }
-.af-pf-platform {
+/*
+ * 🛑 RENAMED FROM `.af-pf-platform`, WHICH COLLIDED WITH A DIFFERENT RULE OF THE
+ * SAME NAME IN af-portfolio.css.
+ *
+ * Both files use the `af-pf-` prefix — "player finder" here, "portfolio" there —
+ * and of the 263 and 34 classes they define, exactly two names clash:
+ * `.af-pf-platform` and `.af-pf-link`. For the platform chip the two disagree on
+ * the properties that decide its shape (padding 1px/7px vs 2px/6px, radius 999px
+ * vs 4px) and portfolio additionally supplied a background and a 1px border. So
+ * a Player Finder chip was rendering as a UNION of two surfaces' intentions,
+ * with bundle order deciding which padding and radius won.
+ *
+ * ⚠ SO THIS SURFACE CHANGES: it loses portfolio's `background: var(--chip)` and
+ * `border: 1px solid var(--chip-line)`, which it was only ever getting by
+ * accident. Nothing visible follows from that for real data — every platform
+ * value that reaches here has its own colour rule on `.af-platform`, and
+ * `native`, the one value portfolio covered that the shared rule did not, is
+ * named there now precisely so this removal costs nothing.
+ *
+ * ⚠ `.af-pf-link` STILL COLLIDES AND IS LEFT ALONE. It is not part of this
+ * change, and picking a winner for it needs a look at both surfaces.
+ */
+.af-pfind-platform {
   padding: 1px 7px;
-  border-radius: 999px;
   font-size: 9.5px;
-  font-weight: 800;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
 }
 
 /* Platform label ahead of the impact card's league name — league names are

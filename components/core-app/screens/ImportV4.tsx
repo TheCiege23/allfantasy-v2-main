@@ -1858,7 +1858,7 @@ export function ImportV4({
                   reset()
                 }}
               >
-                <span className="af-platform af-im-mark" data-platform={opt.provider} aria-hidden>
+                <span className="af-platform af-platform-mark af-im-mark" data-platform={opt.provider} aria-hidden>
                   {PROVIDER_INITIAL[opt.provider] ?? opt.label.charAt(0)}
                 </span>
                 {/*
@@ -1891,7 +1891,7 @@ export function ImportV4({
           so the eye connects the two without reading either.
         */}
         <p className="af-im-context">
-          <span className="af-platform af-im-context-mark" data-platform={provider} aria-hidden>
+          <span className="af-platform af-platform-mark af-im-context-mark" data-platform={provider} aria-hidden>
             {PROVIDER_INITIAL[provider] ?? providerLabel.charAt(0)}
           </span>
           <span className="af-im-context-meta">

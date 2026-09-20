@@ -310,7 +310,7 @@ function PairedBand({
               )}
             </h3>
             <p className="af-lh-paired-meta">
-              <span className="af-platform af-lh-paired-platform" data-platform={sd.platform}>
+              <span className="af-platform af-platform-chip af-lh-paired-platform" data-platform={sd.platform}>
                 {sd.platform}
               </span>
               {sd.season != null ? <span> · {sd.season}</span> : null}
@@ -464,7 +464,7 @@ export function LeagueHome({
           <h1 className={identityInShell ? 'af-lh-name--hidden' : 'af-display af-lh-name'}>{league.name}</h1>
           <div className="af-lh-sub">
             {identityInShell ? null : (
-              <span className="af-platform af-lh-platform" data-platform={league.platform}>
+              <span className="af-platform af-platform-chip" data-platform={league.platform}>
                 {league.platform}
               </span>
             )}

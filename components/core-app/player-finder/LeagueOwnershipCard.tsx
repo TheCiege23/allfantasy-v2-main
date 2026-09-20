@@ -65,7 +65,7 @@ export function LeagueOwnershipCard({
       <header className="af-pf-lv-head">
         <span className="af-label">In this league</span>
         <h3 className="af-pf-h3" id="af-pf-lv-h">
-          <span className="af-platform af-pf-platform" data-platform={view.platform}>
+          <span className="af-platform af-platform-chip af-pfind-platform" data-platform={view.platform}>
             {view.platform}
           </span>
           <Link href={`/core?league=${encodeURIComponent(view.leagueId)}`} className="af-pf-lv-league">

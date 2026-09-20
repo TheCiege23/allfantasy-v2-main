@@ -231,6 +231,46 @@
   color: #a685ff;
 }
 
+/*
+ * 🛑 THE PLATFORM BADGE HAD A COLOUR AND NO SHAPE, AND IT RENDERED AS A SLAB.
+ *
+ * `.af-platform` in af-core.css sets `background` and `color` and NOTHING ELSE —
+ * there is no base `.af-platform` rule in the repo, only seven
+ * `[data-platform='…']` ones. So this badge inherited the tile's font at normal
+ * line-height and got `--p-sleeper-bg` painted across its whole inline box with
+ * no padding and no radius.
+ *
+ * ⚠ MEASURED OFF THE REPORTED SCREENSHOT RATHER THAN DESCRIBED, because the
+ * description was wrong first time round. Sampling the PNG on /core/war-room at
+ * 3.38x: the badge box is 250x84 device px — 74x25 CSS px — a uniform
+ * `#1f2a4d` from its top row to its bottom row at both left and right edges, so
+ * square-cornered, against a 44px tile. 25px tall for one platform word, beside
+ * a 13px league name.
+ *
+ * ⚠ AND THE COLOUR IS CORRECT, WHICH IS THE PART THAT ALMOST SENT THIS THE WRONG
+ * WAY. `#1f2a4d` on `#9fd4ff` is exactly `--p-sleeper-bg` / `--p-sleeper-fg`
+ * from the DARK block. At thumbnail scale against a near-black `#06070f` ground
+ * it reads as a pale slab, and the first diagnosis here was a light-theme token
+ * leaking into dark mode — a bug that does not exist. Nothing is wrong with this
+ * badge's colour; it has no shape.
+ *
+ * ⚠ EVERY OTHER CONSUMER OF `.af-platform` BROUGHT ITS OWN GEOMETRY AND THIS ONE
+ * DID NOT — it was `flex: none` alone, while `.af-lh-platform` was a 10px pill,
+ * `.af-im-mark` a 26px circle and `.af-ca-mark` a 38px rounded square.
+ *
+ * ✅ THAT DUPLICATION IS RESOLVED: `.af-platform` has been split into
+ * `.af-platform-chip` and `.af-platform-mark` in af-core.css, and this rule now
+ * keeps only `flex: none`. The paragraph that stood here said the split was "a
+ * change of its own" and deferred it; it is done, so the deferral is not left
+ * lying around to be acted on twice.
+ */
+/*
+ * Shape comes from `.af-platform-chip` (af-core.css) now — padding, radius,
+ * 10px/800, tracking, uppercase and the nowrap are all the shared pill's, and
+ * were copied from `.af-lh-platform` here in the first place. `flex: none` is
+ * the only thing genuinely local: this chip sits in the tile's flex row and must
+ * not be squeezed by a long league name.
+ */
 .af-pl-league-plat {
   flex: none;
 }

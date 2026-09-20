@@ -314,7 +314,7 @@ export function LandingV4({
             { mark: 'E', platform: 'espn', name: 'End Zone Elites', meta: 'ESPN · Keeper', score: '88.4', against: '–71.9', tag: 'All set', tone: 'good' },
           ].map((row) => (
             <div key={row.name} className="af-lp-card-row">
-              <span className="af-platform af-lp-card-mark" data-platform={row.platform}>
+              <span className="af-platform af-platform-mark af-lp-card-mark" data-platform={row.platform}>
                 {row.mark}
               </span>
               <span className="af-lp-card-text">
