@@ -54,10 +54,12 @@ describe('draft intro routes', () => {
     )
 
     expect(res.status).toBe(200)
+    // The draft-start overlay serves the long intro cut; `Snake Draft.mp4` is the short
+    // tile loop the create-league selector uses.
     await expect(res.json()).resolves.toEqual({
       seen: false,
       draftTypeKey: 'snake',
-      videoUrl: '/media/create-league/drafts/videos/Snake Draft.mp4',
+      videoUrl: '/media/create-league/drafts/videos/Snake Draft Intro.mp4',
       posterUrl: '/images/draft-types/snake-draft.png',
     })
     expect(mocks.draftIntroFindUnique).toHaveBeenCalledWith({

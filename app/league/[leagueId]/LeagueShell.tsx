@@ -1228,6 +1228,7 @@ export function LeagueShell({
         shouldPlayIntro={shouldPlayIntro && !blockConceptIntroForInvitePrefill}
         blockedByModal={settingsOpen}
         leagueType={league.leagueType}
+        sport={String(league.sport ?? '')}
         leagueVariant={league.leagueVariant}
         isDynasty={league.isDynasty}
         guillotineMode={league.guillotineMode}

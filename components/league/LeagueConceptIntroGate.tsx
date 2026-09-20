@@ -5,12 +5,15 @@ import { ConceptIntroVideoOverlay } from '@/components/league/ConceptIntroVideoO
 import { LEAGUE_CREATE_OPTIONS_CATALOG_V1 } from '@/lib/league-creation/options-catalog-seed-data'
 import { getConceptIntroVideoUrl } from '@/lib/league-creation/concept-intro-videos'
 import { getLeagueTypeMedia, resolveLeagueConceptIntroKey } from '@/lib/league-media/leagueTypeMedia'
+import { resolveSportLeagueIntro } from '@/lib/league-media/sportLeagueIntros'
 
 type LeagueConceptIntroGateProps = {
   leagueId: string
   shouldPlayIntro: boolean
   blockedByModal?: boolean
   leagueType?: string | null
+  /** Drives the sport-native intro for generic formats; themed concepts ignore it. */
+  sport?: string | null
   /** Modifier ids should not override a true redraft intro. */
   leagueVariant?: string | null
   isDynasty?: boolean | null
@@ -85,6 +88,7 @@ export function LeagueConceptIntroGate({
   shouldPlayIntro,
   blockedByModal = false,
   leagueType,
+  sport,
   leagueVariant,
   isDynasty,
   guillotineMode,
@@ -114,27 +118,73 @@ export function LeagueConceptIntroGate({
   const storedIntro = useMemo(() => readStoredIntro(settings), [settings])
   const introEnabled = useMemo(() => readIntroSettingEnabled(settings), [settings])
 
-  const videoSrc = useMemo(() => {
-    if (forceRedraftIntro || conceptKey === 'redraft') {
-      return mediaBundle.introVideo || getConceptIntroVideoUrl('redraft') || REDRAFT_INTRO_VIDEO_URL
-    }
+  /**
+   * Sport-native intro, or null. Null for a themed concept, an unknown sport, or a sport with
+   * no shipped clip — each of which leaves the concept intro exactly as it was.
+   */
+  const sportIntro = useMemo(
+    () => resolveSportLeagueIntro({ sport, conceptKey }),
+    [sport, conceptKey],
+  )
 
-    if (storedIntro.videoUrl) return storedIntro.videoUrl
-    if (seed?.introVideoUrl) return seed.introVideoUrl
-    return mediaBundle.introVideo || getConceptIntroVideoUrl(conceptKey) || null
-  }, [conceptKey, forceRedraftIntro, mediaBundle.introVideo, seed, storedIntro.videoUrl])
+  /**
+   * One decision, so video / poster / label can never disagree about which clip is playing.
+   * Precedence, highest first:
+   *   1. a commissioner-set custom intro (never for the forced-redraft path, as before)
+   *   2. the sport-native clip, which is null unless this is a generic format on a sport we ship
+   *   3. the concept intro — exactly what played before this tier existed
+   */
+  const resolved = useMemo(() => {
+    const redraftPath = forceRedraftIntro || conceptKey === 'redraft'
 
-  const posterSrc = useMemo(() => {
-    if (forceRedraftIntro || conceptKey === 'redraft') {
-      return mediaBundle.thumbnail
-    }
+    const base = (() => {
+      if (!redraftPath && storedIntro.videoUrl) {
+        return {
+          video: storedIntro.videoUrl,
+          poster: seed?.introPosterUrl ?? mediaBundle.thumbnail,
+          label: seed?.title ?? mediaBundle.label,
+        }
+      }
 
-    if (storedIntro.posterUrl) return storedIntro.posterUrl
-    if (seed?.introPosterUrl) return seed.introPosterUrl
-    return mediaBundle.thumbnail
-  }, [conceptKey, forceRedraftIntro, mediaBundle.thumbnail, seed, storedIntro.posterUrl])
+      if (sportIntro) {
+        return { video: sportIntro.video, poster: sportIntro.poster, label: sportIntro.label }
+      }
 
-  const conceptLabel = forceRedraftIntro ? 'Redraft' : seed?.title ?? mediaBundle.label
+      if (redraftPath) {
+        return {
+          video:
+            mediaBundle.introVideo || getConceptIntroVideoUrl('redraft') || REDRAFT_INTRO_VIDEO_URL,
+          poster: mediaBundle.thumbnail,
+          label: forceRedraftIntro ? 'Redraft' : seed?.title ?? mediaBundle.label,
+        }
+      }
+
+      return {
+        video:
+          seed?.introVideoUrl || mediaBundle.introVideo || getConceptIntroVideoUrl(conceptKey) || null,
+        poster: seed?.introPosterUrl ?? mediaBundle.thumbnail,
+        label: seed?.title ?? mediaBundle.label,
+      }
+    })()
+
+    // A commissioner-set poster applies whichever video won — video and poster were resolved
+    // independently before this tier existed, and a stored poster must not need a stored video.
+    return !redraftPath && storedIntro.posterUrl ? { ...base, poster: storedIntro.posterUrl } : base
+  }, [
+    conceptKey,
+    forceRedraftIntro,
+    mediaBundle.introVideo,
+    mediaBundle.label,
+    mediaBundle.thumbnail,
+    seed,
+    sportIntro,
+    storedIntro.posterUrl,
+    storedIntro.videoUrl,
+  ])
+
+  const videoSrc = resolved.video
+  const posterSrc = resolved.poster
+  const conceptLabel = resolved.label
 
   const [open, setOpen] = useState(false)
   const seenMarkedRef = useRef(false)

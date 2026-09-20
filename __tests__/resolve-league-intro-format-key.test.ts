@@ -171,9 +171,19 @@ describe('canonical concept / draft media resolution', () => {
   })
 
   it('snake draft intro + board image paths', () => {
-    expect(resolveDraftIntroVideoUrl('snake')).toBe('/media/create-league/drafts/videos/Snake Draft.mp4')
+    // The draft-START overlay plays the long intro cut, not the short tile loop
+    // (`Snake Draft.mp4`), which is what it used to serve.
+    expect(resolveDraftIntroVideoUrl('snake')).toBe(
+      '/media/create-league/drafts/videos/Snake Draft Intro.mp4',
+    )
     expect(resolveDraftIntroPosterUrl('snake')).toBe('/images/draft-types/snake-draft.png')
     expect(resolveDraftBoardImageUrl('snake')).toBe('/images/draft-types/snake-draft.png')
+  })
+
+  it('never serves the mislabeled snake-draft-intro.mp4 (it is the redraft league intro)', () => {
+    for (const id of ['snake', 'devy_snake', 'c2c_snake', 'third_round_reversal']) {
+      expect(resolveDraftIntroVideoUrl(id)).not.toContain('draft-intros/snake-draft-intro')
+    }
   })
 
   it('redraft media paths never contain guillotine segment', () => {
