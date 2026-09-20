@@ -12180,9 +12180,15 @@ model TradeManagerStrategy {
   rosterId    String?
   active      String   @default("balanced") @db.VarChar(24)
   source      String   @default("manager_confirmed") @db.VarChar(32)
-  confirmedAt DateTime @default(now())
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  /// ⚠ `@db.Timestamptz(6)` on these three, and `@default(now())` on `updatedAt`, because
+  /// that is what the TABLE holds — `20260919143000_trade_context_receipts` was hand-written
+  /// with `TIMESTAMPTZ` and `DEFAULT CURRENT_TIMESTAMP`. Without these the schema says
+  /// `TIMESTAMP(3)` with no default and the drift guard proposes rewriting four live columns.
+  /// Keeping timestamptz is also the safer half: this repo has a measured +4h bug from reading
+  /// a timezone-naive column as local time.
+  confirmedAt DateTime @default(now()) @db.Timestamptz(6)
+  createdAt   DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime @default(now()) @updatedAt @db.Timestamptz(6)
 
   @@unique([leagueId, userId])
   @@index([leagueId, rosterId])
@@ -12209,7 +12215,9 @@ model TradeDecisionSnapshot {
   /// Frozen server-computed market grade, recommendation, lineup effect, and per-team explanation.
   decisionResult     Json?
   completeness       String   @default("partial") @db.VarChar(16)
-  capturedAt         DateTime @default(now())
+  /// ⚠ Timestamptz for the same reason as TradeManagerStrategy above — the migration that
+  /// created this table was hand-written with `TIMESTAMPTZ`.
+  capturedAt         DateTime @default(now()) @db.Timestamptz(6)
 
   @@index([leagueId, capturedAt])
   @@index([proposedByUserId, capturedAt])
