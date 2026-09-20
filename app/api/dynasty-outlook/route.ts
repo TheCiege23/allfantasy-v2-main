@@ -6,6 +6,7 @@ import { authOptions } from '@/lib/auth';
 import { z } from 'zod';
 import { normalizeToSupportedSport } from '@/lib/sport-scope';
 import { getDynastyProjectionsForLeague } from '@/lib/dynasty-engine/DynastyQueryService';
+import { CURRENT_TEAMS } from '@/lib/leagues/leagueTeamLifecycle';
 
 const openai = getOpenAIRouteClient()
 
@@ -53,8 +54,9 @@ export async function POST(req: Request) {
     const sport = normalizeToSupportedSport(league.sport ?? 'NFL');
     const sportLower = sport.toLowerCase();
 
+    // A franchise that left the provider has no outlook; it is history, not a competitor.
     const teams = await (prisma as any).leagueTeam.findMany({
-      where: { leagueId },
+      where: { leagueId, ...CURRENT_TEAMS },
       include: {
         performances: { orderBy: { week: 'asc' } },
       },

@@ -18,6 +18,7 @@ import { prisma } from '@/lib/prisma'
 import { bootstrapLeagueFromNormalizedImport } from '@/lib/league-import/sleeper/SleeperLeagueCreationBootstrapService'
 import { buildImportedLeagueSettings } from '@/lib/league-import/ImportedLeagueCommitService'
 import { applySleeperScopeToLeague } from '@/lib/import-os/collector/applySleeperLeagueSync'
+import { CURRENT_TEAMS } from '@/lib/leagues/leagueTeamLifecycle'
 import { syncConnectedSleeperLeague } from '@/lib/import-os/collector/syncConnectedSleeperLeague'
 import { runDueSleeperLeagues } from '@/lib/import-os/collector/runDueSleeperLeagues'
 import { manualRefreshConnectedSleeperLeague } from '@/lib/import-os/collector/manualRefresh'
@@ -335,6 +336,38 @@ describe.skipIf(!OPTED_IN)('durable Sleeper sync — persisted integration', () 
     expect(back.lifecycleState).toBe('CURRENT')
     expect(back.archivedAt).toBeNull()
     expect(back.archiveReason).toBeNull()
+  })
+
+  it('#6f the current-teams filter hides the archived row and KEEPS the unclassified ones', async () => {
+    /*
+     * 🛑 THE UNCLASSIFIED CASE IS THE ONE THAT DECIDES WHETHER THIS IS SAFE TO SHIP. `UNKNOWN` is
+     * the column default and every pre-existing team row in production still holds it — 3,300 of
+     * 3,300 on the test database. A filter asking for `equals: CURRENT` would return NOTHING and
+     * render every league empty. This proves the real Postgres enum comparison keeps them.
+     */
+    const two = [
+      { teamId: '1', managerId: 'u1', players: ['p1'], starters: ['p1'] },
+      { teamId: '2', managerId: 'u2', players: ['p2'], starters: ['p2'] },
+    ]
+    const leagueId = await seed(makeSleeperNormalized({ leagueId: lid('e6'), rosters: two }))
+    const gone = await prisma.leagueTeam.findFirstOrThrow({ where: { leagueId, externalId: '2' } })
+
+    const full = makeSleeperNormalized({ leagueId: lid('e6'), rostersCoverage: 'full', rosters: two.slice(0, 1) })
+    await applySleeperScopeToLeague({ leagueId, scope: 'teams_rosters', normalized: full })
+
+    // Put the survivor back to UNKNOWN — the state every row written before the lifecycle writer holds.
+    const kept = await prisma.leagueTeam.findFirstOrThrow({ where: { leagueId, externalId: '1' } })
+    await prisma.leagueTeam.update({ where: { id: kept.id }, data: { lifecycleState: 'UNKNOWN' } })
+
+    const visible = await prisma.leagueTeam.findMany({
+      where: { leagueId, ...CURRENT_TEAMS },
+      select: { externalId: true },
+    })
+    expect(visible.map((t) => t.externalId).sort()).toEqual(['1'])
+
+    // And the hidden row is hidden, not gone: its history still resolves when asked for directly.
+    expect(await prisma.leagueTeam.count({ where: { id: gone.id } })).toBe(1)
+    expect(await prisma.teamPerformance.count({ where: { teamId: gone.id } })).toBeGreaterThan(0)
   })
 
   it('#7 an empty roster response never erases valid stored data', async () => {

@@ -7,6 +7,7 @@ import { assertLeagueMember, type LeagueAccessResult } from '@/lib/league-access
 import { z } from 'zod';
 import { isToolRankingsEnabled } from '@/lib/feature-toggle';
 import { getOrCreateAiResult } from '@/lib/ai/ai-result-cache'
+import { CURRENT_TEAMS } from '@/lib/leagues/leagueTeamLifecycle';
 
 const openai = getOpenAIRouteClient()
 
@@ -52,8 +53,9 @@ export async function POST(req: Request) {
     const leagueSport = access.leagueSport
     const playerSport = String(leagueSport).toLowerCase()
 
+    // A franchise that left the provider is not ranked among the ones still playing.
     const teams = await (prisma as any).leagueTeam.findMany({
-      where: { leagueId },
+      where: { leagueId, ...CURRENT_TEAMS },
       include: { performances: { orderBy: { week: 'asc' } } },
       orderBy: { pointsFor: 'desc' },
     });
