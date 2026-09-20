@@ -65,6 +65,29 @@ export async function resolvePlayerNamesForSport(
           { clearSportsId: { in: uniquePlayerIds } },
           { fantasyCalcId: { in: uniquePlayerIds } },
           { rollingInsightsId: { in: uniquePlayerIds } },
+          /*
+           * ⚠ FANTRAX WAS THE ONE PROVIDER COLUMN MISSING FROM THIS LIST, WHICH MADE EVERY
+           * COLLEGE ROSTER UNNAMEABLE HERE. `fantraxId` was added to `PlayerIdentityMap` on
+           * 2026-08-31 and is written weekly by `lib/devy/ingestFantraxPlayerIdentities.ts`;
+           * this OR clause was never extended, so the activity feeds, the survivor command
+           * service and tanking detection all fell through to the name-based fallbacks for a
+           * Fantrax league — the same shape of gap that left Chimmy's roster grounding blind.
+           *
+           * ⚠ SAFE BECAUSE IT WAS MEASURED, NOT BECAUSE IT LOOKS SAFE. This clause binds ONE
+           * name to EVERY id on the row it matches, so a token that is one player's Fantrax id
+           * and another player's Sleeper/ESPN/... id would attach the wrong name. Measured on
+           * the TEST database 2026-09-19 — production not readable from that session:
+           *
+           *     fantraxId populated       NCAAF only, 4,128 rows
+           *     distinct values           4,128  (no id held by two rows)
+           *     cross-column collisions   0      (no fantraxId equals another row's
+           *                                       sleeper/espn/mfl/fleaflicker/apiSports/
+           *                                       clearSports/fantasyCalc/rollingInsights id
+           *                                       within the same sport)
+           *
+           * So on that data this can only ADD matches. Re-measure before widening it further.
+           */
+          { fantraxId: { in: uniquePlayerIds } },
         ],
       },
       select: {
@@ -77,6 +100,7 @@ export async function resolvePlayerNamesForSport(
         clearSportsId: true,
         fantasyCalcId: true,
         rollingInsightsId: true,
+        fantraxId: true,
       },
     })
 
@@ -89,6 +113,7 @@ export async function resolvePlayerNamesForSport(
       setNameIfPresent(nameMap, row.clearSportsId, row.canonicalName)
       setNameIfPresent(nameMap, row.fantasyCalcId, row.canonicalName)
       setNameIfPresent(nameMap, row.rollingInsightsId, row.canonicalName)
+      setNameIfPresent(nameMap, row.fantraxId, row.canonicalName)
     }
   } catch {
     // Optional mapping layer; ignore lookup failures.
