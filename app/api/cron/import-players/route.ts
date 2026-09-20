@@ -252,6 +252,9 @@ async function handle(req: NextRequest) {
                   leaguesProfiled: r.leaguesProfiled,
                   stoppedEarly: r.stoppedEarly,
                   deferred: r.deferred,
+                  // Draft facts whose league is gone. A rising count is orphan warehouse rows
+                  // accumulating; 3 of them held 3 of 24 slots every fire until 2026-09-20.
+                  orphanCandidates: r.orphanCandidates,
                   leagueIds: r.leagueIds,
                 },
               },
