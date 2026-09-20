@@ -11,11 +11,24 @@ export const ZOMBIE_VIDEO_DIRS = {
   whisperer: '/zombie/videos/whisperer',
 } as const
 
-/** Canonical URLs for animation overlays (see `animationEngine` metadata enrichment). */
+/**
+ * Canonical URLs for animation overlays (see `animationEngine` metadata enrichment).
+ *
+ * 🛑 THE TWO TRANSITION FILENAMES DESCRIBE THE WINNING SIDE, NOT THE TRANSITION, SO THEY READ
+ * BACKWARDS. These mappings are CORRECT — do not "fix" them. Verified 2026-09-20 by extracting
+ * frames rather than by reading the names:
+ *
+ *   revival-win.mp4    opens on the silver AF robot cracking apart into an infected human and
+ *                      ends on a full green zombie under "UNDEAD CHAMPIONS"  → human → zombie
+ *   infection-win.mp4  ends on the clean silver AF robot standing over a bone → zombie → human
+ *
+ * The previous note here ("If your file names differ, swap these two paths") invited exactly
+ * that inversion, which would play a revival when a manager gets infected.
+ */
 export const ZOMBIE_VIDEO_ASSETS = {
-  /** Survivor → Zombie (infection). If your file names differ, swap these two paths. */
+  /** Survivor → Zombie (infection). File is named for the winner; see the block above. */
   humanToZombie: '/zombie/videos/human-to-zombie/revival-win.mp4',
-  /** Zombie → Survivor (revival / serum). */
+  /** Zombie → Survivor (revival / serum). File is named for the winner; see the block above. */
   zombieToHuman: '/zombie/videos/zombie-to-human/infection-win.mp4',
   bashing: '/zombie/videos/bashing/bashing.mp4',
   ambush: '/zombie/videos/ambush/ambush.mp4',

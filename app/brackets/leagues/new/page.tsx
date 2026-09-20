@@ -7,6 +7,7 @@ import { ArrowLeft, Loader2, Globe, Lock, Trophy, Goal } from "lucide-react"
 import { SUPPORTED_SPORTS, normalizeToSupportedSport } from "@/lib/sport-scope"
 import { getRoundPointsSummary } from "@/lib/bracket-challenge"
 import { CommissionerFanCredSetupNotice } from "@/components/legal/CommissionerFanCredSetupNotice"
+import { BracketChallengeHeroMedia } from "@/components/brackets/BracketChallengeHeroMedia"
 import { createPlayoffBracketChallengeClient } from "@/lib/playoffs/playoffClientApi"
 import { indefiniteArticleFor } from "@/lib/text/indefiniteArticle"
 import { defaultPlayoffChallengeConfig, isAfCommissionerSubscriber, sanitizePlayoffChallengeConfig } from "@/lib/playoffs/playoffChallengeConfig"
@@ -236,6 +237,9 @@ export default function NewBracketLeaguePage() {
           Build {indefiniteArticleFor(sportLabel)} {sportLabel}{" "}
           {challengeType === "playoff_challenge" ? "Playoff Challenge" : "Classic NCAA"} pool.
         </p>
+
+        {/* Renders nothing for a sport with no shipped clip — see bracketChallengeMedia. */}
+        <BracketChallengeHeroMedia sport={sport} />
 
         <form onSubmit={createPool} className="space-y-6 pb-24 sm:pb-0" data-testid="bracket-create-form">
           <div>
