@@ -2,7 +2,7 @@
  * What a LIVE refresh asks Sleeper for, and what it must not — both week knobs.
  *
  * ⚠ THEY ARE DELIBERATELY DIFFERENT SHAPES AND THE TESTS PIN THAT. Transactions get a WINDOW
- * (week ±1) because a trade is an event and older ones are already stored. Matchups get a CAP
+ * (two weeks back, one forward) because a trade is an event and older ones are already stored. Matchups get a CAP
  * (1..current+1) because `bootstrapLeagueFromNormalizedImport` upserts TeamPerformance from every
  * week in the payload, so dropping a PAST week would freeze a real score with nothing behind it —
  * `SleeperHistoricalMatchupSyncService` has no scheduled caller. Swapping the two shapes would be
@@ -25,7 +25,8 @@ import {
   resolveTransactionWeekWindow,
   resolveMatchupWeekCap,
   MAX_TRANSACTION_WEEK,
-  TRANSACTION_WEEK_MARGIN,
+  TRANSACTION_WEEK_LOOKBACK,
+  TRANSACTION_WEEK_LOOKAHEAD,
 } from '@/lib/import-os/season'
 
 const nfl = (now: Date) => resolveTransactionWeekWindow({ sport: 'nfl', provider: 'sleeper', now })
@@ -67,8 +68,8 @@ describe('nflWeekForDate — calendar weeks off the Sep 4 opener', () => {
 })
 
 describe('resolveTransactionWeekWindow — narrow where confident, refuse where not', () => {
-  it('returns the week either side of the current one in the regular season', () => {
-    expect(nfl(new Date('2026-10-15T12:00:00Z'))).toEqual([5, 6, 7])
+  it('reaches two weeks back and one forward in the regular season', () => {
+    expect(nfl(new Date('2026-10-15T12:00:00Z'))).toEqual([4, 5, 6, 7])
   })
 
   it('clamps at the bottom rather than asking for week 0', () => {
@@ -76,7 +77,44 @@ describe('resolveTransactionWeekWindow — narrow where confident, refuse where 
   })
 
   it('clamps at the top rather than asking for week 19', () => {
-    expect(nfl(new Date('2026-12-25T12:00:00Z'))).toEqual([16, 17, 18])
+    expect(nfl(new Date('2026-12-25T12:00:00Z'))).toEqual([15, 16, 17, 18])
+  })
+
+  /*
+   * 🛑 THE TRADE THIS WINDOW LOST, PINNED AS A DATE PAIR. Measured on production 2026-09-20:
+   * `LeagueTrade` holds season 2026 week 1 with a last trade at 2026-09-16T06:48Z and week 2 with
+   * a first at 2026-09-15T12:12Z, so Sleeper's leg turned over during Sep 16 — and a KBFL trade
+   * made at 06:21Z that morning is filed under leg 1. `nflWeekForDate` returns 3 from Sep 18, one
+   * AHEAD of the leg Sleeper was still writing, so the old symmetric window was [2,3,4]: both
+   * margin weeks spent on legs that did not exist yet, and leg 1 — still the newest leg holding
+   * trades — dropped. The trade became unreachable by the live sync two days after it happened.
+   *
+   * The assertion is the containment, not the exact list, because that is the property that was
+   * violated: a leg must stay reachable for longer than the couple of days it takes a calendar
+   * week to tick past it.
+   */
+  it('still reaches leg 1 on the day the old symmetric window had already dropped it', () => {
+    expect(nflWeekForDate(new Date('2026-09-20T11:00:00Z'))).toBe(3)
+    expect(nfl(new Date('2026-09-20T11:00:00Z'))).toEqual([1, 2, 3, 4])
+  })
+
+  /*
+   * ⚠ AND THE FORWARD MARGIN IS STILL THERE, which is the half that absorbs the turnover in the
+   * OTHER direction — Sleeper advancing before the calendar does. Widening backwards must not
+   * quietly buy itself by spending the forward week.
+   */
+  it('keeps one week ahead of the calendar week', () => {
+    const w = nfl(new Date('2026-10-15T12:00:00Z')) as number[]
+    expect(w[w.length - 1]).toBe(nflWeekForDate(new Date('2026-10-15T12:00:00Z')) + 1)
+  })
+
+  /*
+   * ⚠ ONE EXTRA REQUEST, NOT TWO. The whole cost argument for this change is that it buys ~3 weeks
+   * of reach for a single added fetch per league per sync; a window that quietly grew to five
+   * would be a different decision from the one that was approved.
+   */
+  it('costs exactly one request more than the symmetric window did', () => {
+    expect((nfl(new Date('2026-10-15T12:00:00Z')) as number[]).length).toBe(4)
   })
 
   /*
@@ -115,7 +153,9 @@ describe('resolveTransactionWeekWindow — narrow where confident, refuse where 
       const weeks = nfl(new Date(`${iso}T12:00:00Z`))
       expect(weeks).not.toBeNull()
       const w = weeks as number[]
-      expect(w.length).toBeLessThanOrEqual(2 * TRANSACTION_WEEK_MARGIN + 1)
+      expect(w.length).toBeLessThanOrEqual(
+        TRANSACTION_WEEK_LOOKBACK + TRANSACTION_WEEK_LOOKAHEAD + 1,
+      )
       expect(w[0]).toBeGreaterThanOrEqual(1)
       expect(w[w.length - 1]).toBeLessThanOrEqual(MAX_TRANSACTION_WEEK)
       expect([...w].sort((a, b) => a - b)).toEqual(w)
