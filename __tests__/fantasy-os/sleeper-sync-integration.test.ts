@@ -232,6 +232,111 @@ describe.skipIf(!OPTED_IN)('durable Sleeper sync — persisted integration', () 
     expect(await prisma.leagueTeam.findFirst({ where: { leagueId, externalId: '3' } })).toBeNull()
   })
 
+  /*
+   * 🛑 #6b–#6e COVER THE HALF OF RECONCILIATION THAT USED TO DESTROY LEAGUE HISTORY IN SILENCE.
+   *
+   * `leagueTeam.delete` is lossy through two foreign keys and neither reports anything:
+   *   `TeamPerformance.team` is onDelete: Cascade — every week the franchise played, gone.
+   *   `LeagueSeason.championTeam` is optional with no onDelete, so Prisma defaults to SetNull —
+   *   deleting a past champion blanks `championTeamId` and the league forgets who won.
+   *
+   * #6 above still passes UNCHANGED, and that matters: a team with no history is still deleted, so
+   * archiving is not parked in front of the 144 read sites that enumerate teams with no notion of
+   * lifecycle. These four prove the other branch.
+   */
+  it('#6b a vanished team that carries history is ARCHIVED, not deleted — and the history survives', async () => {
+    const three = [
+      { teamId: '1', managerId: 'u1', players: ['p1'], starters: ['p1'] },
+      { teamId: '2', managerId: 'u2', players: ['p2'], starters: ['p2'] },
+      { teamId: '3', managerId: 'u3', players: ['p3'], starters: ['p3'] },
+    ]
+    const leagueId = await seed(makeSleeperNormalized({ leagueId: lid('e2'), rosters: three }))
+    const team3 = await prisma.leagueTeam.findFirstOrThrow({ where: { leagueId, externalId: '3' } })
+    await prisma.teamPerformance.create({ data: { teamId: team3.id, season: 2025, week: 1, points: 101.5 } })
+
+    const full = makeSleeperNormalized({ leagueId: lid('e2'), rostersCoverage: 'full', rosters: three.slice(0, 2) })
+    const r = await applySleeperScopeToLeague({ leagueId, scope: 'teams_rosters', normalized: full })
+
+    expect(r.removed).toBe(1)
+    const after = await prisma.leagueTeam.findFirst({ where: { leagueId, externalId: '3' } })
+    expect(after).not.toBeNull()
+    expect(after?.lifecycleState).toBe('ARCHIVED')
+    expect(after?.archiveReason).toBe('provider_absent')
+    expect(after?.archivedAt).toBeInstanceOf(Date)
+    // Visibility is unchanged from a vanished CLAIMED team, which this pipeline already marks.
+    expect(after?.isOrphan).toBe(true)
+    // 🛑 THE LOAD-BEARING ASSERTION. Everything above could pass on a row that kept no history.
+    expect(await prisma.teamPerformance.count({ where: { teamId: team3.id } })).toBe(1)
+  })
+
+  it('#6c a vanished past CHAMPION stays resolvable, so the league does not forget who won', async () => {
+    const two = [
+      { teamId: '1', managerId: 'u1', players: ['p1'], starters: ['p1'] },
+      { teamId: '2', managerId: 'u2', players: ['p2'], starters: ['p2'] },
+    ]
+    const leagueId = await seed(makeSleeperNormalized({ leagueId: lid('e3'), rosters: two }))
+    const champ = await prisma.leagueTeam.findFirstOrThrow({ where: { leagueId, externalId: '2' } })
+    await prisma.leagueSeason.create({
+      data: { leagueId, season: 2024, platformLeagueId: lid('e3'), championTeamId: champ.id, championName: 'Old Champ' },
+    })
+
+    const full = makeSleeperNormalized({ leagueId: lid('e3'), rostersCoverage: 'full', rosters: two.slice(0, 1) })
+    await applySleeperScopeToLeague({ leagueId, scope: 'teams_rosters', normalized: full })
+
+    const season = await prisma.leagueSeason.findFirstOrThrow({ where: { leagueId, season: 2024 } })
+    // Under the old delete this read NULL — SetNull, no error, no counter, nothing to notice.
+    expect(season.championTeamId).toBe(champ.id)
+    expect(await prisma.leagueTeam.count({ where: { id: champ.id } })).toBe(1)
+  })
+
+  it('#6d re-syncing does not re-stamp archivedAt or re-count the removal', async () => {
+    const two = [
+      { teamId: '1', managerId: 'u1', players: ['p1'], starters: ['p1'] },
+      { teamId: '2', managerId: 'u2', players: ['p2'], starters: ['p2'] },
+    ]
+    const leagueId = await seed(makeSleeperNormalized({ leagueId: lid('e4'), rosters: two }))
+    const gone = await prisma.leagueTeam.findFirstOrThrow({ where: { leagueId, externalId: '2' } })
+    // The bootstrap already wrote this team's week-1 performance from the fixture's matchup, so the
+    // history here is the pipeline's own rather than planted — which is the case that matters.
+    expect(await prisma.teamPerformance.count({ where: { teamId: gone.id } })).toBeGreaterThan(0)
+
+    const full = makeSleeperNormalized({ leagueId: lid('e4'), rostersCoverage: 'full', rosters: two.slice(0, 1) })
+    const first = await applySleeperScopeToLeague({ leagueId, scope: 'teams_rosters', normalized: full })
+    expect(first.removed).toBe(1)
+    const stampedAt = (await prisma.leagueTeam.findFirstOrThrow({ where: { id: gone.id } })).archivedAt
+
+    // A departed team is absent from EVERY later authoritative response, so it is found again each
+    // time. `archivedAt` must keep meaning "when it left", not "the last time we noticed".
+    const second = await applySleeperScopeToLeague({ leagueId, scope: 'teams_rosters', normalized: full })
+    expect(second.removed).toBe(0)
+    const afterSecond = await prisma.leagueTeam.findFirstOrThrow({ where: { id: gone.id } })
+    expect(afterSecond.archivedAt?.getTime()).toBe(stampedAt?.getTime())
+  })
+
+  it('#6e a franchise the provider lists again comes back CURRENT, not live-but-archived', async () => {
+    const two = [
+      { teamId: '1', managerId: 'u1', players: ['p1'], starters: ['p1'] },
+      { teamId: '2', managerId: 'u2', players: ['p2'], starters: ['p2'] },
+    ]
+    const n = makeSleeperNormalized({ leagueId: lid('e5'), rosters: two })
+    const leagueId = await seed(n)
+    const gone = await prisma.leagueTeam.findFirstOrThrow({ where: { leagueId, externalId: '2' } })
+    expect(await prisma.teamPerformance.count({ where: { teamId: gone.id } })).toBeGreaterThan(0)
+
+    const full = makeSleeperNormalized({ leagueId: lid('e5'), rostersCoverage: 'full', rosters: two.slice(0, 1) })
+    await applySleeperScopeToLeague({ leagueId, scope: 'teams_rosters', normalized: full })
+    expect((await prisma.leagueTeam.findFirstOrThrow({ where: { id: gone.id } })).lifecycleState).toBe('ARCHIVED')
+
+    // The upsert keys on [leagueId, externalId], so a returning franchise lands on the ARCHIVED row.
+    // Without the clear in the update branch it would come back fully live and still marked
+    // archived, with an archivedAt from the week it left — and nothing anywhere would fail.
+    await bootstrapLeagueFromNormalizedImport(leagueId, n)
+    const back = await prisma.leagueTeam.findFirstOrThrow({ where: { id: gone.id } })
+    expect(back.lifecycleState).toBe('CURRENT')
+    expect(back.archivedAt).toBeNull()
+    expect(back.archiveReason).toBeNull()
+  })
+
   it('#7 an empty roster response never erases valid stored data', async () => {
     const n = makeSleeperNormalized({ leagueId: lid('f') })
     const leagueId = await seed(n)
