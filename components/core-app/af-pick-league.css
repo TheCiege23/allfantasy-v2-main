@@ -231,8 +231,53 @@
   color: #a685ff;
 }
 
+/*
+ * 🛑 THE PLATFORM BADGE HAD A COLOUR AND NO SHAPE, AND IT RENDERED AS A SLAB.
+ *
+ * `.af-platform` in af-core.css sets `background` and `color` and NOTHING ELSE —
+ * there is no base `.af-platform` rule in the repo, only seven
+ * `[data-platform='…']` ones. So this badge inherited the tile's font at normal
+ * line-height and got `--p-sleeper-bg` painted across its whole inline box with
+ * no padding and no radius.
+ *
+ * ⚠ MEASURED OFF THE REPORTED SCREENSHOT RATHER THAN DESCRIBED, because the
+ * description was wrong first time round. Sampling the PNG on /core/war-room at
+ * 3.38x: the badge box is 250x84 device px — 74x25 CSS px — a uniform
+ * `#1f2a4d` from its top row to its bottom row at both left and right edges, so
+ * square-cornered, against a 44px tile. 25px tall for one platform word, beside
+ * a 13px league name.
+ *
+ * ⚠ AND THE COLOUR IS CORRECT, WHICH IS THE PART THAT ALMOST SENT THIS THE WRONG
+ * WAY. `#1f2a4d` on `#9fd4ff` is exactly `--p-sleeper-bg` / `--p-sleeper-fg`
+ * from the DARK block. At thumbnail scale against a near-black `#06070f` ground
+ * it reads as a pale slab, and the first diagnosis here was a light-theme token
+ * leaking into dark mode — a bug that does not exist. Nothing is wrong with this
+ * badge's colour; it has no shape.
+ *
+ * ⚠ EVERY OTHER CONSUMER OF `.af-platform` BRINGS ITS OWN GEOMETRY AND THIS ONE
+ * DID NOT — it was `flex: none` alone. `.af-lh-platform` is a 10px pill,
+ * `.af-pf-platform` a 4px-radius chip, `.af-im-mark` a 26px circle,
+ * `.af-ca-mark` a 38px square. This matches `.af-lh-platform`, the nearest
+ * sibling doing the same job (a platform word beside a league name).
+ *
+ * 🛑 AND THE GEOMETRY MUST NOT BE HOISTED ONTO `.af-platform` TO "FIX IT ONCE".
+ * That class serves two different shapes: a text CHIP here, in LeagueHome and in
+ * Portfolio, and a square or circular MARK holding a single letter in ImportV4,
+ * LandingV4, ConnectedPlatforms and /import/[platform]. Giving the shared class
+ * chip padding would collapse all four marks. The duplication is the smaller
+ * problem; splitting `.af-platform` into `.af-platform-chip` and
+ * `.af-platform-mark` is the real fix and is a change of its own.
+ */
 .af-pl-league-plat {
   flex: none;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  /* A long platform word must not wrap inside a pill. */
+  white-space: nowrap;
 }
 
 /* ── Phone ───────────────────────────────────────────────────────────── */
