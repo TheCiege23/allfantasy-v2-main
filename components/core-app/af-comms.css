@@ -1670,10 +1670,21 @@
     border-radius: 0;
   }
   .af-cm[data-mode='docked'] { width: 100vw; }
-  .af-cm-launch {
-    right: 14px;
-    bottom: calc(84px + env(safe-area-inset-bottom, 0px));
-  }
+  /*
+   * 🛑 THE LAUNCHER'S GEOMETRY IS NOT SET HERE EITHER. This block used to carry
+   * `right: 14px; bottom: calc(84px + env(safe-area-inset-bottom, 0px))`, and removing
+   * the top-level override further down this file is what exposed it: with that gone,
+   * THIS rule became the one that wins on every phone narrower than 521px.
+   *
+   * ⚠ AND IT DOES NOT MERELY DISAGREE WITH THE TOKEN — IT COLLIDES WITH THE CONTROL
+   * ABOVE IT. `--af-fab-slot-1` is `--af-fab-bottom + 56 + 12` = `136px + env`, while a
+   * launcher pinned at `84px + env` spans up to `140px + env`. The mode toggle's bottom
+   * edge lands 4px INSIDE the bubble. The literal cleared the tab bar and then sat in
+   * the next control instead, which is the same class of bug one step up the stack.
+   *
+   * The `right` went with it: the toggle anchors to `--af-fab-inset` (18px), so 14px
+   * here left the two buttons misaligned by 4px down the right edge.
+   */
 }
 
 /*
@@ -2083,7 +2094,29 @@
 .af-cm button[aria-label] { min-width: 44px; }
 .af-cm [data-testid='league-chat-textarea'] { min-height: 44px; }
 .af-cm img, .af-cm video { max-width: 100%; height: auto; }
-.af-cm-launch { right: 22px; bottom: max(26px, env(safe-area-inset-bottom)); background: #22d3ee; color: white; border: 0; box-shadow: 0 20px 40px -16px rgba(34,211,238,.55); }
+/*
+ * 🛑 NO `bottom` AND NO `right` HERE. THIS LINE PUT THE CHAT BUBBLE BACK ON TOP OF
+ * THE "MORE" TAB, AND IT IS THE SECOND TIME THAT BUG HAS SHIPPED.
+ *
+ * It used to read `right: 22px; bottom: max(26px, env(safe-area-inset-bottom));`. Same
+ * specificity as the `.af-cm-launch` block ~470 lines above, declared later, and — the
+ * part that made it invisible — at TOP LEVEL, inside no media query at all. So it beat
+ * `bottom: var(--af-fab-bottom)` at every width, not just on a phone.
+ *
+ * `--af-fab-bottom` resolves to `--af-tabbar-height + 12px` under 720px, which is
+ * `56px + env(safe-area-inset-bottom) + 12px`. The literal replaced it with ~26–34px, so
+ * the launcher sat ON the bar and landed on its last item, which is "More". af-core.css
+ * carries the whole account of the first time this happened, including the phone report
+ * that the More button was "partially covered making it hard to click it".
+ *
+ * ⚠ IT ALSO STRANDED THE CONTROL ABOVE IT. `GlobalModeToggle` anchors to
+ * `--af-fab-slot-1`, which is `--af-fab-bottom + 56px + gap` — so with the launcher
+ * dropped out from under it the mode toggle kept its correct slot and read as a button
+ * floating alone in the middle of the right edge. One override, two bug reports.
+ *
+ * Colour and shadow stay: those are this file's job. Geometry belongs to the tokens.
+ */
+.af-cm-launch { background: #22d3ee; color: white; border: 0; box-shadow: 0 20px 40px -16px rgba(34,211,238,.55); }
 .af-cm[data-mode='docked'] { border-radius: 24px 0 0 24px; overflow: hidden; }
 .af-cm .af-cm-input { border-radius: 22px; resize: vertical; max-height: 160px; line-height: 1.5; padding-block: 12px; font-family: inherit; }
 .af-cm-league-picker select, .af-cm-league-search { border-radius: 18px; }

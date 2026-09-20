@@ -1400,3 +1400,71 @@ describe('byTradeUrgency', () => {
     expect([passed, never, unknown, live].sort(byTradeUrgency)[0]).toBe(live)
   })
 })
+
+/*
+ * Draft picks carry a price now, and the card has to say so.
+ *
+ * 🛑 THE BUG THESE GUARD WAS INVISIBLE FROM THE LOADER SIDE. `ingestPlayerValues` began
+ * storing FantasyCalc's pick rows on 2026-09-20 and grading started reading them the same
+ * day, so a trade whose verdict DEPENDS on a pick was rendering a letter beside a dash that
+ * claimed we had no value for it. Every loader test passed throughout.
+ */
+describe('TradesBoard — a priced pick shows its price', () => {
+  const withPick = (value: number | null, letter: 'A' | 'B' | 'C' | 'D' | 'F' | null = 'D', sharePct: number | null = 42) => {
+    const d = tradesData()
+    const w = d.windows[0]
+    return {
+      ...d,
+      windows: [
+        {
+          ...w,
+          latest: {
+            ...w.latest!,
+            letter,
+            sharePct,
+            withheldReason: letter ? null : 'one side could not be priced',
+            sent: w.latest!.sent.map((a) => (a.kind === 'pick' ? { ...a, value } : a)),
+          },
+        },
+      ],
+    }
+  }
+
+  it('prints the pick value instead of a dash', () => {
+    const { container } = render(<TradesBoard data={withPick(1231)} allHref="/core/trades?all=1" />)
+    expect(container.textContent).toContain('1,231')
+  })
+
+  /*
+   * ⚠ THE CONTROL, AND IT IS NOT SYMMETRIC WITH THE TEST ABOVE. An unpriced pick is a live
+   * case rather than a defensive branch: FantasyCalc publishes picks on the DYNASTY books
+   * only, so every redraft league and every round past the book's depth lands here. Showing
+   * a zero would read as "worthless" for something we simply did not price.
+   */
+  it('still shows a dash when the book does not price that pick', () => {
+    const { container } = render(<TradesBoard data={withPick(null)} allHref="/core/trades?all=1" />)
+    const row = [...container.querySelectorAll('.af-bd-asset')].find((el) =>
+      el.textContent?.includes('2027 3rd'),
+    )
+    expect(row).toBeTruthy()
+    expect(row!.querySelector('.af-bd-asset-val')?.textContent).toBe('\u2014')
+  })
+
+  it('names both managers in the value split, summing to 100', () => {
+    const { container } = render(<TradesBoard data={withPick(1231, 'D', 42)} allHref="/core/trades?all=1" />)
+    const text = container.textContent ?? ''
+    expect(text).toContain('Value split')
+    expect(text).toContain('TheCiege24 42%')
+    expect(text).toContain('Jordan 58%')
+  })
+
+  /*
+   * A split beside no letter would be a verdict we refused to give, restated as a number.
+   */
+  it('shows no split when the trade could not be graded', () => {
+    const { container } = render(
+      <TradesBoard data={withPick(null, null, null)} allHref="/core/trades?all=1" />,
+    )
+    expect(container.textContent).not.toContain('Value split')
+  })
+})
