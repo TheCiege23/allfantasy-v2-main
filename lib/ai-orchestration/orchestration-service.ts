@@ -29,6 +29,7 @@ import {
   logDiagnosticsEvent,
 } from '@/lib/provider-diagnostics'
 import type { ProviderId } from '@/lib/provider-diagnostics'
+import { redactAndCap } from '@/lib/security/redactSecrets'
 import { getToolRegistration } from '@/lib/ai-tool-registry'
 import type { DeterministicSource } from '@/lib/unified-ai/DeterministicToAIContextBridge'
 import { normalizeOrchestrationToolKey } from './tool-key-normalizer'
@@ -768,7 +769,39 @@ export async function runUnifiedOrchestration(req: UnifiedAIRequest): Promise<Ru
     }
     if (result.status !== 'ok') {
       recordProviderFailure(role, result.error)
-      logDiagnosticsEvent('failure', role, result.status)
+      /*
+       * ── 🛑 "failed" IS NOT A DIAGNOSIS, AND IT WAS THE ONLY THING IN THE LOG ──────────────
+       *
+       * This logged `result.status` — one of four enum values — and dropped `result.error`,
+       * which the line directly above already hands to `recordProviderFailure`. So when every
+       * provider went down in production on 2026-09-20 and every Chimmy answer degraded to the
+       * "AI explanation is temporarily unavailable" fallback, the whole record was:
+       *
+       *     [ProviderDiagnostics] failure grok failed
+       *     [ProviderDiagnostics] failure openai failed
+       *     [ProviderDiagnostics] failure deepseek invalid_response
+       *
+       * Auth, quota, rate limit, bad model name and a network blip are indistinguishable there,
+       * and the enum is derivable from the status field anyway — so the line cost a log write
+       * and carried no information the reader did not already have.
+       *
+       * 🛑 REDACTED THROUGH `redactAndCap`, NOT THROUGH THE LOCAL `sanitizeProviderError`, AND
+       * THE DIFFERENCE IS A CREDENTIAL. This was first written to copy `lib/clear-sports/client.ts`,
+       * which logs through `sanitizeProviderError` in exactly this shape. But that helper is one
+       * of the private half-redactors `lib/security/redactSecrets.ts` exists to replace: it covers
+       * `sk-` and `api_key=` only, anchors on a leading `\b` (so a credential concatenated onto
+       * preceding text slips past), and CAPS BEFORE REDACTING, which can slice a secret in half
+       * and leave the front readable.
+       *
+       * That matters unusually much here: Rolling Insights passes `RSC_token` as a QUERY
+       * PARAMETER and TheSportsDB puts its key in a URL PATH SEGMENT, so any provider error
+       * quoting a URL carries a live credential — and `sanitizeProviderError` catches neither.
+       * Adopting the neighbouring pattern is not the same as using the canonical rule.
+       *
+       * `redactAndCap` redacts first and caps second, by construction.
+       */
+      const reason = result.error ? redactAndCap(result.error, 160) : ''
+      logDiagnosticsEvent('failure', role, reason ? `${result.status} ${reason}` : result.status)
     }
   }
   const succeededIdx = results.findIndex((r) => r.result.status === 'ok')
