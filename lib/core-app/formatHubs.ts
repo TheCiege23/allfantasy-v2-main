@@ -41,6 +41,39 @@ const EFL_TEMPLATE_ID = 'efl_promotion_relegation_dynasty'
 /** Cards drawn per hub. The stat strip still counts every league. */
 const CARD_CAP = 12
 
+/*
+ * 🛑 EVERY READ HERE NEEDS A DEADLINE, BECAUSE `soft` CATCHES A REJECTION AND A HUNG QUERY IS NOT
+ * ONE. `getFormatHub` is awaited on the page with `.catch(() => null)` and every optional read
+ * below goes through `soft`, so a read that THROWS is handled — but a read that simply never
+ * settles is awaited forever, and it holds the whole `/core` render open with nothing painted.
+ * Measured at `/core/hubs/efl`: still on the skeleton 27 minutes after the click.
+ *
+ * ⚠ THIS IS NOT ABOUT CROSS-REGION LATENCY, WHICH IS WHAT THE ORIGINAL VERSION OF THIS NOTE SAID.
+ * The app and the database sat on opposite coasts until 2026-09-09 and both are in Virginia now,
+ * so that explanation no longer holds and is not the reason to keep this. A query can hang on pool
+ * exhaustion, a lock, or a dropped connection at any distance — the deadline exists because an
+ * unbounded await has no failure mode, not because the round trip is slow.
+ *
+ * A guarded read that passes the deadline degrades to its fallback and marks the hub partial. The
+ * membership read that everything else depends on rejects instead, which the page's own `.catch`
+ * turns into the honest "could not read your leagues" panel. A bounded failure is what lets the
+ * screen paint at all.
+ */
+const HUB_READ_TIMEOUT_MS = 8_000
+
+function withTimeout<T>(label: string, run: Promise<T>, ms: number): Promise<T> {
+  let timer: ReturnType<typeof setTimeout>
+  const deadline = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`${label} exceeded ${ms}ms`)), ms)
+  })
+  /*
+   * ⚠ `finally` CLEARS THE TIMER ON BOTH OUTCOMES, AND WITHOUT IT A FAST READ STILL LEAVES AN
+   * 8-SECOND TIMER PENDING ON EVERY CALL. `Promise.race` settles on the first result; it does not
+   * cancel the loser.
+   */
+  return Promise.race([run, deadline]).finally(() => clearTimeout(timer))
+}
+
 export type HubTone = 'good' | 'warn' | 'bad' | 'accent' | 'muted'
 export type HubMeter = { pct: number; value: string; tone: HubTone }
 export type HubLeagueCard = {
@@ -131,7 +164,7 @@ function titleCase(slug: string): string {
 /** A read that may hit a table production has not migrated yet. Logged, never thrown. */
 async function soft<T>(label: string, run: () => Promise<T>, fallback: T, flags: { partial: boolean }): Promise<T> {
   try {
-    return await run()
+    return await withTimeout(label, run(), HUB_READ_TIMEOUT_MS)
   } catch (err) {
     flags.partial = true
     console.warn(`[formatHubs] ${label} read failed`, err instanceof Error ? err.message : err)
@@ -159,21 +192,31 @@ export async function readFormatMembership(
    * own row, or a league where this reader has claimed a team. A hub must never
    * list a league the reader could not open.
    */
-  const members: MemberLeague[] = await prisma.league.findMany({
-    where: { OR: [{ userId }, { teams: { some: { claimedByUserId: userId } } }] },
-    select: {
-      id: true,
-      name: true,
-      platform: true,
-      platformLeagueId: true,
-      leagueSize: true,
-      userId: true,
-      leagueType: true,
-      guillotineMode: true,
-      lastSyncedAt: true,
-      syncStatus: true,
-    },
-  })
+  /*
+   * ⚠ THIS ONE REJECTS RATHER THAN DEGRADING, AND THAT IS THE RIGHT ASYMMETRY. Everything below
+   * is keyed on `ids`, so an empty membership list is indistinguishable from "you are in no
+   * leagues" — degrading here would render a confident, empty hub for someone who has twelve.
+   * Rejecting reaches the page's `.catch` and produces the honest failure panel instead.
+   */
+  const members: MemberLeague[] = await withTimeout(
+    'members',
+    prisma.league.findMany({
+      where: { OR: [{ userId }, { teams: { some: { claimedByUserId: userId } } }] },
+      select: {
+        id: true,
+        name: true,
+        platform: true,
+        platformLeagueId: true,
+        leagueSize: true,
+        userId: true,
+        leagueType: true,
+        guillotineMode: true,
+        lastSyncedAt: true,
+        syncStatus: true,
+      },
+    }),
+    HUB_READ_TIMEOUT_MS,
+  )
   const ids = members.map((m) => m.id)
 
   const [guillotineRows, c2cRows, zombieRows, survivorRows, tournamentRows, eflRows] =
