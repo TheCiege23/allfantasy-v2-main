@@ -6,6 +6,7 @@ import { resolveSourceScreenLink, type SourceScreenLink } from '@/lib/league-lin
 import { prisma } from '@/lib/prisma'
 import { loadLatestPickValueSnapshots } from '@/lib/player-values/latestPickValueSnapshots'
 import { defenderPricerFrom, type DefenderPricer } from './tradeDefenders'
+import { currentSeasonOf } from './todayStrip'
 import { readCanonicalDefenderBoard } from '@/lib/values/canonicalDefenderBoardCache'
 import { hasIdpScoring } from './scoringNotes'
 import { extractScoringSettings } from '@/lib/projections/leagueScoring'
@@ -297,6 +298,17 @@ async function resolveGrades(
     format: book.format,
     qbFormat: book.qbFormat,
   }).catch(() => [])
+  /*
+   * Dated by the board being quoted, with no clock fallback — see `tradesBoard.ts` for the
+   * cacheability contract that forbids one there, and for why an undated market should make
+   * no claim about age rather than borrow the reader's wall clock.
+   */
+  const newestCapture = snaps.reduce<Date | null>(
+    (acc, s) => (acc == null || s.capturedAt > acc ? s.capturedAt : acc),
+    null,
+  )
+  const marketSeason = newestCapture ? currentSeasonOf(newestCapture) : null
+
   const pickPrice = pickPricerFrom(pickRows)
 
   /*
@@ -360,7 +372,10 @@ async function resolveGrades(
        * the cross-league board can. It can still say whether the gap is a PLAYER or a PICK,
        * which is the part the old count-matching guess got wrong.
        */
-      withheldReason: g.graded ? null : withheldTradeReason(g, unpricedOf(recv, gave, picksIn, picksOut)),
+      withheldReason: g.graded ? null : withheldTradeReason(g, unpricedOf(recv, gave, picksIn, picksOut), {
+              tradeSeason: t.season ?? null,
+              currentSeason: marketSeason,
+            }),
       playersIn: recv.length,
       playersOut: gave.length,
       picksIn: picksIn.length,

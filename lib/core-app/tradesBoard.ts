@@ -20,6 +20,7 @@ import { defenderPricerFrom, type DefenderPricer } from './tradeDefenders'
 import { hasIdpScoring } from './scoringNotes'
 import { extractScoringSettings } from '@/lib/projections/leagueScoring'
 import { readCanonicalDefenderBoard } from '@/lib/values/canonicalDefenderBoardCache'
+import { currentSeasonOf } from './todayStrip'
 import { leagueArtUrl } from './leagueArt'
 import { leagueDisplayName } from './leagueHome'
 
@@ -648,6 +649,27 @@ export async function getTradesBoard(
   const rankWith = (book: ValueBook, defenders: DefenderPricer) => (id: string) =>
     valueByBookAndId.get(`${book.format}:${book.qbFormat}:${id}`)?.rank ?? defenders(id)?.rank ?? null
 
+  /*
+   * The season the prices we are about to quote belong to.
+   *
+   * ⚠ FROM THE SNAPSHOT'S OWN `capturedAt`, AND THERE IS NO CLOCK FALLBACK — BY CONTRACT.
+   * `tradesBoardSummary` caches this board's payload and asserts against this file's SOURCE
+   * that it contains no `new Date()` and no `Date.now()`: a cached payload with a clock
+   * rendered into it is wrong for every reader after the one who computed it. That test
+   * caught the first version of this line.
+   *
+   * It is also the better claim. "Today's market no longer covers him" is a statement about
+   * the BOARD, so it should be dated by the board — and where no snapshot was loaded there is
+   * no market to date, so we say nothing about age rather than reaching for the wall clock.
+   * `currentSeasonOf` carries the autumn boundary, so a September trade is not mislabelled as
+   * last season's.
+   */
+  const newestCapture = snaps.reduce<Date | null>(
+    (acc, s) => (acc == null || s.capturedAt > acc ? s.capturedAt : acc),
+    null,
+  )
+  const marketSeason = newestCapture ? currentSeasonOf(newestCapture) : null
+
   /* One pricer per book, built once — the loop below runs per trade. */
   const pricerByBook = new Map<string, PickPricer>(
     pickRowsPerBook.map(([key, rows]) => [key, pickPricerFrom(rows)] as const),
@@ -787,7 +809,10 @@ export async function getTradesBoard(
        * unpriced PLAYER whenever the two happened to be equal. This board is the one caller
        * that holds display names, so it names them.
        */
-      withheldReason: g.graded ? null : withheldTradeReason(g, unpricedIn(t, leagueBook, [...sentPicks, ...recvPicks], pickPrice, defenders)),
+      withheldReason: g.graded ? null : withheldTradeReason(g, unpricedIn(t, leagueBook, [...sentPicks, ...recvPicks], pickPrice, defenders), {
+              tradeSeason: t.season ?? null,
+              currentSeason: marketSeason,
+            }),
     })
   }
 
