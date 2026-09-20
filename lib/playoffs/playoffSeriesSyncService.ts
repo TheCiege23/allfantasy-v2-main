@@ -363,6 +363,15 @@ function rowToSyncGame(row: LiveScoreRow): PlayoffSeriesSyncGame {
     startTime: row.startTime,
     venue: row.venue,
     broadcast: row.broadcast,
+    /*
+     * 🛑 THIS LINE IS WHY THE ESPN PATH COULD NOT INFER A ROUND. It was absent,
+     * so every ESPN-sourced game reached `roundIndexFromGame` with an undefined
+     * `eventName`, matched no round, and was dropped from the provider series
+     * groups entirely — silently, for every sport. Only the Rolling Insights
+     * builder further down ever set it, which is why the gap stayed invisible
+     * on the sports RI serves.
+     */
+    eventName: row.eventName ?? null,
   }
 }
 
@@ -747,14 +756,19 @@ function isPlayInGame(game: PlayoffSeriesSyncGame): boolean {
 }
 
 /**
- * ⚠ THE MLB BRANCH IS UNVERIFIED AGAINST A REAL POSTSEASON PAYLOAD. No MLB
- * postseason event name has been captured from ESPN yet — every MLB row in
- * `SportsGame` today is regular season, and `seasonType` is NULL on all of
- * them. These patterns are written from the published series names, and the
- * MLB sync is still refused upstream (see `assertSyncableSport`), so nothing
- * depends on them being right. Confirm them against a captured payload in the
- * same change that lifts that refusal — do not assume they work because they
- * compile.
+ * ✅ VERIFIED AGAINST ESPN'S REAL 2025 MLB POSTSEASON, and the guessed version
+ * of these patterns was WRONG. The 2026 postseason had not started, so the
+ * first draft was written from the published series names and marked unverified
+ * — but the 2025 postseason is still served, and reading it settled the shape:
+ * ESPN labels games `ALWC - Game 2`, `ALDS - Game 5`, `NLCS - Game 3`,
+ * `World Series - Game 7`.
+ *
+ * Two things that guess got wrong, both silent:
+ *   - "wild card" never appears. The label is `ALWC` / `NLWC`, so round 1 would
+ *     never have been inferred and no Wild Card series could resolve.
+ *   - the league is a PREFIX of one token, so `\bal\b` fails against `ALCS`
+ *     (the boundary after "AL" meets a word character) and every MLB series
+ *     would have been bucketed conference-less.
  */
 function conferenceFromEventName(
   game: PlayoffSeriesSyncGame,
@@ -773,8 +787,12 @@ function conferenceFromEventName(
   if (/\beast\b|\beastern\b/.test(eventName)) return "east"
   if (/\bwest\b|\bwestern\b/.test(eventName)) return "west"
   if (sport === "mlb") {
-    if (/\bamerican league\b|\bal\b/.test(eventName)) return "al"
-    if (/\bnational league\b|\bnl\b/.test(eventName)) return "nl"
+    /*
+     * The World Series is deliberately absent: it belongs to neither league and
+     * must fall through to `null` so the template's `finals` half claims it.
+     */
+    if (/\bal(wc|ds|cs)\b|\bamerican league\b/.test(eventName)) return "al"
+    if (/\bnl(wc|ds|cs)\b|\bnational league\b/.test(eventName)) return "nl"
   }
   return null
 }
@@ -794,16 +812,22 @@ function roundIndexFromGame(game: PlayoffSeriesSyncGame, sport?: PlayoffSport): 
     if (/\b1st round\b|\bfirst round\b|\bround 1\b/.test(eventName)) return 1
   } else if (sport === "mlb") {
     /*
-     * ⚠ UNVERIFIED — see the note on `conferenceFromEventName`. Ordered most
-     * specific first: "World Series" must be tested before the generic
-     * "final" fallthrough below, and "Championship Series" before "Division
-     * Series", because "AL Championship Series" contains neither the word
-     * "conference" nor "final" and would otherwise reach no branch at all.
+     * ✅ Verified against ESPN's real 2025 postseason — see the note on
+     * `conferenceFromEventName`. Ordered most specific first: "World Series"
+     * must be tested before the generic "final" fallthrough below, and
+     * "Championship Series" before "Division Series", because "ALCS" contains
+     * neither the word "conference" nor "final" and would otherwise reach no
+     * branch at all.
      */
     if (/\bworld series\b/.test(eventName)) return 4
     if (/\bchampionship series\b|\balcs\b|\bnlcs\b/.test(eventName)) return 3
     if (/\bdivision series\b|\balds\b|\bnlds\b/.test(eventName)) return 2
-    if (/\bwild card\b|\bwildcard\b/.test(eventName)) return 1
+    /*
+     * ⚠ `ALWC` / `NLWC` ARE THE LABELS ESPN ACTUALLY USES. "wild card" was a
+     * guess and appears nowhere in the real payload, so without these two
+     * round 1 is never inferred and no Wild Card series can ever resolve.
+     */
+    if (/\balwc\b|\bnlwc\b|\bwild card\b|\bwildcard\b/.test(eventName)) return 1
     /*
      * Baseball has no "conference"/"semifinal" vocabulary, so the generic
      * fallthrough below would mis-bucket an unrecognised MLB event rather
@@ -819,6 +843,22 @@ function roundIndexFromGame(game: PlayoffSeriesSyncGame, sport?: PlayoffSport): 
   const explicit = Number(game.providerRound)
   if (Number.isFinite(explicit) && explicit > 0) return explicit
   return null
+}
+
+/**
+ * Round and league inference, and the adapter that feeds them, exposed for
+ * test only.
+ *
+ * ⚠ THESE THREE ARE WHERE A SILENT MISMATCH LIVES. They read provider strings,
+ * so they cannot be checked by the type system and they fail by returning
+ * `null` — which looks exactly like "no postseason games yet". Pinning them to
+ * real captured headlines is the only thing that separates those two states.
+ * Not part of the module's public surface; nothing outside tests may import it.
+ */
+export const __testing = {
+  roundIndexFromGame,
+  conferenceFromEventName,
+  rowToSyncGame,
 }
 
 function pairKey(homeTeam: string | null | undefined, awayTeam: string | null | undefined): string {

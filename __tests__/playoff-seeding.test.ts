@@ -18,8 +18,21 @@ const db = vi.hoisted(() => ({
 vi.mock("server-only", () => ({}))
 vi.mock("@/lib/prisma", () => ({ prisma: db }))
 
-const cacheRow = (teamName: string, conference: string, position: number) => ({
-  data: { teamName, conference, position, team: teamName.slice(0, 3).toUpperCase() },
+/*
+ * `won`/`lost` sum to a COMPLETE MLB season by default. Seeding now refuses a
+ * field whose regular season is still running, so a fixture that omitted them
+ * would make every test here assert the refusal instead of the behaviour it
+ * names — a whole suite passing vacuously.
+ */
+const cacheRow = (teamName: string, conference: string, position: number, gamesPlayed = 162) => ({
+  data: {
+    teamName,
+    conference,
+    position,
+    team: teamName.slice(0, 3).toUpperCase(),
+    won: Math.ceil(gamesPlayed / 2),
+    lost: Math.floor(gamesPlayed / 2),
+  },
 })
 
 /** The AL half of a real 2026 field, as import-standings would have cached it. */
@@ -182,6 +195,57 @@ describe("applyPlayoffSeedsToChallenge", () => {
     expect(result.slotsFilled).toBe(0)
     expect(db.$transaction).not.toHaveBeenCalled()
     expect(db.playoffBracketSeries.update).not.toHaveBeenCalled()
+  })
+
+  /*
+   * The guard that decides whether seeding may happen AT ALL.
+   *
+   * Seeding only fills placeholders and is idempotent, so a club written from
+   * a provisional field is permanent — the bracket keeps whoever held the last
+   * wild card that day, and nothing downstream corrects it. Measured
+   * 2026-09-19: MLB was at 153-155 of 162, AL seeds 6 and 7 two wins apart.
+   */
+  it("writes nothing while the regular season is still being played", async () => {
+    db.sportsDataCache.findMany.mockResolvedValue(
+      AL_FIELD.map((r) => cacheRow(String(r.data.teamName), "American League", Number(r.data.position), 154)),
+    )
+    db.playoffBracketSeries.findMany.mockResolvedValue([series()])
+    const { applyPlayoffSeedsToChallenge } = await import("@/lib/playoffs/playoffSeeding")
+
+    const result = await applyPlayoffSeedsToChallenge({ challengeId: "c1" })
+
+    expect(result.skippedFieldNotFinal).toBe(true)
+    expect(result.slotsFilled).toBe(0)
+    expect(db.playoffBracketSeries.update).not.toHaveBeenCalled()
+    expect(db.$transaction).not.toHaveBeenCalled()
+    expect(result.warnings.join(" ")).toContain("154 of 162")
+  })
+
+  it("allows the rainout case — a season short by a game or two is still over", async () => {
+    db.sportsDataCache.findMany.mockResolvedValue(
+      AL_FIELD.map((r) => cacheRow(String(r.data.teamName), "American League", Number(r.data.position), 160)),
+    )
+    db.playoffBracketSeries.findMany.mockResolvedValue([series()])
+    const { applyPlayoffSeedsToChallenge } = await import("@/lib/playoffs/playoffSeeding")
+
+    const result = await applyPlayoffSeedsToChallenge({ challengeId: "c1" })
+
+    expect(result.skippedFieldNotFinal).toBe(false)
+    expect(result.slotsFilled).toBe(2)
+  })
+
+  it("refuses a sport whose season length it does not know", async () => {
+    db.playoffBracketChallenge.findUnique.mockResolvedValue({ id: "c1", sport: "cricket", seasonYear: 2026 })
+    db.sportsDataCache.findMany.mockResolvedValue(AL_FIELD)
+    db.playoffBracketSeries.findMany.mockResolvedValue([series()])
+    const { applyPlayoffSeedsToChallenge } = await import("@/lib/playoffs/playoffSeeding")
+
+    const result = await applyPlayoffSeedsToChallenge({ challengeId: "c1" })
+
+    // Unknown must refuse, not default to final — the mistake is permanent.
+    expect(result.skippedFieldNotFinal).toBe(true)
+    expect(result.slotsFilled).toBe(0)
+    expect(result.warnings.join(" ")).toContain("no regular-season length known")
   })
 
   /*

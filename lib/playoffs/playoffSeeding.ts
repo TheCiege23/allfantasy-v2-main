@@ -44,6 +44,14 @@ export type PlayoffSeedField = {
   seeds: Map<string, Map<number, string>>
   /** How many standings rows were read, before the seed cut. */
   rowsRead: number
+  /**
+   * False while the regular season is still being played, and therefore while
+   * the field can still change. Nothing may be written from a field that is
+   * not final — see REGULAR_SEASON_GAMES.
+   */
+  isFinal: boolean
+  /** Fewest games played by any club in the standings, or null if unknown. */
+  minGamesPlayed: number | null
   warnings: string[]
 }
 
@@ -52,7 +60,37 @@ type StandingsRow = {
   teamName?: unknown
   position?: unknown
   conference?: unknown
+  won?: unknown
+  lost?: unknown
 }
+
+/**
+ * Regular-season length per sport, used only to answer "is the field final?".
+ *
+ * 🛑 SEEDING A PROVISIONAL FIELD IS UNRECOVERABLE, WHICH IS WHY THIS EXISTS.
+ * `applyPlayoffSeedsToChallenge` only replaces PLACEHOLDERS and is idempotent
+ * — both deliberate — so once `AL6` has been written as a real club it is never
+ * revisited. Seed a week early and the bracket keeps whichever club happened to
+ * hold the last wild card that day, silently, forever.
+ *
+ * Measured 2026-09-19: MLB clubs had played 153-155 of 162, and the AL 6th seed
+ * led the 7th by two wins. A pool seeded that day would very likely have been
+ * wrong, and nothing downstream would ever have corrected it.
+ */
+const REGULAR_SEASON_GAMES: Record<string, number> = {
+  mlb: 162,
+  nba: 82,
+  nhl: 82,
+}
+
+/**
+ * ⚠ THE TOLERANCE IS NOT SLOP, IT IS RAINOUTS. MLB cancels late-season games
+ * that cannot affect the standings, so a completed season legitimately shows
+ * some clubs at 160 or 161. Requiring a hard 162 would mean never seeding in
+ * those years. Two games is enough for that and far too small to admit the
+ * nine-games-remaining case above.
+ */
+const SEASON_COMPLETE_TOLERANCE = 2
 
 function conferenceOf(group: unknown): string | null {
   const value = String(group ?? "").trim()
@@ -84,11 +122,20 @@ export async function resolvePlayoffSeedField(
   })
 
   const seeds = new Map<string, Map<number, string>>()
+  const gamesPlayed: number[] = []
   for (const row of rows as Array<{ data: StandingsRow }>) {
     const data = row?.data ?? {}
     const conference = conferenceOf(data.conference)
     const seed = Number(data.position)
     const name = String(data.teamName ?? "").trim()
+    /*
+     * Counted across EVERY row, not only the seeded field: whether the season
+     * is over is a fact about the league, and the clubs eliminated from the
+     * field are exactly the ones whose last games get cancelled.
+     */
+    const won = Number(data.won)
+    const lost = Number(data.lost)
+    if (Number.isFinite(won) && Number.isFinite(lost)) gamesPlayed.push(won + lost)
     if (!conference || !name || !Number.isFinite(seed) || seed <= 0) continue
     const bucket = seeds.get(conference) ?? new Map<number, string>()
     /*
@@ -108,7 +155,26 @@ export async function resolvePlayoffSeedField(
     warnings.push(`no standings rows cached under "${prefix}" — has import-standings run for ${sport}?`)
   }
 
-  return { sport, season, seeds, rowsRead: rows.length, warnings }
+  const minGamesPlayed = gamesPlayed.length > 0 ? Math.min(...gamesPlayed) : null
+  const required = REGULAR_SEASON_GAMES[String(sport).toLowerCase()]
+  /*
+   * ⚠ UNKNOWN IS NOT FINAL. A sport with no entry here, or standings carrying
+   * no win/loss figures, cannot be shown to be over — and the failure of
+   * seeding too early is permanent, so the unknown case must refuse. A sport
+   * is added to REGULAR_SEASON_GAMES deliberately, never by defaulting.
+   */
+  const isFinal =
+    required != null && minGamesPlayed != null && minGamesPlayed >= required - SEASON_COMPLETE_TOLERANCE
+
+  if (!isFinal && rows.length > 0) {
+    warnings.push(
+      required == null
+        ? `no regular-season length known for ${sport}; refusing to treat the field as final`
+        : `field not final: fewest games played is ${minGamesPlayed ?? "unknown"} of ${required}`,
+    )
+  }
+
+  return { sport, season, seeds, rowsRead: rows.length, isFinal, minGamesPlayed, warnings }
 }
 
 export type ApplyPlayoffSeedsSweep = {
@@ -116,6 +182,8 @@ export type ApplyPlayoffSeedsSweep = {
   slotsFilled: number
   picksMigrated: number
   slotsUnresolved: number
+  /** Challenges left untouched because their field is not final yet. */
+  skippedFieldNotFinal: number
   warnings: string[]
   errors: string[]
 }
@@ -137,6 +205,7 @@ export async function applyPlayoffSeedsToChallenges(challengeIds: string[]): Pro
     slotsFilled: 0,
     picksMigrated: 0,
     slotsUnresolved: 0,
+    skippedFieldNotFinal: 0,
     warnings: [],
     errors: [],
   }
@@ -163,6 +232,7 @@ export async function applyPlayoffSeedsToChallenges(challengeIds: string[]): Pro
         challengeId: challenge.id,
         field: { ...field, warnings: [] },
       })
+      if (result.skippedFieldNotFinal) sweep.skippedFieldNotFinal += 1
       if (result.slotsFilled > 0) sweep.challengesSeeded += 1
       sweep.slotsFilled += result.slotsFilled
       sweep.picksMigrated += result.picksMigrated
@@ -186,6 +256,8 @@ export type ApplyPlayoffSeedsResult = {
   /** Slots still holding a placeholder because no club was found for that seed. */
   slotsUnresolved: number
   rowsRead: number
+  /** True when nothing was written because the regular season is still running. */
+  skippedFieldNotFinal: boolean
   warnings: string[]
 }
 
@@ -216,6 +288,26 @@ export async function applyPlayoffSeedsToChallenge(input: {
   const sport = String(challenge.sport ?? "").toLowerCase() as PlayoffSport
   const field = input.field ?? (await resolvePlayoffSeedField(sport, challenge.seasonYear))
   const warnings = [...field.warnings]
+
+  /*
+   * 🛑 REFUSE BEFORE WRITING ANYTHING. This is the one check that cannot be
+   * deferred to "we will re-run it later": the write is idempotent and only
+   * touches placeholders, so a club written from a provisional field is
+   * permanent. Better an unseeded bracket than a confidently wrong one.
+   */
+  if (!field.isFinal) {
+    return {
+      challengeId: challenge.id,
+      sport: String(challenge.sport),
+      season: field.season,
+      slotsFilled: 0,
+      picksMigrated: 0,
+      slotsUnresolved: 0,
+      rowsRead: field.rowsRead,
+      skippedFieldNotFinal: true,
+      warnings,
+    }
+  }
 
   const series = await (prisma as any).playoffBracketSeries.findMany({
     where: { challengeId: challenge.id },
@@ -267,6 +359,7 @@ export async function applyPlayoffSeedsToChallenge(input: {
       picksMigrated: 0,
       slotsUnresolved,
       rowsRead: field.rowsRead,
+      skippedFieldNotFinal: false,
       warnings,
     }
   }
@@ -300,6 +393,7 @@ export async function applyPlayoffSeedsToChallenge(input: {
     picksMigrated,
     slotsUnresolved,
     rowsRead: field.rowsRead,
+    skippedFieldNotFinal: false,
     warnings,
   }
 }
