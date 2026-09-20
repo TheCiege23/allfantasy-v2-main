@@ -12,6 +12,7 @@ import { assertCommissioner, isCommissioner } from '@/lib/commissioner/permissio
 import { prisma } from '@/lib/prisma'
 import { getDraftVariantSettings, updateDraftVariantSettings } from '@/lib/draft-defaults/DraftVariantSettingsHub'
 import { isDraftTypeAllowedOnSettingsTab } from '@/lib/draft-types/draftTypeRegistry'
+import { CURRENT_TEAMS } from '@/lib/leagues/leagueTeamLifecycle'
 import { validateLeagueSettings } from '@/lib/league-settings-validation'
 import { getDraftOrderModeAndLotteryConfig, setDraftOrderModeAndLotteryConfig } from '@/lib/draft-lottery/lotteryConfigStorage'
 import { getOrphanRosterIdsForLeague } from '@/lib/orphan-ai-manager/orphanRosterResolver'
@@ -273,8 +274,9 @@ export async function PATCH(
   if (body.randomize === true) {
     try {
       const [teams, draftSession] = await Promise.all([
+        // Randomizing the draft order must not deal a slot to a franchise that left the provider.
         prisma.leagueTeam.findMany({
-          where: { leagueId },
+          where: { leagueId, ...CURRENT_TEAMS },
           select: { externalId: true, teamName: true, ownerName: true, platformUserId: true, id: true, avatarUrl: true },
         }),
         prisma.draftSession.findUnique({
