@@ -9,6 +9,7 @@ const requestContractToUnifiedMock = vi.fn()
 const unifiedResponseToContractMock = vi.fn()
 const validateToolRequestMock = vi.fn()
 const buildChimmyConversationIdMock = vi.fn()
+const getRecentChatHistoryMock = vi.fn()
 const buildAgentPromptMock = vi.fn()
 const inferAgentFromMessageMock = vi.fn()
 const getChimmyMemoryContextMock = vi.fn()
@@ -83,9 +84,16 @@ vi.mock("@/lib/ai-memory/chimmy-memory-context", () => ({
   getChimmyMemoryContext: getChimmyMemoryContextMock,
 }))
 
+/*
+ * ⚠ `getRecentChatHistory` ADDED WHEN THE ROUTE GAINED A `GET`. Leaving it out is not loud here —
+ * the POST suite never reaches it, so all 18 tests stayed green with the mock a function short. It
+ * breaks only once a test exercises the history read, which is exactly how a stale double survives
+ * a migration: the suite that should catch it is the one that never calls the new code.
+ */
 vi.mock("@/lib/ai-memory/chat-history-store", () => ({
   appendChatHistory: vi.fn(),
   buildChimmyConversationId: buildChimmyConversationIdMock,
+  getRecentChatHistory: getRecentChatHistoryMock,
 }))
 
 vi.mock("@/lib/ai-memory/ai-memory-store", () => ({
@@ -727,4 +735,125 @@ describe("POST /api/chat/chimmy contract", () => {
     })
     expect(runUnifiedOrchestrationMock).not.toHaveBeenCalled()
   })
+  /*
+   * ── GET: the transcript the route has always been writing ─────────────────────────────────
+   *
+   * Every turn has gone into `chat_history` since PROMPT 234 and nothing ever read it back, so
+   * closing the tab lost a conversation the database still held. These cover the seam: who may
+   * read, which conversation is read, and what a stored turn is allowed to bring back with it.
+   */
+  describe("GET — conversation history", () => {
+    beforeEach(() => {
+      buildChimmyConversationIdMock.mockImplementation(
+        ({ userId, leagueId }: { userId?: string | null; leagueId?: string | null }) =>
+          leagueId ? `chimmy:${userId}:${leagueId}` : `chimmy:${userId}:global`
+      )
+      getRecentChatHistoryMock.mockResolvedValue([])
+    })
+
+    it("refuses an unauthenticated read", async () => {
+      getServerSessionMock.mockResolvedValueOnce(null)
+      const { GET } = await import("@/app/api/chat/chimmy/route")
+      const res = await GET(createMockNextRequest("http://localhost/api/chat/chimmy") as any)
+      expect(res.status).toBe(401)
+      expect(getRecentChatHistoryMock).not.toHaveBeenCalled()
+    })
+
+    it("reads the league's own conversation, scoped to the signed-in user", async () => {
+      getRecentChatHistoryMock.mockResolvedValueOnce([
+        { role: "user", content: "how is my team doing?", createdAt: new Date("2026-09-20T01:00:00Z"), meta: null },
+        { role: "assistant", content: "Here is the read.", createdAt: new Date("2026-09-20T01:00:05Z"), meta: null },
+      ])
+      const { GET } = await import("@/app/api/chat/chimmy/route")
+      const res = await GET(
+        createMockNextRequest("http://localhost/api/chat/chimmy?leagueId=cream-bowl") as any
+      )
+      expect(res.status).toBe(200)
+      const body = await res.json()
+      expect(body.conversationId).toBe("chimmy:user-1:cream-bowl")
+      // ⚠ The userId is passed as its own argument, so a forged leagueId reaches only your own rows.
+      expect(getRecentChatHistoryMock).toHaveBeenCalledWith("chimmy:user-1:cream-bowl", 80, "user-1")
+      expect(body.turns.map((t: { role: string; text: string }) => [t.role, t.text])).toEqual([
+        ["you", "how is my team doing?"],
+        ["chimmy", "Here is the read."],
+      ])
+    })
+
+    it("treats a missing or 'global' league as the global conversation", async () => {
+      const { GET } = await import("@/app/api/chat/chimmy/route")
+      await GET(createMockNextRequest("http://localhost/api/chat/chimmy") as any)
+      await GET(createMockNextRequest("http://localhost/api/chat/chimmy?leagueId=global") as any)
+      expect(getRecentChatHistoryMock.mock.calls.map((c: unknown[]) => c[0])).toEqual([
+        "chimmy:user-1:global",
+        "chimmy:user-1:global",
+      ])
+    })
+
+    /*
+     * 🛑 THE GROUNDING BADGE HAS TO COME BACK WITH THE WORDS. An answer Chimmy gave while unable
+     * to read the league renders a "could not read your league" badge; restore the prose without
+     * it and an ungrounded answer is indistinguishable from a grounded one.
+     */
+    it("restores the grounding, cost and mode a turn was stored with", async () => {
+      getRecentChatHistoryMock.mockResolvedValueOnce([
+        {
+          role: "assistant",
+          content: "I could not read your league.",
+          createdAt: new Date("2026-09-20T01:00:00Z"),
+          meta: { display: { grounding: { status: "unavailable" }, cost: 10, mode: "fast" } },
+        },
+      ])
+      const { GET } = await import("@/app/api/chat/chimmy/route")
+      const res = await GET(createMockNextRequest("http://localhost/api/chat/chimmy") as any)
+      const [turn] = (await res.json()).turns
+      expect(turn.grounding).toEqual({ status: "unavailable" })
+      expect(turn.cost).toBe(10)
+      expect(turn.mode).toBe("fast")
+    })
+
+    /*
+     * ⚠ `advice` carries a live vote and `scenario` a board that has since moved — replaying
+     * either puts a stale interactive control in front of someone and invites them to act on it.
+     */
+    it("does not replay stale interactive state, whatever the row carries", async () => {
+      getRecentChatHistoryMock.mockResolvedValueOnce([
+        {
+          role: "assistant",
+          content: "Add him.",
+          createdAt: new Date(),
+          meta: { display: { advice: { key: "a1" }, scenario: { before: 1 }, players: [{ name: "X" }], cost: "free" } },
+        },
+      ])
+      const { GET } = await import("@/app/api/chat/chimmy/route")
+      const [turn] = (await (await GET(createMockNextRequest("http://localhost/api/chat/chimmy") as any)).json()).turns
+      expect(turn.advice).toBeUndefined()
+      expect(turn.scenario).toBeUndefined()
+      expect(turn.players).toBeUndefined()
+      expect(turn.cost).toBeUndefined() // a non-numeric cost is dropped, not coerced
+    })
+
+    it("survives a malformed meta blob and a failed read", async () => {
+      getRecentChatHistoryMock.mockResolvedValueOnce([
+        { role: "assistant", content: "a", createdAt: new Date(), meta: "not an object" },
+        { role: "assistant", content: "b", createdAt: new Date(), meta: { display: [] } },
+      ])
+      const { GET } = await import("@/app/api/chat/chimmy/route")
+      const ok = await GET(createMockNextRequest("http://localhost/api/chat/chimmy") as any)
+      expect((await ok.json()).turns).toHaveLength(2)
+
+      getRecentChatHistoryMock.mockRejectedValueOnce(new Error("db down"))
+      const degraded = await GET(createMockNextRequest("http://localhost/api/chat/chimmy") as any)
+      expect(degraded.status).toBe(200)
+      expect((await degraded.json()).turns).toEqual([])
+    })
+
+    it("clamps the limit so one request cannot ask for the whole table", async () => {
+      const { GET } = await import("@/app/api/chat/chimmy/route")
+      await GET(createMockNextRequest("http://localhost/api/chat/chimmy?limit=100000") as any)
+      await GET(createMockNextRequest("http://localhost/api/chat/chimmy?limit=-5") as any)
+      await GET(createMockNextRequest("http://localhost/api/chat/chimmy?limit=abc") as any)
+      expect(getRecentChatHistoryMock.mock.calls.map((c: unknown[]) => c[1])).toEqual([80, 1, 80])
+    })
+  })
+
 })
