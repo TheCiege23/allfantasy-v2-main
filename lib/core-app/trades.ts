@@ -6,7 +6,13 @@ import { resolveSourceScreenLink, type SourceScreenLink } from '@/lib/league-lin
 import { prisma } from '@/lib/prisma'
 import { loadLatestPlayerValueSnapshots } from '@/lib/player-values/latestPlayerValueSnapshots'
 import { leagueDisplayName, type SectionState } from './leagueHome'
-import { describeNoSignal, gradeTrade } from '@/lib/projections/tradeGrading'
+import { gradeTrade } from '@/lib/projections/tradeGrading'
+import {
+  LATEST_TRADE_ORDER,
+  gradeableSide,
+  pickAssets,
+  withheldTradeReason,
+} from './tradePicks'
 import {
   scanPendingSleeperTrades,
   type PendingTradeAsset,
@@ -133,6 +139,13 @@ export type GradedTrade = {
   withheldReason: string | null
   playersIn: number
   playersOut: number
+  /**
+   * Picks each way. Counts only — `pickAssets` can name them, but this list's row is a
+   * one-line summary and a count is what it has room for. They are here because a "2 for
+   * 1" that was really "2 for 1 plus a first" reads as a different trade.
+   */
+  picksIn: number
+  picksOut: number
 }
 
 /**
@@ -173,9 +186,20 @@ async function resolveGrades(
     select: {
       transactionId: true, season: true, week: true,
       playersGiven: true, playersReceived: true,
+      /*
+       * ⚠ THE PICK COLUMNS, WHICH THIS GRADE LIST NEVER READ. Grading "a player and a
+       * 2027 1st for a player" on the two players alone is not neutral — it values the
+       * pick at zero and favours whichever side gave it. See `gradeableSide`.
+       */
+      picksGiven: true, picksReceived: true,
       history: { select: { sleeperUsername: true } },
     },
-    orderBy: [{ season: 'desc' }, { week: 'desc' }],
+    /*
+     * 🛑 `tradeDate` FIRST — see `LATEST_TRADE_ORDER`. Ordering by `(season, week)` is
+     * ordering by the LEG Sleeper served a trade under, not by when it happened, and
+     * every offseason trade in a league shares one leg.
+     */
+    orderBy: [...LATEST_TRADE_ORDER],
     /* One source row exists per manager involved. Read enough rows to return
        sixty distinct trades after the mirrored copies are collapsed. */
     take: 240,
@@ -243,11 +267,13 @@ async function resolveGrades(
   const graded: GradedTrade[] = distinctTrades.map((t) => {
     const recv = (Array.isArray(t.playersReceived) ? t.playersReceived : []).map(String)
     const gave = (Array.isArray(t.playersGiven) ? t.playersGiven : []).map(String)
-    const toSide = (label: string, list: string[]) => ({
-      label,
-      assets: list.map((id) => ({ id, rank: rankById.get(id) ?? null, rawValue: null })),
-    })
-    const g = gradeTrade(toSide('received', recv), toSide('gave', gave))
+    const picksIn = pickAssets(t.picksReceived)
+    const picksOut = pickAssets(t.picksGiven)
+    const rankOf = (id: string) => rankById.get(id) ?? null
+    const g = gradeTrade(
+      { label: 'received', assets: gradeableSide(recv, rankOf, picksIn) },
+      { label: 'gave', assets: gradeableSide(gave, rankOf, picksOut) },
+    )
 
     return {
       transactionId: t.transactionId,
@@ -255,9 +281,13 @@ async function resolveGrades(
       week: t.week ?? null,
       letter: g.graded ? g.letter : null,
       sharePct: g.graded ? g.sharePct : null,
-      withheldReason: g.graded ? null : describeNoSignal(g),
+      withheldReason: g.graded
+        ? null
+        : withheldTradeReason(g, picksIn.length + picksOut.length),
       playersIn: recv.length,
       playersOut: gave.length,
+      picksIn: picksIn.length,
+      picksOut: picksOut.length,
     }
   })
 

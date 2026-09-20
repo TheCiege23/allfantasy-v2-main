@@ -79,12 +79,10 @@ registerScreenSummary<TradesBoardData | null>({
   /**
    * ⚠ Bump whenever `TradesBoardData` changes shape — the version is part of the cache key.
    *
-   * 2 (2026-09-20): `TradeAsset` gained `kind`, and both sides of a trade now carry draft
-   * picks (`picksOf` in tradesBoard.ts). Without the bump a cached v1 board keeps being
-   * served for up to the 2h stale-while-revalidate window, so the screen would still show
-   * one-sided trades and the false "one side has no assets on record" — the exact bug —
-   * for two hours after the fix shipped, on precisely the accounts that have boards warm
-   * enough to be reading from cache.
+   * 2 — `TradeAsset` gained `kind` and picks now appear in `sent`/`received`. A v1 entry is
+   * a board with no picks in it and a "latest" trade chosen by the old (season, week) order,
+   * and it would be served for up to two hours after the fix ships. The bump is what makes
+   * the correction visible on the next render instead of after the stale window.
    */
   version: 2,
   ttlMs: TTL_MS,

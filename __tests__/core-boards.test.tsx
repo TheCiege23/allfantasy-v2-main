@@ -592,15 +592,39 @@ function tradesData(over: Partial<TradesBoardData> = {}): TradesBoardData {
             {
               kind: 'player',
               id: 'a',
+              kind: 'player',
               name: 'Perry Vance',
               position: 'WR',
               team: 'PHI',
               imageUrl: null,
               value: 6552,
             },
+            /*
+             * The half this board could not see. `picksGiven` has always held these rows;
+             * nothing read them, so a side that gave two players and a third-rounder
+             * rendered as two players, and a side that gave only picks rendered as the
+             * sentence "Picks or FAAB only — no players on this side".
+             */
+            {
+              id: 'pick:2027:3:0',
+              kind: 'pick',
+              name: '2027 3rd',
+              position: null,
+              team: null,
+              imageUrl: null,
+              value: null,
+            },
           ],
           received: [
-            { kind: 'player', id: 'b', name: 'Dana Okoye', position: 'WR', team: 'BUF', imageUrl: null, value: null },
+            {
+              id: 'b',
+              kind: 'player',
+              name: 'Dana Okoye',
+              position: 'WR',
+              team: 'BUF',
+              imageUrl: null,
+              value: null,
+            },
           ],
           letter: null,
           sharePct: null,
@@ -641,6 +665,46 @@ describe('TradesBoard', () => {
     expect(vals).toContain('6,552')
     expect(vals).toContain('—')
     expect(vals).not.toContain('0')
+  })
+
+  /*
+   * 🛑 REPORTED FROM THE LIVE SCREEN 2026-09-20, ON A REAL KBFL TRADE. Two players
+   * and a 2027 3rd went out for three 2027 picks; the card showed the two players,
+   * dropped the third-rounder, and called the other side "Picks or FAAB only — no
+   * players on this side". The picks were in the database the whole time.
+   */
+  it('renders a traded draft pick as an asset, not as a missing side', () => {
+    const { container } = render(
+      <TradesBoard data={tradesData()} allHref="/core/trades?all=1" />,
+    )
+    const text = container.textContent ?? ''
+    expect(text).toContain('2027 3rd')
+    expect(text).not.toMatch(/no players on this side/i)
+  })
+
+  /*
+   * 🛑 A PICK MUST NOT BECOME A PLAYER CARD TRIGGER. `pick:2027:3:0` is a non-empty
+   * string, so `PlayerName` would happily render a button for it and open the card
+   * for a player who is not in the trade — the failure `TradeAsset.kind` exists to
+   * prevent. Asserted on the pick's own row so a stray trigger elsewhere cannot
+   * satisfy it.
+   */
+  it('does not turn a pick into a player-card trigger', () => {
+    const { container } = render(
+      <TradesBoard data={tradesData()} allHref="/core/trades?all=1" />,
+    )
+    const pickRow = [...container.querySelectorAll('.af-bd-asset')].find((n) =>
+      (n.textContent ?? '').includes('2027 3rd'),
+    )
+    expect(pickRow).toBeTruthy()
+    expect(pickRow!.querySelector('.af-pc-trigger')).toBeNull()
+    expect(pickRow!.querySelector('.af-bd-asset-val')?.textContent).toBe('—')
+
+    /* The control: a real player on the same card still gets one. */
+    const playerRow = [...container.querySelectorAll('.af-bd-asset')].find((n) =>
+      (n.textContent ?? '').includes('Perry Vance'),
+    )
+    expect(playerRow!.querySelector('.af-pc-trigger')).not.toBeNull()
   })
 
   /*
@@ -920,17 +984,17 @@ describe('TradesBoard — which side each asset is on', () => {
   })
 
   /*
-   * A side with nothing on it says so IN PLACE. Rendering nothing there would
-   * make a two-sided trade look one-sided — the same misreading as flattening,
-   * reached from the other direction.
+   * An empty side says so IN PLACE. Rendering nothing there would make a two-sided
+   * trade look one-sided — the same misreading as flattening, reached from the other
+   * direction.
    *
-   * ⚠ THE SENTENCE CHANGED WITH THE LOADER, AND THAT IS WHAT THIS ASSERTS NOW.
-   * It used to read "Picks or FAAB only — no players on this side", which was
-   * true of what the board could SEE and false about the trade: `picksGiven`
-   * and `picksReceived` were never selected. They are, so an empty side can no
-   * longer be explained away as picks.
+   * 🛑 AND IT NO LONGER BLAMES THE PICKS. This line used to read "Picks or FAAB only —
+   * no players on this side", written when the loader could not see `picksGiven`; it
+   * was therefore printed over sides that held real picks, which is how a live KBFL
+   * card claimed a three-pick side was empty. Picks render now, so an empty side is
+   * genuinely empty and the copy has to stop naming a cause it cannot know.
    */
-  it('says an empty side is FAAB-or-cash rather than rendering nothing', () => {
+  it('says an empty side is empty, without blaming picks it can now see', () => {
     const d = tradesData()
     const { container } = render(
       <TradesBoard
@@ -943,81 +1007,12 @@ describe('TradesBoard — which side each asset is on', () => {
     )
     const s = sides(container)
     expect(s).toHaveLength(2)
-    expect(s[1].assets.join(' ')).toMatch(/FAAB or cash only/i)
-    /* And it must NOT claim picks, which is the thing the board now renders. */
-    expect(s[1].assets.join(' ')).not.toMatch(/Picks or FAAB only/i)
-  })
+    expect(s[1].assets.join(' ')).toMatch(/Nothing on record for this side/i)
+    expect(s[1].assets.join(' ')).not.toMatch(/no players on this side/i)
 
-  /*
-   * 🛑 THE REGRESSION THIS WHOLE CHANGE EXISTS FOR. `picksGiven`/`picksReceived`
-   * were never read, so a pick-for-player trade rendered one side as "no players
-   * on this side" and withheld the grade as "one side has no assets on record" —
-   * a false statement about a row that had the assets in it.
-   *
-   * ⚠ AND THE PICK MUST NOT BE A PLAYER-CARD TRIGGER. `PlayerName` opens the
-   * card for any non-empty `sleeperId`, and a synthetic pick key is non-empty,
-   * so a pick routed down the player branch would open some unrelated player's
-   * card rather than degrading to text. Asserting the ABSENCE of the trigger is
-   * the only way to see that; the name renders either way.
-   */
-  it('renders draft picks on the side they belong to, as text rather than a player trigger', () => {
-    const d = tradesData()
-    const { container } = render(
-      <TradesBoard
-        data={{
-          ...d,
-          windows: [
-            {
-              ...d.windows[0],
-              latest: {
-                ...d.windows[0].latest!,
-                received: [
-                  {
-                    kind: 'pick',
-                    id: 'pick:2027-R1:0',
-                    name: '2027 R1',
-                    position: null,
-                    team: null,
-                    imageUrl: null,
-                    value: null,
-                  },
-                ],
-              },
-            },
-          ],
-        }}
-        allHref="/core/trades?all=1"
-      />,
-    )
-    const s = sides(container)
-    expect(s[1].assets.join(' ')).toContain('2027 R1')
-
-    const pickRow = [...container.querySelectorAll('.af-bd-asset')].find((a) =>
-      (a.textContent ?? '').includes('2027 R1'),
-    )
-    expect(pickRow).toBeTruthy()
-    expect(pickRow!.getAttribute('data-kind')).toBe('pick')
-    expect(pickRow!.querySelector('.af-pc-trigger')).toBeNull()
-    /* No price is on file for a pick, and a dash says so rather than a zero. */
-    expect(pickRow!.querySelector('.af-bd-asset-val')?.textContent).toBe('—')
-  })
-
-  /*
-   * The positive control for the assertion above: on a PLAYER row the trigger
-   * must be present. Without this, `querySelector('.af-pc-trigger') === null`
-   * would pass just as happily if the trigger had been removed from every row,
-   * or if the class had been renamed — a check that cannot fail.
-   */
-  it('still renders a player as a player-card trigger', () => {
-    const { container } = render(
-      <TradesBoard data={tradesData()} allHref="/core/trades?all=1" />,
-    )
-    const playerRow = [...container.querySelectorAll('.af-bd-asset')].find((a) =>
-      (a.textContent ?? '').includes('Perry Vance'),
-    )
-    expect(playerRow).toBeTruthy()
-    expect(playerRow!.getAttribute('data-kind')).toBe('player')
-    expect(playerRow!.querySelector('.af-pc-trigger')).not.toBeNull()
+    /* The other side still renders its own assets, picks included. */
+    expect(s[0].assets.join(' ')).toContain('Perry Vance')
+    expect(s[0].assets.join(' ')).toContain('2027 3rd')
   })
 })
 

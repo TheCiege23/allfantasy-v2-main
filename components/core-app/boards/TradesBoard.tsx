@@ -49,47 +49,66 @@ const GRADE_SEV: Record<string, 'good' | 'warn' | 'bad'> = {
   F: 'bad',
 }
 
-function Asset({ a, leagueId }: { a: TradeAsset; leagueId: string }) {
-  /*
-   * ⚠ SWITCHED ON `kind`, NEVER ON THE SHAPE OF THE ID — and that requirement
-   * is the reason `kind` exists. The previous version of this comment recorded
-   * the trap: `PlayerName` opens the card whenever `sleeperId` is a non-empty
-   * string, and a synthetic pick key ("pick:2027-R1:0") is a non-empty string.
-   * So a pick routed through the player path would not fall back to plain text,
-   * it would open the WRONG PLAYER'S CARD. The loader now tags every asset and
-   * this is the only branch that reads the tag.
-   */
-  const isPick = a.kind === 'pick'
+/**
+ * A traded draft pick.
+ *
+ * 🛑 IT IS A SEPARATE COMPONENT BECAUSE `PlayerName` MUST NEVER SEE A PICK KEY. The
+ * loader's synthetic `pick:2027:1:0` is a non-empty string, so it would not degrade
+ * to plain text — it would open a player card for a player that is not in the trade.
+ * `TradeAsset.kind` is the discriminator that makes picks safe to render here, and
+ * this branch is the whole reason it exists.
+ *
+ * The round sits in the same 26px circle a headshot would, so a mixed side stays on
+ * one grid and needs no new CSS.
+ */
+function PickAsset({ a }: { a: TradeAsset }) {
+  /* "2027 1st" -> "1st". `||`, not `??`: an empty last segment is not a label. */
+  const round = a.name.split(' ').slice(-1)[0] || 'PK'
   return (
-    <span className="af-bd-asset" data-kind={a.kind}>
-      {isPick ? (
-        /* A pick has no headshot and no team; the round marker stands in for one. */
-        <span className="af-bd-pickmark" aria-hidden>
-          ◆
+    <span className="af-bd-asset">
+      <span className="af-bd-facewrap">
+        <span className="af-bd-face af-bd-face--sm af-bd-face--none" aria-hidden>
+          {round}
         </span>
-      ) : (
-        <PlayerFace
-          imageUrl={a.imageUrl}
-          name={a.name}
-          teamLogoUrl={teamLogoUrl('NFL', a.team)}
-          size="sm"
-        />
-      )}
+      </span>
       <span className="af-bd-asset-name">
-        {isPick ? (
-          a.name
-        ) : (
-          /* Opens the player card in THIS league's context. */
-          <PlayerName
-            sport="NFL"
-            sleeperId={a.id}
-            name={a.name}
-            position={a.position}
-            team={a.team}
-            imageUrl={a.imageUrl}
-            leagueId={leagueId}
-          />
-        )}
+        {a.name}
+        <span className="af-bd-pos" data-pos="PICK">
+          {' '}
+          PICK
+        </span>
+      </span>
+      {/*
+        ⚠ A DASH, AND IT WILL STAY A DASH. Every other unpriced asset on this screen
+        is one we simply have no snapshot for; a pick is one we do not price at all.
+        Both are honestly "—" and neither may be a zero.
+      */}
+      <span className="af-bd-asset-val">—</span>
+    </span>
+  )
+}
+
+function Asset({ a, leagueId }: { a: TradeAsset; leagueId: string }) {
+  if (a.kind === 'pick') return <PickAsset a={a} />
+  return (
+    <span className="af-bd-asset">
+      <PlayerFace
+        imageUrl={a.imageUrl}
+        name={a.name}
+        teamLogoUrl={teamLogoUrl('NFL', a.team)}
+        size="sm"
+      />
+      <span className="af-bd-asset-name">
+        {/* Opens the player card in THIS league's context. */}
+        <PlayerName
+          sport="NFL"
+          sleeperId={a.id}
+          name={a.name}
+          position={a.position}
+          team={a.team}
+          imageUrl={a.imageUrl}
+          leagueId={leagueId}
+        />
         {a.position ? (
           <span className="af-bd-pos" data-pos={a.position.toUpperCase()}>
             {' '}
@@ -107,18 +126,6 @@ function Asset({ a, leagueId }: { a: TradeAsset; leagueId: string }) {
   )
 }
 
-/*
- * ⚠ THE EMPTY-SIDE SENTENCE HAD TO CHANGE WITH THE LOADER, AND THAT IS THE HALF
- * A DATA FIX USUALLY FORGETS. It read "Picks or FAAB only — no players on this
- * side", which was an accurate description of what the BOARD could see and a
- * misleading one about the TRADE: picks were in the row all along, in a column
- * the query never selected. Now that they are rendered, a side that is still
- * empty is one we genuinely hold nothing for — FAAB, or an unparsable entry —
- * and saying "picks" here would send a reader looking for a row that is not
- * coming.
- */
-const EMPTY_SIDE = 'FAAB or cash only — no players or picks recorded on this side.'
-
 function TradeBody({ t, leagueId }: { t: BoardTrade; leagueId: string }) {
   return (
     <>
@@ -129,7 +136,13 @@ function TradeBody({ t, leagueId }: { t: BoardTrade; leagueId: string }) {
             t.sent.map((a) => <Asset key={`s-${a.id}`} a={a} leagueId={leagueId} />)
           ) : (
             <span className="af-bd-asset">
-              <span className="af-bd-asset-name">{EMPTY_SIDE}</span>
+              {/*
+                ⚠ THIS SENTENCE USED TO READ "Picks or FAAB only — no players on this
+                side", AND IT WAS USUALLY FALSE. Picks render as assets now, so an
+                empty side is genuinely empty: FAAB, or a side the importer never
+                captured. It no longer blames a category we simply were not reading.
+              */}
+              <span className="af-bd-asset-name">Nothing on record for this side — FAAB only, or not captured.</span>
             </span>
           )}
         </div>
@@ -139,7 +152,13 @@ function TradeBody({ t, leagueId }: { t: BoardTrade; leagueId: string }) {
             t.received.map((a) => <Asset key={`r-${a.id}`} a={a} leagueId={leagueId} />)
           ) : (
             <span className="af-bd-asset">
-              <span className="af-bd-asset-name">{EMPTY_SIDE}</span>
+              {/*
+                ⚠ THIS SENTENCE USED TO READ "Picks or FAAB only — no players on this
+                side", AND IT WAS USUALLY FALSE. Picks render as assets now, so an
+                empty side is genuinely empty: FAAB, or a side the importer never
+                captured. It no longer blames a category we simply were not reading.
+              */}
+              <span className="af-bd-asset-name">Nothing on record for this side — FAAB only, or not captured.</span>
             </span>
           )}
         </div>
@@ -200,10 +219,12 @@ function WindowCard({ row }: { row: TradeWindowRow }) {
             {deadlineLabel}
           </span>
           {/*
-            ⚠ NOT A PLAIN `<Link>`. This navigates within the same route segment,
-            so `loading.tsx` cannot fire and the tap produced no feedback at all
-            while `getTradesData` made a live Sleeper call — reported as the
-            button "not working when clicked". See BoardActionLink's header.
+            ⚠ NOT A PLAIN `<Link>`. This navigates `/core/trades` →
+            `/core/trades?league=…`, which changes a SEARCH PARAM and not the
+            segment key — so the route's `loading.tsx` never re-suspends, the
+            skeleton never paints, and the tap produced no feedback at all while
+            `getTradesData` made a live Sleeper call. Reported from a phone as
+            the button "not working when clicked". See BoardActionLink's header.
           */}
           <BoardActionLink className="af-bd-btn" href={row.href}>
             Open trades →
@@ -313,7 +334,6 @@ export function TradesBoard({ data, allHref }: TradesBoardProps) {
                     <BoardActionLink
                       className="af-bd-btn"
                       href={`/core/trades?league=${encodeURIComponent(p.leagueId)}`}
-                      pendingLabel="Opening…"
                     >
                       Review it →
                     </BoardActionLink>

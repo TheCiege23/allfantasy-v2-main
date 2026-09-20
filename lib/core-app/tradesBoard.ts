@@ -3,8 +3,14 @@ import { CROSS_LEAGUE_BOOK, valueBookFor, type ValueBook } from './valueBook'
 
 import { prisma } from '@/lib/prisma'
 import { loadLatestPlayerValueSnapshots } from '@/lib/player-values/latestPlayerValueSnapshots'
-import { describeNoSignal, gradeTrade } from '@/lib/projections/tradeGrading'
-import { pickLabel } from './careerTrades'
+import { gradeTrade } from '@/lib/projections/tradeGrading'
+import {
+  LATEST_TRADE_ORDER,
+  gradeableSide,
+  pickAssets,
+  withheldTradeReason,
+  type TradeAsset,
+} from './tradePicks'
 import { leagueArtUrl } from './leagueArt'
 import { leagueDisplayName } from './leagueHome'
 
@@ -51,25 +57,13 @@ import { leagueDisplayName } from './leagueHome'
  * trade" while meaning ZERO DATA. The withheld reason is rendered instead.
  */
 
-export type TradeAsset = {
-  /**
-   * ⚠ THE DISCRIMINATOR THE BOARD ASKED FOR BEFORE PICKS COULD BE ADDED, and
-   * the reason it had to come first. `TradesBoard` renders every asset name
-   * through `PlayerName`, which opens the player card for a non-empty
-   * `sleeperId`. A synthetic pick key IS a non-empty string, so adding picks
-   * without this field would not have degraded to plain text — it would have
-   * opened the WRONG CARD. The component switches on `kind`, never on the id.
-   */
-  kind: 'player' | 'pick'
-  /** Sleeper id, or a synthetic key for a pick. */
-  id: string
-  name: string
-  position: string | null
-  team: string | null
-  imageUrl: string | null
-  /** Market value, when a snapshot prices him. Null is common and is not zero. */
-  value: number | null
-}
+/**
+ * 🛑 THE DEFINITION MOVED TO `./tradePicks`, AND THE RE-EXPORT IS SO NOTHING ELSE HAD TO.
+ * `TradeAsset` gained a `kind` discriminator when picks started rendering, and the rules
+ * that build one are pure — they belong somewhere a test can reach without a prisma mock.
+ * Every existing `from '@/lib/core-app/tradesBoard'` import keeps working.
+ */
+export type { TradeAsset }
 
 export type BoardTrade = {
   transactionId: string
@@ -186,56 +180,6 @@ function idsOf(v: unknown): string[] {
 }
 
 /**
- * The picks on one side of a trade, as assets.
- *
- * 🛑 THIS COLUMN WAS NEVER READ, AND THE CARD SAID SO IN WORDS NOBODY BELIEVED.
- * The board built both sides from `playersGiven` / `playersReceived` only, so a
- * side that was picks or FAAB rendered as "Picks or FAAB only — no players on
- * this side" and the grade was withheld with reason `NO_ASSETS`: *"one side of
- * this trade has no assets recorded"*. On a pick-for-player trade that sentence
- * is FALSE — the assets are recorded, in a column two lines from the one the
- * query selected. Reported from a phone as the Trades screen "not showing the
- * full trade" and "not showing an explanation", which are one defect.
- *
- * ⚠ `pickLabel` IS REUSED, NOT REWRITTEN. `careerTrades.ts` already parses this
- * exact stored shape — `{ season, round }`, written by the Sleeper ingest in
- * `normalize-historical.ts` — for the career timeline. A second parser here is
- * two implementations of one rule, which is the bug, not the fix.
- *
- * ⚠ AND `rank: null` IS THE POINT, NOT A SHORTCUT. `tradeGrading` works in RANK
- * space and refuses to grade on partial coverage, deliberately: pricing three of
- * four assets and grading the rest as zero favours whichever side received the
- * unpriced one. There is no rank for a draft pick, so adding picks does NOT
- * unlock a letter — it corrects the REASON from "one side has no assets" to
- * "only N of M assets have a value on file", which is true. Giving picks an
- * invented rank to force a letter is the exact failure that file exists to
- * prevent; the honest refusal is the deliverable here.
- */
-function picksOf(v: unknown): TradeAsset[] {
-  if (!Array.isArray(v)) return []
-  const out: TradeAsset[] = []
-  for (const raw of v) {
-    const label = pickLabel(raw)
-    /* An entry we cannot even label is not rendered as a mystery row. */
-    if (!label) continue
-    out.push({
-      kind: 'pick',
-      /*
-       * Synthetic, and prefixed so it can never collide with a Sleeper player
-       * id. Deduped by index because one side can hold two 2027 2nds.
-       */
-      id: `pick:${label.replace(/\s+/g, '-')}:${out.length}`,
-      name: label,
-      position: null,
-      team: null,
-      imageUrl: null,
-      value: null,
-    })
-  }
-  return out
-}
-
-/**
  * Collapse the mirrored copies of each trade, per league.
  *
  * 🛑 THE SAME TRADE IS STORED ONCE PER MANAGER. `LeagueTradeHistory` is
@@ -254,8 +198,9 @@ function picksOf(v: unknown): TradeAsset[] {
  * ⚠ AND THE INPUT MUST ALREADY BE ORDERED, because `firstByLeague` keeps the
  * FIRST row it sees per league and the mirrors are inverted — which copy
  * survives decides which way round the card's two sides read. The caller orders
- * by season, week, then `historyId` so that choice is stable between renders
- * rather than whatever Postgres returned first.
+ * by `LATEST_TRADE_ORDER` — `tradeDate` first, `historyId` last — so that both
+ * "which trade is latest" and "which copy of it survives" are stable between
+ * renders rather than whatever Postgres returned first.
  *
  * Pure and exported so the rule can be asserted without a database; the loader
  * below is the only caller.
@@ -468,14 +413,11 @@ export async function getTradesBoard(
           .findMany({
             where: { historyId: { in: historyIds } },
             /*
-             * ⚠ `historyId` IS THE TIEBREAK, AND IT IS THERE FOR DETERMINISM, NOT
-             * TIDINESS. The mirrors of one trade share a season and a week, so
-             * without a third key which copy survives the dedupe below is
-             * whatever Postgres returned first — and the two copies are
-             * INVERTED, so the card's "X sent / Y sent" sides would swap
-             * between renders of the same trade.
+             * 🛑 `tradeDate` FIRST — see `LATEST_TRADE_ORDER`, which carries the whole
+             * account. This read used to be ordered by `(season, week, historyId)`, which
+             * is how a July trade held the "latest" slot on a live September screen.
              */
-            orderBy: [{ season: 'desc' }, { week: 'desc' }, { historyId: 'asc' }],
+            orderBy: [...LATEST_TRADE_ORDER],
             /*
              * Bounded read: enough to give every league on the board a latest
              * trade without pulling all 7,781 rows. Sliced per league below.
@@ -489,7 +431,11 @@ export async function getTradesBoard(
               tradeDate: true,
               playersGiven: true,
               playersReceived: true,
-              /* Selected since 2026-09-20 — see `picksOf`. */
+              /*
+               * ⚠ READ, NOT IGNORED — the two columns this board left on the floor. A
+               * picks-for-players trade rendered one side as "no players on this side",
+               * which is a sentence about OUR read printed as a fact about the trade.
+               */
               picksGiven: true,
               picksReceived: true,
               partnerName: true,
@@ -591,8 +537,8 @@ export async function getTradesBoard(
     const p = playerById.get(id)
     const v = valueByBookAndId.get(`${book.format}:${book.qbFormat}:${id}`)
     return {
-      kind: 'player',
       id,
+      kind: 'player',
       /*
        * ⚠ AN UNRESOLVED ID IS NAMED AS UNRESOLVED, NOT DROPPED. Dropping it
        * would make a 2-for-1 render as a 1-for-1 — a trade the manager never
@@ -642,46 +588,16 @@ export async function getTradesBoard(
 
     const sentIds = idsOf(t.playersGiven)
     const recvIds = idsOf(t.playersReceived)
-    const sentPicks = picksOf(t.picksGiven)
-    const recvPicks = picksOf(t.picksReceived)
-    const pickCount = sentPicks.length + recvPicks.length
+    const sentPicks = pickAssets(t.picksGiven)
+    const recvPicks = pickAssets(t.picksReceived)
 
-    /*
-     * ⚠ PICKS ARE IN THE GRADE'S DENOMINATOR, NOT ONLY IN THE PICTURE. Leaving
-     * them out of `gradeTrade` while showing them would be worse than the bug
-     * this replaces: the card would print four assets and grade two of them,
-     * silently treating the picks as worth nothing — which is precisely the
-     * "favours whichever side received the unpriced asset" failure the grader
-     * refuses partial coverage over. They carry `rank: null`, so coverage is
-     * honestly partial and the letter is honestly withheld.
-     *
-     * 🛑 SO SOME TRADES THAT USED TO SHOW A LETTER NO LONGER DO, AND THAT IS THE
-     * CORRECTION RATHER THAN THE COST. DO NOT "RESTORE" THEM. The set that loses
-     * its letter is exactly "trades containing a pick" — and for those, the old
-     * letter was computed by pricing the players and NOT COUNTING THE PICK AT
-     * ALL, which is arithmetically identical to valuing it at zero. That reads as
-     * a fair-trade verdict and is in fact a systematic bias towards whichever
-     * side received the pick, at its worst on the deals where it matters most: a
-     * 2027 1st for a WR3 graded as a fleecing of the side that gave the pick.
-     * No SOUND letter is lost here; only unsound ones.
-     */
     const rankOf = (id: string) =>
       valueByBookAndId.get(`${leagueBook.format}:${leagueBook.qbFormat}:${id}`)?.rank ?? null
+
+    /* Picks enter as assets we cannot price — see `gradeableSide` for why that matters. */
     const g = gradeTrade(
-      {
-        label: 'received',
-        assets: [
-          ...recvIds.map((id) => ({ id, rank: rankOf(id), rawValue: null })),
-          ...recvPicks.map((a) => ({ id: a.id, rank: null, rawValue: null })),
-        ],
-      },
-      {
-        label: 'gave',
-        assets: [
-          ...sentIds.map((id) => ({ id, rank: rankOf(id), rawValue: null })),
-          ...sentPicks.map((a) => ({ id: a.id, rank: null, rawValue: null })),
-        ],
-      },
+      { label: 'received', assets: gradeableSide(recvIds, rankOf, recvPicks) },
+      { label: 'gave', assets: gradeableSide(sentIds, rankOf, sentPicks) },
     )
 
     const mgr = managersByLeague.get(league.id)
@@ -704,42 +620,16 @@ export async function getTradesBoard(
        * ⚠ NOT `.map(toAsset)`. With a second parameter that form passes the
        * array INDEX as the book — the classic `map` arity trap, and here it
        * would have priced asset 0 against one book and asset 1 against another.
+       *
+       * Players first, then the picks that moved with them — Sleeper's own order.
        */
-      /* Players first, then picks — the order a manager reads a deal in. */
       sent: [...sentIds.map((id) => toAsset(id, leagueBook)), ...sentPicks],
       received: [...recvIds.map((id) => toAsset(id, leagueBook)), ...recvPicks],
       letter: g.graded ? g.letter : null,
       sharePct: g.graded ? g.sharePct : null,
-      /*
-       * ⚠ A PICK IS A PERMANENT GAP, NOT A MISSING SNAPSHOT, AND THE READER HAS
-       * TO BE TOLD WHICH ONE THEY ARE LOOKING AT. The grader prices assets
-       * through a RANK curve and a future draft pick has no rank in it, so a
-       * trade containing one will never grade, however fresh the values get.
-       * `describeNoSignal` cannot say that — it sees only counts.
-       *
-       * 🛑 AND IT REPLACES THAT SENTENCE RATHER THAN PREFIXING IT, WHICH IS THE
-       * SECOND ATTEMPT HERE. Prefixing produced "only 2 of 3 players have values
-       * on file" above a card showing two players and a pick: the reader counts
-       * two players and is told there are three. The first fix for that was to
-       * reword `describeNoSignal` itself from "players" to "assets" — and that
-       * was wrong twice over. It tripped the decision-engine boundary guard,
-       * which flags every verdict-shaped export in any file a PR touches and so
-       * reported `gradeTrade` and `evaluateTrade`, both untouched and both
-       * pre-existing on main. More importantly it was inaccurate: the per-league
-       * screen (`lib/core-app/trades.ts`) builds its sides from
-       * `playersReceived`/`playersGiven` alone, so every asset it grades IS a
-       * player and "players" is the right word there. Only this board has picks,
-       * so only this board says so.
-       *
-       * ⚠ THE BRANCH IS TOTAL: a pick carries `rank: null`, so coverage can
-       * never be full while one is present and `g.graded` is always false here.
-       * There is no case where picks are in play and a letter was produced.
-       */
       withheldReason: g.graded
         ? null
-        : pickCount > 0
-          ? `Not graded — this trade includes ${pickCount} draft ${pickCount === 1 ? 'pick' : 'picks'}, and picks are not priced against the player market.`
-          : describeNoSignal(g),
+        : withheldTradeReason(g, sentPicks.length + recvPicks.length),
     })
   }
 
