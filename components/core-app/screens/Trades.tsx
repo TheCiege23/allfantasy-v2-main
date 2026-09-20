@@ -355,6 +355,22 @@ export function Trades({ data }: TradesProps) {
                       ? `received ${g.sharePct}% of the traded value`
                       : g.withheldReason}
                   </span>
+                  {/*
+                    WHY it graded that way, the same sentences the cross-league board shows.
+
+                    ⚠ EMPTY ON A TRADE THAT IS NOT THE VIEWER'S OWN, by construction in the
+                    loader: this path holds a display name for one side only, and captioning
+                    another manager's trade with a platform user id would be worse than the
+                    line above it. Empty also for an ungraded trade, where the slot already
+                    carries `withheldReason`.
+                  */}
+                  {g.breakdown.length > 0 ? (
+                    <ul className="af-tr-graderow-breakdown">
+                      {g.breakdown.map((line) => (
+                        <li key={line}>{line}</li>
+                      ))}
+                    </ul>
+                  ) : null}
                 </span>
               </li>
             ))}

@@ -687,6 +687,7 @@ function tradesData(over: Partial<TradesBoardData> = {}): TradesBoardData {
           letter: null,
           sharePct: null,
           withheldReason: 'one side could not be priced',
+          breakdown: [],
         },
         href: '/core/trades?league=l1',
         reasoning: '1 week until the week 11 deadline. 3 trades on file here.',
@@ -1467,5 +1468,63 @@ describe('TradesBoard — a priced pick shows its price', () => {
       <TradesBoard data={withPick(null, null, null)} allHref="/core/trades?all=1" />,
     )
     expect(container.textContent).not.toContain('Value split')
+  })
+})
+
+/*
+ * The card carried a letter, a split and a DEADLINE sentence, and nothing that said why the
+ * trade graded as it did. `buildTradeBreakdown` is unit-tested on its own; these two assert
+ * the sentences actually reach the card, which no module test can see.
+ */
+describe('TradesBoard — the breakdown', () => {
+  const withBreakdown = (breakdown: string[], letter: 'A' | 'B' | 'C' | 'D' | 'F' | null = 'D') => {
+    const d = tradesData()
+    const w = d.windows[0]
+    return {
+      ...d,
+      windows: [
+        {
+          ...w,
+          latest: {
+            ...w.latest!,
+            letter,
+            sharePct: letter ? 42 : null,
+            withheldReason: letter ? null : 'one side could not be priced',
+            breakdown,
+          },
+        },
+      ],
+    }
+  }
+
+  it('renders every sentence of the breakdown', () => {
+    const { container } = render(
+      <TradesBoard
+        data={withBreakdown([
+          'Jordan got the better end — TheCiege24 took 42%.',
+          'The most valuable asset was Dana Okoye, and Jordan got him.',
+        ])}
+        allHref="/core/trades?all=1"
+      />,
+    )
+    const items = [...container.querySelectorAll('.af-bd-breakdown li')].map((el) => el.textContent)
+    expect(items).toEqual([
+      'Jordan got the better end — TheCiege24 took 42%.',
+      'The most valuable asset was Dana Okoye, and Jordan got him.',
+    ])
+  })
+
+  /*
+   * 🛑 THE CONTROL THAT MATTERS. An ungraded trade shows `withheldReason` where the letter
+   * would be; a breakdown beside it would be explaining a verdict we explicitly declined to
+   * reach. The loader returns [] for that case — this asserts the card honours it rather
+   * than rendering an empty bordered strip.
+   */
+  it('renders nothing when the trade could not be graded', () => {
+    const { container } = render(
+      <TradesBoard data={withBreakdown([], null)} allHref="/core/trades?all=1" />,
+    )
+    expect(container.querySelector('.af-bd-breakdown')).toBeNull()
+    expect(container.textContent).toContain('ungraded')
   })
 })

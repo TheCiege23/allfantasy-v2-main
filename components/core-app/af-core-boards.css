@@ -689,6 +689,29 @@
 }
 .af-core .af-bd-card-foot .af-bd-reason { flex: 1; min-width: 200px; }
 
+/*
+ * The breakdown sentences, on their own full-width row under the footer chips.
+ *
+ * ⚠ `flex: 0 0 100%` rather than a sibling block after `.af-bd-card-foot`: the foot is a
+ * wrapping flex row, so a full-basis child breaks the line cleanly and keeps the sentences
+ * inside the same bordered region as the grade they explain. A separate block would put the
+ * explanation outside the card foot's own spacing and drift from it on any padding change.
+ */
+.af-core .af-bd-card-foot .af-bd-breakdown {
+  flex: 0 0 100%;
+  margin: 2px 0 0;
+  padding: 10px 0 0;
+  border-top: 1px solid var(--line);
+  list-style: none;
+  display: grid;
+  gap: 5px;
+}
+.af-core .af-bd-card-foot .af-bd-breakdown li {
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text2);
+}
+
 /* Draft stat strip: hairlines above and below, dividers between. */
 .af-core .af-bd-cards--rich .af-bd-kvrow {
   gap: 10px 0;

@@ -95,6 +95,7 @@ function tradesData(over: Partial<TradesBoardData> = {}): TradesBoardData {
           letter: null,
           sharePct: null,
           withheldReason: 'one side could not be priced',
+          breakdown: [],
         },
         href: '/core/trades?league=l1',
         reasoning: '1 week until the week 11 deadline. 3 trades on file here.',

@@ -344,6 +344,23 @@
   color: var(--muted);
 }
 
+/*
+ * The breakdown sentences under a grade row. Inserted at top level — depth 0, no open
+ * at-rule — for the reason the note further down this file already gives.
+ */
+.af-tr-graderow-breakdown {
+  margin: 2px 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 3px;
+}
+.af-tr-graderow-breakdown li {
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text2);
+}
+
 /* ── Pending offers ──────────────────────────────────────────────────── */
 /*
  * ⚠ APPENDED AT TOP LEVEL ON PURPOSE. This file carries a @media block above;
