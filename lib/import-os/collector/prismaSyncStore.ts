@@ -206,6 +206,14 @@ export function createPrismaSleeperSyncStore(deps: {
             completedScopes: result.completedScopes,
             incompleteScopes: result.incompleteScopes,
             advancedFreshness: result.advancedFreshness,
+            /*
+             * ⚠ THE FIELD THAT SETTLES "WHY DID THIS RUN DO NOTHING". A run that times out with
+             * `completedScopes: []` has spent its budget without working; `lockWaitMs` says
+             * whether it was waiting on the lock or on the event loop. Without it the two are
+             * indistinguishable in this table, which is how a wrong diagnosis survived one round
+             * of review here.
+             */
+            lockWaitMs: result.lockWaitMs,
             removed,
             notes: notes.slice(0, 25),
             accounting: result.accounting,

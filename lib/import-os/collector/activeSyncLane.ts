@@ -7,7 +7,19 @@ import { SYNCABLE_PROVIDERS, type LeagueSyncConnection } from './types'
 
 export const ACTIVE_SYNC_CADENCE_MINUTES = 5
 export const ACTIVE_SYNC_SCOPES = ['transactions', 'teams_rosters'] as const
-export const ACTIVE_SYNC_LEAGUE_TIMEOUT_MS = 20_000
+/**
+ * Per-league work budget for the active lane.
+ *
+ * ⚠ 20s WAS NOT WRONG ABOUT THE WORK, IT WAS WRONG ABOUT WHAT IT WAS MEASURING. Successful runs
+ * of this lane finish at p50 1.9s and p95 7.3s (5,585 runs, production 2026-09-18 onward), so 20s
+ * carried roughly 3x headroom over anything a scope actually does. What exhausted it was queueing
+ * charged to the same clock — see `budgetStartedAt` in `runner.ts`, which no longer does that.
+ *
+ * 60s is ~8x the p95 and still a real bound. It is raised rather than removed because the
+ * distribution has a genuine tail (max 466s on a large league), and an unbounded lane on a worker
+ * with one JS thread is how one slow league stalls the ones behind it.
+ */
+export const ACTIVE_SYNC_LEAGUE_TIMEOUT_MS = 60_000
 const ACTIVE_LANE_SUFFIX = 'active'
 const RECENT_VIEW_WINDOW_MS = 30 * 60_000
 

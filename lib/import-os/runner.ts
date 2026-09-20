@@ -41,6 +41,19 @@ export type RunResult = {
   advancedFreshness: boolean
   startedAt: string
   finishedAt: string
+  /**
+   * Milliseconds spent waiting for the run lock, before any scope was attempted.
+   *
+   * 🛑 RECORDED BECAUSE THE TWO CAUSES OF A DEAD RUN ARE INDISTINGUISHABLE WITHOUT IT, AND ONE OF
+   * THEM WAS MISDIAGNOSED. Measured on production 2026-09-20: 54 runs timed out having completed
+   * ZERO scopes, burning 121–300s of wall clock before the first scope was even checked — while a
+   * successful run of the same lane finishes at p50 1.9s and p95 7.3s. So the time went on
+   * queueing, not on work. What it cannot say is WHICH queue: waiting on this lock, or waiting on
+   * the worker's single JS thread (see the contention note in CLAUDE.md). This field separates
+   * them: a large `lockWaitMs` is lock contention, a small one with a large wall clock is the
+   * event loop.
+   */
+  lockWaitMs: number
   warnings: string[]
   /** Set when a fetch threw an error the caller classified as terminal; the run stopped there. */
   terminalError?: string
@@ -133,6 +146,19 @@ export async function runSync(opts: RunSyncOptions): Promise<RunResult> {
   const baseBackoff = opts.baseBackoffMs ?? 250
   const immutable = new Set(opts.immutableScopes ?? [])
   const startedAt = opts.clock.now()
+  /*
+   * 🛑 TWO CLOCKS, AND CONFLATING THEM IS WHAT KILLED 54 RUNS A WEEK. `startedAt` is the run's
+   * true wall clock and stays that way — it is what `durationMs` reports, and it is the only
+   * reason this was diagnosable at all. `budgetStartedAt` starts when the run actually has the
+   * lock and can do work.
+   *
+   * The budget exists to bound WORK, and charging it for queueing meant a run could arrive
+   * already dead: the active lane's 20s allowance against 121–200s of measured wall clock, with
+   * `completedScopes: []` every time. Those runs did not overrun anything; they were never
+   * scheduled in time to start.
+   */
+  let budgetStartedAt = startedAt
+  let lockWaitMs = 0
   const acc = emptyAccounting()
   const completed: SyncScope[] = []
   const incomplete: SyncScope[] = []
@@ -144,6 +170,8 @@ export async function runSync(opts: RunSyncOptions): Promise<RunResult> {
   if (!lock.acquired || !lock.token) {
     return finalize('locked', false)
   }
+  budgetStartedAt = opts.clock.now()
+  lockWaitMs = budgetStartedAt.getTime() - startedAt.getTime()
 
   try {
     for (const scope of opts.scopes) {
@@ -152,7 +180,8 @@ export async function runSync(opts: RunSyncOptions): Promise<RunResult> {
         incomplete.push(scope)
         continue
       }
-      if (opts.clock.now().getTime() - startedAt.getTime() > runTimeoutMs) {
+      /* Against the BUDGET clock, not the wall clock — see `budgetStartedAt`. */
+      if (opts.clock.now().getTime() - budgetStartedAt.getTime() > runTimeoutMs) {
         incomplete.push(scope)
         warnings.push(`run timeout before scope "${scope}"`)
         continue
@@ -238,6 +267,7 @@ export async function runSync(opts: RunSyncOptions): Promise<RunResult> {
       advancedFreshness,
       startedAt: startedAt.toISOString(),
       finishedAt: opts.clock.now().toISOString(),
+      lockWaitMs,
       warnings,
       ...(terminalError !== undefined ? { terminalError } : {}),
     }
