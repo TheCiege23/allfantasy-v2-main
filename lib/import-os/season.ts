@@ -27,9 +27,12 @@ export type SeasonState = 'preseason' | 'regular_season' | 'postseason' | 'offse
  *
  * ⚠ THE 3x LOAD THIS ORIGINALLY CARRIED HAS BEEN PAID DOWN — AND THE TRANSACTION HALF IS NOW
  * CHEAPER AT 10 MINUTES THAN IT WAS AT 30. `resolveTransactionWeekWindow` below narrows the LIVE
- * refresh from 18 `/transactions/{week}` requests to at most 3, so per sync that half is 6x
- * cheaper; at 3x the frequency the net is ~half the transaction requests of the old 30-minute
+ * refresh from 18 `/transactions/{week}` requests to at most 4, so per sync that half is 4.5x
+ * cheaper; at 3x the frequency the net is ~2/3 the transaction requests of the old 30-minute
  * behaviour. The follow-up this comment used to name as standing is done.
+ *
+ * ⚠ IT WAS 3 UNTIL 2026-09-20 AND THE FOURTH REQUEST IS A BUG FIX, NOT DRIFT — see
+ * `TRANSACTION_WEEK_LOOKBACK` for the trade the third one could not reach.
  *
  * ⚠ THE MATCHUP HALF IS NOW CAPPED TOO — see `resolveMatchupWeekCap`. This comment previously said
  * it was untouched and that narrowing it was "a real behavioural question rather than the pure
@@ -131,11 +134,37 @@ export const MAX_TRANSACTION_WEEK = 18
  * below is derived from a CALENDAR; Sleeper's own `leg` advances on Sleeper's schedule, and the
  * two need not agree at a boundary. A window that is wrong by one and has no margin fetches a week
  * with nothing in it, writes nothing, and reports a completed scope — the exact shape of failure
- * this subsystem has already paid for twice. One extra request per league per sync buys immunity
- * to an off-by-one in EITHER direction, which is why the margin is symmetric even though only the
- * backward half looks useful.
+ * this subsystem has already paid for twice.
+ *
+ * 🛑 AND IT IS ASYMMETRIC NOW, BECAUSE THE SYMMETRIC VERSION LOST A REAL TRADE AND THE OLD NOTE
+ * HERE PREDICTED IT. It used to read "the margin is symmetric even though only the backward half
+ * looks useful" — correct about which half does the work, wrong to spend the budget evenly anyway.
+ *
+ * Measured on production 2026-09-20, in `LeagueTrade`:
+ *
+ *     season 2026, week 1   last trade filed at this leg   2026-09-16T06:48:04Z
+ *     season 2026, week 2   first trade filed at this leg  2026-09-15T12:12:28Z
+ *
+ * So Sleeper's leg turned over DURING Sep 16, and a trade made at 06:21Z that morning was filed
+ * under leg 1. Meanwhile `nflWeekForDate` counts calendar weeks off Sep 4, so it returned 3 from
+ * Sep 18 — one AHEAD of the leg Sleeper was still writing (week-2 rows carry trades through
+ * Sep 20). A symmetric ±1 window was therefore `[2,3,4]`: it spent both margin weeks on legs 3 and
+ * 4, which did not exist yet, and dropped leg 1, which was still the newest leg holding trades.
+ * That trade had a ~2-day capture window and fell out of it permanently.
+ *
+ * The forward margin still earns its place — it is what absorbs the turnover in the other
+ * direction, when Sleeper advances before the calendar does. The backward one just has to cover
+ * more, because a leg keeps receiving trades right up to the turnover and then stops, while a
+ * future leg holds nothing until it opens. Lookback 2 keeps a leg reachable for ~3 weeks instead
+ * of ~2 days, for ONE extra request per league per sync.
+ *
+ * ⚠ NOT FIXED BY READING SLEEPER'S OWN `leg`, WHICH WOULD BE THE OBVIOUS ANSWER.
+ * `SleeperLeagueFetchService` records why: the repo does not pin that field in any contract and
+ * CLAUDE.md forbids probing a provider to establish a shape. The loop variable needs no such
+ * evidence; this window is the part that has to absorb the disagreement.
  */
-export const TRANSACTION_WEEK_MARGIN = 1
+export const TRANSACTION_WEEK_LOOKBACK = 2
+export const TRANSACTION_WEEK_LOOKAHEAD = 1
 
 /**
  * NFL scoring week for a UTC instant, by the same calendar `SPORT_CALENDARS` uses.
@@ -209,8 +238,8 @@ export function resolveTransactionWeekWindow(input: SeasonInput): number[] | nul
   if (state === 'offseason' || state === 'unknown') return null
 
   const centre = state === 'preseason' ? 1 : nflWeekForDate(input.now)
-  const lo = Math.max(1, centre - TRANSACTION_WEEK_MARGIN)
-  const hi = Math.min(MAX_TRANSACTION_WEEK, centre + TRANSACTION_WEEK_MARGIN)
+  const lo = Math.max(1, centre - TRANSACTION_WEEK_LOOKBACK)
+  const hi = Math.min(MAX_TRANSACTION_WEEK, centre + TRANSACTION_WEEK_LOOKAHEAD)
 
   const weeks: number[] = []
   for (let w = lo; w <= hi; w += 1) weeks.push(w)
