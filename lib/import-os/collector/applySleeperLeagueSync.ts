@@ -384,7 +384,15 @@ async function applyTeamsRosters(
     const liveTeamIds = new Set(normalized.rosters.map((r) => r.source_team_id))
     const staleTeams = await prisma.leagueTeam.findMany({
       where: { leagueId, externalId: { notIn: Array.from(liveTeamIds) } },
-      select: { id: true, externalId: true, platformUserId: true, claimedByUserId: true, isOrphan: true },
+      select: {
+        id: true,
+        externalId: true,
+        platformUserId: true,
+        claimedByUserId: true,
+        isOrphan: true,
+        // Needed so an already-archived team is skipped rather than re-stamped every sync.
+        archivedAt: true,
+      },
     })
     // Index the league's rosters by their canonical source team id (stable across the raw→resolved
     // platformUserId change) so a removed team's roster is found even when Roster.platformUserId holds
@@ -398,6 +406,35 @@ async function applyTeamsRosters(
       const st = String(asRecord(r.playerData).source_team_id ?? '')
       if (st) rosterIdBySourceTeam.set(st, r.id)
     }
+
+    /*
+     * 🛑 WHICH VANISHED TEAMS CARRY HISTORY A DELETE WOULD DESTROY IRREVERSIBLY.
+     *
+     * Two foreign keys make `leagueTeam.delete` lossy in a way nothing surfaces:
+     *   `TeamPerformance.team`  onDelete: Cascade  — every week this franchise played, gone.
+     *   `LeagueSeason.championTeam` is OPTIONAL with no onDelete, so Prisma's default is SetNull —
+     *   deleting a past champion blanks `championTeamId` and the league forgets who won that year.
+     *
+     * Neither failure is visible: no error, no counter, no conflict. Measured on the test database
+     * 2026-09-19 — 2,492 of the 2,944 unclaimed teams carry `team_performances` rows, across 49,260
+     * rows total. Any one of them is one absent provider response away from being erased.
+     *
+     * Two round trips for the whole stale set, not one per team.
+     */
+    const unclaimedStaleIds = staleTeams.filter((t) => !t.claimedByUserId && !t.archivedAt).map((t) => t.id)
+    const carriesHistory = new Set<string>()
+    if (unclaimedStaleIds.length > 0) {
+      const played = await prisma.teamPerformance
+        .findMany({ where: { teamId: { in: unclaimedStaleIds } }, select: { teamId: true }, distinct: ['teamId'] })
+        .catch(() => [] as Array<{ teamId: string }>)
+      for (const p of played) carriesHistory.add(p.teamId)
+
+      const champions = await prisma.leagueSeason
+        .findMany({ where: { championTeamId: { in: unclaimedStaleIds } }, select: { championTeamId: true } })
+        .catch(() => [] as Array<{ championTeamId: string | null }>)
+      for (const c of champions) if (c.championTeamId) carriesHistory.add(c.championTeamId)
+    }
+
     for (const t of staleTeams) {
       if (t.claimedByUserId) {
         // A claimed team (and its roster) is NEVER deleted by reconciliation — the user's claim + data
@@ -408,15 +445,77 @@ async function applyTeamsRosters(
         }
         continue
       }
-      // Unclaimed + absent from a complete authoritative response → reconcile away (team + its roster).
+      /*
+       * ⚠ ALREADY ARCHIVED — NOTHING TO DO, AND THAT IS DELIBERATE RATHER THAN AN OPTIMISATION.
+       * A team that left stays absent from every later authoritative response, so it is found here
+       * on every single sync. Re-stamping would turn `archivedAt` into "the last time we noticed"
+       * instead of "when it left", and would re-emit the note forever. It is also not re-counted:
+       * `removed` records a transition, and this one already happened.
+       */
+      if (t.archivedAt) continue
+
+      // Unclaimed + absent from a complete authoritative response → reconcile away.
+      // The ROSTER still goes: it holds the CURRENT player list, which for a departed franchise is
+      // stale by definition, and nothing keys off it for history. Deliberately unchanged here.
       const rosterId = rosterIdBySourceTeam.get(t.externalId)
       if (rosterId) {
         await prisma.roster.delete({ where: { id: rosterId } }).catch(() => undefined)
       } else if (t.platformUserId) {
         await prisma.roster.deleteMany({ where: { leagueId, platformUserId: t.platformUserId } }).catch(() => undefined)
       }
-      await prisma.leagueTeam.delete({ where: { id: t.id } }).catch(() => undefined)
-      out.removed += 1
+
+      if (carriesHistory.has(t.id)) {
+        /*
+         * ARCHIVE, DO NOT DELETE. The row survives so the history foreign keys above keep resolving.
+         *
+         * ⚠ `isOrphan` IS SET ALONGSIDE, AND THAT IS NOT REDEFINING IT. The schema comment lists
+         * "absent from the provider's roster set, set by Sleeper reconciliation" as one of the
+         * seven meanings it ALREADY carries, and the claimed-team branch above sets it here for
+         * exactly that. Setting it keeps an archived team as visible — or invisible — as a vanished
+         * claimed team already is today, so this change adds NO new rows to the 144 enumerations
+         * that read `leagueTeam.findMany` without any notion of lifecycle.
+         *
+         * ⚠ `managerKind` IS LEFT ALONE ON PURPOSE. This transition is evidence about the LIFECYCLE
+         * axis — the provider stopped listing the franchise — and says nothing about who managed it.
+         * VACANT would be a guess, and the schema's own instruction is one meaning at a time.
+         */
+        const archived = await prisma.leagueTeam
+          .update({
+            where: { id: t.id },
+            data: {
+              lifecycleState: 'ARCHIVED',
+              archivedAt: new Date(),
+              archiveReason: 'provider_absent',
+              isOrphan: true,
+            },
+          })
+          .then(() => true)
+          .catch(() => false)
+        if (archived) {
+          out.removed += 1
+          out.notes.push(
+            `teams_rosters: team ${t.externalId} vanished upstream and carries history — archived, not deleted`,
+          )
+        } else {
+          out.notes.push(`teams_rosters: team ${t.externalId} could not be archived (left in place)`)
+        }
+        continue
+      }
+
+      /*
+       * No history to lose — a husk. Deleting it keeps the table honest and avoids parking rows in
+       * front of 144 readers for nothing.
+       *
+       * ⚠ THE COUNTER USED TO LIE HERE. `delete(...).catch(() => undefined)` swallows a failure and
+       * the old code incremented `removed` regardless, so a restricted or already-gone row reported
+       * as reconciled. `removed` now counts what actually happened.
+       */
+      const deleted = await prisma.leagueTeam
+        .delete({ where: { id: t.id } })
+        .then(() => true)
+        .catch(() => false)
+      if (deleted) out.removed += 1
+      else out.notes.push(`teams_rosters: team ${t.externalId} could not be removed (left in place)`)
     }
   }
 

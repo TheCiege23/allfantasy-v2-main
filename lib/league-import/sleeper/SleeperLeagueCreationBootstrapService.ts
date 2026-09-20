@@ -228,6 +228,9 @@ export async function bootstrapLeagueFromNormalizedImport(
         claimedByUserId: resolvedClaim,
         isCommissioner: Boolean(r.is_commissioner),
         isCoCommissioner: Boolean(r.is_co_commissioner),
+        // The provider listed this franchise in an authoritative response, so CURRENT is evidence,
+        // not a guess — which is the only basis on which this axis may be written away from UNKNOWN.
+        lifecycleState: 'CURRENT',
       },
       update: {
         ownerName: r.owner_name,
@@ -247,6 +250,20 @@ export async function bootstrapLeagueFromNormalizedImport(
         ...(resolvedClaim ? { claimedByUserId: resolvedClaim } : {}),
         isCommissioner: Boolean(r.is_commissioner),
         isCoCommissioner: Boolean(r.is_co_commissioner),
+        /*
+         * 🛑 RESURRECTION. THIS IS THE HALF THAT IS EASY TO OMIT AND SILENT WHEN OMITTED.
+         *
+         * `applySleeperLeagueSync` now ARCHIVES a vanished franchise that carries history rather
+         * than deleting it, so the row survives — and `[leagueId, externalId]` is this upsert's
+         * unique key, so a franchise the provider starts listing again lands on that archived row.
+         * Without these three lines it would come back fully live and still marked ARCHIVED, with
+         * an `archivedAt` from the week it left. Nothing would fail; it would just be wrong forever.
+         *
+         * Clearing them is the same evidence as above: the provider is listing it, so it is current.
+         */
+        lifecycleState: 'CURRENT',
+        archivedAt: null,
+        archiveReason: null,
       },
     })
     leagueTeamsCreated++
