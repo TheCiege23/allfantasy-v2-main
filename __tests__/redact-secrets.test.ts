@@ -181,3 +181,46 @@ describe('the telemetry payload actually uses it', () => {
     expect(JSON.stringify(payload.metadata)).not.toContain('s3cret')
   })
 })
+
+/*
+ * ── The orchestration provider-failure log ───────────────────────────────────────────────────
+ *
+ * `orchestration-service` logs why each AI provider failed, which it did not used to do — the
+ * whole record of a total outage on 2026-09-20 was `failure grok failed`, three times, with the
+ * real error dropped on the floor. Adding it means provider error TEXT now reaches the logs, and
+ * that is precisely the text this file exists to police: a provider error quoting a URL carries
+ * `RSC_token` as a query parameter.
+ */
+describe('provider failure logging reaches for the canonical redactor', () => {
+  const providerError =
+    'POST https://rest.datafeeds.rolling-insights.com/api/v1/player-stats/NFL?RSC_token=live-token-abc123 failed: 401 Unauthorized'
+
+  it('🛑 redactAndCap strips the token from a provider error before it is logged', () => {
+    expect(redactAndCap(providerError, 160)).not.toContain('live-token-abc123')
+  })
+
+  /*
+   * ⚠ THE POSITIVE CONTROL, AND THE REASON THE CALL SITE DOES NOT USE THE NEIGHBOURING HELPER.
+   * `lib/clear-sports/client.ts` logs through `sanitizeProviderError`, so copying it looked like
+   * following an established pattern. It is one of the private half-redactors this module
+   * replaced: `sk-` and `api_key=` only, anchored on a leading `\b`, and it caps BEFORE
+   * redacting.
+   *
+   * If this ever fails, `sanitizeProviderError` has been fixed or deleted — good news. Delete
+   * this assertion and check whether the remaining call sites should now delegate too, rather
+   * than loosening it.
+   */
+  it('and the local half-redactor would have leaked it — which is why it is not used here', async () => {
+    const { sanitizeProviderError } = await import('@/lib/ai-orchestration/provider-utils')
+    expect(
+      sanitizeProviderError(providerError),
+      'sanitizeProviderError now redacts RSC_token — see the comment above this test',
+    ).toContain('live-token-abc123')
+  })
+
+  it('redacts before capping, so truncation cannot leave the front of a key readable', () => {
+    const early = `sk-${'a'.repeat(40)} trailing detail that pushes past the cap`
+    const out = redactAndCap(early, 20)
+    expect(out).not.toContain('aaaaaaaaaa')
+  })
+})
