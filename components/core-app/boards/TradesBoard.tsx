@@ -302,6 +302,28 @@ function WindowCard({ row }: { row: TradeWindowRow }) {
           ) : null}
           {t ? <span className="af-bd-rule" aria-hidden /> : null}
           <p className="af-bd-reason">{row.reasoning}</p>
+          {/*
+            WHY it graded that way, which is what a manager opens a trade card for.
+
+            ⚠ THE LINE ABOVE IS ABOUT THE LEAGUE'S DEADLINE, NOT ABOUT THE TRADE.
+            `reasoning` reads "3 weeks until the week 11 deadline. 14 trades on file
+            here." — it sits under the grade and looks like an explanation of it, which
+            is most of why the card read as unexplained. These sentences are the actual
+            account of the verdict, and they are deliberately BELOW that line rather than
+            replacing it: the deadline is the reason this row is on a board sorted by
+            closing window.
+
+            🛑 EMPTY FOR AN UNGRADED TRADE, BY CONSTRUCTION IN THE LOADER. Where there is
+            no letter the slot above already carries `withheldReason`, and a breakdown
+            there would be narrating assets the grader explicitly refused to count.
+          */}
+          {t && t.breakdown.length > 0 ? (
+            <ul className="af-bd-breakdown">
+              {t.breakdown.map((line) => (
+                <li key={line}>{line}</li>
+              ))}
+            </ul>
+          ) : null}
         </div>
       </article>
     </li>

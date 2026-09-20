@@ -17,6 +17,7 @@ import {
   type TradeAsset,
 } from './tradePicks'
 import { defenderPricerFrom, type DefenderPricer } from './tradeDefenders'
+import { buildTradeBreakdown, type BreakdownAsset } from './tradeBreakdown'
 import { hasIdpScoring } from './scoringNotes'
 import { extractScoringSettings } from '@/lib/projections/leagueScoring'
 import { readCanonicalDefenderBoard } from '@/lib/values/canonicalDefenderBoardCache'
@@ -89,6 +90,12 @@ export type BoardTrade = {
   letter: 'A' | 'B' | 'C' | 'D' | 'F' | null
   sharePct: number | null
   withheldReason: string | null
+  /**
+   * Why it graded that way, in sentences. Empty for an ungraded trade — `withheldReason`
+   * is what that card shows, and narrating assets the grader refused to count would be
+   * describing a verdict we declined to reach.
+   */
+  breakdown: string[]
 }
 
 export type TradeWindowRow = {
@@ -770,9 +777,20 @@ export async function getTradesBoard(
      * Picks are priced from this league's OWN book, like the players beside them. A pick the
      * book has no row for stays unpriced and withholds the letter — see `gradeableSide`.
      */
+    /*
+     * ⚠ THE BREAKDOWN READS THE GRADER'S OWN RANKS, BY ID, RATHER THAN RE-DERIVING THEM.
+     * Re-running `rankOf` beside the grader would make a second rank predicate, which is the
+     * exact defect the defender commit removed — three expressions over one map is how the
+     * withheld reason came to name an asset the grader had just counted. These are the same
+     * numbers `sideMath` summed, keyed by id because a pick's id is synthetic and unique and
+     * a player's is his Sleeper id.
+     */
+    const recvGradeable = gradeableSide(recvIds, rankOf, recvPicks, pickPrice)
+    const sentGradeable = gradeableSide(sentIds, rankOf, sentPicks, pickPrice)
+
     const g = gradeTrade(
-      { label: 'received', assets: gradeableSide(recvIds, rankOf, recvPicks, pickPrice) },
-      { label: 'gave', assets: gradeableSide(sentIds, rankOf, sentPicks, pickPrice) },
+      { label: 'received', assets: recvGradeable },
+      { label: 'gave', assets: sentGradeable },
     )
 
     const mgr = managersByLeague.get(league.id)
@@ -780,28 +798,63 @@ export async function getTradesBoard(
     const toResolved =
       t.partnerRosterId != null ? mgr?.byRoster.get(String(t.partnerRosterId)) : null
 
+    /*
+     * ⚠ NOT `.map(toAsset)`. With a second parameter that form passes the array INDEX as
+     * the book — the classic `map` arity trap, and here it would have priced asset 0
+     * against one book and asset 1 against another.
+     *
+     * Players first, then the picks that moved with them — Sleeper's own order.
+     */
+    const sentAssets = [...sentIds.map((id) => toAsset(id, leagueBook, defenders)), ...sentPicks]
+    const recvAssets = [...recvIds.map((id) => toAsset(id, leagueBook, defenders)), ...recvPicks]
+
+    /*
+     * "You" only when this league's claimed team IS the reader's -- exact, not a name match.
+     * Otherwise the resolved manager, and only then a fallback.
+     */
+    const fromName = fromEntry?.mine ? 'You' : managerLabel(h.sleeperUsername, fromEntry?.name)
+    const toName = managerLabel(t.partnerName, toResolved)
+
+    /*
+     * 🛑 GRADED ONLY, AND `g.graded` IS WHAT MAKES THE RANKS SAFE TO ASSERT HERE.
+     * `gradeTrade` issues a letter only under FULL coverage on both sides, so inside this
+     * branch every asset carries a rank and the `rank == null` drop below removes nothing.
+     * Outside it the card shows `withheldReason` and there is no verdict to explain.
+     */
+    const breakdownFor = (
+      assets: readonly TradeAsset[],
+      ranked: ReadonlyArray<{ id: string; rank: number | null }>,
+    ): BreakdownAsset[] => {
+      const rankById = new Map(ranked.map((r) => [r.id, r.rank]))
+      return assets.flatMap((a) => {
+        const rank = rankById.get(a.id)
+        return rank == null ? [] : [{ name: a.name, kind: a.kind, position: a.position, rank }]
+      })
+    }
+
+    const breakdown = g.graded
+      ? buildTradeBreakdown({
+          received: breakdownFor(recvAssets, recvGradeable),
+          gave: breakdownFor(sentAssets, sentGradeable),
+          letter: g.letter,
+          sharePct: g.sharePct,
+          receiverLabel: fromName,
+          partnerLabel: toName,
+        })
+      : []
+
     latestByLeague.set(league.id, {
       transactionId: t.transactionId,
       season: t.season ?? null,
       week: t.week ?? null,
       at: t.tradeDate ? t.tradeDate.toISOString() : null,
-      /*
-       * "You" only when this league's claimed team IS the reader's -- exact, not a
-       * name match. Otherwise the resolved manager, and only then a fallback.
-       */
-      fromName: fromEntry?.mine ? 'You' : managerLabel(h.sleeperUsername, fromEntry?.name),
-      toName: managerLabel(t.partnerName, toResolved),
-      /*
-       * ⚠ NOT `.map(toAsset)`. With a second parameter that form passes the
-       * array INDEX as the book — the classic `map` arity trap, and here it
-       * would have priced asset 0 against one book and asset 1 against another.
-       *
-       * Players first, then the picks that moved with them — Sleeper's own order.
-       */
-      sent: [...sentIds.map((id) => toAsset(id, leagueBook, defenders)), ...sentPicks],
-      received: [...recvIds.map((id) => toAsset(id, leagueBook, defenders)), ...recvPicks],
+      fromName,
+      toName,
+      sent: sentAssets,
+      received: recvAssets,
       letter: g.graded ? g.letter : null,
       sharePct: g.graded ? g.sharePct : null,
+      breakdown,
       /*
        * What we could not price, by identity — never a count. The old call passed
        * `sentPicks.length + recvPicks.length` and `withheldTradeReason` inferred the cause
