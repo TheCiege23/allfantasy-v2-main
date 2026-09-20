@@ -173,6 +173,22 @@ function buildUserContextSection(structuredFantasyContext: StructuredFantasyCont
   if (starters.length > 0) lines.push(`- Starters: ${joinList(starters, 8)}`)
   if (bench.length > 0) lines.push(`- Bench core: ${joinList(bench, 6)}`)
 
+  /*
+   * 🛑 THE GAP HAS TO SURVIVE COMPRESSION, OR REPORTING IT UPSTREAM BUYS NOTHING.
+   *
+   * `unidentifiedPlayers` is set by the pipeline when roster ids could not be resolved to
+   * names. This is the prompt the model ACTUALLY reads on the compressed path, so a warning
+   * that exists only in the JSON payload is a warning the model never sees — and the lists
+   * above then look like a complete squad. Naming the count here is what stops a confident
+   * answer about a roster we can only partly read.
+   */
+  const unidentified = Number(userRoster.unidentifiedPlayers ?? 0)
+  if (Number.isFinite(unidentified) && unidentified > 0) {
+    lines.push(
+      `- ⚠ ${unidentified} player(s) on this roster could not be identified and are NOT in the lists above. Treat the roster as incomplete and say so rather than advising as if it were whole.`
+    )
+  }
+
   if (Object.keys(opponent).length > 0) {
     lines.push(`- Opponent: ${String(opponent.teamName ?? 'Unknown opponent')} (${String(opponent.record ?? 'Unknown record')})`)
   }
