@@ -196,7 +196,15 @@ describe("playoff entry service", () => {
     expect(view?.series.find((item) => item.id === "s1")?.winnerTeamName).toBe("Philadelphia 76ers")
   })
 
-  it("creates entry when user has fewer than 5 entries", async () => {
+  it("creates an entry when the user is under the pool's per-person cap", async () => {
+    // The cap now comes from the pool's own config rather than a hard-coded 5, so a test that
+    // wants a SECOND bracket has to say the pool allows more than one. What this case is
+    // actually for — creation and the generated name — is unchanged.
+    challengeFindUniqueMock.mockResolvedValue({
+      id: "challenge-1",
+      ownerUserId: "owner-1",
+      config: { maxEntriesPerParticipant: 3 },
+    })
     entryFindManyMock.mockResolvedValue([{ id: "entry-1" }])
     entryCreateMock.mockResolvedValue({ id: "entry-2" })
 
@@ -218,8 +226,18 @@ describe("playoff entry service", () => {
     )
   })
 
-  it("blocks 6th entry", async () => {
-    entryFindManyMock.mockResolvedValue(Array.from({ length: 5 }).map((_, i) => ({ id: `entry-${i + 1}` })))
+  it("blocks the entry that would exceed the pool's configured cap", async () => {
+    /*
+     * ⚠ This used to assert the hard-coded "max 5 per user". Re-pointing it at the CONFIGURED
+     * cap is the whole point of the change — a pool set to 3 must stop at 3, not at 5. The
+     * number lives in the mock so the assertion cannot pass against a magic constant again.
+     */
+    challengeFindUniqueMock.mockResolvedValue({
+      id: "challenge-1",
+      ownerUserId: "owner-1",
+      config: { maxEntriesPerParticipant: 3 },
+    })
+    entryFindManyMock.mockResolvedValue(Array.from({ length: 3 }).map((_, i) => ({ id: `entry-${i + 1}` })))
 
     const { createPlayoffBracketEntry } = await import("@/lib/playoffs/playoffService")
 
@@ -228,7 +246,8 @@ describe("playoff entry service", () => {
         challengeId: "challenge-1",
         user: { id: "user-1", name: "Tester" },
       })
-    ).rejects.toThrow("Entry limit reached (max 5 per user)")
+    ).rejects.toThrow("Entry limit reached (max 3 per person).")
+    expect(entryCreateMock).not.toHaveBeenCalled()
   })
 
   it("submits a complete entry back to the pool dashboard", async () => {
