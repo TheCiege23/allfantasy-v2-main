@@ -61,6 +61,8 @@ export interface ExternalMatchupLeagueResult {
   note?: string
   weeksWritten?: number
   weeksUnchanged?: number
+  /** Rows written for a week with no opponent — see `applySchedule`. */
+  soloRowsWritten?: number
 }
 
 export interface ExternalMatchupParityResult {
@@ -129,7 +131,17 @@ function toRosterId(provider: ExternalMatchupProvider, sourceTeamId: string): st
 export type ScheduleWeekInput = {
   week: number
   season: number
-  matchups: Array<{ teamId1: string; teamId2: string; points1?: number; points2?: number }>
+  /**
+   * `teamId2` is null for a week with NO OPPONENT — an ESPN total-points or knockout
+   * league, where every team is scored against the field rather than paired off.
+   *
+   * ⚠ WIDENED RATHER THAN FORKED. Fantrax, Fleaflicker, MFL and Yahoo all build this
+   * shape and all pass a real id, so `string | null` costs them nothing; a second
+   * "solo" array would have meant a second row-writing path, and `applySchedule` is
+   * shared precisely because what a WeeklyMatchup row MEANS must not diverge per
+   * provider.
+   */
+  matchups: Array<{ teamId1: string; teamId2: string | null; points1?: number; points2?: number }>
 }
 
 /**
@@ -153,9 +165,20 @@ export async function applySchedule(
   toRoster: (sourceTeamId: string) => string | null,
   externalLeagueId: string,
   schedule: ScheduleWeekInput[]
-): Promise<{ weeksWritten: number; weeksUnchanged: number }> {
+): Promise<{ weeksWritten: number; weeksUnchanged: number; soloRowsWritten: number }> {
   let weeksWritten = 0
   let weeksUnchanged = 0
+  /*
+   * 🛑 THIS COUNTER IS THE EXPERIMENT, NOT DECORATION. Before this change an ESPN
+   * total-points league recorded `weeksWritten: 0, weeksUnchanged: 0` — and that reading
+   * is produced BOTH by "ESPN sent unpaired entries and we dropped every one" and by
+   * "ESPN sent no schedule at all". The two are indistinguishable in the sync state, so
+   * there was no way to tell whether a fix would do anything. A non-zero count here says
+   * unpaired entries exist and are now landing; a count that stays 0 while the league
+   * still reads 0/0 says ESPN genuinely serves no schedule for that format, and the next
+   * step is the standings, not this path.
+   */
+  let soloRowsWritten = 0
 
   for (const weekEntry of schedule) {
     const rows: Array<{
@@ -167,11 +190,35 @@ export async function applySchedule(
     }> = []
     weekEntry.matchups.forEach((m, index) => {
       const roster1 = toRoster(m.teamId1)
-      const roster2 = toRoster(m.teamId2)
-      if (roster1 == null || roster2 == null) return
+      if (roster1 == null) return
       const p1 = typeof m.points1 === 'number' && Number.isFinite(m.points1) ? m.points1 : 0
-      const p2 = typeof m.points2 === 'number' && Number.isFinite(m.points2) ? m.points2 : 0
+      /*
+       * `index + 1` is unique WITHIN the week, so a solo entry can never share a
+       * `matchupId` with a pair or with another solo. That is what keeps `pairRows`
+       * honest: it groups on (league, season, week, matchupId) and takes only groups of
+       * exactly two, so these rows stay unpaired by construction rather than by a flag.
+       */
       const matchupId = index + 1
+
+      /*
+       * ⚠ NO OPPONENT. `pointsAgainst` is 0 because there is no opponent to have scored
+       * it — NOT because the opponent scored nothing, and the distinction is load-bearing:
+       * `isScored` treats a row as played when EITHER side is positive, so a solo row with
+       * real points still counts, while an unplayed one stays 0-0 exactly as before.
+       *
+       * `win` is 0 for the same reason. In a field format the result is a rank, which is
+       * not knowable from one row, and inventing a 1 here would put a fake record on a
+       * standings screen.
+       */
+      if (m.teamId2 == null || m.teamId2 === '') {
+        rows.push({ rosterId: roster1, matchupId, pointsFor: p1, pointsAgainst: 0, win: 0 })
+        soloRowsWritten += 1
+        return
+      }
+
+      const roster2 = toRoster(m.teamId2)
+      if (roster2 == null) return
+      const p2 = typeof m.points2 === 'number' && Number.isFinite(m.points2) ? m.points2 : 0
       rows.push({ rosterId: roster1, matchupId, pointsFor: p1, pointsAgainst: p2, win: p1 > p2 ? 1 : 0 })
       rows.push({ rosterId: roster2, matchupId, pointsFor: p2, pointsAgainst: p1, win: p2 > p1 ? 1 : 0 })
     })
@@ -214,7 +261,7 @@ export async function applySchedule(
     weeksWritten++
   }
 
-  return { weeksWritten, weeksUnchanged }
+  return { weeksWritten, weeksUnchanged, soloRowsWritten }
 }
 
 function cacheKeyFor(connection: ExternalMatchupConnection): string {
@@ -341,17 +388,24 @@ export async function runExternalMatchupParity(input?: {
         })
         continue
       }
-      const { weeksWritten, weeksUnchanged } = await applySchedule(
+      const { weeksWritten, weeksUnchanged, soloRowsWritten } = await applySchedule(
         (id) => toRosterId(connection.provider, id),
         connection.externalLeagueId,
         fetched.schedule
       )
       summary.synced++
-      summary.results.push({ runKey, status: 'synced', weeksWritten, weeksUnchanged })
+      summary.results.push({ runKey, status: 'synced', weeksWritten, weeksUnchanged, soloRowsWritten })
+      /*
+       * ⚠ `soloRowsWritten` IS RECORDED EVEN WHEN ZERO, on purpose. A league reading
+       * `weeksWritten: 0, weeksUnchanged: 0, soloRowsWritten: 0` after this change has been
+       * served no schedule by ESPN at all — which is a different problem from the one this
+       * counter exists to catch, and the only way to tell them apart from outside.
+       */
       await recordSyncState(cacheKey, SYNC_INTERVAL_MS, {
         status: 'synced',
         weeksWritten,
         weeksUnchanged,
+        soloRowsWritten,
         at: now.toISOString(),
       })
     } catch (err) {

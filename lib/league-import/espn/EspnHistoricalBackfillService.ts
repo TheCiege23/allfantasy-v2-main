@@ -219,7 +219,15 @@ async function persistEspnSeasonWarehouseFacts(args: {
   })
 
   const matchupCreates = args.payload.schedule.flatMap((week) =>
-    week.matchups.map((matchup) =>
+    /*
+     * 🛑 `MatchupFact` IS PAIRWISE — teamA/teamB/scoreA/scoreB — so there is no row shape
+     * for a week with no opponent, and a solo entry is skipped rather than written with an
+     * empty teamB. This is the same conclusion reached for Sleeper's guillotine leagues:
+     * the absence of facts for a field format is correct, not a gap to fill.
+     */
+    week.matchups
+      .filter((m): m is typeof m & { teamId2: string } => m.teamId2 != null)
+      .map((matchup) =>
       prisma.matchupFact.create({
         data: {
           leagueId: args.leagueId,

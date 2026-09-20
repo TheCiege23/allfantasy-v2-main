@@ -51,7 +51,8 @@ export interface EspnImportScheduleWeek {
   season: number
   matchups: Array<{
     teamId1: string
-    teamId2: string
+    /** Null for a total-points / knockout league: ESPN serves a side with no opponent. */
+    teamId2: string | null
     points1?: number
     points2?: number
   }>

@@ -92,15 +92,33 @@ export const EspnAdapter: ILeagueImportAdapter<EspnImportPayload> = {
           }
         : null
 
+    /*
+     * 🛑 THE NORMALIZED SCHEDULE IS PAIRS ONLY, AND THAT IS A BOUNDARY RATHER THAN A
+     * LIMITATION. `NormalizedMatchup.roster_id_2` is the CANONICAL shape every adapter
+     * writes — Sleeper, Yahoo, MFL and this one — and it feeds the bootstrap and the
+     * historical `MatchupFact` writer, both of which are pairwise by construction.
+     * Widening it so ESPN could carry a side with no opponent would push `string | null`
+     * through four providers to serve one format.
+     *
+     * A solo side is not lost: it reaches `WeeklyMatchup` through the COLLECTOR path
+     * (`fetchEspnScheduleForSync` → `applySchedule`), which is where per-week scoring for
+     * these leagues belongs. The two paths share `parseEspnSchedule` and diverge here.
+     */
     const schedule = raw.schedule.map((week) => ({
       week: week.week,
       season: week.season,
-      matchups: week.matchups.map((matchup) => ({
-        roster_id_1: matchup.teamId1,
-        roster_id_2: matchup.teamId2,
-        points_1: matchup.points1,
-        points_2: matchup.points2,
-      })),
+      matchups: week.matchups.flatMap((matchup) =>
+        matchup.teamId2 == null
+          ? []
+          : [
+              {
+                roster_id_1: matchup.teamId1,
+                roster_id_2: matchup.teamId2,
+                points_1: matchup.points1,
+                points_2: matchup.points2,
+              },
+            ],
+      ),
     }))
 
     const transactions = raw.transactions
