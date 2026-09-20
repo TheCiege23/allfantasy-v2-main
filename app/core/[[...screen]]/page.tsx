@@ -63,6 +63,7 @@ import { getPlayerTradeVisual } from '@/lib/core-app/playerTradeVisual'
 import { getManagerPresence } from '@/lib/core-app/managerPresence'
 import { loadGameDayTriage } from '@/lib/core-app/gameDayTriageLoader'
 import { listRecentPlayerSearches, recordRecentPlayerSearch } from '@/lib/core-app/recentPlayerSearches'
+import ScreenLoadError from '@/components/core-app/ScreenLoadError'
 import MyTeam from '@/components/core-app/screens/MyTeam'
 import { getMyTeamData } from '@/lib/core-app/myTeam'
 import MyTeamBoard from '@/components/core-app/MyTeamBoard'
@@ -2032,11 +2033,26 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
       ? await getDiscordBridge(userId, selectedLeagueId).catch(() => null)
       : null
 
-  // My team needs a league in context; without one the screen says which league
-  // to pick rather than guessing at the user's "main" league.
+  /*
+   * My team needs a league in context; without one the screen says which league
+   * to pick rather than guessing at the user's "main" league.
+   *
+   * 🛑 A FAILED READ IS NOT "NO LEAGUE SELECTED", AND CONFLATING THEM SENT PEOPLE
+   * TO THE PICKER. `.catch(() => null)` returned the same `null` as the no-league
+   * case, so any transient failure rendered the cross-league board to a manager
+   * who HAD chosen a league — no error, nothing logged, and choosing the same
+   * league again usually "fixed" it, which is how a bug like this never gets
+   * reported. The flag keeps the two apart; the log follows the
+   * `[core/<screen>] read failed` convention career and rankings already use.
+   */
+  let myTeamLoadFailed = false
   const myTeam =
     activeKey === 'my-team' && selectedLeagueId
-      ? await getMyTeamData(selectedLeagueId, userId, leagueCtx).catch(() => null)
+      ? await getMyTeamData(selectedLeagueId, userId, leagueCtx).catch((e: unknown) => {
+          console.error('[core/my-team] read failed', e)
+          myTeamLoadFailed = true
+          return null
+        })
       : null
 
   /*
@@ -2053,9 +2069,15 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
       ? await getMyTeamPulse(userId).catch(() => null)
       : null
 
+  /* Same split as my-team above: a failed read must not read as "no league". */
+  let matchupLoadFailed = false
   const matchup =
     activeKey === 'matchup' && selectedLeagueId
-      ? await getMatchupData(selectedLeagueId, userId, null, leagueCtx).catch(() => null)
+      ? await getMatchupData(selectedLeagueId, userId, null, leagueCtx).catch((e: unknown) => {
+          console.error('[core/matchup] read failed', e)
+          matchupLoadFailed = true
+          return null
+        })
       : null
 
   /*
@@ -2115,9 +2137,15 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
       : await getTradesBoard(userId, tradesBoardWeek).catch(() => null)
     : null
 
+  /* Same split as my-team above: a failed read must not read as "no league". */
+  let tradesLoadFailed = false
   const trades =
     activeKey === 'trades' && selectedLeagueId
-      ? await getTradesData(selectedLeagueId, userId, leagueCtx).catch(() => null)
+      ? await getTradesData(selectedLeagueId, userId, leagueCtx).catch((e: unknown) => {
+          console.error('[core/trades] read failed', e)
+          tradesLoadFailed = true
+          return null
+        })
       : null
 
   const tradeValueActions =
@@ -2401,6 +2429,24 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
    * boards were composed ABOVE the picker rather than replacing it.
    */
   const showAllLeagues = sp.all === '1' || sp.all === 'true'
+
+  /*
+   * The current URL, rebuilt — what `ScreenLoadError`'s "try again" points at.
+   *
+   * ⚠ IT KEEPS `?league=`, WHICH IS THE WHOLE POINT. A retry that dropped the
+   * league would land on the picker, i.e. exactly the behaviour the error screen
+   * exists to replace. Same reconstruction the guard at the top of this file uses
+   * for its redirect, minus that one's deliberate `league` exclusion.
+   */
+  const retryHref = (() => {
+    const params = new URLSearchParams()
+    for (const [key, value] of Object.entries(sp)) {
+      if (typeof value === 'string') params.set(key, value)
+      else if (Array.isArray(value) && typeof value[0] === 'string') params.set(key, value[0])
+    }
+    const query = params.toString()
+    return `/core${segment ? `/${segment}` : ''}${query ? `?${query}` : ''}`
+  })()
 
   const rivalriesView = activeKey === 'week' && sp.view === 'rivalries'
 
@@ -3515,6 +3561,11 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
       ) : activeKey === 'my-team' ? (
         myTeam ? (
           <MyTeam data={myTeam} />
+        ) : myTeamLoadFailed ? (
+          /* The read failed for a league the user HAS selected — say so, and keep
+             them on this screen. Falling through to the picker below would tell
+             them to choose a league they already chose. */
+          <ScreenLoadError screen="My team" retryHref={retryHref} />
         ) : /*
            * 2026-09-07 handoff. The ranked board IS the screen now; the picker
            * lives behind `?all=1`, which the board's own footer links to.
@@ -3538,6 +3589,8 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
       ) : activeKey === 'matchup' ? (
         matchup ? (
           <Matchup data={matchup} />
+        ) : matchupLoadFailed ? (
+          <ScreenLoadError screen="Matchup" retryHref={retryHref} />
         ) : showAllLeagues || !matchupPulse ? (
           /* A failed pulse read is not "no games" — fall back to the picker. */
           <PickALeague
@@ -3588,6 +3641,8 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
             />
             <Trades data={trades} />
           </>
+        ) : tradesLoadFailed ? (
+          <ScreenLoadError screen="Trade Center" retryHref={retryHref} />
         ) : !showAllLeagues && tradesBoard ? (
           <TradesBoard data={tradesBoard} allHref="/core/trades?all=1" />
         ) : (
