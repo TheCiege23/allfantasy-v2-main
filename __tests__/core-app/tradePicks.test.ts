@@ -136,6 +136,19 @@ describe('withheldTradeReason', () => {
     expect(withheldTradeReason(grade('NO_ASSETS', 0, 2), 2)).toMatch(/no assets on record/)
   })
 
+  /*
+   * ⚠ "ASSETS", NOT "PLAYERS". `grade.total` counts picks now, so a coverage sentence
+   * calling them players is a wrong noun bolted to a right number. It is asserted here
+   * because this function owns the wording — see its docblock for why the fix does not
+   * live in `describeNoSignal`.
+   */
+  it('counts assets rather than players in a coverage reason', () => {
+    expect(withheldTradeReason(grade('PARTIAL_COVERAGE', 2, 6), 0)).toBe(
+      'Not graded — only 2 of 6 assets have values on file.',
+    )
+    expect(withheldTradeReason(grade('NO_COVERAGE', 0, 6), 0)).not.toMatch(/player/i)
+  })
+
   /* Never a letter, and never the word "even" — the rule `describeNoSignal` carries. */
   it('never reads as a grade', () => {
     for (const r of ['NO_ASSETS', 'PARTIAL_COVERAGE', 'NO_COVERAGE'] as const) {

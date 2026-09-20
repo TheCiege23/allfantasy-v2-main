@@ -141,6 +141,29 @@ export function withheldTradeReason(
       pickCount === 1 ? 'a draft pick' : `${pickCount} draft picks`
     }, which we do not price yet.`
   }
+
+  /*
+   * ⚠ "ASSETS", NOT "PLAYERS", AND SAID HERE RATHER THAN IN `describeNoSignal`.
+   * `grade.total` counts picks now, so "6 players" would be a wrong noun bolted to a
+   * right number.
+   *
+   * 🛑 AND THE REASON IT IS RESTATED INSTEAD OF CORRECTED AT SOURCE IS NOT TIDINESS.
+   * `lib/projections/tradeGrading.ts` carries two decision-engine boundary violations
+   * that predate this change — `gradeTrade` and `evaluateTrade` are verdict-shaped
+   * exports living outside `lib/decision-os/`, unchanged on `main` — and
+   * `check-decision-engine-boundary.mjs` runs in `--changed` mode, so ANY edit to that
+   * file, including a three-word copy fix 180 lines away from either of them, fails CI.
+   * Clearing them means moving both functions into `lib/decision-os/trade/` and
+   * repointing their callers; that is a real piece of work and it is not this one.
+   * `describeNoSignal` keeps `NO_ASSETS`, which is an empty side rather than a coverage
+   * count and is right in both vocabularies.
+   */
+  if (grade.reason === 'PARTIAL_COVERAGE') {
+    return `Not graded — only ${grade.covered} of ${grade.total} assets have values on file.`
+  }
+  if (grade.reason === 'NO_COVERAGE') {
+    return 'Not graded — no values on file for anything in this trade.'
+  }
   return describeNoSignal(grade)
 }
 
