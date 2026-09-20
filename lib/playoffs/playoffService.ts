@@ -286,9 +286,20 @@ export async function getPlayoffBracketView(input: {
   for (const entry of challengeEntries) {
     scoreByEntryId.set(
       entry.id,
+      /*
+       * `round` and the sport are both required for weighted scoring. Passing
+       * the sport is what makes an MLB World Series pick worth 30 rather than
+       * 1; NBA and NHL are absent from the weight table on purpose, so they
+       * keep flat scoring and their 26 live pools are not restated.
+       */
       scorePlayoffEntryPicks(
-        challengeSeries.map((series: any) => ({ id: series.id, winnerTeamName: series.winnerTeamName })),
-        allEntryPicks.filter((pick: any) => pick.entryId === entry.id)
+        challengeSeries.map((series: any) => ({
+          id: series.id,
+          winnerTeamName: series.winnerTeamName,
+          round: series.round,
+        })),
+        allEntryPicks.filter((pick: any) => pick.entryId === entry.id),
+        challenge.sport
       )
     )
   }

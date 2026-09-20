@@ -22,12 +22,23 @@ import { getPlayoffPickResult } from "@/lib/playoffs/playoffScoring"
 import { hasPoolAdminAccess } from "@/lib/auth/admin"
 import PlayoffBracketBoard from "./PlayoffBracketBoard"
 import PlayoffSyncDiagnosticsPanel from "./PlayoffSyncDiagnosticsPanel"
+import MlbBracketBoard from "./MlbBracketBoard"
+import PlayoffSettingsModal from "./PlayoffSettingsModal"
 
 type Props = {
   initialView: PlayoffChallengeView
 }
 
 type PlayoffProjectionMode = "official" | "user_projection"
+
+/**
+ * ⚠ MLB GETS A DIFFERENT BOARD, AND ONLY MLB. The 2026 design handoff is a
+ * mirrored tree with a centre champion, which the NBA/NHL board is not; wiring
+ * every sport onto it would restyle 26 live pools nobody asked to change. The
+ * branch is on the sport string and nothing else, so an NBA pool renders
+ * byte-identically to yesterday.
+ */
+const MLB_BOARD_SPORTS = new Set(["mlb"])
 
 export default function PlayoffBracketEntryShell({ initialView }: Props) {
   const router = useRouter()
@@ -42,6 +53,7 @@ export default function PlayoffBracketEntryShell({ initialView }: Props) {
   const [syncDiagnostics, setSyncDiagnostics] = useState<unknown>(null)
   const [showPickResults, setShowPickResults] = useState(false)
   const [showUserProjection, setShowUserProjection] = useState(false)
+  const [settingsOpen, setSettingsOpen] = useState(false)
 
   const activeEntry = view.activeEntry
   const series = Array.isArray(view.series) ? view.series : []
@@ -197,6 +209,71 @@ export default function PlayoffBracketEntryShell({ initialView }: Props) {
         toast.error(error instanceof Error ? error.message : "Failed to sync playoff series")
       }
     })
+  }
+
+  /*
+   * The MLB surface replaces this shell's chrome rather than sitting inside
+   * it — two heroes and two progress counters on one screen is worse than
+   * either. Everything the legacy layout does that a pool still NEEDS is
+   * carried across: back navigation, submit (with the blocked reason on the
+   * disabled button), the commissioner sync, and settings. The review grid
+   * and the projection toggle are not: the tree shows each series' result
+   * inline, and it is always the entry's own projection, which is the only
+   * mode you can pick from.
+   */
+  if (MLB_BOARD_SPORTS.has(String(view.challenge.sport ?? "").toLowerCase())) {
+    return (
+      <>
+        <MlbBracketBoard
+          view={view}
+          onViewChange={(next) => {
+            setView(next)
+            setDirtySinceSubmit((current) => current || Boolean(activeEntry?.isComplete))
+          }}
+          onOpenSettings={() => setSettingsOpen(true)}
+          backHref={`/brackets/leagues/${view.challenge.id}`}
+          backLabel="Back to pool dashboard"
+          actions={
+            <>
+              <button
+                type="button"
+                className="af-pb-btn af-pb-btn--accent"
+                onClick={handleSubmit}
+                disabled={!canSubmit || submitting}
+                title={canSubmit ? undefined : submitBlockedMessage}
+                data-testid="pb-submit"
+              >
+                {submitting
+                  ? "Submitting…"
+                  : dirtySinceSubmit && activeEntry.isComplete
+                    ? `Re-${submitButtonLabel}`
+                    : submitButtonLabel}
+              </button>
+              {canSyncSeries ? (
+                <button
+                  type="button"
+                  className="af-pb-btn"
+                  onClick={handleSyncSeries}
+                  disabled={syncingSeries}
+                  data-testid="pb-sync"
+                >
+                  {syncingSeries ? "Syncing…" : "Sync official data"}
+                </button>
+              ) : null}
+            </>
+          }
+        />
+        {settingsOpen ? (
+          <PlayoffSettingsModal
+            view={view}
+            canAdmin={canSyncSeries}
+            onClose={() => setSettingsOpen(false)}
+            onResync={handleSyncSeries}
+            resyncing={syncingSeries}
+          />
+        ) : null}
+      </>
+    )
   }
 
   return (

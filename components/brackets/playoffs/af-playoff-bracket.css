@@ -1,0 +1,909 @@
+/*
+ * MLB playoff bracket — design tokens and layout.
+ *
+ * ⚠ EVERY @media BLOCK IS AT THE BOTTOM OF THIS FILE, NEVER NESTED INSIDE
+ * ANOTHER. Inserting a narrower query in the middle of a wider one closes the
+ * outer query early and silently drags every rule below it into the narrower
+ * band — brace balance stays 0, nothing throws, and no CSS lint can see it.
+ * That exact bug cost four rules on af-matchup.css. Add new breakpoints to the
+ * section at the end.
+ *
+ * ⚠ THE TREE SCROLLS HORIZONTALLY ON PURPOSE. It does not reflow to one column
+ * on a phone: a bracket read as a vertical list stops being a bracket. This is
+ * how ESPN behaves on mobile and it is an intentional choice, not an
+ * un-fixed overflow.
+ */
+
+/*
+ * 🛑 THE TOKENS ARE DECLARED ON BOTH ROOTS, AND THAT IS NOT BELT-AND-BRACES.
+ * A modal is a SIBLING of the board, not a descendant — the entry shell
+ * renders `<MlbBracketBoard/>` and `<PlayoffSettingsModal/>` side by side — so
+ * a token block scoped to `.af-pb` alone leaves every `var(--pb-*)` inside an
+ * overlay undefined. Measured at 390x844 before this was split: the close
+ * button's `width: var(--pb-tap)` collapsed to 26px and the footer buttons to
+ * 12px, because an invalid `min-height` falls back to `auto` rather than
+ * failing loudly. Nothing throws, no lint sees it, and a declared rule that
+ * resolves to nothing is invisible.
+ */
+.af-pb,
+.af-pb-overlay {
+  --pb-bg: #06070f;
+  --pb-surface: #0d1020;
+  --pb-surface2: #0a0c1a;
+  --pb-line: rgba(255, 255, 255, 0.07);
+  --pb-line2: rgba(255, 255, 255, 0.13);
+  --pb-text: #eef0fa;
+  --pb-text2: #c3c9e6;
+  --pb-muted: #8f97bd;
+  --pb-faint: #5d648a;
+  --pb-accent: #22d3ee;
+  --pb-accent-ink: #04050c;
+  --pb-accent-soft: rgba(34, 211, 238, 0.12);
+  --pb-accent-line: rgba(34, 211, 238, 0.28);
+  --pb-good: #34d399;
+  --pb-warn: #fbbf24;
+  --pb-bad: #fb5b78;
+  --pb-chip: rgba(255, 255, 255, 0.05);
+  --pb-chip-line: rgba(255, 255, 255, 0.1);
+  --pb-shadow: 0 40px 120px -60px rgba(0, 0, 0, 0.9);
+  /* One place to change the minimum comfortable touch target. */
+  --pb-tap: 44px;
+
+  color: var(--pb-text);
+  font-family: Archivo, "Archivo", system-ui, -apple-system, sans-serif;
+}
+
+.af-pb {
+  background: var(--pb-bg);
+  min-height: 100%;
+}
+
+.af-pb *,
+.af-pb *::before,
+.af-pb *::after,
+.af-pb-overlay *,
+.af-pb-overlay *::before,
+.af-pb-overlay *::after {
+  box-sizing: border-box;
+}
+
+.af-pb h1,
+.af-pb h2,
+.af-pb h3 {
+  font-weight: 900;
+  letter-spacing: -0.03em;
+  margin: 0;
+}
+
+.af-pb-mono {
+  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+/* ── Hero ──────────────────────────────────────────────────────────────── */
+
+.af-pb-hero {
+  background:
+    radial-gradient(900px 320px at 15% 0%, rgba(34, 211, 238, 0.14), transparent 65%),
+    radial-gradient(700px 320px at 90% 10%, rgba(167, 139, 250, 0.1), transparent 70%);
+  border-bottom: 1px solid var(--pb-line);
+  padding: 22px 20px 18px;
+}
+
+.af-pb-hero-top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.af-pb-back {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--pb-tap);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--pb-muted);
+  text-decoration: none;
+}
+
+.af-pb-back:hover {
+  color: var(--pb-text);
+}
+
+.af-pb-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  font-size: 26px;
+}
+
+.af-pb-season {
+  font-size: 11px;
+  font-weight: 800;
+  padding: 4px 8px;
+  border-radius: 7px;
+  background: var(--pb-chip);
+  border: 1px solid var(--pb-chip-line);
+  color: var(--pb-text2);
+}
+
+.af-pb-sub {
+  margin: 6px 0 0;
+  font-size: 13px;
+  color: var(--pb-muted);
+}
+
+.af-pb-status {
+  text-align: right;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--pb-warn);
+}
+
+.af-pb-status small {
+  display: block;
+  margin-top: 3px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--pb-faint);
+}
+
+.af-pb-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.af-pb-progress {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  padding: 0 12px;
+  min-height: var(--pb-tap);
+  border-radius: 9px;
+  background: var(--pb-chip);
+  border: 1px solid var(--pb-chip-line);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--pb-text2);
+}
+
+.af-pb-progress span + span {
+  color: var(--pb-accent);
+}
+
+.af-pb-btn {
+  appearance: none;
+  min-height: var(--pb-tap);
+  padding: 0 16px;
+  border-radius: 9px;
+  border: 1px solid var(--pb-chip-line);
+  background: var(--pb-chip);
+  color: var(--pb-text2);
+  font: 700 12px/1 Archivo, system-ui, sans-serif;
+  cursor: pointer;
+}
+
+.af-pb-btn:hover:not(:disabled) {
+  border-color: var(--pb-line2);
+  color: var(--pb-text);
+}
+
+.af-pb-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.af-pb-btn--accent {
+  background: var(--pb-accent);
+  border-color: var(--pb-accent);
+  color: var(--pb-accent-ink);
+}
+
+.af-pb-btn--accent:hover:not(:disabled) {
+  filter: brightness(1.08);
+  color: var(--pb-accent-ink);
+}
+
+/* ── Layout ────────────────────────────────────────────────────────────── */
+
+.af-pb-body {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  padding: 16px 20px 32px;
+  align-items: flex-start;
+}
+
+.af-pb-main {
+  flex: 3 1 560px;
+  min-width: 0; /* lets the inner scroller shrink instead of forcing page overflow */
+}
+
+.af-pb-rail {
+  flex: 1 1 280px;
+  min-width: 280px;
+  max-width: 400px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.af-pb-card {
+  background: var(--pb-surface);
+  border: 1px solid var(--pb-line2);
+  border-radius: 16px;
+  box-shadow: var(--pb-shadow);
+  overflow: hidden;
+}
+
+/* ── Seeding strip ─────────────────────────────────────────────────────── */
+
+.af-pb-seeds {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px;
+  border-bottom: 1px solid var(--pb-line);
+}
+
+.af-pb-seed-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.af-pb-seed-league {
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  color: var(--pb-faint);
+  width: 26px;
+  flex: none;
+}
+
+.af-pb-seed {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 7px 4px 5px;
+  border-radius: 7px;
+  background: var(--pb-chip);
+  border: 1px solid var(--pb-chip-line);
+}
+
+.af-pb-seed-n {
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--pb-faint);
+}
+
+.af-pb-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  flex: none;
+}
+
+.af-pb-badge--sm {
+  width: 22px;
+  height: 22px;
+  font-size: 9px;
+}
+
+.af-pb-badge--champ {
+  width: 112px;
+  height: 112px;
+  font-size: 30px;
+}
+
+/* ── Scoring tiles ─────────────────────────────────────────────────────── */
+
+.af-pb-tiles {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  padding: 14px;
+  border-bottom: 1px solid var(--pb-line);
+}
+
+.af-pb-tile {
+  padding: 10px;
+  border-radius: 10px;
+  background: var(--pb-surface2);
+  border: 1px solid var(--pb-line);
+  min-width: 0;
+}
+
+.af-pb-tile--accent {
+  background: var(--pb-accent-soft);
+  border-color: var(--pb-accent-line);
+}
+
+.af-pb-tile-name {
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--pb-faint);
+  line-height: 1.3;
+}
+
+.af-pb-tile-pts {
+  font-size: 20px;
+  font-weight: 800;
+  margin-top: 4px;
+}
+
+.af-pb-tile-meta {
+  font-size: 10px;
+  color: var(--pb-muted);
+  margin-top: 2px;
+}
+
+/* ── The tree ──────────────────────────────────────────────────────────── */
+
+.af-pb-scroller {
+  overflow-x: auto;
+  overflow-y: hidden;
+  /* Momentum scrolling on iOS, and keep the page from rubber-banding when the
+     tree reaches its own edge. */
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
+  padding: 16px 14px 18px;
+}
+
+.af-pb-tree {
+  display: grid;
+  grid-template-columns:
+    150px 96px 150px 96px 150px
+    250px
+    150px 96px 150px 96px 150px;
+  gap: 10px;
+  align-items: center;
+  /* The track list above is a 3-round default; the board computes its own from
+     the bracket it is given. `max-content` therefore has to be the width rule —
+     a hard-coded pixel figure would be wrong for any other round count, and
+     wrong SILENTLY, since a grid with fixed tracks simply overflows a min-width
+     that is too small. */
+  min-width: max-content;
+}
+
+.af-pb-col {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-around;
+  gap: 14px;
+  height: 100%;
+  min-width: 0;
+}
+
+.af-pb-col-head {
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--pb-faint);
+  text-align: center;
+  padding-bottom: 2px;
+}
+
+.af-pb-match {
+  background: var(--pb-surface2);
+  border: 1px solid var(--pb-line);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.af-pb-team {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px;
+  min-height: var(--pb-tap);
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--pb-line);
+  color: var(--pb-text);
+  text-align: left;
+  cursor: pointer;
+  position: relative;
+  font: inherit;
+}
+
+.af-pb-team:last-child {
+  border-bottom: 0;
+}
+
+.af-pb-team:disabled {
+  cursor: default;
+}
+
+.af-pb-team[data-picked="true"] {
+  background: var(--pb-accent-soft);
+  box-shadow: inset 2px 0 0 var(--pb-accent);
+}
+
+.af-pb-team[data-eliminated="true"] {
+  opacity: 0.4;
+}
+
+.af-pb-team-seed {
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--pb-faint);
+  width: 10px;
+  flex: none;
+}
+
+.af-pb-team-name {
+  font-size: 12px;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+/* A seed slot is pickable but is not a club yet — say so rather than let
+   "AL1" read as a team nobody recognises. */
+.af-pb-team-slot {
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--pb-faint);
+  flex: none;
+}
+
+.af-pb-team-prob {
+  margin-left: auto;
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--pb-muted);
+  flex: none;
+}
+
+/* Status cell between rounds — the Live View entry point. */
+.af-pb-status-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  width: 100%;
+  min-height: var(--pb-tap);
+  padding: 6px 4px;
+  border: 1px solid var(--pb-line);
+  border-radius: 9px;
+  background: var(--pb-surface2);
+  color: var(--pb-text2);
+  cursor: pointer;
+  font: inherit;
+}
+
+.af-pb-status-cell:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.af-pb-status-title {
+  font-size: 10px;
+  font-weight: 800;
+  text-align: center;
+  line-height: 1.2;
+}
+
+.af-pb-status-sub {
+  font-size: 9px;
+  color: var(--pb-faint);
+  text-align: center;
+  line-height: 1.2;
+}
+
+/* Correct/wrong is carried by TEXT, not by colour alone — the badge reads the
+   same to a colour-blind user and in a greyscale screenshot. */
+.af-pb-status-result {
+  font-size: 9px;
+  font-weight: 800;
+  line-height: 1.2;
+  text-align: center;
+}
+
+.af-pb-status-result[data-result="correct"] {
+  color: var(--pb-good);
+}
+
+.af-pb-status-result[data-result="wrong"] {
+  color: var(--pb-bad);
+}
+
+.af-pb-live-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--pb-bad);
+  margin-right: 4px;
+  animation: af-pb-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes af-pb-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+
+/* ── Champion slot ─────────────────────────────────────────────────────── */
+
+.af-pb-champ {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 10px;
+  border: 1px solid var(--pb-accent-line);
+  border-radius: 14px;
+  background: var(--pb-accent-soft);
+  text-align: center;
+}
+
+.af-pb-champ-label {
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--pb-accent);
+}
+
+.af-pb-champ-empty {
+  width: 112px;
+  height: 112px;
+  border-radius: 50%;
+  border: 1.5px dashed var(--pb-chip-line);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  color: var(--pb-faint);
+  padding: 8px;
+}
+
+.af-pb-footnote {
+  padding: 12px 14px;
+  border-top: 1px solid var(--pb-line);
+  font-size: 10px;
+  line-height: 1.5;
+  color: var(--pb-faint);
+}
+
+/* ── Right rail ────────────────────────────────────────────────────────── */
+
+.af-pb-rail-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--pb-line);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--pb-accent);
+}
+
+.af-pb-reason {
+  display: flex;
+  gap: 10px;
+  padding: 11px 14px;
+  border-bottom: 1px solid var(--pb-line);
+}
+
+.af-pb-reason:last-child {
+  border-bottom: 0;
+}
+
+.af-pb-reason-tag {
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: var(--pb-faint);
+  width: 46px;
+  flex: none;
+  padding-top: 2px;
+}
+
+.af-pb-reason-text {
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--pb-text2);
+  min-width: 0;
+}
+
+.af-pb-basis {
+  padding: 10px 14px;
+  font-size: 10px;
+  line-height: 1.45;
+  color: var(--pb-faint);
+  border-top: 1px solid var(--pb-line);
+}
+
+.af-pb-lb-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 14px;
+  border-bottom: 1px solid var(--pb-line);
+  font-size: 12px;
+}
+
+.af-pb-lb-row:last-child {
+  border-bottom: 0;
+}
+
+.af-pb-lb-row[data-you="true"] {
+  background: var(--pb-accent-soft);
+}
+
+.af-pb-lb-rank {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--pb-faint);
+  width: 18px;
+  flex: none;
+}
+
+.af-pb-lb-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+.af-pb-lb-pts {
+  font-size: 12px;
+  font-weight: 800;
+  flex: none;
+}
+
+/* ── Modals ────────────────────────────────────────────────────────────── */
+
+.af-pb-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(2, 3, 8, 0.72);
+  backdrop-filter: blur(3px);
+  /* Keep the sheet clear of the iOS home indicator and Android gesture bar. */
+  padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+}
+
+.af-pb-modal {
+  width: min(540px, 100%);
+  /* dvh, not vh: iOS Safari's collapsing URL bar makes 100vh taller than the
+     visible viewport, which pushes a modal's footer under the chrome. */
+  max-height: min(88dvh, 100%);
+  display: flex;
+  flex-direction: column;
+  background: var(--pb-surface);
+  border: 1px solid var(--pb-line2);
+  border-radius: 18px;
+  box-shadow: var(--pb-shadow);
+  overflow: hidden;
+}
+
+.af-pb-modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--pb-line);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--pb-muted);
+}
+
+.af-pb-modal-body {
+  padding: 16px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* The settings sheet embeds `CommissionerFanCredSetupNotice`, a shared
+   component whose link is a 21px line of text. Restyling that component would
+   change it on every surface that uses it, so the tap target is enlarged HERE,
+   scoped to this sheet, and nowhere else. */
+.af-pb-modal-body a {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--pb-tap);
+}
+
+.af-pb-modal-foot {
+  padding: 12px 16px;
+  border-top: 1px solid var(--pb-line);
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.af-pb-close {
+  appearance: none;
+  width: var(--pb-tap);
+  height: var(--pb-tap);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--pb-muted);
+  font-size: 18px;
+  cursor: pointer;
+}
+
+.af-pb-close:hover {
+  background: var(--pb-chip);
+  color: var(--pb-text);
+}
+
+.af-pb-linescore {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
+  border: 1px solid var(--pb-line);
+  border-radius: 10px;
+  background: var(--pb-surface2);
+}
+
+.af-pb-linescore table {
+  border-collapse: collapse;
+  width: 100%;
+  min-width: 320px;
+}
+
+.af-pb-linescore th,
+.af-pb-linescore td {
+  padding: 7px 9px;
+  text-align: center;
+  font-size: 11px;
+  border-bottom: 1px solid var(--pb-line);
+}
+
+.af-pb-linescore tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.af-pb-linescore th {
+  color: var(--pb-faint);
+  font-weight: 700;
+}
+
+.af-pb-probbar {
+  height: 8px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: var(--pb-chip);
+  display: flex;
+}
+
+.af-pb-probbar i {
+  display: block;
+  height: 100%;
+  background: var(--pb-accent);
+}
+
+.af-pb-setting-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--pb-line);
+  font-size: 13px;
+}
+
+.af-pb-setting-row:last-of-type {
+  border-bottom: 0;
+}
+
+.af-pb-section-label {
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--pb-faint);
+  margin: 16px 0 8px;
+}
+
+.af-pb-note {
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--pb-faint);
+  margin-top: 8px;
+}
+
+/* ═══ Breakpoints — ALL media queries live below this line ═══════════════ */
+
+@media (max-width: 900px) {
+  .af-pb-rail {
+    max-width: none;
+    flex-basis: 100%;
+  }
+}
+
+@media (max-width: 640px) {
+  .af-pb-hero {
+    padding: 16px 14px 14px;
+  }
+
+  .af-pb-title {
+    font-size: 21px;
+  }
+
+  .af-pb-status {
+    text-align: left;
+  }
+
+  .af-pb-body {
+    padding: 12px 14px 28px;
+    gap: 12px;
+  }
+
+  /* Two-up rather than four-up: four tiles at phone width crush the points
+     figure to an unreadable size. */
+  .af-pb-tiles {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .af-pb-scroller {
+    padding: 12px 10px 14px;
+  }
+
+  .af-pb-overlay {
+    padding: 10px;
+    padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px));
+    /* Sheets sit at the bottom on a phone — closer to the thumb than centred. */
+    align-items: flex-end;
+  }
+
+  .af-pb-modal {
+    max-height: min(92dvh, 100%);
+    border-radius: 16px;
+  }
+
+  .af-pb-progress,
+  .af-pb-btn {
+    flex: 1 1 auto;
+    justify-content: center;
+  }
+}
+
+/* The pulsing live dot is decoration; honour a reduced-motion preference. */
+@media (prefers-reduced-motion: reduce) {
+  .af-pb-live-dot {
+    animation: none;
+  }
+}
