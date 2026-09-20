@@ -31,6 +31,20 @@ export type AuthedRole = "manager" | "commissioner"
 export type AuthedRoute = {
   route: string
   login: AuthedRole
+  /**
+   * Visit this route with `?league=<the seeded NFL league>` appended.
+   *
+   * 🛑 WITHOUT IT, `/core/my-team` CERTIFIES THE WRONG SCREEN AND STILL PASSES.
+   * `app/core/[[...screen]]/page.tsx:2037` only loads `getMyTeamData` when a
+   * league is in context; with none it renders `getMyTeamPulse`, the cross-league
+   * "pick a league" board. Both live at the same pathname, so the premise guard
+   * cannot tell them apart — the lane would report a green My Team that had never
+   * rendered a roster.
+   *
+   * ⚠ THE GUARD STILL COMPARES `pathname`, NOT THE FULL URL, so a query string
+   * does not weaken it. `route` stays the bare path and remains the baseline key.
+   */
+  leagueScoped?: boolean
 }
 
 /*
@@ -61,6 +75,7 @@ export type AuthedRoute = {
  */
 export const AUTHED_ROUTES: readonly AuthedRoute[] = [
   { route: "/core", login: "manager" },
+  { route: "/core/my-team", login: "manager", leagueScoped: true },
   { route: "/core/trades", login: "manager" },
   { route: "/commissioner-os", login: "commissioner" },
 ] as const

@@ -64,7 +64,23 @@
     "WHAT TO TAKE FROM THAT: this route certifies a screen rather than rescuing one,",
     "and a claim about what a gate CATCHES is worth nothing until the gate has been",
     "seen to catch it. The control cost one run and stopped a false sentence from",
-    "becoming the permanent record here."
+    "becoming the permanent record here.",
+    "",
+    "WHAT /core/my-team FOUND (2026-09-19), AND WHY ONLY THE DOTS ARE HERE. Four",
+    "undersized controls: the two shell help dots above, plus .af-welcome-close at",
+    "36x36 and .af-welcome-next at 42 tall. Both welcome-tour buttons were FIXED in",
+    "core-welcome-tour.css rather than baselined -- they were already deliberate",
+    "touch-target boxes a few pixels short of the floor, which is the same shape as",
+    ".af-nav-support and the same reason it was fixed. The close button is the only",
+    "way to dismiss the tour, so a 36px hit area was the worst place to be short.",
+    "",
+    "⚠ THIS ROUTE IS LEAGUE-SCOPED AND THAT IS LOAD-BEARING. /core/my-team renders",
+    "the roster only with a league in context; without one it renders the",
+    "cross-league picker at the SAME pathname, so the premise guard cannot tell",
+    "them apart and the picker passes every measurement. authedRoutes marks it",
+    "leagueScoped, and the spec asserts .af-mt present AND .af-pl absent -- both",
+    "directions, because asserting only the roster would still pass if a layout",
+    "ever rendered both."
   ],
   "routes": {
     "/commissioner-os": [],
@@ -75,6 +91,22 @@
         "w": 15,
         "h": 15,
         "why": "THE SAME TWO SHELL CONTROLS ALREADY DEFERRED ON /core/trades, not new debt. They live in AfCoreShell's topbar, so they are on EVERY /core screen; measuring a second route was always going to re-report them. Deferred for the reason recorded below: a 15x15 info dot cannot reach 44x44 by min-height, it needs an expanded hit area that shifts layout around a deliberately small affordance. Retire both routes' entries together when the shell's help affordances are next touched."
+      },
+      {
+        "cls": "af-help-dot",
+        "label": "Plan tokens",
+        "w": 15,
+        "h": 15,
+        "why": "Same control, second instance. See above."
+      }
+    ],
+    "/core/my-team": [
+      {
+        "cls": "af-help-dot",
+        "label": "Read-only by design",
+        "w": 15,
+        "h": 15,
+        "why": "Shell topbar control, already deferred on /core and /core/trades. Retire all three routes' entries together when the help affordances are next touched."
       },
       {
         "cls": "af-help-dot",

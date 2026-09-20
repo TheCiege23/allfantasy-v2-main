@@ -151,7 +151,7 @@ test.describe("@db @mobile authenticated phone contract", () => {
     }
   })
 
-  for (const { route, login } of AUTHED_ROUTES) {
+  for (const { route, login, leagueScoped } of AUTHED_ROUTES) {
     test(`${route} holds the phone contract when signed in`, async ({ page }) => {
       const cssFailures: CssRequestFailure[] = []
       const isStylesheet = (req: { resourceType(): string; url(): string }) =>
@@ -167,8 +167,22 @@ test.describe("@db @mobile authenticated phone contract", () => {
       const who = login === "commissioner" ? TC_TRADE_SEED.commissionerLogin : TC_TRADE_SEED.managerLogins[0]!
       await loginAs(page, who, TC_TRADE_SEED.password)
 
-      const response = await page.goto(route, { waitUntil: "domcontentloaded" })
-      expect(response?.status(), `${route} should not be an error page`).toBeLessThan(400)
+      /*
+       * 🛑 A LEAGUE-SCOPED ROUTE RENDERS A DIFFERENT SCREEN AT THE SAME PATHNAME,
+       * AND THE PREMISE GUARD CANNOT SEE THE DIFFERENCE. `/core/my-team` loads the
+       * roster only when a league is in context; with none it renders the
+       * cross-league "pick a league" board instead — same URL, no redirect, every
+       * assertion below still passing. That is a green My Team that never rendered
+       * a roster, which is the same class of false pass the guard below exists for.
+       *
+       * The league id comes from the seed rather than a literal, so a reseed that
+       * renames it fails loudly here instead of silently measuring the picker.
+       */
+      const target = leagueScoped
+        ? `${route}?league=${encodeURIComponent(TC_TRADE_SEED.leagues.nfl.leagueId)}`
+        : route
+      const response = await page.goto(target, { waitUntil: "domcontentloaded" })
+      expect(response?.status(), `${target} should not be an error page`).toBeLessThan(400)
 
       /*
        * 🛑 THE PREMISE GUARD, AND IT IS THE WHOLE REASON THIS LANE CAN BE
@@ -183,6 +197,29 @@ test.describe("@db @mobile authenticated phone contract", () => {
       expect(landed, `${route} redirected to ${landed} — the session or the seeded league is missing`).toBe(route)
 
       await page.waitForLoadState("load", { timeout: 30_000 }).catch(() => {})
+
+      /*
+       * 🛑 THE SECOND HALF OF THE PREMISE, FOR LEAGUE-SCOPED ROUTES. The pathname
+       * check above cannot distinguish `/core/my-team` WITH a league (the roster,
+       * `.af-mt`) from the same path WITHOUT one (the "pick a league" board,
+       * `.af-pl`). No redirect happens, so `landed` is identical for both, and the
+       * picker is a small tidy page that passes every measurement below.
+       *
+       * So assert the screen by its own root. Both directions, deliberately: the
+       * roster present AND the picker absent. Asserting only the first would still
+       * pass if a future layout rendered both, which is exactly the ambiguity this
+       * guard exists to remove.
+       */
+      if (leagueScoped) {
+        const roster = await page.locator(".af-mt").count()
+        const picker = await page.locator(".af-pl").count()
+        expect(
+          { roster, picker },
+          `${route} did not render the league-scoped screen — ` +
+            `expected the roster (.af-mt) and not the league picker (.af-pl). ` +
+            `The seeded league id may have changed, or the ?league= parameter stopped being honoured.`,
+        ).toEqual({ roster: 1, picker: 0 })
+      }
 
       const stylesheet = await page.evaluate(probeStylesheets)
       console.log(`[stylesheet-guard] ${route} ${JSON.stringify(stylesheet)} cssFailures=${JSON.stringify(cssFailures)}`)

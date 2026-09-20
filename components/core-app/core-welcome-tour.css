@@ -11,16 +11,35 @@
   box-shadow: 0 22px 70px rgba(0, 0, 0, .36);
   backdrop-filter: blur(18px);
 }
-.af-welcome-progress { display: flex; gap: 5px; margin: 0 34px 16px 0; }
+/*
+ * ⚠ THE RIGHT MARGIN CLEARS THE CLOSE BUTTON, SO IT MOVED WITH IT. Derived, not
+ * eyeballed: the button is `right: 10px` and 44px wide, so its left edge sits
+ * 54px from the card's outer right edge. At the old 34px the bar ended at
+ * padding(20) + 34 = 54 — exactly touching. 42px restores the 8px gap the 36px
+ * button used to have.
+ */
+.af-welcome-progress { display: flex; gap: 5px; margin: 0 42px 16px 0; }
 .af-welcome-progress i { height: 3px; flex: 1; border-radius: 999px; background: var(--line2); }
 .af-welcome-progress i[data-active='true'] { background: var(--accent); }
-.af-welcome-close { position: absolute; top: 10px; right: 10px; width: 36px; height: 36px; border: 0; border-radius: 9px; color: var(--muted); background: transparent; font-size: 22px; cursor: pointer; }
+/*
+ * 🛑 44x44, BECAUSE THIS IS THE ONLY WAY TO DISMISS THE TOUR. Found by the
+ * authenticated phone gate the day /core/my-team joined it (2026-09-19), at
+ * 36x36 — the same "a few px short of a floor the rest of /core already holds"
+ * shape as `.af-nav-support`, which was fixed rather than baselined for the same
+ * reason. Sized at every width rather than behind a phone query: it was already
+ * a deliberate touch-target box, and 8px on a floating card changes nothing that
+ * a 36px hit area was buying.
+ */
+.af-welcome-close { position: absolute; top: 10px; right: 10px; width: 44px; height: 44px; border: 0; border-radius: 9px; color: var(--muted); background: transparent; font-size: 22px; cursor: pointer; }
 .af-welcome-kicker { color: var(--accent); font: 750 10px/1 var(--font-jetbrains-mono, 'JetBrains Mono'), monospace; letter-spacing: .14em; text-transform: uppercase; }
 .af-welcome h2 { margin: 9px 0 8px; color: var(--text); font: 900 22px/1.1 var(--font-archivo, Archivo), system-ui, sans-serif; letter-spacing: -.025em; }
 .af-welcome p { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.58; }
 .af-welcome-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; margin-top: 17px; }
 .af-welcome-actions a,
-.af-welcome-actions button { min-height: 42px; padding: 10px 13px; border: 1px solid var(--line2); border-radius: 10px; color: var(--text2); background: var(--chip); font: 800 12px/1 var(--font-archivo, Archivo), system-ui, sans-serif; text-decoration: none; cursor: pointer; }
+/* 42px was two short of the 44px floor — the smallest possible miss, and the
+   kind only a measured gate ever finds. Same fix, same reason as the close
+   button above. */
+.af-welcome-actions button { min-height: 44px; padding: 10px 13px; border: 1px solid var(--line2); border-radius: 10px; color: var(--text2); background: var(--chip); font: 800 12px/1 var(--font-archivo, Archivo), system-ui, sans-serif; text-decoration: none; cursor: pointer; }
 .af-welcome-actions a,
 .af-welcome-actions .af-welcome-next { color: var(--accent-ink); border-color: var(--accent); background: var(--accent); }
 
