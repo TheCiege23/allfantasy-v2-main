@@ -59,9 +59,24 @@ const { store, prismaMock } = vi.hoisted(() => {
       // caught, not masked by a mock that always assumes the fixed behavior. conversationId and
       // limit stay in their fixed interpolation positions regardless.
       const filtersUserId = /"userId"\s*=\s*\?/.test(sql)
-      const [conversationId, userId, limit] = values as [string, string, number]
+      /*
+       * ⚠ THE PARAMETER ORDER CHANGED WHEN THE THREAD STOPPED BEING PER-LEAGUE, AND THIS FAKE
+       * CAUGHT IT. It used to destructure `[conversationId, userId, limit]`; the query now binds
+       * `userId` first and the conversation key twice (once for the NULL test, once for the
+       * comparison), so the old positions read the wrong values and every assertion came back
+       * empty. That is this mock doing its job — it is deliberately SQL-sensitive — so it is
+       * re-aligned rather than loosened into something that could not notice next time.
+       */
+      const [userId, conversationIdOrNull, , limit] = values as [string, string | null, unknown, number]
+      // Omitting the key is how a caller asks for this user's whole thread, and the query makes
+      // that an explicit NULL test rather than a dropped clause — honour the same distinction.
+      const scopesToConversation = conversationIdOrNull != null
       return store.chatHistory
-        .filter((r) => r.conversationId === conversationId && (!filtersUserId || r.userId === userId))
+        .filter(
+          (r) =>
+            (!scopesToConversation || r.conversationId === conversationIdOrNull) &&
+            (!filtersUserId || r.userId === userId),
+        )
         .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
         .slice(0, limit)
     }),
@@ -95,7 +110,7 @@ const { store, prismaMock } = vi.hoisted(() => {
 
 vi.mock('@/lib/prisma', () => ({ prisma: prismaMock }))
 
-import { appendChatHistory, getRecentChatHistory } from '@/lib/ai-memory/chat-history-store'
+import { appendChatHistory, buildChimmyConversationId, getRecentChatHistory } from '@/lib/ai-memory/chat-history-store'
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -164,5 +179,94 @@ describe('getRecentChatHistory — ownership on read', () => {
   it('returns empty for an unknown conversationId rather than erroring', async () => {
     const history = await getRecentChatHistory('nobody-has-this-conversation', 12, 'user-a')
     expect(history).toEqual([])
+  })
+})
+
+/*
+ * ── 🛑 ONE THREAD PER USER — AND THIS IS THE ONLY TEST THAT SEES THE REAL RULE ────────────────
+ *
+ * Every other suite that touches `buildChimmyConversationId` MOCKS it, so a change to the real
+ * function is invisible to all of them: the route-contract suite asserts the request SHAPE, which
+ * is the right assertion there but cannot notice the key itself changing. Controlled by reverting
+ * the function to its per-league form, which reds the first case here and nothing else in the repo.
+ *
+ * The rule became user-only on 2026-09-20, after "my previous conversation from mobile is not
+ * showing up on PC" — the read had been working; mobile was in a different league, so it was a
+ * different thread.
+ */
+describe('buildChimmyConversationId — one thread per user', () => {
+  it('🛑 ignores the league entirely', () => {
+    const withLeague = buildChimmyConversationId({ userId: 'user-a', leagueId: 'kbfl' })
+    const otherLeague = buildChimmyConversationId({ userId: 'user-a', leagueId: 'cream-bowl' })
+    const noLeague = buildChimmyConversationId({ userId: 'user-a' })
+
+    expect(withLeague).toBe('chimmy:user-a')
+    expect(otherLeague).toBe('chimmy:user-a')
+    expect(noLeague).toBe('chimmy:user-a')
+    // Stated as an equality too, because that IS the product requirement in one line.
+    expect(new Set([withLeague, otherLeague, noLeague]).size).toBe(1)
+  })
+
+  it('keeps users apart — the key is still per user, not global', () => {
+    expect(buildChimmyConversationId({ userId: 'user-a' })).not.toBe(
+      buildChimmyConversationId({ userId: 'user-b' }),
+    )
+  })
+
+  it('still honours an explicit id, which the World Cup reply path supplies', () => {
+    expect(
+      buildChimmyConversationId({ userId: 'user-a', leagueId: 'kbfl', explicitConversationId: 'wc-42' }),
+    ).toBe('wc-42')
+  })
+
+  /*
+   * ⚠ ANONYMOUS MUST STAY UNIQUE PER CALL. Collapsing it to a shared constant would pool every
+   * signed-out visitor into one transcript — a cross-user leak dressed as a simplification.
+   */
+  it('gives an anonymous caller a fresh id every time', () => {
+    const a = buildChimmyConversationId({})
+    const b = buildChimmyConversationId({})
+    expect(a).toMatch(/^chimmy:anon:/)
+    expect(a).not.toBe(b)
+  })
+})
+
+/*
+ * ── 🛑 THE USER-SCOPED READ IS THE ONE THAT DROPPED A FILTER ─────────────────────────────────
+ *
+ * Reading the whole thread means asking WITHOUT a `conversationId`, so `userId` is now the only
+ * clause standing between two accounts. That was already true — the key was caller-suppliable and
+ * never constrained an attacker — but "already true" is not a test, and this is the exact edit
+ * where a mistake would be a cross-user leak rather than a display bug.
+ */
+describe('getRecentChatHistory — the whole-thread read', () => {
+  it('unions every conversation this user owns, including old per-league keys', async () => {
+    await appendChatHistory({ conversationId: 'chimmy:user-a:kbfl', role: 'user', content: 'kbfl turn', userId: 'user-a', leagueId: 'kbfl' })
+    await appendChatHistory({ conversationId: 'chimmy:user-a:cream', role: 'user', content: 'cream turn', userId: 'user-a', leagueId: 'cream' })
+    await appendChatHistory({ conversationId: 'chimmy:user-a', role: 'user', content: 'new turn', userId: 'user-a', leagueId: 'kbfl' })
+
+    const history = await getRecentChatHistory({ userId: 'user-a', limit: 12 })
+
+    // This is the whole point of the migration-free read: nothing written before today is lost.
+    expect(history.map((m) => m.content)).toEqual(['kbfl turn', 'cream turn', 'new turn'])
+  })
+
+  it("🛑 never returns another user's turns, with no conversation key to hide behind", async () => {
+    await appendChatHistory({ conversationId: 'chimmy:victim', role: 'user', content: 'victim private', userId: 'victim-user', leagueId: null })
+    await appendChatHistory({ conversationId: 'chimmy:attacker', role: 'user', content: 'mine', userId: 'attacker-user', leagueId: null })
+
+    const history = await getRecentChatHistory({ userId: 'attacker-user', limit: 12 })
+
+    expect(history.map((m) => m.content)).toEqual(['mine'])
+    expect(JSON.stringify(history)).not.toContain('victim private')
+  })
+
+  it('carries each turn’s own league back, which is what lets the prompt label them', async () => {
+    await appendChatHistory({ conversationId: 'chimmy:user-a', role: 'user', content: 'a', userId: 'user-a', leagueId: 'kbfl' })
+    await appendChatHistory({ conversationId: 'chimmy:user-a', role: 'user', content: 'b', userId: 'user-a', leagueId: null })
+
+    const history = await getRecentChatHistory({ userId: 'user-a', limit: 12 })
+
+    expect(history.map((m) => m.leagueId)).toEqual(['kbfl', null])
   })
 })

@@ -744,9 +744,13 @@ describe("POST /api/chat/chimmy contract", () => {
    */
   describe("GET — conversation history", () => {
     beforeEach(() => {
+      /*
+       * ⚠ MIRRORS THE REAL RULE, WHICH STOPPED USING `leagueId` ON 2026-09-20. A fake that still
+       * appended the league would keep this suite green while the route it stands in for had
+       * changed contract — the mock pinning a rule the code no longer follows.
+       */
       buildChimmyConversationIdMock.mockImplementation(
-        ({ userId, leagueId }: { userId?: string | null; leagueId?: string | null }) =>
-          leagueId ? `chimmy:${userId}:${leagueId}` : `chimmy:${userId}:global`
+        ({ userId }: { userId?: string | null; leagueId?: string | null }) => `chimmy:${userId}`
       )
       getRecentChatHistoryMock.mockResolvedValue([])
     })
@@ -759,10 +763,21 @@ describe("POST /api/chat/chimmy contract", () => {
       expect(getRecentChatHistoryMock).not.toHaveBeenCalled()
     })
 
-    it("reads the league's own conversation, scoped to the signed-in user", async () => {
-      getRecentChatHistoryMock.mockResolvedValueOnce([
-        { role: "user", content: "how is my team doing?", createdAt: new Date("2026-09-20T01:00:00Z"), meta: null },
-        { role: "assistant", content: "Here is the read.", createdAt: new Date("2026-09-20T01:00:05Z"), meta: null },
+    /*
+     * 🛑 ONE THREAD, WHATEVER LEAGUE IS ON SCREEN — user's decision 2026-09-20.
+     *
+     * This used to read the LEAGUE's conversation, which is why "my previous conversation from
+     * mobile is not showing up on PC" was reported: the read worked, mobile had simply been in a
+     * different league, so it was a different thread.
+     *
+     * ⚠ THE ASSERTION THAT CATCHES A REGRESSION IS THE REQUEST SHAPE, NOT THE RETURNED TURNS. The
+     * mock answers whatever it is asked, so only "scoped by user, with no conversation key" can
+     * tell one thread from per-league.
+     */
+    it("🛑 reads ONE thread for the user, ignoring the league on screen", async () => {
+      getRecentChatHistoryMock.mockResolvedValue([
+        { role: "user", content: "how is my team doing?", createdAt: new Date("2026-09-20T01:00:00Z"), meta: null, leagueId: "cream-bowl" },
+        { role: "assistant", content: "Here is the read.", createdAt: new Date("2026-09-20T01:00:05Z"), meta: null, leagueId: "kbfl" },
       ])
       const { GET } = await import("@/app/api/chat/chimmy/route")
       const res = await GET(
@@ -770,23 +785,25 @@ describe("POST /api/chat/chimmy contract", () => {
       )
       expect(res.status).toBe(200)
       const body = await res.json()
-      expect(body.conversationId).toBe("chimmy:user-1:cream-bowl")
-      // ⚠ The userId is passed as its own argument, so a forged leagueId reaches only your own rows.
-      expect(getRecentChatHistoryMock).toHaveBeenCalledWith("chimmy:user-1:cream-bowl", 80, "user-1")
-      expect(body.turns.map((t: { role: string; text: string }) => [t.role, t.text])).toEqual([
-        ["you", "how is my team doing?"],
-        ["chimmy", "Here is the read."],
+      expect(body.conversationId).toBe("chimmy:user-1")
+      // No conversation key — that omission is what unions the legacy per-league rows.
+      expect(getRecentChatHistoryMock).toHaveBeenCalledWith({ userId: "user-1", limit: 80 })
+      expect(getRecentChatHistoryMock.mock.calls[0][0]).not.toHaveProperty("conversationId")
+      // Each turn carries its OWN league, so a cross-league thread is not read as one league's.
+      expect(body.turns.map((t: { text: string; leagueId: string | null }) => [t.text, t.leagueId])).toEqual([
+        ["how is my team doing?", "cream-bowl"],
+        ["Here is the read.", "kbfl"],
       ])
     })
 
-    it("treats a missing or 'global' league as the global conversation", async () => {
+    it("asks for the same thread whatever league the client sends, or none at all", async () => {
       const { GET } = await import("@/app/api/chat/chimmy/route")
       await GET(createMockNextRequest("http://localhost/api/chat/chimmy") as any)
       await GET(createMockNextRequest("http://localhost/api/chat/chimmy?leagueId=global") as any)
-      expect(getRecentChatHistoryMock.mock.calls.map((c: unknown[]) => c[0])).toEqual([
-        "chimmy:user-1:global",
-        "chimmy:user-1:global",
-      ])
+      await GET(createMockNextRequest("http://localhost/api/chat/chimmy?leagueId=kbfl") as any)
+      expect(
+        getRecentChatHistoryMock.mock.calls.map((c: unknown[]) => (c[0] as { userId: string }).userId)
+      ).toEqual(["user-1", "user-1", "user-1"])
     })
 
     /*
@@ -852,7 +869,9 @@ describe("POST /api/chat/chimmy contract", () => {
       await GET(createMockNextRequest("http://localhost/api/chat/chimmy?limit=100000") as any)
       await GET(createMockNextRequest("http://localhost/api/chat/chimmy?limit=-5") as any)
       await GET(createMockNextRequest("http://localhost/api/chat/chimmy?limit=abc") as any)
-      expect(getRecentChatHistoryMock.mock.calls.map((c: unknown[]) => c[1])).toEqual([80, 1, 80])
+      expect(
+        getRecentChatHistoryMock.mock.calls.map((c: unknown[]) => (c[0] as { limit: number }).limit)
+      ).toEqual([80, 1, 80])
     })
   })
 
