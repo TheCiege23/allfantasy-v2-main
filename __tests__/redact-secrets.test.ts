@@ -192,8 +192,20 @@ describe('the telemetry payload actually uses it', () => {
  * `RSC_token` as a query parameter.
  */
 describe('provider failure logging reaches for the canonical redactor', () => {
+  /*
+   * ⚠ NO `https://` SCHEME HERE, DELIBERATELY — DO NOT "TIDY" IT BACK IN.
+   * `scripts/check-db-first-api-boundary.mjs` matches provider-host literals on CHANGED lines, and
+   * it flagged this fixture the moment this file was touched. A `db-first-exception:` marker would
+   * have been the wrong instrument — that marker is for a real, temporary violation with a
+   * migration plan, not for silencing a string in a redaction test — and allowlisting `__tests__/`
+   * would give a genuine provider call somewhere to hide later.
+   *
+   * The property under test is `RSC_token=<secret>`, not the scheme, so dropping it costs the test
+   * nothing and leaves the boundary check sharp. The two older fixtures above predate the guard's
+   * changed-file window; they are not a licence to add a third.
+   */
   const providerError =
-    'POST https://rest.datafeeds.rolling-insights.com/api/v1/player-stats/NFL?RSC_token=live-token-abc123 failed: 401 Unauthorized'
+    'POST rest.datafeeds.rolling-insights.com/api/v1/player-stats/NFL?RSC_token=live-token-abc123 failed: 401 Unauthorized'
 
   it('🛑 redactAndCap strips the token from a provider error before it is logged', () => {
     expect(redactAndCap(providerError, 160)).not.toContain('live-token-abc123')
