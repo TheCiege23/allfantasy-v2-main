@@ -3,7 +3,14 @@ import { CROSS_LEAGUE_BOOK, valueBookFor, type ValueBook } from './valueBook'
 
 import { prisma } from '@/lib/prisma'
 import { loadLatestPlayerValueSnapshots } from '@/lib/player-values/latestPlayerValueSnapshots'
-import { describeNoSignal, gradeTrade } from '@/lib/projections/tradeGrading'
+import { gradeTrade } from '@/lib/projections/tradeGrading'
+import {
+  LATEST_TRADE_ORDER,
+  gradeableSide,
+  pickAssets,
+  withheldTradeReason,
+  type TradeAsset,
+} from './tradePicks'
 import { leagueArtUrl } from './leagueArt'
 import { leagueDisplayName } from './leagueHome'
 
@@ -50,16 +57,13 @@ import { leagueDisplayName } from './leagueHome'
  * trade" while meaning ZERO DATA. The withheld reason is rendered instead.
  */
 
-export type TradeAsset = {
-  /** Sleeper id, or a synthetic key for a pick. */
-  id: string
-  name: string
-  position: string | null
-  team: string | null
-  imageUrl: string | null
-  /** Market value, when a snapshot prices him. Null is common and is not zero. */
-  value: number | null
-}
+/**
+ * 🛑 THE DEFINITION MOVED TO `./tradePicks`, AND THE RE-EXPORT IS SO NOTHING ELSE HAD TO.
+ * `TradeAsset` gained a `kind` discriminator when picks started rendering, and the rules
+ * that build one are pure — they belong somewhere a test can reach without a prisma mock.
+ * Every existing `from '@/lib/core-app/tradesBoard'` import keeps working.
+ */
+export type { TradeAsset }
 
 export type BoardTrade = {
   transactionId: string
@@ -194,8 +198,9 @@ function idsOf(v: unknown): string[] {
  * ⚠ AND THE INPUT MUST ALREADY BE ORDERED, because `firstByLeague` keeps the
  * FIRST row it sees per league and the mirrors are inverted — which copy
  * survives decides which way round the card's two sides read. The caller orders
- * by season, week, then `historyId` so that choice is stable between renders
- * rather than whatever Postgres returned first.
+ * by `LATEST_TRADE_ORDER` — `tradeDate` first, `historyId` last — so that both
+ * "which trade is latest" and "which copy of it survives" are stable between
+ * renders rather than whatever Postgres returned first.
  *
  * Pure and exported so the rule can be asserted without a database; the loader
  * below is the only caller.
@@ -408,14 +413,11 @@ export async function getTradesBoard(
           .findMany({
             where: { historyId: { in: historyIds } },
             /*
-             * ⚠ `historyId` IS THE TIEBREAK, AND IT IS THERE FOR DETERMINISM, NOT
-             * TIDINESS. The mirrors of one trade share a season and a week, so
-             * without a third key which copy survives the dedupe below is
-             * whatever Postgres returned first — and the two copies are
-             * INVERTED, so the card's "X sent / Y sent" sides would swap
-             * between renders of the same trade.
+             * 🛑 `tradeDate` FIRST — see `LATEST_TRADE_ORDER`, which carries the whole
+             * account. This read used to be ordered by `(season, week, historyId)`, which
+             * is how a July trade held the "latest" slot on a live September screen.
              */
-            orderBy: [{ season: 'desc' }, { week: 'desc' }, { historyId: 'asc' }],
+            orderBy: [...LATEST_TRADE_ORDER],
             /*
              * Bounded read: enough to give every league on the board a latest
              * trade without pulling all 7,781 rows. Sliced per league below.
@@ -429,6 +431,13 @@ export async function getTradesBoard(
               tradeDate: true,
               playersGiven: true,
               playersReceived: true,
+              /*
+               * ⚠ READ, NOT IGNORED — the two columns this board left on the floor. A
+               * picks-for-players trade rendered one side as "no players on this side",
+               * which is a sentence about OUR read printed as a fact about the trade.
+               */
+              picksGiven: true,
+              picksReceived: true,
               partnerName: true,
               /* Resolves the OTHER side's manager via LeagueTeam.externalId. */
               partnerRosterId: true,
@@ -529,6 +538,7 @@ export async function getTradesBoard(
     const v = valueByBookAndId.get(`${book.format}:${book.qbFormat}:${id}`)
     return {
       id,
+      kind: 'player',
       /*
        * ⚠ AN UNRESOLVED ID IS NAMED AS UNRESOLVED, NOT DROPPED. Dropping it
        * would make a 2-for-1 render as a 1-for-1 — a trade the manager never
@@ -578,24 +588,16 @@ export async function getTradesBoard(
 
     const sentIds = idsOf(t.playersGiven)
     const recvIds = idsOf(t.playersReceived)
+    const sentPicks = pickAssets(t.picksGiven)
+    const recvPicks = pickAssets(t.picksReceived)
 
+    const rankOf = (id: string) =>
+      valueByBookAndId.get(`${leagueBook.format}:${leagueBook.qbFormat}:${id}`)?.rank ?? null
+
+    /* Picks enter as assets we cannot price — see `gradeableSide` for why that matters. */
     const g = gradeTrade(
-      {
-        label: 'received',
-        assets: recvIds.map((id) => ({
-          id,
-          rank: valueByBookAndId.get(`${leagueBook.format}:${leagueBook.qbFormat}:${id}`)?.rank ?? null,
-          rawValue: null,
-        })),
-      },
-      {
-        label: 'gave',
-        assets: sentIds.map((id) => ({
-          id,
-          rank: valueByBookAndId.get(`${leagueBook.format}:${leagueBook.qbFormat}:${id}`)?.rank ?? null,
-          rawValue: null,
-        })),
-      },
+      { label: 'received', assets: gradeableSide(recvIds, rankOf, recvPicks) },
+      { label: 'gave', assets: gradeableSide(sentIds, rankOf, sentPicks) },
     )
 
     const mgr = managersByLeague.get(league.id)
@@ -618,12 +620,16 @@ export async function getTradesBoard(
        * ⚠ NOT `.map(toAsset)`. With a second parameter that form passes the
        * array INDEX as the book — the classic `map` arity trap, and here it
        * would have priced asset 0 against one book and asset 1 against another.
+       *
+       * Players first, then the picks that moved with them — Sleeper's own order.
        */
-      sent: sentIds.map((id) => toAsset(id, leagueBook)),
-      received: recvIds.map((id) => toAsset(id, leagueBook)),
+      sent: [...sentIds.map((id) => toAsset(id, leagueBook)), ...sentPicks],
+      received: [...recvIds.map((id) => toAsset(id, leagueBook)), ...recvPicks],
       letter: g.graded ? g.letter : null,
       sharePct: g.graded ? g.sharePct : null,
-      withheldReason: g.graded ? null : describeNoSignal(g),
+      withheldReason: g.graded
+        ? null
+        : withheldTradeReason(g, sentPicks.length + recvPicks.length),
     })
   }
 
