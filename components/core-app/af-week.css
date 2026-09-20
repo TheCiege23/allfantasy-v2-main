@@ -273,6 +273,35 @@
 .af-wk-lean-prob[data-favoured='false'] { color: var(--bad); }
 .af-wk-lean-prob--none { color: var(--faint); }
 
+/*
+ * Form, in the "Not enough history to call" section — a signed scoring gap over
+ * one or two games, shown where a probability cannot be.
+ *
+ * ⚠ IT MUST READ AS WEAKER THAN A PROJECTED LEAN, WHICH IS WHY IT DOES NOT USE
+ * `--good` / `--bad` NEAT. Those are the colours of the ranked sections above;
+ * matching them here would make a two-game average look like a call. The blend
+ * keeps the direction legible without the authority. `--muted` rather than
+ * `--faint` for the base because this is the row's headline value, and `--faint`
+ * fails WCAG 1.4.3 in every theme (see af-core.css).
+ */
+.af-wk-lean-prob--form {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  color: var(--muted);
+  font-size: 13px;
+}
+.af-wk-lean-prob--form[data-tone='up'] { color: color-mix(in srgb, var(--good) 62%, var(--muted)); }
+.af-wk-lean-prob--form[data-tone='down'] { color: color-mix(in srgb, var(--bad) 62%, var(--muted)); }
+.af-wk-lean-prob-sub {
+  font-family: var(--font-archivo, 'Archivo', system-ui, sans-serif);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+
 .af-wk-lean-score {
   flex: none;
   font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);

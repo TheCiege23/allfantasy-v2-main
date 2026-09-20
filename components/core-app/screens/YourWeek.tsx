@@ -202,7 +202,9 @@ export function YourWeek({ data, rivalriesHref }: YourWeekProps) {
             <h2 className="af-wk-sectiontitle">Not enough history to call</h2>
             <p className="af-wk-sectionnote">
               These are on the schedule, but one or both teams have fewer than three completed
-              weeks on file. A number here would be invented rather than computed.
+              weeks on file, so a win probability here would be invented rather than computed.
+              Where both sides have scored at least once, the weekly scoring gap so far is shown
+              instead — that is form, not a call.
             </p>
           </div>
           <div className="af-wk-leans">
@@ -216,9 +218,39 @@ export function YourWeek({ data, rivalriesHref }: YourWeekProps) {
                 <span className="af-wk-lean-league" data-platform={m.platform}>
                   {m.leagueName}
                 </span>
-                <span className="af-wk-lean-prob af-wk-lean-prob--none">—</span>
+                {/*
+                  ⚠ THE DASH IS THE FALLBACK NOW, NOT THE DEFAULT. This section
+                  is the common case in the first three weeks of a season — see
+                  `WeekMatchup.form` for why (`WeeklyMatchup` is populated one
+                  season at a time, so a league imported this year cannot reach
+                  the threshold until week 4). On the account this was measured
+                  against, 47 of 65 matchups rendered here, every one of them as
+                  a bare dash.
+
+                  A form gap is a weaker signal than a projection and is styled
+                  and labelled as one. It is NOT a probability and must never be
+                  rendered in the probability's own class.
+                */}
+                {m.form ? (
+                  <span
+                    className="af-wk-lean-prob af-wk-lean-prob--form"
+                    data-tone={m.form.margin >= 0 ? 'up' : 'down'}
+                    title={`You have averaged ${m.form.you.toFixed(1)} points a week to their ${m.form.them.toFixed(1)}, over ${m.form.weeks} scored ${
+                      m.form.weeks === 1 ? 'week' : 'weeks'
+                    }`}
+                  >
+                    {m.form.margin >= 0 ? '+' : '−'}
+                    {Math.abs(m.form.margin).toFixed(1)}
+                    <span className="af-wk-lean-prob-sub">so far</span>
+                  </span>
+                ) : (
+                  <span className="af-wk-lean-prob af-wk-lean-prob--none">—</span>
+                )}
                 <span className="af-wk-lean-score">
                   vs <OpponentName matchup={m} />
+                  {m.form
+                    ? ` · ${m.form.you.toFixed(1)} to ${m.form.them.toFixed(1)} per week`
+                    : ''}
                 </span>
               </Link>
             ))}
