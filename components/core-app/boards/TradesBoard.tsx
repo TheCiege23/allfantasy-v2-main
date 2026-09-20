@@ -79,11 +79,19 @@ function PickAsset({ a }: { a: TradeAsset }) {
         </span>
       </span>
       {/*
-        ⚠ A DASH, AND IT WILL STAY A DASH. Every other unpriced asset on this screen
-        is one we simply have no snapshot for; a pick is one we do not price at all.
-        Both are honestly "—" and neither may be a zero.
+        🛑 THIS WAS A HARDCODED DASH, UNDER A COMMENT SAYING a pick is one we do not
+        price at all. That was true when it was written and stopped being true on
+        2026-09-20, when `ingestPlayerValues` began storing FantasyCalc pick rows. The
+        price was being computed, carried onto the asset, and thrown away one step from
+        the screen — so a card could show a GRADE that only the pick value explains,
+        beside a dash claiming we hold no value for it.
+
+        ⚠ STILL A DASH WHEN IT IS GENUINELY UNPRICED, and that case is real rather than
+        theoretical: FantasyCalc publishes picks on the DYNASTY books only, and only for
+        the seasons and rounds it covers. A redraft league, or a round past the book’s
+        depth, has no price here and must never be shown a zero.
       */}
-      <span className="af-bd-asset-val">—</span>
+      <span className="af-bd-asset-val">{a.value != null ? a.value.toLocaleString() : '—'}</span>
     </span>
   )
 }
@@ -252,6 +260,33 @@ function WindowCard({ row }: { row: TradeWindowRow }) {
               <span className="af-bd-k">Latest grade</span>
               <span className="af-bd-sub" style={{ maxWidth: 260 }}>
                 ungraded: {t.withheldReason ?? 'no reason recorded'}
+              </span>
+            </span>
+          ) : null}
+          {/*
+            Who came out ahead, and by how much — the half of the verdict a letter alone
+            cannot carry. `sharePct` was already on `BoardTrade` and rendered nowhere.
+
+            🛑 A SHARE, NOT TWO TOTALS, AND THE REASON IS ARITHMETIC THE READER CAN DO.
+            The per-asset numbers above are the raw `PlayerValueSnapshot.value` for each
+            man; the grade is computed in RANK space, by pushing each asset's rank through
+            `DEFAULT_RANK_CURVE`. Those two agree closely but not exactly — the curve is a
+            nine-point interpolation of the same market, so it is near the raw value and
+            never equal to it. Print side totals and they will not sum to the rows anyone
+            can see, and the discrepancy is the reader's to explain rather than ours. A
+            share is scale-free, so it states the result without inviting an addition that
+            does not balance — which is `tradeGrading.ts`'s own argument for banding the
+            letter on share rather than on an absolute points gap.
+
+            ⚠ `sharePct` IS THE SHARE RECEIVED BY `fromName`, because the loader passes
+            their incoming side as side A. Naming the two managers in that order is what
+            keeps it readable; swapping them silently inverts every verdict on the board.
+          */}
+          {t?.letter && t.sharePct != null ? (
+            <span className="af-bd-kv">
+              <span className="af-bd-k">Value split</span>
+              <span className="af-bd-sub" style={{ maxWidth: 260 }}>
+                {t.fromName} {Math.round(t.sharePct)}% · {t.toName} {100 - Math.round(t.sharePct)}%
               </span>
             </span>
           ) : null}
