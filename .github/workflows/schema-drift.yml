@@ -90,14 +90,28 @@ jobs:
           ln -s "$RUNNER_TEMP/drift-tools/node_modules" node_modules
           node node_modules/prisma/build/index.js --version | head -1
 
-      # ⚠ DELIBERATELY NOT `set -e`. Exit 1 and exit 2 ARE the signal; failing the step here would
-      # skip the summary and the alert, which are what make the signal reach anyone.
+      # 🛑 `set +e` IS THE WHOLE POINT OF THIS STEP AND NOT SETTING `-e` IS NOT THE SAME AS
+      # CLEARING IT. The runner invokes every `run:` as `bash -e {0}`, so errexit is already ON
+      # before the first line; `set -uo pipefail` does not touch it. Without the `+e` below the
+      # step DIES at the guard's non-zero exit, `RC=$?` never runs, `rc` is never written, and the
+      # two steps after this read an empty RC and report "could not measure (exit missing)".
+      #
+      # Measured 2026-09-20: the guard caught the four unapplied 09-19 migrations within half an
+      # hour of them landing and went red on four consecutive runs — and every one of them said
+      # "could not measure" instead, so it was recorded as a guard that had failed to notice.
+      # Exit 1 and exit 2 were indistinguishable at the alert, and drift.json never reached the
+      # summary. The tell: `guard exit: 0` appears in a passing run's log and no `guard exit:`
+      # line appears in a failing one.
+      #
+      # Exit 1 and exit 2 ARE the signal. Failing the step here skips the summary and the alert,
+      # which are the things that make the signal reach anyone.
       - name: Measure drift
         id: check
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: |
           set -uo pipefail
+          set +e
           if [ -z "${DATABASE_URL:-}" ]; then
             echo "::notice::DATABASE_URL is not set -- skipping the schema drift check."
             echo "skipped=true" >> "$GITHUB_OUTPUT"
