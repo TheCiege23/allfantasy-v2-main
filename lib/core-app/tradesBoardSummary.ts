@@ -83,8 +83,14 @@ registerScreenSummary<TradesBoardData | null>({
    * a board with no picks in it and a "latest" trade chosen by the old (season, week) order,
    * and it would be served for up to two hours after the fix ships. The bump is what makes
    * the correction visible on the next render instead of after the stale window.
+   *
+   * 3 — duplicate league cards are collapsed (`collapseClaimedLeagues`). The payload SHAPE is
+   * unchanged, so this bump is not about deserialising an old entry: it is that a v2 entry
+   * holds a `windows` list built one-per-COPY rather than one-per-league, and the key's
+   * fingerprint is derived from the league list rather than from this rule, so nothing else
+   * would evict it.
    */
-  version: 2,
+  version: 3,
   ttlMs: TTL_MS,
   staleWhileRevalidateMs: STALE_WHILE_REVALIDATE_MS,
   // See the header: a user-scoped key carries no league id, so a league sweep would match nothing.
