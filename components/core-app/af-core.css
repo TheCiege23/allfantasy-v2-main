@@ -540,9 +540,87 @@ html[data-mode='af'] .af-core {
   background: var(--p-fleaflicker-bg);
   color: var(--p-fleaflicker-fg);
 }
-.af-core .af-platform[data-platform='manual'] {
+/*
+ * ⚠ `native` RIDES WITH `manual`, AND IT USED TO BE COVERED BY ACCIDENT.
+ * af-portfolio.css pairs the two (`[data-platform='manual'], [data-platform='native']`)
+ * and its `.af-pf-platform` rule collided by NAME with af-player-finder.css's,
+ * so Player Finder's chips were picking up portfolio's `native` colour through a
+ * class the two files happen to share. That collision is being removed below, so
+ * the value it was covering is named here instead of quietly losing its colour.
+ */
+.af-core .af-platform[data-platform='manual'],
+.af-core .af-platform[data-platform='native'] {
   background: var(--p-manual-bg);
   color: var(--p-manual-fg);
+}
+
+/* ── The two shapes `.af-platform` has always had, made explicit ──────────
+ *
+ * 🛑 `.af-platform` SETS COLOUR AND NOTHING ELSE, AND THAT SHIPPED A VISIBLE BUG.
+ * There is no base `.af-platform` rule — only the seven `[data-platform]` ones
+ * above — so every consumer has had to remember its own geometry, and two did
+ * not. `.af-pl-league-plat` was `flex: none` alone, which rendered the league
+ * picker's SLEEPER badge as a 74x25 square-cornered slab (measured off a phone
+ * screenshot at 3.38x) inside a 44px tile. `.af-lh-paired-platform` sets a font
+ * size and a letter-spacing and still has no padding or radius today.
+ *
+ * The class was doing two incompatible jobs: a text CHIP (a platform word beside
+ * a league name) and a fixed-box MARK (one letter in a circle or rounded
+ * square). That is why the geometry could never be hoisted onto `.af-platform`
+ * itself — chip padding on the shared class turns a 26px circle into something
+ * that is not 26px and stops centring the letter inside it.
+ *
+ * ⚠ BOTH ARE IN `:where()`, AND THAT IS THE WHOLE DESIGN — the same argument this
+ * file already makes for the `:focus-visible` baseline further down. `:where()`
+ * contributes ZERO specificity, so these weigh (0,0,0) and EVERY existing local
+ * rule beats them. They are a FLOOR: a consumer that declares its own size,
+ * radius or font keeps it exactly, and a consumer that declares nothing gets a
+ * shape instead of a slab. Written as `.af-core .af-platform-chip` (0,2,0) they
+ * would instead overrule `.af-lp-card-mark`'s 30px with the 26px default and
+ * silently resize four marks — a takeover, not a floor.
+ *
+ * ⚠ AND THAT IS ALSO WHAT MAKES DELETING THE DUPLICATED LOCAL DECLARATIONS SAFE.
+ * Where a local value equals the base, removing it changes nothing because the
+ * base supplies the identical value; where it differs, it is kept and still
+ * wins. Every mark below is byte-identical after the migration.
+ */
+
+/*
+ * The pill. Values are `.af-lh-platform`'s, which was the most complete chip in
+ * the repo and is now deleted in favour of this.
+ *
+ * ⚠ `white-space: nowrap` IS NEW AND IS A NO-OP FOR EVERY CURRENT CALLER. All
+ * five chips render a platform KEY — sleeper, espn, yahoo, fantrax, mfl,
+ * fleaflicker, manual — and a single token has no space to break at. It is here
+ * so a future multi-word label cannot wrap inside a pill.
+ */
+:where(.af-platform-chip) {
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+/*
+ * The fixed box. `--af-platform-mark-size` is the one knob a consumer needs:
+ * setting it drives width and height together, so the two cannot drift into a
+ * rectangle the way two separate declarations can.
+ *
+ * The default is 26px because that is `.af-im-mark`'s size, the most common of
+ * the five. A consumer wanting another size sets the property rather than
+ * redeclaring both dimensions.
+ */
+:where(.af-platform-mark) {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: var(--af-platform-mark-size, 26px);
+  height: var(--af-platform-mark-size, 26px);
+  border-radius: 50%;
+  font-weight: 900;
 }
 
 /*

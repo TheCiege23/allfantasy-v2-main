@@ -51,14 +51,13 @@
   color: var(--muted);
 }
 
-.af-lh-platform {
-  padding: 2px 8px;
-  border-radius: 999px;
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
+/*
+ * ⚠ `.af-lh-platform` IS GONE, NOT MOVED. Its six declarations were exactly the
+ * values `.af-platform-chip` now carries — that rule is where the shared pill's
+ * numbers came from — so the class had nothing left of its own and the element
+ * carries `af-platform-chip` instead. Deleting a rule whose every value the base
+ * reproduces is the one case where removal is provably invisible.
+ */
 
 .af-lh-headside {
   display: flex;
@@ -1205,8 +1204,20 @@
   color: var(--muted, rgba(255, 255, 255, 0.6));
 }
 
+/*
+ * 🛑 THE SECOND CONSUMER THAT HAD COLOUR AND NO SHAPE, and unlike the league
+ * picker's it was never reported — it just looked like that.
+ *
+ * This set a font size, a letter-spacing and `text-transform` and nothing else,
+ * so `.af-platform`'s background painted across a square-cornered, unpadded
+ * inline box: the same slab the picker's SLEEPER badge was, two points larger.
+ * `af-platform-chip` on the element supplies padding and the pill radius.
+ *
+ * ⚠ SO THIS SURFACE CHANGES LOOK, DELIBERATELY. It gains 2px/8px of padding, a
+ * 999px radius and weight 800. The 11px size and the tighter 0.06em tracking are
+ * this row's own and stay — at (0,1,0) they beat the base's `:where()`.
+ */
 .af-lh-paired-platform {
-  text-transform: uppercase;
   font-size: 11px;
   letter-spacing: 0.06em;
 }

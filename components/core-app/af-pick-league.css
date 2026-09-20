@@ -254,30 +254,25 @@
  * leaking into dark mode — a bug that does not exist. Nothing is wrong with this
  * badge's colour; it has no shape.
  *
- * ⚠ EVERY OTHER CONSUMER OF `.af-platform` BRINGS ITS OWN GEOMETRY AND THIS ONE
- * DID NOT — it was `flex: none` alone. `.af-lh-platform` is a 10px pill,
- * `.af-pf-platform` a 4px-radius chip, `.af-im-mark` a 26px circle,
- * `.af-ca-mark` a 38px square. This matches `.af-lh-platform`, the nearest
- * sibling doing the same job (a platform word beside a league name).
+ * ⚠ EVERY OTHER CONSUMER OF `.af-platform` BROUGHT ITS OWN GEOMETRY AND THIS ONE
+ * DID NOT — it was `flex: none` alone, while `.af-lh-platform` was a 10px pill,
+ * `.af-im-mark` a 26px circle and `.af-ca-mark` a 38px rounded square.
  *
- * 🛑 AND THE GEOMETRY MUST NOT BE HOISTED ONTO `.af-platform` TO "FIX IT ONCE".
- * That class serves two different shapes: a text CHIP here, in LeagueHome and in
- * Portfolio, and a square or circular MARK holding a single letter in ImportV4,
- * LandingV4, ConnectedPlatforms and /import/[platform]. Giving the shared class
- * chip padding would collapse all four marks. The duplication is the smaller
- * problem; splitting `.af-platform` into `.af-platform-chip` and
- * `.af-platform-mark` is the real fix and is a change of its own.
+ * ✅ THAT DUPLICATION IS RESOLVED: `.af-platform` has been split into
+ * `.af-platform-chip` and `.af-platform-mark` in af-core.css, and this rule now
+ * keeps only `flex: none`. The paragraph that stood here said the split was "a
+ * change of its own" and deferred it; it is done, so the deferral is not left
+ * lying around to be acted on twice.
+ */
+/*
+ * Shape comes from `.af-platform-chip` (af-core.css) now — padding, radius,
+ * 10px/800, tracking, uppercase and the nowrap are all the shared pill's, and
+ * were copied from `.af-lh-platform` here in the first place. `flex: none` is
+ * the only thing genuinely local: this chip sits in the tile's flex row and must
+ * not be squeezed by a long league name.
  */
 .af-pl-league-plat {
   flex: none;
-  padding: 2px 8px;
-  border-radius: 999px;
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  /* A long platform word must not wrap inside a pill. */
-  white-space: nowrap;
 }
 
 /* ── Phone ───────────────────────────────────────────────────────────── */

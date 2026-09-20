@@ -274,7 +274,7 @@ export default async function ImportPlatformLandingPage({
             {PLATFORM_LANDINGS.filter((l) => l.slug !== landing.slug).map((l) => (
               <li key={l.slug}>
                 <Link href={`/import/${l.slug}`} className="af-lp-other">
-                  <span className="af-platform af-lp-mark" data-platform={l.provider} aria-hidden>
+                  <span className="af-platform af-platform-mark af-lp-mark" data-platform={l.provider} aria-hidden>
                     {l.provider === 'fleaflicker' ? 'FL' : l.name.charAt(0)}
                   </span>
                   {/* `l.article`, not a hardcoded "a" — same reason as the h2 above. */}

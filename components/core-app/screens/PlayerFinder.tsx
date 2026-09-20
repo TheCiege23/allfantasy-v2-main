@@ -967,7 +967,7 @@ export function PlayerFinder({
                                 {l.leagueName}
                               </Link>
                               <span className="af-pf-league-meta">
-                                <span className="af-platform af-pf-platform" data-platform={l.platform}>
+                                <span className="af-platform af-platform-chip af-pfind-platform" data-platform={l.platform}>
                                   {l.platform}
                                 </span>
                                 {l.format ? <span>{l.format}</span> : null}
