@@ -672,12 +672,32 @@
  * responsive layout.
  */
 @media (max-width: 720px) {
+  /*
+   * 🛑 THE NOTCH INSET BELONGS ON THE SHELL, NOT ON `.af-main` — IT WAS COVERING
+   * THE NAV. `app/layout.tsx` sets `viewportFit: 'cover'`, so the page extends
+   * under the status bar and something must reserve that strip. It was reserved
+   * on `.af-main` only; but `.af-main` is a SIBLING of `.af-nav`, and on a phone
+   * the rail goes `position: fixed`, which leaves `.af-nav` as the FIRST in-flow
+   * element — sitting at y=0, unpadded, directly under the notch. The opaque
+   * `::before` strip below then paints over it at z-index 70.
+   *
+   * Reported from a real phone as "the top of the view is blocked, it doesn't all
+   * fit": roughly the top 47px of the primary navigation, hidden behind a bar
+   * drawn to protect content that was never the content at risk.
+   *
+   * ⚠ ON THE GRID CONTAINER RATHER THAN ON BOTH CHILDREN, DELIBERATELY. Padding
+   * `.af-nav` too would fix today's layout and break again the moment anything is
+   * rendered above it — the defect was never about which element, it was that the
+   * reservation sat on ONE of several things that can be first. The container
+   * cannot be reordered out of the way.
+   *
+   * `min-height` stays 100dvh: Preflight's border-box means the padding is inside
+   * that height, so the shell still fills the viewport exactly once.
+   */
   .af-shell {
     grid-template-columns: minmax(0, 1fr);
     grid-template-rows: auto auto minmax(0, 1fr);
     min-height: 100dvh;
-  }
-  .af-main {
     padding-top: env(safe-area-inset-top, 0px);
   }
   .af-shell::before {
