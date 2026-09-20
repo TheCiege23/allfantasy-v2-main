@@ -2,6 +2,7 @@ import 'server-only'
 import { CROSS_LEAGUE_BOOK, valueBookFor, type ValueBook } from './valueBook'
 
 import { prisma } from '@/lib/prisma'
+import { loadLatestPickValueSnapshots } from '@/lib/player-values/latestPickValueSnapshots'
 import { loadLatestPlayerValueSnapshots } from '@/lib/player-values/latestPlayerValueSnapshots'
 import { gradeTrade } from '@/lib/projections/tradeGrading'
 import { claimedRowIdentity, keepBestPerRealLeague, preferImportedCopy } from './realLeague'
@@ -9,7 +10,9 @@ import {
   LATEST_TRADE_ORDER,
   gradeableSide,
   pickAssets,
+  pickPricerFrom,
   withheldTradeReason,
+  type PickPricer,
   type TradeAsset,
 } from './tradePicks'
 import { leagueArtUrl } from './leagueArt'
@@ -504,7 +507,7 @@ export async function getTradesBoard(
     for (const id of [...idsOf(t.playersGiven), ...idsOf(t.playersReceived)]) assetIds.add(id)
   }
 
-  const [players, snaps] = await Promise.all([
+  const [players, snaps, pickRowsPerBook] = await Promise.all([
     assetIds.size > 0
       ? prisma.sportsPlayer
           .findMany({
@@ -552,6 +555,25 @@ export async function getTradesBoard(
           .then((perBook) => perBook.flat())
           .catch(() => [])
       : Promise.resolve([]),
+    /*
+     * 🛑 PICK PRICES, PER BOOK, AND NOT KEYED ON `assetIds`.
+     * A pick's id is FantasyCalc's own synthetic token (`FP_2027_early_0`) and a trade stores
+     * only `{ season, round }`, so there is no id to ask for — the NAME is the whole join.
+     * This is therefore a separate read from the player one above rather than more ids passed
+     * into it.
+     *
+     * ⚠ IT RUNS EVEN WHEN `assetIds` IS EMPTY. A trade can be picks-for-picks with no player
+     * on either side — the KBFL trade that started this work is three 2027 picks against two
+     * players and a 2027 3rd — so gating this on player ids would leave exactly the trades
+     * that are all picks unpriced.
+     */
+    Promise.all(
+      booksInPlay.map((b) =>
+        loadLatestPickValueSnapshots({ source: 'FANTASYCALC', format: b.format, qbFormat: b.qbFormat })
+          .then((rows) => [`${b.format}:${b.qbFormat}`, rows] as const)
+          .catch(() => [`${b.format}:${b.qbFormat}`, []] as const),
+      ),
+    ).catch(() => []),
   ])
 
   const playerById = new Map(players.map((p) => [p.sleeperId, p]))
@@ -567,6 +589,11 @@ export async function getTradesBoard(
       valueByBookAndId.set(k, { value: s.value, rank: s.overallRank ?? null })
     }
   }
+
+  /* One pricer per book, built once — the loop below runs per trade. */
+  const pricerByBook = new Map<string, PickPricer>(
+    pickRowsPerBook.map(([key, rows]) => [key, pickPricerFrom(rows)] as const),
+  )
 
   function toAsset(id: string, book: ValueBook): TradeAsset {
     const p = playerById.get(id)
@@ -623,16 +650,20 @@ export async function getTradesBoard(
 
     const sentIds = idsOf(t.playersGiven)
     const recvIds = idsOf(t.playersReceived)
-    const sentPicks = pickAssets(t.picksGiven)
-    const recvPicks = pickAssets(t.picksReceived)
+    const pickPrice = pricerByBook.get(`${leagueBook.format}:${leagueBook.qbFormat}`)
+    const sentPicks = pickAssets(t.picksGiven, pickPrice)
+    const recvPicks = pickAssets(t.picksReceived, pickPrice)
 
     const rankOf = (id: string) =>
       valueByBookAndId.get(`${leagueBook.format}:${leagueBook.qbFormat}:${id}`)?.rank ?? null
 
-    /* Picks enter as assets we cannot price — see `gradeableSide` for why that matters. */
+    /*
+     * Picks are priced from this league's OWN book, like the players beside them. A pick the
+     * book has no row for stays unpriced and withholds the letter — see `gradeableSide`.
+     */
     const g = gradeTrade(
-      { label: 'received', assets: gradeableSide(recvIds, rankOf, recvPicks) },
-      { label: 'gave', assets: gradeableSide(sentIds, rankOf, sentPicks) },
+      { label: 'received', assets: gradeableSide(recvIds, rankOf, recvPicks, pickPrice) },
+      { label: 'gave', assets: gradeableSide(sentIds, rankOf, sentPicks, pickPrice) },
     )
 
     const mgr = managersByLeague.get(league.id)

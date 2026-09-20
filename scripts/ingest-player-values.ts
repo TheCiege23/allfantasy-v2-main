@@ -27,7 +27,7 @@ async function main() {
     if (c.skipped) {
       console.log(`  ${c.format}/${c.qbFormat} -> ${c.skipped}, skipped`)
     } else {
-      console.log(`  ${c.format}/${c.qbFormat}: ${c.fetched} rows, ${c.picksFiltered} picks filtered, ${c.stored} stored`)
+      console.log(`  ${c.format}/${c.qbFormat}: ${c.fetched} rows, ${c.stored} stored (${c.picksStored} picks)`)
     }
   }
 

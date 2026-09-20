@@ -351,7 +351,13 @@ export async function buildValueLedger(args: {
       }).catch(() => [])
     : await prisma.playerValueSnapshot
         .findMany({
-          where: { source: 'FANTASYCALC', format, qbFormat },
+          /*
+           * ⚠ PICKS EXCLUDED EXPLICITLY. They entered this table on 2026-09-20 so pick trades
+           * could be graded; this branch builds a population to reorder against PROJECTIONS,
+           * and a draft pick has none. The scoped branch above cannot see them — a synthetic
+           * pick id matches no roster — so only this one needs saying.
+           */
+          where: { source: 'FANTASYCALC', format, qbFormat, position: { not: 'PICK' } },
           orderBy: { capturedAt: 'desc' },
           select: {
             sleeperId: true,

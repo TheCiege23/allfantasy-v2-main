@@ -45,7 +45,8 @@ export type ComboResult = {
   format: string
   qbFormat: string
   fetched: number
-  picksFiltered: number
+  /** Pick rows stored for this combo. Was `picksFiltered` while picks were discarded. */
+  picksStored: number
   stored: number
   /** Present only when this combo did not complete. */
   skipped?: string
@@ -95,7 +96,7 @@ export async function ingestPlayerValues(now: Date = new Date()): Promise<Ingest
           format: combo.format,
           qbFormat: combo.qbFormat,
           fetched: 0,
-          picksFiltered: 0,
+          picksStored: 0,
           stored: 0,
           skipped: `HTTP ${res.status}`,
         })
@@ -109,7 +110,7 @@ export async function ingestPlayerValues(now: Date = new Date()): Promise<Ingest
         format: combo.format,
         qbFormat: combo.qbFormat,
         fetched: 0,
-        picksFiltered: 0,
+        picksStored: 0,
         stored: 0,
         skipped: e instanceof Error ? e.message.slice(0, 80) : 'fetch failed',
       })
@@ -117,13 +118,35 @@ export async function ingestPlayerValues(now: Date = new Date()): Promise<Ingest
     }
 
     /*
-     * ⚠ FILTER PICKS BEFORE ANY PLAYER JOIN. Draft picks come back as rows with position
-     * "PICK" and non-numeric id tokens (DP_0_0, FP_2027_early_0). Joining those against a
-     * player table produces silent garbage rather than an error.
+     * 🛑 PICKS ARE STORED NOW. THIS FILTER USED TO DROP THEM, AND THAT IS WHY NO TRADE
+     * CONTAINING A PICK COULD EVER BE GRADED.
+     *
+     * FantasyCalc prices draft picks as tradeable assets and ranks them in the SAME
+     * `overallRank` sequence as players — 78 of 474 entries in the measurement recorded in
+     * `lib/chimmy/tools/availablePlayersTool.ts`. Discarding them threw away the only pick
+     * prices we have on the same scale as our player prices, so both trade screens graded
+     * "a player and a 2027 1st for a player" on the two players alone. That is not neutral:
+     * it values the pick at ZERO and mechanically favours whichever side gave it.
+     *
+     * 🛑 SO EVERY UNSCOPED READER OF THIS TABLE MUST NOW EXCLUDE `position: 'PICK'` ITSELF.
+     * A reader constrained by `sleeperId: { in: [...] }` is safe by construction — a synthetic
+     * pick id (`DP_0_0`, `FP_2027_early_0`) matches no roster. The unscoped ones were censused
+     * when this filter was removed:
+     *   • `lib/decision-os/value/marketAdapter.ts` — guarded here, and it was the live risk:
+     *     no source or position filter and a `take: 2000` cap that picks would have eaten.
+     *   • `lib/trade-intel/valueLedger.ts` — guarded on its unbounded branch, which is
+     *     dormant (its sole caller always passes `populationIds`, i.e. roster ids).
+     *   • `app/api/cron/domain-os-refresh/route.ts` — selects `distinct (format, qbFormat)`
+     *     only, so a pick row carries nothing it does not already see. Unaffected.
+     *   • `lib/decision-os/grounding/intentToWant.ts` — names this table in a COMMENT and
+     *     issues no query. Unaffected.
+     *
+     * ⚠ THE `sleeperId` HALF OF THE OLD PREDICATE IS KEPT. It is what drops rows carrying no
+     * id at all; only the position half is gone. Picks DO carry a (synthetic) `sleeperId`.
      */
-    const players = rows.filter((r) => r.player?.position !== 'PICK' && r.player?.sleeperId)
+    const usable = rows.filter((r) => r.player?.sleeperId)
 
-    const data = players.map((r) => ({
+    const data = usable.map((r) => ({
       // IDs are strings even when numeric-looking — cast explicitly.
       sleeperId: String(r.player.sleeperId),
       name: r.player.name,
@@ -147,7 +170,7 @@ export async function ingestPlayerValues(now: Date = new Date()): Promise<Ingest
       format: combo.format,
       qbFormat: combo.qbFormat,
       fetched: rows.length,
-      picksFiltered: rows.length - players.length,
+      picksStored: usable.filter((r) => r.player?.position === 'PICK').length,
       stored: data.length,
     })
   }

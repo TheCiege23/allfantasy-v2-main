@@ -35,10 +35,22 @@ export type TradeAsset = {
   /**
    * Market value, when a snapshot prices him. Null is common and is not zero.
    *
-   * ⚠ ALWAYS NULL FOR A PICK. We hold no pick prices on this path, and a number here
-   * would be invented rather than read.
+   * ⚠ THIS USED TO READ "ALWAYS NULL FOR A PICK", AND THAT IS NO LONGER TRUE.
+   * `ingestPlayerValues` stored FantasyCalc's draft-pick rows from 2026-09-20, so a pick
+   * whose (season, round) matches a stored row now carries a real market price from the
+   * SAME book as the players beside it. Null still means unpriced and still is not zero.
    */
   value: number | null
+  /**
+   * The season a pick conveys, as stored — `'2027'`. Set on picks only.
+   *
+   * ⚠ KEPT AS A FIELD RATHER THAN PARSED BACK OUT OF `id`. The id is a synthetic display
+   * key whose trailing index exists to stop two identical picks colliding in React; making
+   * the pricing path re-parse it would couple the price to a rendering detail.
+   */
+  pickSeason?: string
+  /** The round a pick conveys, as stored — `1`. Set on picks only. */
+  pickRound?: number
 }
 
 export function ordinal(n: number): string {
@@ -72,7 +84,7 @@ export function ordinal(n: number): string {
  * written by two different importers, and a row that does not carry a season and a
  * finite round is not a pick we can name.
  */
-export function pickAssets(v: unknown): TradeAsset[] {
+export function pickAssets(v: unknown, price?: PickPricer): TradeAsset[] {
   if (!Array.isArray(v)) return []
   const parsed: Array<{ season: string; round: number }> = []
   for (const raw of v) {
@@ -91,29 +103,147 @@ export function pickAssets(v: unknown): TradeAsset[] {
     position: null,
     team: null,
     imageUrl: null,
-    value: null,
+    value: price?.(p.season, p.round)?.value ?? null,
+    pickSeason: p.season,
+    pickRound: p.round,
   }))
 }
 
 /**
- * A trade's assets for GRADING — players carrying whatever rank the book holds, picks
- * carrying none.
+ * What a (season, round) is worth, in the two currencies the screens need.
  *
- * 🛑 A PICK IS AN ASSET WE CANNOT PRICE, AND SAYING SO IS THE POINT. Feeding picks in as
- * unpriced turns some letters into withheld reasons, which is the correction rather than
- * a regression: while picks were invisible, "a player and a 2027 1st for a player" was
- * graded on the two players alone. That is not neutrality — it is valuing the pick at
- * ZERO, and `tradeGrading.ts` exists to refuse exactly that. It could not, because it was
- * never told the pick was there.
+ * `rank` is the grading currency and `value` is the display one — see `pickPricerFrom`
+ * for why the rank is a MEAN OF RANKS rather than a rank derived from the mean value.
+ */
+export type PickPrice = { rank: number; value: number }
+
+/** Prices one stored pick. Returns null when the book holds no row for it. */
+export type PickPricer = (season: string, round: number) => PickPrice | null
+
+/** A stored FantasyCalc row, narrowed to what pricing a pick needs. */
+export type PickValueRow = { name: string; value: number; overallRank: number | null }
+
+/**
+ * `"2026 Pick 1.01"` and `"2027 1st (Early)"` → `{ season, round }`.
+ *
+ * ⚠ FANTASYCALC NAMES PICKS TWO DIFFERENT WAYS AND BOTH ARE LIVE IN ONE RESPONSE.
+ * Near picks, whose slot is known once the standings settle, come back per SLOT
+ * (`2026 Pick 1.01`); far picks come back per BUCKET (`2027 1st (Early)`). Measured
+ * examples are recorded in `lib/chimmy/tools/availablePlayersTool.ts`. A parser that
+ * knows only one form silently prices half the board at nothing.
+ *
+ * Returns null for anything else, including a player name that happens to start with a
+ * year — the caller filters on `position === 'PICK'` first, and this is the second gate.
+ */
+export function parsePickRowName(name: string): { season: string; round: number } | null {
+  const text = String(name ?? '').trim()
+  // "2026 Pick 1.01" — the slot is deliberately discarded; see `pickPricerFrom`.
+  const slot = /^(\d{4})\s+Pick\s+(\d+)\.(\d+)\s*$/i.exec(text)
+  if (slot) {
+    const round = Number(slot[2])
+    return Number.isFinite(round) && round >= 1 ? { season: slot[1], round } : null
+  }
+  // "2027 1st (Early)", "2027 1st" — bucket optional.
+  const bucket = /^(\d{4})\s+(\d+)(?:st|nd|rd|th)\b/i.exec(text)
+  if (bucket) {
+    const round = Number(bucket[2])
+    return Number.isFinite(round) && round >= 1 ? { season: bucket[1], round } : null
+  }
+  return null
+}
+
+/**
+ * Build a pricer from this book's stored pick rows.
+ *
+ * 🛑 THE MEAN IS TAKEN OVER RANKS, NOT OVER VALUES, AND THAT IS A DELIBERATE CHOICE
+ * BETWEEN TWO DEFENSIBLE ANSWERS.
+ *
+ * We store a traded pick as `{ season, round }` and nothing else — Sleeper's slot and
+ * original owner are dropped at write time — so a bare "2027 1st" has to stand for every
+ * slot in that round. Averaging is the user's decision (2026-09-20): treat an unknown slot
+ * as genuinely unknown rather than assuming a good or a bad one.
+ *
+ * The averaging could happen in either currency, and they do not give the same number
+ * because the rank→value curve is convex:
+ *
+ *   • mean of VALUES, then invert the curve to a rank — the exact expected value, but it
+ *     asserts that `DEFAULT_RANK_CURVE`'s value scale IS `PlayerValueSnapshot.value`'s.
+ *     Both are FantasyCalc, so that is probably true; "probably" is the problem. A wrong
+ *     scale here does not fail — it prices every pick trade confidently and wrongly, which
+ *     is the one outcome `tradeGrading.ts` exists to prevent.
+ *   • mean of RANKS — needs no scale claim at all. FantasyCalc ranks picks in the SAME
+ *     `overallRank` sequence as players, so a pick's rank is already the interchange format
+ *     this module is built on, and `sideMath` then converts it exactly as it converts every
+ *     player's. The cost is second-order: the mean rank prices slightly differently from the
+ *     mean value across the bucket span.
+ *
+ * The second is taken because its failure mode is a small known bias and the first's is a
+ * silent wrong answer. `value` is still the mean of values — it is only ever DISPLAYED,
+ * never summed, so it carries no scale risk.
+ *
+ * ⚠ A ROW WITH NO `overallRank` IS SKIPPED FOR RANK AND STILL COUNTED FOR VALUE. They are
+ * different questions, and dropping a priced row from the display average because it lacks
+ * a rank would hide a price we hold.
+ */
+export function pickPricerFrom(rows: readonly PickValueRow[]): PickPricer {
+  const ranks = new Map<string, number[]>()
+  const values = new Map<string, number[]>()
+  for (const r of rows) {
+    const parsed = parsePickRowName(r.name)
+    if (!parsed) continue
+    const key = `${parsed.season}:${parsed.round}`
+    if (Number.isFinite(r.value)) {
+      const v = values.get(key)
+      if (v) v.push(r.value)
+      else values.set(key, [r.value])
+    }
+    if (r.overallRank != null && Number.isFinite(r.overallRank) && r.overallRank >= 1) {
+      const a = ranks.get(key)
+      if (a) a.push(r.overallRank)
+      else ranks.set(key, [r.overallRank])
+    }
+  }
+  const mean = (xs: number[] | undefined) =>
+    xs && xs.length > 0 ? xs.reduce((a, b) => a + b, 0) / xs.length : null
+
+  return (season, round) => {
+    const key = `${String(season).trim()}:${round}`
+    const rank = mean(ranks.get(key))
+    const value = mean(values.get(key))
+    // A pick without a RANK cannot be graded, so it is not a price — see `gradeableSide`.
+    if (rank == null) return null
+    return { rank, value: value ?? 0 }
+  }
+}
+
+/**
+ * A trade's assets for GRADING — every asset carrying whatever rank the book holds.
+ *
+ * 🛑 PICKS NOW CARRY A RANK WHEN THE BOOK PRICES THEM, AND `price` IS WHAT DECIDES.
+ * Omit it and picks enter unpriced, which is the pre-2026-09-20 behaviour and still the
+ * honest answer for a caller that has not loaded pick rows: an unpriced asset withholds
+ * the letter rather than counting as zero. `tradeGrading.ts` refuses to grade a partially
+ * covered trade precisely so that a missing price cannot be silently read as worthless.
+ *
+ * ⚠ A PICK THE BOOK DOES NOT HOLD STAYS UNPRICED RATHER THAN FALLING BACK TO A MODEL.
+ * This repo contains FIVE hand-built pick curves that disagree by up to 4.6x by the third
+ * round (see `scripts/probe-pick-curve.ts`), so a fallback would not be a safety net — it
+ * would be an arbitrary choice among five, printed with the same confidence as a real
+ * market price and indistinguishable from one on screen.
  */
 export function gradeableSide(
   playerIds: readonly string[],
   rankOf: (id: string) => number | null,
   picks: readonly TradeAsset[],
+  price?: PickPricer,
 ): Array<{ id: string; rank: number | null; rawValue: number | null }> {
+  const pickRank = (p: TradeAsset): number | null => {
+    if (!price || !p.pickSeason || p.pickRound == null) return null
+    return price(p.pickSeason, p.pickRound)?.rank ?? null
+  }
   return [
     ...playerIds.map((id) => ({ id, rank: rankOf(id), rawValue: null })),
-    ...picks.map((p) => ({ id: p.id, rank: null, rawValue: null })),
+    ...picks.map((p) => ({ id: p.id, rank: pickRank(p), rawValue: null })),
   ]
 }
 
@@ -121,10 +251,14 @@ export function gradeableSide(
  * Why a trade carries no letter.
  *
  * `describeNoSignal` answers in terms of values on file, which is right for a player
- * nobody has priced yet and misleading when the unpriced half is DRAFT PICKS: "only 2 of
- * 6 assets have values" reads as patchy data a sync might fix, when in fact we do not
- * price picks at all and no sync will change it. Naming the cause separates those two
- * claims.
+ * nobody has priced yet and vague when the unpriced half is DRAFT PICKS. Naming the cause
+ * separates the two claims.
+ *
+ * ⚠ THE WORDING CHANGED WITH THE FACTS ON 2026-09-20. It used to say picks were something
+ * "we do not price yet", which was true while `ingestPlayerValues` discarded every pick row
+ * FantasyCalc sends. We store them now, so an unpriced pick is a GAP IN THE BOOK — a season
+ * or round the market has no row for — not a category we refuse to price. Telling a manager
+ * to stop waiting for something that has already arrived is its own kind of wrong.
  *
  * ⚠ ONLY WHEN THE PICKS ARE THE WHOLE GAP. A trade that is also missing a player's value
  * falls back to the generic reason, because blaming the picks there would be a confident
@@ -137,9 +271,9 @@ export function withheldTradeReason(
 ): string {
   const unpriced = grade.total - grade.covered
   if (grade.reason !== 'NO_ASSETS' && pickCount > 0 && unpriced === pickCount) {
-    return `Not graded — this trade includes ${
-      pickCount === 1 ? 'a draft pick' : `${pickCount} draft picks`
-    }, which we do not price yet.`
+    return `Not graded — no market price on file for ${
+      pickCount === 1 ? 'the draft pick' : `the ${pickCount} draft picks`
+    } in this trade.`
   }
 
   /*
