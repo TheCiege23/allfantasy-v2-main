@@ -2456,9 +2456,17 @@ every stall, and the binding constraint — one JS thread, request concurrency, 
 handlers held open by provider calls that will never succeed — is not established.
 Event-loop lag per request is the measurement that would settle it, and it needs a deploy.
 
-`sfo` was raised from 1 replica to 2 on 2026-09-07. That doubles capacity under every
+The worker was raised from 1 replica to 2 on 2026-09-07. That doubles capacity under every
 reading above, which is why it was worth doing, but it is a mitigation and not a proven
-fix. Three reasons replicas are safe here, worth re-checking before changing the count
+fix.
+
+⚠ **THIS PARAGRAPH NAMED `sfo` AND THE WORKER RUNS IN `iad`.** Read live 2026-09-20 from
+`get-service-config`: `allfantasy-v2-worker` is `multiRegionConfig: { iad: { numReplicas: 2 } }`,
+and the WEB service is `us-east4-eqdc4a` with 1. The count survived; the region did not. Nothing
+announced the move, and a region named in prose is not a setting — **read it before you reason
+from it**, the same way this file already says to read `enforce_admins` rather than remember it.
+
+Three reasons replicas are safe here, worth re-checking before changing the count
 again: `instrumentation.ts` deliberately starts no in-process workers, so nothing
 duplicates; AI daily caps are DB-backed on `apiRateLimitRecord`, so they hold across
 processes; and the in-memory limiter in `lib/domain/rateLimit.ts` guards user-facing
