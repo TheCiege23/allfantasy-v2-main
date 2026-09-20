@@ -1076,15 +1076,25 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const url = new URL(req.url)
-  const rawLeagueId = url.searchParams.get('leagueId')?.trim()
-  const leagueId = rawLeagueId && rawLeagueId !== 'global' ? rawLeagueId : null
   const requested = Number.parseInt(url.searchParams.get('limit') ?? '', 10)
   const limit = Number.isFinite(requested)
     ? Math.min(Math.max(requested, 1), MAX_HISTORY_TURNS)
     : MAX_HISTORY_TURNS
 
-  const conversationId = buildChimmyConversationId({ userId, leagueId })
-  const rows = await getRecentChatHistory(conversationId, limit, userId).catch(() => [])
+  /*
+   * 🛑 ONE THREAD — `leagueId` IS STILL ACCEPTED AND NOW IGNORED, DELIBERATELY.
+   *
+   * Until 2026-09-20 this read the LEAGUE's conversation, which is why "my previous conversation
+   * from mobile is not showing up on PC" was reported: the read worked fine, mobile had simply
+   * been in a different league. The user's decision is one continuous transcript.
+   *
+   * The client still sends its current scope and this still tolerates it, so a bundle already
+   * cached by the service worker keeps working instead of breaking on an argument that stopped
+   * mattering. Each turn carries its own `leagueId` back instead — which is what lets the UI show
+   * a cross-league thread without implying every line is about the league now on screen.
+   */
+  const conversationId = buildChimmyConversationId({ userId })
+  const rows = await getRecentChatHistory({ userId, limit }).catch(() => [])
 
   return NextResponse.json({
     conversationId,
@@ -1095,6 +1105,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
         role: row.role === 'assistant' ? 'chimmy' : 'you',
         text: row.content,
         at: row.createdAt instanceof Date ? row.createdAt.toISOString() : null,
+        leagueId: row.leagueId ?? null,
         ...display,
       }
     }),
