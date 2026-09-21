@@ -91,6 +91,8 @@ async function cachedFetch<T>(
         data: data as object,
         expiresAt: new Date(Date.now() + ttlMs),
       },
+      // Keep RETURNING to the key: `players:all` is 15 MB and was echoed back on every write.
+      select: { cacheKey: true },
     }).catch(() => {})
 
     // Persist to memory
@@ -109,15 +111,24 @@ async function cachedFetch<T>(
   return promise
 }
 
-function setMemoryCache(key: string, data: unknown, ttlMs: number): void {
+/** Exported only as a test seam for the eviction order; callers go through cachedFetch. */
+export function setMemoryCache(key: string, data: unknown, ttlMs: number): void {
   if (memoryCache.size > MAX_MEMORY_ENTRIES) {
-    // Evict oldest entries
-    const oldest = [...memoryCache.entries()]
-      .sort((a, b) => a[1].fetchedAt - b[1].fetchedAt)
+    // Evict the entries CLOSEST TO EXPIRY, not the ones fetched longest ago. Ordering by fetch
+    // time always evicted `players:all` first — a 24h entry is by construction the oldest — so
+    // once ~500 league/roster keys accumulated, the next trades-dashboard load re-read 15 MB
+    // from Postgres. Expired entries sort first, which is the right first thing to drop.
+    const soonest = [...memoryCache.entries()]
+      .sort((a, b) => a[1].fetchedAt + a[1].ttlMs - (b[1].fetchedAt + b[1].ttlMs))
       .slice(0, 50)
-    for (const [k] of oldest) memoryCache.delete(k)
+    for (const [k] of soonest) memoryCache.delete(k)
   }
   memoryCache.set(key, { data, fetchedAt: Date.now(), ttlMs })
+}
+
+/** Test seam: which keys the in-memory layer currently holds. */
+export function memoryCacheKeysForTest(): string[] {
+  return [...memoryCache.keys()]
 }
 
 /**

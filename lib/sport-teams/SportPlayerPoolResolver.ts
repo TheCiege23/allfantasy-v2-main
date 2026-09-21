@@ -13,6 +13,32 @@ import { getTeamIdByAbbreviationMap } from './SportTeamMetadataRegistry'
 import { formatNflTeamDefenseName } from '@/lib/redraft/teamDefenseIdentity'
 import { cachedFetch, cacheKey } from '@/lib/api-cache'
 import { dbFirstMode } from '@/lib/db-first-mode'
+import { createTtlMemo } from '@/lib/ttl-memo'
+
+/**
+ * In-process memos in front of the DB-backed cache. That cache saved CPU but not egress: the NFL
+ * pool's row is 13 MB, and every HIT transferred all of it out of Neon (measured 2026-09-21 as
+ * most of the project's network transfer). Same TTL as the DB cache, so staleness is unchanged.
+ * Only non-empty results are memoised — the same never-cache-a-miss rule as the DB cache below.
+ */
+const poolTtlMs = () => dbFirstMode.draftPoolCacheTtlSeconds * 1000
+const playerPoolMemo = createTtlMemo<PoolPlayerRecord[]>({ ttlMs: poolTtlMs, maxEntries: 64 })
+const adpRankMemo = createTtlMemo<Map<string, number>>({ ttlMs: poolTtlMs, maxEntries: 16 })
+
+/** The SportsPlayer columns this module reads. Everything else was fetched, cached and discarded. */
+const POOL_PLAYER_SELECT = {
+  id: true,
+  name: true,
+  position: true,
+  team: true,
+  teamId: true,
+  status: true,
+  sleeperId: true,
+  externalId: true,
+  age: true,
+  imageUrl: true,
+  source: true,
+} as const
 
 const SPORT_STR: Record<LeagueSport, string> = {
   NFL: 'NFL',
@@ -127,18 +153,22 @@ function sportsPlayerQuality(row: {
  * alphabetical, matching pre-Phase-27 behavior) rather than a hard error.
  */
 async function loadAdpRankByPlayerKey(sport: string): Promise<Map<string, number>> {
+  const memoised = adpRankMemo.get(sport)
+  if (memoised) return memoised
   try {
-    const rows = await prisma.allFantasyAdpSnapshot.findMany({
+    // The minimum is taken in Postgres: one row per player instead of every snapshot row
+    // (~58,000 for NFL, on every pool request), for the identical best-rank-per-key result.
+    const rows = await prisma.allFantasyAdpSnapshot.groupBy({
+      by: ['playerKey'],
       where: { sport },
-      select: { playerKey: true, averageOverallPick: true },
+      _min: { averageOverallPick: true },
     })
     const bestRankByKey = new Map<string, number>()
     for (const row of rows) {
-      const current = bestRankByKey.get(row.playerKey)
-      if (current === undefined || row.averageOverallPick < current) {
-        bestRankByKey.set(row.playerKey, row.averageOverallPick)
-      }
+      const best = row._min.averageOverallPick
+      if (best != null) bestRankByKey.set(row.playerKey, best)
     }
+    if (bestRankByKey.size > 0) adpRankMemo.set(sport, bestRankByKey)
     return bestRankByKey
   } catch {
     return new Map()
@@ -160,8 +190,30 @@ function normalizePositionFilter(sport: string, position?: string): string[] | n
 
 /**
  * Get player pool for a sport from SportsPlayer table (sport-scoped).
+ *
+ * Memoised in-process for the draft-pool TTL. Each call returns a deep copy, because callers
+ * receive a mutable array of mutable records and a shared cached instance would let one request's
+ * edits leak into the next.
  */
 export async function getPlayerPoolForSport(
+  sportType: SportType | LeagueSport | string,
+  options?: { limit?: number; teamId?: string; position?: string }
+): Promise<PoolPlayerRecord[]> {
+  const memoKey = JSON.stringify([
+    normalizeSport(sportType),
+    options?.limit ?? null,
+    options?.teamId?.trim() || null,
+    options?.position?.trim() || null,
+  ])
+  const memoised = playerPoolMemo.get(memoKey)
+  if (memoised) return structuredClone(memoised)
+
+  const pool = await buildPlayerPoolForSport(sportType, options)
+  if (pool.length > 0) playerPoolMemo.set(memoKey, structuredClone(pool))
+  return pool
+}
+
+async function buildPlayerPoolForSport(
   sportType: SportType | LeagueSport | string,
   options?: { limit?: number; teamId?: string; position?: string }
 ): Promise<PoolPlayerRecord[]> {
@@ -258,6 +310,7 @@ export async function getPlayerPoolForSport(
     () => prisma.sportsPlayer.findMany({
       where,
       orderBy: { name: 'asc' },
+      select: POOL_PLAYER_SELECT,
     }),
     (result) => result.length > 0,
   )

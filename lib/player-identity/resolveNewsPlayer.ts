@@ -38,6 +38,7 @@
  */
 import { prisma as defaultPrisma } from '@/lib/prisma'
 import { normalizePlayerName } from '@/lib/player-identity/playerIdentityResolution'
+import { createTtlMemo } from '@/lib/ttl-memo'
 
 /**
  * Strings the extractors write into the player column to mean "this news has no player".
@@ -79,12 +80,31 @@ export interface BuildNewsPlayerIndexDeps {
   loadRegistry(sport: string): Promise<RegistryRow[]>
 }
 
+/**
+ * The registry is re-read at most every 10 minutes per sport, per process. "Once per ingestion
+ * run" held for each caller, but three callers run on schedules and on demand, and together they
+ * re-pulled every identity row for the sport ~860 times a day (13,799 reads in 16 days,
+ * pg_stat_statements 2026-09-21).
+ *
+ * The cost of the TTL is bounded and one-directional: a player ADDED to the registry in the last
+ * 10 minutes resolves as `unresolved` (general news, playerId null) until the next read. It can
+ * never produce a wrong attribution — only a missing one, which the contract above already treats
+ * as the safe outcome. An empty read is not memoised, so an outage is not held for 10 minutes.
+ */
+const REGISTRY_TTL_MS = 10 * 60 * 1000
+const registryMemo = createTtlMemo<RegistryRow[]>({ ttlMs: REGISTRY_TTL_MS, maxEntries: 16 })
+
 const defaultDeps: BuildNewsPlayerIndexDeps = {
-  loadRegistry: (sport) =>
-    defaultPrisma.playerIdentityMap.findMany({
+  loadRegistry: async (sport) => {
+    const memoised = registryMemo.get(sport)
+    if (memoised) return memoised
+    const rows = await defaultPrisma.playerIdentityMap.findMany({
       where: { sport },
       select: { id: true, canonicalName: true, currentTeam: true },
-    }),
+    })
+    if (rows.length > 0) registryMemo.set(sport, rows)
+    return rows
+  },
 }
 
 function teamKey(team: string | null | undefined): string {
