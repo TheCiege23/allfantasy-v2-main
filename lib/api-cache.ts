@@ -40,13 +40,16 @@ export async function cachedFetch<T>(
 ): Promise<T> {
   const cacheKey = buildCacheKey('api', key)
 
-  // 1. Check DB
+  // 1. Check DB. The freshness test is in the WHERE, not after the read: some rows here are
+  // multi-megabyte (the NFL player pool is 13 MB), and reading a stale one only to discard it
+  // transferred the whole blob out of Neon for nothing.
   try {
     const prisma = await getPrisma()
-    const cached = await prisma.sportsDataCache.findUnique({
-      where: { cacheKey },
+    const cached = await prisma.sportsDataCache.findFirst({
+      where: { cacheKey, expiresAt: { gt: new Date() } },
+      select: { data: true },
     })
-    if (cached && cached.expiresAt > new Date()) {
+    if (cached) {
       return cached.data as T
     }
   } catch {
@@ -63,10 +66,13 @@ export async function cachedFetch<T>(
     const expiresAt = new Date(Date.now() + ttlSeconds * 1000)
     try {
       const prisma = await getPrisma()
+      // `select` keeps Prisma's RETURNING to the key. Without it every write echoed the full
+      // blob straight back to us — 13 MB per refresh of the NFL pool, discarded unread.
       await prisma.sportsDataCache.upsert({
         where: { cacheKey },
         update: { data: data as object, expiresAt },
         create: { cacheKey, data: data as object, expiresAt },
+        select: { cacheKey: true },
       })
     } catch {
       // Cache write failed — non-fatal
