@@ -1032,8 +1032,9 @@ function ChimmyPanel({
               ) : null}
 
               {/* Cost sits alongside the answer — never hidden until checkout. */}
+              {/* 0 is only ever reported for a charge refunded because no answer was delivered. */}
               {t.role === 'chimmy' && t.cost != null ? (
-                <span className="af-cm-cost af-num">{t.cost} tokens</span>
+                <span className="af-cm-cost af-num">{t.cost === 0 ? 'Not charged' : `${t.cost} tokens`}</span>
               ) : null}
             </div>
           ))
