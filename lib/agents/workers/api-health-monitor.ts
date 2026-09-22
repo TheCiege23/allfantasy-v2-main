@@ -9,6 +9,7 @@ import { readAgentCache, writeAgentCache } from '@/lib/agents/cache'
 import { dispatchNotification } from '@/lib/notifications/NotificationDispatcher'
 import { runImportMaximizer, type ImportMaximizerResult } from './import-maximizer'
 import { ESPN_SITE_API_BASE } from '@/lib/providers/espnUrls'
+import type { AiProviderProbeResult } from '@/lib/admin-dashboard/aiProviderEntitlementProbe'
 
 type ProviderStatusLevel = 'up' | 'down' | 'degraded'
 type FreshnessStatus = 'fresh' | 'stale' | 'empty'
@@ -164,25 +165,53 @@ async function checkAnthropicHealth(): Promise<HealthProviderEntry> {
   }
 }
 
-async function checkOpenAiHealth(): Promise<HealthProviderEntry> {
-  const apiKey = process.env.OPENAI_API_KEY?.trim() || process.env.AI_INTEGRATIONS_OPENAI_API_KEY?.trim()
-  if (!apiKey) {
-    return { status: 'down', lastSeen: null, details: 'OPENAI_API_KEY missing' }
+/*
+ * 🛑 THIS SAID OPENAI WAS "up" WHILE ITS ACCOUNT COULD NOT ANSWER. It called `/models` with the
+ * key, and a models list returns 200 on an account whose billing is inactive — measured
+ * 2026-09-22, when a real completion on the same account returned 429 `billing_not_active`.
+ * xAI and DeepSeek, which Chimmy actually runs on, were not checked at all.
+ *
+ * All three now come from the shared live probe: one max_tokens=1 completion per provider,
+ * cached 10 min, key never returned. Anything but "answering" is `down`, with the reason.
+ */
+export function aiProbeToHealthEntry(result: AiProviderProbeResult): HealthProviderEntry {
+  if (result.state === 'answering') {
+    return { status: 'up', lastSeen: result.checkedAt, model: result.model ?? undefined }
   }
-
-  const baseUrl =
-    process.env.OPENAI_BASE_URL?.trim() ||
-    process.env.AI_INTEGRATIONS_OPENAI_BASE_URL?.trim() ||
-    'https://api.openai.com/v1'
-  const response = await timedFetch(`${baseUrl.replace(/\/+$/, '')}/models`, {
-    headers: { Authorization: `Bearer ${apiKey}` },
-  })
-
+  const reason =
+    result.state === 'billing'
+      ? 'billing: account cannot pay for requests (add credits; rotating the key will not help)'
+      : result.state === 'auth'
+        ? 'credentials rejected'
+        : result.state === 'not_configured'
+          ? 'no API key configured'
+          : result.state === 'unreachable'
+            ? 'unreachable'
+            : 'failing'
   return {
-    status: !response.ok ? 'down' : response.latencyMs > 3000 ? 'degraded' : 'up',
-    lastSeen: response.ok ? new Date().toISOString() : null,
-    latencyMs: response.latencyMs,
-    details: response.ok ? undefined : response.error || `HTTP ${response.status}`,
+    status: 'down',
+    lastSeen: null,
+    model: result.model ?? undefined,
+    details: [reason, result.httpStatus ? `HTTP ${result.httpStatus}` : null, result.detail].filter(Boolean).join(' — '),
+  }
+}
+
+async function checkAiProviderHealth(): Promise<Record<'openai' | 'xai' | 'deepseek', HealthProviderEntry>> {
+  /*
+   * ⚠ LAZY ON PURPOSE. This module is imported by `lib/agents/anthropic-pipeline.ts` only for
+   * `getLatestSystemHealth` — a cache read. A static import dragged the probe's graph
+   * (provider-config, the outage alerter, the Resend client) into every pipeline import, and the
+   * pipeline's suites started timing out at 30s on load. Only a real health run needs the probe.
+   */
+  const results = await import('@/lib/admin-dashboard/aiProviderEntitlementProbe')
+    .then((m) => m.probeAiProviders())
+    .catch(() => null)
+  const unknown: HealthProviderEntry = { status: 'down', lastSeen: null, details: 'live probe did not run; state unknown' }
+  const byId = new Map((results ?? []).map((r) => [r.id, aiProbeToHealthEntry(r)]))
+  return {
+    openai: byId.get('openai') ?? unknown,
+    xai: byId.get('xai') ?? unknown,
+    deepseek: byId.get('deepseek') ?? unknown,
   }
 }
 
@@ -283,7 +312,7 @@ async function buildProviderHealth(): Promise<Record<string, HealthProviderEntry
 
   const [
     anthropic,
-    openai,
+    ai,
     elevenLabs,
     sleeper,
     yahoo,
@@ -295,7 +324,7 @@ async function buildProviderHealth(): Promise<Record<string, HealthProviderEntry
     resend,
   ] = await Promise.all([
     checkAnthropicHealth(),
-    checkOpenAiHealth(),
+    checkAiProviderHealth(),
     checkElevenLabsHealth(),
     checkPublicApi('https://api.sleeper.app/v1/state/nfl', 1500), // db-first-exception: live provider health probe
     checkPublicApi('https://fantasysports.yahooapis.com', 2000), // db-first-exception: live provider health probe
@@ -318,7 +347,9 @@ async function buildProviderHealth(): Promise<Record<string, HealthProviderEntry
       details: clearSports.error,
     },
     anthropic,
-    openai,
+    openai: ai.openai,
+    xai: ai.xai,
+    deepseek: ai.deepseek,
     elevenlabs: elevenLabs,
     sleeper,
     yahoo,
