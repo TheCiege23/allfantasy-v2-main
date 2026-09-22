@@ -98,11 +98,30 @@ describe("resolvePlayoffSeedField", () => {
     db.sportsDataCache.findMany.mock.calls.map((c: Array<{ where: { cacheKey: { startsWith: string } } }>) => c[0].where.cacheKey.startsWith)
 
   it("a pool made BEFORE tip-off reads the coming season and waits — it never reaches last season's final rows", async () => {
-    stubStandings()
+    // The real hazard: the new season has no key yet, while last season's FINAL rows do.
+    db.sportsDataCache.findMany.mockImplementation(async ({ where }: { where: { cacheKey: { startsWith: string } } }) =>
+      where.cacheKey.startsWith === "NHL:standings:2025:"
+        ? [{ data: { conference: "Western Conference", position: 1, teamName: "Winnipeg Jets", won: 56, lost: 22, otLost: 4 } }]
+        : []
+    )
     const { resolvePlayoffSeedField } = await import("@/lib/playoffs/playoffSeeding")
     const field = await resolvePlayoffSeedField("nhl", 2026, new Date("2026-08-15T00:00:00Z"))
     expect(readKeys()).toEqual(["NHL:standings:2026:"])
     expect(field.season).toBe("2026")
+    expect(field.rowsRead).toBe(0)
+    expect(field.isFinal).toBe(false)
+  })
+
+  it("NHL overtime losses count as games played, or the field can never read final", async () => {
+    // 82 games each: 40 won, 30 lost, 12 lost in overtime.
+    db.sportsDataCache.findMany.mockResolvedValue([
+      { data: { conference: "Western Conference", position: 1, teamName: "Dallas Stars", won: 40, lost: 30, otLost: 12 } },
+      { data: { conference: "Eastern Conference", position: 1, teamName: "Boston Bruins", won: 44, lost: 28, otLost: 10 } },
+    ])
+    const { resolvePlayoffSeedField } = await import("@/lib/playoffs/playoffSeeding")
+    const field = await resolvePlayoffSeedField("nhl", 2027, new Date("2027-04-12T00:00:00Z"))
+    expect(field.minGamesPlayed).toBe(82)
+    expect(field.isFinal).toBe(true)
   })
 
   it("a pool made in November reads the season in progress", async () => {

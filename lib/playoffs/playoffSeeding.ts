@@ -62,6 +62,8 @@ type StandingsRow = {
   conference?: unknown
   won?: unknown
   lost?: unknown
+  tied?: unknown
+  otLost?: unknown
 }
 
 /**
@@ -163,7 +165,13 @@ export async function resolvePlayoffSeedField(
      */
     const won = Number(data.won)
     const lost = Number(data.lost)
-    if (Number.isFinite(won) && Number.isFinite(lost)) gamesPlayed.push(won + lost)
+    /*
+     * ⚠ NHL OVERTIME LOSSES ARE A SEPARATE COLUMN (`otLost`), not part of `lost`. Counting only
+     * won + lost put every NHL club ~8-15 games short of the 82-game season, so the field could
+     * never read as final and NHL pools would never seed. Ties/OT losses absent means zero.
+     */
+    const extra = (Number(data.tied) || 0) + (Number(data.otLost) || 0)
+    if (Number.isFinite(won) && Number.isFinite(lost)) gamesPlayed.push(won + lost + extra)
     if (!conference || !name || !Number.isFinite(seed) || seed <= 0) continue
     const bucket = seeds.get(conference) ?? new Map<number, string>()
     /*
