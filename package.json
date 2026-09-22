@@ -79,6 +79,7 @@
     "audit:ri-mapping": "node --require ./scripts/_audit-preload.cjs --import tsx scripts/audit-rolling-insights-draft-mapping.ts",
     "audit:ncaaf-widening": "node --env-file=.env --require ./scripts/_audit-preload.cjs --import tsx scripts/audit-ncaaf-identity-widening.ts",
     "widen:ncaaf-identities": "node --env-file=.env --require ./scripts/_audit-preload.cjs --import tsx scripts/widen-ncaaf-identities.ts",
+    "repair:ncaaf-identity-ids": "node --env-file=.env --require ./scripts/_audit-preload.cjs --import tsx scripts/repair-ncaaf-identity-ids.ts",
     "backfill:player-headshots": "node --env-file=.env --require ./scripts/_audit-preload.cjs --import tsx scripts/backfill-player-headshots.ts",
     "backfill:redraft-roster-players": "node --env-file=.env --require ./scripts/_audit-preload.cjs --import tsx scripts/backfill-redraft-roster-players.ts",
     "audit:nfl-stats-provider": "node --require ./scripts/_audit-preload.cjs --import tsx scripts/audit-nfl-player-stats-provider.ts",
