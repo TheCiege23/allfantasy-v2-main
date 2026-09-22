@@ -3,6 +3,8 @@ import { describe, expect, it, vi, beforeEach } from 'vitest'
 vi.mock('server-only', () => ({}))
 
 const xaiResponsesJsonMock = vi.hoisted(() => vi.fn())
+const reportProviderFailure = vi.hoisted(() => vi.fn())
+vi.mock('@/lib/ai-orchestration/providerOutageAlert', () => ({ reportProviderFailure }))
 
 vi.mock('@/lib/xai-client', async () => {
   const actual = await vi.importActual<typeof import('@/lib/xai-client')>('@/lib/xai-client')
@@ -235,5 +237,21 @@ describe('answerSportsQuestionFromSearch', () => {
     await answerSportsQuestionFromSearch('when does the college football season start?')
     const withoutRecency = xaiResponsesJsonMock.mock.calls[0][0].tools.map((t: any) => t.type)
     expect(withoutRecency).toEqual(['web_search'])
+  })
+})
+
+describe('an xAI failure on the live search path', () => {
+  it('is reported to the owner, and the caller still gets null', async () => {
+    reportProviderFailure.mockClear()
+    xaiResponsesJsonMock.mockResolvedValue({
+      ok: false,
+      status: 403,
+      details: 'Your team has either used all available credits or reached its monthly spending limit.',
+    })
+    const answer = await answerSportsQuestionFromSearch('how many HRs were hit in the majors yesterday?')
+    expect(answer).toBeNull()
+    expect(reportProviderFailure).toHaveBeenCalledWith(
+      expect.objectContaining({ provider: 'grok', status: 403, surface: 'chimmy_live_search' }),
+    )
   })
 })

@@ -7,6 +7,7 @@ import { findLeagueByName } from '@/lib/chimmy/tools/leagueByName'
 import { buildAvailablePlayersContext } from '@/lib/chimmy/tools/availablePlayersTool'
 import { buildMyRosterContext } from '@/lib/chimmy/tools/myRosterTool'
 import { buildMyStartersPlayingContext } from '@/lib/chimmy/tools/myStartersPlayingTool'
+import { buildMyRosterInjuriesContext } from '@/lib/chimmy/tools/myRosterInjuriesTool'
 import { buildPlayerValueContext } from '@/lib/chimmy/tools/playerValueTool'
 import { buildPlayerProjectionContext } from '@/lib/chimmy/tools/playerProjectionTool'
 import { buildExplainValueContext } from '@/lib/chimmy/tools/explainValueTool'
@@ -232,6 +233,30 @@ export const CHIMMY_TOOL_SPECS = [
             enum: ['today', 'tonight'],
             description:
               "'tonight' for games kicking off from 5pm Eastern, 'today' for the whole Eastern day. Use the word the user used; default to 'today' if they named neither.",
+          },
+        },
+        required: [],
+      },
+    },
+  },
+  /*
+   * The second cross-league tool. "Who's out in my leagues" had no answer anywhere: the
+   * deterministic shortcut listed league-wide injuries, and get_my_roster reads one league with
+   * a Sleeper-only injury field. See myRosterInjuriesTool.ts.
+   */
+  {
+    type: 'function' as const,
+    function: {
+      name: 'get_my_injuries',
+      description:
+        "Injury designations (Out, IR, Doubtful, Questionable…) for players on the user's OWN rosters across EVERY league they are in, current season, any platform. Use for 'who's out in my leagues', 'any injuries on my teams', 'is anyone on my roster hurt', 'injury updates for my players'. Needs NO league in scope. Each player comes with the date it was reported and which leagues/slots they are on, and STARTERS who are Out are flagged. Players not listed have no report on file — that is NOT a statement that they are healthy. It lists the leagues and players it could not check; never fill those gaps from general knowledge.",
+      parameters: {
+        type: 'object',
+        properties: {
+          sport: {
+            type: 'string',
+            description:
+              "Limit to one sport, e.g. 'NFL', 'NBA', 'MLB', 'NHL'. Omit to check every sport the user has a current league in.",
           },
         },
         required: [],
@@ -490,6 +515,15 @@ export async function executeChimmyTool(
         }
         const window = args.window === 'tonight' ? 'tonight' : 'today'
         return await buildMyStartersPlayingContext({ userId: ctx.userId, window })
+      }
+
+      /* Session-scoped like get_my_starters_playing: leagues come only from listMemberLeagues. */
+      case 'get_my_injuries': {
+        if (!ctx.userId) {
+          return 'I cannot tell who is signed in, so I cannot read their leagues. Say that; do not name a player or a league.'
+        }
+        const sport = typeof args.sport === 'string' && args.sport.trim() ? args.sport.trim().toUpperCase() : null
+        return await buildMyRosterInjuriesContext({ userId: ctx.userId, sport })
       }
 
       case 'get_upcoming_games': {

@@ -25,6 +25,7 @@ import {
   buildSportsOperatingSystemAudit,
   type SportsOperatingSystemAudit,
 } from "@/lib/sports-reporting/SportsOperatingSystemReadinessService"
+import { probeAiProviders } from "@/lib/admin-dashboard/aiProviderEntitlementProbe"
 import {
   getSportsIdentityHealthSnapshot,
   type SportsIdentityHealthSnapshot,
@@ -905,10 +906,19 @@ export async function getAdminCommandCenterMetrics(searchQuery = ""): Promise<Ad
   const sportImportMatrix = getSportImportMatrix(sportDataReliability)
   const aiToolAvailability = getDashboardAiToolAvailability(sportDataReliability)
   const chimmySportReadiness = getChimmySportReadiness(sportDataReliability)
+  /*
+   * Live 1-token probe per AI provider, cached 10 min in-process. Bounded so a hung provider
+   * cannot hold the admin page; a miss shows as "not measured", never as healthy.
+   */
+  const aiProviders = await Promise.race([
+    probeAiProviders().catch(() => null),
+    new Promise<null>((resolve) => setTimeout(() => resolve(null), 10_000)),
+  ])
   const sportsOperatingSystem = buildSportsOperatingSystemAudit({
     importMatrix: sportImportMatrix,
     aiToolAvailability,
     identityHealth: sportsIdentityHealth,
+    aiProviders,
   })
 
   return {

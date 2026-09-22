@@ -10,6 +10,7 @@ import type {
   SportsIdentityHealthSnapshot,
   SportsImageHealthRow,
 } from "@/lib/sports-reporting/SportsIdentityHealthService"
+import type { AiProviderProbeResult } from "@/lib/admin-dashboard/aiProviderEntitlementProbe"
 
 export type SportsOsStatus = "ready" | "partial" | "missing"
 
@@ -61,6 +62,8 @@ export type SportsOperatingSystemAudit = {
     missing: number
   }
   biggestDataHoles: string[]
+  /** Can each AI provider answer right now — from a live 1-token probe, never from a key being set. */
+  aiProviders: SportsOsReadinessItem[]
   identityFindings: SportsOsReadinessItem[]
   historicalDataFindings: SportsOsReadinessItem[]
   imageLogoFindings: SportsOsReadinessItem[]
@@ -123,6 +126,112 @@ function toolStatus(status: DashboardAiToolStatus | undefined): SportsOsStatus {
   if (status === "active") return "ready"
   if (status === "preview") return "partial"
   return "missing"
+}
+
+/*
+ * 🛑 "READY" MEANT "READY FOR ONE SPORT", AND THE CARD NEVER SAID WHICH.
+ *
+ * A tool's status is "active" when ANY sport row satisfies its predicate — for Trade Value, one
+ * sport with player rows plus stats, projections or news. So Trade Analyzer and the Value Engine
+ * showed a green READY on the strength of NFL alone, while published player values exist for NFL
+ * only and a trade in an NBA or MLB league mostly comes back unpriced. And the gaps line was
+ * `missingData`, which lists only what is missing for EVERY sport, so it was empty too.
+ *
+ * Ready now requires the tool to be active for every fantasy sport the matrix tracks; anything
+ * less is partial, and the card names the sports it is actually ready for.
+ */
+function coverageStatus(
+  tool: DashboardAiToolAvailability | null,
+  fantasySports: string[],
+): { status: SportsOsStatus; gap: string | null } {
+  const base = toolStatus(tool?.status)
+  if (base !== "ready" || fantasySports.length === 0) return { status: base, gap: null }
+  const covered = new Set(tool?.supportedSports ?? [])
+  const uncovered = fantasySports.filter((sport) => !covered.has(sport))
+  if (uncovered.length === 0) return { status: "ready", gap: null }
+  return {
+    status: "partial",
+    gap: `Ready only for ${[...covered].join(", ") || "no sport"}; not for ${uncovered.join(", ")}`,
+  }
+}
+
+const AI_PROVIDER_STATE_LABEL: Record<AiProviderProbeResult["state"], string> = {
+  answering: "answering",
+  billing: "BILLING — account cannot pay for requests",
+  auth: "CREDENTIALS rejected",
+  other: "failing",
+  not_configured: "no key configured",
+  unreachable: "unreachable",
+}
+
+function buildAiProviderItems(results: AiProviderProbeResult[] | null | undefined): SportsOsReadinessItem[] {
+  if (!results || results.length === 0) {
+    return [
+      item({
+        id: "ai-providers-unmeasured",
+        label: "AI providers",
+        status: "missing",
+        evidence: ["The live provider probe did not run for this page load."],
+        gaps: ["Provider health is unknown — a key being set does not mean the account can answer."],
+        recommendation: "Reload; if it persists, check lib/admin-dashboard/aiProviderEntitlementProbe.ts.",
+      }),
+    ]
+  }
+  const answering = results.filter((r) => r.state === "answering")
+  const xai = results.find((r) => r.id === "xai")
+  const items: SportsOsReadinessItem[] = [
+    item({
+      id: "ai-chimmy-can-answer",
+      label: "Chimmy can answer",
+      status: answering.length === results.length ? "ready" : answering.length > 0 ? "partial" : "missing",
+      evidence: [`${answering.length} of ${results.length} providers answered a live 1-token request.`],
+      gaps:
+        answering.length === 0
+          ? ["NO provider answered — every Chimmy reply is the deterministic fallback."]
+          : answering.length === 1
+            ? [`Single point of failure: only ${answering[0].label} is answering.`]
+            : [],
+      recommendation: "Every answer degrades to the deterministic fallback when no provider answers.",
+    }),
+    /*
+     * Separate row because it fails separately: the tool loop, cross-league tools and live web
+     * search run ONLY on xAI. With xAI down Chimmy still answers — without being able to look
+     * anything up — which is the state that went unnoticed.
+     */
+    item({
+      id: "ai-chimmy-tools",
+      label: "Chimmy tools & web search (xAI only)",
+      status: xai?.state === "answering" ? "ready" : "missing",
+      evidence: [`xAI: ${xai ? AI_PROVIDER_STATE_LABEL[xai.state] : "not probed"}.`],
+      gaps:
+        xai?.state === "answering"
+          ? []
+          : ["The tool loop, cross-league tools and live web search are all off while xAI cannot answer."],
+      recommendation: "These features have no fallback provider; xAI funding gates all of them.",
+    }),
+  ]
+  for (const r of results) {
+    items.push(
+      item({
+        id: `ai-provider-${r.id}`,
+        label: r.label,
+        status: r.state === "answering" ? "ready" : "missing",
+        evidence: [
+          `${AI_PROVIDER_STATE_LABEL[r.state]}${r.httpStatus ? ` (HTTP ${r.httpStatus})` : ""}${r.model ? `, model ${r.model}` : ""}, checked ${r.checkedAt}.`,
+        ],
+        gaps: r.state === "answering" ? [] : [r.detail ?? AI_PROVIDER_STATE_LABEL[r.state]],
+        recommendation:
+          r.state === "billing"
+            ? "Add credits or raise the spending limit on this account — rotating the key will not help."
+            : r.state === "auth"
+              ? "Check the API key configured in production for this provider."
+              : r.state === "answering"
+                ? "Answering a live request."
+                : "Check the provider account and network.",
+      }),
+    )
+  }
+  return items
 }
 
 // Data types the bracket-pool AI actually requires for World Cup answers.
@@ -249,9 +358,11 @@ function item(input: SportsOsReadinessItem): SportsOsReadinessItem {
 function buildPhaseItems(
   rows: SportImportMatrixRow[],
   tools: DashboardAiToolAvailability[],
-  identityHealth?: SportsIdentityHealthSnapshot
+  identityHealth?: SportsIdentityHealthSnapshot,
+  aiProviders?: AiProviderProbeResult[] | null
 ): Pick<
   SportsOperatingSystemAudit,
+  | "aiProviders"
   | "identityFindings"
   | "historicalDataFindings"
   | "imageLogoFindings"
@@ -273,8 +384,13 @@ function buildPhaseItems(
   const matchup = toolById(tools, "matchupPrep")
   const worldCup = toolById(tools, "worldCupAnalysis")
   const commissioner = toolById(tools, "commissionerReport")
+  /* The bracket product is not a fantasy league, so it does not count against fantasy coverage. */
+  const fantasySports = rows.filter((row) => row.id !== "world-cup").map((row) => row.label)
+  const tradeCoverage = coverageStatus(trade, fantasySports)
+  const valueCoverage = [coverageStatus(startSit, fantasySports), tradeCoverage, coverageStatus(power, fantasySports)]
 
   return {
+    aiProviders: buildAiProviderItems(aiProviders),
     identityFindings: [
       item({
         id: "canonical-player-team-identity",
@@ -349,14 +465,18 @@ function buildPhaseItems(
       item({
         id: "value-engine",
         label: "Fantasy Value Engine",
-        status: worstStatus([toolStatus(startSit?.status), toolStatus(trade?.status), toolStatus(power?.status)]),
+        status: worstStatus(valueCoverage.map((c) => c.status)),
         evidence: [
           `Start/Sit: ${startSit?.status ?? "missing"}`,
           `Trade: ${trade?.status ?? "missing"}`,
           `Power: ${power?.status ?? "missing"}`,
           "FantasyValueSnapshot contract now produces cached partial snapshots with missingData/confidence.",
         ],
-        gaps: ["Not every legacy trade/draft route consumes FantasyValueSnapshot yet."],
+        gaps: [
+          ...valueCoverage.map((c) => c.gap).filter((g): g is string => Boolean(g)),
+          "Published player market values (AllFantasyMarketPlayerValue) exist for NFL only.",
+          "Not every legacy trade/draft route consumes FantasyValueSnapshot yet.",
+        ],
         recommendation: "Route paid AI actions through FantasyValueSnapshot before model execution and refuse unsupported exact claims.",
       }),
     ],
@@ -364,9 +484,21 @@ function buildPhaseItems(
       item({
         id: "trade-analyzer",
         label: "Trade Analyzer",
-        status: toolStatus(trade?.status),
-        evidence: [`Admin AI tool status: ${trade?.status ?? "missing"}.`],
-        gaps: trade?.missingData ?? ["players", "stats", "news"],
+        status: tradeCoverage.status,
+        evidence: [
+          `Admin AI tool status: ${trade?.status ?? "missing"}.`,
+          `Supported sports: ${trade?.supportedSports.join(", ") || "none"}.`,
+        ],
+        /*
+         * Known grading limits, found by reading the grader (2026-09-22 audit) — the data matrix
+         * cannot see them, so they are stated here rather than left for a green badge to hide.
+         */
+        gaps: [
+          ...(tradeCoverage.gap ? [tradeCoverage.gap] : []),
+          ...(trade?.missingData ?? []),
+          "Dynasty trades are priced on rest-of-season projection; age and dynasty market value do not enter the totals.",
+          "Trades containing a draft pick are refused by the scenario grader; devy trades are not graded.",
+        ],
         recommendation: "Use FantasyValueSnapshot for cached value comparison; refuse and do not charge when critical value data is unavailable.",
       }),
     ],
@@ -492,10 +624,12 @@ export function buildSportsOperatingSystemAudit(input: {
   aiToolAvailability: DashboardAiToolAvailability[]
   leagueFormats?: LeagueFormatDefinition[]
   identityHealth?: SportsIdentityHealthSnapshot
+  /** Live probe results. Omitted means "not measured", which the panel shows as missing. */
+  aiProviders?: AiProviderProbeResult[] | null
 }): SportsOperatingSystemAudit {
   const leagueFormats = buildLeagueFormatRows(input.leagueFormats ?? getLeagueFormatDefinitions())
   const sports = buildSportsRows(input.importMatrix, input.identityHealth?.imageRows)
-  const phases = buildPhaseItems(input.importMatrix, input.aiToolAvailability, input.identityHealth)
+  const phases = buildPhaseItems(input.importMatrix, input.aiToolAvailability, input.identityHealth, input.aiProviders)
   const chimmyIntentRoutes = buildIntentRoutes(input.aiToolAvailability)
   const statusList = [
     ...sports.flatMap((row) => [row.identityStatus, row.historicalStatus, row.currentFactsStatus, row.imageLogoStatus, row.aiGroundingStatus]),

@@ -30,6 +30,7 @@ import {
 } from '@/lib/provider-diagnostics'
 import type { ProviderId } from '@/lib/provider-diagnostics'
 import { redactAndCap } from '@/lib/security/redactSecrets'
+import { reportAllProvidersDown, reportProviderFailure } from './providerOutageAlert'
 import { getToolRegistration } from '@/lib/ai-tool-registry'
 import type { DeterministicSource } from '@/lib/unified-ai/DeterministicToAIContextBridge'
 import { normalizeOrchestrationToolKey } from './tool-key-normalizer'
@@ -241,6 +242,16 @@ function toConfidenceLabel(score: number): 'low' | 'medium' | 'high' {
   return 'medium'
 }
 
+/*
+ * ⚠ SAY IT IS AN OUTAGE BEFORE ANYTHING ELSE. This used to open "Deterministic guidance from NFL
+ * context: …" and only admit in its last clause that no model had answered, so users read it as
+ * a poor answer and reported "Chimmy got dumb" — not as the outage it was. The lead sentence now
+ * says so plainly; the "Deterministic guidance from" marker is kept after it because that string
+ * is what the runbook tells people to look for.
+ */
+const AI_UNAVAILABLE_LEAD =
+  "Chimmy's AI models are unavailable right now, so this is not a full answer — only the raw context I have."
+
 function buildDeterministicFallbackText(envelope: AIContextEnvelope): string {
   const payload = envelope.deterministicPayload
   if (!payload || typeof payload !== 'object') {
@@ -261,8 +272,10 @@ function buildDeterministicFallbackText(envelope: AIContextEnvelope): string {
   const missing = envelope.dataQualityMetadata?.missing?.length
     ? ` Missing data: ${envelope.dataQualityMetadata?.missing?.slice(0, 4).join(', ')}.`
     : ''
-  return `Deterministic guidance from ${envelope.sport} context: ${summary}.${missing} AI explanation is temporarily unavailable.`
+  return `${AI_UNAVAILABLE_LEAD} Deterministic guidance from ${envelope.sport} context: ${summary}.${missing} AI explanation is temporarily unavailable.`
 }
+
+const FALLBACK_MAX_CONFIDENCE_PCT = 35
 
 function buildDeterministicFallbackResult(params: {
   envelope: AIContextEnvelope
@@ -279,7 +292,11 @@ function buildDeterministicFallbackResult(params: {
         : 34
   const missingPenalty = (envelope.dataQualityMetadata?.missing?.length ?? 0) * 5
   const stalePenalty = envelope.dataQualityMetadata?.stale ? 8 : 0
-  const confidencePct = Math.max(20, Math.min(85, baseConfidence - missingPenalty - stalePenalty))
+  /*
+   * Capped LOW. No model reasoned about this question, so a "MEDIUM CONFIDENCE 58%" badge on a
+   * data dump overstates it — which is exactly how the 2026-09-20 outage was misread as advice.
+   */
+  const confidencePct = Math.max(20, Math.min(FALLBACK_MAX_CONFIDENCE_PCT, baseConfidence - missingPenalty - stalePenalty))
   const factGuardWarnings = envelope.dataQualityMetadata?.missing?.length
     ? [`Data unavailable: ${envelope.dataQualityMetadata.missing.slice(0, 5).join(', ')}`]
     : undefined
@@ -705,6 +722,12 @@ export async function runUnifiedOrchestration(req: UnifiedAIRequest): Promise<Ru
   }
 
   if (available.length === 0) {
+    /* Nothing to call at all — alert before either branch below, both of which are an outage. */
+    reportAllProvidersDown({
+      featureKey: normalizedFeatureKey,
+      stage: 'before_execution',
+      failures: modelsToCall.map((provider) => ({ provider, detail: 'not configured or unavailable' })),
+    })
     const providerResults: ProviderResultMeta[] = modelsToCall.map((provider) => ({
       provider,
       status: 'failed',
@@ -769,6 +792,8 @@ export async function runUnifiedOrchestration(req: UnifiedAIRequest): Promise<Ru
     }
     if (result.status !== 'ok') {
       recordProviderFailure(role, result.error)
+      /* A billing or credential failure is one a human has to fix; see providerOutageAlert. */
+      reportProviderFailure({ provider: role, status: result.status, detail: result.error, surface: normalizedFeatureKey })
       /*
        * ── 🛑 "failed" IS NOT A DIAGNOSIS, AND IT WAS THE ONLY THING IN THE LOG ──────────────
        *
@@ -822,6 +847,11 @@ export async function runUnifiedOrchestration(req: UnifiedAIRequest): Promise<Ru
 
   try {
     if (allProvidersFailed) {
+      reportAllProvidersDown({
+        featureKey: normalizedFeatureKey,
+        stage: 'all_calls_failed',
+        failures: results.map(({ result }, i) => ({ provider: String(available[i]), detail: result.error ?? result.status })),
+      })
       if (envelope.deterministicPayload) {
         recordDegradedModeActivation('all_provider_calls_failed_deterministic_fallback')
         const fallbackResult = buildDeterministicFallbackResult({
