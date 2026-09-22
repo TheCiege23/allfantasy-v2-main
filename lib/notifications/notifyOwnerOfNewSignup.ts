@@ -1,7 +1,8 @@
 import "server-only"
 import { sendNotificationEmail } from "@/lib/resend-client"
 
-const OWNER_EMAIL = "allfantasysportsapp@gmail.com"
+/** Exported so every owner alert goes to one address, not a copy per sender. */
+export const OWNER_EMAIL = "allfantasysportsapp@gmail.com"
 
 export type NewSignupMethod = "email" | "sleeper" | `oauth:${string}`
 

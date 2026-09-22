@@ -2,6 +2,7 @@ import 'server-only'
 import OpenAI from 'openai'
 import { CHIMMY_TOOL_SPECS, executeChimmyTool, type ChimmyToolContext } from './chimmyTools'
 import { isAiSpendEnabled } from '@/lib/ai/aiSpendGuard'
+import { reportProviderFailure } from '@/lib/ai-orchestration/providerOutageAlert'
 
 /**
  * A BOUNDED TOOL LOOP FOR CHIMMY, GROK ONLY, OFF BY DEFAULT.
@@ -170,8 +171,15 @@ export async function runChimmyToolLoop(args: {
     }
 
     return null
-  } catch {
-    /* Timeout, rate limit, refusal — all mean "fall back", never "fail loudly". */
+  } catch (err) {
+    /*
+     * Timeout, rate limit, refusal — all mean "fall back", never "fail loudly" to the USER.
+     * But an exhausted xAI account also lands here, and this loop only runs on xAI, so
+     * swallowing it silently is how the tool loop sat dead for days with nothing reported.
+     * The owner hears about billing/credential failures; the user still just falls back.
+     */
+    const e = err as { status?: number; message?: string } | null
+    reportProviderFailure({ provider: 'grok', status: e?.status, detail: e?.message, surface: 'chimmy_tool_loop' })
     return null
   }
 }
