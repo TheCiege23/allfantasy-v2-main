@@ -20,6 +20,7 @@ import type { FantasyDataEvidenceSnapshot } from "@/lib/fantasy-data/fantasyData
 import type { FantasyFreshnessReport } from "@/lib/fantasy-data/fantasyFreshness"
 import type { FantasyProviderHealthReport } from "@/lib/fantasy-data/providerHealth"
 import { listInjuryFacts } from "@/lib/injuries/injuryReadPort"
+import { rosterPlayerIds } from "@/lib/core-app/myRoster"
 
 // ─── League grounding sub-types ───────────────────────────────────────────────
 
@@ -358,7 +359,11 @@ function buildUnavailableList(
   if (!draft || draft.status === "unknown") {
     missing.push("draft status (no draft session found)")
   }
-  if (!managers || managers.length === 0) {
+  // null and [] are different facts, and saying "no teams found" for a failed read is what
+  // told Chimmy that every league in production was empty.
+  if (managers == null) {
+    missing.push("league managers (could not be loaded)")
+  } else if (managers.length === 0) {
     missing.push("league managers (no teams found)")
   }
   return missing
@@ -403,7 +408,27 @@ async function loadLeagueRow(leagueId: string): Promise<Record<string, unknown> 
   }
 }
 
-async function loadManagers(leagueId: string, viewerUserId: string): Promise<LeagueGroundingManager[]> {
+/**
+ * 🛑 THIS RETURNED `[]` FOR EVERY LEAGUE IN PRODUCTION, AND `[]` MEANS "loaded but empty"
+ * (see the DESIGN note at the top of this file) — so Chimmy was told, on every
+ * league-scoped turn of every one of 385 leagues, that the league had no managers.
+ *
+ * The cause was one name: `prisma.redraftMember` does not exist; the model is
+ * `RedraftLeagueMember`. Reading `.findMany` off `undefined` throws SYNCHRONOUSLY, before
+ * the `.catch(() => [])` chained to that call can attach, so the throw escaped into this
+ * function's own try/catch and took the teams query — which had worked — down with it.
+ *
+ * Two changes, and the second matters as much as the first:
+ *   1. the real model, the real role enum (`COMMISSIONER` | `MEMBER`), and user names
+ *      fetched separately because `RedraftLeagueMember` has no `user` relation;
+ *   2. a FAILURE now returns null, not []. "We could not load the managers" and "this
+ *      league has no managers" are different sentences, and this packet already has a
+ *      vocabulary for the difference.
+ */
+async function loadManagers(
+  leagueId: string,
+  viewerUserId: string,
+): Promise<LeagueGroundingManager[] | null> {
   try {
     const teams = await (prisma as any).leagueTeam.findMany({
       where: { leagueId },
@@ -422,32 +447,43 @@ async function loadManagers(leagueId: string, viewerUserId: string): Promise<Lea
       take: 30,
     }).catch(() => []) as Array<Record<string, unknown>>
 
-    const members = await (prisma as any).redraftMember.findMany({
-      where: { leagueId },
-      select: {
-        userId: true,
-        role: true,
-        user: { select: { id: true, name: true, username: true } },
-      },
-      take: 30,
-    }).catch(() => []) as Array<Record<string, unknown>>
+    const members = await prisma.redraftLeagueMember
+      .findMany({
+        where: { leagueId },
+        select: { userId: true, role: true },
+        take: 30,
+      })
+      .catch(() => [] as Array<{ userId: string; role: string }>)
 
-    const memberMap = new Map<string, Record<string, unknown>>()
+    const memberUserIds = [...new Set(members.map((m) => String(m.userId)).filter(Boolean))]
+    const users = memberUserIds.length
+      ? await prisma.appUser
+          .findMany({
+            where: { id: { in: memberUserIds } },
+            select: { id: true, displayName: true, username: true },
+          })
+          .catch(() => [] as Array<{ id: string; displayName: string | null; username: string | null }>)
+      : []
+    const userById = new Map(users.map((u) => [u.id, u]))
+
+    const memberMap = new Map<string, { role: string }>()
     for (const m of members) {
-      if (m.userId) memberMap.set(String(m.userId), m)
+      if (m.userId) memberMap.set(String(m.userId), { role: String(m.role ?? "") })
     }
 
     return teams.map((t): LeagueGroundingManager => {
       const uid = String(t.claimedByUserId ?? "")
       const member = uid ? memberMap.get(uid) : undefined
-      const user = member?.user as Record<string, unknown> | undefined
-      const role = String(member?.role ?? "")
+      const user = uid ? userById.get(uid) : undefined
+      // The stored enum is upper case (`COMMISSIONER` | `MEMBER`); the old comparison was
+      // lower case and could never match even once the query worked.
+      const role = String(member?.role ?? "").toUpperCase()
       return {
         userId: uid || `open:${t.id}`,
-        displayName: String(user?.name ?? user?.username ?? (uid ? uid.slice(0, 8) : "Open slot")),
+        displayName: String(user?.displayName ?? user?.username ?? (uid ? uid.slice(0, 8) : "Open slot")),
         teamName: t.teamName ? String(t.teamName) : null,
-        isCommissioner: Boolean(t.isCommissioner) || role === "commissioner",
-        isCoCommissioner: Boolean(t.isCoCommissioner) || role === "co_commissioner",
+        isCommissioner: Boolean(t.isCommissioner) || role === "COMMISSIONER",
+        isCoCommissioner: Boolean(t.isCoCommissioner) || role === "CO_COMMISSIONER",
         rank: t.currentRank != null ? Number(t.currentRank) : null,
         pointsFor: t.pointsFor != null ? Number(t.pointsFor) : null,
         wins: t.wins != null ? Number(t.wins) : null,
@@ -456,8 +492,119 @@ async function loadManagers(leagueId: string, viewerUserId: string): Promise<Lea
       }
     })
   } catch {
-    return []
+    // Not loaded — the packet must say so rather than claim the league is empty.
+    return null
   }
+}
+
+/** Ids out of a section that may hold strings or `{playerId|id}` objects. */
+function idArray(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return []
+  const out: string[] = []
+  for (const entry of raw) {
+    if (typeof entry === "string" || typeof entry === "number") {
+      const id = String(entry).trim()
+      if (id && id !== "0") out.push(id)
+      continue
+    }
+    if (entry && typeof entry === "object") {
+      const o = entry as Record<string, unknown>
+      const id = String(o.playerId ?? o.id ?? "").trim()
+      if (id) out.push(id)
+    }
+  }
+  return out
+}
+
+/**
+ * A roster id we could not put a name to.
+ *
+ * ⚠ NAMED EXPLICITLY RATHER THAN DROPPED OR GUESSED. Dropping it understates the roster —
+ * the exact failure this fix exists to end — and passing the bare id as a name invites the
+ * model to call a player "4034".
+ */
+function unnamedRosterPlayer(playerId: string): LeagueGroundingRosterPlayer {
+  return {
+    playerId,
+    playerName: `Unidentified player (${playerId})`,
+    position: "",
+    team: null,
+    injuryStatus: null,
+    adp: null,
+    projectedPoints: null,
+    isStarter: false,
+  }
+}
+
+/**
+ * Names for bare roster ids.
+ *
+ * Two id spaces reach this: provider ids (Sleeper numerics on imports and on native pools
+ * seeded from them) and the draft pool's synthetic `name:<Name>:<POS>:<TEAM>` fallback, which
+ * carries its own name and needs no lookup.
+ */
+async function resolveRosterPlayerNames(
+  ids: readonly string[],
+): Promise<Map<string, LeagueGroundingRosterPlayer>> {
+  const out = new Map<string, LeagueGroundingRosterPlayer>()
+  const lookups: string[] = []
+
+  for (const id of ids) {
+    if (id.startsWith("name:")) {
+      const [, name = "", position = "", team = ""] = id.split(":")
+      out.set(id, {
+        playerId: id,
+        playerName: name.trim(),
+        position: position.trim(),
+        team: team.trim() || null,
+        injuryStatus: null,
+        adp: null,
+        projectedPoints: null,
+        isStarter: false,
+      })
+      continue
+    }
+    lookups.push(id)
+  }
+
+  if (lookups.length === 0) return out
+
+  const rows = await prisma.sportsPlayer
+    .findMany({
+      where: { OR: [{ sleeperId: { in: lookups } }, { externalId: { in: lookups } }] },
+      select: { name: true, position: true, team: true, sleeperId: true, externalId: true },
+      take: 400,
+    })
+    .catch(() => [] as Array<{
+      name: string | null
+      position: string | null
+      team: string | null
+      sleeperId: string | null
+      externalId: string | null
+    }>)
+
+  const wanted = new Set(lookups)
+  for (const row of rows) {
+    const name = String(row.name ?? "").trim()
+    if (!name) continue
+    for (const key of [row.sleeperId, row.externalId]) {
+      const id = String(key ?? "").trim()
+      // One person can have a row per source; the first named row wins rather than the last.
+      if (!id || !wanted.has(id) || out.has(id)) continue
+      out.set(id, {
+        playerId: id,
+        playerName: name,
+        position: String(row.position ?? "").trim(),
+        team: row.team ? String(row.team) : null,
+        injuryStatus: null,
+        adp: null,
+        projectedPoints: null,
+        isStarter: false,
+      })
+    }
+  }
+
+  return out
 }
 
 async function loadViewerRoster(
@@ -515,17 +662,43 @@ async function loadViewerRoster(
       }
     }
 
+    /*
+     * 🛑 `Array.isArray(roster.playerData)` MATCHED NOTHING IN PRODUCTION. `Roster.playerData`
+     * is an OBJECT — `{ players: string[], starters: string[], taxi, reserve, lineup_sections }`
+     * — with bare player ids, for native and imported leagues alike (`lib/core-app/myRoster.ts`
+     * measured 0 of 1,094 rows as arrays). So this packet reported an empty roster for every
+     * user, every turn, and `[]` here means "loaded but empty" rather than "unreadable".
+     *
+     * `rosterPlayerIds` is the shared reader for that blob, already tolerant of every shape
+     * this table has held: id sections, `lineup_sections`, bare strings, and objects. The old
+     * array-of-objects path is kept because those entries carry names of their own.
+     */
+    const playerData = roster.playerData as unknown
     const allPlayers: LeagueGroundingRosterPlayer[] = []
-    const raw = (Array.isArray(roster.playerData) ? roster.playerData : []) as unknown[]
-    for (const p of raw) {
-      const parsed = parsePlayer(p)
-      if (parsed) allPlayers.push(parsed)
+    if (Array.isArray(playerData)) {
+      for (const p of playerData) {
+        const parsed = parsePlayer(p)
+        if (parsed && parsed.playerId) allPlayers.push(parsed)
+      }
+    }
+
+    const named = new Set(allPlayers.map((p) => p.playerId))
+    const idsNeedingNames = rosterPlayerIds(playerData).filter((id) => !named.has(id))
+    if (idsNeedingNames.length > 0) {
+      const identities = await resolveRosterPlayerNames(idsNeedingNames)
+      for (const id of idsNeedingNames) allPlayers.push(identities.get(id) ?? unnamedRosterPlayer(id))
     }
 
     const rosterSettings = asRecord(roster.settings)
-    const starterIds = new Set<string>(
-      Array.isArray(rosterSettings.starters) ? rosterSettings.starters.map(String) : [],
-    )
+    const blob = playerData && typeof playerData === "object" && !Array.isArray(playerData)
+      ? (playerData as Record<string, unknown>)
+      : {}
+    const lineupSections = asRecord(blob.lineup_sections ?? blob.lineupSections)
+    const starterIds = new Set<string>([
+      ...idArray(rosterSettings.starters),
+      ...idArray(blob.starters),
+      ...idArray(lineupSections.starters),
+    ])
 
     return {
       userId,
@@ -957,11 +1130,12 @@ export async function buildLeagueSportsGroundingPacket(args: {
 
   const settings = leagueRow ? resolveSettings(leagueRow) : null
 
-  const commissionerMember = managers.find((m) => m.isCommissioner)
+  const managerList = managers ?? []
+  const commissionerMember = managerList.find((m) => m.isCommissioner)
   const isCommissioner = commissionerMember?.userId === userId
-  const isCoCommissioner = managers.find((m) => m.isCoCommissioner && m.userId === userId) != null
-  const openSlots = managers.filter((m) => m.isOpen).length
-  const totalSlots = settings?.numTeams ?? managers.length
+  const isCoCommissioner = managerList.find((m) => m.isCoCommissioner && m.userId === userId) != null
+  const openSlots = managerList.filter((m) => m.isOpen).length
+  const totalSlots = settings?.numTeams ?? managerList.length
 
   const unavailable = buildUnavailableList(evidence, draft, managers)
   const safeAnswerRules = buildSafeAnswerRules(sport, freshness, evidence)
@@ -981,7 +1155,7 @@ export async function buildLeagueSportsGroundingPacket(args: {
       status: leagueRow?.status ? String(leagueRow.status) : null,
     },
     settings,
-    managers: managers.length > 0 ? managers : null,
+    managers: managers && managers.length > 0 ? managers : null,
     rosters: viewerRoster ? [viewerRoster] : null,
     draft,
     playerPool,

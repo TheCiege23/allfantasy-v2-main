@@ -13,6 +13,7 @@ import { updateStandings } from '@/lib/redraft/standingsEngine'
 import { withSyncJobRun } from '@/lib/production-health/syncJobRunTelemetry'
 import { engineSeasonScope } from '@/lib/redraft/seasonStatus'
 import { resolveSeasonWeekForRedraftSeason } from '@/lib/season-week'
+import { finalizeCompletedWeeksForSeason } from '@/lib/redraft/weekFinalizer'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -151,6 +152,9 @@ async function runRedraftReconciliation() {
   let skippedUnresolvedWeek = 0
   let failed = 0
   let matchupsRecalculated = 0
+  let weeksFinalized = 0
+  let finalizeFailed = 0
+  const finalizeRefusals: Record<string, number> = {}
 
   for (const season of seasons) {
     const resolved = await resolveSeasonWeekForRedraftSeason(season.id)
@@ -172,9 +176,45 @@ async function runRedraftReconciliation() {
       // A single league's provider gap must not end the sweep for the rest.
       failed += 1
     }
+
+    /*
+     * Close any week whose games are over.
+     *
+     * 🛑 THIS RUNS EVEN WHEN THE RECONCILIATION ABOVE THREW, AND THAT IS THE POINT. The
+     * sync fails for a league whose provider had a gap this tick; the weeks BEFORE that one
+     * are still finished and still blocking `advance_week`. Tying the two together would
+     * mean one bad tick keeps a season stuck for the rest of the year.
+     *
+     * It refuses far more often than it acts — unfinished slate, inside the grace period,
+     * stat coverage below the floor — and each refusal is counted into the job's telemetry
+     * so a season that never closes says why.
+     */
+    try {
+      const sweep = await finalizeCompletedWeeksForSeason({
+        seasonId: season.id,
+        throughWeek: resolved.fantasyWeek,
+      })
+      weeksFinalized += sweep.finalized
+      for (const [reason, count] of Object.entries(sweep.refusals)) {
+        finalizeRefusals[reason] = (finalizeRefusals[reason] ?? 0) + count
+      }
+      // A newly closed week changes records, so standings are rebuilt from the sealed results.
+      if (sweep.finalized > 0) await updateStandings(season.id, resolved.fantasyWeek)
+    } catch {
+      finalizeFailed += 1
+    }
   }
 
-  return { seasonsConsidered: seasons.length, reconciled, skippedUnresolvedWeek, failed, matchupsRecalculated }
+  return {
+    seasonsConsidered: seasons.length,
+    reconciled,
+    skippedUnresolvedWeek,
+    failed,
+    matchupsRecalculated,
+    weeksFinalized,
+    finalizeFailed,
+    finalizeRefusals,
+  }
 }
 
 // This branch added its own cron GET here. #284 landed an equivalent one further down
@@ -269,7 +309,10 @@ export async function GET(request: Request) {
       // Survivor/zombie leagues each report their own failures without throwing; a partial
       // sweep is a degraded run, not a dead one.
       status:
-        r.survivorBridge.failed > 0 || r.zombieResolutionFailed > 0 || r.redraft.failed > 0
+        r.survivorBridge.failed > 0 ||
+        r.zombieResolutionFailed > 0 ||
+        r.redraft.failed > 0 ||
+        r.redraft.finalizeFailed > 0
           ? 'partial'
           : 'success',
       metadata: {
