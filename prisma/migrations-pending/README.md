@@ -764,50 +764,30 @@ Verify the apply by the object, not the ledger: `select to_regclass('public.matc
 
 ---
 
-## `20260922200000_ncaaf_identity_provider_id_unique` — added 2026-09-22, NOT applied
+## `20260922200000_ncaaf_identity_provider_id_unique` — ✅ APPLIED 2026-09-22, moved to `prisma/migrations/`
 
 One unique index: `("sport", "rollingInsightsId")` on `PlayerIdentityMap`. Generated with
-`prisma migrate diff`, never typed.
+`prisma migrate diff`, never typed. **No longer parked** — it lives in `prisma/migrations/` and is
+recorded in `_prisma_migrations` (finished 2026-09-22 19:18:57Z).
 
 **What it closes.** 99 `rollingInsightsId` values were each held by TWO NCAAF identity rows, all
 198 written in one batch at 2026-09-11 12:52:01 UTC, 19ms apart and identical in name, team and
-position. `sync_job_runs` shows the cron set firing twice concurrently in that minute
-(`cron-import-scores` at 12:50:47.418 AND 12:50:48.295). One player with two identities means a
-roster, a stat line and a projection can each attach to a different row, and which one a lookup
-returns is arbitrary. **Code cannot close a race between two processes; only this constraint can.**
+position. `sync_job_runs` shows the cron set firing twice concurrently in that minute. One player
+with two identities means a roster, a stat line and a projection can each attach to a different
+row. **Code cannot close a race between two processes; only this constraint can.** The 99
+duplicates were deleted first (62,706 → 62,607 NCAAF rows).
 
-**The 99 duplicates were already deleted** (2026-09-22, `npm run dedupe:ncaaf-identities -- --apply`,
-62,706 -> 62,607 rows), so the index has nothing to trip over. Re-verify immediately before
-applying — a new double-write since then would make it fail:
+**Verified by the object, not the ledger**, on `ep-curly-block-ad0dlt9o/neondb`:
 
-```sql
-SELECT sport, "rollingInsightsId", COUNT(*) FROM "PlayerIdentityMap"
-WHERE "rollingInsightsId" IS NOT NULL GROUP BY 1,2 HAVING COUNT(*) > 1;
--- must return zero rows; measured zero across EVERY sport on 2026-09-22
+```
+SELECT indexdef FROM pg_indexes WHERE indexname = 'PlayerIdentityMap_sport_rollingInsightsId_key';
+-- CREATE UNIQUE INDEX ... ON public."PlayerIdentityMap" USING btree (sport, "rollingInsightsId")
 ```
 
-**NULLs are unaffected.** Postgres treats NULLs as distinct, so the NCAAF rows that still carry no
-provider id (33 of them) do not collide with each other.
+And by EFFECT: a duplicate INSERT inside a self-rolling-back `DO` block was rejected with
+`unique_violation` (the control raised a loud failure if the insert had succeeded; 0 probe rows
+remain). `schema.prisma` carries the matching `@@unique`, and `db:drift:ci` is back to baseline
+(233 items, nothing new) — before that line was added it reported exactly one new item, a
+`DROP INDEX` of this index, which is what an applied constraint absent from the model looks like.
 
-⚠ **It is not `CONCURRENTLY`, because Prisma runs a migration in a transaction and Postgres
-forbids that combination.** The index build takes a lock that blocks WRITES to `PlayerIdentityMap`
-while it runs — a table of ~107k rows, so expect well under a second, but it is not zero.
-
-⚠ **`schema.prisma` deliberately does NOT declare this `@@unique` yet**, for the same drift reason
-as `matchup_odds_snapshots` above: a constraint in the model that the database lacks is drift that
-`npm run db:drift:ci` reports on every run. **Add it in the same change that applies the SQL**:
-
-```prisma
-// in model PlayerIdentityMap, beside the existing @@index lines
-@@unique([sport, rollingInsightsId])
-```
-
-**Order:**
-1. Run the duplicate query above; it must return zero rows.
-2. Apply this SQL.
-3. Add the `@@unique` line to `schema.prisma` and regenerate the client.
-4. Verify by the OBJECT, not the ledger:
-   `SELECT indexdef FROM pg_indexes WHERE indexname = 'PlayerIdentityMap_sport_rollingInsightsId_key';`
-
-`ROLLBACK.sql` drops the index. No data is lost by the rollback; duplicates simply become possible
-again.
+`ROLLBACK.sql` drops the index. No data is lost by the rollback; duplicates become possible again.
