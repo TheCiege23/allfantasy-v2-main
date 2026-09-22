@@ -6,6 +6,7 @@ import {
   extractAnnotations,
   type XaiTool,
 } from '@/lib/xai-client'
+import { reportProviderFailure } from '@/lib/ai-orchestration/providerOutageAlert'
 
 /**
  * THE LAST RESORT FOR A SPORTS QUESTION WE HOLD NO DATA FOR.
@@ -199,7 +200,11 @@ export async function answerSportsQuestionFromSearch(
       new Promise<null>((resolve) => setTimeout(() => resolve(null), SEARCH_TIMEOUT_MS)),
     ])
 
-    if (!result || !result.ok) return null
+    if (!result || !result.ok) {
+      /* xAI-only path: an exhausted account must reach the owner, not just return null. */
+      if (result) reportProviderFailure({ provider: 'grok', status: result.status, detail: result.details, surface: 'chimmy_live_search' })
+      return null
+    }
 
     const text = stripMarkdown(parseTextFromXaiResponse(result.json) ?? '')
     if (!text) return null

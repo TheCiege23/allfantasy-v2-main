@@ -2,6 +2,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const h = vi.hoisted(() => ({ create: vi.fn(), execute: vi.fn() }))
 
+const reportProviderFailure = vi.hoisted(() => vi.fn())
+vi.mock('@/lib/ai-orchestration/providerOutageAlert', () => ({ reportProviderFailure }))
+
 vi.mock('openai', () => ({
   default: class {
     chat = { completions: { create: h.create } }
@@ -150,6 +153,20 @@ describe('runChimmyToolLoop', () => {
     expect(h.create).toHaveBeenCalledTimes(3)
     /* The third response was a tool call, so no fourth execution was attempted. */
     expect(h.execute).toHaveBeenCalledTimes(2)
+  })
+
+  /*
+   * The tool loop runs ONLY on xAI, so an exhausted xAI account used to leave it silently dead:
+   * the catch returned null and nothing reported why. The user still falls back; the owner is told.
+   */
+  it('reports an xAI credit failure instead of swallowing it', async () => {
+    h.create.mockRejectedValue(
+      Object.assign(new Error('403 Your team has either used all available credits or reached its monthly spending limit.'), { status: 403 }),
+    )
+    expect(await runChimmyToolLoop(base)).toBeNull()
+    expect(reportProviderFailure).toHaveBeenCalledWith(
+      expect.objectContaining({ provider: 'grok', status: 403, surface: 'chimmy_tool_loop' }),
+    )
   })
 
   it('falls back rather than throwing when the provider fails', async () => {
