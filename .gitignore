@@ -77,6 +77,7 @@ scripts/ri-import-all.ts
 # of PRODUCTION rows, and this repo is public — they must never be committed. The dedupe
 # script has been writing to this path since before the rule existed.
 scripts/.dedupe-players-snapshot-*.json
+scripts/.ncaaf-identity-dupes-snapshot-*.json
 scripts/.orphan-player-images-snapshot-*.json
 # Holds prior password hashes for the fixture accounts being rotated — never commit.
 scripts/.fixture-accounts-snapshot-*.json

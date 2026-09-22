@@ -496,3 +496,118 @@ export async function repairNcaafIdentityProviderIds(opts?: {
 
   return result
 }
+
+export type NcaafIdentityDedupeResult = {
+  /** Provider ids held by more than one NCAAF identity row. */
+  duplicateGroups: number
+  /** Groups whose rows are identical in every field that identifies a person. */
+  exactTwinGroups: number
+  /** Groups left alone because the rows disagree — possibly two people, or one that moved school. */
+  divergentGroups: number
+  /** Rows deleted: the younger copies of an exact twin group. The oldest row is always kept. */
+  deleted: number
+  /** One row per divergent group, so the disagreement can be read without another query. */
+  divergent: Array<{ providerId: string; rows: Array<{ id: string; name: string; team: string | null; position: string | null }> }>
+  dryRun: boolean
+  error?: string
+}
+
+/** Fields that decide whether two rows are the same person recorded twice. */
+const TWIN_FIELDS = ['normalizedName', 'currentTeam', 'position'] as const
+
+/**
+ * Collapse NCAAF identity rows that share one provider id.
+ *
+ * 🛑 TWO ROWS FOR ONE PROVIDER ID IS ONE PLAYER WITH TWO IDENTITIES, and which one a lookup
+ * returns is arbitrary — so a roster, a stat line and a projection for the same player can each
+ * attach to a different row. Measured on production 2026-09-22: 99 `rollingInsightsId` values held
+ * by exactly two rows each, all 198 rows written in one batch at 2026-09-11 12:52:01 (19ms apart),
+ * every pair identical in name, team, position and status. `sync_job_runs` shows the cron set
+ * firing twice concurrently in that minute, which is how one insert became two.
+ *
+ * ⚠ IT DELETES ONLY EXACT TWINS, AND KEEPS THE OLDEST. A group whose rows DISAGREE on name, team
+ * or position may be two different people who happen to share a provider id through an upstream
+ * error — deleting either would destroy an identity rather than a duplicate. Those are reported,
+ * never resolved, because the right answer needs a human. Deleting is not reversible, so the
+ * refusal is the default for anything less than certain.
+ *
+ * ⚠ THIS DOES NOT PREVENT THE NEXT ONE. Only a unique index on (sport, rollingInsightsId) makes a
+ * double insert impossible, and that is a migration — a separate, deliberate decision. Until then
+ * two concurrent writers can do this again.
+ *
+ * DRY RUN IS THE DEFAULT.
+ */
+export async function dedupeNcaafIdentityDuplicates(opts?: {
+  dryRun?: boolean
+}): Promise<NcaafIdentityDedupeResult> {
+  const dryRun = opts?.dryRun !== false
+  const result: NcaafIdentityDedupeResult = {
+    duplicateGroups: 0,
+    exactTwinGroups: 0,
+    divergentGroups: 0,
+    deleted: 0,
+    divergent: [],
+    dryRun,
+  }
+
+  const rows = await prisma.playerIdentityMap
+    .findMany({
+      where: { sport: 'NCAAF', rollingInsightsId: { not: null } },
+      select: {
+        id: true,
+        rollingInsightsId: true,
+        canonicalName: true,
+        normalizedName: true,
+        currentTeam: true,
+        position: true,
+        status: true,
+        createdAt: true,
+      },
+      orderBy: { createdAt: 'asc' },
+    })
+    .catch(() => null)
+  if (rows == null) return { ...result, error: 'could not read the NCAAF registry — refusing to delete' }
+
+  const byProviderId = new Map<string, typeof rows>()
+  for (const row of rows) {
+    const key = row.rollingInsightsId?.trim()
+    if (!key) continue
+    byProviderId.set(key, [...(byProviderId.get(key) ?? []), row])
+  }
+
+  const doomed: string[] = []
+  for (const [providerId, group] of byProviderId) {
+    if (group.length < 2) continue
+    result.duplicateGroups += 1
+    const [keep, ...rest] = group
+    const identical = rest.every((row) => TWIN_FIELDS.every((field) => row[field] === keep[field]))
+    if (!identical) {
+      result.divergentGroups += 1
+      if (result.divergent.length < 20) {
+        result.divergent.push({
+          providerId,
+          rows: group.map((row) => ({ id: row.id, name: row.canonicalName, team: row.currentTeam, position: row.position })),
+        })
+      }
+      continue
+    }
+    result.exactTwinGroups += 1
+    for (const row of rest) doomed.push(row.id)
+  }
+
+  if (dryRun) {
+    result.deleted = doomed.length
+    return result
+  }
+
+  for (let i = 0; i < doomed.length; i += REPAIR_BATCH) {
+    const batch = doomed.slice(i, i + REPAIR_BATCH)
+    const removed = await prisma.playerIdentityMap
+      .deleteMany({ where: { id: { in: batch }, sport: 'NCAAF' } })
+      .catch(() => null)
+    if (removed == null) return { ...result, error: 'delete failed partway — re-run to see what remains' }
+    result.deleted += removed.count
+  }
+
+  return result
+}

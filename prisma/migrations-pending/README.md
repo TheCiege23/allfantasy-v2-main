@@ -761,3 +761,33 @@ is deliberately NOT in `schema.prisma`**, for the same P2021 / schema-drift reas
 3. Add `model MatchupOddsSnapshot` (`@@map("matchup_odds_snapshots")`) and swap the raw queries.
 
 Verify the apply by the object, not the ledger: `select to_regclass('public.matchup_odds_snapshots')`.
+
+---
+
+## `20260922200000_ncaaf_identity_provider_id_unique` — ✅ APPLIED 2026-09-22, moved to `prisma/migrations/`
+
+One unique index: `("sport", "rollingInsightsId")` on `PlayerIdentityMap`. Generated with
+`prisma migrate diff`, never typed. **No longer parked** — it lives in `prisma/migrations/` and is
+recorded in `_prisma_migrations` (finished 2026-09-22 19:18:57Z).
+
+**What it closes.** 99 `rollingInsightsId` values were each held by TWO NCAAF identity rows, all
+198 written in one batch at 2026-09-11 12:52:01 UTC, 19ms apart and identical in name, team and
+position. `sync_job_runs` shows the cron set firing twice concurrently in that minute. One player
+with two identities means a roster, a stat line and a projection can each attach to a different
+row. **Code cannot close a race between two processes; only this constraint can.** The 99
+duplicates were deleted first (62,706 → 62,607 NCAAF rows).
+
+**Verified by the object, not the ledger**, on `ep-curly-block-ad0dlt9o/neondb`:
+
+```
+SELECT indexdef FROM pg_indexes WHERE indexname = 'PlayerIdentityMap_sport_rollingInsightsId_key';
+-- CREATE UNIQUE INDEX ... ON public."PlayerIdentityMap" USING btree (sport, "rollingInsightsId")
+```
+
+And by EFFECT: a duplicate INSERT inside a self-rolling-back `DO` block was rejected with
+`unique_violation` (the control raised a loud failure if the insert had succeeded; 0 probe rows
+remain). `schema.prisma` carries the matching `@@unique`, and `db:drift:ci` is back to baseline
+(233 items, nothing new) — before that line was added it reported exactly one new item, a
+`DROP INDEX` of this index, which is what an applied constraint absent from the model looks like.
+
+`ROLLBACK.sql` drops the index. No data is lost by the rollback; duplicates become possible again.

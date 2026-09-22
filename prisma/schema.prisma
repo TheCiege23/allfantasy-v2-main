@@ -411,6 +411,13 @@ model PlayerIdentityMap {
   @@index([fantraxId])
   @@index([currentTeam])
   @@index([sport, position])
+  // 🛑 ONE IDENTITY PER PROVIDER PLAYER. Two concurrent cron fires wrote 99 NCAAF pairs on
+  // 2026-09-11 (12:52:01 UTC, 19ms apart, identical rows); a lookup then returns an arbitrary
+  // one of the two, so a roster, a stat line and a projection for one player can attach to
+  // different rows. Code cannot close a race between processes — only this can. NULLs stay
+  // unconstrained in Postgres, so rows carrying no provider id are unaffected.
+  // Applied to production 2026-09-22 by 20260922200000_ncaaf_identity_provider_id_unique.
+  @@unique([sport, rollingInsightsId])
 }
 
 model PlayerTeamHistory {
