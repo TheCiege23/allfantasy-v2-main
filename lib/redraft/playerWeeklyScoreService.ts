@@ -40,7 +40,57 @@ export type WeeklyScoreSyncSummary = {
   missingCachePlayerIds: string[]
   missingWeekPlayerIds: string[]
   missingStatPlayerIds: string[]
+  /** Rostered NFL players scored from the week-wide provider payload rather than the cache. */
+  weekStatsFromProvider: number
   warnings: string[]
+}
+
+/** Week-wide NFL stat lines for the rostered ids, already normalized. */
+export type NflWeekStatsFetcher = (args: {
+  season: number
+  week: number
+  playerIds: readonly string[]
+}) => Promise<Map<string, Record<string, number>>>
+
+/**
+ * 🛑 THE NFL OFFENSIVE PATH READ A TABLE NOTHING FILLS, AND SAID NOTHING.
+ *
+ * This service's NFL branch scores an offensive player from `playerGameLogCache`, whose only
+ * writer is `PlayerGameLogImportService` — admin routes only, no scheduled caller. Production
+ * holds 15 rows in it. So every rostered offensive player fell into `missingCachePlayerIds`
+ * and simply got no `PlayerWeeklyScore` row, while team defenses scored fine (they are derived
+ * from `SportsGame`). Measured 2026-09-22: of the 90 starters in the one native league that has
+ * played, 56 had a week-1 row — every one written by the live tick DURING games — and 6 had a
+ * week-2 row. That gap is what holds stat coverage under the week finalizer's floor.
+ *
+ * ⚠ AND THE OBVIOUS REPLACEMENT IS WORSE, WHICH IS WHY IT IS NOT USED HERE. `PlayerGameStat`
+ * is the table the scheduled multi-sport ingest writes, and it is the right source for the
+ * daily sports — but for NFL it held 147 players in week 1, covering exactly ONE of those 90
+ * starters. Pointing this branch at it would have lowered coverage while looking like a fix.
+ *
+ * The source that actually has the week is Sleeper's week-wide stats endpoint — the same call
+ * the live tick already makes, which is why those 56 rows exist at all. Reusing the live
+ * provider rather than adding a second Sleeper URL keeps one fetcher, one normalizer and one
+ * id-space assumption. It is imported lazily because that provider imports this module for its
+ * normalizers, and a static import would close the cycle.
+ */
+const fetchNflWeekStatsFromLiveProvider: NflWeekStatsFetcher = async ({ season, week, playerIds }) => {
+  try {
+    const { NflLiveStatsProvider } = await import('@/lib/live-scoring/nflLiveStatsProvider')
+    const provider = new NflLiveStatsProvider(prisma as never)
+    return await provider.fetchPlayerStatsForGames({
+      sport: 'NFL',
+      season,
+      week,
+      // The week-wide payload is keyed by player, not by game: the endpoint needs no slate, and
+      // passing none is what lets this reconcile a week whose games are long finished.
+      games: [],
+      playerIds,
+    })
+  } catch {
+    // No fabrication on a provider failure — those players stay unscored and are reported.
+    return new Map()
+  }
 }
 
 /**
@@ -99,6 +149,8 @@ export async function syncPlayerWeeklyScoresForRedraftSeason(params: {
    * and the sync declines without it.
    */
   seasonStartUtc?: Date | string | null
+  /** Injectable for tests; defaults to the live provider's week-wide Sleeper payload. */
+  fetchNflWeekStats?: NflWeekStatsFetcher
 }): Promise<WeeklyScoreSyncSummary> {
   const season = await prisma.redraftSeason.findFirst({
     where: params.seasonId ? { id: params.seasonId } : { leagueId: params.leagueId },
@@ -158,6 +210,7 @@ export async function syncPlayerWeeklyScoresForRedraftSeason(params: {
     missingCachePlayerIds: [],
     missingWeekPlayerIds: [],
     missingStatPlayerIds: [],
+    weekStatsFromProvider: 0,
     warnings: [],
   }
 
@@ -282,6 +335,26 @@ export async function syncPlayerWeeklyScoresForRedraftSeason(params: {
     }
   }
 
+  /*
+   * The week-wide NFL payload, fetched ONCE for the rostered offensive players the cache
+   * cannot answer for (see `fetchNflWeekStatsFromLiveProvider` above for why the cache
+   * cannot). Nothing is fetched when the cache already covers everyone, so a league whose
+   * cache is populated costs no provider call at all.
+   */
+  const weekStatsByPlayer = new Map<string, Record<string, number>>()
+  if (!isDailySport && candidateSportKeys(sport).includes('NFL')) {
+    const uncachedOffensiveIds = playerIds.filter(
+      (id) => !isTeamDefenseRow(id, positionByPlayer.get(id) ?? null) && !cacheByPlayer.has(id),
+    )
+    if (uncachedOffensiveIds.length > 0) {
+      const fetcher = params.fetchNflWeekStats ?? fetchNflWeekStatsFromLiveProvider
+      const fetched = await fetcher({ season: seasonYear, week, playerIds: uncachedOffensiveIds })
+      for (const [id, stats] of fetched) {
+        if (stats && Object.keys(stats).length > 0) weekStatsByPlayer.set(id, stats)
+      }
+    }
+  }
+
   // Provider stat keys no alias claimed. Collected across the whole run so a
   // wrong alias table for a daily sport is reported once, loudly, instead of
   // looking like a quiet week in which nobody scored.
@@ -384,23 +457,26 @@ export async function syncPlayerWeeklyScoresForRedraftSeason(params: {
       continue
     }
 
+    /*
+     * The cache first — it is per-player and season-wide, so it answers historical weeks the
+     * live endpoint has aged out — then the week-wide provider payload. The miss is still
+     * classified by WHY the cache could not answer, so the existing telemetry keeps meaning
+     * what it meant; only the outcome changes, from "unscored" to "scored from the week feed".
+     */
     const cached = cacheByPlayer.get(playerId)
-    if (!cached) {
-      summary.missingCachePlayerIds.push(playerId)
-      continue
-    }
+    const weekPayload = cached ? findCachedWeekPayload(cached.payload, week) : null
+    const cachedStats = weekPayload ? normalizeNflWeeklyStats(weekPayload) : {}
+    const providerStats = weekStatsByPlayer.get(playerId) ?? {}
+    const usedProvider = Object.keys(cachedStats).length === 0 && Object.keys(providerStats).length > 0
+    const stats = Object.keys(cachedStats).length > 0 ? cachedStats : providerStats
 
-    const weekPayload = findCachedWeekPayload(cached.payload, week)
-    if (!weekPayload) {
-      summary.missingWeekPlayerIds.push(playerId)
-      continue
-    }
-
-    const stats = normalizeNflWeeklyStats(weekPayload)
     if (!Object.keys(stats).length) {
-      summary.missingStatPlayerIds.push(playerId)
+      if (!cached) summary.missingCachePlayerIds.push(playerId)
+      else if (!weekPayload) summary.missingWeekPlayerIds.push(playerId)
+      else summary.missingStatPlayerIds.push(playerId)
       continue
     }
+    if (usedProvider) summary.weekStatsFromProvider += 1
     const fantasyPts = await calculateScoreFromSportConfig(season.leagueId, playerId, week, stats, positionByPlayer.get(playerId) ?? null)
 
     await prisma.playerWeeklyScore.upsert({
