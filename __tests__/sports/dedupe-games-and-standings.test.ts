@@ -141,8 +141,10 @@ describe('espn standings module contract', () => {
     // NBA and NHL joined 2026-09-22 (split-year season handling in espnStandings).
     expect(espnHasStandings('NBA')).toBe(true)
     expect(espnHasStandings('nhl')).toBe(true)
-    // NCAAB has no writer: ESPN's payload for it was not verified.
-    expect(espnHasStandings('NCAAB')).toBe(false)
+    // NCAAB joined the same day, once ESPN's payload was verified (365 teams, split-year season).
+    expect(espnHasStandings('ncaab')).toBe(true)
+    // Soccer's standings come from other writers (world cup / API-Football), never this module.
+    expect(espnHasStandings('SOCCER')).toBe(false)
     expect(espnHasStandings('')).toBe(false)
   })
 })

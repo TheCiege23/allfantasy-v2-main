@@ -1,7 +1,7 @@
 import 'server-only'
 
 /**
- * ESPN standings ingestion — NFL, NCAAF, MLB, NBA and NHL, no API key required.
+ * ESPN standings ingestion — NFL, NCAAF, MLB, NBA, NHL and NCAAB, no API key required.
  *
  * WHY THIS EXISTS
  * `/api/cron/import-standings` runs every four hours and had written nothing since
@@ -57,6 +57,12 @@ const ESPN_STANDINGS_PATH: Record<string, string> = {
   MLB: 'baseball/mlb',
   NBA: 'basketball/nba',
   NHL: 'hockey/nhl',
+  /*
+   * Men's college basketball. Verified 2026-09-22: 365 team entries; the default request names
+   * season 2027 (the 2026-27 season, not started) — the same shape as NBA/NHL, so it takes the
+   * split-year policy below and falls back to the completed 2025-26 standings until tip-off.
+   */
+  NCAAB: 'basketball/mens-college-basketball',
 }
 
 /**
@@ -102,6 +108,7 @@ const SEASON_SOURCE: Record<string, 'payload' | 'current-with-fallback' | 'split
   MLB: 'current-with-fallback',
   NBA: 'split-year',
   NHL: 'split-year',
+  NCAAB: 'split-year',
 }
 
 /** ESPN's name for the split-year season in progress (or next up): the year it ends. */

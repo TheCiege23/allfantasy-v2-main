@@ -40,7 +40,7 @@ export const maxDuration = 120
  */
 const JOB = "cron-import-standings"
 
-type StandingsSport = "NFL" | "NCAAF" | "MLB" | "NBA" | "NHL"
+type StandingsSport = "NFL" | "NCAAF" | "MLB" | "NBA" | "NHL" | "NCAAB"
 
 /**
  * Which sports one fire covers.
@@ -62,6 +62,7 @@ function resolveSports(param: string | null): StandingsSport[] {
   if (raw === "MLB") return ["MLB"]
   if (raw === "NFL") return ["NFL"]
   if (raw === "NBA") return ["NBA"]
+  if (raw === "NCAAB") return ["NCAAB"]
   if (raw === "NHL") return ["NHL"]
   /*
    * NCAAF, NBA and NHL joined the default 2026-09-22. NCAAF's writer existed but ran only on an
@@ -69,7 +70,13 @@ function resolveSports(param: string | null): StandingsSport[] {
    * written; NBA/NHL had no writer at all. Same one-slot constraint as above. The whole sweep is
    * ~260 upserts (NCAAF 138 entries), well inside maxDuration.
    */
-  return ["NFL", "MLB", "NCAAF", "NBA", "NHL"]
+  /*
+   * NCAAB joined 2026-09-22 too: it had no writer, and the admin grounding panel listed
+   * "Standings" missing for it. 365 teams makes it the largest sport in the sweep; the whole
+   * fire is ~630 sequential upserts, ~45s at the ~70ms/row the slowest recent run measured
+   * (4.4s for 62 rows), inside maxDuration. Batch the writes before adding another sport.
+   */
+  return ["NFL", "MLB", "NCAAF", "NBA", "NHL", "NCAAB"]
 }
 
 async function handle(req: NextRequest) {
