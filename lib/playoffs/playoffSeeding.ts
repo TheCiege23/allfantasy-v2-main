@@ -115,16 +115,22 @@ export async function resolvePlayoffSeedField(
   const warnings: string[] = []
 
   /*
-   * ⚠ NBA AND NHL STANDINGS ARE KEYED BY THE YEAR THE SEASON STARTS, and a playoff challenge's
-   * `seasonYear` is the calendar year of the playoffs — so the 2027 NBA playoffs read the 2026-27
-   * regular season, filed as `NBA:standings:2026:*` (lib/standings/espnStandings split-year).
-   * Reading `2027` would find nothing until 2027-28 tips off, leaving every seed slot a
-   * placeholder for the whole postseason. The challenge's own year is still tried second, for a
-   * challenge created with the start-year convention. MLB seasons sit in one calendar year.
+   * ⚠ NBA AND NHL STANDINGS ARE KEYED BY THE YEAR THE SEASON STARTS (lib/standings/espnStandings
+   * split-year), and a challenge's `seasonYear` means DIFFERENT things depending on when it was
+   * created, because it defaults to the calendar year (playoffService). A pool made in April 2027
+   * says 2027 but wants the 2026-27 season (key `2026`); a pool made in November 2026 says 2026
+   * and ALSO wants 2026-27.
+   *
+   * 🛑 SO: THE NEWEST SEASON THAT EXISTS, STARTING FROM THE CHALLENGE'S OWN YEAR — never "year-1
+   * first". That order was shipped for one commit and would have seeded a November pool from
+   * LAST season's final standings: the `2025` rows are never purged and read `isFinal`, and seed
+   * writes are permanent. Own year first means the November pool reads the in-progress 2026 rows
+   * (not final, so seeding waits), and the April pool finds no `2027` key yet and falls back to
+   * the 2026-27 season that has just finished. MLB seasons sit in one calendar year.
    */
   const candidates =
     sport === "nba" || sport === "nhl"
-      ? [String(Number(seasonYear) - 1), String(seasonYear)]
+      ? [String(seasonYear), String(Number(seasonYear) - 1)]
       : [String(seasonYear)]
   let season = candidates[0]
   let rows: unknown[] = []

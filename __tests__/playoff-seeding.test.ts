@@ -81,7 +81,7 @@ describe("resolvePlayoffSeedField", () => {
     expect(field.warnings).toEqual([])
   })
 
-  it("NBA/NHL read the regular season by its START year: the 2027 playoffs seed from 2026-27", async () => {
+  it("NBA/NHL: a spring pool (2027) finds no 2027 key yet and seeds from the 2026-27 season just finished", async () => {
     db.sportsDataCache.findMany.mockImplementation(async ({ where }: { where: { cacheKey: { startsWith: string } } }) =>
       where.cacheKey.startsWith === "NBA:standings:2026:"
         ? [{ data: { conference: "Eastern Conference", position: 1, teamName: "Boston Celtics", won: 60, lost: 22 } }]
@@ -91,19 +91,21 @@ describe("resolvePlayoffSeedField", () => {
     const field = await resolvePlayoffSeedField("nba", 2027)
     expect(field.season).toBe("2026")
     expect(field.rowsRead).toBe(1)
-    expect(db.sportsDataCache.findMany).toHaveBeenCalledTimes(1)
   })
 
-  it("NBA/NHL fall back to the challenge's own year when the start-year key is empty", async () => {
-    db.sportsDataCache.findMany.mockImplementation(async ({ where }: { where: { cacheKey: { startsWith: string } } }) =>
-      where.cacheKey.startsWith === "NHL:standings:2027:"
-        ? [{ data: { conference: "Western Conference", position: 1, teamName: "Dallas Stars", won: 50, lost: 20 } }]
-        : []
-    )
+  it("NBA/NHL: a fall pool (2026) reads the season in progress, NOT last season's final standings", async () => {
+    db.sportsDataCache.findMany.mockImplementation(async ({ where }: { where: { cacheKey: { startsWith: string } } }) => {
+      if (where.cacheKey.startsWith === "NHL:standings:2026:")
+        return [{ data: { conference: "Western Conference", position: 1, teamName: "Dallas Stars", won: 5, lost: 2 } }]
+      if (where.cacheKey.startsWith === "NHL:standings:2025:")
+        return [{ data: { conference: "Western Conference", position: 1, teamName: "Winnipeg Jets", won: 56, lost: 22 } }]
+      return []
+    })
     const { resolvePlayoffSeedField } = await import("@/lib/playoffs/playoffSeeding")
-    const field = await resolvePlayoffSeedField("nhl", 2027)
-    expect(field.season).toBe("2027")
-    expect(field.rowsRead).toBe(1)
+    const field = await resolvePlayoffSeedField("nhl", 2026)
+    expect(field.season).toBe("2026")
+    expect(db.sportsDataCache.findMany).toHaveBeenCalledTimes(1)
+    expect(field.isFinal).toBe(false)
   })
 
   it("says so when nothing has been ingested, rather than returning a silent empty field", async () => {
